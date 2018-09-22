@@ -307,6 +307,9 @@ Commands
 :command:`group snap rename` *group-snap-spec* *snap-name*
   Rename group's snapshot.
 
+:command:`group snap rollback` *group-snap-spec*
+  Rollback group to snapshot.
+
 :command:`image-meta get` *image-spec* *key*
   Get metadata value with the key.
 
@@ -347,7 +350,7 @@ Commands
   Flag image journal client as disconnected.
 
 :command:`journal export` [--verbose] [--no-error] *src-journal-spec* *path-name*
-  Export image journal to path (use - for stdout). It can be make a bakcup
+  Export image journal to path (use - for stdout). It can be make a backup
   of the image journal especially before attempting dangerous operations.
 
   Note that this command may not always work if the journal is badly corrupted.

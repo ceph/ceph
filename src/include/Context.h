@@ -23,7 +23,7 @@
 #include <set>
 #include <memory>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define mydout(cct, v) lgeneric_subdout(cct, context, v)
 

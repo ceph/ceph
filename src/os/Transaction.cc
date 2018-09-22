@@ -387,6 +387,18 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
       }
       break;
 
+    case Transaction::OP_MERGE_COLLECTION:
+      {
+        coll_t cid = i.get_cid(op->cid);
+        uint32_t bits = op->split_bits;
+        coll_t dest = i.get_cid(op->dest_cid);
+	f->dump_string("op_name", "op_merge_collection");
+	f->dump_stream("collection") << cid;
+	f->dump_stream("dest") << dest;
+	f->dump_stream("bits") << bits;
+      }
+      break;
+
     case Transaction::OP_OMAP_RMKEYRANGE:
       {
         coll_t cid = i.get_cid(op->cid);

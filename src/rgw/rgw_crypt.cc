@@ -8,7 +8,7 @@
 #include <auth/Crypto.h>
 #include <rgw/rgw_b64.h>
 #include <rgw/rgw_rest_s3.h>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include <boost/utility/string_view.hpp>
 #include <rgw/rgw_keystone.h>
 #include "include/str_map.h"

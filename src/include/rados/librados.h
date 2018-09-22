@@ -457,7 +457,7 @@ CEPH_RADOS_API int rados_ping_monitor(rados_t cluster, const char *mon_id,
  * @post If this succeeds, any function in librados may be used
  *
  * @param cluster The cluster to connect to.
- * @returns 0 on sucess, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 CEPH_RADOS_API int rados_connect(rados_t cluster);
 
@@ -635,7 +635,7 @@ CEPH_RADOS_API int rados_cluster_fsid(rados_t cluster, char *buf, size_t len);
  * Get/wait for the most recent osdmap
  * 
  * @param cluster the cluster to shutdown
- * @returns 0 on sucess, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 CEPH_RADOS_API int rados_wait_for_latest_osdmap(rados_t cluster);
 
@@ -710,6 +710,17 @@ CEPH_RADOS_API rados_config_t rados_cct(rados_t cluster);
 CEPH_RADOS_API uint64_t rados_get_instance_id(rados_t cluster);
 
 /**
+ * Gets the minimum compatible OSD version
+ *
+ * @param cluster cluster handle
+ * @param[out] require_osd_release minimum compatible OSD version
+ *  based upon the current features
+ * @returns 0 on sucess, negative error code on failure
+ */
+CEPH_RADOS_API int rados_get_min_compatible_osd(rados_t cluster,
+                                                int8_t* require_osd_release);
+
+/**
  * Gets the minimum compatible client version
  *
  * @param cluster cluster handle
@@ -717,7 +728,7 @@ CEPH_RADOS_API uint64_t rados_get_instance_id(rados_t cluster);
  *  based upon the current features
  * @param[out] require_min_compat_client required minimum client version
  *  based upon explicit setting
- * @returns 0 on sucess, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 CEPH_RADOS_API int rados_get_min_compatible_client(rados_t cluster,
                                                    int8_t* min_compat_client,
@@ -817,7 +828,6 @@ CEPH_RADOS_API int rados_pool_reverse_lookup(rados_t cluster, int64_t id,
 /**
  * Create a pool with default settings
  *
- * The default owner is the admin user (auid 0).
  * The default crush rule is rule 0.
  *
  * @param cluster the cluster in which the pool will be created
@@ -827,10 +837,10 @@ CEPH_RADOS_API int rados_pool_reverse_lookup(rados_t cluster, int64_t id,
 CEPH_RADOS_API int rados_pool_create(rados_t cluster, const char *pool_name);
 
 /**
- * Create a pool owned by a specific auid
+ * Create a pool owned by a specific auid.
  *
- * The auid is the authenticated user id to give ownership of the pool.
- * TODO: document auid and the rest of the auth system
+ * DEPRECATED: auid support has been removed, and this call will be removed in a future
+ * release.
  *
  * @param cluster the cluster in which the pool will be created
  * @param pool_name the name of the new pool
@@ -839,7 +849,8 @@ CEPH_RADOS_API int rados_pool_create(rados_t cluster, const char *pool_name);
  */
 CEPH_RADOS_API int rados_pool_create_with_auid(rados_t cluster,
                                                const char *pool_name,
-                                               uint64_t auid);
+                                               uint64_t auid)
+  __attribute__((deprecated));
 
 /**
  * Create a pool with a specific CRUSH rule
@@ -856,6 +867,9 @@ CEPH_RADOS_API int rados_pool_create_with_crush_rule(rados_t cluster,
 /**
  * Create a pool with a specific CRUSH rule and auid
  *
+ * DEPRECATED: auid support has been removed and this call will be removed
+ * in a future release.
+ *
  * This is a combination of rados_pool_create_with_crush_rule() and
  * rados_pool_create_with_auid().
  *
@@ -868,7 +882,8 @@ CEPH_RADOS_API int rados_pool_create_with_crush_rule(rados_t cluster,
 CEPH_RADOS_API int rados_pool_create_with_all(rados_t cluster,
                                               const char *pool_name,
                                               uint64_t auid,
-			                      uint8_t crush_rule_num);
+			                      uint8_t crush_rule_num)
+  __attribute__((deprecated));
 
 /**
  * Returns the pool that is the base tier for this pool.
@@ -899,6 +914,8 @@ CEPH_RADOS_API int rados_pool_delete(rados_t cluster, const char *pool_name);
 /**
  * Attempt to change an io context's associated auid "owner"
  *
+ * DEPRECATED: auid support has been removed and this call has no effect.
+ *
  * Requires that you have write permission on both the current and new
  * auid.
  *
@@ -906,16 +923,22 @@ CEPH_RADOS_API int rados_pool_delete(rados_t cluster, const char *pool_name);
  * @param auid the auid you wish the io to have.
  * @returns 0 on success, negative error code on failure
  */
-CEPH_RADOS_API int rados_ioctx_pool_set_auid(rados_ioctx_t io, uint64_t auid);
+CEPH_RADOS_API int rados_ioctx_pool_set_auid(rados_ioctx_t io, uint64_t auid)
+  __attribute__((deprecated));
+
 
 /**
  * Get the auid of a pool
  *
+ * DEPRECATED: auid support has been removed and this call always reports
+ * CEPH_AUTH_UID_DEFAULT (-1).
+
  * @param io pool to query
  * @param auid where to store the auid
  * @returns 0 on success, negative error code on failure
  */
-CEPH_RADOS_API int rados_ioctx_pool_get_auid(rados_ioctx_t io, uint64_t *auid);
+CEPH_RADOS_API int rados_ioctx_pool_get_auid(rados_ioctx_t io, uint64_t *auid)
+  __attribute__((deprecated));
 
 /* deprecated, use rados_ioctx_pool_requires_alignment2 instead */
 CEPH_RADOS_API int rados_ioctx_pool_requires_alignment(rados_ioctx_t io)
@@ -1523,7 +1546,7 @@ CEPH_RADOS_API int rados_read(rados_ioctx_t io, const char *oid, char *buf,
  * @param init_value the init value for the algorithm
  * @param init_value_len the length of the init value
  * @param len the number of bytes to checksum
- * @param off the offset to start checksuming in the object
+ * @param off the offset to start checksumming in the object
  * @param chunk_size optional length-aligned chunk size for checksums
  * @param pchecksum where to store the checksum result
  * @param checksum_len the number of bytes available for the result
@@ -1778,7 +1801,7 @@ CEPH_RADOS_API int rados_stat(rados_ioctx_t io, const char *o, uint64_t *psize,
  *    - N bytes = key name
  *
  * Restrictions:
- *  - The HDR update must preceed any key/value updates.
+ *  - The HDR update must precede any key/value updates.
  *  - All key/value updates must be in lexicographically sorted order
  *    in cmdbuf.
  *  - You can read/write to a tmap object via the regular APIs, but
@@ -2055,7 +2078,7 @@ CEPH_RADOS_API int rados_aio_write(rados_ioctx_t io, const char *oid,
 		                   const char *buf, size_t len, uint64_t off);
 
 /**
- * Asychronously append data to an object
+ * Asynchronously append data to an object
  *
  * Queues the append and returns.
  *
@@ -2075,7 +2098,7 @@ CEPH_RADOS_API int rados_aio_append(rados_ioctx_t io, const char *oid,
 		                    const char *buf, size_t len);
 
 /**
- * Asychronously write an entire object
+ * Asynchronously write an entire object
  *
  * The object is filled with the provided data. If the object exists,
  * it is atomically truncated and then written.
@@ -2097,7 +2120,7 @@ CEPH_RADOS_API int rados_aio_write_full(rados_ioctx_t io, const char *oid,
 			                const char *buf, size_t len);
 
 /**
- * Asychronously write the same buffer multiple times
+ * Asynchronously write the same buffer multiple times
  *
  * Queues the writesame and returns.
  *
@@ -2120,7 +2143,7 @@ CEPH_RADOS_API int rados_aio_writesame(rados_ioctx_t io, const char *oid,
 				       size_t write_len, uint64_t off);
 
 /**
- * Asychronously remove an object
+ * Asynchronously remove an object
  *
  * Queues the remove and returns.
  *
@@ -2137,7 +2160,7 @@ CEPH_RADOS_API int rados_aio_remove(rados_ioctx_t io, const char *oid,
 		                    rados_completion_t completion);
 
 /**
- * Asychronously read data from an object
+ * Asynchronously read data from an object
  *
  * The io context determines the snapshot to read from, if any was set
  * by rados_ioctx_snap_set_read().
@@ -2775,7 +2798,7 @@ CEPH_RADOS_API int rados_set_alloc_hint2(rados_ioctx_t io, const char *o,
  * @name Object Operations
  *
  * A single rados operation can do multiple operations on one object
- * atomicly. The whole operation will suceed or fail, and no partial
+ * atomically. The whole operation will succeed or fail, and no partial
  * results will be visible.
  *
  * Operations may be either reads, which can return data, or writes,
@@ -3327,7 +3350,7 @@ CEPH_RADOS_API void rados_read_op_read(rados_read_op_t read_op,
  * @param init_value the init value for the algorithm
  * @param init_value_len the length of the init value
  * @param len the number of bytes to checksum
- * @param off the offset to start checksuming in the object
+ * @param off the offset to start checksumming in the object
  * @param chunk_size optional length-aligned chunk size for checksums
  * @param pchecksum where to store the checksum result for this action
  * @param checksum_len the number of bytes available for the result
@@ -3754,7 +3777,7 @@ CEPH_RADOS_API int rados_application_metadata_remove(rados_ioctx_t io,
  * @param keys_len number of bytes in keys buffer
  * @param values buffer in which to store values
  * @param vals_len number of bytes in values buffer
- * @returns 0 on succcess, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  * @returns -ERANGE if either buffer is too short
  */
 CEPH_RADOS_API int rados_application_metadata_list(rados_ioctx_t io,

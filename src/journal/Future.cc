@@ -3,7 +3,7 @@
 
 #include "journal/Future.h"
 #include "journal/FutureImpl.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 namespace journal {
 

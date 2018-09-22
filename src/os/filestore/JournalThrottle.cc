@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "JournalThrottle.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 bool JournalThrottle::set_params(
   double _low_threshhold,

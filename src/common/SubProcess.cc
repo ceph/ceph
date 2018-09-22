@@ -9,7 +9,7 @@
 #include <iostream>
 
 #include "common/errno.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 SubProcess::SubProcess(const char *cmd_, std_fd_op stdin_op_, std_fd_op stdout_op_, std_fd_op stderr_op_) :
   cmd(cmd_),

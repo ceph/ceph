@@ -5134,33 +5134,18 @@ void colsplittest(
   }
   ch->flush();
 
-  ObjectStore::Transaction t;
+  // check
   vector<ghobject_t> objects;
   r = store->collection_list(ch, ghobject_t(), ghobject_t::get_max(),
 			     INT_MAX, &objects, 0);
   ASSERT_EQ(r, 0);
   ASSERT_EQ(objects.size(), num_objects);
-  unsigned size = 0;
   for (vector<ghobject_t>::iterator i = objects.begin();
        i != objects.end();
        ++i) {
     ASSERT_EQ(!!(i->hobj.get_hash() & (1<<common_suffix_size)), 0u);
-    t.remove(cid, *i);
-    if (++size > 100) {
-      size = 0;
-      r = queue_transaction(store, ch, std::move(t));
-      ASSERT_EQ(r, 0);
-      t = ObjectStore::Transaction();
-
-      // test environment may have a low open file limit
-      ch->flush();
-    }
   }
 
-  t.remove_collection(cid);
-  r = queue_transaction(store, ch, std::move(t));
-  t = ObjectStore::Transaction();
-  
   objects.clear();
   r = store->collection_list(tch, ghobject_t(), ghobject_t::get_max(),
 			     INT_MAX, &objects, 0);
@@ -5170,23 +5155,48 @@ void colsplittest(
        i != objects.end();
        ++i) {
     ASSERT_EQ(!(i->hobj.get_hash() & (1<<common_suffix_size)), 0u);
-    t.remove(tid, *i);
-    if (++size > 100) {
-      size = 0;
-      r = queue_transaction(store, tch, std::move(t));
-      ASSERT_EQ(r, 0);
-      t = ObjectStore::Transaction();
-
-      // test environment may have a low open file limit
-      tch->flush();
-    }
   }
 
-  t.remove_collection(tid);
-  r = queue_transaction(store, tch, std::move(t));
+  // merge them again!
+  {
+    ObjectStore::Transaction t;
+    t.merge_collection(tid, cid, common_suffix_size);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  // check and clean up
+  ObjectStore::Transaction t;
+  {
+    vector<ghobject_t> objects;
+    r = store->collection_list(ch, ghobject_t(), ghobject_t::get_max(),
+			       INT_MAX, &objects, 0);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(objects.size(), num_objects * 2); // both halves
+    unsigned size = 0;
+    for (vector<ghobject_t>::iterator i = objects.begin();
+	 i != objects.end();
+	 ++i) {
+      t.remove(cid, *i);
+      if (++size > 100) {
+	size = 0;
+	r = queue_transaction(store, ch, std::move(t));
+	ASSERT_EQ(r, 0);
+	t = ObjectStore::Transaction();
+      }
+    }
+  }
+  t.remove_collection(cid);
+  r = queue_transaction(store, ch, std::move(t));
   ASSERT_EQ(r, 0);
+
+  ch->flush();
+  ASSERT_TRUE(!store->collection_exists(tid));
 }
 
+TEST_P(StoreTest, ColSplitTest0) {
+  colsplittest(store.get(), 10, 5, false);
+}
 TEST_P(StoreTest, ColSplitTest1) {
   colsplittest(store.get(), 10000, 11, false);
 }
@@ -5205,6 +5215,169 @@ TEST_P(StoreTest, ColSplitTest3) {
   colsplittest(store.get(), 100000, 25);
 }
 #endif
+
+void test_merge_skewed(ObjectStore *store,
+		       unsigned base, unsigned bits,
+		       unsigned anum, unsigned bnum)
+{
+  cout << __func__ << " 0x" << std::hex << base << std::dec
+       << " bits " << bits
+       << " anum " << anum << " bnum " << bnum << std::endl;
+  /*
+    make merge source pgs have radically different # of objects in them,
+    which should trigger different splitting in filestore, and verify that
+    post-merge all objects are accessible.
+    */
+  int r;
+  coll_t a(spg_t(pg_t(base, 0), shard_id_t::NO_SHARD));
+  coll_t b(spg_t(pg_t(base | (1<<bits), 0), shard_id_t::NO_SHARD));
+
+  auto cha = store->create_new_collection(a);
+  auto chb = store->create_new_collection(b);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(a, bits + 1);
+    r = queue_transaction(store, cha, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(b, bits + 1);
+    r = queue_transaction(store, chb, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  bufferlist small;
+  small.append("small");
+  string suffix = "ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooaaaaaaaaaa";
+  set<ghobject_t> aobjects, bobjects;
+  {
+    // fill a
+    ObjectStore::Transaction t;
+    for (unsigned i = 0; i < 1000; ++i) {
+      string objname = "a" + stringify(i) + suffix;
+      ghobject_t o(hobject_t(
+		     objname,
+		     "",
+		     CEPH_NOSNAP,
+		     i<<(bits+1) | base,
+		     52, ""));
+      aobjects.insert(o);
+      t.write(a, o, 0, small.length(), small, 0);
+      if (i % 100) {
+	r = queue_transaction(store, cha, std::move(t));
+	ASSERT_EQ(r, 0);
+	t = ObjectStore::Transaction();
+      }
+    }
+    r = queue_transaction(store, cha, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    // fill b
+    ObjectStore::Transaction t;
+    for (unsigned i = 0; i < 10; ++i) {
+      string objname = "b" + stringify(i) + suffix;
+      ghobject_t o(hobject_t(
+		     objname,
+		     "",
+		     CEPH_NOSNAP,
+		     (i<<(base+1)) | base | (1<<bits),
+		     52, ""));
+      bobjects.insert(o);
+      t.write(b, o, 0, small.length(), small, 0);
+      if (i % 100) {
+	r = queue_transaction(store, chb, std::move(t));
+	ASSERT_EQ(r, 0);
+	t = ObjectStore::Transaction();
+      }
+    }
+    r = queue_transaction(store, chb, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  // merge b->a
+  {
+    ObjectStore::Transaction t;
+    t.merge_collection(b, a, bits);
+    r = queue_transaction(store, cha, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  // verify
+  {
+    vector<ghobject_t> got;
+    store->collection_list(cha, ghobject_t(), ghobject_t::get_max(), INT_MAX,
+			   &got, 0);
+    set<ghobject_t> gotset;
+    for (auto& o : got) {
+      ASSERT_TRUE(aobjects.count(o) || bobjects.count(o));
+      gotset.insert(o);
+    }
+    // check both listing and stat-ability (different code paths!)
+    struct stat st;
+    for (auto& o : aobjects) {
+      ASSERT_TRUE(gotset.count(o));
+      int r = store->stat(cha, o, &st, false);
+      ASSERT_EQ(r, 0);
+    }
+    for (auto& o : bobjects) {
+      ASSERT_TRUE(gotset.count(o));
+      int r = store->stat(cha, o, &st, false);
+      ASSERT_EQ(r, 0);
+    }
+  }
+
+  // clean up
+  {
+    ObjectStore::Transaction t;
+    for (auto &o : aobjects) {
+      t.remove(a, o);
+    }
+    r = queue_transaction(store, cha, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    for (auto &o : bobjects) {
+      t.remove(a, o);
+    }
+    t.remove_collection(a);
+    r = queue_transaction(store, cha, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
+TEST_P(StoreTest, MergeSkewed) {
+  if (string(GetParam()) != "filestore")
+    return;
+
+  // this is sufficient to exercise merges with different hashing levels
+  test_merge_skewed(store.get(), 0xf, 4, 10, 10000);
+  test_merge_skewed(store.get(), 0xf, 4, 10000, 10);
+
+  /*
+  // this covers a zillion variations that all boil down to the same thing
+  for (unsigned base = 3; base < 0x1000; base *= 5) {
+    unsigned bits;
+    unsigned t = base;
+    for (bits = 0; t; t >>= 1) {
+      ++bits;
+    }
+    for (unsigned b = bits; b < bits + 10; b += 3) {
+      for (auto anum : { 10, 1000, 10000 }) {
+	for (auto bnum : { 10, 1000, 10000 }) {
+	  if (anum == bnum) {
+	    continue;
+	  }
+	  test_merge_skewed(store.get(), base, b, anum, bnum);
+	}
+      }
+    }
+  }
+  */
+}
+
 
 /**
  * This test tests adding two different groups
@@ -6668,6 +6841,7 @@ TEST_P(StoreTestSpecificAUSize, garbageCollection) {
 
   SetVal(g_conf(), "bluestore_compression_max_blob_size", "524288");
   SetVal(g_conf(), "bluestore_compression_min_blob_size", "262144");
+  SetVal(g_conf(), "bluestore_max_blob_size", "524288");
   SetVal(g_conf(), "bluestore_compression_mode", "force");
   g_conf().apply_changes(nullptr);
 
@@ -7070,6 +7244,69 @@ TEST_P(StoreTestSpecificAUSize, BluestoreTinyDevFailure2) {
   ASSERT_EQ(store->fsck(false), 0); // do fsck explicitly
   store->mount();
 }
+
+TEST_P(StoreTest, SpuriousReadErrorTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  int r;
+  auto logger = store->get_perf_counters();
+  coll_t cid;
+  auto ch = store->create_new_collection(cid);
+  ghobject_t hoid(hobject_t(sobject_t("foo", CEPH_NOSNAP)));
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  bufferlist test_data;
+  bufferptr ap(0x2000);
+  memset(ap.c_str(), 'a', 0x2000);
+  test_data.append(ap);
+  {
+    ObjectStore::Transaction t;
+    t.write(cid, hoid, 0, 0x2000, test_data);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    // force cache clear
+    EXPECT_EQ(store->umount(), 0);
+    EXPECT_EQ(store->mount(), 0);
+  }
+
+  cerr << "Injecting CRC error with no retry, expecting EIO" << std::endl;
+  SetVal(g_conf(), "bluestore_retry_disk_reads", "0");
+  SetVal(g_conf(), "bluestore_debug_inject_csum_err_probability", "1");
+  g_ceph_context->_conf.apply_changes(nullptr);
+  {
+    bufferlist in;
+    r = store->read(ch, hoid, 0, 0x2000, in, CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+    ASSERT_EQ(-EIO, r);
+    ASSERT_EQ(logger->get(l_bluestore_read_eio), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_reads_with_retries), 0u);
+  }
+
+  cerr << "Injecting CRC error with retries, expecting success after several retries" << std::endl;
+  SetVal(g_conf(), "bluestore_retry_disk_reads", "255");
+  SetVal(g_conf(), "bluestore_debug_inject_csum_err_probability", "0.8");
+  /**
+   * Probabilistic test: 25 reads, each has a 80% chance of failing with 255 retries
+   * Probability of at least one retried read: 1 - (0.2 ** 25) = 100% - 3e-18
+   * Probability of a random test failure: 1 - ((1 - (0.8 ** 255)) ** 25) ~= 5e-24
+   */
+  g_ceph_context->_conf.apply_changes(nullptr);
+  {
+    for (int i = 0; i < 25; ++i) {
+      bufferlist in;
+      r = store->read(ch, hoid, 0, 0x2000, in, CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+      ASSERT_EQ(0x2000, r);
+      ASSERT_TRUE(bl_eq(test_data, in));
+    }
+    ASSERT_GE(logger->get(l_bluestore_reads_with_retries), 1u);
+  }
+}
+
 #endif  // WITH_BLUESTORE
 
 int main(int argc, char **argv) {

@@ -14,7 +14,7 @@ ContextCompletion::ContextCompletion(Context *ctx, bool ignore_enoent)
 void ContextCompletion::finish_adding_requests() {
   bool complete;
   {
-    Mutex::Locker l(m_lock);
+    std::lock_guard<Mutex> l(m_lock);
     m_building = false;
     complete = (m_current_ops == 0);
   }
@@ -25,14 +25,14 @@ void ContextCompletion::finish_adding_requests() {
 }
 
 void ContextCompletion::start_op() {
-  Mutex::Locker l(m_lock);
+  std::lock_guard<Mutex> l(m_lock);
   ++m_current_ops;
 }
 
 void ContextCompletion::finish_op(int r) {
   bool complete;
   {
-    Mutex::Locker l(m_lock);
+    std::lock_guard<Mutex> l(m_lock);
     if (r < 0 && m_ret == 0 && (!m_ignore_enoent || r != -ENOENT)) {
       m_ret = r;
     }

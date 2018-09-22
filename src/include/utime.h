@@ -35,7 +35,7 @@
 inline __u32 cap_to_u32_max(__u64 t) {
   return std::min(t, (__u64)std::numeric_limits<uint32_t>::max());
 }
-/* WARNING: If add member in utime_t, please make sure the encode/decode funtion
+/* WARNING: If add member in utime_t, please make sure the encode/decode function
  * work well. For little-endian machine, we should make sure there is no padding
  * in 32-bit machine and 64-bit machine.
  * You should also modify the padding_check function.
@@ -531,6 +531,11 @@ inline bool operator!=(const utime_t& a, const utime_t& b)
 inline std::ostream& operator<<(std::ostream& out, const utime_t& t)
 {
   return t.localtime(out);
+}
+
+inline std::string utimespan_str(const utime_t& age) {
+  auto age_ts = ceph::timespan(age.nsec()) + std::chrono::seconds(age.sec());
+  return timespan_str(age_ts);
 }
 
 #endif

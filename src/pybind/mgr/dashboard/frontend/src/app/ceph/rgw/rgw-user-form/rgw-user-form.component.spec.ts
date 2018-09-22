@@ -4,7 +4,7 @@ import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { BsModalService } from 'ngx-bootstrap/modal';
-import { Observable, of as observableOf } from 'rxjs';
+import { of as observableOf } from 'rxjs';
 
 import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
@@ -15,18 +15,11 @@ import { RgwUserFormComponent } from './rgw-user-form.component';
 describe('RgwUserFormComponent', () => {
   let component: RgwUserFormComponent;
   let fixture: ComponentFixture<RgwUserFormComponent>;
-  let queryResult: Array<string> = [];
-
-  class MockRgwUserService extends RgwUserService {
-    enumerate() {
-      return observableOf(queryResult);
-    }
-  }
 
   configureTestBed({
     declarations: [RgwUserFormComponent],
     imports: [HttpClientTestingModule, ReactiveFormsModule, RouterTestingModule, SharedModule],
-    providers: [BsModalService, { provide: RgwUserService, useClass: MockRgwUserService }]
+    providers: [BsModalService, RgwUserService]
   });
 
   beforeEach(() => {
@@ -119,52 +112,43 @@ describe('RgwUserFormComponent', () => {
     });
   });
 
-  describe('userIdValidator', () => {
-    it('should validate user id (1/3)', () => {
-      const validatorFn = component.userIdValidator();
-      const ctrl = new FormControl('');
-      const validator$ = validatorFn(ctrl);
-      expect(validator$ instanceof Observable).toBeTruthy();
-      if (validator$ instanceof Observable) {
-        validator$.subscribe((resp) => {
-          expect(resp).toBe(null);
-        });
-      }
+  describe('username validation', () => {
+    let rgwUserService: RgwUserService;
+
+    beforeEach(() => {
+      rgwUserService = TestBed.get(RgwUserService);
+      spyOn(rgwUserService, 'enumerate').and.returnValue(observableOf(['abc', 'xyz']));
+    });
+
+    it('should validate that username is required', () => {
+      const user_id = component.userForm.get('user_id');
+      user_id.markAsDirty();
+      user_id.setValue('');
+      expect(user_id.hasError('required')).toBeTruthy();
+      expect(user_id.valid).toBeFalsy();
     });
 
     it(
-      'should validate user id (2/3)',
+      'should validate that username is valid',
       fakeAsync(() => {
-        const validatorFn = component.userIdValidator(0);
-        const ctrl = new FormControl('ab');
-        ctrl.markAsDirty();
-        const validator$ = validatorFn(ctrl);
-        expect(validator$ instanceof Observable).toBeTruthy();
-        if (validator$ instanceof Observable) {
-          validator$.subscribe((resp) => {
-            expect(resp).toBe(null);
-          });
-          tick();
-        }
+        const user_id = component.userForm.get('user_id');
+        user_id.markAsDirty();
+        user_id.setValue('ab');
+        tick(500);
+        expect(user_id.hasError('notUnique')).toBeFalsy();
+        expect(user_id.valid).toBeTruthy();
       })
     );
 
     it(
-      'should validate user id (3/3)',
+      'should validate that username is invalid',
       fakeAsync(() => {
-        queryResult = ['abc'];
-        const validatorFn = component.userIdValidator(0);
-        const ctrl = new FormControl('abc');
-        ctrl.markAsDirty();
-        const validator$ = validatorFn(ctrl);
-        expect(validator$ instanceof Observable).toBeTruthy();
-        if (validator$ instanceof Observable) {
-          validator$.subscribe((resp) => {
-            expect(resp instanceof Object).toBeTruthy();
-            expect(resp.userIdExists).toBeTruthy();
-          });
-          tick();
-        }
+        const user_id = component.userForm.get('user_id');
+        user_id.markAsDirty();
+        user_id.setValue('abc');
+        tick(500);
+        expect(user_id.hasError('notUnique')).toBeTruthy();
+        expect(user_id.valid).toBeFalsy();
       })
     );
   });

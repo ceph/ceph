@@ -6,8 +6,8 @@ import pipes
 import os
 import re
 
-from copy import deepcopy
 from util import get_remote_for_role
+from util.workunit import get_refspec_after_overrides
 
 from teuthology import misc
 from teuthology.config import config as teuth_config
@@ -16,59 +16,6 @@ from teuthology.parallel import parallel
 from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
-
-
-class Refspec:
-    def __init__(self, refspec):
-        self.refspec = refspec
-
-    def __str__(self):
-        return self.refspec
-
-    def _clone(self, git_url, clonedir, opts=None):
-        if opts is None:
-            opts = []
-        return (['rm', '-rf', clonedir] +
-                [run.Raw('&&')] +
-                ['git', 'clone'] + opts +
-                [git_url, clonedir])
-
-    def _cd(self, clonedir):
-        return ['cd', clonedir]
-
-    def _checkout(self):
-        return ['git', 'checkout', self.refspec]
-
-    def clone(self, git_url, clonedir):
-        return (self._clone(git_url, clonedir) +
-                [run.Raw('&&')] +
-                self._cd(clonedir) +
-                [run.Raw('&&')] +
-                self._checkout())
-
-
-class Branch(Refspec):
-    def __init__(self, tag):
-        Refspec.__init__(self, tag)
-
-    def clone(self, git_url, clonedir):
-        opts = ['--depth', '1',
-                '--branch', self.refspec]
-        return (self._clone(git_url, clonedir, opts) +
-                [run.Raw('&&')] +
-                self._cd(clonedir))
-
-
-class Head(Refspec):
-    def __init__(self):
-        Refspec.__init__(self, 'HEAD')
-
-    def clone(self, git_url, clonedir):
-        opts = ['--depth', '1']
-        return (self._clone(git_url, clonedir, opts) +
-                [run.Raw('&&')] +
-                self._cd(clonedir))
-
 
 def task(ctx, config):
     """
@@ -140,25 +87,8 @@ def task(ctx, config):
     assert isinstance(config.get('clients'), dict), \
         'configuration must contain a dictionary of clients'
 
-    # mimic the behavior of the "install" task, where the "overrides" are
-    # actually the defaults of that task. in other words, if none of "sha1",
-    # "tag", or "branch" is specified by a "workunit" tasks, we will update
-    # it with the information in the "workunit" sub-task nested in "overrides".
-    overrides = deepcopy(ctx.config.get('overrides', {}).get('workunit', {}))
-    refspecs = {'branch': Branch, 'tag': Refspec, 'sha1': Refspec}
-    if any(map(lambda i: i in config, refspecs.iterkeys())):
-        for i in refspecs.iterkeys():
-            overrides.pop(i, None)
-    misc.deep_merge(config, overrides)
-
-    for spec, cls in refspecs.iteritems():
-        refspec = config.get(spec)
-        if refspec:
-            refspec = cls(refspec)
-            break
-    if refspec is None:
-        refspec = Head()
-
+    overrides = ctx.config.get('overrides', {})
+    refspec = get_refspec_after_overrides(config, overrides)
     timeout = config.get('timeout', '3h')
     cleanup = config.get('cleanup', True)
 
@@ -478,16 +408,13 @@ def _run_tests(ctx, refspec, role, tests, env, basedir,
                     args=args,
                     label="workunit test {workunit}".format(workunit=workunit)
                 )
-                if cleanup:
-                    remote.run(
-                        logger=log.getChild(role),
-                        args=['sudo', 'rm', '-rf', '--', scratch_tmp],
-                    )
     finally:
         log.info('Stopping %s on %s...', tests, role)
+        args=['rm', '-rf', '--', workunits_file, clonedir]
+        if cleanup:
+            log.info("and cleaning up scratch: {}".format(scratch_tmp))
+            args.append(scratch_tmp)
         remote.run(
             logger=log.getChild(role),
-            args=[
-                'rm', '-rf', '--', workunits_file, clonedir,
-            ],
+            args=args,
         )

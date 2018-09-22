@@ -44,6 +44,40 @@
 using ceph::bufferlist;
 using ceph::HeartbeatMap;
 
+#ifdef WITH_SEASTAR
+CephContext::CephContext()
+  : _conf{ceph::common::local_conf()},
+    _crypto_random{std::make_unique<CryptoRandom>()}
+{}
+
+// define the dtor in .cc as CryptoRandom is an incomplete type in the header
+CephContext::~CephContext()
+{}
+
+CryptoRandom* CephContext::random() const
+{
+  return _crypto_random.get();
+}
+
+CephContext* CephContext::get()
+{
+  ++nref;
+  return this;
+}
+
+void CephContext::put()
+{
+  if (--nref == 0) {
+    delete this;
+  }
+}
+
+PerfCountersCollection* CephContext::get_perfcounters_collection()
+{
+  throw std::runtime_error("not yet implemented");
+}
+
+#else  // WITH_SEASTAR
 namespace {
 
 class LockdepObs : public md_config_obs_t {
@@ -142,7 +176,7 @@ public:
   void *entry() override
   {
     while (1) {
-      Mutex::Locker l(_lock);
+      std::lock_guard<Mutex> l(_lock);
 
       if (_cct->_conf->heartbeat_interval) {
         utime_t interval(_cct->_conf->heartbeat_interval, 0);
@@ -168,14 +202,14 @@ public:
 
   void reopen_logs()
   {
-    Mutex::Locker l(_lock);
+    std::lock_guard<Mutex> l(_lock);
     _reopen_logs = true;
     _cond.Signal();
   }
 
   void exit_thread()
   {
-    Mutex::Locker l(_lock);
+    std::lock_guard<Mutex> l(_lock);
     _exit_thread = true;
     _cond.Signal();
   }
@@ -376,7 +410,11 @@ public:
 
   bool call(std::string_view command, const cmdmap_t& cmdmap,
 	    std::string_view format, bufferlist& out) override {
-    m_cct->do_command(command, cmdmap, format, &out);
+    try {
+      m_cct->do_command(command, cmdmap, format, &out);
+    } catch (const bad_cmd_get& e) {
+      return false;
+    }
     return true;
   }
 };
@@ -844,3 +882,4 @@ void CephContext::notify_post_fork()
   for (auto &&t : _fork_watchers)
     t->handle_post_fork();
 }
+#endif	// WITH_SEASTAR

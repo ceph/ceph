@@ -76,7 +76,7 @@
 #include "common/ceph_crypto.h"
 using ceph::crypto::SHA1;
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #include "common/config.h"
 #include "common/blkdev.h"
@@ -3144,6 +3144,17 @@ void FileStore::_do_transaction(
       }
       break;
 
+    case Transaction::OP_MERGE_COLLECTION:
+      {
+        coll_t cid = i.get_cid(op->cid);
+        uint32_t bits = op->split_bits;
+        coll_t dest = i.get_cid(op->dest_cid);
+        tracepoint(objectstore, merge_coll_enter, osr_name);
+        r = _merge_collection(cid, bits, dest, spos);
+        tracepoint(objectstore, merge_coll_exit, r);
+      }
+      break;
+
     case Transaction::OP_SETALLOCHINT:
       {
         const coll_t &_cid = i.get_cid(op->cid);
@@ -5729,6 +5740,138 @@ int FileStore::_omap_setheader(const coll_t& cid, const ghobject_t &hoid,
       return r;
   }
   return object_map->set_header(hoid, bl, &spos);
+}
+
+int FileStore::_merge_collection(const coll_t& cid,
+				 uint32_t bits,
+				 coll_t dest,
+				 const SequencerPosition &spos)
+{
+  dout(15) << __FUNC__ << ": " << cid << " " << dest
+	   << " bits " << bits << dendl;
+  int r = 0;
+
+  if (!collection_exists(cid)) {
+    dout(2) << __FUNC__ << ": " << cid << " DNE" << dendl;
+    ceph_assert(replaying);
+    return 0;
+  }
+  if (!collection_exists(dest)) {
+    dout(2) << __FUNC__ << ": " << dest << " DNE" << dendl;
+    ceph_assert(replaying);
+    return 0;
+  }
+
+  // set bits
+  if (_check_replay_guard(cid, spos) > 0)
+    _collection_set_bits(dest, bits);
+
+  spg_t pgid;
+  bool is_pg = dest.is_pg(&pgid);
+  ceph_assert(is_pg);
+
+  {
+    int dstcmp = _check_replay_guard(dest, spos);
+    if (dstcmp < 0)
+      return 0;
+
+    int srccmp = _check_replay_guard(cid, spos);
+    if (srccmp < 0)
+      return 0;
+
+    _set_global_replay_guard(cid, spos);
+    _set_replay_guard(cid, spos, true);
+    _set_replay_guard(dest, spos, true);
+
+    Index from;
+    r = get_index(cid, &from);
+
+    Index to;
+    if (!r)
+      r = get_index(dest, &to);
+
+    if (!r) {
+      ceph_assert(from.index);
+      RWLock::WLocker l1((from.index)->access_lock);
+
+      ceph_assert(to.index);
+      RWLock::WLocker l2((to.index)->access_lock);
+
+      r = from->merge(bits, to.index);
+    }
+
+    _close_replay_guard(cid, spos);
+    _close_replay_guard(dest, spos);
+  }
+
+  // temp too
+  {
+    int dstcmp = _check_replay_guard(dest.get_temp(), spos);
+    if (dstcmp < 0)
+      return 0;
+
+    int srccmp = _check_replay_guard(cid.get_temp(), spos);
+    if (srccmp < 0)
+      return 0;
+
+    _set_global_replay_guard(cid.get_temp(), spos);
+    _set_replay_guard(cid.get_temp(), spos, true);
+    _set_replay_guard(dest.get_temp(), spos, true);
+
+    Index from;
+    r = get_index(cid.get_temp(), &from);
+
+    Index to;
+    if (!r)
+      r = get_index(dest.get_temp(), &to);
+
+    if (!r) {
+      ceph_assert(from.index);
+      RWLock::WLocker l1((from.index)->access_lock);
+
+      ceph_assert(to.index);
+      RWLock::WLocker l2((to.index)->access_lock);
+
+      r = from->merge(bits, to.index);
+    }
+
+    _close_replay_guard(cid.get_temp(), spos);
+    _close_replay_guard(dest.get_temp(), spos);
+
+  }
+
+  // remove source
+  if (_check_replay_guard(cid, spos) > 0)
+    r = _destroy_collection(cid);
+
+  if (!r && cct->_conf->filestore_debug_verify_split) {
+    vector<ghobject_t> objects;
+    ghobject_t next;
+    while (1) {
+      collection_list(
+	dest,
+	next, ghobject_t::get_max(),
+	get_ideal_list_max(),
+	&objects,
+	&next);
+      if (objects.empty())
+	break;
+      for (vector<ghobject_t>::iterator i = objects.begin();
+	   i != objects.end();
+	   ++i) {
+	if (!i->match(bits, pgid.pgid.ps())) {
+	  dout(20) << __FUNC__ << ": " << *i << " does not belong in "
+		   << cid << dendl;
+	  ceph_assert(i->match(bits, pgid.pgid.ps()));
+	}
+      }
+      objects.clear();
+    }
+  }
+
+  dout(15) << __FUNC__ << ": " << cid << " " << dest << " bits " << bits
+	   << " = " << r << dendl;
+  return r;
 }
 
 int FileStore::_split_collection(const coll_t& cid,

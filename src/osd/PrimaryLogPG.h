@@ -18,7 +18,7 @@
 #define CEPH_REPLICATEDPG_H
 
 #include <boost/tuple/tuple.hpp>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "OSD.h"
 #include "PG.h"
 #include "Watch.h"
@@ -29,7 +29,7 @@
 #include "common/shared_cache.hpp"
 #include "ReplicatedBackend.h"
 #include "PGTransaction.h"
-#include "cls/refcount/cls_refcount_ops.h"
+#include "cls/cas/cls_cas_ops.h"
 
 class CopyFromCallback;
 class PromoteCallback;

@@ -460,7 +460,7 @@ namespace cohort {
       void drain(std::function<void(T*)> uref,
 		 uint32_t flags = FLAG_NONE) {
 	/* clear a table, call supplied function on
-	 * each element found (e.g., retuns sentinel
+	 * each element found (e.g., returns sentinel
 	 * references) */
 	Object::Queue2 drain_q;
 	for (int t_ix = 0; t_ix < n_part; ++t_ix) {

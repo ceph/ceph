@@ -940,6 +940,14 @@ void MemStore::_do_transaction(Transaction& t)
 	r = _split_collection(cid, bits, rem, dest);
       }
       break;
+    case Transaction::OP_MERGE_COLLECTION:
+      {
+        coll_t cid = i.get_cid(op->cid);
+        uint32_t bits = op->split_bits;
+        coll_t dest = i.get_cid(op->dest_cid);
+	r = _merge_collection(cid, bits, dest);
+      }
+      break;
 
     case Transaction::OP_SETALLOCHINT:
       {
@@ -1404,6 +1412,44 @@ int MemStore::_split_collection(const coll_t& cid, uint32_t bits, uint32_t match
 
   return 0;
 }
+
+int MemStore::_merge_collection(const coll_t& cid, uint32_t bits, coll_t dest)
+{
+  dout(10) << __func__ << " " << cid << " " << bits << " "
+	   << dest << dendl;
+  CollectionRef sc = get_collection(cid);
+  if (!sc)
+    return -ENOENT;
+  CollectionRef dc = get_collection(dest);
+  if (!dc)
+    return -ENOENT;
+  {
+    RWLock::WLocker l1(std::min(&(*sc), &(*dc))->lock);
+    RWLock::WLocker l2(std::max(&(*sc), &(*dc))->lock);
+
+    map<ghobject_t,ObjectRef>::iterator p = sc->object_map.begin();
+    while (p != sc->object_map.end()) {
+      dout(20) << " moving " << p->first << dendl;
+      dc->object_map.insert(make_pair(p->first, p->second));
+      dc->object_hash.insert(make_pair(p->first, p->second));
+      sc->object_hash.erase(p->first);
+      sc->object_map.erase(p++);
+    }
+
+    dc->bits = bits;
+  }
+
+  {
+    RWLock::WLocker l(coll_lock);
+    ceph::unordered_map<coll_t,CollectionRef>::iterator cp = coll_map.find(cid);
+    ceph_assert(cp != coll_map.end());
+    used_bytes -= cp->second->used_bytes();
+    coll_map.erase(cp);
+  }
+
+  return 0;
+}
+
 namespace {
 struct BufferlistObject : public MemStore::Object {
   ceph::spinlock mutex;

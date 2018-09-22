@@ -22,9 +22,7 @@
 extern "C" {
 #include "crush/hash.h"
 }
-#include "PG.h"
 #include "OSDMap.h"
-#include "PGBackend.h"
 
 const char *ceph_osd_flag_name(unsigned flag)
 {
@@ -99,6 +97,12 @@ const char * ceph_osd_op_flag_name(unsigned flag)
       break;
     case CEPH_OSD_OP_FLAG_FADVISE_NOCACHE:
       name = "fadvise_nocache";
+      break;
+    case CEPH_OSD_OP_FLAG_WITH_REFERENCE:
+      name = "with_reference";
+      break;
+    case CEPH_OSD_OP_FLAG_BYPASS_CLEAN_CACHE:
+      name = "bypass_clean_cache";
       break;
     default:
       name = "???";
@@ -501,7 +505,11 @@ pg_t pg_t::get_ancestor(unsigned old_pg_num) const
 
 bool pg_t::is_split(unsigned old_pg_num, unsigned new_pg_num, set<pg_t> *children) const
 {
-  ceph_assert(m_seed < old_pg_num);
+  //ceph_assert(m_seed < old_pg_num);
+  if (m_seed >= old_pg_num) {
+    // degenerate case
+    return false;
+  }
   if (new_pg_num <= old_pg_num)
     return false;
 
@@ -552,6 +560,25 @@ unsigned pg_t::get_split_bits(unsigned pg_num) const {
     return p;
   else
     return p - 1;
+}
+
+bool pg_t::is_merge_source(
+  unsigned old_pg_num,
+  unsigned new_pg_num,
+  pg_t *parent) const
+{
+  if (m_seed < old_pg_num &&
+      m_seed >= new_pg_num) {
+    if (parent) {
+      pg_t t = *this;
+      while (t.m_seed >= new_pg_num) {
+	t = t.get_parent();
+      }
+      *parent = t;
+    }
+    return true;
+  }
+  return false;
 }
 
 pg_t pg_t::get_parent() const
@@ -842,6 +869,8 @@ std::string pg_state_string(uint64_t state)
     oss << "degraded+";
   if (state & PG_STATE_REMAPPED)
     oss << "remapped+";
+  if (state & PG_STATE_PREMERGE)
+    oss << "premerge+";
   if (state & PG_STATE_SCRUBBING)
     oss << "scrubbing+";
   if (state & PG_STATE_DEEP_SCRUB)
@@ -891,6 +920,8 @@ boost::optional<uint64_t> pg_string_state(const std::string& state)
     type = PG_STATE_RECOVERY_UNFOUND;
   else if (state == "backfill_unfound")
     type = PG_STATE_BACKFILL_UNFOUND;
+  else if (state == "premerge")
+    type = PG_STATE_PREMERGE;
   else if (state == "scrubbing")
     type = PG_STATE_SCRUBBING;
   else if (state == "degraded")
@@ -937,6 +968,8 @@ boost::optional<uint64_t> pg_string_state(const std::string& state)
     type = PG_STATE_SNAPTRIM_WAIT;
   else if (state == "snaptrim_error")
     type = PG_STATE_SNAPTRIM_ERROR;
+  else if (state == "unknown")
+    type = 0;
   else
     type = boost::none;
   return type;
@@ -1026,7 +1059,9 @@ static opt_mapping_t opt_mapping = boost::assign::map_list_of
            ("csum_max_block", pool_opts_t::opt_desc_t(
 	     pool_opts_t::CSUM_MAX_BLOCK, pool_opts_t::INT))
            ("csum_min_block", pool_opts_t::opt_desc_t(
-	     pool_opts_t::CSUM_MIN_BLOCK, pool_opts_t::INT));
+	     pool_opts_t::CSUM_MIN_BLOCK, pool_opts_t::INT))
+           ("fingerprint_algorithm", pool_opts_t::opt_desc_t(
+	     pool_opts_t::FINGERPRINT_ALGORITHM, pool_opts_t::STR));
 
 bool pool_opts_t::is_opt_name(const std::string& name) {
     return opt_mapping.count(name);
@@ -1191,8 +1226,15 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_int("object_hash", get_object_hash());
   f->dump_unsigned("pg_num", get_pg_num());
   f->dump_unsigned("pg_placement_num", get_pgp_num());
+  f->dump_unsigned("pg_placement_num_target", get_pgp_num_target());
+  f->dump_unsigned("pg_num_target", get_pg_num_target());
+  f->dump_unsigned("pg_num_pending", get_pg_num_pending());
+  f->dump_unsigned("pg_num_dec_last_epoch_clean",
+		   get_pg_num_dec_last_epoch_clean());
   f->dump_stream("last_change") << get_last_change();
   f->dump_stream("last_force_op_resend") << get_last_force_op_resend();
+  f->dump_stream("last_force_op_resend_prenautilus")
+    << get_last_force_op_resend_prenautilus();
   f->dump_stream("last_force_op_resend_preluminous")
     << get_last_force_op_resend_preluminous();
   f->dump_unsigned("auid", get_auid());
@@ -1285,6 +1327,28 @@ unsigned pg_pool_t::get_pg_num_divisor(pg_t pgid) const
     return pg_num_mask + 1;           // smaller bin size (already split)
   else
     return (pg_num_mask + 1) >> 1;    // bigger bin (not yet split)
+}
+
+bool pg_pool_t::is_pending_merge(pg_t pgid, bool *target) const
+{
+  if (pg_num_pending >= pg_num) {
+    return false;
+  }
+  if (pgid.ps() >= pg_num_pending && pgid.ps() < pg_num) {
+    if (target) {
+      *target = false;
+    }
+    return true;
+  }
+  for (unsigned ps = pg_num_pending; ps < pg_num; ++ps) {
+    if (pg_t(ps, pgid.pool()).get_parent() == pgid) {
+      if (target) {
+	*target = true;
+      }
+      return true;
+    }
+  }
+  return false;
 }
 
 /*
@@ -1573,7 +1637,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  uint8_t v = 27;
+  uint8_t v = 28;
   // NOTE: any new encoding dependencies must be reflected by
   // SIGNIFICANT_FEATURES
   if (!(features & CEPH_FEATURE_NEW_OSDOP_ENCODING)) {
@@ -1584,6 +1648,8 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     v = 24;
   } else if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
     v = 26;
+  } else if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
+    v = 27;
   }
 
   ENCODE_START(v, 5, bl);
@@ -1606,7 +1672,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     encode(flags, bl);
   } else {
     auto tmp = flags;
-    tmp &= ~(FLAG_SELFMANAGED_SNAPS | FLAG_POOL_SNAPS);
+    tmp &= ~(FLAG_SELFMANAGED_SNAPS | FLAG_POOL_SNAPS | FLAG_CREATING);
     encode(tmp, bl);
   }
   encode((uint32_t)0, bl); // crash_replay_interval
@@ -1654,7 +1720,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     encode(opts, bl);
   }
   if (v >= 25) {
-    encode(last_force_op_resend, bl);
+    encode(last_force_op_resend_prenautilus, bl);
   }
   if (v >= 26) {
     encode(application_metadata, bl);
@@ -1662,12 +1728,19 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   if (v >= 27) {
     encode(create_time, bl);
   }
+  if (v >= 28) {
+    encode(pg_num_target, bl);
+    encode(pgp_num_target, bl);
+    encode(pg_num_pending, bl);
+    encode(pg_num_dec_last_epoch_clean, bl);
+    encode(last_force_op_resend, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
 void pg_pool_t::decode(bufferlist::const_iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(27, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(28, 5, 5, bl);
   decode(type, bl);
   decode(size, bl);
   decode(crush_rule, bl);
@@ -1810,15 +1883,27 @@ void pg_pool_t::decode(bufferlist::const_iterator& bl)
     decode(opts, bl);
   }
   if (struct_v >= 25) {
-    decode(last_force_op_resend, bl);
+    decode(last_force_op_resend_prenautilus, bl);
   } else {
-    last_force_op_resend = last_force_op_resend_preluminous;
+    last_force_op_resend_prenautilus = last_force_op_resend_preluminous;
   }
   if (struct_v >= 26) {
     decode(application_metadata, bl);
   }
   if (struct_v >= 27) {
     decode(create_time, bl);
+  }
+  if (struct_v >= 28) {
+    decode(pg_num_target, bl);
+    decode(pgp_num_target, bl);
+    decode(pg_num_pending, bl);
+    decode(pg_num_dec_last_epoch_clean, bl);
+    decode(last_force_op_resend, bl);
+  } else {
+    pg_num_target = pg_num;
+    pgp_num_target = pgp_num;
+    pg_num_pending = pg_num;
+    last_force_op_resend = last_force_op_resend_prenautilus;
   }
   DECODE_FINISH(bl);
   calc_pg_masks();
@@ -1836,7 +1921,11 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
   a.crush_rule = 3;
   a.object_hash = 4;
   a.pg_num = 6;
-  a.pgp_num = 5;
+  a.pgp_num = 4;
+  a.pgp_num_target = 4;
+  a.pg_num_target = 5;
+  a.pg_num_pending = 5;
+  a.pg_num_dec_last_epoch_clean = 2;
   a.last_change = 9;
   a.last_force_op_resend = 123823;
   a.last_force_op_resend_preluminous = 123824;
@@ -1898,11 +1987,24 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
       << " crush_rule " << p.get_crush_rule()
       << " object_hash " << p.get_object_hash_name()
       << " pg_num " << p.get_pg_num()
-      << " pgp_num " << p.get_pgp_num()
-      << " last_change " << p.get_last_change();
+      << " pgp_num " << p.get_pgp_num();
+  if (p.get_pg_num_target() != p.get_pg_num()) {
+    out << " pg_num_target " << p.get_pg_num_target();
+  }
+  if (p.get_pgp_num_target() != p.get_pgp_num()) {
+    out << " pgp_num_target " << p.get_pgp_num_target();
+  }
+  if (p.get_pg_num_pending() != p.get_pg_num()) {
+    out << " pg_num_pending " << p.get_pg_num_pending();
+    if (p.get_pg_num_dec_last_epoch_clean())
+      out << " dlec " << p.get_pg_num_dec_last_epoch_clean();
+  }
+  out << " last_change " << p.get_last_change();
   if (p.get_last_force_op_resend() ||
+      p.get_last_force_op_resend_prenautilus() ||
       p.get_last_force_op_resend_preluminous())
     out << " lfor " << p.get_last_force_op_resend() << "/"
+	<< p.get_last_force_op_resend_prenautilus() << "/"
 	<< p.get_last_force_op_resend_preluminous();
   if (p.get_auid())
     out << " owner " << p.get_auid();
@@ -3360,6 +3462,8 @@ bool PastIntervals::is_new_interval(
   int new_min_size,
   unsigned old_pg_num,
   unsigned new_pg_num,
+  unsigned old_pg_num_pending,
+  unsigned new_pg_num_pending,
   bool old_sort_bitwise,
   bool new_sort_bitwise,
   bool old_recovery_deletes,
@@ -3372,6 +3476,16 @@ bool PastIntervals::is_new_interval(
     old_min_size != new_min_size ||
     old_size != new_size ||
     pgid.is_split(old_pg_num, new_pg_num, 0) ||
+    // (is or was) pre-merge source
+    pgid.is_merge_source(old_pg_num_pending, new_pg_num_pending, 0) ||
+    pgid.is_merge_source(new_pg_num_pending, old_pg_num_pending, 0) ||
+    // merge source
+    pgid.is_merge_source(old_pg_num, new_pg_num, 0) ||
+    // (is or was) pre-merge target
+    pgid.is_merge_target(old_pg_num_pending, new_pg_num_pending) ||
+    pgid.is_merge_target(new_pg_num_pending, old_pg_num_pending) ||
+    // merge target
+    pgid.is_merge_target(old_pg_num, new_pg_num) ||
     old_sort_bitwise != new_sort_bitwise ||
     old_recovery_deletes != new_recovery_deletes;
 }
@@ -3412,6 +3526,8 @@ bool PastIntervals::is_new_interval(
 		    pi->min_size,
 		    plast->get_pg_num(),
 		    pi->get_pg_num(),
+		    plast->get_pg_num_pending(),
+		    pi->get_pg_num_pending(),
 		    lastmap->test_flag(CEPH_OSDMAP_SORTBITWISE),
 		    osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE),
 		    lastmap->test_flag(CEPH_OSDMAP_RECOVERY_DELETES),
@@ -4961,7 +5077,8 @@ void chunk_info_t::encode(bufferlist& bl) const
   encode(offset, bl);
   encode(length, bl);
   encode(oid, bl);
-  encode(flags, bl);
+  __u32 _flags = flags;
+  encode(_flags, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -4971,7 +5088,9 @@ void chunk_info_t::decode(bufferlist::const_iterator& bl)
   decode(offset, bl);
   decode(length, bl);
   decode(oid, bl);
-  decode(flags, bl);
+  __u32 _flags;
+  decode(_flags, bl);
+  flags = (cflag_t)_flags;
   DECODE_FINISH(bl);
 }
 

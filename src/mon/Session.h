@@ -15,6 +15,7 @@
 #ifndef CEPH_MON_SESSION_H
 #define CEPH_MON_SESSION_H
 
+#include "global/global_context.h"
 #include "include/xlist.h"
 #include "msg/msg_types.h"
 #include "mon/mon_types.h"
@@ -50,7 +51,6 @@ struct MonSession : public RefCountedObject {
   xlist<MonSession*>::item item;
   set<uint64_t> routed_request_tids;
   MonCap caps;
-  uint64_t auid = 0;
   uint64_t global_id = 0;
 
   bool authenticated = false;  ///< true if auth handshake is complete

@@ -130,7 +130,7 @@ OPTION(ms_bind_ipv6, OPT_BOOL)
 OPTION(ms_bind_port_min, OPT_INT)
 OPTION(ms_bind_port_max, OPT_INT)
 OPTION(ms_bind_retry_count, OPT_INT) // If binding fails, how many times do we retry to bind
-OPTION(ms_bind_retry_delay, OPT_INT) // Delay between attemps to bind
+OPTION(ms_bind_retry_delay, OPT_INT) // Delay between attempts to bind
 OPTION(ms_bind_before_connect, OPT_BOOL)
 OPTION(ms_tcp_listen_backlog, OPT_INT)
 OPTION(ms_rwthread_stack_bytes, OPT_U64)
@@ -174,6 +174,10 @@ OPTION(ms_async_rdma_dscp, OPT_INT)            // in RoCE, this means DSCP
 // rdma connection management
 OPTION(ms_async_rdma_cm, OPT_BOOL)
 OPTION(ms_async_rdma_type, OPT_STR)
+
+// when there are enough accept failures, indicating there are unrecoverable failures,
+// just do ceph_abort() . Here we make it configurable.
+OPTION(ms_max_accept_failures, OPT_INT)
 
 OPTION(ms_dpdk_port_id, OPT_INT)
 SAFE_OPTION(ms_dpdk_coremask, OPT_STR)        // it is modified in unittest so that use SAFE_OPTION to declare 
@@ -270,7 +274,6 @@ OPTION(mon_reweight_max_change, OPT_DOUBLE)
 OPTION(mon_health_to_clog, OPT_BOOL)
 OPTION(mon_health_to_clog_interval, OPT_INT)
 OPTION(mon_health_to_clog_tick_interval, OPT_DOUBLE)
-OPTION(mon_health_preluminous_compat, OPT_BOOL)
 OPTION(mon_data_avail_crit, OPT_INT)
 OPTION(mon_data_avail_warn, OPT_INT)
 OPTION(mon_data_size_warn, OPT_U64) // issue a warning when the monitor's data store goes over 15GB (in bytes)
@@ -495,7 +498,7 @@ OPTION(mds_op_complaint_time, OPT_FLOAT) // how many seconds old makes an op com
 OPTION(mds_op_log_threshold, OPT_INT) // how many op log messages to show in one go
 OPTION(mds_snap_min_uid, OPT_U32) // The minimum UID required to create a snapshot
 OPTION(mds_snap_max_uid, OPT_U32) // The maximum UID allowed to create a snapshot
-OPTION(mds_snap_rstat, OPT_BOOL) // enable/disbale nested stat for snapshot
+OPTION(mds_snap_rstat, OPT_BOOL) // enable/disable nested stat for snapshot
 OPTION(mds_verify_backtrace, OPT_U32)
 // detect clients which aren't trimming completed requests
 OPTION(mds_max_completed_flushes, OPT_U32)
@@ -877,7 +880,7 @@ OPTION(osd_recovery_priority, OPT_U32)
 OPTION(osd_recovery_cost, OPT_U32)
 
 /**
- * osd_recovery_op_warn_multiple scales the normal warning threshhold,
+ * osd_recovery_op_warn_multiple scales the normal warning threshold,
  * osd_op_complaint_time, so that slow recovery ops won't cause noise
  */
 OPTION(osd_recovery_op_warn_multiple, OPT_U32)
@@ -975,6 +978,7 @@ OPTION(bluestore_block_wal_size, OPT_U64) // rocksdb wal
 OPTION(bluestore_block_wal_create, OPT_BOOL)
 OPTION(bluestore_block_preallocate_file, OPT_BOOL) //whether preallocate space if block/db_path/wal_path is file rather that block device.
 OPTION(bluestore_csum_type, OPT_STR) // none|xxhash32|xxhash64|crc32c|crc32c_16|crc32c_8
+OPTION(bluestore_retry_disk_reads, OPT_U64)
 OPTION(bluestore_min_alloc_size, OPT_U32)
 OPTION(bluestore_min_alloc_size_hdd, OPT_U32)
 OPTION(bluestore_min_alloc_size_ssd, OPT_U32)
@@ -1066,9 +1070,9 @@ OPTION(bluestore_debug_omit_block_device_write, OPT_BOOL)
 OPTION(bluestore_debug_fsck_abort, OPT_BOOL)
 OPTION(bluestore_debug_omit_kv_commit, OPT_BOOL)
 OPTION(bluestore_debug_permit_any_bdev_label, OPT_BOOL)
-OPTION(bluestore_shard_finishers, OPT_BOOL)
 OPTION(bluestore_debug_random_read_err, OPT_DOUBLE)
 OPTION(bluestore_debug_inject_bug21040, OPT_BOOL)
+OPTION(bluestore_debug_inject_csum_err_probability, OPT_FLOAT)
 
 OPTION(kstore_max_ops, OPT_U64)
 OPTION(kstore_max_bytes, OPT_U64)
@@ -1161,7 +1165,7 @@ OPTION(filestore_collect_device_partition_information, OPT_BOOL)
 
 // (try to) use extsize for alloc hint NOTE: extsize seems to trigger
 // data corruption in xfs prior to kernel 3.5.  filestore will
-// implicity disable this if it cannot confirm the kernel is newer
+// implicitly disable this if it cannot confirm the kernel is newer
 // than that.
 // NOTE: This option involves a tradeoff: When disabled, fragmentation is
 // worse, but large sequential writes are faster. When enabled, large
@@ -1434,8 +1438,6 @@ OPTION(rgw_relaxed_s3_bucket_names, OPT_BOOL) // enable relaxed bucket name rule
 OPTION(rgw_defer_to_bucket_acls, OPT_STR) // if the user has bucket perms)
 OPTION(rgw_list_buckets_max_chunk, OPT_INT) // max buckets to retrieve in a single op when listing user buckets
 OPTION(rgw_md_log_max_shards, OPT_INT) // max shards for metadata log
-OPTION(rgw_num_zone_opstate_shards, OPT_INT) // max shards for keeping inter-region copy progress info
-OPTION(rgw_opstate_ratelimit_sec, OPT_INT) // min time between opstate updates on a single upload (0 for disabling ratelimit)
 OPTION(rgw_curl_wait_timeout_ms, OPT_INT) // timeout for certain curl calls
 OPTION(rgw_curl_low_speed_limit, OPT_INT) // low speed limit for certain curl calls
 OPTION(rgw_curl_low_speed_time, OPT_INT) // low speed time for certain curl calls
@@ -1512,7 +1514,6 @@ OPTION(rgw_list_bucket_min_readahead, OPT_INT) // minimum number of entries to r
 
 OPTION(rgw_rest_getusage_op_compat, OPT_BOOL) // dump description of total stats for s3 GetUsage API
 
-OPTION(mutex_perf_counter, OPT_BOOL) // enable/disable mutex perf counter
 OPTION(throttler_perf_counter, OPT_BOOL) // enable/disable throttler perf counter
 
 /* The following are tunables for torrent data */
@@ -1542,3 +1543,5 @@ OPTION(rgw_reshard_thread_interval, OPT_U32) // maximum time between rounds of r
 
 OPTION(rgw_acl_grants_max_num, OPT_INT) // According to AWS S3(http://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html), An ACL can have up to 100 grants.
 OPTION(rgw_cors_rules_max_num, OPT_INT) // According to AWS S3(http://docs.aws.amazon.com/AmazonS3/latest/dev/cors.html), An cors can have up to 100 rules.
+OPTION(rgw_delete_multi_obj_max_num, OPT_INT) // According to AWS S3(https://docs.aws.amazon.com/AmazonS3/latest/dev/DeletingObjects.html), Amazon S3 also provides the Multi-Object Delete API that you can use to delete up to 1000 objects in a single HTTP request.
+OPTION(rgw_website_routing_rules_max_num, OPT_INT) // According to AWS S3, An website routing config can have up to 50 rules.

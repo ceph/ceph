@@ -21,7 +21,7 @@
 
 
 #include <boost/python.hpp>
-#include "include/assert.h"  // boost clobbers this
+#include "include/ceph_assert.h"  // boost clobbers this
 
 // For ::config_prefix
 #include "PyModuleRegistry.h"

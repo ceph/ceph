@@ -296,6 +296,50 @@ TEST_F(TestMockIoImageRequestWQ, AcquireLockError) {
   aio_comp->release();
 }
 
+TEST_F(TestMockIoImageRequestWQ, AcquireLockBlacklisted) {
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+  MockExclusiveLock mock_exclusive_lock;
+  mock_image_ctx.exclusive_lock = &mock_exclusive_lock;
+
+  auto mock_queued_image_request = new MockImageDispatchSpec();
+  expect_was_throttled(*mock_queued_image_request, false);
+  expect_set_throttled(*mock_queued_image_request);
+
+  InSequence seq;
+  MockImageRequestWQ mock_image_request_wq(&mock_image_ctx, "io", 60, nullptr);
+  expect_signal(mock_image_request_wq);
+  mock_image_request_wq.set_require_lock(DIRECTION_WRITE, true);
+
+  expect_is_write_op(*mock_queued_image_request, true);
+  expect_queue(mock_image_request_wq);
+  auto *aio_comp = new librbd::io::AioCompletion();
+  mock_image_request_wq.aio_write(aio_comp, 0, 0, {}, 0);
+
+  librbd::exclusive_lock::MockPolicy mock_exclusive_lock_policy;
+  expect_front(mock_image_request_wq, mock_queued_image_request);
+  expect_is_refresh_request(mock_image_ctx, false);
+  expect_is_write_op(*mock_queued_image_request, true);
+  expect_dequeue(mock_image_request_wq, mock_queued_image_request);
+  expect_get_exclusive_lock_policy(mock_image_ctx, mock_exclusive_lock_policy);
+  expect_may_auto_request_lock(mock_exclusive_lock_policy, false);
+  EXPECT_CALL(*mock_image_ctx.exclusive_lock, get_unlocked_op_error())
+    .WillOnce(Return(-EBLACKLISTED));
+  expect_process_finish(mock_image_request_wq);
+  expect_fail(*mock_queued_image_request, -EBLACKLISTED);
+  expect_is_write_op(*mock_queued_image_request, true);
+  expect_signal(mock_image_request_wq);
+  ASSERT_TRUE(mock_image_request_wq.invoke_dequeue() == nullptr);
+
+  ASSERT_EQ(0, aio_comp->wait_for_complete());
+  ASSERT_EQ(-EBLACKLISTED, aio_comp->get_return_value());
+  aio_comp->release();
+}
+
 TEST_F(TestMockIoImageRequestWQ, RefreshError) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));

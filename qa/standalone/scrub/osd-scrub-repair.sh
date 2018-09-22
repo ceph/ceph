@@ -385,7 +385,8 @@ function unfound_erasure_coded() {
 	ceph -s | grep "1/1 objects unfound" && break
 	sleep 1
     done
-    ceph -s|grep "4 osds: 4 up, 4 in" || return 1
+    ceph -s|grep "4 up" || return 1
+    ceph -s|grep "4 in" || return 1
     ceph -s|grep "1/1 objects unfound" || return 1
 
     teardown $dir || return 1
@@ -466,7 +467,7 @@ function list_missing_erasure_coded() {
 
     for i in $(seq 0 120) ; do
         [ $i -lt 60 ] || return 1
-        matches=$(ceph pg $pg list_missing | egrep "MOBJ0|MOBJ1" | wc -l)
+        matches=$(ceph pg $pg list_unfound | egrep "MOBJ0|MOBJ1" | wc -l)
         [ $matches -eq 2 ] && break
     done
 
@@ -662,7 +663,7 @@ function TEST_corrupt_scrub_replicated() {
     err_strings[14]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 1 soid 3:ffdb2004:::ROBJ9:head : candidate size 1 info size 7 mismatch"
     err_strings[15]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 1 soid 3:ffdb2004:::ROBJ9:head : object info inconsistent "
     err_strings[16]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 3:c0c86b1d:::ROBJ14:head : no '_' attr"
-    err_strings[17]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 3:5c7b2c47:::ROBJ16:head : can't decode 'snapset' attr buffer::malformed_input: void SnapSet::decode(ceph::buffer::list::const_iterator&) no longer understand old encoding version 3 < 97"
+    err_strings[17]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 3:5c7b2c47:::ROBJ16:head : can't decode 'snapset' attr buffer::malformed_input: .* no longer understand old encoding version 3 < 97"
     err_strings[18]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 scrub : stat mismatch, got 18/18 objects, 0/0 clones, 17/18 dirty, 17/18 omap, 0/0 pinned, 0/0 hit_set_archive, 0/0 whiteouts, 113/120 bytes, 0/0 manifest objects, 0/0 hit_set_archive bytes."
     err_strings[19]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 scrub 1 missing, 7 inconsistent objects"
     err_strings[20]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 scrub 17 errors"
@@ -1573,7 +1574,7 @@ EOF
     err_strings[32]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 0 soid 3:ffdb2004:::ROBJ9:head : candidate size 3 info size 7 mismatch"
     err_strings[33]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 0 soid 3:ffdb2004:::ROBJ9:head : object info inconsistent "
     err_strings[34]="log_channel[(]cluster[)] log [[]ERR[]] : deep-scrub [0-9]*[.]0 3:c0c86b1d:::ROBJ14:head : no '_' attr"
-    err_strings[35]="log_channel[(]cluster[)] log [[]ERR[]] : deep-scrub [0-9]*[.]0 3:5c7b2c47:::ROBJ16:head : can't decode 'snapset' attr buffer::malformed_input: void SnapSet::decode[(]ceph::buffer::list::const_iterator&[)] no longer understand old encoding version 3 < 97"
+    err_strings[35]="log_channel[(]cluster[)] log [[]ERR[]] : deep-scrub [0-9]*[.]0 3:5c7b2c47:::ROBJ16:head : can't decode 'snapset' attr buffer::malformed_input: .* no longer understand old encoding version 3 < 97"
     err_strings[36]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 deep-scrub : stat mismatch, got 18/18 objects, 0/0 clones, 17/18 dirty, 17/18 omap, 0/0 pinned, 0/0 hit_set_archive, 0/0 whiteouts, 115/116 bytes, 0/0 manifest objects, 0/0 hit_set_archive bytes."
     err_strings[37]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 deep-scrub 1 missing, 11 inconsistent objects"
     err_strings[38]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 deep-scrub 35 errors"
@@ -3006,7 +3007,7 @@ EOF
         return 1
     fi
 
-    rados rmpool $poolname $poolname --yes-i-really-really-mean-it
+    ceph osd pool rm $poolname $poolname --yes-i-really-really-mean-it
     teardown $dir || return 1
 }
 
@@ -5166,7 +5167,7 @@ EOF
       jsonschema -i $dir/json $CEPH_ROOT/doc/rados/command/list-inconsistent-obj.json || return 1
     fi
 
-    rados rmpool $poolname $poolname --yes-i-really-really-mean-it
+    ceph osd pool rm $poolname $poolname --yes-i-really-really-mean-it
     teardown $dir || return 1
 }
 
@@ -5551,7 +5552,7 @@ EOF
         return 1
     fi
 
-    rados rmpool $poolname $poolname --yes-i-really-really-mean-it
+    ceph osd pool rm $poolname $poolname --yes-i-really-really-mean-it
     teardown $dir || return 1
 }
 

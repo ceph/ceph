@@ -8,7 +8,7 @@
 #include <unistd.h>
 #include <sstream>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "common/safe_io.h"
 #include "common/errno.h"
 

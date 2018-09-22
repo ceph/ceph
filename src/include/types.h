@@ -95,38 +95,47 @@ typedef off_t loff_t;
 // the case of containers of containers. I'm tempted to abstract this
 // stuff using template templates like I did for denc.
 
+namespace std {
 template<class A, class B>
-inline ostream& operator<<(ostream&out, const pair<A,B>& v);
+inline std::ostream& operator<<(std::ostream&out, const std::pair<A,B>& v);
 template<class A, class Alloc>
-inline ostream& operator<<(ostream& out, const vector<A,Alloc>& v);
+inline std::ostream& operator<<(std::ostream& out, const std::vector<A,Alloc>& v);
 template<class A, class Comp, class Alloc>
-inline ostream& operator<<(ostream& out, const deque<A,Alloc>& v);
+inline std::ostream& operator<<(std::ostream& out, const std::deque<A,Alloc>& v);
 template<typename... Ts>
-inline ostream& operator<<(ostream& out, const std::tuple<Ts...> &t);
-template<typename... Ts>
-inline ostream& operator<<(ostream& out, const boost::tuple<Ts...> &t);
+inline std::ostream& operator<<(std::ostream& out, const std::tuple<Ts...> &t);
 template<class A, class Alloc>
-inline ostream& operator<<(ostream& out, const list<A,Alloc>& ilist);
+inline std::ostream& operator<<(std::ostream& out, const std::list<A,Alloc>& ilist);
 template<class A, class Comp, class Alloc>
-inline ostream& operator<<(ostream& out, const set<A, Comp, Alloc>& iset);
+inline std::ostream& operator<<(std::ostream& out, const std::set<A, Comp, Alloc>& iset);
 template<class A, class Comp, class Alloc>
-inline ostream& operator<<(ostream& out, const boost::container::flat_set<A, Comp, Alloc>& iset);
+inline std::ostream& operator<<(std::ostream& out, const std::multiset<A,Comp,Alloc>& iset);
 template<class A, class B, class Comp, class Alloc>
-inline ostream& operator<<(ostream& out, const boost::container::flat_map<A, B, Comp, Alloc>& iset);
-template<class A, class Comp, class Alloc>
-inline ostream& operator<<(ostream& out, const multiset<A,Comp,Alloc>& iset);
+inline std::ostream& operator<<(std::ostream& out, const std::map<A,B,Comp,Alloc>& m);
 template<class A, class B, class Comp, class Alloc>
-inline ostream& operator<<(ostream& out, const map<A,B,Comp,Alloc>& m);
-template<class A, class B, class Comp, class Alloc>
-inline ostream& operator<<(ostream& out, const multimap<A,B,Comp,Alloc>& m);
+inline std::ostream& operator<<(std::ostream& out, const std::multimap<A,B,Comp,Alloc>& m);
+}
 
+namespace boost {
+template<typename... Ts>
+inline std::ostream& operator<<(std::ostream& out, const boost::tuple<Ts...> &t);
+
+namespace container {
+template<class A, class Comp, class Alloc>
+inline std::ostream& operator<<(std::ostream& out, const boost::container::flat_set<A, Comp, Alloc>& iset);
+template<class A, class B, class Comp, class Alloc>
+inline std::ostream& operator<<(std::ostream& out, const boost::container::flat_map<A, B, Comp, Alloc>& iset);
+}
+}
+
+namespace std {
 template<class A, class B>
-inline ostream& operator<<(ostream& out, const pair<A,B>& v) {
+inline std::ostream& operator<<(std::ostream& out, const std::pair<A,B>& v) {
   return out << v.first << "," << v.second;
 }
 
 template<class A, class Alloc>
-inline ostream& operator<<(ostream& out, const vector<A,Alloc>& v) {
+inline std::ostream& operator<<(std::ostream& out, const std::vector<A,Alloc>& v) {
   out << "[";
   for (auto p = v.begin(); p != v.end(); ++p) {
     if (p != v.begin()) out << ",";
@@ -135,8 +144,9 @@ inline ostream& operator<<(ostream& out, const vector<A,Alloc>& v) {
   out << "]";
   return out;
 }
+
 template<class A, class Alloc>
-inline ostream& operator<<(ostream& out, const deque<A,Alloc>& v) {
+inline std::ostream& operator<<(std::ostream& out, const std::deque<A,Alloc>& v) {
   out << "<";
   for (auto p = v.begin(); p != v.end(); ++p) {
     if (p != v.begin()) out << ",";
@@ -146,15 +156,8 @@ inline ostream& operator<<(ostream& out, const deque<A,Alloc>& v) {
   return out;
 }
 
-template<typename A, typename B, typename C>
-inline ostream& operator<<(ostream& out, const boost::tuple<A, B, C> &t) {
-  return out << boost::get<0>(t) << ","
-	     << boost::get<1>(t) << ","
-	     << boost::get<2>(t);
-}
-
 template<typename... Ts>
-inline ostream& operator<<(ostream& out, const std::tuple<Ts...> &t) {
+inline std::ostream& operator<<(std::ostream& out, const std::tuple<Ts...> &t) {
   auto f = [n = sizeof...(Ts), i = 0, &out](const auto& e) mutable {
     out << e;
     if (++i != n)
@@ -165,7 +168,7 @@ inline ostream& operator<<(ostream& out, const std::tuple<Ts...> &t) {
 }
 
 template<class A, class Alloc>
-inline ostream& operator<<(ostream& out, const list<A,Alloc>& ilist) {
+inline std::ostream& operator<<(std::ostream& out, const std::list<A,Alloc>& ilist) {
   for (auto it = ilist.begin();
        it != ilist.end();
        ++it) {
@@ -176,7 +179,7 @@ inline ostream& operator<<(ostream& out, const list<A,Alloc>& ilist) {
 }
 
 template<class A, class Comp, class Alloc>
-inline ostream& operator<<(ostream& out, const set<A, Comp, Alloc>& iset) {
+inline std::ostream& operator<<(std::ostream& out, const std::set<A, Comp, Alloc>& iset) {
   for (auto it = iset.begin();
        it != iset.end();
        ++it) {
@@ -187,7 +190,7 @@ inline ostream& operator<<(ostream& out, const set<A, Comp, Alloc>& iset) {
 }
 
 template<class A, class Comp, class Alloc>
-inline ostream& operator<<(ostream& out, const boost::container::flat_set<A, Comp, Alloc>& iset) {
+inline std::ostream& operator<<(std::ostream& out, const std::multiset<A,Comp,Alloc>& iset) {
   for (auto it = iset.begin();
        it != iset.end();
        ++it) {
@@ -198,29 +201,7 @@ inline ostream& operator<<(ostream& out, const boost::container::flat_set<A, Com
 }
 
 template<class A, class B, class Comp, class Alloc>
-inline ostream& operator<<(ostream& out, const boost::container::flat_map<A, B, Comp, Alloc>& m) {
-  for (auto it = m.begin();
-       it != m.end();
-       ++it) {
-    if (it != m.begin()) out << ",";
-    out << it->first << "=" << it->second;
-  }
-  return out;
-}
-
-template<class A, class Comp, class Alloc>
-inline ostream& operator<<(ostream& out, const multiset<A,Comp,Alloc>& iset) {
-  for (auto it = iset.begin();
-       it != iset.end();
-       ++it) {
-    if (it != iset.begin()) out << ",";
-    out << *it;
-  }
-  return out;
-}
-
-template<class A, class B, class Comp, class Alloc>
-inline ostream& operator<<(ostream& out, const map<A,B,Comp,Alloc>& m)
+inline std::ostream& operator<<(std::ostream& out, const std::map<A,B,Comp,Alloc>& m)
 {
   out << "{";
   for (auto it = m.begin();
@@ -234,7 +215,7 @@ inline ostream& operator<<(ostream& out, const map<A,B,Comp,Alloc>& m)
 }
 
 template<class A, class B, class Comp, class Alloc>
-inline ostream& operator<<(ostream& out, const multimap<A,B,Comp,Alloc>& m)
+inline std::ostream& operator<<(std::ostream& out, const std::multimap<A,B,Comp,Alloc>& m)
 {
   out << "{{";
   for (auto it = m.begin();
@@ -247,6 +228,41 @@ inline ostream& operator<<(ostream& out, const multimap<A,B,Comp,Alloc>& m)
   return out;
 }
 
+} // namespace std
+
+namespace boost {
+namespace tuples {
+template<typename A, typename B, typename C>
+inline std::ostream& operator<<(std::ostream& out, const boost::tuples::tuple<A, B, C> &t) {
+  return out << boost::get<0>(t) << ","
+	     << boost::get<1>(t) << ","
+	     << boost::get<2>(t);
+}
+}
+namespace container {
+template<class A, class Comp, class Alloc>
+inline std::ostream& operator<<(std::ostream& out, const boost::container::flat_set<A, Comp, Alloc>& iset) {
+  for (auto it = iset.begin();
+       it != iset.end();
+       ++it) {
+    if (it != iset.begin()) out << ",";
+    out << *it;
+  }
+  return out;
+}
+
+template<class A, class B, class Comp, class Alloc>
+inline std::ostream& operator<<(std::ostream& out, const boost::container::flat_map<A, B, Comp, Alloc>& m) {
+  for (auto it = m.begin();
+       it != m.end();
+       ++it) {
+    if (it != m.begin()) out << ",";
+    out << it->first << "=" << it->second;
+  }
+  return out;
+}
+}
+} // namespace boost
 
 
 
@@ -525,5 +541,28 @@ WRITE_CLASS_ENCODER(errorcode32_t)
 WRITE_EQ_OPERATORS_1(errorcode32_t, code)
 WRITE_CMP_OPERATORS_1(errorcode32_t, code)
 
+struct sha1_digest_t {
+#define SHA1_DIGEST_SIZE 20
+  unsigned char v[SHA1_DIGEST_SIZE] = {0};
+
+  string to_str() const {
+    char str[SHA1_DIGEST_SIZE*2+1] = {0};
+    str[0] = '\0';
+    for (size_t i = 0; i < 20; i++) {
+      ::sprintf(&str[i*2], "%02x", static_cast<int>(v[i]));
+    }
+    return string(str);
+  }
+  sha1_digest_t(unsigned char *_v) {
+    memcpy(v, _v, 20);
+  };
+  sha1_digest_t() {}
+};
+
+inline ostream& operator<<(ostream& out, const sha1_digest_t& b)
+{
+  string str = b.to_str();
+  return out << str;
+}
 
 #endif

@@ -64,8 +64,8 @@ Testing Blkin
 
 It's easy to test Ceph's Blkin tracing. Let's assume you don't have
 Ceph already running, and you compiled Ceph with Blkin support but
-you did't install it. Then launch Ceph with the ``vstart.sh`` script
-in Ceph's src directgory so you can see the possible tracepoints.::
+you didn't install it. Then launch Ceph with the ``vstart.sh`` script
+in Ceph's src directory so you can see the possible tracepoints.::
 
   cd src
   OSD=3 MON=3 RGW=1 ./vstart.sh -n
@@ -109,9 +109,9 @@ You may want to check that ceph is up.::
 
   ./ceph status
 
-Now put something in usin rados, check that it made it, get it back, and remove it.::
+Now put something in using rados, check that it made it, get it back, and remove it.::
 
-  ./rados mkpool test-blkin
+  ./ceph osd pool create test-blkin 8
   ./rados put test-object-1 ./vstart.sh --pool=test-blkin
   ./rados -p test-blkin ls
   ./ceph osd map test-blkin test-object-1

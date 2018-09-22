@@ -407,6 +407,8 @@ public:
 
     int8_t new_require_min_compat_client = -1;
 
+    utime_t new_last_up_change, new_last_in_change;
+
     mutable bool have_crc;      ///< crc values are defined
     uint32_t full_crc;  ///< crc of the resulting OSDMap
     mutable uint32_t inc_crc;   ///< crc of this incremental
@@ -450,7 +452,7 @@ public:
       new_erasure_code_profiles[name] = profile;
     }
 
-    /// propage update pools' snap metadata to any of their tiers
+    /// propagate update pools' snap metadata to any of their tiers
     int propagate_snaps_to_tiers(CephContext *cct, const OSDMap &base);
 
     /// filter out osds with any pending state changing
@@ -505,6 +507,8 @@ private:
 
   int32_t max_osd;
   vector<uint32_t> osd_state;
+
+  utime_t last_up_change, last_in_change;
 
   // These features affect OSDMap[::Incremental] encoding, or the
   // encoding of some type embedded therein (CrushWrapper, something
@@ -1006,7 +1010,8 @@ public:
   uint64_t get_up_osd_features() const;
 
   void maybe_remove_pg_upmaps(CephContext *cct,
-                              const OSDMap& osdmap,
+                              const OSDMap& oldmap,
+			      const OSDMap& nextmap,
                               Incremental *pending_inc);
 
   int apply_incremental(const Incremental &inc);
@@ -1014,7 +1019,9 @@ public:
   /// try to re-use/reference addrs in oldmap from newmap
   static void dedup(const OSDMap *oldmap, OSDMap *newmap);
 
-  static void clean_temps(CephContext *cct, const OSDMap& osdmap,
+  static void clean_temps(CephContext *cct,
+			  const OSDMap& oldmap,
+			  const OSDMap& nextmap,
 			  Incremental *pending_inc);
 
   // serialize, unserialize

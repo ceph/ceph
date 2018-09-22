@@ -287,11 +287,7 @@ int RGWRemoteMetaLog::init()
 
   init_sync_env(&sync_env);
 
-  tn = sync_env.sync_tracer->add_node(new RGWSyncTraceNode(sync_env.cct,
-                                                           sync_env.sync_tracer, 
-                                                           sync_env.sync_tracer->root_node,
-                                                           "meta",
-                                                           string()));
+  tn = sync_env.sync_tracer->add_node(sync_env.sync_tracer->root_node, "meta");
 
   return 0;
 }
@@ -819,11 +815,7 @@ public:
 						      num_shards(_num_shards),
 						      ret_status(0), lease_cr(nullptr), lease_stack(nullptr),
                                                       lost_lock(false), failed(false), markers(_markers) {
-    tn = sync_env->sync_tracer->add_node(new RGWSyncTraceNode(sync_env->cct,
-                                         sync_env->sync_tracer, 
-                                         _tn_parent,
-                                         "fetch_all_meta",
-                                         string()));
+    tn = sync_env->sync_tracer->add_node(_tn_parent, "fetch_all_meta");
   }
 
   ~RGWFetchAllMetaCR() override {
@@ -1013,11 +1005,8 @@ public:
                                                       section(_section),
                                                       key(_key),
 						      pbl(_pbl) {
-    tn = sync_env->sync_tracer->add_node(new RGWSyncTraceNode(sync_env->cct,
-                                         sync_env->sync_tracer, 
-                                         _tn_parent,
-                                         "read_remote_meta",
-                                         section + ":" + key));
+    tn = sync_env->sync_tracer->add_node(_tn_parent, "read_remote_meta",
+                                         section + ":" + key);
   }
 
   int operate() override {
@@ -1231,11 +1220,7 @@ RGWMetaSyncSingleEntryCR::RGWMetaSyncSingleEntryCR(RGWMetaSyncEnv *_sync_env,
                                                       pos(0), sync_status(0),
                                                       marker_tracker(_marker_tracker), tries(0) {
   error_injection = (sync_env->cct->_conf->rgw_sync_meta_inject_err_probability > 0);
-  tn = sync_env->sync_tracer->add_node(new RGWSyncTraceNode(sync_env->cct,
-                                                            sync_env->sync_tracer, 
-                                                            _tn_parent,
-                                                            "entry",
-                                                            raw_key));
+  tn = sync_env->sync_tracer->add_node(_tn_parent, "entry", raw_key);
 }
 
 int RGWMetaSyncSingleEntryCR::operate() {
@@ -1384,8 +1369,8 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
   string max_marker;
   const std::string& period_marker; //< max marker stored in next period
 
+  RGWRadosGetOmapKeysCR::ResultPtr omapkeys;
   std::set<std::string> entries;
-  bool more = false;
   std::set<std::string>::iterator iter;
 
   string oid;
@@ -1572,8 +1557,9 @@ public:
           lost_lock = true;
           break;
         }
+        omapkeys = std::make_shared<RGWRadosGetOmapKeysCR::Result>();
         yield call(new RGWRadosGetOmapKeysCR(sync_env->store, rgw_raw_obj(pool, oid),
-                                             marker, &entries, max_entries, &more));
+                                             marker, max_entries, omapkeys));
         if (retcode < 0) {
           ldout(sync_env->cct, 0) << "ERROR: " << __func__ << "(): RGWRadosGetOmapKeysCR() returned ret=" << retcode << dendl;
           tn->log(0, SSTR("ERROR: failed to list omap keys, status=" << retcode));
@@ -1581,6 +1567,7 @@ public:
           drain_all();
           return retcode;
         }
+        entries = std::move(omapkeys->entries);
         tn->log(20, SSTR("retrieved " << entries.size() << " entries to sync"));
         if (entries.size() > 0) {
           tn->set_flag(RGW_SNS_FLAG_ACTIVE); /* actually have entries to sync */
@@ -1603,7 +1590,7 @@ public:
           }
         }
         collect_children();
-      } while (more && can_adjust_marker);
+      } while (omapkeys->more && can_adjust_marker);
 
       tn->unset_flag(RGW_SNS_FLAG_ACTIVE); /* actually have entries to sync */
 
@@ -1844,7 +1831,6 @@ class RGWMetaSyncShardControlCR : public RGWBackoffControlCR
   rgw_meta_sync_marker sync_marker;
   const std::string period_marker;
 
-  RGWSyncTraceNodeRef tn_parent;
   RGWSyncTraceNodeRef tn;
 
   static constexpr bool exit_on_error = false; // retry on all errors
@@ -1858,14 +1844,10 @@ public:
     : RGWBackoffControlCR(_sync_env->cct, exit_on_error), sync_env(_sync_env),
       pool(_pool), period(period), realm_epoch(realm_epoch), mdlog(mdlog),
       shard_id(_shard_id), sync_marker(_marker),
-      period_marker(std::move(period_marker)),
-      tn_parent(_tn_parent) {
-        tn = sync_env->sync_tracer->add_node(new RGWSyncTraceNode(sync_env->cct,
-                                                                  sync_env->sync_tracer, 
-                                                                  tn_parent,
-                                                                  "shard",
-                                                                  SSTR(shard_id)));
-      }
+      period_marker(std::move(period_marker)) {
+    tn = sync_env->sync_tracer->add_node(_tn_parent, "shard",
+                                         std::to_string(shard_id));
+  }
 
   RGWCoroutine *alloc_cr() override {
     return new RGWMetaSyncShardCR(sync_env, pool, period, realm_epoch, mdlog,

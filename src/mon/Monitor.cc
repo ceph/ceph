@@ -81,7 +81,7 @@
 #include "mon/ConfigKeyService.h"
 #include "common/config.h"
 #include "common/cmdparse.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/compat.h"
 #include "perfglue/heap_profiler.h"
 
@@ -1107,6 +1107,7 @@ void Monitor::_reset()
   scrub_event_cancel();
 
   leader_since = utime_t();
+  quorum_since = {};
   if (!quorum.empty()) {
     exited_quorum = ceph_clock_now();
   }
@@ -1972,6 +1973,7 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
   ceph_assert(is_electing());
   state = STATE_LEADER;
   leader_since = ceph_clock_now();
+  quorum_since = mono_clock::now();
   leader = rank;
   quorum = active;
   quorum_con_features = features;
@@ -2050,6 +2052,7 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l,
 {
   state = STATE_PEON;
   leader_since = utime_t();
+  quorum_since = mono_clock::now();
   leader = l;
   quorum = q;
   outside_quorum.clear();
@@ -2293,6 +2296,10 @@ void Monitor::_quorum_status(Formatter *f, ostream& ss)
 
   f->dump_string("quorum_leader_name", quorum.empty() ? string() : monmap->get_name(*quorum.begin()));
 
+  if (!quorum.empty()) {
+    f->dump_stream("quorum_age") << (mono_clock::now() - quorum_since);
+  }
+
   f->open_object_section("monmap");
   monmap->dump(f);
   f->close_section(); // monmap
@@ -2323,8 +2330,11 @@ void Monitor::get_mon_status(Formatter *f, ostream& ss)
   for (set<int>::iterator p = quorum.begin(); p != quorum.end(); ++p) {
     f->dump_int("mon", *p);
   }
-
   f->close_section(); // quorum
+
+  if (!quorum.empty()) {
+    f->dump_stream("quorum_age") << (mono_clock::now() - quorum_since);
+  }
 
   f->open_object_section("features");
   f->dump_stream("required_con") << required_features;
@@ -2552,8 +2562,6 @@ health_status_t Monitor::get_health_status(
   const char *sep2)
 {
   health_status_t r = HEALTH_OK;
-  bool compat = g_conf()->mon_health_preluminous_compat;
-  bool compat_warn = g_conf().get_val<bool>("mon_health_preluminous_compat_warning");
   if (f) {
     f->open_object_section("health");
     f->open_object_section("checks");
@@ -2569,6 +2577,7 @@ health_status_t Monitor::get_health_status(
   if (f) {
     f->close_section();
     f->dump_stream("status") << r;
+    f->close_section();
   } else {
     // one-liner: HEALTH_FOO[ thing1[; thing2 ...]]
     *plain = stringify(r);
@@ -2579,43 +2588,12 @@ health_status_t Monitor::get_health_status(
     *plain += "\n";
   }
 
-  if (f && (compat || compat_warn)) {
-    health_status_t cr = compat_warn ? min(HEALTH_WARN, r) : r;
-    if (compat) {
-      f->open_array_section("summary");
-      if (compat_warn) {
-	f->open_object_section("item");
-	f->dump_stream("severity") << HEALTH_WARN;
-	f->dump_string("summary", "'ceph health' JSON format has changed in luminous; update your health monitoring scripts");
-	f->close_section();
-      }
-      for (auto& svc : paxos_service) {
-	svc->get_health_checks().dump_summary_compat(f);
-      }
-      f->close_section();
-    }
-    f->dump_stream("overall_status") << cr;
-  }
-
-  if (want_detail) {
-    if (f && (compat || compat_warn)) {
-      f->open_array_section("detail");
-      if (compat_warn) {
-	f->dump_string("item", "'ceph health' JSON format has changed in luminous. If you see this your monitoring system is scraping the wrong fields. Disable this with 'mon health preluminous compat warning = false'");
-      }
-    }
-
+  if (want_detail && !f) {
     for (auto& svc : paxos_service) {
-      svc->get_health_checks().dump_detail(f, plain, compat);
+      svc->get_health_checks().dump_detail(plain);
     }
+  }
 
-    if (f && (compat || compat_warn)) {
-      f->close_section();
-    }
-  }
-  if (f) {
-    f->close_section();
-  }
   return r;
 }
 
@@ -2729,6 +2707,7 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
   if (f)
     f->open_object_section("status");
 
+  mono_clock::time_point now = mono_clock::now();
   if (f) {
     f->dump_stream("fsid") << monmap->get_fsid();
     get_health_status(false, f, nullptr);
@@ -2742,6 +2721,7 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
       for (set<int>::iterator p = quorum.begin(); p != quorum.end(); ++p)
 	f->dump_string("id", monmap->get_name(*p));
       f->close_section();
+      f->dump_stream("quorum_age") << (now - quorum_since);
     }
     f->open_object_section("monmap");
     monmap->dump(f);
@@ -2781,7 +2761,7 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
       const auto quorum_names = get_quorum_names();
       const auto mon_count = monmap->mon_info.size();
       ss << "    mon: " << spacing << mon_count << " daemons, quorum "
-	 << quorum_names;
+	 << quorum_names << " (age " << timespan_str(now - quorum_since) << ")";
       if (quorum_names.size() != mon_count) {
 	std::list<std::string> out_of_q;
 	for (size_t i = 0; i < monmap->ranks.size(); ++i) {
@@ -4168,6 +4148,7 @@ void Monitor::dispatch_op(MonOpRequestRef op)
     case MSG_OSD_PGTEMP:
     case MSG_OSD_PG_CREATED:
     case MSG_REMOVE_SNAPS:
+    case MSG_OSD_PG_READY_TO_MERGE:
       paxos_service[PAXOS_OSDMAP]->dispatch(op);
       return;
 
@@ -4794,6 +4775,10 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
 
   MonSession *s = op->get_session();
   ceph_assert(s);
+
+  if (m->hostname.size()) {
+    s->remote_host = m->hostname;
+  }
 
   for (map<string,ceph_mon_subscribe_item>::iterator p = m->what.begin();
        p != m->what.end();

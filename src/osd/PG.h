@@ -28,7 +28,7 @@
 #include "include/mempool.h"
 
 // re-include our assert to clobber boost's
-#include "include/assert.h" 
+#include "include/ceph_assert.h" 
 
 #include "include/types.h"
 #include "include/stringify.h"
@@ -398,6 +398,9 @@ public:
     const pg_pool_t *pool,
     ObjectStore::Transaction *t) = 0;
   void split_into(pg_t child_pgid, PG *child, unsigned split_bits);
+  void merge_from(map<spg_t,PGRef>& sources, RecoveryCtx *rctx,
+		  unsigned split_bits,
+		  epoch_t dec_last_epoch_clean);
   void finish_split_stats(const object_stat_sum_t& stats, ObjectStore::Transaction *t);
 
   void scrub(epoch_t queued, ThreadPool::TPHandle &handle);
@@ -412,8 +415,6 @@ public:
 
   void queue_peering_event(PGPeeringEventRef evt);
   void do_peering_event(PGPeeringEventRef evt, RecoveryCtx *rcx);
-  void queue_query(epoch_t msg_epoch, epoch_t query_epoch,
-		   pg_shard_t from, const pg_query_t& q);
   void queue_null(epoch_t msg_epoch, epoch_t query_epoch);
   void queue_flushed(epoch_t started_at);
   void handle_advance_map(
@@ -1329,7 +1330,7 @@ protected:
   /// get priority for pg deletion
   unsigned get_delete_priority();
 
-  void mark_clean();  ///< mark an active pg clean
+  void try_mark_clean();  ///< mark an active pg clean
 
   /// return [start,end) bounds for required past_intervals
   static pair<epoch_t, epoch_t> get_required_past_interval_bounds(
@@ -1441,6 +1442,7 @@ protected:
     ostream &ss);
   static void calc_replicated_acting(
     map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
+    uint64_t force_auth_primary_missing_objects,
     unsigned size,
     const vector<int> &acting,
     const vector<int> &up,
@@ -1450,6 +1452,7 @@ protected:
     vector<int> *want,
     set<pg_shard_t> *backfill,
     set<pg_shard_t> *acting_backfill,
+    const OSDMapRef osdmap,
     ostream &ss);
   void choose_async_recovery_ec(const map<pg_shard_t, pg_info_t> &all_info,
                                 const pg_info_t &auth_info,
@@ -2829,6 +2832,7 @@ protected:
     return state_test(PG_STATE_ACTIVE) || state_test(PG_STATE_PEERED);
   }
   bool is_recovering() const { return state_test(PG_STATE_RECOVERING); }
+  bool is_premerge() const { return state_test(PG_STATE_PREMERGE); }
 
   bool is_empty() const { return info.last_update == eversion_t(0,0); }
 
@@ -2857,6 +2861,10 @@ public:
     bool dirty_epoch,
     bool try_fast_info,
     PerfCounters *logger = nullptr);
+
+  void write_if_dirty(RecoveryCtx *rctx) {
+    write_if_dirty(*rctx->transaction);
+  }
 protected:
   void write_if_dirty(ObjectStore::Transaction& t);
 

@@ -1096,7 +1096,9 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
       stat_pg_sub(removed_pg, s->second);
       pg_stat.erase(s);
     }
-    deleted_pools.insert(removed_pg.pool());
+    if (removed_pg.ps() == 0) {
+      deleted_pools.insert(removed_pg.pool());
+    }
   }
 
   for (auto p = inc.get_osd_stat_rm().begin();
@@ -1156,6 +1158,7 @@ void PGMap::calc_stats()
   pg_sum = pool_stat_t();
   osd_sum = osd_stat_t();
   num_pg_by_state.clear();
+  num_pg_by_pool_state.clear();
   num_pg_by_osd.clear();
 
   for (auto p = pg_stat.begin();
@@ -1177,6 +1180,7 @@ void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s,
 
   num_pg++;
   num_pg_by_state[s.state]++;
+  num_pg_by_pool_state[pgid.pool()][s.state]++;
   num_pg_by_pool[pgid.pool()]++;
 
   if ((s.state & PG_STATE_CREATING) &&
@@ -1229,8 +1233,12 @@ void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
   ceph_assert(end >= 0);
   if (end == 0)
     num_pg_by_state.erase(s.state);
+  if (--num_pg_by_pool_state[pgid.pool()][s.state] == 0) {
+    num_pg_by_pool_state[pgid.pool()].erase(s.state);
+  }
   end = --num_pg_by_pool[pgid.pool()];
   if (end == 0) {
+    num_pg_by_pool_state.erase(pgid.pool());
     num_pg_by_pool.erase(pgid.pool());
     pg_pool_sum.erase(pgid.pool());
   }
@@ -2048,9 +2056,11 @@ void PGMap::get_filtered_pg_stats(uint64_t state, int64_t poolid, int64_t osdid,
       continue;
     if ((osdid >= 0) && !(i->second.is_acting_osd(osdid,primary)))
       continue;
-    if (!(i->second.state & state))
-      continue;
-    pgs.insert(i->first);
+    if (state == (uint64_t)-1 ||                 // "all"
+	(i->second.state & state) ||             // matches a state bit
+	(state == 0 && i->second.state == 0)) {  // matches "unknown" (== 0)
+      pgs.insert(i->first);
+    }
   }
 }
 
@@ -2569,19 +2579,24 @@ void PGMap::get_health_checks(
       if (!pi)
 	continue;   // in case osdmap changes haven't propagated to PGMap yet
       const string& name = osdmap.get_pool_name(p->first);
-      if (pi->get_pg_num() > pi->get_pgp_num() &&
+      // NOTE: we use pg_num_target and pgp_num_target for the purposes of
+      // the warnings.  If the cluster is failing to converge on the target
+      // values that is a separate issue!
+      if (pi->get_pg_num_target() > pi->get_pgp_num_target() &&
 	  !(name.find(".DELETED") != string::npos &&
 	    cct->_conf->mon_fake_pool_delete)) {
 	ostringstream ss;
 	ss << "pool " << name << " pg_num "
-	   << pi->get_pg_num() << " > pgp_num " << pi->get_pgp_num();
+	   << pi->get_pg_num_target()
+	   << " > pgp_num " << pi->get_pgp_num_target();
 	pgp_detail.push_back(ss.str());
       }
       int average_objects_per_pg = pg_sum.stats.sum.num_objects / pg_stat.size();
       if (average_objects_per_pg > 0 &&
           pg_sum.stats.sum.num_objects >= mon_pg_warn_min_objects &&
           p->second.stats.sum.num_objects >= mon_pg_warn_min_pool_objects) {
-	int objects_per_pg = p->second.stats.sum.num_objects / pi->get_pg_num();
+	int objects_per_pg = p->second.stats.sum.num_objects /
+	  pi->get_pg_num_target();
 	float ratio = (float)objects_per_pg / (float)average_objects_per_pg;
 	if (mon_pg_warn_max_object_skew > 0 &&
 	    ratio > mon_pg_warn_max_object_skew) {
@@ -3293,7 +3308,8 @@ void PGMapUpdater::check_osd_map(
     }
   }
 
-  // new pgs (split or new pool)?
+  // new (split or new pool) or merged pgs?
+  map<int64_t,unsigned> new_pg_num;
   for (auto& p : osdmap.get_pools()) {
     int64_t poolid = p.first;
     const pg_pool_t& pi = p.second;
@@ -3302,9 +3318,10 @@ void PGMapUpdater::check_osd_map(
     if (q != pgmap.num_pg_by_pool.end())
       my_pg_num = q->second;
     unsigned pg_num = pi.get_pg_num();
-    if (my_pg_num != pg_num) {
+    new_pg_num[poolid] = pg_num;
+    if (my_pg_num < pg_num) {
       ldout(cct,10) << __func__ << " pool " << poolid << " pg_num " << pg_num
-		    << " != my pg_num " << my_pg_num << dendl;
+		    << " > my pg_num " << my_pg_num << dendl;
       for (unsigned ps = my_pg_num; ps < pg_num; ++ps) {
 	pg_t pgid(ps, poolid);
 	if (pending_inc->pg_stat_updates.count(pgid) == 0) {
@@ -3323,6 +3340,29 @@ void PGMapUpdater::check_osd_map(
 	  stats.last_clean_scrub_stamp = osdmap.get_modified();
 	}
       }
+    } else if (my_pg_num > pg_num) {
+      ldout(cct,10) << __func__ << " pool " << poolid << " pg_num " << pg_num
+		    << " < my pg_num " << my_pg_num << dendl;
+      for (unsigned i = pg_num; i < my_pg_num; ++i) {
+	pg_t pgid(i, poolid);
+	ldout(cct,20) << __func__ << " removing merged " << pgid << dendl;
+	if (pgmap.pg_stat.count(pgid)) {
+	  pending_inc->pg_remove.insert(pgid);
+	}
+	pending_inc->pg_stat_updates.erase(pgid);
+      }
+    }
+  }
+  auto i = pending_inc->pg_stat_updates.begin();
+  while (i != pending_inc->pg_stat_updates.end()) {
+    auto j = new_pg_num.find(i->first.pool());
+    if (j == new_pg_num.end() ||
+	i->first.ps() >= j->second) {
+      ldout(cct,20) << __func__ << " removing pending update to old "
+		    << i->first << dendl;
+      i = pending_inc->pg_stat_updates.erase(i);
+    } else {
+      ++i;
     }
   }
 }

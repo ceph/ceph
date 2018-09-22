@@ -531,9 +531,9 @@ int Pipe::accept()
       if (state != STATE_ACCEPTING)
 	goto shutting_down_msgr_unlocked;
       if (!had_challenge && need_challenge && authorizer_challenge) {
-	ldout(msgr->cct,0) << "accept: challenging authorizer "
-			   << authorizer_reply.length()
-			   << " bytes" << dendl;
+	ldout(msgr->cct,10) << "accept: challenging authorizer "
+			    << authorizer_reply.length()
+			    << " bytes" << dendl;
 	ceph_assert(authorizer_reply.length());
 	reply.tag = CEPH_MSGR_TAG_CHALLENGE_AUTHORIZER;
       } else {
@@ -2043,7 +2043,7 @@ static void alloc_aligned_buffer(bufferlist& data, unsigned len, unsigned off)
   }
   unsigned middle = left & CEPH_PAGE_MASK;
   if (middle > 0) {
-    data.push_back(buffer::create_page_aligned(middle));
+    data.push_back(buffer::create_small_page_aligned(middle));
     left -= middle;
   }
   if (left) {

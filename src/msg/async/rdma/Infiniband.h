@@ -19,7 +19,7 @@
 
 #include <boost/pool/pool.hpp>
 // need this because boost messes with ceph log/assert definitions
-#include <include/assert.h>
+#include "include/ceph_assert.h"
 
 #include <infiniband/verbs.h>
 #include <rdma/rdma_cma.h>

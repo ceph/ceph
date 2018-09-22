@@ -203,36 +203,6 @@ TEST(Buffer, constructors) {
       EXPECT_EQ(history_alloc_num, buffer::get_history_alloc_num());
     }
   }
-#ifdef CEPH_HAVE_SPLICE
-  if (ceph_buffer_track) {
-    EXPECT_EQ(0, buffer::get_total_alloc());
-  }
-  
-  {
-    // no fd
-    EXPECT_THROW(buffer::create_zero_copy(len, -1, NULL), buffer::error_code);
-    history_alloc_bytes += len;
-    history_alloc_num++;
-
-    unsigned zc_len = 4;
-    ::unlink(FILENAME);
-    snprintf(cmd, sizeof(cmd), "echo ABC > %s", FILENAME);
-    EXPECT_EQ(0, ::system(cmd));
-    int fd = ::open(FILENAME, O_RDONLY);
-    assert (fd >= 0);
-    bufferptr ptr(buffer::create_zero_copy(zc_len, fd, NULL));
-    history_alloc_bytes += zc_len;
-    history_alloc_num++;
-    EXPECT_EQ(zc_len, ptr.length());
-    if (ceph_buffer_track) {
-      EXPECT_EQ(zc_len, (unsigned)buffer::get_total_alloc());
-      EXPECT_EQ(history_alloc_bytes, buffer::get_history_alloc_bytes());
-      EXPECT_EQ(history_alloc_num, buffer::get_history_alloc_num());
-    }
-    ::close(fd);
-    ::unlink(FILENAME);
-  }
-#endif
   if (ceph_buffer_track) {
     EXPECT_EQ(0, buffer::get_total_alloc());
   }
@@ -266,149 +236,6 @@ TEST(BufferRaw, ostream) {
   EXPECT_GT(stream.str().size(), stream.str().find("buffer::raw("));
   EXPECT_GT(stream.str().size(), stream.str().find("len 1 nref 1)"));
 }
-
-#ifdef CEPH_HAVE_SPLICE
-class TestRawPipe : public ::testing::Test {
-protected:
-  void SetUp() override {
-    len = 4;
-    ::unlink(FILENAME);
-    snprintf(cmd, sizeof(cmd), "echo ABC > %s", FILENAME);
-    EXPECT_EQ(0, ::system(cmd));
-    fd = ::open(FILENAME, O_RDONLY);
-    ceph_assert(fd >= 0);
-  }
-  void TearDown() override {
-    ::close(fd);
-    ::unlink(FILENAME);
-  }
-  int fd;
-  unsigned len;
-};
-
-TEST_F(TestRawPipe, create_zero_copy) {
-  bufferptr ptr(buffer::create_zero_copy(len, fd, NULL));
-  EXPECT_EQ(len, ptr.length());
-  if (get_env_bool("CEPH_BUFFER_TRACK")) {
-    EXPECT_EQ(len, (unsigned)buffer::get_total_alloc());
-  }
-}
-
-TEST_F(TestRawPipe, c_str_no_fd) {
-  EXPECT_THROW(bufferptr ptr(buffer::create_zero_copy(len, -1, NULL)),
-	       buffer::error_code);
-}
-
-TEST_F(TestRawPipe, c_str_basic) {
-  bufferptr ptr = bufferptr(buffer::create_zero_copy(len, fd, NULL));
-  EXPECT_EQ(0, memcmp(ptr.c_str(), "ABC\n", len));
-  EXPECT_EQ(len, ptr.length());
-}
-
-TEST_F(TestRawPipe, c_str_twice) {
-  // make sure we're creating a copy of the data and not consuming it
-  bufferptr ptr = bufferptr(buffer::create_zero_copy(len, fd, NULL));
-  EXPECT_EQ(len, ptr.length());
-  EXPECT_EQ(0, memcmp(ptr.c_str(), "ABC\n", len));
-  EXPECT_EQ(0, memcmp(ptr.c_str(), "ABC\n", len));
-}
-
-TEST_F(TestRawPipe, c_str_basic_offset) {
-  loff_t offset = len - 1;
-  ::lseek(fd, offset, SEEK_SET);
-  bufferptr ptr = bufferptr(buffer::create_zero_copy(len - offset, fd, NULL));
-  EXPECT_EQ(len - offset, ptr.length());
-  EXPECT_EQ(0, memcmp(ptr.c_str(), "\n", len - offset));
-}
-
-TEST_F(TestRawPipe, c_str_dest_short) {
-  ::lseek(fd, 1, SEEK_SET);
-  bufferptr ptr = bufferptr(buffer::create_zero_copy(2, fd, NULL));
-  EXPECT_EQ(2u, ptr.length());
-  EXPECT_EQ(0, memcmp(ptr.c_str(), "BC", 2));
-}
-
-TEST_F(TestRawPipe, c_str_source_short) {
-  ::lseek(fd, 1, SEEK_SET);
-  bufferptr ptr = bufferptr(buffer::create_zero_copy(len, fd, NULL));
-  EXPECT_EQ(len - 1, ptr.length());
-  EXPECT_EQ(0, memcmp(ptr.c_str(), "BC\n", len - 1));
-}
-
-TEST_F(TestRawPipe, c_str_explicit_zero_offset) {
-  int64_t offset = 0;
-  ::lseek(fd, 1, SEEK_SET);
-  bufferptr ptr = bufferptr(buffer::create_zero_copy(len, fd, &offset));
-  EXPECT_EQ(len, offset);
-  EXPECT_EQ(len, ptr.length());
-  EXPECT_EQ(0, memcmp(ptr.c_str(), "ABC\n", len));
-}
-
-TEST_F(TestRawPipe, c_str_explicit_positive_offset) {
-  int64_t offset = 1;
-  bufferptr ptr = bufferptr(buffer::create_zero_copy(len - offset, fd,
-						     &offset));
-  EXPECT_EQ(len, offset);
-  EXPECT_EQ(len - 1, ptr.length());
-  EXPECT_EQ(0, memcmp(ptr.c_str(), "BC\n", len - 1));
-}
-
-TEST_F(TestRawPipe, c_str_explicit_positive_empty_result) {
-  int64_t offset = len;
-  bufferptr ptr = bufferptr(buffer::create_zero_copy(len - offset, fd,
-						     &offset));
-  EXPECT_EQ(len, offset);
-  EXPECT_EQ(0u, ptr.length());
-}
-
-TEST_F(TestRawPipe, c_str_source_short_explicit_offset) {
-  int64_t offset = 1;
-  bufferptr ptr = bufferptr(buffer::create_zero_copy(len, fd, &offset));
-  EXPECT_EQ(len, offset);
-  EXPECT_EQ(len - 1, ptr.length());
-  EXPECT_EQ(0, memcmp(ptr.c_str(), "BC\n", len - 1));
-}
-
-TEST_F(TestRawPipe, c_str_dest_short_explicit_offset) {
-  int64_t offset = 1;
-  bufferptr ptr = bufferptr(buffer::create_zero_copy(2, fd, &offset));
-  EXPECT_EQ(3, offset);
-  EXPECT_EQ(2u, ptr.length());
-  EXPECT_EQ(0, memcmp(ptr.c_str(), "BC", 2));
-}
-
-TEST_F(TestRawPipe, buffer_list_read_fd_zero_copy) {
-  bufferlist bl;
-  EXPECT_EQ(-EBADF, bl.read_fd_zero_copy(-1, len));
-  bl = bufferlist();
-  EXPECT_EQ(0, bl.read_fd_zero_copy(fd, len));
-  EXPECT_EQ(len, bl.length());
-  EXPECT_EQ(0u, bl.front().unused_tail_length());
-  EXPECT_EQ(1u, bl.get_num_buffers());
-  EXPECT_EQ(len, bl.front().raw_length());
-  EXPECT_EQ(0, memcmp(bl.c_str(), "ABC\n", len));
-  EXPECT_TRUE(bl.can_zero_copy());
-}
-
-TEST_F(TestRawPipe, buffer_list_write_fd_zero_copy) {
-  ::unlink(FILENAME);
-  bufferlist bl;
-  EXPECT_EQ(0, bl.read_fd_zero_copy(fd, len));
-  EXPECT_TRUE(bl.can_zero_copy());
-  int out_fd = ::open(FILENAME, O_RDWR|O_CREAT|O_TRUNC, 0600);
-  ASSERT_NE(-1, out_fd);
-  EXPECT_EQ(0, bl.write_fd_zero_copy(out_fd));
-  struct stat st;
-  memset(&st, 0, sizeof(st));
-  ASSERT_EQ(0, ::stat(FILENAME, &st));
-  EXPECT_EQ(len, st.st_size);
-  char buf[len + 1];
-  EXPECT_EQ((int)len, safe_read(out_fd, buf, len + 1));
-  EXPECT_EQ(0, memcmp(buf, "ABC\n", len));
-  ::close(out_fd);
-  ::unlink(FILENAME);
-}
-#endif // CEPH_HAVE_SPLICE
 
 //                                     
 // +-----------+                +-----+
@@ -2980,6 +2807,46 @@ TEST(BufferList, TestIsProvidedBuffer) {
   ASSERT_TRUE(bl.is_provided_buffer(buff));
   bl.append_zero(100);
   ASSERT_FALSE(bl.is_provided_buffer(buff));
+}
+
+TEST(BufferList, TestSHA1) {
+  {
+    bufferlist bl;
+    sha1_digest_t sha1 = bl.sha1();
+    EXPECT_EQ("da39a3ee5e6b4b0d3255bfef95601890afd80709", sha1.to_str());
+  }
+  {
+    bufferlist bl;
+    bl.append("");
+    sha1_digest_t sha1 = bl.sha1();
+    EXPECT_EQ("da39a3ee5e6b4b0d3255bfef95601890afd80709", sha1.to_str());
+  }
+  {
+    bufferlist bl;
+    bl.append("Hello");
+    sha1_digest_t sha1 = bl.sha1();
+    EXPECT_EQ("f7ff9e8b7bb2e09b70935a5d785e0cc5d9d0abf0", sha1.to_str());
+  }
+  {
+    bufferlist bl, bl2;
+    bl.append("Hello");
+    bl2.append(", world!");
+    bl.claim_append(bl2);
+    sha1_digest_t sha1 = bl.sha1();
+    EXPECT_EQ("943a702d06f34599aee1f8da8ef9f7296031d699", sha1.to_str());
+    bl2.append("  How are you today?");
+    bl.claim_append(bl2);
+    sha1 = bl.sha1();
+    EXPECT_EQ("778b5d10e5133aa28fb8de71d35b6999b9a25eb4", sha1.to_str());
+  }
+  {
+    bufferptr p(65536);
+    memset(p.c_str(), 0, 65536);
+    bufferlist bl;
+    bl.append(p);
+    sha1_digest_t sha1 = bl.sha1();
+    EXPECT_EQ("1adc95bebe9eea8c112d40cd04ab7a8d75c4f961", sha1.to_str());
+  }
 }
 
 TEST(BufferHash, all) {

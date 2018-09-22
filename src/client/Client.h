@@ -302,7 +302,7 @@ public:
     const bufferlist& inbl,
     bufferlist *poutbl, std::string *prs, Context *onfinish);
 
-  // these shoud (more or less) mirror the actual system calls.
+  // these should (more or less) mirror the actual system calls.
   int statfs(const char *path, struct statvfs *stbuf, const UserPerm& perms);
 
   // crap
@@ -1034,7 +1034,7 @@ private:
   int _release_fh(Fh *fh);
   void _put_fh(Fh *fh);
 
-  int _do_remount(void);
+  int _do_remount(bool retry_on_error);
 
   int _read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl, bool *checkeof);
   int _read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl);
@@ -1274,6 +1274,8 @@ private:
 
   std::map<std::pair<int64_t,std::string>, int> pool_perms;
   list<Cond*> waiting_for_pool_perm;
+
+  uint64_t retries_on_invalidate = 0;
 };
 
 /**

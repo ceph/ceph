@@ -3,7 +3,7 @@ from nose import SkipTest
 from nose.tools import eq_ as eq, ok_ as ok, assert_raises
 from rados import (Rados, Error, RadosStateError, Object, ObjectExists,
                    ObjectNotFound, ObjectBusy, requires, opt,
-                   ANONYMOUS_AUID, ADMIN_AUID, LIBRADOS_ALL_NSPACES, WriteOpCtx, ReadOpCtx,
+                   LIBRADOS_ALL_NSPACES, WriteOpCtx, ReadOpCtx,
                    LIBRADOS_SNAP_HEAD, LIBRADOS_OPERATION_BALANCE_READS, LIBRADOS_OPERATION_SKIPRWLOCKS, MonitorLog)
 import time
 import threading
@@ -179,11 +179,6 @@ class TestRados(object):
         finally:
             self.rados.delete_pool(poolname)
 
-    def test_create_auid(self):
-        self.rados.create_pool('foo', 100)
-        assert self.rados.pool_exists('foo')
-        self.rados.delete_pool('foo')
-
     def test_eexist(self):
         self.rados.create_pool('foo')
         assert_raises(ObjectExists, self.rados.create_pool, 'foo')
@@ -309,10 +304,6 @@ class TestIoctx(object):
                    'num_wr': 0,
                    'num_objects_degraded': 0,
                    'num_rd': 0})
-
-    def test_change_auid(self):
-        self.ioctx.change_auid(ANONYMOUS_AUID)
-        self.ioctx.change_auid(ADMIN_AUID)
 
     def test_write(self):
         self.ioctx.write('abc', b'abc')
@@ -970,10 +961,6 @@ class TestIoctx2(object):
                    'num_wr': 0,
                    'num_objects_degraded': 0,
                    'num_rd': 0})
-
-    def test_change_auid(self):
-        self.ioctx2.change_auid(ANONYMOUS_AUID)
-        self.ioctx2.change_auid(ADMIN_AUID)
 
 
 class TestObject(object):

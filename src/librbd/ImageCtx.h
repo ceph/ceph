@@ -121,7 +121,7 @@ namespace librbd {
     char *format_string;
     std::string header_oid;
     std::string id; // only used for new-format images
-    ParentInfo parent_md;
+    ParentImageInfo parent_md;
     ImageCtx *parent;
     ImageCtx *child = nullptr;
     MigrationInfo migration_info;
@@ -196,6 +196,7 @@ namespace librbd {
     int journal_object_flush_interval;
     uint64_t journal_object_flush_bytes;
     double journal_object_flush_age;
+    uint64_t journal_object_max_in_flight_appends;
     std::string journal_pool;
     uint32_t journal_max_payload_bytes;
     int journal_max_concurrent_object_sets;
@@ -266,7 +267,7 @@ namespace librbd {
     int get_snap_namespace(librados::snap_t in_snap_id,
 			   cls::rbd::SnapshotNamespace *out_snap_namespace) const;
     int get_parent_spec(librados::snap_t in_snap_id,
-			ParentSpec *pspec) const;
+			cls::rbd::ParentImageSpec *pspec) const;
     int is_snap_protected(librados::snap_t in_snap_id,
 			  bool *is_protected) const;
     int is_snap_unprotected(librados::snap_t in_snap_id,
@@ -288,7 +289,7 @@ namespace librbd {
     void add_snap(cls::rbd::SnapshotNamespace in_snap_namespace,
 		  std::string in_snap_name,
 		  librados::snap_t id,
-		  uint64_t in_size, const ParentInfo &parent,
+		  uint64_t in_size, const ParentImageInfo &parent,
 		  uint8_t protection_status, uint64_t flags, utime_t timestamp);
     void rm_snap(cls::rbd::SnapshotNamespace in_snap_namespace,
 		 std::string in_snap_name,
@@ -302,12 +303,14 @@ namespace librbd {
     bool test_op_features(uint64_t op_features,
                           const RWLock &in_snap_lock) const;
     int get_flags(librados::snap_t in_snap_id, uint64_t *flags) const;
-    int test_flags(uint64_t test_flags, bool *flags_set) const;
-    int test_flags(uint64_t test_flags, const RWLock &in_snap_lock,
+    int test_flags(librados::snap_t in_snap_id,
+                   uint64_t test_flags, bool *flags_set) const;
+    int test_flags(librados::snap_t in_snap_id,
+                   uint64_t test_flags, const RWLock &in_snap_lock,
                    bool *flags_set) const;
     int update_flags(librados::snap_t in_snap_id, uint64_t flag, bool enabled);
 
-    const ParentInfo* get_parent_info(librados::snap_t in_snap_id) const;
+    const ParentImageInfo* get_parent_info(librados::snap_t in_snap_id) const;
     int64_t get_parent_pool_id(librados::snap_t in_snap_id) const;
     std::string get_parent_image_id(librados::snap_t in_snap_id) const;
     uint64_t get_parent_snap_id(librados::snap_t in_snap_id) const;

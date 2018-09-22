@@ -598,7 +598,8 @@ int ReplicatedBackend::be_deep_scrub(
   dout(10) << __func__ << " " << poid << " pos " << pos << dendl;
   int r;
   uint32_t fadvise_flags = CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL |
-                           CEPH_OSD_OP_FLAG_FADVISE_DONTNEED;
+                           CEPH_OSD_OP_FLAG_FADVISE_DONTNEED |
+                           CEPH_OSD_OP_FLAG_BYPASS_CLEAN_CACHE;
 
   utime_t sleeptime;
   sleeptime.set_from_double(cct->_conf->osd_debug_deep_scrub_sleep);
@@ -1696,6 +1697,7 @@ bool ReplicatedBackend::handle_pull_response(
 
   pi.stat.num_keys_recovered += pop.omap_entries.size();
   pi.stat.num_bytes_recovered += data.length();
+  get_parent()->get_logger()->inc(l_osd_rop, pop.omap_entries.size() + data.length());
 
   if (complete) {
     pi.stat.num_objects_recovered++;
@@ -1977,6 +1979,7 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
   if (stat) {
     stat->num_keys_recovered += out_op->omap_entries.size();
     stat->num_bytes_recovered += out_op->data.length();
+    get_parent()->get_logger()->inc(l_osd_rbytes, out_op->omap_entries.size() + out_op->data.length());
   }
 
   get_parent()->get_logger()->inc(l_osd_push);

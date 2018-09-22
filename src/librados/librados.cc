@@ -1134,17 +1134,17 @@ void librados::IoCtx::dup(const IoCtx& rhs)
 
 int librados::IoCtx::set_auid(uint64_t auid_)
 {
-  return io_ctx_impl->pool_change_auid(auid_);
+  return -EOPNOTSUPP;
 }
 
 int librados::IoCtx::set_auid_async(uint64_t auid_, PoolAsyncCompletion *c)
 {
-  return io_ctx_impl->pool_change_auid_async(auid_, c->pc);
+  return -EOPNOTSUPP;
 }
 
 int librados::IoCtx::get_auid(uint64_t *auid_)
 {
-  return rados_ioctx_pool_get_auid(io_ctx_impl, auid_);
+  return -EOPNOTSUPP;
 }
 
 bool librados::IoCtx::pool_requires_alignment()
@@ -2353,6 +2353,11 @@ uint64_t librados::Rados::get_instance_id()
   return client->get_instance_id();
 }
 
+int librados::Rados::get_min_compatible_osd(int8_t* require_osd_release)
+{
+  return client->get_min_compatible_osd(require_osd_release);
+}
+
 int librados::Rados::get_min_compatible_client(int8_t* min_compat_client,
                                                int8_t* require_min_compat_client)
 {
@@ -2422,14 +2427,26 @@ int librados::Rados::pool_create(const char *name)
 
 int librados::Rados::pool_create(const char *name, uint64_t auid)
 {
+  if (auid != CEPH_AUTH_UID_DEFAULT) {
+    return -EINVAL;
+  }
   string str(name);
-  return client->pool_create(str, auid);
+  return client->pool_create(str);
 }
 
 int librados::Rados::pool_create(const char *name, uint64_t auid, __u8 crush_rule)
 {
+  if (auid != CEPH_AUTH_UID_DEFAULT) {
+    return -EINVAL;
+  }
   string str(name);
-  return client->pool_create(str, auid, crush_rule);
+  return client->pool_create(str, crush_rule);
+}
+
+int librados::Rados::pool_create_with_rule(const char *name, __u8 crush_rule)
+{
+  string str(name);
+  return client->pool_create(str, crush_rule);
 }
 
 int librados::Rados::pool_create_async(const char *name, PoolAsyncCompletion *c)
@@ -2440,15 +2457,29 @@ int librados::Rados::pool_create_async(const char *name, PoolAsyncCompletion *c)
 
 int librados::Rados::pool_create_async(const char *name, uint64_t auid, PoolAsyncCompletion *c)
 {
+  if (auid != CEPH_AUTH_UID_DEFAULT) {
+    return -EINVAL;
+  }
   string str(name);
-  return client->pool_create_async(str, c->pc, auid);
+  return client->pool_create_async(str, c->pc);
 }
 
 int librados::Rados::pool_create_async(const char *name, uint64_t auid, __u8 crush_rule,
 				       PoolAsyncCompletion *c)
 {
+  if (auid != CEPH_AUTH_UID_DEFAULT) {
+    return -EINVAL;
+  }
   string str(name);
-  return client->pool_create_async(str, c->pc, auid, crush_rule);
+  return client->pool_create_async(str, c->pc, crush_rule);
+}
+
+int librados::Rados::pool_create_with_rule_async(
+  const char *name, __u8 crush_rule,
+  PoolAsyncCompletion *c)
+{
+  string str(name);
+  return client->pool_create_async(str, c->pc, crush_rule);
 }
 
 int librados::Rados::pool_get_base_tier(int64_t pool_id, int64_t* base_tier)
@@ -2923,6 +2954,13 @@ extern "C" uint64_t rados_get_instance_id(rados_t cluster)
   uint64_t retval = client->get_instance_id();
   tracepoint(librados, rados_get_instance_id_exit, retval);
   return retval;
+}
+
+extern "C" int rados_get_min_compatible_osd(rados_t cluster,
+                                            int8_t* require_osd_release)
+{
+  librados::RadosClient *client = (librados::RadosClient *)cluster;
+  return client->get_min_compatible_osd(require_osd_release);
 }
 
 extern "C" int rados_get_min_compatible_client(rados_t cluster,
@@ -3908,7 +3946,12 @@ extern "C" int rados_pool_create_with_auid(rados_t cluster, const char *name,
   tracepoint(librados, rados_pool_create_with_auid_enter, cluster, name, auid);
   librados::RadosClient *radosp = (librados::RadosClient *)cluster;
   string sname(name);
-  int retval = radosp->pool_create(sname, auid);
+  int retval = 0;
+  if (auid != CEPH_AUTH_UID_DEFAULT) {
+    retval = -EINVAL;
+  } else {
+    retval = radosp->pool_create(sname);
+  }
   tracepoint(librados, rados_pool_create_with_auid_exit, retval);
   return retval;
 }
@@ -3919,7 +3962,7 @@ extern "C" int rados_pool_create_with_crush_rule(rados_t cluster, const char *na
   tracepoint(librados, rados_pool_create_with_crush_rule_enter, cluster, name, crush_rule_num);
   librados::RadosClient *radosp = (librados::RadosClient *)cluster;
   string sname(name);
-  int retval = radosp->pool_create(sname, 0, crush_rule_num);
+  int retval = radosp->pool_create(sname, crush_rule_num);
   tracepoint(librados, rados_pool_create_with_crush_rule_exit, retval);
   return retval;
 }
@@ -3930,7 +3973,12 @@ extern "C" int rados_pool_create_with_all(rados_t cluster, const char *name,
   tracepoint(librados, rados_pool_create_with_all_enter, cluster, name, auid, crush_rule_num);
   librados::RadosClient *radosp = (librados::RadosClient *)cluster;
   string sname(name);
-  int retval = radosp->pool_create(sname, auid, crush_rule_num);
+  int retval = 0;
+  if (auid != CEPH_AUTH_UID_DEFAULT) {
+    retval = -EINVAL;
+  } else {
+    retval = radosp->pool_create(sname, crush_rule_num);
+  }
   tracepoint(librados, rados_pool_create_with_all_exit, retval);
   return retval;
 }
@@ -3956,8 +4004,7 @@ extern "C" int rados_pool_delete(rados_t cluster, const char *pool_name)
 extern "C" int rados_ioctx_pool_set_auid(rados_ioctx_t io, uint64_t auid)
 {
   tracepoint(librados, rados_ioctx_pool_set_auid_enter, io, auid);
-  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
-  int retval = ctx->pool_change_auid(auid);
+  int retval = -EOPNOTSUPP;
   tracepoint(librados, rados_ioctx_pool_set_auid_exit, retval);
   return retval;
 }
@@ -3965,8 +4012,7 @@ extern "C" int rados_ioctx_pool_set_auid(rados_ioctx_t io, uint64_t auid)
 extern "C" int rados_ioctx_pool_get_auid(rados_ioctx_t io, uint64_t *auid)
 {
   tracepoint(librados, rados_ioctx_pool_get_auid_enter, io);
-  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
-  int retval = ctx->client->pool_get_auid(ctx->get_id(), (unsigned long long *)auid);
+  int retval = -EOPNOTSUPP;
   tracepoint(librados, rados_ioctx_pool_get_auid_exit, retval, *auid);
   return retval;
 }

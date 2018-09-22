@@ -23,7 +23,7 @@
 #include "common/RefCountedObj.h"
 #include "common/config.h"
 #include "common/debug.h"
-#include "include/assert.h" // Because intusive_ptr clobbers our assert...
+#include "include/ceph_assert.h" // Because intusive_ptr clobbers our assert...
 #include "include/buffer.h"
 #include "include/types.h"
 #include "msg/MessageRef.h"
@@ -55,7 +55,7 @@ public:
 
 public:
   Connection(CephContext *cct, Messenger *m)
-    // we are managed exlusively by ConnectionRef; make it so you can
+    // we are managed exclusively by ConnectionRef; make it so you can
     //   ConnectionRef foo = new Connection;
     : RefCountedObject(cct, 0),
       lock("Connection::lock"),

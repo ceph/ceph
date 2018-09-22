@@ -167,7 +167,7 @@ void ImageWatcher<I>::notify_flatten(uint64_t request_id,
                                      Context *on_finish) {
   ceph_assert(m_image_ctx.owner_lock.is_locked());
   ceph_assert(m_image_ctx.exclusive_lock &&
-         !m_image_ctx.exclusive_lock->is_lock_owner());
+              !m_image_ctx.exclusive_lock->is_lock_owner());
 
   AsyncRequestId async_request_id(get_client_id(), request_id);
 
@@ -182,7 +182,7 @@ void ImageWatcher<I>::notify_resize(uint64_t request_id, uint64_t size,
                                     Context *on_finish) {
   ceph_assert(m_image_ctx.owner_lock.is_locked());
   ceph_assert(m_image_ctx.exclusive_lock &&
-         !m_image_ctx.exclusive_lock->is_lock_owner());
+              !m_image_ctx.exclusive_lock->is_lock_owner());
 
   AsyncRequestId async_request_id(get_client_id(), request_id);
 
@@ -197,7 +197,7 @@ void ImageWatcher<I>::notify_snap_create(const cls::rbd::SnapshotNamespace &snap
                                          Context *on_finish) {
   ceph_assert(m_image_ctx.owner_lock.is_locked());
   ceph_assert(m_image_ctx.exclusive_lock &&
-         !m_image_ctx.exclusive_lock->is_lock_owner());
+              !m_image_ctx.exclusive_lock->is_lock_owner());
 
   notify_lock_owner(SnapCreatePayload(snap_namespace, snap_name), on_finish);
 }
@@ -208,7 +208,7 @@ void ImageWatcher<I>::notify_snap_rename(const snapid_t &src_snap_id,
 					 Context *on_finish) {
   ceph_assert(m_image_ctx.owner_lock.is_locked());
   ceph_assert(m_image_ctx.exclusive_lock &&
-         !m_image_ctx.exclusive_lock->is_lock_owner());
+              !m_image_ctx.exclusive_lock->is_lock_owner());
 
   notify_lock_owner(SnapRenamePayload(src_snap_id, dst_snap_name), on_finish);
 }
@@ -219,7 +219,7 @@ void ImageWatcher<I>::notify_snap_remove(const cls::rbd::SnapshotNamespace &snap
                                          Context *on_finish) {
   ceph_assert(m_image_ctx.owner_lock.is_locked());
   ceph_assert(m_image_ctx.exclusive_lock &&
-         !m_image_ctx.exclusive_lock->is_lock_owner());
+              !m_image_ctx.exclusive_lock->is_lock_owner());
 
   notify_lock_owner(SnapRemovePayload(snap_namespace, snap_name), on_finish);
 }
@@ -230,7 +230,7 @@ void ImageWatcher<I>::notify_snap_protect(const cls::rbd::SnapshotNamespace &sna
                                           Context *on_finish) {
   ceph_assert(m_image_ctx.owner_lock.is_locked());
   ceph_assert(m_image_ctx.exclusive_lock &&
-         !m_image_ctx.exclusive_lock->is_lock_owner());
+              !m_image_ctx.exclusive_lock->is_lock_owner());
 
   notify_lock_owner(SnapProtectPayload(snap_namespace, snap_name), on_finish);
 }
@@ -241,7 +241,7 @@ void ImageWatcher<I>::notify_snap_unprotect(const cls::rbd::SnapshotNamespace &s
                                             Context *on_finish) {
   ceph_assert(m_image_ctx.owner_lock.is_locked());
   ceph_assert(m_image_ctx.exclusive_lock &&
-         !m_image_ctx.exclusive_lock->is_lock_owner());
+              !m_image_ctx.exclusive_lock->is_lock_owner());
 
   notify_lock_owner(SnapUnprotectPayload(snap_namespace, snap_name), on_finish);
 }
@@ -252,7 +252,7 @@ void ImageWatcher<I>::notify_rebuild_object_map(uint64_t request_id,
                                                 Context *on_finish) {
   ceph_assert(m_image_ctx.owner_lock.is_locked());
   ceph_assert(m_image_ctx.exclusive_lock &&
-         !m_image_ctx.exclusive_lock->is_lock_owner());
+              !m_image_ctx.exclusive_lock->is_lock_owner());
 
   AsyncRequestId async_request_id(get_client_id(), request_id);
 
@@ -266,7 +266,7 @@ void ImageWatcher<I>::notify_rename(const std::string &image_name,
                                     Context *on_finish) {
   ceph_assert(m_image_ctx.owner_lock.is_locked());
   ceph_assert(m_image_ctx.exclusive_lock &&
-         !m_image_ctx.exclusive_lock->is_lock_owner());
+              !m_image_ctx.exclusive_lock->is_lock_owner());
 
   notify_lock_owner(RenamePayload(image_name), on_finish);
 }
@@ -276,7 +276,7 @@ void ImageWatcher<I>::notify_update_features(uint64_t features, bool enabled,
                                              Context *on_finish) {
   ceph_assert(m_image_ctx.owner_lock.is_locked());
   ceph_assert(m_image_ctx.exclusive_lock &&
-         !m_image_ctx.exclusive_lock->is_lock_owner());
+              !m_image_ctx.exclusive_lock->is_lock_owner());
 
   notify_lock_owner(UpdateFeaturesPayload(features, enabled), on_finish);
 }
@@ -287,7 +287,7 @@ void ImageWatcher<I>::notify_migrate(uint64_t request_id,
                                      Context *on_finish) {
   ceph_assert(m_image_ctx.owner_lock.is_locked());
   ceph_assert(m_image_ctx.exclusive_lock &&
-         !m_image_ctx.exclusive_lock->is_lock_owner());
+              !m_image_ctx.exclusive_lock->is_lock_owner());
 
   AsyncRequestId async_request_id(get_client_id(), request_id);
 
@@ -378,7 +378,7 @@ void ImageWatcher<I>::schedule_request_lock(bool use_timer, int timer_delay) {
     return;
   }
   ceph_assert(m_image_ctx.exclusive_lock &&
-         !m_image_ctx.exclusive_lock->is_lock_owner());
+              !m_image_ctx.exclusive_lock->is_lock_owner());
 
   RWLock::RLocker watch_locker(this->m_watch_lock);
   if (this->is_registered(this->m_watch_lock)) {
@@ -1023,7 +1023,7 @@ void ImageWatcher<I>::handle_rewatch_complete(int r) {
     RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
     if (m_image_ctx.exclusive_lock != nullptr) {
       // update the lock cookie with the new watch handle
-      m_image_ctx.exclusive_lock->reacquire_lock();
+      m_image_ctx.exclusive_lock->reacquire_lock(nullptr);
     }
   }
 

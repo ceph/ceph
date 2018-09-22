@@ -279,7 +279,7 @@ Context *ResizeRequest<I>::send_grow_object_map() {
 
   // should have been canceled prior to releasing lock
   ceph_assert(image_ctx.exclusive_lock == nullptr ||
-         image_ctx.exclusive_lock->is_lock_owner());
+              image_ctx.exclusive_lock->is_lock_owner());
 
   image_ctx.object_map->aio_resize(
     m_new_size, OBJECT_NONEXISTENT, create_context_callback<
@@ -295,7 +295,12 @@ Context *ResizeRequest<I>::handle_grow_object_map(int *result) {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
 
-  ceph_assert(*result == 0);
+  if (*result < 0) {
+    lderr(cct) << this << " " << __func__ << ": failed to resize object map: "
+               << cpp_strerror(*result) << dendl;
+    return this->create_context_finisher(*result);
+  }
+
   send_post_block_writes();
   return nullptr;
 }
@@ -321,7 +326,7 @@ Context *ResizeRequest<I>::send_shrink_object_map() {
 
   // should have been canceled prior to releasing lock
   ceph_assert(image_ctx.exclusive_lock == nullptr ||
-         image_ctx.exclusive_lock->is_lock_owner());
+              image_ctx.exclusive_lock->is_lock_owner());
 
   image_ctx.object_map->aio_resize(
     m_new_size, OBJECT_NONEXISTENT, create_context_callback<
@@ -337,8 +342,14 @@ Context *ResizeRequest<I>::handle_shrink_object_map(int *result) {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
 
+  if (*result < 0) {
+    lderr(cct) << this << " " << __func__ << ": failed to resize object map: "
+               << cpp_strerror(*result) << dendl;
+    image_ctx.io_work_queue->unblock_writes();
+    return this->create_context_finisher(*result);
+  }
+
   update_size_and_overlap();
-  ceph_assert(*result == 0);
   return this->create_context_finisher(0);
 }
 
@@ -381,7 +392,7 @@ void ResizeRequest<I>::send_update_header() {
   // should have been canceled prior to releasing lock
   RWLock::RLocker owner_locker(image_ctx.owner_lock);
   ceph_assert(image_ctx.exclusive_lock == nullptr ||
-         image_ctx.exclusive_lock->is_lock_owner());
+              image_ctx.exclusive_lock->is_lock_owner());
 
   librados::ObjectWriteOperation op;
   if (image_ctx.old_format) {

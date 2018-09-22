@@ -200,7 +200,7 @@ public:
   }
 
   // This superclass is used both by kv iterators *and* by the ObjectMap
-  // omap iterator.  The class hiearchies are unfortunatley tied together
+  // omap iterator.  The class hierarchies are unfortunately tied together
   // by the legacy DBOjectMap implementation :(.
   class SimplestIteratorImpl {
   public:

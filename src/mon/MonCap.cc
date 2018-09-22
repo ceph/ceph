@@ -29,7 +29,7 @@
 #include <algorithm>
 #include <regex>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 static inline bool is_not_alnum_space(char c)
 {
@@ -265,13 +265,15 @@ void MonCapGrant::expand_profile_mon(const EntityName& name) const
     profile_grants.back().command_args["caps_osd"] = StringConstraint(
       StringConstraint::MATCH_TYPE_EQUAL, "allow rwx");
   }
-  if (profile == "bootstrap-rbd") {
+  if (profile == "bootstrap-rbd" || profile == "bootstrap-rbd-mirror") {
     profile_grants.push_back(MonCapGrant("mon", MON_CAP_R));  // read monmap
-    profile_grants.push_back(MonCapGrant("auth get-or-create"));  // FIXME: this can expose other mds keys
+    profile_grants.push_back(MonCapGrant("auth get-or-create"));  // FIXME: this can expose other rbd keys
     profile_grants.back().command_args["entity"] = StringConstraint(
       StringConstraint::MATCH_TYPE_PREFIX, "client.");
     profile_grants.back().command_args["caps_mon"] = StringConstraint(
-      StringConstraint::MATCH_TYPE_EQUAL, "profile rbd");
+      StringConstraint::MATCH_TYPE_EQUAL,
+      (profile == "bootstrap-rbd-mirror" ? "profile rbd-mirror" :
+                                           "profile rbd"));
     profile_grants.back().command_args["caps_osd"] = StringConstraint(
       StringConstraint::MATCH_TYPE_REGEX,
       "^([ ,]*profile(=|[ ]+)['\"]?rbd[^ ,'\"]*['\"]?([ ]+pool(=|[ ]+)['\"]?[^,'\"]+['\"]?)?)+$");
@@ -287,7 +289,7 @@ void MonCapGrant::expand_profile_mon(const EntityName& name) const
     profile_grants.push_back(MonCapGrant("osd", MON_CAP_R));
     profile_grants.push_back(MonCapGrant("pg", MON_CAP_R));
   }
-  if (profile == "rbd") {
+  if (profile == "rbd" || profile == "rbd-mirror") {
     profile_grants.push_back(MonCapGrant("mon", MON_CAP_R));
     profile_grants.push_back(MonCapGrant("osd", MON_CAP_R));
     profile_grants.push_back(MonCapGrant("pg", MON_CAP_R));
@@ -298,6 +300,12 @@ void MonCapGrant::expand_profile_mon(const EntityName& name) const
       StringConstraint::MATCH_TYPE_EQUAL, "add");
     profile_grants.back().command_args["addr"] = StringConstraint(
       StringConstraint::MATCH_TYPE_REGEX, "^[^/]+/[0-9]+$");
+
+  }
+  if (profile == "rbd-mirror") {
+    StringConstraint constraint(StringConstraint::MATCH_TYPE_PREFIX,
+                                "rbd/mirror/");
+    profile_grants.push_back(MonCapGrant("config-key get", "key", constraint));
   }
 
   if (profile == "role-definer") {
@@ -613,10 +621,11 @@ bool MonCap::parse(const string& str, ostream *err)
 
   if (err) {
     if (iter != end)
-      *err << "moncap parse failed, stopped at '" << std::string(iter, end)
-	   << "' of '" << str << "'\n";
+      *err << "mon capability parse failed, stopped at '"
+	   << std::string(iter, end)
+	   << "' of '" << str << "'";
     else
-      *err << "moncap parse failed, stopped at end of '" << str << "'\n";
+      *err << "mon capability parse failed, stopped at end of '" << str << "'";
   }
 
   return false; 

@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -35,7 +35,7 @@
 #include "AsyncConnection.h"
 #include "Event.h"
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 class AsyncMessenger;
 
@@ -278,7 +278,7 @@ private:
   ceph::unordered_map<entity_addrvec_t, AsyncConnectionRef> conns;
 
   /**
-   * list of connection are in teh process of accepting
+   * list of connection are in the process of accepting
    *
    * These are not yet in the conns map.
    */
@@ -336,7 +336,7 @@ private:
 public:
 
   /// con used for sending messages to ourselves
-  ConnectionRef local_connection;
+  AsyncConnectionRef local_connection;
 
   /**
    * @defgroup AsyncMessenger internals

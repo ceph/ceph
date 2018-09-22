@@ -24,7 +24,7 @@ class ConfigOsd(RestController):
     @auth
     def patch(self, **kwargs):
         """
-        Modify OSD configration options
+        Modify OSD configuration options
         """
         args = request.json
 

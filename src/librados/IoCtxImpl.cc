@@ -19,7 +19,7 @@
 #include "librados/AioCompletionImpl.h"
 #include "librados/PoolAsyncCompletionImpl.h"
 #include "librados/RadosClient.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "common/valgrind.h"
 #include "common/EventTrace.h"
 
@@ -498,32 +498,6 @@ void librados::IoCtxImpl::aio_selfmanaged_snap_remove(uint64_t snapid,
 {
   Context *onfinish = new C_aio_selfmanaged_snap_op_Complete(client, c);
   objecter->delete_selfmanaged_snap(poolid, snapid, onfinish);
-}
-
-int librados::IoCtxImpl::pool_change_auid(unsigned long long auid)
-{
-  int reply;
-
-  Mutex mylock("IoCtxImpl::pool_change_auid::mylock");
-  Cond cond;
-  bool done;
-  objecter->change_pool_auid(poolid,
-			     new C_SafeCond(&mylock, &cond, &done, &reply),
-			     auid);
-
-  mylock.Lock();
-  while (!done) cond.Wait(mylock);
-  mylock.Unlock();
-  return reply;
-}
-
-int librados::IoCtxImpl::pool_change_auid_async(unsigned long long auid,
-						  PoolAsyncCompletionImpl *c)
-{
-  objecter->change_pool_auid(poolid,
-			     new C_PoolAsync_Safe(c),
-			     auid);
-  return 0;
 }
 
 int librados::IoCtxImpl::snap_list(vector<uint64_t> *snaps)

@@ -48,19 +48,6 @@ public:
 
     void encode(bufferlist& bl, uint64_t features=-1) const {
       using ceph::encode;
-      if ((features & CEPH_FEATURE_MONENC) == 0) {
-	__u8 v = 1;
-	encode(v, bl);
-	__u32 _type = (__u32)inc_type;
-	encode(_type, bl);
-	if (_type == GLOBAL_ID) {
-	  encode(max_global_id, bl);
-	} else {
-	  encode(auth_type, bl);
-	  encode(auth_data, bl);
-	}
-	return;
-      } 
       ENCODE_START(2, 2, bl);
       __u32 _type = (__u32)inc_type;
       encode(_type, bl);
@@ -134,6 +121,17 @@ private:
 
   /* validate mon/osd/mds caps; fail on unrecognized service/type */
   bool valid_caps(const string& type, const string& caps, ostream *out);
+  bool valid_caps(const string& type, const bufferlist& bl, ostream *out) {
+    auto p = bl.begin();
+    string v;
+    try {
+      decode(v, p);
+    } catch (buffer::error& e) {
+      *out << "corrupt capability encoding";
+      return false;
+    }
+    return valid_caps(type, v, out);
+  }
   bool valid_caps(const vector<string>& caps, ostream *out);
 
   void on_active() override;

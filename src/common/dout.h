@@ -18,12 +18,19 @@
 
 #include <type_traits>
 
+#include "include/ceph_assert.h"
+#ifdef WITH_SEASTAR
+#include <seastar/util/log.hh>
+#include "crimson/common/log.h"
+#include "crimson/common/config_proxy.h"
+#else
 #include "global/global_context.h"
 #include "common/ceph_context.h"
 #include "common/config.h"
 #include "common/likely.h"
 #include "common/Clock.h"
 #include "log/Log.h"
+#endif
 
 extern void dout_emergency(const char * const str);
 extern void dout_emergency(const std::string &str);
@@ -42,6 +49,47 @@ public:
   virtual CephContext *get_cct() const = 0;
   virtual unsigned get_subsys() const = 0;
   virtual ~DoutPrefixProvider() {}
+};
+
+// a prefix provider with empty prefix
+class NoDoutPrefix : public DoutPrefixProvider {
+  CephContext *const cct;
+  const unsigned subsys;
+ public:
+  NoDoutPrefix(CephContext *cct, unsigned subsys) : cct(cct), subsys(subsys) {}
+
+  std::ostream& gen_prefix(std::ostream& out) const override { return out; }
+  CephContext *get_cct() const override { return cct; }
+  unsigned get_subsys() const override { return subsys; }
+};
+
+// a prefix provider with static (const char*) prefix
+class DoutPrefix : public NoDoutPrefix {
+  const char *const prefix;
+ public:
+  DoutPrefix(CephContext *cct, unsigned subsys, const char *prefix)
+    : NoDoutPrefix(cct, subsys), prefix(prefix) {}
+
+  std::ostream& gen_prefix(std::ostream& out) const override {
+    return out << prefix;
+  }
+};
+
+// a prefix provider that composes itself on top of another
+class DoutPrefixPipe : public DoutPrefixProvider {
+  const DoutPrefixProvider& dpp;
+ public:
+  DoutPrefixPipe(const DoutPrefixProvider& dpp) : dpp(dpp) {}
+
+  std::ostream& gen_prefix(std::ostream& out) const override final {
+    dpp.gen_prefix(out);
+    add_prefix(out);
+    return out;
+  }
+  CephContext *get_cct() const override { return dpp.get_cct(); }
+  unsigned get_subsys() const override { return dpp.get_subsys(); }
+
+  virtual void add_prefix(std::ostream& out) const = 0;
 };
 
 // helpers
@@ -69,6 +117,31 @@ struct is_dynamic<dynamic_marker_t<T>> : public std::true_type {};
 // generic macros
 #define dout_prefix *_dout
 
+#ifdef WITH_SEASTAR
+#define dout_impl(cct, sub, v)                                          \
+  do {                                                                  \
+    if (ceph::common::local_conf()->subsys.should_gather(sub, v)) {     \
+      seastar::logger& _logger = ceph::get_logger(sub);                 \
+      const auto _lv = v;                                               \
+      std::ostringstream _out;                                          \
+      std::ostream* _dout = &_out;
+#define dendl_impl                              \
+     "";                                        \
+      const std::string _s = _out.str();        \
+      if (_lv < 0) {                            \
+        _logger.error(_s.c_str());              \
+      } else if (_lv < 1) {                     \
+        _logger.warn(_s.c_str());               \
+      } else if (_lv < 5) {                     \
+        _logger.info(_s.c_str());               \
+      } else if (_lv < 10) {                    \
+        _logger.debug(_s.c_str());              \
+      } else {                                  \
+        _logger.trace(_s.c_str());              \
+      }                                         \
+    }                                           \
+  } while (0)
+#else
 #define dout_impl(cct, sub, v)						\
   do {									\
   const bool should_gather = [&](const auto cctX) {			\
@@ -84,14 +157,18 @@ struct is_dynamic<dynamic_marker_t<T>> : public std::true_type {};
   }(cct);								\
 									\
   if (should_gather) {							\
-    static size_t _log_exp_length = 80; 				\
-    ceph::logging::Entry *_dout_e = 					\
-      cct->_log->create_entry(v, sub, &_log_exp_length);		\
+    ceph::logging::MutableEntry _dout_e(v, sub);                        \
     static_assert(std::is_convertible<decltype(&*cct), 			\
 				      CephContext* >::value,		\
 		  "provided cct must be compatible with CephContext*"); \
     auto _dout_cct = cct;						\
-    std::ostream* _dout = &_dout_e->get_ostream();
+    std::ostream* _dout = &_dout_e.get_ostream();
+
+#define dendl_impl std::flush;                                          \
+    _dout_cct->_log->submit_entry(std::move(_dout_e));                  \
+  }                                                                     \
+  } while (0)
+#endif	// WITH_SEASTAR
 
 #define lsubdout(cct, sub, v)  dout_impl(cct, ceph_subsys_##sub, v) dout_prefix
 #define ldout(cct, v)  dout_impl(cct, dout_subsys, v) dout_prefix
@@ -108,11 +185,6 @@ struct is_dynamic<dynamic_marker_t<T>> : public std::true_type {};
 
 #define ldlog_p1(cct, sub, lvl)                 \
   (cct->_conf->subsys.should_gather((sub), (lvl)))
-
-#define dendl_impl std::flush;				\
-  _dout_cct->_log->submit_entry(_dout_e);		\
-    }						\
-  } while (0)
 
 #define dendl dendl_impl
 

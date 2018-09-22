@@ -307,6 +307,9 @@ if(WITH_SEASTAR)
     endif()
   endmacro ()
   add_subdirectory(seastar)
+  # create the directory so cmake won't complain when looking at the imported
+  # target: Seastar exports this directory created at build-time
+  file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/seastar/gen")
   add_subdirectory(crimson)
 endif()
 
@@ -438,10 +441,11 @@ add_subdirectory(perfglue)
 
 add_library(rados_snap_set_diff_obj OBJECT librados/snap_set_diff.cc)
 
+option(WITH_LIBRADOSSTRIPER "build with libradosstriper support" ON)
+
 add_subdirectory(include)
 add_subdirectory(librados)
 
-option(WITH_LIBRADOSSTRIPER "build with libradosstriper support" ON)
 if(WITH_LIBRADOSSTRIPER)
   add_subdirectory(libradosstriper)
 endif()
@@ -717,7 +721,7 @@ install(FILES
   sample.ceph.conf
   DESTINATION ${CMAKE_INSTALL_DOCDIR})
 
-# Now create a useable config.h
+# Now create a usable config.h
 configure_file(
   ${CMAKE_SOURCE_DIR}/src/include/config-h.in.cmake
   ${CMAKE_BINARY_DIR}/include/acconfig.h

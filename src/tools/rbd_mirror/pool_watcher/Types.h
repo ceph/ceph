@@ -4,7 +4,7 @@
 #ifndef CEPH_RBD_MIRROR_POOL_WATCHER_TYPES_H
 #define CEPH_RBD_MIRROR_POOL_WATCHER_TYPES_H
 
-#include "tools/rbd_mirror/types.h"
+#include "tools/rbd_mirror/Types.h"
 #include <string>
 
 namespace rbd {

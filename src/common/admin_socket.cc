@@ -19,12 +19,13 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/pipe.h"
+#include "common/safe_io.h"
 #include "common/Thread.h"
 #include "common/version.h"
 
 
 // re-include our assert to clobber the system one; fix dout:
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_subsys ceph_subsys_asok
 #undef dout_prefix
@@ -352,11 +353,16 @@ bool AdminSocket::do_accept()
     retry_sys_call(::close, connection_fd);
     return false;
   }
-  cmd_getval(m_cct, cmdmap, "format", format);
+  try {
+    cmd_getval(m_cct, cmdmap, "format", format);
+    cmd_getval(m_cct, cmdmap, "prefix", c);
+  } catch (const bad_cmd_get& e) {
+    retry_sys_call(::close, connection_fd);
+    return false;
+  }
   if (format != "json" && format != "json-pretty" &&
       format != "xml" && format != "xml-pretty")
     format = "json-pretty";
-  cmd_getval(m_cct, cmdmap, "prefix", c);
 
   std::unique_lock l(lock);
   decltype(hooks)::iterator p;

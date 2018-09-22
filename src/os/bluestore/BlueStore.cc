@@ -1306,7 +1306,8 @@ void BlueStore::BufferSpace::read(
   uint32_t offset,
   uint32_t length,
   BlueStore::ready_regions_t& res,
-  interval_set<uint32_t>& res_intervals)
+  interval_set<uint32_t>& res_intervals,
+  int flags)
 {
   res.clear();
   res_intervals.clear();
@@ -1320,7 +1321,13 @@ void BlueStore::BufferSpace::read(
          ++i) {
       Buffer *b = i->second.get();
       ceph_assert(b->end() > offset);
-      if (b->is_writing() || b->is_clean()) {
+
+      bool val = false;
+      if (flags & BYPASS_CLEAN_CACHE)
+        val = b->is_writing();
+      else
+        val = b->is_writing() || b->is_clean();
+      if (val) {
         if (b->offset < offset) {
 	  uint32_t skip = offset - b->offset;
 	  uint32_t l = min(length, b->length - skip);
@@ -3184,22 +3191,9 @@ BlueStore::Collection::Collection(BlueStore *store_, Cache *c, coll_t cid)
     cache(c),
     lock("BlueStore::Collection::lock", true, false),
     exists(true),
-    onode_map(c)
+    onode_map(c),
+    commit_queue(nullptr)
 {
-  {
-    std::lock_guard<std::mutex> l(store->zombie_osr_lock);
-    auto p = store->zombie_osr_set.find(cid);
-    if (p == store->zombie_osr_set.end()) {
-      osr = new OpSequencer(store, cid);
-      osr->shard = cid.hash_to_shard(store->m_finisher_num);
-    } else {
-      osr = p->second;
-      store->zombie_osr_set.erase(p);
-      ldout(store->cct, 10) << "resurrecting zombie osr " << osr << dendl;
-      osr->zombie = false;
-      ceph_assert(osr->shard == cid.hash_to_shard(store->m_finisher_num));
-    }
-  }
 }
 
 bool BlueStore::Collection::flush_commit(Context *c)
@@ -3381,11 +3375,13 @@ void BlueStore::Collection::split_cache(
 
   auto p = onode_map.onode_map.begin();
   while (p != onode_map.onode_map.end()) {
+    OnodeRef o = p->second;
     if (!p->second->oid.match(destbits, destpg.pgid.ps())) {
       // onode does not belong to this child
+      ldout(store->cct, 20) << __func__ << " not moving " << o << " " << o->oid
+			    << dendl;
       ++p;
     } else {
-      OnodeRef o = p->second;
       ldout(store->cct, 20) << __func__ << " moving " << o << " " << o->oid
 			    << dendl;
 
@@ -3846,6 +3842,7 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
 		       cct->_conf->bluestore_throttle_bytes +
 		       cct->_conf->bluestore_throttle_deferred_bytes),
     deferred_finisher(cct, "defered_finisher", "dfin"),
+    finisher(cct, "commit_finisher", "cfin"),
     kv_sync_thread(this),
     kv_finalize_thread(this),
     mempool_thread(this)
@@ -3865,6 +3862,7 @@ BlueStore::BlueStore(CephContext *cct,
 		       cct->_conf->bluestore_throttle_bytes +
 		       cct->_conf->bluestore_throttle_deferred_bytes),
     deferred_finisher(cct, "defered_finisher", "dfin"),
+    finisher(cct, "commit_finisher", "cfin"),
     kv_sync_thread(this),
     kv_finalize_thread(this),
     min_alloc_size(_min_alloc_size),
@@ -3878,11 +3876,6 @@ BlueStore::BlueStore(CephContext *cct,
 
 BlueStore::~BlueStore()
 {
-  for (auto f : finishers) {
-    delete f;
-  }
-  finishers.clear();
-
   cct->_conf.remove_observer(this);
   _shutdown_logger();
   ceph_assert(!mounted);
@@ -4082,23 +4075,6 @@ void BlueStore::_set_blob_size()
   }
   dout(10) << __func__ << " max_blob_size 0x" << std::hex << max_blob_size
            << std::dec << dendl;
-}
-
-void BlueStore::_set_finisher_num()
-{
-  if (cct->_conf->bluestore_shard_finishers) {
-    if (cct->_conf->osd_op_num_shards) {
-      m_finisher_num = cct->_conf->osd_op_num_shards;
-    } else {
-      ceph_assert(bdev);
-      if (bdev->is_rotational()) {
-	m_finisher_num = cct->_conf->osd_op_num_shards_hdd;
-      } else {
-	m_finisher_num = cct->_conf->osd_op_num_shards_ssd;
-      }
-    }
-  }
-  ceph_assert(m_finisher_num != 0);
 }
 
 int BlueStore::_set_cache_sizes()
@@ -4337,6 +4313,8 @@ void BlueStore::_init_logger()
 		    "collection");
   b.add_u64_counter(l_bluestore_read_eio, "bluestore_read_eio",
                     "Read EIO errors propagated to high level callers");
+  b.add_u64_counter(l_bluestore_reads_with_retries, "bluestore_reads_with_retries",
+                    "Read operations that required at least one retry due to failed checksum validation");
   b.add_u64(l_bluestore_fragmentation, "bluestore_fragmentation_micros",
             "How fragmented bluestore free space is (free extents / max possible number of free extents) * 1000");
   logger = b.create_perf_counters();
@@ -5459,6 +5437,7 @@ int BlueStore::_open_collections(int *errors)
       }   
       dout(20) << __func__ << " opened " << cid << " " << c
 	       << " " << c->cnode << dendl;
+      _osr_attach(c.get());
       coll_map[cid] = c;
     } else {
       derr << __func__ << " unrecognized collection " << it->key() << dendl;
@@ -6111,7 +6090,7 @@ int BlueStore::_fsck(bool deep, bool repair)
 
   mempool_thread.init();
 
-  // we need finishers and kv_{sync,finalize}_thread *just* for replay
+  // we need finisher and kv_{sync,finalize}_thread *just* for replay
   _kv_start();
   r = _deferred_replay();
   _kv_stop();
@@ -7248,8 +7227,24 @@ ObjectStore::CollectionHandle BlueStore::create_new_collection(
     cache_shards[cid.hash_to_shard(cache_shards.size())],
     cid);
   new_coll_map[cid] = c;
+  _osr_attach(c);
   return c;
 }
+
+void BlueStore::set_collection_commit_queue(
+    const coll_t& cid,
+    ContextQueue *commit_queue)
+{
+  if (commit_queue) {
+    RWLock::RLocker l(coll_lock);
+    if (coll_map.count(cid)) {
+      coll_map[cid]->commit_queue = commit_queue;
+    } else if (new_coll_map.count(cid)) {
+      new_coll_map[cid]->commit_queue = commit_queue;
+    }
+  }
+}
+
 
 bool BlueStore::exists(CollectionHandle &c_, const ghobject_t& oid)
 {
@@ -7404,10 +7399,12 @@ int BlueStore::_do_read(
   uint64_t offset,
   size_t length,
   bufferlist& bl,
-  uint32_t op_flags)
+  uint32_t op_flags,
+  uint64_t retry_count)
 {
   FUNCTRACE(cct);
   int r = 0;
+  int read_cache_policy = 0; // do not bypass clean or dirty cache
 
   dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
            << " size 0x" << o->onode.size << " (" << std::dec
@@ -7442,6 +7439,13 @@ int BlueStore::_do_read(
 
   ready_regions_t ready_regions;
 
+  // for deep-scrub, we only read dirty cache and bypass clean cache in
+  // order to read underlying block device in case there are silent disk errors.
+  if (op_flags & CEPH_OSD_OP_FLAG_BYPASS_CLEAN_CACHE) {
+    dout(20) << __func__ << " will bypass cache and do direct read" << dendl;
+    read_cache_policy = BufferSpace::BYPASS_CLEAN_CACHE;
+  }
+
   // build blob-wise list to of stuff read (that isn't cached)
   blobs2read_t blobs2read;
   unsigned left = length;
@@ -7467,7 +7471,8 @@ int BlueStore::_do_read(
     ready_regions_t cache_res;
     interval_set<uint32_t> cache_interval;
     bptr->shared_blob->bc.read(
-      bptr->shared_blob->get_cache(), b_off, b_len, cache_res, cache_interval);
+      bptr->shared_blob->get_cache(), b_off, b_len, cache_res, cache_interval,
+      read_cache_policy);
     dout(20) << __func__ << "  blob " << *bptr << std::hex
 	     << " need 0x" << b_off << "~" << b_len
 	     << " cache has 0x" << cache_interval
@@ -7616,7 +7621,14 @@ int BlueStore::_do_read(
       bufferlist& compressed_bl = *p++;
       if (_verify_csum(o, &bptr->get_blob(), 0, compressed_bl,
 		       b2r_it->second.front().logical_offset) < 0) {
-	return -EIO;
+        // Handles spurious read errors caused by a kernel bug.
+        // We sometimes get all-zero pages as a result of the read under
+        // high memory pressure. Retrying the failing read succeeds in most cases.
+        // See also: http://tracker.ceph.com/issues/22464
+        if (retry_count >= cct->_conf->bluestore_retry_disk_reads) {
+          return -EIO;
+        }
+        return _do_read(c, o, offset, length, bl, op_flags, retry_count + 1);
       }
       bufferlist raw_bl;
       r = _decompress(compressed_bl, &raw_bl);
@@ -7634,7 +7646,14 @@ int BlueStore::_do_read(
       for (auto& reg : b2r_it->second) {
 	if (_verify_csum(o, &bptr->get_blob(), reg.r_off, reg.bl,
 			 reg.logical_offset) < 0) {
-	  return -EIO;
+          // Handles spurious read errors caused by a kernel bug.
+          // We sometimes get all-zero pages as a result of the read under
+          // high memory pressure. Retrying the failing read succeeds in most cases.
+          // See also: http://tracker.ceph.com/issues/22464
+          if (retry_count >= cct->_conf->bluestore_retry_disk_reads) {
+            return -EIO;
+          }
+          return _do_read(c, o, offset, length, bl, op_flags, retry_count + 1);
 	}
 	if (buffered) {
 	  bptr->shared_blob->bc.did_read(bptr->shared_blob->get_cache(),
@@ -7678,6 +7697,11 @@ int BlueStore::_do_read(
   ceph_assert(pos == length);
   ceph_assert(pr == pr_end);
   r = bl.length();
+  if (retry_count) {
+    logger->inc(l_bluestore_reads_with_retries);
+    dout(5) << __func__ << " read at 0x" << std::hex << offset << "~" << length
+            << " failed " << std::dec << retry_count << " times before succeeding" << dendl;
+  }
   return r;
 }
 
@@ -7690,6 +7714,13 @@ int BlueStore::_verify_csum(OnodeRef& o,
   uint64_t bad_csum;
   auto start = mono_clock::now();
   int r = blob->verify_csum(blob_xoffset, bl, &bad, &bad_csum);
+  if (cct->_conf->bluestore_debug_inject_csum_err_probability > 0 &&
+      (rand() % 10000) < cct->_conf->bluestore_debug_inject_csum_err_probability * 10000.0) {
+    derr << __func__ << " injecting bluestore checksum verifcation error" << dendl;
+    bad = blob_xoffset;
+    r = -1;
+    bad_csum = 0xDEADBEEF;
+  }
   if (r < 0) {
     if (r == -1) {
       PExtentVector pex;
@@ -8517,8 +8548,6 @@ int BlueStore::_open_super_meta()
   _set_compression();
   _set_blob_size();
 
-  _set_finisher_num();
-
   _validate_bdev();
   return 0;
 }
@@ -8899,7 +8928,11 @@ void BlueStore::_txc_committed_kv(TransContext *txc)
   {
     std::lock_guard<std::mutex> l(txc->osr->qlock);
     txc->state = TransContext::STATE_KV_DONE;
-    finishers[txc->osr->shard]->queue(txc->oncommits);
+    if (txc->ch->commit_queue) {
+      txc->ch->commit_queue->queue(txc->oncommits);
+    } else {
+      finisher.queue(txc->oncommits);
+    }
   }
   txc->log_state_latency(logger, l_bluestore_state_kv_committing_lat);
   logger->tinc(l_bluestore_commit_lat, ceph_clock_now() - txc->start);
@@ -9012,13 +9045,40 @@ out:
   txc->released.clear();
 }
 
+void BlueStore::_osr_attach(Collection *c)
+{
+  // note: caller has RWLock on coll_map
+  auto q = coll_map.find(c->cid);
+  if (q != coll_map.end()) {
+    c->osr = q->second->osr;
+    ldout(cct, 10) << __func__ << " " << c->cid
+		   << " reusing osr " << c->osr << " from existing coll "
+		   << q->second << dendl;
+  } else {
+    std::lock_guard<std::mutex> l(zombie_osr_lock);
+    auto p = zombie_osr_set.find(c->cid);
+    if (p == zombie_osr_set.end()) {
+      c->osr = new OpSequencer(this, c->cid);
+      ldout(cct, 10) << __func__ << " " << c->cid
+		     << " fresh osr " << c->osr << dendl;
+    } else {
+      c->osr = p->second;
+      zombie_osr_set.erase(p);
+      ldout(cct, 10) << __func__ << " " << c->cid
+		     << " resurrecting zombie osr " << c->osr << dendl;
+      c->osr->zombie = false;
+    }
+  }
+}
+
 void BlueStore::_osr_register_zombie(OpSequencer *osr)
 {
   std::lock_guard<std::mutex> l(zombie_osr_lock);
   dout(10) << __func__ << " " << osr << " " << osr->cid << dendl;
   osr->zombie = true;
   auto i = zombie_osr_set.emplace(osr->cid, osr);
-  ceph_assert(i.second); // this should be a new insertion
+  // this is either a new insertion or the same osr is already there
+  ceph_assert(i.second || i.first->second == osr);
 }
 
 void BlueStore::_osr_drain_preceding(TransContext *txc)
@@ -9041,6 +9101,29 @@ void BlueStore::_osr_drain_preceding(TransContext *txc)
     kv_cond.notify_one();
   }
   osr->drain_preceding(txc);
+  --deferred_aggressive;
+  dout(10) << __func__ << " " << osr << " done" << dendl;
+}
+
+void BlueStore::_osr_drain(OpSequencer *osr)
+{
+  dout(10) << __func__ << " " << osr << dendl;
+  ++deferred_aggressive; // FIXME: maybe osr-local aggressive flag?
+  {
+    // submit anything pending
+    deferred_lock.lock();
+    if (osr->deferred_pending && !osr->deferred_running) {
+      _deferred_submit_unlock(osr);
+    } else {
+      deferred_lock.unlock();
+    }
+  }
+  {
+    // wake up any previously finished deferred events
+    std::lock_guard<std::mutex> l(kv_lock);
+    kv_cond.notify_one();
+  }
+  osr->drain();
   --deferred_aggressive;
   dout(10) << __func__ << " " << osr << " done" << dendl;
 }
@@ -9111,17 +9194,8 @@ void BlueStore::_kv_start()
 {
   dout(10) << __func__ << dendl;
 
-  for (int i = 0; i < m_finisher_num; ++i) {
-    ostringstream oss;
-    oss << "finisher-" << i;
-    Finisher *f = new Finisher(cct, oss.str(), "finisher");
-    finishers.push_back(f);
-  }
-
   deferred_finisher.start();
-  for (auto f : finishers) {
-    f->start();
-  }
+  finisher.start();
   kv_sync_thread.create("bstore_kv_sync");
   kv_finalize_thread.create("bstore_kv_final");
 }
@@ -9159,10 +9233,8 @@ void BlueStore::_kv_stop()
   dout(10) << __func__ << " stopping finishers" << dendl;
   deferred_finisher.wait_for_empty();
   deferred_finisher.stop();
-  for (auto f : finishers) {
-    f->wait_for_empty();
-    f->stop();
-  }
+  finisher.wait_for_empty();
+  finisher.stop();
   dout(10) << __func__ << " stopped" << dendl;
 }
 
@@ -9785,8 +9857,12 @@ int BlueStore::queue_transactions(
   for (auto c : on_applied_sync) {
     c->complete(0);
   }
-  for (auto c : on_applied) {
-    finishers[osr->shard]->queue(c);
+  if (!on_applied.empty()) {
+    if (c->commit_queue) {
+      c->commit_queue->queue(on_applied);
+    } else {
+      finisher.queue(on_applied);
+    }
   }
 
   logger->tinc(l_bluestore_submit_lat, mono_clock::now() - start);
@@ -9853,6 +9929,15 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
         uint32_t bits = op->split_bits;
         uint32_t rem = op->split_rem;
 	r = _split_collection(txc, c, cvec[op->dest_cid], bits, rem);
+	if (!r)
+	  continue;
+      }
+      break;
+
+    case Transaction::OP_MERGE_COLLECTION:
+      {
+        uint32_t bits = op->split_bits;
+	r = _merge_collection(txc, &c, cvec[op->dest_cid], bits);
 	if (!r)
 	  continue;
       }
@@ -10248,7 +10333,7 @@ void BlueStore::_pad_zeros(
   size_t pad_count = 0;
   if (front_pad) {
     size_t front_copy = std::min<uint64_t>(chunk_size - front_pad, length);
-    bufferptr z = buffer::create_page_aligned(chunk_size);
+    bufferptr z = buffer::create_small_page_aligned(chunk_size);
     z.zero(0, front_pad, false);
     pad_count += front_pad;
     bl->copy(0, front_copy, z.c_str() + front_pad);
@@ -12126,12 +12211,7 @@ int BlueStore::_remove_collection(TransContext *txc, const coll_t &cid,
         }
       }
       if (!exists) {
-        coll_map.erase(cid);
-        txc->removed_collections.push_back(*c);
-        (*c)->exists = false;
-	_osr_register_zombie((*c)->osr.get());
-        c->reset();
-        txc->t->rmkey(PREFIX_COLL, stringify(cid));
+	_do_remove_collection(txc, c);
         r = 0;
       } else {
         dout(10) << __func__ << " " << cid
@@ -12144,6 +12224,17 @@ int BlueStore::_remove_collection(TransContext *txc, const coll_t &cid,
  out:
   dout(10) << __func__ << " " << cid << " = " << r << dendl;
   return r;
+}
+
+void BlueStore::_do_remove_collection(TransContext *txc,
+				      CollectionRef *c)
+{
+  coll_map.erase((*c)->cid);
+  txc->removed_collections.push_back(*c);
+  (*c)->exists = false;
+  _osr_register_zombie((*c)->osr.get());
+  txc->t->rmkey(PREFIX_COLL, stringify((*c)->cid));
+  c->reset();
 }
 
 int BlueStore::_split_collection(TransContext *txc,
@@ -12197,6 +12288,64 @@ int BlueStore::_split_collection(TransContext *txc,
 	   << " bits " << bits << " = " << r << dendl;
   return r;
 }
+
+int BlueStore::_merge_collection(
+  TransContext *txc,
+  CollectionRef *c,
+  CollectionRef& d,
+  unsigned bits)
+{
+  dout(15) << __func__ << " " << (*c)->cid << " to " << d->cid
+	   << " bits " << bits << dendl;
+  RWLock::WLocker l((*c)->lock);
+  RWLock::WLocker l2(d->lock);
+  int r;
+
+  coll_t cid = (*c)->cid;
+
+  // flush all previous deferred writes on the source collection to ensure
+  // that all deferred writes complete before we merge as the target collection's
+  // sequencer may need to order new ops after those writes.
+
+  _osr_drain((*c)->osr.get());
+
+  // move any cached items (onodes and referenced shared blobs) that will
+  // belong to the child collection post-split.  leave everything else behind.
+  // this may include things that don't strictly belong to the now-smaller
+  // parent split, but the OSD will always send us a split for every new
+  // child.
+
+  spg_t pgid, dest_pgid;
+  bool is_pg = cid.is_pg(&pgid);
+  ceph_assert(is_pg);
+  is_pg = d->cid.is_pg(&dest_pgid);
+  ceph_assert(is_pg);
+
+  // adjust bits.  note that this will be redundant for all but the first
+  // merge call for the parent/target.
+  d->cnode.bits = bits;
+
+  // behavior depends on target (d) bits, so this after that is updated.
+  (*c)->split_cache(d.get());
+
+  // remove source collection
+  {
+    RWLock::WLocker l3(coll_lock);
+    _do_remove_collection(txc, c);
+  }
+
+  r = 0;
+
+  bufferlist bl;
+  encode(d->cnode, bl);
+  txc->t->set(PREFIX_COLL, stringify(d->cid), bl);
+
+  dout(10) << __func__ << " " << cid << " to " << d->cid << " "
+	   << " bits " << bits << " = " << r << dendl;
+  return r;
+}
+
+
 
 // DB key value Histogram
 #define KEY_SLAB 32

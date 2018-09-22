@@ -269,7 +269,7 @@ class Scan(object):
                 )
             )
             terminal.success(
-                'To take over managment of this scanned OSD, and disable ceph-disk and udev, run:'
+                'To take over management of this scanned OSD, and disable ceph-disk and udev, run:'
             )
             terminal.success('    ceph-volume simple activate %s %s' % (osd_id, osd_fsid))
 

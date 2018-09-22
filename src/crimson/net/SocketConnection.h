@@ -15,6 +15,7 @@
 #pragma once
 
 #include <seastar/core/reactor.hh>
+#include <seastar/core/shared_future.hh>
 
 #include "msg/Policy.h"
 #include "Connection.h"
@@ -30,6 +31,9 @@ class SocketConnection : public Connection {
   seastar::output_stream<char> out;
 
   state_t state = state_t::none;
+
+  /// become valid only when state is state_t::closed
+  seastar::shared_future<> close_ready;
 
   /// buffer state for read()
   struct Reader {
@@ -118,6 +122,8 @@ class SocketConnection : public Connection {
   /// @returns true if the @c seq is valid, and @c in_seq is updated,
   ///          false otherwise.
   bool update_rx_seq(seq_num_t seq);
+
+  seastar::future<MessageRef> do_read_message();
 
   std::unique_ptr<AuthSessionHandler> session_security;
 

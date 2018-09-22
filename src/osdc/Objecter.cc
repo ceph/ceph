@@ -2861,6 +2861,7 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
   int size = pi->size;
   int min_size = pi->min_size;
   unsigned pg_num = pi->get_pg_num();
+  unsigned pg_num_pending = pi->get_pg_num_pending();
   int up_primary, acting_primary;
   vector<int> up, acting;
   osdmap->pg_to_up_acting_osds(pgid, &up, &up_primary,
@@ -2884,6 +2885,8 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
 	min_size,
 	t->pg_num,
 	pg_num,
+	t->pg_num_pending,
+	pg_num_pending,
 	t->sort_bitwise,
 	sort_bitwise,
 	t->recovery_deletes,
@@ -2903,12 +2906,15 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
       is_pg_changed(
 	t->acting_primary, t->acting, acting_primary, acting,
 	t->used_replica || any_change);
-  bool split = false;
+  bool split_or_merge = false;
   if (t->pg_num) {
-    split = prev_pgid.is_split(t->pg_num, pg_num, nullptr);
+    split_or_merge =
+      prev_pgid.is_split(t->pg_num, pg_num, nullptr) ||
+      prev_pgid.is_merge_source(t->pg_num, pg_num, nullptr) ||
+      prev_pgid.is_merge_target(t->pg_num, pg_num);
   }
 
-  if (legacy_change || split || force_resend) {
+  if (legacy_change || split_or_merge || force_resend) {
     t->pgid = pgid;
     t->acting = acting;
     t->acting_primary = acting_primary;
@@ -2918,6 +2924,7 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
     t->min_size = min_size;
     t->pg_num = pg_num;
     t->pg_num_mask = pi->get_pg_num_mask();
+    t->pg_num_pending = pg_num_pending;
     osdmap->get_primary_shard(
       pg_t(ceph_stable_mod(pgid.ps(), t->pg_num, t->pg_num_mask), pgid.pool()),
       &t->actual_pgid);
@@ -2973,7 +2980,10 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
   if (legacy_change || unpaused || force_resend) {
     return RECALC_OP_TARGET_NEED_RESEND;
   }
-  if (split && con && con->has_features(CEPH_FEATUREMASK_RESEND_ON_SPLIT)) {
+  if (split_or_merge &&
+      (osdmap->require_osd_release >= CEPH_RELEASE_LUMINOUS ||
+       HAVE_FEATURE(osdmap->get_xinfo(acting_primary).features,
+		    RESEND_ON_SPLIT))) {
     return RECALC_OP_TARGET_NEED_RESEND;
   }
   return RECALC_OP_TARGET_NO_ACTION;
@@ -3927,7 +3937,7 @@ int Objecter::delete_selfmanaged_snap(int64_t pool, snapid_t snap,
   return 0;
 }
 
-int Objecter::create_pool(string& name, Context *onfinish, uint64_t auid,
+int Objecter::create_pool(string& name, Context *onfinish,
 			  int crush_rule)
 {
   unique_lock wl(rwlock);
@@ -3945,7 +3955,6 @@ int Objecter::create_pool(string& name, Context *onfinish, uint64_t auid,
   op->onfinish = onfinish;
   op->pool_op = POOL_OP_CREATE;
   pool_ops[op->tid] = op;
-  op->auid = auid;
   op->crush_rule = crush_rule;
 
   pool_op_submit(op);
@@ -3990,32 +3999,6 @@ void Objecter::_do_delete_pool(int64_t pool, Context *onfinish)
   pool_op_submit(op);
 }
 
-/**
- * change the auid owner of a pool by contacting the monitor.
- * This requires the current connection to have write permissions
- * on both the pool's current auid and the new (parameter) auid.
- * Uses the standard Context callback when done.
- */
-int Objecter::change_pool_auid(int64_t pool, Context *onfinish, uint64_t auid)
-{
-  unique_lock wl(rwlock);
-  ldout(cct, 10) << "change_pool_auid " << pool << " to " << auid << dendl;
-  PoolOp *op = new PoolOp;
-  if (!op) return -ENOMEM;
-  op->tid = ++last_tid;
-  op->pool = pool;
-  op->name = "change_pool_auid";
-  op->onfinish = onfinish;
-  op->pool_op = POOL_OP_AUID_CHANGE;
-  op->auid = auid;
-  pool_ops[op->tid] = op;
-
-  logger->set(l_osdc_poolop_active, pool_ops.size());
-
-  pool_op_submit(op);
-  return 0;
-}
-
 void Objecter::pool_op_submit(PoolOp *op)
 {
   // rwlock is locked
@@ -4034,7 +4017,7 @@ void Objecter::_pool_op_submit(PoolOp *op)
   ldout(cct, 10) << "pool_op_submit " << op->tid << dendl;
   MPoolOp *m = new MPoolOp(monc->get_fsid(), op->tid, op->pool,
 			   op->name, op->pool_op,
-			   op->auid, last_seen_osdmap_version);
+			   last_seen_osdmap_version);
   if (op->snapid) m->snapid = op->snapid;
   if (op->crush_rule) m->crush_rule = op->crush_rule;
   monc->send_mon_message(m);
@@ -4640,7 +4623,6 @@ void Objecter::dump_pool_ops(Formatter *fmt) const
     fmt->dump_int("pool", op->pool);
     fmt->dump_string("name", op->name);
     fmt->dump_int("operation_type", op->pool_op);
-    fmt->dump_unsigned("auid", op->auid);
     fmt->dump_unsigned("crush_rule", op->crush_rule);
     fmt->dump_stream("snapid") << op->snapid;
     fmt->dump_stream("last_sent") << op->last_submit;

@@ -4,9 +4,22 @@
 * The 'ceph osd rm' command has been deprecated.  Users should use
   'ceph osd destroy' or 'ceph osd purge' (but after first confirming it is
   safe to do so via the 'ceph osd safe-to-destroy' command).
+* The mon_health_preluminous_compat and mon_health_preluminous_compat_warning
+  config options are removed, as the related functionality is more
+  than two versions old.  Any legacy monitoring system expecting Jewel-style
+  health output will need to be updated to work with Nautilus.
 
 * Nautilus is not supported on any distros still running upstart so upstart
   specific files and references have been removed.
+
+* The 'ceph pg <pgid> list_missing' command has been renamed to
+  'ceph pg <pgid> list_unfound' to better match its behaviour.
+
+* The 'rbd-mirror' daemon can now retrieve remote peer cluster configuration
+  secrets from the monitor. To use this feature, the 'rbd-mirror' daemon
+  CephX user for the local cluster must use the 'profile rbd-mirror' mon cap.
+  The secrets can be set using the 'rbd mirror pool peer add' and
+  'rbd mirror pool peer set' actions.
 
 >=13.1.0
 --------
@@ -40,6 +53,24 @@
   (good) purpose: the OSD should always check heartbeats on both the
   public and cluster networks.
 
+* The ``rados`` tool's ``mkpool`` and ``rmpool`` commands have been
+  removed because they are redundant; please use the ``ceph osd pool
+  create`` and ``ceph osd pool rm`` commands instead.
+
+* The ``auid`` property for cephx users and RADOS pools has been
+  removed.  This was an undocumented and partially implemented
+  capability that allowed cephx users to map capabilities to RADOS
+  pools that they "owned".  Because there are no users we have removed
+  this support.  If any cephx capabilities exist in the cluster that
+  restrict based on auid then they will no longer parse, and the
+  cluster will report a health warning like::
+
+    AUTH_BAD_CAPS 1 auth entities have invalid capabilities
+        client.bad osd capability parse failed, stopped at 'allow rwx auid 123' of 'allow rwx auid 123'
+
+  The capability can be adjusted with the ``ceph auth caps`` command. For example,::
+
+    ceph auth caps client.bad osd 'allow rwx pool foo'
 
 
 
@@ -52,3 +83,4 @@ Upgrading from Luminous
 * During the upgrade from luminous to nautilus, it will not be possible to create
   a new OSD using a luminous ceph-osd daemon after the monitors have been
   upgraded to nautilus.
+

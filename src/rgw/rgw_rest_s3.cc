@@ -42,8 +42,8 @@
 #include "rgw_rest_role.h"
 #include "rgw_crypt.h"
 #include "rgw_crypt_sanitize.h"
-
-#include "include/assert.h"
+#include "rgw_rest_user_policy.h"
+#include "include/ceph_assert.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -1037,6 +1037,24 @@ int RGWSetBucketWebsite_ObjStore_S3::get_params()
     return -EINVAL;
   }
 
+#define WEBSITE_ROUTING_RULES_MAX_NUM      50
+  int max_num = s->cct->_conf->rgw_website_routing_rules_max_num;
+  if (max_num < 0) {
+    max_num = WEBSITE_ROUTING_RULES_MAX_NUM;
+  }
+  int routing_rules_num = website_conf.routing_rules.rules.size();
+  if (routing_rules_num > max_num) {
+    ldout(s->cct, 4) << "An website routing config can have up to "
+                     << max_num
+                     << " rules, request website routing rules num: "
+                     << routing_rules_num << dendl;
+    op_ret = -ERR_INVALID_WEBSITE_ROUTING_RULES_ERROR;
+    s->err.message = std::to_string(routing_rules_num) +" routing rules provided, the number of routing rules in a website configuration is limited to "
+                     + std::to_string(max_num)
+                     + ".";
+    return -ERR_INVALID_REQUEST;
+  }
+
   return 0;
 }
 
@@ -1436,7 +1454,7 @@ void RGWPutObj_ObjStore_S3::send_response()
       if (strftime(buf, sizeof(buf), "%Y-%m-%dT%T.000Z", &tmp) > 0) {
         s->formatter->dump_string("LastModified", buf);
       }
-      dump_etag(s, etag);
+      s->formatter->dump_string("ETag", etag);
       s->formatter->close_section();
       rgw_flush_formatter_and_reset(s, s->formatter);
       return;
@@ -2125,19 +2143,6 @@ int RGWCopyObj_ObjStore_S3::get_params()
   if (s->system_request) {
     source_zone = s->info.args.get(RGW_SYS_PARAM_PREFIX "source-zone");
     s->info.args.get_bool(RGW_SYS_PARAM_PREFIX "copy-if-newer", &copy_if_newer, false);
-    if (!source_zone.empty()) {
-      client_id = s->info.args.get(RGW_SYS_PARAM_PREFIX "client-id");
-      op_id = s->info.args.get(RGW_SYS_PARAM_PREFIX "op-id");
-
-      if (client_id.empty() || op_id.empty()) {
-	ldout(s->cct, 0) <<
-	  RGW_SYS_PARAM_PREFIX "client-id or "
-	  RGW_SYS_PARAM_PREFIX "op-id were not provided, "
-	  "required for intra-region copy"
-			 << dendl;
-	return -EINVAL;
-      }
-    }
   }
 
   copy_source = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE");
@@ -2201,7 +2206,9 @@ void RGWCopyObj_ObjStore_S3::send_response()
 
   if (op_ret == 0) {
     dump_time(s, "LastModified", &mtime);
-    dump_etag(s, etag);
+    if (!etag.empty()) {
+      s->formatter->dump_string("ETag", std::move(etag));
+    }
     s->formatter->close_section();
     rgw_flush_formatter_and_reset(s, s->formatter);
   }
@@ -2370,13 +2377,13 @@ int RGWPutCORS_ObjStore_S3::get_params()
   }
 
   if (!data || !parser.parse(data, len, 1)) {
-    return -EINVAL;
+    return -ERR_MALFORMED_XML;
   }
   cors_config =
     static_cast<RGWCORSConfiguration_S3 *>(parser.find_first(
 					     "CORSConfiguration"));
   if (!cors_config) {
-    return -EINVAL;
+    return -ERR_MALFORMED_XML;
   }
 
 #define CORS_RULES_MAX_NUM      100
@@ -3003,6 +3010,14 @@ RGWOp *RGWHandler_REST_Service_S3::op_post()
       return new RGWListRolePolicies;
     if (action.compare("DeleteRolePolicy") == 0)
       return new RGWDeleteRolePolicy;
+    if (action.compare("PutUserPolicy") == 0)
+      return new RGWPutUserPolicy;
+    if (action.compare("GetUserPolicy") == 0)
+      return new RGWGetUserPolicy;
+    if (action.compare("ListUserPolicies") == 0)
+      return new RGWListUserPolicies;
+    if (action.compare("DeleteUserPolicy") == 0)
+      return new RGWDeleteUserPolicy;
   }
   return NULL;
 }

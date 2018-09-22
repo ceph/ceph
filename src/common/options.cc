@@ -1100,6 +1100,11 @@ std::vector<Option> get_global_options() {
     .set_default(96)
     .set_description(""),
 
+    Option("ms_max_accept_failures", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(4)
+    .set_description("The maximum number of consecutive failed accept() calls before "
+                     "considering the daemon is misconfigured and abort it."),
+
     Option("ms_async_rdma_cm", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .set_description(""),
@@ -1261,7 +1266,12 @@ std::vector<Option> get_global_options() {
 
     Option("mon_osd_max_creating_pgs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1024)
-    .set_description(""),
+    .set_description("Maximum number of PGs the mon will create at once"),
+
+    Option("mon_osd_max_initial_pgs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(1024)
+    .set_description("Maximum number of PGs a pool will created with")
+    .set_long_description("If the user specifies more PGs than this, the cluster will subsequently split PGs after the pool is created in order to reach the target."),
 
     Option("mon_tick_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(5)
@@ -1594,14 +1604,6 @@ std::vector<Option> get_global_options() {
     .set_default(60.0)
     .set_description(""),
 
-    Option("mon_health_preluminous_compat", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(false)
-    .set_description("Include health warnings in preluminous JSON fields"),
-
-    Option("mon_health_preluminous_compat_warning", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(true)
-    .set_description("Warn about the health JSON format change in preluminous JSON fields"),
-
     Option("mon_health_max_detail", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(50)
     .set_description("max detailed pgs to report in health detail"),
@@ -1757,6 +1759,10 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("mon_inject_transaction_delay_probability", Option::TYPE_FLOAT, Option::LEVEL_DEV)
+    .set_default(0)
+    .set_description(""),
+
+    Option("mon_inject_pg_merge_bounce_probability", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0)
     .set_description(""),
 
@@ -3157,11 +3163,11 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("osd_class_load_list", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("cephfs hello journal lock log numops " "otp rbd refcount rgw statelog timeindex user version")
+    .set_default("cephfs hello journal lock log numops " "otp rbd refcount rgw timeindex user version cas")
     .set_description(""),
 
     Option("osd_class_default_list", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("cephfs hello journal lock log numops " "otp rbd refcount rgw statelog timeindex user version")
+    .set_default("cephfs hello journal lock log numops " "otp rbd refcount rgw timeindex user version cas")
     .set_description(""),
 
     Option("osd_check_for_log_corruption", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -3217,9 +3223,15 @@ std::vector<Option> get_global_options() {
     .set_default(100)
     .set_description(""),
 
-    Option("osd_async_recovery_min_pg_log_entries", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("osd_force_auth_primary_missing_objects", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(100)
-    .set_description("Number of entries difference above which to use asynchronous recovery when appropriate"),
+    .set_description("Approximate missing objects above which to force auth_log_shard to be primary temporarily"),
+
+    Option("osd_async_recovery_min_cost", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(100)
+    .set_description("A mixture measure of number of current log entries difference "
+                     "and historical missing objects,  above which we switch to use "
+                     "asynchronous recovery when appropriate"),
 
     Option("osd_max_pg_per_osd_hard_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(3)
@@ -3952,6 +3964,13 @@ std::vector<Option> get_global_options() {
     .set_description("Default checksum algorithm to use")
     .set_long_description("crc32c, xxhash32, and xxhash64 are available.  The _16 and _8 variants use only a subset of the bits for more compact (but less reliable) checksumming."),
 
+    Option("bluestore_retry_disk_reads", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(3)
+    .set_min_max(0, 255)
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_description("Number of read retries on checksum validation error")
+    .set_long_description("Retries to read data from the disk this many times when checksum validation fails to handle spurious read errors gracefully."),
+
     Option("bluestore_min_alloc_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_flag(Option::FLAG_CREATE)
@@ -4323,10 +4342,6 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description(""),
 
-    Option("bluestore_shard_finishers", Option::TYPE_BOOL, Option::LEVEL_DEV)
-    .set_default(false)
-    .set_description(""),
-
     Option("bluestore_debug_random_read_err", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0)
     .set_description(""),
@@ -4334,6 +4349,11 @@ std::vector<Option> get_global_options() {
     Option("bluestore_debug_inject_bug21040", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description(""),
+
+    Option("bluestore_debug_inject_csum_err_probability", Option::TYPE_FLOAT, Option::LEVEL_DEV)
+    .set_default(0.0)
+    .set_description("inject crc verification errors into bluestore device reads"),
+
     // -----------------------------------------
     // kstore
 
@@ -4826,7 +4846,7 @@ std::vector<Option> get_global_options() {
     .set_description("Filesystem path to manager modules."),
 
     Option("mgr_initial_modules", Option::TYPE_STR, Option::LEVEL_BASIC)
-    .set_default("restful status balancer iostat devicehealth crash")
+    .set_default("restful status balancer iostat crash")
     .set_flag(Option::FLAG_NO_MON_UPDATE)
     .set_flag(Option::FLAG_CLUSTER_CREATE)
     .add_service("mon")
@@ -4934,10 +4954,6 @@ std::vector<Option> get_global_options() {
                      "manager before this is reported as an ERR rather than "
                      "a WARN"),
 
-    Option("mutex_perf_counter", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(false)
-    .set_description(""),
-
     Option("throttler_perf_counter", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description(""),
@@ -4969,6 +4985,14 @@ std::vector<Option> get_rgw_options() {
     Option("rgw_cors_rules_max_num", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(100)
     .set_description("Max number of cors rules in a single request"),
+
+    Option("rgw_delete_multi_obj_max_num", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(1000)
+    .set_description("Max number of objects in a single multi-object delete request"),
+
+    Option("rgw_website_routing_rules_max_num", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(50)
+    .set_description("Max number of website routing rules in a single request"),
 
     Option("rgw_rados_tracing", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
@@ -5598,7 +5622,7 @@ std::vector<Option> get_rgw_options() {
     .set_default(".rgw.root")
     .set_description("Period root pool")
     .set_long_description(
-        "The realm root pool, is the pool where the RGW realm configuration located."
+        "The period root pool, is the pool where the RGW period configuration located."
     )
     .add_see_also({"rgw_zonegroup_root_pool", "rgw_zone_root_pool", "rgw_realm_root_pool"}),
 
@@ -5855,14 +5879,6 @@ std::vector<Option> get_rgw_options() {
         "the metadata sync parallelism as a shard can only be processed by a single "
         "RGW at a time"),
 
-    Option("rgw_num_zone_opstate_shards", Option::TYPE_INT, Option::LEVEL_DEV)
-    .set_default(128)
-    .set_description(""),
-
-    Option("rgw_opstate_ratelimit_sec", Option::TYPE_INT, Option::LEVEL_DEV)
-    .set_default(30)
-    .set_description(""),
-
     Option("rgw_curl_wait_timeout_ms", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(1000)
     .set_description(""),
@@ -5875,7 +5891,7 @@ std::vector<Option> get_rgw_options() {
         "to consider it to be too slow and abort. Set it zero to disable this."),
 
     Option("rgw_curl_low_speed_time", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(30)
+    .set_default(300)
     .set_long_description(
         "It contains the time in number seconds that the transfer speed should be below "
         "the rgw_curl_low_speed_limit for the library to consider it too slow and abort. "
@@ -6593,6 +6609,10 @@ static std::vector<Option> get_rbd_options() {
     .set_default(0)
     .set_description("maximum age (in seconds) for pending commits"),
 
+    Option("rbd_journal_object_max_in_flight_appends", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("maximum number of in-flight appends per journal object"),
+
     Option("rbd_journal_pool", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
     .set_description("pool for journal objects"),
@@ -7191,6 +7211,10 @@ std::vector<Option> get_mds_options() {
     Option("mds_cap_revoke_eviction_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
      .set_default(0)
      .set_description("number of seconds after which clients which have not responded to cap revoke messages by the MDS are evicted."),
+
+    Option("mds_max_retries_on_remount_failure", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+     .set_default(5)
+     .set_description("number of consecutive failed remount attempts for invalidating kernel dcache after which client would abort."),
   });
 }
 

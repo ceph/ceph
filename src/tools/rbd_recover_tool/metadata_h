@@ -66,7 +66,7 @@ function get_image_format_by_hobject()
 }
 
 #======================================== image format v1 ========================================  
-# <image_name>.rbd inlude 3 parts:
+# <image_name>.rbd include 3 parts:
 # header + snap_count*snapshot + snap_count*snap_name
 # 
 # struct rbd_obj_header_ondisk {

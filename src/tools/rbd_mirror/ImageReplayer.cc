@@ -492,10 +492,9 @@ void ImageReplayer<I>::bootstrap() {
     ImageReplayer, &ImageReplayer<I>::handle_bootstrap>(this);
 
   BootstrapRequest<I> *request = BootstrapRequest<I>::create(
-    *m_local_ioctx, m_remote_image.io_ctx, m_instance_watcher,
+    m_threads, *m_local_ioctx, m_remote_image.io_ctx, m_instance_watcher,
     &m_local_image_ctx, m_local_image_id, m_remote_image.image_id,
-    m_global_image_id, m_threads->work_queue, m_threads->timer,
-    &m_threads->timer_lock, m_local_mirror_uuid, m_remote_image.mirror_uuid,
+    m_global_image_id, m_local_mirror_uuid, m_remote_image.mirror_uuid,
     m_remote_journaler, &m_client_state, &m_client_meta, ctx,
     &m_resync_requested, &m_progress_cxt);
 
@@ -631,6 +630,9 @@ void ImageReplayer<I>::handle_start_replay(int r) {
     return;
   }
 
+  m_replay_status_formatter =
+    ReplayStatusFormatter<I>::create(m_remote_journaler, m_local_mirror_uuid);
+
   Context *on_finish(nullptr);
   {
     Mutex::Locker locker(m_lock);
@@ -642,8 +644,6 @@ void ImageReplayer<I>::handle_start_replay(int r) {
   m_event_preprocessor = EventPreprocessor<I>::create(
     *m_local_image_ctx, *m_remote_journaler, m_local_mirror_uuid,
     &m_client_meta, m_threads->work_queue);
-  m_replay_status_formatter =
-    ReplayStatusFormatter<I>::create(m_remote_journaler, m_local_mirror_uuid);
 
   update_mirror_image_status(true, boost::none);
   reschedule_update_status_task(30);

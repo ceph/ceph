@@ -654,7 +654,7 @@ Usage::
 
 	ceph osd crush remove <name> {<ancestor>}
 
-Subcommand ``rename-bucket`` renames buchket <srcname> to <stname>
+Subcommand ``rename-bucket`` renames buchket <srcname> to <dstname>
 
 Usage::
 
@@ -945,8 +945,7 @@ Subcommand ``get`` gets pool parameter <var>.
 
 Usage::
 
-	ceph osd pool get <poolname> size|min_size|pg_num|
-	pgp_num|crush_rule|auid|write_fadvise_dontneed
+	ceph osd pool get <poolname> size|min_size|pg_num|pgp_num|crush_rule|write_fadvise_dontneed
 
 Only for tiered pools::
 
@@ -1002,7 +1001,7 @@ Usage::
 	hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|debug_fake_ec_pool|
 	target_max_bytes|target_max_objects|cache_target_dirty_ratio|
 	cache_target_dirty_high_ratio|
-	cache_target_full_ratio|cache_min_flush_age|cache_min_evict_age|auid|
+	cache_target_full_ratio|cache_min_flush_age|cache_min_evict_age|
 	min_read_recency_for_promote|write_fadvise_dontneed|hit_set_grade_decay_rate|
 	hit_set_search_last_n
 	<val> {--yes-i-really-mean-it}
@@ -1262,60 +1261,27 @@ Subcommand ``ls`` lists pg with specific pool, osd, state
 
 Usage::
 
-	ceph pg ls {<int>} {active|clean|down|replay|splitting|
-	scrubbing|scrubq|degraded|inconsistent|peering|repair|
-	recovery|backfill_wait|incomplete|stale| remapped|
-	deep_scrub|backfill|backfill_toofull|recovery_wait|
-	undersized [active|clean|down|replay|splitting|
-	scrubbing|scrubq|degraded|inconsistent|peering|repair|
-	recovery|backfill_wait|incomplete|stale|remapped|
-	deep_scrub|backfill|backfill_toofull|recovery_wait|
-	undersized...]}
+	ceph pg ls {<int>} {<pg-state> [<pg-state>...]}
 
 Subcommand ``ls-by-osd`` lists pg on osd [osd]
 
 Usage::
 
 	ceph pg ls-by-osd <osdname (id|osd.id)> {<int>}
-	{active|clean|down|replay|splitting|
-	scrubbing|scrubq|degraded|inconsistent|peering|repair|
-	recovery|backfill_wait|incomplete|stale| remapped|
-	deep_scrub|backfill|backfill_toofull|recovery_wait|
-	undersized [active|clean|down|replay|splitting|
-	scrubbing|scrubq|degraded|inconsistent|peering|repair|
-	recovery|backfill_wait|incomplete|stale|remapped|
-	deep_scrub|backfill|backfill_toofull|recovery_wait|
-	undersized...]}
+	{<pg-state> [<pg-state>...]}
 
 Subcommand ``ls-by-pool`` lists pg with pool = [poolname]
 
 Usage::
 
-	ceph pg ls-by-pool <poolstr> {<int>} {active|
-	clean|down|replay|splitting|
-	scrubbing|scrubq|degraded|inconsistent|peering|repair|
-	recovery|backfill_wait|incomplete|stale| remapped|
-	deep_scrub|backfill|backfill_toofull|recovery_wait|
-	undersized [active|clean|down|replay|splitting|
-	scrubbing|scrubq|degraded|inconsistent|peering|repair|
-	recovery|backfill_wait|incomplete|stale|remapped|
-	deep_scrub|backfill|backfill_toofull|recovery_wait|
-	undersized...]}
+	ceph pg ls-by-pool <poolstr> {<int>} {<pg-state> [<pg-state>...]}
 
 Subcommand ``ls-by-primary`` lists pg with primary = [osd]
 
 Usage::
 
 	ceph pg ls-by-primary <osdname (id|osd.id)> {<int>}
-	{active|clean|down|replay|splitting|
-	scrubbing|scrubq|degraded|inconsistent|peering|repair|
-	recovery|backfill_wait|incomplete|stale| remapped|
-	deep_scrub|backfill|backfill_toofull|recovery_wait|
-	undersized [active|clean|down|replay|splitting|
-	scrubbing|scrubq|degraded|inconsistent|peering|repair|
-	recovery|backfill_wait|incomplete|stale|remapped|
-	deep_scrub|backfill|backfill_toofull|recovery_wait|
-	undersized...]}
+	{<pg-state> [<pg-state>...]}
 
 Subcommand ``map`` shows mapping of pg to osds.
 

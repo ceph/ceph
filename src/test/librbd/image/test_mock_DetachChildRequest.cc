@@ -71,7 +71,7 @@ public:
     auto rados_client = (*io_ctx_impl)->get_mock_rados_client();
 
     EXPECT_CALL(*rados_client, create_ioctx(_, _))
-      .WillOnce(Return(*io_ctx_impl));
+      .WillOnce(DoAll(GetReference(*io_ctx_impl), Return(*io_ctx_impl)));
   }
 
   void expect_child_detach(MockImageCtx &mock_image_ctx,
@@ -81,7 +81,7 @@ public:
 
     bufferlist bl;
     encode(parent_spec.snap_id, bl);
-    encode(cls::rbd::ChildImageSpec{mock_image_ctx.md_ctx.get_id(),
+    encode(cls::rbd::ChildImageSpec{mock_image_ctx.md_ctx.get_id(), "",
                                     mock_image_ctx.id}, bl);
 
     EXPECT_CALL(mock_io_ctx_impl,
@@ -145,7 +145,7 @@ TEST_F(TestMockImageDetachChildRequest, SuccessV1) {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
 
   MockTestImageCtx mock_image_ctx(*image_ctx);
-  mock_image_ctx.parent_md.spec = {m_ioctx.get_id(), "parent id", 234};
+  mock_image_ctx.parent_md.spec = {m_ioctx.get_id(), "", "parent id", 234};
 
   InSequence seq;
   expect_test_op_features(mock_image_ctx, false);
@@ -161,7 +161,7 @@ TEST_F(TestMockImageDetachChildRequest, SuccessV2) {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
 
   MockTestImageCtx mock_image_ctx(*image_ctx);
-  mock_image_ctx.parent_md.spec = {m_ioctx.get_id(), "parent id", 234};
+  mock_image_ctx.parent_md.spec = {m_ioctx.get_id(), "", "parent id", 234};
 
   InSequence seq;
   expect_test_op_features(mock_image_ctx, true);
@@ -184,7 +184,7 @@ TEST_F(TestMockImageDetachChildRequest, TrashedSnapshotSuccess) {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
 
   MockTestImageCtx mock_image_ctx(*image_ctx);
-  mock_image_ctx.parent_md.spec = {m_ioctx.get_id(), "parent id", 234};
+  mock_image_ctx.parent_md.spec = {m_ioctx.get_id(), "", "parent id", 234};
 
   InSequence seq;
   expect_test_op_features(mock_image_ctx, true);
@@ -210,7 +210,7 @@ TEST_F(TestMockImageDetachChildRequest, TrashedSnapshotInUse) {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
 
   MockTestImageCtx mock_image_ctx(*image_ctx);
-  mock_image_ctx.parent_md.spec = {m_ioctx.get_id(), "parent id", 234};
+  mock_image_ctx.parent_md.spec = {m_ioctx.get_id(), "", "parent id", 234};
 
   InSequence seq;
   expect_test_op_features(mock_image_ctx, true);
@@ -233,7 +233,7 @@ TEST_F(TestMockImageDetachChildRequest, TrashedSnapshotSnapshotGetError) {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
 
   MockTestImageCtx mock_image_ctx(*image_ctx);
-  mock_image_ctx.parent_md.spec = {m_ioctx.get_id(), "parent id", 234};
+  mock_image_ctx.parent_md.spec = {m_ioctx.get_id(), "", "parent id", 234};
 
   InSequence seq;
   expect_test_op_features(mock_image_ctx, true);
@@ -256,7 +256,7 @@ TEST_F(TestMockImageDetachChildRequest, TrashedSnapshotOpenParentError) {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
 
   MockTestImageCtx mock_image_ctx(*image_ctx);
-  mock_image_ctx.parent_md.spec = {m_ioctx.get_id(), "parent id", 234};
+  mock_image_ctx.parent_md.spec = {m_ioctx.get_id(), "", "parent id", 234};
 
   InSequence seq;
   expect_test_op_features(mock_image_ctx, true);
@@ -281,7 +281,7 @@ TEST_F(TestMockImageDetachChildRequest, TrashedSnapshotRemoveError) {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
 
   MockTestImageCtx mock_image_ctx(*image_ctx);
-  mock_image_ctx.parent_md.spec = {m_ioctx.get_id(), "parent id", 234};
+  mock_image_ctx.parent_md.spec = {m_ioctx.get_id(), "", "parent id", 234};
 
   InSequence seq;
   expect_test_op_features(mock_image_ctx, true);
@@ -317,7 +317,7 @@ TEST_F(TestMockImageDetachChildRequest, ChildDetachError) {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
 
   MockTestImageCtx mock_image_ctx(*image_ctx);
-  mock_image_ctx.parent_md.spec = {m_ioctx.get_id(), "parent id", 234};
+  mock_image_ctx.parent_md.spec = {m_ioctx.get_id(), "", "parent id", 234};
 
   InSequence seq;
   expect_test_op_features(mock_image_ctx, true);
@@ -336,7 +336,7 @@ TEST_F(TestMockImageDetachChildRequest, RemoveChildError) {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
 
   MockTestImageCtx mock_image_ctx(*image_ctx);
-  mock_image_ctx.parent_md.spec = {m_ioctx.get_id(), "parent id", 234};
+  mock_image_ctx.parent_md.spec = {m_ioctx.get_id(), "", "parent id", 234};
 
   InSequence seq;
   expect_test_op_features(mock_image_ctx, false);

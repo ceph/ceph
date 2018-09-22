@@ -121,6 +121,7 @@ enum {
   l_osd_push_outb,
 
   l_osd_rop,
+  l_osd_rbytes,
 
   l_osd_loadavg,
   l_osd_buf,
@@ -713,6 +714,22 @@ public:
   AsyncReserver<spg_t> local_reserver;
   AsyncReserver<spg_t> remote_reserver;
 
+  // -- pg merge --
+  Mutex merge_lock = {"OSD::merge_lock"};
+  set<pg_t> ready_to_merge_source;
+  map<pg_t,epoch_t> ready_to_merge_target;  // pg -> last_epoch_clean
+  set<pg_t> not_ready_to_merge_source;
+  set<pg_t> sent_ready_to_merge_source;
+
+  void set_ready_to_merge_source(PG *pg);
+  void set_ready_to_merge_target(PG *pg, epoch_t last_epoch_clean);
+  void set_not_ready_to_merge_source(pg_t pgid);
+  void clear_ready_to_merge(PG *pg);
+  void send_ready_to_merge();
+  void _send_ready_to_merge();
+  void clear_sent_ready_to_merge();
+  void prune_sent_ready_to_merge(OSDMapRef& osdmap);
+
   // -- pg_temp --
 private:
   Mutex pg_temp_lock;
@@ -738,7 +755,7 @@ public:
   void queue_for_snap_trim(PG *pg);
   void queue_for_scrub(PG *pg, bool with_high_priority);
   void queue_for_pg_delete(spg_t pgid, epoch_t e);
-  void finish_pg_delete(PG *pg, unsigned old_pg_num);
+  bool try_finish_pg_delete(PG *pg, unsigned old_pg_num);
 
 private:
   // -- pg recovery and associated throttling --
@@ -862,11 +879,12 @@ public:
   }
 
   /// identify split child pgids over a osdmap interval
-  void identify_split_children(
+  void identify_splits_and_merges(
     OSDMapRef old_map,
     OSDMapRef new_map,
     spg_t pgid,
-    set<spg_t> *new_children);
+    set<pair<spg_t,epoch_t>> *new_children,
+    set<pair<spg_t,epoch_t>> *merge_pgs);
 
   void need_heartbeat_peer_update();
 
@@ -1090,11 +1108,14 @@ struct OSDShardPGSlot {
   /// should bail out (their op has been requeued)
   uint64_t requeue_seq = 0;
 
-  /// waiting for split child to materialize
-  bool waiting_for_split = false;
+  /// waiting for split child to materialize in these epoch(s)
+  set<epoch_t> waiting_for_split;
 
   epoch_t epoch = 0;
   boost::intrusive::set_member_hook<> pg_epoch_item;
+
+  /// waiting for a merge (source or target) by this epoch
+  epoch_t waiting_for_merge_epoch = 0;
 };
 
 struct OSDShard {
@@ -1139,13 +1160,15 @@ struct OSDShard {
       boost::intrusive::set_member_hook<>,
       &OSDShardPGSlot::pg_epoch_item>,
     boost::intrusive::compare<pg_slot_compare_by_epoch>> pg_slots_by_epoch;
-  bool waiting_for_min_pg_epoch = false;
+  int waiting_for_min_pg_epoch = 0;
   Cond min_pg_epoch_cond;
 
   /// priority queue
   std::unique_ptr<OpQueue<OpQueueItem, uint64_t>> pqueue;
 
   bool stop_waiting = false;
+
+  ContextQueue context_queue;
 
   void _enqueue_front(OpQueueItem&& item, unsigned cutoff) {
     unsigned priority = item.get_priority();
@@ -1177,9 +1200,15 @@ struct OSDShard {
 
   void _wake_pg_slot(spg_t pgid, OSDShardPGSlot *slot);
 
-  void identify_splits(const OSDMapRef& as_of_osdmap, set<spg_t> *pgids);
-  void _prime_splits(set<spg_t> *pgids);
-  void prime_splits(const OSDMapRef& as_of_osdmap, set<spg_t> *pgids);
+  void identify_splits_and_merges(
+    const OSDMapRef& as_of_osdmap,
+    set<pair<spg_t,epoch_t>> *split_children,
+    set<pair<spg_t,epoch_t>> *merge_pgs);
+  void _prime_splits(set<pair<spg_t,epoch_t>> *pgids);
+  void prime_splits(const OSDMapRef& as_of_osdmap,
+		    set<pair<spg_t,epoch_t>> *pgids);
+  void prime_merges(const OSDMapRef& as_of_osdmap,
+		    set<pair<spg_t,epoch_t>> *merge_pgs);
   void register_and_wake_split_child(PG *pg);
   void unprime_split_children(spg_t parent, unsigned old_pg_num);
 
@@ -1194,12 +1223,12 @@ struct OSDShard {
       osd(osd),
       shard_name(string("OSDShard.") + stringify(id)),
       sdata_wait_lock_name(shard_name + "::sdata_wait_lock"),
-      sdata_wait_lock(sdata_wait_lock_name.c_str(), false, true, false, cct),
+      sdata_wait_lock(sdata_wait_lock_name.c_str(), false, true, false),
       osdmap_lock_name(shard_name + "::osdmap_lock"),
       osdmap_lock(osdmap_lock_name.c_str(), false, false),
       shard_lock_name(shard_name + "::shard_lock"),
-      shard_lock(shard_lock_name.c_str(), false, true,
-			     false, cct) {
+      shard_lock(shard_lock_name.c_str(), false, true, false),
+      context_queue(sdata_wait_lock, sdata_cond) {
     if (opqueue == io_queue::weightedpriority) {
       pqueue = std::make_unique<
 	WeightedPriorityQueue<OpQueueItem,uint64_t>>(
@@ -1325,6 +1354,10 @@ public:
 	sobject_t(
 	  object_t(string("final_pool_") + stringify(pool)),
 	  CEPH_NOSNAP)));
+  }
+
+  static ghobject_t make_pg_num_history_oid() {
+    return ghobject_t(hobject_t(sobject_t("pg_num_history", CEPH_NOSNAP)));
   }
 
   static void recursive_remove_collection(CephContext* cct,
@@ -1745,12 +1778,22 @@ protected:
       auto &&sdata = osd->shards[shard_index];
       ceph_assert(sdata);
       Mutex::Locker l(sdata->shard_lock);
-      return sdata->pqueue->empty();
+      if (thread_index < osd->num_shards) {
+	return sdata->pqueue->empty() && sdata->context_queue.empty();
+      } else {
+	return sdata->pqueue->empty();
+      }
+    }
+
+    void handle_oncommits(list<Context*>& oncommits) {
+      for (auto p : oncommits) {
+	p->complete(0);
+      }
     }
   } op_shardedwq;
 
 
-  void enqueue_op(spg_t pg, OpRequestRef& op, epoch_t epoch);
+  void enqueue_op(spg_t pg, OpRequestRef&& op, epoch_t epoch);
   void dequeue_op(
     PGRef pg, OpRequestRef op,
     ThreadPool::TPHandle &handle);
@@ -1774,6 +1817,7 @@ protected:
     ThreadPool::TPHandle& handle);
 
   friend class PG;
+  friend class OSDShard;
   friend class PrimaryLogPG;
 
 
@@ -1787,6 +1831,8 @@ protected:
   epoch_t get_osdmap_epoch() const {
     return osdmap ? osdmap->get_epoch() : 0;
   }
+
+  pool_pg_num_history_t pg_num_history;
 
   utime_t         had_map_since;
   RWLock          map_lock;
@@ -1803,8 +1849,9 @@ protected:
   void note_up_osd(int osd);
   friend class C_OnMapCommit;
 
-  void advance_pg(
-    epoch_t advance_to, PG *pg,
+  bool advance_pg(
+    epoch_t advance_to,
+    PG *pg,
     ThreadPool::TPHandle &handle,
     PG::RecoveryCtx *rctx);
   void consume_map();
@@ -1843,6 +1890,13 @@ public:
   }
 
 protected:
+  Mutex merge_lock = {"OSD::merge_lock"};
+  /// merge epoch -> target pgid -> source pgid -> pg
+  map<epoch_t,map<spg_t,map<spg_t,PGRef>>> merge_waiters;
+
+  bool add_merge_waiter(OSDMapRef nextmap, spg_t target, PGRef source,
+			unsigned need);
+
   // -- placement groups --
   std::atomic<size_t> num_pgs = {0};
 
@@ -1856,7 +1910,7 @@ protected:
   PGRef _lookup_pg(spg_t pgid);
   PGRef _lookup_lock_pg(spg_t pgid);
   void register_pg(PGRef pg);
-  void unregister_pg(PG *pg);
+  bool try_finish_pg_delete(PG *pg, unsigned old_pg_num);
 
   void _get_pgs(vector<PGRef> *v, bool clear_too=false);
   void _get_pgids(vector<spg_t> *v);
@@ -1883,15 +1937,6 @@ protected:
     pg_history_t *h,
     PastIntervals *pi);
 
-  /// project pg history from from to now
-  bool project_pg_history(
-    spg_t pgid, pg_history_t& h, epoch_t from,
-    const vector<int>& lastup,
-    int lastupprimary,
-    const vector<int>& lastacting,
-    int lastactingprimary
-    ); ///< @return false if there was a map gap between from and now
-
   epoch_t last_pg_create_epoch;
 
   void handle_pg_create(OpRequestRef op);
@@ -1907,6 +1952,7 @@ protected:
   // == monitor interaction ==
   Mutex mon_report_lock;
   utime_t last_mon_report;
+  Finisher boot_finisher;
 
   // -- boot --
   void start_boot();
@@ -2004,7 +2050,10 @@ protected:
   void handle_fast_pg_info(MOSDPGInfo *m);
   void handle_fast_pg_remove(MOSDPGRemove *m);
 
+public:
+  // used by OSDShard
   PGRef handle_pg_create_info(const OSDMapRef& osdmap, const PGCreateInfo *info);
+protected:
 
   void handle_fast_force_recovery(MOSDForceRecovery *m);
 
@@ -2064,6 +2113,10 @@ protected:
   void handle_command(class MMonCommand *m);
   void handle_command(class MCommand *m);
   void do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, bufferlist& data);
+  int _do_command(
+    Connection *con, cmdmap_t& cmdmap, ceph_tid_t tid, bufferlist& data,
+    bufferlist& odata, stringstream& ss, stringstream& ds);
+
 
   // -- pg recovery --
   void do_recovery(PG *pg, epoch_t epoch_queued, uint64_t pushes_reserved,

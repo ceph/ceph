@@ -1,4 +1,7 @@
-import { FormControl, FormGroup } from '@angular/forms';
+import { fakeAsync, tick } from '@angular/core/testing';
+import { AbstractControl, FormControl, FormGroup } from '@angular/forms';
+
+import { of as observableOf } from 'rxjs';
 
 import { CdValidators } from './cd-validators';
 
@@ -171,18 +174,19 @@ describe('CdValidators', () => {
 
   describe('match', () => {
     let form: FormGroup;
+    let x: FormControl;
+    let y: FormControl;
 
     beforeEach(() => {
+      x = new FormControl('aaa');
+      y = new FormControl('aaa');
       form = new FormGroup({
-        x: new FormControl(),
-        y: new FormControl()
+        x: x,
+        y: y
       });
     });
 
     it('should error when values are different', () => {
-      const x = form.get('x');
-      const y = form.get('y');
-      x.setValue('aaa');
       y.setValue('aab');
       CdValidators.match('x', 'y')(form);
       expect(x.hasError('match')).toBeFalsy();
@@ -190,13 +194,71 @@ describe('CdValidators', () => {
     });
 
     it('should not error when values are equal', () => {
-      const x = form.get('x');
-      const y = form.get('y');
-      x.setValue('aaa');
-      y.setValue('aaa');
       CdValidators.match('x', 'y')(form);
       expect(x.hasError('match')).toBeFalsy();
       expect(y.hasError('match')).toBeFalsy();
     });
+
+    it('should unset error when values are equal', () => {
+      y.setErrors({ match: true });
+      CdValidators.match('x', 'y')(form);
+      expect(x.hasError('match')).toBeFalsy();
+      expect(y.hasError('match')).toBeFalsy();
+      expect(y.valid).toBeTruthy();
+    });
+
+    it('should keep other existing errors', () => {
+      y.setErrors({ match: true, notUnique: true });
+      CdValidators.match('x', 'y')(form);
+      expect(x.hasError('match')).toBeFalsy();
+      expect(y.hasError('match')).toBeFalsy();
+      expect(y.hasError('notUnique')).toBeTruthy();
+      expect(y.valid).toBeFalsy();
+    });
+  });
+
+  describe('unique', () => {
+    let form: FormGroup;
+    let x: AbstractControl;
+
+    beforeEach(() => {
+      form = new FormGroup({
+        x: new FormControl(
+          '',
+          null,
+          CdValidators.unique((value) => {
+            return observableOf('xyz' === value);
+          })
+        )
+      });
+      x = form.get('x');
+      x.markAsDirty();
+    });
+
+    it('should not error because of empty input', () => {
+      x.setValue('');
+      expect(x.hasError('notUnique')).toBeFalsy();
+      expect(x.valid).toBeTruthy();
+    });
+
+    it(
+      'should not error because of not existing input',
+      fakeAsync(() => {
+        x.setValue('abc');
+        tick(500);
+        expect(x.hasError('notUnique')).toBeFalsy();
+        expect(x.valid).toBeTruthy();
+      })
+    );
+
+    it(
+      'should error because of already existing input',
+      fakeAsync(() => {
+        x.setValue('xyz');
+        tick(500);
+        expect(x.hasError('notUnique')).toBeTruthy();
+        expect(x.valid).toBeFalsy();
+      })
+    );
   });
 });

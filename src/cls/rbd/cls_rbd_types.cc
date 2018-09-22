@@ -212,28 +212,65 @@ std::ostream& operator<<(std::ostream& os, const MirrorImageStatus& status) {
   return os;
 }
 
-void ChildImageSpec::encode(bufferlist &bl) const {
+void ParentImageSpec::encode(bufferlist& bl) const {
   ENCODE_START(1, 1, bl);
   encode(pool_id, bl);
+  encode(pool_namespace, bl);
   encode(image_id, bl);
+  encode(snap_id, bl);
+  ENCODE_FINISH(bl);
+}
+
+void ParentImageSpec::decode(bufferlist::const_iterator& bl) {
+  DECODE_START(1, bl);
+  decode(pool_id, bl);
+  decode(pool_namespace, bl);
+  decode(image_id, bl);
+  decode(snap_id, bl);
+  DECODE_FINISH(bl);
+}
+
+void ParentImageSpec::dump(Formatter *f) const {
+  f->dump_int("pool_id", pool_id);
+  f->dump_string("pool_namespace", pool_namespace);
+  f->dump_string("image_id", image_id);
+  f->dump_unsigned("snap_id", snap_id);
+}
+
+void ParentImageSpec::generate_test_instances(std::list<ParentImageSpec*>& o) {
+  o.push_back(new ParentImageSpec{});
+  o.push_back(new ParentImageSpec{1, "", "foo", 3});
+  o.push_back(new ParentImageSpec{1, "ns", "foo", 3});
+}
+
+void ChildImageSpec::encode(bufferlist &bl) const {
+  ENCODE_START(2, 1, bl);
+  encode(pool_id, bl);
+  encode(image_id, bl);
+  encode(pool_namespace, bl);
   ENCODE_FINISH(bl);
 }
 
 void ChildImageSpec::decode(bufferlist::const_iterator &it) {
-  DECODE_START(1, it);
+  DECODE_START(2, it);
   decode(pool_id, it);
   decode(image_id, it);
+  if (struct_v >= 2) {
+    decode(pool_namespace, it);
+  }
   DECODE_FINISH(it);
 }
 
 void ChildImageSpec::dump(Formatter *f) const {
   f->dump_int("pool_id", pool_id);
+  f->dump_string("pool_namespace", pool_namespace);
   f->dump_string("image_id", image_id);
 }
 
 void ChildImageSpec::generate_test_instances(std::list<ChildImageSpec*> &o) {
   o.push_back(new ChildImageSpec());
-  o.push_back(new ChildImageSpec(123, "abc"));
+  o.push_back(new ChildImageSpec(123, "", "abc"));
+  o.push_back(new ChildImageSpec(123, "ns", "abc"));
 }
 
 void GroupImageSpec::encode(bufferlist &bl) const {

@@ -44,7 +44,7 @@
 #include "cls/lock/cls_lock_client.h"
 #include "cls/rgw/cls_rgw_client.h"
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 using ceph::crypto::SHA1;
 
@@ -1314,8 +1314,6 @@ protected:
   RGWBucketInfo src_bucket_info;
   RGWBucketInfo dest_bucket_info;
   string source_zone;
-  string client_id;
-  string op_id;
   string etag;
 
   off_t last_ofs;
@@ -1808,7 +1806,6 @@ public:
 
 class RGWDeleteMultiObj : public RGWOp {
 protected:
-  int max_to_delete;
   int len;
   char *data;
   rgw_bucket bucket;
@@ -1818,7 +1815,6 @@ protected:
 
 public:
   RGWDeleteMultiObj() {
-    max_to_delete = 1000;
     len = 0;
     data = NULL;
     quiet = false;

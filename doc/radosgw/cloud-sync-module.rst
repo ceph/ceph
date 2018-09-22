@@ -10,7 +10,7 @@ provide capability of syncing data to different cloud providers. Currently the s
 cloud providers are ones that are compatible with AWS (S3).
 
 A user for the remote cloud object store service needs to be configured. Sync operations will
-be done under that speicified user. Since different cloud services impose limits on the number
+be done under that specified user. Since different cloud services impose limits on the number
 of buckets that each user can create, the source objects and buckets will be mapped into a
 different (configurable) buckets and objects. It is possible to configure different targets
 to different buckets and bucket prefixes. In addition to that, source ACLs will not be preserved.
@@ -176,7 +176,7 @@ A list of profiles. Each profile contains the following:
 S3 Specific Configurables:
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Currently cloud sync will only work with backends that are compatible with AWS S3. There are are
+Currently cloud sync will only work with backends that are compatible with AWS S3. There are
 a few configurables that can be used to tweak its behavior when accessing these cloud services:
 
 ::

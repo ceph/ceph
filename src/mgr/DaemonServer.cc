@@ -195,7 +195,6 @@ bool DaemonServer::ms_verify_authorizer(
       authorizer_reply, s->entity_name,
       s->global_id, caps_info,
       session_key,
-      nullptr,
       challenge);
   } else {
     dout(10) << __func__ << " no rotating_keys (yet), denied" << dendl;
@@ -353,6 +352,7 @@ void DaemonServer::tick()
 {
   dout(10) << dendl;
   send_report();
+  adjust_pgs();
 
   schedule_tick_locked(
     g_conf().get_val<std::chrono::seconds>("mgr_tick_period").count());
@@ -720,86 +720,86 @@ bool DaemonServer::_allowed_command(
   return capable;
 }
 
+/**
+ * The working data for processing an MCommand.  This lives in
+ * a class to enable passing it into other threads for processing
+ * outside of the thread/locks that called handle_command.
+ */
+class CommandContext {
+public:
+  MCommand *m;
+  bufferlist odata;
+  cmdmap_t cmdmap;
+
+  explicit CommandContext(MCommand *m_)
+    : m(m_) {
+  }
+
+  ~CommandContext() {
+    m->put();
+  }
+
+  void reply(int r, const std::stringstream &ss) {
+    reply(r, ss.str());
+  }
+
+  void reply(int r, const std::string &rs) {
+    // Let the connection drop as soon as we've sent our response
+    ConnectionRef con = m->get_connection();
+    if (con) {
+      con->mark_disposable();
+    }
+
+    if (r == 0) {
+      dout(4) << __func__ << " success" << dendl;
+    } else {
+      derr << __func__ << " " << cpp_strerror(r) << " " << rs << dendl;
+    }
+    if (con) {
+      MCommandReply *reply = new MCommandReply(r, rs);
+      reply->set_tid(m->get_tid());
+      reply->set_data(odata);
+      con->send_message(reply);
+    }
+  }
+};
+
+/**
+ * A context for receiving a bufferlist/error string from a background
+ * function and then calling back to a CommandContext when it's done
+ */
+class ReplyOnFinish : public Context {
+  std::shared_ptr<CommandContext> cmdctx;
+
+public:
+  bufferlist from_mon;
+  string outs;
+
+  explicit ReplyOnFinish(const std::shared_ptr<CommandContext> &cmdctx_)
+    : cmdctx(cmdctx_)
+    {}
+  void finish(int r) override {
+    cmdctx->odata.claim_append(from_mon);
+    cmdctx->reply(r, outs);
+  }
+};
+
 bool DaemonServer::handle_command(MCommand *m)
 {
   Mutex::Locker l(lock);
-  int r = 0;
-  std::stringstream ss;
-  std::string prefix;
-
-  ceph_assert(lock.is_locked_by_me());
-
-  /**
-   * The working data for processing an MCommand.  This lives in
-   * a class to enable passing it into other threads for processing
-   * outside of the thread/locks that called handle_command.
-   */
-  class CommandContext
-  {
-    public:
-    MCommand *m;
-    bufferlist odata;
-    cmdmap_t cmdmap;
-
-    explicit CommandContext(MCommand *m_)
-      : m(m_)
-    {
-    }
-
-    ~CommandContext()
-    {
-      m->put();
-    }
-
-    void reply(int r, const std::stringstream &ss)
-    {
-      reply(r, ss.str());
-    }
-
-    void reply(int r, const std::string &rs)
-    {
-      // Let the connection drop as soon as we've sent our response
-      ConnectionRef con = m->get_connection();
-      if (con) {
-        con->mark_disposable();
-      }
-
-      if (r == 0) {
-        dout(4) << __func__ << " success" << dendl;
-      } else {
-        derr << __func__ << " " << cpp_strerror(r) << " " << rs << dendl;
-      }
-      if (con) {
-        MCommandReply *reply = new MCommandReply(r, rs);
-        reply->set_tid(m->get_tid());
-        reply->set_data(odata);
-        con->send_message(reply);
-      }
-    }
-  };
-
-  /**
-   * A context for receiving a bufferlist/error string from a background
-   * function and then calling back to a CommandContext when it's done
-   */
-  class ReplyOnFinish : public Context {
-    std::shared_ptr<CommandContext> cmdctx;
-
-  public:
-    bufferlist from_mon;
-    string outs;
-
-    explicit ReplyOnFinish(const std::shared_ptr<CommandContext> &cmdctx_)
-      : cmdctx(cmdctx_)
-    {}
-    void finish(int r) override {
-      cmdctx->odata.claim_append(from_mon);
-      cmdctx->reply(r, outs);
-    }
-  };
-
   std::shared_ptr<CommandContext> cmdctx = std::make_shared<CommandContext>(m);
+  try {
+    return _handle_command(m, cmdctx);
+  } catch (const bad_cmd_get& e) {
+    cmdctx->reply(-EINVAL, e.what());
+    return true;
+  }
+}
 
+bool DaemonServer::_handle_command(
+  MCommand *m,
+  std::shared_ptr<CommandContext>& cmdctx)
+{
   auto priv = m->get_connection()->get_priv();
   auto session = static_cast<MgrSession*>(priv.get());
   if (!session) {
@@ -811,6 +811,8 @@ bool DaemonServer::handle_command(MCommand *m)
   std::string format;
   boost::scoped_ptr<Formatter> f;
   map<string,string> param_str_map;
+  std::stringstream ss;
+  int r = 0;
 
   if (!cmdmap_from_json(m->cmd, &(cmdctx->cmdmap), ss)) {
     cmdctx->reply(-EINVAL, ss);
@@ -822,6 +824,7 @@ bool DaemonServer::handle_command(MCommand *m)
     f.reset(Formatter::create(format));
   }
 
+  string prefix;
   cmd_getval(cct, cmdctx->cmdmap, "prefix", prefix);
 
   dout(4) << "decoded " << cmdctx->cmdmap.size() << dendl;
@@ -2210,6 +2213,192 @@ void DaemonServer::send_report()
   // TODO: respect needs_send, so we send the report only if we are asked to do
   //       so, or the state is updated.
   monc->send_mon_message(m);
+}
+
+void DaemonServer::adjust_pgs()
+{
+  dout(20) << dendl;
+  unsigned max = std::max<int64_t>(1, g_conf()->mon_osd_max_creating_pgs);
+
+  map<string,unsigned> pg_num_to_set;
+  map<string,unsigned> pgp_num_to_set;
+  cluster_state.with_pgmap([&](const PGMap& pg_map) {
+      unsigned creating_or_unknown = 0;
+      for (auto& i : pg_map.num_pg_by_state) {
+	if ((i.first & (PG_STATE_CREATING)) ||
+	    i.first == 0) {
+	  creating_or_unknown += i.second;
+	}
+      }
+      unsigned left = max;
+      if (creating_or_unknown >= max) {
+	return;
+      }
+      left -= creating_or_unknown;
+      dout(10) << "creating_or_unknown " << creating_or_unknown
+	       << " max_creating " << max
+               << " left " << left
+               << dendl;
+      cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+	  if (pg_map.last_osdmap_epoch != osdmap.get_epoch()) {
+	    // do nothing if maps aren't in sync
+	    dout(10) << "last_osdmap_epoch " << pg_map.last_osdmap_epoch
+		     << " osdmap " << osdmap.get_epoch() << dendl;
+	    //return;
+	  }
+	  for (auto& i : osdmap.get_pools()) {
+	    const pg_pool_t& p = i.second;
+
+	    // adjust pg_num?
+	    if (p.get_pg_num_target() != p.get_pg_num()) {
+	      dout(20) << "pool " << i.first
+		       << " pg_num " << p.get_pg_num()
+		       << " target " << p.get_pg_num_target()
+		       << dendl;
+	      if (p.has_flag(pg_pool_t::FLAG_CREATING)) {
+		dout(10) << "pool " << i.first
+			 << " target " << p.get_pg_num_target()
+			 << " pg_num " << p.get_pg_num()
+			 << " - still creating initial pgs"
+			 << dendl;
+	      } else if (p.get_pg_num() != p.get_pg_num_pending()) {
+		dout(10) << "pool " << i.first
+			 << " target " << p.get_pg_num_target()
+			 << " pg_num " << p.get_pg_num()
+			 << " - pg_num_pending != pg_num, waiting"
+			 << dendl;
+		// FIXME: we might consider allowing pg_num increases without
+		// waiting for the previously planned merge to complete.
+	      } else if (p.get_pg_num_target() < p.get_pg_num()) {
+		// pg_num decrease (merge)
+		pg_t merge_source(p.get_pg_num() - 1, i.first);
+		pg_t merge_target = merge_source.get_parent();
+		bool ok = true;
+		auto q = pg_map.pg_stat.find(merge_source);
+		if (q == pg_map.pg_stat.end()) {
+		  dout(10) << "pool " << i.first
+			   << " target " << p.get_pg_num_target()
+			   << " pg_num " << p.get_pg_num()
+			   << " - no state for " << merge_source
+			   << " (merge source)"
+			   << dendl;
+		  ok = false;
+		} else if (!(q->second.state & (PG_STATE_ACTIVE |
+						PG_STATE_CLEAN))) {
+		  dout(10) << "pool " << i.first
+			   << " target " << p.get_pg_num_target()
+			   << " pg_num " << p.get_pg_num()
+			   << " - merge source " << merge_source
+			   << " not clean (" << pg_state_string(q->second.state)
+			   << ")" << dendl;
+		  ok = false;
+		}
+		q = pg_map.pg_stat.find(merge_target);
+		if (q == pg_map.pg_stat.end()) {
+		  dout(10) << "pool " << i.first
+			   << " target " << p.get_pg_num_target()
+			   << " pg_num " << p.get_pg_num()
+			   << " - no state for " << merge_target
+			   << " (merge target)"
+			   << dendl;
+		  ok = false;
+		} else if (!(q->second.state & (PG_STATE_ACTIVE |
+						PG_STATE_CLEAN))) {
+		  dout(10) << "pool " << i.first
+			   << " target " << p.get_pg_num_target()
+			   << " pg_num " << p.get_pg_num()
+			   << " - merge target " << merge_target
+			   << " not clean (" << pg_state_string(q->second.state)
+			   << ")" << dendl;
+		  ok = false;
+		}
+		if (ok) {
+		  unsigned target = p.get_pg_num() - 1;
+		  dout(10) << "pool " << i.first
+			   << " target " << p.get_pg_num_target()
+			   << " pg_num " << p.get_pg_num()
+			   << " -> " << target
+			   << " (merging " << merge_source
+			   << " and " << merge_target
+			   << ")" << dendl;
+		  pg_num_to_set[osdmap.get_pool_name(i.first)] = target;
+		}
+	      } else if (p.get_pg_num_target() > p.get_pg_num()) {
+		// pg_num increase (split)
+		bool active = true;
+		auto q = pg_map.num_pg_by_pool_state.find(i.first);
+		if (q != pg_map.num_pg_by_pool_state.end()) {
+		  for (auto& j : q->second) {
+		    if ((j.first & (PG_STATE_ACTIVE|PG_STATE_PEERED)) == 0) {
+		      dout(20) << "pool " << i.first << " has " << j.second
+			       << " pgs in " << pg_state_string(j.first)
+			       << dendl;
+		      active = false;
+                      break;
+		    }
+		  }
+		} else {
+		  active = false;
+		}
+		if (!active) {
+		  dout(10) << "pool " << i.first
+			   << " target " << p.get_pg_num_target()
+			   << " pg_num " << p.get_pg_num()
+			   << " - not all pgs active"
+			   << dendl;
+		} else {
+		  unsigned add = std::min(
+		    left,
+		    p.get_pg_num_target() - p.get_pg_num());
+		  unsigned target = p.get_pg_num() + add;
+		  left -= add;
+		  dout(10) << "pool " << i.first
+			   << " target " << p.get_pg_num_target()
+			   << " pg_num " << p.get_pg_num()
+			   << " -> " << target << dendl;
+		  pg_num_to_set[osdmap.get_pool_name(i.first)] = target;
+		}
+	      }
+	    }
+
+	    // adjust pgp_num?
+	    unsigned target = std::min(p.get_pg_num_pending(),
+				       p.get_pgp_num_target());
+	    if (target != p.get_pgp_num()) {
+	      // FIXME: we should throttle this to limit mispalced objects, like
+	      // we do in the balancer module.
+	      dout(10) << "pool " << i.first
+		       << " pgp target " << p.get_pgp_num_target()
+		       << " pgp_num " << p.get_pgp_num()
+		       << " -> " << target << dendl;
+	      pgp_num_to_set[osdmap.get_pool_name(i.first)] = target;
+	    }
+	    if (left == 0) {
+	      return;
+	    }
+	  }
+	});
+    });
+  for (auto i : pg_num_to_set) {
+    const string cmd =
+      "{"
+      "\"prefix\": \"osd pool set\", "
+      "\"pool\": \"" + i.first + "\", "
+      "\"var\": \"pg_num_actual\", "
+      "\"val\": \"" + stringify(i.second) + "\""
+      "}";
+    monc->start_mon_command({cmd}, {}, nullptr, nullptr, nullptr);
+  }
+  for (auto i : pgp_num_to_set) {
+    const string cmd =
+      "{"
+      "\"prefix\": \"osd pool set\", "
+      "\"pool\": \"" + i.first + "\", "
+      "\"var\": \"pgp_num_actual\", "
+      "\"val\": \"" + stringify(i.second) + "\""
+      "}";
+    monc->start_mon_command({cmd}, {}, nullptr, nullptr, nullptr);
+  }
 }
 
 void DaemonServer::got_service_map()

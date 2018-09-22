@@ -16,10 +16,15 @@
 #include "FSMap.h"
 
 #include <sstream>
-using std::stringstream;
-
+#ifdef WITH_SEASTAR
+#include "crimson/common/config_proxy.h"
+#else
+#include "common/config_proxy.h"
+#endif
+#include "global/global_context.h"
 #include "mon/health_check.h"
 
+using std::stringstream;
 
 void Filesystem::dump(Formatter *f) const
 {

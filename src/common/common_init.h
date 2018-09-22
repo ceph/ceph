@@ -20,7 +20,6 @@
 #include "common/code_environment.h"
 
 class CephContext;
-class CephInitParameters;
 
 enum common_init_flags_t {
   // Set up defaults that make sense for an unprivileged daemon
@@ -38,9 +37,12 @@ enum common_init_flags_t {
   // don't drop privileges
   CINIT_FLAG_DEFER_DROP_PRIVILEGES = 0x10,
 
-  // do'nt contact mons for config
+  // don't contact mons for config
   CINIT_FLAG_NO_MON_CONFIG = 0x20,
 };
+
+#ifndef WITH_SEASTAR
+class CephInitParameters;
 
 /*
  * NOTE: If you are writing a Ceph daemon, ignore this function and call
@@ -61,11 +63,13 @@ enum common_init_flags_t {
  */
 CephContext *common_preinit(const CephInitParameters &iparams,
 			    enum code_environment_t code_env, int flags);
+#endif // #ifndef WITH_SEASTAR
 
 /* Print out some parse errors. */
 void complain_about_parse_errors(CephContext *cct,
 				 std::deque<std::string> *parse_errors);
 
+#ifndef WITH_SEASTAR
 /* This function is called after you have done your last
  * fork. When you make this call, the system will initialize everything that
  * cannot be initialized before a fork.
@@ -79,5 +83,6 @@ void complain_about_parse_errors(CephContext *cct,
  * the Ceph libraries would be destroyed by a fork().
  */
 void common_init_finish(CephContext *cct);
+#endif // #ifndef WITH_SEASTAR
 
 #endif

@@ -21,7 +21,9 @@ TIMEOUT=300
 WAIT_FOR_CLEAN_TIMEOUT=90
 MAX_TIMEOUT=15
 PG_NUM=4
-CEPH_BUILD_VIRTUALENV=${TMPDIR:-/tmp}
+TMPDIR=${TMPDIR:-/tmp}
+CEPH_BUILD_VIRTUALENV=${TMPDIR}
+TESTDIR=${TESTDIR:-${TMPDIR}}
 
 if type xmlstarlet > /dev/null 2>&1; then
     XMLSTARLET=xmlstarlet
@@ -34,10 +36,12 @@ fi
 
 if [ `uname` = FreeBSD ]; then
     SED=gsed
+    AWK=gawk
     DIFFCOLOPTS=""
     KERNCORE="kern.corefile"
 else
     SED=sed
+    AWK=awk
     termwidth=$(stty -a | head -1 | sed -e 's/.*columns \([0-9]*\).*/\1/')
     if [ -n "$termwidth" -a "$termwidth" != "0" ]; then
         termwidth="-W ${termwidth}"
@@ -131,6 +135,9 @@ function setup() {
     if [ $(ulimit -n) -le 1024 ]; then
         ulimit -n 4096 || return 1
     fi
+    if [ -z "$LOCALRUN" ]; then
+        trap "teardown $dir 1" TERM HUP INT
+    fi
 }
 
 function test_setup() {
@@ -202,8 +209,8 @@ function teardown() {
 
 function __teardown_btrfs() {
     local btrfs_base_dir=$1
-    local btrfs_root=$(df -P . | tail -1 | awk '{print $NF}')
-    local btrfs_dirs=$(cd $btrfs_base_dir; sudo btrfs subvolume list -t . | awk '/^[0-9]/ {print $4}' | grep "$btrfs_base_dir/$btrfs_dir")
+    local btrfs_root=$(df -P . | tail -1 | $AWK '{print $NF}')
+    local btrfs_dirs=$(cd $btrfs_base_dir; sudo btrfs subvolume list -t . | $AWK '/^[0-9]/ {print $4}' | grep "$btrfs_base_dir/$btrfs_dir")
     for subvolume in $btrfs_dirs; do
        sudo btrfs subvolume delete $btrfs_root/$subvolume
     done
@@ -1408,7 +1415,7 @@ function test_is_clean() {
 
 #######################################################################
 
-calc() { awk "BEGIN{print $*}"; }
+calc() { $AWK "BEGIN{print $*}"; }
 
 ##
 # Return a list of numbers that are increasingly larger and whose
@@ -1825,7 +1832,7 @@ function run_in_background() {
     local pid_variable=$1
     shift
     # Execute the command and prepend the output with its pid
-    # We enforce to return the exit status of the command and not the awk one.
+    # We enforce to return the exit status of the command and not the sed one.
     ("$@" |& sed 's/^/'$$': /'; return "${PIPESTATUS[0]}") >&2 &
     eval "$pid_variable+=\" $!\""
 }

@@ -33,7 +33,7 @@
 
 #include "msg/SimplePolicyMessenger.h"
 #include "msg/Message.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #include "msg/DispatchQueue.h"
 #include "Pipe.h"
@@ -305,7 +305,7 @@ private:
    */
   ceph::unordered_map<entity_addr_t, Pipe*> rank_pipe;
   /**
-   * list of pipes are in teh process of accepting
+   * list of pipes are in the process of accepting
    *
    * These are not yet in the rank_pipe map.
    */

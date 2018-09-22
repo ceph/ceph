@@ -20,6 +20,7 @@
 
 #include "auth/KeyRing.h"
 #include "include/random.h"
+#include "common/ceph_context.h"
 #include "common/config.h"
 #include "common/dout.h"
 
@@ -251,4 +252,8 @@ bool CephxClientHandler<lp>::need_tickets()
 }
 
 // explicitly instantiate only the classes we need
+#ifdef WITH_SEASTAR
+template class CephxClientHandler<LockPolicy::SINGLE>;
+#else
 template class CephxClientHandler<LockPolicy::MUTEX>;
+#endif

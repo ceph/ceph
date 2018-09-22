@@ -1,16 +1,10 @@
 import { Component, OnInit } from '@angular/core';
-import { AbstractControl, AsyncValidatorFn, ValidationErrors, Validators } from '@angular/forms';
+import { AbstractControl, ValidationErrors, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
 import * as _ from 'lodash';
 import { BsModalService } from 'ngx-bootstrap';
-import {
-  forkJoin as observableForkJoin,
-  Observable,
-  of as observableOf,
-  timer as observableTimer
-} from 'rxjs';
-import { map, switchMapTo, take } from 'rxjs/operators';
+import { forkJoin as observableForkJoin, Observable } from 'rxjs';
 
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
 import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
@@ -57,7 +51,11 @@ export class RgwUserFormComponent implements OnInit {
   createForm() {
     this.userForm = this.formBuilder.group({
       // General
-      user_id: [null, [Validators.required], [this.userIdValidator()]],
+      user_id: [
+        null,
+        [Validators.required],
+        [CdValidators.unique(this.rgwUserService.exists, this.rgwUserService)]
+      ],
       display_name: [null, [Validators.required]],
       email: [null, [CdValidators.email]],
       max_buckets: [1000, [Validators.required, Validators.min(0)]],
@@ -179,7 +177,7 @@ export class RgwUserFormComponent implements OnInit {
               value[type + '_quota_max_size'] = null;
             } else {
               value[type + '_quota_max_size_unlimited'] = false;
-              value[type + '_quota_max_size'] = quota.max_size;
+              value[type + '_quota_max_size'] = `${quota.max_size} B`;
             }
             if (quota.max_objects < 0) {
               value[type + '_quota_max_objects_unlimited'] = true;
@@ -276,36 +274,6 @@ export class RgwUserFormComponent implements OnInit {
     }
     const bytes = new FormatterService().toBytes(control.value);
     return bytes < 1024 ? { quotaMaxSize: true } : null;
-  }
-
-  /**
-   * Validate the username.
-   * @param {number|Date} dueTime The delay time to wait before the
-   *   API call is executed. This is useful to prevent API calls on
-   *   every keystroke. Defaults to 500.
-   */
-  userIdValidator(dueTime = 500): AsyncValidatorFn {
-    const rgwUserService = this.rgwUserService;
-    return (control: AbstractControl): Observable<ValidationErrors | null> => {
-      // Exit immediately if user has not interacted with the control yet
-      // or the control value is empty.
-      if (control.pristine || control.value === '') {
-        return observableOf(null);
-      }
-      // Forgot previous requests if a new one arrives within the specified
-      // delay time.
-      return observableTimer(dueTime).pipe(
-        switchMapTo(rgwUserService.exists(control.value)),
-        map((resp: boolean) => {
-          if (!resp) {
-            return null;
-          } else {
-            return { userIdExists: true };
-          }
-        }),
-        take(1)
-      );
-    };
   }
 
   /**

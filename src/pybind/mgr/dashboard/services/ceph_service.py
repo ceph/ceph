@@ -153,8 +153,7 @@ class CephService(object):
             "prefix": prefix,
             "format": "json",
         }
-        argdict.update({k: v for k, v in kwargs.items() if v})
-
+        argdict.update({k: v for k, v in kwargs.items() if v is not None})
         result = CommandResult("")
         mgr.send_command(result, srv_type, srv_spec, json.dumps(argdict), "")
         r, outb, outs = result.wait()

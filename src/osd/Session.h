@@ -17,6 +17,7 @@
 
 #include "common/RefCountedObj.h"
 #include "common/Mutex.h"
+#include "global/global_context.h"
 #include "include/spinlock.h"
 #include "OSDCap.h"
 #include "Watch.h"
@@ -130,7 +131,6 @@ struct Backoff : public RefCountedObject {
 struct Session : public RefCountedObject {
   EntityName entity_name;
   OSDCap caps;
-  int64_t auid;
   ConnectionRef con;
   entity_addr_t socket_addr;
   WatchConState wstate;
@@ -152,7 +152,7 @@ struct Session : public RefCountedObject {
 
   explicit Session(CephContext *cct, Connection *con_) :
     RefCountedObject(cct),
-    auid(-1), con(con_),
+    con(con_),
     socket_addr(con_->get_peer_socket_addr()),
     wstate(cct),
     session_dispatch_lock("Session::session_dispatch_lock"),

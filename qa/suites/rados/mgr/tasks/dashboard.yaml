@@ -18,7 +18,10 @@ tasks:
         - \(MDS_DAMAGE\)
         - \(MDS_ALL_DOWN\)
         - \(MDS_UP_LESS_THAN_MAX\)
+        - \(OSD_DOWN\)
+        - \(OSD_HOST_DOWN\)
         - pauserd,pausewr flag\(s\) set
+        - Monitor daemon marked osd\.[[:digit:]]+ down, but it is still running
   - rgw: [client.0]
   - cephfs_test_runner:
       fail_on_skip: false

@@ -23,7 +23,7 @@
 #include <boost/smart_ptr/intrusive_ptr.hpp>
 
 // re-include our assert to clobber the system one; fix dout:
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 struct RefCountedObject {
 private:
@@ -90,7 +90,7 @@ struct RefCountedCond : public RefCountedObject {
   RefCountedCond() : complete(false), lock("RefCountedCond"), rval(0) {}
 
   int wait() {
-    Mutex::Locker l(lock);
+    std::lock_guard<Mutex> l(lock);
     while (!complete) {
       cond.Wait(lock);
     }
@@ -98,7 +98,7 @@ struct RefCountedCond : public RefCountedObject {
   }
 
   void done(int r) {
-    Mutex::Locker l(lock);
+    std::lock_guard<Mutex> l(lock);
     rval = r;
     complete = true;
     cond.SignalAll();
@@ -163,8 +163,12 @@ struct RefCountedWaitObject {
   }
 };
 
-void intrusive_ptr_add_ref(const RefCountedObject *p);
-void intrusive_ptr_release(const RefCountedObject *p);
+static inline void intrusive_ptr_add_ref(const RefCountedObject *p) {
+  p->get();
+}
+static inline void intrusive_ptr_release(const RefCountedObject *p) {
+  p->put();
+}
 
 using RefCountedPtr = boost::intrusive_ptr<RefCountedObject>;
 

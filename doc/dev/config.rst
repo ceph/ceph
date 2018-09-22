@@ -122,7 +122,7 @@ Default values
 
 There is a default value for every config option. In some cases, there may
 also be a *daemon default* that only applies to code that declares itself
-as a daemon (in thise case, the regular default only applies to non-daemons).
+as a daemon (in this case, the regular default only applies to non-daemons).
 
 Safety
 ------

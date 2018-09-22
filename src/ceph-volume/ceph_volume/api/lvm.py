@@ -40,7 +40,7 @@ def _output_parser(output, fields):
         if not line:
             continue
 
-        # spliting on ';' because that is what the lvm call uses as
+        # splitting on ';' because that is what the lvm call uses as
         # '--separator'
         output_items = [i.strip() for i in line.split(';')]
         # map the output to the fiels
@@ -477,13 +477,24 @@ def remove_vg(vg_name):
 
 def remove_pv(pv_name):
     """
-    Removes a physical volume.
+    Removes a physical volume using a double `-f` to prevent prompts and fully
+    remove anything related to LVM. This is tremendously destructive, but so is all other actions
+    when zapping a device.
+
+    In the case where multiple PVs are found, it will ignore that fact and
+    continue with the removal, specifically in the case of messages like::
+
+        WARNING: PV $UUID /dev/DEV-1 was already found on /dev/DEV-2
+
+    These situations can be avoided with custom filtering rules, which this API
+    cannot handle while accommodating custom user filters.
     """
     fail_msg = "Unable to remove vg %s" % pv_name
     process.run(
         [
             'pvremove',
             '-v',  # verbose
+            '-f',  # force it
             '-f',  # force it
             pv_name
         ],
@@ -891,7 +902,7 @@ class PVolumes(list):
                 if matches:
                     tag_filtered.append(pvolume)
             # return the tag_filtered pvolumes here, the `filtered` list is no
-            # longer useable
+            # longer usable
             return tag_filtered
 
         return filtered

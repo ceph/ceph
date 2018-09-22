@@ -106,7 +106,7 @@ using ceph::crypto::MD5;
 
 /* IAM Policy */
 #define RGW_ATTR_IAM_POLICY	RGW_ATTR_PREFIX "iam-policy"
-
+#define RGW_ATTR_USER_POLICY    RGW_ATTR_PREFIX "user-policy"
 
 /* RGW File Attributes */
 #define RGW_ATTR_UNIX_KEY1      RGW_ATTR_PREFIX "unix-key1"
@@ -218,9 +218,11 @@ using ceph::crypto::MD5;
 #define ERR_ZONEGROUP_DEFAULT_PLACEMENT_MISCONFIGURATION 2213
 #define ERR_INVALID_ENCRYPTION_ALGORITHM                 2214
 #define ERR_INVALID_CORS_RULES_ERROR                     2215
+#define ERR_NO_CORS_FOUND        2216
+#define ERR_INVALID_WEBSITE_ROUTING_RULES_ERROR          2217
 
 #define ERR_BUSY_RESHARDING      2300
-
+#define ERR_NO_SUCH_ENTITY       2301
 #ifndef UINT32_MAX
 #define UINT32_MAX (0xffffffffu)
 #endif
@@ -502,6 +504,10 @@ enum RGWOpType {
   RGW_OP_PUT_LC,
   RGW_OP_GET_LC,
   RGW_OP_DELETE_LC,
+  RGW_OP_PUT_USER_POLICY,
+  RGW_OP_GET_USER_POLICY,
+  RGW_OP_LIST_USER_POLICIES,
+  RGW_OP_DELETE_USER_POLICY,
   /* rgw specific */
   RGW_OP_ADMIN_SET_METADATA,
   RGW_OP_GET_OBJ_LAYOUT,
@@ -621,7 +627,6 @@ enum RGWUserSourceType
 
 struct RGWUserInfo
 {
-  uint64_t auid;
   rgw_user user_id;
   string display_name;
   string user_email;
@@ -643,8 +648,7 @@ struct RGWUserInfo
   set<string> mfa_ids;
 
   RGWUserInfo()
-    : auid(0),
-      suspended(0),
+    : suspended(0),
       max_buckets(RGW_DEFAULT_MAX_BUCKETS),
       op_mask(RGW_OP_TYPE_ALL),
       admin(0),
@@ -661,7 +665,7 @@ struct RGWUserInfo
 
   void encode(bufferlist& bl) const {
      ENCODE_START(20, 9, bl);
-     encode(auid, bl);
+     encode((uint64_t)0, bl); // old auid
      string access_key;
      string secret_key;
      if (!access_keys.empty()) {
@@ -706,8 +710,10 @@ struct RGWUserInfo
   }
   void decode(bufferlist::const_iterator& bl) {
      DECODE_START_LEGACY_COMPAT_LEN_32(20, 9, 9, bl);
-     if (struct_v >= 2) decode(auid, bl);
-     else auid = CEPH_AUTH_UID_DEFAULT;
+     if (struct_v >= 2) {
+       uint64_t old_auid;
+       decode(old_auid, bl);
+     }
      string access_key;
      string secret_key;
     decode(access_key, bl);
@@ -1861,6 +1867,7 @@ struct req_state : DoutPrefixProvider {
 
   rgw::IAM::Environment env;
   boost::optional<rgw::IAM::Policy> iam_policy;
+  vector<rgw::IAM::Policy> iam_user_policies;
 
   /* Is the request made by an user marked as a system one?
    * Being system user means we also have the admin status. */
@@ -2268,17 +2275,31 @@ extern std::string rgw_to_asctime(const utime_t& t);
 
 /** Check if the req_state's user has the necessary permissions
  * to do the requested action */
+rgw::IAM::Effect eval_user_policies(const vector<rgw::IAM::Policy>& user_policies,
+                          const rgw::IAM::Environment& env,
+                          boost::optional<const rgw::auth::Identity&> id,
+                          const uint64_t op,
+                          const rgw::IAM::ARN& arn);
 bool verify_user_permission(struct req_state * const s,
                             RGWAccessControlPolicy * const user_acl,
-                            const int perm);
+                            const vector<rgw::IAM::Policy>& user_policies,
+                            const rgw::IAM::ARN& res,
+                            const uint64_t op);
+bool verify_user_permission_no_policy(struct req_state * const s,
+                                      RGWAccessControlPolicy * const user_acl,
+                                      const int perm);
 bool verify_user_permission(struct req_state * const s,
-                            const int perm);
+                            const rgw::IAM::ARN& res,
+                            const uint64_t op);
+bool verify_user_permission_no_policy(struct req_state * const s,
+                                      int perm);
 bool verify_bucket_permission(
   struct req_state * const s,
   const rgw_bucket& bucket,
   RGWAccessControlPolicy * const user_acl,
   RGWAccessControlPolicy * const bucket_acl,
   const boost::optional<rgw::IAM::Policy>& bucket_policy,
+  const vector<rgw::IAM::Policy>& user_policies,
   const uint64_t op);
 bool verify_bucket_permission(struct req_state * const s, const uint64_t op);
 bool verify_bucket_permission_no_policy(
@@ -2297,6 +2318,7 @@ extern bool verify_object_permission(
   RGWAccessControlPolicy * const bucket_acl,
   RGWAccessControlPolicy * const object_acl,
   const boost::optional<rgw::IAM::Policy>& bucket_policy,
+  const vector<rgw::IAM::Policy>& user_policies,
   const uint64_t op);
 extern bool verify_object_permission(struct req_state *s, uint64_t op);
 extern bool verify_object_permission_no_policy(
@@ -2319,12 +2341,12 @@ extern std::string url_encode(const std::string& src, bool encode_slash = true);
 extern void calc_hmac_sha1(const char *key, int key_len,
                           const char *msg, int msg_len, char *dest);
 
-using sha1_digest_t = \
+using sha1_digest_array_t = \
   std::array<char, CEPH_CRYPTO_HMACSHA1_DIGESTSIZE>;
 
-static inline sha1_digest_t
+static inline sha1_digest_array_t
 calc_hmac_sha1(const boost::string_view& key, const boost::string_view& msg) {
-  sha1_digest_t dest;
+  sha1_digest_array_t dest;
   calc_hmac_sha1(key.data(), key.size(), msg.data(), msg.size(), dest.data());
   return dest;
 }

@@ -603,14 +603,14 @@ start_mon() {
 		fi
 
 		prun $SUDO "$CEPH_BIN/ceph-authtool" --create-keyring --gen-key --name=mon. "$keyring_fn" --cap mon 'allow *'
-		prun $SUDO "$CEPH_BIN/ceph-authtool" --gen-key --name=client.admin --set-uid=0 \
+		prun $SUDO "$CEPH_BIN/ceph-authtool" --gen-key --name=client.admin \
 			--cap mon 'allow *' \
 			--cap osd 'allow *' \
 			--cap mds 'allow *' \
 			--cap mgr 'allow *' \
 			"$keyring_fn"
 
-		prun $SUDO "$CEPH_BIN/ceph-authtool" --gen-key --name=client.fs --set-uid=0 \
+		prun $SUDO "$CEPH_BIN/ceph-authtool" --gen-key --name=client.fs\
 		   --cap mon 'allow r' \
 			--cap osd 'allow rw tag cephfs data=*' \
 			--cap mds 'allow rwp' \

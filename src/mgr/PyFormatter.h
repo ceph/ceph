@@ -25,11 +25,13 @@
 #include <list>
 
 #include "common/Formatter.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 class PyFormatter : public ceph::Formatter
 {
 public:
+  PyFormatter (const PyFormatter&) = delete;
+  PyFormatter& operator= (const PyFormatter&) = delete;
   PyFormatter(bool pretty = false, bool array = false)
   {
     // It is forbidden to instantiate me outside of the GIL,
@@ -91,20 +93,20 @@ public:
 
   void flush(std::ostream& os) override
   {
-      // This class is not a serializer: this doens't make sense
+      // This class is not a serializer: this doesn't make sense
       ceph_abort();
   }
 
   int get_len() const override
   {
-      // This class is not a serializer: this doens't make sense
+      // This class is not a serializer: this doesn't make sense
       ceph_abort();
       return 0;
   }
 
   void write_raw_data(const char *data) override
   {
-      // This class is not a serializer: this doens't make sense
+      // This class is not a serializer: this doesn't make sense
       ceph_abort();
   }
 

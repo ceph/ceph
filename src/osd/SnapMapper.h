@@ -180,11 +180,10 @@ public:
   }
 
   set<string> prefixes;
-  /// Update bits in case of pg split
+  /// Update bits in case of pg split or merge
   void update_bits(
     uint32_t new_bits  ///< [in] new split bits
     ) {
-    ceph_assert(new_bits >= mask_bits);
     mask_bits = new_bits;
     set<string> _prefixes = hobject_t::get_prefixes(
       mask_bits,

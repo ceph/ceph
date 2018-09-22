@@ -201,14 +201,15 @@ void DeepCopyRequest<I>::send_copy_object_map() {
   ldout(m_cct, 20) << dendl;
 
   Context *finish_op_ctx = nullptr;
+  int r;
   if (m_dst_image_ctx->exclusive_lock != nullptr) {
-    finish_op_ctx = m_dst_image_ctx->exclusive_lock->start_op();
+    finish_op_ctx = m_dst_image_ctx->exclusive_lock->start_op(&r);
   }
   if (finish_op_ctx == nullptr) {
     lderr(m_cct) << "lost exclusive lock" << dendl;
     m_dst_image_ctx->snap_lock.put_read();
     m_dst_image_ctx->owner_lock.put_read();
-    finish(-EROFS);
+    finish(r);
     return;
   }
 
@@ -229,22 +230,29 @@ template <typename I>
 void DeepCopyRequest<I>::handle_copy_object_map(int r) {
   ldout(m_cct, 20) << dendl;
 
-  ceph_assert(r == 0);
+  if (r < 0) {
+    lderr(m_cct) << "failed to roll back object map: " << cpp_strerror(r)
+                 << dendl;
+    finish(r);
+    return;
+  }
+
   send_refresh_object_map();
 }
 
 template <typename I>
 void DeepCopyRequest<I>::send_refresh_object_map() {
+  int r;
   Context *finish_op_ctx = nullptr;
   {
     RWLock::RLocker owner_locker(m_dst_image_ctx->owner_lock);
     if (m_dst_image_ctx->exclusive_lock != nullptr) {
-      finish_op_ctx = m_dst_image_ctx->exclusive_lock->start_op();
+      finish_op_ctx = m_dst_image_ctx->exclusive_lock->start_op(&r);
     }
   }
   if (finish_op_ctx == nullptr) {
     lderr(m_cct) << "lost exclusive lock" << dendl;
-    finish(-EROFS);
+    finish(r);
     return;
   }
 
@@ -262,9 +270,18 @@ template <typename I>
 void DeepCopyRequest<I>::handle_refresh_object_map(int r) {
   ldout(m_cct, 20) << "r=" << r << dendl;
 
-  ceph_assert(r == 0);
+  if (r < 0) {
+    lderr(m_cct) << "failed to open object map: " << cpp_strerror(r)
+                 << dendl;
+    delete m_object_map;
+
+    finish(r);
+    return;
+  }
+
   {
     RWLock::WLocker snap_locker(m_dst_image_ctx->snap_lock);
+    RWLock::WLocker object_map_locker(m_dst_image_ctx->object_map_lock);
     std::swap(m_dst_image_ctx->object_map, m_object_map);
   }
   delete m_object_map;

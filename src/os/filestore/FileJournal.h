@@ -34,7 +34,7 @@ using std::deque;
 #endif
 
 // re-include our assert to clobber the system one; fix dout:
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 /**
  * Implements journaling on top of block device or file.
@@ -399,12 +399,12 @@ private:
   FileJournal(CephContext* cct, uuid_d fsid, Finisher *fin, Cond *sync_cond,
 	      const char *f, bool dio=false, bool ai=true, bool faio=false) :
     Journal(cct, fsid, fin, sync_cond),
-    finisher_lock("FileJournal::finisher_lock", false, true, false, cct),
+    finisher_lock("FileJournal::finisher_lock", false, true, false),
     journaled_seq(0),
     plug_journal_completions(false),
-    writeq_lock("FileJournal::writeq_lock", false, true, false, cct),
+    writeq_lock("FileJournal::writeq_lock", false, true, false),
     completions_lock(
-      "FileJournal::completions_lock", false, true, false, cct),
+      "FileJournal::completions_lock", false, true, false),
     fn(f),
     zero_buf(NULL),
     max_size(0), block_size(0),
@@ -425,7 +425,7 @@ private:
     fd(-1),
     writing_seq(0),
     throttle(cct->_conf->filestore_caller_concurrency),
-    write_lock("FileJournal::write_lock", false, true, false, cct),
+    write_lock("FileJournal::write_lock", false, true, false),
     write_stop(true),
     aio_stop(true),
     write_thread(this),

@@ -22,7 +22,7 @@
 #include <sys/un.h>
 
 // re-include our assert to clobber the system one; fix dout:
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_subsys ceph_subsys_asok
 #undef dout_prefix
@@ -261,9 +261,9 @@ void OutputDataSocket::handle_connection(int fd)
 {
   bufferlist bl;
 
-  m_lock.Lock();
+  m_lock.lock();
   init_connection(bl);
-  m_lock.Unlock();
+  m_lock.unlock();
 
   if (bl.length()) {
     /* need to special case the connection init buffer output, as it needs
@@ -282,14 +282,14 @@ void OutputDataSocket::handle_connection(int fd)
     return;
 
   do {
-    m_lock.Lock();
+    m_lock.lock();
     cond.Wait(m_lock);
 
     if (going_down) {
-      m_lock.Unlock();
+      m_lock.unlock();
       break;
     }
-    m_lock.Unlock();
+    m_lock.unlock();
 
     ret = dump_data(fd);
   } while (ret >= 0);
@@ -297,11 +297,11 @@ void OutputDataSocket::handle_connection(int fd)
 
 int OutputDataSocket::dump_data(int fd)
 {
-  m_lock.Lock(); 
+  m_lock.lock();
   list<bufferlist> l = std::move(data);
   data.clear();
   data_size = 0;
-  m_lock.Unlock();
+  m_lock.unlock();
 
   for (list<bufferlist>::iterator iter = l.begin(); iter != l.end(); ++iter) {
     bufferlist& bl = *iter;
@@ -360,10 +360,10 @@ bool OutputDataSocket::init(const std::string &path)
 
 void OutputDataSocket::shutdown()
 {
-  m_lock.Lock();
+  m_lock.lock();
   going_down = true;
   cond.Signal();
-  m_lock.Unlock();
+  m_lock.unlock();
 
   if (m_shutdown_wr_fd < 0)
     return;
@@ -389,7 +389,7 @@ void OutputDataSocket::shutdown()
 
 void OutputDataSocket::append_output(bufferlist& bl)
 {
-  Mutex::Locker l(m_lock);
+  std::lock_guard<Mutex> l(m_lock);
 
   if (data_size + bl.length() > data_max_backlog) {
     ldout(m_cct, 20) << "dropping data output, max backlog reached" << dendl;

@@ -35,6 +35,7 @@
       group snap list (group snap ls)     List snapshots of a group.
       group snap remove (group snap rm)   Remove a snapshot from a group.
       group snap rename                   Rename group's snapshot.
+      group snap rollback                 Rollback group to snapshot.
       image-meta get                      Image metadata get the value associated
                                           with the key.
       image-meta list (image-meta ls)     Image metadata list keys with values.
@@ -810,6 +811,27 @@
     --snap arg           snapshot name
     --dest-snap arg      destination snapshot name
   
+  rbd help group snap rollback
+  usage: rbd group snap rollback [--no-progress] [--pool <pool>] 
+                                 [--namespace <namespace>] [--group <group>] 
+                                 [--snap <snap>] 
+                                 <group-snap-spec> 
+  
+  Rollback group to snapshot.
+  
+  Positional arguments
+    <group-snap-spec>    group specification
+                         (example:
+                         [<pool-name>/[<namespace-name>/]]<group-name>@<snap-name>
+                         )
+  
+  Optional arguments
+    --no-progress        disable progress output
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --group arg          group name
+    --snap arg           snapshot name
+  
   rbd help image-meta get
   usage: rbd image-meta get [--pool <pool>] [--namespace <namespace>] 
                             [--image <image>] 
@@ -1459,7 +1481,7 @@
   
   rbd help mirror pool info
   usage: rbd mirror pool info [--pool <pool>] [--format <format>] 
-                              [--pretty-format] 
+                              [--pretty-format] [--all] 
                               <pool-name> 
   
   Show information about the pool mirroring configuration.
@@ -1471,11 +1493,14 @@
     -p [ --pool ] arg    pool name
     --format arg         output format (plain, json, or xml) [default: plain]
     --pretty-format      pretty formatting (json and xml)
+    --all                list all attributes
   
   rbd help mirror pool peer add
   usage: rbd mirror pool peer add [--pool <pool>] 
                                   [--remote-client-name <remote-client-name>] 
                                   [--remote-cluster <remote-cluster>] 
+                                  [--remote-mon-host <remote-mon-host>] 
+                                  [--remote-key-file <remote-key-file>] 
                                   <pool-name> <remote-cluster-spec> 
   
   Add a mirroring peer to a pool.
@@ -1489,6 +1514,8 @@
     -p [ --pool ] arg        pool name
     --remote-client-name arg remote client name
     --remote-cluster arg     remote cluster name
+    --remote-mon-host arg    remote mon host(s)
+    --remote-key-file arg    path to file containing remote key
   
   rbd help mirror pool peer remove
   usage: rbd mirror pool peer remove [--pool <pool>] 
@@ -1512,8 +1539,8 @@
   Positional arguments
     <pool-name>          pool name
     <uuid>               peer uuid
-    <key>                peer parameter [client or cluster]
-    <value>              new client or cluster name
+    <key>                peer parameter [client, cluster, mon-host, key-file]
+    <value>              new value for specified key
   
   Optional arguments
     -p [ --pool ] arg    pool name

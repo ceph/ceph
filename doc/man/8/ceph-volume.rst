@@ -58,14 +58,16 @@ Optional arguments:
 * [--bluestore]         Use the bluestore objectstore (default)
 * [--filestore]         Use the filestore objectstore
 * [--yes]               Skip the report and prompt to continue provisioning
-
-.. * [--dmcrypt]           Enable encryption for the underlying OSD devices
-.. * [--crush-device-class] Define a CRUSH device class to assign the OSD to
-.. * [--no-systemd]         Do not enable or create any systemd units
-.. * [--report]         Report what the potential outcome would be for the
-..                      current input (requires devices to be passed in)
-.. * [--format]         Output format when reporting (used along with
-..                      --report), can be one of 'pretty' (default) or 'json'
+* [--dmcrypt]           Enable encryption for the underlying OSD devices
+* [--crush-device-class] Define a CRUSH device class to assign the OSD to
+* [--no-systemd]         Do not enable or create any systemd units
+* [--report]         Report what the potential outcome would be for the
+                     current input (requires devices to be passed in)
+* [--format]         Output format when reporting (used along with
+                     --report), can be one of 'pretty' (default) or 'json'
+* [--block-db-size]     Set (or override) the "bluestore_block_db_size" value,
+                        in bytes
+* [--journal-size]      Override the "osd_journal_size" value, in megabytes
 
 Required positional arguments:
 

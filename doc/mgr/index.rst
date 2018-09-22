@@ -29,6 +29,7 @@ sensible.
     Writing plugins <plugins>
     Writing orchestrator plugins <orchestrator_modules>
     Dashboard plugin <dashboard>
+    DiskPrediction plugin <diskprediction>
     Local pool plugin <localpool>
     RESTful plugin <restful>
     Zabbix plugin <zabbix>
@@ -39,6 +40,6 @@ sensible.
     Telemetry plugin <telemetry>
     Iostat plugin <iostat>
     Crash plugin <crash>
-    Devicehealth plugin <devicehealth>
     Orchestrator CLI plugin <orchestrator_cli>
     Rook plugin <rook>
+    Insights plugin <insights>

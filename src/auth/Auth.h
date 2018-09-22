@@ -21,17 +21,14 @@
 class Cond;
 
 struct EntityAuth {
-  uint64_t auid;
   CryptoKey key;
   map<string, bufferlist> caps;
-
-  EntityAuth() : auid(CEPH_AUTH_UID_DEFAULT) {}
 
   void encode(bufferlist& bl) const {
     __u8 struct_v = 2;
     using ceph::encode;
     encode(struct_v, bl);
-    encode(auid, bl);
+    encode((uint64_t)CEPH_AUTH_UID_DEFAULT, bl);
     encode(key, bl);
     encode(caps, bl);
   }
@@ -39,9 +36,10 @@ struct EntityAuth {
     using ceph::decode;
     __u8 struct_v;
     decode(struct_v, bl);
-    if (struct_v >= 2)
-      decode(auid, bl);
-    else auid = CEPH_AUTH_UID_DEFAULT;
+    if (struct_v >= 2) {
+      uint64_t old_auid;
+      decode(old_auid, bl);
+    }
     decode(key, bl);
     decode(caps, bl);
   }
@@ -49,7 +47,7 @@ struct EntityAuth {
 WRITE_CLASS_ENCODER(EntityAuth)
 
 static inline ostream& operator<<(ostream& out, const EntityAuth& a) {
-  return out << "auth(auid = " << a.auid << " key=" << a.key << " with " << a.caps.size() << " caps)";
+  return out << "auth(key=" << a.key << " with " << a.caps.size() << " caps)";
 }
 
 struct AuthCapsInfo {
@@ -86,12 +84,11 @@ WRITE_CLASS_ENCODER(AuthCapsInfo)
 struct AuthTicket {
   EntityName name;
   uint64_t global_id; /* global instance id */
-  uint64_t auid;
   utime_t created, renew_after, expires;
   AuthCapsInfo caps;
   __u32 flags;
 
-  AuthTicket() : global_id(0), auid(CEPH_AUTH_UID_DEFAULT), flags(0){}
+  AuthTicket() : global_id(0), flags(0){}
 
   void init_timestamps(utime_t now, double ttl) {
     created = now;
@@ -107,7 +104,7 @@ struct AuthTicket {
     encode(struct_v, bl);
     encode(name, bl);
     encode(global_id, bl);
-    encode(auid, bl);
+    encode((uint64_t)CEPH_AUTH_UID_DEFAULT, bl);
     encode(created, bl);
     encode(expires, bl);
     encode(caps, bl);
@@ -119,9 +116,10 @@ struct AuthTicket {
     decode(struct_v, bl);
     decode(name, bl);
     decode(global_id, bl);
-    if (struct_v >= 2)
-      decode(auid, bl);
-    else auid = CEPH_AUTH_UID_DEFAULT;
+    if (struct_v >= 2) {
+      uint64_t old_auid;
+      decode(old_auid, bl);
+    }
     decode(created, bl);
     decode(expires, bl);
     decode(caps, bl);

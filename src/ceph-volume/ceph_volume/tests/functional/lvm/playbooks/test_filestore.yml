@@ -47,6 +47,8 @@
         CEPH_VOLUME_DEBUG: 1
 
     # osd.0 data lv
+    # note: we don't use --destroy here to test this works without that flag.
+    # --destroy is used in the bluestore tests
     - name: zap test_group/data-lv1
       command: "ceph-volume lvm zap test_group/data-lv1"
       environment:

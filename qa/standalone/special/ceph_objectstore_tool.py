@@ -959,11 +959,6 @@ def main(argv):
     logging.debug(cmd)
     call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
 
-    # On import can't specify a different shard
-    BADPG = ONEECPG.split('s')[0] + "s10"
-    cmd = (CFSD_PREFIX + "--op import --pgid {pg} --file {file}").format(osd=ONEECOSD, pg=BADPG, file=OTHERFILE)
-    ERRORS += test_failure(cmd, "Can't specify a different shard, must be")
-
     os.unlink(OTHERFILE)
 
     # Prep a valid export file for import failure tests
@@ -972,18 +967,10 @@ def main(argv):
     logging.debug(cmd)
     call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
 
-    # On import can't specify a PG with a non-existent pool
-    cmd = (CFSD_PREFIX + "--op import --pgid {pg} --file {file}").format(osd=ONEOSD, pg="10.0", file=OTHERFILE)
-    ERRORS += test_failure(cmd, "Can't specify a different pgid pool, must be")
-
-    # On import can't specify shard for a replicated export
-    cmd = (CFSD_PREFIX + "--op import --pgid {pg}s0 --file {file}").format(osd=ONEOSD, pg=ONEPG, file=OTHERFILE)
-    ERRORS += test_failure(cmd, "Can't specify a sharded pgid with a non-sharded export")
-
-    # On import can't specify a PG with a bad seed
+    # On import can't specify a different pgid than the file
     TMPPG="{pool}.80".format(pool=REPID)
-    cmd = (CFSD_PREFIX + "--op import --pgid {pg} --file {file}").format(osd=ONEOSD, pg=TMPPG, file=OTHERFILE)
-    ERRORS += test_failure(cmd, "Illegal pgid, the seed is larger than current pg_num")
+    cmd = (CFSD_PREFIX + "--op import --pgid 12.dd --file {file}").format(osd=ONEOSD, pg=TMPPG, file=OTHERFILE)
+    ERRORS += test_failure(cmd, "specified pgid 12.dd does not match actual pgid")
 
     os.unlink(OTHERFILE)
     cmd = (CFSD_PREFIX + "--op import --file {FOO}").format(osd=ONEOSD, FOO=OTHERFILE)
@@ -1803,7 +1790,7 @@ def main(argv):
 
     if EXP_ERRORS == 0:
         NEWPOOL = "rados-import-pool"
-        cmd = "{path}/rados mkpool {pool}".format(pool=NEWPOOL, path=CEPH_BIN)
+        cmd = "{path}/ceph osd pool create {pool} 8".format(pool=NEWPOOL, path=CEPH_BIN)
         logging.debug(cmd)
         ret = call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
 
@@ -1937,27 +1924,30 @@ def main(argv):
         kill_daemons()
 
         # Now 2 PGs, poolid.0 and poolid.1
+        # make note of pgs before we remove the pgs...
+        osds = get_osds("{pool}.0".format(pool=SPLITID), OSDDIR);
         for seed in range(2):
             pg = "{pool}.{seed}".format(pool=SPLITID, seed=seed)
 
-            which = 0
-            for osd in get_osds(pg, OSDDIR):
+            for osd in osds:
                 cmd = (CFSD_PREFIX + "--force --op remove --pgid {pg}").format(pg=pg, osd=osd)
                 logging.debug(cmd)
                 ret = call(cmd, shell=True, stdout=nullfd)
 
-                # This is weird.  The export files are based on only the EXPORT_PG
-                # and where that pg was before the split.  Use 'which' to use all
-                # export copies in import.
-                mydir = os.path.join(TESTDIR, export_osds[which])
-                fname = os.path.join(mydir, EXPORT_PG)
-                which += 1
-                cmd = (CFSD_PREFIX + "--op import --pgid {pg} --file {file}").format(osd=osd, pg=pg, file=fname)
-                logging.debug(cmd)
-                ret = call(cmd, shell=True, stdout=nullfd)
-                if ret != 0:
-                    logging.error("Import failed from {file} with {ret}".format(file=file, ret=ret))
-                    IMP_ERRORS += 1
+        which = 0
+        for osd in osds:
+            # This is weird.  The export files are based on only the EXPORT_PG
+            # and where that pg was before the split.  Use 'which' to use all
+            # export copies in import.
+            mydir = os.path.join(TESTDIR, export_osds[which])
+            fname = os.path.join(mydir, EXPORT_PG)
+            which += 1
+            cmd = (CFSD_PREFIX + "--op import --pgid {pg} --file {file}").format(osd=osd, pg=EXPORT_PG, file=fname)
+            logging.debug(cmd)
+            ret = call(cmd, shell=True, stdout=nullfd)
+            if ret != 0:
+                logging.error("Import failed from {file} with {ret}".format(file=file, ret=ret))
+                IMP_ERRORS += 1
 
         ERRORS += IMP_ERRORS
 

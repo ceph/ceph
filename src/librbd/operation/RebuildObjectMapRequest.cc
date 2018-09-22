@@ -113,7 +113,7 @@ void RebuildObjectMapRequest<I>::send_resize_object_map() {
 
   // should have been canceled prior to releasing lock
   ceph_assert(m_image_ctx.exclusive_lock == nullptr ||
-         m_image_ctx.exclusive_lock->is_lock_owner());
+              m_image_ctx.exclusive_lock->is_lock_owner());
 
   m_image_ctx.object_map->aio_resize(size, OBJECT_NONEXISTENT,
                                      this->create_callback_context());
@@ -128,7 +128,7 @@ void RebuildObjectMapRequest<I>::send_trim_image() {
 
   // should have been canceled prior to releasing lock
   ceph_assert(m_image_ctx.exclusive_lock == nullptr ||
-         m_image_ctx.exclusive_lock->is_lock_owner());
+              m_image_ctx.exclusive_lock->is_lock_owner());
   ldout(cct, 5) << this << " send_trim_image" << dendl;
   m_state = STATE_TRIM_IMAGE;
 
@@ -197,7 +197,7 @@ void RebuildObjectMapRequest<I>::send_save_object_map() {
 
   // should have been canceled prior to releasing lock
   ceph_assert(m_image_ctx.exclusive_lock == nullptr ||
-         m_image_ctx.exclusive_lock->is_lock_owner());
+              m_image_ctx.exclusive_lock->is_lock_owner());
 
   RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
   ceph_assert(m_image_ctx.object_map != nullptr);
@@ -210,7 +210,7 @@ void RebuildObjectMapRequest<I>::send_update_header() {
 
   // should have been canceled prior to releasing lock
   ceph_assert(m_image_ctx.exclusive_lock == nullptr ||
-         m_image_ctx.exclusive_lock->is_lock_owner());
+              m_image_ctx.exclusive_lock->is_lock_owner());
 
   ldout(m_image_ctx.cct, 5) << this << " send_update_header" << dendl;
   m_state = STATE_UPDATE_HEADER;

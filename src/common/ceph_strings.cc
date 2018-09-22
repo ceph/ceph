@@ -273,6 +273,8 @@ const char *ceph_mds_state_name(int s)
 	case CEPH_MDS_STATE_CLIENTREPLAY: return "up:clientreplay";
 	case CEPH_MDS_STATE_ACTIVE:     return "up:active";
 	case CEPH_MDS_STATE_STOPPING:   return "up:stopping";
+               /* misc */
+	case CEPH_MDS_STATE_NULL:       return "null";
 	}
 	return "???";
 }
@@ -395,7 +397,7 @@ const char *ceph_pool_op_name(int op)
 	switch (op) {
 	case POOL_OP_CREATE: return "create";
 	case POOL_OP_DELETE: return "delete";
-	case POOL_OP_AUID_CHANGE: return "auid change";
+	case POOL_OP_AUID_CHANGE: return "auid change";  // (obsolete)
 	case POOL_OP_CREATE_SNAP: return "create snap";
 	case POOL_OP_DELETE_SNAP: return "delete snap";
 	case POOL_OP_CREATE_UNMANAGED_SNAP: return "create unmanaged snap";

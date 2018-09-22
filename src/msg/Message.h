@@ -25,7 +25,7 @@
 #include "common/config.h"
 #include "common/debug.h"
 #include "common/zipkin_trace.h"
-#include "include/assert.h" // Because intrusive_ptr clobbers our assert...
+#include "include/ceph_assert.h" // Because intrusive_ptr clobbers our assert...
 #include "include/buffer.h"
 #include "include/types.h"
 #include "msg/Connection.h"
@@ -125,6 +125,7 @@
 #define MSG_OSD_PG_CREATE2      120
 #define MSG_OSD_SCRUB2          121
 
+#define MSG_OSD_PG_READY_TO_MERGE 122
 
 // *** MDS ***
 

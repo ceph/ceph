@@ -257,7 +257,7 @@ def assign_devs(roles, devs):
 @contextlib.contextmanager
 def valgrind_post(ctx, config):
     """
-    After the tests run, look throught all the valgrind logs.  Exceptions are raised
+    After the tests run, look through all the valgrind logs.  Exceptions are raised
     if textual errors occurred in the logs, or if valgrind exceptions were detected in
     the logs.
 
@@ -390,7 +390,7 @@ def cluster(ctx, config):
         Create directories needed for the cluster.
         Create remote journals for all osds.
         Create and set keyring.
-        Copy the monmap to tht test systems.
+        Copy the monmap to the test systems.
         Setup mon nodes.
         Setup mds nodes.
         Mkfs osd nodes.
@@ -569,7 +569,6 @@ def cluster(ctx, config):
             'ceph-authtool',
             '--gen-key',
             '--name=client.admin',
-            '--set-uid=0',
             '--cap', 'mon', 'allow *',
             '--cap', 'osd', 'allow *',
             '--cap', 'mds', 'allow *',
@@ -937,7 +936,7 @@ def cluster(ctx, config):
 
         def first_in_ceph_log(pattern, excludes):
             """
-            Find the first occurence of the pattern specified in the Ceph log,
+            Find the first occurrence of the pattern specified in the Ceph log,
             Returns None if none found.
 
             :param pattern: Pattern scanned for.
@@ -1061,7 +1060,7 @@ def osd_scrub_pgs(ctx, config):
     First make sure all pgs are active and clean.
     Next scrub all osds.
     Then periodically check until all pgs have scrub time stamps that
-    indicate the last scrub completed.  Time out if no progess is made
+    indicate the last scrub completed.  Time out if no progress is made
     here after two minutes.
     """
     retries = 40
@@ -1117,7 +1116,7 @@ def osd_scrub_pgs(ctx, config):
             if gap_cnt % 6 == 0:
                 for (pgid, tmval) in timez:
                     # re-request scrub every so often in case the earlier
-                    # request was missed.  do not do it everytime because
+                    # request was missed.  do not do it every time because
                     # the scrub may be in progress or not reported yet and
                     # we will starve progress.
                     manager.raw_cluster_cmd('pg', 'deep-scrub', pgid)

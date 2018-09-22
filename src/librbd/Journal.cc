@@ -1116,7 +1116,7 @@ void Journal<I>::recreate_journaler(int r) {
 
   ceph_assert(m_lock.is_locked());
   ceph_assert(m_state == STATE_FLUSHING_RESTART ||
-         m_state == STATE_FLUSHING_REPLAY);
+              m_state == STATE_FLUSHING_REPLAY);
 
   delete m_journal_replay;
   m_journal_replay = NULL;
@@ -1168,7 +1168,8 @@ void Journal<I>::start_append() {
   ceph_assert(m_lock.is_locked());
   m_journaler->start_append(m_image_ctx.journal_object_flush_interval,
 			    m_image_ctx.journal_object_flush_bytes,
-			    m_image_ctx.journal_object_flush_age);
+			    m_image_ctx.journal_object_flush_age,
+                            m_image_ctx.journal_object_max_in_flight_appends);
   transition_state(STATE_READY, 0);
 }
 
@@ -1266,7 +1267,7 @@ void Journal<I>::handle_replay_complete(int r) {
       {
         Mutex::Locker locker(m_lock);
         ceph_assert(m_state == STATE_FLUSHING_RESTART ||
-               m_state == STATE_FLUSHING_REPLAY);
+                    m_state == STATE_FLUSHING_REPLAY);
         state = m_state;
       }
 
@@ -1309,8 +1310,8 @@ void Journal<I>::handle_replay_process_safe(ReplayEntry replay_entry, int r) {
 
   m_lock.Lock();
   ceph_assert(m_state == STATE_REPLAYING ||
-         m_state == STATE_FLUSHING_RESTART ||
-         m_state == STATE_FLUSHING_REPLAY);
+              m_state == STATE_FLUSHING_RESTART ||
+              m_state == STATE_FLUSHING_REPLAY);
 
   ldout(cct, 20) << this << " " << __func__ << ": r=" << r << dendl;
   if (r < 0) {
@@ -1381,7 +1382,8 @@ void Journal<I>::handle_flushing_replay() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << dendl;
 
-  ceph_assert(m_state == STATE_FLUSHING_REPLAY || m_state == STATE_FLUSHING_RESTART);
+  ceph_assert(m_state == STATE_FLUSHING_REPLAY ||
+              m_state == STATE_FLUSHING_RESTART);
   if (m_close_pending) {
     destroy_journaler(0);
     return;

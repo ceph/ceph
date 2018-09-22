@@ -438,7 +438,7 @@ class Size(object):
 
         for k, v in kw.items():
             self._convert(v, k)
-            # only pursue the first occurence
+            # only pursue the first occurrence
             break
 
     def _convert(self, size, unit):
@@ -509,14 +509,14 @@ class Size(object):
     def __truediv__(self, other):
         if isinstance(other, Size):
             return self._b / other._b
-        self._b = self._b / other
-        return self
+        _b = self._b / other
+        return Size(b=_b)
 
     def __div__(self, other):
         if isinstance(other, Size):
             return self._b / other._b
-        self._b = self._b / other
-        return self
+        _b = self._b / other
+        return Size(b=_b)
 
     def __getattr__(self, unit):
         """

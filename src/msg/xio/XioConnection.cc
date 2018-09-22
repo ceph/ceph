@@ -20,7 +20,7 @@
 #include "msg/msg_types.h"
 #include "auth/none/AuthNoneProtocol.h" // XXX
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "common/dout.h"
 
 extern struct xio_mempool *xio_msgr_mpool;

@@ -832,7 +832,7 @@ public:
     if (r < 0) {
       return r;
     }
-    m_journaler.start_append(0, 0, 0);
+    m_journaler.start_append(0, 0, 0, 0);
 
     int r1 = 0;
     bufferlist bl;

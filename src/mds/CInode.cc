@@ -40,7 +40,7 @@
 
 #include "common/config.h"
 #include "global/global_context.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #include "mds/MDSContinuation.h"
 #include "mds/InoTable.h"
@@ -130,7 +130,7 @@ ostream& operator<<(ostream& out, const CInode& in)
   if (in.is_auth_pinned()) {
     out << " ap=" << in.get_num_auth_pins() << "+" << in.get_num_nested_auth_pins();
 #ifdef MDS_AUTHPIN_SET
-    out << "(" << in.auth_pin_set << ")";
+    in.print_authpin_set(out);
 #endif
   }
 
@@ -2083,7 +2083,7 @@ void CInode::finish_scatter_update(ScatterLock *lock, CDir *dir,
         dir->assimilate_dirty_rstat_inodes_finish(mut, &le->metablob);
 
         if (!(pf->rstat == pf->accounted_rstat)) {
-          if (mut->wrlocks.count(&nestlock) == 0) {
+          if (!mut->is_wrlocked(&nestlock)) {
             mdcache->mds->locker->wrlock_force(&nestlock, mut);
           }
 
@@ -2572,8 +2572,11 @@ void CInode::auth_unpin(void *by)
   auth_pins--;
 
 #ifdef MDS_AUTHPIN_SET
-  ceph_assert(auth_pin_set.count(by));
-  auth_pin_set.erase(auth_pin_set.find(by));
+  {
+    auto it = auth_pin_set.find(by);
+    ceph_assert(it != auth_pin_set.end());
+    auth_pin_set.erase(it);
+  }
 #endif
 
   if (auth_pins == 0)
@@ -3427,14 +3430,12 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 
   using ceph::encode;
   // xattr
-  bufferlist xbl;
   version_t xattr_version;
   if ((!cap && !no_caps) ||
       (cap && cap->client_xattr_version < xattr_i->xattr_version) ||
       (getattr_caps & CEPH_CAP_XATTR_SHARED)) { // client requests xattrs
     if (!pxattrs)
       pxattrs = pxattr ? get_projected_xattrs() : &xattrs;
-    encode(*pxattrs, xbl);
     xattr_version = xattr_i->xattr_version;
   } else {
     xattr_version = 0;
@@ -3442,17 +3443,31 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   
   // do we have room?
   if (max_bytes) {
-    unsigned bytes = 8 + 8 + 4 + 8 + 8 + sizeof(ceph_mds_reply_cap) +
-      sizeof(struct ceph_file_layout) + 4 + layout.pool_ns.size() +
-      sizeof(struct ceph_timespec) * 3 +
-      4 + 8 + 8 + 8 + 4 + 4 + 4 + 4 + 4 +
-      8 + 8 + 8 + 8 + 8 + sizeof(struct ceph_timespec) +
-      4;
-    bytes += sizeof(__u32);
-    bytes += (sizeof(__u32) + sizeof(__u32)) * dirfragtree._splits.size();
-    bytes += sizeof(__u32) + symlink.length();
-    bytes += sizeof(__u32) + xbl.length();
-    bytes += sizeof(version_t) + sizeof(__u32) + inline_data.length();
+    unsigned bytes =
+      8 + 8 + 4 + 8 + 8 + sizeof(ceph_mds_reply_cap) +
+      sizeof(struct ceph_file_layout) +
+      sizeof(struct ceph_timespec) * 3 + 4 + // ctime ~ time_warp_seq
+      8 + 8 + 8 + 4 + 4 + 4 + 4 + 4 + // size ~ nlink
+      8 + 8 + 8 + 8 + 8 + sizeof(struct ceph_timespec) + // dirstat.nfiles ~ rstat.rctime
+      sizeof(__u32) + sizeof(__u32) * 2 * dirfragtree._splits.size() + // dirfragtree
+      sizeof(__u32) + symlink.length() + // symlink
+      sizeof(struct ceph_dir_layout); // dir_layout
+
+    if (xattr_version) {
+      bytes += sizeof(__u32) + sizeof(__u32); // xattr buffer len + number entries
+      if (pxattrs) {
+	for (const auto &p : *pxattrs)
+	  bytes += sizeof(__u32) * 2 + p.first.length() + p.second.length();
+      }
+    } else {
+      bytes += sizeof(__u32); // xattr buffer len
+    }
+    bytes +=
+      sizeof(version_t) + sizeof(__u32) + inline_data.length() + // inline data
+      1 + 1 + 8 + 8 + 4 + // quota
+      4 + layout.pool_ns.size() + // pool ns
+      sizeof(struct ceph_timespec) + 8; // btime + change_attr
+
     if (bytes > max_bytes)
       return -ENOSPC;
   }
@@ -3530,8 +3545,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   ecap.flags = is_auth() ? CEPH_CAP_FLAG_AUTH : 0;
   dout(10) << "encode_inodestat caps " << ccap_string(ecap.caps)
 	   << " seq " << ecap.seq << " mseq " << ecap.mseq
-	   << " xattrv " << xattr_version << " len " << xbl.length()
-	   << dendl;
+	   << " xattrv " << xattr_version << dendl;
 
   if (inline_data.length() && cap) {
     if ((cap->pending() | getattr_caps) & CEPH_CAP_FILE_SHARED) {
@@ -3545,16 +3559,51 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   }
 
   // include those xattrs?
-  if (xbl.length() && cap) {
+  if (xattr_version && cap) {
     if ((cap->pending() | getattr_caps) & CEPH_CAP_XATTR_SHARED) {
-      dout(10) << "including xattrs version " << xattr_i->xattr_version << dendl;
-      cap->client_xattr_version = xattr_i->xattr_version;
+      dout(10) << "including xattrs version " << xattr_version << dendl;
+      cap->client_xattr_version = xattr_version;
     } else {
-      dout(10) << "dropping xattrs version " << xattr_i->xattr_version << dendl;
-      xbl.clear(); // no xattrs .. XXX what's this about?!?
+      dout(10) << "dropping xattrs version " << xattr_version << dendl;
       xattr_version = 0;
     }
   }
+
+  // The end result of encode_xattrs() is equivalent to:
+  // {
+  //   bufferlist xbl;
+  //   if (xattr_version) {
+  //     if (pxattrs)
+  //       encode(*pxattrs, bl);
+  //     else
+  //       encode((__u32)0, bl);
+  //   }
+  //   encode(xbl, bl);
+  // }
+  //
+  // But encoding xattrs into the 'xbl' requires a memory allocation.
+  // The 'bl' should have enough pre-allocated memory in most cases.
+  // Encoding xattrs directly into it can avoid the extra allocation.
+  auto encode_xattrs = [xattr_version, pxattrs, &bl]() {
+    using ceph::encode;
+    if (xattr_version) {
+      ceph_le32 xbl_len;
+      xbl_len = sizeof(__u32);
+      encode(xbl_len, bl);
+
+      auto xbl_len_it = bl.end();
+      xbl_len_it.advance(-4);
+      if (pxattrs)
+	encode(*pxattrs, bl);
+      else
+	encode((__u32)0, bl);
+      xbl_len = bl.length() - xbl_len_it.get_off() - sizeof(xbl_len);
+      if (xbl_len != sizeof(__u32))
+	xbl_len_it.copy_in(sizeof(xbl_len), (char *)&xbl_len);
+    } else {
+      encode((__u32)0, bl);
+    }
+  };
 
   /*
    * note: encoding matches MClientReply::InodeStat
@@ -3593,7 +3642,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     dirfragtree.encode(bl);
     encode(symlink, bl);
     encode(file_i->dir_layout, bl);
-    encode(xbl, bl);
+    encode_xattrs();
     encode(inline_version, bl);
     encode(inline_data, bl);
     mempool_inode *policy_i = ppolicy ? pi : oi;
@@ -3640,7 +3689,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     if (session->get_connection()->has_feature(CEPH_FEATURE_DIRLAYOUTHASH)) {
       encode(file_i->dir_layout, bl);
     }
-    encode(xbl, bl);
+    encode_xattrs();
     if (session->get_connection()->has_feature(CEPH_FEATURE_MDS_INLINE_DATA)) {
       encode(inline_version, bl);
       encode(inline_data, bl);

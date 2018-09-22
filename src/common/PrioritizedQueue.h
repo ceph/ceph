@@ -15,7 +15,7 @@
 #ifndef PRIORITY_QUEUE_H
 #define PRIORITY_QUEUE_H
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #include "common/Formatter.h"
 #include "common/OpQueue.h"

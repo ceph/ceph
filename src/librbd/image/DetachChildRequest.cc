@@ -63,14 +63,17 @@ void DetachChildRequest<I>::clone_v2_child_detach() {
 
   librados::ObjectWriteOperation op;
   cls_client::child_detach(&op, m_parent_spec.snap_id,
-                           {m_image_ctx.md_ctx.get_id(), m_image_ctx.id});
+                           {m_image_ctx.md_ctx.get_id(),
+                            m_image_ctx.md_ctx.get_namespace(),
+                            m_image_ctx.id});
 
-  librados::Rados rados(m_image_ctx.md_ctx);
-  int r = rados.ioctx_create2(m_parent_spec.pool_id, m_parent_io_ctx);
-  ceph_assert(r == 0);
-
-  // TODO support clone v2 parent namespaces
-  m_parent_io_ctx.set_namespace(m_image_ctx.md_ctx.get_namespace());
+  int r = util::create_ioctx(m_image_ctx.md_ctx, "parent image",
+                             m_parent_spec.pool_id,
+                             m_parent_spec.pool_namespace, &m_parent_io_ctx);
+  if (r < 0) {
+    finish(r);
+    return;
+  }
 
   m_parent_header_name = util::header_name(m_parent_spec.image_id);
 
@@ -103,7 +106,7 @@ void DetachChildRequest<I>::clone_v2_get_snapshot() {
   ldout(cct, 5) << dendl;
 
   librados::ObjectReadOperation op;
-  cls_client::snapshot_info_get_start(&op, m_parent_spec.snap_id);
+  cls_client::snapshot_get_start(&op, m_parent_spec.snap_id);
 
   m_out_bl.clear();
   auto aio_comp = create_rados_callback<
@@ -124,7 +127,7 @@ void DetachChildRequest<I>::handle_clone_v2_get_snapshot(int r) {
   if (r == 0) {
     cls::rbd::SnapshotInfo snap_info;
     auto it = m_out_bl.cbegin();
-    r = cls_client::snapshot_info_get_finish(&it, &snap_info);
+    r = cls_client::snapshot_get_finish(&it, &snap_info);
     if (r == 0) {
       m_parent_snap_namespace = snap_info.snapshot_namespace;
       m_parent_snap_name = snap_info.name;

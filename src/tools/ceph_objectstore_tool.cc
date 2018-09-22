@@ -848,6 +848,20 @@ int get_osdmap(ObjectStore *store, epoch_t e, OSDMap &osdmap, bufferlist& bl)
   return 0;
 }
 
+int get_pg_num_history(ObjectStore *store, pool_pg_num_history_t *h)
+{
+  ObjectStore::CollectionHandle ch = store->open_collection(coll_t::meta());
+  bufferlist bl;
+  auto pghist = OSD::make_pg_num_history_oid();
+  int r = store->read(ch, pghist, 0, 0, bl, 0);
+  if (r >= 0 && bl.length() > 0) {
+    auto p = bl.cbegin();
+    decode(*h, p);
+  }
+  cout << __func__ << " pg_num_history " << *h << std::endl;
+  return 0;
+}
+
 int add_osdmap(ObjectStore *store, metadata_section &ms)
 {
   return get_osdmap(store, ms.map_epoch, ms.osdmap, ms.osdmap_bl);
@@ -1183,7 +1197,7 @@ int ObjectStoreTool::get_object(ObjectStore *store,
 				OSDriver& driver,
 				SnapMapper& mapper,
 				coll_t coll,
-				bufferlist &bl, OSDMap &curmap,
+				bufferlist &bl, OSDMap &origmap,
 				bool *skipped_objects)
 {
   ObjectStore::Transaction tran;
@@ -1202,8 +1216,8 @@ int ObjectStoreTool::get_object(ObjectStore *store,
   if (ob.hoid.hobj.nspace != g_ceph_context->_conf->osd_hit_set_namespace) {
     object_t oid = ob.hoid.hobj.oid;
     object_locator_t loc(ob.hoid.hobj);
-    pg_t raw_pgid = curmap.object_locator_to_pg(oid, loc);
-    pg_t pgid = curmap.raw_pg_to_pg(raw_pgid);
+    pg_t raw_pgid = origmap.object_locator_to_pg(oid, loc);
+    pg_t pgid = origmap.raw_pg_to_pg(raw_pgid);
 
     spg_t coll_pgid;
     if (coll.is_pg(&coll_pgid) == false) {
@@ -1325,7 +1339,7 @@ int dump_pg_metadata(Formatter *formatter, bufferlist &bl, metadata_section &ms)
 }
 
 int get_pg_metadata(ObjectStore *store, bufferlist &bl, metadata_section &ms,
-    const OSDSuperblock& sb, OSDMap& curmap, spg_t pgid)
+    const OSDSuperblock& sb, spg_t pgid)
 {
   auto ebliter = bl.cbegin();
   ms.decode(ebliter);
@@ -1348,11 +1362,6 @@ int get_pg_metadata(ObjectStore *store, bufferlist &bl, metadata_section &ms,
     cout << std::endl;
 
     cout << "osd current epoch " << sb.current_epoch << std::endl;
-    formatter->open_object_section("current OSDMap");
-    curmap.dump(formatter);
-    formatter->close_section();
-    formatter->flush(cout);
-    cout << std::endl;
 
     formatter->open_object_section("info");
     ms.info.dump(formatter);
@@ -1384,26 +1393,13 @@ int get_pg_metadata(ObjectStore *store, bufferlist &bl, metadata_section &ms,
     return -EINVAL;
   }
 
-  // Pool verified to exist for call to get_pg_num().
-  unsigned new_pg_num = curmap.get_pg_num(pgid.pgid.pool());
-
-  if (pgid.pgid.ps() >= new_pg_num) {
-    cerr << "Illegal pgid, the seed is larger than current pg_num" << std::endl;
+  // Old exports didn't include OSDMap
+  if (ms.osdmap.get_epoch() == 0) {
+    cerr << "WARNING: No OSDMap in old export, this is an ancient export."
+      " Not supported." << std::endl;
     return -EINVAL;
   }
 
-  // Old exports didn't include OSDMap, see if we have a copy locally
-  if (ms.osdmap.get_epoch() == 0) {
-    OSDMap findmap;
-    bufferlist findmap_bl;
-    int ret = get_osdmap(store, ms.map_epoch, findmap, findmap_bl);
-    if (ret == 0) {
-      ms.osdmap.deepish_copy_from(findmap);
-    } else {
-      cerr << "WARNING: No OSDMap in old export,"
-           " some objects may be ignored due to a split" << std::endl;
-    }
-  }
   if (ms.osdmap.get_epoch() < sb.oldest_map) {
     cerr << "PG export's map " << ms.osdmap.get_epoch()
 	 << " is older than OSD's oldest_map " << sb.oldest_map << std::endl;
@@ -1413,139 +1409,11 @@ int get_pg_metadata(ObjectStore *store, bufferlist &bl, metadata_section &ms,
       return -EINVAL;
     }
   }
-
-  // Make sure old_pg_num is 0 in the unusual case that OSDMap not in export
-  // nor can we find a local copy.
-  unsigned old_pg_num = 0;
-  if (ms.osdmap.get_epoch() != 0)
-    old_pg_num = ms.osdmap.get_pg_num(pgid.pgid.pool());
-
-  if (debug) {
-    cerr << "old_pg_num " << old_pg_num << std::endl;
-    cerr << "new_pg_num " << new_pg_num << std::endl;
-    cerr << ms.osdmap << std::endl;
-    cerr << curmap << std::endl;
-  }
-
-  // If we have managed to have a good OSDMap we can do these checks
-  if (old_pg_num) {
-    if (old_pgid.pgid.ps() >= old_pg_num) {
-      cerr << "FATAL: pgid invalid for original map epoch" << std::endl;
-      return -EFAULT;
-    }
-    if (pgid.pgid.ps() >= old_pg_num) {
-      cout << "NOTICE: Post split pgid specified" << std::endl;
-    } else {
-      spg_t parent(pgid);
-      if (parent.is_split(old_pg_num, new_pg_num, NULL)) {
-            cerr << "WARNING: Split occurred, some objects may be ignored" << std::endl;
-      }
-    }
-  }
-
   if (debug) {
     cerr << "Import pgid " << ms.info.pgid << std::endl;
     cerr << "Previous past_intervals " << ms.past_intervals << std::endl;
-    cerr << "history.same_interval_since " << ms.info.history.same_interval_since << std::endl;
-  }
-
-  if (debug)
-    cerr << "Changing pg epoch " << ms.map_epoch << " to " << sb.current_epoch << std::endl;
-
-  // advance map and fill in PastIntervals
-  if (ms.map_epoch < sb.current_epoch) {
-    if (debug)
-      cerr << "Advancing PG from " << ms.map_epoch << " to " << sb.current_epoch
-	   << std::endl;
-
-    OSDMap *startmap = new OSDMap;
-    startmap->deepish_copy_from(ms.osdmap);
-    OSDMapRef lastmap(startmap);
-
-    int up_primary, acting_primary;
-    vector<int> up, acting;
-    lastmap->pg_to_up_acting_osds(
-      ms.info.pgid.pgid, &up, &up_primary, &acting, &acting_primary);
-
-    while (ms.map_epoch < sb.current_epoch) {
-      ++ms.map_epoch;
-      if (ms.map_epoch < sb.oldest_map) {
-	// cheat!
-	ms.map_epoch = sb.oldest_map;
-      }
-
-      OSDMap *t = new OSDMap;
-      bufferlist nextmap_bl;
-      int ret = get_osdmap(store, ms.map_epoch, *t, nextmap_bl);
-      OSDMapRef nextmap(t);
-      if (ret < 0) {
-	cerr << "cannot load osdmap " << ms.map_epoch << std::endl;
-	return -EINVAL;
-      }
-      
-      int new_up_primary, new_acting_primary;
-      vector<int> new_up, new_acting;
-      nextmap->pg_to_up_acting_osds(
-	ms.info.pgid.pgid, &new_up, &new_up_primary, &new_acting,
-	&new_acting_primary);
-
-      // this is a bit imprecise, but sufficient?
-      struct min_size_predicate_t : public IsPGRecoverablePredicate {
-	const pg_pool_t *pi;
-	bool operator()(const set<pg_shard_t> &have) const {
-	  return have.size() >= pi->min_size;
-	}
-	min_size_predicate_t(const pg_pool_t *i) : pi(i) {}
-      } min_size_predicate(nextmap->get_pg_pool(ms.info.pgid.pgid.pool()));
-
-
-      bool new_interval = PastIntervals::check_new_interval(
-	acting_primary,
-	new_acting_primary,
-	acting, new_acting,
-	up_primary,
-	new_up_primary,
-	up, new_up,
-	ms.info.history.same_interval_since,
-	ms.info.history.last_epoch_clean,
-	nextmap,
-	lastmap,
-	ms.info.pgid.pgid.get_ancestor(
-	  lastmap->get_pg_num(ms.info.pgid.pgid.pool())),
-	&min_size_predicate,
-	&ms.past_intervals,
-	&cerr);
-      if (new_interval) {
-	ms.info.history.same_interval_since = nextmap->get_epoch();
-	if (up != new_up) {
-	  ms.info.history.same_up_since = nextmap->get_epoch();
-	}
-	if (acting_primary != new_acting_primary) {
-	  ms.info.history.same_primary_since = nextmap->get_epoch();
-	}
-	unsigned old_pg_num = lastmap->get_pg_num(ms.info.pgid.pgid.pool());
-	unsigned new_pg_num = nextmap->get_pg_num(ms.info.pgid.pgid.pool());
-	if (pgid.pgid.m_seed >= old_pg_num) {
-	  if (pgid.pgid.m_seed < new_pg_num) {
-	    ms.info.history.epoch_created = nextmap->get_epoch();
-	    ms.info.history.last_epoch_split = nextmap->get_epoch();
-	  }
-	  // we don't actually care about the ancestor splits because only
-	  // the latest split is recorded.
-	} else {
-	  if (pgid.pgid.is_split(old_pg_num, new_pg_num, nullptr)) {
-	    ms.info.history.last_epoch_split = nextmap->get_epoch();
-	  }
-	}
-	up = new_up;
-	acting = new_acting;
-	up_primary = new_up_primary;
-	acting_primary = new_acting_primary;
-      }
-      lastmap = nextmap;
-    }
-    if (debug)
-      cerr << "new PastIntervals " << ms.past_intervals << std::endl;
+    cerr << "history.same_interval_since "
+	 << ms.info.history.same_interval_since << std::endl;
   }
 
   return 0;
@@ -1728,7 +1596,6 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
   pg_begin pgb;
   pgb.decode(ebliter);
   spg_t pgid = pgb.pgid;
-  spg_t orig_pgid = pgid;
 
   if (pgidstr.length()) {
     spg_t user_pgid;
@@ -1737,23 +1604,9 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
     // This succeeded in main() already
     ceph_assert(ok);
     if (pgid != user_pgid) {
-      if (pgid.pool() != user_pgid.pool()) {
-        cerr << "Can't specify a different pgid pool, must be " << pgid.pool() << std::endl;
-        return -EINVAL;
-      }
-      if (pgid.is_no_shard() && !user_pgid.is_no_shard()) {
-        cerr << "Can't specify a sharded pgid with a non-sharded export" << std::endl;
-        return -EINVAL;
-      }
-      // Get shard from export information if not specified
-      if (!pgid.is_no_shard() && user_pgid.is_no_shard()) {
-        user_pgid.shard = pgid.shard;
-      }
-      if (pgid.shard != user_pgid.shard) {
-        cerr << "Can't specify a different shard, must be " << pgid.shard << std::endl;
-        return -EINVAL;
-      }
-      pgid = user_pgid;
+      cerr << "specified pgid " << user_pgid
+	   << " does not match actual pgid " << pgid << std::endl;
+      return -EINVAL;
     }
   }
 
@@ -1768,7 +1621,7 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
     cerr << "Exported features: " << pgb.superblock.compat_features << std::endl;
   }
 
-  // Special case: Old export has SHARDS incompat feature on replicated pg, remove it
+  // Special case: Old export has SHARDS incompat feature on replicated pg, removqqe it
   if (pgid.is_no_shard())
     pgb.superblock.compat_features.incompat.remove(CEPH_OSD_FEATURE_INCOMPAT_SHARDS);
 
@@ -1782,12 +1635,12 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
         return 11;  // Positive return means exit status
   }
 
-  // Don't import if pool no longer exists
+  // we need the latest OSDMap to check for collisions
   OSDMap curmap;
   bufferlist bl;
   ret = get_osdmap(store, sb.current_epoch, curmap, bl);
   if (ret) {
-    cerr << "Can't find local OSDMap" << std::endl;
+    cerr << "Can't find latest local OSDMap " << sb.current_epoch << std::endl;
     return ret;
   }
   if (!curmap.have_pg_pool(pgid.pgid.m_pool)) {
@@ -1796,9 +1649,12 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
     return 10;  // Positive return means exit status
   }
 
+  pool_pg_num_history_t pg_num_history;
+  get_pg_num_history(store, &pg_num_history);
+
   ghobject_t pgmeta_oid = pgid.make_pgmeta_oid();
 
-  //Check for PG already present.
+  // Check for PG already present.
   coll_t coll(pgid);
   if (store->collection_exists(coll)) {
     cerr << "pgid " << pgid << " already exists" << std::endl;
@@ -1806,20 +1662,6 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
   }
 
   ObjectStore::CollectionHandle ch;
-  if (!dry_run) {
-    ObjectStore::Transaction t;
-    ch = store->create_new_collection(coll);
-    PG::_create(t, pgid,
-		pgid.get_split_bits(curmap.get_pg_pool(pgid.pool())->get_pg_num()));
-    PG::_init(t, pgid, NULL);
-
-    // mark this coll for removal until we're done
-    map<string,bufferlist> values;
-    encode((char)1, values["_remove"]);
-    t.omap_setkeys(coll, pgid.make_pgmeta_oid(), values);
-
-    store->queue_transaction(ch, std::move(t));
-  }
 
   OSDriver driver(
     store,
@@ -1828,9 +1670,6 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
   SnapMapper mapper(g_ceph_context, &driver, 0, 0, 0, pgid.shard);
 
   cout << "Importing pgid " << pgid;
-  if (orig_pgid != pgid) {
-    cout << " exported as " << orig_pgid;
-  }
   cout << std::endl;
 
   bool done = false;
@@ -1850,15 +1689,87 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
     }
     switch(type) {
     case TYPE_OBJECT_BEGIN:
-      ret = get_object(store, driver, mapper, coll, ebl, curmap, &skipped_objects);
+      ceph_assert(found_metadata);
+      ret = get_object(store, driver, mapper, coll, ebl, ms.osdmap,
+		       &skipped_objects);
       if (ret) return ret;
       break;
     case TYPE_PG_METADATA:
-      ret = get_pg_metadata(store, ebl, ms, sb, curmap, pgid);
+      ret = get_pg_metadata(store, ebl, ms, sb, pgid);
       if (ret) return ret;
       found_metadata = true;
+
+      if (pgid != ms.info.pgid) {
+	cerr << "specified pgid " << pgid << " does not match import file pgid "
+	     << ms.info.pgid << std::endl;
+	return -EINVAL;
+      }
+
+      // make sure there are no conflicting splits or merges
+      if (ms.osdmap.have_pg_pool(pgid.pgid.pool())) {
+	auto p = pg_num_history.pg_nums.find(pgid.pgid.m_pool);
+	if (p != pg_num_history.pg_nums.end() &&
+	    !p->second.empty()) {
+	  unsigned pg_num = ms.osdmap.get_pg_num(pgid.pgid.pool());
+	  for (auto q = p->second.lower_bound(ms.map_epoch);
+	       q != p->second.end();
+	       ++q) {
+	    unsigned new_pg_num = q->second;
+	    cout << "pool " << pgid.pgid.pool() << " pg_num " << pg_num
+		 << " -> " << new_pg_num << std::endl;
+
+	    // check for merge target
+	    spg_t target;
+	    if (pgid.is_merge_source(pg_num, new_pg_num, &target)) {
+	      // FIXME: this checks assumes the OSD's PG is at the OSD's
+	      // map epoch; it could be, say, at *our* epoch, pre-merge.
+	      coll_t coll(target);
+	      if (store->collection_exists(coll)) {
+		cerr << "pgid " << pgid << " merges to target " << target
+		     << " which already exists" << std::endl;
+		return 12;
+	      }
+	    }
+
+	    // check for split children
+	    set<spg_t> children;
+	    if (pgid.is_split(pg_num, new_pg_num, &children)) {
+	      for (auto child : children) {
+		coll_t coll(child);
+		if (store->collection_exists(coll)) {
+		  cerr << "pgid " << pgid << " splits to " << children
+		       << " and " << child << " exists" << std::endl;
+		  return 12;
+		}
+	      }
+	    }
+	    pg_num = new_pg_num;
+	  }
+	}
+      } else {
+	cout << "pool " << pgid.pgid.pool() << " doesn't existing, not checking"
+	     << " for splits or mergers" << std::endl;
+      }
+
+      if (!dry_run) {
+	ObjectStore::Transaction t;
+	ch = store->create_new_collection(coll);
+	PG::_create(
+	  t, pgid,
+	  pgid.get_split_bits(ms.osdmap.get_pg_pool(pgid.pool())->get_pg_num()));
+	PG::_init(t, pgid, NULL);
+
+	// mark this coll for removal until we're done
+	map<string,bufferlist> values;
+	encode((char)1, values["_remove"]);
+	t.omap_setkeys(coll, pgid.make_pgmeta_oid(), values);
+
+	store->queue_transaction(ch, std::move(t));
+      }
+
       break;
     case TYPE_PG_END:
+      ceph_assert(found_metadata);
       done = true;
       break;
     default:
@@ -1875,7 +1786,7 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
   ObjectStore::Transaction t;
   if (!dry_run) {
     pg_log_t newlog, reject;
-    pg_log_t::filter_log(pgid, curmap, g_ceph_context->_conf->osd_hit_set_namespace,
+    pg_log_t::filter_log(pgid, ms.osdmap, g_ceph_context->_conf->osd_hit_set_namespace,
       ms.log, newlog, reject);
     if (debug) {
       for (list<pg_log_entry_t>::iterator i = newlog.log.begin();
@@ -1887,7 +1798,7 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
     }
 
     divergent_priors_t newdp, rejectdp;
-    filter_divergent_priors(pgid, curmap, g_ceph_context->_conf->osd_hit_set_namespace,
+    filter_divergent_priors(pgid, ms.osdmap, g_ceph_context->_conf->osd_hit_set_namespace,
       ms.divergent_priors, newdp, rejectdp);
     ms.divergent_priors = newdp;
     if (debug) {
@@ -1905,8 +1816,8 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
 	ceph_assert(!obj.is_temp());
 	object_t oid = obj.oid;
 	object_locator_t loc(obj);
-	pg_t raw_pgid = curmap.object_locator_to_pg(oid, loc);
-	pg_t _pgid = curmap.raw_pg_to_pg(raw_pgid);
+	pg_t raw_pgid = ms.osdmap.object_locator_to_pg(oid, loc);
+	pg_t _pgid = ms.osdmap.raw_pg_to_pg(raw_pgid);
 
 	return pgid.pgid != _pgid;
       });
@@ -3124,8 +3035,7 @@ int main(int argc, char **argv)
   positional.add_options()
     ("object", po::value<string>(&object), "'' for pgmeta_oid, object name or ghobject in json")
     ("objcmd", po::value<string>(&objcmd), "command [(get|set)-bytes, (get|set|rm)-(attr|omap), (get|set)-omaphdr, list-attrs, list-omap, remove]")
-    ("arg1", po::value<string>(&arg1), "arg1 based on cmd, "
-     "for apply-layout-settings: target hash level split to")
+    ("arg1", po::value<string>(&arg1), "arg1 based on cmd")
     ("arg2", po::value<string>(&arg2), "arg2 based on cmd")
     ;
 
@@ -3237,7 +3147,7 @@ int main(int argc, char **argv)
     usage(desc);
     return 1;
   }
-  if (op != "list" &&
+  if (op != "list" && op != "apply-layout-settings" &&
       vm.count("op") && vm.count("object")) {
     cerr << "Can't specify both --op and object command syntax" << std::endl;
     usage(desc);
@@ -3249,7 +3159,7 @@ int main(int argc, char **argv)
     usage(desc);
     return 1;
   }
-  if (op != "list" && vm.count("object") && !vm.count("objcmd")) {
+  if (op != "list" && op != "apply-layout-settings" && vm.count("object") && !vm.count("objcmd")) {
     cerr << "Invalid syntax, missing command" << std::endl;
     usage(desc);
     return 1;
@@ -3518,7 +3428,14 @@ int main(int argc, char **argv)
 
   if (op == "apply-layout-settings") {
     int target_level = 0;
-    if (vm.count("arg1") && isdigit(arg1[0])) {
+    // Single positional argument with apply-layout-settings
+    // for target_level.
+    if (vm.count("object") && isdigit(object[0])) {
+      target_level = atoi(object.c_str());
+    // This requires --arg1 to be specified since
+    // this is the third positional argument and normally
+    // used with object operations.
+    } else if (vm.count("arg1") && isdigit(arg1[0])) {
       target_level = atoi(arg1.c_str());
     }
     ret = apply_layout_settings(fs, superblock, pool, pgid, dry_run, target_level);

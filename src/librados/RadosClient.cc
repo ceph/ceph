@@ -47,7 +47,7 @@
 #include "PoolAsyncCompletionImpl.h"
 #include "RadosClient.h"
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "common/EventTrace.h"
 
 #define dout_subsys ceph_subsys_rados
@@ -168,24 +168,6 @@ int librados::RadosClient::pool_required_alignment2(int64_t pool_id,
       *alignment = o.get_pg_pool(pool_id)->required_alignment();
       return 0;
     });
-}
-
-int librados::RadosClient::pool_get_auid(uint64_t pool_id,
-					 unsigned long long *auid)
-{
-  int r = wait_for_osdmap();
-  if (r < 0)
-    return r;
-  objecter->with_osdmap([&](const OSDMap& o) {
-      const pg_pool_t *pg = o.get_pg_pool(pool_id);
-      if (!pg) {
-	r = -ENOENT;
-      } else {
-	r = 0;
-	*auid = pg->auid;
-      }
-    });
-  return r;
 }
 
 int librados::RadosClient::pool_get_name(uint64_t pool_id, std::string *s, bool wait_latest_map)
@@ -462,6 +444,20 @@ uint64_t librados::RadosClient::get_instance_id()
   return instance_id;
 }
 
+int librados::RadosClient::get_min_compatible_osd(int8_t* require_osd_release)
+{
+  int r = wait_for_osdmap();
+  if (r < 0) {
+    return r;
+  }
+
+  objecter->with_osdmap(
+    [require_osd_release](const OSDMap& o) {
+      *require_osd_release = o.require_osd_release;
+    });
+  return 0;
+}
+
 int librados::RadosClient::get_min_compatible_client(int8_t* min_compat_client,
                                                      int8_t* require_min_compat_client)
 {
@@ -704,7 +700,7 @@ bool librados::RadosClient::put() {
   return (refcnt == 0);
 }
  
-int librados::RadosClient::pool_create(string& name, unsigned long long auid,
+int librados::RadosClient::pool_create(string& name,
 				       int16_t crush_rule)
 {
   if (!name.length())
@@ -720,7 +716,7 @@ int librados::RadosClient::pool_create(string& name, unsigned long long auid,
   Cond cond;
   bool done;
   Context *onfinish = new C_SafeCond(&mylock, &cond, &done, &reply);
-  reply = objecter->create_pool(name, onfinish, auid, crush_rule);
+  reply = objecter->create_pool(name, onfinish, crush_rule);
 
   if (reply < 0) {
     delete onfinish;
@@ -733,8 +729,8 @@ int librados::RadosClient::pool_create(string& name, unsigned long long auid,
   return reply;
 }
 
-int librados::RadosClient::pool_create_async(string& name, PoolAsyncCompletionImpl *c,
-					     unsigned long long auid,
+int librados::RadosClient::pool_create_async(string& name,
+					     PoolAsyncCompletionImpl *c,
 					     int16_t crush_rule)
 {
   int r = wait_for_osdmap();
@@ -742,7 +738,7 @@ int librados::RadosClient::pool_create_async(string& name, PoolAsyncCompletionIm
     return r;
 
   Context *onfinish = new C_PoolAsync_Safe(c);
-  r = objecter->create_pool(name, onfinish, auid, crush_rule);
+  r = objecter->create_pool(name, onfinish, crush_rule);
   if (r < 0) {
     delete onfinish;
   }

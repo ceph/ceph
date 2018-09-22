@@ -285,7 +285,7 @@ private:
  * Throttles the maximum number of active requests and completes them in order
  *
  * Operations can complete out-of-order but their associated Context callback
- * will completed in-order during invokation of start_op() and wait_for_ret()
+ * will completed in-order during invocation of start_op() and wait_for_ret()
  */
 class OrderedThrottle {
 public:
@@ -389,7 +389,7 @@ public:
   
     bool wait = false;
     uint64_t got = 0;
-    Mutex::Locker lock(m_lock);
+    std::lock_guard<Mutex> lock(m_lock);
     if (!m_blockers.empty()) {
       // Keep the order of requests, add item after previous blocked requests.
       wait = true;

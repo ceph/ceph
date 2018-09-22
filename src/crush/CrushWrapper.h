@@ -20,7 +20,7 @@ extern "C" {
 #include "builder.h"
 }
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/err.h"
 #include "include/encoding.h"
 #include "include/mempool.h"
@@ -724,7 +724,7 @@ public:
 
   /**
    * returns (type_id, type) of all parent buckets between id and
-   * default, can be used to check for anomolous CRUSH maps
+   * default, can be used to check for anomalous CRUSH maps
    */
   map<int, string> get_parent_hierarchy(int id) const;
 

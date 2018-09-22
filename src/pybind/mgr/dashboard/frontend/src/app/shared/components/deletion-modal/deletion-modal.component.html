@@ -10,48 +10,31 @@
           [formGroup]="deletionForm"
           novalidate>
       <div class="modal-body">
-        <ng-container *ngTemplateOutlet="description"></ng-container>
-        <p>
-          <ng-container i18n>
-            To confirm the deletion, enter
-          </ng-container>
-          <kbd>{{ pattern }}</kbd>
-          <ng-container i18n>
-            and click on
-          </ng-container>
-          <kbd>
-            <ng-container *ngTemplateOutlet="deletionHeading"></ng-container>
-          </kbd>.
-        </p>
-        <div class="form-group"
-             [ngClass]="{'has-error': deletionForm.showError('confirmation', formDir)}">
-          <input type="text"
-                 class="form-control"
-                 name="confirmation"
-                 id="confirmation"
-                 [placeholder]="pattern"
-                 [pattern]="escapeRegExp(pattern)"
-                 autocomplete="off"
-                 (keyup)="updateConfirmation($event)"
-                 formControlName="confirmation"
-                 autofocus>
-          <span class="help-block"
-                *ngIf="deletionForm.showError('confirmation', formDir, 'required')"
-                i18n>
-          This field is required.
-        </span>
-          <span class="help-block"
-                *ngIf="deletionForm.showError('confirmation', formDir, 'pattern')">
-          '{{ confirmation.value }}'
-          <span i18n>doesn't match</span>
-          '{{ pattern }}'.
-        </span>
+        <ng-container *ngTemplateOutlet="bodyTemplate"></ng-container>
+        <div class="question">
+          <p i18n>
+            Are you sure that you want to {{ actionDescription | lowercase }} the selected {{ itemDescription }}?
+          </p>
+          <div class="form-group"
+               [ngClass]="{'has-error': deletionForm.showError('confirmation', formDir)}">
+            <div class="checkbox checkbox-primary">
+              <input type="checkbox"
+                     name="confirmation"
+                     id="confirmation"
+                     formControlName="confirmation"
+                     autofocus>
+              <label i18n
+                     for="confirmation">
+                Yes, I am sure.
+              </label>
+            </div>
+          </div>
         </div>
       </div>
       <div class="modal-footer">
         <cd-submit-button #submitButton
                           [form]="deletionForm"
-                          (submitAction)="deletionCall()">
+                          (submitAction)="callSubmitAction()">
           <ng-container *ngTemplateOutlet="deletionHeading"></ng-container>
         </cd-submit-button>
         <button class="btn btn-link btn-sm"
@@ -66,7 +49,6 @@
 
 <ng-template #deletionHeading>
   <ng-container i18n>
-    Delete
+    {{ actionDescription | titlecase }} {{ itemDescription }}
   </ng-container>
-  {{ metaType }}
 </ng-template>

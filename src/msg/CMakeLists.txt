@@ -21,6 +21,7 @@ endif(HAVE_XIO)
 list(APPEND msg_srcs
   async/AsyncConnection.cc
   async/AsyncMessenger.cc
+  async/Protocol.cc
   async/Event.cc
   async/EventSelect.cc
   async/PosixStack.cc
@@ -65,4 +66,7 @@ if(WITH_DPDK)
     ${async_dpdk_srcs})
   target_link_libraries(common_async_dpdk PRIVATE
     dpdk::dpdk)
+  # Stack.cc includes DPDKStack.h, which includes rte_config.h indirectly
+  target_include_directories(common-msg-objs PRIVATE
+    $<TARGET_PROPERTY:dpdk::dpdk,INTERFACE_INCLUDE_DIRECTORIES>)
 endif(WITH_DPDK)

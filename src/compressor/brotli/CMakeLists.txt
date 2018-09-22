@@ -26,12 +26,13 @@ set(bortli_libs enc dec common)
 foreach(lib ${bortli_libs})
   add_library(brotli::${lib} STATIC IMPORTED)
   add_dependencies(brotli::${lib} brotli_ext)
-  set_property(TARGET brotli::${lib} PROPERTY IMPORTED_LOCATION "${CMAKE_BINARY_DIR}/src/brotli/libbrotli${lib}-static.a")
+  set_target_properties(brotli::${lib} PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_BINARY_DIR}/src/brotli/c/include"
+    IMPORTED_LOCATION "${CMAKE_BINARY_DIR}/src/brotli/libbrotli${lib}-static.a")
   list(APPEND BROTLI_LIBRARIES brotli::${lib})
 endforeach()
 
 add_library(ceph_brotli SHARED ${brotli_sources})
-target_include_directories(ceph_brotli	PRIVATE "${CMAKE_BINARY_DIR}/src/brotli/c/include")
-List(REVERSE bortli_libs)
-target_link_libraries(ceph_brotli ${BROTLI_LIBRARIES})
+list(REVERSE bortli_libs)
+target_link_libraries(ceph_brotli PRIVATE ${BROTLI_LIBRARIES})
 install(TARGETS ceph_brotli DESTINATION ${compressor_plugin_dir})

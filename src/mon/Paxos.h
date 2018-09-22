@@ -162,7 +162,7 @@ enum {
 
 // i am one state machine.
 /**
- * This libary is based on the Paxos algorithm, but varies in a few key ways:
+ * This library is based on the Paxos algorithm, but varies in a few key ways:
  *  1- Only a single new value is generated at a time, simplifying the recovery logic.
  *  2- Nodes track "committed" values, and share them generously (and trustingly)
  *  3- A 'leasing' mechanism is built-in, allowing nodes to determine when it is 

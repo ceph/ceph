@@ -431,12 +431,12 @@ TEST(cls_rgw, index_list)
   int r = CLSRGWIssueBucketList(ioctx, start_key, "", 1000, true, oids, list_results, 1)();
 
   ASSERT_EQ(r, 0);
-  ASSERT_EQ(1, list_results.size());
+  ASSERT_EQ(1u, list_results.size());
 
   auto it = list_results.begin();
   auto m = (it->second).dir.m;
 
-  ASSERT_EQ(4, m.size());
+  ASSERT_EQ(4u, m.size());
   int i = 0;
   for(auto it2 = m.begin(); it2 != m.end(); it2++, i++)
     ASSERT_EQ(it2->first.compare(keys[i]), 0);
@@ -464,7 +464,7 @@ TEST(cls_rgw, bi_list)
   int ret = cls_rgw_bi_list(ioctx, bucket_oid, name, marker, max, &entries,
 			    &is_truncated);
   ASSERT_EQ(ret, 0);
-  ASSERT_EQ(entries.size(), 0);
+  ASSERT_EQ(entries.size(), 0u);
   ASSERT_EQ(is_truncated, false);
 
   uint64_t epoch = 1;
@@ -511,7 +511,7 @@ TEST(cls_rgw, bi_list)
   ret = cls_rgw_bi_list(ioctx, bucket_oid, name, marker, max, &entries,
 			&is_truncated);
   ASSERT_EQ(ret, 0);
-  ASSERT_EQ(entries.size(), 0);
+  ASSERT_EQ(entries.size(), 0u);
   ASSERT_EQ(is_truncated, false);
 
   if (cct->_conf->osd_max_omap_entries_per_request < 15) {
@@ -536,7 +536,7 @@ TEST(cls_rgw, bi_list)
   ret = cls_rgw_bi_list(ioctx, bucket_oid, name, marker, max, &entries,
 			&is_truncated);
   ASSERT_EQ(ret, 0);
-  ASSERT_EQ(entries.size(), 0);
+  ASSERT_EQ(entries.size(), 0u);
   ASSERT_EQ(is_truncated, false);
 }
 
@@ -830,7 +830,7 @@ TEST(cls_rgw, usage_basic)
   // read the entries, and see that we have all the added entries
   ASSERT_EQ(0, ret);
   ASSERT_FALSE(truncated);
-  ASSERT_EQ(total_usage_entries, usage.size());
+  ASSERT_EQ(static_cast<uint64_t>(total_usage_entries), usage.size());
 
   // delete and read to assert that we've deleted all the values
   ASSERT_EQ(0, cls_rgw_usage_log_trim(ioctx, oid, user, start_epoch, end_epoch));
@@ -839,7 +839,7 @@ TEST(cls_rgw, usage_basic)
   ret = cls_rgw_usage_log_read(ioctx, oid, user, start_epoch, end_epoch,
 			       max_entries, read_iter, usage2, &truncated);
   ASSERT_EQ(0, ret);
-  ASSERT_EQ(0, usage2.size());
+  ASSERT_EQ(0u, usage2.size());
 
 }
 
@@ -879,7 +879,7 @@ TEST(cls_rgw, usage_clear)
   ret = cls_rgw_usage_log_read(ioctx, oid, user, start_epoch, end_epoch,
 			       max_entries, read_iter, usage, &truncated);
   ASSERT_EQ(0, ret);
-  ASSERT_EQ(0, usage.size());
+  ASSERT_EQ(0u, usage.size());
 
 }
 

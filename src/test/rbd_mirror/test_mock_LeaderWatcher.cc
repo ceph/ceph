@@ -127,7 +127,7 @@ struct ManagedLock<MockTestImageCtx> {
     m_work_queue->queue(pre_release_ctx, 0);
   }
 
-  void reacquire_lock() {
+  void reacquire_lock(Context* on_finish) {
     MockManagedLock::get_instance().reacquire_lock();
   }
 

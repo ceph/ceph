@@ -1038,6 +1038,14 @@ CEPH_RBD_API int rbd_group_snap_list(rados_ioctx_t group_p,
 CEPH_RBD_API int rbd_group_snap_list_cleanup(rbd_group_snap_info_t *snaps,
                                              size_t group_snap_info_size,
                                              size_t num_entries);
+CEPH_RBD_API int rbd_group_snap_rollback(rados_ioctx_t group_p,
+                                         const char *group_name,
+                                         const char *snap_name);
+CEPH_RBD_API int rbd_group_snap_rollback_with_progress(rados_ioctx_t group_p,
+                                                       const char *group_name,
+                                                       const char *snap_name,
+                                                       librbd_progress_fn_t cb,
+                                                       void *cbdata);
 
 CEPH_RBD_API int rbd_namespace_create(rados_ioctx_t io,
                                       const char *namespace_name);
@@ -1045,6 +1053,8 @@ CEPH_RBD_API int rbd_namespace_remove(rados_ioctx_t io,
                                       const char *namespace_name);
 CEPH_RBD_API int rbd_namespace_list(rados_ioctx_t io, char *namespace_names,
                                     size_t *size);
+CEPH_RBD_API int rbd_namespace_exists(rados_ioctx_t io, const char *namespace_name,
+                                      bool *exists);
 
 #ifdef __cplusplus
 }

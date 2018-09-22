@@ -187,11 +187,6 @@ void usage()
   cout << "  datalog list               list data log\n";
   cout << "  datalog trim               trim data log\n";
   cout << "  datalog status             read data log status\n";
-  cout << "  opstate list               list stateful operations entries (use client_id,\n";
-  cout << "                             op_id, object)\n";
-  cout << "  opstate set                set state on an entry (use client_id, op_id, object, state)\n";
-  cout << "  opstate renew              renew state on an entry (use client_id, op_id, object)\n";
-  cout << "  opstate rm                 remove entry (use client_id, op_id, object)\n";
   cout << "  orphans find               init and run search for leaked rados objects (use job-id, pool)\n";
   cout << "  orphans finish             clean up search for leaked rados objects\n";
   cout << "  orphans list-jobs          list the current job-ids for orphans search\n";
@@ -311,7 +306,6 @@ void usage()
   cout << "   --skip-zero-entries       log show only dumps entries that don't have zero value\n";
   cout << "                             in one of the numeric field\n";
   cout << "   --infile=<file>           specify a file to read in when setting data\n";
-  cout << "   --state=<state>           specify a state for the opstate set command\n";
   cout << "   --categories=<list>       comma separated list of categories, used in usage show\n";
   cout << "   --caps=<caps>             list of caps (e.g., \"usage=read, write; user=read\")\n";
   cout << "   --yes-i-really-mean-it    required for certain operations\n";
@@ -472,10 +466,6 @@ enum {
   OPT_DATALOG_LIST,
   OPT_DATALOG_STATUS,
   OPT_DATALOG_TRIM,
-  OPT_OPSTATE_LIST,
-  OPT_OPSTATE_SET,
-  OPT_OPSTATE_RENEW,
-  OPT_OPSTATE_RM,
   OPT_REALM_CREATE,
   OPT_REALM_DELETE,
   OPT_REALM_GET,
@@ -545,7 +535,6 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       strcmp(cmd, "object") == 0 ||
       strcmp(cmd, "objects") == 0 ||
       strcmp(cmd, "olh") == 0 ||
-      strcmp(cmd, "opstate") == 0 ||
       strcmp(cmd, "orphans") == 0 ||
       strcmp(cmd, "period") == 0 ||
       strcmp(cmd, "placement") == 0 ||
@@ -923,15 +912,6 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_DATA_SYNC_INIT;
     if (strcmp(cmd, "run") == 0)
       return OPT_DATA_SYNC_RUN;
-  } else if (strcmp(prev_cmd, "opstate") == 0) {
-    if (strcmp(cmd, "list") == 0)
-      return OPT_OPSTATE_LIST;
-    if (strcmp(cmd, "set") == 0)
-      return OPT_OPSTATE_SET;
-    if (strcmp(cmd, "renew") == 0)
-      return OPT_OPSTATE_RENEW;
-    if (strcmp(cmd, "rm") == 0)
-      return OPT_OPSTATE_RM;
   } else if (strcmp(prev_cmd, "sync") == 0) {
     if (strcmp(cmd, "status") == 0)
       return OPT_SYNC_STATUS;
@@ -2711,7 +2691,6 @@ int main(int argc, const char **argv)
   bool specified_shard_id = false;
   string client_id;
   string op_id;
-  string state_str;
   string op_mask_str;
   string quota_scope;
   string object_version;
@@ -2751,7 +2730,6 @@ int main(int argc, const char **argv)
   std::string val;
   std::ostringstream errs;
   string err;
-  long long tmp = 0;
 
   string source_zone_name;
   string source_zone; /* zone id */
@@ -2809,8 +2787,6 @@ int main(int argc, const char **argv)
       client_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--op-id", (char*)NULL)) {
       op_id = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--state", (char*)NULL)) {
-      state_str = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--op-mask", (char*)NULL)) {
       op_mask_str = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--key-type", (char*)NULL)) {
@@ -2845,11 +2821,6 @@ int main(int argc, const char **argv)
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &commit, NULL, "--commit", (char*)NULL)) {
       // do nothing
-    } else if (ceph_argparse_witharg(args, i, &tmp, errs, "-a", "--auth-uid", (char*)NULL)) {
-      if (!errs.str().empty()) {
-	cerr << errs.str() << std::endl;
-	exit(EXIT_FAILURE);
-      }
     } else if (ceph_argparse_witharg(args, i, &val, "--min-rewrite-size", (char*)NULL)) {
       min_rewrite_size = (uint64_t)atoll(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--max-rewrite-size", (char*)NULL)) {
@@ -3269,7 +3240,6 @@ int main(int argc, const char **argv)
 			 OPT_DATA_SYNC_STATUS,
 			 OPT_DATALOG_LIST,
 			 OPT_DATALOG_STATUS,
-			 OPT_OPSTATE_LIST,
 			 OPT_REALM_GET,
 			 OPT_REALM_GET_DEFAULT,
 			 OPT_REALM_LIST,
@@ -7376,81 +7346,6 @@ next:
     ret = log->trim_entries(start_time.to_real_time(), end_time.to_real_time(), start_marker, end_marker);
     if (ret < 0) {
       cerr << "ERROR: trim_entries(): " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
-  }
-
-  if (opt_cmd == OPT_OPSTATE_LIST) {
-    RGWOpState oc(store);
-
-    int max = 1000;
-
-    void *handle;
-    oc.init_list_entries(client_id, op_id, object, &handle);
-    list<cls_statelog_entry> entries;
-    bool done;
-    formatter->open_array_section("entries");
-    do {
-      int ret = oc.list_entries(handle, max, entries, &done);
-      if (ret < 0) {
-        cerr << "oc.list_entries returned " << cpp_strerror(-ret) << std::endl;
-        oc.finish_list_entries(handle);
-        return -ret;
-      }
-
-      for (list<cls_statelog_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
-        oc.dump_entry(*iter, formatter);
-      }
-
-      formatter->flush(cout);
-    } while (!done);
-    formatter->close_section();
-    formatter->flush(cout);
-    oc.finish_list_entries(handle);
-  }
-
-  if (opt_cmd == OPT_OPSTATE_SET || opt_cmd == OPT_OPSTATE_RENEW) {
-    RGWOpState oc(store);
-
-    RGWOpState::OpState state;
-    if (object.empty() || client_id.empty() || op_id.empty()) {
-      cerr << "ERROR: need to specify client_id, op_id, and object" << std::endl;
-      return EINVAL;
-    }
-    if (state_str.empty()) {
-      cerr << "ERROR: state was not specified" << std::endl;
-      return EINVAL;
-    }
-    int ret = oc.state_from_str(state_str, &state);
-    if (ret < 0) {
-      cerr << "ERROR: invalid state: " << state_str << std::endl;
-      return -ret;
-    }
-
-    if (opt_cmd == OPT_OPSTATE_SET) {
-      ret = oc.set_state(client_id, op_id, object, state);
-      if (ret < 0) {
-        cerr << "ERROR: failed to set state: " << cpp_strerror(-ret) << std::endl;
-        return -ret;
-      }
-    } else {
-      ret = oc.renew_state(client_id, op_id, object, state);
-      if (ret < 0) {
-        cerr << "ERROR: failed to renew state: " << cpp_strerror(-ret) << std::endl;
-        return -ret;
-      }
-    }
-  }
-  if (opt_cmd == OPT_OPSTATE_RM) {
-    RGWOpState oc(store);
-
-    if (object.empty() || client_id.empty() || op_id.empty()) {
-      cerr << "ERROR: need to specify client_id, op_id, and object" << std::endl;
-      return EINVAL;
-    }
-    ret = oc.remove_entry(client_id, op_id, object);
-    if (ret < 0) {
-      cerr << "ERROR: failed to set state: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
   }

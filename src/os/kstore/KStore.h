@@ -23,7 +23,7 @@
 #include <mutex>
 #include <condition_variable>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/unordered_map.h"
 #include "common/Finisher.h"
 #include "common/RWLock.h"
@@ -443,6 +443,9 @@ public:
 
   CollectionHandle open_collection(const coll_t& c) override;
   CollectionHandle create_new_collection(const coll_t& c) override;
+  void set_collection_commit_queue(const coll_t& cid,
+				   ContextQueue *commit_queue) override {
+  }
 
   using ObjectStore::exists;
   bool exists(CollectionHandle& c, const ghobject_t& oid) override;
@@ -663,6 +666,10 @@ private:
 			CollectionRef& c,
 			CollectionRef& d,
 			unsigned bits, int rem);
+  int _merge_collection(TransContext *txc,
+			CollectionRef *c,
+			CollectionRef& d,
+			unsigned bits);
 
 };
 

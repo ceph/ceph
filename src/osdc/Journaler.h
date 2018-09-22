@@ -300,7 +300,7 @@ private:
 		      ///  write_pos>flush_pos, we're buffering writes.
   uint64_t safe_pos; ///< what has been committed safely to disk.
 
-  uint64_t next_safe_pos; /// start postion of the first entry that isn't
+  uint64_t next_safe_pos; /// start position of the first entry that isn't
 			  /// being fully flushed. If we don't flush any
 			  // partial entry, it's equal to flush_pos.
 

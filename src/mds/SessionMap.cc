@@ -22,7 +22,7 @@
 #include "common/config.h"
 #include "common/errno.h"
 #include "common/DecayCounter.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/stringify.h"
 
 #define dout_context g_ceph_context
@@ -62,6 +62,9 @@ void SessionMap::register_perfcounters()
               "Sessions currently stale");
   plb.add_u64(l_mdssm_total_load, "total_load", "Total Load");
   plb.add_u64(l_mdssm_avg_load, "average_load", "Average Load");
+  plb.add_u64(l_mdssm_avg_session_uptime, "avg_session_uptime",
+               "Average session uptime");
+
   logger = plb.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(logger);
 }
@@ -627,6 +630,8 @@ void SessionMap::add_session(Session *s)
   by_state_entry->second->push_back(&s->item_session_list);
   s->get();
 
+  update_average_birth_time(*s);
+
   logger->set(l_mdssm_session_count, session_map.size());
   logger->inc(l_mdssm_session_add);
 }
@@ -634,6 +639,8 @@ void SessionMap::add_session(Session *s)
 void SessionMap::remove_session(Session *s)
 {
   dout(10) << __func__ << " s=" << s << " name=" << s->info.inst.name << dendl;
+
+  update_average_birth_time(*s, false);
 
   s->trim_completed_requests(0);
   s->item_session_list.remove_myself();
@@ -1000,6 +1007,15 @@ void SessionMap::handle_conf_change(const ConfigProxy &conf,
       }
     }
   }
+}
+
+void SessionMap::update_average_session_age() {
+  if (!session_map.size()) {
+    return;
+  }
+
+  double avg_uptime = std::chrono::duration<double>(clock::now()-avg_birth_time).count();
+  logger->set(l_mdssm_avg_session_uptime, (uint64_t)avg_uptime);
 }
 
 int SessionFilter::parse(

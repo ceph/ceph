@@ -133,7 +133,7 @@ private:
   ImageCtxT *m_src_image_ctx;
   ImageCtxT *m_dst_image_ctx;
   CephContext *m_cct;
-  const SnapMap &m_snap_map;
+  SnapMap m_snap_map;
   uint64_t m_dst_object_number;
   bool m_flatten;
   Context *m_on_finish;
@@ -176,7 +176,7 @@ private:
   void send_update_object_map();
   void handle_update_object_map(int r);
 
-  Context *start_lock_op(RWLock &owner_lock);
+  Context *start_lock_op(RWLock &owner_lock, int* r);
 
   uint64_t src_to_dst_object_offset(uint64_t objectno, uint64_t offset);
 

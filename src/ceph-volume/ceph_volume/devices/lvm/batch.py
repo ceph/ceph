@@ -142,7 +142,8 @@ class Batch(object):
             strategy.report_pretty()
             terminal.info('The above OSDs would be created if the operation continues')
             if not prompt_bool('do you want to proceed? (yes/no)'):
-                terminal.error('aborting OSD provisioning for %s' % ','.join(args.devices))
+                devices = ','.join([device.abspath for device in args.devices])
+                terminal.error('aborting OSD provisioning for %s' % devices)
                 raise SystemExit(0)
 
         strategy.execute()
@@ -204,6 +205,22 @@ class Batch(object):
             dest='no_systemd',
             action='store_true',
             help='Skip creating and enabling systemd units and starting OSD services',
+        )
+        parser.add_argument(
+            '--osds-per-device',
+            type=int,
+            default=1,
+            help='Provision more than 1 (the default) OSD per device',
+        )
+        parser.add_argument(
+            '--block-db-size',
+            type=int,
+            help='Set (or override) the "bluestore_block_db_size" value, in bytes'
+        )
+        parser.add_argument(
+            '--journal-size',
+            type=int,
+            help='Override the "osd_journal_size" value, in megabytes'
         )
         args = parser.parse_args(self.argv)
 

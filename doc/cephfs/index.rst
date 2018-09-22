@@ -75,6 +75,7 @@ authentication keyring.
 	Mount CephFS as FUSE <fuse>
 	Mount CephFS in fstab <fstab>
 	Use the CephFS Shell <cephfs-shell>
+	Supported Features of Kernel Driver <kernel-features>
 	Manpage ceph-fuse <../../man/8/ceph-fuse>
 	Manpage mount.ceph <../../man/8/mount.ceph>
 	Manpage mount.fuse.ceph <../../man/8/mount.fuse.ceph>
@@ -107,6 +108,7 @@ authentication keyring.
     Configuring directory fragmentation <dirfrags>
     Configuring multiple active MDS daemons <multimds>
     Export over NFS <nfs>
+    Application best practices <app-best-practices>
 
 .. toctree:: 
    :hidden:

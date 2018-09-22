@@ -38,7 +38,7 @@
 #include <boost/intrusive/set.hpp>
 #include <boost/optional.hpp>
 
-#include "include/assert.h"	// boost clobbers this
+#include "include/ceph_assert.h"	// boost clobbers this
 #include "include/intarith.h"
 #include "include/int_types.h"
 
@@ -308,8 +308,8 @@ struct denc_traits<
 // otype == external type, i.e., the type on the wire
 
 // NOTE: the overload resolution ensures that the legacy encode/decode methods
-// defined for int types is prefered to the ones  defined using the specialized
-// template, and hence get selected. This machinary prevents these these from
+// defined for int types is preferred to the ones  defined using the specialized
+// template, and hence get selected. This machinery prevents these these from
 // getting glued into the legacy encode/decode methods; the overhead of setting
 // up a contiguous_appender etc is likely to be slower.
 namespace _denc {

@@ -164,7 +164,7 @@ void SnapshotCreateRequest<I>::send_create_snap() {
 
   // should have been canceled prior to releasing lock
   ceph_assert(image_ctx.exclusive_lock == nullptr ||
-         image_ctx.exclusive_lock->is_lock_owner());
+              image_ctx.exclusive_lock->is_lock_owner());
 
   // save current size / parent info for creating snapshot record in ImageCtx
   m_size = image_ctx.size;
@@ -238,9 +238,13 @@ Context *SnapshotCreateRequest<I>::handle_create_object_map(int *result) {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
 
-  ceph_assert(*result == 0);
-
   image_ctx.io_work_queue->unblock_writes();
+  if (*result < 0) {
+    lderr(cct) << this << " " << __func__ << ": failed to snapshot object map: "
+               << cpp_strerror(*result) << dendl;
+    return this->create_context_finisher(*result);
+  }
+
   return this->create_context_finisher(0);
 }
 
@@ -291,7 +295,7 @@ void SnapshotCreateRequest<I>::update_snap_context() {
 
   // should have been canceled prior to releasing lock
   ceph_assert(image_ctx.exclusive_lock == nullptr ||
-         image_ctx.exclusive_lock->is_lock_owner());
+              image_ctx.exclusive_lock->is_lock_owner());
 
   // immediately add a reference to the new snapshot
   utime_t snap_time = ceph_clock_now();

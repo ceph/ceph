@@ -93,7 +93,7 @@
 #include "ObjecterWriteback.h"
 #include "posix_acl.h"
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/stat.h"
 
 #include "include/cephfs/ceph_statx.h"
@@ -3942,7 +3942,7 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
 
   unsigned old_caps = cap.issued;
   cap.cap_id = cap_id;
-  cap.issued |= issued;
+  cap.issued = issued;
   cap.implemented |= issued;
   cap.seq = seq;
   cap.issue_seq = seq;
@@ -4047,11 +4047,15 @@ void Client::remove_session_caps(MetaSession *s)
   sync_cond.Signal();
 }
 
-int Client::_do_remount(void)
+int Client::_do_remount(bool retry_on_error)
 {
+  uint64_t max_retries = g_conf().get_val<uint64_t>("mds_max_retries_on_remount_failure");
+
   errno = 0;
   int r = remount_cb(callback_handle);
-  if (r != 0) {
+  if (r == 0) {
+    retries_on_invalidate = 0;
+  } else {
     int e = errno;
     client_t whoami = get_nodeid();
     if (r == -1) {
@@ -4063,8 +4067,10 @@ int Client::_do_remount(void)
           "failed to remount (to trim kernel dentries): "
           "return code = " << r << dendl;
     }
-    bool should_abort = cct->_conf.get_val<bool>("client_die_on_failed_remount") ||
-        cct->_conf.get_val<bool>("client_die_on_failed_dentry_invalidate");
+    bool should_abort =
+      (cct->_conf.get_val<bool>("client_die_on_failed_remount") ||
+       cct->_conf.get_val<bool>("client_die_on_failed_dentry_invalidate")) &&
+      !(retry_on_error && (++retries_on_invalidate < max_retries));
     if (should_abort && !unmounting) {
       lderr(cct) << "failed to remount for kernel dentry trimming; quitting!" << dendl;
       ceph_abort();
@@ -4080,7 +4086,7 @@ public:
   explicit C_Client_Remount(Client *c) : client(c) {}
   void finish(int r) override {
     ceph_assert(r == 0);
-    client->_do_remount();
+    client->_do_remount(true);
   }
 };
 
@@ -9515,7 +9521,7 @@ success:
   }
 
   // mtime
-  in->mtime = ceph_clock_now();
+  in->mtime = in->ctime = ceph_clock_now();
   in->change_attr++;
   in->mark_caps_dirty(CEPH_CAP_FILE_WR);
 
@@ -9812,6 +9818,7 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
 {
   Mutex::Locker l(client_lock);
   tout(cct) << __func__ << std::endl;
+  unsigned long int total_files_on_fs;
 
   if (unmounting)
     return -ENOTCONN;
@@ -9828,6 +9835,8 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
 
   client_lock.Unlock();
   int rval = cond.wait();
+  assert(root);
+  total_files_on_fs = root->rstat.rfiles + root->rstat.rsubdirs;
   client_lock.Lock();
 
   if (rval < 0) {
@@ -9849,8 +9858,8 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
   const int CEPH_BLOCK_SHIFT = 22;
   stbuf->f_frsize = 1 << CEPH_BLOCK_SHIFT;
   stbuf->f_bsize = 1 << CEPH_BLOCK_SHIFT;
-  stbuf->f_files = stats.num_objects;
-  stbuf->f_ffree = -1;
+  stbuf->f_files = total_files_on_fs;
+  stbuf->f_ffree = 0;
   stbuf->f_favail = -1;
   stbuf->f_fsid = -1;       // ??
   stbuf->f_flag = 0;        // ??
@@ -10259,7 +10268,7 @@ int Client::test_dentry_handling(bool can_invalidate)
     r = 0;
   } else if (remount_cb) {
     ldout(cct, 1) << "using remount_cb" << dendl;
-    r = _do_remount();
+    r = _do_remount(false);
   }
   if (r) {
     bool should_abort = cct->_conf.get_val<bool>("client_die_on_failed_dentry_invalidate");
@@ -13307,7 +13316,7 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
         in->inline_data = bl;
         in->inline_version++;
       }
-      in->mtime = ceph_clock_now();
+      in->mtime = in->ctime = ceph_clock_now();
       in->change_attr++;
       in->mark_caps_dirty(CEPH_CAP_FILE_WR);
     } else {
@@ -13327,7 +13336,7 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
 		  offset, length,
 		  ceph::real_clock::now(),
 		  0, true, &onfinish);
-      in->mtime = ceph_clock_now();
+      in->mtime = in->ctime = ceph_clock_now();
       in->change_attr++;
       in->mark_caps_dirty(CEPH_CAP_FILE_WR);
 
@@ -13340,7 +13349,7 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
     uint64_t size = offset + length;
     if (size > in->size) {
       in->size = size;
-      in->mtime = ceph_clock_now();
+      in->mtime = in->ctime = ceph_clock_now();
       in->change_attr++;
       in->mark_caps_dirty(CEPH_CAP_FILE_WR);
 

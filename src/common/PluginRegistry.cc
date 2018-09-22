@@ -17,6 +17,7 @@
 
 #include "PluginRegistry.h"
 #include "ceph_ver.h"
+#include "common/ceph_context.h"
 #include "common/errno.h"
 #include "common/debug.h"
 
@@ -100,7 +101,7 @@ int PluginRegistry::add(const std::string& type,
 Plugin *PluginRegistry::get_with_load(const std::string& type,
           const std::string& name)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard<Mutex> l(lock);
   Plugin* ret = get(type, name);
   if (!ret) {
     int err = load(type, name);
@@ -217,7 +218,7 @@ int ErasureCodePluginRegistry::preload(const std::string &plugins,
 				       const std::string &directory,
 				       ostream &ss)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard<Mutex> l(lock);
   list<string> plugins_list;
   get_str_list(plugins, plugins_list);
   for (list<string>::iterator i = plugins_list.begin();

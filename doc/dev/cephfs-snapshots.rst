@@ -78,7 +78,7 @@ Generating a SnapContext
 ------------------------
 A RADOS `SnapContext` consists of a snapshot sequence ID (`snapid`) and all
 the snapshot IDs that an object is already part of. To generate that list, we
-combine `snapids` associated with the SnapRealm and all vaild `snapids` in
+combine `snapids` associated with the SnapRealm and all valid `snapids` in
 `past_parent_snaps`. Stale `snapids` are filtered out by SnapClient's cached
 effective snapshots.
 
@@ -118,7 +118,7 @@ out again.
 
 Hard links
 ----------
-Inode with multiple hard links is moved to a dummy gloabl SnapRealm. The
+Inode with multiple hard links is moved to a dummy global SnapRealm. The
 dummy SnapRealm covers all snapshots in the filesystem. The inode's data
 will be preserved for any new snapshot. These preserved data will cover
 snapshots on any linkage of the inode.

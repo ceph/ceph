@@ -28,7 +28,7 @@
 
 #include "include/unordered_map.h"
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #include "os/ObjectStore.h"
 #include "JournalingObjectStore.h"
@@ -531,6 +531,9 @@ public:
 
   CollectionHandle open_collection(const coll_t& c) override;
   CollectionHandle create_new_collection(const coll_t& c) override;
+  void set_collection_commit_queue(const coll_t& cid,
+				   ContextQueue *commit_queue) override {
+  }
 
   int queue_transactions(CollectionHandle& ch, vector<Transaction>& tls,
 			 TrackedOpRef op = TrackedOpRef(),
@@ -785,9 +788,8 @@ private:
 		      const SequencerPosition &spos);
   int _split_collection(const coll_t& cid, uint32_t bits, uint32_t rem, coll_t dest,
                         const SequencerPosition &spos);
-  int _split_collection_create(const coll_t& cid, uint32_t bits, uint32_t rem,
-			       coll_t dest,
-			       const SequencerPosition &spos);
+  int _merge_collection(const coll_t& cid, uint32_t bits, coll_t dest,
+                        const SequencerPosition &spos);
 
   const char** get_tracked_conf_keys() const override;
   void handle_conf_change(const ConfigProxy& conf,

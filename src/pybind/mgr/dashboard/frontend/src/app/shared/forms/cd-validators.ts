@@ -1,10 +1,20 @@
-import { AbstractControl, ValidationErrors, ValidatorFn, Validators } from '@angular/forms';
+import {
+  AbstractControl,
+  AsyncValidatorFn,
+  ValidationErrors,
+  ValidatorFn,
+  Validators
+} from '@angular/forms';
 
 import * as _ from 'lodash';
+import { Observable, of as observableOf, timer as observableTimer } from 'rxjs';
+import { map, switchMapTo, take } from 'rxjs/operators';
 
 export function isEmptyInputValue(value: any): boolean {
   return value == null || value.length === 0;
 }
+
+export type existsServiceFn = (value: any) => Observable<boolean>;
 
 export class CdValidators {
   /**
@@ -98,18 +108,75 @@ export class CdValidators {
   }
 
   /**
-   * Validate if control1 and control2 have the same value.
-   * Error will be added to control2.
-   *
-   * @param {string} control1
-   * @param {string} control2
+   * Validator that requires that both specified controls have the same value.
+   * Error will be added to the `path2` control.
+   * @param {string} path1 A dot-delimited string that define the path to the control.
+   * @param {string} path2 A dot-delimited string that define the path to the control.
+   * @return {ValidatorFn} Returns a validator function that always returns `null`.
+   *   If the validation fails an error map with the `match` property will be set
+   *   on the `path2` control.
    */
-  static match(control1: string, control2: string): ValidatorFn {
+  static match(path1: string, path2: string): ValidatorFn {
     return (control: AbstractControl): { [key: string]: any } => {
-      if (control.get(control1).value !== control.get(control2).value) {
-        control.get(control2).setErrors({ ['match']: true });
+      const ctrl1 = control.get(path1);
+      const ctrl2 = control.get(path2);
+      if (ctrl1.value !== ctrl2.value) {
+        ctrl2.setErrors({ match: true });
+      } else {
+        const hasError = ctrl2.hasError('match');
+        if (hasError) {
+          // Remove the 'match' error. If no more errors exists, then set
+          // the error value to 'null', otherwise the field is still marked
+          // as invalid.
+          const errors = ctrl2.errors;
+          _.unset(errors, 'match');
+          ctrl2.setErrors(_.isEmpty(_.keys(errors)) ? null : errors);
+        }
       }
       return null;
+    };
+  }
+
+  /**
+   * Asynchronous validator that requires the control's value to be unique.
+   * The validation is only executed after the specified delay. Every
+   * keystroke during this delay will restart the timer.
+   * @param serviceFn {existsServiceFn} The service function that is
+   *   called to check whether the given value exists. It must return
+   *   boolean 'true' if the given value exists, otherwise 'false'.
+   * @param serviceFnThis {any} The object to be used as the 'this' object
+   *   when calling the serviceFn function. Defaults to null.
+   * @param {number|Date} dueTime The delay time to wait before the
+   *   serviceFn call is executed. This is useful to prevent calls on
+   *   every keystroke. Defaults to 500.
+   * @return {AsyncValidatorFn} Returns an asynchronous validator function
+   *   that returns an error map with the `notUnique` property if the
+   *   validation check succeeds, otherwise `null`.
+   */
+  static unique(
+    serviceFn: existsServiceFn,
+    serviceFnThis: any = null,
+    dueTime = 500
+  ): AsyncValidatorFn {
+    return (control: AbstractControl): Observable<ValidationErrors | null> => {
+      // Exit immediately if user has not interacted with the control yet
+      // or the control value is empty.
+      if (control.pristine || isEmptyInputValue(control.value)) {
+        return observableOf(null);
+      }
+      // Forgot previous requests if a new one arrives within the specified
+      // delay time.
+      return observableTimer(dueTime).pipe(
+        switchMapTo(serviceFn.call(serviceFnThis, control.value)),
+        map((resp: boolean) => {
+          if (!resp) {
+            return null;
+          } else {
+            return { notUnique: true };
+          }
+        }),
+        take(1)
+      );
     };
   }
 }

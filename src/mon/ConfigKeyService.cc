@@ -23,7 +23,7 @@
 #include "common/errno.h"
 #include "include/stringify.h"
 
-#include "include/assert.h" // re-clobber ceph_assert()
+#include "include/ceph_assert.h" // re-clobber ceph_assert()
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, this)
@@ -199,9 +199,9 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
     return false;
   }
 
-  cmd_getval_throws(g_ceph_context, cmdmap, "prefix", prefix);
+  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
   string key;
-  cmd_getval_throws(g_ceph_context, cmdmap, "key", key);
+  cmd_getval(g_ceph_context, cmdmap, "key", key);
 
   if (prefix == "config-key get") {
     ret = store_get(key, rdata);
@@ -222,7 +222,7 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
 
     bufferlist data;
     string val;
-    if (cmd_getval_throws(g_ceph_context, cmdmap, "val", val)) {
+    if (cmd_getval(g_ceph_context, cmdmap, "val", val)) {
       // they specified a value in the command instead of a file
       data.append(val);
     } else if (cmd->get_data_len() > 0) {
@@ -293,7 +293,7 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
 
   } else if (prefix == "config-key dump") {
     string prefix;
-    cmd_getval_throws(g_ceph_context, cmdmap, "key", prefix);
+    cmd_getval(g_ceph_context, cmdmap, "key", prefix);
     stringstream tmp_ss;
     store_dump(tmp_ss, prefix);
     rdata.append(tmp_ss);

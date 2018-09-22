@@ -22,7 +22,7 @@
 #include "KeyValueDB.h"
 #include "MemDB.h"
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "common/debug.h"
 #include "common/errno.h"
 #include "include/compat.h"

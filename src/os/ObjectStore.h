@@ -51,7 +51,7 @@ namespace ceph {
  */
 
 class Logger;
-
+class ContextQueue;
 
 static inline void encode(const map<string,bufferptr> *attrset, bufferlist &bl) {
   encode(*attrset, bl);
@@ -146,7 +146,7 @@ public:
      * 1) collection is currently idle: the method returns true.  c is
      *    not touched.
      * 2) collection is not idle: the method returns false and c is
-     *    called asyncronously with a value of 0 once all transactions
+     *    called asynchronously with a value of 0 once all transactions
      *    queued on this collection prior to the call have been applied
      *    and committed.
      */
@@ -269,7 +269,7 @@ public:
    *   sobject_encoding detects an older/simpler version of oid
    *   present in pre-bobtail versions of ceph.  use_pool_override
    *   also detects a situation where the pool of an oid can be
-   *   overriden for legacy operations/buffers.  For non-legacy
+   *   overridden for legacy operations/buffers.  For non-legacy
    *   implementations of ObjectStore, neither of these fields are
    *   relevant.
    *
@@ -298,7 +298,7 @@ public:
    * applies independently to each transaction element. For example,
    * if a transaction contains two mutating elements "create A" and
    * "delete B". And an enumeration operation is performed while this
-   * transaction is pending. It is permissable for ObjectStore to
+   * transaction is pending. It is permissible for ObjectStore to
    * report any of the four possible combinations of the existence of
    * A and B.
    *
@@ -349,6 +349,8 @@ public:
       OP_TRY_RENAME = 41,   // oldcid, oldoid, newoid
 
       OP_COLL_SET_BITS = 42, // cid, bits
+
+      OP_MERGE_COLLECTION = 43, // cid, destination
     };
 
     // Transaction hint type
@@ -682,6 +684,13 @@ public:
         op->dest_cid = cm[op->dest_cid];
         break;
 
+      case OP_MERGE_COLLECTION:
+        ceph_assert(op->cid < cm.size());
+	ceph_assert(op->dest_cid < cm.size());
+        op->cid = cm[op->cid];
+        op->dest_cid = cm[op->dest_cid];
+        break;
+
       default:
         ceph_abort_msg("Unknown OP");
       }
@@ -825,7 +834,7 @@ public:
     bool empty() {
       return !data.ops;
     }
-    /// Number of operations in the transation
+    /// Number of operations in the transaction
     int get_num_ops() {
       return data.ops;
     }
@@ -1367,6 +1376,19 @@ public:
       data.ops++;
     }
 
+    /// Merge collection into another.
+    void merge_collection(
+      coll_t cid,
+      coll_t destination,
+      uint32_t bits) {
+      Op* _op = _get_next_op();
+      _op->op = OP_MERGE_COLLECTION;
+      _op->cid = _get_coll_id(cid);
+      _op->dest_cid = _get_coll_id(destination);
+      _op->split_bits = bits;
+      data.ops++;
+    }
+
     void collection_set_bits(
       const coll_t &cid,
       int bits) {
@@ -1595,6 +1617,13 @@ public:
    */
   virtual CollectionHandle create_new_collection(const coll_t &cid) = 0;
 
+  /**
+   * set ContextQueue for a collection
+   *
+   * After that, oncommits of Transaction will queue into commit_queue.
+   * And osd ShardThread will call oncommits.
+   */
+  virtual void set_collection_commit_queue(const coll_t &cid, ContextQueue *commit_queue) = 0;
 
   /**
    * Synchronous read operations

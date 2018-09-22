@@ -23,7 +23,7 @@
 #include <deque>
 #include <list>
 #include <vector>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/compat.h"
 
 #define dout_context g_ceph_context
@@ -181,6 +181,13 @@ extern "C" int rados_connect(rados_t cluster) {
 
 extern "C" int rados_create(rados_t *cluster, const char * const id) {
   *cluster = create_rados_client();
+  return 0;
+}
+
+extern "C" int rados_create_with_context(rados_t *cluster,
+                                         rados_config_t cct_) {
+  auto cct = reinterpret_cast<CephContext*>(cct_);
+  *cluster = librados_test_stub::get_cluster()->create_rados_client(cct);
   return 0;
 }
 
@@ -1020,6 +1027,11 @@ uint64_t Rados::get_instance_id() {
   return impl->get_instance_id();
 }
 
+int Rados::get_min_compatible_osd(int8_t* require_osd_release) {
+  TestRadosClient *impl = reinterpret_cast<TestRadosClient*>(client);
+  return impl->get_min_compatible_osd(require_osd_release);
+}
+
 int Rados::get_min_compatible_client(int8_t* min_compat_client,
                                      int8_t* require_min_compat_client) {
   TestRadosClient *impl = reinterpret_cast<TestRadosClient*>(client);
@@ -1029,6 +1041,10 @@ int Rados::get_min_compatible_client(int8_t* min_compat_client,
 
 int Rados::init(const char * const id) {
   return rados_create(reinterpret_cast<rados_t *>(&client), id);
+}
+
+int Rados::init_with_context(config_t cct_) {
+  return rados_create_with_context(reinterpret_cast<rados_t *>(&client), cct_);
 }
 
 int Rados::ioctx_create(const char *name, IoCtx &io) {
@@ -1405,4 +1421,8 @@ int cls_register_cxx_filter(cls_handle_t hclass,
 {
   librados::TestClassHandler *cls = get_class_handler();
   return cls->create_filter(hclass, filter_name, fn);
+}
+
+int8_t cls_get_required_osd_release(cls_handle_t hclass) {
+  return CEPH_FEATURE_SERVER_NAUTILUS;
 }

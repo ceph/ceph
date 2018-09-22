@@ -281,7 +281,7 @@ this means that the OSDs that store the placement group agree about the current
 state of the placement group. However, completion of the peering process does
 **NOT** mean that each replica has the latest contents.
 
-.. topic:: Authoratative History
+.. topic:: Authoritative History
 
    Ceph will **NOT** acknowledge a write operation to a client, until 
    all OSDs of the acting set persist the write operation. This practice 
@@ -390,7 +390,7 @@ reassigning placement groups to an OSD (especially a new OSD). By default,
 ``osd_max_backfills`` sets the maximum number of concurrent backfills to or from
 an OSD to 10. The ``backfill full ratio`` enables an OSD to refuse a
 backfill request if the OSD is approaching its full ratio (90%, by default) and
-change with ``ceph osd set-backfillfull-ratio`` comand.
+change with ``ceph osd set-backfillfull-ratio`` command.
 If an OSD refuses a backfill request, the ``osd backfill retry interval``
 enables an OSD to retry the request (after 10 seconds, by default). OSDs can
 also set ``osd backfill scan min`` and ``osd backfill scan max`` to manage scan
@@ -413,7 +413,7 @@ Stale
 While Ceph uses heartbeats to ensure that hosts and daemons are running, the
 ``ceph-osd`` daemons may also get into a ``stuck`` state where they are not
 reporting statistics in a timely manner (e.g., a temporary network fault). By
-default, OSD daemons report their placement group, up thru, boot and failure
+default, OSD daemons report their placement group, up through, boot and failure
 statistics every half second (i.e., ``0.5``),  which is more frequent than the
 heartbeat thresholds. If the **Primary OSD** of a placement group's acting set
 fails to report to the monitor or if other OSDs have reported the primary OSD

@@ -47,7 +47,8 @@ int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps, librados::
     t.define_column("SNAPID", TextTable::LEFT, TextTable::RIGHT);
     t.define_column("NAME", TextTable::LEFT, TextTable::LEFT);
     t.define_column("SIZE", TextTable::LEFT, TextTable::RIGHT);
-    t.define_column("TIMESTAMP", TextTable::LEFT, TextTable::LEFT);
+    t.define_column("PROTECTED", TextTable::LEFT, TextTable::LEFT);
+    t.define_column("TIMESTAMP", TextTable::LEFT, TextTable::RIGHT);
     if (all_snaps) {
       t.define_column("NAMESPACE", TextTable::LEFT, TextTable::LEFT);
     }
@@ -60,6 +61,7 @@ int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps, librados::
   for (std::vector<librbd::snap_info_t>::iterator s = snaps.begin();
        s != snaps.end(); ++s) {
     struct timespec timestamp;
+    bool snap_protected = false;
     image.snap_get_timestamp(s->id, &timestamp);
     string tt_str = "";
     if(timestamp.tv_sec != 0) {
@@ -100,11 +102,22 @@ int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps, librados::
         s->id, &trash_original_name);
     }
 
+    std::string protected_str = "";
+    if (snap_namespace == RBD_SNAP_NAMESPACE_TYPE_USER) {
+      r = image.snap_is_protected(s->name.c_str(), &snap_protected);
+      if (r < 0) {
+        std::cerr << "rbd: unable to retrieve snap protection" << std::endl;
+        return r;
+      }
+    }
+
     if (f) {
+      protected_str = snap_protected ? "true" : "false";
       f->open_object_section("snapshot");
       f->dump_unsigned("id", s->id);
       f->dump_string("name", s->name);
       f->dump_unsigned("size", s->size);
+      f->dump_string("protected", protected_str);
       f->dump_string("timestamp", tt_str);
       if (all_snaps) {
 	f->open_object_section("namespace");
@@ -121,7 +134,8 @@ int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps, librados::
       }
       f->close_section();
     } else {
-      t << s->id << s->name << stringify(byte_u_t(s->size)) << tt_str;
+      protected_str = snap_protected ? "yes" : "";
+      t << s->id << s->name << stringify(byte_u_t(s->size)) << protected_str << tt_str;
 
       if (all_snaps) {
 	ostringstream oss;
@@ -268,11 +282,6 @@ int do_unprotect_snap(librbd::Image& image, const char *snapname)
 int do_set_limit(librbd::Image& image, uint64_t limit)
 {
   return image.snap_set_limit(limit);
-}
-
-int do_clear_limit(librbd::Image& image)
-{
-  return image.snap_set_limit(UINT64_MAX);
 }
 
 void get_list_arguments(po::options_description *positional,
@@ -770,7 +779,7 @@ int execute_clear_limit(const po::variables_map &vm,
       return r;
   }
 
-  r = do_clear_limit(image);
+  r = do_set_limit(image, UINT64_MAX);
   if (r < 0) {
     std::cerr << "rbd: clearing snapshot limit failed: " << cpp_strerror(r)
 	      << std::endl;

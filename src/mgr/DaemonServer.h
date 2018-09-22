@@ -38,6 +38,7 @@ class MMgrClose;
 class MMonMgrReport;
 class MCommand;
 struct MonCommand;
+class CommandContext;
 
 
 /**
@@ -145,9 +146,11 @@ public:
   bool handle_close(MMgrClose *m);
   bool handle_report(MMgrReport *m);
   bool handle_command(MCommand *m);
+  bool _handle_command(MCommand *m, std::shared_ptr<CommandContext>& cmdctx);
   void send_report();
   void got_service_map();
   void got_mgr_map();
+  void adjust_pgs();
 
   void _send_configure(ConnectionRef c);
 

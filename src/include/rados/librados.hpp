@@ -4,6 +4,7 @@
 #include <string>
 #include <list>
 #include <map>
+#include <memory>
 #include <set>
 #include <vector>
 #include <utility>
@@ -315,7 +316,7 @@ namespace librados
     void assert_version(uint64_t ver);
 
     /**
-     * Guard operatation with a check that the object already exists
+     * Guard operation with a check that the object already exists
      */
     void assert_exists();
 
@@ -719,13 +720,16 @@ namespace librados
     void dup(const IoCtx& rhs);
 
     // set pool auid
-    int set_auid(uint64_t auid_);
+    int set_auid(uint64_t auid_)
+      __attribute__ ((deprecated));
 
     // set pool auid
-    int set_auid_async(uint64_t auid_, PoolAsyncCompletion *c);
+    int set_auid_async(uint64_t auid_, PoolAsyncCompletion *c)
+      __attribute__ ((deprecated));
 
     // get pool auid
-    int get_auid(uint64_t *auid_);
+    int get_auid(uint64_t *auid_)
+      __attribute__ ((deprecated));
 
     uint64_t get_instance_id() const;
 
@@ -1029,7 +1033,7 @@ namespace librados
 		      size_t write_len, uint64_t off);
 
     /**
-     * Asychronously remove an object
+     * Asynchronously remove an object
      *
      * Queues the remove and returns.
      *
@@ -1330,11 +1334,17 @@ namespace librados
       std::map<std::string,std::string>&& status);
 
     int pool_create(const char *name);
-    int pool_create(const char *name, uint64_t auid);
-    int pool_create(const char *name, uint64_t auid, uint8_t crush_rule);
+    int pool_create(const char *name, uint64_t auid)
+      __attribute__ ((deprecated));
+    int pool_create(const char *name, uint64_t auid, uint8_t crush_rule)
+      __attribute__ ((deprecated));
+    int pool_create_with_rule(const char *name, uint8_t crush_rule);
     int pool_create_async(const char *name, PoolAsyncCompletion *c);
-    int pool_create_async(const char *name, uint64_t auid, PoolAsyncCompletion *c);
-    int pool_create_async(const char *name, uint64_t auid, uint8_t crush_rule, PoolAsyncCompletion *c);
+    int pool_create_async(const char *name, uint64_t auid, PoolAsyncCompletion *c)
+      __attribute__ ((deprecated));
+    int pool_create_async(const char *name, uint64_t auid, uint8_t crush_rule, PoolAsyncCompletion *c)
+      __attribute__ ((deprecated));
+    int pool_create_with_rule_async(const char *name, uint8_t crush_rule, PoolAsyncCompletion *c);
     int pool_get_base_tier(int64_t pool, int64_t* base_tier);
     int pool_delete(const char *name);
     int pool_delete_async(const char *name, PoolAsyncCompletion *c);
@@ -1343,6 +1353,7 @@ namespace librados
 
     uint64_t get_instance_id();
 
+    int get_min_compatible_osd(int8_t* require_osd_release);
     int get_min_compatible_client(int8_t* min_compat_client,
                                   int8_t* require_min_compat_client);
 

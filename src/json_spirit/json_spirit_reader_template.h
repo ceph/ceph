@@ -37,7 +37,7 @@
     #define spirit_namespace boost::spirit
 #endif
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 namespace json_spirit
 {
@@ -388,7 +388,7 @@ namespace json_spirit
        throw reason;
     }
 
-    // the spirit grammer 
+    // the spirit grammar 
     //
     template< class Value_type, class Iter_type >
     class Json_grammer : public spirit_namespace::grammar< Json_grammer< Value_type, Iter_type > >
@@ -465,7 +465,7 @@ namespace json_spirit
                 Int_action    new_int    ( boost::bind( &Semantic_actions_t::new_int,     &self.actions_, _1 ) );
                 Uint64_action new_uint64 ( boost::bind( &Semantic_actions_t::new_uint64,  &self.actions_, _1 ) );
 
-                // actual grammer
+                // actual grammar
 
                 json_
                     = value_ | eps_p[ &throw_not_value ]

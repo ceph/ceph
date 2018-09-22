@@ -149,6 +149,7 @@ for (unsigned i = 0; i < 4; ++i) {
     OSDMap::Incremental inc(epoch + 1);
     inc.new_pools[pool_id].min_size = min_size;
     inc.new_pools[pool_id].set_pg_num(pg_num);
+    inc.new_pools[pool_id].set_pg_num_pending(pg_num);
     inc.new_up_thru[osd_id] = epoch + 1;
     osdmap->apply_incremental(inc);
     lastmap->apply_incremental(inc);
@@ -308,6 +309,207 @@ for (unsigned i = 0; i < 4; ++i) {
 						  osdmap,
 						  lastmap,
 						  pgid,
+                                                  recoverable.get(),
+						  &past_intervals));
+  }
+
+  //
+  // PG is pre-merge source
+  //
+  {
+    std::shared_ptr<OSDMap> osdmap(new OSDMap());
+    osdmap->set_max_osd(10);
+    osdmap->set_state(osd_id, CEPH_OSD_EXISTS);
+    osdmap->set_epoch(epoch);
+    OSDMap::Incremental inc(epoch + 1);
+    inc.new_pools[pool_id].min_size = min_size;
+    inc.new_pools[pool_id].set_pg_num(pg_num);
+    inc.new_pools[pool_id].set_pg_num_pending(pg_num - 1);
+    osdmap->apply_incremental(inc);
+    cout << "pg_num " << pg_num << std::endl;
+    PastIntervals past_intervals;
+
+    ASSERT_TRUE(past_intervals.empty());
+    ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
+						  new_primary,
+						  old_acting,
+						  new_acting,
+						  old_up_primary,
+						  new_up_primary,
+						  old_up,
+						  new_up,
+						  same_interval_since,
+						  last_epoch_clean,
+						  osdmap,
+						  lastmap,
+						  pg_t(pg_num - 1, pool_id),
+                                                  recoverable.get(),
+						  &past_intervals));
+  }
+
+  //
+  // PG was pre-merge source
+  //
+  {
+    std::shared_ptr<OSDMap> osdmap(new OSDMap());
+    osdmap->set_max_osd(10);
+    osdmap->set_state(osd_id, CEPH_OSD_EXISTS);
+    osdmap->set_epoch(epoch);
+    OSDMap::Incremental inc(epoch + 1);
+    inc.new_pools[pool_id].min_size = min_size;
+    inc.new_pools[pool_id].set_pg_num(pg_num);
+    inc.new_pools[pool_id].set_pg_num_pending(pg_num - 1);
+    osdmap->apply_incremental(inc);
+
+    cout << "pg_num " << pg_num << std::endl;
+    PastIntervals past_intervals;
+
+    ASSERT_TRUE(past_intervals.empty());
+    ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
+						  new_primary,
+						  old_acting,
+						  new_acting,
+						  old_up_primary,
+						  new_up_primary,
+						  old_up,
+						  new_up,
+						  same_interval_since,
+						  last_epoch_clean,
+						  lastmap,  // reverse order!
+						  osdmap,
+						  pg_t(pg_num - 1, pool_id),
+                                                  recoverable.get(),
+						  &past_intervals));
+  }
+
+  //
+  // PG is merge source
+  //
+  {
+    std::shared_ptr<OSDMap> osdmap(new OSDMap());
+    osdmap->set_max_osd(10);
+    osdmap->set_state(osd_id, CEPH_OSD_EXISTS);
+    osdmap->set_epoch(epoch);
+    OSDMap::Incremental inc(epoch + 1);
+    inc.new_pools[pool_id].min_size = min_size;
+    inc.new_pools[pool_id].set_pg_num(pg_num - 1);
+    osdmap->apply_incremental(inc);
+
+    PastIntervals past_intervals;
+
+    ASSERT_TRUE(past_intervals.empty());
+    ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
+						  new_primary,
+						  old_acting,
+						  new_acting,
+						  old_up_primary,
+						  new_up_primary,
+						  old_up,
+						  new_up,
+						  same_interval_since,
+						  last_epoch_clean,
+						  osdmap,
+						  lastmap,
+						  pg_t(pg_num - 1, pool_id),
+                                                  recoverable.get(),
+						  &past_intervals));
+  }
+
+  //
+  // PG is pre-merge target
+  //
+  {
+    std::shared_ptr<OSDMap> osdmap(new OSDMap());
+    osdmap->set_max_osd(10);
+    osdmap->set_state(osd_id, CEPH_OSD_EXISTS);
+    osdmap->set_epoch(epoch);
+    OSDMap::Incremental inc(epoch + 1);
+    inc.new_pools[pool_id].min_size = min_size;
+    inc.new_pools[pool_id].set_pg_num_pending(pg_num - 1);
+    osdmap->apply_incremental(inc);
+
+    PastIntervals past_intervals;
+
+    ASSERT_TRUE(past_intervals.empty());
+    ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
+						  new_primary,
+						  old_acting,
+						  new_acting,
+						  old_up_primary,
+						  new_up_primary,
+						  old_up,
+						  new_up,
+						  same_interval_since,
+						  last_epoch_clean,
+						  osdmap,
+						  lastmap,
+						  pg_t(pg_num / 2 - 1, pool_id),
+                                                  recoverable.get(),
+						  &past_intervals));
+  }
+
+  //
+  // PG was pre-merge target
+  //
+  {
+    std::shared_ptr<OSDMap> osdmap(new OSDMap());
+    osdmap->set_max_osd(10);
+    osdmap->set_state(osd_id, CEPH_OSD_EXISTS);
+    osdmap->set_epoch(epoch);
+    OSDMap::Incremental inc(epoch + 1);
+    inc.new_pools[pool_id].min_size = min_size;
+    inc.new_pools[pool_id].set_pg_num_pending(pg_num - 1);
+    osdmap->apply_incremental(inc);
+
+    PastIntervals past_intervals;
+
+    ASSERT_TRUE(past_intervals.empty());
+    ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
+						  new_primary,
+						  old_acting,
+						  new_acting,
+						  old_up_primary,
+						  new_up_primary,
+						  old_up,
+						  new_up,
+						  same_interval_since,
+						  last_epoch_clean,
+						  lastmap,  // reverse order!
+						  osdmap,
+						  pg_t(pg_num / 2 - 1, pool_id),
+                                                  recoverable.get(),
+						  &past_intervals));
+  }
+
+  //
+  // PG is merge target
+  //
+  {
+    std::shared_ptr<OSDMap> osdmap(new OSDMap());
+    osdmap->set_max_osd(10);
+    osdmap->set_state(osd_id, CEPH_OSD_EXISTS);
+    osdmap->set_epoch(epoch);
+    OSDMap::Incremental inc(epoch + 1);
+    inc.new_pools[pool_id].min_size = min_size;
+    inc.new_pools[pool_id].set_pg_num(pg_num - 1);
+    osdmap->apply_incremental(inc);
+
+    PastIntervals past_intervals;
+
+    ASSERT_TRUE(past_intervals.empty());
+    ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
+						  new_primary,
+						  old_acting,
+						  new_acting,
+						  old_up_primary,
+						  new_up_primary,
+						  old_up,
+						  new_up,
+						  same_interval_since,
+						  last_epoch_clean,
+						  osdmap,
+						  lastmap,
+						  pg_t(pg_num / 2 - 1, pool_id),
                                                   recoverable.get(),
 						  &past_intervals));
   }
@@ -666,6 +868,37 @@ TEST(pg_t, split)
   ASSERT_EQ(1u, s.size());
   ASSERT_TRUE(s.count(pg_t(7, 0)));
 
+}
+
+TEST(pg_t, merge)
+{
+  pg_t pgid, parent;
+  bool b;
+
+  pgid = pg_t(7, 0);
+  b = pgid.is_merge_source(8, 7, &parent);
+  ASSERT_TRUE(b);
+  ASSERT_EQ(parent, pg_t(3, 0));
+  ASSERT_TRUE(parent.is_merge_target(8, 7));
+
+  b = pgid.is_merge_source(8, 5, &parent);
+  ASSERT_TRUE(b);
+  ASSERT_EQ(parent, pg_t(3, 0));
+  ASSERT_TRUE(parent.is_merge_target(8, 5));
+
+  b = pgid.is_merge_source(8, 4, &parent);
+  ASSERT_TRUE(b);
+  ASSERT_EQ(parent, pg_t(3, 0));
+  ASSERT_TRUE(parent.is_merge_target(8, 4));
+
+  b = pgid.is_merge_source(8, 3, &parent);
+  ASSERT_TRUE(b);
+  ASSERT_EQ(parent, pg_t(1, 0));
+  ASSERT_TRUE(parent.is_merge_target(8, 4));
+
+  b = pgid.is_merge_source(9, 8, &parent);
+  ASSERT_FALSE(b);
+  ASSERT_FALSE(parent.is_merge_target(9, 8));
 }
 
 TEST(pg_missing_t, constructor)

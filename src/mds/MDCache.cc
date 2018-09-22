@@ -71,7 +71,7 @@
 
 
 #include "common/config.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
@@ -2141,8 +2141,8 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
     pf->version = parent->pre_dirty();
 
     if (do_parent_mtime || linkunlink) {
-      ceph_assert(mut->wrlocks.count(&pin->filelock));
-      ceph_assert(mut->wrlocks.count(&pin->nestlock));
+      ceph_assert(mut->is_wrlocked(&pin->filelock));
+      ceph_assert(mut->is_wrlocked(&pin->nestlock));
       ceph_assert(cfollows == CEPH_NOSNAP);
       
       // update stale fragstat/rstat?
@@ -2188,7 +2188,7 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
 	ceph_assert(pin->nestlock.get_num_wrlocks() || mut->is_slave());
       }
 
-      if (mut->wrlocks.count(&pin->nestlock) == 0) {
+      if (!mut->is_wrlocked(&pin->nestlock)) {
 	dout(10) << " taking wrlock on " << pin->nestlock << " on " << *pin << dendl;
 	mds->locker->wrlock_force(&pin->nestlock, mut);
       }
@@ -2233,7 +2233,7 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
     // can cast only because i'm passing nowait=true in the sole user
     MDRequestRef mdmut = static_cast<MDRequestImpl*>(mut.get());
     if (!stop &&
-	mut->wrlocks.count(&pin->nestlock) == 0 &&
+	!mut->is_wrlocked(&pin->nestlock) &&
 	(!pin->versionlock.can_wrlock() ||                   // make sure we can take versionlock, too
 	 //true
 	 !mds->locker->wrlock_start(&pin->nestlock, mdmut, true)
@@ -2254,11 +2254,10 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
       }
       break;
     }
-    if (!mut->wrlocks.count(&pin->versionlock))
+    if (!mut->is_wrlocked(&pin->versionlock))
       mds->locker->local_wrlock_grab(&pin->versionlock, mut);
 
-    ceph_assert(mut->wrlocks.count(&pin->nestlock) ||
-	   mut->is_slave());
+    ceph_assert(mut->is_wrlocked(&pin->nestlock) || mut->is_slave());
     
     pin->last_dirstat_prop = mut->get_mds_stamp();
 
@@ -4092,63 +4091,56 @@ void MDCache::rejoin_send_rejoins()
       if (mdr->is_slave())
 	continue;
       // auth pins
-      for (map<MDSCacheObject*,mds_rank_t>::iterator q = mdr->remote_auth_pins.begin();
-	   q != mdr->remote_auth_pins.end();
-	   ++q) {
-	if (!q->first->is_auth()) {
-	  ceph_assert(q->second == q->first->authority().first);
-	  if (rejoins.count(q->second) == 0) continue;
-	  const MMDSCacheRejoin::ref &rejoin = rejoins[q->second];
+      for (const auto& q : mdr->remote_auth_pins) {
+	if (!q.first->is_auth()) {
+	  ceph_assert(q.second == q.first->authority().first);
+	  if (rejoins.count(q.second) == 0) continue;
+	  const MMDSCacheRejoin::ref &rejoin = rejoins[q.second];
 	  
-	  dout(15) << " " << *mdr << " authpin on " << *q->first << dendl;
+	  dout(15) << " " << *mdr << " authpin on " << *q.first << dendl;
 	  MDSCacheObjectInfo i;
-	  q->first->set_object_info(i);
+	  q.first->set_object_info(i);
 	  if (i.ino)
 	    rejoin->add_inode_authpin(vinodeno_t(i.ino, i.snapid), mdr->reqid, mdr->attempt);
 	  else
 	    rejoin->add_dentry_authpin(i.dirfrag, i.dname, i.snapid, mdr->reqid, mdr->attempt);
 
 	  if (mdr->has_more() && mdr->more()->is_remote_frozen_authpin &&
-	      mdr->more()->rename_inode == q->first)
+	      mdr->more()->rename_inode == q.first)
 	    rejoin->add_inode_frozen_authpin(vinodeno_t(i.ino, i.snapid),
 					     mdr->reqid, mdr->attempt);
 	}
       }
       // xlocks
-      for (set<SimpleLock*>::iterator q = mdr->xlocks.begin();
-	   q != mdr->xlocks.end();
-	   ++q) {
-	if (!(*q)->get_parent()->is_auth()) {
-	  mds_rank_t who = (*q)->get_parent()->authority().first;
+      for (const auto& q : mdr->locks) {
+	auto lock = q.lock;
+	auto obj = lock->get_parent();
+	if (q.is_xlock() && !obj->is_auth()) {
+	  mds_rank_t who = obj->authority().first;
 	  if (rejoins.count(who) == 0) continue;
 	  const MMDSCacheRejoin::ref &rejoin = rejoins[who];
 	  
-	  dout(15) << " " << *mdr << " xlock on " << **q << " " << *(*q)->get_parent() << dendl;
+	  dout(15) << " " << *mdr << " xlock on " << *lock << " " << *obj << dendl;
 	  MDSCacheObjectInfo i;
-	  (*q)->get_parent()->set_object_info(i);
+	  obj->set_object_info(i);
 	  if (i.ino)
-	    rejoin->add_inode_xlock(vinodeno_t(i.ino, i.snapid), (*q)->get_type(),
+	    rejoin->add_inode_xlock(vinodeno_t(i.ino, i.snapid), lock->get_type(),
 				    mdr->reqid, mdr->attempt);
 	  else
 	    rejoin->add_dentry_xlock(i.dirfrag, i.dname, i.snapid,
 				     mdr->reqid, mdr->attempt);
-	}
-      }
-      // remote wrlocks
-      for (map<SimpleLock*, mds_rank_t>::iterator q = mdr->remote_wrlocks.begin();
-	   q != mdr->remote_wrlocks.end();
-	   ++q) {
-	mds_rank_t who = q->second;
-	if (rejoins.count(who) == 0) continue;
-	const MMDSCacheRejoin::ref &rejoin = rejoins[who];
+	} else if (q.is_remote_wrlock()) {
+	  mds_rank_t who = q.wrlock_target;
+	  if (rejoins.count(who) == 0) continue;
+	  const MMDSCacheRejoin::ref &rejoin = rejoins[who];
 
-	dout(15) << " " << *mdr << " wrlock on " << q->second
-		 << " " << q->first->get_parent() << dendl;
-	MDSCacheObjectInfo i;
-	q->first->get_parent()->set_object_info(i);
-	ceph_assert(i.ino);
-	rejoin->add_inode_wrlock(vinodeno_t(i.ino, i.snapid), q->first->get_type(),
-				 mdr->reqid, mdr->attempt);
+	  dout(15) << " " << *mdr << " wrlock on " << *lock << " " << *obj << dendl;
+	  MDSCacheObjectInfo i;
+	  obj->set_object_info(i);
+	  ceph_assert(i.ino);
+	  rejoin->add_inode_wrlock(vinodeno_t(i.ino, i.snapid), lock->get_type(),
+				   mdr->reqid, mdr->attempt);
+	}
       }
     }
   }
@@ -4752,26 +4744,24 @@ void MDCache::handle_cache_rejoin_strong(const MMDSCacheRejoin::const_ref &stron
 	}
 
         // dn xlock?
-        const auto xlocked_dentries_it = strong->xlocked_dentries.find(dirfrag);
-        if (xlocked_dentries_it != strong->xlocked_dentries.end()) {
-          const auto ss_req_it = xlocked_dentries_it->second.find(ss);
-          if (ss_req_it != xlocked_dentries_it->second.end()) {
+        const auto xlocked_it = strong->xlocked_dentries.find(dirfrag);
+        if (xlocked_it != strong->xlocked_dentries.end()) {
+          const auto ss_req_it = xlocked_it->second.find(ss);
+          if (ss_req_it != xlocked_it->second.end()) {
 	    const MMDSCacheRejoin::slave_reqid& r = ss_req_it->second;
 	    dout(10) << " dn xlock by " << r << " on " << *dn << dendl;
 	    MDRequestRef mdr = request_get(r.reqid);  // should have this from auth_pin above.
 	    ceph_assert(mdr->is_auth_pinned(dn));
-	    if (!mdr->xlocks.count(&dn->versionlock)) {
+	    if (!mdr->is_xlocked(&dn->versionlock)) {
 	      ceph_assert(dn->versionlock.can_xlock_local());
 	      dn->versionlock.get_xlock(mdr, mdr->get_client());
-	      mdr->xlocks.insert(&dn->versionlock);
-	      mdr->locks.insert(&dn->versionlock);
+	      mdr->locks.emplace(&dn->versionlock, MutationImpl::LockOp::XLOCK);
 	    }
 	    if (dn->lock.is_stable())
 	      dn->auth_pin(&dn->lock);
 	    dn->lock.set_state(LOCK_XLOCK);
 	    dn->lock.get_xlock(mdr, mdr->get_client());
-	    mdr->xlocks.insert(&dn->lock);
-	    mdr->locks.insert(&dn->lock);
+	    mdr->locks.emplace(&dn->lock, MutationImpl::LockOp::XLOCK);
           }
         }
 
@@ -4860,11 +4850,10 @@ void MDCache::handle_cache_rejoin_strong(const MMDSCacheRejoin::const_ref &stron
 	dout(10) << " inode xlock by " << q.second << " on " << *lock << " on " << *in << dendl;
 	MDRequestRef mdr = request_get(q.second.reqid);  // should have this from auth_pin above.
 	ceph_assert(mdr->is_auth_pinned(in));
-	if (!mdr->xlocks.count(&in->versionlock)) {
+	if (!mdr->is_xlocked(&in->versionlock)) {
 	  ceph_assert(in->versionlock.can_xlock_local());
 	  in->versionlock.get_xlock(mdr, mdr->get_client());
-	  mdr->xlocks.insert(&in->versionlock);
-	  mdr->locks.insert(&in->versionlock);
+	  mdr->locks.emplace(&in->versionlock, MutationImpl::LockOp::XLOCK);
 	}
 	if (lock->is_stable())
 	  in->auth_pin(lock);
@@ -4872,8 +4861,7 @@ void MDCache::handle_cache_rejoin_strong(const MMDSCacheRejoin::const_ref &stron
 	if (lock == &in->filelock)
 	  in->loner_cap = -1;
 	lock->get_xlock(mdr, mdr->get_client());
-	mdr->xlocks.insert(lock);
-	mdr->locks.insert(lock);
+	mdr->locks.emplace(lock, MutationImpl::LockOp::XLOCK);
       }
     }
   }
@@ -4891,8 +4879,7 @@ void MDCache::handle_cache_rejoin_strong(const MMDSCacheRejoin::const_ref &stron
 	if (lock == &in->filelock)
 	  in->loner_cap = -1;
 	lock->get_wrlock(true);
-	mdr->wrlocks.insert(lock);
-	mdr->locks.insert(lock);
+	mdr->locks.emplace(lock, MutationImpl::LockOp::WRLOCK);
       }
     }
   }
@@ -8841,6 +8828,7 @@ void MDCache::handle_open_ino(const MMDSOpenIno::const_ref &m, int err)
 
   dout(10) << "handle_open_ino " << *m << " err " << err << dendl;
 
+  auto from = mds_rank_t(m->get_source().num());
   inodeno_t ino = m->ino;
   MMDSOpenInoReply::ref reply;
   CInode *in = get_inode(ino);
@@ -8870,7 +8858,7 @@ void MDCache::handle_open_ino(const MMDSOpenIno::const_ref &m, int err)
       return;
     reply = MMDSOpenInoReply::create(m->get_tid(), ino, hint, ret);
   }
-  m->get_connection()->send_message2(reply); /* FIXME, why not send_client? */
+  mds->send_message_mds(reply, from);
 }
 
 void MDCache::handle_open_ino_reply(const MMDSOpenInoReply::const_ref &m)
@@ -9059,7 +9047,7 @@ void MDCache::handle_find_ino(const MMDSFindIno::const_ref &m)
     in->make_path(r->path);
     dout(10) << " have " << r->path << " " << *in << dendl;
   }
-  m->get_connection()->send_message2(r);
+  mds->send_message_mds(r, mds_rank_t(m->get_source().num()));
 }
 
 
@@ -9344,26 +9332,26 @@ void MDCache::request_drop_foreign_locks(MDRequestRef& mdr)
    * implicitly. Note that we don't call the finishers -- there shouldn't
    * be any on a remote lock and the request finish wakes up all
    * the waiters anyway! */
-  set<SimpleLock*>::iterator p = mdr->xlocks.begin();
-  while (p != mdr->xlocks.end()) {
-    if ((*p)->get_parent()->is_auth()) 
-      ++p;
-    else {
-      dout(10) << "request_drop_foreign_locks forgetting lock " << **p
-	       << " on " << *(*p)->get_parent() << dendl;
-      (*p)->put_xlock();
-      mdr->locks.erase(*p);
-      mdr->xlocks.erase(p++);
-    }
-  }
 
-  map<SimpleLock*, mds_rank_t>::iterator q = mdr->remote_wrlocks.begin();
-  while (q != mdr->remote_wrlocks.end()) {
-    dout(10) << "request_drop_foreign_locks forgetting remote_wrlock " << *q->first
-	     << " on mds." << q->second
-	     << " on " << *(q->first)->get_parent() << dendl;
-    mdr->locks.erase(q->first);
-    mdr->remote_wrlocks.erase(q++);
+  for (auto it = mdr->locks.begin(); it != mdr->locks.end(); ) {
+    SimpleLock *lock = it->lock;
+    if (it->is_xlock() && !lock->get_parent()->is_auth()) {
+      dout(10) << "request_drop_foreign_locks forgetting lock " << *lock
+	       << " on " << lock->get_parent() << dendl;
+      lock->put_xlock();
+      mdr->locks.erase(it++);
+    } else if (it->is_remote_wrlock()) {
+      dout(10) << "request_drop_foreign_locks forgetting remote_wrlock " << *lock
+	       << " on mds." << it->wrlock_target << " on " << *lock->get_parent() << dendl;
+      if (it->is_wrlock()) {
+	it->clear_remote_wrlock();
+	++it;
+      } else {
+	mdr->locks.erase(it++);
+      }
+    } else {
+      ++it;
+    }
   }
 
   mdr->more()->slaves.clear(); /* we no longer have requests out to them, and
@@ -9400,10 +9388,7 @@ void MDCache::request_cleanup(MDRequestRef& mdr)
   mdr->drop_local_auth_pins();
 
   // drop stickydirs
-  for (set<CInode*>::iterator p = mdr->stickydirs.begin();
-       p != mdr->stickydirs.end();
-       ++p) 
-    (*p)->put_stickydirs();
+  mdr->put_stickydirs();
 
   mds->locker->kick_cap_releases(mdr);
 
@@ -11393,12 +11378,12 @@ void MDCache::dispatch_fragment_dir(MDRequestRef& mdr)
   dout(10) << "dispatch_fragment_dir " << basedirfrag << " bits " << info.bits
 	   << " on " << *diri << dendl;
   if (!mdr->aborted) {
-    set<SimpleLock*> rdlocks, wrlocks, xlocks;
-    wrlocks.insert(&diri->dirfragtreelock);
+    MutationImpl::LockOpVec lov;
+    lov.add_wrlock(&diri->dirfragtreelock);
     // prevent a racing gather on any other scatterlocks too
-    wrlocks.insert(&diri->nestlock);
-    wrlocks.insert(&diri->filelock);
-    if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks, NULL, NULL, true))
+    lov.add_wrlock(&diri->nestlock);
+    lov.add_wrlock(&diri->filelock);
+    if (!mds->locker->acquire_locks(mdr, lov, NULL, true))
       if (!mdr->aborted)
 	return;
   }
@@ -12238,15 +12223,15 @@ void MDCache::enqueue_scrub(
 
 void MDCache::enqueue_scrub_work(MDRequestRef& mdr)
 {
-  set<SimpleLock*> rdlocks, wrlocks, xlocks;
-  CInode *in = mds->server->rdlock_path_pin_ref(mdr, 0, rdlocks, true);
+  MutationImpl::LockOpVec lov;
+  CInode *in = mds->server->rdlock_path_pin_ref(mdr, 0, lov, true);
   if (NULL == in)
     return;
 
   // TODO: Remove this restriction
   ceph_assert(in->is_auth());
 
-  bool locked = mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks);
+  bool locked = mds->locker->acquire_locks(mdr, lov);
   if (!locked)
     return;
 
@@ -12376,12 +12361,12 @@ void MDCache::repair_dirfrag_stats_work(MDRequestRef& mdr)
 
   mdr->auth_pin(dir);
 
-  set<SimpleLock*> rdlocks, wrlocks, xlocks;
+  MutationImpl::LockOpVec lov;
   CInode *diri = dir->inode;
-  rdlocks.insert(&diri->dirfragtreelock);
-  wrlocks.insert(&diri->nestlock);
-  wrlocks.insert(&diri->filelock);
-  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+  lov.add_rdlock(&diri->dirfragtreelock);
+  lov.add_wrlock(&diri->nestlock);
+  lov.add_wrlock(&diri->filelock);
+  if (!mds->locker->acquire_locks(mdr, lov))
     return;
 
   if (!dir->is_complete()) {
@@ -12473,16 +12458,16 @@ void MDCache::repair_inode_stats_work(MDRequestRef& mdr)
     return;
   }
 
-  set<SimpleLock*> rdlocks, wrlocks, xlocks;
+  MutationImpl::LockOpVec lov;
   std::list<frag_t> frags;
 
   if (mdr->ls) // already marked filelock/nestlock dirty ?
     goto do_rdlocks;
 
-  rdlocks.insert(&diri->dirfragtreelock);
-  wrlocks.insert(&diri->nestlock);
-  wrlocks.insert(&diri->filelock);
-  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+  lov.add_rdlock(&diri->dirfragtreelock);
+  lov.add_wrlock(&diri->nestlock);
+  lov.add_wrlock(&diri->filelock);
+  if (!mds->locker->acquire_locks(mdr, lov))
     return;
 
   // Fetch all dirfrags and mark filelock/nestlock dirty. This will tirgger
@@ -12512,11 +12497,11 @@ void MDCache::repair_inode_stats_work(MDRequestRef& mdr)
 
 do_rdlocks:
   // force the scatter-gather process
-  rdlocks.insert(&diri->dirfragtreelock);
-  rdlocks.insert(&diri->nestlock);
-  rdlocks.insert(&diri->filelock);
-  wrlocks.clear();
-  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+  lov.clear();
+  lov.add_rdlock(&diri->dirfragtreelock);
+  lov.add_rdlock(&diri->nestlock);
+  lov.add_rdlock(&diri->filelock);
+  if (!mds->locker->acquire_locks(mdr, lov))
     return;
 
   diri->state_clear(CInode::STATE_REPAIRSTATS);
@@ -12564,12 +12549,12 @@ void MDCache::upgrade_inode_snaprealm_work(MDRequestRef& mdr)
     return;
   }
 
-  set<SimpleLock*> rdlocks, wrlocks, xlocks;
-  mds->locker->include_snap_rdlocks(rdlocks, in);
-  rdlocks.erase(&in->snaplock);
-  xlocks.insert(&in->snaplock);
+  MutationImpl::LockOpVec lov;
+  mds->locker->include_snap_rdlocks(in, lov);
+  lov.erase_rdlock(&in->snaplock);
+  lov.add_xlock(&in->snaplock);
 
-  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+  if (!mds->locker->acquire_locks(mdr, lov))
     return;
 
   // project_snaprealm() upgrades snaprealm format
@@ -12619,14 +12604,14 @@ public:
 
 void MDCache::flush_dentry_work(MDRequestRef& mdr)
 {
-  set<SimpleLock*> rdlocks, wrlocks, xlocks;
-  CInode *in = mds->server->rdlock_path_pin_ref(mdr, 0, rdlocks, true);
+  MutationImpl::LockOpVec lov;
+  CInode *in = mds->server->rdlock_path_pin_ref(mdr, 0, lov, true);
   if (NULL == in)
     return;
 
   // TODO: Is this necessary? Fix it if so
   ceph_assert(in->is_auth());
-  bool locked = mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks);
+  bool locked = mds->locker->acquire_locks(mdr, lov);
   if (!locked)
     return;
   in->flush(new C_FinishIOMDR(mds, mdr));

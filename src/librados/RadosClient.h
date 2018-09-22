@@ -99,6 +99,7 @@ public:
 
   uint64_t get_instance_id();
 
+  int get_min_compatible_osd(int8_t* require_osd_release);
   int get_min_compatible_client(int8_t* min_compat_client,
                                 int8_t* require_min_compat_client);
 
@@ -113,8 +114,8 @@ public:
   int pool_requires_alignment2(int64_t pool_id, bool *requires);
   uint64_t pool_required_alignment(int64_t pool_id);
   int pool_required_alignment2(int64_t pool_id, uint64_t *alignment);
-  int pool_get_auid(uint64_t pool_id, unsigned long long *auid);
-  int pool_get_name(uint64_t pool_id, std::string *auid, bool wait_latest_map = false);
+  int pool_get_name(uint64_t pool_id, std::string *name,
+		    bool wait_latest_map = false);
 
   int pool_list(std::list<std::pair<int64_t, string> >& ls);
   int get_pool_stats(std::list<string>& ls, map<string,::pool_stat_t>& result);
@@ -127,8 +128,8 @@ public:
     b) the first ruleset in crush ruleset
     c) error out if no value find
   */
-  int pool_create(string& name, unsigned long long auid=0, int16_t crush_rule=-1);
-  int pool_create_async(string& name, PoolAsyncCompletionImpl *c, unsigned long long auid=0,
+  int pool_create(string& name, int16_t crush_rule=-1);
+  int pool_create_async(string& name, PoolAsyncCompletionImpl *c,
 			int16_t crush_rule=-1);
   int pool_get_base_tier(int64_t pool_id, int64_t* base_tier);
   int pool_delete(const char *name);

@@ -166,7 +166,7 @@ extern int crush_get_next_bucket_id(struct crush_map *map);
  *   to another bucket.
  *
  * @param[in] map the crush_map
- * @param[in] bucketno the bucket unique identifer or 0
+ * @param[in] bucketno the bucket unique identifier or 0
  * @param[in] bucket the bucket to add to the __map__
  * @param[out] idout a pointer to the bucket identifier
  *
@@ -267,7 +267,7 @@ extern int crush_remove_bucket(struct crush_map *map, struct crush_bucket *bucke
  *
  * Remove __item__ from __bucket__ and subtract the item weight from
  * the bucket weight. If the weight of the item is greater than the
- * weight of the bucket, silentely set the bucket weight to zero.
+ * weight of the bucket, silently set the bucket weight to zero.
  *
  * - return -ENOMEM if the __bucket__ cannot be sized down with __realloc(3)__.
  * - return -1 if the value of __bucket->alg__ is unknown.

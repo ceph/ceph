@@ -19,10 +19,15 @@ public:
     default_to_dispatch();
   }
 
+  MOCK_METHOD0(connect, int());
+  int do_connect() {
+    return TestMemRadosClient::connect();
+  }
+
   MOCK_METHOD2(create_ioctx, TestIoCtxImpl *(int64_t pool_id,
                                              const std::string &pool_name));
-  TestIoCtxImpl *do_create_ioctx(int64_t pool_id,
-                                 const std::string &pool_name) {
+  MockTestMemIoCtxImpl* do_create_ioctx(int64_t pool_id,
+                                        const std::string &pool_name) {
     return new ::testing::NiceMock<MockTestMemIoCtxImpl>(
       this, this, pool_id, pool_name,
       get_mem_cluster()->get_pool(pool_name));
@@ -33,6 +38,11 @@ public:
   int do_blacklist_add(const std::string& client_address,
                        uint32_t expire_seconds) {
     return TestMemRadosClient::blacklist_add(client_address, expire_seconds);
+  }
+
+  MOCK_METHOD1(get_min_compatible_osd, int(int8_t*));
+  int do_get_min_compatible_osd(int8_t* require_osd_release) {
+    return TestMemRadosClient::get_min_compatible_osd(require_osd_release);
   }
 
   MOCK_METHOD2(get_min_compatible_client, int(int8_t*, int8_t*));
@@ -63,8 +73,10 @@ public:
   void default_to_dispatch() {
     using namespace ::testing;
 
+    ON_CALL(*this, connect()).WillByDefault(Invoke(this, &MockTestMemRadosClient::do_connect));
     ON_CALL(*this, create_ioctx(_, _)).WillByDefault(Invoke(this, &MockTestMemRadosClient::do_create_ioctx));
     ON_CALL(*this, blacklist_add(_, _)).WillByDefault(Invoke(this, &MockTestMemRadosClient::do_blacklist_add));
+    ON_CALL(*this, get_min_compatible_osd(_)).WillByDefault(Invoke(this, &MockTestMemRadosClient::do_get_min_compatible_osd));
     ON_CALL(*this, get_min_compatible_client(_, _)).WillByDefault(Invoke(this, &MockTestMemRadosClient::do_get_min_compatible_client));
     ON_CALL(*this, service_daemon_register(_, _, _)).WillByDefault(Invoke(this, &MockTestMemRadosClient::do_service_daemon_register));
     ON_CALL(*this, service_daemon_update_status_r(_)).WillByDefault(Invoke(this, &MockTestMemRadosClient::do_service_daemon_update_status_r));

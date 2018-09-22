@@ -18,6 +18,8 @@
 #include "common/Finisher.h"
 #include "common/Mutex.h"
 
+#include "PyFormatter.h"
+
 #include "osdc/Objecter.h"
 #include "client/Client.h"
 #include "common/LogClient.h"
@@ -71,11 +73,23 @@ public:
     const std::string &svc_type,
     const std::string &svc_id,
     const std::string &path);
+  PyObject *get_latest_counter_python(
+    const std::string &svc_type,
+    const std::string &svc_id,
+    const std::string &path);
   PyObject *get_perf_schema_python(
      const std::string &svc_type,
      const std::string &svc_id);
   PyObject *get_context();
   PyObject *get_osdmap();
+  PyObject *with_perf_counters(
+      std::function<void(
+        PerfCounterInstance& counter_instance,
+        PerfCounterType& counter_type,
+        PyFormatter& f)> fct,
+      const std::string &svc_name,
+      const std::string &svc_id,
+      const std::string &path) const;
 
   bool get_store(const std::string &module_name,
       const std::string &key, std::string *val) const;

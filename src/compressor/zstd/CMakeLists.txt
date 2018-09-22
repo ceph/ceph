@@ -22,18 +22,17 @@ ExternalProject_Add_Step(zstd_ext forcebuild
   ALWAYS 1)
 
 add_library(zstd STATIC IMPORTED)
-set_property(TARGET zstd PROPERTY
+set_target_properties(zstd PROPERTIES
+  INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/src/zstd/lib"
   IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/libzstd/lib/libzstd.a")
 add_dependencies(zstd zstd_ext)
-set(ZSTD_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/src/zstd/lib)
 
-#
 set(zstd_sources
   CompressionPluginZstd.cc
 )
 
 add_library(ceph_zstd SHARED ${zstd_sources})
-target_link_libraries(ceph_zstd zstd)
+target_link_libraries(ceph_zstd PRIVATE zstd)
 set_target_properties(ceph_zstd PROPERTIES
   VERSION 2.0.0
   SOVERSION 2

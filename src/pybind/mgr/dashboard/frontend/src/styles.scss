@@ -286,6 +286,10 @@ uib-accordion .panel-title,
   padding-left: 4px;
   vertical-align: text-top;
 }
+/* Panel */
+.panel-footer button.btn:not(:first-child) {
+  margin-left: 5px;
+}
 /* Modal dialog */
 .modal-footer button.btn:not(:first-child) {
   margin-left: 5px;

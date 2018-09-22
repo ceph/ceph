@@ -31,7 +31,7 @@
 #include "auth/AuthServiceHandler.h"
 #include "auth/KeyRing.h"
 #include "include/stringify.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #include "mds/MDSAuthCaps.h"
 #include "osd/OSDCap.h"
@@ -136,6 +136,9 @@ void _generate_bootstrap_keys(
     } },
     { "bootstrap-rbd", {
       { "mon", _encode_cap("allow profile bootstrap-rbd") }
+    } },
+    { "bootstrap-rbd-mirror", {
+      { "mon", _encode_cap("allow profile bootstrap-rbd-mirror") }
     } }
   };
 
@@ -198,6 +201,8 @@ void AuthMonitor::create_initial()
 void AuthMonitor::update_from_paxos(bool *need_bootstrap)
 {
   dout(10) << __func__ << dendl;
+  load_health();
+
   version_t version = get_last_committed();
   version_t keys_ver = mon->key_server.get_ver();
   if (version == keys_ver)
@@ -322,6 +327,52 @@ void AuthMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   version_t version = get_last_committed() + 1;
   put_version(t, version, bl);
   put_last_committed(t, version);
+
+  // health
+  health_check_map_t next;
+  map<string,list<string>> bad_detail;  // entity -> details
+  for (auto i = mon->key_server.secrets_begin();
+       i != mon->key_server.secrets_end();
+       ++i) {
+    for (auto& p : i->second.caps) {
+      ostringstream ss;
+      if (!valid_caps(p.first, p.second, &ss)) {
+	ostringstream ss2;
+	ss2 << i->first << " " << ss.str();
+	bad_detail[i->first.to_str()].push_back(ss2.str());
+      }
+    }
+  }
+  for (auto& inc : pending_auth) {
+    if (inc.inc_type == AUTH_DATA) {
+      KeyServerData::Incremental auth_inc;
+      auto iter = inc.auth_data.cbegin();
+      decode(auth_inc, iter);
+      if (auth_inc.op == KeyServerData::AUTH_INC_DEL) {
+	bad_detail.erase(auth_inc.name.to_str());
+      } else if (auth_inc.op == KeyServerData::AUTH_INC_ADD) {
+	for (auto& p : auth_inc.auth.caps) {
+	  ostringstream ss;
+	  if (!valid_caps(p.first, p.second, &ss)) {
+	    ostringstream ss2;
+	    ss2 << auth_inc.name << " " << ss.str();
+	    bad_detail[auth_inc.name.to_str()].push_back(ss2.str());
+	  }
+	}
+      }
+    }
+  }
+  if (bad_detail.size()) {
+    ostringstream ss;
+    ss << bad_detail.size() << " auth entities have invalid capabilities";
+    health_check_t *check = &next.add("AUTH_BAD_CAPS", HEALTH_ERR, ss.str());
+    for (auto& i : bad_detail) {
+      for (auto& j : i.second) {
+	check->detail.push_back(j);
+      }
+    }
+  }
+  encode_health(next, t);
 }
 
 void AuthMonitor::encode_full(MonitorDBStore::TransactionRef t)
@@ -365,8 +416,7 @@ bool AuthMonitor::preprocess_query(MonOpRequestRef op)
   case MSG_MON_COMMAND:
     try {
       return preprocess_command(op);
-    }
-    catch (const bad_cmd_get& e) {
+    } catch (const bad_cmd_get& e) {
       bufferlist bl;
       mon->reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
       return true;
@@ -392,8 +442,7 @@ bool AuthMonitor::prepare_update(MonOpRequestRef op)
   case MSG_MON_COMMAND:
     try {
       return prepare_command(op);
-    }
-    catch (const bad_cmd_get& e) {
+    } catch (const bad_cmd_get& e) {
       bufferlist bl;
       mon->reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
       return true;
@@ -588,7 +637,6 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
   }
 
   try {
-    uint64_t auid = 0;
     if (start) {
       // new session
       proto = s->auth_handler->start_session(entity_name, indata, response_bl, caps_info);
@@ -599,7 +647,7 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
       }
     } else {
       // request
-      ret = s->auth_handler->handle_request(indata, response_bl, s->global_id, caps_info, &auid);
+      ret = s->auth_handler->handle_request(indata, response_bl, s->global_id, caps_info);
     }
     if (ret == -EIO) {
       wait_for_active(op, new C_RetryMessage(this,op));
@@ -615,7 +663,6 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
 	str.clear();
       }
       s->caps.parse(str, NULL);
-      s->auid = auid;
       s->authenticated = true;
       finished = true;
     }
@@ -654,7 +701,7 @@ bool AuthMonitor::preprocess_command(MonOpRequestRef op)
   }
 
   string prefix;
-  cmd_getval_throws(g_ceph_context, cmdmap, "prefix", prefix);
+  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
   if (prefix == "auth add" ||
       prefix == "auth del" ||
       prefix == "auth rm" ||
@@ -674,7 +721,7 @@ bool AuthMonitor::preprocess_command(MonOpRequestRef op)
 
   // entity might not be supplied, but if it is, it should be valid
   string entity_name;
-  cmd_getval_throws(g_ceph_context, cmdmap, "entity", entity_name);
+  cmd_getval(g_ceph_context, cmdmap, "entity", entity_name);
   EntityName entity;
   if (!entity_name.empty() && !entity.from_str(entity_name)) {
     ss << "invalid entity_auth " << entity_name;
@@ -683,7 +730,7 @@ bool AuthMonitor::preprocess_command(MonOpRequestRef op)
   }
 
   string format;
-  cmd_getval_throws(g_ceph_context, cmdmap, "format", format, string("plain"));
+  cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   if (prefix == "auth export") {
@@ -1184,10 +1231,10 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
   string entity_name;
   EntityName entity;
 
-  cmd_getval_throws(g_ceph_context, cmdmap, "prefix", prefix);
+  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
 
   string format;
-  cmd_getval_throws(g_ceph_context, cmdmap, "format", format, string("plain"));
+  cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   MonSession *session = m->get_session();
@@ -1196,14 +1243,14 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
     return true;
   }
 
-  cmd_getval_throws(g_ceph_context, cmdmap, "caps", caps_vec);
+  cmd_getval(g_ceph_context, cmdmap, "caps", caps_vec);
   if ((caps_vec.size() % 2) != 0) {
     ss << "bad capabilities request; odd number of arguments";
     err = -EINVAL;
     goto done;
   }
 
-  cmd_getval_throws(g_ceph_context, cmdmap, "entity", entity_name);
+  cmd_getval(g_ceph_context, cmdmap, "entity", entity_name);
   if (!entity_name.empty() && !entity.from_str(entity_name)) {
     ss << "bad entity name";
     err = -EINVAL;
@@ -1440,7 +1487,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
     return true;
   } else if (prefix == "fs authorize") {
     string filesystem;
-    cmd_getval_throws(g_ceph_context, cmdmap, "filesystem", filesystem);
+    cmd_getval(g_ceph_context, cmdmap, "filesystem", filesystem);
     string mds_cap_string, osd_cap_string;
     string osd_cap_wanted = "r";
 

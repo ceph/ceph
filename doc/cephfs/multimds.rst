@@ -123,7 +123,7 @@ to. A default value of ``-1`` indicates the directory is not pinned.
 
 A directory's export pin is inherited from its closest parent with a set export
 pin.  In this way, setting the export pin on a directory affects all of its
-children. However, the parents pin can be overriden by setting the child
+children. However, the parents pin can be overridden by setting the child
 directory's export pin. For example:
 
 ::

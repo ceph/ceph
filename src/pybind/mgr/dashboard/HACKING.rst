@@ -63,8 +63,8 @@ Run ``npm run build`` to build the project. The build artifacts will be
 stored in the ``dist/`` directory. Use the ``-prod`` flag for a
 production build. Navigate to ``https://localhost:8443``.
 
-Formating TS and SCSS files
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Formatting TS and SCSS files
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 We use `Prettier <https://prettier.io/>`_ to automatically format TS and SCSS
 files.
@@ -72,6 +72,7 @@ To use this plugin you can either install it in your IDE, if supported, or use
 it via the cli.
 
 We added 2 npm scripts to help running prettier commands:
+
 - ``npm run prettier``, will run prettier formatter on all frontend files
 - ``npm run prettier:lint``, will check all frontend files against prettier linter
 
@@ -84,6 +85,14 @@ Create ``unit-test-configuration.ts`` file based on
 
 Run ``npm run test`` to execute the unit tests via `Jest
 <https://facebook.github.io/jest/>`_.
+
+If you get errors on all tests, it could be because `Jest
+<https://facebook.github.io/jest/>`_ or something else was updated.
+There are a few ways how you can try to resolve this:
+
+- Remove all modules with ``rm -rf dist node_modules`` and run ``npm install``
+  again in order to reinstall them
+- Clear the cache of jest by running ``npx jest --clearCache``
 
 Running End-to-End Tests
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -348,7 +357,7 @@ path parameters, query parameters, or body parameters.
 
 For ``GET`` and ``DELETE`` methods, the method's non-optional parameters are
 considered path parameters by default. Optional parameters are considered
-query parameters. By specifing the ``query_parameters`` in the endpoint
+query parameters. By specifying the ``query_parameters`` in the endpoint
 decorator it is possible to make a non-optional parameter to be a query
 parameter.
 
@@ -402,7 +411,7 @@ the ``post`` method case.
 Defining path parameters in endpoints's URLs using python methods's parameters
 is very easy but it is still a bit strict with respect to the position of these
 parameters in the URL structure.
-Sometimes we may want to explictly define a URL scheme that
+Sometimes we may want to explicitly define a URL scheme that
 contains path parameters mixed with static parts of the URL.
 Our controller infrastructure also supports the declaration of URL paths with
 explicit path parameters at both the controller level and method level.
@@ -719,7 +728,7 @@ The value of the class attribute is a pair composed by the default value for tha
 setting, and the python type of the value.
 
 By declaring the ``ADMIN_EMAIL_ADDRESS`` class attribute, when you restart the
-dashboard plugin, you will atomatically gain two additional CLI commands to
+dashboard plugin, you will automatically gain two additional CLI commands to
 get and set that setting::
 
   $ ceph dashboard get-admin-email-address
@@ -877,7 +886,7 @@ additional parameter called ``executor``. The full method signature of
 
 
 The ``TaskExecutor`` class is responsible for code that executes a given task
-function, and defines three methods that can be overriden by
+function, and defines three methods that can be overridden by
 subclasses::
 
   def init(self, task)

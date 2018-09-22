@@ -16,8 +16,10 @@
 
 #include <atomic>
 #include "common/histogram.h"
-#include "msg/Message.h"
 #include "common/RWLock.h"
+#include "common/Thread.h"
+#include "include/spinlock.h"
+#include "msg/Message.h"
 
 #define OPTRACKER_PREALLOC_EVENTS 20
 
@@ -340,7 +342,7 @@ public:
 
   const char *get_desc() const {
     if (!desc || want_new_desc.load()) {
-      Mutex::Locker l(lock);
+      std::lock_guard<Mutex> l(lock);
       _gen_desc();
     }
     return desc;
@@ -363,7 +365,7 @@ public:
   }
 
   double get_duration() const {
-    Mutex::Locker l(lock);
+    std::lock_guard<Mutex> l(lock);
     if (!events.empty() && events.rbegin()->compare("done") == 0)
       return events.rbegin()->stamp - get_initiated();
     else
@@ -380,7 +382,7 @@ public:
   }
 
   virtual const char *state_string() const {
-    Mutex::Locker l(lock);
+    std::lock_guard<Mutex> l(lock);
     return events.rbegin()->c_str();
   }
 

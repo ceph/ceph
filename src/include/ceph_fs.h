@@ -183,7 +183,7 @@ struct ceph_mon_poolop {
 	struct ceph_fsid fsid;
 	__le32 pool;
 	__le32 op;
-	__le64 auid;
+	__le64 __old_auid;  // obsolete
 	__le64 snapid;
 	__le32 name_len;
 } __attribute__ ((packed));
@@ -495,7 +495,7 @@ struct ceph_mds_request_head_legacy {
 } __attribute__ ((packed));
 
 /*
- * Note that this is embedded wthin ceph_mds_request_head. Also, compatability
+ * Note that this is embedded wthin ceph_mds_request_head. Also, compatibility
  * with the ceph_mds_request_args_legacy must be maintained!
  */
 union ceph_mds_request_args {

@@ -396,7 +396,7 @@ public:
   }
 
   void expect_start_append(::journal::MockJournaler &mock_journaler) {
-    EXPECT_CALL(mock_journaler, start_append(_, _, _));
+    EXPECT_CALL(mock_journaler, start_append(_, _, _, _));
   }
 
   void expect_stop_append(::journal::MockJournaler &mock_journaler, int r) {

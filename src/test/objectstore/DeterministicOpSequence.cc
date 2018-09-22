@@ -27,7 +27,7 @@
 
 #include "DeterministicOpSequence.h"
 #include "common/config.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_filestore

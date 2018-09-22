@@ -29,7 +29,7 @@
 #include <boost/functional/hash.hpp>
 #include <boost/dynamic_bitset.hpp>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/unordered_map.h"
 #include "include/mempool.h"
 #include "common/bloom_filter.hpp"
@@ -121,6 +121,7 @@ enum {
   l_bluestore_extent_compress,
   l_bluestore_gc_merged,
   l_bluestore_read_eio,
+  l_bluestore_reads_with_retries,
   l_bluestore_fragmentation,
   l_bluestore_last
 };
@@ -247,6 +248,10 @@ public:
 
   /// map logical extent range (object) onto buffers
   struct BufferSpace {
+    enum {
+      BYPASS_CLEAN_CACHE = 0x1,  // bypass clean cache
+    };
+
     typedef boost::intrusive::list<
       Buffer,
       boost::intrusive::member_hook<
@@ -346,7 +351,8 @@ public:
 
     void read(Cache* cache, uint32_t offset, uint32_t length,
 	      BlueStore::ready_regions_t& res,
-	      interval_set<uint32_t>& res_intervals);
+	      interval_set<uint32_t>& res_intervals,
+	      int flags = 0);
 
     void truncate(Cache* cache, uint32_t offset) {
       discard(cache, offset, (uint32_t)-1 - offset);
@@ -1362,6 +1368,7 @@ public:
 
     //pool options
     pool_opts_t pool_opts;
+    ContextQueue *commit_queue;
 
     OnodeRef get_onode(const ghobject_t& oid, bool create);
 
@@ -1686,8 +1693,6 @@ public:
     BlueStore *store;
     coll_t cid;
 
-    size_t shard;
-
     uint64_t last_seq = 0;
 
     std::atomic_int txc_with_unstable_io = {0};  ///< num txcs with unstable io
@@ -1878,10 +1883,7 @@ private:
   deferred_osr_queue_t deferred_queue; ///< osr's with deferred io pending
   int deferred_queue_size = 0;         ///< num txc's queued across all osrs
   atomic_int deferred_aggressive = {0}; ///< aggressive wakeup of kv thread
-  Finisher deferred_finisher;
-
-  int m_finisher_num = 1;
-  vector<Finisher*> finishers;
+  Finisher deferred_finisher, finisher;
 
   KVSyncThread kv_sync_thread;
   std::mutex kv_lock;
@@ -1957,7 +1959,7 @@ private:
   uint64_t osd_memory_target = 0;   ///< OSD memory target when autotuning cache
   uint64_t osd_memory_base = 0;     ///< OSD base memory when autotuning cache
   double osd_memory_expected_fragmentation = 0; ///< expected memory fragmentation
-  uint64_t osd_memory_cache_min = 0; ///< Min memory to assign when autotuning cahce
+  uint64_t osd_memory_cache_min = 0; ///< Min memory to assign when autotuning cache
   double osd_memory_cache_resize_interval = 0; ///< Time to wait between cache resizing 
   std::mutex vstatfs_lock;
   volatile_statfs vstatfs;
@@ -2187,7 +2189,9 @@ private:
   void _txc_finish(TransContext *txc);
   void _txc_release_alloc(TransContext *txc);
 
+  void _osr_attach(Collection *c);
   void _osr_register_zombie(OpSequencer *osr);
+  void _osr_drain(OpSequencer *osr);
   void _osr_drain_preceding(TransContext *txc);
   void _osr_drain_all();
 
@@ -2379,7 +2383,8 @@ public:
     uint64_t offset,
     size_t len,
     bufferlist& bl,
-    uint32_t op_flags = 0);
+    uint32_t op_flags = 0,
+    uint64_t retry_count = 0);
 
 private:
   int _fiemap(CollectionHandle &c_, const ghobject_t& oid,
@@ -2401,6 +2406,8 @@ public:
 
   CollectionHandle open_collection(const coll_t &c) override;
   CollectionHandle create_new_collection(const coll_t& cid) override;
+  void set_collection_commit_queue(const coll_t& cid,
+				   ContextQueue *commit_queue) override;
 
   bool collection_exists(const coll_t& c) override;
   int collection_empty(CollectionHandle& c, bool *empty) override;
@@ -2797,10 +2804,15 @@ private:
 			 unsigned bits, CollectionRef *c);
   int _remove_collection(TransContext *txc, const coll_t &cid,
                          CollectionRef *c);
+  void _do_remove_collection(TransContext *txc, CollectionRef *c);
   int _split_collection(TransContext *txc,
 			CollectionRef& c,
 			CollectionRef& d,
 			unsigned bits, int rem);
+  int _merge_collection(TransContext *txc,
+			CollectionRef *c,
+			CollectionRef& d,
+			unsigned bits);
 };
 
 static inline void intrusive_ptr_add_ref(BlueStore::Onode *o) {
@@ -2868,7 +2880,7 @@ public:
 	granularity = round_up_to(granularity, min_alloc_size);
       }
 
-      uint64_t entries = p2roundup(total, granularity) / granularity;
+      uint64_t entries = round_up_to(total, granularity) / granularity;
       collections_bfs.resize(entries,
         bloom_filter(BLOOM_FILTER_SALT_COUNT,
                      BLOOM_FILTER_TABLE_SIZE,
@@ -2887,7 +2899,7 @@ public:
 			 const coll_t& cid, const ghobject_t& oid) {
       ceph_assert(granularity); // initialized
       
-      // can't call this func after filter_out has been apllied
+      // can't call this func after filter_out has been applied
       ceph_assert(!was_filtered_out);
       if (!len) {
 	return;

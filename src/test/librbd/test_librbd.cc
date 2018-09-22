@@ -6752,6 +6752,11 @@ TEST_F(TestLibRBD, Namespaces) {
   ASSERT_EQ(2U, cpp_names.size());
   ASSERT_EQ("name1", cpp_names[0]);
   ASSERT_EQ("name3", cpp_names[1]);
+  bool exists;
+  ASSERT_EQ(0, rbd_namespace_exists(ioctx, "name2", &exists));
+  ASSERT_FALSE(exists);
+  ASSERT_EQ(0, rbd_namespace_exists(ioctx, "name3", &exists));
+  ASSERT_TRUE(exists);
   rados_ioctx_destroy(ioctx);
 }
 
@@ -6776,6 +6781,11 @@ TEST_F(TestLibRBD, NamespacesPP) {
   ASSERT_EQ(2U, names.size());
   ASSERT_EQ("name1", names[0]);
   ASSERT_EQ("name3", names[1]);
+  bool exists;
+  ASSERT_EQ(0, rbd.namespace_exists(ioctx, "name2", &exists));
+  ASSERT_FALSE(exists);
+  ASSERT_EQ(0, rbd.namespace_exists(ioctx, "name3", &exists));
+  ASSERT_TRUE(exists);
 
   librados::IoCtx ns_io_ctx;
   ns_io_ctx.dup(ioctx);
@@ -6993,6 +7003,38 @@ TEST_F(TestLibRBD, TestGetModifyTimestamp)
   ASSERT_EQ(0, rbd_close(image));
 
   rados_ioctx_destroy(ioctx);
+}
+
+TEST_F(TestLibRBD, ZeroOverlapFlatten) {
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  librbd::Image parent_image;
+  std::string name = get_temp_image_name();
+
+  uint64_t size = 1;
+  int order = 0;
+
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+  ASSERT_EQ(0, rbd.open(ioctx, parent_image, name.c_str(), NULL));
+
+  uint64_t features;
+  ASSERT_EQ(0, parent_image.features(&features));
+
+  ASSERT_EQ(0, parent_image.snap_create("snap"));
+  ASSERT_EQ(0, parent_image.snap_protect("snap"));
+
+  std::string clone_name = this->get_temp_image_name();
+  ASSERT_EQ(0, rbd.clone(ioctx, name.c_str(), "snap", ioctx, clone_name.c_str(),
+                         features, &order));
+
+  librbd::Image clone_image;
+  ASSERT_EQ(0, rbd.open(ioctx, clone_image, clone_name.c_str(), NULL));
+  ASSERT_EQ(0, clone_image.resize(0));
+  ASSERT_EQ(0, clone_image.flatten());
 }
 
 // poorman's ceph_assert()

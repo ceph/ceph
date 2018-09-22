@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -171,6 +171,8 @@ void Processor::accept()
   for (auto& listen_socket : listen_sockets) {
     ldout(msgr->cct, 10) << __func__ << " listen_fd=" << listen_socket.fd()
 			 << dendl;
+    unsigned accept_error_num = 0;
+
     while (true) {
       entity_addr_t addr;
       ConnectedSocket cli_socket;
@@ -185,6 +187,7 @@ void Processor::accept()
 			     << cli_socket.fd() << dendl;
 
 	msgr->add_accept(w, std::move(cli_socket), addr);
+	accept_error_num = 0;
 	continue;
       } else {
 	if (r == -EINTR) {
@@ -194,7 +197,11 @@ void Processor::accept()
 	} else if (r == -EMFILE || r == -ENFILE) {
 	  lderr(msgr->cct) << __func__ << " open file descriptions limit reached sd = " << listen_socket.fd()
 			   << " errno " << r << " " << cpp_strerror(r) << dendl;
-	  break;
+	  if (++accept_error_num > msgr->cct->_conf->ms_max_accept_failures) {
+	    lderr(msgr->cct) << "Proccessor accept has encountered enough error numbers, just do ceph_abort()." << dendl;
+	    ceph_abort();
+	  }
+	  continue;
 	} else if (r == -ECONNABORTED) {
 	  ldout(msgr->cct, 0) << __func__ << " it was closed because of rst arrived sd = " << listen_socket.fd()
 			      << " errno " << r << " " << cpp_strerror(r) << dendl;
@@ -202,7 +209,11 @@ void Processor::accept()
 	} else {
 	  lderr(msgr->cct) << __func__ << " no incoming connection?"
 			   << " errno " << r << " " << cpp_strerror(r) << dendl;
-	  break;
+	  if (++accept_error_num > msgr->cct->_conf->ms_max_accept_failures) {
+	    lderr(msgr->cct) << "Proccessor accept has encountered enough error numbers, just do ceph_abort()." << dendl;
+	    ceph_abort();
+	  }
+	  continue;
 	}
       }
     }
@@ -276,7 +287,7 @@ AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
   stack->start();
   local_worker = stack->get_worker();
   local_connection = new AsyncConnection(cct, this, &dispatch_queue,
-					 local_worker, true);
+					 local_worker, true, true);
   init_local_connection();
   reap_handler = new C_handle_reap(this);
   unsigned processor_num = 1;
@@ -542,7 +553,7 @@ void AsyncMessenger::add_accept(Worker *w, ConnectedSocket cli_socket, entity_ad
 {
   lock.Lock();
   AsyncConnectionRef conn = new AsyncConnection(cct, this, &dispatch_queue, w,
-						addr.is_msgr2());
+						addr.is_msgr2(), false);
   conn->accept(std::move(cli_socket), addr);
   accepting_conns.insert(conn);
   lock.Unlock();
@@ -572,7 +583,7 @@ AsyncConnectionRef AsyncMessenger::create_connect(
   // create connection
   Worker *w = stack->get_worker();
   AsyncConnectionRef conn = new AsyncConnection(cct, this, &dispatch_queue, w,
-						target.is_msgr2());
+						target.is_msgr2(), false);
   conn->connect(addrs, type, target);
   ceph_assert(!conns.count(addrs));
   conns[addrs] = conn;

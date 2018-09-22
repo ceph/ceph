@@ -102,11 +102,12 @@ configuration details, perform the following steps using ``ceph-deploy``.
    - ``ceph.bootstrap-mds.keyring``
    - ``ceph.bootstrap-rgw.keyring``
    - ``ceph.bootstrap-rbd.keyring``
+   - ``ceph.bootstrap-rbd-mirror.keyring``
 
-.. note:: If this process fails with a message similar to "Unable to
-   find /etc/ceph/ceph.client.admin.keyring", please ensure that the
-   IP listed for the monitor node in ceph.conf is the Public IP, not
-   the Private IP.
+   .. note:: If this process fails with a message similar to "Unable to
+      find /etc/ceph/ceph.client.admin.keyring", please ensure that the
+      IP listed for the monitor node in ceph.conf is the Public IP, not
+      the Private IP.
 
 #. Use ``ceph-deploy`` to copy the configuration file and admin key to
    your admin node and your Ceph Nodes so that you can use the ``ceph``
@@ -133,6 +134,10 @@ configuration details, perform the following steps using ``ceph-deploy``.
      ceph-deploy osd create --data /dev/vdb node1
      ceph-deploy osd create --data /dev/vdb node2
      ceph-deploy osd create --data /dev/vdb node3
+
+   .. note:: If you are creating an OSD on an LVM volume, the argument to
+      ``--data`` *must* be ``volume_group/lv_name``, rather than the path to
+      the volume's block device.
 
 #. Check your cluster's health. ::
 
@@ -196,7 +201,7 @@ A Ceph Storage Cluster requires at least one Ceph Monitor and Ceph
 Manager to run. For high availability, Ceph Storage Clusters typically
 run multiple Ceph Monitors so that the failure of a single Ceph
 Monitor will not bring down the Ceph Storage Cluster. Ceph uses the
-Paxos algorithm, which requires a majority of monitors (i.e., greather
+Paxos algorithm, which requires a majority of monitors (i.e., greater
 than *N/2* where *N* is the number of monitors) to form a quorum.
 Odd numbers of monitors tend to be better, although this is not required.
 

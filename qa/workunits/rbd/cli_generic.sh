@@ -144,7 +144,7 @@ test_rename() {
     rbd rename bar bar2
     rbd rename bar2 foo2 2>&1 | grep exists
 
-    rados mkpool rbd2
+    ceph osd pool create rbd2 8
     rbd pool init rbd2
     rbd create -p rbd2 -s 1 foo
     rbd rename rbd2/foo rbd2/bar
@@ -154,7 +154,7 @@ test_rename() {
     ! rbd rename rbd2/bar --dest-pool rbd foo
     rbd rename --pool rbd2 bar --dest-pool rbd2 foo
     rbd -p rbd2 ls | grep foo
-    rados rmpool rbd2 rbd2 --yes-i-really-really-mean-it
+    ceph osd pool rm rbd2 rbd2 --yes-i-really-really-mean-it
 
     remove_images
 }
@@ -381,7 +381,7 @@ test_clone() {
     rbd snap create test1@s1
     rbd snap protect test1@s1
 
-    rados mkpool rbd2
+    ceph osd pool create rbd2 8
     rbd pool init rbd2
     rbd clone test1@s1 rbd2/clone
     rbd -p rbd2 ls | grep clone
@@ -402,7 +402,7 @@ test_clone() {
     rbd snap unprotect test1@s1
     rbd snap rm test1@s1
     rbd rm test1
-    rados rmpool rbd2 rbd2 --yes-i-really-really-mean-it
+    ceph osd pool rm rbd2 rbd2 --yes-i-really-really-mean-it
 }
 
 test_trash() {
@@ -638,6 +638,26 @@ test_namespace() {
     expect_fail rbd namespace remove --pool rbd missing
 
     rbd create rbd/test1/image1 --size 1G
+
+    # default test1 ns to test2 ns clone
+    rbd bench --io-type write --io-pattern rand --io-total 32M --io-size 4K rbd/test1/image1
+    rbd snap create rbd/test1/image1@1
+    rbd clone --rbd-default-clone-format 2 rbd/test1/image1@1 rbd/test2/image1
+    rbd snap rm rbd/test1/image1@1
+    cmp <(rbd export rbd/test1/image1@1 -) <(rbd export rbd/test2/image1 -)
+    rbd rm rbd/test2/image1
+
+    # default ns to test1 ns clone
+    rbd create rbd/image2 --size 1G
+    rbd bench --io-type write --io-pattern rand --io-total 32M --io-size 4K rbd/image2
+    rbd snap create rbd/image2@1
+    rbd clone --rbd-default-clone-format 2 rbd/image2@1 rbd/test2/image2
+    rbd snap rm rbd/image2@1
+    cmp <(rbd export rbd/image2@1 -) <(rbd export rbd/test2/image2 -)
+    expect_fail rbd rm rbd/image2
+    rbd rm rbd/test2/image2
+    rbd rm rbd/image2
+
     rbd create --namespace test1 image2 --size 1G
     expect_fail rbd namespace remove --pool rbd test1
 
@@ -668,7 +688,7 @@ get_migration_state() {
 test_migration() {
     echo "testing migration..."
     remove_images
-    rados mkpool rbd2
+    ceph osd pool create rbd2 8
     rbd pool init rbd2
 
     # Convert to new format
@@ -749,7 +769,7 @@ test_migration() {
     done
 
     remove_images
-    rados rmpool rbd2 rbd2 --yes-i-really-really-mean-it
+    ceph osd pool rm rbd2 rbd2 --yes-i-really-really-mean-it
 }
 
 test_pool_image_args

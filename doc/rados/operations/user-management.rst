@@ -224,12 +224,32 @@ The following entries describe valid capability profiles:
               so they have permissions to add keys, etc. when bootstrapping
               a metadata server.
 
+``profile bootstrap-rbd`` (Monitor only)
+
+:Description: Gives a user permissions to bootstrap an RBD user.
+              Conferred on deployment tools such as ``ceph-deploy``, etc.
+              so they have permissions to add keys, etc. when bootstrapping
+              an RBD user.
+
+``profile bootstrap-rbd-mirror`` (Monitor only)
+
+:Description: Gives a user permissions to bootstrap an ``rbd-mirror`` daemon
+              user. Conferred on deployment tools such as ``ceph-deploy``, etc.
+              so they have permissions to add keys, etc. when bootstrapping
+              an ``rbd-mirror`` daemon.
+
 ``profile rbd`` (Monitor and OSD)
 
 :Description: Gives a user permissions to manipulate RBD images. When used
               as a Monitor cap, it provides the minimal privileges required
               by an RBD client application. When used as an OSD cap, it
               provides read-write access to an RBD client application.
+
+``profile rbd-mirror`` (Monitor only)
+
+:Description: Gives a user permissions to manipulate RBD images and retrieve
+              RBD mirroring config-key secrets. It provides the minimal
+              privileges required for the ``rbd-mirror`` daemon.
 
 ``profile rbd-read-only`` (OSD only)
 
@@ -356,8 +376,7 @@ save the output to a file. Developers may also execute the following::
 
 	ceph auth export {TYPE.ID}
 
-The ``auth export`` command is identical to ``auth get``, but also prints
-out the internal ``auid``, which is not relevant to end users.
+The ``auth export`` command is identical to ``auth get``.
 
 
 

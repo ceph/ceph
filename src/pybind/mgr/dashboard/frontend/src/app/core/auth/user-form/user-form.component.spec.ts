@@ -75,7 +75,7 @@ describe('UserFormComponent', () => {
 
   describe('create mode', () => {
     beforeEach(() => {
-      setUrl('/users/add');
+      setUrl('/user-management/users/add');
       component.ngOnInit();
     });
 
@@ -88,12 +88,8 @@ describe('UserFormComponent', () => {
     it('should validate username required', () => {
       form.get('username').setValue('');
       expect(form.get('username').hasError('required')).toBeTruthy();
-    });
-
-    it('should validate password required', () => {
-      ['password', 'confirmpassword'].forEach((key) =>
-        expect(form.get(key).hasError('required')).toBeTruthy()
-      );
+      form.get('username').setValue('user1');
+      expect(form.get('username').hasError('required')).toBeFalsy();
     });
 
     it('should validate password match', () => {
@@ -107,6 +103,13 @@ describe('UserFormComponent', () => {
     it('should validate email', () => {
       form.get('email').setValue('aaa');
       expect(form.get('email').hasError('email')).toBeTruthy();
+    });
+
+    it('should validate all required fields', () => {
+      form.get('username').setValue('');
+      expect(form.valid).toBeFalsy();
+      form.get('username').setValue('user1');
+      expect(form.valid).toBeTruthy();
     });
 
     it('should set mode', () => {
@@ -128,7 +131,7 @@ describe('UserFormComponent', () => {
       expect(userReq.request.method).toBe('POST');
       expect(userReq.request.body).toEqual(user);
       userReq.flush({});
-      expect(router.navigate).toHaveBeenCalledWith(['/users']);
+      expect(router.navigate).toHaveBeenCalledWith(['/user-management/users']);
     });
   });
 
@@ -167,7 +170,7 @@ describe('UserFormComponent', () => {
     beforeEach(() => {
       spyOn(userService, 'get').and.callFake(() => of(user));
       spyOn(TestBed.get(RoleService), 'list').and.callFake(() => of(roles));
-      setUrl('/users/edit/user1');
+      setUrl('/user-management/users/edit/user1');
       component.ngOnInit();
       const req = httpTesting.expectOne('api/role');
       expect(req.request.method).toBe('GET');
@@ -194,13 +197,6 @@ describe('UserFormComponent', () => {
 
     it('should set mode', () => {
       expect(component.mode).toBe('editing');
-    });
-
-    it('should validate password not required', () => {
-      ['password', 'confirmpassword'].forEach((key) => {
-        form.get(key).setValue('');
-        expect(form.get(key).hasError('required')).toBeFalsy();
-      });
     });
 
     it('should alert if user is removing needed role permission', () => {
@@ -240,7 +236,7 @@ describe('UserFormComponent', () => {
         roles: ['administrator']
       });
       userReq.flush({});
-      expect(router.navigate).toHaveBeenCalledWith(['/users']);
+      expect(router.navigate).toHaveBeenCalledWith(['/user-management/users']);
     });
   });
 });

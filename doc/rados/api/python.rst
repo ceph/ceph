@@ -314,7 +314,7 @@ first.  You may list the available pools, create a pool, check to see if a pool
 exists,  and delete a pool.
 
 .. automethod:: Rados.list_pools()
-.. automethod:: Rados.create_pool(pool_name, auid=None, crush_rule=None)
+.. automethod:: Rados.create_pool(pool_name, crush_rule=None)
 .. automethod:: Rados.pool_exists()
 .. automethod:: Rados.delete_pool(pool_name)
 
@@ -331,7 +331,6 @@ invoking methods of the `Ioctx` and other classes.
 .. automethod:: Rados.open_ioctx(ioctx_name)
 .. automethod:: Ioctx.require_ioctx_open()
 .. automethod:: Ioctx.get_stats()
-.. automethod:: Ioctx.change_auid(auid)
 .. automethod:: Ioctx.get_last_version()
 .. automethod:: Ioctx.close()
 

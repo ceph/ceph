@@ -196,12 +196,6 @@ template <typename I>
 void ObjectCopyRequest<I>::handle_read_object(int r) {
   ldout(m_cct, 20) << "r=" << r << dendl;
 
-  if (r == -ENOENT && m_read_whole_object) {
-    ldout(m_cct, 5) << "object missing when forced to read whole object"
-                    << dendl;
-    r = 0;
-  }
-
   if (r == -ENOENT) {
     m_retry_snap_set = m_snap_set;
     m_retry_missing_read = true;
@@ -382,14 +376,15 @@ void ObjectCopyRequest<I>::send_write_object() {
     return;
   }
 
+  int r;
   Context *finish_op_ctx;
   {
     RWLock::RLocker owner_locker(m_dst_image_ctx->owner_lock);
-    finish_op_ctx = start_lock_op(m_dst_image_ctx->owner_lock);
+    finish_op_ctx = start_lock_op(m_dst_image_ctx->owner_lock, &r);
   }
   if (finish_op_ctx == nullptr) {
     lderr(m_cct) << "lost exclusive lock" << dendl;
-    finish(-EROFS);
+    finish(r);
     return;
   }
 
@@ -398,8 +393,8 @@ void ObjectCopyRequest<I>::send_write_object() {
       finish_op_ctx->complete(0);
     });
   librados::AioCompletion *comp = create_rados_callback(ctx);
-  int r = m_dst_io_ctx.aio_operate(m_dst_oid, comp, &op, dst_snap_seq,
-                                   dst_snap_ids, nullptr);
+  r = m_dst_io_ctx.aio_operate(m_dst_oid, comp, &op, dst_snap_seq, dst_snap_ids,
+                               nullptr);
   ceph_assert(r == 0);
   comp->release();
 }
@@ -460,12 +455,13 @@ void ObjectCopyRequest<I>::send_update_object_map() {
   ldout(m_cct, 20) << "dst_snap_id=" << dst_snap_id << ", object_state="
                    << static_cast<uint32_t>(object_state) << dendl;
 
-  auto finish_op_ctx = start_lock_op(m_dst_image_ctx->owner_lock);
+  int r;
+  auto finish_op_ctx = start_lock_op(m_dst_image_ctx->owner_lock, &r);
   if (finish_op_ctx == nullptr) {
     lderr(m_cct) << "lost exclusive lock" << dendl;
     m_dst_image_ctx->snap_lock.put_read();
     m_dst_image_ctx->owner_lock.put_read();
-    finish(-EROFS);
+    finish(r);
     return;
   }
 
@@ -491,7 +487,12 @@ template <typename I>
 void ObjectCopyRequest<I>::handle_update_object_map(int r) {
   ldout(m_cct, 20) << "r=" << r << dendl;
 
-  ceph_assert(r == 0);
+  if (r < 0) {
+    lderr(m_cct) << "failed to update object map: " << cpp_strerror(r) << dendl;
+    finish(r);
+    return;
+  }
+
   if (!m_dst_object_state.empty()) {
     send_update_object_map();
     return;
@@ -500,12 +501,12 @@ void ObjectCopyRequest<I>::handle_update_object_map(int r) {
 }
 
 template <typename I>
-Context *ObjectCopyRequest<I>::start_lock_op(RWLock &owner_lock) {
+Context *ObjectCopyRequest<I>::start_lock_op(RWLock &owner_lock, int* r) {
   ceph_assert(m_dst_image_ctx->owner_lock.is_locked());
   if (m_dst_image_ctx->exclusive_lock == nullptr) {
     return new FunctionContext([](int r) {});
   }
-  return m_dst_image_ctx->exclusive_lock->start_op();
+  return m_dst_image_ctx->exclusive_lock->start_op(r);
 }
 
 template <typename I>

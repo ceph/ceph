@@ -143,13 +143,18 @@ BuildRequires:	fuse-devel
 %if 0%{?rhel} == 7
 # devtoolset offers newer make and valgrind-devel, but the old ones are good
 # enough.
-BuildRequires:	devtoolset-7-gcc-c++
+BuildRequires:	devtoolset-7-gcc-c++ >= 7.3.1
 %else
 BuildRequires:	gcc-c++
 %endif
 BuildRequires:	gdbm
 %if 0%{with tcmalloc}
+%if 0%{?fedora} || 0%{?rhel}
+BuildRequires:	gperftools-devel >= 2.6.1
+%endif
+%if 0%{?suse_version}
 BuildRequires:	gperftools-devel >= 2.4
+%endif
 %endif
 BuildRequires:  jq
 BuildRequires:	leveldb-devel > 1.2
@@ -236,7 +241,7 @@ BuildRequires:  openldap-devel
 BuildRequires:  openssl-devel
 BuildRequires:  CUnit-devel
 BuildRequires:  redhat-lsb-core
-BuildRequires:	Cython%{_python_buildid}
+BuildRequires:	Cython
 BuildRequires:	python%{_python_buildid}-prettytable
 BuildRequires:	python%{_python_buildid}-sphinx
 BuildRequires:	lz4-devel >= 1.7

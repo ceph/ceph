@@ -7,7 +7,6 @@ add_library(common_texttable_obj OBJECT
 set(common_srcs
   AsyncOpTracker.cc
   BackTrace.cc
-  CachedPrebufferedStreambuf.cc
   ConfUtils.cc
   Cycles.cc
   DecayCounter.cc
@@ -21,10 +20,8 @@ set(common_srcs
   Mutex.cc
   OutputDataSocket.cc
   PluginRegistry.cc
-  PrebufferedStreambuf.cc
   PriorityCache.cc
   Readahead.cc
-  RefCountedObj.cc
   SloppyCRCMap.cc
   SubProcess.cc
   Thread.cc
@@ -129,8 +126,8 @@ add_library(common-common-objs OBJECT
   ${common_srcs})
 # for options.cc
 target_compile_definitions(common-common-objs PRIVATE
-  "-DCEPH_LIBDIR=\"${CMAKE_INSTALL_FULL_LIBDIR}\""
-  "-DCEPH_PKGLIBDIR=\"${CMAKE_INSTALL_FULL_PKGLIBDIR}\"")
+  "CEPH_LIBDIR=\"${CMAKE_INSTALL_FULL_LIBDIR}\""
+  "CEPH_PKGLIBDIR=\"${CMAKE_INSTALL_FULL_PKGLIBDIR}\"")
 
 set(common_mountcephfs_srcs
   armor.c

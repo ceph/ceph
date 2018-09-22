@@ -22,7 +22,7 @@
 #include <list>
 #include <map>
 #include <string>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 class SafeTimer;
 

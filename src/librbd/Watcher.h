@@ -60,6 +60,10 @@ public:
     RWLock::RLocker locker(m_watch_lock);
     return is_unregistered(m_watch_lock);
   }
+  bool is_blacklisted() const {
+    RWLock::RLocker locker(m_watch_lock);
+    return m_watch_blacklisted;
+  }
 
 protected:
   enum WatchState {
@@ -75,7 +79,10 @@ protected:
   mutable RWLock m_watch_lock;
   uint64_t m_watch_handle;
   watcher::Notifier m_notifier;
+
   WatchState m_watch_state;
+  bool m_watch_blacklisted = false;
+
   AsyncOpTracker m_async_op_tracker;
 
   bool is_registered(const RWLock&) const {

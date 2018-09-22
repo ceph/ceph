@@ -39,7 +39,7 @@ struct MDSlaveUpdate;
  *
  * - make sure you adjust the inode.version for any modified inode you
  *   journal.  CDir and CDentry maintain a projected_version, but CInode
- *   doesn't, since the journaled inode usually has to be modifed 
+ *   doesn't, since the journaled inode usually has to be modified 
  *   manually anyway (to delay the change in the MDS's cache until after
  *   it is journaled).
  *
@@ -77,9 +77,6 @@ public:
     __u8 state{0};
     CInode::mempool_old_inode_map old_inodes; // XXX should not be part of mempool; wait for std::pmr to simplify
 
-    fullbit(const fullbit& o);
-    const fullbit& operator=(const fullbit& o);
-
     fullbit(std::string_view d, snapid_t df, snapid_t dl, 
 	    version_t v, const CInode::mempool_inode& i, const fragtree_t &dft,
 	    const CInode::mempool_xattr_map &xa, std::string_view sym,
@@ -100,7 +97,9 @@ public:
       decode(p);
     }
     fullbit() {}
+    fullbit(const fullbit&) = delete;
     ~fullbit() {}
+    fullbit& operator=(const fullbit&) = delete;
 
     void encode(bufferlist& bl, uint64_t features) const;
     void decode(bufferlist::const_iterator &bl);
@@ -181,7 +180,7 @@ public:
     void decode(bufferlist::const_iterator &bl);
     void dump(Formatter *f) const;
     static void generate_test_instances(list<nullbit*>& ls);
-    void print(ostream& out) {
+    void print(ostream& out) const {
       out << " nullbit dn " << dn << " [" << dnfirst << "," << dnlast << "] dnv " << dnv
 	  << " dirty=" << dirty << std::endl;
     }
@@ -207,12 +206,14 @@ public:
   private:
     mutable bufferlist dnbl;
     mutable bool dn_decoded;
-    mutable list<std::shared_ptr<fullbit> > dfull;
-    mutable list<remotebit> dremote;
-    mutable list<nullbit> dnull;
+    mutable list<fullbit> dfull;
+    mutable vector<remotebit> dremote;
+    mutable vector<nullbit> dnull;
 
   public:
     dirlump() : state(0), nfull(0), nremote(0), nnull(0), dn_decoded(true) { }
+    dirlump(const dirlump&) = delete;
+    dirlump& operator=(const dirlump&) = delete;
     
     bool is_complete() const { return state & STATE_COMPLETE; }
     void mark_complete() { state |= STATE_COMPLETE; }
@@ -225,26 +226,36 @@ public:
     bool is_dirty_dft() { return state & STATE_DIRTYDFT; }
     void mark_dirty_dft() { state |= STATE_DIRTYDFT; }
 
-    const list<std::shared_ptr<fullbit> > &get_dfull()   const { return dfull; }
-    const list<remotebit>                  &get_dremote() const { return dremote; }
-    const list<nullbit>                    &get_dnull()   const { return dnull; }
+    const list<fullbit>			&get_dfull() const { return dfull; }
+    list<fullbit>			&_get_dfull() { return dfull; }
+    const vector<remotebit>		&get_dremote() const { return dremote; }
+    const vector<nullbit>		&get_dnull() const { return dnull; }
 
-    void add_dnull(nullbit const &n)                   { dnull.push_back(n); };
-    void add_dfull(std::shared_ptr<fullbit> const &p) { dfull.push_back(p); };
-    void add_dremote(remotebit const &r)               { dremote.push_back(r); };
+    template< class... Args>
+    void add_dfull(Args&&... args) {
+      dfull.emplace_back(std::forward<Args>(args)...);
+    }
+    template< class... Args>
+    void add_dremote(Args&&... args) {
+      dremote.emplace_back(std::forward<Args>(args)...);
+    }
+    template< class... Args>
+    void add_dnull(Args&&... args) {
+      dnull.emplace_back(std::forward<Args>(args)...);
+    }
 
-    void print(dirfrag_t dirfrag, ostream& out) {
+    void print(dirfrag_t dirfrag, ostream& out) const {
       out << "dirlump " << dirfrag << " v " << fnode.version
 	  << " state " << state
 	  << " num " << nfull << "/" << nremote << "/" << nnull
 	  << std::endl;
       _decode_bits();
-      for (list<std::shared_ptr<fullbit> >::iterator p = dfull.begin(); p != dfull.end(); ++p)
-	(*p)->print(out);
-      for (list<remotebit>::iterator p = dremote.begin(); p != dremote.end(); ++p)
-	p->print(out);
-      for (list<nullbit>::iterator p = dnull.begin(); p != dnull.end(); ++p)
-	p->print(out);
+      for (const auto& p : dfull)
+	p.print(out);
+      for (const auto& p : dremote)
+	p.print(out);
+      for (const auto& p : dnull)
+	p.print(out);
     }
 
     string state_string() const {
@@ -290,16 +301,16 @@ public:
   WRITE_CLASS_ENCODER_FEATURES(dirlump)
 
   // my lumps.  preserve the order we added them in a list.
-  list<dirfrag_t>         lump_order;
+  vector<dirfrag_t>         lump_order;
   map<dirfrag_t, dirlump> lump_map;
-  list<std::shared_ptr<fullbit> > roots;
+  list<fullbit> roots;
 public:
-  list<pair<__u8,version_t> > table_tids;  // tableclient transactions
+  vector<pair<__u8,version_t> > table_tids;  // tableclient transactions
 
   inodeno_t opened_ino;
 public:
   inodeno_t renamed_dirino;
-  list<frag_t> renamed_dir_frags;
+  vector<frag_t> renamed_dir_frags;
 private:
   
   // ino (pre)allocation.  may involve both inotable AND session state.
@@ -310,7 +321,7 @@ private:
   entity_name_t client_name;          //            session
 
   // inodes i've truncated
-  list<inodeno_t> truncate_start;        // start truncate 
+  vector<inodeno_t> truncate_start;        // start truncate
   map<inodeno_t, log_segment_seq_t> truncate_finish;  // finished truncate (started in segment blah)
 
 public:
@@ -318,8 +329,8 @@ public:
 private:
 
   // idempotent op(s)
-  list<pair<metareqid_t,uint64_t> > client_reqs;
-  list<pair<metareqid_t,uint64_t> > client_flushes;
+  vector<pair<metareqid_t,uint64_t> > client_reqs;
+  vector<pair<metareqid_t,uint64_t> > client_flushes;
 
  public:
   void encode(bufferlist& bl, uint64_t features) const;
@@ -342,14 +353,13 @@ private:
                 inotablev(0), sessionmapv(0), allocated_ino(0),
                 last_subtree_map(0), event_seq(0)
                 {}
+  EMetaBlob(const EMetaBlob&) = delete;
   ~EMetaBlob() { }
+  EMetaBlob& operator=(const EMetaBlob&) = delete;
 
   void print(ostream& out) {
-    for (list<dirfrag_t>::iterator p = lump_order.begin();
-	 p != lump_order.end();
-	 ++p) {
-      lump_map[*p].print(*p, out);
-    }
+    for (const auto &p : lump_order)
+      lump_map[p].print(p, out);
   }
 
   void add_client_req(metareqid_t r, uint64_t tid=0) {
@@ -400,10 +410,8 @@ private:
   void add_null_dentry(dirlump& lump, CDentry *dn, bool dirty) {
     // add the dir
     lump.nnull++;
-    lump.add_dnull(nullbit(dn->get_name(), 
-			   dn->first, dn->last,
-			   dn->get_projected_version(), 
-			   dirty));
+    lump.add_dnull(dn->get_name(), dn->first, dn->last,
+		   dn->get_projected_version(), dirty);
   }
 
   void add_remote_dentry(CDentry *dn, bool dirty) {
@@ -419,11 +427,8 @@ private:
       rdt = dn->get_projected_linkage()->get_remote_d_type();
     }
     lump.nremote++;
-    lump.add_dremote(remotebit(dn->get_name(), 
-			       dn->first, dn->last,
-                               dn->get_projected_version(), 
-                               rino, rdt,
-                               dirty));
+    lump.add_dremote(dn->get_name(), dn->first, dn->last,
+		     dn->get_projected_version(), rino, rdt, dirty);
   }
 
   // return remote pointer to to-be-journaled inode
@@ -455,14 +460,9 @@ private:
       sr->encode(snapbl);
 
     lump.nfull++;
-    lump.add_dfull(std::shared_ptr<fullbit>(new fullbit(dn->get_name(),
-							 dn->first, dn->last,
-							 dn->get_projected_version(),
-							 *pi, in->dirfragtree,
-							 *in->get_projected_xattrs(),
-							 in->symlink,
-							 in->oldest_snap, snapbl,
-							 state, &in->old_inodes)));
+    lump.add_dfull(dn->get_name(), dn->first, dn->last, dn->get_projected_version(),
+		   *pi, in->dirfragtree, *in->get_projected_xattrs(), in->symlink,
+		   in->oldest_snap, snapbl, state, &in->old_inodes);
   }
 
   // convenience: primary or remote?  figure it out.
@@ -506,19 +506,17 @@ private:
     if (sr)
       sr->encode(snapbl);
 
-    for (list<std::shared_ptr<fullbit> >::iterator p = roots.begin(); p != roots.end(); ++p) {
-      if ((*p)->inode.ino == in->ino()) {
+    for (auto p = roots.begin(); p != roots.end(); ++p) {
+      if (p->inode.ino == in->ino()) {
 	roots.erase(p);
 	break;
       }
     }
 
     string empty;
-    roots.push_back(std::shared_ptr<fullbit>(new fullbit(empty, in->first, in->last, 0, pi,
-							  pdft, px, in->symlink,
-							  in->oldest_snap, snapbl,
-							  dirty ? fullbit::STATE_DIRTY : 0,
-							  &in->old_inodes)));
+    roots.emplace_back(empty, in->first, in->last, 0, pi, pdft, px, in->symlink,
+		       in->oldest_snap, snapbl, (dirty ? fullbit::STATE_DIRTY : 0),
+		       &in->old_inodes);
   }
   
   dirlump& add_dir(CDir *dir, bool dirty, bool complete=false) {

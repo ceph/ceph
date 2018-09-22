@@ -21,7 +21,7 @@ This process is transparent to the user.
 The detection process runs:
 1. When new objects are added to the bucket
 2. In a background process that periodically scans all the buckets
-This is needed in order to deal with existng buckets in the system that are not being updated.
+This is needed in order to deal with existing buckets in the system that are not being updated.
 A bucket that requires resharding is added to the ``reshard_log`` queue and will be
 scheduled to be resharded later.
 The reshard threads run in the background and execute the scheduled resharding, one at a time.
@@ -38,7 +38,7 @@ Enable/Disable Dynamic bucket index resharding:
 
 -``rgw_dynamic_resharding``:  true/false, default: true.
 
-Parameters to control the resahrding process in Ceph configuration fie:
+Parameters to control the resharding process in Ceph configuration fie:
 
 -``rgw_reshard_num_logs``: number of shards for the resharding log, default: 16
 
