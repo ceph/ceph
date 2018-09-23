@@ -28,11 +28,10 @@
 
 #include "DaemonState.h"
 #include "ClusterState.h"
-#include "OSDPerfMetricQuery.h"
+#include "OSDPerfMetricTypes.h"
 
 class health_check_map_t;
 class DaemonServer;
-struct OSDPerfMetricQuery;
 
 class ActivePyModules
 {

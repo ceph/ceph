@@ -20,13 +20,11 @@
 #include "mgr/DaemonHealthMetric.h"
 
 #include "messages/MMgrReport.h"
-#include "mgr/OSDPerfMetricQuery.h"
+#include "mgr/OSDPerfMetricTypes.h"
 
 #include "common/perf_counters.h"
 #include "common/Timer.h"
 #include "common/CommandTable.h"
-
-typedef int OSDPerfMetricReport; //Temporary
 
 class MMgrMap;
 class MMgrConfigure;
@@ -82,7 +80,8 @@ protected:
   // our reports (hook for use by OSD)
   std::function<MPGStats*()> pgstats_cb;
   std::function<void(const std::list<OSDPerfMetricQuery> &)> set_perf_queries_cb;
-  std::function<void(OSDPerfMetricReport *)> get_perf_report_cb;
+  std::function<void(std::map<OSDPerfMetricQuery,
+                              OSDPerfMetricReport> *)> get_perf_report_cb;
 
   // for service registration and beacon
   bool service_daemon = false;
@@ -121,14 +120,13 @@ public:
 
   void set_perf_metric_query_cb(
           std::function<void(const std::list<OSDPerfMetricQuery> &)> cb_set,
-          std::function<void(OSDPerfMetricReport *)> cb_get)
-
+          std::function<void(std::map<OSDPerfMetricQuery,
+                                      OSDPerfMetricReport> *)> cb_get)
   {
       std::lock_guard l(lock);
       set_perf_queries_cb = cb_set;
       get_perf_report_cb = cb_get;
   }
-
 
   void send_pgstats();
   void set_pgstats_cb(std::function<MPGStats*()>&& cb_)

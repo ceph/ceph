@@ -19,6 +19,7 @@
 
 #include <boost/tuple/tuple.hpp>
 #include "include/ceph_assert.h"
+#include "DynamicPerfStats.h"
 #include "OSD.h"
 #include "PG.h"
 #include "Watch.h"
@@ -1871,6 +1872,14 @@ public:
   int getattrs_maybe_cache(
     ObjectContextRef obc,
     map<string, bufferlist> *out);
+
+public:
+  void set_dynamic_perf_stats_queries(
+      const std::list<OSDPerfMetricQuery> &queries)  override;
+  void get_dynamic_perf_stats(DynamicPerfStats *stats)  override;
+
+private:
+  DynamicPerfStats m_dynamic_perf_stats;
 };
 
 inline ostream& operator<<(ostream& out, const PrimaryLogPG::RepGather& repop)

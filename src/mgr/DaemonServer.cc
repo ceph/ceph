@@ -639,6 +639,10 @@ bool DaemonServer::handle_report(MMgrReport *m)
     py_modules.notify_all("perf_schema_update", oss.str());
   }
 
+  if (m->get_connection()->peer_is_osd()) {
+    osd_perf_metric_collector.process_reports(m->osd_perf_metric_reports);
+  }
+
   m->put();
   return true;
 }

@@ -6,7 +6,7 @@
 
 #include "common/Mutex.h"
 
-#include "mgr/OSDPerfMetricQuery.h"
+#include "mgr/OSDPerfMetricTypes.h"
 
 #include <list>
 #include <set>
@@ -30,6 +30,9 @@ public:
   OSDPerfMetricQueryID add_query(const OSDPerfMetricQuery& query);
   int remove_query(OSDPerfMetricQueryID query_id);
   void remove_all_queries();
+
+  void process_reports(
+      const std::map<OSDPerfMetricQuery, OSDPerfMetricReport> &reports);
 
 private:
   typedef std::map<OSDPerfMetricQuery, std::set<OSDPerfMetricQueryID>> Queries;

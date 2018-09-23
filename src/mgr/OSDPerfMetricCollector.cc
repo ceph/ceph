@@ -102,3 +102,29 @@ void OSDPerfMetricCollector::remove_all_queries() {
     listener.handle_query_updated();
   }
 }
+
+void OSDPerfMetricCollector::process_reports(
+    const std::map<OSDPerfMetricQuery, OSDPerfMetricReport> &reports) {
+
+  if (reports.empty()) {
+    return;
+  }
+
+  std::lock_guard locker(lock);
+
+  for (auto &it : reports) {
+    auto &report = it.second;
+    dout(10) << "report for " << it.first << " query: "
+             << report.group_packed_performance_counters.size() << " records"
+             << dendl;
+    for (auto &it : report.group_packed_performance_counters) {
+      auto &key = it.first;
+      auto bl_it = it.second.cbegin();
+      for (auto &d : report.performance_counter_descriptors) {
+        PerformanceCounter c;
+        d.unpack_counter(bl_it, &c);
+        dout(20) << "counter " << key << " " << d << ": " << c << dendl;
+      }
+    }
+  }
+}

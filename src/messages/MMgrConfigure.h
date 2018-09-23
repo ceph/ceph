@@ -16,7 +16,7 @@
 #define CEPH_MMGRCONFIGURE_H_
 
 #include "msg/Message.h"
-#include "mgr/OSDPerfMetricQuery.h"
+#include "mgr/OSDPerfMetricTypes.h"
 
 /**
  * This message is sent from ceph-mgr to MgrClient, instructing it
