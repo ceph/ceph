@@ -15,9 +15,11 @@
 #ifndef CEPH_FINISHER_H
 #define CEPH_FINISHER_H
 
-#include "common/Mutex.h"
-#include "common/Cond.h"
+#include "include/Context.h"
+#include "common/Thread.h"
+#include "common/ceph_mutex.h"
 #include "common/perf_counters.h"
+#include "common/Cond.h"
 
 class CephContext;
 
@@ -36,9 +38,9 @@ enum {
  */
 class Finisher {
   CephContext *cct;
-  Mutex        finisher_lock; ///< Protects access to queues and finisher_running.
-  Cond         finisher_cond; ///< Signaled when there is something to process.
-  Cond         finisher_empty_cond; ///< Signaled when the finisher has nothing more to process.
+  ceph::mutex finisher_lock; ///< Protects access to queues and finisher_running.
+  ceph::condition_variable finisher_cond; ///< Signaled when there is something to process.
+  ceph::condition_variable finisher_empty_cond; ///< Signaled when the finisher has nothing more to process.
   bool         finisher_stop; ///< Set when the finisher should stop.
   bool         finisher_running; ///< True when the finisher is currently executing contexts.
   bool	       finisher_empty_wait; ///< True mean someone wait finisher empty.
@@ -63,53 +65,55 @@ class Finisher {
  public:
   /// Add a context to complete, optionally specifying a parameter for the complete function.
   void queue(Context *c, int r = 0) {
-    finisher_lock.lock();
+    std::unique_lock ul(finisher_lock);
     if (finisher_queue.empty()) {
-      finisher_cond.Signal();
+      finisher_cond.notify_all();
     }
     finisher_queue.push_back(make_pair(c, r));
     if (logger)
       logger->inc(l_finisher_queue_len);
-    finisher_lock.unlock();
   }
 
   void queue(list<Context*>& ls) {
-    finisher_lock.lock();
-    if (finisher_queue.empty()) {
-      finisher_cond.Signal();
+    {
+      std::unique_lock ul(finisher_lock);
+      if (finisher_queue.empty()) {
+	finisher_cond.notify_all();
+      }
+      for (auto i : ls) {
+	finisher_queue.push_back(make_pair(i, 0));
+      }
+      if (logger)
+	logger->inc(l_finisher_queue_len, ls.size());
     }
-    for (auto i : ls) {
-      finisher_queue.push_back(make_pair(i, 0));
-    }
-    if (logger)
-      logger->inc(l_finisher_queue_len, ls.size());
-    finisher_lock.unlock();
     ls.clear();
   }
   void queue(deque<Context*>& ls) {
-    finisher_lock.lock();
-    if (finisher_queue.empty()) {
-      finisher_cond.Signal();
+    {
+      std::unique_lock ul(finisher_lock);
+      if (finisher_queue.empty()) {
+	finisher_cond.notify_all();
+      }
+      for (auto i : ls) {
+	finisher_queue.push_back(make_pair(i, 0));
+      }
+      if (logger)
+	logger->inc(l_finisher_queue_len, ls.size());
     }
-    for (auto i : ls) {
-      finisher_queue.push_back(make_pair(i, 0));
-    }
-    if (logger)
-      logger->inc(l_finisher_queue_len, ls.size());
-    finisher_lock.unlock();
     ls.clear();
   }
   void queue(vector<Context*>& ls) {
-    finisher_lock.lock();
-    if (finisher_queue.empty()) {
-      finisher_cond.Signal();
+    {
+      std::unique_lock ul(finisher_lock);
+      if (finisher_queue.empty()) {
+	finisher_cond.notify_all();
+      }
+      for (auto i : ls) {
+	finisher_queue.push_back(make_pair(i, 0));
+      }
+      if (logger)
+	logger->inc(l_finisher_queue_len, ls.size());
     }
-    for (auto i : ls) {
-      finisher_queue.push_back(make_pair(i, 0));
-    }
-    if (logger)
-      logger->inc(l_finisher_queue_len, ls.size());
-    finisher_lock.unlock();
     ls.clear();
   }
 
@@ -132,14 +136,14 @@ class Finisher {
   /// Construct an anonymous Finisher.
   /// Anonymous finishers do not log their queue length.
   explicit Finisher(CephContext *cct_) :
-    cct(cct_), finisher_lock("Finisher::finisher_lock"),
+    cct(cct_), finisher_lock(ceph::make_mutex("Finisher::finisher_lock")),
     finisher_stop(false), finisher_running(false), finisher_empty_wait(false),
     thread_name("fn_anonymous"), logger(0),
     finisher_thread(this) {}
 
   /// Construct a named Finisher that logs its queue length.
   Finisher(CephContext *cct_, string name, string tn) :
-    cct(cct_), finisher_lock("Finisher::" + name),
+    cct(cct_), finisher_lock(ceph::make_mutex("Finisher::" + name)),
     finisher_stop(false), finisher_running(false), finisher_empty_wait(false),
     thread_name(tn), logger(0),
     finisher_thread(this) {

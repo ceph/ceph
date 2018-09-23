@@ -31,7 +31,7 @@ static bool test_try_lock(Mutex* m) {
 
 template<typename Mutex>
 static void test_lock() {
-  Mutex m;
+  Mutex m("mutex");
   auto ttl = &test_try_lock<Mutex>;
 
   m.lock();
@@ -58,7 +58,7 @@ TEST(MutexDebug, Lock) {
 }
 
 TEST(MutexDebug, NotRecursive) {
-  ceph::mutex_debug m;
+  ceph::mutex_debug m("foo");
   auto ttl = &test_try_lock<mutex_debug>;
 
   ASSERT_NO_THROW(m.lock());
@@ -80,7 +80,7 @@ TEST(MutexRecursiveDebug, Lock) {
 
 
 TEST(MutexRecursiveDebug, Recursive) {
-  ceph::mutex_recursive_debug m;
+  ceph::mutex_recursive_debug m("m");
   auto ttl = &test_try_lock<mutex_recursive_debug>;
 
   ASSERT_NO_THROW(m.lock());
