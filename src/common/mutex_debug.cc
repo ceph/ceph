@@ -25,15 +25,15 @@ enum {
   l_mutex_last
 };
 
-mutex_debugging_base::mutex_debugging_base(const std::string &n, bool bt) :
-  id(-1), backtrace(bt), nlock(0), locked_by(thread::id()) {
-  if (n.empty()) {
-    uuid_d uu;
-    uu.generate_random();
-    name = string("Unnamed-Mutex-") + uu.to_string();
-  } else {
-    name = n;
-  }
+mutex_debugging_base::mutex_debugging_base(const std::string &n, bool bt)
+  : name(n), id(-1), backtrace(bt), nlock(0), locked_by(thread::id())
+{
+  if (g_lockdep)
+    _register();
+}
+mutex_debugging_base::mutex_debugging_base(const char *n, bool bt)
+  : name(n), id(-1), backtrace(bt), nlock(0), locked_by(thread::id())
+{
   if (g_lockdep)
     _register();
 }
@@ -48,8 +48,8 @@ mutex_debugging_base::~mutex_debugging_base() {
 void mutex_debugging_base::_register() {
   id = lockdep_register(name.c_str());
 }
-void mutex_debugging_base::_will_lock() { // about to lock
-  id = lockdep_will_lock(name.c_str(), id, backtrace);
+void mutex_debugging_base::_will_lock(bool recursive) { // about to lock
+  id = lockdep_will_lock(name.c_str(), id, backtrace, recursive);
 }
 void mutex_debugging_base::_locked() {    // just locked
   id = lockdep_locked(name.c_str(), id, backtrace);
