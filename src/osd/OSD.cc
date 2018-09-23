@@ -2792,9 +2792,12 @@ int OSD::init()
 
   mgrc.set_pgstats_cb([this](){ return collect_pg_stats(); });
   mgrc.set_perf_metric_query_cb(
-      [this](const std::list<OSDPerfMetricQuery> &queries){ set_perf_queries(queries);},
-      [this](OSDPerfMetricReport *report){ get_perf_report(report);
-    });
+      [this](const std::list<OSDPerfMetricQuery> &queries) {
+        set_perf_queries(queries);
+      },
+      [this](std::map<OSDPerfMetricQuery, OSDPerfMetricReport> *reports) {
+        get_perf_reports(reports);
+      });
   mgrc.init();
   client_messenger->add_dispatcher_head(&mgrc);
 
@@ -4245,6 +4248,11 @@ PGRef OSD::handle_pg_create_info(const OSDMapRef& osdmap,
     info->past_intervals,
     false,
     rctx.transaction);
+
+  if (pg->is_primary()) {
+    Mutex::Locker locker(m_perf_queries_lock);
+    pg->set_dynamic_perf_stats_queries(m_perf_queries);
+  }
 
   pg->handle_initialize(&rctx);
   pg->handle_activate_map(&rctx);
@@ -9760,9 +9768,38 @@ int OSD::init_op_flags(OpRequestRef& op)
 }
 
 void OSD::set_perf_queries(const std::list<OSDPerfMetricQuery> &queries) {
+  dout(10) << "setting " << queries.size() << " queries" << dendl;
+
+  {
+    Mutex::Locker locker(m_perf_queries_lock);
+    m_perf_queries = queries;
+  }
+
+  std::vector<PGRef> pgs;
+  _get_pgs(&pgs);
+  for (auto& pg : pgs) {
+    if (pg->is_primary()) {
+      pg->lock();
+      pg->set_dynamic_perf_stats_queries(queries);
+      pg->unlock();
+    }
+  }
 }
 
-void OSD::get_perf_report(OSDPerfMetricReport *report) {
+void OSD::get_perf_reports(
+    std::map<OSDPerfMetricQuery, OSDPerfMetricReport> *reports) {
+  std::vector<PGRef> pgs;
+  _get_pgs(&pgs);
+  DynamicPerfStats dps(m_perf_queries);
+  for (auto& pg : pgs) {
+    if (pg->is_primary()) {
+      pg->lock();
+      pg->get_dynamic_perf_stats(&dps);
+      pg->unlock();
+    }
+  }
+  dps.add_to_reports(reports);
+  dout(20) << "reports for " << reports->size() << " queries" << dendl;
 }
 
 // =============================================================

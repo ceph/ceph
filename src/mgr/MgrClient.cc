@@ -351,7 +351,7 @@ void MgrClient::_send_report()
 			    &last_config_bl_version);
 
   if (get_perf_report_cb) {
-    //get_perf_report_cb(&report->perf_report)
+    get_perf_report_cb(&report->osd_perf_metric_reports);
   }
 
   session->con->send_message(report);
@@ -389,14 +389,14 @@ bool MgrClient::handle_mgr_configure(MMgrConfigure *m)
     stats_threshold = m->stats_threshold;
   }
 
+  if (set_perf_queries_cb) {
+    set_perf_queries_cb(m->osd_perf_metric_queries);
+  }
+
   bool starting = (stats_period == 0) && (m->stats_period != 0);
   stats_period = m->stats_period;
   if (starting) {
     _send_stats();
-  }
-
-  if (set_perf_queries_cb) {
-    set_perf_queries_cb(m->osd_perf_metric_queries);
   }
 
   m->put();

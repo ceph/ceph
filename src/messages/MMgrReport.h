@@ -18,7 +18,7 @@
 #include <boost/optional.hpp>
 
 #include "msg/Message.h"
-#include "mgr/OSDPerfMetricReport.h"
+#include "mgr/OSDPerfMetricTypes.h"
 
 #include "common/perf_counters.h"
 #include "mgr/DaemonHealthMetric.h"
@@ -107,7 +107,7 @@ public:
   // encode map<string,map<int32_t,string>> of current config
   bufferlist config_bl;
 
-  std::list<OSDPerfMetricReport>  osd_perf_metric_reports;
+  std::map<OSDPerfMetricQuery, OSDPerfMetricReport>  osd_perf_metric_reports;
 
   void decode_payload() override
   {
