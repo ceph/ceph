@@ -6798,6 +6798,9 @@ std::vector<Option> get_rgw_options() {
 
 
 
+
+
+
     Option("rgw_max_objs_per_shard", Option::TYPE_UINT, Option::LEVEL_BASIC)
     .set_default(100000)
     .set_description("Max objects per shard for dynamic resharding")

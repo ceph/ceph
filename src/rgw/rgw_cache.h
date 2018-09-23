@@ -1,9 +1,10 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// vim: ts=8 sw=2 smarttab
 
 #ifndef CEPH_RGWCACHE_H
 #define CEPH_RGWCACHE_H
 
+#include "rgw_rados.h"
 #include <string>
 #include <map>
 #include <curl/curl.h>
@@ -11,14 +12,12 @@
 
 #include <unistd.h> /*engage1*/
 #include <signal.h> /*engage1*/
+#include "include/Context.h" /*engage1*/
+
 #include "include/types.h"
 #include "include/utime.h"
 #include "include/ceph_assert.h"
-#include "include/Context.h" /*engage1*/
-#include "common/ceph_mutex.h"
-
-#include "cls/version/cls_version_types.h"
-#include "rgw_common.h"
+#include "common/RWLock.h"
 
 
 #include "include/lru.h" /*engage1*/
@@ -35,120 +34,31 @@ enum {
 #define CACHE_FLAG_MODIFY_XATTRS  0x08
 #define CACHE_FLAG_OBJV           0x10
 
-struct ObjectMetaInfo {
-  uint64_t size;
-  real_time mtime;
-
-  ObjectMetaInfo() : size(0) {}
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(2, 2, bl);
-    encode(size, bl);
-    encode(mtime, bl);
-    ENCODE_FINISH(bl);
-  }
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
-    decode(size, bl);
-    decode(mtime, bl);
-    DECODE_FINISH(bl);
-  }
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<ObjectMetaInfo*>& o);
-};
-WRITE_CLASS_ENCODER(ObjectMetaInfo)
-
-struct ObjectCacheInfo {
-  int status = 0;
-  uint32_t flags = 0;
-  uint64_t epoch = 0;
-  bufferlist data;
-  map<string, bufferlist> xattrs;
-  map<string, bufferlist> rm_xattrs;
-  ObjectMetaInfo meta;
-  obj_version version = {};
-  ceph::coarse_mono_time time_added;
-
-  ObjectCacheInfo() = default;
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(5, 3, bl);
-    encode(status, bl);
-    encode(flags, bl);
-    encode(data, bl);
-    encode(xattrs, bl);
-    encode(meta, bl);
-    encode(rm_xattrs, bl);
-    encode(epoch, bl);
-    encode(version, bl);
-    ENCODE_FINISH(bl);
-  }
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(5, 3, 3, bl);
-    decode(status, bl);
-    decode(flags, bl);
-    decode(data, bl);
-    decode(xattrs, bl);
-    decode(meta, bl);
-    if (struct_v >= 2)
-      decode(rm_xattrs, bl);
-    if (struct_v >= 4)
-      decode(epoch, bl);
-    if (struct_v >= 5)
-      decode(version, bl);
-    DECODE_FINISH(bl);
-  }
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<ObjectCacheInfo*>& o);
-};
-WRITE_CLASS_ENCODER(ObjectCacheInfo)
-
-struct RGWCacheNotifyInfo {
-  uint32_t op;
-  rgw_raw_obj obj;
-  ObjectCacheInfo obj_info;
-  off_t ofs;
-  string ns;
-
-  RGWCacheNotifyInfo() : op(0), ofs(0) {}
-
-  void encode(bufferlist& obl) const {
-    ENCODE_START(2, 2, obl);
-    encode(op, obl);
-    encode(obj, obl);
-    encode(obj_info, obl);
-    encode(ofs, obl);
-    encode(ns, obl);
-    ENCODE_FINISH(obl);
-  }
-  void decode(bufferlist::const_iterator& ibl) {
-    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, ibl);
-    decode(op, ibl);
-    decode(obj, ibl);
-    decode(obj_info, ibl);
-    decode(ofs, ibl);
-    decode(ns, ibl);
-    DECODE_FINISH(ibl);
-  }
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<RGWCacheNotifyInfo*>& o);
-};
+#define mydout(v) lsubdout(T::cct, rgw, v)
 
 /*engage1*/
 struct DataCache;
 class L2CacheThreadPool;
 class HttpL2Request;
 
+struct ChunkDataInfo : public LRUObject {
+	CephContext *cct;
+	uint64_t size;
+	time_t access_time;
+	string address;
+	string oid;
+	bool complete;
+	struct ChunkDataInfo *lru_prev;
+	struct ChunkDataInfo *lru_next;	
 
+	ChunkDataInfo(): size(0) {}
 
-struct ObjectCacheEntry {
-  ObjectCacheInfo info;
-  std::list<string>::iterator lru_iter;
-  uint64_t lru_promotion_ts;
-  uint64_t gen;
-  std::vector<pair<RGWChainedCache *, string> > chained_entries;
+	void set_ctx(CephContext *_cct) {
+		cct = _cct;
+	}
 
-  ObjectCacheEntry() : lru_promotion_ts(0), gen(0) {}
+	void dump(Formatter *f) const;
+	static void generate_test_instances(list<ChunkDataInfo*>& o);
 };
 
 struct cacheAioWriteRequest{
@@ -257,13 +167,123 @@ public:
   }
 };
 
+struct ObjectMetaInfo {
+  uint64_t size;
+  real_time mtime;
+
+  ObjectMetaInfo() : size(0) {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(2, 2, bl);
+    encode(size, bl);
+    encode(mtime, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+    decode(size, bl);
+    decode(mtime, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<ObjectMetaInfo*>& o);
+};
+WRITE_CLASS_ENCODER(ObjectMetaInfo)
+
+struct ObjectCacheInfo {
+  int status = 0;
+  uint32_t flags = 0;
+  uint64_t epoch = 0;
+  bufferlist data;
+  map<string, bufferlist> xattrs;
+  map<string, bufferlist> rm_xattrs;
+  ObjectMetaInfo meta;
+  obj_version version = {};
+  ceph::coarse_mono_time time_added;
+
+  ObjectCacheInfo() = default;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(5, 3, bl);
+    encode(status, bl);
+    encode(flags, bl);
+    encode(data, bl);
+    encode(xattrs, bl);
+    encode(meta, bl);
+    encode(rm_xattrs, bl);
+    encode(epoch, bl);
+    encode(version, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START_LEGACY_COMPAT_LEN(5, 3, 3, bl);
+    decode(status, bl);
+    decode(flags, bl);
+    decode(data, bl);
+    decode(xattrs, bl);
+    decode(meta, bl);
+    if (struct_v >= 2)
+      decode(rm_xattrs, bl);
+    if (struct_v >= 4)
+      decode(epoch, bl);
+    if (struct_v >= 5)
+      decode(version, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<ObjectCacheInfo*>& o);
+};
+WRITE_CLASS_ENCODER(ObjectCacheInfo)
+
+struct RGWCacheNotifyInfo {
+  uint32_t op;
+  rgw_raw_obj obj;
+  ObjectCacheInfo obj_info;
+  off_t ofs;
+  string ns;
+
+  RGWCacheNotifyInfo() : op(0), ofs(0) {}
+
+  void encode(bufferlist& obl) const {
+    ENCODE_START(2, 2, obl);
+    encode(op, obl);
+    encode(obj, obl);
+    encode(obj_info, obl);
+    encode(ofs, obl);
+    encode(ns, obl);
+    ENCODE_FINISH(obl);
+  }
+  void decode(bufferlist::const_iterator& ibl) {
+    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, ibl);
+    decode(op, ibl);
+    decode(obj, ibl);
+    decode(obj_info, ibl);
+    decode(ofs, ibl);
+    decode(ns, ibl);
+    DECODE_FINISH(ibl);
+  }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<RGWCacheNotifyInfo*>& o);
+};
+WRITE_CLASS_ENCODER(RGWCacheNotifyInfo)
+
+struct ObjectCacheEntry {
+  ObjectCacheInfo info;
+  std::list<string>::iterator lru_iter;
+  uint64_t lru_promotion_ts;
+  uint64_t gen;
+  std::vector<pair<RGWChainedCache *, string> > chained_entries;
+
+  ObjectCacheEntry() : lru_promotion_ts(0), gen(0) {}
+};
+
 class ObjectCache {
   std::unordered_map<string, ObjectCacheEntry> cache_map;
   std::list<string> lru;
   unsigned long lru_size;
   unsigned long lru_counter;
   unsigned long lru_window;
-  ceph::shared_mutex lock = ceph::make_shared_mutex("ObjectCache");
+  RWLock lock;
   CephContext *cct;
 
   vector<RGWChainedCache *> chained_cache;
@@ -277,10 +297,8 @@ class ObjectCache {
   void invalidate_lru(ObjectCacheEntry& entry);
 
   void do_invalidate_all();
-
 public:
-  ObjectCache() : lru_size(0), lru_counter(0), lru_window(0), cct(NULL), enabled(false) { }
-  ~ObjectCache();
+  ObjectCache() : lru_size(0), lru_counter(0), lru_window(0), lock("ObjectCache"), cct(NULL), enabled(false) { }
   int get(const std::string& name, ObjectCacheInfo& bl, uint32_t mask, rgw_cache_entry_info *cache_info);
   std::optional<ObjectCacheInfo> get(const std::string& name) {
     std::optional<ObjectCacheInfo> info{std::in_place};
@@ -290,7 +308,7 @@ public:
 
   template<typename F>
   void for_each(const F& f) {
-    std::shared_lock l{lock};
+    RWLock::RLocker l(lock);
     if (enabled) {
       auto now  = ceph::coarse_mono_clock::now();
       for (const auto& [name, entry] : cache_map) {
@@ -315,28 +333,9 @@ public:
   void set_enabled(bool status);
 
   void chain_cache(RGWChainedCache *cache);
-  void unchain_cache(RGWChainedCache *cache);
   void invalidate_all();
 };
-struct ChunkDataInfo : public LRUObject {
-	CephContext *cct;
-	uint64_t size;
-	time_t access_time;
-	string address;
-	string oid;
-	bool complete;
-	struct ChunkDataInfo *lru_prev;
-	struct ChunkDataInfo *lru_next;	
 
-	ChunkDataInfo(): size(0) {}
-
-	void set_ctx(CephContext *_cct) {
-		cct = _cct;
-	}
-
-	void dump(Formatter *f) const;
-	static void generate_test_instances(list<ChunkDataInfo*>& o);
-};
 template <class T>
 class RGWCache  : public T
 {
@@ -918,19 +917,20 @@ int RGWDataCache<T>::get_obj_iterate_cb(RGWObjectCtx *ctx, RGWObjState *astate,
 
   librados::IoCtx io_ctx(d->io_ctx);
   io_ctx.locator_set_key(read_obj.loc);
+  d->add_pending_oid(read_obj.oid);
 
-  if (data_cache.get(oid)) {
+  if (data_cache.get(read_obj.oid)) {
     librados::L1CacheRequest *cc;
-    d->add_l1_request(&cc, pbl, oid, len, obj_ofs, read_ofs, key, c);
-    r = io_ctx.cache_aio_notifier(oid, cc);
+    d->add_l1_request(&cc, pbl, read_obj.oid, len, obj_ofs, read_ofs, key, c);
+    r = io_ctx.cache_aio_notifier(read_obj.oid, cc);
     r = d->submit_l1_aio_read(cc);
     if (r != 0 ){
       mydout(0) << "Error cache_aio_read failed err=" << r << dendl;
     }
-  } else if (d->deterministic_hash_is_local(oid)){
-    mydout(20) << "rados->get_obj_iterate_cb oid=" << oid << " obj-ofs=" << obj_ofs << " read_ofs=" << read_ofs << " len=" << len << dendl;
+  } else if (d->deterministic_hash_is_local(read_obj.oid)){
+    mydout(20) << "rados->get_obj_iterate_cb oid=" << read_obj.oid << " obj-ofs=" << obj_ofs << " read_ofs=" << read_ofs << " len=" << len << dendl;
     op.read(read_ofs, len, pbl, NULL);
-    r = io_ctx.aio_operate(oid, c, &op, NULL);
+    r = io_ctx.aio_operate(read_obj.oid, c, &op, NULL);
     mydout(20) << "rados->aio_operate r=" << r << " bl.length=" << pbl->length() << dendl;
     if (r < 0) {
       mydout(0) << "rados->aio_operate r=" << r << dendl;
@@ -938,8 +938,9 @@ int RGWDataCache<T>::get_obj_iterate_cb(RGWObjectCtx *ctx, RGWObjState *astate,
     }
   } else {
     librados::L2CacheRequest *cc;
-    d->add_l2_request(&cc, pbl, oid, obj_ofs, read_ofs, len, key, c);
-    r = d->add_cache_notifier(oid, c);
+    d->add_l2_request(&cc, pbl, read_obj.oid, obj_ofs, read_ofs, len, key, c);
+//    r = d->add_cache_notifier(oid, c);
+    r = io_ctx.cache_aio_notifier(read_obj.oid, cc); 
     data_cache.push_l2_request(cc);
   }
 
