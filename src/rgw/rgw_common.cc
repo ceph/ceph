@@ -30,7 +30,7 @@
 #include "include/str_list.h"
 #include "auth/Crypto.h"
 #include "rgw_crypt_sanitize.h"
-
+#include <curl/curl.h>
 #include <sstream>
 
 #define dout_context g_ceph_context
@@ -298,6 +298,16 @@ req_state::req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u, uint64_t id)
 req_state::~req_state() {
   delete formatter;
 }
+
+int req_state::submit_http_req(string dest, off_t obj_ofs, size_t len, off_t read_ofs, void* args, size_t (*write_cb)(void *, size_t, size_t, void *)){
+  return 0;
+}
+
+int req_state::get_req_info(string dest, string &uri, string &auth_token){
+  auth_token = "X-Auth-Token: " + string(info.env->get("HTTP_X_AUTH_TOKEN"));
+  uri = "http://" + dest + info.request_uri;
+}
+
 
 std::ostream& req_state::gen_prefix(std::ostream& out) const
 {

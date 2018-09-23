@@ -5,6 +5,9 @@
 #define CEPH_RGWRADOS_H
 
 #include <functional>
+#include <fcntl.h>
+#include <aio.h>
+
 
 #include "include/rados/librados.hpp"
 #include "include/Context.h"
@@ -26,6 +29,8 @@
 #include "rgw_period_puller.h"
 #include "rgw_sync_module.h"
 #include "rgw_sync_log_trim.h"
+#include "common/Throttle.h"
+
 
 class RGWWatcher;
 class SafeTimer;
@@ -44,6 +49,7 @@ struct RGWZoneGroup;
 struct RGWZoneParams;
 class RGWReshard;
 class RGWReshardWait;
+struct get_obj_data;
 
 /* flags for put_obj_meta() */
 #define PUT_OBJ_CREATE      0x01
@@ -59,6 +65,7 @@ class RGWReshardWait;
 
 #define RGW_SHARDS_PRIME_0 7877
 #define RGW_SHARDS_PRIME_1 65521
+
 
 // only called by rgw_shard_id and rgw_bucket_shard_index
 static inline int rgw_shards_mod(unsigned hval, int max_shards)
@@ -2107,6 +2114,69 @@ struct tombstone_entry {
 
 class RGWIndexCompletionManager;
 
+struct get_obj_aio_data {
+  struct get_obj_data *op_data;
+  off_t ofs;
+  off_t len;
+};
+
+struct get_obj_io {
+  off_t len;
+  bufferlist bl;
+};
+
+struct get_obj_data : public RefCountedObject {
+  CephContext *cct;
+  RGWRados *rados;
+  RGWObjectCtx *ctx;
+  librados::IoCtx io_ctx;
+  map<off_t, get_obj_io> io_map;
+  map<off_t, librados::AioCompletion *> completion_map;
+  uint64_t total_read;
+  Mutex lock;
+  Mutex data_lock;
+  list<get_obj_aio_data> aio_data;
+  RGWGetDataCB *client_cb;
+  std::atomic<bool> cancelled = { false };
+  std::atomic<int64_t> err_code = { 0 };
+  Throttle throttle;
+  list<bufferlist> read_list;
+
+  int sequence;
+  Mutex cache_lock;
+  Mutex l2_lock;
+  std::list<string> pending_oid_list;
+  std::map<off_t, librados::CacheRequest*> cache_aio_map;
+  char *tmp_data;
+
+  get_obj_data(CephContext *_cct);
+  ~get_obj_data(); 
+  void set_cancelled(int r);
+  bool is_cancelled();
+  int get_err_code();
+  int wait_next_io(bool *done);
+  void add_io(off_t ofs, off_t len, bufferlist **pbl, librados::AioCompletion **pc);
+  void cancel_io(off_t ofs);
+  void cancel_all_io();
+
+  int get_complete_ios(off_t ofs, list<bufferlist>& bl_list);
+
+  string get_pending_oid();
+  bool deterministic_hash_is_local(string oid);
+  string deterministic_hash(string oid);
+  int add_l1_request(struct librados::L1CacheRequest **cc, bufferlist *pbl, string oid,
+      size_t len, off_t ofs, off_t read_ofs, string key, librados::AioCompletion *lc);
+  int add_l2_request(struct librados::L2CacheRequest **cc, bufferlist *pbl, string oid,
+      off_t obj_ofs, off_t read_ofs, size_t len, string key, librados::AioCompletion *lc);
+  int add_cache_notifier(std::string oid, librados::AioCompletion *lc);
+  void cache_aio_completion_cb(librados::CacheRequest *c);
+  void cache_unmap_io(off_t ofs);
+
+  int submit_l1_aio_read(librados::L1CacheRequest *cc);
+  int submit_l1_io_read(bufferlist *bl, int len, string oid);
+};
+
+
 class RGWRados : public AdminSocketHook
 {
   friend class RGWGC;
@@ -2218,8 +2288,6 @@ class RGWRados : public AdminSocketHook
   int get_system_obj_state_impl(RGWObjectCtx *rctx, rgw_raw_obj& obj, RGWRawObjState **state, RGWObjVersionTracker *objv_tracker);
   int get_obj_state_impl(RGWObjectCtx *rctx, const RGWBucketInfo& bucket_info, const rgw_obj& obj, RGWObjState **state,
                          bool follow_olh, bool assume_noent = false);
-  int append_atomic_test(RGWObjectCtx *rctx, const RGWBucketInfo& bucket_info, const rgw_obj& obj,
-                         librados::ObjectOperation& op, RGWObjState **state);
 
   int update_placement_map();
   int store_bucket_info(RGWBucketInfo& info, map<string, bufferlist> *pattrs, RGWObjVersionTracker *objv_tracker, bool exclusive);
@@ -3233,9 +3301,13 @@ public:
                   int (*iterate_obj_cb)(const RGWBucketInfo& bucket_info, const rgw_obj& obj, const rgw_raw_obj&, off_t, off_t, off_t, bool, RGWObjState *, void *),
                   void *arg);
 
-  int flush_read_list(struct get_obj_data *d);
+  int append_atomic_test(RGWObjectCtx *rctx, const RGWBucketInfo& bucket_info, const rgw_obj& obj,
+		  librados::ObjectOperation& op, RGWObjState **state);
 
-  int get_obj_iterate_cb(RGWObjectCtx *ctx, RGWObjState *astate,
+
+  virtual int flush_read_list(struct get_obj_data *d);
+
+  virtual int get_obj_iterate_cb(RGWObjectCtx *ctx, RGWObjState *astate,
                          const RGWBucketInfo& bucket_info, const rgw_obj& obj,
                          const rgw_raw_obj& read_obj,
                          off_t obj_ofs, off_t read_ofs, off_t len,
@@ -3745,20 +3817,114 @@ class RGWStoreManager {
 public:
   RGWStoreManager() {}
   static RGWRados *get_storage(CephContext *cct, bool use_gc_thread, bool use_lc_thread, bool quota_threads,
-			       bool run_sync_thread, bool run_reshard_thread, bool use_cache = true) {
+			       bool run_sync_thread, bool run_reshard_thread, bool use_metacache = true, bool use_datacache=false) {
     RGWRados *store = init_storage_provider(cct, use_gc_thread, use_lc_thread, quota_threads, run_sync_thread,
-					    run_reshard_thread, use_cache);
+					    run_reshard_thread, use_metacache, use_datacache);
     return store;
   }
   static RGWRados *get_raw_storage(CephContext *cct) {
     RGWRados *store = init_raw_storage_provider(cct);
     return store;
   }
-  static RGWRados *init_storage_provider(CephContext *cct, bool use_gc_thread, bool use_lc_thread, bool quota_threads, bool run_sync_thread, bool run_reshard_thread, bool use_metadata_cache);
+  static RGWRados *init_storage_provider(CephContext *cct, bool use_gc_thread, bool use_lc_thread, bool quota_threads, bool run_sync_thread, bool run_reshard_thread, bool use_metadata_cache, bool use_data_cache = false);
   static RGWRados *init_raw_storage_provider(CephContext *cct);
   static void close_storage(RGWRados *store);
 
 };
+
+class librados::CacheRequest {
+  public:
+    Mutex lock;
+    int sequence;
+    bufferlist *pbl;
+    struct get_obj_data *op_data;
+    std::string oid;
+    off_t ofs;
+    off_t len;
+    librados::AioCompletion *lc;
+    std::string key;
+    off_t read_ofs;
+    Context *onack;
+    CephContext *cct;
+    CacheRequest(CephContext *_cct) : lock("CacheRequest"), sequence(0), pbl(NULL), op_data(NULL), ofs(0), lc(NULL), read_ofs(0), cct(_cct) {};
+    virtual ~CacheRequest(){};
+    virtual void release()=0;
+    virtual void cancel_io()=0;
+    virtual int status()=0;
+    virtual void finish()=0;
+};
+
+struct librados::L1CacheRequest : public librados::CacheRequest{
+  int stat;
+  struct aiocb *paiocb;
+  L1CacheRequest(CephContext *_cct) :  CacheRequest(_cct), stat(-1), paiocb(NULL) {}
+  ~L1CacheRequest(){}
+  void release (){
+    lock.Lock();
+    free((void *)paiocb->aio_buf);
+    paiocb->aio_buf = NULL;
+    ::close(paiocb->aio_fildes);
+    free(paiocb);
+    lock.Unlock();
+    delete this;
+					    }
+
+  void cancel_io(){
+    lock.Lock();
+    stat = ECANCELED;
+    lock.Unlock();
+  }
+
+  int status(){
+    lock.Lock();
+    if (stat != EINPROGRESS) {
+      lock.Unlock();
+      if (stat == ECANCELED){
+	release();
+	return ECANCELED;
+      }
+    }
+    stat = aio_error(paiocb);
+    lock.Unlock();
+    return stat;
+  }
+
+  void finish(){
+    pbl->append((char*)paiocb->aio_buf, paiocb->aio_nbytes);
+    onack->complete(0);
+    release();
+  }
+};
+
+struct librados::L2CacheRequest : public librados::CacheRequest {
+  size_t read;
+  int stat;
+  void *tp;
+  string dest;
+  L2CacheRequest(CephContext *_cct) : CacheRequest(_cct), read(0), stat(-1) {}
+  ~L2CacheRequest(){}
+  void release (){
+    lock.Lock();
+    lock.Unlock();
+  }
+
+  void cancel_io(){
+    lock.Lock();
+    stat = ECANCELED;
+    lock.Unlock();
+  }
+
+  void finish(){
+    onack->complete(0);
+    release();
+  }
+
+  int status(){
+    return 0;
+  }
+};
+
+
 
 template <class T>
 class RGWChainedCacheImpl : public RGWChainedCache {

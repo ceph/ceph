@@ -7,11 +7,21 @@
 #include "rgw_rados.h"
 #include <string>
 #include <map>
+#include <curl/curl.h>
 #include <unordered_map>
+
+#include <unistd.h> /*engage1*/
+#include <signal.h> /*engage1*/
+#include "include/Context.h" /*engage1*/
+
 #include "include/types.h"
 #include "include/utime.h"
 #include "include/ceph_assert.h"
 #include "common/RWLock.h"
+
+
+#include "include/lru.h" /*engage1*/
+#include "rgw_threadpool.h"
 
 enum {
   UPDATE_OBJ,
@@ -25,6 +35,137 @@ enum {
 #define CACHE_FLAG_OBJV           0x10
 
 #define mydout(v) lsubdout(T::cct, rgw, v)
+
+/*engage1*/
+struct DataCache;
+class L2CacheThreadPool;
+class HttpL2Request;
+
+struct ChunkDataInfo : public LRUObject {
+	CephContext *cct;
+	uint64_t size;
+	time_t access_time;
+	string address;
+	string oid;
+	bool complete;
+	struct ChunkDataInfo *lru_prev;
+	struct ChunkDataInfo *lru_next;	
+
+	ChunkDataInfo(): size(0) {}
+
+	void set_ctx(CephContext *_cct) {
+		cct = _cct;
+	}
+
+	void dump(Formatter *f) const;
+	static void generate_test_instances(list<ChunkDataInfo*>& o);
+};
+
+struct cacheAioWriteRequest{
+	string oid;
+	void *data;
+	int fd;
+	struct aiocb *cb;
+	DataCache *priv_data;
+	CephContext *cct;
+	
+	cacheAioWriteRequest(CephContext *_cct) : cct(_cct) {}
+	int create_io(bufferlist& bl, unsigned int len, string oid);
+	
+	void release() {
+		::close(fd);
+		cb->aio_buf = NULL;
+		free(data);
+		data = NULL;
+		free(cb);
+		free(this);
+	}
+};
+
+struct DataCache {
+
+private:
+  std::map<string, ChunkDataInfo*> cache_map;
+  std::list<string> outstanding_write_list;
+  int index;
+  RWLock lock;
+  Mutex  cache_lock;
+  Mutex  req_lock;
+  Mutex  eviction_lock;
+  CephContext *cct;
+  enum _io_type { 
+    SYNC_IO = 1,
+    ASYNC_IO = 2,
+    SEND_FILE = 3
+  } io_type;
+
+  struct sigaction action;
+  long long free_data_cache_size;
+  long long outstanding_write_size;
+  L2CacheThreadPool *tp;
+  struct ChunkDataInfo *head;
+  struct ChunkDataInfo *tail;
+
+private:
+  void add_io();
+
+public:
+  DataCache();
+  ~DataCache() {}
+
+  bool get(string oid);
+  void put(bufferlist& bl, unsigned int len, string obj_key);
+  int io_write(bufferlist& bl, unsigned int len, std::string oid);
+  int create_aio_write_request(bufferlist& bl, unsigned int len, std::string oid);
+  void cache_aio_write_completion_cb(cacheAioWriteRequest *c);
+  size_t random_eviction();
+  size_t lru_eviction();
+  std::string hash_uri(std::string dest);
+  std::string deterministic_hash(std::string oid);
+  void remote_io(struct librados::L2CacheRequest *l2request); 
+  void init_l2_request_cb(librados::completion_t c, void *arg);
+  void push_l2_request(librados::L2CacheRequest*l2request);
+  void l2_http_request(off_t ofs , off_t len, std::string oid);
+  void init(CephContext *_cct) {
+    cct = _cct;
+    free_data_cache_size = cct->_conf->rgw_datacache_size;
+    head = NULL;
+    tail = NULL;
+  }
+
+  void lru_insert_head(struct ChunkDataInfo *o) {
+    o->lru_next = head;
+    o->lru_prev = NULL;
+    if (head) {
+      head->lru_prev = o;
+    } else {
+      tail = o;
+    }
+    head = o;
+  }
+  void lru_insert_tail(struct ChunkDataInfo *o) {
+    o->lru_next = NULL;
+    o->lru_prev = tail;
+    if (tail) {
+      tail->lru_next = o;
+    } else {
+      head = o;
+    }
+    tail = o;
+  }
+
+  void lru_remove(struct ChunkDataInfo *o) {
+    if (o->lru_next)
+      o->lru_next->lru_prev = o->lru_prev;
+    else
+      tail = o->lru_prev;
+    if (o->lru_prev)
+      o->lru_prev->lru_next = o->lru_next;
+    else
+      head = o->lru_next;
+    o->lru_next = o->lru_prev = NULL;
+  }
+};
 
 struct ObjectMetaInfo {
   uint64_t size;
@@ -216,16 +357,6 @@ class RGWCache  : public T
 
   void normalize_pool_and_obj(rgw_pool& src_pool, const string& src_obj, rgw_pool& dst_pool, string& dst_obj);
 
-  int init_rados() override {
-    int ret;
-    cache.set_ctx(T::cct);
-    ret = T::init_rados();
-    if (ret < 0)
-      return ret;
-
-    return 0;
-  }
-
   bool need_watch_notify() override {
     return true;
   }
@@ -245,6 +376,17 @@ public:
   void register_chained_cache(RGWChainedCache *cc) override {
     cache.chain_cache(cc);
   }
+
+  int init_rados() override {
+    int ret;
+    cache.set_ctx(T::cct);
+    ret = T::init_rados();
+    if (ret < 0)
+      return ret;
+
+    return 0;
+  }
+
 
   int system_obj_set_attrs(void *ctx, rgw_raw_obj& obj, 
                 map<string, bufferlist>& attrs,
@@ -651,4 +793,228 @@ void RGWCache<T>::call_zap()
 {
   cache.invalidate_all();
 }
+
+template <class T>
+class RGWDataCache  : public RGWCache<T>
+{
+
+  DataCache   data_cache;
+
+public:
+  RGWDataCache() {}
+
+  int init_rados() override {
+    int ret;
+    data_cache.init(T::cct);
+    ret = RGWCache<T>::init_rados();
+    if (ret < 0)
+      return ret;
+
+    return 0;
+  }
+
+  int flush_read_list(struct get_obj_data *d);
+  int get_obj_iterate_cb(RGWObjectCtx *ctx, RGWObjState *astate,
+      const RGWBucketInfo& bucket_info, const rgw_obj& obj,
+      const rgw_raw_obj& read_obj,
+      off_t obj_ofs, off_t read_ofs, off_t len,
+      bool is_head_obj, void *arg);
+
+};
+
+struct get_obj_data;
+
+template<typename T>
+int RGWDataCache<T>::flush_read_list(struct get_obj_data *d) {
+  d->data_lock.Lock();
+  list<bufferlist> l;
+  l.swap(d->read_list);
+  d->get();
+  d->read_list.clear();
+
+  d->data_lock.Unlock();
+
+  int r = 0;
+
+  std::string oid;
+  list<bufferlist>::iterator iter;
+  for (iter = l.begin(); iter != l.end(); ++iter) {
+    bufferlist& bl = *iter;
+    oid = d->get_pending_oid();
+    if (bl.length() == 0x400000)
+      data_cache.put(bl, bl.length(), oid);
+    r = d->client_cb->handle_data(bl, 0, bl.length());
+    if (r < 0) {
+      mydout(0) << "ERROR: flush_read_list(): d->client_cb->handle_data() returned " << r << dendl;
+      break;
+    }
+  }
+
+  d->data_lock.Lock();
+  d->put();
+  if (r < 0) {
+    d->set_cancelled(r);
+  }
+  d->data_lock.Unlock();
+  return r;
+
+}
+
+template<typename T>
+int RGWDataCache<T>::get_obj_iterate_cb(RGWObjectCtx *ctx, RGWObjState *astate,
+    const RGWBucketInfo& bucket_info, const rgw_obj& obj,
+    const rgw_raw_obj& read_obj,
+    off_t obj_ofs, off_t read_ofs, off_t len,
+    bool is_head_obj, void *arg) {
+  
+  RGWObjectCtx *rctx = static_cast<RGWObjectCtx *>(ctx);
+  librados::ObjectReadOperation op;
+  struct get_obj_data *d = (struct get_obj_data *)arg;
+  string oid, key;
+  bufferlist *pbl;
+  librados::AioCompletion *c;
+
+  int r;
+
+  if (is_head_obj) {
+    /* only when reading from the head object do we need to do the atomic test */
+    r = T::append_atomic_test(rctx, bucket_info, obj, op, &astate);
+    if (r < 0)
+      return r;
+
+    if (astate &&
+        obj_ofs < astate->data.length()) {
+      unsigned chunk_len = std::min((uint64_t)astate->data.length() - obj_ofs, (uint64_t)len);
+
+      r = d->client_cb->handle_data(astate->data, obj_ofs, chunk_len);
+      if (r < 0)
+        return r;
+
+      d->lock.Lock();
+      d->total_read += chunk_len;
+      d->lock.Unlock();
+	
+      len -= chunk_len;
+      read_ofs += chunk_len;
+      obj_ofs += chunk_len;
+      if (!len)
+	  return 0;
+    }
+  }
+
+  d->throttle.get(len);
+  if (d->is_cancelled()) {
+    return d->get_err_code();
+  }
+
+  /* add io after we check that we're not cancelled, otherwise we're going to have trouble
+   * cleaning up
+   */
+  d->add_io(obj_ofs, len, &pbl, &c);
+
+  mydout(20) << "rados->get_obj_iterate_cb oid=" << read_obj.oid << " obj-ofs=" << obj_ofs << " read_ofs=" << read_ofs << " len=" << len << dendl;
+  op.read(read_ofs, len, pbl, NULL);
+
+  librados::IoCtx io_ctx(d->io_ctx);
+  io_ctx.locator_set_key(read_obj.loc);
+
+  if (data_cache.get(oid)) {
+    librados::L1CacheRequest *cc;
+    d->add_l1_request(&cc, pbl, oid, len, obj_ofs, read_ofs, key, c);
+    r = io_ctx.cache_aio_notifier(oid, cc);
+    r = d->submit_l1_aio_read(cc);
+    if (r != 0 ){
+      mydout(0) << "Error cache_aio_read failed err=" << r << dendl;
+    }
+  } else if (d->deterministic_hash_is_local(oid)){
+    mydout(20) << "rados->get_obj_iterate_cb oid=" << oid << " obj-ofs=" << obj_ofs << " read_ofs=" << read_ofs << " len=" << len << dendl;
+    op.read(read_ofs, len, pbl, NULL);
+    r = io_ctx.aio_operate(oid, c, &op, NULL);
+    mydout(20) << "rados->aio_operate r=" << r << " bl.length=" << pbl->length() << dendl;
+    if (r < 0) {
+      mydout(0) << "rados->aio_operate r=" << r << dendl;
+      goto done_err;
+    }
+  } else {
+    librados::L2CacheRequest *cc;
+    d->add_l2_request(&cc, pbl, oid, obj_ofs, read_ofs, len, key, c);
+    r = d->add_cache_notifier(oid, c);
+    data_cache.push_l2_request(cc);
+  }
+
+  // Flush data to client if there is any
+  r = flush_read_list(d);
+  if (r < 0)
+    return r;
+
+  return 0;
+
+done_err:
+  mydout(20) << "cancelling io r=" << r << " obj_ofs=" << obj_ofs << dendl;
+  d->set_cancelled(r);
+  d->cancel_io(obj_ofs);
+
+  return r;
+}
+
+class L2CacheThreadPool {
+public:
+  L2CacheThreadPool(int n) {
+    curl_global_init(CURL_GLOBAL_ALL);
+    for (int i=0; i<n; ++i) {
+      threads.push_back(new PoolWorkerThread(workQueue));
+      threads.back()->start();
+    }
+  }
+
+  ~L2CacheThreadPool() {
+    finish();
+  }
+
+  void addTask(Task *nt) {
+    workQueue.addTask(nt);
+  }
+
+  void finish() {
+    for (size_t i=0,e=threads.size(); i<e; ++i)
+      workQueue.addTask(NULL);
+    for (size_t i=0,e=threads.size(); i<e; ++i) {
+      threads[i]->join();
+      delete threads[i];
+    }
+    threads.clear();
+  }
+
+private:
+  std::vector<PoolWorkerThread*> threads;
+  WorkQueue workQueue;
+};
+
+class HttpL2Request : public Task {
+public:
+  HttpL2Request(librados::L2CacheRequest *_req, CephContext *_cct) : Task(), req(_req), cct(_cct) {
+    pthread_mutex_init(&qmtx,0);
+    pthread_cond_init(&wcond, 0);
+  }
+  ~HttpL2Request() {
+    pthread_mutex_destroy(&qmtx);
+    pthread_cond_destroy(&wcond);
+  }
+  virtual void run();
+  virtual void set_handler(void *handle) {
+    curl_handle = (CURL *)handle;
+  }
+private:
+  int submit_http_request();
+  int sign_request(RGWAccessKey& key, RGWEnv& env, req_info& info);
+private:
+  pthread_mutex_t qmtx;
+  pthread_cond_t wcond;
+  librados::L2CacheRequest *req;
+  CURL *curl_handle;
+  CephContext *cct;
+};
+
+
+
 #endif

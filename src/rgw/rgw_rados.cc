@@ -10179,189 +10179,339 @@ int RGWRados::SystemObject::Read::get_attr(const char *name, bufferlist& dest)
   return store->system_obj_get_attr(obj, name, dest);
 }
 
-struct get_obj_data;
-
-struct get_obj_aio_data {
-  struct get_obj_data *op_data;
-  off_t ofs;
-  off_t len;
-};
-
-struct get_obj_io {
-  off_t len;
-  bufferlist bl;
-};
-
 static void _get_obj_aio_completion_cb(completion_t cb, void *arg);
 
-struct get_obj_data : public RefCountedObject {
-  CephContext *cct;
-  RGWRados *rados;
-  RGWObjectCtx *ctx;
-  IoCtx io_ctx;
-  map<off_t, get_obj_io> io_map;
-  map<off_t, librados::AioCompletion *> completion_map;
-  uint64_t total_read;
-  Mutex lock;
-  Mutex data_lock;
-  list<get_obj_aio_data> aio_data;
-  RGWGetDataCB *client_cb;
-  std::atomic<bool> cancelled = { false };
-  std::atomic<int64_t> err_code = { 0 };
-  Throttle throttle;
-  list<bufferlist> read_list;
+get_obj_data::get_obj_data(CephContext *_cct)
+  : cct(_cct),
+  rados(NULL), ctx(NULL),
+  total_read(0), lock("get_obj_data"), data_lock("get_obj_data::data_lock"),
+  client_cb(NULL),
+  cache_lock("get_obj_data::cache_lock"), 
+  l2_lock("get_obj_data::l2_lock"),
+  throttle(cct, "get_obj_data", cct->_conf->rgw_get_obj_window_size, false) {}
+  
+get_obj_data::~get_obj_data() { } 
 
-  explicit get_obj_data(CephContext *_cct)
-    : cct(_cct),
-      rados(NULL), ctx(NULL),
-      total_read(0), lock("get_obj_data"), data_lock("get_obj_data::data_lock"),
-      client_cb(NULL),
-      throttle(cct, "get_obj_data", cct->_conf->rgw_get_obj_window_size, false) {}
-  ~get_obj_data() override { } 
-  void set_cancelled(int r) {
-    cancelled = true;
-    err_code = r;
-  }
+void get_obj_data::set_cancelled(int r) {
+  cancelled = true;
+  err_code = r;
+}
 
-  bool is_cancelled() {
-    return cancelled;
-  }
+bool get_obj_data::is_cancelled() {
+  return cancelled;
+}
 
-  int get_err_code() {
-    return err_code;
-  }
+int get_obj_data::get_err_code() {
+  return err_code;
+}
 
-  int wait_next_io(bool *done) {
-    lock.Lock();
-    map<off_t, librados::AioCompletion *>::iterator iter = completion_map.begin();
-    if (iter == completion_map.end()) {
-      *done = true;
-      lock.Unlock();
-      return 0;
-    }
-    off_t cur_ofs = iter->first;
-    librados::AioCompletion *c = iter->second;
+int get_obj_data::wait_next_io(bool *done) {
+  lock.Lock();
+  map<off_t, librados::AioCompletion *>::iterator iter = completion_map.begin();
+  if (iter == completion_map.end()) {
+    *done = true;
     lock.Unlock();
-
-    c->wait_for_safe_and_cb();
-    int r = c->get_return_value();
-
-    lock.Lock();
-    completion_map.erase(cur_ofs);
-
-    if (completion_map.empty()) {
-      *done = true;
-    }
-    lock.Unlock();
-
-    c->release();
-    
-    return r;
-  }
-
-  void add_io(off_t ofs, off_t len, bufferlist **pbl, AioCompletion **pc) {
-    Mutex::Locker l(lock);
-
-    const auto& io_iter = io_map.insert(
-      map<off_t, get_obj_io>::value_type(ofs, get_obj_io()));
-
-    ceph_assert(io_iter.second); // assert new insertion
-
-    get_obj_io& io = (io_iter.first)->second;
-    *pbl = &io.bl;
-
-    struct get_obj_aio_data aio;
-    aio.ofs = ofs;
-    aio.len = len;
-    aio.op_data = this;
-
-    aio_data.push_back(aio);
-
-    struct get_obj_aio_data *paio_data =  &aio_data.back(); /* last element */
-
-    librados::AioCompletion *c = librados::Rados::aio_create_completion((void *)paio_data, NULL, _get_obj_aio_completion_cb);
-    completion_map[ofs] = c;
-
-    *pc = c;
-
-    /* we have a reference per IO, plus one reference for the calling function.
-     * reference is dropped for each callback, plus when we're done iterating
-     * over the parts */
-    get();
-  }
-
-  void cancel_io(off_t ofs) {
-    ldout(cct, 20) << "get_obj_data::cancel_io() ofs=" << ofs << dendl;
-    lock.Lock();
-    map<off_t, AioCompletion *>::iterator iter = completion_map.find(ofs);
-    if (iter != completion_map.end()) {
-      AioCompletion *c = iter->second;
-      c->release();
-      completion_map.erase(ofs);
-      io_map.erase(ofs);
-    }
-    lock.Unlock();
-
-    /* we don't drop a reference here -- e.g., not calling d->put(), because we still
-     * need IoCtx to live, as io callback may still be called
-     */
-  }
-
-  void cancel_all_io() {
-    ldout(cct, 20) << "get_obj_data::cancel_all_io()" << dendl;
-    Mutex::Locker l(lock);
-    for (map<off_t, librados::AioCompletion *>::iterator iter = completion_map.begin();
-         iter != completion_map.end(); ++iter) {
-      librados::AioCompletion  *c = iter->second;
-      c->release();
-    }
-  }
-
-  int get_complete_ios(off_t ofs, list<bufferlist>& bl_list) {
-    Mutex::Locker l(lock);
-
-    map<off_t, get_obj_io>::iterator liter = io_map.begin();
-
-    if (liter == io_map.end() ||
-        liter->first != ofs) {
-      return 0;
-    }
-
-    map<off_t, librados::AioCompletion *>::iterator aiter;
-    aiter = completion_map.find(ofs);
-    if (aiter == completion_map.end()) {
-    /* completion map does not hold this io, it was cancelled */
-      return 0;
-    }
-
-    AioCompletion *completion = aiter->second;
-    int r = completion->get_return_value();
-    if (r < 0)
-      return r;
-
-    for (; aiter != completion_map.end(); ++aiter) {
-      completion = aiter->second;
-      if (!completion->is_safe()) {
-        /* reached a request that is not yet complete, stop */
-        break;
-      }
-
-      r = completion->get_return_value();
-      if (r < 0) {
-        set_cancelled(r); /* mark it as cancelled, so that we don't continue processing next operations */
-        return r;
-      }
-
-      total_read += r;
-
-      map<off_t, get_obj_io>::iterator old_liter = liter++;
-      bl_list.push_back(old_liter->second.bl);
-      io_map.erase(old_liter);
-    }
-
     return 0;
   }
-};
+  off_t cur_ofs = iter->first;
+  librados::AioCompletion *c = iter->second;
+  lock.Unlock();
+
+  c->wait_for_safe_and_cb();
+  int r = c->get_return_value();
+
+  lock.Lock();
+  completion_map.erase(cur_ofs);
+
+  if (completion_map.empty()) {
+    *done = true;
+  }
+  lock.Unlock();
+
+  c->release();
+
+  return r;
+}
+
+void get_obj_data::add_io(off_t ofs, off_t len, bufferlist **pbl, AioCompletion **pc) {
+  Mutex::Locker l(lock);
+
+  const auto& io_iter = io_map.insert(
+      map<off_t, get_obj_io>::value_type(ofs, get_obj_io()));
+
+  ceph_assert(io_iter.second); // assert new insertion
+
+  get_obj_io& io = (io_iter.first)->second;
+  *pbl = &io.bl;
+
+  struct get_obj_aio_data aio;
+  aio.ofs = ofs;
+  aio.len = len;
+  aio.op_data = this;
+
+  aio_data.push_back(aio);
+
+  struct get_obj_aio_data *paio_data =  &aio_data.back(); /* last element */
+
+  librados::AioCompletion *c = librados::Rados::aio_create_completion((void *)paio_data, NULL, _get_obj_aio_completion_cb);
+  completion_map[ofs] = c;
+
+  *pc = c;
+
+  /* we have a reference per IO, plus one reference for the calling function.
+   * reference is dropped for each callback, plus when we're done iterating
+   * over the parts */
+  get();
+}
+
+void get_obj_data::cancel_io(off_t ofs) {
+  ldout(cct, 20) << "get_obj_data::cancel_io() ofs=" << ofs << dendl;
+  lock.Lock();
+  map<off_t, AioCompletion *>::iterator iter = completion_map.find(ofs);
+  if (iter != completion_map.end()) {
+    AioCompletion *c = iter->second;
+    c->release();
+    completion_map.erase(ofs);
+    io_map.erase(ofs);
+  }
+  lock.Unlock();
+
+  /* we don't drop a reference here -- e.g., not calling d->put(), because we still
+   * need IoCtx to live, as io callback may still be called
+   */
+}
+
+void get_obj_data::cancel_all_io() {
+  ldout(cct, 20) << "get_obj_data::cancel_all_io()" << dendl;
+  Mutex::Locker l(lock);
+  for (map<off_t, librados::AioCompletion *>::iterator iter = completion_map.begin();
+      iter != completion_map.end(); ++iter) {
+    librados::AioCompletion  *c = iter->second;
+    c->release();
+  }
+}
+
+int get_obj_data::get_complete_ios(off_t ofs, list<bufferlist>& bl_list) {
+  Mutex::Locker l(lock);
+
+  map<off_t, get_obj_io>::iterator liter = io_map.begin();
+
+  if (liter == io_map.end() ||
+      liter->first != ofs) {
+    return 0;
+  }
+
+  map<off_t, librados::AioCompletion *>::iterator aiter;
+  aiter = completion_map.find(ofs);
+  if (aiter == completion_map.end()) {
+    /* completion map does not hold this io, it was cancelled */
+    return 0;
+  }
+
+  AioCompletion *completion = aiter->second;
+  int r = completion->get_return_value();
+  if (r < 0)
+    return r;
+
+  for (; aiter != completion_map.end(); ++aiter) {
+    completion = aiter->second;
+    if (!completion->is_safe()) {
+      /* reached a request that is not yet complete, stop */
+        break;
+    }
+
+    r = completion->get_return_value();
+    if (r < 0) {
+      set_cancelled(r); /* mark it as cancelled, so that we don't continue processing next operations */
+      return r;
+    }
+
+    total_read += r;
+
+    map<off_t, get_obj_io>::iterator old_liter = liter++;
+    bl_list.push_back(old_liter->second.bl);
+    io_map.erase(old_liter);
+  }
+
+  return 0;
+}
+
+static void _cache_aio_completion_cb(sigval_t sigval);
+
+vector<string> split(const string &s, const char * delim) {
+  stringstream ss(s);
+  string item;
+  vector<string> tokens;
+  while (getline(ss, item, (*delim))) {
+    tokens.push_back(item);
+  }
+  return tokens;
+}
+
+bool get_obj_data::deterministic_hash_is_local(string oid) {
+  return !(deterministic_hash(oid).compare(cct->_conf->rgw_host)==0);
+}
+
+string get_obj_data::deterministic_hash(string oid) {
+
+  std::string location = cct->_conf->rgw_l2_hosts;
+  string delimiters(",");
+  std::vector<std::string> tokens = split(location, ",");
+  int mod = tokens.size();
+
+  std::string::size_type sz;   // alias of size_t
+  vector<string> sv = split(oid, "_");
+  int hash = std::stoi(sv[sv.size()-1], &sz);
+  return tokens[hash%mod];
+}
+
+
+string get_obj_data::get_pending_oid()
+{
+  string str;
+  str.clear();
+  if (!pending_oid_list.empty()) {
+    str = pending_oid_list.front();
+    pending_oid_list.pop_front();
+  }
+  return str;
+}
+
+int get_obj_data::add_l2_request(struct librados::L2CacheRequest **cc, bufferlist *pbl, string oid,
+                off_t obj_ofs, off_t read_ofs, size_t len, string key, librados::AioCompletion *lc)
+{
+  librados::L2CacheRequest *l2request = new librados::L2CacheRequest(cct);
+  l2request->sequence = sequence; sequence+=1;
+  l2request->ofs = obj_ofs;
+  l2request->len = len;
+  l2request->oid  = oid;
+  l2request->read_ofs = read_ofs;
+  l2request->key = key;
+  l2request->lc = lc;
+  l2request->op_data = this;
+  l2request->pbl = pbl;
+  /*FIXME calcuclate the destination for L2 and update l2request->dest*/
+  l2request->dest=deterministic_hash(oid);
+  //ldout(cct, 0) << "INFO::REMOTE_IO :"<< dest << dendl;
+  cache_lock.Lock();
+  cache_aio_map[obj_ofs] = l2request;
+  cache_lock.Unlock();
+  *cc = l2request;
+  return 0;
+}
+
+int get_obj_data::add_l1_request(struct librados::L1CacheRequest **cc, bufferlist *pbl, string oid,
+		size_t len, off_t ofs, off_t read_ofs, string key, librados::AioCompletion *lc)
+{
+  librados::L1CacheRequest *c = new librados::L1CacheRequest(cct);
+  c->sequence = sequence++;
+  c->pbl = pbl;
+  c->oid = oid;
+  c->ofs = ofs;
+  c->key = key;
+  c->lc = lc;
+  c->len = len;
+  c->read_ofs = read_ofs;
+  c->stat = EINPROGRESS;
+  c->op_data = this;
+
+  std::string location = cct->_conf->rgw_datacache_persistent_path + oid;
+  struct aiocb *cb = new struct aiocb;
+  memset(cb, 0, sizeof(struct aiocb));
+  cb->aio_fildes = ::open(location.c_str(), O_RDONLY);
+  if (cb->aio_fildes < 0)  {
+    ldout(cct, 0) << "Error: add_cache_io:: read ::open the file has return error "  << dendl;
+    return -1;
+  }
+
+  cb->aio_buf = malloc(len);
+  cb->aio_nbytes = len;
+  cb->aio_offset = read_ofs;
+  cb->aio_sigevent.sigev_notify = SIGEV_THREAD;
+  cb->aio_sigevent.sigev_notify_function = _cache_aio_completion_cb;
+  cb->aio_sigevent.sigev_notify_attributes = NULL;
+  cb->aio_sigevent.sigev_value.sival_ptr = (void*)c;
+  c->paiocb = cb;
+
+  cache_lock.Lock();
+  cache_aio_map[ofs] = c;
+  cache_lock.Unlock();
+  *cc = c;
+  return 0;
+}
+
+int get_obj_data::submit_l1_io_read(bufferlist *bl, int len, string oid) {
+
+  std::string location = cct->_conf->rgw_datacache_persistent_path + oid; 
+  int cache_file = -1;
+  int r = 0;
+
+  cache_file = ::open(location.c_str(), O_RDONLY);
+  if (cache_file < 0) {
+    dout(0) << "ERROR: get_obj_data::cache_io_read, open failed. errno " << errno << dendl;
+    return -1;
+  }
+
+  r = ::read(cache_file, tmp_data, len);
+  if (r < 0){
+    dout(0) << "ERROR: get_obj_data::cache_io_read, read failed. errno " << r << dendl;
+    goto END;
+  }
+  bl->append(tmp_data, len);
+
+END:
+  ::close(cache_file);
+  return r;
+}
+
+int get_obj_data::submit_l1_aio_read(librados::L1CacheRequest *cc) {
+
+  int r = 0;
+  if((r= ::aio_read(cc->paiocb)) != 0) {
+    ldout(cct, 0) << "ERROR: aio_read ::aio_read"<< r << dendl;
+  }
+  return r;
+}
+
+void _cache_aio_completion_cb(sigval_t sigval){
+  librados::CacheRequest *c = static_cast<librados::CacheRequest *>(sigval.sival_ptr);
+  c->op_data->cache_aio_completion_cb(c);
+}
+
+void get_obj_data::cache_aio_completion_cb(librados::CacheRequest *c){
+  
+  int status = c->status();
+  if (status == ECANCELED) {
+    cache_unmap_io(c->ofs);
+    ldout(cct, 0) << "engage1: cache_aio_request: status = ECANCLE" << dendl;
+    return;
+  } else if (status == 0) {
+    cache_unmap_io(c->ofs);
+    l2_lock.Lock();
+    ldout(cct, 0) << "engage1: cache_aio_completion_cb,inside the finish lock- oid : " << c->oid << ", len:" << std::hex << c->len << "plb->len" << std::hex << c->pbl->length()  << dendl;
+    c->finish();
+    l2_lock.Unlock();
+  }
+}
+
+void get_obj_data::cache_unmap_io(off_t ofs){
+	
+  cache_lock.Lock();
+  map<off_t, struct librados::CacheRequest *>::iterator iter = cache_aio_map.find(ofs);
+  if (iter == cache_aio_map.end()) {
+    cache_lock.Unlock();
+    return;
+  }
+  cache_aio_map.erase(ofs);
+  cache_lock.Unlock();
+}
+
+int get_obj_data::add_cache_notifier(std::string oid, librados::AioCompletion *lc) {
+  //Context *onack = new IoCtxImpl::C_aio_Complete(lc->pc);
+  //librados::IoCtxImpl::C_aio_Complete *m_safe = new librados::IoCtxImpl::C_aio_Complete(lc->pc);
+  return 0;
+}
+
 
 static int _get_obj_iterate_cb(const RGWBucketInfo& bucket_info, const rgw_obj& obj, const rgw_raw_obj& read_obj, off_t obj_ofs, off_t read_ofs, off_t len, bool is_head_obj, RGWObjState *astate, void *arg)
 {
@@ -13703,13 +13853,16 @@ uint64_t RGWRados::next_bucket_id()
 }
 
 RGWRados *RGWStoreManager::init_storage_provider(CephContext *cct, bool use_gc_thread, bool use_lc_thread,
-						 bool quota_threads, bool run_sync_thread, bool run_reshard_thread, bool use_cache)
+						 bool quota_threads, bool run_sync_thread, bool run_reshard_thread, bool use_metacache, bool use_datacache)
 {
   RGWRados *store = NULL;
-  if (!use_cache) {
-    store = new RGWRados;
-  } else {
+  if (use_datacache) {
+    store = new RGWDataCache<RGWRados>;
+  }
+  else if (use_metacache) {
     store = new RGWCache<RGWRados>;
+  } else {
+    store = new RGWRados;
   }
 
   if (store->initialize(cct, use_gc_thread, use_lc_thread, quota_threads, run_sync_thread, run_reshard_thread) < 0) {

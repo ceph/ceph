@@ -27,6 +27,7 @@
 #include "include/xlist.h"
 #include "osd/osd_types.h"
 #include "osdc/Objecter.h"
+#include "rgw/rgw_rados.h"
 
 class RadosClient;
 
@@ -161,6 +162,8 @@ struct librados::IoCtxImpl {
 		  int flags, const blkin_trace_info *trace_info = nullptr);
   int aio_operate_read(const object_t& oid, ::ObjectOperation *o,
 		       AioCompletionImpl *c, int flags, bufferlist *pbl, const blkin_trace_info *trace_info = nullptr);
+  int cache_aio_operate_read(const object_t &oid, 
+          AioCompletionImpl *c, CacheRequest *cc);
 
   struct C_aio_stat_Ack : public Context {
     librados::AioCompletionImpl *c;

@@ -6295,6 +6295,30 @@ std::vector<Option> get_rgw_options() {
     .set_default(512*1024)
     .set_description(""),
 
+    Option("rgw_datacache_persistent_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("/tmp")
+    .set_description(""),
+
+    Option("rgw_datacache_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(1048576)
+    .set_description("Datacache size in bytes"),
+
+    Option("rgw_datacache_local_enabled", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description(""),
+
+    Option("rgw_datacache_distributed_enabled", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description(""),
+
+    Option("rgw_l2_request_thread_num", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(10)
+    .set_description(""),
+
+    Option("rgw_l2_hosts", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("localhost")
+    .set_description(""),
+
     Option("rgw_dynamic_resharding", Option::TYPE_BOOL, Option::LEVEL_BASIC)
     .set_default(true)
     .set_description("Enable dynamic resharding")
@@ -6302,6 +6326,9 @@ std::vector<Option> get_rgw_options() {
         "If true, RGW will dynamicall increase the number of shards in buckets that have "
         "a high number of objects per shard.")
     .add_see_also("rgw_max_objs_per_shard"),
+
+
+
 
     Option("rgw_max_objs_per_shard", Option::TYPE_INT, Option::LEVEL_BASIC)
     .set_default(100000)

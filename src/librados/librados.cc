@@ -1632,6 +1632,13 @@ int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
                translate_flags(flags), pbl, trace_info);
 }
 
+int librados::IoCtx::cache_aio_notifier(const std::string& oid, CacheRequest *cc) {
+  if (!cc) return -1;
+  object_t obj(oid);
+  return io_ctx_impl->cache_aio_operate_read(obj, cc->lc->pc, cc);	
+}
+
+
 void librados::IoCtx::snap_set_read(snap_t seq)
 {
   io_ctx_impl->set_snap_read(seq);
