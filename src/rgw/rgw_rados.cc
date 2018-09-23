@@ -6223,11 +6223,13 @@ struct get_obj_data {
     }
     return 0;
   }
-
+  
   void cancel() {
     // wait for all completions to drain and ignore the results
     aio->drain();
   }
+  return tokens;
+}
 
   int drain() {
     auto c = aio->wait();
@@ -6241,7 +6243,26 @@ struct get_obj_data {
     }
     return flush(std::move(c));
   }
-};
+}
+
+void get_obj_data::cache_unmap_io(off_t ofs){
+	
+  cache_lock.Lock();
+  map<off_t, struct librados::CacheRequest *>::iterator iter = cache_aio_map.find(ofs);
+  if (iter == cache_aio_map.end()) {
+    cache_lock.Unlock();
+    return;
+  }
+  cache_aio_map.erase(ofs);
+  cache_lock.Unlock();
+}
+
+int get_obj_data::add_cache_notifier(std::string oid, librados::AioCompletion *lc) {
+  //Context *onack = new IoCtxImpl::C_aio_Complete(lc->pc);
+  //librados::IoCtxImpl::C_aio_Complete *m_safe = new librados::IoCtxImpl::C_aio_Complete(lc->pc);
+  return 0;
+}
+
 
 static int _get_obj_iterate_cb(const rgw_raw_obj& read_obj, off_t obj_ofs,
                                off_t read_ofs, off_t len, bool is_head_obj,
@@ -8963,6 +8984,52 @@ uint64_t RGWRados::next_bucket_id()
 {
   std::lock_guard l{bucket_id_lock};
   return ++max_bucket_id;
+}
+
+RGWRados *RGWStoreManager::init_storage_provider(CephContext *cct, bool use_gc_thread, bool use_lc_thread,
+						 bool quota_threads, bool run_sync_thread, bool run_reshard_thread, bool use_metacache, bool use_datacache)
+{
+  RGWRados *store = NULL;
+  if (use_datacache) {
+    store = new RGWDataCache<RGWRados>;
+  }
+  else if (use_metacache) {
+    store = new RGWCache<RGWRados>;
+  } else {
+    store = new RGWRados;
+  }
+
+  if (store->initialize(cct, use_gc_thread, use_lc_thread, quota_threads, run_sync_thread, run_reshard_thread) < 0) {
+    delete store;
+    return NULL;
+  }
+
+  return store;
+}
+
+RGWRados *RGWStoreManager::init_raw_storage_provider(CephContext *cct)
+{
+  RGWRados *store = NULL;
+  store = new RGWRados;
+
+  store->set_context(cct);
+
+  if (store->init_rados() < 0) {
+    delete store;
+    return NULL;
+  }
+
+  return store;
+}
+
+void RGWStoreManager::close_storage(RGWRados *store)
+{
+  if (!store)
+    return;
+
+  store->finalize();
+
+  delete store;
 }
 
 librados::Rados* RGWRados::get_rados_handle()

@@ -1542,6 +1542,12 @@ OPTION(rgw_website_routing_rules_max_num, OPT_INT) // According to AWS S3, An we
 OPTION(rgw_sts_entry, OPT_STR)
 OPTION(rgw_sts_key, OPT_STR)
 OPTION(rgw_s3_auth_use_sts, OPT_BOOL)  // should we try to use sts for s3?
+OPTION(rgw_datacache_persistent_path, OPT_STR)
+OPTION(rgw_datacache_size, OPT_LONGLONG)
+OPTION(rgw_datacache_local_enabled, OPT_BOOL)
+OPTION(rgw_datacache_distributed_enabled, OPT_BOOL)
+OPTION(rgw_l2_request_thread_num, OPT_INT)
+OPTION(rgw_l2_hosts, OPT_STR)
 OPTION(rgw_sts_max_session_duration, OPT_U64) // Max duration in seconds for which the session token is valid.
 OPTION(fake_statfs_for_testing, OPT_INT) // Set a value for kb and compute kb_used from total of num_bytes
 OPTION(rgw_sts_token_introspection_url, OPT_STR)  // url for introspecting web tokens
