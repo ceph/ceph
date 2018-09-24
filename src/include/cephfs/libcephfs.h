@@ -116,6 +116,8 @@ struct CephContext;
 # define CEPH_SETATTR_ATIME	16
 # define CEPH_SETATTR_SIZE	32
 # define CEPH_SETATTR_CTIME	64
+# define CEPH_SETATTR_MTIME_NOW	128
+# define CEPH_SETATTR_ATIME_NOW	256
 # define CEPH_SETATTR_BTIME	512
 #endif
 
