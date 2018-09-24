@@ -6327,8 +6327,6 @@ ostream& operator<<(ostream& out, const PG& pg)
     }
   }
 
-  if (!pg.backfill_targets.empty())
-    out << " bft=" << pg.backfill_targets;
   out << " crt=" << pg.pg_log.get_can_rollback_to();
 
   if (pg.last_complete_ondisk != pg.info.last_complete)
