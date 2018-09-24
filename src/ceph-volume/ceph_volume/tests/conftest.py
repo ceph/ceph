@@ -85,6 +85,22 @@ def stub_call(monkeypatch):
     return apply
 
 
+@pytest.fixture(autouse=True)
+def reset_cluster_name(request, monkeypatch):
+    """
+    The globally available ``ceph_volume.conf.cluster`` might get mangled in
+    tests, make sure that after evert test, it gets reset, preventing pollution
+    going into other tests later.
+    """
+    def fin():
+        conf.cluster = None
+        try:
+            os.environ.pop('CEPH_CONF')
+        except KeyError:
+            pass
+    request.addfinalizer(fin)
+
+
 @pytest.fixture
 def conf_ceph(monkeypatch):
     """
