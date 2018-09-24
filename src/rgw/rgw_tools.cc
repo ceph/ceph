@@ -320,7 +320,7 @@ int RGWDataAccess::Bucket::init(const RGWBucketInfo& _bucket_info,
 
 int RGWDataAccess::Bucket::get_object(const rgw_obj_key& key,
 				      ObjectRef *obj) {
-  obj->reset(new Object(sd, self_ref, key));
+  obj->reset(new Object(sd, shared_from_this(), key));
   return 0;
 }
 
