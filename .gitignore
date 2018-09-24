@@ -61,3 +61,6 @@ GTAGS
 
 # editor backup files etc.
 \#*\#
+
+.idea
+
