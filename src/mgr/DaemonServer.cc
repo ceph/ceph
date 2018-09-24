@@ -2282,6 +2282,23 @@ void DaemonServer::adjust_pgs()
 		pg_t merge_source(p.get_pg_num() - 1, i.first);
 		pg_t merge_target = merge_source.get_parent();
 		bool ok = true;
+
+		if (osdmap.have_pg_upmaps(merge_target)) {
+		  dout(10) << "pool " << i.first
+			   << " pg_num_target " << p.get_pg_num_target()
+			   << " pg_num " << p.get_pg_num()
+			   << " - merge target " << merge_target
+			   << " has upmap" << dendl;
+		  ok = false;
+		} else if (osdmap.have_pg_upmaps(merge_source)) {
+		  dout(10) << "pool " << i.first
+			   << " pg_num_target " << p.get_pg_num_target()
+			   << " pg_num " << p.get_pg_num()
+			   << " - merge source " << merge_source
+			   << " has upmap" << dendl;
+		  ok = false;
+		}
+
 		auto q = pg_map.pg_stat.find(merge_source);
 		if (p.get_pg_num() != p.get_pg_num_pending()) {
 		  dout(10) << "pool " << i.first
@@ -2315,7 +2332,15 @@ void DaemonServer::adjust_pgs()
 			   << " not clean (" << pg_state_string(q->second.state)
 			   << ")" << dendl;
 		  ok = false;
+		} else if (q->second.state & PG_STATE_REMAPPED) {
+		  dout(10) << "pool " << i.first
+			   << " pg_num_target " << p.get_pg_num_target()
+			   << " pg_num " << p.get_pg_num()
+			   << " - merge source " << merge_source
+			   << " remapped" << dendl;
+		  ok = false;
 		}
+
 		q = pg_map.pg_stat.find(merge_target);
 		if (q == pg_map.pg_stat.end()) {
 		  dout(10) << "pool " << i.first
@@ -2333,6 +2358,13 @@ void DaemonServer::adjust_pgs()
 			   << " - merge target " << merge_target
 			   << " not clean (" << pg_state_string(q->second.state)
 			   << ")" << dendl;
+		  ok = false;
+		} else if (q->second.state & PG_STATE_REMAPPED) {
+		  dout(10) << "pool " << i.first
+			   << " pg_num_target " << p.get_pg_num_target()
+			   << " pg_num " << p.get_pg_num()
+			   << " - merge target " << merge_target
+			   << " remapped" << dendl;
 		  ok = false;
 		}
 		if (ok) {
