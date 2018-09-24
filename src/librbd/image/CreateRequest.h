@@ -51,12 +51,15 @@ private:
   /**
    * @verbatim
    *
-   *                                  <start> . . . . > . . . . .
-   *                                     |                      .
-   *                                     v                      .
-   *                               VALIDATE DATA POOL           v (pool validation
-   *                                     |                      .  disabled)
-   *                                     v                      .
+   *                                  <start>
+   *                                     |
+   *                                     v
+   *                               GET POOL METADATA
+   *                                     |
+   *                                     v
+   *                               VALIDATE DATA POOL . . . . . .
+   *                                     |                      . (pool validation
+   *                                     v                      .  disabled)
    * (error: bottom up)         ADD IMAGE TO DIRECTORY  < . . . .
    *  _______<_______                    |
    * |               |                   v
@@ -103,6 +106,7 @@ private:
   std::string m_image_name;
   std::string m_image_id;
   uint64_t m_size;
+  ImageOptions m_image_options;
   uint8_t m_order = 0;
   uint64_t m_features = 0;
   uint64_t m_stripe_unit = 0;
@@ -129,6 +133,12 @@ private:
   bufferlist m_outbl;
   rbd_mirror_mode_t m_mirror_mode = RBD_MIRROR_MODE_DISABLED;
   cls::rbd::MirrorImage m_mirror_image_internal;
+
+  std::string m_last_metadata_key;
+  std::map<std::string, bufferlist> m_metadata;
+
+  void get_pool_metadata();
+  void handle_get_pool_metadata(int r);
 
   void validate_data_pool();
   void handle_validate_data_pool(int r);

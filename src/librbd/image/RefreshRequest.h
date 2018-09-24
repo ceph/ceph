@@ -51,17 +51,20 @@ private:
    *  * | (v2)                                                v
    *  * \-----> V2_GET_MUTABLE_METADATA                   V1_GET_SNAPSHOTS
    *  *             |                                         |
-   *  *             v                                         v
-   *  * * * * * GET_MIGRATION_HEADER (skip if not         V1_GET_LOCKS
+   *  *             |     -EOPNOTSUPP                         v
+   *  *             |  * * *                              V1_GET_LOCKS
+   *  *             |  *   *                                  |
+   *  *             v  v   *                                  v
+   *  *         V2_GET_PARENT                              <apply>
+   *  *             |                                         |
+   *  *             v                                         |
+   *  * * * * * GET_MIGRATION_HEADER (skip if not             |
    *  (ENOENT)      |                 migrating)              |
-   *                v                                         v
-   *            V2_GET_METADATA                            <apply>
+   *                v                                         |
+   *            V2_GET_METADATA                               |
    *                |                                         |
-   *                |     -EOPNOTSUPP                         |
-   *                |  * * *                                  |
-   *                |  *   *                                  |
-   *                v  v   *                                  |
-   *            V2_GET_PARENT                                 |
+   *                v                                         |
+   *            V2_GET_POOL_METADATA                          |
    *                |                                         |
    *                v (skip if not enabled)                   |
    *            V2_GET_OP_FEATURES                            |
@@ -187,6 +190,9 @@ private:
 
   void send_v2_get_metadata();
   Context *handle_v2_get_metadata(int *result);
+
+  void send_v2_get_pool_metadata();
+  Context *handle_v2_get_pool_metadata(int *result);
 
   void send_v2_get_op_features();
   Context *handle_v2_get_op_features(int *result);

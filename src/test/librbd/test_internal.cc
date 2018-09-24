@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "cls/journal/cls_journal_client.h"
 #include "cls/rbd/cls_rbd_types.h"
 #include "test/librbd/test_fixture.h"
 #include "test/librbd/test_support.h"
@@ -13,6 +14,7 @@
 #include "librbd/Operations.h"
 #include "librbd/api/DiffIterate.h"
 #include "librbd/api/Image.h"
+#include "librbd/api/PoolMetadata.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequest.h"
 #include "librbd/io/ImageRequestWQ.h"
@@ -1302,4 +1304,82 @@ TEST_F(TestInternal, FlattenNoEmptyObjects)
   ASSERT_EQ(0, image.close());
 
   rados_ioctx_destroy(d_ioctx);
+}
+
+TEST_F(TestInternal, PoolMetadataConfApply) {
+  REQUIRE_FORMAT_V2();
+
+  librbd::api::PoolMetadata<>::remove(m_ioctx, "conf_rbd_cache");
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  bool cache = ictx->cache;
+  std::string rbd_conf_cache = cache ? "true" : "false";
+  std::string new_rbd_conf_cache = !cache ? "true" : "false";
+
+  ASSERT_EQ(0, librbd::api::PoolMetadata<>::set(m_ioctx, "conf_rbd_cache",
+                                                new_rbd_conf_cache));
+  ASSERT_EQ(0, ictx->state->refresh());
+  ASSERT_EQ(!cache, ictx->cache);
+
+  ASSERT_EQ(0, ictx->operations->metadata_set("conf_rbd_cache",
+                                              rbd_conf_cache));
+  ASSERT_EQ(cache, ictx->cache);
+
+  ASSERT_EQ(0, ictx->operations->metadata_remove("conf_rbd_cache"));
+  ASSERT_EQ(!cache, ictx->cache);
+
+  ASSERT_EQ(0, librbd::api::PoolMetadata<>::remove(m_ioctx, "conf_rbd_cache"));
+  ASSERT_EQ(0, ictx->state->refresh());
+  ASSERT_EQ(cache, ictx->cache);
+  close_image(ictx);
+
+  ASSERT_EQ(0, librbd::api::PoolMetadata<>::set(m_ioctx,
+                                                "conf_rbd_default_order",
+                                                "17"));
+  ASSERT_EQ(0, librbd::api::PoolMetadata<>::set(m_ioctx,
+                                                "conf_rbd_journal_order",
+                                                "13"));
+  std::string image_name = get_temp_image_name();
+  int order = 0;
+  uint64_t features;
+  ASSERT_TRUE(get_features(&features));
+  ASSERT_EQ(0, create_image_full_pp(m_rbd, m_ioctx, image_name, m_image_size,
+                                    features, false, &order));
+
+  ASSERT_EQ(0, open_image(image_name, &ictx));
+  ASSERT_EQ(ictx->order, 17);
+  ASSERT_EQ(ictx->journal_order, 13);
+
+  if (is_feature_enabled(RBD_FEATURE_JOURNALING)) {
+    uint8_t order;
+    uint8_t splay_width;
+    int64_t pool_id;
+    C_SaferCond cond;
+    cls::journal::client::get_immutable_metadata(m_ioctx, "journal." + ictx->id,
+                                                 &order, &splay_width, &pool_id,
+                                                 &cond);
+    ASSERT_EQ(0, cond.wait());
+    ASSERT_EQ(order, 13);
+    ASSERT_EQ(0, ictx->operations->update_features(RBD_FEATURE_JOURNALING,
+                                                   false));
+    ASSERT_EQ(0, librbd::api::PoolMetadata<>::set(m_ioctx,
+                                                  "conf_rbd_journal_order",
+                                                  "14"));
+    ASSERT_EQ(0, ictx->operations->update_features(RBD_FEATURE_JOURNALING,
+                                                   true));
+    ASSERT_EQ(ictx->journal_order, 14);
+    C_SaferCond cond1;
+    cls::journal::client::get_immutable_metadata(m_ioctx, "journal." + ictx->id,
+                                                 &order, &splay_width, &pool_id,
+                                                 &cond1);
+    ASSERT_EQ(0, cond1.wait());
+    ASSERT_EQ(order, 14);
+  }
+
+  ASSERT_EQ(0, librbd::api::PoolMetadata<>::remove(m_ioctx,
+                                                   "conf_rbd_default_order"));
+  ASSERT_EQ(0, librbd::api::PoolMetadata<>::remove(m_ioctx,
+                                                   "conf_rbd_journal_order"));
 }

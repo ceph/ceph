@@ -250,6 +250,18 @@ typedef struct {
   char *state_description;
 } rbd_image_migration_status_t;
 
+typedef enum {
+  RBD_CONFIG_SOURCE_CONFIG = 0,
+  RBD_CONFIG_SOURCE_POOL = 1,
+  RBD_CONFIG_SOURCE_IMAGE = 2,
+} rbd_config_source_t;
+
+typedef struct {
+  char *name;
+  char *value;
+  rbd_config_source_t source;
+} rbd_config_option_t;
+
 CEPH_RBD_API void rbd_image_options_create(rbd_image_options_t* opts);
 CEPH_RBD_API void rbd_image_options_destroy(rbd_image_options_t opts);
 CEPH_RBD_API int rbd_image_options_set_string(rbd_image_options_t opts,
@@ -390,6 +402,24 @@ CEPH_RBD_API void rbd_mirror_image_status_list_cleanup(char **image_ids,
     rbd_mirror_image_status_t *images, size_t len);
 CEPH_RBD_API int rbd_mirror_image_status_summary(rados_ioctx_t io_ctx,
     rbd_mirror_image_status_state_t *states, int *counts, size_t *maxlen);
+
+/* pool metadata */
+CEPH_RBD_API int rbd_pool_metadata_get(rados_ioctx_t io_ctx, const char *key,
+                                       char *value, size_t *val_len);
+CEPH_RBD_API int rbd_pool_metadata_set(rados_ioctx_t io_ctx, const char *key,
+                                       const char *value);
+CEPH_RBD_API int rbd_pool_metadata_remove(rados_ioctx_t io_ctx,
+                                          const char *key);
+CEPH_RBD_API int rbd_pool_metadata_list(rados_ioctx_t io_ctx, const char *start,
+                                        uint64_t max, char *keys,
+                                        size_t *key_len, char *values,
+                                        size_t *vals_len);
+
+CEPH_RBD_API int rbd_config_pool_list(rados_ioctx_t io_ctx,
+                                      rbd_config_option_t *options,
+                                      int *max_options);
+CEPH_RBD_API void rbd_config_pool_list_cleanup(rbd_config_option_t *options,
+                                               int max_options);
 
 CEPH_RBD_API int rbd_open(rados_ioctx_t io, const char *name,
                           rbd_image_t *image, const char *snap_name);
@@ -998,6 +1028,12 @@ CEPH_RBD_API int rbd_watchers_list(rbd_image_t image,
 
 CEPH_RBD_API void rbd_watchers_list_cleanup(rbd_image_watcher_t *watchers,
 					    size_t num_watchers);
+
+CEPH_RBD_API int rbd_config_image_list(rbd_image_t image,
+                                       rbd_config_option_t *options,
+                                       int *max_options);
+CEPH_RBD_API void rbd_config_image_list_cleanup(rbd_config_option_t *options,
+                                                int max_options);
 
 CEPH_RBD_API int rbd_group_image_add(rados_ioctx_t group_p,
                                      const char *group_name,

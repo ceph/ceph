@@ -26,12 +26,14 @@
 #include "librbd/ImageState.h"
 #include "librbd/internal.h"
 #include "librbd/Operations.h"
+#include "librbd/api/Config.h"
 #include "librbd/api/DiffIterate.h"
 #include "librbd/api/Group.h"
 #include "librbd/api/Image.h"
 #include "librbd/api/Migration.h"
 #include "librbd/api/Mirror.h"
 #include "librbd/api/Namespace.h"
+#include "librbd/api/PoolMetadata.h"
 #include "librbd/api/Snapshot.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequestWQ.h"
@@ -199,6 +201,18 @@ void trash_image_info_cpp_to_c(const librbd::trash_image_info_t &cpp_info,
   c_info->source = cpp_info.source;
   c_info->deletion_time = cpp_info.deletion_time;
   c_info->deferment_end_time = cpp_info.deferment_end_time;
+}
+
+void config_option_cpp_to_c(const librbd::config_option_t &cpp_option,
+                            rbd_config_option_t *c_option) {
+  c_option->name = strdup(cpp_option.name.c_str());
+  c_option->value = strdup(cpp_option.value.c_str());
+  c_option->source = cpp_option.source;
+}
+
+void config_option_cleanup(rbd_config_option_t &option) {
+    free(option.name);
+    free(option.value);
 }
 
 struct C_MirrorImageGetInfo : public Context {
@@ -994,6 +1008,37 @@ namespace librbd {
                                                 snap_name, prog_ctx);
     tracepoint(librbd, group_snap_rollback_exit, r);
     return r;
+  }
+
+  int RBD::pool_metadata_get(IoCtx& ioctx, const std::string &key,
+                             std::string *value)
+  {
+    int r = librbd::api::PoolMetadata<>::get(ioctx, key, value);
+    return r;
+  }
+
+  int RBD::pool_metadata_set(IoCtx& ioctx, const std::string &key,
+                             const std::string &value)
+  {
+    int r = librbd::api::PoolMetadata<>::set(ioctx, key, value);
+    return r;
+  }
+
+  int RBD::pool_metadata_remove(IoCtx& ioctx, const std::string &key)
+  {
+    int r = librbd::api::PoolMetadata<>::remove(ioctx, key);
+    return r;
+  }
+
+  int RBD::pool_metadata_list(IoCtx& ioctx, const std::string &start,
+                              uint64_t max, map<string, bufferlist> *pairs)
+  {
+    int r = librbd::api::PoolMetadata<>::list(ioctx, start, max, pairs);
+    return r;
+  }
+
+  int RBD::config_list(IoCtx& io_ctx, std::vector<config_option_t> *options) {
+    return librbd::api::Config<>::list(io_ctx, options);
   }
 
   RBD::AioCompletion::AioCompletion(void *cb_arg, callback_t complete_cb)
@@ -2374,6 +2419,11 @@ namespace librbd {
     return r;
   }
 
+  int Image::config_list(std::vector<config_option_t> *options) {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    return librbd::api::Config<>::list(ictx, options);
+  }
+
 } // namespace librbd
 
 extern "C" void rbd_version(int *major, int *minor, int *extra)
@@ -3268,6 +3318,107 @@ extern "C" void rbd_migration_status_cleanup(rbd_image_migration_status_t *s)
   free(s->dest_image_name);
   free(s->dest_image_id);
   free(s->state_description);
+}
+
+extern "C" int rbd_pool_metadata_get(rados_ioctx_t p, const char *key,
+                                     char *value, size_t *vallen)
+{
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  string val_s;
+  int r = librbd::api::PoolMetadata<>::get(io_ctx, key, &val_s);
+  if (*vallen < val_s.size() + 1) {
+    r = -ERANGE;
+    *vallen = val_s.size() + 1;
+  } else {
+    strncpy(value, val_s.c_str(), val_s.size() + 1);
+  }
+
+  return r;
+}
+
+extern "C" int rbd_pool_metadata_set(rados_ioctx_t p, const char *key,
+                                     const char *value)
+{
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  int r = librbd::api::PoolMetadata<>::set(io_ctx, key, value);
+  return r;
+}
+
+extern "C" int rbd_pool_metadata_remove(rados_ioctx_t p, const char *key)
+{
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  int r = librbd::api::PoolMetadata<>::remove(io_ctx, key);
+  return r;
+}
+
+extern "C" int rbd_pool_metadata_list(rados_ioctx_t p, const char *start,
+                                      uint64_t max, char *key, size_t *key_len,
+                                      char *value, size_t *val_len)
+{
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  map<string, bufferlist> pairs;
+  int r = librbd::api::PoolMetadata<>::list(io_ctx, start, max, &pairs);
+  if (r < 0) {
+    return r;
+  }
+  size_t key_total_len = 0, val_total_len = 0;
+  for (auto &it : pairs) {
+    key_total_len += it.first.size() + 1;
+    val_total_len += it.second.length() + 1;
+  }
+  if (*key_len < key_total_len || *val_len < val_total_len) {
+    *key_len = key_total_len;
+    *val_len = val_total_len;
+    return -ERANGE;
+  }
+  *key_len = key_total_len;
+  *val_len = val_total_len;
+
+  char *key_p = key, *value_p = value;
+  for (auto &it : pairs) {
+    strncpy(key_p, it.first.c_str(), it.first.size() + 1);
+    key_p += it.first.size() + 1;
+    strncpy(value_p, it.second.c_str(), it.second.length());
+    value_p += it.second.length();
+    *value_p = '\0';
+    value_p++;
+  }
+  return 0;
+}
+
+extern "C" int rbd_config_pool_list(rados_ioctx_t p,
+                                    rbd_config_option_t *options,
+                                    int *max_options) {
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+
+  std::vector<librbd::config_option_t> option_vector;
+  int r = librbd::api::Config<>::list(io_ctx, &option_vector);
+  if (r < 0) {
+    return r;
+  }
+
+  if (*max_options < static_cast<int>(option_vector.size())) {
+    *max_options = static_cast<int>(option_vector.size());
+    return -ERANGE;
+  }
+
+  for (int i = 0; i < static_cast<int>(option_vector.size()); ++i) {
+    config_option_cpp_to_c(option_vector[i], &options[i]);
+  }
+  *max_options = static_cast<int>(option_vector.size());
+  return 0;
+}
+
+extern "C" void rbd_config_pool_list_cleanup(rbd_config_option_t *options,
+                                             int max_options) {
+  for (int i = 0; i < max_options; ++i) {
+    config_option_cleanup(options[i]);
+  }
 }
 
 extern "C" int rbd_open(rados_ioctx_t p, const char *name, rbd_image_t *image,
@@ -5439,5 +5590,35 @@ extern "C" void rbd_watchers_list_cleanup(rbd_image_watcher_t *watchers,
 					  size_t num_watchers) {
   for (size_t i = 0; i < num_watchers; ++i) {
     free(watchers[i].addr);
+  }
+}
+
+extern "C" int rbd_config_image_list(rbd_image_t image,
+                                     rbd_config_option_t *options,
+                                     int *max_options) {
+  librbd::ImageCtx *ictx = (librbd::ImageCtx*)image;
+
+  std::vector<librbd::config_option_t> option_vector;
+  int r = librbd::api::Config<>::list(ictx, &option_vector);
+  if (r < 0) {
+    return r;
+  }
+
+  if (*max_options < static_cast<int>(option_vector.size())) {
+    *max_options = static_cast<int>(option_vector.size());
+    return -ERANGE;
+  }
+
+  for (int i = 0; i < static_cast<int>(option_vector.size()); ++i) {
+    config_option_cpp_to_c(option_vector[i], &options[i]);
+  }
+  *max_options = static_cast<int>(option_vector.size());
+  return 0;
+}
+
+extern "C" void rbd_config_image_list_cleanup(rbd_config_option_t *options,
+                                              int max_options) {
+  for (int i = 0; i < max_options; ++i) {
+    config_option_cleanup(options[i]);
   }
 }
