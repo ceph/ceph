@@ -1296,8 +1296,9 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("mon_config_key_max_entry_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(4_K)
-    .set_description(""),
+    .set_default(64_K)
+    .set_description("Defines the number of bytes allowed to be held in a "
+		     "single config-key entry"),
 
     Option("mon_sync_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(60.0)
