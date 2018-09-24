@@ -77,6 +77,24 @@ struct SyncRequest : public Request {
     Request{_id, started, cost}, req_mtx(mtx), req_cv(_cv), req_state(_state), counters(counters) {};
 };
 
+
+// A move only completer class that'll provide raii style hanlding on scheduled
+// requests, this is needed to throttle reqeusts as we need to decrease throttle
+// count on request processing, this can probably be templated with a bool so that
+// requisite destructor is only invoked when hasResource is true;
+class RequestCompleter {
+public:
+  RequestCompleter(AsyncScheduler *_s) : s(_s) {}
+  ~RequestCompleter();
+
+  RequestCompleter(const RequestCompleter&) = delete;
+  RequestCompleter& operator=(const RequestCompleter&) = delete;
+  RequestCompleter(RequestCompleter&&) = default;
+  RequestCompleter& operator=(RequestCompleter&&) = default;
+private:
+  AsyncScheduler* const s;
+};
+
 class SyncScheduler {
 public:
   template <typename ...Args>
@@ -93,12 +111,16 @@ public:
 			const Time& time, Cost cost,
 			optional_yield_context _y [[maybe_unused]])
   {
-    return add_request(client, params, time, cost);
+    auto r = add_request(client, params, time, cost);
+    return std::make_pair(std::move(r),
+			  std::unique_ptr<RequestCompleter>{nullptr});
   }
 
   void cancel();
 
   void cancel(const client_id& client);
+
+  void request_complete() {};
 
   static void handle_request_cb(const client_id& c, std::unique_ptr<SyncRequest> req,
 				PhaseType phase, Cost cost);
@@ -148,8 +170,8 @@ class AsyncScheduler : public md_config_obs_t {
   auto async_request(const client_id& client, const ReqParams& params,
                      const Time& time, Cost cost, CompletionToken&& token);
 
-  int schedule_request(const client_id& client, const ReqParams& params,
-		       const Time& time, Cost cost, optional_yield_context yield_ctx);
+  std::pair<int,std::unique_ptr<RequestCompleter>> schedule_request(const client_id& client, const ReqParams& params,
+			const Time& time, Cost cost, optional_yield_context yield_ctx);
   /// returns a throttle unit granted by async_request()
   void request_complete();
 
@@ -250,7 +272,6 @@ auto AsyncScheduler::async_request(const client_id& client,
 
   return init.result.get();
 }
-
 
 /// array of per-client counters to serve as GetClientCounters
 class ClientCounters {
