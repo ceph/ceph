@@ -38,10 +38,12 @@
 ActivePyModules::ActivePyModules(PyModuleConfig &module_config_,
           std::map<std::string, std::string> store_data,
           DaemonStateIndex &ds, ClusterState &cs,
-	  MonClient &mc, LogChannelRef clog_, Objecter &objecter_,
+          MonClient &mc, LogChannelRef clog_,
+          LogChannelRef audit_clog_, Objecter &objecter_,
           Client &client_, Finisher &f, DaemonServer &server)
   : module_config(module_config_), daemon_state(ds), cluster_state(cs),
-    monc(mc), clog(clog_), objecter(objecter_), client(client_), finisher(f),
+    monc(mc), clog(clog_), audit_clog(audit_clog_), objecter(objecter_),
+    client(client_), finisher(f),
     server(server), lock("ActivePyModules")
 {
   store_cache = std::move(store_data);
@@ -375,7 +377,7 @@ int ActivePyModules::start_one(PyModuleRef py_module)
 
   ceph_assert(modules.count(py_module->get_name()) == 0);
 
-  modules[py_module->get_name()].reset(new ActivePyModule(py_module, clog));
+  modules[py_module->get_name()].reset(new ActivePyModule(py_module, clog, audit_clog));
   auto active_module = modules.at(py_module->get_name()).get();
 
   int r = active_module->load(this);

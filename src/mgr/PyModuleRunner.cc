@@ -99,6 +99,16 @@ void PyModuleRunner::log(int level, const std::string &record)
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 }
 
+void PyModuleRunner::cluster_log(const std::string &channel, clog_type prio,
+    const std::string &message)
+{
+    if (std::string(channel) == "audit") {
+        audit_clog->do_log(prio, message);
+    } else {
+        clog->do_log(prio, message);
+    }
+}
+
 void* PyModuleRunner::PyModuleRunnerThread::entry()
 {
   // No need to acquire the GIL here; the module does it.

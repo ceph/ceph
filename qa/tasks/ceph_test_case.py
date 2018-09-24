@@ -34,12 +34,17 @@ class CephTestCase(unittest.TestCase):
         self.ceph_cluster.mon_manager.raw_cluster_cmd("log",
             "Ended test {0}".format(self.id()))
 
-    def assert_cluster_log(self, expected_pattern, invert_match=False, timeout=10):
+    def assert_cluster_log(self, expected_pattern, invert_match=False,
+                           timeout=10, watch_channel=None):
         """
         Context manager.  Assert that during execution, or up to 5 seconds later,
         the Ceph cluster log emits a message matching the expected pattern.
 
-        :param expected_pattern: a string that you expect to see in the log output
+        :param expected_pattern: A string that you expect to see in the log output
+        :type expected_pattern: str
+        :param watch_channel: Specifies the channel to be watched. This can be
+                              'cluster', 'audit', ...
+        :type watch_channel: str
         """
 
         ceph_manager = self.ceph_cluster.mon_manager
@@ -53,7 +58,7 @@ class CephTestCase(unittest.TestCase):
                 return found
 
             def __enter__(self):
-                self.watcher_process = ceph_manager.run_ceph_w()
+                self.watcher_process = ceph_manager.run_ceph_w(watch_channel)
 
             def __exit__(self, exc_type, exc_val, exc_tb):
                 if not self.watcher_process.finished:
