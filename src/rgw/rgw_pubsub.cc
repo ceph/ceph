@@ -409,6 +409,10 @@ int RGWUserPubSub::Sub::list_events(const string& marker, int max_events,
   string tenant;
   RGWObjectCtx obj_ctx(store);
   ret = store->get_bucket_info(obj_ctx, tenant, sub_conf.dest.bucket_name, bucket_info, nullptr, nullptr);
+  if (ret == -ENOENT) {
+    result->is_truncated = false;
+    return 0;
+  }
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: failed to read bucket info for events bucket: bucket=" << sub_conf.dest.bucket_name << " ret=" << ret << dendl;
     return ret;
