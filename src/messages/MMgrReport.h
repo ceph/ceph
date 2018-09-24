@@ -31,7 +31,6 @@ public:
   std::string nick;
   enum perfcounter_type_d type;
 
-
   // For older clients that did not send priority, pretend everything
   // is "useful" so that mgr plugins filtering on prio will get some
   // data (albeit probably more than they wanted)
@@ -108,7 +107,7 @@ public:
   // encode map<string,map<int32_t,string>> of current config
   bufferlist config_bl;
 
-  OSDPerfMetricReport perf_report;
+  std::list<OSDPerfMetricReport>  osd_perf_metric_reports;
 
   void decode_payload() override
   {
@@ -129,7 +128,7 @@ public:
       decode(config_bl, p);
     }
     if (header.version >= 7) {
-      decode(perf_report, p);
+      decode(osd_perf_metric_reports, p);
     }
   }
 
@@ -143,7 +142,7 @@ public:
     encode(daemon_status, payload);
     encode(daemon_health_metrics, payload);
     encode(config_bl, payload);
-    encode(perf_report, payload);
+    encode(osd_perf_metric_reports, payload);
   }
 
   const char *get_type_name() const override { return "mgrreport"; }
