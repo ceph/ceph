@@ -410,7 +410,7 @@ def _run_tests(ctx, refspec, role, tests, env, basedir,
                 )
     finally:
         log.info('Stopping %s on %s...', tests, role)
-        args=['rm', '-rf', '--', workunits_file, clonedir]
+        args=['sudo', 'rm', '-rf', '--', workunits_file, clonedir]
         if cleanup:
             log.info("and cleaning up scratch: {}".format(scratch_tmp))
             args.append(scratch_tmp)
