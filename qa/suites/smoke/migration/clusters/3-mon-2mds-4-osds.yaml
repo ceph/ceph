@@ -1,0 +1,21 @@
+meta:
+- desc: "3 mon, 2 mds  and 4 osd cluster"
+overrides:
+ ceph_ansible:
+   vars:
+      osd_scenario: collocated
+      ceph_conf_overrides:
+        global:
+          osd default pool size: 3
+          osd pool default pg num: 1
+          osd pool default pgp num: 1
+          mon max pg per osd: 1024
+      osd_objectstore: filestore
+roles:
+- [mon.a, mds.a]
+- [mon.b, mds.b]
+- [mon.c, mgr.x]
+- [osd.0, osd.1, osd.2]
+- [osd.3, osd.4, osd.5, client.0]
+- [osd.6, osd.7, osd.8]
+- [osd.9, osd.10, osd.11]

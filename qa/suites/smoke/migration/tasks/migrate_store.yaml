@@ -1,0 +1,25 @@
+tasks:
+- ssh-keys:
+- ceph_ansible:
+    rhbuild: '3.1'
+    vars:
+      ceph_conf_overrides:
+        global:
+          mon_max_pg_per_osd: 1024
+          osd default pool size: 2
+          osd pool default pg num: 1
+          osd pool default pgp num: 1
+          osd objectstore:  filestore
+      ceph_origin: distro
+      ceph_repository: rhcs
+      ceph_stable: true
+      ceph_stable_release: luminous
+      ceph_stable_rh_storage: true
+      ceph_test: true
+      journal_size: 1024
+      osd_auto_discovery: true
+      osd_scenario: collocated
+      osd_objectstore: filestore
+- parallel:
+  - migrate_store:
+  - io_with_csum:
