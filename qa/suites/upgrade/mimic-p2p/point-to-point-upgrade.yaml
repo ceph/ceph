@@ -7,6 +7,8 @@ meta:
    run workload and upgrade-sequence in parallel
    install ceph/mimic v13.2.1 point version
    run workload and upgrade-sequence in parallel
+   install ceph/mimic v13.2.2 point version
+   run workload and upgrade-sequence in parallel
    install ceph/mimic v13.2.x point version
    (every point reslease should be tested)
    run workload and upgrade-sequence in parallel
@@ -98,6 +100,24 @@ tasks:
    - workload_mimic
    - upgrade-sequence_mimic
 - print: "**** done workload v13.2.1"
+
+#######  upgrade to v13.2.2
+- install.upgrade:
+    #exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev']
+    mon.a:
+      tag: v13.2.2
+    mon.b:
+      tag: v13.2.2
+    # Note that client.a IS NOT upgraded at this point
+- parallel:
+   - workload_mimic
+   - upgrade-sequence_mimic
+- print: "**** done parallel mimic v13.2.2"
+- parallel:
+   - workload_mimic
+   - upgrade-sequence_mimic
+- print: "**** done workload v13.2.2"
+
 
 #######  upgrade to v13.2.x TO BE ADDED for future point releases
 ### - install.upgrade:
