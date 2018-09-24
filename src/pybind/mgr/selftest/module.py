@@ -86,6 +86,13 @@ class Module(MgrModule):
                 "desc": "Set the now time for the insights module.",
                 "perm": "rw"
             },
+            {
+                "cmd": "mgr self-test cluster-log name=channel,type=CephString "
+                       "name=priority,type=CephString "
+                       "name=message,type=CephString",
+                "desc": "Create an audit log record.",
+                "perm": "rw"
+            },
             ]
 
     def __init__(self, *args, **kwargs):
@@ -136,6 +143,17 @@ class Module(MgrModule):
             return self._health_clear(inbuf, command)
         elif command['prefix'] == 'mgr self-test insights_set_now_offset':
             return self._insights_set_now_offset(inbuf, command)
+        elif command['prefix'] == 'mgr self-test cluster-log':
+            priority_map = {
+                'info': self.CLUSTER_LOG_PRIO_INFO,
+                'security': self.CLUSTER_LOG_PRIO_SEC,
+                'warning': self.CLUSTER_LOG_PRIO_WARN,
+                'error': self.CLUSTER_LOG_PRIO_ERROR
+            }
+            self.cluster_log(command['channel'],
+                             priority_map[command['priority']],
+                             command['message'])
+            return 0, '', 'Successfully called'
         else:
             return (-errno.EINVAL, '',
                     "Command not found '{0}'".format(command['prefix']))

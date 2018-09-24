@@ -44,8 +44,8 @@ private:
 
 public:
   ActivePyModule(const PyModuleRef &py_module_,
-      LogChannelRef clog_)
-    : PyModuleRunner(py_module_, clog_)
+      LogChannelRef clog_, LogChannelRef audit_clog_)
+    : PyModuleRunner(py_module_, clog_, audit_clog_)
   {}
 
   int load(ActivePyModules *py_modules);

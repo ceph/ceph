@@ -36,9 +36,11 @@ StandbyPyModules::StandbyPyModules(
     const MgrMap &mgr_map_,
     PyModuleConfig &module_config,
     LogChannelRef clog_,
+    LogChannelRef audit_clog_,
     MonClient &monc_)
     : state(module_config, monc_),
-      clog(clog_)
+      clog(clog_),
+      audit_clog(audit_clog_)
 {
   state.set_mgr_map(mgr_map_);
 }
@@ -81,7 +83,7 @@ int StandbyPyModules::start_one(PyModuleRef py_module)
 
   modules[module_name].reset(new StandbyPyModule(
       state,
-      py_module, clog));
+      py_module, clog, audit_clog));
 
   int r = modules[module_name]->load();
   if (r != 0) {

@@ -54,7 +54,7 @@ MgrStandby::MgrStandby(int argc, const char **argv) :
   audit_clog(log_client.create_channel(CLOG_CHANNEL_AUDIT)),
   lock("MgrStandby::lock"),
   timer(g_ceph_context, lock),
-  py_module_registry(clog),
+  py_module_registry(clog, audit_clog),
   active_mgr(nullptr),
   orig_argc(argc),
   orig_argv(argv),

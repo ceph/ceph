@@ -1,7 +1,6 @@
 
 import ceph_module  # noqa
 
-import json
 import logging
 import six
 import threading
@@ -279,7 +278,14 @@ class MgrModule(ceph_module.BaseMgrModule):
     # units supported
     BYTES = 0
     NONE = 1
-    
+
+    # Cluster log priorities
+    CLUSTER_LOG_PRIO_DEBUG = 0
+    CLUSTER_LOG_PRIO_INFO = 1
+    CLUSTER_LOG_PRIO_SEC = 2
+    CLUSTER_LOG_PRIO_WARN = 3
+    CLUSTER_LOG_PRIO_ERROR = 4
+
     def __init__(self, module_name, py_modules_ptr, this_ptr):
         self.module_name = module_name
 
@@ -303,6 +309,20 @@ class MgrModule(ceph_module.BaseMgrModule):
     @property
     def log(self):
         return self._logger
+
+    def cluster_log(self, channel, priority, message):
+        """
+        :param channel: The log channel. This can be 'cluster', 'audit', ...
+        :type channel: str
+        :param priority: The log message priority. This can be
+                         CLUSTER_LOG_PRIO_DEBUG, CLUSTER_LOG_PRIO_INFO,
+                         CLUSTER_LOG_PRIO_SEC, CLUSTER_LOG_PRIO_WARN or
+                         CLUSTER_LOG_PRIO_ERROR.
+        :type priority: int
+        :param message: The message to log.
+        :type message: str
+        """
+        self._ceph_cluster_log(channel, priority, message)
 
     @property
     def version(self):
