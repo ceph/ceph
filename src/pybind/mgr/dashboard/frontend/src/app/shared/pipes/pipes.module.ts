@@ -12,6 +12,7 @@ import { FilterPipe } from './filter.pipe';
 import { HealthColorPipe } from './health-color.pipe';
 import { ListPipe } from './list.pipe';
 import { RelativeDatePipe } from './relative-date.pipe';
+import { RoundPipe } from './round.pipe';
 
 @NgModule({
   imports: [CommonModule],
@@ -26,7 +27,8 @@ import { RelativeDatePipe } from './relative-date.pipe';
     FilterPipe,
     CdDatePipe,
     EmptyPipe,
-    EncodeUriPipe
+    EncodeUriPipe,
+    RoundPipe
   ],
   exports: [
     DimlessBinaryPipe,
@@ -39,7 +41,8 @@ import { RelativeDatePipe } from './relative-date.pipe';
     FilterPipe,
     CdDatePipe,
     EmptyPipe,
-    EncodeUriPipe
+    EncodeUriPipe,
+    RoundPipe
   ],
   providers: [
     DatePipe,
