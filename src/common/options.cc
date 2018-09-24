@@ -2956,7 +2956,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("rocksdb_cache_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(128_M)
+    .set_default(512_M)
     .set_description(""),
 
     Option("rocksdb_cache_row_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
