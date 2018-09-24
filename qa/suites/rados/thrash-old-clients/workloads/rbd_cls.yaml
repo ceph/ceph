@@ -2,9 +2,6 @@ meta:
 - desc: |
    rbd object class functional tests
 tasks:
-- workunit:
-    env:
-      CLS_RBD_GTEST_FILTER: -TestClsRbd.get_features
-    clients:
-      client.2:
-        - cls/test_cls_rbd.sh
+- exec:
+    client.2:
+      - ceph_test_cls_rbd --gtest_filter=-TestClsRbd.get_features:TestClsRbd.parents
