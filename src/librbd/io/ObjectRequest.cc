@@ -459,7 +459,8 @@ void AbstractObjectWriteRequest<I>::pre_write_object_map_update() {
   if (image_ctx->object_map->template aio_update<
         AbstractObjectWriteRequest<I>,
         &AbstractObjectWriteRequest<I>::handle_pre_write_object_map_update>(
-          CEPH_NOSNAP, this->m_object_no, new_state, {}, this->m_trace, this)) {
+          CEPH_NOSNAP, this->m_object_no, new_state, {}, this->m_trace, false,
+          this)) {
     image_ctx->object_map_lock.put_write();
     image_ctx->snap_lock.put_read();
     return;
@@ -611,7 +612,7 @@ void AbstractObjectWriteRequest<I>::post_write_object_map_update() {
         AbstractObjectWriteRequest<I>,
         &AbstractObjectWriteRequest<I>::handle_post_write_object_map_update>(
           CEPH_NOSNAP, this->m_object_no, OBJECT_NONEXISTENT, OBJECT_PENDING,
-          this->m_trace, this)) {
+          this->m_trace, false, this)) {
     image_ctx->object_map_lock.put_write();
     image_ctx->snap_lock.put_read();
     return;

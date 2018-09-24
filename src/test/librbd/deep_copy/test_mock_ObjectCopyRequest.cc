@@ -284,18 +284,18 @@ public:
                                 librados::snap_t snap_id, uint8_t state,
                                 int r) {
     if (mock_image_ctx.image_ctx->object_map != nullptr) {
-      auto &expect = EXPECT_CALL(mock_object_map, aio_update(snap_id, 0, 1, state, _, _, _));
+      auto &expect = EXPECT_CALL(mock_object_map, aio_update(snap_id, 0, 1, state, _, _, false, _));
       if (r < 0) {
-        expect.WillOnce(DoAll(WithArg<6>(Invoke([this, r](Context *ctx) {
+        expect.WillOnce(DoAll(WithArg<7>(Invoke([this, r](Context *ctx) {
                                   m_work_queue->queue(ctx, r);
                                 })),
                               Return(true)));
       } else {
-        expect.WillOnce(DoAll(WithArg<6>(Invoke([&mock_image_ctx, snap_id, state](Context *ctx) {
+        expect.WillOnce(DoAll(WithArg<7>(Invoke([&mock_image_ctx, snap_id, state](Context *ctx) {
                                   ceph_assert(mock_image_ctx.image_ctx->snap_lock.is_locked());
                                   ceph_assert(mock_image_ctx.image_ctx->object_map_lock.is_wlocked());
                                   mock_image_ctx.image_ctx->object_map->aio_update<Context>(
-                                    snap_id, 0, 1, state, boost::none, {}, ctx);
+                                    snap_id, 0, 1, state, boost::none, {}, false, ctx);
                                 })),
                               Return(true)));
       }
