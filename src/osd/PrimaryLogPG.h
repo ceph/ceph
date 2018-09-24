@@ -255,6 +255,23 @@ public:
   };
   typedef std::shared_ptr<FlushOp> FlushOpRef;
 
+  struct ChunkScrubOp {
+    ObjectContextRef obc;
+    OpRequestRef op;
+    set<hobject_t> refs;
+    uint64_t ori_size;
+    bool blocking; 
+    uint64_t index;
+    hobject_t cur;
+    ceph_tid_t objecter_tid;
+
+    ChunkScrubOp()
+      : ori_size(0), blocking(false), index(0),
+	objecter_tid(0) {}
+    ~ChunkScrubOp() { }
+  };
+  typedef std::shared_ptr<ChunkScrubOp> ChunkScrubOpRef;
+
   boost::scoped_ptr<PGBackend> pgbackend;
   PGBackend *get_pgbackend() override {
     return pgbackend.get();
@@ -1414,11 +1431,22 @@ protected:
   void refcount_manifest(ObjectContextRef obc, object_locator_t oloc, hobject_t soid,
                          SnapContext snapc, bool get, Context *cb, uint64_t offset);
 
+  int start_chunk_refcount_scrub(
+		OpRequestRef op, ObjectContextRef obc,
+		bool blocking, OpContext* ctx, hobject_t start_oid, set<hobject_t>* refs);
+  void finish_chunk_scrub(hobject_t oid, ceph_tid_t tid, int r);
+  void cancel_chunkscrub(ChunkScrubOpRef fop, bool requeue,
+				      vector<ceph_tid_t> *tids);
+  void cancel_chunkscrub_ops(bool requeue, vector<ceph_tid_t> *tids);
+
+  map<hobject_t, ChunkScrubOpRef> chunkscrub_ops;
+
   friend struct C_ProxyChunkRead;
   friend class PromoteManifestCallback;
   friend class C_CopyChunk;
   friend struct C_ManifestFlush;
   friend struct RefCountCallback;
+  friend struct C_ChunkScrub;
 
 public:
   PrimaryLogPG(OSDService *o, OSDMapRef curmap,

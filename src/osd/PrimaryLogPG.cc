@@ -2707,6 +2707,236 @@ void PrimaryLogPG::finish_manifest_flush(hobject_t oid, ceph_tid_t tid, int r,
   finish_flush(oid, tid, r);
 }
 
+struct C_ChunkScrub : public Context {
+  PrimaryLogPGRef pg;
+  hobject_t oid;
+  epoch_t last_peering_reset;
+  ceph_tid_t tid;
+  C_ChunkScrub(PrimaryLogPG *p, hobject_t o, epoch_t lpr)
+    : pg(p), oid(o), last_peering_reset(lpr),
+      tid(0)
+  {}
+  void finish(int r) override {
+    if (r == -ECANCELED)
+      return;
+    pg->lock();
+    if (last_peering_reset == pg->get_last_peering_reset()) {
+      pg->finish_chunk_scrub(oid, tid, r);
+    }
+    pg->unlock();
+  }
+};
+
+void PrimaryLogPG::finish_chunk_scrub(hobject_t oid, ceph_tid_t tid, int r)
+{
+  dout(10) << __func__ << " " << oid << " tid " << tid
+	   << " " << cpp_strerror(r) << dendl;
+  if (r != -ENOENT && r < 0) {
+    return;
+  }
+  map<hobject_t,ChunkScrubOpRef>::iterator p = chunkscrub_ops.find(oid);
+  if (p == chunkscrub_ops.end()) {
+    dout(10) << __func__ << " no chunkscrub_op found" << dendl;
+    return;
+  }
+  ChunkScrubOpRef csop = p->second;
+  assert(csop);
+  hobject_t next;
+  auto p_cur = csop->refs.find(csop->cur);
+  auto p_next = ++p_cur;
+  if (r == -ENOENT) {
+    p_next = csop->refs.erase(p_cur);
+  }
+
+  if (p_next != csop->refs.end()) {
+    next = *p_next;
+    start_chunk_refcount_scrub(
+      csop->op, csop->obc,
+      csop->blocking, NULL, next, &csop->refs);
+    return;
+  }
+
+  if (csop->blocking) {
+    csop->obc->stop_block();
+    kick_object_context_blocked(csop->obc);
+  }
+  if (csop->refs.size() != csop->ori_size) {
+    OpContextUPtr ctx = simple_opc_create(csop->obc);
+    if (ctx->lock_manager.get_lock_type(
+	  ObjectContext::RWState::RWWRITE,
+	  oid,
+	  csop->obc,
+	  csop->op)) {
+    } else {
+      close_op_ctx(ctx.release());
+      dout(10) << __func__ << " failed write lock " << csop->obc->obs.oi.soid << " tid "
+	       << dendl;
+      if (csop->blocking && csop->obc->is_blocked()) {
+	csop->obc->stop_block();
+	kick_object_context_blocked(csop->obc);
+      }
+      chunkscrub_ops.erase(csop->obc->obs.oi.soid);
+      return;
+    }
+
+    ctx->at_version = get_next_version();
+    if (csop->refs.size() > 0) {
+      // decrease the reference
+      ctx->new_obs = csop->obc->obs;
+      if (ctx->new_obs.oi.is_dirty()) {
+	ctx->new_obs.oi.clear_flag(object_info_t::FLAG_DIRTY);
+	--ctx->delta_stats.num_objects_dirty;
+      }
+
+      // chunk_set
+      ClassHandler::ClassData *cls;
+      int result;
+      dout(10) << __func__ << " " << oid << dendl;
+      result = osd->class_handler->open_class("cas", &cls);
+      ceph_assert(result == 0);  
+
+      ClassHandler::ClassMethod *method = cls->get_method("chunk_set");
+      if (!method) {
+	dout(10) << "call method " << "cas" << "." << "chunk_set" << " does not exist" << dendl;
+	return;
+      }
+
+      bufferlist indata, outdata;
+      chunk_obj_refcount ref_set;
+      ref_set.refs = csop->refs;
+      encode(ref_set, indata);
+      result = method->exec((cls_method_context_t)&ctx, indata, outdata);
+      if (result < 0) {
+	dout(10) << "exec error: " << result << dendl;
+	return;
+      }
+
+      finish_ctx(ctx.get(), pg_log_entry_t::CLEAN);
+    } else {
+      // reference is zero..
+      _delete_oid(ctx.get(), true, false);
+      if (csop->obc->obs.oi.is_omap())
+	ctx->delta_stats.num_objects_omap--;
+      if (csop->obc->obs.oi.is_dirty())
+	--ctx->delta_stats.num_objects_dirty;
+      finish_ctx(ctx.get(), pg_log_entry_t::DELETE);
+    }
+    simple_opc_submit(std::move(ctx));
+    chunkscrub_ops.erase(oid);
+  }
+
+}
+
+int PrimaryLogPG::start_chunk_refcount_scrub(
+  OpRequestRef op, ObjectContextRef obc,
+  bool blocking, OpContext* ctx, hobject_t start_oid, set<hobject_t>* refs)
+{
+  const object_info_t& oi = obc->obs.oi;
+  const hobject_t& soid = oi.soid;
+  ClassHandler::ClassData *cls;
+  chunk_obj_refcount ref_ret;
+  ChunkScrubOpRef csop;
+  int result;
+  dout(10) << __func__ << " " << soid <<dendl;
+  result = osd->class_handler->open_class("cas", &cls);
+  ceph_assert(result == 0);  
+
+  map<hobject_t,ChunkScrubOpRef>::iterator p = chunkscrub_ops.find(soid);
+  if (start_oid == hobject_t() && p == chunkscrub_ops.end()) {
+    ChunkScrubOpRef init_csop(std::make_shared<ChunkScrubOp>());
+    csop = init_csop;
+  } else if (p == chunkscrub_ops.end()) {
+    dout(10) << __func__ << " no chunkscrub_op found" << dendl;
+    return -EINVAL;
+  } else {
+    csop = p->second;
+  }
+  csop->cur = start_oid;
+
+  if (!refs) {
+    ClassHandler::ClassMethod *method = cls->get_method("chunk_read");
+    if (!method) {
+      dout(10) << "call method " << "cas" << "." << "chunk_read" << " does not exist" << dendl;
+      return -EOPNOTSUPP;
+    }
+
+    bufferlist indata, outdata;
+    result = method->exec((cls_method_context_t)&ctx, indata, outdata);
+    if (result < 0) {
+      dout(10) << "exec error: " << result << dendl;
+      return result;
+    }
+
+    decode(ref_ret, outdata);
+    csop->refs = ref_ret.refs;
+    csop->ori_size = ref_ret.refs.size();
+    csop->cur = *ref_ret.refs.begin();
+  }
+
+  if (!csop->obc) {
+    csop->obc = obc;
+  }
+  if (!csop->op) {
+    csop->op = op;
+  }
+
+  if (blocking && !csop->obc->is_blocked()) {
+    obc->start_block();
+  }
+
+  csop->blocking = blocking;
+
+  C_ChunkScrub *fin = new C_ChunkScrub(this, soid, get_last_peering_reset());
+  fin->oid = soid;
+
+  object_locator_t oloc(csop->cur);
+  ObjectOperation obj_op;
+  bufferlist in;
+  unsigned n = info.pgid.hash_to_shard(osd->m_objecter_finishers);
+  ::encode(obc->obs.oi.soid.oid.name, in);                             
+  obj_op.call("cas", "has_chunk", in);         
+  ceph_tid_t tid = osd->objecter->read(csop->cur.oid, oloc, obj_op,
+				  CEPH_NOSNAP, NULL,
+				  CEPH_OSD_FLAG_IGNORE_REDIRECT,
+				  new C_OnFinisher(fin, osd->objecter_finishers[n]),
+				  NULL);
+  if (!chunkscrub_ops[soid]) {
+    chunkscrub_ops[soid] = csop;
+  }
+  fin->tid = tid;
+  csop->objecter_tid = tid;
+  return 0;
+}
+
+void PrimaryLogPG::cancel_chunkscrub(ChunkScrubOpRef csop, bool requeue,
+				      vector<ceph_tid_t> *tids)
+{
+  dout(10) << __func__ << " " << csop->obc->obs.oi.soid << " tid "
+	   << csop->objecter_tid << dendl;
+  if (csop->objecter_tid) {
+    tids->push_back(csop->objecter_tid);
+    csop->objecter_tid = 0;
+  }
+  if (csop->blocking && csop->obc->is_blocked()) {
+    csop->obc->stop_block();
+    kick_object_context_blocked(csop->obc);
+  }
+  if (requeue) {
+    if (csop->op)
+      requeue_op(csop->op);
+  }
+  chunkscrub_ops.erase(csop->obc->obs.oi.soid);
+}
+
+void PrimaryLogPG::cancel_chunkscrub_ops(bool requeue, vector<ceph_tid_t> *tids)
+{
+  dout(10) << __func__ << dendl;
+  map<hobject_t,ChunkScrubOpRef>::iterator p = chunkscrub_ops.begin();
+  while (p != chunkscrub_ops.end()) {
+    cancel_chunkscrub((p++)->second, requeue, tids);
+  }
+}
+
 void PrimaryLogPG::record_write_error(OpRequestRef op, const hobject_t &soid,
 				      MOSDOpReply *orig_reply, int r)
 {
@@ -7101,6 +7331,25 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	ctx->modify = true;
       }
 
+      break;
+
+    case CEPH_OSD_OP_CHUNK_SCRUB:
+      ++ctx->num_write;
+      {
+	if (pool.info.is_tier()) {
+	  result = -EINVAL;
+	  break;
+	}
+	if (!obs.exists) {
+	  result = -ENOENT;
+	  break;
+	}
+	if (get_osdmap()->require_osd_release < CEPH_RELEASE_NAUTILUS) {
+	  result = -EOPNOTSUPP;
+	  break;
+	}
+	result = start_chunk_refcount_scrub(ctx->op, ctx->obc, true, ctx, hobject_t(), NULL);
+      }
       break;
 
       // -- object attrs --
@@ -11975,6 +12224,7 @@ void PrimaryLogPG::on_shutdown()
   cancel_copy_ops(false, &tids);
   cancel_flush_ops(false, &tids);
   cancel_proxy_ops(false, &tids);
+  cancel_chunkscrub_ops(false, &tids);
   osd->objecter->op_cancel(tids, -ECANCELED);
 
   apply_and_flush_repops(false);
@@ -12089,6 +12339,7 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction *t)
   cancel_copy_ops(is_primary(), &tids);
   cancel_flush_ops(is_primary(), &tids);
   cancel_proxy_ops(is_primary(), &tids);
+  cancel_chunkscrub_ops(is_primary(), &tids);
   osd->objecter->op_cancel(tids, -ECANCELED);
 
   // requeue object waiters
