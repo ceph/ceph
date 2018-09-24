@@ -2,6 +2,8 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
+import { PopoverModule } from 'ngx-bootstrap/popover';
+
 import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { DashboardService } from '../../../shared/api/dashboard.service';
 import { SharedModule } from '../../../shared/shared.module';
@@ -20,7 +22,7 @@ describe('HealthComponent', () => {
 
   configureTestBed({
     providers: [DashboardService],
-    imports: [SharedModule, HttpClientTestingModule],
+    imports: [SharedModule, HttpClientTestingModule, PopoverModule.forRoot()],
     declarations: [
       HealthComponent,
       MonSummaryPipe,
