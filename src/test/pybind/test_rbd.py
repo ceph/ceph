@@ -23,7 +23,8 @@ from rbd import (RBD, Group, Image, ImageNotFound, InvalidArgument, ImageExists,
                  RBD_MIRROR_IMAGE_DISABLED, MIRROR_IMAGE_STATUS_STATE_UNKNOWN,
                  RBD_LOCK_MODE_EXCLUSIVE, RBD_OPERATION_FEATURE_GROUP,
                  RBD_SNAP_NAMESPACE_TYPE_TRASH,
-                 RBD_IMAGE_MIGRATION_STATE_PREPARED)
+                 RBD_IMAGE_MIGRATION_STATE_PREPARED, RBD_CONFIG_SOURCE_CONFIG,
+                 RBD_CONFIG_SOURCE_POOL, RBD_CONFIG_SOURCE_IMAGE)
 
 rados = None
 ioctx = None
@@ -324,6 +325,57 @@ def test_rename():
     eq([image_name2], rbd.list(ioctx))
     rbd.rename(ioctx, image_name2, image_name)
     eq([image_name], rbd.list(ioctx))
+
+def test_pool_metadata():
+    rbd = RBD()
+    metadata = list(rbd.pool_metadata_list(ioctx))
+    eq(len(metadata), 0)
+    assert_raises(KeyError, rbd.pool_metadata_get, ioctx, "key1")
+    rbd.pool_metadata_set(ioctx, "key1", "value1")
+    rbd.pool_metadata_set(ioctx, "key2", "value2")
+    value = rbd.pool_metadata_get(ioctx, "key1")
+    eq(value, "value1")
+    value = rbd.pool_metadata_get(ioctx, "key2")
+    eq(value, "value2")
+    metadata = list(rbd.pool_metadata_list(ioctx))
+    eq(len(metadata), 2)
+    rbd.pool_metadata_remove(ioctx, "key1")
+    metadata = list(rbd.pool_metadata_list(ioctx))
+    eq(len(metadata), 1)
+    eq(metadata[0], ("key2", "value2"))
+    rbd.pool_metadata_remove(ioctx, "key2")
+    assert_raises(KeyError, rbd.pool_metadata_remove, ioctx, "key2")
+    metadata = list(rbd.pool_metadata_list(ioctx))
+    eq(len(metadata), 0)
+
+    N = 65
+    for i in xrange(N):
+        rbd.pool_metadata_set(ioctx, "key" + str(i), "X" * 1025)
+    metadata = list(rbd.pool_metadata_list(ioctx))
+    eq(len(metadata), N)
+    for i in xrange(N):
+        rbd.pool_metadata_remove(ioctx, "key" + str(i))
+        metadata = list(rbd.pool_metadata_list(ioctx))
+        eq(len(metadata), N - i - 1)
+
+def test_config_list():
+    rbd = RBD()
+
+    for option in rbd.config_list(ioctx):
+        eq(option['source'], RBD_CONFIG_SOURCE_CONFIG)
+
+    rbd.pool_metadata_set(ioctx, "conf_rbd_cache", "true")
+
+    for option in rbd.config_list(ioctx):
+        if option['name'] == "rbd_cache":
+            eq(option['source'], RBD_CONFIG_SOURCE_POOL)
+        else:
+            eq(option['source'], RBD_CONFIG_SOURCE_CONFIG)
+
+    rbd.pool_metadata_remove(ioctx, "conf_rbd_cache")
+
+    for option in rbd.config_list(ioctx):
+        eq(option['source'], RBD_CONFIG_SOURCE_CONFIG)
 
 def rand_data(size):
     return os.urandom(size)
@@ -994,6 +1046,24 @@ class TestImage(object):
         # The image is open (in r/w mode) from setup, so expect there to be one
         # watcher.
         eq(len(watchers), 1)
+
+    def test_config_list(self):
+        with Image(ioctx, image_name) as image:
+            for option in image.config_list():
+                eq(option['source'], RBD_CONFIG_SOURCE_CONFIG)
+
+            image.metadata_set("conf_rbd_cache", "true")
+
+            for option in image.config_list():
+                if option['name'] == "rbd_cache":
+                    eq(option['source'], RBD_CONFIG_SOURCE_IMAGE)
+                else:
+                    eq(option['source'], RBD_CONFIG_SOURCE_CONFIG)
+
+            image.metadata_remove("conf_rbd_cache")
+
+            for option in image.config_list():
+                eq(option['source'], RBD_CONFIG_SOURCE_CONFIG)
 
 class TestImageId(object):
 

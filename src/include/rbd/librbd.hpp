@@ -141,6 +141,14 @@ namespace librbd {
     std::string state_description;
   } image_migration_status_t;
 
+  typedef rbd_config_source_t config_source_t;
+
+  typedef struct {
+    std::string name;
+    std::string value;
+    config_source_t source;
+  } config_option_t;
+
 class CEPH_RBD_API RBD
 {
 public:
@@ -277,6 +285,16 @@ public:
   int namespace_remove(IoCtx& ioctx, const char *namespace_name);
   int namespace_list(IoCtx& io_ctx, std::vector<std::string>* namespace_names);
   int namespace_exists(IoCtx& io_ctx, const char *namespace_name, bool *exists);
+
+  int pool_metadata_get(IoCtx &io_ctx, const std::string &key,
+                        std::string *value);
+  int pool_metadata_set(IoCtx &io_ctx, const std::string &key,
+                        const std::string &value);
+  int pool_metadata_remove(IoCtx &io_ctx, const std::string &key);
+  int pool_metadata_list(IoCtx &io_ctx, const std::string &start, uint64_t max,
+                         std::map<std::string, ceph::bufferlist> *pairs);
+
+  int config_list(IoCtx& io_ctx, std::vector<config_option_t> *options);
 
 private:
   /* We don't allow assignment or copying */
@@ -561,6 +579,8 @@ public:
   int update_unwatch(uint64_t handle);
 
   int list_watchers(std::list<image_watcher_t> &watchers);
+
+  int config_list(std::vector<config_option_t> *options);
 
 private:
   friend class RBD;
