@@ -259,7 +259,7 @@ void ObjectMap<I>::detained_aio_update(UpdateOperation &&op) {
       handle_detained_aio_update(cell, r, on_finish);
     });
   aio_update(CEPH_NOSNAP, op.start_object_no, op.end_object_no, op.new_state,
-             op.current_state, op.parent_trace, ctx);
+             op.current_state, op.parent_trace, op.ignore_enoent, ctx);
 }
 
 template <typename I>
@@ -287,13 +287,14 @@ void ObjectMap<I>::aio_update(uint64_t snap_id, uint64_t start_object_no,
                               uint64_t end_object_no, uint8_t new_state,
                               const boost::optional<uint8_t> &current_state,
                               const ZTracer::Trace &parent_trace,
-                              Context *on_finish) {
+                              bool ignore_enoent, Context *on_finish) {
   assert(m_image_ctx.snap_lock.is_locked());
   assert((m_image_ctx.features & RBD_FEATURE_OBJECT_MAP) != 0);
   assert(m_image_ctx.image_watcher != nullptr);
   assert(m_image_ctx.exclusive_lock == nullptr ||
          m_image_ctx.exclusive_lock->is_lock_owner());
-  assert(snap_id != CEPH_NOSNAP || m_image_ctx.object_map_lock.is_wlocked());
+  assert(snap_id != CEPH_NOSNAP ||
+         m_image_ctx.object_map_lock.is_wlocked());
   assert(start_object_no < end_object_no);
 
   CephContext *cct = m_image_ctx.cct;
@@ -325,7 +326,7 @@ void ObjectMap<I>::aio_update(uint64_t snap_id, uint64_t start_object_no,
 
   auto req = object_map::UpdateRequest<I>::create(
     m_image_ctx, &m_object_map, snap_id, start_object_no, end_object_no,
-    new_state, current_state, parent_trace, on_finish);
+    new_state, current_state, parent_trace, ignore_enoent, on_finish);
   req->send();
 }
 
