@@ -24,6 +24,11 @@ AsyncScheduler::~AsyncScheduler()
   }
 }
 
+RequestCompleter::~RequestCompleter()
+{
+  if(s)
+    s->request_complete();
+}
 const char** AsyncScheduler::get_tracked_conf_keys() const
 {
   if (observer) {
@@ -47,10 +52,11 @@ void AsyncScheduler::handle_conf_change(const ConfigProxy& conf,
   schedule(crimson::dmclock::TimeZero);
 }
 
-int AsyncScheduler::schedule_request(const client_id& client,
-				      const ReqParams& params,
-				      const Time& time, Cost cost,
-				      optional_yield_context yield_ctx)
+std::pair<int,std::unique_ptr<RequestCompleter>>
+AsyncScheduler::schedule_request(const client_id& client,
+				 const ReqParams& params,
+				 const Time& time, Cost cost,
+				 optional_yield_context yield_ctx)
 {
     ceph_assert(yield_ctx);
 
@@ -58,11 +64,19 @@ int AsyncScheduler::schedule_request(const client_id& client,
     boost::system::error_code ec;
     async_request(client, params, time, cost, yield[ec]);
 
-    if (ec == boost::system::errc::resource_unavailable_try_again)
-      return -EAGAIN;
-    else if (ec)
-      return -ec.value();
-    return 0;
+    int r = 0;
+    if (ec){
+      if (ec == boost::system::errc::resource_unavailable_try_again)
+	r = -EAGAIN;
+      else
+	r = -ec.value();
+
+      return std::make_pair(std::move(r),
+			    std::make_unique<RequestCompleter>(this));
+    }
+
+    return std::make_pair(std::move(r),
+			  std::make_unique<RequestCompleter>(nullptr));
 }
 
 
