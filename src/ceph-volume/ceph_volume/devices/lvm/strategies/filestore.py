@@ -108,12 +108,12 @@ class SingleType(object):
                 data_percentage = data_size * 100 / device_size
                 osd = {'data': {}, 'journal': {}}
                 osd['data']['path'] = device.abspath
-                osd['data']['size'] = data_size.b
+                osd['data']['size'] = data_size.b.as_int()
                 osd['data']['parts'] = self.osds_per_device
                 osd['data']['percentage'] = int(data_percentage)
                 osd['data']['human_readable_size'] = str(data_size)
                 osd['journal']['path'] = device.abspath
-                osd['journal']['size'] = journal_size.b
+                osd['journal']['size'] = journal_size.b.as_int()
                 osd['journal']['percentage'] = int(100 - data_percentage)
                 osd['journal']['human_readable_size'] = str(journal_size)
                 osds.append(osd)
