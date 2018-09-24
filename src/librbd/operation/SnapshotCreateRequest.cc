@@ -208,12 +208,11 @@ template <typename I>
 Context *SnapshotCreateRequest<I>::send_create_object_map() {
   I &image_ctx = this->m_image_ctx;
 
-  update_snap_context();
-
   image_ctx.snap_lock.get_read();
   if (image_ctx.object_map == nullptr || m_skip_object_map) {
     image_ctx.snap_lock.put_read();
 
+    update_snap_context();
     image_ctx.io_work_queue->unblock_writes();
     return this->create_context_finisher(0);
   }
@@ -238,6 +237,7 @@ Context *SnapshotCreateRequest<I>::handle_create_object_map(int *result) {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
 
+  update_snap_context();
   image_ctx.io_work_queue->unblock_writes();
   if (*result < 0) {
     lderr(cct) << this << " " << __func__ << ": failed to snapshot object map: "
