@@ -707,7 +707,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
       const auto &fs = pending.get_filesystem(fscid);
 
       mon->clog->info() << info.human_name() << " finished "
-                        << "deactivating rank " << info.rank << " in filesystem "
+                        << "stopping rank " << info.rank << " in filesystem "
                         << fs->mds_map.fs_name << " (now has "
                         << fs->mds_map.get_num_in_mds() - 1 << " ranks)";
 
@@ -1299,11 +1299,7 @@ int MDSMonitor::filesystem_command(
   string whostr;
   cmd_getval(g_ceph_context, cmdmap, "role", whostr);
 
-  if (prefix == "mds deactivate") {
-    ss << "This command is deprecated because it is obsolete;"
-       << " to deactivate one or more MDS, decrease max_mds appropriately"
-       << " (ceph fs set <fsname> max_mds)";
-  } else if (prefix == "mds set_state") {
+  if (prefix == "mds set_state") {
     mds_gid_t gid;
     if (!cmd_getval(g_ceph_context, cmdmap, "gid", gid)) {
       ss << "error parsing 'gid' value '"
@@ -1787,15 +1783,15 @@ bool MDSMonitor::maybe_resize_cluster(FSMap &fsmap, fs_cluster_id_t fscid)
     mds_rank_t target = in - 1;
     const auto &info = mds_map.get_info(target);
     if (mds_map.is_active(target)) {
-      dout(1) << "deactivating " << target << dendl;
-      mon->clog->info() << "deactivating " << info.human_name();
+      dout(1) << "stopping " << target << dendl;
+      mon->clog->info() << "stopping " << info.human_name();
       fsmap.modify_daemon(info.global_id,
                             [] (MDSMap::mds_info_t *info) {
                                 info->state = MDSMap::STATE_STOPPING;
                             });
       return true;
     } else {
-      dout(20) << "skipping deactivate on " << target << dendl;
+      dout(20) << "skipping stop of " << target << dendl;
       return false;
     }
   }
