@@ -200,7 +200,7 @@ void TrimRequest<I>::send_pre_trim() {
       RWLock::WLocker object_map_locker(image_ctx.object_map_lock);
       if (image_ctx.object_map->template aio_update<AsyncRequest<I> >(
             CEPH_NOSNAP, m_delete_start_min, m_num_objects, OBJECT_PENDING,
-            OBJECT_EXISTS, {}, this)) {
+            OBJECT_EXISTS, {}, false, this)) {
         return;
       }
     }
@@ -294,7 +294,7 @@ void TrimRequest<I>::send_post_trim() {
       RWLock::WLocker object_map_locker(image_ctx.object_map_lock);
       if (image_ctx.object_map->template aio_update<AsyncRequest<I> >(
             CEPH_NOSNAP, m_delete_start_min, m_num_objects, OBJECT_NONEXISTENT,
-            OBJECT_PENDING, {}, this)) {
+            OBJECT_PENDING, {}, false, this)) {
         return;
       }
     }
