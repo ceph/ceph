@@ -898,7 +898,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("mon_osd_cache_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(10)
+    .set_default(500)
     .set_description(""),
 
     Option("mon_cpu_threads", Option::TYPE_INT, Option::LEVEL_ADVANCED)
