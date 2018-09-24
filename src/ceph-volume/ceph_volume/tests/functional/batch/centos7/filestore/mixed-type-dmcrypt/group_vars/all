@@ -1,7 +1,7 @@
 ---
 
 ceph_dev: True
-cluster: ceph
+cluster: test
 public_network: "192.168.3.0/24"
 cluster_network: "192.168.4.0/24"
 monitor_interface: eth1
