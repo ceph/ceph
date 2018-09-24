@@ -2595,7 +2595,6 @@ int trash_get_finish(bufferlist::const_iterator *it,
   return 0;
 }
 
-
 int trash_get(librados::IoCtx *ioctx, const std::string &id,
               cls::rbd::TrashImageSpec *trash_spec)
 {
@@ -2610,6 +2609,28 @@ int trash_get(librados::IoCtx *ioctx, const std::string &id,
 
   auto it = out_bl.cbegin();
   return trash_get_finish(&it, trash_spec);
+}
+
+void trash_state_set(librados::ObjectWriteOperation *op,
+                     const std::string &id,
+                     const cls::rbd::TrashImageState &trash_state,
+                     const cls::rbd::TrashImageState &expect_state)
+{
+  bufferlist bl;
+  encode(id, bl);
+  encode(trash_state, bl);
+  encode(expect_state, bl);
+  op->exec("rbd", "trash_state_set", bl);
+}
+
+int trash_state_set(librados::IoCtx *ioctx, const std::string &id,
+                    const cls::rbd::TrashImageState &trash_state,
+                    const cls::rbd::TrashImageState &expect_state)
+{
+  librados::ObjectWriteOperation op;
+  trash_state_set(&op, id, trash_state, expect_state);
+
+  return ioctx->operate(RBD_TRASH, &op);
 }
 
 void namespace_add(librados::ObjectWriteOperation *op,
