@@ -7436,7 +7436,12 @@ std::vector<Option> get_mds_client_options() {
 
     Option("client_mds_namespace", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
-    .set_description("CephFS file system name to mount"),
+    .set_description("CephFS file system name to mount")
+    .set_long_description("Use this with ceph-fuse, or with any process "
+        "that uses libcephfs.  Programs using libcephfs may also pass "
+        "the filesystem name into mount(), which will override this setting. "
+        "If no filesystem name is given in mount() or this setting, the default "
+        "filesystem will be mounted (usually the first created)."),
   });
 }
 
