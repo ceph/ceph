@@ -6,7 +6,8 @@ import { ToastsManager } from 'ng2-toastr';
   selector: '[cdCopy2ClipboardButton]'
 })
 export class Copy2ClipboardButtonDirective implements OnInit {
-  @Input() private cdCopy2ClipboardButton: string;
+  @Input()
+  private cdCopy2ClipboardButton: string;
 
   constructor(
     private elementRef: ElementRef,

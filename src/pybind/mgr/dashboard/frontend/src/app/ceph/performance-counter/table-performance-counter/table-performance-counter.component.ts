@@ -15,17 +15,20 @@ export class TablePerformanceCounterComponent implements OnInit {
   columns: Array<CdTableColumn> = [];
   counters: Array<object> = [];
 
-  @ViewChild('valueTpl') public valueTpl: TemplateRef<any>;
+  @ViewChild('valueTpl')
+  public valueTpl: TemplateRef<any>;
 
   /**
    * The service type, e.g. 'rgw', 'mds', 'mon', 'osd', ...
    */
-  @Input() serviceType: string;
+  @Input()
+  serviceType: string;
 
   /**
    * The service identifier.
    */
-  @Input() serviceId: string;
+  @Input()
+  serviceId: string;
 
   constructor(private performanceCounterService: PerformanceCounterService) {}
 

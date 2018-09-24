@@ -18,7 +18,8 @@ export class RgwUserCapabilityModalComponent {
    * The event that is triggered when the 'Add' or 'Update' button
    * has been pressed.
    */
-  @Output() submitAction = new EventEmitter();
+  @Output()
+  submitAction = new EventEmitter();
 
   formGroup: CdFormGroup;
   editing = true;

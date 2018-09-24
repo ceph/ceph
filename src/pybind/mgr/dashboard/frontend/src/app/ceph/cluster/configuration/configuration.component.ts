@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 
 import { ConfigurationService } from '../../../shared/api/configuration.service';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
@@ -10,7 +10,7 @@ import { CdTableSelection } from '../../../shared/models/cd-table-selection';
   templateUrl: './configuration.component.html',
   styleUrls: ['./configuration.component.scss']
 })
-export class ConfigurationComponent {
+export class ConfigurationComponent implements OnInit {
   data = [];
   columns: CdTableColumn[];
   selection = new CdTableSelection();
@@ -48,9 +48,9 @@ export class ConfigurationComponent {
     }
   ];
 
-  constructor(
-    private configurationService: ConfigurationService,
-  ) {
+  constructor(private configurationService: ConfigurationService) {}
+
+  ngOnInit() {
     this.columns = [
       { flexGrow: 2, canAutoResize: true, prop: 'name' },
       { flexGrow: 2, prop: 'desc', name: 'Description', cellClass: 'wrap' },

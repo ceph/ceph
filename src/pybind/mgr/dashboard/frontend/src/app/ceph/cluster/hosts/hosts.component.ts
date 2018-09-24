@@ -19,7 +19,8 @@ export class HostsComponent implements OnInit {
   isLoadingHosts = false;
   cdParams = { fromLink: '/hosts' };
 
-  @ViewChild('servicesTpl') public servicesTpl: TemplateRef<any>;
+  @ViewChild('servicesTpl')
+  public servicesTpl: TemplateRef<any>;
 
   constructor(
     private authStorageService: AuthStorageService,

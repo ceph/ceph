@@ -18,7 +18,8 @@ export class RgwUserS3KeyModalComponent {
   /**
    * The event that is triggered when the 'Add' button as been pressed.
    */
-  @Output() submitAction = new EventEmitter();
+  @Output()
+  submitAction = new EventEmitter();
 
   formGroup: CdFormGroup;
   viewing = true;

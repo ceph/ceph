@@ -8,7 +8,8 @@ import { BsModalRef } from 'ngx-bootstrap/modal/bs-modal-ref.service';
   styleUrls: ['./modal.component.scss']
 })
 export class ModalComponent {
-  @Input() modalRef: BsModalRef;
+  @Input()
+  modalRef: BsModalRef;
 
   constructor() {}
 }

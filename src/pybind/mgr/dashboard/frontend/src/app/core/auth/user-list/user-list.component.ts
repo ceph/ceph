@@ -18,7 +18,8 @@ import { NotificationService } from '../../../shared/services/notification.servi
   styleUrls: ['./user-list.component.scss']
 })
 export class UserListComponent implements OnInit {
-  @ViewChild('userRolesTpl') userRolesTpl: TemplateRef<any>;
+  @ViewChild('userRolesTpl')
+  userRolesTpl: TemplateRef<any>;
 
   permission: Permission;
   columns: CdTableColumn[];

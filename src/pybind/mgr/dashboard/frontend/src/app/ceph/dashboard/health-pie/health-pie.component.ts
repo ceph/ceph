@@ -20,12 +20,17 @@ import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
   styleUrls: ['./health-pie.component.scss']
 })
 export class HealthPieComponent implements OnChanges, OnInit {
-  @ViewChild('chartCanvas') chartCanvasRef: ElementRef;
-  @ViewChild('chartTooltip') chartTooltipRef: ElementRef;
+  @ViewChild('chartCanvas')
+  chartCanvasRef: ElementRef;
+  @ViewChild('chartTooltip')
+  chartTooltipRef: ElementRef;
 
-  @Input() data: any;
-  @Input() tooltipFn: any;
-  @Output() prepareFn = new EventEmitter();
+  @Input()
+  data: any;
+  @Input()
+  tooltipFn: any;
+  @Output()
+  prepareFn = new EventEmitter();
 
   chart: any = {
     chartType: 'doughnut',
