@@ -1,7 +1,9 @@
 set(kv_srcs
   KeyValueDB.cc
   MemDB.cc
-  RocksDBStore.cc)
+  RocksDBStore.cc
+  rocksdb_cache/ShardedCache.cc
+  rocksdb_cache/BinnedLRUCache.cc)
 
 if (WITH_LEVELDB)
   list(APPEND kv_srcs LevelDBStore.cc)

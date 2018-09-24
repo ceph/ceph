@@ -13,6 +13,7 @@
 #include "include/encoding.h"
 #include "common/Formatter.h"
 #include "common/perf_counters.h"
+#include "common/PriorityCache.h"
 
 using std::string;
 /**
@@ -20,7 +21,7 @@ using std::string;
  *
  * Kyoto Cabinet or LevelDB should implement this
  */
-class KeyValueDB {
+class KeyValueDB : public PriorityCache::PriCache {
 public:
   class TransactionImpl {
   public:
@@ -306,6 +307,64 @@ public:
   }
 
   virtual int set_cache_size(uint64_t) {
+    return -EOPNOTSUPP;
+  }
+
+  // PriCache
+private:
+  int64_t cache_bytes[PriorityCache::Priority::LAST+1] = { 0 };
+  double cache_ratio = 0;
+
+public:
+  virtual int64_t request_cache_bytes(PriorityCache::Priority pri, uint64_t chunk_bytes) const {
+    return -EOPNOTSUPP;
+  }
+
+  virtual int64_t get_cache_bytes(PriorityCache::Priority pri) const {
+    return cache_bytes[pri];
+  }
+
+  virtual int64_t get_cache_bytes() const {
+    int64_t total = 0;
+
+    for (int i = 0; i < PriorityCache::Priority::LAST + 1; i++) {
+      PriorityCache::Priority pri = static_cast<PriorityCache::Priority>(i);
+      total += get_cache_bytes(pri);
+    }
+    return total;
+  }
+
+  virtual void set_cache_bytes(PriorityCache::Priority pri, int64_t bytes) {
+    cache_bytes[pri] = bytes;
+  }
+
+  virtual void add_cache_bytes(PriorityCache::Priority pri, int64_t bytes) {
+    cache_bytes[pri] += bytes;
+  }
+
+  virtual int64_t commit_cache_size() {
+    return -EOPNOTSUPP;
+  }
+
+  virtual double get_cache_ratio() const {
+    return cache_ratio;
+  }
+
+  virtual void set_cache_ratio(double ratio) {
+    cache_ratio = ratio;
+  }
+
+  virtual string get_cache_name() const {
+    return "Unknown KeyValueDB Cache";
+  } 
+
+  // End PriCache
+
+  virtual int set_cache_high_pri_pool_ratio(double ratio) {
+    return -EOPNOTSUPP;
+  }
+
+  virtual int64_t get_cache_usage() const {
     return -EOPNOTSUPP;
   }
 
