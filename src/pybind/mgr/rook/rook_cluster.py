@@ -19,7 +19,7 @@ except ImportError:
     ApiException = None
 
 ROOK_SYSTEM_NS = "rook-ceph-system"
-ROOK_API_VERSION = "v1alpha1"
+ROOK_API_VERSION = "v1beta1"
 ROOK_API_NAME = "ceph.rook.io/%s" % ROOK_API_VERSION
 
 log = logging.getLogger('rook')
@@ -196,8 +196,7 @@ class RookCluster(object):
                 "namespace": self.rook_namespace
             },
             "spec": {
-                "preservePoolsOnRemove": True,
-                "skipPoolCreation": True,
+                "onlyManageDaemons": True,
                 "metadataServer": {
                     "activeCount": spec.max_size,
                     "activeStandby": True
