@@ -475,6 +475,7 @@ namespace librados
                    std::string tgt_oid, uint64_t tgt_offset, int flag = 0);
     void tier_promote();
     void unset_manifest();
+    void chunk_scrub();
 
 
     friend class IoCtx;

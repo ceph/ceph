@@ -1163,6 +1163,10 @@ struct ObjectOperation {
     add_op(CEPH_OSD_OP_UNSET_MANIFEST);
   }
 
+  void chunk_scrub() {
+    add_op(CEPH_OSD_OP_CHUNK_SCRUB);
+  }
+
   void set_alloc_hint(uint64_t expected_object_size,
                       uint64_t expected_write_size,
 		      uint32_t flags) {

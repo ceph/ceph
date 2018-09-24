@@ -315,6 +315,7 @@ extern int ceph_release_from_features(uint64_t features);
 	f(SET_CHUNK,	__CEPH_OSD_OP(WR, DATA, 40),	"set-chunk")	    \
 	f(TIER_PROMOTE,	__CEPH_OSD_OP(WR, DATA, 41),	"tier-promote")	    \
 	f(UNSET_MANIFEST, __CEPH_OSD_OP(WR, DATA, 42),	"unset-manifest")   \
+	f(CHUNK_SCRUB, __CEPH_OSD_OP(WR, DATA, 43),	"chunk-scrub")   \
 									    \
 	/** attrs **/							    \
 	/* read */							    \

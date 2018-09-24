@@ -639,6 +639,12 @@ void librados::ObjectWriteOperation::unset_manifest()
   o->unset_manifest();
 }
 
+void librados::ObjectWriteOperation::chunk_scrub()
+{
+  ::ObjectOperation *o = &impl->o;
+  o->chunk_scrub();
+}
+
 void librados::ObjectWriteOperation::tmap_put(const bufferlist &bl)
 {
   ::ObjectOperation *o = &impl->o;
