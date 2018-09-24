@@ -25,7 +25,7 @@ export class NotificationsComponent implements OnInit {
     });
   }
 
-  removeAll () {
+  removeAll() {
     this.notificationService.removeAll();
   }
 }

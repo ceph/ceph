@@ -8,17 +8,8 @@ import { SharedModule } from '../../shared/shared.module';
 import { PoolListComponent } from './pool-list/pool-list.component';
 
 @NgModule({
-  imports: [
-    CommonModule,
-    TabsModule,
-    SharedModule,
-    ServicesModule
-  ],
-  exports: [
-    PoolListComponent
-  ],
-  declarations: [
-    PoolListComponent
-  ]
+  imports: [CommonModule, TabsModule, SharedModule, ServicesModule],
+  exports: [PoolListComponent],
+  declarations: [PoolListComponent]
 })
-export class PoolModule { }
+export class PoolModule {}

@@ -31,14 +31,13 @@ export class OsdDetailsComponent implements OnChanges {
   }
 
   refresh() {
-    this.osdService.getDetails(this.osd.tree.id)
-      .subscribe((data: any) => {
-        this.osd.details = data;
-        if (!_.isObject(data.histogram)) {
-          this.osd.histogram_failed = data.histogram;
-          this.osd.details.histogram = undefined;
-        }
-        this.osd.loaded = true;
-      });
+    this.osdService.getDetails(this.osd.tree.id).subscribe((data: any) => {
+      this.osd.details = data;
+      if (!_.isObject(data.histogram)) {
+        this.osd.histogram_failed = data.histogram;
+        this.osd.details.histogram = undefined;
+      }
+      this.osd.loaded = true;
+    });
   }
 }

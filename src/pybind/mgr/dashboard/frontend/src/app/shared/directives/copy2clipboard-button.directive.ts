@@ -6,13 +6,13 @@ import { ToastsManager } from 'ng2-toastr';
   selector: '[cdCopy2ClipboardButton]'
 })
 export class Copy2ClipboardButtonDirective implements OnInit {
-
-  // tslint:disable-next-line:no-input-rename
   @Input('cdCopy2ClipboardButton') private cdCopy2ClipboardButton: string;
 
-  constructor(private elementRef: ElementRef,
-              private renderer: Renderer2,
-              private toastr: ToastsManager) {}
+  constructor(
+    private elementRef: ElementRef,
+    private renderer: Renderer2,
+    private toastr: ToastsManager
+  ) {}
 
   ngOnInit() {
     const iElement = this.renderer.createElement('i');

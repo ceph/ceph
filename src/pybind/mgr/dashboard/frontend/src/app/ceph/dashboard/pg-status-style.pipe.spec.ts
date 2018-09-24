@@ -13,7 +13,7 @@ describe('PgStatusStylePipe', () => {
   });
 
   it('transforms with pg status warning', () => {
-    const value = { 'active': 8 };
+    const value = { active: 8 };
     expect(pipe.transform(value)).toEqual({ color: '#FFC200' });
   });
 

@@ -70,5 +70,4 @@ describe('UserService', () => {
     const req = httpTesting.expectOne('api/user');
     expect(req.request.method).toBe('GET');
   });
-
 });

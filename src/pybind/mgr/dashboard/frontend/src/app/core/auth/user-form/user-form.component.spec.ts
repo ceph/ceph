@@ -38,18 +38,21 @@ describe('UserFormComponent', () => {
     { path: 'users', component: FakeComponent }
   ];
 
-  configureTestBed({
-    imports: [
-      [RouterTestingModule.withRoutes(routes)],
-      HttpClientTestingModule,
-      ReactiveFormsModule,
-      RouterTestingModule,
-      ComponentsModule,
-      ToastModule.forRoot(),
-      SharedModule
-    ],
-    declarations: [UserFormComponent, FakeComponent]
-  }, true);
+  configureTestBed(
+    {
+      imports: [
+        [RouterTestingModule.withRoutes(routes)],
+        HttpClientTestingModule,
+        ReactiveFormsModule,
+        RouterTestingModule,
+        ComponentsModule,
+        ToastModule.forRoot(),
+        SharedModule
+      ],
+      declarations: [UserFormComponent, FakeComponent]
+    },
+    true
+  );
 
   beforeEach(() => {
     fixture = TestBed.createComponent(UserFormComponent);

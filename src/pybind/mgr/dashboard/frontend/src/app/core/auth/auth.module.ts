@@ -25,4 +25,4 @@ import { UserListComponent } from './user-list/user-list.component';
   declarations: [LoginComponent, LogoutComponent, UserListComponent, UserFormComponent],
   exports: [LogoutComponent]
 })
-export class AuthModule { }
+export class AuthModule {}
