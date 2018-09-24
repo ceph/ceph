@@ -73,15 +73,36 @@
   - mgrs
   gather_facts: false
   become: True
+  any_errors_fatal: true
   roles:
     - role: ceph-defaults
       tags: ['ceph_update_config']
     - role: ceph-common
-    - role: ceph-config
-      tags: ['ceph_update_config']
+  tasks:
+    - name: rsync ceph-volume to test nodes on centos
+      synchronize:
+        src: "{{ toxinidir}}/../../../../ceph_volume"
+        dest: "/usr/lib/python2.7/site-packages"
+        use_ssh_args: true
+      when:
+        - ansible_os_family == "RedHat"
+        - inventory_hostname in groups.get(osd_group_name, [])
+
+    - name: rsync ceph-volume to test nodes on ubuntu
+      synchronize:
+        src: "{{ toxinidir}}/../../../../ceph_volume"
+        dest: "/usr/lib/python2.7/dist-packages"
+        use_ssh_args: true
+      when:
+        - ansible_os_family == "Debian"
+        - inventory_hostname in groups.get(osd_group_name, [])
+
+    - import_role:
+        name: ceph-config
 
 - hosts: mons
   gather_facts: false
+  any_errors_fatal: true
   become: True
   roles:
     - role: ceph-defaults
@@ -90,6 +111,7 @@
 
 - hosts: mgrs
   gather_facts: false
+  any_errors_fatal: true
   become: True
   roles:
     - role: ceph-defaults
@@ -98,26 +120,27 @@
 
 - hosts: osds
   gather_facts: false
+  any_errors_fatal: true
   become: True
+  roles:
+    - role: ceph-defaults
+    - role: ceph-common
   tasks:
     - name: rsync ceph-volume to test nodes on centos
       synchronize:
         src: "{{ toxinidir}}/../../../../ceph_volume"
         dest: "/usr/lib/python2.7/site-packages"
         use_ssh_args: true
-      when: ansible_os_family == "RedHat"
+      when:
+        - ansible_os_family == "RedHat"
 
     - name: rsync ceph-volume to test nodes on ubuntu
       synchronize:
         src: "{{ toxinidir}}/../../../../ceph_volume"
         dest: "/usr/lib/python2.7/dist-packages"
         use_ssh_args: true
-      when: ansible_os_family == "Debian"
+      when:
+        - ansible_os_family == "Debian"
 
-- hosts: osds
-  gather_facts: false
-  become: True
-  roles:
-    - role: ceph-defaults
-    - role: ceph-common
-    - role: ceph-osd
+    - import_role:
+        name: ceph-osd
