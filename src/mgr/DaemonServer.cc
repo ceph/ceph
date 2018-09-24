@@ -2229,6 +2229,7 @@ void DaemonServer::adjust_pgs()
 
   map<string,unsigned> pg_num_to_set;
   map<string,unsigned> pgp_num_to_set;
+  set<pg_t> upmaps_to_clear;
   cluster_state.with_pgmap([&](const PGMap& pg_map) {
       unsigned creating_or_unknown = 0;
       for (auto& i : pg_map.num_pg_by_state) {
@@ -2289,6 +2290,7 @@ void DaemonServer::adjust_pgs()
 			   << " pg_num " << p.get_pg_num()
 			   << " - merge target " << merge_target
 			   << " has upmap" << dendl;
+		  upmaps_to_clear.insert(merge_target);
 		  ok = false;
 		} else if (osdmap.have_pg_upmaps(merge_source)) {
 		  dout(10) << "pool " << i.first
@@ -2296,6 +2298,7 @@ void DaemonServer::adjust_pgs()
 			   << " pg_num " << p.get_pg_num()
 			   << " - merge source " << merge_source
 			   << " has upmap" << dendl;
+		  upmaps_to_clear.insert(merge_source);
 		  ok = false;
 		}
 
@@ -2505,6 +2508,20 @@ void DaemonServer::adjust_pgs()
       "\"val\": \"" + stringify(i.second) + "\""
       "}";
     monc->start_mon_command({cmd}, {}, nullptr, nullptr, nullptr);
+  }
+  for (auto pg : upmaps_to_clear) {
+    const string cmd =
+      "{"
+      "\"prefix\": \"osd rm-pg-upmap\", "
+      "\"pgid\": \"" + stringify(pg) + "\""
+      "}";
+    monc->start_mon_command({cmd}, {}, nullptr, nullptr, nullptr);
+    const string cmd2 =
+      "{"
+      "\"prefix\": \"osd rm-pg-upmap-items\", "
+      "\"pgid\": \"" + stringify(pg) + "\"" +
+      "}";
+    monc->start_mon_command({cmd2}, {}, nullptr, nullptr, nullptr);
   }
 }
 
