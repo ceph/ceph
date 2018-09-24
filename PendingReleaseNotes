@@ -24,6 +24,12 @@
 * The `ceph mds deactivate` is fully obsolete and references to it in the docs
   have been removed or clarified.
 
+* The libcephfs bindings added the ceph_select_filesystem function
+  for use with multiple filesystems.
+
+* The cephfs python bindings now include mount_root and filesystem_name
+  options in the mount() function.
+
 >=13.1.0
 --------
 

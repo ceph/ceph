@@ -110,6 +110,7 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_conf_set(ceph_mount_info *cmount, const char *option, const char *value)
 
     int ceph_mount(ceph_mount_info *cmount, const char *root)
+    int ceph_select_filesystem(ceph_mount_info *cmount, const char *fs_name)
     int ceph_unmount(ceph_mount_info *cmount)
     int ceph_abort_conn(ceph_mount_info *cmount)
     uint64_t ceph_get_instance_id(ceph_mount_info *cmount)
@@ -538,15 +539,33 @@ cdef class LibCephFS(object):
             raise make_ex(ret, "error calling ceph_init")
         self.state = "initialized"
 
-    def mount(self):
+    def mount(self, mount_root=None, filesystem_name=None):
         """
         Perform a mount using the path for the root of the mount.
         """
         if self.state == "configuring":
             self.init()
         self.require_state("initialized")
+
+        # Configure which filesystem to mount if one was specified
+        if filesystem_name is None:
+            filesystem_name = b""
+        cdef:
+            char *_filesystem_name = filesystem_name
+        if filesystem_name:
+            with nogil:
+                ret = ceph_select_filesystem(self.cluster,
+                        _filesystem_name)
+            if ret != 0:
+                raise make_ex(ret, "error calling ceph_select_filesystem")
+
+        # Prepare mount_root argument, default to "/"
+        root = b"/" if mount_root is None else mount_root
+        cdef:
+            char *_mount_root = root
+
         with nogil:
-            ret = ceph_mount(self.cluster, "/")
+            ret = ceph_mount(self.cluster, _mount_root)
         if ret != 0:
             raise make_ex(ret, "error calling ceph_mount")
         self.state = "mounted"
