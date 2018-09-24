@@ -49,7 +49,7 @@ public:
       assert(m_image_ctx.exclusive_lock->is_lock_owner());
       assert(m_image_ctx.object_map != nullptr);
       bool sent = m_image_ctx.object_map->aio_update<Context>(
-        CEPH_NOSNAP, m_object_no, OBJECT_EXISTS, {}, m_trace, this);
+        CEPH_NOSNAP, m_object_no, OBJECT_EXISTS, {}, m_trace, false, this);
       return (sent ? 0 : 1);
     }
 
@@ -66,7 +66,7 @@ public:
     }
 
     bool sent = m_image_ctx.object_map->aio_update<Context>(
-      snap_id, m_object_no, state, {}, m_trace, this);
+      snap_id, m_object_no, state, {}, m_trace, true, this);
     assert(sent);
     return 0;
   }
@@ -346,7 +346,7 @@ bool CopyupRequest<I>::send_object_map_head() {
       if (may_update && (new_state != current_state) &&
           m_ictx->object_map->aio_update<CopyupRequest>(
             CEPH_NOSNAP, m_object_no, new_state, current_state, m_trace,
-            this)) {
+            false, this)) {
         return false;
       }
     }
