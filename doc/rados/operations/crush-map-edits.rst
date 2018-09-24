@@ -439,8 +439,9 @@ A rule takes the following form::
 
 ``step choose firstn {num} type {bucket-type}``
 
-:Description: Selects the number of buckets of the given type. The number is
-              usually the number of replicas in the pool (i.e., pool size).
+:Description: Selects the number of buckets of the given type from within the
+	      current bucket. The number is usually the number of replicas in
+	      the pool (i.e., pool size).
 
               - If ``{num} == 0``, choose ``pool-num-replicas`` buckets (all available).
               - If ``{num} > 0 && < pool-num-replicas``, choose that many buckets.
@@ -454,8 +455,8 @@ A rule takes the following form::
 ``step chooseleaf firstn {num} type {bucket-type}``
 
 :Description: Selects a set of buckets of ``{bucket-type}`` and chooses a leaf
-              node from the subtree of each bucket in the set of buckets. The
-              number of buckets in the set is usually the number of replicas in
+              node (that is, an OSD) from the subtree of each bucket in the set of buckets.
+              The number of buckets in the set is usually the number of replicas in
               the pool (i.e., pool size).
 
               - If ``{num} == 0``, choose ``pool-num-replicas`` buckets (all available).
@@ -465,7 +466,6 @@ A rule takes the following form::
 :Purpose: A component of the rule. Usage removes the need to select a device using two steps.
 :Prerequisite: Follows ``step take`` or ``step choose``.
 :Example: ``step chooseleaf firstn 0 type row``
-
 
 
 ``step emit``
@@ -481,7 +481,30 @@ A rule takes the following form::
 .. important:: A given CRUSH rule may be assigned to multiple pools, but it
    is not possible for a single pool to have multiple CRUSH rules.
 
+``firstn`` versus ``indep``
 
+:Description: Controls the replacement strategy CRUSH uses when items (OSDs)
+	      are marked down in the CRUSH map. If this rule is to be used with
+	      replicated pools it should be ``firstn`` and if it's for
+	      erasure-coded pools it should be ``indep``.
+
+	      The reason has to do with how they behave when a
+	      previously-selected device fails. Let's say you have a PG stored
+	      on OSDs 1, 2, 3, 4, 5. Then 3 goes down.
+	      
+	      With the "firstn" mode, CRUSH simply adjusts its calculation to
+	      select 1 and 2, then selects 3 but discovers it's down, so it
+	      retries and selects 4 and 5, and then goes on to select a new
+	      OSD 6. So the final CRUSH mapping change is
+	      1, 2, 3, 4, 5 -> 1, 2, 4, 5, 6.
+
+	      But if you're storing an EC pool, that means you just changed the
+	      data mapped to OSDs 4, 5, and 6! So the "indep" mode attempts to
+	      not do that. You can instead expect it, when it selects the failed
+	      OSD 3, to try again and pick out 6, for a final transformation of:
+	      1, 2, 3, 4, 5 -> 1, 2, 6, 4, 5
+	      
+   
 Placing Different Pools on Different OSDS:
 ==========================================
 
