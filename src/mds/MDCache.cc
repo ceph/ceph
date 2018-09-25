@@ -9180,10 +9180,14 @@ MDRequestRef MDCache::request_start_slave(metareqid_t ri, __u32 attempt, const M
 
 MDRequestRef MDCache::request_start_internal(int op)
 {
+  utime_t now = ceph_clock_now();
   MDRequestImpl::Params params;
   params.reqid.name = entity_name_t::MDS(mds->get_nodeid());
   params.reqid.tid = mds->issue_tid();
-  params.initiated = ceph_clock_now();
+  params.initiated = now;
+  params.throttled = now;
+  params.all_read = now;
+  params.dispatched = now;
   params.internal_op = op;
   MDRequestRef mdr =
       mds->op_tracker.create_request<MDRequestImpl,MDRequestImpl::Params*>(&params);
