@@ -8,6 +8,7 @@ import time
 from teuthology import misc
 from teuthology.exceptions import (CommandCrashedError, CommandFailedError,
                                    ConnectionLostError)
+from teuthology.exceptions import ConfigError
 from teuthology.orchestra import run
 from teuthology.salt import Salt
 from teuthology.task import Task
@@ -44,6 +45,12 @@ class DeepSea(Task):
         branch: (DeepSea git branch, e.g. master)
         exec: (list of commands, relative to qa/ of the DeepSea repo)
 
+    Optional arguments:
+
+        install:
+            package|pkg deepsea will be installed via package system
+            source|src  deepsea will be installed via 'make install' (default)
+
     Example:
 
         tasks
@@ -52,6 +59,7 @@ class DeepSea(Task):
             branch: wip-foo
             exec:
             - suites/basic/health-ok.sh
+            install: source
 
     :param ctx: the argparse.Namespace object
     :param config: the config dict
@@ -68,6 +76,7 @@ class DeepSea(Task):
             if key not in self.config or not self.config[key]:
                 self.config[key] = default_value
 
+        _check_config_key('install', 'source')
         _check_config_key('repo', 'https://github.com/SUSE/DeepSea.git')
         _check_config_key('branch', 'master')
 
@@ -151,7 +160,9 @@ class DeepSea(Task):
 
     def setup(self):
         super(DeepSea, self).setup()
-        if self.config["repo"] is '':
+        if self.config['install'] in ['source', 'src']:
+            self.make_install()
+        elif self.config['install'] in ['package', 'pkg']:
             self.salt.master_remote.run(args=[
                 'sudo',
                 'zypper',
@@ -162,7 +173,9 @@ class DeepSea(Task):
                 'deepsea-qa'
                 ])
         else:
-            self.make_install()
+            raise ConfigError("Unsupported deepsea install method '%s'"
+                                                % self.config['install'])
+
         self.setup_salt()
 
     def begin(self):
