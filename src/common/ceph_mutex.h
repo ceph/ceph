@@ -10,6 +10,39 @@
 // The key requirement is that you make use of the ceph::make_mutex()
 // and make_recursive_mutex() factory methods, which take a string
 // naming the mutex for the purposes of the lockdep debug variant.
+
+#ifdef WITH_SEASTAR
+
+namespace ceph {
+  // an empty class satisfying the mutex concept
+  struct dummy_mutex {
+    void lock() {}
+    bool try_lock() {
+      return true;
+    }
+    void unlock() {}
+  };
+
+  using mutex = dummy_mutex;
+  using recursive_mutex = dummy_mutex;
+  // in seastar, we should use a difference interface for enforcing the
+  // semantics of condition_variable
+
+  template <typename ...Args>
+  dummy_mutex make_mutex(Args&& ...args) {
+    return {};
+  }
+
+  template <typename ...Args>
+  recursive_mutex make_recursive_mutex(Args&& ...args) {
+    return {};
+  }
+
+  #define ceph_mutex_is_locked(m) true
+  #define ceph_mutex_is_locked_by_me(m) true
+}
+
+#else  // WITH_SEASTAR
 //
 // For legacy Mutex users that passed recursive=true, use
 // ceph::make_recursive_mutex.  For legacy Mutex users that passed
@@ -78,4 +111,6 @@ namespace ceph {
   #define ceph_mutex_is_locked_by_me(m) true
 }
 
-#endif
+#endif	// CEPH_DEBUG_MUTEX
+
+#endif	// WITH_SEASTAR
