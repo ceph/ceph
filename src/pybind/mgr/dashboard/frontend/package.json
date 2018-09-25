@@ -8,11 +8,15 @@
     "build": "ng build",
     "test": "jest --watch",
     "test:ci": "jest --coverage",
-    "lint": "ng lint",
     "e2e": "ng e2e",
-    "prettier": "prettier --write \"{src,e2e}/**/*.{ts,scss}\"",
-    "prettier:lint": "prettier --list-different \"{src,e2e}/**/*.{ts,scss}\"",
-    "lint:html": "html-linter --config html-linter.config.json"
+    "lint:tslint": "ng lint ceph-dashboard ceph-dashboard-e2e",
+    "lint:prettier": "prettier --list-different \"{src,e2e}/**/*.{ts,scss}\"",
+    "lint:html": "html-linter --config html-linter.config.json",
+    "lint": "npm run lint:tslint && npm run lint:prettier && npm run lint:html",
+    "fix:prettier": "prettier --write \"{src,e2e}/**/*.{ts,scss}\"",
+    "fix:tslint": "npm run lint:tslint -- --fix",
+    "fix": "npm run fix:tslint; npm run fix:prettier"
+
   },
   "private": true,
   "jest": {
