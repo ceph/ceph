@@ -1,0 +1,19 @@
+roles:
+- [mon.0, osd.6, osd.7, osd.8, client.0]
+- [mgr.0,osd.0, osd.1, osd.2, osd.3, osd.4, osd.5]
+
+overrides:
+  ceph:
+    conf:
+      mon:
+        osd default pool size: 3
+
+tasks:
+- rbd_fio:
+    client.0:
+      fio-io-size: 80%
+      formats: [2]
+      features: [[layering],[layering,exclusive-lock,object-map]]
+      io-engine: rbd
+      rw: randrw
+      runtime: 600

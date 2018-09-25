@@ -1,0 +1,11 @@
+tasks:
+- make_coverage:
+- ceph:
+    conf:
+      osd:
+        osd max object name len : 400
+        osd max object namespace len : 64
+- full_sequential_finally:
+  - collect_coverage:
+
+

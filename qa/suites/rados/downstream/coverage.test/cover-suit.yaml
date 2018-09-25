@@ -1,0 +1,14 @@
+roles:
+- [mon.0, osd.6, osd.7, osd.8, client.0]
+- [mgr.0,osd.0, osd.1, osd.2, osd.3, osd.4, osd.5]
+
+tasks:
+- make_coverage:
+- ceph:
+    coverage: true
+    conf:
+      osd:
+        osd max object name len : 400
+        osd max object namespace len : 64
+- collect_coverage:
+

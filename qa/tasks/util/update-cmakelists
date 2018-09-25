@@ -1,0 +1,14 @@
+#!/bin/bash
+dst=$1
+
+sudo sed -i '/option.WITH_TSAN/ i\option(WITH_GCOV "build with gcov" ON)\
+if(WITH_GCOV)\
+  find_program(HAVE_GCOV gcov)\
+  if(NOT HAVE_GCOV)\
+    message(FATAL_ERROR "Coverage Enabled but gcov Not Found")\
+  endif(NOT HAVE_GCOV)\
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fprofile-arcs -ftest-coverage -O0")\
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fprofile-arcs -ftest-coverage")\
+  list(APPEND EXTRALIBS gcov)\
+endif(WITH_GCOV)\n
+' $1
