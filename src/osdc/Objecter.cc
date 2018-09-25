@@ -1823,6 +1823,7 @@ void Objecter::get_session(Objecter::OSDSession *s)
 
 void Objecter::_reopen_session(OSDSession *s)
 {
+  // rwlock is locked unique
   // s->lock is locked
 
   entity_inst_t inst = osdmap->get_inst(s->osd);
@@ -4415,11 +4416,12 @@ bool Objecter::ms_handle_reset(Connection *con)
   if (!initialized)
     return false;
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_OSD) {
+    unique_lock wl(rwlock);
+    
     OSDSession *session = static_cast<OSDSession*>(con->get_priv());
     if (session) {
       ldout(cct, 1) << "ms_handle_reset " << con << " session " << session
 		    << " osd." << session->osd << dendl;
-      unique_lock wl(rwlock);
       if (!initialized) {
 	wl.unlock();
 	return false;
