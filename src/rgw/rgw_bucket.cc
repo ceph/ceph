@@ -1799,6 +1799,10 @@ int RGWDataChangesLog::add_entry(rgw_bucket& bucket, int shard_id) {
   if (!store->need_to_log_data())
     return 0;
 
+  if (observer) {
+    observer->on_bucket_changed(bucket.get_key());
+  }
+
   rgw_bucket_shard bs(bucket, shard_id);
 
   int index = choose_oid(bs);
