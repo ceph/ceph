@@ -9,7 +9,7 @@
 #include "rgw_frontend.h"
 #include "rgw_client_io_filters.h"
 #include "rgw_dmclock.h"
-#include "rgw_dmclock_scheduler.h"
+#include "rgw_dmclock_sync_scheduler.h"
 #include "common/ceph_time.h"
 #include "common/perf_counters.h"
 
@@ -69,7 +69,7 @@ int RGWCivetWebFrontend::process(struct mg_connection*  const conn)
   //assert (scheduler != nullptr);
   int ret = process_request(env.store, env.rest, &req, env.uri_prefix,
                             *env.auth_registry, &client_io, env.olog,
-                            null_yield, nullptr, scheduler.get() ,&http_ret);
+                            null_yield, scheduler.get() ,&http_ret);
   if (ret < 0) {
     /* We don't really care about return code. */
     dout(20) << "process_request() returned " << ret << dendl;

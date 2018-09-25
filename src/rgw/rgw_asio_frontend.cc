@@ -20,7 +20,7 @@
 #include <boost/asio/ssl.hpp>
 #endif
 
-#include "rgw_dmclock_scheduler.h"
+#include "rgw_dmclock_async_scheduler.h"
 
 #define dout_subsys ceph_subsys_rgw
 

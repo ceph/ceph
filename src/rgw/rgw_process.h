@@ -29,8 +29,7 @@
 extern void signal_shutdown();
 
 namespace rgw::dmclock {
-  class AsyncScheduler;
-  class SyncScheduler;
+  class Scheduler;
 }
 
 struct RGWProcessEnv {
@@ -202,8 +201,7 @@ extern int process_request(RGWRados* store,
                            RGWRestfulIO* client_io,
                            OpsLogSocket* olog,
                            optional_yield_context y,
-                           rgw::dmclock::AsyncScheduler *scheduler,
-			   rgw::dmclock::SyncScheduler *sscheduler = nullptr, // FIXME
+                           rgw::dmclock::Scheduler *scheduler,
                            int* http_ret = nullptr);
 
 extern int rgw_process_authenticated(RGWHandler_REST* handler,
