@@ -46,19 +46,19 @@
           </label>
           <div class="col-sm-9">
             <div class="input-group">
-                <input class="form-control"
-                       type="password"
-                       placeholder="Password..."
-                       id="password"
-                       name="password"
-                       formControlName="password">
-                <span class="input-group-btn">
-                  <button type="button"
-                          class="btn btn-default"
-                          cdPasswordButton="password">
-                  </button>
-                </span>
-              </div>
+              <input class="form-control"
+                     type="password"
+                     placeholder="Password..."
+                     id="password"
+                     name="password"
+                     formControlName="password">
+              <span class="input-group-btn">
+                <button type="button"
+                        class="btn btn-default"
+                        cdPasswordButton="password">
+                </button>
+              </span>
+            </div>
             <span i18n
                   class="help-block"
                   *ngIf="userForm.showError('password', formDir, 'required')">
@@ -76,19 +76,19 @@
           </label>
           <div class="col-sm-9">
             <div class="input-group">
-                <input class="form-control"
-                       type="password"
-                       placeholder="Confirm password..."
-                       id="confirmpassword"
-                       name="confirmpassword"
-                       formControlName="confirmpassword">
-                <span class="input-group-btn">
-                  <button type="button"
-                          class="btn btn-default"
-                          cdPasswordButton="confirmpassword">
-                  </button>
-                </span>
-              </div>
+              <input class="form-control"
+                     type="password"
+                     placeholder="Confirm password..."
+                     id="confirmpassword"
+                     name="confirmpassword"
+                     formControlName="confirmpassword">
+              <span class="input-group-btn">
+                <button type="button"
+                        class="btn btn-default"
+                        cdPasswordButton="confirmpassword">
+                </button>
+              </span>
+            </div>
             <span i18n
                   class="help-block"
                   *ngIf="userForm.showError('confirmpassword', formDir, 'required')">
@@ -147,10 +147,9 @@
         </label>
         <div class="col-sm-9">
           <span class="form-control no-border full-height">
-            <cd-select-badges
-                [data]="userForm.controls.roles.value"
-                [options]="allRoles"
-                emptyMessage="There are no roles."></cd-select-badges>
+            <cd-select-badges [data]="userForm.controls.roles.value"
+                              [options]="allRoles"
+                              emptyMessage="There are no roles."></cd-select-badges>
           </span>
         </div>
 

@@ -1,6 +1,9 @@
 <div class="modal-header">
   <h4 class="modal-title pull-left">{{ editing ? 'Rename' : 'Create' }} RBD Snapshot</h4>
-  <button type="button" class="close pull-right" aria-label="Close" (click)="modalRef.hide()">
+  <button type="button"
+          class="close pull-right"
+          aria-label="Close"
+          (click)="modalRef.hide()">
     <span aria-hidden="true">&times;</span>
   </button>
 </div>
@@ -30,8 +33,8 @@
         <span i18n
               class="help-block"
               *ngIf="snapshotForm.showError('snapshotName', formDir, 'required')">
-              This field is required.
-            </span>
+          This field is required.
+        </span>
       </div>
     </div>
 
@@ -43,8 +46,9 @@
                         (submitAction)="submit()">
         {{ editing ? 'Rename' : 'Create' }} Snapshot
       </cd-submit-button>
-      <button type="button" class="btn btn-sm btn-default" (click)="modalRef.hide()">Close</button>
+      <button type="button"
+              class="btn btn-sm btn-default"
+              (click)="modalRef.hide()">Close</button>
     </div>
   </div>
 </form>
-
