@@ -76,11 +76,6 @@ Ceph Conf: {ceph_path}
         if self.plugin_help:
             self.plugin_help = '\nPlugins:\n' + self.plugin_help
 
-    def load_ceph_conf_path(self, cluster_name='ceph'):
-        abspath = '/etc/ceph/%s.conf' % cluster_name
-        conf.path = os.getenv('CEPH_CONF', abspath)
-        conf.cluster = cluster_name
-
     def load_log_path(self):
         conf.log_path = os.getenv('CEPH_VOLUME_LOG_PATH', '/var/log/ceph')
 
@@ -105,7 +100,7 @@ Ceph Conf: {ceph_path}
     def main(self, argv):
         # these need to be available for the help, which gets parsed super
         # early
-        self.load_ceph_conf_path()
+        configuration.load_ceph_conf_path()
         self.load_log_path()
         self.enable_plugins()
         main_args, subcommand_args = self._get_split_args()
@@ -143,7 +138,7 @@ Ceph Conf: {ceph_path}
         logger.info("Running command: ceph-volume %s %s", " ".join(main_args), " ".join(subcommand_args))
         # set all variables from args and load everything needed according to
         # them
-        self.load_ceph_conf_path(cluster_name=args.cluster)
+        configuration.load_ceph_conf_path(cluster_name=args.cluster)
         try:
             conf.ceph = configuration.load(conf.path)
         except exceptions.ConfigurationError as error:

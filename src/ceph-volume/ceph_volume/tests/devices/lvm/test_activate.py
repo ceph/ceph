@@ -50,6 +50,7 @@ class TestActivate(object):
             activate.Activate([]).activate(args)
 
     def test_filestore_no_systemd(self, is_root, volumes, monkeypatch, capture):
+        monkeypatch.setattr('ceph_volume.configuration.load', lambda: None)
         fake_enable = Capture()
         fake_start_osd = Capture()
         monkeypatch.setattr('ceph_volume.util.system.device_is_mounted', lambda *a, **kw: True)
@@ -64,8 +65,8 @@ class TestActivate(object):
             lv_tags=','.join([
                 "ceph.cluster_name=ceph", "ceph.journal_device=/dev/vg/journal",
                 "ceph.journal_uuid=000", "ceph.type=journal",
-                "ceph.osd_id=0","ceph.osd_fsid=1234"])
-            )
+                "ceph.osd_id=0", "ceph.osd_fsid=1234"])
+        )
         DataVolume = api.Volume(
             lv_name='data',
             lv_path='/dev/vg/data',
@@ -81,6 +82,7 @@ class TestActivate(object):
     def test_filestore_systemd(self, is_root, volumes, monkeypatch, capture):
         fake_enable = Capture()
         fake_start_osd = Capture()
+        monkeypatch.setattr('ceph_volume.configuration.load', lambda: None)
         monkeypatch.setattr('ceph_volume.util.system.device_is_mounted', lambda *a, **kw: True)
         monkeypatch.setattr('ceph_volume.util.system.chown', lambda *a, **kw: True)
         monkeypatch.setattr('ceph_volume.process.run', lambda *a, **kw: True)
