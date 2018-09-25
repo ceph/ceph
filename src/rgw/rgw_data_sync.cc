@@ -589,10 +589,10 @@ int RGWRemoteDataLog::read_source_log_shards_next(map<int, string> shard_markers
   return run(new RGWListRemoteDataLogCR(&sync_env, shard_markers, 1, result));
 }
 
-int RGWRemoteDataLog::init(const DoutPrefixProvider *_dpp, const string& _source_zone, RGWRESTConn *_conn, RGWSyncErrorLogger *_error_logger,
+int RGWRemoteDataLog::init(const string& _source_zone, RGWRESTConn *_conn, RGWSyncErrorLogger *_error_logger,
                            RGWSyncTraceManager *_sync_tracer, RGWSyncModuleInstanceRef& _sync_module)
 {
-  sync_env.init(_dpp, store->ctx(), store, _conn, async_rados, &http_manager, _error_logger,
+  sync_env.init(dpp, store->ctx(), store, _conn, async_rados, &http_manager, _error_logger,
                 _sync_tracer, _source_zone, _sync_module);
 
   if (initialized) {
@@ -1775,7 +1775,7 @@ int RGWDataSyncStatusManager::init()
 
   error_logger = new RGWSyncErrorLogger(store, RGW_SYNC_ERROR_LOG_SHARD_PREFIX, ERROR_LOGGER_SHARDS);
 
-  int r = source_log.init(this, source_zone, conn, error_logger, store->get_sync_tracer(), sync_module);
+  int r = source_log.init(source_zone, conn, error_logger, store->get_sync_tracer(), sync_module);
   if (r < 0) {
     ldpp_dout(this, 0) << "ERROR: failed to init remote log, r=" << r << dendl;
     finalize();
