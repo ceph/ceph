@@ -17,10 +17,10 @@
   tasks:
 
     - name: destroy osd.2
-      command: "ceph osd destroy osd.2 --yes-i-really-mean-it"
+      command: "ceph --cluster {{ cluster }} osd destroy osd.2 --yes-i-really-mean-it"
 
     - name: destroy osd.0
-      command: "ceph osd destroy osd.0 --yes-i-really-mean-it"
+      command: "ceph --cluster {{ cluster }} osd destroy osd.0 --yes-i-really-mean-it"
 
 
 - hosts: osds
@@ -29,23 +29,23 @@
 
     # osd.2 device
     - name: zap /dev/sdd1
-      command: "ceph-volume lvm zap /dev/sdd1 --destroy"
+      command: "ceph-volume --cluster {{ cluster }} lvm zap /dev/sdd1 --destroy"
       environment:
         CEPH_VOLUME_DEBUG: 1
 
     - name: redeploy osd.2 using /dev/sdd1
-      command: "ceph-volume lvm create --bluestore --data /dev/sdd1 --osd-id 2"
+      command: "ceph-volume --cluster {{ cluster }} lvm create --bluestore --data /dev/sdd1 --osd-id 2"
       environment:
         CEPH_VOLUME_DEBUG: 1
 
     # osd.0 lv
     - name: zap test_group/data-lv1
-      command: "ceph-volume lvm zap test_group/data-lv1"
+      command: "ceph-volume --cluster {{ cluster }} lvm zap test_group/data-lv1"
       environment:
         CEPH_VOLUME_DEBUG: 1
 
     - name: redeploy osd.0 using test_group/data-lv1
-      command: "ceph-volume lvm create --bluestore --data test_group/data-lv1 --osd-id 0"
+      command: "ceph-volume --cluster {{ cluster }} lvm create --bluestore --data test_group/data-lv1 --osd-id 0"
       environment:
         CEPH_VOLUME_DEBUG: 1
 
@@ -60,7 +60,7 @@
   tasks:
 
     - name: destroy osd.0
-      command: "ceph osd destroy osd.0 --yes-i-really-mean-it"
+      command: "ceph --cluster {{ cluster }} osd destroy osd.0 --yes-i-really-mean-it"
 
 
 - hosts: osds
@@ -68,12 +68,12 @@
   tasks:
 
     - name: zap test_group/data-lv1
-      command: "ceph-volume lvm zap test_group/data-lv1"
+      command: "ceph-volume --cluster {{ cluster }} lvm zap test_group/data-lv1"
       environment:
         CEPH_VOLUME_DEBUG: 1
 
     - name: prepare osd.0 using test_group/data-lv1
-      command: "ceph-volume lvm prepare --bluestore --data test_group/data-lv1 --osd-id 0"
+      command: "ceph-volume --cluster {{ cluster }} lvm prepare --bluestore --data test_group/data-lv1 --osd-id 0"
       environment:
         CEPH_VOLUME_DEBUG: 1
 
