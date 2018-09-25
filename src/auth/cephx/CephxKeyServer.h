@@ -18,7 +18,7 @@
 #include "auth/KeyRing.h"
 #include "CephxProtocol.h"
 #include "CephxKeyServer.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 
 class CephContext;
 
@@ -193,7 +193,7 @@ WRITE_CLASS_ENCODER(KeyServerData::Incremental)
 class KeyServer : public KeyStore {
   CephContext *cct;
   KeyServerData data;
-  mutable Mutex lock;
+  mutable ceph::mutex lock;
 
   int _rotate_secret(uint32_t service_id);
   bool _check_rotating_secrets();
@@ -232,7 +232,7 @@ public:
     encode(data, bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-    Mutex::Locker l(lock);
+    std::scoped_lock l{lock};
     using ceph::decode;
     decode(data, bl);
   }
@@ -244,31 +244,31 @@ public:
     return encode_secrets(NULL, &ds);
   }
   version_t get_ver() const {
-    Mutex::Locker l(lock);
+    std::scoped_lock l{lock};
     return data.version;    
   }
 
   void clear_secrets() {
-    Mutex::Locker l(lock);
+    std::scoped_lock l{lock};
     data.clear_secrets();
   }
 
   void apply_data_incremental(KeyServerData::Incremental& inc) {
-    Mutex::Locker l(lock);
+    std::scoped_lock l{lock};
     data.apply_incremental(inc);
   }
   void set_ver(version_t ver) {
-    Mutex::Locker l(lock);
+    std::scoped_lock l{lock};
     data.version = ver;
   }
 
   void add_auth(const EntityName& name, EntityAuth& auth) {
-    Mutex::Locker l(lock);
+    std::scoped_lock l{lock};
     data.add_auth(name, auth);
   }
 
   void remove_secret(const EntityName& name) {
-    Mutex::Locker l(lock);
+    std::scoped_lock l{lock};
     data.remove_secret(name);
   }
 
@@ -277,16 +277,16 @@ public:
     return (b != data.secrets_end());
   }
   int get_num_secrets() {
-    Mutex::Locker l(lock);
+    std::scoped_lock l{lock};
     return data.secrets.size();
   }
 
   void clone_to(KeyServerData& dst) const {
-    Mutex::Locker l(lock);
+    std::scoped_lock l{lock};
     dst = data;
   }
   void export_keyring(KeyRing& keyring) {
-    Mutex::Locker l(lock);
+    std::scoped_lock l{lock};
     for (map<EntityName, EntityAuth>::iterator p = data.secrets.begin();
 	 p != data.secrets.end();
 	 ++p) {
@@ -298,7 +298,7 @@ public:
 
   bool get_rotating_encrypted(const EntityName& name, bufferlist& enc_bl) const;
 
-  Mutex& get_lock() const { return lock; }
+  ceph::mutex& get_lock() const { return lock; }
   bool get_service_caps(const EntityName& name, uint32_t service_id,
 			AuthCapsInfo& caps) const;
 

@@ -386,7 +386,7 @@ void AuthMonitor::encode_full(MonitorDBStore::TransactionRef t)
   ceph_assert(get_last_committed() == version);
 
   bufferlist full_bl;
-  Mutex::Locker l(mon->key_server.get_lock());
+  std::scoped_lock l{mon->key_server.get_lock()};
   dout(20) << __func__ << " key server has "
            << (mon->key_server.has_secrets() ? "" : "no ")
            << "secrets!" << dendl;
