@@ -141,7 +141,7 @@ int pidfh::open(const ConfigProxy& conf)
     return -ENAMETOOLONG;
 
   int fd;
-  fd = ::open(pf_path, O_CREAT|O_RDWR, 0644);
+  fd = ::open(pf_path, O_CREAT|O_RDWR|O_CLOEXEC, 0644);
   if (fd < 0) {
     int err = errno;
     derr << __func__ << ": failed to open pid file '"

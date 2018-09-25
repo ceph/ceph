@@ -12090,7 +12090,7 @@ int MDCache::dump_cache(std::string_view fn, Formatter *f)
 
     dout(1) << "dump_cache to " << path << dendl;
 
-    fd = ::open(path, O_WRONLY|O_CREAT|O_EXCL, 0600);
+    fd = ::open(path, O_WRONLY|O_CREAT|O_EXCL|O_CLOEXEC, 0600);
     if (fd < 0) {
       derr << "failed to open " << path << ": " << cpp_strerror(errno) << dendl;
       return errno;

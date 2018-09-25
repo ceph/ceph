@@ -98,6 +98,7 @@ endif()
 CHECK_FUNCTION_EXISTS(strerror_r HAVE_Strerror_R)
 CHECK_FUNCTION_EXISTS(name_to_handle_at HAVE_NAME_TO_HANDLE_AT)
 CHECK_FUNCTION_EXISTS(pipe2 HAVE_PIPE2)
+CHECK_FUNCTION_EXISTS(accept4 HAVE_ACCEPT4)
 
 include(CMakePushCheckState)
 cmake_push_check_state(RESET)

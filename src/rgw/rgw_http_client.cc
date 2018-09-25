@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "include/compat.h"
+#include "common/errno.h"
 
 #include <boost/utility/string_ref.hpp>
 
@@ -1043,21 +1044,19 @@ int RGWHTTPManager::set_request_state(RGWHTTPClient *client, RGWHTTPRequestSetSt
 
 int RGWHTTPManager::start()
 {
-  int r = pipe(thread_pipe);
-  if (r < 0) {
-    r = -errno;
-    ldout(cct, 0) << "ERROR: pipe() returned errno=" << r << dendl;
-    return r;
+  if (pipe_cloexec(thread_pipe) < 0) {
+    int e = errno;
+    ldout(cct, 0) << "ERROR: pipe(): " << cpp_strerror(e) << dendl;
+    return -e;
   }
 
   // enable non-blocking reads
-  r = ::fcntl(thread_pipe[0], F_SETFL, O_NONBLOCK);
-  if (r < 0) {
-    r = -errno;
-    ldout(cct, 0) << "ERROR: fcntl() returned errno=" << r << dendl;
+  if (::fcntl(thread_pipe[0], F_SETFL, O_NONBLOCK) < 0) {
+    int e = errno;
+    ldout(cct, 0) << "ERROR: fcntl(): " << cpp_strerror(e) << dendl;
     TEMP_FAILURE_RETRY(::close(thread_pipe[0]));
     TEMP_FAILURE_RETRY(::close(thread_pipe[1]));
-    return r;
+    return -e;
   }
 
 #ifdef HAVE_CURL_MULTI_WAIT

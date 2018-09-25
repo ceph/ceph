@@ -426,7 +426,7 @@ void global_init_daemonize(CephContext *cct)
 
 int reopen_as_null(CephContext *cct, int fd)
 {
-  int newfd = open("/dev/null", O_RDONLY);
+  int newfd = open("/dev/null", O_RDONLY|O_CLOEXEC);
   if (newfd < 0) {
     int err = errno;
     lderr(cct) << __func__ << " failed to open /dev/null: " << cpp_strerror(err)
@@ -444,6 +444,7 @@ int reopen_as_null(CephContext *cct, int fd)
   }
   // close newfd (we cloned it to target fd)
   VOID_TEMP_FAILURE_RETRY(close(newfd));
+  // N.B. FD_CLOEXEC is cleared on fd (see dup2(2))
   return 0;
 }
 

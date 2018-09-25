@@ -173,4 +173,6 @@
 
 int ceph_posix_fallocate(int fd, off_t offset, off_t len);
 
+int pipe_cloexec(int pipefd[2]);
+
 #endif /* !CEPH_COMPAT_H */

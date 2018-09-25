@@ -70,7 +70,7 @@ GenericFileStoreBackend::GenericFileStoreBackend(FileStore *fs):
   {
     // NOTE: the below won't work on btrfs; we'll assume rotational.
     string fn = get_basedir_path();
-    int fd = ::open(fn.c_str(), O_RDONLY);
+    int fd = ::open(fn.c_str(), O_RDONLY|O_CLOEXEC);
     if (fd < 0) {
       return;
     }
@@ -91,7 +91,7 @@ GenericFileStoreBackend::GenericFileStoreBackend(FileStore *fs):
   {
     // NOTE: the below won't work on btrfs; we'll assume rotational.
     string fn = get_journal_path();
-    int fd = ::open(fn.c_str(), O_RDONLY);
+    int fd = ::open(fn.c_str(), O_RDONLY|O_CLOEXEC);
     if (fd < 0) {
       return;
     }
@@ -115,7 +115,7 @@ int GenericFileStoreBackend::detect_features()
   char fn[PATH_MAX];
   snprintf(fn, sizeof(fn), "%s/fiemap_test", get_basedir_path().c_str());
 
-  int fd = ::open(fn, O_CREAT|O_RDWR|O_TRUNC, 0644);
+  int fd = ::open(fn, O_CREAT|O_RDWR|O_TRUNC|O_CLOEXEC, 0644);
   if (fd < 0) {
     fd = -errno;
     derr << "detect_features: unable to create " << fn << ": " << cpp_strerror(fd) << dendl;
@@ -218,9 +218,10 @@ int GenericFileStoreBackend::detect_features()
     int pipefd[2];
     loff_t off_in = 0;
     int r;
-    if ((r = pipe(pipefd)) < 0)
-      dout(0) << "detect_features: splice  pipe met error " << cpp_strerror(errno) << dendl;
-    else {
+    if (pipe_cloexec(pipefd) < 0) {
+      int e = errno;
+      dout(0) << "detect_features: splice pipe met error " << cpp_strerror(e) << dendl;
+    } else {
       lseek(fd, 0, SEEK_SET);
       r = splice(fd, &off_in, pipefd[1], NULL, 10, 0);
       if (!(r < 0 && errno == EINVAL)) {

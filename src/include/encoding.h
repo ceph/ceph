@@ -142,7 +142,7 @@ WRITE_INTTYPE_ENCODER(int16_t, le16)
       break;								\
     char fn[PATH_MAX];							\
     snprintf(fn, sizeof(fn), ENCODE_STRINGIFY(ENCODE_DUMP_PATH) "/%s__%d.%x", #cl, getpid(), i++); \
-    int fd = ::open(fn, O_WRONLY|O_TRUNC|O_CREAT, 0644);		\
+    int fd = ::open(fn, O_WRONLY|O_TRUNC|O_CREAT|O_CLOEXEC, 0644);		\
     if (fd >= 0) {							\
       ::ceph::bufferlist sub;						\
       sub.substr_of(bl, pre_off, bl.length() - pre_off);		\

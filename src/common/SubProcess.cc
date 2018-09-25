@@ -5,11 +5,13 @@
 #include <signal.h>
 #endif
 #include <stdarg.h>
+#include <fcntl.h>
 #include <unistd.h>
 #include <iostream>
 
 #include "common/errno.h"
 #include "include/ceph_assert.h"
+#include "include/compat.h"
 
 SubProcess::SubProcess(const char *cmd_, std_fd_op stdin_op_, std_fd_op stdout_op_, std_fd_op stderr_op_) :
   cmd(cmd_),
@@ -144,9 +146,9 @@ int SubProcess::spawn() {
 
   int ret = 0;
 
-  if ((stdin_op == PIPE  && ::pipe(ipipe) == -1) ||
-      (stdout_op == PIPE && ::pipe(opipe) == -1) ||
-      (stderr_op == PIPE && ::pipe(epipe) == -1)) {
+  if ((stdin_op == PIPE  && pipe_cloexec(ipipe) == -1) ||
+      (stdout_op == PIPE && pipe_cloexec(opipe) == -1) ||
+      (stderr_op == PIPE && pipe_cloexec(epipe) == -1)) {
     ret = -errno;
     errstr << "pipe failed: " << cpp_strerror(errno);
     goto fail;
@@ -166,21 +168,33 @@ int SubProcess::spawn() {
     close(opipe[IN ]);
     close(epipe[IN ]);
 
-    if (ipipe[IN] != -1 && ipipe[IN] != STDIN_FILENO) {
-      ::dup2(ipipe[IN], STDIN_FILENO);
-      close(ipipe[IN]);
+    if (ipipe[IN] >= 0) {
+      if (ipipe[IN] == STDIN_FILENO) {
+        ::fcntl(STDIN_FILENO, F_SETFD, 0); /* clear FD_CLOEXEC */
+      } else {
+        ::dup2(ipipe[IN], STDIN_FILENO);
+        ::close(ipipe[IN]);
+      }
     }
-    if (opipe[OUT] != -1 && opipe[OUT] != STDOUT_FILENO) {
-      ::dup2(opipe[OUT], STDOUT_FILENO);
-      close(opipe[OUT]);
-      static fd_buf buf(STDOUT_FILENO);
-      std::cout.rdbuf(&buf);
+    if (opipe[OUT] >= 0) {
+      if (opipe[OUT] == STDOUT_FILENO) {
+        ::fcntl(STDOUT_FILENO, F_SETFD, 0); /* clear FD_CLOEXEC */
+      } else {
+        ::dup2(opipe[OUT], STDOUT_FILENO);
+        ::close(opipe[OUT]);
+        static fd_buf buf(STDOUT_FILENO);
+        std::cout.rdbuf(&buf);
+      }
     }
-    if (epipe[OUT] != -1 && epipe[OUT] != STDERR_FILENO) {
-      ::dup2(epipe[OUT], STDERR_FILENO);
-      close(epipe[OUT]);
-      static fd_buf buf(STDERR_FILENO);
-      std::cerr.rdbuf(&buf);
+    if (epipe[OUT] >= 0) {
+      if (epipe[OUT] == STDERR_FILENO) {
+        ::fcntl(STDERR_FILENO, F_SETFD, 0); /* clear FD_CLOEXEC */
+      } else {
+        ::dup2(epipe[OUT], STDERR_FILENO);
+        ::close(epipe[OUT]);
+        static fd_buf buf(STDERR_FILENO);
+        std::cerr.rdbuf(&buf);
+      }
     }
 
     int maxfd = sysconf(_SC_OPEN_MAX);

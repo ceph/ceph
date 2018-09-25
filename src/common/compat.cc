@@ -1,19 +1,34 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2011 New Dream Network
+ * Copyright (C) 2018 Red Hat, Inc.
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software
+ * Foundation.  See file COPYING.
+ *
+ */
 
+#include <errno.h>
 #include <fcntl.h>
 #include <stdint.h>
-#include <unistd.h>
 #include <string.h>
-#include <errno.h>
-#include <sys/stat.h>
-#include <sys/param.h>
 #include <sys/mount.h>
+#include <sys/param.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 #if defined(__linux__) 
 #include <sys/vfs.h>
 #endif
 
-#include "include/compat.h" 
+#include "include/compat.h"
+#include "include/sock_compat.h"
 #include "common/safe_io.h"
 
 // The type-value for a ZFS FS in fstatfs.
@@ -76,3 +91,96 @@ int ceph_posix_fallocate(int fd, off_t offset, off_t len) {
 #endif
 } 
 
+int pipe_cloexec(int pipefd[2])
+{
+#if defined(HAVE_PIPE2)
+  return pipe2(pipefd, O_CLOEXEC);
+#else
+  if (pipe(pipefd) == -1)
+    return -1;
+
+  /*
+   * The old-fashioned, race-condition prone way that we have to fall
+   * back on if pipe2 does not exist.
+   */
+  if (fcntl(pipefd[0], F_SETFD, FD_CLOEXEC) < 0) {
+    goto fail;
+  }
+
+  if (fcntl(pipefd[1], F_SETFD, FD_CLOEXEC) < 0) {
+    goto fail;
+  }
+
+  return 0;
+fail:
+  int save_errno = errno;
+  VOID_TEMP_FAILURE_RETRY(close(pipefd[0]));
+  VOID_TEMP_FAILURE_RETRY(close(pipefd[1]));
+  return (errno = save_errno, -1);
+#endif
+}
+
+
+int socket_cloexec(int domain, int type, int protocol)
+{
+#ifdef SOCK_CLOEXEC
+  return socket(domain, type|SOCK_CLOEXEC, protocol);
+#else
+  int fd = socket(domain, type, protocol);
+  if (fd == -1)
+    return -1;
+
+  if (fcntl(fd, F_SETFD, FD_CLOEXEC) < 0)
+    goto fail;
+
+  return fd;
+fail:
+  int save_errno = errno;
+  VOID_TEMP_FAILURE_RETRY(close(fd));
+  return (errno = save_errno, -1);
+#endif
+}
+
+int socketpair_cloexec(int domain, int type, int protocol, int sv[2])
+{
+#ifdef SOCK_CLOEXEC
+  return socketpair(domain, type|SOCK_CLOEXEC, protocol, sv);
+#else
+  int rc = socketpair(domain, type, protocol, sv);
+  if (rc == -1)
+    return -1;
+
+  if (fcntl(sv[0], F_SETFD, FD_CLOEXEC) < 0)
+    goto fail;
+
+  if (fcntl(sv[1], F_SETFD, FD_CLOEXEC) < 0)
+    goto fail;
+
+  return 0;
+fail:
+  int save_errno = errno;
+  VOID_TEMP_FAILURE_RETRY(close(sv[0]));
+  VOID_TEMP_FAILURE_RETRY(close(sv[1]));
+  return (errno = save_errno, -1);
+#endif
+}
+
+int accept_cloexec(int sockfd, struct sockaddr* addr, socklen_t* addrlen)
+{
+#ifdef HAVE_ACCEPT4
+  return accept4(sockfd, addr, addrlen, SOCK_CLOEXEC);
+#else
+  int fd = accept(sockfd, addr, addrlen);
+  if (fd == -1)
+    return -1;
+
+  if (fcntl(fd, F_SETFD, FD_CLOEXEC) < 0)
+    goto fail;
+
+  return fd;
+fail:
+  int save_errno = errno;
+  VOID_TEMP_FAILURE_RETRY(close(fd));
+  return (errno = save_errno, -1);
+#endif
+}

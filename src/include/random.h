@@ -91,7 +91,7 @@ void randomize_rng(const SeedT seed, MutexT& m, EngineT& e)
 template <typename MutexT, typename EngineT>
 void randomize_rng(MutexT& m, EngineT& e)
 {
-  thread_local std::random_device rd;
+  std::random_device rd;
  
   std::lock_guard<MutexT> lg(m);
   e.seed(rd());
@@ -107,7 +107,7 @@ void randomize_rng(const SeedT n)
 template <typename EngineT = std::default_random_engine>
 void randomize_rng()
 {
-  thread_local std::random_device rd;
+  std::random_device rd;
   detail::engine<EngineT>().seed(rd());
 }
 
