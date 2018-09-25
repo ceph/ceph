@@ -17,11 +17,10 @@
 
 
 #include "auth/Auth.h"
-#include "common/lock_policy.h"
 
 class CephContext;
 struct MAuthReply;
-template<ceph::LockPolicy> class RotatingKeyRing;
+class RotatingKeyRing;
 
 class AuthClientHandler {
 protected:
@@ -59,9 +58,7 @@ public:
 
   virtual void set_global_id(uint64_t id) = 0;
 
-  template<ceph::LockPolicy lock_policy>
-  static AuthClientHandler*
-  create(CephContext *cct, int proto, RotatingKeyRing<lock_policy> *rkeys);
+  static AuthClientHandler* create(CephContext* cct, int proto, RotatingKeyRing* rkeys);
 protected:
   virtual void validate_tickets() = 0;
 };

@@ -428,7 +428,7 @@ int MonClient::init()
   }
 
   rotating_secrets.reset(
-    new RotatingKeyRing<LockPolicy::MUTEX>(cct, cct->get_module_type(), keyring.get()));
+    new RotatingKeyRing(cct, cct->get_module_type(), keyring.get()));
 
   initialized = true;
 
@@ -1230,7 +1230,7 @@ void MonConnection::start(epoch_t epoch,
 int MonConnection::handle_auth(MAuthReply* m,
 			       const EntityName& entity_name,
 			       uint32_t want_keys,
-			       RotatingKeyRing<LockPolicy::MUTEX>* keyring)
+			       RotatingKeyRing* keyring)
 {
   if (state == State::NEGOTIATING) {
     int r = _negotiate(m, entity_name, want_keys, keyring);
@@ -1249,7 +1249,7 @@ int MonConnection::handle_auth(MAuthReply* m,
 int MonConnection::_negotiate(MAuthReply *m,
 			      const EntityName& entity_name,
 			      uint32_t want_keys,
-			      RotatingKeyRing<LockPolicy::MUTEX>* keyring)
+			      RotatingKeyRing* keyring)
 {
   if (auth && (int)m->protocol == auth->get_protocol()) {
     // good, negotiation completed
