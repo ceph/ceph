@@ -158,6 +158,7 @@ class DeepSea(Task):
                 '--non-interactive',
                 'install',
                 'deepsea',
+                'deepsea-cli',
                 'deepsea-qa'
                 ])
         else:
