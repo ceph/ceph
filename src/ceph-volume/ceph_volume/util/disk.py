@@ -29,6 +29,78 @@ def get_partuuid(device):
     return ' '.join(out).strip()
 
 
+def _blkid_parser(output):
+    """
+    Parses the output from a system ``blkid`` call, requires output to be
+    produced using the ``-p`` flag which bypasses the cache, mangling the
+    names. These names are corrected to what it would look like without the
+    ``-p`` flag.
+
+    Normal output::
+
+        /dev/sdb1: UUID="62416664-cbaf-40bd-9689-10bd337379c3" TYPE="xfs" [...]
+    """
+    # first spaced separated item is garbage, gets tossed:
+    output = ' '.join(output.split()[1:])
+    # split again, respecting possible whitespace in quoted values
+    pairs = output.split('" ')
+    raw = {}
+    processed = {}
+    mapping = {
+        'UUID': 'UUID',
+        'TYPE': 'TYPE',
+        'PART_ENTRY_NAME': 'PARTLABEL',
+        'PART_ENTRY_UUID': 'PARTUUID',
+    }
+
+    for pair in pairs:
+        try:
+            column, value = pair.split('=')
+        except ValueError:
+            continue
+        raw[column] = value.strip().strip().strip('"')
+
+    for key, value in raw.items():
+        new_key = mapping.get(key)
+        if not new_key:
+            continue
+        processed[new_key] = value
+
+    return processed
+
+
+def blkid(device):
+    """
+    The blkid interface to its CLI, creating an output similar to what is
+    expected from ``lsblk``. In most cases, ``lsblk()`` should be the preferred
+    method for extracting information about a device. There are some corner
+    cases where it might provide information that is otherwise unavailable.
+
+    The system call uses the ``-p`` flag which bypasses the cache, the caveat
+    being that the keys produced are named completely different to expected
+    names.
+
+    For example, instead of ``PARTLABEL`` it provides a ``PART_ENTRY_NAME``.
+    A bit of translation between these known keys is done, which is why
+    ``lsblk`` should always be preferred: the output provided here is not as
+    rich, given that a translation of keys is required for a uniform interface
+    with the ``-p`` flag.
+
+    Label name to expected output chart:
+
+    cache bypass name               expected name
+
+    UUID                            UUID
+    TYPE                            TYPE
+    PART_ENTRY_NAME                 PARTLABEL
+    PART_ENTRY_UUID                 PARTUUID
+    """
+    out, err, rc = process.call(
+        ['blkid', '-p', device]
+    )
+    return _blkid_parser(' '.join(out))
+
+
 def get_part_entry_type(device):
     """
     Parses the ``ID_PART_ENTRY_TYPE`` from the "low level" (bypasses the cache)
