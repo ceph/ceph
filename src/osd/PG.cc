@@ -8430,7 +8430,7 @@ boost::statechart::result PG::RecoveryState::Active::react(const AllReplicasActi
 	pg_t src = pgid;
 	src.set_ps(pg->pool.info.get_pg_num_pending());
 	assert(src.get_parent() == pgid);
-	pg->osd->set_not_ready_to_merge_source(src);
+	pg->osd->set_not_ready_to_merge_target(pgid, src);
       } else {
 	pg->osd->set_not_ready_to_merge_source(pgid);
       }
