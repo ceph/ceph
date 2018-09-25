@@ -1772,6 +1772,37 @@ int ceph_ll_delegation(struct ceph_mount_info *cmount, Fh *fh,
 
 mode_t ceph_umask(struct ceph_mount_info *cmount, mode_t mode);
 
+/* state reclaim */
+#define CEPH_RECLAIM_RESET 	1
+
+/**
+ * Set ceph client uuid
+ * @param cmount the ceph mount handle to use.
+ * @param uuid the uuid to set
+ *
+ * Must be called before mount.
+ */
+void ceph_set_uuid(struct ceph_mount_info *cmount, const char *uuid);
+
+/**
+ * Start to reclaim states of other client
+ * @param cmount the ceph mount handle to use.
+ * @param uuid uuid of client whose states need to be reclaimed
+ * @param flags flags that control how states get reclaimed
+ *
+ * Returns 0 success, -EOPNOTSUPP if mds does not support the operation,
+ * -ENOENT if CEPH_RECLAIM_RESET is specified and there is no client
+ * with the given uuid, -ENOTRECOVERABLE in all other error cases.
+ */
+int ceph_start_reclaim(struct ceph_mount_info *cmount,
+		       const char *uuid, unsigned flags);
+
+/**
+ * finish reclaiming states of other client (
+ * @param cmount the ceph mount handle to use.
+ */
+void ceph_finish_reclaim(struct ceph_mount_info *cmount);
+
 #ifdef __cplusplus
 }
 #endif
