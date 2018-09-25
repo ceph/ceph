@@ -1,11 +1,14 @@
-<div class="card" [ngClass]="cardClass">
+<div class="card"
+     [ngClass]="cardClass">
   <div class="card-title">
-    <a *ngIf="link; else noLinkTitle" [routerLink]="link">{{ cardTitle }}</a>
+    <a *ngIf="link; else noLinkTitle"
+       [routerLink]="link">{{ cardTitle }}</a>
     <ng-template #noLinkTitle>
       {{ cardTitle }}
     </ng-template>
   </div>
-  <div class="card-body" [ngClass]="contentClass">
-      <ng-content></ng-content>
+  <div class="card-body"
+       [ngClass]="contentClass">
+    <ng-content></ng-content>
   </div>
 </div>

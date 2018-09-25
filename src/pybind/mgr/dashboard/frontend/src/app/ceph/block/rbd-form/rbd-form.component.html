@@ -238,9 +238,9 @@
             </label>
             <div class="col-sm-9">
               <select id="obj_size"
-                    name="obj_size"
-                    class="form-control"
-                    formControlName="obj_size">
+                      name="obj_size"
+                      class="form-control"
+                      formControlName="obj_size">
                 <option *ngFor="let objectSize of objectSizes"
                         [value]="objectSize">{{ objectSize }}</option>
               </select>
@@ -252,15 +252,18 @@
                [ngClass]="{'has-error': rbdForm.showError('stripingUnit', formDir)}">
             <label class="control-label col-sm-3"
                    for="stripingUnit">
-              <span i18n>Stripe unit</span><span class="required"
-                                 *ngIf="rbdForm.getValue('stripingCount')"></span>
+              <span i18n>Stripe unit</span>
+              <span class="required"
+                    *ngIf="rbdForm.getValue('stripingCount')">
+              </span>
             </label>
             <div class="col-sm-9">
               <select id="stripingUnit"
-                    name="stripingUnit"
-                    class="form-control"
-                    formControlName="stripingUnit">
-                <option i18n [ngValue]="null">-- Select stripe unit --</option>
+                      name="stripingUnit"
+                      class="form-control"
+                      formControlName="stripingUnit">
+                <option i18n
+                        [ngValue]="null">-- Select stripe unit --</option>
                 <option *ngFor="let objectSize of objectSizes"
                         [value]="objectSize">{{ objectSize }}</option>
               </select>
@@ -270,10 +273,10 @@
                 This field is required because stripe count is defined!
               </span>
               <span i18n
-                  class="help-block"
-                  *ngIf="rbdForm.showError('stripingUnit', formDir, 'invalidStripingUnit')">
-              Stripe unit is greater than object size.
-            </span>
+                    class="help-block"
+                    *ngIf="rbdForm.showError('stripingUnit', formDir, 'invalidStripingUnit')">
+                Stripe unit is greater than object size.
+              </span>
             </div>
           </div>
 
@@ -282,8 +285,10 @@
                [ngClass]="{'has-error': rbdForm.showError('stripingCount', formDir)}">
             <label class="control-label col-sm-3"
                    for="stripingCount">
-              <span i18n>Stripe count</span><span class="required"
-                                  *ngIf="rbdForm.getValue('stripingUnit')"></span>
+              <span i18n>Stripe count</span>
+              <span class="required"
+                    *ngIf="rbdForm.getValue('stripingUnit')">
+              </span>
             </label>
             <div class="col-sm-9">
               <input id="stripingCount"
