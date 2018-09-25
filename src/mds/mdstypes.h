@@ -242,8 +242,7 @@ struct nest_info_t : public scatter_info_t {
     add(other, -1);
   }
   void add(const nest_info_t &other, int fac=1) {
-    if (other.rctime > rctime)
-      rctime = other.rctime;
+    rctime = std::max(rctime, other.rctime);
     rbytes += fac*other.rbytes;
     rfiles += fac*other.rfiles;
     rsubdirs += fac*other.rsubdirs;
@@ -252,8 +251,7 @@ struct nest_info_t : public scatter_info_t {
 
   // *this += cur - acc;
   void add_delta(const nest_info_t &cur, const nest_info_t &acc) {
-    if (cur.rctime > rctime)
-      rctime = cur.rctime;
+    rctime = std::max(rctime, cur.rctime);
     rbytes += cur.rbytes - acc.rbytes;
     rfiles += cur.rfiles - acc.rfiles;
     rsubdirs += cur.rsubdirs - acc.rsubdirs;

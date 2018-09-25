@@ -2195,9 +2195,10 @@ void CInode::finish_scatter_gather_update(int type)
 	dirstat.add(pf->fragstat);
       }
       if (touched_mtime)
-	pi->mtime = pi->ctime = pi->dirstat.mtime;
+	pi->mtime = pi->dirstat.mtime;
       if (touched_chattr)
 	pi->change_attr = pi->dirstat.change_attr;
+      pi->ctime = std::max(pi->ctime, ceph_clock_now());
       dout(20) << " final dirstat " << pi->dirstat << dendl;
 
       if (dirstat_valid && !dirstat.same_sums(pi->dirstat)) {
@@ -2329,8 +2330,7 @@ void CInode::finish_scatter_gather_update(int type)
 	  }
 	  // trust the dirfrag for now
 	  version_t v = pi->rstat.version;
-	  if (pi->rstat.rctime > rstat.rctime)
-	    rstat.rctime = pi->rstat.rctime;
+          rstat.rctime = std::max(rstat.rctime, pi->rstat.rctime);
 	  pi->rstat = rstat;
 	  pi->rstat.version = v;
 	}

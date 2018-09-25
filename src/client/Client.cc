@@ -718,8 +718,7 @@ void Client::update_inode_file_time(Inode *in, int issued, uint64_t time_warp_se
 		CEPH_CAP_AUTH_EXCL|
 		CEPH_CAP_XATTR_EXCL)) {
     ldout(cct, 30) << "Yay have enough caps to look at our times" << dendl;
-    if (ctime > in->ctime) 
-      in->ctime = ctime;
+    in->ctime = std::max(in->ctime, ctime);
     if (time_warp_seq > in->time_warp_seq) {
       //the mds updated times, so take those!
       in->mtime = mtime;
@@ -6774,7 +6773,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
 
   if (!mask) {
     // caller just needs us to bump the ctime
-    in->ctime = ceph_clock_now();
+    in->ctime = std::max(in->ctime, ceph_clock_now());
     in->cap_dirtier_uid = perms.uid();
     in->cap_dirtier_gid = perms.gid();
     if (issued & CEPH_CAP_AUTH_EXCL)
@@ -6792,8 +6791,8 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
 
     mask &= ~CEPH_SETATTR_KILL_SGUID;
 
+    in->ctime = std::max(in->ctime, ceph_clock_now());
     if (mask & CEPH_SETATTR_UID) {
-      in->ctime = ceph_clock_now();
       in->cap_dirtier_uid = perms.uid();
       in->cap_dirtier_gid = perms.gid();
       in->uid = stx->stx_uid;
@@ -6803,7 +6802,6 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
       ldout(cct,10) << "changing uid to " << stx->stx_uid << dendl;
     }
     if (mask & CEPH_SETATTR_GID) {
-      in->ctime = ceph_clock_now();
       in->cap_dirtier_uid = perms.uid();
       in->cap_dirtier_gid = perms.gid();
       in->gid = stx->stx_gid;
@@ -6814,7 +6812,6 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
     }
 
     if (mask & CEPH_SETATTR_MODE) {
-      in->ctime = ceph_clock_now();
       in->cap_dirtier_uid = perms.uid();
       in->cap_dirtier_gid = perms.gid();
       in->mode = (in->mode & ~07777) | (stx->stx_mode & 07777);
@@ -6828,7 +6825,6 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
     }
 
     if (mask & CEPH_SETATTR_BTIME) {
-      in->ctime = ceph_clock_now();
       in->cap_dirtier_uid = perms.uid();
       in->cap_dirtier_gid = perms.gid();
       in->btime = utime_t(stx->stx_btime);
@@ -6847,7 +6843,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
         in->mtime = utime_t(stx->stx_mtime);
       if (mask & CEPH_SETATTR_ATIME)
         in->atime = utime_t(stx->stx_atime);
-      in->ctime = ceph_clock_now();
+      in->ctime = std::max(in->ctime, ceph_clock_now());
       in->cap_dirtier_uid = perms.uid();
       in->cap_dirtier_gid = perms.gid();
       in->time_warp_seq++;
@@ -7198,13 +7194,8 @@ int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_inf
   }
   st->st_uid = in->uid;
   st->st_gid = in->gid;
-  if (in->ctime > in->mtime) {
-    stat_set_ctime_sec(st, in->ctime.sec());
-    stat_set_ctime_nsec(st, in->ctime.nsec());
-  } else {
-    stat_set_ctime_sec(st, in->mtime.sec());
-    stat_set_ctime_nsec(st, in->mtime.nsec());
-  }
+  stat_set_ctime_sec(st, in->ctime.sec());
+  stat_set_ctime_nsec(st, in->ctime.nsec());
   stat_set_atime_sec(st, in->atime.sec());
   stat_set_atime_nsec(st, in->atime.nsec());
   stat_set_mtime_sec(st, in->mtime.sec());
@@ -7303,10 +7294,7 @@ void Client::fill_statx(Inode *in, unsigned int mask, struct ceph_statx *stx)
   /* Change time and change_attr both require all shared caps to view */
   if ((mask & CEPH_STAT_CAP_INODE_ALL) == CEPH_STAT_CAP_INODE_ALL) {
     stx->stx_version = in->change_attr;
-    if (in->ctime > in->mtime)
-      in->ctime.to_timespec(&stx->stx_ctime);
-    else
-      in->mtime.to_timespec(&stx->stx_ctime);
+    in->ctime.to_timespec(&stx->stx_ctime);
     stx->stx_mask |= (CEPH_STATX_CTIME|CEPH_STATX_VERSION);
   }
 
@@ -9528,9 +9516,13 @@ success:
   }
 
   // mtime
-  in->mtime = in->ctime = ceph_clock_now();
-  in->change_attr++;
-  in->mark_caps_dirty(CEPH_CAP_FILE_WR);
+  {
+    auto now = ceph_clock_now();
+    in->mtime = now;
+    in->ctime = std::max(in->ctime, now);
+    in->change_attr++;
+    in->mark_caps_dirty(CEPH_CAP_FILE_WR);
+  }
 
 done:
 
@@ -13323,7 +13315,9 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
         in->inline_data = bl;
         in->inline_version++;
       }
-      in->mtime = in->ctime = ceph_clock_now();
+      auto now = ceph_clock_now();
+      in->mtime = now;
+      in->ctime = std::max(in->ctime, now);
       in->change_attr++;
       in->mark_caps_dirty(CEPH_CAP_FILE_WR);
     } else {
@@ -13343,7 +13337,9 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
 		  offset, length,
 		  ceph::real_clock::now(),
 		  0, true, &onfinish);
-      in->mtime = in->ctime = ceph_clock_now();
+      auto now = ceph_clock_now();
+      in->mtime = now;
+      in->ctime = std::max(in->ctime, now);
       in->change_attr++;
       in->mark_caps_dirty(CEPH_CAP_FILE_WR);
 
@@ -13356,7 +13352,9 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
     uint64_t size = offset + length;
     if (size > in->size) {
       in->size = size;
-      in->mtime = in->ctime = ceph_clock_now();
+      auto now = ceph_clock_now();
+      in->mtime = now;
+      in->ctime = std::max(in->ctime, now);
       in->change_attr++;
       in->mark_caps_dirty(CEPH_CAP_FILE_WR);
 

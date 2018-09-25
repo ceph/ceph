@@ -134,8 +134,7 @@ ostream& operator<<(ostream &out, const nest_info_t &n)
   if (n == nest_info_t())
     return out << "n()";
   out << "n(v" << n.version;
-  if (n.rctime != utime_t())
-    out << " rc" << n.rctime;
+  out << " rc" << n.rctime;
   if (n.rbytes)
     out << " b" << n.rbytes;
   if (n.rsnaps)

@@ -2389,11 +2389,8 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
     pi.inode.rstat.rbytes = new_size;
     dout(10) << "check_inode_max_size mtime " << pi.inode.mtime << " -> " << new_mtime << dendl;
     pi.inode.mtime = new_mtime;
-    if (new_mtime > pi.inode.ctime) {
-      pi.inode.ctime = new_mtime;
-      if (new_mtime > pi.inode.rstat.rctime)
-	pi.inode.rstat.rctime = new_mtime;
-    }
+    pi.inode.ctime = std::max(pi.inode.ctime, ceph_clock_now()); /* cannot go backwards! */
+    pi.inode.rstat.rctime = std::max(pi.inode.rstat.rctime, pi.inode.ctime);
   }
 
   // use EOpen if the file is still open; otherwise, use EUpdate.
@@ -3157,22 +3154,16 @@ void Locker::_update_cap_fields(CInode *in, int dirty, const MClientCaps::const_
     return;
 
   /* m must be valid if there are dirty caps */
+  bool changed = false;
   ceph_assert(m);
   uint64_t features = m->get_connection()->get_features();
-
-  if (m->get_ctime() > pi->ctime) {
-    dout(7) << "  ctime " << pi->ctime << " -> " << m->get_ctime()
-	    << " for " << *in << dendl;
-    pi->ctime = m->get_ctime();
-    if (m->get_ctime() > pi->rstat.rctime)
-      pi->rstat.rctime = m->get_ctime();
-  }
 
   if ((features & CEPH_FEATURE_FS_CHANGE_ATTR) &&
       m->get_change_attr() > pi->change_attr) {
     dout(7) << "  change_attr " << pi->change_attr << " -> " << m->get_change_attr()
 	    << " for " << *in << dendl;
     pi->change_attr = m->get_change_attr();
+    changed = true;
   }
 
   // file
@@ -3187,8 +3178,7 @@ void Locker::_update_cap_fields(CInode *in, int dirty, const MClientCaps::const_
       dout(7) << "  mtime " << pi->mtime << " -> " << mtime
 	      << " for " << *in << dendl;
       pi->mtime = mtime;
-      if (mtime > pi->rstat.rctime)
-	pi->rstat.rctime = mtime;
+      changed = true;
     }
     if (in->inode.is_file() &&   // ONLY if regular file
 	size > pi->size) {
@@ -3196,6 +3186,7 @@ void Locker::_update_cap_fields(CInode *in, int dirty, const MClientCaps::const_
 	      << " for " << *in << dendl;
       pi->size = size;
       pi->rstat.rbytes = size;
+      changed = true;
     }
     if (in->inode.is_file() &&
         (dirty & CEPH_CAP_FILE_WR) &&
@@ -3205,17 +3196,20 @@ void Locker::_update_cap_fields(CInode *in, int dirty, const MClientCaps::const_
 	pi->inline_data.get_data() = m->inline_data;
       else
 	pi->inline_data.free_data();
+      changed = true;
     }
     if ((dirty & CEPH_CAP_FILE_EXCL) && atime != pi->atime) {
       dout(7) << "  atime " << pi->atime << " -> " << atime
 	      << " for " << *in << dendl;
       pi->atime = atime;
+      changed = true;
     }
     if ((dirty & CEPH_CAP_FILE_EXCL) &&
 	ceph_seq_cmp(pi->time_warp_seq, m->get_time_warp_seq()) < 0) {
       dout(7) << "  time_warp_seq " << pi->time_warp_seq << " -> " << m->get_time_warp_seq()
 	      << " for " << *in << dendl;
       pi->time_warp_seq = m->get_time_warp_seq();
+      changed = true;
     }
   }
   // auth
@@ -3225,25 +3219,34 @@ void Locker::_update_cap_fields(CInode *in, int dirty, const MClientCaps::const_
 	      << " -> " << m->head.uid
 	      << " for " << *in << dendl;
       pi->uid = m->head.uid;
+      changed = true;
     }
     if (m->head.gid != pi->gid) {
       dout(7) << "  gid " << pi->gid
 	      << " -> " << m->head.gid
 	      << " for " << *in << dendl;
       pi->gid = m->head.gid;
+      changed = true;
     }
     if (m->head.mode != pi->mode) {
       dout(7) << "  mode " << oct << pi->mode
 	      << " -> " << m->head.mode << dec
 	      << " for " << *in << dendl;
       pi->mode = m->head.mode;
+      changed = true;
     }
     if ((features & CEPH_FEATURE_FS_BTIME) && m->get_btime() != pi->btime) {
       dout(7) << "  btime " << oct << pi->btime
 	      << " -> " << m->get_btime() << dec
 	      << " for " << *in << dendl;
       pi->btime = m->get_btime();
+      changed = true;
     }
+  }
+
+  if (changed) {
+    pi->ctime = std::max(pi->ctime, ceph_clock_now());
+    pi->rstat.rctime = std::max(pi->rstat.rctime, pi->ctime);
   }
 }
 
