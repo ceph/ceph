@@ -43,6 +43,11 @@ to the *Installing* section:
 
 #. If needed, open TCP ports 3260 and 5000 on the firewall.
 
+   .. note::
+      Access to port 5000 should be restricted to a trusted internal network or
+      only the individual hosts where ``gwcli`` is used or ``ceph-mgr`` daemons
+      are running.
+
 #. Create a new or use an existing RADOS Block Device (RBD).
 
 **Installing:**
