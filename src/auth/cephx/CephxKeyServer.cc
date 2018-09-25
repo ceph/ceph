@@ -134,13 +134,13 @@ bool KeyServerData::get_caps(CephContext *cct, const EntityName& name,
 KeyServer::KeyServer(CephContext *cct_, KeyRing *extra_secrets)
   : cct(cct_),
     data(extra_secrets),
-    lock("KeyServer::lock")
+    lock{ceph::make_mutex("KeyServer::lock")}
 {
 }
 
 int KeyServer::start_server()
 {
-  Mutex::Locker l(lock);
+  std::scoped_lock l{lock};
 
   _check_rotating_secrets();
   _dump_rotating_secrets();
@@ -215,20 +215,20 @@ int KeyServer::_rotate_secret(uint32_t service_id)
 
 bool KeyServer::get_secret(const EntityName& name, CryptoKey& secret) const
 {
-  Mutex::Locker l(lock);
+  std::scoped_lock l{lock};
   return data.get_secret(name, secret);
 }
 
 bool KeyServer::get_auth(const EntityName& name, EntityAuth& auth) const
 {
-  Mutex::Locker l(lock);
+  std::scoped_lock l{lock};
   return data.get_auth(name, auth);
 }
 
 bool KeyServer::get_caps(const EntityName& name, const string& type,
 	      AuthCapsInfo& caps_info) const
 {
-  Mutex::Locker l(lock);
+  std::scoped_lock l{lock};
 
   return data.get_caps(cct, name, type, caps_info);
 }
@@ -236,7 +236,7 @@ bool KeyServer::get_caps(const EntityName& name, const string& type,
 bool KeyServer::get_service_secret(uint32_t service_id,
 	      ExpiringCryptoKey& secret, uint64_t& secret_id) const
 {
-  Mutex::Locker l(lock);
+  std::scoped_lock l{lock};
 
   return data.get_service_secret(cct, service_id, secret, secret_id);
 }
@@ -244,7 +244,7 @@ bool KeyServer::get_service_secret(uint32_t service_id,
 bool KeyServer::get_service_secret(uint32_t service_id,
 		CryptoKey& secret, uint64_t& secret_id) const
 {
-  Mutex::Locker l(lock);
+  std::scoped_lock l{lock};
 
   return data.get_service_secret(cct, service_id, secret, secret_id);
 }
@@ -252,7 +252,7 @@ bool KeyServer::get_service_secret(uint32_t service_id,
 bool KeyServer::get_service_secret(uint32_t service_id,
 		uint64_t secret_id, CryptoKey& secret) const
 {
-  Mutex::Locker l(lock);
+  std::scoped_lock l{lock};
 
   return data.get_service_secret(cct, service_id, secret_id, secret);
 }
@@ -277,7 +277,7 @@ bool KeyServer::generate_secret(EntityName& name, CryptoKey& secret)
   if (!generate_secret(secret))
     return false;
 
-  Mutex::Locker l(lock);
+  std::scoped_lock l{lock};
 
   EntityAuth auth;
   auth.key = secret;
@@ -289,14 +289,14 @@ bool KeyServer::generate_secret(EntityName& name, CryptoKey& secret)
 
 bool KeyServer::contains(const EntityName& name) const
 {
-  Mutex::Locker l(lock);
+  std::scoped_lock l{lock};
 
   return data.contains(name);
 }
 
 int KeyServer::encode_secrets(Formatter *f, stringstream *ds) const
 {
-  Mutex::Locker l(lock);
+  std::scoped_lock l{lock};
   map<EntityName, EntityAuth>::const_iterator mapiter = data.secrets_begin();
 
   if (mapiter == data.secrets_end())
@@ -363,7 +363,7 @@ void KeyServer::encode_plaintext(bufferlist &bl)
 
 bool KeyServer::updated_rotating(bufferlist& rotating_bl, version_t& rotating_ver)
 {
-  Mutex::Locker l(lock);
+  std::scoped_lock l{lock};
 
   _check_rotating_secrets(); 
 
@@ -380,7 +380,7 @@ bool KeyServer::updated_rotating(bufferlist& rotating_bl, version_t& rotating_ve
 bool KeyServer::get_rotating_encrypted(const EntityName& name,
 	bufferlist& enc_bl) const
 {
-  Mutex::Locker l(lock);
+  std::scoped_lock l{lock};
 
   map<EntityName, EntityAuth>::const_iterator mapiter = data.find_name(name);
   if (mapiter == data.secrets_end())
@@ -413,7 +413,7 @@ bool KeyServer::_get_service_caps(const EntityName& name, uint32_t service_id,
 bool KeyServer::get_service_caps(const EntityName& name, uint32_t service_id,
 				 AuthCapsInfo& caps_info) const
 {
-  Mutex::Locker l(lock);
+  std::scoped_lock l{lock};
   return _get_service_caps(name, service_id, caps_info);
 }
 
@@ -444,7 +444,7 @@ int KeyServer::build_session_auth_info(uint32_t service_id, CephXServiceTicketIn
     return -EPERM;
   }
 
-  Mutex::Locker l(lock);
+  std::scoped_lock l{lock};
 
   return _build_session_auth_info(service_id, auth_ticket_info, info);
 }
@@ -455,7 +455,7 @@ int KeyServer::build_session_auth_info(uint32_t service_id, CephXServiceTicketIn
   info.service_secret = service_secret;
   info.secret_id = secret_id;
 
-  Mutex::Locker l(lock);
+  std::scoped_lock l{lock};
   return _build_session_auth_info(service_id, auth_ticket_info, info);
 }
 
