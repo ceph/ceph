@@ -40,6 +40,7 @@
 #include "events/EOpen.h"
 #include "events/ECommitted.h"
 
+#include "include/stringify.h"
 #include "include/filepath.h"
 #include "common/errno.h"
 #include "common/Timer.h"
@@ -259,6 +260,9 @@ void Server::dispatch(const Message::const_ref &m)
   case CEPH_MSG_CLIENT_REQUEST:
     handle_client_request(MClientRequest::msgref_cast(m));
     return;
+  case CEPH_MSG_CLIENT_RECLAIM:
+    handle_client_reclaim(MClientReclaim::msgref_cast(m));
+    return;
   case MSG_MDS_SLAVE_REQUEST:
     handle_slave_request(MMDSSlaveRequest::msgref_cast(m));
     return;
@@ -295,6 +299,132 @@ public:
   }
 };
 
+Session* Server::find_session_by_uuid(std::string_view uuid)
+{
+  Session* session = nullptr;
+  for (auto& it : mds->sessionmap.get_sessions()) {
+    auto& metadata = it.second->info.client_metadata;
+
+    auto p = metadata.find("uuid");
+    if (p == metadata.end() || p->second != uuid)
+      continue;
+
+    if (!session) {
+      session = it.second;
+    } else if (!session->reclaiming_from) {
+      assert(it.second->reclaiming_from == session);
+      session = it.second;
+    } else {
+      assert(session->reclaiming_from == it.second);
+    }
+  }
+  return session;
+}
+
+void Server::reclaim_session(Session *session, const MClientReclaim::const_ref &m)
+{
+  if (!session->is_open() && !session->is_stale()) {
+    dout(10) << "session not open, dropping this req" << dendl;
+    return;
+  }
+
+  auto reply = MClientReclaimReply::create(0);
+  if (m->get_uuid().empty()) {
+    dout(10) << __func__ << " invalid message (no uuid)" << dendl;
+    reply->set_result(-EINVAL);
+    mds->send_message_client(reply, session);
+    return;
+  }
+
+  unsigned flags = m->get_flags();
+  if (flags != CEPH_RECLAIM_RESET) { // currently only support reset
+    dout(10) << __func__ << " unsupported flags" << dendl;
+    reply->set_result(-EOPNOTSUPP);
+    mds->send_message_client(reply, session);
+    return;
+  }
+
+  Session* target = find_session_by_uuid(m->get_uuid());
+  if (target) {
+    assert(!target->reclaiming_from);
+    assert(!session->reclaiming_from);
+    session->reclaiming_from = target;
+    reply->set_addrs(entity_addrvec_t(target->info.inst.addr));
+  }
+
+  if (flags & CEPH_RECLAIM_RESET) {
+    finish_reclaim_session(session, reply);
+    return;
+  }
+
+  ceph_abort();
+}
+
+void Server::finish_reclaim_session(Session *session, const MClientReclaimReply::ref &reply)
+{
+  Session *target = session->reclaiming_from;
+  if (target) {
+    session->reclaiming_from = nullptr;
+
+    Context *send_reply;
+    if (reply) {
+      int64_t session_id = session->get_client().v;
+      send_reply = new FunctionContext([this, session_id, reply](int r) {
+	    assert(mds->mds_lock.is_locked_by_me());
+	    Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(session_id));
+	    if (!session) {
+	      reply->put();
+	      return;
+	    }
+	    auto epoch = mds->objecter->with_osdmap([](const OSDMap &map){ return map.get_epoch(); });
+	    reply->set_epoch(epoch);
+	    mds->send_message_client(reply, session);
+	  });
+    } else {
+      send_reply = nullptr;
+    }
+
+    bool blacklisted = mds->objecter->with_osdmap([target](const OSDMap &map) {
+	  return map.is_blacklisted(target->info.inst.addr);
+	});
+
+    if (blacklisted || !g_conf()->mds_session_blacklist_on_evict) {
+      kill_session(target, send_reply);
+    } else {
+      std::stringstream ss;
+      mds->evict_client(target->get_client().v, false, true, ss, send_reply);
+    }
+  } else if (reply) {
+    mds->send_message_client(reply, session);
+  }
+}
+
+void Server::handle_client_reclaim(const MClientReclaim::const_ref &m)
+{
+  Session *session = mds->get_session(m);
+  dout(3) << __func__ <<  " " << *m << " from " << m->get_source() << dendl;
+  assert(m->get_source().is_client()); // should _not_ come from an mds!
+
+  if (!session) {
+    dout(0) << " ignoring sessionless msg " << *m << dendl;
+    m->put();
+    return;
+  }
+
+  if (mds->get_state() < MDSMap::STATE_CLIENTREPLAY) {
+    mds->wait_for_replay(new C_MDS_RetryMessage(mds, m));
+    return;
+  }
+
+  if (m->get_flags() & MClientReclaim::FLAG_FINISH) {
+    finish_reclaim_session(session);
+  } else {
+    reclaim_session(session, m);
+  }
+  m->put();
+}
+
+/* This function DOES put the passed message before returning*/
 void Server::handle_client_session(const MClientSession::const_ref &m)
 {
   version_t pv;
@@ -410,6 +540,17 @@ void Server::handle_client_session(const MClientSession::const_ref &m)
 	  send_reject_message(ss.str());
 	  mds->clog->warn() << "client session with " << ss.str()
 			    << " denied (" << session->info.inst << ")";
+	  session->clear();
+	  break;
+	}
+      }
+
+      it = client_metadata.find("uuid");
+      if (it != client_metadata.end()) {
+	if (find_session_by_uuid(it->second)) {
+	  send_reject_message("duplicated session uuid");
+	  mds->clog->warn() << "client session with duplicated session uuid '"
+			    << it->second << "' denied (" << session->info.inst << ")";
 	  session->clear();
 	  break;
 	}
@@ -871,12 +1012,15 @@ void Server::kill_session(Session *session, Context *on_safe)
     journal_close_session(session, Session::STATE_KILLING, on_safe);
   } else {
     dout(10) << "kill_session importing or already closing/killing " << session << dendl;
-    ceph_assert(session->is_closing() || 
-	   session->is_closed() || 
-	   session->is_killing() ||
-	   session->is_importing());
-    if (on_safe) {
-      on_safe->complete(0);
+    if (session->is_closing() ||
+	session->is_killing()) {
+      if (on_safe)
+	mdlog->wait_for_safe(new MDSInternalContextWrapper(mds, on_safe));
+    } else {
+      ceph_assert(session->is_closed() ||
+		  session->is_importing());
+      if (on_safe)
+	on_safe->complete(0);
     }
   }
 }

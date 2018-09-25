@@ -114,6 +114,8 @@
 #include "messages/MClientRequest.h"
 #include "messages/MClientRequestForward.h"
 #include "messages/MClientReply.h"
+#include "messages/MClientReclaim.h"
+#include "messages/MClientReclaimReply.h"
 #include "messages/MClientCaps.h"
 #include "messages/MClientCapRelease.h"
 #include "messages/MClientLease.h"
@@ -616,6 +618,12 @@ Message *decode_message(CephContext *cct, int crcflags,
     break;
   case CEPH_MSG_CLIENT_REPLY:
     m = MClientReply::create();
+    break;
+  case CEPH_MSG_CLIENT_RECLAIM:
+    m = MClientReclaim::create();
+    break;
+  case CEPH_MSG_CLIENT_RECLAIM_REPLY:
+    m = MClientReclaimReply::create();
     break;
   case CEPH_MSG_CLIENT_CAPS:
     m = MClientCaps::create();
