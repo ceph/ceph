@@ -73,51 +73,48 @@
   - mgrs
   gather_facts: false
   become: True
+  any_errors_fatal: true
   roles:
     - role: ceph-defaults
       tags: ['ceph_update_config']
     - role: ceph-common
-    - role: ceph-config
-      tags: ['ceph_update_config']
-
-- hosts: mons
-  gather_facts: false
-  become: True
-  roles:
-    - role: ceph-defaults
-    - role: ceph-common
-    - role: ceph-mon
-
-- hosts: mgrs
-  gather_facts: false
-  become: True
-  roles:
-    - role: ceph-defaults
-    - role: ceph-common
-    - role: ceph-mgr
-
-- hosts: osds
-  gather_facts: false
-  become: True
   tasks:
     - name: rsync ceph-volume to test nodes on centos
       synchronize:
         src: "{{ toxinidir}}/../../../../ceph_volume"
         dest: "/usr/lib/python2.7/site-packages"
         use_ssh_args: true
-      when: ansible_os_family == "RedHat"
+      when:
+        - ansible_os_family == "RedHat"
+        - inventory_hostname in groups.get(osd_group_name, [])
 
     - name: rsync ceph-volume to test nodes on ubuntu
       synchronize:
         src: "{{ toxinidir}}/../../../../ceph_volume"
         dest: "/usr/lib/python2.7/dist-packages"
         use_ssh_args: true
-      when: ansible_os_family == "Debian"
+      when:
+        - ansible_os_family == "Debian"
+        - inventory_hostname in groups.get(osd_group_name, [])
 
-- hosts: osds
-  gather_facts: false
-  become: True
-  roles:
-    - role: ceph-defaults
-    - role: ceph-common
-    - role: ceph-osd
+    - name: run ceph-config role
+      import_role:
+        name: ceph-config
+
+    - name: run ceph-mon role
+      import_role:
+        name: ceph-mon
+      when:
+        - inventory_hostname in groups.get(mon_group_name, [])
+
+    - name: run ceph-mgr role
+      import_role:
+        name: ceph-mgr
+      when:
+        - inventory_hostname in groups.get(mgr_group_name, [])
+
+    - name: run ceph-osd role
+      import_role:
+        name: ceph-osd
+      when:
+        - inventory_hostname in groups.get(osd_group_name, [])
