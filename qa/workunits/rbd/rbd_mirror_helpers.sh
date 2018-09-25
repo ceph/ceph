@@ -920,7 +920,9 @@ compare_image_snapshots()
     local loc_export=${TEMPDIR}/${CLUSTER1}-${pool}-${image}.export
 
     for snap_name in $(rbd --cluster ${CLUSTER1} -p ${pool} --format xml \
-                           snap list ${image} | $XMLSTARLET sel -t -v "//snapshot/name"); do
+                           snap list ${image} | \
+                           $XMLSTARLET sel -t -v "//snapshot/name" | \
+                           grep -E -v "^\.rbd-mirror\."); do
         rm -f ${rmt_export} ${loc_export}
         rbd --cluster ${CLUSTER2} -p ${pool} export ${image}@${snap_name} - | xxd > ${rmt_export}
         rbd --cluster ${CLUSTER1} -p ${pool} export ${image}@${snap_name} - | xxd > ${loc_export}
