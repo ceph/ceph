@@ -15,6 +15,7 @@
 #ifndef _SLAB_CONTAINERS_H
 #define _SLAB_CONTAINERS_H
 
+#include <boost/intrusive/list.hpp>
 #include <include/mempool.h>
 
 namespace mempool {
@@ -94,6 +95,121 @@ a step by step examination of how these statistics work.
 
 
 */
+
+template<pool_index_t pool_ix,
+	 typename T,
+	 std::size_t StackSlabSizeV,
+	 std::size_t HeapSlabSizeV>
+class slab_allocator2 : public pool_slab_allocator<pool_ix,T> {
+  struct heap_slab_t;
+  struct heap_slot_t {
+    heap_slab_t* owner;
+    std::aligned_storage_t<sizeof(T), alignof(T)> storage;
+  };
+
+  struct heap_slab_t : public boost::intrusive::list_base_hook<> {
+    // XXX: control data could be put at the end of struct if we want
+    // to take care about types of extended alignment
+    ceph::math::bitset<HeapSlabSizeV> free_map;
+    std::array<heap_slot_t, HeapSlabSizeV> slots;
+  };
+
+  using stack_slot_t = std::aligned_storage_t<sizeof(T), alignof(T)>;
+
+  struct stack_slab_t {
+    ceph::math::bitset<StackSlabSizeV> free_map;
+    std::array<stack_slot_t, StackSlabSizeV> storage;
+  };
+
+  // The pointer-to-tail of doubly linked list is useless for us
+  // but we really need the ability to do O(1) list management
+  // being given only the pointer slab.
+  boost::intrusive::list<heap_slab_t,
+    boost::intrusive::constant_time_size<false>> heap_free_list;
+  stack_slab_t stack_slab;
+
+  T* allocate_dynamic() {
+    if (heap_free_list.empty()) {
+      auto& slab = *new heap_slab_t;
+      slab.free_map.set_first(HeapSlabSizeV);
+      heap_free_list.push_front(slab);
+    }
+
+    auto& slab = heap_free_list.front();
+    const std::size_t idx = slab.free_map.find_first_set();
+    slab.free_map.reset(idx);
+    slab.slots[idx].owner = &slab;
+
+    if (slab.free_map.none()) {
+      heap_free_list.erase(heap_free_list.iterator_to(slab));
+    }
+
+    return reinterpret_cast<T*>(&slab.slots[idx].storage);
+  }
+
+  void deallocate_dynamic(T* const p) {
+    auto* slot = reinterpret_cast<heap_slot_t*>((char *)p - sizeof(heap_slab_t*));
+    heap_slab_t& slab = *(slot->owner);
+
+    const bool was_empty = slab.free_map.none();
+    const std::size_t idx = slot - &slab.slots[0];
+    slab.free_map.set(idx);
+
+    if (was_empty) {
+      heap_free_list.push_front(slab);
+    }
+    if (slab.free_map.all_first_set(HeapSlabSizeV)) {
+      heap_free_list.erase(heap_free_list.iterator_to(slab));
+      delete &slab;
+    }
+  }
+
+public:
+  typedef slab_allocator2<pool_ix, T, StackSlabSizeV, HeapSlabSizeV> allocator_type;
+
+  template<typename U> struct rebind {
+    typedef slab_allocator2<pool_ix, U, StackSlabSizeV, HeapSlabSizeV> other;
+  };
+
+  slab_allocator2() {
+    stack_slab.free_map.set_first(StackSlabSizeV);
+  }
+
+  ~slab_allocator2() {
+    // If you fail here, it's because you've allowed a node to escape
+    // the enclosing object. Something like a swap or a splice operation.
+    // Probably the slab_xxx container is missing a "using" that serves
+    // to hide some operation.
+    ceph_assert(heap_free_list.empty());
+  }
+
+  T* allocate(const size_t cnt, void* const p = nullptr) {
+    if (stack_slab.free_map.any()) {
+      const std::size_t idx = stack_slab.free_map.find_first_set();
+      stack_slab.free_map.reset(idx);
+      return reinterpret_cast<T*>(&stack_slab.storage[idx]);
+    } else {
+      return allocate_dynamic();
+    }
+  }
+
+  void deallocate(T* p, size_t s) {
+    const std::uintptr_t maybe_stackstlot_idx = \
+      reinterpret_cast<stack_slot_t*>(p) - &stack_slab.storage[0];
+    if (maybe_stackstlot_idx < StackSlabSizeV) {
+      stack_slab.free_map.set(maybe_stackstlot_idx);
+    } else {
+      deallocate_dynamic(p);
+    }
+  }
+
+private:
+   // Can't copy or assign this guy
+   slab_allocator2(slab_allocator2&) = delete;
+   slab_allocator2(slab_allocator2&&) = delete;
+   void operator=(const slab_allocator2&) = delete;
+   void operator=(const slab_allocator2&&) = delete;
+};
 
 //
 // fast slab allocator
@@ -380,7 +496,7 @@ template<
    typename node,
    size_t   stackCount, 
    size_t   heapCount>
-struct slab_list : public std::list<node,slab_allocator<pool_ix,node,stackCount,heapCount> > {
+struct slab_list : public std::list<node,slab_allocator2<pool_ix,node,stackCount,heapCount> > {
 
    //
    // copy and assignment
@@ -389,8 +505,8 @@ struct slab_list : public std::list<node,slab_allocator<pool_ix,node,stackCount,
    slab_list(const slab_list& o) { copy(o); }; // copy
    slab_list& operator=(const slab_list& o) { copy(o); return *this; }
 
-   typedef typename std::list<node,slab_allocator<pool_ix,node,stackCount,heapCount>>::iterator it;
-   typedef typename std::list<node,slab_allocator<pool_ix,node,stackCount,heapCount> > base;
+   typedef typename std::list<node,slab_allocator2<pool_ix,node,stackCount,heapCount>>::iterator it;
+   typedef typename std::list<node,slab_allocator2<pool_ix,node,stackCount,heapCount> > base;
    //
    // We support splice, but it requires actually copying each node, so it's O(N) not O(1)
    //
