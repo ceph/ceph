@@ -26,6 +26,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/ceph_strings.cc
   ${PROJECT_SOURCE_DIR}/src/common/cmdparse.cc
   ${PROJECT_SOURCE_DIR}/src/common/common_init.cc
+  ${PROJECT_SOURCE_DIR}/src/common/compat.cc
   ${PROJECT_SOURCE_DIR}/src/common/code_environment.cc
   ${PROJECT_SOURCE_DIR}/src/common/config.cc
   ${PROJECT_SOURCE_DIR}/src/common/config_values.cc
@@ -48,7 +49,6 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/perf_counters.cc
   ${PROJECT_SOURCE_DIR}/src/common/perf_histogram.cc
   ${PROJECT_SOURCE_DIR}/src/common/page.cc
-  ${PROJECT_SOURCE_DIR}/src/common/pipe.c
   ${PROJECT_SOURCE_DIR}/src/common/snap_types.cc
   ${PROJECT_SOURCE_DIR}/src/common/safe_io.c
   ${PROJECT_SOURCE_DIR}/src/common/signal.cc

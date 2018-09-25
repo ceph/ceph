@@ -178,7 +178,6 @@ int RDMAConnectedSocketImpl::try_connect(const entity_addr_t& peer_addr, const S
   if (tcp_fd < 0) {
     return -errno;
   }
-  net.set_close_on_exec(tcp_fd);
 
   int r = net.set_socket_options(tcp_fd, opts.nodelay, opts.rcbuf_size);
   if (r < 0) {

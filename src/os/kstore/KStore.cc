@@ -693,7 +693,7 @@ void KStore::_shutdown_logger()
 int KStore::_open_path()
 {
   ceph_assert(path_fd < 0);
-  path_fd = ::open(path.c_str(), O_DIRECTORY);
+  path_fd = ::open(path.c_str(), O_DIRECTORY|O_CLOEXEC);
   if (path_fd < 0) {
     int r = -errno;
     derr << __func__ << " unable to open " << path << ": " << cpp_strerror(r)

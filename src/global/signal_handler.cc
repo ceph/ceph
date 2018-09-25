@@ -189,7 +189,7 @@ static void handle_fatal_signal(int signum)
     if (r >= 0) {
       char fn[PATH_MAX*2];
       snprintf(fn, sizeof(fn)-1, "%s/meta", base);
-      int fd = ::open(fn, O_CREAT|O_WRONLY, 0600);
+      int fd = ::open(fn, O_CREAT|O_WRONLY|O_CLOEXEC, 0600);
       if (fd >= 0) {
 	JSONFormatter jf(true);
 	jf.open_object_section("crash");
@@ -209,7 +209,7 @@ static void handle_fatal_signal(int signum)
 	}
 #if defined(__linux__)
 	// os-release
-	int in = ::open("/etc/os-release", O_RDONLY);
+	int in = ::open("/etc/os-release", O_RDONLY|O_CLOEXEC);
 	if (in >= 0) {
 	  char buf[4096];
 	  r = safe_read(in, buf, sizeof(buf)-1);
@@ -406,7 +406,7 @@ struct SignalHandler : public Thread {
     : stop(false), lock("SignalHandler::lock")
   {
     // create signal pipe
-    int r = pipe(pipefd);
+    int r = pipe_cloexec(pipefd);
     ceph_assert(r == 0);
     r = fcntl(pipefd[0], F_SETFL, O_NONBLOCK);
     ceph_assert(r == 0);
@@ -543,7 +543,7 @@ void SignalHandler::register_handler(int signum, signal_handler_t handler, bool 
 
   safe_handler *h = new safe_handler;
 
-  r = pipe(h->pipefd);
+  r = pipe_cloexec(h->pipefd);
   ceph_assert(r == 0);
   r = fcntl(h->pipefd[0], F_SETFL, O_NONBLOCK);
   ceph_assert(r == 0);
