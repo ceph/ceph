@@ -2704,13 +2704,13 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       const string & oid = *iter;
       if (use_striper) {
 	if (forcefull) {
-	  ret = striper.remove(oid, CEPH_OSD_FLAG_FULL_FORCE);
+	  ret = striper.remove(oid, (CEPH_OSD_FLAG_FULL_FORCE | CEPH_OSD_FLAG_FULL_TRY));
 	} else {
 	  ret = striper.remove(oid);
 	}
       } else {
 	if (forcefull) {
-	  ret = io_ctx.remove(oid, CEPH_OSD_FLAG_FULL_FORCE);
+	  ret = io_ctx.remove(oid, (CEPH_OSD_FLAG_FULL_FORCE | CEPH_OSD_FLAG_FULL_TRY));
 	} else {
 	  ret = io_ctx.remove(oid);
 	}
