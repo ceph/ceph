@@ -22,6 +22,7 @@
 
 namespace rgw::dmclock {
   class optional_scheduler_ctx;
+  class SyncScheduler;
 }
 
 class RGWFrontendConfig {
