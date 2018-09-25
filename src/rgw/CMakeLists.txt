@@ -66,6 +66,8 @@ set(librgw_common_srcs
   rgw_dencoder.cc
   rgw_dmclock.cc
   rgw_dmclock_scheduler.cc
+  rgw_dmclock_sync_scheduler.cc
+  rgw_dmclock_async_scheduler.cc
   rgw_env.cc
   rgw_es_query.cc
   rgw_formats.cc
