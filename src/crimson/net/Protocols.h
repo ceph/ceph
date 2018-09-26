@@ -35,22 +35,21 @@ class NoneProtocol : public Protocol
 
   const state_t& state() const override { return my_state; }
 
-  seastar::future<bool> send(MessageRef msg) override {
+  seastar::future<seastar::stop_iteration>
+  send(MessageRef msg) override {
     /// none-state connection should not be registered.
     ceph_assert(false);
-    return seastar::make_ready_future<bool>(false);
   }
 
-  seastar::future<bool> keepalive() override {
+  seastar::future<seastar::stop_iteration>
+  keepalive() override {
     /// none-state connection should not be registered.
     ceph_assert(false);
-    return seastar::make_ready_future<bool>(false);
   }
 
   bool replace(const Protocol *newp) override {
     /// none-state connection should not be registered.
     ceph_assert(false);
-    return false;
   }
 
   void start_accept();
@@ -90,22 +89,19 @@ class AcceptProtocol : public Protocol
 
   const state_t& state() const override { return my_state; }
 
-  seastar::future<bool> send(MessageRef msg) override {
+  seastar::future<seastar::stop_iteration> send(MessageRef msg) override {
     /// accepting connection should not be registered.
     ceph_assert(false);
-    return seastar::make_ready_future<bool>(false);
   }
 
-  seastar::future<bool> keepalive() override {
+  seastar::future<seastar::stop_iteration> keepalive() override {
     /// accepting connection should not be registered.
     ceph_assert(false);
-    return seastar::make_ready_future<bool>(false);
   }
 
   bool replace(const Protocol *newp) override {
     /// accepting connection should not be registered.
     ceph_assert(false);
-    return false;
   }
 };
 
@@ -130,12 +126,18 @@ class ConnectProtocol : public Protocol
 
   const state_t& state() const override { return my_state; }
 
-  seastar::future<bool> send(MessageRef msg) override {
-    return wait().then([] { return false; });
+  seastar::future<seastar::stop_iteration> send(MessageRef msg) override {
+    return wait().then([] {
+        return seastar::make_ready_future<seastar::stop_iteration>(
+            seastar::stop_iteration::no);
+      });
   }
 
-  seastar::future<bool> keepalive() override {
-    return wait().then([] { return false; });
+  seastar::future<seastar::stop_iteration> keepalive() override {
+    return wait().then([] {
+        return seastar::make_ready_future<seastar::stop_iteration>(
+            seastar::stop_iteration::no);
+      });
   }
 
   bool replace(const Protocol *newp) override;
@@ -190,9 +192,9 @@ class OpenProtocol : public Protocol
 
   const state_t& state() const override { return my_state; }
 
-  seastar::future<bool> send(MessageRef msg) override;
+  seastar::future<seastar::stop_iteration> send(MessageRef msg) override;
 
-  seastar::future<bool> keepalive() override;
+  seastar::future<seastar::stop_iteration> keepalive() override;
 
   bool replace(const Protocol *newp) override;
 };
@@ -212,18 +214,19 @@ class CloseProtocol : public Protocol
 
   const state_t& state() const override { return my_state; }
 
-  seastar::future<bool> send(MessageRef msg) override {
-    return seastar::make_ready_future<bool>(true);
+  seastar::future<seastar::stop_iteration> send(MessageRef msg) override {
+    return seastar::make_ready_future<seastar::stop_iteration>(
+        seastar::stop_iteration::yes);
   }
 
-  seastar::future<bool> keepalive() override {
-    return seastar::make_ready_future<bool>(true);
+  seastar::future<seastar::stop_iteration> keepalive() override {
+    return seastar::make_ready_future<seastar::stop_iteration>(
+        seastar::stop_iteration::yes);
   }
 
   bool replace(const Protocol *newp) override {
     /// closed connection should be already unregistered.
     ceph_assert(false);
-    return false;
   }
 };
 

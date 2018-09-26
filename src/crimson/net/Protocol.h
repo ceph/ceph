@@ -18,6 +18,7 @@
 
 #include "Fwd.h"
 #include "Session.h"
+#include "Messenger.h"
 
 #include <seastar/core/shared_future.hh>
 
@@ -46,13 +47,35 @@ class Protocol
   Messenger *const messenger;
 
   /// trigger state transition to the next state
-  Protocol *const execute_next(state_t state) {
+  Protocol *const execute_next(state_t state, bool gated=true) {
     ceph_assert(this == s->protocol);
     int index = static_cast<int>(state);
     Protocol *const &p = protocols[index];
     ceph_assert(p->state()==state);
-    p->execute();
+    p->execute(gated);
     return p;
+  }
+
+  /// execute protocol logic of the current state
+  void execute(bool gated) {
+    ceph_assert(this != s->protocol);
+    s->protocol = this;
+    if (gated) {
+      seastar::with_gate(s->dispatch_gate, [this] {
+          execute_ready = do_execute()
+            .handle_exception([this] (std::exception_ptr eptr) {
+                // we should not leak exceptions in do_execute()
+                ceph_assert(false);
+              });
+          return wait();
+        });
+    } else {
+      execute_ready = do_execute()
+        .handle_exception([this] (std::exception_ptr eptr) {
+            // we should not leak exceptions in do_execute()
+            ceph_assert(false);
+          });
+    }
   }
 
   /// do execute protocol logic, no exception allowed
@@ -69,28 +92,33 @@ class Protocol
 
   virtual const state_t& state() const = 0;
   /// try send message
-  virtual seastar::future<bool> send(MessageRef msg) = 0;
+  virtual seastar::future<seastar::stop_iteration> send(MessageRef msg) = 0;
   /// try send keepalive
-  virtual seastar::future<bool> keepalive() = 0;
+  virtual seastar::future<seastar::stop_iteration> keepalive() = 0;
   /// try replaceing
   virtual bool replace(const Protocol *newp) = 0;
 
-  /// execute protocol logic of the current state
-  void execute() {
-    ceph_assert(this != s->protocol);
-    s->protocol = this;
-    seastar::with_gate(s->dispatch_gate, [this] {
-        execute_ready = do_execute()
-          .handle_exception([this] (std::exception_ptr eptr) {
-              // we should not leak exceptions in do_execute()
-              ceph_assert(false);
-            });
-        return wait();
-      });
-  }
   /// wait for execution
   seastar::future<> wait() {
     return execute_ready.get_future();
+  }
+
+  seastar::future<> close() {
+    // unregister_conn() drops a reference, so hold another until completion
+    auto cleanup = [conn = ConnectionRef(managed_conn)] {};
+    if (s->protocol->state() == state_t::accept) {
+      messenger->unaccept_conn(managed_conn);
+      execute_next(state_t::close, false);
+    } else if (s->protocol->state() >= state_t::connect &&
+             s->protocol->state() <= state_t::open) {
+      messenger->unregister_conn(managed_conn);
+      execute_next(state_t::close, false);
+    } else if (s->protocol->state() == state_t::close) {
+      //already closed
+    } else {
+      ceph_assert(false);
+    }
+    return s->protocol->wait().finally(std::move(cleanup));
   }
 };
 

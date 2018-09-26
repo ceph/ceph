@@ -56,10 +56,9 @@ seastar::future<> SocketMessenger::start(Dispatcher *disp)
             ConnectionRef conn = new SocketConnection(this, dispatcher,
                                                       get_myaddr(), peer_addr,
                                                       std::move(socket));
-            accept_conn(conn);
             // initiate the handshake
             // don't wait before accepting another, no throw
-            conn->protocol_accept();
+            conn->start_accept();
           });
       }).handle_exception_type([this] (const std::system_error& e) {
         // stop gracefully on connection_aborted
@@ -80,8 +79,7 @@ SocketMessenger::connect(const entity_addr_t& peer_addr, entity_type_t peer_type
   }
   ConnectionRef conn = new SocketConnection(this, dispatcher,
                                             get_myaddr(), peer_addr);
-  register_conn(conn);
-  conn->protocol_connect(peer_type, get_myname().type());
+  conn->start_connect(peer_type);
   return conn;
 }
 

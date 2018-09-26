@@ -38,19 +38,15 @@ class Connection : public boost::intrusive_ref_counter<Connection,
 
   virtual const entity_addr_t& get_my_addr() const = 0;
   virtual const entity_addr_t& get_peer_addr() const = 0;
-  virtual int get_peer_type() const = 0;
 
   /// true if the handshake has completed and no errors have been encountered
   virtual bool is_connected() = 0;
 
   /// complete a handshake from the client's perspective
-  virtual void protocol_connect(entity_type_t, entity_type_t) = 0;
+  virtual void start_connect(entity_type_t) = 0;
 
   /// complete a handshake from the server's perspective
-  virtual void protocol_accept() = 0;
-
-  /// read a message from a connection that has completed its handshake
-  virtual seastar::future<MessageRef> read_message() = 0;
+  virtual void start_accept() = 0;
 
   /// send a message over a connection that has completed its handshake
   virtual seastar::future<> send(MessageRef msg) = 0;

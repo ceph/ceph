@@ -190,8 +190,7 @@ AcceptProtocol::do_execute() {
       messenger->unaccept_conn(managed_conn);
       execute_next(state_t::open);
     }).handle_exception([this] (std::exception_ptr eptr) {
-      messenger->unaccept_conn(managed_conn);
-      execute_next(state_t::close);
+      close();
     });
 }
 
@@ -420,8 +419,7 @@ ConnectProtocol::do_execute() {
       execute_next(state_t::open);
     }).handle_exception([this] (std::exception_ptr eptr) {
       if (s->policy.lossy) {
-        messenger->unregister_conn(managed_conn);
-        execute_next(state_t::close);
+        close();
       } else {
         s->socket->close().then([this] {
             s->socket.reset();
@@ -642,8 +640,7 @@ OpenProtocol::read_tags_until_next_message()
         });
     }).handle_exception_type([this] (const std::system_error& e) {
       if (e.code() == error::read_eof) {
-        messenger->unregister_conn(managed_conn);
-        execute_next(state_t::close);
+        close();
       }
       throw e;
     }).then_wrapped([this] (auto fut) {
@@ -814,25 +811,29 @@ OpenProtocol::write_message(MessageRef msg)
     });
 }
 
-seastar::future<bool>
+seastar::future<seastar::stop_iteration>
 OpenProtocol::send(MessageRef msg) {
   return write_message(std::move(msg))
     .then([] {
-      return seastar::make_ready_future<bool>(true);
+      return seastar::make_ready_future<seastar::stop_iteration>(
+          seastar::stop_iteration::yes);
     }).handle_exception([] (std::exception_ptr eptr) {
-      return seastar::make_ready_future<bool>(false);
+      return seastar::make_ready_future<seastar::stop_iteration>(
+          seastar::stop_iteration::no);
     });
 }
 
-seastar::future<bool>
+seastar::future<seastar::stop_iteration>
 OpenProtocol::keepalive() {
   k.req.stamp = ceph::coarse_real_clock::to_ceph_timespec(
     ceph::coarse_real_clock::now());
   return s->socket->write_flush(make_static_packet(k.req))
     .then([] {
-      return seastar::make_ready_future<bool>(true);
+      return seastar::make_ready_future<seastar::stop_iteration>(
+          seastar::stop_iteration::yes);
     }).handle_exception([] (std::exception_ptr eptr) {
-      return seastar::make_ready_future<bool>(false);
+      return seastar::make_ready_future<seastar::stop_iteration>(
+          seastar::stop_iteration::no);
     });
 }
 
