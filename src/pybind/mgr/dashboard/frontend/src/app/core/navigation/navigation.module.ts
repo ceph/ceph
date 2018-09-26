@@ -11,6 +11,7 @@ import { AboutComponent } from './about/about.component';
 import { AdministrationComponent } from './administration/administration.component';
 import { BreadcrumbsComponent } from './breadcrumbs/breadcrumbs.component';
 import { DashboardHelpComponent } from './dashboard-help/dashboard-help.component';
+import { IdentityComponent } from './identity/identity.component';
 import { NavigationComponent } from './navigation/navigation.component';
 import { NotificationsComponent } from './notifications/notifications.component';
 import { TaskManagerComponent } from './task-manager/task-manager.component';
@@ -35,7 +36,8 @@ import { TaskManagerComponent } from './task-manager/task-manager.component';
     NotificationsComponent,
     TaskManagerComponent,
     DashboardHelpComponent,
-    AdministrationComponent
+    AdministrationComponent,
+    IdentityComponent
   ],
   exports: [NavigationComponent, BreadcrumbsComponent]
 })
