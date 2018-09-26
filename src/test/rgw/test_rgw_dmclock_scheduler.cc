@@ -14,7 +14,9 @@
 
 //#define BOOST_ASIO_ENABLE_HANDLER_TRACKING
 
-#include "rgw/rgw_dmclock_scheduler.h"
+#include "rgw/rgw_dmclock_sync_scheduler.h"
+#include "rgw/rgw_dmclock_async_scheduler.h"
+
 #include <optional>
 #include <boost/asio/spawn.hpp>
 #include <gtest/gtest.h>
