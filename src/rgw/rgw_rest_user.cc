@@ -866,11 +866,14 @@ void RGWOp_Quota_Set::execute()
         old_quota = &info.bucket_quota;
       }
 
-      int64_t old_max_size_kb = rgw_rounded_kb(old_quota->max_size);
-      int64_t max_size_kb;
       RESTArgs::get_int64(s, "max-objects", old_quota->max_objects, &quota.max_objects);
-      RESTArgs::get_int64(s, "max-size-kb", old_max_size_kb, &max_size_kb);
-      quota.max_size = max_size_kb * 1024;
+      RESTArgs::get_int64(s, "max-size", old_quota->max_size, &quota.max_size);
+      int64_t max_size_kb;
+      bool has_max_size_kb = false;
+      RESTArgs::get_int64(s, "max-size-kb", 0, &max_size_kb, &has_max_size_kb);
+      if (has_max_size_kb) {
+        quota.max_size = max_size_kb * 1024;
+      }
       RESTArgs::get_bool(s, "enabled", old_quota->enabled, &quota.enabled);
     }
 
