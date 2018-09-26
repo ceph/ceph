@@ -41,17 +41,25 @@ void RGWProcess::RGWWQ::_dump_queue()
 
 auto schedule_request(Scheduler *scheduler, req_state *s, RGWOp *op)
 {
+  using rgw::dmclock::SchedulerCompleter;
   if (!scheduler)
-    return 0;
+    return std::make_pair(0,SchedulerCompleter{});
 
   const auto client = op->dmclock_client();
   const auto cost = op->dmclock_cost();
   ldpp_dout(op,10) << "scheduling with dmclock client=" << static_cast<int>(client)
 		   << " cost=" << cost << dendl;
-  return scheduler->schedule_request(client, {},
-				     req_state::Clock::to_double(s->time),
-				     cost,
-				     s->yield);
+  int r = scheduler->schedule_request(client, {},
+				      req_state::Clock::to_double(s->time),
+				      cost,
+				      s->yield);
+  if (r < 0){
+    if (r == -EAGAIN)
+      r = -ERR_RATE_LIMITED;
+    ldpp_dout(op,0) << "Scheduling request failed with " << r << dendl;
+  }
+  std::pair ret(std::move(r),SchedulerCompleter{scheduler});
+  return ret;
 }
 
 
@@ -190,11 +198,7 @@ int process_request(RGWRados* const store,
                                                auth_registry,
                                                frontend_prefix,
                                                client_io, &mgr, &init_error);
-  struct scheduler_completer {
-    rgw::dmclock::Scheduler *sched;
-    ~scheduler_completer() { if (sched) sched->request_complete(); }
-  } sg;
-
+  rgw::dmclock::SchedulerCompleter c;
   if (init_error != 0) {
     abort_early(s, nullptr, init_error, nullptr);
     goto done;
@@ -209,16 +213,10 @@ int process_request(RGWRados* const store,
     abort_early(s, NULL, -ERR_METHOD_NOT_ALLOWED, handler);
     goto done;
   }
-  ret = schedule_request(scheduler, s, op);
+  std::tie(ret,c) = schedule_request(scheduler, s, op);
   if (ret < 0) {
-    if (ret == -EAGAIN)
-      ret = -ERR_RATE_LIMITED;
-    ldpp_dout(s,0) << "Scheduling request failed with " << ret << dendl;
     abort_early(s, op, ret, handler);
   }
-
-  sg.sched = scheduler;
-
   req->op = op;
   dout(10) << "op=" << typeid(*op).name() << dendl;
 
