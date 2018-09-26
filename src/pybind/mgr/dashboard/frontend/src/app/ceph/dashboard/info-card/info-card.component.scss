@@ -27,14 +27,25 @@ $logs-text-font-size: 10px;
 
 .card-body {
   font-size: 1.25vw;
-  padding: 0 0 20px;
   text-align: center;
-  padding-top: 2%;
-  padding-bottom: 2%;
 }
 
 .card-link {
   cursor: pointer;
+}
+
+.content-row2 {
+  position: relative;
+  top: -1vw;
+  margin-bottom: -1.5vw;
+  font-size: 1.15vw;
+}
+
+.content-row3 {
+  position: relative;
+  top: -1.5vw;
+  margin-bottom: -1.5vw;
+  font-size: 1vw;
 }
 
 .content-highlight {
@@ -43,8 +54,6 @@ $logs-text-font-size: 10px;
 
 .content-medium {
   font-size: 1.7vw;
-  padding-top: 0;
-  padding-bottom: 0;
 }
 
 .card-medium {
@@ -159,6 +168,12 @@ $logs-text-font-size: 10px;
 
   .card-medium .card-chart {
     margin-top: 3%;
+  }
+}
+
+@media (min-width: 992px) and (max-width: 1199px) {
+  .content-row3 {
+    top: -0.3vw;
   }
 }
 
