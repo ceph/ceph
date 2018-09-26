@@ -99,6 +99,9 @@ public:
     sessionmap->_load_finish(r, header_r, values_r, first, header_bl, session_vals,
       more_session_vals);
   }
+  void print(ostream& out) const override {
+    out << "session_load";
+  }
 };
 }
 
@@ -279,6 +282,9 @@ public:
   void finish(int r) override {
     sessionmap->_load_legacy_finish(r, bl);
   }
+  void print(ostream& out) const override {
+    out << "session_load_legacy";
+  }
 };
 }
 
@@ -345,6 +351,9 @@ public:
     } else {
       sessionmap->_save_finish(version);
     }
+  }
+  void print(ostream& out) const override {
+    out << "session_save";
   }
 };
 }
@@ -690,6 +699,9 @@ public:
       on_safe->complete(r);
     }
   }
+  void print(ostream& out) const override {
+    out << "session_save_one";
+  }
 };
 }
 
@@ -770,8 +782,8 @@ void SessionMap::save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
       object_locator_t oloc(mds->mdsmap->get_metadata_pool());
       MDSInternalContextBase *on_safe = gather_bld->new_sub();
       mds->objecter->mutate(oid, oloc, op, snapc,
-			    ceph::real_clock::now(),
-			    0, new C_OnFinisher(
+			    ceph::real_clock::now(), 0,
+			    new C_OnFinisher(
 			      new C_IO_SM_Save_One(this, on_safe),
 			      mds->finisher));
     }

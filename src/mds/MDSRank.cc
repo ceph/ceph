@@ -1243,6 +1243,9 @@ public:
   void finish(int r) override {
     mds->_standby_replay_restart_finish(r, old_read_pos);
   }
+  void print(ostream& out) const override {
+    out << "standby_replay_restart";
+  }
 };
 
 void MDSRank::_standby_replay_restart_finish(int r, uint64_t old_read_pos)
