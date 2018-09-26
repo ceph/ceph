@@ -17,6 +17,7 @@
 
 #include <cstddef>
 #include <map>
+#include <memory>
 #include <unordered_map>
 #include <set>
 #include <vector>
@@ -276,86 +277,57 @@ public:
 void dump(ceph::Formatter *f);
 
 
-// STL allocator for use with containers.  All actual state
-// is stored in the static pool_allocator_base_t, which saves us from
-// passing the allocator to container constructors.
-
-template<pool_index_t pool_ix, typename T>
-class pool_allocator {
-  pool_t *pool;
-  type_t *type = nullptr;
+// Compile-time decorator over STL allocators to tie them with mempool.
+template<pool_index_t pool_ix,
+	 class T,
+	 template <typename, size_t...> class Alloc = std::allocator,
+	 size_t... AllocArgs>
+class pool_allocator : public Alloc<T, AllocArgs...> {
+  typedef std::allocator_traits<Alloc<T, AllocArgs...>> alloc_traits;
+  pool_t* pool;
+  type_t* type;
 
 public:
-  typedef pool_allocator<pool_ix, T> allocator_type;
   typedef T value_type;
-  typedef value_type *pointer;
-  typedef const value_type * const_pointer;
-  typedef value_type& reference;
-  typedef const value_type& const_reference;
-  typedef std::size_t size_type;
-  typedef std::ptrdiff_t difference_type;
 
   template<typename U> struct rebind {
-    typedef pool_allocator<pool_ix,U> other;
+    typedef pool_allocator<pool_ix, U, Alloc, AllocArgs...> other;
   };
 
-  void init(bool force_register) {
-    pool = &get_pool(pool_ix);
-    if (debug_mode || force_register) {
-      type = pool->get_type(typeid(T), sizeof(T));
-    }
+  pool_allocator(bool force_register=false)
+    : pool(&get_pool(pool_ix)),
+      type(debug_mode || force_register ? pool->get_type(typeid(T), sizeof(T))
+					: nullptr) {
   }
 
-  pool_allocator(bool force_register=false) {
-    init(force_register);
-  }
   template<typename U>
-  pool_allocator(const pool_allocator<pool_ix,U>&) {
-    init(false);
+  pool_allocator(const pool_allocator<pool_ix, U, Alloc, AllocArgs...>&)
+    : pool(&get_pool(pool_ix)),
+      type(debug_mode ? pool->get_type(typeid(T), sizeof(T)) : nullptr) {
   }
 
-  T* allocate(size_t n, void *p = nullptr) {
-    size_t total = sizeof(T) * n;
-    shard_t *shard = pool->pick_a_shard();
-    shard->bytes += total;
+  typename alloc_traits::pointer allocate(typename alloc_traits::size_type n) {
+    shard_t* const shard = pool->pick_a_shard();
+    shard->bytes += sizeof(value_type) * n;
     shard->items += n;
     if (type) {
       type->items += n;
     }
-    T* r = reinterpret_cast<T*>(new char[total]);
-    return r;
+    return alloc_traits::allocate(*this, n);
   }
 
-  void deallocate(T* p, size_t n) {
-    size_t total = sizeof(T) * n;
-    shard_t *shard = pool->pick_a_shard();
-    shard->bytes -= total;
+  void deallocate(const typename alloc_traits::pointer p,
+		  const typename alloc_traits::size_type n) {
+    shard_t* const shard = pool->pick_a_shard();
+    shard->bytes -= sizeof(value_type) * n;
     shard->items -= n;
     if (type) {
       type->items -= n;
     }
-    delete[] reinterpret_cast<char*>(p);
+    alloc_traits::deallocate(*this, p, n);
   }
 
-  void destroy(T* p) {
-    p->~T();
-  }
-
-  template<class U>
-  void destroy(U *p) {
-    p->~U();
-  }
-
-  void construct(T* p, const T& val) {
-    ::new ((void *)p) T(val);
-  }
-
-  template<class U, class... Args> void construct(U* p,Args&&... args) {
-    ::new((void *)p) U(std::forward<Args>(args)...);
-  }
-
-  bool operator==(const pool_allocator&) const { return true; }
-  bool operator!=(const pool_allocator&) const { return false; }
+  // This decorator doesn't change behaviour of operator==.
 };
 
 
