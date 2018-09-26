@@ -239,7 +239,7 @@ void ProtocolV1::send_message(Message *m) {
       (can_write == WriteStatus::NOWRITE || connection->get_features() != f)) {
     // ensure the correctness of message encoding
     bl.clear();
-    m->get_payload().clear();
+    m->clear_payload();
     ldout(cct, 5) << __func__ << " clear encoded buffer previous " << f
                   << " != " << connection->get_features() << dendl;
   }
