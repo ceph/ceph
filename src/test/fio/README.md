@@ -78,3 +78,17 @@ this README.
 To run:
 
     ./fio /path/to/job.fio
+
+RADOS
+-----
+
+By default FIO can be compiled with support for RADOS.
+When ceph is installed in your system default compilation of FIO includes RADOS ioengine.
+If you installed ceph in any other place (cmake -DCMAKE_INSTALL_PREFIX=${CEPH_INSTALL_ROOT} ..) you can build FIO following way:
+
+    LIBS="-lrados -ltcmalloc" LDFLAGS="-L${CEPH_INSTALL_ROOT}/lib" EXTFLAGS="-I${CEPH_INSTALL_ROOT}/include" \
+    rados=yes ./configure
+    LIBS="-lrados -ltcmalloc" LDFLAGS="-L${CEPH_INSTALL_ROOT}/lib" EXTFLAGS="-I${CEPH_INSTALL_ROOT}/include" \
+    rados=yes make
+
+"-ltcmalloc" is necessary if ceph was compiled with tcmalloc.
