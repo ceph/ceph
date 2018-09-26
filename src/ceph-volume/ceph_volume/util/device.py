@@ -11,6 +11,7 @@ class Device(object):
         # LVs can have a vg/lv path, while disks will have /dev/sda
         self.abspath = path
         self.lv_api = None
+        self.vg_name = None
         self.pvs_api = []
         self.disk_api = {}
         self.blkid_api = {}
@@ -25,6 +26,7 @@ class Device(object):
         if lv:
             self.lv_api = lv
             self.abspath = lv.lv_path
+            self.vg_name = lv.vg_name
         else:
             dev = disk.lsblk(self.path)
             self.blkid_api = disk.blkid(self.path)
@@ -61,6 +63,8 @@ class Device(object):
                 return self._is_lvm_member
             has_vgs = [pv.vg_name for pv in pvs if pv.vg_name]
             if has_vgs:
+                # a pv can only be in one vg, so this should be safe
+                self.vg_name = has_vgs[0]
                 self._is_lvm_member = True
                 self.pvs_api = pvs
             else:
