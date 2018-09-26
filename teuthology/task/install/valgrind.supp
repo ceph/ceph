@@ -533,3 +533,14 @@
   fun:rte_log_init
   fun:__libc_csu_init
 }
+
+{
+  Boost.Thread fails to call tls_destructor() when the thread exists
+  Memcheck:Leak
+  match-leak-kinds: reachable
+  ...
+  fun:*boost*detail*make_external_thread_data*
+  fun:*boost*detail*add_new_tss_node*
+  fun:*boost*detail*set_tss_data*
+  ...
+}
