@@ -57,17 +57,19 @@ public:
   template <typename T, void(T::*MF)(int) = &T::complete>
   bool aio_update(uint64_t snap_id, uint64_t start_object_no, uint8_t new_state,
                   const boost::optional<uint8_t> &current_state,
-                  const ZTracer::Trace &parent_trace, T *callback_object) {
+                  const ZTracer::Trace &parent_trace, bool ignore_enoent,
+                  T *callback_object) {
     return aio_update<T, MF>(snap_id, start_object_no, start_object_no + 1,
                              new_state, current_state, parent_trace,
-                             callback_object);
+                             ignore_enoent, callback_object);
   }
 
   template <typename T, void(T::*MF)(int) = &T::complete>
   bool aio_update(uint64_t snap_id, uint64_t start_object_no,
                   uint64_t end_object_no, uint8_t new_state,
                   const boost::optional<uint8_t> &current_state,
-                  const ZTracer::Trace &parent_trace, T *callback_object) {
+                  const ZTracer::Trace &parent_trace, bool ignore_enoent,
+                  T *callback_object) {
     ceph_assert(start_object_no < end_object_no);
     if (snap_id == CEPH_NOSNAP) {
       end_object_no = std::min(end_object_no, m_object_map.size());
@@ -89,12 +91,13 @@ public:
 
       UpdateOperation update_operation(start_object_no, end_object_no,
                                        new_state, current_state, parent_trace,
+                                       ignore_enoent,
                                        util::create_context_callback<T, MF>(
                                          callback_object));
       detained_aio_update(std::move(update_operation));
     } else {
       aio_update(snap_id, start_object_no, end_object_no, new_state,
-                 current_state, parent_trace,
+                 current_state, parent_trace, ignore_enoent,
                  util::create_context_callback<T, MF>(callback_object));
     }
     return true;
@@ -111,15 +114,18 @@ private:
     uint8_t new_state;
     boost::optional<uint8_t> current_state;
     ZTracer::Trace parent_trace;
+    bool ignore_enoent;
     Context *on_finish;
 
     UpdateOperation(uint64_t start_object_no, uint64_t end_object_no,
                     uint8_t new_state,
                     const boost::optional<uint8_t> &current_state,
-                    const ZTracer::Trace &parent_trace, Context *on_finish)
+                    const ZTracer::Trace &parent_trace,
+                    bool ignore_enoent, Context *on_finish)
       : start_object_no(start_object_no), end_object_no(end_object_no),
         new_state(new_state), current_state(current_state),
-        parent_trace(parent_trace), on_finish(on_finish) {
+        parent_trace(parent_trace), ignore_enoent(ignore_enoent),
+        on_finish(on_finish) {
     }
   };
 
@@ -138,7 +144,8 @@ private:
   void aio_update(uint64_t snap_id, uint64_t start_object_no,
                   uint64_t end_object_no, uint8_t new_state,
                   const boost::optional<uint8_t> &current_state,
-                  const ZTracer::Trace &parent_trace, Context *on_finish);
+                  const ZTracer::Trace &parent_trace, bool ignore_enoent,
+                  Context *on_finish);
   bool update_required(const ceph::BitVector<2>::Iterator &it,
                        uint8_t new_state);
 

@@ -71,17 +71,18 @@ struct UpdateRequest<MockTestImageCtx> {
                                uint8_t new_state,
                                const boost::optional<uint8_t> &current_state,
                                const ZTracer::Trace &parent_trace,
-                               Context *on_finish) {
+                               bool ignore_enoent, Context *on_finish) {
     ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     s_instance->construct(snap_id, start_object_no, end_object_no, new_state,
-                          current_state);
+                          current_state, ignore_enoent);
     return s_instance;
   }
 
-  MOCK_METHOD5(construct, void(uint64_t snap_id, uint64_t start_object_no,
+  MOCK_METHOD6(construct, void(uint64_t snap_id, uint64_t start_object_no,
                                uint64_t end_object_no, uint8_t new_state,
-                               const boost::optional<uint8_t> &current_state));
+                               const boost::optional<uint8_t> &current_state,
+                               bool ignore_enoent));
   MOCK_METHOD0(send, void());
   UpdateRequest() {
     s_instance = this;
@@ -133,10 +134,10 @@ public:
                      uint64_t snap_id, uint64_t start_object_no,
                      uint64_t end_object_no, uint8_t new_state,
                      const boost::optional<uint8_t> &current_state,
-                     Context **on_finish) {
+                     bool ignore_enoent, Context **on_finish) {
     EXPECT_CALL(mock_update_request, construct(snap_id, start_object_no,
                                                end_object_no, new_state,
-                                               current_state))
+                                               current_state, ignore_enoent))
       .Times(1);
     EXPECT_CALL(mock_update_request, send())
       .WillOnce(Invoke([&mock_update_request, on_finish]() {
@@ -163,10 +164,10 @@ TEST_F(TestMockObjectMap, NonDetainedUpdate) {
   MockUpdateRequest mock_update_request;
   Context *finish_update_1;
   expect_update(mock_image_ctx, mock_update_request, CEPH_NOSNAP,
-                0, 1, 1, {}, &finish_update_1);
+                0, 1, 1, {}, false, &finish_update_1);
   Context *finish_update_2;
   expect_update(mock_image_ctx, mock_update_request, CEPH_NOSNAP,
-                1, 2, 1, {}, &finish_update_2);
+                1, 2, 1, {}, false, &finish_update_2);
 
   MockUnlockRequest mock_unlock_request;
   expect_unlock(mock_image_ctx, mock_unlock_request, 0);
@@ -181,8 +182,8 @@ TEST_F(TestMockObjectMap, NonDetainedUpdate) {
   {
     RWLock::RLocker snap_locker(mock_image_ctx.snap_lock);
     RWLock::WLocker object_map_locker(mock_image_ctx.object_map_lock);
-    mock_object_map.aio_update(CEPH_NOSNAP, 0, 1, {}, {}, &update_ctx1);
-    mock_object_map.aio_update(CEPH_NOSNAP, 1, 1, {}, {}, &update_ctx2);
+    mock_object_map.aio_update(CEPH_NOSNAP, 0, 1, {}, {}, false, &update_ctx1);
+    mock_object_map.aio_update(CEPH_NOSNAP, 1, 1, {}, {}, false, &update_ctx2);
   }
 
   finish_update_2->complete(0);
@@ -213,16 +214,16 @@ TEST_F(TestMockObjectMap, DetainedUpdate) {
   MockUpdateRequest mock_update_request;
   Context *finish_update_1;
   expect_update(mock_image_ctx, mock_update_request, CEPH_NOSNAP,
-                1, 4, 1, {}, &finish_update_1);
+                1, 4, 1, {}, false, &finish_update_1);
   Context *finish_update_2 = nullptr;
   expect_update(mock_image_ctx, mock_update_request, CEPH_NOSNAP,
-                1, 3, 1, {}, &finish_update_2);
+                1, 3, 1, {}, false, &finish_update_2);
   Context *finish_update_3 = nullptr;
   expect_update(mock_image_ctx, mock_update_request, CEPH_NOSNAP,
-                2, 3, 1, {}, &finish_update_3);
+                2, 3, 1, {}, false, &finish_update_3);
   Context *finish_update_4 = nullptr;
   expect_update(mock_image_ctx, mock_update_request, CEPH_NOSNAP,
-                0, 2, 1, {}, &finish_update_4);
+                0, 2, 1, {}, false, &finish_update_4);
 
   MockUnlockRequest mock_unlock_request;
   expect_unlock(mock_image_ctx, mock_unlock_request, 0);
@@ -239,10 +240,14 @@ TEST_F(TestMockObjectMap, DetainedUpdate) {
   {
     RWLock::RLocker snap_locker(mock_image_ctx.snap_lock);
     RWLock::WLocker object_map_locker(mock_image_ctx.object_map_lock);
-    mock_object_map.aio_update(CEPH_NOSNAP, 1, 4, 1, {}, {}, &update_ctx1);
-    mock_object_map.aio_update(CEPH_NOSNAP, 1, 3, 1, {}, {}, &update_ctx2);
-    mock_object_map.aio_update(CEPH_NOSNAP, 2, 3, 1, {}, {}, &update_ctx3);
-    mock_object_map.aio_update(CEPH_NOSNAP, 0, 2, 1, {}, {}, &update_ctx4);
+    mock_object_map.aio_update(CEPH_NOSNAP, 1, 4, 1, {}, {}, false,
+                               &update_ctx1);
+    mock_object_map.aio_update(CEPH_NOSNAP, 1, 3, 1, {}, {}, false,
+                               &update_ctx2);
+    mock_object_map.aio_update(CEPH_NOSNAP, 2, 3, 1, {}, {}, false,
+                               &update_ctx3);
+    mock_object_map.aio_update(CEPH_NOSNAP, 0, 2, 1, {}, {}, false,
+                               &update_ctx4);
   }
 
   // updates 2, 3, and 4 are blocked on update 1

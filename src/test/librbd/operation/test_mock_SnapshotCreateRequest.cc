@@ -125,8 +125,8 @@ TEST_F(TestMockOperationSnapshotCreateRequest, Success) {
   expect_allocate_snap_id(mock_image_ctx, 0);
   expect_snap_create(mock_image_ctx, 0);
   if (!mock_image_ctx.old_format) {
-    expect_update_snap_context(mock_image_ctx);
     expect_object_map_snap_create(mock_image_ctx);
+    expect_update_snap_context(mock_image_ctx);
   }
   expect_unblock_writes(mock_image_ctx);
 
@@ -194,8 +194,8 @@ TEST_F(TestMockOperationSnapshotCreateRequest, CreateSnapStale) {
   expect_allocate_snap_id(mock_image_ctx, -ESTALE);
   expect_snap_create(mock_image_ctx, -ESTALE);
   if (!mock_image_ctx.old_format) {
-    expect_update_snap_context(mock_image_ctx);
     expect_object_map_snap_create(mock_image_ctx);
+    expect_update_snap_context(mock_image_ctx);
   }
   expect_unblock_writes(mock_image_ctx);
 
