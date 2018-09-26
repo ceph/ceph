@@ -11,6 +11,7 @@ class Device(object):
         # LVs can have a vg/lv path, while disks will have /dev/sda
         self.abspath = path
         self.lv_api = None
+        self.lvs = []
         self.vg_name = None
         self.pvs_api = []
         self.disk_api = {}
@@ -25,6 +26,7 @@ class Device(object):
         lv = lvm.get_lv_from_argument(self.path)
         if lv:
             self.lv_api = lv
+            self.lvs = [lv]
             self.abspath = lv.lv_path
             self.vg_name = lv.vg_name
         else:
@@ -67,6 +69,11 @@ class Device(object):
                 self.vg_name = has_vgs[0]
                 self._is_lvm_member = True
                 self.pvs_api = pvs
+                for pv in pvs:
+                    if pv.vg_name and pv.lv_uuid:
+                        lv = lvm.get_lv(vg_name=pv.vg_name, lv_uuid=pv.lv_uuid)
+                        if lv:
+                            self.lvs.append(lv)
             else:
                 # this is contentious, if a PV is recognized by LVM but has no
                 # VGs, should we consider it as part of LVM? We choose not to
