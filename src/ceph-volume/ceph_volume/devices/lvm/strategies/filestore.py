@@ -106,7 +106,7 @@ class SingleType(object):
                 journal_size = self.journal_size
                 data_size = osd_size - journal_size
                 data_percentage = data_size * 100 / device_size
-                osd = {'data': {}, 'journal': {}}
+                osd = {'data': {}, 'journal': {}, 'used_by_ceph': device.used_by_ceph}
                 osd['data']['path'] = device.abspath
                 osd['data']['size'] = data_size.b.as_int()
                 osd['data']['parts'] = self.osds_per_device
