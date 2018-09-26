@@ -6,6 +6,7 @@ import contextlib
 import logging
 import random
 import signal
+import socket
 import time
 
 from gevent import sleep
@@ -13,7 +14,9 @@ from gevent.greenlet import Greenlet
 from gevent.event import Event
 
 from teuthology import misc
+from teuthology.exceptions import CommandFailedError
 from teuthology.task import Task
+from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
 
@@ -125,7 +128,10 @@ class RBDMirrorThrasher(Greenlet):
                     continue
 
                 self.log('kill {label}'.format(label=daemon.id_))
-                daemon.signal(signal.SIGTERM)
+                try:
+                    daemon.signal(signal.SIGTERM)
+                except socket.error:
+                    pass
                 killed_daemons.append(daemon)
                 stats['kill'] += 1
 
@@ -136,7 +142,6 @@ class RBDMirrorThrasher(Greenlet):
 
             if killed_daemons:
                 # wait for a while before restarting
-
                 delay = self.max_revive_delay
                 if self.randomize:
                     delay = random.randrange(0.0, self.max_revive_delay)
@@ -146,7 +151,22 @@ class RBDMirrorThrasher(Greenlet):
 
                 for daemon in killed_daemons:
                     self.log('waiting for {label}'.format(label=daemon.id_))
-                    daemon.stop()
+                    try:
+                        run.wait([daemon.proc], timeout=600)
+                    except CommandFailedError:
+                        pass
+                    except:
+                        self.log('Failed to stop {label}'.format(label=daemon.id_))
+
+                        try:
+                            # try to capture a core dump
+                            daemon.signal(signal.SIGABRT)
+                        except socket.error:
+                            pass
+                        raise
+                    finally:
+                        daemon.reset()
+
                 for daemon in killed_daemons:
                     self.log('reviving {label}'.format(label=daemon.id_))
                     daemon.start()

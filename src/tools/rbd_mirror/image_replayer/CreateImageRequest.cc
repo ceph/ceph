@@ -88,7 +88,11 @@ void CreateImageRequest<I>::create_image() {
 template <typename I>
 void CreateImageRequest<I>::handle_create_image(int r) {
   dout(10) << "r=" << r << dendl;
-  if (r < 0) {
+  if (r == -EBADF) {
+    dout(5) << "image id " << m_local_image_id << " already in-use" << dendl;
+    finish(r);
+    return;
+  } else if (r < 0) {
     derr << "failed to create local image: " << cpp_strerror(r) << dendl;
     finish(r);
     return;
@@ -343,7 +347,11 @@ void CreateImageRequest<I>::clone_image() {
 template <typename I>
 void CreateImageRequest<I>::handle_clone_image(int r) {
   dout(10) << "r=" << r << dendl;
-  if (r < 0) {
+  if (r == -EBADF) {
+    dout(5) << "image id " << m_local_image_id << " already in-use" << dendl;
+    finish(r);
+    return;
+  } else if (r < 0) {
     derr << "failed to clone image " << m_parent_pool_name << "/"
          << m_remote_parent_spec.image_id << " to "
          << m_local_image_name << dendl;
