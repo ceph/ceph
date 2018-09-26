@@ -414,9 +414,7 @@ def _run_tests(ctx, refspec, role, tests, env, basedir,
     finally:
         log.info('Stopping %s on %s...', tests, role)
         args=['sudo', 'rm', '-rf', '--', workunits_file, clonedir]
-        if cleanup:
-            log.info("and cleaning up scratch: {}".format(scratch_tmp))
-            args.append(scratch_tmp)
+        # N.B. don't cleanup scratch_tmp! If the mount is broken then rm will hang.
         remote.run(
             logger=log.getChild(role),
             args=args,
