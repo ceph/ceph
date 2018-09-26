@@ -255,8 +255,6 @@ static void log_usage(RGWRados *store, struct req_state *s, const string& op_nam
       storage_class = "STANDARD";
       ldout(s->cct, 0) << "log_usage: get_obj_attrs failed, set storage_class to STANDARD" << dendl;
     }
-  } else {
-    storage_class = "STANDARD";
   }
 
   if(storage_class.compare("STANDARD_IA") == 0) {
@@ -271,7 +269,11 @@ static void log_usage(RGWRados *store, struct req_state *s, const string& op_nam
                       << bytes_received << ", success_ia=" << data.successful_ops_ia << dendl;
   } else {
     data.bytes_sent = bytes_sent;
-    data.bytes_received = bytes_received;
+    if (s->storage_class_restore) {
+      data.bytes_received = s->obj_size;
+    } else {
+      data.bytes_received = bytes_received;
+    }
     data.ops = 1;
     if (!s->is_err())
       data.successful_ops = 1;

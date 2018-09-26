@@ -1832,7 +1832,8 @@ struct req_state : DoutPrefixProvider {
   bool has_bad_meta{false};
 
   RGWUserInfo *user;
-  std::string placement_id;
+  string placement_id;
+  bool storage_class_restore{false};
 
   struct {
     /* TODO(rzarzynski): switch out to the static_ptr for both members. */

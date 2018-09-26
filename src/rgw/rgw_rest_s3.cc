@@ -1490,7 +1490,7 @@ void RGWPutObj_ObjStore_S3::send_response()
       if (strftime(buf, sizeof(buf), "%Y-%m-%dT%T.000Z", &tmp) > 0) {
         s->formatter->dump_string("LastModified", buf);
       }
-      dump_etag(s, etag);
+      s->formatter->dump_string("ETag", etag);
       s->formatter->close_section();
       rgw_flush_formatter_and_reset(s, s->formatter);
       return;
@@ -2213,11 +2213,15 @@ int RGWCopyObj_ObjStore_S3::get_params()
     }
   }
 
+  RGWBucketInfo src_bucket_info;
+  RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
+  store->get_bucket_info(obj_ctx, s->src_tenant_name, s->src_bucket_name, src_bucket_info, NULL, NULL);
+
   map<string, bufferlist> xattrs;
   map<string, bufferlist>::iterator iter;
   std::string storage_class;
   rgw_obj obj;
-  obj = rgw_obj(s->bucket, s->object);
+  obj = rgw_obj(src_bucket_info.bucket, src_object);
   store->set_atomic(s->obj_ctx, obj);
   int res = get_obj_attrs(store, s, obj, xattrs);
   if (res == 0) {
@@ -2248,6 +2252,15 @@ int RGWCopyObj_ObjStore_S3::get_params()
                      "storage class, website redirect location or encryption attributes.";
     ldout(s->cct, 0) << s->err.message << dendl;
     return -ERR_INVALID_REQUEST;
+  }
+
+  if (storage_class.compare("STANDARD") == 0 && placement_storage_class.compare("STANDARD_IA") == 0) {
+    RGWRados::Object op_target(store, src_bucket_info, *static_cast<RGWObjectCtx *>(s->obj_ctx), obj);
+    RGWRados::Object::Read read_op(&op_target);
+    read_op.params.obj_size = &s->obj_size;
+    op_ret = read_op.prepare();
+    s->storage_class_restore = true;
+    storage_class_restore = true;
   }
   return 0;
 }

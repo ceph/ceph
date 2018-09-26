@@ -1324,6 +1324,7 @@ protected:
 
   boost::optional<ceph::real_time> delete_at;
   string placement_storage_class;
+  bool storage_class_restore{false};
   bool copy_if_newer;
 
   int init_common();
@@ -1366,7 +1367,12 @@ public:
   virtual int get_params() = 0;
   virtual void send_partial_response(off_t ofs) {}
   void send_response() override = 0;
-  const char* name() const override { return "copy_obj"; }
+  const char* name() const override {
+    if (storage_class_restore)
+      return "restore_obj";
+    else
+      return "copy_obj";
+  }
   RGWOpType get_type() override { return RGW_OP_COPY_OBJ; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
