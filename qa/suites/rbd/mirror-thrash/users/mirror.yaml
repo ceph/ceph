@@ -5,7 +5,9 @@ overrides:
     conf:
       client:
         rbd default features: 125
+        debug rbd: 20
         debug rbd_mirror: 15
+        log to stderr: false
       # override to make these names predictable
       client.mirror.0:
         admin socket: /var/run/ceph/rbd-mirror.$cluster-$name.asok

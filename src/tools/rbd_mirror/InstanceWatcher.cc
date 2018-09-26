@@ -404,17 +404,12 @@ void InstanceWatcher<I>::notify_image_acquire(
 
   ceph_assert(m_on_finish == nullptr);
 
-  if (instance_id == m_instance_id) {
-    handle_image_acquire(global_image_id, on_notify_ack);
-  } else {
-    uint64_t request_id = ++m_request_seq;
-    bufferlist bl;
-    encode(NotifyMessage{ImageAcquirePayload{request_id, global_image_id}},
-             bl);
-    auto req = new C_NotifyInstanceRequest(this, instance_id, request_id,
-                                           std::move(bl), on_notify_ack);
-    req->send();
-  }
+  uint64_t request_id = ++m_request_seq;
+  bufferlist bl;
+  encode(NotifyMessage{ImageAcquirePayload{request_id, global_image_id}}, bl);
+  auto req = new C_NotifyInstanceRequest(this, instance_id, request_id,
+                                         std::move(bl), on_notify_ack);
+  req->send();
 }
 
 template <typename I>
@@ -428,17 +423,12 @@ void InstanceWatcher<I>::notify_image_release(
 
   ceph_assert(m_on_finish == nullptr);
 
-  if (instance_id == m_instance_id) {
-    handle_image_release(global_image_id, on_notify_ack);
-  } else {
-    uint64_t request_id = ++m_request_seq;
-    bufferlist bl;
-    encode(NotifyMessage{ImageReleasePayload{request_id, global_image_id}},
-             bl);
-    auto req = new C_NotifyInstanceRequest(this, instance_id, request_id,
-                                           std::move(bl), on_notify_ack);
-    req->send();
-  }
+  uint64_t request_id = ++m_request_seq;
+  bufferlist bl;
+  encode(NotifyMessage{ImageReleasePayload{request_id, global_image_id}}, bl);
+  auto req = new C_NotifyInstanceRequest(this, instance_id, request_id,
+                                         std::move(bl), on_notify_ack);
+  req->send();
 }
 
 template <typename I>
@@ -452,17 +442,13 @@ void InstanceWatcher<I>::notify_peer_image_removed(
   Mutex::Locker locker(m_lock);
   ceph_assert(m_on_finish == nullptr);
 
-  if (instance_id == m_instance_id) {
-    handle_peer_image_removed(global_image_id, peer_mirror_uuid, on_notify_ack);
-  } else {
-    uint64_t request_id = ++m_request_seq;
-    bufferlist bl;
-    encode(NotifyMessage{PeerImageRemovedPayload{request_id, global_image_id,
-                                                   peer_mirror_uuid}}, bl);
-    auto req = new C_NotifyInstanceRequest(this, instance_id, request_id,
-                                           std::move(bl), on_notify_ack);
-    req->send();
-  }
+  uint64_t request_id = ++m_request_seq;
+  bufferlist bl;
+  encode(NotifyMessage{PeerImageRemovedPayload{request_id, global_image_id,
+                                               peer_mirror_uuid}}, bl);
+  auto req = new C_NotifyInstanceRequest(this, instance_id, request_id,
+                                         std::move(bl), on_notify_ack);
+  req->send();
 }
 
 template <typename I>
