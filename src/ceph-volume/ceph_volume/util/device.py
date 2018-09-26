@@ -116,6 +116,11 @@ class Device(object):
             return self.disk_api['TYPE'] == 'device'
         return False
 
+    @property
+    def used_by_ceph(self):
+        osd_ids = [lv.tags.get("ceph.osd_id") for lv in self.lvs]
+        return any(osd_ids)
+
 
 class CephDiskDevice(object):
     """
