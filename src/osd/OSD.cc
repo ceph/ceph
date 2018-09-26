@@ -7445,7 +7445,6 @@ void OSD::handle_osd_map(MOSDMap *m)
       epoch_t need = osdmap->get_epoch() - max_lag;
       dout(10) << __func__ << " waiting for pgs to catch up (need " << need
 	       << " max_lag " << max_lag << ")" << dendl;
-      osd_lock.Unlock();
       for (auto shard : shards) {
 	epoch_t min = shard->get_min_pg_epoch();
 	if (need > min) {
@@ -7454,10 +7453,11 @@ void OSD::handle_osd_map(MOSDMap *m)
 		   << ", map cache is " << cct->_conf->osd_map_cache_size
 		   << ", max_lag_factor " << m_osd_pg_epoch_max_lag_factor
 		   << ")" << dendl;
+          osd_lock.Unlock();
 	  shard->wait_min_pg_epoch(need);
+          osd_lock.Lock();
 	}
       }
-      osd_lock.Lock();
     }
   }
 
