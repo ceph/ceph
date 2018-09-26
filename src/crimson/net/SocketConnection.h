@@ -17,7 +17,7 @@
 #include <seastar/core/shared_future.hh>
 
 #include "Connection.h"
-#include "Protocol.h"
+#include "Workspace.h"
 #include "Session.h"
 
 namespace ceph::net {
@@ -25,6 +25,7 @@ namespace ceph::net {
 class SocketConnection : public Connection {
   Session _s;
   Session * const s = &_s;
+  Workspace workspace;
 
   state_t state = state_t::none;
 

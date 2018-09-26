@@ -48,6 +48,7 @@ SocketConnection::SocketConnection(Messenger *messenger,
                                    const entity_addr_t& peer_addr)
   : Connection(messenger),
     _s(my_addr, peer_addr),
+    workspace(&_s, this, disp, messenger),
     dispatcher(disp)
 {
 }
@@ -59,6 +60,7 @@ SocketConnection::SocketConnection(Messenger *messenger,
                                    seastar::connected_socket&& fd)
   : Connection(messenger),
     _s(my_addr, peer_addr, std::forward<seastar::connected_socket>(fd)),
+    workspace(&_s, this, disp, messenger),
     dispatcher(disp)
 {
 }
@@ -291,7 +293,7 @@ seastar::future<> SocketConnection::keepalive()
 
 seastar::future<> SocketConnection::close()
 {
-  if (state == state_t::closed) {
+  if (state == state_t::close) {
     // already closing
     assert(close_ready.valid());
     return close_ready.get_future();
@@ -307,9 +309,9 @@ seastar::future<> SocketConnection::close()
     get_messenger()->unregister_conn(this);
   }
 
-  state = state_t::closed;
+  state = state_t::close;
 
-  // close_ready become valid only after state is state_t::closed
+  // close_ready become valid only after state is state_t::close
   assert(!close_ready.valid());
   close_ready = s->socket->close()
     .then([this] {
@@ -331,29 +333,6 @@ constexpr size_t server_header_size = banner_size + 2 * sizeof(ceph_entity_addr)
 
 WRITE_RAW_ENCODER(ceph_msg_connect);
 WRITE_RAW_ENCODER(ceph_msg_connect_reply);
-
-std::ostream& operator<<(std::ostream& out, const ceph_msg_connect& c)
-{
-  return out << "connect{features=" << std::hex << c.features << std::dec
-      << " host_type=" << c.host_type
-      << " global_seq=" << c.global_seq
-      << " connect_seq=" << c.connect_seq
-      << " protocol_version=" << c.protocol_version
-      << " authorizer_protocol=" << c.authorizer_protocol
-      << " authorizer_len=" << c.authorizer_len
-      << " flags=" << std::hex << static_cast<uint16_t>(c.flags) << std::dec << '}';
-}
-
-std::ostream& operator<<(std::ostream& out, const ceph_msg_connect_reply& r)
-{
-  return out << "connect_reply{tag=" << static_cast<uint16_t>(r.tag)
-      << " features=" << std::hex << r.features << std::dec
-      << " global_seq=" << r.global_seq
-      << " connect_seq=" << r.connect_seq
-      << " protocol_version=" << r.protocol_version
-      << " authorizer_len=" << r.authorizer_len
-      << " flags=" << std::hex << static_cast<uint16_t>(r.flags) << std::dec << '}';
-}
 
 // check that the buffer starts with a valid banner without requiring it to
 // be contiguous in memory
@@ -574,8 +553,8 @@ SocketConnection::handle_connect_with_existing(ConnectionRef existing, bufferlis
     // subsequently went to standby, then the peer should bump
     // their connect_seq and retry: this is not a connection race
     // we need to resolve here.
-    if (existing->get_state() == state_t::open ||
-	existing->get_state() == state_t::standby) {
+    if (existing->get_state() == state_t::open/* ||
+	existing->get_state() == state_t::standby*/) {
       if (s->policy.resetcheck && existing->connect_seq() == 0) {
 	return replace_existing(existing, std::move(authorizer_reply));
       } else {

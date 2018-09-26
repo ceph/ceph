@@ -22,6 +22,8 @@
 
 namespace ceph::net {
 
+enum class state_t;
+
 class Connection : public boost::intrusive_ref_counter<Connection,
 						       boost::thread_unsafe_counter> {
  protected:
@@ -67,15 +69,6 @@ class Connection : public boost::intrusive_ref_counter<Connection,
   virtual std::tuple<seq_num_t, std::queue<MessageRef>> get_out_queue() = 0;
 
 public:
-  enum class state_t {
-    none,
-    accept,
-    connect,
-    open,
-    standby,
-    closed,
-    wait
-  };
   /// the number of connections initiated in this session, increment when a
   /// new connection is established
   virtual uint32_t connect_seq() const = 0;
