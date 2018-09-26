@@ -157,6 +157,44 @@ auto AsyncScheduler::async_request(const client_id& client,
   return init.result.get();
 }
 
-} // namespace rgw::dmclock
+class SimpleThrottler : public md_config_obs_t, public dmclock::Scheduler {
+public:
+  SimpleThrottler(CephContext *cct) :
+    max_requests(cct->_conf.get_val<int64_t>("rgw_max_concurrent_requests")){
+    if (max_requests <= 0) {
+      max_requests = std::numeric_limits<int64_t>::max();
+    }
+    cct->_conf.add_observer(this);
+  }
 
+  const char** get_tracked_conf_keys() const override {
+    static const char* keys[] = { "rgw_max_concurrent_requests", nullptr };
+    return keys;
+  }
+
+  void handle_conf_change(const ConfigProxy& conf,
+                          const std::set<std::string>& changed) override
+  {
+    if (changed.count("rgw_max_concurrent_requests")) {
+      auto new_max = conf.get_val<int64_t>("rgw_max_concurrent_requests");
+      max_requests = new_max > 0 ? new_max : std::numeric_limits<int64_t>::max();
+    }
+  }
+
+  int schedule_request(const client_id&, const ReqParams&,
+                       const Time&, const Cost&,
+                       optional_yield_context) override {
+    return outstanding_requests++ >= max_requests ? -EAGAIN : 0 ;
+  }
+
+  void request_complete() override {
+    --outstanding_requests;
+  }
+
+private:
+  std::atomic<int64_t> max_requests;
+  std::atomic<int64_t> outstanding_requests = 0;
+};
+
+} // namespace rgw::dmclock
 #endif /* RGW_DMCLOCK_ASYNC_SCHEDULER_H */

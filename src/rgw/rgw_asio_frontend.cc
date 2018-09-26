@@ -84,7 +84,7 @@ template <typename Stream>
 void handle_connection(RGWProcessEnv& env, Stream& stream,
                        boost::beast::flat_buffer& buffer, bool is_ssl,
                        SharedMutex& pause_mutex,
-                       rgw::dmclock::AsyncScheduler *scheduler,
+                       rgw::dmclock::Scheduler *scheduler,
                        boost::system::error_code& ec,
                        boost::asio::yield_context yield)
 {
@@ -230,7 +230,7 @@ class AsioFrontend {
   int init_ssl();
 #endif
   SharedMutex pause_mutex;
-  std::unique_ptr<rgw::dmclock::AsyncScheduler> scheduler;
+  std::unique_ptr<rgw::dmclock::Scheduler> scheduler;
 
   struct Listener {
     tcp::endpoint endpoint;
@@ -267,8 +267,9 @@ class AsioFrontend {
 						       &(sched_ctx.get_clients()),
 						       sched_ctx.get_clients(),
 						       rgw::dmclock::AtLimit::Reject));
+    } else {
+      scheduler.reset(new rgw::dmclock::SimpleThrottler(ctx()));
     }
-
   }
 
   int init();

@@ -64,9 +64,9 @@ enum class ReqState {
 
 class Scheduler  {
 public:
-  virtual int schedule_request(const client_id& client, const ReqParams& params,
-			       const Time& time, const Cost& cost,
-			       optional_yield_context y) = 0;
+  virtual int schedule_request(const client_id&, const ReqParams&,
+			       const Time&, const Cost&,
+			       optional_yield_context) = 0;
   virtual void request_complete() {};
   virtual ~Scheduler() {};
 };
