@@ -337,33 +337,6 @@ public:
     delete[] reinterpret_cast<char*>(p);
   }
 
-  T* allocate_aligned(size_t n, size_t align, void *p = nullptr) {
-    size_t total = sizeof(T) * n;
-    shard_t *shard = pool->pick_a_shard();
-    shard->bytes += total;
-    shard->items += n;
-    if (type) {
-      type->items += n;
-    }
-    char *ptr;
-    int rc = ::posix_memalign((void**)(void*)&ptr, align, total);
-    if (rc)
-      throw std::bad_alloc();
-    T* r = reinterpret_cast<T*>(ptr);
-    return r;
-  }
-
-  void deallocate_aligned(T* p, size_t n) {
-    size_t total = sizeof(T) * n;
-    shard_t *shard = pool->pick_a_shard();
-    shard->bytes -= total;
-    shard->items -= n;
-    if (type) {
-      type->items -= n;
-    }
-    ::free(p);
-  }
-
   void destroy(T* p) {
     p->~T();
   }
