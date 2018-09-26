@@ -6593,7 +6593,7 @@ int OSDMonitor::check_pg_num(int64_t pool, int pg_num, int size, ostream *ss)
     if (i.first == pool) {
       projected += pg_num * size;
     } else {
-      projected += i.second.get_pg_num() * i.second.get_size();
+      projected += i.second.get_pg_num_target() * i.second.get_size();
     }
   }
   if (projected > max_pgs) {
