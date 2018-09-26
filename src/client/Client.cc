@@ -2748,7 +2748,8 @@ void Client::send_reconnect(MetaSession *session)
       cap.issue_seq = 0;  // reset seq.
       cap.mseq = 0;  // reset seq.
       cap.issued = cap.implemented;
-
+      // cap gen should catch up with session cap_gen
+      cap.gen = cap.session->cap_gen;
       snapid_t snap_follows = 0;
       if (!in->cap_snaps.empty())
 	snap_follows = in->cap_snaps.begin()->first;
