@@ -191,5 +191,10 @@ and analyze results.
         '--ceph-qa-suite-git-url',
         help=("git clone url for ceph-qa-suite"),
     )
+    parser.add_argument(
+        '--sleep-before-teardown',
+        help='Number of seconds to sleep before tearing down the target VMs',
+        default=0
+    )
 
     return parser.parse_args(argv)

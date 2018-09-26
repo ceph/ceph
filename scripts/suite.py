@@ -71,6 +71,11 @@ Standard arguments:
                               <suite_branch> to be ignored for scheduling
                               purposes, but it will still be used for test
                               running.
+  --sleep-before-teardown <seconds>
+                              Number of seconds to sleep before tearing down
+                              the test cluster(s). Use with care, as this
+                              applies to all jobs in the run.
+                              [default: 0]
 
 Scheduler arguments:
   --owner <owner>             Job owner
