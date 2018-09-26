@@ -94,6 +94,32 @@ void inc(ClientSums& sums, client_id client, Cost cost);
 void on_cancel(PerfCounters *c, const ClientSum& sum);
 void on_process(PerfCounters* c, const ClientSum& rsum, const ClientSum& psum);
 
+class SchedulerCompleter {
+public:
+  SchedulerCompleter(Scheduler *s): s(s) {}
+  // Default constructor is needed as we need to create an empty completer
+  // that'll be move assigned later in process request
+  SchedulerCompleter() : s(nullptr) {}
+  ~SchedulerCompleter() {
+    if (s) {
+      s->request_complete();
+    }
+  }
+  SchedulerCompleter(const SchedulerCompleter&)=delete;
+  SchedulerCompleter& operator=(const SchedulerCompleter&)=delete;
+  SchedulerCompleter(SchedulerCompleter&& other) {
+    s = other.s;
+    other.s = nullptr;
+  }
+  SchedulerCompleter& operator=(SchedulerCompleter&& other){
+    s = other.s;
+    other.s = nullptr;
+    return *this;
+  }
+private:
+  Scheduler *s;
+};
+
 /// a simple wrapper to hold client config. objects needed to construct a
 /// scheduler instance, the primary utility of this being to optionally
 /// construct scheduler only when configured in the frontends.
