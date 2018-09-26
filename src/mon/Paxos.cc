@@ -619,6 +619,8 @@ void Paxos::begin(bufferlist& v)
   // and no value, yet.
   assert(new_value.length() == 0);
 
+  cancel_lease_timeout();
+
   // accept it ourselves
   accepted.clear();
   accepted.insert(mon->rank);
@@ -723,7 +725,7 @@ void Paxos::handle_begin(MonOpRequestRef op)
 
   // set state.
   state = STATE_UPDATING;
-  lease_expire = utime_t();  // cancel lease
+  cancel_lease_timeout();
 
   // yes.
   version_t v = last_committed+1;
@@ -891,7 +893,7 @@ void Paxos::commit_finish()
   // cancel lease - it was for the old value.
   //  (this would only happen if message layer lost the 'begin', but
   //   leader still got a majority and committed with out us.)
-  lease_expire = utime_t();  // cancel lease
+  cancel_lease_timeout();
 
   last_committed++;
   last_commit_time = ceph_clock_now();
@@ -1201,6 +1203,14 @@ void Paxos::reset_lease_timeout()
 	  return;
 	lease_timeout();
       }));
+}
+
+void Paxos::cancel_lease_timeout()
+{
+  lease_expire = utime_t();  // cancel lease
+  dout(20) << __func__ << " - unsetting timeout event" << dendl;
+  if (lease_timeout_event)
+    mon->timer.cancel_event(lease_timeout_event);
 }
 
 void Paxos::lease_timeout()
