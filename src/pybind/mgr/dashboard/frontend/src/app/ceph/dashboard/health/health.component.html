@@ -1,4 +1,5 @@
-<div *ngIf="contentData" class="container-fluid">
+<div *ngIf="contentData"
+     class="container-fluid">
   <cd-info-group groupTitle="Status"
                  i18n-groupTitle
                  class="row info-group">
@@ -10,7 +11,8 @@
                   contentClass="content-highlight"
                   (click)="contentData.health.checks.length > 0 ? healthChecksTarget.toggle() : ''">
       <ng-template #healthChecks>
-        <p class="logs-link" i18n>
+        <p class="logs-link"
+           i18n>
           &rarr; See <a (click)="viewportScroller.scrollToAnchor('logs')">Logs</a> for more details.
         </p>
         <ul>
@@ -21,10 +23,10 @@
       </ng-template>
       <div class="health-popover-wrapper">
         <div [ngStyle]="contentData.health.status | healthColor"
-              [popover]="contentData.health.checks.length > 0 ? healthChecks : ''"
-              triggers=""
-              #healthChecksTarget="bs-popover"
-              placement="bottom">
+             [popover]="contentData.health.checks.length > 0 ? healthChecks : ''"
+             triggers=""
+             #healthChecksTarget="bs-popover"
+             placement="bottom">
           {{ contentData.health.status }}
         </div>
       </div>
@@ -45,7 +47,8 @@
                   class="col-sm-6 col-md-4 col-lg-3"
                   contentClass="content-highlight"
                   *ngIf="contentData.osd_map">
-      <span *ngFor="let result of (contentData.osd_map | osdSummary)" [ngStyle]="result.style">
+      <span *ngFor="let result of (contentData.osd_map | osdSummary)"
+            [ngStyle]="result.style">
         {{ result.content }}
       </span>
     </cd-info-card>
@@ -201,7 +204,8 @@
                   contentClass="card-chart"
                   (click)="pgStatusTarget.toggle()">
       <ng-template #pgStatus>
-        <p class="logs-link" i18n>
+        <p class="logs-link"
+           i18n>
           &rarr; See <a (click)="viewportScroller.scrollToAnchor('logs')">Logs</a> for more details.
         </p>
         <ul>
@@ -212,9 +216,9 @@
       </ng-template>
       <div class="pg-status-popover-wrapper">
         <div [popover]="pgStatus"
-              triggers=""
-              #pgStatusTarget="bs-popover"
-              placement="bottom">
+             triggers=""
+             #pgStatusTarget="bs-popover"
+             placement="bottom">
           <cd-health-pie [data]="contentData"
                          chartType="pie"
                          [displayLegend]="true"
@@ -236,13 +240,13 @@
                   cardClass="card-medium"
                   contentClass="no-center scroll text-monospace"
                   *ngIf="contentData.clog">
-        <p *ngFor="let line of contentData.clog">
-          {{ line.stamp }}&nbsp;{{ line.priority }}&nbsp;
-          <span [ngStyle]="line | logColor">
-            {{ line.message }}
-            <br>
-          </span>
-        </p>
+      <p *ngFor="let line of contentData.clog">
+        {{ line.stamp }}&nbsp;{{ line.priority }}&nbsp;
+        <span [ngStyle]="line | logColor">
+          {{ line.message }}
+          <br>
+        </span>
+      </p>
     </cd-info-card>
     <cd-info-card cardTitle="Audit"
                   i18n-cardTitle
@@ -250,15 +254,15 @@
                   cardClass="card-medium"
                   contentClass="no-center scroll text-monospace"
                   *ngIf="contentData.audit_log">
-        <p *ngFor="let line of contentData.audit_log">
-          {{ line.stamp }}&nbsp;{{ line.priority }}&nbsp;
-          <span [ngStyle]="line | logColor">
-            <span style="font-weight: bold;">
-              {{ line.message }}
-            </span>
-            <br>
+      <p *ngFor="let line of contentData.audit_log">
+        {{ line.stamp }}&nbsp;{{ line.priority }}&nbsp;
+        <span [ngStyle]="line | logColor">
+          <span style="font-weight: bold;">
+            {{ line.message }}
           </span>
-        </p>
+          <br>
+        </span>
+      </p>
     </cd-info-card>
   </cd-info-group>
 </div>

@@ -63,18 +63,21 @@ Run ``npm run build`` to build the project. The build artifacts will be
 stored in the ``dist/`` directory. Use the ``-prod`` flag for a
 production build. Navigate to ``https://localhost:8443``.
 
-Formatting TS and SCSS files
+Code linting and formatting
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-We use `Prettier <https://prettier.io/>`_ to automatically format TS and SCSS
-files.
-To use this plugin you can either install it in your IDE, if supported, or use
-it via the cli.
+We use the following tools to lint and format the code in all our TS, SCSS and
+HTML files:
 
-We added 2 npm scripts to help running prettier commands:
+- `codelyzer <http://codelyzer.com/>`_
+- `html-linter <https://github.com/chinchiheather/html-linter>`_
+- `Prettier <https://prettier.io/>`_
+- `TSLint <https://palantir.github.io/tslint/>`_
 
-- ``npm run prettier``, will run prettier formatter on all frontend files
-- ``npm run prettier:lint``, will check all frontend files against prettier linter
+We added 2 npm scripts to help run these tools:
+
+- ``npm run lint``, will check frontend files against all linters
+- ``npm run fix``, will try to fix all the detected linting errors
 
 Running Unit Tests
 ~~~~~~~~~~~~~~~~~~
