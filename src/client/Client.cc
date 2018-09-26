@@ -2794,8 +2794,13 @@ void Client::send_reconnect(MetaSession *session)
       cap.seq = 0;  // reset seq.
       cap.issue_seq = 0;  // reset seq.
       cap.mseq = 0;  // reset seq.
-      cap.issued = cap.implemented;
-
+      // cap gen should catch up with session cap_gen
+      if (cap.gen < session->cap_gen) {
+	cap.gen = session->cap_gen;
+	cap.issued = cap.implemented = CEPH_CAP_PIN;
+      } else {
+	cap.issued = cap.implemented;
+      }
       snapid_t snap_follows = 0;
       if (!in->cap_snaps.empty())
 	snap_follows = in->cap_snaps.begin()->first;
