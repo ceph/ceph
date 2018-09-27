@@ -357,6 +357,14 @@ bool MDRequestImpl::is_queued_for_replay() const
   return client_request ? client_request->is_queued_for_replay() : false;
 }
 
+bool MDRequestImpl::is_batch_op()
+{
+  return (client_request->get_op() == CEPH_MDS_OP_LOOKUP &&
+      client_request->get_filepath().depth() == 1) ||
+    (client_request->get_op() == CEPH_MDS_OP_GETATTR &&
+     client_request->get_filepath().depth() == 0);
+}
+
 cref_t<MClientRequest> MDRequestImpl::release_client_request()
 {
   msg_lock.lock();
@@ -378,7 +386,7 @@ void MDRequestImpl::reset_slave_request(const cref_t<MMDSSlaveRequest>& req)
 
 void MDRequestImpl::print(ostream &out) const
 {
-  out << "request(" << reqid;
+  out << "request(" << reqid << " nref=" << nref;
   //if (request) out << " " << *request;
   if (is_slave()) out << " slave_to mds." << slave_to_mds;
   if (client_request) out << " cr=" << client_request;

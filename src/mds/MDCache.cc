@@ -9312,7 +9312,44 @@ void MDCache::request_forward(MDRequestRef& mdr, mds_rank_t who, int port)
   if (mdr->client_request && mdr->client_request->get_source().is_client()) {
     dout(7) << "request_forward " << *mdr << " to mds." << who << " req "
             << *mdr->client_request << dendl;
-    mds->forward_message_mds(mdr->release_client_request(), who);
+    if (mdr->is_batch_head) {
+      BatchOp* bop = nullptr;
+      int mask = mdr->client_request->head.args.getattr.mask;
+
+      switch (mdr->client_request->get_op()) {
+	case CEPH_MDS_OP_GETATTR:
+	  {
+	    CInode* in = mdr->in[0];
+	    if (in) {
+	      auto it = in->batch_ops.find(mask);
+	      if (it != in->batch_ops.end()) {
+		bop = it->second;
+	      }
+	    }
+	    break;
+	  }
+	case CEPH_MDS_OP_LOOKUP:
+	  {
+	    CDentry* dn = mdr->dn[0].back();
+	    if (dn) {
+	      auto it = dn->batch_ops.find(mask);
+	      if (it != dn->batch_ops.end()) {
+		bop = it->second;
+	      }
+	    }
+	    break;
+	  }
+	default:
+	  ceph_abort();
+      }
+      if (bop) {
+	dout(20) << __func__ << ": forward other batch ops(GETATTR/LOOKUP) to "
+	  << who << ":" << port <<", too. " << *mdr << dendl;
+	bop->forward_requests(who);
+      }
+    } else {
+      mds->forward_message_mds(mdr->release_client_request(), who);
+    }
     if (mds->logger) mds->logger->inc(l_mds_forward);
   } else if (mdr->internal_op >= 0) {
     dout(10) << "request_forward on internal op; cancelling" << dendl;
