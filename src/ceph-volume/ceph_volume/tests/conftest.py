@@ -192,12 +192,14 @@ def tmpfile(tmpdir):
 
 @pytest.fixture
 def device_info(monkeypatch):
-    def apply(devices=None, lsblk=None, lv=None):
+    def apply(devices=None, lsblk=None, lv=None, blkid=None):
         devices = devices if devices else {}
         lsblk = lsblk if lsblk else {}
+        blkid = blkid if blkid else {}
         lv = Factory(**lv) if lv else None
         monkeypatch.setattr("ceph_volume.sys_info.devices", {})
         monkeypatch.setattr("ceph_volume.util.device.disk.get_devices", lambda: devices)
         monkeypatch.setattr("ceph_volume.util.device.lvm.get_lv_from_argument", lambda path: lv)
         monkeypatch.setattr("ceph_volume.util.device.disk.lsblk", lambda path: lsblk)
+        monkeypatch.setattr("ceph_volume.util.device.disk.blkid", lambda path: blkid)
     return apply
