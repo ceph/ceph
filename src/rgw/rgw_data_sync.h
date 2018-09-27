@@ -230,6 +230,7 @@ struct rgw_bucket_entry_owner {
 class RGWSyncErrorLogger;
 
 struct RGWDataSyncEnv {
+  const DoutPrefixProvider *dpp{nullptr};
   CephContext *cct{nullptr};
   RGWRados *store{nullptr};
   RGWRESTConn *conn{nullptr};
@@ -242,10 +243,11 @@ struct RGWDataSyncEnv {
 
   RGWDataSyncEnv() {}
 
-  void init(CephContext *_cct, RGWRados *_store, RGWRESTConn *_conn,
+  void init(const DoutPrefixProvider *_dpp, CephContext *_cct, RGWRados *_store, RGWRESTConn *_conn,
             RGWAsyncRadosProcessor *_async_rados, RGWHTTPManager *_http_manager,
             RGWSyncErrorLogger *_error_logger, RGWSyncTraceManager *_sync_tracer,
             const string& _source_zone, RGWSyncModuleInstanceRef& _sync_module) {
+    dpp = _dpp;
     cct = _cct;
     store = _store;
     conn = _conn;
@@ -503,12 +505,12 @@ class RGWRemoteBucketLog : public RGWCoroutinesManager {
   RGWBucketSyncCR *sync_cr{nullptr};
 
 public:
-  RGWRemoteBucketLog(const DoutPrefixProvider *dpp, RGWRados *_store,
+  RGWRemoteBucketLog(const DoutPrefixProvider *_dpp, RGWRados *_store,
                      RGWBucketSyncStatusManager *_sm,
                      RGWAsyncRadosProcessor *_async_rados,
                      RGWHTTPManager *_http_manager)
     : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()),
-      dpp(dpp), store(_store), status_manager(_sm),
+      dpp(_dpp), store(_store), status_manager(_sm),
       async_rados(_async_rados), http_manager(_http_manager)
   {}
 
@@ -569,17 +571,17 @@ public:
   static string status_oid(const string& source_zone, const rgw_bucket_shard& bs);
   static string obj_status_oid(const string& source_zone, const rgw_obj& obj); /* can be used by sync modules */
 
-  int read_sync_status();
-  int run();
-
   // implements DoutPrefixProvider
   CephContext *get_cct() const override { return store->ctx(); }
   unsigned get_subsys() const override;
   std::ostream& gen_prefix(std::ostream& out) const override;
+
+  int read_sync_status();
+  int run();
 };
 
 /// read the sync status of all bucket shards from the given source zone
-int rgw_bucket_sync_status(RGWRados *store, const std::string& source_zone,
+int rgw_bucket_sync_status(const DoutPrefixProvider *dpp, RGWRados *store, const std::string& source_zone,
                            const RGWBucketInfo& bucket_info,
                            std::vector<rgw_bucket_shard_sync_info> *status);
 
