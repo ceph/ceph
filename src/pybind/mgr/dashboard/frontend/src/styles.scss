@@ -300,3 +300,31 @@ uib-accordion .panel-title,
 .nav-tabs {
   margin-bottom: 15px;
 }
+
+.info-card-popover-cluster-status {
+  max-width: 23vw;
+  max-height: 20vh;
+
+  .popover-body {
+    max-width: 100%;
+    max-height: 19vh;
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 1199px) {
+  .info-card-popover-cluster-status {
+    max-width: 31vw;
+  }
+}
+
+@media (max-width: 991px) {
+  .info-card-popover-cluster-status {
+    max-width: 46vw;
+  }
+}
+@media (max-width: 767px) {
+  .info-card-popover-cluster-status {
+    max-width: 83vw;
+  }
+}
