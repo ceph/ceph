@@ -8,6 +8,61 @@
 #include "include/buffer.h"
 #include "include/msgr.h"
 
+/*
+ * Continuation Helper Classes
+ */
+
+#include <memory>
+#include <tuple>
+
+template <class C>
+class Ct {
+public:
+  virtual ~Ct() {}
+  virtual Ct<C> *call(C *foo) const = 0;
+};
+
+template <class C, typename... Args>
+class CtFun : public Ct<C> {
+private:
+  using fn = Ct<C> *(C::*)(Args...);
+  fn _f;
+  std::tuple<Args...> _params;
+
+  template <std::size_t... Is>
+  inline Ct<C> *_call(C *foo, std::index_sequence<Is...>) const {
+    return (foo->*_f)(std::get<Is>(_params)...);
+  }
+
+public:
+  CtFun(fn f) : _f(f) {}
+
+  inline void setParams(Args... args) { _params = std::make_tuple(args...); }
+  inline Ct<C> *call(C *foo) const override {
+    return _call(foo, std::index_sequence_for<Args...>());
+  }
+};
+
+#define CONTINUATION_DECL(C, F, ...)                \
+  std::unique_ptr<CtFun<C, ##__VA_ARGS__>> F##_cont_ =  \
+      std::make_unique<CtFun<C, ##__VA_ARGS__>>(&C::F); \
+  CtFun<C, ##__VA_ARGS__> *F##_cont = F##_cont_.get()
+
+#define CONTINUATION_PARAM(V, C, ...) CtFun<C, ##__VA_ARGS__> *V##_cont
+
+#define CONTINUATION(F) F##_cont
+#define CONTINUE(F, ...) F##_cont->setParams(__VA_ARGS__), F##_cont
+
+#define CONTINUATION_RUN(CT)                                      \
+  {                                                               \
+    Ct<std::remove_reference<decltype(*this)>::type> *_cont = CT; \
+    while (_cont) {                                               \
+      _cont = _cont->call(this);                                  \
+    }                                                             \
+  }
+
+//////////////////////////////////////////////////////////////////////
+
 class AsyncMessenger;
 
 class Protocol {
@@ -39,6 +94,11 @@ public:
   virtual void write_event() = 0;
   virtual bool is_queued() = 0;
 };
+
+class ProtocolV1;
+using CtPtr = Ct<ProtocolV1>*;
+#define READ_HANDLER_CONTINUATION_DECL(C, F) CONTINUATION_DECL(C, F, char*, int)
+#define WRITE_HANDLER_CONTINUATION_DECL(C, F) CONTINUATION_DECL(C, F, int)
 
 class ProtocolV1 : public Protocol {
 /*
@@ -87,6 +147,7 @@ handle_tag_ack           |              v                                 |
 */
 
 protected:
+
   enum State {
     NONE = 0,
     START_CONNECT,
@@ -174,28 +235,52 @@ protected:
 
   State state;
 
-  void ready();
-  void wait_message();
-  void handle_message(char *buffer, int r);
+  void run_continuation(CtPtr continuation);
+  CtPtr read(CONTINUATION_PARAM(next, ProtocolV1, char *, int), int len,
+             char *buffer = nullptr);
+  CtPtr write(CONTINUATION_PARAM(next, ProtocolV1, int), bufferlist &bl);
+  inline CtPtr _fault() {  // helper fault method that stops continuation
+    fault();
+    return nullptr;
+  }
 
-  void handle_keepalive2(char *buffer, int r);
+  CONTINUATION_DECL(ProtocolV1, wait_message);
+  READ_HANDLER_CONTINUATION_DECL(ProtocolV1, handle_message);
+  READ_HANDLER_CONTINUATION_DECL(ProtocolV1, handle_keepalive2);
+  READ_HANDLER_CONTINUATION_DECL(ProtocolV1, handle_keepalive2_ack);
+  READ_HANDLER_CONTINUATION_DECL(ProtocolV1, handle_tag_ack);
+  READ_HANDLER_CONTINUATION_DECL(ProtocolV1, handle_message_header);
+  CONTINUATION_DECL(ProtocolV1, throttle_message);
+  CONTINUATION_DECL(ProtocolV1, throttle_bytes);
+  CONTINUATION_DECL(ProtocolV1, throttle_dispatch_queue);
+  READ_HANDLER_CONTINUATION_DECL(ProtocolV1, handle_message_front);
+  READ_HANDLER_CONTINUATION_DECL(ProtocolV1, handle_message_middle);
+  CONTINUATION_DECL(ProtocolV1, read_message_data);
+  READ_HANDLER_CONTINUATION_DECL(ProtocolV1, handle_message_data);
+  READ_HANDLER_CONTINUATION_DECL(ProtocolV1, handle_message_footer);
+
+  CtPtr ready();
+  CtPtr wait_message();
+  CtPtr handle_message(char *buffer, int r);
+
+  CtPtr handle_keepalive2(char *buffer, int r);
   void append_keepalive_or_ack(bool ack = false, utime_t *t = nullptr);
-  void handle_keepalive2_ack(char *buffer, int r);
-  void handle_tag_ack(char *buffer, int r);
+  CtPtr handle_keepalive2_ack(char *buffer, int r);
+  CtPtr handle_tag_ack(char *buffer, int r);
 
-  void handle_message_header(char *buffer, int r);
-  void throttle_message();
-  void throttle_bytes();
-  void throttle_dispatch_queue();
-  void read_message_front();
-  void handle_message_front(char *buffer, int r);
-  void read_message_middle();
-  void handle_message_middle(char *buffer, int r);
-  void read_message_data_prepare();
-  void read_message_data();
-  void handle_message_data(char *buffer, int r);
-  void read_message_footer();
-  void handle_message_footer(char *buffer, int r);
+  CtPtr handle_message_header(char *buffer, int r);
+  CtPtr throttle_message();
+  CtPtr throttle_bytes();
+  CtPtr throttle_dispatch_queue();
+  CtPtr read_message_front();
+  CtPtr handle_message_front(char *buffer, int r);
+  CtPtr read_message_middle();
+  CtPtr handle_message_middle(char *buffer, int r);
+  CtPtr read_message_data_prepare();
+  CtPtr read_message_data();
+  CtPtr handle_message_data(char *buffer, int r);
+  CtPtr read_message_footer();
+  CtPtr handle_message_footer(char *buffer, int r);
 
   void session_reset();
   void randomize_out_seq();
@@ -235,46 +320,69 @@ private:
   bool got_bad_auth;
   AuthAuthorizer *authorizer;
 
-  void send_client_banner();
-  void handle_client_banner_write(int r);
-  void wait_server_banner();
-  void handle_server_banner_and_identify(char *buffer, int r);
-  void handle_my_addr_write(int r);
-  void send_connect_message();
-  void handle_connect_message_write(int r);
-  void wait_connect_reply();
-  void handle_connect_reply_1(char *buffer, int r);
-  void wait_connect_reply_auth();
-  void handle_connect_reply_auth(char *buffer, int r);
-  void handle_connect_reply_2();
-  void wait_ack_seq();
-  void handle_ack_seq(char *buffer, int r);
-  void handle_in_seq_write(int r);
-  void client_ready();
+  CONTINUATION_DECL(ProtocolV1, send_client_banner);
+  WRITE_HANDLER_CONTINUATION_DECL(ProtocolV1, handle_client_banner_write);
+  READ_HANDLER_CONTINUATION_DECL(ProtocolV1, handle_server_banner_and_identify);
+  WRITE_HANDLER_CONTINUATION_DECL(ProtocolV1, handle_my_addr_write);
+  CONTINUATION_DECL(ProtocolV1, send_connect_message);
+  WRITE_HANDLER_CONTINUATION_DECL(ProtocolV1, handle_connect_message_write);
+  READ_HANDLER_CONTINUATION_DECL(ProtocolV1, handle_connect_reply_1);
+  READ_HANDLER_CONTINUATION_DECL(ProtocolV1, handle_connect_reply_auth);
+  READ_HANDLER_CONTINUATION_DECL(ProtocolV1, handle_ack_seq);
+  WRITE_HANDLER_CONTINUATION_DECL(ProtocolV1, handle_in_seq_write);
+
+  CtPtr send_client_banner();
+  CtPtr handle_client_banner_write(int r);
+  CtPtr wait_server_banner();
+  CtPtr handle_server_banner_and_identify(char *buffer, int r);
+  CtPtr handle_my_addr_write(int r);
+  CtPtr send_connect_message();
+  CtPtr handle_connect_message_write(int r);
+  CtPtr wait_connect_reply();
+  CtPtr handle_connect_reply_1(char *buffer, int r);
+  CtPtr wait_connect_reply_auth();
+  CtPtr handle_connect_reply_auth(char *buffer, int r);
+  CtPtr handle_connect_reply_2();
+  CtPtr wait_ack_seq();
+  CtPtr handle_ack_seq(char *buffer, int r);
+  CtPtr handle_in_seq_write(int r);
+  CtPtr client_ready();
 
   // Server Protocol
-private:
+protected:
   bool wait_for_seq;
 
-  void send_server_banner();
-  void handle_server_banner_write(int r);
-  void wait_client_banner();
-  void handle_client_banner(char *buffer, int r);
-  void wait_connect_message();
-  void handle_connect_message_1(char *buffer, int r);
-  void wait_connect_message_auth();
-  void handle_connect_message_auth(char *buffer, int r);
-  void handle_connect_message_2();
-  void send_connect_message_reply(char tag, ceph_msg_connect_reply &reply,
-                                  bufferlist &authorizer_reply);
-  void handle_connect_message_reply_write(int r);
-  void replace(AsyncConnectionRef existing, ceph_msg_connect_reply &reply,
-               bufferlist &authorizer_reply);
-  void open(ceph_msg_connect_reply &reply, bufferlist &authorizer_reply);
-  void handle_ready_connect_message_reply_write(int r);
-  void wait_seq();
-  void handle_seq(char *buffer, int r);
-  void server_ready();
+  CONTINUATION_DECL(ProtocolV1, send_server_banner);
+  WRITE_HANDLER_CONTINUATION_DECL(ProtocolV1, handle_server_banner_write);
+  READ_HANDLER_CONTINUATION_DECL(ProtocolV1, handle_client_banner);
+  CONTINUATION_DECL(ProtocolV1, wait_connect_message);
+  READ_HANDLER_CONTINUATION_DECL(ProtocolV1, handle_connect_message_1);
+  READ_HANDLER_CONTINUATION_DECL(ProtocolV1, handle_connect_message_auth);
+  WRITE_HANDLER_CONTINUATION_DECL(ProtocolV1,
+                                  handle_connect_message_reply_write);
+  WRITE_HANDLER_CONTINUATION_DECL(ProtocolV1,
+                                  handle_ready_connect_message_reply_write);
+  READ_HANDLER_CONTINUATION_DECL(ProtocolV1, handle_seq);
+
+  CtPtr send_server_banner();
+  CtPtr handle_server_banner_write(int r);
+  CtPtr wait_client_banner();
+  CtPtr handle_client_banner(char *buffer, int r);
+  CtPtr wait_connect_message();
+  CtPtr handle_connect_message_1(char *buffer, int r);
+  CtPtr wait_connect_message_auth();
+  CtPtr handle_connect_message_auth(char *buffer, int r);
+  CtPtr handle_connect_message_2();
+  CtPtr send_connect_message_reply(char tag, ceph_msg_connect_reply &reply,
+                                   bufferlist &authorizer_reply);
+  CtPtr handle_connect_message_reply_write(int r);
+  CtPtr replace(AsyncConnectionRef existing, ceph_msg_connect_reply &reply,
+                bufferlist &authorizer_reply);
+  CtPtr open(ceph_msg_connect_reply &reply, bufferlist &authorizer_reply);
+  CtPtr handle_ready_connect_message_reply_write(int r);
+  CtPtr wait_seq();
+  CtPtr handle_seq(char *buffer, int r);
+  CtPtr server_ready();
 };
 
 class LoopbackProtocolV1 : public ProtocolV1 {

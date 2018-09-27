@@ -160,21 +160,18 @@ void AsyncConnection::maybe_start_delay_thread()
 }
 
 
-void AsyncConnection::read(unsigned len, char *buffer,
-                           std::function<void(char *, ssize_t)> callback) {
+ssize_t AsyncConnection::read(unsigned len, char *buffer,
+                              std::function<void(char *, ssize_t)> callback) {
   ldout(async_msgr->cct, 20) << __func__
                              << (pendingReadLen ? " continue" : " start")
                              << " len=" << len << dendl;
-  readCallback = callback;
-  pendingReadLen = len;
-  read_buffer = buffer;
   ssize_t r = read_until(len, buffer);
-  if (r <= 0) {
-    // read all bytes, or an error occured
-    pendingReadLen.reset();
-    read_buffer = nullptr;
-    callback(buffer, r);
+  if (r > 0) {
+    readCallback = callback;
+    pendingReadLen = len;
+    read_buffer = buffer;
   }
+  return r;
 }
 
 // Because this func will be called multi times to populate
@@ -283,20 +280,17 @@ ssize_t AsyncConnection::read_bulk(char *buf, unsigned len)
   return nread;
 }
 
-void AsyncConnection::write(bufferlist &bl,
-                            std::function<void(ssize_t)> callback, bool more) {
+ssize_t AsyncConnection::write(bufferlist &bl,
+                               std::function<void(ssize_t)> callback,
+                               bool more) {
 
     std::unique_lock<std::mutex> l(write_lock);
-    writeCallback = callback;
     outcoming_bl.claim_append(bl);
     ssize_t r = _try_send(more);
-    if (r <= 0) {
-      // either finish writting, or returned an error
-      writeCallback.reset();
-      l.unlock();
-      callback(r);
-      return;
+    if (r > 0) {
+      writeCallback = callback;
     }
+    return r;
 }
 
 // return the remaining bytes, it may larger than the length of ptr
@@ -423,7 +417,13 @@ void AsyncConnection::process() {
 
     case STATE_CONNECTION_ESTABLISHED: {
       if (pendingReadLen) {
-        read(*pendingReadLen, read_buffer, readCallback);
+        ssize_t r = read(*pendingReadLen, read_buffer, readCallback);
+        if (r <= 0) { // read all bytes, or an error occured
+          pendingReadLen.reset();
+          char *buf_tmp = read_buffer;
+          read_buffer = nullptr;
+          readCallback(buf_tmp, r);
+        }
         return;
       }
       break;
