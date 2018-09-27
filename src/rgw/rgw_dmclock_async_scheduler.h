@@ -53,9 +53,6 @@ class AsyncScheduler : public md_config_obs_t, public Scheduler {
   auto async_request(const client_id& client, const ReqParams& params,
                      const Time& time, Cost cost, CompletionToken&& token);
 
-  int schedule_request(const client_id& client, const ReqParams& params,
-                       const Time& time, const Cost& cost,
-                       optional_yield_context yield_ctx) override;
   /// returns a throttle unit granted by async_request()
   void request_complete() override;
 
@@ -72,6 +69,10 @@ class AsyncScheduler : public md_config_obs_t, public Scheduler {
                           const std::set<std::string>& changed) override;
 
  private:
+  int schedule_request_impl(const client_id& client, const ReqParams& params,
+                            const Time& time, const Cost& cost,
+                            optional_yield_context yield_ctx) override;
+
   static constexpr bool IsDelayed = false;
   using Queue = crimson::dmclock::PullPriorityQueue<client_id, Request, IsDelayed>;
   using RequestRef = typename Queue::RequestRef;
@@ -181,17 +182,17 @@ public:
     }
   }
 
-  int schedule_request(const client_id&, const ReqParams&,
-                       const Time&, const Cost&,
-                       optional_yield_context) override {
-    return outstanding_requests++ >= max_requests ? -EAGAIN : 0 ;
-  }
-
   void request_complete() override {
     --outstanding_requests;
   }
 
 private:
+  int schedule_request_impl(const client_id&, const ReqParams&,
+                            const Time&, const Cost&,
+                            optional_yield_context) override {
+    return outstanding_requests++ >= max_requests ? -EAGAIN : 0 ;
+  }
+
   std::atomic<int64_t> max_requests;
   std::atomic<int64_t> outstanding_requests = 0;
 };
