@@ -67,6 +67,36 @@ if(WITH_MGR)
   elseif(NOT WITH_PYTHON3 AND MGR_PYTHON_VERSION_MAJOR EQUAL 3)
     message(FATAL_ERROR "mgr plugins require python3 binding")
   endif()
+
+  if(USE_OPENSSL)
+    execute_process(
+      COMMAND ${PYTHON${PYTHON_VERSION}_EXECUTABLE} -c "import ssl; print('.'.join(map(str,ssl.OPENSSL_VERSION_INFO[0:3])))"
+      RESULT_VARIABLE PYSSL_RESULT
+      OUTPUT_VARIABLE PYSSL_VER
+      ERROR_QUIET)
+    if (NOT ${PYSSL_RESULT})
+      # the ideal way to get the soversion is to parse the suffix of file name of
+      # `/lib/x86_64-linux-gnu/libssl.so.1.0.0`, but since we're lazy, and will just
+      # trust the version number here.
+      macro(get_openssl_soversion version prefix)
+        string(REPLACE "." ";" ssl_version_list ${version})
+        list(GET ssl_version_list 0 ssl_version_major)
+        list(GET ssl_version_list 1 ssl_version_minor)
+        set(${prefix}_SOVERSION ${ssl_version_major}.${ssl_version_minor})
+        unset(ssl_version_list)
+        unset(ssl_version_major)
+        unset(ssl_version_minor)
+      endmacro()
+      get_openssl_soversion(${OPENSSL_VERSION} OPENSSL)
+      get_openssl_soversion(${PYSSL_VER} PYSSL)
+      if(NOT (OPENSSL_SOVERSION VERSION_EQUAL PYSSL_SOVERSION))
+        message(FATAL_ERROR "Python and Ceph link to different OpenSSL versions: ${PYSSL_VER} vs ${OPENSSL_VERSION}")
+      endif()
+    else()
+      message(WARNING "could not determine ssl version of python crypto lib")
+    endif()
+  endif(USE_OPENSSL)
+
   # Location needs to match default setting for mgr_module_path, currently:
   # OPTION(mgr_module_path, OPT_STR, CEPH_PKGLIBDIR "/mgr")
   install(DIRECTORY
