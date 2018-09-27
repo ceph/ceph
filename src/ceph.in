@@ -24,7 +24,6 @@ from time import sleep
 import codecs
 import os
 import sys
-import subprocess
 import time
 import platform
 
@@ -147,7 +146,7 @@ import subprocess
 
 from ceph_argparse import \
     concise_sig, descsort_key, parse_json_funcsigs, \
-    matchnum, validate_command, find_cmd_target, \
+    validate_command, find_cmd_target, \
     json_command, run_in_thread
 
 from ceph_daemon import admin_socket, DaemonWatcher, Termsize
@@ -615,9 +614,9 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
             ret, outbuf, outs = do_command(parsed_args, target, cmdargs, sigdict, inbuf, verbose)
         else:
             # Interactive mode (ceph cli)
-            if sys.stdin.isatty():
-                # do the command-interpreter looping
-                # for input to do readline cmd editing
+            if sys.stdin.isatty():  
+                # do the command-interpreter looping    
+                # for input to do readline cmd editing    
                 import readline  # noqa
 
             while True:
@@ -661,8 +660,6 @@ def complete(sigdict, args, target):
     Return exitcode.
     """
     # XXX this looks a lot like the front of validate_command().  Refactor?
-
-    complete_verbose = 'COMPVERBOSE' in os.environ
 
     # Repulsive hack to handle tell: lop off 'tell' and target
     # and validate the rest of the command.  'target' is already
@@ -929,8 +926,6 @@ def main():
     # For now, --admin-daemon is handled as usual.  Try it
     # first in case we can't connect() to the cluster
 
-    format = parsed_args.output_format
-
     done, ret = maybe_daemon_command(parsed_args, childargs)
     if done:
         return ret
@@ -1164,7 +1159,7 @@ def main():
         if ret:
             where = '{0}.{1}'.format(*target)
             if ret > 0:
-                raise RuntimeError('Unexpeceted return code from {0}: {1}'.
+                raise RuntimeError('Unexpected return code from {0}: {1}'.
                                    format(where, ret))
             outs = 'problem getting command descriptions from {0}'.format(where)
         else:
