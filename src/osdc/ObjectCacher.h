@@ -343,6 +343,7 @@ class ObjectCacher {
     void merge_left(BufferHead *left, BufferHead *right);
     bool can_merge_bh(BufferHead *left, BufferHead *right);
     void try_merge_bh(BufferHead *bh);
+    void maybe_rebuild_buffer(BufferHead *bh);
 
     bool is_cached(loff_t off, loff_t len) const;
     bool include_all_cached_data(loff_t off, loff_t len);

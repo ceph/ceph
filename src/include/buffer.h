@@ -728,6 +728,7 @@ namespace buffer CEPH_BUFFER_API {
       return *this;
     }
 
+    uint64_t get_wasted_space() const;
     unsigned get_num_buffers() const { return _buffers.size(); }
     const ptr& front() const { return _buffers.front(); }
     const ptr& back() const { return _buffers.back(); }
