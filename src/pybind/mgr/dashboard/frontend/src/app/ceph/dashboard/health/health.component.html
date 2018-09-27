@@ -21,14 +21,14 @@
           </li>
         </ul>
       </ng-template>
-      <div class="health-popover-wrapper">
-        <div [ngStyle]="contentData.health.status | healthColor"
-             [popover]="contentData.health.checks.length > 0 ? healthChecks : ''"
-             triggers=""
-             #healthChecksTarget="bs-popover"
-             placement="bottom">
-          {{ contentData.health.status }}
-        </div>
+      <div [ngStyle]="contentData.health.status | healthColor"
+           [popover]="contentData.health.checks.length > 0 ? healthChecks : ''"
+           triggers=""
+           #healthChecksTarget="bs-popover"
+           placement="bottom"
+           container="body"
+           containerClass="info-card-popover-cluster-status">
+        {{ contentData.health.status }}
       </div>
     </cd-info-card>
 
