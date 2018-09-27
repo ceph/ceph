@@ -53,7 +53,7 @@ export class UserListComponent implements OnInit {
     };
     const deleteAction: CdTableAction = {
       permission: 'delete',
-      icon: 'fa-trash-o',
+      icon: 'fa-times',
       click: () => this.deleteUserModal(),
       name: 'Delete'
     };
