@@ -66,10 +66,18 @@ export class ApiInterceptorService implements HttpInterceptor {
 
           let timeoutId;
           if (showNotification) {
+            let message = '';
+            if (_.isPlainObject(resp.error) && _.isString(resp.error.detail)) {
+              message = resp.error.detail; // Error was triggered by the backend.
+            } else if (_.isString(resp.error)) {
+              message = resp.error;
+            } else if (_.isString(resp.message)) {
+              message = resp.message;
+            }
             timeoutId = this.notificationService.show(
               NotificationType.error,
-              resp.error.detail || '',
-              `${resp.status} - ${resp.statusText}`
+              `${resp.status} - ${resp.statusText}`,
+              message
             );
           }
 
