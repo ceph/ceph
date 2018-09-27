@@ -37,10 +37,10 @@ void AsyncScheduler::handle_conf_change(const ConfigProxy& conf,
   schedule(crimson::dmclock::TimeZero);
 }
 
-int AsyncScheduler::schedule_request(const client_id& client,
-                                     const ReqParams& params,
-                                     const Time& time, const Cost& cost,
-                                     optional_yield_context yield_ctx)
+int AsyncScheduler::schedule_request_impl(const client_id& client,
+                                          const ReqParams& params,
+                                          const Time& time, const Cost& cost,
+                                          optional_yield_context yield_ctx)
 {
     ceph_assert(yield_ctx);
 

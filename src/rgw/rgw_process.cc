@@ -49,17 +49,10 @@ auto schedule_request(Scheduler *scheduler, req_state *s, RGWOp *op)
   const auto cost = op->dmclock_cost();
   ldpp_dout(op,10) << "scheduling with dmclock client=" << static_cast<int>(client)
 		   << " cost=" << cost << dendl;
-  int r = scheduler->schedule_request(client, {},
-				      req_state::Clock::to_double(s->time),
-				      cost,
-				      s->yield);
-  if (r < 0){
-    if (r == -EAGAIN)
-      r = -ERR_RATE_LIMITED;
-    ldpp_dout(op,0) << "Scheduling request failed with " << r << dendl;
-  }
-  std::pair ret(std::move(r),SchedulerCompleter{scheduler});
-  return ret;
+  return scheduler->schedule_request(client, {},
+                                     req_state::Clock::to_double(s->time),
+                                     cost,
+                                     s->yield);
 }
 
 
@@ -215,6 +208,10 @@ int process_request(RGWRados* const store,
   }
   std::tie(ret,c) = schedule_request(scheduler, s, op);
   if (ret < 0) {
+    if (ret == -EAGAIN) {
+      ret = -ERR_RATE_LIMITED;
+    }
+    ldpp_dout(op,0) << "Scheduling request failed with " << ret << dendl;
     abort_early(s, op, ret, handler);
   }
   req->op = op;

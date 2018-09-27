@@ -43,12 +43,6 @@ public:
   int add_request(const client_id& client, const ReqParams& params,
 		  const Time& time, Cost cost);
 
-  int schedule_request(const client_id& client, const ReqParams& params,
-			const Time& time, const Cost& cost,
-			optional_yield_context _y [[maybe_unused]]) override
-  {
-    return add_request(client, params, time, cost);
-  }
 
   void cancel();
 
@@ -57,6 +51,13 @@ public:
   static void handle_request_cb(const client_id& c, std::unique_ptr<SyncRequest> req,
 				PhaseType phase, Cost cost);
 private:
+  int schedule_request_impl(const client_id& client, const ReqParams& params,
+			    const Time& time, const Cost& cost,
+			    optional_yield_context _y [[maybe_unused]]) override
+  {
+    return add_request(client, params, time, cost);
+  }
+
   static constexpr bool IsDelayed = false;
   using Queue = crimson::dmclock::PushPriorityQueue<client_id, SyncRequest, IsDelayed>;
   using RequestRef = typename Queue::RequestRef;

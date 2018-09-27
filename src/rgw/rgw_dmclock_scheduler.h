@@ -62,13 +62,44 @@ enum class ReqState {
   Cancelled
 };
 
+template <typename F>
+class Completer {
+public:
+  Completer(F &&f): f(std::move(f)) {}
+  // Default constructor is needed as we need to create an empty completer
+  // that'll be move assigned later in process request
+  Completer() = default;
+  ~Completer() {
+    if (f) {
+      f();
+    }
+  }
+  Completer(const Completer&) = delete;
+  Completer& operator=(const Completer&) = delete;
+  Completer(Completer&& other) = default;
+  Completer& operator=(Completer&& other) = default;
+private:
+  F f;
+};
+
+using SchedulerCompleter = Completer<std::function<void()>>;
+
 class Scheduler  {
 public:
-  virtual int schedule_request(const client_id&, const ReqParams&,
-			       const Time&, const Cost&,
-			       optional_yield_context) = 0;
+  auto schedule_request(const client_id& client, const ReqParams& params,
+			const Time& time, const Cost& cost,
+			optional_yield_context yield)
+  {
+    int r = schedule_request_impl(client,params,time,cost,yield);
+    return std::make_pair(r,SchedulerCompleter(std::bind(&Scheduler::request_complete,this)));
+  }
   virtual void request_complete() {};
+
   virtual ~Scheduler() {};
+private:
+  virtual int schedule_request_impl(const client_id&, const ReqParams&,
+				    const Time&, const Cost&,
+				    optional_yield_context) = 0;
 };
 
 /// array of per-client counters to serve as GetClientCounters
@@ -93,32 +124,6 @@ using ClientSums = std::array<ClientSum, client_count>;
 void inc(ClientSums& sums, client_id client, Cost cost);
 void on_cancel(PerfCounters *c, const ClientSum& sum);
 void on_process(PerfCounters* c, const ClientSum& rsum, const ClientSum& psum);
-
-class SchedulerCompleter {
-public:
-  SchedulerCompleter(Scheduler *s): s(s) {}
-  // Default constructor is needed as we need to create an empty completer
-  // that'll be move assigned later in process request
-  SchedulerCompleter() : s(nullptr) {}
-  ~SchedulerCompleter() {
-    if (s) {
-      s->request_complete();
-    }
-  }
-  SchedulerCompleter(const SchedulerCompleter&)=delete;
-  SchedulerCompleter& operator=(const SchedulerCompleter&)=delete;
-  SchedulerCompleter(SchedulerCompleter&& other) {
-    s = other.s;
-    other.s = nullptr;
-  }
-  SchedulerCompleter& operator=(SchedulerCompleter&& other){
-    s = other.s;
-    other.s = nullptr;
-    return *this;
-  }
-private:
-  Scheduler *s;
-};
 
 /// a simple wrapper to hold client config. objects needed to construct a
 /// scheduler instance, the primary utility of this being to optionally
