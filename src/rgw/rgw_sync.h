@@ -167,6 +167,7 @@ public:
 };
 
 struct RGWMetaSyncEnv {
+  const DoutPrefixProvider *dpp;
   CephContext *cct{nullptr};
   RGWRados *store{nullptr};
   RGWRESTConn *conn{nullptr};
@@ -177,7 +178,7 @@ struct RGWMetaSyncEnv {
 
   RGWMetaSyncEnv() {}
 
-  void init(CephContext *_cct, RGWRados *_store, RGWRESTConn *_conn,
+  void init(const DoutPrefixProvider *_dpp, CephContext *_cct, RGWRados *_store, RGWRESTConn *_conn,
             RGWAsyncRadosProcessor *_async_rados, RGWHTTPManager *_http_manager,
             RGWSyncErrorLogger *_error_logger, RGWSyncTraceManager *_sync_tracer);
 
@@ -186,6 +187,7 @@ struct RGWMetaSyncEnv {
 };
 
 class RGWRemoteMetaLog : public RGWCoroutinesManager {
+  const DoutPrefixProvider *dpp;
   RGWRados *store;
   RGWRESTConn *conn;
   RGWAsyncRadosProcessor *async_rados;
@@ -209,10 +211,11 @@ class RGWRemoteMetaLog : public RGWCoroutinesManager {
   RGWSyncTraceNodeRef tn;
 
 public:
-  RGWRemoteMetaLog(RGWRados *_store, RGWAsyncRadosProcessor *async_rados,
+  RGWRemoteMetaLog(const DoutPrefixProvider *dpp, RGWRados *_store,
+                   RGWAsyncRadosProcessor *async_rados,
                    RGWMetaSyncStatusManager *_sm)
     : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()),
-      store(_store), conn(NULL), async_rados(async_rados),
+      dpp(dpp), store(_store), conn(NULL), async_rados(async_rados),
       http_manager(store->ctx(), completion_mgr),
       status_manager(_sm) {}
 
@@ -235,7 +238,7 @@ public:
   }
 };
 
-class RGWMetaSyncStatusManager {
+class RGWMetaSyncStatusManager : public DoutPrefixProvider {
   RGWRados *store;
   librados::IoCtx ioctx;
 
@@ -263,7 +266,7 @@ class RGWMetaSyncStatusManager {
 
 public:
   RGWMetaSyncStatusManager(RGWRados *_store, RGWAsyncRadosProcessor *async_rados)
-    : store(_store), master_log(store, async_rados, this),
+    : store(_store), master_log(this, store, async_rados, this),
       ts_to_shard_lock("ts_to_shard_lock") {}
   int init();
 
@@ -282,6 +285,12 @@ public:
   }
 
   int run() { return master_log.run_sync(); }
+
+
+  // implements DoutPrefixProvider
+  CephContext *get_cct() const override { return store->ctx(); }
+  unsigned get_subsys() const override;
+  std::ostream& gen_prefix(std::ostream& out) const override;
 
   void wakeup(int shard_id) { return master_log.wakeup(shard_id); }
   void stop() {
@@ -511,11 +520,11 @@ public:
 };
 
 // MetaLogTrimCR factory function
-RGWCoroutine* create_meta_log_trim_cr(RGWRados *store, RGWHTTPManager *http,
+RGWCoroutine* create_meta_log_trim_cr(const DoutPrefixProvider *dpp, RGWRados *store, RGWHTTPManager *http,
                                       int num_shards, utime_t interval);
 
 // factory function for mdlog trim via radosgw-admin
-RGWCoroutine* create_admin_meta_log_trim_cr(RGWRados *store,
+RGWCoroutine* create_admin_meta_log_trim_cr(const DoutPrefixProvider *dpp, RGWRados *store,
                                             RGWHTTPManager *http,
                                             int num_shards);
 
