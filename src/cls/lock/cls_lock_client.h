@@ -4,6 +4,8 @@
 #ifndef CEPH_CLS_LOCK_CLIENT_H
 #define CEPH_CLS_LOCK_CLIENT_H
 
+#include <chrono>
+
 #include "cls/lock/cls_lock_types.h"
 
 namespace librados {
