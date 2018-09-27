@@ -20,81 +20,64 @@
 
 namespace mempool {
 
-/*
+namespace ceph::slab {
 
-The slab_xxxx containers are only available with a mempool. If you don't know what a mempool
-is see mempool.h
-
-The slab_xxxx containers are made from standard STL containers with a custom allocator.
-The declaration for each slab container mimics the corresponding stl container
-but has two additional parameters: stackSize and slabSize (which has a default).
-
-The basic idea of slab_containers is that rather than malloc/free for each container node,
-you malloc a 'slab' of nodes and hand those out one by one (per-container). In this
-documentation we'll use the term 'slabSize' as a short hand for "number of nodes in a slab".
-
-The ADVANTAGE of slab containers is that the run-time cost of the per-node malloc/free is
-reduced by 'slabSize' (well technically amortized across slabSize number of STL alloc/frees).
-Also, heap fragmentation is typically reduced. Especially for containers with lots of small 
-modes.
-
-The DISADVANTAGE of slab containers is that you malloc/free entire slabs. Thus slab
-containers always consume more memory than their STL equivalents. The amount of extra
-memory consumed is dependent on the access pattern (and container type). The worst-case
-memory expansion is 'slabSize-1' times an STL container (approximately). However it's
-likely to be very hard to create a worst-case memory pattern (unless you're trying ;-).
-This also leads toward keeping the slabSizes modest -- unless you have special knowledge
-of the access pattern OR the container itself is expected to be ephemeral.
-
-Another disdvantage of slabs is that you can't move them from one container to another.
-This causes certain operations that used to have O(1) cost to have O(N) cost.
-
-   list::splice  O(N)
-   list::swap    O(2N)
-   vector::swap is O(2*stackSize)
-
-Since I'm lazy, not all of the stl::xxxx.swap operations have been implemented. They
-are pretty much discouraged for slab_containers anyways.
-
-In order to reduce malloc/free traffic further, each container has within it one slab
-that is part of the container itself (logically pre-allocated, but it's not a separate
-malloc call -- its part of the container itself). The size of this slab is set through
-the template parameter 'stackSize' which must be specified on every declaration (no default).
-Thus the first 'stackSize' items in this slab container result in no malloc/free invokation
-at the expense of burning that memory whether it's used or not. This is ideal for
-continers that are normally one or two nodes but have the ability to grow on that rare
-occasion when it's needed.
-
-There is only one way to create more slabs: When no more free nodes are
-available, a slab is allocated using the slabSize template parameter,
-which has a default value intended to try to round up all allocations
-to something like 256 Bytes.
-
-
-STATISTICS
-----------
-
-Normal mempools assume that all of the memory associated with a mempool is "allocated",
-but slab_containers introduce another interesting state known as "free". Bytes and items
-are in the "free" state when they are part of slab but not currently being used by
-the client container. Thus 100% of a slab is considered "allocated" regardless of
-whether any of the contained items are being used by the client container. Hence
-there are several new per-pool statistics:
-
-slabs          number of slabs in system (regardless of size)
-free_items     number of items in slabs not being used by client container
-free_bytes     number of bytes in slabs not begin used by client container
-inuse_items    number of items in use (generally same as slab_xxxx.size())
-inuse_bytes    number of bytes in use
-
-Note, since each slab container has within itself one slab, that slab is added to the
-statistics as soon as the container is ctor'ed.
-
-See the unit test "documentation_test" in src/test/test_slab_containers.cc for
-a step by step examination of how these statistics work.
-
-
-*/
+// ceph::slab - STL-like containers with slabbed memory management.
+//
+// The slabbed containers are composed from standard STL containers and
+// custom allocator that aggregates multiple memory (de)allocations into
+// bigger units called 'slabs' to amortize the cost and improve data
+// locality. That is, instead of calling malloc/free for each its node
+// node separately, slabbed container mallocs a slab, divides it across
+// many nodes and -- when it's no longer necessary -- frees as a whole.
+// In this documentation we'll use the term 'slabSize' as a short hand
+// for "number of nodes in a slab".
+//
+// The way of declaring a slab container mimics its base STL container
+// but has two additional parameters: StackSlabSizeV and  HeapSlabSizeV.
+//
+// The ADVANTAGE of slab containers is that the run-time cost of the per-
+// node malloc/free is reduced by 'slabSize' (well technically amortized
+// across slabSize number of STL alloc/frees). Also, heap fragmentation
+// is typically reduced. Especially for containers with lots of small
+// modes.
+//
+// The DISADVANTAGE of slab containers is that you malloc/free entire
+// slabs. Thus slab containers always consume more memory than their
+// STL  equivalents. The amount of extra memory consumed is dependent
+// on the access pattern (and container type). The worst-case  memory
+// expansion is 'slabSize-1' times an STL container (approximately).
+// However it's likely to be very hard to create a worst-case memory
+// pattern (unless you're trying ;-).
+// This also leads toward keeping the slabSizes modest -- unless you
+// have special knowledge  of the access pattern OR the container itself
+// is expected to be ephemeral.
+//
+// Another disdvantage of slabs is that you can't move them from one
+// container to another. This causes certain operations that used to
+// have O(1) cost to have O(N) cost.
+//
+//    list::splice  O(N)
+//    list::swap    O(2N)
+//    vector::swap is O(2*stackSize)
+//
+// Not all of the stl::xxxx.swap operations are currently implemented.
+// They are pretty much discouraged for slab_containers anyways.
+//
+// In order to reduce malloc/free traffic further, each container has
+// within it one slab that is part of the container itself (logically
+// pre-allocated, but it's not a separate malloc call -- its part of
+// the container itself). The size of this slab is set by the template
+// parameter 'StackSlabSizeV' which must be specified on every
+// declaration (no default).  Thus the first 'StackSlabSizeV' items in
+// this slab container result in no malloc/free invocation at the expense
+// of burning that memory whether it's used or not. This is ideal for
+// containers that are normally one or two nodes but have the ability
+// to grow on that rare occasion when it's needed.
+//
+// There is only one way to create more slabs: When no more free nodes
+// are available, a slab is allocated using the HeapSlabSizeV template
+// parameter.
 
 template<pool_index_t pool_ix,
 	 typename T,
