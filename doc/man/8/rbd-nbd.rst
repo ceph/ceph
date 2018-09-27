@@ -9,7 +9,7 @@
 Synopsis
 ========
 
-| **rbd-nbd** [-c conf] [--read-only] [--device *nbd device*] [--nbds_max *limit*] [--max_part *limit*] [--exclusive] map *image-spec* | *snap-spec*
+| **rbd-nbd** [-c conf] [--read-only] [--device *nbd device*] [--nbds_max *limit*] [--max_part *limit*] [--exclusive] [--timeout *seconds*] map *image-spec* | *snap-spec*
 | **rbd-nbd** unmap *nbd device*
 | **rbd-nbd** list-mapped
 
@@ -44,6 +44,11 @@ Options
 .. option:: --exclusive
 
    Forbid writes by other clients.
+
+.. option:: --timeout *seconds*
+
+   Override device timeout. Linux kernel will default to a 30 second request timeout.
+   Allow the user to optionally specify an alternate timeout.
 
 Image and snap specs
 ====================
