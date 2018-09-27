@@ -1,14 +1,4 @@
 {
-  "__inputs": [
-    {
-      "name": "DS_LOCAL",
-      "label": "Local",
-      "description": "",
-      "type": "datasource",
-      "pluginId": "prometheus",
-      "pluginName": "Prometheus"
-    }
-  ],
   "__requires": [
     {
       "type": "grafana",
@@ -27,12 +17,6 @@
       "id": "graph",
       "name": "Graph",
       "version": "5.0.0"
-    },
-    {
-      "type": "datasource",
-      "id": "prometheus",
-      "name": "Prometheus",
-      "version": "5.0.0"
     }
   ],
   "annotations": {
@@ -48,7 +32,7 @@
       }
     ]
   },
-  "editable": true,
+  "editable": false,
   "gnetId": null,
   "graphTooltip": 0,
   "id": null,
@@ -74,7 +58,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_LOCAL}",
+      "datasource": null,
       "fill": 1,
       "gridPos": {
         "h": 8,
@@ -161,7 +145,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_LOCAL}",
+      "datasource": null,
       "fill": 1,
       "gridPos": {
         "h": 8,
@@ -255,7 +239,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_LOCAL}",
+      "datasource": null,
       "fill": 1,
       "gridPos": {
         "h": 8,
@@ -364,7 +348,7 @@
         "label": "Others",
         "threshold": 0
       },
-      "datasource": "${DS_LOCAL}",
+      "datasource": null,
       "fontSize": "80%",
       "format": "none",
       "gridPos": {
@@ -431,7 +415,7 @@
       {
         "allValue": null,
         "current": {},
-        "datasource": "${DS_LOCAL}",
+        "datasource": null,
         "hide": 0,
         "includeAll": true,
         "label": null,
