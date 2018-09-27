@@ -23,6 +23,420 @@ describe('CdValidators', () => {
     });
   });
 
+  describe('ip validator', () => {
+    let form: FormGroup;
+
+    beforeEach(() => {
+      form = new FormGroup({
+        x: new FormControl()
+      });
+    });
+
+    it('should not error on empty IPv4 addresses', () => {
+      const x = form.get('x');
+      x.setValidators(CdValidators.ip(4));
+      x.setValue('');
+      expect(x.valid).toBeTruthy();
+      expect(x.hasError('pattern')).toBeFalsy();
+    });
+
+    it('should accept valid IPv4 address', () => {
+      const x = form.get('x');
+      x.setValidators(CdValidators.ip(4));
+      x.setValue('19.117.23.141');
+      expect(x.valid).toBeTruthy();
+      expect(x.hasError('pattern')).toBeFalsy();
+    });
+
+    it('should error on IPv4 address containing whitespace', () => {
+      const x = form.get('x');
+      x.setValidators(CdValidators.ip(4));
+      x.setValue('155.144.133.122 ');
+      expect(x.valid).toBeFalsy();
+      expect(x.hasError('pattern')).toBeTruthy();
+
+      x.setValue('155. 144.133 .122');
+      expect(x.valid).toBeFalsy();
+      expect(x.hasError('pattern')).toBeTruthy();
+
+      x.setValue(' 155.144.133.122');
+      expect(x.valid).toBeFalsy();
+      expect(x.hasError('pattern')).toBeTruthy();
+    });
+
+    it('should error on IPv4 address containing invalid char', () => {
+      const x = form.get('x');
+      x.setValidators(CdValidators.ip(4));
+      x.setValue('155.144.eee.122 ');
+      expect(x.valid).toBeFalsy();
+      expect(x.hasError('pattern')).toBeTruthy();
+
+      x.setValue('155.1?.133 .1&2');
+      expect(x.valid).toBeFalsy();
+      expect(x.hasError('pattern')).toBeTruthy();
+    });
+
+    it('should error on IPv4 address containing blocks higher than 255', () => {
+      const x = form.get('x');
+      x.setValidators(CdValidators.ip(4));
+      x.setValue('155.270.133.122 ');
+      expect(x.valid).toBeFalsy();
+      expect(x.hasError('pattern')).toBeTruthy();
+
+      x.setValue('155.144.133.290 ');
+      expect(x.valid).toBeFalsy();
+      expect(x.hasError('pattern')).toBeTruthy();
+    });
+
+    it('should not error on empty IPv6 addresses', () => {
+      const x = form.get('x');
+      x.setValidators(CdValidators.ip(4));
+      x.setValue('');
+      expect(x.valid).toBeTruthy();
+      expect(x.hasError('pattern')).toBeFalsy();
+    });
+
+    it('should accept valid IPv6 address', () => {
+      const x = form.get('x');
+      x.setValidators(CdValidators.ip(6));
+      x.setValue('c4dc:1475:cb0b:24ed:3c80:468b:70cd:1a95');
+      expect(x.valid).toBeTruthy();
+      expect(x.hasError('pattern')).toBeFalsy();
+    });
+
+    it('should error on IPv6 address containing too many blocks', () => {
+      const x = form.get('x');
+      x.setValidators(CdValidators.ip(6));
+      x.setValue('c4dc:14753:cb0b:24ed:3c80:468b:70cd:1a95:a3f3');
+      expect(x.valid).toBeFalsy();
+      expect(x.hasError('pattern')).toBeTruthy();
+    });
+
+    it('should error on IPv6 address containing more than 4 digits per block', () => {
+      const x = form.get('x');
+      x.setValidators(CdValidators.ip(6));
+      x.setValue('c4dc:14753:cb0b:24ed:3c80:468b:70cd:1a95');
+      expect(x.valid).toBeFalsy();
+      expect(x.hasError('pattern')).toBeTruthy();
+    });
+
+    it('should error on IPv6 address containing whitespace', () => {
+      const x = form.get('x');
+      x.setValidators(CdValidators.ip(6));
+      x.setValue('c4dc:14753:cb0b:24ed:3c80:468b:70cd:1a95 ');
+      expect(x.valid).toBeFalsy();
+      expect(x.hasError('pattern')).toBeTruthy();
+
+      x.setValue('c4dc:14753 :cb0b:24ed:3c80 :468b:70cd :1a95');
+      expect(x.valid).toBeFalsy();
+      expect(x.hasError('pattern')).toBeTruthy();
+
+      x.setValue(' c4dc:14753:cb0b:24ed:3c80:468b:70cd:1a95');
+      expect(x.valid).toBeFalsy();
+      expect(x.hasError('pattern')).toBeTruthy();
+    });
+
+    it('should error on IPv6 address containing invalid char', () => {
+      const x = form.get('x');
+      x.setValidators(CdValidators.ip(6));
+      x.setValue('c4dx:14753:cb0b:24ed:3c80:468b:70cd:1a95 ');
+      expect(x.valid).toBeFalsy();
+      expect(x.hasError('pattern')).toBeTruthy();
+
+      x.setValue('c4dx:14753:cb0b:24ed:3$80:468b:70cd:1a95 ');
+      expect(x.valid).toBeFalsy();
+      expect(x.hasError('pattern')).toBeTruthy();
+    });
+
+    it('should accept valid IPv4/6 addresses if not protocol version is given', () => {
+      const x = form.get('x');
+      x.setValidators(CdValidators.ip());
+      x.setValue('19.117.23.141');
+      expect(x.valid).toBeTruthy();
+      expect(x.hasError('pattern')).toBeFalsy();
+
+      x.setValue('c4dc:1475:cb0b:24ed:3c80:468b:70cd:1a95');
+      expect(x.valid).toBeTruthy();
+      expect(x.hasError('pattern')).toBeFalsy();
+    });
+  });
+
+  describe('uuid validator', () => {
+    let form: FormGroup;
+
+    beforeEach(() => {
+      form = new FormGroup({
+        x: new FormControl()
+      });
+      form.controls['x'].setValidators(CdValidators.uuid());
+    });
+
+    it('should accept empty value', () => {
+      const x = form.get('x');
+      x.setValue('');
+      expect(x.valid).toBeTruthy();
+      expect(x.hasError('pattern')).toBeFalsy();
+    });
+
+    it('should accept valid version 1 uuid', () => {
+      const x = form.get('x');
+      x.setValue('171af0b2-c305-11e8-a355-529269fb1459');
+      expect(x.valid).toBeTruthy();
+      expect(x.hasError('pattern')).toBeFalsy();
+    });
+
+    it('should accept valid version 4 uuid', () => {
+      const x = form.get('x');
+      x.setValue('e33bbcb6-fcc3-40b1-ae81-3f81706a35d5');
+      expect(x.valid).toBeTruthy();
+      expect(x.hasError('pattern')).toBeFalsy();
+    });
+
+    it('should error on uuid containing too many blocks', () => {
+      const x = form.get('x');
+      x.setValue('e33bbcb6-fcc3-40b1-ae81-3f81706a35d5-23d3');
+      expect(x.valid).toBeFalsy();
+      expect(x.hasError('pattern')).toBeTruthy();
+    });
+
+    it('should error on uuid containing too many chars in block', () => {
+      const x = form.get('x');
+      x.setValue('aae33bbcb6-fcc3-40b1-ae81-3f81706a35d5');
+      expect(x.valid).toBeFalsy();
+      expect(x.hasError('pattern')).toBeTruthy();
+    });
+
+    it('should error on uuid containing invalid char', () => {
+      const x = form.get('x');
+      x.setValue('x33bbcb6-fcc3-40b1-ae81-3f81706a35d5');
+      expect(x.valid).toBeFalsy();
+      expect(x.hasError('pattern')).toBeTruthy();
+
+      x.setValue('$33bbcb6-fcc3-40b1-ae81-3f81706a35d5');
+      expect(x.valid).toBeFalsy();
+      expect(x.hasError('pattern')).toBeTruthy();
+    });
+  });
+
+  describe('number validator', () => {
+    let form: FormGroup;
+
+    beforeEach(() => {
+      form = new FormGroup({
+        x: new FormControl()
+      });
+      form.controls['x'].setValidators(CdValidators.number());
+    });
+
+    it('should accept empty value', () => {
+      const x = form.get('x');
+      x.setValue('');
+      expect(x.valid).toBeTruthy();
+      expect(x.hasError('pattern')).toBeFalsy();
+    });
+
+    it('should accept numbers', () => {
+      const x = form.get('x');
+      x.setValue(42);
+      expect(x.valid).toBeTruthy();
+      expect(x.hasError('pattern')).toBeFalsy();
+
+      x.setValue(-42);
+      expect(x.valid).toBeTruthy();
+      expect(x.hasError('pattern')).toBeFalsy();
+
+      x.setValue('42');
+      expect(x.valid).toBeTruthy();
+      expect(x.hasError('pattern')).toBeFalsy();
+    });
+
+    it('should error on decimal numbers', () => {
+      const x = form.get('x');
+      x.setValue(42.3);
+      expect(x.valid).toBeFalsy();
+      expect(x.hasError('pattern')).toBeTruthy();
+
+      x.setValue(-42.3);
+      expect(x.valid).toBeFalsy();
+      expect(x.hasError('pattern')).toBeTruthy();
+
+      x.setValue('42.3');
+      expect(x.valid).toBeFalsy();
+      expect(x.hasError('pattern')).toBeTruthy();
+    });
+
+    it('should error on chars', () => {
+      const x = form.get('x');
+      x.setValue('char');
+      expect(x.valid).toBeFalsy();
+      expect(x.hasError('pattern')).toBeTruthy();
+
+      x.setValue('42char');
+      expect(x.valid).toBeFalsy();
+      expect(x.hasError('pattern')).toBeTruthy();
+    });
+
+    it('should error on whitespaces', () => {
+      const x = form.get('x');
+      x.setValue('42 ');
+      expect(x.valid).toBeFalsy();
+      expect(x.hasError('pattern')).toBeTruthy();
+
+      x.setValue('4 2');
+      expect(x.valid).toBeFalsy();
+      expect(x.hasError('pattern')).toBeTruthy();
+    });
+  });
+
+  describe('number validator (without negative values)', () => {
+    let form: FormGroup;
+
+    beforeEach(() => {
+      form = new FormGroup({
+        x: new FormControl()
+      });
+      form.controls['x'].setValidators(CdValidators.number(false));
+    });
+
+    it('should accept positive numbers', () => {
+      const x = form.get('x');
+      x.setValue(42);
+      expect(x.valid).toBeTruthy();
+      expect(x.hasError('pattern')).toBeFalsy();
+
+      x.setValue('42');
+      expect(x.valid).toBeTruthy();
+      expect(x.hasError('pattern')).toBeFalsy();
+    });
+
+    it('should error on negative numbers', () => {
+      const x = form.get('x');
+      x.setValue(-42);
+      expect(x.valid).toBeFalsy();
+      expect(x.hasError('pattern')).toBeTruthy();
+
+      x.setValue('-42');
+      expect(x.valid).toBeFalsy();
+      expect(x.hasError('pattern')).toBeTruthy();
+    });
+  });
+
+  describe('decimal number validator', () => {
+    let form: FormGroup;
+
+    beforeEach(() => {
+      form = new FormGroup({
+        x: new FormControl()
+      });
+      form.controls['x'].setValidators(CdValidators.decimalNumber());
+    });
+
+    it('should accept empty value', () => {
+      const x = form.get('x');
+      x.setValue('');
+      expect(x.valid).toBeTruthy();
+      expect(x.hasError('pattern')).toBeFalsy();
+    });
+
+    it('should accept numbers and decimal numbers', () => {
+      const x = form.get('x');
+      x.setValue(42);
+      expect(x.valid).toBeTruthy();
+      expect(x.hasError('pattern')).toBeFalsy();
+
+      x.setValue(-42);
+      expect(x.valid).toBeTruthy();
+      expect(x.hasError('pattern')).toBeFalsy();
+
+      x.setValue(42.3);
+      expect(x.valid).toBeTruthy();
+      expect(x.hasError('pattern')).toBeFalsy();
+
+      x.setValue(-42.3);
+      expect(x.valid).toBeTruthy();
+      expect(x.hasError('pattern')).toBeFalsy();
+
+      x.setValue('42');
+      expect(x.valid).toBeTruthy();
+      expect(x.hasError('pattern')).toBeFalsy();
+
+      x.setValue('42.3');
+      expect(x.valid).toBeTruthy();
+      expect(x.hasError('pattern')).toBeFalsy();
+    });
+
+    it('should error on chars', () => {
+      const x = form.get('x');
+      x.setValue('42e');
+      expect(x.valid).toBeFalsy();
+      expect(x.hasError('pattern')).toBeTruthy();
+
+      x.setValue('e42.3');
+      expect(x.valid).toBeFalsy();
+      expect(x.hasError('pattern')).toBeTruthy();
+    });
+
+    it('should error on whitespaces', () => {
+      const x = form.get('x');
+      x.setValue('42.3 ');
+      expect(x.valid).toBeFalsy();
+      expect(x.hasError('pattern')).toBeTruthy();
+
+      x.setValue('42 .3');
+      expect(x.valid).toBeFalsy();
+      expect(x.hasError('pattern')).toBeTruthy();
+    });
+  });
+
+  describe('decimal number validator (without negative values)', () => {
+    let form: FormGroup;
+
+    beforeEach(() => {
+      form = new FormGroup({
+        x: new FormControl()
+      });
+      form.controls['x'].setValidators(CdValidators.decimalNumber(false));
+    });
+
+    it('should accept positive numbers and decimals', () => {
+      const x = form.get('x');
+      x.setValue(42);
+      expect(x.valid).toBeTruthy();
+      expect(x.hasError('pattern')).toBeFalsy();
+
+      x.setValue(42.3);
+      expect(x.valid).toBeTruthy();
+      expect(x.hasError('pattern')).toBeFalsy();
+
+      x.setValue('42');
+      expect(x.valid).toBeTruthy();
+      expect(x.hasError('pattern')).toBeFalsy();
+
+      x.setValue('42.3');
+      expect(x.valid).toBeTruthy();
+      expect(x.hasError('pattern')).toBeFalsy();
+    });
+
+    it('should error on negative numbers and decimals', () => {
+      const x = form.get('x');
+      x.setValue(-42);
+      expect(x.valid).toBeFalsy();
+      expect(x.hasError('pattern')).toBeTruthy();
+
+      x.setValue('-42');
+      expect(x.valid).toBeFalsy();
+      expect(x.hasError('pattern')).toBeTruthy();
+
+      x.setValue(-42.3);
+      expect(x.valid).toBeFalsy();
+      expect(x.hasError('pattern')).toBeTruthy();
+
+      x.setValue('-42.3');
+      expect(x.valid).toBeFalsy();
+      expect(x.hasError('pattern')).toBeTruthy();
+    });
+  });
+
   describe('requiredIf', () => {
     let form: FormGroup;
 
