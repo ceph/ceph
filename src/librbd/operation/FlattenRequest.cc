@@ -130,7 +130,7 @@ bool FlattenRequest<I>::send_update_header() {
     RWLock::RLocker parent_locker(image_ctx.parent_lock);
     // stop early if the parent went away - it just means
     // another flatten finished first, so this one is useless.
-    if (!image_ctx.parent) {
+    if (image_ctx.parent_md.spec.pool_id == -1) {
       ldout(cct, 5) << "image already flattened" << dendl;
       return true;
     }
