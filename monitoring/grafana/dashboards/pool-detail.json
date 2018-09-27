@@ -1,14 +1,4 @@
 {
-  "__inputs": [
-    {
-      "name": "DS_LOCAL",
-      "label": "Local",
-      "description": "",
-      "type": "datasource",
-      "pluginId": "prometheus",
-      "pluginName": "Prometheus"
-    }
-  ],
   "__requires": [
     {
       "type": "grafana",
@@ -20,12 +10,6 @@
       "type": "panel",
       "id": "graph",
       "name": "Graph",
-      "version": "5.0.0"
-    },
-    {
-      "type": "datasource",
-      "id": "prometheus",
-      "name": "Prometheus",
       "version": "5.0.0"
     },
     {
@@ -48,7 +32,7 @@
       }
     ]
   },
-  "editable": true,
+  "editable": false,
   "gnetId": null,
   "graphTooltip": 0,
   "id": null,
@@ -77,7 +61,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_LOCAL}",
+      "datasource": null,
       "fill": 1,
       "gridPos": {
         "h": 7,
@@ -168,7 +152,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_LOCAL}",
+      "datasource": null,
       "fill": 1,
       "gridPos": {
         "h": 7,
@@ -250,21 +234,6 @@
           "show": false
         }
       ]
-    },
-    {
-      "content": "<script>\n// add the kiosk mode to the body element\nvar current = document.body.className;\nupdated = current + \" page-kiosk-mode\";\ndocument.body.className = updated;\n\n</script>\n",
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 8
-      },
-      "id": 18,
-      "links": [],
-      "mode": "html",
-      "title": "",
-      "transparent": true,
-      "type": "text"
     }
   ],
   "refresh": "15s",
@@ -276,7 +245,7 @@
       {
         "allValue": null,
         "current": {},
-        "datasource": "${DS_LOCAL}",
+        "datasource": null,
         "hide": 2,
         "includeAll": true,
         "label": null,
@@ -296,7 +265,7 @@
       {
         "allValue": null,
         "current": {},
-        "datasource": "${DS_LOCAL}",
+        "datasource": null,
         "hide": 0,
         "includeAll": false,
         "label": "Pool Name",
