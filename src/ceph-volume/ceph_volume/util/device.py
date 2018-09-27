@@ -13,6 +13,7 @@ class Device(object):
         self.lv_api = None
         self.pvs_api = []
         self.disk_api = {}
+        self.blkid_api = {}
         self.sys_api = {}
         self._exists = None
         self._is_lvm_member = None
@@ -26,6 +27,7 @@ class Device(object):
             self.abspath = lv.lv_path
         else:
             dev = disk.lsblk(self.path)
+            self.blkid_api = disk.blkid(self.path)
             self.disk_api = dev
             device_type = dev.get('TYPE', '')
             # always check is this is an lvm member
@@ -35,6 +37,8 @@ class Device(object):
         if not sys_info.devices:
             sys_info.devices = disk.get_devices()
         self.sys_api = sys_info.devices.get(self.abspath, {})
+
+        self.ceph_disk = CephDiskDevice(self)
 
     def __repr__(self):
         prefix = 'Unknown'
@@ -78,6 +82,10 @@ class Device(object):
         return self._is_lvm_member
 
     @property
+    def is_ceph_disk_member(self):
+        return self.ceph_disk.is_member
+
+    @property
     def is_mapper(self):
         return self.path.startswith('/dev/mapper')
 
@@ -96,3 +104,48 @@ class Device(object):
         if self.disk_api:
             return self.disk_api['TYPE'] == 'device'
         return False
+
+
+class CephDiskDevice(object):
+    """
+    Detect devices that have been created by ceph-disk, report their type
+    (journal, data, etc..). Requires a ``Device`` object as input.
+    """
+
+    def __init__(self, device):
+        self.device = device
+        self._is_ceph_disk_member = None
+
+    @property
+    def partlabel(self):
+        """
+        In containers, the 'PARTLABEL' attribute might not be detected
+        correctly via ``lsblk``, so we poke at the value with ``lsblk`` first,
+        falling back to ``blkid`` (which works correclty in containers).
+        """
+        lsblk_partlabel = self.device.disk_api.get('PARTLABEL')
+        if lsblk_partlabel:
+            return lsblk_partlabel
+        return self.device.blkid_api.get('PARTLABEL', '')
+
+    @property
+    def is_member(self):
+        if self._is_ceph_disk_member is None:
+            if 'ceph' in self.partlabel:
+                self._is_ceph_disk_member = True
+                return True
+            return False
+        return self._is_ceph_disk_member
+
+    @property
+    def type(self):
+        types = [
+            'data', 'wal', 'db', 'lockbox', 'journal',
+            # ceph-disk uses 'ceph block' when placing data in bluestore, but
+            # keeps the regular OSD files in 'ceph data' :( :( :( :(
+            'block',
+        ]
+        for t in types:
+            if t in self.partlabel:
+                return t
+        return 'unknown'
