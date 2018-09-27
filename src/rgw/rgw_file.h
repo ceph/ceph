@@ -602,7 +602,7 @@ namespace rgw {
     int readdir(rgw_readdir_cb rcb, void *cb_arg, readdir_offset offset,
 		bool *eof, uint32_t flags);
 
-    int write(uint64_t off, size_t len, size_t *nbytes, void *buffer);
+    int write(uint64_t off, size_t len, size_t *nbytes, void *buffer, bool* retry);
 
     int commit(uint64_t offset, uint64_t length, uint32_t flags) {
       /* NFS3 and NFSv4 COMMIT implementation
@@ -2494,7 +2494,9 @@ public:
   void put_data(off_t off, buffer::list& _bl) {
     if (off != real_ofs) {
       eio = true;
+      return;
     }
+    eio = false;
     data.claim(_bl);
     real_ofs += data.length();
     ofs = off; /* consumed in exec_continue() */

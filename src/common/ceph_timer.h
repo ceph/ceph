@@ -255,6 +255,46 @@ namespace ceph {
 
 	return true;
       }
+     
+      // Pause the timer event
+      bool pause_event(uint64_t id) {
+        std::lock_guard<std::mutex> l(lock);
+        event key(id);
+        typename event_set_type::iterator it = events.find(key);
+        if (it == events.end()) {
+          return false;
+        }
+
+        event& e = *it;
+
+        schedule.erase(e);
+        return true;
+      }
+
+      // Resume the timer event
+      bool resume_event(uint64_t id) {
+        std::lock_guard<std::mutex> l(lock);
+        event key(id);
+        typename event_set_type::iterator it = events.find(key);
+        if (it == events.end()) {
+          return false;
+        }
+        event& e = *it;
+        typename TC::time_point now = TC::now();
+        if (e.t <= now) {
+          typename TC::duration duration(std::chrono::seconds(1));
+          typename TC::time_point future = (now + duration);
+          e.t = future;
+        }
+        auto i = schedule.insert(e);
+        /* If the event we have just inserted comes before everything
+         * else, we need to adjust our timeout. */
+        if (i.first == schedule.begin()) {
+          cond.notify_one();
+        }
+        
+        return true;
+      }
 
       // Cancel an event. If the event has already come and gone (or you
       // never submitted it) you will receive false. Otherwise you will
