@@ -177,7 +177,6 @@ class TeuthologyConfig(YamlConfig):
                 'size': 1,
             },
         },
-        'sleep_before_teardown': 0,
     }
 
     def __init__(self, yaml_path=None):
