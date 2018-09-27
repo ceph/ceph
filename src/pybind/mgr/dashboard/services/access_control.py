@@ -552,14 +552,16 @@ Username and password updated''', ''
         name = cmd['name'] if 'name' in cmd else None
         email = cmd['email'] if 'email' in cmd else None
         try:
-            user = ACCESS_CTRL_DB.create_user(username, password, name, email)
             role = ACCESS_CTRL_DB.get_role(rolename) if rolename else None
-        except UserAlreadyExists as ex:
-            return -errno.EEXIST, '', str(ex)
         except RoleDoesNotExist as ex:
             if rolename not in SYSTEM_ROLES:
                 return -errno.ENOENT, '', str(ex)
             role = SYSTEM_ROLES[rolename]
+
+        try:
+            user = ACCESS_CTRL_DB.create_user(username, password, name, email)
+        except UserAlreadyExists as ex:
+            return -errno.EEXIST, '', str(ex)
 
         if role:
             user.set_roles([role])
