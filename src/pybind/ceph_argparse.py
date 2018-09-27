@@ -714,6 +714,8 @@ def parse_funcsig(sig):
     """
     parse a single descriptor (array of strings or dicts) into a
     dict of function descriptor/validators (objects of CephXXX type)
+
+    :returns: list of ``argdesc``
     """
     newsig = []
     argnum = 0
@@ -1019,101 +1021,102 @@ def validate(args, signature, flags=0, partial=False):
     return d
 
 
-def cmdsiglen(sig):
-    sigdict = sig.values()
-    assert len(sigdict) == 1
-    some_value = next(iter(sig.values()))
-    return len(some_value['sig'])
-
-
 def validate_command(sigdict, args, verbose=False):
     """
-    turn args into a valid dictionary ready to be sent off as JSON,
-    validated against sigdict.
+    Parse positional arguments into a parameter dict, according to
+    the command descriptions.
+
+    Writes advice about nearly-matching commands ``sys.stderr`` if 
+    the arguments do not match any command.
+
+    :param sigdict: A command description dictionary, as returned
+                    from Ceph daemons by the get_command_descriptions
+                    command.
+    :param args: List of strings, should match one of the command
+                 signatures in ``sigdict``
+
+    :returns: A dict of parsed parameters (including ``prefix``),
+              or an empty dict if the args did not match any signature
     """
     if verbose:
         print("validate_command: " + " ".join(args), file=sys.stderr)
     found = []
     valid_dict = {}
-    if args:
-        # look for best match, accumulate possibles in bestcmds
-        # (so we can maybe give a more-useful error message)
-        best_match_cnt = 0
-        bestcmds = []
-        for cmdtag, cmd in sigdict.items():
-            sig = cmd['sig']
-            matched = matchnum(args, sig, partial=True)
-            if (matched >= math.floor(best_match_cnt) and
-                matched == matchnum(args, sig, partial=False)):
-                # prefer those fully matched over partial patch
-                matched += 0.5
-            if matched < best_match_cnt:
-                continue
-            if verbose:
-                print("better match: {0} > {1}: {2}:{3} ".format(
-                    matched, best_match_cnt, cmdtag, concise_sig(sig)
-                ), file=sys.stderr)
-            if matched > best_match_cnt:
-                best_match_cnt = matched
-                bestcmds = [{cmdtag: cmd}]
-            else:
-                bestcmds.append({cmdtag: cmd})
 
-        # Sort bestcmds by number of args so we can try shortest first
-        # (relies on a cmdsig being key,val where val is a list of len 1)
-        bestcmds_sorted = sorted(bestcmds, key=cmdsiglen)
-
+    # look for best match, accumulate possibles in bestcmds
+    # (so we can maybe give a more-useful error message)
+    best_match_cnt = 0
+    bestcmds = []
+    for cmd in sigdict.values():
+        sig = cmd['sig']
+        matched = matchnum(args, sig, partial=True)
+        if (matched >= math.floor(best_match_cnt) and
+            matched == matchnum(args, sig, partial=False)):
+            # prefer those fully matched over partial patch
+            matched += 0.5
+        if matched < best_match_cnt:
+            continue
         if verbose:
-            print("bestcmds_sorted: ", file=sys.stderr)
-            pprint.PrettyPrinter(stream=sys.stderr).pprint(bestcmds_sorted)
-
-        ex = None
-        # for everything in bestcmds, look for a true match
-        for cmdsig in bestcmds_sorted:
-            for cmd in cmdsig.values():
-                sig = cmd['sig']
-                try:
-                    valid_dict = validate(args, sig, flags=cmd.get('flags', 0))
-                    found = cmd
-                    break
-                except ArgumentPrefix:
-                    # ignore prefix mismatches; we just haven't found
-                    # the right command yet
-                    pass
-                except ArgumentMissing as e:
-                    ex = e
-                    if len(bestcmds) == 1:
-                        found = cmd
-                    break
-                except ArgumentTooFew:
-                    # It looked like this matched the beginning, but it
-                    # didn't have enough args supplied.  If we're out of
-                    # cmdsigs we'll fall out unfound; if we're not, maybe
-                    # the next one matches completely.  Whine, but pass.
-                    if verbose:
-                        print('Not enough args supplied for ',
-                              concise_sig(sig), file=sys.stderr)
-                except ArgumentError as e:
-                    ex = e
-                    # Solid mismatch on an arg (type, range, etc.)
-                    # Stop now, because we have the right command but
-                    # some other input is invalid
-                    found = cmd
-                    break
-            if found or ex:
-                break
-
-        if found:
-            if not valid_dict:
-                print("Invalid command:", ex, file=sys.stderr)
-                print(concise_sig(sig), ': ', cmd['help'], file=sys.stderr)
+            print("better match: {0} > {1}: {3} ".format(
+                matched, best_match_cnt, concise_sig(sig)
+            ), file=sys.stderr)
+        if matched > best_match_cnt:
+            best_match_cnt = matched
+            bestcmds = [cmd]
         else:
-            bestcmds = bestcmds[:10]
-            print('no valid command found; {0} closest matches:'.format(len(bestcmds)), file=sys.stderr)
-            for cmdsig in bestcmds:
-                for (cmdtag, cmd) in cmdsig.items():
-                    print(concise_sig(cmd['sig']), file=sys.stderr)
-        return valid_dict
+            bestcmds.append(cmd)
+
+    # Sort bestcmds by number of args so we can try shortest first
+    # (relies on a cmdsig being key,val where val is a list of len 1)
+    bestcmds_sorted = sorted(bestcmds, key=lambda c: len(c['sig']))
+
+    if verbose:
+        print("bestcmds_sorted: ", file=sys.stderr)
+        pprint.PrettyPrinter(stream=sys.stderr).pprint(bestcmds_sorted)
+
+    ex = None
+    # for everything in bestcmds, look for a true match
+    for cmd in bestcmds_sorted:
+        sig = cmd['sig']
+        try:
+            valid_dict = validate(args, sig, flags=cmd.get('flags', 0))
+            found = cmd
+            break
+        except ArgumentPrefix:
+            # ignore prefix mismatches; we just haven't found
+            # the right command yet
+            pass
+        except ArgumentMissing as e:
+            ex = e
+            if len(bestcmds) == 1:
+                found = cmd
+            break
+        except ArgumentTooFew:
+            # It looked like this matched the beginning, but it
+            # didn't have enough args supplied.  If we're out of
+            # cmdsigs we'll fall out unfound; if we're not, maybe
+            # the next one matches completely.  Whine, but pass.
+            if verbose:
+                print('Not enough args supplied for ',
+                      concise_sig(sig), file=sys.stderr)
+        except ArgumentError as e:
+            ex = e
+            # Solid mismatch on an arg (type, range, etc.)
+            # Stop now, because we have the right command but
+            # some other input is invalid
+            found = cmd
+            break
+
+    if found:
+        if not valid_dict:
+            print("Invalid command:", ex, file=sys.stderr)
+            print(concise_sig(sig), ': ', cmd['help'], file=sys.stderr)
+    else:
+        bestcmds = bestcmds[:10]
+        print('no valid command found; {0} closest matches:'.format(len(bestcmds)), file=sys.stderr)
+        for cmd in bestcmds:
+            print(concise_sig(cmd['sig']), file=sys.stderr)
+    return valid_dict
 
 
 
@@ -1247,6 +1250,8 @@ def send_command_retry(*args, **kwargs):
         try:
             return send_command(*args, **kwargs)
         except Exception as e:
+            # If our librados instance has not reached state 'connected'
+            # yet, we'll see an exception like this and retry
             if ('get_command_descriptions' in str(e) and
                 'object in state configuring' in str(e)):
                 continue
@@ -1339,22 +1344,24 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf=b'', timeout=0,
 def json_command(cluster, target=('mon', ''), prefix=None, argdict=None,
                  inbuf=b'', timeout=0, verbose=False):
     """
-    Format up a JSON command and send it with send_command() above.
+    Serialize a command and up a JSON command and send it with send_command() above.
     Prefix may be supplied separately or in argdict.  Any bulk input
     data comes in inbuf.
 
     If target is osd.N, send command to that osd (except for pgid cmds)
+
+    :param cluster: ``rados.Rados`` instance
+    :param prefix: String to inject into command arguments as 'prefix'
+    :param argdict: Command arguments
     """
     cmddict = {}
     if prefix:
         cmddict.update({'prefix': prefix})
+
     if argdict:
         cmddict.update(argdict)
         if 'target' in argdict:
             target = argdict.get('target')
-
-    # grab prefix for error messages
-    prefix = cmddict['prefix']
 
     try:
         if target[0] == 'osd':

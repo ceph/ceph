@@ -268,6 +268,14 @@ GLOBAL_ARGS = {
 
 
 def parse_cmdargs(args=None, target=''):
+    """
+    Consume generic arguments from the start of the ``args``
+    list.  Call this first to handle arguments that are not
+    handled by a command description provided by the server.
+
+    :returns: three tuple of ArgumentParser instance, Namespace instance
+              containing parsed values, and list of un-handled arguments
+    """
     # alias: let the line-wrapping be sane
     AP = argparse.ArgumentParser
 
