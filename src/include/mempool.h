@@ -32,6 +32,7 @@
 #include "include/ceph_assert.h"
 #include "include/compact_map.h"
 #include "include/compact_set.h"
+#include "include/slab_containers.h"
 
 
 /*
@@ -340,12 +341,21 @@ public:
     template<typename v>						\
     using pool_allocator = mempool::pool_allocator<id,v>;		\
                                                                         \
+    template<typename v, size_t s, size_t h>				\
+    using slab_pool_allocator = 					\
+      mempool::pool_allocator<id,v,ceph::slab::slab_allocator,s,h>;	\
+                                                                        \
     using string = std::basic_string<char,std::char_traits<char>,       \
                                      pool_allocator<char>>;             \
                                                                         \
     template<typename k,typename v, typename cmp = std::less<k> >	\
     using map = std::map<k, v, cmp,					\
 			 pool_allocator<std::pair<const k,v>>>;		\
+                                                                        \
+    template<typename k,typename v, std::size_t s, std::size_t h,	\
+	     typename cmp = std::less<k>>				\
+    using slab_map = ceph::slab::slab_map<k,v,s,h,cmp,			\
+      slab_pool_allocator<std::pair<const k,v>,s,h>>;			\
                                                                         \
     template<typename k,typename v, typename cmp = std::less<k> >       \
     using compact_map = compact_map<k, v, cmp,                          \
@@ -362,9 +372,17 @@ public:
     using multimap = std::multimap<k,v,cmp,				\
 				   pool_allocator<std::pair<const k,	\
 							    v>>>;	\
+    template<typename k,typename v, std::size_t s, std::size_t h,	\
+	     typename cmp = std::less<k>>				\
+    using slab_multimap = ceph::slab::slab_multimap<k,v,s,h,cmp,	\
+      slab_pool_allocator<std::pair<const k,v>,s,h>>;			\
                                                                         \
     template<typename k, typename cmp = std::less<k> >			\
     using set = std::set<k,cmp,pool_allocator<k>>;			\
+                                                                        \
+    template<typename k, std::size_t s, std::size_t h,			\
+	     typename cmp = std::less<k>>				\
+    using slab_set = ceph::slab::slab_set<k,s,h,cmp,slab_pool_allocator<k,s,h>>; \
                                                                         \
     template<typename k, typename cmp = std::less<k> >			\
     using flat_set = boost::container::flat_set<k,cmp,pool_allocator<k>>; \
@@ -375,6 +393,10 @@ public:
                                                                         \
     template<typename v>						\
     using list = std::list<v,pool_allocator<v>>;			\
+                                                                        \
+    template<typename v, std::size_t s, std::size_t h>			\
+    using slab_list = 							\
+      ceph::slab::slab_list<v,s,h,slab_pool_allocator<v,s,h>>;		\
                                                                         \
     template<typename v>						\
     using vector = std::vector<v,pool_allocator<v>>;			\
