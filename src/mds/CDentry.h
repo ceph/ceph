@@ -41,8 +41,7 @@ class CDentry;
 class LogSegment;
 
 class Session;
-
-
+class BatchOp;
 
 // define an ordering
 bool operator<(const CDentry& l, const CDentry& r);
@@ -354,6 +353,7 @@ public:
   LocalLock versionlock; // FIXME referenced containers not in mempool
 
   mempool::mds_co::map<client_t,ClientLease*> client_lease_map;
+  std::map<int, BatchOp*> batch_ops;
 
 
 protected:
