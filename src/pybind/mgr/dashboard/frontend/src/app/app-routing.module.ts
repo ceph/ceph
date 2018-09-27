@@ -4,7 +4,7 @@ import { ActivatedRouteSnapshot, RouterModule, Routes } from '@angular/router';
 import { IscsiComponent } from './ceph/block/iscsi/iscsi.component';
 import { MirroringComponent } from './ceph/block/mirroring/mirroring.component';
 import { RbdFormComponent } from './ceph/block/rbd-form/rbd-form.component';
-import { RbdListComponent } from './ceph/block/rbd-list/rbd-list.component';
+import { RbdImagesComponent } from './ceph/block/rbd-images/rbd-images.component';
 import { CephfsListComponent } from './ceph/cephfs/cephfs-list/cephfs-list.component';
 import { ConfigurationComponent } from './ceph/cluster/configuration/configuration.component';
 import { HostsComponent } from './ceph/cluster/hosts/hosts.component';
@@ -107,7 +107,7 @@ const routes: Routes = [
         path: 'rbd',
         data: { breadcrumbs: 'Images' },
         children: [
-          { path: '', component: RbdListComponent },
+          { path: '', component: RbdImagesComponent },
           { path: 'add', component: RbdFormComponent, data: { breadcrumbs: 'Add' } },
           { path: 'edit/:pool/:name', component: RbdFormComponent, data: { breadcrumbs: 'Edit' } },
           {
