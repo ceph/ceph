@@ -41,6 +41,51 @@ public:
 };
 
 class ProtocolV1 : public Protocol {
+/*
+ *  ProtocolV1 State Machine
+ *
+
+    send_server_banner                             send_client_banner
+            |                                              |
+            v                                              v
+    wait_client_banner                              wait_server_banner
+            |                                              |
+            |                                              v
+            v                                 handle_server_banner_and_identify
+    wait_connect_message <---------\                       |
+      |     |                      |                       v
+      |  wait_connect_message_auth |           send_connect_message <----------\
+      |     |                      |                       |                   |
+      v     v                      |                       |                   |
+handle_connect_message_2           |                       v                   |
+        |           |              |            wait_connect_reply             |
+        v           v              |              |        |                   |
+     replace -> send_connect_message_reply        |        V                   |
+        |                                         |   wait_connect_reply_auth  |
+        |                                         |        |                   |
+        v                                         v        v                   |
+      open ---\                                 handle_connect_reply_2 --------/
+        |     |                                            |
+        |     v                                            v
+        |   wait_seq                                  wait_ack_seq
+        |     |                                            |
+        v     v                                            v
+    server_ready                                      client_ready
+            |                                              |
+            \------------------> wait_message <------------/
+                                 |  ^   |  ^
+        /------------------------/  |   |  |
+        |                           |   |  \----------------- ------------\
+        v                /----------/   v                                 |
+handle_keepalive2        |        handle_message_header      read_message_footer
+handle_keepalive2_ack    |              |                                 ^
+handle_tag_ack           |              v                                 |
+        |                |        throttle_message             read_message_data
+        \----------------/              |                                 ^
+                                        v                                 |
+                             read_message_front --> read_message_middle --/
+*/
+
 protected:
   enum State {
     NONE = 0,
