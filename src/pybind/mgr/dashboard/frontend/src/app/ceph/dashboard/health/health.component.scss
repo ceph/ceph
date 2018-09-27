@@ -19,6 +19,12 @@ $popover-text-font-size: 10px;
 
 @media (max-width: 1599px) {
   .cd-col-5 {
+    width: 25%;
+  }
+}
+
+@media (max-width: 1199px) {
+  .cd-col-5 {
     width: 33%;
   }
 }
