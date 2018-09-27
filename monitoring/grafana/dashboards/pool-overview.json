@@ -1,14 +1,4 @@
 {
-  "__inputs": [
-    {
-      "name": "DS_LOCAL",
-      "label": "Local",
-      "description": "",
-      "type": "datasource",
-      "pluginId": "prometheus",
-      "pluginName": "Prometheus"
-    }
-  ],
   "__requires": [
     {
       "type": "grafana",
@@ -20,12 +10,6 @@
       "type": "panel",
       "id": "graph",
       "name": "Graph",
-      "version": "5.0.0"
-    },
-    {
-      "type": "datasource",
-      "id": "prometheus",
-      "name": "Prometheus",
       "version": "5.0.0"
     },
     {
@@ -48,7 +32,7 @@
       }
     ]
   },
-  "editable": true,
+  "editable": false,
   "gnetId": null,
   "graphTooltip": 0,
   "id": null,
@@ -74,7 +58,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_LOCAL}",
+      "datasource": null,
       "fill": 5,
       "gridPos": {
         "h": 7,
@@ -156,7 +140,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_LOCAL}",
+      "datasource": null,
       "fill": 5,
       "gridPos": {
         "h": 7,
@@ -254,7 +238,7 @@
           "value": "current"
         }
       ],
-      "datasource": "${DS_LOCAL}",
+      "datasource": null,
       "fontSize": "100%",
       "gridPos": {
         "h": 7,
@@ -400,7 +384,7 @@
           "value": "current"
         }
       ],
-      "datasource": "${DS_LOCAL}",
+      "datasource": null,
       "fontSize": "100%",
       "gridPos": {
         "h": 7,
@@ -532,7 +516,7 @@
     },
     {
       "columns": [],
-      "datasource": "${DS_LOCAL}",
+      "datasource": null,
       "fontSize": "100%",
       "gridPos": {
         "h": 7,
@@ -670,7 +654,7 @@
       {
         "allValue": null,
         "current": {},
-        "datasource": "${DS_LOCAL}",
+        "datasource": null,
         "hide": 2,
         "includeAll": true,
         "label": null,
@@ -690,7 +674,7 @@
       {
         "allValue": null,
         "current": {},
-        "datasource": "${DS_LOCAL}",
+        "datasource": null,
         "hide": 2,
         "includeAll": true,
         "label": "Pool Name",
