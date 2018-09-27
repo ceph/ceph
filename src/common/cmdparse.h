@@ -34,7 +34,6 @@ void dump_cmddesc_to_json(ceph::Formatter *jf,
 		          const std::string& helptext,
 		          const std::string& module,
 		          const std::string& perm,
-		          const std::string& avail,
 		          uint64_t flags);
 bool cmdmap_from_json(std::vector<std::string> cmd, cmdmap_t *mapp,
 		      std::stringstream &ss);

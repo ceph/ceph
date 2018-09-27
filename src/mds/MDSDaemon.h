@@ -174,7 +174,6 @@ private:
     std::string cmdstring;
     std::string helpstring;
     std::string module = "mds";
-    std::string availability = "cli,rest";
   };
 
   static const std::vector<MDSCommand>& get_commands();

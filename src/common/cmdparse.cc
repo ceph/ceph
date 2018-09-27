@@ -120,7 +120,6 @@ dump_cmddesc_to_json(Formatter *jf,
 		     const string& helptext,
 		     const string& module,
 		     const string& perm,
-		     const string& avail,
 		     uint64_t flags)
 {
       jf->open_object_section(secname.c_str());
@@ -130,7 +129,6 @@ dump_cmddesc_to_json(Formatter *jf,
       jf->dump_string("help", helptext.c_str());
       jf->dump_string("module", module.c_str());
       jf->dump_string("perm", perm.c_str());
-      jf->dump_string("avail", avail.c_str());
       jf->dump_int("flags", flags);
       jf->close_section(); // cmd
 }

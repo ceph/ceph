@@ -5921,11 +5921,10 @@ struct OSDCommand {
   string helpstring;
   string module;
   string perm;
-  string availability;
 } osd_commands[] = {
 
-#define COMMAND(parsesig, helptext, module, perm, availability) \
-  {parsesig, helptext, module, perm, availability},
+#define COMMAND(parsesig, helptext, module, perm) \
+  {parsesig, helptext, module, perm},
 
 // yes, these are really pg commands, but there's a limit to how
 // much work it's worth.  The OSD returns all of them.  Make this
@@ -5935,62 +5934,62 @@ struct OSDCommand {
 COMMAND("pg " \
 	"name=pgid,type=CephPgid " \
 	"name=cmd,type=CephChoices,strings=query", \
-	"show details of a specific pg", "osd", "r", "cli")
+	"show details of a specific pg", "osd", "r")
 COMMAND("pg " \
 	"name=pgid,type=CephPgid " \
 	"name=cmd,type=CephChoices,strings=mark_unfound_lost " \
 	"name=mulcmd,type=CephChoices,strings=revert|delete", \
 	"mark all unfound objects in this pg as lost, either removing or reverting to a prior version if one is available",
-	"osd", "rw", "cli")
+	"osd", "rw")
 COMMAND("pg " \
 	"name=pgid,type=CephPgid " \
 	"name=cmd,type=CephChoices,strings=list_unfound " \
 	"name=offset,type=CephString,req=false",
 	"list unfound objects on this pg, perhaps starting at an offset given in JSON",
-	"osd", "r", "cli")
+	"osd", "r")
 
 // new form: tell <pgid> <cmd> for both cli and rest
 
 COMMAND("query",
-	"show details of a specific pg", "osd", "r", "cli,rest")
+	"show details of a specific pg", "osd", "r")
 COMMAND("mark_unfound_lost " \
 	"name=mulcmd,type=CephChoices,strings=revert|delete", \
 	"mark all unfound objects in this pg as lost, either removing or reverting to a prior version if one is available",
-	"osd", "rw", "cli,rest")
+	"osd", "rw")
 COMMAND("list_unfound " \
 	"name=offset,type=CephString,req=false",
 	"list unfound objects on this pg, perhaps starting at an offset given in JSON",
-	"osd", "r", "cli,rest")
+	"osd", "r")
 COMMAND("perf histogram dump "
         "name=logger,type=CephString,req=false "
         "name=counter,type=CephString,req=false",
 	"Get histogram data",
-	"osd", "r", "cli,rest")
+	"osd", "r")
 
 // tell <osd.n> commands.  Validation of osd.n must be special-cased in client
-COMMAND("version", "report version of OSD", "osd", "r", "cli,rest")
-COMMAND("get_command_descriptions", "list commands descriptions", "osd", "r", "cli,rest")
+COMMAND("version", "report version of OSD", "osd", "r")
+COMMAND("get_command_descriptions", "list commands descriptions", "osd", "r")
 COMMAND("injectargs " \
 	"name=injected_args,type=CephString,n=N",
 	"inject configuration arguments into running OSD",
-	"osd", "rw", "cli,rest")
+	"osd", "rw")
 COMMAND("config set " \
 	"name=key,type=CephString name=value,type=CephString",
 	"Set a configuration option at runtime (not persistent)",
-	"osd", "rw", "cli,rest")
+	"osd", "rw")
 COMMAND("config get " \
 	"name=key,type=CephString",
 	"Get a configuration option at runtime",
-	"osd", "r", "cli,rest")
+	"osd", "r")
 COMMAND("config unset " \
 	"name=key,type=CephString",
 	"Unset a configuration option at runtime (not persistent)",
-	"osd", "rw", "cli,rest")
+	"osd", "rw")
 COMMAND("cluster_log " \
 	"name=level,type=CephChoices,strings=error,warning,info,debug " \
 	"name=message,type=CephString,n=N",
 	"log a message to the cluster log",
-	"osd", "rw", "cli,rest")
+	"osd", "rw")
 COMMAND("bench " \
 	"name=count,type=CephInt,req=false " \
 	"name=size,type=CephInt,req=false " \
@@ -5998,38 +5997,38 @@ COMMAND("bench " \
 	"name=object_num,type=CephInt,req=false ", \
 	"OSD benchmark: write <count> <size>-byte objects, " \
 	"(default 1G size 4MB). Results in log.",
-	"osd", "rw", "cli,rest")
-COMMAND("flush_pg_stats", "flush pg stats", "osd", "rw", "cli,rest")
+	"osd", "rw")
+COMMAND("flush_pg_stats", "flush pg stats", "osd", "rw")
 COMMAND("heap " \
 	"name=heapcmd,type=CephChoices,strings=dump|start_profiler|stop_profiler|release|stats", \
 	"show heap usage info (available only if compiled with tcmalloc)", \
-	"osd", "rw", "cli,rest")
+	"osd", "rw")
 COMMAND("debug dump_missing " \
 	"name=filename,type=CephFilepath",
-	"dump missing objects to a named file", "osd", "r", "cli,rest")
+	"dump missing objects to a named file", "osd", "r")
 COMMAND("debug kick_recovery_wq " \
 	"name=delay,type=CephInt,range=0",
-	"set osd_recovery_delay_start to <val>", "osd", "rw", "cli,rest")
+	"set osd_recovery_delay_start to <val>", "osd", "rw")
 COMMAND("cpu_profiler " \
 	"name=arg,type=CephChoices,strings=status|flush",
-	"run cpu profiling on daemon", "osd", "rw", "cli,rest")
+	"run cpu profiling on daemon", "osd", "rw")
 COMMAND("dump_pg_recovery_stats", "dump pg recovery statistics",
-	"osd", "r", "cli,rest")
+	"osd", "r")
 COMMAND("reset_pg_recovery_stats", "reset pg recovery statistics",
-	"osd", "rw", "cli,rest")
+	"osd", "rw")
 COMMAND("compact",
         "compact object store's omap. "
         "WARNING: Compaction probably slows your requests",
-        "osd", "rw", "cli,rest")
+        "osd", "rw")
 COMMAND("smart name=devid,type=CephString,req=False",
         "runs smartctl on this osd devices.  ",
-        "osd", "rw", "cli,rest")
+        "osd", "rw")
 COMMAND("cache drop",
         "Drop all OSD caches",
-        "osd", "rwx", "cli,rest")
+        "osd", "rwx")
 COMMAND("cache status",
         "Get OSD caches statistics",
-        "osd", "r", "cli,rest")
+        "osd", "r")
 };
 
 void OSD::do_command(
@@ -6094,7 +6093,7 @@ int OSD::_do_command(
       ostringstream secname;
       secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
       dump_cmddesc_to_json(f, secname.str(), cp->cmdstring, cp->helpstring,
-			   cp->module, cp->perm, cp->availability, 0);
+			   cp->module, cp->perm, 0);
       cmdnum++;
     }
     f->close_section();	// command_descriptions

@@ -108,10 +108,10 @@ const string Monitor::MONITOR_STORE_PREFIX = "monitor_store";
 #undef COMMAND
 #undef COMMAND_WITH_FLAG
 #define FLAG(f) (MonCommand::FLAG_##f)
-#define COMMAND(parsesig, helptext, modulename, req_perms, avail)	\
-  {parsesig, helptext, modulename, req_perms, avail, FLAG(NONE)},
-#define COMMAND_WITH_FLAG(parsesig, helptext, modulename, req_perms, avail, flags) \
-  {parsesig, helptext, modulename, req_perms, avail, flags},
+#define COMMAND(parsesig, helptext, modulename, req_perms)	\
+  {parsesig, helptext, modulename, req_perms, FLAG(NONE)},
+#define COMMAND_WITH_FLAG(parsesig, helptext, modulename, req_perms, flags) \
+  {parsesig, helptext, modulename, req_perms, flags},
 MonCommand mon_commands[] = {
 #include <mon/MonCommands.h>
 };
@@ -2879,7 +2879,7 @@ void Monitor::format_command_descriptions(const std::vector<MonCommand> &command
     secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
     dump_cmddesc_to_json(f, secname.str(),
 			 cmd.cmdstring, cmd.helpstring, cmd.module,
-			 cmd.req_perms, cmd.availability, flags);
+			 cmd.req_perms, flags);
     cmdnum++;
   }
   f->close_section();	// command_descriptions

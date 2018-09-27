@@ -58,18 +58,18 @@ static void all()
 #undef COMMAND_WITH_FLAG
   std::vector<MonCommand> mon_commands = {
 #define FLAG(f) (MonCommand::FLAG_##f)
-#define COMMAND(parsesig, helptext, modulename, req_perms, avail)	\
-    {parsesig, helptext, modulename, req_perms, avail, 0},
-#define COMMAND_WITH_FLAG(parsesig, helptext, modulename, req_perms, avail, flags) \
-    {parsesig, helptext, modulename, req_perms, avail, flags},
+#define COMMAND(parsesig, helptext, modulename, req_perms)	\
+    {parsesig, helptext, modulename, req_perms, 0},
+#define COMMAND_WITH_FLAG(parsesig, helptext, modulename, req_perms, flags) \
+    {parsesig, helptext, modulename, req_perms, flags},
 #include <mon/MonCommands.h>
 #undef COMMAND
 #undef COMMAND_WITH_FLAG
 
-#define COMMAND(parsesig, helptext, modulename, req_perms, avail)	\
-  {parsesig, helptext, modulename, req_perms, avail, FLAG(MGR)},
-#define COMMAND_WITH_FLAG(parsesig, helptext, modulename, req_perms, avail, flags) \
-  {parsesig, helptext, modulename, req_perms, avail, flags | FLAG(MGR)},
+#define COMMAND(parsesig, helptext, modulename, req_perms)	\
+  {parsesig, helptext, modulename, req_perms, FLAG(MGR)},
+#define COMMAND_WITH_FLAG(parsesig, helptext, modulename, req_perms, flags) \
+  {parsesig, helptext, modulename, req_perms, flags | FLAG(MGR)},
 #include <mgr/MgrCommands.h>
  #undef COMMAND
 #undef COMMAND_WITH_FLAG
@@ -87,7 +87,7 @@ static void pull585()
       "name=pg_num,type=CephInt,range=0 " 
       "name=pgp_num,type=CephInt,range=0,req=false" // !!! missing trailing space
       "name=properties,type=CephString,n=N,req=false,goodchars=[A-Za-z0-9-_.=]", 
-      "create pool", "osd", "rw", "cli,rest" }
+      "create pool", "osd", "rw" }
   };
 
   json_print(mon_commands);
