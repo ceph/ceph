@@ -10225,23 +10225,26 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
     }
   }
 
-  if (osd->is_stopping()) {
-    sdata->shard_lock.Unlock();
-    return;    // OSD shutdown, discard.
-  }
-
   list<Context *> oncommits;
   if (is_smallest_thread_index && !sdata->context_queue.empty()) {
     sdata->context_queue.swap(oncommits);
   }
 
   if (sdata->pqueue->empty()) {
+    if (osd->is_stopping()) {
+      sdata->shard_lock.Unlock();
+      return;    // OSD shutdown, discard.
+    }
     sdata->shard_lock.Unlock();
     handle_oncommits(oncommits);
     return;
   }
 
   OpQueueItem item = sdata->pqueue->dequeue();
+  if (osd->is_stopping()) {
+    sdata->shard_lock.Unlock();
+    return;    // OSD shutdown, discard.
+  }
 
   const auto token = item.get_ordering_token();
   auto r = sdata->pg_slots.emplace(token, nullptr);
