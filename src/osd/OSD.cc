@@ -6504,8 +6504,13 @@ int OSD::_do_command(
 
   else if (prefix == "clear_cache") {
     dout(20) << "clearing all caches" << dendl;
-    // Clear the objectstore's cache
-    store->flush_cache();
+    // Clear the objectstore's cache - onode and buffer for Bluestore,
+    // system's pagecache for Filestore
+    r = store->flush_cache();
+    if (r < 0) {
+      ds << "Error flushing objectstore cache: " << cpp_strerror(r);
+      goto out;
+    }
     // Clear osd map cache
     {
       Mutex::Locker l(service.map_cache_lock);

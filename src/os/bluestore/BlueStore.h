@@ -2356,7 +2356,7 @@ public:
   void get_db_statistics(Formatter *f) override;
   void generate_db_histogram(Formatter *f) override;
   void _flush_cache();
-  void flush_cache() override;
+  int flush_cache() override;
   void dump_perf_counters(Formatter *f) override {
     f->open_object_section("perf_counters");
     logger->dump_formatted(f, false);
