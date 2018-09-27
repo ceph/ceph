@@ -8,6 +8,7 @@ from textwrap import dedent
 from ceph_volume import decorators, terminal, conf
 from ceph_volume.api import lvm
 from ceph_volume.util import arg_validators, system, disk, encryption
+from ceph_volume.util.device import Device
 
 
 logger = logging.getLogger(__name__)
@@ -336,10 +337,12 @@ class Scan(object):
             return
 
         args = parser.parse_args(self.argv)
-        if disk.is_partition(args.osd_path):
-            label = disk.lsblk(args.osd_path)['PARTLABEL']
-            if 'data' not in label:
-                raise RuntimeError('Device must be the data partition, but got: %s' % label)
+        device = Device(args.osd_path)
+        if device.is_partition:
+            if device.ceph_disk.type != 'data':
+                label = device.ceph_disk.partlabel
+                msg = 'Device must be the ceph data partition, but PARTLABEL reported: "%s"' % label
+                raise RuntimeError(msg)
 
         # Capture some environment status, so that it can be reused all over
         self.device_mounts = system.get_mounts(devices=True)
