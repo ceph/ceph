@@ -97,6 +97,12 @@ $logs-text-font-size: $card-font-min-size;
   }
 
   .card-medium {
+    min-height: $card-medium-height * 1.2;
+  }
+}
+
+@media (max-width: 1199px) {
+  .card-medium {
     min-height: $card-medium-height * 1.5;
   }
 }
