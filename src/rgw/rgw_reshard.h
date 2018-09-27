@@ -5,17 +5,29 @@
 #define RGW_RESHARD_H
 
 #include <vector>
+#include <functional>
+
 #include "include/rados/librados.hpp"
+#include "common/ceph_time.h"
 #include "cls/rgw/cls_rgw_types.h"
 #include "cls/lock/cls_lock_client.h"
 #include "rgw_bucket.h"
 
+
 class CephContext;
 class RGWRados;
 
-
 class RGWBucketReshard {
+public:
+
   friend class RGWReshard;
+
+  using Clock = ceph::coarse_mono_clock;
+
+  // returns 0 for success or a negative error code
+  using RenewLocksCallback = std::function<int(const Clock::time_point&)>;
+
+private:
 
   RGWRados *store;
   RGWBucketInfo bucket_info;
@@ -23,12 +35,15 @@ class RGWBucketReshard {
 
   string reshard_oid;
   rados::cls::lock::Lock reshard_lock;
-  utime_t lock_start_time;
-  bool locked_bucket;
+  Clock::time_point lock_start_time;
+  std::chrono::seconds lock_duration;
+  Clock::time_point lock_renew_thresh;
+
+  RenewLocksCallback renew_locks_callback;
 
   int lock_bucket();
   void unlock_bucket();
-  int renew_lock_bucket();
+  int renew_lock_bucket(const Clock::time_point&);
   int set_resharding_status(const string& new_instance_id, int32_t num_shards, cls_rgw_reshard_status status);
   int clear_resharding();
 
@@ -40,22 +55,24 @@ class RGWBucketReshard {
                  ostream *os,
 		 Formatter *formatter);
 public:
-  RGWBucketReshard(RGWRados *_store, const RGWBucketInfo& _bucket_info,
-                   const std::map<string, bufferlist>& _bucket_attrs);
 
+  // pass nullptr for the final parameter if no callback is used
   RGWBucketReshard(RGWRados *_store, const RGWBucketInfo& _bucket_info,
                    const std::map<string, bufferlist>& _bucket_attrs,
-		   rados::cls::lock::Lock& reshard_lock, const utime_t& lock_start_time);
-
+		   RenewLocksCallback _renew_locks_callback);
   int execute(int num_shards, int max_op_entries,
               bool verbose = false, ostream *out = nullptr,
               Formatter *formatter = nullptr,
 	      RGWReshard *reshard_log = nullptr);
   int get_status(std::list<cls_rgw_bucket_instance_entry> *status);
   int cancel();
-};
+}; // RGWBucketReshard
 
 class RGWReshard {
+public:
+    using Clock = ceph::coarse_mono_clock;
+
+private:
     RGWRados *store;
     string lock_name;
     rados::cls::lock::Lock instance_lock;
