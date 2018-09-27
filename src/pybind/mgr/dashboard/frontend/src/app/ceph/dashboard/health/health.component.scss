@@ -2,42 +2,45 @@
 
 $popover-text-font-size: 10px;
 
+.cd-container-flex {
+  margin: 0;
+  padding: 0;
+  display: -webkit-box;
+  display: -webkit-flex;
+  display: -ms-flexbox;
+  display: flex;
+  flex-flow: row wrap;
+  justify-content: space-between;
+}
+
 .cd-col-5 {
-  width: 17%;
-  float: left;
-  margin-left: 1.75%;
-  margin-right: 1.15%;
+  width: 20%;
 }
 
 @media (max-width: 1599px) {
   .cd-col-5 {
-    width: 30%;
-    float: left;
-    margin-left: 2.5%;
-    margin-right: 0;
+    width: 33%;
   }
 }
 
 @media (max-width: 991px) {
   .cd-col-5 {
-    width: 45%;
-    float: left;
-    margin-left: 3%;
-    margin-right: 0;
+    width: 50%;
   }
 }
 
 @media (max-width: 767px) {
   .cd-col-5 {
     width: 100%;
-    float: unset;
-    margin-left: unset;
-    margin-right: unset;
   }
 }
 
 .info-group {
   margin-bottom: 20px;
+}
+
+cd-info-card {
+  padding: 0 0.5vw 0 0.5vw;
 }
 
 ::ng-deep .health-popover-wrapper {

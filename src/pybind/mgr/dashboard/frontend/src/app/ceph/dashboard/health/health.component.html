@@ -45,9 +45,9 @@
                   i18n-cardTitle
                   link="/osd"
                   class="col-sm-6 col-md-4 col-lg-3"
-                  *ngIf="(contentData.osd_map | osdSummary) as osdSummaryContent"
-                  [contentClass]="osdSummaryContent.length > 3 ? 'content-row3 content-highlight' : 'content-row2 content-highlight'">
-      <span *ngFor="let result of osdSummaryContent" [ngClass]="result.class">
+                  *ngIf="contentData.osd_map"
+                  contentClass="content-row2 content-highlight">
+      <span *ngFor="let result of (contentData.osd_map | osdSummary)" [ngClass]="result.class">
         {{ result.content }}
       </span>
     </cd-info-card>
@@ -95,137 +95,140 @@
   <cd-info-group groupTitle="Performance"
                  i18n-groupTitle
                  class="row info-group">
+    <div class="cd-container-flex">
+      <cd-info-card cardTitle="Client IOPS"
+                    i18n-cardTitle
+                    class="cd-col-5"
+                    cardClass="card-medium"
+                    contentClass="content-medium content-highlight"
+                    *ngIf="contentData.client_perf">
+        {{ (contentData.client_perf.read_op_per_sec + contentData.client_perf.write_op_per_sec) | round:1 }}
+      </cd-info-card>
 
-    <cd-info-card cardTitle="Client IOPS"
-                  i18n-cardTitle
-                  class="cd-col-5"
-                  cardClass="card-medium"
-                  contentClass="content-medium content-highlight"
-                  *ngIf="contentData.client_perf">
-      {{ (contentData.client_perf.read_op_per_sec + contentData.client_perf.write_op_per_sec) | round:1 }}
-    </cd-info-card>
+      <cd-info-card cardTitle="Client Throughput"
+                    i18n-cardTitle
+                    class="cd-col-5"
+                    cardClass="card-medium"
+                    contentClass="content-medium content-highlight"
+                    *ngIf="contentData.client_perf">
+        {{ ((contentData.client_perf.read_bytes_sec + contentData.client_perf.write_bytes_sec) | dimlessBinary) + '/s' }}
+      </cd-info-card>
 
-    <cd-info-card cardTitle="Client Throughput"
-                  i18n-cardTitle
-                  class="cd-col-5"
-                  cardClass="card-medium"
-                  contentClass="content-medium content-highlight"
-                  *ngIf="contentData.client_perf">
-      {{ ((contentData.client_perf.read_bytes_sec + contentData.client_perf.write_bytes_sec) | dimlessBinary) + '/s' }}
-    </cd-info-card>
+      <cd-info-card cardTitle="Client Read/Write"
+                    i18n-cardTitle
+                    class="cd-col-5"
+                    cardClass="card-medium"
+                    [contentClass]="(contentData.client_perf.read_op_per_sec + contentData.client_perf.write_op_per_sec) <= 0 ? 'content-medium content-highlight' : 'card-chart'"
+                    *ngIf="contentData.client_perf">
+        <cd-health-pie *ngIf="(contentData.client_perf.read_op_per_sec + contentData.client_perf.write_op_per_sec) > 0"
+                       [data]="contentData"
+                       [isBytesData]="false"
+                       chartType="pie"
+                       [displayLegend]="true"
+                       (prepareFn)="prepareReadWriteRatio($event[0], $event[1])">
+        </cd-health-pie>
+        <span *ngIf="(contentData.client_perf.read_op_per_sec + contentData.client_perf.write_op_per_sec) <= 0">
+          N/A
+        </span>
+      </cd-info-card>
 
-    <cd-info-card cardTitle="Client Read/Write"
-                  i18n-cardTitle
-                  class="cd-col-5"
-                  cardClass="card-medium"
-                  [contentClass]="(contentData.client_perf.read_op_per_sec + contentData.client_perf.write_op_per_sec) <= 0 ? 'content-medium content-highlight' : 'card-chart'"
-                  *ngIf="contentData.client_perf">
-      <cd-health-pie *ngIf="(contentData.client_perf.read_op_per_sec + contentData.client_perf.write_op_per_sec) > 0"
-                     [data]="contentData"
-                     [isBytesData]="false"
-                     chartType="pie"
-                     [displayLegend]="true"
-                     (prepareFn)="prepareReadWriteRatio($event[0], $event[1])">
-      </cd-health-pie>
-      <span *ngIf="(contentData.client_perf.read_op_per_sec + contentData.client_perf.write_op_per_sec) <= 0">
-        N/A
-      </span>
-    </cd-info-card>
+      <cd-info-card cardTitle="Client Recovery"
+                    i18n-cardTitle
+                    class="cd-col-5"
+                    cardClass="card-medium"
+                    contentClass="content-medium content-highlight"
+                    *ngIf="contentData.client_perf">
+        {{ (contentData.client_perf.recovering_bytes_per_sec | dimlessBinary) + '/s' }}
+      </cd-info-card>
 
-    <cd-info-card cardTitle="Client Recovery"
-                  i18n-cardTitle
-                  class="cd-col-5"
-                  cardClass="card-medium"
-                  contentClass="content-medium content-highlight"
-                  *ngIf="contentData.client_perf">
-      {{ (contentData.client_perf.recovering_bytes_per_sec | dimlessBinary) + '/s' }}
-    </cd-info-card>
-
-    <cd-info-card cardTitle="Scrub"
-                  i18n-cardTitle
-                  class="cd-col-5"
-                  cardClass="card-medium"
-                  contentClass="content-medium content-highlight"
-                  *ngIf="contentData.scrub_status">
-      {{ contentData.scrub_status }}
-    </cd-info-card>
+      <cd-info-card cardTitle="Scrub"
+                    i18n-cardTitle
+                    class="cd-col-5"
+                    cardClass="card-medium"
+                    contentClass="content-medium content-highlight"
+                    *ngIf="contentData.scrub_status">
+        {{ contentData.scrub_status }}
+      </cd-info-card>
+    </div>
   </cd-info-group>
 
   <cd-info-group groupTitle="Capacity"
                  i18n-groupTitle
                  class="row info-group">
 
-    <cd-info-card cardTitle="Pools"
-                  i18n-cardTitle
-                  link="/pool"
-                  class="cd-col-5"
-                  cardClass="card-medium"
-                  contentClass="content-medium content-highlight"
-                  *ngIf="contentData.pools">
-      {{ contentData.pools.length }}
-    </cd-info-card>
+    <div class="cd-container-flex">
+      <cd-info-card cardTitle="Pools"
+                    i18n-cardTitle
+                    link="/pool"
+                    class="cd-col-5"
+                    cardClass="card-medium"
+                    contentClass="content-medium content-highlight"
+                    *ngIf="contentData.pools">
+        {{ contentData.pools.length }}
+      </cd-info-card>
 
-    <cd-info-card cardTitle="Raw Capacity"
-                  i18n-cardTitle
-                  class="cd-col-5"
-                  cardClass="card-medium"
-                  contentClass="card-chart"
-                  *ngIf="contentData.mon_status">
-      <cd-health-pie [data]="contentData"
-                     [isBytesData]="true"
-                     [displayLegend]="true"
-                     (prepareFn)="prepareRawUsage($event[0], $event[1])">
-      </cd-health-pie>
-    </cd-info-card>
+      <cd-info-card cardTitle="Raw Capacity"
+                    i18n-cardTitle
+                    class="cd-col-5"
+                    cardClass="card-medium"
+                    contentClass="card-chart"
+                    *ngIf="contentData.mon_status">
+        <cd-health-pie [data]="contentData"
+                       [isBytesData]="true"
+                       [displayLegend]="true"
+                       (prepareFn)="prepareRawUsage($event[0], $event[1])">
+        </cd-health-pie>
+      </cd-info-card>
 
-    <cd-info-card cardTitle="Objects"
-                  i18n-cardTitle
-                  class="cd-col-5"
-                  cardClass="card-medium"
-                  contentClass="content-medium content-highlight"
-                  *ngIf="contentData.df?.stats?.total_objects">
-      {{ contentData.df?.stats?.total_objects }}
-    </cd-info-card>
+      <cd-info-card cardTitle="Objects"
+                    i18n-cardTitle
+                    class="cd-col-5"
+                    cardClass="card-medium"
+                    contentClass="content-medium content-highlight"
+                    *ngIf="contentData.df?.stats?.total_objects">
+        {{ contentData.df?.stats?.total_objects }}
+      </cd-info-card>
 
-    <cd-info-card cardTitle="PGs per OSD"
-                  i18n-cardTitle
-                  class="cd-col-5"
-                  cardClass="card-medium"
-                  contentClass="content-medium content-highlight"
-                  *ngIf="contentData.pg_info">
-      {{ contentData.pg_info.pgs_per_osd | dimless }}
-    </cd-info-card>
+      <cd-info-card cardTitle="PGs per OSD"
+                    i18n-cardTitle
+                    class="cd-col-5"
+                    cardClass="card-medium"
+                    contentClass="content-medium content-highlight"
+                    *ngIf="contentData.pg_info">
+        {{ contentData.pg_info.pgs_per_osd | dimless }}
+      </cd-info-card>
 
-    <cd-info-card cardTitle="PG Status"
-                  i18n-cardTitle
-                  class="cd-col-5"
-                  cardClass="card-medium"
-                  contentClass="card-chart"
-                  (click)="pgStatusTarget.toggle()">
-      <ng-template #pgStatus>
-        <p class="logs-link"
-           i18n>
-          &rarr; See <a (click)="viewportScroller.scrollToAnchor('logs')">Logs</a> for more details.
-        </p>
-        <ul>
-          <li *ngFor="let pgStatesText of contentData.pg_info.statuses | keyvalue">
-            {{ pgStatesText.key }}: {{ pgStatesText.value }}
-          </li>
-        </ul>
-      </ng-template>
-      <div class="pg-status-popover-wrapper">
-        <div [popover]="pgStatus"
-             triggers=""
-             #pgStatusTarget="bs-popover"
-             placement="bottom">
-          <cd-health-pie [data]="contentData"
-                         chartType="pie"
-                         [displayLegend]="true"
-                         (prepareFn)="preparePgStatus($event[0], $event[1])">
-          </cd-health-pie>
+      <cd-info-card cardTitle="PG Status"
+                    i18n-cardTitle
+                    class="cd-col-5"
+                    cardClass="card-medium"
+                    contentClass="card-chart"
+                    (click)="pgStatusTarget.toggle()">
+        <ng-template #pgStatus>
+          <p class="logs-link"
+             i18n>
+            &rarr; See <a (click)="viewportScroller.scrollToAnchor('logs')">Logs</a> for more details.
+          </p>
+          <ul>
+            <li *ngFor="let pgStatesText of contentData.pg_info.statuses | keyvalue">
+              {{ pgStatesText.key }}: {{ pgStatesText.value }}
+            </li>
+          </ul>
+        </ng-template>
+        <div class="pg-status-popover-wrapper">
+          <div [popover]="pgStatus"
+               triggers=""
+               #pgStatusTarget="bs-popover"
+               placement="bottom">
+            <cd-health-pie [data]="contentData"
+                           chartType="pie"
+                           [displayLegend]="true"
+                           (prepareFn)="preparePgStatus($event[0], $event[1])">
+            </cd-health-pie>
+          </div>
         </div>
-      </div>
-    </cd-info-card>
+      </cd-info-card>
+    </div>
   </cd-info-group>
 
   <cd-info-group groupTitle="Logs"
