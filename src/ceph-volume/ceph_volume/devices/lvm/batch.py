@@ -5,6 +5,8 @@ from ceph_volume.util import disk, prompt_bool
 from ceph_volume.util import arg_validators
 from . import strategies
 
+mlogger = terminal.MultiLogger(__name__)
+
 
 device_list_template = """
   * {path: <25} {size: <10} {state}"""
@@ -62,7 +64,7 @@ def filestore_mixed_type(device_facts):
         return strategies.filestore.MixedType
 
 
-def get_strategy(args):
+def get_strategy(args, devices):
     """
     Given a set of devices as input, go through the different detection
     mechanisms to narrow down on a strategy to use. The strategies are 4 in
@@ -85,9 +87,9 @@ def get_strategy(args):
         strategies = filestore_strategies
 
     for strategy in strategies:
-        backend = strategy(args.devices)
+        backend = strategy(devices)
         if backend:
-            return backend(args.devices, args)
+            return backend
 
 
 class Batch(object):
@@ -128,7 +130,7 @@ class Batch(object):
         )
 
     def report(self, args):
-        strategy = get_strategy(args)
+        strategy = self._get_strategy(args)
         if args.format == 'pretty':
             strategy.report_pretty()
         elif args.format == 'json':
@@ -137,7 +139,7 @@ class Batch(object):
             raise RuntimeError('report format must be "pretty" or "json"')
 
     def execute(self, args):
-        strategy = get_strategy(args)
+        strategy = self._get_strategy(args)
         if not args.yes:
             strategy.report_pretty()
             terminal.info('The above OSDs would be created if the operation continues')
@@ -147,6 +149,31 @@ class Batch(object):
                 raise SystemExit(0)
 
         strategy.execute()
+
+    def _get_strategy(self, args):
+        strategy = get_strategy(args, args.devices)
+        unused_devices = [device for device in args.devices if not device.used_by_ceph]
+        # only data devices, journals can be reused
+        used_devices = [device.abspath for device in args.devices if device.used_by_ceph]
+        args.filtered_devices = {}
+        if used_devices:
+            for device in used_devices:
+                args.filtered_devices[device] = {"reasons": ["Used by ceph as a data device already"]}
+            if not args.report:
+                mlogger.info("Ignoring devices already used by ceph: %s" % ",".join(used_devices))
+        if not unused_devices and not args.report:
+            # report nothing changed
+            mlogger.info("All devices are already used by ceph. No OSDs will be created.")
+            raise SystemExit(0)
+        else:
+            new_strategy = get_strategy(args, unused_devices)
+            if type(strategy) != type(new_strategy):
+                if not args.report:
+                    mlogger.error("aborting because strategy changed from %s to %s after filtering" % (strategy, new_strategy))
+                    raise SystemExit(0)
+            else:
+                strategy = new_strategy
+        return strategy(unused_devices, args)
 
     @decorators.needs_root
     def main(self):
