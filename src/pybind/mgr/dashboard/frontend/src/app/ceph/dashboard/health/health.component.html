@@ -118,7 +118,7 @@
                     i18n-cardTitle
                     class="cd-col-5"
                     cardClass="card-medium"
-                    [contentClass]="(contentData.client_perf.read_op_per_sec + contentData.client_perf.write_op_per_sec) <= 0 ? 'content-medium content-highlight' : 'card-chart'"
+                    [contentClass]="(contentData.client_perf.read_op_per_sec + contentData.client_perf.write_op_per_sec) <= 0 ? 'content-medium content-highlight' : 'content-chart'"
                     *ngIf="contentData.client_perf">
         <cd-health-pie *ngIf="(contentData.client_perf.read_op_per_sec + contentData.client_perf.write_op_per_sec) > 0"
                        [data]="contentData"
@@ -171,7 +171,7 @@
                     i18n-cardTitle
                     class="cd-col-5"
                     cardClass="card-medium"
-                    contentClass="card-chart"
+                    contentClass="content-chart"
                     *ngIf="contentData.mon_status">
         <cd-health-pie [data]="contentData"
                        [isBytesData]="true"
@@ -202,7 +202,7 @@
                     i18n-cardTitle
                     class="cd-col-5"
                     cardClass="card-medium"
-                    contentClass="card-chart"
+                    contentClass="content-chart"
                     (click)="pgStatusTarget.toggle()">
         <ng-template #pgStatus>
           <p class="logs-link"

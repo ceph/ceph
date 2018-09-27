@@ -1,7 +1,7 @@
 @import '../../../../defaults';
 
-$card-height: 8vw;
-$card-medium-height: 13vw;
+$card-height: 6vw;
+$card-medium-height: 12vw;
 $card-font-min-width: 320px;
 $card-font-max-width: 1920px;
 $card-font-min-size: 12px;
@@ -42,7 +42,7 @@ $logs-text-font-size: $card-font-min-size;
   transform: translate(-50%);
 }
 
-.card-chart {
+.content-chart {
   position: unset;
   top: unset;
   left: unset;
@@ -91,34 +91,36 @@ $logs-text-font-size: $card-font-min-size;
   text-align: left;
 }
 
+@media (max-width: 1599px) {
+  .card {
+    min-height: $card-height * 1.3;
+  }
+
+  .card-medium {
+    min-height: $card-medium-height * 1.5;
+  }
+}
+
 @media (max-width: 991px) {
   .card {
     min-height: $card-height * 2;
   }
+}
 
+@media (max-width: 991px) and (min-width: 768px) {
   .card-medium {
-    min-height: $card-medium-height * 1.9;
+    min-height: $card-medium-height * 2.2;
   }
 }
 
-@media (min-width: 992px) {
+@media (max-width: 599px) {
   .card {
-    min-height: $card-height;
-  }
-
-  .card-medium {
-    min-height: $card-medium-height * 1.5;
+    min-height: $card-height * 3;
   }
 }
 
-@media (min-width: 1200px) {
-  .card-medium {
-    min-height: $card-medium-height * 1.5;
-  }
-}
-
-@media (min-width: 1600px) {
-  .card-medium {
-    min-height: $card-medium-height;
+@media (max-width: 319px) {
+  .card {
+    min-height: $card-height * 4;
   }
 }
