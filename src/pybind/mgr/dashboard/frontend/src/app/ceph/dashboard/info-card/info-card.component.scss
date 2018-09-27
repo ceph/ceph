@@ -2,12 +2,16 @@
 
 $card-height: 8vw;
 $card-medium-height: 13vw;
-$logs-text-font-size: 10px;
+$card-font-min-width: 320px;
+$card-font-max-width: 1920px;
+$card-font-min-size: 12px;
+$card-font-max-size: 21px;
+$logs-text-font-size: $card-font-min-size;
 
 .card {
   border: 0.5px solid $color-info-card-border;
   border-radius: 3px;
-  background: $color-info-card-background;
+  background-color: $color-solid-white;
   box-shadow: 0 1px 1px rgba(3, 3, 3, 0.175);
   margin: 0 -10px 20px;
   padding: 0 20px;
@@ -15,19 +19,41 @@ $logs-text-font-size: 10px;
   height: auto;
   margin-left: auto;
   margin-right: auto;
-
   min-height: $card-height;
+  @include fluid-font-size(
+    $card-font-min-width,
+    $card-font-max-width,
+    $card-font-min-size,
+    $card-font-max-size
+  );
+  position: relative;
 }
 
 .card-title {
-  font-size: 1.2vw;
-  margin: 20px 0;
+  margin: 1.1vw 0;
   padding: 0;
 }
 
 .card-body {
-  font-size: 1.25vw;
   text-align: center;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%);
+}
+
+.card-chart {
+  position: unset;
+  top: unset;
+  left: unset;
+  transform: unset;
+}
+
+.no-center {
+  position: unset;
+  top: unset;
+  left: unset;
+  transform: unset;
 }
 
 .card-link {
@@ -35,25 +61,19 @@ $logs-text-font-size: 10px;
 }
 
 .content-row2 {
-  position: relative;
-  top: -1vw;
-  margin-bottom: -1.5vw;
-  font-size: 1.15vw;
-}
-
-.content-row3 {
-  position: relative;
-  top: -1.5vw;
-  margin-bottom: -1.5vw;
-  font-size: 1vw;
+  margin-right: -50%;
+  transform: translate(-50%, -33%);
+  $font-size-factor: 0.8;
+  @include fluid-font-size(
+    $card-font-min-width,
+    $card-font-max-width,
+    $card-font-min-size * $font-size-factor,
+    $card-font-max-size * $font-size-factor
+  );
 }
 
 .content-highlight {
   font-weight: bold;
-}
-
-.content-medium {
-  font-size: 1.7vw;
 }
 
 .card-medium {
@@ -71,81 +91,13 @@ $logs-text-font-size: 10px;
   text-align: left;
 }
 
-@media (max-width: 600px) {
-  .card-body {
-    margin-top: -10%;
-  }
-
-  .card-medium .card-body {
-    margin-top: -5%;
-  }
-
-  .card-medium .card-chart {
-    margin-top: -2%;
-  }
-}
-
-@media (min-width: 601px) {
-  .card-body {
-    margin-top: -5%;
-  }
-
-  .card-medium .card-body {
-    margin-top: -2%;
-  }
-
-  .card-medium .card-chart {
-    margin-top: 0;
-  }
-}
-
-@media (max-width: 767px) {
-  .card-title {
-    font-size: 4vw;
-  }
-
-  .card-body {
-    font-size: 4.5vw;
-  }
-
-  .card-medium .card-body {
-    font-size: 4.5vw;
-  }
-
-  .card-medium .text-monospace {
-    font-size: $logs-text-font-size;
-  }
-}
-
-@media (min-width: 768px) and (max-width: 991px) {
-  .card-title {
-    font-size: 2vw;
-  }
-
-  .card-medium .card-body {
-    font-size: 3vw;
-  }
-
-  .card-medium .text-monospace {
-    font-size: $logs-text-font-size;
-  }
-}
-
-@media (min-width: 768px) {
+@media (max-width: 991px) {
   .card {
-    min-height: $card-height * 1.5;
+    min-height: $card-height * 2;
   }
 
   .card-medium {
     min-height: $card-medium-height * 1.9;
-  }
-
-  .card-medium .card-body {
-    margin-top: 22%;
-  }
-
-  .card-medium .card-chart {
-    margin-top: -5%;
   }
 }
 
@@ -157,41 +109,11 @@ $logs-text-font-size: 10px;
   .card-medium {
     min-height: $card-medium-height * 1.5;
   }
-
-  .card-body {
-    margin-top: -10%;
-  }
-
-  .card-medium .card-body {
-    margin-top: 25%;
-  }
-
-  .card-medium .card-chart {
-    margin-top: 3%;
-  }
-}
-
-@media (min-width: 992px) and (max-width: 1199px) {
-  .content-row3 {
-    top: -0.3vw;
-  }
 }
 
 @media (min-width: 1200px) {
   .card-medium {
     min-height: $card-medium-height * 1.5;
-  }
-
-  .card-body {
-    margin-top: -2%;
-  }
-
-  .card-medium .card-body {
-    margin-top: 27%;
-  }
-
-  .card-medium .card-chart {
-    margin-top: 10%;
   }
 }
 
@@ -199,12 +121,4 @@ $logs-text-font-size: 10px;
   .card-medium {
     min-height: $card-medium-height;
   }
-
-  .card-body {
-    margin-top: 0;
-  }
-}
-
-.card-medium .no-center {
-  margin-top: 0;
 }
