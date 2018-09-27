@@ -331,7 +331,7 @@ std::vector<MonCommand> PyModuleRegistry::get_commands() const
       flags |= MonCommand::FLAG_POLL;
     }
     result.push_back({pyc.cmdstring, pyc.helpstring, "mgr",
-                        pyc.perm, "cli", flags});
+                        pyc.perm, flags});
   }
   return result;
 }

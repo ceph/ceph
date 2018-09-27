@@ -834,7 +834,7 @@ bool DaemonServer::_handle_command(
       ostringstream secname;
       secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
       dump_cmddesc_to_json(&f, secname.str(), mc.cmdstring, mc.helpstring,
-                           mc.module, mc.req_perms, mc.availability, 0);
+                           mc.module, mc.req_perms, 0);
       cmdnum++;
     };
 
@@ -858,7 +858,7 @@ bool DaemonServer::_handle_command(
 
   bool is_allowed;
   if (!mgr_cmd) {
-    MonCommand py_command = {"", "", "py", "rw", "cli"};
+    MonCommand py_command = {"", "", "py", "rw"};
     is_allowed = _allowed_command(session, py_command.module,
       prefix, cmdctx->cmdmap, param_str_map, &py_command);
   } else {
