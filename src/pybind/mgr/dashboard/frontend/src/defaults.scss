@@ -29,7 +29,7 @@ $color-grad-gray: #ededed;
 $color-light-gray: #d1d1d1;
 $color-soft-gray: #ddd;
 $color-white-gray: #eee;
-$color-off-white: #f5f5f5;
+$color-whitesmoke-gray: #f5f5f5;
 $color-solid-white: #ffffff;
 $color-transparent: rgba(0, 0, 0, 0.09);
 
@@ -72,10 +72,10 @@ $color-login-active-row-text: $color-black;
 /*Landing Page*/
 
 /*InfoGroup*/
-$color-info-group-underline: $color-off-white;
+$color-info-group-underline: $color-whitesmoke-gray;
 
 /*InfoCard*/
-$color-info-card-background: $color-off-white;
+$color-info-card-background: $color-whitesmoke-gray;
 $color-info-card-border: $color-soft-gray;
 
 /*Navigation*/
@@ -98,21 +98,21 @@ $color-helper-bg: $color-blue;
 /*Table*/
 $color-table-seperator-border: $color-transparent;
 $color-table-input-border: $color-transparent;
-$color-table-dropdown-bg: $color-off-white;
-$color-table-header-bg: $color-off-white;
+$color-table-dropdown-bg: $color-whitesmoke-gray;
+$color-table-header-bg: $color-whitesmoke-gray;
 $color-table-header-border: $color-light-gray;
 $color-table-active-row: $color-sky-blue;
 $color-table-active-row-hover: $color-light-blue;
 $color-table-progress-bar-bg: $color-sky-blue;
 $color-table-progress-bar-active: $color-blue;
-$color-table-gradient-1: $color-off-white;
+$color-table-gradient-1: $color-whitesmoke-gray;
 $color-table-gradient-2: $color-grad-gray;
 $color-table-sort: $color-blue;
 $color-table-empty-row: $color-light-yellow;
 $color-table-hover-row: $color-white-gray;
 $color-table-even-row-bg: $color-solid-white;
-$color-table-odd-row-bg: $color-off-white;
-$color-table-datatable-header: $color-off-white;
+$color-table-odd-row-bg: $color-whitesmoke-gray;
+$color-table-datatable-header: $color-whitesmoke-gray;
 
 /*Chart tooltip*/
 $color-chart-tooltip-bg: $color-transparent-black;
@@ -138,5 +138,31 @@ $color-rgw-icon: $color-blue-gray;
 
 @mixin hf {
   border-bottom: 1px solid $color-light-gray;
-  background-color: $color-off-white;
+  background-color: $color-whitesmoke-gray;
+}
+
+@function strip-unit($value) {
+  @return $value / ($value * 0 + 1);
+}
+
+@mixin fluid-font-size($min-vw, $max-vw, $min-font-size, $max-font-size) {
+  $u1: unit($min-vw);
+  $u2: unit($max-vw);
+  $u3: unit($min-font-size);
+  $u4: unit($max-font-size);
+
+  @if $u1 == $u2 and $u1 == $u3 and $u1 == $u4 {
+    & {
+      font-size: $min-font-size;
+      @media screen and (min-width: $min-vw) {
+        font-size: calc(
+          #{$min-font-size} + #{strip-unit($max-font-size - $min-font-size)} *
+            ((100vw - #{$min-vw}) / #{strip-unit($max-vw - $min-vw)})
+        );
+      }
+      @media screen and (min-width: $max-vw) {
+        font-size: $max-font-size;
+      }
+    }
+  }
 }
