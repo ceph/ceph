@@ -908,8 +908,7 @@ TEST_F(TestMockInstanceWatcher_NotifySync, WaitingOnLeaderReleaseLeader) {
 
   C_SaferCond on_start_op_called;
   Context *on_start_ctx;
-  expect_throttler_start_op("sync_id", &on_start_op_called,
-                                          &on_start_ctx);
+  expect_throttler_start_op("sync_id", &on_start_op_called, &on_start_ctx);
   C_SaferCond on_start;
   instance_watcher1->notify_sync_request("sync_id", &on_start);
   ASSERT_EQ(0, on_start_op_called.wait());
@@ -917,10 +916,10 @@ TEST_F(TestMockInstanceWatcher_NotifySync, WaitingOnLeaderReleaseLeader) {
   std::vector<Context *> throttler_queue = {on_start_ctx};
   expect_throttler_destroy(&throttler_queue);
   instance_watcher1->handle_release_leader();
+  expect_throttler_start_op("sync_id");
   instance_watcher2->handle_acquire_leader();
   instance_watcher1->handle_update_leader(instance_id2);
 
-  expect_throttler_start_op("sync_id");
   ASSERT_EQ(0, on_start.wait());
   C_SaferCond on_finish;
   expect_throttler_finish_op("sync_id", &on_finish);
