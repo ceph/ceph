@@ -12,6 +12,7 @@
 #include "include/assert.h"
 
 #define MAX_FLUSH_UNDER_LOCK 20  ///< max bh's we start writeback on
+#define BUFFER_MEMORY_WEIGHT CEPH_PAGE_SHIFT  // memory usage of BufferHead, count in (1<<n)
 
 using std::chrono::seconds;
 				 /// while holding the lock
@@ -166,6 +167,20 @@ void ObjectCacher::Object::try_merge_bh(BufferHead *bh)
   ++p;
   if (p != data.end() && can_merge_bh(bh, p->second))
     merge_left(bh, p->second);
+
+  maybe_rebuild_buffer(bh);
+}
+
+void ObjectCacher::Object::maybe_rebuild_buffer(BufferHead *bh)
+{
+  auto& bl = bh->bl;
+  if (bl.get_num_buffers() <= 1)
+    return;
+
+  auto wasted = bl.get_wasted_space();
+  if (wasted * 2 > bl.length() &&
+      wasted > (1U << BUFFER_MEMORY_WEIGHT))
+    bl.rebuild();
 }
 
 /*
@@ -391,15 +406,18 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(ObjectExtent &ex,
         if (cur + max >= bh->end()) {
           // we want right bit (one splice)
           final = split(bh, cur);   // just split it, take right half.
+          maybe_rebuild_buffer(bh);
           replace_journal_tid(final, tid);
           ++p;
           assert(p->second == final);
         } else {
           // we want middle bit (two splices)
           final = split(bh, cur);
+          maybe_rebuild_buffer(bh);
           ++p;
           assert(p->second == final);
-          split(final, cur+max);
+          auto right = split(final, cur+max);
+          maybe_rebuild_buffer(right);
           replace_journal_tid(final, tid);
         }
       } else {
@@ -408,7 +426,8 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(ObjectExtent &ex,
           // whole bufferhead, piece of cake.
         } else {
           // we want left bit (one splice)
-          split(bh, cur + max);        // just split
+          auto right = split(bh, cur + max);        // just split
+          maybe_rebuild_buffer(right);
         }
         if (final) {
           oc->mark_dirty(bh);
@@ -486,6 +505,7 @@ void ObjectCacher::Object::truncate(loff_t s)
     // split bh at truncation point?
     if (bh->start() < s) {
       split(bh, s);
+      maybe_rebuild_buffer(bh);
       continue;
     }
 
@@ -522,13 +542,15 @@ void ObjectCacher::Object::discard(loff_t off, loff_t len)
     // split bh at truncation point?
     if (bh->start() < off) {
       split(bh, off);
+      maybe_rebuild_buffer(bh);
       ++p;
       continue;
     }
 
     assert(bh->start() >= off);
     if (bh->end() > off + len) {
-      split(bh, off + len);
+      auto right = split(bh, off + len);
+      maybe_rebuild_buffer(right);
     }
 
     ++p;

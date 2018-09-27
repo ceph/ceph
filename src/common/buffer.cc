@@ -1488,6 +1488,32 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     return is_aligned(CEPH_PAGE_SIZE);
   }
 
+  uint64_t buffer::list::get_wasted_space()
+  {
+    if (_buffers.size() == 1)
+      return _buffers.back().wasted();
+
+    std::vector<const raw*> raw_vec;
+    raw_vec.reserve(_buffers.size());
+    for (const auto& p : _buffers)
+      raw_vec.push_back(p.get_raw());
+    std::sort(raw_vec.begin(), raw_vec.end());
+
+    uint64_t total = 0;
+    const raw *last = nullptr;
+    for (const auto r : raw_vec) {
+      if (r == last)
+	continue;
+      last = r;
+      total += r->len;
+    }
+    // If multiple buffers are sharing the same raw buffer and they overlap
+    // with each other, the wasted space will be underestimated.
+    if (total <= length())
+      return 0;
+    return total - length();
+  }
+
   void buffer::list::rebuild()
   {
     if (_len == 0) {
