@@ -1105,7 +1105,7 @@ namespace rgw {
   } /* RGWFileHandle::readdir */
 
   int RGWFileHandle::write(uint64_t off, size_t len, size_t *bytes_written,
-			   void *buffer)
+			   void *buffer, bool *retry)
   {
     using std::get;
     using WriteCompletion = RGWLibFS::WriteCompletion;
@@ -1191,7 +1191,36 @@ namespace rgw {
 #endif
 
     f->write_req->put_data(off, bl);
+
+    /*
+     * NFS Client may not always send data sequentially,
+     * so the expected offset may not equal to the real offset.
+     * In such situation we let writer wait until the offset is
+     * correct.
+     */
+    if (f->write_req->eio == true) {
+       *retry = true;
+       RGWLibFS::write_timer.adjust_event(
+          f->write_req->timer_id, std::chrono::seconds(10));
+      return 0; 
+    }
+
+    /* 
+     * Pause/Resume write timer in order to avoid writing 
+     * stream being wrongly closed when writing operation 
+     * is executing in rados layer
+     */
+    if (stateless_open()) {
+      /* pause write timer */
+      RGWLibFS::write_timer.pause_event(f->write_req->timer_id);
+    }
+
     rc = f->write_req->exec_continue();
+
+    if (stateless_open()) {
+      /* resume write timer */
+      RGWLibFS::write_timer.resume_event(f->write_req->timer_id);
+    }
 
     if (rc == 0) {
       size_t min_size = off + len;
@@ -1995,8 +2024,12 @@ int rgw_write(struct rgw_fs *rgw_fs,
 {
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
   int rc;
-
   *bytes_written = 0;
+
+  /* variables for writer retry count */
+  bool retry = false;
+  int max_retry = 10;
+  int cnt_retry = 0;
 
   if (! rgw_fh->is_file())
     return -EISDIR;
@@ -2010,8 +2043,15 @@ int rgw_write(struct rgw_fs *rgw_fs,
       return -EPERM;
   }
 
-  rc = rgw_fh->write(offset, length, bytes_written, buffer);
-
+  rc = rgw_fh->write(offset, length, bytes_written, buffer, &retry);
+  
+  /* Retry until offset is correct or max retry time reach */
+  while (retry && cnt_retry < max_retry) {
+    sleep(1);
+    retry = false;
+    cnt_retry++;
+    rc = rgw_fh->write(offset, length, bytes_written, buffer, &retry);
+  }
   return rc;
 }
 
