@@ -970,6 +970,27 @@ vc.disconnect()
             obj_data = obj_data
         )))
 
+    def test_put_object_versioned(self):
+        vc_mount = self.mounts[1]
+        vc_mount.umount_wait()
+        self._configure_vc_auth(vc_mount, "manila")
+
+        obj_data = 'test_data'
+        obj_name = 'test_vc_ob_2'
+        pool_name = self.fs.get_data_pool_names()[0]
+        self.fs.rados(['put', obj_name, '-'], pool=pool_name, stdin_data=obj_data)
+
+        # Test if put_object_versioned() crosschecks the version of the
+        # given object. Being a negative test, an exception is expected.
+        with self.assertRaises(CommandFailedError):
+            self._volume_client_python(vc_mount, dedent("""
+                data, version = vc.get_object_and_version("{pool_name}", "{obj_name}")
+                data += 'm1'
+                vc.put_object("{pool_name}", "{obj_name}", data)
+                data += 'm2'
+                vc.put_object_versioned("{pool_name}", "{obj_name}", data, version)
+            """).format(pool_name=pool_name, obj_name=obj_name))
+
     def test_delete_object(self):
         vc_mount = self.mounts[1]
         vc_mount.umount_wait()
