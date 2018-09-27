@@ -99,6 +99,7 @@ class SingleType(object):
         # chose whichever is the one group we have to compute against
         devices = self.hdds or self.ssds
         osds = self.computed['osds']
+        used_osds = []
         for device in devices:
             for osd in range(self.osds_per_device):
                 device_size = disk.Size(b=device.sys_api['size'])
@@ -106,6 +107,7 @@ class SingleType(object):
                 journal_size = self.journal_size
                 data_size = osd_size - journal_size
                 data_percentage = data_size * 100 / device_size
+                used_osds.append(device.used_by_ceph)
                 osd = {'data': {}, 'journal': {}, 'used_by_ceph': device.used_by_ceph}
                 osd['data']['path'] = device.abspath
                 osd['data']['size'] = data_size.b.as_int()
@@ -117,6 +119,8 @@ class SingleType(object):
                 osd['journal']['percentage'] = int(100 - data_percentage)
                 osd['journal']['human_readable_size'] = str(journal_size)
                 osds.append(osd)
+
+        self.computed['changed'] = not any(used_osds)
 
     def execute(self):
         """
