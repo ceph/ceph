@@ -539,6 +539,7 @@ protected:
   void trim_dentry(Dentry *dn);
   void trim_caps(MetaSession *s, uint64_t max);
   void _invalidate_kernel_dcache();
+  void _trim_negative_child_dentries(InodeRef& in);
   
   void dump_inode(Formatter *f, Inode *in, set<Inode*>& did, bool disconnected);
   void dump_cache(Formatter *f);  // debug
