@@ -33,7 +33,7 @@ protected:
   // Populated by descendent class
   PyObject *pClassInstance = nullptr;
 
-  LogChannelRef clog, audit_clog;
+  LogChannelRef clog;
 
   class PyModuleRunnerThread : public Thread
   {
@@ -52,8 +52,6 @@ public:
   int serve();
   void shutdown();
   void log(int level, const std::string &record);
-  void cluster_log(const std::string &channel, clog_type prio,
-    const std::string &message);
 
   const char *get_thread_name() const
   {
@@ -62,12 +60,10 @@ public:
 
   PyModuleRunner(
       const PyModuleRef &py_module_,
-      LogChannelRef clog_,
-      LogChannelRef audit_clog_)
+      LogChannelRef clog_)
     : 
       py_module(py_module_),
       clog(clog_),
-      audit_clog(audit_clog_),
       thread(this)
   {
     // Shortened name for use as thread name, because thread names

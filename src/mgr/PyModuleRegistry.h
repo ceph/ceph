@@ -38,7 +38,7 @@ class PyModuleRegistry
 {
 private:
   mutable Mutex lock{"PyModuleRegistry::lock"};
-  LogChannelRef clog, audit_clog;
+  LogChannelRef clog;
 
   std::map<std::string, PyModuleRef> modules;
 
@@ -76,8 +76,8 @@ public:
     return modules_out;
   }
 
-  explicit PyModuleRegistry(LogChannelRef clog_, LogChannelRef audit_clog_)
-    : clog(clog_), audit_clog(audit_clog_)
+  explicit PyModuleRegistry(LogChannelRef clog_)
+    : clog(clog_)
   {}
 
   /**

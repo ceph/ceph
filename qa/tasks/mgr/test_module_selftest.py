@@ -296,10 +296,10 @@ class TestModuleSelftest(MgrTestCase):
         Use the selftest module to test the cluster/audit log interface.
         """
         priority_map = {
-            'info': 'INF',
-            'security': 'SEC',
-            'warning': 'WRN',
-            'error': 'ERR'
+            "info": "INF",
+            "security": "SEC",
+            "warning": "WRN",
+            "error": "ERR"
         }
         self._load_module("selftest")
         for priority in priority_map.keys():
@@ -318,3 +318,13 @@ class TestModuleSelftest(MgrTestCase):
                 self.mgr_cluster.mon_manager.raw_cluster_cmd(
                     "mgr", "self-test", "cluster-log", "audit",
                     priority, message)
+
+    def test_selftest_cluster_log_unknown_channel(self):
+        """
+        Use the selftest module to test the cluster/audit log interface.
+        """
+        with self.assertRaises(CommandFailedError) as exc_raised:
+            self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                "mgr", "self-test", "cluster-log", "xyz",
+                "ERR", "The channel does not exist")
+        self.assertEqual(exc_raised.exception.exitstatus, errno.EOPNOTSUPP)

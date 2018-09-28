@@ -81,10 +81,9 @@ class StandbyPyModule : public PyModuleRunner
   StandbyPyModule(
       StandbyPyModuleState &state_,
       const PyModuleRef &py_module_,
-      LogChannelRef clog_,
-      LogChannelRef audit_clog_)
+      LogChannelRef clog_)
     :
-      PyModuleRunner(py_module_, clog_, audit_clog_),
+      PyModuleRunner(py_module_, clog_),
       state(state_)
   {
   }
@@ -104,7 +103,7 @@ private:
 
   StandbyPyModuleState state;
 
-  LogChannelRef clog, audit_clog;
+  LogChannelRef clog;
 
 public:
 
@@ -112,7 +111,6 @@ public:
       const MgrMap &mgr_map_,
       PyModuleConfig &module_config,
       LogChannelRef clog_,
-      LogChannelRef audit_clog_,
       MonClient &monc);
 
   int start_one(PyModuleRef py_module);
