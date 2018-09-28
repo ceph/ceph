@@ -209,6 +209,7 @@ void usage()
   cout << "  reshard status             read bucket resharding status\n";
   cout << "  reshard process            process of scheduled reshard jobs\n";
   cout << "  reshard cancel             cancel resharding a bucket\n";
+  cout << "  reshard cleanup            cleanup old index objects from a resharded bucket\n";
   cout << "  sync error list            list sync error\n";
   cout << "  sync error trim            trim sync error\n";
   cout << "  mfa create                 create a new MFA TOTP token\n";
@@ -513,6 +514,7 @@ enum {
   OPT_RESHARD_STATUS,
   OPT_RESHARD_PROCESS,
   OPT_RESHARD_CANCEL,
+  OPT_RESHARD_CLEANUP,
   OPT_MFA_CREATE,
   OPT_MFA_REMOVE,
   OPT_MFA_GET,
@@ -968,6 +970,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_RESHARD_PROCESS;
     if (strcmp(cmd, "cancel") == 0)
       return OPT_RESHARD_CANCEL;
+    if (strcmp(cmd, "cleanup") == 0)
+      return OPT_RESHARD_CLEANUP;
   } else if (strcmp(prev_cmd, "mfa") == 0) {
     if (strcmp(cmd, "create") == 0)
       return OPT_MFA_CREATE;
@@ -2609,6 +2613,88 @@ static int trim_sync_error_log(int shard_id, const ceph::real_time& start_time,
   // unreachable
 }
 
+static int purge_bucket_bi(RGWRados *store,
+                           const RGWBucketInfo& bucket_info,
+                           const rgw_bucket& bucket)
+{
+  int max_shards = (bucket_info.num_shards > 0 ? bucket_info.num_shards : 1);
+  for (int i = 0; i < max_shards; i++) {
+    RGWRados::BucketShard bs(store);
+    int shard_id = (bucket_info.num_shards > 0  ? i : -1);
+    int ret = bs.init(bucket, shard_id);
+    if (ret < 0) {
+      cerr << "ERROR: bs.init(bucket=" << bucket << ", shard=" << shard_id
+           << "): " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    ret = store->bi_remove(bs);
+    if (ret < 0) {
+      cerr << "ERROR: failed to remove bucket index object: "
+           << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+  }
+  return 0;
+}
+
+static int cleanup_stale_bi(RGWRados *store,
+                            const string& tenant,
+                            const string& bucket_name,
+                            const string& orig_instance_id,
+                            std::string&& stale_instance_id)
+{
+  while (stale_instance_id != orig_instance_id){
+    RGWBucketInfo stale_bucket_info;
+    rgw_bucket stale_bucket;
+
+    int ret = init_bucket(tenant, bucket_name,
+                          stale_instance_id, stale_bucket_info, stale_bucket);
+
+    if (ret < 0) {
+      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+      return ret;
+    }
+    std::cout << "purging index: " << stale_instance_id << std::endl;
+    ret = purge_bucket_bi(store, stale_bucket_info, stale_bucket);
+    if (ret < 0) {
+      return ret;
+    }
+    // continue purging subsequently resharded buckets
+    stale_instance_id = std::move(stale_bucket_info.new_bucket_instance_id);
+  }
+
+  return 0;
+}
+
+static int cleanup_stale_bi(RGWRados *store,
+                            const string& tenant,
+                            const string& bucket_name)
+{
+  rgw_bucket orig_bucket;
+  RGWBucketInfo orig_bucket_info;
+
+  RGWObjectCtx obj_ctx(store);
+  RGWBucketEntryPoint orig_bucket_ep;
+  int ret = store->get_bucket_entrypoint_info(obj_ctx, tenant, bucket_name,
+                                              orig_bucket_ep, nullptr, nullptr, nullptr);
+
+
+  ret = init_bucket(tenant, bucket_name, string(), orig_bucket_info, orig_bucket);
+  if (ret < 0) {
+    cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+    return ret;
+  }
+
+  if (orig_bucket_ep.bucket.bucket_id == orig_bucket.marker) {
+    cerr << "Nothing to cleanup here" << std::endl;
+    return 0;
+  }
+
+  return cleanup_stale_bi(store, tenant, bucket_name,
+                          orig_bucket_ep.bucket.bucket_id, std::move(orig_bucket.marker));
+}
+
 int main(int argc, const char **argv)
 {
   vector<const char*> args;
@@ -3162,6 +3248,7 @@ int main(int argc, const char **argv)
                           && opt_cmd != OPT_ROLE_POLICY_DELETE
                           && opt_cmd != OPT_RESHARD_ADD
                           && opt_cmd != OPT_RESHARD_CANCEL
+	                  && opt_cmd != OPT_RESHARD_CLEANUP
                           && opt_cmd != OPT_RESHARD_STATUS) {
         cerr << "ERROR: --tenant is set, but there's no user ID" << std::endl;
         return EINVAL;
@@ -5845,22 +5932,9 @@ next:
       return EINVAL;
     }
 
-    int max_shards = (bucket_info.num_shards > 0 ? bucket_info.num_shards : 1);
-
-    for (int i = 0; i < max_shards; i++) {
-      RGWRados::BucketShard bs(store);
-      int shard_id = (bucket_info.num_shards > 0  ? i : -1);
-      int ret = bs.init(bucket, shard_id);
-      if (ret < 0) {
-        cerr << "ERROR: bs.init(bucket=" << bucket << ", shard=" << shard_id << "): " << cpp_strerror(-ret) << std::endl;
-        return -ret;
-      }
-
-      ret = store->bi_remove(bs);
-      if (ret < 0) {
-        cerr << "ERROR: failed to remove bucket index object: " << cpp_strerror(-ret) << std::endl;
-        return -ret;
-      }
+    ret = purge_bucket_bi(store, bucket_info, bucket);
+    if (ret < 0){
+      return -ret;
     }
   }
 
@@ -6209,6 +6283,17 @@ next:
       cerr << "Error in getting bucket " << bucket_name << ": " << cpp_strerror(-ret) << std::endl;
       return ret;
     }
+  }
+
+  if (opt_cmd == OPT_RESHARD_CLEANUP) {
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket not specified" << std::endl;
+      return EINVAL;
+    }
+
+    ret = cleanup_stale_bi(store, tenant, bucket_name);
+    if (ret < 0)
+      return -ret;
   }
 
   if (opt_cmd == OPT_OBJECT_UNLINK) {
