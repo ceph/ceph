@@ -57,7 +57,7 @@ export class ConfigurationComponent implements OnInit {
       { flexGrow: 2, prop: 'long_desc', name: 'Long description', cellClass: 'wrap' },
       { flexGrow: 1, prop: 'type' },
       { flexGrow: 1, prop: 'level' },
-      { flexGrow: 1, prop: 'default', cellClass: 'wrap'},
+      { flexGrow: 1, prop: 'default', cellClass: 'wrap' },
       { flexGrow: 2, prop: 'daemon_default', name: 'Daemon default' },
       { flexGrow: 1, prop: 'tags', name: 'Tags' },
       { flexGrow: 1, prop: 'services', name: 'Services' },
