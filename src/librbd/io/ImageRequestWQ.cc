@@ -624,7 +624,7 @@ void ImageRequestWQ<I>::apply_qos_limit(uint64_t limit, const uint64_t flag) {
     }
   }
   ceph_assert(throttle != nullptr);
-  throttle->set_max(limit);
+  throttle->set_burst(limit);
   throttle->set_average(limit);
   if (limit)
     m_qos_enabled_flag |= flag;
