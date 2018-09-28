@@ -77,6 +77,7 @@
   roles:
     - role: ceph-defaults
       tags: ['ceph_update_config']
+    - role: ceph-handler
     - role: ceph-common
   tasks:
     - name: rsync ceph-volume to test nodes on centos
