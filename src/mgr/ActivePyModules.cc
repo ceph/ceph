@@ -377,7 +377,7 @@ int ActivePyModules::start_one(PyModuleRef py_module)
 
   ceph_assert(modules.count(py_module->get_name()) == 0);
 
-  modules[py_module->get_name()].reset(new ActivePyModule(py_module, clog, audit_clog));
+  modules[py_module->get_name()].reset(new ActivePyModule(py_module, clog));
   auto active_module = modules.at(py_module->get_name()).get();
 
   int r = active_module->load(this);
@@ -902,5 +902,17 @@ void ActivePyModules::remove_osd_perf_query(OSDPerfMetricQueryID query_id)
   if (r < 0) {
     dout(0) << "remove_osd_perf_query for query_id=" << query_id << " failed: "
             << cpp_strerror(r) << dendl;
+  }
+}
+
+void ActivePyModules::cluster_log(const std::string &channel, clog_type prio,
+  const std::string &message)
+{
+  Mutex::Locker l(lock);
+
+  if (channel == "audit") {
+    audit_clog->do_log(prio, message);
+  } else {
+    clog->do_log(prio, message);
   }
 }

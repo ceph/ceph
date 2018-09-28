@@ -157,5 +157,8 @@ public:
   void dump_server(const std::string &hostname,
                    const DaemonStateCollection &dmc,
                    Formatter *f);
+
+  void cluster_log(const std::string &channel, clog_type prio,
+    const std::string &message);
 };
 
