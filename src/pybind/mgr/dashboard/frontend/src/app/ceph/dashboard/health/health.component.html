@@ -7,8 +7,7 @@
     <cd-info-card cardTitle="Cluster Status"
                   i18n-cardTitle
                   class="col-sm-6 col-md-4 col-lg-3"
-                  [cardClass]="contentData.health.checks.length > 0 ? 'card-link' : ''"
-                  contentClass="content-highlight"
+                  [contentClass]="contentData.health.checks.length > 0 ? 'content-highlight content-row-size-1-5' : 'content-highlight'"
                   (click)="contentData.health.checks.length > 0 ? healthChecksTarget.toggle() : ''">
       <ng-template #healthChecks>
         <p class="logs-link"
@@ -21,7 +20,8 @@
           </li>
         </ul>
       </ng-template>
-      <div [ngStyle]="contentData.health.status | healthColor"
+      <div [ngClass]="contentData.health.checks.length > 0 ? 'info-card-content-clickable' : ''"
+           [ngStyle]="contentData.health.status | healthColor"
            [popover]="contentData.health.checks.length > 0 ? healthChecks : ''"
            triggers=""
            #healthChecksTarget="bs-popover"
@@ -46,7 +46,7 @@
                   link="/osd"
                   class="col-sm-6 col-md-4 col-lg-3"
                   *ngIf="contentData.osd_map"
-                  contentClass="content-row2 content-highlight">
+                  contentClass="content-row-size-2 content-highlight">
       <span *ngFor="let result of (contentData.osd_map | osdSummary)" [ngClass]="result.class">
         {{ result.content }}
       </span>

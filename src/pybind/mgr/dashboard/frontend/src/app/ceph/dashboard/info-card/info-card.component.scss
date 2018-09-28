@@ -56,11 +56,12 @@ $logs-text-font-size: $card-font-min-size;
   transform: unset;
 }
 
-.card-link {
-  cursor: pointer;
+.content-row-size-1-5 {
+  margin-right: -50%;
+  transform: translate(-50%, -20%);
 }
 
-.content-row2 {
+.content-row-size-2 {
   margin-right: -50%;
   transform: translate(-50%, -33%);
   $font-size-factor: 0.8;
