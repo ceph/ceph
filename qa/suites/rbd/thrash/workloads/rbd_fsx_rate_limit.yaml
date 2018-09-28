@@ -7,3 +7,4 @@ overrides:
     conf:
       client:
         rbd qos iops limit: 50
+        rbd qos iops burst: 100
