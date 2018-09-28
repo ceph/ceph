@@ -445,8 +445,7 @@ public:
     return wait;
   }
   
-  int set_burst(uint64_t burst);
-  int set_average(uint64_t avg);
+  int set_limit(uint64_t average, uint64_t burst);
 
 private:
   uint64_t tokens_filled(double tick);

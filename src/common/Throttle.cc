@@ -721,34 +721,25 @@ TokenBucketThrottle::~TokenBucketThrottle() {
   }
 }
 
-int TokenBucketThrottle::set_burst(uint64_t burst){
-  std::lock_guard<Mutex> lock(m_lock);
-  if (0 < burst && burst < m_avg) {
-    // the burst should never less than the average.
-    return -EINVAL;
-  } else {
-    m_burst = burst;
-  }
-  // for the default configuration of burst.
-  m_throttle.set_max(0 == m_burst ? m_avg : m_burst);
-  return 0;
-}
-
-int TokenBucketThrottle::set_average(uint64_t avg) {
+int TokenBucketThrottle::set_limit(uint64_t average, uint64_t burst) {
   {
     std::lock_guard<Mutex> lock(m_lock);
-    m_avg = avg;
 
-    if (0 < m_burst && m_burst < avg) {
+    if (0 < burst && burst < average) {
       // the burst should never less than the average.
       return -EINVAL;
-    } else if (0 == avg) {
+    }
+
+    m_avg = average;
+    m_burst = burst;
+
+    if (0 == average) {
       // The limit is not set, and no tokens will be put into the bucket.
       // So, we can schedule the timer slowly, or even cancel it.
       m_tick = 1000;
     } else {
       // calculate the tick(ms), don't less than the minimum.
-      m_tick = 1000 / avg;
+      m_tick = 1000 / average;
       if (m_tick < m_tick_min) {
         m_tick = m_tick_min;
       }
@@ -758,9 +749,7 @@ int TokenBucketThrottle::set_average(uint64_t avg) {
       m_current_tick = 0;
 
       // for the default configuration of burst.
-      if (0 == m_burst) {
-        m_throttle.set_max(m_avg);
-      }
+      m_throttle.set_max(0 == burst ? average : burst);
     }
     // turn millisecond to second
     m_schedule_tick = m_tick / 1000.0;

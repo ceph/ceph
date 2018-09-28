@@ -6676,6 +6676,30 @@ static std::vector<Option> get_rbd_options() {
     .set_default(0)
     .set_description("the desired limit of write bytes per second"),
 
+    Option("rbd_qos_iops_burst", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("the desired burst limit of IO operations"),
+
+    Option("rbd_qos_bps_burst", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("the desired burst limit of IO bytes"),
+
+    Option("rbd_qos_read_iops_burst", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("the desired burst limit of read operations"),
+
+    Option("rbd_qos_write_iops_burst", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("the desired burst limit of write operations"),
+
+    Option("rbd_qos_read_bps_burst", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("the desired burst limit of read bytes"),
+
+    Option("rbd_qos_write_bps_burst", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("the desired burst limit of write bytes"),
+
     Option("rbd_discard_on_zeroed_write_same", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description("discard data on zeroed write same instead of writing zero"),

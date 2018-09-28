@@ -615,7 +615,10 @@ void ImageRequestWQ<I>::set_require_lock(Direction direction, bool enabled) {
 }
 
 template <typename I>
-void ImageRequestWQ<I>::apply_qos_limit(uint64_t limit, const uint64_t flag) {
+void ImageRequestWQ<I>::apply_qos_limit(const uint64_t flag,
+                                        uint64_t limit,
+                                        uint64_t burst) {
+  CephContext *cct = m_image_ctx.cct;
   TokenBucketThrottle *throttle = nullptr;
   for (auto pair : m_throttles) {
     if (flag == pair.first) {
@@ -624,8 +627,16 @@ void ImageRequestWQ<I>::apply_qos_limit(uint64_t limit, const uint64_t flag) {
     }
   }
   ceph_assert(throttle != nullptr);
-  throttle->set_burst(limit);
-  throttle->set_average(limit);
+
+  int r = throttle->set_limit(limit, burst);
+  if (r < 0) {
+    lderr(cct) << "invalid qos parameter: "
+               << "burst(" << burst << ") is less than "
+               << "limit(" << limit << ")" << dendl;
+    // if apply failed, we should at least make sure the limit works.
+    throttle->set_limit(limit, 0);
+  }
+
   if (limit)
     m_qos_enabled_flag |= flag;
   else

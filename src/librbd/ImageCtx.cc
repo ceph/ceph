@@ -810,23 +810,29 @@ public:
     }
 
     io_work_queue->apply_qos_limit(
+      RBD_QOS_IOPS_THROTTLE,
       config.get_val<uint64_t>("rbd_qos_iops_limit"),
-      RBD_QOS_IOPS_THROTTLE);
+      config.get_val<uint64_t>("rbd_qos_iops_burst"));
     io_work_queue->apply_qos_limit(
+      RBD_QOS_BPS_THROTTLE,
       config.get_val<uint64_t>("rbd_qos_bps_limit"),
-      RBD_QOS_BPS_THROTTLE);
+      config.get_val<uint64_t>("rbd_qos_bps_burst"));
     io_work_queue->apply_qos_limit(
+      RBD_QOS_READ_IOPS_THROTTLE,
       config.get_val<uint64_t>("rbd_qos_read_iops_limit"),
-      RBD_QOS_READ_IOPS_THROTTLE);
+      config.get_val<uint64_t>("rbd_qos_read_iops_burst"));
     io_work_queue->apply_qos_limit(
+      RBD_QOS_WRITE_IOPS_THROTTLE,
       config.get_val<uint64_t>("rbd_qos_write_iops_limit"),
-      RBD_QOS_WRITE_IOPS_THROTTLE);
+      config.get_val<uint64_t>("rbd_qos_write_iops_burst"));
     io_work_queue->apply_qos_limit(
+      RBD_QOS_READ_BPS_THROTTLE,
       config.get_val<uint64_t>("rbd_qos_read_bps_limit"),
-      RBD_QOS_READ_BPS_THROTTLE);
+      config.get_val<uint64_t>("rbd_qos_read_bps_burst"));
     io_work_queue->apply_qos_limit(
+      RBD_QOS_WRITE_BPS_THROTTLE,
       config.get_val<uint64_t>("rbd_qos_write_bps_limit"),
-      RBD_QOS_WRITE_BPS_THROTTLE);
+      config.get_val<uint64_t>("rbd_qos_write_bps_burst"));
   }
 
   ExclusiveLock<ImageCtx> *ImageCtx::create_exclusive_lock() {
