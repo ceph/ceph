@@ -63,6 +63,9 @@
   or reclaim state held by a previous incarnation. These functions are for NFS
   servers.
 
+* The `ceph` command line tool now accepts keyword arguments in
+  the format "--arg=value" or "--arg value".
+
 >=13.1.0
 --------
 

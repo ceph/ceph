@@ -28,6 +28,9 @@ import uuid
 FLAG_MGR = 8   # command is intended for mgr
 FLAG_POLL = 16 # command is intended to be ran continuously by the client
 
+KWARG_EQUALS = "--([^=]+)=(.+)"
+KWARG_SPACE = "--([^=]+)"
+
 try:
     basestring
 except NameError:
@@ -639,6 +642,9 @@ class argdesc(object):
             self.n = 1
         else:
             self.n = int(n)
+
+        self.numseen = 0
+
         self.instance = self.t(**self.typeargs)
 
     def __repr__(self):
@@ -832,7 +838,7 @@ def matchnum(args, signature, partial=False):
     mysig = copy.deepcopy(signature)
     matchcnt = 0
     for desc in mysig:
-        setattr(desc, 'numseen', 0)
+        desc.numseen = 0
         while desc.numseen < desc.n:
             # if there are no more arguments, return
             if not words:
@@ -860,32 +866,6 @@ def matchnum(args, signature, partial=False):
         if desc.req:
             matchcnt += 1
     return matchcnt
-
-
-def get_next_arg(desc, args):
-    '''
-    Get either the value matching key 'desc.name' or the next arg in
-    the non-dict list.  Return None if args are exhausted.  Used in
-    validate() below.
-    '''
-    arg = None
-    if isinstance(args, dict):
-        arg = args.pop(desc.name, None)
-        # allow 'param=param' to be expressed as 'param'
-        if arg == '':
-            arg = desc.name
-        # Hack, or clever?  If value is a list, keep the first element,
-        # push rest back onto myargs for later processing.
-        # Could process list directly, but nesting here is already bad
-        if arg and isinstance(arg, list):
-            args[desc.name] = arg[1:]
-            arg = arg[0]
-    elif args:
-        arg = args.pop(0)
-        if arg and isinstance(arg, list):
-            args = arg[1:] + args
-            arg = arg[0]
-    return arg
 
 
 def store_arg(desc, d):
@@ -917,7 +897,7 @@ def validate(args, signature, flags=0, partial=False):
     """
     validate(args, signature, flags=0, partial=False)
 
-    args is a list of either words or k,v pairs representing a possible
+    args is a list of strings representing a possible
     command input following format of signature.  Runs a validation; no
     exception means it's OK.  Return a dict containing all arguments keyed
     by their descriptor name, with duplicate args per name accumulated
@@ -939,15 +919,81 @@ def validate(args, signature, flags=0, partial=False):
     d = dict()
     save_exception = None
 
+    arg_descs_by_name = dict([desc.name, desc] for desc in mysig
+                             if desc.t != CephPrefix)
+
+    # Special case: detect "injectargs" (legacy way of modifying daemon
+    # configs) and permit "--" string arguments if so.
+    injectargs = myargs and myargs[0] == "injectargs"
+
+    # Make a pass through all arguments
     for desc in mysig:
-        setattr(desc, 'numseen', 0)
+        desc.numseen = 0
+
         while desc.numseen < desc.n:
-            myarg = get_next_arg(desc, myargs)
+            if myargs:
+                myarg = myargs.pop(0)
+            else:
+                myarg = None
 
             # no arg, but not required?  Continue consuming mysig
             # in case there are later required args
             if myarg in (None, []) and not desc.req:
                 break
+
+            # A keyword argument?
+            if myarg:
+
+                # argdesc for the keyword argument, if we find one
+                kwarg_desc = None
+
+                # Track whether we need to push value back onto
+                # myargs in the case that this isn't a valid k=v
+                consumed_next = False
+
+                # Try both styles of keyword argument
+                kwarg_match = re.match(KWARG_EQUALS, myarg)
+                if kwarg_match:
+                    # We have a "--foo=bar" style argument
+                    kwarg_k, kwarg_v = kwarg_match.groups()
+                    kwarg_desc = arg_descs_by_name.get(kwarg_k, None)
+                elif len(myargs):  # Some trailing arguments exist
+                    # Maybe this is a "--foo bar" style argument
+                    key_match = re.match(KWARG_SPACE, myarg)
+                    if key_match:
+                        kwarg_k = key_match.group(1)
+                        kwarg_desc = arg_descs_by_name.get(kwarg_k, None)
+                        if kwarg_desc:
+                            kwarg_v = myargs.pop(0)
+
+                if kwarg_desc:
+                    validate_one(kwarg_v, kwarg_desc)
+                    store_arg(kwarg_desc, d)
+                    continue
+
+            # Don't handle something as a positional argument if it
+            # has a leading "--" unless it's a CephChoices (used for
+            # "--yes-i-really-mean-it")
+            if myarg and myarg.startswith("--"):
+                # Special cases for instances of confirmation flags
+                # that were defined as CephString instead of CephChoices
+                # in pre-nautilus versions of Ceph daemons.
+                is_value = desc.t == CephChoices \
+                        or myarg == "--yes-i-really-mean-it" \
+                        or myarg == "--yes-i-really-really-mean-it" \
+                        or myarg == "--yes-i-really-really-mean-it-not-faking" \
+                        or injectargs
+
+                if not is_value:
+                    sys.stderr.write("desc={0} t={1}".format(
+                        desc, desc.t))
+
+                    # Didn't get caught by kwarg handling, but has a "--", so
+                    # we must assume it's something invalid, to avoid naively
+                    # passing through mis-typed options as the values of
+                    # positional arguments.
+                    raise ArgumentValid("Unexpected argument '{0}'".format(
+                        myarg))
 
             # out of arguments for a required param?
             # Either return (if partial validation) or raise
@@ -981,20 +1027,19 @@ def validate(args, signature, flags=0, partial=False):
                 valid = True
             except ArgumentError as e:
                 valid = False
-                exc = e
-            if not valid:
+
                 # argument mismatch
                 if not desc.req:
                     # if not required, just push back; it might match
                     # the next arg
-                    save_exception = [ myarg, exc ]
+                    save_exception = [ myarg, e ]
                     myargs.insert(0, myarg)
                     break
                 else:
                     # hm, it was required, so time to return/raise
                     if partial:
                         return d
-                    raise exc
+                    raise
 
             # Whew, valid arg acquired.  Store in dict
             matchcnt += 1
