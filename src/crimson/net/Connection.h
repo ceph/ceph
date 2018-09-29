@@ -15,6 +15,7 @@
 #pragma once
 
 #include <queue>
+#include <boost/intrusive_ptr.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
 #include <seastar/core/future.hh>
 
@@ -22,11 +23,10 @@
 
 namespace ceph::net {
 
-enum class state_t;
+class Messenger;
 
 class Connection : public boost::intrusive_ref_counter<Connection,
 						       boost::thread_unsafe_counter> {
- protected:
   Messenger *const messenger;
 
  public:
@@ -35,18 +35,11 @@ class Connection : public boost::intrusive_ref_counter<Connection,
   virtual ~Connection() {}
 
   Messenger* get_messenger() const { return messenger; }
-
   virtual const entity_addr_t& get_my_addr() const = 0;
   virtual const entity_addr_t& get_peer_addr() const = 0;
 
   /// true if the handshake has completed and no errors have been encountered
   virtual bool is_connected() = 0;
-
-  /// complete a handshake from the client's perspective
-  virtual void start_connect(entity_type_t) = 0;
-
-  /// complete a handshake from the server's perspective
-  virtual void start_accept() = 0;
 
   /// send a message over a connection that has completed its handshake
   virtual seastar::future<> send(MessageRef msg) = 0;
@@ -57,28 +50,8 @@ class Connection : public boost::intrusive_ref_counter<Connection,
 
   /// close the connection and cancel any any pending futures from read/send
   virtual seastar::future<> close() = 0;
-
-  /// move all messages in the sent list back into the queue
-  virtual void requeue_sent() = 0;
-
-  /// get all messages in the out queue
-  virtual std::tuple<seq_num_t, std::queue<MessageRef>> get_out_queue() = 0;
-
-public:
-  /// the number of connections initiated in this session, increment when a
-  /// new connection is established
-  virtual uint32_t connect_seq() const = 0;
-
-  /// the client side should connect us with a gseq. it will be reset with a
-  /// the one of exsting connection if it's greater.
-  virtual uint32_t peer_global_seq() const = 0;
-
-  virtual seq_num_t rx_seq_num() const = 0;
-
-  /// current state of connection
-  virtual state_t get_state() const = 0;
-  virtual bool is_server_side() const = 0;
-  virtual bool is_lossy() const = 0;
 };
+
+using ConnectionRef = boost::intrusive_ptr<Connection>;
 
 } // namespace ceph::net

@@ -15,71 +15,16 @@
 #include <seastar/core/shared_future.hh>
 
 #include "SocketConnection.h"
+#include "SocketMessenger.h"
 
 using namespace ceph::net;
 
-SocketConnection::SocketConnection(Messenger *messenger,
-                                   Dispatcher *disp,
-                                   const entity_addr_t& my_addr,
-                                   const entity_addr_t& peer_addr)
-  : Connection(messenger),
-    s(my_addr, peer_addr),
-    workspace(&s, this, disp, messenger)
+SocketConnection::SocketConnection(SocketMessenger &messenger,
+                                   Dispatcher &disp,
+                                   const entity_addr_t& my_addr)
+  : Connection(&messenger), s(my_addr),
+    protocol(std::make_unique<ProtocolV1>(s, *this, disp, messenger))
 {
-}
-
-SocketConnection::SocketConnection(Messenger *messenger,
-                                   Dispatcher *disp,
-                                   const entity_addr_t& my_addr,
-                                   const entity_addr_t& peer_addr,
-                                   seastar::connected_socket&& fd)
-  : Connection(messenger),
-    s(my_addr, peer_addr, std::forward<seastar::connected_socket>(fd)),
-    workspace(&s, this, disp, messenger)
-{
-}
-
-SocketConnection::~SocketConnection()
-{
-  ceph_assert(s.protocol->state() == state_t::close);
-}
-
-bool SocketConnection::is_connected()
-{
-  return s.protocol->state() == state_t::open;
-}
-
-seastar::future<> SocketConnection::send(MessageRef msg)
-{
-  // chain the message after the last message is sent
-  seastar::shared_future<> f = send_ready.then(
-    [this, msg = std::move(msg)] {
-      return seastar::repeat([this, msg=std::move(msg)] {
-          return s.protocol->send(msg);
-        });
-    });
-
-  // chain any later messages after this one completes
-  send_ready = f.get_future();
-  // allow the caller to wait on the same future
-  return f.get_future();
-}
-
-seastar::future<> SocketConnection::keepalive()
-{
-  seastar::shared_future<> f = send_ready.then(
-    [this] {
-      return seastar::repeat([this] {
-          return s.protocol->keepalive();
-        });
-    });
-  send_ready = f.get_future();
-  return f.get_future();
-}
-
-seastar::future<> SocketConnection::close()
-{
-  return s.protocol->close();
 }
 
 void SocketConnection::requeue_sent()

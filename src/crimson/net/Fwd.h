@@ -14,29 +14,15 @@
 
 #pragma once
 
-#include <boost/intrusive_ptr.hpp>
-
-#include "Errors.h"
 #include "msg/msg_types.h"
 #include "msg/Message.h"
 
 using peer_type_t = int;
 using auth_proto_t = int;
 
-class Message;
-using MessageRef = boost::intrusive_ptr<Message>;
-
 namespace ceph::net {
 
 using msgr_tag_t = uint8_t;
-
-class Connection;
-using ConnectionRef = boost::intrusive_ptr<Connection>;
-
-class Dispatcher;
-
-class Messenger;
-
 using seq_num_t = uint64_t;
 
 } // namespace ceph::net

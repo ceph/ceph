@@ -53,12 +53,10 @@ seastar::future<> SocketMessenger::start(Dispatcher *disp)
             entity_addr_t peer_addr;
             peer_addr.set_type(entity_addr_t::TYPE_DEFAULT);
             peer_addr.set_sockaddr(&paddr.as_posix_sockaddr());
-            ConnectionRef conn = new SocketConnection(this, dispatcher,
-                                                      get_myaddr(), peer_addr,
-                                                      std::move(socket));
+            SocketConnectionRef conn = new SocketConnection(*this, *dispatcher, get_myaddr());
             // initiate the handshake
             // don't wait before accepting another, no throw
-            conn->start_accept();
+            conn->start_accept(std::move(socket), peer_addr);
           });
       }).handle_exception_type([this] (const std::system_error& e) {
         // stop gracefully on connection_aborted
@@ -72,14 +70,14 @@ seastar::future<> SocketMessenger::start(Dispatcher *disp)
 }
 
 ceph::net::ConnectionRef
-SocketMessenger::connect(const entity_addr_t& peer_addr, entity_type_t peer_type)
+SocketMessenger::connect(const entity_addr_t& peer_addr,
+                         const entity_type_t& peer_type)
 {
   if (auto found = lookup_conn(peer_addr); found) {
     return found;
   }
-  ConnectionRef conn = new SocketConnection(this, dispatcher,
-                                            get_myaddr(), peer_addr);
-  conn->start_connect(peer_type);
+  SocketConnectionRef conn = new SocketConnection(*this, *dispatcher, get_myaddr());
+  conn->start_connect(peer_addr, peer_type);
   return conn;
 }
 
@@ -88,13 +86,11 @@ seastar::future<> SocketMessenger::shutdown()
   if (listener) {
     listener->abort_accept();
   }
-  return seastar::parallel_for_each(acceptings.begin(), acceptings.end(),
-    [this] (auto conn) {
+  return seastar::parallel_for_each(accepting_conns, [] (auto conn) {
       return conn->close();
     }).then([this] {
-      ceph_assert(acceptings.empty());
-      return seastar::parallel_for_each(connections.begin(), connections.end(),
-        [this] (auto conn) {
+      ceph_assert(accepting_conns.empty());
+      return seastar::parallel_for_each(connections, [] (auto conn) {
           return conn.second->close();
         });
     }).finally([this] {
@@ -120,7 +116,8 @@ void SocketMessenger::set_policy_throttler(entity_type_t peer_type,
   policy_set.set_throttlers(peer_type, throttle, nullptr);
 }
 
-ceph::net::ConnectionRef SocketMessenger::lookup_conn(const entity_addr_t& addr)
+ceph::net::SocketConnectionRef
+SocketMessenger::lookup_conn(const entity_addr_t& addr)
 {
   if (auto found = connections.find(addr);
       found != connections.end()) {
@@ -130,24 +127,24 @@ ceph::net::ConnectionRef SocketMessenger::lookup_conn(const entity_addr_t& addr)
   }
 }
 
-void SocketMessenger::accept_conn(ConnectionRef conn)
+void SocketMessenger::accept_conn(SocketConnectionRef conn)
 {
-  acceptings.insert(conn);
+  accepting_conns.insert(conn);
 }
 
-void SocketMessenger::unaccept_conn(ConnectionRef conn)
+void SocketMessenger::unaccept_conn(SocketConnectionRef conn)
 {
-  acceptings.erase(conn);
+  accepting_conns.erase(conn);
 }
 
-void SocketMessenger::register_conn(ConnectionRef conn)
+void SocketMessenger::register_conn(SocketConnectionRef conn)
 {
   auto [i, added] = connections.emplace(conn->get_peer_addr(), conn);
   std::ignore = i;
   ceph_assert(added);
 }
 
-void SocketMessenger::unregister_conn(ConnectionRef conn)
+void SocketMessenger::unregister_conn(SocketConnectionRef conn)
 {
   ceph_assert(conn);
   auto found = connections.find(conn->get_peer_addr());

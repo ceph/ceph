@@ -21,8 +21,10 @@
 #include <seastar/core/reactor.hh>
 
 #include "msg/Policy.h"
-#include "Messenger.h"
 #include "crimson/thread/Throttle.h"
+
+#include "Messenger.h"
+#include "SocketConnection.h"
 
 namespace ceph::net {
 
@@ -31,8 +33,8 @@ using SocketPolicy = ceph::net::Policy<ceph::thread::Throttle>;
 class SocketMessenger final : public Messenger {
   std::optional<seastar::server_socket> listener;
   Dispatcher *dispatcher = nullptr;
-  std::map<entity_addr_t, ConnectionRef> connections;
-  std::set<ConnectionRef> acceptings;
+  std::map<entity_addr_t, SocketConnectionRef> connections;
+  std::set<SocketConnectionRef> accepting_conns;
   using Throttle = ceph::thread::Throttle;
   ceph::net::PolicySet<Throttle> policy_set;
 
@@ -44,24 +46,28 @@ class SocketMessenger final : public Messenger {
   seastar::future<> start(Dispatcher *dispatcher) override;
 
   ConnectionRef connect(const entity_addr_t& addr,
-                        entity_type_t peer_type) override;
+                        const entity_type_t& peer_type) override;
 
   seastar::future<> shutdown() override;
-  void set_default_policy(const SocketPolicy& p);
-  void set_policy(entity_type_t peer_type, const SocketPolicy& p);
-  void set_policy_throttler(entity_type_t peer_type, Throttle* throttle);
-  ConnectionRef lookup_conn(const entity_addr_t& addr) override;
-  void accept_conn(ConnectionRef conn) override;
-  void unaccept_conn(ConnectionRef conn) override;
-  void register_conn(ConnectionRef) override;
-  void unregister_conn(ConnectionRef) override;
+
   seastar::future<msgr_tag_t, bufferlist>
   verify_authorizer(peer_type_t peer_type,
 		    auth_proto_t protocol,
 		    bufferlist& auth) override;
+
   seastar::future<std::unique_ptr<AuthAuthorizer>>
   get_authorizer(peer_type_t peer_type,
 		 bool force_new) override;
+
+  void set_default_policy(const SocketPolicy& p);
+  void set_policy(entity_type_t peer_type, const SocketPolicy& p);
+  void set_policy_throttler(entity_type_t peer_type, Throttle* throttle);
+
+  SocketConnectionRef lookup_conn(const entity_addr_t&);
+  void accept_conn(SocketConnectionRef);
+  void unaccept_conn(SocketConnectionRef);
+  void register_conn(SocketConnectionRef);
+  void unregister_conn(SocketConnectionRef);
 };
 
 } // namespace ceph::net

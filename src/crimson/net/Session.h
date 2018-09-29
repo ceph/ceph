@@ -16,11 +16,7 @@
 
 #pragma once
 
-#include <seastar/core/future.hh>
-#include <seastar/core/gate.hh>
-
 #include "Fwd.h"
-#include "Socket.h"
 
 #include "crimson/thread/Throttle.h"
 
@@ -29,8 +25,6 @@
 #include "msg/Policy.h"
 
 namespace ceph::net {
-
-class Protocol;
 
 struct Session
 {
@@ -42,10 +36,6 @@ struct Session
   uint32_t peer_global_seq = 0;
   uint32_t global_seq;
   ceph_timespec last_keepalive_ack;
-
-  std::optional<Socket> socket;
-
-  seastar::promise<> send_promise;
 
   ceph::net::Policy<ceph::thread::Throttle> policy;
 
@@ -61,19 +51,7 @@ struct Session
   // messages sent, but not yet acked by peer
   std::queue<MessageRef> sent;
 
-  seastar::gate dispatch_gate;
-
-  Protocol *protocol;
-
-  Session(const entity_addr_t& _my_addr,
-          const entity_addr_t& _peer_addr)
-    : my_addr(_my_addr), peer_addr(_peer_addr) {}
-
-  Session(const entity_addr_t& _my_addr,
-          const entity_addr_t& _peer_addr,
-          seastar::connected_socket&& fd)
-    : my_addr(_my_addr), peer_addr(_peer_addr),
-      socket(std::forward<seastar::connected_socket>(fd)) {}
+  Session(const entity_addr_t& _my_addr) : my_addr(_my_addr) {}
 
   void reset() {
     decltype(out_q){}.swap(out_q);

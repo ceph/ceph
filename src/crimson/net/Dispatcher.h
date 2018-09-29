@@ -14,9 +14,7 @@
 
 #pragma once
 
-#include <seastar/core/future.hh>
-
-#include "Fwd.h"
+#include "Connection.h"
 
 class AuthAuthorizer;
 

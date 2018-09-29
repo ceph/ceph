@@ -18,10 +18,12 @@
 #include <seastar/net/packet.hh>
 
 #include "Config.h"
-#include "Connection.h"
 #include "Dispatcher.h"
-#include "Messenger.h"
-#include "Protocols.h"
+#include "Errors.h"
+#include "ProtocolV1.h"
+#include "Session.h"
+#include "SocketConnection.h"
+#include "SocketMessenger.h"
 
 #include "include/msgr.h"
 #include "auth/Auth.h"
@@ -138,37 +140,172 @@ static uint32_t get_proto_version(entity_type_t peer_type, bool connect)
     }
   }
 }
+
 /*
- * Entry
+ * Constructors
+ */
+ProtocolV1::StateNone::StateNone(ProtocolV1 &p) : Protocol::State(p), proto(p) {}
+ProtocolV1::StateAccept::StateAccept(ProtocolV1 &p) : Protocol::State(p), proto(p) {}
+ProtocolV1::StateConnect::StateConnect(ProtocolV1 &p) : Protocol::State(p), proto(p) {}
+ProtocolV1::StateOpen::StateOpen(ProtocolV1 &p) : Protocol::State(p), proto(p) {}
+ProtocolV1::StateClose::StateClose(ProtocolV1 &p) : Protocol::State(p, false), proto(p) {}
+
+/*
+ * State-aware trigger_close
+ */
+void ProtocolV1::StateAccept::trigger_close() {
+  messenger.unaccept_conn(&conn);
+  trigger(&proto.state_close);
+}
+
+void ProtocolV1::StateConnect::trigger_close() {
+  messenger.unregister_conn(&conn);
+  trigger(&proto.state_close);
+}
+
+void ProtocolV1::StateOpen::trigger_close() {
+  messenger.unregister_conn(&conn);
+  trigger(&proto.state_close);
+}
+
+void ProtocolV1::StateClose::trigger_close() {
+  /* do nothing */
+}
+
+/*
+ * state-aware send
+ */
+seastar::future<seastar::stop_iteration>
+ProtocolV1::StateAccept::send(MessageRef msg) {
+  // not visible by users yet
+  ceph_assert(false);
+}
+
+seastar::future<seastar::stop_iteration>
+ProtocolV1::StateConnect::send(MessageRef msg) {
+  return wait_execute().then([] {
+      return seastar::make_ready_future<seastop>(seastop::no);
+    });
+}
+
+seastar::future<>
+ProtocolV1::StateOpen::write_message(MessageRef msg)
+{
+  msg->set_seq(++s.out_seq);
+  msg->encode(s.features, messenger.get_crc_flags());
+  bufferlist bl;
+  bl.append(CEPH_MSGR_TAG_MSG);
+  auto& header = msg->get_header();
+  bl.append((const char*)&header, sizeof(header));
+  bl.append(msg->get_payload());
+  bl.append(msg->get_middle());
+  bl.append(msg->get_data());
+  auto& footer = msg->get_footer();
+  if (HAVE_FEATURE(s.features, MSG_AUTH)) {
+    bl.append((const char*)&footer, sizeof(footer));
+  } else {
+    ceph_msg_footer_old old_footer;
+    if (messenger.get_crc_flags() & MSG_CRC_HEADER) {
+      old_footer.front_crc = footer.front_crc;
+      old_footer.middle_crc = footer.middle_crc;
+    } else {
+      old_footer.front_crc = old_footer.middle_crc = 0;
+    }
+    if (messenger.get_crc_flags() & MSG_CRC_DATA) {
+      old_footer.data_crc = footer.data_crc;
+    } else {
+      old_footer.data_crc = 0;
+    }
+    old_footer.flags = footer.flags;
+    bl.append((const char*)&old_footer, sizeof(old_footer));
+  }
+  // write as a seastar::net::packet
+  return proto.socket->write_flush(std::move(bl))
+    .then([this, msg = std::move(msg)] {
+      if (!s.policy.lossy) {
+        s.sent.push(std::move(msg));
+      }
+    });
+}
+
+seastar::future<seastar::stop_iteration>
+ProtocolV1::StateOpen::send(MessageRef msg) {
+  return write_message(std::move(msg))
+    .then([] {
+      return seastar::make_ready_future<seastop>(seastop::yes);
+    }).handle_exception([] (std::exception_ptr eptr) {
+      return seastar::make_ready_future<seastop>(seastop::no);
+    });
+}
+
+seastar::future<seastar::stop_iteration>
+ProtocolV1::StateClose::send(MessageRef msg) {
+  return seastar::make_ready_future<seastop>(seastop::yes);
+}
+
+/*
+ * state-aware keepalive
+ */
+seastar::future<seastar::stop_iteration>
+ProtocolV1::StateAccept::keepalive() {
+  // not visible by users yet
+  ceph_assert(false);
+}
+
+seastar::future<seastar::stop_iteration>
+ProtocolV1::StateConnect::keepalive() {
+  return wait_execute().then([] {
+      return seastar::make_ready_future<seastop>(seastop::no);
+    });
+}
+
+seastar::future<seastar::stop_iteration>
+ProtocolV1::StateOpen::keepalive() {
+  k.req.stamp = ceph::coarse_real_clock::to_ceph_timespec(
+    ceph::coarse_real_clock::now());
+  return proto.socket->write_flush(make_static_packet(k.req))
+    .then([] {
+      return seastar::make_ready_future<seastop>(seastop::yes);
+    }).handle_exception([] (std::exception_ptr eptr) {
+      return seastar::make_ready_future<seastop>(seastop::no);
+    });
+}
+
+seastar::future<seastar::stop_iteration>
+ProtocolV1::StateClose::keepalive() {
+  return seastar::make_ready_future<seastop>(seastop::yes);
+}
+
+/*
+ * V1 Protocol Entry
  */
 void
-NoneProtocol::start_accept() {
-  messenger->accept_conn(managed_conn);
-  execute_next(state_t::accept);
+ProtocolV1::StateNone::start_accept() {
+  messenger.accept_conn(&conn);
+  trigger(&proto.state_accept);
 }
 
 void
-NoneProtocol::start_connect(entity_type_t peer_type) {
-  s->peer_type = peer_type;
-  messenger->register_conn(managed_conn);
-  execute_next(state_t::connect);
+ProtocolV1::StateNone::start_connect() {
+  messenger.register_conn(&conn);
+  trigger(&proto.state_connect);
 }
 
 /*
- * Accept
+ * V1 Protocol Accept
  */
 seastar::future<>
-AcceptProtocol::do_execute() {
-  ceph_assert(s->socket);
+ProtocolV1::StateAccept::do_execute() {
+  ceph_assert(proto.socket);
   // encode/send server's handshake header
   bufferlist bl;
   bl.append(buffer::create_static(banner_size, banner));
-  ::encode(s->my_addr, bl, 0);
-  ::encode(s->peer_addr, bl, 0);
-  return s->socket->write_flush(std::move(bl))
+  ::encode(s.my_addr, bl, 0);
+  ::encode(s.peer_addr, bl, 0);
+  return proto.socket->write_flush(std::move(bl))
     .then([this] {
       // read client's handshake header and connect request
-      return s->socket->read(client_header_size);
+      return proto.socket->read(client_header_size);
     }).then([this] (bufferlist bl) {
       auto p = bl.cbegin();
       validate_banner(p);
@@ -176,7 +313,7 @@ AcceptProtocol::do_execute() {
       ::decode(addr, p);
       ceph_assert(p.end());
       if (!addr.is_blank_ip()) {
-        s->peer_addr = addr;
+        s.peer_addr = addr;
       }
     }).then([this] {
       return seastar::repeat([this] {
@@ -184,27 +321,27 @@ AcceptProtocol::do_execute() {
       });
     }).then([this] {
       // TODO: ignore the exception
-      return dispatcher->ms_handle_accept(managed_conn);
+      return dispatcher.ms_handle_accept(&conn);
     }).then([this] {
-      messenger->register_conn(managed_conn);
-      messenger->unaccept_conn(managed_conn);
-      execute_next(state_t::open);
+      messenger.register_conn(&conn);
+      messenger.unaccept_conn(&conn);
+      trigger(&proto.state_open);
     }).handle_exception([this] (std::exception_ptr eptr) {
-      close();
+      proto.close();
     });
 }
 
 bool
-AcceptProtocol::require_auth_feature() const
+ProtocolV1::StateAccept::require_auth_feature() const
 {
-  if (h_connect.authorizer_protocol != CEPH_AUTH_CEPHX) {
+  if (proto.h_connect.authorizer_protocol != CEPH_AUTH_CEPHX) {
     return false;
   }
   if (conf.cephx_require_signatures) {
     return true;
   }
-  if (h_connect.host_type == CEPH_ENTITY_TYPE_OSD ||
-      h_connect.host_type == CEPH_ENTITY_TYPE_MDS) {
+  if (proto.h_connect.host_type == CEPH_ENTITY_TYPE_OSD ||
+      proto.h_connect.host_type == CEPH_ENTITY_TYPE_MDS) {
     return conf.cephx_cluster_require_signatures;
   } else {
     return conf.cephx_service_require_signatures;
@@ -212,140 +349,140 @@ AcceptProtocol::require_auth_feature() const
 }
 
 seastar::future<seastar::stop_iteration>
-AcceptProtocol::repeat_accept() {
-  return s->socket->read(sizeof(h_connect))
+ProtocolV1::StateAccept::repeat_accept() {
+  return proto.socket->read(sizeof(proto.h_connect))
     .then([this](bufferlist bl) {
       auto p = bl.cbegin();
-      ::decode(h_connect, p);
-      return s->socket->read(h_connect.authorizer_len);
+      ::decode(proto.h_connect, p);
+      return proto.socket->read(proto.h_connect.authorizer_len);
     }).then([this] (bufferlist authorizer) {
-      if (h_connect.protocol_version != get_proto_version(h_connect.host_type, false)) {
+      if (proto.h_connect.protocol_version != get_proto_version(proto.h_connect.host_type, false)) {
         return seastar::make_ready_future<msgr_tag_t, bufferlist>(
             CEPH_MSGR_TAG_BADPROTOVER, bufferlist{});
       }
       if (require_auth_feature()) {
-        s->policy.features_required |= CEPH_FEATURE_MSG_AUTH;
+        s.policy.features_required |= CEPH_FEATURE_MSG_AUTH;
       }
-      if (auto feat_missing = s->policy.features_required & ~(uint64_t)h_connect.features;
+      if (auto feat_missing = s.policy.features_required & ~(uint64_t)proto.h_connect.features;
           feat_missing != 0) {
         return seastar::make_ready_future<msgr_tag_t, bufferlist>(
             CEPH_MSGR_TAG_FEATURES, bufferlist{});
       }
-      return messenger->verify_authorizer(s->peer_type,
-                                          h_connect.authorizer_protocol,
-                                          authorizer);
+      return messenger.verify_authorizer(s.peer_type,
+                                         proto.h_connect.authorizer_protocol,
+                                         authorizer);
     }).then([this] (ceph::net::msgr_tag_t tag, bufferlist&& authorizer_reply) {
-      memset(&h_reply, 0, sizeof(h_reply));
+      memset(&proto.h_reply, 0, sizeof(proto.h_reply));
       if (tag) {
         return send_connect_reply(tag, std::move(authorizer_reply));
       }
       // TODO rework this logic to do replacing atomically
-      if (auto existing = messenger->lookup_conn(s->peer_addr); existing) {
+      if (auto existing = messenger.lookup_conn(s.peer_addr); existing) {
         return handle_connect_with_existing(existing, std::move(authorizer_reply));
-      } else if (h_connect.connect_seq > 0) {
+      } else if (proto.h_connect.connect_seq > 0) {
         return send_connect_reply(CEPH_MSGR_TAG_RESETSESSION,
                                   std::move(authorizer_reply));
       }
-      s->connect_seq = h_connect.connect_seq + 1;
-      s->peer_global_seq = h_connect.global_seq;
-      s->features = (uint64_t)s->policy.features_supported & (uint64_t)h_connect.features;
+      s.connect_seq = proto.h_connect.connect_seq + 1;
+      s.peer_global_seq = proto.h_connect.global_seq;
+      s.features = (uint64_t)s.policy.features_supported & (uint64_t)proto.h_connect.features;
       // TODO: cct
       return send_connect_reply_ready(CEPH_MSGR_TAG_READY, std::move(authorizer_reply));
     });
 }
 
 seastar::future<seastar::stop_iteration>
-AcceptProtocol::send_connect_reply(msgr_tag_t tag,
-                                   bufferlist&& authorizer_reply)
+ProtocolV1::StateAccept::send_connect_reply(msgr_tag_t tag,
+                                            bufferlist&& authorizer_reply)
 {
-  h_reply.tag = tag;
-  h_reply.features = static_cast<uint64_t>((h_connect.features &
-					    s->policy.features_supported) |
-					    s->policy.features_required);
-  h_reply.authorizer_len = authorizer_reply.length();
-  return s->socket->write(make_static_packet(h_reply))
+  proto.h_reply.tag = tag;
+  proto.h_reply.features = static_cast<uint64_t>((proto.h_connect.features &
+					    s.policy.features_supported) |
+					    s.policy.features_required);
+  proto.h_reply.authorizer_len = authorizer_reply.length();
+  return proto.socket->write(make_static_packet(proto.h_reply))
     .then([this, reply=std::move(authorizer_reply)]() mutable {
-      return s->socket->write_flush(std::move(reply));
+      return proto.socket->write_flush(std::move(reply));
     }).then([] {
-      return seastar::make_ready_future<seastar::stop_iteration>(
-          seastar::stop_iteration::no);
+      return seastar::make_ready_future<seastop>(seastop::no);
     });
 }
 
 seastar::future<seastar::stop_iteration>
-AcceptProtocol::send_connect_reply_ready(msgr_tag_t tag,
-                                         bufferlist&& authorizer_reply)
+ProtocolV1::StateAccept::send_connect_reply_ready(msgr_tag_t tag,
+                                                  bufferlist&& authorizer_reply)
 {
-  s->global_seq = messenger->get_global_seq();
-  h_reply.tag = tag;
-  h_reply.features = s->policy.features_supported;
-  h_reply.global_seq = s->global_seq;
-  h_reply.connect_seq = s->connect_seq;
-  h_reply.flags = 0;
-  if (s->policy.lossy) {
-    h_reply.flags = h_reply.flags | CEPH_MSG_CONNECT_LOSSY;
+  s.global_seq = messenger.get_global_seq();
+  proto.h_reply.tag = tag;
+  proto.h_reply.features = s.policy.features_supported;
+  proto.h_reply.global_seq = s.global_seq;
+  proto.h_reply.connect_seq = s.connect_seq;
+  proto.h_reply.flags = 0;
+  if (s.policy.lossy) {
+    proto.h_reply.flags = proto.h_reply.flags | CEPH_MSG_CONNECT_LOSSY;
   }
-  h_reply.authorizer_len = authorizer_reply.length();
-  return s->socket->write(make_static_packet(h_reply))
+  proto.h_reply.authorizer_len = authorizer_reply.length();
+  return proto.socket->write(make_static_packet(proto.h_reply))
     .then([this, reply=std::move(authorizer_reply)]() mutable {
       if (reply.length()) {
-        return s->socket->write(std::move(reply));
+        return proto.socket->write(std::move(reply));
       } else {
         return seastar::now();
       }
     }).then([this] {
-      if (h_reply.tag == CEPH_MSGR_TAG_SEQ) {
-        return s->socket->write_flush(make_static_packet(s->in_seq))
+      if (proto.h_reply.tag == CEPH_MSGR_TAG_SEQ) {
+        return proto.socket->write_flush(make_static_packet(s.in_seq))
           .then([this] {
-            return s->socket->read_exactly(sizeof(seq_num_t));
+            return proto.socket->read_exactly(sizeof(seq_num_t));
           }).then([this] (auto buf) {
             auto acked_seq = reinterpret_cast<const seq_num_t*>(buf.get());
-            s->discard_requeued_up_to(*acked_seq);
+            s.discard_requeued_up_to(*acked_seq);
           });
       } else {
-        return s->socket->flush();
+        return proto.socket->flush();
       }
     }).then([this] {
-      return seastar::make_ready_future<seastar::stop_iteration>(
-          seastar::stop_iteration::yes);
+      return seastar::make_ready_future<seastop>(seastop::yes);
     });
 }
 
 seastar::future<seastar::stop_iteration>
-AcceptProtocol::handle_connect_with_existing(ConnectionRef existing, bufferlist&& authorizer_reply)
+ProtocolV1::StateAccept::handle_connect_with_existing(SocketConnectionRef existing, bufferlist&& authorizer_reply)
 {
-  if (h_connect.global_seq < existing->peer_global_seq()) {
-    h_reply.global_seq = existing->peer_global_seq();
+  if (proto.h_connect.global_seq < existing->peer_global_seq()) {
+    proto.h_reply.global_seq = existing->peer_global_seq();
     return send_connect_reply(CEPH_MSGR_TAG_RETRY_GLOBAL);
   } else if (existing->is_lossy()) {
     return replace_existing(existing, std::move(authorizer_reply));
-  } else if (h_connect.connect_seq == 0 && existing->connect_seq() > 0) {
+  } else if (proto.h_connect.connect_seq == 0 && existing->connect_seq() > 0) {
     return replace_existing(existing, std::move(authorizer_reply), true);
-  } else if (h_connect.connect_seq < existing->connect_seq()) {
+  } else if (proto.h_connect.connect_seq < existing->connect_seq()) {
     // old attempt, or we sent READY but they didn't get it.
-    h_reply.connect_seq = existing->connect_seq() + 1;
+    proto.h_reply.connect_seq = existing->connect_seq() + 1;
     return send_connect_reply(CEPH_MSGR_TAG_RETRY_SESSION);
-  } else if (h_connect.connect_seq == existing->connect_seq()) {
+  } else if (proto.h_connect.connect_seq == existing->connect_seq()) {
     // if the existing connection successfully opened, and/or
     // subsequently went to standby, then the peer should bump
     // their connect_seq and retry: this is not a connection race
     // we need to resolve here.
-    if (existing->get_state() == state_t::open/* ||
+    // TODO: refactor existing handle logic
+    if (existing->is_connected()
+        /*existing->get_state() == state_t::open ||
         existing->state() == state_t::standby*/) {
-      if (s->policy.resetcheck && existing->connect_seq() == 0) {
+      if (s.policy.resetcheck && existing->connect_seq() == 0) {
         return replace_existing(existing, std::move(authorizer_reply));
       } else {
-        h_reply.connect_seq = existing->connect_seq() + 1;
+        proto.h_reply.connect_seq = existing->connect_seq() + 1;
         return send_connect_reply(CEPH_MSGR_TAG_RETRY_SESSION);
       }
-    } else if (s->peer_addr < s->my_addr ||
+    } else if (s.peer_addr < s.my_addr ||
 	       existing->is_server_side()) {
       // incoming wins
       return replace_existing(existing, std::move(authorizer_reply));
     } else {
       return send_connect_reply(CEPH_MSGR_TAG_WAIT);
     }
-  } else if (s->policy.resetcheck &&
+  } else if (s.policy.resetcheck &&
 	     existing->connect_seq() == 0) {
     return send_connect_reply(CEPH_MSGR_TAG_RESETSESSION);
   } else {
@@ -355,39 +492,39 @@ AcceptProtocol::handle_connect_with_existing(ConnectionRef existing, bufferlist&
 
 // TODO: change to reuse_existing
 seastar::future<seastar::stop_iteration>
-AcceptProtocol::replace_existing(ConnectionRef existing,
+ProtocolV1::StateAccept::replace_existing(SocketConnectionRef existing,
                                  bufferlist&& authorizer_reply,
                                  bool is_reset_from_peer)
 {
   msgr_tag_t reply_tag;
-  if (HAVE_FEATURE(h_connect.features, RECONNECT_SEQ) &&
+  if (HAVE_FEATURE(proto.h_connect.features, RECONNECT_SEQ) &&
       !is_reset_from_peer) {
     reply_tag = CEPH_MSGR_TAG_SEQ;
   } else {
     reply_tag = CEPH_MSGR_TAG_READY;
   }
-  messenger->unregister_conn(existing);
+  messenger.unregister_conn(existing);
   if (!existing->is_lossy()) {
     // reset the in_seq if this is a hard reset from peer,
     // otherwise we respect our original connection's value
-    s->in_seq = is_reset_from_peer ? 0 : existing->rx_seq_num();
+    s.in_seq = is_reset_from_peer ? 0 : existing->rx_seq_num();
     // steal outgoing queue and out_seq
     existing->requeue_sent();
-    std::tie(s->out_seq, s->out_q) = existing->get_out_queue();
+    std::tie(s.out_seq, s.out_q) = existing->get_out_queue();
   }
   return send_connect_reply_ready(reply_tag, std::move(authorizer_reply));
 }
 
 /*
- * Connect
+ * V1 Protocol Connect
  */
 seastar::future<>
-ConnectProtocol::do_execute() {
-  ceph_assert(!s->socket);
-  return seastar::connect(s->peer_addr.in4_addr())
+ProtocolV1::StateConnect::do_execute() {
+  ceph_assert(!proto.socket);
+  return seastar::connect(s.peer_addr.in4_addr())
     .then([this] (seastar::connected_socket fd) {
-      s->socket.emplace(std::move(fd));
-      return s->socket->read(server_header_size);
+      proto.socket.emplace(std::move(fd));
+      return proto.socket->read(server_header_size);
     }).then([this] (bufferlist headerbl) {
       auto p = headerbl.cbegin();
       validate_banner(p);
@@ -395,75 +532,75 @@ ConnectProtocol::do_execute() {
       ::decode(saddr, p);
       ::decode(caddr, p);
       ceph_assert(p.end());
-      validate_peer_addr(saddr, s->peer_addr);
+      validate_peer_addr(saddr, s.peer_addr);
 
-      if (s->my_addr != caddr) {
+      if (s.my_addr != caddr) {
         // take peer's address for me, but preserve my nonce
-        caddr.nonce = s->my_addr.nonce;
-        s->my_addr = caddr;
+        caddr.nonce = s.my_addr.nonce;
+        s.my_addr = caddr;
       }
       // encode/send client's handshake header
       bufferlist bl;
       bl.append(buffer::create_static(banner_size, banner));
-      ::encode(s->my_addr, bl, 0);
-      s->global_seq = messenger->get_global_seq();
-      return s->socket->write_flush(std::move(bl));
+      ::encode(s.my_addr, bl, 0);
+      s.global_seq = messenger.get_global_seq();
+      return proto.socket->write_flush(std::move(bl));
     }).then([this] {
       return seastar::repeat([this] {
         return repeat_connect();
       });
     }).then([this] {
       // TODO: ignore the exception
-      return dispatcher->ms_handle_connect(managed_conn);
+      return dispatcher.ms_handle_connect(&conn);
     }).then([this] {
-      execute_next(state_t::open);
+      trigger(&proto.state_open);
     }).handle_exception([this] (std::exception_ptr eptr) {
-      if (s->policy.lossy) {
-        close();
+      if (s.policy.lossy) {
+        proto.close();
       } else {
-        s->socket->close().then([this] {
-            s->socket.reset();
-            execute_next(state_t::none);
-            execute_next(state_t::connect);
+        proto.socket->close().then([this] {
+            proto.socket.reset();
+            trigger(&proto.state_none);
+            trigger(&proto.state_connect);
           });
       }
     });
 }
 
 seastar::future<seastar::stop_iteration>
-ConnectProtocol::repeat_connect() {
-  memset(&h_connect, 0, sizeof(h_connect));
-  h_connect.features = s->policy.features_supported;
-  h_connect.host_type = messenger->get_myname().type();
-  h_connect.global_seq = s->global_seq;
-  h_connect.connect_seq = s->connect_seq;
-  h_connect.protocol_version = get_proto_version(s->peer_type, true);
+ProtocolV1::StateConnect::repeat_connect() {
+  memset(&proto.h_connect, 0, sizeof(proto.h_connect));
+  proto.h_connect.features = s.policy.features_supported;
+  proto.h_connect.host_type = messenger.get_myname().type();
+  proto.h_connect.global_seq = s.global_seq;
+  proto.h_connect.connect_seq = s.connect_seq;
+  proto.h_connect.protocol_version = get_proto_version(s.peer_type, true);
   // this is fyi, actually, server decides!
-  h_connect.flags = s->policy.lossy ? CEPH_MSG_CONNECT_LOSSY : 0;
+  proto.h_connect.flags = s.policy.lossy ? CEPH_MSG_CONNECT_LOSSY : 0;
 
-  return messenger->get_authorizer(s->peer_type, false)
+  return messenger.get_authorizer(s.peer_type, false)
     .then([this](auto&& auth) {
       authorizer = std::move(auth);
       bufferlist bl;
       if (authorizer) {
-        h_connect.authorizer_protocol = authorizer->protocol;
-        h_connect.authorizer_len = authorizer->bl.length();
-        bl.append(create_static(h_connect));
+        proto.h_connect.authorizer_protocol = authorizer->protocol;
+        proto.h_connect.authorizer_len = authorizer->bl.length();
+        bl.append(create_static(proto.h_connect));
         bl.append(authorizer->bl);
       } else {
-        h_connect.authorizer_protocol = 0;
-        h_connect.authorizer_len = 0;
-        bl.append(create_static(h_connect));
+        proto.h_connect.authorizer_protocol = 0;
+        proto.h_connect.authorizer_len = 0;
+        bl.append(create_static(proto.h_connect));
       };
-      return s->socket->write_flush(std::move(bl));
+      return proto.socket->write_flush(std::move(bl));
     }).then([this] {
      // read the reply
-      return s->socket->read(sizeof(h_reply));
+      return proto.socket->read(sizeof(proto.h_reply));
     }).then([this] (bufferlist bl) {
       auto p = bl.cbegin();
-      ::decode(h_reply, p);
+      ::decode(proto.h_reply, p);
       ceph_assert(p.end());
-      return s->socket->read(h_reply.authorizer_len);
+      return proto.socket->read(proto.h_reply.authorizer_len);
     }).then([this] (bufferlist bl) {
       if (authorizer) {
         auto auth_reply = bl.cbegin();
@@ -474,7 +611,7 @@ ConnectProtocol::repeat_connect() {
       }
 
       //handle connect reply
-      switch (h_reply.tag) {
+      switch (proto.h_reply.tag) {
       case CEPH_MSGR_TAG_FEATURES:
         logger().error("{} connect protocol feature mispatch", __func__);
         throw std::system_error(make_error_code(error::negotiation_failure));
@@ -488,48 +625,43 @@ ConnectProtocol::repeat_connect() {
         }
         got_bad_auth = true;
         // try harder
-        return messenger->get_authorizer(s->peer_type, true)
+        return messenger.get_authorizer(s.peer_type, true)
           .then([this](auto&& auth) {
             authorizer = std::move(auth);
-            return seastar::make_ready_future<seastar::stop_iteration>(
-                seastar::stop_iteration::no);
+            return seastar::make_ready_future<seastop>(seastop::no);
           });
       case CEPH_MSGR_TAG_RESETSESSION:
-        seastar::with_gate(s->dispatch_gate, [this] {
-          return dispatcher->ms_handle_remote_reset(managed_conn);
+        seastar::with_gate(proto.dispatch_gate, [this] {
+          return dispatcher.ms_handle_remote_reset(&conn);
         });
-        s->reset();
-        return seastar::make_ready_future<seastar::stop_iteration>(
-            seastar::stop_iteration::no);
+        s.reset();
+        return seastar::make_ready_future<seastop>(seastop::no);
       case CEPH_MSGR_TAG_RETRY_GLOBAL:
-        s->global_seq = messenger->get_global_seq(h_reply.global_seq);
-        return seastar::make_ready_future<seastar::stop_iteration>(
-            seastar::stop_iteration::no);
+        s.global_seq = messenger.get_global_seq(proto.h_reply.global_seq);
+        return seastar::make_ready_future<seastop>(seastop::no);
       case CEPH_MSGR_TAG_RETRY_SESSION:
-        ceph_assert(h_reply.connect_seq > s->connect_seq);
-        s->connect_seq = h_reply.connect_seq;
-        return seastar::make_ready_future<seastar::stop_iteration>(
-            seastar::stop_iteration::no);
+        ceph_assert(proto.h_reply.connect_seq > s.connect_seq);
+        s.connect_seq = proto.h_reply.connect_seq;
+        return seastar::make_ready_future<seastop>(seastop::no);
       case CEPH_MSGR_TAG_WAIT:
         logger().error("{} connect got WAIT (connection race)", __func__);
-        // TODO protocol wait
+        // TODO state wait
         throw std::system_error(make_error_code(error::negotiation_failure));
-        //return seastar::make_ready_future<seastar::stop_iteration>(
-        //    seastar::stop_iteration::yes);
+        //return seastar::make_ready_future<seastop>(seastop::yes);
       case CEPH_MSGR_TAG_SEQ:
       case CEPH_MSGR_TAG_READY:
-        if (auto missing = (s->policy.features_required & ~(uint64_t)h_reply.features);
+        if (auto missing = (s.policy.features_required & ~(uint64_t)proto.h_reply.features);
             missing) {
           logger().error("{} missing required features", __func__);
           throw std::system_error(make_error_code(error::negotiation_failure));
         }
         return seastar::futurize_apply([this] {
-            if (h_reply.tag == CEPH_MSGR_TAG_SEQ) {
-              return s->socket->read_exactly(sizeof(seq_num_t))
+            if (proto.h_reply.tag == CEPH_MSGR_TAG_SEQ) {
+              return proto.socket->read_exactly(sizeof(seq_num_t))
                 .then([this] (auto buf) {
                   auto acked_seq = reinterpret_cast<const seq_num_t*>(buf.get());
-                  s->discard_requeued_up_to(*acked_seq);
-                  return s->socket->write_flush(make_static_packet(s->in_seq));
+                  s.discard_requeued_up_to(*acked_seq);
+                  return proto.socket->write_flush(make_static_packet(s.in_seq));
                 });
             } else {
               // tag CEPH_MSGR_TAG_READY
@@ -537,81 +669,72 @@ ConnectProtocol::repeat_connect() {
             }
           }).then([this] {
             // hooray!
-            s->peer_global_seq = h_reply.global_seq;
-            s->policy.lossy = h_reply.flags & CEPH_MSG_CONNECT_LOSSY;
-            s->connect_seq++;
-            s->backoff = 0ms;
-            s->features = h_reply.features & h_connect.features;
+            s.peer_global_seq = proto.h_reply.global_seq;
+            s.policy.lossy = proto.h_reply.flags & CEPH_MSG_CONNECT_LOSSY;
+            s.connect_seq++;
+            s.backoff = 0ms;
+            s.features = proto.h_reply.features & proto.h_connect.features;
             if (authorizer) {
-              s->session_security.reset(
+              s.session_security.reset(
                   get_auth_session_handler(nullptr,
                                            authorizer->protocol,
                                            authorizer->session_key,
-                                           s->features));
+                                           s.features));
             }
             authorizer.reset();
-            return seastar::make_ready_future<seastar::stop_iteration>(
-                seastar::stop_iteration::yes);
+            return seastar::make_ready_future<seastop>(seastop::yes);
           });
         break;
       default:
         // unknown tag
-        logger().error("{} got unknown tag", __func__, int(h_reply.tag));
+        logger().error("{} got unknown tag", __func__, int(proto.h_reply.tag));
         throw std::system_error(make_error_code(error::negotiation_failure));
       }
     });
 }
 
-bool
-ConnectProtocol::replace(const Protocol *newp) {
-    // TODO do replacing atomically
-    ceph_assert(false);
-    return true;
-}
-
 /*
- * Open
+ * V1 Protocol Open
  */
-
 seastar::future<seastar::stop_iteration>
-OpenProtocol::handle_ack()
+ProtocolV1::StateOpen::handle_ack()
 {
-  return s->socket->read_exactly(sizeof(ceph_le64))
+  return proto.socket->read_exactly(sizeof(ceph_le64))
     .then([this] (auto buf) {
       auto seq = reinterpret_cast<const ceph_le64*>(buf.get());
-      s->discard_sent_up_to(*seq);
-      return seastar::stop_iteration::no;
+      s.discard_sent_up_to(*seq);
+      return seastop::no;
     });
 }
 
 seastar::future<>
-OpenProtocol::handle_keepalive2()
+ProtocolV1::StateOpen::handle_keepalive2()
 {
-  return s->socket->read_exactly(sizeof(ceph_timespec))
+  return proto.socket->read_exactly(sizeof(ceph_timespec))
     .then([this] (auto buf) {
       k.ack.stamp = *reinterpret_cast<const ceph_timespec*>(buf.get());
       std::cout << "keepalive2 " << k.ack.stamp.tv_sec << std::endl;
-      return s->socket->write_flush(make_static_packet(k.ack));
+      return proto.socket->write_flush(make_static_packet(k.ack));
     });
 }
 
 seastar::future<>
-OpenProtocol::handle_keepalive2_ack()
+ProtocolV1::StateOpen::handle_keepalive2_ack()
 {
-  return s->socket->read_exactly(sizeof(ceph_timespec))
+  return proto.socket->read_exactly(sizeof(ceph_timespec))
     .then([this] (auto buf) {
       auto t = reinterpret_cast<const ceph_timespec*>(buf.get());
-      s->last_keepalive_ack = *t;
+      s.last_keepalive_ack = *t;
       std::cout << "keepalive2 ack " << t->tv_sec << std::endl;
     });
 }
 
 void
-OpenProtocol::read_tags_until_next_message()
+ProtocolV1::StateOpen::read_tags_until_next_message()
 {
   seastar::repeat([this] {
       // read the next tag
-      return s->socket->read_exactly(1)
+      return proto.socket->read_exactly(1)
         .then([this] (auto buf) {
           if (buf.empty()) {
             throw std::system_error(make_error_code(error::read_eof));
@@ -619,28 +742,30 @@ OpenProtocol::read_tags_until_next_message()
           switch (buf[0]) {
           case CEPH_MSGR_TAG_MSG:
             // stop looping and notify read_header()
-            return seastar::make_ready_future<seastar::stop_iteration>(
-                seastar::stop_iteration::yes);
+            return seastar::make_ready_future<seastop>(seastop::yes);
           case CEPH_MSGR_TAG_ACK:
             return handle_ack();
           case CEPH_MSGR_TAG_KEEPALIVE:
             break;
           case CEPH_MSGR_TAG_KEEPALIVE2:
             return handle_keepalive2()
-              .then([this] { return seastar::stop_iteration::no; });
+              .then([this] {
+                return seastar::make_ready_future<seastop>(seastop::no);
+              });
           case CEPH_MSGR_TAG_KEEPALIVE2_ACK:
             return handle_keepalive2_ack()
-              .then([this] { return seastar::stop_iteration::no; });
+              .then([this] {
+                return seastar::make_ready_future<seastop>(seastop::no);
+              });
           case CEPH_MSGR_TAG_CLOSE:
             std::cout << "close" << std::endl;
             break;
           }
-          return seastar::make_ready_future<seastar::stop_iteration>(
-              seastar::stop_iteration::no);
+          return seastar::make_ready_future<seastop>(seastop::no);
         });
     }).handle_exception_type([this] (const std::system_error& e) {
       if (e.code() == error::read_eof) {
-        close();
+        proto.close();
       }
       throw e;
     }).then_wrapped([this] (auto fut) {
@@ -650,25 +775,25 @@ OpenProtocol::read_tags_until_next_message()
 }
 
 seastar::future<>
-OpenProtocol::maybe_throttle()
+ProtocolV1::StateOpen::maybe_throttle()
 {
-  if (!s->policy.throttler_bytes) {
+  if (!s.policy.throttler_bytes) {
     return seastar::now();
   }
   const auto to_read = (m.header.front_len +
                         m.header.middle_len +
                         m.header.data_len);
-  return s->policy.throttler_bytes->get(to_read);
+  return s.policy.throttler_bytes->get(to_read);
 }
 
 seastar::future<MessageRef>
-OpenProtocol::do_read_message()
+ProtocolV1::StateOpen::do_read_message()
 {
   return on_message.get_future()
     .then([this] {
       on_message = seastar::promise<>{};
       // read header
-      return s->socket->read(sizeof(m.header));
+      return proto.socket->read(sizeof(m.header));
     }).then([this] (bufferlist bl) {
       // throttle the traffic, maybe
       auto p = bl.cbegin();
@@ -676,19 +801,19 @@ OpenProtocol::do_read_message()
       return maybe_throttle();
     }).then([this] {
       // read front
-      return s->socket->read(m.header.front_len);
+      return proto.socket->read(m.header.front_len);
     }).then([this] (bufferlist bl) {
       m.front = std::move(bl);
       // read middle
-      return s->socket->read(m.header.middle_len);
+      return proto.socket->read(m.header.middle_len);
     }).then([this] (bufferlist bl) {
       m.middle = std::move(bl);
       // read data
-      return s->socket->read(m.header.data_len);
+      return proto.socket->read(m.header.data_len);
     }).then([this] (bufferlist bl) {
       m.data = std::move(bl);
       // read footer
-      return s->socket->read(sizeof(m.footer));
+      return proto.socket->read(sizeof(m.footer));
     }).then([this] (bufferlist bl) {
       // resume background processing of tags
       read_tags_until_next_message();
@@ -698,34 +823,34 @@ OpenProtocol::do_read_message()
       auto msg = ::decode_message(nullptr, 0, m.header, m.footer,
                                   m.front, m.middle, m.data, nullptr);
       // TODO: set time stamps
-      msg->set_byte_throttler(s->policy.throttler_bytes);
+      msg->set_byte_throttler(s.policy.throttler_bytes);
       constexpr bool add_ref = false; // Message starts with 1 ref
       return MessageRef{msg, add_ref};
     });
 }
 
 bool
-OpenProtocol::update_rx_seq(seq_num_t seq)
+ProtocolV1::StateOpen::update_rx_seq(seq_num_t seq)
 {
-  if (seq <= s->in_seq) {
-    if (HAVE_FEATURE(s->features, RECONNECT_SEQ) &&
+  if (seq <= s.in_seq) {
+    if (HAVE_FEATURE(s.features, RECONNECT_SEQ) &&
         conf.ms_die_on_old_message) {
       ceph_abort_msg("old msgs despite reconnect_seq feature");
     }
     return false;
-  } else if (seq > s->in_seq + 1) {
+  } else if (seq > s.in_seq + 1) {
     if (conf.ms_die_on_skipped_message) {
       ceph_abort_msg("skipped incoming seq");
     }
     return false;
   } else {
-    s->in_seq = seq;
+    s.in_seq = seq;
     return true;
   }
 }
 
 seastar::future<MessageRef>
-OpenProtocol::read_message()
+ProtocolV1::StateOpen::read_message()
 {
   namespace stdx = std::experimental;
 
@@ -742,15 +867,15 @@ OpenProtocol::read_message()
 }
 
 seastar::future<>
-OpenProtocol::do_execute() {
+ProtocolV1::StateOpen::do_execute() {
   //TODO: capture and handle failure at top-level
   read_tags_until_next_message();
   return seastar::keep_doing([this] {
       return read_message()
         .then([this] (MessageRef msg) {
           // start dispatch, ignoring exceptions from the application layer
-          seastar::with_gate(s->dispatch_gate, [this, msg = std::move(msg)] {
-              return dispatcher->ms_dispatch(managed_conn, std::move(msg))
+          seastar::with_gate(proto.dispatch_gate, [this, msg = std::move(msg)] {
+              return dispatcher.ms_dispatch(&conn, std::move(msg))
                 .handle_exception([] (std::exception_ptr eptr) {});
             });
           // return immediately to start on the next message
@@ -760,9 +885,9 @@ OpenProtocol::do_execute() {
       // TODO handle failure
       if (e.code() == error::connection_aborted ||
           e.code() == error::connection_reset) {
-        return dispatcher->ms_handle_reset(managed_conn);
+        return dispatcher.ms_handle_reset(&conn);
       } else if (e.code() == error::read_eof) {
-        return dispatcher->ms_handle_remote_reset(managed_conn);
+        return dispatcher.ms_handle_remote_reset(&conn);
       } else {
         throw e;
       }
@@ -771,88 +896,15 @@ OpenProtocol::do_execute() {
     });
 }
 
-seastar::future<>
-OpenProtocol::write_message(MessageRef msg)
-{
-  msg->set_seq(++s->out_seq);
-  msg->encode(s->features, messenger->get_crc_flags());
-  bufferlist bl;
-  bl.append(CEPH_MSGR_TAG_MSG);
-  auto& header = msg->get_header();
-  bl.append((const char*)&header, sizeof(header));
-  bl.append(msg->get_payload());
-  bl.append(msg->get_middle());
-  bl.append(msg->get_data());
-  auto& footer = msg->get_footer();
-  if (HAVE_FEATURE(s->features, MSG_AUTH)) {
-    bl.append((const char*)&footer, sizeof(footer));
-  } else {
-    ceph_msg_footer_old old_footer;
-    if (messenger->get_crc_flags() & MSG_CRC_HEADER) {
-      old_footer.front_crc = footer.front_crc;
-      old_footer.middle_crc = footer.middle_crc;
-    } else {
-      old_footer.front_crc = old_footer.middle_crc = 0;
-    }
-    if (messenger->get_crc_flags() & MSG_CRC_DATA) {
-      old_footer.data_crc = footer.data_crc;
-    } else {
-      old_footer.data_crc = 0;
-    }
-    old_footer.flags = footer.flags;
-    bl.append((const char*)&old_footer, sizeof(old_footer));
-  }
-  // write as a seastar::net::packet
-  return s->socket->write_flush(std::move(bl))
-    .then([this, msg = std::move(msg)] {
-      if (!s->policy.lossy) {
-        s->sent.push(std::move(msg));
-      }
-    });
-}
-
-seastar::future<seastar::stop_iteration>
-OpenProtocol::send(MessageRef msg) {
-  return write_message(std::move(msg))
-    .then([] {
-      return seastar::make_ready_future<seastar::stop_iteration>(
-          seastar::stop_iteration::yes);
-    }).handle_exception([] (std::exception_ptr eptr) {
-      return seastar::make_ready_future<seastar::stop_iteration>(
-          seastar::stop_iteration::no);
-    });
-}
-
-seastar::future<seastar::stop_iteration>
-OpenProtocol::keepalive() {
-  k.req.stamp = ceph::coarse_real_clock::to_ceph_timespec(
-    ceph::coarse_real_clock::now());
-  return s->socket->write_flush(make_static_packet(k.req))
-    .then([] {
-      return seastar::make_ready_future<seastar::stop_iteration>(
-          seastar::stop_iteration::yes);
-    }).handle_exception([] (std::exception_ptr eptr) {
-      return seastar::make_ready_future<seastar::stop_iteration>(
-          seastar::stop_iteration::no);
-    });
-}
-
-bool
-OpenProtocol::replace(const Protocol *newp) {
-    // TODO do replacing atomically
-    ceph_assert(false);
-    return true;
-}
-
 /*
- * Close
+ * V1 Protocol Close
  */
 seastar::future<>
-CloseProtocol::do_execute() {
-  return s->socket->close()
+ProtocolV1::StateClose::do_execute() {
+  return proto.socket->close()
     .then([this] {
       // closing connections will unblock any dispatchers that were waiting to
       // send(). wait for any pending calls to finish
-      return s->dispatch_gate.close();
+      return proto.dispatch_gate.close();
     });
 }

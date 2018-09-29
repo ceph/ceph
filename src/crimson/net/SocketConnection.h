@@ -14,79 +14,84 @@
 
 #pragma once
 
-#include <seastar/core/shared_future.hh>
-
 #include "Connection.h"
-#include "Workspace.h"
+#include "ProtocolV1.h"
 #include "Session.h"
 
 namespace ceph::net {
 
+class SocketMessenger;
+
 class SocketConnection : public Connection {
   Session s;
-  Workspace workspace;
-
-  /// becomes available when handshake completes, and when all previous messages
-  /// have been sent to the output stream. send() chains new messages as
-  /// continuations to this future to act as a queue
-  seastar::future<> send_ready = seastar::now();
+  std::unique_ptr<Protocol> protocol;
 
  public:
-  SocketConnection(Messenger *messenger,
-                   Dispatcher *disp,
-                   const entity_addr_t& my_addr,
-                   const entity_addr_t& peer_addr);
-  SocketConnection(Messenger *messenger,
-                   Dispatcher *disp,
-                   const entity_addr_t& my_addr,
-                   const entity_addr_t& peer_addr,
-                   seastar::connected_socket&& socket);
-  ~SocketConnection();
+  SocketConnection(SocketMessenger& messenger,
+                   Dispatcher& disp,
+                   const entity_addr_t& my_addr);
+  ~SocketConnection() {}
 
   const entity_addr_t& get_my_addr() const { return s.my_addr; };
   const entity_addr_t& get_peer_addr() const { return s.peer_addr; };
 
-  bool is_connected() override;
-
-  void start_connect(entity_type_t peer_type) override{
-    workspace.start_connect(peer_type);
+  bool is_connected() override {
+    return protocol->is_connected();
   }
 
-  void start_accept() override {
-    workspace.start_accept();
+  seastar::future<> send(MessageRef msg) override {
+    return protocol->send(std::move(msg));
   }
 
-  seastar::future<> send(MessageRef msg) override;
+  seastar::future<> keepalive() override {
+    return protocol->keepalive();
+  }
 
-  seastar::future<> keepalive() override;
+  seastar::future<> close() override {
+    return protocol->close();
+  }
 
-  seastar::future<> close() override;
+  // Only call when SocketConnection first construct
+  void start_connect(const entity_addr_t& peer_addr, const entity_type_t& peer_type) {
+    protocol->start_connect(peer_addr, peer_type);
+  }
 
-  uint32_t connect_seq() const override {
+  // Only call when SocketConnection first construct
+  void start_accept(seastar::connected_socket&& socket, const entity_addr_t& peer_addr) {
+    protocol->start_accept(std::move(socket), peer_addr);
+  }
+
+  /// the number of connections initiated in this session, increment when a
+  /// new connection is established
+  uint32_t connect_seq() const {
     return s.connect_seq;
   }
-  uint32_t peer_global_seq() const override {
+
+  /// the client side should connect us with a gseq. it will be reset with a
+  /// the one of exsting connection if it's greater.
+  uint32_t peer_global_seq() const {
     return s.peer_global_seq;
   }
   seq_num_t rx_seq_num() const {
     return s.in_seq;
   }
-  state_t get_state() const override {
-    return s.protocol->state();
-  }
-  bool is_server_side() const override {
+  bool is_server_side() const {
     return s.policy.server;
   }
-  bool is_lossy() const override {
+  bool is_lossy() const {
     return s.policy.lossy;
   }
 
-private:
-  void requeue_sent() override;
-  std::tuple<seq_num_t, std::queue<MessageRef>> get_out_queue() override {
+  /// move all messages in the sent list back into the queue
+  void requeue_sent();
+
+  /// get all messages in the out queue
+  std::tuple<seq_num_t, std::queue<MessageRef>> get_out_queue() {
     return {s.out_seq, std::move(s.out_q)};
   }
 
 };
+
+using SocketConnectionRef = boost::intrusive_ptr<SocketConnection>;
 
 } // namespace ceph::net
