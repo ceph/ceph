@@ -17,26 +17,31 @@
 
 #include <map>
 #include <list>
+#ifdef WITH_SEASTAR
+#include <boost/smart_ptr/local_shared_ptr.hpp>
+#else
+#include <memory>
+#endif
+#include "common/ceph_mutex.h"
 #include "common/dout.h"
-#include "common/lock_cond.h"
-#include "common/lock_mutex.h"
-#include "common/lock_policy.h"
-#include "common/lock_shared_ptr.h"
 #include "include/unordered_map.h"
 
 // re-include our assert to clobber the system one; fix dout:
 #include "include/ceph_assert.h"
 
-template <class K, class V,
-	  ceph::LockPolicy lock_policy = ceph::LockPolicy::MUTEX>
+template <class K, class V>
 class SharedLRU {
   CephContext *cct;
-  using shared_ptr_trait_t = SharedPtrTrait<lock_policy>;
-  using VPtr = typename shared_ptr_trait_t::template shared_ptr<V>;
-  using WeakVPtr = typename shared_ptr_trait_t::template weak_ptr<V>;
-  LockMutexT<lock_policy> lock;
+#ifdef WITH_SEASTAR
+  using VPtr = boost::local_shared_ptr<V>;
+  using WeakVPtr = boost::weak_ptr<V>;
+#else
+  using VPtr = std::shared_ptr<V>;
+  using WeakVPtr = std::weak_ptr<V>;
+#endif
+  ceph::mutex lock;
   size_t max_size;
-  LockCondT<lock_policy> cond;
+  ceph::condition_variable cond;
   unsigned size;
 public:
   int waiting;
@@ -99,7 +104,7 @@ private:
 public:
   SharedLRU(CephContext *cct = NULL, size_t max_size = 20)
     : cct(cct),
-      lock{LockMutex<lock_policy>::create("SharedLRU::lock")},
+      lock{ceph::make_mutex("SharedLRU::lock")},
       max_size(max_size),
       size(0), waiting(0) {
     contents.rehash(max_size); 

@@ -21,7 +21,6 @@
 #include "MonMap.h"
 #include "MonSub.h"
 
-#include "common/lock_policy.h"
 #include "common/Timer.h"
 #include "common/Finisher.h"
 #include "common/config.h"
@@ -38,7 +37,7 @@ class AuthAuthorizer;
 class AuthMethodList;
 class AuthClientHandler;
 class KeyRing;
-template<LockPolicy> class RotatingKeyRing;
+class RotatingKeyRing;
 
 struct MonClientPinger : public Dispatcher {
 
@@ -108,7 +107,7 @@ public:
   int handle_auth(MAuthReply *m,
 		  const EntityName& entity_name,
 		  uint32_t want_keys,
-		  RotatingKeyRing<LockPolicy::MUTEX>* keyring);
+		  RotatingKeyRing* keyring);
   int authenticate(MAuthReply *m);
   void start(epoch_t epoch,
              const EntityName& entity_name,
@@ -128,7 +127,7 @@ private:
   int _negotiate(MAuthReply *m,
 		 const EntityName& entity_name,
 		 uint32_t want_keys,
-		 RotatingKeyRing<LockPolicy::MUTEX>* keyring);
+		 RotatingKeyRing* keyring);
 
 private:
   CephContext *cct;
@@ -276,7 +275,7 @@ public:
   }
   
   std::unique_ptr<KeyRing> keyring;
-  std::unique_ptr<RotatingKeyRing<LockPolicy::MUTEX>> rotating_secrets;
+  std::unique_ptr<RotatingKeyRing> rotating_secrets;
 
  public:
   explicit MonClient(CephContext *cct_);
