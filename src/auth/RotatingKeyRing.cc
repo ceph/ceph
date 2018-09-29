@@ -9,30 +9,26 @@
 #define dout_prefix *_dout << "auth: "
 
 
-template<LockPolicy lp>
-bool RotatingKeyRing<lp>::need_new_secrets() const
+bool RotatingKeyRing::need_new_secrets() const
 {
   std::lock_guard l{lock};
   return secrets.need_new_secrets();
 }
 
-template<LockPolicy lp>
-bool RotatingKeyRing<lp>::need_new_secrets(utime_t now) const
+bool RotatingKeyRing::need_new_secrets(utime_t now) const
 {
   std::lock_guard l{lock};
   return secrets.need_new_secrets(now);
 }
 
-template<LockPolicy lp>
-void RotatingKeyRing<lp>::set_secrets(RotatingSecrets&& s)
+void RotatingKeyRing::set_secrets(RotatingSecrets&& s)
 {
   std::lock_guard l{lock};
   secrets = std::move(s);
   dump_rotating();
 }
 
-template<LockPolicy lp>
-void RotatingKeyRing<lp>::dump_rotating() const
+void RotatingKeyRing::dump_rotating() const
 {
   ldout(cct, 10) << "dump_rotating:" << dendl;
   for (map<uint64_t, ExpiringCryptoKey>::const_iterator iter = secrets.secrets.begin();
@@ -41,15 +37,13 @@ void RotatingKeyRing<lp>::dump_rotating() const
     ldout(cct, 10) << " id " << iter->first << " " << iter->second << dendl;
 }
 
-template<LockPolicy lp>
-bool RotatingKeyRing<lp>::get_secret(const EntityName& name, CryptoKey& secret) const
+bool RotatingKeyRing::get_secret(const EntityName& name, CryptoKey& secret) const
 {
   std::lock_guard l{lock};
   return keyring->get_secret(name, secret);
 }
 
-template<LockPolicy lp>
-bool RotatingKeyRing<lp>::get_service_secret(uint32_t service_id_, uint64_t secret_id,
+bool RotatingKeyRing::get_service_secret(uint32_t service_id_, uint64_t secret_id,
 					 CryptoKey& secret) const
 {
   std::lock_guard l{lock};
@@ -72,15 +66,7 @@ bool RotatingKeyRing<lp>::get_service_secret(uint32_t service_id_, uint64_t secr
   return true;
 }
 
-template<LockPolicy lp>
-KeyRing *RotatingKeyRing<lp>::get_keyring()
+KeyRing* RotatingKeyRing::get_keyring()
 {
   return keyring;
 }
-
-// explicitly instantiate only the classes we need
-#ifdef WITH_SEASTAR
-template class RotatingKeyRing<LockPolicy::SINGLE>;
-#else
-template class RotatingKeyRing<LockPolicy::MUTEX>;
-#endif

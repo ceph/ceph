@@ -15,7 +15,6 @@
 #include "AuthAuthorizeHandler.h"
 #include "cephx/CephxAuthorizeHandler.h"
 #include "none/AuthNoneAuthorizeHandler.h"
-#include "common/Mutex.h"
 
 AuthAuthorizeHandler *AuthAuthorizeHandlerRegistry::get_handler(int protocol)
 {
@@ -23,7 +22,7 @@ AuthAuthorizeHandler *AuthAuthorizeHandlerRegistry::get_handler(int protocol)
     return NULL;
   }
   
-  Mutex::Locker l(m_lock);
+  std::scoped_lock l{m_lock};
   map<int,AuthAuthorizeHandler*>::iterator iter = m_authorizers.find(protocol);
   if (iter != m_authorizers.end())
     return iter->second;

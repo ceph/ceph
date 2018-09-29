@@ -20,32 +20,16 @@
 #include "none/AuthNoneClientHandler.h"
 
 
-template<ceph::LockPolicy lp>
 AuthClientHandler*
-AuthClientHandler::create(CephContext *cct, int proto,
-			  RotatingKeyRing<lp> *rkeys)
+AuthClientHandler::create(CephContext* cct, int proto,
+			  RotatingKeyRing* rkeys)
 {
   switch (proto) {
   case CEPH_AUTH_CEPHX:
-    return new CephxClientHandler<lp>(cct, rkeys);
+    return new CephxClientHandler(cct, rkeys);
   case CEPH_AUTH_NONE:
     return new AuthNoneClientHandler{cct};
   default:
     return NULL;
   }
 }
-
-// explicitly instantiate only the classes we need
-#ifdef WITH_SEASTAR
-template AuthClientHandler*
-AuthClientHandler::create<ceph::LockPolicy::SINGLE>(
-  CephContext *cct,
-  int proto,
-  RotatingKeyRing<ceph::LockPolicy::SINGLE> *rkeys);
-#else
-template AuthClientHandler*
-AuthClientHandler::create<ceph::LockPolicy::MUTEX>(
-  CephContext *cct,
-  int proto,
-  RotatingKeyRing<ceph::LockPolicy::MUTEX> *rkeys);
-#endif
