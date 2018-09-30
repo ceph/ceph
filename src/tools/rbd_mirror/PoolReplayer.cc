@@ -16,6 +16,7 @@
 #include "librbd/internal.h"
 #include "librbd/Utils.h"
 #include "librbd/Watcher.h"
+#include "librbd/api/Config.h"
 #include "librbd/api/Mirror.h"
 #include "ImageMap.h"
 #include "InstanceReplayer.h"
@@ -303,6 +304,21 @@ void PoolReplayer<I>::init()
     derr << "error accessing local pool " << m_local_pool_id << ": "
          << cpp_strerror(r) << dendl;
     return;
+  }
+
+  std::vector<librbd::config_option_t> options;
+  r = librbd::api::Config<I>::list(m_local_io_ctx, &options);
+  if (r < 0) {
+    derr << "error listing local pool config overrides: " << cpp_strerror(r)
+         << dendl;
+    return;
+  }
+  auto cct = reinterpret_cast<CephContext *>(m_local_io_ctx.cct());
+  for (auto &option : options) {
+    if (option.source == RBD_CONFIG_SOURCE_POOL) {
+      r = cct->_conf.set_val(option.name.c_str(), option.value);
+      assert(r == 0);
+    }
   }
 
   std::string local_mirror_uuid;
