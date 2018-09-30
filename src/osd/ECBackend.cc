@@ -1000,17 +1000,6 @@ void ECBackend::handle_sub_read(
       i != op.to_read.end();
       ++i) {
     int r = 0;
-    ECUtil::HashInfoRef hinfo;
-    if (!get_parent()->get_pool().allows_ecoverwrites()) {
-      hinfo = get_hash_info(i->first);
-      if (!hinfo) {
-	r = -EIO;
-	get_parent()->clog_error() << "Corruption detected: object " << i->first
-                                   << " is missing hash_info";
-	dout(5) << __func__ << ": No hinfo for " << i->first << dendl;
-	goto error;
-      }
-    }
     for (auto j = i->second.begin(); j != i->second.end(); ++j) {
       bufferlist bl;
       r = store->read(
@@ -1039,6 +1028,17 @@ void ECBackend::handle_sub_read(
 	// This shows that we still need deep scrub because large enough files
 	// are read in sections, so the digest check here won't be done here.
 	// Do NOT check osd_read_eio_on_bad_digest here.  We need to report
+	ECUtil::HashInfoRef hinfo;
+	if (!get_parent()->get_pool().allows_ecoverwrites()) {
+	  hinfo = get_hash_info(i->first);
+	  if (!hinfo) {
+	    r = -EIO;
+	    get_parent()->clog_error() << "Corruption detected: object " << i->first
+				       << " is missing hash_info";
+	    dout(5) << __func__ << ": No hinfo for " << i->first << dendl;
+	    goto error;
+	  }
+	}
 	// the state of our chunk in case other chunks could substitute.
 	assert(hinfo->has_chunk_hash());
 	if ((bl.length() == hinfo->get_total_chunk_size()) &&
