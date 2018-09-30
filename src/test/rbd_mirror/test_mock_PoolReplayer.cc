@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "librbd/api/Config.h"
 #include "test/librbd/mock/MockImageCtx.h"
 #include "test/librados_test_stub/MockTestMemCluster.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
@@ -29,6 +30,19 @@ struct MockTestImageCtx : public MockImageCtx {
 };
 
 } // anonymous namespace
+
+namespace api {
+
+template <>
+class Config<MockTestImageCtx> {
+public:
+  static int list(librados::IoCtx& io_ctx,
+                  std::vector<config_option_t> *options) {
+    return 0;
+  }
+};
+
+}
 
 } // namespace librbd
 

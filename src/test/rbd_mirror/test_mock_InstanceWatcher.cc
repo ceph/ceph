@@ -87,7 +87,7 @@ template <>
 struct ImageSyncThrottler<librbd::MockTestImageCtx> {
   static ImageSyncThrottler* s_instance;
 
-  static ImageSyncThrottler *create() {
+  static ImageSyncThrottler *create(CephContext *cct) {
     ceph_assert(s_instance != nullptr);
     return s_instance;
   }
