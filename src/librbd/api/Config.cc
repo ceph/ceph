@@ -68,6 +68,22 @@ struct Options : Parent {
       {"rbd_request_timed_out_seconds", {}},
       {"rbd_skip_partial_discard", {}},
       {"rbd_sparse_read_threshold_bytes", {}},
+      // rbd-mirror daemon options
+      {"rbd_mirror_concurrent_image_deletions", {}},
+      {"rbd_mirror_concurrent_image_syncs", {}},
+      {"rbd_mirror_delete_retry_interval", {}},
+      {"rbd_mirror_image_policy_migration_throttle", {}},
+      {"rbd_mirror_image_policy_rebalance_timeout", {}},
+      {"rbd_mirror_image_policy_type", {}},
+      {"rbd_mirror_image_policy_update_throttle_interval", {}},
+      {"rbd_mirror_image_state_check_interval", {}},
+      {"rbd_mirror_journal_commit_age", {}},
+      {"rbd_mirror_journal_max_fetch_bytes", {}},
+      {"rbd_mirror_journal_poll_age", {}},
+      {"rbd_mirror_leader_heartbeat_interval", {}},
+      {"rbd_mirror_leader_max_acquire_attempts_before_break", {}},
+      {"rbd_mirror_leader_max_missed_heartbeats", {}},
+      {"rbd_mirror_sync_point_update_age", {}},
     } {
     if (!image_apply_only_options) {
       Parent image_create_opts = {
