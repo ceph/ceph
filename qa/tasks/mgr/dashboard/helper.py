@@ -169,7 +169,8 @@ class DashboardTestCase(MgrTestCase):
         else:
             assert False
         try:
-            if cls._resp.text and cls._resp.text != "":
+            content_type = cls._resp.headers['content-type']
+            if content_type == 'application/json' and cls._resp.text and cls._resp.text != "":
                 return cls._resp.json()
             return cls._resp.text
         except ValueError as ex:
