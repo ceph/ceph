@@ -250,9 +250,9 @@ class Activate(object):
                 has_journal = lv.tags.get('ceph.journal_uuid')
                 if has_journal:
                     logger.info('found a journal associated with the OSD, assuming filestore')
-                    return activate_filestore(lvs)
+                    return activate_filestore(lvs, no_systemd=args.no_systemd)
             logger.info('unable to find a journal associated with the OSD, assuming bluestore')
-            return activate_bluestore(lvs)
+            return activate_bluestore(lvs, no_systemd=args.no_systemd)
         if args.bluestore:
             activate_bluestore(lvs, no_systemd=args.no_systemd)
         elif args.filestore:
