@@ -4467,7 +4467,9 @@ int RGWRados::init_complete()
     }
   }
 
-  writeable_zone = (zone_public_config.tier_type.empty() || zone_public_config.tier_type == "rgw");
+  writeable_zone = (zone_public_config.tier_type.empty()  ||
+                    zone_public_config.tier_type == "rgw" ||
+                    zone_public_config.tier_type == "archive");
 
   init_unique_trans_id_deps();
 
