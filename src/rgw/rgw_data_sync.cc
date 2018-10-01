@@ -1718,8 +1718,7 @@ RGWCoroutine *RGWArchiveDataSyncModule::sync_object(RGWDataSyncEnv *sync_env, RG
   if (!bucket_info.versioned() ||
      (bucket_info.flags & BUCKET_VERSIONS_SUSPENDED)) {
       ldout(sync_env->cct, 0) << "SYNC_ARCHIVE: sync_object: enabling object versioning for archive bucket" << dendl;
-      bucket_info.flags |= BUCKET_VERSIONED;
-      bucket_info.flags &= ~BUCKET_VERSIONS_SUSPENDED;
+      bucket_info.flags = (bucket_info.flags & ~BUCKET_VERSIONS_SUSPENDED) | BUCKET_VERSIONED;
       int op_ret = sync_env->store->put_bucket_instance_info(bucket_info, false, real_time(), NULL);
       if (op_ret < 0) {
          ldout(sync_env->cct, 0) << "SYNC_ARCHIVE: sync_object: error versioning archive bucket" << dendl;
