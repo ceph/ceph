@@ -87,11 +87,24 @@ namespace rados {
 	void set_tag(const std::string& t) { tag = t; }
 	void set_description(const std::string& desc) { description = desc; }
 	void set_duration(const utime_t& e) { duration = e; }
-	void set_renew(bool renew) {
+	void set_duration(const ceph::timespan& d) {
+	  duration = utime_t(ceph::real_clock::zero() + d);
+	}
+
+	void set_may_renew(bool renew) {
 	  if (renew) {
-	    flags |= LOCK_FLAG_RENEW;
+	    flags |= LOCK_FLAG_MAY_RENEW;
+	    flags &= ~LOCK_FLAG_MUST_RENEW; // if may then not must
 	  } else {
-	    flags &= ~LOCK_FLAG_RENEW;
+	    flags &= ~LOCK_FLAG_MAY_RENEW;
+	  }
+	}
+	void set_must_renew(bool renew) {
+	  if (renew) {
+	    flags |= LOCK_FLAG_MUST_RENEW;
+	    flags &= ~LOCK_FLAG_MAY_RENEW; // if must then not may
+	  } else {
+	    flags &= ~LOCK_FLAG_MUST_RENEW;
 	  }
 	}
 
