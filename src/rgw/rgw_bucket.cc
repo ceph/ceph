@@ -2481,6 +2481,174 @@ public:
   }
 };
 
+void get_md5_digest(const RGWBucketEntryPoint *be, string& md5_digest) {
+
+   char md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
+   unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
+   bufferlist bl;
+
+   Formatter *f = new JSONFormatter(false);
+   be->dump(f);
+   f->flush(bl);
+
+   MD5 hash;
+   hash.Update((const unsigned char *)bl.c_str(), bl.length());
+   hash.Final(m);
+
+   buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, md5);
+
+   delete f;
+
+   md5_digest = md5;
+}
+
+class RGWArchiveBucketMetadataHandler : public RGWBucketMetadataHandler {
+
+public:
+
+  int remove_by_metakey(RGWRados *store, string& metadata_key) override {
+
+    ldout(store->ctx(), 0) << "SKIP: bucket removal is not allowed on archive zone: " << metadata_key << " ... proceeding to rename" << dendl;
+
+    string type;
+    string entry;
+    store->meta_mgr->parse_metadata_key(metadata_key, type, entry);
+
+    RGWMetadataObject *obj;
+    int ret = get(store, entry, &obj);
+    if (ret < 0) {
+        return ret;
+    }
+
+    RGWBucketEntryPoint be;
+    RGWObjectCtx obj_ctx(store);
+    RGWObjVersionTracker objv_tracker;
+    objv_tracker.read_version = obj->get_version();
+
+    delete obj;
+
+    string tenant_name, bucket_name;
+    parse_bucket(entry, &tenant_name, &bucket_name);
+
+    real_time mtime;
+
+    ret = store->get_bucket_entrypoint_info(obj_ctx, tenant_name, bucket_name, be, &objv_tracker, &mtime, NULL);
+    if (ret < 0) {
+        return ret;
+    }
+
+    string md5_digest;
+    get_md5_digest(&be, md5_digest);
+
+    string archive_zone_suffix = "-deleted-" + md5_digest;
+    be.bucket.name = be.bucket.name + archive_zone_suffix;
+
+    RGWBucketEntryMetadataObject *be_mdo = new RGWBucketEntryMetadataObject(be, objv_tracker.read_version, mtime);
+
+    JSONFormatter f(false);
+    f.open_object_section("metadata_info");
+    encode_json("key", metadata_key + archive_zone_suffix, &f);
+    encode_json("ver", be_mdo->get_version(), &f);
+    mtime = be_mdo->get_mtime();
+    if (!real_clock::is_zero(mtime)) {
+       utime_t ut(mtime);
+       encode_json("mtime", ut, &f);
+    }
+    encode_json("data", *be_mdo, &f);
+    f.close_section();
+
+    delete be_mdo;
+
+    ret = rgw_unlink_bucket(store, be.owner, tenant_name, bucket_name, false);
+    if (ret < 0) {
+        lderr(store->ctx()) << "could not unlink bucket=" << entry << " owner=" << be.owner << dendl;
+    }
+
+    // if (ret == -ECANCELED) it means that there was a race here, and someone
+    // wrote to the bucket entrypoint just before we removed it. The question is
+    // whether it was a newly created bucket entrypoint ...  in which case we
+    // should ignore the error and move forward, or whether it is a higher version
+    // of the same bucket instance ... in which we should retry
+    ret = rgw_bucket_delete_bucket_obj(store, tenant_name, bucket_name, objv_tracker);
+    if (ret < 0) {
+        lderr(store->ctx()) << "could not delete bucket=" << entry << dendl;
+    }
+
+    string new_entry, new_bucket_name;
+    new_entry = entry + archive_zone_suffix;
+    parse_bucket(new_entry, &tenant_name, &new_bucket_name);
+
+    bufferlist bl;
+    f.flush(bl);
+
+    JSONParser parser;
+    if (!parser.parse(bl.c_str(), bl.length())) {
+        return -EINVAL;
+    }
+
+    JSONObj *jo = parser.find_obj("data");
+    if (!jo) {
+        return -EINVAL;
+    }
+
+    try {
+        decode_json_obj(be, jo);
+    } catch (JSONDecoder::err& e) {
+        return -EINVAL;
+    }
+
+    RGWBucketEntryPoint ep;
+    ep.linked = be.linked;
+    ep.owner = be.owner;
+    ep.bucket = be.bucket;
+
+    RGWObjVersionTracker ot;
+    ot.generate_new_write_ver(store->ctx());
+
+    map<string, bufferlist> attrs;
+
+    ret = store->put_bucket_entrypoint_info(tenant_name, new_bucket_name, ep, false, ot, mtime, &attrs);
+    if (ret < 0) {
+        return ret;
+    }
+
+    ret = rgw_link_bucket(store, be.owner, be.bucket, be.creation_time, false);
+    if (ret < 0) {
+        return ret;
+    }
+
+    // .bucket.meta.my-bucket-1:c0f7ef8c-2309-4ebb-a1d0-1b0a61dc5a78.4226.1
+    string meta_name = bucket_name + ":" + be.bucket.marker;
+
+    map<string, bufferlist> attrs_m;
+    RGWBucketInfo bi_m;
+
+    ret = store->get_bucket_instance_info(obj_ctx, meta_name, bi_m, NULL, &attrs_m);
+    if (ret < 0) {
+        return ret;
+    }
+
+    string new_meta_name = RGW_BUCKET_INSTANCE_MD_PREFIX + new_bucket_name + ":" + be.bucket.marker;
+
+    bi_m.bucket.name = new_bucket_name;
+
+    bufferlist bl_m;
+    using ceph::encode;
+    encode(bi_m, bl_m);
+
+    ret = rgw_put_system_obj(store, store->get_zone_params().domain_root, new_meta_name, bl_m, false, NULL, real_time(), NULL);
+    if (ret < 0) {
+        return ret;
+    }
+
+    ret = rgw_delete_system_obj(store, store->get_zone_params().domain_root, RGW_BUCKET_INSTANCE_MD_PREFIX + meta_name, NULL);
+
+    /* idempotent */
+    return 0;
+  }
+
+};
+
 class RGWBucketInstanceMetadataHandler : public RGWMetadataHandler {
 
 public:
@@ -2700,10 +2868,26 @@ public:
   }
 };
 
+class RGWArchiveBucketInstanceMetadataHandler : public RGWBucketInstanceMetadataHandler {
+
+public:
+
+   int remove_by_metakey(RGWRados *store, string& metadata_key) override {
+       ldout(store->ctx(), 0) << "SKIP: bucket instance removal is not allowed on archive zone: " << metadata_key << dendl;
+	   return 0;
+   }
+
+};
+
 void rgw_bucket_init(RGWMetadataManager *mm)
 {
-  bucket_meta_handler = new RGWBucketMetadataHandler;
+  if (mm->get_store()->get_zone().tier_type == "archive") {
+      bucket_meta_handler = new RGWArchiveBucketMetadataHandler;
+      bucket_instance_meta_handler = new RGWArchiveBucketInstanceMetadataHandler;
+  } else {
+      bucket_meta_handler = new RGWBucketMetadataHandler;
+      bucket_instance_meta_handler = new RGWBucketInstanceMetadataHandler;
+  }
   mm->register_handler(bucket_meta_handler);
-  bucket_instance_meta_handler = new RGWBucketInstanceMetadataHandler;
   mm->register_handler(bucket_instance_meta_handler);
 }
