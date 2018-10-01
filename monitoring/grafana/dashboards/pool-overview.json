@@ -77,7 +77,7 @@
         "values": false
       },
       "lines": true,
-      "linewidth": 2,
+      "linewidth": 1,
       "links": [],
       "minSpan": 12,
       "nullPointMode": "null",
@@ -159,7 +159,7 @@
         "values": false
       },
       "lines": true,
-      "linewidth": 2,
+      "linewidth": 1,
       "links": [],
       "minSpan": 12,
       "nullPointMode": "null",
