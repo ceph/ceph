@@ -65,6 +65,15 @@ Run ``npm run build`` to build the project. The build artifacts will be
 stored in the ``dist/`` directory. Use the ``-prod`` flag for a
 production build. Navigate to ``https://localhost:8443``.
 
+Build the Code Documentation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Run ``npm run doc-build`` to generate code docs in the ``documentation/``
+directory. To make them accesible locally for a web browser, run
+``npm run doc-serve`` and they will become available at ``http://localhost:8444``.
+With ``npm run compodoc -- <opts>`` you may
+`fully configure it https://compodoc.app/guides/usage.html`_.
+
 Code linting and formatting
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
