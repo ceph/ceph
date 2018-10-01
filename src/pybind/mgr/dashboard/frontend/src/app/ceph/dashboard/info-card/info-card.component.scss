@@ -12,7 +12,7 @@ $logs-text-font-size: $card-font-min-size;
   border: 0.5px solid $color-info-card-border;
   border-radius: 3px;
   background-color: $color-solid-white;
-  box-shadow: 0 1px 1px rgba(3, 3, 3, 0.175);
+  box-shadow: 0 1px 1px $color-shadow-gray;
   margin: 0 -10px 20px;
   padding: 0 20px;
   width: auto;
