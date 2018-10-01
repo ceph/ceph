@@ -4,6 +4,9 @@
 # separate file to house the deploy_ceph function
 #
 
+DEPLOY_PHASE_COMPLETE_MESSAGE="deploy phase complete!"
+
+
 function _os_specific_install_deps {
     echo "Installing dependencies on the Salt Master node"
     local DEPENDENCIES="jq
@@ -189,7 +192,7 @@ function deploy_ceph {
     test "$RBD" && ceph_test_librbd_can_be_run
     if [ -z "$MDS" -a -z "$NFS_GANESHA" -a -z "$RGW" ] ; then
         echo "WWWW"
-        echo "Stages 0-3 OK, no roles requiring Stage 4: deploy phase complete!"
+        echo "Stages 0-3 OK, no roles requiring Stage 4: $DEPLOY_PHASE_COMPLETE_MESSAGE"
         return 0
     fi
     test -n "$NFS_GANESHA" && nfs_ganesha_no_root_squash
@@ -202,5 +205,6 @@ function deploy_ceph {
     fi
     ceph_cluster_status
     _zypper_ps
+    echo "Stages 0-4 OK: $DEPLOY_PHASE_COMPLETE_MESSAGE"
     return 0
 }
