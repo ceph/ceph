@@ -275,6 +275,23 @@ obj_version& RGWMetadataObject::get_version()
   return objv;
 }
 
+int RGWMetadataHandler::remove_by_metakey(RGWRados *store, string& metadata_key) {
+    string entry;
+    string type;
+    store->meta_mgr->parse_metadata_key(metadata_key, type, entry);
+
+    RGWMetadataObject *obj;
+    int ret = get(store, entry, &obj);
+    if (ret < 0) {
+        return ret;
+    }
+    RGWObjVersionTracker objv_tracker;
+    objv_tracker.read_version = obj->get_version();
+    delete obj;
+
+    return remove(store, entry, objv_tracker);
+}
+
 class RGWMetadataTopHandler : public RGWMetadataHandler {
   struct iter_data {
     set<string> sections;
@@ -293,6 +310,7 @@ public:
   virtual void get_pool_and_oid(RGWRados *store, const string& key, rgw_pool& pool, string& oid) override {}
 
   int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) override { return -ENOTSUP; }
+  int remove_by_metakey(RGWRados *store, string& metadata_key) override { return -ENOTSUP; }
 
   int list_keys_init(RGWRados *store, const string& marker, void **phandle) override {
     iter_data *data = new iter_data;
@@ -760,8 +778,19 @@ int RGWMetadataManager::put(string& metadata_key, bufferlist& bl,
   string entry;
 
   int ret = find_handler(metadata_key, &handler, entry);
-  if (ret < 0)
+  if (ret < 0) {
     return ret;
+  }
+
+  // archive existing bucket if needed
+  if (store->get_zone().tier_type == "archive") {
+      if (handler->get_type() == "bucket") {
+          size_t found = metadata_key.find("-deleted-");
+          if(found != string::npos) {
+             remove(metadata_key);
+          }
+      }
+  }
 
   JSONParser parser;
   if (!parser.parse(bl.c_str(), bl.length())) {
@@ -832,23 +861,11 @@ int RGWMetadataManager::remove(string& metadata_key)
   string entry;
 
   int ret = find_handler(metadata_key, &handler, entry);
-  if (ret < 0)
-    return ret;
-
-  RGWMetadataObject *obj;
-
-  ret = handler->get(store, entry, &obj);
   if (ret < 0) {
     return ret;
   }
 
-  RGWObjVersionTracker objv_tracker;
-
-  objv_tracker.read_version = obj->get_version();
-
-  delete obj;
-
-  return handler->remove(store, entry, objv_tracker);
+  return handler->remove_by_metakey(store, metadata_key);
 }
 
 int RGWMetadataManager::lock_exclusive(string& metadata_key, timespan duration, string& owner_id) {
@@ -1133,8 +1150,9 @@ int RGWMetadataManager::remove_entry(RGWMetadataHandler *handler,
   string section;
   RGWMetadataLogData log_data;
   int ret = pre_modify(handler, section, key, log_data, objv_tracker, MDLOG_STATUS_REMOVE);
-  if (ret < 0)
-    return ret;
+  if (ret < 0) {
+      return ret;
+  }
 
   string oid;
   rgw_pool pool;
@@ -1151,8 +1169,9 @@ int RGWMetadataManager::remove_entry(RGWMetadataHandler *handler,
   /* cascading ret into post_modify() */
 
   ret = post_modify(handler, section, key, log_data, objv_tracker, ret);
-  if (ret < 0)
-    return ret;
+  if (ret < 0) {
+      return ret;
+  }
 
   return 0;
 }
