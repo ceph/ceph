@@ -1207,7 +1207,7 @@ public:
   int dump_cache(Formatter *f);
   void dump_tree(CInode *in, const int cur_depth, const int max_depth, Formatter *f);
 
-  int cache_status(Formatter *f);
+  void cache_status(Formatter *f);
 
   void dump_resolve_status(Formatter *f) const;
   void dump_rejoin_status(Formatter *f) const;

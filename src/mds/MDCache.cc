@@ -7524,7 +7524,7 @@ void MDCache::check_memory_usage()
 
   if (cache_toofull()) {
     last_recall_state = clock::now();
-    mds->server->recall_client_state();
+    mds->server->recall_client_state(-1.0, false, nullptr);
   }
 
   // If the cache size had exceeded its limit, but we're back in bounds
@@ -12025,7 +12025,7 @@ void MDCache::show_cache()
     show_func(p.second);
 }
 
-int MDCache::cache_status(Formatter *f)
+void MDCache::cache_status(Formatter *f)
 {
   f->open_object_section("cache");
 
@@ -12034,7 +12034,6 @@ int MDCache::cache_status(Formatter *f)
   f->close_section();
 
   f->close_section();
-  return 0;
 }
 
 void MDCache::dump_tree(CInode *in, const int cur_depth, const int max_depth, Formatter *f) 
