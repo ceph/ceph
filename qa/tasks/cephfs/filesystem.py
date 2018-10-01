@@ -947,9 +947,17 @@ class Filesystem(MDSCluster):
         while True:
             status = self.status()
             if rank is not None:
-                mds_info = status.get_rank(self.id, rank)
-                current_state = mds_info['state'] if mds_info else None
-                log.info("Looked up MDS state for mds.{0}: {1}".format(rank, current_state))
+                try:
+                    mds_info = status.get_rank(self.id, rank)
+                    current_state = mds_info['state'] if mds_info else None
+                    log.info("Looked up MDS state for mds.{0}: {1}".format(rank, current_state))
+                except:
+                    mdsmap = self.get_mds_map(status=status)
+                    if rank in mdsmap['failed']:
+                        log.info("Waiting for rank {0} to come back.".format(rank))
+                        current_state = None
+                    else:
+                        raise
             elif mds_id is not None:
                 # mds_info is None if no daemon with this ID exists in the map
                 mds_info = status.get_mds(mds_id)
