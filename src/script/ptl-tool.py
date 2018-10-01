@@ -295,22 +295,16 @@ def build_branch(args):
         for indication in indications:
             message = message + indication + "\n"
 
+        G.git.merge(tip.hexsha, '--no-ff', m=message)
+
         if new_new_contributors:
             # Check out the PR, add a commit adding to .githubmap
-            HEAD = G.head.commit
-            log.info("adding new contributors to githubmap on top of PR #%s" % pr)
-            G.head.reset(commit=tip, index=True, working_tree=True)
+            log.info("adding new contributors to githubmap in merge commit")
             with open(".githubmap", "a") as f:
                 for c in new_new_contributors:
                     f.write("%s %s\n" % (c, new_new_contributors[c]))
             G.index.add([".githubmap"])
-            G.git.commit("-s", "-m", "githubmap: update contributors")
-            c = G.head.commit
-            G.head.reset(HEAD, index=True, working_tree=True)
-        else:
-            c = tip
-
-        G.git.merge(c.hexsha, '--no-ff', m=message)
+            G.git.commit("--amend", "--no-edit")
 
         if label:
             req = requests.post("https://api.github.com/repos/{project}/{repo}/issues/{pr}/labels".format(pr=pr, project=BASE_PROJECT, repo=BASE_REPO), data=json.dumps([label]), auth=(USER, PASSWORD))
