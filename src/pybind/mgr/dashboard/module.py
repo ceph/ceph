@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-openATTIC mgr plugin (based on CherryPy)
+ceph dashboard mgr plugin (based on CherryPy)
 """
 from __future__ import absolute_import
 

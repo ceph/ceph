@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=wrong-import-position,global-statement,protected-access
 """
-openATTIC module
+ceph dashboard module
 """
 from __future__ import absolute_import
 
