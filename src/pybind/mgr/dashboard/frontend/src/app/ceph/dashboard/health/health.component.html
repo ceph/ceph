@@ -7,29 +7,36 @@
     <cd-info-card cardTitle="Cluster Status"
                   i18n-cardTitle
                   class="col-sm-6 col-md-4 col-lg-3"
-                  [contentClass]="contentData.health.checks.length > 0 ? 'content-highlight content-row-size-1-5' : 'content-highlight'"
-                  (click)="contentData.health.checks.length > 0 ? healthChecksTarget.toggle() : ''">
-      <ng-template #healthChecks>
-        <p class="logs-link"
-           i18n>
-          &rarr; See <a (click)="viewportScroller.scrollToAnchor('logs')">Logs</a> for more details.
-        </p>
-        <ul>
-          <li *ngFor="let check of contentData.health.checks">
-            <span [ngStyle]="check.severity | healthColor">{{ check.type }}</span>: {{ check.summary.message }}
-          </li>
-        </ul>
-      </ng-template>
-      <div [ngClass]="contentData.health.checks.length > 0 ? 'info-card-content-clickable' : ''"
-           [ngStyle]="contentData.health.status | healthColor"
-           [popover]="contentData.health.checks.length > 0 ? healthChecks : ''"
-           triggers=""
-           #healthChecksTarget="bs-popover"
-           placement="bottom"
-           container="body"
-           containerClass="info-card-popover-cluster-status">
-        {{ contentData.health.status }}
-      </div>
+                  [contentClass]="contentData.health.checks.length > 0 ? 'content-highlight content-row-size-1-5' : 'content-highlight'">
+      <ng-container *ngIf="contentData.health.checks.length > 0">
+        <ng-template #healthChecks>
+          <p class="logs-link"
+             i18n>
+            &rarr; See <a (click)="viewportScroller.scrollToAnchor('logs')">Logs</a> for more details.
+          </p>
+          <ul>
+            <li *ngFor="let check of contentData.health.checks">
+              <span [ngStyle]="check.severity | healthColor">{{ check.type }}</span>: {{ check.summary.message }}
+            </li>
+          </ul>
+        </ng-template>
+        <div class="info-card-content-clickable"
+             [ngStyle]="contentData.health.status | healthColor"
+             [popover]="healthChecks"
+             triggers=""
+             #healthChecksTarget="bs-popover"
+             placement="bottom"
+             container="body"
+             containerClass="info-card-popover-cluster-status"
+             (click)="healthChecksTarget.toggle()">
+          {{ contentData.health.status }}
+        </div>
+      </ng-container>
+      <ng-container *ngIf="contentData.health.checks.length == 0">
+        <div [ngStyle]="contentData.health.status | healthColor">
+          {{ contentData.health.status }}
+        </div>
+      </ng-container>
     </cd-info-card>
 
     <cd-info-card cardTitle="Monitors"
