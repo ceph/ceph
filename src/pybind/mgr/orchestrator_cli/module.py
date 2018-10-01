@@ -90,6 +90,9 @@ class OrchestratorCli(MgrModule):
                 else:
                     done = True
 
+        if all(hasattr(c, 'error') and getattr(c, 'error')for c in completions):
+            raise Exception([getattr(c, 'error') for c in completions])
+
     def _list_devices(self, cmd):
         node = cmd.get('node', None)
 
