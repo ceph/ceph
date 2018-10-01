@@ -35,6 +35,7 @@
 #include "auth/cephx/CephxProtocol.h"
 #include "auth/AuthSessionHandler.h"
 
+#include "include/compat.h"
 #include "include/sock_compat.h"
 
 // Constant to limit starting sequence number to 2^31.  Nothing special about it, just a big number.  PLR
@@ -1021,10 +1022,11 @@ int Pipe::connect()
     ::close(sd);
 
   // create socket?
-  sd = ::socket(peer_addr.get_family(), SOCK_STREAM, 0);
+  sd = socket_cloexec(peer_addr.get_family(), SOCK_STREAM, 0);
   if (sd < 0) {
-    rc = -errno;
-    lderr(msgr->cct) << "connect couldn't create socket " << cpp_strerror(rc) << dendl;
+    int e = errno;
+    lderr(msgr->cct) << "connect couldn't create socket " << cpp_strerror(e) << dendl;
+    rc = -e;
     goto fail;
   }
 

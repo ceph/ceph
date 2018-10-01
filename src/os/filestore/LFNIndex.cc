@@ -169,7 +169,7 @@ int LFNIndex::collection_list_partial(const ghobject_t &start,
 int LFNIndex::fsync_dir(const vector<string> &path)
 {
   maybe_inject_failure();
-  int fd = ::open(get_full_path_subdir(path).c_str(), O_RDONLY);
+  int fd = ::open(get_full_path_subdir(path).c_str(), O_RDONLY|O_CLOEXEC);
   if (fd < 0)
     return -errno;
   FDCloser f(fd);
@@ -897,7 +897,7 @@ int LFNIndex::lfn_unlink(const vector<string> &path,
     }
   }
   string full_path = get_full_path(path, mangled_name);
-  int fd = ::open(full_path.c_str(), O_RDONLY);
+  int fd = ::open(full_path.c_str(), O_RDONLY|O_CLOEXEC);
   if (fd < 0)
     return -errno;
   FDCloser f(fd);

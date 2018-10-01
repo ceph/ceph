@@ -4207,7 +4207,7 @@ int BlueStore::_open_path()
     return -EINVAL;
   }
   assert(path_fd < 0);
-  path_fd = TEMP_FAILURE_RETRY(::open(path.c_str(), O_DIRECTORY));
+  path_fd = TEMP_FAILURE_RETRY(::open(path.c_str(), O_DIRECTORY|O_CLOEXEC));
   if (path_fd < 0) {
     int r = -errno;
     derr << __func__ << " unable to open " << path << ": " << cpp_strerror(r)
@@ -4236,7 +4236,7 @@ int BlueStore::_write_bdev_label(CephContext *cct,
   z.zero();
   bl.append(std::move(z));
 
-  int fd = TEMP_FAILURE_RETRY(::open(path.c_str(), O_WRONLY));
+  int fd = TEMP_FAILURE_RETRY(::open(path.c_str(), O_WRONLY|O_CLOEXEC));
   if (fd < 0) {
     fd = -errno;
     derr << __func__ << " failed to open " << path << ": " << cpp_strerror(fd)
@@ -4261,7 +4261,7 @@ int BlueStore::_read_bdev_label(CephContext* cct, string path,
 				bluestore_bdev_label_t *label)
 {
   dout(10) << __func__ << dendl;
-  int fd = TEMP_FAILURE_RETRY(::open(path.c_str(), O_RDONLY));
+  int fd = TEMP_FAILURE_RETRY(::open(path.c_str(), O_RDONLY|O_CLOEXEC));
   if (fd < 0) {
     fd = -errno;
     derr << __func__ << " failed to open " << path << ": " << cpp_strerror(fd)
@@ -4561,7 +4561,7 @@ void BlueStore::_close_alloc()
 int BlueStore::_open_fsid(bool create)
 {
   assert(fsid_fd < 0);
-  int flags = O_RDWR;
+  int flags = O_RDWR|O_CLOEXEC;
   if (create)
     flags |= O_CREAT;
   fsid_fd = ::openat(path_fd, "fsid", flags, 0644);
@@ -5265,7 +5265,7 @@ int BlueStore::_setup_block_symlink_or_file(
   dout(20) << __func__ << " name " << name << " path " << epath
 	   << " size " << size << " create=" << (int)create << dendl;
   int r = 0;
-  int flags = O_RDWR;
+  int flags = O_RDWR|O_CLOEXEC;
   if (create)
     flags |= O_CREAT;
   if (epath.length()) {

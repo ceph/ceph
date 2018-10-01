@@ -9,8 +9,10 @@
 #include <sstream>
 
 #include "include/assert.h"
-#include "common/safe_io.h"
 #include "common/errno.h"
+#include "common/safe_io.h"
+#include "include/compat.h"
+#include "include/sock_compat.h"
 
 /**
  * pre-fork fork/daemonize helper class
@@ -34,22 +36,23 @@ public:
 
   int prefork(std::string &err) {
     assert(!forked);
-    int r = ::socketpair(AF_UNIX, SOCK_STREAM, 0, fd);
     std::ostringstream oss;
+    int r = socketpair_cloexec(AF_UNIX, SOCK_STREAM, 0, fd);
     if (r < 0) {
-      oss << "[" << getpid() << "]: unable to create socketpair: " << cpp_strerror(errno);
+      int e = errno;
+      oss << "[" << getpid() << "]: unable to create socketpair: " << cpp_strerror(e);
       err = oss.str();
-      return r;
+      return (errno = e, -1);
     }
 
     forked = true;
 
     childpid = fork();
     if (childpid < 0) {
-      r = -errno;
-      oss << "[" << getpid() << "]: unable to fork: " << cpp_strerror(errno);
+      int e = errno;
+      oss << "[" << getpid() << "]: unable to fork: " << cpp_strerror(e);
       err = oss.str();
-      return r;
+      return (errno = e, -1);
     }
     if (is_child()) {
       ::close(fd[0]);

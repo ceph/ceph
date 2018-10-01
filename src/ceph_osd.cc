@@ -234,7 +234,7 @@ int main(int argc, const char **argv)
   {
     char fn[PATH_MAX];
     snprintf(fn, sizeof(fn), "%s/type", g_conf->osd_data.c_str());
-    int fd = ::open(fn, O_RDONLY);
+    int fd = ::open(fn, O_RDONLY|O_CLOEXEC);
     if (fd >= 0) {
       bufferlist bl;
       bl.read_fd(fd, 64);

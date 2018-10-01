@@ -12,6 +12,9 @@
  */
 
 #include <sstream>
+#include <limits>
+#include <fcntl.h>
+
 #include "Crypto.h"
 #ifdef USE_CRYPTOPP
 # include <cryptopp/modes.h>
@@ -37,7 +40,7 @@
 
 int get_random_bytes(char *buf, int len)
 {
-  int fd = TEMP_FAILURE_RETRY(::open("/dev/urandom", O_RDONLY));
+  int fd = TEMP_FAILURE_RETRY(::open("/dev/urandom", O_RDONLY|O_CLOEXEC));
   if (fd < 0)
     return -errno;
   int ret = safe_read_exact(fd, buf, len);

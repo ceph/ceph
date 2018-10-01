@@ -71,7 +71,7 @@ int FileJournal::_open(bool forwrite, bool create)
 	   << cpp_strerror(err) << dendl;
     }
   }
-  fd = TEMP_FAILURE_RETRY(::open(fn.c_str(), flags, 0644));
+  fd = TEMP_FAILURE_RETRY(::open(fn.c_str(), flags|O_CLOEXEC, 0644));
   if (fd < 0) {
     int err = errno;
     dout(2) << "FileJournal::_open unable to open journal "

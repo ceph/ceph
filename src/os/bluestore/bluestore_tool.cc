@@ -361,7 +361,7 @@ int main(int argc, char **argv)
 	}
       } else {
 	v += "\n";
-	int fd = ::open(p.c_str(), O_CREAT|O_TRUNC|O_WRONLY, 0600);
+	int fd = ::open(p.c_str(), O_CREAT|O_TRUNC|O_WRONLY|O_CLOEXEC, 0600);
 	if (fd < 0) {
 	  cerr << "error writing " << p << ": " << cpp_strerror(errno)
 	       << std::endl;
@@ -491,7 +491,7 @@ int main(int argc, char **argv)
 	  exit(EXIT_FAILURE);
 	}
 	string path = out_dir + "/" + dir + "/" + file;
-	int fd = ::open(path.c_str(), O_CREAT|O_WRONLY|O_TRUNC, 0644);
+	int fd = ::open(path.c_str(), O_CREAT|O_WRONLY|O_TRUNC|O_CLOEXEC, 0644);
 	if (fd < 0) {
 	  r = -errno;
 	  cerr << "open " << path << " failed: " << cpp_strerror(r) << std::endl;

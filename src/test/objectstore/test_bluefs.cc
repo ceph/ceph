@@ -7,12 +7,15 @@
 #include <time.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <random>
 #include <thread>
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
 #include "include/stringify.h"
 #include "common/errno.h"
 #include <gtest/gtest.h>
+
+#include <boost/random/random_device.hpp>
 
 #include "os/bluestore/BlueFS.h"
 
