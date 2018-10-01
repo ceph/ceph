@@ -72,6 +72,7 @@ public:
       return false;
     return true;
   }
+
   virtual ~RGWMetadataHandler() {}
   virtual string get_type() = 0;
 
@@ -79,6 +80,7 @@ public:
   virtual int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker,
                   real_time mtime, JSONObj *obj, sync_type_t type) = 0;
   virtual int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) = 0;
+  virtual int remove_by_metakey(RGWRados *store, string& metadata_key);
 
   virtual int list_keys_init(RGWRados *store, const string& marker, void **phandle) = 0;
   virtual int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated) = 0;
@@ -300,8 +302,6 @@ class RGWMetadataManager {
   // use the current period's log for mutating operations
   RGWMetadataLog* current_log = nullptr;
 
-  void parse_metadata_key(const string& metadata_key, string& type, string& entry);
-
   int find_handler(const string& metadata_key, RGWMetadataHandler **handler, string& entry);
   int pre_modify(RGWMetadataHandler *handler, string& section, const string& key,
                  RGWMetadataLogData& log_data, RGWObjVersionTracker *objv_tracker,
@@ -322,6 +322,8 @@ class RGWMetadataManager {
 public:
   RGWMetadataManager(CephContext *_cct, RGWRados *_store);
   ~RGWMetadataManager();
+
+  RGWRados* get_store() { return store; }
 
   int init(const std::string& current_period);
 
@@ -380,6 +382,8 @@ public:
   int unlock(string& metadata_key, string& owner_id);
 
   int get_log_shard_id(const string& section, const string& key, int *shard_id);
+
+  void parse_metadata_key(const string& metadata_key, string& type, string& entry);
 };
 
 template <typename F>
