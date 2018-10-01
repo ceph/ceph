@@ -989,6 +989,9 @@ private:
   /// restart the lease timeout timer
   void reset_lease_timeout();
 
+  /// cancel the lease timeout timer
+  void cancel_lease_timeout();
+
   /**
    * Cancel all of Paxos' timeout/renew events. 
    */
