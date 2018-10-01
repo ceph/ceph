@@ -150,3 +150,7 @@ Files: src/pybind/mgr/diskprediction/predictor/models/*
 Copyright: None
 License: Public domain
 
+Files: src/ceph-volume/plugin/zfs/*
+Copyright: 2018, Willem Jan Withagen
+License: BSD 3-clause
+
