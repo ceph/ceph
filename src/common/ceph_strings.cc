@@ -187,6 +187,10 @@ uint64_t ceph_release_features(int r)
 	if (r <= CEPH_RELEASE_MIMIC)
 	  return req;
 
+	req |= CEPH_FEATUREMASK_SERVER_NAUTILUS;
+	if (r<= CEPH_RELEASE_NAUTILUS)
+	  return req;
+	
 	return req;
 }
 
