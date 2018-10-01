@@ -2154,7 +2154,8 @@ private:
 
   void _dump_alloc_on_rebalance_failure();
   int _reconcile_bluefs_freespace();
-  int _balance_bluefs_freespace(PExtentVector *extents);
+  int _balance_bluefs_freespace(PExtentVector *extents,
+				KeyValueDB::Transaction synct);
   void _commit_bluefs_freespace(const PExtentVector& extents);
 
   CollectionRef _get_collection(const coll_t& cid);
@@ -2994,6 +2995,11 @@ public:
   KeyValueDB::Transaction get_fix_misreferences_txn() {
     return fix_misreferences_txn;
   }
+  KeyValueDB::Transaction get_bluefs_rebalance_txn(KeyValueDB *db) {
+    return bluefs_rebalance_txn ?
+      bluefs_rebalance_txn :
+      bluefs_rebalance_txn = db->get_transaction();
+  }
 
 private:
   unsigned to_repair_cnt = 0;
@@ -3004,6 +3010,7 @@ private:
   KeyValueDB::Transaction fix_shared_blob_txn;
 
   KeyValueDB::Transaction fix_misreferences_txn;
+  KeyValueDB::Transaction bluefs_rebalance_txn;
 
   StoreSpaceTracker space_usage_tracker;
 
