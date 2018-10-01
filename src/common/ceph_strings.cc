@@ -183,6 +183,10 @@ uint64_t ceph_release_features(int r)
 	if (r <= CEPH_RELEASE_LUMINOUS)
 		return req;
 
+	req |= CEPH_FEATUREMASK_SERVER_MIMIC;
+	if (r <= CEPH_RELEASE_MIMIC)
+	  return req;
+
 	return req;
 }
 
