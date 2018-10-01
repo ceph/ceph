@@ -16,6 +16,36 @@ class TestLsblkParser(object):
         assert result['SIZE'] == '10M'
 
 
+class TestBlkidParser(object):
+
+    def test_parses_whitespace_values(self):
+        output = '''/dev/sdb1: UUID="62416664-cbaf-40bd-9689-10bd337379c3" TYPE="xfs" PART_ENTRY_SCHEME="gpt" PART_ENTRY_NAME="ceph data" PART_ENTRY_UUID="b89c03bc-bf58-4338-a8f8-a2f484852b4f"'''  # noqa
+        result = disk._blkid_parser(output)
+        assert result['PARTLABEL'] == 'ceph data'
+
+    def test_ignores_unmapped(self):
+        output = '''/dev/sdb1: UUID="62416664-cbaf-40bd-9689-10bd337379c3" TYPE="xfs" PART_ENTRY_SCHEME="gpt" PART_ENTRY_NAME="ceph data" PART_ENTRY_UUID="b89c03bc-bf58-4338-a8f8-a2f484852b4f"'''  # noqa
+        result = disk._blkid_parser(output)
+        assert len(result.keys()) == 4
+
+    def test_translates_to_partuuid(self):
+        output = '''/dev/sdb1: UUID="62416664-cbaf-40bd-9689-10bd337379c3" TYPE="xfs" PART_ENTRY_SCHEME="gpt" PART_ENTRY_NAME="ceph data" PART_ENTRY_UUID="b89c03bc-bf58-4338-a8f8-a2f484852b4f"'''  # noqa
+        result = disk._blkid_parser(output)
+        assert result['PARTUUID'] == 'b89c03bc-bf58-4338-a8f8-a2f484852b4f'
+
+
+class TestBlkid(object):
+
+    def test_parses_translated(self, stub_call):
+        output = '''/dev/sdb1: UUID="62416664-cbaf-40bd-9689-10bd337379c3" TYPE="xfs" PART_ENTRY_SCHEME="gpt" PART_ENTRY_NAME="ceph data" PART_ENTRY_UUID="b89c03bc-bf58-4338-a8f8-a2f484852b4f"'''  # noqa
+        stub_call((output.split(), [], 0))
+        result = disk.blkid('/dev/sdb1')
+        assert result['PARTUUID'] == 'b89c03bc-bf58-4338-a8f8-a2f484852b4f'
+        assert result['PARTLABEL'] == 'ceph data'
+        assert result['UUID'] == '62416664-cbaf-40bd-9689-10bd337379c3'
+        assert result['TYPE'] == 'xfs'
+
+
 class TestDeviceFamily(object):
 
     def test_groups_multiple_devices(self, stub_call):
