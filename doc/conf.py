@@ -33,9 +33,12 @@ html_logo = 'logo.png'
 html_favicon = 'favicon.ico'
 html_use_smartypants = True
 html_show_sphinx = False
+html_static_path = ["_static"]
 html_sidebars = {
     '**': ['smarttoc.html', 'searchbox.html'],
     }
+
+sys.path.insert(0, os.path.abspath('_ext'))
 
 extensions = [
     'sphinx.ext.autodoc',
@@ -43,6 +46,7 @@ extensions = [
     'sphinx.ext.todo',
     'sphinxcontrib.ditaa',
     'breathe',
+    'edit_on_github',
     ]
 ditaa = 'ditaa'
 todo_include_todos = True
@@ -66,3 +70,13 @@ breathe_domain_by_extension = {'py': 'py', 'c': 'c', 'h': 'c', 'cc': 'cxx', 'hpp
 pybind = os.path.join(top_level, 'src/pybind')
 if pybind not in sys.path:
     sys.path.insert(0, pybind)
+
+# the docs are rendered with github links pointing to master. the javascript
+# snippet in _static/ceph.js rewrites the edit links when a page is loaded, to
+# point to the correct branch.
+edit_on_github_project = 'ceph/ceph'
+edit_on_github_branch = 'master'
+
+# handles edit-on-github and old version warning display
+def setup(app):
+    app.add_javascript('js/ceph.js')
