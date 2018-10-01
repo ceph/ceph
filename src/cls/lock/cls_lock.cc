@@ -123,15 +123,23 @@ static int lock_obj(cls_method_context_t hctx,
 {
   bool exclusive = lock_type == LOCK_EXCLUSIVE;
   lock_info_t linfo;
-  bool fail_if_exists = (flags & LOCK_FLAG_RENEW) == 0;
+  bool fail_if_exists = (flags & LOCK_FLAG_MAY_RENEW) == 0;
+  bool fail_if_does_not_exist = flags & LOCK_FLAG_MUST_RENEW;
 
-  CLS_LOG(20, "requested lock_type=%s fail_if_exists=%d", cls_lock_type_str(lock_type), fail_if_exists);
+  CLS_LOG(20, "requested lock_type=%s fail_if_exists=%d fail_if_does_not_exist=%d", cls_lock_type_str(lock_type), fail_if_exists, fail_if_does_not_exist);
   if (lock_type != LOCK_EXCLUSIVE &&
       lock_type != LOCK_SHARED)
     return -EINVAL;
 
   if (name.empty())
     return -EINVAL;
+
+  if (!fail_if_exists && fail_if_does_not_exist) {
+    // at most one of LOCK_FLAG_MAY_RENEW and LOCK_FLAG_MUST_RENEW may
+    // be set since they have different implications if the lock does
+    // not already exist
+    return -EINVAL;
+  }
 
   // see if there's already a locker
   int r = read_lock(hctx, name, &linfo);
@@ -160,11 +168,13 @@ static int lock_obj(cls_method_context_t hctx,
   CLS_LOG(20, "existing_lock_type=%s", cls_lock_type_str(existing_lock_type));
   iter = lockers.find(id);
   if (iter != lockers.end()) {
-    if (fail_if_exists) {
+    if (fail_if_exists && !fail_if_does_not_exist) {
       return -EEXIST;
     } else {
       lockers.erase(iter); // remove old entry
     }
+  } else if (fail_if_does_not_exist) {
+    return -ENOENT;
   }
 
   if (!lockers.empty()) {
@@ -421,7 +431,7 @@ int assert_locked(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return -EINVAL;
   }
 
-  if (op.type != LOCK_EXCLUSIVE && op.type != LOCK_SHARED) {
+  if (!cls_lock_is_valid(op.type)) {
     return -EINVAL;
   }
 
@@ -493,7 +503,7 @@ int set_cookie(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return -EINVAL;
   }
 
-  if (op.type != LOCK_EXCLUSIVE && op.type != LOCK_SHARED) {
+  if (!cls_lock_is_valid(op.type)) {
     return -EINVAL;
   }
 

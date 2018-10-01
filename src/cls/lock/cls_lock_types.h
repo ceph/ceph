@@ -7,7 +7,8 @@
 #include "msg/msg_types.h"
 
 /* lock flags */
-#define LOCK_FLAG_RENEW 0x1        /* idempotent lock acquire */
+#define LOCK_FLAG_MAY_RENEW 0x1    /* idempotent lock acquire */
+#define LOCK_FLAG_MUST_RENEW 0x2   /* lock must already be acquired */
 
 enum ClsLockType {
   LOCK_NONE      = 0,

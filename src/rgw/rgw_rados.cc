@@ -5501,7 +5501,7 @@ int RGWRados::lock_exclusive(rgw_pool& pool, const string& oid, timespan& durati
   l.set_duration(ut);
   l.set_cookie(owner_id);
   l.set_tag(zone_id);
-  l.set_renew(true);
+  l.set_may_renew(true);
   
   return l.lock_exclusive(&io_ctx, oid);
 }
