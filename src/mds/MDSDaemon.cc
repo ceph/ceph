@@ -244,6 +244,11 @@ void MDSDaemon::set_up_admin_socket()
                                      asok_hook,
                                      "show cache status");
   ceph_assert(r == 0);
+  r = admin_socket->register_command("cache drop",
+                                     "cache drop name=timeout,type=CephInt,range=1",
+                                     asok_hook,
+                                     "drop cache");
+  ceph_assert(r == 0);
   r = admin_socket->register_command("dump tree",
 				     "dump tree "
 				     "name=root,type=CephString,req=true "
@@ -696,6 +701,9 @@ COMMAND("heap " \
 	"name=heapcmd,type=CephChoices,strings=dump|start_profiler|stop_profiler|release|stats", \
 	"show heap usage info (available only if compiled with tcmalloc)", \
 	"mds", "*", "cli,rest")
+COMMAND("cache drop name=timeout,type=CephInt,range=1", "trim cache and optionally "
+	"request client to release all caps and flush the journal", "mds",
+	"r", "cli,rest")
 };
 
 
@@ -861,8 +869,8 @@ int MDSDaemon::_handle_command(
     else {
       bool handled;
       try {
-	handled = mds_rank->handle_command(cmdmap, m, &r, &ds, &ss,
-					   need_reply);
+        handled = mds_rank->handle_command(cmdmap, m, &r, &ds, &ss,
+                                           run_later, need_reply);
 	if (!handled) {
 	  // MDSDaemon doesn't know this command
 	  ss << "unrecognized command! " << prefix;

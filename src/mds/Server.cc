@@ -493,17 +493,25 @@ void Server::handle_client_session(const MClientSession::const_ref &m)
   }
 }
 
+
+void Server::flush_session(Session *session, MDSGatherBuilder *gather) {
+  if (!session->is_open() ||
+      !session->get_connection() ||
+      !session->get_connection()->has_feature(CEPH_FEATURE_EXPORT_PEER)) {
+    return;
+  }
+
+  version_t seq = session->wait_for_flush(gather->new_sub());
+  mds->send_message_client(
+    MClientSession::create(CEPH_SESSION_FLUSHMSG, seq), session);
+}
+
 void Server::flush_client_sessions(set<client_t>& client_set, MDSGatherBuilder& gather)
 {
   for (set<client_t>::iterator p = client_set.begin(); p != client_set.end(); ++p) {
     Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(p->v));
     ceph_assert(session);
-    if (!session->is_open() ||
-	!session->get_connection() ||
-	!session->get_connection()->has_feature(CEPH_FEATURE_EXPORT_PEER))
-      continue;
-    version_t seq = session->wait_for_flush(gather.new_sub());
-    mds->send_message_client(MClientSession::create(CEPH_SESSION_FLUSHMSG, seq), session);
+    flush_session(session, &gather);
   }
 }
 
@@ -1268,8 +1276,12 @@ void Server::recover_filelocks(CInode *in, bufferlist locks, int64_t client)
  * to trim some caps, and consequently unpin some inodes in the MDCache so
  * that it can trim too.
  */
-void Server::recall_client_state(void)
-{
+void Server::recall_client_state(double ratio, bool flush_client_session,
+                                 MDSGatherBuilder *gather) {
+  if (flush_client_session) {
+    assert(gather != nullptr);
+  }
+
   /* try to recall at least 80% of all caps */
   uint64_t max_caps_per_client = Capability::count() * g_conf().get_val<double>("mds_max_ratio_caps_per_client");
   uint64_t min_caps_per_client = g_conf().get_val<uint64_t>("mds_min_caps_per_client");
@@ -1283,16 +1295,18 @@ void Server::recall_client_state(void)
   /* ratio: determine the amount of caps to recall from each client. Use
    * percentage full over the cache reservation. Cap the ratio at 80% of client
    * caps. */
-  double ratio = 1.0-fmin(0.80, mdcache->cache_toofull_ratio());
+  if (ratio < 0.0)
+    ratio = 1.0 - fmin(0.80, mdcache->cache_toofull_ratio());
 
-  dout(10) << "recall_client_state " << ratio
-	   << ", caps per client " << min_caps_per_client << "-" << max_caps_per_client
-	   << dendl;
+  dout(10) << __func__ << ": ratio=" << ratio << ", caps per client "
+           << min_caps_per_client << "-" << max_caps_per_client << dendl;
 
   set<Session*> sessions;
   mds->sessionmap.get_client_session_set(sessions);
+
   for (auto &session : sessions) {
     if (!session->is_open() ||
+        !session->get_connection() ||
 	!session->info.inst.name.is_client())
       continue;
 
@@ -1306,6 +1320,9 @@ void Server::recall_client_state(void)
       auto m = MClientSession::create(CEPH_SESSION_RECALL_STATE);
       m->head.max_caps = newlim;
       mds->send_message_client(m, session);
+      if (flush_client_session) {
+        flush_session(session, gather);
+      }
       session->notify_recall_sent(newlim);
     }
   }
