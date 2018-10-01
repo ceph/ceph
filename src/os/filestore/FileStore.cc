@@ -1413,22 +1413,28 @@ int FileStore::version_stamp_is_valid(uint32_t *version)
     return 0;
 }
 
-int FileStore::flush_cache()
+int FileStore::flush_cache(ostream *os)
 {
   string drop_caches_file = "/proc/sys/vm/drop_caches";
-  int drop_caches_fd = ::open(drop_caches_file.c_str(), O_WRONLY), ret = 0;
+  int drop_caches_fd = ::open(drop_caches_file.c_str(), O_WRONLY|O_CLOEXEC), ret = 0;
   char buf[2] = "3";
-  int len = strlen(buf);
+  size_t len = strlen(buf);
 
   if (drop_caches_fd < 0) {
     ret = -errno;
     derr << __FUNC__ << ": failed to open " << drop_caches_file << ": " << cpp_strerror(ret) << dendl;
+    if (os) {
+      *os << "FileStore flush_cache: failed to open " << drop_caches_file << ": " << cpp_strerror(ret);
+    }
     return ret;
   }
 
   if (::write(drop_caches_fd, buf, len) < 0) {
     ret = -errno;
     derr << __FUNC__ << ": failed to write to " << drop_caches_file << ": " << cpp_strerror(ret) << dendl;
+    if (os) {
+      *os << "FileStore flush_cache: failed to write to " << drop_caches_file << ": " << cpp_strerror(ret);
+    }
     goto out;
   }
 
