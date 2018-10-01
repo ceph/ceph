@@ -220,6 +220,7 @@ class MDSRank {
                             const std::set <std::string> &changed)
     {
       mdcache->handle_conf_change(conf, changed, *mdsmap);
+      sessionmap.handle_conf_change(conf, changed);
       purge_queue.handle_conf_change(conf, changed, *mdsmap);
     }
 
