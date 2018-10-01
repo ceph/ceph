@@ -63,14 +63,7 @@ $logs-text-font-size: $card-font-min-size;
 
 .content-row-size-2 {
   margin-right: -50%;
-  transform: translate(-50%, -33%);
-  $font-size-factor: 0.8;
-  @include fluid-font-size(
-    $card-font-min-width,
-    $card-font-max-width,
-    $card-font-min-size * $font-size-factor,
-    $card-font-max-size * $font-size-factor
-  );
+  transform: translate(-50%, -40%);
 }
 
 .content-highlight {
