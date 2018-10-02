@@ -20,7 +20,7 @@ class SingleType(object):
         # TODO: add --fast-devices and --slow-devices so these can be customized
         self.hdds = [device for device in devices if device.sys_api['rotational'] == '1']
         self.ssds = [device for device in devices if device.sys_api['rotational'] == '0']
-        self.computed = {'osds': [], 'vgs': []}
+        self.computed = {'osds': [], 'vgs': [], 'filtered_devices': args.filtered_devices}
         self.validate()
         self.compute()
 
@@ -73,7 +73,7 @@ class SingleType(object):
         osds = self.computed['osds']
         for device in self.hdds:
             for hdd in range(self.osds_per_device):
-                osd = {'data': {}, 'block.db': {}}
+                osd = {'data': {}, 'block.db': {}, 'used_by_ceph': device.used_by_ceph}
                 osd['data']['path'] = device.abspath
                 osd['data']['size'] = device.sys_api['size'] / self.osds_per_device
                 osd['data']['parts'] = self.osds_per_device
@@ -86,13 +86,15 @@ class SingleType(object):
         for device in self.ssds:
             extents = lvm.sizing(device.sys_api['size'], parts=self.osds_per_device)
             for ssd in range(self.osds_per_device):
-                osd = {'data': {}, 'block.db': {}}
+                osd = {'data': {}, 'block.db': {}, 'used_by_ceph': device.used_by_ceph}
                 osd['data']['path'] = device.abspath
                 osd['data']['size'] = extents['sizes']
                 osd['data']['parts'] = extents['parts']
                 osd['data']['percentage'] = 100 / self.osds_per_device
                 osd['data']['human_readable_size'] = str(disk.Size(b=extents['sizes']))
                 osds.append(osd)
+
+        self.computed['changed'] = len(osds) > 0
 
     def execute(self):
         """
@@ -135,7 +137,7 @@ class MixedType(object):
         # TODO: add --fast-devices and --slow-devices so these can be customized
         self.hdds = [device for device in devices if device.sys_api['rotational'] == '1']
         self.ssds = [device for device in devices if device.sys_api['rotational'] == '0']
-        self.computed = {'osds': []}
+        self.computed = {'osds': [], 'filtered_devices': args.filtered_devices}
         self.block_db_size = self.get_block_size()
         self.system_vgs = lvm.VolumeGroups()
         self.dbs_needed = len(self.hdds) * self.osds_per_device
@@ -213,7 +215,7 @@ class MixedType(object):
 
         for device in self.hdds:
             for hdd in range(self.osds_per_device):
-                osd = {'data': {}, 'block.db': {}}
+                osd = {'data': {}, 'block.db': {}, 'used_by_ceph': device.used_by_ceph}
                 osd['data']['path'] = device.abspath
                 osd['data']['size'] = device.sys_api['size'] / self.osds_per_device
                 osd['data']['percentage'] = 100 / self.osds_per_device
@@ -225,6 +227,8 @@ class MixedType(object):
                 osd['block.db']['human_readable_size'] = str(self.block_db_size)
                 osd['block.db']['percentage'] = self.vg_extents['percentages']
                 osds.append(osd)
+
+        self.computed['changed'] = len(osds) > 0
 
     def execute(self):
         """

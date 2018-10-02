@@ -178,7 +178,7 @@ class MixedType(object):
         self.devices = devices
         self.hdds = [device for device in devices if device.sys_api['rotational'] == '1']
         self.ssds = [device for device in devices if device.sys_api['rotational'] == '0']
-        self.computed = {'osds': [], 'vg': None}
+        self.computed = {'osds': [], 'vg': None, 'filtered_devices': args.filtered_devices}
         self.blank_ssds = []
         self.journals_needed = len(self.hdds) * self.osds_per_device
         self.journal_size = get_journal_size(args)
@@ -320,7 +320,7 @@ class MixedType(object):
             for osd in range(self.osds_per_device):
                 device_size = disk.Size(b=device.sys_api['size'])
                 data_size = device_size / self.osds_per_device
-                osd = {'data': {}, 'journal': {}}
+                osd = {'data': {}, 'journal': {}, 'used_by_ceph': device.used_by_ceph}
                 osd['data']['path'] = device.path
                 osd['data']['size'] = data_size.b
                 osd['data']['percentage'] = 100 / self.osds_per_device
@@ -330,6 +330,8 @@ class MixedType(object):
                 osd['journal']['percentage'] = int(self.journal_size.gb * 100 / vg_free)
                 osd['journal']['human_readable_size'] = str(self.journal_size)
                 osds.append(osd)
+
+        self.computed['changed'] = len(osds) > 0
 
     def execute(self):
         """
