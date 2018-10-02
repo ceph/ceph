@@ -44,7 +44,7 @@
 
 %if %{with selinux}
 # get selinux policy version
-%{!?_selinux_policy_version: %global _selinux_policy_version %(sed -e 's,.*selinux-policy-\\([^/]*\\)/.*,\\1,' /usr/share/selinux/devel/policyhelp 2>/dev/null || echo 0.0.0)}
+%{!?_selinux_policy_version: %global _selinux_policy_version 0.0.0}
 %endif
 
 %{!?_udevrulesdir: %global _udevrulesdir /lib/udev/rules.d}
@@ -100,7 +100,6 @@ BuildRequires:	sharutils
 %if 0%{with selinux}
 BuildRequires:	checkpolicy
 BuildRequires:	selinux-policy-devel
-BuildRequires:	/usr/share/selinux/devel/policyhelp
 %endif
 %if 0%{with make_check}
 %if 0%{?fedora} || 0%{?rhel}
