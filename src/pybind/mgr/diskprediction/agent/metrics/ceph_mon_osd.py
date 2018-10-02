@@ -82,7 +82,9 @@ class CephMonOsdAgent(MetricsAgent):
             return 'histogram'
         return ''
 
-    def _generate_osd(self, cluster_id, service_name, perf_counts):
+    def _generate_osd(self, cluster_id, service_name, perf_counts, osds_state):
+        apply_latency_ms = -1
+        comit_latency_ms = -1
         obj_api = ClusterAPI(self._module_inst)
         service_id = service_name[4:]
         d_osd = CephOSD()
@@ -96,6 +98,12 @@ class CephMonOsdAgent(MetricsAgent):
         d_osd.tags['host_domain_id'] = \
             '%s_%s' % (cluster_id,
                        obj_api.get_osd_hostname(d_osd.tags['osd_id']))
+        for osd_state in osds_state:
+            if osd_state['osd'] == int(service_id):
+                apply_latency_ms = osd_state.get('perf_stat', {}).get('apply_latency_ms')
+                comit_latency_ms = osd_state.get('perf_stat', {}).get('commit_latency_ms')
+                break
+
         for i_key, i_val in perf_counts.iteritems():
             if i_key[:4] == 'osd.':
                 key_name = i_key[4:]
@@ -117,6 +125,8 @@ class CephMonOsdAgent(MetricsAgent):
                 round(float(stat_bytes_used) / float(stat_bytes) * 100, 4)
         else:
             d_osd.fields['stat_bytes_used_percentage'] = 0.0000
+        d_osd.fields['apply_latency_ms'] = apply_latency_ms
+        d_osd.fields['comit_latency_ms'] = comit_latency_ms
         self.data.append(d_osd)
 
     def _generate_mon(self, cluster_id, service_name, perf_counts):
@@ -148,6 +158,7 @@ class CephMonOsdAgent(MetricsAgent):
         # process data and save to 'self.data'
         obj_api = ClusterAPI(self._module_inst)
         perf_data = obj_api.get_all_perf_counters()
+        osds_state = obj_api.get('osd_stats')
         if not perf_data and not isinstance(perf_data, dict):
             self._logger.error('unable to get all perf counters')
             return
@@ -156,4 +167,4 @@ class CephMonOsdAgent(MetricsAgent):
             if n_name[0:3].lower() == 'mon':
                 self._generate_mon(cluster_id, n_name, i_perf)
             elif n_name[0:3].lower() == 'osd':
-                self._generate_osd(cluster_id, n_name, i_perf)
+                self._generate_osd(cluster_id, n_name, i_perf, osds_state.get('osd_stats', []))
