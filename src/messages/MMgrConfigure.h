@@ -16,6 +16,7 @@
 #define CEPH_MMGRCONFIGURE_H_
 
 #include "msg/Message.h"
+#include "mgr/OSDPerfMetricQuery.h"
 
 /**
  * This message is sent from ceph-mgr to MgrClient, instructing it
@@ -26,7 +27,7 @@ public:
   friend factory;
 private:
 
-  static constexpr int HEAD_VERSION = 2;
+  static constexpr int HEAD_VERSION = 3;
   static constexpr int COMPAT_VERSION = 1;
 
 public:
@@ -35,6 +36,8 @@ public:
   // Default 0 means if unspecified will include all stats
   uint32_t stats_threshold = 0;
 
+  std::list<OSDPerfMetricQuery> osd_perf_metric_queries;
+
   void decode_payload() override
   {
     auto p = payload.cbegin();
@@ -42,12 +45,16 @@ public:
     if (header.version >= 2) {
       decode(stats_threshold, p);
     }
+    if (header.version >= 3) {
+      decode(osd_perf_metric_queries, p);
+    }
   }
 
   void encode_payload(uint64_t features) override {
     using ceph::encode;
     encode(stats_period, payload);
     encode(stats_threshold, payload);
+    encode(osd_perf_metric_queries, payload);
   }
 
   const char *get_type_name() const override { return "mgrconfigure"; }

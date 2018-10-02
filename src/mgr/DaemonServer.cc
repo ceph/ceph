@@ -2508,9 +2508,16 @@ void DaemonServer::_send_configure(ConnectionRef c)
 {
   ceph_assert(lock.is_locked_by_me());
 
+  OSDPerfMetricQuery query;
+
   auto configure = new MMgrConfigure();
   configure->stats_period = g_conf().get_val<int64_t>("mgr_stats_period");
   configure->stats_threshold = g_conf().get_val<int64_t>("mgr_stats_threshold");
+
+  if (c->peer_is_osd()) {
+    configure->osd_perf_metric_queries.push_back(query);
+  }
+
   c->send_message(configure);
 }
 

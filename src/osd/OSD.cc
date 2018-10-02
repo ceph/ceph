@@ -2785,6 +2785,10 @@ int OSD::init()
     goto out;
 
   mgrc.set_pgstats_cb([this](){ return collect_pg_stats(); });
+  mgrc.set_perf_metric_query_cb(
+      [this](const std::list<OSDPerfMetricQuery> &queries){ set_perf_queries(queries);},
+      [this](OSDPerfMetricReport *report){ get_perf_report(report);
+    });
   mgrc.init();
   client_messenger->add_dispatcher_head(&mgrc);
 
@@ -9763,6 +9767,11 @@ int OSD::init_op_flags(OpRequestRef& op)
   return 0;
 }
 
+void OSD::set_perf_queries(const std::list<OSDPerfMetricQuery> &queries) {
+}
+
+void OSD::get_perf_report(OSDPerfMetricReport *report) {
+}
 
 // =============================================================
 
