@@ -120,7 +120,7 @@ class Device(object):
     def used_by_ceph(self):
         # only filter out data devices as journals could potentially be reused
         osd_ids = [lv.tags.get("ceph.osd_id") for lv in self.lvs
-                   if lv.tags.get("ceph.type") == "data"]
+                   if lv.tags.get("ceph.type") in ["data", "block"]]
         return any(osd_ids)
 
 
