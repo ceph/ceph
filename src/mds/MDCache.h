@@ -118,6 +118,9 @@ static const int PREDIRTY_SHALLOW = 4; // only go to immediate parent (for easie
 
 class MDCache {
  public:
+  using clock = ceph::coarse_mono_clock;
+  using time = ceph::coarse_mono_time;
+
   // my master
   MDSRank *mds;
 
@@ -752,7 +755,7 @@ public:
   void trim_client_leases();
   void check_memory_usage();
 
-  utime_t last_recall_state;
+  time last_recall_state;
 
   // shutdown
 private:
