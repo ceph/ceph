@@ -686,6 +686,8 @@ def get_devices(_sys_block_path='/sys/block', _dev_path='/dev', _mapper_path='/d
         # Ensure that the diskname is an absolute path and that it never points
         # to a /dev/dm-* device
         diskname = mapper_devs.get(block) or dev_devs.get(block)
+        if not diskname:
+            continue
 
         # If the mapper device is a logical volume it gets excluded
         if is_mapper_device(diskname):
