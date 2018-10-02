@@ -2822,9 +2822,10 @@ CInode* Server::rdlock_path_pin_ref(MDRequestRef& mdr, int n,
   if (r > 0)
     return NULL; // delayed
   if (r < 0) {  // error
-    if (r == -ENOENT && n == 0 && mdr->dn[n].size()) {
-      if (!no_lookup)
-	mdr->tracedn = mdr->dn[n][mdr->dn[n].size()-1];
+    if (r == -ENOENT && n == 0 && !mdr->dn[n].empty()) {
+      if (!no_lookup) {
+        mdr->tracedn = mdr->dn[n].back();
+      }
       respond_to_request(mdr, r);
     } else if (r == -ESTALE) {
       dout(10) << "FAIL on ESTALE but attempting recovery" << dendl;
@@ -5172,6 +5173,11 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
 void Server::handle_client_mkdir(MDRequestRef& mdr)
 {
   MClientRequest *req = mdr->client_request;
+  if (req->get_filepath().is_last_dot_or_dotdot()) {
+    respond_to_request(mdr, -EEXIST);
+    return;
+  }
+
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
   CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, false, false, false);
   if (!dn) return;
@@ -5871,20 +5877,25 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
   bool rmdir = false;
   if (req->get_op() == CEPH_MDS_OP_RMDIR) rmdir = true;
 
-  if (req->get_filepath().depth() == 0) {
+  const filepath& refpath = req->get_filepath();
+  if (refpath.depth() == 0) {
     respond_to_request(mdr, -EINVAL);
     return;
-  }    
+  }
+  if (refpath.is_last_dot_or_dotdot()) {
+    respond_to_request(mdr, -ENOTEMPTY);
+    return;
+  }
 
   // traverse to path
   vector<CDentry*> trace;
   CInode *in;
-  int r = mdcache->path_traverse(mdr, NULL, NULL, req->get_filepath(), &trace, &in, MDS_TRAVERSE_FORWARD);
+  int r = mdcache->path_traverse(mdr, NULL, NULL, refpath, &trace, &in, MDS_TRAVERSE_FORWARD);
   if (r > 0) return;
   if (r < 0) {
     if (r == -ESTALE) {
       dout(10) << "FAIL on ESTALE but attempting recovery" << dendl;
-      mdcache->find_ino_peers(req->get_filepath().get_ino(), new C_MDS_TryFindInode(this, mdr));
+      mdcache->find_ino_peers(refpath.get_ino(), new C_MDS_TryFindInode(this, mdr));
       return;
     }
     respond_to_request(mdr, r);
@@ -5895,7 +5906,7 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
     return;
   }
 
-  CDentry *dn = trace[trace.size()-1];
+  CDentry *dn = trace.back();
   assert(dn);
   if (!dn->is_auth()) {
     mdcache->request_forward(mdr, dn->authority().first);
@@ -5950,9 +5961,9 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
 
   // lock
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
-
-  for (int i=0; i<(int)trace.size()-1; i++)
+  for (int i=0; i<(int)trace.size()-1; i++) {
     rdlocks.insert(&trace[i]->lock);
+  }
   xlocks.insert(&dn->lock);
   wrlocks.insert(&diri->filelock);
   wrlocks.insert(&diri->nestlock);
@@ -6230,7 +6241,7 @@ void Server::handle_slave_rmdir_prep(MDRequestRef& mdr)
     return;
   }
   assert(r == 0);
-  CDentry *dn = trace[trace.size()-1];
+  CDentry *dn = trace.back();
   dout(10) << " dn " << *dn << dendl;
   mdr->pin(dn);
 
@@ -6584,6 +6595,11 @@ void Server::handle_client_rename(MDRequestRef& mdr)
     respond_to_request(mdr, -EINVAL);
     return;
   }
+  if (srcpath.is_last_dot_or_dotdot() || destpath.is_last_dot_or_dotdot()) {
+    respond_to_request(mdr, -EBUSY);
+    return;
+  }
+
   boost::string_view destname = destpath.last_dentry();
 
   vector<CDentry*>& srctrace = mdr->dn[1];
@@ -6617,7 +6633,7 @@ void Server::handle_client_rename(MDRequestRef& mdr)
 
   }
   assert(!srctrace.empty());
-  CDentry *srcdn = srctrace[srctrace.size()-1];
+  CDentry *srcdn = srctrace.back();
   dout(10) << " srcdn " << *srcdn << dendl;
   if (srcdn->last != CEPH_NOSNAP) {
     respond_to_request(mdr, -EROFS);
@@ -7633,7 +7649,7 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
   }
   assert(r == 0);  // we shouldn't get an error here!
       
-  CDentry *destdn = trace[trace.size()-1];
+  CDentry *destdn = trace.back();
   CDentry::linkage_t *destdnl = destdn->get_projected_linkage();
   dout(10) << " destdn " << *destdn << dendl;
   mdr->pin(destdn);
@@ -7649,7 +7665,7 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
   // srcpath must not point to a null dentry
   assert(srci != nullptr);
       
-  CDentry *srcdn = trace[trace.size()-1];
+  CDentry *srcdn = trace.back();
   CDentry::linkage_t *srcdnl = srcdn->get_projected_linkage();
   dout(10) << " srcdn " << *srcdn << dendl;
   mdr->pin(srcdn);
