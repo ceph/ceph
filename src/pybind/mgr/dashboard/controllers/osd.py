@@ -65,8 +65,8 @@ class Osd(RESTController):
             histogram = CephService.send_command('osd', srv_spec=svc_id,
                                                  prefix='perf histogram dump')
         except SendCommandError as e:
-            if 'osd down' in e.message:
-                histogram = e.message
+            if 'osd down' in str(e):
+                histogram = str(e)
             else:
                 raise
 
@@ -173,7 +173,7 @@ class Osd(RESTController):
             return {'safe-to-destroy': True}
         except SendCommandError as e:
             return {
-                'message': e.message,
+                'message': str(e),
                 'safe-to-destroy': False,
             }
 
