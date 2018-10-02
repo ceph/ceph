@@ -32,7 +32,7 @@ export class OsdDetailsComponent implements OnChanges {
   }
 
   refresh() {
-    this.osdService.getDetails(this.osd.tree.id).subscribe((data: any) => {
+    this.osdService.getDetails(this.osd.id).subscribe((data: any) => {
       this.osd.details = data;
       this.osd.histogram_failed = '';
       if (!_.isObject(data.histogram)) {
