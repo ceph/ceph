@@ -5,10 +5,15 @@
     </cd-table-key-value>
   </tab>
   <tab heading="Metadata">
-    <cd-table-key-value *ngIf="osd.loaded"
+    <cd-table-key-value *ngIf="osd.loaded && osd.details.osd_metadata; else noMetaData"
                         (fetchData)="osd.autoRefresh()"
                         [data]="osd.details.osd_metadata">
     </cd-table-key-value>
+    <ng-template #noMetaData>
+      <cd-warning-panel i18n>
+        Metadata not available
+      </cd-warning-panel>
+    </ng-template>
   </tab>
   <tab heading="Performance counter">
     <cd-table-performance-counter *ngIf="osd.loaded"
