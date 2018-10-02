@@ -5,6 +5,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { ToastModule } from 'ng2-toastr';
 import { of } from 'rxjs';
 
+import { By } from '@angular/platform-browser';
 import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { RbdService } from '../../../shared/api/rbd.service';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
@@ -100,6 +101,36 @@ describe('RbdTrashListComponent', () => {
       expect(component.images.length).toBe(2);
       expectImageTasks(component.images[0], 'Deleting');
       expectImageTasks(component.images[1], 'Restoring');
+    });
+  });
+
+  describe('display purge button', () => {
+    beforeEach(() => {});
+
+    it('should show button with delete permission', () => {
+      component.permission = {
+        read: true,
+        create: true,
+        delete: true,
+        update: true
+      };
+      fixture.detectChanges();
+
+      const purge = fixture.debugElement.query(By.css('.table-actions button .fa-times'));
+      expect(purge).not.toBeNull();
+    });
+
+    it('should remove button without delete permission', () => {
+      component.permission = {
+        read: true,
+        create: true,
+        delete: false,
+        update: true
+      };
+      fixture.detectChanges();
+
+      const purge = fixture.debugElement.query(By.css('.table-actions button .fa-times'));
+      expect(purge).toBeNull();
     });
   });
 });
