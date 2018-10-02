@@ -197,6 +197,15 @@ class TestGetDevices(object):
             _mapper_path=str(tmpdir))
         assert result == {}
 
+    def test_no_devices_are_found_errors(self, tmpdir):
+        block_path, dev_path, mapper_path = self.setup_paths(tmpdir)
+        os.makedirs(os.path.join(block_path, 'sda'))
+        result = disk.get_devices(
+            _sys_block_path=block_path, # has 1 device
+            _dev_path=str(tmpdir), # exists but no devices
+            _mapper_path='/does/not/exist/path') # does not exist
+        assert result == {}
+
     def test_sda_block_is_found(self, tmpfile, tmpdir):
         block_path, dev_path, mapper_path = self.setup_paths(tmpdir)
         dev_sda_path = os.path.join(dev_path, 'sda')
