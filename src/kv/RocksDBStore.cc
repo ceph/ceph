@@ -347,15 +347,17 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
     bbt_opts.index_type = rocksdb::BlockBasedTableOptions::IndexType::kHashSearch;
   if (g_conf->get_val<std::string>("rocksdb_index_type") == "two_level")
     bbt_opts.index_type = rocksdb::BlockBasedTableOptions::IndexType::kTwoLevelIndexSearch;
-  bbt_opts.cache_index_and_filter_blocks = 
-      g_conf->get_val<bool>("rocksdb_cache_index_and_filter_blocks");
-  bbt_opts.cache_index_and_filter_blocks_with_high_priority = 
-      g_conf->get_val<bool>("rocksdb_cache_index_and_filter_blocks_with_high_priority");
+  if (!bbt_opts.no_block_cache) {
+    bbt_opts.cache_index_and_filter_blocks =
+        g_conf->get_val<bool>("rocksdb_cache_index_and_filter_blocks");
+    bbt_opts.cache_index_and_filter_blocks_with_high_priority =
+        g_conf->get_val<bool>("rocksdb_cache_index_and_filter_blocks_with_high_priority");
+    bbt_opts.pin_l0_filter_and_index_blocks_in_cache =
+      g_conf->get_val<bool>("rocksdb_pin_l0_filter_and_index_blocks_in_cache");
+  }
   bbt_opts.partition_filters = g_conf->get_val<bool>("rocksdb_partition_filters");
   if (g_conf->get_val<uint64_t>("rocksdb_metadata_block_size") > 0)
     bbt_opts.metadata_block_size = g_conf->get_val<uint64_t>("rocksdb_metadata_block_size");
-  bbt_opts.pin_l0_filter_and_index_blocks_in_cache = 
-      g_conf->get_val<bool>("rocksdb_pin_l0_filter_and_index_blocks_in_cache");
 
   opt.table_factory.reset(rocksdb::NewBlockBasedTableFactory(bbt_opts));
   dout(10) << __func__ << " block size " << g_conf->rocksdb_block_size
@@ -491,12 +493,15 @@ void RocksDBStore::get_statistics(Formatter *f)
   }
   if (g_conf->rocksdb_collect_memory_stats) {
     f->open_object_section("rocksdb_memtable_statistics");
-    std::string str(stringify(bbt_opts.block_cache->GetUsage()));
-    f->dump_string("block_cache_usage", str.data());
-    str.clear();
-    str.append(stringify(bbt_opts.block_cache->GetPinnedUsage()));
-    f->dump_string("block_cache_pinned_blocks_usage", str);
-    str.clear();
+    std::string str;
+    if (!bbt_opts.no_block_cache) {
+      str.append(stringify(bbt_opts.block_cache->GetUsage()));
+      f->dump_string("block_cache_usage", str.data());
+      str.clear();
+      str.append(stringify(bbt_opts.block_cache->GetPinnedUsage()));
+      f->dump_string("block_cache_pinned_blocks_usage", str);
+      str.clear();
+    }
     db->GetProperty("rocksdb.cur-size-all-mem-tables", &str);
     f->dump_string("rocksdb_memtable_usage", str);
     f->close_section();
