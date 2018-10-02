@@ -12,7 +12,7 @@ import six
 
 import rbd
 
-from . import ApiController, RESTController, Task, UpdatePermission
+from . import ApiController, RESTController, Task, UpdatePermission, DeletePermission
 from .. import mgr
 from ..security import Scope
 from ..services.ceph_service import CephService
@@ -466,7 +466,7 @@ class RbdSnapshot(RESTController):
         return _rbd_call(pool_name, _parent_clone)
 
 
-@ApiController('/block/image/trash')
+@ApiController('/block/image/trash', Scope.RBD_IMAGE)
 class RbdTrash(RESTController):
     RESOURCE_ID = "pool_name/image_id"
     rbd_inst = rbd.RBD()
@@ -506,6 +506,7 @@ class RbdTrash(RESTController):
     @handle_rados_error('pool')
     @RbdTask('trash/purge', ['{pool_name}'], 2.0)
     @RESTController.Collection('POST', query_params=['pool_name'])
+    @DeletePermission
     def purge(self, pool_name=None):
         """Remove all expired images from trash."""
         now = "{}Z".format(datetime.now().isoformat())
@@ -518,6 +519,7 @@ class RbdTrash(RESTController):
 
     @RbdTask('trash/restore', ['{pool_name}', '{image_id}', '{new_image_name}'], 2.0)
     @RESTController.Resource('POST')
+    @UpdatePermission
     def restore(self, pool_name, image_id, new_image_name):
         """Restore an image from trash."""
         return _rbd_call(pool_name, self.rbd_inst.trash_restore, image_id, new_image_name)
