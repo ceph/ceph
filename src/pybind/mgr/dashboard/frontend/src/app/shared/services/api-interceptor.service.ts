@@ -59,9 +59,6 @@ export class ApiInterceptorService implements HttpInterceptor {
             case 403:
               this.router.navigate(['/403']);
               break;
-            case 404:
-              this.router.navigate(['/404']);
-              break;
           }
 
           let timeoutId;

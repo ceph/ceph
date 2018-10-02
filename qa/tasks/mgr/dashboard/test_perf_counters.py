@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-from .helper import DashboardTestCase
+from .helper import DashboardTestCase, JObj
 
 
 class PerfCountersControllerTest(DashboardTestCase):
@@ -32,7 +32,6 @@ class PerfCountersControllerTest(DashboardTestCase):
             self.assertIn('unit', counter)
             self.assertIn('value', counter)
 
-
     def test_perf_counters_mon_get(self):
         mon = self.mons()[0]
         data = self._get('/api/perf_counters/mon/{}'.format(mon))
@@ -57,3 +56,18 @@ class PerfCountersControllerTest(DashboardTestCase):
             data = self._get('/api/perf_counters/osd/{}'.format(osd))
             self.assertStatus(200)
             self._validate_perf(osd, 'osd', data, allow_empty=False)
+
+    def test_perf_counters_not_found(self):
+        osds = self.ceph_cluster.mon_manager.get_osd_dump()
+        unused_id = int(list(map(lambda o: o['osd'], osds)).pop()) + 1
+
+        self._get('/api/perf_counters/osd/{}'.format(unused_id))
+        self.assertStatus(404)
+        schema = JObj(sub_elems={
+            'status': str,
+            'version': str,
+            'detail': str,
+            'traceback': str,
+        })
+        self.assertEqual(self._resp.json()['detail'], 'osd.{} not found'.format(unused_id))
+        self.assertSchemaBody(schema)

@@ -1,4 +1,5 @@
-<cd-table [data]="counters"
+<cd-table *ngIf="counters; else warning"
+          [data]="counters"
           [columns]="columns"
           columnMode="flex"
           [autoSave]="false"
@@ -7,3 +8,8 @@
     {{ row.value | dimless }} {{ row.unit }}
   </ng-template>
 </cd-table>
+<ng-template #warning>
+  <cd-warning-panel i18n>
+    Performance counters not available
+  </cd-warning-panel>
+</ng-template>
