@@ -67,6 +67,10 @@ public:
     ceph_timespec ts = real_clock::to_ceph_timespec(rt);
     decode_timeval(&ts);
   }
+  explicit utime_t(const ceph::coarse_real_time& crt) {
+    ceph_timespec ts = coarse_real_clock::to_ceph_timespec(crt);
+    decode_timeval(&ts);
+  }
   utime_t(const struct timeval &v) {
     set_from_timeval(&v);
   }
