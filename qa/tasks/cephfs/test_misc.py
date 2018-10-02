@@ -173,7 +173,6 @@ class TestMisc(CephFSTestCase):
                                 cap_waited, session_timeout
                             ))
 
-            self.assertTrue(self.mount_a.is_blacklisted())
             cap_holder.stdin.close()
             try:
                 cap_holder.wait()
