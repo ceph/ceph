@@ -107,7 +107,7 @@ void RGWOp_MDLog_List::execute() {
 void RGWOp_MDLog_List::send_response() {
   set_req_state_err(s, http_ret);
   dump_errno(s);
-  end_header(s);
+  end_header(s, this, "application/json");
 
   if (http_ret < 0)
     return;
@@ -138,7 +138,7 @@ void RGWOp_MDLog_Info::execute() {
 void RGWOp_MDLog_Info::send_response() {
   set_req_state_err(s, http_ret);
   dump_errno(s);
-  end_header(s);
+  end_header(s, this, "application/json");
 
   s->formatter->open_object_section("mdlog");
   s->formatter->dump_unsigned("num_objects", num_objects);
@@ -180,7 +180,7 @@ void RGWOp_MDLog_ShardInfo::execute() {
 void RGWOp_MDLog_ShardInfo::send_response() {
   set_req_state_err(s, http_ret);
   dump_errno(s);
-  end_header(s);
+  end_header(s, this, "application/json");
 
   encode_json("info", info, s->formatter);
   flusher.flush();
@@ -433,7 +433,7 @@ void RGWOp_BILog_List::send_response() {
 
   set_req_state_err(s, http_ret);
   dump_errno(s);
-  end_header(s);
+  end_header(s, this, "application/json");
 
   sent_header = true;
 
@@ -503,7 +503,7 @@ void RGWOp_BILog_Info::execute() {
 void RGWOp_BILog_Info::send_response() {
   set_req_state_err(s, http_ret);
   dump_errno(s);
-  end_header(s);
+  end_header(s, this, "application/json");
 
   if (http_ret < 0)
     return;
@@ -616,7 +616,7 @@ void RGWOp_DATALog_List::execute() {
 void RGWOp_DATALog_List::send_response() {
   set_req_state_err(s, http_ret);
   dump_errno(s);
-  end_header(s);
+  end_header(s, this, "application/json");
 
   if (http_ret < 0)
     return;
@@ -651,7 +651,7 @@ void RGWOp_DATALog_Info::execute() {
 void RGWOp_DATALog_Info::send_response() {
   set_req_state_err(s, http_ret);
   dump_errno(s);
-  end_header(s);
+  end_header(s, this, "application/json");
 
   s->formatter->open_object_section("num_objects");
   s->formatter->dump_unsigned("num_objects", num_objects);
@@ -676,7 +676,7 @@ void RGWOp_DATALog_ShardInfo::execute() {
 void RGWOp_DATALog_ShardInfo::send_response() {
   set_req_state_err(s, http_ret);
   dump_errno(s);
-  end_header(s);
+  end_header(s, this, "application/json");
 
   encode_json("info", info, s->formatter);
   flusher.flush();
@@ -864,7 +864,7 @@ void RGWOp_MDLog_Status::send_response()
 {
   set_req_state_err(s, http_ret);
   dump_errno(s);
-  end_header(s);
+  end_header(s, this, "application/json");
 
   if (http_ret >= 0) {
     encode_json("status", status, s->formatter);
@@ -921,7 +921,7 @@ void RGWOp_BILog_Status::send_response()
 {
   set_req_state_err(s, http_ret);
   dump_errno(s);
-  end_header(s);
+  end_header(s, this, "application/json");
 
   if (http_ret >= 0) {
     encode_json("status", status, s->formatter);
@@ -960,7 +960,7 @@ void RGWOp_DATALog_Status::send_response()
 {
   set_req_state_err(s, http_ret);
   dump_errno(s);
-  end_header(s);
+  end_header(s, this, "application/json");
 
   if (http_ret >= 0) {
     encode_json("status", status, s->formatter);
