@@ -15,10 +15,18 @@ describe('InfoGroupComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(InfoGroupComponent);
     component = fixture.componentInstance;
-    fixture.detectChanges();
   });
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  it('Setting groupTitle makes title visible', () => {
+    const groupTitle = 'Group Title';
+    component.groupTitle = groupTitle;
+    fixture.detectChanges();
+    const titleDiv = fixture.debugElement.nativeElement.querySelector('.info-group-title');
+
+    expect(titleDiv.textContent).toContain(groupTitle);
   });
 });
