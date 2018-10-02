@@ -173,13 +173,14 @@ target_link_libraries(rgw_a librados cls_otp_client cls_lock_client cls_rgw_clie
   ${OPENLDAP_LIBRARIES} ${CRYPTO_LIBS}
   OATH::OATH)
 
+if(WITH_CURL_OPENSSL)
+  # used by rgw_http_client_curl.cc
+  target_link_libraries(rgw_a PRIVATE OpenSSL::Crypto)
+endif()
+
 if (WITH_RADOSGW_BEAST_FRONTEND)
   target_compile_definitions(rgw_a PUBLIC BOOST_COROUTINES_NO_DEPRECATION_WARNING)
   target_link_libraries(rgw_a Boost::coroutine Boost::context)
-endif()
-
-if (WITH_CURL_OPENSSL OR (WITH_RADOSGW_BEAST_FRONTEND AND WITH_RADOSGW_BEAST_OPENSSL))
-  target_link_libraries(rgw_a ${OPENSSL_LIBRARIES})
 endif()
 
 set(radosgw_srcs
@@ -192,15 +193,19 @@ if (WITH_RADOSGW_FCGI_FRONTEND)
   list(APPEND radosgw_srcs rgw_fcgi_process.cc)
 endif()
 
-if (WITH_RADOSGW_BEAST_FRONTEND)
+if(WITH_RADOSGW_BEAST_FRONTEND)
   list(APPEND radosgw_srcs
     rgw_asio_client.cc
     rgw_asio_frontend.cc)
-endif (WITH_RADOSGW_BEAST_FRONTEND)
+endif()
 
 add_library(radosgw_a STATIC ${radosgw_srcs}
   $<TARGET_OBJECTS:civetweb_common_objs>)
-target_link_libraries(radosgw_a rgw_a ${SSL_LIBRARIES})
+target_link_libraries(radosgw_a PRIVATE rgw_a)
+if(WITH_RADOSGW_BEAST_FRONTEND AND WITH_RADOSGW_BEAST_OPENSSL)
+  # used by rgw_asio_frontend.cc
+  target_link_libraries(radosgw_a PRIVATE OpenSSL::SSL)
+endif()
 
 add_executable(radosgw rgw_main.cc)
 target_link_libraries(radosgw radosgw_a librados
@@ -225,7 +230,7 @@ target_link_libraries(radosgw-admin rgw_a librados
   cls_log_client cls_timeindex_client
   cls_version_client cls_user_client
   global ${FCGI_LIBRARY} ${LIB_RESOLV}
-  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${SSL_LIBRARIES} ${BLKID_LIBRARIES})
+  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES})
 install(TARGETS radosgw-admin DESTINATION bin)
 
 set(radosgw_es_srcs
@@ -236,7 +241,7 @@ target_link_libraries(radosgw-es rgw_a librados
   cls_log_client cls_timeindex_client
   cls_version_client cls_user_client
   global ${FCGI_LIBRARY} ${LIB_RESOLV}
-  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${SSL_LIBRARIES} ${BLKID_LIBRARIES})
+  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES})
 install(TARGETS radosgw-es DESTINATION bin)
 
 set(radosgw_token_srcs
