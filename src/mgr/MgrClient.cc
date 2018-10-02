@@ -350,6 +350,10 @@ void MgrClient::_send_report()
   cct->_conf.get_config_bl(last_config_bl_version, &report->config_bl,
 			    &last_config_bl_version);
 
+  if (get_perf_report_cb) {
+    //get_perf_report_cb(&report->perf_report)
+  }
+
   session->con->send_message(report);
 }
 
@@ -389,6 +393,10 @@ bool MgrClient::handle_mgr_configure(MMgrConfigure *m)
   stats_period = m->stats_period;
   if (starting) {
     _send_stats();
+  }
+
+  if (set_perf_queries_cb) {
+    set_perf_queries_cb(m->osd_perf_metric_queries);
   }
 
   m->put();
