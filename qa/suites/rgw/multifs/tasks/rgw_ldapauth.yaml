@@ -1,0 +1,11 @@
+tasks:
+- install:
+- ceph:
+- sequential:
+  - ldap_server: [client.1]
+  - ldap_client: [client.0]
+  - rgw: [client.0]
+- workunit:
+    clients:
+      client.0:
+        - rgw/ldap_client.pl

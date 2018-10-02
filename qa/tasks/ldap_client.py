@@ -1,8 +1,10 @@
 """
-ldap_server
+ldap_client
 """
 import logging
+import contextlib
 import time
+import os
 
 from teuthology.orchestra import run
 from teuthology import misc
@@ -21,7 +23,7 @@ def get_node_name(ctx, this_task):
 
 def get_task_site(ctx, taskname):
     """
-    Given a taskname ('ldap_server' for example), return the associated
+    Given a taskname ('ldap_client' for example), return the associated
     teuthology location that that task is running on ('client.1' for example)
     """
     for tentry in ctx.config['tasks']:
@@ -37,10 +39,18 @@ def fix_yum_boto(client):
     client.run(args=['sudo', 'yum', '-y', 'install', 'python-boto'])
     client.run(args=['sudo', 'yum-config-manager', '--disable', 'epel'])
 
+def get_dc_path(path):
+    dcvals = path.split('.')[1:]
+    out_str = []
+    for path_part in dcvals:
+        out_str.append('dc=%s' % path_part)
+    return (','.join(out_str))
+
+@contextlib.contextmanager
 def task(ctx, config):
     """
-    Install ldap_client in order to test ldap rgw authentication 
-    
+    Install ldap_client in order to test ldap rgw authentication
+
     Usage
        tasks:
        - ldap_client:
@@ -49,6 +59,7 @@ def task(ctx, config):
     """
     log.info('in ldap_client')
     assert isinstance(config, list)
+    ldap_admin_key = os.environ.get('LDAP_ADMIN_KEY_VALUE', 't0pSecret')
     (client,) = ctx.cluster.only(config[0]).remotes
     system_type = misc.get_system_type(client)
     if system_type == 'rpm':
@@ -58,69 +69,37 @@ def task(ctx, config):
     else:
         install_cmd = ['sudo', 'apt-get', '-y', 'install', 'ldap-utils']
         client.run(args=install_cmd)
-        client.run(args=['sudo', 'apt-get', 'install', 'python-boto', '-y'])    
+        client.run(args=['sudo', 'apt-get', 'install', 'python-boto', '-y'])
+    client.run(args=['sudo', 'pip', 'install', '-U', 'boto'])
 
     ldap_server_task = get_task_site(ctx, 'ldap_server')
     server_site = get_node_name(ctx, ldap_server_task)
     ldap_client_task = get_task_site(ctx, 'ldap_client')
     client_site = get_node_name(ctx, ldap_client_task)
 
-    client.run(args=['sudo', 'useradd', 'rgw'])
-    client.run(args=['echo', 't0pSecret\nt0pSecret', run.Raw('|'), 'sudo',
-                     'passwd', 'rgw'])
-    client.run(args=['sudo', 'useradd', 'newuser'])
-    client.run(args=['echo', 't0pSecret\nt0pSecret', run.Raw('|'), 'sudo',
-                     'passwd', 'newuser'])
-
-
-    client_actions = """
-#!/bin/python
-import json
-import os
-from subprocess import Popen
-import sys
-import ConfigParser
-site = sys.argv[1]
-c2= ConfigParser.SafeConfigParser()
-c2.read('/etc/ceph/ceph.conf')
-c2.set('global','rgw_ldap_secret','"/etc/bindpass"')
-c2.set('global','rgw_ldap_uri','"ldap://%s:389"' % site)
-c2.set('global','rgw_ldap_binddn','"uid=rgw,cn=users,cn=accounts,dc=ceph,dc=redhat,dc=com"')
-c2.set('global','rgw_ldap_searchdn','"cn=users,cn=accounts,dc=ceph,dc=redhat,dc=com"')
-c2.set('global','rgw_ldap_dnattr','"uid"')
-c2.set('global','rgw_s3_auth_use_ldap','"true"')
-c2.set('global','debug rgw','20')
-with open('/tmp/ceph.conf', 'w') as x:
-    c2.write(x)
-with open('/tmp/nodes.json') as x:
-    cnodes = json.loads(x.read())
-sites = set()
-for mtype in cnodes:
-    for isite in cnodes[mtype]:
-        noden = isite.split('.')[0]
-        sites.add(noden)
-slist = list(sites)
-with open('/tmp/bindpass', 'w') as x:
-    x.write('t0pSecret')
-for nnode in slist:
-    p = Popen('ssh %s sudo cp /tmp/bindpass /etc/bindpass' % nnode, shell=True) 
-    os.waitpid(p.pid,0)
-    p = Popen('ssh %s sudo chmod 0600 /etc/bindpass' % nnode, shell=True)
-    os.waitpid(p.pid,0)
-    p = Popen('ssh %s sudo chown rgw:rgw /etc/bindpass' % nnode, shell=True)
-    os.waitpid(p.pid,0)
-    p = Popen('ssh %s sudo cp /tmp/ceph.conf /etc/ceph/ceph.conf' % nnode, shell=True)
-    os.waitpid(p.pid,0)
-"""
-    misc.sudo_write_file(
-        remote=client,
-        path='/tmp/setup_ldap_client.py',
-        data=client_actions,
-        perms='0744',
-        )
-    client.run(args=['python', '/tmp/setup_ldap_client.py', server_site])
-    if system_type == 'rpm':
-        client.run(args=['sudo', 'systemctl', 'restart', 'ceph-radosgw.service'])
+    dc_splits = get_dc_path(ctx.cluster.remotes.keys()[0].name)
+    new_globals = ctx.ceph['ceph'].conf['global']
+    new_globals.update({'rgw_ldap_secret': '/etc/bindpass'})
+    new_globals.update({'rgw_ldap_uri': 'ldap://%s:389' % server_site})
+    new_globals.update({'rgw_ldap_binddn': 'uid=rgw,cn=users,cn=accounts,%s' % dc_splits})
+    new_globals.update({'rgw_ldap_searchdn': 'cn=users,cn=accounts,%s' % dc_splits})
+    new_globals.update({'rgw_ldap_dnattr': 'uid'})
+    new_globals.update({'rgw_s3_auth_use_ldap': 'true'})
+    new_globals.update({'debug rgw': '20'})
+    with open('/tmp/ceph.conf', 'w+') as cephconf:
+        ctx.ceph['ceph'].conf.write(outfile=cephconf)
+    with open('/tmp/ceph.conf', 'r') as newcephconf:
+        confstr = newcephconf.read()
+    tbindpass = ldap_admin_key
+    for remote in ctx.cluster.remotes:
+        misc.sudo_write_file(remote, '/etc/ceph/ceph.conf', confstr, perms='0644', owner='root:root')
+        misc.sudo_write_file(remote, '/etc/bindpass', tbindpass, perms='0600', owner='ceph:ceph')
+    iyam = client.name.split('@')[-1].split('.')[0]
+    if misc.get_system_type(client) == 'rpm':
+        client.run(args=['sudo', 'systemctl', 'restart', 'ceph-radosgw@rgw.%s' % iyam])
     else:
-        short_client = client_site.split('.')[0]
-        client.run(args=['sudo', 'service', 'radosgw', 'restart', 'id=rgw.%s' % short_client])
+        client.run(args=['sudo', 'service', 'radosgw', 'restart', 'id=rgw.%s' % iyam])
+    try:
+        yield
+    finally:
+        pass
