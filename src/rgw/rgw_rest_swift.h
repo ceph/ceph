@@ -395,7 +395,7 @@ public:
   int validate_bucket_name(const string& bucket);
 
   int init(RGWRados *store, struct req_state *s, rgw::io::BasicClient *cio) override;
-  int authorize() override;
+  int authorize(const DoutPrefixProvider *dpp) override;
   int postauth_init() override;
 
   RGWAccessControlPolicy *alloc_policy() { return nullptr; /* return new RGWAccessControlPolicy_SWIFT; */ }
@@ -543,7 +543,7 @@ public:
     return RGWHandler::init(store, state, cio);
   }
 
-  int authorize() override {
+  int authorize(const DoutPrefixProvider *dpp) override {
     return 0;
   }
 
@@ -599,7 +599,7 @@ public:
     return RGWHandler::init(store, state, cio);
   }
 
-  int authorize() override {
+  int authorize(const DoutPrefixProvider *dpp) override {
     return 0;
   }
 
@@ -655,7 +655,7 @@ public:
     return RGWHandler::init(store, state, cio);
   }
 
-  int authorize() override {
+  int authorize(const DoutPrefixProvider *dpp) override {
     return 0;
   }
 

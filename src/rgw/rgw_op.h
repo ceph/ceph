@@ -92,7 +92,7 @@ public:
   }
 
   virtual int read_permissions(RGWOp* op) = 0;
-  virtual int authorize() = 0;
+  virtual int authorize(const DoutPrefixProvider* dpp) = 0;
   virtual int postauth_init() = 0;
   virtual int error_handler(int err_no, std::string* error_content);
   virtual void dump(const string& code, const string& message) const {}
@@ -162,7 +162,7 @@ public:
    * of special cases. */
   virtual int verify_requester(const rgw::auth::StrategyRegistry& auth_registry) {
     /* TODO(rzarzynski): rename RGWHandler::authorize to generic_authenticate. */
-    return dialect_handler->authorize();
+    return dialect_handler->authorize(this);
   }
   virtual int verify_permission() = 0;
   virtual int verify_op_mask();

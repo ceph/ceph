@@ -219,7 +219,7 @@ public:
       /* Engine doesn't grant the access but also doesn't reject it. */
       DENIED,
 
-      /* Engine successfully authenticated requester. */
+      /* Engine successfully authenicated requester. */
       GRANTED,
 
       /* Engine strictly indicates that a request should be rejected
@@ -329,7 +329,7 @@ public:
     return auth_stack.empty();
   }
 
-  static int apply(const Strategy& auth_strategy, req_state* s) noexcept;
+  static int apply(const DoutPrefixProvider* dpp, const Strategy& auth_strategy, req_state* s) noexcept;
 
 private:
   /* Using the reference wrapper here to explicitly point out we are not

@@ -1832,7 +1832,7 @@ int RGWPostObj_ObjStore_S3::get_policy()
     /* FIXME: this is a makeshift solution. The browser upload authentication will be
      * handled by an instance of rgw::auth::Completer spawned in Handler's authorize()
      * method. */
-    const int ret = rgw::auth::Strategy::apply(auth_registry_ptr->get_s3_post(), s);
+    const int ret = rgw::auth::Strategy::apply(this, auth_registry_ptr->get_s3_post(), s);
     if (ret != 0) {
       return -EACCES;
     } else {
@@ -3470,7 +3470,8 @@ discover_aws_flavour(const req_info& info)
  *
  * it tries AWS v4 before AWS v2
  */
-int RGW_Auth_S3::authorize(RGWRados* const store,
+int RGW_Auth_S3::authorize(const DoutPrefixProvider *dpp,
+                           RGWRados* const store,
                            const rgw::auth::StrategyRegistry& auth_registry,
                            struct req_state* const s)
 {
@@ -3479,11 +3480,11 @@ int RGW_Auth_S3::authorize(RGWRados* const store,
   if (!store->ctx()->_conf->rgw_s3_auth_use_rados &&
       !store->ctx()->_conf->rgw_s3_auth_use_keystone &&
       !store->ctx()->_conf->rgw_s3_auth_use_ldap) {
-    dout(0) << "WARNING: no authorization backend enabled! Users will never authenticate." << dendl;
+    ldpp_dout(dpp, 0) << "WARNING: no authorization backend enabled! Users will never authenticate." << dendl;
     return -EPERM;
   }
 
-  const auto ret = rgw::auth::Strategy::apply(auth_registry.get_s3_main(), s);
+  const auto ret = rgw::auth::Strategy::apply(dpp, auth_registry.get_s3_main(), s);
   if (ret == 0) {
     /* Populate the owner info. */
     s->owner.set_id(s->user->user_id);
@@ -4301,7 +4302,7 @@ rgw::auth::s3::LocalEngine::authenticate(
   /* TODO(rzarzynski): we need to have string-view taking variant. */
   const std::string access_key_id = _access_key_id.to_string();
   if (rgw_get_user_info_by_access_key(store, access_key_id, user_info) < 0) {
-      ldout(cct, 5) << "error reading user info, uid=" << access_key_id
+      ldpp_dout(s, 5) << "error reading user info, uid=" << access_key_id
               << " can't authenticate" << dendl;
       return result_t::deny(-ERR_INVALID_ACCESS_KEY);
   }
@@ -4316,7 +4317,7 @@ rgw::auth::s3::LocalEngine::authenticate(
 
   const auto iter = user_info.access_keys.find(access_key_id);
   if (iter == std::end(user_info.access_keys)) {
-    ldout(cct, 0) << "ERROR: access key not encoded in user info" << dendl;
+    ldpp_dout(s, 0) << "ERROR: access key not encoded in user info" << dendl;
     return result_t::deny(-EPERM);
   }
   const RGWAccessKey& k = iter->second;

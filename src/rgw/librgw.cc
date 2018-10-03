@@ -253,7 +253,7 @@ namespace rgw {
     /* XXX authorize does less here then in the REST path, e.g.,
      * the user's info is cached, but still incomplete */
     ldpp_dout(s, 2) << "authorizing" << dendl;
-    ret = req->authorize();
+    ret = req->authorize(op);
     if (ret < 0) {
       dout(10) << "failed to authorize request" << dendl;
       abort_req(s, op, ret);
@@ -368,7 +368,7 @@ namespace rgw {
     /* XXX authorize does less here then in the REST path, e.g.,
      * the user's info is cached, but still incomplete */
     ldpp_dout(s, 2) << "authorizing" << dendl;
-    ret = req->authorize();
+    ret = req->authorize(op);
     if (ret < 0) {
       dout(10) << "failed to authorize request" << dendl;
       abort_req(s, op, ret);
@@ -645,7 +645,7 @@ namespace rgw {
     return ret;
   } /* RGWLibRequest::read_permissions */
 
-  int RGWHandler_Lib::authorize()
+  int RGWHandler_Lib::authorize(const DoutPrefixProvider *dpp)
   {
     /* TODO: handle
      *  1. subusers

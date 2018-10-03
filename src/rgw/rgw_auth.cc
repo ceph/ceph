@@ -266,7 +266,7 @@ rgw::auth::Strategy::authenticate(const req_state* const s) const
 }
 
 int
-rgw::auth::Strategy::apply(const rgw::auth::Strategy& auth_strategy,
+rgw::auth::Strategy::apply(const DoutPrefixProvider *dpp, const rgw::auth::Strategy& auth_strategy,
                            req_state* const s) noexcept
 {
   try {
@@ -274,7 +274,7 @@ rgw::auth::Strategy::apply(const rgw::auth::Strategy& auth_strategy,
     if (result.get_status() != decltype(result)::Status::GRANTED) {
       /* Access denied is acknowledged by returning a std::unique_ptr with
        * nullptr inside. */
-      ldout(s->cct, 5) << "Failed the auth strategy, reason="
+      ldpp_dout(dpp, 5) << "Failed the auth strategy, reason="
                        << result.get_reason() << dendl;
       return result.get_reason();
     }
@@ -301,11 +301,11 @@ rgw::auth::Strategy::apply(const rgw::auth::Strategy& auth_strategy,
 
       return 0;
     } catch (const int err) {
-      ldout(s->cct, 5) << "applier throwed err=" << err << dendl;
+      ldpp_dout(dpp, 5) << "applier throwed err=" << err << dendl;
       return err;
     }
   } catch (const int err) {
-    ldout(s->cct, 5) << "auth engine throwed err=" << err << dendl;
+    ldpp_dout(dpp, 5) << "auth engine throwed err=" << err << dendl;
     return err;
   }
 
