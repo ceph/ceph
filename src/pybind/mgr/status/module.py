@@ -233,6 +233,9 @@ class Module(MgrModule):
             output += rank_table.get_string()
             output += "\n" + pools_table.get_string() + "\n"
 
+        if not output and fs_filter is not None:
+            return errno.EINVAL, "", "Invalid filesystem: " + fs_filter
+
         standby_table = PrettyTable(["Standby MDS"])
         for standby in fsmap['standbys']:
             metadata = self.get_metadata('mds', standby['name'])
