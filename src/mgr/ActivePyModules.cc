@@ -888,4 +888,17 @@ void ActivePyModules::set_uri(const std::string& module_name,
   modules[module_name]->set_uri(uri);
 }
 
+OSDPerfMetricQueryID ActivePyModules::add_osd_perf_query(
+  const OSDPerfMetricQuery &query)
+{
+  return server.add_osd_perf_query(query);
+}
 
+void ActivePyModules::remove_osd_perf_query(OSDPerfMetricQueryID query_id)
+{
+  int r = server.remove_osd_perf_query(query_id);
+  if (r < 0) {
+    dout(0) << "remove_osd_perf_query for query_id=" << query_id << " failed: "
+            << cpp_strerror(r) << dendl;
+  }
+}
