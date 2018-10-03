@@ -552,6 +552,27 @@ TRACEPOINT_EVENT(librbd, trash_list_exit,
     )
 )
 
+TRACEPOINT_EVENT(librbd, trash_purge_enter,
+    TP_ARGS(
+        const char*, pool_name,
+        int64_t, id,
+        time_t, expire_ts,
+        float, threshold),
+    TP_FIELDS(
+        ctf_string(pool_name, pool_name)
+        ctf_integer(int64_t, id, id)
+        ceph_ctf_time_t(expire_ts, expire_ts)
+        ctf_float(float, threshold, threshold)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, trash_purge_exit,
+    TP_ARGS(int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
 TRACEPOINT_EVENT(librbd, trash_remove_enter,
     TP_ARGS(
         const char*, pool_name,

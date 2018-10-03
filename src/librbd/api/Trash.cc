@@ -18,6 +18,7 @@
 #include "librbd/mirror/DisableRequest.h"
 #include "librbd/mirror/EnableRequest.h"
 #include "librbd/trash/MoveRequest.h"
+#include <json_spirit/json_spirit.h>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -266,6 +267,173 @@ int Trash<I>::list(IoCtx &io_ctx, vector<trash_image_info_t> &entries) {
     last_read = trash_entries.rbegin()->first;
     more_entries = (trash_entries.size() >= max_read);
   } while (more_entries);
+
+  return 0;
+}
+
+template <typename I>
+int Trash<I>::purge(IoCtx& io_ctx, time_t expire_ts,
+                    float threshold, ProgressContext& pctx) {
+  auto *cct((CephContext *) io_ctx.cct());
+
+  librbd::RBD rbd;
+
+  std::vector<librbd::trash_image_info_t> trash_entries;
+  int r = librbd::api::Trash<>::list(io_ctx, trash_entries);
+  if (r < 0) {
+    return r;
+  }
+
+  std::remove_if(trash_entries.begin(), trash_entries.end(),
+      [](librbd::trash_image_info_t info) {
+        return info.source != RBD_TRASH_IMAGE_SOURCE_USER;
+      }
+  );
+
+  std::vector<const char *> to_be_removed;
+  if (threshold != -1) {
+    if (threshold < 0 || threshold > 1) {
+      lderr(cct) << "argument 'threshold' is out of valid range"
+                 << dendl;
+      return -EINVAL;
+    }
+
+    librados::bufferlist inbl;
+    librados::bufferlist outbl;
+    std::string pool_name = io_ctx.get_pool_name();
+
+    librados::Rados rados(io_ctx);
+    rados.mon_command(R"({"prefix": "df", "format": "json"})", inbl,
+                      &outbl, nullptr);
+
+    json_spirit::mValue json;
+    if (!json_spirit::read(outbl.to_str(), json)) {
+      lderr(cct) << "ceph df json output could not be parsed"
+                 << dendl;
+      return -EBADMSG;
+    }
+
+    json_spirit::mArray arr = json.get_obj()["pools"].get_array();
+
+    double pool_percent_used = 0;
+    uint64_t pool_total_bytes = 0;
+
+    std::map<std::string, std::vector<const char *>> datapools;
+
+    std::sort(trash_entries.begin(), trash_entries.end(),
+        [](librbd::trash_image_info_t a, librbd::trash_image_info_t b) {
+          return a.deferment_end_time < b.deferment_end_time;
+        }
+    );
+
+    for (const auto &entry : trash_entries) {
+      librbd::Image image;
+      std::string data_pool;
+      r = rbd.open_by_id_read_only(io_ctx, image, entry.id.c_str(), NULL);
+      if (r < 0) continue;
+
+      int64_t data_pool_id = image.get_data_pool_id();
+      if (data_pool_id != io_ctx.get_id()) {
+        librados::IoCtx data_io_ctx;
+        r = util::create_ioctx(io_ctx, "image", data_pool_id,
+                               {}, &data_io_ctx);
+        if (r < 0) {
+          lderr(cct) << "error accessing data pool" << dendl;
+          continue;
+        }
+        data_pool = data_io_ctx.get_pool_name();
+        datapools[data_pool].push_back(entry.id.c_str());
+      } else {
+        datapools[pool_name].push_back(entry.id.c_str());
+      }
+    }
+
+    uint64_t bytes_to_free = 0;
+
+    for (uint8_t i = 0; i < arr.size(); ++i) {
+      json_spirit::mObject obj = arr[i].get_obj();
+      std::string name = obj.find("name")->second.get_str();
+      auto img = datapools.find(name);
+      if (img != datapools.end()) {
+        json_spirit::mObject stats = arr[i].get_obj()["stats"].get_obj();
+        pool_percent_used = stats["percent_used"].get_real();
+        if (pool_percent_used <= threshold) continue;
+
+        bytes_to_free = 0;
+
+        pool_total_bytes = stats["max_avail"].get_uint64() +
+                           stats["bytes_used"].get_uint64();
+
+        auto bytes_threshold = (uint64_t) (pool_total_bytes *
+                                          (pool_percent_used - threshold));
+
+        librbd::Image curr_img;
+        for (const auto &it : img->second) {
+          r = rbd.open_by_id_read_only(io_ctx, curr_img, it, NULL);
+          if (r < 0) continue;
+
+          uint64_t img_size;
+          curr_img.size(&img_size);
+          r = curr_img.diff_iterate2(nullptr, 0, img_size, false, true,
+              [](uint64_t offset, size_t len, int exists, void *arg) {
+                auto *to_free = reinterpret_cast<uint64_t *>(arg);
+                if (exists)
+                  (*to_free) += len;
+                return 0;
+              }, &bytes_to_free
+          );
+          if (r < 0) continue;
+          to_be_removed.push_back(it);
+          if (bytes_to_free >= bytes_threshold) break;
+        }
+      }
+    }
+    if (bytes_to_free == 0) {
+      ldout(cct, 10) << "pool usage is lower than or equal to "
+                     << (threshold * 100)
+                     << "%" << dendl;
+      return 0;
+    }
+  }
+
+  if (expire_ts == 0) {
+    struct timespec now;
+    clock_gettime(CLOCK_REALTIME, &now);
+    expire_ts = now.tv_sec;
+  }
+
+  for (const auto &entry : trash_entries) {
+    if (expire_ts >= entry.deferment_end_time) {
+      to_be_removed.push_back(entry.id.c_str());
+    }
+  }
+
+  NoOpProgressContext remove_pctx;
+  uint64_t list_size = to_be_removed.size(), i = 0;
+  for (const auto &entry_id : to_be_removed) {
+    r = librbd::api::Trash<>::remove(io_ctx, entry_id, true, remove_pctx);
+    if (r < 0) {
+      if (r == -ENOTEMPTY) {
+        ldout(cct, 5) << "image has snapshots - these must be deleted "
+                      << "with 'rbd snap purge' before the image can be removed."
+                      << dendl;
+      } else if (r == -EBUSY) {
+        ldout(cct, 5) << "error: image still has watchers"
+                      << std::endl
+                      << "This means the image is still open or the client using "
+                      << "it crashed. Try again after closing/unmapping it or "
+                      << "waiting 30s for the crashed client to timeout."
+                      << dendl;
+      } else if (r == -EMLINK) {
+        ldout(cct, 5) << "Remove the image from the group and try again."
+                      << dendl;
+      } else {
+        lderr(cct) << "remove error: " << cpp_strerror(r) << dendl;
+      }
+      return r;
+    }
+    pctx.update_progress(++i, list_size);
+  }
 
   return 0;
 }
