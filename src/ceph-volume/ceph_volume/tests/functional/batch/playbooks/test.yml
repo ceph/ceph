@@ -33,3 +33,20 @@
       command: "ceph-volume --cluster {{ cluster }} lvm batch --yes --{{ osd_objectstore|default('bluestore') }} {{ '--dmcrypt' if dmcrypt|default(false) else '' }} {{ devices | join(' ') }}"
       environment:
         CEPH_VOLUME_DEBUG: 1
+
+    - name: ensure batch create is idempotent
+      command: "ceph-volume --cluster {{ cluster }} lvm batch --yes --{{ osd_objectstore|default('bluestore') }} {{ '--dmcrypt' if dmcrypt|default(false) else '' }} {{ devices | join(' ') }}"
+      environment:
+        CEPH_VOLUME_DEBUG: 1
+
+    - name: run batch --report to see if devices get filtered
+      command: "ceph-volume --cluster {{ cluster }} lvm batch --report --format=json --{{ osd_objectstore|default('bluestore') }} {{ '--dmcrypt' if dmcrypt|default(false) else '' }} {{ devices | join(' ') }}"
+      register: report_cmd
+      environment:
+        CEPH_VOLUME_DEBUG: 1
+
+    - name: verify OSDs will not be created again
+      fail:
+        msg: "Devices were not filtered out after redeploy"
+      when:
+        - (report_cmd.stdout | from_json).changed
