@@ -640,16 +640,12 @@ static int decode_imagemeta(int fd, uint64_t length, std::map<std::string, std::
   return 0;
 }
 
-static int do_import_header(int fd, int import_format, uint64_t &size, librbd::ImageOptions& opts,
+static int do_import_header(int fd, int import_format, librbd::ImageOptions& opts,
                             std::map<std::string, std::string>* imagemetas)
 {
   // There is no header in v1 image.
   if (import_format == 1) {
     return 0;
-  }
-
-  if (fd == STDIN_FILENO || size < utils::RBD_IMAGE_BANNER_V2.size()) {
-    return -EINVAL;
   }
 
   int r;
@@ -885,7 +881,7 @@ static int do_import(librados::Rados &rados, librbd::RBD &rbd,
 #endif
   }
 
-  r = do_import_header(fd, import_format, size, opts, &imagemetas);
+  r = do_import_header(fd, import_format, opts, &imagemetas);
   if (r < 0) {
     std::cerr << "rbd: import header failed." << std::endl;
     goto done;
