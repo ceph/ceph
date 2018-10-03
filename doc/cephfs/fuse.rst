@@ -26,7 +26,7 @@ For additional details on ``cephx`` configuration, see
 To mount the Ceph file system as a FUSE, you may use the ``ceph-fuse`` command.
 For example::
 
-	sudo mkdir /home/usernname/cephfs
+	sudo mkdir /home/username/cephfs
 	sudo ceph-fuse -m 192.168.0.1:6789 /home/username/cephfs
 
 If you have more than one filesystem, specify which one to mount using
