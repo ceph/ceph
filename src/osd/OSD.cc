@@ -6521,7 +6521,6 @@ int OSD::_do_command(
 
   else if (prefix == "get cache stats") {
     int obj_ctx_count = 0;
-    int osd_map_count = service.map_cache.get_count();
     vector<PGRef> pgs;
     _get_pgs(&pgs);
     for (auto& pg: pgs) {
@@ -6531,13 +6530,11 @@ int OSD::_do_command(
       f->open_object_section("cache_stats");
       f->dump_int("object_ctx", obj_ctx_count);
       store->dump_cache_stats(f.get());
-      f->dump_int("osd_map", osd_map_count);
       f->close_section();
       f->flush(ds);
     } else {
       ds << "object_ctx: " << obj_ctx_count;
       store->dump_cache_stats(ds);
-      ds << "osd_map: " << osd_map_count;
     }
   }
 
