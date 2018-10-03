@@ -170,7 +170,7 @@ class Batch(object):
             if type(strategy) != type(new_strategy):
                 if not args.report:
                     mlogger.error("aborting because strategy changed from %s to %s after filtering" % (strategy, new_strategy))
-                    raise SystemExit(0)
+                    raise SystemExit(1)
             else:
                 strategy = new_strategy
         return strategy(unused_devices, args)
