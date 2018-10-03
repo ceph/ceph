@@ -28,9 +28,11 @@
 
 #include "DaemonState.h"
 #include "ClusterState.h"
+#include "OSDPerfMetricQuery.h"
 
 class health_check_map_t;
 class DaemonServer;
+struct OSDPerfMetricQuery;
 
 class ActivePyModules
 {
@@ -90,6 +92,9 @@ public:
       const std::string &svc_name,
       const std::string &svc_id,
       const std::string &path) const;
+
+  OSDPerfMetricQueryID add_osd_perf_query(const OSDPerfMetricQuery &query);
+  void remove_osd_perf_query(OSDPerfMetricQueryID query_id);
 
   bool get_store(const std::string &module_name,
       const std::string &key, std::string *val) const;
