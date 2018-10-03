@@ -8,7 +8,6 @@
 #include "common/errno.h"
 #include "common/WorkQueue.h"
 #include "journal/Journaler.h"
-#include "journal/Settings.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
 #include "librbd/journal/Types.h"
@@ -106,17 +105,11 @@ template <typename I>
 void PrepareRemoteImageRequest<I>::get_client() {
   dout(20) << dendl;
 
-  journal::Settings settings;
-  settings.commit_interval = g_ceph_context->_conf.get_val<double>(
-    "rbd_mirror_journal_commit_age");
-  settings.max_fetch_bytes = g_ceph_context->_conf.get_val<Option::size_t>(
-    "rbd_mirror_journal_max_fetch_bytes");
-
   ceph_assert(*m_remote_journaler == nullptr);
   *m_remote_journaler = new Journaler(m_threads->work_queue, m_threads->timer,
                                       &m_threads->timer_lock, m_remote_io_ctx,
                                       *m_remote_image_id, m_local_mirror_uuid,
-                                      settings);
+                                      m_journal_settings);
 
   Context *ctx = create_async_context_callback(
     m_threads->work_queue, create_context_callback<

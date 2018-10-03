@@ -165,6 +165,7 @@ struct PrepareRemoteImageRequest<librbd::MockTestImageCtx> {
                                            const std::string &global_image_id,
                                            const std::string &local_mirror_uuid,
                                            const std::string &local_image_id,
+                                           const journal::Settings &settings,
                                            std::string *remote_mirror_uuid,
                                            std::string *remote_image_id,
                                            ::journal::MockJournalerProxy **remote_journaler,

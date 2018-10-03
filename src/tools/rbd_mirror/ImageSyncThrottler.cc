@@ -28,18 +28,19 @@ namespace rbd {
 namespace mirror {
 
 template <typename I>
-ImageSyncThrottler<I>::ImageSyncThrottler()
-  : m_lock(librbd::util::unique_lock_name("rbd::mirror::ImageSyncThrottler",
+ImageSyncThrottler<I>::ImageSyncThrottler(CephContext *cct)
+  : m_cct(cct),
+    m_lock(librbd::util::unique_lock_name("rbd::mirror::ImageSyncThrottler",
                                           this)),
-    m_max_concurrent_syncs(g_ceph_context->_conf.get_val<uint64_t>(
+    m_max_concurrent_syncs(cct->_conf.get_val<uint64_t>(
       "rbd_mirror_concurrent_image_syncs")) {
   dout(20) << "max_concurrent_syncs=" << m_max_concurrent_syncs << dendl;
-  g_ceph_context->_conf.add_observer(this);
+  m_cct->_conf.add_observer(this);
 }
 
 template <typename I>
 ImageSyncThrottler<I>::~ImageSyncThrottler() {
-  g_ceph_context->_conf.remove_observer(this);
+  m_cct->_conf.remove_observer(this);
 
   Mutex::Locker locker(m_lock);
   ceph_assert(m_inflight_ops.empty());
