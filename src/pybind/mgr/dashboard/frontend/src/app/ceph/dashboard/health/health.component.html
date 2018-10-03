@@ -7,7 +7,8 @@
     <cd-info-card cardTitle="Cluster Status"
                   i18n-cardTitle
                   class="col-sm-6 col-md-4 col-lg-3"
-                  [contentClass]="contentData.health.checks.length > 0 ? 'content-highlight content-row-size-1-5' : 'content-highlight'">
+                  [contentClass]="contentData.health.checks.length > 0 ? 'content-highlight content-row-size-1-5' : 'content-highlight'"
+                  *ngIf="contentData.health">
       <ng-container *ngIf="contentData.health.checks.length > 0">
         <ng-template #healthChecks>
           <p class="logs-link"
@@ -71,7 +72,8 @@
                   i18n-cardTitle
                   link="/hosts"
                   class="col-sm-6 col-md-4 col-lg-3"
-                  contentClass="content-medium content-highlight">
+                  contentClass="content-medium content-highlight"
+                  *ngIf="contentData.hosts !== undefined">
       {{ contentData.hosts }}
     </cd-info-card>
 
@@ -79,7 +81,8 @@
                   i18n-cardTitle
                   link="/rgw/daemon"
                   class="col-sm-6 col-md-4 col-lg-3"
-                  contentClass="content-medium content-highlight">
+                  contentClass="content-medium content-highlight"
+                  *ngIf="contentData.rgw !== undefined">
       {{ contentData.rgw }}
     </cd-info-card>
     <cd-info-card cardTitle="Metadata Servers"
@@ -94,7 +97,8 @@
                   i18n-cardTitle
                   link="/block/iscsi"
                   class="col-sm-6 col-md-4 col-lg-3"
-                  contentClass="content-medium content-highlight">
+                  contentClass="content-medium content-highlight"
+                  *ngIf="contentData.iscsi_daemons !== undefined">
       {{ contentData.iscsi_daemons }}
     </cd-info-card>
   </cd-info-group>
@@ -179,7 +183,7 @@
                     class="cd-col-5"
                     cardClass="card-medium"
                     contentClass="content-chart"
-                    *ngIf="contentData.mon_status">
+                    *ngIf="contentData.df">
         <cd-health-pie [data]="contentData"
                        [isBytesData]="true"
                        [displayLegend]="true"
@@ -192,7 +196,7 @@
                     class="cd-col-5"
                     cardClass="card-medium"
                     contentClass="content-medium content-highlight"
-                    *ngIf="contentData.df?.stats?.total_objects">
+                    *ngIf="contentData.df?.stats?.total_objects !== undefined">
         {{ contentData.df?.stats?.total_objects }}
       </cd-info-card>
 
@@ -210,7 +214,8 @@
                     class="cd-col-5"
                     cardClass="card-medium"
                     contentClass="content-chart"
-                    (click)="pgStatusTarget.toggle()">
+                    (click)="pgStatusTarget.toggle()"
+                    *ngIf="contentData.pg_info">
         <ng-template #pgStatus>
           <p class="logs-link"
              i18n>
@@ -241,7 +246,8 @@
   <cd-info-group groupTitle="Logs"
                  i18n-groupTitle
                  class="row info-group"
-                 id="logs">
+                 id="logs"
+                 *ngIf="contentData.clog || contentData.audit_log">
 
     <cd-info-card cardTitle="Cluster"
                   i18n-cardTitle
