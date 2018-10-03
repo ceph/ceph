@@ -21,6 +21,7 @@
 
 #include "mgr/mgr_commands.h"
 #include "mgr/DaemonHealthMetricCollector.h"
+#include "mgr/OSDPerfMetricCollector.h"
 #include "mon/MonCommand.h"
 
 #include "messages/MMgrOpen.h"
@@ -87,7 +88,9 @@ DaemonServer::DaemonServer(MonClient *monc_,
       pgmap_ready(false),
       timer(g_ceph_context, lock),
       shutting_down(false),
-      tick_event(nullptr)
+      tick_event(nullptr),
+      osd_perf_metric_collector_listener(this),
+      osd_perf_metric_collector(osd_perf_metric_collector_listener)
 {
   g_conf().add_observer(this);
 }
@@ -386,6 +389,22 @@ void DaemonServer::schedule_tick(double delay_sec)
 {
   Mutex::Locker l(lock);
   schedule_tick_locked(delay_sec);
+}
+
+void DaemonServer::handle_osd_perf_metric_query_updated()
+{
+  dout(10) << dendl;
+
+  // Send a fresh MMgrConfigure to all clients, so that they can follow
+  // the new policy for transmitting stats
+  finisher.queue(new FunctionContext([this](int r) {
+        Mutex::Locker l(lock);
+        for (auto &c : daemon_connections) {
+          if (c->peer_is_osd()) {
+            _send_configure(c);
+          }
+        }
+      }));
 }
 
 void DaemonServer::shutdown()
@@ -2508,16 +2527,25 @@ void DaemonServer::_send_configure(ConnectionRef c)
 {
   ceph_assert(lock.is_locked_by_me());
 
-  OSDPerfMetricQuery query;
-
   auto configure = new MMgrConfigure();
   configure->stats_period = g_conf().get_val<int64_t>("mgr_stats_period");
   configure->stats_threshold = g_conf().get_val<int64_t>("mgr_stats_threshold");
 
   if (c->peer_is_osd()) {
-    configure->osd_perf_metric_queries.push_back(query);
+    configure->osd_perf_metric_queries =
+        osd_perf_metric_collector.get_queries();
   }
 
   c->send_message(configure);
 }
 
+OSDPerfMetricQueryID DaemonServer::add_osd_perf_query(
+  const OSDPerfMetricQuery &query)
+{
+  return osd_perf_metric_collector.add_query(query);
+}
+
+int DaemonServer::remove_osd_perf_query(OSDPerfMetricQueryID query_id)
+{
+  return osd_perf_metric_collector.remove_query(query_id);
+}
