@@ -6023,8 +6023,8 @@ COMMAND("smart name=devid,type=CephString,req=False",
 COMMAND("drop cache",
         "Drop all OSD caches",
         "osd", "rw", "cli,rest")
-COMMAND("get_cache_object_count",
-        "Get OSD caches object count",
+COMMAND("get cache stats",
+        "Get OSD caches statistics",
         "osd", "r", "cli,rest")
 };
 
@@ -6524,8 +6524,7 @@ int OSD::_do_command(
     }
   }
 
-  else if (prefix == "get_cache_object_count") {
-    int store_cache_count = store->get_cache_obj_count();
+  else if (prefix == "get cache stats") {
     int obj_ctx_count = 0;
     int osd_map_count = service.map_cache.get_count();
     vector<PGRef> pgs;
@@ -6534,15 +6533,15 @@ int OSD::_do_command(
       obj_ctx_count += pg->get_cache_obj_count();
     }
     if (f) {
-      f->open_object_section("caches_object_count");
+      f->open_object_section("cache_stats");
       f->dump_int("object_ctx", obj_ctx_count);
-      f->dump_int("objectstore_onode", store_cache_count);
+      store->dump_cache_stats(f.get());
       f->dump_int("osd_map", osd_map_count);
       f->close_section();
       f->flush(ds);
     } else {
       ds << "object_ctx: " << obj_ctx_count;
-      ds << "objectstore_onode: " << store_cache_count;
+      store->dump_cache_stats(ds);
       ds << "osd_map: " << osd_map_count;
     }
   }
