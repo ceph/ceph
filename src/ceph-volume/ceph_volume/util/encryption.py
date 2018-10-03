@@ -189,7 +189,8 @@ def status(device):
         'status',
         device,
     ]
-    out, err, code = process.call(command, show_command=True)
+    out, err, code = process.call(command, show_command=True, verbose_on_failure=False)
+
     metadata = {}
     if code != 0:
         logger.warning('failed to detect device mapper information')
