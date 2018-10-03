@@ -6511,11 +6511,6 @@ int OSD::_do_command(
       ds << "Error flushing objectstore cache: " << cpp_strerror(r);
       goto out;
     }
-    // Clear osd map cache
-    {
-      Mutex::Locker l(service.map_cache_lock);
-      service.map_cache.clear();
-    }
     // Clear the objectcontext cache (per PG)
     vector<PGRef> pgs;
     _get_pgs(&pgs);
