@@ -709,7 +709,7 @@ int RGWHandler_SWIFT_Auth::init(RGWRados *store, struct req_state *state,
   return RGWHandler::init(store, state, cio);
 }
 
-int RGWHandler_SWIFT_Auth::authorize()
+int RGWHandler_SWIFT_Auth::authorize(const DoutPrefixProvider *dpp)
 {
   return 0;
 }

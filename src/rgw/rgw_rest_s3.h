@@ -468,7 +468,8 @@ public:
 
 class RGW_Auth_S3 {
 public:
-  static int authorize(RGWRados *store,
+  static int authorize(const DoutPrefixProvider *dpp,
+                       RGWRados *store,
                        const rgw::auth::StrategyRegistry& auth_registry,
                        struct req_state *s);
 };
@@ -491,8 +492,8 @@ public:
   int init(RGWRados *store,
            struct req_state *s,
            rgw::io::BasicClient *cio) override;
-  int authorize() override {
-    return RGW_Auth_S3::authorize(store, auth_registry, s);
+  int authorize(const DoutPrefixProvider *dpp) override {
+    return RGW_Auth_S3::authorize(dpp, store, auth_registry, s);
   }
   int postauth_init() override { return 0; }
 };
@@ -513,8 +514,8 @@ public:
   int init(RGWRados *store,
            struct req_state *s,
            rgw::io::BasicClient *cio) override;
-  int authorize() override {
-    return RGW_Auth_S3::authorize(store, auth_registry, s);
+  int authorize(const DoutPrefixProvider *dpp) override {
+    return RGW_Auth_S3::authorize(dpp, store, auth_registry, s);
   }
   int postauth_init() override;
 };

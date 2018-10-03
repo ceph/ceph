@@ -290,7 +290,7 @@ public:
   RGWOp *op_get() override;
 
   int init(RGWRados *store, struct req_state *state, rgw::io::BasicClient *cio) override;
-  int authorize() override;
+  int authorize(const DoutPrefixProvider *dpp) override;
   int postauth_init() override { return 0; }
   int read_permissions(RGWOp *op) override { return 0; }
 
