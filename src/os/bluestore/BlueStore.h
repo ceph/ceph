@@ -2333,12 +2333,23 @@ public:
   int _fsck(bool deep, bool repair);
 
   void set_cache_shards(unsigned num) override;
-  int get_cache_obj_count() {
-    int count = 0;
+  void dump_cache_stats(Formatter *f) override {
+    int onode_count = 0, buffers_bytes = 0;
     for (auto i: cache_shards) {
-      count += i->_get_num_onodes();
+      onode_count += i->_get_num_onodes();
+      buffers_bytes += i->_get_buffer_bytes();
     }
-    return count;
+    f->dump_int("bluestore_onode", onode_count);
+    f->dump_int("bluestore_buffers", buffers_bytes);
+  }
+  void dump_cache_stats(ostream& ss) override {
+    int onode_count = 0, buffers_bytes = 0;
+    for (auto i: cache_shards) {
+      onode_count += i->_get_num_onodes();
+      buffers_bytes += i->_get_buffer_bytes();
+    }
+    ss << "bluestore_onode: " << onode_count;
+    ss << "bluestore_buffers: " << buffers_bytes;
   }
 
   int validate_hobject_key(const hobject_t &obj) const override {
