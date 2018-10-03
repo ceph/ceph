@@ -238,6 +238,9 @@ public:
   int trash_move(IoCtx &io_ctx, const char *name, uint64_t delay);
   int trash_get(IoCtx &io_ctx, const char *id, trash_image_info_t *info);
   int trash_list(IoCtx &io_ctx, std::vector<trash_image_info_t> &entries);
+  int trash_purge(IoCtx &io_ctx, time_t expire_ts, float threshold);
+  int trash_purge_with_progress(IoCtx &io_ctx, time_t expire_ts, float threshold,
+                                ProgressContext &pctx);
   int trash_remove(IoCtx &io_ctx, const char *image_id, bool force);
   int trash_remove_with_progress(IoCtx &io_ctx, const char *image_id,
                                  bool force, ProgressContext &pctx);

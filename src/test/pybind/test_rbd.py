@@ -5,7 +5,7 @@ import os
 import time
 import sys
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from nose import with_setup, SkipTest
 from nose.tools import eq_ as eq, assert_raises, assert_not_equal
 from rados import (Rados,
@@ -1862,6 +1862,36 @@ class TestTrash(object):
 
         RBD().trash_move(ioctx, image_name, 1000)
         RBD().trash_remove(ioctx, image_id, True)
+
+    def test_purge(self):
+        create_image()
+        with Image(ioctx, image_name) as image:
+            image_name1 = image_name
+            image_id1 = image.id()
+
+        create_image()
+        with Image(ioctx, image_name) as image:
+            image_name2 = image_name
+            image_id2 = image.id()
+
+        create_image()
+        with Image(ioctx, image_name) as image:
+            image_name3 = image_name
+            image_id3 = image.id()
+
+        RBD().trash_move(ioctx, image_name1, 0)
+        RBD().trash_move(ioctx, image_name2, 1000)
+        RBD().trash_move(ioctx, image_name3, 1000)
+
+        RBD().trash_purge(ioctx, datetime.now())
+        entries = list(RBD().trash_list(ioctx))
+        for e in entries:
+            assert(e['id'] != image_id1)
+
+        RBD.trash_purge(ioctx, datetime.now() + timedelta(seconds=5000), 0)
+        entries = list(RBD().trash_list(ioctx))
+        for e in entries:
+            assert(e['id'] not in [image_id2, image_id3])
 
     def test_remove_denied(self):
         create_image()

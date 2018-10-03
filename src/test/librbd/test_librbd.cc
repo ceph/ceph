@@ -6680,6 +6680,75 @@ TEST_F(TestLibRBD, TestTrashMoveAndPurgeNonExpiredDelay) {
                                               true, pp2));
 }
 
+TEST_F(TestLibRBD, TestTrashPurge) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  std::string name1 = get_temp_image_name();
+  std::string name2 = get_temp_image_name();
+
+  uint64_t size = 1 << 18;
+  int order = 12;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name1.c_str(), size, &order));
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name1.c_str(), size, &order));
+
+  librbd::Image image1;
+  ASSERT_EQ(0, rbd.open(ioctx, image1, name1.c_str(), nullptr));
+  uint8_t old_format;
+  ASSERT_EQ(0, image1.old_format(&old_format));
+
+  if (old_format) {
+    ASSERT_EQ(-EOPNOTSUPP, rbd.trash_move(ioctx, name1.c_str(), 0));
+    image1.close();
+    return;
+  }
+  std::string image_id1;
+  ASSERT_EQ(0, image1.get_id(&image_id1));
+  image1.close();
+
+  ASSERT_EQ(0, rbd.trash_move(ioctx, name1.c_str(), 0));
+
+  librbd::Image image2;
+  ASSERT_EQ(0, rbd.open(ioctx, image2, name2.c_str(), nullptr));
+  ASSERT_EQ(0, image2.old_format(&old_format));
+
+  if (old_format) {
+    ASSERT_EQ(-EOPNOTSUPP, rbd.trash_move(ioctx, name2.c_str(), 0));
+    image2.close();
+    return;
+  }
+  std::string image_id2;
+  ASSERT_EQ(0, image2.get_id(&image_id2));
+  image2.close();
+
+  ASSERT_EQ(0, rbd.trash_move(ioctx, name2.c_str(), 100));
+  ASSERT_EQ(0, rbd.trash_purge(ioctx, 0, -1));
+
+  std::vector<librbd::trash_image_info_t> entries;
+  ASSERT_EQ(0, rbd.trash_list(ioctx, entries));
+  ASSERT_FALSE(entries.empty());
+  bool found = false;
+  for(auto& entry : entries) {
+    if (entry.id == image_id1 && entry.name == name1)
+      found = true;
+  }
+  ASSERT_FALSE(found);
+  entries.clear();
+
+  struct timespec now;
+  clock_gettime(CLOCK_REALTIME, &now);
+  ASSERT_EQ(0, rbd.trash_purge(ioctx, now.tv_sec+1000, 0));
+  ASSERT_EQ(0, rbd.trash_list(ioctx, entries));
+
+  found = false;
+  for(auto& entry : entries) {
+    if (entry.id == image_id2 && entry.name == name2)
+      found = true;
+  }
+  ASSERT_FALSE(found);
+}
+
 TEST_F(TestLibRBD, TestTrashMoveAndRestore) {
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
