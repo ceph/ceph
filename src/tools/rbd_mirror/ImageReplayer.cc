@@ -433,12 +433,20 @@ void ImageReplayer<I>::prepare_remote_image() {
   ceph_assert(!m_peers.empty());
   m_remote_image = {*m_peers.begin()};
 
+  auto cct = static_cast<CephContext *>(m_local->cct());
+  journal::Settings journal_settings;
+  journal_settings.commit_interval = cct->_conf.get_val<double>(
+    "rbd_mirror_journal_commit_age");
+  journal_settings.max_fetch_bytes = cct->_conf.get_val<Option::size_t>(
+    "rbd_mirror_journal_max_fetch_bytes");
+
   Context *ctx = create_context_callback<
     ImageReplayer, &ImageReplayer<I>::handle_prepare_remote_image>(this);
   auto req = PrepareRemoteImageRequest<I>::create(
     m_threads, m_remote_image.io_ctx, m_global_image_id, m_local_mirror_uuid,
-    m_local_image_id, &m_remote_image.mirror_uuid, &m_remote_image.image_id,
-    &m_remote_journaler, &m_client_state, &m_client_meta, ctx);
+    m_local_image_id, journal_settings, &m_remote_image.mirror_uuid,
+    &m_remote_image.image_id, &m_remote_journaler, &m_client_state,
+    &m_client_meta, ctx);
   req->send();
 }
 

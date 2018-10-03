@@ -595,7 +595,7 @@ void InstanceWatcher<I>::handle_acquire_leader() {
   Mutex::Locker locker(m_lock);
 
   ceph_assert(m_image_sync_throttler == nullptr);
-  m_image_sync_throttler = ImageSyncThrottler<I>::create();
+  m_image_sync_throttler = ImageSyncThrottler<I>::create(m_cct);
 
   m_leader_instance_id = m_instance_id;
   unsuspend_notify_requests();

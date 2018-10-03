@@ -42,7 +42,7 @@ public:
 };
 
 TEST_F(TestMockImageSyncThrottler, Single_Sync) {
-  MockImageSyncThrottler throttler;
+  MockImageSyncThrottler throttler(g_ceph_context);
   C_SaferCond on_start;
   throttler.start_op("id", &on_start);
   ASSERT_EQ(0, on_start.wait());
@@ -50,7 +50,7 @@ TEST_F(TestMockImageSyncThrottler, Single_Sync) {
 }
 
 TEST_F(TestMockImageSyncThrottler, Multiple_Syncs) {
-  MockImageSyncThrottler throttler;
+  MockImageSyncThrottler throttler(g_ceph_context);
   throttler.set_max_concurrent_syncs(2);
 
   C_SaferCond on_start1;
@@ -73,7 +73,7 @@ TEST_F(TestMockImageSyncThrottler, Multiple_Syncs) {
 }
 
 TEST_F(TestMockImageSyncThrottler, Cancel_Running_Sync) {
-  MockImageSyncThrottler throttler;
+  MockImageSyncThrottler throttler(g_ceph_context);
   C_SaferCond on_start;
   throttler.start_op("id", &on_start);
   ASSERT_EQ(0, on_start.wait());
@@ -82,7 +82,7 @@ TEST_F(TestMockImageSyncThrottler, Cancel_Running_Sync) {
 }
 
 TEST_F(TestMockImageSyncThrottler, Cancel_Waiting_Sync) {
-  MockImageSyncThrottler throttler;
+  MockImageSyncThrottler throttler(g_ceph_context);
   throttler.set_max_concurrent_syncs(1);
 
   C_SaferCond on_start1;
@@ -98,7 +98,7 @@ TEST_F(TestMockImageSyncThrottler, Cancel_Waiting_Sync) {
 
 
 TEST_F(TestMockImageSyncThrottler, Cancel_Running_Sync_Start_Waiting) {
-  MockImageSyncThrottler throttler;
+  MockImageSyncThrottler throttler(g_ceph_context);
   throttler.set_max_concurrent_syncs(1);
 
   C_SaferCond on_start1;
@@ -114,7 +114,7 @@ TEST_F(TestMockImageSyncThrottler, Cancel_Running_Sync_Start_Waiting) {
 }
 
 TEST_F(TestMockImageSyncThrottler, Increase_Max_Concurrent_Syncs) {
-  MockImageSyncThrottler throttler;
+  MockImageSyncThrottler throttler(g_ceph_context);
   throttler.set_max_concurrent_syncs(2);
 
   C_SaferCond on_start1;
@@ -146,7 +146,7 @@ TEST_F(TestMockImageSyncThrottler, Increase_Max_Concurrent_Syncs) {
 }
 
 TEST_F(TestMockImageSyncThrottler, Decrease_Max_Concurrent_Syncs) {
-  MockImageSyncThrottler throttler;
+  MockImageSyncThrottler throttler(g_ceph_context);
   throttler.set_max_concurrent_syncs(4);
 
   C_SaferCond on_start1;
