@@ -23,9 +23,12 @@ class RGWBucketReshard {
 
   string reshard_oid;
   rados::cls::lock::Lock reshard_lock;
+  utime_t lock_start_time;
+  bool locked_bucket;
 
   int lock_bucket();
   void unlock_bucket();
+  int renew_lock_bucket();
   int set_resharding_status(const string& new_instance_id, int32_t num_shards, cls_rgw_reshard_status status);
   int clear_resharding();
 
@@ -39,6 +42,10 @@ class RGWBucketReshard {
 public:
   RGWBucketReshard(RGWRados *_store, const RGWBucketInfo& _bucket_info,
                    const std::map<string, bufferlist>& _bucket_attrs);
+
+  RGWBucketReshard(RGWRados *_store, const RGWBucketInfo& _bucket_info,
+                   const std::map<string, bufferlist>& _bucket_attrs,
+		   rados::cls::lock::Lock& reshard_lock, const utime_t& lock_start_time);
 
   int execute(int num_shards, int max_op_entries,
               bool verbose = false, ostream *out = nullptr,
