@@ -226,9 +226,6 @@ namespace librbd {
 
     ZTracer::Endpoint trace_endpoint;
 
-    static bool _filter_metadata_confs(const string &prefix, std::map<string, bool> &configs,
-                                       const map<string, bufferlist> &pairs, map<string, bufferlist> *res);
-
     // unit test mock helpers
     static ImageCtx* create(const std::string &image_name,
                             const std::string &image_id,

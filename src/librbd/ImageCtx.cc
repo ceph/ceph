@@ -35,6 +35,7 @@
 
 #include "osdc/Striper.h"
 #include <boost/bind.hpp>
+#include <boost/algorithm/string/predicate.hpp>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -742,79 +743,9 @@ public:
     completed_reqs.clear();
   }
 
-  bool ImageCtx::_filter_metadata_confs(const string &prefix,
-                                        map<string, bool> &configs,
-                                        const map<string, bufferlist> &pairs,
-                                        map<string, bufferlist> *res) {
-    size_t conf_prefix_len = prefix.size();
-
-    for (auto it : pairs) {
-      if (it.first.compare(0, std::min(conf_prefix_len, it.first.size()), prefix) > 0)
-        return false;
-
-      if (it.first.size() <= conf_prefix_len)
-        continue;
-
-      string key = it.first.substr(conf_prefix_len, it.first.size() - conf_prefix_len);
-      auto cit = configs.find(key);
-      if (cit != configs.end()) {
-        cit->second = true;
-        res->insert(make_pair(key, it.second));
-      }
-    }
-    return true;
-  }
-
   void ImageCtx::apply_metadata(const std::map<std::string, bufferlist> &meta,
                                 bool thread_safe) {
     ldout(cct, 20) << __func__ << dendl;
-    std::map<string, bool> configs = boost::assign::map_list_of(
-        "rbd_non_blocking_aio", false)(
-        "rbd_cache", false)(
-        "rbd_cache_writethrough_until_flush", false)(
-        "rbd_cache_size", false)(
-        "rbd_cache_max_dirty", false)(
-        "rbd_cache_target_dirty", false)(
-        "rbd_cache_max_dirty_age", false)(
-        "rbd_cache_max_dirty_object", false)(
-        "rbd_cache_block_writes_upfront", false)(
-        "rbd_concurrent_management_ops", false)(
-        "rbd_balance_snap_reads", false)(
-        "rbd_localize_snap_reads", false)(
-        "rbd_balance_parent_reads", false)(
-        "rbd_localize_parent_reads", false)(
-        "rbd_sparse_read_threshold_bytes", false)(
-        "rbd_readahead_trigger_requests", false)(
-        "rbd_readahead_max_bytes", false)(
-        "rbd_readahead_disable_after_bytes", false)(
-        "rbd_clone_copy_on_read", false)(
-        "rbd_blacklist_on_break_lock", false)(
-        "rbd_blacklist_expire_seconds", false)(
-        "rbd_request_timed_out_seconds", false)(
-        "rbd_journal_order", false)(
-        "rbd_journal_splay_width", false)(
-        "rbd_journal_commit_age", false)(
-        "rbd_journal_object_flush_interval", false)(
-        "rbd_journal_object_flush_bytes", false)(
-        "rbd_journal_object_flush_age", false)(
-        "rbd_journal_object_max_in_flight_appends", false)(
-        "rbd_journal_pool", false)(
-        "rbd_journal_max_payload_bytes", false)(
-        "rbd_journal_max_concurrent_object_sets", false)(
-        "rbd_mirroring_resync_after_disconnect", false)(
-        "rbd_mirroring_delete_delay", false)(
-        "rbd_mirroring_replay_delay", false)(
-        "rbd_mtime_update_interval", false)(
-        "rbd_atime_update_interval", false)(
-        "rbd_skip_partial_discard", false)(
-	"rbd_qos_iops_limit", false)(
-	"rbd_qos_bps_limit", false)(
-	"rbd_qos_read_iops_limit", false)(
-	"rbd_qos_write_iops_limit", false)(
-	"rbd_qos_read_bps_limit", false)(
-	"rbd_qos_write_bps_limit", false);
-
-    std::map<std::string, bufferlist> res;
 
     // reset settings back to global defaults
     for (auto& key : config_overrides) {
@@ -824,25 +755,41 @@ public:
 
       config.set_val(key, value);
     }
-
     config_overrides.clear();
-    _filter_metadata_confs(METADATA_CONF_PREFIX, configs, meta, &res);
-    for (auto it : res) {
-      std::string val(it.second.c_str(), it.second.length());
-      int j = config.set_val(it.first.c_str(), val);
-      if (j < 0) {
-        lderr(cct) << __func__ << " failed to set config " << it.first
-                   << " with value " << it.second.c_str() << ": " << j
-                   << dendl;
+
+    // extract config overrides
+    for (auto meta_pair : meta) {
+      if (!boost::starts_with(meta_pair.first, METADATA_CONF_PREFIX)) {
+        continue;
       }
-      config_overrides.insert(it.first);
+
+      std::string key = meta_pair.first.substr(METADATA_CONF_PREFIX.size());
+      if (!boost::starts_with(key, "rbd_")) {
+        // ignore non-RBD configuration keys
+        // TODO use option schema to determine applicable subsystem
+        ldout(cct, 0) << __func__ << ": ignoring config " << key << dendl;
+        continue;
+      }
+
+      if (config.find_option(key) != nullptr) {
+        std::string val(meta_pair.second.c_str(), meta_pair.second.length());
+        int r = config.set_val(key, val);
+        if (r >= 0) {
+          ldout(cct, 20) << __func__ << ": " << key << "=" << val << dendl;
+          config_overrides.insert(key);
+        } else {
+          lderr(cct) << __func__ << ": failed to set config " << key << " "
+                     << "with value " << val << ": " << cpp_strerror(r)
+                     << dendl;
+        }
+      }
     }
 
-#define ASSIGN_OPTION(config, type)                                            \
+#define ASSIGN_OPTION(param, type)                                             \
     do {                                                                       \
       string key = "rbd_";						       \
-      key = key + #config;					      	       \
-      config = config.get_val<type>("rbd_"#config);                            \
+      key = key + #param;					      	       \
+      param = config.get_val<type>("rbd_"#param);                              \
     } while (0);
 
     ASSIGN_OPTION(non_blocking_aio, bool);
