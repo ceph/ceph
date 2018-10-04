@@ -11,142 +11,143 @@
 #include "services/svc_sys_obj_cache.h"
 #include "services/svc_sys_obj_core.h"
 
+#include "common/errno.h"
+
 #define dout_subsys ceph_subsys_rgw
 
-RGWServiceInstance::~RGWServiceInstance()
-{
-  if (svc) {
-    shutdown();
-    svc->svc_registry->remove_instance(this);
-  }
-}
 
-void RGWServiceRegistry::register_all(CephContext *cct)
+int RGWServices_Shared::init(CephContext *cct,
+                             bool have_cache)
 {
-  services["finisher"] = make_shared<RGWS_Finisher>(cct);
-  services["notify"] = make_shared<RGWS_Notify>(cct);
-  services["rados"] = make_shared<RGWS_RADOS>(cct);
-  services["zone"] = make_shared<RGWS_Zone>(cct);
-  services["zone_utils"] = make_shared<RGWS_ZoneUtils>(cct);
-  services["quota"] = make_shared<RGWS_Quota>(cct);
-  services["sync_modules"] = make_shared<RGWS_SyncModules>(cct);
-  services["sysobj"] = make_shared<RGWS_SysObj>(cct);
-  services["sysobj_cache"] = make_shared<RGWS_SysObj_Cache>(cct);
-  services["sysobj_core"] = make_shared<RGWS_SysObj_Core>(cct);
-}
+  finisher = std::make_shared<RGWSI_Finisher>(cct);
+  notify = std::make_shared<RGWSI_Notify>(cct);
+  rados = std::make_shared<RGWSI_RADOS>(cct);
+  zone = std::make_shared<RGWSI_Zone>(cct);
+  zone_utils = std::make_shared<RGWSI_ZoneUtils>(cct);
+  quota = std::make_shared<RGWSI_Quota>(cct);
+  sync_modules = std::make_shared<RGWSI_SyncModules>(cct);
+  sysobj = std::make_shared<RGWSI_SysObj>(cct);
+  sysobj_core = std::make_shared<RGWSI_SysObj_Core>(cct);
 
-bool RGWServiceRegistry::find(const string& name, RGWServiceRef *svc)
-{
-  auto iter = services.find(name);
-  if (iter == services.end()) {
-    return false;
+  if (have_cache) {
+    sysobj_cache = std::make_shared<RGWSI_SysObj_Cache>(cct);
   }
 
-  *svc = iter->second;
-  return true;
+  finisher->init();
+  notify->init(zone, rados, finisher);
+  rados->init();
+  zone->init(sysobj, rados, sync_modules);
+  zone_utils->init(rados, zone);
+  quota->init(zone);
+  sync_modules->init();
+  sysobj_core->core_init(rados, zone);
+  if (have_cache) {
+    sysobj_cache->init(rados, zone, notify);
+    auto _cache = std::static_pointer_cast<RGWSI_SysObj_Core>(sysobj_cache);
+    sysobj->init(rados, _cache);
+  } else {
+    sysobj->init(rados, sysobj_core);
+  }
+
+
+  int r = finisher->start();
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: failed to start finisher service (" << cpp_strerror(-r) << dendl;
+    return r;
+  }
+
+  r = notify->start();
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: failed to start notify service (" << cpp_strerror(-r) << dendl;
+    return r;
+  }
+
+  r = rados->start();
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: failed to start rados service (" << cpp_strerror(-r) << dendl;
+    return r;
+  }
+
+  r = zone->start();
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: failed to start zone service (" << cpp_strerror(-r) << dendl;
+    return r;
+  }
+
+  r = zone_utils->start();
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: failed to start zone_utils service (" << cpp_strerror(-r) << dendl;
+    return r;
+  }
+
+  r = quota->start();
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: failed to start quota service (" << cpp_strerror(-r) << dendl;
+    return r;
+  }
+
+  r = sysobj_core->start();
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: failed to start sysobj_core service (" << cpp_strerror(-r) << dendl;
+    return r;
+  }
+
+  if (have_cache) {
+    r = sysobj_cache->start();
+    if (r < 0) {
+      ldout(cct, 0) << "ERROR: failed to start sysobj_cache service (" << cpp_strerror(-r) << dendl;
+      return r;
+    }
+  }
+
+  r = sysobj->start();
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: failed to start sysobj service (" << cpp_strerror(-r) << dendl;
+    return r;
+  }
+
+  /* cache or core services will be started by sysobj */
+
+  return  0;
 }
 
-string RGWServiceRegistry::get_conf_id(const string& service_type, const string& conf)
+
+int RGWServices::init(CephContext *cct, bool have_cache)
 {
-  return service_type + ":" + conf;
+  int r = _svc.init(cct, have_cache);
+  if (r < 0) {
+    return r;
+  }
+
+  finisher = _svc.finisher.get();
+  notify = _svc.notify.get();
+  rados = _svc.rados.get();
+  zone = _svc.zone.get();
+  zone_utils = _svc.zone_utils.get();
+  quota = _svc.quota.get();
+  sync_modules = _svc.sync_modules.get();
+  sysobj = _svc.sysobj.get();
+  cache = _svc.sysobj_cache.get();
+  core = _svc.sysobj_core.get();
+
+  return 0;
 }
 
-int RGWServiceRegistry::do_get_instance(RGWServiceRef& svc,
-                                        const string& conf,
-                                        RGWServiceInstanceRef *ref,
-                                        vector<RGWServiceInstanceRef> *new_instances)
+int RGWServiceInstance::start()
 {
-  RGWServiceInstanceRef instance_ref;
-
-  string conf_id = get_conf_id(svc->type(), conf);
-
-  auto iter = instances_by_conf.find(conf_id);
-  if (iter != instances_by_conf.end()) {
-    *ref = iter->second.ref;
+  if (start_state != StateInit) {
     return 0;
   }
-  int r = svc->create_instance(conf, &instance_ref);
+
+  start_state = StateStarting;; /* setting started prior to do_start() on purpose so that circular
+                                   references can call start() on each other */
+
+  int r = do_start();
   if (r < 0) {
-    ldout(cct, 0) << "ERROR: failed to create instance for service " << svc->type() << " conf=" << conf << " (r=" << r << ")" << dendl;
-    return r;
-  }
-  svc->svc_registry = shared_from_this();
-  instance_ref->svc = svc;
-  instance_ref->svc_id = ++max_registry_id;
-
-  map<string, RGWServiceInstanceRef> dep_refs;
-
-  instance_info& iinfo = instances[instance_ref->svc_id];
-  iinfo.conf_id = get_conf_id(svc->type(), conf);
-  iinfo.id = instance_ref->svc_id;
-  iinfo.title = instance_ref->get_title();
-  iinfo.conf = conf;
-  iinfo.ref = instance_ref;
-
-  instances_by_conf[iinfo.conf_id] = iinfo;
-
-  auto deps = instance_ref->get_deps();
-  for (auto iter : deps) {
-    auto& dep_id = iter.first;
-    auto& dep = iter.second;
-    RGWServiceInstanceRef dep_ref;
-    r = do_get_instance(dep.name, dep.conf, &dep_ref, new_instances);
-    if (r < 0) {
-      ldout(cct, 0) << "ERROR: cannot satisfy dependency for service " << svc->type() << ": " << dep.name << dendl;
-      return r;
-    }
-    dep_refs[dep_id] = dep_ref;
-  }
-
-  ldout(cct, 10) << "svc: load service: " << instance_ref->get_svc()->type() << dendl;
-  r = instance_ref->load(conf, dep_refs);
-  ldout(cct, 10) << "svc: done load service: " << instance_ref->get_svc()->type() << dendl;
-  if (r < 0) {
-    ldout(cct, 0) << "ERROR: service instance load return error: service=" << svc->type() << " r=" << r << dendl;
     return r;
   }
 
-  new_instances->push_back(instance_ref);
-
-  if (instance_ref->svc_instance.empty()) {
-    char buf[32];
-    snprintf(buf, sizeof(buf), "%lld", (long long)instance_ref->svc_id);
-    instance_ref->svc_instance = buf;
-  }
-
-  *ref = iinfo.ref;
+  start_state = StateStarted;
 
   return 0;
-}
-
-int RGWServiceRegistry::get_instance(RGWServiceRef& svc,
-                                     const string& conf,
-                                     RGWServiceInstanceRef *ref)
-{
-  vector<RGWServiceInstanceRef> new_instances;
-
-  int r =  do_get_instance(svc, conf, ref, &new_instances);
-  if (r < 0) {
-    ldout(cct, 0) << "ERROR: service instance load return error: service=" << svc->type() << " r=" << r << dendl;
-  }
-
-  for (auto& instance_ref : new_instances) {
-    ldout(cct, 10) << "svc: init service: " << instance_ref->get_svc()->type() << dendl;
-    r = instance_ref->init();
-    ldout(cct, 10) << "svc: done init service: " << instance_ref->get_svc()->type() << dendl;
-    if (r < 0) {
-      ldout(cct, 0) << "ERROR: service instance init return error: service=" << instance_ref->get_svc()->type() << " r=" << r << dendl;
-      return r;
-    }
-  }
-  return 0;
-}
-
-void RGWServiceRegistry::remove_instance(RGWServiceInstance *instance) {
-  auto iter = instances.find(instance->svc_id);
-  if (iter == instances.end()) {
-    return;
-  }
-  instances_by_conf.erase(iter->second.conf_id);
-  instances.erase(iter);
 }

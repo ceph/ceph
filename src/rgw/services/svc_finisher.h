@@ -7,16 +7,9 @@
 class Context;
 class Finisher;
 
-class RGWS_Finisher : public RGWService
-{
-public:
-  RGWS_Finisher(CephContext *cct) : RGWService(cct, "finisher") {}
-
-  int create_instance(const std::string& conf, RGWServiceInstanceRef *instance) override;
-};
-
 class RGWSI_Finisher : public RGWServiceInstance
 {
+  friend struct RGWServices_Shared;
 public:
   class ShutdownCB;
 
@@ -24,18 +17,17 @@ private:
   Finisher *finisher{nullptr};
   bool finalized{false};
 
-  std::map<std::string, RGWServiceInstance::dependency> get_deps() override;
-  int load(const std::string& conf, std::map<std::string, RGWServiceInstanceRef>& dep_refs) override {
-    return 0;
-  }
-  int init() override;
   void shutdown() override;
 
   std::map<int, ShutdownCB *> shutdown_cbs;
   std::atomic<int> handles_counter;
 
+protected:
+  void init() {}
+  int do_start() override;
+
 public:
-  RGWSI_Finisher(RGWService *svc, CephContext *cct): RGWServiceInstance(svc, cct) {}
+  RGWSI_Finisher(CephContext *cct): RGWServiceInstance(cct) {}
   ~RGWSI_Finisher();
 
   class ShutdownCB {

@@ -26,6 +26,7 @@
 #include "rgw_period_puller.h"
 #include "rgw_sync_module.h"
 #include "rgw_sync_log_trim.h"
+#include "rgw_service.h"
 
 #include "services/svc_rados.h"
 #include "services/svc_zone.h"
@@ -46,13 +47,6 @@ struct RGWZoneGroup;
 struct RGWZoneParams;
 class RGWReshard;
 class RGWReshardWait;
-
-class RGWSI_Zone;
-class RGWSI_ZoneUtils;
-class RGWSI_Quota;
-class RGWSI_SyncModules;
-class RGWSI_SysObj;
-class RGWSI_SysObj_Cache;
 
 class RGWSysObjectCtx;
 
@@ -1296,7 +1290,6 @@ protected:
   RGWSyncModuleInstanceRef sync_module;
   bool writeable_zone{false};
 
-  RGWServiceRegistryRef svc_registry;
   RGWIndexCompletionManager *index_completion_manager{nullptr};
 
   bool use_cache{false};
@@ -1358,25 +1351,7 @@ public:
     cct = _cct;
   }
 
-  struct {
-    std::shared_ptr<RGWSI_RADOS> rados;
-    std::shared_ptr<RGWSI_Zone> zone;
-    std::shared_ptr<RGWSI_ZoneUtils> zone_utils;
-    std::shared_ptr<RGWSI_Quota> quota;
-    std::shared_ptr<RGWSI_SyncModules> sync_modules;
-    std::shared_ptr<RGWSI_SysObj> sysobj;
-    std::shared_ptr<RGWSI_SysObj_Cache> cache;
-  } _svc;
-
-  struct {
-    RGWSI_RADOS *rados{nullptr};
-    RGWSI_Zone *zone{nullptr};
-    RGWSI_ZoneUtils *zone_utils{nullptr};
-    RGWSI_Quota *quota{nullptr};
-    RGWSI_SyncModules *sync_modules{nullptr};
-    RGWSI_SysObj *sysobj{nullptr};
-    RGWSI_SysObj_Cache *cache{nullptr};
-  } svc;
+  RGWServices svc;
 
   /**
    * AmazonS3 errors contain a HostId string, but is an opaque base64 blob; we

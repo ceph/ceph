@@ -2,19 +2,7 @@
 
 #include "svc_finisher.h"
 
-int RGWS_Finisher::create_instance(const string& conf, RGWServiceInstanceRef *instance)
-{
-  instance->reset(new RGWSI_Finisher(this, cct));
-  return 0;
-}
-
-std::map<string, RGWServiceInstance::dependency> RGWSI_Finisher::get_deps()
-{
-  std::map<string, RGWServiceInstance::dependency> dep;
-  return dep;
-}
-
-int RGWSI_Finisher::init()
+int RGWSI_Finisher::do_start()
 {
   finisher = new Finisher(cct);
   finisher->start();
