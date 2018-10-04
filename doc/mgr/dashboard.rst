@@ -69,7 +69,7 @@ various aspects of your Ceph cluster:
 * **Object Gateway**: Lists all active object gateways and their performance
   counters. Display and manage (add/edit/delete) object gateway users and their
   details (e.g. quotas) as well as the users' buckets and their details (e.g.
-  owner, quotas). 
+  owner, quotas).
 
 Enabling
 --------
@@ -250,13 +250,6 @@ The default value is 45 seconds.
 Enabling the Embedding of Grafana Dashboards
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. note:: 
-  The embedding of Grafana dashboards into the Ceph Manager Dashboard is
-  currently work in progress. This section documents the backend configuration.
-  The corresponding changes to the WebUI have not been merged yet. You can
-  follow the development process in `PR#23666
-  <https://github.com/ceph/ceph/pull/23666>`_.
-
 Grafana and Prometheus are likely going to be bundled and installed by some
 orchestration tools along Ceph in the near future, but currently, you will have
 to install and configure both manually. After you have installed Prometheus and
@@ -266,9 +259,7 @@ Grafana on your preferred hosts, proceed with the following steps.
 
     $ ceph mgr module enable prometheus
 
-    More details can be found on the `documentation
-    <http://docs.ceph.com/docs/master/mgr/prometheus/>`_ of the prometheus
-    module.
+More details can be found on the `documentation <http://docs.ceph.com/docs/master/mgr/prometheus/>`_ of the prometheus module.
 
 #. Add the corresponding scrape configuration to Prometheus. This may look
    like::
@@ -289,42 +280,29 @@ Grafana on your preferred hosts, proceed with the following steps.
 
 #. Add Prometheus as data source to Grafana
 
-#. Install the `vonage-status-panel` plugin using::
+#. Install the `vonage-status-panel and grafana-piechart-panel` plugins using::
 
         grafana-cli plugins install vonage-status-panel
+        grafana-cli plugins install grafana-piechart-panel
 
 #. Add the Dashboards to Grafana by importing them
 
-#. Configure Grafana in `/etc/grafana/grafana.ini` to adapt the URLs to the
-   Ceph Dashboard properly::
+#. Configure Grafana in `/etc/grafana/grafana.ini` to adapt anonymous mode::
 
-        root_url = http://localhost:3000/api/grafana/proxy
+        [auth.anonymous]
+        enabled = true
+        org_name = Main Org.
+        org_role = Viewer
 
 After you have set up Grafana and Prometheus, you will need to configure the
 connection information that the Ceph Manager Dashboard will use to access Grafana.
-This includes setting the authentication method to be used, the corresponding login
-credentials as well as the URL at which the Grafana instance can be reached.
 
-The URL and TCP port can be set by using the following command::
+You need to tell the dashboard on which url Grafana instance is running/deployed::
 
-  $ ceph dashboard set-grafana-api-url <url>  # default: 'http://localhost:3000'
+  $ ceph dashboard set-grafana-api-url <grafana-server-url>  # default: ''
 
-You need to tell the dashboard which authentication method should be
-used::
-
-  $ ceph dashboard set-grafana-api-auth-method <method>  # default: ''
-
-Possible values are either 'password' or 'token'.
-
-To authenticate via username and password, you will need to set the following
-values::
-
-  $ ceph dashboard set-grafana-api-username <username>  # default: 'admin'
-  $ ceph dashboard set-grafana-api-password <password>  # default: 'admin'
-
-To use token based authentication, you will ned to set the token by issuing::
-
-  $ ceph dashboard set-grafana-api-token <token>  # default: ''
+The format of url is : `<protocol>:<IP-address>:<port>`
+You can directly access Grafana Instance as well to monitor your cluster.
 
 Accessing the dashboard
 ^^^^^^^^^^^^^^^^^^^^^^^
@@ -521,4 +499,3 @@ to use hyperlinks that include your prefix, you can set the
   ceph config-key set mgr/dashboard/url_prefix $PREFIX
 
 so you can access the dashboard at ``http://$IP:$PORT/$PREFIX/``.
-
