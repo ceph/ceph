@@ -27,6 +27,7 @@ export class Permissions {
   user: Permission;
   grafana: Permission;
   prometheus: Permission;
+  nfs: Permission;
 
   constructor(serverPermissions: any) {
     this.hosts = new Permission(serverPermissions['hosts']);
@@ -44,5 +45,6 @@ export class Permissions {
     this.user = new Permission(serverPermissions['user']);
     this.grafana = new Permission(serverPermissions['grafana']);
     this.prometheus = new Permission(serverPermissions['prometheus']);
+    this.nfs = new Permission(serverPermissions['nfs-ganesha']);
   }
 }

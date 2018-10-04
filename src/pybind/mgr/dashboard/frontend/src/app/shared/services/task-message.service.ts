@@ -321,6 +321,13 @@ export class TaskMessageService {
     ),
     'iscsi/target/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
       this.iscsiTarget(metadata)
+    ),
+    'nfs/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
+      this.nfs(metadata)
+    ),
+    'nfs/edit': this.newTaskMessage(this.commonOperations.update, (metadata) => this.nfs(metadata)),
+    'nfs/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
+      this.nfs(metadata)
     )
   };
 
@@ -344,6 +351,12 @@ export class TaskMessageService {
 
   iscsiTarget(metadata) {
     return this.i18n(`target '{{target_iqn}}'`, { target_iqn: metadata.target_iqn });
+  }
+
+  nfs(metadata) {
+    return this.i18n(`NFS {{nfs_id}}`, {
+      nfs_id: `'${metadata.cluster_id}:${metadata.export_id ? metadata.export_id : metadata.path}'`
+    });
   }
 
   _getTaskTitle(task: Task) {
