@@ -61,7 +61,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
+      "datasource": "$datasource",
       "fill": 1,
       "gridPos": {
         "h": 7,
@@ -152,7 +152,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
+      "datasource": "$datasource",
       "fill": 1,
       "gridPos": {
         "h": 7,
@@ -245,7 +245,7 @@
       {
         "allValue": null,
         "current": {},
-        "datasource": null,
+        "datasource": "$datasource",
         "hide": 2,
         "includeAll": true,
         "label": null,
@@ -263,9 +263,24 @@
         "useTags": false
       },
       {
+        "current": {
+        "tags": [],
+        "text": "default",
+        "value": "default"
+        },
+        "hide": 0,
+        "label": "Data Source",
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "type": "datasource"
+      },
+      {
         "allValue": null,
         "current": {},
-        "datasource": null,
+        "datasource": "$datasource",
         "hide": 0,
         "includeAll": false,
         "label": "Pool Name",
