@@ -302,7 +302,7 @@ int execute(const po::variables_map &vm,
   }
 
   r = do_list(pool_name, namespace_name, vm["long"].as<bool>(),
-              g_conf().get_val<int64_t>("rbd_concurrent_management_ops"),
+              g_conf().get_val<uint64_t>("rbd_concurrent_management_ops"),
               formatter.get());
   if (r < 0) {
     std::cerr << "rbd: listing images failed : " << cpp_strerror(r) << std::endl;
