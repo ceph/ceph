@@ -8,6 +8,11 @@
       bench                             Simple benchmark.
       children                          Display children of snapshot.
       clone                             Clone a snapshot into a CoW child image.
+      config global get                 Get a global-level configuration override.
+      config global list (... ls)       List global-level configuration overrides.
+      config global remove (... rm)     Remove a global-level configuration
+                                        override.
+      config global set                 Set a global-level configuration override.
       config image get                  Get an image-level configuration override.
       config image list (... ls)        List image-level configuration overrides.
       config image remove (... rm)      Remove an image-level configuration
@@ -233,6 +238,47 @@
     (*) supports enabling/disabling on existing images
     (-) supports disabling-only on existing images
     (+) enabled by default for new images if features not specified
+  
+  rbd help config global get
+  usage: rbd config global get <config-entity> <key> 
+  
+  Get a global-level configuration override.
+  
+  Positional arguments
+    <config-entity>      config entity (global, client, client.<id>)
+    <key>                config key
+  
+  rbd help config global list
+  usage: rbd config global list [--format <format>] [--pretty-format] 
+                                <config-entity> 
+  
+  List global-level configuration overrides.
+  
+  Positional arguments
+    <config-entity>      config entity (global, client, client.<id>)
+  
+  Optional arguments
+    --format arg         output format (plain, json, or xml) [default: plain]
+    --pretty-format      pretty formatting (json and xml)
+  
+  rbd help config global remove
+  usage: rbd config global remove <config-entity> <key> 
+  
+  Remove a global-level configuration override.
+  
+  Positional arguments
+    <config-entity>      config entity (global, client, client.<id>)
+    <key>                config key
+  
+  rbd help config global set
+  usage: rbd config global set <config-entity> <key> <value> 
+  
+  Set a global-level configuration override.
+  
+  Positional arguments
+    <config-entity>      config entity (global, client, client.<id>)
+    <key>                config key
+    <value>              config value
   
   rbd help config image get
   usage: rbd config image get [--pool <pool>] [--namespace <namespace>] 
