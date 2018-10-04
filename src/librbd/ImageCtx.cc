@@ -62,7 +62,7 @@ public:
     : ThreadPool(cct, "librbd::thread_pool", "tp_librbd", 1,
                  "rbd_op_threads"),
       op_work_queue(new ContextWQ("librbd::op_work_queue",
-                                  cct->_conf.get_val<int64_t>("rbd_op_thread_timeout"),
+                                  cct->_conf.get_val<uint64_t>("rbd_op_thread_timeout"),
                                   this)) {
     start();
   }
@@ -139,7 +139,7 @@ public:
     get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
     io_work_queue = new io::ImageRequestWQ<>(
       this, "librbd::io_work_queue",
-      cct->_conf.get_val<int64_t>("rbd_op_thread_timeout"),
+      cct->_conf.get_val<uint64_t>("rbd_op_thread_timeout"),
       thread_pool);
     io_object_dispatcher = new io::ObjectDispatcher<>(this);
 
@@ -844,34 +844,34 @@ public:
     ASSIGN_OPTION(cache_max_dirty, Option::size_t);
     ASSIGN_OPTION(cache_target_dirty, Option::size_t);
     ASSIGN_OPTION(cache_max_dirty_age, double);
-    ASSIGN_OPTION(cache_max_dirty_object, int64_t);
+    ASSIGN_OPTION(cache_max_dirty_object, uint64_t);
     ASSIGN_OPTION(cache_block_writes_upfront, bool);
-    ASSIGN_OPTION(concurrent_management_ops, int64_t);
+    ASSIGN_OPTION(concurrent_management_ops, uint64_t);
     ASSIGN_OPTION(balance_snap_reads, bool);
     ASSIGN_OPTION(localize_snap_reads, bool);
     ASSIGN_OPTION(balance_parent_reads, bool);
     ASSIGN_OPTION(localize_parent_reads, bool);
     ASSIGN_OPTION(sparse_read_threshold_bytes, Option::size_t);
-    ASSIGN_OPTION(readahead_trigger_requests, int64_t);
+    ASSIGN_OPTION(readahead_trigger_requests, uint64_t);
     ASSIGN_OPTION(readahead_max_bytes, Option::size_t);
     ASSIGN_OPTION(readahead_disable_after_bytes, Option::size_t);
     ASSIGN_OPTION(clone_copy_on_read, bool);
     ASSIGN_OPTION(blacklist_on_break_lock, bool);
-    ASSIGN_OPTION(blacklist_expire_seconds, int64_t);
-    ASSIGN_OPTION(request_timed_out_seconds, int64_t);
+    ASSIGN_OPTION(blacklist_expire_seconds, uint64_t);
+    ASSIGN_OPTION(request_timed_out_seconds, uint64_t);
     ASSIGN_OPTION(enable_alloc_hint, bool);
     ASSIGN_OPTION(journal_order, uint64_t);
     ASSIGN_OPTION(journal_splay_width, uint64_t);
     ASSIGN_OPTION(journal_commit_age, double);
-    ASSIGN_OPTION(journal_object_flush_interval, int64_t);
+    ASSIGN_OPTION(journal_object_flush_interval, uint64_t);
     ASSIGN_OPTION(journal_object_flush_bytes, Option::size_t);
     ASSIGN_OPTION(journal_object_flush_age, double);
     ASSIGN_OPTION(journal_object_max_in_flight_appends, uint64_t);
     ASSIGN_OPTION(journal_max_payload_bytes, Option::size_t);
-    ASSIGN_OPTION(journal_max_concurrent_object_sets, int64_t);
+    ASSIGN_OPTION(journal_max_concurrent_object_sets, uint64_t);
     ASSIGN_OPTION(mirroring_resync_after_disconnect, bool);
     ASSIGN_OPTION(mirroring_delete_delay, uint64_t);
-    ASSIGN_OPTION(mirroring_replay_delay, int64_t);
+    ASSIGN_OPTION(mirroring_replay_delay, uint64_t);
     ASSIGN_OPTION(mtime_update_interval, uint64_t);
     ASSIGN_OPTION(atime_update_interval, uint64_t);
     ASSIGN_OPTION(skip_partial_discard, bool);

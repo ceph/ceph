@@ -877,7 +877,7 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
 
     uint64_t format;
     if (opts.get(RBD_IMAGE_OPTION_FORMAT, &format) != 0)
-      format = cct->_conf.get_val<int64_t>("rbd_default_format");
+      format = cct->_conf.get_val<uint64_t>("rbd_default_format");
     bool old_format = format == 1;
 
     // make sure it doesn't already exist, in either format
@@ -894,7 +894,7 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
 
     uint64_t order = 0;
     if (opts.get(RBD_IMAGE_OPTION_ORDER, &order) != 0 || order == 0) {
-      order = cct->_conf.get_val<int64_t>("rbd_default_order");
+      order = cct->_conf.get_val<uint64_t>("rbd_default_order");
     }
     r = image::CreateRequest<>::validate_order(cct, order);
     if (r < 0) {

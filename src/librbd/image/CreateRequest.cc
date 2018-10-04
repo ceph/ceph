@@ -238,7 +238,7 @@ void CreateRequest<I>::handle_get_pool_metadata(int r) {
   }
   if (get_image_option(m_image_options, RBD_IMAGE_OPTION_ORDER,
                        &m_order) != 0 || m_order == 0) {
-    m_order = config.get_val<int64_t>("rbd_default_order");
+    m_order = config.get_val<uint64_t>("rbd_default_order");
   }
   if (get_image_option(m_image_options, RBD_IMAGE_OPTION_JOURNAL_ORDER,
                        &m_journal_order) != 0) {
