@@ -24,6 +24,10 @@ class SingleType(object):
         self.validate()
         self.compute()
 
+    @staticmethod
+    def type():
+        return "filestore.MixedType"
+
     @property
     def total_osds(self):
         if self.hdds:
@@ -143,6 +147,10 @@ class MixedType(object):
         self.dbs_needed = len(self.hdds) * self.osds_per_device
         self.validate()
         self.compute()
+
+    @staticmethod
+    def type():
+        return "bluestore.MixedType"
 
     def report_json(self):
         print(json.dumps(self.computed, indent=4, sort_keys=True))

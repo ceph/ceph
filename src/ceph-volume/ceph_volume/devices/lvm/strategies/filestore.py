@@ -36,6 +36,10 @@ class SingleType(object):
         self.validate()
         self.compute()
 
+    @staticmethod
+    def type():
+        return "filestore.SingleType"
+
     @property
     def total_osds(self):
         if self.hdds:
@@ -186,6 +190,10 @@ class MixedType(object):
         self.validate()
         self.compute()
 
+    @staticmethod
+    def type():
+        return "filestore.MixedType"
+
     def report_json(self):
         print(json.dumps(self.computed, indent=4, sort_keys=True))
 
@@ -304,11 +312,11 @@ class MixedType(object):
             # there isn't a common vg, so a new one must be created with all
             # the blank SSDs
             self.computed['vg'] = {
-                'devices': self.blank_ssds,
+                'devices': ", ".join([ssd.abspath for ssd in self.blank_ssds]),
                 'parts': self.journals_needed,
                 'percentages': self.vg_extents['percentages'],
-                'sizes': self.journal_size.b,
-                'size': int(self.total_blank_ssd_size.b),
+                'sizes': self.journal_size.b.as_int(),
+                'size': self.total_blank_ssd_size.b.as_int(),
                 'human_readable_sizes': str(self.journal_size),
                 'human_readable_size': str(self.total_available_journal_space),
             }
@@ -322,11 +330,11 @@ class MixedType(object):
                 data_size = device_size / self.osds_per_device
                 osd = {'data': {}, 'journal': {}, 'used_by_ceph': device.used_by_ceph}
                 osd['data']['path'] = device.path
-                osd['data']['size'] = data_size.b
+                osd['data']['size'] = data_size.b.as_int()
                 osd['data']['percentage'] = 100 / self.osds_per_device
                 osd['data']['human_readable_size'] = str(data_size)
                 osd['journal']['path'] = 'vg: %s' % vg_name
-                osd['journal']['size'] = self.journal_size.b
+                osd['journal']['size'] = self.journal_size.b.as_int()
                 osd['journal']['percentage'] = int(self.journal_size.gb * 100 / vg_free)
                 osd['journal']['human_readable_size'] = str(self.journal_size)
                 osds.append(osd)
