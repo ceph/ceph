@@ -83,7 +83,7 @@ void ImageCopyRequest<I>::send_object_copies() {
   {
     Mutex::Locker locker(m_lock);
     for (uint64_t i = 0;
-         i < m_cct->_conf.get_val<uint64_t>("rbd_concurrent_management_ops");
+         i < m_src_image_ctx->config.template get_val<uint64_t>("rbd_concurrent_management_ops");
          ++i) {
       send_next_object_copy();
       if (m_ret_val < 0 && m_current_ops == 0) {

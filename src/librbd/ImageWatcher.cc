@@ -488,8 +488,9 @@ void ImageWatcher<I>::schedule_async_request_timed_out(const AsyncRequestId &id)
   Task task(TASK_CODE_ASYNC_REQUEST, id);
   m_task_finisher->cancel(task);
 
-  m_task_finisher->add_event_after(task, m_image_ctx.request_timed_out_seconds,
-                                   ctx);
+  m_task_finisher->add_event_after(
+    task, m_image_ctx.config.template get_val<uint64_t>("rbd_request_timed_out_seconds"),
+    ctx);
 }
 
 template <typename I>

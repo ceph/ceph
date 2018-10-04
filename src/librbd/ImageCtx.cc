@@ -314,9 +314,9 @@ public:
     if (snap_id == LIBRADOS_SNAP_HEAD)
       return flags;
 
-    if (balance_snap_reads)
+    if (config.get_val<bool>("rbd_balance_snap_reads"))
       flags |= librados::OPERATION_BALANCE_READS;
-    else if (localize_snap_reads)
+    else if (config.get_val<bool>("rbd_localize_snap_reads"))
       flags |= librados::OPERATION_LOCALIZE_READS;
     return flags;
   }
@@ -785,73 +785,48 @@ public:
       }
     }
 
-#define ASSIGN_OPTION(param, type)                                             \
-    do {                                                                       \
-      string key = "rbd_";						       \
-      key = key + #param;					      	       \
-      param = config.get_val<type>("rbd_"#param);                              \
-    } while (0);
+#define ASSIGN_OPTION(param, type)              \
+    param = config.get_val<type>("rbd_"#param)
 
     ASSIGN_OPTION(non_blocking_aio, bool);
     ASSIGN_OPTION(cache, bool);
     ASSIGN_OPTION(cache_writethrough_until_flush, bool);
-    ASSIGN_OPTION(cache_size, Option::size_t);
     ASSIGN_OPTION(cache_max_dirty, Option::size_t);
-    ASSIGN_OPTION(cache_target_dirty, Option::size_t);
-    ASSIGN_OPTION(cache_max_dirty_age, double);
-    ASSIGN_OPTION(cache_max_dirty_object, uint64_t);
-    ASSIGN_OPTION(cache_block_writes_upfront, bool);
-    ASSIGN_OPTION(concurrent_management_ops, uint64_t);
-    ASSIGN_OPTION(balance_snap_reads, bool);
-    ASSIGN_OPTION(localize_snap_reads, bool);
-    ASSIGN_OPTION(balance_parent_reads, bool);
-    ASSIGN_OPTION(localize_parent_reads, bool);
     ASSIGN_OPTION(sparse_read_threshold_bytes, Option::size_t);
-    ASSIGN_OPTION(readahead_trigger_requests, uint64_t);
     ASSIGN_OPTION(readahead_max_bytes, Option::size_t);
     ASSIGN_OPTION(readahead_disable_after_bytes, Option::size_t);
     ASSIGN_OPTION(clone_copy_on_read, bool);
-    ASSIGN_OPTION(blacklist_on_break_lock, bool);
-    ASSIGN_OPTION(blacklist_expire_seconds, uint64_t);
-    ASSIGN_OPTION(request_timed_out_seconds, uint64_t);
     ASSIGN_OPTION(enable_alloc_hint, bool);
-    ASSIGN_OPTION(journal_order, uint64_t);
-    ASSIGN_OPTION(journal_splay_width, uint64_t);
-    ASSIGN_OPTION(journal_commit_age, double);
-    ASSIGN_OPTION(journal_object_flush_interval, uint64_t);
-    ASSIGN_OPTION(journal_object_flush_bytes, Option::size_t);
-    ASSIGN_OPTION(journal_object_flush_age, double);
-    ASSIGN_OPTION(journal_object_max_in_flight_appends, uint64_t);
-    ASSIGN_OPTION(journal_max_payload_bytes, Option::size_t);
-    ASSIGN_OPTION(journal_max_concurrent_object_sets, uint64_t);
-    ASSIGN_OPTION(mirroring_resync_after_disconnect, bool);
-    ASSIGN_OPTION(mirroring_delete_delay, uint64_t);
     ASSIGN_OPTION(mirroring_replay_delay, uint64_t);
     ASSIGN_OPTION(mtime_update_interval, uint64_t);
     ASSIGN_OPTION(atime_update_interval, uint64_t);
     ASSIGN_OPTION(skip_partial_discard, bool);
     ASSIGN_OPTION(blkin_trace_all, bool);
-    ASSIGN_OPTION(qos_iops_limit, uint64_t);
-    ASSIGN_OPTION(qos_bps_limit, uint64_t);
-    ASSIGN_OPTION(qos_read_iops_limit, uint64_t);
-    ASSIGN_OPTION(qos_write_iops_limit, uint64_t);
-    ASSIGN_OPTION(qos_read_bps_limit, uint64_t);
-    ASSIGN_OPTION(qos_write_bps_limit, uint64_t);
 
-    if (thread_safe) {
-      ASSIGN_OPTION(journal_pool, std::string);
-    }
+#undef ASSIGN_OPTION
 
     if (sparse_read_threshold_bytes == 0) {
       sparse_read_threshold_bytes = get_object_size();
     }
 
-    io_work_queue->apply_qos_limit(qos_iops_limit, RBD_QOS_IOPS_THROTTLE);
-    io_work_queue->apply_qos_limit(qos_bps_limit, RBD_QOS_BPS_THROTTLE);
-    io_work_queue->apply_qos_limit(qos_read_iops_limit, RBD_QOS_READ_IOPS_THROTTLE);
-    io_work_queue->apply_qos_limit(qos_write_iops_limit, RBD_QOS_WRITE_IOPS_THROTTLE);
-    io_work_queue->apply_qos_limit(qos_read_bps_limit, RBD_QOS_READ_BPS_THROTTLE);
-    io_work_queue->apply_qos_limit(qos_write_bps_limit, RBD_QOS_WRITE_BPS_THROTTLE);
+    io_work_queue->apply_qos_limit(
+      config.get_val<uint64_t>("rbd_qos_iops_limit"),
+      RBD_QOS_IOPS_THROTTLE);
+    io_work_queue->apply_qos_limit(
+      config.get_val<uint64_t>("rbd_qos_bps_limit"),
+      RBD_QOS_BPS_THROTTLE);
+    io_work_queue->apply_qos_limit(
+      config.get_val<uint64_t>("rbd_qos_read_iops_limit"),
+      RBD_QOS_READ_IOPS_THROTTLE);
+    io_work_queue->apply_qos_limit(
+      config.get_val<uint64_t>("rbd_qos_write_iops_limit"),
+      RBD_QOS_WRITE_IOPS_THROTTLE);
+    io_work_queue->apply_qos_limit(
+      config.get_val<uint64_t>("rbd_qos_read_bps_limit"),
+      RBD_QOS_READ_BPS_THROTTLE);
+    io_work_queue->apply_qos_limit(
+      config.get_val<uint64_t>("rbd_qos_write_bps_limit"),
+      RBD_QOS_WRITE_BPS_THROTTLE);
   }
 
   ExclusiveLock<ImageCtx> *ImageCtx::create_exclusive_lock() {

@@ -692,7 +692,7 @@ TEST_F(TestMockImageDeleterTrashMoveRequest, CloseImageError) {
 TEST_F(TestMockImageDeleterTrashMoveRequest, DelayedDelation) {
   librbd::MockTestImageCtx mock_image_ctx(*m_local_image_ctx);
   librbd::MockExclusiveLock mock_exclusive_lock;
-  mock_image_ctx.mirroring_delete_delay = 600;
+  mock_image_ctx.config.set_val("rbd_mirroring_delete_delay", "600");
   mock_image_ctx.exclusive_lock = &mock_exclusive_lock;
 
   InSequence seq;
