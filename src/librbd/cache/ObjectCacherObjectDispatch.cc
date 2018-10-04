@@ -102,34 +102,40 @@ void ObjectCacherObjectDispatch<I>::init() {
     init_max_dirty = 0;
   }
 
+  auto cache_size =
+    m_image_ctx->config.template get_val<Option::size_t>("rbd_cache_size");
+  auto target_dirty =
+    m_image_ctx->config.template get_val<Option::size_t>("rbd_cache_target_dirty");
+  auto max_dirty_age =
+    m_image_ctx->config.template get_val<double>("rbd_cache_max_dirty_age");
+  auto block_writes_upfront =
+    m_image_ctx->config.template get_val<bool>("rbd_cache_block_writes_upfront");
+  auto max_dirty_object =
+    m_image_ctx->config.template get_val<uint64_t>("rbd_cache_max_dirty_object");
+
   ldout(cct, 5) << "Initial cache settings:"
-                << " size=" << m_image_ctx->cache_size
+                << " size=" << cache_size
                 << " num_objects=" << 10
                 << " max_dirty=" << init_max_dirty
-                << " target_dirty=" << m_image_ctx->cache_target_dirty
-                << " max_dirty_age="
-                << m_image_ctx->cache_max_dirty_age << dendl;
+                << " target_dirty=" << target_dirty
+                << " max_dirty_age=" << max_dirty_age << dendl;
 
   m_object_cacher = new ObjectCacher(cct, m_image_ctx->perfcounter->get_name(),
                                      *m_writeback_handler, m_cache_lock,
-                                     nullptr, nullptr, m_image_ctx->cache_size,
-    			             10,  /* reset this in init */
-    			             init_max_dirty,
-    			             m_image_ctx->cache_target_dirty,
-    			             m_image_ctx->cache_max_dirty_age,
-                                     m_image_ctx->cache_block_writes_upfront);
+                                     nullptr, nullptr, cache_size,
+                                     10,  /* reset this in init */
+                                     init_max_dirty, target_dirty,
+                                     max_dirty_age, block_writes_upfront);
 
   // size object cache appropriately
-  uint64_t obj = m_image_ctx->cache_max_dirty_object;
-  if (!obj) {
-    obj = std::min<uint64_t>(2000,
-                             std::max<uint64_t>(
-                               10, m_image_ctx->cache_size / 100 /
+  if (max_dirty_object == 0) {
+    max_dirty_object = std::min<uint64_t>(
+      2000, std::max<uint64_t>(10, cache_size / 100 /
                                  sizeof(ObjectCacher::Object)));
   }
-  ldout(cct, 5) << " cache bytes " << m_image_ctx->cache_size
-                << " -> about " << obj << " objects" << dendl;
-  m_object_cacher->set_max_objects(obj);
+  ldout(cct, 5) << " cache bytes " << cache_size
+                << " -> about " << max_dirty_object << " objects" << dendl;
+  m_object_cacher->set_max_objects(max_dirty_object);
 
   m_object_set = new ObjectCacher::ObjectSet(nullptr,
                                              m_image_ctx->data_ctx.get_id(), 0);

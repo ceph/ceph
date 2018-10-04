@@ -1305,7 +1305,7 @@ TEST_F(TestInternal, PoolMetadataConfApply) {
 
   ASSERT_EQ(0, open_image(image_name, &ictx));
   ASSERT_EQ(ictx->order, 17);
-  ASSERT_EQ(ictx->journal_order, 13);
+  ASSERT_EQ(ictx->config.get_val<uint64_t>("rbd_journal_order"), 13U);
 
   if (is_feature_enabled(RBD_FEATURE_JOURNALING)) {
     uint8_t order;
@@ -1324,7 +1324,8 @@ TEST_F(TestInternal, PoolMetadataConfApply) {
                                                   "14"));
     ASSERT_EQ(0, ictx->operations->update_features(RBD_FEATURE_JOURNALING,
                                                    true));
-    ASSERT_EQ(ictx->journal_order, 14);
+    ASSERT_EQ(ictx->config.get_val<uint64_t>("rbd_journal_order"), 14U);
+
     C_SaferCond cond1;
     cls::journal::client::get_immutable_metadata(m_ioctx, "journal." + ictx->id,
                                                  &order, &splay_width, &pool_id,

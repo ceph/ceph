@@ -482,7 +482,8 @@ bool CopyupRequest<I>::send_object_map() {
     AsyncObjectThrottle<> *throttle = new AsyncObjectThrottle<>(
       NULL, *m_ictx, context_factory, util::create_context_callback(this),
       NULL, 0, m_snap_ids.size());
-    throttle->start_ops(m_ictx->concurrent_management_ops);
+    throttle->start_ops(
+      m_ictx->config.template get_val<uint64_t>("rbd_concurrent_management_ops"));
   }
   return false;
 }
