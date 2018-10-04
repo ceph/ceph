@@ -65,7 +65,7 @@ public:
     return "rgw::auth::swift::TempURLEngine";
   }
 
-  result_t authenticate(const req_state* const s) const override;
+  result_t authenticate(const DoutPrefixProvider* dpp, const req_state* const s) const override;
 };
 
 
@@ -79,7 +79,8 @@ class SignedTokenEngine : public rgw::auth::Engine {
   const rgw::auth::LocalApplier::Factory* const apl_factory;
 
   bool is_applicable(const std::string& token) const noexcept;
-  result_t authenticate(const std::string& token,
+  result_t authenticate(const DoutPrefixProvider* dpp,
+                        const std::string& token,
                         const req_state* s) const;
 
 public:
@@ -97,8 +98,8 @@ public:
     return "rgw::auth::swift::SignedTokenEngine";
   }
 
-  result_t authenticate(const req_state* const s) const override {
-    return authenticate(extractor->get_token(s), s);
+  result_t authenticate(const DoutPrefixProvider* dpp, const req_state* const s) const override {
+    return authenticate(dpp, extractor->get_token(s), s);
   }
 };
 
@@ -113,7 +114,8 @@ class ExternalTokenEngine : public rgw::auth::Engine {
   const rgw::auth::LocalApplier::Factory* const apl_factory;
 
   bool is_applicable(const std::string& token) const noexcept;
-  result_t authenticate(const std::string& token,
+  result_t authenticate(const DoutPrefixProvider* dpp,
+                        const std::string& token,
                         const req_state* s) const;
 
 public:
@@ -131,8 +133,8 @@ public:
     return "rgw::auth::swift::ExternalTokenEngine";
   }
 
-  result_t authenticate(const req_state* const s) const override {
-    return authenticate(extractor->get_token(s), s);
+  result_t authenticate(const DoutPrefixProvider* dpp, const req_state* const s) const override {
+    return authenticate(dpp, extractor->get_token(s), s);
   }
 };
 
