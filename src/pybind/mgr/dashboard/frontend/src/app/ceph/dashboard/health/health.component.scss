@@ -1,5 +1,9 @@
 @import '../../../../defaults';
 
+cd-info-card {
+  padding: 0 0.5vw 0 0.5vw;
+}
+
 .cd-container-flex {
   margin: 0;
   padding: 0;
@@ -34,6 +38,10 @@
 }
 
 @media (max-width: 767px) {
+  cd-info-card {
+    padding: 0;
+  }
+
   .cd-col-5 {
     width: 100%;
   }
@@ -42,10 +50,6 @@
 .info-group {
   margin: 0;
   padding: 0;
-}
-
-cd-info-card {
-  padding: 0 0.5vw 0 0.5vw;
 }
 
 ::ng-deep .pg-status-popover-wrapper {
