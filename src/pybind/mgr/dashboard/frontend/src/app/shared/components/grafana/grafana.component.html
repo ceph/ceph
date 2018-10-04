@@ -1,0 +1,42 @@
+<!-- Embed dashboard -->
+<cd-loading-panel *ngIf="loading && grafanaExist"
+                  i18n>
+  Loading panel data...
+</cd-loading-panel>
+<cd-info-panel *ngIf="!grafanaExist">
+  <ng-container i18n>
+    Please consult the <a href="http://docs.ceph.com/docs/luminous/mgr/dashboard/" target="_blank">documentation</a> on how to configure and enable the monitoring functionality.
+  </ng-container>
+</cd-info-panel>
+<div class="row" *ngIf="grafanaExist">
+  <div class="col-md-12">
+    <div dropdown>
+      <button dropdownToggle
+              class="btn btn-sm dropdown-toggle"
+              data-toggle="dropdown"
+              title="Advanced Settings">
+        <i class="fa fa-cog"></i>
+        <span class="caret"></span>
+      </button>
+      <ul *dropdownMenu
+          class="dropdown-menu">
+        <li>
+          <a i18n
+             class="dropdown-item"
+             (click)="timePickerToggle()">{{ modeText }}
+          </a>
+        </li>
+      </ul>
+    </div>
+    <div class="grafana-container">
+      <iframe #iframe
+              id="iframe"
+              [src]="grafanaSrc"
+              class="grafana"
+              [ngClass]="panelStyle"
+              frameborder="0"
+              scrolling="no">
+      </iframe>
+    </div>
+  </div>
+</div>
