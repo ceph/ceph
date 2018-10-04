@@ -69,7 +69,7 @@
         "rgba(237, 129, 40, 0.89)",
         "rgba(50, 172, 45, 0.97)"
       ],
-      "datasource": null,
+      "datasource": "$datasource",
       "format": "none",
       "gauge": {
         "maxValue": 100,
@@ -155,7 +155,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
+      "datasource": "$datasource",
       "description": "Shows the CPU breakdown. When multiple servers are selected, only the first host's cpu data is shown",
       "fill": 3,
       "gridPos": {
@@ -248,7 +248,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
+      "datasource": "$datasource",
       "fill": 1,
       "gridPos": {
         "h": 10,
@@ -360,7 +360,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
+      "datasource": "$datasource",
       "description": "Show the network load (rx,tx) across all interfaces (excluding loopback 'lo')",
       "fill": 1,
       "gridPos": {
@@ -455,7 +455,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
+      "datasource": "$datasource",
       "fill": 1,
       "gridPos": {
         "h": 5,
@@ -541,7 +541,7 @@
         "rgba(237, 129, 40, 0.89)",
         "rgba(50, 172, 45, 0.97)"
       ],
-      "datasource": null,
+      "datasource": "$datasource",
       "decimals": 0,
       "description": "Each OSD consists of a Journal/WAL partition and a data partition. The RAW Capacity shown is the sum of the data partitions across all OSDs on the selected OSD hosts.",
       "format": "bytes",
@@ -623,7 +623,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
+      "datasource": "$datasource",
       "fill": 1,
       "gridPos": {
         "h": 5,
@@ -715,7 +715,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": null,
+          "datasource": "$datasource",
           "description": "For any OSD devices on the host, this chart shows the iops per physical device. Each device is shown by it's name and corresponding OSD id value",
           "fill": 1,
           "gridPos": {
@@ -799,7 +799,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": null,
+          "datasource": "$datasource",
           "description": "Show disk utilization % (util) of any OSD devices on the host by the physical device name and associated OSD id.",
           "fill": 1,
           "gridPos": {
@@ -884,7 +884,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": null,
+          "datasource": "$datasource",
           "description": "For OSD hosts, this chart shows the latency at the physical drive. Each drive is shown by device name, with it's corresponding OSD id",
           "fill": 1,
           "gridPos": {
@@ -967,7 +967,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": null,
+          "datasource": "$datasource",
           "description": "For OSD hosts, this chart shows the disk bandwidth (read bytes/sec + write bytes/sec) of the physical OSD device. Each device is shown by device name, and corresponding OSD id",
           "fill": 1,
           "gridPos": {
@@ -1062,9 +1062,24 @@
   "templating": {
     "list": [
       {
+        "current": {
+          "tags": [],
+          "text": "default",
+          "value": "default"
+        },
+        "hide": 0,
+        "label": "Data Source",
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "type": "datasource"
+      },
+      {
         "allValue": null,
         "current": {},
-        "datasource": null,
+        "datasource": "$datasource",
         "hide": 0,
         "includeAll": false,
         "label": "Hostname",
