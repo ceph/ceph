@@ -35,8 +35,6 @@ class Options(object):
     GRAFANA_API_URL = ('', str)
     GRAFANA_API_USERNAME = ('admin', str)
     GRAFANA_API_PASSWORD = ('admin', str)
-    GRAFANA_API_TOKEN = ('', str)
-    GRAFANA_API_AUTH_METHOD = ('', str)  # Either 'password' or 'token'
 
     @staticmethod
     def has_default_value(name):
