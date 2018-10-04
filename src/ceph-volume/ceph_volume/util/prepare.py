@@ -83,7 +83,12 @@ def get_block_db_size(lv_format=True):
     .. note: Configuration values are in bytes, unlike journals which
              are defined in gigabytes
     """
-    conf_db_size = conf.ceph.get_safe('osd', 'bluestore_block_db_size', None)
+    conf_db_size = None
+    try:
+        conf_db_size = conf.ceph.get_safe('osd', 'bluestore_block_db_size', None)
+    except RuntimeError:
+        logger.debug("failed to load ceph configuration, will use defaults")
+
     if not conf_db_size:
         logger.debug(
             'block.db has no size configuration, will fallback to using as much as possible'
