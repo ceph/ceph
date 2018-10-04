@@ -79,10 +79,6 @@ public:
     return result;
   }
 
-  void set_atomic(rgw_raw_obj& obj) {
-    RWLock::WLocker wl(lock);
-    assert (!obj.empty());
-  }
   void set_prefetch_data(rgw_raw_obj& obj) {
     RWLock::WLocker wl(lock);
     assert (!obj.empty());
