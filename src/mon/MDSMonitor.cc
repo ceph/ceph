@@ -834,6 +834,7 @@ bool MDSMonitor::prepare_offload_targets(MonOpRequestRef op)
   } else {
     dout(10) << "prepare_offload_targets " << gid << " not in map" << dendl;
   }
+  mon->no_reply(op);
   return true;
 }
 
