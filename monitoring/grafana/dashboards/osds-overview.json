@@ -53,7 +53,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
+      "datasource": "$datasource",
       "fill": 1,
       "gridPos": {
         "h": 8,
@@ -144,7 +144,7 @@
     },
     {
       "columns": [],
-      "datasource": null,
+      "datasource": "$datasource",
       "description": "This table shows the osd's that are delivering the 10 highest read latencies within the cluster",
       "fontSize": "100%",
       "gridPos": {
@@ -230,7 +230,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
+      "datasource": "$datasource",
       "fill": 1,
       "gridPos": {
         "h": 8,
@@ -321,7 +321,7 @@
     },
     {
       "columns": [],
-      "datasource": null,
+      "datasource": "$datasource",
       "description": "This table shows the osd's that are delivering the 10 highest write latencies within the cluster",
       "fontSize": "100%",
       "gridPos": {
@@ -408,7 +408,7 @@
         "label": "Others",
         "threshold": 0
       },
-      "datasource": null,
+      "datasource": "$datasource",
       "fontSize": "80%",
       "format": "none",
       "gridPos": {
@@ -452,7 +452,7 @@
         "label": "Others",
         "threshold": 0
       },
-      "datasource": null,
+      "datasource": "$datasource",
       "fontSize": "80%",
       "format": "none",
       "gridPos": {
@@ -517,7 +517,7 @@
         "label": "Others",
         "threshold": "0.05"
       },
-      "datasource": null,
+      "datasource": "$datasource",
       "description": "The pie chart shows the various OSD sizes used within the cluster",
       "fontSize": "80%",
       "format": "none",
@@ -631,7 +631,7 @@
       "bars": true,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
+      "datasource": "$datasource",
       "description": "Each bar indicates the number of OSD's that have a PG count in a specific range as shown on the x axis.",
       "fill": 1,
       "gridPos": {
@@ -733,7 +733,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
+      "datasource": "$datasource",
       "description": "Show the read/write workload profile overtime",
       "fill": 1,
       "gridPos": {
@@ -822,7 +822,23 @@
   "style": "dark",
   "tags": [],
   "templating": {
-    "list": []
+    "list": [
+        {
+          "current": {
+          "tags": [],
+          "text": "default",
+          "value": "default"
+          },
+          "hide": 0,
+          "label": "Data Source",
+          "name": "datasource",
+          "options": [],
+          "query": "prometheus",
+          "refresh": 1,
+          "regex": "",
+          "type": "datasource"
+        }
+    ]
   },
   "time": {
     "from": "now-1h",
