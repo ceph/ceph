@@ -48,7 +48,7 @@
         "rgba(237, 129, 40, 0.89)",
         "#d44a3a"
       ],
-      "datasource": null,
+      "datasource": "$datasource",
       "format": "none",
       "gauge": {
         "maxValue": 100,
@@ -129,7 +129,7 @@
         "rgba(237, 129, 40, 0.89)",
         "#d44a3a"
       ],
-      "datasource": null,
+      "datasource": "$datasource",
       "decimals": 0,
       "description": "Average CPU busy across all hosts (OSD, RGW, MON etc) within the cluster",
       "format": "percentunit",
@@ -212,7 +212,7 @@
         "rgba(237, 129, 40, 0.89)",
         "#d44a3a"
       ],
-      "datasource": null,
+      "datasource": "$datasource",
       "decimals": 0,
       "description": "Average Memory Usage across all hosts in the cluster (excludes buffer/cache usage)",
       "format": "percentunit",
@@ -295,7 +295,7 @@
         "rgba(237, 129, 40, 0.89)",
         "#d44a3a"
       ],
-      "datasource": null,
+      "datasource": "$datasource",
       "description": "IOPS Load at the device as reported by the OS on all OSD hosts",
       "format": "none",
       "gauge": {
@@ -377,7 +377,7 @@
         "rgba(237, 129, 40, 0.89)",
         "#d44a3a"
       ],
-      "datasource": null,
+      "datasource": "$datasource",
       "description": "Average Disk utilization for all OSD data devices (i.e. excludes journal/WAL)",
       "format": "percent",
       "gauge": {
@@ -459,7 +459,7 @@
         "rgba(237, 129, 40, 0.89)",
         "#d44a3a"
       ],
-      "datasource": null,
+      "datasource": "$datasource",
       "decimals": 0,
       "description": "Total send/receive network load across all hosts in the ceph cluster",
       "format": "bytes",
@@ -538,7 +538,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
+      "datasource": "$datasource",
       "description": "Show the top 10 busiest hosts by cpu",
       "fill": 1,
       "gridPos": {
@@ -620,7 +620,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
+      "datasource": "$datasource",
       "description": "Top 10 hosts by network load",
       "fill": 1,
       "gridPos": {
@@ -705,9 +705,24 @@
   "templating": {
     "list": [
       {
+        "current": {
+          "tags": [],
+          "text": "default",
+          "value": "default"
+        },
+        "hide": 0,
+        "label": "Data Source",
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "type": "datasource"
+      },
+      {
         "allValue": "",
         "current": {},
-        "datasource": null,
+        "datasource": "$datasource",
         "hide": 2,
         "includeAll": true,
         "label": null,
@@ -727,7 +742,7 @@
       {
         "allValue": null,
         "current": {},
-        "datasource": null,
+        "datasource": "$datasource",
         "hide": 2,
         "includeAll": true,
         "label": null,
@@ -747,7 +762,7 @@
       {
         "allValue": null,
         "current": {},
-        "datasource": null,
+        "datasource": "$datasource",
         "hide": 2,
         "includeAll": true,
         "label": null,
@@ -767,7 +782,7 @@
       {
         "allValue": null,
         "current": {},
-        "datasource": null,
+        "datasource": "$datasource",
         "hide": 2,
         "includeAll": true,
         "label": null,
