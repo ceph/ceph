@@ -669,7 +669,7 @@ void Operations<I>::execute_resize(uint64_t size, bool allow_shrink, ProgressCon
 
 template <typename I>
 int Operations<I>::snap_create(const cls::rbd::SnapshotNamespace &snap_namespace,
-			       const char *snap_name) {
+			       const std::string& snap_name) {
   if (m_image_ctx.read_only) {
     return -EROFS;
   }
@@ -693,7 +693,7 @@ int Operations<I>::snap_create(const cls::rbd::SnapshotNamespace &snap_namespace
 
 template <typename I>
 void Operations<I>::snap_create(const cls::rbd::SnapshotNamespace &snap_namespace,
-				const char *snap_name,
+				const std::string& snap_name,
 				Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": snap_name=" << snap_name
@@ -753,7 +753,7 @@ void Operations<I>::execute_snap_create(const cls::rbd::SnapshotNamespace &snap_
 
 template <typename I>
 int Operations<I>::snap_rollback(const cls::rbd::SnapshotNamespace& snap_namespace,
-				 const char *snap_name,
+				 const std::string& snap_name,
                                  ProgressContext& prog_ctx) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": snap_name=" << snap_name
@@ -833,7 +833,7 @@ void Operations<I>::execute_snap_rollback(const cls::rbd::SnapshotNamespace& sna
 
 template <typename I>
 int Operations<I>::snap_remove(const cls::rbd::SnapshotNamespace& snap_namespace,
-			       const char *snap_name) {
+			       const std::string& snap_name) {
   if (m_image_ctx.read_only) {
     return -EROFS;
   }
@@ -857,7 +857,7 @@ int Operations<I>::snap_remove(const cls::rbd::SnapshotNamespace& snap_namespace
 
 template <typename I>
 void Operations<I>::snap_remove(const cls::rbd::SnapshotNamespace& snap_namespace,
-				const char *snap_name,
+				const std::string& snap_name,
 				Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": snap_name=" << snap_name
@@ -1028,7 +1028,7 @@ void Operations<I>::execute_snap_rename(const uint64_t src_snap_id,
 
 template <typename I>
 int Operations<I>::snap_protect(const cls::rbd::SnapshotNamespace& snap_namespace,
-				const char *snap_name) {
+				const std::string& snap_name) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": snap_name=" << snap_name
                 << dendl;
@@ -1123,7 +1123,7 @@ void Operations<I>::execute_snap_protect(const cls::rbd::SnapshotNamespace& snap
 
 template <typename I>
 int Operations<I>::snap_unprotect(const cls::rbd::SnapshotNamespace& snap_namespace,
-				  const char *snap_name) {
+				  const std::string& snap_name) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": snap_name=" << snap_name
                 << dendl;
