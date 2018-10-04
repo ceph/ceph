@@ -15,35 +15,6 @@ RGWSI_SysObj::Obj RGWSI_SysObj::get_obj(RGWSysObjectCtx& obj_ctx, const rgw_raw_
   return Obj(core_svc.get(), obj_ctx, obj);
 }
 
-int RGWS_SysObj::create_instance(const string& conf, RGWServiceInstanceRef *instance)
-{
-  instance->reset(new RGWSI_SysObj(this, cct));
-  return 0;
-}
-
-std::map<string, RGWServiceInstance::dependency> RGWSI_SysObj::get_deps()
-{
-  RGWServiceInstance::dependency dep1 = { .name = "rados",
-                                          .conf = "{}" };
-  RGWServiceInstance::dependency dep2 = { .name = "sysobj_core",
-                                          .conf = "{}" };
-  map<string, RGWServiceInstance::dependency> deps;
-  deps["rados_dep"] = dep1;
-  deps["sysobj_core_dep"] = dep2;
-  return deps;
-}
-
-int RGWSI_SysObj::load(const string& conf, std::map<std::string, RGWServiceInstanceRef>& dep_refs)
-{
-  rados_svc = static_pointer_cast<RGWSI_RADOS>(dep_refs["rados_dep"]);
-  assert(rados_svc);
-
-  core_svc = static_pointer_cast<RGWSI_SysObj_Core>(dep_refs["sysobj_core_dep"]);
-  assert(core_svc);
-
-  return 0;
-}
-
 void RGWSI_SysObj::Obj::invalidate()
 {
   ctx.invalidate(obj);

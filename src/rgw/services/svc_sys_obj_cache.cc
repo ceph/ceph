@@ -4,12 +4,6 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-int RGWS_SysObj_Cache::create_instance(const string& conf, RGWServiceInstanceRef *instance)
-{
-  instance->reset(new RGWSI_SysObj_Cache(this, cct));
-  return 0;
-}
-
 class RGWSI_SysObj_Cache_CB : public RGWSI_Notify::CB
 {
   RGWSI_SysObj_Cache *svc;
@@ -27,24 +21,19 @@ public:
   }
 };
 
-std::map<string, RGWServiceInstance::dependency> RGWSI_SysObj_Cache::get_deps()
+int RGWSI_SysObj_Cache::do_start()
 {
-  map<string, RGWServiceInstance::dependency> deps = RGWSI_SysObj_Core::get_deps();
-
-  deps["cache_notify_dep"] = { .name = "notify",
-                               .conf = "{}" };
-  return deps;
-}
-
-int RGWSI_SysObj_Cache::load(const string& conf, std::map<std::string, RGWServiceInstanceRef>& dep_refs)
-{
-  int r = RGWSI_SysObj_Core::load(conf, dep_refs);
+  int r = RGWSI_SysObj_Core::do_start();
   if (r < 0) {
     return r;
   }
 
-  notify_svc = static_pointer_cast<RGWSI_Notify>(dep_refs["cache_notify_dep"]);
-  assert(notify_svc);
+  r = notify_svc->start();
+  if (r < 0) {
+    return r;
+  }
+
+  assert(notify_svc->is_started());
 
   cb.reset(new RGWSI_SysObj_Cache_CB(this));
 

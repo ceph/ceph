@@ -12,17 +12,10 @@ class RGWSI_Notify;
 
 class RGWSI_SysObj_Cache_CB;
 
-class RGWS_SysObj_Cache : public RGWService
-{
-public:
-  RGWS_SysObj_Cache(CephContext *cct) : RGWService(cct, "sysobj_cache") {}
-
-  int create_instance(const std::string& conf, RGWServiceInstanceRef *instance) override;
-};
-
 class RGWSI_SysObj_Cache : public RGWSI_SysObj_Core
 {
   friend class RGWSI_SysObj_Cache_CB;
+  friend class RGWServices_Shared;
 
   std::shared_ptr<RGWSI_Notify> notify_svc;
   ObjectCache cache;
@@ -31,8 +24,14 @@ class RGWSI_SysObj_Cache : public RGWSI_SysObj_Core
 
   void normalize_pool_and_obj(rgw_pool& src_pool, const string& src_obj, rgw_pool& dst_pool, string& dst_obj);
 protected:
-  std::map<std::string, RGWServiceInstance::dependency> get_deps() override;
-  int load(const std::string& conf, std::map<std::string, RGWServiceInstanceRef>& dep_refs) override;
+  void init(std::shared_ptr<RGWSI_RADOS>& _rados_svc,
+            std::shared_ptr<RGWSI_Zone>& _zone_svc,
+            std::shared_ptr<RGWSI_Notify>& _notify_svc) {
+    core_init(_rados_svc, _zone_svc);
+    notify_svc = _notify_svc;
+  }
+
+  int do_start() override;
 
   int raw_stat(rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *epoch,
                map<string, bufferlist> *attrs, bufferlist *first_chunk,
@@ -81,7 +80,7 @@ protected:
   void set_enabled(bool status);
 
 public:
-  RGWSI_SysObj_Cache(RGWService *svc, CephContext *cct) : RGWSI_SysObj_Core(svc, cct) {
+  RGWSI_SysObj_Cache(CephContext *cct) : RGWSI_SysObj_Core(cct) {
     cache.set_ctx(cct);
   }
 

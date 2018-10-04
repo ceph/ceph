@@ -14,16 +14,10 @@ class RGWSysObjectCtx;
 
 struct rgw_cache_entry_info;
 
-class RGWS_SysObj : public RGWService
-{
-public:
-  RGWS_SysObj(CephContext *cct) : RGWService(cct, "sys_obj") {}
-
-  int create_instance(const std::string& conf, RGWServiceInstanceRef *instance) override;
-};
-
 class RGWSI_SysObj : public RGWServiceInstance
 {
+  friend struct RGWServices_Shared;
+
 public:
   class Obj {
     friend class ROp;
@@ -239,11 +233,14 @@ protected:
   std::shared_ptr<RGWSI_RADOS> rados_svc;
   std::shared_ptr<RGWSI_SysObj_Core> core_svc;
 
-  std::map<std::string, RGWServiceInstance::dependency> get_deps() override;
-  int load(const std::string& conf, std::map<std::string, RGWServiceInstanceRef>& dep_refs) override;
+  void init(std::shared_ptr<RGWSI_RADOS>& _rados_svc,
+            std::shared_ptr<RGWSI_SysObj_Core>& _core_svc) {
+    rados_svc = _rados_svc;
+    core_svc = _core_svc;
+  }
 
 public:
-  RGWSI_SysObj(RGWService *svc, CephContext *cct): RGWServiceInstance(svc, cct) {}
+  RGWSI_SysObj(CephContext *cct): RGWServiceInstance(cct) {}
 
   RGWSysObjectCtx init_obj_ctx();
   Obj get_obj(RGWSysObjectCtx& obj_ctx, const rgw_raw_obj& obj);

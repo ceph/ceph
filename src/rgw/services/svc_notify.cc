@@ -12,12 +12,6 @@
 
 static string notify_oid_prefix = "notify";
 
-int RGWS_Notify::create_instance(const string& conf, RGWServiceInstanceRef *instance)
-{
-  instance->reset(new RGWSI_Notify(this, cct));
-  return 0;
-}
-
 class RGWWatcher : public librados::WatchCtx2 {
   CephContext *cct;
   RGWSI_Notify *svc;
@@ -145,29 +139,6 @@ public:
   }
 };
 
-std::map<string, RGWServiceInstance::dependency> RGWSI_Notify::get_deps()
-{
-  map<string, RGWServiceInstance::dependency> deps;
-  deps["zone_dep"] = { .name = "zone",
-                       .conf = "{}" };
-  deps["rados_dep"] = { .name = "rados",
-                        .conf = "{}" };
-  deps["finisher_dep"] = { .name = "finisher",
-                        .conf = "{}" };
-  return deps;
-}
-
-int RGWSI_Notify::load(const string& conf, std::map<std::string, RGWServiceInstanceRef>& dep_refs)
-{
-  zone_svc = static_pointer_cast<RGWSI_Zone>(dep_refs["zone_dep"]);
-  assert(zone_svc);
-  rados_svc = static_pointer_cast<RGWSI_RADOS>(dep_refs["rados_dep"]);
-  assert(rados_svc);
-  finisher_svc = static_pointer_cast<RGWSI_Finisher>(dep_refs["finisher_dep"]);
-  assert(finisher_svc);
-  return 0;
-}
-
 string RGWSI_Notify::get_control_oid(int i)
 {
   char buf[notify_oid_prefix.size() + 16];
@@ -262,8 +233,24 @@ void RGWSI_Notify::finalize_watch()
   delete[] watchers;
 }
 
-int RGWSI_Notify::init()
+int RGWSI_Notify::do_start()
 {
+  int r = zone_svc->start();
+  if (r < 0) {
+    return r;
+  }
+
+  assert(zone_svc->is_started()); /* otherwise there's an ordering problem */
+
+  r = rados_svc->start();
+  if (r < 0) {
+    return r;
+  }
+  r = finisher_svc->start();
+  if (r < 0) {
+    return r;
+  }
+
   control_pool = zone_svc->get_zone_params().control_pool;
 
   int ret = init_watch();

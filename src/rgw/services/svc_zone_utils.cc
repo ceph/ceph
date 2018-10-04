@@ -4,36 +4,7 @@
 
 #include "rgw/rgw_zone.h"
 
-int RGWS_ZoneUtils::create_instance(const string& conf, RGWServiceInstanceRef *instance)
-{
-  instance->reset(new RGWSI_ZoneUtils(this, cct));
-  return 0;
-}
-
-std::map<string, RGWServiceInstance::dependency> RGWSI_ZoneUtils::get_deps()
-{
-  RGWServiceInstance::dependency dep1 = { .name = "rados",
-                                          .conf = "{}" };
-  RGWServiceInstance::dependency dep2 = { .name = "zone",
-                                          .conf = "{}" };
-  map<string, RGWServiceInstance::dependency> deps;
-  deps["rados_dep"] = dep1;
-  deps["zone_dep"] = dep2;
-  return deps;
-}
-
-int RGWSI_ZoneUtils::load(const string& conf, std::map<std::string, RGWServiceInstanceRef>& dep_refs)
-{
-  rados_svc = static_pointer_cast<RGWSI_RADOS>(dep_refs["rados_dep"]);
-  assert(rados_svc);
-
-  zone_svc = static_pointer_cast<RGWSI_Zone>(dep_refs["zone_dep"]);
-  assert(zone_svc);
-
-  return 0;
-}
-
-int RGWSI_ZoneUtils::init()
+int RGWSI_ZoneUtils::do_start()
 {
   init_unique_trans_id_deps();
 

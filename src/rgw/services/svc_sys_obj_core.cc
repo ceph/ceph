@@ -6,12 +6,6 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-int RGWS_SysObj_Core::create_instance(const string& conf, RGWServiceInstanceRef *instance)
-{
-  instance->reset(new RGWSI_SysObj_Core(this, cct));
-  return 0;
-}
-
 int RGWSI_SysObj_Core::GetObjState::get_rados_obj(RGWSI_RADOS *rados_svc,
                                                   RGWSI_Zone *zone_svc,
                                                   rgw_raw_obj& obj,
@@ -28,29 +22,6 @@ int RGWSI_SysObj_Core::GetObjState::get_rados_obj(RGWSI_RADOS *rados_svc,
     has_rados_obj = true;
   }
   *pobj = &rados_obj;
-  return 0;
-}
-
-std::map<string, RGWServiceInstance::dependency> RGWSI_SysObj_Core::get_deps()
-{
-  RGWServiceInstance::dependency dep1 = { .name = "rados",
-                                          .conf = "{}" };
-  RGWServiceInstance::dependency dep2 = { .name = "zone",
-                                          .conf = "{}" };
-  map<string, RGWServiceInstance::dependency> deps;
-  deps["rados_dep"] = dep1;
-  deps["zone_dep"] = dep2;
-  return deps;
-}
-
-int RGWSI_SysObj_Core::load(const string& conf, std::map<std::string, RGWServiceInstanceRef>& dep_refs)
-{
-  rados_svc = static_pointer_cast<RGWSI_RADOS>(dep_refs["rados_dep"]);
-  assert(rados_svc);
-
-  zone_svc = static_pointer_cast<RGWSI_Zone>(dep_refs["zone_dep"]);
-  assert(zone_svc);
-
   return 0;
 }
 

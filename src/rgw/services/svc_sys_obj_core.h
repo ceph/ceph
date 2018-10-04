@@ -98,16 +98,9 @@ public:
   }
 };
 
-class RGWS_SysObj_Core : public RGWService
-{
-public:
-  RGWS_SysObj_Core(CephContext *cct) : RGWService(cct, "sysobj_core") {}
-
-  int create_instance(const std::string& conf, RGWServiceInstanceRef *instance) override;
-};
-
 class RGWSI_SysObj_Core : public RGWServiceInstance
 {
+  friend class RGWServices_Shared;
   friend class RGWSI_SysObj;
 
 protected:
@@ -128,9 +121,11 @@ protected:
   };
 
 
-  std::map<std::string, RGWServiceInstance::dependency> get_deps() override;
-  int load(const std::string& conf, std::map<std::string, RGWServiceInstanceRef>& dep_refs) override;
-
+  void core_init(std::shared_ptr<RGWSI_RADOS>& _rados_svc,
+                 std::shared_ptr<RGWSI_Zone>& _zone_svc) {
+    rados_svc = _rados_svc;
+    zone_svc = _zone_svc;
+  }
   int get_rados_obj(RGWSI_Zone *zone_svc, rgw_raw_obj& obj, RGWSI_RADOS::Obj *pobj);
 
   virtual int raw_stat(rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *epoch,
@@ -198,7 +193,7 @@ protected:
            RGWObjVersionTracker *objv_tracker);
 
 public:
-  RGWSI_SysObj_Core(RGWService *svc, CephContext *cct): RGWServiceInstance(svc, cct) {}
+  RGWSI_SysObj_Core(CephContext *cct): RGWServiceInstance(cct) {}
 
   RGWSI_Zone *get_zone_svc() {
     return zone_svc.get();

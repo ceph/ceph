@@ -21,15 +21,6 @@ struct RGWAccessListFilterPrefix : public RGWAccessListFilter {
   }
 };
 
-class RGWS_RADOS : public RGWService
-{
-  std::vector<std::string> get_deps();
-public:
-  RGWS_RADOS(CephContext *cct) : RGWService(cct, "rados") {}
-
-  int create_instance(const string& conf, RGWServiceInstanceRef *instance) override;
-};
-
 struct rgw_rados_ref {
   rgw_pool pool;
   string oid;
@@ -88,7 +79,7 @@ class RGWSI_RADOS : public RGWServiceInstance
   RWLock handle_lock;
   std::map<pthread_t, int> rados_map;
 
-  int load(const string& conf, std::map<std::string, RGWServiceInstanceRef>& deps) override;
+  int do_start() override;
 
   librados::Rados* get_rados_handle(int rados_handle);
   int open_pool_ctx(const rgw_pool& pool, librados::IoCtx& io_ctx, int rados_handle);
@@ -99,8 +90,10 @@ class RGWSI_RADOS : public RGWServiceInstance
                    bool *is_truncated);
 
 public:
-  RGWSI_RADOS(RGWService *svc, CephContext *cct): RGWServiceInstance(svc, cct),
-                                                  handle_lock("rados_handle_lock") {}
+  RGWSI_RADOS(CephContext *cct): RGWServiceInstance(cct),
+                                 handle_lock("rados_handle_lock") {}
+
+  void init() {}
 
   uint64_t instance_id();
 

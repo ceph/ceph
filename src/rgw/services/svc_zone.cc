@@ -13,42 +13,19 @@
 
 using namespace rgw_zone_defaults;
 
-int RGWS_Zone::create_instance(const string& conf, RGWServiceInstanceRef *instance)
+void RGWSI_Zone::init(std::shared_ptr<RGWSI_SysObj>& _sysobj_svc,
+                      std::shared_ptr<RGWSI_RADOS>& _rados_svc,
+                      std::shared_ptr<RGWSI_SyncModules>& _sync_modules_svc)
 {
-  instance->reset(new RGWSI_Zone(this, cct));
-  return 0;
-}
-
-std::map<string, RGWServiceInstance::dependency> RGWSI_Zone::get_deps()
-{
-  map<string, RGWServiceInstance::dependency> deps;
-  deps["sysobj_dep"] = { .name = "sysobj",
-                          .conf = "{}" };
-  deps["rados_dep"] = { .name = "rados",
-                        .conf = "{}" };
-  deps["sync_modules_dep"] = { .name = "sync_modules",
-                        .conf = "{}" };
-  return deps;
-}
-
-int RGWSI_Zone::load(const string& conf, std::map<std::string, RGWServiceInstanceRef>& dep_refs)
-{
-  sysobj_svc = static_pointer_cast<RGWSI_SysObj>(dep_refs["sysobj_dep"]);
-  assert(sysobj_svc);
+  sysobj_svc = _sysobj_svc;
+  rados_svc = _rados_svc;
+  sync_modules_svc = _sync_modules_svc;
 
   realm = make_shared<RGWRealm>();
   zonegroup = make_shared<RGWZoneGroup>();
   zone_public_config = make_shared<RGWZone>();
   zone_params = make_shared<RGWZoneParams>();
   current_period = make_shared<RGWPeriod>();
-
-  rados_svc = static_pointer_cast<RGWSI_RADOS>(dep_refs["rados_dep"]);
-  assert(rados_svc);
-
-  sync_modules_svc = static_pointer_cast<RGWSI_SyncModules>(dep_refs["sync_modules_dep"]);
-  assert(sync_modules_svc);
-
-  return 0;
 }
 
 bool RGWSI_Zone::zone_syncs_from(RGWZone& target_zone, RGWZone& source_zone)
@@ -57,9 +34,24 @@ bool RGWSI_Zone::zone_syncs_from(RGWZone& target_zone, RGWZone& source_zone)
          sync_modules_svc->get_manager()->supports_data_export(source_zone.tier_type);
 }
 
-int RGWSI_Zone::init()
+int RGWSI_Zone::do_start()
 {
-  int ret = realm->init(cct, sysobj_svc.get());
+  int ret = sysobj_svc->start();
+  if (ret < 0) {
+    return ret;
+  }
+
+  assert(sysobj_svc->start_state == StateStarted); /* if not then there's ordering issue */
+
+  ret = rados_svc->start();
+  if (ret < 0) {
+    return ret;
+  }
+  ret = sync_modules_svc->start();
+  if (ret < 0) {
+    return ret;
+  }
+  ret = realm->init(cct, sysobj_svc.get());
   if (ret < 0 && ret != -ENOENT) {
     ldout(cct, 0) << "failed reading realm info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
     return ret;

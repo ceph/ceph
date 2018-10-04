@@ -12,16 +12,10 @@ class RGWSI_SyncModules;
 
 class RGWRESTConn;
 
-class RGWS_Zone : public RGWService
-{
-public:
-  RGWS_Zone(CephContext *cct) : RGWService(cct, "zone") {}
-
-  int create_instance(const std::string& conf, RGWServiceInstanceRef *instance) override;
-};
-
 class RGWSI_Zone : public RGWServiceInstance
 {
+  friend struct RGWServices_Shared;
+
   std::shared_ptr<RGWSI_SysObj> sysobj_svc;
   std::shared_ptr<RGWSI_RADOS> rados_svc;
   std::shared_ptr<RGWSI_SyncModules> sync_modules_svc;
@@ -43,9 +37,10 @@ class RGWSI_Zone : public RGWServiceInstance
   map<string, string> zone_id_by_name;
   map<string, RGWZone> zone_by_id;
 
-  std::map<std::string, RGWServiceInstance::dependency> get_deps() override;
-  int load(const std::string& conf, std::map<std::string, RGWServiceInstanceRef>& dep_refs) override;
-  int init() override;
+  void init(std::shared_ptr<RGWSI_SysObj>& _sysobj_svc,
+           std::shared_ptr<RGWSI_RADOS>& _rados_svc,
+           std::shared_ptr<RGWSI_SyncModules>& _sync_modules_svc);
+  int do_start() override;
   void shutdown() override;
 
   int replace_region_with_zonegroup();
@@ -55,7 +50,7 @@ class RGWSI_Zone : public RGWServiceInstance
 
   int update_placement_map();
 public:
-  RGWSI_Zone(RGWService *svc, CephContext *cct): RGWServiceInstance(svc, cct) {}
+  RGWSI_Zone(CephContext *cct): RGWServiceInstance(cct) {}
 
   RGWZoneParams& get_zone_params();
   RGWPeriod& get_current_period();

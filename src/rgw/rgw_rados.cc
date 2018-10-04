@@ -1644,27 +1644,6 @@ int RGWRados::init_complete()
   return ret;
 }
 
-/*
- * FIXME: in the future formattable will derive from formatter, so formattable
- * could be constructed directly
- */
-static bool to_formattable(CephContext *cct, JSONFormatter& f, JSONFormattable *result)
-{
-  stringstream ss;
-  f.flush(ss);
-  string s = ss.str();
-
-  JSONParser jp;
-  if (!jp.parse(s.c_str(), s.size())) {
-    ldout(cct, 0) << "failed to parse formatter string: data=" << s << dendl;
-    return false;
-  }
-
-  result->decode_json(&jp);
-
-  return true;
-}
-
 /** 
  * Initialize the RADOS instance and prepare to do other ops
  * Returns 0 on success, -ERR# on failure.
@@ -1677,57 +1656,11 @@ int RGWRados::initialize()
     cct->_conf.get_val<double>("rgw_inject_notify_timeout_probability");
   max_notify_retries = cct->_conf.get_val<uint64_t>("rgw_max_notify_retries");
 
-  svc_registry = std::make_shared<RGWServiceRegistry>(cct);
-
-  JSONFormattable zone_svc_conf;
-  ret = svc_registry->get_instance("zone", zone_svc_conf, &_svc.zone);
+  ret = svc.init(cct, use_cache);
   if (ret < 0) {
+    ldout(cct, 0) << "ERROR: failed to init services (ret=" << cpp_strerror(-ret) << ")" << dendl;
     return ret;
   }
-  svc.zone = _svc.zone.get();
-
-  JSONFormattable zone_utils_svc_conf;
-  ret = svc_registry->get_instance("zone_utils", zone_utils_svc_conf, &_svc.zone_utils);
-  if (ret < 0) {
-    return ret;
-  }
-  svc.zone_utils = _svc.zone_utils.get();
-
-  JSONFormattable quota_svc_conf;
-  ret = svc_registry->get_instance("quota", quota_svc_conf, &_svc.quota);
-  if (ret < 0) {
-    return ret;
-  }
-  svc.quota = _svc.quota.get();
-
-  JSONFormattable sync_modules_svc_conf;
-  ret = svc_registry->get_instance("sync_modules", sync_modules_svc_conf, &_svc.sync_modules);
-  if (ret < 0) {
-    return ret;
-  }
-  svc.sync_modules = _svc.sync_modules.get();
-
-  if (use_cache) {
-    JSONFormattable cache_svc_conf;
-    ret = svc_registry->get_instance("sysobj_cache", cache_svc_conf, &_svc.cache);
-    if (ret < 0) {
-      return ret;
-    }
-    svc.cache = _svc.cache.get();
-  }
-
-  JSONFormattable sysobj_svc_conf;
-
-  JSONFormatter f;
-  encode_json("cache", use_cache, &f);
-  if (!to_formattable(cct, f, &sysobj_svc_conf)) {
-    assert(0);
-  }
-  ret = svc_registry->get_instance("sysobj", sysobj_svc_conf, &_svc.sysobj);
-  if (ret < 0) {
-    return ret;
-  }
-  svc.sysobj = _svc.sysobj.get();
 
   host_id = svc.zone_utils->gen_host_id();
 

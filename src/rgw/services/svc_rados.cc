@@ -6,12 +6,6 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-int RGWS_RADOS::create_instance(const string& conf, RGWServiceInstanceRef *instance)
-{
-  instance->reset(new RGWSI_RADOS(this, cct));
-  return 0;
-}
-
 static int init_ioctx(CephContext *cct, librados::Rados *rados, const rgw_pool& pool, librados::IoCtx& ioctx, bool create)
 {
   int r = rados->ioctx_create(pool.name.c_str(), ioctx);
@@ -47,7 +41,7 @@ static int init_ioctx(CephContext *cct, librados::Rados *rados, const rgw_pool& 
   return 0;
 }
 
-int RGWSI_RADOS::load(const string& conf, map<string, RGWServiceInstanceRef>& deps)
+int RGWSI_RADOS::do_start()
 {
   auto handles = std::vector<librados::Rados>{static_cast<size_t>(cct->_conf->rgw_num_rados_handles)};
 
