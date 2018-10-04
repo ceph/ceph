@@ -4,6 +4,22 @@
 * The 'ceph osd rm' command has been deprecated.  Users should use
   'ceph osd destroy' or 'ceph osd purge' (but after first confirming it is
   safe to do so via the 'ceph osd safe-to-destroy' command).
+
+* The MDS now supports dropping its cache for the purposes of benchmarking.
+
+    ceph tell mds.* cache drop <timeout>
+
+  Note that the MDS cache is cooperatively managed by the clients. It is
+  necessary for clients to give up capabilities in order for the MDS to fully
+  drop its cache. This is accomplished by asking all clients to trim as many
+  caps as possible. The timeout argument to the `cache drop` command controls
+  how long the MDS waits for clients to complete trimming caps. Keep in mind
+  that clients may still retain caps to open files which will prevent the
+  metadata for those files from being dropped by both the client and the MDS.
+  (This is an equivalent scenario to dropping the Linux
+  page/buffer/inode/dentry caches with some processes pinning some
+  inodes/dentries/pages in cache.)
+
 * The mon_health_preluminous_compat and mon_health_preluminous_compat_warning
   config options are removed, as the related functionality is more
   than two versions old.  Any legacy monitoring system expecting Jewel-style
