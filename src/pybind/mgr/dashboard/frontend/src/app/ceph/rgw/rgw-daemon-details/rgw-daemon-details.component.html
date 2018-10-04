@@ -11,4 +11,10 @@
                                   [serviceId]="serviceId">
     </cd-table-performance-counter>
   </tab>
+  <tab i18n-heading
+       heading="Performance Details">
+    <cd-grafana [grafanaPath]="'x5ARzZtmk/rgw-instance-detail?var-rgw_servers=rgw.' + this.selection.first().id"
+                grafanaStyle="one">
+    </cd-grafana>
+  </tab>
 </tabset>
