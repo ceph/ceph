@@ -51,7 +51,7 @@ static string normal_name(rgw_pool& pool, const std::string& oid) {
   return buf;
 }
 
-void RGWSI_SysObj_Cache::normalize_pool_and_obj(rgw_pool& src_pool, const string& src_obj, rgw_pool& dst_pool, string& dst_obj)
+void RGWSI_SysObj_Cache::normalize_pool_and_obj(const rgw_pool& src_pool, const string& src_obj, rgw_pool& dst_pool, string& dst_obj)
 {
   if (src_obj.size()) {
     dst_pool = src_pool;
@@ -65,7 +65,7 @@ void RGWSI_SysObj_Cache::normalize_pool_and_obj(rgw_pool& src_pool, const string
 
 int RGWSI_SysObj_Cache::remove(RGWSysObjectCtxBase& obj_ctx,
                                RGWObjVersionTracker *objv_tracker,
-                               rgw_raw_obj& obj)
+                               const rgw_raw_obj& obj)
 
 {
   rgw_pool pool;
@@ -87,7 +87,7 @@ int RGWSI_SysObj_Cache::remove(RGWSysObjectCtxBase& obj_ctx,
 int RGWSI_SysObj_Cache::read(RGWSysObjectCtxBase& obj_ctx,
                              GetObjState& read_state,
                              RGWObjVersionTracker *objv_tracker,
-                             rgw_raw_obj& obj,
+                             const rgw_raw_obj& obj,
                              bufferlist *obl, off_t ofs, off_t end,
                              map<string, bufferlist> *attrs,
                              rgw_cache_entry_info *cache_info,
@@ -164,7 +164,7 @@ int RGWSI_SysObj_Cache::read(RGWSysObjectCtxBase& obj_ctx,
   return r;
 }
 
-int RGWSI_SysObj_Cache::get_attr(rgw_raw_obj& obj,
+int RGWSI_SysObj_Cache::get_attr(const rgw_raw_obj& obj,
 				 const char *attr_name,
 				 bufferlist *dest)
 {
@@ -194,7 +194,7 @@ int RGWSI_SysObj_Cache::get_attr(rgw_raw_obj& obj,
   return RGWSI_SysObj_Core::get_attr(obj, attr_name, dest);
 }
 
-int RGWSI_SysObj_Cache::set_attrs(rgw_raw_obj& obj, 
+int RGWSI_SysObj_Cache::set_attrs(const rgw_raw_obj& obj, 
                                   map<string, bufferlist>& attrs,
                                   map<string, bufferlist> *rmattrs,
                                   RGWObjVersionTracker *objv_tracker) 
@@ -227,7 +227,7 @@ int RGWSI_SysObj_Cache::set_attrs(rgw_raw_obj& obj,
   return ret;
 }
 
-int RGWSI_SysObj_Cache::write(rgw_raw_obj& obj,
+int RGWSI_SysObj_Cache::write(const rgw_raw_obj& obj,
                              real_time *pmtime,
                              map<std::string, bufferlist>& attrs,
                              bool exclusive,
@@ -278,7 +278,7 @@ int RGWSI_SysObj_Cache::write(rgw_raw_obj& obj,
   return ret;
 }
 
-int RGWSI_SysObj_Cache::write_data(rgw_raw_obj& obj,
+int RGWSI_SysObj_Cache::write_data(const rgw_raw_obj& obj,
                                    const bufferlist& data,
                                    bool exclusive,
                                    RGWObjVersionTracker *objv_tracker)
@@ -311,7 +311,7 @@ int RGWSI_SysObj_Cache::write_data(rgw_raw_obj& obj,
   return ret;
 }
 
-int RGWSI_SysObj_Cache::raw_stat(rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *pepoch,
+int RGWSI_SysObj_Cache::raw_stat(const rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *pepoch,
                                  map<string, bufferlist> *attrs, bufferlist *first_chunk,
                                  RGWObjVersionTracker *objv_tracker)
 {
@@ -371,7 +371,7 @@ done:
   return 0;
 }
 
-int RGWSI_SysObj_Cache::distribute_cache(const string& normal_name, rgw_raw_obj& obj, ObjectCacheInfo& obj_info, int op)
+int RGWSI_SysObj_Cache::distribute_cache(const string& normal_name, const rgw_raw_obj& obj, ObjectCacheInfo& obj_info, int op)
 {
   RGWCacheNotifyInfo info;
 

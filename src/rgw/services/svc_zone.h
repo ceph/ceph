@@ -127,8 +127,6 @@ public:
   int list_realms(list<string>& realms);
   int list_periods(list<string>& periods);
   int list_periods(const string& current_period, list<string>& periods);
-
-  void canonicalize_raw_obj(rgw_raw_obj *obj);
 };
 
 #endif
