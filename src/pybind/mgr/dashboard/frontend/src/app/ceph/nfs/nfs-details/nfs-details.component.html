@@ -1,0 +1,7 @@
+<tabset *ngIf="selection?.hasSingleSelection">
+  <tab heading="Details"
+       i18n-heading>
+    <cd-table-key-value [data]="data">
+    </cd-table-key-value>
+  </tab>
+</tabset>

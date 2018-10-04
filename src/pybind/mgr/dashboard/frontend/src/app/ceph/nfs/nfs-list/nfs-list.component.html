@@ -1,0 +1,33 @@
+<cd-info-panel *ngIf="true"
+               title="Orchestrator not available"
+               i18n-title
+               i18n>To apply any changes you have to restart the Ganisha services.</cd-info-panel>
+
+<cd-table #table
+          [data]="exports"
+          columnMode="flex"
+          [columns]="columns"
+          identifier="id"
+          forceIdentifier="true"
+          selectionType="single"
+          (updateSelection)="updateSelection($event)">
+  <div class="table-actions btn-toolbar">
+    <cd-table-actions class="btn-group"
+                      [permission]="permission"
+                      [selection]="selection"
+                      [tableActions]="tableActions">
+    </cd-table-actions>
+  </div>
+
+  <cd-nfs-details cdTableDetail
+                  [selection]="selection">
+  </cd-nfs-details>
+</cd-table>
+
+<ng-template #nfsFsal
+             let-value="value">
+  <ng-container *ngIf="value.name==='CEPH'"
+                i18n>CephFS</ng-container>
+  <ng-container *ngIf="value.name==='RGW'"
+                i18n>Object Gateway</ng-container>
+</ng-template>
