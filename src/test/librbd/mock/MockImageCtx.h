@@ -118,7 +118,8 @@ struct MockImageCtx {
       ignore_migrating(image_ctx.ignore_migrating),
       mtime_update_interval(image_ctx.mtime_update_interval),
       atime_update_interval(image_ctx.atime_update_interval),
-      cache(image_ctx.cache)
+      cache(image_ctx.cache),
+      config(image_ctx.config)
   {
     md_ctx.dup(image_ctx.md_ctx);
     data_ctx.dup(image_ctx.data_ctx);
@@ -339,6 +340,8 @@ struct MockImageCtx {
   uint64_t mtime_update_interval;
   uint64_t atime_update_interval;
   bool cache;
+
+  ConfigProxy config;
 };
 
 } // namespace librbd

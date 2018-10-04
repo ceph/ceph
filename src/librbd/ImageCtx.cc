@@ -96,6 +96,7 @@ public:
   ImageCtx::ImageCtx(const string &image_name, const string &image_id,
 		     const char *snap, IoCtx& p, bool ro)
     : cct((CephContext*)p.cct()),
+      config(cct->_conf),
       perfcounter(NULL),
       snap_id(CEPH_NOSNAP),
       snap_exists(true),
@@ -813,28 +814,35 @@ public:
 	"rbd_qos_read_bps_limit", false)(
 	"rbd_qos_write_bps_limit", false);
 
-    ConfigProxy local_config_t{false};
     std::map<std::string, bufferlist> res;
 
+    // reset settings back to global defaults
+    for (auto& key : config_overrides) {
+      std::string value;
+      int r = cct->_conf.get_val(key, &value);
+      ceph_assert(r == 0);
+
+      config.set_val(key, value);
+    }
+
+    config_overrides.clear();
     _filter_metadata_confs(METADATA_CONF_PREFIX, configs, meta, &res);
     for (auto it : res) {
       std::string val(it.second.c_str(), it.second.length());
-      int j = local_config_t.set_val(it.first.c_str(), val);
+      int j = config.set_val(it.first.c_str(), val);
       if (j < 0) {
         lderr(cct) << __func__ << " failed to set config " << it.first
                    << " with value " << it.second.c_str() << ": " << j
                    << dendl;
       }
+      config_overrides.insert(it.first);
     }
 
 #define ASSIGN_OPTION(config, type)                                            \
     do {                                                                       \
       string key = "rbd_";						       \
       key = key + #config;					      	       \
-      if (configs[key])                                                        \
-        config = local_config_t.get_val<type>("rbd_"#config);                  \
-      else                                                                     \
-        config = cct->_conf.get_val<type>("rbd_"#config);                      \
+      config = config.get_val<type>("rbd_"#config);                            \
     } while (0);
 
     ASSIGN_OPTION(non_blocking_aio, bool);
