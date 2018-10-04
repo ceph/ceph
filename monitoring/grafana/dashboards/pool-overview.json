@@ -58,7 +58,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
+      "datasource": "$datasource",
       "fill": 5,
       "gridPos": {
         "h": 7,
@@ -140,7 +140,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
+      "datasource": "$datasource",
       "fill": 5,
       "gridPos": {
         "h": 7,
@@ -238,7 +238,7 @@
           "value": "current"
         }
       ],
-      "datasource": null,
+      "datasource": "$datasource",
       "fontSize": "100%",
       "gridPos": {
         "h": 7,
@@ -384,7 +384,7 @@
           "value": "current"
         }
       ],
-      "datasource": null,
+      "datasource": "$datasource",
       "fontSize": "100%",
       "gridPos": {
         "h": 7,
@@ -516,7 +516,7 @@
     },
     {
       "columns": [],
-      "datasource": null,
+      "datasource": "$datasource",
       "fontSize": "100%",
       "gridPos": {
         "h": 7,
@@ -654,7 +654,7 @@
       {
         "allValue": null,
         "current": {},
-        "datasource": null,
+        "datasource": "$datasource",
         "hide": 2,
         "includeAll": true,
         "label": null,
@@ -674,7 +674,7 @@
       {
         "allValue": null,
         "current": {},
-        "datasource": null,
+        "datasource": "$datasource",
         "hide": 2,
         "includeAll": true,
         "label": "Pool Name",
@@ -690,6 +690,21 @@
         "tagsQuery": "",
         "type": "query",
         "useTags": false
+      },
+      {
+        "current": {
+          "tags": [],
+          "text": "default",
+          "value": "default"
+        },
+        "hide": 0,
+        "label": "Data Source",
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "type": "datasource"
       }
     ]
   },
