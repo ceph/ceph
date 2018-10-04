@@ -3,12 +3,18 @@
 
 
 #include "rgw/rgw_service.h"
-#include "rgw/rgw_zone.h"
 
 
 class RGWSI_RADOS;
 class RGWSI_SysObj;
 class RGWSI_SyncModules;
+
+class RGWRealm;
+class RGWZoneGroup;
+class RGWZone;
+class RGWZoneParams;
+class RGWPeriod;
+class RGWZonePlacementInfo;
 
 class RGWRESTConn;
 
@@ -20,11 +26,11 @@ class RGWSI_Zone : public RGWServiceInstance
   std::shared_ptr<RGWSI_RADOS> rados_svc;
   std::shared_ptr<RGWSI_SyncModules> sync_modules_svc;
 
-  std::shared_ptr<RGWRealm> realm;
-  std::shared_ptr<RGWZoneGroup> zonegroup;
-  std::shared_ptr<RGWZone> zone_public_config; /* external zone params, e.g., entrypoints, log flags, etc. */  
-  std::shared_ptr<RGWZoneParams> zone_params; /* internal zone params, e.g., rados pools */
-  std::shared_ptr<RGWPeriod> current_period;
+  RGWRealm *realm{nullptr};
+  RGWZoneGroup *zonegroup{nullptr};
+  RGWZone *zone_public_config{nullptr}; /* external zone params, e.g., entrypoints, log flags, etc. */  
+  RGWZoneParams *zone_params{nullptr}; /* internal zone params, e.g., rados pools */
+  RGWPeriod *current_period{nullptr};
   uint32_t zone_short_id{0};
   bool writeable_zone{false};
 
@@ -50,7 +56,8 @@ class RGWSI_Zone : public RGWServiceInstance
 
   int update_placement_map();
 public:
-  RGWSI_Zone(CephContext *cct): RGWServiceInstance(cct) {}
+  RGWSI_Zone(CephContext *cct);
+  ~RGWSI_Zone();
 
   RGWZoneParams& get_zone_params();
   RGWPeriod& get_current_period();
