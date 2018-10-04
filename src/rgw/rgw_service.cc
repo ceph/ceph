@@ -32,7 +32,6 @@ int RGWServices_Shared::init(CephContext *cct,
   if (have_cache) {
     sysobj_cache = std::make_shared<RGWSI_SysObj_Cache>(cct);
   }
-
   finisher->init();
   notify->init(zone, rados, finisher);
   rados->init();

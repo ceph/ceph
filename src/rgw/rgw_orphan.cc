@@ -10,6 +10,7 @@
 
 #include "rgw_rados.h"
 #include "rgw_orphan.h"
+#include "rgw_zone.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_sys_obj.h"

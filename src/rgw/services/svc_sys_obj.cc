@@ -3,6 +3,8 @@
 #include "svc_rados.h"
 #include "svc_zone.h"
 
+#include "rgw/rgw_zone.h"
+
 #define dout_subsys ceph_subsys_rgw
 
 RGWSysObjectCtx RGWSI_SysObj::init_obj_ctx()

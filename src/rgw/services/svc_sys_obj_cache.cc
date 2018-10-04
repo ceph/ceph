@@ -2,6 +2,8 @@
 #include "svc_zone.h"
 #include "svc_notify.h"
 
+#include "rgw/rgw_zone.h"
+
 #define dout_subsys ceph_subsys_rgw
 
 class RGWSI_SysObj_Cache_CB : public RGWSI_Notify::CB

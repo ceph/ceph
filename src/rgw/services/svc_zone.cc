@@ -13,6 +13,10 @@
 
 using namespace rgw_zone_defaults;
 
+RGWSI_Zone::RGWSI_Zone(CephContext *cct) : RGWServiceInstance(cct)
+{
+}
+
 void RGWSI_Zone::init(std::shared_ptr<RGWSI_SysObj>& _sysobj_svc,
                       std::shared_ptr<RGWSI_RADOS>& _rados_svc,
                       std::shared_ptr<RGWSI_SyncModules>& _sync_modules_svc)
@@ -21,11 +25,20 @@ void RGWSI_Zone::init(std::shared_ptr<RGWSI_SysObj>& _sysobj_svc,
   rados_svc = _rados_svc;
   sync_modules_svc = _sync_modules_svc;
 
-  realm = make_shared<RGWRealm>();
-  zonegroup = make_shared<RGWZoneGroup>();
-  zone_public_config = make_shared<RGWZone>();
-  zone_params = make_shared<RGWZoneParams>();
-  current_period = make_shared<RGWPeriod>();
+  realm = new RGWRealm();
+  zonegroup = new RGWZoneGroup();
+  zone_public_config = new RGWZone();
+  zone_params = new RGWZoneParams();
+  current_period = new RGWPeriod();
+}
+
+RGWSI_Zone::~RGWSI_Zone()
+{
+  delete realm;
+  delete zonegroup;
+  delete zone_public_config;
+  delete zone_params;
+  delete current_period;
 }
 
 bool RGWSI_Zone::zone_syncs_from(RGWZone& target_zone, RGWZone& source_zone)
