@@ -30,6 +30,7 @@ export class CephfsDetailComponent implements OnChanges, OnInit {
   standbys = [];
   clientCount: number;
   mdsCounters = {};
+  grafanaId: any;
 
   objectValues = Object.values;
   clientsSelect = false;
@@ -43,6 +44,8 @@ export class CephfsDetailComponent implements OnChanges, OnInit {
   ngOnChanges() {
     if (this.selection.hasSelection) {
       this.selectedItem = this.selection.first();
+      const mdsInfo: any[] = this.selectedItem.mdsmap.info;
+      this.grafanaId = Object.values(mdsInfo)[0].name;
 
       if (this.id !== this.selectedItem.id) {
         this.id = this.selectedItem.id;

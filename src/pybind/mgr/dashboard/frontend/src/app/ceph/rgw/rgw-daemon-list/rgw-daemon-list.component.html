@@ -1,10 +1,20 @@
-<cd-table [data]="daemons"
-          [columns]="columns"
-          columnMode="flex"
-          selectionType="single"
-          (updateSelection)="updateSelection($event)"
-          (fetchData)="getDaemonList($event)">
-  <cd-rgw-daemon-details cdTableDetail
-                         [selection]="selection">
-  </cd-rgw-daemon-details>
-</cd-table>
+<tabset>
+  <tab i18n-heading heading="Daemons List">
+    <cd-table [data]="daemons"
+              [columns]="columns"
+              columnMode="flex"
+              selectionType="single"
+              (updateSelection)="updateSelection($event)"
+              (fetchData)="getDaemonList($event)">
+      <cd-rgw-daemon-details cdTableDetail [selection]="selection">
+      </cd-rgw-daemon-details>
+    </cd-table>
+  </tab>
+
+  <tab i18n-heading
+       heading="Overall Performance">
+    <cd-grafana [grafanaPath]="'WAkugZpiz/rgw-overview?'"
+                grafanaStyle="two">
+    </cd-grafana>
+  </tab>
+</tabset>
