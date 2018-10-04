@@ -18,7 +18,8 @@
 
     <button class="btn btn-sm btn-default btn-label"
             type="button"
-            (click)="purgeModal()">
+            (click)="purgeModal()"
+            *ngIf="permission.delete">
       <i class="fa fa-fw fa-times"
          aria-hidden="true"></i>
       <ng-container i18n>Purge Trash</ng-container>
