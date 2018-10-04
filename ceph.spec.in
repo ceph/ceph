@@ -930,6 +930,7 @@ RPM_OPT_FLAGS="$RPM_OPT_FLAGS --param ggc-min-expand=20 --param ggc-min-heapsize
 export CPPFLAGS="$java_inc"
 export CFLAGS="$RPM_OPT_FLAGS"
 export CXXFLAGS="$RPM_OPT_FLAGS"
+export LDFLAGS="$RPM_LD_FLAGS"
 
 # Parallel build settings ...
 CEPH_MFLAGS_JOBS="%{?_smp_mflags}"
