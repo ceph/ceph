@@ -305,6 +305,22 @@ const routes: Routes = [
       }
     ]
   },
+  // NFS
+  {
+    path: 'nfs',
+    canActivate: [AuthGuardService],
+    canActivateChild: [AuthGuardService],
+    data: { breadcrumbs: 'NFS' },
+    children: [
+      { path: '', component: NfsListComponent },
+      { path: 'add', component: NfsFormComponent, data: { breadcrumbs: 'Add' } },
+      {
+        path: 'edit/:cluster_id/:export_id',
+        component: NfsFormComponent,
+        data: { breadcrumbs: 'Edit' }
+      }
+    ]
+  },
   // Single Sign-On (SSO)
   { path: 'sso/404', component: SsoNotFoundComponent },
   // System
