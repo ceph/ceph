@@ -78,7 +78,7 @@ class OrchestratorCli(MgrModule):
         done = False
 
         while done is False:
-            done = self._oremote("wait", completions)
+            done = self._oremote("wait", completions) == []
 
             if not done:
                 any_nonpersistent = False
