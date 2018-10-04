@@ -17,6 +17,8 @@ import { MonitorComponent } from './ceph/cluster/monitor/monitor.component';
 import { OsdListComponent } from './ceph/cluster/osd/osd-list/osd-list.component';
 import { PrometheusListComponent } from './ceph/cluster/prometheus/prometheus-list/prometheus-list.component';
 import { DashboardComponent } from './ceph/dashboard/dashboard/dashboard.component';
+import { NfsFormComponent } from './ceph/nfs/nfs-form/nfs-form.component';
+import { NfsListComponent } from './ceph/nfs/nfs-list/nfs-list.component';
 import { PerformanceCounterComponent } from './ceph/performance-counter/performance-counter/performance-counter.component';
 import { PoolFormComponent } from './ceph/pool/pool-form/pool-form.component';
 import { PoolListComponent } from './ceph/pool/pool-list/pool-list.component';
