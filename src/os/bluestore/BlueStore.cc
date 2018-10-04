@@ -5494,9 +5494,15 @@ int BlueStore::_setup_block_symlink_or_file(
 	     << cpp_strerror(r) << dendl;
 	return r;
       }
-      string serial_number = epath.substr(strlen(SPDK_PREFIX));
-      r = ::write(fd, serial_number.c_str(), serial_number.size());
-      ceph_assert(r == (int)serial_number.size());
+      // write the Transport ID of the NVMe device
+      // a transport id looks like: "trtype:PCIe traddr:0000:02:00.0"
+      // where "0000:02:00.0" is the selector of a PCI device, see
+      // the first column of "lspci -mm -n -D"
+      string trid{"trtype:PCIe "};
+      trid += "traddr:";
+      trid += epath.substr(strlen(SPDK_PREFIX));
+      r = ::write(fd, trid.c_str(), trid.size());
+      ceph_assert(r == static_cast<int>(trid.size()));
       dout(1) << __func__ << " created " << name << " symlink to "
               << epath << dendl;
       VOID_TEMP_FAILURE_RETRY(::close(fd));

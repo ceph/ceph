@@ -435,8 +435,8 @@ wconf() {
 	fi
 }
 
-get_nvme_serial_number() {
-    sudo lspci -vvv -d $pci_id | grep 'Device Serial Number' | awk '{print $NF}' | sed 's/-//g'
+get_pci_selector() {
+    lspci -mm -n -D -d $pci_id | cut -d' ' -f1
 }
 
 prepare_conf() {
@@ -496,7 +496,7 @@ EOF
 	fi
         if [ "$objectstore" == "bluestore" ]; then
             if [ "$spdk_enabled" -eq 1 ]; then
-                if [ "$(get_nvme_serial_number)" == "" ]; then
+                if [ "$(get_pci_selector)" == "" ]; then
                     echo "Not find the specified NVME device, please check."
                     exit
                 fi
@@ -507,7 +507,7 @@ EOF
         bluestore_block_wal_size = 0
         bluestore_block_wal_create = false
         bluestore_spdk_mem = 2048
-        bluestore_block_path = spdk:$(get_nvme_serial_number)"
+        bluestore_block_path = spdk:$(get_pci_selector)"
             else
                 BLUESTORE_OPTS="        bluestore block db path = $CEPH_DEV_DIR/osd\$id/block.db.file
         bluestore block db size = 67108864
