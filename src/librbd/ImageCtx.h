@@ -7,9 +7,11 @@
 
 #include <list>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
+#include "common/config_proxy.h"
 #include "common/event_socket.h"
 #include "common/Mutex.h"
 #include "common/Readahead.h"
@@ -62,6 +64,9 @@ namespace librbd {
 
   struct ImageCtx {
     CephContext *cct;
+    ConfigProxy config;
+    std::set<std::string> config_overrides;
+
     PerfCounters *perfcounter;
     struct rbd_obj_header_ondisk header;
     ::SnapContext snapc;
