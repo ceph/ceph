@@ -22,7 +22,7 @@ class RGWSI_SysObj_Cache : public RGWSI_SysObj_Core
 
   std::shared_ptr<RGWSI_SysObj_Cache_CB> cb;
 
-  void normalize_pool_and_obj(rgw_pool& src_pool, const string& src_obj, rgw_pool& dst_pool, string& dst_obj);
+  void normalize_pool_and_obj(const rgw_pool& src_pool, const string& src_obj, rgw_pool& dst_pool, string& dst_obj);
 protected:
   void init(std::shared_ptr<RGWSI_RADOS>& _rados_svc,
             std::shared_ptr<RGWSI_Zone>& _zone_svc,
@@ -33,31 +33,31 @@ protected:
 
   int do_start() override;
 
-  int raw_stat(rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *epoch,
+  int raw_stat(const rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *epoch,
                map<string, bufferlist> *attrs, bufferlist *first_chunk,
                RGWObjVersionTracker *objv_tracker) override;
 
   int read(RGWSysObjectCtxBase& obj_ctx,
            GetObjState& read_state,
            RGWObjVersionTracker *objv_tracker,
-           rgw_raw_obj& obj,
+           const rgw_raw_obj& obj,
            bufferlist *bl, off_t ofs, off_t end,
            map<string, bufferlist> *attrs,
            rgw_cache_entry_info *cache_info,
            boost::optional<obj_version>) override;
 
-  int get_attr(rgw_raw_obj& obj, const char *name, bufferlist *dest) override;
+  int get_attr(const rgw_raw_obj& obj, const char *name, bufferlist *dest) override;
 
-  int set_attrs(rgw_raw_obj& obj, 
+  int set_attrs(const rgw_raw_obj& obj, 
                 map<string, bufferlist>& attrs,
                 map<string, bufferlist> *rmattrs,
                 RGWObjVersionTracker *objv_tracker);
 
   int remove(RGWSysObjectCtxBase& obj_ctx,
              RGWObjVersionTracker *objv_tracker,
-             rgw_raw_obj& obj) override;
+             const rgw_raw_obj& obj) override;
 
-  int write(rgw_raw_obj& obj,
+  int write(const rgw_raw_obj& obj,
             real_time *pmtime,
             map<std::string, bufferlist>& attrs,
             bool exclusive,
@@ -65,12 +65,12 @@ protected:
             RGWObjVersionTracker *objv_tracker,
             real_time set_mtime) override;
 
-  int write_data(rgw_raw_obj& obj,
+  int write_data(const rgw_raw_obj& obj,
                  const bufferlist& bl,
                  bool exclusive,
                  RGWObjVersionTracker *objv_tracker);
 
-  int distribute_cache(const string& normal_name, rgw_raw_obj& obj, ObjectCacheInfo& obj_info, int op);
+  int distribute_cache(const string& normal_name, const rgw_raw_obj& obj, ObjectCacheInfo& obj_info, int op);
 
   int watch_cb(uint64_t notify_id,
                uint64_t cookie,

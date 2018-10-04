@@ -115,20 +115,6 @@ public:
 
   public:
     Obj() {}
-    Obj(const Obj& o) : rados_svc(o.rados_svc),
-                        rados_handle(o.rados_handle),
-                        ref(o.ref) {}
-
-    Obj(Obj&& o) : rados_svc(o.rados_svc),
-                   rados_handle(o.rados_handle),
-                   ref(std::move(o.ref)) {}
-
-    Obj& operator=(Obj&& o) {
-      rados_svc = o.rados_svc;
-      rados_handle = o.rados_handle;
-      ref = std::move(o.ref);
-      return *this;
-    }
 
     int open();
 
@@ -170,9 +156,6 @@ public:
     Pool(RGWSI_RADOS *_rados_svc) : rados_svc(_rados_svc) {}
   public:
     Pool() {}
-    Pool(const Pool& p) : rados_svc(p.rados_svc),
-                          rados_handle(p.rados_handle),
-                          pool(p.pool) {}
 
     int create(const std::vector<rgw_pool>& pools, std::vector<int> *retcodes);
     int lookup(const rgw_pool& pool);

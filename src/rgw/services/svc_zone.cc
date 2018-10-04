@@ -933,14 +933,6 @@ bool RGWSI_Zone::is_syncing_bucket_meta(const rgw_bucket& bucket)
 }
 
 
-void RGWSI_Zone::canonicalize_raw_obj(rgw_raw_obj *obj)
-{
-  if (obj->oid.empty()) {
-    obj->oid = obj->pool.to_str();
-    obj->pool = zone_params->domain_root;
-  }
-}
-
 int RGWSI_Zone::select_new_bucket_location(RGWUserInfo& user_info, const string& zonegroup_id, const string& request_rule,
                                          string *pselected_rule_name, RGWZonePlacementInfo *rule_info)
 
