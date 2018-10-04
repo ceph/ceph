@@ -4,12 +4,14 @@ import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 
 import { ChartsModule } from 'ng2-charts/ng2-charts';
 import { AlertModule, ModalModule, PopoverModule, TooltipModule } from 'ngx-bootstrap';
+import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 
 import { DirectivesModule } from '../directives/directives.module';
 import { PipesModule } from '../pipes/pipes.module';
 import { ConfirmationModalComponent } from './confirmation-modal/confirmation-modal.component';
 import { DeletionModalComponent } from './deletion-modal/deletion-modal.component';
 import { ErrorPanelComponent } from './error-panel/error-panel.component';
+import { GrafanaComponent } from './grafana/grafana.component';
 import { HelperComponent } from './helper/helper.component';
 import { InfoPanelComponent } from './info-panel/info-panel.component';
 import { LoadingPanelComponent } from './loading-panel/loading-panel.component';
@@ -33,7 +35,8 @@ import { WarningPanelComponent } from './warning-panel/warning-panel.component';
     ReactiveFormsModule,
     PipesModule,
     ModalModule.forRoot(),
-    DirectivesModule
+    DirectivesModule,
+    BsDropdownModule
   ],
   declarations: [
     ViewCacheComponent,
@@ -48,7 +51,8 @@ import { WarningPanelComponent } from './warning-panel/warning-panel.component';
     ModalComponent,
     DeletionModalComponent,
     ConfirmationModalComponent,
-    WarningPanelComponent
+    WarningPanelComponent,
+    GrafanaComponent
   ],
   providers: [],
   exports: [
@@ -62,7 +66,8 @@ import { WarningPanelComponent } from './warning-panel/warning-panel.component';
     InfoPanelComponent,
     UsageBarComponent,
     ModalComponent,
-    WarningPanelComponent
+    WarningPanelComponent,
+    GrafanaComponent
   ],
   entryComponents: [ModalComponent, DeletionModalComponent, ConfirmationModalComponent]
 })
