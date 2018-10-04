@@ -4165,7 +4165,7 @@ AWSBrowserUploadAbstractor::get_auth_data(const req_state* const s) const
 }
 
 AWSEngine::result_t
-AWSEngine::authenticate(const req_state* const s) const
+AWSEngine::authenticate(const DoutPrefixProvider* dpp, const req_state* const s) const
 {
   /* Small reminder: an ver_abstractor is allowed to throw! */
   const auto auth_data = ver_abstractor.get_auth_data(s);
@@ -4173,7 +4173,8 @@ AWSEngine::authenticate(const req_state* const s) const
   if (auth_data.access_key_id.empty() || auth_data.client_signature.empty()) {
     return result_t::deny(-EINVAL);
   } else {
-    return authenticate(auth_data.access_key_id,
+    return authenticate(dpp,
+                        auth_data.access_key_id,
 		        auth_data.client_signature,
             auth_data.session_token,
 			auth_data.string_to_sign,
@@ -4238,6 +4239,7 @@ rgw::auth::s3::LDAPEngine::get_creds_info(const rgw::RGWToken& token) const noex
 
 rgw::auth::Engine::result_t
 rgw::auth::s3::LDAPEngine::authenticate(
+  const DoutPrefixProvider* dpp,
   const boost::string_view& access_key_id,
   const boost::string_view& signature,
   const boost::string_view& session_token,
@@ -4265,7 +4267,7 @@ rgw::auth::s3::LDAPEngine::authenticate(
   user_info.user_id = base64_token.id;
   if (rgw_get_user_info_by_uid(store, user_info.user_id, user_info) >= 0) {
     if (user_info.type != TYPE_LDAP) {
-      ldout(cct, 10) << "ERROR: User id of type: " << user_info.type << " is already present" << dendl;
+      ldpp_dout(dpp, 10) << "ERROR: User id of type: " << user_info.type << " is already present" << dendl;
       return nullptr;
     }
   }*/
@@ -4289,6 +4291,7 @@ void rgw::auth::s3::LDAPEngine::shutdown() {
 /* LocalEngine */
 rgw::auth::Engine::result_t
 rgw::auth::s3::LocalEngine::authenticate(
+  const DoutPrefixProvider* dpp,
   const boost::string_view& _access_key_id,
   const boost::string_view& signature,
   const boost::string_view& session_token,
@@ -4302,14 +4305,14 @@ rgw::auth::s3::LocalEngine::authenticate(
   /* TODO(rzarzynski): we need to have string-view taking variant. */
   const std::string access_key_id = _access_key_id.to_string();
   if (rgw_get_user_info_by_access_key(store, access_key_id, user_info) < 0) {
-      ldpp_dout(s, 5) << "error reading user info, uid=" << access_key_id
+      ldpp_dout(dpp, 5) << "error reading user info, uid=" << access_key_id
               << " can't authenticate" << dendl;
       return result_t::deny(-ERR_INVALID_ACCESS_KEY);
   }
   //TODO: Uncomment, when we have a migration plan in place.
   /*else {
     if (s->user->type != TYPE_RGW) {
-      ldout(cct, 10) << "ERROR: User id of type: " << s->user->type
+      ldpp_dout(dpp, 10) << "ERROR: User id of type: " << s->user->type
                      << " is present" << dendl;
       throw -EPERM;
     }
@@ -4317,7 +4320,7 @@ rgw::auth::s3::LocalEngine::authenticate(
 
   const auto iter = user_info.access_keys.find(access_key_id);
   if (iter == std::end(user_info.access_keys)) {
-    ldpp_dout(s, 0) << "ERROR: access key not encoded in user info" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: access key not encoded in user info" << dendl;
     return result_t::deny(-EPERM);
   }
   const RGWAccessKey& k = iter->second;
@@ -4326,12 +4329,12 @@ rgw::auth::s3::LocalEngine::authenticate(
     signature_factory(cct, k.key, string_to_sign);
   auto compare = signature.compare(server_signature);
 
-  ldout(cct, 15) << "string_to_sign="
+  ldpp_dout(dpp, 15) << "string_to_sign="
                  << rgw::crypt_sanitize::log_content{string_to_sign}
                  << dendl;
-  ldout(cct, 15) << "server signature=" << server_signature << dendl;
-  ldout(cct, 15) << "client signature=" << signature << dendl;
-  ldout(cct, 15) << "compare=" << compare << dendl;
+  ldpp_dout(dpp, 15) << "server signature=" << server_signature << dendl;
+  ldpp_dout(dpp, 15) << "client signature=" << signature << dendl;
+  ldpp_dout(dpp, 15) << "compare=" << compare << dendl;
 
   if (compare != 0) {
     return result_t::deny(-ERR_SIGNATURE_NO_MATCH);

@@ -280,7 +280,7 @@ public:
    *    interface.
    *
    * On error throws rgw::auth::Exception containing the reason. */
-  virtual result_t authenticate(const req_state* s) const = 0;
+  virtual result_t authenticate(const DoutPrefixProvider* dpp, const req_state* s) const = 0;
 };
 
 
@@ -323,7 +323,7 @@ public:
     FALLBACK,
   };
 
-  Engine::result_t authenticate(const req_state* s) const override final;
+  Engine::result_t authenticate(const DoutPrefixProvider* dpp, const req_state* s) const override final;
 
   bool is_empty() const {
     return auth_stack.empty();
@@ -526,7 +526,7 @@ public:
     return "rgw::auth::AnonymousEngine";
   }
 
-  Engine::result_t authenticate(const req_state* s) const override final;
+  Engine::result_t authenticate(const DoutPrefixProvider* dpp, const req_state* s) const override final;
 
 protected:
   virtual bool is_applicable(const req_state*) const noexcept {

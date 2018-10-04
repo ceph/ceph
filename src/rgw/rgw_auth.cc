@@ -207,7 +207,7 @@ strategy_handle_granted(rgw::auth::Engine::result_t&& engine_result,
 }
 
 rgw::auth::Engine::result_t
-rgw::auth::Strategy::authenticate(const req_state* const s) const
+rgw::auth::Strategy::authenticate(const DoutPrefixProvider* dpp, const req_state* const s) const
 {
   result_t strategy_result = result_t::deny();
 
@@ -215,11 +215,11 @@ rgw::auth::Strategy::authenticate(const req_state* const s) const
     const rgw::auth::Engine& engine = kv.first;
     const auto& policy = kv.second;
 
-    dout(20) << get_name() << ": trying " << engine.get_name() << dendl;
+    ldpp_dout(dpp, 20) << get_name() << ": trying " << engine.get_name() << dendl;
 
     result_t engine_result = result_t::deny();
     try {
-      engine_result = engine.authenticate(s);
+      engine_result = engine.authenticate(dpp, s);
     } catch (const int err) {
       engine_result = result_t::deny(err);
     }
@@ -227,7 +227,7 @@ rgw::auth::Strategy::authenticate(const req_state* const s) const
     bool try_next = true;
     switch (engine_result.get_status()) {
       case result_t::Status::REJECTED: {
-        dout(20) << engine.get_name() << " rejected with reason="
+        ldpp_dout(dpp, 20) << engine.get_name() << " rejected with reason="
                  << engine_result.get_reason() << dendl;
 
         std::tie(try_next, strategy_result) = \
@@ -236,7 +236,7 @@ rgw::auth::Strategy::authenticate(const req_state* const s) const
         break;
       }
       case result_t::Status::DENIED: {
-        dout(20) << engine.get_name() << " denied with reason="
+        ldpp_dout(dpp, 20) << engine.get_name() << " denied with reason="
                  << engine_result.get_reason() << dendl;
 
         std::tie(try_next, strategy_result) = \
@@ -245,7 +245,7 @@ rgw::auth::Strategy::authenticate(const req_state* const s) const
         break;
       }
       case result_t::Status::GRANTED: {
-        dout(20) << engine.get_name() << " granted access" << dendl;
+        ldpp_dout(dpp, 20) << engine.get_name() << " granted access" << dendl;
 
         std::tie(try_next, strategy_result) = \
           strategy_handle_granted(std::move(engine_result), policy,
@@ -270,7 +270,7 @@ rgw::auth::Strategy::apply(const DoutPrefixProvider *dpp, const rgw::auth::Strat
                            req_state* const s) noexcept
 {
   try {
-    auto result = auth_strategy.authenticate(s);
+    auto result = auth_strategy.authenticate(dpp, s);
     if (result.get_status() != decltype(result)::Status::GRANTED) {
       /* Access denied is acknowledged by returning a std::unique_ptr with
        * nullptr inside. */
@@ -550,7 +550,7 @@ void rgw::auth::LocalApplier::modify_request_state(req_state* s) const
 }
 
 rgw::auth::Engine::result_t
-rgw::auth::AnonymousEngine::authenticate(const req_state* const s) const
+rgw::auth::AnonymousEngine::authenticate(const DoutPrefixProvider* dpp, const req_state* const s) const
 {
   if (! is_applicable(s)) {
     return result_t::deny(-EPERM);

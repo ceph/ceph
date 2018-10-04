@@ -205,7 +205,8 @@ TokenEngine::get_acl_strategy(const TokenEngine::token_envelope_t& token) const
 }
 
 TokenEngine::result_t
-TokenEngine::authenticate(const std::string& token,
+TokenEngine::authenticate(const DoutPrefixProvider* dpp,
+                          const std::string& token,
                           const req_state* const s) const
 {
   boost::optional<TokenEngine::token_envelope_t> t;
@@ -232,12 +233,12 @@ TokenEngine::authenticate(const std::string& token,
   /* Token ID is a concept that makes dealing with PKI tokens more effective.
    * Instead of storing several kilobytes, a short hash can be burried. */
   const auto& token_id = rgw_get_token_id(token);
-  ldout(cct, 20) << "token_id=" << token_id << dendl;
+  ldpp_dout(dpp, 20) << "token_id=" << token_id << dendl;
 
   /* Check cache first. */
   t = token_cache.find(token_id);
   if (t) {
-    ldout(cct, 20) << "cached token.project.id=" << t->get_project_id()
+    ldpp_dout(dpp, 20) << "cached token.project.id=" << t->get_project_id()
                    << dendl;
     auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(*t),
                                               get_creds_info(*t, roles.admin));
@@ -263,7 +264,7 @@ TokenEngine::authenticate(const std::string& token,
 
   /* Verify expiration. */
   if (t->expired()) {
-    ldout(cct, 0) << "got expired token: " << t->get_project_name()
+    ldpp_dout(dpp, 0) << "got expired token: " << t->get_project_name()
                   << ":" << t->get_user_name()
                   << " expired: " << t->get_expires() << dendl;
     return result_t::deny(-EPERM);
@@ -272,7 +273,7 @@ TokenEngine::authenticate(const std::string& token,
   /* Check for necessary roles. */
   for (const auto& role : roles.plain) {
     if (t->has_role(role) == true) {
-      ldout(cct, 0) << "validated token: " << t->get_project_name()
+      ldpp_dout(dpp, 0) << "validated token: " << t->get_project_name()
                     << ":" << t->get_user_name()
                     << " expires: " << t->get_expires() << dendl;
       token_cache.add(token_id, *t);
@@ -282,7 +283,7 @@ TokenEngine::authenticate(const std::string& token,
     }
   }
 
-  ldout(cct, 0) << "user does not hold a matching role; required roles: "
+  ldpp_dout(dpp, 0) << "user does not hold a matching role; required roles: "
                 << g_conf()->rgw_keystone_accepted_roles << dendl;
 
   return result_t::deny(-EPERM);
@@ -418,6 +419,7 @@ EC2Engine::get_creds_info(const EC2Engine::token_envelope_t& token,
 }
 
 rgw::auth::Engine::result_t EC2Engine::authenticate(
+  const DoutPrefixProvider* dpp,
   const boost::string_view& access_key_id,
   const boost::string_view& signature,
   const boost::string_view& session_token,
@@ -452,7 +454,7 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(
 
   /* Verify expiration. */
   if (t->expired()) {
-    ldout(cct, 0) << "got expired token: " << t->get_project_name()
+    ldpp_dout(dpp, 0) << "got expired token: " << t->get_project_name()
                   << ":" << t->get_user_name()
                   << " expired: " << t->get_expires() << dendl;
     return result_t::deny();
@@ -468,13 +470,13 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(
   }
 
   if (! found) {
-    ldout(cct, 5) << "s3 keystone: user does not hold a matching role;"
+    ldpp_dout(dpp, 5) << "s3 keystone: user does not hold a matching role;"
                      " required roles: "
                   << cct->_conf->rgw_keystone_accepted_roles << dendl;
     return result_t::deny();
   } else {
     /* everything seems fine, continue with this user */
-    ldout(cct, 5) << "s3 keystone: validated token: " << t->get_project_name()
+    ldpp_dout(dpp, 5) << "s3 keystone: validated token: " << t->get_project_name()
                   << ":" << t->get_user_name()
                   << " expires: " << t->get_expires() << dendl;
 
