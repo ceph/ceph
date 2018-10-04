@@ -3,6 +3,7 @@ import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { HostService } from '../../../shared/api/host.service';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
+import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { Permissions } from '../../../shared/models/permissions';
 import { CephShortVersionPipe } from '../../../shared/pipes/ceph-short-version.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
@@ -18,6 +19,7 @@ export class HostsComponent implements OnInit {
   hosts: Array<object> = [];
   isLoadingHosts = false;
   cdParams = { fromLink: '/hosts' };
+  selection = new CdTableSelection();
 
   @ViewChild('servicesTpl')
   public servicesTpl: TemplateRef<any>;
@@ -50,6 +52,10 @@ export class HostsComponent implements OnInit {
         pipe: this.cephShortVersionPipe
       }
     ];
+  }
+
+  updateSelection(selection: CdTableSelection) {
+    this.selection = selection;
   }
 
   getHosts(context: CdTableFetchDataContext) {
