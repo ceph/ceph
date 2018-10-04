@@ -288,7 +288,7 @@ int abort_bucket_multiparts(RGWRados *store, CephContext *cct, RGWBucketInfo& bu
           continue;
         entry.obj = obj;
         ret = abort_multipart_upload(store, cct, &obj_ctx, bucket_info, entry.mp);
-        if (ret < 0) {
+        if (ret < 0 && ret != -ENOENT && ret != -ERR_NO_SUCH_UPLOAD) {
           return ret;
         }
         num_deleted++;
