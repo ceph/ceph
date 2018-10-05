@@ -2,6 +2,7 @@ import { Component, Input, OnInit, TemplateRef, ViewChild } from '@angular/core'
 
 import { PerformanceCounterService } from '../../../shared/api/performance-counter.service';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
+import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
 
 /**
  * Display the specified performance counters in a datatable.
@@ -52,7 +53,7 @@ export class TablePerformanceCounterComponent implements OnInit {
     ];
   }
 
-  getCounters() {
+  getCounters(context: CdTableFetchDataContext) {
     this.performanceCounterService.get(this.serviceType, this.serviceId).subscribe(
       (resp: object[]) => {
         this.counters = resp;
@@ -61,6 +62,8 @@ export class TablePerformanceCounterComponent implements OnInit {
         if (error.status === 404) {
           error.preventDefault();
           this.counters = null;
+        } else {
+          context.error();
         }
       }
     );
