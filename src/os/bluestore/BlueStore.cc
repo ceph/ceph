@@ -5269,7 +5269,8 @@ void BlueStore::_dump_alloc_on_rebalance_failure()
   }
 }
 
-int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
+int BlueStore::_balance_bluefs_freespace(PExtentVector *extents,
+					 KeyValueDB::Transaction synct)
 {
   int ret = 0;
   ceph_assert(bluefs);
@@ -5398,7 +5399,16 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
 
     ret = 1;
   }
-
+  if (ret > 0) {
+    for (auto& p : *extents) {
+      bluefs_extents.insert(p.offset, p.length);
+    }
+    bufferlist bl;
+    encode(bluefs_extents, bl);
+    dout(10) << __func__ << " bluefs_extents now 0x" << std::hex
+	      << bluefs_extents << std::dec << dendl;
+    synct->set(PREFIX_SUPER, "bluefs_extents", bl);
+  }
   return ret;
 }
 
@@ -6891,6 +6901,17 @@ int BlueStore::_fsck(bool deep, bool repair)
 	}
       }
       used_blocks.flip();
+    }
+  }
+  if(repair) {
+    PExtentVector bluefs_gift_extents;
+    int r = _balance_bluefs_freespace(&bluefs_gift_extents,
+                                      repairer.get_bluefs_rebalance_txn(db));
+    ceph_assert(r >= 0);
+    if (r && !bluefs_gift_extents.empty()) {
+      dout(1) << __func__ << " additional bluefs_extents allocated 0x" << std::hex
+	      << bluefs_gift_extents << std::dec << dendl;
+      _commit_bluefs_freespace(bluefs_gift_extents);
     }
   }
   if (repair) {
@@ -9386,18 +9407,8 @@ void BlueStore::_kv_sync_thread()
 	  after_flush - bluefs_last_balance >
 	  ceph::make_timespan(cct->_conf->bluestore_bluefs_balance_interval)) {
 	bluefs_last_balance = after_flush;
-	int r = _balance_bluefs_freespace(&bluefs_gift_extents);
+	int r = _balance_bluefs_freespace(&bluefs_gift_extents, synct);
 	ceph_assert(r >= 0);
-	if (r > 0) {
-	  for (auto& p : bluefs_gift_extents) {
-	    bluefs_extents.insert(p.offset, p.length);
-	  }
-	  bufferlist bl;
-	  encode(bluefs_extents, bl);
-	  dout(10) << __func__ << " bluefs_extents now 0x" << std::hex
-		   << bluefs_extents << std::dec << dendl;
-	  synct->set(PREFIX_SUPER, "bluefs_extents", bl);
-	}
       }
 
       // cleanup sync deferred keys
@@ -12783,6 +12794,10 @@ unsigned BlueStoreRepairer::apply(KeyValueDB* db)
   if (fix_statfs_txn) {
     db->submit_transaction_sync(fix_statfs_txn);
     fix_statfs_txn = nullptr;
+  }
+  if (bluefs_rebalance_txn) {
+    db->submit_transaction_sync(bluefs_rebalance_txn);
+    bluefs_rebalance_txn = nullptr;
   }
   unsigned repaired = to_repair_cnt;
   to_repair_cnt = 0;
