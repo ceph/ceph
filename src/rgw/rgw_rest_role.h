@@ -13,6 +13,7 @@ protected:
   string policy_name;
   string perm_policy;
   string path_prefix;
+  string max_session_duration;
   RGWRole _role;
 public:
   int verify_permission() override;

@@ -276,6 +276,7 @@ void RGWRole::dump(Formatter *f) const
   encode_json("path", path, f);
   encode_json("arn", arn, f);
   encode_json("create_date", creation_date, f);
+  encode_json("max_session_duration", max_session_duration, f);
   encode_json("assume_role_policy_document", trust_policy, f);
 }
 
@@ -286,6 +287,7 @@ void RGWRole::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("path", path, obj);
   JSONDecoder::decode_json("arn", arn, obj);
   JSONDecoder::decode_json("create_date", creation_date, obj);
+  JSONDecoder::decode_json("max_session_duration", max_session_duration, obj);
   JSONDecoder::decode_json("assume_role_policy_document", trust_policy, obj);
 }
 
@@ -394,6 +396,11 @@ bool RGWRole::validate_input()
     return false;
   }
 
+  if (max_session_duration < SESSION_DURATION_MIN ||
+          max_session_duration > SESSION_DURATION_MAX) {
+    ldout(cct, 0) << "ERROR: Invalid session duration, should be between 3600 and 43200 seconds " << dendl;
+    return false;
+  }
   return true;
 }
 

@@ -34,15 +34,18 @@ transform_old_authinfo(const req_state* const s)
     const rgw_user id;
     const int perm_mask;
     const bool is_admin;
+    const uint32_t type;
   public:
     DummyIdentityApplier(CephContext* const cct,
                          const rgw_user& auth_id,
                          const int perm_mask,
-                         const bool is_admin)
+                         const bool is_admin,
+                         const uint32_t type)
       : cct(cct),
         id(auth_id),
         perm_mask(perm_mask),
-        is_admin(is_admin) {
+        is_admin(is_admin),
+        type(type) {
     }
 
     uint32_t get_perms_from_aclspec(const aclspec_t& aclspec) const override {
@@ -76,6 +79,14 @@ transform_old_authinfo(const req_state* const s)
       return perm_mask;
     }
 
+    uint32_t get_identity_type() const override {
+      return type;
+    }
+
+    string get_acct_name() const override {
+      return {};
+    }
+
     void to_str(std::ostream& out) const override {
       out << "RGWDummyIdentityApplier(auth_id=" << id
           << ", perm_mask=" << perm_mask
@@ -89,7 +100,8 @@ transform_old_authinfo(const req_state* const s)
                                  s->perm_mask,
   /* System user has admin permissions by default - it's supposed to pass
    * through any security check. */
-                                 s->system_request));
+                                 s->system_request,
+                                 s->user->type));
 }
 
 } /* namespace auth */
@@ -454,7 +466,6 @@ void rgw::auth::RemoteApplier::load_acct_info(RGWUserInfo& user_info) const     
   /* Succeeded if we are here (create_account() hasn't throwed). */
 }
 
-
 /* rgw::auth::LocalApplier */
 /* static declaration */
 const std::string rgw::auth::LocalApplier::NO_SUBUSER;
@@ -523,6 +534,20 @@ void rgw::auth::LocalApplier::load_acct_info(RGWUserInfo& user_info) const /* ou
   user_info = this->user_info;
 }
 
+void rgw::auth::LocalApplier::modify_request_state(req_state* s) const
+{
+  for (auto it : role_policies) {
+    try {
+      bufferlist bl = bufferlist::static_from_string(it);
+      const rgw::IAM::Policy p(s->cct, s->user->user_id.tenant, bl);
+      s->iam_user_policies.push_back(std::move(p));
+    } catch (rgw::IAM::PolicyParseException& e) {
+      //Control shouldn't reach here as the policy has already been
+      //verified earlier
+      ldout(s->cct, 20) << "failed to parse policy: " << e.what() << dendl;
+    }
+  }
+}
 
 rgw::auth::Engine::result_t
 rgw::auth::AnonymousEngine::authenticate(const req_state* const s) const
@@ -535,7 +560,8 @@ rgw::auth::AnonymousEngine::authenticate(const req_state* const s) const
 
     auto apl = \
       apl_factory->create_apl_local(cct, s, user_info,
-                                    rgw::auth::LocalApplier::NO_SUBUSER);
+                                    rgw::auth::LocalApplier::NO_SUBUSER,
+                                    boost::none, boost::none);
     return result_t::grant(std::move(apl));
   }
 }
