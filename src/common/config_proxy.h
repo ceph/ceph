@@ -69,6 +69,9 @@ public:
   void config_options(Formatter *f) const {
     config.config_options(f);
   }
+  const decltype(md_config_t::schema)& get_schema() const {
+    return config.schema;
+  }
   const Option* get_schema(const std::string& key) const {
     auto found = config.schema.find(key);
     if (found == config.schema.end()) {
