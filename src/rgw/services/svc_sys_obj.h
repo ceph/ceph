@@ -16,7 +16,7 @@ struct rgw_cache_entry_info;
 
 class RGWSI_SysObj : public RGWServiceInstance
 {
-  friend struct RGWServices_Shared;
+  friend struct RGWServices_Def;
 
 public:
   class Obj {
@@ -230,11 +230,11 @@ public:
   friend class Pool::Op;
 
 protected:
-  std::shared_ptr<RGWSI_RADOS> rados_svc;
-  std::shared_ptr<RGWSI_SysObj_Core> core_svc;
+  RGWSI_RADOS *rados_svc{nullptr};
+  RGWSI_SysObj_Core *core_svc{nullptr};
 
-  void init(std::shared_ptr<RGWSI_RADOS>& _rados_svc,
-            std::shared_ptr<RGWSI_SysObj_Core>& _core_svc) {
+  void init(RGWSI_RADOS *_rados_svc,
+            RGWSI_SysObj_Core *_core_svc) {
     rados_svc = _rados_svc;
     core_svc = _core_svc;
   }
@@ -246,7 +246,7 @@ public:
   Obj get_obj(RGWSysObjectCtx& obj_ctx, const rgw_raw_obj& obj);
 
   Pool get_pool(const rgw_pool& pool) {
-    return Pool(rados_svc.get(), core_svc.get(), pool);
+    return Pool(rados_svc, core_svc, pool);
   }
 
   RGWSI_Zone *get_zone_svc();

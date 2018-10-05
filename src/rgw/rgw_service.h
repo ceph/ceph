@@ -52,18 +52,21 @@ class RGWSI_SysObj;
 class RGWSI_SysObj_Core;
 class RGWSI_SysObj_Cache;
 
-struct RGWServices_Shared
+struct RGWServices_Def
 {
-  std::shared_ptr<RGWSI_Finisher> finisher;
-  std::shared_ptr<RGWSI_Notify> notify;
-  std::shared_ptr<RGWSI_RADOS> rados;
-  std::shared_ptr<RGWSI_Zone> zone;
-  std::shared_ptr<RGWSI_ZoneUtils> zone_utils;
-  std::shared_ptr<RGWSI_Quota> quota;
-  std::shared_ptr<RGWSI_SyncModules> sync_modules;
-  std::shared_ptr<RGWSI_SysObj> sysobj;
-  std::shared_ptr<RGWSI_SysObj_Core> sysobj_core;
-  std::shared_ptr<RGWSI_SysObj_Cache> sysobj_cache;
+  std::unique_ptr<RGWSI_Finisher> finisher;
+  std::unique_ptr<RGWSI_Notify> notify;
+  std::unique_ptr<RGWSI_RADOS> rados;
+  std::unique_ptr<RGWSI_Zone> zone;
+  std::unique_ptr<RGWSI_ZoneUtils> zone_utils;
+  std::unique_ptr<RGWSI_Quota> quota;
+  std::unique_ptr<RGWSI_SyncModules> sync_modules;
+  std::unique_ptr<RGWSI_SysObj> sysobj;
+  std::unique_ptr<RGWSI_SysObj_Core> sysobj_core;
+  std::unique_ptr<RGWSI_SysObj_Cache> sysobj_cache;
+
+  RGWServices_Def();
+  ~RGWServices_Def();
 
   int init(CephContext *cct, bool have_cache);
 };
@@ -71,7 +74,7 @@ struct RGWServices_Shared
 
 struct RGWServices
 {
-  RGWServices_Shared _svc;
+  RGWServices_Def _svc;
 
   RGWSI_Finisher *finisher{nullptr};
   RGWSI_Notify *notify{nullptr};

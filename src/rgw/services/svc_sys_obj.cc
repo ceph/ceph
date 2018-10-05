@@ -14,7 +14,7 @@ RGWSysObjectCtx RGWSI_SysObj::init_obj_ctx()
 
 RGWSI_SysObj::Obj RGWSI_SysObj::get_obj(RGWSysObjectCtx& obj_ctx, const rgw_raw_obj& obj)
 {
-  return Obj(core_svc.get(), obj_ctx, obj);
+  return Obj(core_svc, obj_ctx, obj);
 }
 
 void RGWSI_SysObj::Obj::invalidate()

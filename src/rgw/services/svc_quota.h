@@ -7,12 +7,12 @@
 
 class RGWSI_Quota : public RGWServiceInstance
 {
-  std::shared_ptr<RGWSI_Zone> zone_svc;
+  RGWSI_Zone *zone_svc{nullptr};
 
 public:
   RGWSI_Quota(CephContext *cct): RGWServiceInstance(cct) {}
 
-  void init(std::shared_ptr<RGWSI_Zone>& _zone_svc) {
+  void init(RGWSI_Zone *_zone_svc) {
     zone_svc = _zone_svc;
   }
 

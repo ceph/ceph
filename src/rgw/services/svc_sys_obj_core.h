@@ -96,12 +96,12 @@ public:
 
 class RGWSI_SysObj_Core : public RGWServiceInstance
 {
-  friend class RGWServices_Shared;
+  friend class RGWServices_Def;
   friend class RGWSI_SysObj;
 
 protected:
-  std::shared_ptr<RGWSI_RADOS> rados_svc;
-  std::shared_ptr<RGWSI_Zone> zone_svc;
+  RGWSI_RADOS *rados_svc{nullptr};
+  RGWSI_Zone *zone_svc{nullptr};
 
   struct GetObjState {
     RGWSI_RADOS::Obj rados_obj;
@@ -117,8 +117,8 @@ protected:
   };
 
 
-  void core_init(std::shared_ptr<RGWSI_RADOS>& _rados_svc,
-                 std::shared_ptr<RGWSI_Zone>& _zone_svc) {
+  void core_init(RGWSI_RADOS *_rados_svc,
+                 RGWSI_Zone *_zone_svc) {
     rados_svc = _rados_svc;
     zone_svc = _zone_svc;
   }
@@ -192,7 +192,7 @@ public:
   RGWSI_SysObj_Core(CephContext *cct): RGWServiceInstance(cct) {}
 
   RGWSI_Zone *get_zone_svc() {
-    return zone_svc.get();
+    return zone_svc;
   }
 };
 

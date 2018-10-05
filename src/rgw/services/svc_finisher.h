@@ -9,7 +9,7 @@ class Finisher;
 
 class RGWSI_Finisher : public RGWServiceInstance
 {
-  friend struct RGWServices_Shared;
+  friend struct RGWServices_Def;
 public:
   class ShutdownCB;
 

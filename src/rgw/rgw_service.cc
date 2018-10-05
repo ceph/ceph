@@ -16,36 +16,38 @@
 #define dout_subsys ceph_subsys_rgw
 
 
-int RGWServices_Shared::init(CephContext *cct,
-                             bool have_cache)
+RGWServices_Def::RGWServices_Def() = default;
+RGWServices_Def::~RGWServices_Def() = default;
+
+int RGWServices_Def::init(CephContext *cct,
+			  bool have_cache)
 {
-  finisher = std::make_shared<RGWSI_Finisher>(cct);
-  notify = std::make_shared<RGWSI_Notify>(cct);
-  rados = std::make_shared<RGWSI_RADOS>(cct);
-  zone = std::make_shared<RGWSI_Zone>(cct);
-  zone_utils = std::make_shared<RGWSI_ZoneUtils>(cct);
-  quota = std::make_shared<RGWSI_Quota>(cct);
-  sync_modules = std::make_shared<RGWSI_SyncModules>(cct);
-  sysobj = std::make_shared<RGWSI_SysObj>(cct);
-  sysobj_core = std::make_shared<RGWSI_SysObj_Core>(cct);
+  finisher = std::make_unique<RGWSI_Finisher>(cct);
+  notify = std::make_unique<RGWSI_Notify>(cct);
+  rados = std::make_unique<RGWSI_RADOS>(cct);
+  zone = std::make_unique<RGWSI_Zone>(cct);
+  zone_utils = std::make_unique<RGWSI_ZoneUtils>(cct);
+  quota = std::make_unique<RGWSI_Quota>(cct);
+  sync_modules = std::make_unique<RGWSI_SyncModules>(cct);
+  sysobj = std::make_unique<RGWSI_SysObj>(cct);
+  sysobj_core = std::make_unique<RGWSI_SysObj_Core>(cct);
 
   if (have_cache) {
-    sysobj_cache = std::make_shared<RGWSI_SysObj_Cache>(cct);
+    sysobj_cache = std::make_unique<RGWSI_SysObj_Cache>(cct);
   }
   finisher->init();
-  notify->init(zone, rados, finisher);
+  notify->init(zone.get(), rados.get(), finisher.get());
   rados->init();
-  zone->init(sysobj, rados, sync_modules);
-  zone_utils->init(rados, zone);
-  quota->init(zone);
+  zone->init(sysobj.get(), rados.get(), sync_modules.get());
+  zone_utils->init(rados.get(), zone.get());
+  quota->init(zone.get());
   sync_modules->init();
-  sysobj_core->core_init(rados, zone);
+  sysobj_core->core_init(rados.get(), zone.get());
   if (have_cache) {
-    sysobj_cache->init(rados, zone, notify);
-    auto _cache = std::static_pointer_cast<RGWSI_SysObj_Core>(sysobj_cache);
-    sysobj->init(rados, _cache);
+    sysobj_cache->init(rados.get(), zone.get(), notify.get());
+    sysobj->init(rados.get(), sysobj_cache.get());
   } else {
-    sysobj->init(rados, sysobj_core);
+    sysobj->init(rados.get(), sysobj_core.get());
   }
 
 
