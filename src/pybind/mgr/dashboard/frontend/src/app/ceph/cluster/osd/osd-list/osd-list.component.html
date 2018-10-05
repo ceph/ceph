@@ -7,10 +7,9 @@
               selectionType="single"
               (updateSelection)="updateSelection($event)"
               [updateSelectionOnRefresh]="'never'">
-      <div class="table-actions btn-toolbar" *ngIf="permission.update">
+      <div class="table-actions btn-toolbar">
         <cd-table-actions [permission]="permission"
                           [selection]="selection"
-                          onlyDropDown="Perform Task"
                           class="btn-group"
                           [tableActions]="tableActions">
         </cd-table-actions>
@@ -53,3 +52,28 @@
     </cd-grafana>
   </tab>
 </tabset>
+
+<ng-template #osdUsageTpl
+             let-row="row">
+  <cd-usage-bar [totalBytes]="row.stats.stat_bytes"
+                [usedBytes]="row.stats.stat_bytes_used"></cd-usage-bar>
+</ng-template>
+
+<ng-template #markOsdConfirmationTpl i18n let-markActionDescription="markActionDescription">
+  <strong>OSD {{ selection.first().id }}</strong> will be marked
+  <strong>{{ markActionDescription }}</strong> if you proceed.
+</ng-template>
+
+<ng-template #criticalConfirmationTpl
+             i18n
+             let-safeToDestroyResult="result"
+             let-actionDescription="actionDescription">
+  <div *ngIf="!safeToDestroyResult['safe-to-destroy']"
+       class="danger">
+    <cd-warning-panel>
+      {{ safeToDestroyResult.message }}
+    </cd-warning-panel>
+  </div>
+  <strong>OSD {{ selection.first().id }}</strong> will be
+  <strong>{{ actionDescription }}</strong> if you proceed.
+</ng-template>

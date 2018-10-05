@@ -278,4 +278,10 @@ describe('TableActionsComponent', () => {
       expect(component.getCurrentButton()).toBeFalsy();
     });
   });
+
+  it('should convert any name to a proper CSS class', () => {
+    expect(component.toClassName('Create')).toBe('create');
+    expect(component.toClassName('Mark x down')).toBe('mark-x-down');
+    expect(component.toClassName('?Su*per!')).toBe('super');
+  });
 });

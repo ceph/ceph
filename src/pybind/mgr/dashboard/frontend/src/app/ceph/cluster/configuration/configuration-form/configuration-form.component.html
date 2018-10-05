@@ -137,6 +137,11 @@
                   {{ patternHelpText }}
                 </span>
                 <span class="help-block"
+                      *ngIf="configForm.showError(section, formDir, 'invalidUuid')"
+                      i18n>
+                  {{ patternHelpText }}
+                </span>
+                <span class="help-block"
                       *ngIf="configForm.showError(section, formDir, 'max')"
                       i18n>
                   The entered value is too high! It must not be greater than {{ maxValue }}.

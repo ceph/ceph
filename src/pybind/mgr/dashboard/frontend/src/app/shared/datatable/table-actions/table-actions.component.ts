@@ -35,6 +35,13 @@ export class TableActionsComponent implements OnInit {
     this.updateDropDownActions();
   }
 
+  toClassName(name: string): string {
+    return name
+      .replace(/ /g, '-')
+      .replace(/[^a-z-]/gi, '')
+      .toLowerCase();
+  }
+
   /**
    * Removes all actions from 'tableActions' that need a permission the user doesn't have.
    */
