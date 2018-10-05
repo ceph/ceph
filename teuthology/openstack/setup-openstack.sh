@@ -698,7 +698,7 @@ function main() {
     #
     # assume the first available IPv4 subnet is going to be used to assign IP to the instance
     #
-    [ -z network ] && {
+    [ -z "$network" ] && {
         local default_subnets=$(openstack subnet list --ip-version 4 -f json | jq -r '.[] | .Subnet' | sort | uniq)
     } || {
         local network_id=$(openstack network list -f json | jq -r ".[] | select(.Name == \"$network\") | .ID")
