@@ -37,10 +37,10 @@ class TokenEngine : public rgw::auth::Engine {
 
   /* Helper methods. */
   bool is_applicable(const std::string& token) const noexcept;
-  token_envelope_t decode_pki_token(const std::string& token) const;
+  token_envelope_t decode_pki_token(const DoutPrefixProvider* dpp, const std::string& token) const;
 
   boost::optional<token_envelope_t>
-  get_from_keystone(const std::string& token) const;
+  get_from_keystone(const DoutPrefixProvider* dpp, const std::string& token) const;
 
   acl_strategy_t get_acl_strategy(const token_envelope_t& token) const;
   auth_info_t get_creds_info(const token_envelope_t& token,
@@ -89,7 +89,7 @@ class EC2Engine : public rgw::auth::s3::AWSEngine {
                              const std::vector<std::string>& admin_roles
                             ) const noexcept;
   std::pair<boost::optional<token_envelope_t>, int>
-  get_from_keystone(const boost::string_view& access_key_id,
+  get_from_keystone(const DoutPrefixProvider* dpp, const boost::string_view& access_key_id,
                     const std::string& string_to_sign,
                     const boost::string_view& signature) const;
   result_t authenticate(const DoutPrefixProvider* dpp,

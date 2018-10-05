@@ -38,15 +38,15 @@ TokenEngine::is_applicable(const std::string& token) const noexcept
 }
 
 TokenEngine::token_envelope_t
-TokenEngine::decode_pki_token(const std::string& token) const
+TokenEngine::decode_pki_token(const DoutPrefixProvider* dpp, const std::string& token) const
 {
   ceph::buffer::list token_body_bl;
   int ret = rgw_decode_b64_cms(cct, token, token_body_bl);
   if (ret < 0) {
-    ldout(cct, 20) << "cannot decode pki token" << dendl;
+    ldpp_dout(dpp, 20) << "cannot decode pki token" << dendl;
     throw ret;
   } else {
-    ldout(cct, 20) << "successfully decoded pki token" << dendl;
+    ldpp_dout(dpp, 20) << "successfully decoded pki token" << dendl;
   }
 
   TokenEngine::token_envelope_t token_body;
@@ -59,7 +59,7 @@ TokenEngine::decode_pki_token(const std::string& token) const
 }
 
 boost::optional<TokenEngine::token_envelope_t>
-TokenEngine::get_from_keystone(const std::string& token) const
+TokenEngine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string& token) const
 {
   /* Unfortunately, we can't use the short form of "using" here. It's because
    * we're aliasing a class' member, not namespace. */
@@ -113,12 +113,12 @@ TokenEngine::get_from_keystone(const std::string& token) const
       validate.get_http_status() ==
           /* Most likely: non-existent token supplied by the client. */
           RGWValidateKeystoneToken::HTTP_STATUS_NOTFOUND) {
-    ldout(cct, 5) << "Failed keystone auth from " << url << " with "
+    ldpp_dout(dpp, 5) << "Failed keystone auth from " << url << " with "
                   << validate.get_http_status() << dendl;
     return boost::none;
   }
 
-  ldout(cct, 20) << "received response status=" << validate.get_http_status()
+  ldpp_dout(dpp, 20) << "received response status=" << validate.get_http_status()
                  << ", body=" << token_body_bl.c_str() << dendl;
 
   TokenEngine::token_envelope_t token_body;
@@ -248,14 +248,14 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
   /* Retrieve token. */
   if (rgw_is_pki_token(token)) {
     try {
-      t = decode_pki_token(token);
+      t = decode_pki_token(dpp, token);
     } catch (...) {
       /* Last resort. */
-      t = get_from_keystone(token);
+      t = get_from_keystone(dpp, token);
     }
   } else {
     /* Can't decode, just go to the Keystone server for validation. */
-    t = get_from_keystone(token);
+    t = get_from_keystone(dpp, token);
   }
 
   if (! t) {
@@ -294,7 +294,7 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
  * Try to validate S3 auth against keystone s3token interface
  */
 std::pair<boost::optional<rgw::keystone::TokenEnvelope>, int>
-EC2Engine::get_from_keystone(const boost::string_view& access_key_id,
+EC2Engine::get_from_keystone(const DoutPrefixProvider* dpp, const boost::string_view& access_key_id,
                              const std::string& string_to_sign,
                              const boost::string_view& signature) const
 {
@@ -316,7 +316,7 @@ EC2Engine::get_from_keystone(const boost::string_view& access_key_id,
   int ret = rgw::keystone::Service::get_admin_token(cct, token_cache, config,
                                                     admin_token);
   if (ret < 0) {
-    ldout(cct, 2) << "s3 keystone: cannot get token for keystone access"
+    ldpp_dout(dpp, 2) << "s3 keystone: cannot get token for keystone access"
                   << dendl;
     throw ret;
   }
@@ -354,7 +354,7 @@ EC2Engine::get_from_keystone(const boost::string_view& access_key_id,
   /* send request */
   ret = validate.process();
   if (ret < 0) {
-    ldout(cct, 2) << "s3 keystone: token validation ERROR: "
+    ldpp_dout(dpp, 2) << "s3 keystone: token validation ERROR: "
                   << token_body_bl.c_str() << dendl;
     throw ret;
   }
@@ -372,7 +372,7 @@ EC2Engine::get_from_keystone(const boost::string_view& access_key_id,
   rgw::keystone::TokenEnvelope token_envelope;
   ret = token_envelope.parse(cct, std::string(), token_body_bl, api_version);
   if (ret < 0) {
-    ldout(cct, 2) << "s3 keystone: token parsing failed, ret=0" << ret
+    ldpp_dout(dpp, 2) << "s3 keystone: token parsing failed, ret=0" << ret
                   << dendl;
     throw ret;
   }
@@ -447,7 +447,7 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(
   boost::optional<token_envelope_t> t;
   int failure_reason;
   std::tie(t, failure_reason) = \
-    get_from_keystone(access_key_id, string_to_sign, signature);
+    get_from_keystone(dpp, access_key_id, string_to_sign, signature);
   if (! t) {
     return result_t::deny(failure_reason);
   }

@@ -43,7 +43,8 @@ class TempURLEngine : public rgw::auth::Engine {
   const TempURLApplier::Factory* const apl_factory;
 
   /* Helper methods. */
-  void get_owner_info(const req_state* s,
+  void get_owner_info(const DoutPrefixProvider* dpp, 
+                      const req_state* s,
                       RGWUserInfo& owner_info) const;
   bool is_applicable(const req_state* s) const noexcept;
   bool is_expired(const std::string& expires) const;
