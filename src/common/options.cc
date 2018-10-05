@@ -5103,7 +5103,7 @@ std::vector<Option> get_rgw_options() {
         "will be located in the path that is specified here. "),
 
     Option("rgw_enable_apis", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("s3, s3website, swift, swift_auth, admin")
+    .set_default("s3, s3website, swift, swift_auth, admin, sts")
     .set_description("A list of set of RESTful APIs that rgw handles."),
 
     Option("rgw_cache_enabled", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -5373,7 +5373,7 @@ std::vector<Option> get_rgw_options() {
     .set_description("Should S3 authentication use Keystone."),
 
     Option("rgw_s3_auth_order", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-     .set_default("external, local")
+     .set_default("sts, external, local")
      .set_description("Authentication strategy order to use for s3 authentication")
      .set_long_description(
 	  "Order of authentication strategies to try for s3 authentication, the allowed "
@@ -6349,6 +6349,24 @@ std::vector<Option> get_rgw_options() {
 			  "increasing this value may cause some operations to "
 			  "take longer in exceptional cases and thus may, "
 			  "rarely, cause clients to time out."),
+    Option("rgw_sts_entry", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("sts")
+    .set_description("STS URL prefix")
+    .set_long_description("URL path prefix for internal STS requests."),
+
+    Option("rgw_sts_key", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("sts")
+    .set_description("STS Key")
+    .set_long_description("Key used for encrypting/ decrypting session token."),
+
+    Option("rgw_s3_auth_use_sts", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("Should S3 authentication use STS."),
+
+    Option("rgw_sts_max_session_duration", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(43200)
+    .set_description("Session token max duration")
+    .set_long_description("Max duration in seconds for which the session token is valid."),
   });
 }
 

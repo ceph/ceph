@@ -27,6 +27,7 @@
 
 #include "rgw_auth.h"
 #include "rgw_auth_filters.h"
+#include "rgw_sts.h"
 
 struct rgw_http_error {
   int http_ret;
@@ -498,7 +499,7 @@ public:
 
 class RGWHandler_REST_S3 : public RGWHandler_REST {
   friend class RGWRESTMgr_S3;
-
+protected:
   const rgw::auth::StrategyRegistry& auth_registry;
 public:
   static int init_from_header(struct req_state *s, int default_formatter, bool configurable_format);
@@ -520,6 +521,7 @@ public:
 
 class RGWHandler_REST_Service_S3 : public RGWHandler_REST_S3 {
 protected:
+    bool isSTSenabled;
     bool is_usage_op() {
     return s->info.args.exists("usage");
   }
@@ -527,7 +529,9 @@ protected:
   RGWOp *op_head() override;
   RGWOp *op_post() override;
 public:
-  using RGWHandler_REST_S3::RGWHandler_REST_S3;
+   RGWHandler_REST_Service_S3(const rgw::auth::StrategyRegistry& auth_registry,
+                              bool isSTSenabled) :
+      RGWHandler_REST_S3(auth_registry), isSTSenabled(isSTSenabled) {}
   ~RGWHandler_REST_Service_S3() override = default;
 };
 
@@ -591,9 +595,11 @@ public:
 class RGWRESTMgr_S3 : public RGWRESTMgr {
 private:
   bool enable_s3website;
+  bool enable_sts;
 public:
-  explicit RGWRESTMgr_S3(bool enable_s3website = false)
-    : enable_s3website(enable_s3website) {
+  explicit RGWRESTMgr_S3(bool enable_s3website = false, bool enable_sts = false)
+    : enable_s3website(enable_s3website),
+      enable_sts(enable_sts) {
   }
 
   ~RGWRESTMgr_S3() override = default;
@@ -699,6 +705,7 @@ public:
 
     using access_key_id_t = boost::string_view;
     using client_signature_t = boost::string_view;
+    using session_token_t = boost::string_view;
     using server_signature_t = basic_sstring<char, uint16_t, SIGNATURE_MAX_SIZE>;
     using string_to_sign_t = std::string;
 
@@ -720,6 +727,7 @@ public:
     struct auth_data_t {
       access_key_id_t access_key_id;
       client_signature_t client_signature;
+      session_token_t session_token;
       string_to_sign_t string_to_sign;
       signature_factory_t signature_factory;
       completer_factory_t completer_factory;
@@ -747,6 +755,7 @@ protected:
    * Replace these thing with a simple, dedicated structure. */
   virtual result_t authenticate(const boost::string_view& access_key_id,
                                 const boost::string_view& signature,
+                                const boost::string_view& session_token,
                                 const string_to_sign_t& string_to_sign,
                                 const signature_factory_t& signature_factory,
                                 const completer_factory_t& completer_factory,
@@ -822,6 +831,7 @@ protected:
 
   result_t authenticate(const boost::string_view& access_key_id,
                         const boost::string_view& signature,
+                        const boost::string_view& session_token,
                         const string_to_sign_t& string_to_sign,
                         const signature_factory_t&,
                         const completer_factory_t& completer_factory,
@@ -852,6 +862,7 @@ class LocalEngine : public AWSEngine {
 
   result_t authenticate(const boost::string_view& access_key_id,
                         const boost::string_view& signature,
+                        const boost::string_view& session_token,
                         const string_to_sign_t& string_to_sign,
                         const signature_factory_t& signature_factory,
                         const completer_factory_t& completer_factory,
@@ -873,6 +884,45 @@ public:
   }
 };
 
+class STSEngine : public AWSEngine {
+  RGWRados* const store;
+  const rgw::auth::LocalApplier::Factory* const local_apl_factory;
+  const rgw::auth::RemoteApplier::Factory* const remote_apl_factory;
+
+  using acl_strategy_t = rgw::auth::RemoteApplier::acl_strategy_t;
+  using auth_info_t = rgw::auth::RemoteApplier::AuthInfo;
+
+  acl_strategy_t get_acl_strategy() const { return nullptr; };
+  auth_info_t get_creds_info(const STS::SessionToken& token) const noexcept;
+
+  int get_session_token(const boost::string_view& session_token,
+                        STS::SessionToken& token) const;
+
+  result_t authenticate(const boost::string_view& access_key_id,
+                        const boost::string_view& signature,
+                        const boost::string_view& session_token,
+                        const string_to_sign_t& string_to_sign,
+                        const signature_factory_t& signature_factory,
+                        const completer_factory_t& completer_factory,
+                        const req_state* s) const override;
+public:
+  STSEngine(CephContext* const cct,
+              RGWRados* const store,
+              const VersionAbstractor& ver_abstractor,
+              const rgw::auth::LocalApplier::Factory* const local_apl_factory,
+              const rgw::auth::RemoteApplier::Factory* const remote_apl_factory)
+    : AWSEngine(cct, ver_abstractor),
+      store(store),
+      local_apl_factory(local_apl_factory),
+      remote_apl_factory(remote_apl_factory) {
+  }
+
+  using AWSEngine::authenticate;
+
+  const char* get_name() const noexcept override {
+    return "rgw::auth::s3::STSEngine";
+  }
+};
 
 class S3AnonymousEngine : public rgw::auth::AnonymousEngine {
   bool is_applicable(const req_state* s) const noexcept override;
@@ -910,9 +960,11 @@ public:
   aplptr_t create_apl_local(CephContext* const cct,
                             const req_state* const s,
                             const RGWUserInfo& user_info,
-                            const std::string& subuser) const override {
+                            const std::string& subuser,
+                            const boost::optional<vector<std::string> >& role_policies,
+                            const boost::optional<uint32_t>& perm_mask) const override {
       return aplptr_t(
-        new rgw::auth::LocalApplier(cct, user_info, subuser));
+        new rgw::auth::LocalApplier(cct, user_info, subuser, role_policies, perm_mask));
   }
 };
 

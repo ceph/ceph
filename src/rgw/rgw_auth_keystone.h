@@ -93,6 +93,7 @@ class EC2Engine : public rgw::auth::s3::AWSEngine {
                     const boost::string_view& signature) const;
   result_t authenticate(const boost::string_view& access_key_id,
                         const boost::string_view& signature,
+                        const boost::string_view& session_token,
                         const string_to_sign_t& string_to_sign,
                         const signature_factory_t&,
                         const completer_factory_t& completer_factory,

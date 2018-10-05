@@ -80,6 +80,14 @@ public:
     return get_decoratee().get_perm_mask();
   }
 
+  uint32_t get_identity_type() const override {
+    return get_decoratee().get_identity_type();
+  }
+
+  string get_acct_name() const override {
+    return get_decoratee().get_acct_name();
+  }
+
   bool is_identity(
     const boost::container::flat_set<Principal>& ids) const override {
     return get_decoratee().is_identity(ids);
@@ -250,6 +258,7 @@ void SysReqApplier<T>::modify_request_state(req_state* const s) const
     s->info.args.set_system();
     s->system_request = true;
   }
+  DecoratedApplier<T>::modify_request_state(s);
 }
 
 template <typename T> static inline
