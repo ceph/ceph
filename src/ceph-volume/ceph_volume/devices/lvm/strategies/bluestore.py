@@ -40,6 +40,8 @@ class SingleType(object):
 
     def report_pretty(self):
         string = ""
+        if self.args.filtered_devices:
+            string += templates.filtered_devices(self.args.filtered_devices)
         string += templates.total_osds.format(
             total_osds=self.total_osds,
         )
@@ -166,6 +168,8 @@ class MixedType(object):
         db_size = str(disk.Size(b=(vg_extents['sizes'])))
 
         string = ""
+        if self.args.filtered_devices:
+            string += templates.filtered_devices(self.args.filtered_devices)
         string += templates.total_osds.format(
             total_osds=len(self.hdds) * self.osds_per_device
         )
