@@ -597,6 +597,7 @@ int rgw_bucket_update_stats(cls_method_context_t hctx, bufferlist *in, bufferlis
       dest.total_size += s.second.total_size;
       dest.total_size_rounded += s.second.total_size_rounded;
       dest.num_entries += s.second.num_entries;
+      dest.actual_size += s.second.actual_size;
     }
   }
 
