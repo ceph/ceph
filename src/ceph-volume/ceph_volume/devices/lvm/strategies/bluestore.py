@@ -26,7 +26,7 @@ class SingleType(object):
 
     @staticmethod
     def type():
-        return "filestore.MixedType"
+        return "bluestore.SingleType"
 
     @property
     def total_osds(self):
@@ -209,11 +209,11 @@ class MixedType(object):
             # there isn't a common vg, so a new one must be created with all
             # the blank SSDs
             self.computed['vg'] = {
-                'devices': self.blank_ssds,
+                'devices': ", ".join([ssd.abspath for ssd in self.blank_ssds]),
                 'parts': self.dbs_needed,
                 'percentages': self.vg_extents['percentages'],
-                'sizes': self.block_db_size.b,
-                'size': int(self.total_blank_ssd_size.b),
+                'sizes': self.block_db_size.b.as_int(),
+                'size': self.total_blank_ssd_size.b.as_int(),
                 'human_readable_sizes': str(self.block_db_size),
                 'human_readable_size': str(self.total_available_db_space),
             }
