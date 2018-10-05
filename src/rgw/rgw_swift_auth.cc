@@ -65,7 +65,7 @@ bool TempURLEngine::is_applicable(const req_state* const s) const noexcept
          s->info.args.exists("temp_url_expires");
 }
 
-void TempURLEngine::get_owner_info(const req_state* const s,
+void TempURLEngine::get_owner_info(const DoutPrefixProvider* dpp, const req_state* const s,
                                    RGWUserInfo& owner_info) const
 {
   /* We cannot use req_state::bucket_name because it isn't available
@@ -113,7 +113,7 @@ void TempURLEngine::get_owner_info(const req_state* const s,
     throw ret;
   }
 
-  ldout(cct, 20) << "temp url user (bucket owner): " << bucket_info.owner
+  ldpp_dout(dpp, 20) << "temp url user (bucket owner): " << bucket_info.owner
                  << dendl;
 
   if (rgw_get_user_info_by_uid(store, bucket_info.owner, owner_info) < 0) {
@@ -268,7 +268,7 @@ TempURLEngine::authenticate(const DoutPrefixProvider* dpp, const req_state* cons
 
   RGWUserInfo owner_info;
   try {
-    get_owner_info(s, owner_info);
+    get_owner_info(dpp, s, owner_info);
   } catch (...) {
     ldpp_dout(dpp, 5) << "cannot get user_info of account's owner" << dendl;
     return result_t::reject();
