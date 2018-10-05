@@ -77,7 +77,7 @@ class SingleType(object):
         osds = self.computed['osds']
         for device in self.hdds:
             for hdd in range(self.osds_per_device):
-                osd = {'data': {}, 'block.db': {}, 'used_by_ceph': device.used_by_ceph}
+                osd = {'data': {}, 'block.db': {}}
                 osd['data']['path'] = device.abspath
                 osd['data']['size'] = device.sys_api['size'] / self.osds_per_device
                 osd['data']['parts'] = self.osds_per_device
@@ -90,7 +90,7 @@ class SingleType(object):
         for device in self.ssds:
             extents = lvm.sizing(device.sys_api['size'], parts=self.osds_per_device)
             for ssd in range(self.osds_per_device):
-                osd = {'data': {}, 'block.db': {}, 'used_by_ceph': device.used_by_ceph}
+                osd = {'data': {}, 'block.db': {}}
                 osd['data']['path'] = device.abspath
                 osd['data']['size'] = extents['sizes']
                 osd['data']['parts'] = extents['parts']
@@ -223,7 +223,7 @@ class MixedType(object):
 
         for device in self.hdds:
             for hdd in range(self.osds_per_device):
-                osd = {'data': {}, 'block.db': {}, 'used_by_ceph': device.used_by_ceph}
+                osd = {'data': {}, 'block.db': {}}
                 osd['data']['path'] = device.abspath
                 osd['data']['size'] = device.sys_api['size'] / self.osds_per_device
                 osd['data']['percentage'] = 100 / self.osds_per_device
