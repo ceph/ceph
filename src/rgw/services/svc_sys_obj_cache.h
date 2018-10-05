@@ -15,18 +15,18 @@ class RGWSI_SysObj_Cache_CB;
 class RGWSI_SysObj_Cache : public RGWSI_SysObj_Core
 {
   friend class RGWSI_SysObj_Cache_CB;
-  friend class RGWServices_Shared;
+  friend class RGWServices_Def;
 
-  std::shared_ptr<RGWSI_Notify> notify_svc;
+  RGWSI_Notify *notify_svc{nullptr};
   ObjectCache cache;
 
   std::shared_ptr<RGWSI_SysObj_Cache_CB> cb;
 
   void normalize_pool_and_obj(const rgw_pool& src_pool, const string& src_obj, rgw_pool& dst_pool, string& dst_obj);
 protected:
-  void init(std::shared_ptr<RGWSI_RADOS>& _rados_svc,
-            std::shared_ptr<RGWSI_Zone>& _zone_svc,
-            std::shared_ptr<RGWSI_Notify>& _notify_svc) {
+  void init(RGWSI_RADOS *_rados_svc,
+            RGWSI_Zone *_zone_svc,
+            RGWSI_Notify *_notify_svc) {
     core_init(_rados_svc, _zone_svc);
     notify_svc = _notify_svc;
   }

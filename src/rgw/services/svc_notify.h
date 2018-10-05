@@ -17,15 +17,15 @@ class RGWSI_Notify : public RGWServiceInstance
 {
   friend class RGWWatcher;
   friend class RGWSI_Notify_ShutdownCB;
-  friend class RGWServices_Shared;
+  friend class RGWServices_Def;
 
 public:
   class CB;
 
 private:
-  std::shared_ptr<RGWSI_Zone> zone_svc;
-  std::shared_ptr<RGWSI_RADOS> rados_svc;
-  std::shared_ptr<RGWSI_Finisher> finisher_svc;
+  RGWSI_Zone *zone_svc{nullptr};
+  RGWSI_RADOS *rados_svc{nullptr};
+  RGWSI_Finisher *finisher_svc{nullptr};
 
   RWLock watchers_lock{"watchers_lock"};
   rgw_pool control_pool;
@@ -51,9 +51,9 @@ private:
   int init_watch();
   void finalize_watch();
 
-  void init(std::shared_ptr<RGWSI_Zone>& _zone_svc,
-            std::shared_ptr<RGWSI_RADOS>& _rados_svc,
-            std::shared_ptr<RGWSI_Finisher>& _finisher_svc) {
+  void init(RGWSI_Zone *_zone_svc,
+            RGWSI_RADOS *_rados_svc,
+            RGWSI_Finisher *_finisher_svc) {
     zone_svc = _zone_svc;
     rados_svc = _rados_svc;
     finisher_svc = _finisher_svc;

@@ -20,11 +20,11 @@ class RGWRESTConn;
 
 class RGWSI_Zone : public RGWServiceInstance
 {
-  friend struct RGWServices_Shared;
+  friend struct RGWServices_Def;
 
-  std::shared_ptr<RGWSI_SysObj> sysobj_svc;
-  std::shared_ptr<RGWSI_RADOS> rados_svc;
-  std::shared_ptr<RGWSI_SyncModules> sync_modules_svc;
+  RGWSI_SysObj *sysobj_svc{nullptr};
+  RGWSI_RADOS *rados_svc{nullptr};
+  RGWSI_SyncModules *sync_modules_svc{nullptr};
 
   RGWRealm *realm{nullptr};
   RGWZoneGroup *zonegroup{nullptr};
@@ -43,9 +43,9 @@ class RGWSI_Zone : public RGWServiceInstance
   map<string, string> zone_id_by_name;
   map<string, RGWZone> zone_by_id;
 
-  void init(std::shared_ptr<RGWSI_SysObj>& _sysobj_svc,
-           std::shared_ptr<RGWSI_RADOS>& _rados_svc,
-           std::shared_ptr<RGWSI_SyncModules>& _sync_modules_svc);
+  void init(RGWSI_SysObj *_sysobj_svc,
+           RGWSI_RADOS *_rados_svc,
+           RGWSI_SyncModules *_sync_modules_svc);
   int do_start() override;
   void shutdown() override;
 

@@ -10,15 +10,15 @@ class RGWSI_Zone;
 
 class RGWSI_ZoneUtils : public RGWServiceInstance
 {
-  friend struct RGWServices_Shared;
+  friend struct RGWServices_Def;
 
-  std::shared_ptr<RGWSI_RADOS> rados_svc;
-  std::shared_ptr<RGWSI_Zone> zone_svc;
+  RGWSI_RADOS *rados_svc{nullptr};
+  RGWSI_Zone *zone_svc{nullptr};
 
   string trans_id_suffix;
 
-  void init(std::shared_ptr<RGWSI_RADOS>& _rados_svc,
-            std::shared_ptr<RGWSI_Zone>& _zone_svc) {
+  void init(RGWSI_RADOS *_rados_svc,
+            RGWSI_Zone *_zone_svc) {
     rados_svc = _rados_svc;
     zone_svc = _zone_svc;
   }
