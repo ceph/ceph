@@ -83,6 +83,7 @@ public:
       target.num_entries += entry_stats.num_entries;
       target.total_size += entry_stats.total_size;
       target.total_size_rounded += entry_stats.total_size_rounded;
+      target.actual_size += entry_stats.actual_size;
     }
     if (entries.size() >= RESHARD_SHARD_WINDOW) {
       int ret = flush();
