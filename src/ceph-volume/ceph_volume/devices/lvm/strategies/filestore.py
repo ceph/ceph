@@ -52,6 +52,8 @@ class SingleType(object):
 
     def report_pretty(self):
         string = ""
+        if self.args.filtered_devices:
+            string += templates.filtered_devices(self.args.filtered_devices)
         string += templates.total_osds.format(
             total_osds=self.total_osds
         )
@@ -206,6 +208,8 @@ class MixedType(object):
 
     def report_pretty(self):
         string = ""
+        if self.args.filtered_devices:
+            string += templates.filtered_devices(self.args.filtered_devices)
         string += templates.total_osds.format(
             total_osds=self.total_osds
         )

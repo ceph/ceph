@@ -159,18 +159,18 @@ class Batch(object):
         if used_devices:
             for device in used_devices:
                 args.filtered_devices[device] = {"reasons": ["Used by ceph as a data device already"]}
-            if not args.report:
-                mlogger.info("Ignoring devices already used by ceph: %s" % ",".join(used_devices))
-        if not unused_devices and not args.report:
+            if args.yes and unused_devices:
+                mlogger.info("Ignoring devices already used by ceph: %s" % ", ".join(used_devices))
+        if not unused_devices and not args.format == 'json':
             # report nothing changed
             mlogger.info("All devices are already used by ceph. No OSDs will be created.")
             raise SystemExit(0)
         else:
             new_strategy = get_strategy(args, unused_devices)
-            if strategy != new_strategy:
+            if new_strategy and strategy != new_strategy:
                 if args.report:
                     mlogger.info("Ignoring devices already used by ceph: %s" % ",".join(used_devices))
-                mlogger.error("aborting because strategy changed from %s to %s after filtering" % (strategy.type(), new_strategy.type()))
+                mlogger.error("Aborting because strategy changed from %s to %s after filtering" % (strategy.type(), new_strategy.type()))
                 raise SystemExit(1)
 
         return strategy(unused_devices, args)
