@@ -312,10 +312,6 @@ class Prepare(object):
         Once the OSD is ready, an ad-hoc systemd unit will be enabled so that
         it can later get activated and the OSD daemon can get started.
 
-        Most basic Usage looks like (journal will be collocated from the same volume group):
-
-            ceph-volume lvm prepare --data {volume group name}
-
         Encryption is supported via dmcrypt and the --dmcrypt flag.
 
         Existing logical volume (lv):
