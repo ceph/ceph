@@ -74,7 +74,7 @@ authentication:
 Using a custom search filter to limit user access
 =================================================
 
-There are two ways to use the ``rgw_search_filter`` parameter:
+There are two ways to use the ``rgw_ldap_searchfilter`` parameter:
 
 Specifying a partial filter to further limit the constructed search filter
 --------------------------------------------------------------------------
@@ -102,14 +102,14 @@ password.
 Specifying a complete filter
 ----------------------------
 
-A complete filter must contain a ``USERNAME`` token which will be substituted
+A complete filter must contain a ``@USERNAME@`` token which will be substituted
 with the user name during the authentication attempt. The ``rgw_ldap_dnattr``
 parameter is not used anymore in this case. For example, to limit valid users
 to a specific group, use the following filter:
 
 ::
 
-  "(&(uid=USERNAME)(memberOf=cn=ceph-users,ou=groups,dc=mycompany,dc=com))"
+  "(&(uid=@USERNAME@)(memberOf=cn=ceph-users,ou=groups,dc=mycompany,dc=com))"
 
 .. note:: Using the ``memberOf`` attribute in LDAP searches requires server side
           support from you specific LDAP server implementation.
@@ -135,4 +135,4 @@ access token.
 Testing access
 ==============
 
-Use your favorite S3 client and specify the token as the access key.
+Use your favorite S3 client and specify the token as the access key ID.
