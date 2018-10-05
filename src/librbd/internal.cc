@@ -1123,11 +1123,12 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
   int is_exclusive_lock_owner(ImageCtx *ictx, bool *is_owner)
   {
+    CephContext *cct = ictx->cct;
+    ldout(cct, 20) << __func__ << ": ictx=" << ictx << dendl;
     *is_owner = false;
 
     RWLock::RLocker owner_locker(ictx->owner_lock);
-    if (ictx->exclusive_lock == nullptr ||
-        !ictx->exclusive_lock->is_lock_owner()) {
+    if (ictx->exclusive_lock == nullptr) {
       return 0;
     }
 
@@ -1183,11 +1184,11 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     }
 
     RWLock::RLocker l(ictx->owner_lock);
-
-    if (ictx->exclusive_lock == nullptr ||
-	!ictx->exclusive_lock->is_lock_owner()) {
+    if (ictx->exclusive_lock == nullptr) {
+      return -EINVAL;
+    } else if (!ictx->exclusive_lock->is_lock_owner()) {
       lderr(cct) << "failed to acquire exclusive lock" << dendl;
-      return -EROFS;
+      return ictx->exclusive_lock->get_unlocked_op_error();
     }
 
     return 0;

@@ -134,7 +134,7 @@ private:
 
   int validate_parent(ImageCtxT *image_ctx, librbd::ParentSpec *spec);
 
-  Context *start_local_op();
+  Context *start_local_op(int *r);
 
 };
 

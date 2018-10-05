@@ -7,6 +7,7 @@
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
+#include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
 #include "librbd/Utils.h"
 #include "librbd/exclusive_lock/Policy.h"
@@ -564,7 +565,8 @@ void *ImageRequestWQ<I>::_void_dequeue() {
       ldout(cct, 5) << "exclusive lock required: delaying IO " << item << dendl;
       if (!m_image_ctx.get_exclusive_lock_policy()->may_auto_request_lock()) {
         lderr(cct) << "op requires exclusive lock" << dendl;
-        fail_in_flight_io(-EROFS, item);
+        fail_in_flight_io(m_image_ctx.exclusive_lock->get_unlocked_op_error(),
+                          item);
 
         // wake up the IO since we won't be returning a request to process
         this->signal();

@@ -160,19 +160,20 @@ Context *DisableFeaturesRequest<I>::handle_acquire_exclusive_lock(int *result) {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": r=" << *result << dendl;
 
+  image_ctx.owner_lock.get_read();
   if (*result < 0) {
     lderr(cct) << "failed to lock image: " << cpp_strerror(*result) << dendl;
+    image_ctx.owner_lock.put_read();
     return handle_finish(*result);
-  } else if (m_acquired_lock && (image_ctx.exclusive_lock == nullptr ||
-				 !image_ctx.exclusive_lock->is_lock_owner())) {
+  } else if (image_ctx.exclusive_lock != nullptr &&
+             !image_ctx.exclusive_lock->is_lock_owner()) {
     lderr(cct) << "failed to acquire exclusive lock" << dendl;
-    *result = -EROFS;
+    *result = image_ctx.exclusive_lock->get_unlocked_op_error();
+    image_ctx.owner_lock.put_read();
     return handle_finish(*result);
   }
 
   do {
-    RWLock::WLocker locker(image_ctx.owner_lock);
-
     m_features &= image_ctx.features;
     m_new_features = image_ctx.features & ~m_features;
     m_features_mask = m_features;
@@ -202,6 +203,7 @@ Context *DisableFeaturesRequest<I>::handle_acquire_exclusive_lock(int *result) {
       m_disable_flags |= RBD_FLAG_OBJECT_MAP_INVALID;
     }
   } while (false);
+  image_ctx.owner_lock.put_read();
 
   if (*result < 0) {
     return handle_finish(*result);

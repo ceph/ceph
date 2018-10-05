@@ -170,10 +170,11 @@ void SnapshotCopyRequest<I>::send_snap_unprotect() {
            << "snap_name=" << m_snap_name << ", "
            << "snap_id=" << m_prev_snap_id << dendl;
 
-  auto finish_op_ctx = start_local_op();
+  int r;
+  auto finish_op_ctx = start_local_op(&r);
   if (finish_op_ctx == nullptr) {
     derr << ": lost exclusive lock" << dendl;
-    finish(-EROFS);
+    finish(r);
     return;
   }
 
@@ -257,10 +258,11 @@ void SnapshotCopyRequest<I>::send_snap_remove() {
            << "snap_name=" << m_snap_name << ", "
            << "snap_id=" << m_prev_snap_id << dendl;
 
-  auto finish_op_ctx = start_local_op();
+  int r;
+  auto finish_op_ctx = start_local_op(&r);
   if (finish_op_ctx == nullptr) {
     derr << ": lost exclusive lock" << dendl;
-    finish(-EROFS);
+    finish(r);
     return;
   }
 
@@ -360,10 +362,11 @@ void SnapshotCopyRequest<I>::send_snap_create() {
            << "snap_id=" << parent_spec.snap_id << ", "
            << "overlap=" << parent_overlap << "]" << dendl;
 
-  Context *finish_op_ctx = start_local_op();
+  int r;
+  Context *finish_op_ctx = start_local_op(&r);
   if (finish_op_ctx == nullptr) {
     derr << ": lost exclusive lock" << dendl;
-    finish(-EROFS);
+    finish(r);
     return;
   }
 
@@ -471,10 +474,11 @@ void SnapshotCopyRequest<I>::send_snap_protect() {
            << "snap_name=" << m_snap_name << ", "
            << "snap_id=" << m_prev_snap_id << dendl;
 
-  auto finish_op_ctx = start_local_op();
+  int r;
+  auto finish_op_ctx = start_local_op(&r);
   if (finish_op_ctx == nullptr) {
     derr << ": lost exclusive lock" << dendl;
-    finish(-EROFS);
+    finish(r);
     return;
   }
 
@@ -599,12 +603,13 @@ int SnapshotCopyRequest<I>::validate_parent(I *image_ctx,
 }
 
 template <typename I>
-Context *SnapshotCopyRequest<I>::start_local_op() {
+Context *SnapshotCopyRequest<I>::start_local_op(int *r) {
   RWLock::RLocker owner_locker(m_local_image_ctx->owner_lock);
   if (m_local_image_ctx->exclusive_lock == nullptr) {
+    *r = -EROFS;
     return nullptr;
   }
-  return m_local_image_ctx->exclusive_lock->start_op();
+  return m_local_image_ctx->exclusive_lock->start_op(r);
 }
 
 } // namespace image_sync

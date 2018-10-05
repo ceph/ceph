@@ -35,18 +35,23 @@ void RewatchRequest::send() {
 
 void RewatchRequest::unwatch() {
   assert(m_watch_lock.is_wlocked());
-  assert(*m_watch_handle != 0);
+  ceph_assert(m_watch_lock.is_wlocked());
+  if (*m_watch_handle == 0) {
+    rewatch();
+    return;
+  }
 
   CephContext *cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
   ldout(cct, 10) << dendl;
 
+  uint64_t watch_handle = 0;
+  std::swap(*m_watch_handle, watch_handle);
+
   librados::AioCompletion *aio_comp = create_rados_callback<
                         RewatchRequest, &RewatchRequest::handle_unwatch>(this);
-  int r = m_ioctx.aio_unwatch(*m_watch_handle, aio_comp);
+  int r = m_ioctx.aio_unwatch(watch_handle, aio_comp);
   assert(r == 0);
   aio_comp->release();
-
-  *m_watch_handle = 0;
 }
 
 void RewatchRequest::handle_unwatch(int r) {
@@ -77,20 +82,10 @@ void RewatchRequest::rewatch() {
 void RewatchRequest::handle_rewatch(int r) {
   CephContext *cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
   ldout(cct, 10) << "r=" << r << dendl;
-
-  if (r == -EBLACKLISTED) {
-    lderr(cct) << "client blacklisted" << dendl;
-    finish(r);
-    return;
-  } else if (r == -ENOENT) {
-    ldout(cct, 5) << "object deleted" << dendl;
-    finish(r);
-    return;
-  } else if (r < 0) {
+  if (r < 0) {
     lderr(cct) << "failed to watch object: " << cpp_strerror(r)
                << dendl;
-    rewatch();
-    return;
+    m_rewatch_handle = 0;
   }
 
   {
@@ -98,7 +93,7 @@ void RewatchRequest::handle_rewatch(int r) {
     *m_watch_handle = m_rewatch_handle;
   }
 
-  finish(0);
+  finish(r);
 }
 
 void RewatchRequest::finish(int r) {

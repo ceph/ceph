@@ -225,7 +225,7 @@ public:
   }
 
   void expect_start_op(librbd::MockExclusiveLock &mock_exclusive_lock) {
-    EXPECT_CALL(mock_exclusive_lock, start_op()).WillOnce(
+    EXPECT_CALL(mock_exclusive_lock, start_op(_)).WillOnce(
       ReturnNew<FunctionContext>([](int) {}));
   }
 
