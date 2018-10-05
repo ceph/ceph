@@ -372,7 +372,7 @@ void ObjectCopyRequest<I>::send_update_object_map() {
   bool sent = m_local_image_ctx->object_map->template aio_update<
     Context, &Context::complete>(
       snap_object_state.first, m_object_number, snap_object_state.second, {},
-      {}, ctx);
+      {}, false, ctx);
   assert(sent);
   m_local_image_ctx->snap_lock.put_read();
   m_local_image_ctx->owner_lock.put_read();
