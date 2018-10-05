@@ -63,12 +63,14 @@ export class PermissionHelper {
     singleExecuting?: any; // uses 'single' if not defined
     multiple?: any; // uses 'empty' if not defined
   }) {
-    this.testScenario( // 'multiple selections'
+    this.testScenario(
+      // 'multiple selections'
       [{}, {}],
       fn,
       _.isUndefined(multiple) ? empty : multiple
     );
-    this.testScenario( // 'select executing item'
+    this.testScenario(
+      // 'select executing item'
       [{ cdExecuting: 'someAction' }],
       fn,
       _.isUndefined(singleExecuting) ? single : singleExecuting
@@ -77,11 +79,7 @@ export class PermissionHelper {
     this.testScenario([], fn, empty); // 'no selection'
   }
 
-  private testScenario(
-    selection: object[],
-    fn: () => any,
-    expected: any
-  ) {
+  private testScenario(selection: object[], fn: () => any, expected: any) {
     this.setSelection(selection);
     expect(fn()).toBe(expected);
   }

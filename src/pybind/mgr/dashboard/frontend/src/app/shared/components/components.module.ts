@@ -72,10 +72,6 @@ import { WarningPanelComponent } from './warning-panel/warning-panel.component';
     WarningPanelComponent,
     GrafanaComponent
   ],
-  entryComponents: [
-    ModalComponent,
-    CriticalConfirmationModalComponent,
-    ConfirmationModalComponent
-  ]
+  entryComponents: [ModalComponent, CriticalConfirmationModalComponent, ConfirmationModalComponent]
 })
 export class ComponentsModule {}

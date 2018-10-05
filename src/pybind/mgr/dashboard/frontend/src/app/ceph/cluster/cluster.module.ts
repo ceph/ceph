@@ -3,9 +3,11 @@ import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 
+import { AlertModule } from 'ngx-bootstrap/alert';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { ModalModule } from 'ngx-bootstrap/modal';
 import { TabsModule } from 'ngx-bootstrap/tabs';
+import { TooltipModule } from 'ngx-bootstrap/tooltip';
 
 import { SharedModule } from '../../shared/shared.module';
 import { PerformanceCounterModule } from '../performance-counter/performance-counter.module';
@@ -19,10 +21,16 @@ import { OsdDetailsComponent } from './osd/osd-details/osd-details.component';
 import { OsdFlagsModalComponent } from './osd/osd-flags-modal/osd-flags-modal.component';
 import { OsdListComponent } from './osd/osd-list/osd-list.component';
 import { OsdPerformanceHistogramComponent } from './osd/osd-performance-histogram/osd-performance-histogram.component';
+import { OsdReweightModalComponent } from './osd/osd-reweight-modal/osd-reweight-modal.component';
 import { OsdScrubModalComponent } from './osd/osd-scrub-modal/osd-scrub-modal.component';
 
 @NgModule({
-  entryComponents: [OsdDetailsComponent, OsdScrubModalComponent, OsdFlagsModalComponent],
+  entryComponents: [
+    OsdDetailsComponent,
+    OsdScrubModalComponent,
+    OsdFlagsModalComponent,
+    OsdReweightModalComponent
+  ],
   imports: [
     CommonModule,
     PerformanceCounterModule,
@@ -32,7 +40,9 @@ import { OsdScrubModalComponent } from './osd/osd-scrub-modal/osd-scrub-modal.co
     FormsModule,
     ReactiveFormsModule,
     BsDropdownModule.forRoot(),
-    ModalModule.forRoot()
+    ModalModule.forRoot(),
+    AlertModule.forRoot(),
+    TooltipModule.forRoot()
   ],
   declarations: [
     HostsComponent,
@@ -45,7 +55,8 @@ import { OsdScrubModalComponent } from './osd/osd-scrub-modal/osd-scrub-modal.co
     OsdFlagsModalComponent,
     HostDetailsComponent,
     ConfigurationDetailsComponent,
-    ConfigurationFormComponent
+    ConfigurationFormComponent,
+    OsdReweightModalComponent
   ]
 })
 export class ClusterModule {}

@@ -16,7 +16,7 @@ export class CriticalConfirmationModalComponent implements OnInit {
   @ViewChild(SubmitButtonComponent)
   submitButton: SubmitButtonComponent;
   bodyTemplate: TemplateRef<any>;
-  bodyContext: any;
+  bodyContext: object;
   submitActionObservable: () => Observable<any>;
   submitAction: Function;
   deletionForm: CdFormGroup;

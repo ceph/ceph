@@ -13,7 +13,7 @@
         <div class="button-group text-right">
           <cd-submit-button i18n
                             [form]="confirmationForm"
-                            (submitAction)="submit()">
+                            (submitAction)="onSubmit(confirmationForm.value)">
             {{ buttonText }}
           </cd-submit-button>
           <button i18n

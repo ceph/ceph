@@ -91,7 +91,7 @@ class MockComponent {
   }
 }
 
-describe('DeletionModalComponent', () => {
+describe('CriticalConfirmationModalComponent', () => {
   let mockComponent: MockComponent;
   let component: CriticalConfirmationModalComponent;
   let mockFixture: ComponentFixture<MockComponent>;

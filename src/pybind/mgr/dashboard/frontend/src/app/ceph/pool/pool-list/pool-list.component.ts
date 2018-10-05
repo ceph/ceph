@@ -3,6 +3,7 @@ import { Component, OnInit, ViewChild } from '@angular/core';
 import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 
 import { PoolService } from '../../../shared/api/pool.service';
+import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { TableComponent } from '../../../shared/datatable/table/table.component';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
@@ -16,7 +17,6 @@ import { AuthStorageService } from '../../../shared/services/auth-storage.servic
 import { TaskListService } from '../../../shared/services/task-list.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
 import { Pool } from '../pool';
-import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 
 @Component({
   selector: 'cd-pool-list',
