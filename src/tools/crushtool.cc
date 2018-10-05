@@ -218,6 +218,10 @@ void usage()
   cout << "                         export select data generated during testing routine\n";
   cout << "                         to CSV files for off-line post-processing\n";
   cout << "                         use --help-output for more information\n";
+  cout << "   --reclassify          transform legacy CRUSH map buckets and rules\n";
+  cout << "                         by adding classes\n";
+  cout << "      --reclassify-bucket <bucket-match> <class> <default-parent>\n";
+  cout << "      --reclassify-root <bucket-name> <class>\n";
   cout << "\n";
   cout << "Options for the output stage\n";
   cout << "\n";
@@ -408,6 +412,10 @@ int main(int argc, const char **argv)
   int straw_calc_version = -1;
   int allowed_bucket_algs = -1;
 
+  bool reclassify = false;
+  map<string,pair<string,string>> reclassify_bucket; // %suffix or prefix% -> class, default_root
+  map<string,string> reclassify_root;        // bucket -> class
+
   CrushWrapper crush;
 
   CrushTester tester(crush, cout);
@@ -442,6 +450,30 @@ int main(int argc, const char **argv)
       outfn = val;
     } else if (ceph_argparse_flag(args, i, "-v", "--verbose", (char*)NULL)) {
       verbose += 1;
+    } else if (ceph_argparse_flag(args, i, "--reclassify", (char*)NULL)) {
+      reclassify = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--reclassify-bucket",
+				     (char*)NULL)) {
+      if (i == args.end()) {
+	cerr << "expecting additional argument" << std::endl;
+	return EXIT_FAILURE;
+      }
+      string c = *i;
+      i = args.erase(i);
+      if (i == args.end()) {
+	cerr << "expecting additional argument" << std::endl;
+	return EXIT_FAILURE;
+      }
+      reclassify_bucket[val] = make_pair(c, *i);
+      i = args.erase(i);
+    } else if (ceph_argparse_witharg(args, i, &val, "--reclassify-root",
+				     (char*)NULL)) {
+      if (i == args.end()) {
+	cerr << "expecting additional argument" << std::endl;
+	return EXIT_FAILURE;
+      }
+      reclassify_root[val] = *i;
+      i = args.erase(i);
     } else if (ceph_argparse_flag(args, i, "--tree", (char*)NULL)) {
       tree = true;
     } else if (ceph_argparse_witharg(args, i, &val, "-f", "--format", (char*)NULL)) {
@@ -773,6 +805,7 @@ int main(int argc, const char **argv)
   }
   if (!check && !compile && !decompile && !build && !test && !reweight && !adjust && !tree && !dump &&
       add_item < 0 && !add_bucket && !move_item && !add_rule && !del_rule && full_location < 0 &&
+      !reclassify &&
       remove_name.empty() && reweight_name.empty()) {
     cerr << "no action specified; -h for help" << std::endl;
     return EXIT_FAILURE;
@@ -1115,6 +1148,18 @@ int main(int argc, const char **argv)
     modified = true;
   }
 
+  if (reclassify) {
+    int r = crush.reclassify(
+      g_ceph_context,
+      cout,
+      reclassify_root,
+      reclassify_bucket);
+    if (r < 0) {
+      cerr << "failed to reclassify map" << std::endl;
+      return EXIT_FAILURE;
+    }
+    modified = true;
+  }
 
   // display ---
   if (full_location >= 0) {
@@ -1127,7 +1172,7 @@ int main(int argc, const char **argv)
   }
 
   if (tree) {
-    crush.dump_tree(&cout, NULL);
+    crush.dump_tree(&cout, NULL, {}, true);
   }
 
   if (dump) {

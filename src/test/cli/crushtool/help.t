@@ -110,6 +110,10 @@
                            export select data generated during testing routine
                            to CSV files for off-line post-processing
                            use --help-output for more information
+     --reclassify          transform legacy CRUSH map buckets and rules
+                           by adding classes
+        --reclassify-bucket <bucket-match> <class> <default-parent>
+        --reclassify-root <bucket-name> <class>
   
   Options for the output stage
   
