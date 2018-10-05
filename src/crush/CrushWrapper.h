@@ -1199,6 +1199,8 @@ private:
    **/
   int detach_bucket(CephContext *cct, int item);
 
+  int get_new_bucket_id();
+
 public:
   int get_max_buckets() const {
     if (!crush) return -EINVAL;
@@ -1298,6 +1300,13 @@ public:
   int rebuild_roots_with_classes();
   /* remove unused roots generated for class devices */
   int trim_roots_with_class();
+
+  int reclassify(
+    CephContext *cct,
+    ostream& out,
+    const map<string,string>& classify_root,
+    const map<string,pair<string,string>>& classify_bucket
+    );
 
   void start_choose_profile() {
     free(crush->choose_tries);
