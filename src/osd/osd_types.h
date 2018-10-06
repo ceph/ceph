@@ -303,7 +303,6 @@ public:
                               const string& robj) :
       redirect_locator(orig), redirect_object(robj) {}
 
-  void set_instructions(const bufferlist& bl) { osd_instructions = bl; }
   const bufferlist& get_instructions() { return osd_instructions; }
 
   bool empty() const { return redirect_locator.empty() &&
