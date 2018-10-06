@@ -1615,6 +1615,12 @@ timespec_eq(timespec const& lhs, timespec const& rhs)
   return lhs.tv_sec == rhs.tv_sec && lhs.tv_nsec == rhs.tv_nsec;
 }
 
+static inline bool
+timespec_ge(timespec const& lhs, timespec const& rhs)
+{
+  return lhs.tv_sec >= rhs.tv_sec && lhs.tv_nsec >= rhs.tv_nsec;
+}
+
 TEST(LibCephFS, Btime) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
@@ -1634,22 +1640,23 @@ TEST(LibCephFS, Btime) {
 
   ASSERT_EQ(ceph_fstatx(cmount, fd, &stx, CEPH_STATX_CTIME|CEPH_STATX_BTIME, 0), 0);
   ASSERT_TRUE(stx.stx_mask & (CEPH_STATX_CTIME|CEPH_STATX_BTIME));
-  ASSERT_TRUE(timespec_eq(stx.stx_ctime, stx.stx_btime));
+  ASSERT_TRUE(timespec_ge(stx.stx_ctime, stx.stx_btime));
+  auto orig_btime = stx.stx_btime;
+  auto orig_ctime = stx.stx_ctime;
   ceph_close(cmount, fd);
 
   ASSERT_EQ(ceph_statx(cmount, filename, &stx, CEPH_STATX_CTIME|CEPH_STATX_BTIME, 0), 0);
-  ASSERT_TRUE(timespec_eq(stx.stx_ctime, stx.stx_btime));
+  ASSERT_TRUE(timespec_eq(stx.stx_btime, orig_btime));
+  ASSERT_TRUE(timespec_eq(stx.stx_ctime, orig_ctime));
   ASSERT_TRUE(stx.stx_mask & (CEPH_STATX_CTIME|CEPH_STATX_BTIME));
-
-  struct timespec old_btime = stx.stx_btime;
 
   /* Now sleep, do a chmod and verify that the ctime changed, but btime didn't */
   sleep(1);
   ASSERT_EQ(ceph_chmod(cmount, filename, 0644), 0);
   ASSERT_EQ(ceph_statx(cmount, filename, &stx, CEPH_STATX_CTIME|CEPH_STATX_BTIME, 0), 0);
   ASSERT_TRUE(stx.stx_mask & CEPH_STATX_BTIME);
-  ASSERT_TRUE(timespec_eq(stx.stx_btime, old_btime));
-  ASSERT_FALSE(timespec_eq(stx.stx_ctime, stx.stx_btime));
+  ASSERT_TRUE(timespec_eq(stx.stx_btime, orig_btime));
+  ASSERT_FALSE(timespec_eq(stx.stx_ctime, orig_ctime));
 
   ceph_shutdown(cmount);
 }
