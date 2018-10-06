@@ -171,8 +171,10 @@ class CephCluster(object):
         del self._ctx.ceph['ceph'].conf[subsys][key]
         write_conf(self._ctx)
 
-    def json_asok(self, command, service_type, service_id):
-        proc = self.mon_manager.admin_socket(service_type, service_id, command)
+    def json_asok(self, command, service_type, service_id, timeout=None):
+        if timeout is None:
+            timeout = 15*60
+        proc = self.mon_manager.admin_socket(service_type, service_id, command, timeout=timeout)
         response_data = proc.stdout.getvalue()
         log.info("_json_asok output: {0}".format(response_data))
         if response_data.strip():
@@ -855,15 +857,15 @@ class Filesystem(MDSCluster):
 
         return version
 
-    def mds_asok(self, command, mds_id=None):
+    def mds_asok(self, command, mds_id=None, timeout=None):
         if mds_id is None:
             mds_id = self.get_lone_mds_id()
 
-        return self.json_asok(command, 'mds', mds_id)
+        return self.json_asok(command, 'mds', mds_id, timeout=timeout)
 
-    def rank_asok(self, command, rank=0):
-        info = self.get_rank(rank=rank)
-        return self.json_asok(command, 'mds', info['name'])
+    def rank_asok(self, command, rank=0, status=None, timeout=None):
+        info = self.get_rank(rank=rank, status=status)
+        return self.json_asok(command, 'mds', info['name'], timeout=timeout)
 
     def read_cache(self, path, depth=None):
         cmd = ["dump", "tree", path]
