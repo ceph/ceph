@@ -186,7 +186,7 @@ public:
     std::map<std::string,bufferlist> om;
     int r = get(prefix, ks, &om);
     if (om.find(key) != om.end()) {
-      *value = om[key];
+      *value = std::move(om[key]);
     } else {
       *value = bufferlist();
       r = -ENOENT;
