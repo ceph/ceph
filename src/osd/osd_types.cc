@@ -248,16 +248,21 @@ void request_redirect_t::encode(bufferlist& bl) const
   ENCODE_START(1, 1, bl);
   encode(redirect_locator, bl);
   encode(redirect_object, bl);
-  encode(osd_instructions, bl);
+  // legacy of the removed osd_instructions member
+  encode((uint32_t)0, bl);
   ENCODE_FINISH(bl);
 }
 
 void request_redirect_t::decode(bufferlist::const_iterator& bl)
 {
   DECODE_START(1, bl);
+  uint32_t legacy_osd_instructions_len;
   decode(redirect_locator, bl);
   decode(redirect_object, bl);
-  decode(osd_instructions, bl);
+  decode(legacy_osd_instructions_len, bl);
+  if (legacy_osd_instructions_len) {
+    bl.advance(legacy_osd_instructions_len);
+  }
   DECODE_FINISH(bl);
 }
 
