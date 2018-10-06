@@ -371,6 +371,7 @@ namespace buffer CEPH_BUFFER_API {
     void zero(unsigned o, unsigned l);
     void zero(unsigned o, unsigned l, bool crc_reset);
     unsigned append_zeros(unsigned l);
+    char* diggy_diggy_hole(unsigned l);
 
 #ifdef HAVE_SEASTAR
     /// create a temporary_buffer, copying the ptr as its deleter
@@ -834,6 +835,7 @@ namespace buffer CEPH_BUFFER_API {
     bool rebuild_page_aligned();
 
     void reserve(size_t prealloc);
+    char* reserve2(size_t prealloc);
 
     // assignment-op with move semantics
     const static unsigned int CLAIM_DEFAULT = 0;

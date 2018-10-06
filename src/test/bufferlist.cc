@@ -38,6 +38,8 @@
 #include "include/crc32c.h"
 #include "common/sctp_crc32.h"
 
+#include "include/encoding.h"
+
 #define MAX_TEST 1000000
 #define FILENAME "bufferlist"
 
@@ -2853,6 +2855,74 @@ TEST(BufferList, TestSHA1) {
     EXPECT_EQ("f7ff9e8b7bb2e09b70935a5d785e0cc5d9d0abf0", sha1.to_str());
   }
 
+}
+
+struct jas_fasola
+{
+  uint32_t a0;
+  uint32_t a1;
+  uint64_t a2;
+  uint64_t a3;
+  uint16_t a4;
+  uint8_t a5;
+  uint8_t a6;
+  uint8_t a7;
+  void encode(bufferlist& bl)
+  {
+//#define AK
+#ifdef AK
+    int b;
+    size_t roz = 0;
+    auto encode = [&b, &roz](auto& x, char* __restrict__ &at) {
+
+      if (b == 0) {
+        roz += sizeof(x);//::rozmiar(x);
+        return;
+      } else {
+        memcpy(at, &x, sizeof(x));
+        at += sizeof(x);
+      }
+      //ceph::dane(x, at);
+      return;
+    };
+    {
+      bufferlist& bl_copy = bl;
+      char* __restrict__ bl = nullptr;
+      for (b = 0; b < 2; b++)
+      {
+#else
+        using ceph::encode;
+#endif
+
+
+        encode(a0, bl);
+        encode(a1, bl);
+        encode(a2, bl);
+        encode(a3, bl);
+        encode(a4, bl);
+        encode(a5, bl);
+        encode(a6, bl);
+        encode(a7, bl);
+#ifdef AK
+        if (b == 0) {
+          bl = bl_copy.reserve2(roz);
+        }
+      }
+    }
+#endif
+  }
+};
+
+TEST(BufferList, encode_bench)
+{
+  bufferlist bl;
+  uint32_t v0 = 0;
+  jas_fasola jf;
+  for (size_t i=0; i < 1000000; i++)
+  {
+    jf.encode(bl);
+  }
+  //EXPECT_EQ(1000000 * (4+4+8+8+2+1+1+1), bl.length());
 }
 
 TEST(BufferHash, all) {

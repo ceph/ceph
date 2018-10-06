@@ -782,6 +782,13 @@ using namespace ceph;
     return _len + _off;
   }
 
+  char* buffer::ptr::diggy_diggy_hole(unsigned l)
+  {
+    char* c = _raw->data + _off + _len;
+    _len += l;
+    return c;
+  }
+
   void buffer::ptr::copy_in(unsigned o, unsigned l, const char *src)
   {
     copy_in(o, l, src, true);
@@ -1490,6 +1497,20 @@ using namespace ceph;
       append_buffer.set_length(0);   // unused, so far.
     }
   }
+ char* buffer::list::reserve2(size_t prealloc)
+    {
+      if (append_buffer.unused_tail_length() < prealloc) {
+        //if (prealloc < 4096) prealloc = 4096;
+        append_buffer = buffer::create_page_aligned(prealloc < 4096 ? 4096 : prealloc);
+        append_buffer.set_length(0);   // unused, so far.
+      }
+      char* c = append_buffer.diggy_diggy_hole(prealloc);
+
+   // char* c = _raw->data + _off + _len;
+   //     maybe_inline_memcpy(c, p, l, 32);
+   //     _len += l;
+      return c;
+    }
 
   // sort-of-like-assignment-op
   void buffer::list::claim(list& bl, unsigned int flags)
