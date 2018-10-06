@@ -193,6 +193,7 @@ public:
     if (truncate_seq)
       out << " ts " << truncate_seq << "/" << truncate_size;
     out << " mtime " << mtime;
+    out << " ctime " << ctime;
     if (time_warp_seq)
       out << " tws " << time_warp_seq;
 
