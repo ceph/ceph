@@ -3528,6 +3528,157 @@ TEST_F(LibRadosTwoPoolsPP, ManifestDedupRefRead) {
   cluster.wait_for_latest_osdmap();
 }
 
+TEST_F(LibRadosTwoPoolsPP, ManifestDedupChunkScrub) {
+  // skip test if not yet nautilus
+  {
+    bufferlist inbl, outbl;
+    ASSERT_EQ(0, cluster.mon_command(
+		"{\"prefix\": \"osd dump\"}",
+		inbl, &outbl, NULL));
+    string s(outbl.c_str(), outbl.length());
+    if (s.find("nautilus") == std::string::npos) {
+      cout << "cluster is not yet nautilus, skipping test" << std::endl;
+      return;
+    }
+  }
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(
+	    set_pool_str(pool_name, "fingerprint_algorithm", "sha1"),
+	    inbl, NULL, NULL));
+  cluster.wait_for_latest_osdmap();
+
+  // create object
+  {
+    bufferlist bl;
+    bl.append("hi there");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("there");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("bar", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("hi there");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo-dedup", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("CHUNK");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("bar-chunk", &op));
+  }
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // set-chunk (dedup)
+  {
+    ObjectWriteOperation op;
+    int len = strlen("hi there");
+    op.set_chunk(0, len, cache_ioctx, "bar", 0, 
+		CEPH_OSD_OP_FLAG_WITH_REFERENCE);
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &op));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+  // set-chunk (dedup)
+  {
+    ObjectWriteOperation op;
+    int len = strlen("hi there");
+    op.set_chunk(0, len, cache_ioctx, "bar-chunk", 0, 
+		CEPH_OSD_OP_FLAG_WITH_REFERENCE);
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, ioctx.aio_operate("foo-dedup", completion, &op));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+  // make a chunk dirty then flush 
+  {
+    // make a dirty chunk
+    bufferlist bl;
+    bl.append("There hi");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+  {
+    // do flush
+    bufferlist bl;
+    bl.append("There hi");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+  // 1. read chunk's refcount 2. set wrong reference 3. do chunk-scrub
+  {
+    bufferlist in, out;
+    SHA1 sha1_gen;
+    int size = strlen("There hi");
+    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1];
+    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
+    sha1_gen.Update((const unsigned char *)"There hi", size);
+    sha1_gen.Final(fingerprint);
+    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
+    cache_ioctx.exec(p_str, "cas", "chunk_read", in, out);
+    cls_chunk_refcount_read_ret read_ret;
+    cls_chunk_refcount_set_op set_op;
+    try {
+      auto iter = out.cbegin();
+      decode(read_ret, iter);
+    } catch (buffer::error& err) {
+      ASSERT_TRUE(0);
+    }
+
+    for (auto p : read_ret.refs) {
+      set_op.refs.insert(p);
+    }
+    uint32_t hash;
+    ASSERT_EQ(0, cache_ioctx.get_object_hash_position2("foo-dedup", &hash));
+    hobject_t oid(sobject_t("foo-dedup", CEPH_NOSNAP), "", hash, -1, "");
+    set_op.refs.insert(oid);
+    encode(set_op, in);
+    cache_ioctx.exec(p_str, "cas", "chunk_set", in, out);
+
+    {
+      ObjectWriteOperation op;
+      op.chunk_scrub();
+      librados::AioCompletion *completion = cluster.aio_create_completion();
+      ASSERT_EQ(0, cache_ioctx.aio_operate(p_str, completion, &op));
+      completion->wait_for_safe();
+      ASSERT_EQ(0, completion->get_return_value());
+      completion->release();
+    }
+    in.clear();
+    out.clear();
+    read_ret.refs.clear();
+
+    cache_ioctx.exec(p_str, "cas", "chunk_read", in, out);
+    try {
+      auto iter = out.cbegin();
+      decode(read_ret, iter);
+    } catch (buffer::error& err) {
+      ASSERT_TRUE(0);
+    }
+
+    ASSERT_EQ(1, read_ret.refs.size());
+  }
+
+  // wait for maps to settle before next test
+  cluster.wait_for_latest_osdmap();
+}
+
 class LibRadosTwoPoolsECPP : public RadosTestECPP
 {
 public:
