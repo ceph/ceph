@@ -306,8 +306,7 @@
     --image arg          image name
   
   rbd help config pool get
-  usage: rbd config pool get 
-                             <pool-name> <key> 
+  usage: rbd config pool get <pool-name> <key> 
   
   Get a pool-level configuration override.
   
@@ -329,8 +328,7 @@
     --pretty-format      pretty formatting (json and xml)
   
   rbd help config pool remove
-  usage: rbd config pool remove 
-                                <pool-name> <key> 
+  usage: rbd config pool remove <pool-name> <key> 
   
   Remove a pool-level configuration override.
   
@@ -339,8 +337,7 @@
     <key>                config key
   
   rbd help config pool set
-  usage: rbd config pool set 
-                             <pool-name> <key> <value> 
+  usage: rbd config pool set <pool-name> <key> <value> 
   
   Set a pool-level configuration override.
   
