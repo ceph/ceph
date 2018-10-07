@@ -278,22 +278,6 @@ double buffer_encode()
   return Cycles::to_seconds(total)/(count*10);
 }
 
-// Measure the cost of retrieving an object from the beginning of a buffer.
-double buffer_get_contiguous()
-{
-  int count = 1000000;
-  int value = 11;
-  bufferlist b;
-  b.append((char*)&value, sizeof(value));
-  int sum = 0;
-  uint64_t start = Cycles::rdtsc();
-  for (int i = 0; i < count; i++) {
-    sum += *reinterpret_cast<int*>(b.get_contiguous(0, sizeof(value)));
-  }
-  uint64_t stop = Cycles::rdtsc();
-  return Cycles::to_seconds(stop - start)/count;
-}
-
 // Measure the cost of creating an iterator and iterating over 10
 // chunks in a buffer.
 double buffer_iterator()
@@ -930,8 +914,6 @@ TestInfo tests[] = {
     "copy out 2 small ptrs from buffer"},
   {"buffer_encode10", buffer_encode,
     "buffer encoding 10 structures onto existing ptr"},
-  {"buffer_get_contiguous", buffer_get_contiguous,
-    "Buffer::get_contiguous"},
   {"buffer_iterator", buffer_iterator,
     "iterate over buffer with 5 ptrs"},
   {"cond_ping_pong", cond_ping_pong,
