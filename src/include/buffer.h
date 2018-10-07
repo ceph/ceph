@@ -651,6 +651,9 @@ namespace buffer CEPH_BUFFER_API {
 	memcpy(pos, src, len);
 	pos += len;
       }
+      char* c_str() {
+        return pos;
+      }
     };
     // The contiguous_filler is supposed to be not costlier than a single
     // pointer. Keep it dumb, please.
