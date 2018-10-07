@@ -162,6 +162,8 @@ ostream& operator<<(ostream& out, const CInode& in)
       out << " nl=" << in.inode.nlink;
   }
 
+  out << " ct[" << in.inode.ctime << "]";
+
   // rstat
   out << " " << in.inode.rstat;
   if (!(in.inode.rstat == in.inode.accounted_rstat))
