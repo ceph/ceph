@@ -865,7 +865,7 @@ public:
           objects(t->object_index.size()) {
 
         ops = t->data.ops;
-        op_buffer_p = t->op_bl.get_contiguous(0, t->data.ops * sizeof(Op));
+        op_buffer_p = t->op_bl.c_str();
 
         map<coll_t, __le32>::iterator coll_index_p;
         for (coll_index_p = t->coll_index.begin();

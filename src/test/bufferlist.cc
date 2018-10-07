@@ -1425,55 +1425,6 @@ TEST(BufferList, to_str) {
   }
 }
 
-TEST(BufferList, get_contiguous) {
-  {
-    bufferptr a("foobarbaz", 9);
-    bufferptr b("123456789", 9);
-    bufferptr c("ABCDEFGHI", 9);
-    bufferlist bl;
-    ASSERT_EQ(0, bl.get_contiguous(0, 0));
-
-    bl.append(a);
-    bl.append(b);
-    bl.append(c);
-    ASSERT_EQ(3u, bl.get_num_buffers());
-    ASSERT_EQ(0, memcmp("bar", bl.get_contiguous(3, 3), 3));
-    ASSERT_EQ(0, memcmp("456", bl.get_contiguous(12, 3), 3));
-    ASSERT_EQ(0, memcmp("ABC", bl.get_contiguous(18, 3), 3));
-    ASSERT_EQ(3u, bl.get_num_buffers());
-    ASSERT_EQ(0, memcmp("789ABC", bl.get_contiguous(15, 6), 6));
-    ASSERT_EQ(2u, bl.get_num_buffers());
-  }
-
-  {
-    bufferptr a("foobarbaz", 9);
-    bufferptr b("123456789", 9);
-    bufferptr c("ABCDEFGHI", 9);
-    bufferlist bl;
-
-    bl.append(a);
-    bl.append(b);
-    bl.append(c);
-
-    ASSERT_EQ(0, memcmp("789ABCDEFGHI", bl.get_contiguous(15, 12), 12));
-    ASSERT_EQ(2u, bl.get_num_buffers());
-  }
-
-  {
-    bufferptr a("foobarbaz", 9);
-    bufferptr b("123456789", 9);
-    bufferptr c("ABCDEFGHI", 9);
-    bufferlist bl;
-
-    bl.append(a);
-    bl.append(b);
-    bl.append(c);
-
-    ASSERT_EQ(0, memcmp("z123456789AB", bl.get_contiguous(8, 12), 12));
-    ASSERT_EQ(1u, bl.get_num_buffers());
-  }
-}
-
 TEST(BufferList, swap) {
   bufferlist b1;
   b1.append('A');
