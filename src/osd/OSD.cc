@@ -6033,6 +6033,9 @@ COMMAND("compact",
 COMMAND("smart name=devid,type=CephString,req=False",
         "runs smartctl on this osd devices.  ",
         "osd", "rw", "cli,rest")
+COMMAND("reload plugin name=plugin,type=CephString,req=True",
+        "WARNING: reload cls plugin.",
+        "osd", "rw", "cli,rest")
 };
 
 void OSD::do_command(
@@ -6507,6 +6510,12 @@ int OSD::_do_command(
     string devid;
     cmd_getval(cct, cmdmap, "devid", devid);
     probe_smart(devid, ds);
+  }
+
+  else if (prefix == "reload plugin")   {
+    std::string plugin;
+    cmd_getval(cct, cmdmap, "plugin", plugin);
+    class_handler->reload(plugin);
   }
 
   else {

@@ -124,6 +124,7 @@ public:
   void unregister_class(ClassData *cls);
 
   void shutdown();
+  void reload(string plugin);
 };
 
 

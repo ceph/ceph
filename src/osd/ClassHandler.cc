@@ -90,6 +90,17 @@ void ClassHandler::shutdown()
   classes.clear();
 }
 
+void ClassHandler::reload(string plugin){
+  for (auto& cls : classes) {
+    if (cls.second.handle && (cls.first.compare(plugin) == 0)) {
+      dlclose(cls.second.handle);
+      cls.second.status = ClassData::CLASS_MISSING;
+      ldout(cct, 0) << __func__ << " set " << cls.first << "status" << cls.second.status << dendl;
+    }
+  }
+}
+
+
 /*
  * Check if @cname is in the whitespace delimited list @list, or the @list
  * contains the wildcard "*".
