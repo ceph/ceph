@@ -222,6 +222,7 @@ void usage()
   cout << "                         by adding classes\n";
   cout << "      --reclassify-bucket <bucket-match> <class> <default-parent>\n";
   cout << "      --reclassify-root <bucket-name> <class>\n";
+  cout << "   --compare <otherfile> compare two maps using --test parameters\n";
   cout << "\n";
   cout << "Options for the output stage\n";
   cout << "\n";
@@ -416,6 +417,8 @@ int main(int argc, const char **argv)
   map<string,pair<string,string>> reclassify_bucket; // %suffix or prefix% -> class, default_root
   map<string,string> reclassify_root;        // bucket -> class
 
+  string compare;
+
   CrushWrapper crush;
 
   CrushTester tester(crush, cout);
@@ -450,6 +453,8 @@ int main(int argc, const char **argv)
       outfn = val;
     } else if (ceph_argparse_flag(args, i, "-v", "--verbose", (char*)NULL)) {
       verbose += 1;
+    } else if (ceph_argparse_witharg(args, i, &val, "--compare", (char*)NULL)) {
+      compare = val;
     } else if (ceph_argparse_flag(args, i, "--reclassify", (char*)NULL)) {
       reclassify = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--reclassify-bucket",
@@ -795,7 +800,7 @@ int main(int argc, const char **argv)
     }
   }
 
-  if (test && !check && !display && !write_to_file) {
+  if (test && !check && !display && !write_to_file && compare.empty()) {
     cerr << "WARNING: no output selected; use --output-csv or --show-X" << std::endl;
   }
 
@@ -806,6 +811,7 @@ int main(int argc, const char **argv)
   if (!check && !compile && !decompile && !build && !test && !reweight && !adjust && !tree && !dump &&
       add_item < 0 && !add_bucket && !move_item && !add_rule && !del_rule && full_location < 0 &&
       !reclassify &&
+      compare.empty() &&
       remove_name.empty() && reweight_name.empty()) {
     cerr << "no action specified; -h for help" << std::endl;
     return EXIT_FAILURE;
@@ -1215,6 +1221,28 @@ int main(int argc, const char **argv)
       tester.set_output_statistics(true);
 
     int r = tester.test();
+    if (r < 0)
+      return EXIT_FAILURE;
+  }
+
+  if (compare.size()) {
+    CrushWrapper crush2;
+    bufferlist in;
+    string error;
+    int r = in.read_file(compare.c_str(), &error);
+    if (r < 0) {
+      cerr << me << ": error reading '" << compare << "': "
+	   << error << std::endl;
+      return EXIT_FAILURE;
+    }
+    auto p = in.begin();
+    try {
+      crush2.decode(p);
+    } catch(...) {
+      cerr << me << ": unable to decode " << compare << std::endl;
+      return EXIT_FAILURE;
+    }
+    r = tester.compare(crush2);
     if (r < 0)
       return EXIT_FAILURE;
   }
