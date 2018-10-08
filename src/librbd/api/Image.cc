@@ -16,6 +16,7 @@
 #include "librbd/internal.h"
 #include "librbd/Utils.h"
 #include "librbd/api/Config.h"
+#include "librbd/api/Trash.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -378,6 +379,18 @@ int Image<I>::remove(IoCtx& io_ctx, const std::string &image_name,
 {
   CephContext *cct((CephContext *)io_ctx.cct());
   ldout(cct, 20) << (image_id.empty() ? image_name : image_id) << dendl;
+
+  if (image_id.empty()) {
+    // id will only be supplied when used internally
+    ConfigProxy config(cct->_conf);
+    Config<I>::apply_pool_overrides(io_ctx, &config);
+
+    if (config.get_val<bool>("rbd_move_to_trash_on_remove")) {
+      return Trash<I>::move(
+        io_ctx, RBD_TRASH_IMAGE_SOURCE_USER, image_name,
+        config.get_val<uint64_t>("rbd_move_to_trash_on_remove_expire_seconds"));
+    }
+  }
 
   ThreadPool *thread_pool;
   ContextWQ *op_work_queue;
