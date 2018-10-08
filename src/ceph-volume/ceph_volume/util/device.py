@@ -87,6 +87,12 @@ class Device(object):
         return os.path.exists(self.abspath)
 
     @property
+    def rotational(self):
+        if self.sys_api['rotational'] == '1':
+            return True
+        return False
+
+    @property
     def is_lvm_member(self):
         if self._is_lvm_member is None:
             self._set_lvm_membership()
