@@ -10,12 +10,8 @@ rbd ls | wc -l | grep -v '^0$' && echo "nonempty rbd pool, aborting!  run this s
 
 IMGS="testimg1 testimg2 testimg3 testimg4 testimg5 testimg6 testimg-diff1 testimg-diff2 testimg-diff3 foo foo2 bar bar2 test1 test2 test3 test4 clone2"
 
-expect_fail()
-{
-  set -x
-  set +e
-  "$@"
-  if [ $? == 0 ]; then return 1; else return 0; fi
+expect_fail() {
+    "$@" && return 1 || return 0
 }
 
 tiered=0
@@ -644,7 +640,7 @@ test_namespace() {
     rbd snap create rbd/test1/image1@1
     rbd clone --rbd-default-clone-format 2 rbd/test1/image1@1 rbd/test2/image1
     rbd snap rm rbd/test1/image1@1
-    cmp <(rbd export rbd/test1/image1@1 -) <(rbd export rbd/test2/image1 -)
+    cmp <(rbd export rbd/test1/image1 -) <(rbd export rbd/test2/image1 -)
     rbd rm rbd/test2/image1
 
     # default ns to test1 ns clone
@@ -653,7 +649,7 @@ test_namespace() {
     rbd snap create rbd/image2@1
     rbd clone --rbd-default-clone-format 2 rbd/image2@1 rbd/test2/image2
     rbd snap rm rbd/image2@1
-    cmp <(rbd export rbd/image2@1 -) <(rbd export rbd/test2/image2 -)
+    cmp <(rbd export rbd/image2 -) <(rbd export rbd/test2/image2 -)
     expect_fail rbd rm rbd/image2
     rbd rm rbd/test2/image2
     rbd rm rbd/image2
