@@ -1427,7 +1427,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       });
       auto gather_ctx = new C_Gather(m_dest->cct, end_op_ctx);
 
-      bufferptr m_ptr(m_bl->length());
+      auto& m_ptr = buffer::ptr_node::create(m_bl->length());
       m_bl->rebuild(m_ptr);
       size_t write_offset = 0;
       size_t write_length = 0;
@@ -1440,7 +1440,8 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 				     &write_offset,
 				     &write_length,
 				     &offset)) {
-	  bufferptr write_ptr(m_ptr, write_offset, write_length);
+	  auto& write_ptr = \
+	    buffer::ptr_node::create(m_ptr, write_offset, write_length);
 	  bufferlist *write_bl = new bufferlist();
 	  write_bl->push_back(write_ptr);
 	  Context *ctx = new C_CopyWrite(write_bl, gather_ctx->new_sub());

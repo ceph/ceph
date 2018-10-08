@@ -1325,15 +1325,13 @@ using namespace ceph;
       _buffers.clear_and_dispose(ptr_node::disposer());
       return;
     }
-    ptr nb;
     if ((_len & ~CEPH_PAGE_MASK) == 0)
-      nb = buffer::create_page_aligned(_len);
+      rebuild(ptr_node::create(buffer::create_page_aligned(_len)));
     else
-      nb = buffer::create(_len);
-    rebuild(nb);
+      rebuild(ptr_node::create(buffer::create(_len)));
   }
 
-  void buffer::list::rebuild(ptr& nb)
+  void buffer::list::rebuild(ptr_node& nb)
   {
     unsigned pos = 0;
     for (auto& node : _buffers) {
@@ -1342,8 +1340,11 @@ using namespace ceph;
     }
     _memcopy_count += pos;
     _buffers.clear_and_dispose(ptr_node::disposer());
-    if (nb.length())
-      _buffers.push_back(ptr_node::create(nb));
+    if (likely(nb.length())) {
+      _buffers.push_back(nb);
+    } else {
+      ptr_node::disposer()(&nb);
+    }
     invalidate_crc();
     last_p = begin();
   }
@@ -1397,8 +1398,9 @@ using namespace ceph;
   	      !p->is_n_align_sized(align_size) ||
   	      (offset % align_size)));
       if (!(unaligned.is_contiguous() && unaligned._buffers.front().is_aligned(align_memory))) {
-        ptr nb(buffer::create_aligned(unaligned._len, align_memory));
-        unaligned.rebuild(nb);
+        unaligned.rebuild(
+          ptr_node::create(
+            buffer::create_aligned(unaligned._len, align_memory)));
         _memcopy_count += unaligned._len;
       }
       _buffers.insert(p, ptr_node::create(unaligned._buffers.front()));
@@ -1556,7 +1558,7 @@ using namespace ceph;
       }
     }
     // add new item to list
-    push_back(ptr(bp, off, len));
+    push_back(ptr_node::create(bp, off, len));
   }
 
   void buffer::list::append(const list& bl)
@@ -1852,11 +1854,11 @@ int buffer::list::read_file(const char *fn, std::string *error)
 
 ssize_t buffer::list::read_fd(int fd, size_t len)
 {
-  bufferptr bp = buffer::create(len);
+  auto& bp = ptr_node::create(buffer::create(len));
   ssize_t ret = safe_read(fd, (void*)bp.c_str(), len);
   if (ret >= 0) {
     bp.set_length(ret);
-    append(std::move(bp));
+    push_back(bp);
   }
   return ret;
 }
@@ -2165,7 +2167,7 @@ void buffer::list::hexdump(std::ostream &out, bool trailing_newline) const
 
 buffer::list buffer::list::static_from_mem(char* c, size_t l) {
   list bl;
-  bl.push_back(ptr(create_static(l, c)));
+  bl.push_back(ptr_node::create(create_static(l, c)));
   return bl;
 }
 
