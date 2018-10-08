@@ -34,6 +34,7 @@ them to run the e2e frontend tests."
     fi
 fi
 
+cd $CEPH_ROOT/src/pybind/mgr/dashboard
 DASH_DIR=`pwd`
 
 cd ../../../../build
