@@ -25,8 +25,8 @@ class DashboardTestCase(MgrTestCase):
     CLIENTS_REQUIRED = 1
     CEPHFS = False
 
-    _session = None
-    _resp = None
+    _session = None  # type: requests.sessions.Session
+    _resp = None  # type: requests.models.Response
     _loggedin = False
     _base_uri = None
 

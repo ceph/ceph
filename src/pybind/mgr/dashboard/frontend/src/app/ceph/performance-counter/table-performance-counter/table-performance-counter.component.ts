@@ -53,10 +53,16 @@ export class TablePerformanceCounterComponent implements OnInit {
   }
 
   getCounters() {
-    this.performanceCounterService
-      .get(this.serviceType, this.serviceId)
-      .subscribe((resp: object[]) => {
+    this.performanceCounterService.get(this.serviceType, this.serviceId).subscribe(
+      (resp: object[]) => {
         this.counters = resp;
-      });
+      },
+      (error) => {
+        if (error.status === 404) {
+          error.preventDefault();
+          this.counters = null;
+        }
+      }
+    );
   }
 }

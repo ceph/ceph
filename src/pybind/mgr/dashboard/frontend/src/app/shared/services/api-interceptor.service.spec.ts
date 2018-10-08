@@ -82,16 +82,6 @@ describe('ApiInterceptorService', () => {
     );
   });
 
-  it('should redirect 404', (done) => {
-    runRouterTest(
-      {
-        status: 404
-      },
-      [['/404']],
-      done
-    );
-  });
-
   it('should show notification (error string)', function(done) {
     runNotificationTest(
       'foobar',
