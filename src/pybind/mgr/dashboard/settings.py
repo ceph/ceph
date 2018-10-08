@@ -21,6 +21,10 @@ class Options(object):
     ENABLE_BROWSABLE_API = (True, bool)
     REST_REQUESTS_TIMEOUT = (45, int)
 
+    # API auditing
+    AUDIT_API_ENABLED = (False, bool)
+    AUDIT_API_LOG_PAYLOAD = (True, bool)
+
     # RGW settings
     RGW_API_HOST = ('', str)
     RGW_API_PORT = (80, int)

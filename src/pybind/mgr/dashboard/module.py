@@ -151,6 +151,8 @@ class CherryPyConfig(object):
                 'application/json',
                 'application/javascript',
             ],
+            'tools.json_in.on': True,
+            'tools.json_in.force': False
         }
 
         if ssl:
