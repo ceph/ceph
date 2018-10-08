@@ -359,7 +359,7 @@ by setting it in the ``[mon]`` section of the configuration file.
 
 :Description: Issue a ``HEALTH_WARN`` in cluster log if the CRUSH's
               ``straw_calc_version`` is zero. See
-              `CRUSH map tunables <../operations/crush-map#tunables>`_ for
+              :ref:`CRUSH map tunables <crush-map-tunables>` for
               details.
 :Type: Boolean
 :Default: True
@@ -377,7 +377,7 @@ by setting it in the ``[mon]`` section of the configuration file.
 
 :Description: The minimum tunable profile version required by the cluster.
               See
-              `CRUSH map tunables <../operations/crush-map#tunables>`_ for
+              :ref:`CRUSH map tunables <crush-map-tunables>` for
               details.
 :Type: String
 :Default: ``firefly``
