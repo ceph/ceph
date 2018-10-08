@@ -50,6 +50,8 @@
 #include <exception>
 #include <type_traits>
 
+#include <boost/intrusive/list.hpp>
+
 #include "page.h"
 #include "crc32c.h"
 #include "buffer_fwd.h"
@@ -382,13 +384,39 @@ namespace buffer CEPH_BUFFER_API {
   };
 
 
+  class hangable_ptr : public ptr, public boost::intrusive::list_base_hook<> {
+    template <class... Args>
+    hangable_ptr(Args&&... args) : ptr(std::forward<Args>(args)...) {
+    }
+
+    hangable_ptr(const hangable_ptr&) = default;
+  public:
+
+    ~hangable_ptr() = default;
+
+    template <class... Args>
+    static hangable_ptr& create(Args&&... args) {
+      return *new hangable_ptr(std::forward<Args>(args)...);
+    }
+
+    struct cloner {
+      hangable_ptr* operator()(const hangable_ptr& clone_this) {
+	return new hangable_ptr(clone_this);
+      }
+    };
+    struct disposer {
+      void operator()(hangable_ptr* const delete_this) {
+	delete delete_this;
+      }
+    };
+  };
   /*
    * list - the useful bit!
    */
 
   class CEPH_BUFFER_API list {
   public:
-    typedef std::list<ptr> buffers_t;
+    typedef boost::intrusive::list<hangable_ptr> buffers_t;
     class iterator;
 
   private:
@@ -726,20 +754,27 @@ namespace buffer CEPH_BUFFER_API {
       reserve(prealloc);
     }
 
-    list(const list& other) : _buffers(other._buffers), _len(other._len),
+    list(const list& other) : _len(other._len),
 			      _memcopy_count(other._memcopy_count), last_p(this) {
+      _buffers.clone_from(other._buffers,
+			  hangable_ptr::cloner(), hangable_ptr::disposer());
       make_shareable();
     }
     list(list&& other) noexcept;
+
+    ~list() {
+      _buffers.clear_and_dispose(hangable_ptr::disposer());
+    }
+
     list& operator= (const list& other) {
       if (this != &other) {
-        _buffers = other._buffers;
+        _buffers.clone_from(other._buffers,
+			    hangable_ptr::cloner(), hangable_ptr::disposer());
         _len = other._len;
 	make_shareable();
       }
       return *this;
     }
-
     list& operator= (list&& other) noexcept {
       _buffers = std::move(other._buffers);
       _len = other._len;
@@ -798,7 +833,7 @@ namespace buffer CEPH_BUFFER_API {
 
     // modifiers
     void clear() noexcept {
-      _buffers.clear();
+      _buffers.clear_and_dispose(hangable_ptr::disposer());
       _len = 0;
       _memcopy_count = 0;
       last_p = begin();
@@ -807,17 +842,18 @@ namespace buffer CEPH_BUFFER_API {
     void push_back(const ptr& bp) {
       if (bp.length() == 0)
 	return;
-      _buffers.push_back(bp);
+      _buffers.push_back(hangable_ptr::create(bp));
       _len += bp.length();
     }
     void push_back(ptr&& bp) {
       if (bp.length() == 0)
 	return;
       _len += bp.length();
-      _buffers.push_back(std::move(bp));
+      _buffers.push_back(hangable_ptr::create(std::move(bp)));
     }
     void push_back(raw *r) {
-      push_back(ptr(r));
+      _buffers.push_back(hangable_ptr::create(r));
+      _len += _buffers.back().length();
     }
 
     void zero();
