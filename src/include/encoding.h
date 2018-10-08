@@ -617,30 +617,18 @@ inline std::enable_if_t<!traits::supported>
 {
   __u32 n = (__u32)(ls.size());  // c++11 std::list::size() is O(1)
   encode(n, bl);
-  for (auto p = ls.begin(); p != ls.end(); ++p)
-    encode(*p, bl);
+  for (auto& elem : ls) {
+    encode(elem, bl);
+  }
 }
 template<class T, class Alloc, typename traits>
 inline std::enable_if_t<!traits::supported>
   encode(const std::list<T,Alloc>& ls, bufferlist& bl, uint64_t features)
 {
-  // should i pre- or post- count?
-  if (!ls.empty()) {
-    unsigned pos = bl.length();
-    unsigned n = 0;
-    encode(n, bl);
-    for (auto p = ls.begin(); p != ls.end(); ++p) {
-      n++;
-      encode(*p, bl, features);
-    }
-    ceph_le32 en;
-    en = n;
-    bl.copy_in(pos, sizeof(en), (char*)&en);
-  } else {
-    __u32 n = (__u32)(ls.size());    // FIXME: this is slow on a list.
-    encode(n, bl);
-    for (auto p = ls.begin(); p != ls.end(); ++p)
-      encode(*p, bl, features);
+  __u32 n = (__u32)(ls.size());  // c++11 std::list::size() is O(1)
+  encode(n, bl);
+  for (auto& elem : ls) {
+    encode(elem, bl, features);
   }
 }
 template<class T, class Alloc, typename traits>
