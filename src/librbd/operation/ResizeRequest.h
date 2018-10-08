@@ -127,6 +127,9 @@ private:
   void send_flush_cache();
   Context *handle_flush_cache(int *result);
 
+  void send_invalidate_image_cache();
+  Context *handle_invalidate_image_cache(int *result);
+
   void send_invalidate_cache();
   Context *handle_invalidate_cache(int *result);
 

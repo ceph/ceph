@@ -11,7 +11,6 @@ set(librbd_test
   test_ImageWatcher.cc
   test_internal.cc
   test_mirroring.cc
-  test_BlockGuard.cc
   test_DeepCopy.cc
   test_Groups.cc
   test_Migration.cc
@@ -21,6 +20,11 @@ set(librbd_test
   test_Trash.cc
   journal/test_Entries.cc
   journal/test_Replay.cc)
+if(WITH_RWL)
+  list(APPEND librbd_test
+    test_WriteLogMap.cc
+    test_BlockGuard.cc)
+endif()
 add_library(rbd_test STATIC ${librbd_test})
 target_link_libraries(rbd_test PRIVATE
   rbd_test_support

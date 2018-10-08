@@ -60,16 +60,26 @@ public:
                                                                 enabled));
   }
 
-  void expect_block_writes(MockImageCtx &mock_image_ctx, int r) {
-    expect_test_features(mock_image_ctx, RBD_FEATURE_JOURNALING,
-                         ((mock_image_ctx.features & RBD_FEATURE_JOURNALING) != 0));
+  void _expect_block_writes(MockImageCtx &mock_image_ctx, int r) {
+    expect_test_features(mock_image_ctx, RBD_FEATURES_REQUIRE_LOCK_BOTH,
+                         ((mock_image_ctx.features & RBD_FEATURES_REQUIRE_LOCK_BOTH) != 0));
     if (mock_image_ctx.clone_copy_on_read ||
-        (mock_image_ctx.features & RBD_FEATURE_JOURNALING) != 0) {
+        (mock_image_ctx.features & RBD_FEATURES_REQUIRE_LOCK_BOTH) != 0) {
       expect_set_require_lock(mock_image_ctx, librbd::io::DIRECTION_BOTH, true);
     } else {
       expect_set_require_lock(mock_image_ctx, librbd::io::DIRECTION_WRITE,
                               true);
     }
+  }
+
+  void expect_block_writes(MockImageCtx &mock_image_ctx, librbd::io::FlushSource flush_source, int r) {
+    _expect_block_writes(mock_image_ctx, r);
+    EXPECT_CALL(*mock_image_ctx.io_work_queue, block_writes(_, flush_source))
+                  .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
+  }
+
+  void expect_block_writes(MockImageCtx &mock_image_ctx, int r) {
+    _expect_block_writes(mock_image_ctx, r);
     EXPECT_CALL(*mock_image_ctx.io_work_queue, block_writes(_))
                   .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
   }
@@ -133,7 +143,7 @@ TEST_F(TestMockExclusiveLockPreReleaseRequest, Success) {
 
   expect_prepare_lock(mock_image_ctx);
   expect_cancel_op_requests(mock_image_ctx, 0);
-  expect_block_writes(mock_image_ctx, 0);
+  expect_block_writes(mock_image_ctx, librbd::io::FLUSH_SOURCE_SHUTDOWN, 0);
   expect_invalidate_cache(mock_image_ctx, 0);
 
   expect_flush_notifies(mock_image_ctx);
@@ -163,7 +173,7 @@ TEST_F(TestMockExclusiveLockPreReleaseRequest, SuccessJournalDisabled) {
 
   MockImageCtx mock_image_ctx(*ictx);
 
-  expect_block_writes(mock_image_ctx, 0);
+  expect_block_writes(mock_image_ctx, librbd::io::FLUSH_SOURCE_SHUTDOWN, 0);
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
@@ -194,7 +204,7 @@ TEST_F(TestMockExclusiveLockPreReleaseRequest, SuccessObjectMapDisabled) {
 
   MockImageCtx mock_image_ctx(*ictx);
 
-  expect_block_writes(mock_image_ctx, 0);
+  expect_block_writes(mock_image_ctx, librbd::io::FLUSH_SOURCE_SHUTDOWN, 0);
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
@@ -223,7 +233,7 @@ TEST_F(TestMockExclusiveLockPreReleaseRequest, Blacklisted) {
   InSequence seq;
   expect_prepare_lock(mock_image_ctx);
   expect_cancel_op_requests(mock_image_ctx, 0);
-  expect_block_writes(mock_image_ctx, -EBLACKLISTED);
+  expect_block_writes(mock_image_ctx, librbd::io::FLUSH_SOURCE_SHUTDOWN, -EBLACKLISTED);
   expect_invalidate_cache(mock_image_ctx, -EBLACKLISTED);
 
   expect_flush_notifies(mock_image_ctx);
@@ -257,7 +267,7 @@ TEST_F(TestMockExclusiveLockPreReleaseRequest, BlockWritesError) {
 
   InSequence seq;
   expect_cancel_op_requests(mock_image_ctx, 0);
-  expect_block_writes(mock_image_ctx, -EINVAL);
+  expect_block_writes(mock_image_ctx, librbd::io::FLUSH_SOURCE_SHUTDOWN, -EINVAL);
   expect_unblock_writes(mock_image_ctx);
 
   C_SaferCond ctx;
@@ -279,7 +289,7 @@ TEST_F(TestMockExclusiveLockPreReleaseRequest, UnlockError) {
 
   InSequence seq;
   expect_cancel_op_requests(mock_image_ctx, 0);
-  expect_block_writes(mock_image_ctx, 0);
+  expect_block_writes(mock_image_ctx, librbd::io::FLUSH_SOURCE_SHUTDOWN, 0);
   expect_invalidate_cache(mock_image_ctx, 0);
 
   expect_flush_notifies(mock_image_ctx);

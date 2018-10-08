@@ -21,8 +21,9 @@ static const std::map<std::string, uint64_t> RBD_FEATURE_MAP = {
   {RBD_FEATURE_NAME_DATA_POOL, RBD_FEATURE_DATA_POOL},
   {RBD_FEATURE_NAME_OPERATIONS, RBD_FEATURE_OPERATIONS},
   {RBD_FEATURE_NAME_MIGRATING, RBD_FEATURE_MIGRATING},
+  {RBD_FEATURE_NAME_IMAGE_CACHE, RBD_FEATURE_IMAGE_CACHE},
 };
-static_assert((RBD_FEATURE_MIGRATING << 1) > RBD_FEATURES_ALL,
+static_assert((RBD_FEATURE_IMAGE_CACHE << 1) > RBD_FEATURES_ALL,
 	      "new RBD feature added");
 
 
@@ -105,3 +106,6 @@ uint64_t rbd_features_from_string(const std::string& orig_value,
 }
 
 } // namespace librbd
+/* Local Variables: */
+/* eval: (c-set-offset 'innamespace 0) */
+/* End: */

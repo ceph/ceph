@@ -616,6 +616,7 @@ public:
    * @returns 0 on success, negative error code on failure
    */
   int invalidate_cache();
+  int invalidate_image_cache(bool discard);
 
   int poll_io_events(RBD::AioCompletion **comps, int numcomp);
 

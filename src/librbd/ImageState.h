@@ -49,6 +49,10 @@ public:
   int unregister_update_watcher(uint64_t handle);
   void flush_update_watchers(Context *on_finish);
   void shut_down_update_watchers(Context *on_finish);
+  void update_image_cache_state(Context *on_finish, bool always_write=false);
+  void write_image_cache_state(Context *on_finish);
+  void init_image_cache(Context *on_finish);
+  void shut_down_image_cache(Context *on_finish);
 
 private:
   enum State {
@@ -135,7 +139,6 @@ private:
   void handle_set_snap(int r);
 
   void send_prepare_lock_unlock();
-
 };
 
 } // namespace librbd

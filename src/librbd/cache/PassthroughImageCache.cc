@@ -57,11 +57,11 @@ void PassthroughImageCache<I>::aio_discard(uint64_t offset, uint64_t length,
 }
 
 template <typename I>
-void PassthroughImageCache<I>::aio_flush(Context *on_finish) {
+void PassthroughImageCache<I>::aio_flush(Context *on_finish, librbd::io::FlushSource flush_source) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "on_finish=" << on_finish << dendl;
 
-  m_image_writeback.aio_flush(on_finish);
+  m_image_writeback.aio_flush(on_finish, flush_source);
 }
 
 template <typename I>
@@ -103,20 +103,27 @@ void PassthroughImageCache<I>::init(Context *on_finish) {
 }
 
 template <typename I>
+void PassthroughImageCache<I>::get_state(bool &clean, bool &empty, bool &present) {
+  /* State of this cache to be recorded in image metadata */
+  clean = true;    /* never dirty, no need to flush */
+  empty = true;    /* always empty, no need to invalidate */
+  present = false; /* never present, no storage to release */
+}
+
+template <typename I>
 void PassthroughImageCache<I>::shut_down(Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << dendl;
 
-  on_finish->complete(0);
+  m_image_writeback.shut_down(on_finish);
 }
 
 template <typename I>
-void PassthroughImageCache<I>::invalidate(Context *on_finish) {
+void PassthroughImageCache<I>::invalidate(Context *on_finish, bool discard_unflushed_writes) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << dendl;
 
-  // dump cache contents (don't have anything)
-  on_finish->complete(0);
+  m_image_writeback.invalidate(on_finish, discard_unflushed_writes);
 }
 
 template <typename I>
@@ -124,9 +131,7 @@ void PassthroughImageCache<I>::flush(Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << dendl;
 
-  // internal flush -- nothing to writeback but make sure
-  // in-flight IO is flushed
-  aio_flush(on_finish);
+  m_image_writeback.flush(on_finish);
 }
 
 } // namespace cache

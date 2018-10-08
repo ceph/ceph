@@ -494,6 +494,8 @@ TYPE(cls::rbd::GroupSpec)
 TYPE(cls::rbd::ImageSnapshotSpec)
 TYPE(cls::rbd::SnapshotInfo)
 TYPE(cls::rbd::SnapshotNamespace)
+TYPE(cls::rbd::ImageCacheSpec)
+TYPE(cls::rbd::ImageCacheState)
 #endif
 
 #include "cls/lock/cls_lock_types.h"

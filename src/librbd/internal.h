@@ -140,7 +140,7 @@ namespace librbd {
 		       int (*cb)(uint64_t, size_t, const char *, void *),
 		       void *arg);
 
-  int invalidate_cache(ImageCtx *ictx);
+  int invalidate_cache(ImageCtx *ictx, bool discard=false);
   int poll_io_events(ImageCtx *ictx, io::AioCompletion **comps, int numcomp);
   int metadata_list(ImageCtx *ictx, const string &last, uint64_t max, map<string, bufferlist> *pairs);
   int metadata_get(ImageCtx *ictx, const std::string &key, std::string *value);

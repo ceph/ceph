@@ -127,6 +127,9 @@ private:
   void send_acquire_exclusive_lock();
   Context *handle_acquire_exclusive_lock(int *result);
 
+  void send_shutdown_image_cache();
+  Context *handle_shutdown_image_cache(int *result);
+
   void send_get_mirror_mode();
   Context *handle_get_mirror_mode(int *result);
 

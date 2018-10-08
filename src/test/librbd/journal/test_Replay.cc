@@ -604,6 +604,7 @@ TEST_F(TestJournalReplay, Rename) {
   get_journal_commit_position(ictx, &current_tag, &current_entry);
   ASSERT_EQ(initial_tag + 1, current_tag);
   ASSERT_EQ(1, current_entry);
+  close_image(ictx);
 
   // verify lock ordering constraints
   librbd::RBD rbd;
@@ -811,6 +812,7 @@ TEST_F(TestJournalReplay, MetadataRemove) {
 
 TEST_F(TestJournalReplay, ObjectPosition) {
   REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_IMAGE_CACHE));
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));

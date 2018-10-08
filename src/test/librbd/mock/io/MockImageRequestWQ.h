@@ -14,6 +14,7 @@ namespace io {
 
 struct MockImageRequestWQ {
   MOCK_METHOD1(block_writes, void(Context *));
+  MOCK_METHOD2(block_writes, void(Context *, librbd::io::FlushSource));
   MOCK_METHOD0(unblock_writes, void());
 
   MOCK_METHOD2(set_require_lock, void(Direction, bool));

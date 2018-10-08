@@ -1811,20 +1811,48 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     return 0;
   }
 
-  int invalidate_cache(ImageCtx *ictx)
+  int invalidate_cache(ImageCtx *ictx, bool discard)
   {
     CephContext *cct = ictx->cct;
-    ldout(cct, 20) << "invalidate_cache " << ictx << dendl;
+    ldout(cct, 20) << "invalidate_cache " << ictx << "discard: "
+                   << discard << dendl;
 
     int r = ictx->state->refresh_if_required();
     if (r < 0) {
       return r;
     }
 
+    if (discard){
+      ictx->ignore_image_cache_init_failure = true;
+      int r = lock_acquire(ictx, RBD_LOCK_MODE_EXCLUSIVE);
+      if (r < 0) {
+        return r;
+      }
+      //check for cache initialization. if it failed, update image state
+      if(!ictx->image_cache_init_succeeded) {
+        C_SaferCond ctx;
+        {
+          ictx->image_cache_state.present = false;
+          ictx->image_cache_state.empty = true;
+          ictx->image_cache_state.clean = true;
+          ictx->state->write_image_cache_state(&ctx);
+        }
+        r = ctx.wait();
+        return r;
+      }
+    }
+
     C_SaferCond ctx;
     {
       RWLock::RLocker owner_locker(ictx->owner_lock);
-      ictx->io_object_dispatcher->invalidate_cache(&ctx);
+      if (ictx->image_cache == nullptr) {
+	ictx->io_object_dispatcher->invalidate_cache(&ctx);
+      } else {
+	Context *obj_invd_ctx = new FunctionContext([ictx, &ctx](int r) {
+	    ictx->io_object_dispatcher->invalidate_cache(&ctx);
+	  });
+        ictx->image_cache->invalidate(obj_invd_ctx, discard);
+     }
     }
     r = ctx.wait();
     ictx->perfcounter->inc(l_librbd_invalidate_cache);
@@ -1835,9 +1863,8 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
   {
     if (numcomp <= 0)
       return -EINVAL;
-    CephContext *cct = ictx->cct;
-    ldout(cct, 20) << __func__ << " " << ictx << " numcomp = " << numcomp
-                   << dendl;
+    ldout(ictx->cct, 30) << __func__ << " " << ictx << " numcomp = " << numcomp
+                         << dendl;
     int i = 0;
     while (i < numcomp && ictx->completed_reqs.pop(comps[i])) {
       ++i;

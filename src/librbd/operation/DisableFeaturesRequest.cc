@@ -173,6 +173,8 @@ Context *DisableFeaturesRequest<I>::handle_acquire_exclusive_lock(int *result) {
     return handle_finish(*result);
   }
 
+  bool shutdown_cache = false;
+
   do {
     m_features &= image_ctx.features;
 
@@ -187,16 +189,18 @@ Context *DisableFeaturesRequest<I>::handle_acquire_exclusive_lock(int *result) {
 
     if ((m_features & RBD_FEATURE_EXCLUSIVE_LOCK) != 0) {
       if ((m_new_features & RBD_FEATURE_OBJECT_MAP) != 0 ||
-          (m_new_features & RBD_FEATURE_JOURNALING) != 0) {
-        lderr(cct) << "cannot disable exclusive-lock. object-map "
-                      "or journaling must be disabled before "
+          (m_new_features & RBD_FEATURE_JOURNALING) != 0 ||
+          (m_new_features & RBD_FEATURE_IMAGE_CACHE) != 0) {
+        lderr(cct) << "cannot disable exclusive-lock. object-map, "
+                      "journaling, or image-cache must be disabled before "
                       "disabling exclusive-lock." << dendl;
         *result = -EINVAL;
         break;
       }
       m_features_mask |= (RBD_FEATURE_OBJECT_MAP |
                           RBD_FEATURE_FAST_DIFF |
-                          RBD_FEATURE_JOURNALING);
+                          RBD_FEATURE_JOURNALING |
+                          RBD_FEATURE_IMAGE_CACHE);
     }
     if ((m_features & RBD_FEATURE_FAST_DIFF) != 0) {
       m_disable_flags |= RBD_FLAG_FAST_DIFF_INVALID;
@@ -204,10 +208,56 @@ Context *DisableFeaturesRequest<I>::handle_acquire_exclusive_lock(int *result) {
     if ((m_features & RBD_FEATURE_OBJECT_MAP) != 0) {
       m_disable_flags |= RBD_FLAG_OBJECT_MAP_INVALID;
     }
+    if ((m_features & RBD_FEATURE_IMAGE_CACHE) != 0) {
+      shutdown_cache = true;
+      break;
+    }
   } while (false);
   image_ctx.owner_lock.put_read();
 
   if (*result < 0) {
+    return handle_finish(*result);
+  }
+
+  if(shutdown_cache) {
+    send_shutdown_image_cache();
+    return nullptr;
+  }
+
+  send_get_mirror_mode();
+  return nullptr;
+}
+
+template <typename I>
+void DisableFeaturesRequest<I>::send_shutdown_image_cache() {
+  I &image_ctx = this->m_image_ctx;
+  CephContext *cct = image_ctx.cct;
+  ldout(cct, 10) << this << " " << __func__ << dendl;
+
+  Context *ctx = create_context_callback<
+    DisableFeaturesRequest<I>,
+    &DisableFeaturesRequest<I>::handle_shutdown_image_cache>(this);
+
+   image_ctx.state->shut_down_image_cache(ctx);
+}
+
+template <typename I>
+Context *DisableFeaturesRequest<I>::handle_shutdown_image_cache(int *result) {
+  I &image_ctx = this->m_image_ctx;
+  CephContext *cct = image_ctx.cct;
+  ldout(cct, 20) << this << " " << __func__ << dendl;
+
+  ldout(cct, 10) << __func__ << " result=" << *result << dendl;
+  if (*result >= 0) {
+    if (!image_ctx.image_cache_state.clean) {
+      lderr(cct) << "cannot disable image-cache. Unflushed writes "
+        "remain on " << image_ctx.m_rwl_spec->host << ". Open the "
+        "image there to flush the cache." << dendl;
+      *result = -EINVAL;
+    }
+  }
+
+  if(*result < 0) {
     return handle_finish(*result);
   }
 

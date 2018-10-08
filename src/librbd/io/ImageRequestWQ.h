@@ -48,7 +48,7 @@ public:
                  bufferlist &&bl, int op_flags, bool native_async=true);
   void aio_discard(AioCompletion *c, uint64_t off, uint64_t len,
                    uint32_t discard_granularity_bytes, bool native_async=true);
-  void aio_flush(AioCompletion *c, bool native_async=true);
+  void aio_flush(AioCompletion *c, bool native_async=true, FlushSource flush_source = FLUSH_SOURCE_USER);
   void aio_writesame(AioCompletion *c, uint64_t off, uint64_t len,
                      bufferlist &&bl, int op_flags, bool native_async=true);
   void aio_compare_and_write(AioCompletion *c, uint64_t off,
@@ -67,7 +67,7 @@ public:
   }
 
   int block_writes();
-  void block_writes(Context *on_blocked);
+  void block_writes(Context *on_blocked, io::FlushSource flush_source = io::FLUSH_SOURCE_INTERNAL);
   void unblock_writes();
 
   void wait_on_writes_unblocked(Context *on_unblocked);

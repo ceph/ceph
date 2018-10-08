@@ -90,6 +90,7 @@ TEST_F(TestObjectMap, RefreshInvalidatesWhenTooSmall) {
 
 TEST_F(TestObjectMap, InvalidateFlagOnDisk) {
   REQUIRE_FEATURE(RBD_FEATURE_OBJECT_MAP);
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_IMAGE_CACHE));
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));

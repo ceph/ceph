@@ -211,15 +211,17 @@ TEST_F(TestGroup, add_snapshot)
   const char test_data[] = "test data";
   char read_data[10];
 
-  rbd_image_t image;
-  ASSERT_EQ(0, rbd_open(ioctx, m_image_name.c_str(), &image, NULL));
-  BOOST_SCOPE_EXIT(image) {
-    EXPECT_EQ(0, rbd_close(image));
-  } BOOST_SCOPE_EXIT_END;
+  {
+    rbd_image_t image;
+    ASSERT_EQ(0, rbd_open(ioctx, m_image_name.c_str(), &image, NULL));
+    BOOST_SCOPE_EXIT(image) {
+      EXPECT_EQ(0, rbd_close(image));
+    } BOOST_SCOPE_EXIT_END;
 
-  ASSERT_EQ(10, rbd_write(image, 0, 10, orig_data));
-  ASSERT_EQ(10, rbd_read(image, 0, 10, read_data));
-  ASSERT_EQ(0, memcmp(orig_data, read_data, 10));
+    ASSERT_EQ(10, rbd_write(image, 0, 10, orig_data));
+    ASSERT_EQ(10, rbd_read(image, 0, 10, read_data));
+    ASSERT_EQ(0, memcmp(orig_data, read_data, 10));
+  }
 
   ASSERT_EQ(0, rbd_group_create(ioctx, group_name));
 
@@ -241,13 +243,28 @@ TEST_F(TestGroup, add_snapshot)
 
   ASSERT_STREQ(snap_name, snaps[0].name);
 
-  ASSERT_EQ(10, rbd_write(image, 11, 10, test_data));
-  ASSERT_EQ(10, rbd_read(image, 11, 10, read_data));
-  ASSERT_EQ(0, memcmp(test_data, read_data, 10));
+  {
+    rbd_image_t image;
+    ASSERT_EQ(0, rbd_open(ioctx, m_image_name.c_str(), &image, NULL));
+    BOOST_SCOPE_EXIT(image) {
+      EXPECT_EQ(0, rbd_close(image));
+    } BOOST_SCOPE_EXIT_END;
+
+    ASSERT_EQ(10, rbd_write(image, 11, 10, test_data));
+    ASSERT_EQ(10, rbd_read(image, 11, 10, read_data));
+    ASSERT_EQ(0, memcmp(test_data, read_data, 10));
+  }
 
   ASSERT_EQ(0, rbd_group_snap_rollback(ioctx, group_name, snap_name));
-  ASSERT_EQ(10, rbd_read(image, 0, 10, read_data));
-  ASSERT_EQ(0, memcmp(orig_data, read_data, 10));
+  {
+    rbd_image_t image;
+    ASSERT_EQ(0, rbd_open(ioctx, m_image_name.c_str(), &image, NULL));
+    BOOST_SCOPE_EXIT(image) {
+      EXPECT_EQ(0, rbd_close(image));
+    } BOOST_SCOPE_EXIT_END;
+    ASSERT_EQ(10, rbd_read(image, 0, 10, read_data));
+    ASSERT_EQ(0, memcmp(orig_data, read_data, 10));
+  }
 
   ASSERT_EQ(0, rbd_group_snap_list_cleanup(snaps, sizeof(rbd_group_snap_info_t),
                                            num_snaps));
@@ -286,7 +303,9 @@ TEST_F(TestGroup, add_snapshotPP)
   ASSERT_EQ(512, image.read(0, 512, read_bl));
   ASSERT_TRUE(expect_bl.contents_equal(read_bl));
 
+  ASSERT_EQ(0, image.close());
   ASSERT_EQ(0, rbd.group_snap_create(ioctx, group_name, snap_name));
+  ASSERT_EQ(0, rbd.open(ioctx, image, m_image_name.c_str(), NULL));
 
   std::vector<librbd::group_snap_info_t> snaps;
   ASSERT_EQ(0, rbd.group_snap_list(ioctx, group_name, &snaps,
@@ -303,7 +322,9 @@ TEST_F(TestGroup, add_snapshotPP)
   ASSERT_EQ(1024, image.read(513, 1024, read_bl));
   ASSERT_TRUE(write_bl.contents_equal(read_bl));
 
+  ASSERT_EQ(0, image.close());
   ASSERT_EQ(0, rbd.group_snap_rollback(ioctx, group_name, snap_name));
+  ASSERT_EQ(0, rbd.open(ioctx, image, m_image_name.c_str(), NULL));
 
   ASSERT_EQ(512, image.read(0, 512, read_bl));
   ASSERT_TRUE(expect_bl.contents_equal(read_bl));

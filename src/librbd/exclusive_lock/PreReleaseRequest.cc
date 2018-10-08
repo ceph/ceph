@@ -113,12 +113,12 @@ void PreReleaseRequest<I>::send_block_writes() {
     // setting the lock as required will automatically cause the IO
     // queue to re-request the lock if any IO is queued
     if (m_image_ctx.clone_copy_on_read ||
-        m_image_ctx.test_features(RBD_FEATURE_JOURNALING)) {
+        m_image_ctx.test_features(RBD_FEATURES_REQUIRE_LOCK_BOTH)) {
       m_image_ctx.io_work_queue->set_require_lock(io::DIRECTION_BOTH, true);
     } else {
       m_image_ctx.io_work_queue->set_require_lock(io::DIRECTION_WRITE, true);
     }
-    m_image_ctx.io_work_queue->block_writes(ctx);
+    m_image_ctx.io_work_queue->block_writes(ctx, io::FLUSH_SOURCE_SHUTDOWN);
   }
 }
 
@@ -157,6 +157,42 @@ void PreReleaseRequest<I>::handle_wait_for_ops(int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << dendl;
 
+  send_shut_down_image_cache();
+}
+
+template <typename I>
+void PreReleaseRequest<I>::send_shut_down_image_cache() {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << dendl;
+
+  /* Shut down existing image cache whether the feature bit is on or not */
+  if (!m_image_ctx.image_cache || (!m_image_ctx.image_cache_init_succeeded &&
+       m_image_ctx.ignore_image_cache_init_failure)) {
+    send_invalidate_cache();
+    return;
+  }
+
+  RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
+  Context *ctx = create_async_context_callback(m_image_ctx, create_context_callback<
+      PreReleaseRequest<I>,
+      &PreReleaseRequest<I>::handle_shut_down_image_cache>(this));
+  m_image_ctx.state->shut_down_image_cache(ctx);
+}
+
+template <typename I>
+void PreReleaseRequest<I>::handle_shut_down_image_cache(int r) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << "r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(cct) << "failed to shut down image cache: " << cpp_strerror(r)
+               << dendl;
+    m_image_ctx.io_work_queue->unblock_writes();
+    save_result(r);
+    finish();
+    return;
+  }
+
   send_invalidate_cache();
 }
 
@@ -166,9 +202,9 @@ void PreReleaseRequest<I>::send_invalidate_cache() {
   ldout(cct, 10) << dendl;
 
   RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
-  Context *ctx = create_context_callback<
+  Context *ctx = create_async_context_callback(m_image_ctx, create_context_callback<
       PreReleaseRequest<I>,
-      &PreReleaseRequest<I>::handle_invalidate_cache>(this);
+      &PreReleaseRequest<I>::handle_invalidate_cache>(this));
   m_image_ctx.io_object_dispatcher->invalidate_cache(ctx);
 }
 

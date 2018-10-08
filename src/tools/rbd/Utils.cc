@@ -731,6 +731,8 @@ int open_image(librados::IoCtx &io_ctx, const std::string &image_name,
     std::cerr << "rbd: error opening image " << image_name << ": "
               << cpp_strerror(r) << std::endl;
     return r;
+  } else {
+    std::cout << "rbd: opened image " << image_name << std::endl;
   }
   return 0;
 }

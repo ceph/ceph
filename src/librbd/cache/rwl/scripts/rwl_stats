@@ -1,0 +1,9 @@
+#!/bin/bash
+#
+# Extract all the JSON RWL perf stats objects from the log file at $1.
+# Result can be fed into rwl_stats_display, or rwl_stats_display.py
+#
+#sed '/--- Begin perf dump ---/,$!d' $1 | sed '/--- End perf dump ---/,$d' | sed '1d'
+
+# Keep all lines between markers
+sed '/--- Begin perf dump ---/,/--- End perf dump ---/{//!b};d' $1

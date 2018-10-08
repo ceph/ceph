@@ -25,6 +25,8 @@ struct MockImageState {
 
   MOCK_METHOD1(prepare_lock, void(Context*));
   MOCK_METHOD0(handle_prepare_lock_complete, void());
+  MOCK_METHOD1(init_image_cache, void(Context*));
+  MOCK_METHOD1(shut_down_image_cache, void(Context*));
 };
 
 } // namespace librbd

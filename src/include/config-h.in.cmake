@@ -111,8 +111,11 @@
 /* DPDK conditional compilation */
 #cmakedefine HAVE_DPDK
 
-/* PMEM conditional compilation */
-#cmakedefine HAVE_PMEM
+/* PMDK conditional compilation */
+#cmakedefine HAVE_PMDK
+
+/* PMEM_DEVICE (OSD) conditional compilation */
+#cmakedefine HAVE_PMEM_DEVICE
 
 /* Defined if LevelDB supports bloom filters */
 #cmakedefine HAVE_LEVELDB_FILTER_POLICY
@@ -357,5 +360,8 @@
 
 /* Define if unit tests are built. */
 #cmakedefine UNIT_TESTS_BUILT
+
+/* Define if RWL is enabled */
+#cmakedefine WITH_RWL
 
 #endif /* CONFIG_H */

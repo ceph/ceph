@@ -125,7 +125,7 @@ struct C_AioCompletion : public Context {
   }
 
   void finish(int r) override {
-    ldout(cct, 20) << "C_AioComplete::finish: r=" << r << dendl;
+    ldout(cct, 20) << "C_AioCompletion::finish: r=" << r << dendl;
     if (r < 0) {
       aio_comp->fail(r);
     } else {
@@ -2437,6 +2437,15 @@ namespace librbd {
     return r;
   }
 
+  int Image::invalidate_image_cache(bool discard)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    tracepoint(librbd, invalidate_cache_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only);
+    int r = librbd::invalidate_cache(ictx, discard);
+    tracepoint(librbd, invalidate_cache_exit, r);
+    return r;
+  }
+
   int Image::poll_io_events(RBD::AioCompletion **comps, int numcomp)
   {
     io::AioCompletion *cs[numcomp];
@@ -3900,6 +3909,9 @@ extern "C" int rbd_open(rados_ioctx_t p, const char *name, rbd_image_t *image,
   TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
   librbd::ImageCtx *ictx = new librbd::ImageCtx(name, "", snap_name, io_ctx,
 						false);
+#if defined(WITH_RWL)
+  ldout(ictx->cct, 1) << "wip-librbd-rwl-3 build" << dendl;
+#endif //defined(WITH_RWL)
   tracepoint(librbd, open_image_enter, ictx, ictx->name.c_str(), ictx->id.c_str(), ictx->snap_name.c_str(), ictx->read_only);
 
   int r = ictx->state->open(0);

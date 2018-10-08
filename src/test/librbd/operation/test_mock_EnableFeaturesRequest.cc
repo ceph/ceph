@@ -214,6 +214,7 @@ public:
   void expect_block_writes(MockOperationImageCtx &mock_image_ctx) {
     EXPECT_CALL(*mock_image_ctx.io_work_queue, block_writes(_))
       .WillOnce(CompleteContext(0, mock_image_ctx.image_ctx->op_work_queue));
+    expect_op_work_queue(mock_image_ctx);
   }
 
   void expect_unblock_writes(MockOperationImageCtx &mock_image_ctx) {

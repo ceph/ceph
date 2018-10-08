@@ -2827,5 +2827,55 @@ int sparsify(librados::IoCtx *ioctx, const std::string &oid, size_t sparse_size,
   return ioctx->operate(oid, &op);
 }
 
+void get_image_cache_state_start(librados::ObjectReadOperation *op)
+{
+  bufferlist bl;
+  op->exec("rbd", "image_cache_state_get", bl);
+}
+
+int get_image_cache_state_finish(bufferlist::const_iterator *it,
+				 cls::rbd::ImageCacheState *ics)
+{
+  try {
+    decode(*ics, *it);
+  } catch (const buffer::error &err) {
+    return -EBADMSG;
+  }
+
+  return 0;
+}
+
+int get_image_cache_state(librados::IoCtx *ioctx, const std::string &oid,
+			  cls::rbd::ImageCacheState *ics)
+{
+  librados::ObjectReadOperation op;
+  get_image_cache_state_start(&op);
+
+  bufferlist out_bl;
+  int r = ioctx->operate(oid, &op, &out_bl);
+  if (r < 0) {
+    return r;
+  }
+
+  auto iter = out_bl.cbegin();
+  return get_image_cache_state_finish(&iter, ics);
+}
+
+int set_image_cache_state(librados::IoCtx *ioctx, const std::string &oid,
+			  const cls::rbd::ImageCacheState &ics)
+{
+  librados::ObjectWriteOperation op;
+  set_image_cache_state(&op, ics);
+  return ioctx->operate(oid, &op);
+}
+
+void set_image_cache_state(librados::ObjectWriteOperation *op,
+			   const cls::rbd::ImageCacheState &ics)
+{
+  bufferlist bl;
+  encode(ics, bl);
+  op->exec("rbd", "image_cache_state_set", bl);
+}
+
 } // namespace cls_client
 } // namespace librbd

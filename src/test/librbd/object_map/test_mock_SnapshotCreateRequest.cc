@@ -30,6 +30,11 @@ public:
   }
 
   void expect_read_map(librbd::ImageCtx *ictx, int r) {
+    if (ictx->test_features(RBD_FEATURE_IMAGE_CACHE)) {
+      EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
+		  exec(ictx->header_oid, _, StrEq("rbd"), StrEq("image_cache_state_set"), _, _, _))
+	.WillOnce(DoDefault());
+    }
     if (r < 0) {
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
                   read(ObjectMap<>::object_map_name(ictx->id, CEPH_NOSNAP),

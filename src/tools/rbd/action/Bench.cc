@@ -211,9 +211,9 @@ bool should_read(uint64_t read_proportion)
 }
 
 int do_bench(librbd::Image& image, io_type_t io_type,
-		   uint64_t io_size, uint64_t io_threads,
-		   uint64_t io_bytes, io_pattern_t io_pattern,
-                   uint64_t read_proportion)
+	     uint64_t io_size, uint64_t io_threads,
+	     uint64_t io_bytes, bool no_flush,
+	     io_pattern_t io_pattern, uint64_t read_proportion)
 {
   uint64_t size = 0;
   image.size(&size);
@@ -228,10 +228,12 @@ int do_bench(librbd::Image& image, io_type_t io_type,
     return -EINVAL;
   }
 
-  int r = image.flush();
-  if (r < 0 && (r != -EROFS || io_type != IO_TYPE_READ)) {
-    std::cerr << "rbd: failed to flush: " << cpp_strerror(r) << std::endl;
-    return r;
+  if (!no_flush) {
+    int r = image.flush();
+    if (r < 0 && (r != -EROFS || io_type != IO_TYPE_READ)) {
+      std::cerr << "rbd: failed to flush: " << cpp_strerror(r) << std::endl;
+      return r;
+    }
   }
 
   rbd_bencher b(&image, io_type, io_size);
@@ -396,8 +398,8 @@ int do_bench(librbd::Image& image, io_type_t io_type,
   }
   b.wait_for(0, false);
 
-  if (io_type != IO_TYPE_READ) {
-    r = image.flush();
+  if (io_type != IO_TYPE_READ && !no_flush) {
+    int r = image.flush();
     if (r < 0) {
       std::cerr << "rbd: failed to flush at the end: " << cpp_strerror(r)
                 << std::endl;
@@ -433,7 +435,8 @@ void add_bench_common_options(po::options_description *positional,
     ("io-threads", po::value<uint32_t>(), "ios in flight [default: 16]")
     ("io-total", po::value<Size>(), "total size for IO (in B/K/M/G/T) [default: 1G]")
     ("io-pattern", po::value<IOPattern>(), "IO pattern (rand, seq, or full-seq) [default: seq]")
-    ("rw-mix-read", po::value<uint64_t>(), "read proportion in readwrite (<= 100) [default: 50]");
+    ("rw-mix-read", po::value<uint64_t>(), "read proportion in readwrite (<= 100) [default: 50]")
+    ("no-flush", "supress flush before close");
 }
 
 void get_arguments_for_write(po::options_description *positional,
@@ -496,6 +499,11 @@ int bench_execute(const po::variables_map &vm, io_type_t bench_io_type) {
   }
 
   io_pattern_t bench_pattern;
+  uint64_t bench_no_flush = false;
+  if (vm.count("no-flush")) {
+    bench_no_flush = true;
+  }
+
   if (vm.count("io-pattern")) {
     bench_pattern = vm["io-pattern"].as<io_pattern_t>();
   } else {
@@ -535,7 +543,7 @@ int bench_execute(const po::variables_map &vm, io_type_t bench_io_type) {
   register_async_signal_handler_oneshot(SIGTERM, handle_signal);
 
   r = do_bench(image, bench_io_type, bench_io_size, bench_io_threads,
-		     bench_bytes, bench_pattern, bench_read_proportion);
+	       bench_bytes, bench_no_flush, bench_pattern, bench_read_proportion);
 
   unregister_async_signal_handler(SIGHUP, sighup_handler);
   unregister_async_signal_handler(SIGINT, handle_signal);

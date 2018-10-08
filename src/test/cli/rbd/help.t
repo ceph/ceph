@@ -52,6 +52,8 @@
       group snap remove (... rm)        Remove a snapshot from a group.
       group snap rename                 Rename group's snapshot.
       group snap rollback               Rollback group to snapshot.
+      image-cache discard-dirty         Discard existing / dirty image cache
+      image-cache show                  Show image cache config
       image-meta get                    Image metadata get the value associated
                                         with the key.
       image-meta list (image-meta ls)   Image metadata list keys with values.
@@ -150,7 +152,7 @@
   usage: rbd bench [--pool <pool>] [--namespace <namespace>] [--image <image>] 
                    [--io-size <io-size>] [--io-threads <io-threads>] 
                    [--io-total <io-total>] [--io-pattern <io-pattern>] 
-                   [--rw-mix-read <rw-mix-read>] --io-type <io-type> 
+                   [--rw-mix-read <rw-mix-read>] [--no-flush] --io-type <io-type> 
                    <image-spec> 
   
   Simple benchmark.
@@ -168,6 +170,7 @@
     --io-total arg       total size for IO (in B/K/M/G/T) [default: 1G]
     --io-pattern arg     IO pattern (rand, seq, or full-seq) [default: seq]
     --rw-mix-read arg    read proportion in readwrite (<= 100) [default: 50]
+    --no-flush           supress flush before close
     --io-type arg        IO type (read, write, or readwrite(rw))
   
   rbd help children
@@ -230,7 +233,7 @@
     --object-size arg         object size in B/K/M [4K <= object size <= 32M]
     --image-feature arg       image features
                               [layering(+), exclusive-lock(+*), object-map(+*),
-                              deep-flatten(+-), journaling(*)]
+                              deep-flatten(+-), journaling(*), image-cache(*)]
     --image-shared            shared image
     --stripe-unit arg         stripe unit in B/K/M
     --stripe-count arg        stripe count
@@ -434,7 +437,8 @@
     --object-size arg            object size in B/K/M [4K <= object size <= 32M]
     --image-feature arg          image features
                                  [layering(+), exclusive-lock(+*),
-                                 object-map(+*), deep-flatten(+-), journaling(*)]
+                                 object-map(+*), deep-flatten(+-), journaling(*),
+                                 image-cache(*)]
     --image-shared               shared image
     --stripe-unit arg            stripe unit in B/K/M
     --stripe-count arg           stripe count
@@ -480,7 +484,7 @@
     --object-size arg         object size in B/K/M [4K <= object size <= 32M]
     --image-feature arg       image features
                               [layering(+), exclusive-lock(+*), object-map(+*),
-                              deep-flatten(+-), journaling(*)]
+                              deep-flatten(+-), journaling(*), image-cache(*)]
     --image-shared            shared image
     --stripe-unit arg         stripe unit in B/K/M
     --stripe-count arg        stripe count
@@ -535,7 +539,8 @@
     --object-size arg            object size in B/K/M [4K <= object size <= 32M]
     --image-feature arg          image features
                                  [layering(+), exclusive-lock(+*),
-                                 object-map(+*), deep-flatten(+-), journaling(*)]
+                                 object-map(+*), deep-flatten(+-), journaling(*),
+                                 image-cache(*)]
     --image-shared               shared image
     --stripe-unit arg            stripe unit in B/K/M
     --stripe-count arg           stripe count
@@ -713,7 +718,7 @@
     <image-spec>         image specification
                          (example: [<pool-name>/[<namespace>/]]<image-name>)
     <features>           image features
-                         [exclusive-lock, object-map, journaling]
+                         [exclusive-lock, object-map, journaling, image-cache]
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -734,7 +739,8 @@
     <image-spec>              image specification
                               (example: [<pool-name>/[<namespace>/]]<image-name>)
     <features>                image features
-                              [exclusive-lock, object-map, journaling]
+                              [exclusive-lock, object-map, journaling,
+                              image-cache]
   
   Optional arguments
     -p [ --pool ] arg         pool name
@@ -1001,6 +1007,46 @@
     --group arg          group name
     --snap arg           snapshot name
   
+  rbd help image-cache discard-dirty
+  usage: rbd image-cache discard-dirty [--pool <pool>] [--namespace <namespace>] 
+                                       [--image <image>] [--image-id <image-id>] 
+                                       [--format <format>] [--pretty-format] 
+                                       <image-spec> 
+  
+  Discard existing / dirty image cache
+  
+  Positional arguments
+    <image-spec>         image specification
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --image arg          image name
+    --image-id arg       image id
+    --format arg         output format (plain, json, or xml) [default: plain]
+    --pretty-format      pretty formatting (json and xml)
+  
+  rbd help image-cache show
+  usage: rbd image-cache show [--pool <pool>] [--namespace <namespace>] 
+                              [--image <image>] [--image-id <image-id>] 
+                              [--format <format>] [--pretty-format] 
+                              <image-spec> 
+  
+  Show image cache config
+  
+  Positional arguments
+    <image-spec>         image specification
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --image arg          image name
+    --image-id arg       image id
+    --format arg         output format (plain, json, or xml) [default: plain]
+    --pretty-format      pretty formatting (json and xml)
+  
   rbd help image-meta get
   usage: rbd image-meta get [--pool <pool>] [--namespace <namespace>] 
                             [--image <image>] 
@@ -1107,7 +1153,7 @@
     --object-size arg         object size in B/K/M [4K <= object size <= 32M]
     --image-feature arg       image features
                               [layering(+), exclusive-lock(+*), object-map(+*),
-                              deep-flatten(+-), journaling(*)]
+                              deep-flatten(+-), journaling(*), image-cache(*)]
     --image-shared            shared image
     --stripe-unit arg         stripe unit in B/K/M
     --stripe-count arg        stripe count
@@ -1485,7 +1531,7 @@
     --object-size arg         object size in B/K/M [4K <= object size <= 32M]
     --image-feature arg       image features
                               [layering(+), exclusive-lock(+*), object-map(+*),
-                              deep-flatten(+-), journaling(*)]
+                              deep-flatten(+-), journaling(*), image-cache(*)]
     --image-shared            shared image
     --stripe-unit arg         stripe unit in B/K/M
     --stripe-count arg        stripe count
@@ -2284,3 +2330,12 @@
     --namespace arg      namespace name
     --image arg          image name
   
+
+
+
+
+
+
+
+
+

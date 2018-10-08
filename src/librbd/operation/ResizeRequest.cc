@@ -212,6 +212,38 @@ Context *ResizeRequest<I>::handle_flush_cache(int *result) {
     return this->create_context_finisher(*result);
   }
 
+  send_invalidate_image_cache();
+  return nullptr;
+}
+
+template <typename I>
+void ResizeRequest<I>::send_invalidate_image_cache() {
+  I &image_ctx = this->m_image_ctx;
+  CephContext *cct = image_ctx.cct;
+  if (image_ctx.image_cache == nullptr) {
+    send_invalidate_cache();
+    return;
+  }
+
+  ldout(cct, 10) << __func__ << dendl;
+
+  Context *ctx = create_context_callback<
+    ResizeRequest<I>, &ResizeRequest<I>::handle_invalidate_image_cache>(this);
+  image_ctx.image_cache->invalidate(ctx);
+}
+
+template <typename I>
+Context *ResizeRequest<I>::handle_invalidate_image_cache(int *result) {
+  I &image_ctx = this->m_image_ctx;
+  CephContext *cct = image_ctx.cct;
+  ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
+
+  if (*result < 0) {
+    lderr(cct) << "failed to invalidate image cache: " << cpp_strerror(*result)
+               << dendl;
+    return this->create_context_finisher(*result);
+  }
+
   send_invalidate_cache();
   return nullptr;
 }

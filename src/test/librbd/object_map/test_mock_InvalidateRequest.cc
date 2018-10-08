@@ -65,6 +65,12 @@ TEST_F(TestMockObjectMapInvalidateRequest, UpdatesHeadOnDiskFlag) {
               exec(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _, _))
                 .WillOnce(DoDefault());
 
+  if (ictx->test_features(RBD_FEATURE_IMAGE_CACHE)) {
+    EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
+		exec(ictx->header_oid, _, StrEq("rbd"), StrEq("image_cache_state_set"), _, _, _))
+      .WillOnce(DoDefault());
+  }
+
   {
     RWLock::RLocker owner_locker(ictx->owner_lock);
     RWLock::WLocker image_locker(ictx->image_lock);
@@ -134,6 +140,12 @@ TEST_F(TestMockObjectMapInvalidateRequest, IgnoresOnDiskUpdateFailure) {
 
   C_SaferCond cond_ctx;
   AsyncRequest<> *request = new InvalidateRequest<>(*ictx, CEPH_NOSNAP, false, &cond_ctx);
+
+  if (ictx->test_features(RBD_FEATURE_IMAGE_CACHE)) {
+    EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
+		exec(ictx->header_oid, _, StrEq("rbd"), StrEq("image_cache_state_set"), _, _, _))
+      .WillOnce(DoDefault());
+  }
 
   EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
               exec(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _, _))

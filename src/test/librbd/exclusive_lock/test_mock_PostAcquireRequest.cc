@@ -202,6 +202,7 @@ TEST_F(TestMockExclusiveLockPostAcquireRequest, Success) {
   expect_open_journal(mock_image_ctx, mock_journal, 0);
   expect_get_journal_policy(mock_image_ctx, mock_journal_policy);
   expect_allocate_journal_tag(mock_image_ctx, mock_journal_policy, 0);
+  expect_test_features(mock_image_ctx, RBD_FEATURE_IMAGE_CACHE, false);
 
   C_SaferCond acquire_ctx;
   C_SaferCond ctx;
@@ -232,6 +233,7 @@ TEST_F(TestMockExclusiveLockPostAcquireRequest, SuccessRefresh) {
   expect_test_features(mock_image_ctx, RBD_FEATURE_JOURNALING,
                        mock_image_ctx.image_lock, false);
   expect_handle_prepare_lock_complete(mock_image_ctx);
+  expect_test_features(mock_image_ctx, RBD_FEATURE_IMAGE_CACHE, false);
 
   C_SaferCond acquire_ctx;
   C_SaferCond ctx;
@@ -263,6 +265,7 @@ TEST_F(TestMockExclusiveLockPostAcquireRequest, SuccessJournalDisabled) {
   expect_test_features(mock_image_ctx, RBD_FEATURE_JOURNALING,
                        mock_image_ctx.image_lock, false);
   expect_handle_prepare_lock_complete(mock_image_ctx);
+  expect_test_features(mock_image_ctx, RBD_FEATURE_IMAGE_CACHE, false);
 
   C_SaferCond acquire_ctx;
   C_SaferCond ctx;
@@ -299,6 +302,7 @@ TEST_F(TestMockExclusiveLockPostAcquireRequest, SuccessObjectMapDisabled) {
   expect_open_journal(mock_image_ctx, mock_journal, 0);
   expect_get_journal_policy(mock_image_ctx, mock_journal_policy);
   expect_allocate_journal_tag(mock_image_ctx, mock_journal_policy, 0);
+  expect_test_features(mock_image_ctx, RBD_FEATURE_IMAGE_CACHE, false);
 
   C_SaferCond acquire_ctx;
   C_SaferCond ctx;
@@ -353,6 +357,7 @@ TEST_F(TestMockExclusiveLockPostAcquireRequest, RefreshLockDisabled) {
   expect_test_features(mock_image_ctx, RBD_FEATURE_JOURNALING,
                        mock_image_ctx.image_lock, false);
   expect_handle_prepare_lock_complete(mock_image_ctx);
+  expect_test_features(mock_image_ctx, RBD_FEATURE_IMAGE_CACHE, false);
 
   C_SaferCond acquire_ctx;
   C_SaferCond ctx;
@@ -498,6 +503,7 @@ TEST_F(TestMockExclusiveLockPostAcquireRequest, OpenObjectMapTooBig) {
   expect_open_journal(mock_image_ctx, mock_journal, 0);
   expect_get_journal_policy(mock_image_ctx, mock_journal_policy);
   expect_allocate_journal_tag(mock_image_ctx, mock_journal_policy, 0);
+  expect_test_features(mock_image_ctx, RBD_FEATURE_IMAGE_CACHE, false);
 
   C_SaferCond acquire_ctx;
   C_SaferCond ctx;

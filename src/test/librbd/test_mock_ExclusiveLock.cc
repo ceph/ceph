@@ -228,7 +228,7 @@ public:
     EXPECT_CALL(*mock_image_ctx.io_work_queue, block_writes(_))
                   .WillOnce(CompleteContext(0, mock_image_ctx.image_ctx->op_work_queue));
     if (mock_image_ctx.clone_copy_on_read ||
-        (mock_image_ctx.features & RBD_FEATURE_JOURNALING) != 0) {
+        (mock_image_ctx.features & RBD_FEATURES_REQUIRE_LOCK_BOTH) != 0) {
       expect_set_require_lock(mock_image_ctx, io::DIRECTION_BOTH, true);
     } else {
       expect_set_require_lock(mock_image_ctx, io::DIRECTION_WRITE, true);

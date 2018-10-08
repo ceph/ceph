@@ -6,6 +6,10 @@ function(add_ceph_test test_name test_path)
   if(TARGET ${test_name})
     add_dependencies(tests ${test_name})
   endif()
+  set(PMEM_FORCE "0")
+  if(WITH_RWL)
+    set(PMEM_FORCE "1")
+  endif(WITH_RWL)
   set_property(TEST
     ${test_name}
     PROPERTY ENVIRONMENT 
@@ -15,6 +19,7 @@ function(add_ceph_test test_name test_path)
     CEPH_BUILD_DIR=${CMAKE_BINARY_DIR}
     LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/lib
     PATH=${CMAKE_RUNTIME_OUTPUT_DIRECTORY}:${CMAKE_SOURCE_DIR}/src:$ENV{PATH}
+    PMEM_IS_PMEM_FORCE=${PMEM_FORCE}
     PYTHONPATH=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/cython_modules/lib.${PYTHON${PYTHON_VERSION}_VERSION_MAJOR}:${CMAKE_SOURCE_DIR}/src/pybind
     CEPH_BUILD_VIRTUALENV=${CEPH_BUILD_VIRTUALENV})
   # none of the tests should take more than 1 hour to complete

@@ -6,6 +6,7 @@
 #include "common/errno.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/ImageState.h"
 #include "librbd/Utils.h"
 #include "librbd/cache/ObjectCacherObjectDispatch.h"
 #include "librbd/cache/WriteAroundObjectDispatch.h"
@@ -299,18 +300,19 @@ Context *OpenRequest<I>::handle_v2_get_initial_metadata(int *result) {
     return nullptr;
   }
 
-  if (m_image_ctx->test_features(RBD_FEATURE_STRIPINGV2)) {
-    send_v2_get_stripe_unit_count();
-  } else {
-    send_v2_get_create_timestamp();
-  }
-
+  send_v2_get_stripe_unit_count();
   return nullptr;
 }
 
 template <typename I>
 void OpenRequest<I>::send_v2_get_stripe_unit_count() {
   CephContext *cct = m_image_ctx->cct;
+
+  if (!m_image_ctx->test_features(RBD_FEATURE_STRIPINGV2)) {
+    send_v2_get_image_cache_state();
+    return;
+  }
+
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
   librados::ObjectReadOperation op;
@@ -342,6 +344,60 @@ Context *OpenRequest<I>::handle_v2_get_stripe_unit_count(int *result) {
 
   if (*result < 0) {
     lderr(cct) << "failed to read striping metadata: " << cpp_strerror(*result)
+               << dendl;
+    send_close_image(*result);
+    return nullptr;
+  }
+
+  send_v2_get_image_cache_state();
+  return nullptr;
+}
+
+template <typename I>
+void OpenRequest<I>::send_v2_get_image_cache_state() {
+  CephContext *cct = m_image_ctx->cct;
+
+  if (!m_image_ctx->test_features(RBD_FEATURE_IMAGE_CACHE)) {
+    send_v2_get_create_timestamp();
+    return;
+  }
+
+  ldout(cct, 10) << this << " " << __func__ << dendl;
+
+  librados::ObjectReadOperation op;
+  cls_client::get_image_cache_state_start(&op);
+
+  using klass = OpenRequest<I>;
+  librados::AioCompletion *comp = create_rados_callback<
+    klass, &klass::handle_v2_get_image_cache_state>(this);
+  m_out_bl.clear();
+  m_image_ctx->md_ctx.aio_operate(m_image_ctx->header_oid, comp, &op,
+                                  &m_out_bl);
+  comp->release();
+}
+
+template <typename I>
+Context *OpenRequest<I>::handle_v2_get_image_cache_state(int *result) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << __func__ << ": r=" << *result << dendl;
+
+  if (*result == 0) {
+    auto it = m_out_bl.cbegin();
+    *result = cls_client::get_image_cache_state_finish(
+      &it, &m_image_ctx->image_cache_state);
+  }
+
+  ldout(cct, 10) << __func__ << " result=" << *result << dendl;
+  if (*result == 0) {
+    ldout(cct, 10) << __func__ << " image_cache_state=" << m_image_ctx->image_cache_state << dendl;
+  }
+
+  if (*result == -ENOEXEC || *result == -EINVAL) {
+    *result = 0;
+  }
+
+  if (*result < 0) {
+    lderr(cct) << "failed to read image cache state: " << cpp_strerror(*result)
                << dendl;
     send_close_image(*result);
     return nullptr;
@@ -517,7 +573,7 @@ Context *OpenRequest<I>::handle_refresh(int *result) {
 
 template <typename I>
 Context *OpenRequest<I>::send_init_cache(int *result) {
-  // cache is disabled or parent image context
+  // cache is disabled or this is a parent image context
   if (!m_image_ctx->cache || m_image_ctx->child != nullptr) {
     return send_register_watch(result);
   }
@@ -593,7 +649,7 @@ Context *OpenRequest<I>::send_set_snap(int *result) {
   if (m_image_ctx->snap_name.empty() &&
       m_image_ctx->open_snap_id == CEPH_NOSNAP) {
     *result = 0;
-    return finalize(*result);
+    return m_on_finish;
   }
 
   CephContext *cct = m_image_ctx->cct;
@@ -640,14 +696,12 @@ Context *OpenRequest<I>::finalize(int r) {
   if (r == 0) {
     auto io_scheduler_cfg =
       m_image_ctx->config.template get_val<std::string>("rbd_io_scheduler");
-
     if (io_scheduler_cfg == "simple" && !m_image_ctx->read_only) {
       auto io_scheduler =
-        io::SimpleSchedulerObjectDispatch<I>::create(m_image_ctx);
+	io::SimpleSchedulerObjectDispatch<I>::create(m_image_ctx);
       io_scheduler->init();
     }
   }
-
   return m_on_finish;
 }
 
@@ -683,3 +737,7 @@ Context *OpenRequest<I>::handle_close_image(int *result) {
 } // namespace librbd
 
 template class librbd::image::OpenRequest<librbd::ImageCtx>;
+
+/* Local Variables: */
+/* eval: (c-set-offset 'innamespace 0) */
+/* End: */

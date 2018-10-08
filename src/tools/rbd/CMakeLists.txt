@@ -46,7 +46,8 @@ set(rbd_srcs
   action/Sparsify.cc
   action/Status.cc
   action/Trash.cc
-  action/Watch.cc)
+  action/Watch.cc
+  action/ImageCache.cc)
 
 add_executable(rbd ${rbd_srcs}
   $<TARGET_OBJECTS:common_texttable_obj>)

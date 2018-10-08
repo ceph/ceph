@@ -45,6 +45,9 @@ private:
    * WAIT_FOR_OPS
    *    |
    *    v
+   * SHUT_DOWN_IMAGE_CACHE
+   *    |
+   *    v
    * INVALIDATE_CACHE
    *    |
    *    v
@@ -86,6 +89,9 @@ private:
 
   void send_wait_for_ops();
   void handle_wait_for_ops(int r);
+
+  void send_shut_down_image_cache();
+  void handle_shut_down_image_cache(int r);
 
   void send_invalidate_cache();
   void handle_invalidate_cache(int r);

@@ -16,7 +16,7 @@
 
 namespace librbd {
 
-class ImageCtx;
+struct ImageCtx;
 
 namespace util {
 namespace detail {
@@ -197,6 +197,13 @@ public:
       return;
     }
     m_on_finish = on_finish;
+  }
+
+  friend std::ostream &operator<<(std::ostream &os,
+				  const AsyncOpTracker &t) {
+    os << "refs=" << t.m_refs << ", "
+       << "on_finish=" << t.m_on_finish;
+    return os;
   }
 
 private:

@@ -23,6 +23,11 @@ using ::testing::StrEq;
 class TestMockObjectMapSnapshotRemoveRequest : public TestMockFixture {
 public:
   void expect_load_map(librbd::ImageCtx *ictx, uint64_t snap_id, int r) {
+    if (ictx->test_features(RBD_FEATURE_IMAGE_CACHE)) {
+      EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
+		  exec(ictx->header_oid, _, StrEq("rbd"), StrEq("image_cache_state_set"), _, _, _))
+	.WillOnce(DoDefault());
+    }
     std::string snap_oid(ObjectMap<>::object_map_name(ictx->id, snap_id));
     if (r < 0) {
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
@@ -81,6 +86,12 @@ TEST_F(TestMockObjectMapSnapshotRemoveRequest, Success) {
   if (ictx->test_features(RBD_FEATURE_FAST_DIFF)) {
     expect_load_map(ictx, snap_id, 0);
     expect_remove_snapshot(ictx, 0);
+  } else {
+    if (ictx->test_features(RBD_FEATURE_IMAGE_CACHE)) {
+      EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
+		  exec(ictx->header_oid, _, StrEq("rbd"), StrEq("image_cache_state_set"), _, _, _))
+	.WillOnce(DoDefault());
+    }
   }
   expect_remove_map(ictx, snap_id, 0);
 
@@ -235,6 +246,12 @@ TEST_F(TestMockObjectMapSnapshotRemoveRequest, RemoveMapMissing) {
   if (ictx->test_features(RBD_FEATURE_FAST_DIFF)) {
     expect_load_map(ictx, snap_id, 0);
     expect_remove_snapshot(ictx, 0);
+  } else {
+    if (ictx->test_features(RBD_FEATURE_IMAGE_CACHE)) {
+      EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
+		  exec(ictx->header_oid, _, StrEq("rbd"), StrEq("image_cache_state_set"), _, _, _))
+	.WillOnce(DoDefault());
+    }
   }
   expect_remove_map(ictx, snap_id, -ENOENT);
 
@@ -265,6 +282,12 @@ TEST_F(TestMockObjectMapSnapshotRemoveRequest, RemoveMapError) {
   if (ictx->test_features(RBD_FEATURE_FAST_DIFF)) {
     expect_load_map(ictx, snap_id, 0);
     expect_remove_snapshot(ictx, 0);
+  } else {
+    if (ictx->test_features(RBD_FEATURE_IMAGE_CACHE)) {
+      EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
+		  exec(ictx->header_oid, _, StrEq("rbd"), StrEq("image_cache_state_set"), _, _, _))
+	.WillOnce(DoDefault());
+    }
   }
   expect_remove_map(ictx, snap_id, -EINVAL);
 

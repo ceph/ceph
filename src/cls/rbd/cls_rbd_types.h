@@ -555,6 +555,7 @@ struct GroupSnapshot {
   static void generate_test_instances(std::list<GroupSnapshot *> &o);
 };
 WRITE_CLASS_ENCODER(GroupSnapshot);
+
 enum TrashImageSource {
   TRASH_IMAGE_SOURCE_USER = 0,
   TRASH_IMAGE_SOURCE_MIRRORING = 1,
@@ -784,6 +785,143 @@ inline void decode(AssertSnapcSeqState &state, bufferlist::const_iterator& it) {
 }
 
 std::ostream& operator<<(std::ostream& os, const AssertSnapcSeqState& state);
+
+enum ImageCacheType {
+  IMAGE_CACHE_TYPE_PASSTHROUGH = 1,
+  IMAGE_CACHE_TYPE_RWL = 2,
+  IMAGE_CACHE_TYPE_UNKNOWN = 3,
+};
+
+inline std::ostream& operator<<(std::ostream& os,
+                                const ImageCacheType& type) {
+  switch (type) {
+  case IMAGE_CACHE_TYPE_PASSTHROUGH:
+    os << "passthrough";
+    break;
+  case IMAGE_CACHE_TYPE_RWL:
+    os << "rwl";
+    break;
+  default:
+    os << "unknown (" << static_cast<uint32_t>(type) << ")";
+    break;
+  }
+  return os;
+}
+
+inline void encode(const ImageCacheType &type, bufferlist& bl) {
+  using ceph::encode;
+  encode(static_cast<uint8_t>(type), bl);
+}
+
+inline void decode(ImageCacheType &type, bufferlist::const_iterator& it) {
+  uint8_t int_type;
+  using ceph::decode;
+  decode(int_type, it);
+  type = static_cast<ImageCacheType>(int_type);
+}
+
+struct UnknownImageCacheSpec {
+  static const ImageCacheType IMAGE_CACHE_TYPE =
+    IMAGE_CACHE_TYPE_UNKNOWN;
+
+  UnknownImageCacheSpec() {}
+
+  void encode(bufferlist& bl) const {}
+  void decode(bufferlist::const_iterator& it) {}
+
+  void dump(Formatter *f) const {}
+
+  static void generate_test_instances(std::list<UnknownImageCacheSpec*> &o);
+};
+
+struct PassthroughImageCacheSpec {
+  static const ImageCacheType IMAGE_CACHE_TYPE =
+    IMAGE_CACHE_TYPE_PASSTHROUGH;
+
+  PassthroughImageCacheSpec() {}
+
+  void encode(bufferlist& bl) const {}
+  void decode(bufferlist::const_iterator& it) {}
+
+  void dump(Formatter *f) const {}
+
+  static void generate_test_instances(std::list<PassthroughImageCacheSpec*> &o);
+};
+
+struct ReplicatedWriteLogSpec {
+  static const ImageCacheType IMAGE_CACHE_TYPE =
+    IMAGE_CACHE_TYPE_RWL;
+
+  ReplicatedWriteLogSpec() {}
+
+  ReplicatedWriteLogSpec(const string &_host,
+			 const string &_path,
+			 uint64_t _size,
+			 bool _invalidate_on_flush)
+    : host(_host), path(_path), size(_size),
+      invalidate_on_flush(_invalidate_on_flush) {}
+
+  string host;
+  string path;
+  uint64_t size = 0;
+  bool invalidate_on_flush = false;
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::const_iterator& it);
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(std::list<ReplicatedWriteLogSpec*> &o);
+};
+
+std::ostream& operator<<(std::ostream& os, const UnknownImageCacheSpec& ics);
+std::ostream& operator<<(std::ostream& os, const PassthroughImageCacheSpec& ics);
+std::ostream& operator<<(std::ostream& os, const ReplicatedWriteLogSpec& ics);
+
+typedef boost::variant<PassthroughImageCacheSpec,
+                       ReplicatedWriteLogSpec,
+		       UnknownImageCacheSpec> ImageCacheSpecVariant;
+
+struct ImageCacheSpec : public ImageCacheSpecVariant {
+  ImageCacheSpec() {
+  }
+
+  template <typename T>
+  ImageCacheSpec(T&& t) : ImageCacheSpecVariant(std::forward<T>(t)) {
+  }
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::const_iterator& it);
+  void dump(Formatter *f) const;
+
+  static void generate_test_instances(std::list<ImageCacheSpec*> &o);
+};
+WRITE_CLASS_ENCODER(ImageCacheSpec);
+
+ImageCacheType get_image_cache_spec_type(const ImageCacheSpec& ic);
+
+struct ImageCacheState {
+  bool present = false;
+  bool empty = true;
+  bool clean = true;
+
+  ImageCacheState() {}
+  ImageCacheState(bool _present, bool _empty, bool _clean) :
+    present(_present), empty(_empty), clean(_clean) {}
+  ImageCacheState(bool _present, bool _empty, bool _clean, vector<ImageCacheSpec> &&_layers) :
+    present(_present), empty(_empty), clean(_clean), layers(std::move(_layers)) {}
+
+  vector<ImageCacheSpec> layers;
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::const_iterator& it);
+  void dump(Formatter *f) const;
+  bool enabled() { return(0 != layers.size()); }
+
+  static void generate_test_instances(std::list<ImageCacheState *> &o);
+};
+WRITE_CLASS_ENCODER(ImageCacheState);
+
+std::ostream& operator<<(std::ostream& os, const ImageCacheState& ics);
 
 } // namespace rbd
 } // namespace cls

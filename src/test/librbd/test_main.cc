@@ -5,6 +5,7 @@
 #include "global/global_context.h"
 #include "test/librados/test.h"
 #include "test/librados/test_cxx.h"
+#include "test_support.h"
 #include "gtest/gtest.h"
 #include <iostream>
 #include <string>
@@ -23,12 +24,28 @@ extern void register_test_mirroring_watcher();
 extern void register_test_object_map();
 extern void register_test_operations();
 extern void register_test_trash();
+#if defined(WITH_RWL)
+extern void register_test_blockguard();
+extern void register_test_write_log_map();
+#endif //defined(WITH_RWL)
 #endif // TEST_LIBRBD_INTERNALS
 
 int main(int argc, char **argv)
 {
   setenv("RBD_FORCE_ALLOW_V1","1",1);
+#if defined(WITH_RWL)
+  /* Disable actual PMDK persistence guarantees for unit tests */
+  setenv("PMEM_IS_PMEM_FORCE","1",1);
+#else
+  uint64_t features;
 
+  if (get_features(&features)) {
+    if (features & RBD_FEATURE_IMAGE_CACHE) {
+      std::cout << "RBD_FEATURE_IMAGE_CACHE not supported in this build. No tests run." << std::endl;
+      return 0;
+    }
+  }
+#endif
   register_test_librbd();
 #ifdef TEST_LIBRBD_INTERNALS
   register_test_deep_copy();
@@ -43,6 +60,10 @@ int main(int argc, char **argv)
   register_test_object_map();
   register_test_operations();
   register_test_trash();
+#if defined(WITH_RWL)
+  register_test_blockguard();
+  register_test_write_log_map();
+#endif //defined(WITH_RWL)
 #endif // TEST_LIBRBD_INTERNALS
 
   ::testing::InitGoogleTest(&argc, argv);

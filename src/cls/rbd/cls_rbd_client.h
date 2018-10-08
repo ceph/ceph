@@ -588,6 +588,15 @@ int namespace_list_finish(bufferlist::const_iterator *it,
 int namespace_list(librados::IoCtx *ioctx,
                    const std::string &start, uint64_t max_return,
                    std::list<std::string> *entries);
+void get_image_cache_state_start(librados::ObjectReadOperation *op);
+int get_image_cache_state_finish(bufferlist::const_iterator *it,
+				 cls::rbd::ImageCacheState *ics);
+int get_image_cache_state(librados::IoCtx *ioctx, const std::string &oid,
+			  cls::rbd::ImageCacheState *ics);
+int set_image_cache_state(librados::IoCtx *ioctx, const std::string &oid,
+			  const cls::rbd::ImageCacheState &ics);
+void set_image_cache_state(librados::ObjectWriteOperation *op,
+			   const cls::rbd::ImageCacheState &ics);
 
 // operations on data objects
 int assert_snapc_seq(librados::IoCtx *ioctx, const std::string &oid,

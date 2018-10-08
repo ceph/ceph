@@ -902,5 +902,208 @@ std::ostream& operator<<(std::ostream& os, const AssertSnapcSeqState& state) {
   return os;
 }
 
+void PassthroughImageCacheSpec::generate_test_instances(std::list<PassthroughImageCacheSpec*> &o) {
+  o.push_back(new PassthroughImageCacheSpec());
+}
+
+std::ostream& operator<<(std::ostream& os, const PassthroughImageCacheSpec& ics) {
+  os << "[" << IMAGE_CACHE_TYPE_PASSTHROUGH << "]";
+  return os;
+}
+
+void UnknownImageCacheSpec::generate_test_instances(std::list<UnknownImageCacheSpec*> &o) {
+  o.push_back(new UnknownImageCacheSpec());
+}
+
+std::ostream& operator<<(std::ostream& os, const UnknownImageCacheSpec& ics) {
+  os << "[" << IMAGE_CACHE_TYPE_UNKNOWN << "]";
+  return os;
+}
+
+void ReplicatedWriteLogSpec::encode(bufferlist& bl) const {
+  ENCODE_START(1, 1, bl);
+  encode(host, bl);
+  encode(path, bl);
+  encode(size, bl);
+  encode(invalidate_on_flush, bl);
+  ENCODE_FINISH(bl);
+}
+
+void ReplicatedWriteLogSpec::decode(bufferlist::const_iterator& it) {
+  DECODE_START(1, it);
+  decode(host, it);
+  decode(path, it);
+  decode(size, it);
+  decode(invalidate_on_flush, it);
+  DECODE_FINISH(it);
+}
+
+void ReplicatedWriteLogSpec::dump(Formatter *f) const {
+  f->dump_string("host", host);
+  f->dump_string("path", path);
+  f->dump_unsigned("size", size);
+  f->dump_bool("invalidate_on_flush", invalidate_on_flush);
+}
+
+void ReplicatedWriteLogSpec::generate_test_instances(std::list<ReplicatedWriteLogSpec*> &o) {
+  o.push_back(new ReplicatedWriteLogSpec("host_a", "path_a", 1024*1024, true));
+  o.push_back(new ReplicatedWriteLogSpec("host_a", "path_b", 2*1024*1024, false));
+}
+
+std::ostream& operator<<(std::ostream& os, const ReplicatedWriteLogSpec& ics) {
+  os << "[" << IMAGE_CACHE_TYPE_RWL << ", ";
+  os << "host=" << ics.host << ", ";
+  os << "path=" << ics.path << ", ";
+  os << "size=" << ics.size << ", ";
+  os << "invalidate_on_flush=" << ics.invalidate_on_flush;
+  os << "]";
+  return os;
+}
+
+class EncodeImageCacheSpecVisitor : public boost::static_visitor<void> {
+public:
+  explicit EncodeImageCacheSpecVisitor(bufferlist &bl) : m_bl(bl) {
+  }
+
+  template <typename T>
+  inline void operator()(const T& t) const {
+    using ceph::encode;
+    encode(static_cast<uint32_t>(T::IMAGE_CACHE_TYPE), m_bl);
+    t.encode(m_bl);
+  }
+
+private:
+  bufferlist &m_bl;
+};
+
+class DecodeImageCacheSpecVisitor : public boost::static_visitor<void> {
+public:
+  DecodeImageCacheSpecVisitor(bufferlist::const_iterator &iter)
+    : m_iter(iter) {
+  }
+
+  template <typename T>
+  inline void operator()(T& t) const {
+    t.decode(m_iter);
+  }
+private:
+  bufferlist::const_iterator &m_iter;
+};
+
+class DumpImageCacheSpecVisitor : public boost::static_visitor<void> {
+public:
+  explicit DumpImageCacheSpecVisitor(Formatter *formatter, const std::string &key)
+    : m_formatter(formatter), m_key(key) {}
+
+  template <typename T>
+  inline void operator()(const T& t) const {
+    auto type = T::IMAGE_CACHE_TYPE;
+    m_formatter->dump_string(m_key.c_str(), stringify(type));
+    t.dump(m_formatter);
+  }
+private:
+  ceph::Formatter *m_formatter;
+  std::string m_key;
+};
+
+class GetImageCacheTypeVisitor : public boost::static_visitor<ImageCacheType> {
+public:
+  template <typename T>
+  inline ImageCacheType operator()(const T&) const {
+    return static_cast<ImageCacheType>(T::IMAGE_CACHE_TYPE);
+  }
+};
+
+ImageCacheType get_image_cache_spec_type(
+    const ImageCacheSpec& ics) {
+  return static_cast<ImageCacheType>(boost::apply_visitor(
+    GetImageCacheTypeVisitor(), ics));
+}
+
+void ImageCacheSpec::encode(bufferlist& bl) const {
+  ENCODE_START(1, 1, bl);
+  boost::apply_visitor(EncodeImageCacheSpecVisitor(bl), *this);
+  ENCODE_FINISH(bl);
+}
+
+void ImageCacheSpec::decode(bufferlist::const_iterator &p)
+{
+  DECODE_START(1, p);
+  uint32_t type;
+  decode(type, p);
+  switch (type) {
+    case cls::rbd::IMAGE_CACHE_TYPE_PASSTHROUGH:
+      *this = PassthroughImageCacheSpec();
+      break;
+    case cls::rbd::IMAGE_CACHE_TYPE_RWL:
+      *this = ReplicatedWriteLogSpec();
+      break;
+    default:
+      *this = UnknownImageCacheSpec();
+      break;
+  }
+  boost::apply_visitor(DecodeImageCacheSpecVisitor(p), *this);
+  DECODE_FINISH(p);
+}
+
+void ImageCacheSpec::dump(Formatter *f) const {
+  boost::apply_visitor(
+    DumpImageCacheSpecVisitor(f, "image_cache_type"), *this);
+}
+
+void ImageCacheSpec::generate_test_instances(std::list<ImageCacheSpec*> &o) {
+  o.push_back(new ImageCacheSpec(PassthroughImageCacheSpec()));
+  o.push_back(new ImageCacheSpec(ReplicatedWriteLogSpec("host_a1", "path_a1", 3*1024*1024, false)));
+  o.push_back(new ImageCacheSpec(UnknownImageCacheSpec()));
+}
+
+void ImageCacheState::encode(bufferlist& bl) const {
+  ENCODE_START(1, 1, bl);
+  encode(present, bl);
+  encode(empty, bl);
+  encode(clean, bl);
+  encode(layers, bl);
+  ENCODE_FINISH(bl);
+}
+
+void ImageCacheState::decode(bufferlist::const_iterator& it) {
+  DECODE_START(1, it);
+  decode(present, it);
+  decode(empty, it);
+  decode(clean, it);
+  decode(layers, it);
+  DECODE_FINISH(it);
+}
+
+void ImageCacheState::dump(Formatter *f) const {
+  f->dump_bool("present", present);
+  f->dump_bool("empty", empty);
+  f->dump_bool("clean", clean);
+}
+
+void ImageCacheState::generate_test_instances(std::list<ImageCacheState*> &o) {
+  o.push_back(new ImageCacheState(true, true, true));
+  o.push_back(new ImageCacheState(true, true, true, {PassthroughImageCacheSpec()}));
+  o.push_back(new ImageCacheState(true, true, true,
+				  {ReplicatedWriteLogSpec("host_a1", "path_a1", 3*1024*1024, false)}));
+  o.push_back(new ImageCacheState(true, true, true,
+				  {ReplicatedWriteLogSpec("host_a2", "path_a2", 4*1024*1024, true),
+				   PassthroughImageCacheSpec()}));
+  o.push_back(new ImageCacheState(true, true, true,
+				  {ReplicatedWriteLogSpec("host_a3", "path_a3", 4*1024*1024, true),
+				   ReplicatedWriteLogSpec("host_a3", "path_b3", 40*1024*1024, false),
+				   PassthroughImageCacheSpec()}));
+}
+
+std::ostream& operator<<(std::ostream& os, const ImageCacheState& ics) {
+  os << "[";
+  os << "present=" << ics.present << ", ";
+  os << "empty=" << ics.empty << ", ";
+  os << "clean=" << ics.clean << ", ";
+  os << "layers=" << ics.layers;
+  os << "]";
+  return os;
+}
+
 } // namespace rbd
 } // namespace cls

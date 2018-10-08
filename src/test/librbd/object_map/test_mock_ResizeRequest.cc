@@ -30,6 +30,12 @@ public:
                     .WillOnce(DoDefault());
     }
 
+    if (ictx->test_features(RBD_FEATURE_IMAGE_CACHE) && (snap_id == CEPH_NOSNAP)) {
+      EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
+		  exec(ictx->header_oid, _, StrEq("rbd"), StrEq("image_cache_state_set"), _, _, _))
+	.WillOnce(DoDefault());
+    }
+
     if (r < 0) {
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
                   exec(oid, _, StrEq("rbd"), StrEq("object_map_resize"), _, _, _))

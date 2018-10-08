@@ -31,6 +31,7 @@
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/AsyncRequest.h"
 #include "librbd/Types.h"
+#include "librbd/cache/ImageCache.h"
 
 #include <boost/lockfree/policies.hpp>
 #include <boost/lockfree/queue.hpp>
@@ -52,7 +53,6 @@ namespace librbd {
   template <typename> class ObjectMap;
   template <typename> class Operations;
 
-  namespace cache { struct ImageCache; }
   namespace exclusive_lock { struct Policy; }
   namespace io {
   class AioCompletion;
@@ -85,7 +85,7 @@ namespace librbd {
     uint64_t snap_id;
     bool snap_exists; // false if our snap_id was deleted
     // whether the image was opened read-only. cannot be changed after opening
-    bool read_only;
+    const bool read_only;
 
     std::map<rados::cls::lock::locker_id_t,
 	     rados::cls::lock::locker_info_t> lockers;
@@ -148,7 +148,11 @@ namespace librbd {
 
     file_layout_t layout;
 
-    cache::ImageCache *image_cache = nullptr;
+    cls::rbd::ImageCacheState image_cache_state;
+    cache::ImageCache<ImageCtx> *image_cache = nullptr;
+    bool ignore_image_cache_init_failure = false;
+    bool image_cache_init_succeeded = false;
+    std::list<cache::ImageCache<ImageCtx>*> image_cache_layers; /* front layer on top */
 
     Readahead readahead;
     std::atomic<uint64_t> total_bytes_read = {0};
@@ -194,6 +198,15 @@ namespace librbd {
     uint64_t mirroring_replay_delay;
     uint64_t mtime_update_interval;
     uint64_t atime_update_interval;
+
+    bool rwl_enabled;
+    cls::rbd::ReplicatedWriteLogSpec *m_rwl_spec = nullptr;
+    bool rwl_remove_on_close;
+    bool rwl_log_stats_on_close;
+    bool rwl_log_periodic_stats;
+    bool rwl_invalidate_on_flush;
+    uint64_t rwl_size;
+    std::string rwl_path;
 
     LibrbdAdminSocketHook *asok_hook;
 

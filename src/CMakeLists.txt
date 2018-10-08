@@ -395,6 +395,73 @@ if(WITH_DPDK)
   list(APPEND ceph_common_deps common_async_dpdk)
 endif()
 
+if(WITH_PMDK)
+  # used in src/librbd/CMakeLists.txt and src/os/CMakeLists.txt
+  if(WITH_PMDK_PKG)
+    # Use installed libpmem-dev and libpmemobj-dev. This will make
+    # libpmem1 and libpmemobj1 build dependencies for Ceph, and install dependencies for
+    # anything that links to them (librbd).
+    find_package(libpmem-dev)
+    list(APPEND EXTRALIBS "pmem")
+    find_package(libpmemobj-dev)
+    list(APPEND EXTRALIBS "pmemobj")
+  else(WITH_PMDK_PKG)
+    # Use locally built and statically linked libpmem and libpmemobj
+
+    include(ExternalProject)
+    ExternalProject_Add(nvml_ext
+      DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/src/
+      GIT_REPOSITORY "https://github.com/ceph/nvml.git"
+      GIT_TAG "dd622819dd4ee97d3920f913c70be"
+      SOURCE_DIR ${CMAKE_BINARY_DIR}/src/nvml
+      CONFIGURE_COMMAND ""
+      # Explicitly built w/o NDCTL, otherwise if ndtcl is present on the
+      # build system tests statically linking to librbd (which uses
+      # libpmemobj) will not link (because we don't build the ndctl
+      # static library here).
+      BUILD_COMMAND $(MAKE) NDCTL_ENABLE=n
+      BUILD_IN_SOURCE 1
+      INSTALL_COMMAND "true")
+
+    ExternalProject_Add_Step(nvml_ext forcebuild
+      DEPENDEES configure
+      DEPENDERS build
+      COMMAND "true"
+      ALWAYS 1)
+
+    set(PMDK_ROOT "${CMAKE_BINARY_DIR}/src/nvml")
+    set(PMDK_SRC "${PMDK_ROOT}/src")
+    set(PMDK_INCLUDE "${PMDK_SRC}/include")
+
+    # Use debug PMDK libs in debug librbd builds
+    if(NOT CMAKE_BUILD_TYPE STREQUAL Debug)
+      set(PMDK_LIB_DIR "nondebug")
+    else()
+      set(PMDK_LIB_DIR "debug")
+    endif()
+
+    set(PMDK_LIB "${PMDK_SRC}/${PMDK_LIB_DIR}")
+
+    # Do this in your component CMake to use the PMDK headers built here
+    #target_include_directories(your_target SYSTEM PRIVATE "${PMDK_SRC}/include")
+
+    # libpmem
+    add_library(pmem STATIC IMPORTED GLOBAL)
+    add_dependencies(pmem nvml_ext)
+    set_target_properties(pmem PROPERTIES
+      IMPORTED_LOCATION "${PMDK_LIB}/libpmem.a"
+      INTERFACE_LINK_LIBRARIES ${CMAKE_THREAD_LIBS_INIT})
+
+    # libpmemobj
+    add_library(pmemobj STATIC IMPORTED GLOBAL)
+    add_dependencies(pmemobj nvml_ext)
+    set_target_properties(pmemobj PROPERTIES
+      IMPORTED_LOCATION "${PMDK_LIB}/libpmemobj.a"
+      INTERFACE_LINK_LIBRARIES ${CMAKE_THREAD_LIBS_INIT})
+    set(PMDK_STATIC_LIBS pmemobj pmem)
+  endif(WITH_PMDK_PKG)
+endif(WITH_PMDK)
+
 add_library(common STATIC ${ceph_common_objs})
 target_link_libraries(common ${ceph_common_deps})
 

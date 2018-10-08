@@ -1,7 +1,7 @@
 find_program(CTAGS_EXECUTABLE ctags)
 
 function(add_tags name)
-  cmake_parse_arguments(TAGS "" "SRC_DIR;TAG_FILE" "EXCLUDE_OPTS;EXCLUDES" ${ARGN})
+  cmake_parse_arguments(TAGS "" "SRC_DIR;TAG_FILE;EXECUTABLE_OPTIONS" "EXCLUDE_OPTS;EXCLUDES" ${ARGN})
   set(excludes ${TAGS_EXCLUDES})
   if(TAGS_EXCLUDE_OPTS)
     # always respect EXCLUDES_OPTS
@@ -31,9 +31,9 @@ function(add_tags name)
     list(APPEND exclude_args --exclude=${exclude})
   endforeach()
   add_custom_target(${name}
-    COMMAND ${CTAGS_EXECUTABLE} -R --c++-kinds=+p --fields=+iaS --extra=+q ${exclude_args}
+    COMMAND ${CTAGS_EXECUTABLE} ${TAGS_EXECUTABLE_OPTIONS} -R --c++-kinds=+p --fields=+iaS --extra=+q ${exclude_args}
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/${TAGS_SRC_DIR}
-    COMMENT "Building ctags file ${TAGS_TAG_FILE}"
+    COMMENT "Building ctags file ${TAGS_TAG_FILE} (${CTAGS_EXECUTABLE} ${TAGS_EXECUTABLE_OPTIONS})"
     VERBATIM)
   set_source_files_properties(${CMAKE_SOURCE_DIR}/${TAGS_TAG_FILE} PROPERTIES
     GENERATED true)

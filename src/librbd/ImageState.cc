@@ -7,12 +7,16 @@
 #include "common/errno.h"
 #include "common/Cond.h"
 #include "common/WorkQueue.h"
+#include "common/hostname.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
 #include "librbd/image/CloseRequest.h"
 #include "librbd/image/OpenRequest.h"
 #include "librbd/image/RefreshRequest.h"
 #include "librbd/image/SetSnapRequest.h"
+#include "librbd/cache/ImageCache.h"
+#include "librbd/cache/ImageWriteback.h"
+#include "librbd/cache/ReplicatedWriteLog.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -734,6 +738,232 @@ void ImageState<I>::send_prepare_lock_unlock() {
 
   // wake up the lock handler now that its safe to proceed
   on_ready->complete(0);
+}
+
+template <typename I>
+void ImageState<I>::init_image_cache(Context *on_finish) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 20) << __func__ << dendl;
+
+#if defined(WITH_RWL)
+  // {
+  //   /* This must (?) be called during exclusive lock acquire */
+  //   Mutex::Locker locker(m_lock);
+  //   ceph_assert(STATE_PREPARING_LOCK == m_state);
+  // }
+
+  bool image_cache_state_modified = false;
+  bool cache_exists = m_image_ctx->image_cache_state.present;
+  bool cache_desired = m_image_ctx->test_features(RBD_FEATURE_IMAGE_CACHE) && m_image_ctx->rwl_enabled;
+
+  /* Avoid creating a cache in certain cases */
+  cache_desired &= !m_image_ctx->read_only;
+  cache_desired &= !m_image_ctx->test_features(RBD_FEATURE_MIGRATING);
+  cache_desired &= !m_image_ctx->old_format;
+
+  if (!(cache_exists || cache_desired)) {
+    ldout(cct, 20) << __func__ << " Image cache not used" << dendl;
+    on_finish->complete(0);
+    return;
+  }
+
+  /* Find the layer with the RWL */
+  cls::rbd::ReplicatedWriteLogSpec *rwl_spec = nullptr;
+  for (auto spec_it = m_image_ctx->image_cache_state.layers.begin();
+       spec_it != m_image_ctx->image_cache_state.layers.end();) {
+    if (cls::rbd::get_image_cache_spec_type(*spec_it) == cls::rbd::IMAGE_CACHE_TYPE_RWL) {
+      /* Only one layer of RWL is supported */
+      ldout(cct, 20) << __func__ << " Found RWL in image cache state: "
+		     << boost::get<cls::rbd::ReplicatedWriteLogSpec>(*spec_it) << dendl;
+      if (rwl_spec == nullptr) {
+	rwl_spec = &boost::get<cls::rbd::ReplicatedWriteLogSpec>(*spec_it);
+      } else {
+	ldout(cct, 20) << __func__ << " Removing extra RWL config spec" << dendl;
+	spec_it = m_image_ctx->image_cache_state.layers.erase(spec_it);
+	continue;
+      }
+    }
+    ++spec_it;
+  }
+
+  /* Record RWL config for image if no RWL config is recorded,
+     or there was no cache left behind by the last opener. */
+  if (cache_desired && (!rwl_spec || !m_image_ctx->image_cache_state.present)) {
+    auto rwl_conf = cls::rbd::ReplicatedWriteLogSpec(ceph_get_short_hostname(),
+						     m_image_ctx->rwl_path,
+						     m_image_ctx->rwl_size,
+						     m_image_ctx->rwl_invalidate_on_flush);
+    if (!rwl_spec) {
+      ldout(cct, 20) << __func__ << " Initializing RWL config in state" << dendl;
+      m_image_ctx->image_cache_state.layers.push_back({rwl_conf});
+    } else {
+      ldout(cct, 20) << __func__ << " Adjusting RWL config in state" << dendl;
+      *rwl_spec = rwl_conf;
+    }
+    image_cache_state_modified = true;
+  } else {
+    /* Use the saved config if it's there */
+    ldout(cct, 20) << __func__ << " Using RWL config from state" << dendl;
+    ceph_assert(cls::rbd::get_image_cache_spec_type(*rwl_spec) == cls::rbd::IMAGE_CACHE_TYPE_RWL);
+    m_image_ctx->rwl_path = rwl_spec->path;
+    m_image_ctx->rwl_size = rwl_spec->size;
+    m_image_ctx->rwl_invalidate_on_flush = rwl_spec->invalidate_on_flush;
+    /* TODO: If these are different, shut down the existing cache and re-init with new params */
+  }
+
+  if (m_image_ctx->image_cache_state.present &&
+      (rwl_spec->host.compare(ceph_get_short_hostname()) != 0)) {
+    auto cleanstring = "dirty";
+    if (m_image_ctx->image_cache_state.clean) {
+      cleanstring = "clean";
+    }
+    if (!m_image_ctx->ignore_image_cache_init_failure) {
+      lderr(cct) << "An image cache (RWL) remains on host " << rwl_spec->host
+                 << " which is " << cleanstring
+                 << ". Flush/close the image there to remove the image cache" << dendl;
+    }
+    on_finish->complete(-ENOENT);
+    return;
+  }
+
+  ceph_assert(!m_image_ctx->old_format);
+  if (!cache_desired) {
+    ldout(cct, 4) << "Existing image cache must be initialized" << dendl;
+  } else {
+    ldout(cct, 20) << __func__ << " Image configured to use image cache" << dendl;
+  }
+
+  m_image_ctx->m_rwl_spec = rwl_spec;
+  m_image_ctx->image_cache_layers.clear();
+  cache::ImageCache<I> *layer = nullptr;
+  /* Don't create ImageWriteback unless there's at least one ImageCache enabled */
+  layer = new cache::ImageWriteback<I>(*m_image_ctx);
+  m_image_ctx->image_cache = layer;
+  /* An ImageCache below RWL would be created here */
+  ldout(cct, 4) << this << " " << __func__ << " RWL enabled" << dendl;
+  layer = new cache::ReplicatedWriteLog<I>(*m_image_ctx, layer);
+  m_image_ctx->image_cache = layer;
+  m_image_ctx->image_cache_layers.push_front(layer);
+  Context *ctx = on_finish;
+  ctx = new FunctionContext(
+    [this, ctx, image_cache_state_modified](int r) {
+      if (r < 0) {
+	ctx->complete(r);
+      } else {
+	ldout(m_image_ctx->cct, 20) << __func__ << " All image caches initialized" << dendl;
+	update_image_cache_state(ctx, image_cache_state_modified);
+      }
+    });
+  ldout(cct, 20) << __func__ << " Initializing image caches" << dendl;
+  m_image_ctx->image_cache->init(ctx);
+  return;
+#else //defined(WITH_RWL)
+  m_image_ctx->image_cache = nullptr;
+  on_finish->complete(0);
+#endif //defined(WITH_RWL)
+}
+
+template <typename I>
+void ImageState<I>::shut_down_image_cache(Context *on_finish) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << this << " " << __func__ << dendl;
+
+#if defined(WITH_RWL)
+  if (m_image_ctx->image_cache == nullptr) {
+    on_finish->complete(0);
+    return;
+  }
+
+  Context *ctx = on_finish;
+  ctx = new FunctionContext(
+    [this, ctx](int r) {
+      if (r < 0) {
+	ctx->complete(r);
+      } else {
+	m_image_ctx->image_cache_layers.clear();
+	delete m_image_ctx->image_cache;
+	m_image_ctx->image_cache = nullptr;
+	ctx->complete(0);
+      }
+    });
+  ctx = new FunctionContext(
+    [this, ctx](int r) {
+      m_image_ctx->op_work_queue->queue(ctx, r);
+    });
+  ctx = new FunctionContext(
+    [this, ctx](int r) {
+      if (r < 0) {
+	ctx->complete(r);
+      } else {
+	update_image_cache_state(ctx);
+      }
+    });
+  ctx = new FunctionContext(
+    [this, ctx](int r) {
+      m_image_ctx->op_work_queue->queue(ctx, r);
+    });
+  m_image_ctx->image_cache->shut_down(ctx);
+#else //defined(WITH_RWL)
+  ceph_assert(m_image_ctx->image_cache == nullptr);
+  on_finish->complete(0);
+#endif //defined(WITH_RWL)
+}
+
+template <typename I>
+void ImageState<I>::update_image_cache_state(Context *on_finish, bool always_write) {
+  ldout(m_image_ctx->cct, 10) << this << " " << __func__ << dendl;
+#if defined(WITH_RWL)
+  bool changed = always_write;
+  bool any_present = false;
+  bool all_empty = true;
+  bool all_clean = true;
+
+  /* Collect states of all image caches and produce collective state */
+  for (auto &layer : m_image_ctx->image_cache_layers) {
+    bool present;
+    bool empty;
+    bool clean;
+    layer->get_state(clean, empty, present);
+    any_present |= present;
+    all_empty &= empty;
+    all_clean &= clean;
+  }
+
+  /* Detect collective state changes */
+  changed |= any_present != m_image_ctx->image_cache_state.present;
+  changed |= all_empty != m_image_ctx->image_cache_state.empty;
+  changed |= all_clean != m_image_ctx->image_cache_state.clean;
+
+  if (changed) {
+    ldout(m_image_ctx->cct, 10) << "state changed" << dendl;
+    m_image_ctx->image_cache_state.present = any_present;
+    m_image_ctx->image_cache_state.empty = all_empty;
+    m_image_ctx->image_cache_state.clean = all_clean;
+    write_image_cache_state(on_finish);
+  } else {
+    on_finish->complete(0);
+  }
+#else //defined(WITH_RWL)
+  ceph_assert(m_image_ctx->image_cache == nullptr);
+  on_finish->complete(0);
+#endif //defined(WITH_RWL)
+}
+
+template <typename I>
+void ImageState<I>::write_image_cache_state(Context *on_finish) {
+  ldout(m_image_ctx->cct, 10) << __func__ << " state=" << m_image_ctx->image_cache_state << dendl;
+#if defined(WITH_RWL)
+  librados::ObjectWriteOperation op;
+  librbd::cls_client::set_image_cache_state(&op, m_image_ctx->image_cache_state);
+
+  librados::AioCompletion *comp = librbd::util::create_rados_callback(on_finish);
+  int r = m_image_ctx->md_ctx.aio_operate(m_image_ctx->header_oid, comp, &op);
+  ceph_assert(r == 0);
+  comp->release();
+#else //defined(WITH_RWL)
+  ceph_assert(m_image_ctx->image_cache == nullptr);
+  on_finish->complete(0);
+#endif //defined(WITH_RWL)
 }
 
 } // namespace librbd

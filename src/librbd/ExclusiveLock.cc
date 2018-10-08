@@ -159,7 +159,7 @@ void ExclusiveLock<I>::handle_init_complete(uint64_t features) {
   {
     RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
     if (m_image_ctx.clone_copy_on_read ||
-        (features & RBD_FEATURE_JOURNALING) != 0) {
+        (features_require_lock_both(features))) {
       m_image_ctx.io_work_queue->set_require_lock(io::DIRECTION_BOTH, true);
     } else {
       m_image_ctx.io_work_queue->set_require_lock(io::DIRECTION_WRITE, true);

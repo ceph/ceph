@@ -267,6 +267,26 @@ if(WITH_BLUESTORE)
   endif()
 endif()
 
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "i386|i686|amd64|x86_64")
+  option(WITH_PMEM_DEVICE "Enable PMEM OSD" OFF)
+else()
+  # ARM64 PMDK support is still experimental
+  option(WITH_PMEM_DEVICE "Enable PMEM OSD" OFF)
+endif(CMAKE_SYSTEM_PROCESSOR MATCHES "i386|i686|amd64|x86_64")
+if(WITH_PMEM_DEVICE)
+  set(HAVE_PMEM_DEVICE ON)
+  if(NOT WITH_BLUESTORE)
+    message(SEND_ERROR "Please enable WITH_BLUESTORE for using PMEM OSD")
+  endif()
+endif()
+
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "i386|i686|amd64|x86_64")
+  option(WITH_RWL "Enable librbd persistent write back cache" ON)
+else()
+  # ARM64 PMDK support is still experimental
+  option(WITH_RWL "Enable librbd persistent write back cache" OFF)
+endif(CMAKE_SYSTEM_PROCESSOR MATCHES "i386|i686|amd64|x86_64")
+
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "i386|i686|amd64|x86_64|AMD64|aarch64")
   option(WITH_SPDK "Enable SPDK" ON)
 else()
@@ -281,21 +301,44 @@ if(WITH_SPDK)
   set(HAVE_SPDK TRUE)
 endif(WITH_SPDK)
 
-option(WITH_PMEM "Enable PMEM" OFF)
-if(WITH_PMEM)
-  set(HAVE_PMEM ON)
-  if(NOT WITH_BLUESTORE)
-    message(SEND_ERROR "Please enable WITH_BLUESTORE for using PMEM")
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "i386|i686|amd64|x86_64")
+  # NVML is now PMDK
+  if(WITH_RWL OR WITH_PMEM_DEVICE)
+    option(WITH_PMDK "Enable PMDK libraries" ON)
+  else()
+    option(WITH_PMDK "Enable PMDK libraries" ON)
+  endif(WITH_RWL OR WITH_PMEM_DEVICE)
+else()
+  # ARM64 PMDK support is still experimental
+  option(WITH_PMDK "Enable PMDK libraries" OFF)
+endif(CMAKE_SYSTEM_PROCESSOR MATCHES "i386|i686|amd64|x86_64")
+if(WITH_PMDK)
+  set(HAVE_PMDK ON)
+  if(NOT WITH_PMEM_DEVICE AND NOT WITH_RWL)
+    message(SEND_ERROR "Please enable WITH_PMEM_DEVICE or WITH_RWL for using PMDK libraries")
   endif()
+  option(WITH_PMDK_PKG "Use installed PMDK" OFF)
 endif()
 
 if(WITH_BLUESTORE)
-  if(NOT AIO_FOUND AND NOT HAVE_POSIXAIO AND NOT WITH_SPDK AND NOT WITH_PMEM)
+  if(NOT AIO_FOUND AND NOT HAVE_POSIXAIO AND NOT WITH_SPDK AND NOT WITH_PMEM_DEVICE)
     message(SEND_ERROR "WITH_BLUESTORE is ON, "
       "but none of the bluestore backends is enabled. "
-      "Please install libaio, or enable WITH_SPDK or WITH_PMEM (experimental)")
+      "Please install libaio, or enable WITH_SPDK or WITH_PMEM_DEVICE (experimental)")
   endif()
 endif()
+
+if(WITH_RWL)
+  if(NOT WITH_PMDK)
+    message(SEND_ERROR "WITH_RWL requires WITH_PMDK")
+  endif()
+endif(WITH_RWL)
+
+if(WITH_PMEM_DEVICE)
+  if(NOT WITH_PMDK)
+    message(SEND_ERROR "WITH_PMEM_DEVICE requires WITH_PMDK")
+  endif()
+endif(WITH_PMEM_DEVICE)
 
 option(WITH_BLUEFS "libbluefs library" OFF)
 
@@ -735,4 +778,10 @@ add_tags(ctags
   TAG_FILE tags
   EXCLUDE_OPTS ${CTAG_EXCLUDES}
   EXCLUDES "*.js" "*.css")
-add_custom_target(tags DEPENDS ctags)
+add_tags(etags
+  EXECUTABLE_OPTIONS "-e"
+  SRC_DIR src
+  TAG_FILE TAGS
+  EXCLUDE_OPTS ${CTAG_EXCLUDES}
+  EXCLUDES "*.js" "*.css")
+add_custom_target(tags DEPENDS ctags etags)

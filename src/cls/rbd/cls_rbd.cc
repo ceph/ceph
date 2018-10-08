@@ -795,14 +795,17 @@ int create(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   bufferlist object_prefixbl;
   bufferlist snap_seqbl;
   bufferlist timestampbl;
+  bufferlist image_cache_statebl;
   uint64_t snap_seq = 0;
   utime_t timestamp = ceph_clock_now();
+  cls::rbd::ImageCacheState image_cache_state{};
   encode(size, sizebl);
   encode(order, orderbl);
   encode(features, featuresbl);
   encode(object_prefix, object_prefixbl);
   encode(snap_seq, snap_seqbl);
   encode(timestamp, timestampbl);
+  encode(image_cache_state, image_cache_statebl);
 
   map<string, bufferlist> omap_vals;
   omap_vals["size"] = sizebl;
@@ -813,6 +816,7 @@ int create(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   omap_vals["create_timestamp"] = timestampbl;
   omap_vals["access_timestamp"] = timestampbl;
   omap_vals["modify_timestamp"] = timestampbl;
+  omap_vals["image_cache_state"] = image_cache_statebl;
 
   if ((features & RBD_FEATURE_OPERATIONS) != 0ULL) {
     CLS_ERR("Attempting to set internal feature: operations");
@@ -7259,6 +7263,118 @@ std::string name_from_key(const std::string &key) {
 } // namespace nspace
 
 /**
+ * get the image cache state
+ *
+ * Input:
+ * @param none
+ *
+ * Output:
+ * @param timestamp the image access timestamp
+ *
+ * @returns 0 on success, negative error code upon failure
+ */
+int get_image_cache_state(cls_method_context_t hctx, cls::rbd::ImageCacheState &image_cache_state)
+{
+  CLS_LOG(20, "get_image_cache_state");
+
+  bufferlist bl;
+  int r = cls_cxx_map_get_val(hctx, "image_cache_state", &bl);
+  if (r < 0) {
+    if (r != -ENOENT) {
+      CLS_ERR("error reading image_cache_state: %s", cpp_strerror(r).c_str());
+      return r;
+    }
+  } else {
+    try {
+      auto it = bl.cbegin();
+      decode(image_cache_state, it);
+    } catch (const buffer::error &err) {
+      CLS_ERR("could not decode image_cache_state");
+      return -EIO;
+    }
+  }
+  return 0;
+}
+
+/**
+ * get the image cache state
+ *
+ * Input:
+ * @param none
+ *
+ * Output:
+ * @param timestamp the image access timestamp
+ *
+ * @returns 0 on success, negative error code upon failure
+ */
+int image_cache_state_get(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  cls::rbd::ImageCacheState image_cache_state;
+  int r = get_image_cache_state(hctx, image_cache_state);
+  if (0 == r) {
+    encode(image_cache_state, *out);
+  }
+  return r;
+}
+
+/**
+ * Update the image cache state of an image
+ *
+ * Input:
+ * @param none
+ *
+ * Output:
+ * @returns 0 on success, negative error code on other error
+ */
+int set_image_cache_state(cls_method_context_t hctx, const cls::rbd::ImageCacheState& ics)
+{
+  int r = check_exists(hctx);
+  if(r < 0)
+    return r;
+
+  CLS_LOG(20, "set_image_cache_state present=%d empty=%d clean=%d layers=%d",
+	  ics.present, ics.empty, ics.clean, (unsigned int)ics.layers.size());
+  for (unsigned int layer=0; layer<ics.layers.size(); layer++) {
+    ostringstream oss;
+    oss << ics.layers[layer];
+    CLS_LOG(20, "layer %d: %s", layer, oss.str().c_str());
+  }
+
+  bufferlist bl;
+  encode(ics, bl);
+  r = cls_cxx_map_set_val(hctx, "image_cache_state", &bl);
+  if(r < 0) {
+    CLS_ERR("error setting image_cache_state");
+    return r;
+  }
+
+  return 0;
+}
+
+/**
+ * Update the image cache state of an image
+ *
+ * Input:
+ * @param none
+ *
+ * Output:
+ * @returns 0 on success, negative error code on other error
+ */
+int image_cache_state_set(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  cls::rbd::ImageCacheState image_cache_state;
+
+  try {
+    auto it = in->cbegin();
+    decode(image_cache_state, it);
+  } catch (const buffer::error &err) {
+    CLS_ERR("could not decode image_cache_state");
+    return -EIO;
+  }
+  return set_image_cache_state(hctx, image_cache_state);
+}
+
+/**
  * Add a namespace to the namespace directory.
  *
  * Input:
@@ -7555,6 +7671,8 @@ CLS_INIT(rbd)
   cls_method_handle_t h_migration_set_state;
   cls_method_handle_t h_migration_get;
   cls_method_handle_t h_migration_remove;
+  cls_method_handle_t h_image_cache_state_get;
+  cls_method_handle_t h_image_cache_state_set;
   cls_method_handle_t h_old_snapshots_list;
   cls_method_handle_t h_old_snapshot_add;
   cls_method_handle_t h_old_snapshot_remove;
@@ -7757,6 +7875,12 @@ CLS_INIT(rbd)
   cls_register_cxx_method(h_class, "migration_remove",
                           CLS_METHOD_RD | CLS_METHOD_WR,
                           migration_remove, &h_migration_remove);
+  cls_register_cxx_method(h_class, "image_cache_state_get",
+                          CLS_METHOD_RD,
+                          image_cache_state_get, &h_image_cache_state_get);
+  cls_register_cxx_method(h_class, "image_cache_state_set",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          image_cache_state_set, &h_image_cache_state_set);
 
   cls_register_cxx_method(h_class, "set_modify_timestamp",
 	            	  CLS_METHOD_RD | CLS_METHOD_WR,

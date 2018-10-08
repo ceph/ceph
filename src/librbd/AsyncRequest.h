@@ -10,7 +10,7 @@
 
 namespace librbd {
 
-class ImageCtx;
+struct ImageCtx;
 
 template <typename ImageCtxT = ImageCtx>
 class AsyncRequest

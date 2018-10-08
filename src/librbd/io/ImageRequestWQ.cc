@@ -28,14 +28,20 @@ namespace io {
 namespace {
 
 template <typename I>
-void flush_image(I& image_ctx, Context* on_finish) {
+#pragma push_macro("dout_prefix")
+#undef dout_prefix
+#define dout_prefix *_dout << __func__ << ": "
+void flush_image(I& image_ctx, Context* on_finish,
+		 librbd::io::FlushSource flush_source = librbd::io::FLUSH_SOURCE_INTERNAL) {
+  ldout(image_ctx.cct, 20) << "ictx=" << &image_ctx << " flush_source=" << flush_source << dendl;
   auto aio_comp = librbd::io::AioCompletion::create_and_start(
     on_finish, util::get_image_ctx(&image_ctx), librbd::io::AIO_TYPE_FLUSH);
   auto req = librbd::io::ImageDispatchSpec<I>::create_flush_request(
-    image_ctx, aio_comp, librbd::io::FLUSH_SOURCE_INTERNAL, {});
+    image_ctx, aio_comp, flush_source, {});
   req->send();
   delete req;
 }
+#pragma pop_macro("dout_prefix")
 
 } // anonymous namespace
 
@@ -246,7 +252,7 @@ int ImageRequestWQ<I>::flush() {
 
   C_SaferCond cond;
   AioCompletion *c = AioCompletion::create(&cond);
-  aio_flush(c, false);
+  aio_flush(c, false, FLUSH_SOURCE_INTERNAL);
 
   int r = cond.wait();
   if (r < 0) {
@@ -376,7 +382,7 @@ void ImageRequestWQ<I>::aio_discard(AioCompletion *c, uint64_t off,
 }
 
 template <typename I>
-void ImageRequestWQ<I>::aio_flush(AioCompletion *c, bool native_async) {
+void ImageRequestWQ<I>::aio_flush(AioCompletion *c, bool native_async, FlushSource flush_source) {
   CephContext *cct = m_image_ctx.cct;
   FUNCTRACE(cct);
   ZTracer::Trace trace;
@@ -400,10 +406,10 @@ void ImageRequestWQ<I>::aio_flush(AioCompletion *c, bool native_async) {
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   if (m_image_ctx.non_blocking_aio || writes_blocked() || !writes_empty()) {
     queue(ImageDispatchSpec<I>::create_flush_request(
-            m_image_ctx, c, FLUSH_SOURCE_USER, trace));
+            m_image_ctx, c, flush_source, trace));
   } else {
     c->start_op();
-    ImageRequest<I>::aio_flush(&m_image_ctx, c, FLUSH_SOURCE_USER, trace);
+    ImageRequest<I>::aio_flush(&m_image_ctx, c, flush_source, trace);
     finish_in_flight_io();
   }
   trace.event("finish");
@@ -510,7 +516,7 @@ void ImageRequestWQ<I>::shut_down(Context *on_shutdown) {
   }
 
   // ensure that all in-flight IO is flushed
-  flush_image(m_image_ctx, on_shutdown);
+  flush_image(m_image_ctx, on_shutdown, io::FLUSH_SOURCE_SHUTDOWN);
 }
 
 template <typename I>
@@ -521,7 +527,7 @@ int ImageRequestWQ<I>::block_writes() {
 }
 
 template <typename I>
-void ImageRequestWQ<I>::block_writes(Context *on_blocked) {
+void ImageRequestWQ<I>::block_writes(Context *on_blocked, io::FlushSource flush_source) {
   ceph_assert(m_image_ctx.owner_lock.is_locked());
   CephContext *cct = m_image_ctx.cct;
 
@@ -537,7 +543,7 @@ void ImageRequestWQ<I>::block_writes(Context *on_blocked) {
   }
 
   // ensure that all in-flight IO is flushed
-  flush_image(m_image_ctx, on_blocked);
+  flush_image(m_image_ctx, on_blocked, flush_source);
 }
 
 template <typename I>
@@ -588,7 +594,7 @@ void ImageRequestWQ<I>::wait_on_writes_unblocked(Context *on_unblocked) {
 template <typename I>
 void ImageRequestWQ<I>::set_require_lock(Direction direction, bool enabled) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << dendl;
+  ldout(cct, 20) << "direction: " << direction << " enabled: " << enabled << dendl;
 
   bool wake_up = false;
   {
@@ -862,7 +868,7 @@ void ImageRequestWQ<I>::finish_in_flight_io() {
   ldout(cct, 5) << "completing shut down" << dendl;
 
   ceph_assert(on_shutdown != nullptr);
-  flush_image(m_image_ctx, on_shutdown);
+  flush_image(m_image_ctx, on_shutdown, io::FLUSH_SOURCE_SHUTDOWN);
 }
 
 template <typename I>

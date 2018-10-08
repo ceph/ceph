@@ -141,10 +141,41 @@ set(librbd_internal_srcs
   watcher/RewatchRequest.cc
   ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc)
 
+if(WITH_RWL)
+  set(librbd_internal_srcs
+    ${librbd_internal_srcs}
+    cache/ReplicatedWriteLog.cc)
+endif(WITH_RWL)
+
+if(WITH_PMDK)
+  if(WITH_PMDK_PKG)
+    # # Use installed libpmem-dev and libpmemobj-dev. This will make
+    # # libpmem1 and libpmemobj1 install dependencies for librbd.
+    # find_package(libpmem-dev)
+    # list(APPEND EXTRALIBS "pmem")
+    # find_package(libpmemobj-dev)
+    # list(APPEND EXTRALIBS "pmemobj")
+    #
+    # Here's where you'd make the installed PMDK a dependency
+    # for just librbd (afer removing it from the outer CMakeLists)
+  else(WITH_PMDK_PKG)
+    # pmem and pmemobj libraries already created in outer CMakeLists.txt
+    # via WITH_PMDK
+  endif(WITH_PMDK_PKG)
+endif(WITH_PMDK)
+
 add_library(rbd_api STATIC librbd.cc)
 add_library(rbd_internal STATIC
   ${librbd_internal_srcs}
   $<TARGET_OBJECTS:rados_snap_set_diff_obj>)
+
+if(WITH_PMDK AND NOT WITH_PMDK_PKG)
+  # static PMDK libs, built here
+  add_dependencies(rbd_internal ${PMDK_STATIC_LIBS})
+  #message(STATUS "Adding include directory: ${PMDK_SRC}/include")
+  target_include_directories(rbd_internal SYSTEM PRIVATE "${PMDK_SRC}/include")
+endif()
+
 if(WITH_LTTNG)
   # librbd.cc includes tracing/librbd.h
   add_dependencies(rbd_api librbd-tp)
@@ -156,6 +187,10 @@ if(WITH_LTTNG AND WITH_EVENTTRACE)
 endif()
 target_link_libraries(rbd_internal PRIVATE
   osdc)
+
+if(WITH_PMDK AND NOT WITH_PMDK_PKG)
+  target_link_libraries(rbd_internal PRIVATE ${PMDK_STATIC_LIBS})
+endif()
 
 add_library(librbd ${CEPH_SHARED}
   librbd.cc)
@@ -179,6 +214,7 @@ if(HAVE_UDEV)
   target_link_libraries(librbd PRIVATE
     udev)
 endif()
+
 if(ENABLE_SHARED)
   set_target_properties(librbd PROPERTIES
     OUTPUT_NAME rbd

@@ -60,7 +60,7 @@ public:
 
   explicit ThreadPoolSingleton(CephContext *cct)
     : ThreadPool(cct, "librbd::thread_pool", "tp_librbd", 1,
-                 "rbd_op_threads"),
+		 "rbd_op_threads"),
       op_work_queue(new ContextWQ("librbd::op_work_queue",
                                   cct->_conf.get_val<uint64_t>("rbd_op_thread_timeout"),
                                   this)) {
@@ -769,6 +769,13 @@ public:
     ASSIGN_OPTION(skip_partial_discard, bool);
     ASSIGN_OPTION(discard_granularity_bytes, uint64_t);
     ASSIGN_OPTION(blkin_trace_all, bool);
+    ASSIGN_OPTION(rwl_enabled, bool);
+    ASSIGN_OPTION(rwl_remove_on_close, bool);
+    ASSIGN_OPTION(rwl_log_stats_on_close, bool);
+    ASSIGN_OPTION(rwl_log_periodic_stats, bool);
+    ASSIGN_OPTION(rwl_invalidate_on_flush, bool);
+    ASSIGN_OPTION(rwl_size, uint64_t);
+    ASSIGN_OPTION(rwl_path, std::string);
 
 #undef ASSIGN_OPTION
 
