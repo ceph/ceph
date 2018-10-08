@@ -504,6 +504,145 @@ A rule takes the following form::
 	      OSD 3, to try again and pick out 6, for a final transformation of:
 	      1, 2, 3, 4, 5 -> 1, 2, 6, 4, 5
 	      
+.. _crush-reclassify:
+
+Migrating from a legacy SSD rule to device classes
+--------------------------------------------------
+
+It used to be necessary to manually edit your CRUSH map and maintain a
+parallel hierarchy for each specialized device type (e.g., SSD) in order to
+write rules that apply to those devices.  Since the Luminous release,
+the *device class* feature has enabled this transparently.
+
+However, migrating from an existing, manually customized per-device map to
+the new device class rules in the trivial way will cause all data in the
+system to be reshuffled.
+
+The ``crushtool`` has a few commands that can transform a legacy rule
+and hierarchy so that you can start using the new class-based rules.
+There are three types of transformations possible:
+
+#. ``--reclassify-root <root-name> <device-class>``
+
+   This will take everything in the hierarchy beneath root-name, mark
+   all devices with the specified class, and adjust any rules that
+   reference that root via a ``take <root-name>`` to instead ``take
+   <root-name> class <device-class>``.  It renumbers the buckets in
+   such a way that the old IDs are instead used for the specified
+   class's "shadow tree" so that no data movement takes place.
+
+   For example, imagine you have an existing rule like::
+
+     rule replicated_ruleset {
+        id 0
+        type replicated
+        min_size 1
+        max_size 10
+        step take default
+        step chooseleaf firstn 0 type rack
+        step emit
+     }
+
+   If you reclassify the root `default` as class `hdd`, the rule will
+   become::
+
+     rule replicated_ruleset {
+        id 0
+        type replicated
+        min_size 1
+        max_size 10
+        step take default class hdd
+        step chooseleaf firstn 0 type rack
+        step emit
+     }
+
+#. ``--reclassify-bucket <match-pattern> <device-class> <default-parent>``
+
+   This will allow you to merge a parallel type-specific hiearchy with the normal hierarchy.  For example, many users have maps like::
+
+     host node1 {
+        id -2           # do not change unnecessarily
+        # weight 109.152
+        alg straw
+        hash 0  # rjenkins1
+        item osd.0 weight 9.096
+        item osd.1 weight 9.096
+        item osd.2 weight 9.096
+        item osd.3 weight 9.096
+        item osd.4 weight 9.096
+        item osd.5 weight 9.096
+        ...
+     }
+
+     host node1-ssd {
+        id -10          # do not change unnecessarily
+        # weight 2.000
+        alg straw
+        hash 0  # rjenkins1
+        item osd.80 weight 2.000
+	...
+     }
+
+     root default {
+        id -1           # do not change unnecessarily
+        alg straw
+        hash 0  # rjenkins1
+        item node1 weight 110.967
+        ...
+     }
+
+     root ssd {
+        id -18          # do not change unnecessarily
+        # weight 16.000
+        alg straw
+        hash 0  # rjenkins1
+        item node1-ssd weight 2.000
+	...
+     }
+
+   This function will reclassify each bucket that matches a
+   pattern.  The pattern can look like ``%suffix`` or ``prefix%``.
+   For example, in the above example, we would use the pattern
+   ``%-ssd``.  For each matched bucket, the remaining portion of the
+   name (that matches the ``%`` wildcard) specifies the *base bucket*.
+   All devices in the matched bucket are labeled with the specified
+   device class and then moved to the base bucket.  If the base bucket
+   does not exist (e.g., ``node12-ssd`` exists but ``node12`` does
+   not), then it is created and linked underneath the specified
+   *default parent* bucket.  In each case, we are careful to preserve
+   the old bucket IDs for the new shadow buckets to prevent data
+   movement.  Any rules with ``take`` steps referencing the old
+   buckets are adjusted.
+
+#. ``--reclassify-bucket <bucket-name> <device-class> <base-bucket>``
+
+   The same command can also be used without a wildcard to map a
+   single bucket.  For example, in the previous example, we want the
+   ``ssd`` bucket to be mapped to the ``default`` bucket.
+
+The final command to convert the map comprised of the above fragments would be something like::
+
+  $ ceph osd getcrushmap -o original
+  $ crushtool -i original --reclassify \
+      --reclassify-root default hdd \
+      --reclassify-bucket %-ssd ssd default \
+      --reclassify-bucket ssd ssd default \
+      -o adjusted
+
+In order to ensure that the conversion is correct, there is a ``--compare`` command that will test a large sample of inputs to the CRUSH map and ensure that the same result comes back out.  These inputs are controlled by the same options that apply to the ``--test`` command.  For the above example,::
+
+  $ crushtool -i original --compare adjusted
+  rule 0 had 0/10240 mismatched mappings (0)
+  rule 1 had 0/10240 mismatched mappings (0)
+  maps appear equivalent
+
+If there were difference, you'd see what ratio of inputs are remapped
+in the parentheses.
+
+If you are satisfied with the adjusted map, you can apply it to the cluster with something like::
+
+  ceph osd setcrushmap -i adjusted
+
 Tuning CRUSH, the hard way
 --------------------------
 
