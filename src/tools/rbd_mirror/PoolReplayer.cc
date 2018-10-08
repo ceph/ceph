@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+
 // vim: ts=8 sw=2 smarttab
 
 #include "PoolReplayer.h"
@@ -306,20 +306,8 @@ void PoolReplayer<I>::init()
     return;
   }
 
-  std::vector<librbd::config_option_t> options;
-  r = librbd::api::Config<I>::list(m_local_io_ctx, &options);
-  if (r < 0) {
-    derr << "error listing local pool config overrides: " << cpp_strerror(r)
-         << dendl;
-    return;
-  }
   auto cct = reinterpret_cast<CephContext *>(m_local_io_ctx.cct());
-  for (auto &option : options) {
-    if (option.source == RBD_CONFIG_SOURCE_POOL) {
-      r = cct->_conf.set_val(option.name.c_str(), option.value);
-      assert(r == 0);
-    }
-  }
+  librbd::api::Config<I>::apply_pool_overrides(m_local_io_ctx, &cct->_conf);
 
   std::string local_mirror_uuid;
   r = librbd::cls_client::mirror_uuid_get(&m_local_io_ctx,

@@ -68,6 +68,7 @@ public:
     : m_threads(threads), m_remote_io_ctx(remote_io_ctx),
       m_global_image_id(global_image_id),
       m_local_mirror_uuid(local_mirror_uuid), m_local_image_id(local_image_id),
+      m_journal_settings(journal_settings),
       m_remote_mirror_uuid(remote_mirror_uuid),
       m_remote_image_id(remote_image_id),
       m_remote_journaler(remote_journaler), m_client_state(client_state),
