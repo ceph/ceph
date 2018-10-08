@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
+import cherrypy
+
 from . import ApiController, RESTController
 from .. import mgr
 from ..security import Scope
@@ -12,7 +14,10 @@ class PerfCounter(RESTController):
 
     def get(self, service_id):
         schema_dict = mgr.get_perf_schema(self.service_type, str(service_id))
-        schema = schema_dict["{}.{}".format(self.service_type, service_id)]
+        try:
+            schema = schema_dict["{}.{}".format(self.service_type, service_id)]
+        except KeyError as e:
+            raise cherrypy.HTTPError(404, "{0} not found".format(e.message))
         counters = []
 
         for key, value in sorted(schema.items()):
