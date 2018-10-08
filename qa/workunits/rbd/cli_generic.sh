@@ -468,6 +468,13 @@ test_trash() {
     rbd snap purge --image-id $ID
     rbd snap ls --image-id $ID | grep -v 'SNAPID' | wc -l | grep 0
 
+    rbd rm --rbd_move_to_trash_on_remove=true --rbd_move_to_trash_on_remove_expire_seconds=3600 test1
+    rbd trash ls | grep test1
+    rbd trash ls | wc -l | grep 1
+    rbd trash ls -l | grep 'test1.*USER.*protected until'
+    rbd trash rm $ID 2>&1 | grep 'Deferment time has not expired'
+    rbd trash rm --image-id $ID --force
+
     remove_images
 }
 
