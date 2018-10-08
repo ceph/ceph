@@ -193,3 +193,4 @@ Table of content
 	erasure-code-isa
 	erasure-code-lrc
 	erasure-code-shec
+	erasure-code-clay
