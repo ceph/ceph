@@ -24,7 +24,7 @@ public:
     : LocalApplier(cct, user_info, LocalApplier::NO_SUBUSER, boost::none, boost::none) {
   };
 
-  void modify_request_state(req_state * s) const override; /* in/out */
+  void modify_request_state(const DoutPrefixProvider* dpp, req_state * s) const override; /* in/out */
 
   struct Factory {
     virtual ~Factory() {}

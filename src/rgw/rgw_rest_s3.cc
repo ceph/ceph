@@ -4401,6 +4401,7 @@ rgw::auth::s3::STSEngine::get_session_token(const boost::string_view& session_to
 
 rgw::auth::Engine::result_t
 rgw::auth::s3::STSEngine::authenticate(
+  const DoutPrefixProvider* dpp,
   const boost::string_view& _access_key_id,
   const boost::string_view& signature,
   const boost::string_view& session_token,
@@ -4421,7 +4422,7 @@ rgw::auth::s3::STSEngine::authenticate(
   //Authentication
   //Check if access key is not the same passed in by client
   if (token.access_key_id != _access_key_id) {
-    ldout(cct, 0) << "Invalid access key" << dendl;
+    ldpp_dout(dpp, 0) << "Invalid access key" << dendl;
     return result_t::reject(-EPERM);
   }
   //Check if the token has expired
@@ -4432,11 +4433,11 @@ rgw::auth::s3::STSEngine::authenticate(
       if (exp) {
         real_clock::time_point now = real_clock::now();
         if (now >= *exp) {
-          ldout(cct, 0) << "ERROR: Token expired" << dendl;
+          ldpp_dout(dpp, 0) << "ERROR: Token expired" << dendl;
           return result_t::reject(-EPERM);
         }
       } else {
-        ldout(cct, 0) << "ERROR: Invalid expiration: " << expiration << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: Invalid expiration: " << expiration << dendl;
         return result_t::reject(-EPERM);
       }
     }
@@ -4446,12 +4447,12 @@ rgw::auth::s3::STSEngine::authenticate(
     signature_factory(cct, token.secret_access_key, string_to_sign);
   auto compare = signature.compare(server_signature);
 
-  ldout(cct, 15) << "string_to_sign="
+  ldpp_dout(dpp, 15) << "string_to_sign="
                  << rgw::crypt_sanitize::log_content{string_to_sign}
                  << dendl;
-  ldout(cct, 15) << "server signature=" << server_signature << dendl;
-  ldout(cct, 15) << "client signature=" << signature << dendl;
-  ldout(cct, 15) << "compare=" << compare << dendl;
+  ldpp_dout(dpp, 15) << "server signature=" << server_signature << dendl;
+  ldpp_dout(dpp, 15) << "client signature=" << signature << dendl;
+  ldpp_dout(dpp, 15) << "compare=" << compare << dendl;
 
   if (compare != 0) {
     return result_t::reject(-ERR_SIGNATURE_NO_MATCH);
@@ -4478,7 +4479,7 @@ rgw::auth::s3::STSEngine::authenticate(
     // get user info
     int ret = rgw_get_user_info_by_uid(store, token.user, user_info, NULL);
     if (ret < 0) {
-      ldout(cct, 5) << "ERROR: failed reading user info: uid=" << token.user << dendl;
+      ldpp_dout(dpp, 5) << "ERROR: failed reading user info: uid=" << token.user << dendl;
       return result_t::reject(-EPERM);
     }
   }

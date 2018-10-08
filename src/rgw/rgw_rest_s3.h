@@ -902,7 +902,8 @@ class STSEngine : public AWSEngine {
   int get_session_token(const boost::string_view& session_token,
                         STS::SessionToken& token) const;
 
-  result_t authenticate(const boost::string_view& access_key_id,
+  result_t authenticate(const DoutPrefixProvider* dpp, 
+                        const boost::string_view& access_key_id,
                         const boost::string_view& signature,
                         const boost::string_view& session_token,
                         const string_to_sign_t& string_to_sign,
