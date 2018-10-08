@@ -4,6 +4,8 @@ import { DomSanitizer } from '@angular/platform-browser';
 import { SafeUrl } from '@angular/platform-browser';
 
 import { SettingsService } from '../../../shared/api/settings.service';
+import { CephReleaseNamePipe } from '../../../shared/pipes/ceph-release-name.pipe';
+import { SummaryService } from '../../../shared/services/summary.service';
 
 @Component({
   selector: 'cd-grafana',
@@ -31,8 +33,14 @@ export class GrafanaComponent implements OnInit, OnChanges {
   @Input()
   grafanaStyle: string;
   grafanaUrl: any;
+  docsUrl: string;
 
-  constructor(private sanitizer: DomSanitizer, private settingsService: SettingsService) {}
+  constructor(
+    private summaryService: SummaryService,
+    private sanitizer: DomSanitizer,
+    private settingsService: SettingsService,
+    private cephReleaseNamePipe: CephReleaseNamePipe
+  ) {}
 
   ngOnInit() {
     this.styles = {
@@ -40,6 +48,20 @@ export class GrafanaComponent implements OnInit, OnChanges {
       two: 'grafana_two',
       three: 'grafana_three'
     };
+
+    const subs = this.summaryService.subscribe((summary: any) => {
+      if (!summary) {
+        return;
+      }
+
+      const releaseName = this.cephReleaseNamePipe.transform(summary.version);
+      this.docsUrl = `http://docs.ceph.com/docs/${releaseName}/mgr/dashboard/`;
+
+      setTimeout(() => {
+        subs.unsubscribe();
+      }, 0);
+    });
+
     this.settingsService.getGrafanaApiUrl().subscribe((data: any) => {
       this.grafanaUrl = data.value;
       if (this.grafanaUrl === '') {
