@@ -12,7 +12,7 @@ public:
 
   int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override
   {
-    auto bl_buffers = bl.buffers();
+    auto& bl_buffers = bl.buffers();
     auto i = bl_buffers.begin();
     while (bl_len > 0)
     {
