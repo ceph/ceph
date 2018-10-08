@@ -6020,10 +6020,10 @@ COMMAND("compact",
 COMMAND("smart name=devid,type=CephString,req=False",
         "runs smartctl on this osd devices.  ",
         "osd", "rw", "cli,rest")
-COMMAND("drop cache",
+COMMAND("cache drop",
         "Drop all OSD caches",
         "osd", "rw", "cli,rest")
-COMMAND("get cache stats",
+COMMAND("cache status",
         "Get OSD caches statistics",
         "osd", "r", "cli,rest")
 };
@@ -6502,7 +6502,7 @@ int OSD::_do_command(
     probe_smart(devid, ds);
   }
 
-  else if (prefix == "drop cache") {
+  else if (prefix == "cache drop") {
     dout(20) << "clearing all caches" << dendl;
     // Clear the objectstore's cache - onode and buffer for Bluestore,
     // system's pagecache for Filestore
@@ -6519,7 +6519,7 @@ int OSD::_do_command(
     }
   }
 
-  else if (prefix == "get cache stats") {
+  else if (prefix == "cache status") {
     int obj_ctx_count = 0;
     vector<PGRef> pgs;
     _get_pgs(&pgs);
@@ -6527,7 +6527,7 @@ int OSD::_do_command(
       obj_ctx_count += pg->get_cache_obj_count();
     }
     if (f) {
-      f->open_object_section("cache_stats");
+      f->open_object_section("cache_status");
       f->dump_int("object_ctx", obj_ctx_count);
       store->dump_cache_stats(f.get());
       f->close_section();
