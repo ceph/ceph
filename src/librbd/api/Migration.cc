@@ -12,6 +12,7 @@
 #include "librbd/ImageState.h"
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
+#include "librbd/api/Config.h"
 #include "librbd/api/Group.h"
 #include "librbd/deep_copy/MetadataCopyRequest.h"
 #include "librbd/deep_copy/SnapshotCopyRequest.h"
@@ -1162,8 +1163,11 @@ int Migration<I>::create_dst_image() {
       return r;
     }
 
+    ConfigProxy config{m_cct->_conf};
+    api::Config<I>::apply_pool_overrides(m_dst_io_ctx, &config);
+
     auto *req = image::CloneRequest<I>::create(
-      parent_io_ctx, parent_spec.image_id, "", parent_spec.snap_id,
+      config, parent_io_ctx, parent_spec.image_id, "", parent_spec.snap_id,
       m_dst_io_ctx, m_dst_image_name, m_dst_image_id, m_image_options, "", "",
       op_work_queue, &on_create);
     req->send();

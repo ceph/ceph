@@ -33,6 +33,7 @@
 #include "librbd/TrashWatcher.h"
 #include "librbd/Types.h"
 #include "librbd/Utils.h"
+#include "librbd/api/Config.h"
 #include "librbd/api/Image.h"
 #include "librbd/exclusive_lock/AutomaticPolicy.h"
 #include "librbd/exclusive_lock/StandardPolicy.h"
@@ -999,15 +1000,18 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
 		   << "c_id= " << clone_id << ", "
 		   << "c_opts=" << c_opts << dendl;
 
+    ConfigProxy config{reinterpret_cast<CephContext *>(c_ioctx.cct())->_conf};
+    api::Config<>::apply_pool_overrides(c_ioctx, &config);
+
     ThreadPool *thread_pool;
     ContextWQ *op_work_queue;
     ImageCtx::get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
 
     C_SaferCond cond;
     auto *req = image::CloneRequest<>::create(
-      p_ioctx, parent_id, p_snap_name, CEPH_NOSNAP, c_ioctx, c_name, clone_id,
-      c_opts, non_primary_global_image_id, primary_mirror_uuid, op_work_queue,
-      &cond);
+      config, p_ioctx, parent_id, p_snap_name, CEPH_NOSNAP, c_ioctx, c_name,
+      clone_id, c_opts, non_primary_global_image_id, primary_mirror_uuid,
+      op_work_queue, &cond);
     req->send();
 
     r = cond.wait();
