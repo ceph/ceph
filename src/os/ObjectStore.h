@@ -744,7 +744,8 @@ public:
       //the other.op_bl SHOULD NOT be changes during append operation,
       //we use additional bufferlist to avoid this problem
       bufferptr other_op_bl_ptr(other.op_bl.length());
-      other.op_bl.copy(0, other.op_bl.length(), other_op_bl_ptr.c_str());
+      bufferlist::constiter_hint_t hint = other.op_bl.create_iter_hint();
+      other.op_bl.copy(0, other.op_bl.length(), other_op_bl_ptr.c_str(), hint);
       bufferlist other_op_bl;
       other_op_bl.append(other_op_bl_ptr);
 

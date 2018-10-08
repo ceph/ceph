@@ -743,19 +743,16 @@ namespace buffer CEPH_BUFFER_API {
       return page_aligned_appender(this, min_pages);
     }
 
-  private:
-    mutable iterator last_p;
-
   public:
     // cons/des
-    list() : _len(0), _memcopy_count(0), last_p(this) {}
+    list() : _len(0), _memcopy_count(0) {}
     // cppcheck-suppress noExplicitConstructor
-    list(unsigned prealloc) : _len(0), _memcopy_count(0), last_p(this) {
+    list(unsigned prealloc) : _len(0), _memcopy_count(0) {
       reserve(prealloc);
     }
 
     list(const list& other) : _len(other._len),
-			      _memcopy_count(other._memcopy_count), last_p(this) {
+			      _memcopy_count(other._memcopy_count) {
       _buffers.clone_from(other._buffers,
 			  hangable_ptr::cloner(), hangable_ptr::disposer());
       make_shareable();
@@ -779,7 +776,6 @@ namespace buffer CEPH_BUFFER_API {
       _buffers = std::move(other._buffers);
       _len = other._len;
       _memcopy_count = other._memcopy_count;
-      last_p = begin();
       append_buffer.swap(other.append_buffer);
       other.clear();
       return *this;
@@ -836,7 +832,6 @@ namespace buffer CEPH_BUFFER_API {
       _buffers.clear_and_dispose(hangable_ptr::disposer());
       _len = 0;
       _memcopy_count = 0;
-      last_p = begin();
       append_buffer = ptr();
     }
     void push_back(const ptr& bp) {
@@ -931,6 +926,22 @@ namespace buffer CEPH_BUFFER_API {
     void copy_in(unsigned off, unsigned len, const char *src);
     void copy_in(unsigned off, unsigned len, const char *src, bool crc_reset);
     void copy_in(unsigned off, unsigned len, const list& src);
+
+    typedef iterator iter_hint_t;
+    typedef const_iterator constiter_hint_t;
+
+    iter_hint_t create_iter_hint(unsigned off = 0) {
+      return iter_hint_t(this, 0);
+    }
+    constiter_hint_t create_iter_hint(unsigned off = 0) const {
+      return constiter_hint_t(this, 0);
+    }
+
+    void copy(unsigned off, unsigned len, char *dest, constiter_hint_t& p_last) const;
+    void copy(unsigned off, unsigned len, list &dest, constiter_hint_t& p_last) const;
+    void copy(unsigned off, unsigned len, std::string& dest, constiter_hint_t& p_last) const;
+    void copy_in(unsigned off, unsigned len, const char *src, bool crc_reset, iter_hint_t& p_last);
+    void copy_in(unsigned off, unsigned len, const list& src, iter_hint_t& p_last);
 
     void append(char c);
     void append(const char *data, unsigned len);
