@@ -914,9 +914,12 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
       ContextWQ *op_work_queue;
       ImageCtx::get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
 
+      ConfigProxy config{cct->_conf};
+      api::Config<>::apply_pool_overrides(io_ctx, &config);
+
       C_SaferCond cond;
       image::CreateRequest<> *req = image::CreateRequest<>::create(
-        io_ctx, image_name, id, size, opts, non_primary_global_image_id,
+        config, io_ctx, image_name, id, size, opts, non_primary_global_image_id,
         primary_mirror_uuid, skip_mirror_enable, op_work_queue, &cond);
       req->send();
 

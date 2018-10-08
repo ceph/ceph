@@ -75,7 +75,8 @@ template <>
 struct CreateRequest<MockTestImageCtx> {
   Context* on_finish = nullptr;
   static CreateRequest* s_instance;
-  static CreateRequest* create(IoCtx &ioctx, const std::string &image_name,
+  static CreateRequest* create(const ConfigProxy& config, IoCtx &ioctx,
+                               const std::string &image_name,
                                const std::string &image_id, uint64_t size,
                                const ImageOptions &image_options,
                                const std::string &non_primary_global_image_id,

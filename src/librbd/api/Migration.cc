@@ -1147,13 +1147,17 @@ int Migration<I>::create_dst_image() {
   ContextWQ *op_work_queue;
   ImageCtx::get_thread_pool_instance(m_cct, &thread_pool, &op_work_queue);
 
+  ConfigProxy config{m_cct->_conf};
+  api::Config<I>::apply_pool_overrides(m_dst_io_ctx, &config);
+
   int r;
   C_SaferCond on_create;
   librados::IoCtx parent_io_ctx;
   if (parent_spec.pool_id == -1) {
     auto *req = image::CreateRequest<I>::create(
-      m_dst_io_ctx, m_dst_image_name, m_dst_image_id, size, m_image_options,
-      "", "", true /* skip_mirror_enable */, op_work_queue, &on_create);
+      config, m_dst_io_ctx, m_dst_image_name, m_dst_image_id, size,
+      m_image_options, "", "", true /* skip_mirror_enable */, op_work_queue,
+      &on_create);
     req->send();
   } else {
     r = util::create_ioctx(m_src_image_ctx->md_ctx, "destination image",
@@ -1162,9 +1166,6 @@ int Migration<I>::create_dst_image() {
     if (r < 0) {
       return r;
     }
-
-    ConfigProxy config{m_cct->_conf};
-    api::Config<I>::apply_pool_overrides(m_dst_io_ctx, &config);
 
     auto *req = image::CloneRequest<I>::create(
       config, parent_io_ctx, parent_spec.image_id, "", parent_spec.snap_id,
