@@ -207,6 +207,30 @@ int Config<I>::list(I *image_ctx, std::vector<config_option_t> *options) {
   return 0;
 }
 
+template <typename I>
+void Config<I>::apply_pool_overrides(librados::IoCtx& io_ctx,
+                                     ConfigProxy* config) {
+  CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
+
+  Options opts(io_ctx, false);
+  int r = opts.init();
+  if (r < 0) {
+    lderr(cct) << "failed to read pool config overrides: " << cpp_strerror(r)
+               << dendl;
+    return;
+  }
+
+  for (auto& pair : opts) {
+    if (pair.second.second == RBD_CONFIG_SOURCE_POOL) {
+      r = config->set_val(pair.first, pair.second.first);
+      if (r < 0) {
+        lderr(cct) << "failed to override pool config " << pair.first << "="
+                   << pair.second.first << ": " << cpp_strerror(r) << dendl;
+      }
+    }
+  }
+}
+
 } // namespace api
 } // namespace librbd
 

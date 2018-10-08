@@ -6,6 +6,8 @@
 
 #include "include/rbd/librbd.hpp"
 
+struct ConfigProxy;
+
 namespace librados {
 
 class IoCtx;
@@ -27,6 +29,9 @@ public:
 
   static bool is_option_name(ImageCtxT *image_ctx, const std::string &name);
   static int list(ImageCtxT *image_ctx, std::vector<config_option_t> *options);
+
+  static void apply_pool_overrides(librados::IoCtx& io_ctx,
+                                   ConfigProxy* config);
 };
 
 } // namespace api
