@@ -3027,6 +3027,7 @@ public:
 		  extents[0].truncate_size, trunc_seq, oncommit,
 		  0, 0, op_flags);
     } else {
+      auto hint = bl.create_iter_hint();
       C_GatherBuilder gcom(cct, oncommit);
       for (vector<ObjectExtent>::iterator p = extents.begin();
 	   p != extents.end();
@@ -3036,7 +3037,7 @@ public:
 	       = p->buffer_extents.begin();
 	     bit != p->buffer_extents.end();
 	     ++bit)
-	  bl.copy(bit->first, bit->second, cur);
+	  bl.copy(bit->first, bit->second, cur, hint);
 	ceph_assert(cur.length() == p->length);
 	write_trunc(p->oid, p->oloc, p->offset, p->length,
 	      snapc, cur, mtime, flags, p->truncate_size, trunc_seq,
