@@ -13,6 +13,7 @@
 #include "librbd/Operations.h"
 #include "librbd/TrashWatcher.h"
 #include "librbd/Utils.h"
+#include "librbd/api/Image.h"
 #include "librbd/trash/MoveRequest.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -209,7 +210,7 @@ int Trash<I>::remove(IoCtx &io_ctx, const std::string &image_id, bool force,
     return r;
   }
 
-  r = librbd::remove(io_ctx, "", image_id, prog_ctx, false, true);
+  r = Image<I>::remove(io_ctx, "", image_id, prog_ctx, false, true);
   if (r < 0) {
     lderr(cct) << "error removing image " << image_id
                << ", which is pending deletion" << dendl;

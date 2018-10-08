@@ -38,7 +38,6 @@
 #include "librbd/exclusive_lock/StandardPolicy.h"
 #include "librbd/image/CloneRequest.h"
 #include "librbd/image/CreateRequest.h"
-#include "librbd/image/RemoveRequest.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequest.h"
 #include "librbd/io/ImageRequestWQ.h"
@@ -1369,27 +1368,6 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
       return r;
     }
     return 0;
-  }
-
-  int remove(IoCtx& io_ctx, const std::string &image_name,
-             const std::string &image_id, ProgressContext& prog_ctx,
-             bool force, bool from_trash_remove)
-  {
-    CephContext *cct((CephContext *)io_ctx.cct());
-    ldout(cct, 20) << "remove " << &io_ctx << " "
-                   << (image_id.empty() ? image_name : image_id) << dendl;
-
-    ThreadPool *thread_pool;
-    ContextWQ *op_work_queue;
-    ImageCtx::get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
-
-    C_SaferCond cond;
-    auto req = librbd::image::RemoveRequest<>::create(
-      io_ctx, image_name, image_id, force, from_trash_remove, prog_ctx,
-      op_work_queue, &cond);
-    req->send();
-
-    return cond.wait();
   }
 
   int snap_list(ImageCtx *ictx, vector<snap_info_t>& snaps)

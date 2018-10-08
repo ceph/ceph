@@ -682,7 +682,7 @@ TEST_F(TestMockImageRefreshRequest, SuccessChild) {
     }
 
     librbd::NoOpProgressContext no_op;
-    ASSERT_EQ(0, librbd::remove(m_ioctx, clone_name, "", no_op));
+    ASSERT_EQ(0, librbd::api::Image<>::remove(m_ioctx, clone_name, "", no_op));
     ASSERT_EQ(0, ictx->operations->snap_unprotect(cls::rbd::UserSnapshotNamespace(), "snap"));
   };
 
@@ -736,7 +736,7 @@ TEST_F(TestMockImageRefreshRequest, SuccessChildDontOpenParent) {
     }
 
     librbd::NoOpProgressContext no_op;
-    ASSERT_EQ(0, librbd::remove(m_ioctx, clone_name, "", no_op));
+    ASSERT_EQ(0, librbd::api::Image<>::remove(m_ioctx, clone_name, "", no_op));
     ASSERT_EQ(0, ictx->operations->snap_unprotect(cls::rbd::UserSnapshotNamespace(), "snap"));
   };
 
