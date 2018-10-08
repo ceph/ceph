@@ -36,7 +36,8 @@ struct CreateRequest<librbd::MockTestImageCtx> {
   static CreateRequest *s_instance;
   Context *on_finish = nullptr;
 
-  static CreateRequest *create(IoCtx &ioctx, const std::string &imgname,
+  static CreateRequest *create(const ConfigProxy& config, IoCtx &ioctx,
+                               const std::string &imgname,
                                const std::string &imageid, uint64_t size,
                                const librbd::ImageOptions &image_options,
                                const std::string &non_primary_global_image_id,

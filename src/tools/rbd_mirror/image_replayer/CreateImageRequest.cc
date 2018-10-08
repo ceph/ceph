@@ -75,11 +75,14 @@ void CreateImageRequest<I>::create_image() {
 
   RWLock::RLocker snap_locker(m_remote_image_ctx->snap_lock);
 
+  auto& config{
+    reinterpret_cast<CephContext*>(m_local_io_ctx.cct())->_conf};
+
   librbd::ImageOptions image_options;
   populate_image_options(&image_options);
 
   auto req = librbd::image::CreateRequest<I>::create(
-    m_local_io_ctx, m_local_image_name, m_local_image_id,
+    config, m_local_io_ctx, m_local_image_name, m_local_image_id,
     m_remote_image_ctx->size, image_options, m_global_image_id,
     m_remote_mirror_uuid, false, m_remote_image_ctx->op_work_queue, ctx);
   req->send();

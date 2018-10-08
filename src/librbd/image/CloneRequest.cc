@@ -277,8 +277,9 @@ void CloneRequest<I>::create_child() {
 
   RWLock::RLocker snap_locker(m_parent_image_ctx->snap_lock);
   CreateRequest<I> *req = CreateRequest<I>::create(
-    m_ioctx, m_name, m_id, m_size, m_opts, m_non_primary_global_image_id,
-    m_primary_mirror_uuid, true, m_op_work_queue, ctx);
+    m_config, m_ioctx, m_name, m_id, m_size, m_opts,
+    m_non_primary_global_image_id, m_primary_mirror_uuid, true,
+    m_op_work_queue, ctx);
   req->send();
 }
 
