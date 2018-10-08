@@ -514,3 +514,29 @@ to use hyperlinks that include your prefix, you can set the
   ceph config set mgr mgr/dashboard/url_prefix $PREFIX
 
 so you can access the dashboard at ``http://$IP:$PORT/$PREFIX/``.
+
+
+Auditing
+--------
+
+The REST API is capable of logging PUT, POST and DELETE requests to the Ceph
+audit log. This feature is disabled by default, but can be enabled with the
+following command::
+
+  $ ceph dashboard set-audit-api-enabled <true|false>
+
+If enabled, the following parameters are logged per each request:
+
+* from - The origin of the request, e.g. https://[::1]:44410
+* path - The REST API path, e.g. /api/auth
+* method - e.g. PUT, POST or DELETE
+* user - The name of the user, otherwise 'None'
+
+The logging of the request payload (the arguments and their values) is enabled
+by default. Execute the following command to disable this behaviour::
+
+  $ ceph dashboard set-audit-api-log-payload <true|false>
+
+A log entry may look like this::
+
+  2018-10-22 15:27:01.302514 mgr.x [INF] [DASHBOARD] from='https://[::ffff:127.0.0.1]:37022' path='/api/rgw/user/klaus' method='PUT' user='admin' params='{"max_buckets": "1000", "display_name": "Klaus Mustermann", "uid": "klaus", "suspended": "0", "email": "klaus.mustermann@ceph.com"}'

@@ -3,6 +3,7 @@ from __future__ import absolute_import
 
 import sys
 import inspect
+import json
 import functools
 
 import collections
@@ -15,8 +16,9 @@ import socket
 from six.moves import urllib
 import cherrypy
 
-from . import logger
+from . import logger, mgr
 from .exceptions import ViewCacheNoDataException
+from .settings import Settings
 from .services.auth import JwtManager
 
 
@@ -35,12 +37,31 @@ class RequestLoggingTool(cherrypy.Tool):
     def request_begin(self):
         req = cherrypy.request
         user = JwtManager.get_username()
-        if user:
-            logger.debug("[%s:%s] [%s] [%s] %s", req.remote.ip,
-                         req.remote.port, req.method, user, req.path_info)
-        else:
-            logger.debug("[%s:%s] [%s] %s", req.remote.ip,
-                         req.remote.port, req.method, req.path_info)
+        # Log the request.
+        logger.debug('[%s:%s] [%s] [%s] %s', req.remote.ip, req.remote.port,
+                     req.method, user, req.path_info)
+        # Audit the request.
+        if Settings.AUDIT_API_ENABLED and req.method not in ['GET']:
+            url = build_url(req.remote.ip, scheme=req.scheme,
+                            port=req.remote.port)
+            msg = '[DASHBOARD] from=\'{}\' path=\'{}\' method=\'{}\' ' \
+                'user=\'{}\''.format(url, req.path_info, req.method, user)
+            if Settings.AUDIT_API_LOG_PAYLOAD:
+                params = req.params if req.params else {}
+                params.update(get_request_body_params(req))
+                # Hide sensitive data like passwords, secret keys, ...
+                # Extend the list of patterns to search for if necessary.
+                # Currently parameters like this are processed:
+                # - secret_key
+                # - user_password
+                # - new_passwd_to_login
+                keys = []
+                for key in ['password', 'passwd', 'secret']:
+                    keys.extend([x for x in params.keys() if key in x])
+                for key in keys:
+                    params[key] = '***'
+                msg = '{} params=\'{}\''.format(msg, json.dumps(params))
+            mgr.cluster_log('audit', mgr.CLUSTER_LOG_PRIO_INFO, msg)
 
     def request_error(self):
         self._request_log(logger.error)
@@ -718,3 +739,24 @@ def str_to_bool(val):
     if isinstance(val, bool):
         return val
     return bool(strtobool(val))
+
+
+def get_request_body_params(request):
+    """
+    Helper function to get parameters from the request body.
+    :param request The CherryPy request object.
+    :type request: cherrypy.Request
+    :return: A dictionary containing the parameters.
+    :rtype: dict
+    """
+    params = {}
+    if request.method not in request.methods_with_bodies:
+        return params
+
+    content_type = request.headers.get('Content-Type', '')
+    if content_type in ['application/json', 'text/javascript']:
+        if not hasattr(request, 'json'):
+            raise cherrypy.HTTPError(400, 'Expected JSON body')
+        params.update(request.json.items())
+
+    return params
