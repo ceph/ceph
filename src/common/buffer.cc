@@ -639,14 +639,18 @@ using namespace ceph;
     if (_raw) {
       bdout << "ptr " << this << " release " << _raw << bendl;
       if (--_raw->nref == 0) {
+        // BE CAREFUL: this is called also for hypercombined ptr_node. After
+        // freeing underlying raw, `*this` can become inaccessible as well!
+        const auto* delete_raw = _raw;
+        _raw = nullptr;
 	//cout << "hosing raw " << (void*)_raw << " len " << _raw->len << std::endl;
         ANNOTATE_HAPPENS_AFTER(&_raw->nref);
         ANNOTATE_HAPPENS_BEFORE_FORGET_ALL(&_raw->nref);
-	delete _raw;  // dealloc old (if any)
+	delete delete_raw;  // dealloc old (if any)
       } else {
         ANNOTATE_HAPPENS_BEFORE(&_raw->nref);
+        _raw = nullptr;
       }
-      _raw = 0;
     }
   }
 
@@ -2181,6 +2185,27 @@ buffer::list buffer::list::static_from_string(string& s) {
   return static_from_mem(const_cast<char*>(s.data()), s.length());
   // But the way buffer::list mostly doesn't work in a sane way with
   // const makes me generally sad.
+}
+
+bool buffer::ptr_node::dispose_if_hypercombined(
+  buffer::ptr_node* const delete_this)
+{
+  const bool is_hypercombined = static_cast<void*>(delete_this) == \
+    static_cast<void*>(&delete_this->get_raw()->bptr_storage);
+  if (is_hypercombined) {
+    delete_this->~ptr_node();
+  }
+  return is_hypercombined;
+}
+
+buffer::ptr_node& buffer::ptr_node::create_hypercombined(
+  buffer::raw* const r)
+{
+  if (likely(r->nref == 0)) {
+    return *new (&r->bptr_storage) ptr_node(r);
+  } else {
+    return *new ptr_node(r);
+  }
 }
 
 std::ostream& buffer::operator<<(std::ostream& out, const buffer::raw &r) {

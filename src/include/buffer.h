@@ -273,6 +273,8 @@ namespace buffer CEPH_BUFFER_API {
     ptr& operator= (const ptr& p);
     ptr& operator= (ptr&& p) noexcept;
     ~ptr() {
+      // BE CAREFUL: this destructor is called also for hypercombined ptr_node.
+      // After freeing underlying raw, `*this` can become inaccessible as well!
       release();
     }
 
@@ -385,12 +387,27 @@ namespace buffer CEPH_BUFFER_API {
     template <class... Args>
     ptr_node(Args&&... args) : ptr(std::forward<Args>(args)...) {
     }
-
     ptr_node(const ptr_node&) = default;
-  public:
 
+    ptr& operator= (const ptr& p) = delete;
+    ptr& operator= (ptr&& p) noexcept = delete;
+    ptr_node& operator= (const ptr_node& p) = delete;
+    ptr_node& operator= (ptr_node&& p) noexcept = delete;
+    void swap(ptr& other) noexcept = delete;
+    void swap(ptr_node& other) noexcept = delete;
+
+  public:
     ~ptr_node() = default;
 
+    static bool dispose_if_hypercombined(ptr_node* delete_this);
+    static ptr_node& create_hypercombined(raw* r);
+
+    static ptr_node& create(raw* const r) {
+      return create_hypercombined(r);
+    }
+    static ptr_node& create(const unsigned l) {
+      return create_hypercombined(buffer::create(l));
+    }
     template <class... Args>
     static ptr_node& create(Args&&... args) {
       return *new ptr_node(std::forward<Args>(args)...);
@@ -403,7 +420,9 @@ namespace buffer CEPH_BUFFER_API {
     };
     struct disposer {
       void operator()(ptr_node* const delete_this) {
-	delete delete_this;
+	if (!dispose_if_hypercombined(delete_this)) {
+	  delete delete_this;
+	}
       }
     };
   };
@@ -834,7 +853,7 @@ namespace buffer CEPH_BUFFER_API {
       _len += bp.length();
       _buffers.push_back(bp);
     }
-    void push_back(raw *r) {
+    void push_back(raw* const r) {
       _buffers.push_back(ptr_node::create(r));
       _len += _buffers.back().length();
     }
