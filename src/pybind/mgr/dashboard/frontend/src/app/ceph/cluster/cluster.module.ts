@@ -9,6 +9,7 @@ import { TabsModule } from 'ngx-bootstrap/tabs';
 
 import { SharedModule } from '../../shared/shared.module';
 import { PerformanceCounterModule } from '../performance-counter/performance-counter.module';
+import { ConfigurationDetailsComponent } from './configuration/configuration-details/configuration-details.component';
 import { ConfigurationComponent } from './configuration/configuration.component';
 import { HostDetailsComponent } from './hosts/host-details/host-details.component';
 import { HostsComponent } from './hosts/hosts.component';
@@ -41,7 +42,8 @@ import { OsdScrubModalComponent } from './osd/osd-scrub-modal/osd-scrub-modal.co
     OsdPerformanceHistogramComponent,
     OsdScrubModalComponent,
     OsdFlagsModalComponent,
-    HostDetailsComponent
+    HostDetailsComponent,
+    ConfigurationDetailsComponent
   ]
 })
 export class ClusterModule {}

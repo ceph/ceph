@@ -8,6 +8,7 @@ import { TabsModule } from 'ngx-bootstrap/tabs/tabs.module';
 import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { ConfigurationService } from '../../../shared/api/configuration.service';
 import { SharedModule } from '../../../shared/shared.module';
+import { ConfigurationDetailsComponent } from './configuration-details/configuration-details.component';
 import { ConfigurationComponent } from './configuration.component';
 
 describe('ConfigurationComponent', () => {
@@ -15,7 +16,7 @@ describe('ConfigurationComponent', () => {
   let fixture: ComponentFixture<ConfigurationComponent>;
 
   configureTestBed({
-    declarations: [ConfigurationComponent],
+    declarations: [ConfigurationComponent, ConfigurationDetailsComponent],
     providers: [ConfigurationService],
     imports: [
       SharedModule,
