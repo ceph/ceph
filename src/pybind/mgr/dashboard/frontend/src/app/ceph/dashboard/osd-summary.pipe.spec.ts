@@ -11,42 +11,106 @@ describe('OsdSummaryPipe', () => {
     expect(pipe.transform(undefined)).toBe('');
   });
 
-  it('transforms having 1 with 0 up and 1 in', () => {
+  it('transforms having 3 osd with 3 up, 3 in, 0 down, 0 out', () => {
     const value = {
-      osds: [{ in: true, out: false }]
+      osds: [{ up: 1, in: 1 }, { up: 1, in: 1 }, { up: 1, in: 1 }]
     };
     expect(pipe.transform(value)).toEqual([
       {
-        content: '1 (0 up, 1 in',
-        style: { 'margin-right': '-5px', color: '' }
+        content: '3 total',
+        class: ''
       },
       {
-        content: ', ',
-        style: { 'margin-right': '0', color: '' }
+        content: '',
+        class: 'card-text-line-break'
       },
       {
-        content: '1 down',
-        style: { 'margin-right': '-5px', color: OsdSummaryPipe.COLOR_ERROR }
-      },
-      {
-        content: ')',
-        style: { 'margin-right': '0', color: '' }
+        content: '3 up, 3 in',
+        class: ''
       }
     ]);
   });
 
-  it('transforms having 2 with 2 up and 1 in', () => {
+  it('transforms having 3 osd with 2 up, 1 in, 1 down, 1 out', () => {
     const value = {
-      osds: [{ in: true, up: true }, { in: false, up: true }]
+      osds: [{ up: 1, in: 1 }, { up: 1, in: 0 }, { up: 0, in: 0 }]
     };
     expect(pipe.transform(value)).toEqual([
       {
-        content: '2 (2 up, 1 in',
-        style: { 'margin-right': '-5px', color: '' }
+        content: '3 total',
+        class: ''
       },
       {
-        content: ')',
-        style: { 'margin-right': '0', color: '' }
+        content: '',
+        class: 'card-text-line-break'
+      },
+      {
+        content: '2 up, 1 in',
+        class: ''
+      },
+      {
+        content: '',
+        class: 'card-text-line-break'
+      },
+      {
+        content: '1 down, 1 out',
+        class: 'card-text-error'
+      }
+    ]);
+  });
+
+  it('transforms having 3 osd with 2 up, 2 in, 1 down, 0 out', () => {
+    const value = {
+      osds: [{ up: 1, in: 1 }, { up: 1, in: 1 }, { up: 0, in: 0 }]
+    };
+    expect(pipe.transform(value)).toEqual([
+      {
+        content: '3 total',
+        class: ''
+      },
+      {
+        content: '',
+        class: 'card-text-line-break'
+      },
+      {
+        content: '2 up, 2 in',
+        class: ''
+      },
+      {
+        content: '',
+        class: 'card-text-line-break'
+      },
+      {
+        content: '1 down',
+        class: 'card-text-error'
+      }
+    ]);
+  });
+
+  it('transforms having 3 osd with 3 up, 2 in, 0 down, 1 out', () => {
+    const value = {
+      osds: [{ up: 1, in: 1 }, { up: 1, in: 1 }, { up: 1, in: 0 }]
+    };
+    expect(pipe.transform(value)).toEqual([
+      {
+        content: '3 total',
+        class: ''
+      },
+      {
+        content: '',
+        class: 'card-text-line-break'
+      },
+      {
+        content: '3 up, 2 in',
+        class: ''
+      },
+      {
+        content: '',
+        class: 'card-text-line-break'
+      },
+      {
+        content: '1 out',
+        class: 'card-text-error'
       }
     ]);
   });
