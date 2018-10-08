@@ -1,4 +1,5 @@
 import argparse
+import logging
 from textwrap import dedent
 from ceph_volume import terminal, decorators
 from ceph_volume.util import disk, prompt_bool
@@ -6,6 +7,7 @@ from ceph_volume.util import arg_validators
 from . import strategies
 
 mlogger = terminal.MultiLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 device_list_template = """
@@ -159,8 +161,16 @@ class Batch(object):
         if used_devices:
             for device in used_devices:
                 args.filtered_devices[device] = {"reasons": ["Used by ceph as a data device already"]}
-            if args.yes and unused_devices:
-                mlogger.info("Ignoring devices already used by ceph: %s" % ", ".join(used_devices))
+            logger.info("Ignoring devices already used by ceph: %s" % ", ".join(used_devices))
+        if len(unused_devices) == 1:
+            last_device = unused_devices[0]
+            if not last_device.rotational and last_device.is_lvm_member:
+                reason = "Used by ceph as a %s already and there are no devices left for data/block" % (
+                    last_device.lvs[0].tags.get("ceph.type"),
+                )
+                args.filtered_devices[last_device.abspath] = {"reasons": [reason]}
+                logger.info(reason + ": %s" % last_device.abspath)
+                unused_devices = []
         if not unused_devices and not args.format == 'json':
             # report nothing changed
             mlogger.info("All devices are already used by ceph. No OSDs will be created.")
@@ -168,8 +178,6 @@ class Batch(object):
         else:
             new_strategy = get_strategy(args, unused_devices)
             if new_strategy and strategy != new_strategy:
-                if args.report:
-                    mlogger.info("Ignoring devices already used by ceph: %s" % ",".join(used_devices))
                 mlogger.error("Aborting because strategy changed from %s to %s after filtering" % (strategy.type(), new_strategy.type()))
                 raise SystemExit(1)
 
