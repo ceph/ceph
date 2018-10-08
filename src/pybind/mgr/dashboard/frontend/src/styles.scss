@@ -4,6 +4,7 @@
 $fa-font-path: '../node_modules/fork-awesome/fonts';
 @import '../node_modules/fork-awesome/scss/fork-awesome';
 $font_family_1: 'ForkAwesome';
+@import 'app/ceph/dashboard/info-card/info-card-popover.scss';
 
 /* Basics */
 html {

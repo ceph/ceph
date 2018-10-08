@@ -13,7 +13,5 @@ export class InfoCardComponent {
   @Input()
   cardClass = '';
   @Input()
-  imageClass: string;
-  @Input()
   contentClass: string;
 }

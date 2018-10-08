@@ -25,4 +25,8 @@ export class AppComponent {
   isLoginActive() {
     return this.router.url === '/login' || !this.authStorageService.isLoggedIn();
   }
+
+  isDashboardPage() {
+    return this.router.url === '/dashboard';
+  }
 }
