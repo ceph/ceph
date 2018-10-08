@@ -18,6 +18,7 @@
 #include <atomic>
 #include <map>
 #include <utility>
+#include <type_traits>
 #include "include/buffer.h"
 #include "include/mempool.h"
 #include "include/spinlock.h"
@@ -25,6 +26,11 @@
 namespace ceph::buffer {
   class raw {
   public:
+    // In the future we might want to have a slab allocator here with
+    // few embedded slots. This would allow to avoid the "if" in dtor
+    // of hangable_ptr.
+    std::aligned_storage_t<sizeof(hangable_ptr),
+			   alignof(hangable_ptr)> bptr_storage;
     char *data;
     unsigned len;
     std::atomic<unsigned> nref { 0 };

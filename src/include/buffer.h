@@ -390,12 +390,30 @@ namespace buffer CEPH_BUFFER_API {
     }
 
     hangable_ptr(const hangable_ptr&) = default;
-  public:
 
+    template <class T>
+    void operator= (T) = delete;
+
+    ptr& operator= (const ptr& p) = delete;
+    ptr& operator= (ptr&& p) noexcept = delete;
+    hangable_ptr& operator= (const hangable_ptr& p) = delete;
+    hangable_ptr& operator= (hangable_ptr&& p) noexcept = delete;
+
+  public:
     ~hangable_ptr() = default;
+
+    static bool dispose_if_hypercombined(hangable_ptr* delete_this);
+    static hangable_ptr& create_hypercombined(raw* r);
 
     template <class... Args>
     static hangable_ptr& create(Args&&... args) {
+      if constexpr (sizeof...(Args) == 1) {
+	if constexpr (std::is_same_v<Args..., raw*>) {
+	  // That's really cool.
+	  raw* const r = std::get<0>(std::forward_as_tuple(args...));
+          return create_hypercombined(r);
+	}
+      }
       return *new hangable_ptr(std::forward<Args>(args)...);
     }
 
@@ -406,7 +424,9 @@ namespace buffer CEPH_BUFFER_API {
     };
     struct disposer {
       void operator()(hangable_ptr* const delete_this) {
-	delete delete_this;
+	if (!dispose_if_hypercombined(delete_this)) {
+	  delete delete_this;
+	}
       }
     };
   };
