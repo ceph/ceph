@@ -5,7 +5,10 @@
 </cd-loading-panel>
 <cd-info-panel *ngIf="!grafanaExist">
   <ng-container i18n>
-    Please consult the <a href="http://docs.ceph.com/docs/luminous/mgr/dashboard/" target="_blank">documentation</a> on how to configure and enable the monitoring functionality.
+    Please consult the
+    <a href="{{ docsUrl }}"
+       target="_blank">documentation
+    </a> on how to configure and enable the monitoring functionality.
   </ng-container>
 </cd-info-panel>
 <div class="row" *ngIf="grafanaExist">
