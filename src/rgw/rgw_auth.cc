@@ -48,7 +48,7 @@ transform_old_authinfo(const req_state* const s)
         type(type) {
     }
 
-    uint32_t get_perms_from_aclspec(const aclspec_t& aclspec) const override {
+    uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override {
       return rgw_perms_from_aclspec_default_strategy(id, aclspec);
     }
 
@@ -285,15 +285,15 @@ rgw::auth::Strategy::apply(const DoutPrefixProvider *dpp, const rgw::auth::Strat
 
       /* Account used by a given RGWOp is decoupled from identity employed
        * in the authorization phase (RGWOp::verify_permissions). */
-      applier->load_acct_info(*s->user);
+      applier->load_acct_info(dpp, *s->user);
       s->perm_mask = applier->get_perm_mask();
 
       /* This is the single place where we pass req_state as a pointer
        * to non-const and thus its modification is allowed. In the time
        * of writing only RGWTempURLEngine needed that feature. */
-      applier->modify_request_state(s);
+      applier->modify_request_state(dpp, s);
       if (completer) {
-        completer->modify_request_state(s);
+        completer->modify_request_state(dpp, s);
       }
 
       s->auth.identity = std::move(applier);
@@ -322,7 +322,7 @@ rgw::auth::Strategy::add_engine(const Control ctrl_flag,
 
 
 /* rgw::auth::RemoteAuthApplier */
-uint32_t rgw::auth::RemoteApplier::get_perms_from_aclspec(const aclspec_t& aclspec) const
+uint32_t rgw::auth::RemoteApplier::get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const
 {
   uint32_t perm = 0;
 
@@ -345,7 +345,7 @@ uint32_t rgw::auth::RemoteApplier::get_perms_from_aclspec(const aclspec_t& aclsp
     perm |= extra_acl_strategy(aclspec);
   }
 
-  ldout(cct, 20) << "from ACL got perm=" << perm << dendl;
+  ldpp_dout(dpp, 20) << "from ACL got perm=" << perm << dendl;
   return perm;
 }
 
@@ -398,7 +398,8 @@ void rgw::auth::RemoteApplier::to_str(std::ostream& out) const
       << ", is_admin=" << info.is_admin << ")";
 }
 
-void rgw::auth::RemoteApplier::create_account(const rgw_user& acct_user,
+void rgw::auth::RemoteApplier::create_account(const DoutPrefixProvider* dpp,
+                                              const rgw_user& acct_user,
                                               RGWUserInfo& user_info) const      /* out */
 {
   rgw_user new_acct_user = acct_user;
@@ -424,14 +425,14 @@ void rgw::auth::RemoteApplier::create_account(const rgw_user& acct_user,
   int ret = rgw_store_user_info(store, user_info, nullptr, nullptr,
                                 real_time(), true);
   if (ret < 0) {
-    ldout(cct, 0) << "ERROR: failed to store new user info: user="
+    ldpp_dout(dpp, 0) << "ERROR: failed to store new user info: user="
                   << user_info.user_id << " ret=" << ret << dendl;
     throw ret;
   }
 }
 
 /* TODO(rzarzynski): we need to handle display_name changes. */
-void rgw::auth::RemoteApplier::load_acct_info(RGWUserInfo& user_info) const      /* out */
+void rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const      /* out */
 {
   /* It's supposed that RGWRemoteAuthApplier tries to load account info
    * that belongs to the authenticated identity. Another policy may be
@@ -459,8 +460,8 @@ void rgw::auth::RemoteApplier::load_acct_info(RGWUserInfo& user_info) const     
   }
 
   if (rgw_get_user_info_by_uid(store, acct_user, user_info) < 0) {
-    ldout(cct, 0) << "NOTICE: couldn't map swift user " << acct_user << dendl;
-    create_account(acct_user, user_info);
+    ldpp_dout(dpp, 0) << "NOTICE: couldn't map swift user " << acct_user << dendl;
+    create_account(dpp, acct_user, user_info);
   }
 
   /* Succeeded if we are here (create_account() hasn't throwed). */
@@ -470,7 +471,7 @@ void rgw::auth::RemoteApplier::load_acct_info(RGWUserInfo& user_info) const     
 /* static declaration */
 const std::string rgw::auth::LocalApplier::NO_SUBUSER;
 
-uint32_t rgw::auth::LocalApplier::get_perms_from_aclspec(const aclspec_t& aclspec) const
+uint32_t rgw::auth::LocalApplier::get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const
 {
   return rgw_perms_from_aclspec_default_strategy(user_info.user_id, aclspec);
 }
@@ -527,14 +528,14 @@ uint32_t rgw::auth::LocalApplier::get_perm_mask(const std::string& subuser_name,
   }
 }
 
-void rgw::auth::LocalApplier::load_acct_info(RGWUserInfo& user_info) const /* out */
+void rgw::auth::LocalApplier::load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const /* out */
 {
   /* Load the account that belongs to the authenticated identity. An extra call
    * to RADOS may be safely skipped in this case. */
   user_info = this->user_info;
 }
 
-void rgw::auth::LocalApplier::modify_request_state(req_state* s) const
+void rgw::auth::LocalApplier::modify_request_state(const DoutPrefixProvider *dpp, req_state* s) const
 {
   for (auto it : role_policies) {
     try {
@@ -544,7 +545,7 @@ void rgw::auth::LocalApplier::modify_request_state(req_state* s) const
     } catch (rgw::IAM::PolicyParseException& e) {
       //Control shouldn't reach here as the policy has already been
       //verified earlier
-      ldout(s->cct, 20) << "failed to parse policy: " << e.what() << dendl;
+      ldpp_dout(dpp, 20) << "failed to parse policy: " << e.what() << dendl;
     }
   }
 }

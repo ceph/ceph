@@ -404,6 +404,7 @@ public:
 
   class Deleter {
   protected:
+    const DoutPrefixProvider * dpp;
     unsigned int num_deleted;
     unsigned int num_unfound;
     std::list<fail_desc_t> failures;
@@ -412,8 +413,9 @@ public:
     req_state * const s;
 
   public:
-    Deleter(RGWRados * const str, req_state * const s)
-      : num_deleted(0),
+    Deleter(const DoutPrefixProvider* dpp, RGWRados * const str, req_state * const s)
+      : dpp(dpp),
+        num_deleted(0),
         num_unfound(0),
         store(str),
         s(s) {

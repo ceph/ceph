@@ -33,7 +33,7 @@ namespace auth {
 namespace swift {
 
 /* TempURL: applier */
-void TempURLApplier::modify_request_state(req_state* s) const       /* in/out */
+void TempURLApplier::modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const       /* in/out */
 {
   bool inline_exists = false;
   const std::string& filename = s->info.args.get("filename");
@@ -51,7 +51,7 @@ void TempURLApplier::modify_request_state(req_state* s) const       /* in/out */
     s->content_disp.fallback = "attachment; filename=\"" + fenc + "\"";
   }
 
-  ldout(s->cct, 20) << "finished applying changes to req_state for TempURL: "
+  ldpp_dout(dpp, 20) << "finished applying changes to req_state for TempURL: "
                     << " content_disp override " << s->content_disp.override
                     << " content_disp fallback " << s->content_disp.fallback
                     << dendl;
