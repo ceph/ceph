@@ -8,6 +8,7 @@
 #include "include/rbd/librbd.hpp"
 #include "librbd/internal.h"
 
+class ConfigProxy;
 class Context;
 
 using librados::IoCtx;
@@ -18,7 +19,7 @@ namespace image {
 template <typename ImageCtxT = ImageCtx>
 class CloneRequest {
 public:
-  static CloneRequest *create(IoCtx& parent_io_ctx,
+  static CloneRequest *create(ConfigProxy& config, IoCtx& parent_io_ctx,
                               const std::string& parent_image_id,
                               const std::string& parent_snap_name,
                               uint64_t parent_snap_id,
@@ -27,13 +28,13 @@ public:
 			      const std::string &non_primary_global_image_id,
 			      const std::string &primary_mirror_uuid,
 			      ContextWQ *op_work_queue, Context *on_finish) {
-    return new CloneRequest(parent_io_ctx, parent_image_id, parent_snap_name,
-                            parent_snap_id, c_ioctx, c_name, c_id, c_options,
-                            non_primary_global_image_id, primary_mirror_uuid,
-                            op_work_queue, on_finish);
+    return new CloneRequest(config, parent_io_ctx, parent_image_id,
+                            parent_snap_name, parent_snap_id, c_ioctx, c_name,
+                            c_id, c_options, non_primary_global_image_id,
+                            primary_mirror_uuid, op_work_queue, on_finish);
   }
 
-  CloneRequest(IoCtx& parent_io_ctx,
+  CloneRequest(ConfigProxy& config, IoCtx& parent_io_ctx,
                const std::string& parent_image_id,
                const std::string& parent_snap_name,
                uint64_t parent_snap_id,
@@ -104,6 +105,7 @@ private:
    * @endverbatim
    */
 
+  ConfigProxy& m_config;
   IoCtx &m_parent_io_ctx;
   std::string m_parent_image_id;
   std::string m_parent_snap_name;

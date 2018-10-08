@@ -73,7 +73,8 @@ struct CloneRequest<librbd::MockTestImageCtx> {
   static CloneRequest *s_instance;
   Context *on_finish = nullptr;
 
-  static CloneRequest *create(IoCtx &p_ioctx, const std::string &p_id,
+  static CloneRequest *create(ConfigProxy& config, IoCtx &p_ioctx,
+                              const std::string &p_id,
                               const std::string &p_snap_name,
                               uint64_t p_snap_id,
 			      IoCtx &c_ioctx, const std::string &c_name,
