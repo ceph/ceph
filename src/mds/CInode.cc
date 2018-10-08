@@ -406,6 +406,8 @@ CInode::projected_inode &CInode::project_inode(bool xattr, bool snap)
     project_snaprealm();
   }
 
+  ++pi.inode.rstat.version;
+
   dout(15) << __func__ << " " << pi.inode.ino << dendl;
   return pi;
 }
@@ -1700,7 +1702,7 @@ void CInode::decode_lock_state(int type, const bufferlist& bl)
   case CEPH_LOCK_IAUTH:
     decode(inode.version, p);
     decode(tm, p);
-    if (inode.ctime < tm) inode.ctime = tm;
+    inode.ctime = std::max(inode.ctime, tm);
     decode(inode.mode, p);
     decode(inode.uid, p);
     decode(inode.gid, p);
@@ -1709,7 +1711,7 @@ void CInode::decode_lock_state(int type, const bufferlist& bl)
   case CEPH_LOCK_ILINK:
     decode(inode.version, p);
     decode(tm, p);
-    if (inode.ctime < tm) inode.ctime = tm;
+    inode.ctime = std::map(inode.ctime, tm);
     decode(inode.nlink, p);
     break;
 
@@ -1761,7 +1763,7 @@ void CInode::decode_lock_state(int type, const bufferlist& bl)
     if (!is_auth()) {
       decode(inode.version, p);
       decode(tm, p);
-      if (inode.ctime < tm) inode.ctime = tm;
+      inode.ctime = std::max(inode.ctime, tm);
       decode(inode.mtime, p);
       decode(inode.atime, p);
       decode(inode.time_warp_seq, p);
@@ -1897,7 +1899,7 @@ void CInode::decode_lock_state(int type, const bufferlist& bl)
   case CEPH_LOCK_IXATTR:
     decode(inode.version, p);
     decode(tm, p);
-    if (inode.ctime < tm) inode.ctime = tm;
+    inode.ctime = std::max(inode.ctime, tm);
     decode(xattrs, p);
     break;
 
@@ -1905,7 +1907,7 @@ void CInode::decode_lock_state(int type, const bufferlist& bl)
     {
       decode(inode.version, p);
       decode(tm, p);
-      if (inode.ctime < tm) inode.ctime = tm;
+      inode.ctime = std::max(inode.ctime, tm);
       decode_snap(p);
     }
     break;

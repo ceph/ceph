@@ -370,6 +370,7 @@ void MDCache::create_unlinked_system_inode(CInode *in, inodeno_t ino,
   if (in->inode.is_dir()) {
     in->inode.dir_layout.dl_dir_hash = g_conf()->mds_default_dir_hash;
     ++in->inode.rstat.rsubdirs;
+    in->inode.rstat.rctime = in->inode.ctime;
   } else {
     in->inode.layout = default_file_layout;
     ++in->inode.rstat.rfiles;
@@ -420,9 +421,8 @@ void MDCache::create_empty_hierarchy(MDSGather *gather)
   rootdir->fnode.accounted_rstat = rootdir->fnode.rstat;
 
   root->inode.dirstat = rootdir->fnode.fragstat;
-  root->inode.rstat = rootdir->fnode.rstat;
   ++root->inode.rstat.rsubdirs;
-  root->inode.accounted_rstat = root->inode.rstat;
+  rootdir->fnode.rstat = root->inode.rstat;
 
   rootdir->mark_complete();
   rootdir->mark_dirty(rootdir->pre_dirty(), mds->mdlog->get_current_segment());
@@ -2124,7 +2124,6 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
   // build list of inodes to wrlock, dirty, and update
   list<CInode*> lsi;
   CInode *cur = in;
-  CDentry *parentdn = NULL;
   bool first = true;
   while (parent) {
     //assert(cur->is_auth() || !primary_dn);  // this breaks the rename auth twiddle hack
@@ -2170,6 +2169,7 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
     // rstat
     if (!primary_dn) {
       // don't update parent this pass
+      dout(20) << " skipping rstat update this pass" << dendl;
     } else if (!linkunlink && !(pin->nestlock.can_wrlock(-1) &&
 				pin->versionlock.can_wrlock())) {
       dout(20) << " unwritable parent nestlock " << pin->nestlock
@@ -2306,12 +2306,6 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
      * hard link backpointers to do the above properly.
      */
 
-    // stop?
-    if (pin->is_base())
-      break;
-    parentdn = pin->get_projected_parent_dn();
-    ceph_assert(parentdn);
-
     // rstat
     dout(10) << "predirty_journal_parents frag->inode on " << *parent << dendl;
 
@@ -2346,7 +2340,11 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
     broadcast_quota_to_client(pin);
     // next parent!
     cur = pin;
-    parent = parentdn->get_dir();
+    {
+      auto dn = cur->get_projected_parent_dn();
+      if (!dn) break;
+      parent = dn->get_dir();
+    }
     linkunlink = 0;
     do_parent_mtime = false;
     primary_dn = true;

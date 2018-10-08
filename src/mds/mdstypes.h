@@ -23,6 +23,7 @@
 #include "include/compact_map.h"
 #include "include/compact_set.h"
 #include "include/fs_types.h"
+#include "include/utime.h"
 
 #include "inode_backtrace.h"
 
@@ -232,7 +233,7 @@ struct nest_info_t : public scatter_info_t {
 
   int64_t rsnaps = 0;
 
-  nest_info_t() {}
+  nest_info_t() : rctime(ceph_clock_now()) {}
 
   void zero() {
     *this = nest_info_t();
@@ -528,7 +529,7 @@ struct inode_t {
 
   std::basic_string<char,std::char_traits<char>,Allocator<char>> stray_prior_path; //stores path before unlink
 
-  inode_t()
+  inode_t() : ctime(ceph_clock_now())
   {
     clear_layout();
     memset(&dir_layout, 0, sizeof(dir_layout));
