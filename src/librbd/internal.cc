@@ -1877,7 +1877,7 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
       });
       auto gather_ctx = new C_Gather(m_dest->cct, end_op_ctx);
 
-      bufferptr m_ptr(m_bl->length());
+      auto& m_ptr = buffer::hangable_ptr::create(m_bl->length());
       m_bl->rebuild(m_ptr);
       size_t write_offset = 0;
       size_t write_length = 0;
@@ -1890,7 +1890,8 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
 				     &write_offset,
 				     &write_length,
 				     &offset)) {
-	  bufferptr write_ptr(m_ptr, write_offset, write_length);
+	  auto& write_ptr = \
+	    buffer::hangable_ptr::create(m_ptr, write_offset, write_length);
 	  bufferlist *write_bl = new bufferlist();
 	  write_bl->push_back(write_ptr);
 	  Context *ctx = new C_CopyWrite(write_bl, gather_ctx->new_sub());

@@ -846,6 +846,12 @@ namespace buffer CEPH_BUFFER_API {
       _len += bp.length();
       _buffers.push_back(hangable_ptr::create(std::move(bp)));
     }
+    void push_back(hangable_ptr& bp) {
+      if (bp.length() == 0)
+	return;
+      _len += bp.length();
+      _buffers.push_back(bp);
+    }
     void push_back(raw *r) {
       _buffers.push_back(hangable_ptr::create(r));
       _len += _buffers.back().length();
@@ -856,7 +862,7 @@ namespace buffer CEPH_BUFFER_API {
 
     bool is_contiguous() const;
     void rebuild();
-    void rebuild(ptr& nb);
+    void rebuild(hangable_ptr& nb);
     bool rebuild_aligned(unsigned align);
     // max_buffers = 0 mean don't care _buffers.size(), other
     // must make _buffers.size() <= max_buffers after rebuilding.
