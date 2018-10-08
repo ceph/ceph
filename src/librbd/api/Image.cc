@@ -12,6 +12,7 @@
 #include "librbd/ImageState.h"
 #include "librbd/Utils.h"
 #include "librbd/image/CloneRequest.h"
+#include "librbd/image/RemoveRequest.h"
 #include "librbd/internal.h"
 #include "librbd/Utils.h"
 #include "librbd/api/Config.h"
@@ -368,6 +369,27 @@ int Image<I>::snap_set(I *ictx, uint64_t snap_id) {
   }
 
   return 0;
+}
+
+template <typename I>
+int Image<I>::remove(IoCtx& io_ctx, const std::string &image_name,
+                     const std::string &image_id, ProgressContext& prog_ctx,
+                     bool force, bool from_trash_remove)
+{
+  CephContext *cct((CephContext *)io_ctx.cct());
+  ldout(cct, 20) << (image_id.empty() ? image_name : image_id) << dendl;
+
+  ThreadPool *thread_pool;
+  ContextWQ *op_work_queue;
+  ImageCtx::get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
+
+  C_SaferCond cond;
+  auto req = librbd::image::RemoveRequest<>::create(
+    io_ctx, image_name, image_id, force, from_trash_remove, prog_ctx,
+    op_work_queue, &cond);
+  req->send();
+
+  return cond.wait();
 }
 
 } // namespace api
