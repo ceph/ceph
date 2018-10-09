@@ -710,7 +710,9 @@ def get_devices(_sys_block_path='/sys/block', _dev_path='/dev', _mapper_path='/d
 
         metadata['partitions'] = get_partitions_facts(sysdir)
 
-        metadata['rotational'] = get_file_contents(sysdir + "/queue/rotational")
+        for key in ['rotational', 'nr_requests']:
+            metadata[key] = get_file_contents(sysdir + "/queue/" + key)
+
         metadata['scheduler_mode'] = ""
         scheduler = get_file_contents(sysdir + "/queue/scheduler")
         if scheduler is not None:
