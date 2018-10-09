@@ -694,10 +694,7 @@ def get_devices(_sys_block_path='/sys/block', _dev_path='/dev', _mapper_path='/d
             if lvm.is_lv(diskname):
                 continue
 
-        # If the device reports itself as 'removable', get it excluded
         metadata['removable'] = get_file_contents(os.path.join(sysdir, 'removable'))
-        if metadata['removable'] == '1':
-            continue
 
         for key in ['vendor', 'model', 'sas_address', 'sas_device_handle']:
             metadata[key] = get_file_contents(sysdir + "/device/" + key)

@@ -19,6 +19,8 @@ class Device(object):
         self.sys_api = {}
         self._exists = None
         self._is_lvm_member = None
+        self._valid = False
+        self._rejected_reasons = []
         self._parse()
 
     def _parse(self):
@@ -128,6 +130,20 @@ class Device(object):
         osd_ids = [lv.tags.get("ceph.osd_id") is not None for lv in self.lvs
                    if lv.tags.get("ceph.type") in ["data", "block"]]
         return any(osd_ids)
+
+
+    @property
+    def is_valid(self):
+        def reject_device(item, value, reason):
+            try:
+                if self.sys_api[item] == value:
+                    self._rejected_reasons.append(reason)
+            except KeyError:
+                pass
+        reject_device('removable', 1, 'removable')
+
+        self._valid = len(self._rejected_reasons) == 0
+        return self._valid
 
 
 class CephDiskDevice(object):
