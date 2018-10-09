@@ -345,6 +345,19 @@ struct es_index_config {
   }
 };
 
+static bool is_sys_attr(const std::string& attr_name){
+  static constexpr std::initializer_list rgw_sys_attrs = {RGW_ATTR_PG_VER,
+                                                          RGW_ATTR_SOURCE_ZONE,
+                                                          RGW_ATTR_ID_TAG,
+                                                          RGW_ATTR_TEMPURL_KEY1,
+                                                          RGW_ATTR_TEMPURL_KEY2,
+                                                          RGW_ATTR_UNIX1,
+                                                          RGW_ATTR_UNIX_KEY1
+  };
+
+  return std::find(rgw_sys_attrs.begin(), rgw_sys_attrs.end(), attr_name) != rgw_sys_attrs.end();
+}
+
 struct es_obj_metadata {
   CephContext *cct;
   ElasticConfigRef es_conf;
@@ -369,7 +382,6 @@ struct es_obj_metadata {
 
     for (auto i : attrs) {
       const string& attr_name = i.first;
-      string name;
       bufferlist& val = i.second;
 
       if (!boost::algorithm::starts_with(attr_name, RGW_ATTR_PREFIX)) {
@@ -377,12 +389,14 @@ struct es_obj_metadata {
       }
 
       if (boost::algorithm::starts_with(attr_name, RGW_ATTR_META_PREFIX)) {
-        name = attr_name.substr(sizeof(RGW_ATTR_META_PREFIX) - 1);
-        custom_meta[name] = string(val.c_str(), (val.length() > 0 ? val.length() - 1 : 0));
+        custom_meta.emplace(attr_name.substr(sizeof(RGW_ATTR_META_PREFIX) - 1),
+                            string(val.c_str(), (val.length() > 0 ? val.length() - 1 : 0)));
         continue;
       }
 
-      name = attr_name.substr(sizeof(RGW_ATTR_PREFIX) - 1);
+      if (attr_name.compare(0, sizeof(RGW_ATTR_CRYPT_PREFIX) -1, RGW_ATTR_CRYPT_PREFIX) == 0) {
+        continue;
+      }
 
       if (boost::algorithm::starts_with(attr_name, RGW_ATTR_CRYPT_PREFIX)) {
         continue;
@@ -393,7 +407,7 @@ struct es_obj_metadata {
         continue;
       }
 
-      if (name == "acl") {
+      if (attr_name == RGW_ATTR_ACL) {
         try {
           auto i = val.begin();
           decode(policy, i);
@@ -414,19 +428,18 @@ struct es_obj_metadata {
             }
           }
         }
-      } else if (name == "x-amz-tagging") {
+      } else if (attr_name == RGW_ATTR_TAGS) {
         auto tags_bl = val.begin();
         decode(obj_tags, tags_bl);
-      } else if (name == "compression") {
+      } else if (attr_name == RGW_ATTR_COMPRESSION) {
         RGWCompressionInfo cs_info;
         auto vals_bl = val.begin();
         decode(cs_info, vals_bl);
-        out_attrs[name] = cs_info.compression_type;
+        out_attrs.emplace("compression",std::move(cs_info.compression_type));
       } else {
-        if (name != "pg_ver" &&
-            name != "source_zone" &&
-            name != "idtag") {
-          out_attrs[name] = string(val.c_str(), (val.length() > 0 ? val.length() - 1 : 0));
+        if (!is_sys_attr(attr_name)) {
+          out_attrs.emplace(attr_name.substr(sizeof(RGW_ATTR_PREFIX) - 1),
+                            std::string(val.c_str(), (val.length() > 0 ? val.length() - 1 : 0)));
         }
       }
     }
