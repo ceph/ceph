@@ -699,7 +699,7 @@ def get_devices(_sys_block_path='/sys/block', _dev_path='/dev', _mapper_path='/d
         metadata['ro'] = get_file_contents(os.path.join(sysdir, 'ro'))
 
 
-        for key in ['vendor', 'model', 'sas_address', 'sas_device_handle']:
+        for key in ['vendor', 'model', 'rev', 'sas_address', 'sas_device_handle']:
             metadata[key] = get_file_contents(sysdir + "/device/" + key)
 
         for key in ['sectors', 'size']:
