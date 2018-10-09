@@ -480,6 +480,7 @@ struct es_obj_metadata {
           decode(policy, i);
         } catch (buffer::error& err) {
           ldout(cct, 0) << "ERROR: failed to decode acl for " << bucket_info.bucket << "/" << key << dendl;
+          continue;
         }
 
         const RGWAccessControlList& acl = policy.get_acl();
@@ -496,12 +497,24 @@ struct es_obj_metadata {
           }
         }
       } else if (attr_name == RGW_ATTR_TAGS) {
-        auto tags_bl = val.begin();
-        decode(obj_tags, tags_bl);
+        try {
+          auto tags_bl = val.begin();
+          decode(obj_tags, tags_bl);
+        } catch (buffer::error& err) {
+          ldout(cct,0) << "ERROR: failed to decode obj tags for "
+                       << bucket_info.bucket << "/" << key << dendl;
+          continue;
+        }
       } else if (attr_name == RGW_ATTR_COMPRESSION) {
         RGWCompressionInfo cs_info;
-        auto vals_bl = val.begin();
-        decode(cs_info, vals_bl);
+        try {
+          auto vals_bl = val.begin();
+          decode(cs_info, vals_bl);
+        } catch (buffer::error& err) {
+          ldout(cct,0) << "ERROR: failed to decode compression attr for "
+                       << bucket_info.bucket << "/" << key << dendl;
+          continue;
+        }
         out_attrs.emplace("compression",std::move(cs_info.compression_type));
       } else {
         if (!is_sys_attr(attr_name)) {
