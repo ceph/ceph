@@ -172,10 +172,15 @@ void RGWSTSAssumeRole::execute()
 
 RGWOp *RGWHandler_REST_STS::op_post()
 {
-  char buf[256];
-  recv_body(s, buf, s->content_length);
-  ldout(s->cct, 0) << "Content of POST: " << buf << dendl;
-  string post_body = buf;
+  int len = 0;
+  char *data = nullptr;
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  auto ret = rgw_rest_read_all_input(s, &data, &len, max_size, false);
+  if (ret < 0) {
+    return nullptr;
+  }
+  ldout(s->cct, 0) << "Content of POST: " << data << dendl;
+  string post_body = data;
 
   if (post_body.find("Action") != string::npos) {
     boost::char_separator<char> sep("&");
@@ -190,6 +195,8 @@ RGWOp *RGWHandler_REST_STS::op_post()
        }
      }
   }
+
+  free(data);
 
   if (s->info.args.exists("Action"))    {
     string action = s->info.args.get("Action");
