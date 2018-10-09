@@ -141,6 +141,7 @@ class Device(object):
             except KeyError:
                 pass
         reject_device('removable', 1, 'removable')
+        reject_device('ro', 1, 'read-only')
 
         self._valid = len(self._rejected_reasons) == 0
         return self._valid
