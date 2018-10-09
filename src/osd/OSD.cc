@@ -5702,6 +5702,12 @@ bool remove_dir(
       cont = dstate->pause_clearing();
       handle.suspend_tp_timeout();
       waiter.wait();
+      if (cct->_conf->osd_delete_sleep) {
+        utime_t t;
+        t.set_from_double(cct->_conf->osd_delete_sleep);
+        lgeneric_subdout(cct, osd, 10) << __func__ << " inject delay of " << t << dendl;
+        t.sleep();
+      }
       handle.reset_tp_timeout();
       if (cont)
         cont = dstate->resume_clearing();

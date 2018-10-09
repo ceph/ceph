@@ -848,6 +848,7 @@ OPTION(osd_op_history_duration, OPT_U32) // Oldest completed op to track
 OPTION(osd_op_history_slow_op_size, OPT_U32)           // Max number of slow ops to track
 OPTION(osd_op_history_slow_op_threshold, OPT_DOUBLE) // track the op if over this threshold
 OPTION(osd_target_transaction_size, OPT_INT)     // to adjust various transactions that batch smaller items
+OPTION(osd_delete_sleep, OPT_FLOAT)         // seconds to sleep between removal transactions
 OPTION(osd_failsafe_full_ratio, OPT_FLOAT) // what % full makes an OSD "full" (failsafe)
 OPTION(osd_fast_fail_on_connection_refused, OPT_BOOL) // immediately mark OSDs as down once they refuse to accept connections
 
