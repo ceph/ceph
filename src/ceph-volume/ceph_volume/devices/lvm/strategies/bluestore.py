@@ -21,8 +21,11 @@ class SingleType(object):
         self.hdds = [device for device in devices if device.sys_api['rotational'] == '1']
         self.ssds = [device for device in devices if device.sys_api['rotational'] == '0']
         self.computed = {'osds': [], 'vgs': [], 'filtered_devices': args.filtered_devices}
-        self.validate()
-        self.compute()
+        if self.devices:
+            self.validate()
+            self.compute()
+        else:
+            self.computed["changed"] = False
 
     @staticmethod
     def type():
@@ -147,8 +150,11 @@ class MixedType(object):
         self.block_db_size = self.get_block_size()
         self.system_vgs = lvm.VolumeGroups()
         self.dbs_needed = len(self.hdds) * self.osds_per_device
-        self.validate()
-        self.compute()
+        if self.devices:
+            self.validate()
+            self.compute()
+        else:
+            self.computed["changed"] = False
 
     @staticmethod
     def type():
