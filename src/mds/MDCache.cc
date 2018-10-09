@@ -7642,7 +7642,13 @@ bool MDCache::shutdown_pass()
   // Fully trim the log so that all objects in cache are clean and may be
   // trimmed by a future MDCache::trim. Note that MDSRank::tick does not
   // trim the log such that the cache eventually becomes clean.
-  mds->mdlog->trim(0);
+  if (mds->mdlog->get_num_segments() > 0 &&
+      mds->mdlog->get_current_segment()->num_events > 1) {
+    // current segment contains events other than subtreemap
+    mds->mdlog->start_new_segment();
+    mds->mdlog->flush();
+  }
+  mds->mdlog->trim_all();
   if (mds->mdlog->get_num_segments() > 1) {
     dout(7) << "still >1 segments, waiting for log to trim" << dendl;
     return false;
@@ -7691,9 +7697,11 @@ bool MDCache::shutdown_pass()
   if (!mds->mdlog->is_capped()) {
     dout(7) << "capping the log" << dendl;
     mds->mdlog->cap();
-    mds->mdlog->trim();
   }
   
+  if (!mds->mdlog->empty())
+    mds->mdlog->trim(0);
+
   if (!mds->mdlog->empty()) {
     dout(7) << "waiting for log to flush.. " << mds->mdlog->get_num_events() 
 	    << " in " << mds->mdlog->get_num_segments() << " segments" << dendl;
