@@ -5442,7 +5442,8 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
 
   // are we beyond truncate_size?
   if ( (seq < op.extent.truncate_seq) &&
-       (op.extent.offset + op.extent.length > op.extent.truncate_size) )
+       (op.extent.offset + op.extent.length > op.extent.truncate_size) &&
+       (size > op.extent.truncate_size) )
     size = op.extent.truncate_size;
 
   if (op.extent.length == 0) //length is zero mean read the whole object
