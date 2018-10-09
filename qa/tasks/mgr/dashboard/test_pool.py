@@ -4,6 +4,7 @@ from __future__ import absolute_import
 import logging
 
 import six
+import time
 
 from .helper import DashboardTestCase, JObj, JList
 
@@ -78,8 +79,19 @@ class PoolTest(DashboardTestCase):
             self.assertEqual(pool[prop], value, '{}: {} != {}'.format(prop, pool[prop], value))
 
     def _check_pg_num(self, value, pool):
+        # If both properties have not the same value, the cluster goes into a warning state,
+        # which will only happen during a pg update on a existing pool.
+        # The test that does that is currently commented out because
+        # our QA systems can't deal with the change.
+        # Feel free to test it locally.
         prop = 'pg_num'
         pgp_prop = 'pg_placement_num'
+        health = lambda: self._get('/api/dashboard/health')['health']['status'] == 'HEALTH_OK'
+        t = 0;
+        while (int(value) != pool[pgp_prop] or not health()) and t < 180:
+            time.sleep(2)
+            t += 2
+            pool = self._get_pool(pool['pool_name'])
         for p in [prop, pgp_prop]:  # Should have the same values
             self.assertEqual(pool[p], int(value), '{}: {} != {}'.format(p, pool[p], value))
 
@@ -198,8 +210,12 @@ class PoolTest(DashboardTestCase):
             {
                 'application_metadata': ['rbd', 'sth'],
             },
+            # The following test case is currently commented out because
+            # our QA systems can't deal with the change and will fail because
+            # they can't recover from the resulting warning state.
+            # Feel free to test it locally.
             # {
-            #     'pg_num': '12',
+            #     'pg_num': '8',
             # },
             {
                 'application_metadata': ['rgw'],
