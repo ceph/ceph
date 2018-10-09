@@ -7708,6 +7708,12 @@ bool MDCache::shutdown_pass()
   ceph_assert(!migrator->is_exporting());
   ceph_assert(!migrator->is_importing());
 
+  // replicas may dirty scatter locks
+  if (myin && myin->is_replicated()) {
+    dout(7) << "still have replicated objects" << dendl;
+    return false;
+  }
+
   if ((myin && myin->get_num_auth_pins()) ||
       (mydir && (mydir->get_auth_pins() || mydir->get_dir_auth_pins()))) {
     dout(7) << "still have auth pinned objects" << dendl;
