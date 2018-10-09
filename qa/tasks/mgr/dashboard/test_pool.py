@@ -13,13 +13,6 @@ log = logging.getLogger(__name__)
 class PoolTest(DashboardTestCase):
     AUTH_ROLES = ['pool-manager']
 
-    @classmethod
-    def tearDownClass(cls):
-        super(PoolTest, cls).tearDownClass()
-        for name in ['dashboard_pool1', 'dashboard_pool2', 'dashboard_pool3', 'dashboard_pool_update1']:
-            cls._ceph_cmd(['osd', 'pool', 'delete', name, name, '--yes-i-really-really-mean-it'])
-        cls._ceph_cmd(['osd', 'erasure-code-profile', 'rm', 'ecprofile'])
-
     pool_schema = JObj(sub_elems={
         'pool_name': str,
         'type': str,
@@ -27,6 +20,75 @@ class PoolTest(DashboardTestCase):
         'flags': int,
         'flags_names': str,
     }, allow_unknown=True)
+
+    def _pool_create(self, data):
+        try:
+            self._task_post('/api/pool/', data)
+            self.assertStatus(201)
+
+            self._check_pool_properties(data)
+
+            self._task_delete("/api/pool/" + data['pool'])
+            self.assertStatus(204)
+        except Exception:
+            log.exception("test_pool_create: data=%s", data)
+            raise
+
+    def _check_pool_properties(self, data, pool_name=None):
+        if not pool_name:
+            pool_name = data['pool']
+        pool = self._get_pool(pool_name)
+        try:
+            for k, v in data.items():
+                self._check_pool_property(k, v, pool)
+
+        except Exception:
+            log.exception("test_pool_create: pool=%s", pool)
+            raise
+
+        health = self._get('/api/dashboard/health')['health']
+        self.assertEqual(health['status'], 'HEALTH_OK', msg='health={}'.format(health))
+
+    def _get_pool(self, pool_name):
+        pool = self._get("/api/pool/" + pool_name)
+        self.assertStatus(200)
+        self.assertSchemaBody(self.pool_schema)
+        return pool
+
+    def _check_pool_property(self, prop, value, pool):
+        if prop == 'pool_type':
+            self.assertEqual(pool['type'], value)
+        elif prop == 'size':
+            self.assertEqual(pool[prop], int(value), '{}: {} != {}'.format(prop, pool[prop], value))
+        elif prop == 'pg_num':
+            self._check_pg_num(value, pool)
+        elif prop == 'application_metadata':
+            self.assertIsInstance(pool[prop], list)
+            self.assertEqual(pool[prop], value)
+        elif prop == 'pool':
+            self.assertEqual(pool['pool_name'], value)
+        elif prop.startswith('compression'):
+            if value is not None:
+                if prop.endswith('size'):
+                    value = int(value)
+                elif prop.endswith('ratio'):
+                    value = float(value)
+            self.assertEqual(pool['options'].get(prop), value)
+        else:
+            self.assertEqual(pool[prop], value, '{}: {} != {}'.format(prop, pool[prop], value))
+
+    def _check_pg_num(self, value, pool):
+        prop = 'pg_num'
+        pgp_prop = 'pg_placement_num'
+        for p in [prop, pgp_prop]:  # Should have the same values
+            self.assertEqual(pool[p], int(value), '{}: {} != {}'.format(p, pool[p], value))
+
+    @classmethod
+    def tearDownClass(cls):
+        super(PoolTest, cls).tearDownClass()
+        for name in ['dashboard_pool1', 'dashboard_pool2', 'dashboard_pool3', 'dashboard_pool_update1']:
+            cls._ceph_cmd(['osd', 'pool', 'delete', name, name, '--yes-i-really-really-mean-it'])
+        cls._ceph_cmd(['osd', 'erasure-code-profile', 'rm', 'ecprofile'])
 
     @DashboardTestCase.RunAs('test', 'test', [{'pool': ['create', 'update', 'delete']}])
     def test_read_access_permissions(self):
@@ -95,55 +157,6 @@ class PoolTest(DashboardTestCase):
         self.assertIn('stats', pool)
         self.assertNotIn('flags_names', pool)
 
-    def _pool_create(self, data):
-        try:
-            self._task_post('/api/pool/', data)
-            self.assertStatus(201)
-
-            self._check_pool_properties(data)
-
-            self._task_delete("/api/pool/" + data['pool'])
-            self.assertStatus(204)
-        except Exception:
-            log.exception("test_pool_create: data=%s", data)
-            raise
-
-    def _check_pool_properties(self, data, pool_name=None):
-        if not pool_name:
-            pool_name = data['pool']
-        pool = self._get("/api/pool/" + pool_name)
-        self.assertStatus(200)
-        self.assertSchemaBody(self.pool_schema)
-        try:
-            for k, v in data.items():
-                if k == 'pool_type':
-                    self.assertEqual(pool['type'], data['pool_type'])
-                elif k == 'pg_num':
-                    self.assertEqual(pool[k], int(v), '{}: {} != {}'.format(k, pool[k], v))
-                    k = 'pg_placement_num' # Should have the same value as pg_num
-                    self.assertEqual(pool[k], int(v), '{}: {} != {}'.format(k, pool[k], v))
-                elif k == 'application_metadata':
-                    self.assertIsInstance(pool[k], list)
-                    self.assertEqual(pool[k],
-                                     data['application_metadata'])
-                elif k == 'pool':
-                    self.assertEqual(pool['pool_name'], v)
-                elif k in ['compression_mode', 'compression_algorithm']:
-                    self.assertEqual(pool['options'][k], data[k])
-                elif k == 'compression_max_blob_size':
-                    self.assertEqual(pool['options'][k], int(data[k]))
-                elif k == 'compression_required_ratio':
-                    self.assertEqual(pool['options'][k], float(data[k]))
-                else:
-                    self.assertEqual(pool[k], v, '{}: {} != {}'.format(k, pool[k], v))
-
-        except Exception:
-            log.exception("test_pool_create: pool=%s", pool)
-            raise
-
-        health = self._get('/api/dashboard/health')['health']
-        self.assertEqual(health['status'], 'HEALTH_OK', msg='health={}'.format(health))
-
     def test_pool_create(self):
         self._ceph_cmd(['osd', 'crush', 'rule', 'create-erasure', 'ecrule'])
         self._ceph_cmd(
@@ -172,12 +185,16 @@ class PoolTest(DashboardTestCase):
             self._pool_create(data)
 
     def test_update(self):
-        pool = [
-            {
-                'pool': 'dashboard_pool_update1',
-                'pg_num': '10',
-                'pool_type': 'replicated',
-            },
+        pool = {
+            'pool': 'dashboard_pool_update1',
+            'pg_num': '4',
+            'pool_type': 'replicated',
+            'compression_mode': 'passive',
+            'compression_algorithm': 'snappy',
+            'compression_max_blob_size': '131072',
+            'compression_required_ratio': '0.875',
+        }
+        updates = [
             {
                 'application_metadata': ['rbd', 'sth'],
             },
@@ -192,19 +209,27 @@ class PoolTest(DashboardTestCase):
                 'compression_mode': 'aggressive',
                 'compression_max_blob_size': '10000000',
                 'compression_required_ratio': '0.8',
+            },
+            {
+                'compression_mode': 'unset'
             }
-
         ]
-        self._task_post('/api/pool/', pool[0])
+        self._task_post('/api/pool/', pool)
         self.assertStatus(201)
+        self._check_pool_properties(pool)
 
-        self._check_pool_properties(pool[0])
-
-        for data in pool[1:]:
-            self._task_put('/api/pool/' + pool[0]['pool'], data)
-            self._check_pool_properties(data, pool_name=pool[0]['pool'])
-
-        self._task_delete("/api/pool/" + pool[0]['pool'])
+        for update in updates:
+            self._task_put('/api/pool/' + pool['pool'], update)
+            if update.get('compression_mode') == 'unset':
+                update = {
+                    'compression_mode': None,
+                    'compression_algorithm': None,
+                    'compression_mode': None,
+                    'compression_max_blob_size': None,
+                    'compression_required_ratio': None,
+                }
+            self._check_pool_properties(update, pool_name=pool['pool'])
+        self._task_delete("/api/pool/" + pool['pool'])
         self.assertStatus(204)
 
     def test_pool_create_fail(self):
@@ -224,6 +249,7 @@ class PoolTest(DashboardTestCase):
             'compression_algorithms': JList(six.string_types),
             'compression_modes': JList(six.string_types),
             'is_all_bluestore': bool,
+            "bluestore_compression_algorithm": six.string_types,
             'osd_count': int,
             'crush_rules_replicated': JList(JObj({}, allow_unknown=True)),
             'crush_rules_erasure': JList(JObj({}, allow_unknown=True)),
