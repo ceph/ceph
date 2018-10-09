@@ -998,6 +998,7 @@ void RGWZoneStorageClasses::decode_json(JSONObj *obj)
 
     decode_json_obj(m[field.first], field_obj);
   }
+  standard_class = &m[RGW_STORAGE_CLASS_STANDARD];
 }
 
 void RGWZonePlacementInfo::dump(Formatter *f) const
