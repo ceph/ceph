@@ -1950,7 +1950,11 @@ std::vector<Option> get_global_options() {
     .set_default(65536)
     .set_description(""),
 
-    Option("osd_disk_threads", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("osd_remove_threads", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(1)
+    .set_description(""),
+
+    Option("osd_recovery_threads", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1)
     .set_description(""),
 
