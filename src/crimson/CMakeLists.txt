@@ -80,6 +80,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/msg/msg_types.cc
   ${PROJECT_SOURCE_DIR}/src/msg/Message.cc
   ${PROJECT_SOURCE_DIR}/src/mon/MonCap.cc
+  ${PROJECT_SOURCE_DIR}/src/mon/MonMap.cc
   ${PROJECT_SOURCE_DIR}/src/osd/osd_types.cc
   ${PROJECT_SOURCE_DIR}/src/osd/ECMsgTypes.cc
   ${PROJECT_SOURCE_DIR}/src/osd/HitSet.cc
@@ -110,7 +111,6 @@ set(crimson_auth_srcs
   auth/KeyRing.cc)
 set(crimson_mon_srcs
   mon/MonClient.cc
-  ${PROJECT_SOURCE_DIR}/src/mon/MonMap.cc
   ${PROJECT_SOURCE_DIR}/src/mon/MonSub.cc)
 set(crimson_net_srcs
   net/Dispatcher.cc
@@ -134,3 +134,4 @@ target_link_libraries(crimson
     crimson-common
     crimson::cflags)
 add_subdirectory(os)
+add_subdirectory(osd)
