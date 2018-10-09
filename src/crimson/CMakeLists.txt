@@ -132,6 +132,5 @@ target_compile_options(crimson PUBLIC
   "-ftemplate-backtrace-limit=0")
 target_link_libraries(crimson
   PUBLIC
-    crimson-common Seastar::seastar
-  PRIVATE
+    crimson-common
     crimson::cflags)
