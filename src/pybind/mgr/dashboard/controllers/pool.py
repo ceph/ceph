@@ -76,11 +76,11 @@ class Pool(RESTController):
         return CephService.send_command('mon', 'osd pool delete', pool=pool_name, pool2=pool_name,
                                         sure='--yes-i-really-really-mean-it')
 
-    @pool_task('set', ['{pool_name}'])
+    @pool_task('edit', ['{pool_name}'])
     def set(self, pool_name, flags=None, application_metadata=None, **kwargs):
         self._set_pool_values(pool_name, application_metadata, flags, True, kwargs)
 
-    @pool_task('create', ['{pool}'])
+    @pool_task('create', {'pool_name': '{pool}'})
     @handle_send_command_error('pool')
     def create(self, pool, pg_num, pool_type, erasure_code_profile=None, flags=None,
                application_metadata=None, rule_name=None, **kwargs):
@@ -92,6 +92,9 @@ class Pool(RESTController):
         self._set_pool_values(pool, application_metadata, flags, False, kwargs)
 
     def _set_pool_values(self, pool, application_metadata, flags, update_existing, kwargs):
+        if update_existing:
+            current_pool = self._get(pool)
+            self._handle_update_compression_args(current_pool.get('options'), kwargs)
         if flags and 'ec_overwrites' in flags:
             CephService.send_command('mon', 'osd pool set', pool=pool, var='allow_ec_overwrites',
                                      val='true')
@@ -101,7 +104,7 @@ class Pool(RESTController):
                                          force='--yes-i-really-mean-it')
             if update_existing:
                 original_app_metadata = set(
-                    self._get(pool, 'application_metadata')['application_metadata'])
+                    current_pool.get('application_metadata'))
             else:
                 original_app_metadata = set()
 
@@ -118,6 +121,16 @@ class Pool(RESTController):
             if key == 'pg_num':
                 set_key('pgp_num', value)
 
+    def _handle_update_compression_args(self, options, kwargs):
+        if kwargs.get('compression_mode') == 'unset' and options is not None:
+            def reset_arg(arg, value):
+                if options.get(arg):
+                    kwargs[arg] = value
+            for arg in ['compression_min_blob_size', 'compression_max_blob_size',
+                        'compression_required_ratio']:
+                reset_arg(arg, '0')
+            reset_arg('compression_algorithm', 'unset')
+
     @Endpoint()
     @ReadPermission
     def _info(self):
@@ -132,15 +145,17 @@ class Pool(RESTController):
                        for o in mgr.get('osd_metadata').values())
 
         def compression_enum(conf_name):
-            return [o['enum_values'] for o in mgr.get('config_options')['options']
+            return [[v for v in o['enum_values'] if len(v) > 0] for o in config_options
                     if o['name'] == conf_name][0]
 
+        config_options = mgr.get('config_options')['options']
         return {
             "pool_names": [p['pool_name'] for p in self._pool_list()],
             "crush_rules_replicated": rules(1),
             "crush_rules_erasure": rules(3),
             "is_all_bluestore": all_bluestore(),
             "osd_count": len(mgr.get('osd_map')['osds']),
+            "bluestore_compression_algorithm": mgr.get('config')['bluestore_compression_algorithm'],
             "compression_algorithms": compression_enum('bluestore_compression_algorithm'),
             "compression_modes": compression_enum('bluestore_compression_mode'),
         }

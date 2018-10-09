@@ -38,7 +38,7 @@ export class TaskWrapperService {
         (resp) => {
           task.success = false;
           task.exception = resp.error;
-          observer.error();
+          observer.error(resp);
         },
         () => {
           observer.complete();
