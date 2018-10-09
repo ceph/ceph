@@ -97,6 +97,10 @@
 
     ceph auth caps client.bad osd 'allow rwx pool foo'
 
+* The ``ceph-kvstore-tool`` ``repair`` command has been renamed
+  ``destructive-repair`` since we have discovered it can corrupt an
+  otherwise healthy rocksdb database.  It should be used only as a last-ditch
+  attempt to recover data from an otherwise corrupted store.
 
 
 

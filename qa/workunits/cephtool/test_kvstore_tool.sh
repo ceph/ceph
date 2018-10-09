@@ -59,8 +59,8 @@ function test_ceph_kvstore_tool()
   # compact
   ceph-kvstore-tool bluestore-kv ${TEMP_DIR} compact
 
-  # repair 
-  ceph-kvstore-tool bluestore-kv ${TEMP_DIR} repair 
+  # destructive-repair 
+  ceph-kvstore-tool bluestore-kv ${TEMP_DIR} destructive-repair 
 
   current_kv_nums=`ceph-kvstore-tool  bluestore-kv ${TEMP_DIR} list 2>/dev/null | wc -l`
   test ${origin_kv_nums} -eq ${current_kv_nums}
