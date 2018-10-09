@@ -107,31 +107,8 @@ public:
 #define ES_NUM_SHARDS_DEFAULT 16
 #define ES_NUM_REPLICAS_DEFAULT 1
 
-struct ESVersion {
-  int major_ver;
-  int minor_ver;
-
-  ESVersion(int _major, int _minor): major_ver(_major), minor_ver(_minor) {}
-  ESVersion(): major_ver(0), minor_ver(0) {}
-
-  void from_str(const char* s) {
-    sscanf(s, "%d.%d", &major_ver, &minor_ver);
-  }
-
-  std::string to_str() const {
-    return std::to_string(major_ver) + "." + std::to_string(minor_ver);
-  }
-
-  void decode_json(JSONObj *obj);
-};
-
-bool operator >= (const ESVersion& v1, const ESVersion& v2)
-{
-  if (v1.major_ver == v2.major_ver)
-    return v1.minor_ver >= v2.minor_ver;
-
-  return v1.major_ver > v2.major_ver;
-}
+using ESVersion = std::pair<int,int>;
+static constexpr ESVersion ES_V5{5,0};
 
 struct ESInfo {
   std::string name;
@@ -140,21 +117,43 @@ struct ESInfo {
   ESVersion version;
 
   void decode_json(JSONObj *obj);
+
+  std::string get_version_str(){
+    return std::to_string(version.first) + "." + std::to_string(version.second);
+  }
 };
+
+// simple wrapper structure to wrap the es version nested type
+struct es_version_decoder {
+  ESVersion version;
+
+  int parse_version(const std::string& s) {
+    int major, minor;
+    int ret = sscanf(s.c_str(), "%d.%d", &major, &minor);
+    if (ret < 0) {
+      return ret;
+    }
+    version = std::make_pair(major,minor);
+    return 0;
+  }
+
+  void decode_json(JSONObj *obj) {
+    std::string s;
+    JSONDecoder::decode_json("number",s,obj);
+    if (parse_version(s) < 0)
+      throw JSONDecoder::err("Failed to parse ElasticVersion");
+  }
+};
+
 
 void ESInfo::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("name", name, obj);
   JSONDecoder::decode_json("cluster_name", cluster_name, obj);
   JSONDecoder::decode_json("cluster_uuid", cluster_uuid, obj);
-  JSONDecoder::decode_json("version", version, obj);
-}
-
-void ESVersion::decode_json(JSONObj *obj)
-{
-  std::string s;
-  JSONDecoder::decode_json("number", s, obj);
-  this->from_str(s.c_str());
+  es_version_decoder esv;
+  JSONDecoder::decode_json("version", esv, obj);
+  version = std::move(esv.version);
 }
 
 struct ElasticConfig {
@@ -559,11 +558,11 @@ public:
 
       yield {
         string path = conf->get_index_path();
-        ldout(sync_env->cct, 5) << "got elastic version=" << es_info.version.to_str() << dendl;
+        ldout(sync_env->cct, 5) << "got elastic version=" << es_info.get_version_str() << dendl;
 
         es_index_settings settings(conf->num_replicas, conf->num_shards);
         es_index_mappings mappings;
-        if (es_info.version >= ESVersion(5,0)) {
+        if (es_info.version >= ES_V5) {
           ldout(sync_env->cct, 0) << "elasticsearch: using text type for string index mappings " << dendl;
           mappings.string_type = ESType::Text;
         }
