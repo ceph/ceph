@@ -122,8 +122,8 @@ public:
 					       out, expand_meta);
   }
 
-  unsigned get_osd_pool_default_min_size() const {
-    return get_config().get_osd_pool_default_min_size(*values);
+  unsigned get_osd_pool_default_min_size(uint8_t size) const {
+    return get_config().get_osd_pool_default_min_size(*values, size);
   }
 
   seastar::future<> set_mon_vals(const std::map<std::string,std::string>& kv) {

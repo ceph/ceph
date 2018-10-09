@@ -6111,7 +6111,7 @@ int OSDMonitor::prepare_new_pool(MonOpRequestRef op)
   string rule_name;
   int ret = 0;
   ret = prepare_new_pool(m->name, m->crush_rule, rule_name,
-			 0, 0,
+			 0, 0, 0,
 			 erasure_code_profile,
 			 pg_pool_t::TYPE_REPLICATED, 0, FAST_READ_OFF, &ss);
 
@@ -6424,14 +6424,18 @@ int OSDMonitor::parse_erasure_code_profile(const vector<string> &erasure_code_pr
 
 int OSDMonitor::prepare_pool_size(const unsigned pool_type,
 				  const string &erasure_code_profile,
+                                  uint8_t repl_size,
 				  unsigned *size, unsigned *min_size,
 				  ostream *ss)
 {
   int err = 0;
   switch (pool_type) {
   case pg_pool_t::TYPE_REPLICATED:
-    *size = g_conf().get_val<uint64_t>("osd_pool_default_size");
-    *min_size = g_conf().get_osd_pool_default_min_size();
+    *size = (repl_size == 0 ?
+      g_conf().get_val<uint64_t>("osd_pool_default_size")
+      : repl_size);
+    *min_size = g_conf().get_osd_pool_default_min_size(repl_size);
+
     break;
   case pg_pool_t::TYPE_ERASURE:
     {
@@ -6616,6 +6620,7 @@ int OSDMonitor::check_pg_num(int64_t pool, int pg_num, int size, ostream *ss)
  * @param crush_rule_name The crush rule to use, if crush_rulset <0
  * @param pg_num The pg_num to use. If set to 0, will use the system default
  * @param pgp_num The pgp_num to use. If set to 0, will use the system default
+ * @param repl_size Replication factor, or 0 for default
  * @param erasure_code_profile The profile name in OSDMap to be used for erasure code
  * @param pool_type TYPE_ERASURE, or TYPE_REP
  * @param expected_num_objects expected number of objects on the pool
@@ -6628,6 +6633,7 @@ int OSDMonitor::prepare_new_pool(string& name,
 				 int crush_rule,
 				 const string &crush_rule_name,
                                  unsigned pg_num, unsigned pgp_num,
+                                 const uint64_t repl_size,
 				 const string &erasure_code_profile,
                                  const unsigned pool_type,
                                  const uint64_t expected_num_objects,
@@ -6683,7 +6689,8 @@ int OSDMonitor::prepare_new_pool(string& name,
              << duration << dendl;
   }
   unsigned size, min_size;
-  r = prepare_pool_size(pool_type, erasure_code_profile, &size, &min_size, ss);
+  r = prepare_pool_size(pool_type, erasure_code_profile, repl_size,
+                        &size, &min_size, ss);
   if (r) {
     dout(10) << "prepare_pool_size returns " << r << dendl;
     return r;
@@ -11554,11 +11561,15 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       fast_read = FAST_READ_OFF;
     else if (fast_read_param > 0)
       fast_read = FAST_READ_ON;
-    
+
+    int64_t repl_size = 0;
+    cmd_getval(cct, cmdmap, "size", repl_size);
+
     err = prepare_new_pool(poolstr,
 			   -1, // default crush rule
 			   rule_name,
 			   pg_num, pgp_num,
+                           repl_size,
 			   erasure_code_profile, pool_type,
                            (uint64_t)expected_num_objects,
                            fast_read,

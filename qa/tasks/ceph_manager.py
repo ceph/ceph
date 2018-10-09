@@ -1682,9 +1682,9 @@ class CephManager:
         """
         with self.lock:
             assert isinstance(pool_name, basestring)
-            assert pool_name in self.pools
             self.log("removing pool_name %s" % (pool_name,))
-            del self.pools[pool_name]
+            if pool_name in self.pools:
+                del self.pools[pool_name]
             self.raw_cluster_cmd('osd', 'pool', 'rm', pool_name, pool_name,
                                  "--yes-i-really-really-mean-it")
 

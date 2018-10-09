@@ -2173,12 +2173,14 @@ std::vector<Option> get_global_options() {
 
     Option("osd_pool_default_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(3)
+    .set_min_max(0, 255)
     .set_flag(Option::FLAG_RUNTIME)
     .set_description("the number of copies of an object")
     .add_service("mon"),
 
     Option("osd_pool_default_min_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
+    .set_min_max(0, 255)
     .set_flag(Option::FLAG_RUNTIME)
     .set_description("the minimal number of copies allowed to write to a degraded pool")
     .set_long_description("0 means no specific default; ceph will use size-size/2")
