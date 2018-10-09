@@ -142,6 +142,7 @@ class Device(object):
                 pass
         reject_device('removable', 1, 'removable')
         reject_device('ro', 1, 'read-only')
+        reject_device('locked', 1, 'locked')
 
         self._valid = len(self._rejected_reasons) == 0
         return self._valid
