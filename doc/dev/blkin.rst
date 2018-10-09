@@ -1,5 +1,5 @@
 =========================
- Tracing Ceph With BlkKin
+ Tracing Ceph With Blkin
 =========================
 
 Ceph can use Blkin, a library created by Marios Kogias and others,
