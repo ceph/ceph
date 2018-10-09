@@ -33,6 +33,7 @@
 #include "mon/MgrMap.h"
 #include "osd/OSDMap.h"
 #include "crush/CrushCompiler.h"
+#include "mon/CreatingPGs.h"
 
 namespace po = boost::program_options;
 using namespace std;
@@ -592,6 +593,35 @@ static int update_monitor(MonitorDBStore& st)
 }
 
 // rebuild
+//  - creating_pgs
+static int update_creating_pgs(MonitorDBStore& st)
+{
+  bufferlist bl;
+  auto last_osdmap_epoch = st.get("osdmap", "last_committed");
+  int r = st.get("osdmap", st.combine_strings("full", last_osdmap_epoch), bl);
+  if (r < 0) {
+    cerr << "unable to losd osdmap e" << last_osdmap_epoch << std::endl;
+    return r;
+  }
+
+  OSDMap osdmap;
+  osdmap.decode(bl);
+  creating_pgs_t creating;
+  for (auto& i : osdmap.get_pools()) {
+    creating.created_pools.insert(i.first);
+  }
+  creating.last_scan_epoch = last_osdmap_epoch;
+
+  bufferlist newbl;
+  ::encode(creating, newbl);
+
+  auto t = make_shared<MonitorDBStore::Transaction>();
+  t->put("osd_pg_creating", "creating", newbl);
+  st.apply_transaction(t);
+  return 0;
+}
+
+// rebuild
 //  - mgr
 //  - mgr_command_desc
 static int update_mgrmap(MonitorDBStore& st)
@@ -677,6 +707,9 @@ int rebuild_monstore(const char* progname,
   }
   if (!keyring_path.empty())
     update_auth(st, keyring_path);
+  if ((r = update_creating_pgs(st))) {
+    return r;
+  }
   if ((r = update_mgrmap(st))) {
     return r;
   }
