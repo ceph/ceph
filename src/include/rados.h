@@ -601,10 +601,11 @@ struct ceph_osd_op {
 		struct {
 			__le64 snapid;
 			__le64 src_version;
-			__u8 flags;
+			__u8 flags; /* CEPH_OSD_COPY_FROM_FLAG_* */
 			/*
-			 * __le32 flags: CEPH_OSD_OP_FLAG_FADVISE_: mean the fadvise flags for dest object
-			 * src_fadvise_flags mean the fadvise flags for src object
+			 * CEPH_OSD_OP_FLAG_FADVISE_*: fadvise flags
+			 * for src object, flags for dest object are in
+			 * ceph_osd_op::flags.
 			 */
 			__le32 src_fadvise_flags;
 		} __attribute__ ((packed)) copy_from;
