@@ -642,9 +642,10 @@ namespace buffer CEPH_BUFFER_API {
     }
 
     class contiguous_filler {
-      friend buffer::list;
+    public:
+      //friend buffer::list;
       char* pos;
-
+    public:
       contiguous_filler(char* const pos) : pos(pos) {}
 
     public:

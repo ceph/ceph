@@ -39,6 +39,8 @@
 #include "common/sctp_crc32.h"
 
 #include "include/encoding.h"
+#define DELETE_MOST
+#ifdef DELETE_MOST
 
 #define MAX_TEST 1000000
 #define FILENAME "bufferlist"
@@ -2856,6 +2858,191 @@ TEST(BufferList, TestSHA1) {
   }
 
 }
+#endif //DELETE_MOST
+
+class encode_size
+{
+public:
+  //calculate size stage
+  size_t encode_sizex{0};
+  size_t data_size;
+  encode_size() : data_size(1) {
+
+  }
+};
+
+
+
+
+class encode_helper
+{
+public:
+
+  //calculate size stage
+  size_t encode_size{0};
+  size_t data_size;
+  //encode stage
+  //buffer::list::contiguous_filler start{nullptr};
+  buffer::list::contiguous_filler at{nullptr};
+  char p[sizeof(std::string)];
+  char* dupa;
+
+  const int mode;
+  //uint64_t dupa;
+  //dupex::ptr pp;
+  //std::string* str;
+  //buffer::ptr rr;
+  //encode_size p;
+  //char* pos;
+  buffer::list* bl;
+
+  inline buffer::ptr& get_ptr()
+  {
+    return *(reinterpret_cast<buffer::ptr*>(p));
+  }
+  encode_helper(int mode) : mode(mode) {}
+  encode_helper(buffer::list::contiguous_filler at) :mode(1), at(at) {};
+  encode_helper(buffer::list& x) :bl(&x), mode(2) {};
+  ~encode_helper();
+};
+encode_helper::~encode_helper()
+{
+
+}
+
+#if 0
+void encode(bufferlist& bl) const {
+  using ceph::encode;
+  __u8 v = 1;
+  encode(v, bl);
+  encode(m_pool, bl);
+  encode(m_seed, bl);
+  encode((int32_t)-1, bl); // was preferred
+}
+template<typename T> void encode(T& bl) const {
+  using ceph::encode;
+  __u8 v = 1;
+  encode(v, bl);
+  encode(m_pool, bl);
+  encode(m_seed, bl);
+  encode((int32_t)-1, bl); // was preferred
+}
+#endif
+
+#if 1
+
+/*
+template<typename T> void inline encode(T& __restrict__ x, encode_size& s)
+{
+  s.encode_sizex += sizeof(x);
+}
+
+template<typename T> void inline encode(const T& __restrict__ x, buffer::list::contiguous_filler& __restrict__ at)
+{
+  at.copy_in(sizeof(x), (const char*)&x);
+}
+*/
+
+template<typename T> void inline encode(const T& __restrict__ x, encode_helper& __restrict__ eh)
+{
+  if (eh.mode == 2)
+  {
+    encode(x, *eh.bl);
+    return;
+  } else
+  if (eh.mode == 0)
+  {
+    eh.encode_size += sizeof(x);
+    return;
+  } else
+  if (eh.mode == 1)
+  {
+    eh.at.copy_in(sizeof(x), (const char*)&x);
+    return;
+  }
+}
+
+struct fasola
+{
+  uint32_t a0;
+  uint32_t a1;
+  uint64_t a2;
+  uint64_t a3;
+  void encode(encode_helper& __restrict__ bl) const;
+#if 0
+  {
+    //using namespace dupa;
+    ::encode(a0, bl);
+    ::encode(a1, bl);
+    ::encode(a2, bl);
+    ::encode(a3, bl);
+  }
+#endif
+};
+
+void fasola::encode(encode_helper& __restrict__ bl) const
+{
+  //using namespace dupa;
+  ::encode(a0, bl);
+  ::encode(a1, bl);
+  ::encode(a2, bl);
+  ::encode(a3, bl);
+}
+
+
+struct jas_fasola2
+{
+  uint32_t a0;
+  uint32_t a1;
+  uint64_t a2;
+  uint64_t a3;
+  uint16_t a4;
+  uint8_t a5;
+  uint8_t a6;
+  uint8_t a7;
+  fasola f;
+  //template<typename T> void inline encode(T& __restrict__ bl) const
+  void encode(encode_helper& bl)
+  {
+    //using namespace dupa;
+    f.encode(bl);
+    ::encode(a0, bl);
+    ::encode(a1, bl);
+    ::encode(a2, bl);
+    ::encode(a3, bl);
+    ::encode(a4, bl);
+    ::encode(a5, bl);
+    ::encode(a6, bl);
+    ::encode(a7, bl);
+  }
+  void encode(bufferlist& bl);
+#if 0
+  {
+    encode_size s;
+    buffer::ptr rr;
+    encode_helper h(0);
+    encode(h);
+    h.at = bl.append_hole(h.encode_size);
+    //h.pos = h.at.pos;
+    h.mode = 1;
+    encode(h);
+  }
+#endif
+};
+#endif
+
+void jas_fasola2::encode(bufferlist& bl)
+{
+  encode_size s;
+  buffer::ptr rr;
+  encode_helper h(0);
+  encode(h);
+  h.at = bl.append_hole(h.encode_size);
+  //h.pos = h.at.pos;
+  encode_helper h1(h.at);
+  encode(h1);
+}
+
 
 struct jas_fasola
 {
@@ -2869,25 +3056,30 @@ struct jas_fasola
   uint8_t a7;
   void encode(bufferlist& bl)
   {
-//#define AK
+#define AK
 #ifdef AK
+    //buffer::list::contiguous_filler cf;
     int b;
     size_t roz = 0;
-    auto encode = [&b, &roz](auto& x, char* __restrict__ &at) {
+    auto encode = [&b, &roz](auto& x, buffer::list::contiguous_filler &at) {
 
       if (b == 0) {
         roz += sizeof(x);//::rozmiar(x);
+        //encode(x, &roz);
         return;
       } else {
-        memcpy(at, &x, sizeof(x));
-        at += sizeof(x);
+        at.copy_in(sizeof(x), (const char*)&x);
+        //encode(x, &at);
+        //memcpy(at, &x, sizeof(x));
+        //at += sizeof(x);
       }
       //ceph::dane(x, at);
       return;
     };
     {
       bufferlist& bl_copy = bl;
-      char* __restrict__ bl = nullptr;
+      //char* __restrict__ bl = nullptr;
+      buffer::list::contiguous_filler bl{nullptr};
       for (b = 0; b < 2; b++)
       {
 #else
@@ -2903,9 +3095,11 @@ struct jas_fasola
         encode(a5, bl);
         encode(a6, bl);
         encode(a7, bl);
+
+
 #ifdef AK
         if (b == 0) {
-          bl = bl_copy.reserve2(roz);
+          bl = bl_copy.append_hole(roz);
         }
       }
     }
@@ -2913,18 +3107,40 @@ struct jas_fasola
   }
 };
 
-TEST(BufferList, encode_bench)
+#if 0
+void ENCODE(bufferlist& bl)
 {
-  bufferlist bl;
   uint32_t v0 = 0;
-  jas_fasola jf;
+  jas_fasola2 jf;
   for (size_t i=0; i < 1000000; i++)
   {
     jf.encode(bl);
   }
-  //EXPECT_EQ(1000000 * (4+4+8+8+2+1+1+1), bl.length());
+  EXPECT_EQ(1000000 * (4+4+8+8+2+1+1+1), bl.length());
+}
+#endif
+
+jas_fasola2 jf;
+
+TEST(BufferList, encode_bench)
+{
+  bufferlist bl;
+  //ENCODE(bl);
+#if 1
+  uint32_t v0 = 0;
+  for (size_t i=0; i < 1000000; i++)
+  {
+    jf.encode(bl);
+  }
+  EXPECT_EQ(1000000 * (4+4+8+8+2+1+1+1), bl.length());
+#endif
 }
 
+
+
+
+
+#ifdef DELETE_MOST
 TEST(BufferHash, all) {
   {
     bufferlist bl;
@@ -2946,7 +3162,7 @@ TEST(BufferHash, all) {
     EXPECT_EQ((unsigned)0xB3109EBF, hash.digest());
   }
 }
-
+#endif
 /*
  * Local Variables:
  * compile-command: "cd .. ; make unittest_bufferlist && 
