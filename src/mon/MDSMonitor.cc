@@ -327,7 +327,7 @@ bool MDSMonitor::preprocess_beacon(MonOpRequestRef op)
   const auto &fsmap = get_fsmap();
 
   // check privileges, ignore if fails
-  MonSession *session = m->get_session();
+  MonSession *session = op->get_session();
   if (!session)
     goto ignore;
   if (!session->is_capable("mds", MON_CAP_X)) {
@@ -473,7 +473,7 @@ bool MDSMonitor::preprocess_offload_targets(MonOpRequestRef op)
   const auto &fsmap = get_fsmap();
   
   // check privileges, ignore message if fails
-  MonSession *session = m->get_session();
+  MonSession *session = op->get_session();
   if (!session)
     goto ignore;
   if (!session->is_capable("mds", MON_CAP_X)) {
@@ -904,7 +904,7 @@ bool MDSMonitor::preprocess_command(MonOpRequestRef op)
   cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
   std::unique_ptr<Formatter> f(Formatter::create(format));
 
-  MonSession *session = m->get_session();
+  MonSession *session = op->get_session();
   if (!session) {
     mon->reply_command(op, -EACCES, "access denied", rdata, get_last_committed());
     return true;
@@ -1215,7 +1215,7 @@ bool MDSMonitor::prepare_command(MonOpRequestRef op)
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
 
   /* Refuse access if message not associated with a valid session */
-  MonSession *session = m->get_session();
+  MonSession *session = op->get_session();
   if (!session) {
     mon->reply_command(op, -EACCES, "access denied", rdata, get_last_committed());
     return true;
