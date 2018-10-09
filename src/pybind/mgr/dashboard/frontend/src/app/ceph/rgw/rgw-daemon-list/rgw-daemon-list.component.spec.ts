@@ -1,5 +1,6 @@
 import { HttpClientModule } from '@angular/common/http';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { RouterTestingModule } from '@angular/router/testing';
 
 import { TabsModule } from 'ngx-bootstrap/tabs';
 
@@ -15,7 +16,13 @@ describe('RgwDaemonListComponent', () => {
 
   configureTestBed({
     declarations: [RgwDaemonListComponent, RgwDaemonDetailsComponent],
-    imports: [HttpClientModule, TabsModule.forRoot(), PerformanceCounterModule, SharedModule]
+    imports: [
+      HttpClientModule,
+      TabsModule.forRoot(),
+      PerformanceCounterModule,
+      SharedModule,
+      RouterTestingModule
+    ]
   });
 
   beforeEach(() => {
