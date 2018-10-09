@@ -955,6 +955,50 @@ class TestOSD(TestArgparse):
                                                     'poolname', 'snapname',
                                                     'toomany']))
 
+    def test_pool_kwargs(self):
+        """
+        Use the pool creation command to exercise keyword-style arguments
+        since it has lots of parameters
+        """
+        # Simply use a keyword arg instead of a positional arg, in its
+        # normal order (pgp_num after pg_num)
+        assert_equal(
+            {
+                "prefix": "osd pool create",
+                "pool": "foo",
+                "pg_num": 8,
+                "pgp_num": 16
+            }, validate_command(sigdict, [
+                'osd', 'pool', 'create', "foo", "8", "--pgp_num", "16"]))
+
+        # Again, but using the "--foo=bar" style
+        assert_equal(
+            {
+                "prefix": "osd pool create",
+                "pool": "foo",
+                "pg_num": 8,
+                "pgp_num": 16
+            }, validate_command(sigdict, [
+                'osd', 'pool', 'create', "foo", "8", "--pgp_num=16"]))
+
+        # Specify keyword args in a different order than their definitions
+        # (pgp_num after pool_type)
+        assert_equal(
+            {
+                "prefix": "osd pool create",
+                "pool": "foo",
+                "pg_num": 8,
+                "pgp_num": 16,
+                "pool_type": "replicated"
+            }, validate_command(sigdict, [
+                'osd', 'pool', 'create', "foo", "8",
+                "--pool_type", "replicated",
+                "--pgp_num", "16"]))
+
+        # Use a keyword argument that doesn't exist, should fail validation
+        assert_equal({}, validate_command(sigdict,
+            ['osd', 'pool', 'create', "foo", "8", "--foo=bar"]))
+
     def test_pool_create(self):
         self.assert_valid_command(['osd', 'pool', 'create',
                                    'poolname', '128'])
