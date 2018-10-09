@@ -63,6 +63,10 @@ describe('FormatterService', () => {
       expect(service.toBytes('1.1  kib')).toBeNull();
       expect(service.toBytes('1.kib')).toBeNull();
       expect(service.toBytes('1 ki')).toBeNull();
+      expect(service.toBytes()).toBeNull();
+      expect(service.toBytes('')).toBeNull();
+      expect(service.toBytes('-')).toBeNull();
+      expect(service.toBytes(null)).toBeNull();
     });
 
     it('should convert values to bytes', () => {
