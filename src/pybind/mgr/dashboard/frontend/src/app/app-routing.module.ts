@@ -6,6 +6,7 @@ import { MirroringComponent } from './ceph/block/mirroring/mirroring.component';
 import { RbdFormComponent } from './ceph/block/rbd-form/rbd-form.component';
 import { RbdImagesComponent } from './ceph/block/rbd-images/rbd-images.component';
 import { CephfsListComponent } from './ceph/cephfs/cephfs-list/cephfs-list.component';
+import { ConfigurationFormComponent } from './ceph/cluster/configuration/configuration-form/configuration-form.component';
 import { ConfigurationComponent } from './ceph/cluster/configuration/configuration.component';
 import { HostsComponent } from './ceph/cluster/hosts/hosts.component';
 import { MonitorComponent } from './ceph/cluster/monitor/monitor.component';
@@ -77,9 +78,15 @@ const routes: Routes = [
   },
   {
     path: 'configuration',
-    component: ConfigurationComponent,
-    canActivate: [AuthGuardService],
-    data: { breadcrumbs: 'Cluster/Configuration Documentation' }
+    data: { breadcrumbs: 'Cluster/Configuration' },
+    children: [
+      { path: '', component: ConfigurationComponent },
+      {
+        path: 'edit/:name',
+        component: ConfigurationFormComponent,
+        data: { breadcrumbs: 'Edit' }
+      }
+    ]
   },
   {
     path: 'perf_counters/:type/:id',
