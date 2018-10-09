@@ -179,10 +179,12 @@ class RGWZoneStorageClasses {
   map<string, RGWZoneStorageClass> m;
 
   /* in memory only */
-  RGWZoneStorageClass *standard_class{&m[RGW_STORAGE_CLASS_STANDARD]};
+  RGWZoneStorageClass *standard_class;
 
 public:
-  RGWZoneStorageClasses() {}
+  RGWZoneStorageClasses() {
+    standard_class = &m[RGW_STORAGE_CLASS_STANDARD];
+  }
   RGWZoneStorageClasses(const RGWZoneStorageClasses& rhs) {
     m = rhs.m;
     standard_class = &m[RGW_STORAGE_CLASS_STANDARD];
@@ -237,6 +239,7 @@ public:
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(m, bl);
+    standard_class = &m[RGW_STORAGE_CLASS_STANDARD];
     DECODE_FINISH(bl);
   }
 
