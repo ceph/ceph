@@ -1,14 +1,33 @@
-<cd-table [data]="hosts"
-          [columns]="columns"
-          columnMode="flex"
-          (fetchData)="getHosts($event)">
-  <ng-template #servicesTpl let-value="value">
-    <span *ngFor="let service of value; last as isLast">
-      <a [routerLink]="[service.cdLink]"
-         [queryParams]="cdParams"
-         *ngIf="service.canRead">{{ service.type }}.{{ service.id }}</a>
-      <span *ngIf="!service.canRead">{{ service.type }}.{{ service.id }}</span>
-      {{ !isLast ? ", " : "" }}
-    </span>
-  </ng-template>
-</cd-table>
+<tabset>
+  <tab i18n-heading
+       heading="Hosts List">
+    <cd-table [data]="hosts"
+              [columns]="columns"
+              columnMode="flex"
+              (fetchData)="getHosts($event)"
+              selectionType="single"
+              (updateSelection)="updateSelection($event)">
+      <ng-template #servicesTpl let-value="value">
+        <span *ngFor="let service of value; last as isLast">
+          <a [routerLink]="[service.cdLink]"
+             [queryParams]="cdParams"
+             *ngIf="service.canRead">{{ service.type }}.{{ service.id }}
+          </a>
+          <span *ngIf="!service.canRead">
+            {{ service.type }}.{{ service.id }}
+          </span>
+          {{ !isLast ? ", " : "" }}
+        </span>
+      </ng-template>
+      <cd-host-details cdTableDetail
+                       [selection]="selection">
+      </cd-host-details>
+    </cd-table>
+  </tab>
+  <tab i18n-heading
+       heading="Overall Performance">
+    <cd-grafana [grafanaPath]="'lxnjcTAmk/host-overview?'"
+                grafanaStyle="two">
+    </cd-grafana>
+  </tab>
+</tabset>

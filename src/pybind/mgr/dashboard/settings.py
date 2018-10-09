@@ -32,11 +32,9 @@ class Options(object):
     RGW_API_SSL_VERIFY = (True, bool)
 
     # Grafana settings
-    GRAFANA_API_URL = ('http://localhost:3000', str)
+    GRAFANA_API_URL = ('', str)
     GRAFANA_API_USERNAME = ('admin', str)
     GRAFANA_API_PASSWORD = ('admin', str)
-    GRAFANA_API_TOKEN = ('', str)
-    GRAFANA_API_AUTH_METHOD = ('', str)  # Either 'password' or 'token'
 
     @staticmethod
     def has_default_value(name):

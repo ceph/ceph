@@ -39,4 +39,10 @@
       </div>
     </div>
   </tab>
+  <tab i18n-heading
+       heading="Performance Details">
+    <cd-grafana [grafanaPath]="'MKj_9ipiz/osd-device-details?var-osd_id=' + osd['id']"
+                grafanaStyle="GrafanaStyles.two">
+    </cd-grafana>
+  </tab>
 </tabset>
