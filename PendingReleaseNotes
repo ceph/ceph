@@ -46,6 +46,10 @@
 * The cephfs python bindings now include mount_root and filesystem_name
   options in the mount() function.
 
+* erasure-code: add experimental *Coupled LAYer (CLAY)* erasure codes
+  support. It features less network traffic and disk I/O when performing
+  recovery.
+
 >=13.1.0
 --------
 
