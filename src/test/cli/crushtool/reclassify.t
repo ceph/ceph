@@ -1,4 +1,32 @@
-  $ crushtool -i $TESTDIR/crush-classes/Eric.Smith@ccur.com --reclassify --reclassify-bucket %-ssd ssd default --reclassify-bucket ssd ssd default --reclassify-root default hdd -o foo
+  $ crushtool -i $TESTDIR/crush-classes/a --reclassify --reclassify-bucket %-ssd ssd default --reclassify-bucket ssd ssd default --reclassify-root default hdd -o foo
+  classify_root default (-1) as hdd
+    created new class hdd as 1
+    renumbering bucket -1 -> -5
+    renumbering bucket -4 -> -6
+    renumbering bucket -3 -> -7
+    renumbering bucket -2 -> -8
+  classify_bucket %-ssd as ssd default bucket default (root)
+    created new class ssd as 2
+  match %-ssd to ttipod001-cephosd-2-ssd basename ttipod001-cephosd-2
+    have base -8
+  match %-ssd to ttipod001-cephosd-1-ssd basename ttipod001-cephosd-1
+    have base -7
+  match %-ssd to ttipod001-cephosd-3-ssd basename ttipod001-cephosd-3
+    have base -6
+  classify_bucket ssd as ssd default bucket default (root)
+    new class ssd exists as 2
+  match ssd to ssd basename default
+    have base -5
+  moving items from -24 (ttipod001-cephosd-3-ssd) to -6 (ttipod001-cephosd-3)
+  moving items from -23 (ttipod001-cephosd-1-ssd) to -7 (ttipod001-cephosd-1)
+  moving items from -22 (ttipod001-cephosd-2-ssd) to -8 (ttipod001-cephosd-2)
+  moving items from -21 (ssd) to -5 (default)
+  $ crushtool -i $TESTDIR/crush-classes/a --compare foo
+  rule 0 had 0/10240 mismatched mappings (0)
+  rule 1 had 0/10240 mismatched mappings (0)
+  maps appear equivalent
+
+  $ crushtool -i $TESTDIR/crush-classes/d --reclassify --reclassify-bucket %-ssd ssd default --reclassify-bucket ssd ssd default --reclassify-root default hdd -o foo
   classify_root default (-1) as hdd
     created new class hdd as 1
     renumbering bucket -1 -> -13
@@ -29,48 +57,12 @@
   moving items from -9 (node-21-ssd) to -25 (node-21)
   moving items from -8 (node-20-ssd) to -18 (node-20)
   moving items from -7 (ssd) to -13 (default)
-  $ crushtool -i $TESTDIR/crush-classes/Eric.Smith@ccur.com --compare foo
+  $ crushtool -i $TESTDIR/crush-classes/d --compare foo
   rule 0 had 0/10240 mismatched mappings (0)
   rule 1 had 0/10240 mismatched mappings (0)
   maps appear equivalent
 
-  $ crushtool -i $TESTDIR/crush-classes/Eric.Smith@ccur.com --reclassify --reclassify-bucket %-ssd ssd default --reclassify-bucket ssd ssd default --reclassify-root default hdd -o foo
-  classify_root default (-1) as hdd
-    created new class hdd as 1
-    renumbering bucket -1 -> -13
-    renumbering bucket -6 -> -14
-    renumbering bucket -5 -> -15
-    renumbering bucket -4 -> -16
-    renumbering bucket -3 -> -17
-    renumbering bucket -2 -> -18
-  classify_bucket %-ssd as ssd default bucket default (root)
-    created new class ssd as 2
-  match %-ssd to node-20-ssd basename node-20
-    have base -18
-  match %-ssd to node-21-ssd basename node-21
-    created base -25
-  match %-ssd to node-22-ssd basename node-22
-    created base -26
-  match %-ssd to node-23-ssd basename node-23
-    created base -27
-  match %-ssd to node-27-ssd basename node-27
-    created base -28
-  classify_bucket ssd as ssd default bucket default (root)
-    new class ssd exists as 2
-  match ssd to ssd basename default
-    have base -13
-  moving items from -12 (node-27-ssd) to -28 (node-27)
-  moving items from -11 (node-23-ssd) to -27 (node-23)
-  moving items from -10 (node-22-ssd) to -26 (node-22)
-  moving items from -9 (node-21-ssd) to -25 (node-21)
-  moving items from -8 (node-20-ssd) to -18 (node-20)
-  moving items from -7 (ssd) to -13 (default)
-  $ crushtool -i $TESTDIR/crush-classes/Eric.Smith@ccur.com --compare foo
-  rule 0 had 0/10240 mismatched mappings (0)
-  rule 1 had 0/10240 mismatched mappings (0)
-  maps appear equivalent
-
-  $ crushtool -i $TESTDIR/crush-classes/iversons@rushville.k12.in.us --reclassify --reclassify-bucket ceph-osd-ssd-% ssd default --reclassify-bucket ssd-root ssd default --reclassify-root default hdd -o foo
+  $ crushtool -i $TESTDIR/crush-classes/e --reclassify --reclassify-bucket ceph-osd-ssd-% ssd default --reclassify-bucket ssd-root ssd default --reclassify-root default hdd -o foo
   classify_root default (-1) as hdd
     new class hdd exists as 1
     renumbering bucket -1 -> -55
@@ -116,13 +108,13 @@
 
 this one has weird node weights, so *lots* of mappings change...
 
-  $ crushtool -i $TESTDIR/crush-classes/iversons@rushville.k12.in.us --compare foo
+  $ crushtool -i $TESTDIR/crush-classes/e --compare foo
   rule 0 had 6540/10240 mismatched mappings (0.638672)
   rule 1 had 8417/10240 mismatched mappings (0.821973)
   warning: maps are NOT equivalent
   [1]
 
-  $ crushtool -i $TESTDIR/crush-classes/jwillem@stads.net --reclassify --reclassify-bucket %-SSD ssd default --reclassify-bucket ssd ssd default --reclassify-root default hdd -o foo
+  $ crushtool -i $TESTDIR/crush-classes/c --reclassify --reclassify-bucket %-SSD ssd default --reclassify-bucket ssd ssd default --reclassify-root default hdd -o foo
   classify_root default (-1) as hdd
     new class hdd exists as 0
     renumbering bucket -1 -> -55
@@ -169,14 +161,14 @@ this one has weird node weights, so *lots* of mappings change...
 wonky crush weights on Ceph-Stor1, so a small number of mappings change
 because the new map has a strictly summing hierarchy.
 
-  $ crushtool -i $TESTDIR/crush-classes/jwillem@stads.net --compare foo
+  $ crushtool -i $TESTDIR/crush-classes/c --compare foo
   rule 0 had 158/10240 mismatched mappings (0.0154297)
   rule 1 had 62/5120 mismatched mappings (0.0121094)
   rule 2 had 0/10240 mismatched mappings (0)
   warning: maps are NOT equivalent
   [1]
 
-  $ crushtool -i $TESTDIR/crush-classes/dan@vanderster.com-beesly.crush --reclassify --reclassify-root 0513-R-0050 hdd --reclassify-root 0513-R-0060 hdd -o foo
+  $ crushtool -i $TESTDIR/crush-classes/beesly --reclassify --reclassify-root 0513-R-0050 hdd --reclassify-root 0513-R-0060 hdd -o foo
   classify_root 0513-R-0050 (-2) as hdd
     new class hdd exists as 0
     renumbering bucket -2 -> -131
@@ -244,14 +236,14 @@ because the new map has a strictly summing hierarchy.
     renumbering bucket -83 -> -55
     renumbering bucket -73 -> -56
     renumbering bucket -69 -> -57
-  $ crushtool -i $TESTDIR/crush-classes/dan@vanderster.com-beesly.crush --compare foo
+  $ crushtool -i $TESTDIR/crush-classes/beesly --compare foo
   rule 0 had 0/10240 mismatched mappings (0)
   rule 1 had 0/10240 mismatched mappings (0)
   rule 2 had 0/10240 mismatched mappings (0)
   rule 4 had 0/10240 mismatched mappings (0)
   maps appear equivalent
 
-  $ crushtool -i $TESTDIR/crush-classes/dan@vanderster.com-flax.crush --reclassify --reclassify-root default hdd -o foo
+  $ crushtool -i $TESTDIR/crush-classes/flax --reclassify --reclassify-root default hdd -o foo
   classify_root default (-1) as hdd
     new class hdd exists as 0
     renumbering bucket -1 -> -5
@@ -261,11 +253,11 @@ because the new map has a strictly summing hierarchy.
     renumbering bucket -4 -> -11
     renumbering bucket -3 -> -13
     renumbering bucket -2 -> -14
-  $ crushtool -i $TESTDIR/crush-classes/dan@vanderster.com-flax.crush --compare foo
+  $ crushtool -i $TESTDIR/crush-classes/flax --compare foo
   rule 0 had 0/10240 mismatched mappings (0)
   maps appear equivalent
 
-  $ crushtool -i $TESTDIR/crush-classes/dan@vanderster.com-gabe.crush --reclassify --reclassify-root default hdd -o foo
+  $ crushtool -i $TESTDIR/crush-classes/gabe --reclassify --reclassify-root default hdd -o foo
   classify_root default (-1) as hdd
     new class hdd exists as 0
     rule 3 includes take on root default class 0
@@ -275,7 +267,7 @@ because the new map has a strictly summing hierarchy.
 above fails because of ec-rack-by-2-hdd also has take default class hdd
 
 
-  $ crushtool -i $TESTDIR/crush-classes/michael.nieporte@uk-essen.de --reclassify --reclassify-bucket %-hdd hdd default --reclassify-bucket %-ssd ssd default --reclassify-bucket ssd ssd default --reclassify-bucket hdd hdd default -o foo
+  $ crushtool -i $TESTDIR/crush-classes/b --reclassify --reclassify-bucket %-hdd hdd default --reclassify-bucket %-ssd ssd default --reclassify-bucket ssd ssd default --reclassify-bucket hdd hdd default -o foo
   classify_bucket %-hdd as hdd default bucket default (root)
     new class hdd exists as 0
   match %-hdd to berta-hdd basename berta
@@ -378,7 +370,7 @@ above fails because of ec-rack-by-2-hdd also has take default class hdd
 this makes changes, but it doesn't really clean up the map, which is
 a mess!
 
-  $ crushtool -i $TESTDIR/crush-classes/michael.nieporte@uk-essen.de --compare foo
+  $ crushtool -i $TESTDIR/crush-classes/b --compare foo
   rule 0 had 3060/3072 mismatched mappings (0.996094)
   rule 1 had 4096/4096 mismatched mappings (1)
   warning: maps are NOT equivalent
