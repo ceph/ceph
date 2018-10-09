@@ -3884,7 +3884,9 @@ void Monitor::resend_routed_requests()
       rr->op->mark_event("resend forwarded message to leader");
       dout(10) << " resend to mon." << mon << " tid " << rr->tid << " " << *req
 	       << dendl;
-      MForward *forward = new MForward(rr->tid, req, rr->con_features,
+      MForward *forward = new MForward(rr->tid,
+				       req,
+				       rr->con_features,
 				       rr->session->caps);
       req->put();  // forward takes its own ref; drop ours.
       forward->client_type = rr->con->get_peer_type();
