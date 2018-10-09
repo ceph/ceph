@@ -205,11 +205,12 @@ SHOULD fix warnings that are related to syntax you modified.
 .. important:: You must validate ALL HYPERLINKS. If a hyperlink is broken,
    it automatically breaks the build!
 
-Once you build the documentation set, you may navigate to the source directory
-to view it::
+Once you build the documentation set, you may start an HTTP server at
+``http://localhost:8080/`` to view it::
 
-	cd build-doc/output
+	admin/serve-doc
 
+You can also navigate to ``build-doc/output`` to inspect the built documents.
 There should be an ``html`` directory and a ``man`` directory containing
 documentation in HTML and manpage formats respectively.
 
