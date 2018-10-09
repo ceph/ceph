@@ -78,7 +78,9 @@ void Beacon::init(const MDSMap &mdsmap)
       auto since = std::chrono::duration<double>(now-last_send).count();
       auto interval = beacon_interval;
       if (since >= interval*.90) {
-        _send();
+        if (!_send()) {
+          interval = 0.5; /* 500ms */
+        }
       } else {
         interval -= since;
       }
@@ -179,7 +181,7 @@ void Beacon::send_and_wait(const double duration)
 /**
  * Call periodically, or when you have updated the desired state
  */
-void Beacon::_send()
+bool Beacon::_send()
 {
   auto now = clock::now();
   auto since = std::chrono::duration<double>(now-last_acked_stamp).count();
@@ -188,7 +190,7 @@ void Beacon::_send()
     /* If anything isn't progressing, let avoid sending a beacon so that
      * the MDS will consider us laggy */
     dout(0) << "Skipping beacon heartbeat to monitors (last acked " << since << "s ago); MDS internal heartbeat is not healthy!" << dendl;
-    return;
+    return false;
   }
 
   ++last_seq;
@@ -221,6 +223,7 @@ void Beacon::_send()
   }
   monc->send_mon_message(beacon.detach());
   last_send = now;
+  return true;
 }
 
 /**
