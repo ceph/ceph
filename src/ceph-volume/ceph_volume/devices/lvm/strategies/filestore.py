@@ -33,8 +33,11 @@ class SingleType(object):
         self.ssds = [device for device in devices if device.sys_api['rotational'] == '0']
         self.computed = {'osds': [], 'vgs': [], 'filtered_devices': args.filtered_devices}
         self.journal_size = get_journal_size(args)
-        self.validate()
-        self.compute()
+        if self.devices:
+            self.validate()
+            self.compute()
+        else:
+            self.computed["changed"] = False
 
     @staticmethod
     def type():
@@ -189,8 +192,11 @@ class MixedType(object):
         self.journals_needed = len(self.hdds) * self.osds_per_device
         self.journal_size = get_journal_size(args)
         self.system_vgs = lvm.VolumeGroups()
-        self.validate()
-        self.compute()
+        if self.devices:
+            self.validate()
+            self.compute()
+        else:
+            self.computed["changed"] = False
 
     @staticmethod
     def type():
