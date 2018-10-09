@@ -764,8 +764,6 @@ COMMAND("osd require-osd-release "\
 	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
 	"set the minimum allowed OSD release to participate in the cluster",
 	"osd", "rw")
-COMMAND("osd cluster_snap", "take cluster snapshot (disabled)", \
-	"osd", "r")
 COMMAND("osd down " \
 	"type=CephString,name=ids,n=N", \
 	"set osd(s) <id> [<id>...] down, " \
