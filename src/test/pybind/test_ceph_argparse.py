@@ -859,9 +859,6 @@ class TestOSD(TestArgparse):
             assert_equal({}, validate_command(sigdict, ['osd', action,
                                                         'pause', 'toomany']))
 
-    def test_cluster_snap(self):
-        assert_equal({}, validate_command(sigdict, ['osd', 'cluster_snap']))
-
     def test_down(self):
         self.check_1_or_more_string_args('osd', 'down')
 

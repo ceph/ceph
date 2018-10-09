@@ -10118,11 +10118,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
     pending_inc.new_require_osd_release = rel;
     goto update;
-  } else if (prefix == "osd cluster_snap") {
-    // ** DISABLE THIS FOR NOW **
-    ss << "cluster snapshot currently disabled (broken implementation)";
-    // ** DISABLE THIS FOR NOW **
-
   } else if (prefix == "osd down" ||
 	     prefix == "osd out" ||
 	     prefix == "osd in" ||
