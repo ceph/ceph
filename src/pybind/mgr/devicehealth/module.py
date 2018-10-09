@@ -47,7 +47,7 @@ class Module(MgrModule):
         },
         {
             'name': 'warn_threshold',
-            'default': str(86400 * 14 * 2),
+            'default': str(86400 * 14 * 6),
         },
         {
             'name': 'self_heal',
