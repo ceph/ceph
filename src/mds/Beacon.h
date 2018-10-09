@@ -84,7 +84,7 @@ public:
 
 private:
   void _notify_mdsmap(const MDSMap &mdsmap);
-  void _send();
+  bool _send();
 
   mutable std::mutex mutex;
   std::thread sender;
