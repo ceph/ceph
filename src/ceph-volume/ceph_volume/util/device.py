@@ -22,6 +22,7 @@ class Device(object):
         self._valid = False
         self._rejected_reasons = []
         self._parse()
+        self.is_valid
 
     def _parse(self):
         # start with lvm since it can use an absolute or relative path
