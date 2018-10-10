@@ -19,7 +19,7 @@ function _os_specific_install_deps {
 
 function _determine_master_minion {
     type hostname
-    MASTER_MINION=$(hostname)
+    MASTER_MINION=$(hostname --fqdn)
     salt $MASTER_MINION test.ping
 }
 
