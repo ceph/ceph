@@ -3616,7 +3616,8 @@ void RGWPutObj::execute()
     supplied_md5[sizeof(supplied_md5) - 1] = '\0';
   }
 
-  processor.reset(select_processor(*static_cast<RGWObjectCtx*>(s->obj_ctx), &multipart));
+  auto& obj_ctx = *static_cast<RGWObjectCtx*>(s->obj_ctx);
+  processor.reset(select_processor(obj_ctx, &multipart));
 
   // no filters by default
   filter = processor.get();
@@ -3624,7 +3625,7 @@ void RGWPutObj::execute()
   /* Handle object versioning of Swift API. */
   if (! multipart) {
     rgw_obj obj(s->bucket, s->object);
-    op_ret = store->swift_versioning_copy(*static_cast<RGWObjectCtx *>(s->obj_ctx),
+    op_ret = store->swift_versioning_copy(obj_ctx,
                                           s->bucket_owner.get_id(),
                                           s->bucket_info,
                                           obj);
@@ -3645,8 +3646,8 @@ void RGWPutObj::execute()
     rgw_obj obj(copy_source_bucket_info.bucket, obj_key.name);
 
     RGWObjState *astate;
-    op_ret = store->get_obj_state(static_cast<RGWObjectCtx *>(s->obj_ctx),
-                                  copy_source_bucket_info, obj, &astate, true, false);
+    op_ret = store->get_obj_state(&obj_ctx, copy_source_bucket_info, obj,
+                                  &astate, true, false);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "ERROR: get copy source obj state returned with error" << op_ret << dendl;
       return;
@@ -3736,7 +3737,7 @@ void RGWPutObj::execute()
       data.swap(orig_data);
 
       /* restart processing with different oid suffix */
-      processor.reset(select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx), &multipart);
+      processor.reset(select_processor(obj_ctx, &multipart));
       filter = processor.get();
 
       string oid_rand;
