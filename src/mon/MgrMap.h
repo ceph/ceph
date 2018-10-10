@@ -19,6 +19,7 @@
 #include "msg/msg_types.h"
 #include "common/Formatter.h"
 #include "include/encoding.h"
+#include "common/version.h"
 
 
 class MgrMap
@@ -145,6 +146,11 @@ public:
   // Modules which are enabled
   std::set<std::string> modules;
 
+  // Modules which should always be enabled. A manager daemon will enable
+  // modules from the union of this set and the `modules` set above, latest
+  // active version.
+  std::map<uint32_t, std::set<std::string>> always_on_modules;
+
   // Modules which are reported to exist
   std::vector<ModuleInfo> available_modules;
 
@@ -236,6 +242,13 @@ public:
     return ls;
   }
 
+  std::set<std::string> get_always_on_modules() const {
+    auto it = always_on_modules.find(ceph_release());
+    if (it == always_on_modules.end())
+      return {};
+    return it->second;
+  }
+
   void encode(bufferlist& bl, uint64_t features) const
   {
     if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
@@ -261,7 +274,7 @@ public:
       ENCODE_FINISH(bl);
       return;
     }
-    ENCODE_START(7, 6, bl);
+    ENCODE_START(8, 6, bl);
     encode(epoch, bl);
     encode(active_addrs, bl, features);
     encode(active_gid, bl);
@@ -272,6 +285,7 @@ public:
     encode(services, bl);
     encode(available_modules, bl);
     encode(active_change, bl);
+    encode(always_on_modules, bl);
     ENCODE_FINISH(bl);
     return;
   }
@@ -314,6 +328,9 @@ public:
     } else {
       active_change = {};
     }
+    if (struct_v >= 8) {
+      decode(always_on_modules, p);
+    }
     DECODE_FINISH(p);
   }
 
@@ -351,6 +368,16 @@ public:
     f->open_object_section("services");
     for (const auto &i : services) {
       f->dump_string(i.first.c_str(), i.second);
+    }
+    f->close_section();
+
+    f->open_object_section("always_on_modules");
+    for (auto& v : always_on_modules) {
+      f->open_array_section(ceph_release_name(v.first));
+      for (auto& m : v.second) {
+        f->dump_string("module", m);
+      }
+      f->close_section();
     }
     f->close_section();
   }
