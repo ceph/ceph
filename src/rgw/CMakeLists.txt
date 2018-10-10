@@ -85,6 +85,7 @@ set(librgw_common_srcs
   rgw_otp.cc
   rgw_policy_s3.cc
   rgw_putobj.cc
+  rgw_putobj_throttle.cc
   rgw_quota.cc
   rgw_rados.cc
   rgw_resolve.cc
