@@ -460,10 +460,10 @@ Following information are not recoverable using the steps above:
   using ``ceph-monstore-tool``. But the MDS keyrings and other keyrings are missing
   in the recovered monitor store. You might need to re-add them manually.
 
-- **pg settings**: the ``full ratio`` and ``nearfull ratio`` settings configured using
-  ``ceph pg set_full_ratio`` and ``ceph pg set_nearfull_ratio`` will be lost.
+- **creating pools**: If any RADOS pools were in the process of being creating, that state is lost.  The recovery tool assumes that all pools have been created.  If there are PGs that are stuck in the 'unknown' after the recovery for a partially created pool, you can force creation of the *empty* PG with the ``ceph osd force-create-pg`` command.  Note that this will create an *empty* PG, so only do this if you know the pool is empty.
 
 - **MDS Maps**: the MDS maps are lost.
+
 
 
 Everything Failed! Now What?
