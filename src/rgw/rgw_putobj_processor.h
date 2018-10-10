@@ -167,4 +167,46 @@ class AtomicObjectProcessor : public ManifestObjectProcessor {
                rgw_zone_set *zones_trace, bool *canceled) override;
 };
 
+
+// a processor for multipart parts, which don't require atomic completion. the
+// part's head is written with an exclusive create to detect racing uploads of
+// the same part/upload id, which are restarted with a random oid prefix
+class MultipartObjectProcessor : public ManifestObjectProcessor {
+  const rgw_obj target_obj; // target multipart object
+  const std::string upload_id;
+  const int part_num;
+  const std::string part_num_str;
+  RGWMPObj mp;
+
+  // write the first chunk and wait on aio->drain() for its completion.
+  // on EEXIST, retry with random prefix
+  int process_first_chunk(bufferlist&& data, DataProcessor **processor) override;
+  // prepare the head stripe and manifest
+  int prepare_head();
+ public:
+  MultipartObjectProcessor(Aio *aio, RGWRados *store,
+                           const RGWBucketInfo& bucket_info,
+                           const rgw_user& owner, RGWObjectCtx& obj_ctx,
+                           const rgw_obj& head_obj,
+                           const std::string& upload_id, uint64_t part_num,
+                           const std::string& part_num_str)
+    : ManifestObjectProcessor(aio, store, bucket_info, owner, obj_ctx, head_obj),
+      target_obj(head_obj), upload_id(upload_id),
+      part_num(part_num), part_num_str(part_num_str),
+      mp(head_obj.key.name, upload_id)
+  {}
+
+  // prepare a multipart manifest
+  int prepare() override;
+  // write the head object attributes in a bucket index transaction, then
+  // register the completed part with the multipart meta object
+  int complete(size_t accounted_size, const std::string& etag,
+               ceph::real_time *mtime, ceph::real_time set_mtime,
+               std::map<std::string, bufferlist>& attrs,
+               ceph::real_time delete_at,
+               const char *if_match, const char *if_nomatch,
+               const std::string *user_data,
+               rgw_zone_set *zones_trace, bool *canceled) override;
+};
+
 } // namespace rgw::putobj
