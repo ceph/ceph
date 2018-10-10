@@ -5,7 +5,6 @@ import pkg_resources
 import sys
 import logging
 
-import ceph_volume
 from ceph_volume.decorators import catches
 from ceph_volume import log, devices, configuration, conf, exceptions, terminal
 
@@ -14,8 +13,6 @@ class Volume(object):
     _help = """
 ceph-volume: Deploy Ceph OSDs using different device technologies like lvm or
 physical disks.
-
-Version: {version}
 
 Log Path: {log_path}
 Ceph Conf: {ceph_path}
@@ -43,7 +40,6 @@ Ceph Conf: {ceph_path}
         warning = 'See "ceph-volume --help" for full list of options.' if warning else ''
         return self._help.format(
             warning=warning,
-            version=ceph_volume.__version__,
             log_path=conf.log_path,
             ceph_path=self.stat_ceph_conf(),
             plugins=self.plugin_help,
