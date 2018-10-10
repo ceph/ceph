@@ -754,7 +754,8 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
       if (!iter->is_delete_marker()) {
 	s->formatter->dump_format("ETag", "\"%s\"", iter->meta.etag.c_str());
 	s->formatter->dump_int("Size", iter->meta.accounted_size);
-	s->formatter->dump_string("StorageClass", "STANDARD");
+	auto& storage_class = rgw_placement_rule::get_canonical_storage_class(iter->meta.storage_class);
+	s->formatter->dump_string("StorageClass", storage_class.c_str());
       }
       dump_owner(s, iter->meta.owner, iter->meta.owner_display_name);
       s->formatter->close_section();
@@ -831,7 +832,8 @@ void RGWListBucket_ObjStore_S3::send_response()
       dump_time(s, "LastModified", &iter->meta.mtime);
       s->formatter->dump_format("ETag", "\"%s\"", iter->meta.etag.c_str());
       s->formatter->dump_int("Size", iter->meta.accounted_size);
-      s->formatter->dump_string("StorageClass", "STANDARD");
+      auto& storage_class = rgw_placement_rule::get_canonical_storage_class(iter->meta.storage_class);
+      s->formatter->dump_string("StorageClass", storage_class.c_str());
       dump_owner(s, iter->meta.owner, iter->meta.owner_display_name);
       if (s->system_request) {
         s->formatter->dump_string("RgwxTag", iter->tag);
