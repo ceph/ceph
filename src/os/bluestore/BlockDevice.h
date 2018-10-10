@@ -84,7 +84,7 @@ public:
       // as there is no lock protection for aio_submit.
       // Hence we might have false conditional trigger.
       // aio_wait has to handle that hence do not care here.
-      std::lock_guard<std::mutex> l(lock);
+      std::lock_guard l(lock);
       cond.notify_all();
     }
   }

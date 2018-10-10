@@ -370,7 +370,7 @@ public:
     bool random = false);
 
   void close_writer(FileWriter *h) {
-    std::lock_guard<std::mutex> l(lock);
+    std::lock_guard l(lock);
     _close_writer(h);
   }
 
@@ -412,15 +412,15 @@ public:
   void handle_discard(unsigned dev, interval_set<uint64_t>& to_release);
 
   void flush(FileWriter *h) {
-    std::lock_guard<std::mutex> l(lock);
+    std::lock_guard l(lock);
     _flush(h, false);
   }
   void flush_range(FileWriter *h, uint64_t offset, uint64_t length) {
-    std::lock_guard<std::mutex> l(lock);
+    std::lock_guard l(lock);
     _flush_range(h, offset, length);
   }
   int fsync(FileWriter *h) {
-    std::unique_lock<std::mutex> l(lock);
+    std::unique_lock l(lock);
     return _fsync(h, l);
   }
   int read(FileReader *h, FileReaderBuffer *buf, uint64_t offset, size_t len,
@@ -438,15 +438,15 @@ public:
     return _read_random(h, offset, len, out);
   }
   void invalidate_cache(FileRef f, uint64_t offset, uint64_t len) {
-    std::lock_guard<std::mutex> l(lock);
+    std::lock_guard l(lock);
     _invalidate_cache(f, offset, len);
   }
   int preallocate(FileRef f, uint64_t offset, uint64_t len) {
-    std::lock_guard<std::mutex> l(lock);
+    std::lock_guard l(lock);
     return _preallocate(f, offset, len);
   }
   int truncate(FileWriter *h, uint64_t offset) {
-    std::lock_guard<std::mutex> l(lock);
+    std::lock_guard l(lock);
     return _truncate(h, offset);
   }
 

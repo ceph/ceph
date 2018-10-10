@@ -328,14 +328,14 @@ public:
 
     // return value is the highest cache_private of a trimmed buffer, or 0.
     int discard(Cache* cache, uint32_t offset, uint32_t length) {
-      std::lock_guard<std::recursive_mutex> l(cache->lock);
+      std::lock_guard l(cache->lock);
       return _discard(cache, offset, length);
     }
     int _discard(Cache* cache, uint32_t offset, uint32_t length);
 
     void write(Cache* cache, uint64_t seq, uint32_t offset, bufferlist& bl,
 	       unsigned flags) {
-      std::lock_guard<std::recursive_mutex> l(cache->lock);
+      std::lock_guard l(cache->lock);
       Buffer *b = new Buffer(this, Buffer::STATE_WRITING, seq, offset, bl,
 			     flags);
       b->cache_private = _discard(cache, offset, bl.length());
@@ -343,7 +343,7 @@ public:
     }
     void _finish_write(Cache* cache, uint64_t seq);
     void did_read(Cache* cache, uint32_t offset, bufferlist& bl) {
-      std::lock_guard<std::recursive_mutex> l(cache->lock);
+      std::lock_guard l(cache->lock);
       Buffer *b = new Buffer(this, Buffer::STATE_CLEAN, 0, offset, bl);
       b->cache_private = _discard(cache, offset, bl.length());
       _add_buffer(cache, b, 1, nullptr);
@@ -361,7 +361,7 @@ public:
     void split(Cache* cache, size_t pos, BufferSpace &r);
 
     void dump(Cache* cache, Formatter *f) const {
-      std::lock_guard<std::recursive_mutex> l(cache->lock);
+      std::lock_guard l(cache->lock);
       f->open_array_section("buffers");
       for (auto& i : buffer_map) {
 	f->open_object_section("buffer");
@@ -445,7 +445,7 @@ public:
     mempool::bluestore_cache_other::unordered_map<uint64_t,SharedBlob*> sb_map;
 
     SharedBlobRef lookup(uint64_t sbid) {
-      std::lock_guard<std::mutex> l(lock);
+      std::lock_guard l(lock);
       auto p = sb_map.find(sbid);
       if (p == sb_map.end() ||
 	  p->second->nref == 0) {
@@ -455,13 +455,13 @@ public:
     }
 
     void add(Collection* coll, SharedBlob *sb) {
-      std::lock_guard<std::mutex> l(lock);
+      std::lock_guard l(lock);
       sb_map[sb->get_sbid()] = sb;
       sb->coll = coll;
     }
 
     void remove(SharedBlob *sb) {
-      std::lock_guard<std::mutex> l(lock);
+      std::lock_guard l(lock);
       ceph_assert(sb->get_parent() == this);
       // only remove if it still points to us
       auto p = sb_map.find(sb->get_sbid());
@@ -472,7 +472,7 @@ public:
     }
 
     bool empty() {
-      std::lock_guard<std::mutex> l(lock);
+      std::lock_guard l(lock);
       return sb_map.empty();
     }
 
@@ -521,7 +521,7 @@ public:
     }
 
     bool can_split() const {
-      std::lock_guard<std::recursive_mutex> l(shared_blob->get_cache()->lock);
+      std::lock_guard l(shared_blob->get_cache()->lock);
       // splitting a BufferSpace writing list is too hard; don't try.
       return shared_blob->bc.writing.empty() &&
              used_in_blob.can_split() &&
@@ -1117,7 +1117,7 @@ public:
 			   uint64_t *bytes) = 0;
 
     bool empty() {
-      std::lock_guard<std::recursive_mutex> l(lock);
+      std::lock_guard l(lock);
       return _get_num_onodes() == 0 && _get_buffer_bytes() == 0;
     }
 
@@ -1207,7 +1207,7 @@ public:
 		   uint64_t *blobs,
 		   uint64_t *buffers,
 		   uint64_t *bytes) override {
-      std::lock_guard<std::recursive_mutex> l(lock);
+      std::lock_guard l(lock);
       *onodes += onode_lru.size();
       *extents += num_extents;
       *blobs += num_blobs;
@@ -1302,7 +1302,7 @@ public:
 		   uint64_t *blobs,
 		   uint64_t *buffers,
 		   uint64_t *bytes) override {
-      std::lock_guard<std::recursive_mutex> l(lock);
+      std::lock_guard l(lock);
       *onodes += onode_lru.size();
       *extents += num_extents;
       *blobs += num_blobs;
@@ -1712,19 +1712,19 @@ public:
     }
 
     void queue_new(TransContext *txc) {
-      std::lock_guard<std::mutex> l(qlock);
+      std::lock_guard l(qlock);
       txc->seq = ++last_seq;
       q.push_back(*txc);
     }
 
     void drain() {
-      std::unique_lock<std::mutex> l(qlock);
+      std::unique_lock l(qlock);
       while (!q.empty())
 	qcond.wait(l);
     }
 
     void drain_preceding(TransContext *txc) {
-      std::unique_lock<std::mutex> l(qlock);
+      std::unique_lock l(qlock);
       while (!q.empty() && &q.front() != txc)
 	qcond.wait(l);
     }
@@ -1740,7 +1740,7 @@ public:
     }
 
     void flush() {
-      std::unique_lock<std::mutex> l(qlock);
+      std::unique_lock l(qlock);
       while (true) {
 	// set flag before the check because the condition
 	// may become true outside qlock, and we need to make
@@ -1756,7 +1756,7 @@ public:
     }
 
     void flush_all_but_last() {
-      std::unique_lock<std::mutex> l(qlock);
+      std::unique_lock l(qlock);
       assert (q.size() >= 1);
       while (true) {
 	// set flag before the check because the condition
@@ -1779,7 +1779,7 @@ public:
     }
 
     bool flush_commit(Context *c) {
-      std::lock_guard<std::mutex> l(qlock);
+      std::lock_guard l(qlock);
       if (q.empty()) {
 	return true;
       }
