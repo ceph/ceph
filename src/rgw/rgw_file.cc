@@ -1324,16 +1324,18 @@ namespace rgw {
     }
 
     filter = processor;
+#if 0
     if (compression_type != "none") {
       plugin = Compressor::create(s->cct, compression_type);
-    if (! plugin) {
-      ldout(s->cct, 1) << "Cannot load plugin for rgw_compression_type "
-                       << compression_type << dendl;
-    } else {
-      compressor.emplace(s->cct, plugin, filter);
-      filter = &*compressor;
+      if (! plugin) {
+        ldout(s->cct, 1) << "Cannot load plugin for rgw_compression_type "
+                         << compression_type << dendl;
+      } else {
+        compressor.emplace(s->cct, plugin, filter);
+        filter = &*compressor;
+      }
     }
-  }
+#endif
 
   done:
     return op_ret;
@@ -1396,13 +1398,13 @@ namespace rgw {
 			 << op_ret << dendl;
 	goto done;
       }
-
+#if 0
       /* restore compression filter, if any */
       if (compressor) {
 	compressor.emplace(s->cct, plugin, filter);
 	filter = &*compressor;
       }
-
+#endif
       op_ret = put_data_and_throttle(filter, data, ofs, false);
       if (op_ret < 0) {
 	goto done;

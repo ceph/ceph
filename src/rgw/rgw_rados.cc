@@ -7619,10 +7619,12 @@ public:
 
     if (plugin && src_attrs.find(RGW_ATTR_CRYPT_MODE) == src_attrs.end()) {
       //do not compress if object is encrypted
+#if 0
       compressor = boost::in_place(cct, plugin, filter);
       constexpr unsigned buffer_size = 512 * 1024;
       buffering = boost::in_place(&*compressor, buffer_size);
       filter = &*buffering;
+#endif
     }
     return 0;
   }
