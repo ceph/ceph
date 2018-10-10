@@ -1399,6 +1399,20 @@ int RGWPutObj_ObjStore_S3::get_params()
     }
   }
 
+  multipart_upload_id = s->info.args.get("uploadId");
+  multipart_part_str = s->info.args.get("partNumber");
+  if (!multipart_part_str.empty()) {
+    string err;
+    multipart_part_num = strict_strtol(multipart_part_str.c_str(), 10, &err);
+    if (!err.empty()) {
+      ldpp_dout(s, 10) << "bad part number: " << multipart_part_str << ": " << err << dendl;
+      return -EINVAL;
+    }
+  } else if (!multipart_upload_id.empty()) {
+    ldpp_dout(s, 10) << "part number with no multipart upload id" << dendl;
+    return -EINVAL;
+  }
+
   return RGWPutObj_ObjStore::get_params();
 }
 

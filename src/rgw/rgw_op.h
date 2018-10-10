@@ -1027,6 +1027,10 @@ protected:
   map<string, string> crypt_http_responses;
   string user_data;
 
+  std::string multipart_upload_id;
+  std::string multipart_part_str;
+  int multipart_part_num = 0;
+
   boost::optional<ceph::real_time> delete_at;
 
 public:
