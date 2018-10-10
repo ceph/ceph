@@ -37,6 +37,7 @@
 #include "rgw_acl.h"
 #include "rgw_cors.h"
 #include "rgw_quota.h"
+#include "rgw_putobj.h"
 
 #include "rgw_lc.h"
 #include "rgw_torrent.h"
@@ -1074,9 +1075,9 @@ public:
     *filter = nullptr;
     return 0;
   }
-  virtual int get_encrypt_filter(std::unique_ptr<RGWPutObjDataProcessor> *filter, RGWPutObjDataProcessor* cb) {
-     *filter = nullptr;
-     return 0;
+  virtual int get_encrypt_filter(std::unique_ptr<rgw::putobj::DataProcessor> *filter,
+                                 rgw::putobj::DataProcessor *cb) {
+    return 0;
   }
 
   int get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len);
@@ -1147,8 +1148,8 @@ public:
   void pre_exec() override;
   void execute() override;
 
-  virtual int get_encrypt_filter(std::unique_ptr<RGWPutObjDataProcessor> *filter, RGWPutObjDataProcessor* cb) {
-    *filter = nullptr;
+  virtual int get_encrypt_filter(std::unique_ptr<rgw::putobj::DataProcessor> *filter,
+                                 rgw::putobj::DataProcessor *cb) {
     return 0;
   }
   virtual int get_params() = 0;
