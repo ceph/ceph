@@ -41,4 +41,16 @@ class Pipe : public DataProcessor {
   }
 };
 
+// pipe that writes to the next processor in discrete chunks
+class ChunkProcessor : public Pipe {
+  uint64_t chunk_size;
+  bufferlist chunk; // leftover bytes from the last call to process()
+ public:
+  ChunkProcessor(DataProcessor *next, uint64_t chunk_size)
+    : Pipe(next), chunk_size(chunk_size)
+  {}
+
+  int process(bufferlist&& data, uint64_t offset) override;
+};
+
 } // namespace rgw::putobj
