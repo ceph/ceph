@@ -28,6 +28,8 @@
 #include "rgw_rest_conn.h"
 #include "rgw_cr_rados.h"
 #include "rgw_cr_rest.h"
+#include "rgw_putobj_processor.h"
+#include "rgw_putobj_throttle.h"
 
 #include "cls/rgw/cls_rgw_ops.h"
 #include "cls/rgw/cls_rgw_client.h"
@@ -7651,12 +7653,6 @@ public:
   uint64_t get_data_len() {
     return data_len;
   }
-
-  int complete(const string& etag, real_time *mtime, real_time set_mtime,
-               map<string, bufferlist>& attrs, real_time delete_at,
-               rgw_zone_set *zones_trace, bool *canceled) {
-    return processor->complete(data_len, etag, mtime, set_mtime, attrs, delete_at, NULL, NULL, NULL, zones_trace, canceled);
-  }
 };
 
 /*
@@ -7929,8 +7925,8 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                const rgw_user& user_id,
                req_info *info,
                const string& source_zone,
-               rgw_obj& dest_obj,
-               rgw_obj& src_obj,
+               const rgw_obj& dest_obj,
+               const rgw_obj& src_obj,
                RGWBucketInfo& dest_bucket_info,
                RGWBucketInfo& src_bucket_info,
                real_time *src_mtime,
@@ -7946,7 +7942,6 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                RGWObjCategory category,
                std::optional<uint64_t> olh_epoch,
 	       real_time delete_at,
-               string *version_id,
                string *ptag,
                string *petag,
                void (*progress_cb)(off_t, void *),
@@ -7962,16 +7957,11 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   obj_time_weight set_mtime_weight;
   set_mtime_weight.high_precision = high_precision_time;
 
-  RGWPutObjProcessor_Atomic processor(obj_ctx,
-                                      dest_bucket_info, dest_obj.bucket, dest_obj.key.name,
-                                      cct->_conf->rgw_obj_stripe_size, tag, dest_bucket_info.versioning_enabled());
-  if (version_id && *version_id != "null") {
-    processor.set_version_id(*version_id);
-  }
-  if (olh_epoch) {
-    processor.set_olh_epoch(*olh_epoch);
-  }
-  int ret = processor.prepare(this, NULL);
+  using namespace rgw::putobj;
+  AioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
+  AtomicObjectProcessor processor(&aio, this, dest_bucket_info, user_id,
+                                  obj_ctx, dest_obj, olh_epoch, tag);
+  int ret = processor.prepare();
   if (ret < 0) {
     return ret;
   }
@@ -8117,7 +8107,9 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
 #define MAX_COMPLETE_RETRY 100
   for (i = 0; i < MAX_COMPLETE_RETRY; i++) {
     bool canceled = false;
-    ret = cb.complete(etag, mtime, set_mtime, attrs, delete_at, zones_trace, &canceled);
+    ret = processor.complete(cb.get_data_len(), etag, mtime, set_mtime,
+                             attrs, delete_at, nullptr, nullptr, nullptr,
+                             zones_trace, &canceled);
     if (ret < 0) {
       goto set_err_state;
     }
@@ -8263,7 +8255,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
                dest_obj, src_obj, dest_bucket_info, src_bucket_info, src_mtime, mtime, mod_ptr,
                unmod_ptr, high_precision_time,
                if_match, if_nomatch, attrs_mod, copy_if_newer, attrs, category,
-               olh_epoch, delete_at, version_id, ptag, petag, progress_cb, progress_data);
+               olh_epoch, delete_at, ptag, petag, progress_cb, progress_data);
   }
 
   map<string, bufferlist> src_attrs;

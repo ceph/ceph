@@ -577,7 +577,6 @@ int RGWAsyncFetchRemoteObj::_send_request()
                        RGW_OBJ_CATEGORY_MAIN,
                        versioned_epoch,
                        real_time(), /* delete_at */
-                       &key.instance, /* string *version_id, */
                        NULL, /* string *ptag, */
                        NULL, /* string *petag, */
                        NULL, /* void (*progress_cb)(off_t, void *), */
