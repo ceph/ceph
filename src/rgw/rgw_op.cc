@@ -14,6 +14,7 @@
 #include <boost/utility/in_place_factory.hpp>
 #include <boost/utility/string_view.hpp>
 
+#include "include/scope_guard.h"
 #include "common/Clock.h"
 #include "common/armor.h"
 #include "common/errno.h"
@@ -3556,6 +3557,11 @@ void RGWPutObj::execute()
 
   bool need_calc_md5 = (dlo_manifest == NULL) && (slo_info == NULL);
   perfcounter->inc(l_rgw_put);
+  // report latency on return
+  auto put_lat = make_scope_guard([&] {
+      perfcounter->tinc(l_rgw_put_lat, s->time_elapsed());
+    });
+
   op_ret = -EINVAL;
   if (s->object.empty()) {
     goto done;
@@ -3900,7 +3906,6 @@ void RGWPutObj::execute()
 
 done:
   dispose_processor(processor);
-  perfcounter->tinc(l_rgw_put_lat, s->time_elapsed());
 }
 
 int RGWPostObj::verify_permission()
