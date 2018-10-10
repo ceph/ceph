@@ -6168,7 +6168,10 @@ int RGWRados::Object::Read::prepare()
   state.obj = astate->obj;
   store->obj_to_raw(bucket_info.placement_rule, state.obj, &state.head_obj);
 
-  r = store->get_obj_head_ioctx(bucket_info, state.obj, &state.io_ctx);
+  state.cur_pool = state.head_obj.pool;
+  state.cur_ioctx = &state.io_ctxs[state.cur_pool];
+
+  r = store->get_obj_head_ioctx(bucket_info, state.obj, state.cur_ioctx);
   if (r < 0) {
     return r;
   }
@@ -6492,8 +6495,6 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl)
     len = max_chunk_size;
 
 
-  state.io_ctx.locator_set_key(read_obj.loc);
-
   read_len = len;
 
   if (reading_from_head) {
@@ -6525,7 +6526,24 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl)
   ldout(cct, 20) << "rados->read obj-ofs=" << ofs << " read_ofs=" << read_ofs << " read_len=" << read_len << dendl;
   op.read(read_ofs, read_len, pbl, NULL);
 
-  r = state.io_ctx.operate(read_obj.oid, &op, NULL);
+  if (state.cur_pool != read_obj.pool) {
+    auto iter = state.io_ctxs.find(read_obj.pool);
+    if (iter == state.io_ctxs.end()) {
+      state.cur_ioctx = &state.io_ctxs[read_obj.pool];
+      r = store->open_pool_ctx(read_obj.pool, *state.cur_ioctx);
+      if (r < 0) {
+        ldout(cct, 20) << "ERROR: failed to open pool context for pool=" << read_obj.pool << " r=" << r << dendl;
+        return r;
+      }
+    } else {
+      state.cur_ioctx = &iter->second;
+    }
+    state.cur_pool = read_obj.pool;
+  }
+
+  state.cur_ioctx->locator_set_key(read_obj.loc);
+
+  r = state.cur_ioctx->operate(read_obj.oid, &op, NULL);
   ldout(cct, 20) << "rados->read r=" << r << " bl.length=" << bl.length() << dendl;
 
   if (r < 0) {
