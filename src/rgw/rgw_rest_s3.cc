@@ -2194,6 +2194,7 @@ int RGWCopyObj_ObjStore_S3::get_params()
       (dest_bucket_name.compare(src_bucket_name) == 0) &&
       (dest_object.compare(src_object.name) == 0) &&
       src_object.instance.empty() &&
+      s->info.storage_class.storage_class.empty() &&
       (attrs_mod != RGWRados::ATTRSMOD_REPLACE)) {
     /* can only copy object into itself if replacing attrs */
     s->err.message = "This copy request is illegal because it is trying to copy "

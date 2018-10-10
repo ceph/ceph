@@ -4482,7 +4482,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
                rgw_obj& src_obj,
                RGWBucketInfo& dest_bucket_info,
                RGWBucketInfo& src_bucket_info,
-               const rgw_placement_rule *ptail_rule,
+               rgw_placement_rule *ptail_rule,
                real_time *src_mtime,
                real_time *mtime,
                const real_time *mod_ptr,
@@ -4600,6 +4600,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 
   if (astate->has_manifest) {
     src_rule = &astate->manifest.get_tail_placement().placement_rule;
+    ldout(cct, 20) << __func__ << "(): manifest src_rule=" << src_rule->to_str() << dendl;
   }
 
   if (!src_rule || src_rule->empty()) {
@@ -4608,6 +4609,8 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 
   if (!ptail_rule) {
     ptail_rule = &dest_bucket_info.placement_rule;
+  } else {
+    ptail_rule->inherit_from(dest_bucket_info.placement_rule);
   }
 
   auto& dest_storage_class = ptail_rule->get_storage_class();
@@ -4625,6 +4628,8 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
     return -EIO;
   }
 
+  ldout(cct, 20) << __func__ << "(): src_rule=" << src_rule->to_str() << " src_pool=" << src_pool
+                             << " dest_rule=" << ptail_rule->to_str() << " dest_pool=" << dest_pool << dendl;
 
   bool copy_data = !astate->has_manifest || (src_pool != dest_pool);
   bool copy_first = false;
