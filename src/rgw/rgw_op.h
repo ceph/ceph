@@ -995,9 +995,6 @@ struct RGWSLOInfo {
 WRITE_CLASS_ENCODER(RGWSLOInfo)
 
 class RGWPutObj : public RGWOp {
-
-  friend class RGWPutObjProcessor;
-
 protected:
   seed torrent;
   off_t ofs;
@@ -1061,8 +1058,6 @@ public:
     attrs.emplace(std::move(key), std::move(bl)); /* key and bl are r-value refs */
   }
 
-  virtual RGWPutObjProcessor *select_processor(RGWObjectCtx& obj_ctx, bool *is_multipart);
-  void dispose_processor(RGWPutObjDataProcessor *processor);
   int verify_permission() override;
   void pre_exec() override;
   void execute() override;
