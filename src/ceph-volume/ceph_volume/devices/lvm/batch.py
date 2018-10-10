@@ -94,6 +94,28 @@ def get_strategy(args, devices):
             return backend
 
 
+def filter_devices(args):
+    unused_devices = [device for device in args.devices if not device.used_by_ceph]
+    # only data devices, journals can be reused
+    used_devices = [device.abspath for device in args.devices if device.used_by_ceph]
+    args.filtered_devices = {}
+    if used_devices:
+        for device in used_devices:
+            args.filtered_devices[device] = {"reasons": ["Used by ceph as a data device already"]}
+        logger.info("Ignoring devices already used by ceph: %s" % ", ".join(used_devices))
+    if len(unused_devices) == 1:
+        last_device = unused_devices[0]
+        if not last_device.rotational and last_device.is_lvm_member:
+            reason = "Used by ceph as a %s already and there are no devices left for data/block" % (
+                last_device.lvs[0].tags.get("ceph.type"),
+            )
+            args.filtered_devices[last_device.abspath] = {"reasons": [reason]}
+            logger.info(reason + ": %s" % last_device.abspath)
+            unused_devices = []
+
+    return unused_devices
+
+
 class Batch(object):
 
     help = 'Automatically size devices for multi-OSD provisioning with minimal interaction'
@@ -154,23 +176,7 @@ class Batch(object):
 
     def _get_strategy(self, args):
         strategy = get_strategy(args, args.devices)
-        unused_devices = [device for device in args.devices if not device.used_by_ceph]
-        # only data devices, journals can be reused
-        used_devices = [device.abspath for device in args.devices if device.used_by_ceph]
-        args.filtered_devices = {}
-        if used_devices:
-            for device in used_devices:
-                args.filtered_devices[device] = {"reasons": ["Used by ceph as a data device already"]}
-            logger.info("Ignoring devices already used by ceph: %s" % ", ".join(used_devices))
-        if len(unused_devices) == 1:
-            last_device = unused_devices[0]
-            if not last_device.rotational and last_device.is_lvm_member:
-                reason = "Used by ceph as a %s already and there are no devices left for data/block" % (
-                    last_device.lvs[0].tags.get("ceph.type"),
-                )
-                args.filtered_devices[last_device.abspath] = {"reasons": [reason]}
-                logger.info(reason + ": %s" % last_device.abspath)
-                unused_devices = []
+        unused_devices = filter_devices(args)
         if not unused_devices and not args.format == 'json':
             # report nothing changed
             mlogger.info("All devices are already used by ceph. No OSDs will be created.")
