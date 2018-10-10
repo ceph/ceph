@@ -438,7 +438,8 @@ public:
 
   /// a lookup table of SharedBlobs
   struct SharedBlobSet {
-    std::mutex lock;   ///< protect lookup, insertion, removal
+    /// protect lookup, insertion, removal
+    ceph::mutex lock = {ceph::make_mutex("BlueStore::SharedBlobSet::lock")};
 
     // we use a bare pointer because we don't want to affect the ref
     // count
@@ -1039,8 +1040,9 @@ public:
     // track txc's that have not been committed to kv store (and whose
     // effects cannot be read via the kvdb read methods)
     std::atomic<int> flushing_count = {0};
-    std::mutex flush_lock;  ///< protect flush_txns
-    std::condition_variable flush_cond;   ///< wait here for uncommitted txns
+    /// protect flush_txns
+    ceph::mutex flush_lock = {ceph::make_mutex("BlueStore::Onode::flush_lock")};
+    ceph::condition_variable flush_cond;   ///< wait here for uncommitted txns
 
     Onode(Collection *c, const ghobject_t& o,
 	  const mempool::bluestore_cache_other::string& k)
@@ -1675,8 +1677,8 @@ public:
 
   class OpSequencer : public RefCountedObject {
   public:
-    std::mutex qlock;
-    std::condition_variable qcond;
+    ceph::mutex qlock = {ceph::make_mutex("BlueStore::OpSequencer::qlock")};
+    ceph::condition_variable qcond;
     typedef boost::intrusive::list<
       TransContext,
       boost::intrusive::member_hook<
@@ -1864,7 +1866,8 @@ private:
 
   vector<Cache*> cache_shards;
 
-  std::mutex zombie_osr_lock;              ///< protect zombie_osr_set
+  /// protect zombie_osr_set
+  ceph::mutex zombie_osr_lock = {ceph::make_mutex("BlueStore::zombie_osr_lock")};
   std::map<coll_t,OpSequencerRef> zombie_osr_set; ///< set of OpSequencers for deleted collections
 
   std::atomic<uint64_t> nid_last = {0};
@@ -1878,7 +1881,7 @@ private:
   interval_set<uint64_t> bluefs_extents;  ///< block extents owned by bluefs
   interval_set<uint64_t> bluefs_extents_reclaiming; ///< currently reclaiming
 
-  std::mutex deferred_lock;
+  ceph::mutex deferred_lock = {ceph::make_mutex("BlueStore::deferred_lock")};
   std::atomic<uint64_t> deferred_seq = {0};
   deferred_osr_queue_t deferred_queue; ///< osr's with deferred io pending
   int deferred_queue_size = 0;         ///< num txc's queued across all osrs
@@ -1886,8 +1889,8 @@ private:
   Finisher deferred_finisher, finisher;
 
   KVSyncThread kv_sync_thread;
-  std::mutex kv_lock;
-  std::condition_variable kv_cond;
+  ceph::mutex kv_lock = {ceph::make_mutex("BlueStore::kv_lock")};
+  ceph::condition_variable kv_cond;
   bool _kv_only = false;
   bool kv_sync_started = false;
   bool kv_stop = false;
@@ -1899,8 +1902,8 @@ private:
   deque<DeferredBatch*> deferred_done_queue;   ///< deferred ios done
 
   KVFinalizeThread kv_finalize_thread;
-  std::mutex kv_finalize_lock;
-  std::condition_variable kv_finalize_cond;
+  ceph::mutex kv_finalize_lock = {ceph::make_mutex("BlueStore::kv_finalize_lock")};
+  ceph::condition_variable kv_finalize_cond;
   deque<TransContext*> kv_committing_to_finalize;   ///< pending finalization
   deque<DeferredBatch*> deferred_stable_to_finalize; ///< pending finalization
 
@@ -1961,7 +1964,7 @@ private:
   double osd_memory_expected_fragmentation = 0; ///< expected memory fragmentation
   uint64_t osd_memory_cache_min = 0; ///< Min memory to assign when autotuning cache
   double osd_memory_cache_resize_interval = 0; ///< Time to wait between cache resizing 
-  std::mutex vstatfs_lock;
+  ceph::mutex vstatfs_lock = {ceph::make_mutex("BlueStore::vstatfs_lock")};
   volatile_statfs vstatfs;
 
   struct MempoolThread : public Thread {

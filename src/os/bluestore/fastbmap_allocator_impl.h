@@ -35,6 +35,7 @@ typedef std::vector<slot_t> slot_vector_t;
 #include "common/likely.h"
 #include "os/bluestore/bluestore_types.h"
 #include "include/mempool.h"
+#include "common/ceph_mutex.h"
 
 typedef bluestore_pextent_t interval_t;
 typedef PExtentVector interval_vector_t;
@@ -503,7 +504,7 @@ public:
   }
 
 protected:
-  std::mutex lock;
+  ceph::mutex lock = {ceph::make_mutex("AllocatorLevel02::lock")};
   L1 l1;
   slot_vector_t l2;
   uint64_t l2_granularity = 0; // space per entry

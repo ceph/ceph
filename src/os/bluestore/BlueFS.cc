@@ -1318,7 +1318,7 @@ void BlueFS::_compact_log_sync()
  *
  * 8. Release the old log space.  Clean up.
  */
-void BlueFS::_compact_log_async(std::unique_lock<std::mutex>& l)
+void BlueFS::_compact_log_async(std::unique_lock<ceph::mutex>& l)
 {
   dout(10) << __func__ << dendl;
   File *log_file = log_writer->file.get();
@@ -1476,7 +1476,7 @@ void BlueFS::flush_log()
   _flush_and_sync_log(l);
 }
 
-int BlueFS::_flush_and_sync_log(std::unique_lock<std::mutex>& l,
+int BlueFS::_flush_and_sync_log(std::unique_lock<ceph::mutex>& l,
 				uint64_t want_seq,
 				uint64_t jump_to)
 {
@@ -1919,7 +1919,7 @@ int BlueFS::_truncate(FileWriter *h, uint64_t offset)
   return 0;
 }
 
-int BlueFS::_fsync(FileWriter *h, std::unique_lock<std::mutex>& l)
+int BlueFS::_fsync(FileWriter *h, std::unique_lock<ceph::mutex>& l)
 {
   dout(10) << __func__ << " " << h << " " << h->file->fnode << dendl;
   int r = _flush(h, true);

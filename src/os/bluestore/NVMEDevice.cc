@@ -228,8 +228,8 @@ struct Task {
   int64_t return_code;
   ceph::coarse_real_clock::time_point start;
   IORequest io_request;
-  std::mutex lock;
-  std::condition_variable cond;
+  ceph::mutex lock = {ceph::make_mutex("Task::lock")};
+  ceph::condition_variable cond;
   SharedDriverQueueData *queue = nullptr;
   Task(NVMEDevice *dev, IOCommand c, uint64_t off, uint64_t l, int64_t rc = 0)
     : device(dev), command(c), offset(off), len(l),
@@ -485,8 +485,8 @@ class NVMEManager {
   bool init = false;
   std::vector<SharedDriverData*> shared_driver_datas;
   std::thread dpdk_thread;
-  std::mutex probe_queue_lock;
-  std::condition_variable probe_queue_cond;
+  ceph::mutex probe_queue_lock = {ceph::make_mutex("NVMEManager::probe_queue_lock")};
+  ceph::condition_variable probe_queue_cond;
   std::list<ProbeContext*> probe_queue;
 
  public:

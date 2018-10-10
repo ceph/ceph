@@ -39,7 +39,7 @@ class KernelDevice : public BlockDevice {
   interval_set<uint64_t> debug_inflight;
 
   std::atomic<bool> io_since_flush = {false};
-  std::mutex flush_mutex;
+  ceph::mutex flush_mutex = {ceph::make_mutex("KernelDevice::flush_mutex")};
 
   aio_queue_t aio_queue;
   aio_callback_t discard_callback;
@@ -48,8 +48,8 @@ class KernelDevice : public BlockDevice {
   bool discard_started;
   bool discard_stop;
 
-  std::mutex discard_lock;
-  std::condition_variable discard_cond;
+  ceph::mutex discard_lock = {ceph::make_mutex("KernelDevice::discard_lock")};
+  ceph::condition_variable discard_cond;
   bool discard_running = false;
   interval_set<uint64_t> discard_queued;
   interval_set<uint64_t> discard_finishing;
@@ -95,7 +95,7 @@ class KernelDevice : public BlockDevice {
 
   // stalled aio debugging
   aio_list_t debug_queue;
-  std::mutex debug_queue_lock;
+  ceph::mutex debug_queue_lock = {ceph::make_mutex("KernelDevice::debug_queue_lock")};
   aio_t *debug_oldest = nullptr;
   utime_t debug_stall_since;
   void debug_aio_link(aio_t& aio);
