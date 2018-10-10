@@ -13,6 +13,17 @@
     margin-bottom: 30px;
   }
 
+  .version {
+    font-size: 12px;
+    font-weight: normal;
+    text-align: center;
+    color: #555
+  }
+
+  .height-95-pc {
+    height: 95%;
+  }
+
   .btn-password,
   .form-control {
     color: $color-password-toggle-text;

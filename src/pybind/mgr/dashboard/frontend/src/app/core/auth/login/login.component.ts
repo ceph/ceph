@@ -2,10 +2,13 @@ import { Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 
 import { BsModalService } from 'ngx-bootstrap';
+import { Subscription } from 'rxjs';
 
 import { AuthService } from '../../../shared/api/auth.service';
 import { Credentials } from '../../../shared/models/credentials';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
+import { VersionService } from '../../../shared/services/version.service';
+
 
 @Component({
   selector: 'cd-login',
@@ -14,11 +17,14 @@ import { AuthStorageService } from '../../../shared/services/auth-storage.servic
 })
 export class LoginComponent implements OnInit {
   model = new Credentials();
+  version: string;
+  subs: Subscription;
 
   constructor(
     private authService: AuthService,
     private authStorageService: AuthStorageService,
     private bsModalService: BsModalService,
+    private versionService: VersionService,
     private router: Router
   ) {}
 
@@ -34,6 +40,13 @@ export class LoginComponent implements OnInit {
         this.bsModalService.hide(i);
       }
     }
+    this.subs = this.versionService.subscribe((version: any) => {
+      if (!version) {
+        return;
+      }
+      this.version = version.raw;
+    });
+
   }
 
   login() {
