@@ -65,4 +65,43 @@ class HeadObjectProcessor : public ObjectProcessor {
   int process(bufferlist&& data, uint64_t logical_offset) final override;
 };
 
+
+class Aio;
+using RawObjSet = std::set<rgw_raw_obj>;
+
+// a data sink that writes to rados objects and deletes them on cancelation
+class RadosWriter : public DataProcessor {
+  Aio *const aio;
+  RGWRados *const store;
+  const RGWBucketInfo& bucket_info;
+  RGWObjectCtx& obj_ctx;
+  const rgw_obj& head_obj;
+  rgw_rados_ref stripe_ref; // current stripe ref
+  rgw_raw_obj stripe_obj; // current stripe object
+  RawObjSet written; // set of written objects for deletion
+
+ public:
+  RadosWriter(Aio *aio, RGWRados *store, const RGWBucketInfo& bucket_info,
+              RGWObjectCtx& obj_ctx, const rgw_obj& head_obj)
+    : aio(aio), store(store), bucket_info(bucket_info),
+      obj_ctx(obj_ctx), head_obj(head_obj)
+  {}
+  ~RadosWriter();
+
+  // change the current stripe object
+  int set_stripe_obj(rgw_raw_obj&& obj);
+
+  // write the data at the given offset of the current stripe object
+  int process(bufferlist&& data, uint64_t stripe_offset) override;
+
+  // write the data as an exclusive create and wait for it to complete
+  int write_exclusive(const bufferlist& data);
+
+  int drain();
+
+  // when the operation completes successfully, clear the set of written objects
+  // so they aren't deleted on destruction
+  void clear_written() { written.clear(); }
+};
+
 } // namespace rgw::putobj
