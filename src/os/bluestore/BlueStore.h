@@ -1070,7 +1070,10 @@ public:
   struct Cache {
     CephContext* cct;
     PerfCounters *logger;
-    std::recursive_mutex lock;          ///< protect lru and other structures
+
+    /// protect lru and other structures
+    ceph::recursive_mutex lock = {
+      ceph::make_recursive_mutex("BlueStore::Cache::lock") };
 
     std::atomic<uint64_t> num_extents = {0};
     std::atomic<uint64_t> num_blobs = {0};
