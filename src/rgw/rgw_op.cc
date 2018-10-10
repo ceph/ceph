@@ -3536,7 +3536,7 @@ static CompressorRef get_compressor_plugin(const req_state *s,
 
 void RGWPutObj::execute()
 {
-  RGWPutObjProcessor *processor = NULL;
+  std::unique_ptr<RGWPutObjProcessor> processor;
   RGWPutObjDataProcessor *filter = nullptr;
   std::unique_ptr<RGWPutObjDataProcessor> encrypt;
   char supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1];
@@ -3616,10 +3616,10 @@ void RGWPutObj::execute()
     supplied_md5[sizeof(supplied_md5) - 1] = '\0';
   }
 
-  processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx), &multipart);
+  processor.reset(select_processor(*static_cast<RGWObjectCtx*>(s->obj_ctx), &multipart));
 
   // no filters by default
-  filter = processor;
+  filter = processor.get();
 
   /* Handle object versioning of Swift API. */
   if (! multipart) {
@@ -3736,10 +3736,8 @@ void RGWPutObj::execute()
       data.swap(orig_data);
 
       /* restart processing with different oid suffix */
-
-      dispose_processor(processor);
-      processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx), &multipart);
-      filter = processor;
+      processor.reset(select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx), &multipart);
+      filter = processor.get();
 
       string oid_rand;
       char buf[33];
@@ -3889,7 +3887,7 @@ void RGWPutObj::execute()
 
   // only atomic upload will upate version_id here
   if (!multipart) 
-    version_id = (static_cast<RGWPutObjProcessor_Atomic *>(processor))->get_version_id();
+    version_id = (static_cast<RGWPutObjProcessor_Atomic *>(processor.get()))->get_version_id();
 
   /* produce torrent */
   if (s->cct->_conf->rgw_torrent_flag && (ofs == torrent.get_data_len()))
@@ -3905,7 +3903,6 @@ void RGWPutObj::execute()
   }
 
 done:
-  dispose_processor(processor);
 }
 
 int RGWPostObj::verify_permission()
