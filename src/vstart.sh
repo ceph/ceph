@@ -448,7 +448,7 @@ prepare_conf() {
         heartbeat file = $CEPH_OUT_DIR/\$name.heartbeat
 "
 
-    local mgr_modules="restful status balancer iostat devicehealth"
+    local mgr_modules="restful iostat"
     if $with_mgr_dashboard; then
       mgr_modules="dashboard $mgr_modules"
     fi

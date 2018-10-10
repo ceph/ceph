@@ -24,7 +24,6 @@
 #include "mgr/MgrContext.h"
 
 #include "DaemonServer.h"
-#include "messages/MMgrBeacon.h"
 #include "messages/MMgrDigest.h"
 #include "messages/MCommand.h"
 #include "messages/MCommandReply.h"

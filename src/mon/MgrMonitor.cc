@@ -36,6 +36,19 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon,
 		<< ").mgr e" << mgrmap.get_epoch() << " ";
 }
 
+// the system treats always_on_modules as if they provide built-in functionality
+// by ensuring that they are always enabled.
+const static std::map<uint32_t, std::set<std::string>> always_on_modules = {
+  {
+    CEPH_RELEASE_NAUTILUS, {
+      "crash",
+      "status",
+      "balancer",
+      "devicehealth"
+    }
+  }
+};
+
 // Prefix for mon store of active mgr's command descriptions
 const static std::string command_descs_prefix = "mgr_command_descs";
 
@@ -57,9 +70,11 @@ void MgrMonitor::create_initial()
   for (auto& m : tok) {
     pending_map.modules.insert(m);
   }
+  pending_map.always_on_modules = always_on_modules;
   pending_command_descs = mgr_commands;
   dout(10) << __func__ << " initial modules " << pending_map.modules
-	   << ", " << pending_command_descs.size() << " commands"
+	   << ", always on modules " << pending_map.get_always_on_modules()
+           << ", " << pending_command_descs.size() << " commands"
 	   << dendl;
 }
 
@@ -546,6 +561,13 @@ void MgrMonitor::on_active()
 {
   if (mon->is_leader()) {
     mon->clog->debug() << "mgrmap e" << map.epoch << ": " << map;
+
+    if (pending_map.always_on_modules != always_on_modules) {
+      pending_map.always_on_modules = always_on_modules;
+      dout(4) << "always on modules changed "
+        << pending_map.get_always_on_modules() << dendl;
+      propose_pending();
+    }
   }
 }
 
@@ -761,6 +783,8 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
     {
       f->open_array_section("enabled_modules");
       for (auto& p : map.modules) {
+        if (map.get_always_on_modules().count(p) > 0)
+          continue;
         // We only show the name for enabled modules.  The any errors
         // etc will show up as a health checks.
         f->dump_string("module", p);
@@ -768,7 +792,8 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
       f->close_section();
       f->open_array_section("disabled_modules");
       for (auto& p : map.available_modules) {
-        if (map.modules.count(p.name) == 0) {
+        if (map.modules.count(p.name) == 0 &&
+            map.get_always_on_modules().count(p.name) == 0) {
           // For disabled modules, we show the full info, to
           // give a hint about whether enabling it will work
           p.dump(f.get());
@@ -926,6 +951,10 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
       r = -EINVAL;
       goto out;
     }
+    if (pending_map.get_always_on_modules().count(module) > 0) {
+      ss << "module '" << module << "' is already enabled (always-on)";
+      goto out;
+    }
     string force;
     cmd_getval(g_ceph_context, cmdmap, "force", force);
     if (!pending_map.all_support_module(module) &&
@@ -955,6 +984,11 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
     string module;
     cmd_getval(g_ceph_context, cmdmap, "module", module);
     if (module.empty()) {
+      r = -EINVAL;
+      goto out;
+    }
+    if (pending_map.get_always_on_modules().count(module) > 0) {
+      ss << "module '" << module << "' cannot be disabled (always-on)";
       r = -EINVAL;
       goto out;
     }
