@@ -380,8 +380,7 @@ find_package(OpenSSL REQUIRED)
 # TODO: use NSS only for validation of the OpenSSL-based implementations
 set(USE_NSS 1)
 set(USE_OPENSSL 1)
-set(CRYPTO_LIBS ${NSS_LIBRARIES} ${NSPR_LIBRARIES} ${OPENSSL_LIBRARIES})
-set(SSL_LIBRARIES ${NSS_LIBRARIES} ${OPENSSL_LIBRARIES})
+set(CRYPTO_LIBS ${NSS_LIBRARIES} ${NSPR_LIBRARIES} OpenSSL::Crypto)
 
 option(WITH_XIO "Enable XIO messaging" OFF)
 if(WITH_XIO)
