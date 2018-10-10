@@ -1695,6 +1695,19 @@ using namespace ceph;
     return { std::prev(std::end(_buffers))->end_c_str() - len };
   }
 
+  void buffer::list::insert(const list& bl, buffer::list::contiguous_filler& cf) {
+    buffer::ptr& bp = *std::prev(std::end(_buffers));
+    assert(bp.get_raw()->get_data() <= cf.pos);
+    assert(cf.pos < bp.get_raw()->get_data() + bp.get_raw()->len);
+
+    buffer::ptr new_bp(bp, cf.pos - bp.c_str(), bp.end_c_str() - cf.pos);
+    //trim last ptr
+    bp.set_length(cf.pos - bp.c_str());
+    append(bl);
+    append(new_bp);
+    //surprisingly, cf does not need modifying
+  }
+
   void buffer::list::prepend_zero(unsigned len)
   {
     ptr bp(len);
