@@ -87,7 +87,7 @@ def get_block_db_size(lv_format=True):
     try:
         conf_db_size = conf.ceph.get_safe('osd', 'bluestore_block_db_size', None)
     except RuntimeError:
-        logger.debug("failed to load ceph configuration, will use defaults")
+        logger.exception("failed to load ceph configuration, will use defaults")
 
     if not conf_db_size:
         logger.debug(
