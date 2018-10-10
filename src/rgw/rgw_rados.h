@@ -2062,30 +2062,14 @@ public:
     assert (!obj.empty());
     objs_state[obj].prefetch_data = true;
   }
-  void invalidate(T& obj) {
-    RWLock::WLocker wl(lock);
-    auto iter = objs_state.find(obj);
-    if (iter == objs_state.end()) {
-      return;
-    }
-    bool is_atomic = iter->second.is_atomic;
-    bool prefetch_data = iter->second.prefetch_data;
-  
-    objs_state.erase(iter);
-
-    if (is_atomic || prefetch_data) {
-      auto& s = objs_state[obj];
-      s.is_atomic = is_atomic;
-      s.prefetch_data = prefetch_data;
-    }
-  }
+  void invalidate(const T& obj);
 };
 
 template<>
-void RGWObjectCtxImpl<rgw_obj, RGWObjState>::invalidate(rgw_obj& obj);
+void RGWObjectCtxImpl<rgw_obj, RGWObjState>::invalidate(const rgw_obj& obj);
 
 template<>
-void RGWObjectCtxImpl<rgw_raw_obj, RGWRawObjState>::invalidate(rgw_raw_obj& obj);
+void RGWObjectCtxImpl<rgw_raw_obj, RGWRawObjState>::invalidate(const rgw_raw_obj& obj);
 
 struct RGWObjectCtx {
   RGWRados *store;
