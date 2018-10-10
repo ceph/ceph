@@ -53,8 +53,8 @@ DEFAULT_OS_VERSION = dict(
     ubuntu="16.04",
     fedora="25",
     centos="7.4",
-    opensuse="12.2",
-    sles="11-sp2",
+    opensuse="42.1",
+    sle="12.2",
     rhel="7.4",
     debian='8.0'
 )
@@ -71,7 +71,7 @@ class OS(object):
     __slots__ = ['name', 'version', 'codename', 'package_type']
 
     _deb_distros = ('debian', 'ubuntu')
-    _rpm_distros = ('fedora', 'rhel', 'centos', 'opensuse', 'opensuse-leap')
+    _rpm_distros = ('fedora', 'rhel', 'centos', 'opensuse', 'opensuse-leap', 'sles')
 
     def __init__(self, name=None, version=None, codename=None):
         self.name = name
@@ -117,8 +117,10 @@ class OS(object):
         name = cls._get_value(str_, 'Distributor ID')
         if name == 'RedHatEnterpriseServer':
             name = 'rhel'
-	elif name.startswith('openSUSE'):
-	    name = 'opensuse'
+        elif name.startswith('openSUSE'):
+            name = 'opensuse'
+        elif name.startswith('SUSE'):
+            name = 'sle'
         name = name.lower()
 
         version = cls._get_value(str_, 'Release')

@@ -605,6 +605,8 @@ class GitbuilderProject(object):
             distro = "fedora"
         elif distro == "opensuse":
             distro = "opensuse"
+        elif distro == "sle":
+            distro == "sle"
         else:
             # deb based systems use codename instead of a distro/version combo
             if not codename:
@@ -780,7 +782,7 @@ class GitbuilderProject(object):
     def _install_rpm_repo(self):
         dist_release = self.dist_release
         project = self.project
-        if dist_release == 'opensuse':
+        if dist_release in ['opensuse', 'sle']:
             proj_release = '{proj}-release-{release}.noarch'.format(
                 proj=project, release=self.rpm_release)
         else:
@@ -792,7 +794,7 @@ class GitbuilderProject(object):
         rpm_name = "{rpm_nm}.rpm".format(rpm_nm=proj_release)
         url = "{base_url}/noarch/{rpm_name}".format(
             base_url=self.base_url, rpm_name=rpm_name)
-        if dist_release == 'opensuse':
+        if dist_release in ['opensuse', 'sle']:
             self.remote.run(args=[
                 'sudo', 'zypper', '-n', 'install', '--capability', rpm_name
             ])

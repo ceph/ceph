@@ -24,7 +24,7 @@ def _remove(ctx, config, remote, rpm):
     builder = _get_builder_project(ctx, remote, config)
     dist_release = builder.dist_release
 
-    if dist_release == 'opensuse':
+    if dist_release in ['opensuse', 'sle']:
         pkg_mng_cmd = 'zypper'
         pkg_mng_opts = '-n'
         pkg_mng_subcommand_opts = '--capability'
@@ -44,7 +44,7 @@ def _remove(ctx, config, remote, rpm):
             run.Raw('$d'), run.Raw('||'), 'true', run.Raw(';'),
             'done',
         ])
-    if dist_release == 'opensuse':
+    if dist_release in ['opensuse', 'sle']:
         pkg_mng_opts = '-a'
     else:
         pkg_mng_opts = 'all'
@@ -55,7 +55,7 @@ def _remove(ctx, config, remote, rpm):
 
     builder.remove_repo()
 
-    if dist_release != 'opensuse':
+    if dist_release not in ['opensuse', 'sle']:
         pkg_mng_opts = 'expire-cache'
     remote.run(
         args=[
@@ -111,13 +111,13 @@ def _update_package_list_and_install(ctx, remote, rpm, config):
 
     dist_release = builder.dist_release
     project = builder.project
-    if dist_release != 'opensuse':
+    if dist_release not in ['opensuse', 'sle']:
         uri = builder.uri_reference
         _yum_fix_repo_priority(remote, project, uri)
         _yum_fix_repo_host(remote, project)
         _yum_set_check_obsoletes(remote)
 
-    if dist_release == 'opensuse':
+    if dist_release in ['opensuse', 'sle']:
         remote.run(
             args=[
                 'sudo', 'zypper', 'clean', '-a',
@@ -130,7 +130,7 @@ def _update_package_list_and_install(ctx, remote, rpm, config):
 
     ldir = _get_local_dir(config, remote)
 
-    if dist_release == 'opensuse':
+    if dist_release in ['opensuse', 'sle']:
         pkg_mng_cmd = 'zypper'
         pkg_mng_opts = '-n'
         pkg_mng_subcommand_opts = '--capability'
@@ -268,7 +268,7 @@ def _remove_sources_list(ctx, config, remote):
         args=['sudo', 'rm', '-r', '/var/log/{proj}'.format(proj=proj)],
         check_status=False,
     )
-    if remote.os.name != 'opensuse':
+    if remote.os.name not in ['opensuse', 'sle']:
         _yum_unset_check_obsoletes(remote)
 
 
@@ -301,13 +301,13 @@ def _upgrade_packages(ctx, config, remote, pkgs):
     builder.remove_repo()
     builder.install_repo()
 
-    if builder.dist_release != 'opensuse':
+    if builder.dist_release not in ['opensuse', 'sle']:
         uri = builder.uri_reference
         _yum_fix_repo_priority(remote, project, uri)
         _yum_fix_repo_host(remote, project)
         _yum_set_check_obsoletes(remote)
 
-    if builder.dist_release == 'opensuse':
+    if builder.dist_release in ['opensuse', 'sle']:
         pkg_mng_cmd = 'zypper'
         pkg_mng_opts = '-a'
     else:
@@ -320,7 +320,7 @@ def _upgrade_packages(ctx, config, remote, pkgs):
         ])
 
     # Actually upgrade the project packages
-    if builder.dist_release == 'opensuse':
+    if builder.dist_release in ['opensuse', 'sle']:
         pkg_mng_opts = '-n'
         pkg_mng_subcommand_opts = '--capability'
     else:
