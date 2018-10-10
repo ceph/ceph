@@ -4704,6 +4704,8 @@ void RGWCopyObj::execute()
     return;
   }
 
+  rgw_placement_rule& dest_placement = s->info.storage_class;
+
   op_ret = store->copy_obj(obj_ctx,
 			   s->user->user_id,
 			   &s->info,
@@ -4712,7 +4714,7 @@ void RGWCopyObj::execute()
 			   src_obj,
 			   dest_bucket_info,
 			   src_bucket_info,
-                           nullptr, /* dest placement rule */
+                           &dest_placement,
 			   &src_mtime,
 			   &mtime,
 			   mod_ptr,
