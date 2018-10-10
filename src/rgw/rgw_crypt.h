@@ -123,16 +123,8 @@ public:
   RGWPutObj_BlockEncrypt(CephContext* cct,
                          RGWPutObjDataProcessor* next,
                          std::unique_ptr<BlockCrypt> crypt);
-  virtual ~RGWPutObj_BlockEncrypt();
-  virtual int handle_data(bufferlist& bl,
-                          off_t ofs,
-                          void **phandle,
-                          rgw_raw_obj *pobj,
-                          bool *again) override;
-  virtual int throttle_data(void *handle,
-                            const rgw_raw_obj& obj,
-                            uint64_t size,
-                            bool need_to_wait) override;
+
+  int handle_data(bufferlist&& bl, off_t ofs) override;
 }; /* RGWPutObj_BlockEncrypt */
 
 

@@ -3715,15 +3715,15 @@ void RGWPutObj::execute()
       orig_data = data;
     }
 
-    op_ret = put_data_and_throttle(filter, data, ofs, need_to_wait);
+    op_ret = filter->handle_data(std::move(data), ofs);
     if (op_ret < 0) {
       if (op_ret != -EEXIST) {
-        ldpp_dout(this, 20) << "processor->thottle_data() returned ret="
+        ldpp_dout(this, 20) << "processor->handle_data() returned ret="
 			  << op_ret << dendl;
         goto done;
       }
       /* need_to_wait == true and op_ret == -EEXIST */
-      ldpp_dout(this, 5) << "NOTICE: processor->throttle_data() returned -EEXIST, need to restart write" << dendl;
+      ldpp_dout(this, 5) << "NOTICE: processor->handle_data() returned -EEXIST, need to restart write" << dendl;
 
       /* restore original data */
       data.swap(orig_data);
@@ -3758,7 +3758,7 @@ void RGWPutObj::execute()
           filter = &*compressor;
         }
       }
-      op_ret = put_data_and_throttle(filter, data, ofs, false);
+      op_ret = filter->handle_data(std::move(data), ofs);
       if (op_ret < 0) {
         goto done;
       }
@@ -3768,12 +3768,10 @@ void RGWPutObj::execute()
   } while (len > 0);
   tracepoint(rgw_op, after_data_transfer, s->req_id.c_str(), ofs);
 
-  {
-    bufferlist flush;
-    op_ret = put_data_and_throttle(filter, flush, ofs, false);
-    if (op_ret < 0) {
-      goto done;
-    }
+  // flush
+  op_ret = filter->handle_data({}, ofs);
+  if (op_ret < 0) {
+    goto done;
   }
 
   if (!chunked_upload && ofs != s->content_length) {
@@ -4045,7 +4043,7 @@ void RGWPostObj::execute()
       }
 
       hash.Update((const unsigned char *)data.c_str(), data.length());
-      op_ret = put_data_and_throttle(filter, data, ofs, false);
+      op_ret = filter->handle_data(std::move(data), ofs);
 
       ofs += len;
 
@@ -4055,9 +4053,10 @@ void RGWPostObj::execute()
       }
     } while (again);
 
-    {
-      bufferlist flush;
-      op_ret = put_data_and_throttle(filter, flush, ofs, false);
+    // flush
+    op_ret = filter->handle_data({}, ofs);
+    if (op_ret < 0) {
+      return;
     }
 
     if (len < min_len) {
@@ -6799,7 +6798,7 @@ int RGWBulkUploadOp::handle_file(const boost::string_ref path,
       return op_ret;
     } else if (len > 0) {
       hash.Update((const unsigned char *)data.c_str(), data.length());
-      op_ret = put_data_and_throttle(filter, data, ofs, false);
+      op_ret = filter->handle_data(std::move(data), ofs);
       if (op_ret < 0) {
         ldpp_dout(this, 20) << "processor->thottle_data() returned ret=" << op_ret << dendl;
         return op_ret;

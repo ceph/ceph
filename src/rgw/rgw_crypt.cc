@@ -672,31 +672,14 @@ RGWPutObj_BlockEncrypt::RGWPutObj_BlockEncrypt(CephContext* cct,
   block_size = this->crypt->get_block_size();
 }
 
-RGWPutObj_BlockEncrypt::~RGWPutObj_BlockEncrypt() {
-}
-
-int RGWPutObj_BlockEncrypt::handle_data(bufferlist& bl,
-                                        off_t in_ofs,
-                                        void **phandle,
-                                        rgw_raw_obj *pobj,
-                                        bool *again) {
+int RGWPutObj_BlockEncrypt::handle_data(bufferlist&& bl, off_t in_ofs) {
   int res = 0;
   ldout(cct, 25) << "Encrypt " << bl.length() << " bytes" << dendl;
 
-  if (*again) {
-    bufferlist no_data;
-    res = next->handle_data(no_data, in_ofs, phandle, pobj, again);
-    //if *again is not set to false, we will have endless loop
-    //drop info on log
-    if (*again) {
-      ldout(cct, 20) << "*again==true" << dendl;
-    }
-    return res;
-  }
-
-  cache.append(bl);
+  const bool flush = (bl.length() == 0);
+  cache.claim_append(bl);
   off_t proc_size = cache.length() & ~(block_size - 1);
-  if (bl.length() == 0) {
+  if (flush) {
     proc_size = cache.length();
   }
   if (proc_size > 0) {
@@ -704,25 +687,18 @@ int RGWPutObj_BlockEncrypt::handle_data(bufferlist& bl,
     if (! crypt->encrypt(cache, 0, proc_size, data, ofs) ) {
       return -ERR_INTERNAL_ERROR;
     }
-    res = next->handle_data(data, ofs, phandle, pobj, again);
+    res = next->handle_data(std::move(data), ofs);
     ofs += proc_size;
     cache.splice(0, proc_size);
     if (res < 0)
       return res;
   }
 
-  if (bl.length() == 0) {
+  if (flush) {
     /*replicate 0-sized handle_data*/
-    res = next->handle_data(bl, ofs, phandle, pobj, again);
+    res = next->handle_data({}, ofs);
   }
   return res;
-}
-
-int RGWPutObj_BlockEncrypt::throttle_data(void *handle,
-                                          const rgw_raw_obj& obj,
-                                          uint64_t size,
-                                          bool need_to_wait) {
-  return next->throttle_data(handle, obj, size, need_to_wait);
 }
 
 std::string create_random_key_selector(CephContext * const cct) {

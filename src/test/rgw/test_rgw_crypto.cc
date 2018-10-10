@@ -50,14 +50,10 @@ class ut_put_sink: public RGWPutObjDataProcessor
 public:
   ut_put_sink(){}
   virtual ~ut_put_sink(){}
-  int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_raw_obj *pobj, bool *again) override
+  int handle_data(bufferlist&& bl, off_t ofs) override
   {
     sink << boost::string_ref(bl.c_str(),bl.length());
-    *again = false;
-    return 0;
-  }
-  int throttle_data(void *handle, const rgw_raw_obj& obj, uint64_t size, bool need_to_wait) override
-  {
+    bl.clear();
     return 0;
   }
   std::string get_sink()
@@ -562,18 +558,11 @@ TEST(TestRGWCrypto, verify_RGWPutObj_BlockEncrypt_chunks)
 
       bufferlist bl;
       bl.append(input.c_str()+pos, size);
-      void* handle;
-      bool again = false;
-      rgw_raw_obj ro;
-      encrypt.handle_data(bl, 0, &handle, nullptr, &again);
-      encrypt.throttle_data(handle, ro, size, false);
+      encrypt.handle_data(std::move(bl), 0);
 
       pos = pos + size;
     } while (pos < test_size);
-    bufferlist bl;
-    void* handle;
-    bool again = false;
-    encrypt.handle_data(bl, 0, &handle, nullptr, &again);
+    encrypt.handle_data({}, 0);
 
     ASSERT_EQ(put_sink.get_sink().length(), static_cast<size_t>(test_size));
 
@@ -619,13 +608,8 @@ TEST(TestRGWCrypto, verify_Encrypt_Decrypt)
 				   AES_256_CBC_create(g_ceph_context, &key[0], 32) );
     bufferlist bl;
     bl.append((char*)test_in, test_size);
-    void* handle;
-    bool again = false;
-    rgw_raw_obj ro;
-    encrypt.handle_data(bl, 0, &handle, nullptr, &again);
-    encrypt.throttle_data(handle, ro, test_size, false);
-    bl.clear();
-    encrypt.handle_data(bl, 0, &handle, nullptr, &again);
+    encrypt.handle_data(std::move(bl), 0);
+    encrypt.handle_data({}, test_size);
     ASSERT_EQ(put_sink.get_sink().length(), test_size);
 
     bl.append(put_sink.get_sink().data(), put_sink.get_sink().length());

@@ -1092,11 +1092,8 @@ public:
   explicit RGWPutObj_Filter(RGWPutObjDataProcessor* next) :
   next(next){}
   ~RGWPutObj_Filter() override {}
-  int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_raw_obj *pobj, bool *again) override {
-    return next->handle_data(bl, ofs, phandle, pobj, again);
-  }
-  int throttle_data(void *handle, const rgw_raw_obj& obj, uint64_t size, bool need_to_wait) override {
-    return next->throttle_data(handle, obj, size, need_to_wait);
+  int handle_data(bufferlist&& bl, off_t ofs) override {
+    return next->handle_data(std::move(bl), ofs);
   }
 }; /* RGWPutObj_Filter */
 
@@ -1851,38 +1848,6 @@ extern int rgw_build_object_policies(RGWRados *store, struct req_state *s,
 				     bool prefetch_data);
 extern rgw::IAM::Environment rgw_build_iam_environment(RGWRados* store,
 						       struct req_state* s);
-
-static inline int put_data_and_throttle(RGWPutObjDataProcessor *processor,
-					bufferlist& data, off_t ofs,
-					bool need_to_wait)
-{
-  bool again = false;
-  do {
-    void *handle = nullptr;
-    rgw_raw_obj obj;
-
-    uint64_t size = data.length();
-
-    int ret = processor->handle_data(data, ofs, &handle, &obj, &again);
-    if (ret < 0)
-      return ret;
-    if (handle != nullptr)
-    {
-      ret = processor->throttle_data(handle, obj, size, need_to_wait);
-      if (ret < 0)
-        return ret;
-    }
-    else
-      break;
-    need_to_wait = false; /* the need to wait only applies to the first
-			   * iteration */
-  } while (again);
-
-  return 0;
-} /* put_data_and_throttle */
-
-
-
 
 
 static inline int get_system_versioning_params(req_state *s,
