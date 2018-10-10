@@ -3622,7 +3622,7 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
     if (name.compare(RGW_ATTR_ETAG) == 0) {
       etag = bl.to_str();
     } else if (name.compare(RGW_ATTR_CONTENT_TYPE) == 0) {
-      content_type = bl.c_str();
+      content_type = bl.to_str();
     } else if (name.compare(RGW_ATTR_ACL) == 0) {
       acl_bl = bl;
     }
