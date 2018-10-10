@@ -12,7 +12,6 @@ static int update_monitor(const OSDSuperblock& sb, MonitorDBStore& ms);
 static int update_osdmap(ObjectStore& fs,
                          OSDSuperblock& sb,
                          MonitorDBStore& ms);
-static int update_pgmap_pg(ObjectStore& fs, MonitorDBStore& ms);
 
 int update_mon_db(ObjectStore& fs, OSDSuperblock& sb,
                   const string& keyring,
@@ -28,9 +27,6 @@ int update_mon_db(ObjectStore& fs, OSDSuperblock& sb,
     goto out;
   }
   if ((r = update_osdmap(fs, sb, ms)) < 0) {
-    goto out;
-  }
-  if ((r = update_pgmap_pg(fs, ms)) < 0) {
     goto out;
   }
   if ((r = update_monitor(sb, ms)) < 0) {
@@ -337,61 +333,5 @@ int update_osdmap(ObjectStore& fs, OSDSuperblock& sb, MonitorDBStore& ms)
        << osd_name << ": "
        << ntrimmed << " osdmaps trimmed, "
        << nadded << " osdmaps added." << std::endl;
-  return 0;
-}
-
-// rebuild
-//  - pgmap_pg/${pgid}
-int update_pgmap_pg(ObjectStore& fs, MonitorDBStore& ms)
-{
-  // pgmap/${epoch} is the incremental of: stamp, pgmap_pg, pgmap_osd
-  // if PGMonitor fails to read it, it will fall back to the pgmap_pg, i.e.
-  // the fullmap.
-  vector<coll_t> collections;
-  int r = fs.list_collections(collections);
-  if (r < 0) {
-    cerr << "failed to list pgs: "  << cpp_strerror(r) << std::endl;
-    return r;
-  }
-  const string prefix("pgmap_pg");
-  // in general, there are less than 100 PGs per OSD, so no need to apply
-  // transaction in batch.
-  auto t = make_shared<MonitorDBStore::Transaction>();
-  unsigned npg = 0;
-  for (const auto& coll : collections) {
-    spg_t pgid;
-    if (!coll.is_pg(&pgid))
-      continue;
-    bufferlist bl;
-    pg_info_t info(pgid);
-    PastIntervals past_intervals;
-    __u8 struct_v;
-    r = PG::read_info(&fs, pgid, coll, bl, info, past_intervals, struct_v);
-    if (r < 0) {
-      cerr << "failed to read_info: " << cpp_strerror(r) << std::endl;
-      return r;
-    }
-    if (struct_v < PG::cur_struct_v) {
-      cerr << "incompatible pg_info: v" << struct_v << std::endl;
-      return -EINVAL;
-    }
-    version_t latest_epoch = 0;
-    r = ms.get(prefix, stringify(pgid.pgid), bl);
-    if (r >= 0) {
-      pg_stat_t pg_stat;
-      auto bp = bl.begin();
-      ::decode(pg_stat, bp);
-      latest_epoch = pg_stat.reported_epoch;
-    }
-    if (info.stats.reported_epoch > latest_epoch) {
-      bufferlist bl;
-      ::encode(info.stats, bl);
-      t->put(prefix, stringify(pgid.pgid), bl);
-      npg++;
-    }
-  }
-  ms.apply_transaction(t);
-  cout << std::left << setw(10)
-       << " " << npg << " pgs added." << std::endl;
   return 0;
 }
