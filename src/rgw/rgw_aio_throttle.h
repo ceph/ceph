@@ -18,6 +18,7 @@
 #include "include/rados/librados_fwd.hpp"
 #include <memory>
 #include "common/ceph_mutex.h"
+#include "common/async/completion.h"
 #include "services/svc_rados.h"
 #include "rgw_aio.h"
 
@@ -75,5 +76,41 @@ class BlockingAioThrottle final : public Aio, private Throttle {
 
   AioResultList drain() override final;
 };
+
+#ifdef HAVE_BOOST_CONTEXT
+// a throttle that yields the coroutine instead of blocking. all public
+// functions must be called within the coroutine strand
+class YieldingAioThrottle final : public Aio, private Throttle {
+  boost::asio::io_context& context;
+  boost::asio::yield_context yield;
+  struct Handler;
+
+  // completion callback associated with the waiter
+  using Completion = ceph::async::Completion<void(boost::system::error_code)>;
+  std::unique_ptr<Completion> completion;
+
+  template <typename CompletionToken>
+  auto async_wait(CompletionToken&& token);
+
+  struct Pending : AioResultEntry { uint64_t cost = 0; };
+
+ public:
+  YieldingAioThrottle(uint64_t window, boost::asio::io_context& context,
+                      boost::asio::yield_context yield)
+    : Throttle(window), context(context), yield(yield)
+  {}
+
+  AioResultList get(const RGWSI_RADOS::Obj& obj, OpFunc&& f,
+                    uint64_t cost, uint64_t id) override final;
+
+  void put(AioResult& r) override final;
+
+  AioResultList poll() override final;
+
+  AioResultList wait() override final;
+
+  AioResultList drain() override final;
+};
+#endif // HAVE_BOOST_CONTEXT
 
 } // namespace rgw

@@ -110,4 +110,98 @@ AioResultList BlockingAioThrottle::drain()
   return std::move(completed);
 }
 
+#ifdef HAVE_BOOST_CONTEXT
+
+template <typename CompletionToken>
+auto YieldingAioThrottle::async_wait(CompletionToken&& token)
+{
+  using boost::asio::async_completion;
+  using Signature = void(boost::system::error_code);
+  async_completion<CompletionToken, Signature> init(token);
+  completion = Completion::create(context.get_executor(),
+                                  std::move(init.completion_handler));
+  return init.result.get();
+}
+
+AioResultList YieldingAioThrottle::get(const RGWSI_RADOS::Obj& obj,
+                                       OpFunc&& f,
+                                       uint64_t cost, uint64_t id)
+{
+  auto p = std::make_unique<Pending>();
+  p->obj = obj;
+  p->id = id;
+  p->cost = cost;
+
+  if (cost > window) {
+    p->result = -EDEADLK; // would never succeed
+    completed.push_back(*p);
+  } else {
+    // wait for the write size to become available
+    pending_size += p->cost;
+    if (!is_available()) {
+      ceph_assert(waiter == Wait::None);
+      ceph_assert(!completion);
+
+      boost::system::error_code ec;
+      waiter = Wait::Available;
+      async_wait(yield[ec]);
+    }
+
+    // register the pending write and initiate the operation
+    pending.push_back(*p);
+    std::move(f)(this, *static_cast<AioResult*>(p.get()));
+  }
+  p.release();
+  return std::move(completed);
+}
+
+void YieldingAioThrottle::put(AioResult& r)
+{
+  auto& p = static_cast<Pending&>(r);
+
+  // move from pending to completed
+  pending.erase(pending.iterator_to(p));
+  completed.push_back(p);
+
+  pending_size -= p.cost;
+
+  if (waiter_ready()) {
+    ceph_assert(completion);
+    ceph::async::post(std::move(completion), boost::system::error_code{});
+    waiter = Wait::None;
+  }
+}
+
+AioResultList YieldingAioThrottle::poll()
+{
+  return std::move(completed);
+}
+
+AioResultList YieldingAioThrottle::wait()
+{
+  if (!has_completion() && !pending.empty()) {
+    ceph_assert(waiter == Wait::None);
+    ceph_assert(!completion);
+
+    boost::system::error_code ec;
+    waiter = Wait::Completion;
+    async_wait(yield[ec]);
+  }
+  return std::move(completed);
+}
+
+AioResultList YieldingAioThrottle::drain()
+{
+  if (!is_drained()) {
+    ceph_assert(waiter == Wait::None);
+    ceph_assert(!completion);
+
+    boost::system::error_code ec;
+    waiter = Wait::Drained;
+    async_wait(yield[ec]);
+  }
+  return std::move(completed);
+}
+#endif // HAVE_BOOST_CONTEXT
+
 } // namespace rgw
