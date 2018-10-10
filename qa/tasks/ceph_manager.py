@@ -1179,20 +1179,26 @@ class CephManager:
         proc = self.controller.run(**kwargs)
         return proc.exitstatus
 
-    def run_ceph_w(self):
+    def run_ceph_w(self, watch_channel=None):
         """
         Execute "ceph -w" in the background with stdout connected to a StringIO,
         and return the RemoteProcess.
+
+        :param watch_channel: Specifies the channel to be watched. This can be
+                              'cluster', 'audit', ...
+        :type watch_channel: str
         """
-        return self.controller.run(
-            args=["sudo",
-                  "daemon-helper",
-                  "kill",
-                  "ceph",
-                  '--cluster',
-                  self.cluster,
-                  "-w"],
-            wait=False, stdout=StringIO(), stdin=run.PIPE)
+        args = ["sudo",
+                "daemon-helper",
+                "kill",
+                "ceph",
+                '--cluster',
+                self.cluster,
+                "-w"]
+        if watch_channel is not None:
+            args.append("--watch-channel")
+            args.append(watch_channel)
+        return self.controller.run(args, wait=False, stdout=StringIO(), stdin=run.PIPE)
 
     def flush_pg_stats(self, osds, no_wait=None, wait_for_mon=300):
         """
