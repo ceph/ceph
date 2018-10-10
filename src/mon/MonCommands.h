@@ -942,14 +942,16 @@ COMMAND("osd pool create " \
 COMMAND_WITH_FLAG("osd pool delete " \
 	"name=pool,type=CephPoolname " \
 	"name=pool2,type=CephPoolname,req=false " \
-	"name=sure,type=CephString,req=false", \
+	"name=sure,type=CephChoices,strings=--yes-i-really-really-mean-it|" \
+        "--yes-i-really-really-mean-it-not-faking,req=false", \
 	"delete pool", \
 	"osd", "rw", \
     FLAG(DEPRECATED))
 COMMAND("osd pool rm " \
 	"name=pool,type=CephPoolname " \
 	"name=pool2,type=CephPoolname,req=false " \
-	"name=sure,type=CephString,req=false", \
+	"name=sure,type=CephChoices,strings=--yes-i-really-really-mean-it|" \
+        "--yes-i-really-really-mean-it-not-faking,req=false", \
 	"remove pool", \
 	"osd", "rw")
 COMMAND("osd pool rename " \
