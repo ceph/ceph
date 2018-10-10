@@ -47,4 +47,52 @@ int ChunkProcessor::process(bufferlist&& data, uint64_t offset)
   return 0;
 }
 
+
+int StripeProcessor::process(bufferlist&& data, uint64_t offset)
+{
+  ceph_assert(offset >= bounds.first);
+
+  const bool flush = (data.length() == 0);
+  if (flush) {
+    return Pipe::process({}, offset - bounds.first);
+  }
+
+  auto max = bounds.second - offset;
+  while (data.length() > max) {
+    if (max > 0) {
+      bufferlist bl;
+      data.splice(0, max, &bl);
+
+      int r = Pipe::process(std::move(bl), offset - bounds.first);
+      if (r < 0) {
+        return r;
+      }
+      offset += max;
+    }
+
+    // flush the current chunk
+    int r = Pipe::process({}, offset - bounds.first);
+    if (r < 0) {
+      return r;
+    }
+    // generate the next stripe
+    uint64_t stripe_size;
+    r = gen->next(offset, &stripe_size);
+    if (r < 0) {
+      return r;
+    }
+    ceph_assert(stripe_size > 0);
+
+    bounds.first = offset;
+    bounds.second = offset + stripe_size;
+
+    max = stripe_size;
+  }
+
+  if (data.length() == 0) { // don't flush the chunk here
+    return 0;
+  }
+  return Pipe::process(std::move(data), offset - bounds.first);
+}
+
 } // namespace rgw::putobj
