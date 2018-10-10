@@ -19,8 +19,8 @@
 
 #include "include/types.h"
 #include "include/interval_set.h"
-#include "common/Mutex.h"
-#include "common/Cond.h"
+#include "common/Thread.h"
+#include "include/utime.h"
 
 #include "aio.h"
 #include "BlockDevice.h"
@@ -35,7 +35,7 @@ class KernelDevice : public BlockDevice {
 
   std::string devname;  ///< kernel dev name (/sys/block/$devname), if any
 
-  Mutex debug_lock;
+  ceph::mutex debug_lock = {ceph::make_mutex("KernelDevice::debug_lock")};
   interval_set<uint64_t> debug_inflight;
 
   std::atomic<bool> io_since_flush = {false};

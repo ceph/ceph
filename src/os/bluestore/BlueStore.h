@@ -1974,8 +1974,8 @@ private:
   public:
     BlueStore *store;
 
-    Cond cond;
-    Mutex lock;
+    ceph::condition_variable cond;
+    ceph::mutex lock = {ceph::make_mutex("BlueStore::MempoolThread::lock")};
     bool stop = false;
     uint64_t autotune_cache_size = 0;
 
@@ -2077,7 +2077,6 @@ private:
   public:
     explicit MempoolThread(BlueStore *s)
       : store(s),
-	lock("BlueStore::MempoolThread::lock"),
         meta_cache(MetaCache(s)),
         data_cache(DataCache(s)) {}
 
@@ -2087,10 +2086,10 @@ private:
       create("bstore_mempool");
     }
     void shutdown() {
-      lock.Lock();
+      lock.lock();
       stop = true;
-      cond.Signal();
-      lock.Unlock();
+      cond.notify_all();
+      lock.unlock();
       join();
     }
 

@@ -481,7 +481,7 @@ class NVMEManager {
   };
 
  private:
-  Mutex lock;
+  ceph::mutex lock = {ceph::make_mutex("NVMEManager::lock")};
   bool init = false;
   std::vector<SharedDriverData*> shared_driver_datas;
   std::thread dpdk_thread;
@@ -490,11 +490,10 @@ class NVMEManager {
   std::list<ProbeContext*> probe_queue;
 
  public:
-  NVMEManager()
-      : lock("NVMEDevice::NVMEManager::lock") {}
+  NVMEManager() {}
   int try_get(const spdk_nvme_transport_id& trid, SharedDriverData **driver);
   void register_ctrlr(const spdk_nvme_transport_id& trid, spdk_nvme_ctrlr *c, SharedDriverData **driver) {
-    ceph_assert(lock.is_locked());
+    ceph_assert(ceph_mutex_is_locked(lock));
     spdk_nvme_ns *ns;
     int num_ns = spdk_nvme_ctrlr_get_num_ns(c);
     ceph_assert(num_ns >= 1);
@@ -547,7 +546,7 @@ static void attach_cb(void *cb_ctx, const struct spdk_nvme_transport_id *trid,
 
 int NVMEManager::try_get(const spdk_nvme_transport_id& trid, SharedDriverData **driver)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   for (auto &&it : shared_driver_datas) {
     if (it->is_equal(trid)) {
       *driver = it;

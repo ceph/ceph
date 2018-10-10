@@ -3440,7 +3440,7 @@ void BlueStore::Collection::split_cache(
 
 void *BlueStore::MempoolThread::entry()
 {
-  Mutex::Locker l(lock);
+  std::unique_lock l(lock);
 
   std::list<PriorityCache::PriCache *> caches;
   caches.push_back(store->db);
@@ -3485,9 +3485,9 @@ void *BlueStore::MempoolThread::entry()
     interval_stats_trim = false;
 
     store->_update_cache_logger();
-    utime_t wait;
-    wait += store->cct->_conf->bluestore_cache_trim_interval;
-    cond.WaitInterval(lock, wait);
+    auto wait = ceph::make_timespan(
+      store->cct->_conf->bluestore_cache_trim_interval);
+    cond.wait_for(l, wait);
   }
   stop = false;
   return NULL;

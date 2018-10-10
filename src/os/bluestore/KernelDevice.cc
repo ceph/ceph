@@ -37,7 +37,6 @@ KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, ai
     fd_direct(-1),
     fd_buffered(-1),
     aio(false), dio(false),
-    debug_lock("KernelDevice::debug_lock"),
     aio_queue(cct->_conf->bdev_aio_max_queue_depth),
     discard_callback(d_cb),
     discard_callback_priv(d_cbpriv),
@@ -576,7 +575,7 @@ void KernelDevice::_aio_log_start(
   dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << std::dec << dendl;
   if (cct->_conf->bdev_debug_inflight_ios) {
-    Mutex::Locker l(debug_lock);
+    std::lock_guard l(debug_lock);
     if (debug_inflight.intersects(offset, length)) {
       derr << __func__ << " inflight overlap of 0x"
 	   << std::hex
@@ -619,7 +618,7 @@ void KernelDevice::_aio_log_finish(
   dout(20) << __func__ << " " << aio << " 0x"
 	   << std::hex << offset << "~" << length << std::dec << dendl;
   if (cct->_conf->bdev_debug_inflight_ios) {
-    Mutex::Locker l(debug_lock);
+    std::lock_guard l(debug_lock);
     debug_inflight.erase(offset, length);
   }
 }
