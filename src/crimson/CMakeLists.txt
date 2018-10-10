@@ -106,7 +106,7 @@ target_link_libraries(crimson-common
     crimson::cflags
     Boost::iostreams
     Boost::random
-    ${NSS_LIBRARIES} ${NSPR_LIBRARIES} ${OPENSSL_LIBRARIES})
+    ${NSS_LIBRARIES} ${NSPR_LIBRARIES} OpenSSL::Crypto)
 
 set(crimson_net_srcs
   net/Dispatcher.cc
