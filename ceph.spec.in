@@ -1178,6 +1178,7 @@ export CPPFLAGS="$java_inc"
 export CFLAGS="$RPM_OPT_FLAGS"
 export CXXFLAGS="$RPM_OPT_FLAGS"
 export LDFLAGS="$RPM_LD_FLAGS"
+test "$RPM_LD_FLAGS" && echo "RPM_LD_FLAGS == $RPM_LD_FLAGS" || echo "RPM_LD_FLAGS is empty"
 
 # Parallel build settings ...
 CEPH_MFLAGS_JOBS="%{?_smp_mflags}"
