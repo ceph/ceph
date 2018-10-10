@@ -68,7 +68,7 @@ int seed::get_torrent_file(RGWRados::Object::Read &read_op,
 
   const set<string> obj_key{RGW_OBJ_TORRENT};
   map<string, bufferlist> m;
-  const int r = read_op.state.io_ctx.omap_get_vals_by_keys(oid, obj_key, &m);
+  const int r = read_op.state.cur_ioctx->omap_get_vals_by_keys(oid, obj_key, &m);
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: omap_get_vals_by_keys failed: " << r << dendl;
     return r;
