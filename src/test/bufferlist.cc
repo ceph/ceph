@@ -39,8 +39,6 @@
 #include "common/sctp_crc32.h"
 
 #include "include/encoding.h"
-#define DELETE_MOST
-#ifdef DELETE_MOST
 
 #define MAX_TEST 1000000
 #define FILENAME "bufferlist"
@@ -2858,17 +2856,12 @@ TEST(BufferList, TestSHA1) {
   }
 
 }
-#endif //DELETE_MOST
 
+//calculate size stage
 class encode_size
 {
 public:
-  //calculate size stage
-  size_t encode_sizex{0};
-  size_t data_size;
-  encode_size() : data_size(1) {
-
-  }
+  size_t encode{0};
 };
 
 
@@ -2877,37 +2870,13 @@ public:
 class encode_helper
 {
 public:
-
-  //calculate size stage
-  size_t encode_size{0};
-  size_t data_size;
-  //encode stage
-  //buffer::list::contiguous_filler start{nullptr};
   buffer::list::contiguous_filler at{nullptr};
-  char p[sizeof(std::string)];
-  char* dupa;
-
-  //uint64_t dupa;
-  //dupex::ptr pp;
-  //std::string* str;
-  //buffer::ptr rr;
-  //encode_size p;
-  //char* pos;
   buffer::list* bl;
 
-  inline buffer::ptr& get_ptr()
-  {
-    return *(reinterpret_cast<buffer::ptr*>(p));
-  }
   encode_helper() {}
-  //encode_helper(buffer::list::contiguous_filler at) :mode(1), at(at) {};
-  //encode_helper(buffer::list& x) :bl(&x), mode(2) {};
-  ~encode_helper();
+  ~encode_helper() {};
 };
-encode_helper::~encode_helper()
-{
 
-}
 
 #if 0
 void encode(bufferlist& bl) const {
@@ -2928,23 +2897,61 @@ template<typename T> void encode(T& bl) const {
 }
 #endif
 
-#if 1
-
 namespace ceph {
   //namespace encode {
 
 template<typename T> void inline encode(T& __restrict__ x, encode_size& s)
 {
-  s.encode_sizex += sizeof(x);
+  s.encode += sizeof(x);
+  //s.total += sizeof(x);
 }
 
-template<typename T> void inline encode(const T& __restrict__ x, buffer::list::contiguous_filler& __restrict__ at)
+//template<typename T> void inline encode(const T& __restrict__ x, buffer::list::contiguous_filler& __restrict__ at)
+template<typename T> void inline encode(const T& __restrict__ x, encode_helper& __restrict__ eh)
 {
-  at.copy_in(sizeof(x), (const char*)&x);
+  eh.at.copy_in(sizeof(x), (const char*)&x);
 }
 
 //}
 }
+
+
+struct clone_info1 {
+  snapid_t cloneid;
+  vector<snapid_t> snaps;  // ascending
+  vector< pair<uint64_t,uint64_t> > overlap;
+  uint64_t size;
+
+  clone_info1() : cloneid(CEPH_NOSNAP), size(0) {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(cloneid, bl);
+    encode(snaps, bl);
+    encode(overlap, bl);
+    encode(size, bl);
+    ENCODE_FINISH(bl);
+  }
+};
+
+
+
+struct makaron
+{
+  bufferlist nitki;
+  void encode(bufferlist& bl) const {
+    bl.append(nitki);
+  }
+  void encode(encode_size& bl) const {}
+  void encode(encode_helper& bl) const {
+    bl.bl->insert(nitki, bl.at);
+  }
+  makaron() {
+    bufferptr ptr(10);
+    memset(ptr.c_str(), 10, 'X');
+    nitki.append(ptr);
+  }
+};
 
 
 struct groch
@@ -2953,9 +2960,10 @@ struct groch
   uint32_t a1;
   uint16_t a2;
   uint8_t a3;
+  makaron m;
+  //clone_info1 ci;
   template<typename T> void encode(T& bl) const;
 };
-
 
 template<typename T> void groch::encode(T& __restrict__ bl) const
 {
@@ -2964,32 +2972,17 @@ template<typename T> void groch::encode(T& __restrict__ bl) const
   encode(a1, bl);
   encode(a2, bl);
   encode(a3, bl);
+  //m.encode(bl);
+  //ci.encode(bl);
 }
-#if 0
-template<> void groch::encode<bufferlist&>(bufferlist& bl) const
-{
-  encode_size s;
-  encode_helper h;
-  encode(s);
-  h.at = bl.append_hole(s.encode_sizex);
-  encode(h.at);
-}
-#endif
+
 struct fasola
 {
   uint32_t a0;
   uint32_t a1;
   uint64_t a2;
   uint64_t a3;
-#if 0
-  template<typename T> void encode_worker(T& __restrict__ bl) const;
-  void encode(bufferlist& bl) const;
-  void encode(encode_size& bl) const;
-  void encode(buffer::list::contiguous_filler& bl) const;
-#endif
-
   template<typename T> void inline encode(T& __restrict__ bl) const
-  //void fasola::encode(encode_helper& __restrict__ bl) const
   {
     using ceph::encode;
     encode(a0, bl);
@@ -2997,41 +2990,7 @@ struct fasola
     encode(a2, bl);
     encode(a3, bl);
   }
-
-#if 0
-  {
-    //using namespace dupa;
-    ::encode(a0, bl);
-    ::encode(a1, bl);
-    ::encode(a2, bl);
-    ::encode(a3, bl);
-  }
-#endif
 };
-#if 0
-template<typename T> void inline fasola::encode_worker(T& __restrict__ bl) const
-//void fasola::encode(encode_helper& __restrict__ bl) const
-{
-  using ceph::encode;
-  encode(a0, bl);
-  encode(a1, bl);
-  encode(a2, bl);
-  encode(a3, bl);
-}
-
-void inline fasola::encode(bufferlist& bl) const
-{
-  encode_worker(bl);
-}
-void inline fasola::encode(encode_size& bl) const
-{
-  encode_worker(bl);
-}
-void inline fasola::encode(buffer::list::contiguous_filler& bl) const
-{
-  encode_worker(bl);
-}
-#endif
 
 struct jas_fasola2
 {
@@ -3045,10 +3004,9 @@ struct jas_fasola2
   uint8_t a7;
   fasola f;
   groch g;
-  template<typename T> void encode_worker(T& __restrict__ bl) const
-  //template<typename T> void inline encode(T& __restrict__ bl) const
+  template<typename T> void encode(T& __restrict__ bl) const
   {
-    using ceph::encode;//namespace dupa;
+    using ceph::encode;
     f.encode(bl);
     encode(a0, bl);
     encode(a1, bl);
@@ -3060,64 +3018,49 @@ struct jas_fasola2
     encode(a7, bl);
     g.encode(bl);
   }
-  void encode(bufferlist& bl) const { encode_worker(bl); }
-  void encode(encode_size& bl) const  { encode_worker(bl); }
-  void encode(buffer::list::contiguous_filler& bl) const  { encode_worker(bl); }
-
   void encode_x(bufferlist& bl);
-#if 0
-  {
-    encode_size s;
-    buffer::ptr rr;
-    encode_helper h(0);
-    encode(h);
-    h.at = bl.append_hole(h.encode_size);
-    //h.pos = h.at.pos;
-    h.mode = 1;
-    encode(h);
-  }
-#endif
+
 };
-#endif
 
 void jas_fasola2::encode_x(bufferlist& bl)
 {
   encode_size s;
-  buffer::ptr rr;
   encode_helper h;
   encode(s);
-  h.at = bl.append_hole(s.encode_sizex);
-  //h.pos = h.at.pos;
-
-  encode(h.at);
+  h.bl = &bl;
+  h.at = bl.append_hole(s.encode);
+  encode(h);
 }
 
 jas_fasola2 jf;
 
 TEST(BufferList, encode_bench)
 {
-  bufferlist bl;
-  for (size_t i=0; i < 1000000; i++)
+  for (size_t j=0; j < 100000; j++)
   {
-    jf.encode(bl);
+    bufferlist bl;
+    for (size_t i=0; i < 10; i++)
+    {
+      jf.encode(bl);
+    }
+    EXPECT_EQ((unsigned)(4+4+8+8 + 4+4+8+8+2+1+1+1 + 8+4+2+1) * 10, bl.length());
   }
-  EXPECT_EQ(1000000 * (4+4+8+8 + 4+4+8+8+2+1+1+1 + 8+4+2+1), bl.length());
 }
 
 TEST(BufferList, encode_bench_x)
 {
-  bufferlist bl;
-  for (size_t i=0; i < 1000000; i++)
+  for (size_t j=0; j < 100000; j++)
   {
-    jf.encode_x(bl);
+    bufferlist bl;
+    for (size_t i=0; i < 10; i++)
+    {
+      jf.encode_x(bl);
+    }
+    EXPECT_EQ((unsigned)(4+4+8+8 + 4+4+8+8+2+1+1+1 + 8+4+2+1) * 10, bl.length());
   }
-  EXPECT_EQ(1000000 * (4+4+8+8 + 4+4+8+8+2+1+1+1 + 8+4+2+1), bl.length());
 }
 
 
-
-
-#ifdef DELETE_MOST
 TEST(BufferHash, all) {
   {
     bufferlist bl;
@@ -3139,7 +3082,7 @@ TEST(BufferHash, all) {
     EXPECT_EQ((unsigned)0xB3109EBF, hash.digest());
   }
 }
-#endif
+
 /*
  * Local Variables:
  * compile-command: "cd .. ; make unittest_bufferlist && 
