@@ -165,7 +165,8 @@ add_dependencies(rgw_a civetweb_h)
 
 target_include_directories(rgw_a SYSTEM PUBLIC "../rapidjson/include")
 
-target_link_libraries(rgw_a librados cls_otp_client cls_lock_client cls_rgw_client cls_refcount_client
+target_link_libraries(rgw_a PRIVATE
+  librados cls_otp_client cls_lock_client cls_rgw_client cls_refcount_client
   cls_log_client cls_timeindex_client cls_version_client
   cls_user_client ceph-common common_utf8 global
   ${CURL_LIBRARIES}
@@ -178,9 +179,9 @@ if(WITH_CURL_OPENSSL)
   target_link_libraries(rgw_a PRIVATE OpenSSL::Crypto)
 endif()
 
-if (WITH_RADOSGW_BEAST_FRONTEND)
+if(WITH_RADOSGW_BEAST_FRONTEND)
   target_compile_definitions(rgw_a PUBLIC BOOST_COROUTINES_NO_DEPRECATION_WARNING)
-  target_link_libraries(rgw_a Boost::coroutine Boost::context)
+  target_link_libraries(rgw_a PRIVATE Boost::coroutine Boost::context)
 endif()
 
 set(radosgw_srcs
