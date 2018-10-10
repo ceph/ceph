@@ -4610,6 +4610,11 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
     ptail_rule = &dest_bucket_info.placement_rule;
   }
 
+  auto& dest_storage_class = ptail_rule->get_storage_class();
+  bufferlist scbl;
+  scbl.append(dest_storage_class);
+  attrs[RGW_ATTR_STORAGE_CLASS] = scbl;
+
   if (!get_obj_data_pool(*src_rule, src_obj, &src_pool)) {
     ldout(cct, 0) << "ERROR: failed to locate data pool for " << src_obj << dendl;
     return -EIO;
