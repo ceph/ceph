@@ -205,7 +205,7 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool, IoCtx& ioctx, b
 }
 
 template<>
-void RGWObjectCtxImpl<rgw_obj, RGWObjState>::invalidate(rgw_obj& obj) {
+void RGWObjectCtxImpl<rgw_obj, RGWObjState>::invalidate(const rgw_obj& obj) {
   RWLock::WLocker wl(lock);
   auto iter = objs_state.find(obj);
   if (iter == objs_state.end()) {
@@ -224,7 +224,7 @@ void RGWObjectCtxImpl<rgw_obj, RGWObjState>::invalidate(rgw_obj& obj) {
 }
 
 template<>
-void RGWObjectCtxImpl<rgw_raw_obj, RGWRawObjState>::invalidate(rgw_raw_obj& obj) {
+void RGWObjectCtxImpl<rgw_raw_obj, RGWRawObjState>::invalidate(const rgw_raw_obj& obj) {
   RWLock::WLocker wl(lock);
   auto iter = objs_state.find(obj);
   if (iter == objs_state.end()) {
