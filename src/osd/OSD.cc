@@ -6022,7 +6022,7 @@ COMMAND("smart name=devid,type=CephString,req=False",
         "osd", "rw", "cli,rest")
 COMMAND("cache drop",
         "Drop all OSD caches",
-        "osd", "rw", "cli,rest")
+        "osd", "rwx", "cli,rest")
 COMMAND("cache status",
         "Get OSD caches statistics",
         "osd", "r", "cli,rest")
