@@ -277,7 +277,7 @@ test_locking() {
     echo "testing locking..."
     remove_images
 
-    rbd create -s 1 test1
+    rbd create $RBD_CREATE_ARGS -s 1 test1
     rbd lock list test1 | wc -l | grep '^0$'
     rbd lock add test1 id
     rbd lock list test1 | grep ' 1 '
@@ -633,7 +633,7 @@ test_namespace() {
 
     expect_fail rbd namespace remove --pool rbd missing
 
-    rbd create rbd/test1/image1 --size 1G
+    rbd create $RBD_CREATE_ARGS --size 1G rbd/test1/image1
 
     # default test1 ns to test2 ns clone
     rbd bench --io-type write --io-pattern rand --io-total 32M --io-size 4K rbd/test1/image1
@@ -644,7 +644,7 @@ test_namespace() {
     rbd rm rbd/test2/image1
 
     # default ns to test1 ns clone
-    rbd create rbd/image2 --size 1G
+    rbd create $RBD_CREATE_ARGS --size 1G rbd/image2
     rbd bench --io-type write --io-pattern rand --io-total 32M --io-size 4K rbd/image2
     rbd snap create rbd/image2@1
     rbd clone --rbd-default-clone-format 2 rbd/image2@1 rbd/test2/image2
@@ -654,7 +654,7 @@ test_namespace() {
     rbd rm rbd/test2/image2
     rbd rm rbd/image2
 
-    rbd create --namespace test1 image2 --size 1G
+    rbd create $RBD_CREATE_ARGS --size 1G --namespace test1 image2
     expect_fail rbd namespace remove --pool rbd test1
 
     rbd group create rbd/test1/group1
