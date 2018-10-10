@@ -53,4 +53,26 @@ class ChunkProcessor : public Pipe {
   int process(bufferlist&& data, uint64_t offset) override;
 };
 
+
+// interface to generate the next stripe description
+class StripeGenerator {
+ public:
+  virtual ~StripeGenerator() {}
+
+  virtual int next(uint64_t offset, uint64_t *stripe_size) = 0;
+};
+
+// pipe that respects stripe boundaries and restarts each stripe at offset 0
+class StripeProcessor : public Pipe {
+  StripeGenerator *gen;
+  std::pair<uint64_t, uint64_t> bounds; // bounds of current stripe
+ public:
+  StripeProcessor(DataProcessor *next, StripeGenerator *gen,
+                  uint64_t stripe_size)
+    : Pipe(next), gen(gen), bounds(0, stripe_size)
+  {}
+
+  int process(bufferlist&& data, uint64_t data_offset) override;
+};
+
 } // namespace rgw::putobj
