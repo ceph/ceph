@@ -340,7 +340,7 @@ Journal<I>::Journal(I &image_ctx)
     &cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
       "librbd::journal::thread_pool", false, cct);
   m_work_queue = new ContextWQ("librbd::journal::work_queue",
-                               cct->_conf.get_val<int64_t>("rbd_op_thread_timeout"),
+                               cct->_conf.get_val<uint64_t>("rbd_op_thread_timeout"),
                                thread_pool_singleton);
   ImageCtx::get_timer_instance(cct, &m_timer, &m_timer_lock);
 }
@@ -1062,10 +1062,12 @@ void Journal<I>::create_journaler() {
 
   transition_state(STATE_INITIALIZING, 0);
   ::journal::Settings settings;
-  settings.commit_interval = m_image_ctx.journal_commit_age;
-  settings.max_payload_bytes = m_image_ctx.journal_max_payload_bytes;
+  settings.commit_interval =
+    m_image_ctx.config.template get_val<double>("rbd_journal_commit_age");
+  settings.max_payload_bytes =
+    m_image_ctx.config.template get_val<Option::size_t>("rbd_journal_max_payload_bytes");
   settings.max_concurrent_object_sets =
-    m_image_ctx.journal_max_concurrent_object_sets;
+    m_image_ctx.config.template get_val<uint64_t>("rbd_journal_max_concurrent_object_sets");
   // TODO: a configurable filter to exclude certain peers from being
   // disconnected.
   settings.whitelisted_laggy_clients = {IMAGE_CLIENT_ID};
@@ -1166,10 +1168,11 @@ void Journal<I>::complete_event(typename Events::iterator it, int r) {
 template <typename I>
 void Journal<I>::start_append() {
   ceph_assert(m_lock.is_locked());
-  m_journaler->start_append(m_image_ctx.journal_object_flush_interval,
-			    m_image_ctx.journal_object_flush_bytes,
-			    m_image_ctx.journal_object_flush_age,
-                            m_image_ctx.journal_object_max_in_flight_appends);
+  m_journaler->start_append(
+    m_image_ctx.config.template get_val<uint64_t>("rbd_journal_object_flush_interval"),
+    m_image_ctx.config.template get_val<Option::size_t>("rbd_journal_object_flush_bytes"),
+    m_image_ctx.config.template get_val<double>("rbd_journal_object_flush_age"),
+    m_image_ctx.config.template get_val<uint64_t>("rbd_journal_object_max_in_flight_appends"));
   transition_state(STATE_READY, 0);
 }
 

@@ -16,6 +16,7 @@
 #include "common/Timer.h"
 #include "librbd/journal/TypeTraits.h"
 
+class ConfigProxy;
 class Context;
 
 using librados::IoCtx;
@@ -30,17 +31,18 @@ namespace image {
 template <typename ImageCtxT = ImageCtx>
 class CreateRequest {
 public:
-  static CreateRequest *create(IoCtx &ioctx, const std::string &image_name,
+  static CreateRequest *create(const ConfigProxy& config, IoCtx &ioctx,
+                               const std::string &image_name,
                                const std::string &image_id, uint64_t size,
                                const ImageOptions &image_options,
                                const std::string &non_primary_global_image_id,
                                const std::string &primary_mirror_uuid,
                                bool skip_mirror_enable,
                                ContextWQ *op_work_queue, Context *on_finish) {
-    return new CreateRequest(ioctx, image_name, image_id, size, image_options,
-                             non_primary_global_image_id, primary_mirror_uuid,
-                             skip_mirror_enable, op_work_queue,
-                             on_finish);
+    return new CreateRequest(config, ioctx, image_name, image_id, size,
+                             image_options, non_primary_global_image_id,
+                             primary_mirror_uuid, skip_mirror_enable,
+                             op_work_queue, on_finish);
   }
 
   static int validate_order(CephContext *cct, uint8_t order);
@@ -51,15 +53,12 @@ private:
   /**
    * @verbatim
    *
-   *                                  <start>
-   *                                     |
-   *                                     v
-   *                               GET POOL METADATA
-   *                                     |
-   *                                     v
-   *                               VALIDATE DATA POOL . . . . . .
-   *                                     |                      . (pool validation
-   *                                     v                      .  disabled)
+   *                                  <start> . . . . > . . . . .
+   *                                     |                      .
+   *                                     v                      .
+   *                               VALIDATE DATA POOL           v (pool validation
+   *                                     |                      .  disabled)
+   *                                     v                      .
    * (error: bottom up)         ADD IMAGE TO DIRECTORY  < . . . .
    *  _______<_______                    |
    * |               |                   v
@@ -93,7 +92,8 @@ private:
    * @endverbatim
    */
 
-  CreateRequest(IoCtx &ioctx, const std::string &image_name,
+  CreateRequest(const ConfigProxy& config, IoCtx &ioctx,
+                const std::string &image_name,
                 const std::string &image_id, uint64_t size,
                 const ImageOptions &image_options,
                 const std::string &non_primary_global_image_id,
@@ -101,12 +101,12 @@ private:
                 bool skip_mirror_enable,
                 ContextWQ *op_work_queue, Context *on_finish);
 
+  const ConfigProxy& m_config;
   IoCtx m_io_ctx;
   IoCtx m_data_io_ctx;
   std::string m_image_name;
   std::string m_image_id;
   uint64_t m_size;
-  ImageOptions m_image_options;
   uint8_t m_order = 0;
   uint64_t m_features = 0;
   uint64_t m_stripe_unit = 0;
@@ -133,12 +133,6 @@ private:
   bufferlist m_outbl;
   rbd_mirror_mode_t m_mirror_mode = RBD_MIRROR_MODE_DISABLED;
   cls::rbd::MirrorImage m_mirror_image_internal;
-
-  std::string m_last_metadata_key;
-  std::map<std::string, bufferlist> m_metadata;
-
-  void get_pool_metadata();
-  void handle_get_pool_metadata(int r);
 
   void validate_data_pool();
   void handle_validate_data_pool(int r);

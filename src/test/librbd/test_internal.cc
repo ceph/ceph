@@ -515,51 +515,6 @@ TEST_F(TestInternal, Metadata) {
   ASSERT_STREQ(val.c_str(), "value3");
 }
 
-TEST_F(TestInternal, MetadataFilter) {
-  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
-
-  map<string, bool> test_confs = boost::assign::map_list_of(
-    "aaaaaaa", false)(
-    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", false)(
-    "cccccccccccccc", false);
-  map<string, bool>::iterator it = test_confs.begin();
-  const string prefix = "test_config_";
-  bool is_continue;
-  librbd::ImageCtx *ictx;
-  ASSERT_EQ(0, open_image(m_image_name, &ictx));
-
-  librbd::Image image1;
-  map<string, bufferlist> pairs, res;
-  pairs["abc"].append("value");
-  pairs["abcabc"].append("value");
-  pairs[prefix+it->first].append("value1");
-  ++it;
-  pairs[prefix+it->first].append("value2");
-  ++it;
-  pairs[prefix+it->first].append("value3");
-  pairs[prefix+"asdfsdaf"].append("value6");
-  pairs[prefix+"zxvzxcv123"].append("value5");
-
-  is_continue = ictx->_filter_metadata_confs(prefix, test_confs, pairs, &res);
-  ASSERT_TRUE(is_continue);
-  ASSERT_TRUE(res.size() == 3U);
-  it = test_confs.begin();
-  ASSERT_TRUE(res.count(it->first));
-  ASSERT_TRUE(it->second);
-  ++it;
-  ASSERT_TRUE(res.count(it->first));
-  ASSERT_TRUE(it->second);
-  ++it;
-  ASSERT_TRUE(res.count(it->first));
-  ASSERT_TRUE(it->second);
-  res.clear();
-
-  pairs["zzzzzzzz"].append("value7");
-  is_continue = ictx->_filter_metadata_confs(prefix, test_confs, pairs, &res);
-  ASSERT_FALSE(is_continue);
-  ASSERT_TRUE(res.size() == 3U);
-}
-
 TEST_F(TestInternal, MetadataConfApply) {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
 
@@ -1350,7 +1305,7 @@ TEST_F(TestInternal, PoolMetadataConfApply) {
 
   ASSERT_EQ(0, open_image(image_name, &ictx));
   ASSERT_EQ(ictx->order, 17);
-  ASSERT_EQ(ictx->journal_order, 13);
+  ASSERT_EQ(ictx->config.get_val<uint64_t>("rbd_journal_order"), 13U);
 
   if (is_feature_enabled(RBD_FEATURE_JOURNALING)) {
     uint8_t order;
@@ -1369,7 +1324,8 @@ TEST_F(TestInternal, PoolMetadataConfApply) {
                                                   "14"));
     ASSERT_EQ(0, ictx->operations->update_features(RBD_FEATURE_JOURNALING,
                                                    true));
-    ASSERT_EQ(ictx->journal_order, 14);
+    ASSERT_EQ(ictx->config.get_val<uint64_t>("rbd_journal_order"), 14U);
+
     C_SaferCond cond1;
     cls::journal::client::get_immutable_metadata(m_ioctx, "journal." + ictx->id,
                                                  &order, &splay_width, &pool_id,

@@ -64,7 +64,7 @@ struct thick_provision_writer {
     ceph_assert(r >= 0);
     uint64_t order;
     if (info.order == 0) {
-      order = g_conf().get_val<int64_t>("rbd_default_order");
+      order = g_conf().get_val<uint64_t>("rbd_default_order");
     } else {
       order = info.order;
     }
@@ -73,7 +73,7 @@ struct thick_provision_writer {
       chunk_size = image->get_stripe_unit();
     }
 
-    concurr = g_conf().get_val<int64_t>("rbd_concurrent_management_ops");
+    concurr = g_conf().get_val<uint64_t>("rbd_concurrent_management_ops");
     io_status.in_flight = 0;
     io_status.io_error = 0;
   }

@@ -108,7 +108,8 @@ void FlattenRequest<I>::flatten_objects() {
       boost::lambda::_1, &image_ctx, m_snapc, boost::lambda::_2));
   AsyncObjectThrottle<I> *throttle = new AsyncObjectThrottle<I>(
     this, image_ctx, context_factory, ctx, &m_prog_ctx, 0, m_overlap_objects);
-  throttle->start_ops(image_ctx.concurrent_management_ops);
+  throttle->start_ops(
+    image_ctx.config.template get_val<uint64_t>("rbd_concurrent_management_ops"));
 }
 
 template <typename I>

@@ -1,8 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include <boost/algorithm/string/predicate.hpp>
-
 #include "librbd/image/CreateRequest.h"
 #include "common/dout.h"
 #include "common/errno.h"
@@ -32,8 +30,6 @@ using util::create_rados_callback;
 using util::create_context_callback;
 
 namespace {
-
-const uint64_t MAX_METADATA_ITEMS = 128;
 
 int validate_features(CephContext *cct, uint64_t features,
                        bool force_non_primary) {
@@ -119,16 +115,16 @@ int CreateRequest<I>::validate_order(CephContext *cct, uint8_t order) {
                            << __func__ << ": "
 
 template<typename I>
-CreateRequest<I>::CreateRequest(IoCtx &ioctx, const std::string &image_name,
+CreateRequest<I>::CreateRequest(const ConfigProxy& config, IoCtx &ioctx,
+                                const std::string &image_name,
                                 const std::string &image_id, uint64_t size,
                                 const ImageOptions &image_options,
                                 const std::string &non_primary_global_image_id,
                                 const std::string &primary_mirror_uuid,
                                 bool skip_mirror_enable,
                                 ContextWQ *op_work_queue, Context *on_finish)
-  : m_image_name(image_name), m_image_id(image_id), m_size(size),
-    m_image_options(image_options),
-    m_non_primary_global_image_id(non_primary_global_image_id),
+  : m_config(config), m_image_name(image_name), m_image_id(image_id),
+    m_size(size), m_non_primary_global_image_id(non_primary_global_image_id),
     m_primary_mirror_uuid(primary_mirror_uuid),
     m_skip_mirror_enable(skip_mirror_enable),
     m_op_work_queue(op_work_queue), m_on_finish(on_finish) {
@@ -140,83 +136,17 @@ CreateRequest<I>::CreateRequest(IoCtx &ioctx, const std::string &image_name,
   m_header_obj = util::header_name(m_image_id);
   m_objmap_name = ObjectMap<>::object_map_name(m_image_id, CEPH_NOSNAP);
   m_force_non_primary = !non_primary_global_image_id.empty();
-}
 
-template<typename I>
-void CreateRequest<I>::send() {
-  ldout(m_cct, 20) << dendl;
-
-  get_pool_metadata();
-}
-
-template <typename I>
-void CreateRequest<I>::get_pool_metadata() {
-  ldout(m_cct, 20) << "start_key=" << m_last_metadata_key << dendl;
-
-  librados::ObjectReadOperation op;
-  cls_client::metadata_list_start(&op, m_last_metadata_key, MAX_METADATA_ITEMS);
-
-  using klass = CreateRequest<I>;
-  librados::AioCompletion *comp =
-    create_rados_callback<klass, &klass::handle_get_pool_metadata>(this);
-  m_outbl.clear();
-  m_io_ctx.aio_operate(RBD_INFO, comp, &op, &m_outbl);
-  comp->release();
-}
-
-template <typename I>
-void CreateRequest<I>::handle_get_pool_metadata(int r) {
-  ldout(m_cct, 20) << "r=" << r << dendl;
-
-  std::map<std::string, bufferlist> metadata;
-  if (r == 0) {
-    auto it = m_outbl.cbegin();
-    r = cls_client::metadata_list_finish(&it, &metadata);
-  }
-
-  if (r == -EOPNOTSUPP || r == -ENOENT) {
-    ldout(m_cct, 10) << "pool metadata not supported by OSD" << dendl;
-  } else if (r < 0) {
-    lderr(m_cct) << "failed to retrieve pool metadata: " << cpp_strerror(r)
-                 << dendl;
-    complete(r);
-    return;
-  }
-
-  if (!metadata.empty()) {
-    m_metadata.insert(metadata.begin(), metadata.end());
-    m_last_metadata_key = metadata.rbegin()->first;
-    if (boost::starts_with(m_last_metadata_key,
-                           ImageCtx::METADATA_CONF_PREFIX)) {
-      get_pool_metadata();
-      return;
-    }
-  }
-
-  ConfigProxy config(m_cct->_conf);
-  for (auto &it : m_metadata) {
-    std::string key;
-    if (!util::is_metadata_config_override(it.first, &key)) {
-      continue;
-    }
-    std::string value(it.second.c_str(), it.second.length());
-    r = config.set_val(key.c_str(), value);
-    if (r != 0) {
-      lderr(m_cct) << " failed to set config " << key << " with value "
-                   << it.second << ": " << cpp_strerror(r) << dendl;
-    }
-  }
-
-  if (m_image_options.get(RBD_IMAGE_OPTION_FEATURES, &m_features) != 0) {
+  if (image_options.get(RBD_IMAGE_OPTION_FEATURES, &m_features) != 0) {
     m_features = librbd::rbd_features_from_string(
-      config.get_val<std::string>("rbd_default_features"), nullptr);
+      m_config.get_val<std::string>("rbd_default_features"), nullptr);
     m_negotiate_features = true;
   }
 
   uint64_t features_clear = 0;
   uint64_t features_set = 0;
-  m_image_options.get(RBD_IMAGE_OPTION_FEATURES_CLEAR, &features_clear);
-  m_image_options.get(RBD_IMAGE_OPTION_FEATURES_SET, &features_set);
+  image_options.get(RBD_IMAGE_OPTION_FEATURES_CLEAR, &features_clear);
+  image_options.get(RBD_IMAGE_OPTION_FEATURES_SET, &features_set);
 
   uint64_t features_conflict = features_clear & features_set;
   features_clear &= ~features_conflict;
@@ -228,32 +158,32 @@ void CreateRequest<I>::handle_get_pool_metadata(int r) {
       m_features |= RBD_FEATURE_FAST_DIFF;
   }
 
-  if (m_image_options.get(RBD_IMAGE_OPTION_STRIPE_UNIT, &m_stripe_unit) != 0 ||
+  if (image_options.get(RBD_IMAGE_OPTION_STRIPE_UNIT, &m_stripe_unit) != 0 ||
       m_stripe_unit == 0) {
-    m_stripe_unit = config.get_val<Option::size_t>("rbd_default_stripe_unit");
+    m_stripe_unit = m_config.get_val<Option::size_t>("rbd_default_stripe_unit");
   }
-  if (m_image_options.get(RBD_IMAGE_OPTION_STRIPE_COUNT,
-                          &m_stripe_count) != 0 || m_stripe_count == 0) {
-    m_stripe_count = config.get_val<uint64_t>("rbd_default_stripe_count");
+  if (image_options.get(RBD_IMAGE_OPTION_STRIPE_COUNT, &m_stripe_count) != 0 ||
+      m_stripe_count == 0) {
+    m_stripe_count = m_config.get_val<uint64_t>("rbd_default_stripe_count");
   }
-  if (get_image_option(m_image_options, RBD_IMAGE_OPTION_ORDER,
-                       &m_order) != 0 || m_order == 0) {
-    m_order = config.get_val<int64_t>("rbd_default_order");
+  if (get_image_option(image_options, RBD_IMAGE_OPTION_ORDER, &m_order) != 0 ||
+      m_order == 0) {
+    m_order = config.get_val<uint64_t>("rbd_default_order");
   }
-  if (get_image_option(m_image_options, RBD_IMAGE_OPTION_JOURNAL_ORDER,
-                       &m_journal_order) != 0) {
-    m_journal_order = config.get_val<uint64_t>("rbd_journal_order");
+  if (get_image_option(image_options, RBD_IMAGE_OPTION_JOURNAL_ORDER,
+      &m_journal_order) != 0) {
+    m_journal_order = m_config.get_val<uint64_t>("rbd_journal_order");
   }
-  if (get_image_option(m_image_options, RBD_IMAGE_OPTION_JOURNAL_SPLAY_WIDTH,
+  if (get_image_option(image_options, RBD_IMAGE_OPTION_JOURNAL_SPLAY_WIDTH,
                        &m_journal_splay_width) != 0) {
-    m_journal_splay_width = config.get_val<uint64_t>("rbd_journal_splay_width");
+    m_journal_splay_width = m_config.get_val<uint64_t>(
+      "rbd_journal_splay_width");
   }
-  if (m_image_options.get(RBD_IMAGE_OPTION_JOURNAL_POOL,
-                          &m_journal_pool) != 0) {
-    m_journal_pool = config.get_val<std::string>("rbd_journal_pool");
+  if (image_options.get(RBD_IMAGE_OPTION_JOURNAL_POOL, &m_journal_pool) != 0) {
+    m_journal_pool = m_config.get_val<std::string>("rbd_journal_pool");
   }
-  if (m_image_options.get(RBD_IMAGE_OPTION_DATA_POOL, &m_data_pool) != 0) {
-    m_data_pool = config.get_val<std::string>("rbd_default_data_pool");
+  if (image_options.get(RBD_IMAGE_OPTION_DATA_POOL, &m_data_pool) != 0) {
+    m_data_pool = m_config.get_val<std::string>("rbd_default_data_pool");
   }
 
   m_layout.object_size = 1ull << m_order;
@@ -265,7 +195,7 @@ void CreateRequest<I>::handle_get_pool_metadata(int r) {
     m_layout.stripe_count = m_stripe_count;
   }
 
-  if (!m_data_pool.empty() && m_data_pool != m_io_ctx.get_pool_name()) {
+  if (!m_data_pool.empty() && m_data_pool != ioctx.get_pool_name()) {
     m_features |= RBD_FEATURE_DATA_POOL;
   } else {
     m_data_pool.clear();
@@ -291,8 +221,13 @@ void CreateRequest<I>::handle_get_pool_metadata(int r) {
                    << (uint64_t)m_journal_splay_width << ", "
                    << "journal_pool=" << m_journal_pool << ", "
                    << "data_pool=" << m_data_pool << dendl;
+}
 
-  r = validate_features(m_cct, m_features, m_force_non_primary);
+template<typename I>
+void CreateRequest<I>::send() {
+  ldout(m_cct, 20) << dendl;
+
+  int r = validate_features(m_cct, m_features, m_force_non_primary);
   if (r < 0) {
     complete(r);
     return;
@@ -316,6 +251,11 @@ void CreateRequest<I>::handle_get_pool_metadata(int r) {
     return;
   }
 
+  validate_data_pool();
+}
+
+template <typename I>
+void CreateRequest<I>::validate_data_pool() {
   m_data_io_ctx = m_io_ctx;
   if ((m_features & RBD_FEATURE_DATA_POOL) != 0) {
     librados::Rados rados(m_io_ctx);
@@ -329,16 +269,11 @@ void CreateRequest<I>::handle_get_pool_metadata(int r) {
     m_data_io_ctx.set_namespace(m_io_ctx.get_namespace());
   }
 
-  if (!config.get_val<bool>("rbd_validate_pool")) {
+  if (!m_config.get_val<bool>("rbd_validate_pool")) {
     add_image_to_directory();
     return;
   }
 
-  validate_data_pool();
-}
-
-template <typename I>
-void CreateRequest<I>::validate_data_pool() {
   ldout(m_cct, 15) << dendl;
 
   using klass = CreateRequest<I>;

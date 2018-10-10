@@ -75,7 +75,8 @@ template <>
 struct CreateRequest<MockTestImageCtx> {
   Context* on_finish = nullptr;
   static CreateRequest* s_instance;
-  static CreateRequest* create(IoCtx &ioctx, const std::string &image_name,
+  static CreateRequest* create(const ConfigProxy& config, IoCtx &ioctx,
+                               const std::string &image_name,
                                const std::string &image_id, uint64_t size,
                                const ImageOptions &image_options,
                                const std::string &non_primary_global_image_id,
@@ -422,9 +423,9 @@ TEST_F(TestMockImageCloneRequest, SuccessV1) {
 
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(m_ioctx, "parent id", "", 123, m_ioctx,
-                                  "clone name", "clone id", clone_opts, "", "",
-                                  image_ctx->op_work_queue, &ctx);
+  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", 123,
+                                  m_ioctx, "clone name", "clone id", clone_opts,
+                                  "", "", image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -470,9 +471,9 @@ TEST_F(TestMockImageCloneRequest, SuccessV2) {
 
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(m_ioctx, "parent id", "", 123, m_ioctx,
-                                  "clone name", "clone id", clone_opts, "", "",
-                                  image_ctx->op_work_queue, &ctx);
+  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", 123,
+                                  m_ioctx, "clone name", "clone id", clone_opts,
+                                  "", "", image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -523,9 +524,9 @@ TEST_F(TestMockImageCloneRequest, SuccessAuto) {
 
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(m_ioctx, "parent id", "", 123, m_ioctx,
-                                  "clone name", "clone id", clone_opts, "", "",
-                                  image_ctx->op_work_queue, &ctx);
+  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", 123,
+                                  m_ioctx, "clone name", "clone id", clone_opts,
+                                  "", "", image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -541,9 +542,9 @@ TEST_F(TestMockImageCloneRequest, OpenParentError) {
 
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(m_ioctx, "parent id", "", 123, m_ioctx,
-                                  "clone name", "clone id", clone_opts, "", "",
-                                  image_ctx->op_work_queue, &ctx);
+  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", 123,
+                                  m_ioctx, "clone name", "clone id", clone_opts,
+                                  "", "", image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -567,9 +568,9 @@ TEST_F(TestMockImageCloneRequest, CreateError) {
 
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(m_ioctx, "parent id", "", 123, m_ioctx,
-                                  "clone name", "clone id", clone_opts, "", "",
-                                  image_ctx->op_work_queue, &ctx);
+  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", 123,
+                                  m_ioctx, "clone name", "clone id", clone_opts,
+                                  "", "", image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -598,9 +599,9 @@ TEST_F(TestMockImageCloneRequest, OpenError) {
 
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(m_ioctx, "parent id", "", 123, m_ioctx,
-                                  "clone name", "clone id", clone_opts, "", "",
-                                  image_ctx->op_work_queue, &ctx);
+  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", 123,
+                                  m_ioctx, "clone name", "clone id", clone_opts,
+                                  "", "", image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -634,9 +635,9 @@ TEST_F(TestMockImageCloneRequest, AttachParentError) {
 
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(m_ioctx, "parent id", "", 123, m_ioctx,
-                                  "clone name", "clone id", clone_opts, "", "",
-                                  image_ctx->op_work_queue, &ctx);
+  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", 123,
+                                  m_ioctx, "clone name", "clone id", clone_opts,
+                                  "", "", image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -672,9 +673,9 @@ TEST_F(TestMockImageCloneRequest, AddChildError) {
 
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(m_ioctx, "parent id", "", 123, m_ioctx,
-                                  "clone name", "clone id", clone_opts, "", "",
-                                  image_ctx->op_work_queue, &ctx);
+  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", 123,
+                                  m_ioctx, "clone name", "clone id", clone_opts,
+                                  "", "", image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -714,9 +715,9 @@ TEST_F(TestMockImageCloneRequest, RefreshError) {
 
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(m_ioctx, "parent id", "", 123, m_ioctx,
-                                  "clone name", "clone id", clone_opts, "", "",
-                                  image_ctx->op_work_queue, &ctx);
+  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", 123,
+                                  m_ioctx, "clone name", "clone id", clone_opts,
+                                  "", "", image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -759,9 +760,9 @@ TEST_F(TestMockImageCloneRequest, MetadataListError) {
 
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(m_ioctx, "parent id", "", 123, m_ioctx,
-                                  "clone name", "clone id", clone_opts, "", "",
-                                  image_ctx->op_work_queue, &ctx);
+  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", 123,
+                                  m_ioctx, "clone name", "clone id", clone_opts,
+                                  "", "", image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -801,9 +802,9 @@ TEST_F(TestMockImageCloneRequest, MetadataSetError) {
 
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(m_ioctx, "parent id", "", 123, m_ioctx,
-                                  "clone name", "clone id", clone_opts, "", "",
-                                  image_ctx->op_work_queue, &ctx);
+  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", 123,
+                                  m_ioctx, "clone name", "clone id", clone_opts,
+                                  "", "", image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -849,9 +850,9 @@ TEST_F(TestMockImageCloneRequest, GetMirrorModeError) {
 
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(m_ioctx, "parent id", "", 123, m_ioctx,
-                                  "clone name", "clone id", clone_opts, "", "",
-                                  image_ctx->op_work_queue, &ctx);
+  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", 123,
+                                  m_ioctx, "clone name", "clone id", clone_opts,
+                                  "", "", image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -896,9 +897,9 @@ TEST_F(TestMockImageCloneRequest, MirrorEnableError) {
 
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(m_ioctx, "parent id", "", 123, m_ioctx,
-                                  "clone name", "clone id", clone_opts, "", "",
-                                  image_ctx->op_work_queue, &ctx);
+  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", 123,
+                                  m_ioctx, "clone name", "clone id", clone_opts,
+                                  "", "", image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -938,9 +939,9 @@ TEST_F(TestMockImageCloneRequest, CloseError) {
 
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(m_ioctx, "parent id", "", 123, m_ioctx,
-                                  "clone name", "clone id", clone_opts, "", "",
-                                  image_ctx->op_work_queue, &ctx);
+  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", 123,
+                                  m_ioctx, "clone name", "clone id", clone_opts,
+                                  "", "", image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -969,9 +970,9 @@ TEST_F(TestMockImageCloneRequest, RemoveError) {
 
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(m_ioctx, "parent id", "", 123, m_ioctx,
-                                  "clone name", "clone id", clone_opts, "", "",
-                                  image_ctx->op_work_queue, &ctx);
+  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", 123,
+                                  m_ioctx, "clone name", "clone id", clone_opts,
+                                  "", "", image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -1000,9 +1001,9 @@ TEST_F(TestMockImageCloneRequest, CloseParentError) {
 
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(m_ioctx, "parent id", "", 123, m_ioctx,
-                                  "clone name", "clone id", clone_opts, "", "",
-                                  image_ctx->op_work_queue, &ctx);
+  auto req = new MockCloneRequest(m_cct->_conf, m_ioctx, "parent id", "", 123,
+                                  m_ioctx, "clone name", "clone id", clone_opts,
+                                  "", "", image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
