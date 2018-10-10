@@ -703,7 +703,7 @@ COMMAND("heap " \
 	"mds", "*", "cli,rest")
 COMMAND("cache drop name=timeout,type=CephInt,range=1", "trim cache and optionally "
 	"request client to release all caps and flush the journal", "mds",
-	"r", "cli,rest")
+	"rw", "cli,rest")
 };
 
 
