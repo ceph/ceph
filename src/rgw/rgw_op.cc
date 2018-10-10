@@ -3662,7 +3662,7 @@ void RGWPutObj::execute()
   }
 
   fst = copy_source_range_fst;
-
+#if 0
   op_ret = get_encrypt_filter(&encrypt, filter);
   if (op_ret < 0) {
     return;
@@ -3682,7 +3682,7 @@ void RGWPutObj::execute()
       }
     }
   }
-
+#endif
   tracepoint(rgw_op, before_data_transfer, s->req_id.c_str());
   do {
     bufferlist data;
@@ -3751,7 +3751,7 @@ void RGWPutObj::execute()
 			 << op_ret << dendl;
         return;
       }
-
+#if 0
       op_ret = get_encrypt_filter(&encrypt, filter);
       if (op_ret < 0) {
         return;
@@ -3764,6 +3764,7 @@ void RGWPutObj::execute()
           filter = &*compressor;
         }
       }
+#endif
       op_ret = put_data_and_throttle(filter, data, ofs, false);
       if (op_ret < 0) {
         return;
@@ -4011,7 +4012,7 @@ void RGWPostObj::execute()
     if (op_ret < 0) {
       return;
     }
-
+#if 0
     op_ret = get_encrypt_filter(&encrypt, filter);
     if (op_ret < 0) {
       return;
@@ -4032,7 +4033,7 @@ void RGWPostObj::execute()
         }
       }
     }
-
+#endif
     bool again;
     do {
       ceph::bufferlist data;
@@ -6779,6 +6780,7 @@ int RGWBulkUploadOp::handle_file(const boost::string_ref path,
   const auto& compression_type = store->get_zone_params().get_compression_type(
       binfo.placement_rule);
   CompressorRef plugin;
+#if 0
   if (compression_type != "none") {
     plugin = Compressor::create(s->cct, compression_type);
     if (! plugin) {
@@ -6789,7 +6791,7 @@ int RGWBulkUploadOp::handle_file(const boost::string_ref path,
       filter = &*compressor;
     }
   }
-
+#endif
   /* Upload file content. */
   ssize_t len = 0;
   size_t ofs = 0;

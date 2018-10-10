@@ -1560,9 +1560,11 @@ int RGWPutObj_ObjStore_S3::get_encrypt_filter(
         /* We are adding to existing object.
          * We use crypto mode that configured as if we were decrypting. */
         res = rgw_s3_prepare_decrypt(s, xattrs, &block_crypt, crypt_http_responses);
+#if 0
         if (res == 0 && block_crypt != nullptr)
           *filter = std::unique_ptr<RGWPutObj_BlockEncrypt>(
               new RGWPutObj_BlockEncrypt(s->cct, cb, std::move(block_crypt)));
+#endif
       }
     }
     /* it is ok, to not have encryption at all */
@@ -1571,10 +1573,12 @@ int RGWPutObj_ObjStore_S3::get_encrypt_filter(
   {
     std::unique_ptr<BlockCrypt> block_crypt;
     res = rgw_s3_prepare_encrypt(s, attrs, nullptr, &block_crypt, crypt_http_responses);
+#if 0
     if (res == 0 && block_crypt != nullptr) {
       *filter = std::unique_ptr<RGWPutObj_BlockEncrypt>(
           new RGWPutObj_BlockEncrypt(s->cct, cb, std::move(block_crypt)));
     }
+#endif
   }
   return res;
 }
@@ -2085,12 +2089,14 @@ int RGWPostObj_ObjStore_S3::get_encrypt_filter(
   int res = 0;
   std::unique_ptr<BlockCrypt> block_crypt;
   res = rgw_s3_prepare_encrypt(s, attrs, &parts, &block_crypt, crypt_http_responses);
+#if 0
   if (res == 0 && block_crypt != nullptr) {
     *filter = std::unique_ptr<RGWPutObj_BlockEncrypt>(
         new RGWPutObj_BlockEncrypt(s->cct, cb, std::move(block_crypt)));
   }
   else
     *filter = nullptr;
+#endif
   return res;
 }
 
