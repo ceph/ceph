@@ -57,7 +57,7 @@ namespace rgw {
 
 TEST_F(Aio_Throttle, NoThrottleUpToMax)
 {
-  AioThrottle throttle(4);
+  BlockingAioThrottle throttle(4);
   auto obj = make_obj(__PRETTY_FUNCTION__);
   {
     librados::ObjectWriteOperation op1;
@@ -84,7 +84,7 @@ TEST_F(Aio_Throttle, NoThrottleUpToMax)
 
 TEST_F(Aio_Throttle, CostOverWindow)
 {
-  AioThrottle throttle(4);
+  BlockingAioThrottle throttle(4);
   auto obj = make_obj(__PRETTY_FUNCTION__);
 
   librados::ObjectWriteOperation op;
@@ -96,7 +96,7 @@ TEST_F(Aio_Throttle, CostOverWindow)
 TEST_F(Aio_Throttle, ThrottleOverMax)
 {
   constexpr uint64_t window = 4;
-  AioThrottle throttle(window);
+  BlockingAioThrottle throttle(window);
 
   auto obj = make_obj(__PRETTY_FUNCTION__);
 

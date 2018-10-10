@@ -20,7 +20,7 @@
 
 namespace rgw {
 
-bool AioThrottle::waiter_ready() const
+bool Throttle::waiter_ready() const
 {
   switch (waiter) {
   case Wait::Available: return is_available();
@@ -30,9 +30,9 @@ bool AioThrottle::waiter_ready() const
   }
 }
 
-AioResultList AioThrottle::get(const RGWSI_RADOS::Obj& obj,
-			       OpFunc&& f,
-			       uint64_t cost, uint64_t id)
+AioResultList BlockingAioThrottle::get(const RGWSI_RADOS::Obj& obj,
+                                       OpFunc&& f,
+                                       uint64_t cost, uint64_t id)
 {
   auto p = std::make_unique<Pending>();
   p->obj = obj;
@@ -64,7 +64,7 @@ AioResultList AioThrottle::get(const RGWSI_RADOS::Obj& obj,
   return std::move(completed);
 }
 
-void AioThrottle::put(AioResult& r)
+void BlockingAioThrottle::put(AioResult& r)
 {
   auto& p = static_cast<Pending&>(r);
   std::scoped_lock lock{mutex};
@@ -80,13 +80,13 @@ void AioThrottle::put(AioResult& r)
   }
 }
 
-AioResultList AioThrottle::poll()
+AioResultList BlockingAioThrottle::poll()
 {
   std::unique_lock lock{mutex};
   return std::move(completed);
 }
 
-AioResultList AioThrottle::wait()
+AioResultList BlockingAioThrottle::wait()
 {
   std::unique_lock lock{mutex};
   if (completed.empty() && !pending.empty()) {
@@ -98,7 +98,7 @@ AioResultList AioThrottle::wait()
   return std::move(completed);
 }
 
-AioResultList AioThrottle::drain()
+AioResultList BlockingAioThrottle::drain()
 {
   std::unique_lock lock{mutex};
   if (!pending.empty()) {

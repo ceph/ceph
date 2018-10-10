@@ -23,53 +23,57 @@
 
 namespace rgw {
 
-// a throttle for aio operations that enforces a maximum window on outstanding
-// bytes. only supports a single waiter, so all public functions must be called
-// from the same thread
-class AioThrottle : public Aio {
+class Throttle {
  protected:
   const uint64_t window;
   uint64_t pending_size = 0;
 
+  AioResultList pending;
+  AioResultList completed;
+
   bool is_available() const { return pending_size <= window; }
   bool has_completion() const { return !completed.empty(); }
   bool is_drained() const { return pending.empty(); }
-
-  struct Pending : AioResultEntry {
-    AioThrottle *parent = nullptr;
-    uint64_t cost = 0;
-  };
-  OwningList<Pending> pending;
-  AioResultList completed;
 
   enum class Wait { None, Available, Completion, Drained };
   Wait waiter = Wait::None;
 
   bool waiter_ready() const;
 
-  ceph::mutex mutex = ceph::make_mutex("AioThrottle");
-  ceph::condition_variable cond;
-
  public:
-  AioThrottle(uint64_t window) : window(window) {}
+  Throttle(uint64_t window) : window(window) {}
 
-  virtual ~AioThrottle() {
+  ~Throttle() {
     // must drain before destructing
     ceph_assert(pending.empty());
     ceph_assert(completed.empty());
   }
+};
 
-  AioResultList get(const RGWSI_RADOS::Obj& obj,
-		    OpFunc&& f,
-		    uint64_t cost, uint64_t id) override;
-  void put(AioResult& r) override;
+// a throttle for aio operations. all public functions must be called from
+// the same thread
+class BlockingAioThrottle final : public Aio, private Throttle {
+  ceph::mutex mutex = ceph::make_mutex("AioThrottle");
+  ceph::condition_variable cond;
 
+  struct Pending : AioResultEntry {
+    BlockingAioThrottle *parent = nullptr;
+    uint64_t cost = 0;
+    librados::AioCompletion *completion = nullptr;
+  };
+ public:
+  BlockingAioThrottle(uint64_t window) : Throttle(window) {}
 
-  AioResultList poll() override;
+  AioResultList get(const RGWSI_RADOS::Obj& obj, OpFunc&& f,
+                    uint64_t cost, uint64_t id) override final;
 
-  AioResultList wait() override;
+  void put(AioResult& r) override final;
 
-  AioResultList drain() override;
+  AioResultList poll() override final;
+
+  AioResultList wait() override final;
+
+  AioResultList drain() override final;
 };
 
 } // namespace rgw

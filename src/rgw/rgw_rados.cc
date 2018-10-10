@@ -4278,7 +4278,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   set_mtime_weight.high_precision = high_precision_time;
   int ret;
 
-  rgw::AioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
+  rgw::BlockingAioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
   using namespace rgw::putobj;
   const rgw_placement_rule *ptail_rule = (dest_placement_rule ? &(*dest_placement_rule) : nullptr);
   AtomicObjectProcessor processor(&aio, this, dest_bucket_info, ptail_rule, user_id,
@@ -4856,7 +4856,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
   string tag;
   append_rand_alpha(cct, tag, tag, 32);
 
-  rgw::AioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
+  rgw::BlockingAioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
   using namespace rgw::putobj;
   AtomicObjectProcessor processor(&aio, this, dest_bucket_info, &dest_placement,
                                   dest_bucket_info.owner, obj_ctx,
@@ -6826,7 +6826,7 @@ int RGWRados::Object::Read::iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb)
   const uint64_t chunk_size = cct->_conf->rgw_get_obj_max_req_size;
   const uint64_t window_size = cct->_conf->rgw_get_obj_window_size;
 
-  rgw::AioThrottle aio(window_size);
+  rgw::BlockingAioThrottle aio(window_size);
   get_obj_data data(store, cb, &aio, ofs);
 
   int r = store->iterate_obj(obj_ctx, source->get_bucket_info(), state.obj,
