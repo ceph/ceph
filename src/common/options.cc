@@ -6555,6 +6555,14 @@ static std::vector<Option> get_rbd_options() {
     .set_default(true)
     .set_description("automatically acquire/release exclusive lock until it is explicitly requested"),
 
+    Option("rbd_move_to_trash_on_remove", Option::TYPE_BOOL, Option::LEVEL_BASIC)
+    .set_default(false)
+    .set_description("automatically move images to the trash when deleted"),
+
+    Option("rbd_move_to_trash_on_remove_expire_seconds", Option::TYPE_UINT, Option::LEVEL_BASIC)
+    .set_default(0)
+    .set_description("default number of seconds to protect deleted images in the trash"),
+
     Option("rbd_mirroring_resync_after_disconnect", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .set_description("automatically start image resync after mirroring is disconnected due to being laggy"),
