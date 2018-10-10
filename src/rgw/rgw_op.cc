@@ -3564,7 +3564,7 @@ void RGWPutObj::execute()
 
   op_ret = -EINVAL;
   if (s->object.empty()) {
-    goto done;
+    return;
   }
 
   if (!s->bucket_exists) {
@@ -3577,7 +3577,7 @@ void RGWPutObj::execute()
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "get_system_versioning_params() returned ret="
 		      << op_ret << dendl;
-    goto done;
+    return;
   }
 
   if (supplied_md5_b64) {
@@ -3589,7 +3589,7 @@ void RGWPutObj::execute()
     ldpp_dout(this, 15) << "ceph_armor ret=" << op_ret << dendl;
     if (op_ret != CEPH_CRYPTO_MD5_DIGESTSIZE) {
       op_ret = -ERR_INVALID_DIGEST;
-      goto done;
+      return;
     }
 
     buf_to_hex((const unsigned char *)supplied_md5_bin, CEPH_CRYPTO_MD5_DIGESTSIZE, supplied_md5);
@@ -3602,12 +3602,12 @@ void RGWPutObj::execute()
 				user_quota, bucket_quota, s->content_length);
     if (op_ret < 0) {
       ldpp_dout(this, 20) << "check_quota() returned ret=" << op_ret << dendl;
-      goto done;
+      return;
     }
     op_ret = store->check_bucket_shards(s->bucket_info, s->bucket, bucket_quota);
     if (op_ret < 0) {
       ldpp_dout(this, 20) << "check_bucket_shards() returned ret=" << op_ret << dendl;
-      goto done;
+      return;
     }
   }
 
@@ -3629,7 +3629,7 @@ void RGWPutObj::execute()
                                           s->bucket_info,
                                           obj);
     if (op_ret < 0) {
-      goto done;
+      return;
     }
   }
 
@@ -3637,7 +3637,7 @@ void RGWPutObj::execute()
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "processor->prepare() returned ret=" << op_ret
 		      << dendl;
-    goto done;
+    return;
   }
 
   if ((! copy_source.empty()) && !copy_source_range) {
@@ -3649,11 +3649,11 @@ void RGWPutObj::execute()
                                   copy_source_bucket_info, obj, &astate, true, false);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "ERROR: get copy source obj state returned with error" << op_ret << dendl;
-      goto done;
+      return;
     }
     if (!astate->exists){
       op_ret = -ENOENT;
-      goto done;
+      return;
     }
     lst = astate->accounted_size - 1;
   } else {
@@ -3664,7 +3664,7 @@ void RGWPutObj::execute()
 
   op_ret = get_encrypt_filter(&encrypt, filter);
   if (op_ret < 0) {
-    goto done;
+    return;
   }
   if (encrypt != nullptr) {
     filter = encrypt.get();
@@ -3693,7 +3693,7 @@ void RGWPutObj::execute()
       uint64_t cur_lst = min(fst + s->cct->_conf->rgw_max_chunk_size - 1, lst);
       op_ret = get_data(fst, cur_lst, data);
       if (op_ret < 0)
-        goto done;
+        return;
       len = data.length();
       s->content_length += len;
       fst += len;
@@ -3701,7 +3701,7 @@ void RGWPutObj::execute()
     if (len < 0) {
       op_ret = len;
       ldpp_dout(this, 20) << "get_data() returned ret=" << op_ret << dendl;
-      goto done;
+      return;
     }
 
     if (need_calc_md5) {
@@ -3727,7 +3727,7 @@ void RGWPutObj::execute()
       if (op_ret != -EEXIST) {
         ldpp_dout(this, 20) << "processor->thottle_data() returned ret="
 			  << op_ret << dendl;
-        goto done;
+        return;
       }
       /* need_to_wait == true and op_ret == -EEXIST */
       ldpp_dout(this, 5) << "NOTICE: processor->throttle_data() returned -EEXIST, need to restart write" << dendl;
@@ -3748,12 +3748,12 @@ void RGWPutObj::execute()
       if (op_ret < 0) {
         ldpp_dout(this, 0) << "ERROR: processor->prepare() returned "
 			 << op_ret << dendl;
-        goto done;
+        return;
       }
 
       op_ret = get_encrypt_filter(&encrypt, filter);
       if (op_ret < 0) {
-        goto done;
+        return;
       }
       if (encrypt != nullptr) {
         filter = encrypt.get();
@@ -3765,7 +3765,7 @@ void RGWPutObj::execute()
       }
       op_ret = put_data_and_throttle(filter, data, ofs, false);
       if (op_ret < 0) {
-        goto done;
+        return;
       }
     }
 
@@ -3777,13 +3777,13 @@ void RGWPutObj::execute()
     bufferlist flush;
     op_ret = put_data_and_throttle(filter, flush, ofs, false);
     if (op_ret < 0) {
-      goto done;
+      return;
     }
   }
 
   if (!chunked_upload && ofs != s->content_length) {
     op_ret = -ERR_REQUEST_TIMEOUT;
-    goto done;
+    return;
   }
   s->obj_size = ofs;
 
@@ -3791,20 +3791,20 @@ void RGWPutObj::execute()
 
   op_ret = do_aws4_auth_completion();
   if (op_ret < 0) {
-    goto done;
+    return;
   }
 
   op_ret = store->check_quota(s->bucket_owner.get_id(), s->bucket,
                               user_quota, bucket_quota, s->obj_size);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "second check_quota() returned op_ret=" << op_ret << dendl;
-    goto done;
+    return;
   }
 
   op_ret = store->check_bucket_shards(s->bucket_info, s->bucket, bucket_quota);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "check_bucket_shards() returned ret=" << op_ret << dendl;
-    goto done;
+    return;
   }
 
   hash.Final(m);
@@ -3829,7 +3829,7 @@ void RGWPutObj::execute()
 
   if (supplied_md5_b64 && strcmp(calc_md5, supplied_md5)) {
     op_ret = -ERR_BAD_DIGEST;
-    goto done;
+    return;
   }
 
   policy.encode(aclbl);
@@ -3839,7 +3839,7 @@ void RGWPutObj::execute()
     op_ret = encode_dlo_manifest_attr(dlo_manifest, attrs);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "bad user manifest: " << dlo_manifest << dendl;
-      goto done;
+      return;
     }
     complete_etag(hash, &etag);
     ldpp_dout(this, 10) << __func__ << ": calculated md5 for user manifest: " << etag << dendl;
@@ -3857,7 +3857,7 @@ void RGWPutObj::execute()
 
   if (supplied_etag && etag.compare(supplied_etag) != 0) {
     op_ret = -ERR_UNPROCESSABLE_ENTITY;
-    goto done;
+    return;
   }
   bl.append(etag.c_str(), etag.size());
   emplace_attr(RGW_ATTR_ETAG, std::move(bl));
@@ -3865,7 +3865,7 @@ void RGWPutObj::execute()
   populate_with_generic_attrs(s, attrs);
   op_ret = rgw_get_request_metadata(s->cct, s->info, attrs);
   if (op_ret < 0) {
-    goto done;
+    return;
   }
   encode_delete_at_attr(delete_at, attrs);
   encode_obj_tags_attr(obj_tags.get(), attrs);
@@ -3898,11 +3898,9 @@ void RGWPutObj::execute()
     if (0 != op_ret)
     {
       ldpp_dout(this, 0) << "ERROR: torrent.handle_data() returned " << op_ret << dendl;
-      goto done;
+      return;
     }
   }
-
-done:
 }
 
 int RGWPostObj::verify_permission()
