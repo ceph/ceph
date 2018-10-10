@@ -108,14 +108,14 @@ COMMAND("osd test-reweight-by-pg " \
 
 COMMAND("osd destroy "	    \
         "name=id,type=CephOsdName " \
-        "name=sure,type=CephString,req=False",
+	"name=sure,type=CephChoices,strings=--force|--yes-i-really-mean-it,req=false", \
         "mark osd as being destroyed. Keeps the ID intact (allowing reuse), " \
         "but removes cephx keys, config-key data and lockbox keys, "\
         "rendering data permanently unreadable.", \
         "osd", "rw")
 COMMAND("osd purge " \
         "name=id,type=CephOsdName " \
-        "name=sure,type=CephString,req=false",			     \
+	"name=sure,type=CephChoices,strings=--force|--yes-i-really-mean-it,req=false", \
         "purge all osd data from the monitors including the OSD id " \
 	"and CRUSH position",					     \
 	"osd", "rw")
