@@ -104,6 +104,8 @@ function(build_dpdk dpdk_dir)
   foreach(c
       bus_pci
       eal
+      ethdev
+      mbuf
       mempool
       mempool_ring
       mempool_stack
