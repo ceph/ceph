@@ -1299,11 +1299,8 @@ static bool decode_dump(const char *field_name, bufferlist& bl, Formatter *f)
 
 static bool dump_string(const char *field_name, bufferlist& bl, Formatter *f)
 {
-  string val;
-  if (bl.length() > 0) {
-    val.assign(bl.c_str());
-  }
-  f->dump_string(field_name, val);
+  string val = bl.to_str();
+  f->dump_string(field_name, val.c_str() /* hide encoded null termination chars */);
 
   return true;
 }
