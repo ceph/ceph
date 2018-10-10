@@ -1941,7 +1941,7 @@ public:
                rgw_obj& src_obj,
                RGWBucketInfo& dest_bucket_info,
                RGWBucketInfo& src_bucket_info,
-               const rgw_placement_rule *ptail_rule,
+               rgw_placement_rule *ptail_rule,
                ceph::real_time *src_mtime,
                ceph::real_time *mtime,
                const ceph::real_time *mod_ptr,
