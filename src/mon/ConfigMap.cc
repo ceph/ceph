@@ -39,6 +39,9 @@ void MaskedOption::dump(Formatter *f) const
 {
   f->dump_string("name", opt->name);
   f->dump_string("value", raw_value);
+  f->dump_string("level", Option::level_to_str(opt->level));
+  f->dump_bool("can_update_at_runtime", opt->can_update_at_runtime());
+  f->dump_string("mask", mask.to_str());
   mask.dump(f);
 }
 
