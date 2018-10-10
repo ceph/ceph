@@ -1238,7 +1238,7 @@ function get_num_active_clean() {
     expression+="select(contains(\"active\") and contains(\"clean\")) | "
     expression+="select(contains(\"stale\") | not)"
     ceph --format json pg dump pgs 2>/dev/null | \
-        jq "[.[] | .state | $expression] | length"
+        jq ".pg_stats | [.[] | .state | $expression] | length"
 }
 
 function test_get_num_active_clean() {
@@ -1295,7 +1295,7 @@ function test_get_num_pgs() {
 # @return 0 on success, 1 on error
 #
 function get_osd_id_used_by_pgs() {
-    ceph --format json pg dump pgs 2>/dev/null | jq '.[] | .up[], .acting[]' | sort
+    ceph --format json pg dump pgs 2>/dev/null | jq '.pg_stats | .[] | .up[], .acting[]' | sort
 }
 
 function test_get_osd_id_used_by_pgs() {
@@ -1369,7 +1369,7 @@ function get_last_scrub_stamp() {
     local pgid=$1
     local sname=${2:-last_scrub_stamp}
     ceph --format json pg dump pgs 2>/dev/null | \
-        jq -r ".[] | select(.pgid==\"$pgid\") | .$sname"
+        jq -r ".pg_stats | .[] | select(.pgid==\"$pgid\") | .$sname"
 }
 
 function test_get_last_scrub_stamp() {

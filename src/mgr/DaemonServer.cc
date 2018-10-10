@@ -2019,6 +2019,14 @@ bool DaemonServer::_handle_command(
     }
     return true;
   } else {
+    if (!pgmap_ready) {
+      ss << "Warning: due to ceph-mgr restart, some PG states may not be up to date\n";
+    }
+    if (f) {
+       f->open_object_section("pg_info");
+       f->dump_bool("pg_ready", pgmap_ready);
+    }
+
     // fall back to feeding command to PGMap
     r = cluster_state.with_pgmap([&](const PGMap& pg_map) {
 	return cluster_state.with_osdmap([&](const OSDMap& osdmap) {
@@ -2027,6 +2035,10 @@ bool DaemonServer::_handle_command(
 	  });
       });
 
+    if (f) {
+      f->close_section();
+      f->flush(cmdctx->odata);
+    }
     if (r != -EOPNOTSUPP) {
       cmdctx->reply(r, ss);
       return true;
