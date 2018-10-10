@@ -43,6 +43,7 @@ class KernelMount(CephFSMount):
                 run.Raw('>'),
                 filename,
             ],
+            timeout=(5*60),
         )
 
     def mount(self, mount_path=None, mount_fs_name=None):
@@ -60,6 +61,7 @@ class KernelMount(CephFSMount):
                 '--',
                 self.mountpoint,
             ],
+            timeout=(5*60),
         )
 
         if mount_path is None:
@@ -84,10 +86,11 @@ class KernelMount(CephFSMount):
                 '-o',
                 opts
             ],
+            timeout=(30*60),
         )
 
         self.client_remote.run(
-            args=['sudo', 'chmod', '1777', self.mountpoint])
+            args=['sudo', 'chmod', '1777', self.mountpoint], timeout=(5*60))
 
         self.mounted = True
 
@@ -99,7 +102,7 @@ class KernelMount(CephFSMount):
             cmd.append('-f')
 
         try:
-            self.client_remote.run(args=cmd, timeout=(5*60))
+            self.client_remote.run(args=cmd, timeout=(15*60))
         except Exception as e:
             self.client_remote.run(args=[
                 'sudo',
@@ -107,7 +110,7 @@ class KernelMount(CephFSMount):
                 'lsof',
                 run.Raw(';'),
                 'ps', 'auxf',
-            ])
+            ], timeout=(15*60))
             raise e
 
         rproc = self.client_remote.run(
@@ -194,6 +197,7 @@ class KernelMount(CephFSMount):
                 '--',
                 self.mountpoint,
             ],
+            timeout=(5*60),
         )
 
     def _find_debug_dir(self):
@@ -219,7 +223,7 @@ class KernelMount(CephFSMount):
 
         p = self.client_remote.run(args=[
             'sudo', 'python', '-c', pyscript
-        ], stdout=StringIO())
+        ], stdout=StringIO(), timeout=(5*60))
         client_id_to_dir = json.loads(p.stdout.getvalue())
 
         try:
@@ -241,7 +245,7 @@ class KernelMount(CephFSMount):
 
         p = self.client_remote.run(args=[
             'sudo', 'python', '-c', pyscript
-        ], stdout=StringIO())
+        ], stdout=StringIO(), timeout=(5*60))
         return p.stdout.getvalue()
 
     def get_global_id(self):
