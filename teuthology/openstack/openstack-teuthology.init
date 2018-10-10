@@ -88,6 +88,15 @@ function rkill() {
     echo Killing process $pid
     kill -9 $pid
 }
+function status_process() {
+    local name=$1
+    local pidf=$2
+    [[ -f $pidf ]] && {
+        PID=$(cat $pidf)
+        STATUS=$(ps aux --no-headers -q $PID 2>&1 > /dev/null && echo running || echo dead)
+        echo $name PID:$PID STATUS:$STATUS
+    }
+}
 
 function stop_process() {
     local pidfile=$1
@@ -117,13 +126,11 @@ case $1 in
         start-workers)
             start_workers
             ;;
-        list-workers)
+        status-workers|list-workers)
             for i in $(ls /var/run | grep teuthology-worker | sort) ; do
-                WPID=$(cat /var/run/$i)
                 WORKER=${i##teuthology-worker.}
                 WORKER=${WORKER%%.pid}
-                STATUS=$(ps aux --no-headers -q $WPID 2>&1 > /dev/null && echo running || echo dead)
-                echo $WORKER PID:$WPID STATUS:$STATUS
+                status_process "worker $WORKER" /var/run/$i
             done
             ;;
         stop-workers)
@@ -137,6 +144,9 @@ case $1 in
             $0 stop-workers
             $1 start-workers
             ;;
+        status-pulpito)
+            status_process pulpito /var/run/pulpito.pid
+            ;;
         start-pulpito)
             su - -c "cd /home/$user/pulpito ; virtualenv/bin/python run.py" $user  > /var/log/pulpito.log 2>&1 & \
             echo $! > /var/run/pulpito.pid
@@ -144,6 +154,9 @@ case $1 in
         stop-pulpito)
             echo Stopping pulpito
             stop_process /var/run/pulpito.pid
+            ;;
+        status-paddles)
+            status_process paddles /var/run/paddles.pid
             ;;
         start-paddles)
             su - -c "cd /home/$user/paddles ; virtualenv/bin/pecan serve config.py" $user  > /var/log/paddles.log 2>&1 &
