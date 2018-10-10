@@ -429,3 +429,4 @@ for interpreter in python2.7 python3 ; do
     rm -rf $top_srcdir/install-deps-$interpreter
 done
 rm -rf $XDG_CACHE_HOME
+git --version || (echo "Dashboard uses git to pull dependencies." ; false)
