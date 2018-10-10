@@ -104,4 +104,36 @@ class RadosWriter : public DataProcessor {
   void clear_written() { written.clear(); }
 };
 
+// a rados object processor that stripes according to RGWObjManifest
+class ManifestObjectProcessor : public HeadObjectProcessor,
+                                public StripeGenerator {
+ protected:
+  RGWRados *const store;
+  const RGWBucketInfo& bucket_info;
+  const rgw_user& owner;
+  RGWObjectCtx& obj_ctx;
+  rgw_obj head_obj;
+
+  RadosWriter writer;
+  RGWObjManifest manifest;
+  RGWObjManifest::generator manifest_gen;
+  ChunkProcessor chunk;
+  StripeProcessor stripe;
+
+  // implements StripeGenerator
+  int next(uint64_t offset, uint64_t *stripe_size) override;
+
+ public:
+  ManifestObjectProcessor(Aio *aio, RGWRados *store,
+                          const RGWBucketInfo& bucket_info,
+                          const rgw_user& owner, RGWObjectCtx& obj_ctx,
+                          const rgw_obj& head_obj)
+    : HeadObjectProcessor(0),
+      store(store), bucket_info(bucket_info), owner(owner),
+      obj_ctx(obj_ctx), head_obj(head_obj),
+      writer(aio, store, bucket_info, obj_ctx, head_obj),
+      chunk(&writer, 0), stripe(&chunk, this, 0)
+  {}
+};
+
 } // namespace rgw::putobj

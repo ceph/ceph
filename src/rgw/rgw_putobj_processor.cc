@@ -163,4 +163,31 @@ RadosWriter::~RadosWriter()
   }
 }
 
+
+// advance to the next stripe
+int ManifestObjectProcessor::next(uint64_t offset, uint64_t *pstripe_size)
+{
+  // advance the manifest
+  int r = manifest_gen.create_next(offset);
+  if (r < 0) {
+    return r;
+  }
+
+  rgw_raw_obj stripe_obj = manifest_gen.get_cur_obj(store);
+
+  uint64_t chunk_size = 0;
+  r = store->get_max_chunk_size(stripe_obj.pool, &chunk_size);
+  if (r < 0) {
+    return r;
+  }
+  r = writer.set_stripe_obj(std::move(stripe_obj));
+  if (r < 0) {
+    return r;
+  }
+
+  chunk = ChunkProcessor(&writer, chunk_size);
+  *pstripe_size = manifest_gen.cur_stripe_max_size();
+  return 0;
+}
+
 } // namespace rgw::putobj
