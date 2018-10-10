@@ -1771,6 +1771,7 @@ public:
       int complete(int64_t poolid, uint64_t epoch, uint64_t size,
                    uint64_t accounted_size, ceph::real_time& ut,
                    const string& etag, const string& content_type,
+                   const string& storage_class,
                    bufferlist *acl_bl, RGWObjCategory category,
 		   list<rgw_obj_index_key> *remove_objs, const string *user_data = nullptr);
       int complete_del(int64_t poolid, uint64_t epoch,

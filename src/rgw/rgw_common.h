@@ -683,11 +683,15 @@ struct rgw_placement_rule {
     storage_class = c;
   }
 
-  const string& get_storage_class() const {
+  static const string& get_canonical_storage_class(const string& storage_class) {
     if (storage_class.empty()) {
       return RGW_STORAGE_CLASS_STANDARD;
     }
     return storage_class;
+  }
+
+  const string& get_storage_class() const {
+    return get_canonical_storage_class(storage_class);
   }
   
   int compare(const rgw_placement_rule& r) const {

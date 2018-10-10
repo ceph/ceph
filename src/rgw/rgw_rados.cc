@@ -3590,6 +3590,7 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   string etag;
   string content_type;
   bufferlist acl_bl;
+  string storage_class;
 
   map<string, bufferlist>::iterator iter;
   if (meta.rmattrs) {
@@ -3600,6 +3601,8 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   }
 
   if (meta.manifest) {
+    storage_class = meta.manifest->get_tail_placement().placement_rule.storage_class;
+
     /* remove existing manifest attr */
     iter = attrs.find(RGW_ATTR_MANIFEST);
     if (iter != attrs.end())
@@ -3693,7 +3696,8 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
 
   tracepoint(rgw_rados, complete_enter, req_id.c_str());
   r = index_op->complete(poolid, epoch, size, accounted_size,
-                        meta.set_mtime, etag, content_type, &acl_bl,
+                        meta.set_mtime, etag, content_type,
+                        storage_class, &acl_bl,
                         meta.category, meta.remove_objs, meta.user_data);
   tracepoint(rgw_rados, complete_exit, req_id.c_str());
   if (r < 0)
@@ -6120,10 +6124,15 @@ int RGWRados::set_attrs(void *ctx, const RGWBucketInfo& bucket_info, rgw_obj& ob
       bufferlist content_type_bl = attrs[RGW_ATTR_CONTENT_TYPE];
       string etag(etag_bl.c_str(), etag_bl.length());
       string content_type(content_type_bl.c_str(), content_type_bl.length());
+      string storage_class;
+      auto iter = attrs.find(RGW_ATTR_STORAGE_CLASS);
+      if (iter != attrs.end()) {
+        storage_class = iter->second.to_str();
+      }
       uint64_t epoch = ref.ioctx.get_last_version();
       int64_t poolid = ref.ioctx.get_id();
       r = index_op.complete(poolid, epoch, state->size, state->accounted_size,
-                            mtime, etag, content_type, &acl_bl,
+                            mtime, etag, content_type, storage_class, &acl_bl,
                             RGWObjCategory::Main, NULL);
     } else {
       int ret = index_op.cancel();
@@ -6346,7 +6355,7 @@ int RGWRados::Bucket::UpdateIndex::prepare(RGWModifyOp op, const string *write_t
 int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch,
                                             uint64_t size, uint64_t accounted_size,
                                             ceph::real_time& ut, const string& etag,
-                                            const string& content_type,
+                                            const string& content_type, const string& storage_class,
                                             bufferlist *acl_bl,
                                             RGWObjCategory category,
                                             list<rgw_obj_index_key> *remove_objs, const string *user_data)
@@ -6369,6 +6378,7 @@ int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch,
   ent.meta.accounted_size = accounted_size;
   ent.meta.mtime = ut;
   ent.meta.etag = etag;
+  ent.meta.storage_class = storage_class;
   if (user_data)
     ent.meta.user_data = *user_data;
 
