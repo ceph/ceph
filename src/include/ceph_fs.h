@@ -111,6 +111,8 @@ struct ceph_dir_layout {
 #define CEPH_MSG_CLIENT_REQUEST         24
 #define CEPH_MSG_CLIENT_REQUEST_FORWARD 25
 #define CEPH_MSG_CLIENT_REPLY           26
+#define CEPH_MSG_CLIENT_RECLAIM		27
+#define CEPH_MSG_CLIENT_RECLAIM_REPLY   28
 #define CEPH_MSG_CLIENT_CAPS            0x310
 #define CEPH_MSG_CLIENT_LEASE           0x311
 #define CEPH_MSG_CLIENT_SNAP            0x312
@@ -309,6 +311,9 @@ enum {
 	CEPH_SESSION_REJECT,
         CEPH_SESSION_REQUEST_FLUSH_MDLOG
 };
+
+// flags for state reclaim
+#define CEPH_RECLAIM_RESET	1
 
 extern const char *ceph_session_op_name(int op);
 
