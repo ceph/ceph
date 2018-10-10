@@ -595,7 +595,7 @@ int NVMEManager::try_get(const spdk_nvme_transport_id& trid, SharedDriverData **
         if (spdk_nvme_retry_count < 0)
           spdk_nvme_retry_count = SPDK_NVME_DEFAULT_RETRY_COUNT;
 
-        std::unique_lock<std::mutex> l(probe_queue_lock);
+        std::unique_lock l(probe_queue_lock);
         while (true) {
           if (!probe_queue.empty()) {
             ProbeContext* ctxt = probe_queue.front();
@@ -618,7 +618,7 @@ int NVMEManager::try_get(const spdk_nvme_transport_id& trid, SharedDriverData **
 
   ProbeContext ctx{trid, this, nullptr, false};
   {
-    std::unique_lock<std::mutex> l(probe_queue_lock);
+    std::unique_lock l(probe_queue_lock);
     probe_queue.push_back(&ctx);
     while (!ctx.done)
       probe_queue_cond.wait(l);

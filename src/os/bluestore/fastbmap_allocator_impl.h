@@ -481,20 +481,20 @@ class AllocatorLevel02 : public AllocatorLevel
 public:
   uint64_t debug_get_free(uint64_t pos0 = 0, uint64_t pos1 = 0)
   {
-    std::lock_guard<std::mutex> l(lock);
+    std::lock_guard l(lock);
     return l1.debug_get_free(pos0 * l1._children_per_slot() * bits_per_slot,
       pos1 * l1._children_per_slot() * bits_per_slot);
   }
   uint64_t debug_get_allocated(uint64_t pos0 = 0, uint64_t pos1 = 0)
   {
-    std::lock_guard<std::mutex> l(lock);
+    std::lock_guard l(lock);
     return l1.debug_get_allocated(pos0 * l1._children_per_slot() * bits_per_slot,
       pos1 * l1._children_per_slot() * bits_per_slot);
   }
 
   uint64_t get_available()
   {
-    std::lock_guard<std::mutex> l(lock);
+    std::lock_guard l(lock);
     return available;
   }
   inline uint64_t get_min_alloc_size() const
@@ -622,7 +622,7 @@ protected:
 
     uint64_t l1_w = slotset_width * l1._children_per_slot();
 
-    std::lock_guard<std::mutex> l(lock);
+    std::lock_guard l(lock);
 
     if (available < min_length) {
       return;
@@ -692,7 +692,7 @@ protected:
   void _free_l2(const interval_set<uint64_t> & rr)
   {
     uint64_t released = 0;
-    std::lock_guard<std::mutex> l(lock);
+    std::lock_guard l(lock);
     for (auto r : rr) {
       released += l1._free_l1(r.first, r.second);
       uint64_t l2_pos = r.first / l2_granularity;
@@ -708,7 +708,7 @@ protected:
   void _free_l2(const T& rr)
   {
     uint64_t released = 0;
-    std::lock_guard<std::mutex> l(lock);
+    std::lock_guard l(lock);
     for (auto r : rr) {
       released += l1._free_l1(r.offset, r.length);
       uint64_t l2_pos = r.offset / l2_granularity;
@@ -724,7 +724,7 @@ protected:
     uint64_t l2_pos = o / l2_granularity;
     uint64_t l2_pos_end = p2roundup(int64_t(o + len), int64_t(l2_granularity)) / l2_granularity;
 
-    std::lock_guard<std::mutex> l(lock);
+    std::lock_guard l(lock);
     auto allocated = l1._mark_alloc_l1(o, len);
     ceph_assert(available >= allocated);
     available -= allocated;
@@ -736,7 +736,7 @@ protected:
     uint64_t l2_pos = o / l2_granularity;
     uint64_t l2_pos_end = p2roundup(int64_t(o + len), int64_t(l2_granularity)) / l2_granularity;
 
-    std::lock_guard<std::mutex> l(lock);
+    std::lock_guard l(lock);
     available += l1._free_l1(o, len);
     _mark_l2_free(l2_pos, l2_pos_end);
   }
@@ -745,7 +745,7 @@ protected:
     last_pos = 0;
   }
   double _get_fragmentation() {
-    std::lock_guard<std::mutex> l(lock);
+    std::lock_guard l(lock);
     return l1.get_fragmentation();
   }
 };

@@ -44,7 +44,7 @@
 
 void IOContext::aio_wait()
 {
-  std::unique_lock<std::mutex> l(lock);
+  std::unique_lock l(lock);
   // see _aio_thread for waker logic
   while (num_running.load() > 0) {
     dout(10) << __func__ << " " << this
@@ -139,7 +139,7 @@ BlockDevice *BlockDevice::create(CephContext* cct, const string& path,
 
 void BlockDevice::queue_reap_ioc(IOContext *ioc)
 {
-  std::lock_guard<std::mutex> l(ioc_reap_lock);
+  std::lock_guard l(ioc_reap_lock);
   if (ioc_reap_count.load() == 0)
     ++ioc_reap_count;
   ioc_reap_queue.push_back(ioc);
@@ -148,7 +148,7 @@ void BlockDevice::queue_reap_ioc(IOContext *ioc)
 void BlockDevice::reap_ioc()
 {
   if (ioc_reap_count.load()) {
-    std::lock_guard<std::mutex> l(ioc_reap_lock);
+    std::lock_guard l(ioc_reap_lock);
     for (auto p : ioc_reap_queue) {
       dout(20) << __func__ << " reap ioc " << p << dendl;
       delete p;
