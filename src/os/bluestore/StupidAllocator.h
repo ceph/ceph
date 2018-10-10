@@ -11,10 +11,11 @@
 #include "include/interval_set.h"
 #include "os/bluestore/bluestore_types.h"
 #include "include/mempool.h"
+#include "common/ceph_mutex.h"
 
 class StupidAllocator : public Allocator {
   CephContext* cct;
-  std::mutex lock;
+  ceph::mutex lock = ceph::make_mutex("StupidAllocator::lock");
 
   int64_t num_free;     ///< total bytes in freelist
 
