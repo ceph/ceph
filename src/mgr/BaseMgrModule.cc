@@ -465,7 +465,6 @@ get_daemon_status(BaseMgrModule *self, PyObject *args)
 static PyObject*
 ceph_log(BaseMgrModule *self, PyObject *args)
 {
-
   int level = 0;
   char *record = nullptr;
   if (!PyArg_ParseTuple(args, "is:log", &level, &record)) {
@@ -475,6 +474,32 @@ ceph_log(BaseMgrModule *self, PyObject *args)
   ceph_assert(self->this_module);
 
   self->this_module->log(level, record);
+
+  Py_RETURN_NONE;
+}
+
+static PyObject*
+ceph_cluster_log(BaseMgrModule *self, PyObject *args)
+{
+  int prio = 0;
+  char *channel = nullptr;
+  char *message = nullptr;
+  std::vector<std::string> channels = { "audit", "cluster" };
+
+  if (!PyArg_ParseTuple(args, "sis:ceph_cluster_log", &channel, &prio, &message)) {
+    return nullptr;
+  }
+
+  if (std::find(channels.begin(), channels.end(), std::string(channel)) == channels.end()) {
+    std::string msg("Unknown channel: ");
+    msg.append(channel);
+    PyErr_SetString(PyExc_ValueError, msg.c_str());
+    return nullptr;
+  }
+
+  PyThreadState *tstate = PyEval_SaveThread();
+  self->py_modules->cluster_log(channel, (clog_type)prio, message);
+  PyEval_RestoreThread(tstate);
 
   Py_RETURN_NONE;
 }
@@ -691,6 +716,9 @@ PyMethodDef BaseMgrModule_methods[] = {
 
   {"_ceph_log", (PyCFunction)ceph_log, METH_VARARGS,
    "Emit a (local) log message"},
+
+  {"_ceph_cluster_log", (PyCFunction)ceph_cluster_log, METH_VARARGS,
+   "Emit a cluster log message"},
 
   {"_ceph_get_version", (PyCFunction)ceph_get_version, METH_VARARGS,
    "Get the ceph version of this process"},

@@ -38,10 +38,12 @@
 ActivePyModules::ActivePyModules(PyModuleConfig &module_config_,
           std::map<std::string, std::string> store_data,
           DaemonStateIndex &ds, ClusterState &cs,
-	  MonClient &mc, LogChannelRef clog_, Objecter &objecter_,
+          MonClient &mc, LogChannelRef clog_,
+          LogChannelRef audit_clog_, Objecter &objecter_,
           Client &client_, Finisher &f, DaemonServer &server)
   : module_config(module_config_), daemon_state(ds), cluster_state(cs),
-    monc(mc), clog(clog_), objecter(objecter_), client(client_), finisher(f),
+    monc(mc), clog(clog_), audit_clog(audit_clog_), objecter(objecter_),
+    client(client_), finisher(f),
     server(server), lock("ActivePyModules")
 {
   store_cache = std::move(store_data);
@@ -900,5 +902,17 @@ void ActivePyModules::remove_osd_perf_query(OSDPerfMetricQueryID query_id)
   if (r < 0) {
     dout(0) << "remove_osd_perf_query for query_id=" << query_id << " failed: "
             << cpp_strerror(r) << dendl;
+  }
+}
+
+void ActivePyModules::cluster_log(const std::string &channel, clog_type prio,
+  const std::string &message)
+{
+  Mutex::Locker l(lock);
+
+  if (channel == "audit") {
+    audit_clog->do_log(prio, message);
+  } else {
+    clog->do_log(prio, message);
   }
 }

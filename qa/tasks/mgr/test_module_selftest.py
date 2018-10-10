@@ -291,3 +291,40 @@ class TestModuleSelftest(MgrTestCase):
         self.mgr_cluster.mon_manager.raw_cluster_cmd(
             "mgr", "self-test", "remote")
 
+    def test_selftest_cluster_log(self):
+        """
+        Use the selftest module to test the cluster/audit log interface.
+        """
+        priority_map = {
+            "info": "INF",
+            "security": "SEC",
+            "warning": "WRN",
+            "error": "ERR"
+        }
+        self._load_module("selftest")
+        for priority in priority_map.keys():
+            message = "foo bar {}".format(priority)
+            log_message = "[{}] {}".format(priority_map[priority], message)
+            # Check for cluster/audit logs:
+            # 2018-09-24 09:37:10.977858 mgr.x [INF] foo bar info
+            # 2018-09-24 09:37:10.977860 mgr.x [SEC] foo bar security
+            # 2018-09-24 09:37:10.977863 mgr.x [WRN] foo bar warning
+            # 2018-09-24 09:37:10.977866 mgr.x [ERR] foo bar error
+            with self.assert_cluster_log(log_message):
+                self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                    "mgr", "self-test", "cluster-log", "cluster",
+                    priority, message)
+            with self.assert_cluster_log(log_message, watch_channel="audit"):
+                self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                    "mgr", "self-test", "cluster-log", "audit",
+                    priority, message)
+
+    def test_selftest_cluster_log_unknown_channel(self):
+        """
+        Use the selftest module to test the cluster/audit log interface.
+        """
+        with self.assertRaises(CommandFailedError) as exc_raised:
+            self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                "mgr", "self-test", "cluster-log", "xyz",
+                "ERR", "The channel does not exist")
+        self.assertEqual(exc_raised.exception.exitstatus, errno.EOPNOTSUPP)
