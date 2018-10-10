@@ -36,9 +36,8 @@ namespace api {
 template <>
 class Config<MockTestImageCtx> {
 public:
-  static int list(librados::IoCtx& io_ctx,
-                  std::vector<config_option_t> *options) {
-    return 0;
+  static void apply_pool_overrides(librados::IoCtx& io_ctx,
+                                   ConfigProxy* config_proxy) {
   }
 };
 

@@ -605,7 +605,7 @@ void ImageReplayer<I>::handle_init_remote_journaler(int r) {
   if (m_client_meta.image_id == m_local_image_id &&
       client.state != cls::journal::CLIENT_STATE_CONNECTED) {
     dout(5) << "client flagged disconnected, stopping image replay" << dendl;
-    if (m_local_image_ctx->mirroring_resync_after_disconnect) {
+    if (m_local_image_ctx->config.template get_val<bool>("rbd_mirroring_resync_after_disconnect")) {
       m_resync_requested = true;
       on_start_fail(-ENOTCONN, "disconnected: automatic resync");
     } else {

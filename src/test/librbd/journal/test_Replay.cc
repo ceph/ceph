@@ -755,7 +755,7 @@ TEST_F(TestJournalReplay, MetadataSet) {
   ASSERT_EQ(initial_tag + 1, current_tag);
   ASSERT_EQ(1, current_entry);
 
-  ASSERT_EQ(9876, ictx->mirroring_replay_delay);
+  ASSERT_EQ(9876U, ictx->mirroring_replay_delay);
 
   std::string value;
   ASSERT_EQ(0, librbd::metadata_get(ictx, "conf_rbd_mirroring_replay_delay",
@@ -797,7 +797,7 @@ TEST_F(TestJournalReplay, MetadataRemove) {
   get_journal_commit_position(ictx, &current_tag, &current_entry);
   ASSERT_EQ(initial_tag, current_tag);
   ASSERT_EQ(initial_entry + 2, current_entry);
-  ASSERT_EQ(0, ictx->mirroring_replay_delay);
+  ASSERT_EQ(0U, ictx->mirroring_replay_delay);
 
   std::string value;
   ASSERT_EQ(-ENOENT,

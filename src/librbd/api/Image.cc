@@ -14,6 +14,7 @@
 #include "librbd/image/CloneRequest.h"
 #include "librbd/internal.h"
 #include "librbd/Utils.h"
+#include "librbd/api/Config.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -238,11 +239,14 @@ int Image<I>::deep_copy(I *src, librados::IoCtx& dest_md_ctx,
       return r;
     }
 
+    ConfigProxy config{cct->_conf};
+    api::Config<I>::apply_pool_overrides(dest_md_ctx, &config);
+
     C_SaferCond ctx;
     std::string dest_id = util::generate_image_id(dest_md_ctx);
     auto *req = image::CloneRequest<I>::create(
-      parent_io_ctx, parent_spec.image_id, "", parent_spec.snap_id, dest_md_ctx,
-      destname, dest_id, opts, "", "", src->op_work_queue, &ctx);
+      config, parent_io_ctx, parent_spec.image_id, "", parent_spec.snap_id,
+      dest_md_ctx, destname, dest_id, opts, "", "", src->op_work_queue, &ctx);
     req->send();
     r = ctx.wait();
   }

@@ -33,6 +33,7 @@
 #include "librbd/TrashWatcher.h"
 #include "librbd/Types.h"
 #include "librbd/Utils.h"
+#include "librbd/api/Config.h"
 #include "librbd/api/Image.h"
 #include "librbd/exclusive_lock/AutomaticPolicy.h"
 #include "librbd/exclusive_lock/StandardPolicy.h"
@@ -877,7 +878,7 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
 
     uint64_t format;
     if (opts.get(RBD_IMAGE_OPTION_FORMAT, &format) != 0)
-      format = cct->_conf.get_val<int64_t>("rbd_default_format");
+      format = cct->_conf.get_val<uint64_t>("rbd_default_format");
     bool old_format = format == 1;
 
     // make sure it doesn't already exist, in either format
@@ -894,7 +895,7 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
 
     uint64_t order = 0;
     if (opts.get(RBD_IMAGE_OPTION_ORDER, &order) != 0 || order == 0) {
-      order = cct->_conf.get_val<int64_t>("rbd_default_order");
+      order = cct->_conf.get_val<uint64_t>("rbd_default_order");
     }
     r = image::CreateRequest<>::validate_order(cct, order);
     if (r < 0) {
@@ -913,9 +914,12 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
       ContextWQ *op_work_queue;
       ImageCtx::get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
 
+      ConfigProxy config{cct->_conf};
+      api::Config<>::apply_pool_overrides(io_ctx, &config);
+
       C_SaferCond cond;
       image::CreateRequest<> *req = image::CreateRequest<>::create(
-        io_ctx, image_name, id, size, opts, non_primary_global_image_id,
+        config, io_ctx, image_name, id, size, opts, non_primary_global_image_id,
         primary_mirror_uuid, skip_mirror_enable, op_work_queue, &cond);
       req->send();
 
@@ -999,15 +1003,18 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
 		   << "c_id= " << clone_id << ", "
 		   << "c_opts=" << c_opts << dendl;
 
+    ConfigProxy config{reinterpret_cast<CephContext *>(c_ioctx.cct())->_conf};
+    api::Config<>::apply_pool_overrides(c_ioctx, &config);
+
     ThreadPool *thread_pool;
     ContextWQ *op_work_queue;
     ImageCtx::get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
 
     C_SaferCond cond;
     auto *req = image::CloneRequest<>::create(
-      p_ioctx, parent_id, p_snap_name, CEPH_NOSNAP, c_ioctx, c_name, clone_id,
-      c_opts, non_primary_global_image_id, primary_mirror_uuid, op_work_queue,
-      &cond);
+      config, p_ioctx, parent_id, p_snap_name, CEPH_NOSNAP, c_ioctx, c_name,
+      clone_id, c_opts, non_primary_global_image_id, primary_mirror_uuid,
+      op_work_queue, &cond);
     req->send();
 
     r = cond.wait();
@@ -2032,7 +2039,7 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
     }
 
     RWLock::RLocker owner_lock(src->owner_lock);
-    SimpleThrottle throttle(src->concurrent_management_ops, false);
+    SimpleThrottle throttle(src->config.get_val<uint64_t>("rbd_concurrent_management_ops"), false);
     uint64_t period = src->get_stripe_period();
     unsigned fadvise_flags = LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL |
 			     LIBRADOS_OP_FLAG_FADVISE_NOCACHE;
@@ -2183,7 +2190,7 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
       return -EINVAL;
     }
 
-    if (ictx->blacklist_on_break_lock) {
+    if (ictx->config.get_val<bool>("rbd_blacklist_on_break_lock")) {
       typedef std::map<rados::cls::lock::locker_id_t,
 		       rados::cls::lock::locker_info_t> Lockers;
       Lockers lockers;
@@ -2212,8 +2219,9 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
 
       RWLock::RLocker locker(ictx->md_lock);
       librados::Rados rados(ictx->md_ctx);
-      r = rados.blacklist_add(client_address,
-			      ictx->blacklist_expire_seconds);
+      r = rados.blacklist_add(
+        client_address,
+        ictx->config.get_val<uint64_t>("rbd_blacklist_expire_seconds"));
       if (r < 0) {
         lderr(ictx->cct) << "unable to blacklist client: " << cpp_strerror(r)
           	       << dendl;

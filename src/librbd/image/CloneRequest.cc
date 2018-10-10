@@ -29,7 +29,8 @@ using util::create_context_callback;
 using util::create_async_context_callback;
 
 template <typename I>
-CloneRequest<I>::CloneRequest(IoCtx& parent_io_ctx,
+CloneRequest<I>::CloneRequest(ConfigProxy& config,
+                              IoCtx& parent_io_ctx,
                               const std::string& parent_image_id,
                               const std::string& parent_snap_name,
                               uint64_t parent_snap_id,
@@ -40,9 +41,10 @@ CloneRequest<I>::CloneRequest(IoCtx& parent_io_ctx,
 			      const std::string &non_primary_global_image_id,
 			      const std::string &primary_mirror_uuid,
 			      ContextWQ *op_work_queue, Context *on_finish)
-  : m_parent_io_ctx(parent_io_ctx), m_parent_image_id(parent_image_id),
-    m_parent_snap_name(parent_snap_name), m_parent_snap_id(parent_snap_id),
-    m_ioctx(c_ioctx), m_name(c_name), m_id(c_id), m_opts(c_options),
+  : m_config(config), m_parent_io_ctx(parent_io_ctx),
+    m_parent_image_id(parent_image_id), m_parent_snap_name(parent_snap_name),
+    m_parent_snap_id(parent_snap_id), m_ioctx(c_ioctx), m_name(c_name),
+    m_id(c_id), m_opts(c_options),
     m_non_primary_global_image_id(non_primary_global_image_id),
     m_primary_mirror_uuid(primary_mirror_uuid),
     m_op_work_queue(op_work_queue), m_on_finish(on_finish),
@@ -92,7 +94,7 @@ void CloneRequest<I>::validate_options() {
     m_use_p_features = false;
   }
 
-  std::string default_clone_format = m_cct->_conf.get_val<std::string>(
+  std::string default_clone_format = m_config.get_val<std::string>(
     "rbd_default_clone_format");
   if (default_clone_format == "1") {
     m_clone_format = 1;
@@ -275,8 +277,9 @@ void CloneRequest<I>::create_child() {
 
   RWLock::RLocker snap_locker(m_parent_image_ctx->snap_lock);
   CreateRequest<I> *req = CreateRequest<I>::create(
-    m_ioctx, m_name, m_id, m_size, m_opts, m_non_primary_global_image_id,
-    m_primary_mirror_uuid, true, m_op_work_queue, ctx);
+    m_config, m_ioctx, m_name, m_id, m_size, m_opts,
+    m_non_primary_global_image_id, m_primary_mirror_uuid, true,
+    m_op_work_queue, ctx);
   req->send();
 }
 
