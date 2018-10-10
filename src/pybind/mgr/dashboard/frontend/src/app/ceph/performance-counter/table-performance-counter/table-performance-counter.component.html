@@ -3,7 +3,7 @@
           [columns]="columns"
           columnMode="flex"
           [autoSave]="false"
-          (fetchData)="getCounters()">
+          (fetchData)="getCounters($event)">
   <ng-template #valueTpl let-row="row">
     {{ row.value | dimless }} {{ row.unit }}
   </ng-template>

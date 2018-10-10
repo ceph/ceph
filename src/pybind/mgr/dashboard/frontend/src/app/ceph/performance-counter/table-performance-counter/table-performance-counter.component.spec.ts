@@ -1,26 +1,58 @@
-import { HttpClientTestingModule } from '@angular/common/http/testing';
+import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { configureTestBed } from '../../../../testing/unit-test-helper';
-import { SharedModule } from '../../../shared/shared.module';
+import { AppModule } from '../../../app.module';
+import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
 import { TablePerformanceCounterComponent } from './table-performance-counter.component';
 
 describe('TablePerformanceCounterComponent', () => {
   let component: TablePerformanceCounterComponent;
   let fixture: ComponentFixture<TablePerformanceCounterComponent>;
+  let httpTesting: HttpTestingController;
 
   configureTestBed({
-    declarations: [TablePerformanceCounterComponent],
-    imports: [SharedModule, HttpClientTestingModule]
+    imports: [AppModule, HttpClientTestingModule]
   });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(TablePerformanceCounterComponent);
     component = fixture.componentInstance;
+    httpTesting = TestBed.get(HttpTestingController);
     fixture.detectChanges();
   });
 
   it('should create', () => {
     expect(component).toBeTruthy();
+    expect(component.counters).toEqual([]);
+  });
+
+  describe('Error handling', () => {
+    const context = new CdTableFetchDataContext(() => {});
+
+    beforeEach(() => {
+      spyOn(context, 'error');
+      component.serviceType = 'osd';
+      component.serviceId = '3';
+      component.getCounters(context);
+    });
+
+    it('should display 404 warning', () => {
+      httpTesting
+        .expectOne('api/perf_counters/osd/3')
+        .error(new ErrorEvent('osd.3 not found'), { status: 404 });
+      httpTesting.verify();
+      expect(component.counters).toBeNull();
+      expect(context.error).not.toHaveBeenCalled();
+    });
+
+    it('should call error function of context', () => {
+      httpTesting
+        .expectOne('api/perf_counters/osd/3')
+        .error(new ErrorEvent('Unknown error'), { status: 500 });
+      httpTesting.verify();
+      expect(component.counters).toEqual([]);
+      expect(context.error).toHaveBeenCalled();
+    });
   });
 });
