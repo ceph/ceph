@@ -17,6 +17,7 @@
 #include "include/rados/librados.hpp"
 
 class InodeStore;
+class MDSTable;
 
 class RecoveryDriver {
   protected:
@@ -232,6 +233,9 @@ class MetadataDriver : public RecoveryDriver, public MetadataTool
     int init_roots(int64_t data_pool_id) override;
 
     int check_roots(bool *result) override;
+
+    int load_table(MDSTable *table);
+    int save_table(MDSTable *table);
 };
 
 class DataScan : public MDSUtility, public MetadataTool

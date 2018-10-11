@@ -19,6 +19,7 @@
 #include "include/util.h"
 
 #include "mds/CInode.h"
+#include "mds/InoTable.h"
 #include "cls/cephfs/cls_cephfs_client.h"
 
 #include "PgFiles.h"
@@ -1132,7 +1133,21 @@ int DataScan::scan_links()
   }
 
   for (auto& p : max_ino_map) {
-    std::cout << "mds." << p.first << " max used ino " << p.second << std::endl;
+    InoTable inotable(nullptr);
+    inotable.set_rank(p.first);
+    bool dirty = false;
+    int r = metadata_driver->load_table(&inotable);
+    if (r < 0) {
+      inotable.reset_state();
+      dirty = true;
+    }
+    if (inotable.force_consume_to(p.second))
+      dirty = true;
+    if (dirty) {
+      r = metadata_driver->save_table(&inotable);
+      if (r < 0)
+	return r;
+    }
   }
 
   return 0;
@@ -1370,6 +1385,48 @@ int MetadataTool::read_dentry(inodeno_t parent_ino, frag_t frag,
     return -EINVAL;
   }
 
+  return 0;
+}
+
+int MetadataDriver::load_table(MDSTable *table)
+{
+  object_t table_oid = table->get_object_name();
+
+  bufferlist table_bl;
+  int r = metadata_io.read(table_oid.name, table_bl, 0, 0);
+  if (r < 0) {
+    derr << "unable to read mds table '" << table_oid.name << "': "
+      << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  try {
+    version_t table_ver;
+    auto p = table_bl.begin();
+    decode(table_ver, p);
+    table->decode_state(p);
+    table->force_replay_version(table_ver);
+  } catch (const buffer::error &err) {
+    derr << "unable to decode mds table '" << table_oid.name << "': "
+      << err.what() << dendl;
+    return -EIO;
+  }
+  return 0;
+}
+
+int MetadataDriver::save_table(MDSTable *table)
+{
+  object_t table_oid = table->get_object_name();
+
+  bufferlist table_bl;
+  encode(table->get_version(), table_bl);
+  table->encode_state(table_bl);
+  int r = metadata_io.write_full(table_oid.name, table_bl);
+  if (r != 0) {
+    derr << "error updating mds table " << table_oid.name
+      << ": " << cpp_strerror(r) << dendl;
+    return r;
+  }
   return 0;
 }
 
