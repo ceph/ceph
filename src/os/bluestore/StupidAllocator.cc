@@ -277,12 +277,12 @@ void StupidAllocator::dump()
 {
   std::lock_guard<std::mutex> l(lock);
   for (unsigned bin = 0; bin < free.size(); ++bin) {
-    ldout(cct, 0) << __func__ << " free bin " << bin << ": "
+    ldout(cct, 10) << __func__ << " free bin " << bin << ": "
 	    	  << free[bin].num_intervals() << " extents" << dendl;
     for (auto p = free[bin].begin();
 	 p != free[bin].end();
 	 ++p) {
-      ldout(cct, 0) << __func__ << "  0x" << std::hex << p.get_start() << "~"
+      ldout(cct, 10) << __func__ << "  0x" << std::hex << p.get_start() << "~"
 	      	    << p.get_len() << std::dec << dendl;
     }
   }
