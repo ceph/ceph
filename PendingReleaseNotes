@@ -157,6 +157,8 @@
 * the callback function passed to LibRGWFS.readdir() now accepts a ``flags``
   parameter. it will be the last parameter passed to  ``readdir()` method.
 
+* The 'cephfs-data-scan scan_links' now automatically repair inotables.
+
 >=13.1.0
 --------
 
