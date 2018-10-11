@@ -23,6 +23,9 @@ notes (?))
   field with an ``addrs`` section to reflect that OSDs may bind to
   multiple addresses.
 
+* The 'cephfs-data-scan scan_links' now automatically repair inotables and
+  snaptable.
+
 13.2.1
 ======
 
