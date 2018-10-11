@@ -779,6 +779,27 @@ test_config() {
     echo "testing config..."
     remove_images
 
+    expect_fail rbd config global set osd rbd_cache true
+    expect_fail rbd config global set global debug_ms 10
+    expect_fail rbd config global set global rbd_UNKNOWN false
+    expect_fail rbd config global set global rbd_cache INVALID
+    rbd config global set global rbd_cache false
+    rbd config global set client rbd_cache true
+    rbd config global set client.123 rbd_cache false
+    rbd config global get global rbd_cache | grep '^false$'
+    rbd config global get client rbd_cache | grep '^true$'
+    rbd config global get client.123 rbd_cache | grep '^false$'
+    expect_fail rbd config global get client.UNKNOWN rbd_cache
+    rbd config global list global | grep '^rbd_cache * false * global *$'
+    rbd config global list client | grep '^rbd_cache * true * client *$'
+    rbd config global list client.123 | grep '^rbd_cache * false * client.123 *$'
+    rbd config global list client.UNKNOWN | grep '^rbd_cache * true * client *$'
+    rbd config global rm client rbd_cache
+    expect_fail rbd config global get client rbd_cache
+    rbd config global list client | grep '^rbd_cache * false * global *$'
+    rbd config global rm client.123 rbd_cache
+    rbd config global rm global rbd_cache
+
     rbd config pool set rbd rbd_cache true
     rbd config pool list rbd | grep '^rbd_cache * true * pool *$'
     rbd config pool get rbd rbd_cache | grep '^true$'

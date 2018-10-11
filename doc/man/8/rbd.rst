@@ -197,10 +197,22 @@ Commands
   The parent snapshot must be protected (see `rbd snap protect`).
   This requires image format 2.
 
+:command:`config global get` *config-entity* *key*
+  Get a global-level configuration override.
+
+:command:`config global list` [--format plain | json | xml] [--pretty-format] *config-entity*
+  List global-level configuration overrides.
+
+:command:`config global set` *config-entity* *key* *value*
+  Set a global-level configuration override.
+
+:command:`config global remove` *config-entity* *key*
+  Remove a global-level configuration override.
+
 :command:`config image get` *image-spec* *key*
   Get an image-level configuration override.
 
-:command:`config image list` [--format plain | json | xml] [--pretty-format] *image-spec* *key*
+:command:`config image list` [--format plain | json | xml] [--pretty-format] *image-spec*
   List image-level configuration overrides.
 
 :command:`config image set` *image-spec* *key* *value*

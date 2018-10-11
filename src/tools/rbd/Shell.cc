@@ -63,11 +63,31 @@ std::string format_command_spec(const Shell::CommandSpec &spec) {
   return joinify<std::string>(spec.begin(), spec.end(), " ");
 }
 
+std::string format_alias_spec(const Shell::CommandSpec &spec,
+                              const Shell::CommandSpec &alias_spec) {
+    auto spec_it = spec.begin();
+    auto alias_it = alias_spec.begin();
+    int level = 0;
+    while (spec_it != spec.end() && alias_it != alias_spec.end() &&
+           *spec_it == *alias_it) {
+      spec_it++;
+      alias_it++;
+      level++;
+    }
+    ceph_assert(spec_it != spec.end() && alias_it != alias_spec.end());
+
+    if (level < 2) {
+      return joinify<std::string>(alias_spec.begin(), alias_spec.end(), " ");
+    } else {
+      return "... " + joinify<std::string>(alias_it, alias_spec.end(), " ");
+    }
+}
+
 std::string format_command_name(const Shell::CommandSpec &spec,
                                 const Shell::CommandSpec &alias_spec) {
   std::string name = format_command_spec(spec);
   if (!alias_spec.empty()) {
-    name += " (" + format_command_spec(alias_spec) + ")";
+    name += " (" + format_alias_spec(spec, alias_spec) + ")";
   }
   return name;
 }

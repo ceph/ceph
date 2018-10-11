@@ -3,14 +3,21 @@
 
 #include "common/Formatter.h"
 #include "common/TextTable.h"
-#include "common/config_proxy.h"
+#include "common/ceph_context.h"
+#include "common/ceph_json.h"
+#include "common/escape.h"
 #include "common/errno.h"
+#include "common/options.h"
+#include "global/global_context.h"
+#include "include/stringify.h"
 
 #include "tools/rbd/ArgumentTypes.h"
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
 
 #include <iostream>
+
+#include <boost/algorithm/string/predicate.hpp>
 #include <boost/program_options.hpp>
 
 namespace rbd {
@@ -25,6 +32,12 @@ namespace {
 const std::string METADATA_CONF_PREFIX = "conf_";
 const uint32_t MAX_KEYS = 64;
 
+void add_config_entity_option(
+    boost::program_options::options_description *positional) {
+  positional->add_options()
+    ("config-entity", "config entity (global, client, client.<id>)");
+}
+
 void add_pool_option(boost::program_options::options_description *positional) {
   positional->add_options()
     ("pool-name", "pool name");
@@ -33,6 +46,19 @@ void add_pool_option(boost::program_options::options_description *positional) {
 void add_key_option(po::options_description *positional) {
   positional->add_options()
     ("key", "config key");
+}
+
+int get_config_entity(const po::variables_map &vm, std::string *config_entity) {
+  *config_entity = utils::get_positional_argument(vm, 0);
+
+  if (*config_entity != "global" && *config_entity != "client" &&
+      !boost::starts_with(*config_entity, ("client."))) {
+    std::cerr << "rbd: invalid config entity: " << *config_entity
+              << " (must be global, client or client.<id>)" << std::endl;
+    return -EINVAL;
+  }
+
+  return 0;
 }
 
 int get_pool(const po::variables_map &vm, std::string *pool_name) {
@@ -51,6 +77,19 @@ int get_key(const po::variables_map &vm, std::string *key) {
     std::cerr << "rbd: config key was not specified" << std::endl;
     return -EINVAL;
   }
+
+  if (!boost::starts_with(*key, "rbd_")) {
+    std::cerr << "rbd: not rbd option: " << *key << std::endl;
+    return -EINVAL;
+  }
+
+  std::string value;
+  int r = g_ceph_context->_conf.get_val(key->c_str(), &value);
+  if (r < 0) {
+    std::cerr << "rbd: invalid config key: " << *key << std::endl;
+    return -EINVAL;
+  }
+
   return 0;
 }
 
@@ -73,7 +112,284 @@ std::ostream& operator<<(std::ostream& os,
   return os;
 }
 
+int config_global_list(
+    librados::Rados &rados, const std::string &config_entity,
+    std::map<std::string, std::pair<std::string, std::string>> *options) {
+  bool client_id_config_entity =
+    boost::starts_with(config_entity, ("client."));
+  std::string cmd =
+    "{"
+      "\"prefix\": \"config dump\", "
+      "\"format\": \"json\" "
+    "}";
+  bufferlist in_bl;
+  bufferlist out_bl;
+  std::string ss;
+  int r = rados.mon_command(cmd, in_bl, &out_bl, &ss);
+  if (r < 0) {
+    std::cerr << "rbd: error reading config: " << ss << std::endl;
+    return r;
+  }
+
+  json_spirit::mValue json_root;
+  if (!json_spirit::read(out_bl.to_str(), json_root)) {
+    std::cerr << "rbd: error parsing config dump" << std::endl;
+    return -EINVAL;
+  }
+
+  try {
+    auto &json_array = json_root.get_array();
+    for (auto& e : json_array) {
+      auto &json_obj = e.get_obj();
+      std::string section;
+      std::string name;
+      std::string value;
+
+      for (auto &pairs : json_obj) {
+        if (pairs.first == "section") {
+          section = pairs.second.get_str();
+        } else if (pairs.first == "name") {
+          name = pairs.second.get_str();
+        } else if (pairs.first == "value") {
+          value = pairs.second.get_str();
+        }
+      }
+
+      if (!boost::starts_with(name, "rbd_")) {
+        continue;
+      }
+      if (section != "global" && section != "client" &&
+          (!client_id_config_entity || section != config_entity)) {
+        continue;
+      }
+      if (config_entity == "global" && section != "global") {
+        continue;
+      }
+      auto it = options->find(name);
+      if (it == options->end()) {
+        (*options)[name] = {value, section};
+        continue;
+      }
+      if (section == "client") {
+        if (it->second.second == "global") {
+          it->second = {value, section};
+        }
+      } else if (client_id_config_entity) {
+        it->second = {value, section};
+      }
+    }
+  } catch (std::runtime_error &e) {
+    std::cerr << "rbd: error parsing config dump: " << e.what() << std::endl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
 } // anonymous namespace
+
+void get_global_get_arguments(po::options_description *positional,
+                              po::options_description *options) {
+  add_config_entity_option(positional);
+  add_key_option(positional);
+}
+
+int execute_global_get(const po::variables_map &vm,
+                       const std::vector<std::string> &ceph_global_init_args) {
+  std::string config_entity;
+  int r = get_config_entity(vm, &config_entity);
+  if (r < 0) {
+    return r;
+  }
+
+  std::string key;
+  r = get_key(vm, &key);
+  if (r < 0) {
+    return r;
+  }
+
+  librados::Rados rados;
+  r = utils::init_rados(&rados);
+  if (r < 0) {
+    return r;
+  }
+
+  std::map<std::string, std::pair<std::string, std::string>> options;
+  r = config_global_list(rados, config_entity, &options);
+  if (r < 0) {
+    return r;
+  }
+
+  auto it = options.find(key);
+
+  if (it == options.end() || it->second.second != config_entity) {
+    std::cerr << "rbd: " << key << " is not set" << std::endl;
+    return -ENOENT;
+  }
+
+  std::cout << it->second.first << std::endl;
+  return 0;
+}
+
+void get_global_set_arguments(po::options_description *positional,
+                              po::options_description *options) {
+  add_config_entity_option(positional);
+  add_key_option(positional);
+  positional->add_options()
+    ("value", "config value");
+}
+
+int execute_global_set(const po::variables_map &vm,
+                     const std::vector<std::string> &ceph_global_init_args) {
+  std::string config_entity;
+  int r = get_config_entity(vm, &config_entity);
+  if (r < 0) {
+    return r;
+  }
+
+  std::string key;
+  r = get_key(vm, &key);
+  if (r < 0) {
+    return r;
+  }
+
+  librados::Rados rados;
+  r = utils::init_rados(&rados);
+  if (r < 0) {
+    return r;
+  }
+
+  std::string value = utils::get_positional_argument(vm, 2);
+  std::string cmd =
+    "{"
+      "\"prefix\": \"config set\", "
+      "\"who\": \"" + stringify(json_stream_escaper(config_entity)) + "\", "
+      "\"name\": \"" + key + "\", "
+      "\"value\": \"" + stringify(json_stream_escaper(value)) + "\""
+    "}";
+  bufferlist in_bl;
+  std::string ss;
+  r = rados.mon_command(cmd, in_bl, nullptr, &ss);
+  if (r < 0) {
+    std::cerr << "rbd: error setting " << key << ": " << ss << std::endl;
+    return r;
+  }
+
+  return 0;
+}
+
+void get_global_remove_arguments(po::options_description *positional,
+                                 po::options_description *options) {
+  add_config_entity_option(positional);
+  add_key_option(positional);
+}
+
+int execute_global_remove(
+    const po::variables_map &vm,
+    const std::vector<std::string> &ceph_global_init_args) {
+  std::string config_entity;
+  int r = get_config_entity(vm, &config_entity);
+  if (r < 0) {
+    return r;
+  }
+
+  std::string key;
+  r = get_key(vm, &key);
+  if (r < 0) {
+    return r;
+  }
+
+  librados::Rados rados;
+  r = utils::init_rados(&rados);
+  if (r < 0) {
+    return r;
+  }
+
+  std::string cmd =
+    "{"
+      "\"prefix\": \"config rm\", "
+      "\"who\": \"" + stringify(json_stream_escaper(config_entity)) + "\", "
+      "\"name\": \"" + key + "\""
+    "}";
+  bufferlist in_bl;
+  std::string ss;
+  r = rados.mon_command(cmd, in_bl, nullptr, &ss);
+  if (r < 0) {
+    std::cerr << "rbd: error removing " << key << ": " << ss << std::endl;
+    return r;
+  }
+
+  return 0;
+}
+
+void get_global_list_arguments(po::options_description *positional,
+                             po::options_description *options) {
+  add_config_entity_option(positional);
+  at::add_format_options(options);
+}
+
+int execute_global_list(const po::variables_map &vm,
+                        const std::vector<std::string> &ceph_global_init_args) {
+  std::string config_entity;
+  int r = get_config_entity(vm, &config_entity);
+  if (r < 0) {
+    return r;
+  }
+
+  at::Format::Formatter f;
+  r = utils::get_formatter(vm, &f);
+  if (r < 0) {
+    return r;
+  }
+
+  librados::Rados rados;
+  r = utils::init_rados(&rados);
+  if (r < 0) {
+    return r;
+  }
+
+  std::map<std::string, std::pair<std::string, std::string>> options;
+  r = config_global_list(rados, config_entity, &options);
+  if (r < 0) {
+    return r;
+  }
+
+  if (options.empty() && !f) {
+    return 0;
+  }
+
+  TextTable tbl;
+
+  if (f) {
+    f->open_array_section("config");
+  } else {
+    tbl.define_column("Name", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("Value", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("Section", TextTable::LEFT, TextTable::LEFT);
+  }
+
+  for (const auto &it : options) {
+    if (f) {
+      f->open_object_section("option");
+      f->dump_string("name", it.first);
+      f->dump_string("value", it.second.first);
+      f->dump_string("section", it.second.second);
+      f->close_section();
+    } else {
+      tbl << it.first << it.second.first << it.second.second
+          << TextTable::endrow;
+    }
+  }
+
+  if (f) {
+    f->close_section();
+    f->flush(std::cout);
+  } else {
+    std::cout << tbl;
+  }
+
+  return 0;
+}
 
 void get_pool_get_arguments(po::options_description *positional,
                             po::options_description *options) {
@@ -263,7 +579,7 @@ int execute_pool_list(const po::variables_map &vm,
     f->close_section();
     f->flush(std::cout);
   } else {
-    std::cout << std::endl << tbl;
+    std::cout << tbl;
   }
 
   return 0;
@@ -503,11 +819,28 @@ int execute_image_list(const po::variables_map &vm,
     f->close_section();
     f->flush(std::cout);
   } else {
-    std::cout << std::endl << tbl;
+    std::cout << tbl;
   }
 
   return 0;
 }
+
+Shell::Action action_global_get(
+  {"config", "global", "get"}, {},
+   "Get a global-level configuration override.", "",
+   &get_global_get_arguments, &execute_global_get);
+Shell::Action action_global_set(
+  {"config", "global", "set"}, {},
+   "Set a global-level configuration override.", "",
+   &get_global_set_arguments, &execute_global_set);
+Shell::Action action_global_remove(
+  {"config", "global", "remove"}, {"config", "global", "rm"},
+   "Remove a global-level configuration override.", "",
+   &get_global_remove_arguments, &execute_global_remove);
+Shell::Action action_global_list(
+  {"config", "global", "list"}, {"config", "global", "ls"},
+   "List global-level configuration overrides.", "",
+   &get_global_list_arguments, &execute_global_list);
 
 Shell::Action action_pool_get(
   {"config", "pool", "get"}, {}, "Get a pool-level configuration override.", "",
