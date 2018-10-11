@@ -570,6 +570,9 @@ public:
 
 class RGWHandler_REST_Obj_S3 : public RGWHandler_REST_S3 {
 protected:
+  bool is_object_op() {
+    return !s->object.empty();
+  }
   bool is_acl_op() {
     return s->info.args.exists("acl");
   }

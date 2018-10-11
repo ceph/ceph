@@ -3172,6 +3172,10 @@ RGWOp *RGWHandler_REST_Obj_S3::get_obj_op(bool get_data)
 
 RGWOp *RGWHandler_REST_Obj_S3::op_get()
 {
+  if (!is_object_op()) {
+    return NULL;
+  }
+
   if (is_acl_op()) {
     return new RGWGetACLs_ObjStore_S3;
   } else if (s->info.args.exists("uploadId")) {
@@ -3186,6 +3190,10 @@ RGWOp *RGWHandler_REST_Obj_S3::op_get()
 
 RGWOp *RGWHandler_REST_Obj_S3::op_head()
 {
+  if (!is_object_op()) {
+    return NULL;
+  }
+
   if (is_acl_op()) {
     return new RGWGetACLs_ObjStore_S3;
   } else if (s->info.args.exists("uploadId")) {
@@ -3196,6 +3204,10 @@ RGWOp *RGWHandler_REST_Obj_S3::op_head()
 
 RGWOp *RGWHandler_REST_Obj_S3::op_put()
 {
+  if (!is_object_op()) {
+    return NULL;
+  }
+
   if (is_acl_op()) {
     return new RGWPutACLs_ObjStore_S3;
   } else if (is_tagging_op()) {
@@ -3210,6 +3222,10 @@ RGWOp *RGWHandler_REST_Obj_S3::op_put()
 
 RGWOp *RGWHandler_REST_Obj_S3::op_delete()
 {
+  if (!is_object_op()) {
+    return NULL;
+  }
+
   if (is_tagging_op()) {
     return new RGWDeleteObjTags_ObjStore_S3;
   }
@@ -3223,6 +3239,10 @@ RGWOp *RGWHandler_REST_Obj_S3::op_delete()
 
 RGWOp *RGWHandler_REST_Obj_S3::op_post()
 {
+  if (!is_object_op()) {
+    return NULL;
+  }
+
   if (s->info.args.exists("uploadId"))
     return new RGWCompleteMultipart_ObjStore_S3;
 
@@ -3234,6 +3254,10 @@ RGWOp *RGWHandler_REST_Obj_S3::op_post()
 
 RGWOp *RGWHandler_REST_Obj_S3::op_options()
 {
+  if (!is_object_op()) {
+    return NULL;
+  }
+
   return new RGWOptionsCORS_ObjStore_S3;
 }
 
@@ -3528,7 +3552,7 @@ RGWHandler_REST* RGWRESTMgr_S3::get_handler(struct req_state* const s,
   } else {
     if (s->init_state.url_bucket.empty()) {
       handler = new RGWHandler_REST_Service_S3(auth_registry, enable_sts);
-    } else if (s->object.empty()) {
+    } else if (s->object.empty() && s->info.args.get("uploadId").empty()) {
       handler = new RGWHandler_REST_Bucket_S3(auth_registry);
     } else {
       handler = new RGWHandler_REST_Obj_S3(auth_registry);
