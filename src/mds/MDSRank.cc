@@ -279,6 +279,10 @@ private:
     }
 
     void start_timer() {
+      if (!timeout) {
+        return;
+      }
+
       timer_task = new FunctionContext([this](int _) {
           timer_task = nullptr;
           complete(-ETIMEDOUT);
@@ -2397,7 +2401,7 @@ bool MDSRankDispatcher::handle_asok_command(
   } else if (command == "cache drop") {
     int64_t timeout;
     if (!cmd_getval(g_ceph_context, cmdmap, "timeout", timeout)) {
-      return false;
+      timeout = 0;
     }
 
     C_SaferCond cond;
@@ -3235,7 +3239,7 @@ bool MDSRankDispatcher::handle_command(
   } else if (prefix == "cache drop") {
     int64_t timeout;
     if (!cmd_getval(g_ceph_context, cmdmap, "timeout", timeout)) {
-      return false;
+      timeout = 0;
     }
 
     JSONFormatter *f = new JSONFormatter(true);
