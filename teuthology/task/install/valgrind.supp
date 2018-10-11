@@ -523,3 +523,11 @@
   fun:_dlerror_run
   fun:dlopen@@GLIBC_2.2.5
 }
+
+{
+  ethdev_init_log thing
+  Memcheck:Leak
+  match-leak-kinds: reachable
+  fun:...
+  fun:ethdev_init_log
+  fun:...
