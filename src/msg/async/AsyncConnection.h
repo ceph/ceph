@@ -52,13 +52,13 @@ static const int ASYNC_IOV_MAX = (IOV_MAX >= 1024 ? IOV_MAX / 4 : IOV_MAX);
  */
 class AsyncConnection : public Connection {
 
-  void read(unsigned len, char *buffer,
-            std::function<void(char *, ssize_t)> callback);
+  ssize_t read(unsigned len, char *buffer,
+               std::function<void(char *, ssize_t)> callback);
   ssize_t read_until(unsigned needed, char *p);
   ssize_t read_bulk(char *buf, unsigned len);
 
-  void write(bufferlist &bl, std::function<void(ssize_t)> callback,
-             bool more=false);
+  ssize_t write(bufferlist &bl, std::function<void(ssize_t)> callback,
+                bool more=false);
   ssize_t _try_send(bool more=false);
 
   void _connect();
