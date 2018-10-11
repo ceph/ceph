@@ -4834,7 +4834,7 @@ void OSD::heartbeat_check()
 
     if (p->second.first_tx == utime_t()) {
       dout(25) << "heartbeat_check we haven't sent ping to osd." << p->first
-               << "yet, skipping" << dendl;
+               << " yet, skipping" << dendl;
       continue;
     }
 
