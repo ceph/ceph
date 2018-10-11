@@ -48,7 +48,7 @@ int RGWRestUserPolicy::verify_permission()
   uint64_t op = get_op();
   string user_name = s->info.args.get("UserName");
   rgw_user user_id(user_name);
-  if (! verify_user_permission(s, rgw::IAM::ARN(rgw::IAM::ARN(user_id.id,
+  if (! verify_user_permission(this, s, rgw::IAM::ARN(rgw::IAM::ARN(user_id.id,
                                                 "user",
                                                  user_id.tenant)), op)) {
     return -EACCES;

@@ -92,7 +92,7 @@ public:
   }
 
   virtual int read_permissions(RGWOp* op) = 0;
-  virtual int authorize() = 0;
+  virtual int authorize(const DoutPrefixProvider* dpp) = 0;
   virtual int postauth_init() = 0;
   virtual int error_handler(int err_no, std::string* error_content);
   virtual void dump(const string& code, const string& message) const {}
@@ -162,7 +162,7 @@ public:
    * of special cases. */
   virtual int verify_requester(const rgw::auth::StrategyRegistry& auth_registry) {
     /* TODO(rzarzynski): rename RGWHandler::authorize to generic_authenticate. */
-    return dialect_handler->authorize();
+    return dialect_handler->authorize(this);
   }
   virtual int verify_permission() = 0;
   virtual int verify_op_mask();
@@ -404,6 +404,7 @@ public:
 
   class Deleter {
   protected:
+    const DoutPrefixProvider * dpp;
     unsigned int num_deleted;
     unsigned int num_unfound;
     std::list<fail_desc_t> failures;
@@ -412,8 +413,9 @@ public:
     req_state * const s;
 
   public:
-    Deleter(RGWRados * const str, req_state * const s)
-      : num_deleted(0),
+    Deleter(const DoutPrefixProvider* dpp, RGWRados * const str, req_state * const s)
+      : dpp(dpp),
+        num_deleted(0),
         num_unfound(0),
         store(str),
         s(s) {

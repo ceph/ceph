@@ -2294,20 +2294,25 @@ rgw::IAM::Effect eval_user_policies(const vector<rgw::IAM::Policy>& user_policie
                           boost::optional<const rgw::auth::Identity&> id,
                           const uint64_t op,
                           const rgw::IAM::ARN& arn);
-bool verify_user_permission(struct req_state * const s,
+bool verify_user_permission(const DoutPrefixProvider* dpp,
+                            struct req_state * const s,
                             RGWAccessControlPolicy * const user_acl,
                             const vector<rgw::IAM::Policy>& user_policies,
                             const rgw::IAM::ARN& res,
                             const uint64_t op);
-bool verify_user_permission_no_policy(struct req_state * const s,
+bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
+                                      struct req_state * const s,
                                       RGWAccessControlPolicy * const user_acl,
                                       const int perm);
-bool verify_user_permission(struct req_state * const s,
+bool verify_user_permission(const DoutPrefixProvider* dpp,
+                            struct req_state * const s,
                             const rgw::IAM::ARN& res,
                             const uint64_t op);
-bool verify_user_permission_no_policy(struct req_state * const s,
+bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
+                                      struct req_state * const s,
                                       int perm);
 bool verify_bucket_permission(
+  const DoutPrefixProvider* dpp,
   struct req_state * const s,
   const rgw_bucket& bucket,
   RGWAccessControlPolicy * const user_acl,
@@ -2315,17 +2320,20 @@ bool verify_bucket_permission(
   const boost::optional<rgw::IAM::Policy>& bucket_policy,
   const vector<rgw::IAM::Policy>& user_policies,
   const uint64_t op);
-bool verify_bucket_permission(struct req_state * const s, const uint64_t op);
+bool verify_bucket_permission(const DoutPrefixProvider* dpp, struct req_state * const s, const uint64_t op);
 bool verify_bucket_permission_no_policy(
+  const DoutPrefixProvider* dpp,
   struct req_state * const s,
   RGWAccessControlPolicy * const user_acl,
   RGWAccessControlPolicy * const bucket_acl,
   const int perm);
-bool verify_bucket_permission_no_policy(struct req_state * const s,
+bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp,
+                                        struct req_state * const s,
 					const int perm);
 int verify_bucket_owner_or_policy(struct req_state* const s,
 				  const uint64_t op);
 extern bool verify_object_permission(
+  const DoutPrefixProvider* dpp,
   struct req_state * const s,
   const rgw_obj& obj,
   RGWAccessControlPolicy * const user_acl,
@@ -2334,14 +2342,15 @@ extern bool verify_object_permission(
   const boost::optional<rgw::IAM::Policy>& bucket_policy,
   const vector<rgw::IAM::Policy>& user_policies,
   const uint64_t op);
-extern bool verify_object_permission(struct req_state *s, uint64_t op);
+extern bool verify_object_permission(const DoutPrefixProvider* dpp, struct req_state *s, uint64_t op);
 extern bool verify_object_permission_no_policy(
+  const DoutPrefixProvider* dpp,
   struct req_state * const s,
   RGWAccessControlPolicy * const user_acl,
   RGWAccessControlPolicy * const bucket_acl,
   RGWAccessControlPolicy * const object_acl,
   int perm);
-extern bool verify_object_permission_no_policy(struct req_state *s,
+extern bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp, struct req_state *s,
 					       int perm);
 /** Convert an input URL into a sane object name
  * by converting %-escaped strings into characters, etc*/

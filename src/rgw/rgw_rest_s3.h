@@ -468,7 +468,8 @@ public:
 
 class RGW_Auth_S3 {
 public:
-  static int authorize(RGWRados *store,
+  static int authorize(const DoutPrefixProvider *dpp,
+                       RGWRados *store,
                        const rgw::auth::StrategyRegistry& auth_registry,
                        struct req_state *s);
 };
@@ -491,8 +492,8 @@ public:
   int init(RGWRados *store,
            struct req_state *s,
            rgw::io::BasicClient *cio) override;
-  int authorize() override {
-    return RGW_Auth_S3::authorize(store, auth_registry, s);
+  int authorize(const DoutPrefixProvider *dpp) override {
+    return RGW_Auth_S3::authorize(dpp, store, auth_registry, s);
   }
   int postauth_init() override { return 0; }
 };
@@ -513,8 +514,8 @@ public:
   int init(RGWRados *store,
            struct req_state *s,
            rgw::io::BasicClient *cio) override;
-  int authorize() override {
-    return RGW_Auth_S3::authorize(store, auth_registry, s);
+  int authorize(const DoutPrefixProvider *dpp) override {
+    return RGW_Auth_S3::authorize(dpp, store, auth_registry, s);
   }
   int postauth_init() override;
 };
@@ -753,7 +754,8 @@ protected:
   /* TODO(rzarzynski): clean up. We've too many input parameter hee. Also
    * the signature get_auth_data() of VersionAbstractor is too complicated.
    * Replace these thing with a simple, dedicated structure. */
-  virtual result_t authenticate(const boost::string_view& access_key_id,
+  virtual result_t authenticate(const DoutPrefixProvider* dpp,
+                                const boost::string_view& access_key_id,
                                 const boost::string_view& signature,
                                 const boost::string_view& session_token,
                                 const string_to_sign_t& string_to_sign,
@@ -762,7 +764,7 @@ protected:
                                 const req_state* s) const = 0;
 
 public:
-  result_t authenticate(const req_state* const s) const final;
+  result_t authenticate(const DoutPrefixProvider* dpp, const req_state* const s) const final;
 };
 
 
@@ -829,7 +831,8 @@ protected:
   acl_strategy_t get_acl_strategy() const;
   auth_info_t get_creds_info(const rgw::RGWToken& token) const noexcept;
 
-  result_t authenticate(const boost::string_view& access_key_id,
+  result_t authenticate(const DoutPrefixProvider* dpp,
+                        const boost::string_view& access_key_id,
                         const boost::string_view& signature,
                         const boost::string_view& session_token,
                         const string_to_sign_t& string_to_sign,
@@ -860,7 +863,8 @@ class LocalEngine : public AWSEngine {
   RGWRados* const store;
   const rgw::auth::LocalApplier::Factory* const apl_factory;
 
-  result_t authenticate(const boost::string_view& access_key_id,
+  result_t authenticate(const DoutPrefixProvider* dpp,
+                        const boost::string_view& access_key_id,
                         const boost::string_view& signature,
                         const boost::string_view& session_token,
                         const string_to_sign_t& string_to_sign,
@@ -898,7 +902,8 @@ class STSEngine : public AWSEngine {
   int get_session_token(const boost::string_view& session_token,
                         STS::SessionToken& token) const;
 
-  result_t authenticate(const boost::string_view& access_key_id,
+  result_t authenticate(const DoutPrefixProvider* dpp, 
+                        const boost::string_view& access_key_id,
                         const boost::string_view& signature,
                         const boost::string_view& session_token,
                         const string_to_sign_t& string_to_sign,

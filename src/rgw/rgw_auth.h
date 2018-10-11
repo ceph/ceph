@@ -38,7 +38,7 @@ public:
    * NOTE: an implementation is responsible for giving the real semantic to
    * the items in @aclspec. That is, their meaning may depend on particular
    * applier that is being used. */
-  virtual uint32_t get_perms_from_aclspec(const aclspec_t& aclspec) const = 0;
+  virtual uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const = 0;
 
   /* Verify whether a given identity *can be treated as* an admin of rgw_user
   * (account in Swift's terminology) specified in @uid. On error throws
@@ -106,11 +106,11 @@ public:
    *
    * XXX: be aware that the "account" term refers to rgw_user. The naming
    * is legacy. */
-  virtual void load_acct_info(RGWUserInfo& user_info) const = 0; /* out */
+  virtual void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const = 0; /* out */
 
   /* Apply any changes to request state. This method will be most useful for
    * TempURL of Swift API. */
-  virtual void modify_request_state(req_state* s) const {}      /* in/out */
+  virtual void modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const {}      /* in/out */
 };
 
 
@@ -146,7 +146,7 @@ public:
 
   /* Apply any changes to request state. The initial use case was injecting
    * the AWSv4 filter over rgw::io::RestfulClient in req_state. */
-  virtual void modify_request_state(req_state* s) = 0;     /* in/out */
+  virtual void modify_request_state(const DoutPrefixProvider* dpp, req_state* s) = 0;     /* in/out */
 };
 
 
@@ -219,7 +219,7 @@ public:
       /* Engine doesn't grant the access but also doesn't reject it. */
       DENIED,
 
-      /* Engine successfully authenticated requester. */
+      /* Engine successfully authenicated requester. */
       GRANTED,
 
       /* Engine strictly indicates that a request should be rejected
@@ -280,7 +280,7 @@ public:
    *    interface.
    *
    * On error throws rgw::auth::Exception containing the reason. */
-  virtual result_t authenticate(const req_state* s) const = 0;
+  virtual result_t authenticate(const DoutPrefixProvider* dpp, const req_state* s) const = 0;
 };
 
 
@@ -323,13 +323,13 @@ public:
     FALLBACK,
   };
 
-  Engine::result_t authenticate(const req_state* s) const override final;
+  Engine::result_t authenticate(const DoutPrefixProvider* dpp, const req_state* s) const override final;
 
   bool is_empty() const {
     return auth_stack.empty();
   }
 
-  static int apply(const Strategy& auth_strategy, req_state* s) noexcept;
+  static int apply(const DoutPrefixProvider* dpp, const Strategy& auth_strategy, req_state* s) noexcept;
 
 private:
   /* Using the reference wrapper here to explicitly point out we are not
@@ -404,7 +404,8 @@ protected:
   const AuthInfo info;
   const bool implicit_tenants;
 
-  virtual void create_account(const rgw_user& acct_user,
+  virtual void create_account(const DoutPrefixProvider* dpp,
+                              const rgw_user& acct_user,
                               RGWUserInfo& user_info) const;          /* out */
 
 public:
@@ -420,14 +421,14 @@ public:
       implicit_tenants(implicit_tenants) {
   }
 
-  uint32_t get_perms_from_aclspec(const aclspec_t& aclspec) const override;
+  uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override;
   bool is_admin_of(const rgw_user& uid) const override;
   bool is_owner_of(const rgw_user& uid) const override;
   bool is_identity(const idset_t& ids) const override;
 
   uint32_t get_perm_mask() const override { return info.perm_mask; }
   void to_str(std::ostream& out) const override;
-  void load_acct_info(RGWUserInfo& user_info) const override; /* out */
+  void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override; /* out */
   uint32_t get_identity_type() const override { return info.acct_type; }
   string get_acct_name() const override { return info.acct_name; }
 
@@ -481,7 +482,7 @@ public:
   }
 
 
-  uint32_t get_perms_from_aclspec(const aclspec_t& aclspec) const override;
+  uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override;
   bool is_admin_of(const rgw_user& uid) const override;
   bool is_owner_of(const rgw_user& uid) const override;
   bool is_identity(const idset_t& ids) const override;
@@ -493,10 +494,10 @@ public:
     }
   }
   void to_str(std::ostream& out) const override;
-  void load_acct_info(RGWUserInfo& user_info) const override; /* out */
+  void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override; /* out */
   uint32_t get_identity_type() const override { return TYPE_RGW; }
   string get_acct_name() const override { return {}; }
-  void modify_request_state(req_state* s) const override;
+  void modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const override;
 
   struct Factory {
     virtual ~Factory() {}
@@ -526,7 +527,7 @@ public:
     return "rgw::auth::AnonymousEngine";
   }
 
-  Engine::result_t authenticate(const req_state* s) const override final;
+  Engine::result_t authenticate(const DoutPrefixProvider* dpp, const req_state* s) const override final;
 
 protected:
   virtual bool is_applicable(const req_state*) const noexcept {
