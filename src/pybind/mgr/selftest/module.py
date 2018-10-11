@@ -316,7 +316,7 @@ class Module(MgrModule):
         disabled_modules = set(all_modules) - set(mgr_map['modules'])
         disabled_module = list(disabled_modules)[0]
         try:
-            self.remote(disabled_module, "handle_command", {"prefix": "influx self-test"})
+            self.remote(disabled_module, "handle_command", "", {"prefix": "influx self-test"})
         except ImportError:
             pass
         else:
@@ -324,7 +324,7 @@ class Module(MgrModule):
 
         # Test calling module that doesn't exist
         try:
-            self.remote("idontexist", "handle_command", {"prefix": "influx self-test"})
+            self.remote("idontexist", "handle_command", "", {"prefix": "influx self-test"})
         except ImportError:
             pass
         else:
