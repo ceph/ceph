@@ -1,4 +1,4 @@
-import { Component, Input } from '@angular/core';
+import { Component, EventEmitter, Input, Output } from '@angular/core';
 
 import { BsModalRef } from 'ngx-bootstrap/modal/bs-modal-ref.service';
 
@@ -11,5 +11,18 @@ export class ModalComponent {
   @Input()
   modalRef: BsModalRef;
 
+  /**
+   * Should be a function that is triggered when the modal is hidden.
+   */
+  @Output()
+  hide = new EventEmitter();
+
   constructor() {}
+
+  close() {
+    if (this.modalRef) {
+      this.modalRef.hide();
+    }
+    this.hide.emit();
+  }
 }
