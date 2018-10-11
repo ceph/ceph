@@ -18,7 +18,7 @@
 /* COMPILATION OPTIONS
  *
  * The prop_heap does not seem to be necessary. The only thing it
- * would help with is quickly finding the mininum proportion/prioity
+ * would help with is quickly finding the minimum proportion/prioity
  * when an idle client became active. To have the code maintain the
  * proportional heap, define USE_PROP_HEAP (i.e., compiler argument
  * -DUSE_PROP_HEAP).
