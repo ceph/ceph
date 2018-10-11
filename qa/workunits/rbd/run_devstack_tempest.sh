@@ -1,7 +1,7 @@
 #!/bin/bash -ex
 
-STACK_BRANCH=stable/pike
-TEMPEST_BRANCH=17.2.0
+STACK_BRANCH=stable/rocky
+TEMPEST_BRANCH=19.0.0
 
 STACK_USER=${STACK_USER:-stack}
 STACK_GROUP=${STACK_GROUP:-stack}
