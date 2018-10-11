@@ -658,7 +658,13 @@ struct rgw_placement_rule {
 
   rgw_placement_rule() {}
   rgw_placement_rule(const string& _n, const string& _sc) : name(_n), storage_class(_sc) {}
-
+  rgw_placement_rule(const rgw_placement_rule& _r, const string& _sc) : name(_r.name) {
+    if (!_sc.empty()) {
+      storage_class = _sc;
+    } else {
+      storage_class = _r.storage_class;
+    }
+  }
 
   bool empty() const {
     return name.empty() && storage_class.empty();
@@ -1624,7 +1630,7 @@ struct req_info {
   string effective_uri;
   string request_params;
   string domain;
-  rgw_placement_rule storage_class;
+  string storage_class;
 
   req_info(CephContext *cct, const RGWEnv *env);
   void rebuild_from(req_info& src);
@@ -1981,6 +1987,7 @@ struct req_state : DoutPrefixProvider {
   real_time bucket_mtime;
   std::map<std::string, ceph::bufferlist> bucket_attrs;
   bool bucket_exists{false};
+  rgw_placement_rule dest_placement;
 
   bool has_bad_meta{false};
 

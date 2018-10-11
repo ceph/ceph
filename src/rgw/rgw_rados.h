@@ -1942,7 +1942,7 @@ public:
                rgw_obj& src_obj,
                RGWBucketInfo& dest_bucket_info,
                RGWBucketInfo& src_bucket_info,
-               rgw_placement_rule *ptail_rule,
+               const rgw_placement_rule& dest_placement,
                ceph::real_time *src_mtime,
                ceph::real_time *mtime,
                const ceph::real_time *mod_ptr,
@@ -1964,7 +1964,7 @@ public:
 
   int copy_obj_data(RGWObjectCtx& obj_ctx,
                RGWBucketInfo& dest_bucket_info,
-               const rgw_placement_rule *ptail_rule,
+               const rgw_placement_rule& dest_placement,
 	       RGWRados::Object::Read& read_op, off_t end,
                const rgw_obj& dest_obj,
 	       ceph::real_time *mtime,

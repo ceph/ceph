@@ -117,7 +117,6 @@ static const struct generic_attr generic_attrs[] = {
   { "HTTP_CONTENT_DISPOSITION", RGW_ATTR_CONTENT_DISP },
   { "HTTP_CONTENT_ENCODING",    RGW_ATTR_CONTENT_ENC },
   { "HTTP_X_ROBOTS_TAG",        RGW_ATTR_X_ROBOTS_TAG },
-  { "HTTP_X_AMZ_STORAGE_CLASS", RGW_ATTR_STORAGE_CLASS },
 };
 
 map<string, string> rgw_to_http_attrs;
