@@ -3385,7 +3385,7 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
                obj,
                dest_bucket_info,
                bucket_info,
-               nullptr, /* const string *tail_rule */
+               bucket_info.placement_rule,
                NULL, /* time_t *src_mtime */
                NULL, /* time_t *mtime */
                NULL, /* const time_t *mod_ptr */
@@ -3477,7 +3477,7 @@ int RGWRados::swift_versioning_restore(RGWSysObjectCtx& sysobj_ctx,
                        archive_obj,   /* src obj */
                        bucket_info,   /* dest bucket info */
                        archive_binfo, /* src bucket info */
-                       nullptr,       /* const string *ptail_rule */
+                       bucket_info.placement_rule,  /* placement_rule */
                        nullptr,       /* time_t *src_mtime */
                        nullptr,       /* time_t *mtime */
                        nullptr,       /* const time_t *mod_ptr */
@@ -3638,6 +3638,12 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
     bufferlist bl;
     encode(store->svc.zone->get_zone_short_id(), bl);
     op.setxattr(RGW_ATTR_SOURCE_ZONE, bl);
+  }
+
+  if (!storage_class.empty()) {
+    bufferlist bl;
+    bl.append(storage_class);
+    op.setxattr(RGW_ATTR_STORAGE_CLASS, bl);
   }
 
   if (!op.size())
@@ -3979,7 +3985,8 @@ int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, const rgw_obj& obj)
   attrset.erase(RGW_ATTR_ID_TAG);
   attrset.erase(RGW_ATTR_TAIL_TAG);
 
-  return copy_obj_data(rctx, dest_bucket_info, nullptr, read_op, obj_size - 1, obj, NULL, mtime, attrset,
+  return copy_obj_data(rctx, dest_bucket_info, dest_bucket_info.placement_rule,
+                       read_op, obj_size - 1, obj, NULL, mtime, attrset,
                        0, real_time(), NULL);
 }
 
@@ -4486,7 +4493,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
                rgw_obj& src_obj,
                RGWBucketInfo& dest_bucket_info,
                RGWBucketInfo& src_bucket_info,
-               rgw_placement_rule *ptail_rule,
+               const rgw_placement_rule& dest_placement,
                real_time *src_mtime,
                real_time *mtime,
                const real_time *mod_ptr,
@@ -4611,31 +4618,23 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
     src_rule = &src_bucket_info.placement_rule;
   }
 
-  if (!ptail_rule) {
-    ptail_rule = &dest_bucket_info.placement_rule;
-  } else {
-    ptail_rule->inherit_from(dest_bucket_info.placement_rule);
-  }
-
-  auto& dest_storage_class = ptail_rule->get_storage_class();
-  bufferlist scbl;
-  scbl.append(dest_storage_class);
-  attrs[RGW_ATTR_STORAGE_CLASS] = scbl;
-
   if (!get_obj_data_pool(*src_rule, src_obj, &src_pool)) {
     ldout(cct, 0) << "ERROR: failed to locate data pool for " << src_obj << dendl;
     return -EIO;
   }
 
-  if (!get_obj_data_pool(*ptail_rule, dest_obj, &dest_pool)) {
+  if (!get_obj_data_pool(dest_placement, dest_obj, &dest_pool)) {
     ldout(cct, 0) << "ERROR: failed to locate data pool for " << dest_obj << dendl;
     return -EIO;
   }
 
   ldout(cct, 20) << __func__ << "(): src_rule=" << src_rule->to_str() << " src_pool=" << src_pool
-                             << " dest_rule=" << ptail_rule->to_str() << " dest_pool=" << dest_pool << dendl;
+                             << " dest_rule=" << dest_placement.to_str() << " dest_pool=" << dest_pool << dendl;
 
-  bool copy_data = !astate->has_manifest || (src_pool != dest_pool);
+  bool copy_data = !astate->has_manifest ||
+    (*src_rule != dest_placement) ||
+    (src_pool != dest_pool);
+
   bool copy_first = false;
   if (astate->has_manifest) {
     if (!astate->manifest.has_tail()) {
@@ -4662,7 +4661,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 
   if (copy_data) { /* refcounting tail wouldn't work here, just copy the data */
     attrs.erase(RGW_ATTR_TAIL_TAG);
-    return copy_obj_data(obj_ctx, dest_bucket_info, ptail_rule, read_op, obj_size - 1, dest_obj,
+    return copy_obj_data(obj_ctx, dest_bucket_info, dest_placement, read_op, obj_size - 1, dest_obj,
                          mtime, real_time(), attrs, olh_epoch, delete_at, petag);
   }
 
@@ -4779,7 +4778,7 @@ done_ret:
 
 int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
                RGWBucketInfo& dest_bucket_info,
-               const rgw_placement_rule *ptail_rule,
+               const rgw_placement_rule& dest_placement,
 	       RGWRados::Object::Read& read_op, off_t end,
                const rgw_obj& dest_obj,
 	       real_time *mtime,
@@ -4794,7 +4793,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
 
   rgw::AioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
   using namespace rgw::putobj;
-  AtomicObjectProcessor processor(&aio, this, dest_bucket_info, ptail_rule,
+  AtomicObjectProcessor processor(&aio, this, dest_bucket_info, &dest_placement,
                                   dest_bucket_info.owner, obj_ctx,
                                   dest_obj, olh_epoch, tag);
   int ret = processor.prepare();

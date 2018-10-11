@@ -545,6 +545,13 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
         return -ERR_PERMANENT_REDIRECT;
       }
     }
+
+    /* init dest placement -- only if bucket exists, otherwise request is either not relevant, or
+     * it's a create_bucket request, in which case the op will deal with the placement later */
+    if (s->bucket_exists) {
+      s->dest_placement.storage_class = s->info.storage_class;
+      s->dest_placement.inherit_from(s->bucket_info.placement_rule);
+    }
   }
 
   /* handle user ACL only for those APIs which support it */
@@ -3506,7 +3513,7 @@ void RGWPutObj::execute()
 
   if (multipart) {
     processor.emplace<MultipartObjectProcessor>(
-        &aio, store, s->bucket_info, &s->info.storage_class,
+        &aio, store, s->bucket_info, &s->dest_placement,
         s->owner.get_id(), obj_ctx, obj,
         multipart_upload_id, multipart_part_num, multipart_part_str);
   } else {
@@ -3519,7 +3526,7 @@ void RGWPutObj::execute()
       }
     }
     processor.emplace<AtomicObjectProcessor>(
-        &aio, store, s->bucket_info, &s->info.storage_class,
+        &aio, store, s->bucket_info, &s->dest_placement,
         s->bucket_owner.get_id(), obj_ctx, obj, olh_epoch, s->req_id);
   }
 
@@ -3842,11 +3849,10 @@ void RGWPostObj::execute()
     }
 
     rgw::AioThrottle aio(s->cct->_conf->rgw_put_obj_min_window_size);
-    rgw_placement_rule& tail_placement = s->info.storage_class;
 
     using namespace rgw::putobj;
     AtomicObjectProcessor processor(&aio, store, s->bucket_info,
-                                    &tail_placement,
+                                    &s->dest_placement,
                                     s->bucket_owner.get_id(),
                                     *static_cast<RGWObjectCtx*>(s->obj_ctx),
                                     obj, 0, s->req_id);
@@ -4704,8 +4710,6 @@ void RGWCopyObj::execute()
     return;
   }
 
-  rgw_placement_rule& dest_placement = s->info.storage_class;
-
   op_ret = store->copy_obj(obj_ctx,
 			   s->user->user_id,
 			   &s->info,
@@ -4714,7 +4718,7 @@ void RGWCopyObj::execute()
 			   src_obj,
 			   dest_bucket_info,
 			   src_bucket_info,
-                           &dest_placement,
+                           s->dest_placement,
 			   &src_mtime,
 			   &mtime,
 			   mod_ptr,
@@ -6399,6 +6403,7 @@ int RGWBulkUploadOp::handle_dir(const boost::string_ref path)
     pmaster_num_shards = nullptr;
   }
 
+  rgw_placement_rule placement_rule(binfo.placement_rule, s->info.storage_class);
 
   if (bucket_exists) {
     rgw_placement_rule selected_placement_rule;
@@ -6407,7 +6412,7 @@ int RGWBulkUploadOp::handle_dir(const boost::string_ref path)
     bucket.name = s->bucket_name;
     op_ret = store->svc.zone->select_bucket_placement(*(s->user),
                                             store->svc.zone->get_zonegroup().get_id(),
-                                            s->info.storage_class,
+                                            placement_rule,
                                             &selected_placement_rule,
                                             nullptr);
     if (selected_placement_rule != binfo.placement_rule) {
@@ -6437,7 +6442,7 @@ int RGWBulkUploadOp::handle_dir(const boost::string_ref path)
   op_ret = store->create_bucket(*(s->user),
                                 bucket,
                                 store->svc.zone->get_zonegroup().get_id(),
-                                s->info.storage_class, binfo.swift_ver_location,
+                                placement_rule, binfo.swift_ver_location,
                                 pquota_info, attrs,
                                 out_info, pobjv, &ep_objv, creation_time,
                                 pmaster_bucket, pmaster_num_shards, true);
@@ -6574,11 +6579,10 @@ int RGWBulkUploadOp::handle_file(const boost::string_ref path,
   }
 
   rgw::AioThrottle aio(store->ctx()->_conf->rgw_put_obj_min_window_size);
-  rgw_placement_rule& tail_placement = s->info.storage_class;
 
   using namespace rgw::putobj;
 
-  AtomicObjectProcessor processor(&aio, store, binfo, &tail_placement, bowner.get_id(),
+  AtomicObjectProcessor processor(&aio, store, binfo, &s->dest_placement, bowner.get_id(),
                                   obj_ctx, obj, 0, s->req_id);
 
   op_ret = processor.prepare();

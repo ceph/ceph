@@ -1243,8 +1243,10 @@ int RGWCreateBucket_ObjStore_S3::get_params()
 
   size_t pos = location_constraint.find(':');
   if (pos != string::npos) {
-    placement_rule.init(location_constraint.substr(pos + 1), s->info.storage_class.storage_class);
+    placement_rule.init(location_constraint.substr(pos + 1), s->info.storage_class);
     location_constraint = location_constraint.substr(0, pos);
+  } else {
+    placement_rule.storage_class = s->info.storage_class;
   }
 
   return 0;
@@ -2196,7 +2198,7 @@ int RGWCopyObj_ObjStore_S3::get_params()
       (dest_bucket_name.compare(src_bucket_name) == 0) &&
       (dest_object.compare(src_object.name) == 0) &&
       src_object.instance.empty() &&
-      s->info.storage_class.storage_class.empty() &&
+      s->info.storage_class.empty() &&
       (attrs_mod != RGWRados::ATTRSMOD_REPLACE)) {
     /* can only copy object into itself if replacing attrs */
     s->err.message = "This copy request is illegal because it is trying to copy "
@@ -3440,7 +3442,7 @@ int RGWHandler_REST_S3::init(RGWRados *store, struct req_state *s,
 
   const char *sc = s->info.env->get("HTTP_X_AMZ_STORAGE_CLASS");
   if (sc) {
-    s->info.storage_class.storage_class = sc;
+    s->info.storage_class = sc;
   }
 
   return RGWHandler_REST::init(store, s, cio);
