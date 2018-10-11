@@ -2772,9 +2772,9 @@ RGWOp *RGWHandler_REST_Obj_SWIFT::op_options()
 }
 
 
-int RGWHandler_REST_SWIFT::authorize()
+int RGWHandler_REST_SWIFT::authorize(const DoutPrefixProvider *dpp)
 {
-  return rgw::auth::Strategy::apply(auth_strategy, s);
+  return rgw::auth::Strategy::apply(dpp, auth_strategy, s);
 }
 
 int RGWHandler_REST_SWIFT::postauth_init()

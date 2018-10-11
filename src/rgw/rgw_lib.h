@@ -115,7 +115,7 @@ namespace rgw {
     friend class RGWRESTMgr_Lib;
   public:
 
-    int authorize() override;
+    int authorize(const DoutPrefixProvider *dpp) override;
 
     RGWHandler_Lib() {}
     ~RGWHandler_Lib() override {}
