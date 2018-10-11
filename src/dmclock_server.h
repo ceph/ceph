@@ -863,7 +863,7 @@ namespace crimson {
       // data_mtx must be held by caller
       RequestTag initial_tag(DelayedTagCalc delayed, ClientRec& client,
 			     const ReqParams& params, Time time, Cost cost) {
-	RequestTag tag(0, 0, 0, time, cost);
+	RequestTag tag(0, 0, 0, time, 0, 0, cost);
 
 	// only calculate a tag if the request is going straight to the front
 	if (!client.has_request()) {
