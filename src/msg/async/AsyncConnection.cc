@@ -22,7 +22,7 @@
 #include "AsyncMessenger.h"
 #include "AsyncConnection.h"
 
-#include "Protocol.h"
+#include "ProtocolV1.h"
 
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
