@@ -116,7 +116,7 @@ int RGWGetObj_ObjStore_S3Website::send_response_data(bufferlist& bl, off_t bl_of
     bufferlist &bl = iter->second;
     s->redirect = bl.c_str();
     s->err.http_ret = 301;
-    ldout(s->cct, 20) << __CEPH_ASSERT_FUNCTION << " redirecting per x-amz-website-redirect-location=" << s->redirect << dendl;
+    ldpp_dout(this, 20) << __CEPH_ASSERT_FUNCTION << " redirecting per x-amz-website-redirect-location=" << s->redirect << dendl;
     op_ret = -ERR_WEBSITE_REDIRECT;
     set_req_state_err(s, op_ret);
     dump_errno(s);
@@ -237,14 +237,14 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
     uint64_t pg_ver = 0;
     int r = decode_attr_bl_single_value(attrs, RGW_ATTR_PG_VER, &pg_ver, (uint64_t)0);
     if (r < 0) {
-      ldout(s->cct, 0) << "ERROR: failed to decode pg ver attr, ignoring" << dendl;
+      ldpp_dout(this, 0) << "ERROR: failed to decode pg ver attr, ignoring" << dendl;
     }
     dump_header(s, "Rgwx-Obj-PG-Ver", pg_ver);
 
     uint32_t source_zone_short_id = 0;
     r = decode_attr_bl_single_value(attrs, RGW_ATTR_SOURCE_ZONE, &source_zone_short_id, (uint32_t)0);
     if (r < 0) {
-      ldout(s->cct, 0) << "ERROR: failed to decode pg ver attr, ignoring" << dendl;
+      ldpp_dout(this, 0) << "ERROR: failed to decode pg ver attr, ignoring" << dendl;
     }
     if (source_zone_short_id != 0) {
       dump_header(s, "Rgwx-Source-Zone-Short-Id", source_zone_short_id);
@@ -325,7 +325,7 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
           auto it = iter->second.cbegin();
           obj_tags.decode(it);
         } catch (buffer::error &err) {
-          ldout(s->cct,0) << "Error caught buffer::error couldn't decode TagSet " << dendl;
+          ldpp_dout(this,0) << "Error caught buffer::error couldn't decode TagSet " << dendl;
         }
         dump_header(s, RGW_AMZ_TAG_COUNT, obj_tags.count());
       }
@@ -399,7 +399,7 @@ void RGWGetObjTags_ObjStore_S3::send_response_data(bufferlist& bl)
     try {
       tagset.decode(iter);
     } catch (buffer::error& err) {
-      ldout(s->cct,0) << "ERROR: caught buffer::error, couldn't decode TagSet" << dendl;
+      ldpp_dout(this,0) << "ERROR: caught buffer::error, couldn't decode TagSet" << dendl;
       op_ret= -EIO;
       return;
     }
@@ -447,7 +447,7 @@ int RGWPutObjTags_ObjStore_S3::get_params()
     return r;
 
   obj_tags.encode(tags_bl);
-  ldout(s->cct, 20) << "Read " << obj_tags.count() << "tags" << dendl;
+  ldpp_dout(this, 20) << "Read " << obj_tags.count() << "tags" << dendl;
 
   return 0;
 }
@@ -689,7 +689,7 @@ int RGWListBucket_ObjStore_S3::get_params()
       string err;
       shard_id = strict_strtol(shard_id_str, 10, &err);
       if (!err.empty()) {
-        ldout(s->cct, 5) << "bad shard id specified: " << shard_id_str << dendl;
+        ldpp_dout(this, 5) << "bad shard id specified: " << shard_id_str << dendl;
         return -EINVAL;
       }
     } else {
@@ -976,13 +976,13 @@ int RGWSetBucketVersioning_ObjStore_S3::get_params()
 
   RGWXMLDecoder::XMLParser parser;
   if (!parser.init()) {
-    ldout(s->cct, 0) << "ERROR: failed to initialize parser" << dendl;
+    ldpp_dout(this, 0) << "ERROR: failed to initialize parser" << dendl;
     return -EIO;
   }
 
   char* buf = data.c_str();
   if (!parser.parse(buf, data.length(), 1)) {
-    ldout(s->cct, 10) << "NOTICE: failed to parse data: " << buf << dendl;
+    ldpp_dout(this, 10) << "NOTICE: failed to parse data: " << buf << dendl;
     r = -EINVAL;
     return r;
   }
@@ -990,7 +990,7 @@ int RGWSetBucketVersioning_ObjStore_S3::get_params()
   ver_config_status status_conf;
 
   if (!RGWXMLDecoder::decode_xml("VersioningConfiguration", status_conf, &parser)) {
-    ldout(s->cct, 10) << "NOTICE: bad versioning config input" << dendl;
+    ldpp_dout(this, 10) << "NOTICE: bad versioning config input" << dendl;
     return -EINVAL;
   }
 
@@ -1014,7 +1014,7 @@ int RGWSetBucketVersioning_ObjStore_S3::get_params()
         mfa_status = true;
         break;
       default:
-        ldout(s->cct, 0) << "ERROR: RGWSetBucketVersioning_ObjStore_S3::get_params(): unexpected switch case mfa_status=" << status_conf.mfa_status << dendl;
+        ldpp_dout(this, 0) << "ERROR: RGWSetBucketVersioning_ObjStore_S3::get_params(): unexpected switch case mfa_status=" << status_conf.mfa_status << dendl;
         r = -EIO;
     }
   } else if (status_conf.retcode < 0) {
@@ -1052,20 +1052,20 @@ int RGWSetBucketWebsite_ObjStore_S3::get_params()
 
   RGWXMLDecoder::XMLParser parser;
   if (!parser.init()) {
-    ldout(s->cct, 0) << "ERROR: failed to initialize parser" << dendl;
+    ldpp_dout(this, 0) << "ERROR: failed to initialize parser" << dendl;
     return -EIO;
   }
 
   char* buf = data.c_str();
   if (!parser.parse(buf, data.length(), 1)) {
-    ldout(s->cct, 5) << "failed to parse xml: " << buf << dendl;
+    ldpp_dout(this, 5) << "failed to parse xml: " << buf << dendl;
     return -EINVAL;
   }
 
   try {
     RGWXMLDecoder::decode_xml("WebsiteConfiguration", website_conf, &parser, true);
   } catch (RGWXMLDecoder::err& err) {
-    ldout(s->cct, 5) << "unexpected xml: " << buf << dendl;
+    ldpp_dout(this, 5) << "unexpected xml: " << buf << dendl;
     return -EINVAL;
   }
 
@@ -1076,7 +1076,7 @@ int RGWSetBucketWebsite_ObjStore_S3::get_params()
   }
   int routing_rules_num = website_conf.routing_rules.rules.size();
   if (routing_rules_num > max_num) {
-    ldout(s->cct, 4) << "An website routing config can have up to "
+    ldpp_dout(this, 4) << "An website routing config can have up to "
                      << max_num
                      << " rules, request website routing rules num: "
                      << routing_rules_num << dendl;
@@ -1240,7 +1240,7 @@ int RGWCreateBucket_ObjStore_S3::get_params()
     RGWCreateBucketParser parser;
 
     if (!parser.init()) {
-      ldout(s->cct, 0) << "ERROR: failed to initialize parser" << dendl;
+      ldpp_dout(this, 0) << "ERROR: failed to initialize parser" << dendl;
       return -EIO;
     }
 
@@ -1249,16 +1249,16 @@ int RGWCreateBucket_ObjStore_S3::get_params()
     ldout(s->cct, 20) << "create bucket input data=" << buf << dendl;
 
     if (!success) {
-      ldout(s->cct, 0) << "failed to parse input: " << buf << dendl;
+      ldpp_dout(this, 0) << "failed to parse input: " << buf << dendl;
       return -EINVAL;
     }
 
     if (!parser.get_location_constraint(location_constraint)) {
-      ldout(s->cct, 0) << "provided input did not specify location constraint correctly" << dendl;
+      ldpp_dout(this, 0) << "provided input did not specify location constraint correctly" << dendl;
       return -EINVAL;
     }
 
-    ldout(s->cct, 10) << "create bucket location constraint: "
+    ldpp_dout(this, 10) << "create bucket location constraint: "
 		      << location_constraint << dendl;
   }
 
@@ -1362,7 +1362,7 @@ int RGWPutObj_ObjStore_S3::get_params()
     pos = copy_source_bucket_name.find("/");
     if (pos == std::string::npos) {
       ret = -EINVAL;
-      ldout(s->cct, 5) << "x-amz-copy-source bad format" << dendl;
+      ldpp_dout(this, 5) << "x-amz-copy-source bad format" << dendl;
       return ret;
     }
     copy_source_object_name =
@@ -1386,7 +1386,7 @@ int RGWPutObj_ObjStore_S3::get_params()
        copy_source_bucket_name = copy_source_bucket_name.substr(pos + 1, copy_source_bucket_name.size());
        if (copy_source_bucket_name.empty()) {
          ret = -EINVAL;
-         ldout(s->cct, 5) << "source bucket name is empty" << dendl;
+         ldpp_dout(this, 5) << "source bucket name is empty" << dendl;
          return ret;
        }
     }
@@ -1396,7 +1396,7 @@ int RGWPutObj_ObjStore_S3::get_params()
                                  copy_source_bucket_info,
                                  NULL, &src_attrs);
     if (ret < 0) {
-      ldout(s->cct, 5) << __func__ << "(): get_bucket_info() returned ret=" << ret << dendl;
+      ldpp_dout(this, 5) << __func__ << "(): get_bucket_info() returned ret=" << ret << dendl;
       return ret;
     }
 
@@ -1407,14 +1407,14 @@ int RGWPutObj_ObjStore_S3::get_params()
       pos = range.find("=");
       if (pos == std::string::npos) {
         ret = -EINVAL;
-        ldout(s->cct, 5) << "x-amz-copy-source-range bad format" << dendl;
+        ldpp_dout(this, 5) << "x-amz-copy-source-range bad format" << dendl;
         return ret;
       }
       range = range.substr(pos + 1);
       pos = range.find("-");
       if (pos == std::string::npos) {
         ret = -EINVAL;
-        ldout(s->cct, 5) << "x-amz-copy-source-range bad format" << dendl;
+        ldpp_dout(this, 5) << "x-amz-copy-source-range bad format" << dendl;
         return ret;
       }
       string first = range.substr(0, pos);
@@ -1431,7 +1431,7 @@ int RGWPutObj_ObjStore_S3::get_params()
     obj_tags = std::make_unique<RGWObjTags>();
     ret = obj_tags->set_from_string(tag_str);
     if (ret < 0){
-      ldout(s->cct,0) << "setting obj tags failed with " << ret << dendl;
+      ldpp_dout(this,0) << "setting obj tags failed with " << ret << dendl;
       if (ret == -ERR_INVALID_TAG){
         ret = -EINVAL; //s3 returns only -EINVAL for PUT requests
       }
@@ -1659,7 +1659,7 @@ int RGWPostObj_ObjStore_S3::get_params()
 
   map_qs_metadata(s);
 
-  ldout(s->cct, 20) << "adding bucket to policy env: " << s->bucket.name
+  ldpp_dout(this, 20) << "adding bucket to policy env: " << s->bucket.name
 		    << dendl;
   env.add_var("bucket", s->bucket.name);
 
@@ -1671,16 +1671,16 @@ int RGWPostObj_ObjStore_S3::get_params()
       return r;
 
     if (s->cct->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
-      ldout(s->cct, 20) << "read part header -- part.name="
+      ldpp_dout(this, 20) << "read part header -- part.name="
                         << part.name << dendl;
 
       for (const auto& pair : part.fields) {
-        ldout(s->cct, 20) << "field.name=" << pair.first << dendl;
-        ldout(s->cct, 20) << "field.val=" << pair.second.val << dendl;
-        ldout(s->cct, 20) << "field.params:" << dendl;
+        ldpp_dout(this, 20) << "field.name=" << pair.first << dendl;
+        ldpp_dout(this, 20) << "field.val=" << pair.second.val << dendl;
+        ldpp_dout(this, 20) << "field.params:" << dendl;
 
         for (const auto& param_pair : pair.second.params) {
-          ldout(s->cct, 20) << " " << param_pair.first
+          ldpp_dout(this, 20) << " " << param_pair.first
                             << " -> " << param_pair.second << dendl;
         }
       }
@@ -1796,12 +1796,12 @@ int RGWPostObj_ObjStore_S3::get_tags()
   if (part_str(parts, "tagging", &tags_str)) {
     RGWXMLParser parser;
     if (!parser.init()){
-      ldout(s->cct, 0) << "Couldn't init RGWObjTags XML parser" << dendl;
+      ldpp_dout(this, 0) << "Couldn't init RGWObjTags XML parser" << dendl;
       err_msg = "Server couldn't process the request";
       return -EINVAL; // TODO: This class of errors in rgw code should be a 5XX error
     }
     if (!parser.parse(tags_str.c_str(), tags_str.size(), 1)) {
-      ldout(s->cct,0 ) << "Invalid Tagging XML" << dendl;
+      ldpp_dout(this,0 ) << "Invalid Tagging XML" << dendl;
       err_msg = "Invalid Tagging XML";
       return -EINVAL;
     }
@@ -1822,7 +1822,7 @@ int RGWPostObj_ObjStore_S3::get_tags()
 
     bufferlist tags_bl;
     obj_tags.encode(tags_bl);
-    ldout(s->cct, 20) << "Read " << obj_tags.count() << "tags" << dendl;
+    ldpp_dout(this, 20) << "Read " << obj_tags.count() << "tags" << dendl;
     attrs[RGW_ATTR_TAGS] = tags_bl;
   }
 
@@ -1839,10 +1839,10 @@ int RGWPostObj_ObjStore_S3::get_policy()
     using rgw::auth::s3::AWS4_HMAC_SHA256_STR;
     if ((part_str(parts, "x-amz-algorithm", &s->auth.s3_postobj_creds.x_amz_algorithm)) &&
         (s->auth.s3_postobj_creds.x_amz_algorithm == AWS4_HMAC_SHA256_STR)) {
-      ldout(s->cct, 0) << "Signature verification algorithm AWS v4 (AWS4-HMAC-SHA256)" << dendl;
+      ldpp_dout(this, 0) << "Signature verification algorithm AWS v4 (AWS4-HMAC-SHA256)" << dendl;
       aws4_auth = true;
     } else {
-      ldout(s->cct, 0) << "Signature verification algorithm AWS v2" << dendl;
+      ldpp_dout(this, 0) << "Signature verification algorithm AWS v2" << dendl;
     }
 
     // check that the signature matches the encoded policy
@@ -1852,7 +1852,7 @@ int RGWPostObj_ObjStore_S3::get_policy()
       /* x-amz-credential handling */
       if (!part_str(parts, "x-amz-credential",
                     &s->auth.s3_postobj_creds.x_amz_credential)) {
-        ldout(s->cct, 0) << "No S3 aws4 credential found!" << dendl;
+        ldpp_dout(this, 0) << "No S3 aws4 credential found!" << dendl;
         err_msg = "Missing aws4 credential";
         return -EINVAL;
       }
@@ -1860,7 +1860,7 @@ int RGWPostObj_ObjStore_S3::get_policy()
       /* x-amz-signature handling */
       if (!part_str(parts, "x-amz-signature",
                     &s->auth.s3_postobj_creds.signature)) {
-        ldout(s->cct, 0) << "No aws4 signature found!" << dendl;
+        ldpp_dout(this, 0) << "No aws4 signature found!" << dendl;
         err_msg = "Missing aws4 signature";
         return -EINVAL;
       }
@@ -1868,7 +1868,7 @@ int RGWPostObj_ObjStore_S3::get_policy()
       /* x-amz-date handling */
       std::string received_date_str;
       if (!part_str(parts, "x-amz-date", &received_date_str)) {
-        ldout(s->cct, 0) << "No aws4 date found!" << dendl;
+        ldpp_dout(this, 0) << "No aws4 date found!" << dendl;
         err_msg = "Missing aws4 date";
         return -EINVAL;
       }
@@ -1878,13 +1878,13 @@ int RGWPostObj_ObjStore_S3::get_policy()
       // check that the signature matches the encoded policy
       if (!part_str(parts, "AWSAccessKeyId",
                     &s->auth.s3_postobj_creds.access_key)) {
-        ldout(s->cct, 0) << "No S3 aws2 access key found!" << dendl;
+        ldpp_dout(this, 0) << "No S3 aws2 access key found!" << dendl;
         err_msg = "Missing aws2 access key";
         return -EINVAL;
       }
 
       if (!part_str(parts, "signature", &s->auth.s3_postobj_creds.signature)) {
-        ldout(s->cct, 0) << "No aws2 signature found!" << dendl;
+        ldpp_dout(this, 0) << "No aws2 signature found!" << dendl;
         err_msg = "Missing aws2 signature";
         return -EINVAL;
       }
@@ -1902,20 +1902,20 @@ int RGWPostObj_ObjStore_S3::get_policy()
       /* Populate the owner info. */
       s->owner.set_id(s->user->user_id);
       s->owner.set_name(s->user->display_name);
-      ldout(s->cct, 20) << "Successful Signature Verification!" << dendl;
+      ldpp_dout(this, 20) << "Successful Signature Verification!" << dendl;
     }
 
     ceph::bufferlist decoded_policy;
     try {
       decoded_policy.decode_base64(s->auth.s3_postobj_creds.encoded_policy);
     } catch (buffer::error& err) {
-      ldout(s->cct, 0) << "failed to decode_base64 policy" << dendl;
+      ldpp_dout(this, 0) << "failed to decode_base64 policy" << dendl;
       err_msg = "Could not decode policy";
       return -EINVAL;
     }
 
     decoded_policy.append('\0'); // NULL terminate
-    ldout(s->cct, 20) << "POST policy: " << decoded_policy.c_str() << dendl;
+    ldpp_dout(this, 20) << "POST policy: " << decoded_policy.c_str() << dendl;
 
 
     int r = post_policy.from_json(decoded_policy, err_msg);
@@ -1923,7 +1923,7 @@ int RGWPostObj_ObjStore_S3::get_policy()
       if (err_msg.empty()) {
 	err_msg = "Failed to parse policy";
       }
-      ldout(s->cct, 0) << "failed to parse policy" << dendl;
+      ldpp_dout(this, 0) << "failed to parse policy" << dendl;
       return -EINVAL;
     }
 
@@ -1942,19 +1942,19 @@ int RGWPostObj_ObjStore_S3::get_policy()
       if (err_msg.empty()) {
 	err_msg = "Policy check failed";
       }
-      ldout(s->cct, 0) << "policy check failed" << dendl;
+      ldpp_dout(this, 0) << "policy check failed" << dendl;
       return r;
     }
 
   } else {
-    ldout(s->cct, 0) << "No attached policy found!" << dendl;
+    ldpp_dout(this, 0) << "No attached policy found!" << dendl;
   }
 
   string canned_acl;
   part_str(parts, "acl", &canned_acl);
 
   RGWAccessControlPolicy_S3 s3policy(s->cct);
-  ldout(s->cct, 20) << "canned_acl=" << canned_acl << dendl;
+  ldpp_dout(this, 20) << "canned_acl=" << canned_acl << dendl;
   if (s3policy.create_canned(s->owner, s->bucket_owner, canned_acl) < 0) {
     err_msg = "Bad canned ACLs";
     return -EINVAL;
@@ -2154,7 +2154,7 @@ int RGWDeleteObj_ObjStore_S3::get_params()
     uint64_t epoch;
     uint64_t nsec;
     if (utime_t::parse_date(if_unmod_decoded, &epoch, &nsec) < 0) {
-      ldout(s->cct, 10) << "failed to parse time: " << if_unmod_decoded << dendl;
+      ldpp_dout(this, 10) << "failed to parse time: " << if_unmod_decoded << dendl;
       return -EINVAL;
     }
     unmod_since = utime_t(epoch, nsec).to_real_time();
@@ -2224,7 +2224,7 @@ int RGWCopyObj_ObjStore_S3::get_params()
       attrs_mod = RGWRados::ATTRSMOD_NONE; // default for intra-zone_group copy
     } else {
       s->err.message = "Unknown metadata directive.";
-      ldout(s->cct, 0) << s->err.message << dendl;
+      ldpp_dout(this, 0) << s->err.message << dendl;
       return -EINVAL;
     }
   }
@@ -2248,7 +2248,7 @@ int RGWCopyObj_ObjStore_S3::check_storage_class(const rgw_placement_rule& src_pl
     s->err.message = "This copy request is illegal because it is trying to copy "
       "an object to itself without changing the object's metadata, "
       "storage class, website redirect location or encryption attributes.";
-    ldout(s->cct, 0) << s->err.message << dendl;
+    ldpp_dout(this, 0) << s->err.message << dendl;
     return -ERR_INVALID_REQUEST;
   }
   return 0;
@@ -2360,7 +2360,7 @@ void RGWGetLC_ObjStore_S3::execute()
   try {
       config.decode(iter);
     } catch (const buffer::error& e) {
-      ldout(s->cct, 0) << __func__ <<  "decode life cycle config failed" << dendl;
+      ldpp_dout(this, 0) << __func__ <<  "decode life cycle config failed" << dendl;
       op_ret = -EIO;
       return;
     }
@@ -2471,7 +2471,7 @@ int RGWPutCORS_ObjStore_S3::get_params()
   }
   int cors_rules_num = cors_config->get_rules().size();
   if (cors_rules_num > max_num) {
-    ldout(s->cct, 4) << "An cors config can have up to "
+    ldpp_dout(this, 4) << "An cors config can have up to "
                      << max_num
                      << " rules, request cors rules num: "
                      << cors_rules_num << dendl;
@@ -2488,7 +2488,7 @@ int RGWPutCORS_ObjStore_S3::get_params()
   }
 
   if (s->cct->_conf->subsys.should_gather<ceph_subsys_rgw, 15>()) {
-    ldout(s->cct, 15) << "CORSConfiguration";
+    ldpp_dout(this, 15) << "CORSConfiguration";
     cors_config->to_xml(*_dout);
     *_dout << dendl;
   }
@@ -2602,13 +2602,13 @@ int RGWSetRequestPayment_ObjStore_S3::get_params()
   RGWSetRequestPaymentParser parser;
 
   if (!parser.init()) {
-    ldout(s->cct, 0) << "ERROR: failed to initialize parser" << dendl;
+    ldpp_dout(this, 0) << "ERROR: failed to initialize parser" << dendl;
     return -EIO;
   }
 
   char* buf = data.c_str();
   if (!parser.parse(buf, data.length(), 1)) {
-    ldout(s->cct, 10) << "failed to parse data: " << buf << dendl;
+    ldpp_dout(this, 10) << "failed to parse data: " << buf << dendl;
     return -EINVAL;
   }
 
@@ -2957,7 +2957,7 @@ int RGWConfigBucketMetaSearch_ObjStore_S3::get_params()
   auto iter = s->info.x_meta_map.find("x-amz-meta-search");
   if (iter == s->info.x_meta_map.end()) {
     s->err.message = "X-Rgw-Meta-Search header not provided";
-    ldout(s->cct, 5) << s->err.message << dendl;
+    ldpp_dout(this, 5) << s->err.message << dendl;
     return -EINVAL;
   }
 
@@ -2970,12 +2970,12 @@ int RGWConfigBucketMetaSearch_ObjStore_S3::get_params()
 
     if (args.empty()) {
       s->err.message = "invalid empty expression";
-      ldout(s->cct, 5) << s->err.message << dendl;
+      ldpp_dout(this, 5) << s->err.message << dendl;
       return -EINVAL;
     }
     if (args.size() > 2) {
       s->err.message = string("invalid expression: ") + expression;
-      ldout(s->cct, 5) << s->err.message << dendl;
+      ldpp_dout(this, 5) << s->err.message << dendl;
       return -EINVAL;
     }
 
@@ -2987,7 +2987,7 @@ int RGWConfigBucketMetaSearch_ObjStore_S3::get_params()
 
     if (!boost::algorithm::starts_with(key, RGW_AMZ_META_PREFIX)) {
       s->err.message = string("invalid expression, key must start with '" RGW_AMZ_META_PREFIX "' : ") + expression;
-      ldout(s->cct, 5) << s->err.message << dendl;
+      ldpp_dout(this, 5) << s->err.message << dendl;
       return -EINVAL;
     }
 
@@ -3003,7 +3003,7 @@ int RGWConfigBucketMetaSearch_ObjStore_S3::get_params()
       entity_type = ESEntityTypeMap::ES_ENTITY_DATE;
     } else {
       s->err.message = string("invalid entity type: ") + val;
-      ldout(s->cct, 5) << s->err.message << dendl;
+      ldpp_dout(this, 5) << s->err.message << dendl;
       return -EINVAL;
     }
 
