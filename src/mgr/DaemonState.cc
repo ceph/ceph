@@ -43,9 +43,21 @@ void DeviceState::set_life_expectancy(utime_t from, utime_t to, utime_t now)
 {
   life_expectancy = make_pair(from, to);
   life_expectancy_stamp = now;
-  metadata["life_expectancy_min"] = stringify(life_expectancy.first);
-  metadata["life_expectancy_max"] = stringify(life_expectancy.second);
-  metadata["life_expectancy_stamp"] = stringify(life_expectancy_stamp);
+  if (from != utime_t()) {
+    metadata["life_expectancy_min"] = from;
+  } else {
+    metadata["life_expectancy_min"] = "";
+  }
+  if (to != utime_t()) {
+    metadata["life_expectancy_max"] = to;
+  } else {
+    metadata["life_expectancy_max"] = "";
+  }
+  if (now != utime_t()) {
+    metadata["life_expectancy_stamp"] = stringify(now);
+  } else {
+    metadata["life_expectancy_stamp"] = "";
+  }
 }
 
 void DeviceState::rm_life_expectancy()
