@@ -4,7 +4,7 @@ import re
 import threading
 import six
 from mgr_module import MgrModule, CommandResult
-import health as health_util
+from . import health as health_util
 
 # hours of crash history to report
 CRASH_HISTORY_HOURS = 24
