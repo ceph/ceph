@@ -360,6 +360,12 @@ RGWMetadataManager::RGWMetadataManager(CephContext *_cct, RGWRados *_store)
 {
 }
 
+RGWArchiveMetadataManager::RGWArchiveMetadataManager(CephContext *_cct, RGWRados *_store)
+  : RGWMetadataManager(_cct, _store)
+{
+    ldout(store->ctx(), 0) << "RGWArchiveMetadataManager() constructor check" << dendl;
+}
+
 RGWMetadataManager::~RGWMetadataManager()
 {
   map<string, RGWMetadataHandler *>::iterator iter;
