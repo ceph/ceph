@@ -1361,6 +1361,8 @@ public:
   /// last epoch that forced clients to resend (pre-luminous clients only)
   epoch_t last_force_op_resend_preluminous = 0;
 
+  ///< last_epoch_started preceding pg_num decrement request
+  epoch_t pg_num_dec_last_epoch_started = 0;
   ///< last_epoch_clean preceding pg_num decrement request
   epoch_t pg_num_dec_last_epoch_clean = 0;
   snapid_t snap_seq;        ///< seq for per-pool snapshot
@@ -1618,6 +1620,9 @@ public:
   // pool size that it represents.
   unsigned get_pg_num_divisor(pg_t pgid) const;
 
+  epoch_t get_pg_num_dec_last_epoch_started() const {
+    return pg_num_dec_last_epoch_started;
+  }
   epoch_t get_pg_num_dec_last_epoch_clean() const {
     return pg_num_dec_last_epoch_clean;
   }
@@ -1643,8 +1648,10 @@ public:
   void set_pgp_num_target(int p) {
     pgp_num_target = p;
   }
-  void dec_pg_num(epoch_t last_epoch_clean) {
+  void dec_pg_num(epoch_t last_epoch_started,
+		  epoch_t last_epoch_clean) {
     --pg_num;
+    pg_num_dec_last_epoch_started = last_epoch_started;
     pg_num_dec_last_epoch_clean = last_epoch_clean;
     calc_pg_masks();
   }
