@@ -923,7 +923,7 @@
       "span": 12,
       "targets": [
         {
-          "expr": "ceph_osd_stat_bytes_used{instance='$instance'} / ceph_osd_stat_bytes{instance='$instance'}",
+          "expr": "ceph_osd_stat_bytes_used{instance=~'$instance'} / ceph_osd_stat_bytes{instance=~'$instance'}",
           "format": "time_series",
           "interval": "1m",
           "intervalFactor": 1,
