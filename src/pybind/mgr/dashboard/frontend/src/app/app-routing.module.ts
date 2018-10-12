@@ -6,12 +6,14 @@ import { MirroringComponent } from './ceph/block/mirroring/mirroring.component';
 import { RbdFormComponent } from './ceph/block/rbd-form/rbd-form.component';
 import { RbdImagesComponent } from './ceph/block/rbd-images/rbd-images.component';
 import { CephfsListComponent } from './ceph/cephfs/cephfs-list/cephfs-list.component';
+import { ConfigurationFormComponent } from './ceph/cluster/configuration/configuration-form/configuration-form.component';
 import { ConfigurationComponent } from './ceph/cluster/configuration/configuration.component';
 import { HostsComponent } from './ceph/cluster/hosts/hosts.component';
 import { MonitorComponent } from './ceph/cluster/monitor/monitor.component';
 import { OsdListComponent } from './ceph/cluster/osd/osd-list/osd-list.component';
 import { DashboardComponent } from './ceph/dashboard/dashboard/dashboard.component';
 import { PerformanceCounterComponent } from './ceph/performance-counter/performance-counter/performance-counter.component';
+import { PoolFormComponent } from './ceph/pool/pool-form/pool-form.component';
 import { PoolListComponent } from './ceph/pool/pool-list/pool-list.component';
 import { Rgw501Component } from './ceph/rgw/rgw-501/rgw-501.component';
 import { RgwBucketFormComponent } from './ceph/rgw/rgw-bucket-form/rgw-bucket-form.component';
@@ -77,9 +79,15 @@ const routes: Routes = [
   },
   {
     path: 'configuration',
-    component: ConfigurationComponent,
-    canActivate: [AuthGuardService],
-    data: { breadcrumbs: 'Cluster/Configuration Documentation' }
+    data: { breadcrumbs: 'Cluster/Configuration' },
+    children: [
+      { path: '', component: ConfigurationComponent },
+      {
+        path: 'edit/:name',
+        component: ConfigurationFormComponent,
+        data: { breadcrumbs: 'Edit' }
+      }
+    ]
   },
   {
     path: 'perf_counters/:type/:id',
@@ -92,9 +100,14 @@ const routes: Routes = [
   // Pools
   {
     path: 'pool',
-    component: PoolListComponent,
     canActivate: [AuthGuardService],
-    data: { breadcrumbs: 'Pools' }
+    canActivateChild: [AuthGuardService],
+    data: { breadcrumbs: 'Pools' },
+    children: [
+      { path: '', component: PoolListComponent },
+      { path: 'add', component: PoolFormComponent, data: { breadcrumbs: 'Add' } },
+      { path: 'edit/:name', component: PoolFormComponent, data: { breadcrumbs: 'Edit' } }
+    ]
   },
   // Block
   {

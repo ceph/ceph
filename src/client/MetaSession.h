@@ -35,6 +35,13 @@ struct MetaSession {
     STATE_STALE,
   } state;
 
+  enum {
+    RECLAIM_NULL,
+    RECLAIMING,
+    RECLAIM_OK,
+    RECLAIM_FAIL,
+  } reclaim_state;
+
   int mds_state;
   bool readonly;
 
@@ -53,7 +60,8 @@ struct MetaSession {
 	      const entity_addrvec_t& addrs)
     : mds_num(mds_num), con(con),
       seq(0), cap_gen(0), cap_renew_seq(0), addrs(addrs),
-      state(STATE_OPENING), mds_state(MDSMap::STATE_NULL), readonly(false)
+      state(STATE_OPENING), reclaim_state(RECLAIM_NULL),
+      mds_state(MDSMap::STATE_NULL), readonly(false)
   {}
 
   const char *get_state_name() const;

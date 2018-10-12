@@ -136,9 +136,9 @@ void RefreshParentRequest<I>::send_open_parent() {
   m_parent_image_ctx->child = &m_child_image_ctx;
 
   // set rados flags for reading the parent image
-  if (m_child_image_ctx.balance_parent_reads) {
+  if (m_child_image_ctx.config.template get_val<bool>("rbd_balance_parent_reads")) {
     m_parent_image_ctx->set_read_flag(librados::OPERATION_BALANCE_READS);
-  } else if (m_child_image_ctx.localize_parent_reads) {
+  } else if (m_child_image_ctx.config.template get_val<bool>("rbd_localize_parent_reads")) {
     m_parent_image_ctx->set_read_flag(librados::OPERATION_LOCALIZE_READS);
   }
 

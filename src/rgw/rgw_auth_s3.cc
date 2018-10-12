@@ -1009,7 +1009,7 @@ size_t AWSv4ComplMulti::recv_body(char* const buf, const size_t buf_max)
   return buf_pos;
 }
 
-void AWSv4ComplMulti::modify_request_state(req_state* const s_rw)
+void AWSv4ComplMulti::modify_request_state(const DoutPrefixProvider* dpp, req_state* const s_rw)
 {
   const char* const decoded_length = \
     s_rw->info.env->get("HTTP_X_AMZ_DECODED_CONTENT_LENGTH");
@@ -1021,7 +1021,7 @@ void AWSv4ComplMulti::modify_request_state(req_state* const s_rw)
     s_rw->content_length = parse_content_length(decoded_length);
 
     if (s_rw->content_length < 0) {
-      ldout(cct, 10) << "negative AWSv4's content length, aborting" << dendl;
+      ldpp_dout(dpp, 10) << "negative AWSv4's content length, aborting" << dendl;
       throw -EINVAL;
     }
   }
@@ -1075,7 +1075,7 @@ size_t AWSv4ComplSingle::recv_body(char* const buf, const size_t max)
   return received;
 }
 
-void AWSv4ComplSingle::modify_request_state(req_state* const s_rw)
+void AWSv4ComplSingle::modify_request_state(const DoutPrefixProvider* dpp, req_state* const s_rw)
 {
   /* Install the filter over rgw::io::RestfulClient. */
   AWS_AUTHv4_IO(s_rw)->add_filter(

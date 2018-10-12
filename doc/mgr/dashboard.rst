@@ -261,7 +261,8 @@ Grafana on your preferred hosts, proceed with the following steps.
 
     $ ceph mgr module enable prometheus
 
-More details can be found on the `documentation <http://docs.ceph.com/docs/master/mgr/prometheus/>`_ of the prometheus module.
+More details can be found on the `documentation <http://docs.ceph.com/docs/master/
+mgr/prometheus/>`_ of the prometheus module.
 
 #. Add the corresponding scrape configuration to Prometheus. This may look
    like::
@@ -287,7 +288,19 @@ More details can be found on the `documentation <http://docs.ceph.com/docs/maste
         grafana-cli plugins install vonage-status-panel
         grafana-cli plugins install grafana-piechart-panel
 
-#. Add the Dashboards to Grafana by importing them
+#. Add the Dashboards to Grafana:
+
+   Dashboards can be added to Grafana by importing dashboard jsons. 
+   Following command can be used for downloading json files::
+	
+	wget https://raw.githubusercontent.com/ceph/ceph/master/monitoring/grafana/dashboards/<Dashboard-name>.json
+
+   You can find all the dashboard jsons `here <https://github.com/ceph/ceph/tree/
+   master/monitoring/grafana/dashboards>`_ .
+
+   For Example, for ceph-cluster overview you can use::
+	
+        wget https://raw.githubusercontent.com/ceph/ceph/master/monitoring/grafana/dashboards/ceph-cluster.json
 
 #. Configure Grafana in `/etc/grafana/grafana.ini` to adapt anonymous mode::
 

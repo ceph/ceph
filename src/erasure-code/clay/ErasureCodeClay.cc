@@ -3,7 +3,7 @@
 /*
  * Ceph - scalable distributed file system
  *
- * Copyright (C) 2018 Myna Vajha <mynaramana@gmail.com>
+ * Copyright (C) 2018 Indian Institute of Science <office.ece@iisc.ac.in>
  *
  * Author: Myna Vajha <mynaramana@gmail.com>
  *
@@ -388,7 +388,8 @@ void ErasureCodeClay::get_repair_subchunks(const int &lost_node,
 
 int ErasureCodeClay::get_repair_sub_chunk_count(const set<int> &want_to_read)
 {
-  int weight_vector[t] = {0};
+  int weight_vector[t];
+  std::fill(weight_vector, weight_vector + t, 0);
   for (auto to_read : want_to_read) {
     weight_vector[to_read / q]++;
   }

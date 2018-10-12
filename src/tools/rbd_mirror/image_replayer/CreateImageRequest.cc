@@ -75,11 +75,14 @@ void CreateImageRequest<I>::create_image() {
 
   RWLock::RLocker snap_locker(m_remote_image_ctx->snap_lock);
 
+  auto& config{
+    reinterpret_cast<CephContext*>(m_local_io_ctx.cct())->_conf};
+
   librbd::ImageOptions image_options;
   populate_image_options(&image_options);
 
   auto req = librbd::image::CreateRequest<I>::create(
-    m_local_io_ctx, m_local_image_name, m_local_image_id,
+    config, m_local_io_ctx, m_local_image_name, m_local_image_id,
     m_remote_image_ctx->size, image_options, m_global_image_id,
     m_remote_mirror_uuid, false, m_remote_image_ctx->op_work_queue, ctx);
   req->send();
@@ -332,13 +335,16 @@ void CreateImageRequest<I>::clone_image() {
   librbd::ImageOptions opts;
   populate_image_options(&opts);
 
+  auto& config{
+    reinterpret_cast<CephContext*>(m_local_io_ctx.cct())->_conf};
+
   using klass = CreateImageRequest<I>;
   Context *ctx = create_context_callback<
     klass, &klass::handle_clone_image>(this);
 
   librbd::image::CloneRequest<I> *req = librbd::image::CloneRequest<I>::create(
-    m_local_parent_io_ctx, m_local_parent_spec.image_id, snap_name, CEPH_NOSNAP,
-    m_local_io_ctx, m_local_image_name, m_local_image_id, opts,
+    config, m_local_parent_io_ctx, m_local_parent_spec.image_id, snap_name,
+    CEPH_NOSNAP, m_local_io_ctx, m_local_image_name, m_local_image_id, opts,
     m_global_image_id, m_remote_mirror_uuid, m_remote_image_ctx->op_work_queue,
     ctx);
   req->send();

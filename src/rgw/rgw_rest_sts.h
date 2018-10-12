@@ -57,8 +57,8 @@ public:
   int init(RGWRados *store,
            struct req_state *s,
            rgw::io::BasicClient *cio) override;
-  int authorize() override {
-    return RGW_Auth_S3::authorize(store, auth_registry, s);
+  int authorize(const DoutPrefixProvider* dpp) override {
+    return RGW_Auth_S3::authorize(dpp, store, auth_registry, s);
   }
   int postauth_init() override { return 0; }
 };

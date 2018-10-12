@@ -40,6 +40,7 @@
 #include "events/EOpen.h"
 #include "events/ECommitted.h"
 
+#include "include/stringify.h"
 #include "include/filepath.h"
 #include "common/errno.h"
 #include "common/Timer.h"
@@ -259,6 +260,9 @@ void Server::dispatch(const Message::const_ref &m)
   case CEPH_MSG_CLIENT_REQUEST:
     handle_client_request(MClientRequest::msgref_cast(m));
     return;
+  case CEPH_MSG_CLIENT_RECLAIM:
+    handle_client_reclaim(MClientReclaim::msgref_cast(m));
+    return;
   case MSG_MDS_SLAVE_REQUEST:
     handle_slave_request(MMDSSlaveRequest::msgref_cast(m));
     return;
@@ -295,6 +299,139 @@ public:
   }
 };
 
+Session* Server::find_session_by_uuid(std::string_view uuid)
+{
+  Session* session = nullptr;
+  for (auto& it : mds->sessionmap.get_sessions()) {
+    auto& metadata = it.second->info.client_metadata;
+
+    auto p = metadata.find("uuid");
+    if (p == metadata.end() || p->second != uuid)
+      continue;
+
+    if (!session) {
+      session = it.second;
+    } else if (!session->reclaiming_from) {
+      assert(it.second->reclaiming_from == session);
+      session = it.second;
+    } else {
+      assert(session->reclaiming_from == it.second);
+    }
+  }
+  return session;
+}
+
+void Server::reclaim_session(Session *session, const MClientReclaim::const_ref &m)
+{
+  if (!session->is_open() && !session->is_stale()) {
+    dout(10) << "session not open, dropping this req" << dendl;
+    return;
+  }
+
+  auto reply = MClientReclaimReply::create(0);
+  if (m->get_uuid().empty()) {
+    dout(10) << __func__ << " invalid message (no uuid)" << dendl;
+    reply->set_result(-EINVAL);
+    mds->send_message_client(reply, session);
+    return;
+  }
+
+  unsigned flags = m->get_flags();
+  if (flags != CEPH_RECLAIM_RESET) { // currently only support reset
+    dout(10) << __func__ << " unsupported flags" << dendl;
+    reply->set_result(-EOPNOTSUPP);
+    mds->send_message_client(reply, session);
+    return;
+  }
+
+  Session* target = find_session_by_uuid(m->get_uuid());
+  if (target) {
+    if (session->info.auth_name != target->info.auth_name) {
+      dout(10) << __func__ << " session auth_name " << session->info.auth_name
+	       << " != target auth_name " << target->info.auth_name << dendl;
+      reply->set_result(-EPERM);
+      mds->send_message_client(reply, session);
+    }
+
+    assert(!target->reclaiming_from);
+    assert(!session->reclaiming_from);
+    session->reclaiming_from = target;
+    reply->set_addrs(entity_addrvec_t(target->info.inst.addr));
+  }
+
+  if (flags & CEPH_RECLAIM_RESET) {
+    finish_reclaim_session(session, reply);
+    return;
+  }
+
+  ceph_abort();
+}
+
+void Server::finish_reclaim_session(Session *session, const MClientReclaimReply::ref &reply)
+{
+  Session *target = session->reclaiming_from;
+  if (target) {
+    session->reclaiming_from = nullptr;
+
+    Context *send_reply;
+    if (reply) {
+      int64_t session_id = session->get_client().v;
+      send_reply = new FunctionContext([this, session_id, reply](int r) {
+	    assert(mds->mds_lock.is_locked_by_me());
+	    Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(session_id));
+	    if (!session) {
+	      reply->put();
+	      return;
+	    }
+	    auto epoch = mds->objecter->with_osdmap([](const OSDMap &map){ return map.get_epoch(); });
+	    reply->set_epoch(epoch);
+	    mds->send_message_client(reply, session);
+	  });
+    } else {
+      send_reply = nullptr;
+    }
+
+    bool blacklisted = mds->objecter->with_osdmap([target](const OSDMap &map) {
+	  return map.is_blacklisted(target->info.inst.addr);
+	});
+
+    if (blacklisted || !g_conf()->mds_session_blacklist_on_evict) {
+      kill_session(target, send_reply);
+    } else {
+      std::stringstream ss;
+      mds->evict_client(target->get_client().v, false, true, ss, send_reply);
+    }
+  } else if (reply) {
+    mds->send_message_client(reply, session);
+  }
+}
+
+void Server::handle_client_reclaim(const MClientReclaim::const_ref &m)
+{
+  Session *session = mds->get_session(m);
+  dout(3) << __func__ <<  " " << *m << " from " << m->get_source() << dendl;
+  assert(m->get_source().is_client()); // should _not_ come from an mds!
+
+  if (!session) {
+    dout(0) << " ignoring sessionless msg " << *m << dendl;
+    m->put();
+    return;
+  }
+
+  if (mds->get_state() < MDSMap::STATE_CLIENTREPLAY) {
+    mds->wait_for_replay(new C_MDS_RetryMessage(mds, m));
+    return;
+  }
+
+  if (m->get_flags() & MClientReclaim::FLAG_FINISH) {
+    finish_reclaim_session(session);
+  } else {
+    reclaim_session(session, m);
+  }
+  m->put();
+}
+
+/* This function DOES put the passed message before returning*/
 void Server::handle_client_session(const MClientSession::const_ref &m)
 {
   version_t pv;
@@ -410,6 +547,17 @@ void Server::handle_client_session(const MClientSession::const_ref &m)
 	  send_reject_message(ss.str());
 	  mds->clog->warn() << "client session with " << ss.str()
 			    << " denied (" << session->info.inst << ")";
+	  session->clear();
+	  break;
+	}
+      }
+
+      it = client_metadata.find("uuid");
+      if (it != client_metadata.end()) {
+	if (find_session_by_uuid(it->second)) {
+	  send_reject_message("duplicated session uuid");
+	  mds->clog->warn() << "client session with duplicated session uuid '"
+			    << it->second << "' denied (" << session->info.inst << ")";
 	  session->clear();
 	  break;
 	}
@@ -571,13 +719,18 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
       dout(20) << " killing client lease of " << *dn << dendl;
       dn->remove_client_lease(r, mds->locker);
     }
-    if (client_reconnect_gather.count(session->info.get_client())) {
+    if (client_reconnect_gather.erase(session->info.get_client())) {
       dout(20) << " removing client from reconnect set" << dendl;
-      client_reconnect_gather.erase(session->info.get_client());
-
       if (client_reconnect_gather.empty()) {
         dout(7) << " client " << session->info.inst << " was last reconnect, finishing" << dendl;
         reconnect_gather_finish();
+      }
+    }
+    if (client_reclaim_gather.erase(session->info.get_client())) {
+      dout(20) << " removing client from reclaim set" << dendl;
+      if (client_reclaim_gather.empty()) {
+        dout(7) << " client " << session->info.inst << " was last reclaimed, finishing" << dendl;
+	mds->maybe_clientreplay_done();
       }
     }
     
@@ -758,21 +911,53 @@ void Server::find_idle_sessions()
   //  (caps go stale, lease die)
   double queue_max_age = mds->get_dispatch_queue_max_age(ceph_clock_now());
   double cutoff = queue_max_age + mds->mdsmap->get_session_timeout();
-  while (1) {
-    Session *session = mds->sessionmap.get_oldest_session(Session::STATE_OPEN);
-    if (!session) break;
-    auto last_cap_renew_span = std::chrono::duration<double>(now-session->last_cap_renew).count();
-    if (last_cap_renew_span < cutoff) {
-      dout(20) << "laggiest active session is " << session->info.inst << " and renewed caps recently (" << last_cap_renew_span << "s ago)" << dendl;
-      break;
+
+  std::vector<Session*> to_evict;
+
+  const auto sessions_p1 = mds->sessionmap.by_state.find(Session::STATE_OPEN);
+  if (sessions_p1 != mds->sessionmap.by_state.end() && !sessions_p1->second->empty()) {
+    std::vector<Session*> new_stale;
+
+    for (auto session : *(sessions_p1->second)) {
+      auto last_cap_renew_span = std::chrono::duration<double>(now - session->last_cap_renew).count();
+      if (last_cap_renew_span < cutoff) {
+	dout(20) << "laggiest active session is " << session->info.inst
+		 << " and renewed caps recently (" << last_cap_renew_span << "s ago)" << dendl;
+	continue;
+      }
+
+      auto it = session->info.client_metadata.find("timeout");
+      if (it != session->info.client_metadata.end()) {
+	unsigned timeout = strtoul(it->second.c_str(), nullptr, 0);
+	if (timeout == 0) {
+	  dout(10) << "skipping session " << session->info.inst
+		   << ", infinite timeout specified" << dendl;
+	  continue;
+	}
+	double cutoff = queue_max_age + timeout;
+	if  (last_cap_renew_span < cutoff) {
+	  dout(10) << "skipping session " << session->info.inst
+		   << ", timeout (" << timeout << ") specified"
+		   << " and renewed caps recently (" << last_cap_renew_span << "s ago)" << dendl;
+	  continue;
+	}
+
+	// do not go through stale, evict it directly.
+	to_evict.push_back(session);
+      } else {
+	dout(10) << "new stale session " << session->info.inst
+		 << " last renewed caps " << last_cap_renew_span << "s ago" << dendl;
+	new_stale.push_back(session);
+      }
     }
 
-    dout(10) << "new stale session " << session->info.inst << " last renewed caps " << last_cap_renew_span << "s ago" << dendl;
-    mds->sessionmap.set_state(session, Session::STATE_STALE);
-    mds->locker->revoke_stale_caps(session);
-    mds->locker->remove_stale_leases(session);
-    mds->send_message_client(MClientSession::create(CEPH_SESSION_STALE, session->get_push_seq()), session);
-    finish_flush_session(session, session->get_push_seq());
+    for (auto session : new_stale) {
+      mds->sessionmap.set_state(session, Session::STATE_STALE);
+      mds->locker->revoke_stale_caps(session);
+      mds->locker->remove_stale_leases(session);
+      mds->send_message_client(MClientSession::create(CEPH_SESSION_STALE, session->get_push_seq()), session);
+      finish_flush_session(session, session->get_push_seq());
+    }
   }
 
   // autoclose
@@ -791,38 +976,35 @@ void Server::find_idle_sessions()
   }
 
   // Collect a list of sessions exceeding the autoclose threshold
-  std::vector<Session *> to_evict;
-  const auto sessions_p = mds->sessionmap.by_state.find(Session::STATE_STALE);
-  if (sessions_p == mds->sessionmap.by_state.end() || sessions_p->second->empty()) {
-    return;
+  const auto sessions_p2 = mds->sessionmap.by_state.find(Session::STATE_STALE);
+  if (sessions_p2 != mds->sessionmap.by_state.end() && !sessions_p2->second->empty()) {
+    for (auto session : *(sessions_p2->second)) {
+      assert(session->is_stale());
+      auto last_cap_renew_span = std::chrono::duration<double>(now - session->last_cap_renew).count();
+      if (last_cap_renew_span < cutoff) {
+	dout(20) << "oldest stale session is " << session->info.inst
+		 << " and recently renewed caps " << last_cap_renew_span << "s ago" << dendl;
+	break;
+      }
+      to_evict.push_back(session);
+    }
   }
-  const auto &stale_sessions = sessions_p->second;
-  ceph_assert(stale_sessions != nullptr);
 
-  for (const auto &session: *stale_sessions) {
-    auto last_cap_renew_span = std::chrono::duration<double>(now-session->last_cap_renew).count();
+  for (auto session: to_evict) {
     if (session->is_importing()) {
-      dout(10) << "stopping at importing session " << session->info.inst << dendl;
-      break;
-    }
-    ceph_assert(session->is_stale());
-    if (last_cap_renew_span < cutoff) {
-      dout(20) << "oldest stale session is " << session->info.inst << " and recently renewed caps " << last_cap_renew_span << "s ago" << dendl;
-      break;
+      dout(10) << "skipping session " << session->info.inst << ", it's being imported" << dendl;
+      continue;
     }
 
-    to_evict.push_back(session);
-  }
-
-  for (const auto &session: to_evict) {
-    auto last_cap_renew_span = std::chrono::duration<double>(now-session->last_cap_renew).count();
-    mds->clog->warn() << "evicting unresponsive client " << *session << ", after " << last_cap_renew_span << " seconds";
-    dout(10) << "autoclosing stale session " << session->info.inst << " last renewed caps " << last_cap_renew_span << "s ago" << dendl;
+    auto last_cap_renew_span = std::chrono::duration<double>(now - session->last_cap_renew).count();
+    mds->clog->warn() << "evicting unresponsive client " << *session
+		      << ", after " << last_cap_renew_span << " seconds";
+    dout(10) << "autoclosing stale session " << session->info.inst
+	     << " last renewed caps " << last_cap_renew_span << "s ago" << dendl;
 
     if (g_conf()->mds_session_blacklist_on_timeout) {
       std::stringstream ss;
-      mds->evict_client(session->get_client().v, false, true,
-                        ss, nullptr);
+      mds->evict_client(session->get_client().v, false, true, ss, nullptr);
     } else {
       kill_session(session, NULL);
     }
@@ -879,12 +1061,15 @@ void Server::kill_session(Session *session, Context *on_safe)
     journal_close_session(session, Session::STATE_KILLING, on_safe);
   } else {
     dout(10) << "kill_session importing or already closing/killing " << session << dendl;
-    ceph_assert(session->is_closing() || 
-	   session->is_closed() || 
-	   session->is_killing() ||
-	   session->is_importing());
-    if (on_safe) {
-      on_safe->complete(0);
+    if (session->is_closing() ||
+	session->is_killing()) {
+      if (on_safe)
+	mdlog->wait_for_safe(new MDSInternalContextWrapper(mds, on_safe));
+    } else {
+      ceph_assert(session->is_closed() ||
+		  session->is_importing());
+      if (on_safe)
+	on_safe->complete(0);
     }
   }
 }
@@ -953,11 +1138,14 @@ void Server::reconnect_clients(MDSInternalContext *reconnect_done_)
 {
   reconnect_done = reconnect_done_;
 
+  auto now = clock::now();
   set<Session*> sessions;
   mds->sessionmap.get_client_session_set(sessions);
   for (auto session : sessions) {
-    if (session->is_open())
-	client_reconnect_gather.insert(session->get_client());
+    if (session->is_open()) {
+      client_reconnect_gather.insert(session->get_client());
+      session->last_cap_renew = now;
+    }
   }
 
   if (client_reconnect_gather.empty()) {
@@ -1218,7 +1406,18 @@ void Server::reconnect_tick()
 	 ++p) {
       Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(p->v));
       ceph_assert(session);
-      dout(1) << "reconnect gave up on " << session->info.inst << dendl;
+
+      // Keep sessions that have specified timeout. These sessions will prevent
+      // mds from going to active. MDS goes to active after they all have been
+      // killed or reclaimed.
+      if (session->info.client_metadata.find("timeout") !=
+	  session->info.client_metadata.end()) {
+	dout(1) << "reconnect keeps " << session->info.inst << ", need to be reclaimed" << dendl;
+	client_reclaim_gather.insert(session->get_client());
+	continue;
+      }
+
+      dout(1) << "reconnect gives up on " << session->info.inst << dendl;
 
       mds->clog->warn() << "evicting unresponsive client " << *session
                         << ", after waiting " << g_conf()->mds_reconnect_timeout

@@ -710,6 +710,8 @@ void MDSRankDispatcher::tick()
 
   if (is_reconnect())
     server->reconnect_tick();
+  if (is_clientreplay())
+    maybe_clientreplay_done();
 
   if (is_active()) {
     balancer->tick();
@@ -999,17 +1001,6 @@ bool MDSRank::_dispatch(const Message::const_ref &m, bool new_msg)
     return true;
   }
 
-  // done with all client replayed requests?
-  if (is_clientreplay() &&
-      mdcache->is_open() &&
-      replay_queue.empty() &&
-      beacon.get_want_state() == MDSMap::STATE_CLIENTREPLAY) {
-    int num_requests = mdcache->get_num_client_requests();
-    dout(10) << " still have " << num_requests << " active replay requests" << dendl;
-    if (num_requests == 0)
-      clientreplay_done();
-  }
-
   // hack: thrash exports
   static utime_t start;
   utime_t now = ceph_clock_now();
@@ -1135,6 +1126,7 @@ bool MDSRank::handle_deferrable_message(const Message::const_ref &m)
       // SERVER
     case CEPH_MSG_CLIENT_SESSION:
     case CEPH_MSG_CLIENT_RECONNECT:
+    case CEPH_MSG_CLIENT_RECLAIM:
       ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_CLIENT);
       // fall-thru
     case CEPH_MSG_CLIENT_REQUEST:
@@ -1861,7 +1853,7 @@ void MDSRank::rejoin_done()
     return;
   }
 
-  if (replay_queue.empty())
+  if (replay_queue.empty() && !server->get_num_pending_reclaim())
     request_state(MDSMap::STATE_ACTIVE);
   else
     request_state(MDSMap::STATE_CLIENTREPLAY);
@@ -1877,13 +1869,31 @@ void MDSRank::clientreplay_start()
 
 bool MDSRank::queue_one_replay()
 {
-  if (replay_queue.empty()) {
-    mdlog->wait_for_safe(new C_MDS_VoidFn(this, &MDSRank::clientreplay_done));
-    return false;
+  if (!replay_queue.empty()) {
+    queue_waiter(replay_queue.front());
+    replay_queue.pop_front();
+    return true;
   }
-  queue_waiter(replay_queue.front());
-  replay_queue.pop_front();
-  return true;
+  // don't go to active if there are session waiting for being reclaimed
+  if (!server->get_num_pending_reclaim())
+    mdlog->wait_for_safe(new C_MDS_VoidFn(this, &MDSRank::clientreplay_done));
+  return false;
+}
+
+void MDSRank::maybe_clientreplay_done()
+{
+  if (is_clientreplay() &&
+      get_want_state() == MDSMap::STATE_CLIENTREPLAY &&
+      replay_queue.empty()) {
+    int num_requests = mdcache->get_num_client_requests();
+    int num_reclaim = server->get_num_pending_reclaim();
+    if (!num_requests && !num_reclaim) {
+      clientreplay_done();
+    } else {
+      dout(1) << " still have " << num_requests << " active replay requests, "
+	      << num_reclaim << " sessions need to be reclaimed" << dendl;
+    }
+  }
 }
 
 void MDSRank::clientreplay_done()

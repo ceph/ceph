@@ -57,6 +57,7 @@ std::string TestFixture::get_temp_image_name() {
 
 void TestFixture::SetUp() {
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), m_ioctx));
+  m_cct = reinterpret_cast<CephContext*>(m_ioctx.cct());
 
   m_image_name = get_temp_image_name();
   m_image_size = 2 << 20;

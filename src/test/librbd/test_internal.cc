@@ -326,7 +326,7 @@ TEST_F(TestInternal, FlattenFailsToLockImage) {
       parent->unlock_image();
     }
     librbd::NoOpProgressContext no_op;
-    ASSERT_EQ(0, librbd::remove(m_ioctx, clone_name, "", no_op));
+    ASSERT_EQ(0, librbd::api::Image<>::remove(m_ioctx, clone_name, "", no_op));
   } BOOST_SCOPE_EXIT_END;
 
   ASSERT_EQ(0, open_image(clone_name, &ictx2));
@@ -513,51 +513,6 @@ TEST_F(TestInternal, Metadata) {
   r = librbd::metadata_get(ictx, it->first, &val);
   ASSERT_EQ(0, r);
   ASSERT_STREQ(val.c_str(), "value3");
-}
-
-TEST_F(TestInternal, MetadataFilter) {
-  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
-
-  map<string, bool> test_confs = boost::assign::map_list_of(
-    "aaaaaaa", false)(
-    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", false)(
-    "cccccccccccccc", false);
-  map<string, bool>::iterator it = test_confs.begin();
-  const string prefix = "test_config_";
-  bool is_continue;
-  librbd::ImageCtx *ictx;
-  ASSERT_EQ(0, open_image(m_image_name, &ictx));
-
-  librbd::Image image1;
-  map<string, bufferlist> pairs, res;
-  pairs["abc"].append("value");
-  pairs["abcabc"].append("value");
-  pairs[prefix+it->first].append("value1");
-  ++it;
-  pairs[prefix+it->first].append("value2");
-  ++it;
-  pairs[prefix+it->first].append("value3");
-  pairs[prefix+"asdfsdaf"].append("value6");
-  pairs[prefix+"zxvzxcv123"].append("value5");
-
-  is_continue = ictx->_filter_metadata_confs(prefix, test_confs, pairs, &res);
-  ASSERT_TRUE(is_continue);
-  ASSERT_TRUE(res.size() == 3U);
-  it = test_confs.begin();
-  ASSERT_TRUE(res.count(it->first));
-  ASSERT_TRUE(it->second);
-  ++it;
-  ASSERT_TRUE(res.count(it->first));
-  ASSERT_TRUE(it->second);
-  ++it;
-  ASSERT_TRUE(res.count(it->first));
-  ASSERT_TRUE(it->second);
-  res.clear();
-
-  pairs["zzzzzzzz"].append("value7");
-  is_continue = ictx->_filter_metadata_confs(prefix, test_confs, pairs, &res);
-  ASSERT_FALSE(is_continue);
-  ASSERT_TRUE(res.size() == 3U);
 }
 
 TEST_F(TestInternal, MetadataConfApply) {
@@ -935,7 +890,8 @@ TEST_F(TestInternal, WriteFullCopyup) {
     }
 
     librbd::NoOpProgressContext remove_no_op;
-    ASSERT_EQ(0, librbd::remove(m_ioctx, clone_name, "", remove_no_op));
+    ASSERT_EQ(0, librbd::api::Image<>::remove(m_ioctx, clone_name, "",
+                                              remove_no_op));
   } BOOST_SCOPE_EXIT_END;
 
   ASSERT_EQ(0, open_image(clone_name, &ictx2));
@@ -979,7 +935,8 @@ TEST_F(TestInternal, RemoveById) {
   close_image(ictx);
 
   librbd::NoOpProgressContext remove_no_op;
-  ASSERT_EQ(0, librbd::remove(m_ioctx, "", image_id, remove_no_op));
+  ASSERT_EQ(0, librbd::api::Image<>::remove(m_ioctx, "", image_id,
+                                            remove_no_op));
 }
 
 static int iterate_cb(uint64_t off, size_t len, int exists, void *arg)
@@ -1350,7 +1307,7 @@ TEST_F(TestInternal, PoolMetadataConfApply) {
 
   ASSERT_EQ(0, open_image(image_name, &ictx));
   ASSERT_EQ(ictx->order, 17);
-  ASSERT_EQ(ictx->journal_order, 13);
+  ASSERT_EQ(ictx->config.get_val<uint64_t>("rbd_journal_order"), 13U);
 
   if (is_feature_enabled(RBD_FEATURE_JOURNALING)) {
     uint8_t order;
@@ -1369,7 +1326,8 @@ TEST_F(TestInternal, PoolMetadataConfApply) {
                                                   "14"));
     ASSERT_EQ(0, ictx->operations->update_features(RBD_FEATURE_JOURNALING,
                                                    true));
-    ASSERT_EQ(ictx->journal_order, 14);
+    ASSERT_EQ(ictx->config.get_val<uint64_t>("rbd_journal_order"), 14U);
+
     C_SaferCond cond1;
     cls::journal::client::get_immutable_metadata(m_ioctx, "journal." + ictx->id,
                                                  &order, &splay_width, &pool_id,

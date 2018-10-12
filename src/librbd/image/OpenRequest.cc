@@ -528,9 +528,9 @@ Context *OpenRequest<I>::send_init_cache(int *result) {
 
   // readahead requires the cache
   m_image_ctx->readahead.set_trigger_requests(
-    m_image_ctx->readahead_trigger_requests);
+    m_image_ctx->config.template get_val<uint64_t>("rbd_readahead_trigger_requests"));
   m_image_ctx->readahead.set_max_readahead_size(
-    m_image_ctx->readahead_max_bytes);
+    m_image_ctx->config.template get_val<Option::size_t>("rbd_readahead_max_bytes"));
 
   return send_register_watch(result);
 }

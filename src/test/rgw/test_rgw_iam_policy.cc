@@ -91,7 +91,7 @@ class FakeIdentity : public Identity {
 public:
 
   explicit FakeIdentity(Principal&& id) : id(std::move(id)) {}
-  uint32_t get_perms_from_aclspec(const aclspec_t& aclspec) const override {
+  uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override {
     ceph_abort();
     return 0;
   };

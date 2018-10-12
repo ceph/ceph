@@ -8,6 +8,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
 #include "librbd/api/PoolMetadata.h"
+#include <boost/algorithm/string/predicate.hpp>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -22,85 +23,60 @@ const uint32_t MAX_KEYS = 64;
 
 typedef std::map<std::string, std::pair<std::string, config_source_t>> Parent;
 
+static std::set<std::string> EXCLUDE_OPTIONS {
+    "rbd_auto_exclusive_lock_until_manual_request",
+    "rbd_default_format",
+    "rbd_default_map_options",
+    "rbd_default_pool",
+    "rbd_discard_on_zeroed_write_same",
+    "rbd_op_thread_timeout",
+    "rbd_op_threads",
+    "rbd_tracing",
+    "rbd_validate_names",
+    "rbd_validate_pool",
+    "rbd_mirror_pool_replayers_refresh_interval"
+  };
+static std::set<std::string> EXCLUDE_IMAGE_OPTIONS {
+    "rbd_default_clone_format",
+    "rbd_default_data_pool",
+    "rbd_default_features",
+    "rbd_default_format",
+    "rbd_default_order",
+    "rbd_default_stripe_count",
+    "rbd_default_stripe_unit",
+    "rbd_journal_order",
+    "rbd_journal_pool",
+    "rbd_journal_splay_width"
+  };
+
 struct Options : Parent {
-  Options(bool image_apply_only_options) :
-    Parent{
-      {"rbd_atime_update_interval", {}},
-      {"rbd_balance_parent_reads", {}},
-      {"rbd_balance_snap_reads", {}},
-      {"rbd_blacklist_expire_seconds", {}},
-      {"rbd_blacklist_on_break_lock", {}},
-      {"rbd_cache", {}},
-      {"rbd_cache_block_writes_upfront", {}},
-      {"rbd_cache_max_dirty", {}},
-      {"rbd_cache_max_dirty_age", {}},
-      {"rbd_cache_max_dirty_object", {}},
-      {"rbd_cache_size", {}},
-      {"rbd_cache_target_dirty", {}},
-      {"rbd_cache_writethrough_until_flush", {}},
-      {"rbd_clone_copy_on_read", {}},
-      {"rbd_concurrent_management_ops", {}},
-      {"rbd_journal_commit_age", {}},
-      {"rbd_journal_max_concurrent_object_sets", {}},
-      {"rbd_journal_max_payload_bytes", {}},
-      {"rbd_journal_object_flush_age", {}},
-      {"rbd_journal_object_flush_bytes", {}},
-      {"rbd_journal_object_flush_interval", {}},
-      {"rbd_journal_order", {}},
-      {"rbd_journal_pool", {}},
-      {"rbd_journal_splay_width", {}},
-      {"rbd_localize_parent_reads", {}},
-      {"rbd_localize_snap_reads", {}},
-      {"rbd_mirroring_delete_delay", {}},
-      {"rbd_mirroring_replay_delay", {}},
-      {"rbd_mirroring_resync_after_disconnect", {}},
-      {"rbd_mtime_update_interval", {}},
-      {"rbd_non_blocking_aio", {}},
-      {"rbd_qos_bps_limit", {}},
-      {"rbd_qos_iops_limit", {}},
-      {"rbd_qos_read_bps_limit", {}},
-      {"rbd_qos_read_iops_limit", {}},
-      {"rbd_qos_write_bps_limit", {}},
-      {"rbd_qos_write_iops_limit", {}},
-      {"rbd_readahead_disable_after_bytes", {}},
-      {"rbd_readahead_max_bytes", {}},
-      {"rbd_readahead_trigger_requests", {}},
-      {"rbd_request_timed_out_seconds", {}},
-      {"rbd_skip_partial_discard", {}},
-      {"rbd_sparse_read_threshold_bytes", {}},
-      // rbd-mirror daemon options
-      {"rbd_mirror_concurrent_image_deletions", {}},
-      {"rbd_mirror_concurrent_image_syncs", {}},
-      {"rbd_mirror_delete_retry_interval", {}},
-      {"rbd_mirror_image_policy_migration_throttle", {}},
-      {"rbd_mirror_image_policy_rebalance_timeout", {}},
-      {"rbd_mirror_image_policy_type", {}},
-      {"rbd_mirror_image_policy_update_throttle_interval", {}},
-      {"rbd_mirror_image_state_check_interval", {}},
-      {"rbd_mirror_journal_commit_age", {}},
-      {"rbd_mirror_journal_max_fetch_bytes", {}},
-      {"rbd_mirror_journal_poll_age", {}},
-      {"rbd_mirror_leader_heartbeat_interval", {}},
-      {"rbd_mirror_leader_max_acquire_attempts_before_break", {}},
-      {"rbd_mirror_leader_max_missed_heartbeats", {}},
-      {"rbd_mirror_sync_point_update_age", {}},
-    } {
-    if (!image_apply_only_options) {
-      Parent image_create_opts = {
-        {"rbd_default_data_pool", {}},
-        {"rbd_default_features", {}},
-        {"rbd_default_order", {}},
-        {"rbd_default_stripe_count", {}},
-        {"rbd_default_stripe_unit", {}},
-        {"rbd_journal_order", {}},
-        {"rbd_journal_pool", {}},
-        {"rbd_journal_splay_width", {}},
-      };
-      insert(image_create_opts.begin(), image_create_opts.end());
+  librados::IoCtx& io_ctx;
+
+  Options(librados::IoCtx& io_ctx, bool image_apply_only_options)
+    : io_ctx(io_ctx) {
+    CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
+
+    const std::string rbd_key_prefix("rbd_");
+    const std::string rbd_mirror_key_prefix("rbd_mirror_");
+    auto& schema = cct->_conf.get_schema();
+    for (auto& pair : schema) {
+      if (!boost::starts_with(pair.first, rbd_key_prefix)) {
+        continue;
+      } else if (EXCLUDE_OPTIONS.count(pair.first) != 0) {
+        continue;
+      } else if (image_apply_only_options &&
+                 EXCLUDE_IMAGE_OPTIONS.count(pair.first) != 0) {
+        continue;
+      } else if (image_apply_only_options &&
+                 boost::starts_with(pair.first, rbd_mirror_key_prefix)) {
+        continue;
+      }
+
+      insert({pair.first, {}});
     }
   }
 
-  int init(librados::IoCtx& io_ctx) {
+  int init() {
     CephContext *cct = (CephContext *)io_ctx.cct();
 
     for (auto &it : *this) {
@@ -150,7 +126,7 @@ struct Options : Parent {
 template <typename I>
 bool Config<I>::is_option_name(librados::IoCtx& io_ctx,
                                const std::string &name) {
-  Options opts(false);
+  Options opts(io_ctx, false);
 
   return (opts.find(name) != opts.end());
 }
@@ -158,9 +134,9 @@ bool Config<I>::is_option_name(librados::IoCtx& io_ctx,
 template <typename I>
 int Config<I>::list(librados::IoCtx& io_ctx,
                     std::vector<config_option_t> *options) {
-  Options opts(false);
+  Options opts(io_ctx, false);
 
-  int r = opts.init(io_ctx);
+  int r = opts.init();
   if (r < 0) {
     return r;
   }
@@ -174,7 +150,7 @@ int Config<I>::list(librados::IoCtx& io_ctx,
 
 template <typename I>
 bool Config<I>::is_option_name(I *image_ctx, const std::string &name) {
-  Options opts(true);
+  Options opts(image_ctx->md_ctx, true);
 
   return (opts.find(name) != opts.end());
 }
@@ -182,9 +158,9 @@ bool Config<I>::is_option_name(I *image_ctx, const std::string &name) {
 template <typename I>
 int Config<I>::list(I *image_ctx, std::vector<config_option_t> *options) {
   CephContext *cct = image_ctx->cct;
-  Options opts(true);
+  Options opts(image_ctx->md_ctx, true);
 
-  int r = opts.init(image_ctx->md_ctx);
+  int r = opts.init();
   if (r < 0) {
     return r;
   }
@@ -229,6 +205,30 @@ int Config<I>::list(I *image_ctx, std::vector<config_option_t> *options) {
   }
 
   return 0;
+}
+
+template <typename I>
+void Config<I>::apply_pool_overrides(librados::IoCtx& io_ctx,
+                                     ConfigProxy* config) {
+  CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
+
+  Options opts(io_ctx, false);
+  int r = opts.init();
+  if (r < 0) {
+    lderr(cct) << "failed to read pool config overrides: " << cpp_strerror(r)
+               << dendl;
+    return;
+  }
+
+  for (auto& pair : opts) {
+    if (pair.second.second == RBD_CONFIG_SOURCE_POOL) {
+      r = config->set_val(pair.first, pair.second.first);
+      if (r < 0) {
+        lderr(cct) << "failed to override pool config " << pair.first << "="
+                   << pair.second.first << ": " << cpp_strerror(r) << dendl;
+      }
+    }
+  }
 }
 
 } // namespace api

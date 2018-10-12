@@ -1832,7 +1832,7 @@ int RGWPostObj_ObjStore_S3::get_policy()
     /* FIXME: this is a makeshift solution. The browser upload authentication will be
      * handled by an instance of rgw::auth::Completer spawned in Handler's authorize()
      * method. */
-    const int ret = rgw::auth::Strategy::apply(auth_registry_ptr->get_s3_post(), s);
+    const int ret = rgw::auth::Strategy::apply(this, auth_registry_ptr->get_s3_post(), s);
     if (ret != 0) {
       return -EACCES;
     } else {
@@ -3470,7 +3470,8 @@ discover_aws_flavour(const req_info& info)
  *
  * it tries AWS v4 before AWS v2
  */
-int RGW_Auth_S3::authorize(RGWRados* const store,
+int RGW_Auth_S3::authorize(const DoutPrefixProvider *dpp,
+                           RGWRados* const store,
                            const rgw::auth::StrategyRegistry& auth_registry,
                            struct req_state* const s)
 {
@@ -3479,11 +3480,11 @@ int RGW_Auth_S3::authorize(RGWRados* const store,
   if (!store->ctx()->_conf->rgw_s3_auth_use_rados &&
       !store->ctx()->_conf->rgw_s3_auth_use_keystone &&
       !store->ctx()->_conf->rgw_s3_auth_use_ldap) {
-    dout(0) << "WARNING: no authorization backend enabled! Users will never authenticate." << dendl;
+    ldpp_dout(dpp, 0) << "WARNING: no authorization backend enabled! Users will never authenticate." << dendl;
     return -EPERM;
   }
 
-  const auto ret = rgw::auth::Strategy::apply(auth_registry.get_s3_main(), s);
+  const auto ret = rgw::auth::Strategy::apply(dpp, auth_registry.get_s3_main(), s);
   if (ret == 0) {
     /* Populate the owner info. */
     s->owner.set_id(s->user->user_id);
@@ -4164,7 +4165,7 @@ AWSBrowserUploadAbstractor::get_auth_data(const req_state* const s) const
 }
 
 AWSEngine::result_t
-AWSEngine::authenticate(const req_state* const s) const
+AWSEngine::authenticate(const DoutPrefixProvider* dpp, const req_state* const s) const
 {
   /* Small reminder: an ver_abstractor is allowed to throw! */
   const auto auth_data = ver_abstractor.get_auth_data(s);
@@ -4172,7 +4173,8 @@ AWSEngine::authenticate(const req_state* const s) const
   if (auth_data.access_key_id.empty() || auth_data.client_signature.empty()) {
     return result_t::deny(-EINVAL);
   } else {
-    return authenticate(auth_data.access_key_id,
+    return authenticate(dpp,
+                        auth_data.access_key_id,
 		        auth_data.client_signature,
             auth_data.session_token,
 			auth_data.string_to_sign,
@@ -4237,6 +4239,7 @@ rgw::auth::s3::LDAPEngine::get_creds_info(const rgw::RGWToken& token) const noex
 
 rgw::auth::Engine::result_t
 rgw::auth::s3::LDAPEngine::authenticate(
+  const DoutPrefixProvider* dpp,
   const boost::string_view& access_key_id,
   const boost::string_view& signature,
   const boost::string_view& session_token,
@@ -4264,7 +4267,7 @@ rgw::auth::s3::LDAPEngine::authenticate(
   user_info.user_id = base64_token.id;
   if (rgw_get_user_info_by_uid(store, user_info.user_id, user_info) >= 0) {
     if (user_info.type != TYPE_LDAP) {
-      ldout(cct, 10) << "ERROR: User id of type: " << user_info.type << " is already present" << dendl;
+      ldpp_dout(dpp, 10) << "ERROR: User id of type: " << user_info.type << " is already present" << dendl;
       return nullptr;
     }
   }*/
@@ -4288,6 +4291,7 @@ void rgw::auth::s3::LDAPEngine::shutdown() {
 /* LocalEngine */
 rgw::auth::Engine::result_t
 rgw::auth::s3::LocalEngine::authenticate(
+  const DoutPrefixProvider* dpp,
   const boost::string_view& _access_key_id,
   const boost::string_view& signature,
   const boost::string_view& session_token,
@@ -4301,14 +4305,14 @@ rgw::auth::s3::LocalEngine::authenticate(
   /* TODO(rzarzynski): we need to have string-view taking variant. */
   const std::string access_key_id = _access_key_id.to_string();
   if (rgw_get_user_info_by_access_key(store, access_key_id, user_info) < 0) {
-      ldout(cct, 5) << "error reading user info, uid=" << access_key_id
+      ldpp_dout(dpp, 5) << "error reading user info, uid=" << access_key_id
               << " can't authenticate" << dendl;
       return result_t::deny(-ERR_INVALID_ACCESS_KEY);
   }
   //TODO: Uncomment, when we have a migration plan in place.
   /*else {
     if (s->user->type != TYPE_RGW) {
-      ldout(cct, 10) << "ERROR: User id of type: " << s->user->type
+      ldpp_dout(dpp, 10) << "ERROR: User id of type: " << s->user->type
                      << " is present" << dendl;
       throw -EPERM;
     }
@@ -4316,7 +4320,7 @@ rgw::auth::s3::LocalEngine::authenticate(
 
   const auto iter = user_info.access_keys.find(access_key_id);
   if (iter == std::end(user_info.access_keys)) {
-    ldout(cct, 0) << "ERROR: access key not encoded in user info" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: access key not encoded in user info" << dendl;
     return result_t::deny(-EPERM);
   }
   const RGWAccessKey& k = iter->second;
@@ -4325,12 +4329,12 @@ rgw::auth::s3::LocalEngine::authenticate(
     signature_factory(cct, k.key, string_to_sign);
   auto compare = signature.compare(server_signature);
 
-  ldout(cct, 15) << "string_to_sign="
+  ldpp_dout(dpp, 15) << "string_to_sign="
                  << rgw::crypt_sanitize::log_content{string_to_sign}
                  << dendl;
-  ldout(cct, 15) << "server signature=" << server_signature << dendl;
-  ldout(cct, 15) << "client signature=" << signature << dendl;
-  ldout(cct, 15) << "compare=" << compare << dendl;
+  ldpp_dout(dpp, 15) << "server signature=" << server_signature << dendl;
+  ldpp_dout(dpp, 15) << "client signature=" << signature << dendl;
+  ldpp_dout(dpp, 15) << "compare=" << compare << dendl;
 
   if (compare != 0) {
     return result_t::deny(-ERR_SIGNATURE_NO_MATCH);
@@ -4397,6 +4401,7 @@ rgw::auth::s3::STSEngine::get_session_token(const boost::string_view& session_to
 
 rgw::auth::Engine::result_t
 rgw::auth::s3::STSEngine::authenticate(
+  const DoutPrefixProvider* dpp,
   const boost::string_view& _access_key_id,
   const boost::string_view& signature,
   const boost::string_view& session_token,
@@ -4417,7 +4422,7 @@ rgw::auth::s3::STSEngine::authenticate(
   //Authentication
   //Check if access key is not the same passed in by client
   if (token.access_key_id != _access_key_id) {
-    ldout(cct, 0) << "Invalid access key" << dendl;
+    ldpp_dout(dpp, 0) << "Invalid access key" << dendl;
     return result_t::reject(-EPERM);
   }
   //Check if the token has expired
@@ -4428,11 +4433,11 @@ rgw::auth::s3::STSEngine::authenticate(
       if (exp) {
         real_clock::time_point now = real_clock::now();
         if (now >= *exp) {
-          ldout(cct, 0) << "ERROR: Token expired" << dendl;
+          ldpp_dout(dpp, 0) << "ERROR: Token expired" << dendl;
           return result_t::reject(-EPERM);
         }
       } else {
-        ldout(cct, 0) << "ERROR: Invalid expiration: " << expiration << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: Invalid expiration: " << expiration << dendl;
         return result_t::reject(-EPERM);
       }
     }
@@ -4442,12 +4447,12 @@ rgw::auth::s3::STSEngine::authenticate(
     signature_factory(cct, token.secret_access_key, string_to_sign);
   auto compare = signature.compare(server_signature);
 
-  ldout(cct, 15) << "string_to_sign="
+  ldpp_dout(dpp, 15) << "string_to_sign="
                  << rgw::crypt_sanitize::log_content{string_to_sign}
                  << dendl;
-  ldout(cct, 15) << "server signature=" << server_signature << dendl;
-  ldout(cct, 15) << "client signature=" << signature << dendl;
-  ldout(cct, 15) << "compare=" << compare << dendl;
+  ldpp_dout(dpp, 15) << "server signature=" << server_signature << dendl;
+  ldpp_dout(dpp, 15) << "client signature=" << signature << dendl;
+  ldpp_dout(dpp, 15) << "compare=" << compare << dendl;
 
   if (compare != 0) {
     return result_t::reject(-ERR_SIGNATURE_NO_MATCH);
@@ -4474,7 +4479,7 @@ rgw::auth::s3::STSEngine::authenticate(
     // get user info
     int ret = rgw_get_user_info_by_uid(store, token.user, user_info, NULL);
     if (ret < 0) {
-      ldout(cct, 5) << "ERROR: failed reading user info: uid=" << token.user << dendl;
+      ldpp_dout(dpp, 5) << "ERROR: failed reading user info: uid=" << token.user << dendl;
       return result_t::reject(-EPERM);
     }
   }

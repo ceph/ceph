@@ -3,13 +3,17 @@
   Failed to load data.
 </cd-error-panel>
 <div class="dataTables_wrapper">
-  <div class="dataTables_header clearfix"
+  <div class="dataTables_header clearfix form-inline"
        *ngIf="toolHeader">
     <!-- actions -->
     <div class="oadatatableactions">
       <ng-content select=".table-actions"></ng-content>
     </div>
     <!-- end actions -->
+
+    <!-- filters -->
+    <ng-content select=".table-filters"></ng-content>
+    <!-- end filters -->
 
     <!-- search -->
     <div class="input-group">

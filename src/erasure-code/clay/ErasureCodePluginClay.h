@@ -3,7 +3,7 @@
 /*
  * Ceph distributed storage system
  *
- * Copyright (C) 2018 Myna Vajha <mynaramana@gmail.com>
+ * Copyright (C) 2018 Indian Institute of Science <office.ece@iisc.ac.in>
  *
  * Author: Myna Vajha <mynaramana@gmail.com>
  *

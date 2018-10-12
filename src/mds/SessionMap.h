@@ -120,6 +120,7 @@ private:
   time birth_time;
 
 public:
+  Session *reclaiming_from = nullptr;
 
   void push_pv(version_t pv)
   {
