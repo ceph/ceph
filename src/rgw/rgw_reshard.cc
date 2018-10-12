@@ -226,9 +226,11 @@ RGWBucketReshard::RGWBucketReshard(RGWRados *_store,
 int RGWBucketReshard::lock_bucket()
 {
   reshard_lock.set_must_renew(false);
-  int ret = reshard_lock.lock_exclusive(&store->reshard_pool_ctx, reshard_oid);
+  int ret = reshard_lock.lock_exclusive_ephemeral(&store->reshard_pool_ctx,
+						  reshard_oid);
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "RGWReshard::add failed to acquire lock on " << reshard_oid << " ret=" << ret << dendl;
+    ldout(store->ctx(), 0) << "RGWReshard::add failed to acquire lock on " <<
+      reshard_oid << " ret=" << ret << dendl;
     return ret;
   }
   lock_start_time = Clock::now();
@@ -257,7 +259,8 @@ int RGWBucketReshard::renew_lock_bucket(const Clock::time_point& now)
   }
 
   reshard_lock.set_must_renew(true);
-  int ret = reshard_lock.lock_exclusive(&store->reshard_pool_ctx, reshard_oid);
+  int ret = reshard_lock.lock_exclusive_ephemeral(&store->reshard_pool_ctx,
+						  reshard_oid);
   if (ret < 0) { /* expired or already locked by another processor */
     ldout(store->ctx(), 5) << __func__ << "(): failed to renew lock on " <<
       reshard_oid << " with " << cpp_strerror(-ret) << dendl;
