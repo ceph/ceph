@@ -8,6 +8,7 @@ class TestSchedule(object):
         '--owner': 'OWNER',
         '--description': 'DESC',
         '--email': 'EMAIL',
+        '--first-in-suite': False,
         '--last-in-suite': True,
         '--name': 'NAME',
         '--worker': 'tala',
@@ -22,6 +23,7 @@ class TestSchedule(object):
         expected = {
             'description': 'DESC',
             'email': 'EMAIL',
+            'first_in_suite': False,
             'last_in_suite': True,
             'machine_type': 'tala',
             'name': 'NAME',

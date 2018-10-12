@@ -9,6 +9,8 @@ apache-libcloud==1.5.0
 appdirs==1.4.3            # via os-client-config
 argparse==1.4.0
 asn1crypto==0.22.0        # via cryptography
+atomicwrites==1.1.5       # via pytest
+attrs==18.1.0             # via pytest
 babel==2.4.0              # via osc-lib, oslo.i18n, python-cinderclient, python-glanceclient, python-neutronclient, python-novaclient, python-openstackclient
 backports.ssl-match-hostname==3.5.0.1
 beanstalkc==0.4.0
@@ -27,7 +29,7 @@ deprecation==1.0          # via openstacksdk
 docopt==0.6.2
 enum34==1.1.6             # via cryptography
 first==2.0.1              # via pip-tools
-funcsigs==1.0.2           # via debtcollector, oslo.utils
+funcsigs==1.0.2           # via debtcollector, oslo.utils, pytest
 functools32==3.2.3.post2  # via jsonschema
 gevent==1.2.1
 greenlet==0.4.12          # via gevent
@@ -40,10 +42,10 @@ jsonpatch==1.15           # via warlock
 jsonpointer==1.10         # via jsonpatch
 jsonschema==2.6.0         # via warlock
 keystoneauth1==2.19.0     # via openstacksdk, os-client-config, osc-lib, python-cinderclient, python-glanceclient, python-keystoneclient, python-neutronclient, python-novaclient, python-openstackclient
-libvirt-python
 manhole==1.3.0
 markupsafe==1.0           # via jinja2
 monotonic==1.3            # via oslo.utils
+more-itertools==4.3.0     # via pytest
 msgpack-python==0.4.8     # via oslo.serialization
 mysql-python==1.2.3
 ndg-httpsclient==0.4.2
@@ -58,19 +60,21 @@ oslo.i18n==3.15.0         # via osc-lib, oslo.config, oslo.utils, python-cinderc
 oslo.serialization==2.18.0  # via python-keystoneclient, python-neutronclient, python-novaclient
 oslo.utils==3.25.0        # via osc-lib, oslo.serialization, python-cinderclient, python-glanceclient, python-keystoneclient, python-neutronclient, python-novaclient, python-openstackclient
 paramiko==2.1.2
+pathlib2==2.3.2           # via pytest
 pbr==2.0.0                # via cliff, debtcollector, keystoneauth1, openstacksdk, osc-lib, oslo.i18n, oslo.serialization, oslo.utils, positional, python-cinderclient, python-glanceclient, python-keystoneclient, python-neutronclient, python-novaclient, python-openstackclient, requestsexceptions, stevedore
 pexpect==4.2.1
 pip-tools==1.10.1
-pluggy==0.6.0             # via tox
+pluggy==0.7.1             # via pytest, tox
 positional==1.1.1         # via keystoneauth1, python-keystoneclient
 prettytable==0.7.2
 psutil==5.2.2
 ptyprocess==0.5.1         # via pexpect
-py==1.5.3                 # via tox
+py==1.5.3                 # via pytest, tox
 pyasn1==0.2.3
 pycparser==2.17           # via cffi
 pyopenssl==16.2.0
 pyparsing==2.2.0          # via cliff, cmd2, oslo.utils
+pytest==3.7.1
 python-cinderclient==2.0.1  # via python-openstackclient
 python-dateutil==2.6.0
 python-glanceclient==2.6.0  # via python-openstackclient
@@ -84,6 +88,7 @@ raven==6.0.0
 requests==2.12.5
 requestsexceptions==1.2.0  # via os-client-config
 rfc3986==0.4.1            # via oslo.config
+scandir==1.8              # via pathlib2
 simplejson==3.10.0        # via osc-lib, python-cinderclient, python-neutronclient, python-novaclient
 six==1.10.0
 stevedore==1.21.0         # via cliff, keystoneauth1, openstacksdk, osc-lib, oslo.config, python-keystoneclient

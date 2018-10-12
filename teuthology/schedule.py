@@ -7,13 +7,21 @@ from teuthology import report
 
 
 def main(args):
+    if not args['--first-in-suite']:
+        first_job_args = ['subset', 'seed']
+        for arg in first_job_args:
+            opt = '--{arg}'.format(arg=arg)
+            msg_fmt = '{opt} is only applicable to the first job in a suite'
+            if args[opt]:
+                raise ValueError(msg_fmt.format(opt=opt))
+
     if not args['--last-in-suite']:
-        if args['--email']:
-            raise ValueError(
-                '--email is only applicable to the last job in a suite')
-        if args['--timeout']:
-            raise ValueError(
-                '--timeout is only applicable to the last job in a suite')
+        last_job_args = ['email', 'timeout']
+        for arg in last_job_args:
+            opt = '--{arg}'.format(arg=arg)
+            msg_fmt = '{opt} is only applicable to the last job in a suite'
+            if args[opt]:
+                raise ValueError(msg_fmt.format(opt=opt))
 
     name = args['--name']
     if not name or name.isdigit():
@@ -43,6 +51,7 @@ def build_config(args):
 
     job_config = dict(
         name=args['--name'],
+        first_in_suite=args['--first-in-suite'],
         last_in_suite=args['--last-in-suite'],
         email=args['--email'],
         description=args['--description'],
@@ -56,8 +65,13 @@ def build_config(args):
     # settings in the yaml override what's passed on the command line. This is
     # primarily to accommodate jobs with multiple machine types.
     job_config.update(conf_dict)
-    if args['--timeout'] is not None:
-        job_config['results_timeout'] = args['--timeout']
+    for arg,conf in {'--timeout':'results_timeout',
+                     '--seed': 'seed',
+                     '--subset': 'subset'}.items():
+        val = args.get(arg, None)
+        if val is not None:
+            job_config[conf] = val
+
     return job_config
 
 

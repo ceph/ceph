@@ -391,15 +391,6 @@ class Remote(object):
     @property
     def os(self):
         if not hasattr(self, '_os'):
-            proc = self.run(
-                args=[
-                    'python', '-c',
-                    'import platform; print platform.linux_distribution()'],
-                stdout=StringIO(), stderr=StringIO(), check_status=False)
-            if proc.exitstatus == 0:
-                self._os = OS.from_python(proc.stdout.getvalue().strip())
-                return self._os
-
             proc = self.run(args=['cat', '/etc/os-release'], stdout=StringIO(),
                             stderr=StringIO(), check_status=False)
             if proc.exitstatus == 0:

@@ -139,10 +139,16 @@ class RemoteProcess(object):
 
         :returns: self.returncode
         """
-        for greenlet in self.greenlets:
-            greenlet.get()
 
         status = self._get_exitstatus()
+        if status != 0:
+            log.debug("got remote process result: {}".format(status))
+        for greenlet in self.greenlets:
+            try:
+                greenlet.get(block=True,timeout=60)
+            except gevent.Timeout:
+                log.debug("timed out waiting; will kill: {}".format(greenlet))
+                greenlet.kill(block=False)
         for stream in ('stdout', 'stderr'):
             if hasattr(self, stream):
                 stream_obj = getattr(self, stream)

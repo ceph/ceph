@@ -345,6 +345,13 @@ def main(args):
     if suite_repo:
         teuth_config.ceph_qa_suite_git_url = suite_repo
 
+    # overwrite the config values of os_{type,version} if corresponding 
+    # command-line arguments are provided
+    if os_type:
+        config["os_type"] = os_type
+    if os_version:
+        config["os_version"] = os_version
+
     config["tasks"] = validate_tasks(config)
 
     init_tasks = get_initial_tasks(lock, config, machine_type)
@@ -357,14 +364,6 @@ def main(args):
 
     # fetches the tasks and returns a new suite_path if needed
     config["suite_path"] = fetch_tasks_if_needed(config)
-
-    # overwrite the config value of os_type if --os-type is provided
-    if os_type:
-        config["os_type"] = os_type
-
-    # overwrite the config value of os_version if --os-version is provided
-    if os_version:
-        config["os_version"] = os_version
 
     # If the job has a 'use_shaman' key, use that value to override the global
     # config's value.

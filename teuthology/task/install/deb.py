@@ -48,6 +48,13 @@ def _update_package_list_and_install(ctx, remote, debs, config):
     log.info("Installing packages: {pkglist} on remote deb {arch}".format(
         pkglist=", ".join(debs), arch=builder.arch)
     )
+    system_pkglist = config.get('extra_system_packages')
+    if system_pkglist:
+        if isinstance(system_pkglist, dict):
+            system_pkglist = system_pkglist.get('deb')
+        log.info("Installing system (non-project) packages: {pkglist} on remote deb {arch}".format(
+            pkglist=", ".join(system_pkglist), arch=builder.arch)
+        )
     # get baseurl
     log.info('Pulling from %s', builder.base_url)
 
@@ -57,15 +64,20 @@ def _update_package_list_and_install(ctx, remote, debs, config):
     builder.install_repo()
 
     remote.run(args=['sudo', 'apt-get', 'update'], check_status=False)
-    remote.run(
-        args=[
+    install_cmd = [
             'sudo', 'DEBIAN_FRONTEND=noninteractive', 'apt-get', '-y',
             '--force-yes',
             '-o', run.Raw('Dpkg::Options::="--force-confdef"'), '-o', run.Raw(
                 'Dpkg::Options::="--force-confold"'),
             'install',
-        ] + ['%s=%s' % (d, version) for d in debs],
+        ]
+    remote.run(
+        args=install_cmd + ['%s=%s' % (d, version) for d in debs],
     )
+    if system_pkglist:
+        remote.run(
+            args=install_cmd + system_pkglist,
+        )
     ldir = _get_local_dir(config, remote)
     if ldir:
         for fyle in os.listdir(ldir):

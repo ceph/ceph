@@ -1,3 +1,4 @@
+import os
 import random
 
 from mock import patch, MagicMock
@@ -256,19 +257,17 @@ class TestBuildMatrix(object):
                 },
             },
         }
-        for info in [(fake_fs,'d0_0'), (fake_fs1,'d0_0$')]:
-            fsv = info[0]
-            dval = info[1]
-            self.start_patchers(fsv)
-            result = build_matrix.build_matrix(dval)
+        for fs, root in [(fake_fs,'d0_0'), (fake_fs1,'d0_0$')]:
+            self.start_patchers(fs)
+            result = build_matrix.build_matrix(root)
             assert len(result) == 1
             if result[0][0][1:].startswith('d1_2'):
                 for i in result:
-                    assert 'd0_0/d1_2/d1_2_0.yaml' in i[1]
-                    assert 'd0_0/d1_2/d1_2_1.yaml' in i[1]
-                    assert 'd0_0/d1_2/d1_2_2.yaml' in i[1]
-                    assert 'd0_0/d1_2/d1_2_3.yaml' in i[1]
-            if dval == 'd0_0':
+                    assert os.path.join(root, 'd1_2/d1_2_0.yaml') in i[1]
+                    assert os.path.join(root, 'd1_2/d1_2_1.yaml') in i[1]
+                    assert os.path.join(root, 'd1_2/d1_2_2.yaml') in i[1]
+                    assert os.path.join(root, 'd1_2/d1_2_3.yaml') in i[1]
+            if root == 'd0_0':
                 self.stop_patchers()
 
     def test_random_dollar_sign_with_convolve(self):

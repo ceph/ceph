@@ -25,7 +25,7 @@ class CephAnsible(Task):
     - ceph-ansible:
         repo: {git_base}ceph-ansible.git
         branch: mybranch # defaults to master
-        ansible-version: 2.2 # defaults to 2.2.1
+        ansible-version: 2.4 # defaults to 2.5
         vars:
           ceph_dev: True ( default)
           ceph_conf_overrides:
@@ -53,6 +53,7 @@ class CephAnsible(Task):
         osds='osd',
         rgws='rgw',
         clients='client',
+        nfss='nfs',
     )
 
     def __init__(self, ctx, config):
@@ -407,7 +408,7 @@ class CephAnsible(Task):
         branch = 'master'
         if self.config.get('branch'):
             branch = self.config.get('branch')
-        ansible_ver = 'ansible==2.3.2'
+        ansible_ver = 'ansible==2.5'
         if self.config.get('ansible-version'):
             ansible_ver = 'ansible==' + self.config.get('ansible-version')
         ceph_installer.run(

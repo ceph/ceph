@@ -196,6 +196,7 @@ class TestScheduleSuite(object):
         self.args = YamlConfig.from_dict(self.args_dict)
 
     @patch('teuthology.suite.run.Run.schedule_jobs')
+    @patch('teuthology.suite.run.Run.write_rerun_memo')
     @patch('teuthology.suite.util.has_packages_for_distro')
     @patch('teuthology.suite.util.get_package_versions')
     @patch('teuthology.suite.util.get_install_task_flavor')
@@ -216,6 +217,7 @@ class TestScheduleSuite(object):
         m_get_install_task_flavor,
         m_get_package_versions,
         m_has_packages_for_distro,
+        m_write_rerun_memo,
         m_schedule_jobs,
     ):
         m_get_arch.return_value = 'x86_64'
@@ -266,6 +268,7 @@ class TestScheduleSuite(object):
         m_schedule_jobs.assert_has_calls(
             [call([], [expected_job], runobj.name)],
         )
+        m_write_rerun_memo.assert_called_once_with()
 
     @patch('teuthology.suite.util.find_git_parent')
     @patch('teuthology.suite.run.Run.schedule_jobs')
@@ -323,6 +326,7 @@ class TestScheduleSuite(object):
 
     @patch('teuthology.suite.util.find_git_parent')
     @patch('teuthology.suite.run.Run.schedule_jobs')
+    @patch('teuthology.suite.run.Run.write_rerun_memo')
     @patch('teuthology.suite.util.has_packages_for_distro')
     @patch('teuthology.suite.util.get_package_versions')
     @patch('teuthology.suite.util.get_install_task_flavor')
@@ -343,6 +347,7 @@ class TestScheduleSuite(object):
         m_get_install_task_flavor,
         m_get_package_versions,
         m_has_packages_for_distro,
+        m_write_rerun_memo,
         m_schedule_jobs,
         m_find_git_parent,
     ):

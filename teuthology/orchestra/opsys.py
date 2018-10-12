@@ -1,11 +1,15 @@
-import ast
 import re
 
 DISTRO_CODENAME_MAP = {
     "ubuntu": {
         "18.04": "bionic",
+        "17.10": "artful",
+        "17.04": "zesty",
+        "16.10": "yakkety",
         "16.04": "xenial",
+        "15.10": "wily",
         "15.04": "vivid",
+        "14.10": "utopic",
         "14.04": "trusty",
         "13.10": "saucy",
         "12.04": "precise",
@@ -13,6 +17,7 @@ DISTRO_CODENAME_MAP = {
     "debian": {
         "7": "wheezy",
         "8": "jessie",
+        "9": "stretch",
     },
     "rhel": {
         "7": "maipo",
@@ -23,12 +28,24 @@ DISTRO_CODENAME_MAP = {
         "6": "core",
     },
     "fedora": {
+        "28": "28",
+        "27": "27",
+        "26": "26",
         "25": "25",
         "24": "24",
         "23": "23",
         "22": "22",
         "21": "21",
         "20": "heisenbug",
+    },
+    "opensuse": {
+        "42.2": "leap",
+        "42.3": "leap",
+    },
+    "opensuse-leap": {
+        "42.2": "leap",
+        "42.3": "leap",
+        "15.0": "leap",
     },
 }
 
@@ -54,7 +71,7 @@ class OS(object):
     __slots__ = ['name', 'version', 'codename', 'package_type']
 
     _deb_distros = ('debian', 'ubuntu')
-    _rpm_distros = ('fedora', 'rhel', 'centos', 'opensuse')
+    _rpm_distros = ('fedora', 'rhel', 'centos', 'opensuse', 'opensuse-leap')
 
     def __init__(self, name=None, version=None, codename=None):
         self.name = name
@@ -77,37 +94,6 @@ class OS(object):
             name,
             codename,
         ))
-
-    @classmethod
-    def from_python(cls, python_val):
-        """
-        Parse output from platform.linux_distribution() and populate attributes
-
-        Given a tuple or str()'ed tuple like this:
-            ('Ubuntu', '14.04', 'trusty')
-
-        Attributes will be:
-            name = 'ubuntu'
-            version = '14.04'
-            codename = 'trusty'
-        Additionally, we set the package type:
-            package_type = 'deb'
-        """
-        if not isinstance(python_val, tuple):
-            python_val = ast.literal_eval(python_val)
-
-        (name, version, codename) = python_val
-        name = name.lower().replace(' ', '')
-        if name.startswith('redhat'):
-            name = 'rhel'
-        elif name.startswith('centos'):
-            name = 'centos'
-        elif name.startswith('fedora'):
-            name = 'fedora'
-        elif name.startswith('opensuse'):
-            name = 'opensuse'
-        obj = cls(name=name, version=version, codename=codename.lower())
-        return obj
 
     @classmethod
     def from_lsb_release(cls, lsb_release_str):

@@ -28,21 +28,33 @@ class TestInstall(object):
 
     def test_get_package_list_debug(self):
         default_pkgs = self._get_default_package_list(debug=True)
+        default_pkgs['rpm'].sort()
+        default_pkgs['deb'].sort()
         config = dict(debuginfo=True)
         result = install.get_package_list(ctx=None, config=config)
+        result['rpm'].sort()
+        result['deb'].sort()
         assert result == default_pkgs
 
     def test_get_package_list_no_debug(self):
         default_pkgs = self._get_default_package_list(debug=False)
+        default_pkgs['rpm'].sort()
+        default_pkgs['deb'].sort()
         config = dict(debuginfo=False)
         result = install.get_package_list(ctx=None, config=config)
+        result['rpm'].sort()
+        result['deb'].sort()
         assert result == default_pkgs
 
     def test_get_package_list_custom_rpm(self):
         default_pkgs = self._get_default_package_list(debug=False)
+        default_pkgs['rpm'].sort()
+        default_pkgs['deb'].sort()
         rpms = ['rpm1', 'rpm2', 'rpm2-debuginfo']
         config = dict(packages=dict(rpm=rpms))
         result = install.get_package_list(ctx=None, config=config)
+        result['rpm'].sort()
+        result['deb'].sort()
         assert result['rpm'] == ['rpm1', 'rpm2']
         assert result['deb'] == default_pkgs['deb']
 
