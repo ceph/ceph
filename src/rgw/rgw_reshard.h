@@ -44,7 +44,6 @@ private:
   int lock_bucket();
   void unlock_bucket();
   int renew_lock_bucket(const Clock::time_point&);
-  int set_resharding_status(const string& new_instance_id, int32_t num_shards, cls_rgw_reshard_status status);
   int clear_resharding();
 
   int create_new_bucket_instance(int new_num_shards, RGWBucketInfo& new_bucket_info);
@@ -66,6 +65,21 @@ public:
 	      RGWReshard *reshard_log = nullptr);
   int get_status(std::list<cls_rgw_bucket_instance_entry> *status);
   int cancel();
+  static int clear_index_shard_reshard_status(RGWRados* store,
+					      RGWBucketInfo& bucket_info);
+  int clear_index_shard_reshard_status() {
+    return clear_index_shard_reshard_status(store, bucket_info);
+  }
+  static int set_resharding_status(RGWRados* store, RGWBucketInfo& bucket_info,
+				   const string& new_instance_id,
+				   int32_t num_shards,
+				   cls_rgw_reshard_status status);
+  int set_resharding_status(const string& new_instance_id,
+			    int32_t num_shards,
+			    cls_rgw_reshard_status status) {
+    return set_resharding_status(store, bucket_info,
+				 new_instance_id, num_shards, status);
+  }
 }; // RGWBucketReshard
 
 class RGWReshard {
