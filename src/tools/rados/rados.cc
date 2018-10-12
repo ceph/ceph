@@ -497,10 +497,13 @@ static int do_copy(IoCtx& io_ctx, const char *objname,
 		   IoCtx& target_ctx, const char *target_obj)
 {
   __le32 src_fadvise_flags = LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL | LIBRADOS_OP_FLAG_FADVISE_NOCACHE;
-  __le32 dest_fadvise_flags = LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL | LIBRADOS_OP_FLAG_FADVISE_DONTNEED;
+  __le32 copy_from_flags = CEPH_OSD_COPY_FROM_FLAG_IGNORE_OVERLAY |
+    CEPH_OSD_COPY_FROM_FLAG_IGNORE_CACHE |
+    CEPH_OSD_COPY_FROM_FLAG_MAP_SNAP_CLONE |
+    CEPH_OSD_COPY_FROM_FLAG_RWORDERED;
   ObjectWriteOperation op;
   op.copy_from2(objname, io_ctx, 0, src_fadvise_flags);
-  op.set_op_flags2(dest_fadvise_flags);
+  op.set_op_flags2(copy_from_flags);
 
   return target_ctx.operate(target_obj, &op);
 }
