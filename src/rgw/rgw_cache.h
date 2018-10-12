@@ -209,6 +209,7 @@ public:
   void set_enabled(bool status);
 
   void chain_cache(RGWChainedCache *cache);
+  void unchain_cache(RGWChainedCache *cache);
   void invalidate_all();
 };
 
