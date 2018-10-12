@@ -17,7 +17,10 @@
 
 
 RGWServices_Def::RGWServices_Def() = default;
-RGWServices_Def::~RGWServices_Def() = default;
+RGWServices_Def::~RGWServices_Def()
+{
+  shutdown();
+}
 
 int RGWServices_Def::init(CephContext *cct,
 			  bool have_cache)
@@ -110,6 +113,27 @@ int RGWServices_Def::init(CephContext *cct,
   /* cache or core services will be started by sysobj */
 
   return  0;
+}
+
+void RGWServices_Def::shutdown()
+{
+  if (has_shutdown) {
+    return;
+  }
+
+  sysobj->shutdown();
+  sysobj_core->shutdown();
+  notify->shutdown();
+  if (sysobj_cache) {
+    sysobj_cache->shutdown();
+  }
+  quota->shutdown();
+  zone_utils->shutdown();
+  zone->shutdown();
+  rados->shutdown();
+
+  has_shutdown = true;
+
 }
 
 
