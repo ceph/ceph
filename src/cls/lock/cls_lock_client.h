@@ -101,6 +101,7 @@ namespace rados {
 	    flags &= ~LOCK_FLAG_MAY_RENEW;
 	  }
 	}
+
 	void set_must_renew(bool renew) {
 	  if (renew) {
 	    flags |= LOCK_FLAG_MUST_RENEW;
@@ -110,18 +111,31 @@ namespace rados {
 	  }
 	}
 
-        void assert_locked_exclusive(librados::ObjectOperation *rados_op);
         void assert_locked_shared(librados::ObjectOperation *rados_op);
+        void assert_locked_exclusive(librados::ObjectOperation *rados_op);
+        void assert_locked_exclusive_ephemeral(librados::ObjectOperation *rados_op);
 
 	/* ObjectWriteOperation */
-	void lock_exclusive(librados::ObjectWriteOperation *ioctx);
 	void lock_shared(librados::ObjectWriteOperation *ioctx);
+	void lock_exclusive(librados::ObjectWriteOperation *ioctx);
+
+	// Be careful when using an exclusive ephemeral lock; it is
+	// intended strictly for cases when a lock object exists
+	// solely for a lock in a given process and the object is no
+	// longer needed when the lock is unlocked or expired, as the
+	// cls back-end will make an effort to delete it.
+	void lock_exclusive_ephemeral(librados::ObjectWriteOperation *ioctx);
 	void unlock(librados::ObjectWriteOperation *ioctx);
-	void break_lock(librados::ObjectWriteOperation *ioctx, const entity_name_t& locker);
+	void break_lock(librados::ObjectWriteOperation *ioctx,
+			const entity_name_t& locker);
 
 	/* IoCtx */
-	int lock_exclusive(librados::IoCtx *ioctx, const std::string& oid);
 	int lock_shared(librados::IoCtx *ioctx, const std::string& oid);
+	int lock_exclusive(librados::IoCtx *ioctx, const std::string& oid);
+
+	// NB: see above comment on exclusive ephemeral locks
+	int lock_exclusive_ephemeral(librados::IoCtx *ioctx,
+				     const std::string& oid);
 	int unlock(librados::IoCtx *ioctx, const std::string& oid);
 	int break_lock(librados::IoCtx *ioctx, const std::string& oid,
 		       const entity_name_t& locker);
