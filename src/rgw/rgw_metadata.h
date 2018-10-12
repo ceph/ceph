@@ -294,8 +294,6 @@ WRITE_CLASS_ENCODER(RGWMetadataLogHistory)
 
 class RGWMetadataManager {
   map<string, RGWMetadataHandler *> handlers;
-  CephContext *cct;
-  RGWRados *store;
 
   // maintain a separate metadata log for each period
   std::map<std::string, RGWMetadataLog> md_logs;
@@ -318,6 +316,10 @@ class RGWMetadataManager {
                      const real_time& mtime,
                      RGWObjVersionTracker *objv_tracker,
                      RGWMetadataHandler::sync_type_t sync_mode);
+
+protected:
+  CephContext *cct;
+  RGWRados *store;
 
 public:
   RGWMetadataManager(CephContext *_cct, RGWRados *_store);
@@ -421,5 +423,10 @@ int RGWMetadataManager::mutate(RGWMetadataHandler *handler, const string& key,
 
   return 0;
 }
+
+class RGWArchiveMetadataManager : public RGWMetadataManager {
+public:
+  RGWArchiveMetadataManager(CephContext *_cct, RGWRados *_store);
+};
 
 #endif
