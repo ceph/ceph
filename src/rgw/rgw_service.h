@@ -8,11 +8,11 @@
 
 #include "rgw/rgw_common.h"
 
-struct RGWServices_Shared;
+struct RGWServices_Def;
 
 class RGWServiceInstance
 {
-  friend struct RGWServices_Shared;
+  friend struct RGWServices_Def;
 
 protected:
   CephContext *cct;
@@ -54,6 +54,8 @@ class RGWSI_SysObj_Cache;
 
 struct RGWServices_Def
 {
+  bool has_shutdown{false};
+
   std::unique_ptr<RGWSI_Finisher> finisher;
   std::unique_ptr<RGWSI_Notify> notify;
   std::unique_ptr<RGWSI_RADOS> rados;
@@ -69,6 +71,7 @@ struct RGWServices_Def
   ~RGWServices_Def();
 
   int init(CephContext *cct, bool have_cache);
+  void shutdown();
 };
 
 
@@ -88,6 +91,9 @@ struct RGWServices
   RGWSI_SysObj_Core *core{nullptr};
 
   int init(CephContext *cct, bool have_cache);
+  void shutdown() {
+    _svc.shutdown();
+  }
 };
 
 
