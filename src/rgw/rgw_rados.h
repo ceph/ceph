@@ -1105,7 +1105,7 @@ public:
     assert (!obj.empty());
     objs_state[obj].is_atomic = true;
   }
-  void set_prefetch_data(rgw_obj& obj) {
+  void set_prefetch_data(const rgw_obj& obj) {
     RWLock::WLocker wl(lock);
     assert (!obj.empty());
     objs_state[obj].prefetch_data = true;
@@ -2102,7 +2102,7 @@ public:
     RGWObjectCtx *rctx = static_cast<RGWObjectCtx *>(ctx);
     rctx->set_atomic(obj);
   }
-  void set_prefetch_data(void *ctx, rgw_obj& obj) {
+  void set_prefetch_data(void *ctx, const rgw_obj& obj) {
     RGWObjectCtx *rctx = static_cast<RGWObjectCtx *>(ctx);
     rctx->set_prefetch_data(obj);
   }
