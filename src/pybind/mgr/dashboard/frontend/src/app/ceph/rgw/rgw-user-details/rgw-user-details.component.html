@@ -1,5 +1,6 @@
 <tabset *ngIf="selection.hasSingleSelection">
-  <tab i18n-heading heading="Details">
+  <tab i18n-heading
+       heading="Details">
     <div *ngIf="user">
       <table class="table table-striped table-bordered">
         <tbody>
@@ -123,26 +124,26 @@
     </div>
   </tab>
 
-  <tab i18n-heading heading="Keys">
-    <form class="form-horizontal">
-      <cd-table [data]="keys"
-                [columns]="keysColumns"
-                columnMode="flex"
-                selectionType="multi"
-                forceIdentifier="true"
-                (updateSelection)="updateKeysSelection($event)">
-        <div class="table-actions">
-          <div class="btn-group" dropdown>
-            <button type="button"
-                    class="btn btn-sm btn-primary"
-                    [disabled]="!keysSelection.hasSingleSelection"
-                    (click)="showKeyModal()">
-              <i class="fa fa-eye"></i>
-              <ng-container i18n>Show</ng-container>
-            </button>
-          </div>
+  <tab i18n-heading
+       heading="Keys">
+    <cd-table [data]="keys"
+              [columns]="keysColumns"
+              columnMode="flex"
+              selectionType="multi"
+              forceIdentifier="true"
+              (updateSelection)="updateKeysSelection($event)">
+      <div class="table-actions">
+        <div class="btn-group"
+             dropdown>
+          <button type="button"
+                  class="btn btn-sm btn-primary"
+                  [disabled]="!keysSelection.hasSingleSelection"
+                  (click)="showKeyModal()">
+            <i class="fa fa-eye"></i>
+            <ng-container i18n>Show</ng-container>
+          </button>
         </div>
-      </cd-table>
-    </form>
+      </div>
+    </cd-table>
   </tab>
 </tabset>
