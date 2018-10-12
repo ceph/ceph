@@ -595,7 +595,7 @@ void PGLog::write_log_and_missing(
   bool require_rollback)
 {
   if (is_dirty()) {
-    dout(5) << "write_log_and_missing with: "
+    dout(6) << "write_log_and_missing with: "
 	     << "dirty_to: " << dirty_to
 	     << ", dirty_from: " << dirty_from
 	     << ", writeout_from: " << writeout_from

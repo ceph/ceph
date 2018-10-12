@@ -567,9 +567,7 @@ void ReplicatedBackend::do_repop_reply(OpRequestRef op)
       ceph_assert(ip_op.waiting_for_commit.count(from));
       ip_op.waiting_for_commit.erase(from);
       if (ip_op.op) {
-        ostringstream ss;
-        ss << "sub_op_commit_rec from " << from;
-	ip_op.op->mark_event_string(ss.str());
+	ip_op.op->mark_event_string("sub_op_commit_rec");
 	ip_op.op->pg_trace.event("sub_op_commit_rec");
       }
     } else {
