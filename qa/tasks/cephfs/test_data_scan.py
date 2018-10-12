@@ -642,3 +642,38 @@ class TestDataScan(CephFSTestCase):
         mds1_inotable = json.loads(self.fs.table_tool([self.fs.name + ":1", "show", "inode"]))
         self.assertGreaterEqual(
             mds1_inotable['1']['data']['inotable']['free'][0]['start'], file_ino)
+
+    def test_rebuild_snaptable(self):
+        """
+        The scan_links command repair snaptable
+        """
+        self.fs.set_allow_new_snaps(True)
+
+        self.mount_a.run_shell(["mkdir", "dir1"])
+        self.mount_a.run_shell(["mkdir", "dir1/.snap/s1"])
+        self.mount_a.run_shell(["mkdir", "dir1/.snap/s2"])
+        self.mount_a.run_shell(["rmdir", "dir1/.snap/s2"])
+
+        self.mount_a.umount_wait()
+
+        mds0_id = self.fs.get_active_names()[0]
+        self.fs.mds_asok(["flush", "journal"], mds0_id)
+
+        # wait for mds to update removed snaps
+        time.sleep(10)
+
+        old_snaptable = json.loads(self.fs.table_tool([self.fs.name + ":0", "show", "snap"]))
+        # stamps may have minor difference
+        for item in old_snaptable['snapserver']['snaps']:
+            del item['stamp']
+
+        self.fs.rados(["rm", "mds_snaptable"])
+        self.fs.data_scan(["scan_links", "--filesystem", self.fs.name])
+
+        new_snaptable = json.loads(self.fs.table_tool([self.fs.name + ":0", "show", "snap"]))
+        for item in new_snaptable['snapserver']['snaps']:
+            del item['stamp']
+        self.assertGreaterEqual(
+            new_snaptable['snapserver']['last_snap'], old_snaptable['snapserver']['last_snap'])
+        self.assertEqual(
+            new_snaptable['snapserver']['snaps'], old_snaptable['snapserver']['snaps'])

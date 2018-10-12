@@ -20,6 +20,7 @@
 
 #include "mds/CInode.h"
 #include "mds/InoTable.h"
+#include "mds/SnapServer.h"
 #include "cls/cephfs/cls_cephfs_client.h"
 
 #include "PgFiles.h"
@@ -298,6 +299,8 @@ int DataScan::main(const std::vector<const char*> &args)
     if (r != 0) {
       return r;
     }
+
+    data_pools = fs->mds_map.get_data_pools();
   }
 
   // Finally, dispatch command
@@ -906,6 +909,9 @@ int DataScan::scan_links()
 
   interval_set<uint64_t> used_inos;
   map<inodeno_t, int> remote_links;
+  map<snapid_t, SnapInfo> snaps;
+  snapid_t last_snap = 1;
+  snapid_t snaprealm_v2_since = 2;
 
   struct link_info_t {
     inodeno_t dirino;
@@ -914,6 +920,7 @@ int DataScan::scan_links()
     version_t version;
     int nlink;
     bool is_dir;
+    map<snapid_t, SnapInfo> snaps;
     link_info_t() : version(0), nlink(0), is_dir(false) {}
     link_info_t(inodeno_t di, frag_t df, const string& n, const CInode::mempool_inode& i) :
       dirino(di), frag(df), name(n),
@@ -972,6 +979,10 @@ int DataScan::scan_links()
 	try {
 	  snapid_t dnfirst;
 	  decode(dnfirst, q);
+	  if (dnfirst <= CEPH_MAXSNAP) {
+	    if (dnfirst - 1 > last_snap)
+	      last_snap = dnfirst - 1;
+	  }
 	  char dentry_type;
 	  decode(dentry_type, q);
 	  if (dentry_type == 'I') {
@@ -986,9 +997,33 @@ int DataScan::scan_links()
 		used_inos.insert(ino);
 	      }
 	    } else if (step == CHECK_LINK) {
+	      sr_t srnode;
+	      if (inode.snap_blob.length()) {
+		auto p = inode.snap_blob.begin();
+		decode(srnode, p);
+		for (auto it = srnode.snaps.begin();
+		     it != srnode.snaps.end(); ) {
+		  if (it->second.ino != ino ||
+		      it->second.snapid != it->first) {
+		    srnode.snaps.erase(it++);
+		  } else {
+		    ++it;
+		  }
+		}
+		if (!srnode.past_parents.empty()) {
+		  snapid_t last = srnode.past_parents.rbegin()->first;
+		  if (last + 1 > snaprealm_v2_since)
+		    snaprealm_v2_since = last + 1;
+		}
+	      }
+	      if (!inode.old_inodes.empty()) {
+		if (inode.old_inodes.rbegin()->first > last_snap)
+		  last_snap = inode.old_inodes.rbegin()->first;
+	      }
 	      auto q = dup_primaries.find(ino);
 	      if (q != dup_primaries.end()) {
 		q->second.push_back(link_info_t(dir_ino, frag_id, dname, inode.inode));
+		q->second.back().snaps.swap(srnode.snaps);
 	      } else {
 		int nlink = 0;
 		auto r = remote_links.find(ino);
@@ -1002,6 +1037,8 @@ int DataScan::scan_links()
 		  bad_nlink_inos[ino] = link_info_t(dir_ino, frag_id, dname, inode.inode);
 		  bad_nlink_inos[ino].nlink = nlink;
 		}
+		snaps.insert(make_move_iterator(begin(srnode.snaps)),
+			     make_move_iterator(end(srnode.snaps)));
 	      }
 	    }
 	  } else if (dentry_type == 'L') {
@@ -1074,8 +1111,11 @@ int DataScan::scan_links()
 
     for (auto& q : p.second) {
       // in the middle of dir fragmentation?
-      if (newest.dirino == q.dirino && newest.name == q.name)
+      if (newest.dirino == q.dirino && newest.name == q.name) {
+	snaps.insert(make_move_iterator(begin(q.snaps)),
+		     make_move_iterator(end(q.snaps)));
 	continue;
+      }
 
       std::string key;
       dentry_key_t dn_key(CEPH_NOSNAP, q.name.c_str());
@@ -1150,6 +1190,38 @@ int DataScan::scan_links()
     }
   }
 
+  {
+    objecter->with_osdmap([&](const OSDMap& o) {
+      for (auto p : data_pools) {
+	const pg_pool_t *pi = o.get_pg_pool(p);
+	if (!pi)
+	  continue;
+	if (pi->snap_seq > last_snap)
+	  last_snap = pi->snap_seq;
+      }
+    });
+
+    if (!snaps.empty()) {
+      if (snaps.rbegin()->first > last_snap)
+	last_snap = snaps.rbegin()->first;
+    }
+
+    SnapServer snaptable;
+    snaptable.set_rank(0);
+    bool dirty = false;
+    int r = metadata_driver->load_table(&snaptable);
+    if (r < 0) {
+      snaptable.reset_state();
+      dirty = true;
+    }
+    if (snaptable.force_update(last_snap, snaprealm_v2_since, snaps))
+      dirty = true;
+    if (dirty) {
+      r = metadata_driver->save_table(&snaptable);
+      if (r < 0)
+	return r;
+    }
+  }
   return 0;
 }
 
