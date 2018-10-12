@@ -4,7 +4,9 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { ChartsModule } from 'ng2-charts/ng2-charts';
-import { BsDropdownModule, ProgressbarModule, TabsModule } from 'ngx-bootstrap';
+import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
+import { ProgressbarModule } from 'ngx-bootstrap/progressbar';
+import { TabsModule } from 'ngx-bootstrap/tabs';
 
 import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { CephfsService } from '../../../shared/api/cephfs.service';

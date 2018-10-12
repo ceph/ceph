@@ -2,7 +2,7 @@ import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@an
 
 import * as _ from 'lodash';
 import * as moment from 'moment';
-import { BsModalRef, BsModalService } from 'ngx-bootstrap';
+import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 import { of } from 'rxjs';
 
 import { RbdService } from '../../../shared/api/rbd.service';

@@ -4,7 +4,7 @@ import { ReactiveFormsModule } from '@angular/forms';
 
 import * as _ from 'lodash';
 import { ToastModule } from 'ng2-toastr';
-import { BsModalRef, ModalModule } from 'ngx-bootstrap';
+import { BsModalRef, ModalModule } from 'ngx-bootstrap/modal';
 
 import { configureTestBed } from '../../../../../testing/unit-test-helper';
 import { NotificationType } from '../../../../shared/enum/notification-type.enum';

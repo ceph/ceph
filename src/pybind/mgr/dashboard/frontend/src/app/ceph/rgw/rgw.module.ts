@@ -2,13 +2,11 @@ import { CommonModule } from '@angular/common';
 import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 
-import {
-  AlertModule,
-  BsDropdownModule,
-  ModalModule,
-  TabsModule,
-  TooltipModule
-} from 'ngx-bootstrap';
+import { AlertModule } from 'ngx-bootstrap/alert';
+import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
+import { ModalModule } from 'ngx-bootstrap/modal';
+import { TabsModule } from 'ngx-bootstrap/tabs';
+import { TooltipModule } from 'ngx-bootstrap/tooltip';
 
 import { AppRoutingModule } from '../../app-routing.module';
 import { SharedModule } from '../../shared/shared.module';

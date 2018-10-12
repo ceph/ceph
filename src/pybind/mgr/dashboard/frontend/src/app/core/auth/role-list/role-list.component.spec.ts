@@ -4,7 +4,7 @@ import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastModule } from 'ng2-toastr';
-import { TabsModule } from 'ngx-bootstrap';
+import { TabsModule } from 'ngx-bootstrap/tabs';
 
 import { configureTestBed, PermissionHelper } from '../../../../testing/unit-test-helper';
 import { TableActionsComponent } from '../../../shared/datatable/table-actions/table-actions.component';

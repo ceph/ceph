@@ -1,6 +1,6 @@
 import { Component, ViewChild } from '@angular/core';
 
-import { BsModalService } from 'ngx-bootstrap';
+import { BsModalService } from 'ngx-bootstrap/modal';
 import { forkJoin as observableForkJoin, Observable, Subscriber } from 'rxjs';
 
 import { RgwBucketService } from '../../../shared/api/rgw-bucket.service';

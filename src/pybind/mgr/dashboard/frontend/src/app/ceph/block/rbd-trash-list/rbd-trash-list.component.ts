@@ -2,7 +2,7 @@ import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import * as _ from 'lodash';
 import * as moment from 'moment';
-import { BsModalRef, BsModalService } from 'ngx-bootstrap';
+import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 
 import { RbdService } from '../../../shared/api/rbd.service';
 import { DeletionModalComponent } from '../../../shared/components/deletion-modal/deletion-modal.component';
