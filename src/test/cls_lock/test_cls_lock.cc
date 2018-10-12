@@ -457,3 +457,109 @@ TEST(ClsLock, TestRenew) {
 
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
+
+TEST(ClsLock, TestExclusiveEphemeralBasic) {
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+
+  bufferlist bl;
+
+  string oid1 = "foo1";
+  string oid2 = "foo2";
+  string lock_name1 = "mylock1";
+  string lock_name2 = "mylock2";
+
+  Lock l1(lock_name1);
+  l1.set_duration(utime_t(5, 0));
+
+  uint64_t size;
+  time_t mod_time;
+
+  l1.set_may_renew(true);
+  ASSERT_EQ(0, l1.lock_exclusive_ephemeral(&ioctx, oid1));
+  ASSERT_EQ(0, ioctx.stat(oid1, &size, &mod_time));
+  sleep(2);
+  ASSERT_EQ(0, l1.unlock(&ioctx, oid1));
+  ASSERT_EQ(-ENOENT, ioctx.stat(oid1, &size, &mod_time));
+
+  // ***********************************************
+
+  Lock l2(lock_name2);
+  utime_t lock_duration2(5, 0);
+  l2.set_duration(utime_t(5, 0));
+
+  ASSERT_EQ(0, l2.lock_exclusive(&ioctx, oid2));
+  ASSERT_EQ(0, ioctx.stat(oid2, &size, &mod_time));
+  sleep(2);
+  ASSERT_EQ(0, l2.unlock(&ioctx, oid2));
+  ASSERT_EQ(0, ioctx.stat(oid2, &size, &mod_time));
+
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+}
+
+
+TEST(ClsLock, TestExclusiveEphemeralStealEphemeral) {
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+
+  bufferlist bl;
+
+  string oid1 = "foo1";
+  string lock_name1 = "mylock1";
+
+  Lock l1(lock_name1);
+  l1.set_duration(utime_t(3, 0));
+
+  ASSERT_EQ(0, l1.lock_exclusive_ephemeral(&ioctx, oid1));
+  sleep(4);
+
+  // l1 is expired, l2 can take; l2 is also exclusive_ephemeral
+  Lock l2(lock_name1);
+  l2.set_duration(utime_t(3, 0));
+  ASSERT_EQ(0, l2.lock_exclusive_ephemeral(&ioctx, oid1));
+  sleep(1);
+  ASSERT_EQ(0, l2.unlock(&ioctx, oid1));
+
+  // l2 cannot unlock its expired lock
+  ASSERT_EQ(-ENOENT, l1.unlock(&ioctx, oid1));
+
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+}
+
+
+TEST(ClsLock, TestExclusiveEphemeralStealExclusive) {
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+
+  bufferlist bl;
+
+  string oid1 = "foo1";
+  string lock_name1 = "mylock1";
+
+  Lock l1(lock_name1);
+  l1.set_duration(utime_t(3, 0));
+
+  ASSERT_EQ(0, l1.lock_exclusive_ephemeral(&ioctx, oid1));
+  sleep(4);
+
+  // l1 is expired, l2 can take; l2 is exclusive (but not ephemeral)
+  Lock l2(lock_name1);
+  l2.set_duration(utime_t(3, 0));
+  ASSERT_EQ(0, l2.lock_exclusive(&ioctx, oid1));
+  sleep(1);
+  ASSERT_EQ(0, l2.unlock(&ioctx, oid1));
+
+  // l2 cannot unlock its expired lock
+  ASSERT_EQ(-ENOENT, l1.unlock(&ioctx, oid1));
+
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+}
