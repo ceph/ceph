@@ -2,14 +2,22 @@
      class="container-fluid">
   <cd-info-group groupTitle="Status"
                  i18n-groupTitle
-                 class="row info-group">
+                 class="row info-group"
+                 *ngIf="contentData.health?.status
+                 || contentData.mon_status
+                 || contentData.osd_map
+                 || contentData.mgr_map
+                 || contentData.hosts != null
+                 || contentData.rgw != null
+                 || contentData.fs_map
+                 || contentData.iscsi_daemons != null">
 
     <cd-info-card cardTitle="Cluster Status"
                   i18n-cardTitle
                   class="col-sm-6 col-md-4 col-lg-3"
-                  [contentClass]="contentData.health.checks.length > 0 ? 'content-highlight content-row-size-1-5' : 'content-highlight'"
-                  *ngIf="contentData.health">
-      <ng-container *ngIf="contentData.health.checks.length > 0">
+                  [contentClass]="contentData.health?.checks?.length > 0 ? 'content-highlight content-row-size-1-5' : 'content-highlight'"
+                  *ngIf="contentData.health?.status">
+      <ng-container *ngIf="contentData.health?.checks?.length > 0">
         <ng-template #healthChecks>
           <p class="logs-link"
              i18n>
@@ -33,7 +41,7 @@
           {{ contentData.health.status }}
         </div>
       </ng-container>
-      <ng-container *ngIf="contentData.health.checks.length == 0">
+      <ng-container *ngIf="contentData.health?.checks?.length == 0">
         <div [ngStyle]="contentData.health.status | healthColor">
           {{ contentData.health.status }}
         </div>
@@ -73,7 +81,7 @@
                   link="/hosts"
                   class="col-sm-6 col-md-4 col-lg-3"
                   contentClass="content-medium content-highlight"
-                  *ngIf="contentData.hosts !== undefined">
+                  *ngIf="contentData.hosts != null">
       {{ contentData.hosts }}
     </cd-info-card>
 
@@ -82,7 +90,7 @@
                   link="/rgw/daemon"
                   class="col-sm-6 col-md-4 col-lg-3"
                   contentClass="content-medium content-highlight"
-                  *ngIf="contentData.rgw !== undefined">
+                  *ngIf="contentData.rgw != null">
       {{ contentData.rgw }}
     </cd-info-card>
     <cd-info-card cardTitle="Metadata Servers"
@@ -98,14 +106,16 @@
                   link="/block/iscsi"
                   class="col-sm-6 col-md-4 col-lg-3"
                   contentClass="content-medium content-highlight"
-                  *ngIf="contentData.iscsi_daemons !== undefined">
+                  *ngIf="contentData.iscsi_daemons != null">
       {{ contentData.iscsi_daemons }}
     </cd-info-card>
   </cd-info-group>
 
   <cd-info-group groupTitle="Performance"
                  i18n-groupTitle
-                 class="row info-group">
+                 class="row info-group"
+                 *ngIf="contentData.client_perf || contentData.scrub_status">
+
     <div class="cd-container-flex">
       <cd-info-card cardTitle="Client IOPS"
                     i18n-cardTitle
@@ -165,7 +175,11 @@
 
   <cd-info-group groupTitle="Capacity"
                  i18n-groupTitle
-                 class="row info-group">
+                 class="row info-group"
+                 *ngIf="contentData.pools
+                 || contentData.df
+                 || contentData.df?.stats?.total_objects != null
+                 || contentData.pg_info">
 
     <div class="cd-container-flex">
       <cd-info-card cardTitle="Pools"
@@ -196,7 +210,7 @@
                     class="cd-col-5"
                     cardClass="card-medium"
                     contentClass="content-medium content-highlight"
-                    *ngIf="contentData.df?.stats?.total_objects !== undefined">
+                    *ngIf="contentData.df?.stats?.total_objects != null">
         {{ contentData.df?.stats?.total_objects }}
       </cd-info-card>
 
