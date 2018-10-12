@@ -3758,7 +3758,7 @@ static int rgw_set_bucket_resharding(cls_method_context_t hctx, bufferlist *in, 
 
 static int rgw_clear_bucket_resharding(cls_method_context_t hctx, bufferlist *in,  bufferlist *out)
 {
-  cls_rgw_set_bucket_resharding_op op;
+  cls_rgw_clear_bucket_resharding_op op;
 
   bufferlist::iterator in_iter = in->begin();
   try {
