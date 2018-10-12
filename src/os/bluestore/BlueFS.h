@@ -125,7 +125,7 @@ public:
     bufferlist::page_aligned_appender buffer_appender;  //< for const char* only
     int writer_type = 0;    ///< WRITER_*
 
-    ceph::mutex lock = {ceph::make_mutex("BlueFS::FileWriter::lock")};
+    ceph::mutex lock {ceph::make_mutex("BlueFS::FileWriter::lock")};
     std::array<IOContext*,MAX_BDEV> iocv; ///< for each bdev
     std::array<bool, MAX_BDEV> dirty_devs;
 
@@ -219,7 +219,7 @@ public:
   };
 
 private:
-  ceph::mutex lock;
+  ceph::mutex lock {ceph::make_mutex("BlueFS::lock")};
 
   PerfCounters *logger = nullptr;
 
