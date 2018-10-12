@@ -397,7 +397,7 @@ might be found in the monitor log::
 
 or::
 
-  Corruption: 1 missing files; e.g.: /var/lib/ceph/mon/mon.0/store.db/1234567.ldb
+  Corruption: 1 missing files; e.g.: /var/lib/ceph/mon/mon.foo/store.db/1234567.ldb
 
 Recovery using healthy monitor(s)
 ---------------------------------
@@ -410,45 +410,51 @@ Recovery using OSDs
 -------------------
 
 But what if all monitors fail at the same time? Since users are encouraged to
-deploy at least three monitors in a Ceph cluster, the chance of simultaneous
+deploy at least three (and preferably five) monitors in a Ceph cluster, the chance of simultaneous
 failure is rare. But unplanned power-downs in a data center with improperly
 configured disk/fs settings could fail the underlying filesystem, and hence
 kill all the monitors. In this case, we can recover the monitor store with the
 information stored in OSDs.::
 
-  ms=/tmp/mon-store
+  ms=/root/mon-store
   mkdir $ms
+  
   # collect the cluster map from OSDs
   for host in $hosts; do
-    rsync -avz $ms user@host:$ms
+    rsync -avz $ms/. user@host:$ms.remote
     rm -rf $ms
     ssh user@host <<EOF
       for osd in /var/lib/osd/osd-*; do
-        ceph-objectstore-tool --data-path \$osd --op update-mon-db --mon-store-path $ms
+        ceph-objectstore-tool --data-path \$osd --op update-mon-db --mon-store-path $ms.remote
       done
     EOF
-    rsync -avz user@host:$ms $ms
+    rsync -avz user@host:$ms.remote/. $ms
   done
+  
   # rebuild the monitor store from the collected map, if the cluster does not
   # use cephx authentication, we can skip the following steps to update the
   # keyring with the caps, and there is no need to pass the "--keyring" option.
-  # i.e. just use "ceph-monstore-tool /tmp/mon-store rebuild" instead
+  # i.e. just use "ceph-monstore-tool $ms rebuild" instead
   ceph-authtool /path/to/admin.keyring -n mon. \
     --cap mon 'allow *'
   ceph-authtool /path/to/admin.keyring -n client.admin \
     --cap mon 'allow *' --cap osd 'allow *' --cap mds 'allow *'
-  ceph-monstore-tool /tmp/mon-store rebuild -- --keyring /path/to/admin.keyring
-  # backup corrupted store.db just in case
-  mv /var/lib/ceph/mon/mon.0/store.db /var/lib/ceph/mon/mon.0/store.db.corrupted
-  mv /tmp/mon-store/store.db /var/lib/ceph/mon/mon.0/store.db
-  chown -R ceph:ceph /var/lib/ceph/mon/mon.0/store.db
+  ceph-monstore-tool $ms rebuild -- --keyring /path/to/admin.keyring
+  
+  # make a backup of the corrupted store.db just in case!  repeat for
+  # all monitors.
+  mv /var/lib/ceph/mon/mon.foo/store.db /var/lib/ceph/mon/mon.foo/store.db.corrupted
+
+  # move rebuild store.db into place.  repeat for all monitors.
+  mv $ms/store.db /var/lib/ceph/mon/mon.foo/store.db
+  chown -R ceph:ceph /var/lib/ceph/mon/mon.foo/store.db
 
 The steps above
 
 #. collect the map from all OSD hosts,
 #. then rebuild the store,
 #. fill the entities in keyring file with appropriate caps
-#. replace the corrupted store on ``mon.0`` with the recovered copy.
+#. replace the corrupted store on ``mon.foo`` with the recovered copy.
 
 Known limitations
 ~~~~~~~~~~~~~~~~~
