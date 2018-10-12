@@ -1,5 +1,6 @@
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../shared/shared.module';
 import { AdministrationComponent } from './administration.component';
 
@@ -7,12 +8,10 @@ describe('AdministrationComponent', () => {
   let component: AdministrationComponent;
   let fixture: ComponentFixture<AdministrationComponent>;
 
-  beforeEach(async(() => {
-    TestBed.configureTestingModule({
-      imports: [SharedModule],
-      declarations: [AdministrationComponent]
-    }).compileComponents();
-  }));
+  configureTestBed({
+    imports: [SharedModule],
+    declarations: [AdministrationComponent]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(AdministrationComponent);
