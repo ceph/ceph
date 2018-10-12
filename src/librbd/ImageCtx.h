@@ -7,9 +7,11 @@
 
 #include <list>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
+#include "common/config_proxy.h"
 #include "common/event_socket.h"
 #include "common/Mutex.h"
 #include "common/Readahead.h"
@@ -61,7 +63,12 @@ namespace librbd {
   }
 
   struct ImageCtx {
+    static const string METADATA_CONF_PREFIX;
+
     CephContext *cct;
+    ConfigProxy config;
+    std::set<std::string> config_overrides;
+
     PerfCounters *perfcounter;
     struct rbd_obj_header_ondisk header;
     ::SnapContext snapc;
@@ -165,54 +172,21 @@ namespace librbd {
 
     bool ignore_migrating = false;
 
-    // Configuration
-    static const string METADATA_CONF_PREFIX;
+    /// Cached latency-sensitive configuration settings
     bool non_blocking_aio;
     bool cache;
     bool cache_writethrough_until_flush;
-    uint64_t cache_size;
     uint64_t cache_max_dirty;
-    uint64_t cache_target_dirty;
-    double cache_max_dirty_age;
-    uint32_t cache_max_dirty_object;
-    bool cache_block_writes_upfront;
-    uint32_t concurrent_management_ops;
-    bool balance_snap_reads;
-    bool localize_snap_reads;
-    bool balance_parent_reads;
-    bool localize_parent_reads;
     uint64_t sparse_read_threshold_bytes;
-    uint32_t readahead_trigger_requests;
     uint64_t readahead_max_bytes;
     uint64_t readahead_disable_after_bytes;
     bool clone_copy_on_read;
-    bool blacklist_on_break_lock;
-    uint32_t blacklist_expire_seconds;
-    uint32_t request_timed_out_seconds;
     bool enable_alloc_hint;
-    uint8_t journal_order;
-    uint8_t journal_splay_width;
-    double journal_commit_age;
-    int journal_object_flush_interval;
-    uint64_t journal_object_flush_bytes;
-    double journal_object_flush_age;
-    uint64_t journal_object_max_in_flight_appends;
-    std::string journal_pool;
-    uint32_t journal_max_payload_bytes;
-    int journal_max_concurrent_object_sets;
-    bool mirroring_resync_after_disconnect;
-    uint64_t mirroring_delete_delay;
-    int mirroring_replay_delay;
     bool skip_partial_discard;
     bool blkin_trace_all;
+    uint64_t mirroring_replay_delay;
     uint64_t mtime_update_interval;
     uint64_t atime_update_interval;
-    uint64_t qos_iops_limit;
-    uint64_t qos_bps_limit;
-    uint64_t qos_read_iops_limit;
-    uint64_t qos_write_iops_limit;
-    uint64_t qos_read_bps_limit;
-    uint64_t qos_write_bps_limit;
 
     LibrbdAdminSocketHook *asok_hook;
 
@@ -220,9 +194,6 @@ namespace librbd {
     journal::Policy *journal_policy = nullptr;
 
     ZTracer::Endpoint trace_endpoint;
-
-    static bool _filter_metadata_confs(const string &prefix, std::map<string, bool> &configs,
-                                       const map<string, bufferlist> &pairs, map<string, bufferlist> *res);
 
     // unit test mock helpers
     static ImageCtx* create(const std::string &image_name,

@@ -12,8 +12,11 @@
 #include "librbd/ImageState.h"
 #include "librbd/Utils.h"
 #include "librbd/image/CloneRequest.h"
+#include "librbd/image/RemoveRequest.h"
 #include "librbd/internal.h"
 #include "librbd/Utils.h"
+#include "librbd/api/Config.h"
+#include "librbd/api/Trash.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -238,11 +241,14 @@ int Image<I>::deep_copy(I *src, librados::IoCtx& dest_md_ctx,
       return r;
     }
 
+    ConfigProxy config{cct->_conf};
+    api::Config<I>::apply_pool_overrides(dest_md_ctx, &config);
+
     C_SaferCond ctx;
     std::string dest_id = util::generate_image_id(dest_md_ctx);
     auto *req = image::CloneRequest<I>::create(
-      parent_io_ctx, parent_spec.image_id, "", parent_spec.snap_id, dest_md_ctx,
-      destname, dest_id, opts, "", "", src->op_work_queue, &ctx);
+      config, parent_io_ctx, parent_spec.image_id, "", parent_spec.snap_id,
+      dest_md_ctx, destname, dest_id, opts, "", "", src->op_work_queue, &ctx);
     req->send();
     r = ctx.wait();
   }
@@ -364,6 +370,39 @@ int Image<I>::snap_set(I *ictx, uint64_t snap_id) {
   }
 
   return 0;
+}
+
+template <typename I>
+int Image<I>::remove(IoCtx& io_ctx, const std::string &image_name,
+                     const std::string &image_id, ProgressContext& prog_ctx,
+                     bool force, bool from_trash_remove)
+{
+  CephContext *cct((CephContext *)io_ctx.cct());
+  ldout(cct, 20) << (image_id.empty() ? image_name : image_id) << dendl;
+
+  if (image_id.empty()) {
+    // id will only be supplied when used internally
+    ConfigProxy config(cct->_conf);
+    Config<I>::apply_pool_overrides(io_ctx, &config);
+
+    if (config.get_val<bool>("rbd_move_to_trash_on_remove")) {
+      return Trash<I>::move(
+        io_ctx, RBD_TRASH_IMAGE_SOURCE_USER, image_name,
+        config.get_val<uint64_t>("rbd_move_to_trash_on_remove_expire_seconds"));
+    }
+  }
+
+  ThreadPool *thread_pool;
+  ContextWQ *op_work_queue;
+  ImageCtx::get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
+
+  C_SaferCond cond;
+  auto req = librbd::image::RemoveRequest<>::create(
+    io_ctx, image_name, image_id, force, from_trash_remove, prog_ctx,
+    op_work_queue, &cond);
+  req->send();
+
+  return cond.wait();
 }
 
 } // namespace api

@@ -2904,7 +2904,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       const string & oid = *iter;
 
     if (forcefull) {
-        ret = detail::remove(io_ctx, oid, CEPH_OSD_FLAG_FULL_FORCE, use_striper);
+        ret = detail::remove(io_ctx, oid, (CEPH_OSD_FLAG_FULL_FORCE |
+                             CEPH_OSD_FLAG_FULL_TRY), use_striper);
     } else {
         ret = detail::remove(io_ctx, oid, use_striper);
     }

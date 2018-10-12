@@ -12,7 +12,9 @@
 #include "librbd/ImageState.h"
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
+#include "librbd/api/Config.h"
 #include "librbd/api/Group.h"
+#include "librbd/api/Trash.h"
 #include "librbd/deep_copy/MetadataCopyRequest.h"
 #include "librbd/deep_copy/SnapshotCopyRequest.h"
 #include "librbd/image/CloneRequest.h"
@@ -149,7 +151,7 @@ int trash_search(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
                  const std::string &image_name, std::string *image_id) {
   std::vector<trash_image_info_t> entries;
 
-  int r = trash_list(io_ctx, entries);
+  int r = Trash<>::list(io_ctx, entries);
   if (r < 0) {
     return r;
   }
@@ -1075,8 +1077,8 @@ int Migration<I>::v2_unlink_src_image() {
     m_src_image_ctx->owner_lock.put_read();
   }
 
-  int r = trash_move(m_src_io_ctx, RBD_TRASH_IMAGE_SOURCE_MIGRATION,
-                     m_src_image_ctx->name, 0);
+  int r = Trash<I>::move(m_src_io_ctx, RBD_TRASH_IMAGE_SOURCE_MIGRATION,
+                         m_src_image_ctx->name, 0);
   if (r < 0) {
     lderr(m_cct) << "failed moving image to trash: " << cpp_strerror(r)
                  << dendl;
@@ -1113,7 +1115,8 @@ template <typename I>
 int Migration<I>::v2_relink_src_image() {
   ldout(m_cct, 10) << dendl;
 
-  int r = trash_restore(m_src_io_ctx, m_src_image_ctx->id, m_src_image_ctx->name);
+  int r = Trash<I>::restore(m_src_io_ctx, m_src_image_ctx->id,
+                            m_src_image_ctx->name);
   if (r < 0) {
     lderr(m_cct) << "failed restoring image from trash: " << cpp_strerror(r)
                  << dendl;
@@ -1146,13 +1149,17 @@ int Migration<I>::create_dst_image() {
   ContextWQ *op_work_queue;
   ImageCtx::get_thread_pool_instance(m_cct, &thread_pool, &op_work_queue);
 
+  ConfigProxy config{m_cct->_conf};
+  api::Config<I>::apply_pool_overrides(m_dst_io_ctx, &config);
+
   int r;
   C_SaferCond on_create;
   librados::IoCtx parent_io_ctx;
   if (parent_spec.pool_id == -1) {
     auto *req = image::CreateRequest<I>::create(
-      m_dst_io_ctx, m_dst_image_name, m_dst_image_id, size, m_image_options,
-      "", "", true /* skip_mirror_enable */, op_work_queue, &on_create);
+      config, m_dst_io_ctx, m_dst_image_name, m_dst_image_id, size,
+      m_image_options, "", "", true /* skip_mirror_enable */, op_work_queue,
+      &on_create);
     req->send();
   } else {
     r = util::create_ioctx(m_src_image_ctx->md_ctx, "destination image",
@@ -1163,7 +1170,7 @@ int Migration<I>::create_dst_image() {
     }
 
     auto *req = image::CloneRequest<I>::create(
-      parent_io_ctx, parent_spec.image_id, "", parent_spec.snap_id,
+      config, parent_io_ctx, parent_spec.image_id, "", parent_spec.snap_id,
       m_dst_io_ctx, m_dst_image_name, m_dst_image_id, m_image_options, "", "",
       op_work_queue, &on_create);
     req->send();

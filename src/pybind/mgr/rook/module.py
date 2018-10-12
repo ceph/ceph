@@ -182,11 +182,11 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         if kubernetes_imported:
             return True, ""
         else:
-            return False, "`kubernetes` module not found"
+            return False, "`kubernetes` python module not found"
 
     def available(self):
         if not kubernetes_imported:
-            return False, "`kubernetes` module not found"
+            return False, "`kubernetes` python module not found"
         elif not self._in_cluster_name:
             return False, "ceph-mgr not running in Rook cluster"
 

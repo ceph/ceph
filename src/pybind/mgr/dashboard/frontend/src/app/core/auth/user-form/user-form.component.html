@@ -146,10 +146,11 @@
                i18n>Roles
         </label>
         <div class="col-sm-9">
-          <span class="form-control no-border full-height">
+          <span class="form-control no-border full-height"
+                *ngIf="allRoles">
             <cd-select-badges [data]="userForm.controls.roles.value"
                               [options]="allRoles"
-                              emptyMessage="There are no roles."></cd-select-badges>
+                              [messages]="messages"></cd-select-badges>
           </span>
         </div>
 

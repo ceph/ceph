@@ -36,7 +36,8 @@ struct CreateRequest<librbd::MockTestImageCtx> {
   static CreateRequest *s_instance;
   Context *on_finish = nullptr;
 
-  static CreateRequest *create(IoCtx &ioctx, const std::string &imgname,
+  static CreateRequest *create(const ConfigProxy& config, IoCtx &ioctx,
+                               const std::string &imgname,
                                const std::string &imageid, uint64_t size,
                                const librbd::ImageOptions &image_options,
                                const std::string &non_primary_global_image_id,
@@ -73,7 +74,8 @@ struct CloneRequest<librbd::MockTestImageCtx> {
   static CloneRequest *s_instance;
   Context *on_finish = nullptr;
 
-  static CloneRequest *create(IoCtx &p_ioctx, const std::string &p_id,
+  static CloneRequest *create(ConfigProxy& config, IoCtx &p_ioctx,
+                              const std::string &p_id,
                               const std::string &p_snap_name,
                               uint64_t p_snap_id,
 			      IoCtx &c_ioctx, const std::string &c_name,

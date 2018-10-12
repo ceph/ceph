@@ -19,6 +19,7 @@
 
 #include <string>
 #include <map>
+#include <set>
 #include <memory>
 
 #include "common/LogClient.h"
@@ -94,8 +95,9 @@ public:
   void active_start(
                 DaemonStateIndex &ds, ClusterState &cs,
                 const std::map<std::string, std::string> &kv_store,
-                MonClient &mc, LogChannelRef clog_, Objecter &objecter_,
-                Client &client_, Finisher &f, DaemonServer &server);
+                MonClient &mc, LogChannelRef clog_, LogChannelRef audit_clog_,
+                Objecter &objecter_, Client &client_, Finisher &f,
+                DaemonServer &server);
   void standby_start(MonClient &mc);
 
   bool is_standby_running() const
@@ -105,15 +107,6 @@ public:
 
   void active_shutdown();
   void shutdown();
-
-  template<typename Callback, typename...Args>
-  void with_active_modules(Callback&& cb, Args&&...args) const
-  {
-    Mutex::Locker l(lock);
-    ceph_assert(active_modules != nullptr);
-
-    std::forward<Callback>(cb)(*active_modules, std::forward<Args>(args)...);
-  }
 
   std::vector<MonCommand> get_commands() const;
   std::vector<ModuleCommand> get_py_commands() const;

@@ -577,8 +577,17 @@ class LocalCephManager(CephManager):
         """
         return LocalRemote()
 
-    def run_ceph_w(self):
-        proc = self.controller.run([os.path.join(BIN_PREFIX, "ceph"), "-w"], wait=False, stdout=StringIO())
+    def run_ceph_w(self, watch_channel=None):
+        """
+        :param watch_channel: Specifies the channel to be watched.
+                              This can be 'cluster', 'audit', ...
+        :type watch_channel: str
+        """
+        args = [os.path.join(BIN_PREFIX, "ceph"), "-w"]
+        if watch_channel is not None:
+            args.append("--watch-channel")
+            args.append(watch_channel)
+        proc = self.controller.run(args, wait=False, stdout=StringIO())
         return proc
 
     def raw_cluster_cmd(self, *args, **kwargs):

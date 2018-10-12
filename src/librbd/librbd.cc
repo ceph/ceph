@@ -35,6 +35,7 @@
 #include "librbd/api/Namespace.h"
 #include "librbd/api/PoolMetadata.h"
 #include "librbd/api/Snapshot.h"
+#include "librbd/api/Trash.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequestWQ.h"
 #include "librbd/io/ReadResult.h"
@@ -557,7 +558,7 @@ namespace librbd {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
     tracepoint(librbd, remove_enter, io_ctx.get_pool_name().c_str(), io_ctx.get_id(), name);
     librbd::NoOpProgressContext prog_ctx;
-    int r = librbd::remove(io_ctx, name, "", prog_ctx);
+    int r = librbd::api::Image<>::remove(io_ctx, name, "", prog_ctx);
     tracepoint(librbd, remove_exit, r);
     return r;
   }
@@ -567,7 +568,7 @@ namespace librbd {
   {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
     tracepoint(librbd, remove_enter, io_ctx.get_pool_name().c_str(), io_ctx.get_id(), name);
-    int r = librbd::remove(io_ctx, name, "", pctx);
+    int r = librbd::api::Image<>::remove(io_ctx, name, "", pctx);
     tracepoint(librbd, remove_exit, r);
     return r;
   }
@@ -576,21 +577,21 @@ namespace librbd {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
     tracepoint(librbd, trash_move_enter, io_ctx.get_pool_name().c_str(),
                io_ctx.get_id(), name);
-    int r = librbd::trash_move(io_ctx, RBD_TRASH_IMAGE_SOURCE_USER, name,
-                               delay);
+    int r = librbd::api::Trash<>::move(io_ctx, RBD_TRASH_IMAGE_SOURCE_USER,
+                                       name, delay);
     tracepoint(librbd, trash_move_exit, r);
     return r;
   }
 
   int RBD::trash_get(IoCtx &io_ctx, const char *id, trash_image_info_t *info) {
-    return librbd::trash_get(io_ctx, id, info);
+    return librbd::api::Trash<>::get(io_ctx, id, info);
   }
 
   int RBD::trash_list(IoCtx &io_ctx, vector<trash_image_info_t> &entries) {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
     tracepoint(librbd, trash_list_enter,
                io_ctx.get_pool_name().c_str(), io_ctx.get_id());
-    int r = librbd::trash_list(io_ctx, entries);
+    int r = librbd::api::Trash<>::list(io_ctx, entries);
 #ifdef WITH_LTTNG
     if (r >= 0) {
       for (const auto& entry : entries) {
@@ -607,7 +608,7 @@ namespace librbd {
     tracepoint(librbd, trash_remove_enter, io_ctx.get_pool_name().c_str(),
                io_ctx.get_id(), image_id, force);
     librbd::NoOpProgressContext prog_ctx;
-    int r = librbd::trash_remove(io_ctx, image_id, force, prog_ctx);
+    int r = librbd::api::Trash<>::remove(io_ctx, image_id, force, prog_ctx);
     tracepoint(librbd, trash_remove_exit, r);
     return r;
   }
@@ -617,7 +618,7 @@ namespace librbd {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
     tracepoint(librbd, trash_remove_enter, io_ctx.get_pool_name().c_str(),
                io_ctx.get_id(), image_id, force);
-    int r = librbd::trash_remove(io_ctx, image_id, force, pctx);
+    int r = librbd::api::Trash<>::remove(io_ctx, image_id, force, pctx);
     tracepoint(librbd, trash_remove_exit, r);
     return r;
   }
@@ -626,7 +627,7 @@ namespace librbd {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
     tracepoint(librbd, trash_undelete_enter, io_ctx.get_pool_name().c_str(),
                io_ctx.get_id(), id, name);
-    int r = librbd::trash_restore(io_ctx, id, name);
+    int r = librbd::api::Trash<>::restore(io_ctx, id, name);
     tracepoint(librbd, trash_undelete_exit, r);
     return r;
   }
@@ -2051,7 +2052,7 @@ namespace librbd {
       return -EINVAL;
     }
 
-    bool discard_zero = ictx->cct->_conf.get_val<bool>("rbd_discard_on_zeroed_write_same");
+    bool discard_zero = ictx->config.get_val<bool>("rbd_discard_on_zeroed_write_same");
     if (discard_zero && mem_is_zero(bl.c_str(), bl.length())) {
       int r = ictx->io_work_queue->discard(ofs, len, false);
       tracepoint(librbd, writesame_exit, r);
@@ -2188,7 +2189,7 @@ namespace librbd {
       return -EINVAL;
     }
 
-    bool discard_zero = ictx->cct->_conf.get_val<bool>("rbd_discard_on_zeroed_write_same");
+    bool discard_zero = ictx->config.get_val<bool>("rbd_discard_on_zeroed_write_same");
     if (discard_zero && mem_is_zero(bl.c_str(), bl.length())) {
       ictx->io_work_queue->aio_discard(get_aio_completion(c), off, len, false);
       tracepoint(librbd, aio_writesame_exit, 0);
@@ -2804,7 +2805,7 @@ extern "C" int rbd_remove(rados_ioctx_t p, const char *name)
   TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
   tracepoint(librbd, remove_enter, io_ctx.get_pool_name().c_str(), io_ctx.get_id(), name);
   librbd::NoOpProgressContext prog_ctx;
-  int r = librbd::remove(io_ctx, name, "", prog_ctx);
+  int r = librbd::api::Image<>::remove(io_ctx, name, "", prog_ctx);
   tracepoint(librbd, remove_exit, r);
   return r;
 }
@@ -2817,7 +2818,7 @@ extern "C" int rbd_remove_with_progress(rados_ioctx_t p, const char *name,
   TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
   tracepoint(librbd, remove_enter, io_ctx.get_pool_name().c_str(), io_ctx.get_id(), name);
   librbd::CProgressContext prog_ctx(cb, cbdata);
-  int r = librbd::remove(io_ctx, name, "", prog_ctx);
+  int r = librbd::api::Image<>::remove(io_ctx, name, "", prog_ctx);
   tracepoint(librbd, remove_exit, r);
   return r;
 }
@@ -2829,7 +2830,8 @@ extern "C" int rbd_trash_move(rados_ioctx_t p, const char *name,
   TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
   tracepoint(librbd, trash_move_enter, io_ctx.get_pool_name().c_str(),
              io_ctx.get_id(), name);
-  int r = librbd::trash_move(io_ctx, RBD_TRASH_IMAGE_SOURCE_USER, name, delay);
+  int r = librbd::api::Trash<>::move(io_ctx, RBD_TRASH_IMAGE_SOURCE_USER, name,
+                                     delay);
   tracepoint(librbd, trash_move_exit, r);
   return r;
 }
@@ -2840,7 +2842,7 @@ extern "C" int rbd_trash_get(rados_ioctx_t io, const char *id,
   librados::IoCtx::from_rados_ioctx_t(io, io_ctx);
 
   librbd::trash_image_info_t cpp_info;
-  int r = librbd::trash_get(io_ctx, id, &cpp_info);
+  int r = librbd::api::Trash<>::get(io_ctx, id, &cpp_info);
   if (r < 0) {
     return r;
   }
@@ -2863,7 +2865,7 @@ extern "C" int rbd_trash_list(rados_ioctx_t p, rbd_trash_image_info_t *entries,
              io_ctx.get_pool_name().c_str(), io_ctx.get_id());
 
   vector<librbd::trash_image_info_t> cpp_entries;
-  int r = librbd::trash_list(io_ctx, cpp_entries);
+  int r = librbd::api::Trash<>::list(io_ctx, cpp_entries);
   if (r < 0) {
     tracepoint(librbd, trash_list_exit, r, *num_entries);
     return r;
@@ -2899,7 +2901,7 @@ extern "C" int rbd_trash_remove(rados_ioctx_t p, const char *image_id,
   tracepoint(librbd, trash_remove_enter, io_ctx.get_pool_name().c_str(),
              io_ctx.get_id(), image_id, force);
   librbd::NoOpProgressContext prog_ctx;
-  int r = librbd::trash_remove(io_ctx, image_id, force, prog_ctx);
+  int r = librbd::api::Trash<>::remove(io_ctx, image_id, force, prog_ctx);
   tracepoint(librbd, trash_remove_exit, r);
   return r;
 }
@@ -2915,7 +2917,7 @@ extern "C" int rbd_trash_remove_with_progress(rados_ioctx_t p,
   tracepoint(librbd, trash_remove_enter, io_ctx.get_pool_name().c_str(),
              io_ctx.get_id(), image_id, force);
   librbd::CProgressContext prog_ctx(cb, cbdata);
-  int r = librbd::trash_remove(io_ctx, image_id, force, prog_ctx);
+  int r = librbd::api::Trash<>::remove(io_ctx, image_id, force, prog_ctx);
   tracepoint(librbd, trash_remove_exit, r);
   return r;
 }
@@ -2927,7 +2929,7 @@ extern "C" int rbd_trash_restore(rados_ioctx_t p, const char *id,
   TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
   tracepoint(librbd, trash_undelete_enter, io_ctx.get_pool_name().c_str(),
              io_ctx.get_id(), id, name);
-  int r = librbd::trash_restore(io_ctx, id, name);
+  int r = librbd::api::Trash<>::restore(io_ctx, id, name);
   tracepoint(librbd, trash_undelete_exit, r);
   return r;
 }
@@ -4559,7 +4561,7 @@ extern "C" ssize_t rbd_writesame(rbd_image_t image, uint64_t ofs, size_t len,
     return -EINVAL;
   }
 
-  bool discard_zero = ictx->cct->_conf.get_val<bool>("rbd_discard_on_zeroed_write_same");
+  bool discard_zero = ictx->config.get_val<bool>("rbd_discard_on_zeroed_write_same");
   if (discard_zero && mem_is_zero(buf, data_len)) {
     int r = ictx->io_work_queue->discard(ofs, len, false);
     tracepoint(librbd, writesame_exit, r);
@@ -4781,7 +4783,7 @@ extern "C" int rbd_aio_writesame(rbd_image_t image, uint64_t off, size_t len,
     return -EINVAL;
   }
 
-  bool discard_zero = ictx->cct->_conf.get_val<bool>("rbd_discard_on_zeroed_write_same");
+  bool discard_zero = ictx->config.get_val<bool>("rbd_discard_on_zeroed_write_same");
   if (discard_zero && mem_is_zero(buf, data_len)) {
     ictx->io_work_queue->aio_discard(get_aio_completion(comp), off, len, false);
     tracepoint(librbd, aio_writesame_exit, 0);

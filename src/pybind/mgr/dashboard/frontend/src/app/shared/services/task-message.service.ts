@@ -49,6 +49,8 @@ class TaskMessage {
   providedIn: ServicesModule
 })
 export class TaskMessageService {
+  constructor() {}
+
   defaultMessage = new TaskMessage(
     new TaskMessageOperation('Executing', 'execute', 'Executed'),
     (metadata) => {
@@ -74,6 +76,13 @@ export class TaskMessageService {
   };
 
   messages = {
+    'pool/create': new TaskMessage(this.commonOperations.create, this.pool, (metadata) => ({
+      '17': `Name is already used by ${this.pool(metadata)}.`
+    })),
+    'pool/edit': new TaskMessage(this.commonOperations.update, this.pool, (metadata) => ({
+      '17': `Name is already used by ${this.pool(metadata)}.`
+    })),
+    'pool/delete': new TaskMessage(this.commonOperations.delete, this.pool),
     'rbd/create': new TaskMessage(this.commonOperations.create, this.rbd.default, (metadata) => ({
       '17': `Name is already used by ${this.rbd.default(metadata)}.`
     })),
@@ -159,7 +168,9 @@ export class TaskMessageService {
     )
   };
 
-  constructor() {}
+  pool(metadata) {
+    return `pool '${metadata.pool_name}'`;
+  }
 
   _getTaskTitle(task: Task) {
     return this.messages[task.name] || this.defaultMessage;

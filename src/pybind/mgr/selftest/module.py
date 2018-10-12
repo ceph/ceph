@@ -86,6 +86,13 @@ class Module(MgrModule):
                 "desc": "Set the now time for the insights module.",
                 "perm": "rw"
             },
+            {
+                "cmd": "mgr self-test cluster-log name=channel,type=CephString "
+                       "name=priority,type=CephString "
+                       "name=message,type=CephString",
+                "desc": "Create an audit log record.",
+                "perm": "rw"
+            },
             ]
 
     def __init__(self, *args, **kwargs):
@@ -136,6 +143,17 @@ class Module(MgrModule):
             return self._health_clear(inbuf, command)
         elif command['prefix'] == 'mgr self-test insights_set_now_offset':
             return self._insights_set_now_offset(inbuf, command)
+        elif command['prefix'] == 'mgr self-test cluster-log':
+            priority_map = {
+                'info': self.CLUSTER_LOG_PRIO_INFO,
+                'security': self.CLUSTER_LOG_PRIO_SEC,
+                'warning': self.CLUSTER_LOG_PRIO_WARN,
+                'error': self.CLUSTER_LOG_PRIO_ERROR
+            }
+            self.cluster_log(command['channel'],
+                             priority_map[command['priority']],
+                             command['message'])
+            return 0, '', 'Successfully called'
         else:
             return (-errno.EINVAL, '',
                     "Command not found '{0}'".format(command['prefix']))
@@ -293,10 +311,15 @@ class Module(MgrModule):
         self.remote("influx", "handle_command", "", {"prefix": "influx self-test"})
 
         # Test calling module that exists but isn't enabled
+        # (arbitrarily pick a non-always-on module to use)
+        disabled_module = "telegraf"
         mgr_map = self.get("mgr_map")
-        all_modules = [m['name'] for m in mgr_map['available_modules']]
-        disabled_modules = set(all_modules) - set(mgr_map['modules'])
-        disabled_module = list(disabled_modules)[0]
+        assert disabled_module not in mgr_map['modules']
+
+        # (This works until the Z release in about 2027)
+        latest_release = sorted(mgr_map['always_on_modules'].keys())[-1]
+        assert disabled_module not in mgr_map['always_on_modules'][latest_release]
+
         try:
             self.remote(disabled_module, "handle_command", {"prefix": "influx self-test"})
         except ImportError:

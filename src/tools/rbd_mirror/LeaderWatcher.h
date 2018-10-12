@@ -214,7 +214,7 @@ private:
   LeaderLock *m_leader_lock;
   Context *m_on_finish = nullptr;
   Context *m_on_shut_down_finish = nullptr;
-  int m_acquire_attempts = 0;
+  uint64_t m_acquire_attempts = 0;
   int m_ret_val = 0;
   MirrorStatusWatcher<ImageCtxT> *m_status_watcher = nullptr;
   Instances<ImageCtxT> *m_instances = nullptr;

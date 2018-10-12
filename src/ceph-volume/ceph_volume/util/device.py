@@ -11,6 +11,8 @@ class Device(object):
         # LVs can have a vg/lv path, while disks will have /dev/sda
         self.abspath = path
         self.lv_api = None
+        self.lvs = []
+        self.vg_name = None
         self.pvs_api = []
         self.disk_api = {}
         self.blkid_api = {}
@@ -24,7 +26,9 @@ class Device(object):
         lv = lvm.get_lv_from_argument(self.path)
         if lv:
             self.lv_api = lv
+            self.lvs = [lv]
             self.abspath = lv.lv_path
+            self.vg_name = lv.vg_name
         else:
             dev = disk.lsblk(self.path)
             self.blkid_api = disk.blkid(self.path)
@@ -61,8 +65,15 @@ class Device(object):
                 return self._is_lvm_member
             has_vgs = [pv.vg_name for pv in pvs if pv.vg_name]
             if has_vgs:
+                # a pv can only be in one vg, so this should be safe
+                self.vg_name = has_vgs[0]
                 self._is_lvm_member = True
                 self.pvs_api = pvs
+                for pv in pvs:
+                    if pv.vg_name and pv.lv_uuid:
+                        lv = lvm.get_lv(vg_name=pv.vg_name, lv_uuid=pv.lv_uuid)
+                        if lv:
+                            self.lvs.append(lv)
             else:
                 # this is contentious, if a PV is recognized by LVM but has no
                 # VGs, should we consider it as part of LVM? We choose not to
@@ -74,6 +85,12 @@ class Device(object):
     @property
     def exists(self):
         return os.path.exists(self.abspath)
+
+    @property
+    def rotational(self):
+        if self.sys_api['rotational'] == '1':
+            return True
+        return False
 
     @property
     def is_lvm_member(self):
@@ -104,6 +121,13 @@ class Device(object):
         if self.disk_api:
             return self.disk_api['TYPE'] == 'device'
         return False
+
+    @property
+    def used_by_ceph(self):
+        # only filter out data devices as journals could potentially be reused
+        osd_ids = [lv.tags.get("ceph.osd_id") is not None for lv in self.lvs
+                   if lv.tags.get("ceph.type") in ["data", "block"]]
+        return any(osd_ids)
 
 
 class CephDiskDevice(object):
