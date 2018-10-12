@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <limits>
+
 #include "rgw_rados.h"
 #include "rgw_bucket.h"
 #include "rgw_reshard.h"
@@ -22,6 +24,7 @@ using namespace std;
 
 #define RESHARD_SHARD_WINDOW 64
 #define RESHARD_MAX_AIO 128
+
 
 class BucketReshardShard {
   RGWRados *store;
@@ -267,6 +270,7 @@ int RGWBucketReshard::renew_lock_bucket(const Clock::time_point& now)
       reshard_oid << " with " << cpp_strerror(-ret) << dendl;
     return ret;
   }
+  reshard_lock.set_must_renew(false);
   lock_start_time = now;
   lock_renew_thresh = lock_start_time + lock_duration / 2;
   ldout(store->ctx(), 20) << __func__ << "(): successfully renewed lock on " <<
@@ -275,7 +279,11 @@ int RGWBucketReshard::renew_lock_bucket(const Clock::time_point& now)
   return 0;
 }
 
-int RGWBucketReshard::set_resharding_status(const string& new_instance_id, int32_t num_shards, cls_rgw_reshard_status status)
+int RGWBucketReshard::set_resharding_status(RGWRados* store,
+					    RGWBucketInfo& bucket_info,
+					    const string& new_instance_id,
+					    int32_t num_shards,
+					    cls_rgw_reshard_status status)
 {
   if (new_instance_id.empty()) {
     ldout(store->ctx(), 0) << __func__ << " missing new bucket instance id" << dendl;
@@ -294,16 +302,47 @@ int RGWBucketReshard::set_resharding_status(const string& new_instance_id, int32
   return 0;
 }
 
+// reshard lock assumes lock is held
 int RGWBucketReshard::clear_resharding()
 {
-  cls_rgw_bucket_instance_entry instance_entry;
-
-  int ret = store->bucket_set_reshard(bucket_info, instance_entry);
+  int ret = clear_index_shard_reshard_status();
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "RGWReshard::" << __func__ << " ERROR: error setting bucket resharding flag on bucket index: "
-		  << cpp_strerror(-ret) << dendl;
+    ldout(store->ctx(), 0) << "RGWBucketReshard::" << __func__ <<
+      " ERROR: error clearing reshard status from index shard " <<
+      cpp_strerror(-ret) << dendl;
     return ret;
   }
+
+  cls_rgw_bucket_instance_entry instance_entry;
+  ret = store->bucket_set_reshard(bucket_info, instance_entry);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "RGWReshard::" << __func__ <<
+      " ERROR: error setting bucket resharding flag on bucket index: " <<
+      cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  return 0;
+}
+
+int RGWBucketReshard::clear_index_shard_reshard_status(RGWRados* store,
+						       RGWBucketInfo& bucket_info)
+{
+  uint32_t num_shards = bucket_info.num_shards;
+
+  if (num_shards < std::numeric_limits<uint32_t>::max()) {
+    int ret = set_resharding_status(store, bucket_info,
+				    bucket_info.bucket.bucket_id,
+				    (num_shards < 1 ? 1 : num_shards),
+				    CLS_RGW_RESHARD_NONE);
+    if (ret < 0) {
+      ldout(store->ctx(), 0) << "RGWBucketReshard::" << __func__ <<
+	" ERROR: error clearing reshard status from index shard " <<
+	cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+  }
+
   return 0;
 }
 
@@ -355,7 +394,7 @@ int RGWBucketReshard::cancel()
   ret = clear_resharding();
 
   unlock_bucket();
-  return 0;
+  return ret;
 }
 
 class BucketInfoReshardUpdate
@@ -390,8 +429,14 @@ public:
 
   ~BucketInfoReshardUpdate() {
     if (in_progress) {
+      int ret =
+	RGWBucketReshard::clear_index_shard_reshard_status(store, bucket_info);
+      if (ret < 0) {
+	lderr(store->ctx()) << "Error: " << __func__ <<
+	  " clear_index_shard_status returned " << ret << dendl;
+      }
       bucket_info.new_bucket_instance_id.clear();
-      set_status(CLS_RGW_RESHARD_NONE);
+      set_status(CLS_RGW_RESHARD_NONE); // saves new_bucket_instance as well
     }
   }
 
@@ -442,6 +487,8 @@ int RGWBucketReshard::do_reshard(int num_shards,
     return -EINVAL;
   }
 
+  // NB: destructor cleans up sharding state if reshard does not
+  // complete successfully
   BucketInfoReshardUpdate bucket_info_updater(store, bucket_info, bucket_attrs, new_bucket_info.bucket.bucket_id);
 
   ret = bucket_info_updater.start();

@@ -536,7 +536,7 @@ int cls_rgw_reshard_get(librados::IoCtx& io_ctx, const string& oid, cls_rgw_resh
 int cls_rgw_reshard_get_head(librados::IoCtx& io_ctx, const string& oid, cls_rgw_reshard_entry& entry);
 void cls_rgw_reshard_remove(librados::ObjectWriteOperation& op, const cls_rgw_reshard_entry& entry);
 
-/* resharding attribute  */
+/* resharding attribute on bucket index shard headers */
 int cls_rgw_set_bucket_resharding(librados::IoCtx& io_ctx, const string& oid,
                                   const cls_rgw_bucket_instance_entry& entry);
 int cls_rgw_clear_bucket_resharding(librados::IoCtx& io_ctx, const string& oid);
