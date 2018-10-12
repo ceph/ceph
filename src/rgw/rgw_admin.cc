@@ -516,6 +516,7 @@ enum {
   OPT_MFA_LIST,
   OPT_MFA_CHECK,
   OPT_MFA_RESYNC,
+  OPT_STALE_INSTANCES_LIST
 };
 
 static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_cmd, bool *need_more)
@@ -553,6 +554,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       strcmp(cmd, "replicalog") == 0 ||
       strcmp(cmd, "role") == 0 ||
       strcmp(cmd, "role-policy") == 0 ||
+      strcmp(cmd, "stale-instances") == 0 ||
       strcmp(cmd, "subuser") == 0 ||
       strcmp(cmd, "sync") == 0 ||
       strcmp(cmd, "usage") == 0 ||
@@ -986,6 +988,9 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_MFA_CHECK;
     if (strcmp(cmd, "resync") == 0)
       return OPT_MFA_RESYNC;
+  } else if (strcmp(prev_cmd, "stale-instances") == 0) {
+    if (strcmp(cmd, "list") == 0)
+      return OPT_STALE_INSTANCES_LIST;
   }
 
   return -EINVAL;
@@ -7930,7 +7935,11 @@ next:
       return -ret;
     }
 
-  }
+ }
+
+ if (opt_cmd == OPT_STALE_INSTANCES_LIST) {
+   RGWBucketAdminOp::list_stale_instances(store, bucket_op,f);
+ }
 
   return 0;
 }
