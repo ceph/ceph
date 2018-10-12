@@ -5,8 +5,8 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import * as moment from 'moment';
 import { ToastModule } from 'ng2-toastr';
-import { BsModalRef, BsModalService } from 'ngx-bootstrap';
 import { BsDatepickerModule } from 'ngx-bootstrap/datepicker';
+import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 
 import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { ApiModule } from '../../../shared/api/api.module';
