@@ -38,6 +38,9 @@ void SnapServer::reset_state()
   last_snap = 1;  /* snapid 1 reserved for initial root snaprealm */
   snaps.clear();
   need_to_purge.clear();
+  pending_update.clear();
+  pending_destroy.clear();
+  pending_noop.clear();
 
   // find any removed snapshot in data pools
   if (mds) {  // only if I'm running in a live MDS
@@ -61,7 +64,8 @@ void SnapServer::reset_state()
   last_created = last_snap;
   last_destroyed = last_snap;
   snaprealm_v2_since = last_snap + 1;
-  version++;
+
+  MDSTableServer::reset_state();
 }
 
 
@@ -436,4 +440,37 @@ void SnapServer::generate_test_instances(list<SnapServer*>& ls)
   populated->pending_noop.insert(890);
 
   ls.push_back(populated);
+}
+
+bool SnapServer::force_update(snapid_t last, snapid_t v2_since,
+			      map<snapid_t, SnapInfo>& _snaps)
+{
+  bool modified = false;
+  if (last > last_snap) {
+    derr << " updating last_snap " << last_snap << " -> " << last << dendl;
+    last_snap = last;
+    last_created = last;
+    last_destroyed = last;
+    modified = true;
+  }
+  if (v2_since > snaprealm_v2_since) {
+    derr << " updating snaprealm_v2_since " << snaprealm_v2_since
+	 << " -> " << v2_since << dendl;
+    snaprealm_v2_since = v2_since;
+    modified = true;
+  }
+  if (snaps != _snaps) {
+    derr << " updating snaps {" << snaps << "} -> {" << _snaps << "}" << dendl;
+    snaps = _snaps;
+    modified = true;
+  }
+
+  if (modified) {
+    need_to_purge.clear();
+    pending_update.clear();
+    pending_destroy.clear();
+    pending_noop.clear();
+    MDSTableServer::reset_state();
+  }
+  return modified;
 }

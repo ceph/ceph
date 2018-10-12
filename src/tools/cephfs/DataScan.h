@@ -244,11 +244,13 @@ class DataScan : public MDSUtility, public MetadataTool
     RecoveryDriver *driver;
     fs_cluster_id_t fscid;
 
+    string metadata_pool_name;
+    std::vector<int64_t> data_pools;
+
     // IoCtx for data pool (where we scrape file backtraces from)
     librados::IoCtx data_io;
     // Remember the data pool ID for use in layouts
     int64_t data_pool_id;
-    string metadata_pool_name;
 
     uint32_t n;
     uint32_t m;
@@ -325,7 +327,7 @@ class DataScan : public MDSUtility, public MetadataTool
 
     DataScan()
       : driver(NULL), fscid(FS_CLUSTER_ID_NONE),
-	data_pool_id(-1), metadata_pool_name(""), n(0), m(1),
+	data_pool_id(-1), n(0), m(1),
         force_pool(false), force_corrupt(false),
         force_init(false)
     {
