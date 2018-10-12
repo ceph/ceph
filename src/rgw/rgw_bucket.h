@@ -337,6 +337,12 @@ public:
 			 RGWFormatterFlusher& flusher,
 			 bool warnings_only = false);
   static int set_quota(RGWRados *store, RGWBucketAdminOpState& op_state);
+
+  static int list_stale_instances(RGWRados *store, RGWBucketAdminOpState& op_state,
+				  RGWFormatterFlusher& flusher);
+
+  static int clear_stale_instances(RGWRados *store, RGWBucketAdminOpState& op_state,
+				   RGWFormatterFlusher& flusher);
 };
 
 
