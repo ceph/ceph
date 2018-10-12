@@ -426,21 +426,24 @@ class Module(MgrModule):
         assert osdmap is not None
         for dev in devs['devices']:
             devid = dev['devid']
-            if 'life_expectancy_min' not in dev:
+            if 'life_expectancy_max' not in dev:
                 continue
             # ignore devices that are not consumed by any daemons
             if not dev['daemons']:
                 continue
+            if not dev['life_expectancy_max'] or \
+               dev['life_expectancy_max'] == '0.000000':
+                continue
             # life_expectancy_(min/max) is in the format of:
             # '%Y-%m-%d %H:%M:%S.%f', e.g.:
             # '2019-01-20 21:12:12.000000'
-            life_expectancy_min = datetime.strptime(
-                dev['life_expectancy_min'],
+            life_expectancy_max = datetime.strptime(
+                dev['life_expectancy_max'],
                 '%Y-%m-%d %H:%M:%S.%f')
-            self.log.debug('device %s expectancy min %s', dev,
-                           life_expectancy_min)
+            self.log.debug('device %s expectancy max %s', dev,
+                           life_expectancy_max)
 
-            if life_expectancy_min - now <= mark_out_threshold_td:
+            if life_expectancy_max - now <= mark_out_threshold_td:
                 if self.self_heal:
                     # dev['daemons'] == ["osd.0","osd.1","osd.2"]
                     if dev['daemons']:
@@ -449,11 +452,11 @@ class Module(MgrModule):
                         osd_ids = map(lambda x: x[4:], osds)
                         for _id in osd_ids:
                             if self.is_osd_in(osdmap, _id):
-                                osds_in[_id] = life_expectancy_min
+                                osds_in[_id] = life_expectancy_max
                             else:
                                 osds_out[_id] = 1
 
-            if life_expectancy_min - now <= warn_threshold_td:
+            if life_expectancy_max - now <= warn_threshold_td:
                 # device can appear in more than one location in case
                 # of SCSI multipath
                 device_locations = map(lambda x: x['host'] + ':' + x['dev'],
@@ -463,11 +466,8 @@ class Module(MgrModule):
                     % (dev['devid'],
                        ','.join(device_locations),
                        ','.join(dev.get('daemons', ['none'])),
-                       dev['life_expectancy_min'],
+                       dev['life_expectancy_max'],
                        dev.get('life_expectancy_max', 'unknown')))
-                # TODO: by default, dev['life_expectancy_max'] == '0.000000',
-                # so dev.get('life_expectancy_max', 'unknown')
-                # above should be altered.
 
         # OSD might be marked 'out' (which means it has no
         # data), however PGs are still attached to it.
