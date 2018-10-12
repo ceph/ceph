@@ -497,6 +497,7 @@ enum {
   OPT_RESHARD_STATUS,
   OPT_RESHARD_PROCESS,
   OPT_RESHARD_CANCEL,
+  OPT_STALE_INSTANCES_LIST
 };
 
 static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_cmd, bool *need_more)
@@ -531,6 +532,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       strcmp(cmd, "replicalog") == 0 ||
       strcmp(cmd, "role") == 0 ||
       strcmp(cmd, "role-policy") == 0 ||
+      strcmp(cmd, "stale-instances") == 0 ||
       strcmp(cmd, "subuser") == 0 ||
       strcmp(cmd, "sync") == 0 ||
       strcmp(cmd, "usage") == 0 ||
@@ -951,6 +953,9 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_RESHARD_PROCESS;
     if (strcmp(cmd, "cancel") == 0)
       return OPT_RESHARD_CANCEL;
+  } else if (strcmp(prev_cmd, "stale-instances") == 0) {
+    if (strcmp(cmd, "list") == 0)
+      return OPT_STALE_INSTANCES_LIST;
   }
 
   return -EINVAL;
@@ -7494,6 +7499,10 @@ next:
         return EINVAL;
       }
     }
+  }
+
+  if (opt_cmd == OPT_STALE_INSTANCES_LIST) {
+    RGWBucketAdminOp::list_stale_instances(store, bucket_op,f);
   }
 
   return 0;
