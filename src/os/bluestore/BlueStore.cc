@@ -12554,12 +12554,14 @@ void BlueStore::_flush_cache()
 // We use a best-effort policy instead, e.g.,
 // we don't care if there are still some pinned onodes/data in the cache
 // after this command is completed.
-void BlueStore::flush_cache()
+int BlueStore::flush_cache(ostream *os)
 {
   dout(10) << __func__ << dendl;
   for (auto i : cache_shards) {
     i->trim_all();
   }
+
+  return 0;
 }
 
 void BlueStore::_apply_padding(uint64_t head_pad,

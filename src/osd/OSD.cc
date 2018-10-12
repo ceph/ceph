@@ -2397,7 +2397,7 @@ will start to track new ops received afterwards.";
   } else if (admin_command == "calc_objectstore_db_histogram") {
     store->generate_db_histogram(f);
   } else if (admin_command == "flush_store_cache") {
-    store->flush_cache();
+    store->flush_cache(&ss);
   } else if (admin_command == "dump_pgstate_history") {
     f->open_object_section("pgstate_history");
     vector<PGRef> pgs;
@@ -6020,6 +6020,12 @@ COMMAND("compact",
 COMMAND("smart name=devid,type=CephString,req=False",
         "runs smartctl on this osd devices.  ",
         "osd", "rw", "cli,rest")
+COMMAND("cache drop",
+        "Drop all OSD caches",
+        "osd", "rwx", "cli,rest")
+COMMAND("cache status",
+        "Get OSD caches statistics",
+        "osd", "r", "cli,rest")
 };
 
 void OSD::do_command(
@@ -6494,6 +6500,42 @@ int OSD::_do_command(
     string devid;
     cmd_getval(cct, cmdmap, "devid", devid);
     probe_smart(devid, ds);
+  }
+
+  else if (prefix == "cache drop") {
+    dout(20) << "clearing all caches" << dendl;
+    // Clear the objectstore's cache - onode and buffer for Bluestore,
+    // system's pagecache for Filestore
+    r = store->flush_cache(&ss);
+    if (r < 0) {
+      ds << "Error flushing objectstore cache: " << cpp_strerror(r);
+      goto out;
+    }
+    // Clear the objectcontext cache (per PG)
+    vector<PGRef> pgs;
+    _get_pgs(&pgs);
+    for (auto& pg: pgs) {
+      pg->clear_cache();
+    }
+  }
+
+  else if (prefix == "cache status") {
+    int obj_ctx_count = 0;
+    vector<PGRef> pgs;
+    _get_pgs(&pgs);
+    for (auto& pg: pgs) {
+      obj_ctx_count += pg->get_cache_obj_count();
+    }
+    if (f) {
+      f->open_object_section("cache_status");
+      f->dump_int("object_ctx", obj_ctx_count);
+      store->dump_cache_stats(f.get());
+      f->close_section();
+      f->flush(ds);
+    } else {
+      ds << "object_ctx: " << obj_ctx_count;
+      store->dump_cache_stats(ds);
+    }
   }
 
   else {

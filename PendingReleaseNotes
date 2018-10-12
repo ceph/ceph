@@ -50,6 +50,15 @@
   support. It features less network traffic and disk I/O when performing
   recovery.
 
+* The 'cache drop' OSD command has been added to drop an OSD's caches:
+
+    - ``ceph tell osd.x cache drop``
+
+* The 'cache status' OSD command has been added to get the cache stats of an
+  OSD:
+
+    - ``ceph tell osd.x cache status'
+
 >=13.1.0
 --------
 

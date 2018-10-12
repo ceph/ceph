@@ -1479,8 +1479,10 @@ public:
 
   virtual void get_db_statistics(Formatter *f) { }
   virtual void generate_db_histogram(Formatter *f) { }
-  virtual void flush_cache() { }
+  virtual int flush_cache(ostream *os = NULL) { return -1; }
   virtual void dump_perf_counters(Formatter *f) {}
+  virtual void dump_cache_stats(Formatter *f) {}
+  virtual void dump_cache_stats(ostream& os) {}
 
   virtual string get_type() = 0;
 
