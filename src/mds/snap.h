@@ -40,6 +40,12 @@ struct SnapInfo {
 };
 WRITE_CLASS_ENCODER(SnapInfo)
 
+inline bool operator==(const SnapInfo &l, const SnapInfo &r)
+{
+  return l.snapid == r.snapid && l.ino == r.ino &&
+	 l.stamp == r.stamp && l.name == r.name;
+}
+
 ostream& operator<<(ostream& out, const SnapInfo &sn);
 
 
