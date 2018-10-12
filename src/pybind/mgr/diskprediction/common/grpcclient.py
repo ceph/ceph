@@ -6,8 +6,8 @@ import os
 import time
 
 from . import DummyResonse
-import client_pb2
-import client_pb2_grpc
+from . import client_pb2
+from . import client_pb2_grpc
 
 
 def gen_configuration(**kwargs):
