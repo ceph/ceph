@@ -114,13 +114,22 @@ class Module(MgrModule):
         self.run = True
         self.event = Event()
 
+    def is_valid_daemon_name(self, who):
+        l = cmd.get('who', '').split('.')
+        if len(l) != 2:
+            return False
+        if l[0] not in ('osd', 'mon'):
+            return False;
+        return True;
+
     def handle_command(self, _, cmd):
         self.log.error("handle_command")
 
         if cmd['prefix'] == 'device query-daemon-health-metrics':
+            who = cmd.get('who', '')
+            if not self.is_valid_daemon_name(who):
+                return -errno.EINVAL, '', 'not a valid mon or osd daemon name'
             (daemon_type, daemon_id) = cmd.get('who', '').split('.')
-            if daemon_type not in ('osd', 'mon'):
-                return -errno.EINVAL, '', 'not a valid daemon name'
             result = CommandResult('')
             self.send_command(result, daemon_type, daemon_id, json.dumps({
                 'prefix': 'smart',
@@ -129,9 +138,10 @@ class Module(MgrModule):
             r, outb, outs = result.wait()
             return r, outb, outs
         elif cmd['prefix'] == 'device scrape-daemon-health-metrics':
+            who = cmd.get('who', '')
+            if not self.is_valid_daemon_name(who):
+                return -errno.EINVAL, '', 'not a valid mon or osd daemon name'
             (daemon_type, daemon_id) = cmd.get('who', '').split('.')
-            if daemon_type not in ('osd', 'mon'):
-                return -errno.EINVAL, '', 'not a valid daemon name'
             return self.scrape_daemon(daemon_type, daemon_id)
         elif cmd['prefix'] == 'device scrape-health-metrics':
             if 'devid' in cmd:
