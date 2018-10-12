@@ -87,6 +87,7 @@ public:
   bool chain_cache_entry(std::initializer_list<rgw_cache_entry_info *> cache_info_entries,
                          RGWChainedCache::Entry *chained_entry);
   void register_chained_cache(RGWChainedCache *cc);
+  void unregister_chained_cache(RGWChainedCache *cc);
 
   void call_list(const std::optional<std::string>& filter, Formatter* f);
   int call_inspect(const std::string& target, Formatter* f);
@@ -104,11 +105,18 @@ class RGWChainedCacheImpl : public RGWChainedCache {
 
 public:
   RGWChainedCacheImpl() : lock("RGWChainedCacheImpl::lock") {}
-
-  void init(RGWSI_SysObj_Cache *svc) {
+  ~RGWChainedCacheImpl() {
     if (!svc) {
       return;
     }
+    svc->unregister_chained_cache(this);
+  }
+
+  void init(RGWSI_SysObj_Cache *_svc) {
+    if (!_svc) {
+      return;
+    }
+    svc = _svc;
     svc->register_chained_cache(this);
     expiry = std::chrono::seconds(svc->ctx()->_conf.get_val<uint64_t>(
 				    "rgw_cache_expiry_interval"));

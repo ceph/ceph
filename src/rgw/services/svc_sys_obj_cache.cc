@@ -438,6 +438,11 @@ void RGWSI_SysObj_Cache::register_chained_cache(RGWChainedCache *cc)
   cache.chain_cache(cc);
 }
 
+void RGWSI_SysObj_Cache::unregister_chained_cache(RGWChainedCache *cc)
+{
+  cache.unchain_cache(cc);
+}
+
 static void cache_list_dump_helper(Formatter* f,
                                    const std::string& name,
                                    const ceph::real_time mtime,
