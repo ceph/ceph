@@ -1691,6 +1691,8 @@ class RGWArchiveDataSyncModule : public RGWDefaultDataSyncModule {
 public:
   RGWArchiveDataSyncModule() {}
 
+  void init(RGWDataSyncEnv *sync_env, uint64_t instance_id) override;
+
   RGWCoroutine *sync_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override;
   RGWCoroutine *remove_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, real_time& mtime, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override;
   RGWCoroutine *create_delete_marker(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, real_time& mtime,
@@ -1710,6 +1712,20 @@ int RGWArchiveSyncModule::create_instance(CephContext *cct, const JSONFormattabl
 {
   instance->reset(new RGWArchiveSyncModuleInstance());
   return 0;
+}
+
+void RGWArchiveDataSyncModule::init(RGWDataSyncEnv *sync_env, uint64_t instance_id) {
+
+  ldout(sync_env->cct, 0) << "Switching to archive zone metadata manager" << dendl;
+
+  // FIXME: this code crashes... migrating the current state (handles, md_logs,
+  // current_log...) in meta_mgr raises errors (threads, locks ...)
+
+  //RGWMetadataManager *current_meta_mgr = sync_env->store->meta_mgr;
+  //RGWMetadataManager *new_meta_mgr = new RGWArchiveMetadataManager(sync_env->cct, sync_env->store);
+  //new_meta_mgr.update_state_from(current_meta_mgr);
+  //delete current_meta_mgr;
+  //current_meta_mgr = new_meta_mgr;
 }
 
 RGWCoroutine *RGWArchiveDataSyncModule::sync_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, uint64_t versioned_epoch, rgw_zone_set *zones_trace)
