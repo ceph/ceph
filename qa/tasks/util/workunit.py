@@ -61,7 +61,8 @@ def get_refspec_after_overrides(config, overrides):
     # "tag", or "branch" is specified by a "workunit" tasks, we will update
     # it with the information in the "workunit" sub-task nested in "overrides".
     overrides = copy.deepcopy(overrides.get('workunit', {}))
-    refspecs = {'branch': Branch, 'tag': Refspec, 'sha1': Refspec}
+    refspecs = {'suite_sha1': Refspec, 'suite_branch': Branch,
+                'sha1': Refspec, 'tag': Refspec, 'branch': Branch}
     if any(map(lambda i: i in config, refspecs.iterkeys())):
         for i in refspecs.iterkeys():
             overrides.pop(i, None)
