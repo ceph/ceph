@@ -6068,6 +6068,10 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
     if (ret < 0)
       return ret;
 
+    bucket.explicit_placement.data_pool = rule_info.data_pool;
+    bucket.explicit_placement.data_extra_pool = rule_info.data_extra_pool;
+    bucket.explicit_placement.index_pool = rule_info.index_pool;
+
     if (!pmaster_bucket) {
       create_bucket_id(&bucket.marker);
       bucket.bucket_id = bucket.marker;
