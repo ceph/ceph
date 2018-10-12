@@ -525,6 +525,15 @@
 }
 
 {
+  ethdev_init_log thing
+  Memcheck:Leak
+  match-leak-kinds: reachable
+  fun:...
+  fun:ethdev_init_log
+  fun:...
+}
+
+{
   rte_log_init() in DPDK fails to reset strdup()'ed string at exit
   Memcheck:Leak
   match-leak-kinds: reachable
