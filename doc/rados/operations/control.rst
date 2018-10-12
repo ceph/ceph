@@ -276,6 +276,13 @@ concurrently accessing the OSD. ::
 
 	ceph tell osd.N bench [TOTAL_DATA_BYTES] [BYTES_PER_WRITE]
 
+To clear an OSD's caches between benchmark runs, use the 'cache drop' command ::
+
+	ceph tell osd.N cache drop
+
+To get the cache statistics of an OSD, use the 'cache status' command ::
+
+	ceph tell osd.N cache status
 
 MDS Subsystem
 =============

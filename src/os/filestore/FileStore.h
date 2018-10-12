@@ -504,6 +504,7 @@ public:
     f->close_section();
   }
 
+  int flush_cache(ostream *os = NULL) override;
   int write_version_stamp();
   int version_stamp_is_valid(uint32_t *version);
   int update_version_stamp();
