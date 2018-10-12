@@ -1703,11 +1703,15 @@ void OSDService::set_ready_to_merge_source(PG *pg)
   _send_ready_to_merge();
 }
 
-void OSDService::set_ready_to_merge_target(PG *pg, epoch_t last_epoch_clean)
+void OSDService::set_ready_to_merge_target(PG *pg,
+					   epoch_t last_epoch_started,
+					   epoch_t last_epoch_clean)
 {
   Mutex::Locker l(merge_lock);
   dout(10) << __func__ << " " << pg->pg_id << dendl;
-  ready_to_merge_target.insert(make_pair(pg->pg_id.pgid, last_epoch_clean));
+  ready_to_merge_target.insert(make_pair(pg->pg_id.pgid,
+					 make_pair(last_epoch_started,
+						   last_epoch_clean)));
   assert(not_ready_to_merge_target.count(pg->pg_id.pgid) == 0);
   _send_ready_to_merge();
 }
@@ -1750,6 +1754,7 @@ void OSDService::_send_ready_to_merge()
       monc->send_mon_message(new MOSDPGReadyToMerge(
 			       src,
 			       0,
+			       0,
 			       false,
 			       osdmap->get_epoch()));
       sent_ready_to_merge_source.insert(src);
@@ -1759,6 +1764,7 @@ void OSDService::_send_ready_to_merge()
     if (sent_ready_to_merge_source.count(p.second) == 0) {
       monc->send_mon_message(new MOSDPGReadyToMerge(
 			       p.second,
+			       0,
 			       0,
 			       false,
 			       osdmap->get_epoch()));
@@ -1775,7 +1781,8 @@ void OSDService::_send_ready_to_merge()
 	sent_ready_to_merge_source.count(src) == 0) {
       monc->send_mon_message(new MOSDPGReadyToMerge(
 			       src,
-			       p->second,  // PG's last_epoch_clean
+			       p->second.first,   // PG's last_epoch_started
+			       p->second.second,  // PG's last_epoch_clean
 			       true,
 			       osdmap->get_epoch()));
       sent_ready_to_merge_source.insert(src);
@@ -8207,6 +8214,8 @@ bool OSD::advance_pg(
 	    dout(1) << __func__ << " merging " << pg->pg_id << dendl;
 	    pg->merge_from(
 	      sources, rctx, split_bits,
+	      nextmap->get_pg_pool(
+		pg->pg_id.pool())->get_pg_num_dec_last_epoch_started(),
 	      nextmap->get_pg_pool(
 		pg->pg_id.pool())->get_pg_num_dec_last_epoch_clean());
 	    pg->pg_slot->waiting_for_merge_epoch = 0;
