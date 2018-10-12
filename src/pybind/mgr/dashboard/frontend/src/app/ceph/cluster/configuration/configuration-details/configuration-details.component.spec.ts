@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { TabsModule } from 'ngx-bootstrap';
+import { TabsModule } from 'ngx-bootstrap/tabs';
 
 import { configureTestBed } from '../../../../../testing/unit-test-helper';
 import { DataTableModule } from '../../../../shared/datatable/datatable.module';

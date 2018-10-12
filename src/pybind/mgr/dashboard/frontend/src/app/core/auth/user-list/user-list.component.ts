@@ -1,6 +1,6 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
-import { BsModalRef, BsModalService } from 'ngx-bootstrap';
+import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 
 import { UserService } from '../../../shared/api/user.service';
 import { DeletionModalComponent } from '../../../shared/components/deletion-modal/deletion-modal.component';
