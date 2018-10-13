@@ -1716,23 +1716,19 @@ using namespace ceph;
   
   void buffer::list::append_zero(unsigned len)
   {
-    if (_buffers.empty()) {
-      auto& buf = hangable_ptr::create(buffer::create_page_aligned(len));
-      buf.set_length(0);   // unused, so far.
-      _buffers.push_back(buf);
+    _len += len;
+
+    const unsigned free_in_last = get_append_buffer_unused_tail_length();
+    const unsigned first_round = std::min(len, free_in_last);
+    if (first_round) {
+      _buffers.back().append_zeros(first_round);
     }
 
-    auto& buf = _buffers.back();
-    unsigned need = std::min(buf.unused_tail_length(), len);
-    if (need) {
-      buf.append_zeros(need);
-      len -= need;
-      _len += need;
-    }
-    if (len) {
-      auto& bp = hangable_ptr::create(buffer::create_page_aligned(len));
-      bp.zero(false);
-      push_back(std::move(bp));
+    const unsigned second_round = len - first_round;
+    if (second_round) {
+      auto& new_back = refill_append_space(second_round);
+      new_back.set_length(second_round);
+      new_back.zero(false);
     }
   }
 
