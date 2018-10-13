@@ -2200,6 +2200,10 @@ void ECBackend::objects_read_async(
 	  auto range = got.second.get_containing_range(offset, length);
 	  ceph_assert(range.first != range.second);
 	  ceph_assert(range.first.get_off() <= offset);
+          ldpp_dout(dpp, 30) << "offset: " << offset << dendl;
+          ldpp_dout(dpp, 30) << "range offset: " << range.first.get_off() << dendl;
+          ldpp_dout(dpp, 30) << "length: " << length << dendl;
+          ldpp_dout(dpp, 30) << "range length: " << range.first.get_len()  << dendl;
 	  ceph_assert(
 	    (offset + length) <=
 	    (range.first.get_off() + range.first.get_len()));
