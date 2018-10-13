@@ -50,11 +50,7 @@ describe('RbdSnapshotListComponent', () => {
       RouterTestingModule,
       PipesModule
     ],
-    providers: [
-      { provide: AuthStorageService, useValue: fakeAuthStorageService },
-      SummaryService,
-      TaskListService
-    ]
+    providers: [{ provide: AuthStorageService, useValue: fakeAuthStorageService }, TaskListService]
   });
 
   beforeEach(() => {

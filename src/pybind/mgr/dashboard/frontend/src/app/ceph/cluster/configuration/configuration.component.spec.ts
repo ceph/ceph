@@ -6,7 +6,6 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { TabsModule } from 'ngx-bootstrap/tabs';
 
 import { configureTestBed } from '../../../../testing/unit-test-helper';
-import { ConfigurationService } from '../../../shared/api/configuration.service';
 import { SharedModule } from '../../../shared/shared.module';
 import { ConfigurationComponent } from './configuration.component';
 
@@ -16,7 +15,6 @@ describe('ConfigurationComponent', () => {
 
   configureTestBed({
     declarations: [ConfigurationComponent],
-    providers: [ConfigurationService],
     imports: [
       SharedModule,
       FormsModule,
