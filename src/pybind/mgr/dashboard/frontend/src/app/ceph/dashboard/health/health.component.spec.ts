@@ -39,7 +39,6 @@ describe('HealthComponent', () => {
   };
 
   configureTestBed({
-    providers: [DashboardService],
     imports: [SharedModule, HttpClientTestingModule, PopoverModule.forRoot()],
     declarations: [
       HealthComponent,

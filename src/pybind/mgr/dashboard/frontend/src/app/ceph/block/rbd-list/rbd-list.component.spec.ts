@@ -13,7 +13,6 @@ import { BehaviorSubject, of } from 'rxjs';
 
 import { configureTestBed, PermissionHelper } from '../../../../testing/unit-test-helper';
 import { RbdService } from '../../../shared/api/rbd.service';
-import { ComponentsModule } from '../../../shared/components/components.module';
 import { TableActionsComponent } from '../../../shared/datatable/table-actions/table-actions.component';
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
 import { ExecutingTask } from '../../../shared/models/executing-task';
@@ -44,12 +43,11 @@ describe('RbdListComponent', () => {
       TooltipModule.forRoot(),
       ToastModule.forRoot(),
       AlertModule.forRoot(),
-      ComponentsModule,
       RouterTestingModule,
       HttpClientTestingModule
     ],
     declarations: [RbdListComponent, RbdDetailsComponent, RbdSnapshotListComponent],
-    providers: [SummaryService, TaskListService, RbdService]
+    providers: [TaskListService]
   });
 
   beforeEach(() => {

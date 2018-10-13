@@ -11,7 +11,6 @@ import { of } from 'rxjs';
 import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { RoleService } from '../../../shared/api/role.service';
 import { ScopeService } from '../../../shared/api/scope.service';
-import { ComponentsModule } from '../../../shared/components/components.module';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { SharedModule } from '../../../shared/shared.module';
@@ -35,11 +34,9 @@ describe('RoleFormComponent', () => {
   configureTestBed(
     {
       imports: [
-        [RouterTestingModule.withRoutes(routes)],
+        RouterTestingModule.withRoutes(routes),
         HttpClientTestingModule,
         ReactiveFormsModule,
-        RouterTestingModule,
-        ComponentsModule,
         ToastModule.forRoot(),
         SharedModule
       ],

@@ -41,10 +41,9 @@ describe('UserFormComponent', () => {
   configureTestBed(
     {
       imports: [
-        [RouterTestingModule.withRoutes(routes)],
+        RouterTestingModule.withRoutes(routes),
         HttpClientTestingModule,
         ReactiveFormsModule,
-        RouterTestingModule,
         ComponentsModule,
         ToastModule.forRoot(),
         SharedModule

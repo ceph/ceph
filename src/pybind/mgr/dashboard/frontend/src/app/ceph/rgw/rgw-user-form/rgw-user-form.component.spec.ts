@@ -19,7 +19,7 @@ describe('RgwUserFormComponent', () => {
   configureTestBed({
     declarations: [RgwUserFormComponent],
     imports: [HttpClientTestingModule, ReactiveFormsModule, RouterTestingModule, SharedModule],
-    providers: [BsModalService, RgwUserService]
+    providers: [BsModalService]
   });
 
   beforeEach(() => {

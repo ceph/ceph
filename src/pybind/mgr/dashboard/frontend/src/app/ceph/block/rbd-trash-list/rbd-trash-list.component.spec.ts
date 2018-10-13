@@ -24,7 +24,7 @@ describe('RbdTrashListComponent', () => {
   configureTestBed({
     declarations: [RbdTrashListComponent],
     imports: [SharedModule, HttpClientTestingModule, RouterTestingModule, ToastModule.forRoot()],
-    providers: [TaskListService, RbdService]
+    providers: [TaskListService]
   });
 
   beforeEach(() => {
