@@ -296,7 +296,7 @@ class Module(MgrModule):
         self.log.warn("Handling command: '%s'" % str(command))
         if command['prefix'] == 'balancer status':
             s = {
-                'plans': self.plans.keys(),
+                'plans': list(self.plans.keys()),
                 'active': self.active,
                 'mode': self.get_config('mode', default_mode),
             }
