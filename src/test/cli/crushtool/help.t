@@ -114,6 +114,8 @@
                            by adding classes
         --reclassify-bucket <bucket-match> <class> <default-parent>
         --reclassify-root <bucket-name> <class>
+     --set-subtree-class <bucket-name> <class>
+                           set class for all items beneath bucket-name
      --compare <otherfile> compare two maps using --test parameters
   
   Options for the output stage

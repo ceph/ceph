@@ -1310,6 +1310,8 @@ public:
     const map<string,pair<string,string>>& classify_bucket
     );
 
+  int set_subtree_class(const string& name, const string& class_name);
+
   void start_choose_profile() {
     free(crush->choose_tries);
     /*

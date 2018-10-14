@@ -524,12 +524,12 @@ There are three types of transformations possible:
 
 #. ``--reclassify-root <root-name> <device-class>``
 
-   This will take everything in the hierarchy beneath root-name, mark
-   all devices with the specified class, and adjust any rules that
-   reference that root via a ``take <root-name>`` to instead ``take
-   <root-name> class <device-class>``.  It renumbers the buckets in
-   such a way that the old IDs are instead used for the specified
-   class's "shadow tree" so that no data movement takes place.
+   This will take everything in the hierarchy beneath root-name and
+   adjust any rules that reference that root via a ``take
+   <root-name>`` to instead ``take <root-name> class <device-class>``.
+   It renumbers the buckets in such a way that the old IDs are instead
+   used for the specified class's "shadow tree" so that no data
+   movement takes place.
 
    For example, imagine you have an existing rule like::
 
@@ -555,6 +555,22 @@ There are three types of transformations possible:
         step chooseleaf firstn 0 type rack
         step emit
      }
+
+#. ``--set-subtree-class <bucket-name> <device-class>``
+
+   This will mark every device in the subtree rooted at *bucket-name*
+   with the specified device class.
+
+   This is normally used in conjunction with the ``--reclassify-root``
+   option to ensure that all devices in that root are labeled with the
+   correct class.  In some situations, however, some of those devices
+   (correctly) have a different class and we do not want to relabel
+   them.  In such cases, one can exclude the ``--set-subtree-class``
+   option.  This means that the remapping process will not be perfect,
+   since the previous rule distributed across devices of multiple
+   classes but the adjusted rules will only map to devices of the
+   specified *device-class*, but that often is an accepted level of
+   data movement when the nubmer of outlier devices is small.
 
 #. ``--reclassify-bucket <match-pattern> <device-class> <default-parent>``
 
@@ -624,6 +640,7 @@ The final command to convert the map comprised of the above fragments would be s
 
   $ ceph osd getcrushmap -o original
   $ crushtool -i original --reclassify \
+      --set-subtree-class default hdd \
       --reclassify-root default hdd \
       --reclassify-bucket %-ssd ssd default \
       --reclassify-bucket ssd ssd default \
