@@ -1645,6 +1645,44 @@ int32_t CrushWrapper::_alloc_class_id() const {
   ceph_abort_msg("no available class id");
 }
 
+int CrushWrapper::set_subtree_class(
+  const string& subtree,
+  const string& new_class)
+{
+  if (!name_exists(subtree)) {
+    return -ENOENT;
+  }
+
+  int new_class_id = -1;
+  if (class_exists(new_class)) {
+    new_class_id = get_class_id(new_class);
+  } else {
+    for (new_class_id = 1; class_name.count(new_class_id); ++new_class_id) ;
+    class_name[new_class_id] = new_class;
+    class_rname[new_class] = new_class_id;
+  }
+
+  int id = get_item_id(subtree);
+  list<int> q = { id };
+  while (!q.empty()) {
+    int id = q.front();
+    q.pop_front();
+    crush_bucket *b = get_bucket(id);
+    if (IS_ERR(b)) {
+      return PTR_ERR(b);
+    }
+    for (unsigned i = 0; i < b->size; ++i) {
+      int item = b->items[i];
+      if (item >= 0) {
+	class_map[item] = new_class_id;
+      } else {
+	q.push_back(item);
+      }
+    }
+  }
+  return 0;
+}
+
 int CrushWrapper::reclassify(
   CephContext *cct,
   ostream& out,
@@ -1742,8 +1780,8 @@ int CrushWrapper::reclassify(
 	if (bucket->items[j] < 0) {
 	  q.push_front(bucket->items[j]);
 	} else {
-	  // reclassify device
-	  class_map[bucket->items[j]] = new_class_id;
+	  // we don't reclassify the device here; if the users wants that,
+	  // they can pass --set-subtree-class separately.
 	}
       }
     }
