@@ -672,25 +672,25 @@ using namespace ceph;
 
   const char *buffer::ptr::c_str() const {
     ceph_assert(_raw);
-    if (buffer_track_c_str)
+    if (unlikely(buffer_track_c_str))
       buffer_c_str_accesses++;
     return _raw->get_data() + _off;
   }
   char *buffer::ptr::c_str() {
     ceph_assert(_raw);
-    if (buffer_track_c_str)
+    if (unlikely(buffer_track_c_str))
       buffer_c_str_accesses++;
     return _raw->get_data() + _off;
   }
   const char *buffer::ptr::end_c_str() const {
     ceph_assert(_raw);
-    if (buffer_track_c_str)
+    if (unlikely(buffer_track_c_str))
       buffer_c_str_accesses++;
     return _raw->get_data() + _off + _len;
   }
   char *buffer::ptr::end_c_str() {
     ceph_assert(_raw);
-    if (buffer_track_c_str)
+    if (unlikely(buffer_track_c_str))
       buffer_c_str_accesses++;
     return _raw->get_data() + _off + _len;
   }
