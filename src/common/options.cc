@@ -1253,7 +1253,7 @@ std::vector<Option> get_global_options() {
     /* -- mon: osdmap prune (end) -- */
 
     Option("mon_osd_cache_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(10)
+    .set_default(500)
     .set_description(""),
 
     Option("mon_cpu_threads", Option::TYPE_INT, Option::LEVEL_ADVANCED)
@@ -3485,7 +3485,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("rocksdb_cache_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
-    .set_default(128_M)
+    .set_default(512_M)
     .set_description(""),
 
     Option("rocksdb_cache_row_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
