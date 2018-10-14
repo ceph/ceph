@@ -222,6 +222,8 @@ void usage()
   cout << "                         by adding classes\n";
   cout << "      --reclassify-bucket <bucket-match> <class> <default-parent>\n";
   cout << "      --reclassify-root <bucket-name> <class>\n";
+  cout << "   --set-subtree-class <bucket-name> <class>\n";
+  cout << "                         set class for all items beneath bucket-name\n";
   cout << "   --compare <otherfile> compare two maps using --test parameters\n";
   cout << "\n";
   cout << "Options for the output stage\n";
@@ -416,6 +418,7 @@ int main(int argc, const char **argv)
   bool reclassify = false;
   map<string,pair<string,string>> reclassify_bucket; // %suffix or prefix% -> class, default_root
   map<string,string> reclassify_root;        // bucket -> class
+  map<string,string> set_subtree_class;     // bucket -> class
 
   string compare;
 
@@ -478,6 +481,14 @@ int main(int argc, const char **argv)
 	return EXIT_FAILURE;
       }
       reclassify_root[val] = *i;
+      i = args.erase(i);
+    } else if (ceph_argparse_witharg(args, i, &val, "--set-subtree-class",
+				     (char*)NULL)) {
+      if (i == args.end()) {
+	cerr << "expecting additional argument" << std::endl;
+	return EXIT_FAILURE;
+      }
+      set_subtree_class[val] = *i;
       i = args.erase(i);
     } else if (ceph_argparse_flag(args, i, "--tree", (char*)NULL)) {
       tree = true;
@@ -1154,6 +1165,10 @@ int main(int argc, const char **argv)
     modified = true;
   }
 
+  for (auto& i : set_subtree_class) {
+    crush.set_subtree_class(i.first, i.second);
+    modified = true;
+  }
   if (reclassify) {
     int r = crush.reclassify(
       g_ceph_context,
