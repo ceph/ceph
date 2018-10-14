@@ -1,6 +1,10 @@
+# vim: expandtab smarttab shiftwidth=4 softtabstop=4
+
 import argparse
 from textwrap import dedent
 from ceph_volume import terminal
+
+from . import prepare
 
 
 class ZFS(object):
@@ -8,12 +12,13 @@ class ZFS(object):
     help = 'Use ZFS to deploy OSDs'
 
     _help = dedent("""
-    Use ZFS to deploy OSDs
+        Use ZFS to deploy OSDs
 
-    {sub_help}
+        {sub_help}
     """)
 
     mapper = {
+        'prepare':  prepare.Prepare,
     }
 
     def __init__(self, argv):

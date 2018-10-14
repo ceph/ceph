@@ -1,15 +1,26 @@
 # -*- coding: utf-8 -*-
+# vim: expandtab smarttab shiftwidth=4 softtabstop=4
 
 from __future__ import print_function
 import argparse
 import os
 import sys
 import logging
+from textwrap import dedent
 
 import main
+
+# Try to make use of ceph-volume code
 from ceph_volume import log, conf, configuration
 from ceph_volume import exceptions
 from ceph_volume import terminal
+
+# The ceph-volume-zfs specific code
+import ceph_volume_zfs
+from ceph_volume_zfs import devices
+from ceph_volume_zfs.util import device
+from ceph_volume_zfs.devices import zfs
+from ceph_volume_zfs.devices.zfs import prepare
 
 if __name__ == '__main__':
     main.ZFSVOL()
@@ -18,16 +29,19 @@ if __name__ == '__main__':
 class ZFSVOL(object):
 
     help_menu = 'Deploy OSDs with ZFS'
-    _help = """
-Use ZFS as the underlying technology for OSDs
+    _help = dedent("""
+        Use ZFS as the underlying technology for OSDs
 
---verbose   Increase the verbosity level
-    """
+        --verbose   Increase the verbosity level
+         {sub_help}
+    """)
     name = 'zfs'
 
+    mapper = {
+        'prepare': prepare.Prepare,
+    }
+
     def __init__(self, argv=None, parse=True):
-        self.mapper = {
-        }
         if argv is None:
             self.argv = sys.argv
         else:
@@ -77,7 +91,7 @@ Use ZFS as the underlying technology for OSDs
     def _get_split_args(self):
         subcommands = self.mapper.keys()
         slice_on_index = len(self.argv) + 1
-        pruned_args = self.argv[1:]
+        pruned_args = self.argv
         for count, arg in enumerate(pruned_args):
             if arg in subcommands:
                 slice_on_index = count
@@ -91,6 +105,7 @@ Use ZFS as the underlying technology for OSDs
         self.load_ceph_conf_path()
         self.load_log_path()
         main_args, subcommand_args = self._get_split_args()
+
         # no flags where passed in, return the help menu instead of waiting for
         # argparse which will end up complaning that there are no args
         if len(argv) <= 1:
@@ -117,6 +132,7 @@ Use ZFS as the underlying technology for OSDs
             help='Change the log path (defaults to /var/log/ceph)',
         )
         args = parser.parse_args(main_args)
+
         conf.log_path = args.log_path
         if os.path.isdir(conf.log_path):
             conf.log_path = os.path.join(args.log_path, 'ceph-volume-zfs.log')

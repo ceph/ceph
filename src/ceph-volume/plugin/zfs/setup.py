@@ -5,9 +5,9 @@
 
 from setuptools import setup, find_packages
 
-requirements = [ ]
+requirements = []
 
-setup_requirements = [ ]
+setup_requirements = []
 
 setup(
     author="Willem Jan Withagen",
@@ -39,8 +39,8 @@ setup(
     url='https://github.com/ceph/ceph/src/ceph-volume/plugin/zfs',
     version='0.1.0',
     zip_safe=False,
-    entry_points = dict(
-        ceph_volume_handlers = [
+    entry_points=dict(
+        ceph_volume_handlers=[
             'zfs = ceph_volume_zfs.main:ZFSVOL',
         ],
     ),

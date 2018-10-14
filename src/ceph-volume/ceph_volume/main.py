@@ -162,7 +162,7 @@ def _load_library_extensions():
 
     `plugin_name` will be used to load it as a sub command.
     """
-    logger = logging.getLogger('ceph_volume.plugins')
+    logger = logging.getLogger(__name__ + ".plugins")
     group = 'ceph_volume_handlers'
     entry_points = pkg_resources.iter_entry_points(group=group)
     plugins = []
