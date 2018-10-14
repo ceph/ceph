@@ -268,7 +268,7 @@ class OrchestratorCli(MgrModule):
         except NoOrchestrator:
             return -errno.ENODEV, "", "No orchestrator configured"
         except ImportError as e:
-            return -errno.ENOENT, "", e.message
+            return -errno.ENOENT, "", str(e)
         except NotImplementedError:
             return -errno.EINVAL, "", "Command not found"
 

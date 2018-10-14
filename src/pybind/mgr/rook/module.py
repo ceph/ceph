@@ -17,7 +17,7 @@ except ImportError:
     client = None
     config = None
 
-from rook_cluster import RookCluster, ApplyException
+from .rook_cluster import RookCluster
 
 
 all_completions = []
@@ -276,8 +276,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
             global all_completions
             self.wait(all_completions)
-            all_completions = filter(lambda x: not x.is_complete,
-                                     all_completions)
+            all_completions = [c for c in all_completions if not c.is_complete]
 
             self._shutdown.wait(5)
 

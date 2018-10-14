@@ -12,19 +12,17 @@ ENV TERM linux
 RUN (grep -q rhel /etc/os-release && ( \
         yum install -y python-pip && \
         yum install -y liboath && \
-        yum install -y python-bcrypt librdmacm \
+        yum install -y python-bcrypt librdmacm && \
+        pip install kubernetes==6.0.0 \
     )) || (grep -q suse /etc/os-release && ( \
         zypper --non-interactive --gpg-auto-import-keys install --no-recommends --auto-agree-with-licenses --replacefiles --details \
-            python-pip \
+            python3-kubernetes \
             liboauth-devel \
             python-bcrypt \
             lz4 \
             librdmacm1 \
             libopenssl1_1 \
     ))
-
-
-RUN pip install kubernetes==6.0.0
 
 ADD bin.tar.gz /usr/bin/
 ADD lib.tar.gz /usr/lib64/
