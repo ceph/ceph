@@ -644,6 +644,7 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
       if (caps_info.allow_all) {
 	s->caps.set_allow_all();
 	s->authenticated = true;
+	finished = true;
       }
     } else {
       // request
