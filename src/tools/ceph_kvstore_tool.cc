@@ -285,7 +285,7 @@ class StoreTool
     db->compact_range(prefix, start, end);
   }
 
-  int repair() {
+  int destructive_repair() {
     return db->repair(std::cout);
   }
 };
@@ -309,7 +309,7 @@ void usage(const char *pname)
     << "  compact\n"
     << "  compact-prefix <prefix>\n"
     << "  compact-range <prefix> <start> <end>\n"
-    << "  repair\n"
+    << "  destructive-repair  (use only as last resort! may corrupt healthy data)\n"
     << std::endl;
 }
 
@@ -355,15 +355,17 @@ int main(int argc, const char *argv[])
     return 1;
   }
 
-  bool need_open_db = (cmd != "repair");
+  bool need_open_db = (cmd != "destructive-repair");
   StoreTool st(type, path, need_open_db);
 
-  if (cmd == "repair") {
-    int ret = st.repair();
+  if (cmd == "destructive-repair") {
+    int ret = st.destructive_repair();
     if (!ret) {
-      std::cout << "repair kvstore successfully" << std::endl;
+      std::cout << "destructive-repair completed without reporting an error"
+		<< std::endl;
     } else {
-      std::cout << "repair kvstore failed" << std::endl;
+      std::cout << "destructive-repair failed with " << cpp_strerror(ret)
+		<< std::endl;
     }
     return ret;
   } else if (cmd == "list" || cmd == "list-crc") {
