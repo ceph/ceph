@@ -85,7 +85,7 @@ export class RbdListComponent implements OnInit {
       permission: 'create',
       icon: 'fa-plus',
       routerLink: () => '/block/rbd/add',
-      buttonCondition: (selection: CdTableSelection) => !selection.hasSingleSelection,
+      canBePrimary: (selection: CdTableSelection) => !selection.hasSingleSelection,
       name: 'Add'
     };
     const editAction: CdTableAction = {
@@ -102,7 +102,7 @@ export class RbdListComponent implements OnInit {
     };
     const copyAction: CdTableAction = {
       permission: 'create',
-      buttonCondition: (selection: CdTableSelection) => selection.hasSingleSelection,
+      canBePrimary: (selection: CdTableSelection) => selection.hasSingleSelection,
       disable: (selection: CdTableSelection) =>
         !selection.hasSingleSelection || selection.first().cdExecuting,
       icon: 'fa-copy',

@@ -84,7 +84,7 @@ export class TableActionsComponent implements OnInit {
    * @returns {boolean}
    */
   private showableAction(action: CdTableAction): boolean {
-    const condition = action.buttonCondition;
+    const condition = action.canBePrimary;
     const singleSelection = this.selection.hasSingleSelection;
     const defaultCase = action.permission === 'create' ? !singleSelection : singleSelection;
     return (condition && condition(this.selection)) || (!condition && defaultCase);
