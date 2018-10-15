@@ -42,6 +42,14 @@ for issue in j:
     prtext.append(pr['html_url'] + ' - ' + pr['title'])
 print("--- queried %s prs" % len(prs))
 
+# update local master
+print('--- checkout master')
+r = call('git checkout master', shell=True)
+assert not r
+print('--- pull master from upstream')
+r = call('git pull upstream master', shell=True)
+assert not r
+
 # name branch
 TIME_FORMAT = '%Y-%m-%d-%H%M'
 branch = label + "-" + time.strftime(TIME_FORMAT, time.localtime())

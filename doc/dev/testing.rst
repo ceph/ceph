@@ -15,9 +15,10 @@ Setup
 #. Create a ceph repo label `wip-yourname-testing` if you don't
    already have one at `<https://github.com/ceph/ceph/labels>`_.
 
-#. Create the ``ci`` remote::
+#. Create the ``ci`` and ``upstream`` remote::
 
      git remote add ci git@github.com:ceph/ceph-ci
+     git remote add upstream git@github.com:ceph/ceph
 
 Using
 ^^^^^
@@ -26,8 +27,6 @@ Using
 
 #. Create the integration branch::
 
-     git checkout master
-     git pull
      ../src/script/build-integration-branch wip-yourname-testing
 
 #. Smoke test::
