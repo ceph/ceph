@@ -31,14 +31,6 @@ def get_task_site(ctx, taskname):
             return tentry[taskname][0]
     return ''
 
-def fix_yum_boto(client):
-    """
-    Set up boto on Rhel/Fedora/Centos.
-    """
-    client.run(args=['sudo', 'yum-config-manager', '--enable', 'epel'])
-    client.run(args=['sudo', 'yum', '-y', 'install', 'python-boto'])
-    client.run(args=['sudo', 'yum-config-manager', '--disable', 'epel'])
-
 def get_dc_path(path):
     dcvals = path.split('.')[1:]
     out_str = []
@@ -65,7 +57,9 @@ def task(ctx, config):
     if system_type == 'rpm':
         install_cmd = ['sudo', 'yum', '-y', 'install', 'openldap-clients']
         client.run(args=install_cmd)
-        fix_yum_boto(client)
+        client.run(args=['sudo', 'yum-config-manager', '--enable', 'epel'])
+        client.run(args=['sudo', 'yum', '-y', 'install', 'python-boto'])
+        client.run(args=['sudo', 'yum-config-manager', '--disable', 'epel'])
     else:
         install_cmd = ['sudo', 'apt-get', '-y', 'install', 'ldap-utils']
         client.run(args=install_cmd)
