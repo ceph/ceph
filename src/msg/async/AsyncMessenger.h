@@ -363,7 +363,12 @@ public:
         existing->get_perf_counter()->dec(l_msgr_active_connections);
         conns.erase(it);
       } else if (conn != existing) {
-        return -1;
+        if (existing->is_closed()) {
+          existing->get_perf_counter()->dec(l_msgr_active_connections);
+          conns.erase(it);
+        } else {
+          return -1;
+        }
       }
     }
     conns[conn->peer_addrs] = conn;
