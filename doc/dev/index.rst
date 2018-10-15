@@ -55,8 +55,11 @@ Scope     Lead             GitHub nick
 Ceph      Sage Weil        liewegas
 RADOS     Neha Ojha        neha-ojha
 RGW       Yehuda Sadeh     yehudasa
+RGW       Matt Benjamin    mattbenjamin
 RBD       Jason Dillaman   dillaman
 CephFS    Patrick Donnelly batrick
+Dashboard Lenz Grimmer     LenzGr
+MON       Joao Luis        jecluis
 Build/Ops Ken Dreyer       ktdreyer
 ========= ================ =============
 
