@@ -638,9 +638,15 @@ class TeuthologyOpenStack(OpenStack):
             else:
                 argv.append(original_argv.pop(0))
         if self.args.test_repo:
-            repos = [{'name':k, 'url': v}
-                                    for k, v in [x.split(':', 1)
-                                    for x in self.args.test_repo]]
+            def repo(name, url):
+                if '!' in name:
+                    n, p = name.split('!', 1)
+                    return {'name': n, 'priority': int(p), 'url': url}
+                else:
+                    return {'name': name, 'url': url}
+            repos = [repo(k, v)
+                     for k, v in [x.split(':', 1)
+                     for x in self.args.test_repo]]
             log.info("Using repos: %s" % self.args.test_repo)
 
             overrides = {
