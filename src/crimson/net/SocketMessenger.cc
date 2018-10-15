@@ -12,12 +12,13 @@
  *
  */
 
-#include <tuple>
-#include "auth/Auth.h"
 #include "SocketMessenger.h"
-#include "SocketConnection.h"
+
+#include <tuple>
+
+#include "auth/Auth.h"
+#include "Errors.h"
 #include "Dispatcher.h"
-#include "msg/Message.h"
 
 using namespace ceph::net;
 
@@ -39,7 +40,7 @@ void SocketMessenger::bind(const entity_addr_t& addr)
   listener = seastar::listen(address, lo);
 }
 
-seastar::future<> SocketMessenger::dispatch(ConnectionRef conn)
+seastar::future<> SocketMessenger::dispatch(SocketConnectionRef conn)
 {
   auto [i, added] = connections.emplace(conn->get_peer_addr(), conn);
   std::ignore = i;
@@ -79,8 +80,8 @@ seastar::future<> SocketMessenger::accept(seastar::connected_socket socket,
   entity_addr_t peer_addr;
   peer_addr.set_type(entity_addr_t::TYPE_DEFAULT);
   peer_addr.set_sockaddr(&paddr.as_posix_sockaddr());
-  ConnectionRef conn = new SocketConnection(this, get_myaddr(),
-                                            peer_addr, std::move(socket));
+  SocketConnectionRef conn = new SocketConnection(*this, get_myaddr(),
+                                                  peer_addr, std::move(socket));
   // initiate the handshake
   return conn->server_handshake()
     .then([=] {
@@ -133,8 +134,8 @@ SocketMessenger::connect(const entity_addr_t& addr, entity_type_t peer_type)
   }
   return seastar::connect(addr.in4_addr())
     .then([=] (seastar::connected_socket socket) {
-      ConnectionRef conn = new SocketConnection(this, get_myaddr(), addr,
-                                                std::move(socket));
+      SocketConnectionRef conn = new SocketConnection(*this, get_myaddr(), addr,
+                                                      std::move(socket));
       // complete the handshake before returning to the caller
       return conn->client_handshake(peer_type, get_myname().type())
         .then([=] {
@@ -151,7 +152,7 @@ SocketMessenger::connect(const entity_addr_t& addr, entity_type_t peer_type)
           // dispatch replies on this connection
           dispatch(conn)
             .handle_exception([] (std::exception_ptr eptr) {});
-          return conn;
+          return ConnectionRef(conn);
         });
     });
 }
@@ -191,7 +192,7 @@ void SocketMessenger::set_policy_throttler(entity_type_t peer_type,
   policy_set.set_throttlers(peer_type, throttle, nullptr);
 }
 
-ceph::net::ConnectionRef SocketMessenger::lookup_conn(const entity_addr_t& addr)
+ceph::net::SocketConnectionRef SocketMessenger::lookup_conn(const entity_addr_t& addr)
 {
   if (auto found = connections.find(addr);
       found != connections.end()) {
@@ -201,7 +202,7 @@ ceph::net::ConnectionRef SocketMessenger::lookup_conn(const entity_addr_t& addr)
   }
 }
 
-void SocketMessenger::unregister_conn(ConnectionRef conn)
+void SocketMessenger::unregister_conn(SocketConnectionRef conn)
 {
   ceph_assert(conn);
   auto found = connections.find(conn->get_peer_addr());

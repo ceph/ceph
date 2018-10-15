@@ -12,22 +12,22 @@
  *
  */
 
+#include "SocketConnection.h"
+
 #include <algorithm>
 #include <seastar/core/shared_future.hh>
 #include <seastar/core/sleep.hh>
 #include <seastar/net/packet.hh>
 
-#include "Config.h"
-#include "Messenger.h"
-#include "SocketConnection.h"
-
 #include "include/msgr.h"
 #include "include/random.h"
 #include "auth/Auth.h"
 #include "auth/AuthSessionHandler.h"
-#include "msg/Message.h"
 
 #include "crimson/common/log.h"
+#include "Config.h"
+#include "Errors.h"
+#include "SocketMessenger.h"
 
 using namespace ceph::net;
 
@@ -42,11 +42,12 @@ namespace {
   }
 }
 
-SocketConnection::SocketConnection(Messenger *messenger,
+SocketConnection::SocketConnection(SocketMessenger& messenger,
                                    const entity_addr_t& my_addr,
                                    const entity_addr_t& peer_addr,
                                    seastar::connected_socket&& fd)
-  : Connection(messenger, my_addr, peer_addr),
+  : Connection(my_addr, peer_addr),
+    messenger(messenger),
     socket(std::move(fd)),
     in(socket.input()),
     out(socket.output()),
@@ -59,6 +60,11 @@ SocketConnection::~SocketConnection()
   // errors were reported to callers of send()
   ceph_assert(send_ready.available());
   send_ready.ignore_ready_future();
+}
+
+ceph::net::Messenger*
+SocketConnection::get_messenger() const {
+  return &messenger;
 }
 
 bool SocketConnection::is_connected()
@@ -284,7 +290,7 @@ bool SocketConnection::update_rx_seq(seq_num_t seq)
 seastar::future<> SocketConnection::write_message(MessageRef msg)
 {
   msg->set_seq(++out_seq);
-  msg->encode(features, get_messenger()->get_crc_flags());
+  msg->encode(features, messenger.get_crc_flags());
   bufferlist bl;
   bl.append(CEPH_MSGR_TAG_MSG);
   auto& header = msg->get_header();
@@ -297,13 +303,13 @@ seastar::future<> SocketConnection::write_message(MessageRef msg)
     bl.append((const char*)&footer, sizeof(footer));
   } else {
     ceph_msg_footer_old old_footer;
-    if (get_messenger()->get_crc_flags() & MSG_CRC_HEADER) {
+    if (messenger.get_crc_flags() & MSG_CRC_HEADER) {
       old_footer.front_crc = footer.front_crc;
       old_footer.middle_crc = footer.middle_crc;
     } else {
       old_footer.front_crc = old_footer.middle_crc = 0;
     }
-    if (get_messenger()->get_crc_flags() & MSG_CRC_DATA) {
+    if (messenger.get_crc_flags() & MSG_CRC_DATA) {
       old_footer.data_crc = footer.data_crc;
     } else {
       old_footer.data_crc = 0;
@@ -359,9 +365,9 @@ seastar::future<> SocketConnection::close()
   state = state_t::closed;
 
   // unregister_conn() drops a reference, so hold another until completion
-  auto cleanup = [conn = ConnectionRef(this)] {};
+  auto cleanup = [conn = SocketConnectionRef(this)] {};
 
-  get_messenger()->unregister_conn(this);
+  messenger.unregister_conn(this);
 
   // close_ready become valid only after state is state_t::closed
   assert(!close_ready.valid());
@@ -503,15 +509,15 @@ seastar::future<> SocketConnection::handle_connect()
         return seastar::make_ready_future<msgr_tag_t, bufferlist>(
             CEPH_MSGR_TAG_FEATURES, bufferlist{});
       }
-      return get_messenger()->verify_authorizer(get_peer_type(),
-      						h.connect.authorizer_protocol,
-      						authorizer);
+      return messenger.verify_authorizer(get_peer_type(),
+                                          h.connect.authorizer_protocol,
+                                          authorizer);
     }).then([this] (ceph::net::msgr_tag_t tag, bufferlist&& authorizer_reply) {
       memset(&h.reply, 0, sizeof(h.reply));
       if (tag) {
 	return send_connect_reply(tag, std::move(authorizer_reply));
       }
-      if (auto existing = get_messenger()->lookup_conn(peer_addr); existing) {
+      if (auto existing = messenger.lookup_conn(peer_addr); existing) {
 	return handle_connect_with_existing(existing, std::move(authorizer_reply));
       } else if (h.connect.connect_seq > 0) {
 	return send_connect_reply(CEPH_MSGR_TAG_RESETSESSION,
@@ -546,7 +552,7 @@ seastar::future<>
 SocketConnection::send_connect_reply_ready(msgr_tag_t tag,
                                            bufferlist&& authorizer_reply)
 {
-  h.global_seq = get_messenger()->get_global_seq();
+  h.global_seq = messenger.get_global_seq();
   h.reply.tag = tag;
   h.reply.features = policy.features_supported;
   h.reply.global_seq = h.global_seq;
@@ -607,7 +613,7 @@ SocketConnection::handle_keepalive2_ack()
 }
 
 seastar::future<>
-SocketConnection::handle_connect_with_existing(ConnectionRef existing, bufferlist&& authorizer_reply)
+SocketConnection::handle_connect_with_existing(SocketConnectionRef existing, bufferlist&& authorizer_reply)
 {
   if (h.connect.global_seq < existing->peer_global_seq()) {
     h.reply.global_seq = existing->peer_global_seq();
@@ -633,7 +639,7 @@ SocketConnection::handle_connect_with_existing(ConnectionRef existing, bufferlis
 	h.reply.connect_seq = existing->connect_seq() + 1;
 	return send_connect_reply(CEPH_MSGR_TAG_RETRY_SESSION);
       }
-    } else if (get_peer_addr() < get_my_addr() ||
+    } else if (peer_addr < my_addr ||
 	       existing->is_server_side()) {
       // incoming wins
       return replace_existing(existing, std::move(authorizer_reply));
@@ -648,7 +654,7 @@ SocketConnection::handle_connect_with_existing(ConnectionRef existing, bufferlis
   }
 }
 
-seastar::future<> SocketConnection::replace_existing(ConnectionRef existing,
+seastar::future<> SocketConnection::replace_existing(SocketConnectionRef existing,
                                                      bufferlist&& authorizer_reply,
 						     bool is_reset_from_peer)
 {
@@ -659,7 +665,7 @@ seastar::future<> SocketConnection::replace_existing(ConnectionRef existing,
   } else {
     reply_tag = CEPH_MSGR_TAG_READY;
   }
-  get_messenger()->unregister_conn(existing);
+  messenger.unregister_conn(existing);
   if (!existing->is_lossy()) {
     // reset the in_seq if this is a hard reset from peer,
     // otherwise we respect our original connection's value
@@ -685,7 +691,7 @@ seastar::future<> SocketConnection::handle_connect_reply(msgr_tag_t tag)
     }
     h.got_bad_auth = true;
     // try harder
-    return get_messenger()->get_authorizer(h.peer_type, true)
+    return messenger.get_authorizer(h.peer_type, true)
       .then([this](auto&& auth) {
         h.authorizer = std::move(auth);
 	return seastar::now();
@@ -694,7 +700,7 @@ seastar::future<> SocketConnection::handle_connect_reply(msgr_tag_t tag)
     reset_session();
     return seastar::now();
   case CEPH_MSGR_TAG_RETRY_GLOBAL:
-    h.global_seq = get_messenger()->get_global_seq(h.reply.global_seq);
+    h.global_seq = messenger.get_global_seq(h.reply.global_seq);
     return seastar::now();
   case CEPH_MSGR_TAG_RETRY_SESSION:
     ceph_assert(h.reply.connect_seq > h.connect_seq);
@@ -779,7 +785,7 @@ seastar::future<> SocketConnection::connect(entity_type_t peer_type,
   // this is fyi, actually, server decides!
   h.connect.flags = policy.lossy ? CEPH_MSG_CONNECT_LOSSY : 0;
 
-  return get_messenger()->get_authorizer(peer_type, false)
+  return messenger.get_authorizer(peer_type, false)
     .then([this](auto&& auth) {
       h.authorizer = std::move(auth);
       bufferlist bl;
@@ -839,7 +845,7 @@ seastar::future<> SocketConnection::client_handshake(entity_type_t peer_type,
       bufferlist bl;
       bl.append(buffer::create_static(banner_size, banner));
       ::encode(my_addr, bl, 0);
-      h.global_seq = get_messenger()->get_global_seq();
+      h.global_seq = messenger.get_global_seq();
       return out.write(std::move(bl)).then([this] { return out.flush(); });
     }).then([=] {
       return seastar::do_until([=] { return state == state_t::open; },
@@ -889,7 +895,7 @@ seastar::future<> SocketConnection::server_handshake()
 seastar::future<> SocketConnection::fault()
 {
   if (policy.lossy) {
-    get_messenger()->unregister_conn(this);
+    messenger.unregister_conn(this);
   }
   if (h.backoff.count()) {
     h.backoff += h.backoff;
