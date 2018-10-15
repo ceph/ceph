@@ -1656,7 +1656,13 @@ public:
     }
     bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer,
 			   bool force_new) override {
-      return osd->ms_get_authorizer(dest_type, authorizer, force_new);
+      // some pre-nautilus OSDs get confused if you include an
+      // authorizer but they are not expecting it.  do not try to authorize
+      // heartbeat connections until all OSDs are nautilus.
+      if (osd->get_osdmap()->require_osd_release >= CEPH_RELEASE_NAUTILUS) {
+	return osd->ms_get_authorizer(dest_type, authorizer, force_new);
+      }
+      return false;
     }
     KeyStore *ms_get_auth1_authorizer_keystore() override {
       return osd->ms_get_auth1_authorizer_keystore();
