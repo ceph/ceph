@@ -183,6 +183,8 @@ public:
 
     auto t = before_lock_blocks();
     lock_impl();
+    if (!no_lockdep && g_lockdep)
+      _locked();
     after_lock_blocks(t, no_lockdep);
     _post_lock();
   }
