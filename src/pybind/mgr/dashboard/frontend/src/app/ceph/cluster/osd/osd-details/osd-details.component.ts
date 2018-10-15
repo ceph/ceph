@@ -24,9 +24,6 @@ export class OsdDetailsComponent implements OnChanges {
     };
     if (this.selection.hasSelection) {
       this.osd = this.selection.first();
-      this.osd.autoRefresh = () => {
-        this.refresh();
-      };
       this.refresh();
     }
   }
