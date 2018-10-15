@@ -26,7 +26,7 @@ export class CdTableAction {
   // You can define the condition to disable the action.
   // By default all 'create' actions can be the action button if no or multiple items are selected
   // By default all 'update' and 'delete' actions can be the action button if one item is selected
-  buttonCondition?: (_: CdTableSelection) => boolean;
+  canBePrimary?: (_: CdTableSelection) => boolean;
 
   // In some rare cases you want to hide a action that can be used by the user for example
   // if one action can lock the item and another action unlocks it

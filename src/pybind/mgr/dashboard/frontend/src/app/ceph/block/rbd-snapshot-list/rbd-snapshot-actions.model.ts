@@ -28,7 +28,7 @@ export class RbdSnapshotActionsModel {
   };
   clone: CdTableAction = {
     permission: 'create',
-    buttonCondition: (selection: CdTableSelection) => selection.hasSingleSelection,
+    canBePrimary: (selection: CdTableSelection) => selection.hasSingleSelection,
     disable: (selection: CdTableSelection) =>
       !selection.hasSingleSelection || selection.first().cdExecuting,
     icon: 'fa-clone',
@@ -36,7 +36,7 @@ export class RbdSnapshotActionsModel {
   };
   copy: CdTableAction = {
     permission: 'create',
-    buttonCondition: (selection: CdTableSelection) => selection.hasSingleSelection,
+    canBePrimary: (selection: CdTableSelection) => selection.hasSingleSelection,
     disable: (selection: CdTableSelection) =>
       !selection.hasSingleSelection || selection.first().cdExecuting,
     icon: 'fa-copy',
