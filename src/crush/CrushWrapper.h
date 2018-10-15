@@ -1290,6 +1290,7 @@ public:
     const std::set<int32_t>& used_ids,
     int *clone,
     map<int,map<int,vector<int>>> *cmap_item_weight);
+  bool class_is_in_use(int class_id, ostream *ss = nullptr);
   int rename_class(const string& srcname, const string& dstname);
   int populate_classes(
     const std::map<int32_t, map<int32_t, int32_t>>& old_class_bucket);
