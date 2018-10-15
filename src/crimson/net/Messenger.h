@@ -46,9 +46,10 @@ class Messenger {
   /// start the messenger
   virtual seastar::future<> start(Dispatcher *dispatcher) = 0;
 
-  /// establish a client connection and complete a handshake
-  virtual seastar::future<ConnectionRef> connect(const entity_addr_t& addr,
-						 entity_type_t peer_type) = 0;
+  /// either return an existing connection to the peer,
+  /// or a new pending connection
+  virtual ConnectionRef connect(const entity_addr_t& peer_addr,
+                                const entity_type_t& peer_type) = 0;
 
   /// stop listenening and wait for all connections to close. safe to destruct
   /// after this future becomes available
