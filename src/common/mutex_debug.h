@@ -93,6 +93,10 @@ public:
   static constexpr bool recursive = Recursive;
 
   // Mutex concept is DefaultConstructible
+  mutex_debug_impl(bool bt = false)
+    : mutex_debugging_base("unnamed", bt) {
+    _init();
+  }
   mutex_debug_impl(const std::string &n, bool bt = false)
     : mutex_debugging_base(n, bt) {
     _init();

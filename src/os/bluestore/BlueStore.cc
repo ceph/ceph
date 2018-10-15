@@ -785,13 +785,13 @@ BlueStore::Cache *BlueStore::Cache::create(CephContext* cct, string type,
 
 void BlueStore::Cache::trim(uint64_t onode_max, uint64_t buffer_max)
 {
-  std::lock_guard<std::recursive_mutex> l(lock);
+  std::lock_guard l(lock);
   _trim(onode_max, buffer_max);
 }
 
 void BlueStore::Cache::trim_all()
 {
-  std::lock_guard<std::recursive_mutex> l(lock);
+  std::lock_guard l(lock);
   _trim(0, 0);
 }
 
@@ -1315,7 +1315,7 @@ void BlueStore::BufferSpace::read(
   uint32_t end = offset + length;
 
   {
-    std::lock_guard<std::recursive_mutex> l(cache->lock);
+    std::lock_guard l(cache->lock);
     for (auto i = _data_lower_bound(offset);
          i != buffer_map.end() && offset < end && i->first < end;
          ++i) {
@@ -1408,7 +1408,7 @@ void BlueStore::BufferSpace::_finish_write(Cache* cache, uint64_t seq)
 
 void BlueStore::BufferSpace::split(Cache* cache, size_t pos, BlueStore::BufferSpace &r)
 {
-  std::lock_guard<std::recursive_mutex> lk(cache->lock);
+  std::lock_guard lk(cache->lock);
   if (buffer_map.empty())
     return;
 
@@ -1463,7 +1463,7 @@ void BlueStore::BufferSpace::split(Cache* cache, size_t pos, BlueStore::BufferSp
 
 BlueStore::OnodeRef BlueStore::OnodeSpace::add(const ghobject_t& oid, OnodeRef o)
 {
-  std::lock_guard<std::recursive_mutex> l(cache->lock);
+  std::lock_guard l(cache->lock);
   auto p = onode_map.find(oid);
   if (p != onode_map.end()) {
     ldout(cache->cct, 30) << __func__ << " " << oid << " " << o
@@ -1484,7 +1484,7 @@ BlueStore::OnodeRef BlueStore::OnodeSpace::lookup(const ghobject_t& oid)
   bool hit = false;
 
   {
-    std::lock_guard<std::recursive_mutex> l(cache->lock);
+    std::lock_guard l(cache->lock);
     ceph::unordered_map<ghobject_t,OnodeRef>::iterator p = onode_map.find(oid);
     if (p == onode_map.end()) {
       ldout(cache->cct, 30) << __func__ << " " << oid << " miss" << dendl;
@@ -1507,7 +1507,7 @@ BlueStore::OnodeRef BlueStore::OnodeSpace::lookup(const ghobject_t& oid)
 
 void BlueStore::OnodeSpace::clear()
 {
-  std::lock_guard<std::recursive_mutex> l(cache->lock);
+  std::lock_guard l(cache->lock);
   ldout(cache->cct, 10) << __func__ << dendl;
   for (auto &p : onode_map) {
     cache->_rm_onode(p.second);
@@ -1517,7 +1517,7 @@ void BlueStore::OnodeSpace::clear()
 
 bool BlueStore::OnodeSpace::empty()
 {
-  std::lock_guard<std::recursive_mutex> l(cache->lock);
+  std::lock_guard l(cache->lock);
   return onode_map.empty();
 }
 
@@ -1527,7 +1527,7 @@ void BlueStore::OnodeSpace::rename(
   const ghobject_t& new_oid,
   const mempool::bluestore_cache_other::string& new_okey)
 {
-  std::lock_guard<std::recursive_mutex> l(cache->lock);
+  std::lock_guard l(cache->lock);
   ldout(cache->cct, 30) << __func__ << " " << old_oid << " -> " << new_oid
 			<< dendl;
   ceph::unordered_map<ghobject_t,OnodeRef>::iterator po, pn;
@@ -1558,7 +1558,7 @@ void BlueStore::OnodeSpace::rename(
 
 bool BlueStore::OnodeSpace::map_any(std::function<bool(OnodeRef)> f)
 {
-  std::lock_guard<std::recursive_mutex> l(cache->lock);
+  std::lock_guard l(cache->lock);
   ldout(cache->cct, 20) << __func__ << dendl;
   for (auto& i : onode_map) {
     if (f(i.second)) {
@@ -1618,7 +1618,7 @@ void BlueStore::SharedBlob::put()
   again:
     auto coll_snap = coll;
     if (coll_snap) {
-      std::lock_guard<std::recursive_mutex> l(coll_snap->cache->lock);
+      std::lock_guard l(coll_snap->cache->lock);
       if (coll_snap != coll) {
 	goto again;
       }
@@ -1650,7 +1650,7 @@ void BlueStore::SharedBlob::finish_write(uint64_t seq)
 {
   while (true) {
     Cache *cache = coll->cache;
-    std::lock_guard<std::recursive_mutex> l(cache->lock);
+    std::lock_guard l(cache->lock);
     if (coll->cache != cache) {
       ldout(coll->store->cct, 20) << __func__
 				  << " raced with sb cache update, was " << cache
@@ -1671,7 +1671,7 @@ void BlueStore::SharedBlob::finish_write(uint64_t seq)
 template <int LogLevelV = 30>
 void BlueStore::SharedBlobSet::dump(CephContext *cct)
 {
-  std::lock_guard<std::mutex> l(lock);
+  std::lock_guard l(lock);
   for (auto& i : sb_map) {
     ldout(cct, LogLevelV) << i.first << " : " << *i.second << dendl;
   }
@@ -3037,7 +3037,7 @@ void BlueStore::Onode::flush()
 {
   if (flushing_count.load()) {
     ldout(c->store->cct, 20) << __func__ << " cnt:" << flushing_count << dendl;
-    std::unique_lock<std::mutex> l(flush_lock);
+    std::unique_lock l(flush_lock);
     while (flushing_count.load()) {
       flush_cond.wait(l);
     }
@@ -3365,8 +3365,8 @@ void BlueStore::Collection::split_cache(
 
   // lock (one or both) cache shards
   std::lock(cache->lock, dest->cache->lock);
-  std::lock_guard<std::recursive_mutex> l(cache->lock, std::adopt_lock);
-  std::lock_guard<std::recursive_mutex> l2(dest->cache->lock, std::adopt_lock);
+  std::lock_guard l(cache->lock, std::adopt_lock);
+  std::lock_guard l2(dest->cache->lock, std::adopt_lock);
 
   int destbits = dest->cnode.bits;
   spg_t destpg;
@@ -3440,7 +3440,7 @@ void BlueStore::Collection::split_cache(
 
 void *BlueStore::MempoolThread::entry()
 {
-  Mutex::Locker l(lock);
+  std::unique_lock l(lock);
 
   std::list<PriorityCache::PriCache *> caches;
   caches.push_back(store->db);
@@ -3485,9 +3485,9 @@ void *BlueStore::MempoolThread::entry()
     interval_stats_trim = false;
 
     store->_update_cache_logger();
-    utime_t wait;
-    wait += store->cct->_conf->bluestore_cache_trim_interval;
-    cond.WaitInterval(lock, wait);
+    auto wait = ceph::make_timespan(
+      store->cct->_conf->bluestore_cache_trim_interval);
+    cond.wait_for(l, wait);
   }
   stop = false;
   return NULL;
@@ -7100,7 +7100,7 @@ int BlueStore::statfs(struct store_statfs_t *buf)
   }
 
   {
-    std::lock_guard<std::mutex> l(vstatfs_lock);
+    std::lock_guard l(vstatfs_lock);
     buf->allocated = vstatfs.allocated();
     buf->data_stored = vstatfs.stored();
     buf->data_compressed = vstatfs.compressed();
@@ -8660,7 +8660,7 @@ void BlueStore::_txc_update_store_statfs(TransContext *txc)
   logger->inc(l_bluestore_compressed_original, txc->statfs_delta.compressed_original());
 
   {
-    std::lock_guard<std::mutex> l(vstatfs_lock);
+    std::lock_guard l(vstatfs_lock);
     vstatfs += txc->statfs_delta;
   }
 
@@ -8693,7 +8693,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       return;
 
     case TransContext::STATE_IO_DONE:
-      //assert(txc->osr->qlock.is_locked());  // see _txc_finish_io
+      assert(ceph_mutex_is_locked(txc->osr->qlock));  // see _txc_finish_io
       if (txc->had_ios) {
 	++txc->osr->txc_with_unstable_io;
       }
@@ -8728,7 +8728,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 	}
       }
       {
-	std::lock_guard<std::mutex> l(kv_lock);
+	std::lock_guard l(kv_lock);
 	kv_queue.push_back(txc);
 	kv_cond.notify_one();
 	if (txc->state != TransContext::STATE_KV_SUBMITTED) {
@@ -8783,7 +8783,7 @@ void BlueStore::_txc_finish_io(TransContext *txc)
    */
 
   OpSequencer *osr = txc->osr.get();
-  std::lock_guard<std::mutex> l(osr->qlock);
+  std::lock_guard l(osr->qlock);
   txc->state = TransContext::STATE_IO_DONE;
   txc->ioc.release_running_aios();
   OpSequencer::q_list_t::iterator p = osr->q.iterator_to(*txc);
@@ -8921,7 +8921,7 @@ void BlueStore::_txc_applied_kv(TransContext *txc)
       dout(20) << __func__ << " onode " << o << " had " << o->flushing_count
 	       << dendl;
       if (--o->flushing_count == 0) {
-        std::lock_guard<std::mutex> l(o->flush_lock);
+        std::lock_guard l(o->flush_lock);
 	o->flush_cond.notify_all();
       }
     }
@@ -8932,7 +8932,7 @@ void BlueStore::_txc_committed_kv(TransContext *txc)
 {
   dout(20) << __func__ << " txc " << txc << dendl;
   {
-    std::lock_guard<std::mutex> l(txc->osr->qlock);
+    std::lock_guard l(txc->osr->qlock);
     txc->state = TransContext::STATE_KV_DONE;
     if (txc->ch->commit_queue) {
       txc->ch->commit_queue->queue(txc->oncommits);
@@ -8964,7 +8964,7 @@ void BlueStore::_txc_finish(TransContext *txc)
   bool submit_deferred = false;
   OpSequencer::q_list_t releasing_txc;
   {
-    std::lock_guard<std::mutex> l(osr->qlock);
+    std::lock_guard l(osr->qlock);
     txc->state = TransContext::STATE_DONE;
     bool notify = false;
     while (!osr->q.empty()) {
@@ -9014,7 +9014,7 @@ void BlueStore::_txc_finish(TransContext *txc)
   }
 
   if (empty && osr->zombie) {
-    std::lock_guard<std::mutex> l(zombie_osr_lock);
+    std::lock_guard l(zombie_osr_lock);
     if (zombie_osr_set.erase(osr->cid)) {
       dout(10) << __func__ << " reaping empty zombie osr " << osr << dendl;
     } else {
@@ -9061,7 +9061,7 @@ void BlueStore::_osr_attach(Collection *c)
 		   << " reusing osr " << c->osr << " from existing coll "
 		   << q->second << dendl;
   } else {
-    std::lock_guard<std::mutex> l(zombie_osr_lock);
+    std::lock_guard l(zombie_osr_lock);
     auto p = zombie_osr_set.find(c->cid);
     if (p == zombie_osr_set.end()) {
       c->osr = new OpSequencer(this, c->cid);
@@ -9079,7 +9079,7 @@ void BlueStore::_osr_attach(Collection *c)
 
 void BlueStore::_osr_register_zombie(OpSequencer *osr)
 {
-  std::lock_guard<std::mutex> l(zombie_osr_lock);
+  std::lock_guard l(zombie_osr_lock);
   dout(10) << __func__ << " " << osr << " " << osr->cid << dendl;
   osr->zombie = true;
   auto i = zombie_osr_set.emplace(osr->cid, osr);
@@ -9103,7 +9103,7 @@ void BlueStore::_osr_drain_preceding(TransContext *txc)
   }
   {
     // wake up any previously finished deferred events
-    std::lock_guard<std::mutex> l(kv_lock);
+    std::lock_guard l(kv_lock);
     kv_cond.notify_one();
   }
   osr->drain_preceding(txc);
@@ -9126,7 +9126,7 @@ void BlueStore::_osr_drain(OpSequencer *osr)
   }
   {
     // wake up any previously finished deferred events
-    std::lock_guard<std::mutex> l(kv_lock);
+    std::lock_guard l(kv_lock);
     kv_cond.notify_one();
   }
   osr->drain();
@@ -9147,7 +9147,7 @@ void BlueStore::_osr_drain_all()
     }
   }
   {
-    std::lock_guard<std::mutex> l(zombie_osr_lock);
+    std::lock_guard l(zombie_osr_lock);
     for (auto& i : zombie_osr_set) {
       s.insert(i.second);
       zombies.push_back(i.second);
@@ -9162,11 +9162,11 @@ void BlueStore::_osr_drain_all()
   }
   {
     // wake up any previously finished deferred events
-    std::lock_guard<std::mutex> l(kv_lock);
+    std::lock_guard l(kv_lock);
     kv_cond.notify_one();
   }
   {
-    std::lock_guard<std::mutex> l(kv_finalize_lock);
+    std::lock_guard l(kv_finalize_lock);
     kv_finalize_cond.notify_one();
   }
   for (auto osr : s) {
@@ -9176,7 +9176,7 @@ void BlueStore::_osr_drain_all()
   --deferred_aggressive;
 
   {
-    std::lock_guard<std::mutex> l(zombie_osr_lock);
+    std::lock_guard l(zombie_osr_lock);
     for (auto& osr : zombies) {
       if (zombie_osr_set.erase(osr->cid)) {
 	dout(10) << __func__ << " reaping empty zombie osr " << osr << dendl;
@@ -9210,7 +9210,7 @@ void BlueStore::_kv_stop()
 {
   dout(10) << __func__ << dendl;
   {
-    std::unique_lock<std::mutex> l(kv_lock);
+    std::unique_lock l(kv_lock);
     while (!kv_sync_started) {
       kv_cond.wait(l);
     }
@@ -9218,7 +9218,7 @@ void BlueStore::_kv_stop()
     kv_cond.notify_all();
   }
   {
-    std::unique_lock<std::mutex> l(kv_finalize_lock);
+    std::unique_lock l(kv_finalize_lock);
     while (!kv_finalize_started) {
       kv_finalize_cond.wait(l);
     }
@@ -9229,11 +9229,11 @@ void BlueStore::_kv_stop()
   kv_finalize_thread.join();
   ceph_assert(removed_collections.empty());
   {
-    std::lock_guard<std::mutex> l(kv_lock);
+    std::lock_guard l(kv_lock);
     kv_stop = false;
   }
   {
-    std::lock_guard<std::mutex> l(kv_finalize_lock);
+    std::lock_guard l(kv_finalize_lock);
     kv_finalize_stop = false;
   }
   dout(10) << __func__ << " stopping finishers" << dendl;
@@ -9248,7 +9248,7 @@ void BlueStore::_kv_sync_thread()
 {
   dout(10) << __func__ << " start" << dendl;
   deque<DeferredBatch*> deferred_stable_queue; ///< deferred ios done + stable
-  std::unique_lock<std::mutex> l(kv_lock);
+  std::unique_lock l(kv_lock);
   ceph_assert(!kv_sync_started);
   kv_sync_started = true;
   kv_cond.notify_all();
@@ -9360,7 +9360,7 @@ void BlueStore::_kv_sync_thread()
 	  --txc->osr->kv_committing_serially;
 	  txc->state = TransContext::STATE_KV_SUBMITTED;
 	  if (txc->osr->kv_submitted_waiters) {
-	    std::lock_guard<std::mutex> l(txc->osr->qlock);
+	    std::lock_guard l(txc->osr->qlock);
 	    txc->osr->qcond.notify_all();
 	  }
 
@@ -9416,7 +9416,7 @@ void BlueStore::_kv_sync_thread()
       ceph_assert(r == 0);
 
       {
-	std::unique_lock<std::mutex> m(kv_finalize_lock);
+	std::unique_lock m(kv_finalize_lock);
 	if (kv_committing_to_finalize.empty()) {
 	  kv_committing_to_finalize.swap(kv_committing);
 	} else {
@@ -9489,7 +9489,7 @@ void BlueStore::_kv_finalize_thread()
   deque<TransContext*> kv_committed;
   deque<DeferredBatch*> deferred_stable;
   dout(10) << __func__ << " start" << dendl;
-  std::unique_lock<std::mutex> l(kv_finalize_lock);
+  std::unique_lock l(kv_finalize_lock);
   ceph_assert(!kv_finalize_started);
   kv_finalize_started = true;
   kv_finalize_cond.notify_all();
@@ -9597,7 +9597,7 @@ void BlueStore::deferred_try_submit()
 {
   dout(20) << __func__ << " " << deferred_queue.size() << " osrs, "
 	   << deferred_queue_size << " txcs" << dendl;
-  std::lock_guard<std::mutex> l(deferred_lock);
+  std::lock_guard l(deferred_lock);
   vector<OpSequencerRef> osrs;
   osrs.reserve(deferred_queue.size());
   for (auto& osr : deferred_queue) {
@@ -9690,7 +9690,7 @@ void BlueStore::_deferred_aio_finish(OpSequencer *osr)
   DeferredBatch *b = osr->deferred_running;
 
   {
-    std::lock_guard<std::mutex> l(deferred_lock);
+    std::lock_guard l(deferred_lock);
     ceph_assert(osr->deferred_running == b);
     osr->deferred_running = nullptr;
     if (!osr->deferred_pending) {
@@ -9708,7 +9708,7 @@ void BlueStore::_deferred_aio_finish(OpSequencer *osr)
   {
     uint64_t costs = 0;
     {
-      std::lock_guard<std::mutex> l2(osr->qlock);
+      std::lock_guard l2(osr->qlock);
       for (auto& i : b->txcs) {
 	TransContext *txc = &i;
 	txc->log_state_latency(logger, l_bluestore_state_deferred_aio_wait_lat);
@@ -9717,14 +9717,14 @@ void BlueStore::_deferred_aio_finish(OpSequencer *osr)
       }
     }
     throttle_deferred_bytes.put(costs);
-    std::lock_guard<std::mutex> l(kv_lock);
+    std::lock_guard l(kv_lock);
     deferred_done_queue.emplace_back(b);
   }
 
   // in the normal case, do not bother waking up the kv thread; it will
   // catch us on the next commit anyway.
   if (deferred_aggressive) {
-    std::lock_guard<std::mutex> l(kv_lock);
+    std::lock_guard l(kv_lock);
     kv_cond.notify_one();
   }
 }
@@ -9842,7 +9842,7 @@ int BlueStore::queue_transactions(
       deferred_try_submit();
       {
 	// wake up any previously finished deferred events
-	std::lock_guard<std::mutex> l(kv_lock);
+	std::lock_guard l(kv_lock);
 	kv_cond.notify_one();
       }
       throttle_deferred_bytes.get(txc->cost);
@@ -10302,7 +10302,7 @@ void BlueStore::_dump_extent_map(ExtentMap &em)
       dout(LogLevelV) << __func__ << "      csum: " << std::hex << v << std::dec
 		      << dendl;
     }
-    std::lock_guard<std::recursive_mutex> l(e.blob->shared_blob->get_cache()->lock);
+    std::lock_guard l(e.blob->shared_blob->get_cache()->lock);
     for (auto& i : e.blob->shared_blob->bc.buffer_map) {
       dout(LogLevelV) << __func__ << "       0x" << std::hex << i.first
 		      << "~" << i.second->length << std::dec
