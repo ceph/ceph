@@ -4,6 +4,7 @@ from ceph_volume.util import disk, prepare
 from ceph_volume.api import lvm
 from . import validators
 from ceph_volume.devices.lvm.create import Create
+from ceph_volume.devices.lvm.prepare import Prepare
 from ceph_volume.util import templates
 from ceph_volume.exceptions import SizeAllocationError
 
@@ -134,7 +135,10 @@ class SingleType(object):
                 if self.args.crush_device_class:
                     command.extend(['--crush-device-class', self.args.crush_device_class])
 
-                Create(command).main()
+                if self.args.prepare:
+                    Prepare(command).main()
+                else:
+                    Create(command).main()
 
 
 class MixedType(object):
@@ -310,7 +314,10 @@ class MixedType(object):
             if self.args.crush_device_class:
                 command.extend(['--crush-device-class', self.args.crush_device_class])
 
-            Create(command).main()
+            if self.args.prepare:
+                Prepare(command).main()
+            else:
+                Create(command).main()
 
     def get_common_vg(self):
         # find all the vgs associated with the current device
