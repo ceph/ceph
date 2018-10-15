@@ -201,6 +201,8 @@ void usage()
   cout << "  reshard list               list all bucket resharding or scheduled to be reshared\n";
   cout << "  reshard process            process of scheduled reshard jobs\n";
   cout << "  reshard cancel             cancel resharding a bucket\n";
+  cout << "  reshard stale-instances list list stale-instances from bucket resharding\n";
+  cout << "  reshard stale-instances rm   cleanup stale-instances from bucket resharding\n";
   cout << "  sync error list            list sync error\n";
   cout << "  sync error trim            trim sync error\n";
   cout << "options:\n";
@@ -497,7 +499,8 @@ enum {
   OPT_RESHARD_STATUS,
   OPT_RESHARD_PROCESS,
   OPT_RESHARD_CANCEL,
-  OPT_STALE_INSTANCES_LIST
+  OPT_RESHARD_STALE_INSTANCES_LIST,
+  OPT_RESHARD_STALE_INSTANCES_DELETE
 };
 
 static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_cmd, bool *need_more)
@@ -953,9 +956,13 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_RESHARD_PROCESS;
     if (strcmp(cmd, "cancel") == 0)
       return OPT_RESHARD_CANCEL;
-  } else if (strcmp(prev_cmd, "stale-instances") == 0) {
+  } else if ((prev_prev_cmd && strcmp(prev_prev_cmd, "reshard") == 0) &&
+	     (strcmp(prev_cmd, "stale-instances") == 0)) {
     if (strcmp(cmd, "list") == 0)
-      return OPT_STALE_INSTANCES_LIST;
+      return OPT_RESHARD_STALE_INSTANCES_LIST;
+    if (strcmp(cmd, "rm") == 0 ||
+        strcmp(cmd, "delete") == 0)
+      return OPT_RESHARD_STALE_INSTANCES_DELETE;
   }
 
   return -EINVAL;
@@ -7501,9 +7508,19 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_STALE_INSTANCES_LIST) {
-    RGWBucketAdminOp::list_stale_instances(store, bucket_op,f);
-  }
+ if (opt_cmd == OPT_RESHARD_STALE_INSTANCES_LIST) {
+   ret = RGWBucketAdminOp::list_stale_instances(store, bucket_op,f);
+   if (ret < 0) {
+     cerr << "ERROR: listing stale instances" << cpp_strerror(-ret) << std::endl;
+   }
+ }
 
-  return 0;
+ if (opt_cmd == OPT_RESHARD_STALE_INSTANCES_DELETE) {
+   ret = RGWBucketAdminOp::clear_stale_instances(store, bucket_op,f);
+   if (ret < 0) {
+     cerr << "ERROR: deleting stale instances" << cpp_strerror(-ret) << std::endl;
+   }
+ }
+
+ return 0;
 }
