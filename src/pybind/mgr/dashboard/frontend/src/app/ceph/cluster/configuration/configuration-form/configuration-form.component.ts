@@ -49,7 +49,7 @@ export class ConfigurationFormComponent implements OnInit {
     };
 
     this.availSections.forEach((section) => {
-      formControls.values.controls[section] = new FormControl(null);
+      formControls.values.addControl(section, new FormControl(null));
     });
 
     this.configForm = new CdFormGroup(formControls);
