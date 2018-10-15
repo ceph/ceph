@@ -6,7 +6,7 @@
   </tab>
   <tab heading="Metadata">
     <cd-table-key-value *ngIf="osd.loaded && osd.details.osd_metadata; else noMetaData"
-                        (fetchData)="osd.autoRefresh()"
+                        (fetchData)="refresh()"
                         [data]="osd.details.osd_metadata">
     </cd-table-key-value>
     <ng-template #noMetaData>

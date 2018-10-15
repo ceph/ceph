@@ -34,6 +34,13 @@ export class OsdListComponent implements OnInit {
   columns: CdTableColumn[];
   selection = new CdTableSelection();
 
+  protected static collectStates(osd) {
+    return [
+      osd['in'] ? 'in' : 'out',
+      osd['up'] ? 'up' : 'out',
+    ];
+  }
+
   constructor(
     private authStorageService: AuthStorageService,
     private osdService: OsdService,
@@ -87,22 +94,13 @@ export class OsdListComponent implements OnInit {
     this.osdService.getList().subscribe((data: any[]) => {
       this.osds = data;
       data.map((osd) => {
-        osd.collectedStates = this.collectStates(osd);
+        osd.collectedStates = OsdListComponent.collectStates(osd);
         osd.stats_history.out_bytes = osd.stats_history.op_out_bytes.map((i) => i[1]);
         osd.stats_history.in_bytes = osd.stats_history.op_in_bytes.map((i) => i[1]);
         osd.cdIsBinary = true;
         return osd;
       });
     });
-  }
-
-  collectStates(osd) {
-    const select = (onState, offState) => (osd[onState] ? onState : offState);
-    return [select('up', 'down'), select('in', 'out')];
-  }
-
-  beforeShowDetails(selection: CdTableSelection) {
-    return selection.hasSingleSelection;
   }
 
   scrubAction(deep) {
