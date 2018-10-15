@@ -323,20 +323,21 @@ void RGWOp_MDLog_Unlock::execute() {
 }
 
 void RGWOp_MDLog_Notify::execute() {
-  char *data;
-  int len = 0;
 #define LARGE_ENOUGH_BUF (128 * 1024)
-  int r = rgw_rest_read_all_input(s, &data, &len, LARGE_ENOUGH_BUF);
+
+  int r = 0;
+  bufferlist data;
+  std::tie(r, data) = rgw_rest_read_all_input(s, LARGE_ENOUGH_BUF);
   if (r < 0) {
     http_ret = r;
     return;
   }
 
-  ldout(s->cct, 20) << __func__ << "(): read data: " << string(data, len) << dendl;
+  char* buf = data.c_str();
+  ldout(s->cct, 20) << __func__ << "(): read data: " << buf << dendl;
 
   JSONParser p;
-  r = p.parse(data, len);
-  free(data);
+  r = p.parse(buf, data.length());
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: failed to parse JSON" << dendl;
     http_ret = r;
@@ -753,20 +754,21 @@ void RGWOp_DATALog_Unlock::execute() {
 
 void RGWOp_DATALog_Notify::execute() {
   string  source_zone = s->info.args.get("source-zone");
-  char *data;
-  int len = 0;
 #define LARGE_ENOUGH_BUF (128 * 1024)
-  int r = rgw_rest_read_all_input(s, &data, &len, LARGE_ENOUGH_BUF);
+
+  int r = 0;
+  bufferlist data;
+  std::tie(r, data) = rgw_rest_read_all_input(s, LARGE_ENOUGH_BUF);
   if (r < 0) {
     http_ret = r;
     return;
   }
 
-  ldout(s->cct, 20) << __func__ << "(): read data: " << string(data, len) << dendl;
+  char* buf = data.c_str();
+  ldout(s->cct, 20) << __func__ << "(): read data: " << buf << dendl;
 
   JSONParser p;
-  r = p.parse(data, len);
-  free(data);
+  r = p.parse(buf, data.length());
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: failed to parse JSON" << dendl;
     http_ret = r;

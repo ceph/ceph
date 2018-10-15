@@ -172,31 +172,29 @@ void RGWSTSAssumeRole::execute()
 
 RGWOp *RGWHandler_REST_STS::op_post()
 {
-  int len = 0;
-  char *data = nullptr;
   const auto max_size = s->cct->_conf->rgw_max_put_param_size;
-  auto ret = rgw_rest_read_all_input(s, &data, &len, max_size, false);
-  if (ret < 0) {
-    return nullptr;
-  }
-  ldout(s->cct, 0) << "Content of POST: " << data << dendl;
-  string post_body = data;
 
-  if (post_body.find("Action") != string::npos) {
-    boost::char_separator<char> sep("&");
-    boost::tokenizer<boost::char_separator<char>> tokens(post_body, sep);
-    for (const auto& t : tokens) {
-      auto pos = t.find("=");
-      if (pos != string::npos) {
-         std::string key = t.substr(0, pos);
-         std::string value = t.substr(pos + 1, t.size() - 1);
-         ldout(s->cct, 0) << "Key: " << key << "Value: " << value << dendl;
-         s->info.args.append(key, value);
+  int ret = 0;
+  bufferlist data;
+  std::tie(ret, data) = rgw_rest_read_all_input(s, max_size, false);
+  if (data.length() > 0) {
+    string post_body = data.to_str();
+    ldout(s->cct, 10) << "Content of POST: " << post_body << dendl;
+
+    if (post_body.find("Action") != string::npos) {
+      boost::char_separator<char> sep("&");
+      boost::tokenizer<boost::char_separator<char>> tokens(post_body, sep);
+      for (const auto& t : tokens) {
+        auto pos = t.find("=");
+        if (pos != string::npos) {
+           std::string key = t.substr(0, pos);
+           std::string value = t.substr(pos + 1, t.size() - 1);
+           ldout(s->cct, 10) << "Key: " << key << "Value: " << value << dendl;
+           s->info.args.append(key, value);
+         }
        }
-     }
+    }
   }
-
-  free(data);
 
   if (s->info.args.exists("Action"))    {
     string action = s->info.args.get("Action");
