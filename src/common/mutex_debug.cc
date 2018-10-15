@@ -58,12 +58,5 @@ void mutex_debugging_base::_will_unlock() {  // about to unlock
   id = lockdep_will_unlock(name.c_str(), id);
 }
 
-ceph::mono_time mutex_debugging_base::before_lock_blocks() {
-  return ceph::mono_time::min();
-}
-
-void mutex_debugging_base::after_lock_blocks(ceph::mono_time start,
-					     bool no_lockdep) {
-}
 } // namespace mutex_debug_detail
 } // namespace ceph
