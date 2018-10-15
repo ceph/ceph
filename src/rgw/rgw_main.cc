@@ -209,16 +209,16 @@ int main(int argc, const char **argv)
   for (list<string>::iterator iter = frontends.begin(); iter != frontends.end(); ++iter) {
     string& f = *iter;
 
-    if (f.find("civetweb") != string::npos) {
-      // If civetweb is configured as a frontend, prevent global_init() from
+    if (f.find("civetweb") != string::npos || f.find("beast") != string::npos) {
+      // If civetweb or beast is configured as a frontend, prevent global_init() from
       // dropping permissions by setting the appropriate flag.
       flags |= CINIT_FLAG_DEFER_DROP_PRIVILEGES;
       if (f.find("port") != string::npos) {
         // check for the most common ws problems
         if ((f.find("port=") == string::npos) ||
             (f.find("port= ") != string::npos)) {
-          derr << "WARNING: civetweb frontend config found unexpected spacing around 'port' "
-               << "(ensure civetweb port parameter has the form 'port=80' with no spaces "
+          derr << "WARNING: radosgw frontend config found unexpected spacing around 'port' "
+               << "(ensure frontend port parameter has the form 'port=80' with no spaces "
                << "before or after '=')" << dendl;
         }
       }
