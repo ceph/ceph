@@ -1740,48 +1740,6 @@ using namespace ceph;
     return s;
   }
 
-  char *buffer::list::get_contiguous(unsigned orig_off, unsigned len)
-  {
-    if (orig_off + len > length())
-      throw end_of_buffer();
-
-    if (len == 0) {
-      return 0;
-    }
-
-    unsigned off = orig_off;
-    std::list<ptr>::iterator curbuf = _buffers.begin();
-    while (off > 0 && off >= curbuf->length()) {
-      off -= curbuf->length();
-      ++curbuf;
-    }
-
-    if (off + len > curbuf->length()) {
-      bufferlist tmp;
-      unsigned l = off + len;
-
-      do {
-	if (l >= curbuf->length())
-	  l -= curbuf->length();
-	else
-	  l = 0;
-	tmp.append(*curbuf);
-	curbuf = _buffers.erase(curbuf);
-
-      } while (curbuf != _buffers.end() && l > 0);
-
-      ceph_assert(l == 0);
-
-      tmp.rebuild();
-      _buffers.insert(curbuf, tmp._buffers.front());
-      return tmp.c_str() + off;
-    }
-
-    last_p = begin();  // we modified _buffers
-
-    return curbuf->c_str() + off;
-  }
-
   void buffer::list::substr_of(const list& other, unsigned off, unsigned len)
   {
     if (off + len > other.length())
