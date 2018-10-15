@@ -501,12 +501,23 @@ class CephFilepath(CephArgtype):
     Openable file
     """
     def valid(self, s, partial=False):
-        try:
-            f = open(s, 'a+')
-        except Exception as e:
-            raise ArgumentValid('can\'t open {0}: {1}'.format(s, e))
-        f.close()
+        # set self.val if the specified path is readable or writable
+        s = os.path.abspath(s)
+        if not os.access(s, os.R_OK):
+            self._validate_writable_file(s)
         self.val = s
+
+    def _validate_writable_file(self, fname):
+        if os.path.exists(fname):
+            if os.path.isfile(fname):
+                if not os.access(fname, os.W_OK):
+                    raise ArgumentValid('{0} is not writable'.format(fname))
+            else:
+                raise ArgumentValid('{0} is not file'.format(fname))
+        else:
+            dirname = os.path.dirname(fname)
+            if not os.access(dirname, os.W_OK):
+                raise ArgumentValid('cannot create file in {0}'.format(dirname))
 
     def __str__(self):
         return '<outfilename>'
