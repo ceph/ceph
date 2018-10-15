@@ -8,10 +8,10 @@ import { Observable, Subscriber, timer as observableTimer } from 'rxjs';
 
 import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { DirectivesModule } from '../../directives/directives.module';
-import { DeletionModalComponent } from './deletion-modal.component';
+import { CriticalConfirmationModalComponent } from './critical-confirmation-modal.component';
 
 @NgModule({
-  entryComponents: [DeletionModalComponent]
+  entryComponents: [CriticalConfirmationModalComponent]
 })
 export class MockModule {}
 
@@ -51,7 +51,7 @@ class MockComponent {
   constructor(public modalService: BsModalService) {}
 
   openCtrlDriven() {
-    this.ctrlRef = this.modalService.show(DeletionModalComponent, {
+    this.ctrlRef = this.modalService.show(CriticalConfirmationModalComponent, {
       initialState: {
         submitAction: this.fakeDeleteController.bind(this),
         bodyTemplate: this.ctrlDescription
@@ -60,7 +60,7 @@ class MockComponent {
   }
 
   openModalDriven() {
-    this.modalRef = this.modalService.show(DeletionModalComponent, {
+    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
       initialState: {
         submitActionObservable: this.fakeDelete(),
         bodyTemplate: this.modalDescription
@@ -93,12 +93,12 @@ class MockComponent {
 
 describe('DeletionModalComponent', () => {
   let mockComponent: MockComponent;
-  let component: DeletionModalComponent;
+  let component: CriticalConfirmationModalComponent;
   let mockFixture: ComponentFixture<MockComponent>;
-  let fixture: ComponentFixture<DeletionModalComponent>;
+  let fixture: ComponentFixture<CriticalConfirmationModalComponent>;
 
   configureTestBed({
-    declarations: [MockComponent, DeletionModalComponent],
+    declarations: [MockComponent, CriticalConfirmationModalComponent],
     schemas: [NO_ERRORS_SCHEMA],
     imports: [ModalModule.forRoot(), ReactiveFormsModule, MockModule, DirectivesModule],
     providers: [BsModalRef]
@@ -110,7 +110,7 @@ describe('DeletionModalComponent', () => {
     // Mocking the modals as a lot would be left over
     spyOn(mockComponent.modalService, 'show').and.callFake((modalComp, config) => {
       const ref = new BsModalRef();
-      fixture = TestBed.createComponent(DeletionModalComponent);
+      fixture = TestBed.createComponent(CriticalConfirmationModalComponent);
       component = fixture.componentInstance;
       if (config.initialState) {
         component = Object.assign(component, config.initialState);

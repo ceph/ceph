@@ -4,7 +4,7 @@ import { BsModalService } from 'ngx-bootstrap/modal';
 import { forkJoin as observableForkJoin, Observable, Subscriber } from 'rxjs';
 
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
-import { DeletionModalComponent } from '../../../shared/components/deletion-modal/deletion-modal.component';
+import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { TableComponent } from '../../../shared/datatable/table/table.component';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
 import { CdTableAction } from '../../../shared/models/cd-table-action';
@@ -101,7 +101,7 @@ export class RgwUserListComponent {
   }
 
   deleteAction() {
-    this.bsModalService.show(DeletionModalComponent, {
+    this.bsModalService.show(CriticalConfirmationModalComponent, {
       initialState: {
         itemDescription: this.selection.hasSingleSelection ? 'user' : 'users',
         submitActionObservable: (): Observable<any> => {

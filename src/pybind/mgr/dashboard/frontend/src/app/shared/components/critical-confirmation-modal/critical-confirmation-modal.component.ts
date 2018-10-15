@@ -9,10 +9,10 @@ import { SubmitButtonComponent } from '../submit-button/submit-button.component'
 
 @Component({
   selector: 'cd-deletion-modal',
-  templateUrl: './deletion-modal.component.html',
-  styleUrls: ['./deletion-modal.component.scss']
+  templateUrl: './critical-confirmation-modal.component.html',
+  styleUrls: ['./critical-confirmation-modal.component.scss']
 })
-export class DeletionModalComponent implements OnInit {
+export class CriticalConfirmationModalComponent implements OnInit {
   @ViewChild(SubmitButtonComponent)
   submitButton: SubmitButtonComponent;
   bodyTemplate: TemplateRef<any>;

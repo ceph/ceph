@@ -12,7 +12,7 @@ import { TooltipModule } from 'ngx-bootstrap/tooltip';
 import { DirectivesModule } from '../directives/directives.module';
 import { PipesModule } from '../pipes/pipes.module';
 import { ConfirmationModalComponent } from './confirmation-modal/confirmation-modal.component';
-import { DeletionModalComponent } from './deletion-modal/deletion-modal.component';
+import { CriticalConfirmationModalComponent } from './critical-confirmation-modal/critical-confirmation-modal.component';
 import { ErrorPanelComponent } from './error-panel/error-panel.component';
 import { GrafanaComponent } from './grafana/grafana.component';
 import { HelperComponent } from './helper/helper.component';
@@ -52,7 +52,7 @@ import { WarningPanelComponent } from './warning-panel/warning-panel.component';
     LoadingPanelComponent,
     InfoPanelComponent,
     ModalComponent,
-    DeletionModalComponent,
+    CriticalConfirmationModalComponent,
     ConfirmationModalComponent,
     WarningPanelComponent,
     GrafanaComponent
@@ -72,6 +72,10 @@ import { WarningPanelComponent } from './warning-panel/warning-panel.component';
     WarningPanelComponent,
     GrafanaComponent
   ],
-  entryComponents: [ModalComponent, DeletionModalComponent, ConfirmationModalComponent]
+  entryComponents: [
+    ModalComponent,
+    CriticalConfirmationModalComponent,
+    ConfirmationModalComponent
+  ]
 })
 export class ComponentsModule {}
