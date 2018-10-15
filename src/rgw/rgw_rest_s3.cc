@@ -404,18 +404,16 @@ int RGWPutObjTags_ObjStore_S3::get_params()
     return -EINVAL;
   }
 
-  char *data=nullptr;
-  int len=0;
-
   const auto max_size = s->cct->_conf->rgw_max_put_param_size;
-  int r = rgw_rest_read_all_input(s, &data, &len, max_size, false);
+
+  int r = 0;
+  bufferlist data;
+  std::tie(r, data) = rgw_rest_read_all_input(s, max_size, false);
 
   if (r < 0)
     return r;
 
-  auto data_deleter = std::unique_ptr<char, decltype(free)*>{data, free};
-
-  if (!parser.parse(data, len, 1)) {
+  if (!parser.parse(data.c_str(), data.length(), 1)) {
     return -ERR_MALFORMED_XML;
   }
 
@@ -930,15 +928,13 @@ struct ver_config_status {
 
 int RGWSetBucketVersioning_ObjStore_S3::get_params()
 {
-  char *data = nullptr;
-  int len = 0;
-  int r =
-    rgw_rest_read_all_input(s, &data, &len, s->cct->_conf->rgw_max_put_param_size, false);
+  int r = 0;
+  bufferlist data;
+  std::tie(r, data) =
+    rgw_rest_read_all_input(s, s->cct->_conf->rgw_max_put_param_size, false);
   if (r < 0) {
     return r;
   }
-  
-  auto data_deleter = std::unique_ptr<char, decltype(free)*>{data, free};
 
   r = do_aws4_auth_completion();
   if (r < 0) {
@@ -951,8 +947,9 @@ int RGWSetBucketVersioning_ObjStore_S3::get_params()
     return -EIO;
   }
 
-  if (!parser.parse(data, len, 1)) {
-    ldout(s->cct, 10) << "NOTICE: failed to parse data: " << data << dendl;
+  char* buf = data.c_str();
+  if (!parser.parse(buf, data.length(), 1)) {
+    ldout(s->cct, 10) << "NOTICE: failed to parse data: " << buf << dendl;
     r = -EINVAL;
     return r;
   }
@@ -966,7 +963,7 @@ int RGWSetBucketVersioning_ObjStore_S3::get_params()
 
   if (!store->is_meta_master()) {
     /* only need to keep this data around if we're not meta master */
-    in_data.append(data, len);
+    in_data.append(data);
   }
 
   versioning_status = status_conf.status;
@@ -1003,24 +1000,22 @@ void RGWSetBucketVersioning_ObjStore_S3::send_response()
 
 int RGWSetBucketWebsite_ObjStore_S3::get_params()
 {
-  char *data = nullptr;
-  int len = 0;
   const auto max_size = s->cct->_conf->rgw_max_put_param_size;
-  int r = rgw_rest_read_all_input(s, &data, &len, max_size, false);
+
+  int r = 0;
+  bufferlist data;
+  std::tie(r, data) = rgw_rest_read_all_input(s, max_size, false);
 
   if (r < 0) {
     return r;
   }
-
-  auto data_deleter = std::unique_ptr<char, decltype(free)*>{data, free};
 
   r = do_aws4_auth_completion();
   if (r < 0) {
     return r;
   }
 
-  bufferptr in_ptr(data, len);
-  in_data.append(in_ptr);
+  in_data.append(data);
 
   RGWXMLDecoder::XMLParser parser;
   if (!parser.init()) {
@@ -1028,17 +1023,16 @@ int RGWSetBucketWebsite_ObjStore_S3::get_params()
     return -EIO;
   }
 
-  if (!parser.parse(data, len, 1)) {
-    string str(data, len);
-    ldout(s->cct, 5) << "failed to parse xml: " << str << dendl;
+  char* buf = data.c_str();
+  if (!parser.parse(buf, data.length(), 1)) {
+    ldout(s->cct, 5) << "failed to parse xml: " << buf << dendl;
     return -EINVAL;
   }
 
   try {
     RGWXMLDecoder::decode_xml("WebsiteConfiguration", website_conf, &parser, true);
   } catch (RGWXMLDecoder::err& err) {
-    string str(data, len);
-    ldout(s->cct, 5) << "unexpected xml: " << str << dendl;
+    ldout(s->cct, 5) << "unexpected xml: " << buf << dendl;
     return -EINVAL;
   }
 
@@ -1193,26 +1187,23 @@ int RGWCreateBucket_ObjStore_S3::get_params()
 
   policy = s3policy;
 
-  int len = 0;
-  char *data = nullptr;
-
   const auto max_size = s->cct->_conf->rgw_max_put_param_size;
-  op_ret = rgw_rest_read_all_input(s, &data, &len, max_size, false);
+
+  int op_ret = 0;
+  bufferlist data;
+  std::tie(op_ret, data) = rgw_rest_read_all_input(s, max_size, false);
 
   if ((op_ret < 0) && (op_ret != -ERR_LENGTH_REQUIRED))
     return op_ret;
-
-  auto data_deleter = std::unique_ptr<char, decltype(free)*>{data, free};
 
   const int auth_ret = do_aws4_auth_completion();
   if (auth_ret < 0) {
     return auth_ret;
   }
   
-  bufferptr in_ptr(data, len);
-  in_data.append(in_ptr);
+  in_data.append(data);
 
-  if (len) {
+  if (data.length()) {
     RGWCreateBucketParser parser;
 
     if (!parser.init()) {
@@ -1220,11 +1211,12 @@ int RGWCreateBucket_ObjStore_S3::get_params()
       return -EIO;
     }
 
-    bool success = parser.parse(data, len, 1);
-    ldout(s->cct, 20) << "create bucket input data=" << data << dendl;
+    char* buf = data.c_str();
+    bool success = parser.parse(buf, data.length(), 1);
+    ldout(s->cct, 20) << "create bucket input data=" << buf << dendl;
 
     if (!success) {
-      ldout(s->cct, 0) << "failed to parse input: " << data << dendl;
+      ldout(s->cct, 0) << "failed to parse input: " << buf << dendl;
       return -EINVAL;
     }
 
@@ -2360,19 +2352,17 @@ void RGWGetCORS_ObjStore_S3::send_response()
 
 int RGWPutCORS_ObjStore_S3::get_params()
 {
-  int r;
-  char *data = nullptr;
-  int len = 0;
   RGWCORSXMLParser_S3 parser(s->cct);
   RGWCORSConfiguration_S3 *cors_config;
 
   const auto max_size = s->cct->_conf->rgw_max_put_param_size;
-  r = rgw_rest_read_all_input(s, &data, &len, max_size, false);
+
+  int r = 0;
+  bufferlist data;
+  std::tie(r, data) = rgw_rest_read_all_input(s, max_size, false);
   if (r < 0) {
     return r;
   }
-
-  auto data_deleter = std::unique_ptr<char, decltype(free)*>{data, free};
 
   r = do_aws4_auth_completion();
   if (r < 0) {
@@ -2383,7 +2373,8 @@ int RGWPutCORS_ObjStore_S3::get_params()
     return -EINVAL;
   }
 
-  if (!data || !parser.parse(data, len, 1)) {
+  char* buf = data.c_str();
+  if (!buf || !parser.parse(buf, data.length(), 1)) {
     return -ERR_MALFORMED_XML;
   }
   cors_config =
@@ -2413,7 +2404,7 @@ int RGWPutCORS_ObjStore_S3::get_params()
   // forward bucket cors requests to meta master zone
   if (!store->is_meta_master()) {
     /* only need to keep this data around if we're not meta master */
-    in_data.append(data, len);
+    in_data.append(data);
   }
 
   if (s->cct->_conf->subsys.should_gather<ceph_subsys_rgw, 15>()) {
@@ -2518,10 +2509,11 @@ public:
 
 int RGWSetRequestPayment_ObjStore_S3::get_params()
 {
-  char *data;
-  int len = 0;
   const auto max_size = s->cct->_conf->rgw_max_put_param_size;
-  int r = rgw_rest_read_all_input(s, &data, &len, max_size, false);
+
+  int r = 0;
+  bufferlist data;
+  std::tie(r, data) = rgw_rest_read_all_input(s, max_size, false);
 
   if (r < 0) {
     return r;
@@ -2531,22 +2523,16 @@ int RGWSetRequestPayment_ObjStore_S3::get_params()
 
   if (!parser.init()) {
     ldout(s->cct, 0) << "ERROR: failed to initialize parser" << dendl;
-    r = -EIO;
-    goto done;
+    return -EIO;
   }
 
-  if (!parser.parse(data, len, 1)) {
-    ldout(s->cct, 10) << "failed to parse data: " << data << dendl;
-    r = -EINVAL;
-    goto done;
+  char* buf = data.c_str();
+  if (!parser.parse(buf, data.length(), 1)) {
+    ldout(s->cct, 10) << "failed to parse data: " << buf << dendl;
+    return -EINVAL;
   }
 
-  r = parser.get_request_payment_payer(&requester_pays);
-
-done:
-  free(data);
-
-  return r;
+  return parser.get_request_payment_payer(&requester_pays);
 }
 
 void RGWSetRequestPayment_ObjStore_S3::send_response()

@@ -3845,7 +3845,7 @@ void RGWPutObj::execute()
     encode(*slo_info, manifest_bl);
     emplace_attr(RGW_ATTR_SLO_MANIFEST, std::move(manifest_bl));
 
-    hash.Update((unsigned char *)slo_info->raw_data, slo_info->raw_data_len);
+    hash.Update((unsigned char *)(slo_info->raw_data.c_str()), slo_info->raw_data.length());
     complete_etag(hash, &etag);
     ldpp_dout(this, 10) << __func__ << ": calculated md5 for user manifest: " << etag << dendl;
   }
@@ -4994,7 +4994,6 @@ void RGWPutACLs::execute()
   RGWACLXMLParser_S3 parser(s->cct);
   RGWAccessControlPolicy_S3 new_policy(s->cct);
   stringstream ss;
-  char *new_data = NULL;
   rgw_obj obj;
 
   op_ret = 0; /* XXX redundant? */
@@ -5023,9 +5022,10 @@ void RGWPutACLs::execute()
     return;
   }
 
-  ldpp_dout(this, 15) << "read len=" << len << " data=" << (data ? data : "") << dendl;
+  char* buf = data.c_str();
+  ldpp_dout(this, 15) << "read len=" << data.length() << " data=" << (buf ? buf : "") << dendl;
 
-  if (!s->canned_acl.empty() && len) {
+  if (!s->canned_acl.empty() && data.length() > 0) {
     op_ret = -EINVAL;
     return;
   }
@@ -5035,13 +5035,11 @@ void RGWPutACLs::execute()
     if (op_ret < 0)
       return;
 
-    new_data = strdup(ss.str().c_str());
-    free(data);
-    data = new_data;
-    len = ss.str().size();
+    data.clear();
+    data.append(ss.str());
   }
 
-  if (!parser.parse(data, len, 1)) {
+  if (!parser.parse(data.c_str(), data.length(), 1)) {
     op_ret = -EINVAL;
     return;
   }
@@ -5075,7 +5073,7 @@ void RGWPutACLs::execute()
     bufferlist in_data;
     // include acl data unless it was generated from a canned_acl
     if (s->canned_acl.empty()) {
-      in_data.append(data, len);
+      in_data.append(data);
     }
     op_ret = forward_request_to_master(s, NULL, store, in_data, NULL);
     if (op_ret < 0) {
@@ -5166,11 +5164,12 @@ void RGWPutLC::execute()
   if (op_ret < 0)
     return;
 
-  ldpp_dout(this, 15) << "read len=" << len << " data=" << (data ? data : "") << dendl;
+  char* buf = data.c_str();
+  ldpp_dout(this, 15) << "read len=" << data.length() << " data=" << (buf ? buf : "") << dendl;
 
   MD5 data_hash;
   unsigned char data_hash_res[CEPH_CRYPTO_MD5_DIGESTSIZE];
-  data_hash.Update(reinterpret_cast<const unsigned char*>(data), len);
+  data_hash.Update(reinterpret_cast<const unsigned char*>(buf), data.length());
   data_hash.Final(data_hash_res);
 
   if (memcmp(data_hash_res, content_md5_bin.c_str(), CEPH_CRYPTO_MD5_DIGESTSIZE) != 0) {
@@ -5183,7 +5182,7 @@ void RGWPutLC::execute()
     return;
   }
 
-  if (!parser.parse(data, len, 1)) {
+  if (!parser.parse(buf, data.length(), 1)) {
     op_ret = -ERR_MALFORMED_XML;
     return;
   }
@@ -5652,7 +5651,7 @@ void RGWCompleteMultipart::execute()
     return;
   }
 
-  if (!data || !len) {
+  if (!data.length()) {
     op_ret = -ERR_MALFORMED_XML;
     return;
   }
@@ -5662,7 +5661,7 @@ void RGWCompleteMultipart::execute()
     return;
   }
 
-  if (!parser.parse(data, len, 1)) {
+  if (!parser.parse(data.c_str(), data.length(), 1)) {
     op_ret = -ERR_MALFORMED_XML;
     return;
   }
@@ -6099,13 +6098,15 @@ void RGWDeleteMultiObj::execute()
   vector<rgw_obj_key>::iterator iter;
   RGWMultiDelXMLParser parser;
   RGWObjectCtx *obj_ctx = static_cast<RGWObjectCtx *>(s->obj_ctx);
+  char* buf;
 
   op_ret = get_params();
   if (op_ret < 0) {
     goto error;
   }
 
-  if (!data) {
+  buf = data.c_str();
+  if (!buf) {
     op_ret = -EINVAL;
     goto error;
   }
@@ -6115,7 +6116,7 @@ void RGWDeleteMultiObj::execute()
     goto error;
   }
 
-  if (!parser.parse(data, len, 1)) {
+  if (!parser.parse(buf, data.length(), 1)) {
     op_ret = -EINVAL;
     goto error;
   }
@@ -6213,12 +6214,10 @@ void RGWDeleteMultiObj::execute()
 done:
   // will likely segfault if begin_response() has not been called
   end_response();
-  free(data);
   return;
 
 error:
   send_status();
-  free(data);
   return;
 
 }
@@ -7211,7 +7210,8 @@ int RGWPutBucketPolicy::get_params()
   const auto max_size = s->cct->_conf->rgw_max_put_param_size;
   // At some point when I have more time I want to make a version of
   // rgw_rest_read_all_input that doesn't use malloc.
-  op_ret = rgw_rest_read_all_input(s, &data, &len, max_size, false);
+  std::tie(op_ret, data) = rgw_rest_read_all_input(s, max_size, false);
+
   // And throws exceptions.
   return op_ret;
 }
@@ -7223,10 +7223,8 @@ void RGWPutBucketPolicy::execute()
     return;
   }
 
-  bufferlist in_data = bufferlist::static_from_mem(data, len);
-
   if (!store->is_meta_master()) {
-    op_ret = forward_request_to_master(s, NULL, store, in_data, nullptr);
+    op_ret = forward_request_to_master(s, NULL, store, data, nullptr);
     if (op_ret < 0) {
       ldpp_dout(this, 20) << "forward_request_to_master returned ret=" << op_ret << dendl;
       return;
@@ -7234,7 +7232,7 @@ void RGWPutBucketPolicy::execute()
   }
 
   try {
-    const Policy p(s->cct, s->bucket_tenant, in_data);
+    const Policy p(s->cct, s->bucket_tenant, data);
     op_ret = retry_raced_bucket_write(store, s, [&p, this] {
 	auto attrs = s->bucket_attrs;
 	attrs[RGW_ATTR_IAM_POLICY].clear();
