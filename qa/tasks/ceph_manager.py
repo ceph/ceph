@@ -1198,7 +1198,7 @@ class CephManager:
         if watch_channel is not None:
             args.append("--watch-channel")
             args.append(watch_channel)
-        return self.controller.run(args, wait=False, stdout=StringIO(), stdin=run.PIPE)
+        return self.controller.run(args=args, wait=False, stdout=StringIO(), stdin=run.PIPE)
 
     def flush_pg_stats(self, osds, no_wait=None, wait_for_mon=300):
         """
