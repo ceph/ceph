@@ -711,7 +711,7 @@ Highlights since Giant include:
   vastly improved in Giant, and more improvements have been made now
   in Hammer.  Although we still recommend caution when storing
   important data in CephFS, we do encourage testing for non-critical
-  workloads so that we can better guage the feature, usability,
+  workloads so that we can better gauge the feature, usability,
   performance, and stability gaps.
 * *CRUSH improvements*: We have added a new straw2 bucket algorithm
   that reduces the amount of data migration required when changes are
@@ -737,7 +737,7 @@ Other highlights since Firefly include:
   performance of single-MDS systems is vastly improved in Giant.
   Although we do not yet recommend CephFS for production deployments,
   we do encourage testing for non-critical workloads so that we can
-  better guage the feature, usability, performance, and stability
+  better gauge the feature, usability, performance, and stability
   gaps.
 * *Local Recovery Codes*: the OSDs now support an erasure-coding scheme
   that stores some additional data blocks to reduce the IO required to
@@ -843,7 +843,7 @@ Upgrading from v0.87.x Giant
   that it is untested and may destroy data, you need to add the
   following to your ceph.conf::
 
-    enable experimental unrecoverable data corrupting featuers = keyvaluestore
+    enable experimental unrecoverable data corrupting features = keyvaluestore
 
 * The following librados C API function calls take a 'flags' argument whose value
   is now correctly interpreted:
@@ -869,7 +869,7 @@ Upgrading from v0.87.x Giant
   to track PG stat summations over different categories of objects for use by
   radosgw.  It is no longer has any known users and is prone to abuse because it
   can lead to a pg_stat_t structure that is unbounded.  The librados API calls
-  that accept this field now ignore it, and the OSD no longers tracks the
+  that accept this field now ignore it, and the OSD no longer tracks the
   per-category summations.
 
 * The output for 'rados df' has changed.  The 'category' level has been
@@ -1823,7 +1823,7 @@ Upgrading
   that it is untested and may destroy data, you need to add the
   following to your ceph.conf::
 
-    enable experimental unrecoverable data corrupting featuers = keyvaluestore
+    enable experimental unrecoverable data corrupting features = keyvaluestore
 
 * The following librados C API function calls take a 'flags' argument whose value
   is now correctly interpreted:
@@ -1945,7 +1945,7 @@ Upgrading
   to track PG stat summations over different categories of objects for use by
   radosgw.  It is no longer has any known users and is prone to abuse because it
   can lead to a pg_stat_t structure that is unbounded.  The librados API calls
-  that accept this field now ignore it, and the OSD no longers tracks the
+  that accept this field now ignore it, and the OSD no longer tracks the
   per-category summations.
 
 * The output for 'rados df' has changed.  The 'category' level has been

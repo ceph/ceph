@@ -161,7 +161,7 @@ v0.87.x.  Highlights for Giant include:
   performance of single-MDS systems is vastly improved in Giant.
   Although we do not yet recommend CephFS for production deployments,
   we do encourage testing for non-critical workloads so that we can
-  better guage the feature, usability, performance, and stability
+  better gauge the feature, usability, performance, and stability
   gaps.
 * *Local Recovery Codes*: the OSDs now support an erasure-coding scheme
   that stores some additional data blocks to reduce the IO required to
@@ -705,7 +705,7 @@ Major items include:
 * LTTNG tracing framework, with initial tracepoints in librados,
   librbd, and the OSD FileStore backend
 * separate monitor audit log for all administrative commands
-* asynchronos monitor transaction commits to reduce the impact on
+* asynchronous monitor transaction commits to reduce the impact on
   monitor read requests while processing updates
 * low-level tool for working with individual OSD data stores for
   debugging, recovery, and testing

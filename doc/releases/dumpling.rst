@@ -404,7 +404,7 @@ For more detailed information, see :download:`the complete changelog <../changel
 v0.67.2 "Dumpling"
 ==================
 
-This is an imporant point release for Dumpling.  Most notably, it
+This is an important point release for Dumpling.  Most notably, it
 fixes a problem when upgrading directly from v0.56.x Bobtail to
 v0.67.x Dumpling (without stopping at v0.61.x Cuttlefish along the
 way).  It also fixes a problem with the CLI parsing of the CEPH_ARGS
@@ -543,7 +543,7 @@ Upgrading from v0.66
 * ceph-osd now requires a max file descriptor limit (e.g., ``ulimit -n
   ...``) of at least
   filestore_wbthrottle_(xfs|btrfs)_inodes_hard_limit (5000 by default)
-  in order to accomodate the new write back throttle system.  On
+  in order to accommodate the new write back throttle system.  On
   Ubuntu, upstart now sets the fd limit to 32k.  On other platforms,
   the sysvinit script will set it to 32k by default (still
   overrideable via max_open_files).  If this field has been customized
@@ -860,7 +860,7 @@ Upgrading
   introduced in v0.59 and Linux kernel version v3.9.  If you wish to
   access the cluster from an older kernel, set the 'osd pool default
   flag hashpspool = false' option in your ceph.conf prior to creating
-  the cluster or creating new pools.  Note that the presense of any
+  the cluster or creating new pools.  Note that the presence of any
   pool in the cluster with the flag enabled will make the OSD require
   support from all clients.
 

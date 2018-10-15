@@ -40,7 +40,7 @@ Notable Changes
     mitigate data sync getting blocked during network issues
 
   * Option `rgw s3 auth order` configurable added which takes a comma
-    seperated list of order to try for s3 authentication when external
+    separated list of order to try for s3 authentication when external
     engines are involved.
 
 Changelog
@@ -426,7 +426,7 @@ v12.2.5 Luminous
 
 This is the fifth bugfix release of Luminous v12.2.x long term stable
 release series. This release contains a range of bug fixes across all
-compoenents of Ceph. We recommend all the users of 12.2.x series to
+components of Ceph. We recommend all the users of 12.2.x series to
 update.
 
 Notable Changes
@@ -1513,7 +1513,7 @@ Upgrade from Jewel or Kraken
      # ceph osd set sortbitwise
 
 #. Make sure your cluster is stable and healthy (no down or
-   recoverying OSDs).  (Optional, but recommended.)
+   recovering OSDs).  (Optional, but recommended.)
 
 #. Do not create any new erasure-code pools while upgrading the monitors.
 
@@ -1651,7 +1651,7 @@ upgrades from Jewel to Luminous.
 * The 'rgw rest getusage op compat' config option allows you to dump
   (or not dump) the description of user stats in the S3 GetUsage
   API. This option defaults to false.  If the value is true, the
-  reponse data for GetUsage looks like::
+  response data for GetUsage looks like::
 
     "stats": {
                 "TotalBytes": 516,
@@ -1659,7 +1659,7 @@ upgrades from Jewel to Luminous.
                 "TotalEntries": 1
              }
 
-  If the value is false, the reponse for GetUsage looks as it did before::
+  If the value is false, the response for GetUsage looks as it did before::
 
     {
          516,
