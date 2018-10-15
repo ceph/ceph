@@ -298,6 +298,9 @@ public:
   const PGPool& get_pool() const {
     return pool;
   }
+  unsigned get_pg_num_pending() const {
+    return pool.info.get_pg_num_pending();
+  }
   uint64_t get_last_user_version() const {
     return info.last_user_version;
   }

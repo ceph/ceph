@@ -1696,19 +1696,35 @@ bool OSDService::try_finish_pg_delete(PG *pg, unsigned old_pg_num)
 
 void OSDService::set_ready_to_merge_source(PG *pg)
 {
+  auto source = pg->pg_id.pgid;
+  auto target = source.get_parent();
   Mutex::Locker l(merge_lock);
-  dout(10) << __func__ << " " << pg->pg_id << dendl;
-  ready_to_merge_source.insert(pg->pg_id.pgid);
-  assert(not_ready_to_merge_source.count(pg->pg_id.pgid) == 0);
+  dout(10) << __func__ << " " << source << dendl;
+  if (not_ready_to_merge_target.count(target)) {
+    dout(10) << __func__ << " target " << target
+             << " not ready, not setting" << dendl;
+    return;
+  }
+  ready_to_merge_source.insert(source);
+  assert(not_ready_to_merge_source.count(source) == 0);
   _send_ready_to_merge();
 }
 
 void OSDService::set_ready_to_merge_target(PG *pg, epoch_t last_epoch_clean)
 {
+  auto target = pg->pg_id.pgid;
+  auto source = target;
+  source.set_ps(pg->get_pg_num_pending());
+  assert(source.get_parent() == target);
   Mutex::Locker l(merge_lock);
-  dout(10) << __func__ << " " << pg->pg_id << dendl;
-  ready_to_merge_target.insert(make_pair(pg->pg_id.pgid, last_epoch_clean));
-  assert(not_ready_to_merge_target.count(pg->pg_id.pgid) == 0);
+  dout(10) << __func__ << " " << target << dendl;
+  if (not_ready_to_merge_source.count(source)) {
+    dout(10) << __func__ << " source " << source
+             << " not ready, not setting" << dendl;
+    return;
+  }
+  ready_to_merge_target.insert(make_pair(target, last_epoch_clean));
+  assert(not_ready_to_merge_target.count(target) == 0);
   _send_ready_to_merge();
 }
 
@@ -1718,6 +1734,7 @@ void OSDService::set_not_ready_to_merge_source(pg_t source)
   dout(10) << __func__ << " " << source << dendl;
   not_ready_to_merge_source.insert(source);
   assert(ready_to_merge_source.count(source) == 0);
+  ready_to_merge_target.erase(source.get_parent());
   _send_ready_to_merge();
 }
 
@@ -1727,6 +1744,7 @@ void OSDService::set_not_ready_to_merge_target(pg_t target, pg_t source)
   dout(10) << __func__ << " " << target << " source " << source << dendl;
   not_ready_to_merge_target[target] = source;
   assert(ready_to_merge_target.count(target) == 0);
+  ready_to_merge_source.erase(source);
   _send_ready_to_merge();
 }
 
