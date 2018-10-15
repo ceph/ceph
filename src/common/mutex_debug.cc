@@ -64,8 +64,6 @@ ceph::mono_time mutex_debugging_base::before_lock_blocks() {
 
 void mutex_debugging_base::after_lock_blocks(ceph::mono_time start,
 					     bool no_lockdep) {
-  if (!no_lockdep && g_lockdep)
-    _locked();
 }
 } // namespace mutex_debug_detail
 } // namespace ceph
