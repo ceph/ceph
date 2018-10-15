@@ -145,7 +145,20 @@ void add_devices(
   map<string, int> got;
   parse_devices(cct, devs, &got, nullptr, nullptr);
   for(auto e : got) {
-    cout << " slot " << e.second << " " << e.first << std::endl;
+    char target_path[PATH_MAX] = "";
+    if(!e.first.empty()) {
+      if (realpath(e.first.c_str(), target_path) == nullptr) {
+	cerr << "failed to retrieve absolute path for " << e.first
+	      << ": " << cpp_strerror(errno)
+	      << std::endl;
+      }
+    }
+
+    cout << " slot " << e.second << " " << e.first;
+    if (target_path[0]) {
+      cout << " -> " << target_path;
+    }
+    cout << std::endl;
     int r = fs->add_block_device(e.second, e.first, false);
     if (r < 0) {
       cerr << "unable to open " << e.first << ": " << cpp_strerror(r) << std::endl;
