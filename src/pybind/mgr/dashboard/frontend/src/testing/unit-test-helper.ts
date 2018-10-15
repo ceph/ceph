@@ -63,41 +63,31 @@ export class PermissionHelper {
     singleExecuting?: any; // uses 'single' if not defined
     multiple?: any; // uses 'empty' if not defined
   }) {
-    this.testSingleScenario(
+    this.testScenario( // 'multiple selections'
       [{}, {}],
-      'multiple selections',
       fn,
       _.isUndefined(multiple) ? empty : multiple
     );
-    this.testSingleScenario(
+    this.testScenario( // 'select executing item'
       [{ cdExecuting: 'someAction' }],
-      'select executing item',
       fn,
       _.isUndefined(singleExecuting) ? single : singleExecuting
     );
-    this.testSingleScenario([{}], 'select non-executing item', fn, single);
-    this.testSingleScenario([], 'no selection', fn, empty);
+    this.testScenario([{}], fn, single); // 'select non-executing item'
+    this.testScenario([], fn, empty); // 'no selection'
   }
 
-  private testSingleScenario(
+  private testScenario(
     selection: object[],
-    description: string,
     fn: () => any,
     expected: any
   ) {
     this.setSelection(selection);
-    this.readableExpect(description, fn, expected);
+    expect(fn()).toBe(expected);
   }
 
   setSelection(selection: object[]) {
     this.tableActions.selection.selected = selection;
     this.tableActions.selection.update();
-  }
-
-  private readableExpect(task: string, fn: () => any, expected: any) {
-    expect({ task: task, expected: fn() }).toEqual({
-      task: task,
-      expected: expected
-    });
   }
 }
