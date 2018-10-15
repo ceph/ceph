@@ -113,6 +113,7 @@ private:
 protected:
   uint64_t size;
   uint64_t block_size;
+  bool support_discard = false;
   bool rotational = true;
 
 public:
