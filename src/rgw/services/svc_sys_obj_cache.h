@@ -138,6 +138,10 @@ public:
 
   bool put(RGWSI_SysObj_Cache *svc, const string& key, T *entry,
 	   std::initializer_list<rgw_cache_entry_info *> cache_info_entries) {
+    if (!svc) {
+      return false;
+    }
+
     Entry chain_entry(this, key, entry);
 
     /* we need the svc cache to call us under its lock to maintain lock ordering */
