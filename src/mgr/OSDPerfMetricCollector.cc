@@ -16,7 +16,7 @@ OSDPerfMetricCollector::OSDPerfMetricCollector(Listener &listener)
 }
 
 std::list<OSDPerfMetricQuery> OSDPerfMetricCollector::get_queries() {
-  Mutex::Locker locker(lock);
+  std::lock_guard locker(lock);
 
   std::list<OSDPerfMetricQuery> query_list;
   for (auto &it : queries) {
@@ -31,7 +31,7 @@ int OSDPerfMetricCollector::add_query(const OSDPerfMetricQuery& query) {
   bool notify = false;
 
   {
-    Mutex::Locker locker(lock);
+    std::lock_guard locker(lock);
 
     query_id = next_query_id++;
     auto it = queries.find(query);
@@ -56,7 +56,7 @@ int OSDPerfMetricCollector::remove_query(int query_id) {
   bool notify = false;
 
   {
-    Mutex::Locker locker(lock);
+    std::lock_guard locker(lock);
 
     for (auto it = queries.begin() ; it != queries.end(); it++) {
       auto &ids = it->second;
@@ -92,7 +92,7 @@ void OSDPerfMetricCollector::remove_all_queries() {
   bool notify;
 
   {
-    Mutex::Locker locker(lock);
+    std::lock_guard locker(lock);
 
     notify = !queries.empty();
     queries.clear();

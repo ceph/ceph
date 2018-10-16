@@ -39,7 +39,7 @@ MgrClient::MgrClient(CephContext *cct_, Messenger *msgr_)
 
 void MgrClient::init()
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
 
   ceph_assert(msgr != nullptr);
 
@@ -48,7 +48,7 @@ void MgrClient::init()
 
 void MgrClient::shutdown()
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   ldout(cct, 10) << dendl;
 
   if (connect_retry_callback) {
@@ -83,7 +83,7 @@ void MgrClient::shutdown()
 
 bool MgrClient::ms_dispatch(Message *m)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
 
   switch(m->get_type()) {
   case MSG_MGR_MAP:
@@ -219,7 +219,7 @@ bool MgrClient::handle_mgr_map(MMgrMap *m)
 
 bool MgrClient::ms_handle_reset(Connection *con)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   if (session && con == session->con) {
     ldout(cct, 4) << __func__ << " con " << con << dendl;
     reconnect();
@@ -359,7 +359,7 @@ void MgrClient::_send_report()
 
 void MgrClient::send_pgstats()
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   _send_pgstats();
 }
 
@@ -415,7 +415,7 @@ int MgrClient::start_command(const vector<string>& cmd, const bufferlist& inbl,
                   bufferlist *outbl, string *outs,
                   Context *onfinish)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
 
   ldout(cct, 20) << "cmd: " << cmd << dendl;
 
@@ -479,7 +479,7 @@ int MgrClient::service_daemon_register(
   const std::string& name,
   const std::map<std::string,std::string>& metadata)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   if (service == "osd" ||
       service == "mds" ||
       service == "client" ||
@@ -509,7 +509,7 @@ int MgrClient::service_daemon_register(
 int MgrClient::service_daemon_update_status(
   std::map<std::string,std::string>&& status)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   ldout(cct,10) << status << dendl;
   daemon_status = std::move(status);
   daemon_dirty_status = true;
@@ -518,7 +518,7 @@ int MgrClient::service_daemon_update_status(
 
 void MgrClient::update_daemon_health(std::vector<DaemonHealthMetric>&& metrics)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   daemon_health_metrics = std::move(metrics);
 }
 

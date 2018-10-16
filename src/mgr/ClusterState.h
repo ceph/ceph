@@ -70,28 +70,28 @@ public:
   void notify_osdmap(const OSDMap &osd_map);
 
   bool have_fsmap() const {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     return fsmap.get_epoch() > 0;
   }
 
   template<typename Callback, typename...Args>
   void with_servicemap(Callback&& cb, Args&&...args) const
   {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     std::forward<Callback>(cb)(servicemap, std::forward<Args>(args)...);
   }
 
   template<typename Callback, typename...Args>
   void with_fsmap(Callback&& cb, Args&&...args) const
   {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     std::forward<Callback>(cb)(fsmap, std::forward<Args>(args)...);
   }
 
   template<typename Callback, typename...Args>
   void with_mgrmap(Callback&& cb, Args&&...args) const
   {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     std::forward<Callback>(cb)(mgr_map, std::forward<Args>(args)...);
   }
 
@@ -99,7 +99,7 @@ public:
   auto with_pgmap(Callback&& cb, Args&&...args) const ->
     decltype(cb(pg_map, std::forward<Args>(args)...))
   {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     return std::forward<Callback>(cb)(pg_map, std::forward<Args>(args)...);
   }
 
@@ -107,14 +107,14 @@ public:
   auto with_mutable_pgmap(Callback&& cb, Args&&...args) ->
     decltype(cb(pg_map, std::forward<Args>(args)...))
   {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     return std::forward<Callback>(cb)(pg_map, std::forward<Args>(args)...);
   }
 
   template<typename... Args>
   void with_monmap(Args &&... args) const
   {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     ceph_assert(monc != nullptr);
     monc->with_monmap(std::forward<Args>(args)...);
   }
