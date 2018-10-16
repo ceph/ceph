@@ -9,15 +9,12 @@
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/timer.hh>
 
-#include "auth/AuthClientHandler.h"
 #include "auth/AuthMethodList.h"
 #include "auth/KeyRing.h"
-#include "auth/RotatingKeyRing.h"
 
-#include "crimson/net/Connection.h"
 #include "crimson/net/Dispatcher.h"
+#include "crimson/net/Fwd.h"
 
-#include "messages/MAuthReply.h"
 #include "mon/MonMap.h"
 
 #include "mon/MonSub.h"
@@ -27,6 +24,7 @@ namespace ceph::net {
   class Messenger;
 }
 
+class MAuthReply;
 struct MMonMap;
 struct MMonSubscribeAck;
 struct MMonGetVersionReply;
@@ -36,38 +34,7 @@ struct MConfig;
 
 namespace ceph::mon {
 
-class Connection {
-public:
-  Connection(ceph::net::ConnectionRef conn,
-	     KeyRing* keyring);
-  seastar::future<> handle_auth_reply(Ref<MAuthReply> m);
-  seastar::future<> authenticate(epoch_t epoch,
-				 const EntityName& name,
-				 const AuthMethodList& auth_methods,
-				 uint32_t want_keys);
-  seastar::future<> close();
-  bool is_my_peer(const entity_addr_t& addr) const;
-
-  seastar::future<> renew_tickets();
-  ceph::net::ConnectionRef get_conn();
-
-private:
-  seastar::future<> setup_session(epoch_t epoch,
-				  const AuthMethodList& auth_methods,
-				  const EntityName& name);
-  std::unique_ptr<AuthClientHandler> create_auth(Ref<MAuthReply> m,
-						 const EntityName& name,
-						 uint32_t want_keys);
-  seastar::future<bool> do_auth();
-
-private:
-  bool closed = false;
-  seastar::promise<Ref<MAuthReply>> reply;
-  ceph::net::ConnectionRef conn;
-  std::unique_ptr<AuthClientHandler> auth;
-  RotatingKeyRing rotating_keyring;
-  uint64_t global_id;
-};
+class Connection;
 
 class Client : public ceph::net::Dispatcher {
   const EntityName entity_name;
@@ -100,6 +67,8 @@ class Client : public ceph::net::Dispatcher {
 public:
   Client(const EntityName& name,
 	 ceph::net::Messenger& messenger);
+  Client(Client&&);
+  ~Client();
   seastar::future<> load_keyring();
   seastar::future<> build_initial_map();
   seastar::future<> authenticate(std::chrono::seconds seconds);
