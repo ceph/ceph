@@ -231,7 +231,7 @@ int RGWSI_Zone::list_zones(list<string>& zones)
   RGWZoneParams zoneparams;
   RGWSI_SysObj::Pool syspool = sysobj_svc->get_pool(zoneparams.get_pool(cct));
 
-  return syspool.op().list_prefixed_objs(zonegroup_names_oid_prefix, &zones);
+  return syspool.op().list_prefixed_objs(zone_names_oid_prefix, &zones);
 }
 
 int RGWSI_Zone::list_realms(list<string>& realms)
@@ -239,7 +239,7 @@ int RGWSI_Zone::list_realms(list<string>& realms)
   RGWRealm realm(cct, sysobj_svc);
   RGWSI_SysObj::Pool syspool = sysobj_svc->get_pool(realm.get_pool(cct));
 
-  return syspool.op().list_prefixed_objs(zonegroup_names_oid_prefix, &realms);
+  return syspool.op().list_prefixed_objs(realm_names_oid_prefix, &realms);
 }
 
 int RGWSI_Zone::list_periods(list<string>& periods)
