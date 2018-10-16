@@ -37,7 +37,9 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unknown-pragmas")
 if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -rdynamic")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wstrict-null-sentinel -Woverloaded-virtual")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-new-ttp-matching")
+  if(CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 7.0.0)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-new-ttp-matching")
+  endif(CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 7.0.0)
   # cmake does not add '-pie' for executables even if
   # CMAKE_POSITION_INDEPENDENT_CODE is TRUE.
   if(EXE_LINKER_USE_PIE)
