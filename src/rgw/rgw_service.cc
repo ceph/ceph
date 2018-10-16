@@ -23,7 +23,8 @@ RGWServices_Def::~RGWServices_Def()
 }
 
 int RGWServices_Def::init(CephContext *cct,
-			  bool have_cache)
+			  bool have_cache,
+                          bool raw)
 {
   finisher = std::make_unique<RGWSI_Finisher>(cct);
   notify = std::make_unique<RGWSI_Notify>(cct);
@@ -60,10 +61,12 @@ int RGWServices_Def::init(CephContext *cct,
     return r;
   }
 
-  r = notify->start();
-  if (r < 0) {
-    ldout(cct, 0) << "ERROR: failed to start notify service (" << cpp_strerror(-r) << dendl;
-    return r;
+  if (!raw) {
+    r = notify->start();
+    if (r < 0) {
+      ldout(cct, 0) << "ERROR: failed to start notify service (" << cpp_strerror(-r) << dendl;
+      return r;
+    }
   }
 
   r = rados->start();
@@ -72,10 +75,12 @@ int RGWServices_Def::init(CephContext *cct,
     return r;
   }
 
-  r = zone->start();
-  if (r < 0) {
-    ldout(cct, 0) << "ERROR: failed to start zone service (" << cpp_strerror(-r) << dendl;
-    return r;
+  if (!raw) {
+    r = zone->start();
+    if (r < 0) {
+      ldout(cct, 0) << "ERROR: failed to start zone service (" << cpp_strerror(-r) << dendl;
+      return r;
+    }
   }
 
   r = zone_utils->start();
@@ -137,9 +142,9 @@ void RGWServices_Def::shutdown()
 }
 
 
-int RGWServices::init(CephContext *cct, bool have_cache)
+int RGWServices::do_init(CephContext *cct, bool have_cache, bool raw)
 {
-  int r = _svc.init(cct, have_cache);
+  int r = _svc.init(cct, have_cache, raw);
   if (r < 0) {
     return r;
   }
