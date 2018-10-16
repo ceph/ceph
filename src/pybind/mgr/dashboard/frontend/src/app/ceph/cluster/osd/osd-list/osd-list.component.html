@@ -34,9 +34,7 @@
                  let-value="value">
       <span *ngFor="let state of value; last as last">
         <span class="label"
-              [ngClass]="{'label-success': ['in', 'up'].includes(state), 'label-danger': ['down', 'out'].includes(state)}">
-         {{ state }}
-        </span>
+              [ngClass]="{'label-success': ['in', 'up'].includes(state), 'label-danger': ['down', 'out'].includes(state)}">{{ state }}</span>
         <span *ngIf="!last">&nbsp;</span>
       </span>
     </ng-template>
