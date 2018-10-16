@@ -68,7 +68,7 @@ struct MonClientPinger : public Dispatcher {
   }
 
   bool ms_dispatch(Message *m) override {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     if (m->get_type() != CEPH_MSG_PING)
       return false;
 
@@ -83,7 +83,7 @@ struct MonClientPinger : public Dispatcher {
     return true;
   }
   bool ms_handle_reset(Connection *con) override {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     done = true;
     ping_recvd_cond.SignalAll();
     return true;
@@ -254,23 +254,23 @@ private:
 
 public:
   void renew_subs() {
-    Mutex::Locker l(monc_lock);
+    std::lock_guard l(monc_lock);
     _renew_subs();
   }
   bool sub_want(string what, version_t start, unsigned flags) {
-    Mutex::Locker l(monc_lock);
+    std::lock_guard l(monc_lock);
     return sub.want(what, start, flags);
   }
   void sub_got(string what, version_t have) {
-    Mutex::Locker l(monc_lock);
+    std::lock_guard l(monc_lock);
     sub.got(what, have);
   }
   void sub_unwant(string what) {
-    Mutex::Locker l(monc_lock);
+    std::lock_guard l(monc_lock);
     sub.unwant(what);
   }
   bool sub_want_increment(string what, version_t start, unsigned flags) {
-    Mutex::Locker l(monc_lock);
+    std::lock_guard l(monc_lock);
     return sub.inc_want(what, start, flags);
   }
   
@@ -301,11 +301,11 @@ public:
    * putting the message reference!
    */
   void set_passthrough_monmap() {
-    Mutex::Locker l(monc_lock);
+    std::lock_guard l(monc_lock);
     passthrough_monmap = true;
   }
   void unset_passthrough_monmap() {
-    Mutex::Locker l(monc_lock);
+    std::lock_guard l(monc_lock);
     passthrough_monmap = false;
   }
   /**
@@ -321,7 +321,7 @@ public:
   int ping_monitor(const string &mon_id, string *result_reply);
 
   void send_mon_message(Message *m) {
-    Mutex::Locker l(monc_lock);
+    std::lock_guard l(monc_lock);
     _send_mon_message(m);
   }
   /**
@@ -332,7 +332,7 @@ public:
    * to reconnect to another monitor.
    */
   void reopen_session(Context *cb=NULL) {
-    Mutex::Locker l(monc_lock);
+    std::lock_guard l(monc_lock);
     if (cb) {
       session_established_context.reset(cb);
     }
@@ -348,18 +348,18 @@ public:
   }
 
   entity_addrvec_t get_mon_addrs(unsigned i) const {
-    Mutex::Locker l(monc_lock);
+    std::lock_guard l(monc_lock);
     if (i < monmap.size())
       return monmap.get_addrs(i);
     return entity_addrvec_t();
   }
   int get_num_mon() const {
-    Mutex::Locker l(monc_lock);
+    std::lock_guard l(monc_lock);
     return monmap.size();
   }
 
   uint64_t get_global_id() const {
-    Mutex::Locker l(monc_lock);
+    std::lock_guard l(monc_lock);
     return global_id;
   }
 
@@ -434,7 +434,7 @@ public:
   template<typename Callback, typename...Args>
   auto with_monmap(Callback&& cb, Args&&...args) const ->
     decltype(cb(monmap, std::forward<Args>(args)...)) {
-    Mutex::Locker l(monc_lock);
+    std::lock_guard l(monc_lock);
     return std::forward<Callback>(cb)(monmap, std::forward<Args>(args)...);
   }
 
