@@ -2358,7 +2358,9 @@ void PG::try_mark_clean()
       if (pool.info.is_pending_merge(info.pgid.pgid, &target)) {
 	if (target) {
 	  ldout(cct, 10) << "ready to merge (target)" << dendl;
-	  osd->set_ready_to_merge_target(this, info.history.last_epoch_clean);
+	  osd->set_ready_to_merge_target(this,
+					 info.history.last_epoch_started,
+					 info.history.last_epoch_clean);
 	} else {
 	  ldout(cct, 10) << "ready to merge (source)" << dendl;
 	  osd->set_ready_to_merge_source(this);
@@ -2677,6 +2679,7 @@ void PG::finish_split_stats(const object_stat_sum_t& stats, ObjectStore::Transac
 
 void PG::merge_from(map<spg_t,PGRef>& sources, RecoveryCtx *rctx,
 		    unsigned split_bits,
+		    epoch_t dec_last_epoch_started,
 		    epoch_t dec_last_epoch_clean)
 {
   dout(10) << __func__ << " from " << sources << " split_bits " << split_bits
@@ -2769,11 +2772,12 @@ void PG::merge_from(map<spg_t,PGRef>& sources, RecoveryCtx *rctx,
 
     // use last_epoch_clean value for last_epoch_started, though--we must be
     // conservative here to avoid breaking peering, calc_acting, etc.
-    info.history.last_epoch_started = dec_last_epoch_clean;
-    info.last_epoch_started = dec_last_epoch_clean;
+    info.history.last_epoch_started = dec_last_epoch_started;
+    info.last_epoch_started = dec_last_epoch_started;
     dout(10) << __func__
-	     << " set last_epoch_{started,clean} to " << dec_last_epoch_clean
-	     << " from pg_num_dec_last_epoch_clean, source pg history was "
+	     << " set les/c to " << dec_last_epoch_started << "/"
+	     << dec_last_epoch_clean
+	     << " from pool last_dec_*, source pg history was "
 	     << sources.begin()->second->info.history
 	     << dendl;
   }
