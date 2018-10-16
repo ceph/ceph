@@ -675,7 +675,7 @@ void PGBackend::be_compare_scrubmaps(
   ostream &errorstream)
 {
   map<hobject_t,ScrubMap::object, hobject_t::BitwiseComparator>::const_iterator i;
-  map<pg_shard_t, ScrubMap *, hobject_t::BitwiseComparator>::const_iterator j;
+  map<pg_shard_t, ScrubMap *>::const_iterator j;
   set<hobject_t, hobject_t::BitwiseComparator> master_set;
   utime_t now = ceph_clock_now(NULL);
 
