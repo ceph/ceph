@@ -221,6 +221,11 @@ def get_openstack_parser():
         default=0,
     )
     parser.add_argument(
+        '--setup',
+        action='store_true', default=False,
+        help='deploy the cluster, if it does not exist',
+    )
+    parser.add_argument(
         '--teardown',
         action='store_true', default=None,
         help='destroy the cluster, if it exists',
