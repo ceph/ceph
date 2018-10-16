@@ -57,3 +57,16 @@ endif()
 if(WITH_OSD_INSTRUMENT_FUNCTIONS)
   add_dependencies(osd cyg_profile_tp)
 endif()
+
+# libcls_* are runtime dependencies
+add_dependencies(osd cls_journal cls_hello cls_lock cls_log cls_numops
+  cls_refcount cls_timeindex cls_user cls_version cls_cas)
+if(WITH_CEPHFS)
+  add_dependencies(osd cls_cephfs)
+endif()
+if(WITH_RBD)
+  add_dependencies(osd cls_rbd)
+endif()
+if(WITH_RADOSGW)
+  add_dependencies(osd cls_otp cls_rgw)
+endif()
