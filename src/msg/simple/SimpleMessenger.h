@@ -352,17 +352,6 @@ public:
    */
 
   /**
-   * This wraps ms_deliver_get_authorizer. We use it for Pipe.
-   */
-  AuthAuthorizer *get_authorizer(int peer_type, bool force_new);
-  /**
-   * This wraps ms_deliver_verify_authorizer; we use it for Pipe.
-   */
-  bool verify_authorizer(Connection *con, int peer_type, int protocol, bufferlist& auth,
-			 bufferlist& auth_reply,
-                         bool& isvalid,CryptoKey& session_key,
-			 std::unique_ptr<AuthAuthorizerChallenge> *challenge);
-  /**
    * Increment the global sequence for this SimpleMessenger and return it.
    * This is for the connect protocol, although it doesn't hurt if somebody
    * else calls it.

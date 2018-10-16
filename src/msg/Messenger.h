@@ -20,6 +20,10 @@
 #include <map>
 #include <deque>
 
+#include <errno.h>
+#include <sstream>
+#include <memory>
+
 #include "Message.h"
 #include "Dispatcher.h"
 #include "Policy.h"
@@ -31,6 +35,8 @@
 #include "include/ceph_features.h"
 #include "auth/Crypto.h"
 #include "common/item_history.h"
+#include "auth/AuthAuthorizeHandler.h"
+#include "include/ceph_assert.h"
 
 #include <errno.h>
 #include <sstream>
@@ -39,6 +45,8 @@
 #define SOCKET_PRIORITY_MIN_DELAY 6
 
 class Timer;
+
+class AuthAuthorizerHandlerRegistry;
 
 class Messenger {
 private:
@@ -80,6 +88,13 @@ public:
   int crcflags;
 
   using Policy = ceph::net::Policy<Throttle>;
+
+protected:
+  // for authentication
+  std::unique_ptr<AuthAuthorizeHandlerRegistry> auth_ah_service_registry;
+  std::unique_ptr<AuthAuthorizeHandlerRegistry> auth_ah_cluster_registry;
+
+public:
   /**
    * Messenger constructor. Call this from your implementation.
    * Messenger users should construct full implementations directly,
@@ -769,17 +784,11 @@ public:
    * @return True if we were able to prove or disprove correctness of
    * authorizer, false otherwise.
    */
-  bool ms_deliver_verify_authorizer(Connection *con, int peer_type,
-				    int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
-				    bool& isvalid, CryptoKey& session_key,
-				    std::unique_ptr<AuthAuthorizerChallenge> *challenge) {
-    for (const auto& dispatcher : dispatchers) {
-      if (dispatcher->ms_verify_authorizer(con, peer_type, protocol, authorizer, authorizer_reply,
-                                           isvalid, session_key, challenge))
-	return true;
-    }
-    return false;
-  }
+  bool ms_deliver_verify_authorizer(
+    Connection *con, int peer_type,
+    int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
+    bool& isvalid, CryptoKey& session_key,
+    std::unique_ptr<AuthAuthorizerChallenge> *challenge);
 
   /**
    * @} // Dispatcher Interfacing

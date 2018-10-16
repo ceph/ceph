@@ -247,7 +247,7 @@ bool MonmapMonitor::preprocess_command(MonOpRequestRef op)
   string prefix;
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
 
-  MonSession *session = m->get_session();
+  MonSession *session = op->get_session();
   if (!session) {
     mon->reply_command(op, -EACCES, "access denied", get_last_committed());
     return true;
@@ -445,7 +445,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
   string prefix;
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
 
-  MonSession *session = m->get_session();
+  MonSession *session = op->get_session();
   if (!session) {
     mon->reply_command(op, -EACCES, "access denied", get_last_committed());
     return true;
@@ -725,7 +725,7 @@ bool MonmapMonitor::preprocess_join(MonOpRequestRef op)
   MMonJoin *join = static_cast<MMonJoin*>(op->get_req());
   dout(10) << __func__ << " " << join->name << " at " << join->addr << dendl;
 
-  MonSession *session = join->get_session();
+  MonSession *session = op->get_session();
   if (!session ||
       !session->is_capable("mon", MON_CAP_W | MON_CAP_X)) {
     dout(10) << " insufficient caps" << dendl;

@@ -145,20 +145,13 @@ public:
   ~DaemonServer() override;
 
   bool ms_dispatch(Message *m) override;
+  int ms_handle_authentication(Connection *con) override;
   bool ms_handle_reset(Connection *con) override;
   void ms_handle_remote_reset(Connection *con) override {}
   bool ms_handle_refused(Connection *con) override;
   bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer,
                          bool force_new) override;
-  bool ms_verify_authorizer(
-    Connection *con,
-    int peer_type,
-    int protocol,
-    ceph::bufferlist& authorizer,
-    ceph::bufferlist& authorizer_reply,
-    bool& isvalid,
-    CryptoKey& session_key,
-    std::unique_ptr<AuthAuthorizerChallenge> *challenge) override;
+  KeyStore *ms_get_auth1_authorizer_keystore() override;
 
   bool handle_open(MMgrOpen *m);
   bool handle_close(MMgrClose *m);

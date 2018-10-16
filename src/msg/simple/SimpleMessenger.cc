@@ -425,21 +425,6 @@ Pipe *SimpleMessenger::connect_rank(const entity_addr_t& addr,
 
 
 
-AuthAuthorizer *SimpleMessenger::get_authorizer(int peer_type, bool force_new)
-{
-  return ms_deliver_get_authorizer(peer_type, force_new);
-}
-
-bool SimpleMessenger::verify_authorizer(Connection *con, int peer_type,
-					int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
-					bool& isvalid,CryptoKey& session_key,
-					std::unique_ptr<AuthAuthorizerChallenge> *challenge)
-{
-  return ms_deliver_verify_authorizer(con, peer_type, protocol, authorizer, authorizer_reply,
-				      isvalid, session_key,
-				      challenge);
-}
-
 ConnectionRef SimpleMessenger::connect_to(int type,
 					  const entity_addrvec_t& addrs)
 {

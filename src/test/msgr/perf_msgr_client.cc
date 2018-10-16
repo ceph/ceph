@@ -56,12 +56,8 @@ class MessengerClient {
     bool ms_handle_reset(Connection *con) override { return true; }
     void ms_handle_remote_reset(Connection *con) override {}
     bool ms_handle_refused(Connection *con) override { return false; }
-    bool ms_verify_authorizer(Connection *con, int peer_type, int protocol,
-                              bufferlist& authorizer, bufferlist& authorizer_reply,
-                              bool& isvalid, CryptoKey& session_key,
-			      std::unique_ptr<AuthAuthorizerChallenge> *challenge) override {
-      isvalid = true;
-      return true;
+    int ms_handle_authentication(Connection *con) override {
+      return 1;
     }
   };
 
