@@ -1231,6 +1231,8 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_unsigned("pg_placement_num_target", get_pgp_num_target());
   f->dump_unsigned("pg_num_target", get_pg_num_target());
   f->dump_unsigned("pg_num_pending", get_pg_num_pending());
+  f->dump_unsigned("pg_num_dec_last_epoch_started",
+		   get_pg_num_dec_last_epoch_started());
   f->dump_unsigned("pg_num_dec_last_epoch_clean",
 		   get_pg_num_dec_last_epoch_clean());
   f->dump_stream("last_change") << get_last_change();
@@ -1734,6 +1736,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     encode(pg_num_target, bl);
     encode(pgp_num_target, bl);
     encode(pg_num_pending, bl);
+    encode(pg_num_dec_last_epoch_started, bl);
     encode(pg_num_dec_last_epoch_clean, bl);
     encode(last_force_op_resend, bl);
   }
@@ -1899,6 +1902,7 @@ void pg_pool_t::decode(bufferlist::const_iterator& bl)
     decode(pg_num_target, bl);
     decode(pgp_num_target, bl);
     decode(pg_num_pending, bl);
+    decode(pg_num_dec_last_epoch_started, bl);
     decode(pg_num_dec_last_epoch_clean, bl);
     decode(last_force_op_resend, bl);
   } else {
@@ -1927,7 +1931,8 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
   a.pgp_num_target = 4;
   a.pg_num_target = 5;
   a.pg_num_pending = 5;
-  a.pg_num_dec_last_epoch_clean = 2;
+  a.pg_num_dec_last_epoch_started = 2;
+  a.pg_num_dec_last_epoch_clean = 3;
   a.last_change = 9;
   a.last_force_op_resend = 123823;
   a.last_force_op_resend_preluminous = 123824;
@@ -1998,8 +2003,10 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
   }
   if (p.get_pg_num_pending() != p.get_pg_num()) {
     out << " pg_num_pending " << p.get_pg_num_pending();
-    if (p.get_pg_num_dec_last_epoch_clean())
-      out << " dlec " << p.get_pg_num_dec_last_epoch_clean();
+    if (p.get_pg_num_dec_last_epoch_started() ||
+	p.get_pg_num_dec_last_epoch_clean())
+      out << " dles/c " << p.get_pg_num_dec_last_epoch_started()
+	  << "/" << p.get_pg_num_dec_last_epoch_clean();
   }
   out << " last_change " << p.get_last_change();
   if (p.get_last_force_op_resend() ||
