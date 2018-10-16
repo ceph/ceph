@@ -1412,6 +1412,7 @@ public:
     return initialize();
   }
   /** Initialize the RADOS instance and prepare to do other ops */
+  int init_svc(bool raw);
   int init_rados();
   int init_complete();
   int initialize();

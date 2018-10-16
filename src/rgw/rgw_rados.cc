@@ -1647,6 +1647,15 @@ int RGWRados::init_complete()
   return ret;
 }
 
+int RGWRados::init_svc(bool raw)
+{
+  if (raw) {
+    return svc.init_raw(cct, use_cache);
+  }
+
+  return svc.init(cct, use_cache);
+}
+
 /** 
  * Initialize the RADOS instance and prepare to do other ops
  * Returns 0 on success, -ERR# on failure.
@@ -1659,7 +1668,7 @@ int RGWRados::initialize()
     cct->_conf.get_val<double>("rgw_inject_notify_timeout_probability");
   max_notify_retries = cct->_conf.get_val<uint64_t>("rgw_max_notify_retries");
 
-  ret = svc.init(cct, use_cache);
+  ret = init_svc(false);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: failed to init services (ret=" << cpp_strerror(-ret) << ")" << dendl;
     return ret;
@@ -9892,9 +9901,15 @@ RGWRados *RGWStoreManager::init_raw_storage_provider(CephContext *cct)
 
   store->set_context(cct);
 
+  int ret = store->init_svc(true);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: failed to init services (ret=" << cpp_strerror(-ret) << ")" << dendl;
+    return nullptr;
+  }
+
   if (store->init_rados() < 0) {
     delete store;
-    return NULL;
+    return nullptr;
   }
 
   return store;

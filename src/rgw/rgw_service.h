@@ -70,7 +70,7 @@ struct RGWServices_Def
   RGWServices_Def();
   ~RGWServices_Def();
 
-  int init(CephContext *cct, bool have_cache);
+  int init(CephContext *cct, bool have_cache, bool raw_storage);
   void shutdown();
 };
 
@@ -90,7 +90,15 @@ struct RGWServices
   RGWSI_SysObj_Cache *cache{nullptr};
   RGWSI_SysObj_Core *core{nullptr};
 
-  int init(CephContext *cct, bool have_cache);
+  int do_init(CephContext *cct, bool have_cache, bool raw_storage);
+
+  int init(CephContext *cct, bool have_cache) {
+    return do_init(cct, have_cache, false);
+  }
+
+  int init_raw(CephContext *cct, bool have_cache) {
+    return do_init(cct, have_cache, true);
+  }
   void shutdown() {
     _svc.shutdown();
   }
