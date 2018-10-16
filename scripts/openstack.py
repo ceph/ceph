@@ -197,6 +197,10 @@ def get_openstack_parser():
         default='teuthology',
     )
     parser.add_argument(
+        '--nameserver',
+        help='nameserver ip address (optional)',
+    )
+    parser.add_argument(
         '--simultaneous-jobs',
         help='maximum number of jobs running in parallel',
         type=int,

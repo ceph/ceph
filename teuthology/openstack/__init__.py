@@ -825,6 +825,7 @@ class TeuthologyOpenStack(OpenStack):
                 ]
         while len(original_argv) > 0:
             if original_argv[0] in ('--name',
+                                    '--nameserver',
                                     '--conf',
                                     '--teuthology-branch',
                                     '--teuthology-git-url',
@@ -1101,6 +1102,9 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
             all_options += [ '--network ' + network ]
         if self.args.simultaneous_jobs:
             all_options += [ '--nworkers ' + str(self.args.simultaneous_jobs) ]
+        if self.args.nameserver:
+            all_options += [ '--nameserver %s' % self.args.nameserver]
+
 
         cmds = [
             "su - -c '(set -x ; %s && cd teuthology && ./bootstrap install)' "
