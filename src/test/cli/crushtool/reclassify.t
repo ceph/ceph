@@ -264,7 +264,44 @@ because the new map has a strictly summing hierarchy.
   failed to reclassify map
   [1]
 
-above fails because of ec-rack-by-2-hdd also has take default class hdd
+above fails because of ec-rack-by-2-hdd also has take default class hdd.
+
+below is an adjusted version of the same cluster's map
+
+  $ crushtool -i $TESTDIR/crush-classes/gabe2 --reclassify --reclassify-root default hdd -o foo
+  classify_root default (-1) as hdd
+    new class hdd exists as 0
+    renumbering bucket -1 -> -178
+    renumbering bucket -4 -> -179
+    renumbering bucket -25 -> -180
+    renumbering bucket -16 -> -181
+    renumbering bucket -21 -> -182
+    renumbering bucket -19 -> -183
+    renumbering bucket -15 -> -184
+    renumbering bucket -7 -> -185
+    renumbering bucket -47 -> -186
+    renumbering bucket -18 -> -187
+    renumbering bucket -8 -> -188
+    renumbering bucket -6 -> -189
+    renumbering bucket -12 -> -190
+    renumbering bucket -23 -> -191
+    renumbering bucket -22 -> -192
+    renumbering bucket -20 -> -193
+    renumbering bucket -11 -> -194
+    renumbering bucket -10 -> -195
+    renumbering bucket -17 -> -196
+    renumbering bucket -13 -> -197
+    renumbering bucket -9 -> -198
+    renumbering bucket -3 -> -199
+    renumbering bucket -14 -> -200
+    renumbering bucket -5 -> -201
+    renumbering bucket -2 -> -202
+  $ crushtool -i $TESTDIR/crush-classes/gabe2 --compare foo
+  rule 0 had 627/10240 mismatched mappings (0.0612305)
+  rule 1 had 422/6144 mismatched mappings (0.0686849)
+  warning: maps are NOT equivalent
+  [1]
+
 
 
   $ crushtool -i $TESTDIR/crush-classes/b --reclassify --reclassify-bucket %-hdd hdd default --reclassify-bucket %-ssd ssd default --reclassify-bucket ssd ssd default --reclassify-bucket hdd hdd default -o foo
