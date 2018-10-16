@@ -1001,7 +1001,7 @@ protected:
     bool oid_existed = true //indicate this oid whether exsited in backend
     );
   void register_snapset_context(SnapSetContext *ssc) {
-    Mutex::Locker l(snapset_contexts_lock);
+    std::lock_guard l(snapset_contexts_lock);
     _register_snapset_context(ssc);
   }
   void _register_snapset_context(SnapSetContext *ssc) {
@@ -1613,7 +1613,7 @@ private:
       };
       auto *pg = context< SnapTrimmer >().pg;
       if (pg->cct->_conf->osd_snap_trim_sleep > 0) {
-	Mutex::Locker l(pg->osd->sleep_lock);
+	std::lock_guard l(pg->osd->sleep_lock);
 	wakeup = pg->osd->sleep_timer.add_event_after(
 	  pg->cct->_conf->osd_snap_trim_sleep,
 	  new OnTimer{pg, pg->get_osdmap()->get_epoch()});
@@ -1625,7 +1625,7 @@ private:
       context< SnapTrimmer >().log_exit(state_name, enter_time);
       auto *pg = context< SnapTrimmer >().pg;
       if (wakeup) {
-	Mutex::Locker l(pg->osd->sleep_lock);
+	std::lock_guard l(pg->osd->sleep_lock);
 	pg->osd->sleep_timer.cancel_event(wakeup);
 	wakeup = nullptr;
       }
