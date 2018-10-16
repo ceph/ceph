@@ -79,7 +79,7 @@ class Module(MgrModule):
 
     def do_ls(self, cmd, inbuf):
         keys = []
-        for key in self.get_store_prefix('crash/').iterkeys():
+        for key in six.iterkeys(self.get_store_prefix('crash/')):
             keys.append(key.replace('crash/', ''))
         return 0, '\n'.join(keys), ''
 
