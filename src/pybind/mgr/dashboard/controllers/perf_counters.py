@@ -17,7 +17,7 @@ class PerfCounter(RESTController):
         try:
             schema = schema_dict["{}.{}".format(self.service_type, service_id)]
         except KeyError as e:
-            raise cherrypy.HTTPError(404, "{0} not found".format(e.message))
+            raise cherrypy.HTTPError(404, "{0} not found".format(e))
         counters = []
 
         for key, value in sorted(schema.items()):
