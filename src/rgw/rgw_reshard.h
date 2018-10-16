@@ -17,6 +17,42 @@
 class CephContext;
 class RGWRados;
 
+class RGWBucketReshardLock {
+  using Clock = ceph::coarse_mono_clock;
+
+  RGWRados* store;
+  const std::string lock_oid;
+  const bool ephemeral;
+  rados::cls::lock::Lock internal_lock;
+  std::chrono::seconds duration;
+
+  Clock::time_point start_time;
+  Clock::time_point renew_thresh;
+
+  void reset_time(const Clock::time_point& now) {
+    start_time = now;
+    renew_thresh = start_time + duration / 2;
+  }
+
+public:
+  RGWBucketReshardLock(RGWRados* _store,
+		       const std::string& reshard_lock_oid,
+		       bool _ephemeral);
+  RGWBucketReshardLock(RGWRados* _store,
+		       const RGWBucketInfo& bucket_info,
+		       bool _ephemeral) :
+    RGWBucketReshardLock(_store, bucket_info.bucket.get_key(':'), _ephemeral)
+  {}
+
+  int lock();
+  void unlock();
+  int renew(const Clock::time_point&);
+
+  bool should_renew(const Clock::time_point& now) const {
+    return now >= renew_thresh;
+  }
+}; // class RGWBucketReshardLock
+
 class RGWBucketReshard {
 public:
 
@@ -24,29 +60,19 @@ public:
 
   using Clock = ceph::coarse_mono_clock;
 
-  // returns 0 for success or a negative error code
-  using RenewLocksCallback = std::function<int(const Clock::time_point&)>;
-
 private:
 
   RGWRados *store;
   RGWBucketInfo bucket_info;
   std::map<string, bufferlist> bucket_attrs;
 
-  string reshard_oid;
-  rados::cls::lock::Lock reshard_lock;
-  Clock::time_point lock_start_time;
-  std::chrono::seconds lock_duration;
-  Clock::time_point lock_renew_thresh;
+  RGWBucketReshardLock reshard_lock;
+  RGWBucketReshardLock* outer_reshard_lock;
 
-  RenewLocksCallback renew_locks_callback;
-
-  int lock_bucket();
-  void unlock_bucket();
-  int renew_lock_bucket(const Clock::time_point&);
   int clear_resharding();
 
-  int create_new_bucket_instance(int new_num_shards, RGWBucketInfo& new_bucket_info);
+  int create_new_bucket_instance(int new_num_shards,
+				 RGWBucketInfo& new_bucket_info);
   int do_reshard(int num_shards,
 		 RGWBucketInfo& new_bucket_info,
 		 int max_entries,
@@ -55,10 +81,11 @@ private:
 		 Formatter *formatter);
 public:
 
-  // pass nullptr for the final parameter if no callback is used
+  // pass nullptr for the final parameter if no outer reshard lock to
+  // manage
   RGWBucketReshard(RGWRados *_store, const RGWBucketInfo& _bucket_info,
                    const std::map<string, bufferlist>& _bucket_attrs,
-		   RenewLocksCallback _renew_locks_callback);
+		   RGWBucketReshardLock* _outer_reshard_lock);
   int execute(int num_shards, int max_op_entries,
               bool verbose = false, ostream *out = nullptr,
               Formatter *formatter = nullptr,
