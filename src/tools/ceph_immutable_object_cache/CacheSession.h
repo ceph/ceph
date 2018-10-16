@@ -11,7 +11,7 @@
 #include <boost/asio/error.hpp>
 #include <boost/algorithm/string.hpp>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "SocketCommon.h"
 
 

@@ -13,7 +13,7 @@
 #include "common/WorkQueue.h"
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "CacheServer.h"

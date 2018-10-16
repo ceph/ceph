@@ -12,27 +12,6 @@
 namespace ceph {
 namespace immutable_obj_cache {
 
-class ThreadPoolSingleton : public ThreadPool {
-public:
-  ContextWQ *op_work_queue;
-
-  explicit ThreadPoolSingleton(CephContext *cct)
-    : ThreadPool(cct, "ceph::cache::thread_pool", "tp_librbd_cache", 32,
-                 "pcache_threads"),
-      op_work_queue(new ContextWQ("ceph::pcache_op_work_queue",
-                    cct->_conf.get_val<int64_t>("rbd_op_thread_timeout"),
-                    this)) {
-    start();
-  }
-  ~ThreadPoolSingleton() override {
-    op_work_queue->drain();
-    delete op_work_queue;
-
-    stop();
-  }
-};
-
-
 CacheController::CacheController(CephContext *cct, const std::vector<const char*> &args):
   m_args(args), m_cct(cct) {
 
@@ -43,9 +22,6 @@ CacheController::~CacheController() {
 }
 
 int CacheController::init() {
-  ThreadPoolSingleton* thread_pool_singleton = &m_cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
-    "ceph::cache::thread_pool", false, m_cct);
-  pcache_op_work_queue = thread_pool_singleton->op_work_queue;
 
   m_object_cache_store = new ObjectCacheStore(m_cct, pcache_op_work_queue);
   //TODO(): make this configurable
