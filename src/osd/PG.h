@@ -154,11 +154,11 @@ class PGRecoveryStats {
   PGRecoveryStats() : lock("PGRecoverStats::lock") {}
 
   void reset() {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     info.clear();
   }
   void dump(ostream& out) {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     for (map<const char *,per_state_info>::iterator p = info.begin(); p != info.end(); ++p) {
       per_state_info& i = p->second;
       out << i.enter << "\t" << i.exit << "\t"
@@ -170,7 +170,7 @@ class PGRecoveryStats {
   }
 
   void dump_formatted(Formatter *f) {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     f->open_array_section("pg_recovery_stats");
     for (map<const char *,per_state_info>::iterator p = info.begin();
 	 p != info.end(); ++p) {
@@ -197,11 +197,11 @@ class PGRecoveryStats {
   }
 
   void log_enter(const char *s) {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     info[s].enter++;
   }
   void log_exit(const char *s, utime_t dur, uint64_t events, utime_t event_dur) {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     per_state_info &i = info[s];
     i.exit++;
     i.total_time += dur;
