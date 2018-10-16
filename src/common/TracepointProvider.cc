@@ -6,8 +6,8 @@
 
 TracepointProvider::TracepointProvider(CephContext *cct, const char *library,
                                        const char *config_key)
-  : m_cct(cct), m_library(library), m_config_keys{config_key, NULL},
-    m_lock("TracepointProvider::m_lock") {
+  : m_cct(cct), m_library(library), m_config_keys{config_key, NULL}
+{
   m_cct->_conf.add_observer(this);
   verify_config(m_cct->_conf);
 }
@@ -27,7 +27,7 @@ void TracepointProvider::handle_conf_change(
 }
 
 void TracepointProvider::verify_config(const ConfigProxy& conf) {
-  std::lock_guard<Mutex> locker(m_lock);
+  std::lock_guard locker(m_lock);
   if (m_handle) {
     return;
   }
