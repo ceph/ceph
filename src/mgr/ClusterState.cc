@@ -34,27 +34,27 @@ ClusterState::ClusterState(
 
 void ClusterState::set_objecter(Objecter *objecter_)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
 
   objecter = objecter_;
 }
 
 void ClusterState::set_fsmap(FSMap const &new_fsmap)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
 
   fsmap = new_fsmap;
 }
 
 void ClusterState::set_mgr_map(MgrMap const &new_mgrmap)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   mgr_map = new_mgrmap;
 }
 
 void ClusterState::set_service_map(ServiceMap const &new_service_map)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   servicemap = new_service_map;
 }
 
@@ -66,7 +66,7 @@ void ClusterState::load_digest(MMgrDigest *m)
 
 void ClusterState::ingest_pgstats(MPGStats *stats)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
 
   const int from = stats->get_orig_source().num();
 
@@ -135,7 +135,7 @@ void ClusterState::update_delta_stats()
 
 void ClusterState::notify_osdmap(const OSDMap &osd_map)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
 
   pending_inc.stamp = ceph_clock_now();
   pending_inc.version = pg_map.version + 1; // to make apply_incremental happy

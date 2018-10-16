@@ -145,7 +145,7 @@ void PyModuleConfig::set_config(
   const std::string global_key = PyModule::config_prefix
                                    + module_name + "/" + key;
   {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
 
     if (val) {
       config[global_key] = *val;
@@ -534,7 +534,7 @@ int PyModule::load_options()
 
 bool PyModule::is_option(const std::string &option_name)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   return options.count(option_name) > 0;
 }
 
