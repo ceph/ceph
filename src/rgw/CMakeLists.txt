@@ -216,10 +216,6 @@ target_link_libraries(radosgw radosgw_a librados
   global ${FCGI_LIBRARY} ${LIB_RESOLV}
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES}
   ${ALLOC_LIBS})
-# radosgw depends on cls libraries at runtime, but not as link dependencies
-add_dependencies(radosgw cls_rgw cls_lock cls_refcount
-  cls_log cls_timeindex
-  cls_version cls_user cls_otp)
 install(TARGETS radosgw DESTINATION bin)
 
 set(radosgw_admin_srcs
