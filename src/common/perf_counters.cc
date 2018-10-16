@@ -20,8 +20,7 @@
 using std::ostringstream;
 
 PerfCountersCollection::PerfCountersCollection(CephContext *cct)
-  : m_cct(cct),
-    m_lock("PerfCountersCollection")
+  : m_cct(cct)
 {
 }
 
@@ -32,7 +31,7 @@ PerfCountersCollection::~PerfCountersCollection()
 
 void PerfCountersCollection::add(class PerfCounters *l)
 {
-  std::lock_guard<Mutex> lck(m_lock);
+  std::lock_guard lck(m_lock);
 
   // make sure the name is unique
   perf_counters_set_t::iterator i;
@@ -59,7 +58,7 @@ void PerfCountersCollection::add(class PerfCounters *l)
 
 void PerfCountersCollection::remove(class PerfCounters *l)
 {
-  std::lock_guard<Mutex> lck(m_lock);
+  std::lock_guard lck(m_lock);
 
   for (unsigned int i = 0; i < l->m_data.size(); ++i) {
     PerfCounters::perf_counter_data_any_d &data = l->m_data[i];
@@ -78,7 +77,7 @@ void PerfCountersCollection::remove(class PerfCounters *l)
 
 void PerfCountersCollection::clear()
 {
-  std::lock_guard<Mutex> lck(m_lock);
+  std::lock_guard lck(m_lock);
   perf_counters_set_t::iterator i = m_loggers.begin();
   perf_counters_set_t::iterator i_end = m_loggers.end();
   for (; i != i_end; ) {
@@ -91,7 +90,7 @@ void PerfCountersCollection::clear()
 bool PerfCountersCollection::reset(const std::string &name)
 {
   bool result = false;
-  std::lock_guard<Mutex> lck(m_lock);
+  std::lock_guard lck(m_lock);
   perf_counters_set_t::iterator i = m_loggers.begin();
   perf_counters_set_t::iterator i_end = m_loggers.end();
 
@@ -135,7 +134,7 @@ void PerfCountersCollection::dump_formatted_generic(
     const std::string &logger,
     const std::string &counter)
 {
-  std::lock_guard<Mutex> lck(m_lock);
+  std::lock_guard lck(m_lock);
   f->open_object_section("perfcounter_collection");
   
   for (perf_counters_set_t::iterator l = m_loggers.begin();
@@ -151,7 +150,7 @@ void PerfCountersCollection::dump_formatted_generic(
 void PerfCountersCollection::with_counters(std::function<void(
       const PerfCountersCollection::CounterMap &)> fn) const
 {
-  std::lock_guard<Mutex> lck(m_lock);
+  std::lock_guard lck(m_lock);
 
   fn(by_path);
 }
@@ -465,7 +464,7 @@ PerfCounters::PerfCounters(CephContext *cct, const std::string &name,
     m_upper_bound(upper_bound),
     m_name(name.c_str()),
     m_lock_name(std::string("PerfCounters::") + name.c_str()),
-    m_lock(m_lock_name.c_str())
+    m_lock(ceph::make_mutex(m_lock_name))
 {
   m_data.resize(upper_bound - lower_bound - 1);
 }

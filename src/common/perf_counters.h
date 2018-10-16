@@ -25,7 +25,7 @@
 
 #include "common/perf_histogram.h"
 #include "include/utime.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/ceph_context.h"
 #include "common/ceph_time.h"
 
@@ -287,7 +287,7 @@ private:
   int prio_adjust = 0;
 
   /** Protects m_data */
-  mutable Mutex m_lock;
+  mutable ceph::mutex m_lock;
 
   perf_counter_data_vec_t m_data;
 
@@ -351,7 +351,8 @@ private:
   CephContext *m_cct;
 
   /** Protects m_loggers */
-  mutable Mutex m_lock;
+  mutable ceph::mutex m_lock =
+    ceph::make_mutex("PerfCountersCollection::m_lock");
 
   perf_counters_set_t m_loggers;
 
