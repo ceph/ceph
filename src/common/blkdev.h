@@ -13,6 +13,7 @@ extern int get_block_device_base(const char *path, char *devname, size_t len);
 // from an fd
 extern int block_device_discard(int fd, int64_t offset, int64_t len);
 extern int get_block_device_size(int fd, int64_t *psize);
+extern int get_device_by_path(const char *path, char* partition, char* device, size_t max);
 extern int get_device_by_fd(int fd, char* partition, char* device, size_t max);
 
 // from a device (e.g., "sdb")
@@ -29,6 +30,9 @@ extern int block_device_serial(const char *devname, char *serial, size_t max);
 
 extern void get_dm_parents(const std::string& dev, std::set<std::string> *ls);
 extern std::string get_device_id(const std::string& devname);
+
+extern int block_device_run_smartctl(const char *device, int timeout,
+				     std::string *result);
 
 // for VDO
 

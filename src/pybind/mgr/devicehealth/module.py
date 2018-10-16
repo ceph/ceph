@@ -63,7 +63,7 @@ class Module(MgrModule):
         {
             "cmd": "device query-daemon-health-metrics "
                    "name=who,type=CephString",
-            "desc": "Get device health metrics for a given daemon (OSD)",
+            "desc": "Get device health metrics for a given daemon",
             "perm": "r"
         },
         {
@@ -114,16 +114,24 @@ class Module(MgrModule):
         self.run = True
         self.event = Event()
 
+    def is_valid_daemon_name(self, who):
+        l = cmd.get('who', '').split('.')
+        if len(l) != 2:
+            return False
+        if l[0] not in ('osd', 'mon'):
+            return False;
+        return True;
+
     def handle_command(self, _, cmd):
         self.log.error("handle_command")
 
         if cmd['prefix'] == 'device query-daemon-health-metrics':
             who = cmd.get('who', '')
-            if who[0:4] != 'osd.':
-                return -errno.EINVAL, '', 'not a valid <osd.NNN> id'
-            osd_id = who[4:]
+            if not self.is_valid_daemon_name(who):
+                return -errno.EINVAL, '', 'not a valid mon or osd daemon name'
+            (daemon_type, daemon_id) = cmd.get('who', '').split('.')
             result = CommandResult('')
-            self.send_command(result, 'osd', osd_id, json.dumps({
+            self.send_command(result, daemon_type, daemon_id, json.dumps({
                 'prefix': 'smart',
                 'format': 'json',
             }), '')
@@ -131,10 +139,10 @@ class Module(MgrModule):
             return r, outb, outs
         elif cmd['prefix'] == 'device scrape-daemon-health-metrics':
             who = cmd.get('who', '')
-            if who[0:4] != 'osd.':
-                return -errno.EINVAL, '', 'not a valid <osd.NNN> id'
-            osd_id = int(who[4:])
-            return self.scrape_osd(osd_id)
+            if not self.is_valid_daemon_name(who):
+                return -errno.EINVAL, '', 'not a valid mon or osd daemon name'
+            (daemon_type, daemon_id) = cmd.get('who', '').split('.')
+            return self.scrape_daemon(daemon_type, daemon_id)
         elif cmd['prefix'] == 'device scrape-health-metrics':
             if 'devid' in cmd:
                 return self.scrape_device(cmd['devid'])
@@ -267,9 +275,9 @@ class Module(MgrModule):
         ioctx = self.rados.open_ioctx(self.pool_name)
         return ioctx
 
-    def scrape_osd(self, osd_id):
+    def scrape_daemon(self, daemon_type, daemon_id):
         ioctx = self.open_connection()
-        raw_smart_data = self.do_scrape_osd(osd_id)
+        raw_smart_data = self.do_scrape_daemon(daemon_type, daemon_id)
         if raw_smart_data:
             for device, raw_data in raw_smart_data.items():
                 data = self.extract_smart_features(raw_data)
@@ -282,9 +290,14 @@ class Module(MgrModule):
         assert osdmap is not None
         ioctx = self.open_connection()
         did_device = {}
+        ids = []
         for osd in osdmap['osds']:
-            osd_id = osd['osd']
-            raw_smart_data = self.do_scrape_osd(osd_id)
+            ids.append(('osd', str(osd['osd'])))
+        monmap = self.get("mon_map")
+        for mon in monmap['mons']:
+            ids.append(('mon', mon['name']))
+        for daemon_type, daemon_id in ids:
+            raw_smart_data = self.do_scrape_daemon(daemon_type, daemon_id)
             if not raw_smart_data:
                 continue
             for device, raw_data in raw_smart_data.items():
@@ -294,7 +307,6 @@ class Module(MgrModule):
                 did_device[device] = 1
                 data = self.extract_smart_features(raw_data)
                 self.put_device_metrics(ioctx, device, data)
-
         ioctx.close()
         return 0, "", ""
 
@@ -303,14 +315,13 @@ class Module(MgrModule):
         if not r or 'device' not in r.keys():
             return -errno.ENOENT, '', 'device ' + devid + ' not found'
         daemons = r['device'].get('daemons', [])
-        osds = [int(r[4:]) for r in daemons if r.startswith('osd.')]
-        if not osds:
+        if not daemons:
             return (-errno.EAGAIN, '',
-                    'device ' + devid + ' not claimed by any active '
-                                        'OSD daemons')
-        osd_id = osds[0]
+                    'device ' + devid + ' not claimed by any active daemons')
+        (daemon_type, daemon_id) = daemons[0].split('.')
         ioctx = self.open_connection()
-        raw_smart_data = self.do_scrape_osd(osd_id, devid=devid)
+        raw_smart_data = self.do_scrape_daemon(daemon_type, daemon_id,
+                                               devid=devid)
         if raw_smart_data:
             for device, raw_data in raw_smart_data.items():
                 data = self.extract_smart_features(raw_data)
@@ -318,15 +329,13 @@ class Module(MgrModule):
         ioctx.close()
         return 0, "", ""
 
-    def do_scrape_osd(self, osd_id, devid=''):
+    def do_scrape_daemon(self, daemon_type, daemon_id, devid=''):
         """
         :return: a dict, or None if the scrape failed.
         """
-        self.log.debug('do_scrape_osd osd.%d' % osd_id)
-
-        # scrape from osd
+        self.log.debug('do_scrape_daemon %s.%s' % (daemon_type, daemon_id))
         result = CommandResult('')
-        self.send_command(result, 'osd', str(osd_id), json.dumps({
+        self.send_command(result, daemon_type, daemon_id, json.dumps({
             'prefix': 'smart',
             'format': 'json',
             'devid': devid,
@@ -337,8 +346,8 @@ class Module(MgrModule):
             return json.loads(outb)
         except (IndexError, ValueError):
             self.log.error(
-                "Fail to parse JSON result from OSD {0} ({1})".format(
-                    osd_id, outb))
+                "Fail to parse JSON result from daemon {0}.{1} ({2})".format(
+                    daemon_type, daemon_id, outb))
 
     def put_device_metrics(self, ioctx, devid, data):
         old_key = datetime.utcnow() - timedelta(

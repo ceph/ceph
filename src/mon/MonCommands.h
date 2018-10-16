@@ -1149,3 +1149,8 @@ COMMAND("config reset" \
 	" name=num,type=CephInt",
 	"Revert configuration to previous state",
 	"config", "rw", "cli,rest")
+
+COMMAND_WITH_FLAG("smart name=devid,type=CephString,req=false",
+		  "Query health metrics for underlying device",
+		  "mon", "rw", "cli,rest",
+		  FLAG(HIDDEN))

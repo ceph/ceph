@@ -23,12 +23,28 @@
 #include "include/uuid.h"
 #include "blkdev.h"
 
+int get_device_by_path(const char *path, char* partition, char* device,
+		       size_t max)
+{
+  int fd = ::open(path, O_RDONLY|O_DIRECTORY);
+  if (fd < 0) {
+    return -errno;
+  }
+  int r = get_device_by_fd(fd, partition, device, max);
+  ::close(fd);
+  return r;
+}
+
+
 #ifdef __linux__
 #include <libudev.h>
 #include <linux/fs.h>
 #include <blkid/blkid.h>
 
 #include <set>
+
+#include "common/SubProcess.h"
+#include "common/errno.h"
 
 
 #define UUID_LEN 36
@@ -436,6 +452,45 @@ std::string get_block_device_string_property_wrap(const std::string &devname,
   return prop_val;
 }
 
+int block_device_run_smartctl(const char *device, int timeout,
+			      std::string *result)
+{
+  // when using --json, smartctl will report its errors in JSON format to stdout 
+  SubProcessTimed smartctl(
+    "sudo", SubProcess::CLOSE, SubProcess::PIPE, SubProcess::CLOSE,
+    timeout);
+  smartctl.add_cmd_args(
+    "smartctl",
+    "-a",
+    //"-x",
+    "--json",
+    device,
+    NULL);
+
+  int ret = smartctl.spawn();
+  if (ret != 0) {
+    *result = std::string("error spawning smartctl: ") + smartctl.err();
+    return ret;
+  }
+
+  bufferlist output;
+  ret = output.read_fd(smartctl.get_stdout(), 100*1024);
+  if (ret < 0) {
+    *result = std::string("failed read smartctl output: ") + cpp_strerror(-ret);
+  } else {
+    ret = 0;
+    *result = output.to_str();
+  }
+
+  if (smartctl.join() != 0) {
+    *result = std::string("smartctl returned an error:") + smartctl.err();
+    return -EINVAL;
+  }
+
+  return ret;
+}
+
+
 #elif defined(__APPLE__)
 #include <sys/disk.h>
 
@@ -544,6 +599,12 @@ std::string get_device_id(const std::string& devname)
   return std::string();
 }
 
+int block_device_run_smartctl(const char *device, int timeout,
+			      std::string *result)
+{
+  return -EOPNOTSUPP;
+}
+
 #else
 int get_block_device_size(int fd, int64_t *psize)
 {
@@ -592,6 +653,12 @@ std::string get_device_id(const std::string& devname)
 {
   // not implemented
   return std::string();
+}
+
+int block_device_run_smartctl(const char *device, int timeout,
+			      std::string *result)
+{
+  return -EOPNOTSUPP;
 }
 
 #endif
