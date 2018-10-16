@@ -254,14 +254,12 @@ seastar::future<MessageRef> SocketConnection::do_read_message()
 
 seastar::future<MessageRef> SocketConnection::read_message()
 {
-  namespace stdx = std::experimental;
-
   return seastar::repeat_until_value([this] {
       return do_read_message()
-        .then([this] (MessageRef msg) -> stdx::optional<MessageRef> {
+        .then([this] (MessageRef msg) -> std::optional<MessageRef> {
           if (!update_rx_seq(msg->get_seq())) {
             // skip this request and read the next
-            return stdx::nullopt;
+            return {};
           }
           return msg;
         });
