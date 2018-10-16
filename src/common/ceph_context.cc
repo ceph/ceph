@@ -24,7 +24,8 @@
 #include "common/admin_socket.h"
 #include "common/perf_counters.h"
 #include "common/code_environment.h"
-#include "common/Cond.h"
+#include "common/ceph_mutex.h"
+#include "common/debug.h"
 #include "common/config.h"
 #include "common/ceph_crypto.h"
 #include "common/HeartbeatMap.h"
@@ -172,8 +173,7 @@ class CephContextServiceThread : public Thread
 {
 public:
   explicit CephContextServiceThread(CephContext *cct)
-    : _lock("CephContextServiceThread::_lock"),
-      _reopen_logs(false), _exit_thread(false), _cct(cct)
+    : _reopen_logs(false), _exit_thread(false), _cct(cct)
   {
   }
 
@@ -182,13 +182,13 @@ public:
   void *entry() override
   {
     while (1) {
-      std::lock_guard<Mutex> l(_lock);
+      std::unique_lock l(_lock);
 
       if (_cct->_conf->heartbeat_interval) {
-        utime_t interval(_cct->_conf->heartbeat_interval, 0);
-        _cond.WaitInterval(_lock, interval);
+        auto interval = ceph::make_timespan(_cct->_conf->heartbeat_interval);
+        _cond.wait_for(l, interval);
       } else
-        _cond.Wait(_lock);
+        _cond.wait(l);
 
       if (_exit_thread) {
         break;
@@ -208,21 +208,21 @@ public:
 
   void reopen_logs()
   {
-    std::lock_guard<Mutex> l(_lock);
+    std::lock_guard l(_lock);
     _reopen_logs = true;
-    _cond.Signal();
+    _cond.notify_all();
   }
 
   void exit_thread()
   {
-    std::lock_guard<Mutex> l(_lock);
+    std::lock_guard l(_lock);
     _exit_thread = true;
-    _cond.Signal();
+    _cond.notify_all();
   }
 
 private:
-  Mutex _lock;
-  Cond _cond;
+  ceph::mutex _lock = ceph::make_mutex("CephContextServiceThread::_lock");
+  ceph::condition_variable _cond;
   bool _reopen_logs;
   bool _exit_thread;
   CephContext *_cct;
