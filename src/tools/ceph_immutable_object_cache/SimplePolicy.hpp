@@ -45,12 +45,14 @@ public:
     RWLock::WLocker wlocker(m_cache_map_lock);
 
     auto entry_it = m_cache_map.find(cache_file_name);
+    // simplely promote on first lookup
     if(entry_it == m_cache_map.end()) {
       Mutex::Locker locker(m_free_list_lock);
-      Entry* entry = reinterpret_cast<Entry*>(m_free_list.front());
+      Entry* entry = m_free_list.front();
       assert(entry != nullptr);
       m_free_list.pop_front();
       entry->status = OBJ_CACHE_PROMOTING;
+      entry->cache_file_name = cache_file_name;
 
       m_cache_map[cache_file_name] = entry;
 
@@ -65,12 +67,6 @@ public:
     }
 
     return entry->status;
-  }
-
-  int evict_object(std::string& out_cache_file_name) {
-    RWLock::WLocker locker(m_cache_map_lock);
-
-    return 1;
   }
 
   // TODO(): simplify the logic
@@ -99,6 +95,23 @@ public:
     assert(0);
   }
 
+  int evict_entry(std::string file_name) {
+    RWLock::WLocker map_locker(m_cache_map_lock);
+    auto entry_it = m_cache_map.find(file_name);
+    if (entry_it == m_cache_map.end()) {
+      return 0;
+    }
+    m_cache_map.erase(entry_it);
+
+    //mark this entry as free
+    Entry* entry = entry_it->second;
+    entry->status = OBJ_CACHE_NONE;
+    entry->cache_file_name = "";
+    Mutex::Locker free_list_locker(m_free_list_lock);
+    m_free_list.push_back(entry);
+    return 0;
+  }
+
   // get entry status
   CACHESTATUS get_status(std::string file_name) {
     RWLock::RLocker locker(m_cache_map_lock);
@@ -123,13 +136,6 @@ public:
         std::string file_name = entry->cache_file_name;
         obj_list->push_back(file_name);
 
-        auto entry_it = m_cache_map.find(file_name);
-        m_cache_map.erase(entry_it);
-
-        //mark this entry as free
-	entry->status = OBJ_CACHE_NONE;
-        Mutex::Locker locker(m_free_list_lock);
-        m_free_list.push_back(entry);
       }
    }
   }

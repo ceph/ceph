@@ -112,6 +112,7 @@ int ObjectCacheStore::lookup_object(std::string pool_name, std::string object_na
 
   switch(ret) {
     case OBJ_CACHE_NONE:
+      evict_objects();
       return do_promote(pool_name, object_name);
     case OBJ_CACHE_PROMOTED:
       return 0;
@@ -140,10 +141,6 @@ int ObjectCacheStore::init_cache(std::string vol_name, uint64_t vol_size) {
   return 0;
 }
 
-int ObjectCacheStore::lock_cache(std::string vol_name) {
-  return 0;
-}
-
 int ObjectCacheStore::promote_object(librados::IoCtx* ioctx, std::string object_name, librados::bufferlist* read_buf, uint64_t read_len) {
   int ret;
 
@@ -164,8 +161,19 @@ int ObjectCacheStore::evict_objects() {
   std::list<std::string> obj_list;
   m_policy->get_evict_list(&obj_list);
   for (auto& obj: obj_list) {
-    //do_evict(obj);
+    do_evict(obj);
   }
+}
+
+int ObjectCacheStore::do_evict(std::string cache_file) {
+  //TODO(): call SyncFile API
+  int ret = std::remove(cache_file.c_str());
+
+  // evict entry in policy
+  if (ret == 0) {
+    m_policy->evict_entry(cache_file);
+  }
+  return ret;
 }
 
 } // namespace immutable_obj_cache

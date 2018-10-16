@@ -50,6 +50,7 @@ class ObjectCacheStore
     int promote_object(librados::IoCtx*, std::string object_name,
                        librados::bufferlist* read_buf,
                        uint64_t length);
+    int do_evict(std::string cache_file);
 
     CephContext *m_cct;
     ContextWQ* m_work_queue;
