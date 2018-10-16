@@ -29,7 +29,7 @@ class PMEMDevice : public BlockDevice {
   char *addr; //the address of mmap
   std::string path;
 
-  Mutex debug_lock;
+  ceph::mutex debug_lock = ceph::make_mutex("PMEMDevice::debug_lock");
   interval_set<uint64_t> debug_inflight;
 
   std::atomic_int injecting_crash;

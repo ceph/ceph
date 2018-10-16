@@ -52,10 +52,6 @@ protected:
   mutex_debugging_base(const char *n, bool bt = false);
   ~mutex_debugging_base();
 
-  ceph::mono_time before_lock_blocks();
-  void after_lock_blocks(ceph::mono_time start,
-			 bool no_lockdep);
-
 public:
   bool is_locked() const {
     return (nlock > 0);
@@ -181,9 +177,9 @@ public:
     if (try_lock())
       return;
 
-    auto t = before_lock_blocks();
     lock_impl();
-    after_lock_blocks(t, no_lockdep);
+    if (!no_lockdep && g_lockdep)
+      _locked();
     _post_lock();
   }
 

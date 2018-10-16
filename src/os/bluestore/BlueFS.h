@@ -125,7 +125,7 @@ public:
     bufferlist::page_aligned_appender buffer_appender;  //< for const char* only
     int writer_type = 0;    ///< WRITER_*
 
-    std::mutex lock;
+    ceph::mutex lock = ceph::make_mutex("BlueFS::FileWriter::lock");
     std::array<IOContext*,MAX_BDEV> iocv; ///< for each bdev
     std::array<bool, MAX_BDEV> dirty_devs;
 
@@ -219,7 +219,7 @@ public:
   };
 
 private:
-  std::mutex lock;
+  ceph::mutex lock = ceph::make_mutex("BlueFS::lock");
 
   PerfCounters *logger = nullptr;
 
@@ -237,7 +237,7 @@ private:
   FileWriter *log_writer = 0;  ///< writer for the log
   bluefs_transaction_t log_t;  ///< pending, unwritten log transaction
   bool log_flushing = false;   ///< true while flushing the log
-  std::condition_variable log_cond;
+  ceph::condition_variable log_cond;
 
   uint64_t new_log_jump_to = 0;
   uint64_t old_log_jump_to = 0;
@@ -275,21 +275,21 @@ private:
 		bluefs_fnode_t* node);
   int _flush_range(FileWriter *h, uint64_t offset, uint64_t length);
   int _flush(FileWriter *h, bool force);
-  int _fsync(FileWriter *h, std::unique_lock<std::mutex>& l);
+  int _fsync(FileWriter *h, std::unique_lock<ceph::mutex>& l);
 
 #ifdef HAVE_LIBAIO
   void _claim_completed_aios(FileWriter *h, list<aio_t> *ls);
   void wait_for_aio(FileWriter *h);  // safe to call without a lock
 #endif
 
-  int _flush_and_sync_log(std::unique_lock<std::mutex>& l,
+  int _flush_and_sync_log(std::unique_lock<ceph::mutex>& l,
 			  uint64_t want_seq = 0,
 			  uint64_t jump_to = 0);
   uint64_t _estimate_log_size();
   bool _should_compact_log();
   void _compact_log_dump_metadata(bluefs_transaction_t *t);
   void _compact_log_sync();
-  void _compact_log_async(std::unique_lock<std::mutex>& l);
+  void _compact_log_async(std::unique_lock<ceph::mutex>& l);
 
   //void _aio_finish(void *priv);
 
@@ -370,7 +370,7 @@ public:
     bool random = false);
 
   void close_writer(FileWriter *h) {
-    std::lock_guard<std::mutex> l(lock);
+    std::lock_guard l(lock);
     _close_writer(h);
   }
 
@@ -412,15 +412,15 @@ public:
   void handle_discard(unsigned dev, interval_set<uint64_t>& to_release);
 
   void flush(FileWriter *h) {
-    std::lock_guard<std::mutex> l(lock);
+    std::lock_guard l(lock);
     _flush(h, false);
   }
   void flush_range(FileWriter *h, uint64_t offset, uint64_t length) {
-    std::lock_guard<std::mutex> l(lock);
+    std::lock_guard l(lock);
     _flush_range(h, offset, length);
   }
   int fsync(FileWriter *h) {
-    std::unique_lock<std::mutex> l(lock);
+    std::unique_lock l(lock);
     return _fsync(h, l);
   }
   int read(FileReader *h, FileReaderBuffer *buf, uint64_t offset, size_t len,
@@ -438,15 +438,15 @@ public:
     return _read_random(h, offset, len, out);
   }
   void invalidate_cache(FileRef f, uint64_t offset, uint64_t len) {
-    std::lock_guard<std::mutex> l(lock);
+    std::lock_guard l(lock);
     _invalidate_cache(f, offset, len);
   }
   int preallocate(FileRef f, uint64_t offset, uint64_t len) {
-    std::lock_guard<std::mutex> l(lock);
+    std::lock_guard l(lock);
     return _preallocate(f, offset, len);
   }
   int truncate(FileWriter *h, uint64_t offset) {
-    std::lock_guard<std::mutex> l(lock);
+    std::lock_guard l(lock);
     return _truncate(h, offset);
   }
 

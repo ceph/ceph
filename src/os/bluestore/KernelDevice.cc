@@ -37,7 +37,6 @@ KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, ai
     fd_direct(-1),
     fd_buffered(-1),
     aio(false), dio(false),
-    debug_lock("KernelDevice::debug_lock"),
     aio_queue(cct->_conf->bdev_aio_max_queue_depth),
     discard_callback(d_cb),
     discard_callback_priv(d_cbpriv),
@@ -312,7 +311,7 @@ int KernelDevice::flush()
   // aio completion notification will not return before that aio is
   // stable on disk: whichever thread sees the flag first will block
   // followers until the aio is stable.
-  std::lock_guard<std::mutex> l(flush_mutex);
+  std::lock_guard l(flush_mutex);
 
   bool expect = true;
   if (!io_since_flush.compare_exchange_strong(expect, false)) {
@@ -385,7 +384,7 @@ void KernelDevice::_discard_stop()
 {
   dout(10) << __func__ << dendl;
   {
-    std::unique_lock<std::mutex> l(discard_lock);
+    std::unique_lock l(discard_lock);
     while (!discard_started) {
       discard_cond.wait(l);
     }
@@ -394,7 +393,7 @@ void KernelDevice::_discard_stop()
   }
   discard_thread.join();
   {
-    std::lock_guard<std::mutex> l(discard_lock);
+    std::lock_guard l(discard_lock);
     discard_stop = false;
   }
   dout(10) << __func__ << " stopped" << dendl;
@@ -403,7 +402,7 @@ void KernelDevice::_discard_stop()
 void KernelDevice::discard_drain()
 {
   dout(10) << __func__ << dendl;
-  std::unique_lock<std::mutex> l(discard_lock);
+  std::unique_lock l(discard_lock);
   while (!discard_queued.empty() || discard_running) {
     discard_cond.wait(l);
   }
@@ -438,7 +437,7 @@ void KernelDevice::_aio_thread()
 	IOContext *ioc = static_cast<IOContext*>(aio[i]->priv);
 	_aio_log_finish(ioc, aio[i]->offset, aio[i]->length);
 	if (aio[i]->queue_item.is_linked()) {
-	  std::lock_guard<std::mutex> l(debug_queue_lock);
+	  std::lock_guard l(debug_queue_lock);
 	  debug_aio_unlink(*aio[i]);
 	}
 
@@ -487,7 +486,7 @@ void KernelDevice::_aio_thread()
     }
     if (cct->_conf->bdev_debug_aio) {
       utime_t now = ceph_clock_now();
-      std::lock_guard<std::mutex> l(debug_queue_lock);
+      std::lock_guard l(debug_queue_lock);
       if (debug_oldest) {
 	if (debug_stall_since == utime_t()) {
 	  debug_stall_since = now;
@@ -522,7 +521,7 @@ void KernelDevice::_aio_thread()
 
 void KernelDevice::_discard_thread()
 {
-  std::unique_lock<std::mutex> l(discard_lock);
+  std::unique_lock l(discard_lock);
   ceph_assert(!discard_started);
   discard_started = true;
   discard_cond.notify_all();
@@ -562,7 +561,7 @@ int KernelDevice::queue_discard(interval_set<uint64_t> &to_release)
   if (to_release.empty())
     return 0;
 
-  std::lock_guard<std::mutex> l(discard_lock);
+  std::lock_guard l(discard_lock);
   discard_queued.insert(to_release);
   discard_cond.notify_all();
   return 0;
@@ -576,7 +575,7 @@ void KernelDevice::_aio_log_start(
   dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << std::dec << dendl;
   if (cct->_conf->bdev_debug_inflight_ios) {
-    Mutex::Locker l(debug_lock);
+    std::lock_guard l(debug_lock);
     if (debug_inflight.intersects(offset, length)) {
       derr << __func__ << " inflight overlap of 0x"
 	   << std::hex
@@ -619,7 +618,7 @@ void KernelDevice::_aio_log_finish(
   dout(20) << __func__ << " " << aio << " 0x"
 	   << std::hex << offset << "~" << length << std::dec << dendl;
   if (cct->_conf->bdev_debug_inflight_ios) {
-    Mutex::Locker l(debug_lock);
+    std::lock_guard l(debug_lock);
     debug_inflight.erase(offset, length);
   }
 }
@@ -651,7 +650,7 @@ void KernelDevice::aio_submit(IOContext *ioc)
     list<aio_t>::iterator p = ioc->running_aios.begin();
     while (p != e) {
       dout(30) << __func__ << " " << *p << dendl;
-      std::lock_guard<std::mutex> l(debug_queue_lock);
+      std::lock_guard l(debug_queue_lock);
       debug_aio_link(*p++);
     }
   }
