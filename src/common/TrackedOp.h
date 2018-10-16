@@ -18,6 +18,8 @@
 #include "common/histogram.h"
 #include "common/RWLock.h"
 #include "common/Thread.h"
+#include "common/Clock.h"
+#include "common/ceph_mutex.h"
 #include "include/spinlock.h"
 #include "msg/Message.h"
 
@@ -55,7 +57,7 @@ class OpHistory {
   set<pair<utime_t, TrackedOpRef> > arrived;
   set<pair<double, TrackedOpRef> > duration;
   set<pair<utime_t, TrackedOpRef> > slow_op;
-  Mutex ops_history_lock;
+  ceph::mutex ops_history_lock = ceph::make_mutex("OpHistory::ops_history_lock");
   void cleanup(utime_t now);
   uint32_t history_size;
   uint32_t history_duration;
@@ -66,10 +68,10 @@ class OpHistory {
   friend class OpHistoryServiceThread;
 
 public:
-  OpHistory() : ops_history_lock("OpHistory::Lock"),
-    history_size(0), history_duration(0),
-    history_slow_op_size(0), history_slow_op_threshold(0),
-    shutdown(false), opsvc(this) {
+  OpHistory()
+    : history_size(0), history_duration(0),
+      history_slow_op_size(0), history_slow_op_threshold(0),
+      shutdown(false), opsvc(this) {
     opsvc.create("OpHistorySvc");
   }
   ~OpHistory() {
@@ -259,7 +261,7 @@ protected:
   };
 
   vector<Event> events;    ///< list of events and their times
-  mutable Mutex lock = {"TrackedOp::lock"}; ///< to protect the events list
+  mutable ceph::mutex lock = ceph::make_mutex("TrackedOp::lock"); ///< to protect the events list
   const char *current = 0; ///< the current state the event is in
   uint64_t seq = 0;        ///< a unique value set by the OpTracker
 
@@ -342,7 +344,7 @@ public:
 
   const char *get_desc() const {
     if (!desc || want_new_desc.load()) {
-      std::lock_guard<Mutex> l(lock);
+      std::lock_guard l(lock);
       _gen_desc();
     }
     return desc;
@@ -365,7 +367,7 @@ public:
   }
 
   double get_duration() const {
-    std::lock_guard<Mutex> l(lock);
+    std::lock_guard l(lock);
     if (!events.empty() && events.rbegin()->compare("done") == 0)
       return events.rbegin()->stamp - get_initiated();
     else
@@ -382,7 +384,7 @@ public:
   }
 
   virtual const char *state_string() const {
-    std::lock_guard<Mutex> l(lock);
+    std::lock_guard l(lock);
     return events.rbegin()->c_str();
   }
 
