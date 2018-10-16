@@ -23,6 +23,7 @@ namespace immutable_obj_cache {
 class CacheClient {
 public:
   CacheClient(const std::string& file, ClientProcessMsg processmsg, CephContext* ceph_ctx);
+  ~CacheClient();
   void run();
   bool is_session_work();
 
@@ -40,6 +41,7 @@ private:
   ClientProcessMsg m_client_process_msg;
   stream_protocol::endpoint m_ep;
   char m_recv_buffer[1024];
+  std::shared_ptr<std::thread> io_thread;
 
   // atomic modfiy for this variable.
   // thread 1 : asio callback thread modify it.

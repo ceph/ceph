@@ -15,7 +15,7 @@ using boost::asio::local::stream_protocol;
 namespace ceph {
 namespace immutable_obj_cache {
 
- CacheClient::CacheClient(const std::string& file, ClientProcessMsg processmsg, CephContext* ceph_ctx)
+  CacheClient::CacheClient(const std::string& file, ClientProcessMsg processmsg, CephContext* ceph_ctx)
     : m_io_service_work(m_io_service),
       m_dm_socket(m_io_service),
       m_client_process_msg(processmsg),
@@ -24,8 +24,12 @@ namespace immutable_obj_cache {
       cct(ceph_ctx)
   {
      // TODO wrapper io_service
-     std::thread thd([this](){m_io_service.run();});
-     thd.detach();
+     io_thread.reset(new std::thread([this](){m_io_service.run(); }));
+  }
+
+  CacheClient::~CacheClient() {
+    m_io_service.stop();
+    io_thread->join();
   }
 
   void CacheClient::run(){
