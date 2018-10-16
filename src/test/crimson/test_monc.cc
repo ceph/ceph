@@ -2,6 +2,7 @@
 #include "common/ceph_argparse.h"
 #include "crimson/common/config_proxy.h"
 #include "crimson/mon/MonClient.h"
+#include "crimson/net/Connection.h"
 #include "crimson/net/SocketMessenger.h"
 
 using Config = ceph::common::ConfigProxy;

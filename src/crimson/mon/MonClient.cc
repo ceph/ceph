@@ -15,9 +15,11 @@
 #include "crimson/common/config_proxy.h"
 #include "crimson/common/log.h"
 #include "crimson/net/Connection.h"
+#include "crimson/net/Errors.h"
 #include "crimson/net/Messenger.h"
 
 #include "messages/MAuth.h"
+#include "messages/MAuthReply.h"
 #include "messages/MConfig.h"
 #include "messages/MLogAck.h"
 #include "messages/MMonCommand.h"
@@ -41,6 +43,40 @@ namespace {
 }
 
 namespace ceph::mon {
+
+
+class Connection {
+public:
+  Connection(ceph::net::ConnectionRef conn,
+	     KeyRing* keyring);
+  seastar::future<> handle_auth_reply(Ref<MAuthReply> m);
+  seastar::future<> authenticate(epoch_t epoch,
+				 const EntityName& name,
+				 const AuthMethodList& auth_methods,
+				 uint32_t want_keys);
+  seastar::future<> close();
+  bool is_my_peer(const entity_addr_t& addr) const;
+
+  seastar::future<> renew_tickets();
+  ceph::net::ConnectionRef get_conn();
+
+private:
+  seastar::future<> setup_session(epoch_t epoch,
+				  const AuthMethodList& auth_methods,
+				  const EntityName& name);
+  std::unique_ptr<AuthClientHandler> create_auth(Ref<MAuthReply> m,
+						 const EntityName& name,
+						 uint32_t want_keys);
+  seastar::future<bool> do_auth();
+
+private:
+  bool closed = false;
+  seastar::promise<Ref<MAuthReply>> reply;
+  ceph::net::ConnectionRef conn;
+  std::unique_ptr<AuthClientHandler> auth;
+  RotatingKeyRing rotating_keyring;
+  uint64_t global_id;
+};
 
 Connection::Connection(ceph::net::ConnectionRef conn,
                        KeyRing* keyring)
@@ -222,6 +258,9 @@ Client::Client(const EntityName& name,
     timer{[this] { tick(); }},
     msgr{messenger}
 {}
+
+Client::Client(Client&&) = default;
+Client::~Client() = default;
 
 seastar::future<> Client::load_keyring()
 {
