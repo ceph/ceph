@@ -63,9 +63,9 @@ std::cv_status condition_variable_debug::_wait_until(mutex_debug* mutex,
 
   waiter_mutex->_pre_unlock();
   int r = pthread_cond_timedwait(&cond, waiter_mutex->native_handle(), ts);
+  waiter_mutex->_post_lock();
   switch (r) {
   case 0:
-    waiter_mutex->_post_lock();
     return std::cv_status::no_timeout;
   case ETIMEDOUT:
     return std::cv_status::timeout;
