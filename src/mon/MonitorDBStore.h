@@ -29,6 +29,7 @@
 #include "common/errno.h"
 #include "common/debug.h"
 #include "common/safe_io.h"
+#include "common/blkdev.h"
 
 #define dout_context g_ceph_context
 
@@ -47,6 +48,13 @@ class MonitorDBStore
   bool is_open;
 
  public:
+
+  string get_devname() {
+    char devname[4096] = {0}, partition[4096];
+    get_device_by_path(path.c_str(), partition, devname,
+		       sizeof(devname));
+    return devname;
+  }
 
   struct Op {
     uint8_t type;
