@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 import errno
 from functools import wraps
-from httplib import BAD_REQUEST
+from six.moves.http_client import BAD_REQUEST
 import os
 import signal
 
