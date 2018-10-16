@@ -69,5 +69,5 @@ class PerfCountersControllerTest(DashboardTestCase):
             'detail': str,
             'traceback': str,
         })
-        self.assertEqual(self._resp.json()['detail'], 'osd.{} not found'.format(unused_id))
+        self.assertEqual(self._resp.json()['detail'], "'osd.{}' not found".format(unused_id))
         self.assertSchemaBody(schema)
