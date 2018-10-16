@@ -86,3 +86,31 @@ If you installed ceph in any other place (cmake -DCMAKE_INSTALL_PREFIX=${CEPH_IN
     rados=yes make
 
 "-ltcmalloc" is necessary if ceph was compiled with tcmalloc.
+
+Messenger
+---------
+
+This fio engine allows you to test CEPH messenger transport layer, without
+any disk activities involved.
+
+To build fio_ceph_messenger:
+```
+  ./do_cmake.sh -DWITH_FIO=ON
+  cd build
+  make fio_ceph_messenger
+```
+If you install the ceph libraries to a location that isn't in your
+LD_LIBRARY_PATH, be sure to add it:
+
+    export LD_LIBRARY_PATH=/path/to/install/lib
+
+To view the fio options specific to the messenger engine:
+
+    ./fio --enghelp=libfio_ceph_messenger.so
+
+The ceph_conf_file= option requires a ceph configuration file (ceph.conf),
+see ceph-messenger.conf and ceph-messenger.fio for details.
+
+To run:
+
+    ./fio ./ceph-messenger.fio
