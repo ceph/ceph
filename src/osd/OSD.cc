@@ -4834,7 +4834,7 @@ void OSD::heartbeat_check()
 
     if (p->second.first_tx == utime_t()) {
       dout(25) << "heartbeat_check we haven't sent ping to osd." << p->first
-               << "yet, skipping" << dendl;
+               << " yet, skipping" << dendl;
       continue;
     }
 
@@ -6880,83 +6880,59 @@ bool OSD::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool for
   return *authorizer != NULL;
 }
 
-
-bool OSD::ms_verify_authorizer(
-  Connection *con, int peer_type,
-  int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
-  bool& isvalid, CryptoKey& session_key,
-  std::unique_ptr<AuthAuthorizerChallenge> *challenge)
+KeyStore *OSD::ms_get_auth1_authorizer_keystore()
 {
-  AuthAuthorizeHandler *authorize_handler = 0;
-  switch (peer_type) {
-  case CEPH_ENTITY_TYPE_MDS:
-    /*
-     * note: mds is technically a client from our perspective, but
-     * this makes the 'cluster' consistent w/ monitor's usage.
-     */
-  case CEPH_ENTITY_TYPE_OSD:
-  case CEPH_ENTITY_TYPE_MGR:
-    authorize_handler = authorize_handler_cluster_registry->get_handler(protocol);
-    break;
-  default:
-    authorize_handler = authorize_handler_service_registry->get_handler(protocol);
-  }
-  if (!authorize_handler) {
-    dout(0) << "No AuthAuthorizeHandler found for protocol " << protocol << dendl;
-    isvalid = false;
-    return true;
-  }
+  return monc->rotating_secrets.get();
+}
 
-  AuthCapsInfo caps_info;
-  EntityName name;
-  uint64_t global_id;
-
-  auto keys = monc->rotating_secrets.get();
-  if (keys) {
-    isvalid = authorize_handler->verify_authorizer(
-      cct, keys,
-      authorizer_data, authorizer_reply, name, global_id, caps_info, session_key,
-      challenge);
+int OSD::ms_handle_authentication(Connection *con)
+{
+  int ret = 0;
+  auto priv = con->get_priv();
+  Session *s = static_cast<Session*>(priv.get());
+  if (!s) {
+    s = new Session(cct, con);
+    con->set_priv(RefCountedPtr{s, false});
+    s->entity_name = con->get_peer_entity_name();
+    dout(10) << __func__ << " new session " << s << " con " << s->con
+	     << " entity " << s->entity_name
+	     << " addr " << con->get_peer_addrs() << dendl;
   } else {
-    dout(10) << __func__ << " no rotating_keys (yet), denied" << dendl;
-    isvalid = false;
+    dout(10) << __func__ << " existing session " << s << " con " << s->con
+	     << " entity " << s->entity_name
+	     << " addr " << con->get_peer_addrs() << dendl;
   }
 
-  if (isvalid) {
-    auto priv = con->get_priv();
-    auto s = static_cast<Session*>(priv.get());
-    if (!s) {
-      s = new Session{cct, con};
-      con->set_priv(RefCountedPtr{s, false});
-      dout(10) << " new session " << s << " con=" << s->con
-	       << " addr=" << con->get_peer_addr() << dendl;
+  AuthCapsInfo &caps_info = con->get_peer_caps_info();
+  if (caps_info.allow_all)
+    s->caps.set_allow_all();
+
+  if (caps_info.caps.length() > 0) {
+    bufferlist::const_iterator p = caps_info.caps.cbegin();
+    string str;
+    try {
+      decode(str, p);
     }
-
-    s->entity_name = name;
-    if (caps_info.allow_all)
-      s->caps.set_allow_all();
-
-    if (caps_info.caps.length() > 0) {
-      auto p = caps_info.caps.cbegin();
-      string str;
-      try {
-	decode(str, p);
-      }
-      catch (buffer::error& e) {
-        isvalid = false;
-      }
-      stringstream ss;
-      bool success = s->caps.parse(str, &ss);
-      if (success)
-	dout(10) << " session " << s << " " << s->entity_name << " has caps " << s->caps << " '" << str << "'" << dendl;
-      else {
-	dout(10) << " session " << s << " " << s->entity_name << " failed to parse caps '" << str << "'" << dendl;
-	dout(20) << "parser returned " << ss.str() << dendl;
-        isvalid = false;
+    catch (buffer::error& e) {
+      dout(10) << __func__ << " session " << s << " " << s->entity_name
+	       << " failed to decode caps string" << dendl;
+      ret = -EPERM;
+    }
+    if (!ret) {
+      bool success = s->caps.parse(str);
+      if (success) {
+	dout(10) << __func__ << " session " << s
+		 << " " << s->entity_name
+		 << " has caps " << s->caps << " '" << str << "'" << dendl;
+	ret = 1;
+      } else {
+	dout(10) << __func__ << " session " << s << " " << s->entity_name
+		 << " failed to parse caps '" << str << "'" << dendl;
+	ret = -EPERM;
       }
     }
   }
-  return true;
+  return ret;
 }
 
 void OSD::do_waiters()
@@ -8094,6 +8070,10 @@ void OSD::check_osdmap_features()
       int err = store->queue_transaction(service.meta_ch, std::move(t), NULL);
       ceph_assert(err == 0);
     }
+  }
+
+  if (osdmap->require_osd_release < CEPH_RELEASE_NAUTILUS) {
+    heartbeat_dispatcher.ms_set_require_authorizer(false);
   }
 }
 

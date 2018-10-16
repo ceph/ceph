@@ -235,6 +235,7 @@ class FuseStore;
 class OSDMap;
 class MLog;
 class Objecter;
+class KeyStore;
 
 class Watch;
 class PrimaryLogPG;
@@ -1630,12 +1631,12 @@ public:
     bool ms_can_fast_dispatch_any() const override { return true; }
     bool ms_can_fast_dispatch(const Message *m) const override {
       switch (m->get_type()) {
-	case CEPH_MSG_PING:
-	case MSG_OSD_PING:
-          return true;
-	default:
-          return false;
-	}
+      case CEPH_MSG_PING:
+      case MSG_OSD_PING:
+	return true;
+      default:
+	return false;
+      }
     }
     void ms_fast_dispatch(Message *m) override {
       osd->heartbeat_dispatch(m);
@@ -1650,12 +1651,21 @@ public:
     bool ms_handle_refused(Connection *con) override {
       return osd->ms_handle_refused(con);
     }
-    bool ms_verify_authorizer(Connection *con, int peer_type,
-			      int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
-			      bool& isvalid, CryptoKey& session_key,
-			      std::unique_ptr<AuthAuthorizerChallenge> *challenge) override {
-      isvalid = true;
+    int ms_handle_authentication(Connection *con) override {
       return true;
+    }
+    bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer,
+			   bool force_new) override {
+      // some pre-nautilus OSDs get confused if you include an
+      // authorizer but they are not expecting it.  do not try to authorize
+      // heartbeat connections until all OSDs are nautilus.
+      if (osd->get_osdmap()->require_osd_release >= CEPH_RELEASE_NAUTILUS) {
+	return osd->ms_get_authorizer(dest_type, authorizer, force_new);
+      }
+      return false;
+    }
+    KeyStore *ms_get_auth1_authorizer_keystore() override {
+      return osd->ms_get_auth1_authorizer_keystore();
     }
   } heartbeat_dispatcher;
 
@@ -2183,13 +2193,11 @@ private:
   void ms_fast_preprocess(Message *m) override;
   bool ms_dispatch(Message *m) override;
   bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new) override;
-  bool ms_verify_authorizer(Connection *con, int peer_type,
-			    int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
-			    bool& isvalid, CryptoKey& session_key,
-			    std::unique_ptr<AuthAuthorizerChallenge> *challenge) override;
   void ms_handle_connect(Connection *con) override;
   void ms_handle_fast_connect(Connection *con) override;
   void ms_handle_fast_accept(Connection *con) override;
+  int ms_handle_authentication(Connection *con) override;
+  KeyStore *ms_get_auth1_authorizer_keystore() override;
   bool ms_handle_reset(Connection *con) override;
   void ms_handle_remote_reset(Connection *con) override {}
   bool ms_handle_refused(Connection *con) override;

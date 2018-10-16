@@ -2217,8 +2217,8 @@ bool OSDMonitor::preprocess_get_osdmap(MonOpRequestRef op)
   MMonGetOSDMap *m = static_cast<MMonGetOSDMap*>(op->get_req());
 
   uint64_t features = mon->get_quorum_con_features();
-  if (m->get_session() && m->get_session()->con_features)
-    features = m->get_session()->con_features;
+  if (op->get_session() && op->get_session()->con_features)
+    features = op->get_session()->con_features;
 
   dout(10) << __func__ << " " << *m << dendl;
   MOSDMap *reply = new MOSDMap(mon->monmap->fsid, features);
@@ -2249,9 +2249,9 @@ bool OSDMonitor::preprocess_get_osdmap(MonOpRequestRef op)
 
 // failure --
 
-bool OSDMonitor::check_source(PaxosServiceMessage *m, uuid_d fsid) {
+bool OSDMonitor::check_source(MonOpRequestRef op, uuid_d fsid) {
   // check permissions
-  MonSession *session = m->get_session();
+  MonSession *session = op->get_session();
   if (!session)
     return true;
   if (!session->is_capable("osd", MON_CAP_X)) {
@@ -2276,7 +2276,7 @@ bool OSDMonitor::preprocess_failure(MonOpRequestRef op)
   int badboy = m->get_target_osd();
 
   // check permissions
-  if (check_source(m, m->fsid))
+  if (check_source(op, m->fsid))
     goto didit;
 
   // first, verify the reporting host is valid
@@ -2370,7 +2370,7 @@ bool OSDMonitor::preprocess_mark_me_down(MonOpRequestRef op)
   int from = m->target_osd;
 
   // check permissions
-  if (check_source(m, m->fsid))
+  if (check_source(op, m->fsid))
     goto reply;
 
   // first, verify the reporting host is valid
@@ -2755,7 +2755,7 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
   int from = m->get_orig_source_inst().name.num();
 
   // check permissions, ignore if failed (no response expected)
-  MonSession *session = m->get_session();
+  MonSession *session = op->get_session();
   if (!session)
     goto ignore;
   if (!session->is_capable("osd", MON_CAP_X)) {
@@ -3050,7 +3050,7 @@ bool OSDMonitor::preprocess_full(MonOpRequestRef op)
   unsigned mask = CEPH_OSD_NEARFULL | CEPH_OSD_BACKFILLFULL | CEPH_OSD_FULL;
 
   // check permissions, ignore if failed
-  MonSession *session = m->get_session();
+  MonSession *session = op->get_session();
   if (!session)
     goto ignore;
   if (!session->is_capable("osd", MON_CAP_X)) {
@@ -3139,7 +3139,7 @@ bool OSDMonitor::preprocess_alive(MonOpRequestRef op)
   int from = m->get_orig_source().num();
 
   // check permissions, ignore if failed
-  MonSession *session = m->get_session();
+  MonSession *session = op->get_session();
   if (!session)
     goto ignore;
   if (!session->is_capable("osd", MON_CAP_X)) {
@@ -3204,7 +3204,7 @@ bool OSDMonitor::preprocess_pg_created(MonOpRequestRef op)
   op->mark_osdmon_event(__func__);
   auto m = static_cast<MOSDPGCreated*>(op->get_req());
   dout(10) << __func__ << " " << *m << dendl;
-  auto session = m->get_session();
+  auto session = op->get_session();
   mon->no_reply(op);
   if (!session) {
     dout(10) << __func__ << ": no monitor session!" << dendl;
@@ -3242,7 +3242,7 @@ bool OSDMonitor::preprocess_pg_ready_to_merge(MonOpRequestRef op)
   auto m = static_cast<MOSDPGReadyToMerge*>(op->get_req());
   dout(10) << __func__ << " " << *m << dendl;
   const pg_pool_t *pi;
-  auto session = m->get_session();
+  auto session = op->get_session();
   if (!session) {
     dout(10) << __func__ << ": no monitor session!" << dendl;
     goto ignore;
@@ -3343,7 +3343,7 @@ bool OSDMonitor::preprocess_pgtemp(MonOpRequestRef op)
   size_t ignore_cnt = 0;
 
   // check caps
-  MonSession *session = m->get_session();
+  MonSession *session = op->get_session();
   if (!session)
     goto ignore;
   if (!session->is_capable("osd", MON_CAP_X)) {
@@ -3486,7 +3486,7 @@ bool OSDMonitor::preprocess_remove_snaps(MonOpRequestRef op)
   dout(7) << "preprocess_remove_snaps " << *m << dendl;
 
   // check privilege, ignore if failed
-  MonSession *session = m->get_session();
+  MonSession *session = op->get_session();
   if (!session)
     goto ignore;
   if (!session->caps.is_capable(
@@ -3565,9 +3565,8 @@ bool OSDMonitor::prepare_remove_snaps(MonOpRequestRef op)
 bool OSDMonitor::preprocess_beacon(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
-  auto beacon = static_cast<MOSDBeacon*>(op->get_req());
   // check caps
-  auto session = beacon->get_session();
+  auto session = op->get_session();
   mon->no_reply(op);
   if (!session) {
     dout(10) << __func__ << " no monitor session!" << dendl;
@@ -4530,8 +4529,9 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     return true;
   }
 
-  MonSession *session = m->get_session();
+  MonSession *session = op->get_session();
   if (!session) {
+    derr << __func__ << " no session" << dendl;
     mon->reply_command(op, -EACCES, "access denied", get_last_committed());
     return true;
   }
@@ -6087,7 +6087,7 @@ int OSDMonitor::prepare_new_pool(MonOpRequestRef op)
   op->mark_osdmon_event(__func__);
   MPoolOp *m = static_cast<MPoolOp*>(op->get_req());
   dout(10) << "prepare_new_pool from " << m->get_connection() << dendl;
-  MonSession *session = m->get_session();
+  MonSession *session = op->get_session();
   if (!session)
     return -EPERM;
   string erasure_code_profile;
@@ -8054,8 +8054,9 @@ bool OSDMonitor::prepare_command(MonOpRequestRef op)
     return true;
   }
 
-  MonSession *session = m->get_session();
+  MonSession *session = op->get_session();
   if (!session) {
+    derr << __func__ << " no session" << dendl;
     mon->reply_command(op, -EACCES, "access denied", get_last_committed());
     return true;
   }
@@ -12111,7 +12112,7 @@ bool OSDMonitor::enforce_pool_op_caps(MonOpRequestRef op)
   op->mark_osdmon_event(__func__);
 
   MPoolOp *m = static_cast<MPoolOp*>(op->get_req());
-  MonSession *session = m->get_session();
+  MonSession *session = op->get_session();
   if (!session) {
     _pool_op_reply(op, -EPERM, osdmap.get_epoch());
     return true;

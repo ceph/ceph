@@ -212,7 +212,7 @@ bool MgrStatMonitor::preprocess_getpoolstats(MonOpRequestRef op)
 {
   op->mark_pgmon_event(__func__);
   auto m = static_cast<MGetPoolStats*>(op->get_req());
-  auto session = m->get_session();
+  auto session = op->get_session();
   if (!session)
     return true;
   if (!session->is_capable("pg", MON_CAP_R)) {
@@ -244,7 +244,7 @@ bool MgrStatMonitor::preprocess_statfs(MonOpRequestRef op)
 {
   op->mark_pgmon_event(__func__);
   auto statfs = static_cast<MStatfs*>(op->get_req());
-  auto session = statfs->get_session();
+  auto session = op->get_session();
 
   if (!session)
     return true;

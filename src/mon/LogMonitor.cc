@@ -304,7 +304,7 @@ bool LogMonitor::preprocess_log(MonOpRequestRef op)
   dout(10) << "preprocess_log " << *m << " from " << m->get_orig_source() << dendl;
   int num_new = 0;
 
-  MonSession *session = m->get_session();
+  MonSession *session = op->get_session();
   if (!session)
     goto done;
   if (!session->is_capable("log", MON_CAP_W)) {
@@ -402,7 +402,7 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
     mon->reply_command(op, -EINVAL, rs, get_last_committed());
     return true;
   }
-  MonSession *session = m->get_session();
+  MonSession *session = op->get_session();
   if (!session) {
     mon->reply_command(op, -EACCES, "access denied", get_last_committed());
     return true;
@@ -532,7 +532,7 @@ bool LogMonitor::prepare_command(MonOpRequestRef op)
   string prefix;
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
 
-  MonSession *session = m->get_session();
+  MonSession *session = op->get_session();
   if (!session) {
     mon->reply_command(op, -EACCES, "access denied", get_last_committed());
     return true;

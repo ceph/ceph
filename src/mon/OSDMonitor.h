@@ -358,7 +358,7 @@ public:
 private:
   void print_utilization(ostream &out, Formatter *f, bool tree) const;
 
-  bool check_source(PaxosServiceMessage *m, uuid_d fsid);
+  bool check_source(MonOpRequestRef op, uuid_d fsid);
  
   bool preprocess_get_osdmap(MonOpRequestRef op);
 

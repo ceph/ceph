@@ -44,21 +44,6 @@ public:
 
   MForward() : MessageInstance(MSG_FORWARD, HEAD_VERSION, COMPAT_VERSION),
                tid(0), con_features(0), msg(NULL) {}
-  //the message needs to have caps filled in!
-  MForward(uint64_t t, PaxosServiceMessage *m, uint64_t feat) :
-    MessageInstance(MSG_FORWARD, HEAD_VERSION, COMPAT_VERSION),
-    tid(t), msg(NULL) {
-    client_type = m->get_source().type();
-    client_addrs = m->get_source_addrs();
-    if (auto con = m->get_connection()) {
-      client_socket_addr = con->get_peer_socket_addr();
-    }
-    client_caps = m->get_session()->caps;
-    con_features = feat;
-    // we may need to reencode for the target mon
-    msg->clear_payload();
-    msg = (PaxosServiceMessage*)m->get();
-  }
   MForward(uint64_t t, PaxosServiceMessage *m, uint64_t feat,
            const MonCap& caps) :
     MessageInstance(MSG_FORWARD, HEAD_VERSION, COMPAT_VERSION),
