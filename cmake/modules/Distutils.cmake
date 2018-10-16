@@ -34,15 +34,27 @@ endfunction(distutils_install_module)
 function(distutils_add_cython_module name src)
   get_property(compiler_launcher GLOBAL PROPERTY RULE_LAUNCH_COMPILE)
   get_property(link_launcher GLOBAL PROPERTY RULE_LAUNCH_LINK)
-  set(PY_CC \"${compiler_launcher} ${CMAKE_C_COMPILER}\")
-  set(PY_CXX \"${compiler_launcher} ${CMAKE_CXX_COMPILER}\")
-  set(PY_LDSHARED \"${link_launcher} ${CMAKE_C_COMPILER} -shared\")
+  # When using ccache CMAKE_C_COMPILER is ccache executable absolute path
+  # and the actual C compiler is CMAKE_C_COMPILER_ARG1.
+  # However with a naive
+  # set(PY_CC ${compiler_launcher} ${CMAKE_C_COMPILER} ${CMAKE_C_COMPILER_ARG1})
+  # distutils tries to execve something like "/usr/bin/cmake gcc" and fails.
+  # Removing the leading whitespace from CMAKE_C_COMPILER_ARG1 helps to avoid
+  # the failure.
+  string(REGEX REPLACE "^[ ]+(.+)[ ]*$" \\1 _actual_c_compiler "${CMAKE_C_COMPILER_ARG1}")
+  string(REGEX REPLACE "^[ ]+(.+)[ ]*$" \\1 _actual_cxx_compiler "${CMAKE_CXX_COMPILER_ARG1}")
+  # Note: no quotes, otherwise distutils will execute "/usr/bin/ccache gcc"
+  # CMake's implicit conversion between strings and lists is wonderful, isn't it?
+  set(PY_CC ${compiler_launcher} ${CMAKE_C_COMPILER} ${_actual_c_compiler})
+  set(PY_CXX ${compiler_launcher} ${CMAKE_CXX_COMPILER} ${_actual_cxx_compiler})
+  # C++ code should be linked with C++ compiler
+  set(PY_LDSHARED ${link_launcher} ${CMAKE_CXX_COMPILER} ${_actual_cxx_compiler} "-shared")
   add_custom_target(${name} ALL
     COMMAND
     env
-    CC=${PY_CC}
-    CXX=${PY_CXX}
-    LDSHARED=${PY_LDSHARED}
+    CC="${PY_CC}"
+    CXX="${PY_CXX}"
+    LDSHARED="${PY_LDSHARED}"
     OPT=\"-DNDEBUG -g -fwrapv -O2 -w\"
     LDFLAGS=-L${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
     CYTHON_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}
