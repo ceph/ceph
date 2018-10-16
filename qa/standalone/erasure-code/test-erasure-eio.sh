@@ -60,7 +60,7 @@ function get_state() {
     local pgid=$1
     local sname=state
     ceph --format json pg dump pgs 2>/dev/null | \
-        jq -r ".[] | select(.pgid==\"$pgid\") | .$sname"
+        jq -r ".pg_stats | .[] | select(.pgid==\"$pgid\") | .$sname"
 }
 
 function create_erasure_coded_pool() {
