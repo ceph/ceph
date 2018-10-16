@@ -568,8 +568,7 @@ exists.')
                 items = sorted(list_items(dir_name),
                                key=lambda item: item.d_name)
             if not args.all and len(items) > 2:
-                items = [i for i in items if not i.d_name.decode(
-                    'utf-8').startswith('.')]
+                items = [i for i in items if not i.d_name.startswith('.')]
             flag = 0
             if args.S:
                 items = sorted(items, key=lambda item: cephfs.stat(
@@ -579,7 +578,7 @@ exists.')
             for item in items:
                 path = item
                 if not isinstance(item, str):
-                    path = item.d_name.decode('utf-8')
+                    path = item.d_name
                     if item.is_dir():
                         is_dir = True
                     else:
