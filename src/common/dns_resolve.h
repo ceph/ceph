@@ -17,7 +17,7 @@
 #include <netinet/in.h>
 #include <resolv.h>
 
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "msg/msg_types.h"		// for entity_addr_t
 
 namespace ceph {
@@ -126,10 +126,10 @@ class DNSResolver {
         std::map<std::string, Record> *srv_hosts);
 
   private:
-    DNSResolver() : lock("DNSResolver") { resolv_h = new ResolvHWrapper(); }
+    DNSResolver() { resolv_h = new ResolvHWrapper(); }
     ~DNSResolver();
 
-    Mutex lock;
+    ceph::mutex lock = ceph::make_mutex("DNSResolver::lock");
     ResolvHWrapper *resolv_h;
 #ifdef HAVE_RES_NQUERY
     std::list<res_state> states;

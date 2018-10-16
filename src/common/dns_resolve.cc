@@ -86,7 +86,7 @@ int DNSResolver::get_state(CephContext *cct, res_state *ps)
 
 void DNSResolver::put_state(res_state s)
 {
-  std::lock_guard<Mutex> l(lock);
+  std::lock_guard l(lock);
   states.push_back(s);
 }
 #endif
@@ -122,7 +122,7 @@ int DNSResolver::resolve_cname(CephContext *cct, const string& hostname,
 #else
   {
 # ifndef HAVE_THREAD_SAFE_RES_QUERY
-    std::lock_guard<Mutex> l(lock);
+    std::lock_guard l(lock);
 # endif
     len = resolv_h->res_query(origname, ns_c_in, ns_t_cname, buf, sizeof(buf));
   }
@@ -219,7 +219,7 @@ int DNSResolver::resolve_ip_addr(CephContext *cct, res_state *res, const string&
 #else
   {
 # ifndef HAVE_THREAD_SAFE_RES_QUERY
-    std::lock_guard<Mutex> l(lock);
+    std::lock_guard l(lock);
 # endif
     len = resolv_h->res_query(hostname.c_str(), ns_c_in, type, nsbuf, sizeof(nsbuf));
   }
@@ -295,7 +295,7 @@ int DNSResolver::resolve_srv_hosts(CephContext *cct, const string& service_name,
 #else
   {
 # ifndef HAVE_THREAD_SAFE_RES_QUERY
-    std::lock_guard<Mutex> l(lock);
+    std::lock_guard l(lock);
 # endif
     len = resolv_h->res_search(query_str.c_str(), ns_c_in, ns_t_srv, nsbuf,
         sizeof(nsbuf));
