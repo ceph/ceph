@@ -312,43 +312,19 @@ class Prepare(object):
         Once the OSD is ready, an ad-hoc systemd unit will be enabled so that
         it can later get activated and the OSD daemon can get started.
 
-        Most basic Usage looks like (journal will be collocated from the same volume group):
-
-            ceph-volume lvm prepare --data {volume group name}
-
         Encryption is supported via dmcrypt and the --dmcrypt flag.
 
-        Example calls for supported scenarios:
+        Existing logical volume (lv):
 
-        Dedicated volume group for Journal(s)
-        -------------------------------------
+            ceph-volume lvm prepare --data {vg/lv}
 
-          Existing logical volume (lv) or device:
+        Existing block device, that will be made a group and logical volume:
 
-              ceph-volume lvm prepare --filestore --data {vg/lv} --journal /path/to/device
+            ceph-volume lvm prepare --data /path/to/device
 
-          Or:
+        Optionally, can consume db and wal partitions or logical volumes:
 
-              ceph-volume lvm prepare --filestore --data {vg/lv} --journal {vg/lv}
-
-          Existing block device, that will be made a group and logical volume:
-
-              ceph-volume lvm prepare --filestore --data /path/to/device --journal {vg/lv}
-
-        Bluestore
-        ---------
-
-          Existing logical volume (lv):
-
-              ceph-volume lvm prepare --bluestore --data {vg/lv}
-
-          Existing block device, that will be made a group and logical volume:
-
-              ceph-volume lvm prepare --bluestore --data /path/to/device
-
-          Optionally, can consume db and wal devices or logical volumes:
-
-              ceph-volume lvm prepare --bluestore --data {vg/lv} --block.wal {device} --block-db {vg/lv}
+            ceph-volume lvm prepare --data {vg/lv} --block.wal {partition} --block.db {vg/lv}
         """)
         parser = prepare_parser(
             prog='ceph-volume lvm prepare',
