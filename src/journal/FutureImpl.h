@@ -7,6 +7,7 @@
 #include "include/int_types.h"
 #include "common/Mutex.h"
 #include "common/RefCountedObj.h"
+#include "include/Context.h"
 #include "journal/Future.h"
 #include <list>
 #include <map>
