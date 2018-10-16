@@ -349,7 +349,7 @@ public:
                           const std::set <std::string> &changed) override {
     if (changed.count(
 	  "enable_experimental_unrecoverable_data_corrupting_features")) {
-      std::lock_guard<ceph::spinlock> lg(cct->_feature_lock);
+      std::lock_guard lg(cct->_feature_lock);
       get_str_set(
 	conf->enable_experimental_unrecoverable_data_corrupting_features,
 	cct->_experimental_features);
@@ -741,7 +741,7 @@ void CephContext::shutdown_crypto()
 void CephContext::start_service_thread()
 {
   {
-    std::lock_guard<ceph::spinlock> lg(_service_thread_lock);
+    std::lock_guard lg(_service_thread_lock);
     if (_service_thread) {
       return;
     }
@@ -768,7 +768,7 @@ void CephContext::start_service_thread()
 
 void CephContext::reopen_logs()
 {
-  std::lock_guard<ceph::spinlock> lg(_service_thread_lock);
+  std::lock_guard lg(_service_thread_lock);
   if (_service_thread)
     _service_thread->reopen_logs();
 }
@@ -899,7 +899,7 @@ CryptoHandler *CephContext::get_crypto_handler(int type)
 void CephContext::notify_pre_fork()
 {
   {
-    std::lock_guard<ceph::spinlock> lg(_fork_watchers_lock);
+    std::lock_guard lg(_fork_watchers_lock);
     for (auto &&t : _fork_watchers) {
       t->handle_pre_fork();
     }

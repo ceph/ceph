@@ -106,7 +106,7 @@ void mempool::pool_t::get_stats(
     total->bytes += shard[i].bytes;
   }
   if (debug_mode) {
-    std::lock_guard<std::mutex> shard_lock(lock);
+    std::lock_guard shard_lock(lock);
     for (auto &p : type_map) {
       std::string n = ceph_demangle(p.second.type_name);
       stats_t &s = (*by_type)[n];

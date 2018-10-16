@@ -700,7 +700,7 @@ TokenBucketThrottle::TokenBucketThrottle(
     m_avg(avg), m_timer(timer), m_timer_lock(timer_lock),
     m_lock("token_bucket_throttle_lock")
 {
-  std::lock_guard<Mutex> timer_locker(*m_timer_lock);
+  std::lock_guard timer_locker(*m_timer_lock);
   schedule_timer();
 }
 
@@ -708,13 +708,13 @@ TokenBucketThrottle::~TokenBucketThrottle()
 {
   // cancel the timer events.
   {
-    std::lock_guard<Mutex> timer_locker(*m_timer_lock);
+    std::lock_guard timer_locker(*m_timer_lock);
     cancel_timer();
   }
 
   list<Blocker> tmp_blockers;
   {
-    std::lock_guard<Mutex> blockers_lock(m_lock);
+    std::lock_guard blockers_lock(m_lock);
     tmp_blockers.splice(tmp_blockers.begin(), m_blockers, m_blockers.begin(), m_blockers.end());
   }
 
@@ -724,7 +724,7 @@ TokenBucketThrottle::~TokenBucketThrottle()
 }
 
 void TokenBucketThrottle::set_max(uint64_t m) {
-  std::lock_guard<Mutex> lock(m_lock);
+  std::lock_guard lock(m_lock);
   m_throttle.set_max(m);
 }
 
@@ -736,7 +736,7 @@ void TokenBucketThrottle::add_tokens() {
   list<Blocker> tmp_blockers;
   {
     // put m_avg tokens into bucket.
-    std::lock_guard<Mutex> lock(m_lock);
+    std::lock_guard lock(m_lock);
     m_throttle.put(m_avg);
     // check the m_blockers from head to tail, if blocker can get
     // enough tokens, let it go.

@@ -389,7 +389,7 @@ public:
   
     bool wait = false;
     uint64_t got = 0;
-    std::lock_guard<Mutex> lock(m_lock);
+    std::lock_guard lock(m_lock);
     if (!m_blockers.empty()) {
       // Keep the order of requests, add item after previous blocked requests.
       wait = true;
