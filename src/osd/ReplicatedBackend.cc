@@ -1695,7 +1695,7 @@ bool ReplicatedBackend::handle_pull_response(
 
   pi.stat.num_keys_recovered += pop.omap_entries.size();
   pi.stat.num_bytes_recovered += data.length();
-  get_parent()->get_logger()->inc(l_osd_rop, pop.omap_entries.size() + data.length());
+  get_parent()->get_logger()->inc(l_osd_rbytes, pop.omap_entries.size() + data.length());
 
   if (complete) {
     pi.stat.num_objects_recovered++;
