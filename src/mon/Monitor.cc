@@ -250,7 +250,7 @@ public:
 void Monitor::do_admin_command(std::string_view command, const cmdmap_t& cmdmap,
 			       std::string_view format, std::ostream& ss)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
 
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
@@ -818,7 +818,7 @@ int Monitor::preinit()
 int Monitor::init()
 {
   dout(2) << "init" << dendl;
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
 
   finisher.start();
 
@@ -2890,7 +2890,7 @@ struct C_MgrProxyCommand : public Context {
   C_MgrProxyCommand(Monitor *mon, MonOpRequestRef op, uint64_t s)
     : mon(mon), op(op), size(s) { }
   void finish(int r) {
-    Mutex::Locker l(mon->lock);
+    std::lock_guard l(mon->lock);
     mon->mgr_proxy_bytes -= size;
     mon->reply_command(op, r, outs, outbl, 0);
   }
@@ -3920,7 +3920,7 @@ void Monitor::remove_session(MonSession *s)
 
 void Monitor::remove_all_sessions()
 {
-  Mutex::Locker l(session_map_lock);
+  std::lock_guard l(session_map_lock);
   while (!session_map.sessions.empty()) {
     MonSession *s = session_map.sessions.front();
     remove_session(s);
@@ -3966,7 +3966,7 @@ void Monitor::waitlist_or_zap_client(MonOpRequestRef op)
     // proxied sessions aren't registered and don't have a con; don't remove
     // those.
     if (!s->proxy_con) {
-      Mutex::Locker l(session_map_lock);
+      std::lock_guard l(session_map_lock);
       remove_session(s);
     }
     op->mark_zap();
@@ -4027,7 +4027,7 @@ void Monitor::_ms_dispatch(Message *m)
 
     ConnectionRef con = m->get_connection();
     {
-      Mutex::Locker l(session_map_lock);
+      std::lock_guard l(session_map_lock);
       s = session_map.new_session(m->get_source(),
 				  m->get_source_addrs(),
 				  con.get());
@@ -4797,7 +4797,7 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
       for (map<string, Subscription*>::iterator it = s->sub_map.begin();
 	   it != s->sub_map.end(); ) {
 	if (it->first != p->first && logmon()->sub_name_to_id(it->first) >= 0) {
-	  Mutex::Locker l(session_map_lock);
+	  std::lock_guard l(session_map_lock);
 	  session_map.remove_sub((it++)->second);
 	} else {
 	  ++it;
@@ -4806,7 +4806,7 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
     }
 
     {
-      Mutex::Locker l(session_map_lock);
+      std::lock_guard l(session_map_lock);
       session_map.add_update_sub(s, p->first, p->second.start,
 				 p->second.flags & CEPH_SUBSCRIBE_ONETIME,
 				 m->get_connection()->has_feature(CEPH_FEATURE_INCSUBOSDMAP));
@@ -4919,11 +4919,11 @@ bool Monitor::ms_handle_reset(Connection *con)
   if (is_shutdown())
     return false;
 
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
 
   dout(10) << "reset/close on session " << s->name << " " << s->addrs << dendl;
   if (!s->closed) {
-    Mutex::Locker l(session_map_lock);
+    std::lock_guard l(session_map_lock);
     remove_session(s);
   }
   return true;
@@ -5395,7 +5395,7 @@ void Monitor::tick()
   
   // trim sessions
   {
-    Mutex::Locker l(session_map_lock);
+    std::lock_guard l(session_map_lock);
     auto p = session_map.sessions.begin();
 
     bool out_for_too_long = (!exited_quorum.is_zero() &&

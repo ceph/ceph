@@ -999,7 +999,7 @@ void OSDMonitor::prime_pg_temp(
 	   << ", priming " << acting
 	   << dendl;
   {
-    Mutex::Locker l(prime_pg_temp_lock);
+    std::lock_guard l(prime_pg_temp_lock);
     // do not touch a mapping if a change is pending
     pending_inc.new_pg_temp.emplace(
       pgid,
