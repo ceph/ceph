@@ -492,7 +492,7 @@ public:
 
   snapid_t ll_get_snapid(Inode *in);
   vinodeno_t ll_get_vino(Inode *in) {
-    Mutex::Locker lock(client_lock);
+    std::lock_guard lock(client_lock);
     return _get_vino(in);
   }
   // get inode from faked ino
