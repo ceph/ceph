@@ -515,7 +515,8 @@ void global_init_chdir(const CephContext *cct)
 int global_init_shutdown_stderr(CephContext *cct)
 {
   reopen_as_null(cct, STDERR_FILENO);
-  cct->_log->set_stderr_level(-1, -1);
+  int l = cct->_conf->err_to_stderr ? -1 : -2;
+  cct->_log->set_stderr_level(l, l);
   return 0;
 }
 

@@ -511,11 +511,11 @@ flushjournal_out:
   ms_hb_back_server->set_cluster_protocol(CEPH_OSD_PROTOCOL);
   ms_hb_front_server->set_cluster_protocol(CEPH_OSD_PROTOCOL);
 
-  cout << "starting osd." << whoami
-       << " osd_data " << data_path
-       << " " << ((journal_path.empty()) ?
-		  "(no journal)" : journal_path)
-       << std::endl;
+  dout(0) << "starting osd." << whoami
+          << " osd_data " << data_path
+          << " " << ((journal_path.empty()) ?
+		    "(no journal)" : journal_path)
+          << dendl;
 
   uint64_t message_size =
     g_conf().get_val<Option::size_t>("osd_client_message_size_cap");
