@@ -134,11 +134,15 @@ struct MTrim : boost::statechart::event<MTrim> {
 
 struct RequestBackfillPrio : boost::statechart::event< RequestBackfillPrio > {
   unsigned priority;
-  explicit RequestBackfillPrio(unsigned prio) :
+  int64_t primary_num_bytes;
+  int64_t local_num_bytes;
+  explicit RequestBackfillPrio(unsigned prio, int64_t pbytes, int64_t lbytes) :
     boost::statechart::event< RequestBackfillPrio >(),
-    priority(prio) {}
+    priority(prio), primary_num_bytes(pbytes), local_num_bytes(lbytes) {}
   void print(std::ostream *out) const {
-    *out << "RequestBackfillPrio: priority " << priority;
+    *out << "RequestBackfillPrio: priority " << priority
+         << " primary bytes " << primary_num_bytes
+         << " local bytes " << local_num_bytes;
   }
 };
 

@@ -4265,7 +4265,19 @@ void PrimaryLogPG::do_backfill(OpRequestRef op)
       ceph_assert(cct->_conf->osd_kill_backfill_at != 2);
 
       info.set_last_backfill(m->last_backfill);
-      info.stats = m->stats;
+      // During backfill submit_push_data() tracks num_bytes which is needed in case
+      // backfill stops and starts again.  We want to know how many bytes this
+      // pg is consuming on the disk in order to compute amount of new data
+      // reserved to hold backfill if it won't fit.
+      if (m->op == MOSDPGBackfill::OP_BACKFILL_PROGRESS) {
+        dout(0) << __func__ << " primary " << m->stats.stats.sum.num_bytes << " local " << info.stats.stats.sum.num_bytes << dendl;
+        int64_t bytes = info.stats.stats.sum.num_bytes;
+        info.stats = m->stats;
+        info.stats.stats.sum.num_bytes = bytes;
+      } else {
+        dout(0) << __func__ << " final " << m->stats.stats.sum.num_bytes << " replaces local " << info.stats.stats.sum.num_bytes << dendl;
+        info.stats = m->stats;
+      }
 
       ObjectStore::Transaction t;
       dirty_info = true;
@@ -4296,6 +4308,19 @@ void PrimaryLogPG::do_backfill_remove(OpRequestRef op)
 
   ObjectStore::Transaction t;
   for (auto& p : m->ls) {
+    if (is_remote_backfilling()) {
+      struct stat st;
+      int r = osd->store->stat(ch, ghobject_t(p.first, ghobject_t::NO_GEN,
+                               pg_whoami.shard) , &st);
+      if (r == 0) {
+        sub_local_num_bytes(st.st_size);
+        int chunks = 1;
+        sub_num_bytes(st.st_size * chunks);
+        dout(10) << __func__ << " " << ghobject_t(p.first, ghobject_t::NO_GEN, pg_whoami.shard)
+                 << " sub actual data by " << st.st_size
+                 << dendl;
+      }
+    }
     remove_snap_mapped_object(t, p.first);
   }
   int r = osd->store->queue_transaction(ch, std::move(t), NULL);

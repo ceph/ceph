@@ -1531,6 +1531,24 @@ void ReplicatedBackend::submit_push_data(
 		      oi.expected_object_size,
 		      oi.expected_write_size,
 		      oi.alloc_hint_flags);
+    if (get_parent()->pg_is_remote_backfilling()) {
+      struct stat st;
+      uint64_t size = 0;
+      int r = store->stat(ch, ghobject_t(recovery_info.soid), &st);
+      if (r == 0) {
+        size = st.st_size;
+      }
+      // Don't need to do anything if object is still the same size
+      if (size != recovery_info.oi.size) {
+        get_parent()->pg_add_local_num_bytes((int64_t)recovery_info.oi.size - (int64_t)size);
+        get_parent()->pg_add_num_bytes((int64_t)recovery_info.oi.size - (int64_t)size);
+        dout(10) << __func__ << " " << recovery_info.soid
+               << " backfill size " << recovery_info.oi.size
+               << " previous size " << size
+               << " net size " << recovery_info.oi.size - size
+               << dendl;
+      }
+    }
   }
   uint64_t off = 0;
   uint32_t fadvise_flags = CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL;
