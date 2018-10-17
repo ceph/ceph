@@ -43,14 +43,9 @@ namespace {
 }
 
 SocketConnection::SocketConnection(SocketMessenger& messenger,
-                                   const entity_addr_t& my_addr,
-                                   const entity_addr_t& peer_addr,
-                                   seastar::connected_socket&& fd)
-  : Connection(my_addr, peer_addr),
+                                   const entity_addr_t& my_addr)
+  : Connection(my_addr),
     messenger(messenger),
-    socket(std::move(fd)),
-    in(socket.input()),
-    out(socket.output()),
     send_ready(h.promise.get_future())
 {
 }
@@ -72,67 +67,11 @@ bool SocketConnection::is_connected()
   return !send_ready.failed();
 }
 
-// an input_stream consumer that reads buffer segments into a bufferlist up to
-// the given number of remaining bytes
-struct bufferlist_consumer {
-  bufferlist& bl;
-  size_t& remaining;
-
-  bufferlist_consumer(bufferlist& bl, size_t& remaining)
-    : bl(bl), remaining(remaining) {}
-
-  using tmp_buf = seastar::temporary_buffer<char>;
-  using consumption_result_type = typename seastar::input_stream<char>::consumption_result_type;
-
-  // consume some or all of a buffer segment
-  seastar::future<consumption_result_type> operator()(tmp_buf&& data) {
-    if (remaining >= data.size()) {
-      // consume the whole buffer
-      remaining -= data.size();
-      bl.append(buffer::create_foreign(std::move(data)));
-      if (remaining > 0) {
-        // return none to request more segments
-        return seastar::make_ready_future<consumption_result_type>(
-            seastar::continue_consuming{});
-      } else {
-        // return an empty buffer to singal that we're done
-        return seastar::make_ready_future<consumption_result_type>(
-            consumption_result_type::stop_consuming_type({}));
-      }
-    }
-    if (remaining > 0) {
-      // consume the front
-      bl.append(buffer::create_foreign(data.share(0, remaining)));
-      data.trim_front(remaining);
-      remaining = 0;
-    }
-    // give the rest back to signal that we're done
-    return seastar::make_ready_future<consumption_result_type>(
-        consumption_result_type::stop_consuming_type{std::move(data)});
-  };
-};
-
-seastar::future<bufferlist> SocketConnection::read(size_t bytes)
-{
-  if (bytes == 0) {
-    return seastar::make_ready_future<bufferlist>();
-  }
-  r.buffer.clear();
-  r.remaining = bytes;
-  return in.consume(bufferlist_consumer{r.buffer, r.remaining})
-    .then([this] {
-      if (r.remaining) { // throw on short reads
-        throw std::system_error(make_error_code(error::read_eof));
-      }
-      return seastar::make_ready_future<bufferlist>(std::move(r.buffer));
-    });
-}
-
 void SocketConnection::read_tags_until_next_message()
 {
   seastar::repeat([this] {
       // read the next tag
-      return in.read_exactly(1)
+      return socket->read_exactly(1)
         .then([this] (auto buf) {
           if (buf.empty()) {
             throw std::system_error(make_error_code(error::read_eof));
@@ -172,7 +111,7 @@ void SocketConnection::read_tags_until_next_message()
 
 seastar::future<seastar::stop_iteration> SocketConnection::handle_ack()
 {
-  return in.read_exactly(sizeof(ceph_le64))
+  return socket->read_exactly(sizeof(ceph_le64))
     .then([this] (auto buf) {
       auto seq = reinterpret_cast<const ceph_le64*>(buf.get());
       discard_up_to(&sent, *seq);
@@ -216,7 +155,7 @@ seastar::future<MessageRef> SocketConnection::do_read_message()
     .then([this] {
       on_message = seastar::promise<>{};
       // read header
-      return read(sizeof(m.header));
+      return socket->read(sizeof(m.header));
     }).then([this] (bufferlist bl) {
       // throttle the traffic, maybe
       auto p = bl.cbegin();
@@ -224,19 +163,19 @@ seastar::future<MessageRef> SocketConnection::do_read_message()
       return maybe_throttle();
     }).then([this] {
       // read front
-      return read(m.header.front_len);
+      return socket->read(m.header.front_len);
     }).then([this] (bufferlist bl) {
       m.front = std::move(bl);
       // read middle
-      return read(m.header.middle_len);
+      return socket->read(m.header.middle_len);
     }).then([this] (bufferlist bl) {
       m.middle = std::move(bl);
       // read data
-      return read(m.header.data_len);
+      return socket->read(m.header.data_len);
     }).then([this] (bufferlist bl) {
       m.data = std::move(bl);
       // read footer
-      return read(sizeof(m.footer));
+      return socket->read(sizeof(m.footer));
     }).then([this] (bufferlist bl) {
       // resume background processing of tags
       read_tags_until_next_message();
@@ -316,8 +255,7 @@ seastar::future<> SocketConnection::write_message(MessageRef msg)
     bl.append((const char*)&old_footer, sizeof(old_footer));
   }
   // write as a seastar::net::packet
-  return out.write(std::move(bl))
-    .then([this] { return out.flush(); })
+  return socket->write_flush(std::move(bl))
     .then([this, msg = std::move(msg)] {
       if (!policy.lossy) {
         sent.push(std::move(msg));
@@ -344,9 +282,7 @@ seastar::future<> SocketConnection::keepalive()
   seastar::shared_future<> f = send_ready.then([this] {
       k.req.stamp = ceph::coarse_real_clock::to_ceph_timespec(
         ceph::coarse_real_clock::now());
-      return out.write(make_static_packet(k.req));
-    }).then([this] {
-      return out.flush();
+      return socket->write_flush(make_static_packet(k.req));
     });
   send_ready = f.get_future();
   return f.get_future();
@@ -354,24 +290,28 @@ seastar::future<> SocketConnection::keepalive()
 
 seastar::future<> SocketConnection::close()
 {
-  if (state == state_t::closed) {
+  if (state == state_t::closing) {
     // already closing
     assert(close_ready.valid());
     return close_ready.get_future();
   }
 
-  state = state_t::closed;
-
   // unregister_conn() drops a reference, so hold another until completion
   auto cleanup = [conn = SocketConnectionRef(this)] {};
 
-  messenger.unregister_conn(this);
+  if (state == state_t::accepting) {
+    messenger.unaccept_conn(this);
+  } else if (state >= state_t::connecting && state < state_t::closing) {
+    messenger.unregister_conn(this);
+  } else {
+    // cannot happen
+    ceph_assert(false);
+  }
+  state = state_t::closing;
 
-  // close_ready become valid only after state is state_t::closed
+  // close_ready become valid only after state is state_t::closing
   assert(!close_ready.valid());
-  close_ready = seastar::when_all(in.close(), out.close())
-    .discard_result()
-    .finally(std::move(cleanup));
+  close_ready = socket->close().finally(std::move(cleanup));
   return close_ready.get_future();
 }
 
@@ -487,13 +427,15 @@ uint32_t SocketConnection::get_proto_version(entity_type_t peer_type, bool conne
   }
 }
 
-seastar::future<> SocketConnection::handle_connect()
+seastar::future<>
+SocketConnection::repeat_handle_connect()
 {
-  return read(sizeof(h.connect))
+  return socket->read(sizeof(h.connect))
     .then([this](bufferlist bl) {
       auto p = bl.cbegin();
       ::decode(h.connect, p);
-      return read(h.connect.authorizer_len);
+      peer_type = h.connect.host_type;
+      return socket->read(h.connect.authorizer_len);
     }).then([this] (bufferlist authorizer) {
       if (h.connect.protocol_version != get_proto_version(h.connect.host_type, false)) {
       	return seastar::make_ready_future<msgr_tag_t, bufferlist>(
@@ -507,9 +449,9 @@ seastar::future<> SocketConnection::handle_connect()
         return seastar::make_ready_future<msgr_tag_t, bufferlist>(
             CEPH_MSGR_TAG_FEATURES, bufferlist{});
       }
-      return messenger.verify_authorizer(get_peer_type(),
-                                          h.connect.authorizer_protocol,
-                                          authorizer);
+      return messenger.verify_authorizer(peer_type,
+                                         h.connect.authorizer_protocol,
+                                         authorizer);
     }).then([this] (ceph::net::msgr_tag_t tag, bufferlist&& authorizer_reply) {
       memset(&h.reply, 0, sizeof(h.reply));
       if (tag) {
@@ -538,11 +480,9 @@ SocketConnection::send_connect_reply(msgr_tag_t tag,
 					    policy.features_supported) |
 					   policy.features_required);
   h.reply.authorizer_len = authorizer_reply.length();
-  return out.write(make_static_packet(h.reply))
+  return socket->write(make_static_packet(h.reply))
     .then([this, reply=std::move(authorizer_reply)]() mutable {
-      return out.write(std::move(reply));
-    }).then([this] {
-      return out.flush();
+      return socket->write_flush(std::move(reply));
     });
 }
 
@@ -560,28 +500,28 @@ SocketConnection::send_connect_reply_ready(msgr_tag_t tag,
     h.reply.flags = h.reply.flags | CEPH_MSG_CONNECT_LOSSY;
   }
   h.reply.authorizer_len = authorizer_reply.length();
-  return out.write(make_static_packet(h.reply))
+  return socket->write(make_static_packet(h.reply))
     .then([this, reply=std::move(authorizer_reply)]() mutable {
       if (reply.length()) {
-        return out.write(std::move(reply));
+        return socket->write(std::move(reply));
       } else {
         return seastar::now();
       }
     }).then([this] {
       if (h.reply.tag == CEPH_MSGR_TAG_SEQ) {
-        return out.write(make_static_packet(in_seq))
+        return socket->write_flush(make_static_packet(in_seq))
           .then([this] {
-            return out.flush();
-          }).then([this] {
-            return in.read_exactly(sizeof(seq_num_t));
+            return socket->read_exactly(sizeof(seq_num_t));
           }).then([this] (auto buf) {
             auto acked_seq = reinterpret_cast<const seq_num_t*>(buf.get());
             discard_up_to(&out_q, *acked_seq);
           });
       } else {
-        return out.flush();
+        return socket->flush();
       }
     }).then([this] {
+      messenger.register_conn(this);
+      messenger.unaccept_conn(this);
       state = state_t::open;
     });
 }
@@ -589,20 +529,18 @@ SocketConnection::send_connect_reply_ready(msgr_tag_t tag,
 seastar::future<>
 SocketConnection::handle_keepalive2()
 {
-  return in.read_exactly(sizeof(ceph_timespec))
+  return socket->read_exactly(sizeof(ceph_timespec))
     .then([this] (auto buf) {
       k.ack.stamp = *reinterpret_cast<const ceph_timespec*>(buf.get());
       std::cout << "keepalive2 " << k.ack.stamp.tv_sec << std::endl;
-      return out.write(make_static_packet(k.ack));
-    }).then([this] {
-      return out.flush();
+      return socket->write_flush(make_static_packet(k.ack));
     });
 }
 
 seastar::future<>
 SocketConnection::handle_keepalive2_ack()
 {
-  return in.read_exactly(sizeof(ceph_timespec))
+  return socket->read_exactly(sizeof(ceph_timespec))
     .then([this] (auto buf) {
       auto t = reinterpret_cast<const ceph_timespec*>(buf.get());
       k.ack_stamp = *t;
@@ -689,7 +627,7 @@ seastar::future<> SocketConnection::handle_connect_reply(msgr_tag_t tag)
     }
     h.got_bad_auth = true;
     // try harder
-    return messenger.get_authorizer(h.peer_type, true)
+    return messenger.get_authorizer(peer_type, true)
       .then([this](auto&& auth) {
         h.authorizer = std::move(auth);
 	return seastar::now();
@@ -716,13 +654,11 @@ seastar::future<> SocketConnection::handle_connect_reply(msgr_tag_t tag)
     return fault();
   }
   if (tag == CEPH_MSGR_TAG_SEQ) {
-    return in.read_exactly(sizeof(seq_num_t))
+    return socket->read_exactly(sizeof(seq_num_t))
       .then([this] (auto buf) {
         auto acked_seq = reinterpret_cast<const seq_num_t*>(buf.get());
         discard_up_to(&out_q, *acked_seq);
-        return out.write(make_static_packet(in_seq));
-      }).then([this] {
-        return out.flush();
+        return socket->write_flush(make_static_packet(in_seq));
       }).then([this] {
         return handle_connect_reply(CEPH_MSGR_TAG_READY);
       });
@@ -769,14 +705,12 @@ void SocketConnection::reset_session()
   }
 }
 
-seastar::future<> SocketConnection::connect(entity_type_t peer_type,
-                                            entity_type_t host_type)
+seastar::future<> SocketConnection::repeat_connect()
 {
   // encode ceph_msg_connect
-  h.peer_type = peer_type;
   memset(&h.connect, 0, sizeof(h.connect));
   h.connect.features = policy.features_supported;
-  h.connect.host_type = host_type;
+  h.connect.host_type = messenger.get_myname().type();
   h.connect.global_seq = h.global_seq;
   h.connect.connect_seq = h.connect_seq;
   h.connect.protocol_version = get_proto_version(peer_type, true);
@@ -797,17 +731,15 @@ seastar::future<> SocketConnection::connect(entity_type_t peer_type,
         h.connect.authorizer_len = 0;
         bl.append(create_static(h.connect));
       };
-      return out.write(std::move(bl));
-    }).then([this] {
-      return out.flush();
+      return socket->write_flush(std::move(bl));
     }).then([this] {
      // read the reply
-      return read(sizeof(h.reply));
+      return socket->read(sizeof(h.reply));
     }).then([this] (bufferlist bl) {
       auto p = bl.cbegin();
       ::decode(h.reply, p);
       ceph_assert(p.end());
-      return read(h.reply.authorizer_len);
+      return socket->read(h.reply.authorizer_len);
     }).then([this] (bufferlist bl) {
       if (h.authorizer) {
         auto reply = bl.cbegin();
@@ -820,12 +752,22 @@ seastar::future<> SocketConnection::connect(entity_type_t peer_type,
     });
 }
 
-seastar::future<> SocketConnection::client_handshake(entity_type_t peer_type,
-                                                     entity_type_t host_type)
+seastar::future<>
+SocketConnection::start_connect(const entity_addr_t& _peer_addr,
+                                const entity_type_t& _peer_type)
 {
-  // read server's handshake header
-  return read(server_header_size)
-    .then([this] (bufferlist headerbl) {
+  ceph_assert(state == state_t::none);
+  ceph_assert(!socket);
+  peer_addr = _peer_addr;
+  peer_type = _peer_type;
+  messenger.register_conn(this);
+  state = state_t::connecting;
+  return seastar::connect(peer_addr.in4_addr())
+    .then([this](seastar::connected_socket fd) {
+      socket.emplace(std::move(fd));
+      // read server's handshake header
+      return socket->read(server_header_size);
+    }).then([this] (bufferlist headerbl) {
       auto p = headerbl.cbegin();
       validate_banner(p);
       entity_addr_t saddr, caddr;
@@ -844,10 +786,10 @@ seastar::future<> SocketConnection::client_handshake(entity_type_t peer_type,
       bl.append(buffer::create_static(banner_size, banner));
       ::encode(my_addr, bl, 0);
       h.global_seq = messenger.get_global_seq();
-      return out.write(std::move(bl)).then([this] { return out.flush(); });
+      return socket->write_flush(std::move(bl));
     }).then([=] {
       return seastar::do_until([=] { return state == state_t::open; },
-                               [=] { return connect(peer_type, host_type); });
+                               [=] { return repeat_connect(); });
     }).then([this] {
       // start background processing of tags
       read_tags_until_next_message();
@@ -857,18 +799,25 @@ seastar::future<> SocketConnection::client_handshake(entity_type_t peer_type,
     });
 }
 
-seastar::future<> SocketConnection::server_handshake()
+seastar::future<>
+SocketConnection::start_accept(seastar::connected_socket&& fd,
+                               const entity_addr_t& _peer_addr)
 {
+  ceph_assert(state == state_t::none);
+  ceph_assert(!socket);
+  peer_addr = _peer_addr;
+  socket.emplace(std::move(fd));
+  messenger.accept_conn(this);
+  state = state_t::accepting;
   // encode/send server's handshake header
   bufferlist bl;
   bl.append(buffer::create_static(banner_size, banner));
   ::encode(my_addr, bl, 0);
   ::encode(peer_addr, bl, 0);
-  return out.write(std::move(bl))
-    .then([this] { return out.flush(); })
+  return socket->write_flush(std::move(bl))
     .then([this] {
       // read client's handshake header and connect request
-      return read(client_header_size);
+      return socket->read(client_header_size);
     }).then([this] (bufferlist bl) {
       auto p = bl.cbegin();
       validate_banner(p);
@@ -880,7 +829,7 @@ seastar::future<> SocketConnection::server_handshake()
       }
     }).then([this] {
       return seastar::do_until([this] { return state == state_t::open; },
-                               [this] { return handle_connect(); });
+                               [this] { return repeat_handle_connect(); });
     }).then([this] {
       // start background processing of tags
       read_tags_until_next_message();

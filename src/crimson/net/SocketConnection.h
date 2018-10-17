@@ -19,6 +19,7 @@
 
 #include "msg/Policy.h"
 #include "Connection.h"
+#include "Socket.h"
 #include "crimson/thread/Throttle.h"
 
 class AuthAuthorizer;
@@ -32,30 +33,21 @@ using SocketConnectionRef = boost::intrusive_ptr<SocketConnection>;
 
 class SocketConnection : public Connection {
   SocketMessenger& messenger;
-  seastar::connected_socket socket;
-  seastar::input_stream<char> in;
-  seastar::output_stream<char> out;
+  std::optional<Socket> socket;
 
   enum class state_t {
     none,
+    accepting,
+    connecting,
     open,
     standby,
-    closed,
-    wait
+    wait,
+    closing
   };
   state_t state = state_t::none;
 
-  /// become valid only when state is state_t::closed
+  /// become valid only when state is state_t::closing
   seastar::shared_future<> close_ready;
-
-  /// buffer state for read()
-  struct Reader {
-    bufferlist buffer;
-    size_t remaining;
-  } r;
-
-  /// read the requested number of bytes into a bufferlist
-  seastar::future<bufferlist> read(size_t bytes);
 
   /// state for handshake
   struct Handshake {
@@ -63,7 +55,6 @@ class SocketConnection : public Connection {
     ceph_msg_connect_reply reply;
     bool got_bad_auth = false;
     std::unique_ptr<AuthAuthorizer> authorizer;
-    peer_type_t peer_type;
     std::chrono::milliseconds backoff;
     uint32_t connect_seq = 0;
     uint32_t peer_global_seq = 0;
@@ -72,7 +63,7 @@ class SocketConnection : public Connection {
   } h;
 
   /// server side of handshake negotiation
-  seastar::future<> handle_connect();
+  seastar::future<> repeat_handle_connect();
   seastar::future<> handle_connect_with_existing(SocketConnectionRef existing,
 						 bufferlist&& authorizer_reply);
   seastar::future<> replace_existing(SocketConnectionRef existing,
@@ -89,7 +80,7 @@ class SocketConnection : public Connection {
   bool require_auth_feature() const;
   uint32_t get_proto_version(entity_type_t peer_type, bool connec) const;
   /// client side of handshake negotiation
-  seastar::future<> connect(entity_type_t peer_type, entity_type_t host_type);
+  seastar::future<> repeat_connect();
   seastar::future<> handle_connect_reply(ceph::net::msgr_tag_t tag);
   void reset_session();
 
@@ -159,15 +150,13 @@ class SocketConnection : public Connection {
 
  public:
   SocketConnection(SocketMessenger& messenger,
-                   const entity_addr_t& my_addr,
-                   const entity_addr_t& peer_addr,
-                   seastar::connected_socket&& socket);
+                   const entity_addr_t& my_addr);
   ~SocketConnection();
 
   Messenger* get_messenger() const override;
 
   int get_peer_type() const override {
-    return h.connect.host_type;
+    return peer_type;
   }
 
   bool is_connected() override;
@@ -180,11 +169,12 @@ class SocketConnection : public Connection {
 
  public:
   /// complete a handshake from the client's perspective
-  seastar::future<> client_handshake(entity_type_t peer_type,
-				     entity_type_t host_type);
+  seastar::future<> start_connect(const entity_addr_t& peer_addr,
+                                  const entity_type_t& peer_type);
 
   /// complete a handshake from the server's perspective
-  seastar::future<> server_handshake();
+  seastar::future<> start_accept(seastar::connected_socket&& socket,
+                                 const entity_addr_t& peer_addr);
 
   /// read a message from a connection that has completed its handshake
   seastar::future<MessageRef> read_message();

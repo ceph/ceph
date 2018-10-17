@@ -29,11 +29,11 @@ class Connection : public boost::intrusive_ref_counter<Connection,
  protected:
   entity_addr_t my_addr;
   entity_addr_t peer_addr;
+  peer_type_t peer_type = -1;
 
  public:
-  Connection(const entity_addr_t& my_addr,
-             const entity_addr_t& peer_addr)
-    : my_addr(my_addr), peer_addr(peer_addr) {}
+  Connection(const entity_addr_t& my_addr)
+    : my_addr(my_addr) {}
   virtual ~Connection() {}
 
   virtual Messenger* get_messenger() const = 0;
