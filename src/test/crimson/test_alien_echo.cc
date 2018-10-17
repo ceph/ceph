@@ -133,14 +133,6 @@ struct Server {
       }
       on_reply.notify_one();
     }
-    bool ms_verify_authorizer(Connection *con, int peer_type, int protocol,
-                              bufferlist& authorizer,
-                              bufferlist& authorizer_reply,
-                              bool& isvalid, CryptoKey& session_key,
-                              std::unique_ptr<AuthAuthorizerChallenge>*) override {
-      isvalid = true;
-      return true;
-    }
     bool ms_dispatch(Message*) override {
       ceph_abort();
     }
@@ -195,14 +187,6 @@ struct Client {
         replied = true;
       }
       on_reply.notify_one();
-    }
-    bool ms_verify_authorizer(Connection *con, int peer_type, int protocol,
-                              bufferlist& authorizer,
-                              bufferlist& authorizer_reply,
-                              bool& isvalid, CryptoKey& session_key,
-                              std::unique_ptr<AuthAuthorizerChallenge>*) override {
-      isvalid = true;
-      return true;
     }
     bool ms_dispatch(Message*) override {
       ceph_abort();
