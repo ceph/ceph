@@ -68,6 +68,7 @@ class MMDSSlaveRequest;
 struct MClientSnap;
 
 class MMDSFragmentNotify;
+class MMDSFragmentNotifyAck;
 
 class ESubtreeMap;
 
@@ -1099,15 +1100,20 @@ private:
     list<CDir*> dirs;
     list<CDir*> resultfrags;
     MDRequestRef mdr;
+    set<mds_rank_t> notify_ack_waiting;
+    bool finishing = false;
+
     // for deadlock detection
-    bool all_frozen;
+    bool all_frozen = false;
     utime_t last_cum_auth_pins_change;
-    int last_cum_auth_pins;
-    int num_remote_waiters;	// number of remote authpin waiters
-    fragment_info_t() : bits(0), all_frozen(false), last_cum_auth_pins(0), num_remote_waiters(0) {}
+    int last_cum_auth_pins = 0;
+    int num_remote_waiters = 0;	// number of remote authpin waiters
+    fragment_info_t() {}
     bool is_fragmenting() { return !resultfrags.empty(); }
+    uint64_t get_tid() { return mdr ? mdr->reqid.tid : 0; }
   };
   map<dirfrag_t,fragment_info_t> fragments;
+  typedef map<dirfrag_t,fragment_info_t>::iterator fragment_info_iterator;
 
   void adjust_dir_fragments(CInode *diri, frag_t basefrag, int bits,
 			    list<CDir*>& frags, list<MDSInternalContextBase*>& waiters, bool replay);
@@ -1125,11 +1131,13 @@ private:
   void fragment_mark_and_complete(MDRequestRef& mdr);
   void fragment_frozen(MDRequestRef& mdr, int r);
   void fragment_unmark_unfreeze_dirs(list<CDir*>& dirs);
+  void fragment_drop_locks(fragment_info_t &info);
+  void fragment_maybe_finish(const fragment_info_iterator& it);
   void dispatch_fragment_dir(MDRequestRef& mdr);
   void _fragment_logged(MDRequestRef& mdr);
   void _fragment_stored(MDRequestRef& mdr);
-  void _fragment_committed(dirfrag_t f, list<CDir*>& resultfrags);
-  void _fragment_finish(dirfrag_t f, list<CDir*>& resultfrags);
+  void _fragment_committed(dirfrag_t f, const MDRequestRef& mdr);
+  void _fragment_old_purged(dirfrag_t f, int bits, const MDRequestRef& mdr);
 
   friend class EFragment;
   friend class C_MDC_FragmentFrozen;
@@ -1137,9 +1145,10 @@ private:
   friend class C_MDC_FragmentPrep;
   friend class C_MDC_FragmentStore;
   friend class C_MDC_FragmentCommit;
-  friend class C_IO_MDC_FragmentFinish;
+  friend class C_IO_MDC_FragmentPurgeOld;
 
   void handle_fragment_notify(MMDSFragmentNotify *m);
+  void handle_fragment_notify_ack(MMDSFragmentNotifyAck *m);
 
   void add_uncommitted_fragment(dirfrag_t basedirfrag, int bits, list<frag_t>& old_frag,
 				LogSegment *ls, bufferlist *rollback=NULL);

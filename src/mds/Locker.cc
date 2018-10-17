@@ -819,6 +819,24 @@ void Locker::drop_rdlocks_for_early_reply(MutationImpl *mut)
   issue_caps_set(need_issue);
 }
 
+void Locker::drop_locks_for_fragment_unfreeze(MutationImpl *mut)
+{
+  set<CInode*> need_issue;
+
+  for (auto it = mut->locks.begin(); it != mut->locks.end(); ) {
+    SimpleLock *lock = *it;
+    ++it;
+    if (lock->get_type() == CEPH_LOCK_IDFT) {
+      continue;
+    }
+    bool ni = false;
+    wrlock_finish(lock, mut, &ni);
+    if (ni)
+      need_issue.insert(static_cast<CInode*>(lock->get_parent()));
+  }
+  issue_caps_set(need_issue);
+}
+
 // generics
 
 void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, list<MDSInternalContextBase*> *pfinishers)

@@ -18,43 +18,52 @@
 #include "msg/Message.h"
 
 class MMDSFragmentNotify : public Message {
-  inodeno_t ino;
-  frag_t basefrag;
-  int8_t bits;
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 1;
+
+  dirfrag_t base_dirfrag;
+  int8_t bits = 0;
+  bool ack_wanted = false;
 
  public:
-  inodeno_t get_ino() { return ino; }
-  frag_t get_basefrag() { return basefrag; }
+  inodeno_t get_ino() { return base_dirfrag.ino; }
+  frag_t get_basefrag() { return base_dirfrag.frag; }
+  dirfrag_t get_base_dirfrag() const { return base_dirfrag; }
   int get_bits() { return bits; }
+  bool is_ack_wanted() const { return ack_wanted; }
+  void mark_ack_wanted() { ack_wanted = true; }
 
   bufferlist basebl;
 
-  MMDSFragmentNotify() : Message(MSG_MDS_FRAGMENTNOTIFY) {}
-  MMDSFragmentNotify(dirfrag_t df, int b) :
-	Message(MSG_MDS_FRAGMENTNOTIFY),
-    ino(df.ino), basefrag(df.frag), bits(b) { }
+  MMDSFragmentNotify() :
+    Message(MSG_MDS_FRAGMENTNOTIFY, HEAD_VERSION, COMPAT_VERSION) {}
+  MMDSFragmentNotify(dirfrag_t df, int b, uint64_t tid) :
+    Message(MSG_MDS_FRAGMENTNOTIFY, HEAD_VERSION, COMPAT_VERSION),
+    base_dirfrag(df), bits(b) {
+    set_tid(tid);
+  }
 private:
   ~MMDSFragmentNotify() override {}
 
 public:  
   const char *get_type_name() const override { return "fragment_notify"; }
   void print(ostream& o) const override {
-    o << "fragment_notify(" << ino << "." << basefrag
-      << " " << (int)bits << ")";
+    o << "fragment_notify(" << base_dirfrag << " " << (int)bits << ")";
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(ino, payload);
-    ::encode(basefrag, payload);
+    ::encode(base_dirfrag, payload);
     ::encode(bits, payload);
     ::encode(basebl, payload);
+    ::encode(ack_wanted, payload);
   }
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
-    ::decode(ino, p);
-    ::decode(basefrag, p);
+    ::decode(base_dirfrag, p);
     ::decode(bits, p);
     ::decode(basebl, p);
+    if (header.version >= 2)
+      ::decode(ack_wanted, p);
   }
   
 };
