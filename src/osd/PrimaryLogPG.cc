@@ -4314,10 +4314,29 @@ void PrimaryLogPG::do_backfill_remove(OpRequestRef op)
                                pg_whoami.shard) , &st);
       if (r == 0) {
         sub_local_num_bytes(st.st_size);
-        int chunks = 1;
-        sub_num_bytes(st.st_size * chunks);
+        int64_t usersize;
+        if (pool.info.is_erasure()) {
+          bufferlist bv;
+	  int r = osd->store->getattr(
+	      ch,
+              ghobject_t(p.first, ghobject_t::NO_GEN, pg_whoami.shard),
+	      OI_ATTR,
+	      bv);
+	  if (r >= 0) {
+	    object_info_t oi(bv);
+            usersize = oi.size * pgbackend->get_ec_data_chunk_count();
+          } else {
+            dout(0) << __func__ << " " << ghobject_t(p.first, ghobject_t::NO_GEN, pg_whoami.shard)
+                    << " can't get object info" << dendl;
+            usersize = 0;
+          }
+        } else {
+          usersize = st.st_size;
+        }
+        sub_num_bytes(usersize);
         dout(10) << __func__ << " " << ghobject_t(p.first, ghobject_t::NO_GEN, pg_whoami.shard)
                  << " sub actual data by " << st.st_size
+                 << " sub num_bytes by " << usersize
                  << dendl;
       }
     }
