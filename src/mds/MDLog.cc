@@ -476,7 +476,7 @@ void MDLog::flush()
 
 void MDLog::kick_submitter()
 {
-  Mutex::Locker l(submit_mutex);
+  std::lock_guard l(submit_mutex);
   submit_cond.Signal();
 }
 
@@ -978,7 +978,7 @@ void MDLog::_recovery_thread(MDSInternalContextBase *completion)
     if (mds->is_standby_replay()) {
       dout(1) << "Journal " << jp.front << " is being rewritten, "
         << "cannot replay in standby until an active MDS completes rewrite" << dendl;
-      Mutex::Locker l(mds->mds_lock);
+      std::lock_guard l(mds->mds_lock);
       if (mds->is_daemon_stopping()) {
         return;
       }
@@ -1033,7 +1033,7 @@ void MDLog::_recovery_thread(MDSInternalContextBase *completion)
   // Assign to ::journaler so that we can be aborted by ::shutdown while
   // waiting for journaler recovery
   {
-    Mutex::Locker l(mds->mds_lock);
+    std::lock_guard l(mds->mds_lock);
     journaler = front_journal;
   }
 
@@ -1059,7 +1059,7 @@ void MDLog::_recovery_thread(MDSInternalContextBase *completion)
     dout(0) << "Journal " << jp.front << " is in unknown format " << front_journal->get_stream_format()
             << ", does this MDS daemon require upgrade?" << dendl;
     {
-      Mutex::Locker l(mds->mds_lock);
+      std::lock_guard l(mds->mds_lock);
       if (mds->is_daemon_stopping()) {
         journaler = NULL;
         delete front_journal;
@@ -1074,7 +1074,7 @@ void MDLog::_recovery_thread(MDSInternalContextBase *completion)
     dout(4) << "Recovered journal " << jp.front << " in format " << front_journal->get_stream_format() << dendl;
     journaler->set_write_error_handler(new C_MDL_WriteError(this));
     {
-      Mutex::Locker l(mds->mds_lock);
+      std::lock_guard l(mds->mds_lock);
       if (mds->is_daemon_stopping()) {
         return;
       }
@@ -1252,7 +1252,7 @@ void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journa
   int erase_result = erase_waiter.wait();
   ceph_assert(erase_result == 0);
   {
-    Mutex::Locker l(mds->mds_lock);
+    std::lock_guard l(mds->mds_lock);
     if (mds->is_daemon_stopping()) {
       delete new_journal;
       return;
@@ -1270,7 +1270,7 @@ void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journa
   /* Reset the Journaler object to its default state */
   dout(1) << "Journal rewrite complete, continuing with normal startup" << dendl;
   {
-    Mutex::Locker l(mds->mds_lock);
+    std::lock_guard l(mds->mds_lock);
     if (mds->is_daemon_stopping()) {
       delete new_journal;
       return;
@@ -1282,7 +1282,7 @@ void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journa
 
   /* Trigger completion */
   {
-    Mutex::Locker l(mds->mds_lock);
+    std::lock_guard l(mds->mds_lock);
     if (mds->is_daemon_stopping()) {
       return;
     }
@@ -1429,7 +1429,7 @@ void MDLog::_replay_thread()
       num_events++;
 
       {
-        Mutex::Locker l(mds->mds_lock);
+        std::lock_guard l(mds->mds_lock);
         if (mds->is_daemon_stopping()) {
           return;
         }
@@ -1455,7 +1455,7 @@ void MDLog::_replay_thread()
 
   dout(10) << "_replay_thread kicking waiters" << dendl;
   {
-    Mutex::Locker l(mds->mds_lock);
+    std::lock_guard l(mds->mds_lock);
     if (mds->is_daemon_stopping()) {
       return;
     }

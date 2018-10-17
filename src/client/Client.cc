@@ -224,7 +224,7 @@ vinodeno_t Client::_map_faked_ino(ino_t ino)
 
 vinodeno_t Client::map_faked_ino(ino_t ino)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   return _map_faked_ino(ino);
 }
 
@@ -335,7 +335,7 @@ void Client::tear_down_cache()
 
 inodeno_t Client::get_root_ino()
 {
-  Mutex::Locker l(client_lock);
+  std::lock_guard l(client_lock);
   if (use_faked_inos())
     return root->faked_ino;
   else
@@ -344,7 +344,7 @@ inodeno_t Client::get_root_ino()
 
 Inode *Client::get_root()
 {
-  Mutex::Locker l(client_lock);
+  std::lock_guard l(client_lock);
   root->ll_get();
   return root;
 }
@@ -1987,7 +1987,7 @@ void Client::populate_metadata(const std::string &mount_root)
  */
 void Client::update_metadata(std::string const &k, std::string const &v)
 {
-  Mutex::Locker l(client_lock);
+  std::lock_guard l(client_lock);
   ceph_assert(initialized);
 
   auto it = metadata.find(k);
@@ -2519,7 +2519,7 @@ void Client::handle_osd_map(MOSDMap *m)
 
 bool Client::ms_dispatch(Message *m)
 {
-  Mutex::Locker l(client_lock);
+  std::lock_guard l(client_lock);
   if (!initialized) {
     ldout(cct, 10) << "inactive, discarding " << *m << dendl;
     m->put();
@@ -3860,7 +3860,7 @@ void Client::_flush_range(Inode *in, int64_t offset, uint64_t size)
 
 void Client::flush_set_callback(ObjectCacher::ObjectSet *oset)
 {
-  //  Mutex::Locker l(client_lock);
+  //  std::lock_guard l(client_lock);
   ceph_assert(client_lock.is_locked());   // will be called via dispatch() -> objecter -> ...
   Inode *in = static_cast<Inode *>(oset->parent);
   ceph_assert(in);
@@ -5615,7 +5615,7 @@ int Client::mds_command(
     string *outs,
     Context *onfinish)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (!initialized)
     return -ENOTCONN;
@@ -5761,7 +5761,7 @@ int Client::subscribe_mdsmap(const std::string &fs_name)
 int Client::mount(const std::string &mount_root, const UserPerm& perms,
 		  bool require_mds, const std::string &fs_name)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (mounted) {
     ldout(cct, 5) << "already mounted" << dendl;
@@ -6053,13 +6053,13 @@ void Client::_unmount(bool abort)
 
 void Client::unmount()
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   _unmount(false);
 }
 
 void Client::abort_conn()
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   _unmount(true);
 }
 
@@ -6417,7 +6417,7 @@ int Client::path_walk(const filepath& origpath, InodeRef *end,
 
 int Client::link(const char *relexisting, const char *relpath, const UserPerm& perm)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   tout(cct) << "link" << std::endl;
   tout(cct) << relexisting << std::endl;
   tout(cct) << relpath << std::endl;
@@ -6460,7 +6460,7 @@ int Client::link(const char *relexisting, const char *relpath, const UserPerm& p
 
 int Client::unlink(const char *relpath, const UserPerm& perm)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
 
@@ -6487,7 +6487,7 @@ int Client::unlink(const char *relpath, const UserPerm& perm)
 
 int Client::rename(const char *relfrom, const char *relto, const UserPerm& perm)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << relfrom << std::endl;
   tout(cct) << relto << std::endl;
@@ -6530,7 +6530,7 @@ out:
 
 int Client::mkdir(const char *relpath, mode_t mode, const UserPerm& perm)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
   tout(cct) << mode << std::endl;
@@ -6559,7 +6559,7 @@ int Client::mkdir(const char *relpath, mode_t mode, const UserPerm& perm)
 
 int Client::mkdirs(const char *relpath, mode_t mode, const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   ldout(cct, 10) << "Client::mkdirs " << relpath << dendl;
   tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
@@ -6616,7 +6616,7 @@ int Client::mkdirs(const char *relpath, mode_t mode, const UserPerm& perms)
 
 int Client::rmdir(const char *relpath, const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
 
@@ -6643,7 +6643,7 @@ int Client::rmdir(const char *relpath, const UserPerm& perms)
 
 int Client::mknod(const char *relpath, mode_t mode, const UserPerm& perms, dev_t rdev) 
 { 
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
   tout(cct) << mode << std::endl;
@@ -6674,7 +6674,7 @@ int Client::mknod(const char *relpath, mode_t mode, const UserPerm& perms, dev_t
   
 int Client::symlink(const char *target, const char *relpath, const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << target << std::endl;
   tout(cct) << relpath << std::endl;
@@ -6702,7 +6702,7 @@ int Client::symlink(const char *target, const char *relpath, const UserPerm& per
 
 int Client::readlink(const char *relpath, char *buf, loff_t size, const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
 
@@ -7008,7 +7008,7 @@ int Client::_setattr(InodeRef &in, struct stat *attr, int mask,
 int Client::setattr(const char *relpath, struct stat *attr, int mask,
 		    const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
   tout(cct) << mask  << std::endl;
@@ -7027,7 +7027,7 @@ int Client::setattr(const char *relpath, struct stat *attr, int mask,
 int Client::setattrx(const char *relpath, struct ceph_statx *stx, int mask,
 		     const UserPerm& perms, int flags)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
   tout(cct) << mask  << std::endl;
@@ -7045,7 +7045,7 @@ int Client::setattrx(const char *relpath, struct ceph_statx *stx, int mask,
 
 int Client::fsetattr(int fd, struct stat *attr, int mask, const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << fd << std::endl;
   tout(cct) << mask  << std::endl;
@@ -7065,7 +7065,7 @@ int Client::fsetattr(int fd, struct stat *attr, int mask, const UserPerm& perms)
 
 int Client::fsetattrx(int fd, struct ceph_statx *stx, int mask, const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << fd << std::endl;
   tout(cct) << mask  << std::endl;
@@ -7087,7 +7087,7 @@ int Client::stat(const char *relpath, struct stat *stbuf, const UserPerm& perms,
 		 frag_info_t *dirstat, int mask)
 {
   ldout(cct, 3) << __func__ << " enter (relpath " << relpath << " mask " << mask << ")" << dendl;
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   tout(cct) << "stat" << std::endl;
   tout(cct) << relpath << std::endl;
 
@@ -7136,7 +7136,7 @@ int Client::statx(const char *relpath, struct ceph_statx *stx,
 		  unsigned int want, unsigned int flags)
 {
   ldout(cct, 3) << __func__ << " enter (relpath " << relpath << " want " << want << ")" << dendl;
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   tout(cct) << "statx" << std::endl;
   tout(cct) << relpath << std::endl;
 
@@ -7167,7 +7167,7 @@ int Client::lstat(const char *relpath, struct stat *stbuf,
 		  const UserPerm& perms, frag_info_t *dirstat, int mask)
 {
   ldout(cct, 3) << __func__ << " enter (relpath " << relpath << " mask " << mask << ")" << dendl;
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
 
@@ -7342,7 +7342,7 @@ void Client::touch_dn(Dentry *dn)
 
 int Client::chmod(const char *relpath, mode_t mode, const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
   tout(cct) << mode << std::endl;
@@ -7362,7 +7362,7 @@ int Client::chmod(const char *relpath, mode_t mode, const UserPerm& perms)
 
 int Client::fchmod(int fd, mode_t mode, const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << fd << std::endl;
   tout(cct) << mode << std::endl;
@@ -7384,7 +7384,7 @@ int Client::fchmod(int fd, mode_t mode, const UserPerm& perms)
 
 int Client::lchmod(const char *relpath, mode_t mode, const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
   tout(cct) << mode << std::endl;
@@ -7406,7 +7406,7 @@ int Client::lchmod(const char *relpath, mode_t mode, const UserPerm& perms)
 int Client::chown(const char *relpath, uid_t new_uid, gid_t new_gid,
 		  const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
   tout(cct) << new_uid << std::endl;
@@ -7428,7 +7428,7 @@ int Client::chown(const char *relpath, uid_t new_uid, gid_t new_gid,
 
 int Client::fchown(int fd, uid_t new_uid, gid_t new_gid, const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << fd << std::endl;
   tout(cct) << new_uid << std::endl;
@@ -7456,7 +7456,7 @@ int Client::fchown(int fd, uid_t new_uid, gid_t new_gid, const UserPerm& perms)
 int Client::lchown(const char *relpath, uid_t new_uid, gid_t new_gid,
 		   const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
   tout(cct) << new_uid << std::endl;
@@ -7531,7 +7531,7 @@ int Client::futime(int fd, struct utimbuf *buf, const UserPerm& perms)
 int Client::utimes(const char *relpath, struct timeval times[2],
                    const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
   tout(cct) << "atime: " << times[0].tv_sec << "." << times[0].tv_usec
@@ -7558,7 +7558,7 @@ int Client::utimes(const char *relpath, struct timeval times[2],
 int Client::lutimes(const char *relpath, struct timeval times[2],
                     const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
   tout(cct) << "atime: " << times[0].tv_sec << "." << times[0].tv_usec
@@ -7595,7 +7595,7 @@ int Client::futimes(int fd, struct timeval times[2], const UserPerm& perms)
 
 int Client::futimens(int fd, struct timespec times[2], const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << fd << std::endl;
   tout(cct) << "atime: " << times[0].tv_sec << "." << times[0].tv_nsec
@@ -7623,7 +7623,7 @@ int Client::futimens(int fd, struct timespec times[2], const UserPerm& perms)
 
 int Client::flock(int fd, int operation, uint64_t owner)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << fd << std::endl;
   tout(cct) << operation << std::endl;
@@ -7641,7 +7641,7 @@ int Client::flock(int fd, int operation, uint64_t owner)
 
 int Client::opendir(const char *relpath, dir_result_t **dirpp, const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
 
@@ -7678,7 +7678,7 @@ int Client::_opendir(Inode *in, dir_result_t **dirpp, const UserPerm& perms)
 
 int Client::closedir(dir_result_t *dir) 
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << (unsigned long)dir << std::endl;
 
@@ -7701,7 +7701,7 @@ void Client::_closedir(dir_result_t *dirp)
 
 void Client::rewinddir(dir_result_t *dirp)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   ldout(cct, 3) << __func__ << "(" << dirp << ")" << dendl;
 
   if (unmounting)
@@ -7721,7 +7721,7 @@ loff_t Client::telldir(dir_result_t *dirp)
 
 void Client::seekdir(dir_result_t *dirp, loff_t offset)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   ldout(cct, 3) << __func__ << "(" << dirp << ", " << offset << ")" << dendl;
 
@@ -7976,7 +7976,7 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p,
 {
   int caps = statx_to_mask(flags, want);
 
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -8324,7 +8324,7 @@ int Client::getdir(const char *relpath, list<string>& contents,
 {
   ldout(cct, 3) << "getdir(" << relpath << ")" << dendl;
   {
-    Mutex::Locker lock(client_lock);
+    std::lock_guard lock(client_lock);
     tout(cct) << "getdir" << std::endl;
     tout(cct) << relpath << std::endl;
   }
@@ -8353,7 +8353,7 @@ int Client::open(const char *relpath, int flags, const UserPerm& perms,
 		 int object_size, const char *data_pool)
 {
   ldout(cct, 3) << "open enter(" << relpath << ", " << ceph_flags_sys2wire(flags) << "," << mode << ")" << dendl;
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   tout(cct) << "open" << std::endl;
   tout(cct) << relpath << std::endl;
   tout(cct) << ceph_flags_sys2wire(flags) << std::endl;
@@ -8442,7 +8442,7 @@ int Client::open(const char *relpath, int flags, const UserPerm& perms, mode_t m
 int Client::lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name,
 			const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   ldout(cct, 3) << __func__ << " enter(" << ino << ", #" << dirino << "/" << name << ")" << dendl;
 
   if (unmounting)
@@ -8498,7 +8498,7 @@ int Client::_lookup_ino(inodeno_t ino, const UserPerm& perms, Inode **inode)
 
 int Client::lookup_ino(inodeno_t ino, const UserPerm& perms, Inode **inode)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   return _lookup_ino(ino, perms, inode);
 }
 
@@ -8549,7 +8549,7 @@ int Client::_lookup_parent(Inode *ino, const UserPerm& perms, Inode **parent)
 
 int Client::lookup_parent(Inode *ino, const UserPerm& perms, Inode **parent)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   return _lookup_parent(ino, perms, parent);
 }
 
@@ -8577,7 +8577,7 @@ int Client::_lookup_name(Inode *ino, Inode *parent, const UserPerm& perms)
 
 int Client::lookup_name(Inode *ino, Inode *parent, const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   return _lookup_name(ino, parent, perms);
 }
 
@@ -8778,7 +8778,7 @@ int Client::_renew_caps(Inode *in)
 int Client::close(int fd)
 {
   ldout(cct, 3) << "close enter(" << fd << ")" << dendl;
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   tout(cct) << "close" << std::endl;
   tout(cct) << fd << std::endl;
 
@@ -8801,7 +8801,7 @@ int Client::close(int fd)
 
 loff_t Client::lseek(int fd, loff_t offset, int whence)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   tout(cct) << "lseek" << std::endl;
   tout(cct) << fd << std::endl;
   tout(cct) << offset << std::endl;
@@ -8932,7 +8932,7 @@ int Client::uninline_data(Inode *in, Context *onfinish)
 
 int Client::read(int fd, char *buf, loff_t size, loff_t offset)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   tout(cct) << "read" << std::endl;
   tout(cct) << fd << std::endl;
   tout(cct) << size << std::endl;
@@ -9255,7 +9255,7 @@ void Client::_sync_write_commit(Inode *in)
 
 int Client::write(int fd, const char *buf, loff_t size, loff_t offset) 
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   tout(cct) << "write" << std::endl;
   tout(cct) << fd << std::endl;
   tout(cct) << size << std::endl;
@@ -9338,7 +9338,7 @@ int64_t Client::_preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
 
 int Client::_preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt, int64_t offset, bool write)
 {
-    Mutex::Locker lock(client_lock);
+    std::lock_guard lock(client_lock);
     tout(cct) << fd << std::endl;
     tout(cct) << offset << std::endl;
 
@@ -9598,7 +9598,7 @@ int Client::truncate(const char *relpath, loff_t length, const UserPerm& perms)
 
 int Client::ftruncate(int fd, loff_t length, const UserPerm& perms) 
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << fd << std::endl;
   tout(cct) << length << std::endl;
@@ -9620,7 +9620,7 @@ int Client::ftruncate(int fd, loff_t length, const UserPerm& perms)
 
 int Client::fsync(int fd, bool syncdataonly) 
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   tout(cct) << "fsync" << std::endl;
   tout(cct) << fd << std::endl;
   tout(cct) << syncdataonly << std::endl;
@@ -9723,7 +9723,7 @@ int Client::_fsync(Fh *f, bool syncdataonly)
 
 int Client::fstat(int fd, struct stat *stbuf, const UserPerm& perms, int mask)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   tout(cct) << "fstat mask " << hex << mask << dec << std::endl;
   tout(cct) << fd << std::endl;
 
@@ -9744,7 +9744,7 @@ int Client::fstat(int fd, struct stat *stbuf, const UserPerm& perms, int mask)
 int Client::fstatx(int fd, struct ceph_statx *stx, const UserPerm& perms,
 		   unsigned int want, unsigned int flags)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   tout(cct) << "fstatx flags " << hex << flags << " want " << want << dec << std::endl;
   tout(cct) << fd << std::endl;
 
@@ -9776,7 +9776,7 @@ int Client::fstatx(int fd, struct ceph_statx *stx, const UserPerm& perms,
 int Client::chdir(const char *relpath, std::string &new_cwd,
 		  const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   tout(cct) << "chdir" << std::endl;
   tout(cct) << relpath << std::endl;
 
@@ -9838,7 +9838,7 @@ void Client::_getcwd(string& dir, const UserPerm& perms)
 
 void Client::getcwd(string& dir, const UserPerm& perms)
 {
-  Mutex::Locker l(client_lock);
+  std::lock_guard l(client_lock);
   if (!unmounting)
     _getcwd(dir, perms);
 }
@@ -9846,7 +9846,7 @@ void Client::getcwd(string& dir, const UserPerm& perms)
 int Client::statfs(const char *path, struct statvfs *stbuf,
 		   const UserPerm& perms)
 {
-  Mutex::Locker l(client_lock);
+  std::lock_guard l(client_lock);
   tout(cct) << __func__ << std::endl;
   unsigned long int total_files_on_fs;
 
@@ -10259,7 +10259,7 @@ void Client::ll_register_callbacks(struct client_callback_args *args)
 {
   if (!args)
     return;
-  Mutex::Locker l(client_lock);
+  std::lock_guard l(client_lock);
   ldout(cct, 10) << __func__ << " cb " << args->handle
 		 << " invalidate_ino_cb " << args->ino_cb
 		 << " invalidate_dentry_cb " << args->dentry_cb
@@ -10345,7 +10345,7 @@ int Client::_sync_fs()
 
 int Client::sync_fs()
 {
-  Mutex::Locker l(client_lock);
+  std::lock_guard l(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -10355,7 +10355,7 @@ int Client::sync_fs()
 
 int64_t Client::drop_caches()
 {
-  Mutex::Locker l(client_lock);
+  std::lock_guard l(client_lock);
   return objectcacher->release_all();
 }
 
@@ -10385,7 +10385,7 @@ int Client::_lazyio(Fh *fh, int enable)
 
 int Client::lazyio(int fd, int enable)
 {
-  Mutex::Locker l(client_lock);
+  std::lock_guard l(client_lock);
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
@@ -10395,7 +10395,7 @@ int Client::lazyio(int fd, int enable)
 
 int Client::ll_lazyio(Fh *fh, int enable)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   ldout(cct, 3) << __func__ << " " << fh << " " << fh->inode->ino << " " << !!enable << dendl;
   tout(cct) << __func__ << std::endl;
 
@@ -10404,7 +10404,7 @@ int Client::ll_lazyio(Fh *fh, int enable)
 
 int Client::lazyio_propogate(int fd, loff_t offset, size_t count)
 {
-  Mutex::Locker l(client_lock);
+  std::lock_guard l(client_lock);
   ldout(cct, 3) << "op: client->lazyio_propogate(" << fd
           << ", " << offset << ", " << count << ")" << dendl;
   
@@ -10420,7 +10420,7 @@ int Client::lazyio_propogate(int fd, loff_t offset, size_t count)
 
 int Client::lazyio_synchronize(int fd, loff_t offset, size_t count)
 {
-  Mutex::Locker l(client_lock);
+  std::lock_guard l(client_lock);
   ldout(cct, 3) << "op: client->lazyio_synchronize(" << fd
           << ", " << offset << ", " << count << ")" << dendl;
   
@@ -10441,7 +10441,7 @@ int Client::lazyio_synchronize(int fd, loff_t offset, size_t count)
 
 int Client::mksnap(const char *relpath, const char *name, const UserPerm& perm)
 {
-  Mutex::Locker l(client_lock);
+  std::lock_guard l(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -10462,7 +10462,7 @@ int Client::mksnap(const char *relpath, const char *name, const UserPerm& perm)
 
 int Client::rmsnap(const char *relpath, const char *name, const UserPerm& perms)
 {
-  Mutex::Locker l(client_lock);
+  std::lock_guard l(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -10486,7 +10486,7 @@ int Client::rmsnap(const char *relpath, const char *name, const UserPerm& perms)
 
 int Client::get_caps_issued(int fd) {
 
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -10500,7 +10500,7 @@ int Client::get_caps_issued(int fd) {
 
 int Client::get_caps_issued(const char *path, const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -10551,7 +10551,7 @@ Inode *Client::open_snapdir(Inode *diri)
 int Client::ll_lookup(Inode *parent, const char *name, struct stat *attr,
 		      Inode **out, const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   vinodeno_t vparent = _get_vino(parent);
   ldout(cct, 3) << __func__ << " " << vparent << " " << name << dendl;
   tout(cct) << __func__ << std::endl;
@@ -10597,7 +10597,7 @@ int Client::ll_lookup_inode(
     const UserPerm& perms,
     Inode **inode)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   ldout(cct, 3) << "ll_lookup_inode " << ino  << dendl;
    
   // Num1: get inode and *inode
@@ -10641,7 +10641,7 @@ int Client::ll_lookupx(Inode *parent, const char *name, Inode **out,
 		       struct ceph_statx *stx, unsigned want, unsigned flags,
 		       const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   vinodeno_t vparent = _get_vino(parent);
   ldout(cct, 3) << __func__ << " " << vparent << " " << name << dendl;
   tout(cct) << "ll_lookupx" << std::endl;
@@ -10683,7 +10683,7 @@ int Client::ll_lookupx(Inode *parent, const char *name, Inode **out,
 int Client::ll_walk(const char* name, Inode **out, struct ceph_statx *stx,
 		    unsigned int want, unsigned int flags, const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -10800,7 +10800,7 @@ bool Client::_ll_forget(Inode *in, int count)
 
 bool Client::ll_forget(Inode *in, int count)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   return _ll_forget(in, count);
 }
 
@@ -10812,7 +10812,7 @@ bool Client::ll_put(Inode *in)
 
 int Client::ll_get_snap_ref(snapid_t snap)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   auto p = ll_snap_ref.find(snap);
   if (p != ll_snap_ref.end())
     return p->second;
@@ -10821,13 +10821,13 @@ int Client::ll_get_snap_ref(snapid_t snap)
 
 snapid_t Client::ll_get_snapid(Inode *in)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   return in->snapid;
 }
 
 Inode *Client::ll_get_inode(ino_t ino)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return NULL;
@@ -10843,7 +10843,7 @@ Inode *Client::ll_get_inode(ino_t ino)
 
 Inode *Client::ll_get_inode(vinodeno_t vino)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return NULL;
@@ -10872,7 +10872,7 @@ int Client::_ll_getattr(Inode *in, int caps, const UserPerm& perms)
 
 int Client::ll_getattr(Inode *in, struct stat *attr, const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -10888,7 +10888,7 @@ int Client::ll_getattr(Inode *in, struct stat *attr, const UserPerm& perms)
 int Client::ll_getattrx(Inode *in, struct ceph_statx *stx, unsigned int want,
 			unsigned int flags, const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -10939,7 +10939,7 @@ int Client::_ll_setattrx(Inode *in, struct ceph_statx *stx, int mask,
 int Client::ll_setattrx(Inode *in, struct ceph_statx *stx, int mask,
 			const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -10961,7 +10961,7 @@ int Client::ll_setattr(Inode *in, struct stat *attr, int mask,
   struct ceph_statx stx;
   stat_to_statx(attr, &stx);
 
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -10984,7 +10984,7 @@ int Client::ll_setattr(Inode *in, struct stat *attr, int mask,
 int Client::getxattr(const char *path, const char *name, void *value, size_t size,
 		     const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -10999,7 +10999,7 @@ int Client::getxattr(const char *path, const char *name, void *value, size_t siz
 int Client::lgetxattr(const char *path, const char *name, void *value, size_t size,
 		      const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -11014,7 +11014,7 @@ int Client::lgetxattr(const char *path, const char *name, void *value, size_t si
 int Client::fgetxattr(int fd, const char *name, void *value, size_t size,
 		      const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -11028,7 +11028,7 @@ int Client::fgetxattr(int fd, const char *name, void *value, size_t size,
 int Client::listxattr(const char *path, char *list, size_t size,
 		      const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -11043,7 +11043,7 @@ int Client::listxattr(const char *path, char *list, size_t size,
 int Client::llistxattr(const char *path, char *list, size_t size,
 		       const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -11057,7 +11057,7 @@ int Client::llistxattr(const char *path, char *list, size_t size,
 
 int Client::flistxattr(int fd, char *list, size_t size, const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -11071,7 +11071,7 @@ int Client::flistxattr(int fd, char *list, size_t size, const UserPerm& perms)
 int Client::removexattr(const char *path, const char *name,
 			const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -11086,7 +11086,7 @@ int Client::removexattr(const char *path, const char *name,
 int Client::lremovexattr(const char *path, const char *name,
 			 const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -11100,7 +11100,7 @@ int Client::lremovexattr(const char *path, const char *name,
 
 int Client::fremovexattr(int fd, const char *name, const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -11116,7 +11116,7 @@ int Client::setxattr(const char *path, const char *name, const void *value,
 {
   _setxattr_maybe_wait_for_osdmap(name, value, size);
 
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -11133,7 +11133,7 @@ int Client::lsetxattr(const char *path, const char *name, const void *value,
 {
   _setxattr_maybe_wait_for_osdmap(name, value, size);
 
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -11150,7 +11150,7 @@ int Client::fsetxattr(int fd, const char *name, const void *value, size_t size,
 {
   _setxattr_maybe_wait_for_osdmap(name, value, size);
 
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -11238,7 +11238,7 @@ int Client::_getxattr(InodeRef &in, const char *name, void *value, size_t size,
 int Client::ll_getxattr(Inode *in, const char *name, void *value,
 			size_t size, const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -11309,7 +11309,7 @@ int Client::_listxattr(Inode *in, char *name, size_t size,
 int Client::ll_listxattr(Inode *in, char *names, size_t size,
 			 const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -11509,7 +11509,7 @@ int Client::ll_setxattr(Inode *in, const char *name, const void *value,
 {
   _setxattr_maybe_wait_for_osdmap(name, value, size);
 
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -11575,7 +11575,7 @@ int Client::_removexattr(InodeRef &in, const char *name, const UserPerm& perms)
 
 int Client::ll_removexattr(Inode *in, const char *name, const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -11834,7 +11834,7 @@ size_t Client::_vxattrs_calcu_name_size(const VXattr *vxattr)
 
 int Client::ll_readlink(Inode *in, char *buf, size_t buflen, const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -11912,7 +11912,7 @@ int Client::ll_mknod(Inode *parent, const char *name, mode_t mode,
 		     dev_t rdev, struct stat *attr, Inode **out,
 		     const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -11953,7 +11953,7 @@ int Client::ll_mknodx(Inode *parent, const char *name, mode_t mode,
 		      const UserPerm& perms)
 {
   unsigned caps = statx_to_mask(flags, want);
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -12143,7 +12143,7 @@ int Client::_mkdir(Inode *dir, const char *name, mode_t mode, const UserPerm& pe
 int Client::ll_mkdir(Inode *parent, const char *name, mode_t mode,
 		     struct stat *attr, Inode **out, const UserPerm& perm)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -12181,7 +12181,7 @@ int Client::ll_mkdirx(Inode *parent, const char *name, mode_t mode, Inode **out,
 		      struct ceph_statx *stx, unsigned want, unsigned flags,
 		      const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -12267,7 +12267,7 @@ int Client::_symlink(Inode *dir, const char *name, const char *target,
 int Client::ll_symlink(Inode *parent, const char *name, const char *value,
 		       struct stat *attr, Inode **out, const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -12306,7 +12306,7 @@ int Client::ll_symlinkx(Inode *parent, const char *name, const char *value,
 			Inode **out, struct ceph_statx *stx, unsigned want,
 			unsigned flags, const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -12393,7 +12393,7 @@ int Client::_unlink(Inode *dir, const char *name, const UserPerm& perm)
 
 int Client::ll_unlink(Inode *in, const char *name, const UserPerm& perm)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -12470,7 +12470,7 @@ int Client::_rmdir(Inode *dir, const char *name, const UserPerm& perms)
 
 int Client::ll_rmdir(Inode *in, const char *name, const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -12603,7 +12603,7 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
 int Client::ll_rename(Inode *parent, const char *name, Inode *newparent,
 		      const char *newname, const UserPerm& perm)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -12681,7 +12681,7 @@ int Client::_link(Inode *in, Inode *dir, const char *newname, const UserPerm& pe
 int Client::ll_link(Inode *in, Inode *newparent, const char *newname,
 		    const UserPerm& perm)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -12718,13 +12718,13 @@ int Client::ll_link(Inode *in, Inode *newparent, const char *newname,
 
 int Client::ll_num_osds(void)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   return objecter->with_osdmap(std::mem_fn(&OSDMap::get_num_osds));
 }
 
 int Client::ll_osdaddr(int osd, uint32_t *addr)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   entity_addr_t g;
   bool exists = objecter->with_osdmap([&](const OSDMap& o) {
@@ -12742,19 +12742,19 @@ int Client::ll_osdaddr(int osd, uint32_t *addr)
 
 uint32_t Client::ll_stripe_unit(Inode *in)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   return in->layout.stripe_unit;
 }
 
 uint64_t Client::ll_snap_seq(Inode *in)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   return in->snaprealm->seq;
 }
 
 int Client::ll_file_layout(Inode *in, file_layout_t *layout)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   *layout = in->layout;
   return 0;
 }
@@ -12774,7 +12774,7 @@ int Client::ll_file_layout(Fh *fh, file_layout_t *layout)
 int Client::ll_get_stripe_osd(Inode *in, uint64_t blockno,
 			      file_layout_t* layout)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   inodeno_t ino = in->ino;
   uint32_t object_size = layout->object_size;
@@ -12806,7 +12806,7 @@ int Client::ll_get_stripe_osd(Inode *in, uint64_t blockno,
 
 uint64_t Client::ll_get_internal_offset(Inode *in, uint64_t blockno)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   file_layout_t *layout=&(in->layout);
   uint32_t object_size = layout->object_size;
   uint32_t su = layout->stripe_unit;
@@ -12818,7 +12818,7 @@ uint64_t Client::ll_get_internal_offset(Inode *in, uint64_t blockno)
 int Client::ll_opendir(Inode *in, int flags, dir_result_t** dirpp,
 		       const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -12847,7 +12847,7 @@ int Client::ll_opendir(Inode *in, int flags, dir_result_t** dirpp,
 
 int Client::ll_releasedir(dir_result_t *dirp)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   ldout(cct, 3) << "ll_releasedir " << dirp << dendl;
   tout(cct) << "ll_releasedir" << std::endl;
   tout(cct) << (unsigned long)dirp << std::endl;
@@ -12861,7 +12861,7 @@ int Client::ll_releasedir(dir_result_t *dirp)
 
 int Client::ll_fsyncdir(dir_result_t *dirp)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   ldout(cct, 3) << "ll_fsyncdir " << dirp << dendl;
   tout(cct) << "ll_fsyncdir" << std::endl;
   tout(cct) << (unsigned long)dirp << std::endl;
@@ -12876,7 +12876,7 @@ int Client::ll_open(Inode *in, int flags, Fh **fhp, const UserPerm& perms)
 {
   ceph_assert(!(flags & O_CREAT));
 
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -13000,7 +13000,7 @@ int Client::ll_create(Inode *parent, const char *name, mode_t mode,
 		      int flags, struct stat *attr, Inode **outp, Fh **fhp,
 		      const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   InodeRef in;
 
   if (unmounting)
@@ -13030,7 +13030,7 @@ int Client::ll_createx(Inode *parent, const char *name, mode_t mode,
 			const UserPerm& perms)
 {
   unsigned caps = statx_to_mask(lflags, want);
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   InodeRef in;
 
   if (unmounting)
@@ -13056,7 +13056,7 @@ int Client::ll_createx(Inode *parent, const char *name, mode_t mode,
 
 loff_t Client::ll_lseek(Fh *fh, loff_t offset, int whence)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   tout(cct) << "ll_lseek" << std::endl;
   tout(cct) << offset << std::endl;
   tout(cct) << whence << std::endl;
@@ -13069,7 +13069,7 @@ loff_t Client::ll_lseek(Fh *fh, loff_t offset, int whence)
 
 int Client::ll_read(Fh *fh, loff_t off, loff_t len, bufferlist *bl)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   ldout(cct, 3) << "ll_read " << fh << " " << fh->inode->ino << " " << " " << off << "~" << len << dendl;
   tout(cct) << "ll_read" << std::endl;
   tout(cct) << (unsigned long)fh << std::endl;
@@ -13090,7 +13090,7 @@ int Client::ll_read_block(Inode *in, uint64_t blockid,
 			  uint64_t length,
 			  file_layout_t* layout)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -13186,7 +13186,7 @@ int Client::ll_commit_blocks(Inode *in,
 			     uint64_t offset,
 			     uint64_t length)
 {
-    Mutex::Locker lock(client_lock);
+    std::lock_guard lock(client_lock);
     /*
     BarrierContext *bctx;
     vinodeno_t vino = _get_vino(in);
@@ -13210,7 +13210,7 @@ int Client::ll_commit_blocks(Inode *in,
 
 int Client::ll_write(Fh *fh, loff_t off, loff_t len, const char *data)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   ldout(cct, 3) << "ll_write " << fh << " " << fh->inode->ino << " " << off <<
     "~" << len << dendl;
   tout(cct) << "ll_write" << std::endl;
@@ -13231,7 +13231,7 @@ int Client::ll_write(Fh *fh, loff_t off, loff_t len, const char *data)
 
 int64_t Client::ll_writev(struct Fh *fh, const struct iovec *iov, int iovcnt, int64_t off)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   if (unmounting)
    return -ENOTCONN;
   return _preadv_pwritev_locked(fh, iov, iovcnt, off, true, false);
@@ -13239,7 +13239,7 @@ int64_t Client::ll_writev(struct Fh *fh, const struct iovec *iov, int iovcnt, in
 
 int64_t Client::ll_readv(struct Fh *fh, const struct iovec *iov, int iovcnt, int64_t off)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   if (unmounting)
    return -ENOTCONN;
   return _preadv_pwritev_locked(fh, iov, iovcnt, off, false, false);
@@ -13247,7 +13247,7 @@ int64_t Client::ll_readv(struct Fh *fh, const struct iovec *iov, int iovcnt, int
 
 int Client::ll_flush(Fh *fh)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   ldout(cct, 3) << "ll_flush " << fh << " " << fh->inode->ino << " " << dendl;
   tout(cct) << "ll_flush" << std::endl;
   tout(cct) << (unsigned long)fh << std::endl;
@@ -13260,7 +13260,7 @@ int Client::ll_flush(Fh *fh)
 
 int Client::ll_fsync(Fh *fh, bool syncdataonly)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   ldout(cct, 3) << "ll_fsync " << fh << " " << fh->inode->ino << " " << dendl;
   tout(cct) << "ll_fsync" << std::endl;
   tout(cct) << (unsigned long)fh << std::endl;
@@ -13278,7 +13278,7 @@ int Client::ll_fsync(Fh *fh, bool syncdataonly)
 
 int Client::ll_sync_inode(Inode *in, bool syncdataonly)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   ldout(cct, 3) << "ll_sync_inode " << *in << " " << dendl;
   tout(cct) << "ll_sync_inode" << std::endl;
   tout(cct) << (unsigned long)in << std::endl;
@@ -13420,7 +13420,7 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
 
 int Client::ll_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   ldout(cct, 3) << __func__ << " " << fh << " " << fh->inode->ino << " " << dendl;
   tout(cct) << __func__ << " " << mode << " " << offset << " " << length << std::endl;
   tout(cct) << (unsigned long)fh << std::endl;
@@ -13433,7 +13433,7 @@ int Client::ll_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
 
 int Client::fallocate(int fd, int mode, loff_t offset, loff_t length)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
   tout(cct) << __func__ << " " << " " << fd << mode << " " << offset << " " << length << std::endl;
 
   if (unmounting)
@@ -13451,7 +13451,7 @@ int Client::fallocate(int fd, int mode, loff_t offset, loff_t length)
 
 int Client::ll_release(Fh *fh)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -13468,7 +13468,7 @@ int Client::ll_release(Fh *fh)
 
 int Client::ll_getlk(Fh *fh, struct flock *fl, uint64_t owner)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   ldout(cct, 3) << "ll_getlk (fh)" << fh << " " << fh->inode->ino << dendl;
   tout(cct) << "ll_getk (fh)" << (unsigned long)fh << std::endl;
@@ -13481,7 +13481,7 @@ int Client::ll_getlk(Fh *fh, struct flock *fl, uint64_t owner)
 
 int Client::ll_setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   ldout(cct, 3) << __func__ << "  (fh) " << fh << " " << fh->inode->ino << dendl;
   tout(cct) << __func__ << " (fh)" << (unsigned long)fh << std::endl;
@@ -13494,7 +13494,7 @@ int Client::ll_setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep)
 
 int Client::ll_flock(Fh *fh, int cmd, uint64_t owner)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   ldout(cct, 3) << __func__ << "  (fh) " << fh << " " << fh->inode->ino << dendl;
   tout(cct) << __func__ << " (fh)" << (unsigned long)fh << std::endl;
@@ -13507,7 +13507,7 @@ int Client::ll_flock(Fh *fh, int cmd, uint64_t owner)
 
 int Client::set_deleg_timeout(uint32_t timeout)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   /*
    * The whole point is to prevent blacklisting so we must time out the
@@ -13524,7 +13524,7 @@ int Client::ll_delegation(Fh *fh, unsigned cmd, ceph_deleg_cb_t cb, void *priv)
 {
   int ret = -EINVAL;
 
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (!mounted)
     return -ENOTCONN;
@@ -13556,7 +13556,7 @@ public:
     req->get();
   }
   void finish(int r) override {
-    Mutex::Locker l(client->client_lock);
+    std::lock_guard l(client->client_lock);
     ceph_assert(req->head.op == CEPH_MDS_OP_SETFILELOCK);
     client->_interrupt_filelock(req);
     client->put_request(req);
@@ -13579,7 +13579,7 @@ void Client::ll_interrupt(void *d)
 int Client::describe_layout(const char *relpath, file_layout_t *lp,
 			    const UserPerm& perms)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -13598,7 +13598,7 @@ int Client::describe_layout(const char *relpath, file_layout_t *lp,
 
 int Client::fdescribe_layout(int fd, file_layout_t *lp)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -13616,7 +13616,7 @@ int Client::fdescribe_layout(int fd, file_layout_t *lp)
 
 int64_t Client::get_default_pool_id()
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -13629,7 +13629,7 @@ int64_t Client::get_default_pool_id()
 
 int64_t Client::get_pool_id(const char *pool_name)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -13640,7 +13640,7 @@ int64_t Client::get_pool_id(const char *pool_name)
 
 string Client::get_pool_name(int64_t pool)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return string();
@@ -13652,7 +13652,7 @@ string Client::get_pool_name(int64_t pool)
 
 int Client::get_pool_replication(int64_t pool)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -13664,7 +13664,7 @@ int Client::get_pool_replication(int64_t pool)
 
 int Client::get_file_extent_osds(int fd, loff_t off, loff_t *len, vector<int>& osds)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -13710,7 +13710,7 @@ int Client::get_file_extent_osds(int fd, loff_t off, loff_t *len, vector<int>& o
 
 int Client::get_osd_crush_location(int id, vector<pair<string, string> >& path)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -13725,7 +13725,7 @@ int Client::get_osd_crush_location(int id, vector<pair<string, string> >& path)
 int Client::get_file_stripe_address(int fd, loff_t offset,
 				    vector<entity_addr_t>& address)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -13758,7 +13758,7 @@ int Client::get_file_stripe_address(int fd, loff_t offset,
 
 int Client::get_osd_addr(int osd, entity_addr_t& addr)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -13775,7 +13775,7 @@ int Client::get_osd_addr(int osd, entity_addr_t& addr)
 int Client::enumerate_layout(int fd, vector<ObjectExtent>& result,
 			     loff_t length, loff_t offset)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -13796,7 +13796,7 @@ int Client::enumerate_layout(int fd, vector<ObjectExtent>& result,
 /* find an osd with the same ip.  -ENXIO if none. */
 int Client::get_local_osd()
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (unmounting)
     return -ENOTCONN;
@@ -13831,7 +13831,7 @@ bool Client::ms_handle_reset(Connection *con)
 void Client::ms_handle_remote_reset(Connection *con)
 {
   ldout(cct, 0) << __func__ << " on " << con->get_peer_addr() << dendl;
-  Mutex::Locker l(client_lock);
+  std::lock_guard l(client_lock);
   switch (con->get_peer_type()) {
   case CEPH_ENTITY_TYPE_MDS:
     {
@@ -14184,7 +14184,7 @@ out:
 
 void Client::set_filer_flags(int flags)
 {
-  Mutex::Locker l(client_lock);
+  std::lock_guard l(client_lock);
   ceph_assert(flags == 0 ||
 	 flags == CEPH_OSD_FLAG_LOCALIZE_READS);
   objecter->add_global_op_flags(flags);
@@ -14192,7 +14192,7 @@ void Client::set_filer_flags(int flags)
 
 void Client::clear_filer_flags(int flags)
 {
-  Mutex::Locker l(client_lock);
+  std::lock_guard l(client_lock);
   ceph_assert(flags == CEPH_OSD_FLAG_LOCALIZE_READS);
   objecter->clear_global_op_flag(flags);
 }
@@ -14200,7 +14200,7 @@ void Client::clear_filer_flags(int flags)
 // called before mount
 void Client::set_uuid(const std::string& uuid)
 {
-  Mutex::Locker l(client_lock);
+  std::lock_guard l(client_lock);
   assert(initialized);
   assert(!uuid.empty());
 
@@ -14211,7 +14211,7 @@ void Client::set_uuid(const std::string& uuid)
 // called before mount. 0 means infinite
 void Client::set_session_timeout(unsigned timeout)
 {
-  Mutex::Locker l(client_lock);
+  std::lock_guard l(client_lock);
   assert(initialized);
 
   metadata["timeout"] = stringify(timeout);
@@ -14221,7 +14221,7 @@ void Client::set_session_timeout(unsigned timeout)
 int Client::start_reclaim(const std::string& uuid, unsigned flags,
 			  const std::string& fs_name)
 {
-  Mutex::Locker l(client_lock);
+  std::lock_guard l(client_lock);
   if (!initialized)
     return -ENOTCONN;
 
@@ -14391,7 +14391,7 @@ const char** Client::get_tracked_conf_keys() const
 void Client::handle_conf_change(const ConfigProxy& conf,
 				const std::set <std::string> &changed)
 {
-  Mutex::Locker lock(client_lock);
+  std::lock_guard lock(client_lock);
 
   if (changed.count("client_cache_mid")) {
     lru.lru_set_midpoint(cct->_conf->client_cache_mid);

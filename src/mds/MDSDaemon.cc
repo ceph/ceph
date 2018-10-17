@@ -95,7 +95,7 @@ MDSDaemon::MDSDaemon(std::string_view n, Messenger *m, MonClient *mc) :
 }
 
 MDSDaemon::~MDSDaemon() {
-  Mutex::Locker lock(mds_lock);
+  std::lock_guard lock(mds_lock);
 
   delete mds_rank;
   mds_rank = NULL;
@@ -162,7 +162,7 @@ void MDSDaemon::dump_status(Formatter *f)
   f->dump_string("state", ceph_mds_state_name(mdsmap->get_state_gid(mds_gid_t(
 	    monc->get_global_id()))));
   if (mds_rank) {
-    Mutex::Locker l(mds_lock);
+    std::lock_guard l(mds_lock);
     mds_rank->dump_status(f);
   }
 
@@ -1044,7 +1044,7 @@ void MDSDaemon::handle_signal(int signum)
   ceph_assert(signum == SIGINT || signum == SIGTERM);
   derr << "*** got signal " << sig_str(signum) << " ***" << dendl;
   {
-    Mutex::Locker l(mds_lock);
+    std::lock_guard l(mds_lock);
     if (stopping) {
       return;
     }
@@ -1153,7 +1153,7 @@ void MDSDaemon::respawn()
 
 bool MDSDaemon::ms_dispatch2(const Message::ref &m)
 {
-  Mutex::Locker l(mds_lock);
+  std::lock_guard l(mds_lock);
   if (stopping) {
     return false;
   }
@@ -1245,7 +1245,7 @@ bool MDSDaemon::ms_handle_reset(Connection *con)
   if (con->get_peer_type() != CEPH_ENTITY_TYPE_CLIENT)
     return false;
 
-  Mutex::Locker l(mds_lock);
+  std::lock_guard l(mds_lock);
   if (stopping) {
     return false;
   }
@@ -1272,7 +1272,7 @@ void MDSDaemon::ms_handle_remote_reset(Connection *con)
   if (con->get_peer_type() != CEPH_ENTITY_TYPE_CLIENT)
     return;
 
-  Mutex::Locker l(mds_lock);
+  std::lock_guard l(mds_lock);
   if (stopping) {
     return;
   }
@@ -1387,7 +1387,7 @@ int MDSDaemon::ms_handle_authentication(Connection *con)
 
 void MDSDaemon::ms_handle_accept(Connection *con)
 {
-  Mutex::Locker l(mds_lock);
+  std::lock_guard l(mds_lock);
   if (stopping) {
     return;
   }
