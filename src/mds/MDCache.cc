@@ -7642,11 +7642,14 @@ bool MDCache::shutdown_pass()
   // Fully trim the log so that all objects in cache are clean and may be
   // trimmed by a future MDCache::trim. Note that MDSRank::tick does not
   // trim the log such that the cache eventually becomes clean.
-  if (mds->mdlog->get_num_segments() > 0 &&
-      mds->mdlog->get_current_segment()->num_events > 1) {
-    // current segment contains events other than subtreemap
-    mds->mdlog->start_new_segment();
-    mds->mdlog->flush();
+  if (mds->mdlog->get_num_segments() > 0) {
+    auto ls = mds->mdlog->get_current_segment();
+    if (ls->num_events > 1 || !ls->dirty_dirfrags.empty()) {
+      // Current segment contains events other than subtreemap or
+      // there are dirty dirfrags (see CDir::log_mark_dirty())
+      mds->mdlog->start_new_segment();
+      mds->mdlog->flush();
+    }
   }
   mds->mdlog->trim_all();
   if (mds->mdlog->get_num_segments() > 1) {
