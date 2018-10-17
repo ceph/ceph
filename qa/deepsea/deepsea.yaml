@@ -1,4 +1,4 @@
 tasks:
 - install:
-    install_packages: false
+    install_ceph_packages: false
 - deepsea:
