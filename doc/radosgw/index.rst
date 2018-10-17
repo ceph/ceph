@@ -62,6 +62,7 @@ you may write data with one API and retrieve it with the other.
    Sync Modules <sync-modules>
    Data Layout in RADOS <layout>
    STS Lite <STSLite>
+   Role <role>
    troubleshooting
    Manpage radosgw <../../man/8/radosgw>
    Manpage radosgw-admin <../../man/8/radosgw-admin>
