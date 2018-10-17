@@ -615,6 +615,13 @@ void ImageRequestWQ<I>::set_require_lock(Direction direction, bool enabled) {
 }
 
 template <typename I>
+void ImageRequestWQ<I>::apply_qos_schedule_tick_min(uint64_t tick){
+  for (auto pair : m_throttles) {
+    pair.second->set_schedule_tick_min(tick);
+  }
+}
+
+template <typename I>
 void ImageRequestWQ<I>::apply_qos_limit(const uint64_t flag,
                                         uint64_t limit,
                                         uint64_t burst) {

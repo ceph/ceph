@@ -764,6 +764,13 @@ int TokenBucketThrottle::set_limit(uint64_t average, uint64_t burst) {
   return 0;
 }
 
+void TokenBucketThrottle::set_schedule_tick_min(uint64_t tick) {
+  std::lock_guard<Mutex> lock(m_lock);
+  if (tick != 0) {
+    m_tick_min = tick;
+  }
+}
+
 uint64_t TokenBucketThrottle::tokens_filled(double tick) {
   return (0 == m_avg) ? 0 : (tick / m_ticks_per_second * m_avg);
 }
