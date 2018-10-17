@@ -1,0 +1,17 @@
+roles:
+- - mon.a
+  - mgr.x
+  - osd.0
+  - osd.1
+  - osd.2
+  - client.0
+tasks:
+- install:
+- ceph:
+    log-whitelist:
+    - overall HEALTH_
+    - \(AUTH_BAD_CAPS\)
+- workunit:
+    clients:
+      all:
+        - mon/test_config_key_caps.sh
