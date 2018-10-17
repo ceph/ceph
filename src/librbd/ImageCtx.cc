@@ -809,6 +809,9 @@ public:
       sparse_read_threshold_bytes = get_object_size();
     }
 
+    io_work_queue->apply_qos_schedule_tick_min(
+      config.get_val<uint64_t>("rbd_qos_schedule_tick_min"));
+
     io_work_queue->apply_qos_limit(
       RBD_QOS_IOPS_THROTTLE,
       config.get_val<uint64_t>("rbd_qos_iops_limit"),
