@@ -3982,6 +3982,8 @@ void BlueStore::_init_logger()
 		    "collection");
   b.add_u64_counter(l_bluestore_read_eio, "bluestore_read_eio",
                     "Read EIO errors propagated to high level callers");
+  b.add_u64_counter(l_bluestore_reads_with_retries, "bluestore_reads_with_retries",
+                    "Read operations that required at least one retry due to failed checksum validation");
   logger = b.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 }
@@ -6509,7 +6511,8 @@ int BlueStore::_do_read(
   uint64_t offset,
   size_t length,
   bufferlist& bl,
-  uint32_t op_flags)
+  uint32_t op_flags,
+  uint64_t retry_count)
 {
   FUNCTRACE();
   int r = 0;
@@ -6721,7 +6724,14 @@ int BlueStore::_do_read(
       bufferlist& compressed_bl = *p++;
       if (_verify_csum(o, &bptr->get_blob(), 0, compressed_bl,
 		       b2r_it->second.front().logical_offset) < 0) {
-	return -EIO;
+        // Handles spurious read errors caused by a kernel bug.
+        // We sometimes get all-zero pages as a result of the read under
+        // high memory pressure. Retrying the failing read succeeds in most cases.
+        // See also: http://tracker.ceph.com/issues/22464
+        if (retry_count >= cct->_conf->bluestore_retry_disk_reads) {
+          return -EIO;
+        }
+        return _do_read(c, o, offset, length, bl, op_flags, retry_count + 1);
       }
       bufferlist raw_bl;
       r = _decompress(compressed_bl, &raw_bl);
@@ -6739,7 +6749,14 @@ int BlueStore::_do_read(
       for (auto& reg : b2r_it->second) {
 	if (_verify_csum(o, &bptr->get_blob(), reg.r_off, reg.bl,
 			 reg.logical_offset) < 0) {
-	  return -EIO;
+          // Handles spurious read errors caused by a kernel bug.
+          // We sometimes get all-zero pages as a result of the read under
+          // high memory pressure. Retrying the failing read succeeds in most cases.
+          // See also: http://tracker.ceph.com/issues/22464
+          if (retry_count >= cct->_conf->bluestore_retry_disk_reads) {
+            return -EIO;
+          }
+          return _do_read(c, o, offset, length, bl, op_flags, retry_count + 1);
 	}
 	if (buffered) {
 	  bptr->shared_blob->bc.did_read(bptr->shared_blob->get_cache(),
@@ -6783,6 +6800,11 @@ int BlueStore::_do_read(
   assert(pos == length);
   assert(pr == pr_end);
   r = bl.length();
+  if (retry_count) {
+    logger->inc(l_bluestore_reads_with_retries);
+    dout(5) << __func__ << " read at 0x" << std::hex << offset << "~" << length
+            << " failed " << std::dec << retry_count << " times before succeeding" << dendl;
+  }
   return r;
 }
 
@@ -6795,6 +6817,13 @@ int BlueStore::_verify_csum(OnodeRef& o,
   uint64_t bad_csum;
   utime_t start = ceph_clock_now();
   int r = blob->verify_csum(blob_xoffset, bl, &bad, &bad_csum);
+  if (cct->_conf->bluestore_debug_inject_csum_err_probability > 0 &&
+      (rand() % 10000) < cct->_conf->bluestore_debug_inject_csum_err_probability * 10000.0) {
+    derr << __func__ << " injecting bluestore checksum verifcation error" << dendl;
+    bad = blob_xoffset;
+    r = -1;
+    bad_csum = 0xDEADBEEF;
+  }
   if (r < 0) {
     if (r == -1) {
       PExtentVector pex;
