@@ -13,7 +13,7 @@ class Public(BaseController):
     def version(self):
         raw_version = mgr.version
         parsed_version = re.match(
-            'ceph version ([^\s]+) \(([0-9a-f]+)\) ([^\s]*)',
+            r'ceph version ([^\s]+) \(([0-9a-f]+)\) ([^\s]*)',
             raw_version,
         ).groups()
         return dict(
