@@ -1,27 +1,27 @@
-=========================
-Coupled LAYer code plugin
-=========================
+================
+CLAY code plugin
+================
 
-Coupled LAYer (CLAY) codes are erasure codes designed to save in terms of network 
-bandwidth, disk IO when a failed node/OSD/rack is being repaired. Let:
+CLAY (short for coupled-layer) codes are erasure codes designed to bring about significant savings 
+in terms of network bandwidth and disk IO when a failed node/OSD/rack is being repaired. Let:
 
 	d = number of OSDs contacted during repair
 
 If *jerasure* is configured with *k=8* and *m=4*, losing one OSD requires 
 reading from the *d=8* others to repair. And recovery of say a 1GiB needs
-a download of 8 X 1GiB = 8GiB amount of information.
+a download of 8 X 1GiB = 8GiB of information.
 
-However, in the case of *clay* plugin *d* is configurable such that:
+However, in the case of the *clay* plugin *d* is configurable within the limits:
 
 	k+1 <= d <= k+m-1 
 
-By default the clay code plugin picks *d=k+m-1* as it gives most savings in terms 
-of network bandwidth and disk IO. In the case of *clay* plugin configured with 
-*k=8*, *m=4* and *d=11* when a single OSD fails d=11 osds are contacted and 
-250MiB is downloaded from each of them resulting in download of 11 X 250MiB = 2.75GiB 
-amount of information. More general parameters are shown below. The benefits are huge
-when the repair is being done for a rack that stores information in the order of 
-Tera bytes.
+By default, the clay code plugin picks *d=k+m-1* as it provides the greatest savings in terms 
+of network bandwidth and disk IO. In the case of the *clay* plugin configured with 
+*k=8*, *m=4* and *d=11* when a single OSD fails, d=11 osds are contacted and 
+250MiB is downloaded from each of them, resulting in a total download of 11 X 250MiB = 2.75GiB 
+amount of information. More general parameters are provided below. The benefits are substantial 
+when the repair is carried out for a rack that stores information on the order of 
+Terabytes.
 
 	+-------------+---------------------------+
 	| plugin      | total amount of disk IO   |
@@ -31,14 +31,14 @@ Tera bytes.
 	| clay        | d*S/(d-k+1) = (k+m-1)*S/m |
 	+-------------+---------------------------+
 
-where *S* is the amount of data stored of single OSD being repaired and 
-in the table above, we are using the maximum possible value of d for minimal amount 
-of data transmission for recovery.
+where *S* is the amount of data stored on a single OSD undergoing repair. In the table above, we have 
+used the largest possible value of d as this will result in the smallest amount of data download needed
+to achieve recovery from an OSD failure.
 
-Erasure code profile examples
+Erasure-code profile examples
 =============================
 
-Reduced bandwidth usage can actually be observed.::
+An example configuration that can be used to observe reduced bandwidth usage::
 
         $ ceph osd erasure-code-profile set CLAYprofile \
              plugin=clay \
@@ -47,8 +47,8 @@ Reduced bandwidth usage can actually be observed.::
         $ ceph osd pool create claypool 12 12 erasure CLAYprofile
 
 
-Create a clay profile
-=====================
+Creating a clay profile
+=======================
 
 To create a new clay code profile::
 
@@ -67,8 +67,8 @@ Where:
 
 ``k={data chunks}``
 
-:Description: Each object is split in **data-chunks** parts,
-              each stored on a different OSD.
+:Description: Each object is split into **data-chunks** parts,
+              each of which is stored on a different OSD.
 
 :Type: Integer
 :Required: Yes.
@@ -88,7 +88,7 @@ Where:
 
 :Description: Number of OSDs requested to send data during recovery of
               a single chunk. *d* needs to be chosen such that
-              k+1 <= d <= k+m-1. Larger the *d*, better the savings.
+              k+1 <= d <= k+m-1. Larger the *d*, the better the savings.
 
 :Type: Integer
 :Required: No.
@@ -169,15 +169,15 @@ Where:
 Notion of sub-chunks
 ====================
 
-Clay code is able to save in terms of disk IO, network bandwidth as it
-is a vector code and it can see a chunk at a finer granularity called 
-sub-chunks. Number of sub-chunks within a chunk for a clay code is
-given by:
+The Clay code is able to save in terms of disk IO, network bandwidth as it
+is a vector code and it is able t view and manipulate data within a chunk 
+at a finer granularity termed as a sub-chunk. The number of sub-chunks within 
+a chunk for a Clay code is given by:
 
 	sub-chunk count = q\ :sup:`(k+m)/q`, where q=d-k+1
 
 
-During repair of a OSD, the helper information requested
+During repair of an OSD, the helper information requested
 from an available OSD is only a fraction of a chunk. In fact, the number
 of sub-chunks within a chunk that are accessed during repair is given by:
 
@@ -195,22 +195,22 @@ Examples
 
 
 
-How to choose configuration given a workload
-============================================
+How to choose a configuration given a workload
+==============================================
 
 Only a few sub-chunks are read of all the sub-chunks within a chunk. These sub-chunks
 are not necessarily stored consecutively within a chunk. For best disk IO 
-performance, it is helpful to read contiguous data. Choose stripe-size such that
-sub-chunk size is sufficiently large.
+performance, it is helpful to read contiguous data. For this reaspn, it is suggested that
+you choose stripe-size such that the sub-chunk size is sufficiently large.
 
 For a given stripe-size (that's fixed based on a workload), choose ``k``, ``m``, ``d`` such that::
 
 	sub-chunk size = stripe-size / (k*sub-chunk count) = 4KB, 8KB, 12KB ...
 
-#. For large size workloads for which stripe size is large it is easy to choose k, m, d.
-   For example consider stripe-size of size 64MB, choosing *k=16*, *m=4* and *d=19* will
-   result in a sub-chunk count of 1024 and sub-chunk size of 4KB.
-#. For small size workloads *k=4*, *m=2* is a good configuration that gives both network
+#. For large size workloads for which the stripe size is large, it is easy to choose k, m, d.
+   For example consider a stripe-size of size 64MB, choosing *k=16*, *m=4* and *d=19* will
+   result in a sub-chunk count of 1024 and a sub-chunk size of 4KB.
+#. For small size workloads *k=4*, *m=2* is a good configuration that provides both network
    and disk IO benefits.
 
 Comparisons with LRC
@@ -218,10 +218,10 @@ Comparisons with LRC
 
 Locally Recoverable Codes (LRC) are also designed in order to save in terms of network
 bandwidth, disk IO during single OSD recovery. However, the focus in LRCs is to keep the
-number of OSDs contacted during repair (d) to be minimal at the cost of storage overhead.
-*clay* code has a storage overhead m/k. In the case of *lrc*, it stores (k+m)/d parities in
+number of OSDs contacted during repair (d) to be minimal, but this comes at the cost of storage overhead.
+The *clay* code has a storage overhead m/k. In the case of an *lrc*, it stores (k+m)/d parities in
 addition to the ``m`` parities resulting in a storage overhead (m+(k+m)/d)/k. Both *clay* and *lrc*
-can recover from failure of any ``m`` OSDs.
+can recover from the failure of any ``m`` OSDs.
 
 	+-----------------+----------------------------------+----------------------------------+
 	| Parameters      | disk IO, storage overhead (LRC)  | disk IO, storage overhead (CLAY) |
