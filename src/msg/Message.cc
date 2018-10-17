@@ -140,6 +140,7 @@
 #include "messages/MDiscoverReply.h"
 
 #include "messages/MMDSFragmentNotify.h"
+#include "messages/MMDSFragmentNotifyAck.h"
 
 #include "messages/MExportDirDiscover.h"
 #include "messages/MExportDirDiscoverAck.h"
@@ -689,6 +690,10 @@ Message *decode_message(CephContext *cct, int crcflags,
 
   case MSG_MDS_FRAGMENTNOTIFY:
     m = new MMDSFragmentNotify;
+    break;
+
+  case MSG_MDS_FRAGMENTNOTIFYACK:
+    m = new MMDSFragmentNotifyAck;
     break;
 
   case MSG_MDS_EXPORTDIRDISCOVER:
