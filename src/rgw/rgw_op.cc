@@ -3907,6 +3907,7 @@ void RGWPostObj::execute()
                                         s->cct->_conf->rgw_obj_stripe_size,
                                         s->req_id,
                                         s->bucket_info.versioning_enabled());
+    processor.set_olh_epoch(0);
     /* No filters by default. */
     filter = &processor;
 
