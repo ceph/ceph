@@ -1276,6 +1276,18 @@ public:
     }
   }
 
+  // Only used in testing so not worried about needing the PG lock here
+  int64_t get_stats_num_bytes() {
+    Mutex::Locker l(_lock);
+    int num_bytes = info.stats.stats.sum.num_bytes;
+    int64_t lnb = local_num_bytes.load();
+    if (lnb && lnb != num_bytes) {
+      lgeneric_dout(cct, 0) << this << " " << info.pgid << " num_bytes mismatch "
+			    << lnb << " vs stats " << num_bytes << dendl;
+    }
+    return num_bytes;
+  }
+
 protected:
 
   /*
