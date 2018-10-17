@@ -307,11 +307,17 @@ seastar::future<> SocketConnection::close()
     // cannot happen
     ceph_assert(false);
   }
-  state = state_t::closing;
 
   // close_ready become valid only after state is state_t::closing
   assert(!close_ready.valid());
-  close_ready = socket->close().finally(std::move(cleanup));
+
+  if (socket) {
+    close_ready = socket->close().finally(std::move(cleanup));
+  } else {
+    ceph_assert(state == state_t::connecting);
+    close_ready = seastar::now();
+  }
+  state = state_t::closing;
   return close_ready.get_future();
 }
 
@@ -764,6 +770,11 @@ SocketConnection::start_connect(const entity_addr_t& _peer_addr,
   state = state_t::connecting;
   return seastar::connect(peer_addr.in4_addr())
     .then([this](seastar::connected_socket fd) {
+      if (state == state_t::closing) {
+        fd.shutdown_input();
+        fd.shutdown_output();
+        throw std::system_error(make_error_code(error::connection_aborted));
+      }
       socket.emplace(std::move(fd));
       // read server's handshake header
       return socket->read(server_header_size);
