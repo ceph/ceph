@@ -1,4 +1,6 @@
 tasks:
+- clock:
 - install:
     install_ceph_packages: false
+- salt:
 - deepsea:
