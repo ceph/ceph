@@ -466,11 +466,9 @@ seastar::future<> Client::build_initial_map()
   return monmap.build_initial(ceph::common::local_conf());
 }
 
-seastar::future<> Client::authenticate(std::chrono::seconds seconds)
+seastar::future<> Client::authenticate()
 {
-  return seastar::with_timeout(
-    seastar::lowres_clock::now() + seconds,
-    reopen_session(-1));
+  return reopen_session(-1);
 }
 
 seastar::future<> Client::stop()
