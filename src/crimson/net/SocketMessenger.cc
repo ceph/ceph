@@ -42,10 +42,6 @@ void SocketMessenger::bind(const entity_addr_t& addr)
 
 seastar::future<> SocketMessenger::dispatch(SocketConnectionRef conn)
 {
-  auto [i, added] = connections.emplace(conn->get_peer_addr(), conn);
-  std::ignore = i;
-  ceph_assert(added);
-
   return seastar::keep_doing([=] {
       return conn->read_message()
         .then([=] (MessageRef msg) {
@@ -80,11 +76,10 @@ seastar::future<> SocketMessenger::accept(seastar::connected_socket socket,
   entity_addr_t peer_addr;
   peer_addr.set_type(entity_addr_t::TYPE_DEFAULT);
   peer_addr.set_sockaddr(&paddr.as_posix_sockaddr());
-  SocketConnectionRef conn = new SocketConnection(*this, get_myaddr(),
-                                                  peer_addr, std::move(socket));
+  SocketConnectionRef conn = new SocketConnection(*this, get_myaddr());
   // initiate the handshake
-  return conn->server_handshake()
-    .then([=] {
+  return conn->start_accept(std::move(socket), peer_addr)
+    .then([this, conn] {
       // notify the dispatcher and allow them to reject the connection
       return seastar::with_gate(pending_dispatch, [=] {
           return dispatcher->ms_handle_accept(conn);
@@ -126,35 +121,30 @@ seastar::future<> SocketMessenger::start(Dispatcher *disp)
   return seastar::now();
 }
 
-seastar::future<ceph::net::ConnectionRef>
-SocketMessenger::connect(const entity_addr_t& addr, entity_type_t peer_type)
+ceph::net::ConnectionRef
+SocketMessenger::connect(const entity_addr_t& peer_addr, const entity_type_t& peer_type)
 {
-  if (auto found = lookup_conn(addr); found) {
-    return seastar::make_ready_future<ceph::net::ConnectionRef>(found);
+  if (auto found = lookup_conn(peer_addr); found) {
+    return found;
   }
-  return seastar::connect(addr.in4_addr())
-    .then([=] (seastar::connected_socket socket) {
-      SocketConnectionRef conn = new SocketConnection(*this, get_myaddr(), addr,
-                                                      std::move(socket));
-      // complete the handshake before returning to the caller
-      return conn->client_handshake(peer_type, get_myname().type())
-        .then([=] {
-          // notify the dispatcher and allow them to reject the connection
-          return seastar::with_gate(pending_dispatch, [=] {
-            return dispatcher->ms_handle_connect(conn);
-          });
-        }).handle_exception([conn] (std::exception_ptr eptr) {
-          // close the connection before returning errors
-          return seastar::make_exception_future<>(eptr)
-            .finally([conn] { return conn->close(); });
-	  // TODO: retry on fault
-        }).then([=] {
-          // dispatch replies on this connection
-          dispatch(conn)
-            .handle_exception([] (std::exception_ptr eptr) {});
-          return ConnectionRef(conn);
-        });
+  SocketConnectionRef conn = new SocketConnection(*this, get_myaddr());
+  conn->start_connect(peer_addr, peer_type)
+    .then([this, conn] {
+      // notify the dispatcher and allow them to reject the connection
+      return seastar::with_gate(pending_dispatch, [this, conn] {
+        return dispatcher->ms_handle_connect(conn);
+      });
+    }).handle_exception([conn] (std::exception_ptr eptr) {
+      // close the connection before returning errors
+      return seastar::make_exception_future<>(eptr)
+        .finally([conn] { return conn->close(); });
+      // TODO: retry on fault
+    }).then([this, conn] {
+      // dispatch replies on this connection
+      dispatch(conn)
+        .handle_exception([] (std::exception_ptr eptr) {});
     });
+  return conn;
 }
 
 seastar::future<> SocketMessenger::shutdown()
@@ -163,11 +153,15 @@ seastar::future<> SocketMessenger::shutdown()
     listener->abort_accept();
   }
   // close all connections
-  return seastar::parallel_for_each(connections.begin(), connections.end(),
-    [this] (auto conn) {
-      return conn.second->close();
+  return seastar::parallel_for_each(accepting_conns, [] (auto conn) {
+      return conn->close();
+    }).then([this] {
+      ceph_assert(accepting_conns.empty());
+      return seastar::parallel_for_each(connections, [] (auto conn) {
+          return conn.second->close();
+        });
     }).finally([this] {
-      connections.clear();
+      ceph_assert(connections.empty());
       // closing connections will unblock any dispatchers that were waiting to
       // send(). wait for any pending calls to finish
       return pending_dispatch.close();
@@ -200,6 +194,23 @@ ceph::net::SocketConnectionRef SocketMessenger::lookup_conn(const entity_addr_t&
   } else {
     return nullptr;
   }
+}
+
+void SocketMessenger::accept_conn(SocketConnectionRef conn)
+{
+  accepting_conns.insert(conn);
+}
+
+void SocketMessenger::unaccept_conn(SocketConnectionRef conn)
+{
+  accepting_conns.erase(conn);
+}
+
+void SocketMessenger::register_conn(SocketConnectionRef conn)
+{
+  auto [i, added] = connections.emplace(conn->get_peer_addr(), conn);
+  std::ignore = i;
+  ceph_assert(added);
 }
 
 void SocketMessenger::unregister_conn(SocketConnectionRef conn)
