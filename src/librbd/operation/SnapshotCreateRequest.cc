@@ -34,7 +34,7 @@ struct C_CreateSnapId: public Context {
   }
 
   virtual void finish(int r) {
-    r = image_ctx.md_ctx.selfmanaged_snap_create(snap_id);
+    r = image_ctx.data_ctx.selfmanaged_snap_create(snap_id);
     on_finish->complete(r);
   }
 };
@@ -50,7 +50,7 @@ struct C_RemoveSnapId: public Context {
   }
 
   virtual void finish(int r) {
-    r = image_ctx.md_ctx.selfmanaged_snap_remove(snap_id);
+    r = image_ctx.data_ctx.selfmanaged_snap_remove(snap_id);
     on_finish->complete(r);
   }
 };
