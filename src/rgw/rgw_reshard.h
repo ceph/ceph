@@ -69,8 +69,6 @@ private:
   RGWBucketReshardLock reshard_lock;
   RGWBucketReshardLock* outer_reshard_lock;
 
-  int clear_resharding();
-
   int create_new_bucket_instance(int new_num_shards,
 				 RGWBucketInfo& new_bucket_info);
   int do_reshard(int num_shards,
@@ -92,12 +90,18 @@ public:
 	      RGWReshard *reshard_log = nullptr);
   int get_status(std::list<cls_rgw_bucket_instance_entry> *status);
   int cancel();
+  static int clear_resharding(RGWRados* store,
+			      const RGWBucketInfo& bucket_info);
+  int clear_resharding() {
+    return clear_resharding(store, bucket_info);
+  }
   static int clear_index_shard_reshard_status(RGWRados* store,
-					      RGWBucketInfo& bucket_info);
+					      const RGWBucketInfo& bucket_info);
   int clear_index_shard_reshard_status() {
     return clear_index_shard_reshard_status(store, bucket_info);
   }
-  static int set_resharding_status(RGWRados* store, RGWBucketInfo& bucket_info,
+  static int set_resharding_status(RGWRados* store,
+				   const RGWBucketInfo& bucket_info,
 				   const string& new_instance_id,
 				   int32_t num_shards,
 				   cls_rgw_reshard_status status);
@@ -180,7 +184,9 @@ public:
   ~RGWReshardWait() {
     assert(going_down);
   }
-  int block_while_resharding(RGWRados::BucketShard *bs, string *new_bucket_id);
+  int block_while_resharding(RGWRados::BucketShard *bs,
+			     string *new_bucket_id,
+			     const RGWBucketInfo& bucket_info);
 
   void stop() {
     Mutex::Locker l(lock);
