@@ -464,7 +464,7 @@ TEST(ErasureCodeClay, encode)
   profile["m"] = "2";
   EXPECT_EQ(0, clay.init(profile, &cerr));
 
-  unsigned aligned_object_size = clay.get_alignment() * 2;
+  unsigned aligned_object_size = clay.get_chunk_size(1) * 2 * 2;
   {
     //
     // When the input bufferlist needs to be padded because

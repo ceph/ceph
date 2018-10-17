@@ -84,8 +84,6 @@ public:
 
   virtual int parse(ceph::ErasureCodeProfile &profile, std::ostream *ss);
 
-  unsigned get_alignment() const;
-
 private:
   int minimum_to_repair(const std::set<int> &want_to_read,
                         const std::set<int> &available_chunks,
