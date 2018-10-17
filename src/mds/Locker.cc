@@ -2617,6 +2617,14 @@ void Locker::mark_need_snapflush_inode(CInode *in)
   }
 }
 
+bool Locker::is_revoking_any_caps_from(client_t client)
+{
+  auto it = revoking_caps_by_client.find(client);
+  if (it == revoking_caps_by_client.end())
+    return false;
+  return !it->second.empty();
+}
+
 void Locker::_do_null_snapflush(CInode *head_in, client_t client, snapid_t last)
 {
   dout(10) << "_do_null_snapflush client." << client << " on " << *head_in << dendl;
