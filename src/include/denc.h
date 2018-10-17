@@ -957,7 +957,7 @@ namespace _denc {
           } else {
             denc(static_cast<const T&>(*s.begin()), elem_size);
           }
-          p += sizeof(uint32_t) + elem_size * elem_num;
+          p += elem_size * elem_num;
         }
       } else {
         for (const T& e : s) {
