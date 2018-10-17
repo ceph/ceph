@@ -46,7 +46,6 @@ function _initialize_minion_array {
     if type salt-key > /dev/null 2>&1; then
         MINION_LIST=$(salt-key -L -l acc | grep -v '^Accepted Keys')
         for m in $MINION_LIST ; do
-            echo "Adding minion $m to minion array"
             MINION_ARRAY[0]=$m
             i=$((i+1))
         done
@@ -54,7 +53,7 @@ function _initialize_minion_array {
         echo "Cannot find salt-key. Is Salt installed? Is this running on the Salt Master?"
         exit 1
     fi
-    echo "There are $i minions in this Salt cluster"
+    echo $i
 }
 
 function _initialize_storage_profile {
@@ -119,11 +118,13 @@ function initialization_sequence {
     set +e
     _python_versions
     type deepsea > /dev/null 2>&1 && deepsea --version || echo "deepsea CLI not installed"
-    _initialize_minion_array
+    TOTAL_MINIONS=$(_initialize_minion_array)
+    echo "There are $TOTAL_MINIONS minions in this Salt cluster"
     set -e
     _set_deepsea_minions
     salt '*' saltutil.sync_all 2>/dev/null
     TOTAL_NODES=$(json_total_nodes)
+    test "$TOTAL_NODES" = "$TOTAL_MINIONS"
     _ping_minions_until_all_respond
     cat_salt_config
     _initialize_storage_profile
