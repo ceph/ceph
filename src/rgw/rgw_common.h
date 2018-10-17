@@ -1886,7 +1886,11 @@ struct req_state {
   req_info info;
   req_init_state init_state;
 
-  utime_t time;
+  using Clock = ceph::coarse_real_clock;
+  Clock::time_point time;
+
+  Clock::duration time_elapsed() const { return Clock::now() - time; }
+
   void *obj_ctx{nullptr};
   string dialect;
   string req_id;

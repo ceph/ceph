@@ -23,7 +23,6 @@ struct RGWRequest
   struct req_state *s;
   string req_str;
   RGWOp *op;
-  utime_t ts;
 
   explicit RGWRequest(uint64_t id) : id(id), s(NULL), op(NULL) {}
 
