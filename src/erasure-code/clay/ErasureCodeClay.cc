@@ -89,13 +89,10 @@ int ErasureCodeClay::init(ErasureCodeProfile &profile,
 
 unsigned int ErasureCodeClay::get_chunk_size(unsigned int object_size) const
 {
-  unsigned alignment = get_alignment();
-  unsigned tail = object_size % alignment;
-  unsigned padded_length = object_size + ( tail ?  ( alignment - tail ) : 0 );
-
-  ceph_assert(padded_length % (k*sub_chunk_no) == 0);
-
-  return padded_length / k;
+  unsigned int alignment_scalar_code = pft.erasure_code->get_chunk_size(1);
+  unsigned int alignment = sub_chunk_no * k * alignment_scalar_code;
+  
+  return round_up_to(object_size, alignment) / k;
 }
 
 int ErasureCodeClay::minimum_to_decode(const set<int> &want_to_read,
@@ -118,7 +115,8 @@ int ErasureCodeClay::decode(const set<int> &want_to_read,
     avail.insert(node);
   }
 
-  if (is_repair(want_to_read, avail)) {
+  if (is_repair(want_to_read, avail) && 
+         ((unsigned int)chunk_size > chunks.begin()->second.length())) {
     return repair(want_to_read, chunks, decoded, chunk_size);
   } else {
     return ErasureCode::_decode(want_to_read, chunks, decoded);
@@ -184,15 +182,6 @@ int ErasureCodeClay::decode_chunks(const set<int> &want_to_read,
     coded_chunks[i].clear();
   }
   return res;
-}
-
-unsigned int ErasureCodeClay::get_alignment() const
-{
-  unsigned alignment = k * sub_chunk_no * w * sizeof(int);
-  if ((w * sizeof(int)) % LARGEST_VECTOR_WORDSIZE) {
-    alignment = k * sub_chunk_no * w * LARGEST_VECTOR_WORDSIZE;
-  }
-  return alignment;
 }
 
 int ErasureCodeClay::parse(ErasureCodeProfile &profile,
