@@ -551,6 +551,14 @@ COMMAND("osd crush add " \
 COMMAND("osd crush set-all-straw-buckets-to-straw2",
         "convert all CRUSH current straw buckets to use the straw2 algorithm",
 	"osd", "rw", "cli,rest")
+COMMAND("osd crush class create " \
+        "name=class,type=CephString,goodchars=[A-Za-z0-9-_]", \
+        "create crush device class <class>", \
+        "osd", "rw", "cli,rest")
+COMMAND("osd crush class rm " \
+        "name=class,type=CephString,goodchars=[A-Za-z0-9-_]", \
+        "remove crush device class <class>", \
+        "osd", "rw", "cli,rest")
 COMMAND("osd crush set-device-class " \
         "name=class,type=CephString " \
 	"name=ids,type=CephString,n=N", \
