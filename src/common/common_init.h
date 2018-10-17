@@ -69,7 +69,6 @@ CephContext *common_preinit(const CephInitParameters &iparams,
 void complain_about_parse_errors(CephContext *cct,
 				 std::deque<std::string> *parse_errors);
 
-#ifndef WITH_SEASTAR
 /* This function is called after you have done your last
  * fork. When you make this call, the system will initialize everything that
  * cannot be initialized before a fork.
@@ -83,6 +82,5 @@ void complain_about_parse_errors(CephContext *cct,
  * the Ceph libraries would be destroyed by a fork().
  */
 void common_init_finish(CephContext *cct);
-#endif // #ifndef WITH_SEASTAR
 
 #endif
