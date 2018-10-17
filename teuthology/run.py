@@ -332,7 +332,7 @@ def main(args):
         assert lock, \
             'the --block option is only supported with the --lock option'
 
-    log.debug(
+    log.info(
         '\n  '.join(['Config:', ] + yaml.safe_dump(
             config, default_flow_style=False).splitlines()))
 
