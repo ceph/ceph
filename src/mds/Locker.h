@@ -208,6 +208,7 @@ protected:
 public:
   void snapflush_nudge(CInode *in);
   void mark_need_snapflush_inode(CInode *in);
+  bool is_revoking_any_caps_from(client_t client);
 
   // local
 public:

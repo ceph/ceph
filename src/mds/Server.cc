@@ -956,6 +956,21 @@ void Server::find_idle_sessions()
 	}
       }
 
+      if (last_cap_renew_span >= mds->mdsmap->get_session_autoclose()) {
+	dout(20) << "evicting session " << session->info.inst << " since autoclose "
+		    "has arrived" << dendl;
+	// evict session without marking it stale
+	to_evict.push_back(session);
+	continue;
+      }
+
+      if (!session->is_any_flush_waiter() &&
+	  !mds->locker->is_revoking_any_caps_from(session->get_client())) {
+	dout(20) << "deferring marking session " << session->info.inst << " stale "
+		    "since it holds no caps" << dendl;
+	continue;
+      }
+
       auto it = session->info.client_metadata.find("timeout");
       if (it != session->info.client_metadata.end()) {
 	unsigned timeout = strtoul(it->second.c_str(), nullptr, 0);
