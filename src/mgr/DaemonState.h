@@ -182,7 +182,7 @@ class DaemonState
     }
   }
 
-  const std::map<std::string,std::string>& get_config_defaults() {
+  const std::map<std::string,std::string>& _get_config_defaults() {
     if (config_defaults.empty() &&
 	config_defaults_bl.length()) {
       auto p = config_defaults_bl.cbegin();
