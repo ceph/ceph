@@ -7678,28 +7678,14 @@ PG::RecoveryState::RepWaitBackfillReserved::react(const RemoteBackfillReserved &
 {
   PG *pg = context< RecoveryMachine >().pg;
 
-  if (pg->cct->_conf->osd_debug_reject_backfill_probability > 0 &&
-      (rand()%1000 < (pg->cct->_conf->osd_debug_reject_backfill_probability*1000.0))) {
-    ldout(pg->cct, 10) << "backfill reservation rejected after reservation: "
-		       << "failure injection" << dendl;
-    post_event(RejectRemoteReservation());
-    return discard_event();
-  } else if (!pg->cct->_conf->osd_debug_skip_full_check_in_backfill_reservation &&
-	     pg->osd->check_backfill_full(pg)) {
-    ldout(pg->cct, 10) << "backfill reservation rejected after reservation: backfill full"
-		       << dendl;
-    post_event(RejectRemoteReservation());
-    return discard_event();
-  } else {
-    pg->osd->send_message_osd_cluster(
+  pg->osd->send_message_osd_cluster(
       pg->primary.osd,
       new MBackfillReserve(
 	MBackfillReserve::GRANT,
 	spg_t(pg->info.pgid.pgid, pg->primary.shard),
 	pg->get_osdmap_epoch()),
       pg->get_osdmap_epoch());
-    return transit<RepRecovering>();
-  }
+  return transit<RepRecovering>();
 }
 
 boost::statechart::result
