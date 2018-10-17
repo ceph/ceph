@@ -57,20 +57,6 @@ function _initialize_minion_array {
     echo "There are $i minions in this Salt cluster"
 }
 
-function _update_salt {
-    # make sure we are running the latest Salt before Stage 0 starts,
-    # otherwise Stage 0 will update Salt and then fail with cryptic
-    # error messages
-    TOTAL_NODES=$(json_total_nodes)
-    salt '*' cmd.run 'zypper -n in -f python3-salt salt salt-api salt-master salt-minion' 2>/dev/null
-    systemctl restart salt-api.service
-    systemctl restart salt-master.service
-    sleep 15
-    salt '*' cmd.run 'systemctl restart salt-minion' 2>/dev/null
-    _ping_minions_until_all_respond "$TOTAL_NODES"
-    salt '*' saltutil.sync_all 2>/dev/null
-}
-
 function _initialize_storage_profile {
     test "$STORAGE_PROFILE"
     case "$STORAGE_PROFILE" in
@@ -107,7 +93,8 @@ function _initialize_and_vet_nodes {
     fi
     test "$PROPOSED_MIN_NODES" -gt "$MIN_NODES" && MIN_NODES="$PROPOSED_MIN_NODES"
     echo "Final MIN_NODES is $MIN_NODES"
-    test -n "$TOTAL_NODES" # set in _update_salt
+    echo "TOTAL_NODES is $TOTAL_NODES"
+    test "$TOTAL_NODES"
     test "$TOTAL_NODES" -ge "$MIN_NODES"
     STORAGE_NODES=$((TOTAL_NODES - CLIENT_NODES))
     echo "WWWW"
@@ -135,7 +122,9 @@ function initialization_sequence {
     _initialize_minion_array
     set -e
     _set_deepsea_minions
-    _update_salt
+    salt '*' saltutil.sync_all 2>/dev/null
+    TOTAL_NODES=$(json_total_nodes)
+    _ping_minions_until_all_respond
     cat_salt_config
     _initialize_storage_profile
     _initialize_and_vet_nodes

@@ -169,13 +169,12 @@ function _root_fs_is_btrfs {
 }
 
 function _ping_minions_until_all_respond {
-    local NUM_MINIONS="$1"
     local RESPONDING=""
     for i in {1..20} ; do
         sleep 10
         RESPONDING=$(salt '*' test.ping 2>/dev/null | grep True 2>/dev/null | wc --lines)
-        echo "Of $NUM_MINIONS total minions, $RESPONDING are responding"
-        test "$NUM_MINIONS" -eq "$RESPONDING" && break
+        echo "Of $TOTAL_NODES total minions, $RESPONDING are responding"
+        test "$TOTAL_NODES" -eq "$RESPONDING" && break
     done
 }
 
