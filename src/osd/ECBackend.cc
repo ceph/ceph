@@ -329,6 +329,15 @@ void ECBackend::handle_recovery_push(
     ceph_assert(op.data.length() == 0);
   }
 
+  if (get_parent()->pg_is_remote_backfilling()) {
+    get_parent()->pg_add_local_num_bytes(op.data.length());
+    get_parent()->pg_add_num_bytes(op.data.length() * get_ec_data_chunk_count());
+    dout(10) << __func__ << " " << op.soid
+             << " add new actual data by " << op.data.length()
+             << " add new num_bytes by " << op.data.length() * get_ec_data_chunk_count()
+             << dendl;
+  }
+
   if (op.before_progress.first) {
     ceph_assert(op.attrset.count(string("_")));
     m->t.setattrs(
@@ -365,6 +374,20 @@ void ECBackend::handle_recovery_push(
 	ObjectContextRef(),
 	false,
 	&m->t);
+      if (get_parent()->pg_is_remote_backfilling()) {
+        struct stat st;
+        int r = store->stat(ch, ghobject_t(op.soid, ghobject_t::NO_GEN,
+                            get_parent()->whoami_shard().shard), &st);
+        if (r == 0) {
+          get_parent()->pg_sub_local_num_bytes(st.st_size);
+         // XXX: This can be way overestimated for small objects
+         get_parent()->pg_sub_num_bytes(st.st_size * get_ec_data_chunk_count());
+         dout(10) << __func__ << " " << op.soid
+                  << " sub actual data by " << st.st_size
+                  << " sub num_bytes by " << st.st_size * get_ec_data_chunk_count()
+                  << dendl;
+        }
+      }
     }
   }
   m->push_replies[get_parent()->primary_shard()].push_back(PushReplyOp());
