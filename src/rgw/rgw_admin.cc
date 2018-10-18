@@ -519,6 +519,8 @@ enum {
   OPT_MFA_LIST,
   OPT_MFA_CHECK,
   OPT_MFA_RESYNC,
+  OPT_RESHARD_STALE_INSTANCES_LIST,
+  OPT_RESHARD_STALE_INSTANCES_DELETE
 };
 
 static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_cmd, bool *need_more)
@@ -554,6 +556,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       strcmp(cmd, "realm") == 0 ||
       strcmp(cmd, "role") == 0 ||
       strcmp(cmd, "role-policy") == 0 ||
+      strcmp(cmd, "stale-instances") == 0 ||
       strcmp(cmd, "subuser") == 0 ||
       strcmp(cmd, "sync") == 0 ||
       strcmp(cmd, "usage") == 0 ||
@@ -971,8 +974,13 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_MFA_CHECK;
     if (strcmp(cmd, "resync") == 0)
       return OPT_MFA_RESYNC;
+  } else if ((prev_prev_cmd && strcmp(prev_prev_cmd, "reshard") == 0) &&
+	     (strcmp(prev_cmd, "stale-instances") == 0)) {
+    if ((strcmp(cmd, "list")) == 0)
+      return OPT_RESHARD_STALE_INSTANCES_LIST;
+    if (match_str(cmd, "rm", "delete"))
+      return OPT_RESHARD_STALE_INSTANCES_DELETE;
   }
-
   return -EINVAL;
 }
 
@@ -7604,7 +7612,15 @@ next:
       return -ret;
     }
 
-  }
+ }
 
-  return 0;
+ if (opt_cmd == OPT_RESHARD_STALE_INSTANCES_LIST) {
+   RGWBucketAdminOp::list_stale_instances(store, bucket_op,f);
+ }
+
+ if (opt_cmd == OPT_RESHARD_STALE_INSTANCES_DELETE) {
+   RGWBucketAdminOp::clear_stale_instances(store, bucket_op,f);
+ }
+
+ return 0;
 }
