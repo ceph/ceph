@@ -268,9 +268,11 @@ public:
   PerfCounterTypes types;
 
   void insert(DaemonStatePtr dm);
+  void _insert(DaemonStatePtr dm);
   bool exists(const DaemonKey &key) const;
   DaemonStatePtr get(const DaemonKey &key);
   void rm(const DaemonKey &key);
+  void _rm(const DaemonKey &key);
 
   // Note that these return by value rather than reference to avoid
   // callers needing to stay in lock while using result.  Callers must
@@ -352,6 +354,18 @@ public:
   bool is_updating(const DaemonKey &k) {
     RWLock::RLocker l(lock);
     return updating.count(k) > 0;
+  }
+
+  void update_metadata(DaemonStatePtr state,
+		       const map<string,string>& meta) {
+    // remove and re-insert in case the device metadata changed
+    RWLock::WLocker l(lock);
+    _rm(state->key);
+    {
+      Mutex::Locker l2(state->lock);
+      state->set_metadata(meta);
+    }
+    _insert(state);
   }
 
   /**
