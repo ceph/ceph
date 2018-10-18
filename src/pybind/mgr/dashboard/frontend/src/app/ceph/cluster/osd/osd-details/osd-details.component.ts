@@ -2,8 +2,8 @@ import { Component, Input, OnChanges } from '@angular/core';
 
 import * as _ from 'lodash';
 
+import { OsdService } from '../../../../shared/api/osd.service';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
-import { OsdService } from '../osd.service';
 
 @Component({
   selector: 'cd-osd-details',
@@ -11,7 +11,8 @@ import { OsdService } from '../osd.service';
   styleUrls: ['./osd-details.component.scss']
 })
 export class OsdDetailsComponent implements OnChanges {
-  @Input() selection: CdTableSelection;
+  @Input()
+  selection: CdTableSelection;
 
   osd: any;
 
@@ -31,14 +32,14 @@ export class OsdDetailsComponent implements OnChanges {
   }
 
   refresh() {
-    this.osdService.getDetails(this.osd.tree.id)
-      .subscribe((data: any) => {
-        this.osd.details = data;
-        if (!_.isObject(data.histogram)) {
-          this.osd.histogram_failed = data.histogram;
-          this.osd.details.histogram = undefined;
-        }
-        this.osd.loaded = true;
-      });
+    this.osdService.getDetails(this.osd.id).subscribe((data: any) => {
+      this.osd.details = data;
+      this.osd.histogram_failed = '';
+      if (!_.isObject(data.histogram)) {
+        this.osd.histogram_failed = data.histogram;
+        this.osd.details.histogram = undefined;
+      }
+      this.osd.loaded = true;
+    });
   }
 }

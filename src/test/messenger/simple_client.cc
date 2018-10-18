@@ -102,7 +102,7 @@ int main(int argc, const char **argv)
 	  "initial msgs (pipe depth) " << n_msgs << " " <<
 	  "data buffer size " << n_dsize << std::endl;
 
-	messenger = Messenger::create(g_ceph_context, g_conf->get_val<std::string>("ms_type"),
+	messenger = Messenger::create(g_ceph_context, g_conf().get_val<std::string>("ms_type"),
 				      entity_name_t::MON(-1),
 				      "client",
 				      getpid(), 0);
@@ -116,7 +116,7 @@ int main(int argc, const char **argv)
 	dest_str += ":";
 	dest_str += port;
 	entity_addr_from_url(&dest_addr, dest_str.c_str());
-	entity_inst_t dest_server(entity_name_t::MON(-1), dest_addr);
+	entity_addrvec_t dest_addrs(dest_addr);
 
 	dispatcher = new SimpleDispatcher(messenger);
 	messenger->add_dispatcher_head(dispatcher);
@@ -127,7 +127,7 @@ int main(int argc, const char **argv)
 	if (r < 0)
 		goto out;
 
-	conn = messenger->get_connection(dest_server);
+	conn = messenger->connect_to_mon(dest_addrs);
 
 	// do stuff
 	time_t t1, t2;

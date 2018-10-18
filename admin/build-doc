@@ -111,6 +111,7 @@ for target in $sphinx_targets; do
     case $target in
         html)
             builder=dirhtml
+            extra_opt="-D graphviz_output_format=svg"
             ;;
         man)
             extra_opt="-t man"

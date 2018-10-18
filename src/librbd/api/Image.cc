@@ -12,8 +12,11 @@
 #include "librbd/ImageState.h"
 #include "librbd/Utils.h"
 #include "librbd/image/CloneRequest.h"
+#include "librbd/image/RemoveRequest.h"
 #include "librbd/internal.h"
 #include "librbd/Utils.h"
+#include "librbd/api/Config.h"
+#include "librbd/api/Trash.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -71,7 +74,8 @@ int Image<I>::list_images(librados::IoCtx& io_ctx, ImageNameToIds *images) {
 }
 
 template <typename I>
-int Image<I>::list_children(I *ictx, const ParentSpec &parent_spec,
+int Image<I>::list_children(I *ictx,
+                            const cls::rbd::ParentImageSpec &parent_spec,
                             PoolImageIds *pool_image_ids)
 {
   CephContext *cct = ictx->cct;
@@ -110,13 +114,10 @@ int Image<I>::list_children(I *ictx, const ParentSpec &parent_spec,
     }
 
     IoCtx ioctx;
-    r = rados.ioctx_create2(it->first, ioctx);
+    r = util::create_ioctx(ictx->md_ctx, "child image", it->first, {}, &ioctx);
     if (r == -ENOENT) {
-      ldout(cct, 1) << "pool " << it->second << " no longer exists" << dendl;
       continue;
     } else if (r < 0) {
-      lderr(cct) << "error accessing child image pool " << it->second
-                 << dendl;
       return r;
     }
 
@@ -128,13 +129,17 @@ int Image<I>::list_children(I *ictx, const ParentSpec &parent_spec,
                  << dendl;
       return r;
     }
-    pool_image_ids->insert({*it, image_ids});
+    pool_image_ids->insert({
+      {it->first, it->second, ictx->md_ctx.get_namespace()}, image_ids});
   }
 
   // retrieve clone v2 children attached to this snapshot
   IoCtx parent_io_ctx;
-  r = rados.ioctx_create2(parent_spec.pool_id, parent_io_ctx);
-  assert(r == 0);
+  r = util::create_ioctx(ictx->md_ctx, "parent image", parent_spec.pool_id,
+                         parent_spec.pool_namespace, &parent_io_ctx);
+  if (r < 0) {
+    return r;
+  }
 
   cls::rbd::ChildImageSpecs child_images;
   r = cls_client::children_list(&parent_io_ctx,
@@ -147,14 +152,14 @@ int Image<I>::list_children(I *ictx, const ParentSpec &parent_spec,
 
   for (auto& child_image : child_images) {
     IoCtx io_ctx;
-    r = rados.ioctx_create2(child_image.pool_id, io_ctx);
+    r = util::create_ioctx(ictx->md_ctx, "child image", child_image.pool_id,
+                           child_image.pool_namespace, &io_ctx);
     if (r == -ENOENT) {
-      ldout(cct, 1) << "pool " << child_image.pool_id << " no longer exists"
-                    << dendl;
       continue;
     }
 
-    PoolSpec pool_spec = {child_image.pool_id, io_ctx.get_pool_name()};
+    PoolSpec pool_spec = {child_image.pool_id, io_ctx.get_pool_name(),
+                          child_image.pool_namespace};
     (*pool_image_ids)[pool_spec].insert(child_image.image_id);
   }
 
@@ -174,7 +179,7 @@ int Image<I>::deep_copy(I *src, librados::IoCtx& dest_md_ctx,
   uint64_t src_size;
   {
     RWLock::RLocker snap_locker(src->snap_lock);
-    features = src->features;
+    features = (src->features & ~RBD_FEATURES_IMPLICIT_ENABLE);
     src_size = src->get_image_size(src->snap_id);
   }
   uint64_t format = 2;
@@ -205,8 +210,15 @@ int Image<I>::deep_copy(I *src, librados::IoCtx& dest_md_ctx,
     return -ENOSYS;
   }
 
-  ParentSpec parent_spec;
-  {
+  uint64_t flatten = 0;
+  if (opts.get(RBD_IMAGE_OPTION_FLATTEN, &flatten) == 0) {
+    opts.unset(RBD_IMAGE_OPTION_FLATTEN);
+  }
+
+  cls::rbd::ParentImageSpec parent_spec;
+  if (flatten > 0) {
+    parent_spec.pool_id = -1;
+  } else {
     RWLock::RLocker snap_locker(src->snap_lock);
     RWLock::RLocker parent_locker(src->parent_lock);
 
@@ -222,46 +234,23 @@ int Image<I>::deep_copy(I *src, librados::IoCtx& dest_md_ctx,
   if (parent_spec.pool_id == -1) {
     r = create(dest_md_ctx, destname, "", src_size, opts, "", "", false);
   } else {
-    librados::Rados rados(src->md_ctx);
     librados::IoCtx parent_io_ctx;
-    r = rados.ioctx_create2(parent_spec.pool_id, parent_io_ctx);
+    r = util::create_ioctx(src->md_ctx, "parent image", parent_spec.pool_id,
+                           parent_spec.pool_namespace, &parent_io_ctx);
     if (r < 0) {
-      lderr(cct) << "failed to open source parent pool: "
-                 << cpp_strerror(r) << dendl;
-      return r;
-    }
-    ImageCtx *src_parent_image_ctx =
-      new ImageCtx("", parent_spec.image_id, nullptr, parent_io_ctx, false);
-    r = src_parent_image_ctx->state->open(true);
-    if (r < 0) {
-      if (r != -ENOENT) {
-        lderr(cct) << "failed to open source parent image: "
-                   << cpp_strerror(r) << dendl;
-      }
       return r;
     }
 
-    C_SaferCond cond;
-    src_parent_image_ctx->state->snap_set(parent_spec.snap_id, &cond);
-    r = cond.wait();
-    if (r < 0) {
-      if (r != -ENOENT) {
-        lderr(cct) << "failed to set snapshot: " << cpp_strerror(r) << dendl;
-      }
-      return r;
-    }
+    ConfigProxy config{cct->_conf};
+    api::Config<I>::apply_pool_overrides(dest_md_ctx, &config);
 
     C_SaferCond ctx;
     std::string dest_id = util::generate_image_id(dest_md_ctx);
     auto *req = image::CloneRequest<I>::create(
-      src_parent_image_ctx, dest_md_ctx, destname, dest_id, opts,
-      "", "", src->op_work_queue, &ctx);
+      config, parent_io_ctx, parent_spec.image_id, "", parent_spec.snap_id,
+      dest_md_ctx, destname, dest_id, opts, "", "", src->op_work_queue, &ctx);
     req->send();
     r = ctx.wait();
-    int close_r = src_parent_image_ctx->state->close();
-    if (r == 0 && close_r < 0) {
-      r = close_r;
-    }
   }
   if (r < 0) {
     lderr(cct) << "header creation failed" << dendl;
@@ -269,9 +258,9 @@ int Image<I>::deep_copy(I *src, librados::IoCtx& dest_md_ctx,
   }
   opts.set(RBD_IMAGE_OPTION_ORDER, static_cast<uint64_t>(order));
 
-  ImageCtx *dest = new librbd::ImageCtx(destname, "", NULL,
+  ImageCtx *dest = new librbd::ImageCtx(destname, "", nullptr,
                                         dest_md_ctx, false);
-  r = dest->state->open(false);
+  r = dest->state->open(0);
   if (r < 0) {
     lderr(cct) << "failed to read newly created header" << dendl;
     return r;
@@ -297,7 +286,7 @@ int Image<I>::deep_copy(I *src, librados::IoCtx& dest_md_ctx,
     return r;
   }
 
-  r = deep_copy(src, dest, prog_ctx);
+  r = deep_copy(src, dest, flatten > 0, prog_ctx);
 
   int close_r = dest->state->close();
   if (r == 0 && close_r < 0) {
@@ -307,7 +296,8 @@ int Image<I>::deep_copy(I *src, librados::IoCtx& dest_md_ctx,
 }
 
 template <typename I>
-int Image<I>::deep_copy(I *src, I *dest, ProgressContext &prog_ctx) {
+int Image<I>::deep_copy(I *src, I *dest, bool flatten,
+                        ProgressContext &prog_ctx) {
   CephContext *cct = src->cct;
   librados::snap_t snap_id_start = 0;
   librados::snap_t snap_id_end;
@@ -323,8 +313,8 @@ int Image<I>::deep_copy(I *src, I *dest, ProgressContext &prog_ctx) {
   C_SaferCond cond;
   SnapSeqs snap_seqs;
   auto req = DeepCopyRequest<>::create(src, dest, snap_id_start, snap_id_end,
-                                       boost::none, op_work_queue, &snap_seqs,
-                                       &prog_ctx, &cond);
+                                       flatten, boost::none, op_work_queue,
+                                       &snap_seqs, &prog_ctx, &cond);
   req->send();
   int r = cond.wait();
   if (r < 0) {
@@ -380,6 +370,39 @@ int Image<I>::snap_set(I *ictx, uint64_t snap_id) {
   }
 
   return 0;
+}
+
+template <typename I>
+int Image<I>::remove(IoCtx& io_ctx, const std::string &image_name,
+                     const std::string &image_id, ProgressContext& prog_ctx,
+                     bool force, bool from_trash_remove)
+{
+  CephContext *cct((CephContext *)io_ctx.cct());
+  ldout(cct, 20) << (image_id.empty() ? image_name : image_id) << dendl;
+
+  if (image_id.empty()) {
+    // id will only be supplied when used internally
+    ConfigProxy config(cct->_conf);
+    Config<I>::apply_pool_overrides(io_ctx, &config);
+
+    if (config.get_val<bool>("rbd_move_to_trash_on_remove")) {
+      return Trash<I>::move(
+        io_ctx, RBD_TRASH_IMAGE_SOURCE_USER, image_name,
+        config.get_val<uint64_t>("rbd_move_to_trash_on_remove_expire_seconds"));
+    }
+  }
+
+  ThreadPool *thread_pool;
+  ContextWQ *op_work_queue;
+  ImageCtx::get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
+
+  C_SaferCond cond;
+  auto req = librbd::image::RemoveRequest<>::create(
+    io_ctx, image_name, image_id, force, from_trash_remove, prog_ctx,
+    op_work_queue, &cond);
+  req->send();
+
+  return cond.wait();
 }
 
 } // namespace api

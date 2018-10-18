@@ -71,8 +71,13 @@ function check() {
     local primary_start=${9:-}
     local primary_end=${10:-}
 
-    local log=$(grep -l +backfilling $dir/osd.*.log)
+    local log=$(grep -l +backfilling $dir/osd.$primary.log)
     test -n "$log" || return 1
+    if [ "$(echo "$log" | wc -w)" != "1" ];
+    then
+      echo "Test setup failure, a single OSD should have performed backfill"
+      return 1
+    fi
 
     local addp=" "
     if [ "$type" = "erasure" ];
@@ -340,8 +345,11 @@ function TEST_backfill_out2() {
     ceph osd pool set $poolname size 3
     ceph osd out osd.${otherosd}
     ceph osd out osd.${primary}
+    # Primary might change before backfill starts
+    sleep 2
+    primary=$(get_primary $poolname obj1)
     ceph osd unset nobackfill
-    ceph tell osd.$(get_primary $poolname obj1) debug kick_recovery_wq 0
+    ceph tell osd.$primary debug kick_recovery_wq 0
     sleep 2
 
     wait_for_clean || return 1
@@ -394,8 +402,11 @@ function TEST_backfill_sizeup4_allout() {
     ceph osd out osd.$otherosd
     ceph osd out osd.$primary
     ceph osd pool set $poolname size 4
+    # Primary might change before backfill starts
+    sleep 2
+    primary=$(get_primary $poolname obj1)
     ceph osd unset nobackfill
-    ceph tell osd.$(get_primary $poolname obj1) debug kick_recovery_wq 0
+    ceph tell osd.$primary debug kick_recovery_wq 0
     sleep 2
 
     wait_for_clean || return 1
@@ -453,8 +464,14 @@ function TEST_backfill_remapped() {
     ceph osd out osd.${primary}
     ceph osd pool set $poolname size 2
     sleep 2
+
+    # primary may change due to invalidating the old pg_temp, which was [1,2,0],
+    # but up_primary (3) chooses [0,1] for acting.
+    primary=$(get_primary $poolname obj1)
+
     ceph osd unset nobackfill
-    ceph tell osd.$(get_primary $poolname obj1) debug kick_recovery_wq 0
+    ceph tell osd.$primary debug kick_recovery_wq 0
+
     sleep 2
 
     wait_for_clean || return 1
@@ -509,8 +526,11 @@ function TEST_backfill_ec_all_out() {
     do
         ceph osd out osd.$o
     done
+    # Primary might change before backfill starts
+    sleep 2
+    primary=$(get_primary $poolname obj1)
     ceph osd unset nobackfill
-    ceph tell osd.$(get_primary $poolname obj1) debug kick_recovery_wq 0
+    ceph tell osd.$primary debug kick_recovery_wq 0
     sleep 2
 
     wait_for_clean || return 1
@@ -556,8 +576,11 @@ function TEST_backfill_ec_prim_out() {
 
     ceph osd set nobackfill
     ceph osd out osd.$primary
+    # Primary might change before backfill starts
+    sleep 2
+    primary=$(get_primary $poolname obj1)
     ceph osd unset nobackfill
-    ceph tell osd.$(get_primary $poolname obj1) debug kick_recovery_wq 0
+    ceph tell osd.$primary debug kick_recovery_wq 0
     sleep 2
 
     wait_for_clean || return 1
@@ -611,8 +634,11 @@ function TEST_backfill_ec_down_all_out() {
     do
         ceph osd out osd.$o
     done
+    # Primary might change before backfill starts
+    sleep 2
+    primary=$(get_primary $poolname obj1)
     ceph osd unset nobackfill
-    ceph tell osd.$(get_primary $poolname obj1) debug kick_recovery_wq 0
+    ceph tell osd.$primary debug kick_recovery_wq 0
     sleep 2
     flush_pg_stats
 
@@ -622,7 +648,7 @@ function TEST_backfill_ec_down_all_out() {
     while(true)
     do
       if test "$(ceph --format json pg dump pgs |
-         jq '[.[] | .state | select(. == "incomplete")] | length')" -ne "0"
+         jq '.pg_stats | [.[] | .state | select(. == "incomplete")] | length')" -ne "0"
       then
         sleep 2
         continue
@@ -692,8 +718,11 @@ function TEST_backfill_ec_down_out() {
     kill $(cat $dir/osd.${otherosd}.pid)
     ceph osd down osd.${otherosd}
     ceph osd out osd.${otherosd}
+    # Primary might change before backfill starts
+    sleep 2
+    primary=$(get_primary $poolname obj1)
     ceph osd unset nobackfill
-    ceph tell osd.$(get_primary $poolname obj1) debug kick_recovery_wq 0
+    ceph tell osd.$primary debug kick_recovery_wq 0
     sleep 2
 
     wait_for_clean || return 1
@@ -706,7 +735,7 @@ function TEST_backfill_ec_down_out() {
 }
 
 
-main recout "$@"
+main osd-backfill-stats "$@"
 
 # Local Variables:
 # compile-command: "make -j4 && ../qa/run-standalone.sh osd-backfill-stats.sh"

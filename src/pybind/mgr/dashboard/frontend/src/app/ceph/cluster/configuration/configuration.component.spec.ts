@@ -1,33 +1,31 @@
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import { HttpClientTestingModule } from '@angular/common/http/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
+import { RouterTestingModule } from '@angular/router/testing';
 
-import { Observable } from 'rxjs/Observable';
+import { TabsModule } from 'ngx-bootstrap/tabs/tabs.module';
 
-import { ConfigurationService } from '../../../shared/services/configuration.service';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
+import { ConfigurationService } from '../../../shared/api/configuration.service';
 import { SharedModule } from '../../../shared/shared.module';
+import { ConfigurationDetailsComponent } from './configuration-details/configuration-details.component';
 import { ConfigurationComponent } from './configuration.component';
 
 describe('ConfigurationComponent', () => {
   let component: ConfigurationComponent;
   let fixture: ComponentFixture<ConfigurationComponent>;
 
-  const fakeService = {
-    getConfigData: () => {
-      return Observable.create(observer => {
-        return () => console.log('disposed');
-      });
-    }
-  };
-
-  beforeEach(
-    async(() => {
-      TestBed.configureTestingModule({
-        declarations: [ConfigurationComponent],
-        providers: [{ provide: ConfigurationService, useValue: fakeService }],
-        imports: [SharedModule, FormsModule]
-      }).compileComponents();
-    })
-  );
+  configureTestBed({
+    declarations: [ConfigurationComponent, ConfigurationDetailsComponent],
+    providers: [ConfigurationService],
+    imports: [
+      SharedModule,
+      FormsModule,
+      TabsModule.forRoot(),
+      HttpClientTestingModule,
+      RouterTestingModule
+    ]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(ConfigurationComponent);

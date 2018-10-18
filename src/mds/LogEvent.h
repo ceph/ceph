@@ -58,7 +58,7 @@ public:
 private:
   EventType _type;
   uint64_t _start_off;
-  static LogEvent *decode_event(bufferlist& bl, bufferlist::iterator& p, EventType type);
+  static LogEvent *decode_event(bufferlist& bl, bufferlist::const_iterator& p, EventType type);
 
 protected:
   utime_t stamp;
@@ -70,7 +70,9 @@ public:
 
   explicit LogEvent(int t)
     : _type(t), _start_off(0), _segment(0) { }
+  LogEvent(const LogEvent&) = delete;
   virtual ~LogEvent() { }
+  LogEvent& operator=(const LogEvent&) = delete;
 
   string get_type_str() const;
   static EventType str_to_type(std::string_view str);
@@ -85,7 +87,7 @@ public:
 
   // encoding
   virtual void encode(bufferlist& bl, uint64_t features) const = 0;
-  virtual void decode(bufferlist::iterator &bl) = 0;
+  virtual void decode(bufferlist::const_iterator &bl) = 0;
   static LogEvent *decode(bufferlist &bl);
   virtual void dump(Formatter *f) const = 0;
 

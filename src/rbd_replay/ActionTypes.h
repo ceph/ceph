@@ -50,8 +50,8 @@ struct Dependency {
   }
 
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &it);
-  void decode(__u8 version, bufferlist::iterator &it);
+  void decode(bufferlist::const_iterator &it);
+  void decode(__u8 version, bufferlist::const_iterator &it);
   void dump(Formatter *f) const;
 
   static void generate_test_instances(std::list<Dependency *> &o);
@@ -89,7 +89,7 @@ struct ActionBase {
   }
 
   void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::iterator &it);
+  void decode(__u8 version, bufferlist::const_iterator &it);
   void dump(Formatter *f) const;
 };
 
@@ -126,7 +126,7 @@ struct ImageActionBase : public ActionBase {
   }
 
   void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::iterator &it);
+  void decode(__u8 version, bufferlist::const_iterator &it);
   void dump(Formatter *f) const;
 };
 
@@ -144,7 +144,7 @@ struct IoActionBase : public ImageActionBase {
   }
 
   void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::iterator &it);
+  void decode(__u8 version, bufferlist::const_iterator &it);
   void dump(Formatter *f) const;
 };
 
@@ -238,7 +238,7 @@ struct OpenImageAction : public ImageActionBase {
   }
 
   void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::iterator &it);
+  void decode(__u8 version, bufferlist::const_iterator &it);
   void dump(Formatter *f) const;
 };
 
@@ -271,7 +271,7 @@ struct AioOpenImageAction : public ImageActionBase {
   }
 
   void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::iterator &it);
+  void decode(__u8 version, bufferlist::const_iterator &it);
   void dump(Formatter *f) const;
 };
 
@@ -290,7 +290,7 @@ struct UnknownAction {
   static const ActionType ACTION_TYPE = static_cast<ActionType>(-1);
 
   void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::iterator &it);
+  void decode(__u8 version, bufferlist::const_iterator &it);
   void dump(Formatter *f) const;
 };
 
@@ -318,14 +318,14 @@ public:
   }
 
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &it);
-  void decode_unversioned(bufferlist::iterator &it);
+  void decode(bufferlist::const_iterator &it);
+  void decode_unversioned(bufferlist::const_iterator &it);
   void dump(Formatter *f) const;
 
   static void generate_test_instances(std::list<ActionEntry *> &o);
 
 private:
-  void decode(__u8 version, bufferlist::iterator &it);
+  void decode(__u8 version, bufferlist::const_iterator &it);
 };
 
 WRITE_CLASS_ENCODER(ActionEntry);

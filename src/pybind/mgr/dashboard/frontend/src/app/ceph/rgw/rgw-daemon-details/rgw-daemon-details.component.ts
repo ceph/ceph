@@ -2,8 +2,8 @@ import { Component, Input, OnChanges } from '@angular/core';
 
 import * as _ from 'lodash';
 
+import { RgwDaemonService } from '../../../shared/api/rgw-daemon.service';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
-import { RgwDaemonService } from '../services/rgw-daemon.service';
 
 @Component({
   selector: 'cd-rgw-daemon-details',
@@ -14,7 +14,8 @@ export class RgwDaemonDetailsComponent implements OnChanges {
   metadata: any;
   serviceId = '';
 
-  @Input() selection: CdTableSelection;
+  @Input()
+  selection: CdTableSelection;
 
   constructor(private rgwDaemonService: RgwDaemonService) {}
 
@@ -29,7 +30,7 @@ export class RgwDaemonDetailsComponent implements OnChanges {
     if (_.isEmpty(this.serviceId)) {
       return;
     }
-    this.rgwDaemonService.get(this.serviceId).then(resp => {
+    this.rgwDaemonService.get(this.serviceId).subscribe((resp) => {
       this.metadata = resp['rgw_metadata'];
     });
   }

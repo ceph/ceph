@@ -17,7 +17,7 @@
 #include <iostream>
 #include <boost/program_options.hpp>
 #include <boost/scoped_ptr.hpp>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd
@@ -37,7 +37,7 @@ struct ImportDiffContext {
   ImportDiffContext(librbd::Image *image, int fd, size_t size, bool no_progress)
     : image(image), fd(fd), size(size), pc("Importing image diff", no_progress),
       throttle((fd == STDIN_FILENO) ? 1 :
-                  g_conf->get_val<int64_t>("rbd_concurrent_management_ops"),
+                  g_conf().get_val<uint64_t>("rbd_concurrent_management_ops"),
                false),
       last_offset(0) {
   }
@@ -139,12 +139,14 @@ static int do_image_snap_from(ImportDiffContext *idiffctx)
   string from;
   r = utils::read_string(idiffctx->fd, 4096, &from);   // 4k limit to make sure we don't get a garbage string
   if (r < 0) {
+    std::cerr << "rbd: failed to decode start snap name" << std::endl;
     return r;
   }
 
   bool exists;
   r = idiffctx->image->snap_exists2(from.c_str(), &exists);
   if (r < 0) {
+    std::cerr << "rbd: failed to query start snap state" << std::endl;
     return r;
   }
 
@@ -164,17 +166,20 @@ static int do_image_snap_to(ImportDiffContext *idiffctx, std::string *tosnap)
   string to;
   r = utils::read_string(idiffctx->fd, 4096, &to);   // 4k limit to make sure we don't get a garbage string
   if (r < 0) {
+    std::cerr << "rbd: failed to decode end snap name" << std::endl;
     return r;
   }
 
   bool exists;
   r = idiffctx->image->snap_exists2(to.c_str(), &exists);
   if (r < 0) {
+    std::cerr << "rbd: failed to query end snap state" << std::endl;
     return r;
   }
 
   if (exists) {
-    std::cerr << "end snapshot '" << to << "' already exists, aborting" << std::endl;
+    std::cerr << "end snapshot '" << to << "' already exists, aborting"
+              << std::endl;
     return -EEXIST;
   }
 
@@ -184,12 +189,14 @@ static int do_image_snap_to(ImportDiffContext *idiffctx, std::string *tosnap)
   return 0;
 }
 
-static int get_snap_protection_status(ImportDiffContext *idiffctx, bool *is_protected)
+static int get_snap_protection_status(ImportDiffContext *idiffctx,
+                                      bool *is_protected)
 {
   int r;
   char buf[sizeof(__u8)];
   r = safe_read_exact(idiffctx->fd, buf, sizeof(buf));
   if (r < 0) {
+    std::cerr << "rbd: failed to decode snap protection status" << std::endl;
     return r;
   }
 
@@ -206,12 +213,13 @@ static int do_image_resize(ImportDiffContext *idiffctx)
   uint64_t end_size;
   r = safe_read_exact(idiffctx->fd, buf, sizeof(buf));
   if (r < 0) {
+    std::cerr << "rbd: failed to decode image size" << std::endl;
     return r;
   }
 
   bufferlist bl;
   bl.append(buf, sizeof(buf));
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
   decode(end_size, p);
 
   uint64_t cur_size;
@@ -231,12 +239,13 @@ static int do_image_io(ImportDiffContext *idiffctx, bool discard, size_t sparse_
   char buf[16];
   r = safe_read_exact(idiffctx->fd, buf, sizeof(buf));
   if (r < 0) {
+    std::cerr << "rbd: failed to decode IO length" << std::endl;
     return r;
   }
 
   bufferlist bl;
   bl.append(buf, sizeof(buf));
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
 
   uint64_t image_offset, buffer_length;
   decode(image_offset, p);
@@ -246,6 +255,7 @@ static int do_image_io(ImportDiffContext *idiffctx, bool discard, size_t sparse_
     bufferptr bp = buffer::create(buffer_length);
     r = safe_read_exact(idiffctx->fd, bp.c_str(), buffer_length);
     if (r < 0) {
+      std::cerr << "rbd: failed to decode write data" << std::endl;
       return r;
     }
 
@@ -255,13 +265,13 @@ static int do_image_io(ImportDiffContext *idiffctx, bool discard, size_t sparse_
       bool zeroed = false;
       utils::calc_sparse_extent(bp, sparse_size, buffer_offset, buffer_length,
 				&write_length, &zeroed);
-      assert(write_length > 0);
+      ceph_assert(write_length > 0);
 
       bufferlist write_bl;
       if (!zeroed) {
 	bufferptr write_ptr(bp, buffer_offset, write_length);
 	write_bl.push_back(write_ptr);
-	assert(write_bl.length() == write_length);
+	ceph_assert(write_bl.length() == write_length);
       }
 
       C_ImportDiff *ctx = new C_ImportDiff(idiffctx, write_bl,
@@ -287,14 +297,16 @@ static int validate_banner(int fd, std::string banner)
 {
   int r;
   char buf[banner.size() + 1];
+  memset(buf, 0, sizeof(buf));
   r = safe_read_exact(fd, buf, banner.size());
   if (r < 0) {
+    std::cerr << "rbd: failed to decode diff banner" << std::endl;
     return r;
   }
 
   buf[banner.size()] = '\0';
   if (strcmp(buf, banner.c_str())) {
-    std::cerr << "invalid banner '" << buf << "', expected '" << banner << "'" << std::endl;
+    std::cerr << "rbd: invalid or unexpected diff banner" << std::endl;
     return -EINVAL;
   }
 
@@ -311,8 +323,10 @@ static int skip_tag(int fd, uint64_t length)
     uint64_t len = min<uint64_t>(length, sizeof(buf));
     while (len > 0) {
       r = safe_read_exact(fd, buf, len);
-      if (r < 0)
+      if (r < 0) {
+        std::cerr << "rbd: failed to decode skipped tag data" << std::endl;
         return r;
+      }
       length -= len;
       len = min<uint64_t>(length, sizeof(buf));
     }
@@ -334,6 +348,7 @@ static int read_tag(int fd, __u8 end_tag, int format, __u8 *tag, uint64_t *readl
 
   r = safe_read_exact(fd, &read_tag, sizeof(read_tag));
   if (r < 0) {
+    std::cerr << "rbd: failed to decode tag" << std::endl;
     return r;
   }
 
@@ -342,12 +357,13 @@ static int read_tag(int fd, __u8 end_tag, int format, __u8 *tag, uint64_t *readl
     char buf[sizeof(uint64_t)];
     r = safe_read_exact(fd, buf, sizeof(buf));
     if (r < 0) {
+      std::cerr << "rbd: failed to decode tag length" << std::endl;
       return r;
     }
 
     bufferlist bl;
     bl.append(buf, sizeof(buf));
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     decode(*readlen, p);
   }
 
@@ -365,6 +381,7 @@ int do_import_diff_fd(librados::Rados &rados, librbd::Image &image, int fd,
     struct stat stat_buf;
     r = ::fstat(fd, &stat_buf);
     if (r < 0) {
+      std::cerr << "rbd: failed to stat specified diff file" << std::endl;
       return r;
     }
     size = (uint64_t)stat_buf.st_size;
@@ -420,7 +437,7 @@ int do_import_diff_fd(librados::Rados &rados, librbd::Image &image, int fd,
     r = idiffctx.image->snap_create(tosnap.c_str());
     if (r == 0 && is_protected) {
       r = idiffctx.image->snap_protect(tosnap.c_str());
-    } 
+    }
   }
 
   idiffctx.finish(r);
@@ -472,11 +489,13 @@ int execute_diff(const po::variables_map &vm,
   }
 
   std::string pool_name;
+  std::string namespace_name;
   std::string image_name;
   std::string snap_name;
   r = utils::get_pool_image_snapshot_names(
-    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_NONE);
+    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &namespace_name,
+    &image_name, &snap_name, true, utils::SNAPSHOT_PRESENCE_NONE,
+    utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
@@ -489,14 +508,17 @@ int execute_diff(const po::variables_map &vm,
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", false,
-                                 &rados, &io_ctx, &image);
+  r = utils::init_and_open_image(pool_name, namespace_name, image_name, "", "",
+                                 false, &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
   }
 
   r = do_import_diff(rados, image, path.c_str(),
 		     vm[at::NO_PROGRESS].as<bool>(), sparse_size);
+  if (r == -EDOM) {
+    r = -EBADMSG;
+  }
   if (r < 0) {
     cerr << "rbd: import-diff failed: " << cpp_strerror(r) << std::endl;
     return r;
@@ -559,13 +581,13 @@ static int decode_and_set_image_option(int fd, uint64_t imageopt, librbd::ImageO
 
   r = safe_read_exact(fd, buf, sizeof(buf));
   if (r < 0) {
+    std::cerr << "rbd: failed to decode image option" << std::endl;
     return r;
   }
 
   bufferlist bl;
   bl.append(buf, sizeof(buf));
-  bufferlist::iterator it;
-  it = bl.begin();
+  auto it = bl.cbegin();
 
   uint64_t val;
   decode(val, it);
@@ -584,7 +606,7 @@ static int do_import_metadata(int import_format, librbd::Image& image,
 
   //v1 format
   if (import_format == 1) {
-    return r;
+    return 0;
   }
 
   for (std::map<std::string, std::string>::const_iterator it = imagemetas.begin();
@@ -594,7 +616,7 @@ static int do_import_metadata(int import_format, librbd::Image& image,
       return r;
   }
 
-  return r;
+  return 0;
 }
 
 static int decode_imagemeta(int fd, uint64_t length, std::map<std::string, std::string>* imagemetas)
@@ -604,27 +626,27 @@ static int decode_imagemeta(int fd, uint64_t length, std::map<std::string, std::
   string value;
 
   r = utils::read_string(fd, length, &key);
-  if (r < 0)
+  if (r < 0) {
+    std::cerr << "rbd: failed to decode metadata key" << std::endl;
     return r;
+  }
 
   r = utils::read_string(fd, length, &value);
-  if (r < 0)
+  if (r < 0) {
+    std::cerr << "rbd: failed to decode metadata value" << std::endl;
     return r;
+  }
 
   (*imagemetas)[key] = value;
   return 0;
 }
 
-static int do_import_header(int fd, int import_format, uint64_t &size, librbd::ImageOptions& opts,
+static int do_import_header(int fd, int import_format, librbd::ImageOptions& opts,
                             std::map<std::string, std::string>* imagemetas)
 {
   // There is no header in v1 image.
   if (import_format == 1) {
     return 0;
-  }
-
-  if (fd == STDIN_FILENO || size < utils::RBD_IMAGE_BANNER_V2.size()) {
-    return -EINVAL;
   }
 
   int r;
@@ -680,11 +702,12 @@ static int do_import_v2(librados::Rados &rados, int fd, librbd::Image &image,
   char buf[sizeof(uint64_t)];
   r = safe_read_exact(fd, buf, sizeof(buf));
   if (r < 0) {
+    std::cerr << "rbd: failed to decode diff count" << std::endl;
     return r;
   }
   bufferlist bl;
   bl.append(buf, sizeof(buf));
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
   uint64_t diff_num;
   decode(diff_num, p);
   for (size_t i = 0; i < diff_num; i++) {
@@ -717,7 +740,7 @@ static int do_import_v1(int fd, librbd::Image &image, uint64_t size,
     throttle.reset(new SimpleThrottle(1, false));
   } else {
     throttle.reset(new SimpleThrottle(
-      g_conf->get_val<int64_t>("rbd_concurrent_management_ops"), false));
+      g_conf().get_val<uint64_t>("rbd_concurrent_management_ops"), false));
   }
 
   reqlen = min<uint64_t>(reqlen, size);
@@ -760,7 +783,7 @@ static int do_import_v1(int fd, librbd::Image &image, uint64_t size,
 	bufferlist write_bl;
 	bufferptr write_ptr(blkptr, buffer_offset, write_length);
 	write_bl.push_back(write_ptr);
-	assert(write_bl.length() == write_length);
+	ceph_assert(write_bl.length() == write_length);
 
 	C_Import *ctx = new C_Import(*throttle, image, write_bl,
 				     image_pos + buffer_offset);
@@ -807,11 +830,11 @@ static int do_import(librados::Rados &rados, librbd::RBD &rbd,
   utils::ProgressContext pc("Importing image", no_progress);
   std::map<std::string, std::string> imagemetas;
 
-  assert(imgname);
+  ceph_assert(imgname);
 
   uint64_t order;
   if (opts.get(RBD_IMAGE_OPTION_ORDER, &order) != 0) {
-    order = g_conf->get_val<int64_t>("rbd_default_order");
+    order = g_conf().get_val<uint64_t>("rbd_default_order");
   }
 
   // try to fill whole imgblklen blocks for sparsification
@@ -851,7 +874,7 @@ static int do_import(librados::Rados &rados, librbd::RBD &rbd,
                   << std::endl;
         goto done;
       }
-      assert(bdev_size >= 0);
+      ceph_assert(bdev_size >= 0);
       size = (uint64_t) bdev_size;
     }
 #ifdef HAVE_POSIX_FADVISE
@@ -859,7 +882,7 @@ static int do_import(librados::Rados &rados, librbd::RBD &rbd,
 #endif
   }
 
-  r = do_import_header(fd, import_format, size, opts, &imagemetas);
+  r = do_import_header(fd, import_format, opts, &imagemetas);
   if (r < 0) {
     std::cerr << "rbd: import header failed." << std::endl;
     goto done;
@@ -953,8 +976,8 @@ int execute(const po::variables_map &vm,
 
   std::string deprecated_snap_name;
   r = utils::extract_spec(deprecated_image_name, &deprecated_pool_name,
-                          &deprecated_image_name, &deprecated_snap_name,
-                          utils::SPEC_VALIDATION_FULL);
+                          nullptr, &deprecated_image_name,
+                          &deprecated_snap_name, utils::SPEC_VALIDATION_FULL);
   if (r < 0) {
     return r;
   }
@@ -965,12 +988,13 @@ int execute(const po::variables_map &vm,
   }
 
   std::string pool_name = deprecated_pool_name;
+  std::string namespace_name;
   std::string image_name;
   std::string snap_name = deprecated_snap_name;
   r = utils::get_pool_image_snapshot_names(
-    vm, at::ARGUMENT_MODIFIER_DEST, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_FULL,
-    false);
+    vm, at::ARGUMENT_MODIFIER_DEST, &arg_index, &pool_name, &namespace_name,
+    &image_name, &snap_name, false, utils::SNAPSHOT_PRESENCE_NONE,
+    utils::SPEC_VALIDATION_FULL);
   if (r < 0) {
     return r;
   }
@@ -987,7 +1011,7 @@ int execute(const po::variables_map &vm,
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  r = utils::init(pool_name, &rados, &io_ctx);
+  r = utils::init(pool_name, namespace_name, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }

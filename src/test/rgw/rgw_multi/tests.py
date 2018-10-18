@@ -252,7 +252,7 @@ def bucket_sync_status(target_zone, source_zone, bucket_name):
     if target_zone == source_zone:
         return None
 
-    cmd = ['bucket', 'sync', 'status'] + target_zone.zone_args()
+    cmd = ['bucket', 'sync', 'markers'] + target_zone.zone_args()
     cmd += ['--source-zone', source_zone.name]
     cmd += ['--bucket', bucket_name]
     while True:
@@ -263,7 +263,7 @@ def bucket_sync_status(target_zone, source_zone, bucket_name):
         assert(retcode == 2) # ENOENT
 
     bucket_sync_status_json = bucket_sync_status_json.decode('utf-8')
-    log.debug('current bucket sync status=%s', bucket_sync_status_json)
+    log.debug('current bucket sync markers=%s', bucket_sync_status_json)
     sync_status = json.loads(bucket_sync_status_json)
 
     markers={}
@@ -387,16 +387,18 @@ def zone_bucket_checkpoint(target_zone, source_zone, bucket_name):
 
         time.sleep(config.checkpoint_delay)
 
-    assert False, 'finished bucket checkpoint for target_zone=%s source_zone=%s bucket=%s' % \
+    assert False, 'failed bucket checkpoint for target_zone=%s source_zone=%s bucket=%s' % \
                   (target_zone.name, source_zone.name, bucket_name)
 
 def zonegroup_bucket_checkpoint(zonegroup_conns, bucket_name):
-    for source_conn in zonegroup_conns.zones:
+    for source_conn in zonegroup_conns.rw_zones:
         for target_conn in zonegroup_conns.zones:
             if source_conn.zone == target_conn.zone:
                 continue
+            log.debug('bucket checkpoint: source=%s target=%s bucket=%s', source_conn.zone.name, target_conn.zone.name, bucket_name)
             zone_bucket_checkpoint(target_conn.zone, source_conn.zone, bucket_name)
-            target_conn.check_bucket_eq(source_conn, bucket_name)
+    for source_conn, target_conn in combinations(zonegroup_conns.zones, 2):
+        target_conn.check_bucket_eq(source_conn, bucket_name)
 
 def set_master_zone(zone):
     zone.modify(zone.cluster, ['--master'])
@@ -689,12 +691,20 @@ def test_versioned_object_incremental_sync():
             log.debug('version3 id=%s', v.version_id)
             k.bucket.delete_key(obj, version_id=v.version_id)
 
-    for source_conn, bucket in zone_bucket:
-        for target_conn in zonegroup_conns.zones:
-            if source_conn.zone == target_conn.zone:
-                continue
-            zone_bucket_checkpoint(target_conn.zone, source_conn.zone, bucket.name)
-            check_bucket_eq(source_conn, target_conn, bucket)
+    for _, bucket in zone_bucket:
+        zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    for _, bucket in zone_bucket:
+        # overwrite the acls to test that metadata-only entries are applied
+        for zone_conn in zonegroup_conns.rw_zones:
+            obj = 'obj-' + zone_conn.name
+            k = new_key(zone_conn, bucket.name, obj)
+            v = get_latest_object_version(k)
+            v.make_public()
+
+    for _, bucket in zone_bucket:
+        zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
 
 def test_bucket_versioning():
     buckets, zone_bucket = create_bucket_per_zone_in_realm()
@@ -831,7 +841,7 @@ def test_multi_period_incremental_sync():
 
 def test_multi_zone_redirect():
     zonegroup = realm.master_zonegroup()
-    if len(zonegroup.zones) < 2:
+    if len(zonegroup.rw_zones) < 2:
         raise SkipTest("test_multi_period_incremental_sync skipped. Requires 3 or more zones in master zonegroup.")
 
     zonegroup_conns = ZonegroupConns(zonegroup)
@@ -1027,6 +1037,9 @@ def test_multipart_object_sync():
 def test_encrypted_object_sync():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
+
+    if len(zonegroup.rw_zones) < 2:
+        raise SkipTest("test_zonegroup_remove skipped. Requires 2 or more zones in master zonegroup.")
 
     (zone1, zone2) = zonegroup_conns.rw_zones[0:2]
 

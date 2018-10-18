@@ -36,7 +36,6 @@
 PMEMDevice::PMEMDevice(CephContext *cct, aio_callback_t cb, void *cbpriv)
   : BlockDevice(cct, cb, cbpriv),
     fd(-1), addr(0),
-    debug_lock("PMEMDevice::debug_lock"),
     injecting_crash(0)
 {
 }
@@ -61,7 +60,7 @@ int PMEMDevice::open(const string& p)
   int r = 0;
   dout(1) << __func__ << " path " << path << dendl;
 
-  fd = ::open(path.c_str(), O_RDWR);
+  fd = ::open(path.c_str(), O_RDWR | O_CLOEXEC);
   if (fd < 0) {
     r = -errno;
     derr << __func__ << " open got: " << cpp_strerror(r) << dendl;
@@ -95,7 +94,7 @@ int PMEMDevice::open(const string& p)
   // blksize doesn't strictly matter except that some file systems may
   // require a read/modify/write if we write something smaller than
   // it.
-  block_size = g_conf->bdev_block_size;
+  block_size = g_conf()->bdev_block_size;
   if (block_size != (unsigned)st.st_blksize) {
     dout(1) << __func__ << " backing device/file reports st_blksize "
       << st.st_blksize << ", using bdev_block_size "
@@ -104,9 +103,9 @@ int PMEMDevice::open(const string& p)
 
   dout(1) << __func__
     << " size " << size
-    << " (" << pretty_si_t(size) << "B)"
+    << " (" << byte_u_t(size) << ")"
     << " block_size " << block_size
-    << " (" << pretty_si_t(block_size) << "B)"
+    << " (" << byte_u_t(block_size) << ")"
     << dendl;
   return 0;
 
@@ -120,9 +119,9 @@ void PMEMDevice::close()
 {
   dout(1) << __func__ << dendl;
 
-  assert(addr != NULL);
+  ceph_assert(addr != NULL);
   pmem_unmap(addr, size);
-  assert(fd >= 0);
+  ceph_assert(fd >= 0);
   VOID_TEMP_FAILURE_RETRY(::close(fd));
   fd = -1;
 
@@ -201,7 +200,7 @@ int PMEMDevice::flush()
 void PMEMDevice::aio_submit(IOContext *ioc)
 {
   if (ioc->priv) {
-    assert(ioc->num_running == 0);
+    ceph_assert(ioc->num_running == 0);
     aio_callback(aio_callback_priv, ioc->priv);
   } else {
     ioc->try_aio_wake();
@@ -213,14 +212,14 @@ int PMEMDevice::write(uint64_t off, bufferlist& bl, bool buffered)
 {
   uint64_t len = bl.length();
   dout(20) << __func__ << " " << off << "~" << len  << dendl;
-  assert(is_valid_io(off, len));
+  ceph_assert(is_valid_io(off, len));
 
   dout(40) << "data: ";
   bl.hexdump(*_dout);
   *_dout << dendl;
 
-  if (g_conf->bdev_inject_crash &&
-      rand() % g_conf->bdev_inject_crash == 0) {
+  if (g_conf()->bdev_inject_crash &&
+      rand() % g_conf()->bdev_inject_crash == 0) {
     derr << __func__ << " bdev_inject_crash: dropping io " << off << "~" << len
       << dendl;
     ++injecting_crash;
@@ -254,9 +253,9 @@ int PMEMDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
 		      bool buffered)
 {
   dout(5) << __func__ << " " << off << "~" << len  << dendl;
-  assert(is_valid_io(off, len));
+  ceph_assert(is_valid_io(off, len));
 
-  bufferptr p = buffer::create_page_aligned(len);
+  bufferptr p = buffer::create_small_page_aligned(len);
   memcpy(p.c_str(), addr + off, len);
 
   pbl->clear();
@@ -278,7 +277,7 @@ int PMEMDevice::aio_read(uint64_t off, uint64_t len, bufferlist *pbl,
 int PMEMDevice::read_random(uint64_t off, uint64_t len, char *buf, bool buffered)
 {
   dout(5) << __func__ << " " << off << "~" << len << dendl;
-  assert(is_valid_io(off, len));
+  ceph_assert(is_valid_io(off, len));
 
   memcpy(buf, addr + off, len);
   return 0;

@@ -14,30 +14,6 @@ CLS_NAME(refcount)
 
 #define REFCOUNT_ATTR "refcount"
 
-struct obj_refcount {
-  map<string, bool> refs;
-  set<string> retired_refs;
-
-  obj_refcount() {}
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
-    encode(refs, bl);
-    encode(retired_refs, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::iterator& bl) {
-    DECODE_START(2, bl);
-    decode(refs, bl);
-    if (struct_v >= 2) {
-      decode(retired_refs, bl);
-    }
-    DECODE_FINISH(bl);
-  }
-};
-WRITE_CLASS_ENCODER(obj_refcount)
-
 static string wildcard_tag;
 
 static int read_refcount(cls_method_context_t hctx, bool implicit_ref, obj_refcount *objr)
@@ -55,7 +31,7 @@ static int read_refcount(cls_method_context_t hctx, bool implicit_ref, obj_refco
     return ret;
 
   try {
-    bufferlist::iterator iter = bl.begin();
+    auto iter = bl.cbegin();
     decode(*objr, iter);
   } catch (buffer::error& err) {
     CLS_LOG(0, "ERROR: read_refcount(): failed to decode refcount entry\n");
@@ -80,7 +56,7 @@ static int set_refcount(cls_method_context_t hctx, const struct obj_refcount& ob
 
 static int cls_rc_refcount_get(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_refcount_get_op op;
   try {
@@ -108,7 +84,7 @@ static int cls_rc_refcount_get(cls_method_context_t hctx, bufferlist *in, buffer
 
 static int cls_rc_refcount_put(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_refcount_put_op op;
   try {
@@ -161,7 +137,7 @@ static int cls_rc_refcount_put(cls_method_context_t hctx, bufferlist *in, buffer
 
 static int cls_rc_refcount_set(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_refcount_set_op op;
   try {
@@ -190,7 +166,7 @@ static int cls_rc_refcount_set(cls_method_context_t hctx, bufferlist *in, buffer
 
 static int cls_rc_refcount_read(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_refcount_read_op op;
   try {

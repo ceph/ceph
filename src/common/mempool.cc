@@ -70,7 +70,7 @@ size_t mempool::pool_t::allocated_bytes() const
   for (size_t i = 0; i < num_shards; ++i) {
     result += shard[i].bytes;
   }
-  assert(result >= 0);
+  ceph_assert(result >= 0);
   return (size_t) result;
 }
 
@@ -80,7 +80,7 @@ size_t mempool::pool_t::allocated_items() const
   for (size_t i = 0; i < num_shards; ++i) {
     result += shard[i].items;
   }
-  assert(result >= 0);
+  ceph_assert(result >= 0);
   return (size_t) result;
 }
 

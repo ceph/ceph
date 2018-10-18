@@ -24,7 +24,10 @@ import os
 import re
 import sys
 import json
-from StringIO import StringIO
+try:
+    from StringIO import StringIO
+except ImportError:
+    from io import StringIO
 
 def get_command_descriptions(what):
     CEPH_BIN = os.environ['CEPH_BIN']
@@ -95,7 +98,7 @@ class TestArgparse:
                                                     command,
                                                     'toomany']))
 
-	def capture_output(self, args, stdout=None, stderr=None):
+    def capture_output(self, args, stdout=None, stderr=None):
         if stdout:
             stdout = StringIO()
             sys.stdout = stdout
@@ -373,12 +376,6 @@ class TestMDS(TestArgparse):
         assert_equal({}, validate_command(sigdict, ['mds', 'compat',
                                                     'show', 'toomany']))
 
-    def test_deactivate(self):
-        self.assert_valid_command(['mds', 'deactivate', 'someone'])
-        assert_equal({}, validate_command(sigdict, ['mds', 'deactivate']))
-        assert_equal({}, validate_command(sigdict, ['mds', 'deactivate',
-                                                    'someone', 'toomany']))
-
     def test_set_state(self):
         self.assert_valid_command(['mds', 'set_state', '1', '2'])
         assert_equal({}, validate_command(sigdict, ['mds', 'set_state']))
@@ -445,10 +442,16 @@ class TestFS(TestArgparse):
         self.assert_valid_command(['fs', 'set', 'default', 'max_mds', '2'])
 
     def test_fs_set_cluster_down(self):
-        self.assert_valid_command(['fs', 'set', 'default', 'cluster_down', 'true'])
+        self.assert_valid_command(['fs', 'set', 'default', 'down', 'true'])
 
     def test_fs_set_cluster_up(self):
-        self.assert_valid_command(['fs', 'set', 'default', 'cluster_down', 'false'])
+        self.assert_valid_command(['fs', 'set', 'default', 'down', 'false'])
+
+    def test_fs_set_cluster_joinable(self):
+        self.assert_valid_command(['fs', 'set', 'default', 'joinable', 'true'])
+
+    def test_fs_set_cluster_not_joinable(self):
+        self.assert_valid_command(['fs', 'set', 'default', 'joinable', 'false'])
 
     def test_fs_set(self):
         self.assert_valid_command(['fs', 'set', 'default', 'max_file_size', '2'])
@@ -561,10 +564,8 @@ class TestOSD(TestArgparse):
 
     def test_lspools(self):
         self.assert_valid_command(['osd', 'lspools'])
-        self.assert_valid_command(['osd', 'lspools', '1'])
-        self.assert_valid_command(['osd', 'lspools', '-1'])
         assert_equal({}, validate_command(sigdict, ['osd', 'lspools',
-                                                    '1', 'toomany']))
+                                                    'toomany']))
 
     def test_blacklist_ls(self):
         self.assert_valid_command(['osd', 'blacklist', 'ls'])
@@ -1017,7 +1018,7 @@ class TestOSD(TestArgparse):
 
     def test_pool_get(self):
         for var in ('size', 'min_size',
-                    'pg_num', 'pgp_num', 'crush_rule', 'auid', 'fast_read',
+                    'pg_num', 'pgp_num', 'crush_rule', 'fast_read',
                     'scrub_min_interval', 'scrub_max_interval',
                     'deep_scrub_interval', 'recovery_priority',
                     'recovery_op_priority'):
@@ -1037,7 +1038,7 @@ class TestOSD(TestArgparse):
     def test_pool_set(self):
         for var in ('size', 'min_size',
                     'pg_num', 'pgp_num', 'crush_rule',
-                    'hashpspool', 'auid', 'fast_read',
+                    'hashpspool', 'fast_read',
                     'scrub_min_interval', 'scrub_max_interval',
                     'deep_scrub_interval', 'recovery_priority',
                     'recovery_op_priority'):

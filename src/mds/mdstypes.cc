@@ -24,7 +24,7 @@ void frag_info_t::encode(bufferlist &bl) const
   ENCODE_FINISH(bl);
 }
 
-void frag_info_t::decode(bufferlist::iterator &bl)
+void frag_info_t::decode(bufferlist::const_iterator &bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
   decode(version, bl);
@@ -86,12 +86,12 @@ void nest_info_t::encode(bufferlist &bl) const
     int64_t ranchors = 0;
     encode(ranchors, bl);
   }
-  encode(rsnaprealms, bl);
+  encode(rsnaps, bl);
   encode(rctime, bl);
   ENCODE_FINISH(bl);
 }
 
-void nest_info_t::decode(bufferlist::iterator &bl)
+void nest_info_t::decode(bufferlist::const_iterator &bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
   decode(version, bl);
@@ -102,7 +102,7 @@ void nest_info_t::decode(bufferlist::iterator &bl)
     int64_t ranchors;
     decode(ranchors, bl);
   }
-  decode(rsnaprealms, bl);
+  decode(rsnaps, bl);
   decode(rctime, bl);
   DECODE_FINISH(bl);
 }
@@ -113,7 +113,7 @@ void nest_info_t::dump(Formatter *f) const
   f->dump_unsigned("rbytes", rbytes);
   f->dump_unsigned("rfiles", rfiles);
   f->dump_unsigned("rsubdirs", rsubdirs);
-  f->dump_unsigned("rsnaprealms", rsnaprealms);
+  f->dump_unsigned("rsnaps", rsnaps);
   f->dump_stream("rctime") << rctime;
 }
 
@@ -125,7 +125,7 @@ void nest_info_t::generate_test_instances(list<nest_info_t*>& ls)
   ls.back()->rbytes = 2;
   ls.back()->rfiles = 3;
   ls.back()->rsubdirs = 4;
-  ls.back()->rsnaprealms = 6;
+  ls.back()->rsnaps = 6;
   ls.back()->rctime = utime_t(7, 8);
 }
 
@@ -138,8 +138,8 @@ ostream& operator<<(ostream &out, const nest_info_t &n)
     out << " rc" << n.rctime;
   if (n.rbytes)
     out << " b" << n.rbytes;
-  if (n.rsnaprealms)
-    out << " sr" << n.rsnaprealms;
+  if (n.rsnaps)
+    out << " rs" << n.rsnaps;
   if (n.rfiles || n.rsubdirs)
     out << " " << n.rsize() << "=" << n.rfiles << "+" << n.rsubdirs;
   out << ")";    
@@ -185,7 +185,7 @@ void client_writeable_range_t::encode(bufferlist &bl) const
   ENCODE_FINISH(bl);
 }
 
-void client_writeable_range_t::decode(bufferlist::iterator& bl)
+void client_writeable_range_t::decode(bufferlist::const_iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
   decode(range.first, bl);
@@ -229,7 +229,7 @@ void inline_data_t::encode(bufferlist &bl) const
   else
     encode(bufferlist(), bl);
 }
-void inline_data_t::decode(bufferlist::iterator &p)
+void inline_data_t::decode(bufferlist::const_iterator &p)
 {
   using ceph::decode;
   decode(version, p);
@@ -262,7 +262,7 @@ void fnode_t::encode(bufferlist &bl) const
   ENCODE_FINISH(bl);
 }
 
-void fnode_t::decode(bufferlist::iterator &bl)
+void fnode_t::decode(bufferlist::const_iterator &bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
   decode(version, bl);
@@ -334,7 +334,7 @@ void old_rstat_t::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void old_rstat_t::decode(bufferlist::iterator& bl)
+void old_rstat_t::decode(bufferlist::const_iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
   decode(first, bl);
@@ -366,24 +366,126 @@ void old_rstat_t::generate_test_instances(list<old_rstat_t*>& ls)
 }
 
 /*
+ * feature_bitset_t
+ */
+feature_bitset_t::feature_bitset_t(unsigned long value)
+{
+  if (value) {
+    for (size_t i = 0; i < sizeof(value) * 8; i += bits_per_block) {
+      _vec.push_back((block_type)(value >> i));
+    }
+  }
+}
+
+feature_bitset_t::feature_bitset_t(const vector<size_t>& array)
+{
+  if (!array.empty()) {
+    size_t n = array.back();
+    n += bits_per_block;
+    n /= bits_per_block;
+    _vec.resize(n, 0);
+
+    size_t last = 0;
+    for (auto& bit : array) {
+      if (bit > last)
+	last = bit;
+      else
+	ceph_assert(bit == last);
+      _vec[bit / bits_per_block] |= (block_type)1 << (bit % bits_per_block);
+    }
+  }
+}
+
+feature_bitset_t& feature_bitset_t::operator-=(const feature_bitset_t& other)
+{
+  for (size_t i = 0; i < _vec.size(); ++i) {
+    if (i >= other._vec.size())
+      break;
+    _vec[i] &= ~other._vec[i];
+  }
+  return *this;
+}
+
+void feature_bitset_t::encode(bufferlist& bl) const {
+  using ceph::encode;
+  using ceph::encode_nohead;
+  uint32_t len = _vec.size() * sizeof(block_type);
+  encode(len, bl);
+  encode_nohead(_vec, bl);
+}
+
+void feature_bitset_t::decode(bufferlist::const_iterator &p) {
+  using ceph::decode;
+  using ceph::decode_nohead;
+  uint32_t len;
+  decode(len, p);
+
+  _vec.clear();
+  if (len >= sizeof(block_type))
+    decode_nohead(len / sizeof(block_type), _vec, p);
+
+  if (len % sizeof(block_type)) {
+    ceph_le64 buf{};
+    p.copy(len % sizeof(block_type), (char*)&buf);
+    _vec.push_back((block_type)buf);
+  }
+}
+
+void feature_bitset_t::print(ostream& out) const
+{
+  std::ios_base::fmtflags f(out.flags());
+  for (int i = _vec.size() - 1; i >= 0; --i)
+    out << std::setfill('0') << std::setw(sizeof(block_type) * 2)
+        << std::hex << _vec[i];
+  out.flags(f);
+}
+
+/*
+ * client_metadata_t
+ */
+void client_metadata_t::encode(bufferlist& bl) const
+{
+  ENCODE_START(2, 1, bl);
+  encode(kv_map, bl);
+  encode(features, bl);
+  ENCODE_FINISH(bl);
+}
+
+void client_metadata_t::decode(bufferlist::const_iterator& p)
+{
+  DECODE_START(2, p);
+  decode(kv_map, p);
+  if (struct_v >= 2)
+    decode(features, p);
+  DECODE_FINISH(p);
+}
+
+void client_metadata_t::dump(Formatter *f) const
+{
+  f->dump_stream("features") << features;
+  for (const auto& p : kv_map)
+    f->dump_string(p.first.c_str(), p.second);
+}
+
+/*
  * session_info_t
  */
 void session_info_t::encode(bufferlist& bl, uint64_t features) const
 {
-  ENCODE_START(6, 3, bl);
+  ENCODE_START(7, 7, bl);
   encode(inst, bl, features);
   encode(completed_requests, bl);
   encode(prealloc_inos, bl);   // hacky, see below.
   encode(used_inos, bl);
-  encode(client_metadata, bl);
   encode(completed_flushes, bl);
   encode(auth_name, bl);
+  encode(client_metadata, bl);
   ENCODE_FINISH(bl);
 }
 
-void session_info_t::decode(bufferlist::iterator& p)
+void session_info_t::decode(bufferlist::const_iterator& p)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(6, 2, 2, p);
+  DECODE_START_LEGACY_COMPAT_LEN(7, 2, 2, p);
   decode(inst, p);
   if (struct_v <= 2) {
     set<ceph_tid_t> s;
@@ -399,14 +501,17 @@ void session_info_t::decode(bufferlist::iterator& p)
   decode(used_inos, p);
   prealloc_inos.insert(used_inos);
   used_inos.clear();
-  if (struct_v >= 4) {
-    decode(client_metadata, p);
+  if (struct_v >= 4 && struct_v < 7) {
+    decode(client_metadata.kv_map, p);
   }
   if (struct_v >= 5) {
     decode(completed_flushes, p);
   }
   if (struct_v >= 6) {
     decode(auth_name, p);
+  }
+  if (struct_v >= 7) {
+    decode(client_metadata, p);
   }
   DECODE_FINISH(p);
 }
@@ -448,10 +553,9 @@ void session_info_t::dump(Formatter *f) const
   }
   f->close_section();
 
-  for (map<string, string>::const_iterator i = client_metadata.begin();
-      i != client_metadata.end(); ++i) {
-    f->dump_string(i->first.c_str(), i->second);
-  }
+  f->open_array_section("client_metadata");
+  client_metadata.dump(f);
+  f->close_section();
 }
 
 void session_info_t::generate_test_instances(list<session_info_t*>& ls)
@@ -478,7 +582,7 @@ void string_snap_t::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void string_snap_t::decode(bufferlist::iterator& bl)
+void string_snap_t::decode(bufferlist::const_iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
   decode(name, bl);
@@ -517,7 +621,7 @@ void MDSCacheObjectInfo::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void MDSCacheObjectInfo::decode(bufferlist::iterator& p)
+void MDSCacheObjectInfo::decode(bufferlist::const_iterator& p)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, p);
   decode(ino, p);
@@ -562,7 +666,7 @@ void mds_table_pending_t::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void mds_table_pending_t::decode(bufferlist::iterator& bl)
+void mds_table_pending_t::decode(bufferlist::const_iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
   decode(reqid, bl);
@@ -600,16 +704,16 @@ void inode_load_vec_t::encode(bufferlist &bl) const
   ENCODE_FINISH(bl);
 }
 
-void inode_load_vec_t::decode(const utime_t &t, bufferlist::iterator &p)
+void inode_load_vec_t::decode(bufferlist::const_iterator &p)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, p);
   for (auto &i : vec) {
-    decode(i, t, p);
+    decode(i, p);
   }
   DECODE_FINISH(p);
 }
 
-void inode_load_vec_t::dump(Formatter *f)
+void inode_load_vec_t::dump(Formatter *f) const
 {
   f->open_array_section("Decay Counters");
   for (const auto &i : vec) {
@@ -622,8 +726,7 @@ void inode_load_vec_t::dump(Formatter *f)
 
 void inode_load_vec_t::generate_test_instances(list<inode_load_vec_t*>& ls)
 {
-  utime_t sample;
-  ls.push_back(new inode_load_vec_t(sample));
+  ls.push_back(new inode_load_vec_t(DecayRate()));
 }
 
 
@@ -641,20 +744,19 @@ void dirfrag_load_vec_t::dump(Formatter *f) const
   f->close_section();
 }
 
-void dirfrag_load_vec_t::dump(Formatter *f, utime_t now, const DecayRate& rate)
+void dirfrag_load_vec_t::dump(Formatter *f, const DecayRate& rate) const
 {
-  f->dump_float("meta_load", meta_load(now, rate));
-  f->dump_float("IRD", get(META_POP_IRD).get(now, rate));
-  f->dump_float("IWR", get(META_POP_IWR).get(now, rate));
-  f->dump_float("READDIR", get(META_POP_READDIR).get(now, rate));
-  f->dump_float("FETCH", get(META_POP_FETCH).get(now, rate));
-  f->dump_float("STORE", get(META_POP_STORE).get(now, rate));
+  f->dump_float("meta_load", meta_load());
+  f->dump_float("IRD", get(META_POP_IRD).get());
+  f->dump_float("IWR", get(META_POP_IWR).get());
+  f->dump_float("READDIR", get(META_POP_READDIR).get());
+  f->dump_float("FETCH", get(META_POP_FETCH).get());
+  f->dump_float("STORE", get(META_POP_STORE).get());
 }
 
-void dirfrag_load_vec_t::generate_test_instances(list<dirfrag_load_vec_t*>& ls)
+void dirfrag_load_vec_t::generate_test_instances(std::list<dirfrag_load_vec_t*>& ls)
 {
-  utime_t sample;
-  ls.push_back(new dirfrag_load_vec_t(sample));
+  ls.push_back(new dirfrag_load_vec_t(DecayRate()));
 }
 
 /*
@@ -671,10 +773,10 @@ void mds_load_t::encode(bufferlist &bl) const {
   ENCODE_FINISH(bl);
 }
 
-void mds_load_t::decode(const utime_t &t, bufferlist::iterator &bl) {
+void mds_load_t::decode(bufferlist::const_iterator &bl) {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
-  decode(auth, t, bl);
-  decode(all, t, bl);
+  decode(auth, bl);
+  decode(all, bl);
   decode(req_rate, bl);
   decode(cache_hit_rate, bl);
   decode(queue_len, bl);
@@ -696,10 +798,9 @@ void mds_load_t::dump(Formatter *f) const
   f->close_section();
 }
 
-void mds_load_t::generate_test_instances(list<mds_load_t*>& ls)
+void mds_load_t::generate_test_instances(std::list<mds_load_t*>& ls)
 {
-  utime_t sample;
-  ls.push_back(new mds_load_t(sample));
+  ls.push_back(new mds_load_t(DecayRate()));
 }
 
 /*
@@ -720,7 +821,7 @@ void cap_reconnect_t::encode_old(bufferlist& bl) const {
   encode_nohead(flockbl, bl);
 }
 
-void cap_reconnect_t::decode(bufferlist::iterator& bl) {
+void cap_reconnect_t::decode(bufferlist::const_iterator& bl) {
   DECODE_START(1, bl);
   decode_old(bl); // extract out when something changes
   if (struct_v >= 2)
@@ -728,7 +829,7 @@ void cap_reconnect_t::decode(bufferlist::iterator& bl) {
   DECODE_FINISH(bl);
 }
 
-void cap_reconnect_t::decode_old(bufferlist::iterator& bl) {
+void cap_reconnect_t::decode_old(bufferlist::const_iterator& bl) {
   using ceph::decode;
   decode(path, bl);
   decode(capinfo, bl);

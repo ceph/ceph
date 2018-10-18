@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 class Create(object):
 
-    help = 'Create a new OSD from  an LVM device'
+    help = 'Create a new OSD from an LVM device'
 
     def __init__(self, argv):
         self.argv = argv
@@ -31,7 +31,7 @@ class Create(object):
             # activate, which would never need to be rolled back.
             Activate([]).activate(args)
         except Exception:
-            logger.error('lvm activate was unable to complete, while creating the OSD')
+            logger.exception('lvm activate was unable to complete, while creating the OSD')
             logger.info('will rollback OSD ID creation')
             rollback_osd(args, osd_id)
             raise

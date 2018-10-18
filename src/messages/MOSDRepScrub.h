@@ -22,10 +22,12 @@
  * instruct an OSD initiate a replica scrub on a specific PG
  */
 
-struct MOSDRepScrub : public MOSDFastDispatchOp {
+class MOSDRepScrub : public MessageInstance<MOSDRepScrub, MOSDFastDispatchOp> {
+public:
+  friend factory;
 
-  static const int HEAD_VERSION = 9;
-  static const int COMPAT_VERSION = 6;
+  static constexpr int HEAD_VERSION = 9;
+  static constexpr int COMPAT_VERSION = 6;
 
   spg_t pgid;             // PG to scrub
   eversion_t scrub_from; // only scrub log entries after scrub_from
@@ -50,14 +52,14 @@ struct MOSDRepScrub : public MOSDFastDispatchOp {
   }
 
   MOSDRepScrub()
-    : MOSDFastDispatchOp(MSG_OSD_REP_SCRUB, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_REP_SCRUB, HEAD_VERSION, COMPAT_VERSION),
       chunky(false),
       deep(false) { }
 
   MOSDRepScrub(spg_t pgid, eversion_t scrub_to, epoch_t map_epoch, epoch_t min_epoch,
                hobject_t start, hobject_t end, bool deep,
 	       bool preemption, int prio, bool highprio)
-    : MOSDFastDispatchOp(MSG_OSD_REP_SCRUB, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_REP_SCRUB, HEAD_VERSION, COMPAT_VERSION),
       pgid(pgid),
       scrub_to(scrub_to),
       map_epoch(map_epoch),
@@ -109,7 +111,7 @@ public:
     encode(high_priority, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(pgid.pgid, p);
     decode(scrub_from, p);
     decode(scrub_to, p);

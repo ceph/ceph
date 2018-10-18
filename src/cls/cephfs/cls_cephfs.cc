@@ -53,7 +53,7 @@ static int set_if_greater(cls_method_context_t hctx,
   if (r == -ENOENT || existing_val_bl.length() == 0) {
     set_val = true;
   } else if (r >= 0) {
-    bufferlist::iterator existing_p = existing_val_bl.begin();
+    auto existing_p = existing_val_bl.cbegin();
     try {
       A existing_val;
       decode(existing_val, existing_p);
@@ -85,13 +85,13 @@ static int set_if_greater(cls_method_context_t hctx,
 static int accumulate_inode_metadata(cls_method_context_t hctx,
     bufferlist *in, bufferlist *out)
 {
-  assert(in != NULL);
-  assert(out != NULL);
+  ceph_assert(in != NULL);
+  ceph_assert(out != NULL);
 
   int r = 0;
 
   // Decode `in`
-  bufferlist::iterator q = in->begin();
+  auto q = in->cbegin();
   AccumulateArgs args;
   try {
     args.decode(q);
@@ -126,7 +126,7 @@ class PGLSCephFSFilter : public PGLSFilter {
 protected:
   std::string scrub_tag;
 public:
-  int init(bufferlist::iterator& params) override {
+  int init(bufferlist::const_iterator& params) override {
     try {
       InodeTagFilterArgs args;
       args.decode(params);
@@ -167,7 +167,7 @@ bool PGLSCephFSFilter::filter(const hobject_t &obj,
 
   if (!scrub_tag.empty() && xattr_data.length() > 0) {
     std::string tag_ondisk;
-    bufferlist::iterator q = xattr_data.begin();
+    auto q = xattr_data.cbegin();
     try {
       decode(tag_ondisk, q);
       if (tag_ondisk == scrub_tag)

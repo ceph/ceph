@@ -44,7 +44,7 @@ class TestFlush(CephFSTestCase):
 
         # ...and the journal is truncated to just a single subtreemap from the
         # newly created segment
-        summary_output = self.fs.journal_tool(["event", "get", "summary"])
+        summary_output = self.fs.journal_tool(["event", "get", "summary"], 0)
         try:
             self.assertEqual(summary_output,
                              dedent(
@@ -72,7 +72,7 @@ class TestFlush(CephFSTestCase):
                              ).strip())
             flush_data = self.fs.mds_asok(["flush", "journal"])
             self.assertEqual(flush_data['return_code'], 0)
-            self.assertEqual(self.fs.journal_tool(["event", "get", "summary"]),
+            self.assertEqual(self.fs.journal_tool(["event", "get", "summary"], 0),
                              dedent(
                                  """
                                  Events by type:

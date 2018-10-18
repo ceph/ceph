@@ -25,7 +25,7 @@ struct ServiceMap {
     std::map<std::string,std::string> metadata;  ///< static metadata
 
     void encode(bufferlist& bl, uint64_t features) const;
-    void decode(bufferlist::iterator& p);
+    void decode(bufferlist::const_iterator& p);
     void dump(Formatter *f) const;
     static void generate_test_instances(std::list<Daemon*>& ls);
   };
@@ -35,7 +35,7 @@ struct ServiceMap {
     std::string summary;   ///< summary status string for 'ceph -s'
 
     void encode(bufferlist& bl, uint64_t features) const;
-    void decode(bufferlist::iterator& p);
+    void decode(bufferlist::const_iterator& p);
     void dump(Formatter *f) const;
     static void generate_test_instances(std::list<Service*>& ls);
 
@@ -71,7 +71,7 @@ struct ServiceMap {
   map<std::string,Service> services;
 
   void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::iterator& p);
+  void decode(bufferlist::const_iterator& p);
   void dump(Formatter *f) const;
   static void generate_test_instances(std::list<ServiceMap*>& ls);
 

@@ -163,6 +163,10 @@ int ZlibCompressor::isal_compress(const bufferlist &in, bufferlist &out)
 
 int ZlibCompressor::compress(const bufferlist &in, bufferlist &out)
 {
+#ifdef HAVE_QATZIP
+  if (qat_enabled)
+    return qat_accel.compress(in, out);
+#endif
 #if __x86_64__ && defined(HAVE_BETTER_YASM_ELF64)
   if (isal_enabled)
     return isal_compress(in, out);
@@ -173,8 +177,13 @@ int ZlibCompressor::compress(const bufferlist &in, bufferlist &out)
 #endif
 }
 
-int ZlibCompressor::decompress(bufferlist::iterator &p, size_t compressed_size, bufferlist &out)
+int ZlibCompressor::decompress(bufferlist::const_iterator &p, size_t compressed_size, bufferlist &out)
 {
+#ifdef HAVE_QATZIP
+  if (qat_enabled)
+    return qat_accel.decompress(p, compressed_size, out);
+#endif
+
   int ret;
   unsigned have;
   z_stream strm;
@@ -228,6 +237,10 @@ int ZlibCompressor::decompress(bufferlist::iterator &p, size_t compressed_size, 
 
 int ZlibCompressor::decompress(const bufferlist &in, bufferlist &out)
 {
-  bufferlist::iterator i = const_cast<bufferlist&>(in).begin();
+#ifdef HAVE_QATZIP
+  if (qat_enabled)
+    return qat_accel.decompress(in, out);
+#endif
+  auto i = std::cbegin(in);
   return decompress(i, in.length(), out);
 }

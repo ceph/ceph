@@ -5,9 +5,16 @@
 #include <fstream>
 #include <include/types.h>
 
+#include <boost/algorithm/string.hpp>
+#include <boost/tokenizer.hpp>
+
 using namespace json_spirit;
 
 #define dout_subsys ceph_subsys_rgw
+
+
+static JSONFormattable default_formattable;
+
 
 JSONObjIter::JSONObjIter()
 {
@@ -219,10 +226,18 @@ bool JSONParser::parse(const char *buf_, int len)
 
   string json_string(buf_, len);
   success = read(json_string, data);
-  if (success)
+  if (success) {
     handle_value(data);
-  else
+    if (data.type() != obj_type &&
+        data.type() != array_type) {
+      if (data.type() == str_type)
+        data_string =  data.get_str();
+      else
+        data_string =  write(data, raw_utf8);
+    }
+  } else {
     set_failure();
+  }
 
   return success;
 }
@@ -513,5 +528,325 @@ void encode_json(const char *name, const bufferlist& bl, Formatter *f)
   string s(b64.c_str(), b64.length());
 
   encode_json(name, s, f);
+}
+
+
+
+/* JSONFormattable */
+
+const JSONFormattable& JSONFormattable::operator[](const string& name) const
+{
+  auto i = obj.find(name);
+  if (i == obj.end()) {
+    return default_formattable;
+  }
+  return i->second;
+}
+
+const JSONFormattable& JSONFormattable::operator[](size_t index) const
+{
+  if (index >= arr.size()) {
+    return default_formattable;
+  }
+  return arr[index];
+}
+
+JSONFormattable& JSONFormattable::operator[](const string& name)
+{
+  auto i = obj.find(name);
+  if (i == obj.end()) {
+    return default_formattable;
+  }
+  return i->second;
+}
+
+JSONFormattable& JSONFormattable::operator[](size_t index)
+{
+  if (index >= arr.size()) {
+    return default_formattable;
+  }
+  return arr[index];
+}
+
+bool JSONFormattable::exists(const string& name) const
+{
+  auto i = obj.find(name);
+  return (i != obj.end());
+}
+
+bool JSONFormattable::exists(size_t index) const
+{
+  return (index < arr.size());
+}
+
+bool JSONFormattable::find(const string& name, string *val) const
+{
+  auto i = obj.find(name);
+  if (i == obj.end()) {
+    return false;
+  }
+  *val = i->second.val();
+  return true;
+}
+
+int JSONFormattable::val_int() const {
+  return atoi(str.c_str());
+}
+
+bool JSONFormattable::val_bool() const {
+  return (boost::iequals(str, "true") ||
+          boost::iequals(str, "on") ||
+          boost::iequals(str, "yes") ||
+          boost::iequals(str, "1"));
+}
+
+string JSONFormattable::def(const string& def_val) const {
+  if (type == FMT_NONE) {
+    return def_val;
+  }
+  return val();
+}
+
+int JSONFormattable::def(int def_val) const {
+  if (type == FMT_NONE) {
+    return def_val;
+  }
+  return val_int();
+}
+
+bool JSONFormattable::def(bool def_val) const {
+  if (type == FMT_NONE) {
+    return def_val;
+  }
+  return val_bool();
+}
+
+string JSONFormattable::get(const string& name, const string& def_val) const
+{
+  return (*this)[name].def(def_val);
+}
+
+int JSONFormattable::get_int(const string& name, int def_val) const
+{
+  return (*this)[name].def(def_val);
+}
+
+bool JSONFormattable::get_bool(const string& name, bool def_val) const
+{
+  return (*this)[name].def(def_val);
+}
+
+struct field_entity {
+  bool is_obj{false}; /* either obj field or array entity */
+  string name; /* if obj */
+  int index{0}; /* if array */
+  bool append{false};
+
+  field_entity() {}
+  explicit field_entity(const string& n) : is_obj(true), name(n) {}
+  explicit field_entity(int i) : is_obj(false), index(i) {}
+};
+
+static int parse_entity(const string& s, vector<field_entity> *result)
+{
+  size_t ofs = 0;
+
+  while (ofs < s.size()) {
+    size_t next_arr = s.find('[', ofs);
+    if (next_arr == string::npos) {
+      if (ofs != 0) {
+        return -EINVAL;
+      }
+      result->push_back(field_entity(s));
+      return 0;
+    }
+    if (next_arr > ofs) {
+      string field = s.substr(ofs, next_arr - ofs);
+      result->push_back(field_entity(field));
+      ofs = next_arr;
+    }
+    size_t end_arr = s.find(']', next_arr + 1);
+    if (end_arr == string::npos) {
+      return -EINVAL;
+    }
+
+    string index_str = s.substr(next_arr + 1, end_arr - next_arr - 1);
+
+    ofs = end_arr + 1;
+
+    if (!index_str.empty()) {
+      result->push_back(field_entity(atoi(index_str.c_str())));
+    } else {
+      field_entity f;
+      f.append = true;
+      result->push_back(f);
+    }
+  }
+  return 0;
+}
+
+int JSONFormattable::set(const string& name, const string& val)
+{
+  boost::escaped_list_separator<char> els('\\', '.', '"');
+  boost::tokenizer<boost::escaped_list_separator<char> > tok(name, els);
+
+  JSONFormattable *f = this;
+
+  JSONParser jp;
+
+  bool is_valid_json = jp.parse(val.c_str(), val.size());
+
+  for (const auto& i : tok) {
+    vector<field_entity> v;
+    int ret = parse_entity(i, &v);
+    if (ret < 0) {
+      return ret;
+    }
+    for (const auto& vi : v) {
+      if (f->type == FMT_NONE) {
+        if (vi.is_obj) {
+          f->type = FMT_OBJ;
+        } else {
+          f->type = FMT_ARRAY;
+        }
+      }
+
+      if (f->type == FMT_OBJ) {
+        if (!vi.is_obj) {
+          return -EINVAL;
+        }
+        f = &f->obj[vi.name];
+      } else if (f->type == FMT_ARRAY) {
+        if (vi.is_obj) {
+          return -EINVAL;
+        }
+        int index = vi.index;
+        if (vi.append) {
+          index = f->arr.size();
+        } else if (index < 0) {
+          index = f->arr.size() + index;
+          if (index < 0) {
+            return -EINVAL; /* out of bounds */
+          }
+        }
+        if ((size_t)index >= f->arr.size()) {
+          f->arr.resize(index + 1);
+        }
+        f = &f->arr[index];
+      }
+    }
+  }
+
+  if (is_valid_json) {
+    f->decode_json(&jp);
+  } else {
+    f->type = FMT_STRING;
+    f->str = val;
+  }
+
+  return 0;
+}
+
+int JSONFormattable::erase(const string& name)
+{
+  boost::escaped_list_separator<char> els('\\', '.', '"');
+  boost::tokenizer<boost::escaped_list_separator<char> > tok(name, els);
+
+  JSONFormattable *f = this;
+  JSONFormattable *parent = nullptr;
+  field_entity last_entity;
+
+  for (auto& i : tok) {
+    vector<field_entity> v;
+    int ret = parse_entity(i, &v);
+    if (ret < 0) {
+      return ret;
+    }
+    for (const auto& vi : v) {
+      if (f->type == FMT_NONE ||
+          f->type == FMT_STRING) {
+        if (vi.is_obj) {
+          f->type = FMT_OBJ;
+        } else {
+          f->type = FMT_ARRAY;
+        }
+      }
+
+      parent = f;
+
+      if (f->type == FMT_OBJ) {
+        if (!vi.is_obj) {
+          return -EINVAL;
+        }
+        auto iter = f->obj.find(vi.name);
+        if (iter == f->obj.end()) {
+          return 0; /* nothing to erase */
+        }
+        f = &iter->second;
+      } else if (f->type == FMT_ARRAY) {
+        if (vi.is_obj) {
+          return -EINVAL;
+        }
+        int index = vi.index;
+        if (index < 0) {
+          index = f->arr.size() + index;
+          if (index < 0) { /* out of bounds, nothing to remove */
+            return 0;
+          }
+        }
+        if ((size_t)index >= f->arr.size()) {
+          return 0; /* index beyond array boundaries */
+        }
+        f = &f->arr[index];
+      }
+      last_entity = vi;
+    }
+  }
+
+  if (!parent) {
+    *this = JSONFormattable(); /* erase everything */
+  } else {
+    if (last_entity.is_obj) {
+      parent->obj.erase(last_entity.name);
+    } else {
+      int index = (last_entity.index >= 0 ? last_entity.index : parent->arr.size() + last_entity.index);
+      if (index < 0 || (size_t)index >= parent->arr.size()) {
+        return 0;
+      }
+      parent->arr.erase(parent->arr.begin() + index);
+    }
+  }
+
+  return 0;
+}
+
+void JSONFormattable::derive_from(const JSONFormattable& parent)
+{
+  for (auto& o : parent.obj) {
+    if (obj.find(o.first) == obj.end()) {
+      obj[o.first] = o.second;
+    }
+  }
+}
+
+void encode_json(const char *name, const JSONFormattable& v, Formatter *f)
+{
+  switch (v.type) {
+    case JSONFormattable::FMT_STRING:
+      encode_json(name, v.str, f);
+      break;
+    case JSONFormattable::FMT_ARRAY:
+      encode_json(name, v.arr, f);
+      break;
+    case JSONFormattable::FMT_OBJ:
+      f->open_object_section(name);
+      for (auto iter : v.obj) {
+        encode_json(iter.first.c_str(), iter.second, f);
+      }
+      f->close_section();
+      break;
+    case JSONFormattable::FMT_NONE:
+      break;
+  }
 }
 

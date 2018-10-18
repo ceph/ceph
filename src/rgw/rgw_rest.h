@@ -10,7 +10,7 @@
 #include <boost/container/flat_set.hpp>
 #include "common/sstring.hh"
 #include "common/ceph_json.h"
-#include "include/assert.h" /* needed because of common/ceph_json.h */
+#include "include/ceph_assert.h" /* needed because of common/ceph_json.h */
 #include "rgw_op.h"
 #include "rgw_formats.h"
 #include "rgw_client_io.h"
@@ -733,9 +733,6 @@ extern void dump_content_length(struct req_state *s, uint64_t len);
 extern int64_t parse_content_length(const char *content_length);
 extern void dump_etag(struct req_state *s,
                       const boost::string_ref& etag,
-                      bool quoted = false);
-extern void dump_etag(struct req_state *s,
-                      ceph::buffer::list& bl_etag,
                       bool quoted = false);
 extern void dump_epoch_header(struct req_state *s, const char *name, real_time t);
 extern void dump_time_header(struct req_state *s, const char *name, real_time t);

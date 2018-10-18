@@ -14,10 +14,6 @@
 #include "rgw_sync_module.h"
 #include "rgw_sync_trace.h"
 
-namespace rgw {
-struct BucketChangeObserver;
-}
-
 struct rgw_datalog_info {
   uint32_t num_shards;
 
@@ -46,7 +42,7 @@ struct rgw_data_sync_info {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START(2, bl);
      decode(state, bl);
      decode(num_shards, bl);
@@ -120,7 +116,7 @@ struct rgw_data_sync_marker {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START(1, bl);
     decode(state, bl);
     decode(marker, bl);
@@ -132,7 +128,19 @@ struct rgw_data_sync_marker {
   }
 
   void dump(Formatter *f) const {
-    encode_json("state", (int)state, f);
+    const char *s{nullptr};
+    switch ((SyncState)state) {
+      case FullSync:
+        s = "full-sync";
+        break;
+      case IncrementalSync:
+        s = "incremental-sync";
+        break;
+      default:
+        s = "unknown";
+        break;
+    }
+    encode_json("status", s, f);
     encode_json("marker", marker, f);
     encode_json("next_step_marker", next_step_marker, f);
     encode_json("total_entries", total_entries, f);
@@ -140,9 +148,13 @@ struct rgw_data_sync_marker {
     encode_json("timestamp", utime_t(timestamp), f);
   }
   void decode_json(JSONObj *obj) {
-    int s;
-    JSONDecoder::decode_json("state", s, obj);
-    state = s;
+    std::string s;
+    JSONDecoder::decode_json("status", s, obj);
+    if (s == "full-sync") {
+      state = FullSync;
+    } else if (s == "incremental-sync") {
+      state = IncrementalSync;
+    }
     JSONDecoder::decode_json("marker", marker, obj);
     JSONDecoder::decode_json("next_step_marker", next_step_marker, obj);
     JSONDecoder::decode_json("total_entries", total_entries, obj);
@@ -168,7 +180,7 @@ struct rgw_data_sync_status {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START(1, bl);
     decode(sync_info, bl);
     /* sync markers are decoded separately */
@@ -218,6 +230,7 @@ struct rgw_bucket_entry_owner {
 class RGWSyncErrorLogger;
 
 struct RGWDataSyncEnv {
+  const DoutPrefixProvider *dpp{nullptr};
   CephContext *cct{nullptr};
   RGWRados *store{nullptr};
   RGWRESTConn *conn{nullptr};
@@ -227,15 +240,14 @@ struct RGWDataSyncEnv {
   RGWSyncTraceManager *sync_tracer{nullptr};
   string source_zone;
   RGWSyncModuleInstanceRef sync_module{nullptr};
-  rgw::BucketChangeObserver *observer{nullptr};
 
   RGWDataSyncEnv() {}
 
-  void init(CephContext *_cct, RGWRados *_store, RGWRESTConn *_conn,
+  void init(const DoutPrefixProvider *_dpp, CephContext *_cct, RGWRados *_store, RGWRESTConn *_conn,
             RGWAsyncRadosProcessor *_async_rados, RGWHTTPManager *_http_manager,
             RGWSyncErrorLogger *_error_logger, RGWSyncTraceManager *_sync_tracer,
-            const string& _source_zone, RGWSyncModuleInstanceRef& _sync_module,
-            rgw::BucketChangeObserver *_observer) {
+            const string& _source_zone, RGWSyncModuleInstanceRef& _sync_module) {
+    dpp = _dpp;
     cct = _cct;
     store = _store;
     conn = _conn;
@@ -245,7 +257,6 @@ struct RGWDataSyncEnv {
     sync_tracer = _sync_tracer;
     source_zone = _source_zone;
     sync_module = _sync_module;
-    observer = _observer;
   }
 
   string shard_obj_name(int shard_id);
@@ -253,9 +264,9 @@ struct RGWDataSyncEnv {
 };
 
 class RGWRemoteDataLog : public RGWCoroutinesManager {
+  const DoutPrefixProvider *dpp;
   RGWRados *store;
   RGWAsyncRadosProcessor *async_rados;
-  rgw::BucketChangeObserver *observer;
   RGWHTTPManager http_manager;
 
   RGWDataSyncEnv sync_env;
@@ -268,10 +279,10 @@ class RGWRemoteDataLog : public RGWCoroutinesManager {
   bool initialized;
 
 public:
-  RGWRemoteDataLog(RGWRados *_store, RGWAsyncRadosProcessor *async_rados,
-                   rgw::BucketChangeObserver *observer)
+  RGWRemoteDataLog(const DoutPrefixProvider *dpp, RGWRados *_store,
+                   RGWAsyncRadosProcessor *async_rados)
     : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()),
-      store(_store), async_rados(async_rados), observer(observer),
+      dpp(dpp), store(_store), async_rados(async_rados),
       http_manager(store->ctx(), completion_mgr),
       lock("RGWRemoteDataLog::lock"), data_sync_cr(NULL),
       initialized(false) {}
@@ -284,13 +295,14 @@ public:
   int read_source_log_shards_next(map<int, string> shard_markers, map<int, rgw_datalog_shard_data> *result);
   int read_sync_status(rgw_data_sync_status *sync_status);
   int read_recovering_shards(const int num_shards, set<int>& recovering_shards);
+  int read_shard_status(int shard_id, set<string>& lagging_buckets,set<string>& recovering_buckets, rgw_data_sync_marker* sync_marker, const int max_entries);
   int init_sync_status(int num_shards);
   int run_sync(int num_shards);
 
   void wakeup(int shard_id, set<string>& keys);
 };
 
-class RGWDataSyncStatusManager {
+class RGWDataSyncStatusManager : public DoutPrefixProvider {
   RGWRados *store;
   rgw_rados_ref ref;
 
@@ -310,17 +322,15 @@ class RGWDataSyncStatusManager {
 
 public:
   RGWDataSyncStatusManager(RGWRados *_store, RGWAsyncRadosProcessor *async_rados,
-                           const string& _source_zone,
-                           rgw::BucketChangeObserver *observer = nullptr)
+                           const string& _source_zone)
     : store(_store), source_zone(_source_zone), conn(NULL), error_logger(NULL),
       sync_module(nullptr),
-      source_log(store, async_rados, observer), num_shards(0) {}
+      source_log(this, store, async_rados), num_shards(0) {}
   RGWDataSyncStatusManager(RGWRados *_store, RGWAsyncRadosProcessor *async_rados,
-                           const string& _source_zone, const RGWSyncModuleInstanceRef& _sync_module,
-                           rgw::BucketChangeObserver *observer = nullptr)
+                           const string& _source_zone, const RGWSyncModuleInstanceRef& _sync_module)
     : store(_store), source_zone(_source_zone), conn(NULL), error_logger(NULL),
       sync_module(_sync_module),
-      source_log(store, async_rados, observer), num_shards(0) {}
+      source_log(this, store, async_rados), num_shards(0) {}
   ~RGWDataSyncStatusManager() {
     finalize();
   }
@@ -338,6 +348,9 @@ public:
     return source_log.read_recovering_shards(num_shards, recovering_shards);
   }
 
+  int read_shard_status(int shard_id, set<string>& lagging_buckets, set<string>& recovering_buckets, rgw_data_sync_marker *sync_marker, const int max_entries) {
+    return source_log.read_shard_status(shard_id, lagging_buckets, recovering_buckets,sync_marker, max_entries);
+  }
   int init_sync_status() { return source_log.init_sync_status(num_shards); }
 
   int read_log_info(rgw_datalog_info *log_info) {
@@ -356,6 +369,11 @@ public:
   void stop() {
     source_log.finish();
   }
+
+  // implements DoutPrefixProvider
+  CephContext *get_cct() const override { return store->ctx(); }
+  unsigned get_subsys() const override;
+  std::ostream& gen_prefix(std::ostream& out) const override;
 };
 
 class RGWBucketSyncStatusManager;
@@ -376,7 +394,7 @@ struct rgw_bucket_shard_full_sync_marker {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START(1, bl);
     decode(position, bl);
     decode(count, bl);
@@ -401,7 +419,7 @@ struct rgw_bucket_shard_inc_sync_marker {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START(1, bl);
     decode(position, bl);
      DECODE_FINISH(bl);
@@ -439,7 +457,7 @@ struct rgw_bucket_shard_sync_info {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START(1, bl);
      decode(state, bl);
      decode(full_marker, bl);
@@ -455,8 +473,23 @@ struct rgw_bucket_shard_sync_info {
 };
 WRITE_CLASS_ENCODER(rgw_bucket_shard_sync_info)
 
+struct rgw_bucket_index_marker_info {
+  string bucket_ver;
+  string master_ver;
+  string max_marker;
+  bool syncstopped{false};
+
+  void decode_json(JSONObj *obj) {
+    JSONDecoder::decode_json("bucket_ver", bucket_ver, obj);
+    JSONDecoder::decode_json("master_ver", master_ver, obj);
+    JSONDecoder::decode_json("max_marker", max_marker, obj);
+    JSONDecoder::decode_json("syncstopped", syncstopped, obj);
+  }
+};
+
 
 class RGWRemoteBucketLog : public RGWCoroutinesManager {
+  const DoutPrefixProvider *dpp;
   RGWRados *store;
   RGWRESTConn *conn{nullptr};
   string source_zone;
@@ -472,9 +505,14 @@ class RGWRemoteBucketLog : public RGWCoroutinesManager {
   RGWBucketSyncCR *sync_cr{nullptr};
 
 public:
-  RGWRemoteBucketLog(RGWRados *_store, RGWBucketSyncStatusManager *_sm,
-                     RGWAsyncRadosProcessor *_async_rados, RGWHTTPManager *_http_manager) : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()), store(_store),
-                                       status_manager(_sm), async_rados(_async_rados), http_manager(_http_manager) {}
+  RGWRemoteBucketLog(const DoutPrefixProvider *_dpp, RGWRados *_store,
+                     RGWBucketSyncStatusManager *_sm,
+                     RGWAsyncRadosProcessor *_async_rados,
+                     RGWHTTPManager *_http_manager)
+    : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()),
+      dpp(_dpp), store(_store), status_manager(_sm),
+      async_rados(_async_rados), http_manager(_http_manager)
+  {}
 
   int init(const string& _source_zone, RGWRESTConn *_conn,
            const rgw_bucket& bucket, int shard_id,
@@ -490,7 +528,7 @@ public:
   void wakeup();
 };
 
-class RGWBucketSyncStatusManager {
+class RGWBucketSyncStatusManager : public DoutPrefixProvider {
   RGWRados *store;
 
   RGWCoroutinesManager cr_mgr;
@@ -531,21 +569,27 @@ public:
   int init_sync_status();
 
   static string status_oid(const string& source_zone, const rgw_bucket_shard& bs);
+  static string obj_status_oid(const string& source_zone, const rgw_obj& obj); /* can be used by sync modules */
+
+  // implements DoutPrefixProvider
+  CephContext *get_cct() const override { return store->ctx(); }
+  unsigned get_subsys() const override;
+  std::ostream& gen_prefix(std::ostream& out) const override;
 
   int read_sync_status();
   int run();
 };
 
 /// read the sync status of all bucket shards from the given source zone
-int rgw_bucket_sync_status(RGWRados *store, const std::string& source_zone,
-                           const rgw_bucket& bucket,
+int rgw_bucket_sync_status(const DoutPrefixProvider *dpp, RGWRados *store, const std::string& source_zone,
+                           const RGWBucketInfo& bucket_info,
                            std::vector<rgw_bucket_shard_sync_info> *status);
 
 class RGWDefaultSyncModule : public RGWSyncModule {
 public:
   RGWDefaultSyncModule() {}
   bool supports_data_export() override { return true; }
-  int create_instance(CephContext *cct, map<string, string, ltstr_nocase>& config, RGWSyncModuleInstanceRef *instance) override;
+  int create_instance(CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) override;
 };
 
 // DataLogTrimCR factory function

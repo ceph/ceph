@@ -114,8 +114,7 @@ int test_cors_helper::extract_input(unsigned argc, char *argv[]){
       ERR_CHECK_NEXT_PARAM(port);
     }else return -1;
   }
-  if(host.length() <= 0 ||
-     creds.length() <= 0)
+  if(host.empty() || creds.empty())
     return -1;
   return 0;
 }
@@ -170,7 +169,7 @@ static void calc_hmac_sha1(const char *key, int key_len,
   buf_to_hex((unsigned char *)dest, CEPH_CRYPTO_HMACSHA1_DIGESTSIZE, hex_str);
 }
 
-static int get_s3_auth(string method, string creds, string date, string res, string& out){
+static int get_s3_auth(const string &method, string creds, const string &date, const string &res, string& out){
   string aid, secret, auth_hdr;
   size_t off = creds.find(":");
   out = "";

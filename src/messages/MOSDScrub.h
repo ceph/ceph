@@ -22,22 +22,24 @@
  * instruct an OSD to scrub some or all pg(s)
  */
 
-struct MOSDScrub : public Message {
+class MOSDScrub : public MessageInstance<MOSDScrub> {
+public:
+  friend factory;
 
-  static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 2;
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 2;
 
   uuid_d fsid;
   vector<pg_t> scrub_pgs;
   bool repair = false;
   bool deep = false;
 
-  MOSDScrub() : Message(MSG_OSD_SCRUB, HEAD_VERSION, COMPAT_VERSION) {}
+  MOSDScrub() : MessageInstance(MSG_OSD_SCRUB, HEAD_VERSION, COMPAT_VERSION) {}
   MOSDScrub(const uuid_d& f, bool r, bool d) :
-    Message(MSG_OSD_SCRUB, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstance(MSG_OSD_SCRUB, HEAD_VERSION, COMPAT_VERSION),
     fsid(f), repair(r), deep(d) {}
   MOSDScrub(const uuid_d& f, vector<pg_t>& pgs, bool r, bool d) :
-    Message(MSG_OSD_SCRUB, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstance(MSG_OSD_SCRUB, HEAD_VERSION, COMPAT_VERSION),
     fsid(f), scrub_pgs(pgs), repair(r), deep(d) {}
 private:
   ~MOSDScrub() override {}
@@ -65,7 +67,7 @@ public:
     encode(deep, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(fsid, p);
     decode(scrub_pgs, p);
     decode(repair, p);

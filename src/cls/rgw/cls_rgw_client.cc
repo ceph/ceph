@@ -21,12 +21,12 @@ private:
   T *data;
   int *ret_code;
 public:
-  ClsBucketIndexOpCtx(T* _data, int *_ret_code) : data(_data), ret_code(_ret_code) { assert(data); }
+  ClsBucketIndexOpCtx(T* _data, int *_ret_code) : data(_data), ret_code(_ret_code) { ceph_assert(data); }
   ~ClsBucketIndexOpCtx() override {}
   void handle_completion(int r, bufferlist& outbl) override {
     if (r >= 0) {
       try {
-        bufferlist::iterator iter = outbl.begin();
+        auto iter = outbl.cbegin();
         decode((*data), iter);
       } catch (buffer::error& err) {
         r = -EIO;
@@ -42,7 +42,7 @@ void BucketIndexAioManager::do_completion(int id) {
   Mutex::Locker l(lock);
 
   map<int, librados::AioCompletion*>::iterator iter = pendings.find(id);
-  assert(iter != pendings.end());
+  ceph_assert(iter != pendings.end());
   completions[id] = iter->second;
   pendings.erase(iter);
 
@@ -266,7 +266,7 @@ int cls_rgw_bi_get(librados::IoCtx& io_ctx, const string oid,
     return r;
 
   struct rgw_cls_bi_get_ret op_ret;
-  bufferlist::iterator iter = out.begin();
+  auto iter = out.cbegin();
   try {
     decode(op_ret, iter);
   } catch (buffer::error& err) {
@@ -315,7 +315,7 @@ int cls_rgw_bi_list(librados::IoCtx& io_ctx, const string oid,
     return r;
 
   struct rgw_cls_bi_list_ret op_ret;
-  bufferlist::iterator iter = out.begin();
+  auto iter = out.cbegin();
   try {
     decode(op_ret, iter);
   } catch (buffer::error& err) {
@@ -400,7 +400,7 @@ int cls_rgw_get_olh_log(IoCtx& io_ctx, string& oid, librados::ObjectReadOperatio
 
   struct rgw_cls_read_olh_log_ret ret;
   try {
-    bufferlist::iterator iter = out.begin();
+    auto iter = out.cbegin();
     decode(ret, iter);
   } catch (buffer::error& err) {
     return -EIO;
@@ -560,7 +560,7 @@ public:
   void handle_completion(int r, bufferlist& outbl) override {
     struct rgw_cls_list_ret ret;
     try {
-      bufferlist::iterator iter = outbl.begin();
+      auto iter = outbl.cbegin();
       decode(ret, iter);
     } catch (buffer::error& err) {
       r = -EIO;
@@ -610,7 +610,7 @@ int cls_rgw_usage_log_read(IoCtx& io_ctx, string& oid, string& user,
 
   try {
     rgw_cls_usage_log_read_ret result;
-    bufferlist::iterator iter = out.begin();
+    auto iter = out.cbegin();
     decode(result, iter);
     read_iter = result.next_iter;
     if (is_truncated)
@@ -700,7 +700,7 @@ int cls_rgw_gc_list(IoCtx& io_ctx, string& oid, string& marker, uint32_t max, bo
 
   cls_rgw_gc_list_ret ret;
   try {
-    bufferlist::iterator iter = out.begin();
+    auto iter = out.cbegin();
     decode(ret, iter);
   } catch (buffer::error& err) {
     return -EIO;
@@ -732,7 +732,7 @@ int cls_rgw_lc_get_head(IoCtx& io_ctx, string& oid, cls_rgw_lc_obj_head& head)
 
   cls_rgw_lc_get_head_ret ret;
   try {
-    bufferlist::iterator iter = out.begin();
+    auto iter = out.cbegin();
     decode(ret, iter);
   } catch (buffer::error& err) {
     return -EIO;
@@ -764,7 +764,7 @@ int cls_rgw_lc_get_next_entry(IoCtx& io_ctx, string& oid, string& marker, pair<s
 
   cls_rgw_lc_get_next_entry_ret ret;
   try {
-    bufferlist::iterator iter = out.begin();
+    auto iter = out.cbegin();
     decode(ret, iter);
   } catch (buffer::error& err) {
     return -EIO;
@@ -815,7 +815,7 @@ int cls_rgw_lc_list(IoCtx& io_ctx, string& oid,
 
   cls_rgw_lc_list_entries_ret ret;
   try {
-    bufferlist::iterator iter = out.begin();
+    auto iter = out.cbegin();
     decode(ret, iter);
   } catch (buffer::error& err) {
     return -EIO;
@@ -847,7 +847,7 @@ int cls_rgw_reshard_list(librados::IoCtx& io_ctx, const string& oid, string& mar
     return r;
 
   struct cls_rgw_reshard_list_ret op_ret;
-  bufferlist::iterator iter = out.begin();
+  auto iter = out.cbegin();
   try {
     decode(op_ret, iter);
   } catch (buffer::error& err) {
@@ -871,7 +871,7 @@ int cls_rgw_reshard_get(librados::IoCtx& io_ctx, const string& oid, cls_rgw_resh
     return r;
 
   struct cls_rgw_reshard_get_ret op_ret;
-  bufferlist::iterator iter = out.begin();
+  auto iter = out.cbegin();
   try {
     decode(op_ret, iter);
   } catch (buffer::error& err) {
@@ -923,7 +923,7 @@ int cls_rgw_get_bucket_resharding(librados::IoCtx& io_ctx, const string& oid,
     return r;
 
   struct cls_rgw_get_bucket_resharding_ret op_ret;
-  bufferlist::iterator iter = out.begin();
+  auto iter = out.cbegin();
   try {
     decode(op_ret, iter);
   } catch (buffer::error& err) {

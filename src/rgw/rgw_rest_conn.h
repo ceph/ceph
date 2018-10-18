@@ -36,15 +36,33 @@ struct rgw_http_param_pair {
   const char *val;
 };
 
-// copy a null-terminated rgw_http_param_pair list into a list of string pairs
-inline param_vec_t make_param_list(const rgw_http_param_pair* pp)
+// append a null-terminated rgw_http_param_pair list into a list of string pairs
+inline void append_param_list(param_vec_t& params, const rgw_http_param_pair* pp)
 {
-  param_vec_t params;
   while (pp && pp->key) {
     string k = pp->key;
     string v = (pp->val ? pp->val : "");
     params.emplace_back(make_pair(std::move(k), std::move(v)));
     ++pp;
+  }
+}
+
+// copy a null-terminated rgw_http_param_pair list into a list of string pairs
+inline param_vec_t make_param_list(const rgw_http_param_pair* pp)
+{
+  param_vec_t params;
+  append_param_list(params, pp);
+  return params;
+}
+
+inline param_vec_t make_param_list(const map<string, string> *pp)
+{
+  param_vec_t params;
+  if (!pp) {
+    return params;
+  }
+  for (auto iter : *pp) {
+    params.emplace_back(make_pair(iter.first, iter.second));
   }
   return params;
 }
@@ -56,14 +74,18 @@ class RGWRESTConn
   RGWAccessKey key;
   string self_zone_group;
   string remote_id;
+  HostStyle host_style;
   std::atomic<int64_t> counter = { 0 };
 
 public:
 
-  RGWRESTConn(CephContext *_cct, RGWRados *store, const string& _remote_id, const list<string>& endpoints);
+  RGWRESTConn(CephContext *_cct, RGWRados *store, const string& _remote_id, const list<string>& endpoints, HostStyle _host_style = PathStyle);
+  RGWRESTConn(CephContext *_cct, RGWRados *store, const string& _remote_id, const list<string>& endpoints, RGWAccessKey _cred, HostStyle _host_style = PathStyle);
+
   // custom move needed for atomic
   RGWRESTConn(RGWRESTConn&& other);
   RGWRESTConn& operator=(RGWRESTConn&& other);
+  virtual ~RGWRESTConn() = default;
 
   int get_url(string& endpoint);
   string get_url();
@@ -77,25 +99,65 @@ public:
     return key;
   }
 
+  HostStyle get_host_style() {
+    return host_style;
+  }
+
   CephContext *get_ctx() {
     return cct;
   }
   size_t get_endpoint_count() const { return endpoints.size(); }
 
+  virtual void populate_params(param_vec_t& params, const rgw_user *uid, const string& zonegroup);
+
   /* sync request */
   int forward(const rgw_user& uid, req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl);
 
-  /* async request */
-  int put_obj_init(const rgw_user& uid, rgw_obj& obj, uint64_t obj_size,
-                   map<string, bufferlist>& attrs, RGWRESTStreamWriteRequest **req);
-  int complete_request(RGWRESTStreamWriteRequest *req, string& etag, ceph::real_time *mtime);
 
-  int get_obj(const rgw_user& uid, req_info *info /* optional */, rgw_obj& obj,
+  /* async requests */
+  int put_obj_send_init(rgw_obj& obj, const rgw_http_param_pair *extra_params, RGWRESTStreamS3PutObj **req);
+  int put_obj_async(const rgw_user& uid, rgw_obj& obj, uint64_t obj_size,
+                    map<string, bufferlist>& attrs, bool send, RGWRESTStreamS3PutObj **req);
+  int complete_request(RGWRESTStreamS3PutObj *req, string& etag, ceph::real_time *mtime);
+
+  struct get_obj_params {
+    rgw_user uid;
+    req_info *info{nullptr};
+    const ceph::real_time *mod_ptr{nullptr};
+    const ceph::real_time *unmod_ptr{nullptr};
+    bool high_precision_time{true};
+
+    string etag;
+
+    uint32_t mod_zone_id{0};
+    uint64_t mod_pg_ver{0};
+
+    bool prepend_metadata{false};
+    bool get_op{false};
+    bool rgwx_stat{false};
+    bool sync_manifest{false};
+
+    bool skip_decrypt{true};
+    RGWHTTPStreamRWRequest::ReceiveCB *cb{nullptr};
+
+    bool range_is_set{false};
+    uint64_t range_start{0};
+    uint64_t range_end{0};
+  };
+
+  int get_obj(const rgw_obj& obj, const get_obj_params& params, bool send, RGWRESTStreamRWRequest **req);
+
+  int get_obj(const rgw_user& uid, req_info *info /* optional */, const rgw_obj& obj,
               const ceph::real_time *mod_ptr, const ceph::real_time *unmod_ptr,
               uint32_t mod_zone_id, uint64_t mod_pg_ver,
               bool prepend_metadata, bool get_op, bool rgwx_stat, bool sync_manifest,
-              bool skip_decrypt, RGWGetDataCB *cb, RGWRESTStreamRWRequest **req);
-  int complete_request(RGWRESTStreamRWRequest *req, string& etag, ceph::real_time *mtime, uint64_t *psize, map<string, string>& attrs);
+              bool skip_decrypt, bool send, RGWHTTPStreamRWRequest::ReceiveCB *cb, RGWRESTStreamRWRequest **req);
+  int complete_request(RGWRESTStreamRWRequest *req,
+                       string *etag,
+                       ceph::real_time *mtime,
+                       uint64_t *psize,
+                       map<string, string> *pattrs,
+                       map<string, string> *pheaders);
 
   int get_resource(const string& resource,
 		   param_vec_t *extra_params,
@@ -110,6 +172,38 @@ public:
   int get_json_resource(const string& resource, param_vec_t *params, T& t);
   template <class T>
   int get_json_resource(const string& resource, const rgw_http_param_pair *pp, T& t);
+
+private:
+  void populate_zonegroup(param_vec_t& params, const string& zonegroup) {
+    if (!zonegroup.empty()) {
+      params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "zonegroup", zonegroup));
+    }
+  }
+  void populate_uid(param_vec_t& params, const rgw_user *uid) {
+    if (uid) {
+      string uid_str = uid->to_str();
+      if (!uid->empty()){
+        params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "uid", uid_str));
+      }
+    }
+  }
+};
+
+class S3RESTConn : public RGWRESTConn {
+
+public:
+
+  S3RESTConn(CephContext *_cct, RGWRados *store, const string& _remote_id, const list<string>& endpoints, HostStyle _host_style = PathStyle) :
+    RGWRESTConn(_cct, store, _remote_id, endpoints, _host_style) {}
+
+  S3RESTConn(CephContext *_cct, RGWRados *store, const string& _remote_id, const list<string>& endpoints, RGWAccessKey _cred, HostStyle _host_style = PathStyle):
+    RGWRESTConn(_cct, store, _remote_id, endpoints, _cred, _host_style) {}
+  ~S3RESTConn() override = default;
+
+  void populate_params(param_vec_t& params, const rgw_user *uid, const string& zonegroup) override {
+    // do not populate any params in S3 REST Connection.
+    return;
+  }
 };
 
 
@@ -143,17 +237,17 @@ int RGWRESTConn::get_json_resource(const string& resource,  const rgw_http_param
   return get_json_resource(resource, &params, t);
 }
 
-class RGWStreamIntoBufferlist : public RGWGetDataCB {
+class RGWStreamIntoBufferlist : public RGWHTTPStreamRWRequest::ReceiveCB {
   bufferlist& bl;
 public:
-  RGWStreamIntoBufferlist(bufferlist& _bl) : bl(_bl) {}
-  int handle_data(bufferlist& inbl, off_t bl_ofs, off_t bl_len) override {
+  explicit RGWStreamIntoBufferlist(bufferlist& _bl) : bl(_bl) {}
+  int handle_data(bufferlist& inbl, bool *pause) override {
     bl.claim_append(inbl);
-    return bl_len;
+    return inbl.length();
   }
 };
 
-class RGWRESTReadResource : public RefCountedObject {
+class RGWRESTReadResource : public RefCountedObject, public RGWIOProvider {
   CephContext *cct;
   RGWRESTConn *conn;
   string resource;
@@ -179,12 +273,18 @@ public:
 		      param_vec_t& _params,
 		      param_vec_t *extra_headers,
 		      RGWHTTPManager *_mgr);
+  ~RGWRESTReadResource() = default;
 
-  void set_user_info(void *user_info) {
-    req.set_user_info(user_info);
+  rgw_io_id get_io_id(int io_type) {
+    return req.get_io_id(io_type);
   }
-  void *get_user_info() {
-    return req.get_user_info();
+
+  void set_io_user_info(void *user_info) override {
+    req.set_io_user_info(user_info);
+  }
+
+  void *get_io_user_info() override {
+    return req.get_io_user_info();
   }
 
   template <class T>
@@ -202,7 +302,7 @@ public:
     return req.get_http_status();
   }
 
-  int wait_bl(bufferlist *pbl) {
+  int wait(bufferlist *pbl) {
     int ret = req.wait();
     if (ret < 0) {
       return ret;
@@ -267,7 +367,7 @@ int RGWRESTReadResource::wait(T *dest)
   return 0;
 }
 
-class RGWRESTSendResource : public RefCountedObject {
+class RGWRESTSendResource : public RefCountedObject, public RGWIOProvider {
   CephContext *cct;
   RGWRESTConn *conn;
   string method;
@@ -297,11 +397,18 @@ public:
 		      param_vec_t *extra_headers,
 		      RGWHTTPManager *_mgr);
 
-  void set_user_info(void *user_info) {
-    req.set_user_info(user_info);
+  ~RGWRESTSendResource() = default;
+
+  rgw_io_id get_io_id(int io_type) {
+    return req.get_io_id(io_type);
   }
-  void *get_user_info() {
-    return req.get_user_info();
+
+  void set_io_user_info(void *user_info) override {
+    req.set_io_user_info(user_info);
+  }
+
+  void *get_io_user_info() override {
+    return req.get_io_user_info();
   }
 
   template <class T>
@@ -319,8 +426,9 @@ public:
     return req.get_http_status();
   }
 
-  int wait_bl(bufferlist *pbl) {
+  int wait(bufferlist *pbl) {
     int ret = req.wait();
+    *pbl = bl;
     if (ret < 0) {
       return ret;
     }
@@ -328,7 +436,6 @@ public:
     if (req.get_status() < 0) {
       return req.get_status();
     }
-    *pbl = bl;
     return 0;
   }
 

@@ -10,8 +10,8 @@ wheelhouse*
 
 # IDE
 .vscode
-.idea
 *.egg
+.env
 
 # virtualenv
 venv

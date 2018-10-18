@@ -1,22 +1,28 @@
 # -*- coding: utf-8 -*-
-# pylint: disable=W0212
 from __future__ import absolute_import
+
+import sys
+import inspect
+import functools
 
 import collections
 from datetime import datetime, timedelta
+from distutils.util import strtobool
 import fnmatch
 import time
 import threading
-
+import socket
+from six.moves import urllib
 import cherrypy
 
 from . import logger
+from .exceptions import ViewCacheNoDataException
 
 
 class RequestLoggingTool(cherrypy.Tool):
     def __init__(self):
         cherrypy.Tool.__init__(self, 'before_handler', self.request_begin,
-                               priority=95)
+                               priority=10)
 
     def _setup(self):
         cherrypy.Tool._setup(self)
@@ -100,7 +106,6 @@ class ViewCache(object):
     VALUE_OK = 0
     VALUE_STALE = 1
     VALUE_NONE = 2
-    VALUE_EXCEPTION = 3
 
     class GetterThread(threading.Thread):
         def __init__(self, view, fn, args, kwargs):
@@ -113,17 +118,21 @@ class ViewCache(object):
 
         # pylint: disable=broad-except
         def run(self):
+            t0 = 0.0
+            t1 = 0.0
             try:
                 t0 = time.time()
+                logger.debug("VC: starting execution of %s", self.fn)
                 val = self.fn(*self.args, **self.kwargs)
                 t1 = time.time()
             except Exception as ex:
-                logger.exception("Error while calling fn=%s ex=%s", self.fn,
-                                 str(ex))
-                self._view.value = None
-                self._view.value_when = None
-                self._view.getter_thread = None
-                self._view.exception = ex
+                with self._view.lock:
+                    logger.exception("Error while calling fn=%s ex=%s", self.fn,
+                                     str(ex))
+                    self._view.value = None
+                    self._view.value_when = None
+                    self._view.getter_thread = None
+                    self._view.exception = ex
             else:
                 with self._view.lock:
                     self._view.latency = t1 - t0
@@ -132,6 +141,8 @@ class ViewCache(object):
                     self._view.getter_thread = None
                     self._view.exception = None
 
+            logger.debug("VC: execution of %s finished in: %s", self.fn,
+                         t1 - t0)
             self.event.set()
 
     class RemoteViewCache(object):
@@ -173,6 +184,8 @@ class ViewCache(object):
                     self.getter_thread = ViewCache.GetterThread(self, fn, args,
                                                                 kwargs)
                     self.getter_thread.start()
+                else:
+                    logger.debug("VC: getter_thread still alive for: %s", fn)
 
                 ev = self.getter_thread.event
 
@@ -183,13 +196,14 @@ class ViewCache(object):
                     # We fetched the data within the timeout
                     if self.exception:
                         # execution raised an exception
-                        return ViewCache.VALUE_EXCEPTION, self.exception
+                        # pylint: disable=raising-bad-type
+                        raise self.exception
                     return ViewCache.VALUE_OK, self.value
                 elif self.value_when is not None:
                     # We have some data, but it doesn't meet freshness requirements
                     return ViewCache.VALUE_STALE, self.value
                 # We have no data, not even stale data
-                return ViewCache.VALUE_NONE, None
+                raise ViewCacheNoDataException()
 
     def __init__(self, timeout=5):
         self.timeout = timeout
@@ -321,7 +335,7 @@ class NotificationQueue(threading.Thread):
     def deregister(cls, func, n_types=None):
         """Removes the listener function from this notification queue
 
-        If the second parameter `n_types` is ommitted, the function is removed
+        If the second parameter `n_types` is omitted, the function is removed
         from all event types, otherwise the function is removed only for the
         specified event types.
 
@@ -386,7 +400,7 @@ class NotificationQueue(threading.Thread):
         logger.debug("notification queue finished")
 
 
-# pylint: disable=too-many-arguments
+# pylint: disable=too-many-arguments, protected-access
 class TaskManager(object):
     FINISHED_TASK_SIZE = 10
     FINISHED_TASK_TTL = 60.0
@@ -412,14 +426,16 @@ class TaskManager(object):
             cls._finished_tasks.append(task)
 
     @classmethod
-    def run(cls, name, metadata, fn, args=None, kwargs=None, executor=None):
+    def run(cls, name, metadata, fn, args=None, kwargs=None, executor=None,
+            exception_handler=None):
         if not args:
             args = []
         if not kwargs:
             kwargs = {}
         if not executor:
             executor = ThreadedExecutor()
-        task = Task(name, metadata, fn, args, kwargs, executor)
+        task = Task(name, metadata, fn, args, kwargs, executor,
+                    exception_handler)
         with cls._lock:
             if task in cls._executing_tasks:
                 logger.debug("TM: task already executing: %s", task)
@@ -487,11 +503,13 @@ class TaskManager(object):
             'duration': t.duration,
             'progress': t.progress,
             'success': not t.exception,
-            'ret_value': t.ret_value,
-            'exception': str(t.exception) if t.exception else None
+            'ret_value': t.ret_value if not t.exception else None,
+            'exception': t.ret_value if t.exception and t.ret_value else (
+                {'detail': str(t.exception)} if t.exception else None)
         } for t in fn_t]
 
 
+# pylint: disable=protected-access
 class TaskExecutor(object):
     def __init__(self):
         self.task = None
@@ -516,6 +534,7 @@ class TaskExecutor(object):
         self.task._complete(ret_value, exception)
 
 
+# pylint: disable=protected-access
 class ThreadedExecutor(TaskExecutor):
     def __init__(self):
         super(ThreadedExecutor, self).__init__()
@@ -538,13 +557,15 @@ class ThreadedExecutor(TaskExecutor):
 
 
 class Task(object):
-    def __init__(self, name, metadata, fn, args, kwargs, executor):
+    def __init__(self, name, metadata, fn, args, kwargs, executor,
+                 exception_handler=None):
         self.name = name
         self.metadata = metadata
         self.fn = fn
         self.fn_args = args
         self.fn_kwargs = kwargs
         self.executor = executor
+        self.ex_handler = exception_handler
         self.running = False
         self.event = threading.Event()
         self.progress = None
@@ -559,11 +580,14 @@ class Task(object):
         return hash((self.name, tuple(sorted(self.metadata.items()))))
 
     def __eq__(self, other):
-        return self.name == self.name and self.metadata == self.metadata
+        return self.name == other.name and self.metadata == other.metadata
 
     def __str__(self):
         return "Task(ns={}, md={})" \
                .format(self.name, self.metadata)
+
+    def __repr__(self):
+        return str(self)
 
     def _run(self):
         with self.lock:
@@ -576,6 +600,12 @@ class Task(object):
 
     def _complete(self, ret_value, exception=None):
         now = time.time()
+        if exception and self.ex_handler:
+            # pylint: disable=broad-except
+            try:
+                ret_value = self.ex_handler(exception, task=self)
+            except Exception as ex:
+                exception = ex
         with self.lock:
             assert self.running, "_complete cannot be called before _run"
             self.end_time = now
@@ -625,3 +655,112 @@ class Task(object):
         self.progress = percentage
         if not in_lock:
             self.lock.release()
+
+
+def is_valid_ipv6_address(addr):
+    try:
+        socket.inet_pton(socket.AF_INET6, addr)
+        return True
+    except socket.error:
+        return False
+
+
+def build_url(host, scheme=None, port=None):
+    """
+    Build a valid URL. IPv6 addresses specified in host will be enclosed in brackets
+    automatically.
+
+    >>> build_url('example.com', 'https', 443)
+    'https://example.com:443'
+
+    >>> build_url(host='example.com', port=443)
+    '//example.com:443'
+
+    >>> build_url('fce:9af7:a667:7286:4917:b8d3:34df:8373', port=80, scheme='http')
+    'http://[fce:9af7:a667:7286:4917:b8d3:34df:8373]:80'
+
+    :param scheme: The scheme, e.g. http, https or ftp.
+    :type scheme: str
+    :param host: Consisting of either a registered name (including but not limited to
+                 a hostname) or an IP address.
+    :type host: str
+    :type port: int
+    :rtype: str
+    """
+    netloc = host if not is_valid_ipv6_address(host) else '[{}]'.format(host)
+    if port:
+        netloc += ':{}'.format(port)
+    pr = urllib.parse.ParseResult(
+        scheme=scheme if scheme else '',
+        netloc=netloc,
+        path='',
+        params='',
+        query='',
+        fragment='')
+    return pr.geturl()
+
+
+def dict_contains_path(dct, keys):
+    """
+    Tests whether the keys exist recursively in `dictionary`.
+
+    :type dct: dict
+    :type keys: list
+    :rtype: bool
+    """
+    if keys:
+        if not isinstance(dct, dict):
+            return False
+        key = keys.pop(0)
+        if key in dct:
+            dct = dct[key]
+            return dict_contains_path(dct, keys)
+        return False
+    return True
+
+
+if sys.version_info > (3, 0):
+    wraps = functools.wraps
+    _getargspec = inspect.getfullargspec
+else:
+    def wraps(func):
+        def decorator(wrapper):
+            new_wrapper = functools.wraps(func)(wrapper)
+            new_wrapper.__wrapped__ = func  # set __wrapped__ even for Python 2
+            return new_wrapper
+        return decorator
+
+    _getargspec = inspect.getargspec
+
+
+def getargspec(func):
+    try:
+        while True:
+            func = func.__wrapped__
+    except AttributeError:
+        pass
+    return _getargspec(func)
+
+
+def str_to_bool(val):
+    """
+    Convert a string representation of truth to True or False.
+
+    >>> str_to_bool('true') and str_to_bool('yes') and str_to_bool('1') and str_to_bool(True)
+    True
+
+    >>> str_to_bool('false') and str_to_bool('no') and str_to_bool('0') and str_to_bool(False)
+    False
+
+    >>> str_to_bool('xyz')
+    Traceback (most recent call last):
+        ...
+    ValueError: invalid truth value 'xyz'
+
+    :param val: The value to convert.
+    :type val: str|bool
+    :rtype: bool
+    """
+    if isinstance(val, bool):
+        return val
+    return bool(strtobool(val))

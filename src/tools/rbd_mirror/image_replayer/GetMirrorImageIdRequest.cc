@@ -41,14 +41,14 @@ void GetMirrorImageIdRequest<I>::get_image_id() {
     &GetMirrorImageIdRequest<I>::handle_get_image_id>(
       this);
   int r = m_io_ctx.aio_operate(RBD_MIRRORING, aio_comp, &op, &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   aio_comp->release();
 }
 
 template <typename I>
 void GetMirrorImageIdRequest<I>::handle_get_image_id(int r) {
   if (r == 0) {
-    bufferlist::iterator iter = m_out_bl.begin();
+    auto iter = m_out_bl.cbegin();
     r = librbd::cls_client::mirror_image_get_image_id_finish(
       &iter, m_image_id);
   }

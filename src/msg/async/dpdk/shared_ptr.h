@@ -115,9 +115,9 @@ public:
     template <typename X>
     friend class lw_shared_ptr;
     template <typename X>
-    friend class internal::lw_shared_ptr_accessors_esft;
+    friend class ::internal::lw_shared_ptr_accessors_esft;
     template <typename X, class Y>
-    friend class internal::lw_shared_ptr_accessors;
+    friend class ::internal::lw_shared_ptr_accessors;
 };
 
 template <typename T>
@@ -133,9 +133,9 @@ struct shared_ptr_no_esft : private lw_shared_ptr_counter_base {
     template <typename X>
     friend class lw_shared_ptr;
     template <typename X>
-    friend class internal::lw_shared_ptr_accessors_no_esft;
+    friend class ::internal::lw_shared_ptr_accessors_no_esft;
     template <typename X, class Y>
-    friend class internal::lw_shared_ptr_accessors;
+    friend class ::internal::lw_shared_ptr_accessors;
 };
 
 
@@ -209,7 +209,7 @@ struct lw_shared_ptr_accessors<T, std::void_t<decltype(lw_shared_ptr_deleter<T>{
 
 template <typename T>
 class lw_shared_ptr {
-    using accessors = internal::lw_shared_ptr_accessors<std::remove_const_t<T>>;
+    using accessors = ::internal::lw_shared_ptr_accessors<std::remove_const_t<T>>;
     using concrete_type = typename accessors::concrete_type;
     mutable lw_shared_ptr_counter_base* _p = nullptr;
 private:

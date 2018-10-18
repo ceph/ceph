@@ -8,9 +8,10 @@
 #include "include/rados/librados.hpp"
 #include "common/Mutex.h"
 #include "cls/journal/cls_journal_types.h"
+#include "librbd/journal/Types.h"
 #include "librbd/journal/TypeTraits.h"
 #include "tools/rbd_mirror/BaseRequest.h"
-#include "tools/rbd_mirror/types.h"
+#include "tools/rbd_mirror/Types.h"
 #include <list>
 #include <string>
 
@@ -29,6 +30,7 @@ class ProgressContext;
 
 template <typename> class ImageSync;
 template <typename> class InstanceWatcher;
+template <typename> struct Threads;
 
 namespace image_replayer {
 
@@ -41,6 +43,7 @@ public:
   typedef rbd::mirror::ProgressContext ProgressContext;
 
   static BootstrapRequest* create(
+        Threads<ImageCtxT>* threads,
         librados::IoCtx &local_io_ctx,
         librados::IoCtx &remote_io_ctx,
         InstanceWatcher<ImageCtxT> *instance_watcher,
@@ -48,8 +51,6 @@ public:
         const std::string &local_image_id,
         const std::string &remote_image_id,
         const std::string &global_image_id,
-        ContextWQ *work_queue, SafeTimer *timer,
-        Mutex *timer_lock,
         const std::string &local_mirror_uuid,
         const std::string &remote_mirror_uuid,
         Journaler *journaler,
@@ -58,23 +59,23 @@ public:
         Context *on_finish,
         bool *do_resync,
         ProgressContext *progress_ctx = nullptr) {
-    return new BootstrapRequest(local_io_ctx, remote_io_ctx,
+    return new BootstrapRequest(threads, local_io_ctx, remote_io_ctx,
                                 instance_watcher, local_image_ctx,
                                 local_image_id, remote_image_id,
-                                global_image_id, work_queue, timer, timer_lock,
-                                local_mirror_uuid, remote_mirror_uuid,
-                                journaler, client_state, client_meta, on_finish,
-                                do_resync, progress_ctx);
+                                global_image_id, local_mirror_uuid,
+                                remote_mirror_uuid, journaler, client_state,
+                                client_meta, on_finish, do_resync,
+                                progress_ctx);
   }
 
-  BootstrapRequest(librados::IoCtx &local_io_ctx,
+  BootstrapRequest(Threads<ImageCtxT>* threads,
+                   librados::IoCtx &local_io_ctx,
                    librados::IoCtx &remote_io_ctx,
                    InstanceWatcher<ImageCtxT> *instance_watcher,
                    ImageCtxT **local_image_ctx,
                    const std::string &local_image_id,
                    const std::string &remote_image_id,
-                   const std::string &global_image_id, ContextWQ *work_queue,
-                   SafeTimer *timer, Mutex *timer_lock,
+                   const std::string &global_image_id,
                    const std::string &local_mirror_uuid,
                    const std::string &remote_mirror_uuid, Journaler *journaler,
                    cls::journal::ClientState *client_state,
@@ -105,8 +106,9 @@ private:
    *    |                                               *   *   |
    *    | (remote image primary, no local image id)     *   *   |
    *    \----> UPDATE_CLIENT_IMAGE  * * * * * * * * * * *   *   |
-   *    |         |                                     *   *   |
-   *    |         v                                     *   *   |
+   *    |         |   ^                                 *   *   |
+   *    |         |   * (duplicate image id)            *   *   |
+   *    |         v   *                                 *   *   |
    *    \----> CREATE_LOCAL_IMAGE * * * * * * * * * * * *   *   |
    *    |         |                                     *   *   |
    *    |         v                                     *   *   |
@@ -145,6 +147,7 @@ private:
    */
   typedef std::list<cls::journal::Tag> Tags;
 
+  Threads<ImageCtxT>* m_threads;
   librados::IoCtx &m_local_io_ctx;
   librados::IoCtx &m_remote_io_ctx;
   InstanceWatcher<ImageCtxT> *m_instance_watcher;
@@ -152,9 +155,6 @@ private:
   std::string m_local_image_id;
   std::string m_remote_image_id;
   std::string m_global_image_id;
-  ContextWQ *m_work_queue;
-  SafeTimer *m_timer;
-  Mutex *m_timer_lock;
   std::string m_local_mirror_uuid;
   std::string m_remote_mirror_uuid;
   Journaler *m_journaler;
@@ -173,6 +173,9 @@ private:
   bool m_primary = false;
   int m_ret_val = 0;
   ImageSync<ImageCtxT> *m_image_sync = nullptr;
+
+  uint64_t m_local_tag_tid = 0;
+  librbd::journal::TagData m_local_tag_data;
 
   bufferlist m_out_bl;
 

@@ -11,6 +11,7 @@
  * Foundation.  See file COPYING.
  *
  */
+#include <stdarg.h>
 
 #include "auth/Auth.h"
 #include "common/ceph_argparse.h"

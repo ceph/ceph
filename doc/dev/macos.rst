@@ -25,7 +25,6 @@ then, under the source directory of Ceph::
     CXX=/usr/local/opt/llvm/bin/clang++ \
     cmake .. -DBOOST_J=4 \
     -DENABLE_GIT_VERSION=OFF \
-    -DWITH_EMBEDDED=OFF \
     -DWITH_MANPAGE=OFF \
     -DWITH_LIBCEPHFS=OFF \
     -DWITH_XFS=OFF \

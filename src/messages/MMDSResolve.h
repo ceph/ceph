@@ -19,8 +19,10 @@
 
 #include "include/types.h"
 
-class MMDSResolve : public Message {
+class MMDSResolve : public MessageInstance<MMDSResolve> {
 public:
+  friend factory;
+
   map<dirfrag_t, vector<dirfrag_t> > subtrees;
   map<dirfrag_t, vector<dirfrag_t> > ambiguous_imports;
 
@@ -33,7 +35,7 @@ public:
       encode(inode_caps, bl);
       encode(committing, bl);
     }
-    void decode(bufferlist::iterator &bl) {
+    void decode(bufferlist::const_iterator &bl) {
       using ceph::decode;
       decode(inode_caps, bl);
       decode(committing, bl);
@@ -56,7 +58,7 @@ public:
       encode(type, bl);
       encode(pending_commits, bl);
     }
-    void decode(bufferlist::iterator& bl) {
+    void decode(bufferlist::const_iterator& bl) {
       using ceph::decode;
       decode(type, bl);
       decode(pending_commits, bl);
@@ -65,8 +67,8 @@ public:
 
   list<table_client> table_clients;
 
-  MMDSResolve() : Message(MSG_MDS_RESOLVE) {}
-private:
+protected:
+  MMDSResolve() : MessageInstance(MSG_MDS_RESOLVE) {}
   ~MMDSResolve() override {}
 
 public:
@@ -110,7 +112,7 @@ public:
   }
   void decode_payload() override {
     using ceph::decode;
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(subtrees, p);
     decode(ambiguous_imports, p);
     decode(slave_requests, p);

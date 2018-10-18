@@ -166,3 +166,14 @@ the partition UUID.
 Example::
 
     ceph.wal_uuid=A58D1C68-0D6E-4CB3-8E99-B261AD47CC39
+
+
+``vdo``
+-------
+A VDO-enabled device is detected when device is getting prepared, and then
+stored for later checks when activating. This affects mount options by
+appending the ``discard`` mount flag, regardless of mount flags being used.
+
+Example for an enabled VDO device::
+
+    ceph.vdo=1

@@ -36,10 +36,8 @@ target_link_libraries(ceph_test_rgw_manifest
   cls_lock_client
   cls_refcount_client
   cls_log_client
-  cls_statelog_client
   cls_timeindex_client
   cls_version_client
-  cls_replica_log_client
   cls_user_client
   librados
   global
@@ -48,12 +46,8 @@ target_link_libraries(ceph_test_rgw_manifest
   ${EXPAT_LIBRARIES}
   ${CMAKE_DL_LIBS}
   ${UNITTEST_LIBS}
-  ${CRYPTO_LIBS}
-  )
-set_target_properties(ceph_test_rgw_manifest PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
+  ${CRYPTO_LIBS})
 
-# ceph_test_rgw_obj
 set(test_rgw_obj_srcs test_rgw_obj.cc)
 add_executable(ceph_test_rgw_obj
   ${test_rgw_obj_srcs}
@@ -65,9 +59,7 @@ target_link_libraries(ceph_test_rgw_obj
   cls_lock_client
   cls_refcount_client
   cls_log_client
-  cls_statelog_client
   cls_version_client
-  cls_replica_log_client
   cls_user_client
   librados
   global
@@ -77,25 +69,19 @@ target_link_libraries(ceph_test_rgw_obj
   ${UNITTEST_LIBS}
   ${CRYPTO_LIBS}
   )
-set_target_properties(ceph_test_rgw_obj PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
 
-# ceph_test_rgw_crypto
 set(test_rgw_crypto_srcs test_rgw_crypto.cc)
 add_executable(unittest_rgw_crypto
   ${test_rgw_crypto_srcs}
   )
 add_ceph_unittest(unittest_rgw_crypto)
-
 target_link_libraries(unittest_rgw_crypto
   rgw_a
   cls_rgw_client
   cls_lock_client
   cls_refcount_client
   cls_log_client
-  cls_statelog_client
   cls_version_client
-  cls_replica_log_client
   cls_user_client
   librados
   global
@@ -105,9 +91,7 @@ target_link_libraries(unittest_rgw_crypto
   ${UNITTEST_LIBS}
   ${CRYPTO_LIBS}
   )
-set_target_properties(unittest_rgw_crypto PROPERTIES COMPILE_FLAGS$ {UNITTEST_CXX_FLAGS})
 
-# ceph_test_rgw_iam_policy
 add_executable(unittest_rgw_iam_policy test_rgw_iam_policy.cc)
 add_ceph_unittest(unittest_rgw_iam_policy)
 target_link_libraries(unittest_rgw_iam_policy
@@ -116,9 +100,7 @@ target_link_libraries(unittest_rgw_iam_policy
   cls_lock_client
   cls_refcount_client
   cls_log_client
-  cls_statelog_client
   cls_version_client
-  cls_replica_log_client
   cls_user_client
   librados
   global
@@ -128,8 +110,6 @@ target_link_libraries(unittest_rgw_iam_policy
   ${UNITTEST_LIBS}
   ${CRYPTO_LIBS}
   )
-set_target_properties(unittest_rgw_iam_policy PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 
-# unitttest_rgw_string
 add_executable(unittest_rgw_string test_rgw_string.cc)
 add_ceph_unittest(unittest_rgw_string)

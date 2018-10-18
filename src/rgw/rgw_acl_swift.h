@@ -38,7 +38,7 @@ public:
 class RGWAccessControlPolicy_SWIFTAcct : public RGWAccessControlPolicy
 {
 public:
-  RGWAccessControlPolicy_SWIFTAcct(CephContext * const cct)
+  explicit RGWAccessControlPolicy_SWIFTAcct(CephContext * const cct)
     : RGWAccessControlPolicy(cct) {
   }
   ~RGWAccessControlPolicy_SWIFTAcct() override {}

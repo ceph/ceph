@@ -4,7 +4,7 @@
 
 #include "rgw/rgw_compression.h"
 
-class ut_get_sink : public RGWGetDataCB {
+class ut_get_sink : public RGWGetObj_Filter {
   bufferlist sink;
 public:
   ut_get_sink() {}
@@ -16,7 +16,7 @@ public:
     auto i = bl_buffers.begin();
     while (bl_len > 0)
     {
-      assert(i != bl_buffers.end());
+      ceph_assert(i != bl_buffers.end());
       off_t len = std::min<off_t>(bl_len, i->length());
       sink.append(*i, 0, len);
       bl_len -= len;
@@ -30,7 +30,7 @@ public:
   }
 };
 
-class ut_get_sink_size : public RGWGetDataCB {
+class ut_get_sink_size : public RGWGetObj_Filter {
   size_t max_size = 0;
 public:
   ut_get_sink_size() {}
@@ -71,7 +71,7 @@ public:
 };
 
 
-struct MockGetDataCB : public RGWGetDataCB {
+struct MockGetDataCB : public RGWGetObj_Filter {
   int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override {
     return 0;
   }

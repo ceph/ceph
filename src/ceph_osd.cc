@@ -31,6 +31,7 @@
 
 #include "msg/Messenger.h"
 
+#include "common/Throttle.h"
 #include "common/Timer.h"
 #include "common/TracepointProvider.h"
 #include "common/ceph_argparse.h"
@@ -44,7 +45,7 @@
 
 #include "perfglue/heap_profiler.h"
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #include "common/Preforker.h"
 
@@ -100,13 +101,7 @@ static void usage()
   generic_server_usage();
 }
 
-#ifdef BUILDING_FOR_EMBEDDED
-void cephd_preload_embedded_plugins();
-void cephd_preload_rados_classes(OSD *osd);
-extern "C" int cephd_osd(int argc, const char **argv)
-#else
 int main(int argc, const char **argv)
-#endif
 {
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
@@ -212,7 +207,7 @@ int main(int argc, const char **argv)
   global_init_chdir(g_ceph_context);
 
   if (get_journal_fsid) {
-    device_path = g_conf->get_val<std::string>("osd_journal");
+    device_path = g_conf().get_val<std::string>("osd_journal");
     get_device_fsid = true;
   }
   if (get_device_fsid) {
@@ -235,7 +230,7 @@ int main(int argc, const char **argv)
 
     if (bl.read_file(dump_pg_log.c_str(), &error) >= 0) {
       pg_log_entry_t e;
-      bufferlist::iterator p = bl.begin();
+      auto p = bl.cbegin();
       while (!p.end()) {
 	uint64_t pos = p.get_off();
 	try {
@@ -255,9 +250,9 @@ int main(int argc, const char **argv)
 
   // whoami
   char *end;
-  const char *id = g_conf->name.get_id().c_str();
+  const char *id = g_conf()->name.get_id().c_str();
   int whoami = strtol(id, &end, 10);
-  std::string data_path = g_conf->get_val<std::string>("osd_data");
+  std::string data_path = g_conf().get_val<std::string>("osd_data");
   if (*end || end == id || whoami < 0) {
     derr << "must specify '-i #' where # is the osd number" << dendl;
     forker.exit(1);
@@ -269,11 +264,11 @@ int main(int argc, const char **argv)
   }
 
   // the store
-  std::string store_type = g_conf->get_val<std::string>("osd_objectstore");
+  std::string store_type = g_conf().get_val<std::string>("osd_objectstore");
   {
     char fn[PATH_MAX];
     snprintf(fn, sizeof(fn), "%s/type", data_path.c_str());
-    int fd = ::open(fn, O_RDONLY);
+    int fd = ::open(fn, O_RDONLY|O_CLOEXEC);
     if (fd >= 0) {
       bufferlist bl;
       bl.read_fd(fd, 64);
@@ -285,8 +280,8 @@ int main(int argc, const char **argv)
     }
   }
 
-  std::string journal_path = g_conf->get_val<std::string>("osd_journal");
-  uint32_t flags = g_conf->get_val<uint64_t>("osd_os_flags");
+  std::string journal_path = g_conf().get_val<std::string>("osd_journal");
+  uint32_t flags = g_conf().get_val<uint64_t>("osd_os_flags");
   ObjectStore *store = ObjectStore::create(g_ceph_context,
 					   store_type,
 					   data_path,
@@ -297,9 +292,6 @@ int main(int argc, const char **argv)
     forker.exit(-ENODEV);
   }
 
-#ifdef BUILDING_FOR_EMBEDDED
-  cephd_preload_embedded_plugins();
-#endif
 
   if (mkkey) {
     common_init_finish(g_ceph_context);
@@ -309,10 +301,10 @@ int main(int argc, const char **argv)
       forker.exit(1);
     }
 
-    EntityName ename(g_conf->name);
+    EntityName ename{g_conf()->name};
     EntityAuth eauth;
 
-    std::string keyring_path = g_conf->get_val<std::string>("keyring");
+    std::string keyring_path = g_conf().get_val<std::string>("keyring");
     int ret = keyring->load(g_ceph_context, keyring_path);
     if (ret == 0 &&
 	keyring->get_auth(ename, eauth)) {
@@ -334,13 +326,13 @@ int main(int argc, const char **argv)
   if (mkfs) {
     common_init_finish(g_ceph_context);
 
-    if (g_conf->get_val<uuid_d>("fsid").is_zero()) {
+    if (g_conf().get_val<uuid_d>("fsid").is_zero()) {
       derr << "must specify cluster fsid" << dendl;
       forker.exit(-EINVAL);
     }
 
     int err = OSD::mkfs(g_ceph_context, store, data_path,
-			g_conf->get_val<uuid_d>("fsid"),
+			g_conf().get_val<uuid_d>("fsid"),
                         whoami);
     if (err < 0) {
       derr << TEXT_RED << " ** ERROR: error creating empty object store in "
@@ -349,7 +341,7 @@ int main(int argc, const char **argv)
     }
     dout(0) << "created object store " << data_path
 	    << " for osd." << whoami
-	    << " fsid " << g_conf->get_val<uuid_d>("fsid")
+	    << " fsid " << g_conf().get_val<uuid_d>("fsid")
 	    << dendl;
   }
   if (mkfs || mkkey) {
@@ -478,25 +470,11 @@ flushjournal_out:
     forker.exit(0);
   }
 
-  pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC
-                                |CEPH_PICK_ADDRESS_CLUSTER);
-
-  entity_addr_t paddr = g_conf->get_val<entity_addr_t>("public_addr");
-  entity_addr_t caddr = g_conf->get_val<entity_addr_t>("cluster_addr");
-
-
-  if (paddr.is_blank_ip() && !caddr.is_blank_ip()) {
-    derr << TEXT_YELLOW
-	 << " ** WARNING: specified cluster addr but not public addr; we recommend **\n"
-	 << " **          you specify neither or both.                             **"
-	 << TEXT_NORMAL << dendl;
-  }
-
-  std::string msg_type = g_conf->get_val<std::string>("ms_type");
+  std::string msg_type = g_conf().get_val<std::string>("ms_type");
   std::string public_msg_type =
-    g_conf->get_val<std::string>("ms_public_type");
+    g_conf().get_val<std::string>("ms_public_type");
   std::string cluster_msg_type =
-    g_conf->get_val<std::string>("ms_cluster_type");
+    g_conf().get_val<std::string>("ms_cluster_type");
 
   public_msg_type = public_msg_type.empty() ? msg_type : public_msg_type;
   cluster_msg_type = cluster_msg_type.empty() ? msg_type : cluster_msg_type;
@@ -533,15 +511,14 @@ flushjournal_out:
   ms_hb_back_server->set_cluster_protocol(CEPH_OSD_PROTOCOL);
   ms_hb_front_server->set_cluster_protocol(CEPH_OSD_PROTOCOL);
 
-  cout << "starting osd." << whoami
-       << " at " << ms_public->get_myaddr()
-       << " osd_data " << data_path
-       << " " << ((journal_path.empty()) ?
-		  "(no journal)" : journal_path)
-       << std::endl;
+  dout(0) << "starting osd." << whoami
+          << " osd_data " << data_path
+          << " " << ((journal_path.empty()) ?
+		    "(no journal)" : journal_path)
+          << dendl;
 
   uint64_t message_size =
-    g_conf->get_val<uint64_t>("osd_client_message_size_cap");
+    g_conf().get_val<Option::size_t>("osd_client_message_size_cap");
   boost::scoped_ptr<Throttle> client_byte_throttler(
     new Throttle(g_ceph_context, "osd_client_bytes", message_size));
 
@@ -582,13 +559,25 @@ flushjournal_out:
 
   ms_objecter->set_default_policy(Messenger::Policy::lossy_client(CEPH_FEATURE_OSDREPLYMUX));
 
-  if (ms_public->bind(paddr) < 0)
+  entity_addrvec_t public_addrs, cluster_addrs;
+  r = pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC, &public_addrs);
+  if (r < 0) {
+    derr << "Failed to pick public address." << dendl;
+    forker.exit(1);
+  }
+  r = pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_CLUSTER, &cluster_addrs);
+  if (r < 0) {
+    derr << "Failed to pick cluster address." << dendl;
+    forker.exit(1);
+  }
+
+  if (ms_public->bindv(public_addrs) < 0)
     forker.exit(1);
 
-  if (ms_cluster->bind(caddr) < 0)
+  if (ms_cluster->bindv(cluster_addrs) < 0)
     forker.exit(1);
 
-  bool is_delay = g_conf->get_val<bool>("osd_heartbeat_use_min_delay_socket");
+  bool is_delay = g_conf().get_val<bool>("osd_heartbeat_use_min_delay_socket");
   if (is_delay) {
     ms_hb_front_client->set_socket_priority(SOCKET_PRIORITY_MIN_DELAY);
     ms_hb_back_client->set_socket_priority(SOCKET_PRIORITY_MIN_DELAY);
@@ -596,26 +585,22 @@ flushjournal_out:
     ms_hb_front_server->set_socket_priority(SOCKET_PRIORITY_MIN_DELAY);
   }
 
-  // hb back should bind to same ip as cluster_addr (if specified)
-  entity_addr_t haddr = g_conf->get_val<entity_addr_t>("osd_heartbeat_addr");
-  if (haddr.is_blank_ip()) {
-    haddr = caddr;
-    if (haddr.is_ip())
-      haddr.set_port(0);
+  entity_addrvec_t hb_front_addrs = public_addrs;
+  for (auto& a : hb_front_addrs.v) {
+    a.set_port(0);
   }
+  if (ms_hb_front_server->bindv(hb_front_addrs) < 0)
+    forker.exit(1);
+  if (ms_hb_front_client->client_bind(hb_front_addrs.front()) < 0)
+    forker.exit(1);
 
-  if (ms_hb_back_server->bind(haddr) < 0)
+  entity_addrvec_t hb_back_addrs = cluster_addrs;
+  for (auto& a : hb_back_addrs.v) {
+    a.set_port(0);
+  }
+  if (ms_hb_back_server->bindv(hb_back_addrs) < 0)
     forker.exit(1);
-  if (ms_hb_back_client->client_bind(haddr) < 0)
-    forker.exit(1);
-
-  // hb front should bind to same ip as public_addr
-  entity_addr_t hb_front_addr = paddr;
-  if (hb_front_addr.is_ip())
-    hb_front_addr.set_port(0);
-  if (ms_hb_front_server->bind(hb_front_addr) < 0)
-    forker.exit(1);
-  if (ms_hb_front_client->client_bind(hb_front_addr) < 0)
+  if (ms_hb_back_client->client_bind(hb_back_addrs.front()) < 0)
     forker.exit(1);
 
   // install signal handlers
@@ -635,11 +620,9 @@ flushjournal_out:
     return -1;
   global_init_chdir(g_ceph_context);
 
-#ifndef BUILDING_FOR_EMBEDDED
   if (global_init_preload_erasure_code(g_ceph_context) < 0) {
     forker.exit(1);
   }
-#endif
 
   osd = new OSD(g_ceph_context,
                 store,
@@ -680,22 +663,18 @@ flushjournal_out:
 
   // -- daemonize --
 
-  if (g_conf->daemonize) {
+  if (g_conf()->daemonize) {
     global_init_postfork_finish(g_ceph_context);
     forker.daemonize();
   }
 
-
-#ifdef BUILDING_FOR_EMBEDDED
-  cephd_preload_rados_classes(osd);
-#endif
 
   register_async_signal_handler_oneshot(SIGINT, handle_osd_signal);
   register_async_signal_handler_oneshot(SIGTERM, handle_osd_signal);
 
   osd->final_init();
 
-  if (g_conf->get_val<bool>("inject_early_sigterm"))
+  if (g_conf().get_val<bool>("inject_early_sigterm"))
     kill(getpid(), SIGTERM);
 
   ms_public->wait();

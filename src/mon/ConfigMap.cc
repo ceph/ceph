@@ -39,6 +39,9 @@ void MaskedOption::dump(Formatter *f) const
 {
   f->dump_string("name", opt->name);
   f->dump_string("value", raw_value);
+  f->dump_string("level", Option::level_to_str(opt->level));
+  f->dump_bool("can_update_at_runtime", opt->can_update_at_runtime());
+  f->dump_string("mask", mask.to_str());
   mask.dump(f);
 }
 
@@ -161,7 +164,7 @@ bool ConfigMap::parse_mask(
     } else {
       type = i;
     }
-    if (str_to_ceph_entity_type(type.c_str()) == CEPH_ENTITY_TYPE_ANY) {
+    if (EntityName::str_to_ceph_entity_type(type) == CEPH_ENTITY_TYPE_ANY) {
       return false;
     }
     *section = i;

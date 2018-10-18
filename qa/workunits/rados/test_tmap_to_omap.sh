@@ -7,7 +7,7 @@ expect_false()
 }
 
 pool="pool-$$"
-rados mkpool $pool
+ceph osd pool create $pool 8
 
 rados -p $pool tmap set foo key1 value1
 rados -p $pool tmap set foo key2 value2
@@ -23,6 +23,6 @@ rados -p $pool listomapkeys foo | grep key2
 rados -p $pool getomapval foo key1 | grep value1
 rados -p $pool getomapval foo key2 | grep value2
 
-rados rmpool $pool $pool --yes-i-really-really-mean-it
+ceph osd pool rm $pool $pool --yes-i-really-really-mean-it
 
 echo OK

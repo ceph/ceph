@@ -1,9 +1,10 @@
 import { Component } from '@angular/core';
 
+import { RgwDaemonService } from '../../../shared/api/rgw-daemon.service';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
+import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { CephShortVersionPipe } from '../../../shared/pipes/ceph-short-version.pipe';
-import { RgwDaemonService } from '../services/rgw-daemon.service';
 
 @Component({
   selector: 'cd-rgw-daemon-list',
@@ -11,13 +12,14 @@ import { RgwDaemonService } from '../services/rgw-daemon.service';
   styleUrls: ['./rgw-daemon-list.component.scss']
 })
 export class RgwDaemonListComponent {
+  columns: CdTableColumn[] = [];
+  daemons: object[] = [];
+  selection: CdTableSelection = new CdTableSelection();
 
-  columns: Array<CdTableColumn> = [];
-  daemons: Array<object> = [];
-  selection = new CdTableSelection();
-
-  constructor(private rgwDaemonService: RgwDaemonService,
-              cephShortVersionPipe: CephShortVersionPipe) {
+  constructor(
+    private rgwDaemonService: RgwDaemonService,
+    cephShortVersionPipe: CephShortVersionPipe
+  ) {
     this.columns = [
       {
         name: 'ID',
@@ -38,11 +40,15 @@ export class RgwDaemonListComponent {
     ];
   }
 
-  getDaemonList() {
-    this.rgwDaemonService.list()
-      .then((resp) => {
+  getDaemonList(context: CdTableFetchDataContext) {
+    this.rgwDaemonService.list().subscribe(
+      (resp: object[]) => {
         this.daemons = resp;
-      });
+      },
+      () => {
+        context.error();
+      }
+    );
   }
 
   updateSelection(selection: CdTableSelection) {

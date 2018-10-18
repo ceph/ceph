@@ -21,10 +21,12 @@
  * pass a ScrubMap from a shard back to the primary
  */
 
-struct MOSDRepScrubMap : public MOSDFastDispatchOp {
+class MOSDRepScrubMap : public MessageInstance<MOSDRepScrubMap, MOSDFastDispatchOp> {
+public:
+  friend factory;
 
-  static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 1;
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 1;
 
   spg_t pgid;            // primary spg_t
   epoch_t map_epoch = 0;
@@ -40,10 +42,10 @@ struct MOSDRepScrubMap : public MOSDFastDispatchOp {
   }
 
   MOSDRepScrubMap()
-    : MOSDFastDispatchOp(MSG_OSD_REP_SCRUBMAP, HEAD_VERSION, COMPAT_VERSION) {}
+    : MessageInstance(MSG_OSD_REP_SCRUBMAP, HEAD_VERSION, COMPAT_VERSION) {}
 
   MOSDRepScrubMap(spg_t pgid, epoch_t map_epoch, pg_shard_t from)
-    : MOSDFastDispatchOp(MSG_OSD_REP_SCRUBMAP, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_REP_SCRUBMAP, HEAD_VERSION, COMPAT_VERSION),
       pgid(pgid),
       map_epoch(map_epoch),
       from(from) {}
@@ -67,7 +69,7 @@ public:
     encode(preempted, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(pgid, p);
     decode(map_epoch, p);
     decode(from, p);

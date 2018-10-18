@@ -20,33 +20,26 @@
 #include "msg/Message.h"
 #include "include/encoding.h"
 
-struct MRoute : public Message {
+class MRoute : public MessageInstance<MRoute> {
+public:
+  friend factory;
 
-  static const int HEAD_VERSION = 3;
-  static const int COMPAT_VERSION = 3;
+  static constexpr int HEAD_VERSION = 3;
+  static constexpr int COMPAT_VERSION = 3;
 
   uint64_t session_mon_tid;
   Message *msg;
-  entity_inst_t dest;
   epoch_t send_osdmap_first;
   
-  MRoute() : Message(MSG_ROUTE, HEAD_VERSION, COMPAT_VERSION),
+  MRoute() : MessageInstance(MSG_ROUTE, HEAD_VERSION, COMPAT_VERSION),
 	     session_mon_tid(0),
 	     msg(NULL),
 	     send_osdmap_first(0) {}
   MRoute(uint64_t t, Message *m)
-    : Message(MSG_ROUTE, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_ROUTE, HEAD_VERSION, COMPAT_VERSION),
       session_mon_tid(t),
       msg(m),
       send_osdmap_first(0) {}
-  MRoute(bufferlist bl, const entity_inst_t& i)
-    : Message(MSG_ROUTE, HEAD_VERSION, COMPAT_VERSION),
-      session_mon_tid(0),
-      dest(i),
-      send_osdmap_first(0) {
-    bufferlist::iterator p = bl.begin();
-    msg = decode_message(NULL, 0, p);
-  }
 private:
   ~MRoute() override {
     if (msg)
@@ -55,9 +48,10 @@ private:
 
 public:
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(session_mon_tid, p);
-    decode(dest, p);
+    entity_inst_t dest_unused;
+    decode(dest_unused, p);
     bool m;
     decode(m, p);
     if (m)
@@ -67,7 +61,8 @@ public:
   void encode_payload(uint64_t features) override {
     using ceph::encode;
     encode(session_mon_tid, payload);
-    encode(dest, payload, features);
+    entity_inst_t dest_unused;
+    encode(dest_unused, payload, features);
     bool m = msg ? true : false;
     encode(m, payload);
     if (msg)
@@ -86,7 +81,7 @@ public:
     if (session_mon_tid)
       o << " tid " << session_mon_tid << ")";
     else
-      o << " to " << dest << ")";
+      o << " tid (none)";
   }
 };
 

@@ -26,7 +26,7 @@
 #include "include/linux_fiemap.h"
 #include "include/color.h"
 #include "include/buffer.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #ifndef __CYGWIN__
 #include "os/fs/btrfs_ioctl.h"
@@ -69,7 +69,7 @@ int BtrfsFileStoreBackend::detect_features()
 
   // clone_range?
   if (m_filestore_btrfs_clone_range) {
-    int fd = ::openat(get_basedir_fd(), "clone_range_test", O_CREAT|O_WRONLY, 0600);
+    int fd = ::openat(get_basedir_fd(), "clone_range_test", O_CREAT|O_WRONLY|O_CLOEXEC, 0600);
     if (fd >= 0) {
       if (::unlinkat(get_basedir_fd(), "clone_range_test", 0) < 0) {
 	r = -errno;
@@ -108,7 +108,7 @@ int BtrfsFileStoreBackend::detect_features()
     r = -errno;
     dout(0) << "detect_feature: failed to create simple subvolume " << vol_args.name << ": " << cpp_strerror(r) << dendl;
   }
-  int srcfd = ::openat(get_basedir_fd(), vol_args.name, O_RDONLY);
+  int srcfd = ::openat(get_basedir_fd(), vol_args.name, O_RDONLY|O_CLOEXEC);
   if (srcfd < 0) {
     r = -errno;
     dout(0) << "detect_feature: failed to open " << vol_args.name << ": " << cpp_strerror(r) << dendl;
@@ -445,7 +445,7 @@ int BtrfsFileStoreBackend::rollback_to(const string& name)
   snprintf(s, sizeof(s), "%s/%s", get_basedir_path().c_str(), name.c_str());
 
   // roll back
-  vol_args.fd = ::open(s, O_RDONLY);
+  vol_args.fd = ::open(s, O_RDONLY|O_CLOEXEC);
   if (vol_args.fd < 0) {
     ret = -errno;
     dout(0) << "rollback_to: error opening '" << s << "': " << cpp_strerror(ret) << dendl;

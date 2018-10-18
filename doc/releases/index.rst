@@ -12,12 +12,14 @@ Release Index
 
    Release Schedule <schedule>
 
+
 Active Releases
 ~~~~~~~~~~~~~~~
 
 .. toctree::
    :maxdepth: 1
 
+   Mimic <mimic>
    Luminous <luminous>
    Jewel <jewel>
 

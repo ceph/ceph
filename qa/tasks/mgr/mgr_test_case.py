@@ -48,13 +48,13 @@ class MgrCluster(CephCluster):
         return [s['name'] for s in self.get_mgr_map()["standbys"]]
 
     def set_module_conf(self, module, key, val):
-        self.mon_manager.raw_cluster_cmd("config-key", "set",
+        self.mon_manager.raw_cluster_cmd("config", "set", "mgr",
                                          "mgr/{0}/{1}".format(
                                              module, key
                                          ), val)
 
     def set_module_localized_conf(self, module, mgr_id, key, val):
-        self.mon_manager.raw_cluster_cmd("config-key", "set",
+        self.mon_manager.raw_cluster_cmd("config", "set", "mgr",
                                          "mgr/{0}/{1}/{2}".format(
                                              module, mgr_id, key
                                          ), val)
@@ -75,7 +75,7 @@ class MgrTestCase(CephTestCase):
         # Unload all non-default plugins
         loaded = json.loads(cls.mgr_cluster.mon_manager.raw_cluster_cmd(
                    "mgr", "module", "ls"))['enabled_modules']
-        unload_modules = set(loaded) - {"status", "restful"}
+        unload_modules = set(loaded) - {"restful"}
 
         for m in unload_modules:
             cls.mgr_cluster.mon_manager.raw_cluster_cmd(
@@ -116,9 +116,22 @@ class MgrTestCase(CephTestCase):
             # isn't, so let's return now if it's already loaded
             return
 
-        initial_gid = cls.mgr_cluster.get_mgr_map()['active_gid']
+        initial_mgr_map = cls.mgr_cluster.get_mgr_map()
+
+        # check if the the module is configured as an always on module
+        mgr_daemons = json.loads(cls.mgr_cluster.mon_manager.raw_cluster_cmd(
+                   "mgr", "metadata"))
+
+        for daemon in mgr_daemons:
+            if daemon["name"] == initial_mgr_map["active_name"]:
+                ceph_version = daemon["ceph_release"]
+                always_on = initial_mgr_map["always_on_modules"].get(ceph_version, [])
+                if module_name in always_on:
+                    return
+
+        initial_gid = initial_mgr_map['active_gid']
         cls.mgr_cluster.mon_manager.raw_cluster_cmd("mgr", "module", "enable",
-                                         module_name)
+                                                    module_name, "--force")
 
         # Wait for the module to load
         def has_restarted():

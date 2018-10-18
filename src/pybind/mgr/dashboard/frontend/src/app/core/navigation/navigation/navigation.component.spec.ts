@@ -1,29 +1,16 @@
-import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
-import { RouterTestingModule } from '@angular/router/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { SharedModule } from '../../../shared/shared.module';
-import { LogoutComponent } from '../../auth/logout/logout.component';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
+import { AppModule } from '../../../app.module';
 import { NavigationComponent } from './navigation.component';
 
 describe('NavigationComponent', () => {
   let component: NavigationComponent;
   let fixture: ComponentFixture<NavigationComponent>;
 
-  beforeEach(async(() => {
-    TestBed.configureTestingModule({
-      imports: [
-        SharedModule,
-        RouterTestingModule,
-        HttpClientTestingModule
-      ],
-      declarations: [
-        NavigationComponent,
-        LogoutComponent
-      ]
-    })
-    .compileComponents();
-  }));
+  configureTestBed({
+    imports: [AppModule]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(NavigationComponent);

@@ -31,7 +31,7 @@ static void reset_rop(librados::ObjectReadOperation **pop) {
 
 static int read_bl(bufferlist& bl, int *i)
 {
-  bufferlist::iterator iter = bl.begin();
+  auto iter = bl.cbegin();
 
   try {
     decode(*i, iter);

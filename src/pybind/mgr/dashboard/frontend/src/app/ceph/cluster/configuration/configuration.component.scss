@@ -1,5 +1,7 @@
-@import '../../../shared/datatable/table/table.component.scss';
+.filter {
+  padding-right: 8px;
+}
 
-td.wrap {
+::ng-deep datatable-body-cell.wrap {
   word-break: break-all;
 }

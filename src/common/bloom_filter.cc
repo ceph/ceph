@@ -17,7 +17,7 @@ void bloom_filter::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void bloom_filter::decode(bufferlist::iterator& p)
+void bloom_filter::decode(bufferlist::const_iterator& p)
 {
   DECODE_START(2, p);
   uint64_t v;
@@ -94,7 +94,7 @@ void compressible_bloom_filter::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void compressible_bloom_filter::decode(bufferlist::iterator& p)
+void compressible_bloom_filter::decode(bufferlist::const_iterator& p)
 {
   DECODE_START(2, p);
   bloom_filter::decode(p);

@@ -15,9 +15,11 @@
 #ifndef CEPH_MTIMECHECK_H
 #define CEPH_MTIMECHECK_H
 
-struct MTimeCheck : public Message
-{
-  static const int HEAD_VERSION = 1;
+class MTimeCheck : public MessageInstance<MTimeCheck> {
+public:
+  friend factory;
+
+  static constexpr int HEAD_VERSION = 1;
 
   enum {
     OP_PING = 1,
@@ -33,9 +35,9 @@ struct MTimeCheck : public Message
   map<entity_inst_t, double> skews;
   map<entity_inst_t, double> latencies;
 
-  MTimeCheck() : Message(MSG_TIMECHECK, HEAD_VERSION) { }
+  MTimeCheck() : MessageInstance(MSG_TIMECHECK, HEAD_VERSION) { }
   MTimeCheck(int op) :
-    Message(MSG_TIMECHECK, HEAD_VERSION),
+    MessageInstance(MSG_TIMECHECK, HEAD_VERSION),
     op(op)
   { }
 
@@ -65,7 +67,7 @@ public:
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(op, p);
     decode(epoch, p);
     decode(round, p);

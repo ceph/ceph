@@ -64,7 +64,7 @@ public:
     if (r >= 0) {
       cls_version_read_ret ret;
       try {
-        bufferlist::iterator iter = outbl.begin();
+        auto iter = outbl.cbegin();
         decode(ret, iter);
 	*objv = ret.objv;
       } catch (buffer::error& err) {
@@ -89,7 +89,7 @@ int cls_version_read(librados::IoCtx& io_ctx, string& oid, obj_version *ver)
 
   cls_version_read_ret ret;
   try {
-    bufferlist::iterator iter = out.begin();
+    auto iter = out.cbegin();
     decode(ret, iter);
   } catch (buffer::error& err) {
     return -EIO;

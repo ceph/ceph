@@ -22,7 +22,6 @@
 #include <fstream>
 
 #define dout_context g_ceph_context
-#define dout_subsys ceph_subsys_mds_balancer
 #undef dout_prefix
 #define dout_prefix *_dout << "mds.mantle "
 #define mantle_dout(lvl) \
@@ -83,7 +82,7 @@ int Mantle::balance(std::string_view script,
   /* set the name of the global mds table */
   lua_setglobal(L, "mds");
 
-  assert(lua_gettop(L) == 1);
+  ceph_assert(lua_gettop(L) == 1);
   if (lua_pcall(L, 0, 1, 0) != LUA_OK) {
     mantle_dout(0) << "WARNING: mantle could not execute script: "
             << lua_tostring(L, -1) << mantle_dendl;
@@ -119,12 +118,21 @@ Mantle::Mantle (void)
   }
 
   /* balancer policies can use basic Lua functions */
-  luaopen_base(L);
-  luaopen_coroutine(L);
-  luaopen_string(L);
-  luaopen_math(L);
-  luaopen_table(L);
-  luaopen_utf8(L);
+  static const luaL_Reg loadedlibs[] = {
+    {"_G", luaopen_base},
+    {LUA_COLIBNAME, luaopen_coroutine},
+    {LUA_STRLIBNAME, luaopen_string},
+    {LUA_MATHLIBNAME, luaopen_math},
+    {LUA_TABLIBNAME, luaopen_table},
+    {LUA_UTF8LIBNAME, luaopen_utf8},
+    {NULL, NULL}
+  };
+
+  const luaL_Reg *lib;
+  for (lib = loadedlibs; lib->func; lib++) {
+      luaL_requiref(L, lib->name, lib->func, 1);
+      lua_pop(L, 1);  /* remove lib */
+  }
 
   /* setup debugging */
   lua_register(L, "BAL_LOG", dout_wrapper);

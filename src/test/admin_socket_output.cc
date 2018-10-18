@@ -98,7 +98,7 @@ bool AdminSocketOutput::init_sockets() {
 
 std::pair<std::string, std::string>
 AdminSocketOutput::run_command(AdminSocketClient &client,
-                               const std::string raw_command,
+                               const std::string &raw_command,
                                bool send_untouched) {
   std::cout << "Sending command \"" << raw_command << "\"" << std::endl;
   std::string command;
@@ -112,7 +112,7 @@ AdminSocketOutput::run_command(AdminSocketClient &client,
   if (!err.empty()) {
     std::cerr << __func__  << " AdminSocketClient::do_request errored with: "
               << err << std::endl;
-    ceph_assert(false);
+    ceph_abort();
   }
   return std::make_pair(command, output);
 }
@@ -188,8 +188,8 @@ bool AdminSocketOutput::gather_socket_output() {
   return true;
 }
 
-std::string AdminSocketOutput::get_result(const std::string target,
-                                          const std::string command) const {
+std::string AdminSocketOutput::get_result(const std::string &target,
+                                          const std::string &command) const {
   const auto& target_results = results.find(target);
   if (target_results == results.end())
     return std::string("");

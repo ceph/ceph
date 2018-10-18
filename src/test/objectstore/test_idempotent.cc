@@ -49,7 +49,7 @@ int main(int argc, char **argv) {
 			 CODE_ENVIRONMENT_UTILITY,
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
-  g_ceph_context->_conf->apply_changes(NULL);
+  cct->_conf.apply_changes(nullptr);
 
   std::cerr << "args: " << args << std::endl;
   if (args.size() < 4) {
@@ -65,7 +65,7 @@ int main(int argc, char **argv) {
   if (string(args[0]) == string("new")) start_new = true;
 
   KeyValueDB *_db = KeyValueDB::create(g_ceph_context, "leveldb", db_path);
-  assert(!_db->create_and_open(std::cerr));
+  ceph_assert(!_db->create_and_open(std::cerr));
   boost::scoped_ptr<KeyValueDB> db(_db);
   boost::scoped_ptr<ObjectStore> store(new FileStore(cct.get(), store_path,
 						     store_dev));
@@ -75,14 +75,14 @@ int main(int argc, char **argv) {
 
   if (start_new) {
     std::cerr << "mkfs" << std::endl;
-    assert(!store->mkfs());
+    ceph_assert(!store->mkfs());
     ObjectStore::Transaction t;
-    assert(!store->mount());
+    ceph_assert(!store->mount());
     ch = store->create_new_collection(coll);
     t.create_collection(coll, 0);
     store->queue_transaction(ch, std::move(t));
   } else {
-    assert(!store->mount());
+    ceph_assert(!store->mount());
     ch = store->open_collection(coll);
   }
 

@@ -22,13 +22,15 @@
  * The mgr digest is a way for the mgr to subscribe to things
  * other than the cluster maps, which are needed by 
  */
-class MMgrDigest : public Message {
+class MMgrDigest : public MessageInstance<MMgrDigest> {
 public:
+  friend factory;
+
   bufferlist mon_status_json;
   bufferlist health_json;
 
   MMgrDigest() : 
-    Message(MSG_MGR_DIGEST) {}
+    MessageInstance(MSG_MGR_DIGEST) {}
 
   const char *get_type_name() const override { return "mgrdigest"; }
   void print(ostream& out) const override {
@@ -36,7 +38,7 @@ public:
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(mon_status_json, p);
     decode(health_json, p);
   }

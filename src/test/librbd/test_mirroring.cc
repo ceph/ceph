@@ -660,7 +660,7 @@ TEST_F(TestMirroring, RemoveBootstrapped)
   // simulate the image is open by rbd-mirror bootstrap
   uint64_t handle;
   struct MirrorWatcher : public librados::WatchCtx2 {
-    MirrorWatcher(librados::IoCtx &ioctx) : m_ioctx(ioctx) {
+    explicit MirrorWatcher(librados::IoCtx &ioctx) : m_ioctx(ioctx) {
     }
     void handle_notify(uint64_t notify_id, uint64_t cookie,
                                uint64_t notifier_id, bufferlist& bl) override {

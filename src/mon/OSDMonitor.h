@@ -42,6 +42,9 @@ class MOSDMap;
 
 #include "erasure-code/ErasureCodeInterface.h"
 #include "mon/MonOpRequest.h"
+#include <boost/functional/hash.hpp>
+// re-include our assert to clobber the system one; fix dout:
+#include "include/ceph_assert.h"
 
 /// information about a particular peer's failure reports for one osd
 struct failure_reporter_t {
@@ -78,7 +81,7 @@ struct failure_info_t {
 			     MonOpRequestRef op) {
     map<int, failure_reporter_t>::iterator p = reporters.find(who);
     if (p == reporters.end()) {
-      if (max_failed_since < failed_since)
+      if (max_failed_since != utime_t() && max_failed_since < failed_since)
 	max_failed_since = failed_since;
       p = reporters.insert(map<int, failure_reporter_t>::value_type(who, failure_reporter_t(failed_since))).first;
     }
@@ -105,6 +108,7 @@ struct failure_info_t {
       return MonOpRequestRef();
     MonOpRequestRef ret = p->second.op;
     reporters.erase(p);
+    max_failed_since = utime_t();
     return ret;
   }
 };
@@ -180,7 +184,7 @@ struct osdmap_manifest_t {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl)
+  void decode(bufferlist::const_iterator& bl)
   {
     DECODE_START(1, bl);
     decode(pinned, bl);
@@ -188,7 +192,7 @@ struct osdmap_manifest_t {
   }
 
   void decode(bufferlist& bl) {
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     decode(p);
   }
 
@@ -219,8 +223,13 @@ public:
 
   map<int,double> osd_weight;
 
-  SimpleLRU<version_t, bufferlist> inc_osd_cache;
-  SimpleLRU<version_t, bufferlist> full_osd_cache;
+  using osdmap_key_t = std::pair<version_t, uint64_t>;
+  using osdmap_cache_t = SimpleLRU<osdmap_key_t,
+                                   bufferlist,
+                                   std::less<osdmap_key_t>,
+                                   boost::hash<osdmap_key_t>>;
+  osdmap_cache_t inc_osd_cache;
+  osdmap_cache_t full_osd_cache;
 
   bool has_osdmap_manifest;
   osdmap_manifest_t osdmap_manifest;
@@ -228,9 +237,6 @@ public:
   bool check_failures(utime_t now);
   bool check_failure(utime_t now, int target_osd, failure_info_t& fi);
   void force_failure(int target_osd, int by);
-
-  // the time of last msg(MSG_ALIVE and MSG_PGTEMP) proposed without delay
-  utime_t last_attempted_minwait_time;
 
   bool _have_pending_crush();
   CrushWrapper &_get_stable_crush();
@@ -261,7 +267,7 @@ private:
   void _prune_update_trimmed(
       MonitorDBStore::TransactionRef tx,
       version_t first);
-  void prune_init();
+  void prune_init(osdmap_manifest_t& manifest);
   bool _prune_sanitize_options() const;
   bool is_prune_enabled() const;
   bool is_prune_supported() const;
@@ -339,8 +345,8 @@ private:
   bool can_mark_in(int o);
 
   // ...
-  MOSDMap *build_latest_full();
-  MOSDMap *build_incremental(epoch_t first, epoch_t last);
+  MOSDMap *build_latest_full(uint64_t features);
+  MOSDMap *build_incremental(epoch_t first, epoch_t last, uint64_t features);
   void send_full(MonOpRequestRef op);
   void send_incremental(MonOpRequestRef op, epoch_t first);
 public:
@@ -352,7 +358,7 @@ public:
 private:
   void print_utilization(ostream &out, Formatter *f, bool tree) const;
 
-  bool check_source(PaxosServiceMessage *m, uuid_d fsid);
+  bool check_source(MonOpRequestRef op, uuid_d fsid);
  
   bool preprocess_get_osdmap(MonOpRequestRef op);
 
@@ -383,6 +389,9 @@ private:
   bool preprocess_pg_created(MonOpRequestRef op);
   bool prepare_pg_created(MonOpRequestRef op);
 
+  bool preprocess_pg_ready_to_merge(MonOpRequestRef op);
+  bool prepare_pg_ready_to_merge(MonOpRequestRef op);
+
   int _check_remove_pool(int64_t pool_id, const pg_pool_t &pool, ostream *ss);
   bool _check_become_tier(
       int64_t tier_pool_id, const pg_pool_t *tier_pool,
@@ -395,6 +404,7 @@ private:
   int _prepare_remove_pool(int64_t pool, ostream *ss, bool no_fake);
   int _prepare_rename_pool(int64_t pool, string newname);
 
+  bool enforce_pool_op_caps(MonOpRequestRef op);
   bool preprocess_pool_op (MonOpRequestRef op);
   bool preprocess_pool_op_create (MonOpRequestRef op);
   bool prepare_pool_op (MonOpRequestRef op);
@@ -440,7 +450,7 @@ private:
 				unsigned *stripe_width,
 				ostream *ss);
   int check_pg_num(int64_t pool, int pg_num, int size, ostream* ss);
-  int prepare_new_pool(string& name, uint64_t auid,
+  int prepare_new_pool(string& name,
 		       int crush_rule,
 		       const string &crush_rule_name,
                        unsigned pg_num, unsigned pgp_num,
@@ -485,7 +495,7 @@ private:
       else if (r == -EAGAIN)
         cmon->dispatch(op);
       else
-	assert(0 == "bad C_Booted return value");
+	ceph_abort_msg("bad C_Booted return value");
     }
   };
 
@@ -502,7 +512,7 @@ private:
       else if (r == -EAGAIN)
 	osdmon->dispatch(op);
       else
-	assert(0 == "bad C_ReplyMap return value");
+	ceph_abort_msg("bad C_ReplyMap return value");
     }    
   };
   struct C_PoolOp : public C_MonOp {
@@ -523,7 +533,7 @@ private:
       else if (r == -EAGAIN)
 	osdmon->dispatch(op);
       else
-	assert(0 == "bad C_PoolOp return value");
+	ceph_abort_msg("bad C_PoolOp return value");
     }
   };
 
@@ -532,6 +542,9 @@ private:
 
   int load_metadata(int osd, map<string, string>& m, ostream *err);
   void count_metadata(const string& field, Formatter *f);
+
+  void reencode_incremental_map(bufferlist& bl, uint64_t features);
+  void reencode_full_map(bufferlist& bl, uint64_t features);
 public:
   void count_metadata(const string& field, map<string,int> *out);
 protected:
@@ -637,10 +650,14 @@ public:
     mempool::osdmap::map<int64_t,OSDMap::snap_interval_set_t> *gap_removed_snaps);
 
   int get_version(version_t ver, bufferlist& bl) override;
+  int get_version(version_t ver, uint64_t feature, bufferlist& bl);
+
+  int get_version_full(version_t ver, uint64_t feature, bufferlist& bl);
   int get_version_full(version_t ver, bufferlist& bl) override;
   int get_inc(version_t ver, OSDMap::Incremental& inc);
   int get_full_from_pinned_map(version_t ver, bufferlist& bl);
 
+  epoch_t blacklist(const entity_addrvec_t& av, utime_t until);
   epoch_t blacklist(const entity_addr_t& a, utime_t until);
 
   void dump_info(Formatter *f);

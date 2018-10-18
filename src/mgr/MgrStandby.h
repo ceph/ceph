@@ -28,14 +28,15 @@
 
 class MMgrMap;
 class Mgr;
+class PyModuleConfig;
 
 class MgrStandby : public Dispatcher,
 		   public md_config_obs_t {
 public:
   // config observer bits
   const char** get_tracked_conf_keys() const override;
-  void handle_conf_change(const struct md_config_t *conf,
-                         const std::set <std::string> &changed) override;
+  void handle_conf_change(const ConfigProxy& conf,
+			  const std::set <std::string> &changed) override;
 
 protected:
   MonClient monc;

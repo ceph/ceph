@@ -9,7 +9,7 @@
 Synopsis
 ========
 
-| **ceph-mds** -i *name* [ --hot-standby [*rank*] ]
+| **ceph-mds** -i <*ID*> [flags] [ --hot-standby <*rank*> ]
 
 
 Description
@@ -27,10 +27,10 @@ it a logical rank, or put it in a standby pool to take over for
 another daemon that crashes. Some of the specified options can cause
 other behaviors.
 
-If you specify hot-standby, you must either specify the rank on the command
-line, or specify one of the mds_standby_for_[rank|name] parameters in the
-config.  The command line specification overrides the config, and specifying
-the rank overrides specifying the name.
+If you specify --hot-standby, you must specify the rank on the command
+line. Alternatively, you can specify one of the mds_standby_for_[rank|name]
+parameters in the config.  The command line specification overrides the config,
+and specifying the rank overrides specifying the name.
 
 
 Options
@@ -70,7 +70,11 @@ Options
 
 .. option:: --hot-standby <rank>
 
-    Start as a hot standby for MDS <rank>.
+   Start as a hot standby for MDS <rank>.
+
+.. option:: --id/-i ID
+
+   Set ID portion of the MDS name.
 
 Availability
 ============

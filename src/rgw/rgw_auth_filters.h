@@ -60,12 +60,12 @@ class DecoratedApplier : public rgw::auth::IdentityApplier {
   }
 
 public:
-  DecoratedApplier(DecorateeT&& decoratee)
+  explicit DecoratedApplier(DecorateeT&& decoratee)
     : decoratee(std::forward<DecorateeT>(decoratee)) {
   }
 
-  uint32_t get_perms_from_aclspec(const aclspec_t& aclspec) const override {
-    return get_decoratee().get_perms_from_aclspec(aclspec);
+  uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override {
+    return get_decoratee().get_perms_from_aclspec(dpp, aclspec);
   }
 
   bool is_admin_of(const rgw_user& uid) const override {
@@ -80,6 +80,14 @@ public:
     return get_decoratee().get_perm_mask();
   }
 
+  uint32_t get_identity_type() const override {
+    return get_decoratee().get_identity_type();
+  }
+
+  string get_acct_name() const override {
+    return get_decoratee().get_acct_name();
+  }
+
   bool is_identity(
     const boost::container::flat_set<Principal>& ids) const override {
     return get_decoratee().is_identity(ids);
@@ -89,12 +97,12 @@ public:
     get_decoratee().to_str(out);
   }
 
-  void load_acct_info(RGWUserInfo& user_info) const override {  /* out */
-    return get_decoratee().load_acct_info(user_info);
+  void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override {  /* out */
+    return get_decoratee().load_acct_info(dpp, user_info);
   }
 
-  void modify_request_state(req_state * s) const override {     /* in/out */
-    return get_decoratee().modify_request_state(s);
+  void modify_request_state(const DoutPrefixProvider* dpp, req_state * s) const override {     /* in/out */
+    return get_decoratee().modify_request_state(dpp, s);
   }
 };
 
@@ -112,7 +120,7 @@ public:
 
   template <typename U>
   ThirdPartyAccountApplier(RGWRados* const store,
-                           const rgw_user acct_user_override,
+                           const rgw_user &acct_user_override,
                            U&& decoratee)
     : DecoratedApplier<T>(std::move(decoratee)),
       store(store),
@@ -120,7 +128,7 @@ public:
   }
 
   void to_str(std::ostream& out) const override;
-  void load_acct_info(RGWUserInfo& user_info) const override;   /* out */
+  void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override;   /* out */
 };
 
 /* static declaration: UNKNOWN_ACCT will be an empty rgw_user that is a result
@@ -137,16 +145,16 @@ void ThirdPartyAccountApplier<T>::to_str(std::ostream& out) const
 }
 
 template <typename T>
-void ThirdPartyAccountApplier<T>::load_acct_info(RGWUserInfo& user_info) const
+void ThirdPartyAccountApplier<T>::load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const
 {
   if (UNKNOWN_ACCT == acct_user_override) {
     /* There is no override specified by the upper layer. This means that we'll
      * load the account owned by the authenticated identity (aka auth_user). */
-    DecoratedApplier<T>::load_acct_info(user_info);
+    DecoratedApplier<T>::load_acct_info(dpp, user_info);
   } else if (DecoratedApplier<T>::is_owner_of(acct_user_override)) {
     /* The override has been specified but the account belongs to the authenticated
      * identity. We may safely forward the call to a next stage. */
-    DecoratedApplier<T>::load_acct_info(user_info);
+    DecoratedApplier<T>::load_acct_info(dpp, user_info);
   } else {
     /* Compatibility mechanism for multi-tenancy. For more details refer to
      * load_acct_info method of rgw::auth::RemoteApplier. */
@@ -175,7 +183,7 @@ void ThirdPartyAccountApplier<T>::load_acct_info(RGWUserInfo& user_info) const
 
 template <typename T> static inline
 ThirdPartyAccountApplier<T> add_3rdparty(RGWRados* const store,
-                                         const rgw_user acct_user_override,
+                                         const rgw_user &acct_user_override,
                                          T&& t) {
   return ThirdPartyAccountApplier<T>(store, acct_user_override,
                                      std::forward<T>(t));
@@ -203,8 +211,8 @@ public:
   }
 
   void to_str(std::ostream& out) const override;
-  void load_acct_info(RGWUserInfo& user_info) const override;   /* out */
-  void modify_request_state(req_state* s) const override;       /* in/out */
+  void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override;   /* out */
+  void modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const override;       /* in/out */
 };
 
 template <typename T>
@@ -215,13 +223,13 @@ void SysReqApplier<T>::to_str(std::ostream& out) const
 }
 
 template <typename T>
-void SysReqApplier<T>::load_acct_info(RGWUserInfo& user_info) const
+void SysReqApplier<T>::load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const
 {
-  DecoratedApplier<T>::load_acct_info(user_info);
+  DecoratedApplier<T>::load_acct_info(dpp, user_info);
   is_system = user_info.system;
 
   if (is_system) {
-    //dout(20) << "system request" << dendl;
+    //ldpp_dout(dpp, 20) << "system request" << dendl;
 
     rgw_user effective_uid(args.sys_get(RGW_SYS_PARAM_PREFIX "uid"));
     if (! effective_uid.empty()) {
@@ -230,7 +238,7 @@ void SysReqApplier<T>::load_acct_info(RGWUserInfo& user_info) const
        * calls ::decode instead. */
       RGWUserInfo euser_info;
       if (rgw_get_user_info_by_uid(store, effective_uid, euser_info) < 0) {
-        //ldout(s->cct, 0) << "User lookup failed!" << dendl;
+        //ldpp_dout(dpp, 0) << "User lookup failed!" << dendl;
         throw -EACCES;
       }
       user_info = euser_info;
@@ -239,17 +247,18 @@ void SysReqApplier<T>::load_acct_info(RGWUserInfo& user_info) const
 }
 
 template <typename T>
-void SysReqApplier<T>::modify_request_state(req_state* const s) const
+void SysReqApplier<T>::modify_request_state(const DoutPrefixProvider* dpp, req_state* const s) const
 {
   if (boost::logic::indeterminate(is_system)) {
     RGWUserInfo unused_info;
-    load_acct_info(unused_info);
+    load_acct_info(dpp, unused_info);
   }
 
   if (is_system) {
     s->info.args.set_system();
     s->system_request = true;
   }
+  DecoratedApplier<T>::modify_request_state(dpp, s);
 }
 
 template <typename T> static inline

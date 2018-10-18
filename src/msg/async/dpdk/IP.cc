@@ -41,7 +41,7 @@
 #include "toeplitz.h"
 
 #include "common/dout.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_subsys ceph_subsys_dpdk
 #undef dout_prefix

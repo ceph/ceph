@@ -30,31 +30,31 @@ operations on a BlueStore instance.
 Commands
 ========
 
-.. option:: help
+:command:`help`
 
    show help
 
-.. option:: fsck
+:command:`fsck` [ --deep ]
 
    run consistency check on BlueStore metadata.  If *--deep* is specified, also read all object data and verify checksums.
 
-.. option:: repair
+:command:`repair`
 
    Run a consistency check *and* repair any errors we can.
 
-.. option:: bluefs-export
+:command:`bluefs-export`
 
    Export the contents of BlueFS (i.e., rocksdb files) to an output directory.
 
-.. option:: bluefs-bdev-sizes --path *osd path*
+:command:`bluefs-bdev-sizes` --path *osd path*
 
    Print the device sizes, as understood by BlueFS, to stdout.
 
-.. option:: bluefs-bdev-expand --path *osd path*
+:command:`bluefs-bdev-expand` --path *osd path*
 
    Instruct BlueFS to check the size of its block devices and, if they have expanded, make use of the additional space.
 
-.. option:: show-label --dev *device* [...]
+:command:`show-label` --dev *device* [...]
 
    Show device label(s).	   
 

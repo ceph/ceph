@@ -11,7 +11,6 @@
  * Foundation.  See file COPYING.
  * 
  */
-
 #ifndef CEPH_MONCLIENT_H
 #define CEPH_MONCLIENT_H
 
@@ -20,11 +19,11 @@
 #include "msg/Messenger.h"
 
 #include "MonMap.h"
+#include "MonSub.h"
 
 #include "common/Timer.h"
 #include "common/Finisher.h"
 #include "common/config.h"
-
 
 class MMonMap;
 class MConfig;
@@ -75,7 +74,7 @@ struct MonClientPinger : public Dispatcher {
 
     bufferlist &payload = m->get_payload();
     if (result && payload.length() > 0) {
-      bufferlist::iterator p = payload.begin();
+      auto p = std::cbegin(payload);
       decode(*result, p);
     }
     done = true;
@@ -148,6 +147,7 @@ private:
 class MonClient : public Dispatcher {
 public:
   MonMap monmap;
+  map<string,string> config_mgr;
 private:
   Messenger *messenger;
 
@@ -205,7 +205,7 @@ private:
   std::unique_ptr<Context> session_established_context;
   bool had_a_connection;
   double reopen_interval_multiplier;
-
+  
   bool _opened() const;
   bool _hunting() const;
   void _start_hunting();
@@ -216,6 +216,16 @@ private:
   void _un_backoff();
   void _add_conns(uint64_t global_id);
   void _send_mon_message(Message *m);
+
+  std::map<entity_addr_t, MonConnection>::iterator _find_pending_con(
+    const ConnectionRef& con) {
+    for (auto i = pending_cons.begin(); i != pending_cons.end(); ++i) {
+      if (i->second.get_con() == con) {
+	return i;
+      }
+    }
+    return pending_cons.end();
+  }
 
 public:
   void set_entity_name(EntityName name) { entity_name = name; }
@@ -236,54 +246,11 @@ public:
    */
   void flush_log();
 
-  // mon subscriptions
 private:
-  map<string,ceph_mon_subscribe_item> sub_sent; // my subs, and current versions
-  map<string,ceph_mon_subscribe_item> sub_new;  // unsent new subs
-  utime_t sub_renew_sent, sub_renew_after;
-
+  // mon subscriptions
+  MonSub sub;
   void _renew_subs();
   void handle_subscribe_ack(MMonSubscribeAck* m);
-
-  bool _sub_want(const string &what, version_t start, unsigned flags) {
-    auto sub = sub_new.find(what);
-    if (sub != sub_new.end() &&
-        sub->second.start == start &&
-        sub->second.flags == flags) {
-      return false;
-    } else {
-      sub = sub_sent.find(what);
-      if (sub != sub_sent.end() &&
-	  sub->second.start == start &&
-	  sub->second.flags == flags)
-	return false;
-    }
-
-    sub_new[what].start = start;
-    sub_new[what].flags = flags;
-    return true;
-  }
-  void _sub_got(const string &what, version_t got) {
-    if (sub_new.count(what)) {
-      if (sub_new[what].start <= got) {
-	if (sub_new[what].flags & CEPH_SUBSCRIBE_ONETIME)
-	  sub_new.erase(what);
-	else
-	  sub_new[what].start = got + 1;
-      }
-    } else if (sub_sent.count(what)) {
-      if (sub_sent[what].start <= got) {
-	if (sub_sent[what].flags & CEPH_SUBSCRIBE_ONETIME)
-	  sub_sent.erase(what);
-	else
-	  sub_sent[what].start = got + 1;
-      }
-    }
-  }
-  void _sub_unwant(const string &what) {
-    sub_sent.erase(what);
-    sub_new.erase(what);
-  }
 
 public:
   void renew_subs() {
@@ -292,39 +259,19 @@ public:
   }
   bool sub_want(string what, version_t start, unsigned flags) {
     Mutex::Locker l(monc_lock);
-    return _sub_want(what, start, flags);
+    return sub.want(what, start, flags);
   }
   void sub_got(string what, version_t have) {
     Mutex::Locker l(monc_lock);
-    _sub_got(what, have);
+    sub.got(what, have);
   }
   void sub_unwant(string what) {
     Mutex::Locker l(monc_lock);
-    _sub_unwant(what);
+    sub.unwant(what);
   }
-  /**
-   * Increase the requested subscription start point. If you do increase
-   * the value, apply the passed-in flags as well; otherwise do nothing.
-   */
   bool sub_want_increment(string what, version_t start, unsigned flags) {
     Mutex::Locker l(monc_lock);
-    map<string,ceph_mon_subscribe_item>::iterator i = sub_new.find(what);
-    if (i != sub_new.end()) {
-      if (i->second.start >= start)
-	return false;
-      i->second.start = start;
-      i->second.flags = flags;
-      return true;
-    }
-
-    i = sub_sent.find(what);
-    if (i == sub_sent.end() || i->second.start < start) {
-      ceph_mon_subscribe_item& item = sub_new[what];
-      item.start = start;
-      item.flags = flags;
-      return true;
-    }
-    return false;
+    return sub.inc_want(what, start, flags);
   }
   
   std::unique_ptr<KeyRing> keyring;
@@ -400,17 +347,11 @@ public:
     return monmap.fsid;
   }
 
-  entity_addr_t get_mon_addr(unsigned i) const {
+  entity_addrvec_t get_mon_addrs(unsigned i) const {
     Mutex::Locker l(monc_lock);
     if (i < monmap.size())
-      return monmap.get_addr(i);
-    return entity_addr_t();
-  }
-  entity_inst_t get_mon_inst(unsigned i) const {
-    Mutex::Locker l(monc_lock);
-    if (i < monmap.size())
-      return monmap.get_inst(i);
-    return entity_inst_t();
+      return monmap.get_addrs(i);
+    return entity_addrvec_t();
   }
   int get_num_mon() const {
     Mutex::Locker l(monc_lock);
@@ -424,6 +365,7 @@ public:
 
   void set_messenger(Messenger *m) { messenger = m; }
   entity_addr_t get_myaddr() const { return messenger->get_myaddr(); }
+  entity_addrvec_t get_myaddrs() const { return messenger->get_myaddrs(); }
   AuthAuthorizer* build_authorizer(int service_id) const;
 
   void set_want_keys(uint32_t want) {
@@ -433,6 +375,7 @@ public:
   // admin commands
 private:
   uint64_t last_mon_command_tid;
+
   struct MonCommand {
     string target_name;
     int target_rank;
@@ -484,7 +427,6 @@ public:
    * @return (via context) 0 on success, -EAGAIN if we need to resubmit our request
    */
   void get_version(string map, version_t *newest, version_t *oldest, Context *onfinish);
-
   /**
    * Run a callback within our lock, with a reference
    * to the MonMap
@@ -495,6 +437,9 @@ public:
     Mutex::Locker l(monc_lock);
     return std::forward<Callback>(cb)(monmap, std::forward<Args>(args)...);
   }
+
+  void register_config_callback(md_config_t::config_callback fn);
+  md_config_t::config_callback get_config_callback();
 
 private:
   struct version_req_d {
@@ -507,7 +452,7 @@ private:
   ceph_tid_t version_req_id;
   void handle_get_version_reply(MMonGetVersionReply* m);
 
-
+  md_config_t::config_callback config_cb;
 };
 
 #endif

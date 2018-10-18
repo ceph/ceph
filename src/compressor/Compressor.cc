@@ -24,7 +24,7 @@
 #include "common/debug.h"
 #include "common/dout.h"
 
-std::string Compressor::get_comp_alg_name(int a) {
+const char* Compressor::get_comp_alg_name(int a) {
 
   auto p = std::find_if(std::cbegin(compression_algorithms), std::cend(compression_algorithms),
 		   [a](const auto& kv) { return kv.second == a; });
@@ -32,15 +32,17 @@ std::string Compressor::get_comp_alg_name(int a) {
   if (std::cend(compression_algorithms) == p)
    return "???"; // It would be nice to revise this...
 
-  return std::string { p->first };
+  return p->first;
 }
 
 boost::optional<Compressor::CompressionAlgorithm> Compressor::get_comp_alg_type(const std::string &s) {
 
-  if (auto pos = compression_algorithms.find(s.c_str()); std::end(compression_algorithms) != pos)
-   return pos->second;
+  auto p = std::find_if(std::cbegin(compression_algorithms), std::cend(compression_algorithms),
+		   [&s](const auto& kv) { return kv.first == s; });
+  if (std::cend(compression_algorithms) == p)
+    return {};
 
-  return boost::optional<Compressor::CompressionAlgorithm> {};
+  return p->second;
 }
 
 const char *Compressor::get_comp_mode_name(int m) {

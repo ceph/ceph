@@ -3,7 +3,7 @@
 
 #include "common/dout.h"
 #include "common/errno.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "librbd/Utils.h"
 #include "common/Timer.h"
 #include "common/WorkQueue.h"
@@ -72,6 +72,7 @@ void CreateRequest<I>::get_pool_id() {
     complete(r);
     return;
   }
+  data_ioctx.set_namespace(m_ioctx.get_namespace());
 
   m_pool_id = data_ioctx.get_id();
   create_journal();

@@ -22,7 +22,7 @@
 #include "rgw_data_sync.h"
 #include "rgw_common.h"
 #include "common/errno.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_context g_ceph_context
 #define LOG_CLASS_LIST_MAX_ENTRIES (1000)
@@ -846,7 +846,7 @@ public:
   }
   void execute() override;
   void send_response() override;
-  const string name() override { return "get_metadata_log_status"; }
+  const char* name() const override { return "get_metadata_log_status"; }
 };
 
 void RGWOp_MDLog_Status::execute()
@@ -884,7 +884,7 @@ public:
   }
   void execute() override;
   void send_response() override;
-  const string name() override { return "get_bucket_index_log_status"; }
+  const char* name() const override { return "get_bucket_index_log_status"; }
 };
 
 void RGWOp_BILog_Status::execute()
@@ -906,7 +906,15 @@ void RGWOp_BILog_Status::execute()
     return;
   }
 
-  http_ret = rgw_bucket_sync_status(store, source_zone, bucket, &status);
+  // read the bucket instance info for num_shards
+  RGWObjectCtx ctx(store);
+  RGWBucketInfo info;
+  http_ret = store->get_bucket_instance_info(ctx, bucket, info, nullptr, nullptr);
+  if (http_ret < 0) {
+    ldout(s->cct, 4) << "failed to read bucket info: " << cpp_strerror(http_ret) << dendl;
+    return;
+  }
+  http_ret = rgw_bucket_sync_status(this, store, source_zone, info, &status);
 }
 
 void RGWOp_BILog_Status::send_response()
@@ -933,7 +941,7 @@ public:
   }
   void execute() override ;
   void send_response() override;
-  const string name() override { return "get_data_changes_log_status"; }
+  const char* name() const override { return "get_data_changes_log_status"; }
 };
 
 void RGWOp_DATALog_Status::execute()

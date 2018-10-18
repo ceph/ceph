@@ -237,8 +237,11 @@ void rgw_format_ops_log_entry(struct rgw_log_entry& entry, Formatter *formatter)
 {
   formatter->open_object_section("log_entry");
   formatter->dump_string("bucket", entry.bucket);
-  entry.time.gmtime(formatter->dump_stream("time"));      // UTC
-  entry.time.localtime(formatter->dump_stream("time_local"));
+  {
+    auto t = utime_t{entry.time};
+    t.gmtime(formatter->dump_stream("time"));      // UTC
+    t.localtime(formatter->dump_stream("time_local"));
+  }
   formatter->dump_string("remote_addr", entry.remote_addr);
   string obj_owner = entry.object_owner.to_str();
   if (obj_owner.length())
@@ -251,9 +254,11 @@ void rgw_format_ops_log_entry(struct rgw_log_entry& entry, Formatter *formatter)
   formatter->dump_int("bytes_sent", entry.bytes_sent);
   formatter->dump_int("bytes_received", entry.bytes_received);
   formatter->dump_int("object_size", entry.obj_size);
-  uint64_t total_time =  entry.total_time.to_msec();
-
-  formatter->dump_int("total_time", total_time);
+  {
+    using namespace std::chrono;
+    uint64_t total_time = duration_cast<milliseconds>(entry.total_time).count();
+    formatter->dump_int("total_time", total_time);
+  }
   formatter->dump_string("user_agent",  entry.user_agent);
   formatter->dump_string("referrer",  entry.referrer);
   if (entry.x_headers.size() > 0) {
@@ -406,7 +411,7 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
   uint64_t bytes_received = ACCOUNTING_IO(s)->get_bytes_received();
 
   entry.time = s->time;
-  entry.total_time = ceph_clock_now() - s->time;
+  entry.total_time = s->time_elapsed();
   entry.bytes_sent = bytes_sent;
   entry.bytes_received = bytes_received;
   if (s->err.http_ret) {
@@ -423,7 +428,7 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
   encode(entry, bl);
 
   struct tm bdt;
-  time_t t = entry.time.sec();
+  time_t t = req_state::Clock::to_time_t(entry.time);
   if (s->cct->_conf->rgw_log_object_name_utc)
     gmtime_r(&t, &bdt);
   else

@@ -26,7 +26,7 @@ public:
                                        const std::string &snap_name,
                                        const cls::rbd::SnapshotNamespace &snap_namespace,
                                        uint64_t size,
-                                       const librbd::ParentSpec &parent_spec,
+                                       const cls::rbd::ParentImageSpec &parent_spec,
                                        uint64_t parent_overlap,
                                        Context *on_finish) {
     return new SnapshotCreateRequest(dst_image_ctx, snap_name, snap_namespace, size,
@@ -37,7 +37,7 @@ public:
                         const std::string &snap_name,
 			const cls::rbd::SnapshotNamespace &snap_namespace,
 			uint64_t size,
-                        const librbd::ParentSpec &parent_spec,
+                        const cls::rbd::ParentImageSpec &parent_spec,
                         uint64_t parent_overlap, Context *on_finish);
 
   void send();
@@ -67,7 +67,7 @@ private:
   std::string m_snap_name;
   cls::rbd::SnapshotNamespace m_snap_namespace;
   uint64_t m_size;
-  librbd::ParentSpec m_parent_spec;
+  cls::rbd::ParentImageSpec m_parent_spec;
   uint64_t m_parent_overlap;
   Context *m_on_finish;
 
@@ -82,7 +82,7 @@ private:
   void send_create_object_map();
   void handle_create_object_map(int r);
 
-  Context *start_lock_op();
+  Context *start_lock_op(int* r);
 
   void finish(int r);
 };

@@ -2,7 +2,7 @@ Building Ceph Documentation
 ===========================
 
 Ceph utilizes Python's Sphinx documentation tool. For details on
-the Sphinx documentation tool, refer to `The Sphinx Documentation Tool <http://sphinx.pocoo.org/>`_.
+the Sphinx documentation tool, refer to `The Sphinx Documentation Tool <https://www.sphinx-doc.org/en/master/>`_.
 
 To build the Ceph documentation set, you must:
 

@@ -65,9 +65,20 @@ function(do_build_boost version)
   set(BOOST_CXXFLAGS "-fPIC -w") # check on arm, etc <---XXX
   list(APPEND boost_features "cxxflags=${BOOST_CXXFLAGS}")
 
-  list(FIND Boost_BUILD_COMPONENTS "python" with_python)
-  list_replace(Boost_BUILD_COMPONENTS "unit_test_framework" "test")
-  string(REPLACE ";" "," boost_with_libs "${Boost_BUILD_COMPONENTS}")
+  set(boost_with_libs)
+  foreach(c ${Boost_BUILD_COMPONENTS})
+    if(c MATCHES "^python([0-9])\$")
+      set(with_python_version "${CMAKE_MATCH_1}")
+      list(APPEND boost_with_libs "python")
+    elseif(c MATCHES "^python([0-9])\\.?([0-9])\$")
+      set(with_python_version "${CMAKE_MATCH_1}.${CMAKE_MATCH_2}")
+      list(APPEND boost_with_libs "python")
+    else()
+      list(APPEND boost_with_libs ${c})
+    endif()
+  endforeach()
+  list_replace(boost_with_libs "unit_test_framework" "test")
+  string(REPLACE ";" "," boost_with_libs "${boost_with_libs}")
   # build b2 and prepare the project-config.jam for boost
   set(configure_command
     ./bootstrap.sh --prefix=<INSTALL_DIR>
@@ -78,11 +89,8 @@ function(do_build_boost version)
     message(STATUS "BUILDING Boost Libraries at j ${BOOST_J}")
     list(APPEND b2 -j${BOOST_J})
   endif()
-  if(CMAKE_VERBOSE_MAKEFILE)
-    list(APPEND b2 -d1)
-  else()
-    list(APPEND b2 -d0)
-  endif()
+  # suppress all debugging levels for b2
+  list(APPEND b2 -d0)
 
   if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
     set(toolset gcc)
@@ -100,12 +108,12 @@ function(do_build_boost version)
     " : "
     " : ${CMAKE_CXX_COMPILER}"
     " ;\n")
-  if(with_python GREATER -1)
-    set(python_ver ${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR})
+  if(with_python_version)
+    find_package(PythonLibs ${with_python_version} QUIET REQUIRED)
     string(REPLACE ";" " " python_includes "${PYTHON_INCLUDE_DIRS}")
     file(APPEND ${user_config}
       "using python"
-      " : ${python_ver}"
+      " : ${with_python_version}"
       " : ${PYTHON_EXECUTABLE}"
       " : ${python_includes}"
       " : ${PYTHON_LIBRARIES}"
@@ -114,12 +122,8 @@ function(do_build_boost version)
   list(APPEND b2 --user-config=${user_config})
 
   list(APPEND b2 toolset=${toolset})
-  if(with_python GREATER -1)
-    if(NOT PYTHONLIBS_FOUND)
-      message(FATAL_ERROR "Please call find_package(PythonLibs) first for building "
-        "Boost.Python")
-    endif()
-    list(APPEND b2 python=${python_ver})
+  if(with_python_version)
+    list(APPEND b2 python=${with_python_version})
   endif()
 
   set(build_command
@@ -133,14 +137,14 @@ function(do_build_boost version)
     check_boost_version("${PROJECT_SOURCE_DIR}/src/boost" ${version})
     set(source_dir
       SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/boost")
-  elseif(version VERSION_GREATER 1.66)
+  elseif(version VERSION_GREATER 1.67)
     message(FATAL_ERROR "Unknown BOOST_REQUESTED_VERSION: ${version}")
   else()
     message(STATUS "boost will be downloaded...")
     # NOTE: If you change this version number make sure the package is available
     # at the three URLs below (may involve uploading to download.ceph.com)
-    set(boost_version 1.66.0)
-    set(boost_md5 b2dfbd6c717be4a7bb2d88018eaccf75)
+    set(boost_version 1.67.0)
+    set(boost_sha256 2684c972994ee57fc5632e03bf044746f6eb45d4920c343937a465fd67a5adba)
     string(REPLACE "." "_" boost_version_underscore ${boost_version} )
     set(boost_url 
       https://dl.bintray.com/boostorg/release/${boost_version}/source/boost_${boost_version_underscore}.tar.bz2)
@@ -152,10 +156,8 @@ function(do_build_boost version)
     endif()
     set(source_dir
       URL ${boost_url}
-      URL_MD5 ${boost_md5})
-    if(CMAKE_VERSION VERSION_GREATER 3.1)
-      list(APPEND source_dir DOWNLOAD_NO_PROGRESS 1)
-    endif()
+      URL_HASH SHA256=${boost_sha256}
+      DOWNLOAD_NO_PROGRESS 1)
   endif()
   # build all components in a single shot
   include(ExternalProject)
@@ -179,6 +181,7 @@ macro(build_boost version)
   ExternalProject_Get_Property(Boost install_dir)
   set(Boost_INCLUDE_DIRS ${install_dir}/include)
   set(Boost_INCLUDE_DIR ${install_dir}/include)
+  set(Boost_VERSION ${version})
   # create the directory so cmake won't complain when looking at the imported
   # target
   file(MAKE_DIRECTORY ${Boost_INCLUDE_DIRS})
@@ -201,17 +204,15 @@ macro(build_boost version)
       add_library(Boost::${c} SHARED IMPORTED)
     endif()
     add_dependencies(Boost::${c} Boost)
-    if(c STREQUAL python AND PYTHON_VERSION_MAJOR EQUAL 3)
-      set(buildid 3)
-    else()
-      set(buildid "")
+    if(c MATCHES "^python")
+      set(c "python${PYTHON_VERSION_MAJOR}${PYTHON_VERSION_MINOR}")
     endif()
     if(Boost_USE_STATIC_LIBS)
       set(Boost_${upper_c}_LIBRARY
-        ${install_dir}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}boost_${c}${buildid}${CMAKE_STATIC_LIBRARY_SUFFIX})
+        ${install_dir}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}boost_${c}${CMAKE_STATIC_LIBRARY_SUFFIX})
     else()
       set(Boost_${upper_c}_LIBRARY
-        ${install_dir}/lib/${CMAKE_SHARED_LIBRARY_PREFIX}boost_${c}${buildid}${CMAKE_SHARED_LIBRARY_SUFFIX})
+        ${install_dir}/lib/${CMAKE_SHARED_LIBRARY_PREFIX}boost_${c}${CMAKE_SHARED_LIBRARY_SUFFIX})
     endif()
     unset(buildid)
     set_target_properties(Boost::${c} PROPERTIES
@@ -232,16 +233,10 @@ macro(build_boost version)
   endforeach()
 
   # for header-only libraries
-  if(CMAKE_VERSION VERSION_LESS 3.3)
-    # only ALIAS and INTERFACE target names allow ":" in it, but
-    # INTERFACE library is not allowed until cmake 3.1
-    add_custom_target(Boost.boost DEPENDS Boost)
-  else()
-    add_library(Boost.boost INTERFACE IMPORTED)
-    set_target_properties(Boost.boost PROPERTIES
-      INTERFACE_INCLUDE_DIRECTORIES "${Boost_INCLUDE_DIRS}")
-    add_dependencies(Boost.boost Boost)
-  endif()
+  add_library(Boost::boost INTERFACE IMPORTED)
+  set_target_properties(Boost::boost PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${Boost_INCLUDE_DIRS}")
+  add_dependencies(Boost::boost Boost)
   find_package_handle_standard_args(Boost DEFAULT_MSG
     Boost_INCLUDE_DIRS Boost_LIBRARIES)
   mark_as_advanced(Boost_LIBRARIES BOOST_INCLUDE_DIRS)
@@ -253,11 +248,12 @@ function(maybe_add_boost_dep target)
     return()
   endif()
   get_target_property(sources ${target} SOURCES)
+  string(GENEX_STRIP "${sources}" sources)
   foreach(src ${sources})
     get_filename_component(ext ${src} EXT)
     # assuming all cxx source files include boost header(s)
     if(ext MATCHES ".cc|.cpp|.cxx")
-      add_dependencies(${target} Boost.boost)
+      add_dependencies(${target} Boost::boost)
       return()
     endif()
   endforeach()

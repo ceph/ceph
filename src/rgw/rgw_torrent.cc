@@ -58,27 +58,21 @@ int seed::get_torrent_file(RGWRados::Object::Read &read_op,
   }
 
   string oid, key;
-  map<string, bufferlist> m;
-  set<string> obj_key;
   get_obj_bucket_and_oid_loc(obj, oid, key);
-  ldout(s->cct, 0) << "NOTICE: head obj oid= " << oid << dendl;
+  ldout(s->cct, 20) << "NOTICE: head obj oid= " << oid << dendl;
 
-  obj_key.insert(RGW_OBJ_TORRENT);
-  const int op_ret = read_op.state.io_ctx.omap_get_vals_by_keys(oid, obj_key, &m);
-  if (op_ret < 0)
-  {
-    ldout(s->cct, 0) << "ERROR: failed to omap_get_vals_by_keys op_ret = "
-                     << op_ret << dendl;
-    return op_ret;
+  const set<string> obj_key{RGW_OBJ_TORRENT};
+  map<string, bufferlist> m;
+  const int r = read_op.state.io_ctx.omap_get_vals_by_keys(oid, obj_key, &m);
+  if (r < 0) {
+    ldout(s->cct, 0) << "ERROR: omap_get_vals_by_keys failed: " << r << dendl;
+    return r;
   }
-
-  map<string, bufferlist>::iterator iter;
-  for (iter = m.begin(); iter != m.end(); ++iter)
-  {
-    bufferlist bl_tmp = iter->second;
-    char *pbuff = bl_tmp.c_str();
-    bl.append(pbuff, bl_tmp.length());
+  if (m.size() != 1) {
+    ldout(s->cct, 0) << "ERROR: omap key " RGW_OBJ_TORRENT " not found" << dendl;
+    return -EINVAL;
   }
+  bl.append(std::move(m.begin()->second));
   dencode.bencode_end(bl);
 
   bl_data = bl;
@@ -175,12 +169,12 @@ void seed::sha1(SHA1 *h, bufferlist &bl, off_t bl_len)
 int seed::get_params()
 {
   is_torrent = true;
-  info.piece_length = g_conf->rgw_torrent_sha_unit;
-  create_by = g_conf->rgw_torrent_createby;
-  encoding = g_conf->rgw_torrent_encoding;
-  origin = g_conf->rgw_torrent_origin;
-  comment = g_conf->rgw_torrent_comment;
-  announce = g_conf->rgw_torrent_tracker;
+  info.piece_length = g_conf()->rgw_torrent_sha_unit;
+  create_by = g_conf()->rgw_torrent_createby;
+  encoding = g_conf()->rgw_torrent_encoding;
+  origin = g_conf()->rgw_torrent_origin;
+  comment = g_conf()->rgw_torrent_comment;
+  announce = g_conf()->rgw_torrent_tracker;
 
   /* tracker and tracker list is empty, set announce to origin */
   if (announce.empty() && !origin.empty())

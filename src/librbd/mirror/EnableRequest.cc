@@ -48,7 +48,7 @@ void EnableRequest<I>::send_get_mirror_image() {
     create_rados_callback<klass, &klass::handle_get_mirror_image>(this);
   m_out_bl.clear();
   int r = m_io_ctx.aio_operate(RBD_MIRRORING, comp, &op, &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 
@@ -57,7 +57,7 @@ Context *EnableRequest<I>::handle_get_mirror_image(int *result) {
   ldout(m_cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
 
   if (*result == 0) {
-    bufferlist::iterator iter = m_out_bl.begin();
+    auto iter = m_out_bl.cbegin();
     *result = cls_client::mirror_image_get_finish(&iter, &m_mirror_image);
   }
 
@@ -139,7 +139,7 @@ void EnableRequest<I>::send_set_mirror_image() {
     create_rados_callback<klass, &klass::handle_set_mirror_image>(this);
   m_out_bl.clear();
   int r = m_io_ctx.aio_operate(RBD_MIRRORING, comp, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 

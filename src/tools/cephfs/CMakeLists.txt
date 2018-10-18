@@ -37,3 +37,13 @@ install(TARGETS
   cephfs-table-tool
   cephfs-data-scan
   DESTINATION bin)
+
+option(WITH_CEPHFS_SHELL "install cephfs-shell" OFF)
+if(WITH_CEPHFS_SHELL)
+  if(NOT WITH_PYTHON3)
+    message(SEND_ERROR "Please enable WITH_PYTHON3 for cephfs-shell")
+  endif()
+  set(PYTHON_VERSION 3)
+  include(Distutils)
+  distutils_install_module(cephfs-shell)
+endif()

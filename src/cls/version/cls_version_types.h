@@ -20,7 +20,7 @@ struct obj_version {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(ver, bl);
     decode(tag, bl);
@@ -73,7 +73,7 @@ struct obj_version_cond {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(ver, bl);
     uint32_t c;

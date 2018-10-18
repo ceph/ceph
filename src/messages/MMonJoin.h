@@ -20,15 +20,17 @@
 #include <vector>
 using std::vector;
 
-class MMonJoin : public PaxosServiceMessage {
- public:
+class MMonJoin : public MessageInstance<MMonJoin, PaxosServiceMessage> {
+public:
+  friend factory;
+
   uuid_d fsid;
   string name;
   entity_addr_t addr;
 
-  MMonJoin() : PaxosServiceMessage(MSG_MON_JOIN, 0) {}
+  MMonJoin() : MessageInstance(MSG_MON_JOIN, 0) {}
   MMonJoin(uuid_d &f, string n, const entity_addr_t& a)
-    : PaxosServiceMessage(MSG_MON_JOIN, 0),
+    : MessageInstance(MSG_MON_JOIN, 0),
       fsid(f), name(n), addr(a)
   { }
   
@@ -49,7 +51,7 @@ public:
     encode(addr, payload, features);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     paxos_decode(p);
     decode(fsid, p);
     decode(name, p);

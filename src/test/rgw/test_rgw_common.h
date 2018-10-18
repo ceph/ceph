@@ -39,7 +39,7 @@ struct old_rgw_bucket {
     data_pool = index_pool = s;
     marker = "";
   }
-  old_rgw_bucket(const char *n) : name(n) {
+  explicit old_rgw_bucket(const char *n) : name(n) {
     data_pool = index_pool = n;
     marker = "";
   }
@@ -57,7 +57,7 @@ struct old_rgw_bucket {
     encode(tenant, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(8, 3, 3, bl);
     decode(name, bl);
     decode(data_pool, bl);
@@ -391,7 +391,7 @@ public:
     }
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(5, 3, 3, bl);
     decode(bucket.name, bl);
     decode(loc, bl);

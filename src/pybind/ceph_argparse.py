@@ -12,6 +12,7 @@ LGPL2.1.  See file COPYING.
 from __future__ import print_function
 import copy
 import errno
+import math
 import json
 import os
 import pprint
@@ -23,8 +24,9 @@ import threading
 import uuid
 
 
+# Flags are from MonCommand.h
 FLAG_MGR = 8   # command is intended for mgr
-
+FLAG_POLL = 16 # command is intended to be ran continuously by the client
 
 try:
     basestring
@@ -499,12 +501,23 @@ class CephFilepath(CephArgtype):
     Openable file
     """
     def valid(self, s, partial=False):
-        try:
-            f = open(s, 'a+')
-        except Exception as e:
-            raise ArgumentValid('can\'t open {0}: {1}'.format(s, e))
-        f.close()
+        # set self.val if the specified path is readable or writable
+        s = os.path.abspath(s)
+        if not os.access(s, os.R_OK):
+            self._validate_writable_file(s)
         self.val = s
+
+    def _validate_writable_file(self, fname):
+        if os.path.exists(fname):
+            if os.path.isfile(fname):
+                if not os.access(fname, os.W_OK):
+                    raise ArgumentValid('{0} is not writable'.format(fname))
+            else:
+                raise ArgumentValid('{0} is not file'.format(fname))
+        else:
+            dirname = os.path.dirname(fname)
+            if not os.access(dirname, os.W_OK):
+                raise ArgumentValid('cannot create file in {0}'.format(dirname))
 
     def __str__(self):
         return '<outfilename>'
@@ -999,6 +1012,9 @@ def validate(args, signature, flags=0, partial=False):
     if flags & FLAG_MGR:
         d['target'] = ('mgr','')
 
+    if flags & FLAG_POLL:
+        d['poll'] = True
+
     # Finally, success
     return d
 
@@ -1027,18 +1043,20 @@ def validate_command(sigdict, args, verbose=False):
         for cmdtag, cmd in sigdict.items():
             sig = cmd['sig']
             matched = matchnum(args, sig, partial=True)
+            if (matched >= math.floor(best_match_cnt) and
+                matched == matchnum(args, sig, partial=False)):
+                # prefer those fully matched over partial patch
+                matched += 0.5
+            if matched < best_match_cnt:
+                continue
+            if verbose:
+                print("better match: {0} > {1}: {2}:{3} ".format(
+                    matched, best_match_cnt, cmdtag, concise_sig(sig)
+                ), file=sys.stderr)
             if matched > best_match_cnt:
-                if verbose:
-                    print("better match: {0} > {1}: {2}:{3} ".format(
-                        matched, best_match_cnt, cmdtag, concise_sig(sig)
-                    ), file=sys.stderr)
                 best_match_cnt = matched
                 bestcmds = [{cmdtag: cmd}]
-            elif matched == best_match_cnt:
-                if verbose:
-                    print("equal match: {0} > {1}: {2}:{3} ".format(
-                        matched, best_match_cnt, cmdtag, concise_sig(sig)
-                    ), file=sys.stderr)
+            else:
                 bestcmds.append({cmdtag: cmd})
 
         # Sort bestcmds by number of args so we can try shortest first
@@ -1087,7 +1105,7 @@ def validate_command(sigdict, args, verbose=False):
 
         if found:
             if not valid_dict:
-                print("Invalid command:", e, file=sys.stderr)
+                print("Invalid command:", ex, file=sys.stderr)
                 print(concise_sig(sig), ': ', cmd['help'], file=sys.stderr)
         else:
             bestcmds = bestcmds[:10]
@@ -1168,16 +1186,16 @@ def find_cmd_target(childargs):
 
 
 class RadosThread(threading.Thread):
-    def __init__(self, target, *args, **kwargs):
+    def __init__(self, func, *args, **kwargs):
         self.args = args
         self.kwargs = kwargs
-        self.target = target
+        self.func = func
         self.exception = None
         threading.Thread.__init__(self)
 
     def run(self):
         try:
-            self.retval = self.target(*self.args, **self.kwargs)
+            self.retval = self.func(*self.args, **self.kwargs)
         except Exception as e:
             self.exception = e
 
@@ -1186,11 +1204,11 @@ class RadosThread(threading.Thread):
 POLL_TIME_INCR = 0.5
 
 
-def run_in_thread(target, *args, **kwargs):
+def run_in_thread(func, *args, **kwargs):
     interrupt = False
     timeout = kwargs.pop('timeout', 0)
     countdown = timeout
-    t = RadosThread(target, *args, **kwargs)
+    t = RadosThread(func, *args, **kwargs)
 
     # allow the main thread to exit (presumably, avoid a join() on this
     # subthread) before this thread terminates.  This allows SIGINT
@@ -1239,7 +1257,7 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf=b'', timeout=0,
                  verbose=False):
     """
     Send a command to a daemon using librados's
-    mon_command, osd_command, or pg_command.  Any bulk input data
+    mon_command, osd_command, mgr_command, or pg_command.  Any bulk input data
     comes in inbuf.
 
     Returns (ret, outbuf, outs); ret is the return code, outbuf is
@@ -1257,11 +1275,11 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf=b'', timeout=0,
                 print('submit {0} to osd.{1}'.format(cmd, osdid),
                       file=sys.stderr)
             ret, outbuf, outs = run_in_thread(
-                cluster.osd_command, osdid, cmd, inbuf, timeout)
+                cluster.osd_command, osdid, cmd, inbuf, timeout=timeout)
 
         elif target[0] == 'mgr':
             ret, outbuf, outs = run_in_thread(
-                cluster.mgr_command, cmd, inbuf, timeout)
+                cluster.mgr_command, cmd, inbuf, timeout=timeout)
 
         elif target[0] == 'pg':
             pgid = target[1]
@@ -1277,7 +1295,7 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf=b'', timeout=0,
                 print('submit {0} for pgid {1}'.format(cmd, pgid),
                       file=sys.stderr)
             ret, outbuf, outs = run_in_thread(
-                cluster.pg_command, pgid, cmd, inbuf, timeout)
+                cluster.pg_command, pgid, cmd, inbuf, timeout=timeout)
 
         elif target[0] == 'mon':
             if verbose:
@@ -1285,10 +1303,10 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf=b'', timeout=0,
                       file=sys.stderr)
             if len(target) < 2 or target[1] == '':
                 ret, outbuf, outs = run_in_thread(
-                    cluster.mon_command, cmd, inbuf, timeout)
+                    cluster.mon_command, cmd, inbuf, timeout=timeout)
             else:
                 ret, outbuf, outs = run_in_thread(
-                    cluster.mon_command, cmd, inbuf, timeout, target[1])
+                    cluster.mon_command, cmd, inbuf, timeout=timeout, target=target[1])
         elif target[0] == 'mds':
             mds_spec = target[1]
 
@@ -1351,7 +1369,6 @@ def json_command(cluster, target=('mon', ''), prefix=None, argdict=None,
             except:
                 # use the target we were originally given
                 pass
-
         ret, outbuf, outs = send_command_retry(cluster,
                                                target, [json.dumps(cmddict)],
                                                inbuf, timeout, verbose)

@@ -56,7 +56,7 @@ struct Page {
     bl.append(buffer::copy(data, page_size));
     encode(offset, bl);
   }
-  void decode(bufferlist::iterator &p, size_t page_size) {
+  void decode(bufferlist::const_iterator &p, size_t page_size) {
     using ceph::decode;
     p.copy(page_size, data);
     decode(offset, p);
@@ -186,7 +186,7 @@ class PageSet {
       length -= c;
     }
     // make sure we sized the vector correctly
-    assert(out == range.rend());
+    ceph_assert(out == range.rend());
   }
 
   // return all allocated pages that intersect the range [offset,length)
@@ -214,9 +214,9 @@ class PageSet {
     for (auto p = pages.rbegin(); p != pages.rend(); ++p)
       p->encode(bl, page_size);
   }
-  void decode(bufferlist::iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
     using ceph::decode;
-    assert(empty());
+    ceph_assert(empty());
     decode(page_size, p);
     unsigned count;
     decode(count, p);

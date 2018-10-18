@@ -8,7 +8,7 @@
 #include "rgw_rest_user.h"
 
 #include "include/str_list.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -23,23 +23,24 @@ public:
 
   void execute() override;
 
-  const string name() override { return "get_user_info"; }
+  const char* name() const override { return "get_user_info"; }
 };
 
 void RGWOp_User_Info::execute()
 {
   RGWUserAdminOpState op_state;
 
-  std::string uid_str;
+  std::string uid_str, access_key_str;
   bool fetch_stats;
   bool sync_stats;
 
   RESTArgs::get_string(s, "uid", uid_str, &uid_str);
+  RESTArgs::get_string(s, "access-key", access_key_str, &access_key_str);
 
   // if uid was not supplied in rest argument, error out now, otherwise we'll
   // end up initializing anonymous user, for which keys.init will eventually
   // return -EACESS
-  if (uid_str.empty()){
+  if (uid_str.empty() && access_key_str.empty()){
     http_ret=-EINVAL;
     return;
   }
@@ -51,6 +52,7 @@ void RGWOp_User_Info::execute()
   RESTArgs::get_bool(s, "sync", false, &sync_stats);
 
   op_state.set_user_id(uid);
+  op_state.set_access_key(access_key_str);
   op_state.set_fetch_stats(fetch_stats);
   op_state.set_sync_stats(sync_stats);
 
@@ -68,7 +70,7 @@ public:
 
   void execute() override;
 
-  const string name() override { return "create_user"; }
+  const char* name() const override { return "create_user"; }
 };
 
 void RGWOp_User_Create::execute()
@@ -151,37 +153,6 @@ void RGWOp_User_Create::execute()
   if (gen_key)
     op_state.set_generate_key();
 
-  RGWQuotaInfo bucket_quota;
-  RGWQuotaInfo user_quota;
-
-  if (s->cct->_conf->rgw_bucket_default_quota_max_objects >= 0) {
-    bucket_quota.max_objects = s->cct->_conf->rgw_bucket_default_quota_max_objects;
-    bucket_quota.enabled = true;
-  }
-
-  if (s->cct->_conf->rgw_bucket_default_quota_max_size >= 0) {
-    bucket_quota.max_size = s->cct->_conf->rgw_bucket_default_quota_max_size;
-    bucket_quota.enabled = true;
-  }
-
-  if (s->cct->_conf->rgw_user_default_quota_max_objects >= 0) {
-    user_quota.max_objects = s->cct->_conf->rgw_user_default_quota_max_objects;
-    user_quota.enabled = true;
-  }
-
-  if (s->cct->_conf->rgw_user_default_quota_max_size >= 0) {
-    user_quota.max_size = s->cct->_conf->rgw_user_default_quota_max_size;
-    user_quota.enabled = true;
-  }
-
-  if (bucket_quota.enabled) {
-    op_state.set_bucket_quota(bucket_quota);
-  }
-
-  if (user_quota.enabled) {
-    op_state.set_user_quota(user_quota);
-  }
-
   http_ret = RGWUserAdminOp_User::create(store, op_state, flusher);
 }
 
@@ -196,7 +167,7 @@ public:
 
   void execute() override;
 
-  const string name() override { return "modify_user"; }
+  const char* name() const override { return "modify_user"; }
 };
 
 void RGWOp_User_Modify::execute()
@@ -212,7 +183,7 @@ void RGWOp_User_Modify::execute()
   bool gen_key;
   bool suspended;
   bool system;
-
+  bool email_set;
   bool quota_set;
   int32_t max_buckets;
 
@@ -222,7 +193,7 @@ void RGWOp_User_Modify::execute()
   rgw_user uid(uid_str);
 
   RESTArgs::get_string(s, "display-name", display_name, &display_name);
-  RESTArgs::get_string(s, "email", email, &email);
+  RESTArgs::get_string(s, "email", email, &email, &email_set);
   RESTArgs::get_string(s, "access-key", access_key, &access_key);
   RESTArgs::get_string(s, "secret-key", secret_key, &secret_key);
   RESTArgs::get_string(s, "user-caps", caps, &caps);
@@ -241,7 +212,10 @@ void RGWOp_User_Modify::execute()
 
   op_state.set_user_id(uid);
   op_state.set_display_name(display_name);
-  op_state.set_user_email(email);
+
+  if (email_set)
+    op_state.set_user_email(email);
+
   op_state.set_caps(caps);
   op_state.set_access_key(access_key);
   op_state.set_secret_key(secret_key);
@@ -282,7 +256,7 @@ public:
 
   void execute() override;
 
-  const string name() override { return "remove_user"; }
+  const char* name() const override { return "remove_user"; }
 };
 
 void RGWOp_User_Remove::execute()
@@ -317,7 +291,7 @@ public:
 
   void execute() override;
 
-  const string name() override { return "create_subuser"; }
+  const char* name() const override { return "create_subuser"; }
 };
 
 void RGWOp_Subuser_Create::execute()
@@ -387,7 +361,7 @@ public:
 
   void execute() override;
 
-  const string name() override { return "modify_subuser"; }
+  const char* name() const override { return "modify_subuser"; }
 };
 
 void RGWOp_Subuser_Modify::execute()
@@ -448,7 +422,7 @@ public:
 
   void execute() override;
 
-  const string name() override { return "remove_subuser"; }
+  const char* name() const override { return "remove_subuser"; }
 };
 
 void RGWOp_Subuser_Remove::execute()
@@ -485,7 +459,7 @@ public:
 
   void execute() override;
 
-  const string name() override { return "create_access_key"; }
+  const char* name() const override { return "create_access_key"; }
 };
 
 void RGWOp_Key_Create::execute()
@@ -541,7 +515,7 @@ public:
 
   void execute() override;
 
-  const string name() override { return "remove_access_key"; }
+  const char* name() const override { return "remove_access_key"; }
 };
 
 void RGWOp_Key_Remove::execute()
@@ -588,7 +562,7 @@ public:
 
   void execute() override;
 
-  const string name() override { return "add_user_caps"; }
+  const char* name() const override { return "add_user_caps"; }
 };
 
 void RGWOp_Caps_Add::execute()
@@ -620,7 +594,7 @@ public:
 
   void execute() override;
 
-  const string name() override { return "remove_user_caps"; }
+  const char* name() const override { return "remove_user_caps"; }
 };
 
 void RGWOp_Caps_Remove::execute()
@@ -671,7 +645,7 @@ public:
 
   void execute() override;
 
-  const string name() override { return "get_quota_info"; }
+  const char* name() const override { return "get_quota_info"; }
 };
 
 
@@ -743,7 +717,7 @@ public:
 
   void execute() override;
 
-  const string name() override { return "set_quota_info"; }
+  const char* name() const override { return "set_quota_info"; }
 };
 
 /**
@@ -892,11 +866,14 @@ void RGWOp_Quota_Set::execute()
         old_quota = &info.bucket_quota;
       }
 
-      int64_t old_max_size_kb = rgw_rounded_kb(old_quota->max_size);
-      int64_t max_size_kb;
       RESTArgs::get_int64(s, "max-objects", old_quota->max_objects, &quota.max_objects);
-      RESTArgs::get_int64(s, "max-size-kb", old_max_size_kb, &max_size_kb);
-      quota.max_size = max_size_kb * 1024;
+      RESTArgs::get_int64(s, "max-size", old_quota->max_size, &quota.max_size);
+      int64_t max_size_kb;
+      bool has_max_size_kb = false;
+      RESTArgs::get_int64(s, "max-size-kb", 0, &max_size_kb, &has_max_size_kb);
+      if (has_max_size_kb) {
+        quota.max_size = max_size_kb * 1024;
+      }
       RESTArgs::get_bool(s, "enabled", old_quota->enabled, &quota.enabled);
     }
 

@@ -18,28 +18,31 @@
 #include "msg/Message.h"
 #include "include/types.h"
 
-class MExportDirDiscover : public Message {
+class MExportDirDiscover : public MessageInstance<MExportDirDiscover> {
+public:
+  friend factory;
+private:
   mds_rank_t from = -1;
   dirfrag_t dirfrag;
   filepath path;
 
  public:
-  mds_rank_t get_source_mds() { return from; }
-  inodeno_t get_ino() { return dirfrag.ino; }
-  dirfrag_t get_dirfrag() { return dirfrag; }
-  filepath& get_path() { return path; }
+  mds_rank_t get_source_mds() const { return from; }
+  inodeno_t get_ino() const { return dirfrag.ino; }
+  dirfrag_t get_dirfrag() const { return dirfrag; }
+  const filepath& get_path() const { return path; }
 
   bool started;
 
+protected:
   MExportDirDiscover() :     
-    Message(MSG_MDS_EXPORTDIRDISCOVER),
+    MessageInstance(MSG_MDS_EXPORTDIRDISCOVER),
     started(false) { }
   MExportDirDiscover(dirfrag_t df, filepath& p, mds_rank_t f, uint64_t tid) :
-    Message(MSG_MDS_EXPORTDIRDISCOVER),
+    MessageInstance(MSG_MDS_EXPORTDIRDISCOVER),
     from(f), dirfrag(df), path(p), started(false) {
     set_tid(tid);
   }
-private:
   ~MExportDirDiscover() override {}
 
 public:
@@ -49,7 +52,7 @@ public:
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(from, p);
     decode(dirfrag, p);
     decode(path, p);

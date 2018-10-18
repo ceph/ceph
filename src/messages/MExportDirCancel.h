@@ -18,18 +18,21 @@
 #include "msg/Message.h"
 #include "include/types.h"
 
-class MExportDirCancel : public Message {
+class MExportDirCancel : public MessageInstance<MExportDirCancel> {
+public:
+  friend factory;
+private:
   dirfrag_t dirfrag;
 
  public:
-  dirfrag_t get_dirfrag() { return dirfrag; }
+  dirfrag_t get_dirfrag() const { return dirfrag; }
 
-  MExportDirCancel() : Message(MSG_MDS_EXPORTDIRCANCEL) {}
+protected:
+  MExportDirCancel() : MessageInstance(MSG_MDS_EXPORTDIRCANCEL) {}
   MExportDirCancel(dirfrag_t df, uint64_t tid) :
-    Message(MSG_MDS_EXPORTDIRCANCEL), dirfrag(df) {
+    MessageInstance(MSG_MDS_EXPORTDIRCANCEL), dirfrag(df) {
     set_tid(tid);
   }
-private:
   ~MExportDirCancel() override {}
 
 public:
@@ -43,7 +46,7 @@ public:
     encode(dirfrag, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(dirfrag, p);
   }
 };

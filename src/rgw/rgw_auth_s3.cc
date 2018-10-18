@@ -243,7 +243,8 @@ static inline int parse_v4_query_string(const req_info& info,              /* in
                                         boost::string_view& credential,    /* out */
                                         boost::string_view& signedheaders, /* out */
                                         boost::string_view& signature,     /* out */
-                                        boost::string_view& date)          /* out */
+                                        boost::string_view& date,          /* out */
+                                        boost::string_view& sessiontoken)  /* out */
 {
   /* auth ships with req params ... */
 
@@ -289,10 +290,16 @@ static inline int parse_v4_query_string(const req_info& info,              /* in
     return -EPERM;
   }
 
+  if (info.args.exists("X-Amz-Security-Token")) {
+    sessiontoken = info.args.get("X-Amz-Security-Token");
+    if (sessiontoken.size() == 0) {
+      return -EPERM;
+    }
+  }
+
   return 0;
 }
 
-namespace {
 static bool get_next_token(const boost::string_view& s,
                            size_t& pos,
                            const char* const delims,
@@ -341,13 +348,13 @@ get_str_vec(const boost::string_view& str)
   const char delims[] = ";,= \t";
   return get_str_vec<ExpectedStrNum>(str, delims);
 }
-};
 
 static inline int parse_v4_auth_header(const req_info& info,               /* in */
                                        boost::string_view& credential,     /* out */
                                        boost::string_view& signedheaders,  /* out */
                                        boost::string_view& signature,      /* out */
-                                       boost::string_view& date)           /* out */
+                                       boost::string_view& date,           /* out */
+                                       boost::string_view& sessiontoken)   /* out */
 {
   boost::string_view input(info.env->get("HTTP_AUTHORIZATION", ""));
   try {
@@ -408,6 +415,10 @@ static inline int parse_v4_auth_header(const req_info& info,               /* in
     return -ERR_REQUEST_TIME_SKEWED;
   }
 
+  if (info.env->exists("HTTP_X_AMZ_SECURITY_TOKEN")) {
+    sessiontoken = info.env->get("HTTP_X_AMZ_SECURITY_TOKEN");
+  }
+
   return 0;
 }
 
@@ -417,16 +428,17 @@ int parse_credentials(const req_info& info,                     /* in */
                       boost::string_view& signedheaders,        /* out */
                       boost::string_view& signature,            /* out */
                       boost::string_view& date,                 /* out */
+                      boost::string_view& session_token,        /* out */
                       const bool using_qs)                      /* in */
 {
   boost::string_view credential;
   int ret;
   if (using_qs) {
     ret = parse_v4_query_string(info, credential, signedheaders,
-                                signature, date);
+                                signature, date, session_token);
   } else {
     ret = parse_v4_auth_header(info, credential, signedheaders,
-                               signature, date);
+                               signature, date, session_token);
   }
 
   if (ret < 0) {
@@ -455,45 +467,6 @@ int parse_credentials(const req_info& info,                     /* in */
   dout(10) << "credential scope = " << credential_scope << dendl;
 
   return 0;
-}
-
-static inline bool char_needs_aws4_escaping(const char c)
-{
-  if ((c >= 'a' && c <= 'z') ||
-      (c >= 'A' && c <= 'Z') ||
-      (c >= '0' && c <= '9')) {
-    return false;
-  }
-
-  switch (c) {
-    case '-':
-    case '_':
-    case '.':
-    case '~':
-      return false;
-  }
-  return true;
-}
-
-static inline std::string aws4_uri_encode(const std::string& src)
-{
-  std::string result;
-
-  for (const std::string::value_type c : src) {
-    if (char_needs_aws4_escaping(c)) {
-      rgw_uri_escape_char(c, result);
-    } else {
-      result.push_back(c);
-    }
-  }
-
-  return result;
-}
-
-static inline std::string aws4_uri_recode(const boost::string_view& src)
-{
-  std::string decoded = url_decode(src);
-  return aws4_uri_encode(decoded);
 }
 
 std::string get_v4_canonical_qs(const req_info& info, const bool using_qs)
@@ -536,7 +509,7 @@ std::string get_v4_canonical_qs(const req_info& info, const bool using_qs)
        * way. */
       canonical_qs_map[key.to_string()] = val.to_string();
     } else {
-      canonical_qs_map[aws4_uri_recode(key)] = aws4_uri_recode(val);
+      canonical_qs_map[aws4_uri_recode(key, true)] = aws4_uri_recode(val, true);
     }
   }
 
@@ -1036,7 +1009,7 @@ size_t AWSv4ComplMulti::recv_body(char* const buf, const size_t buf_max)
   return buf_pos;
 }
 
-void AWSv4ComplMulti::modify_request_state(req_state* const s_rw)
+void AWSv4ComplMulti::modify_request_state(const DoutPrefixProvider* dpp, req_state* const s_rw)
 {
   const char* const decoded_length = \
     s_rw->info.env->get("HTTP_X_AMZ_DECODED_CONTENT_LENGTH");
@@ -1048,7 +1021,7 @@ void AWSv4ComplMulti::modify_request_state(req_state* const s_rw)
     s_rw->content_length = parse_content_length(decoded_length);
 
     if (s_rw->content_length < 0) {
-      ldout(cct, 10) << "negative AWSv4's content length, aborting" << dendl;
+      ldpp_dout(dpp, 10) << "negative AWSv4's content length, aborting" << dendl;
       throw -EINVAL;
     }
   }
@@ -1102,7 +1075,7 @@ size_t AWSv4ComplSingle::recv_body(char* const buf, const size_t max)
   return received;
 }
 
-void AWSv4ComplSingle::modify_request_state(req_state* const s_rw)
+void AWSv4ComplSingle::modify_request_state(const DoutPrefixProvider* dpp, req_state* const s_rw)
 {
   /* Install the filter over rgw::io::RestfulClient. */
   AWS_AUTHv4_IO(s_rw)->add_filter(

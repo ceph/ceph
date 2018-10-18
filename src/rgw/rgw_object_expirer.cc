@@ -29,7 +29,6 @@
 #include "rgw_log.h"
 #include "rgw_formats.h"
 #include "rgw_usage.h"
-#include "rgw_replica_log.h"
 #include "rgw_object_expirer_core.h"
 
 #define dout_subsys ceph_subsys_rgw
@@ -76,7 +75,7 @@ int main(const int argc, const char **argv)
     }
   }
 
-  if (g_conf->daemonize) {
+  if (g_conf()->daemonize) {
     global_init_daemonize(g_ceph_context);
   }
 

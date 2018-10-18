@@ -1,5 +1,5 @@
 =========================
- Tracing Ceph With BlkKin
+ Tracing Ceph With Blkin
 =========================
 
 Ceph can use Blkin, a library created by Marios Kogias and others,
@@ -16,7 +16,7 @@ in realtime. The LTTng traces can then be visualized with Twitter's
 Zipkin_.
 
 .. _Dapper: http://static.googleusercontent.com/media/research.google.com/el//pubs/archive/36356.pdf
-.. _Zipkin: http://zipkin.io/
+.. _Zipkin: https://zipkin.io/
 
 
 Installing Blkin
@@ -48,10 +48,15 @@ Ceph.::
   export BLKIN_CFLAGS=-Iblkin/
   export BLKIN_LIBS=-lzipkin-cpp
 
-Since there are separate lttng and blkin changes to Ceph, you may
+Blkin support in Ceph is disabled by default, so you may
 want to configure with something like::
 
-  ./configure --with-blkin --without-lttng --with-debug
+  ./do_cmake -DWITH_BLKIN=ON
+
+Config option for blkin must be set to true in ceph.conf to get
+traces from rbd through OSDC and OSD::
+
+  rbd_blkin_trace_all = true
 
 
 Testing Blkin
@@ -59,8 +64,8 @@ Testing Blkin
 
 It's easy to test Ceph's Blkin tracing. Let's assume you don't have
 Ceph already running, and you compiled Ceph with Blkin support but
-you did't install it. Then launch Ceph with the ``vstart.sh`` script
-in Ceph's src directgory so you can see the possible tracepoints.::
+you didn't install it. Then launch Ceph with the ``vstart.sh`` script
+in Ceph's src directory so you can see the possible tracepoints.::
 
   cd src
   OSD=3 MON=3 RGW=1 ./vstart.sh -n
@@ -72,13 +77,15 @@ You'll see something like the following:::
   -------------
   PID: 8987 - Name: ./ceph-osd
         zipkin:timestamp (loglevel: TRACE_WARNING (4)) (type: tracepoint)
-        zipkin:keyval (loglevel: TRACE_WARNING (4)) (type: tracepoint)
-        ust_baddr_statedump:soinfo (loglevel: TRACE_DEBUG_LINE (13)) (type: tracepoint)
+        zipkin:keyval_integer (loglevel: TRACE_WARNING (4)) (type: tracepoint)
+        zipkin:keyval_string (loglevel: TRACE_WARNING (4)) (type: tracepoint)
+        lttng_ust_tracelog:TRACE_DEBUG (loglevel: TRACE_DEBUG (14)) (type: tracepoint)
 
   PID: 8407 - Name: ./ceph-mon
         zipkin:timestamp (loglevel: TRACE_WARNING (4)) (type: tracepoint)
-        zipkin:keyval (loglevel: TRACE_WARNING (4)) (type: tracepoint)
-        ust_baddr_statedump:soinfo (loglevel: TRACE_DEBUG_LINE (13)) (type: tracepoint)
+        zipkin:keyval_integer (loglevel: TRACE_WARNING (4)) (type: tracepoint)
+        zipkin:keyval_string (loglevel: TRACE_WARNING (4)) (type: tracepoint)
+        lttng_ust_tracelog:TRACE_DEBUG (loglevel: TRACE_DEBUG (14)) (type: tracepoint)
 
   ...
 
@@ -90,7 +97,8 @@ Start up an LTTng session and enable the tracepoints.::
 
   lttng create blkin-test
   lttng enable-event --userspace zipkin:timestamp
-  lttng enable-event --userspace zipkin:keyval
+  lttng enable-event --userspace zipkin:keyval_integer
+  lttng enable-event --userspace zipkin:keyval_string
   lttng start
 
 Then start up Ceph again.::
@@ -101,9 +109,9 @@ You may want to check that ceph is up.::
 
   ./ceph status
 
-Now put something in usin rados, check that it made it, get it back, and remove it.::
+Now put something in using rados, check that it made it, get it back, and remove it.::
 
-  ./rados mkpool test-blkin
+  ./ceph osd pool create test-blkin 8
   ./rados put test-object-1 ./vstart.sh --pool=test-blkin
   ./rados -p test-blkin ls
   ./ceph osd map test-blkin test-object-1
@@ -120,38 +128,32 @@ Then stop the LTTng session and see what was collected.::
 
 You'll see something like:::
 
-  [13:09:07.755054973] (+?.?????????) scruffy zipkin:timestamp: { cpu_id = 5 }, { trace_name = "Main", service_name = "MOSDOp", port_no = 0, ip = "0.0.0.0", trace_id = 7492589359882233221, span_id = 2694140257089376129, parent_span_id = 0, event = "Message allocated" }
-  [13:09:07.755071569] (+0.000016596) scruffy zipkin:keyval: { cpu_id = 5 }, { trace_name = "Main", service_name = "MOSDOp", port_no = 0, ip = "0.0.0.0", trace_id = 7492589359882233221, span_id = 2694140257089376129, parent_span_id = 0, key = "Type", val = "MOSDOp" }
-  [13:09:07.755074217] (+0.000002648) scruffy zipkin:keyval: { cpu_id = 5 }, { trace_name = "Main", service_name = "MOSDOp", port_no = 0, ip = "0.0.0.0", trace_id = 7492589359882233221, span_id = 2694140257089376129, parent_span_id = 0, key = "Reqid", val = "client.4126.0:1" }
-  ...
+  [15:33:08.884275486] (+0.000225472) ubuntu zipkin:timestamp: { cpu_id = 53 }, { trace_name = "op", service_name = "Objecter", port_no = 0, ip = "0.0.0.0", trace_id = 5485970765435202833, span_id = 5485970765435202833, parent_span_id = 0, event = "osd op reply" }
+  [15:33:08.884614135] (+0.000002839) ubuntu zipkin:keyval_integer: { cpu_id = 10 }, { trace_name = "", service_name = "Messenger", port_no = 6805, ip = "0.0.0.0", trace_id = 7381732770245808782, span_id = 7387710183742669839, parent_span_id = 1205040135881905799, key = "tid", val = 2 }
+  [15:33:08.884616431] (+0.000002296) ubuntu zipkin:keyval_string: { cpu_id = 10 }, { trace_name = "", service_name = "Messenger", port_no = 6805, ip = "0.0.0.0", trace_id = 7381732770245808782, span_id = 7387710183742669839, parent_span_id = 1205040135881905799, key = "entity type", val = "client" }
 
 
 Install  Zipkin
 ===============
 One of the points of using Blkin is so that you can look at the traces
 using Zipkin. Users should run Zipkin as a tracepoints collector and
-also a web service, which means users need to run three services,
-zipkin-collector, zipkin-query and zipkin-web.
+also a web service. The executable jar runs a collector on port 9410 and
+the web interface on port 9411
 
 Download Zipkin Package::
 
-  wget https://github.com/twitter/zipkin/archive/1.1.0.tar.gz
-  tar zxf 1.1.0.tar.gz
-  cd zipkin-1.1.0
-  bin/collector cassandra &
-  bin/query cassandra &
-  bin/web &
-
-Check Zipkin::
-
-  bin/test
-  Browse http://${zipkin-web-ip}:8080
+  git clone https://github.com/openzipkin/zipkin && cd zipkin
+  wget -O zipkin.jar 'https://search.maven.org/remote_content?g=io.zipkin.java&a=zipkin-server&v=LATEST&c=exec'
+  java -jar zipkin.jar
 
 
 Show Ceph's Blkin Traces in Zipkin-web
 ======================================
-Blkin provides a script which translates lttng result to Zipkin
-(Dapper) semantics.
+Download babeltrace-zipkin project. This project takes the traces
+generated with blkin and sends them to a Zipkin collector using scribe::
+
+  git clone https://github.com/vears91/babeltrace-zipkin
+  cd babeltrace-zipkin
 
 Send lttng data to Zipkin::
 
@@ -163,5 +165,5 @@ Example::
 
 Check Ceph traces on webpage::
 
-  Browse http://${zipkin-web-ip}:8080
+  Browse http://${zipkin-collector-ip}:9411
   Click "Find traces"

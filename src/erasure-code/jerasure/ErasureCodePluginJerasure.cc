@@ -71,8 +71,6 @@ int ErasureCodePluginJerasure::factory(const std::string& directory,
     return 0;
 }
 
-#ifndef BUILDING_FOR_EMBEDDED
-
 const char *__erasure_code_version() { return CEPH_GIT_NICE_VER; }
 
 int __erasure_code_init(char *plugin_name, char *directory)
@@ -85,5 +83,3 @@ int __erasure_code_init(char *plugin_name, char *directory)
   }
   return instance.add(plugin_name, new ErasureCodePluginJerasure());
 }
-
-#endif

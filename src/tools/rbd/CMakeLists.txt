@@ -8,6 +8,7 @@ set(rbd_srcs
   action/Bench.cc
   action/Children.cc
   action/Clone.cc
+  action/Config.cc
   action/Copy.cc
   action/Create.cc
   action/Device.cc
@@ -26,8 +27,10 @@ set(rbd_srcs
   action/List.cc
   action/Lock.cc
   action/MergeDiff.cc
+  action/Migration.cc
   action/MirrorPool.cc
   action/MirrorImage.cc
+  action/Namespace.cc
   action/Nbd.cc
   action/ObjectMap.cc
   action/Pool.cc

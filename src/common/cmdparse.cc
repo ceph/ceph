@@ -12,9 +12,11 @@
  *
  */
 
-#include "json_spirit/json_spirit.h"
+#include "common/cmdparse.h"
+#include "common/Formatter.h"
 #include "common/debug.h"
-
+#include "common/strtol.h"
+#include "json_spirit/json_spirit.h"
 
 /**
  * Given a cmddesc like "foo baz name=bar,type=CephString",
@@ -135,7 +137,7 @@ dump_cmddesc_to_json(Formatter *jf,
 
 void cmdmap_dump(const cmdmap_t &cmdmap, Formatter *f)
 {
-  assert(f != nullptr);
+  ceph_assert(f != nullptr);
 
   class dump_visitor : public boost::static_visitor<void>
   {
@@ -458,7 +460,7 @@ bool validate_str_arg(std::string_view value,
     }
   } else if (type == "CephChoices") {
     auto choices = desc.find("strings");
-    assert(choices != end(desc));
+    ceph_assert(choices != end(desc));
     auto strings = choices->second;
     if (find_first_in(strings, "|", [=](auto choice) {
 	  return (value == choice);
@@ -487,19 +489,23 @@ bool validate_arg(CephContext* cct,
 		  std::ostream& os)
 {
   Value v;
-  if (!cmd_getval(cct, cmdmap, string(name), v)) {
-    if constexpr (is_vector) {
-      // an empty list is acceptable.
-      return true;
-    } else {
-      if (auto req = desc.find("req");
-	  req != end(desc) && req->second == "false") {
-	return true;
-      } else {
-	os << "missing required parameter: '" << name << "'";
-	return false;
+  try {
+    if (!cmd_getval(cct, cmdmap, string(name), v)) {
+      if constexpr (is_vector) {
+	  // an empty list is acceptable.
+	  return true;
+	} else {
+	if (auto req = desc.find("req");
+	    req != end(desc) && req->second == "false") {
+	  return true;
+	} else {
+	  os << "missing required parameter: '" << name << "'";
+	  return false;
+	}
       }
     }
+  } catch (const bad_cmd_get& e) {
+    return false;
   }
   auto validate = [&](const T& value) {
     if constexpr (is_same_v<std::string, T>) {
@@ -527,8 +533,8 @@ bool validate_cmd(CephContext* cct,
     if (arg_desc.empty()) {
       return false;
     }
-    assert(arg_desc.count("name"));
-    assert(arg_desc.count("type"));
+    ceph_assert(arg_desc.count("name"));
+    ceph_assert(arg_desc.count("type"));
     auto name = arg_desc["name"];
     auto type = arg_desc["type"];
     if (arg_desc.count("n")) {

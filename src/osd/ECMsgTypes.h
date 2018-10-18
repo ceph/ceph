@@ -78,7 +78,7 @@ struct ECSubWrite {
     backfill_or_async_recovery = other.backfill_or_async_recovery;
   }
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<ECSubWrite*>& o);
 private:
@@ -96,7 +96,7 @@ struct ECSubWriteReply {
   bool applied;
   ECSubWriteReply() : tid(0), committed(false), applied(false) {}
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<ECSubWriteReply*>& o);
 };
@@ -109,7 +109,7 @@ struct ECSubRead {
   set<hobject_t> attrs_to_read;
   map<hobject_t, vector<pair<int, int>>> subchunks;
   void encode(bufferlist &bl, uint64_t features) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<ECSubRead*>& o);
 };
@@ -122,7 +122,7 @@ struct ECSubReadReply {
   map<hobject_t, map<string, bufferlist>> attrs_read;
   map<hobject_t, int> errors;
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<ECSubReadReply*>& o);
 };

@@ -13,7 +13,7 @@
 
 #include "rgw_cr_rados.h"
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include <boost/asio/yield.hpp>
 
 #define dout_subsys ceph_subsys_rgw
@@ -52,7 +52,7 @@ void RGWMetadataLogData::encode(bufferlist& bl) const {
   ENCODE_FINISH(bl);
 }
 
-void RGWMetadataLogData::decode(bufferlist::iterator& bl) {
+void RGWMetadataLogData::decode(bufferlist::const_iterator& bl) {
    DECODE_START(1, bl);
    decode(read_version, bl);
    decode(write_version, bl);
@@ -319,7 +319,7 @@ public:
     delete data;
   }
 
-  virtual string get_marker(void *handle) {
+  virtual string get_marker(void *handle) override {
     iter_data *data = static_cast<iter_data *>(handle);
 
     if (data->iter != data->sections.end()) {
@@ -364,8 +364,18 @@ int read_history(RGWRados *store, RGWMetadataLogHistory *state,
   if (ret < 0) {
     return ret;
   }
+  if (bl.length() == 0) {
+    /* bad history object, remove it */
+    rgw_raw_obj obj(pool, oid);
+    ret = store->delete_system_obj(obj);
+    if (ret < 0) {
+      ldout(store->ctx(), 0) << "ERROR: meta history is empty, but cannot remove it (" << cpp_strerror(-ret) << ")" << dendl;
+      return ret;
+    }
+    return -ENOENT;
+  }
   try {
-    auto p = bl.begin();
+    auto p = bl.cbegin();
     state->decode(p);
   } catch (buffer::error& e) {
     ldout(store->ctx(), 1) << "failed to decode the mdlog history: "
@@ -540,7 +550,7 @@ Cursor find_oldest_period(RGWRados *store)
       }
       ldout(cct, 20) << "find_oldest_period advancing to "
           "predecessor period " << predecessor << dendl;
-      assert(cursor.has_prev());
+      ceph_assert(cursor.has_prev());
     }
     cursor.prev();
   }
@@ -779,6 +789,38 @@ int RGWMetadataManager::put(string& metadata_key, bufferlist& bl,
   return ret;
 }
 
+int RGWMetadataManager::prepare_mutate(RGWRados *store,
+                                       rgw_pool& pool, const string& oid,
+                                       const real_time& mtime,
+                                       RGWObjVersionTracker *objv_tracker,
+                                       RGWMetadataHandler::sync_type_t sync_mode)
+{
+  bufferlist bl;
+  real_time orig_mtime;
+  RGWObjectCtx obj_ctx(store);
+  int ret = rgw_get_system_obj(store, obj_ctx, pool, oid,
+                               bl, objv_tracker, &orig_mtime,
+                               nullptr, nullptr);
+  if (ret < 0 && ret != -ENOENT) {
+    return ret;
+  }
+  if (ret != -ENOENT &&
+      !RGWMetadataHandler::check_versions(objv_tracker->read_version, orig_mtime,
+                                          objv_tracker->write_version, mtime, sync_mode)) {
+    return STATUS_NO_APPLY;
+  }
+
+  if (objv_tracker->write_version.tag.empty()) {
+    if (objv_tracker->read_version.tag.empty()) {
+      objv_tracker->generate_new_write_ver(store->ctx());
+    } else {
+      objv_tracker->write_version = objv_tracker->read_version;
+      objv_tracker->write_version.ver++;
+    }
+  }
+  return 0;
+}
+
 int RGWMetadataManager::remove(string& metadata_key)
 {
   RGWMetadataHandler *handler;
@@ -911,7 +953,7 @@ void RGWMetadataManager::dump_log_entry(cls_log_entry& entry, Formatter *f)
 
   try {
     RGWMetadataLogData log_data;
-    bufferlist::iterator iter = entry.data.begin();
+    auto iter = entry.data.cbegin();
     decode(log_data, iter);
 
     encode_json("data", log_data, f);
@@ -951,7 +993,7 @@ int RGWMetadataManager::pre_modify(RGWMetadataHandler *handler, string& section,
   bufferlist logbl;
   encode(log_data, logbl);
 
-  assert(current_log); // must have called init()
+  ceph_assert(current_log); // must have called init()
   int ret = current_log->add_entry(handler, section, key, logbl);
   if (ret < 0)
     return ret;
@@ -970,7 +1012,7 @@ int RGWMetadataManager::post_modify(RGWMetadataHandler *handler, const string& s
   bufferlist logbl;
   encode(log_data, logbl);
 
-  assert(current_log); // must have called init()
+  ceph_assert(current_log); // must have called init()
   int r = current_log->add_entry(handler, section, key, logbl);
   if (ret < 0)
     return ret;

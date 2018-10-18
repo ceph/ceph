@@ -25,10 +25,7 @@
 
 #include "include/types.h"
 #include "common/Clock.h"
-#include "msg/Message.h"
 #include "mds/MDSMap.h"
-
-#include "common/config.h"
 
 #include "include/CompatSet.h"
 #include "include/ceph_features.h"
@@ -47,14 +44,8 @@ class health_check_map_t;
 class Filesystem
 {
 public:
-  Filesystem()
-    :
-      fscid(FS_CLUSTER_ID_NONE)
-  {
-  }
-
   void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::iterator& p);
+  void decode(bufferlist::const_iterator& p);
 
   void dump(Formatter *f) const;
   void print(std::ostream& out) const;
@@ -76,19 +67,19 @@ public:
     return false;
   }
 
-  fs_cluster_id_t fscid;
+  fs_cluster_id_t fscid = FS_CLUSTER_ID_NONE;
   MDSMap mds_map;
 };
 WRITE_CLASS_ENCODER_FEATURES(Filesystem)
 
 class FSMap {
 protected:
-  epoch_t epoch;
-  uint64_t next_filesystem_id;
-  fs_cluster_id_t legacy_client_fscid;
+  epoch_t epoch = 0;
+  uint64_t next_filesystem_id = FS_CLUSTER_ID_ANONYMOUS + 1;
+  fs_cluster_id_t legacy_client_fscid = FS_CLUSTER_ID_NONE;
   CompatSet compat;
-  bool enable_multiple;
-  bool ever_enabled_multiple; // < the cluster had multiple MDSes enabled once
+  bool enable_multiple = false;
+  bool ever_enabled_multiple = false; // < the cluster had multiple MDSes enabled once
 
   std::map<fs_cluster_id_t, std::shared_ptr<Filesystem> > filesystems;
 
@@ -103,14 +94,9 @@ protected:
 public:
 
   friend class MDSMonitor;
+  friend class PaxosFSMap;
 
-  FSMap() 
-    : epoch(0),
-      next_filesystem_id(FS_CLUSTER_ID_ANONYMOUS + 1),
-      legacy_client_fscid(FS_CLUSTER_ID_NONE),
-      compat(get_mdsmap_compat_set_default()),
-      enable_multiple(false), ever_enabled_multiple(false)
-  { }
+  FSMap() : compat(MDSMap::get_compat_set_default()) {}
 
   FSMap(const FSMap &rhs)
     :
@@ -168,7 +154,7 @@ public:
 
   void set_legacy_client_fscid(fs_cluster_id_t fscid)
   {
-    assert(fscid == FS_CLUSTER_ID_NONE || filesystems.count(fscid));
+    ceph_assert(fscid == FS_CLUSTER_ID_NONE || filesystems.count(fscid));
     legacy_client_fscid = fscid;
   }
 
@@ -305,9 +291,9 @@ public:
    * Caller must already have validated all arguments vs. the existing
    * FSMap and OSDMap contents.
    */
-  void create_filesystem(std::string_view name,
-                         int64_t metadata_pool, int64_t data_pool,
-                         uint64_t features);
+  std::shared_ptr<Filesystem> create_filesystem(
+      std::string_view name, int64_t metadata_pool,
+      int64_t data_pool, uint64_t features);
 
   /**
    * Remove the filesystem (it must exist).  Caller should already
@@ -349,7 +335,7 @@ public:
     if (mds_roles.at(who) == FS_CLUSTER_ID_NONE) {
       auto &info = standby_daemons.at(who);
       fn(&info);
-      assert(info.state == MDSMap::STATE_STANDBY);
+      ceph_assert(info.state == MDSMap::STATE_STANDBY);
       standby_epochs[who] = epoch;
     } else {
       const auto &fs = filesystems[mds_roles.at(who)];
@@ -405,7 +391,7 @@ public:
   /**
    * A daemon has informed us of its offload targets
    */
-  void update_export_targets(mds_gid_t who, const std::set<mds_rank_t> targets)
+  void update_export_targets(mds_gid_t who, const std::set<mds_rank_t> &targets)
   {
     auto fscid = mds_roles.at(who);
     modify_filesystem(fscid, [who, &targets](std::shared_ptr<Filesystem> fs) {
@@ -419,6 +405,7 @@ public:
   size_t filesystem_count() const {return filesystems.size();}
   bool filesystem_exists(fs_cluster_id_t fscid) const {return filesystems.count(fscid) > 0;}
   std::shared_ptr<const Filesystem> get_filesystem(fs_cluster_id_t fscid) const {return std::const_pointer_cast<const Filesystem>(filesystems.at(fscid));}
+  std::shared_ptr<Filesystem> get_filesystem(fs_cluster_id_t fscid) {return filesystems.at(fscid);}
   std::shared_ptr<const Filesystem> get_filesystem(void) const {return std::const_pointer_cast<const Filesystem>(filesystems.begin()->second);}
   std::shared_ptr<const Filesystem> get_filesystem(std::string_view name) const
   {
@@ -482,9 +469,9 @@ public:
   void sanity() const;
 
   void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::iterator& p);
+  void decode(bufferlist::const_iterator& p);
   void decode(bufferlist& bl) {
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     decode(p);
   }
   void sanitize(const std::function<bool(int64_t pool)>& pool_exists);

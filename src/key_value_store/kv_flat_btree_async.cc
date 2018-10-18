@@ -186,7 +186,7 @@ int KvFlatBtreeAsync::next(const index_data &idata, index_data * out_data)
   }
   if (!kvs.empty()) {
     out_data->kdata.parse(kvs.begin()->first);
-    bufferlist::iterator b = kvs.begin()->second.begin();
+    auto b = kvs.begin()->second.cbegin();
     out_data->decode(b);
     if (idata.is_timed_out(ceph_clock_now(), timeout)) {
       if (verbose) cout << client_name << " THINKS THE OTHER CLIENT DIED."
@@ -228,7 +228,7 @@ int KvFlatBtreeAsync::prev(const index_data &idata, index_data * out_data)
     }
     return err;
   }
-  bufferlist::iterator it = outbl.begin();
+  auto it = outbl.cbegin();
   in_args.decode(it);
   *out_data = in_args.next_idata;
   if (verbose) cout << "\t\t" << client_name << "-prev: prev is "
@@ -279,7 +279,7 @@ int KvFlatBtreeAsync::read_index(const string &key, index_data * idata,
     cerr << "\t" << client_name
 	<< "-read_index: getting keys failed with "
 	<< err << std::endl;
-    assert(0 == client_name + "-read_index: reading index failed");
+    ceph_abort_msg(client_name + "-read_index: reading index failed");
     return err;
   }
   kvmap.insert(dupmap.begin(), dupmap.end());
@@ -287,7 +287,7 @@ int KvFlatBtreeAsync::read_index(const string &key, index_data * idata,
       it != kvmap.end();
       ++it) {
     bufferlist bl = it->second;
-    bufferlist::iterator blit = bl.begin();
+    auto blit = bl.cbegin();
     index_data this_idata;
     this_idata.decode(blit);
     if (this_idata.is_timed_out(mytime, timeout)) {
@@ -308,21 +308,21 @@ int KvFlatBtreeAsync::read_index(const string &key, index_data * idata,
     icache.push(this_idata);
     icache_lock.Unlock();
   }
-  bufferlist::iterator b = kvmap.begin()->second.begin();
+  auto b = kvmap.begin()->second.cbegin();
   idata->decode(b);
   idata->kdata.parse(kvmap.begin()->first);
   if (verbose) cout << "\t" << client_name << "-read_index: kvmap_size is "
       << kvmap.size()
       << ", idata is " << idata->str() << std::endl;
 
-  assert(idata->obj != "");
+  ceph_assert(idata->obj != "");
   icache_lock.Lock();
   icache.push(key, *idata);
   icache_lock.Unlock();
 
   if (next_idata != NULL && idata->kdata.prefix != "1") {
     next_idata->kdata.parse((++kvmap.begin())->first);
-    bufferlist::iterator nb = (++kvmap.begin())->second.begin();
+    auto nb = (++kvmap.begin())->second.cbegin();
     next_idata->decode(nb);
     icache_lock.Lock();
     icache.push(*next_idata);
@@ -561,7 +561,7 @@ int KvFlatBtreeAsync::rebalance(const index_data &idata1,
     ops.push_back(make_pair(
 	pair<int, string>(MAKE_OBJECT, o2w),
 	&create[0]));
-    assert((int)write2_map.size() <= 2*k);
+    ceph_assert((int)write2_map.size() <= 2*k);
   } else {
     //rebalance
     if (verbose) cout << "\t\t" << client_name << "-rebalance: rebalancing "
@@ -692,7 +692,7 @@ int KvFlatBtreeAsync::read_object(const string &obj, rebalance_args * args) {
     a->release();
     return err;
   }
-  bufferlist::iterator it = outbl.begin();
+  auto it = outbl.cbegin();
   args->decode(it);
   args->odata.name = obj;
   args->odata.version = a->get_version64();
@@ -741,7 +741,7 @@ void KvFlatBtreeAsync::set_up_prefix_index(
 	<< "-setup_prefix: will assert "
 	<< this_entry.str() << std::endl;
   }
-  assert(*err == 0);
+  ceph_assert(*err == 0);
   owo->omap_cmp(assertions, err);
   if (to_create.size() <= 2) {
     owo->omap_set(to_insert);
@@ -996,7 +996,7 @@ int KvFlatBtreeAsync::cleanup(const index_data &idata, const int &error) {
       << idata.str()
       << std::endl;
   int err = 0;
-  assert(idata.prefix != "");
+  ceph_assert(idata.prefix != "");
   map<std::string,bufferlist> new_index;
   map<std::string, pair<bufferlist, int> > assertions;
   switch (error) {
@@ -1838,7 +1838,7 @@ int KvFlatBtreeAsync::set_many(const map<string, bufferlist> &in_map) {
   }
 
   map<string, bufferlist> imap;//read from the index
-  bufferlist::iterator blit = outbl.begin();
+  auto blit = outbl.cbegin();
   decode(imap, blit);
 
   if (verbose) cout << "finished reading index for objects. there are "
@@ -1979,7 +1979,7 @@ int KvFlatBtreeAsync::remove_all() {
 	sub.remove();
       }
       index_data idata;
-      bufferlist::iterator b = it->second.begin();
+      auto b = it->second.cbegin();
       idata.decode(b);
       io_ctx.operate(idata.obj, &sub);
     }
@@ -2007,7 +2007,7 @@ int KvFlatBtreeAsync::get_all_keys(std::set<std::string> *keys) {
     std::set<std::string> ret;
     sub.omap_get_keys2("",LONG_MAX,&ret, nullptr, &err);
     index_data idata;
-    bufferlist::iterator b = it->second.begin();
+    auto b = it->second.cbegin();
     idata.decode(b);
     io_ctx.operate(idata.obj, &sub, NULL);
     keys->insert(ret.begin(), ret.end());
@@ -2067,7 +2067,7 @@ bool KvFlatBtreeAsync::is_consistent() {
       it != index.end(); ++it) {
     if (it->first != "") {
       index_data idata;
-      bufferlist::iterator b = it->second.begin();
+      auto b = it->second.cbegin();
       idata.decode(b);
       if (idata.prefix != "") {
 	for(vector<delete_data>::iterator dit = idata.to_delete.begin();
@@ -2216,7 +2216,7 @@ string KvFlatBtreeAsync::str() {
   for (map<std::string,bufferlist>::iterator it = index.begin();
       it != index.end(); ++it){
     index_data idata;
-    bufferlist::iterator b = it->second.begin();
+    auto b = it->second.cbegin();
     idata.decode(b);
     string s = idata.str();
     ret << "|" << string((148 -

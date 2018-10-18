@@ -252,7 +252,7 @@ namespace rgw {
     int rc = rgwlib.get_fe()->execute_req(&req);
     if ((rc == 0) &&
 	(req.get_ret() == 0)) {
-      lock_guard(rgw_fh->mtx);
+      lock_guard guard(rgw_fh->mtx);
       rgw_fh->set_atime(real_clock::to_timespec(real_clock::now()));
       *bytes_read = req.nread;
     }
@@ -481,7 +481,7 @@ namespace rgw {
       }
       goto out;
       default:
-	abort();
+	ceph_abort();
       } /* switch */
     } /* ix */
   unlock:
@@ -786,7 +786,7 @@ namespace rgw {
     {
       RGWLibFS* fs;
     public:
-      ObjUnref(RGWLibFS* _fs) : fs(_fs) {}
+      explicit ObjUnref(RGWLibFS* _fs) : fs(_fs) {}
       void operator()(RGWFileHandle* fh) const {
 	lsubdout(fs->get_context(), rgw, 5)
 	  << __func__
@@ -951,6 +951,11 @@ namespace rgw {
   }
 
   RGWFileHandle::~RGWFileHandle() {
+    /* !recycle case, handle may STILL be in handle table, BUT
+     * the partition lock is not held in this path */
+    if (fh_hook.is_linked()) {
+      fs->fh_cache.remove(fh.fh_hk.object, this, FHCache::FLAG_LOCK);
+    }
     /* cond-unref parent */
     if (parent && (! parent->is_mount())) {
       /* safe because if parent->unref causes its deletion,
@@ -979,15 +984,15 @@ namespace rgw {
     using ceph::decode;
     DecodeAttrsResult dar { false, false };
     fh_key fhk;
-    auto bl_iter_key1  = const_cast<buffer::list*>(ux_key1)->begin();
+    auto bl_iter_key1 = ux_key1->cbegin();
     decode(fhk, bl_iter_key1);
     if (fhk.version >= 2) {
-      assert(this->fh.fh_hk == fhk.fh_hk);
+      ceph_assert(this->fh.fh_hk == fhk.fh_hk);
     } else {
       get<0>(dar) = true;
     }
 
-    auto bl_iter_unix1 = const_cast<buffer::list*>(ux_attrs1)->begin();
+    auto bl_iter_unix1 = ux_attrs1->cbegin();
     decode(*this, bl_iter_unix1);
     if (this->state.version < 2) {
       get<1>(dar) = true;
@@ -1285,8 +1290,8 @@ namespace rgw {
 	s->bucket_info.placement_rule);
 
     /* not obviously supportable */
-    assert(! dlo_manifest);
-    assert(! slo_info);
+    ceph_assert(! dlo_manifest);
+    ceph_assert(! slo_info);
 
     perfcounter->inc(l_rgw_put);
     op_ret = -EINVAL;
@@ -1506,8 +1511,7 @@ namespace rgw {
 
   done:
     dispose_processor(processor);
-    perfcounter->tinc(l_rgw_put_lat,
-		      (ceph_clock_now() - s->time));
+    perfcounter->tinc(l_rgw_put_lat, s->time_elapsed());
     return op_ret;
   } /* exec_finish */
 
@@ -1538,7 +1542,7 @@ void rgwfile_version(int *major, int *minor, int *extra)
   /* stash access data for "mount" */
   RGWLibFS* new_fs = new RGWLibFS(static_cast<CephContext*>(rgw), uid, acc_key,
 				  sec_key, "/");
-  assert(new_fs);
+  ceph_assert(new_fs);
 
   rc = new_fs->authorize(rgwlib.get_store());
   if (rc != 0) {
@@ -1569,7 +1573,7 @@ int rgw_mount2(librgw_t rgw, const char *uid, const char *acc_key,
   /* stash access data for "mount" */
   RGWLibFS* new_fs = new RGWLibFS(static_cast<CephContext*>(rgw), uid, acc_key,
 				  sec_key, root);
-  assert(new_fs);
+  ceph_assert(new_fs);
 
   rc = new_fs->authorize(rgwlib.get_store());
   if (rc != 0) {
@@ -1767,7 +1771,7 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
     if (unlikely((strcmp(path, "..") == 0))) {
       rgw_fh = parent;
       lsubdout(fs->get_context(), rgw, 17)
-	<< __func__ << "BANG"<< *rgw_fh
+	<< __func__ << " BANG"<< *rgw_fh
 	<< dendl;
       fs->ref(rgw_fh);
     } else {

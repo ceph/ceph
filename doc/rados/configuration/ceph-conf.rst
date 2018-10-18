@@ -148,7 +148,7 @@ These sections include:
 
 :Description: Settings under ``client`` affect all Ceph Clients
               (e.g., mounted Ceph Filesystems, mounted Ceph Block Devices,
-              etc.).
+              etc.) as well as Rados Gateway (RGW) daemons.
 
 :Example: ``objecter_inflight_ops = 512``
 
@@ -157,7 +157,7 @@ Sections may also specify an individual daemon or client name.  For example,
 ``mon.foo``, ``osd.123``, and ``client.smith`` are all valid section names.
 
 
-Any given daemon will draw it's settings from the global section, the
+Any given daemon will draw its settings from the global section, the
 daemon or client type section, and the section sharing its name.
 Settings in the most-specific section take precedence, so for example
 if the same option is specified in both ``global``, ``mon``, and
@@ -256,22 +256,9 @@ by preceding comments with a pound sign (#) or a semi-colon (;).  For example:
 Config file section names
 -------------------------
 
-The configuration file is divided into sections like ``[global]`` or
-``[mon.foo]``, where the section is a valid Ceph section name
-(`global`, a daemon type, or a daemon name) surrounded by square
-brackets.
-
-Global settings affect all instances of all daemon in the Ceph Storage Cluster.
-Use the ``[global]`` setting for values that are common for all daemons in the
-Ceph Storage Cluster. You can override each ``[global]`` setting by:
-
-#. Changing the setting in a particular process type
-   (*e.g.,* ``[osd]``, ``[mon]``, ``[mds]`` ).
-
-#. Changing the setting in a particular process (*e.g.,* ``[osd.1]`` ).
-
-Overriding a global setting affects all child processes, except those that
-you specifically override in a particular daemon.  For example,
+The configuration file is divided into sections. Each section must begin with a
+valid configuration section name (see `Configuration sections`_, above)
+surrounded by square brackets. For example,
 
 .. code-block:: ini
 
@@ -356,7 +343,7 @@ The following CLI commands are used to configure the cluster:
   of the output.
 
 * ``ceph config assimilate-conf -i <input file> -o <output file>``
-  will injest a configuration file from *input file* and move any
+  will ingest a configuration file from *input file* and move any
   valid options into the monitors' configuration database.  Any
   settings that are unrecognized, invalid, or cannot be controlled by
   the monitor will be returned in an abbreviated config file stored in

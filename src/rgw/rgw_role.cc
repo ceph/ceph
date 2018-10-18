@@ -276,6 +276,7 @@ void RGWRole::dump(Formatter *f) const
   encode_json("path", path, f);
   encode_json("arn", arn, f);
   encode_json("create_date", creation_date, f);
+  encode_json("max_session_duration", max_session_duration, f);
   encode_json("assume_role_policy_document", trust_policy, f);
 }
 
@@ -286,6 +287,7 @@ void RGWRole::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("path", path, obj);
   JSONDecoder::decode_json("arn", arn, obj);
   JSONDecoder::decode_json("create_date", creation_date, obj);
+  JSONDecoder::decode_json("max_session_duration", max_session_duration, obj);
   JSONDecoder::decode_json("assume_role_policy_document", trust_policy, obj);
 }
 
@@ -303,7 +305,7 @@ int RGWRole::read_id(const string& role_name, const string& tenant, string& role
 
   RGWNameToId nameToId;
   try {
-    bufferlist::iterator iter = bl.begin();
+    auto iter = bl.cbegin();
     using ceph::decode;
     decode(nameToId, iter);
   } catch (buffer::error& err) {
@@ -331,7 +333,7 @@ int RGWRole::read_info()
 
   try {
     using ceph::decode;
-    bufferlist::iterator iter = bl.begin();
+    auto iter = bl.cbegin();
     decode(*this, iter);
   } catch (buffer::error& err) {
     ldout(cct, 0) << "ERROR: failed to decode role info from pool: " << pool.name <<
@@ -359,7 +361,7 @@ int RGWRole::read_name()
   RGWNameToId nameToId;
   try {
     using ceph::decode;
-    bufferlist::iterator iter = bl.begin();
+    auto iter = bl.cbegin();
     decode(nameToId, iter);
   } catch (buffer::error& err) {
     ldout(cct, 0) << "ERROR: failed to decode role name from pool: " << pool.name << ": "
@@ -394,6 +396,11 @@ bool RGWRole::validate_input()
     return false;
   }
 
+  if (max_session_duration < SESSION_DURATION_MIN ||
+          max_session_duration > SESSION_DURATION_MAX) {
+    ldout(cct, 0) << "ERROR: Invalid session duration, should be between 3600 and 43200 seconds " << dendl;
+    return false;
+  }
   return true;
 }
 

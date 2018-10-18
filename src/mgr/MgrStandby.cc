@@ -41,7 +41,7 @@ MgrStandby::MgrStandby(int argc, const char **argv) :
   monc{g_ceph_context},
   client_messenger(Messenger::create(
 		     g_ceph_context,
-		     cct->_conf->get_val<std::string>("ms_type"),
+		     cct->_conf.get_val<std::string>("ms_type"),
 		     entity_name_t::MGR(),
 		     "mgr",
 		     getpid(),
@@ -84,7 +84,7 @@ const char** MgrStandby::get_tracked_conf_keys() const
 }
 
 void MgrStandby::handle_conf_change(
-  const struct md_config_t *conf,
+  const ConfigProxy& conf,
   const std::set <std::string> &changed)
 {
   if (changed.count("clog_to_monitors") ||
@@ -125,6 +125,21 @@ int MgrStandby::init()
   monc.set_want_keys(CEPH_ENTITY_TYPE_MON|CEPH_ENTITY_TYPE_OSD
       |CEPH_ENTITY_TYPE_MDS|CEPH_ENTITY_TYPE_MGR);
   monc.set_messenger(client_messenger.get());
+
+  // We must register our config callback before calling init(), so
+  // that we see the initial configuration message
+  monc.register_config_callback([this](const std::string &k, const std::string &v){
+      dout(10) << "config_callback: " << k << " : " << v << dendl;
+      if (k.substr(0, 4) == "mgr/") {
+	const std::string global_key = PyModule::config_prefix + k.substr(4);
+        py_module_registry.handle_config(global_key, v);
+
+	return true;
+      }
+      return false;
+    });
+  dout(4) << "Registered monc callback" << dendl;
+
   int r = monc.init();
   if (r < 0) {
     monc.shutdown();
@@ -164,8 +179,8 @@ int MgrStandby::init()
 
 void MgrStandby::send_beacon()
 {
-  assert(lock.is_locked_by_me());
-  dout(1) << state_str() << dendl;
+  ceph_assert(lock.is_locked_by_me());
+  dout(4) << state_str() << dendl;
 
   std::list<PyModuleRef> modules = py_module_registry.get_modules();
 
@@ -184,7 +199,7 @@ void MgrStandby::send_beacon()
   // as available in the map)
   bool available = active_mgr != nullptr && active_mgr->is_initialized();
 
-  auto addr = available ? active_mgr->get_server_addr() : entity_addr_t();
+  auto addrs = available ? active_mgr->get_server_addrs() : entity_addrvec_t();
   dout(10) << "sending beacon as gid " << monc.get_global_id() << dendl;
 
   map<string,string> metadata;
@@ -193,8 +208,8 @@ void MgrStandby::send_beacon()
 
   MMgrBeacon *m = new MMgrBeacon(monc.get_fsid(),
 				 monc.get_global_id(),
-                                 g_conf->name.get_id(),
-                                 addr,
+                                 g_conf()->name.get_id(),
+                                 addrs,
                                  available,
 				 std::move(module_info),
 				 std::move(metadata));
@@ -223,12 +238,8 @@ void MgrStandby::tick()
   dout(10) << __func__ << dendl;
   send_beacon();
 
-  if (active_mgr && active_mgr->is_initialized()) {
-    active_mgr->tick();
-  }
-
   timer.add_event_after(
-      g_conf->get_val<std::chrono::seconds>("mgr_tick_period").count(),
+      g_conf().get_val<std::chrono::seconds>("mgr_tick_period").count(),
       new FunctionContext([this](int r){
           tick();
       }
@@ -238,7 +249,7 @@ void MgrStandby::tick()
 void MgrStandby::handle_signal(int signum)
 {
   Mutex::Locker l(lock);
-  assert(signum == SIGINT || signum == SIGTERM);
+  ceph_assert(signum == SIGINT || signum == SIGTERM);
   derr << "*** Got signal " << sig_str(signum) << " ***" << dendl;
   shutdown();
 }
@@ -246,7 +257,7 @@ void MgrStandby::handle_signal(int signum)
 void MgrStandby::shutdown()
 {
   // Expect already to be locked as we're called from signal handler
-  assert(lock.is_locked_by_me());
+  ceph_assert(lock.is_locked_by_me());
 
   dout(4) << "Shutting down" << dendl;
 
@@ -289,7 +300,7 @@ void MgrStandby::respawn()
     /* Print CWD for the user's interest */
     char buf[PATH_MAX];
     char *cwd = getcwd(buf, sizeof(buf));
-    assert(cwd);
+    ceph_assert(cwd);
     dout(1) << " cwd " << cwd << dendl;
 
     /* Fall back to a best-effort: just running in our CWD */
@@ -381,11 +392,11 @@ void MgrStandby::handle_mgr_map(MMgrMap* mmap)
     derr << "I was active but no longer am" << dendl;
     respawn();
   } else {
-    if (map.active_gid != 0 && map.active_name != g_conf->name.get_id()) {
+    if (map.active_gid != 0 && map.active_name != g_conf()->name.get_id()) {
       // I am the standby and someone else is active, start modules
       // in standby mode to do redirects if needed
       if (!py_module_registry.is_standby_running()) {
-        py_module_registry.standby_start(&monc);
+        py_module_registry.standby_start(monc);
       }
     }
   }

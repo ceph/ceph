@@ -140,6 +140,12 @@ int Mirror<I>::image_enable(I *ictx, bool relax_same_pool_parent_check) {
   CephContext *cct = ictx->cct;
   ldout(cct, 20) << "ictx=" << ictx << dendl;
 
+  // TODO
+  if (!ictx->md_ctx.get_namespace().empty()) {
+    lderr(cct) << "namespaces are not supported" << dendl;
+    return -EINVAL;
+  }
+
   int r = ictx->state->refresh_if_required();
   if (r < 0) {
     return r;
@@ -267,8 +273,10 @@ int Mirror<I>::image_disable(I *ictx, bool force) {
       RWLock::RLocker l(ictx->snap_lock);
       map<librados::snap_t, SnapInfo> snap_info = ictx->snap_info;
       for (auto &info : snap_info) {
-        ParentSpec parent_spec(ictx->md_ctx.get_id(), ictx->id, info.first);
-        map< pair<int64_t, string>, set<string> > image_info;
+        cls::rbd::ParentImageSpec parent_spec{ictx->md_ctx.get_id(),
+                                              ictx->md_ctx.get_namespace(),
+                                              ictx->id, info.first};
+        map< tuple<int64_t, string, string>, set<string> > image_info;
 
         r = Image<I>::list_children(ictx, parent_spec, &image_info);
         if (r < 0) {
@@ -278,16 +286,16 @@ int Mirror<I>::image_disable(I *ictx, bool force) {
         if (image_info.empty())
           continue;
 
-        librados::Rados rados(ictx->md_ctx);
         for (auto &info: image_info) {
           librados::IoCtx ioctx;
-          r = rados.ioctx_create2(info.first.first, ioctx);
+          r = util::create_ioctx(ictx->md_ctx, "child image",
+                                 std::get<0>(info.first),
+                                 std::get<2>(info.first), &ioctx);
           if (r < 0) {
             rollback = true;
-            lderr(cct) << "error accessing child image pool "
-                       << info.first.second  << dendl;
             return r;
           }
+
           for (auto &id_it : info.second) {
             cls::rbd::MirrorImage mirror_image_internal;
             r = cls_client::mirror_image_get(&ioctx, id_it,
@@ -491,6 +499,12 @@ int Mirror<I>::mode_set(librados::IoCtx& io_ctx,
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 20) << dendl;
 
+  // TODO
+  if (!io_ctx.get_namespace().empty()) {
+    lderr(cct) << "namespaces are not supported" << dendl;
+    return -EINVAL;
+  }
+
   cls::rbd::MirrorMode next_mirror_mode;
   switch (mirror_mode) {
   case RBD_MIRROR_MODE_DISABLED:
@@ -569,9 +583,9 @@ int Mirror<I>::mode_set(librados::IoCtx& io_ctx,
 
     for (const auto& img_pair : images) {
       uint64_t features;
-      r = cls_client::get_features(&io_ctx,
-                                   util::header_name(img_pair.second),
-                                   CEPH_NOSNAP, &features);
+      uint64_t incompatible_features;
+      r = cls_client::get_features(&io_ctx, util::header_name(img_pair.second),
+                                   true, &features, &incompatible_features);
       if (r < 0) {
         lderr(cct) << "error getting features for image " << img_pair.first
                    << ": " << cpp_strerror(r) << dendl;
@@ -580,7 +594,7 @@ int Mirror<I>::mode_set(librados::IoCtx& io_ctx,
 
       if ((features & RBD_FEATURE_JOURNALING) != 0) {
         I *img_ctx = I::create("", img_pair.second, nullptr, io_ctx, false);
-        r = img_ctx->state->open(false);
+        r = img_ctx->state->open(0);
         if (r < 0) {
           lderr(cct) << "error opening image "<< img_pair.first << ": "
                      << cpp_strerror(r) << dendl;
@@ -624,7 +638,7 @@ int Mirror<I>::mode_set(librados::IoCtx& io_ctx,
         }
       } else {
         I *img_ctx = I::create("", img_id, nullptr, io_ctx, false);
-        r = img_ctx->state->open(false);
+        r = img_ctx->state->open(0);
         if (r < 0) {
           lderr(cct) << "error opening image id "<< img_id << ": "
                      << cpp_strerror(r) << dendl;
@@ -667,6 +681,12 @@ int Mirror<I>::peer_add(librados::IoCtx& io_ctx, std::string *uuid,
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 20) << "name=" << cluster_name << ", "
                  << "client=" << client_name << dendl;
+
+  // TODO
+  if (!io_ctx.get_namespace().empty()) {
+    lderr(cct) << "namespaces are not supported" << dendl;
+    return -EINVAL;
+  }
 
   if (cct->_conf->cluster == cluster_name) {
     lderr(cct) << "cannot add self as remote peer" << dendl;

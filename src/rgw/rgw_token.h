@@ -101,7 +101,7 @@ namespace rgw {
       ENCODE_FINISH(bl);
     }
 
-    void decode(bufferlist::iterator& bl) {
+    void decode(bufferlist::const_iterator& bl) {
       string name;
       string typestr;
       uint32_t version;

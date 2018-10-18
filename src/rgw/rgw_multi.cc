@@ -119,7 +119,7 @@ int list_multipart_parts(RGWRados *store, RGWBucketInfo& bucket_info, CephContex
 
   for (i = 0, iter = parts_map.begin(); (i < num_parts || !sorted_omap) && iter != parts_map.end(); ++iter, ++i) {
     bufferlist& bl = iter->second;
-    bufferlist::iterator bli = bl.begin();
+    auto bli = bl.cbegin();
     RGWUploadPartInfo info;
     try {
       decode(info, bli);
@@ -285,7 +285,7 @@ int abort_bucket_multiparts(RGWRados *store, CephContext *cct, RGWBucketInfo& bu
         if (!mp.from_meta(key.name))
           continue;
         ret = abort_multipart_upload(store, cct, &obj_ctx, bucket_info, mp);
-        if (ret < 0) {
+        if (ret < 0 && ret != -ENOENT && ret != -ERR_NO_SUCH_UPLOAD) {
           return ret;
         }
         num_deleted++;

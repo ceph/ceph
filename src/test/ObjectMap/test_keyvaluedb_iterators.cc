@@ -10,7 +10,6 @@
 * License version 2.1, as published by the Free Software
 * Foundation. See file COPYING.
 */
-#include "include/memory.h"
 #include <map>
 #include <set>
 #include <deque>
@@ -34,10 +33,10 @@ public:
   boost::scoped_ptr<KeyValueDBMemory> mock;
 
   void SetUp() override {
-    assert(!store_path.empty());
+    ceph_assert(!store_path.empty());
 
     KeyValueDB *db_ptr = KeyValueDB::create(g_ceph_context, "leveldb", store_path);
-    assert(!db_ptr->create_and_open(std::cerr));
+    ceph_assert(!db_ptr->create_and_open(std::cerr));
     db.reset(db_ptr);
     mock.reset(new KeyValueDBMemory());
   }
@@ -93,8 +92,8 @@ public:
   ::testing::AssertionResult validate_iterator(
 				KeyValueDB::WholeSpaceIterator it,
 				string expected_prefix,
-				string expected_key,
-				string expected_value) {
+				const string &expected_key,
+				const string &expected_value) {
     if (!it->valid()) {
       return ::testing::AssertionFailure()
 	      << __func__
@@ -214,13 +213,13 @@ public:
     return str;
   }
 
-  string _gen_val_str(string key) {
+  string _gen_val_str(const string &key) {
     ostringstream ss;
     ss << "##value##" << key << "##";
     return ss.str();
  }
 
-  bufferlist _gen_val(string key) {
+  bufferlist _gen_val(const string &key) {
     bufferlist bl;
     bl.append(_gen_val_str(key));
     return bl;

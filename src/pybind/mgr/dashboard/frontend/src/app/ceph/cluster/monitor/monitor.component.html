@@ -1,13 +1,3 @@
-<nav aria-label="breadcrumb">
-  <ol class="breadcrumb">
-    <li i18n
-        class="breadcrumb-item">Cluster</li>
-    <li i18n
-        class="breadcrumb-item active"
-        aria-current="page">Monitors</li>
-  </ol>
-</nav>
-
 <div class="row">
   <div class="col-md-4">
     <fieldset>
@@ -54,19 +44,17 @@
   </div>
 
   <div class="col-md-8">
-    <fieldset>
-      <legend i18n
-              class="in-quorum">In Quorum</legend>
-      <cd-table [data]="inQuorum.data"
-                [columns]="inQuorum.columns">
-      </cd-table>
+    <legend i18n
+            class="in-quorum">In Quorum</legend>
+    <cd-table [data]="inQuorum.data"
+              [columns]="inQuorum.columns">
+    </cd-table>
 
-      <legend i18n
-              class="in-quorum">Not In Quorum</legend>
-      <cd-table [data]="notInQuorum.data"
-                (fetchData)="refresh()"
-                [columns]="notInQuorum.columns">
-      </cd-table>
-    </fieldset>
+    <legend i18n
+            class="in-quorum">Not In Quorum</legend>
+    <cd-table [data]="notInQuorum.data"
+              (fetchData)="refresh()"
+              [columns]="notInQuorum.columns">
+    </cd-table>
   </div>
 </div>

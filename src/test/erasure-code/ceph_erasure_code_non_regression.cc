@@ -28,6 +28,7 @@
 #include "global/global_context.h"
 #include "global/global_init.h"
 #include "common/errno.h"
+#include "common/ceph_context.h"
 #include "common/ceph_argparse.h"
 #include "common/config.h"
 #include "erasure-code/ErasureCodePlugin.h"
@@ -95,7 +96,7 @@ int ErasureCodeNonRegression::setup(int argc, char** argv) {
 		    CODE_ENVIRONMENT_UTILITY,
 		    CINIT_FLAG_NO_MON_CONFIG);
   common_init_finish(g_ceph_context);
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   if (vm.count("help")) {
     cout << desc << std::endl;
@@ -154,7 +155,7 @@ int ErasureCodeNonRegression::run_create()
   ErasureCodeInterfaceRef erasure_code;
   stringstream messages;
   int code = instance.factory(plugin,
-			      g_conf->get_val<std::string>("erasure_code_dir"),
+			      g_conf().get_val<std::string>("erasure_code_dir"),
 			      profile, &erasure_code, &messages);
   if (code) {
     cerr << messages.str() << endl;
@@ -206,7 +207,7 @@ int ErasureCodeNonRegression::decode_erasures(ErasureCodeInterfaceRef erasure_co
       
   }
   map<int,bufferlist> decoded;
-  int code = erasure_code->decode(erasures, available, &decoded, 0);
+  int code = erasure_code->decode(erasures, available, &decoded, available.begin()->second.length());
   if (code)
     return code;
   for (set<int>::iterator erasure = erasures.begin();
@@ -226,7 +227,7 @@ int ErasureCodeNonRegression::run_check()
   ErasureCodeInterfaceRef erasure_code;
   stringstream messages;
   int code = instance.factory(plugin,
-			      g_conf->get_val<std::string>("erasure_code_dir"),
+			      g_conf().get_val<std::string>("erasure_code_dir"),
 			      profile, &erasure_code, &messages);
   if (code) {
     cerr << messages.str() << endl;

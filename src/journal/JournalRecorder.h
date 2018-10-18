@@ -24,7 +24,7 @@ public:
   JournalRecorder(librados::IoCtx &ioctx, const std::string &object_oid_prefix,
                   const JournalMetadataPtr &journal_metadata,
                   uint32_t flush_interval, uint64_t flush_bytes,
-                  double flush_age);
+                  double flush_age, uint64_t max_in_flight_appends);
   ~JournalRecorder();
 
   Future append(uint64_t tag_tid, const bufferlist &bl);
@@ -81,6 +81,7 @@ private:
   uint32_t m_flush_interval;
   uint64_t m_flush_bytes;
   double m_flush_age;
+  uint64_t m_max_in_flight_appends;
 
   Listener m_listener;
   ObjectHandler m_object_handler;

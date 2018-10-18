@@ -208,7 +208,7 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
         f->dump_unsigned("type", type);
         bufferlist hint;
         i.decode_bl(hint);
-        bufferlist::iterator hiter = hint.begin();
+        auto hiter = hint.cbegin();
         if (type == Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS) {
           uint32_t pg_num;
           uint64_t num_objs;
@@ -384,6 +384,18 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
 	f->dump_stream("bits") << bits;
 	f->dump_stream("rem") << rem;
 	f->dump_stream("dest") << dest;
+      }
+      break;
+
+    case Transaction::OP_MERGE_COLLECTION:
+      {
+        coll_t cid = i.get_cid(op->cid);
+        uint32_t bits = op->split_bits;
+        coll_t dest = i.get_cid(op->dest_cid);
+	f->dump_string("op_name", "op_merge_collection");
+	f->dump_stream("collection") << cid;
+	f->dump_stream("dest") << dest;
+	f->dump_stream("bits") << bits;
       }
       break;
 

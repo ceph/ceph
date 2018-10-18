@@ -1,4 +1,4 @@
-import { Component, Input, OnChanges, OnInit } from '@angular/core';
+import { Component, Input, OnChanges } from '@angular/core';
 
 @Component({
   selector: 'cd-usage-bar',
@@ -6,20 +6,20 @@ import { Component, Input, OnChanges, OnInit } from '@angular/core';
   styleUrls: ['./usage-bar.component.scss']
 })
 export class UsageBarComponent implements OnChanges {
-
-  @Input() totalBytes: number;
-  @Input() usedBytes: number;
+  @Input()
+  totalBytes: number;
+  @Input()
+  usedBytes: number;
 
   usedPercentage: number;
   freePercentage: number;
   freeBytes: number;
 
-  constructor() { }
+  constructor() {}
 
   ngOnChanges() {
-    this.usedPercentage = Math.round(this.usedBytes / this.totalBytes * 100);
+    this.usedPercentage = Math.round((this.usedBytes / this.totalBytes) * 100);
     this.freePercentage = 100 - this.usedPercentage;
     this.freeBytes = this.totalBytes - this.usedBytes;
   }
-
 }

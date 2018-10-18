@@ -4,13 +4,16 @@
 #include "msg/Message.h"
 
 
-class MGatherCaps : public Message {
- public:
+class MGatherCaps : public MessageInstance<MGatherCaps> {
+public:
+  friend factory;
+
+
   inodeno_t ino;
 
+protected:
   MGatherCaps() :
-    Message(MSG_MDS_GATHERCAPS) {}
-private:
+    MessageInstance(MSG_MDS_GATHERCAPS) {}
   ~MGatherCaps() override {}
 
 public:
@@ -25,7 +28,7 @@ public:
   }
   void decode_payload() override {
     using ceph::decode;
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(ino, p);
   }
 

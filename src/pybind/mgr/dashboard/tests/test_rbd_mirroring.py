@@ -59,26 +59,31 @@ class RbdMirroringControllerTest(ControllerTestCase):
         mgr.url_prefix = ''
         mgr.get_mgr_id.return_value = 0
         mgr.have_mon_connection.return_value = True
+        mgr.version = 'ceph version 13.1.0-534-g23d3751b89 ' \
+                      '(23d3751b897b31d2bda57aeaf01acb5ff3c4a9cd) ' \
+                      'nautilus (dev)'
 
         RbdMirror._cp_config['tools.authenticate.on'] = False  # pylint: disable=protected-access
 
         Summary._cp_config['tools.authenticate.on'] = False  # pylint: disable=protected-access
 
-        cls.setup_controllers([RbdMirror, Summary], '/api/test')
+        cls.setup_controllers([RbdMirror, Summary], '/test')
 
     @mock.patch('dashboard.controllers.rbd_mirroring.rbd')
     def test_default(self, rbd_mock):  # pylint: disable=W0613
-        self._get('/api/test/rbdmirror')
+        self._get('/test/api/rbdmirror')
         result = self.jsonBody()
         self.assertStatus(200)
         self.assertEqual(result['status'], 0)
         for k in ['daemons', 'pools', 'image_error', 'image_syncing', 'image_ready']:
             self.assertIn(k, result['content_data'])
 
+    @mock.patch('dashboard.controllers.BaseController._has_permissions')
     @mock.patch('dashboard.controllers.rbd_mirroring.rbd')
-    def test_summary(self, rbd_mock):  # pylint: disable=W0613
+    def test_summary(self, rbd_mock, has_perms_mock):  # pylint: disable=W0613
         """We're also testing `summary`, as it also uses code from `rbd_mirroring.py`"""
-        self._get('/api/test/summary')
+        has_perms_mock.return_value = True
+        self._get('/test/api/summary')
         self.assertStatus(200)
 
         summary = self.jsonBody()['rbd_mirroring']

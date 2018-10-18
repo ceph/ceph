@@ -29,8 +29,13 @@
 
 #include "common/cmdparse.h"
 #include "common/code_environment.h"
-
+#ifdef WITH_SEASTAR
+#include "crimson/common/config_proxy.h"
+#else
+#include "common/config_proxy.h"
 #include "include/spinlock.h"
+#endif
+
 
 #include "crush/CrushLocation.h"
 
@@ -38,8 +43,6 @@ class AdminSocket;
 class CephContextServiceThread;
 class PerfCountersCollection;
 class PerfCounters;
-class md_config_obs_t;
-struct md_config_t;
 class CephContextHook;
 class CephContextObs;
 class CryptoHandler;
@@ -53,6 +56,28 @@ namespace ceph {
   }
 }
 
+#ifdef WITH_SEASTAR
+class CephContext {
+public:
+  CephContext();
+  CephContext(uint32_t,
+	      code_environment_t=CODE_ENVIRONMENT_UTILITY,
+	      int = 0)
+    : CephContext{}
+  {}
+  ~CephContext();
+
+  CryptoRandom* random() const;
+  PerfCountersCollection* get_perfcounters_collection();
+  ceph::common::ConfigProxy& _conf;
+
+  CephContext* get();
+  void put();
+private:
+  std::unique_ptr<CryptoRandom> _crypto_random;
+  unsigned nref;
+};
+#else
 /* A CephContext represents the context held by a single library user.
  * There can be multiple CephContexts in the same process.
  *
@@ -84,7 +109,7 @@ public:
   }
   void put();
 
-  md_config_t *_conf;
+  ConfigProxy _conf;
   ceph::logging::Log *_log;
 
   /* init ceph::crypto */
@@ -144,7 +169,7 @@ public:
   void do_command(std::string_view command, const cmdmap_t& cmdmap,
 		  std::string_view format, ceph::bufferlist *out);
 
-  static constexpr std::size_t largest_singleton = sizeof(void*) * 72;
+  static constexpr std::size_t largest_singleton = 8 * 72;
 
   template<typename T, typename... Args>
   T& lookup_or_create_singleton_object(std::string_view name,
@@ -197,7 +222,7 @@ public:
     return _set_gid;
   }
 
-  void set_uid_gid_strings(std::string u, std::string g) {
+  void set_uid_gid_strings(const std::string &u, const std::string &g) {
     _set_uid_string = u;
     _set_gid_string = g;
   }
@@ -244,6 +269,8 @@ private:
    * SIGHUP wakes this thread, which then reopens logfiles */
   friend class CephContextServiceThread;
   CephContextServiceThread *_service_thread;
+
+  using md_config_obs_t = ceph::md_config_obs_impl<ConfigProxy>;
 
   md_config_obs_t *_log_obs;
 
@@ -311,5 +338,6 @@ private:
 
   friend class CephContextObs;
 };
+#endif	// WITH_SEASTAR
 
 #endif

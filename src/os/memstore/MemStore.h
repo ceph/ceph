@@ -20,13 +20,12 @@
 #include <boost/intrusive_ptr.hpp>
 
 #include "include/unordered_map.h"
-#include "include/memory.h"
 #include "common/Finisher.h"
 #include "common/RefCountedObj.h"
 #include "common/RWLock.h"
 #include "os/ObjectStore.h"
 #include "PageSet.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 class MemStore : public ObjectStore {
 public:
@@ -50,7 +49,7 @@ public:
                       uint64_t dstoff) = 0;
     virtual int truncate(uint64_t offset) = 0;
     virtual void encode(bufferlist& bl) const = 0;
-    virtual void decode(bufferlist::iterator& p) = 0;
+    virtual void decode(bufferlist::const_iterator& p) = 0;
 
     void encode_base(bufferlist& bl) const {
       using ceph::encode;
@@ -58,7 +57,7 @@ public:
       encode(omap_header, bl);
       encode(omap, bl);
     }
-    void decode_base(bufferlist::iterator& p) {
+    void decode_base(bufferlist::const_iterator& p) {
       using ceph::decode;
       decode(xattr, p);
       decode(omap_header, p);
@@ -147,7 +146,7 @@ public:
       }
       ENCODE_FINISH(bl);
     }
-    void decode(bufferlist::iterator& p) {
+    void decode(bufferlist::const_iterator& p) {
       DECODE_START(1, p);
       decode(xattr, p);
       decode(use_page_set, p);
@@ -234,6 +233,7 @@ private:
   int _collection_move_rename(const coll_t& oldcid, const ghobject_t& oldoid,
 			      coll_t cid, const ghobject_t& o);
   int _split_collection(const coll_t& cid, uint32_t bits, uint32_t rem, coll_t dest);
+  int _merge_collection(const coll_t& cid, uint32_t bits, coll_t dest);
 
   int _save();
   int _load();
@@ -321,6 +321,11 @@ public:
     return get_collection(c);
   }
   CollectionHandle create_new_collection(const coll_t& c) override;
+
+  void set_collection_commit_queue(const coll_t& cid,
+				   ContextQueue *commit_queue) override {
+  }
+
   bool collection_exists(const coll_t& c) override;
   int collection_empty(CollectionHandle& c, bool *empty) override;
   int collection_bits(CollectionHandle& c) override;

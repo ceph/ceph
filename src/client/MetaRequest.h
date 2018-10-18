@@ -98,7 +98,7 @@ public:
    */
   void abort(int rc)
   {
-    assert(rc != 0);
+    ceph_assert(rc != 0);
     abort_rc = rc;
   }
 
@@ -199,7 +199,7 @@ public:
   }
   bool auth_is_best() {
     if ((head.op & CEPH_MDS_OP_WRITE) || head.op == CEPH_MDS_OP_OPEN ||
-	head.op == CEPH_MDS_OP_READDIR) 
+	head.op == CEPH_MDS_OP_READDIR || send_to_auth) 
       return true;
     return false;    
   }

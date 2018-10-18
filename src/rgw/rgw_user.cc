@@ -22,6 +22,7 @@
 #include "rgw_common.h"
 
 #include "rgw_bucket.h"
+#include "rgw_quota.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -279,7 +280,7 @@ int rgw_get_user_info_from_index(RGWRados * const store,
 
   rgw_cache_entry_info cache_info;
 
-  bufferlist::iterator iter = bl.begin();
+  auto iter = bl.cbegin();
   try {
     decode(uid, iter);
     int ret = rgw_get_user_info_by_uid(store, uid.user_id, e.info, &e.objv_tracker, NULL, &cache_info);
@@ -324,7 +325,7 @@ int rgw_get_user_info_by_uid(RGWRados *store,
     return ret;
   }
 
-  bufferlist::iterator iter = bl.begin();
+  auto iter = bl.cbegin();
   try {
     decode(user_id, iter);
     if (user_id.user_id.compare(uid) != 0) {
@@ -719,7 +720,7 @@ static void dump_user_info(Formatter *f, RGWUserInfo &info,
   f->dump_string("email", info.user_email);
   f->dump_int("suspended", (int)info.suspended);
   f->dump_int("max_buckets", (int)info.max_buckets);
-
+  f->dump_bool("system", (bool)info.system);
   dump_subusers_info(f, info);
   dump_access_keys_info(f, info);
   dump_swift_keys_info(f, info);
@@ -1963,14 +1964,7 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
   if (op_state.has_bucket_quota()) {
     user_info.bucket_quota = op_state.get_bucket_quota();
   } else {
-    if (cct->_conf->rgw_bucket_default_quota_max_objects >= 0) {
-      user_info.bucket_quota.max_objects = cct->_conf->rgw_bucket_default_quota_max_objects;
-      user_info.bucket_quota.enabled = true;
-    }
-    if (cct->_conf->rgw_bucket_default_quota_max_size >= 0) {
-      user_info.bucket_quota.max_size = cct->_conf->rgw_bucket_default_quota_max_size;
-      user_info.bucket_quota.enabled = true;
-    }
+    rgw_apply_default_bucket_quota(user_info.bucket_quota, cct->_conf);
   }
 
   if (op_state.temp_url_key_specified) {
@@ -1984,14 +1978,7 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
   if (op_state.has_user_quota()) {
     user_info.user_quota = op_state.get_user_quota();
   } else {
-    if (cct->_conf->rgw_user_default_quota_max_objects >= 0) {
-      user_info.user_quota.max_objects = cct->_conf->rgw_user_default_quota_max_objects;
-      user_info.user_quota.enabled = true;
-    }
-    if (cct->_conf->rgw_user_default_quota_max_size >= 0) {
-      user_info.user_quota.max_size = cct->_conf->rgw_user_default_quota_max_size;
-      user_info.user_quota.enabled = true;
-    }
+    rgw_apply_default_user_quota(user_info.user_quota, cct->_conf);
   }
 
   // update the request
@@ -2255,6 +2242,10 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
 
     } while (is_truncated);
   }
+
+  if (op_state.mfa_ids_specified) {
+    user_info.mfa_ids = op_state.mfa_ids;
+  }
   op_state.set_user_info(user_info);
 
   // if we're supposed to modify keys, do so
@@ -2348,7 +2339,7 @@ int RGWUserAdminOp_User::info(RGWRados *store, RGWUserAdminOpState& op_state,
   RGWStorageStats *arg_stats = NULL;
   if (op_state.fetch_stats) {
     int ret = store->get_user_stats(info.user_id, stats);
-    if (ret < 0) {
+    if (ret < 0 && ret != -ENOENT) {
       return ret;
     }
 
@@ -2789,7 +2780,7 @@ public:
     if (ret == -ENOENT) {
       if (truncated)
         *truncated = false;
-      return -ENOENT;
+      return 0;
     }
 
     // now filter out the buckets entries
@@ -2810,7 +2801,7 @@ public:
     delete info;
   }
 
-  string get_marker(void *handle) {
+  string get_marker(void *handle) override {
     list_keys_info *info = static_cast<list_keys_info *>(handle);
     return info->store->list_raw_objs_get_cursor(info->ctx);
   }

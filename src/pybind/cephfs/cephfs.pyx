@@ -110,7 +110,10 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_conf_set(ceph_mount_info *cmount, const char *option, const char *value)
 
     int ceph_mount(ceph_mount_info *cmount, const char *root)
+    int ceph_select_filesystem(ceph_mount_info *cmount, const char *fs_name)
     int ceph_unmount(ceph_mount_info *cmount)
+    int ceph_abort_conn(ceph_mount_info *cmount)
+    uint64_t ceph_get_instance_id(ceph_mount_info *cmount)
     int ceph_fstatx(ceph_mount_info *cmount, int fd, statx *stx, unsigned want, unsigned flags)
     int ceph_statx(ceph_mount_info *cmount, const char *path, statx *stx, unsigned want, unsigned flags)
     int ceph_statfs(ceph_mount_info *cmount, const char *path, statvfs *stbuf)
@@ -143,8 +146,9 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_sync_fs(ceph_mount_info *cmount)
     int ceph_fsync(ceph_mount_info *cmount, int fd, int syncdataonly)
     int ceph_conf_parse_argv(ceph_mount_info *cmount, int argc, const char **argv)
+    int ceph_chmod(ceph_mount_info *cmount, const char *path, mode_t mode)
     void ceph_buffer_free(char *buf)
-
+    mode_t ceph_umask(ceph_mount_info *cmount, mode_t mode)
 
 
 class Error(Exception):
@@ -535,15 +539,33 @@ cdef class LibCephFS(object):
             raise make_ex(ret, "error calling ceph_init")
         self.state = "initialized"
 
-    def mount(self):
+    def mount(self, mount_root=None, filesystem_name=None):
         """
         Perform a mount using the path for the root of the mount.
         """
         if self.state == "configuring":
             self.init()
         self.require_state("initialized")
+
+        # Configure which filesystem to mount if one was specified
+        if filesystem_name is None:
+            filesystem_name = b""
+        cdef:
+            char *_filesystem_name = filesystem_name
+        if filesystem_name:
+            with nogil:
+                ret = ceph_select_filesystem(self.cluster,
+                        _filesystem_name)
+            if ret != 0:
+                raise make_ex(ret, "error calling ceph_select_filesystem")
+
+        # Prepare mount_root argument, default to "/"
+        root = b"/" if mount_root is None else mount_root
+        cdef:
+            char *_mount_root = root
+
         with nogil:
-            ret = ceph_mount(self.cluster, "/")
+            ret = ceph_mount(self.cluster, _mount_root)
         if ret != 0:
             raise make_ex(ret, "error calling ceph_mount")
         self.state = "mounted"
@@ -558,6 +580,26 @@ cdef class LibCephFS(object):
         if ret != 0:
             raise make_ex(ret, "error calling ceph_unmount")
         self.state = "initialized"
+
+    def abort_conn(self):
+        """
+        Abort mds connections.
+        """
+        self.require_state("mounted")
+        with nogil:
+            ret = ceph_abort_conn(self.cluster)
+        if ret != 0:
+            raise make_ex(ret, "error calling ceph_abort_conn")
+        self.state = "initialized"
+
+    def get_instance_id(self):
+        """
+        Get a global id for current instance
+        """
+        self.require_state("initialized", "mounted")
+        with nogil:
+            ret = ceph_get_instance_id(self.cluster)
+        return ret;
 
     def statfs(self, path):
         """
@@ -678,11 +720,13 @@ cdef class LibCephFS(object):
         if not dirent:
             return None
 
+        d_name = dirent.d_name if sys.version[0:2] == '2.' else dirent.d_name.\
+                 decode()
         return DirEntry(d_ino=dirent.d_ino,
                         d_off=dirent.d_off,
                         d_reclen=dirent.d_reclen,
                         d_type=dirent.d_type,
-                        d_name=dirent.d_name)
+                        d_name=d_name)
 
     def closedir(self, DirResult dir_handler):
         """
@@ -719,6 +763,25 @@ cdef class LibCephFS(object):
             ret = ceph_mkdir(self.cluster, _path, _mode)
         if ret < 0:
             raise make_ex(ret, "error in mkdir '%s'" % path)
+
+    def chmod(self, path, mode) :
+        """
+        Change directory mode.
+        :param path: the path of the directory to create.  This must be either an
+                    absolute path or a relative path off of the current working directory.
+        :param mode the permissions the directory should have once created.
+        """
+        self.require_state("mounted")
+        path = cstr(path, 'path')
+        if not isinstance(mode, int):
+            raise TypeError('mode must be an int')
+        cdef:
+            char* _path = path
+            int _mode = mode
+        with nogil:
+            ret = ceph_chmod(self.cluster, _path, _mode)
+        if ret < 0:
+            raise make_ex(ret, "error in chmod '%s'" % path)
 
     def mkdirs(self, path, mode):
         """
@@ -987,6 +1050,7 @@ cdef class LibCephFS(object):
         if ret < 0:
             raise make_ex(ret, "error in setxattr")
 
+
     def stat(self, path):
         """
         Get a file's extended statistics and attributes.
@@ -1183,3 +1247,13 @@ cdef class LibCephFS(object):
             return (ret, my_outbuf, my_outs)
         finally:
             free(_cmd)
+
+    def umask(self, mode) :
+        self.require_state("mounted")
+        cdef:
+            mode_t _mode = mode
+        with nogil:
+            ret = ceph_umask(self.cluster, _mode)
+        if ret < 0:
+            raise make_ex(ret, "error in umask")
+        return ret        

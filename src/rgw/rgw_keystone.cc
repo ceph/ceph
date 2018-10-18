@@ -212,7 +212,7 @@ int Service::issue_admin_token_request(CephContext* const cct,
   }
 
   bufferlist token_bl;
-  RGWGetKeystoneAdminToken token_req(cct, &token_bl);
+  RGWGetKeystoneAdminToken token_req(cct, "POST", "", &token_bl);
   token_req.append_header("Content-Type", "application/json");
   JSONFormatter jf;
 
@@ -240,7 +240,9 @@ int Service::issue_admin_token_request(CephContext* const cct,
     return -ENOTSUP;
   }
 
-  const int ret = token_req.process("POST", token_url.c_str());
+  token_req.set_url(token_url);
+
+  const int ret = token_req.process();
   if (ret < 0) {
     return ret;
   }
@@ -283,7 +285,7 @@ int Service::get_keystone_barbican_token(CephContext * const cct,
   }
 
   bufferlist token_bl;
-  RGWKeystoneHTTPTransceiver token_req(cct, &token_bl);
+  RGWKeystoneHTTPTransceiver token_req(cct, "POST", "", &token_bl);
   token_req.append_header("Content-Type", "application/json");
   JSONFormatter jf;
 
@@ -311,8 +313,10 @@ int Service::get_keystone_barbican_token(CephContext * const cct,
     return -ENOTSUP;
   }
 
+  token_req.set_url(token_url);
+
   ldout(cct, 20) << "Requesting secret from barbican url=" << token_url << dendl;
-  const int ret = token_req.process("POST", token_url.c_str());
+  const int ret = token_req.process();
   if (ret < 0) {
     ldout(cct, 20) << "Barbican process error:" << token_bl.c_str() << dendl;
     return ret;
@@ -411,7 +415,7 @@ bool TokenCache::find(const std::string& token_id,
 bool TokenCache::find_locked(const std::string& token_id,
                              rgw::keystone::TokenEnvelope& token)
 {
-  assert(lock.is_locked_by_me());
+  ceph_assert(lock.is_locked_by_me());
   map<string, token_entry>::iterator iter = tokens.find(token_id);
   if (iter == tokens.end()) {
     if (perfcounter) perfcounter->inc(l_rgw_keystone_token_cache_miss);
@@ -460,7 +464,7 @@ void TokenCache::add(const std::string& token_id,
 void TokenCache::add_locked(const std::string& token_id,
                             const rgw::keystone::TokenEnvelope& token)
 {
-  assert(lock.is_locked_by_me());
+  ceph_assert(lock.is_locked_by_me());
   map<string, token_entry>::iterator iter = tokens.find(token_id);
   if (iter != tokens.end()) {
     token_entry& e = iter->second;
@@ -475,7 +479,7 @@ void TokenCache::add_locked(const std::string& token_id,
   while (tokens_lru.size() > max) {
     list<string>::reverse_iterator riter = tokens_lru.rbegin();
     iter = tokens.find(*riter);
-    assert(iter != tokens.end());
+    ceph_assert(iter != tokens.end());
     tokens.erase(iter);
     tokens_lru.pop_back();
   }
@@ -516,7 +520,7 @@ int TokenCache::RevokeThread::check_revoked()
   std::string token;
 
   bufferlist bl;
-  RGWGetRevokedTokens req(cct, &bl);
+  RGWGetRevokedTokens req(cct, "GET", "", &bl);
 
   if (rgw::keystone::Service::get_admin_token(cct, *cache, config, token) < 0) {
     return -EINVAL;
@@ -536,8 +540,10 @@ int TokenCache::RevokeThread::check_revoked()
     url.append("v3/auth/tokens/OS-PKI/revoked");
   }
 
+  req.set_url(url);
+
   req.set_send_length(0);
-  int ret = req.process(url.c_str());
+  int ret = req.process();
   if (ret < 0) {
     return ret;
   }

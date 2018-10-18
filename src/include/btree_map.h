@@ -6,7 +6,7 @@
 
 #include "include/cpp-btree/btree.h"
 #include "include/cpp-btree/btree_map.h"
-#include "include/assert.h"   // cpp-btree uses system assert, blech
+#include "include/ceph_assert.h"   // cpp-btree uses system assert, blech
 #include "include/encoding.h"
 
 template<class T, class U>
@@ -30,7 +30,7 @@ inline void encode(const btree::btree_map<T,U>& m, bufferlist& bl, uint64_t feat
   }
 }
 template<class T, class U>
-inline void decode(btree::btree_map<T,U>& m, bufferlist::iterator& p)
+inline void decode(btree::btree_map<T,U>& m, bufferlist::const_iterator& p)
 {
   __u32 n;
   decode(n, p);
@@ -50,7 +50,7 @@ inline void encode_nohead(const btree::btree_map<T,U>& m, bufferlist& bl)
   }
 }
 template<class T, class U>
-inline void decode_nohead(int n, btree::btree_map<T,U>& m, bufferlist::iterator& p)
+inline void decode_nohead(int n, btree::btree_map<T,U>& m, bufferlist::const_iterator& p)
 {
   m.clear();
   while (n--) {

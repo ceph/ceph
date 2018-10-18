@@ -279,7 +279,7 @@
 
 ``mds bal fragment interval``
 
-:Description: The delay (in seconds) between a fragment being elegible for split
+:Description: The delay (in seconds) between a fragment being eligible for split
               or merge and executing the fragmentation change.
 :Type:  32-bit Integer
 :Default: ``5``

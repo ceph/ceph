@@ -1,5 +1,5 @@
 import { HTTP_INTERCEPTORS, HttpClientModule } from '@angular/common/http';
-import { NgModule } from '@angular/core';
+import { ErrorHandler, NgModule } from '@angular/core';
 import { BrowserModule } from '@angular/platform-browser';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
@@ -10,7 +10,8 @@ import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
 import { CephModule } from './ceph/ceph.module';
 import { CoreModule } from './core/core.module';
-import { AuthInterceptorService } from './shared/services/auth-interceptor.service';
+import { ApiInterceptorService } from './shared/services/api-interceptor.service';
+import { JsErrorHandler } from './shared/services/js-error-handler.service';
 import { SharedModule } from './shared/shared.module';
 
 export class CustomOption extends ToastOptions {
@@ -21,37 +22,36 @@ export class CustomOption extends ToastOptions {
 }
 
 @NgModule({
-  declarations: [
-    AppComponent
-  ],
+  declarations: [AppComponent],
   imports: [
     HttpClientModule,
     BrowserModule,
     BrowserAnimationsModule,
     ToastModule.forRoot(),
     AppRoutingModule,
-    HttpClientModule,
     CoreModule,
     SharedModule,
     CephModule,
     AccordionModule.forRoot(),
     BsDropdownModule.forRoot(),
-    TabsModule.forRoot(),
-    HttpClientModule,
-    BrowserAnimationsModule
+    TabsModule.forRoot()
   ],
   exports: [SharedModule],
   providers: [
     {
+      provide: ErrorHandler,
+      useClass: JsErrorHandler
+    },
+    {
       provide: HTTP_INTERCEPTORS,
-      useClass: AuthInterceptorService,
+      useClass: ApiInterceptorService,
       multi: true
     },
     {
       provide: ToastOptions,
       useClass: CustomOption
-    },
+    }
   ],
   bootstrap: [AppComponent]
 })
-export class AppModule { }
+export class AppModule {}

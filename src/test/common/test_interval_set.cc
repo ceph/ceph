@@ -564,53 +564,6 @@ TYPED_TEST(IntervalSetTest, subset_of) {
   iset1.insert( 50, 5);
   iset2.insert( 55, 2);
   ASSERT_FALSE(iset1.subset_of(iset2));
-
-  ISet iset3, iset4, expected;
-  iset3.insert(5, 10);
-  iset3.insert(20, 5);
-
-  iset4.subset_of(iset3, 0, 100);
-  expected.insert(5, 10);
-  expected.insert(20, 5);
-  ASSERT_TRUE(iset4 == expected);
-
-  iset4.clear();
-  iset4.subset_of(iset3, 5, 25);
-  ASSERT_TRUE(iset4 == expected);
-
-  iset4.clear();
-  iset4.subset_of(iset3, 1, 10);
-  expected.clear();
-  expected.insert(5, 5);
-  ASSERT_TRUE(iset4 == expected);
-
-  iset4.clear();
-  iset4.subset_of(iset3, 8, 24);
-  expected.clear();
-  expected.insert(8, 7);
-  expected.insert(20, 4);
-  ASSERT_TRUE(iset4 == expected);
-
-  iset4.clear();
-  iset4.subset_of(iset3, 0, 0);
-  expected.clear();
-  ASSERT_TRUE(iset4 == expected);
-
-  iset4.clear();
-  iset4.subset_of(iset3, 0, 1);
-  ASSERT_TRUE(iset4 == expected);
-
-  iset4.clear();
-  iset4.subset_of(iset3, 0, 5);
-  ASSERT_TRUE(iset4 == expected);
-
-  iset4.clear();
-  iset4.subset_of(iset3, 25, 30);
-  ASSERT_TRUE(iset4 == expected);
-
-  iset4.clear();
-  iset4.subset_of(iset3, 26, 40);
-  ASSERT_TRUE(iset4 == expected);
 }
 
 TYPED_TEST(IntervalSetTest, span_of) {

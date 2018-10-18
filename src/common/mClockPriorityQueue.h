@@ -27,7 +27,7 @@
 
 // the following is done to unclobber _ASSERT_H so it returns to the
 // way ceph likes it
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 
 namespace ceph {
@@ -39,7 +39,6 @@ namespace ceph {
 
     using priority_t = unsigned;
     using cost_t = unsigned;
-    using Retn = std::pair<T, dmc::PhaseType>;
 
     typedef std::list<std::pair<cost_t, T> > ListPairs;
 
@@ -129,20 +128,20 @@ namespace ceph {
       }
 
       const std::pair<cost_t, T>& front() const {
-	assert(!(q.empty()));
-	assert(cur != q.end());
+	ceph_assert(!(q.empty()));
+	ceph_assert(cur != q.end());
 	return cur->second.front();
       }
 
       std::pair<cost_t, T>& front() {
-	assert(!(q.empty()));
-	assert(cur != q.end());
+	ceph_assert(!(q.empty()));
+	ceph_assert(cur != q.end());
 	return cur->second.front();
       }
 
       void pop_front() {
-	assert(!(q.empty()));
-	assert(cur != q.end());
+	ceph_assert(!(q.empty()));
+	ceph_assert(cur != q.end());
 	cur->second.pop_front();
 	if (cur->second.empty()) {
 	  auto i = cur;
@@ -158,7 +157,7 @@ namespace ceph {
       }
 
       unsigned length() const {
-	assert(size >= 0);
+	ceph_assert(size >= 0);
 	return (unsigned)size;
       }
 
@@ -211,7 +210,8 @@ namespace ceph {
 
     SubQueues high_queue;
 
-    dmc::PullPriorityQueue<K,T,true> queue;
+    using Queue = dmc::PullPriorityQueue<K,T,false>;
+    Queue queue;
 
     // when enqueue_front is called, rather than try to re-calc tags
     // to put in mClock priority queue, we'll just keep a separate
@@ -222,9 +222,9 @@ namespace ceph {
   public:
 
     mClockQueue(
-      const typename dmc::PullPriorityQueue<K,T,true>::ClientInfoFunc& info_func,
+      const typename Queue::ClientInfoFunc& info_func,
       double anticipation_timeout = 0.0) :
-      queue(info_func, true, anticipation_timeout)
+      queue(info_func, dmc::AtLimit::Allow, anticipation_timeout)
     {
       // empty
     }
@@ -234,7 +234,7 @@ namespace ceph {
       total += queue_front.size();
       total += queue.request_count();
       for (auto i = high_queue.cbegin(); i != high_queue.cend(); ++i) {
-	assert(i->second.length());
+	ceph_assert(i->second.length());
 	total += i->second.length();
       }
       return total;
@@ -311,12 +311,6 @@ namespace ceph {
       queue.add_request(std::move(item), cl, cost);
     }
 
-    void enqueue_distributed(K cl, unsigned priority, unsigned cost, T&& item,
-			     const dmc::ReqParams& req_params) {
-      // priority is ignored
-      queue.add_request(std::move(item), cl, req_params, cost);
-    }
-
     void enqueue_front(K cl,
 		       unsigned priority,
 		       unsigned cost,
@@ -329,7 +323,7 @@ namespace ceph {
     }
 
     T dequeue() override final {
-      assert(!empty());
+      ceph_assert(!empty());
 
       if (!high_queue.empty()) {
 	T ret = std::move(high_queue.rbegin()->second.front().second);
@@ -347,35 +341,9 @@ namespace ceph {
       }
 
       auto pr = queue.pull_request();
-      assert(pr.is_retn());
+      ceph_assert(pr.is_retn());
       auto& retn = pr.get_retn();
       return std::move(*(retn.request));
-    }
-
-    Retn dequeue_distributed() {
-      assert(!empty());
-      dmc::PhaseType resp_params = dmc::PhaseType();
-
-      if (!high_queue.empty()) {
-	T ret = std::move(high_queue.rbegin()->second.front().second);
-	high_queue.rbegin()->second.pop_front();
-	if (high_queue.rbegin()->second.empty()) {
-	  high_queue.erase(high_queue.rbegin()->first);
-	}
-	return std::make_pair(std::move(ret), resp_params);
-      }
-
-      if (!queue_front.empty()) {
-	T ret = std::move(queue_front.front().second);
-	queue_front.pop_front();
-	return std::make_pair(std::move(ret), resp_params);
-      }
-
-      auto pr = queue.pull_request();
-      assert(pr.is_retn());
-      auto& retn = pr.get_retn();
-      resp_params = retn.phase;
-      return std::make_pair(std::move(*(retn.request)), resp_params);
     }
 
     void dump(ceph::Formatter *f) const override final {

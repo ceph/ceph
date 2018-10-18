@@ -11,6 +11,7 @@ import inspect
 import tempfile
 import threading
 import traceback
+import six
 import socket
 
 from . import common
@@ -20,16 +21,11 @@ from uuid import uuid4
 from pecan import jsonify, make_app
 from OpenSSL import crypto
 from pecan.rest import RestController
+from six import iteritems
 from werkzeug.serving import make_server, make_ssl_devcert
 
 from .hooks import ErrorHook
 from mgr_module import MgrModule, CommandResult
-
-
-try:
-    iteritems = dict.iteritems
-except:
-    iteritems = dict.items
 
 
 class CannotServe(Exception):
@@ -84,7 +80,7 @@ class CommandsRequest(object):
         # Gather the results (in parallel)
         results = []
         for index in range(len(commands)):
-            tag = '%s:%d' % (str(self.id), index)
+            tag = '%s:%s:%d' % (__name__, self.id, index)
 
             # Store the result
             result = CommandResult(tag)
@@ -203,6 +199,12 @@ class CommandsRequest(object):
 
 
 class Module(MgrModule):
+    OPTIONS = [
+        {'name': 'server_addr'},
+        {'name': 'server_port'},
+        {'name': 'key_file'},
+    ]
+
     COMMANDS = [
         {
             "cmd": "restful create-key name=key_name,type=CephString",
@@ -217,7 +219,7 @@ class Module(MgrModule):
         {
             "cmd": "restful list-keys",
             "desc": "List all API keys",
-            "perm": "rw"
+            "perm": "r"
         },
         {
             "cmd": "restful create-self-signed-cert",
@@ -263,8 +265,8 @@ class Module(MgrModule):
 
     def refresh_keys(self):
         self.keys = {}
-        rawkeys = self.get_config_prefix('keys/') or {}
-        for k, v in iteritems(rawkeys):
+        rawkeys = self.get_store_prefix('keys/') or {}
+        for k, v in six.iteritems(rawkeys):
             self.keys[k[5:]] = v  # strip of keys/ prefix
 
     def _serve(self):
@@ -285,16 +287,16 @@ class Module(MgrModule):
         self.log.info('server_addr: %s server_port: %d',
                       server_addr, server_port)
 
-        cert = self.get_localized_config("crt")
+        cert = self.get_localized_store("crt")
         if cert is not None:
             cert_tmp = tempfile.NamedTemporaryFile()
             cert_tmp.write(cert.encode('utf-8'))
             cert_tmp.flush()
             cert_fname = cert_tmp.name
         else:
-            cert_fname = self.get_localized_config('crt_file')
+            cert_fname = self.get_localized_store('crt_file')
 
-        pkey = self.get_localized_config("key")
+        pkey = self.get_localized_store("key")
         if pkey is not None:
             pkey_tmp = tempfile.NamedTemporaryFile()
             pkey_tmp.write(pkey.encode('utf-8'))
@@ -359,22 +361,20 @@ class Module(MgrModule):
 
 
     def _notify(self, notify_type, tag):
-        if notify_type == "command":
-            # we can safely skip all the sequential commands
-            if tag == 'seq':
-                return
-
-            request = [x for x in self.requests if x.is_running(tag)]
-            if len(request) != 1:
-                self.log.warn("Unknown request '%s'" % str(tag))
-                return
-
-            request = request[0]
+        if notify_type != "command":
+            self.log.debug("Unhandled notification type '%s'", notify_type)
+            return
+        # we can safely skip all the sequential commands
+        if tag == 'seq':
+            return
+        try:
+            request = next(x for x in self.requests if x.is_running(tag))
             request.finish(tag)
             if request.is_ready():
                 request.next()
-        else:
-            self.log.debug("Unhandled notification type '%s'" % notify_type)
+        except StopIteration:
+            # the command was not issued by me
+            pass
 
 
     def create_self_signed_cert(self):
@@ -399,7 +399,7 @@ class Module(MgrModule):
         )
 
 
-    def handle_command(self, command):
+    def handle_command(self, inbuf, command):
         self.log.warn("Handling command: '%s'" % str(command))
         if command['prefix'] == "restful create-key":
             if command['key_name'] in self.keys:
@@ -408,7 +408,7 @@ class Module(MgrModule):
             else:
                 key = str(uuid4())
                 self.keys[command['key_name']] = key
-                self.set_config('keys/' + command['key_name'], key)
+                self.set_store('keys/' + command['key_name'], key)
 
             return (
                 0,
@@ -419,7 +419,7 @@ class Module(MgrModule):
         elif command['prefix'] == "restful delete-key":
             if command['key_name'] in self.keys:
                 del self.keys[command['key_name']]
-                self.set_config('keys/' + command['key_name'], None)
+                self.set_store('keys/' + command['key_name'], None)
 
             return (
                 0,
@@ -437,8 +437,8 @@ class Module(MgrModule):
 
         elif command['prefix'] == "restful create-self-signed-cert":
             cert, pkey = self.create_self_signed_cert()
-            self.set_config(self.get_mgr_id() + '/crt', cert.decode('utf-8'))
-            self.set_config(self.get_mgr_id() + '/key', pkey.decode('utf-8'))
+            self.set_store(self.get_mgr_id() + '/crt', cert.decode('utf-8'))
+            self.set_store(self.get_mgr_id() + '/key', pkey.decode('utf-8'))
 
             self.restart()
             return (
@@ -593,7 +593,7 @@ class Module(MgrModule):
 
 
     def run_command(self, command):
-        # tag with 'seq' so that we can ingore these in notify function
+        # tag with 'seq' so that we can ignore these in notify function
         result = CommandResult('seq')
 
         self.send_command(result, 'mon', '', json.dumps(command), 'seq')

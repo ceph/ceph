@@ -1,13 +1,20 @@
 import { Injectable } from '@angular/core';
-import { ActivatedRouteSnapshot, CanActivate, Router, RouterStateSnapshot } from '@angular/router';
+import {
+  ActivatedRouteSnapshot,
+  CanActivate,
+  CanActivateChild,
+  Router,
+  RouterStateSnapshot
+} from '@angular/router';
 
 import { AuthStorageService } from './auth-storage.service';
+import { ServicesModule } from './services.module';
 
-@Injectable()
-export class AuthGuardService implements CanActivate {
-
-  constructor(private router: Router, private authStorageService: AuthStorageService) {
-  }
+@Injectable({
+  providedIn: ServicesModule
+})
+export class AuthGuardService implements CanActivate, CanActivateChild {
+  constructor(private router: Router, private authStorageService: AuthStorageService) {}
 
   canActivate(route: ActivatedRouteSnapshot, state: RouterStateSnapshot) {
     if (this.authStorageService.isLoggedIn()) {
@@ -15,5 +22,9 @@ export class AuthGuardService implements CanActivate {
     }
     this.router.navigate(['/login']);
     return false;
+  }
+
+  canActivateChild(route: ActivatedRouteSnapshot, state: RouterStateSnapshot): boolean {
+    return this.canActivate(route, state);
   }
 }

@@ -18,7 +18,7 @@
 #include "rgw/rgw_rados.h"
 #include "rgw/rgw_crypt.h"
 #include <gtest/gtest.h>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
@@ -27,7 +27,7 @@ using namespace std;
 std::unique_ptr<BlockCrypt> AES_256_CBC_create(CephContext* cct, const uint8_t* key, size_t len);
 
 
-class ut_get_sink : public RGWGetDataCB {
+class ut_get_sink : public RGWGetObj_Filter {
   std::stringstream sink;
 public:
   ut_get_sink() {}

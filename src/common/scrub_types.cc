@@ -12,7 +12,7 @@ void object_id_wrapper::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void object_id_wrapper::decode(bufferlist::iterator& bp)
+void object_id_wrapper::decode(bufferlist::const_iterator& bp)
 {
   DECODE_START(1, bp);
   decode(name, bp);
@@ -37,7 +37,7 @@ void osd_shard_wrapper::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void osd_shard_wrapper::decode(bufferlist::iterator& bp)
+void osd_shard_wrapper::decode(bufferlist::const_iterator& bp)
 {
   DECODE_START(1, bp);
   decode(osd, bp);
@@ -87,7 +87,7 @@ void shard_info_wrapper::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void shard_info_wrapper::decode(bufferlist::iterator& bp)
+void shard_info_wrapper::decode(bufferlist::const_iterator& bp)
 {
   DECODE_START(3, bp);
   decode(errors, bp);
@@ -159,7 +159,7 @@ void inconsistent_obj_wrapper::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void inconsistent_obj_wrapper::decode(bufferlist::iterator& bp)
+void inconsistent_obj_wrapper::decode(bufferlist::const_iterator& bp)
 {
   DECODE_START(2, bp);
   DECODE_OLDEST(2);
@@ -185,24 +185,24 @@ void inconsistent_snapset_wrapper::set_headless()
   errors |= inc_snapset_t::HEADLESS_CLONE;
 }
 
-void inconsistent_snapset_wrapper::set_ss_attr_missing()
+void inconsistent_snapset_wrapper::set_snapset_missing()
 {
   errors |= inc_snapset_t::SNAPSET_MISSING;
 }
 
-void inconsistent_snapset_wrapper::set_oi_attr_missing()
+void inconsistent_snapset_wrapper::set_info_missing()
 {
-  errors |= inc_snapset_t::OI_MISSING;
+  errors |= inc_snapset_t::INFO_MISSING;
 }
 
-void inconsistent_snapset_wrapper::set_ss_attr_corrupted()
+void inconsistent_snapset_wrapper::set_snapset_corrupted()
 {
   errors |= inc_snapset_t::SNAPSET_CORRUPTED;
 }
 
-void inconsistent_snapset_wrapper::set_oi_attr_corrupted()
+void inconsistent_snapset_wrapper::set_info_corrupted()
 {
-  errors |= inc_snapset_t::OI_CORRUPTED;
+  errors |= inc_snapset_t::INFO_CORRUPTED;
 }
 
 void inconsistent_snapset_wrapper::set_clone_missing(snapid_t snap)
@@ -217,14 +217,9 @@ void inconsistent_snapset_wrapper::set_clone(snapid_t snap)
   clones.push_back(snap);
 }
 
-void inconsistent_snapset_wrapper::set_snapset_mismatch()
+void inconsistent_snapset_wrapper::set_snapset_error()
 {
-  errors |= inc_snapset_t::SNAP_MISMATCH;
-}
-
-void inconsistent_snapset_wrapper::set_head_mismatch()
-{
-  errors |= inc_snapset_t::HEAD_MISMATCH;
+  errors |= inc_snapset_t::SNAP_ERROR;
 }
 
 void inconsistent_snapset_wrapper::set_size_mismatch()
@@ -234,21 +229,25 @@ void inconsistent_snapset_wrapper::set_size_mismatch()
 
 void inconsistent_snapset_wrapper::encode(bufferlist& bl) const
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   encode(errors, bl);
   encode(object, bl);
   encode(clones, bl);
   encode(missing, bl);
+  encode(ss_bl, bl);
   ENCODE_FINISH(bl);
 }
 
-void inconsistent_snapset_wrapper::decode(bufferlist::iterator& bp)
+void inconsistent_snapset_wrapper::decode(bufferlist::const_iterator& bp)
 {
-  DECODE_START(1, bp);
+  DECODE_START(2, bp);
   decode(errors, bp);
   decode(object, bp);
   decode(clones, bp);
   decode(missing, bp);
+  if (struct_v >= 2) {
+    decode(ss_bl, bp);
+  }
   DECODE_FINISH(bp);
 }
 
@@ -264,7 +263,7 @@ void scrub_ls_arg_t::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void scrub_ls_arg_t::decode(bufferlist::iterator& bp)
+void scrub_ls_arg_t::decode(bufferlist::const_iterator& bp)
 {
   DECODE_START(1, bp);
   decode(interval, bp);
@@ -284,7 +283,7 @@ void scrub_ls_result_t::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void scrub_ls_result_t::decode(bufferlist::iterator& bp)
+void scrub_ls_result_t::decode(bufferlist::const_iterator& bp)
 {
   DECODE_START(1, bp);
   decode(interval, bp);

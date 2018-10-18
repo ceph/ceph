@@ -5,10 +5,15 @@
     </cd-table-key-value>
   </tab>
   <tab heading="Metadata">
-    <cd-table-key-value *ngIf="osd.loaded"
+    <cd-table-key-value *ngIf="osd.loaded && osd.details.osd_metadata; else noMetaData"
                         (fetchData)="osd.autoRefresh()"
                         [data]="osd.details.osd_metadata">
     </cd-table-key-value>
+    <ng-template #noMetaData>
+      <cd-warning-panel i18n>
+        Metadata not available
+      </cd-warning-panel>
+    </ng-template>
   </tab>
   <tab heading="Performance counter">
     <cd-table-performance-counter *ngIf="osd.loaded"
@@ -17,9 +22,10 @@
     </cd-table-performance-counter>
   </tab>
   <tab heading="Histogram">
-    <h3 *ngIf="osd.loaded && osd.histogram_failed">
-      Histogram not available -> <span class="text-warning">{{ osd.histogram_failed }}</span>
-    </h3>
+    <cd-warning-panel i18n *ngIf="osd.loaded && osd.histogram_failed">
+      Histogram not available: {{ osd.histogram_failed }}
+    </cd-warning-panel>
+
     <div class="row" *ngIf="osd.loaded && osd.details.histogram">
       <div class="col-md-6">
         <h4>Writes</h4>
@@ -32,5 +38,11 @@
         </cd-osd-performance-histogram>
       </div>
     </div>
+  </tab>
+  <tab i18n-heading
+       heading="Performance Details">
+    <cd-grafana [grafanaPath]="'MKj_9ipiz/osd-device-details?var-osd_id=' + osd['id']"
+                grafanaStyle="GrafanaStyles.two">
+    </cd-grafana>
   </tab>
 </tabset>

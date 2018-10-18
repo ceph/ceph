@@ -25,7 +25,7 @@
 #include "msg/Messenger.h"
 
 #include "common/config.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
@@ -60,17 +60,18 @@ void SnapServer::reset_state()
   }
   last_created = last_snap;
   last_destroyed = last_snap;
+  snaprealm_v2_since = last_snap + 1;
   version++;
 }
 
 
 // SERVER
 
-void SnapServer::_prepare(bufferlist &bl, uint64_t reqid, mds_rank_t bymds)
+void SnapServer::_prepare(const bufferlist& bl, uint64_t reqid, mds_rank_t bymds, bufferlist& out)
 {
   using ceph::decode;
   using ceph::encode;
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
   __u32 op;
   decode(op, p);
 
@@ -89,8 +90,8 @@ void SnapServer::_prepare(bufferlist &bl, uint64_t reqid, mds_rank_t bymds)
 	pending_noop.insert(version);
 	dout(10) << "prepare v" << version << " noop" << dendl;
       }
-      bl.clear();
-      encode(last_snap, bl);
+
+      encode(last_snap, out);
     }
     break;
 
@@ -107,8 +108,7 @@ void SnapServer::_prepare(bufferlist &bl, uint64_t reqid, mds_rank_t bymds)
       pending_destroy[version] = pair<snapid_t,snapid_t>(snapid, last_snap);
       dout(10) << "prepare v" << version << " destroy " << snapid << " seq " << last_snap << dendl;
 
-      bl.clear();
-      encode(last_snap, bl);
+      encode(last_snap, out);
     }
     break;
 
@@ -120,12 +120,8 @@ void SnapServer::_prepare(bufferlist &bl, uint64_t reqid, mds_rank_t bymds)
       decode(info.name, p);
       decode(info.stamp, p);
 
-      // bump last_snap... we use it as a version value on the snaprealm.
-      ++last_snap;
       pending_update[version] = info;
       dout(10) << "prepare v" << version << " update " << info << dendl;
-
-      bl.clear();
     }
     break;
 
@@ -159,7 +155,7 @@ void SnapServer::_get_reply_buffer(version_t tid, bufferlist *pbl) const
   assert (0 == "tid not found");
 }
 
-void SnapServer::_commit(version_t tid, MMDSTableRequest *req)
+void SnapServer::_commit(version_t tid, MMDSTableRequest::const_ref req)
 {
   if (pending_update.count(tid)) {
     SnapInfo &info = pending_update[tid];
@@ -235,7 +231,7 @@ void SnapServer::_rollback(version_t tid)
 void SnapServer::_server_update(bufferlist& bl)
 {
   using ceph::decode;
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
   map<int, vector<snapid_t> > purge;
   decode(purge, p);
 
@@ -263,31 +259,31 @@ bool SnapServer::_notify_prep(version_t tid)
   encode(pending_destroy, bl);
   encode(last_created, bl);
   encode(last_destroyed, bl);
-  assert(version == tid);
+  ceph_assert(version == tid);
 
-  for (auto p : active_clients) {
-    MMDSTableRequest *m = new MMDSTableRequest(table, TABLESERVER_OP_NOTIFY_PREP, 0, version);
+  for (auto &p : active_clients) {
+    auto m = MMDSTableRequest::create(table, TABLESERVER_OP_NOTIFY_PREP, 0, version);
     m->bl = bl;
     mds->send_message_mds(m, p);
   }
   return true;
 }
 
-void SnapServer::handle_query(MMDSTableRequest *req)
+void SnapServer::handle_query(const MMDSTableRequest::const_ref &req)
 {
   using ceph::encode;
   using ceph::decode;
   char op;
-  bufferlist::iterator p = req->bl.begin();
+  auto p = req->bl.cbegin();
   decode(op, p);
 
-  MMDSTableRequest *reply = new MMDSTableRequest(table, TABLESERVER_OP_QUERY_REPLY, req->reqid, version);
+  auto reply = MMDSTableRequest::create(table, TABLESERVER_OP_QUERY_REPLY, req->reqid, version);
 
   switch (op) {
     case 'F': // full
       version_t have_version;
       decode(have_version, p);
-      assert(have_version <= version);
+      ceph_assert(have_version <= version);
       if (have_version == version) {
 	char type = 'U';
 	encode(type, reply->bl);
@@ -307,7 +303,6 @@ void SnapServer::handle_query(MMDSTableRequest *req)
   };
 
   mds->send_message(reply, req->get_connection());
-  req->put();
 }
 
 void SnapServer::check_osd_map(bool force)
@@ -354,8 +349,8 @@ void SnapServer::check_osd_map(bool force)
 
   if (!all_purge.empty()) {
     dout(10) << "requesting removal of " << all_purge << dendl;
-    MRemoveSnaps *m = new MRemoveSnaps(all_purge);
-    mon_client->send_mon_message(m);
+    auto m = MRemoveSnaps::create(all_purge);
+    mon_client->send_mon_message(m.detach());
   }
 
   last_checked_osdmap = version;

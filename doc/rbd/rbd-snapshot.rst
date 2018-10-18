@@ -138,7 +138,7 @@ Layering
 ========
 
 Ceph supports the ability to create many copy-on-write (COW) clones of a block
-device shapshot. Snapshot layering enables Ceph block device clients to create
+device snapshot. Snapshot layering enables Ceph block device clients to create
 images very quickly. For example, you might create a block device image with a
 Linux VM written to it; then, snapshot the image, protect the snapshot, and
 create as many copy-on-write clones as you like. A snapshot is read-only, 
@@ -202,7 +202,7 @@ clone snapshots  from one pool to images in another pool.
 
 
 #. **Image Template:** A common use case for block device layering is to create a
-   a master image and a snapshot that serves as a template for clones. For example, 
+   master image and a snapshot that serves as a template for clones. For example, 
    a user may create an image for a Linux distribution (e.g., Ubuntu 12.04), and 
    create a snapshot for it. Periodically, the user may update the image and create
    a new snapshot (e.g., ``sudo apt-get update``, ``sudo apt-get upgrade``,

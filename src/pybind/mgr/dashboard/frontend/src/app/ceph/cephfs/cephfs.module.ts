@@ -3,13 +3,14 @@ import { NgModule } from '@angular/core';
 
 import { ChartsModule } from 'ng2-charts/ng2-charts';
 import { ProgressbarModule } from 'ngx-bootstrap/progressbar';
+import { TabsModule } from 'ngx-bootstrap/tabs';
 
 import { AppRoutingModule } from '../../app-routing.module';
 import { SharedModule } from '../../shared/shared.module';
 import { CephfsChartComponent } from './cephfs-chart/cephfs-chart.component';
-import { CephfsService } from './cephfs.service';
-import { CephfsComponent } from './cephfs/cephfs.component';
-import { ClientsComponent } from './clients/clients.component';
+import { CephfsClientsComponent } from './cephfs-clients/cephfs-clients.component';
+import { CephfsDetailComponent } from './cephfs-detail/cephfs-detail.component';
+import { CephfsListComponent } from './cephfs-list/cephfs-list.component';
 
 @NgModule({
   imports: [
@@ -17,9 +18,14 @@ import { ClientsComponent } from './clients/clients.component';
     SharedModule,
     AppRoutingModule,
     ChartsModule,
-    ProgressbarModule.forRoot()
+    ProgressbarModule.forRoot(),
+    TabsModule.forRoot()
   ],
-  declarations: [CephfsComponent, ClientsComponent, CephfsChartComponent],
-  providers: [CephfsService]
+  declarations: [
+    CephfsDetailComponent,
+    CephfsClientsComponent,
+    CephfsChartComponent,
+    CephfsListComponent
+  ]
 })
 export class CephfsModule {}

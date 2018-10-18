@@ -158,7 +158,7 @@ public:
       encode(stream_format, bl);
       ENCODE_FINISH(bl);
     }
-    void decode(bufferlist::iterator &bl) {
+    void decode(bufferlist::const_iterator &bl) {
       DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
       decode(magic, bl);
       decode(trimmed_pos, bl);
@@ -240,7 +240,7 @@ private:
    */
   void _do_delayed_flush()
   {
-    assert(delay_flush_event != NULL);
+    ceph_assert(delay_flush_event != NULL);
     lock_guard l(lock);
     delay_flush_event = NULL;
     _do_flush();
@@ -300,7 +300,7 @@ private:
 		      ///  write_pos>flush_pos, we're buffering writes.
   uint64_t safe_pos; ///< what has been committed safely to disk.
 
-  uint64_t next_safe_pos; /// start postion of the first entry that isn't
+  uint64_t next_safe_pos; /// start position of the first entry that isn't
 			  /// being fully flushed. If we don't flush any
 			  // partial entry, it's equal to flush_pos.
 
@@ -312,6 +312,8 @@ private:
 
   uint64_t waiting_for_zero_pos;
   interval_set<uint64_t> pending_zero;  // non-contig bits we've zeroed
+  list<Context*> waitfor_prezero;
+
   std::map<uint64_t, uint64_t> pending_safe; // flush_pos -> safe_pos
   // when safe through given offset
   std::map<uint64_t, std::list<Context*> > waitfor_safe;
@@ -367,7 +369,7 @@ private:
 
   // only init_headers when following or first reading off-disk
   void init_headers(Header& h) {
-    assert(readonly ||
+    ceph_assert(readonly ||
 	   state == STATE_READHEAD ||
 	   state == STATE_REREADHEAD);
     last_written = last_committed = h;
@@ -424,7 +426,7 @@ public:
    */
   void reset() {
     lock_guard l(lock);
-    assert(state == STATE_ACTIVE);
+    ceph_assert(state == STATE_ACTIVE);
 
     readonly = true;
     delay_flush_event = NULL;
@@ -440,7 +442,7 @@ public:
     requested_pos = 0;
     received_pos = 0;
     fetch_len = 0;
-    assert(!on_readable);
+    ceph_assert(!on_readable);
     expire_pos = 0;
     trimming_pos = 0;
     trimmed_pos = 0;
@@ -459,6 +461,7 @@ public:
   void flush(Context *onsafe = 0);
   void wait_for_readable(Context *onfinish);
   bool have_waiter() const;
+  void wait_for_prezero(Context *onfinish);
 
   // Synchronous setters
   // ===================
@@ -472,7 +475,7 @@ public:
   void set_read_pos(uint64_t p) {
     lock_guard l(lock);
     // we can't cope w/ in-progress read right now.
-    assert(requested_pos == received_pos);
+    ceph_assert(requested_pos == received_pos);
     read_pos = requested_pos = received_pos = p;
     read_buf.clear();
   }
@@ -497,7 +500,7 @@ public:
   void trim_tail() {
     lock_guard l(lock);
 
-    assert(!readonly);
+    ceph_assert(!readonly);
     _issue_prezero();
   }
 

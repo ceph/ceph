@@ -67,9 +67,9 @@ void LibRadosWatchNotify::watch_notify2_test_cb(void *arg,
 {
   std::cout << __func__ << " from " << notifier_gid << " notify_id " << notify_id
 	    << " cookie " << cookie << std::endl;
-  assert(notifier_gid > 0);
+  ceph_assert(notifier_gid > 0);
   auto thiz = reinterpret_cast<LibRadosWatchNotify*>(arg);
-  assert(thiz);
+  ceph_assert(thiz);
   thiz->notify_cookies.insert(cookie);
   thiz->notify_bl.clear();
   thiz->notify_bl.append((char*)data, data_len);
@@ -84,9 +84,9 @@ void LibRadosWatchNotify::watch_notify2_test_errcb(void *arg,
                                                    int err)
 {
   std::cout << __func__ << " cookie " << cookie << " err " << err << std::endl;
-  assert(cookie > 1000);
+  ceph_assert(cookie > 1000);
   auto thiz = reinterpret_cast<LibRadosWatchNotify*>(arg);
-  assert(thiz);
+  ceph_assert(thiz);
   thiz->notify_err = err;
 }
 
@@ -130,7 +130,7 @@ public:
   void handle_error(uint64_t cookie, int err) override {
     std::cout << __func__ << " cookie " << cookie
 	      << " err " << err << std::endl;
-    assert(cookie > 1000);
+    ceph_assert(cookie > 1000);
     notify->notify_err = err;
   }
 };
@@ -344,7 +344,7 @@ TEST_F(LibRadosWatchNotify, WatchNotify2) {
   reply.append(reply_buf, reply_buf_len);
   std::map<std::pair<uint64_t,uint64_t>, bufferlist> reply_map;
   std::set<std::pair<uint64_t,uint64_t> > missed_map;
-  bufferlist::iterator reply_p = reply.begin();
+  auto reply_p = reply.cbegin();
   decode(reply_map, reply_p);
   decode(missed_map, reply_p);
   ASSERT_EQ(1u, reply_map.size());
@@ -395,7 +395,7 @@ TEST_F(LibRadosWatchNotify, AioWatchNotify2) {
   reply.append(reply_buf, reply_buf_len);
   std::map<std::pair<uint64_t,uint64_t>, bufferlist> reply_map;
   std::set<std::pair<uint64_t,uint64_t> > missed_map;
-  bufferlist::iterator reply_p = reply.begin();
+  auto reply_p = reply.cbegin();
   decode(reply_map, reply_p);
   decode(missed_map, reply_p);
   ASSERT_EQ(1u, reply_map.size());
@@ -449,7 +449,7 @@ TEST_F(LibRadosWatchNotify, AioNotify) {
   reply.append(reply_buf, reply_buf_len);
   std::map<std::pair<uint64_t,uint64_t>, bufferlist> reply_map;
   std::set<std::pair<uint64_t,uint64_t> > missed_map;
-  bufferlist::iterator reply_p = reply.begin();
+  auto reply_p = reply.cbegin();
   decode(reply_map, reply_p);
   decode(missed_map, reply_p);
   ASSERT_EQ(1u, reply_map.size());
@@ -494,7 +494,7 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotify2) {
   ASSERT_EQ(watches.size(), 1u);
   bufferlist bl2, bl_reply;
   ASSERT_EQ(0, ioctx.notify2(notify_oid, bl2, 300000, &bl_reply));
-  bufferlist::iterator p = bl_reply.begin();
+  auto p = bl_reply.cbegin();
   std::map<std::pair<uint64_t,uint64_t>,bufferlist> reply_map;
   std::set<std::pair<uint64_t,uint64_t> > missed_map;
   decode(reply_map, p);
@@ -533,7 +533,7 @@ TEST_P(LibRadosWatchNotifyPP, AioWatchNotify2) {
   ASSERT_EQ(watches.size(), 1u);
   bufferlist bl2, bl_reply;
   ASSERT_EQ(0, ioctx.notify2(notify_oid, bl2, 300000, &bl_reply));
-  bufferlist::iterator p = bl_reply.begin();
+  auto p = bl_reply.cbegin();
   std::map<std::pair<uint64_t,uint64_t>,bufferlist> reply_map;
   std::set<std::pair<uint64_t,uint64_t> > missed_map;
   decode(reply_map, p);
@@ -575,7 +575,7 @@ TEST_P(LibRadosWatchNotifyPP, AioNotify) {
   ASSERT_EQ(0, comp->wait_for_complete());
   ASSERT_EQ(0, comp->get_return_value());
   comp->release();
-  bufferlist::iterator p = bl_reply.begin();
+  auto p = bl_reply.cbegin();
   std::map<std::pair<uint64_t,uint64_t>,bufferlist> reply_map;
   std::set<std::pair<uint64_t,uint64_t> > missed_map;
   decode(reply_map, p);
@@ -621,7 +621,7 @@ TEST_F(LibRadosWatchNotify, WatchNotify2Multi) {
   reply.append(reply_buf, reply_buf_len);
   std::map<std::pair<uint64_t,uint64_t>, bufferlist> reply_map;
   std::set<std::pair<uint64_t,uint64_t> > missed_map;
-  bufferlist::iterator reply_p = reply.begin();
+  auto reply_p = reply.cbegin();
   decode(reply_map, reply_p);
   decode(missed_map, reply_p);
   ASSERT_EQ(2u, reply_map.size());
@@ -666,7 +666,7 @@ TEST_F(LibRadosWatchNotify, WatchNotify2Timeout) {
     reply.append(reply_buf, reply_buf_len);
     std::map<std::pair<uint64_t,uint64_t>, bufferlist> reply_map;
     std::set<std::pair<uint64_t,uint64_t> > missed_map;
-    bufferlist::iterator reply_p = reply.begin();
+    auto reply_p = reply.cbegin();
     decode(reply_map, reply_p);
     decode(missed_map, reply_p);
     ASSERT_EQ(0u, reply_map.size());
@@ -756,7 +756,7 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotify3) {
   std::cout << "notify2" << std::endl;
   ASSERT_EQ(0, ioctx.notify2(notify_oid, bl2, 300000, &bl_reply));
   std::cout << "notify2 done" << std::endl;
-  bufferlist::iterator p = bl_reply.begin();
+  auto p = bl_reply.cbegin();
   std::map<std::pair<uint64_t,uint64_t>,bufferlist> reply_map;
   std::set<std::pair<uint64_t,uint64_t> > missed_map;
   decode(reply_map, p);
@@ -832,7 +832,7 @@ TEST_F(LibRadosWatchNotify, Watch3Timeout) {
     reply.append(reply_buf, reply_buf_len);
     std::map<std::pair<uint64_t,uint64_t>, bufferlist> reply_map;
     std::set<std::pair<uint64_t,uint64_t> > missed_map;
-    bufferlist::iterator reply_p = reply.begin();
+    auto reply_p = reply.cbegin();
     decode(reply_map, reply_p);
     decode(missed_map, reply_p);
     ASSERT_EQ(0u, reply_map.size());
@@ -862,7 +862,7 @@ TEST_F(LibRadosWatchNotify, Watch3Timeout) {
     reply.append(reply_buf, reply_buf_len);
     std::map<std::pair<uint64_t,uint64_t>, bufferlist> reply_map;
     std::set<std::pair<uint64_t,uint64_t> > missed_map;
-    bufferlist::iterator reply_p = reply.begin();
+    auto reply_p = reply.cbegin();
     decode(reply_map, reply_p);
     decode(missed_map, reply_p);
     ASSERT_EQ(1u, reply_map.size());

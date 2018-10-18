@@ -20,7 +20,7 @@ ceph osd crush rule create-simple foo default host
 ceph osd crush rule create-simple bar default host
 
 # make sure we're at luminous+ before using crush device classes
-ceph osd require-osd-release mimic
+ceph osd require-osd-release nautilus
 ceph osd crush rm-device-class all
 ceph osd crush set-device-class ssd osd.0
 ceph osd crush set-device-class hdd osd.1
@@ -211,6 +211,17 @@ ceph osd crush tree --show-shadow | grep osd\\.0 | grep globster | grep 6\\.
 ceph osd crush rm-device-class osd.0
 ceph osd pool rm cool cool --yes-i-really-really-mean-it
 ceph osd pool rm cold cold --yes-i-really-really-mean-it
+ceph osd crush weight-set rm-compat
+
+# weight set vs device classes vs move
+ceph osd crush weight-set create-compat
+ceph osd crush add-bucket fooo host
+ceph osd crush move fooo root=default
+ceph osd crush add-bucket barr rack
+ceph osd crush move barr root=default
+ceph osd crush move fooo rack=barr
+ceph osd crush rm fooo
+ceph osd crush rm barr
 ceph osd crush weight-set rm-compat
 
 echo OK

@@ -347,7 +347,7 @@ instances or all radosgw-admin commands can be put into the ``[global]`` or the
 
 ``rgw content length compat``
 
-:Description: Enable compatability handling of FCGI requests with both CONTENT_LENGTH AND HTTP_CONTENT_LENGTH set.
+:Description: Enable compatibility handling of FCGI requests with both CONTENT_LENGTH AND HTTP_CONTENT_LENGTH set.
 :Type: Boolean
 :Default: ``false``
 

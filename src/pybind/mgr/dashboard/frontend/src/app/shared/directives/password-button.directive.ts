@@ -4,24 +4,29 @@ import { Directive, ElementRef, HostListener, Input, OnInit, Renderer2 } from '@
   selector: '[cdPasswordButton]'
 })
 export class PasswordButtonDirective implements OnInit {
-  private inputElement: any;
-  private iElement: any;
+  private iElement: HTMLElement;
 
-  @Input('cdPasswordButton') private cdPasswordButton: string;
+  @Input()
+  private cdPasswordButton: string;
 
-  constructor(private el: ElementRef, private renderer: Renderer2) { }
+  constructor(private elementRef: ElementRef, private renderer: Renderer2) {}
 
   ngOnInit() {
-    this.inputElement = document.getElementById(this.cdPasswordButton);
+    this.renderer.setAttribute(this.elementRef.nativeElement, 'tabindex', '-1');
     this.iElement = this.renderer.createElement('i');
     this.renderer.addClass(this.iElement, 'icon-prepend');
     this.renderer.addClass(this.iElement, 'fa');
-    this.renderer.appendChild(this.el.nativeElement, this.iElement);
+    this.renderer.appendChild(this.elementRef.nativeElement, this.iElement);
     this.update();
   }
 
+  private getInputElement() {
+    return document.getElementById(this.cdPasswordButton) as HTMLInputElement;
+  }
+
   private update() {
-    if (this.inputElement.type === 'text') {
+    const inputElement = this.getInputElement();
+    if (inputElement && inputElement.type === 'text') {
       this.renderer.removeClass(this.iElement, 'fa-eye');
       this.renderer.addClass(this.iElement, 'fa-eye-slash');
     } else {
@@ -32,8 +37,9 @@ export class PasswordButtonDirective implements OnInit {
 
   @HostListener('click')
   onClick() {
+    const inputElement = this.getInputElement();
     // Modify the type of the input field.
-    this.inputElement.type = (this.inputElement.type === 'password') ? 'text' : 'password';
+    inputElement.type = inputElement.type === 'password' ? 'text' : 'password';
     // Update the button icon/tooltip.
     this.update();
   }

@@ -6,7 +6,9 @@ import unittest
 import threading
 import time
 from collections import defaultdict
+from functools import partial
 
+from ..services.exception import serialize_dashboard_exception
 from ..tools import NotificationQueue, TaskManager, TaskExecutor
 
 
@@ -31,24 +33,30 @@ class MyTask(object):
                 self.finish(result, None)
 
     # pylint: disable=too-many-arguments
-    def __init__(self, op_seconds, wait=False, fail=False, progress=50, is_async=False):
+    def __init__(self, op_seconds, wait=False, fail=False, progress=50,
+                 is_async=False, handle_ex=False):
         self.op_seconds = op_seconds
         self.wait = wait
         self.fail = fail
         self.progress = progress
         self.is_async = is_async
+        self.handle_ex = handle_ex
         self._event = threading.Event()
 
     def run(self, ns, timeout=None):
         args = ['dummy arg']
         kwargs = {'dummy': 'arg'}
+        h_ex = partial(serialize_dashboard_exception,
+                       include_http_status=True) if self.handle_ex else None
         if not self.is_async:
             task = TaskManager.run(
-                ns, self.metadata(), self.task_op, args, kwargs)
+                ns, self.metadata(), self.task_op, args, kwargs,
+                exception_handler=h_ex)
         else:
             task = TaskManager.run(
                 ns, self.metadata(), self.task_async_op, args, kwargs,
-                executor=MyTask.CallbackExecutor(self.fail, self.progress))
+                executor=MyTask.CallbackExecutor(self.fail, self.progress),
+                exception_handler=h_ex)
         return task.wait(timeout)
 
     def task_op(self, *args, **kwargs):
@@ -82,7 +90,8 @@ class MyTask(object):
             'wait': self.wait,
             'fail': self.fail,
             'progress': self.progress,
-            'is_async': self.is_async
+            'is_async': self.is_async,
+            'handle_ex': self.handle_ex
         }
 
 
@@ -174,7 +183,7 @@ class TaskTest(unittest.TestCase):
         state, result = task1.run('test5/task1', 0.5)
         self.assertEqual(state, TaskManager.VALUE_EXECUTING)
         self.assertIsNone(result)
-        ex_t, _ = TaskManager.list()
+        ex_t, _ = TaskManager.list('test5/*')
         self.assertEqual(len(ex_t), 1)
         self.assertEqual(ex_t[0].name, 'test5/task1')
         self.assertEqual(ex_t[0].progress, 30)
@@ -190,12 +199,12 @@ class TaskTest(unittest.TestCase):
                 self.assertEqual(task.progress, 60)
         task2.resume()
         self.wait_for_task('test5/task2')
-        ex_t, _ = TaskManager.list()
+        ex_t, _ = TaskManager.list('test5/*')
         self.assertEqual(len(ex_t), 1)
         self.assertEqual(ex_t[0].name, 'test5/task1')
         task1.resume()
         self.wait_for_task('test5/task1')
-        ex_t, _ = TaskManager.list()
+        ex_t, _ = TaskManager.list('test5/*')
         self.assertEqual(len(ex_t), 0)
 
     def test_task_idempotent(self):
@@ -204,13 +213,13 @@ class TaskTest(unittest.TestCase):
         state, result = task1.run('test6/task1', 0.5)
         self.assertEqual(state, TaskManager.VALUE_EXECUTING)
         self.assertIsNone(result)
-        ex_t, _ = TaskManager.list()
+        ex_t, _ = TaskManager.list('test6/*')
         self.assertEqual(len(ex_t), 1)
         self.assertEqual(ex_t[0].name, 'test6/task1')
         state, result = task1_clone.run('test6/task1', 0.5)
         self.assertEqual(state, TaskManager.VALUE_EXECUTING)
         self.assertIsNone(result)
-        ex_t, _ = TaskManager.list()
+        ex_t, _ = TaskManager.list('test6/*')
         self.assertEqual(len(ex_t), 1)
         self.assertEqual(ex_t[0].name, 'test6/task1')
         task1.resume()
@@ -381,4 +390,44 @@ class TaskTest(unittest.TestCase):
         self.assertEqual(fn_t[0]['progress'], 50)
         self.assertFalse(fn_t[0]['success'])
         self.assertIsNotNone(fn_t[0]['exception'])
-        self.assertEqual(fn_t[0]['exception'], "Task Unexpected Exception")
+        self.assertEqual(fn_t[0]['exception'],
+                         {"detail": "Task Unexpected Exception"})
+
+    def test_task_serialization_format_on_failure_with_handler(self):
+        task1 = MyTask(1, fail=True, handle_ex=True)
+        task1.run('test15/task1', 0.5)
+        self.wait_for_task('test15/task1')
+        ex_t, fn_t = TaskManager.list_serializable('test15/*')
+        self.assertEqual(len(ex_t), 0)
+        self.assertEqual(len(fn_t), 1)
+        # validate finished tasks attributes
+
+        try:
+            json.dumps(fn_t)
+        except TypeError as ex:
+            self.fail("Failed to serialize finished tasks: {}".format(str(ex)))
+
+        self.assertEqual(len(fn_t[0].keys()), 9)
+        self.assertEqual(fn_t[0]['name'], 'test15/task1')
+        self.assertEqual(fn_t[0]['metadata'], task1.metadata())
+        self.assertIsNotNone(fn_t[0]['begin_time'])
+        self.assertIsNotNone(fn_t[0]['end_time'])
+        self.assertGreaterEqual(fn_t[0]['duration'], 1.0)
+        self.assertEqual(fn_t[0]['progress'], 50)
+        self.assertFalse(fn_t[0]['success'])
+        self.assertIsNotNone(fn_t[0]['exception'])
+        self.assertEqual(fn_t[0]['exception'], {
+            'component': None,
+            'detail': 'Task Unexpected Exception',
+            'status': 500,
+            'task': {
+                'metadata': {
+                    'fail': True,
+                    'handle_ex': True,
+                    'is_async': False,
+                    'op_seconds': 1,
+                    'progress': 50,
+                    'wait': False},
+                'name': 'test15/task1'
+            }
+        })

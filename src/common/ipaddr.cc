@@ -10,8 +10,9 @@
 #endif
 
 #include "include/ipaddr.h"
+#include "msg/msg_types.h"
 
-static void netmask_ipv4(const struct in_addr *addr,
+void netmask_ipv4(const struct in_addr *addr,
 			 unsigned int prefix_len,
 			 struct in_addr *out) {
   uint32_t mask;
@@ -57,9 +58,9 @@ const struct ifaddrs *find_ipv4_in_subnet(const struct ifaddrs *addrs,
 }
 
 
-static void netmask_ipv6(const struct in6_addr *addr,
-			 unsigned int prefix_len,
-			 struct in6_addr *out) {
+void netmask_ipv6(const struct in6_addr *addr,
+		  unsigned int prefix_len,
+		  struct in6_addr *out) {
   if (prefix_len > 128)
     prefix_len = 128;
 
@@ -162,5 +163,55 @@ bool parse_network(const char *s, struct sockaddr_storage *network, unsigned int
     return true;
   }
 
+  return false;
+}
+
+bool parse_network(const char *s,
+		   entity_addr_t *network,
+		   unsigned int *prefix_len)
+{
+  sockaddr_storage ss;
+  bool ret = parse_network(s, &ss, prefix_len);
+  if (ret) {
+    network->set_type(entity_addr_t::TYPE_LEGACY);
+    network->set_sockaddr((sockaddr *)&ss);
+  }
+  return ret;
+}
+
+bool network_contains(
+  const struct entity_addr_t& network,
+  unsigned int prefix_len,
+  const struct entity_addr_t& addr)
+{
+  if (addr.get_family() != network.get_family()) {
+    return false;
+  }
+  switch (network.get_family()) {
+  case AF_INET:
+    {
+      struct in_addr a, b;
+      netmask_ipv4(
+	&((const sockaddr_in*)network.get_sockaddr())->sin_addr, prefix_len, &a);
+      netmask_ipv4(
+	&((const sockaddr_in*)addr.get_sockaddr())->sin_addr, prefix_len, &b);
+      if (memcmp(&a, &b, sizeof(a)) == 0) {
+	return true;
+      }
+    }
+    break;
+  case AF_INET6:
+    {
+      struct in6_addr a, b;
+      netmask_ipv6(
+	&((const sockaddr_in6*)network.get_sockaddr())->sin6_addr, prefix_len, &a);
+      netmask_ipv6(
+	&((const sockaddr_in6*)addr.get_sockaddr())->sin6_addr, prefix_len, &b);
+      if (memcmp(&a, &b, sizeof(a)) == 0) {
+	return true;
+      }
+    }
+    break;
+  }
   return false;
 }

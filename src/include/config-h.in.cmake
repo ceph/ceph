@@ -117,14 +117,14 @@
 /* Define if you have tcmalloc */
 #cmakedefine HAVE_LIBTCMALLOC
 
-/* Define if you have jemalloc */
-#cmakedefine HAVE_LIBJEMALLOC
-
 /* Define if have curl_multi_wait() */
 #cmakedefine HAVE_CURL_MULTI_WAIT 1
 
 /* Define if using NSS. */
 #cmakedefine USE_NSS
+
+/* Define if using OpenSSL. */
+#cmakedefine USE_OPENSSL
 
 /* Accelio conditional compilation */
 #cmakedefine HAVE_XIO
@@ -138,9 +138,6 @@
 
 /* define if bluestore enabled */
 #cmakedefine WITH_BLUESTORE
-
-/* define if embedded enabled */
-#cmakedefine WITH_EMBEDDED
 
 /* define if cephfs enabled */
 #cmakedefine WITH_CEPHFS
@@ -262,10 +259,10 @@
 /* Defined if you have libzfs enabled */
 #cmakedefine HAVE_LIBZFS
 
-/* Define if the C complier supports __func__ */
+/* Define if the C compiler supports __func__ */
 #cmakedefine HAVE_FUNC
 
-/* Define if the C complier supports __PRETTY_FUNCTION__ */
+/* Define if the C compiler supports __PRETTY_FUNCTION__ */
 #cmakedefine HAVE_PRETTY_FUNC
 
 /* F_SETPIPE_SZ is supported */
@@ -336,10 +333,19 @@
 /* Defined if boost::context is available */
 #cmakedefine HAVE_BOOST_CONTEXT
 
+/* Defined if libradosstriper is enabled: */
+#cmakedefine WITH_LIBRADOSSTRIPER
+
 /* Defined if OpenSSL is available for the rgw beast frontend */
 #cmakedefine WITH_RADOSGW_BEAST_OPENSSL
 
 /* Defined if std::map::merge() is supported */
 #cmakedefine HAVE_STDLIB_MAP_SPLICING
+
+/* Defined if Intel QAT compress/decompress is supported */
+#cmakedefine HAVE_QATZIP
+
+/* Define if seastar is available. */
+#cmakedefine HAVE_SEASTAR
 
 #endif /* CONFIG_H */

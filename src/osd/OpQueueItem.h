@@ -20,8 +20,6 @@
 #include "include/utime.h"
 #include "osd/OpRequest.h"
 #include "osd/PG.h"
-#include "common/mClockCommon.h"
-#include "messages/MOSDOp.h"
 #include "PGPeeringEvent.h"
 
 class OSD;
@@ -88,7 +86,6 @@ public:
 private:
   OpQueueable::Ref qitem;
   int cost;
-  dmc::ReqParams qos_params;
   unsigned priority;
   utime_t start_time;
   uint64_t owner;  ///< global id (e.g., client.XXX)
@@ -108,15 +105,7 @@ public:
       start_time(start_time),
       owner(owner),
       map_epoch(e)
-  {
-    if (auto op = maybe_get_op()) {
-      auto req = (*op)->get_req();
-      if (req->get_type() == CEPH_MSG_OSD_OP) {
-	const MOSDOp *m = static_cast<const MOSDOp*>(req);
-	qos_params = m->get_qos_params();
-      }
-    }
-  }
+  {}
   OpQueueItem(OpQueueItem &&) = default;
   OpQueueItem(const OpQueueItem &) = delete;
   OpQueueItem &operator=(OpQueueItem &&) = default;
@@ -149,8 +138,6 @@ public:
   utime_t get_start_time() const { return start_time; }
   uint64_t get_owner() const { return owner; }
   epoch_t get_map_epoch() const { return map_epoch; }
-  dmc::ReqParams get_qos_params() const { return qos_params; }
-  void set_qos_params(dmc::ReqParams qparams) { qos_params =  qparams; }
 
   bool is_peering() const {
     return qitem->is_peering();
@@ -185,7 +172,7 @@ protected:
     return pgid;
   }
 public:
-  PGOpQueueable(spg_t pg) : pgid(pg) {}
+  explicit PGOpQueueable(spg_t pg) : pgid(pg) {}
   uint32_t get_queue_token() const override final {
     return get_pgid().ps();
   }
@@ -198,7 +185,7 @@ public:
     class Locker : public OpQueueItem::OrderLocker {
       PGRef pg;
     public:
-      Locker(PGRef pg) : pg(pg) {}
+      explicit Locker(PGRef pg) : pg(pg) {}
       void lock() override final {
 	pg->lock();
       }
@@ -214,7 +201,7 @@ public:
 class PGOpItem : public PGOpQueueable {
   OpRequestRef op;
 public:
-  PGOpItem(spg_t pg, OpRequestRef op) : PGOpQueueable(pg), op(op) {}
+  PGOpItem(spg_t pg, OpRequestRef op) : PGOpQueueable(pg), op(std::move(op)) {}
   op_type_t get_op_type() const override final {
     return op_type_t::client_op;
   }

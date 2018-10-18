@@ -5,17 +5,20 @@
 
 #include "msg/Message.h"
 
-struct MGetConfig : public Message {
-  static const int HEAD_VERSION = 1;
-  static const int COMPAT_VERSION = 1;
+class MGetConfig : public MessageInstance<MGetConfig> {
+public:
+  friend factory;
+
+  static constexpr int HEAD_VERSION = 1;
+  static constexpr int COMPAT_VERSION = 1;
 
   EntityName name;  ///< e.g., mon.a, client.foo
   string host;      ///< our hostname
   string device_class;
 
-  MGetConfig() : Message(MSG_GET_CONFIG, HEAD_VERSION, COMPAT_VERSION) { }
+  MGetConfig() : MessageInstance(MSG_GET_CONFIG, HEAD_VERSION, COMPAT_VERSION) { }
   MGetConfig(const EntityName& n, const string& h)
-    : Message(MSG_GET_CONFIG, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_GET_CONFIG, HEAD_VERSION, COMPAT_VERSION),
       name(n),
       host(h) {}
 
@@ -32,7 +35,7 @@ struct MGetConfig : public Message {
 
   void decode_payload() override {
     using ceph::decode;
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(name, p);
     decode(host, p);
     decode(device_class, p);

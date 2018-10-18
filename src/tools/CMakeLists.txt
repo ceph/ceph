@@ -4,9 +4,16 @@ set(rados_srcs
   rados/RadosImport.cc
   rados/PoolDump.cc
   ${PROJECT_SOURCE_DIR}/src/common/util.cc
-  ${PROJECT_SOURCE_DIR}/src/common/obj_bencher.cc)
+  ${PROJECT_SOURCE_DIR}/src/common/obj_bencher.cc
+  ${PROJECT_SOURCE_DIR}/src/osd/ECUtil.cc)
 add_executable(rados ${rados_srcs})
-target_link_libraries(rados librados global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} radosstriper)
+
+target_link_libraries(rados librados global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
+if(WITH_LIBRADOSSTRIPER)
+  target_link_libraries(rados radosstriper)
+else()
+  target_link_libraries(rados cls_lock_client)
+endif()
 install(TARGETS rados DESTINATION bin)
 
 if(WITH_TESTS)
@@ -105,3 +112,5 @@ if(WITH_RBD)
     add_subdirectory(rbd_ggate)
   endif()
 endif(WITH_RBD)
+
+add_subdirectory(ceph-dencoder)

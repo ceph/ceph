@@ -29,7 +29,7 @@
 #include "ErasureCodeLrc.h"
 
 // re-include our assert to clobber boost's
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_osd
@@ -83,15 +83,15 @@ int ErasureCodeLrc::create_rule(const string &name,
   int ret;
   ret = crush.add_rule(rno, steps, pg_pool_t::TYPE_ERASURE,
 		       min_rep, max_rep);
-  assert(ret == rno);
+  ceph_assert(ret == rno);
   int step = 0;
 
   ret = crush.set_rule_step(rno, step++, CRUSH_RULE_SET_CHOOSELEAF_TRIES, 5, 0);
-  assert(ret == 0);
+  ceph_assert(ret == 0);
   ret = crush.set_rule_step(rno, step++, CRUSH_RULE_SET_CHOOSE_TRIES, 100, 0);
-  assert(ret == 0);
+  ceph_assert(ret == 0);
   ret = crush.set_rule_step(rno, step++, CRUSH_RULE_TAKE, root, 0);
-  assert(ret == 0);
+  ceph_assert(ret == 0);
   // [ [ "choose", "rack", 2 ],
   //   [ "chooseleaf", "host", 5 ] ]
   for (vector<Step>::const_iterator i = rule_steps.begin();
@@ -105,10 +105,10 @@ int ErasureCodeLrc::create_rule(const string &name,
       return -EINVAL;
     }
     ret = crush.set_rule_step(rno, step++, op, i->n, type);
-    assert(ret == 0);
+    ceph_assert(ret == 0);
   }
   ret = crush.set_rule_step(rno, step++, CRUSH_RULE_EMIT, 0, 0);
-  assert(ret == 0);
+  ceph_assert(ret == 0);
   crush.set_rule_name(rno, name);
   return rno;
 }
@@ -142,7 +142,7 @@ int ErasureCodeLrc::layers_description(const ErasureCodeProfile &profile,
   return 0;
 }
 
-int ErasureCodeLrc::layers_parse(string description_string,
+int ErasureCodeLrc::layers_parse(const string &description_string,
 				 json_spirit::mArray description,
 				 ostream *ss)
 {
@@ -251,7 +251,7 @@ int ErasureCodeLrc::layers_init(ostream *ss)
   return 0;
 }
 
-int ErasureCodeLrc::layers_sanity_checks(string description_string,
+int ErasureCodeLrc::layers_sanity_checks(const string &description_string,
 					 ostream *ss) const
 {
   int position = 0;
@@ -452,7 +452,7 @@ int ErasureCodeLrc::parse_rule(ErasureCodeProfile &profile,
   return 0;
 }
 
-int ErasureCodeLrc::parse_rule_step(string description_string,
+int ErasureCodeLrc::parse_rule_step(const string &description_string,
 				       json_spirit::mArray description,
 				       ostream *ss)
 {

@@ -194,14 +194,18 @@ def create_pools(ctx, clients):
     for client in clients:
         log.debug("Obtaining remote for client {}".format(client))
         (remote,) = ctx.cluster.only(client).remotes.iterkeys()
-        data_pool = '.rgw.buckets'
+        data_pool = 'default.rgw.buckets.data'
         cluster_name, daemon_type, client_id = teuthology.split_role(client)
 
         if ctx.rgw.ec_data_pool:
-            create_ec_pool(remote, data_pool, client, 64,
+            create_ec_pool(remote, data_pool, client, ctx.rgw.data_pool_pg_size,
                            ctx.rgw.erasure_code_profile, cluster_name, 'rgw')
         else:
-            create_replicated_pool(remote, data_pool, 64, cluster_name, 'rgw')
+            create_replicated_pool(remote, data_pool, ctx.rgw.data_pool_pg_size, cluster_name, 'rgw')
+
+        index_pool = 'default.rgw.buckets.index'
+        create_replicated_pool(remote, index_pool, ctx.rgw.index_pool_pg_size, cluster_name, 'rgw')
+
         if ctx.rgw.cache_pools:
             create_cache_pool(remote, data_pool, data_pool + '.cache', 64,
                               64*1024*1024, cluster_name)
@@ -256,6 +260,13 @@ def task(ctx, config):
               valgrind: [--tool=memcheck]
             client.3:
               valgrind: [--tool=memcheck]
+
+    To configure data or index pool pg_size:
+
+        overrides:
+          rgw:
+            data_pool_pg_size: 256
+            index_pool_pg_size: 128
     """
     if config is None:
         config = dict(('client.{id}'.format(id=id_), None)
@@ -277,6 +288,8 @@ def task(ctx, config):
     ctx.rgw.frontend = config.pop('frontend', 'civetweb')
     ctx.rgw.compression_type = config.pop('compression type', None)
     default_cert = config.pop('ssl certificate', None)
+    ctx.rgw.data_pool_pg_size = config.pop('data_pool_pg_size', 64)
+    ctx.rgw.index_pool_pg_size = config.pop('index_pool_pg_size', 64)
     ctx.rgw.config = config
 
     log.debug("config is {}".format(config))

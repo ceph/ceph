@@ -130,7 +130,7 @@ To add a Ceph block device as Primary Storage, the steps include:
 Create a Disk Offering
 ======================
 
-To create a new disk offering, refer to `Create a New Disk Offering (4.2.0)`_.
+To create a new disk offering, refer to `Create a New Disk Offering`_.
 Create a disk offering so that it matches the ``rbd`` tag.
 The ``StoragePoolAllocator`` will choose the  ``rbd``
 pool when searching for a suitable storage pool. If the disk offering doesn't
@@ -151,5 +151,5 @@ Limitations
 .. _Install and Configure libvirt: ../libvirt
 .. _KVM Hypervisor Host Installation: http://cloudstack.apache.org/docs/en-US/Apache_CloudStack/4.2.0/html/Installation_Guide/hypervisor-kvm-install-flow.html
 .. _Storage Tags: http://docs.cloudstack.apache.org/projects/cloudstack-administration/en/4.11/storage.html#storage-tags
-.. _Create a New Disk Offering (4.2.0): http://cloudstack.apache.org/docs/en-US/Apache_CloudStack/4.2.0/html/Admin_Guide/compute-disk-service-offerings.html#creating-disk-offerings
+.. _Create a New Disk Offering: http://docs.cloudstack.apache.org/projects/cloudstack-administration/en/master/service_offerings.html#creating-a-new-disk-offering
 .. _User Management: ../../rados/operations/user-management

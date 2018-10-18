@@ -670,7 +670,7 @@ int OMAPReader::get_next(string *key, bufferlist *pbl, bool *done)
 
 int RGWOrphanSearch::compare_oid_indexes()
 {
-  assert(linked_objs_index.size() == all_objs_index.size());
+  ceph_assert(linked_objs_index.size() == all_objs_index.size());
 
   librados::IoCtx& ioctx = orphan_store.get_ioctx();
 

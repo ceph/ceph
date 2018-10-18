@@ -1221,7 +1221,7 @@ Get Bucket Info
 ===============
 
 Get information about a subset of the existing buckets. If ``uid`` is specified
-without ``bucket`` then all buckets beloning to the user will be returned. If
+without ``bucket`` then all buckets belonging to the user will be returned. If
 ``bucket`` alone is specified, information for that particular bucket will be
 retrieved.
 
@@ -1862,7 +1862,8 @@ Valid parameters for quotas include:
   the maximum number of objects. A negative value disables this setting.
 
 - **Maximum Size:** The ``max-size`` option allows you to specify a quota
-  for the maximum number of bytes. A negative value disables this setting.
+  for the maximum number of bytes. The ``max-size-kb`` option allows you
+  to specify it in KiB. A negative value disables this setting.
 
 - **Quota Type:** The ``quota-type`` option sets the scope for the quota.
   The options are ``bucket`` and ``user``.

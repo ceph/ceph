@@ -404,7 +404,6 @@ void RGWSubUser::generate_test_instances(list<RGWSubUser*>& o)
 void RGWUserInfo::generate_test_instances(list<RGWUserInfo*>& o)
 {
   RGWUserInfo *i = new RGWUserInfo;
-  i->auid = 1;
   i->user_id = "user_id";
   i->display_name =  "display_name";
   i->user_email = "user@email";

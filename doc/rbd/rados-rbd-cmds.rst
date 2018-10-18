@@ -182,12 +182,12 @@ For example::
 
 .. note::
 
-  * You can move an image to the trash even it has shapshot(s) or actively 
+  * You can move an image to the trash even it has snapshot(s) or actively 
     in-use by clones, but can not be removed from trash.
 
-  * You can use *--delay* to set the defer time (default is 0), and if its 
-    deferment time has not expired, it can not be removed unless you use 
-    force.
+  * You can use *--expires-at* to set the defer time (default is ``now``), 
+    and if its deferment time has not expired, it can not be removed unless 
+    you use *--force*.
 
 Restoring a Block Device Image
 ==============================
@@ -195,7 +195,7 @@ Restoring a Block Device Image
 To restore a deferred delete block device in the rbd pool, execute the 
 following, but replace ``{image-id}`` with the id of the image::
 
-        rbd trash restore {image-d}
+        rbd trash restore {image-id}
 
 For example:: 
 
@@ -211,8 +211,9 @@ For example::
 
         rbd trash restore swimmingpool/2bf4474b0dc51
 
-Also you can use *--image* to rename the iamge when restore it, for 
-example::
+You can also use ``--image`` to rename the image while restoring it. 
+
+For example::
 
         rbd trash restore swimmingpool/2bf4474b0dc51 --image new-name
 

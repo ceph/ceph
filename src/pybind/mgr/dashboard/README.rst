@@ -1,40 +1,35 @@
 Dashboard and Administration Module for Ceph Manager
-=========================================================================
+====================================================
 
 Overview
 --------
 
-The original Ceph Manager Dashboard that was shipped with Ceph "Luminous"
+The original Ceph manager dashboard that was shipped with Ceph "Luminous"
 started out as a simple read-only view into various run-time information and
-performance data of a Ceph cluster.
+performance data of a Ceph cluster. It used a very simple architecture to
+achieve the original goal.
 
-However, there is a `growing demand <http://pad.ceph.com/p/mimic-dashboard>`_
-for adding more web-based management capabilities, to make it easier for
-administrators that prefer a WebUI over the command line.
+However, there was a growing demand for adding more web-based management
+capabilities, to make it easier to administer Ceph for users that prefer a WebUI
+over using the command line.
 
-This module is an ongoing project to add a native web based monitoring and
-administration application to Ceph Manager. It aims at becoming a successor of
-the existing dashboard, which provides read-only functionality and uses a
-simpler architecture to achieve the original goal.
+This new dashboard module is a replacement of the previous one and an
+ongoing project to add a native web based monitoring and administration
+application to Ceph Manager.
 
-The code and architecture of this module is derived from and inspired by the
-`openATTIC Ceph management and monitoring tool <https://openattic.org/>`_ (both
-the backend and WebUI). The development is actively driven by the team behind
-openATTIC.
+The architecture and functionality of this module are derived from and inspired
+by the `openATTIC Ceph management and monitoring tool
+<https://openattic.org/>`_. The development is actively driven by the team
+behind openATTIC at SUSE.
 
-The intention is to reuse as much of the existing openATTIC code as possible,
-while adapting it to the different environment. The current openATTIC backend
-implementation is based on Django and the Django REST framework, the Manager
-module's backend code will use the CherryPy framework and a custom REST API
-implementation instead.
+The intention is to reuse as much of the existing openATTIC functionality as
+possible, while adapting it to the different environment. The Dashboard module's
+backend code uses the CherryPy framework and a custom REST API implementation
+instead of Django and the Django REST Framework.
 
-The WebUI implementation will be developed using Angular/TypeScript, merging
-both functionality from the existing dashboard as well as adding new
-functionality originally developed for the standalone version of openATTIC.
-
-The porting and migration of the existing openATTIC and dashboard functionality
-will be done in stages. The tasks are currently tracked in the `openATTIC team's
-JIRA instance <https://tracker.openattic.org/browse/OP-3039>`_.
+The WebUI implementation is based on Angular/TypeScript, merging both
+functionality from the original dashboard as well as adding new functionality
+originally developed for the standalone version of openATTIC.
 
 Enabling and Starting the Dashboard
 -----------------------------------
@@ -51,23 +46,30 @@ Finally, you need to build the dashboard frontend code. See the file
 ``HACKING.rst`` in this directory for instructions on setting up the necessary
 development environment.
 
-From within a running Ceph cluster, you can start the Dashboard module by
-running the following command::
+If you use the ``vstart.sh`` script to start up your development cluster, it
+will configure and enable the dashboard automatically. The URL and login
+credentials are displayed when the script finishes.
 
-  $ ceph mgr module enable dashboard
+See the `Ceph Dashboard plugin documentation
+<http://docs.ceph.com/docs/master/mgr/dashboard/>`_ for details on how to enable
+and configure the dashboard manually and how to configure other settings, e.g.
+access to the Ceph object gateway.
 
-You can see currently enabled Manager modules with::
+Supported browsers
+------------------
 
-  $ ceph mgr module ls
+The Ceph Manager Dashboard is tested and developed on the following browsers:
 
-In order to be able to log in, you need to define a username and password, which
-will be stored in the MON's configuration database::
++----------------------------------------------+----------+
+|                    Browser                   | Versions |
++==============================================+==========+
+| `Chrome <https://www.google.com/chrome/>`_   | 68+      |
++----------------------------------------------+----------+
+| `Firefox <http://www.mozilla.org/firefox/>`_ | 61+      |
++----------------------------------------------+----------+
 
-  $ ceph dashboard set-login-credentials <username> <password>
-
-The password will be stored as a hash using ``bcrypt``.
-
-The Dashboard's WebUI should then be reachable on TCP port 8080.
+While Ceph Manager Dashboard might work in older browsers, we cannot guarantee
+it and recommend you update your browser to the latest version.
 
 Working on the Dashboard Code
 -----------------------------

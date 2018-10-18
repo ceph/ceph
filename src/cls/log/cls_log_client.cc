@@ -91,7 +91,7 @@ public:
     if (r >= 0) {
       cls_log_list_ret ret;
       try {
-        bufferlist::iterator iter = outbl.begin();
+        auto iter = outbl.cbegin();
         decode(ret, iter);
         if (entries)
           *entries = std::move(ret.entries);
@@ -131,7 +131,7 @@ public:
     if (r >= 0) {
       cls_log_info_ret ret;
       try {
-        bufferlist::iterator iter = outbl.begin();
+        auto iter = outbl.cbegin();
         decode(ret, iter);
         if (header)
 	  *header = ret.header;

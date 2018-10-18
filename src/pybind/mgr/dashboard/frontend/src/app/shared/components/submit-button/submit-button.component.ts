@@ -1,5 +1,5 @@
 import { Component, ElementRef, EventEmitter, Input, OnInit, Output } from '@angular/core';
-import { FormGroup } from '@angular/forms';
+import { AbstractControl, FormGroup, FormGroupDirective, NgForm } from '@angular/forms';
 
 import * as _ from 'lodash';
 
@@ -27,8 +27,12 @@ import * as _ from 'lodash';
   styleUrls: ['./submit-button.component.scss']
 })
 export class SubmitButtonComponent implements OnInit {
-  @Input() form: FormGroup;
-  @Output() submitAction = new EventEmitter();
+  @Input()
+  form: FormGroup | NgForm;
+  @Input()
+  type = 'submit';
+  @Output()
+  submitAction = new EventEmitter();
 
   loading = false;
 
@@ -39,12 +43,22 @@ export class SubmitButtonComponent implements OnInit {
       if (_.has(this.form.errors, 'cdSubmitButton')) {
         this.loading = false;
         _.unset(this.form.errors, 'cdSubmitButton');
-        this.form.updateValueAndValidity();
+        // Handle Reactive forms.
+        if (this.form instanceof AbstractControl) {
+          (<AbstractControl>this.form).updateValueAndValidity();
+        }
       }
     });
   }
 
-  submit() {
+  submit($event) {
+    this.focusButton();
+
+    // Special handling for Template driven forms.
+    if (this.form instanceof FormGroupDirective) {
+      (<FormGroupDirective>this.form).onSubmit($event);
+    }
+
     if (this.form.invalid) {
       this.focusInvalid();
       return;
@@ -52,6 +66,10 @@ export class SubmitButtonComponent implements OnInit {
 
     this.loading = true;
     this.submitAction.emit();
+  }
+
+  focusButton() {
+    this.elRef.nativeElement.offsetParent.querySelector(`button[type="${this.type}"]`).focus();
   }
 
   focusInvalid() {

@@ -47,7 +47,7 @@ action::Dependencies convert_dependencies(uint64_t start_time,
 
 } // anonymous namespace
 
-void IO::write_debug_base(ostream& out, string type) const {
+void IO::write_debug_base(ostream& out, const string &type) const {
   out << m_ionum << ": " << m_start_time / 1000000.0 << ": " << type << ", thread = " << m_thread_id << ", deps = {";
   bool first = true;
   for (io_set_t::iterator itr = m_dependencies.begin(), end = m_dependencies.end(); itr != end; ++itr) {

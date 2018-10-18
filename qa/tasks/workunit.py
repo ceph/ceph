@@ -6,8 +6,8 @@ import pipes
 import os
 import re
 
-from copy import deepcopy
 from util import get_remote_for_role
+from util.workunit import get_refspec_after_overrides
 
 from teuthology import misc
 from teuthology.config import config as teuth_config
@@ -16,59 +16,6 @@ from teuthology.parallel import parallel
 from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
-
-
-class Refspec:
-    def __init__(self, refspec):
-        self.refspec = refspec
-
-    def __str__(self):
-        return self.refspec
-
-    def _clone(self, git_url, clonedir, opts=None):
-        if opts is None:
-            opts = []
-        return (['rm', '-rf', clonedir] +
-                [run.Raw('&&')] +
-                ['git', 'clone'] + opts +
-                [git_url, clonedir])
-
-    def _cd(self, clonedir):
-        return ['cd', clonedir]
-
-    def _checkout(self):
-        return ['git', 'checkout', self.refspec]
-
-    def clone(self, git_url, clonedir):
-        return (self._clone(git_url, clonedir) +
-                [run.Raw('&&')] +
-                self._cd(clonedir) +
-                [run.Raw('&&')] +
-                self._checkout())
-
-
-class Branch(Refspec):
-    def __init__(self, tag):
-        Refspec.__init__(self, tag)
-
-    def clone(self, git_url, clonedir):
-        opts = ['--depth', '1',
-                '--branch', self.refspec]
-        return (self._clone(git_url, clonedir, opts) +
-                [run.Raw('&&')] +
-                self._cd(clonedir))
-
-
-class Head(Refspec):
-    def __init__(self):
-        Refspec.__init__(self, 'HEAD')
-
-    def clone(self, git_url, clonedir):
-        opts = ['--depth', '1']
-        return (self._clone(git_url, clonedir, opts) +
-                [run.Raw('&&')] +
-                self._cd(clonedir))
-
 
 def task(ctx, config):
     """
@@ -140,26 +87,10 @@ def task(ctx, config):
     assert isinstance(config.get('clients'), dict), \
         'configuration must contain a dictionary of clients'
 
-    # mimic the behavior of the "install" task, where the "overrides" are
-    # actually the defaults of that task. in other words, if none of "sha1",
-    # "tag", or "branch" is specified by a "workunit" tasks, we will update
-    # it with the information in the "workunit" sub-task nested in "overrides".
-    overrides = deepcopy(ctx.config.get('overrides', {}).get('workunit', {}))
-    refspecs = {'branch': Branch, 'tag': Refspec, 'sha1': Refspec}
-    if any(map(lambda i: i in config, refspecs.iterkeys())):
-        for i in refspecs.iterkeys():
-            overrides.pop(i, None)
-    misc.deep_merge(config, overrides)
-
-    for spec, cls in refspecs.iteritems():
-        refspec = config.get(spec)
-        if refspec:
-            refspec = cls(refspec)
-            break
-    if refspec is None:
-        refspec = Head()
-
+    overrides = ctx.config.get('overrides', {})
+    refspec = get_refspec_after_overrides(config, overrides)
     timeout = config.get('timeout', '3h')
+    cleanup = config.get('cleanup', True)
 
     log.info('Pulling workunits from ref %s', refspec)
 
@@ -181,24 +112,28 @@ def task(ctx, config):
         created_mountpoint[role] = created_mnt_dir
 
     # Execute any non-all workunits
+    log.info("timeout={}".format(timeout))
+    log.info("cleanup={}".format(cleanup))
     with parallel() as p:
         for role, tests in clients.iteritems():
             if role != "all":
                 p.spawn(_run_tests, ctx, refspec, role, tests,
                         config.get('env'),
                         basedir=config.get('basedir','qa/workunits'),
-                        timeout=timeout)
+                        timeout=timeout,cleanup=cleanup)
 
-    # Clean up dirs from any non-all workunits
-    for role, created in created_mountpoint.items():
-        _delete_dir(ctx, role, created)
+    if cleanup:
+        # Clean up dirs from any non-all workunits
+        for role, created in created_mountpoint.items():
+            _delete_dir(ctx, role, created)
 
     # Execute any 'all' workunits
     if 'all' in clients:
         all_tasks = clients["all"]
         _spawn_on_all_clients(ctx, refspec, all_tasks, config.get('env'),
                               config.get('basedir', 'qa/workunits'),
-                              config.get('subdir'), timeout=timeout)
+                              config.get('subdir'), timeout=timeout,
+                              cleanup=cleanup)
 
 
 def _client_mountpoint(ctx, cluster, id_):
@@ -326,7 +261,7 @@ def _make_scratch_dir(ctx, role, subdir):
     return created_mountpoint
 
 
-def _spawn_on_all_clients(ctx, refspec, tests, env, basedir, subdir, timeout=None):
+def _spawn_on_all_clients(ctx, refspec, tests, env, basedir, subdir, timeout=None, cleanup=True):
     """
     Make a scratch directory for each client in the cluster, and then for each
     test spawn _run_tests() for each role.
@@ -351,12 +286,13 @@ def _spawn_on_all_clients(ctx, refspec, tests, env, basedir, subdir, timeout=Non
                         timeout=timeout)
 
     # cleanup the generated client directories
-    for role, _ in client_remotes.items():
-        _delete_dir(ctx, role, created_mountpoint[role])
+    if cleanup:
+        for role, _ in client_remotes.items():
+            _delete_dir(ctx, role, created_mountpoint[role])
 
 
 def _run_tests(ctx, refspec, role, tests, env, basedir,
-               subdir=None, timeout=None):
+               subdir=None, timeout=None, cleanup=True):
     """
     Run the individual test. Create a scratch directory and then extract the
     workunits from git. Make the executables, and then run the tests.
@@ -472,15 +408,14 @@ def _run_tests(ctx, refspec, role, tests, env, basedir,
                     args=args,
                     label="workunit test {workunit}".format(workunit=workunit)
                 )
-                remote.run(
-                    logger=log.getChild(role),
-                    args=['sudo', 'rm', '-rf', '--', scratch_tmp],
-                )
+                if cleanup:
+                    args=['sudo', 'rm', '-rf', '--', scratch_tmp]
+                    remote.run(logger=log.getChild(role), args=args, timeout=(60*60))
     finally:
         log.info('Stopping %s on %s...', tests, role)
+        args=['sudo', 'rm', '-rf', '--', workunits_file, clonedir]
+        # N.B. don't cleanup scratch_tmp! If the mount is broken then rm will hang.
         remote.run(
             logger=log.getChild(role),
-            args=[
-                'rm', '-rf', '--', workunits_file, clonedir,
-            ],
+            args=args,
         )

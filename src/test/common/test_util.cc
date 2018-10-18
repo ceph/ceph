@@ -18,20 +18,6 @@
 
 #include <sstream>
 
-TEST(util, unit_to_bytesize)
-{
-  ASSERT_EQ(1234ll, unit_to_bytesize("1234", &cerr));
-  ASSERT_EQ(1024ll, unit_to_bytesize("1K", &cerr));
-  ASSERT_EQ(1024ll, unit_to_bytesize("1k", &cerr));
-  ASSERT_EQ(1048576ll, unit_to_bytesize("1M", &cerr));
-  ASSERT_EQ(1073741824ll, unit_to_bytesize("1G", &cerr));
-  ASSERT_EQ(1099511627776ll, unit_to_bytesize("1T", &cerr));
-  ASSERT_EQ(1125899906842624ll, unit_to_bytesize("1P", &cerr));
-  ASSERT_EQ(1152921504606846976ll, unit_to_bytesize("1E", &cerr));
-
-  ASSERT_EQ(65536ll, unit_to_bytesize(" 64K", &cerr));
-}
-
 #if defined(__linux__)
 TEST(util, collect_sys_info)
 {

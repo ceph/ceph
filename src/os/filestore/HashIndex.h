@@ -92,12 +92,12 @@ private:
       encode(hash_level, bl);
     }
 
-    void decode(bufferlist::iterator &bl)
+    void decode(bufferlist::const_iterator &bl)
     {
       using ceph::decode;
       __u8 v;
       decode(v, bl);
-      assert(v == 1);
+      ceph_assert(v == 1);
       decode(objs, bl);
       decode(subdirs, bl);
       decode(hash_level, bl);
@@ -114,7 +114,7 @@ private:
       encode(v, bl);
       encode(split_rand_factor, bl);
     }
-    void decode(bufferlist::iterator &bl)
+    void decode(bufferlist::const_iterator &bl)
     {
       using ceph::decode;
       __u8 v;
@@ -134,7 +134,7 @@ private:
     InProgressOp(int op, const vector<string> &path)
       : op(op), path(path) {}
 
-    explicit InProgressOp(bufferlist::iterator &bl) {
+    explicit InProgressOp(bufferlist::const_iterator &bl) {
       decode(bl);
     }
 
@@ -150,11 +150,11 @@ private:
       encode(path, bl);
     }
 
-    void decode(bufferlist::iterator &bl) {
+    void decode(bufferlist::const_iterator &bl) {
       using ceph::decode;
       __u8 v;
       decode(v, bl);
-      assert(v == 1);
+      ceph_assert(v == 1);
       decode(op, bl);
       decode(path, bl);
     }
@@ -167,8 +167,8 @@ public:
     CephContext* cct,
     coll_t collection,     ///< [in] Collection
     const char *base_path, ///< [in] Path to the index root.
-    int merge_at,          ///< [in] Merge threshhold.
-    int split_multiple,	   ///< [in] Split threshhold.
+    int merge_at,          ///< [in] Merge threshold.
+    int split_multiple,	   ///< [in] Split threshold.
     uint32_t index_version,///< [in] Index version
     double retry_probability=0) ///< [in] retry probability
     : LFNIndex(cct, collection, base_path, index_version, retry_probability),
@@ -193,6 +193,17 @@ public:
     uint32_t bits,
     CollectionIndex* dest
     ) override;
+
+  /// @see CollectionIndex
+  int _merge(
+    uint32_t bits,
+    CollectionIndex* dest
+    ) override;
+
+  int _merge_dirs(
+    HashIndex& from,
+    HashIndex& to,
+    const vector<string>& path);
 
   /// @see CollectionIndex
   int apply_layout_settings(int target_level) override;
@@ -386,7 +397,7 @@ private:
 
   /// Convert a number to hex string (upper case).
   static string to_hex(int n) {
-    assert(n >= 0 && n < 16);
+    ceph_assert(n >= 0 && n < 16);
     char c = (n <= 9 ? ('0' + n) : ('A' + n - 10));
     string str;
     str.append(1, c);
@@ -395,7 +406,7 @@ private:
 
   struct CmpPairBitwise {
     bool operator()(const pair<string, ghobject_t>& l,
-		    const pair<string, ghobject_t>& r)
+		    const pair<string, ghobject_t>& r) const
     {
       if (l.first < r.first)
 	return true;
@@ -408,7 +419,7 @@ private:
   };
 
   struct CmpHexdigitStringBitwise {
-    bool operator()(const string& l, const string& r) {
+    bool operator()(const string& l, const string& r) const {
       return reverse_hexdigit_bits_string(l) < reverse_hexdigit_bits_string(r);
     }
   };

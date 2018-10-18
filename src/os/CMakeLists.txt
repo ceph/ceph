@@ -28,10 +28,10 @@ if(WITH_BLUESTORE)
     bluestore/BlueRocksEnv.cc
     bluestore/BlueStore.cc
     bluestore/bluestore_types.cc
+    bluestore/fastbmap_allocator_impl.cc
     bluestore/FreelistManager.cc
     bluestore/StupidAllocator.cc
-    bluestore/BitMapAllocator.cc
-    bluestore/BitAllocator.cc
+    bluestore/BitmapAllocator.cc
   )
 endif(WITH_BLUESTORE)
 
@@ -71,12 +71,16 @@ if(WITH_SPDK)
     bluestore/NVMEDevice.cc)
 endif()
 
-add_library(os STATIC ${libos_srcs} $<TARGET_OBJECTS:kv_objs>)
+add_library(os STATIC ${libos_srcs}
+  $<TARGET_OBJECTS:kv_objs>)
+
+target_link_libraries(os heap_profiler)
 
 if(WITH_BLUEFS)
   add_library(bluefs SHARED 
     bluestore/BlueRocksEnv.cc)
-  target_include_directories(bluefs SYSTEM PUBLIC ${ROCKSDB_INCLUDE_DIR})
+  target_include_directories(bluefs SYSTEM PUBLIC
+    $<TARGET_PROPERTY:RocksDB::RocksDB,INTERFACE_INCLUDE_DIRECTORIES>)
   target_link_libraries(bluefs global)
   install(TARGETS bluefs DESTINATION lib)
 endif(WITH_BLUEFS)
@@ -138,7 +142,8 @@ if(WITH_PMEM)
   add_library(pmem STATIC IMPORTED GLOBAL)
   add_dependencies(pmem nvml_ext)
   set_target_properties(pmem PROPERTIES
-    IMPORTED_LOCATION "${CMAKE_BINARY_DIR}/src/nvml/src/nondebug/libpmem.a")
+    IMPORTED_LOCATION "${CMAKE_BINARY_DIR}/src/nvml/src/nondebug/libpmem.a"
+    INTERFACE_LINK_LIBRARIES ${CMAKE_THREAD_LIBS_INIT})
   target_link_libraries(os pmem)
   target_include_directories(os SYSTEM PRIVATE "${CMAKE_BINARY_DIR}/src/nvml/src/include")
 endif(WITH_PMEM)

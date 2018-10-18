@@ -57,6 +57,7 @@ std::string TestFixture::get_temp_image_name() {
 
 void TestFixture::SetUp() {
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), m_ioctx));
+  m_cct = reinterpret_cast<CephContext*>(m_ioctx.cct());
 
   m_image_name = get_temp_image_name();
   m_image_size = 2 << 20;
@@ -75,7 +76,7 @@ void TestFixture::TearDown() {
 
 int TestFixture::open_image(const std::string &image_name,
 			    librbd::ImageCtx **ictx) {
-  *ictx = new librbd::ImageCtx(image_name.c_str(), "", NULL, m_ioctx, false);
+  *ictx = new librbd::ImageCtx(image_name.c_str(), "", nullptr, m_ioctx, false);
   m_ictxs.insert(*ictx);
 
   return (*ictx)->state->open(false);
@@ -138,6 +139,6 @@ int TestFixture::acquire_exclusive_lock(librbd::ImageCtx &ictx) {
   }
 
   RWLock::RLocker owner_locker(ictx.owner_lock);
-  assert(ictx.exclusive_lock != nullptr);
+  ceph_assert(ictx.exclusive_lock != nullptr);
   return ictx.exclusive_lock->is_lock_owner() ? 0 : -EINVAL;
 }

@@ -14,19 +14,25 @@
 #include "BaseMgrModule.h"
 #include "BaseMgrStandbyModule.h"
 #include "PyOSDMap.h"
+#include "MgrContext.h"
 
 #include "PyModule.h"
 
 #include "common/debug.h"
+#include "common/errno.h"
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
 
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr[py] "
 
+// definition for non-const static member
+std::string PyModule::config_prefix = "mgr/";
+
 // Courtesy of http://stackoverflow.com/questions/1418015/how-to-get-python-exception-text
 #include <boost/python.hpp>
-#include "include/assert.h"  // boost clobbers this
+#include <boost/algorithm/string/predicate.hpp>
+#include "include/ceph_assert.h"  // boost clobbers this
 // decode a Python exception into a string
 std::string handle_pyerror()
 {
@@ -69,6 +75,24 @@ std::string handle_pyerror()
     return extract<std::string>(formatted);
 }
 
+/**
+ * Get the single-line exception message, without clearing any
+ * exception state.
+ */
+std::string peek_pyerror()
+{
+  PyObject *ptype, *pvalue, *ptraceback;
+  PyErr_Fetch(&ptype, &pvalue, &ptraceback);
+  ceph_assert(ptype);
+  ceph_assert(pvalue);
+  PyObject *pvalue_str = PyObject_Str(pvalue);
+  std::string exc_msg = PyString_AsString(pvalue_str);
+  Py_DECREF(pvalue_str);
+  PyErr_Restore(ptype, pvalue, ptraceback);
+
+  return exc_msg;
+}
+
 
 namespace {
   PyObject* log_write(PyObject*, PyObject* args) {
@@ -104,6 +128,59 @@ namespace {
 #endif
 }
 
+PyModuleConfig::PyModuleConfig() = default;  
+
+PyModuleConfig::PyModuleConfig(PyModuleConfig &mconfig)
+  : config(mconfig.config)
+{}
+
+PyModuleConfig::~PyModuleConfig() = default;
+
+
+void PyModuleConfig::set_config(
+    MonClient *monc,
+    const std::string &module_name,
+    const std::string &key, const boost::optional<std::string>& val)
+{
+  const std::string global_key = PyModule::config_prefix
+                                   + module_name + "/" + key;
+  {
+    Mutex::Locker l(lock);
+
+    if (val) {
+      config[global_key] = *val;
+    } else {
+      config.erase(global_key);
+    }
+  }
+
+  Command set_cmd;
+  {
+    std::ostringstream cmd_json;
+    JSONFormatter jf;
+    jf.open_object_section("cmd");
+    if (val) {
+      jf.dump_string("prefix", "config set");
+      jf.dump_string("who", "mgr");
+      jf.dump_string("name", global_key);
+      jf.dump_string("value", *val);
+    } else {
+      jf.dump_string("prefix", "config rm");
+      jf.dump_string("name", "mgr");
+      jf.dump_string("key", global_key);
+    }
+    jf.close_section();
+    jf.flush(cmd_json);
+    set_cmd.run(monc, cmd_json.str());
+  }
+  set_cmd.wait();
+
+  if (set_cmd.r != 0) {
+    dout(0) << "`config set mgr" << global_key << " " << val << "` failed: "
+      << cpp_strerror(set_cmd.r) << dendl;
+    dout(0) << "mon returned " << set_cmd.r << ": " << set_cmd.outs << dendl;
+  }
+}
 
 std::string PyModule::get_site_packages()
 {
@@ -112,12 +189,12 @@ std::string PyModule::get_site_packages()
   // CPython doesn't auto-add site-packages dirs to sys.path for us,
   // but it does provide a module that we can ask for them.
   auto site_module = PyImport_ImportModule("site");
-  assert(site_module);
+  ceph_assert(site_module);
 
   auto site_packages_fn = PyObject_GetAttrString(site_module, "getsitepackages");
   if (site_packages_fn != nullptr) {
     auto site_packages_list = PyObject_CallObject(site_packages_fn, nullptr);
-    assert(site_packages_list);
+    ceph_assert(site_packages_list);
 
     auto n = PyList_Size(site_packages_list);
     for (Py_ssize_t i = 0; i < n; ++i) {
@@ -135,7 +212,7 @@ std::string PyModule::get_site_packages()
     // run inside virtualenvs :-/
 
     auto site_packages_fn = PyObject_GetAttrString(site_module, "addsitepackages");
-    assert(site_packages_fn);
+    ceph_assert(site_packages_fn);
 
     auto known_paths = PySet_New(nullptr);
     auto pArgs = PyTuple_Pack(1, known_paths);
@@ -145,9 +222,9 @@ std::string PyModule::get_site_packages()
     Py_DECREF(site_packages_fn);
 
     auto sys_module = PyImport_ImportModule("sys");
-    assert(sys_module);
+    ceph_assert(sys_module);
     auto sys_path = PyObject_GetAttrString(sys_module, "path");
-    assert(sys_path);
+    ceph_assert(sys_path);
 
     dout(1) << "sys.path:" << dendl;
     auto n = PyList_Size(sys_path);
@@ -213,7 +290,7 @@ void PyModule::init_ceph_module()
 #else
   PyObject *ceph_module = Py_InitModule("ceph_module", module_methods);
 #endif
-  assert(ceph_module != nullptr);
+  ceph_assert(ceph_module != nullptr);
   std::map<const char*, PyTypeObject*> classes{
     {{"BaseMgrModule", &BaseMgrModuleType},
      {"BaseMgrStandbyModule", &BaseMgrStandbyModuleType},
@@ -224,7 +301,7 @@ void PyModule::init_ceph_module()
   for (auto [name, type] : classes) {
     type->tp_new = PyType_GenericNew;
     if (PyType_Ready(type) < 0) {
-      assert(0);
+      ceph_abort();
     }
     Py_INCREF(type);
 
@@ -237,7 +314,7 @@ void PyModule::init_ceph_module()
 
 int PyModule::load(PyThreadState *pMainThreadState)
 {
-  assert(pMainThreadState != nullptr);
+  ceph_assert(pMainThreadState != nullptr);
 
   // Configure sub-interpreter
   {
@@ -261,7 +338,7 @@ int PyModule::load(PyThreadState *pMainThreadState)
 #endif
       // Configure sys.path to include mgr_module_path
       string paths = (":" + get_site_packages() +
-		      ":" + g_conf->get_val<std::string>("mgr_module_path"));
+		      ":" + g_conf().get_val<std::string>("mgr_module_path"));
 #if PY_MAJOR_VERSION >= 3
       wstring sys_path(Py_GetPath() + wstring(begin(paths), end(paths)));
       PySys_SetPath(const_cast<wchar_t*>(sys_path.c_str()));
@@ -287,10 +364,17 @@ int PyModule::load(PyThreadState *pMainThreadState)
 
     r = load_commands();
     if (r != 0) {
-      std::ostringstream oss;
-      oss << "Missing COMMAND attribute in module '" << module_name << "'";
-      error_string = oss.str();
-      derr << oss.str() << dendl;
+      derr << "Missing or invalid COMMANDS attribute in module '"
+          << module_name << "'" << dendl;
+      error_string = "Missing or invalid COMMANDS attribute";
+      return r;
+    }
+
+    r = load_options();
+    if (r != 0) {
+      derr << "Missing or invalid OPTIONS attribute in module '"
+          << module_name << "'" << dendl;
+      error_string = "Missing or invalid OPTIONS attribute";
       return r;
     }
 
@@ -319,6 +403,7 @@ int PyModule::load(PyThreadState *pMainThreadState)
         if (!PyBool_Check(pCanRun) || !PyString_Check(can_run_str)) {
           derr << "Module " << get_name()
                << " returned wrong type in can_run" << dendl;
+          error_string = "wrong type returned from can_run";
           can_run = false;
         } else {
           can_run = (pCanRun == Py_True);
@@ -332,6 +417,7 @@ int PyModule::load(PyThreadState *pMainThreadState)
       } else {
         derr << "Module " << get_name()
              << " returned wrong type in can_run" << dendl;
+        error_string = "wrong type returned from can_run";
         can_run = false;
       }
 
@@ -345,54 +431,111 @@ int PyModule::load(PyThreadState *pMainThreadState)
   return 0;
 }
 
-int PyModule::load_commands()
+int PyModule::walk_dict_list(
+    const std::string &attr_name,
+    std::function<int(PyObject*)> fn)
 {
-  // Don't need a Gil here -- this is called from load(),
-  // which already has one.
-  PyObject *command_list = PyObject_GetAttrString(pClass, "COMMANDS");
+  PyObject *command_list = PyObject_GetAttrString(pClass, attr_name.c_str());
   if (command_list == nullptr) {
-    // Even modules that don't define command should still have the COMMANDS
-    // from the MgrModule definition.  Something is wrong!
-    derr << "Module " << get_name() << " has missing COMMANDS member" << dendl;
+    derr << "Module " << get_name() << " has missing " << attr_name
+         << " member" << dendl;
     return -EINVAL;
   }
   if (!PyObject_TypeCheck(command_list, &PyList_Type)) {
     // Relatively easy mistake for human to make, e.g. defining COMMANDS
     // as a {} instead of a []
-    derr << "Module " << get_name() << " has COMMANDS member of wrong type ("
-            "should be a list)" << dendl;
+    derr << "Module " << get_name() << " has " << attr_name
+         << " member of wrong type (should be a list)" << dendl;
     return -EINVAL;
   }
+
+  // Invoke fn on each item in the list
+  int r = 0;
   const size_t list_size = PyList_Size(command_list);
   for (size_t i = 0; i < list_size; ++i) {
     PyObject *command = PyList_GetItem(command_list, i);
-    assert(command != nullptr);
+    ceph_assert(command != nullptr);
 
-    ModuleCommand item;
+    if (!PyDict_Check(command)) {
+      derr << "Module " << get_name() << " has non-dict entry "
+           << "in " << attr_name << " list" << dendl;
+      return -EINVAL;
+    }
 
-    PyObject *pCmd = PyDict_GetItemString(command, "cmd");
-    assert(pCmd != nullptr);
-    item.cmdstring = PyString_AsString(pCmd);
-
-    dout(20) << "loaded command " << item.cmdstring << dendl;
-
-    PyObject *pDesc = PyDict_GetItemString(command, "desc");
-    assert(pDesc != nullptr);
-    item.helpstring = PyString_AsString(pDesc);
-
-    PyObject *pPerm = PyDict_GetItemString(command, "perm");
-    assert(pPerm != nullptr);
-    item.perm = PyString_AsString(pPerm);
-
-    item.module_name = module_name;
-
-    commands.push_back(item);
+    r = fn(command);
+    if (r != 0) {
+      break;
+    }
   }
   Py_DECREF(command_list);
 
+  return r;
+}
+
+int PyModule::load_commands()
+{
+  int r = walk_dict_list("COMMANDS", [this](PyObject *pCommand) -> int {
+    ModuleCommand command;
+
+    PyObject *pCmd = PyDict_GetItemString(pCommand, "cmd");
+    ceph_assert(pCmd != nullptr);
+    command.cmdstring = PyString_AsString(pCmd);
+
+    dout(20) << "loaded command " << command.cmdstring << dendl;
+
+    PyObject *pDesc = PyDict_GetItemString(pCommand, "desc");
+    ceph_assert(pDesc != nullptr);
+    command.helpstring = PyString_AsString(pDesc);
+
+    PyObject *pPerm = PyDict_GetItemString(pCommand, "perm");
+    ceph_assert(pPerm != nullptr);
+    command.perm = PyString_AsString(pPerm);
+
+    command.polling = false;
+    PyObject *pPoll = PyDict_GetItemString(pCommand, "poll");
+    if (pPoll) {
+      std::string polling = PyString_AsString(pPoll);
+      if (boost::iequals(polling, "true")) {
+        command.polling = true;
+      }
+    }
+
+    command.module_name = module_name;
+
+    commands.push_back(std::move(command));
+
+    return 0;
+  });
+
   dout(10) << "loaded " << commands.size() << " commands" << dendl;
 
-  return 0;
+  return r;
+}
+
+int PyModule::load_options()
+{
+  int r = walk_dict_list("OPTIONS", [this](PyObject *pOption) -> int {
+    PyObject *pName = PyDict_GetItemString(pOption, "name");
+    ceph_assert(pName != nullptr);
+
+    ModuleOption option;
+    option.name = PyString_AsString(pName);
+    dout(20) << "loaded option " << option.name << dendl;
+
+    options[option.name] = std::move(option);
+
+    return 0;
+  });
+
+  dout(10) << "loaded " << options.size() << " options" << dendl;
+
+  return r;
+}
+
+bool PyModule::is_option(const std::string &option_name)
+{
+  Mutex::Locker l(lock);
+  return options.count(option_name) > 0;
 }
 
 int PyModule::load_subclass_of(const char* base_class, PyObject** py_class)
@@ -400,6 +543,7 @@ int PyModule::load_subclass_of(const char* base_class, PyObject** py_class)
   // load the base class
   PyObject *mgr_module = PyImport_ImportModule("mgr_module");
   if (!mgr_module) {
+    error_string = peek_pyerror();
     derr << "Module not found: 'mgr_module'" << dendl;
     derr << handle_pyerror() << dendl;
     return -EINVAL;
@@ -407,6 +551,7 @@ int PyModule::load_subclass_of(const char* base_class, PyObject** py_class)
   auto mgr_module_type = PyObject_GetAttrString(mgr_module, base_class);
   Py_DECREF(mgr_module);
   if (!mgr_module_type) {
+    error_string = peek_pyerror();
     derr << "Unable to import MgrModule from mgr_module" << dendl;
     derr << handle_pyerror() << dendl;
     return -EINVAL;
@@ -415,6 +560,7 @@ int PyModule::load_subclass_of(const char* base_class, PyObject** py_class)
   // find the sub class
   PyObject *plugin_module = PyImport_ImportModule(module_name.c_str());
   if (!plugin_module) {
+    error_string = peek_pyerror();
     derr << "Module not found: '" << module_name << "'" << dendl;
     derr << handle_pyerror() << dendl;
     return -ENOENT;

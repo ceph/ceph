@@ -59,7 +59,7 @@ public:
       encode(up, bl);
       encode(primary, bl);
     }
-    void decode(bufferlist::iterator& p) {
+    void decode(bufferlist::const_iterator& p) {
       using ceph::decode;
       decode(acting, p);
       decode(up, p);
@@ -84,7 +84,7 @@ public:
   /**
    * keep track of sum deltas, per-pool, taking into account any previous
    * deltas existing in @p per_pool_sum_deltas.  The utime_t as second member
-   * of the pair is the timestamp refering to the last update (i.e., the first
+   * of the pair is the timestamp referring to the last update (i.e., the first
    * member of the pair) for a given pool.
    */
   mempool::pgmap::unordered_map<uint64_t, pair<pool_stat_t,utime_t> > per_pool_sum_delta;
@@ -152,6 +152,10 @@ public:
    */
   int64_t get_pool_free_space(const OSDMap &osd_map, int64_t poolid) const;
 
+
+  /**
+   * Dump pool usage and io ops/bytes, used by "ceph df" command
+   */
   virtual void dump_pool_stats_full(const OSDMap &osd_map, stringstream *ss,
 				    Formatter *f, bool verbose) const;
   void dump_fs_stats(stringstream *ss, Formatter *f, bool verbose) const;
@@ -203,7 +207,7 @@ public:
   }
 
   void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::iterator& p);
+  void decode(bufferlist::const_iterator& p);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<PGMapDigest*>& ls);
 };
@@ -277,6 +281,7 @@ public:
   mempool::pgmap::unordered_map<int,set<pg_t> > pg_by_osd;
   mempool::pgmap::unordered_map<int,int> blocked_by_sum;
   mempool::pgmap::list< pair<pool_stat_t, utime_t> > pg_sum_deltas;
+  mempool::pgmap::unordered_map<int64_t,mempool::pgmap::unordered_map<uint64_t,int32_t>> num_pg_by_pool_state;
 
   utime_t stamp;
 
@@ -383,7 +388,7 @@ public:
   void stat_osd_sub(int osd, const osd_stat_t &s);
   
   void encode(bufferlist &bl, uint64_t features=-1) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
 
   /// encode subset of our data to a PGMapDigest
   void encode_digest(const OSDMap& osdmap,
@@ -404,6 +409,13 @@ public:
     get_rules_avail(osd_map, &avail_space_by_rule);
     PGMapDigest::dump_pool_stats_full(osd_map, ss, f, verbose);
   }
+
+  /*
+  * Dump client io rate, recovery io rate, cache io rate and recovery information.
+  * this function is used by "ceph osd pool stats" command
+  */
+  void dump_pool_stats_and_io_rate(int64_t poolid, const OSDMap &osd_map, Formatter *f,
+                              stringstream *ss) const;
 
   void dump_pg_stats_plain(
     ostream& ss,

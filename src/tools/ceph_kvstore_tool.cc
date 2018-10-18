@@ -130,14 +130,14 @@ class StoreTool
   }
 
   bool exists(const string &prefix) {
-    assert(!prefix.empty());
+    ceph_assert(!prefix.empty());
     KeyValueDB::WholeSpaceIterator iter = db->get_wholespace_iterator();
     iter->seek_to_first(prefix);
     return (iter->valid() && (iter->raw_key().first == prefix));
   }
 
   bool exists(const string &prefix, const string &key) {
-    assert(!prefix.empty());
+    ceph_assert(!prefix.empty());
 
     if (key.empty()) {
       return exists(prefix);
@@ -149,7 +149,7 @@ class StoreTool
   }
 
   bufferlist get(const string &prefix, const string &key, bool &exists) {
-    assert(!prefix.empty() && !key.empty());
+    ceph_assert(!prefix.empty() && !key.empty());
 
     map<string,bufferlist> result;
     std::set<std::string> keys;
@@ -176,9 +176,9 @@ class StoreTool
   }
 
   bool set(const string &prefix, const string &key, bufferlist &val) {
-    assert(!prefix.empty());
-    assert(!key.empty());
-    assert(val.length() > 0);
+    ceph_assert(!prefix.empty());
+    ceph_assert(!key.empty());
+    ceph_assert(val.length() > 0);
 
     KeyValueDB::Transaction tx = db->get_transaction();
     tx->set(prefix, key, val);
@@ -188,8 +188,8 @@ class StoreTool
   }
 
   bool rm(const string& prefix, const string& key) {
-    assert(!prefix.empty());
-    assert(!key.empty());
+    ceph_assert(!prefix.empty());
+    ceph_assert(!key.empty());
 
     KeyValueDB::Transaction tx = db->get_transaction();
     tx->rmkey(prefix, key);
@@ -199,7 +199,7 @@ class StoreTool
   }
 
   bool rm_prefix(const string& prefix) {
-    assert(!prefix.empty());
+    ceph_assert(!prefix.empty());
 
     KeyValueDB::Transaction tx = db->get_transaction();
     tx->rmkeys_by_prefix(prefix);
@@ -257,7 +257,7 @@ class StoreTool
 
       auto cur_duration = std::chrono::duration<double>(coarse_mono_clock::now() - started_at);
       std::cout << "ts = " << cur_duration.count() << "s, copied " << total_keys
-                << " keys so far (" << stringify(si_t(total_size)) << ")"
+                << " keys so far (" << stringify(byte_u_t(total_size)) << ")"
                 << std::endl;
 
     } while (it->valid());
@@ -267,7 +267,7 @@ class StoreTool
     std::cout << "summary:" << std::endl;
     std::cout << "  copied " << total_keys << " keys" << std::endl;
     std::cout << "  used " << total_txs << " transactions" << std::endl;
-    std::cout << "  total size " << stringify(si_t(total_size)) << std::endl;
+    std::cout << "  total size " << stringify(byte_u_t(total_size)) << std::endl;
     std::cout << "  from '" << store_path << "' to '" << other_path << "'"
               << std::endl;
     std::cout << "  duration " << time_taken.count() << " seconds" << std::endl;
@@ -285,7 +285,7 @@ class StoreTool
     db->compact_range(prefix, start, end);
   }
 
-  int repair() {
+  int destructive_repair() {
     return db->repair(std::cout);
   }
 };
@@ -309,7 +309,7 @@ void usage(const char *pname)
     << "  compact\n"
     << "  compact-prefix <prefix>\n"
     << "  compact-range <prefix> <start> <end>\n"
-    << "  repair\n"
+    << "  destructive-repair  (use only as last resort! may corrupt healthy data)\n"
     << std::endl;
 }
 
@@ -326,9 +326,14 @@ int main(int argc, const char *argv[])
     exit(0);
   }
 
+  map<string,string> defaults = {
+    { "debug_rocksdb", "2" }
+  };
+
   auto cct = global_init(
-      NULL, args,
-      CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+    &defaults, args,
+    CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
+    CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
 
 
@@ -350,15 +355,17 @@ int main(int argc, const char *argv[])
     return 1;
   }
 
-  bool need_open_db = (cmd != "repair");
+  bool need_open_db = (cmd != "destructive-repair");
   StoreTool st(type, path, need_open_db);
 
-  if (cmd == "repair") {
-    int ret = st.repair();
+  if (cmd == "destructive-repair") {
+    int ret = st.destructive_repair();
     if (!ret) {
-      std::cout << "repair kvstore successfully" << std::endl;
+      std::cout << "destructive-repair completed without reporting an error"
+		<< std::endl;
     } else {
-      std::cout << "repair kvstore failed" << std::endl;
+      std::cout << "destructive-repair failed with " << cpp_strerror(ret)
+		<< std::endl;
     }
     return ret;
   } else if (cmd == "list" || cmd == "list-crc") {
@@ -471,7 +478,7 @@ int main(int argc, const char *argv[])
       return 1;
     }
     std::cout << "(" << url_escape(prefix) << "," << url_escape(key)
-              << ") size " << si_t(bl.length()) << std::endl;
+              << ") size " << byte_u_t(bl.length()) << std::endl;
 
   } else if (cmd == "set") {
     if (argc < 8) {

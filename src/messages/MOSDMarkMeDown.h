@@ -17,37 +17,51 @@
 
 #include "messages/PaxosServiceMessage.h"
 
-class MOSDMarkMeDown : public PaxosServiceMessage {
-
-  static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 2;
+class MOSDMarkMeDown : public MessageInstance<MOSDMarkMeDown, PaxosServiceMessage> {
+public:
+  friend factory;
+private:
+  static constexpr int HEAD_VERSION = 3;
+  static constexpr int COMPAT_VERSION = 3;
 
  public:
   uuid_d fsid;
-  entity_inst_t target_osd;
+  int32_t target_osd;
+  entity_addrvec_t target_addrs;
   epoch_t epoch = 0;
   bool request_ack = false;          // ack requested
 
   MOSDMarkMeDown()
-    : PaxosServiceMessage(MSG_OSD_MARK_ME_DOWN, 0,
+    : MessageInstance(MSG_OSD_MARK_ME_DOWN, 0,
 			  HEAD_VERSION, COMPAT_VERSION) { }
-  MOSDMarkMeDown(const uuid_d &fs, const entity_inst_t& f,
+  MOSDMarkMeDown(const uuid_d &fs, int osd, const entity_addrvec_t& av,
 		 epoch_t e, bool request_ack)
-    : PaxosServiceMessage(MSG_OSD_MARK_ME_DOWN, e,
+    : MessageInstance(MSG_OSD_MARK_ME_DOWN, e,
 			  HEAD_VERSION, COMPAT_VERSION),
-      fsid(fs), target_osd(f), epoch(e), request_ack(request_ack) {}
+      fsid(fs), target_osd(osd), target_addrs(av),
+      epoch(e), request_ack(request_ack) {}
  private:
   ~MOSDMarkMeDown() override {}
 
 public: 
-  entity_inst_t get_target() const { return target_osd; }
   epoch_t get_epoch() const { return epoch; }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     paxos_decode(p);
+    if (header.version <= 2) {
+      decode(fsid, p);
+      entity_inst_t i;
+      decode(i, p);
+      target_osd = i.name.num();
+      target_addrs = entity_addrvec_t(i.addr);
+      decode(epoch, p);
+      decode(request_ack, p);
+      return;
+    }
     decode(fsid, p);
     decode(target_osd, p);
+    decode(target_addrs, p);
     decode(epoch, p);
     decode(request_ack, p);
   }
@@ -55,8 +69,22 @@ public:
   void encode_payload(uint64_t features) override {
     using ceph::encode;
     paxos_encode();
+    if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
+      header.version = 2;
+      header.compat_version = 2;
+      encode(fsid, payload);
+      encode(entity_inst_t(entity_name_t::OSD(target_osd),
+			   target_addrs.legacy_addr()),
+	     payload, features);
+      encode(epoch, payload);
+      encode(request_ack, payload);
+      return;
+    }
+    header.version = HEAD_VERSION;
+    header.compat_version = COMPAT_VERSION;
     encode(fsid, payload);
     encode(target_osd, payload, features);
+    encode(target_addrs, payload, features);
     encode(epoch, payload);
     encode(request_ack, payload);
   }
@@ -65,7 +93,8 @@ public:
   void print(ostream& out) const override {
     out << "MOSDMarkMeDown("
 	<< "request_ack=" << request_ack
-	<< ", target_osd=" << target_osd
+	<< ", osd." << target_osd
+	<< ", " << target_addrs
 	<< ", fsid=" << fsid
 	<< ")";
   }

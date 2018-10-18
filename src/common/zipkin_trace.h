@@ -79,7 +79,7 @@ static inline void encode(const blkin_trace_info& b, bufferlist& bl)
   encode(b.parent_span_id, bl);
 }
 
-static inline void decode(blkin_trace_info& b, bufferlist::iterator& p)
+static inline void decode(blkin_trace_info& b, bufferlist::const_iterator& p)
 {
   decode(b.trace_id, p);
   decode(b.span_id, p);

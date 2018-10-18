@@ -93,7 +93,7 @@ bool LibrbdAdminSocketHook::call(std::string_view command,
 				 std::string_view format,
 				 bufferlist& out) {
   Commands::const_iterator i = commands.find(command);
-  assert(i != commands.end());
+  ceph_assert(i != commands.end());
   stringstream ss;
   bool r = i->second->call(&ss);
   out.append(ss);

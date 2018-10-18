@@ -29,7 +29,7 @@ class RGWFrontendConfig {
                    std::multimap<std::string, std::string>& config_map);
 
 public:
-  RGWFrontendConfig(const std::string& config)
+  explicit RGWFrontendConfig(const std::string& config)
     : config(config) {
   }
 
@@ -85,7 +85,7 @@ struct RGWMongooseEnv : public RGWProcessEnv {
   static constexpr bool prioritize_write = true;
   RWLock mutex;
 
-  RGWMongooseEnv(const RGWProcessEnv &env)
+  explicit RGWMongooseEnv(const RGWProcessEnv &env)
     : RGWProcessEnv(env),
       mutex("RGWCivetWebFrontend", false, true, prioritize_write) {
   }
@@ -163,7 +163,7 @@ public:
   }
 
   int run() override {
-    assert(pprocess); /* should have initialized by init() */
+    ceph_assert(pprocess); /* should have initialized by init() */
     thread = new RGWProcessControlThread(pprocess);
     thread->create("rgw_frontend");
     return 0;
@@ -194,7 +194,7 @@ public:
 
   int init() override {
     pprocess = new RGWFCGXProcess(g_ceph_context, &env,
-				  g_conf->rgw_thread_pool_size, conf);
+				  g_conf()->rgw_thread_pool_size, conf);
     return 0;
   }
 }; /* RGWFCGXFrontend */
@@ -206,7 +206,7 @@ public:
 
   int init() override {
     int num_threads;
-    conf->get_val("num_threads", g_conf->rgw_thread_pool_size, &num_threads);
+    conf->get_val("num_threads", g_conf()->rgw_thread_pool_size, &num_threads);
     RGWLoadGenProcess *pp = new RGWLoadGenProcess(g_ceph_context, &env,
 						  num_threads, conf);
 

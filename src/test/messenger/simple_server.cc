@@ -73,7 +73,7 @@ int main(int argc, const char **argv)
 	dest_str += port;
 	entity_addr_from_url(&bind_addr, dest_str.c_str());
 
-	messenger = Messenger::create(g_ceph_context, g_conf->get_val<std::string>("ms_type"),
+	messenger = Messenger::create(g_ceph_context, g_conf().get_val<std::string>("ms_type"),
 				      entity_name_t::MON(-1),
 				      "simple_server",
 				      0 /* nonce */,

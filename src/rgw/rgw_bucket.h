@@ -116,7 +116,7 @@ public:
     using ceph::encode;
     encode(buckets, bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     using ceph::decode;
     decode(buckets, bl);
   }
@@ -359,7 +359,7 @@ struct rgw_data_change {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START(1, bl);
      uint8_t t;
      decode(t, bl);
@@ -387,7 +387,7 @@ struct rgw_data_change_log_entry {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START(1, bl);
      decode(log_id, bl);
      decode(log_timestamp, bl);
@@ -408,9 +408,14 @@ struct RGWDataChangesLogInfo {
   void decode_json(JSONObj *obj);
 };
 
+namespace rgw {
+struct BucketChangeObserver;
+}
+
 class RGWDataChangesLog {
   CephContext *cct;
   RGWRados *store;
+  rgw::BucketChangeObserver *observer = nullptr;
 
   int num_shards;
   string *oids;
@@ -437,7 +442,7 @@ class RGWDataChangesLog {
     }
   };
 
-  typedef ceph::shared_ptr<ChangeStatus> ChangeStatusPtr;
+  typedef std::shared_ptr<ChangeStatus> ChangeStatusPtr;
 
   lru_map<rgw_bucket_shard, ChangeStatusPtr> changes;
 
@@ -520,6 +525,10 @@ public:
 
   void mark_modified(int shard_id, const rgw_bucket_shard& bs);
   void read_clear_modified(map<int, set<string> > &modified);
+
+  void set_observer(rgw::BucketChangeObserver *observer) {
+    this->observer = observer;
+  }
 
   bool going_down();
 };

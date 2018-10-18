@@ -56,7 +56,6 @@ For example::
     "email": "john@example.com",
     "suspended": 0,
     "max_buckets": 1000,
-    "auid": 0,
     "subusers": [],
     "keys": [
           { "user": "johndoe",
@@ -109,7 +108,6 @@ For example::
     "email": "john@example.com",
     "suspended": 0,
     "max_buckets": 1000,
-    "auid": 0,
     "subusers": [
           { "id": "johndoe:swift",
             "permissions": "full-control"}],

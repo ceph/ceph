@@ -96,6 +96,10 @@ def dmcrypt_close(mapping):
 
     :param mapping:
     """
+    if not os.path.exists(mapping):
+        logger.debug('device mapper path does not exist %s' % mapping)
+        logger.debug('will skip cryptsetup removal')
+        return
     process.run(['cryptsetup', 'remove', mapping])
 
 
@@ -144,7 +148,7 @@ def write_lockbox_keyring(osd_id, osd_fsid, secret):
     For filestore: The path for the OSD would exist at this point even if no
     OSD data device is mounted, so the keyring is written to fetch the key, and
     then the data device is mounted on that directory, making the keyring
-    "dissapear".
+    "disappear".
     """
     if os.path.exists('/var/lib/ceph/osd/%s-%s/lockbox.keyring' % (conf.cluster, osd_id)):
         return
@@ -185,7 +189,8 @@ def status(device):
         'status',
         device,
     ]
-    out, err, code = process.call(command, show_command=True)
+    out, err, code = process.call(command, show_command=True, verbose_on_failure=False)
+
     metadata = {}
     if code != 0:
         logger.warning('failed to detect device mapper information')

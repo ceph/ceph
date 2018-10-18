@@ -8,7 +8,7 @@
 #include <auth/Crypto.h>
 #include <rgw/rgw_b64.h>
 #include <rgw/rgw_rest_s3.h>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include <boost/utility/string_view.hpp>
 #include <rgw/rgw_keystone.h>
 #include "include/str_map.h"
@@ -37,7 +37,7 @@ private:
   CephContext* cct;
   uint8_t key[AES_256_KEYSIZE];
 public:
-  AES_256_CTR(CephContext* cct): cct(cct) {
+  explicit AES_256_CTR(CephContext* cct): cct(cct) {
   }
   ~AES_256_CTR() {
     memset(key, 0, AES_256_KEYSIZE);
@@ -200,7 +200,7 @@ private:
   CephContext* cct;
   uint8_t key[AES_256_KEYSIZE];
 public:
-  AES_256_CBC(CephContext* cct): cct(cct) {
+  explicit AES_256_CBC(CephContext* cct): cct(cct) {
   }
   ~AES_256_CBC() {
     memset(key, 0, AES_256_KEYSIZE);
@@ -516,7 +516,7 @@ bool AES_256_ECB_encrypt(CephContext* cct,
 
 
 RGWGetObj_BlockDecrypt::RGWGetObj_BlockDecrypt(CephContext* cct,
-                                               RGWGetDataCB* next,
+                                               RGWGetObj_Filter* next,
                                                std::unique_ptr<BlockCrypt> crypt):
     RGWGetObj_Filter(next),
     cct(cct),
@@ -536,7 +536,7 @@ int RGWGetObj_BlockDecrypt::read_manifest(bufferlist& manifest_bl) {
   parts_len.clear();
   RGWObjManifest manifest;
   if (manifest_bl.length()) {
-    bufferlist::iterator miter = manifest_bl.begin();
+    auto miter = manifest_bl.cbegin();
     try {
       decode(manifest, miter);
     } catch (buffer::error& err) {
@@ -761,11 +761,11 @@ static int request_key_from_barbican(CephContext *cct,
   secret_url += "v1/secrets/" + std::string(key_id);
 
   bufferlist secret_bl;
-  RGWHTTPTransceiver secret_req(cct, &secret_bl);
+  RGWHTTPTransceiver secret_req(cct, "GET", secret_url, &secret_bl);
   secret_req.append_header("Accept", "application/octet-stream");
   secret_req.append_header("X-Auth-Token", barbican_token);
 
-  res = secret_req.process("GET", secret_url.c_str());
+  res = secret_req.process();
   if (res < 0) {
     return res;
   }

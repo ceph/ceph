@@ -64,7 +64,7 @@ public:
     virtual unsigned insert_count() const = 0;
     virtual unsigned approx_unique_insert_count() const = 0;
     virtual void encode(bufferlist &bl) const = 0;
-    virtual void decode(bufferlist::iterator& p) = 0;
+    virtual void decode(bufferlist::const_iterator& p) = 0;
     virtual void dump(Formatter *f) const = 0;
     virtual Impl* clone() const = 0;
     virtual void seal() {}
@@ -84,7 +84,7 @@ public:
       virtual impl_type_t get_type() const = 0;
       virtual HitSet::Impl *get_new_impl() const = 0;
       virtual void encode(bufferlist &bl) const {}
-      virtual void decode(bufferlist::iterator& p) {}
+      virtual void decode(bufferlist::const_iterator& p) {}
       virtual void dump(Formatter *f) const {}
       virtual void dump_stream(ostream& o) const {}
       virtual ~Impl() {}
@@ -106,7 +106,7 @@ public:
     const Params& operator=(const Params& o);
 
     void encode(bufferlist &bl) const;
-    void decode(bufferlist::iterator &bl);
+    void decode(bufferlist::const_iterator& bl);
     void dump(Formatter *f) const;
     static void generate_test_instances(list<HitSet::Params*>& o);
 
@@ -153,13 +153,13 @@ public:
     return impl->approx_unique_insert_count();
   }
   void seal() {
-    assert(!sealed);
+    ceph_assert(!sealed);
     sealed = true;
     impl->seal();
   }
 
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<HitSet*>& o);
 
@@ -227,7 +227,7 @@ public:
     encode(hits, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &bl) override {
+  void decode(bufferlist::const_iterator &bl) override {
     DECODE_START(1, bl);
     decode(count, bl);
     decode(hits, bl);
@@ -298,7 +298,7 @@ public:
     encode(hits, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &bl) override {
+  void decode(bufferlist::const_iterator& bl) override {
     DECODE_START(1, bl);
     decode(count, bl);
     decode(hits, bl);
@@ -363,7 +363,7 @@ public:
       encode(seed, bl);
       ENCODE_FINISH(bl);
     }
-    void decode(bufferlist::iterator& bl) override {
+    void decode(bufferlist::const_iterator& bl) override {
       DECODE_START(1, bl);
       decode(fpp_micro, bl);
       decode(target_size, bl);
@@ -398,7 +398,7 @@ public:
     // oh god
     bufferlist bl;
     o.encode(bl);
-    bufferlist::iterator bli = bl.begin();
+    auto bli = std::cbegin(bl);
     this->decode(bli);
   }
 
@@ -434,7 +434,7 @@ public:
     encode(bloom, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &bl) override {
+  void decode(bufferlist::const_iterator& bl) override {
     DECODE_START(1, bl);
     decode(bloom, bl);
     DECODE_FINISH(bl);

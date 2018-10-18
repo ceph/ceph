@@ -21,6 +21,30 @@ In order to stop the cluster, you can type::
 Options
 =======
 
+.. option:: -b, --bluestore
+
+    Use bluestore as the objectstore backend for osds.
+
+.. option:: --cache <pool>
+
+    Set a cache-tier for the specified pool.
+
+.. option:: -d, --debug
+
+    Launch in debug mode.
+
+.. option:: -e
+
+    Create an erasure pool.
+
+.. option:: -f, --filestore
+
+    Use filestore as the osd objectstore backend.
+
+.. option:: --hitset <pool> <hit_set_type>
+
+    Enable hitset tracking.
+
 .. option:: -i ip_address
 
     Bind to the specified *ip_address* instead of guessing and resolve from hostname.
@@ -28,6 +52,10 @@ Options
 .. option:: -k
 
     Keep old configuration files instead of overwritting theses.
+
+.. option:: -K, --kstore
+
+    Use kstore as the osd objectstore backend.
 
 .. option:: -l, --localhost
 
@@ -37,49 +65,69 @@ Options
 
     Specifies monitor *ip* address and *port*.
 
+.. option:: --memstore
+
+    Use memstore as the objectstore backend for osds
+
+.. option:: --multimds <count>
+
+    Allow multimds with maximum active count.
+
 .. option:: -n, --new
 
     Create a new cluster.
 
-.. option:: -o config
+.. option:: -N, --not-new
 
-    Add *config* to all sections in the ceph configuration.
+    Reuse existing cluster config (default).
 
 .. option:: --nodaemon
 
     Use ceph-run as wrapper for mon/osd/mds.
 
+.. option:: --nolockdep
+
+    Disable lockdep
+
+.. option:: -o <config>
+
+    Add *config* to all sections in the ceph configuration.
+
+.. option:: --rgw_port <port>
+
+    Specify ceph rgw http listen port.
+
+.. option:: --rgw_frontend <frontend>
+
+    Specify the rgw frontend configuration (default is civetweb).
+
+.. option:: --rgw_compression <compression_type>
+
+    Specify the rgw compression plugin (default is disabled).
+
 .. option:: --smallmds
 
     Configure mds with small limit cache size.
 
-.. option:: -x
+.. option:: --short
 
-    Enable Cephx (on by default).
-
-.. option:: -X
-
-    Disable Cephx.
-
-.. option:: -d, --debug
-
-    Launch in debug mode
+    Short object names only; necessary for ext4 dev
 
 .. option:: --valgrind[_{osd,mds,mon}] 'valgrind_toolname [args...]'
 
     Launch the osd/mds/mon/all the ceph binaries using valgrind with the specified tool and arguments.
 
-.. option:: --bluestore
+.. option:: --without-dashboard
 
-    Use bluestore as the objectstore backend for osds
+    Do not run using mgr dashboard.
 
-.. option:: --memstore
+.. option:: -x
 
-    Use memstore as the objectstore backend for osds
+    Enable cephx (on by default).
 
-.. option:: --cache <pool>
+.. option:: -X
 
-    Set a cache-tier for the specified pool
+    Disable cephx.
 
 
 Environment variables
@@ -113,7 +161,7 @@ the following way::
 
 For eg::
 
-  ./mstart.sh cluster1 -n -r
+  ./mstart.sh cluster1 -n
 
 
 For stopping the cluster, you do::

@@ -9,7 +9,10 @@ exports.config = {
     './e2e/**/*.e2e-spec.ts'
   ],
   capabilities: {
-    'browserName': 'chrome'
+    'browserName': 'chrome',
+    chromeOptions: {
+      args: ['--no-sandbox', '--headless', '--window-size=1920x1080']
+    }
   },
   directConnect: true,
   baseUrl: 'http://localhost:4200/',
@@ -19,10 +22,34 @@ exports.config = {
     defaultTimeoutInterval: 30000,
     print: function() {}
   },
+  params: {
+    login: {
+      user: 'admin',
+      password: 'admin'
+    }
+  },
   onPrepare() {
     require('ts-node').register({
       project: 'e2e/tsconfig.e2e.json'
     });
     jasmine.getEnv().addReporter(new SpecReporter({ spec: { displayStacktrace: true } }));
+
+    browser.get('/#/login');
+
+    browser.driver.findElement(by.name('username')).clear();
+    browser.driver.findElement(by.name('username')).sendKeys(browser.params.login.user);
+    browser.driver.findElement(by.name('password')).clear();
+    browser.driver.findElement(by.name('password')).sendKeys(browser.params.login.password);
+
+    browser.driver.findElement(by.css('input[type="submit"]')).click();
+
+    // Login takes some time, so wait until it's done.
+    // For the test app's login, we know it's done when it redirects to
+    // dashboard.
+    return browser.driver.wait(function() {
+      return browser.driver.getCurrentUrl().then(function(url) {
+        return /dashboard/.test(url);
+      });
+    });
   }
 };

@@ -32,6 +32,21 @@ class TestPrepareDevice(object):
         assert 'A vg/lv path or an existing device is needed' in str(error)
 
 
+class TestGetClusterFsid(object):
+
+    def test_fsid_is_passed_in(self, factory):
+        args = factory(cluster_fsid='aaaa-1111')
+        prepare_obj = lvm.prepare.Prepare([])
+        prepare_obj.args = args
+        assert prepare_obj.get_cluster_fsid() == 'aaaa-1111'
+
+    def test_fsid_is_read_from_ceph_conf(self, factory, conf_ceph_stub):
+        conf_ceph_stub('[global]\nfsid = bbbb-2222')
+        prepare_obj = lvm.prepare.Prepare([])
+        prepare_obj.args = factory(cluster_fsid=None)
+        assert prepare_obj.get_cluster_fsid() == 'bbbb-2222'
+
+
 class TestPrepare(object):
 
     def test_main_spits_help_with_no_arguments(self, capsys):
@@ -73,6 +88,13 @@ class TestPrepare(object):
         stdout, stderr = capsys.readouterr()
         expected = 'Cannot use --block.db (bluestore) with --journal (filestore)'
         assert expected in stdout
+
+    def test_journal_is_required_with_filestore(self, is_root, monkeypatch):
+        monkeypatch.setattr('os.path.exists', lambda x: True)
+        with pytest.raises(SystemExit) as error:
+            lvm.prepare.Prepare(argv=['--filestore', '--data', '/dev/sdfoo']).main()
+        expected = '--journal is required when using --filestore'
+        assert expected in str(error)
 
 
 class TestGetJournalLV(object):

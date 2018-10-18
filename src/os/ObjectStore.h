@@ -51,15 +51,15 @@ namespace ceph {
  */
 
 class Logger;
-
+class ContextQueue;
 
 static inline void encode(const map<string,bufferptr> *attrset, bufferlist &bl) {
   encode(*attrset, bl);
 }
 
 // this isn't the best place for these, but...
-void decode_str_str_map_to_bl(bufferlist::iterator& p, bufferlist *out);
-void decode_str_set_to_bl(bufferlist::iterator& p, bufferlist *out);
+void decode_str_str_map_to_bl(bufferlist::const_iterator& p, bufferlist *out);
+void decode_str_set_to_bl(bufferlist::const_iterator& p, bufferlist *out);
 
 // Flag bits
 typedef uint32_t osflagbits_t;
@@ -146,7 +146,7 @@ public:
      * 1) collection is currently idle: the method returns true.  c is
      *    not touched.
      * 2) collection is not idle: the method returns false and c is
-     *    called asyncronously with a value of 0 once all transactions
+     *    called asynchronously with a value of 0 once all transactions
      *    queued on this collection prior to the call have been applied
      *    and committed.
      */
@@ -269,8 +269,8 @@ public:
    *   sobject_encoding detects an older/simpler version of oid
    *   present in pre-bobtail versions of ceph.  use_pool_override
    *   also detects a situation where the pool of an oid can be
-   *   override for legacy operations/buffers.  For non-legacy
-   *   implementation of ObjectStore, neither of these fields is
+   *   overridden for legacy operations/buffers.  For non-legacy
+   *   implementations of ObjectStore, neither of these fields are
    *   relevant.
    *
    *
@@ -298,7 +298,7 @@ public:
    * applies independently to each transaction element. For example,
    * if a transaction contains two mutating elements "create A" and
    * "delete B". And an enumeration operation is performed while this
-   * transaction is pending. It is permissable for ObjectStore to
+   * transaction is pending. It is permissible for ObjectStore to
    * report any of the four possible combinations of the existence of
    * A and B.
    *
@@ -349,6 +349,8 @@ public:
       OP_TRY_RENAME = 41,   // oldcid, oldoid, newoid
 
       OP_COLL_SET_BITS = 42, // cid, bits
+
+      OP_MERGE_COLLECTION = 43, // cid, destination
     };
 
     // Transaction hint type
@@ -427,7 +429,7 @@ public:
       void encode(bufferlist& bl) const {
         bl.append((char*)this, sizeof(TransactionData));
       }
-      void decode(bufferlist::iterator &bl) {
+      void decode(bufferlist::const_iterator &bl) {
         bl.copy(sizeof(TransactionData), (char*)this);
       }
     } __attribute__ ((packed)) ;
@@ -453,11 +455,11 @@ public:
   public:
     Transaction() = default;
 
-    explicit Transaction(bufferlist::iterator &dp) {
+    explicit Transaction(bufferlist::const_iterator &dp) {
       decode(dp);
     }
     explicit Transaction(bufferlist &nbl) {
-      bufferlist::iterator dp = nbl.begin();
+      auto dp = nbl.cbegin();
       decode(dp);
     }
 
@@ -534,9 +536,9 @@ public:
       Context **out_on_applied,
       Context **out_on_commit,
       Context **out_on_applied_sync) {
-      assert(out_on_applied);
-      assert(out_on_commit);
-      assert(out_on_applied_sync);
+      ceph_assert(out_on_applied);
+      ceph_assert(out_on_commit);
+      ceph_assert(out_on_applied_sync);
       list<Context *> on_applied, on_commit, on_applied_sync;
       for (auto& i : t) {
 	on_applied.splice(on_applied.end(), i.on_applied);
@@ -552,9 +554,9 @@ public:
       list<Context*> *out_on_applied,
       list<Context*> *out_on_commit,
       list<Context*> *out_on_applied_sync) {
-      assert(out_on_applied);
-      assert(out_on_commit);
-      assert(out_on_applied_sync);
+      ceph_assert(out_on_applied);
+      ceph_assert(out_on_commit);
+      ceph_assert(out_on_applied_sync);
       for (auto& i : t) {
 	out_on_applied->splice(out_on_applied->end(), i.on_applied);
 	out_on_commit->splice(out_on_commit->end(), i.on_commit);
@@ -619,17 +621,17 @@ public:
       case OP_ZERO:
       case OP_TRUNCATE:
       case OP_SETALLOCHINT:
-        assert(op->cid < cm.size());
-        assert(op->oid < om.size());
+        ceph_assert(op->cid < cm.size());
+        ceph_assert(op->oid < om.size());
         op->cid = cm[op->cid];
         op->oid = om[op->oid];
         break;
 
       case OP_CLONERANGE2:
       case OP_CLONE:
-        assert(op->cid < cm.size());
-        assert(op->oid < om.size());
-        assert(op->dest_oid < om.size());
+        ceph_assert(op->cid < cm.size());
+        ceph_assert(op->oid < om.size());
+        ceph_assert(op->dest_oid < om.size());
         op->cid = cm[op->cid];
         op->oid = om[op->oid];
         op->dest_oid = om[op->dest_oid];
@@ -642,24 +644,24 @@ public:
       case OP_COLL_SETATTRS:
       case OP_COLL_HINT:
       case OP_COLL_SET_BITS:
-        assert(op->cid < cm.size());
+        ceph_assert(op->cid < cm.size());
         op->cid = cm[op->cid];
         break;
 
       case OP_COLL_ADD:
-        assert(op->cid < cm.size());
-        assert(op->oid < om.size());
-        assert(op->dest_cid < om.size());
+        ceph_assert(op->cid < cm.size());
+        ceph_assert(op->oid < om.size());
+        ceph_assert(op->dest_cid < om.size());
         op->cid = cm[op->cid];
         op->dest_cid = cm[op->dest_cid];
         op->oid = om[op->oid];
         break;
 
       case OP_COLL_MOVE_RENAME:
-        assert(op->cid < cm.size());
-        assert(op->oid < om.size());
-        assert(op->dest_cid < cm.size());
-        assert(op->dest_oid < om.size());
+        ceph_assert(op->cid < cm.size());
+        ceph_assert(op->oid < om.size());
+        ceph_assert(op->dest_cid < cm.size());
+        ceph_assert(op->dest_oid < om.size());
         op->cid = cm[op->cid];
         op->oid = om[op->oid];
         op->dest_cid = cm[op->dest_cid];
@@ -667,23 +669,30 @@ public:
         break;
 
       case OP_TRY_RENAME:
-        assert(op->cid < cm.size());
-        assert(op->oid < om.size());
-        assert(op->dest_oid < om.size());
+        ceph_assert(op->cid < cm.size());
+        ceph_assert(op->oid < om.size());
+        ceph_assert(op->dest_oid < om.size());
         op->cid = cm[op->cid];
         op->oid = om[op->oid];
         op->dest_oid = om[op->dest_oid];
 	break;
 
       case OP_SPLIT_COLLECTION2:
-        assert(op->cid < cm.size());
-	assert(op->dest_cid < cm.size());
+        ceph_assert(op->cid < cm.size());
+	ceph_assert(op->dest_cid < cm.size());
+        op->cid = cm[op->cid];
+        op->dest_cid = cm[op->dest_cid];
+        break;
+
+      case OP_MERGE_COLLECTION:
+        ceph_assert(op->cid < cm.size());
+	ceph_assert(op->dest_cid < cm.size());
         op->cid = cm[op->cid];
         op->dest_cid = cm[op->dest_cid];
         break;
 
       default:
-        assert(0 == "Unknown OP");
+        ceph_abort_msg("Unknown OP");
       }
     }
     void _update_op_bl(
@@ -695,7 +704,7 @@ public:
       std::list<bufferptr>::iterator p;
 
       for(p = list.begin(); p != list.end(); ++p) {
-        assert(p->length() % sizeof(Op) == 0);
+        ceph_assert(p->length() % sizeof(Op) == 0);
 
         char* raw_p = p->c_str();
         char* raw_end = raw_p + p->length();
@@ -825,7 +834,7 @@ public:
     bool empty() {
       return !data.ops;
     }
-    /// Number of operations in the transation
+    /// Number of operations in the transaction
     int get_num_ops() {
       return data.ops;
     }
@@ -845,7 +854,7 @@ public:
       uint64_t ops;
       char* op_buffer_p;
 
-      bufferlist::iterator data_bl_p;
+      bufferlist::const_iterator data_bl_p;
 
     public:
       vector<coll_t> colls;
@@ -854,12 +863,12 @@ public:
     private:
       explicit iterator(Transaction *t)
         : t(t),
-	  data_bl_p(t->data_bl.begin()),
+	  data_bl_p(t->data_bl.cbegin()),
           colls(t->coll_index.size()),
           objects(t->object_index.size()) {
 
         ops = t->data.ops;
-        op_buffer_p = t->op_bl.get_contiguous(0, t->data.ops * sizeof(Op));
+        op_buffer_p = t->op_bl.c_str();
 
         map<coll_t, __le32>::iterator coll_index_p;
         for (coll_index_p = t->coll_index.begin();
@@ -884,7 +893,7 @@ public:
         return ops > 0;
       }
       Op* decode_op() {
-        assert(ops > 0);
+        ceph_assert(ops > 0);
 
         Op* op = reinterpret_cast<Op*>(op_buffer_p);
         op_buffer_p += sizeof(Op);
@@ -926,11 +935,11 @@ public:
       }
 
       const ghobject_t &get_oid(__le32 oid_id) {
-        assert(oid_id < objects.size());
+        ceph_assert(oid_id < objects.size());
         return objects[oid_id];
       }
       const coll_t &get_cid(__le32 cid_id) {
-        assert(cid_id < colls.size());
+        ceph_assert(cid_id < colls.size());
         return colls[cid_id];
       }
       uint32_t get_fadvise_flags() const {
@@ -1029,7 +1038,7 @@ public:
       _op->len = len;
       encode(write_data, data_bl);
 
-      assert(len == write_data.length());
+      ceph_assert(len == write_data.length());
       data.fadvise_flags = data.fadvise_flags | flags;
       if (write_data.length() > data.largest_data_len) {
 	data.largest_data_len = write_data.length();
@@ -1213,7 +1222,7 @@ public:
       _op->cid = _get_coll_id(cid);
       data.ops++;
     }
-    void collection_move(const coll_t& cid, coll_t oldcid, const ghobject_t& oid)
+    void collection_move(const coll_t& cid, const coll_t &oldcid, const ghobject_t& oid)
       __attribute__ ((deprecated)) {
 	// NOTE: we encode this as a fixed combo of ADD + REMOVE.  they
 	// always appear together, so this is effectively a single MOVE.
@@ -1231,7 +1240,7 @@ public:
 	data.ops++;
       }
     void collection_move_rename(const coll_t& oldcid, const ghobject_t& oldoid,
-				coll_t cid, const ghobject_t& oid) {
+				const coll_t &cid, const ghobject_t& oid) {
       Op* _op = _get_next_op();
       _op->op = OP_COLL_MOVE_RENAME;
       _op->cid = _get_coll_id(oldcid);
@@ -1240,7 +1249,7 @@ public:
       _op->dest_oid = _get_object_id(oid);
       data.ops++;
     }
-    void try_rename(coll_t cid, const ghobject_t& oldoid,
+    void try_rename(const coll_t &cid, const ghobject_t& oldoid,
                     const ghobject_t& oid) {
       Op* _op = _get_next_op();
       _op->op = OP_TRY_RENAME;
@@ -1252,7 +1261,7 @@ public:
 
     /// Remove omap from oid
     void omap_clear(
-      coll_t cid,           ///< [in] Collection containing oid
+      const coll_t &cid,           ///< [in] Collection containing oid
       const ghobject_t &oid  ///< [in] Object from which to remove omap
       ) {
       Op* _op = _get_next_op();
@@ -1278,7 +1287,7 @@ public:
 
     /// Set keys on an oid omap (bufferlist variant).
     void omap_setkeys(
-      coll_t cid,                           ///< [in] Collection containing oid
+      const coll_t &cid,                           ///< [in] Collection containing oid
       const ghobject_t &oid,                ///< [in] Object to update
       const bufferlist &attrset_bl          ///< [in] Replacement keys and values
       ) {
@@ -1292,7 +1301,7 @@ public:
 
     /// Remove keys from oid omap
     void omap_rmkeys(
-      coll_t cid,             ///< [in] Collection containing oid
+      const coll_t &cid,             ///< [in] Collection containing oid
       const ghobject_t &oid,  ///< [in] Object from which to remove the omap
       const set<string> &keys ///< [in] Keys to clear
       ) {
@@ -1307,7 +1316,7 @@ public:
 
     /// Remove keys from oid omap
     void omap_rmkeys(
-      coll_t cid,             ///< [in] Collection containing oid
+      const coll_t &cid,             ///< [in] Collection containing oid
       const ghobject_t &oid,  ///< [in] Object from which to remove the omap
       const bufferlist &keys_bl ///< [in] Keys to clear
       ) {
@@ -1321,7 +1330,7 @@ public:
 
     /// Remove key range from oid omap
     void omap_rmkeyrange(
-      coll_t cid,             ///< [in] Collection containing oid
+      const coll_t &cid,             ///< [in] Collection containing oid
       const ghobject_t &oid,  ///< [in] Object from which to remove the omap keys
       const string& first,    ///< [in] first key in range
       const string& last      ///< [in] first key past range, range is [first,last)
@@ -1338,7 +1347,7 @@ public:
 
     /// Set omap header
     void omap_setheader(
-      coll_t cid,             ///< [in] Collection containing oid
+      const coll_t &cid,             ///< [in] Collection containing oid
       const ghobject_t &oid,  ///< [in] Object
       const bufferlist &bl    ///< [in] Header value
       ) {
@@ -1354,10 +1363,10 @@ public:
     /// Split collection based on given prefixes, objects matching the specified bits/rem are
     /// moved to the new collection
     void split_collection(
-      coll_t cid,
+      const coll_t &cid,
       uint32_t bits,
       uint32_t rem,
-      coll_t destination) {
+      const coll_t &destination) {
       Op* _op = _get_next_op();
       _op->op = OP_SPLIT_COLLECTION2;
       _op->cid = _get_coll_id(cid);
@@ -1367,8 +1376,21 @@ public:
       data.ops++;
     }
 
-    void collection_set_bits(
+    /// Merge collection into another.
+    void merge_collection(
       coll_t cid,
+      coll_t destination,
+      uint32_t bits) {
+      Op* _op = _get_next_op();
+      _op->op = OP_MERGE_COLLECTION;
+      _op->cid = _get_coll_id(cid);
+      _op->dest_cid = _get_coll_id(destination);
+      _op->split_bits = bits;
+      data.ops++;
+    }
+
+    void collection_set_bits(
+      const coll_t &cid,
       int bits) {
       Op* _op = _get_next_op();
       _op->op = OP_COLL_SET_BITS;
@@ -1380,7 +1402,7 @@ public:
     /// Set allocation hint for an object
     /// make 0 values(expected_object_size, expected_write_size) noops for all implementations
     void set_alloc_hint(
-      coll_t cid,
+      const coll_t &cid,
       const ghobject_t &oid,
       uint64_t expected_object_size,
       uint64_t expected_write_size,
@@ -1407,7 +1429,7 @@ public:
       ENCODE_FINISH(bl);
     }
 
-    void decode(bufferlist::iterator &bl) {
+    void decode(bufferlist::const_iterator &bl) {
       DECODE_START(9, bl);
       DECODE_OLDEST(9);
 
@@ -1457,8 +1479,10 @@ public:
 
   virtual void get_db_statistics(Formatter *f) { }
   virtual void generate_db_histogram(Formatter *f) { }
-  virtual void flush_cache() { }
+  virtual int flush_cache(ostream *os = NULL) { return -1; }
   virtual void dump_perf_counters(Formatter *f) {}
+  virtual void dump_cache_stats(Formatter *f) {}
+  virtual void dump_cache_stats(ostream& os) {}
 
   virtual string get_type() = 0;
 
@@ -1595,6 +1619,13 @@ public:
    */
   virtual CollectionHandle create_new_collection(const coll_t &cid) = 0;
 
+  /**
+   * set ContextQueue for a collection
+   *
+   * After that, oncommits of Transaction will queue into commit_queue.
+   * And osd ShardThread will call oncommits.
+   */
+  virtual void set_collection_commit_queue(const coll_t &cid, ContextQueue *commit_queue) = 0;
 
   /**
    * Synchronous read operations

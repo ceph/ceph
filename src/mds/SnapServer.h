@@ -24,8 +24,9 @@ class MonClient;
 class SnapServer : public MDSTableServer {
 protected:
   MonClient *mon_client = nullptr;
-  snapid_t last_snap;
+  snapid_t last_snap = 0;
   snapid_t last_created, last_destroyed;
+  snapid_t snaprealm_v2_since;
   map<snapid_t, SnapInfo> snaps;
   map<int, set<snapid_t> > need_to_purge;
   
@@ -35,8 +36,11 @@ protected:
 
   version_t last_checked_osdmap;
 
+  bool root_scrubbed = false; // all snaprealms under root are converted?
+  bool mdsdir_scrubbed = false; // all snaprealms under ~mds0 are converted?
+
   void encode_server_state(bufferlist& bl) const override {
-    ENCODE_START(4, 3, bl);
+    ENCODE_START(5, 3, bl);
     encode(last_snap, bl);
     encode(snaps, bl);
     encode(need_to_purge, bl);
@@ -45,10 +49,11 @@ protected:
     encode(pending_noop, bl);
     encode(last_created, bl);
     encode(last_destroyed, bl);
+    encode(snaprealm_v2_since, bl);
     ENCODE_FINISH(bl);
   }
-  void decode_server_state(bufferlist::iterator& bl) override {
-    DECODE_START_LEGACY_COMPAT_LEN(4, 3, 3, bl);
+  void decode_server_state(bufferlist::const_iterator& bl) override {
+    DECODE_START_LEGACY_COMPAT_LEN(5, 3, 3, bl);
     decode(last_snap, bl);
     decode(snaps, bl);
     decode(need_to_purge, bl);
@@ -69,17 +74,22 @@ protected:
       last_created = last_snap;
       last_destroyed = last_snap;
     }
+    if (struct_v >= 5)
+      decode(snaprealm_v2_since, bl);
+    else
+      snaprealm_v2_since = CEPH_NOSNAP;
+
     DECODE_FINISH(bl);
   }
 
   // server bits
-  void _prepare(bufferlist &bl, uint64_t reqid, mds_rank_t bymds) override;
+  void _prepare(const bufferlist &bl, uint64_t reqid, mds_rank_t bymds, bufferlist &out) override;
   void _get_reply_buffer(version_t tid, bufferlist *pbl) const override;
-  void _commit(version_t tid, MMDSTableRequest *req=NULL) override;
+  void _commit(version_t tid, MMDSTableRequest::const_ref req) override;
   void _rollback(version_t tid) override;
   void _server_update(bufferlist& bl) override;
   bool _notify_prep(version_t tid) override;
-  void handle_query(MMDSTableRequest *m) override;
+  void handle_query(const MMDSTableRequest::const_ref &m) override;
 
 public:
   SnapServer(MDSRank *m, MonClient *monc)
@@ -88,12 +98,42 @@ public:
 
   void reset_state() override;
 
+  bool upgrade_format() {
+    // upgraded from old filesystem
+    ceph_assert(last_snap > 0);
+    bool upgraded = false;
+    if (get_version() == 0) {
+      // version 0 confuses snapclient code
+      reset_state();
+      upgraded = true;
+    }
+    if (snaprealm_v2_since == CEPH_NOSNAP) {
+      // new snapshots will have new format snaprealms
+      snaprealm_v2_since = last_snap + 1;
+      upgraded = true;
+    }
+    return upgraded;
+  }
+
   void check_osd_map(bool force);
+
+  void mark_base_recursively_scrubbed(inodeno_t ino) {
+    if (ino ==  MDS_INO_ROOT)
+      root_scrubbed = true;
+    else if (ino == MDS_INO_MDSDIR(rank))
+      mdsdir_scrubbed = true;
+    else
+      ceph_abort();
+  }
+  bool can_allow_multimds_snaps() const {
+    return (root_scrubbed && mdsdir_scrubbed) ||
+	   snaps.empty() || snaps.begin()->first >= snaprealm_v2_since;
+  }
 
   void encode(bufferlist& bl) const {
     encode_server_state(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     decode_server_state(bl);
   }
 

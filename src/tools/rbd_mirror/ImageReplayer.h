@@ -16,7 +16,7 @@
 #include "librbd/journal/Types.h"
 #include "librbd/journal/TypeTraits.h"
 #include "ProgressContext.h"
-#include "types.h"
+#include "tools/rbd_mirror/Types.h"
 #include "tools/rbd_mirror/image_replayer/Types.h"
 
 #include <boost/noncopyable.hpp>
@@ -196,7 +196,7 @@ protected:
    * @endverbatim
    */
 
-  virtual void on_start_fail(int r, const std::string &desc = "");
+  virtual void on_start_fail(int r, const std::string &desc);
   virtual bool on_start_interrupted();
 
   virtual void on_stop_journal_replay(int r = 0, const std::string &desc = "");
@@ -279,6 +279,7 @@ private:
   int64_t m_local_pool_id;
   std::string m_local_image_id;
   std::string m_global_image_id;
+  std::string m_local_image_name;
   std::string m_name;
 
   mutable Mutex m_lock;
@@ -377,7 +378,7 @@ private:
   void queue_mirror_image_status_update(const OptionalState &state);
   void send_mirror_status_update(const OptionalState &state);
   void handle_mirror_status_update(int r);
-  void reschedule_update_status_task(int new_interval = 0);
+  void reschedule_update_status_task(int new_interval);
 
   void shut_down(int r);
   void handle_shut_down(int r);
@@ -417,8 +418,7 @@ private:
 
   void register_admin_socket_hook();
   void unregister_admin_socket_hook();
-
-  void on_name_changed();
+  void reregister_admin_socket_hook();
 };
 
 } // namespace mirror

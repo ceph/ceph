@@ -16,8 +16,10 @@
 
 #include <atomic>
 #include "common/histogram.h"
-#include "msg/Message.h"
 #include "common/RWLock.h"
+#include "common/Thread.h"
+#include "include/spinlock.h"
+#include "msg/Message.h"
 
 #define OPTRACKER_PREALLOC_EVENTS 20
 
@@ -71,9 +73,9 @@ public:
     opsvc.create("OpHistorySvc");
   }
   ~OpHistory() {
-    assert(arrived.empty());
-    assert(duration.empty());
-    assert(slow_op.empty());
+    ceph_assert(arrived.empty());
+    ceph_assert(duration.empty());
+    ceph_assert(slow_op.empty());
   }
   void insert(const utime_t& now, TrackedOpRef op)
   {
@@ -134,6 +136,7 @@ public:
   bool dump_historic_slow_ops(Formatter *f, set<string> filters = {""});
   bool register_inflight_op(TrackedOp *i);
   void unregister_inflight_op(TrackedOp *i);
+  void record_history_op(TrackedOpRef&& i);
 
   void get_age_ms_histogram(pow2_hist_t *h);
 
@@ -152,12 +155,14 @@ public:
    *
    * @param[out] oldest_sec the amount of time since the oldest op was initiated
    * @param[out] num_slow_ops total number of slow ops
+   * @param[out] num_warned_ops total number of warned ops
    * @param on_warn a function consuming tracked ops, the function returns
    *                false if it don't want to be fed with more ops
    * @return True if there are any Ops to warn on, false otherwise
    */
   bool with_slow_ops_in_flight(utime_t* oldest_secs,
 			       int* num_slow_ops,
+			       int* num_warned_ops,
 			       std::function<void(TrackedOp&)>&& on_warn);
   /**
    * Look for Ops which are too old, and insert warning
@@ -301,7 +306,9 @@ public:
     ++nref;
   }
   void put() {
-    if (--nref == 0) {
+  again:
+    auto nref_snap = nref.load();
+    if (nref_snap == 1) {
       switch (state.load()) {
       case STATE_UNTRACKED:
 	_unregistered();
@@ -311,6 +318,14 @@ public:
       case STATE_LIVE:
 	mark_event("done");
 	tracker->unregister_inflight_op(this);
+	_unregistered();
+	if (!tracker->is_tracking()) {
+	  delete this;
+	} else {
+	  state = TrackedOp::STATE_HISTORY;
+	  tracker->record_history_op(
+	    TrackedOpRef(this, /* add_ref = */ false));
+	}
 	break;
 
       case STATE_HISTORY:
@@ -320,12 +335,14 @@ public:
       default:
 	ceph_abort();
       }
+    } else if (!nref.compare_exchange_weak(nref_snap, nref_snap - 1)) {
+      goto again;
     }
   }
 
   const char *get_desc() const {
     if (!desc || want_new_desc.load()) {
-      Mutex::Locker l(lock);
+      std::lock_guard<Mutex> l(lock);
       _gen_desc();
     }
     return desc;
@@ -348,7 +365,7 @@ public:
   }
 
   double get_duration() const {
-    Mutex::Locker l(lock);
+    std::lock_guard<Mutex> l(lock);
     if (!events.empty() && events.rbegin()->compare("done") == 0)
       return events.rbegin()->stamp - get_initiated();
     else
@@ -360,8 +377,12 @@ public:
   void mark_event(const char *event,
 		  utime_t stamp=ceph_clock_now());
 
+  void mark_nowarn() {
+    warn_interval_multiplier = 0;
+  }
+
   virtual const char *state_string() const {
-    Mutex::Locker l(lock);
+    std::lock_guard<Mutex> l(lock);
     return events.rbegin()->c_str();
   }
 

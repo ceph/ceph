@@ -9,7 +9,6 @@
 /node_modules
 
 # IDEs and editors
-/.idea
 .project
 .classpath
 .c9/
@@ -32,6 +31,7 @@
 npm-debug.log
 testem.log
 /typings
+/src/unit-test-configuration.ts
 
 # e2e
 /e2e/*.js
@@ -43,7 +43,6 @@ Thumbs.db
 
 # Package lock files
 yarn.lock
-package-lock.json
 
 # Ceph
 !core

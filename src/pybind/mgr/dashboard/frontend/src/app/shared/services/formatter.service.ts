@@ -2,53 +2,31 @@ import { Injectable } from '@angular/core';
 
 import * as _ from 'lodash';
 
-@Injectable()
+import { ServicesModule } from './services.module';
+
+@Injectable({
+  providedIn: ServicesModule
+})
 export class FormatterService {
   constructor() {}
 
-  truncate(n, maxWidth) {
-    const stringized = n.toString();
-    const parts = stringized.split('.');
-    if (parts.length === 1) {
-      // Just an int
-      return stringized;
-    } else {
-      const fractionalDigits = maxWidth - parts[0].length - 1;
-      if (fractionalDigits <= 0) {
-        // No width available for the fractional part, drop
-        // it and the decimal point
-        return parts[0];
-      } else {
-        return stringized.substring(0, maxWidth);
-      }
+  format_number(n: any, divisor: number, units: string[], decimals: number = 1): string {
+    if (_.isString(n)) {
+      n = Number(n);
     }
-  }
-
-  format_number(n, divisor, units) {
-    const width = 4;
-    let unit = 0;
-
-    if (n == null) {
-      // People shouldn't really be passing null, but let's
-      // do something sensible instead of barfing.
+    if (!_.isNumber(n)) {
       return '-';
     }
-
-    while (Math.floor(n / divisor ** unit).toString().length > width - 1) {
-      unit = unit + 1;
+    let unit = n < 1 ? 0 : Math.floor(Math.log(n) / Math.log(divisor));
+    unit = unit >= units.length ? units.length - 1 : unit;
+    let result = _.round(n / Math.pow(divisor, unit), decimals).toString();
+    if (result === '') {
+      return '-';
     }
-
-    let truncatedFloat;
-    if (unit > 0) {
-      truncatedFloat = this.truncate(
-        (n / Math.pow(divisor, unit)).toString(),
-        width
-      );
-    } else {
-      truncatedFloat = this.truncate(n, width);
+    if (units[unit] !== '') {
+      result = `${result} ${units[unit]}`;
     }
-
-    return truncatedFloat === '' ? '-' : (truncatedFloat + units[unit]);
+    return result;
   }
 
   /**
@@ -59,42 +37,15 @@ export class FormatterService {
    */
   toBytes(value: string): number | null {
     const base = 1024;
-    const units = {
-      'b': 1,
-      'k': Math.pow(base, 1),
-      'kb': Math.pow(base, 1),
-      'kib': Math.pow(base, 1),
-      'm': Math.pow(base, 2),
-      'mb': Math.pow(base, 2),
-      'mib': Math.pow(base, 2),
-      'g': Math.pow(base, 3),
-      'gb': Math.pow(base, 3),
-      'gib': Math.pow(base, 3),
-      't': Math.pow(base, 4),
-      'tb': Math.pow(base, 4),
-      'tib': Math.pow(base, 4),
-      'p': Math.pow(base, 5),
-      'pb': Math.pow(base, 5),
-      'pib': Math.pow(base, 5),
-      'e': Math.pow(base, 6),
-      'eb': Math.pow(base, 6),
-      'eib': Math.pow(base, 6),
-      'z': Math.pow(base, 7),
-      'zb': Math.pow(base, 7),
-      'zib': Math.pow(base, 7),
-      'y': Math.pow(base, 8),
-      'yb': Math.pow(base, 8),
-      'yib': Math.pow(base, 8)
-    };
-    const m = RegExp('^(\\d+)\\s*(B|K(B|iB)?|M(B|iB)?|G(B|iB)?|T(B|iB)?|P(B|iB)?|' +
-      'E(B|iB)?|Z(B|iB)?|Y(B|iB)?)?$', 'i').exec(value);
+    const units = ['b', 'k', 'm', 'g', 't', 'p', 'e', 'z', 'y'];
+    const m = RegExp('^(\\d+(.\\d+)?) ?([' + units.join('') + '](b|ib)?)?$', 'i').exec(value);
     if (m === null) {
       return null;
     }
-    let bytes = parseInt(m[1], 10);
-    if (_.isString(m[2])) {
-      bytes = bytes * units[m[2].toLowerCase()];
+    let bytes = parseFloat(m[1]);
+    if (_.isString(m[3])) {
+      bytes = bytes * Math.pow(base, units.indexOf(m[3].toLowerCase()[0]));
     }
-    return bytes;
+    return Math.round(bytes);
   }
 }

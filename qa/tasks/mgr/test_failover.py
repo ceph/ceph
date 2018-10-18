@@ -100,7 +100,7 @@ class TestFailover(MgrTestCase):
         # (regression test for http://tracker.ceph.com/issues/21260)
         meta = json.loads(self.mgr_cluster.mon_manager.raw_cluster_cmd(
             "mgr", "metadata"))
-        id_to_meta = dict([(i['id'], i) for i in meta])
+        id_to_meta = dict([(i['name'], i) for i in meta])
         for i in [original_active] + original_standbys:
             self.assertIn(i, id_to_meta)
             self.assertIn('ceph_version', id_to_meta[i])

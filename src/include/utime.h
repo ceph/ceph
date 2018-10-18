@@ -32,7 +32,10 @@
 // --------
 // utime_t
 
-/* WARNING: If add member in utime_t, please make sure the encode/decode funtion
+inline __u32 cap_to_u32_max(__u64 t) {
+  return std::min(t, (__u64)std::numeric_limits<uint32_t>::max());
+}
+/* WARNING: If add member in utime_t, please make sure the encode/decode function
  * work well. For little-endian machine, we should make sure there is no padding
  * in 32-bit machine and 64-bit machine.
  * You should also modify the padding_check function.
@@ -47,9 +50,10 @@ public:
   bool is_zero() const {
     return (tv.tv_sec == 0) && (tv.tv_nsec == 0);
   }
+
   void normalize() {
     if (tv.tv_nsec > 1000000000ul) {
-      tv.tv_sec += tv.tv_nsec / (1000000000ul);
+      tv.tv_sec = cap_to_u32_max(tv.tv_sec + tv.tv_nsec / (1000000000ul));
       tv.tv_nsec %= 1000000000ul;
     }
   }
@@ -67,10 +71,12 @@ public:
     tv.tv_sec = v.tv_sec;
     tv.tv_nsec = v.tv_nsec;
   }
-  explicit utime_t(const ceph::real_time& rt) {
-    ceph_timespec ts = real_clock::to_ceph_timespec(rt);
-    decode_timeval(&ts);
-  }
+  // conversion from ceph::real_time/coarse_real_time
+  template <typename Clock, typename std::enable_if_t<
+            ceph::converts_to_timespec_v<Clock>>* = nullptr>
+  explicit utime_t(const std::chrono::time_point<Clock>& t)
+    : utime_t(Clock::to_timespec(t)) {} // forward to timespec ctor
+
   utime_t(const struct timeval &v) {
     set_from_timeval(&v);
   }
@@ -133,7 +139,7 @@ public:
     encode(tv.tv_nsec, bl);
 #endif
   }
-  void decode(bufferlist::iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
 #if defined(CEPH_LITTLE_ENDIAN)
     p.copy(sizeof(__u32) + sizeof(__u32), (char *)(this));
 #else
@@ -214,7 +220,7 @@ public:
       // raw seconds.  this looks like a relative time.
       out << (long)sec() << "." << std::setw(6) << usec();
     } else {
-      // localtime.  this looks like an absolute time.
+      // this looks like an absolute time.
       //  aim for http://en.wikipedia.org/wiki/ISO_8601
       struct tm bdt;
       time_t tt = sec();
@@ -243,7 +249,7 @@ public:
       // raw seconds.  this looks like a relative time.
       out << (long)sec() << "." << std::setw(6) << usec();
     } else {
-      // localtime.  this looks like an absolute time.
+      // this looks like an absolute time.
       //  aim for http://en.wikipedia.org/wiki/ISO_8601
       struct tm bdt;
       time_t tt = sec();
@@ -272,7 +278,7 @@ public:
       // raw seconds.  this looks like a relative time.
       out << (long)sec() << "." << std::setw(6) << usec();
     } else {
-      // localtime.  this looks like an absolute time.
+      // this looks like an absolute time.
       //  aim for http://en.wikipedia.org/wiki/ISO_8601
       struct tm bdt;
       time_t tt = sec();
@@ -298,7 +304,7 @@ public:
       // raw seconds.  this looks like a relative time.
       out << (long)sec() << "." << std::setw(6) << usec();
     } else {
-      // localtime.  this looks like an absolute time.
+      // this looks like an absolute time.
       //  aim for http://en.wikipedia.org/wiki/ISO_8601
       struct tm bdt;
       time_t tt = sec();
@@ -429,26 +435,35 @@ public:
 
     return 0;
   }
+
+  bool parse(const string& s) {
+    uint64_t epoch, nsec;
+    int r = parse_date(s, &epoch, &nsec);
+    if (r < 0) {
+      return false;
+    }
+    *this = utime_t(epoch, nsec);
+    return true;
+  }
 };
 WRITE_CLASS_ENCODER(utime_t)
 WRITE_CLASS_DENC(utime_t)
 
-
 // arithmetic operators
 inline utime_t operator+(const utime_t& l, const utime_t& r) {
-  return utime_t( l.sec() + r.sec() + (l.nsec()+r.nsec())/1000000000L,
-                  (l.nsec()+r.nsec())%1000000000L );
+  __u64 sec = (__u64)l.sec() + r.sec();
+  return utime_t(cap_to_u32_max(sec), l.nsec() + r.nsec());
 }
 inline utime_t& operator+=(utime_t& l, const utime_t& r) {
-  l.sec_ref() += r.sec() + (l.nsec()+r.nsec())/1000000000L;
+  l.sec_ref() = cap_to_u32_max((__u64)l.sec() + r.sec());
   l.nsec_ref() += r.nsec();
-  l.nsec_ref() %= 1000000000L;
+  l.normalize();
   return l;
 }
 inline utime_t& operator+=(utime_t& l, double f) {
   double fs = trunc(f);
   double ns = (f - fs) * 1000000000.0;
-  l.sec_ref() += (long)fs;
+  l.sec_ref() = cap_to_u32_max(l.sec() + (__u64)fs);
   l.nsec_ref() += (long)ns;
   l.normalize();
   return l;
@@ -516,6 +531,11 @@ inline bool operator!=(const utime_t& a, const utime_t& b)
 inline std::ostream& operator<<(std::ostream& out, const utime_t& t)
 {
   return t.localtime(out);
+}
+
+inline std::string utimespan_str(const utime_t& age) {
+  auto age_ts = ceph::timespan(age.nsec()) + std::chrono::seconds(age.sec());
+  return timespan_str(age_ts);
 }
 
 #endif

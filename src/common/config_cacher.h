@@ -20,7 +20,7 @@
 
 template <typename ValueT>
 class md_config_cacher_t : public md_config_obs_t {
-  md_config_t& conf;
+  ConfigProxy& conf;
   const char* const option_name;
   std::atomic<ValueT> value_cache;
 
@@ -29,15 +29,15 @@ class md_config_cacher_t : public md_config_obs_t {
     return keys;
   }
 
-  void handle_conf_change(const md_config_t* conf,
+  void handle_conf_change(const ConfigProxy& conf,
                           const std::set<std::string>& changed) override {
     if (changed.count(option_name)) {
-      value_cache.store(conf->get_val<ValueT>(option_name));
+      value_cache.store(conf.get_val<ValueT>(option_name));
     }
   }
 
 public:
-  md_config_cacher_t(md_config_t& conf,
+  md_config_cacher_t(ConfigProxy& conf,
                      const char* const option_name)
     : conf(conf),
       option_name(option_name) {

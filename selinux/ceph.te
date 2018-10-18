@@ -12,6 +12,7 @@ require {
 	class dir read;
 	class file { getattr read open };
 	class blk_file { getattr ioctl open read write };
+	class capability2 block_suspend;
 }
 
 ########################################
@@ -46,6 +47,7 @@ allow ceph_t self:process { signal_perms };
 allow ceph_t self:fifo_file rw_fifo_file_perms;
 allow ceph_t self:unix_stream_socket create_stream_socket_perms;
 allow ceph_t self:capability { setuid setgid dac_override };
+allow ceph_t self:capability2 block_suspend;
 
 manage_dirs_pattern(ceph_t, ceph_log_t, ceph_log_t)
 manage_files_pattern(ceph_t, ceph_log_t, ceph_log_t)
@@ -103,6 +105,7 @@ fstools_exec(ceph_t)
 nis_use_ypbind_uncond(ceph_t)
 storage_raw_rw_fixed_disk(ceph_t)
 files_manage_generic_locks(ceph_t)
+libs_exec_ldconfig(ceph_t)
 
 allow ceph_t sysfs_t:dir read;
 allow ceph_t sysfs_t:file { read getattr open };

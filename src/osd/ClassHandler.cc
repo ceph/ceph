@@ -28,9 +28,9 @@
 
 void ClassHandler::add_embedded_class(const string& cname)
 {
-  assert(mutex.is_locked());
+  ceph_assert(mutex.is_locked());
   ClassData *cls = _get_class(cname, false);
-  assert(cls->status == ClassData::CLASS_UNKNOWN);
+  ceph_assert(cls->status == ClassData::CLASS_UNKNOWN);
   cls->status = ClassData::CLASS_INITIALIZING;
 }
 
@@ -211,7 +211,7 @@ int ClassHandler::_load_class(ClassData *cls)
 
 ClassHandler::ClassData *ClassHandler::register_class(const char *cname)
 {
-  assert(mutex.is_locked());
+  ceph_assert(mutex.is_locked());
 
   ClassData *cls = _get_class(cname, false);
   ldout(cct, 10) << "register_class " << cname << " status " << cls->status << dendl;

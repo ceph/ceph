@@ -236,6 +236,9 @@ TEST(LibRadosAio, PoolQuotaPP) {
   }
   ASSERT_LT(n, 1024);
 
+  // make sure we have latest map that marked the pool full
+  test_data.m_cluster.wait_for_latest_osdmap();
+
   // make sure we block without FULL_TRY
   {
     ObjectWriteOperation op;
@@ -604,7 +607,7 @@ TEST(LibRadosAio, RoundTripPP3)
   ASSERT_EQ(0, memcmp(buf, bl.c_str(), sizeof(buf)));
 
   ASSERT_EQ(8U, csum_bl.length());
-  auto csum_bl_it = csum_bl.begin();
+  auto csum_bl_it = csum_bl.cbegin();
   uint32_t csum_count;
   uint32_t csum;
   decode(csum_count, csum_bl_it);

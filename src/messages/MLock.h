@@ -18,10 +18,14 @@
 
 #include "msg/Message.h"
 #include "mds/locks.h"
+#include "mds/SimpleLock.h"
 
-class MLock : public Message {
+class MLock : public MessageInstance<MLock> {
+public:
+  friend factory;
+private:
   int32_t     action = 0;  // action type
-  int32_t     asker = 0;  // who is initiating this request
+  mds_rank_t  asker = 0;  // who is initiating this request
   metareqid_t reqid;  // for remote lock requests
   
   __u16      lock_type = 0;  // lock object type
@@ -31,31 +35,33 @@ class MLock : public Message {
   
 public:
   bufferlist& get_data() { return lockdata; }
-  int get_asker() { return asker; }
-  int get_action() { return action; }
-  metareqid_t get_reqid() { return reqid; }
+  const bufferlist& get_data() const { return lockdata; }
+  int get_asker() const { return asker; }
+  int get_action() const { return action; }
+  metareqid_t get_reqid() const { return reqid; }
   
-  int get_lock_type() { return lock_type; }
+  int get_lock_type() const { return lock_type; }
+  const MDSCacheObjectInfo &get_object_info() const { return object_info; }
   MDSCacheObjectInfo &get_object_info() { return object_info; }
-  
-  MLock() : Message(MSG_MDS_LOCK) {}
-  MLock(int ac, int as) :
-    Message(MSG_MDS_LOCK),
+
+protected:
+  MLock() : MessageInstance(MSG_MDS_LOCK) {}
+  MLock(int ac, mds_rank_t as) :
+    MessageInstance(MSG_MDS_LOCK),
     action(ac), asker(as),
     lock_type(0) { }
-  MLock(SimpleLock *lock, int ac, int as) :
-    Message(MSG_MDS_LOCK),
+  MLock(SimpleLock *lock, int ac, mds_rank_t as) :
+    MessageInstance(MSG_MDS_LOCK),
     action(ac), asker(as),
     lock_type(lock->get_type()) {
     lock->get_parent()->set_object_info(object_info);
   }
-  MLock(SimpleLock *lock, int ac, int as, bufferlist& bl) :
-    Message(MSG_MDS_LOCK),
+  MLock(SimpleLock *lock, int ac, mds_rank_t as, bufferlist& bl) :
+    MessageInstance(MSG_MDS_LOCK),
     action(ac), asker(as), lock_type(lock->get_type()) {
     lock->get_parent()->set_object_info(object_info);
     lockdata.claim(bl);
   }
-private:
   ~MLock() override {}
   
 public:
@@ -74,7 +80,7 @@ public:
   
   void decode_payload() override {
     using ceph::decode;
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(asker, p);
     decode(action, p);
     decode(reqid, p);

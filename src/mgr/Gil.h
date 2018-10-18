@@ -28,7 +28,7 @@ typedef struct _ts PyThreadState;
 class SafeThreadState
 {
   public:
-  SafeThreadState(PyThreadState *ts_);
+  explicit SafeThreadState(PyThreadState *ts_);
 
   SafeThreadState()
     : ts(nullptr), thread(0)

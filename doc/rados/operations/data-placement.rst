@@ -28,6 +28,11 @@ placement planning.  The main data placement planning concepts in Ceph include:
   for added data safety among other things. See `CRUSH Maps`_ for additional
   details.
 
+- **Balancer:** The balancer is a feature that will automatically optimize the
+  distribution of PGs across devices to achieve a balanced data distribution,
+  maximizing the amount of data that can be stored in the cluster and evenly
+  distributing the workload across OSDs.
+
 When you initially set up a test cluster, you can use the default values. Once
 you begin planning for a large Ceph cluster, refer to pools, placement groups
 and CRUSH for data placement operations.
@@ -35,3 +40,4 @@ and CRUSH for data placement operations.
 .. _Pools: ../pools
 .. _Placement Groups: ../placement-groups
 .. _CRUSH Maps: ../crush-map
+.. _Balancer: ../balancer

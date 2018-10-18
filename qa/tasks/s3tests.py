@@ -88,6 +88,9 @@ def _config_user(s3tests_conf, section, user):
     s3tests_conf[section].setdefault('display_name', 'Mr. {user}'.format(user=user))
     s3tests_conf[section].setdefault('access_key', ''.join(random.choice(string.uppercase) for i in xrange(20)))
     s3tests_conf[section].setdefault('secret_key', base64.b64encode(os.urandom(40)))
+    s3tests_conf[section].setdefault('totp_serial', ''.join(random.choice(string.digits) for i in xrange(10)))
+    s3tests_conf[section].setdefault('totp_seed', base64.b32encode(os.urandom(40)))
+    s3tests_conf[section].setdefault('totp_seconds', '5')
 
 
 @contextlib.contextmanager
@@ -121,6 +124,23 @@ def create_users(ctx, config):
                     '--access-key', s3tests_conf[section]['access_key'],
                     '--secret', s3tests_conf[section]['secret_key'],
                     '--email', s3tests_conf[section]['email'],
+                    '--cluster', cluster_name,
+                ],
+            )
+            ctx.cluster.only(client).run(
+                args=[
+                    'adjust-ulimits',
+                    'ceph-coverage',
+                    '{tdir}/archive/coverage'.format(tdir=testdir),
+                    'radosgw-admin',
+                    '-n', client_with_id,
+                    'mfa', 'create',
+                    '--uid', s3tests_conf[section]['user_id'],
+                    '--totp-serial', s3tests_conf[section]['totp_serial'],
+                    '--totp-seed', s3tests_conf[section]['totp_seed'],
+                    '--totp-seconds', s3tests_conf[section]['totp_seconds'],
+                    '--totp-window', '8',
+                    '--totp-seed-type', 'base32',
                     '--cluster', cluster_name,
                 ],
             )
@@ -228,10 +248,8 @@ def run_tests(ctx, config):
     """
     assert isinstance(config, dict)
     testdir = teuthology.get_testdir(ctx)
-    attrs = ["!fails_on_rgw", "!lifecycle_expiration"]
-    # beast parser is strict about unreadable headers
-    if ctx.rgw.frontend == 'beast':
-        attrs.append("!fails_strict_rfc2616")
+    # civetweb > 1.8 && beast parsers are strict on rfc2616
+    attrs = ["!fails_on_rgw", "!lifecycle_expiration", "!fails_strict_rfc2616"]
     for client, client_config in config.iteritems():
         (remote,) = ctx.cluster.only(client).remotes.keys()
         args = [
@@ -378,6 +396,7 @@ def task(ctx, config):
                     {
                     'port'      : endpoint.port,
                     'is_secure' : 'yes' if endpoint.cert else 'no',
+                    'api_name'  : 'default',
                     },
                 'fixtures' : {},
                 's3 main'  : {},

@@ -23,7 +23,7 @@ public:
   RGWGetObj_Decompress(CephContext* cct_, 
                        RGWCompressionInfo* cs_info_, 
                        bool partial_content_,
-                       RGWGetDataCB* next);
+                       RGWGetObj_Filter* next);
   ~RGWGetObj_Decompress() override {}
 
   int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override;

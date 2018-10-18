@@ -63,7 +63,7 @@ struct bluefs_fnode_t {
     _denc_friend(*this, p);
     DENC_DUMP_POST(bluefs_fnode_t);
   }
-  void decode(buffer::ptr::iterator& p) {
+  void decode(buffer::ptr::const_iterator& p) {
     _denc_friend(*this, p);
     recalc_allocated();
   }
@@ -128,11 +128,11 @@ struct bluefs_super_t {
       block_size(4096) { }
 
   uint64_t block_mask() const {
-    return ~(block_size - 1);
+    return ~((uint64_t)block_size - 1);
   }
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& p);
+  void decode(bufferlist::const_iterator& p);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<bluefs_super_t*>& ls);
 };
@@ -146,7 +146,7 @@ struct bluefs_transaction_t {
     OP_NONE = 0,
     OP_INIT,        ///< initial (empty) file system marker
     OP_ALLOC_ADD,   ///< add extent to available block storage (extent)
-    OP_ALLOC_RM,    ///< remove extent from availabe block storage (extent)
+    OP_ALLOC_RM,    ///< remove extent from available block storage (extent)
     OP_DIR_LINK,    ///< (re)set a dir entry (dirname, filename, ino)
     OP_DIR_UNLINK,  ///< remove a dir entry (dirname, filename)
     OP_DIR_CREATE,  ///< create a dir (dirname)
@@ -234,9 +234,9 @@ struct bluefs_transaction_t {
   }
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& p);
+  void decode(bufferlist::const_iterator& p);
   void dump(Formatter *f) const;
-  static void generate_test_instance(list<bluefs_transaction_t*>& ls);
+  static void generate_test_instances(list<bluefs_transaction_t*>& ls);
 };
 WRITE_CLASS_ENCODER(bluefs_transaction_t)
 

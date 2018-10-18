@@ -8,9 +8,10 @@
 #include <vector>
 #include <algorithm>
 
+#include "common/likely.h"
 #include "common/subsys_types.h"
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 namespace ceph {
 namespace logging {
@@ -68,27 +69,30 @@ public:
   }
 
   template <unsigned SubV, int LvlV>
-  bool should_gather() {
+  bool should_gather() const {
     static_assert(SubV < get_num(), "wrong subsystem ID");
     static_assert(LvlV >= -1 && LvlV <= 200);
 
     if constexpr (LvlV <= 0) {
       // handle the -1 and 0 levels entirely at compile-time.
-      // Such debugs are intended be gathered regardless even
+      // Such debugs are intended to be gathered regardless even
       // of the user configuration.
       return true;
     } else {
-      return LvlV <= static_cast<int>(m_gather_levels[SubV]);
+      // we expect that setting level different than the default
+      // is rather unusual.
+      return expect(LvlV <= static_cast<int>(m_gather_levels[SubV]),
+		    LvlV <= ceph_subsys_get_max_default_level(SubV));
     }
   }
-  bool should_gather(const unsigned sub, int level) {
-    assert(sub < m_subsys.size());
+  bool should_gather(const unsigned sub, int level) const {
+    ceph_assert(sub < m_subsys.size());
     return level <= static_cast<int>(m_gather_levels[sub]);
   }
 
   void set_log_level(unsigned subsys, uint8_t log)
   {
-    assert(subsys < m_subsys.size());
+    ceph_assert(subsys < m_subsys.size());
     m_subsys[subsys].log_level = log;
     m_gather_levels[subsys] = \
       std::max(log, m_subsys[subsys].gather_level);
@@ -96,7 +100,7 @@ public:
 
   void set_gather_level(unsigned subsys, uint8_t gather)
   {
-    assert(subsys < m_subsys.size());
+    ceph_assert(subsys < m_subsys.size());
     m_subsys[subsys].gather_level = gather;
     m_gather_levels[subsys] = \
       std::max(m_subsys[subsys].log_level, gather);
