@@ -304,6 +304,12 @@ public:
           result = crypto_accel->cbc_decrypt(out + offset, in + offset,
                                              process_size, iv, key);
         }
+        if (!result) {
+          ldout(cct, 5) << "Cryto Accelerator failed to perform operation. \
+                         Fall back to SW implementation " << dendl;
+          crypto_accel = NULL;
+          failed_to_get_crypto = true;
+        }
       } else {
         result = cbc_transform(
             out + offset, in + offset, process_size,
