@@ -1130,9 +1130,6 @@ struct OSDShard {
 
   string shard_name;
 
-  string sdata_wait_lock_name;
-  Mutex sdata_wait_lock;
-  Cond sdata_cond;
 
   string osdmap_lock_name;
   Mutex osdmap_lock;  ///< protect shard_osdmap updates vs users w/o shard_lock
@@ -1145,6 +1142,7 @@ struct OSDShard {
 
   string shard_lock_name;
   Mutex shard_lock;   ///< protects remaining members below
+  Cond shard_cond;
 
   /// map of slots for each spg_t.  maintains ordering of items dequeued
   /// from pqueue while _process thread drops shard lock to acquire the
@@ -1227,13 +1225,11 @@ struct OSDShard {
       cct(cct),
       osd(osd),
       shard_name(string("OSDShard.") + stringify(id)),
-      sdata_wait_lock_name(shard_name + "::sdata_wait_lock"),
-      sdata_wait_lock(sdata_wait_lock_name.c_str(), false, true, false),
       osdmap_lock_name(shard_name + "::osdmap_lock"),
       osdmap_lock(osdmap_lock_name.c_str(), false, false),
       shard_lock_name(shard_name + "::shard_lock"),
       shard_lock(shard_lock_name.c_str(), false, true, false),
-      context_queue(sdata_wait_lock, sdata_cond) {
+      context_queue(shard_lock, shard_cond) {
     if (opqueue == io_queue::weightedpriority) {
       pqueue = std::make_unique<
 	WeightedPriorityQueue<OpQueueItem,uint64_t>>(
@@ -1754,10 +1750,10 @@ protected:
       for(uint32_t i = 0; i < osd->num_shards; i++) {
 	OSDShard* sdata = osd->shards[i];
 	assert (NULL != sdata); 
-	sdata->sdata_wait_lock.Lock();
+	sdata->shard_lock.Lock();
 	sdata->stop_waiting = true;
-	sdata->sdata_cond.Signal();
-	sdata->sdata_wait_lock.Unlock();
+	sdata->shard_cond.Signal();
+	sdata->shard_lock.Unlock();
       }
     }
 
@@ -1765,9 +1761,9 @@ protected:
       for(uint32_t i = 0; i < osd->num_shards; i++) {
 	OSDShard* sdata = osd->shards[i];
 	assert (NULL != sdata);
-	sdata->sdata_wait_lock.Lock();
+	sdata->shard_lock.Lock();
 	sdata->stop_waiting = false;
-	sdata->sdata_wait_lock.Unlock();
+	sdata->shard_lock.Unlock();
       }
     }
 

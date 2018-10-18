@@ -9933,9 +9933,7 @@ void OSDShard::consume_map(
     ++p;
   }
   if (queued) {
-    sdata_wait_lock.Lock();
-    sdata_cond.SignalOne();
-    sdata_wait_lock.Unlock();
+    shard_cond.SignalOne();
   }
 }
 
@@ -10136,10 +10134,10 @@ void OSDShard::register_and_wake_split_child(PG *pg)
 	epoch,
 	epoch,
 	NullEvt())));
-
-  sdata_wait_lock.Lock();
-  sdata_cond.SignalOne();
-  sdata_wait_lock.Unlock();
+  {
+    Mutex::Locker l(shard_lock);
+    shard_cond.SignalOne();
+  }
 }
 
 void OSDShard::unprime_split_children(spg_t parent, unsigned old_pg_num)
@@ -10205,14 +10203,10 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
   sdata->shard_lock.Lock();
   if (sdata->pqueue->empty() &&
      !(is_smallest_thread_index && !sdata->context_queue.empty())) {
-    sdata->sdata_wait_lock.Lock();
     if (!sdata->stop_waiting) {
       dout(20) << __func__ << " empty q, waiting" << dendl;
       osd->cct->get_heartbeat_map()->clear_timeout(hb);
-      sdata->shard_lock.Unlock();
-      sdata->sdata_cond.Wait(sdata->sdata_wait_lock);
-      sdata->sdata_wait_lock.Unlock();
-      sdata->shard_lock.Lock();
+      sdata->shard_cond.Wait(sdata->shard_lock);
       if (sdata->pqueue->empty() &&
          !(is_smallest_thread_index && !sdata->context_queue.empty())) {
 	sdata->shard_lock.Unlock();
@@ -10222,7 +10216,6 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
 	  osd->cct->_conf->threadpool_default_timeout, 0);
     } else {
       dout(20) << __func__ << " need return immediately" << dendl;
-      sdata->sdata_wait_lock.Unlock();
       sdata->shard_lock.Unlock();
       return;
     }
@@ -10490,11 +10483,9 @@ void OSD::ShardedOpWQ::_enqueue(OpQueueItem&& item) {
   else
     sdata->pqueue->enqueue(
       item.get_owner(), priority, cost, std::move(item));
+  sdata->shard_cond.SignalOne();
   sdata->shard_lock.Unlock();
 
-  sdata->sdata_wait_lock.Lock();
-  sdata->sdata_cond.SignalOne();
-  sdata->sdata_wait_lock.Unlock();
 
 }
 
@@ -10521,10 +10512,8 @@ void OSD::ShardedOpWQ::_enqueue_front(OpQueueItem&& item)
     dout(20) << __func__ << " " << item << dendl;
   }
   sdata->_enqueue_front(std::move(item), osd->op_prio_cutoff);
+  sdata->shard_cond.SignalOne();
   sdata->shard_lock.Unlock();
-  sdata->sdata_wait_lock.Lock();
-  sdata->sdata_cond.SignalOne();
-  sdata->sdata_wait_lock.Unlock();
 }
 
 namespace ceph { 
