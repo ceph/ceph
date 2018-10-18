@@ -176,7 +176,6 @@ ssize_t AsyncConnection::read(unsigned len, char *buffer,
 
 // Because this func will be called multi times to populate
 // the needed buffer, so the passed in bufferptr must be the same.
-// Normally, only "read_message" will pass existing bufferptr in
 //
 // And it will uses readahead method to reduce small read overhead,
 // "recv_buf" is used to store read buffer
