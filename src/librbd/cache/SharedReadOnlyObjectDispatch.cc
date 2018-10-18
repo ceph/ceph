@@ -41,12 +41,11 @@ void SharedReadOnlyObjectDispatch<I>::init() {
   ldout(cct, 5) << dendl;
 
   if (m_image_ctx->parent != nullptr) {
-    //TODO(): should we cover multi-leveled clone?
-    ldout(cct, 5) << "child image: skipping SRO cache client" << dendl;
+    ldout(cct, 5) << "child image: skipping" << dendl;
     return;
   }
 
-  ldout(cct, 5) << "parent image: setup SRO cache client = " << dendl;
+  ldout(cct, 5) << "parent image: setup SRO cache client" << dendl;
 
   std::string controller_path = ((CephContext*)cct)->_conf.get_val<std::string>("rbd_shared_cache_sock");
   m_cache_client = new ceph::immutable_obj_cache::CacheClient(controller_path.c_str(),
@@ -55,12 +54,13 @@ void SharedReadOnlyObjectDispatch<I>::init() {
   int ret = m_cache_client->connect();
   if (ret < 0) {
     ldout(cct, 5) << "SRO cache client fail to connect with local controller: "
-                  << "please start rbd-cache daemon"
+                  << "please start ceph-immutable-object-cache daemon"
 		  << dendl;
   } else {
-    ldout(cct, 5) << "SRO cache client to register volume on rbd-cache daemon: "
-                   << "name = " << m_image_ctx->id 
-                   << dendl;
+    ldout(cct, 5) << "SRO cache client to register volume "
+                  << "name = " << m_image_ctx->name
+                  << "on ceph-immutable-object-cache daemon: "
+                  << dendl;
 
     ret = m_cache_client->register_volume(m_image_ctx->data_ctx.get_pool_name(),
                                           m_image_ctx->id, m_image_ctx->size);
@@ -86,9 +86,10 @@ bool SharedReadOnlyObjectDispatch<I>::read(
 
   // if any session fails, later reads will go to rados
   if(!m_cache_client->is_session_work()) {
+    ldout(cct, 5) << "SRO cache client session failed " << dendl;
     *dispatch_result = io::DISPATCH_RESULT_CONTINUE;
     on_dispatched->complete(0);
-    return true;
+    return false;
     // TODO(): fix domain socket error
   }
 
@@ -116,7 +117,6 @@ int SharedReadOnlyObjectDispatch<I>::handle_read_cache(
   // try to read from parent image
   if (cache) {
     int r = m_object_store->read_object(oid, read_data, object_off, object_len, on_dispatched);
-    //int r = object_len;
     if (r != 0) {
       *dispatch_result = io::DISPATCH_RESULT_COMPLETE;
       //TODO(): complete in syncfile
