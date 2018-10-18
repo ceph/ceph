@@ -135,7 +135,11 @@ void DeviceState::print(ostream& out) const
 void DaemonStateIndex::insert(DaemonStatePtr dm)
 {
   RWLock::WLocker l(lock);
+  _insert(dm);
+}
 
+void DaemonStateIndex::_insert(DaemonStatePtr dm)
+{
   if (all.count(dm->key)) {
     _erase(dm->key);
   }
@@ -227,6 +231,11 @@ DaemonStatePtr DaemonStateIndex::get(const DaemonKey &key)
 void DaemonStateIndex::rm(const DaemonKey &key)
 {
   RWLock::WLocker l(lock);
+  _rm(key);
+}
+
+void DaemonStateIndex::_rm(const DaemonKey &key)
+{
   if (all.count(key)) {
     _erase(key);
   }
