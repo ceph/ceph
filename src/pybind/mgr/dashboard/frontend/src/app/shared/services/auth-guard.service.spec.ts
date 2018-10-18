@@ -36,13 +36,10 @@ describe('AuthGuardService', () => {
     expect(service.canActivate(null, null)).toBe(true);
   });
 
-  it(
-    'should prevent user if not loggedIn and redirect to login page',
-    fakeAsync(() => {
-      const router = TestBed.get(Router);
-      expect(service.canActivate(null, null)).toBe(false);
-      tick();
-      expect(router.url).toBe('/login');
-    })
-  );
+  it('should prevent user if not loggedIn and redirect to login page', fakeAsync(() => {
+    const router = TestBed.get(Router);
+    expect(service.canActivate(null, null)).toBe(false);
+    tick();
+    expect(router.url).toBe('/login');
+  }));
 });
