@@ -18,7 +18,7 @@
 /* COMPILATION OPTIONS
  *
  * The prop_heap does not seem to be necessary. The only thing it
- * would help with is quickly finding the mininum proportion/prioity
+ * would help with is quickly finding the minimum proportion/prioity
  * when an idle client became active. To have the code maintain the
  * proportional heap, define USE_PROP_HEAP (i.e., compiler argument
  * -DUSE_PROP_HEAP).
@@ -863,7 +863,7 @@ namespace crimson {
       // data_mtx must be held by caller
       RequestTag initial_tag(DelayedTagCalc delayed, ClientRec& client,
 			     const ReqParams& params, Time time, Cost cost) {
-	RequestTag tag(0, 0, 0, time, cost);
+	RequestTag tag(0, 0, 0, time, 0, 0, cost);
 
 	// only calculate a tag if the request is going straight to the front
 	if (!client.has_request()) {

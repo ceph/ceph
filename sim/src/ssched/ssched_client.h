@@ -31,7 +31,7 @@ namespace crimson {
       // cleaning process
       ServiceTracker()
       {
-	// emptry
+	// empty
       }
 
       void track_resp(const S& server_id,
