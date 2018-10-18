@@ -4,6 +4,9 @@ overrides:
     - but it is still running
     - objects unfound and apparently lost
     conf:
+      global:
+        osd_verify_sparse_read_holes: true
+        filestore_fiemap: true
       osd:
         osd debug reject backfill probability: .3
         osd scrub min interval: 60

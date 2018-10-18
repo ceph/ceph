@@ -4,6 +4,9 @@ overrides:
     - but it is still running
     - objects unfound and apparently lost
     conf:
+      global:
+        osd_verify_sparse_read_holes: true
+        filestore_seek_data_hole: true
       osd:
         osd scrub min interval: 60
         osd scrub max interval: 120
