@@ -66,7 +66,6 @@ set(common_srcs
   histogram.cc
   hobject.cc
   hostname.cc
-  io_priority.cc
   ipaddr.cc
   iso_8601.cc
   linux_version.c
