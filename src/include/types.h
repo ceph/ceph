@@ -158,7 +158,7 @@ inline std::ostream& operator<<(std::ostream& out, const std::deque<A,Alloc>& v)
 
 template<typename... Ts>
 inline std::ostream& operator<<(std::ostream& out, const std::tuple<Ts...> &t) {
-  auto f = [n = sizeof...(Ts), i = 0, &out](const auto& e) mutable {
+  auto f = [n = sizeof...(Ts), i = 0U, &out](const auto& e) mutable {
     out << e;
     if (++i != n)
       out << ",";
