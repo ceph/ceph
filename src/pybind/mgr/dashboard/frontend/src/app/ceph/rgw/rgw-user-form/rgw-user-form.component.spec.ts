@@ -126,22 +126,16 @@ describe('RgwUserFormComponent', () => {
       formHelper.expectErrorChange('user_id', '', 'required', true);
     });
 
-    it(
-      'should validate that username is valid',
-      fakeAsync(() => {
-        formHelper.setValue('user_id', 'ab', true);
-        tick(500);
-        formHelper.expectValid('user_id');
-      })
-    );
+    it('should validate that username is valid', fakeAsync(() => {
+      formHelper.setValue('user_id', 'ab', true);
+      tick(500);
+      formHelper.expectValid('user_id');
+    }));
 
-    it(
-      'should validate that username is invalid',
-      fakeAsync(() => {
-        formHelper.setValue('user_id', 'abc', true);
-        tick(500);
-        formHelper.expectError('user_id', 'notUnique');
-      })
-    );
+    it('should validate that username is invalid', fakeAsync(() => {
+      formHelper.setValue('user_id', 'abc', true);
+      tick(500);
+      formHelper.expectError('user_id', 'notUnique');
+    }));
   });
 });

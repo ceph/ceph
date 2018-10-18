@@ -62,25 +62,16 @@ describe('ModuleStatusGuardService', () => {
     expect(service).toBeTruthy();
   });
 
-  it(
-    'should test canActivate with status available',
-    fakeAsync(() => {
-      route.data.moduleStatusGuardConfig.redirectTo = 'foo';
-      testCanActivate({ available: true, message: 'foo' }, true, '/');
-    })
-  );
+  it('should test canActivate with status available', fakeAsync(() => {
+    route.data.moduleStatusGuardConfig.redirectTo = 'foo';
+    testCanActivate({ available: true, message: 'foo' }, true, '/');
+  }));
 
-  it(
-    'should test canActivateChild with status unavailable',
-    fakeAsync(() => {
-      testCanActivate({ available: false, message: null }, false, '/foo/');
-    })
-  );
+  it('should test canActivateChild with status unavailable', fakeAsync(() => {
+    testCanActivate({ available: false, message: null }, false, '/foo/');
+  }));
 
-  it(
-    'should test canActivateChild with status unavailable',
-    fakeAsync(() => {
-      testCanActivate(null, false, '/foo');
-    })
-  );
+  it('should test canActivateChild with status unavailable', fakeAsync(() => {
+    testCanActivate(null, false, '/foo');
+  }));
 });

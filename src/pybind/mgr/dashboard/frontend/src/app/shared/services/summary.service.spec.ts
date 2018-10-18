@@ -46,21 +46,18 @@ describe('SummaryService', () => {
     expect(summaryService).toBeTruthy();
   });
 
-  it(
-    'should call refresh',
-    fakeAsync(() => {
-      authStorageService.set('foobar');
-      let result = false;
-      summaryService.refresh();
-      summaryService.subscribe(() => {
-        result = true;
-      });
-      tick(5000);
-      spyOn(summaryService, 'refresh').and.callFake(() => true);
-      tick(5000);
-      expect(result).toEqual(true);
-    })
-  );
+  it('should call refresh', fakeAsync(() => {
+    authStorageService.set('foobar');
+    let result = false;
+    summaryService.refresh();
+    summaryService.subscribe(() => {
+      result = true;
+    });
+    tick(5000);
+    spyOn(summaryService, 'refresh').and.callFake(() => true);
+    tick(5000);
+    expect(result).toEqual(true);
+  }));
 
   describe('Should test methods after first refresh', () => {
     beforeEach(() => {
