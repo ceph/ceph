@@ -716,6 +716,8 @@ namespace buffer CEPH_BUFFER_API {
     // pointer. Keep it dumb, please.
     static_assert(sizeof(contiguous_filler) == sizeof(char*));
 
+#define CEPH_INLINE __attribute__((always_inline))
+
     class contiguous_reserver {
       ceph::bufferlist& bl;
       std::uint8_t reserved;
@@ -727,7 +729,7 @@ namespace buffer CEPH_BUFFER_API {
       static_assert(
         RESERVATION_UNIT < std::numeric_limits<decltype(reserved)>::max());
 
-      void commit_length_update() {
+      void CEPH_INLINE commit_length_update() {
         if (reserved != RESERVATION_INVALID) {
           const auto used = RESERVATION_UNIT - reserved;
           *promise.bl_len += used;
@@ -735,7 +737,7 @@ namespace buffer CEPH_BUFFER_API {
         }
       }
 
-      void commit_length_update_n_invalidate() {
+      void CEPH_INLINE commit_length_update_n_invalidate() {
         commit_length_update();
         reserved = RESERVATION_INVALID;
       }
@@ -750,13 +752,14 @@ namespace buffer CEPH_BUFFER_API {
       }
 
       template <std::size_t LenV>
-      void append(const char* __restrict__ const c) {
+      void CEPH_INLINE append(const char* __restrict__ const c) {
         if (reserved != RESERVATION_INVALID && reserved >= LenV) {
           // The fast, direct memcpy path. The check above is expected to be
           // a subject to DCE (dead code elimination). As we are taking data
           // as restricted pointer, compiler is promised the reserved member
           // can be updated only by us. Thankfully to that, operations on it
-          // are heavily optimizable.
+          // are heavily optimizable. However, it is only possible when code
+          // will be inlined.
           memcpy(promise.bp_data + (RESERVATION_UNIT - reserved), c, LenV);
           reserved -= LenV;
         } else {
@@ -764,24 +767,25 @@ namespace buffer CEPH_BUFFER_API {
         }
       }
 
-      void append(const char* __restrict__ const c, const unsigned len) {
+      void CEPH_INLINE append(const char* __restrict__ const c,
+			      const unsigned len) {
         commit_length_update();
         promise = bl.append_n_reserve(c, len, RESERVATION_UNIT);
         reserved = RESERVATION_UNIT;
       }
 
-      void append(const ceph::bufferlist& __restrict__ ibl) {
+      void CEPH_INLINE append(const ceph::bufferlist& __restrict__ ibl) {
         commit_length_update_n_invalidate();
         bl.append(ibl);
       }
 
       // TODO: consider making len a non-type template parameter.
-      auto append_hole(const unsigned len) {
+      auto CEPH_INLINE append_hole(const unsigned len) {
         commit_length_update_n_invalidate();
         return bl.append_hole(len);
       }
 
-      auto length() const {
+      auto CEPH_INLINE length() const {
         const auto copied_but_uncommitted = \
           reserved == RESERVATION_INVALID ? 0 : RESERVATION_UNIT - reserved;
         return bl.length() + copied_but_uncommitted;
