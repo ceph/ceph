@@ -37,6 +37,7 @@
 #include "rgw_acl.h"
 #include "rgw_cors.h"
 #include "rgw_quota.h"
+#include "rgw_putobj.h"
 
 #include "rgw_lc.h"
 #include "rgw_torrent.h"
@@ -994,9 +995,6 @@ struct RGWSLOInfo {
 WRITE_CLASS_ENCODER(RGWSLOInfo)
 
 class RGWPutObj : public RGWOp {
-
-  friend class RGWPutObjProcessor;
-
 protected:
   seed torrent;
   off_t ofs;
@@ -1027,6 +1025,10 @@ protected:
   map<string, string> crypt_http_responses;
   string user_data;
 
+  std::string multipart_upload_id;
+  std::string multipart_part_str;
+  int multipart_part_num = 0;
+
   boost::optional<ceph::real_time> delete_at;
 
 public:
@@ -1056,8 +1058,6 @@ public:
     attrs.emplace(std::move(key), std::move(bl)); /* key and bl are r-value refs */
   }
 
-  virtual RGWPutObjProcessor *select_processor(RGWObjectCtx& obj_ctx, bool *is_multipart);
-  void dispose_processor(RGWPutObjDataProcessor *processor);
   int verify_permission() override;
   void pre_exec() override;
   void execute() override;
@@ -1070,9 +1070,9 @@ public:
     *filter = nullptr;
     return 0;
   }
-  virtual int get_encrypt_filter(std::unique_ptr<RGWPutObjDataProcessor> *filter, RGWPutObjDataProcessor* cb) {
-     *filter = nullptr;
-     return 0;
+  virtual int get_encrypt_filter(std::unique_ptr<rgw::putobj::DataProcessor> *filter,
+                                 rgw::putobj::DataProcessor *cb) {
+    return 0;
   }
 
   int get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len);
@@ -1085,22 +1085,6 @@ public:
   RGWOpType get_type() override { return RGW_OP_PUT_OBJ; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
-
-class RGWPutObj_Filter : public RGWPutObjDataProcessor
-{
-protected:
-  RGWPutObjDataProcessor* next;
-public:
-  explicit RGWPutObj_Filter(RGWPutObjDataProcessor* next) :
-  next(next){}
-  ~RGWPutObj_Filter() override {}
-  int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_raw_obj *pobj, bool *again) override {
-    return next->handle_data(bl, ofs, phandle, pobj, again);
-  }
-  int throttle_data(void *handle, const rgw_raw_obj& obj, uint64_t size, bool need_to_wait) override {
-    return next->throttle_data(handle, obj, size, need_to_wait);
-  }
-}; /* RGWPutObj_Filter */
 
 class RGWPostObj : public RGWOp {
 protected:
@@ -1143,8 +1127,8 @@ public:
   void pre_exec() override;
   void execute() override;
 
-  virtual int get_encrypt_filter(std::unique_ptr<RGWPutObjDataProcessor> *filter, RGWPutObjDataProcessor* cb) {
-    *filter = nullptr;
+  virtual int get_encrypt_filter(std::unique_ptr<rgw::putobj::DataProcessor> *filter,
+                                 rgw::putobj::DataProcessor *cb) {
     return 0;
   }
   virtual int get_params() = 0;
@@ -1853,38 +1837,6 @@ extern int rgw_build_object_policies(RGWRados *store, struct req_state *s,
 				     bool prefetch_data);
 extern rgw::IAM::Environment rgw_build_iam_environment(RGWRados* store,
 						       struct req_state* s);
-
-static inline int put_data_and_throttle(RGWPutObjDataProcessor *processor,
-					bufferlist& data, off_t ofs,
-					bool need_to_wait)
-{
-  bool again = false;
-  do {
-    void *handle = nullptr;
-    rgw_raw_obj obj;
-
-    uint64_t size = data.length();
-
-    int ret = processor->handle_data(data, ofs, &handle, &obj, &again);
-    if (ret < 0)
-      return ret;
-    if (handle != nullptr)
-    {
-      ret = processor->throttle_data(handle, obj, size, need_to_wait);
-      if (ret < 0)
-        return ret;
-    }
-    else
-      break;
-    need_to_wait = false; /* the need to wait only applies to the first
-			   * iteration */
-  } while (again);
-
-  return 0;
-} /* put_data_and_throttle */
-
-
-
 
 
 static inline int get_system_versioning_params(req_state *s,

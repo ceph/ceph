@@ -28,6 +28,8 @@
 #include "rgw_rest_conn.h"
 #include "rgw_cr_rados.h"
 #include "rgw_cr_rest.h"
+#include "rgw_putobj_processor.h"
+#include "rgw_putobj_throttle.h"
 
 #include "cls/rgw/cls_rgw_ops.h"
 #include "cls/rgw/cls_rgw_client.h"
@@ -205,7 +207,7 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool, IoCtx& ioctx, b
 }
 
 template<>
-void RGWObjectCtxImpl<rgw_obj, RGWObjState>::invalidate(rgw_obj& obj) {
+void RGWObjectCtxImpl<rgw_obj, RGWObjState>::invalidate(const rgw_obj& obj) {
   RWLock::WLocker wl(lock);
   auto iter = objs_state.find(obj);
   if (iter == objs_state.end()) {
@@ -224,7 +226,7 @@ void RGWObjectCtxImpl<rgw_obj, RGWObjState>::invalidate(rgw_obj& obj) {
 }
 
 template<>
-void RGWObjectCtxImpl<rgw_raw_obj, RGWRawObjState>::invalidate(rgw_raw_obj& obj) {
+void RGWObjectCtxImpl<rgw_raw_obj, RGWRawObjState>::invalidate(const rgw_raw_obj& obj) {
   RWLock::WLocker wl(lock);
   auto iter = objs_state.find(obj);
   if (iter == objs_state.end()) {
@@ -2197,7 +2199,7 @@ void RGWObjManifest::obj_iterator::operator++()
   update_location();
 }
 
-int RGWObjManifest::generator::create_begin(CephContext *cct, RGWObjManifest *_m, const string& placement_rule, rgw_bucket& _b, rgw_obj& _obj)
+int RGWObjManifest::generator::create_begin(CephContext *cct, RGWObjManifest *_m, const string& placement_rule, const rgw_bucket& _b, const rgw_obj& _obj)
 {
   manifest = _m;
 
@@ -2462,401 +2464,6 @@ void RGWObjVersionTracker::generate_new_write_ver(CephContext *cct)
   append_rand_alpha(cct, write_version.tag, write_version.tag, TAG_LEN);
 }
 
-int RGWPutObjProcessor::complete(size_t accounted_size, const string& etag,
-                                 real_time *mtime, real_time set_mtime,
-                                 map<string, bufferlist>& attrs, real_time delete_at,
-                                 const char *if_match, const char *if_nomatch, const string *user_data,
-                                 rgw_zone_set *zones_trace)
-{
-  int r = do_complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at, if_match, if_nomatch, user_data, zones_trace);
-  if (r < 0)
-    return r;
-
-  is_complete = !canceled;
-  return 0;
-}
-
-CephContext *RGWPutObjProcessor::ctx()
-{
-  return store->ctx();
-}
-
-RGWPutObjProcessor_Aio::~RGWPutObjProcessor_Aio()
-{
-  drain_pending();
-
-  if (is_complete)
-    return;
-
-  set<rgw_raw_obj>::iterator iter;
-  bool need_to_remove_head = false;
-  rgw_raw_obj raw_head;
-
-  if (!head_obj.empty()) {
-    store->obj_to_raw(bucket_info.placement_rule, head_obj, &raw_head);
-  }
-
-  /** 
-   * We should delete the object in the "multipart" namespace to avoid race condition. 
-   * Such race condition is caused by the fact that the multipart object is the gatekeeper of a multipart 
-   * upload, when it is deleted, a second upload would start with the same suffix("2/"), therefore, objects
-   * written by the second upload may be deleted by the first upload.
-   * details is describled on #11749
-   *
-   * The above comment still stands, but instead of searching for a specific object in the multipart
-   * namespace, we just make sure that we remove the object that is marked as the head object after
-   * we remove all the other raw objects. Note that we use different call to remove the head object,
-   * as this one needs to go via the bucket index prepare/complete 2-phase commit scheme.
-   */ 
-  for (iter = written_objs.begin(); iter != written_objs.end(); ++iter) {
-    const rgw_raw_obj& obj = *iter;
-    if (!head_obj.empty() && obj == raw_head) {
-      ldout(store->ctx(), 5) << "NOTE: we should not process the head object (" << obj << ") here" << dendl;
-      need_to_remove_head = true;
-      continue;
-    }
-
-    int r = store->delete_raw_obj(obj);
-    if (r < 0 && r != -ENOENT) {
-      ldout(store->ctx(), 5) << "WARNING: failed to remove obj (" << obj << "), leaked" << dendl;
-    }
-  }
-
-  if (need_to_remove_head) {
-    ldout(store->ctx(), 5) << "NOTE: we are going to process the head obj (" << raw_head << ")" << dendl;
-    int r = store->delete_obj(obj_ctx, bucket_info, head_obj, 0, 0);
-    if (r < 0 && r != -ENOENT) {
-      ldout(store->ctx(), 0) << "WARNING: failed to remove obj (" << raw_head << "), leaked" << dendl;
-    }
-  }
-}
-
-int RGWPutObjProcessor_Aio::handle_obj_data(rgw_raw_obj& obj, bufferlist& bl, off_t ofs, off_t abs_ofs, void **phandle, bool exclusive)
-{
-  if ((uint64_t)abs_ofs + bl.length() > obj_len)
-    obj_len = abs_ofs + bl.length();
-
-  if (!(obj == last_written_obj)) {
-    last_written_obj = obj;
-  }
-
-  // For the first call pass -1 as the offset to
-  // do a write_full.
-  return store->aio_put_obj_data(NULL, obj, bl, ((ofs != 0) ? ofs : -1), exclusive, phandle);
-}
-
-struct put_obj_aio_info RGWPutObjProcessor_Aio::pop_pending()
-{
-  struct put_obj_aio_info info;
-  info = pending.front();
-  pending.pop_front();
-  pending_size -= info.size;
-  return info;
-}
-
-int RGWPutObjProcessor_Aio::wait_pending_front()
-{
-  if (pending.empty()) {
-    return 0;
-  }
-  struct put_obj_aio_info info = pop_pending();
-  int ret = store->aio_wait(info.handle);
-
-  if (ret >= 0) {
-    add_written_obj(info.obj);
-  }
-
-  return ret;
-}
-
-bool RGWPutObjProcessor_Aio::pending_has_completed()
-{
-  if (pending.empty())
-    return false;
-
-  struct put_obj_aio_info& info = pending.front();
-  return store->aio_completed(info.handle);
-}
-
-int RGWPutObjProcessor_Aio::drain_pending()
-{
-  int ret = 0;
-  while (!pending.empty()) {
-    int r = wait_pending_front();
-    if (r < 0)
-      ret = r;
-  }
-  return ret;
-}
-
-int RGWPutObjProcessor_Aio::throttle_data(void *handle, const rgw_raw_obj& obj, uint64_t size, bool need_to_wait)
-{
-  bool _wait = need_to_wait;
-
-  if (handle) {
-    struct put_obj_aio_info info;
-    info.handle = handle;
-    info.obj = obj;
-    info.size = size;
-    pending_size += size;
-    pending.push_back(info);
-  }
-  size_t orig_size = pending_size;
-
-  /* first drain complete IOs */
-  while (pending_has_completed()) {
-    int r = wait_pending_front();
-    if (r < 0)
-      return r;
-
-    _wait = false;
-  }
-
-  /* resize window in case messages are draining too fast */
-  if (orig_size - pending_size >= window_size) {
-    window_size += store->ctx()->_conf->rgw_max_chunk_size;
-    uint64_t max_window_size = store->ctx()->_conf->rgw_put_obj_max_window_size;
-    if (window_size > max_window_size) {
-      window_size = max_window_size;
-    }
-  }
-
-  /* now throttle. Note that need_to_wait should only affect the first IO operation */
-  if (pending_size > window_size || _wait) {
-    int r = wait_pending_front();
-    if (r < 0)
-      return r;
-  }
-  return 0;
-}
-
-int RGWPutObjProcessor_Atomic::write_data(bufferlist& bl, off_t ofs, void **phandle, rgw_raw_obj *pobj, bool exclusive)
-{
-  if (ofs >= next_part_ofs) {
-    int r = prepare_next_part(ofs);
-    if (r < 0) {
-      return r;
-    }
-  }
-
-  *pobj = cur_obj;
-
-  if (!bl.length()) {
-    *phandle = nullptr;
-    return 0;
-  }
-
-  return RGWPutObjProcessor_Aio::handle_obj_data(cur_obj, bl, ofs - cur_part_ofs, ofs, phandle, exclusive);
-}
-
-int RGWPutObjProcessor_Aio::prepare(RGWRados *store, string *oid_rand)
-{
-  RGWPutObjProcessor::prepare(store, oid_rand);
-
-  window_size = store->ctx()->_conf->rgw_put_obj_min_window_size;
-
-  return 0;
-}
-
-int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_raw_obj *pobj, bool *again)
-{
-  *phandle = NULL;
-  uint64_t max_write_size = std::min(max_chunk_size, (uint64_t)next_part_ofs - data_ofs);
-
-  pending_data_bl.claim_append(bl);
-  if (pending_data_bl.length() < max_write_size) {
-    *again = false;
-    return 0;
-  }
-
-  pending_data_bl.splice(0, max_write_size, &bl);
-
-  /* do we have enough data pending accumulated that needs to be written? */
-  *again = (pending_data_bl.length() >= max_chunk_size);
-
-  if (!data_ofs && !immutable_head()) {
-    first_chunk.claim(bl);
-    obj_len = (uint64_t)first_chunk.length();
-    int r = prepare_next_part(obj_len);
-    if (r < 0) {
-      return r;
-    }
-    data_ofs = obj_len;
-    return 0;
-  }
-  off_t write_ofs = data_ofs;
-  data_ofs = write_ofs + bl.length();
-  bool exclusive = (!write_ofs && immutable_head()); /* immutable head object, need to verify nothing exists there
-                                                        we could be racing with another upload, to the same
-                                                        object and cleanup can be messy */
-  int ret = write_data(bl, write_ofs, phandle, pobj, exclusive);
-  if (ret >= 0) { /* we might return, need to clear bl as it was already sent */
-    bl.clear();
-  }
-  return ret;
-}
-
-
-int RGWPutObjProcessor_Atomic::prepare_init(RGWRados *store, string *oid_rand)
-{
-  RGWPutObjProcessor_Aio::prepare(store, oid_rand);
-
-  int r = store->get_max_chunk_size(bucket_info.placement_rule, head_obj, &max_chunk_size);
-  if (r < 0) {
-    return r;
-  }
-
-  return 0;
-}
-
-int RGWPutObjProcessor_Atomic::prepare(RGWRados *store, string *oid_rand)
-{
-  head_obj.init(bucket, obj_str);
-
-  int r = prepare_init(store, oid_rand);
-  if (r < 0) {
-    return r;
-  }
-
-  if (versioned_object) {
-    if (!version_id.empty()) {
-      head_obj.key.set_instance(version_id);
-    } else {
-      store->gen_rand_obj_instance_name(&head_obj);
-      version_id = head_obj.key.get_instance();
-    }
-  }
-
-  manifest.set_trivial_rule(max_chunk_size, store->ctx()->_conf->rgw_obj_stripe_size);
-
-  r = manifest_gen.create_begin(store->ctx(), &manifest, bucket_info.placement_rule, head_obj.bucket, head_obj);
-  if (r < 0) {
-    return r;
-  }
-
-  return 0;
-}
-
-int RGWPutObjProcessor_Atomic::prepare_next_part(off_t ofs) {
-
-  int ret = manifest_gen.create_next(ofs);
-  if (ret < 0) {
-    lderr(store->ctx()) << "ERROR: manifest_gen.create_next() returned ret=" << ret << dendl;
-    return ret;
-  }
-  cur_part_ofs = ofs;
-  next_part_ofs = ofs + manifest_gen.cur_stripe_max_size();
-  cur_obj = manifest_gen.get_cur_obj(store);
-
-  return 0;
-}
-
-int RGWPutObjProcessor_Atomic::complete_parts()
-{
-  if (obj_len > (uint64_t)cur_part_ofs) {
-    return prepare_next_part(obj_len);
-  }
-  return 0;
-}
-
-int RGWPutObjProcessor_Atomic::complete_writing_data()
-{
-  if (!data_ofs && !immutable_head()) {
-    /* only claim if pending_data_bl() is not empty. This is needed because we might be called twice
-     * (e.g., when a retry due to race happens). So a second call to first_chunk.claim() would
-     * clobber first_chunk
-     */
-    if (pending_data_bl.length() > 0) {
-      first_chunk.claim(pending_data_bl);
-    }
-    obj_len = (uint64_t)first_chunk.length();
-  }
-  while (pending_data_bl.length()) {
-    void *handle = nullptr;
-    rgw_raw_obj obj;
-    uint64_t max_write_size = std::min(max_chunk_size, (uint64_t)next_part_ofs - data_ofs);
-    if (max_write_size > pending_data_bl.length()) {
-      max_write_size = pending_data_bl.length();
-    }
-    bufferlist bl;
-    pending_data_bl.splice(0, max_write_size, &bl);
-    uint64_t write_len = bl.length();
-    int r = write_data(bl, data_ofs, &handle, &obj, false);
-    if (r < 0) {
-      ldout(store->ctx(), 0) << "ERROR: write_data() returned " << r << dendl;
-      return r;
-    }
-    data_ofs += write_len;
-    r = throttle_data(handle, obj, write_len, false);
-    if (r < 0) {
-      ldout(store->ctx(), 0) << "ERROR: throttle_data() returned " << r << dendl;
-      return r;
-    }
-
-    if (data_ofs >= next_part_ofs) {
-      r = prepare_next_part(data_ofs);
-      if (r < 0) {
-        ldout(store->ctx(), 0) << "ERROR: prepare_next_part() returned " << r << dendl;
-        return r;
-      }
-    }
-  }
-  int r = complete_parts();
-  if (r < 0) {
-    return r;
-  }
-
-  r = drain_pending();
-  if (r < 0)
-    return r;
-
-  return 0;
-}
-
-int RGWPutObjProcessor_Atomic::do_complete(size_t accounted_size, const string& etag,
-                                           real_time *mtime, real_time set_mtime,
-                                           map<string, bufferlist>& attrs,
-                                           real_time delete_at,
-                                           const char *if_match,
-                                           const char *if_nomatch, const string *user_data,
-                                           rgw_zone_set *zones_trace) {
-  int r = complete_writing_data();
-  if (r < 0)
-    return r;
-
-  obj_ctx.obj.set_atomic(head_obj);
-
-  RGWRados::Object op_target(store, bucket_info, obj_ctx, head_obj);
-
-  /* some object types shouldn't be versioned, e.g., multipart parts */
-  op_target.set_versioning_disabled(!versioned_object);
-
-  RGWRados::Object::Write obj_op(&op_target);
-
-  obj_op.meta.data = &first_chunk;
-  obj_op.meta.manifest = &manifest;
-  obj_op.meta.ptag = &unique_tag; /* use req_id as operation tag */
-  obj_op.meta.if_match = if_match;
-  obj_op.meta.if_nomatch = if_nomatch;
-  obj_op.meta.mtime = mtime;
-  obj_op.meta.set_mtime = set_mtime;
-  obj_op.meta.owner = bucket_info.owner;
-  obj_op.meta.flags = PUT_OBJ_CREATE;
-  obj_op.meta.olh_epoch = olh_epoch;
-  obj_op.meta.delete_at = delete_at;
-  obj_op.meta.user_data = user_data;
-  obj_op.meta.zones_trace = zones_trace;
-  obj_op.meta.modify_tail = true;
-
-  r = obj_op.write_meta(obj_len, accounted_size, attrs);
-  if (r < 0) {
-    return r;
-  }
-
-  canceled = obj_op.meta.canceled;
-
-  return 0;
-}
 
 int RGWRados::watch(const string& oid, uint64_t *watch_handle, librados::WatchCtx2 *ctx) {
   int r = control_pool_ctx.watch2(oid, watch_handle, ctx);
@@ -7538,59 +7145,28 @@ bool RGWRados::aio_completed(void *handle)
   return c->is_safe();
 }
 
-// PutObj filter that buffers data so we don't try to compress tiny blocks.
-// libcurl reads in 16k at a time, and we need at least 64k to get a good
-// compression ratio
-class RGWPutObj_Buffer : public RGWPutObj_Filter {
-  const unsigned buffer_size;
-  bufferlist buffer;
- public:
-  RGWPutObj_Buffer(RGWPutObjDataProcessor* next, unsigned buffer_size)
-    : RGWPutObj_Filter(next), buffer_size(buffer_size) {
-    ceph_assert(isp2(buffer_size)); // must be power of 2
-  }
-
-  int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_raw_obj *pobj,
-                  bool *again) override {
-    if (*again || !bl.length()) {
-      // flush buffered data
-      return RGWPutObj_Filter::handle_data(buffer, ofs, phandle, pobj, again);
-    }
-    // transform offset to the beginning of the buffer
-    ofs = ofs - buffer.length();
-    buffer.claim_append(bl);
-    if (buffer.length() < buffer_size) {
-      *again = false; // don't come back until there's more data
-      return 0;
-    }
-    const auto count = p2align(buffer.length(), buffer_size);
-    buffer.splice(0, count, &bl);
-    return RGWPutObj_Filter::handle_data(bl, ofs, phandle, pobj, again);
-  }
-};
-
 class RGWRadosPutObj : public RGWHTTPStreamRWRequest::ReceiveCB
 {
   CephContext* cct;
   rgw_obj obj;
-  RGWPutObjDataProcessor *filter;
+  rgw::putobj::DataProcessor *filter;
   boost::optional<RGWPutObj_Compress>& compressor;
-  boost::optional<RGWPutObj_Buffer> buffering;
+  boost::optional<rgw::putobj::ChunkProcessor> buffering;
   CompressorRef& plugin;
-  RGWPutObjProcessor_Atomic *processor;
+  rgw::putobj::ObjectProcessor *processor;
   void (*progress_cb)(off_t, void *);
   void *progress_data;
   bufferlist extra_data_bl;
   uint64_t extra_data_left;
   uint64_t data_len;
   map<string, bufferlist> src_attrs;
-  off_t ofs{0};
-  off_t lofs{0}; /* logical ofs */
+  uint64_t ofs{0};
+  uint64_t lofs{0}; /* logical ofs */
 public:
   RGWRadosPutObj(CephContext* cct,
                  CompressorRef& plugin,
                  boost::optional<RGWPutObj_Compress>& compressor,
-                 RGWPutObjProcessor_Atomic *p,
+                 rgw::putobj::ObjectProcessor *p,
                  void (*_progress_cb)(off_t, void *),
                  void *_progress_data) :
                        cct(cct),
@@ -7620,6 +7196,9 @@ public:
     if (plugin && src_attrs.find(RGW_ATTR_CRYPT_MODE) == src_attrs.end()) {
       //do not compress if object is encrypted
       compressor = boost::in_place(cct, plugin, filter);
+      // add a filter that buffers data so we don't try to compress tiny blocks.
+      // libcurl reads in 16k at a time, and we need at least 64k to get a good
+      // compression ratio
       constexpr unsigned buffer_size = 512 * 1024;
       buffering = boost::in_place(&*compressor, buffer_size);
       filter = &*buffering;
@@ -7629,10 +7208,10 @@ public:
 
   int handle_data(bufferlist& bl, bool *pause) override {
     if (progress_cb) {
-      progress_cb(lofs, progress_data);
+      progress_cb(data_len, progress_data);
     }
     if (extra_data_left) {
-      size_t extra_len = bl.length();
+      uint64_t extra_len = bl.length();
       if (extra_len > extra_data_left)
         extra_len = extra_data_left;
 
@@ -7654,32 +7233,17 @@ public:
 
     ceph_assert(uint64_t(ofs) >= extra_data_len);
 
-    lofs = ofs - extra_data_len;
+    uint64_t size = bl.length();
+    ofs += size;
 
-    data_len += bl.length();
-    bool again = false;
+    const uint64_t lofs = data_len;
+    data_len += size;
 
-    do {
-      void *handle = NULL;
-      rgw_raw_obj obj;
-      uint64_t size = bl.length();
-      int ret = filter->handle_data(bl, lofs, &handle, &obj, &again);
-      if (ret < 0)
-        return ret;
-
-      ofs += size;
-
-      ret = filter->throttle_data(handle, obj, size, false);
-      if (ret < 0)
-        return ret;
-    } while (again);
-
-    return 0;
+    return filter->process(std::move(bl), lofs);
   }
 
   int flush() {
-    bufferlist bl;
-    return put_data_and_throttle(filter, bl, ofs, false);
+    return filter->process({}, data_len);
   }
 
   bufferlist& get_extra_data() { return extra_data_bl; }
@@ -7693,15 +7257,6 @@ public:
 
   uint64_t get_data_len() {
     return data_len;
-  }
-
-  int complete(const string& etag, real_time *mtime, real_time set_mtime,
-               map<string, bufferlist>& attrs, real_time delete_at, rgw_zone_set *zones_trace) {
-    return processor->complete(data_len, etag, mtime, set_mtime, attrs, delete_at, NULL, NULL, NULL, zones_trace);
-  }
-
-  bool is_canceled() {
-    return processor->is_canceled();
   }
 };
 
@@ -7737,7 +7292,7 @@ static void set_copy_attrs(map<string, bufferlist>& src_attrs,
   }
 }
 
-int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, rgw_obj& obj)
+int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, const rgw_obj& obj)
 {
   map<string, bufferlist> attrset;
 
@@ -7760,9 +7315,7 @@ int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, rgw_obj& obj)
   attrset.erase(RGW_ATTR_TAIL_TAG);
 
   return copy_obj_data(rctx, dest_bucket_info, read_op, obj_size - 1, obj, NULL, mtime, attrset,
-                       0, real_time(),
-                       (obj.key.instance.empty() ? NULL : &(obj.key.instance)),
-                       NULL);
+                       0, real_time(), NULL);
 }
 
 struct obj_time_weight {
@@ -7975,8 +7528,8 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                const rgw_user& user_id,
                req_info *info,
                const string& source_zone,
-               rgw_obj& dest_obj,
-               rgw_obj& src_obj,
+               const rgw_obj& dest_obj,
+               const rgw_obj& src_obj,
                RGWBucketInfo& dest_bucket_info,
                RGWBucketInfo& src_bucket_info,
                real_time *src_mtime,
@@ -7992,7 +7545,6 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                RGWObjCategory category,
                std::optional<uint64_t> olh_epoch,
 	       real_time delete_at,
-               string *version_id,
                string *ptag,
                string *petag,
                void (*progress_cb)(off_t, void *),
@@ -8008,16 +7560,11 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   obj_time_weight set_mtime_weight;
   set_mtime_weight.high_precision = high_precision_time;
 
-  RGWPutObjProcessor_Atomic processor(obj_ctx,
-                                      dest_bucket_info, dest_obj.bucket, dest_obj.key.name,
-                                      cct->_conf->rgw_obj_stripe_size, tag, dest_bucket_info.versioning_enabled());
-  if (version_id && *version_id != "null") {
-    processor.set_version_id(*version_id);
-  }
-  if (olh_epoch) {
-    processor.set_olh_epoch(*olh_epoch);
-  }
-  int ret = processor.prepare(this, NULL);
+  using namespace rgw::putobj;
+  AioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
+  AtomicObjectProcessor processor(&aio, this, dest_bucket_info, user_id,
+                                  obj_ctx, dest_obj, olh_epoch, tag);
+  int ret = processor.prepare();
   if (ret < 0) {
     return ret;
   }
@@ -8162,11 +7709,14 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
 
 #define MAX_COMPLETE_RETRY 100
   for (i = 0; i < MAX_COMPLETE_RETRY; i++) {
-    ret = cb.complete(etag, mtime, set_mtime, attrs, delete_at, zones_trace);
+    bool canceled = false;
+    ret = processor.complete(cb.get_data_len(), etag, mtime, set_mtime,
+                             attrs, delete_at, nullptr, nullptr, nullptr,
+                             zones_trace, &canceled);
     if (ret < 0) {
       goto set_err_state;
     }
-    if (copy_if_newer && cb.is_canceled()) {
+    if (copy_if_newer && canceled) {
       ldout(cct, 20) << "raced with another write of obj: " << dest_obj << dendl;
       obj_ctx.obj.invalidate(dest_obj); /* object was overwritten */
       ret = get_obj_state(&obj_ctx, dest_bucket_info, dest_obj, &dest_state, false);
@@ -8308,7 +7858,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
                dest_obj, src_obj, dest_bucket_info, src_bucket_info, src_mtime, mtime, mod_ptr,
                unmod_ptr, high_precision_time,
                if_match, if_nomatch, attrs_mod, copy_if_newer, attrs, category,
-               olh_epoch, delete_at, version_id, ptag, petag, progress_cb, progress_data);
+               olh_epoch, delete_at, ptag, petag, progress_cb, progress_data);
   }
 
   map<string, bufferlist> src_attrs;
@@ -8408,10 +7958,15 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
     }
   }
 
+  if (version_id && !version_id->empty()) {
+    dest_obj.key.set_instance(*version_id);
+  } else if (dest_bucket_info.versioning_enabled()) {
+    gen_rand_obj_instance_name(&dest_obj);
+  }
+
   if (copy_data) { /* refcounting tail wouldn't work here, just copy the data */
     return copy_obj_data(obj_ctx, dest_bucket_info, read_op, obj_size - 1, dest_obj,
-                         mtime, real_time(), attrs, olh_epoch, delete_at,
-                         version_id, petag);
+                         mtime, real_time(), attrs, olh_epoch, delete_at, petag);
   }
 
   RGWObjManifest::obj_iterator miter = astate->manifest.obj_begin();
@@ -8424,12 +7979,6 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   ret = get_raw_obj_ref(miter.get_location().get_raw_obj(this), &ref);
   if (ret < 0) {
     return ret;
-  }
-
-  if (version_id && !version_id->empty()) {
-    dest_obj.key.set_instance(*version_id);
-  } else if (dest_bucket_info.versioning_enabled()) {
-    gen_rand_obj_instance_name(&dest_obj);
   }
 
   bufferlist first_chunk;
@@ -8534,26 +8083,23 @@ done_ret:
 int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
                RGWBucketInfo& dest_bucket_info,
 	       RGWRados::Object::Read& read_op, off_t end,
-               rgw_obj& dest_obj,
+               const rgw_obj& dest_obj,
 	       real_time *mtime,
 	       real_time set_mtime,
                map<string, bufferlist>& attrs,
                uint64_t olh_epoch,
 	       real_time delete_at,
-               string *version_id,
                string *petag)
 {
   string tag;
   append_rand_alpha(cct, tag, tag, 32);
 
-  RGWPutObjProcessor_Atomic processor(obj_ctx,
-                                      dest_bucket_info, dest_obj.bucket, dest_obj.key.name,
-                                      cct->_conf->rgw_obj_stripe_size, tag, dest_bucket_info.versioning_enabled());
-  if (version_id) {
-    processor.set_version_id(*version_id);
-  }
-  processor.set_olh_epoch(olh_epoch);
-  int ret = processor.prepare(this, NULL);
+  using namespace rgw::putobj;
+  AioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
+  AtomicObjectProcessor processor(&aio, this, dest_bucket_info,
+                                  dest_bucket_info.owner, obj_ctx,
+                                  dest_obj, olh_epoch, tag);
+  int ret = processor.prepare();
   if (ret < 0)
     return ret;
 
@@ -8568,23 +8114,19 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
     }
 
     uint64_t read_len = ret;
-    bool again;
-
-    do {
-      void *handle;
-      rgw_raw_obj obj;
-
-      ret = processor.handle_data(bl, ofs, &handle, &obj, &again);
-      if (ret < 0) {
-        return ret;
-      }
-      ret = processor.throttle_data(handle, obj, read_len, false);
-      if (ret < 0)
-        return ret;
-    } while (again);
+    ret = processor.process(std::move(bl), ofs);
+    if (ret < 0) {
+      return ret;
+    }
 
     ofs += read_len;
   } while (ofs <= end);
+
+  // flush
+  ret = processor.process({}, ofs);
+  if (ret < 0) {
+    return ret;
+  }
 
   string etag;
   auto iter = attrs.find(RGW_ATTR_ETAG);
@@ -8609,7 +8151,8 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
     accounted_size = compressed ? cs_info.orig_size : ofs;
   }
 
-  return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at);
+  return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at,
+                            nullptr, nullptr, nullptr, nullptr, nullptr);
 }
 
 bool RGWRados::is_meta_master()

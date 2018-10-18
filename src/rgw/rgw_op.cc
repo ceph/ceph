@@ -14,12 +14,14 @@
 #include <boost/utility/in_place_factory.hpp>
 #include <boost/utility/string_view.hpp>
 
+#include "include/scope_guard.h"
 #include "common/Clock.h"
 #include "common/armor.h"
 #include "common/errno.h"
 #include "common/mime.h"
 #include "common/utf8.h"
 #include "common/ceph_json.h"
+#include "common/static_ptr.h"
 
 #include "rgw_rados.h"
 #include "rgw_op.h"
@@ -41,6 +43,8 @@
 #include "rgw_compression.h"
 #include "rgw_role.h"
 #include "rgw_tag_s3.h"
+#include "rgw_putobj_processor.h"
+#include "rgw_putobj_throttle.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/rgw/cls_rgw_client.h"
 
@@ -3251,167 +3255,6 @@ int RGWPutObj::verify_permission()
   return 0;
 }
 
-void RGWPutObjProcessor_Multipart::get_mp(RGWMPObj** _mp){
-  *_mp = &mp;
-}
-
-int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, string *oid_rand)
-{
-  string oid = obj_str;
-  upload_id = s->info.args.get("uploadId");
-  if (!oid_rand) {
-    mp.init(oid, upload_id);
-  } else {
-    mp.init(oid, upload_id, *oid_rand);
-  }
-
-  part_num = s->info.args.get("partNumber");
-  if (part_num.empty()) {
-    ldpp_dout(s, 10) << "part number is empty" << dendl;
-    return -EINVAL;
-  }
-
-  string err;
-  uint64_t num = (uint64_t)strict_strtol(part_num.c_str(), 10, &err);
-
-  if (!err.empty()) {
-    ldpp_dout(s, 10) << "bad part number: " << part_num << ": " << err << dendl;
-    return -EINVAL;
-  }
-
-  string upload_prefix = oid + ".";
-
-  if (!oid_rand) {
-    upload_prefix.append(upload_id);
-  } else {
-    upload_prefix.append(*oid_rand);
-  }
-
-  rgw_obj target_obj;
-  target_obj.init(bucket, oid);
-
-  manifest.set_prefix(upload_prefix);
-
-  manifest.set_multipart_part_rule(store->ctx()->_conf->rgw_obj_stripe_size, num);
-
-  int r = manifest_gen.create_begin(store->ctx(), &manifest, s->bucket_info.placement_rule, bucket, target_obj);
-  if (r < 0) {
-    return r;
-  }
-
-  cur_obj = manifest_gen.get_cur_obj(store);
-  rgw_raw_obj_to_obj(bucket, cur_obj, &head_obj);
-  head_obj.index_hash_source = obj_str;
-
-  r = prepare_init(store, NULL);
-  if (r < 0) {
-    return r;
-  }
-
-  return 0;
-}
-
-int RGWPutObjProcessor_Multipart::do_complete(size_t accounted_size,
-                                              const string& etag,
-                                              real_time *mtime, real_time set_mtime,
-                                              map<string, bufferlist>& attrs,
-                                              real_time delete_at,
-                                              const char *if_match,
-                                              const char *if_nomatch, const string *user_data, rgw_zone_set *zones_trace)
-{
-  complete_writing_data();
-
-  RGWRados::Object op_target(store, s->bucket_info, obj_ctx, head_obj);
-  op_target.set_versioning_disabled(true);
-  RGWRados::Object::Write head_obj_op(&op_target);
-
-  head_obj_op.meta.set_mtime = set_mtime;
-  head_obj_op.meta.mtime = mtime;
-  head_obj_op.meta.owner = s->owner.get_id();
-  head_obj_op.meta.delete_at = delete_at;
-  head_obj_op.meta.zones_trace = zones_trace;
-  head_obj_op.meta.modify_tail = true;
-
-  int r = head_obj_op.write_meta(obj_len, accounted_size, attrs);
-  if (r < 0)
-    return r;
-
-  bufferlist bl;
-  RGWUploadPartInfo info;
-  string p = "part.";
-  bool sorted_omap = is_v2_upload_id(upload_id);
-
-  if (sorted_omap) {
-    string err;
-    int part_num_int = strict_strtol(part_num.c_str(), 10, &err);
-    if (!err.empty()) {
-      dout(10) << "bad part number specified: " << part_num << dendl;
-      return -EINVAL;
-    }
-    char buf[32];
-    snprintf(buf, sizeof(buf), "%08d", part_num_int);
-    p.append(buf);
-  } else {
-    p.append(part_num);
-  }
-  info.num = atoi(part_num.c_str());
-  info.etag = etag;
-  info.size = obj_len;
-  info.accounted_size = accounted_size;
-  info.modified = real_clock::now();
-  info.manifest = manifest;
-
-  bool compressed;
-  r = rgw_compression_info_from_attrset(attrs, compressed, info.cs_info);
-  if (r < 0) {
-    dout(1) << "cannot get compression info" << dendl;
-    return r;
-  }
-
-  encode(info, bl);
-
-  string multipart_meta_obj = mp.get_meta();
-
-  rgw_obj meta_obj;
-  meta_obj.init_ns(bucket, multipart_meta_obj, mp_ns);
-  meta_obj.set_in_extra_data(true);
-
-  rgw_raw_obj raw_meta_obj;
-
-  store->obj_to_raw(s->bucket_info.placement_rule, meta_obj, &raw_meta_obj);
-  const bool must_exist = true;// detect races with abort
-  r = store->omap_set(raw_meta_obj, p, bl, must_exist);
-  return r;
-}
-
-RGWPutObjProcessor *RGWPutObj::select_processor(RGWObjectCtx& obj_ctx, bool *is_multipart)
-{
-  RGWPutObjProcessor *processor;
-
-  bool multipart = s->info.args.exists("uploadId");
-
-  uint64_t part_size = s->cct->_conf->rgw_obj_stripe_size;
-
-  if (!multipart) {
-    processor = new RGWPutObjProcessor_Atomic(obj_ctx, s->bucket_info, s->bucket, s->object.name, part_size, s->req_id, s->bucket_info.versioning_enabled());
-    (static_cast<RGWPutObjProcessor_Atomic *>(processor))->set_olh_epoch(olh_epoch);
-    (static_cast<RGWPutObjProcessor_Atomic *>(processor))->set_version_id(version_id);
-  } else {
-    processor = new RGWPutObjProcessor_Multipart(obj_ctx, s->bucket_info, part_size, s);
-  }
-
-  if (is_multipart) {
-    *is_multipart = multipart;
-  }
-
-  return processor;
-}
-
-void RGWPutObj::dispose_processor(RGWPutObjDataProcessor *processor)
-{
-  delete processor;
-}
-
 void RGWPutObj::pre_exec()
 {
   rgw_bucket_object_pre_exec(s);
@@ -3535,9 +3378,6 @@ static CompressorRef get_compressor_plugin(const req_state *s,
 
 void RGWPutObj::execute()
 {
-  RGWPutObjProcessor *processor = NULL;
-  RGWPutObjDataProcessor *filter = nullptr;
-  std::unique_ptr<RGWPutObjDataProcessor> encrypt;
   char supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1];
   char supplied_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
   char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
@@ -3545,20 +3385,20 @@ void RGWPutObj::execute()
   MD5 hash;
   bufferlist bl, aclbl, bs;
   int len;
-  bool multipart;
   
   off_t fst;
   off_t lst;
-  const auto& compression_type = store->get_zone_params().get_compression_type(
-      s->bucket_info.placement_rule);
-  CompressorRef plugin;
-  boost::optional<RGWPutObj_Compress> compressor;
 
   bool need_calc_md5 = (dlo_manifest == NULL) && (slo_info == NULL);
   perfcounter->inc(l_rgw_put);
+  // report latency on return
+  auto put_lat = make_scope_guard([&] {
+      perfcounter->tinc(l_rgw_put_lat, s->time_elapsed());
+    });
+
   op_ret = -EINVAL;
   if (s->object.empty()) {
-    goto done;
+    return;
   }
 
   if (!s->bucket_exists) {
@@ -3571,7 +3411,7 @@ void RGWPutObj::execute()
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "get_system_versioning_params() returned ret="
 		      << op_ret << dendl;
-    goto done;
+    return;
   }
 
   if (supplied_md5_b64) {
@@ -3583,7 +3423,7 @@ void RGWPutObj::execute()
     ldpp_dout(this, 15) << "ceph_armor ret=" << op_ret << dendl;
     if (op_ret != CEPH_CRYPTO_MD5_DIGESTSIZE) {
       op_ret = -ERR_INVALID_DIGEST;
-      goto done;
+      return;
     }
 
     buf_to_hex((const unsigned char *)supplied_md5_bin, CEPH_CRYPTO_MD5_DIGESTSIZE, supplied_md5);
@@ -3596,12 +3436,12 @@ void RGWPutObj::execute()
 				user_quota, bucket_quota, s->content_length);
     if (op_ret < 0) {
       ldpp_dout(this, 20) << "check_quota() returned ret=" << op_ret << dendl;
-      goto done;
+      return;
     }
     op_ret = store->check_bucket_shards(s->bucket_info, s->bucket, bucket_quota);
     if (op_ret < 0) {
       ldpp_dout(this, 20) << "check_bucket_shards() returned ret=" << op_ret << dendl;
-      goto done;
+      return;
     }
   }
 
@@ -3610,28 +3450,51 @@ void RGWPutObj::execute()
     supplied_md5[sizeof(supplied_md5) - 1] = '\0';
   }
 
-  processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx), &multipart);
-
-  // no filters by default
-  filter = processor;
+  const bool multipart = !multipart_upload_id.empty();
+  auto& obj_ctx = *static_cast<RGWObjectCtx*>(s->obj_ctx);
+  rgw_obj obj{s->bucket, s->object};
 
   /* Handle object versioning of Swift API. */
   if (! multipart) {
-    rgw_obj obj(s->bucket, s->object);
-    op_ret = store->swift_versioning_copy(*static_cast<RGWObjectCtx *>(s->obj_ctx),
+    op_ret = store->swift_versioning_copy(obj_ctx,
                                           s->bucket_owner.get_id(),
                                           s->bucket_info,
                                           obj);
     if (op_ret < 0) {
-      goto done;
+      return;
     }
   }
 
-  op_ret = processor->prepare(store, NULL);
+  // create the object processor
+  using namespace rgw::putobj;
+  AioThrottle aio(store->ctx()->_conf->rgw_put_obj_min_window_size);
+  constexpr auto max_processor_size = std::max(sizeof(MultipartObjectProcessor),
+                                               sizeof(AtomicObjectProcessor));
+  ceph::static_ptr<ObjectProcessor, max_processor_size> processor;
+
+  if (multipart) {
+    processor.emplace<MultipartObjectProcessor>(
+        &aio, store, s->bucket_info, s->owner.get_id(), obj_ctx, obj,
+        multipart_upload_id, multipart_part_num, multipart_part_str);
+  } else {
+    if (s->bucket_info.versioning_enabled()) {
+      if (!version_id.empty()) {
+        obj.key.set_instance(version_id);
+      } else {
+        store->gen_rand_obj_instance_name(&obj);
+        version_id = obj.key.instance;
+      }
+    }
+    processor.emplace<AtomicObjectProcessor>(
+        &aio, store, s->bucket_info, s->bucket_owner.get_id(),
+        obj_ctx, obj, olh_epoch, s->req_id);
+  }
+
+  op_ret = processor->prepare();
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "processor->prepare() returned ret=" << op_ret
 		      << dendl;
-    goto done;
+    return;
   }
 
   if ((! copy_source.empty()) && !copy_source_range) {
@@ -3639,15 +3502,15 @@ void RGWPutObj::execute()
     rgw_obj obj(copy_source_bucket_info.bucket, obj_key.name);
 
     RGWObjState *astate;
-    op_ret = store->get_obj_state(static_cast<RGWObjectCtx *>(s->obj_ctx),
-                                  copy_source_bucket_info, obj, &astate, true, false);
+    op_ret = store->get_obj_state(&obj_ctx, copy_source_bucket_info, obj,
+                                  &astate, true, false);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "ERROR: get copy source obj state returned with error" << op_ret << dendl;
-      goto done;
+      return;
     }
     if (!astate->exists){
       op_ret = -ENOENT;
-      goto done;
+      return;
     }
     lst = astate->accounted_size - 1;
   } else {
@@ -3656,26 +3519,31 @@ void RGWPutObj::execute()
 
   fst = copy_source_range_fst;
 
+  // no filters by default
+  DataProcessor *filter = processor.get();
+
+  const auto& compression_type = store->get_zone_params().get_compression_type(
+      s->bucket_info.placement_rule);
+  CompressorRef plugin;
+  boost::optional<RGWPutObj_Compress> compressor;
+
+  std::unique_ptr<DataProcessor> encrypt;
   op_ret = get_encrypt_filter(&encrypt, filter);
   if (op_ret < 0) {
-    goto done;
+    return;
   }
   if (encrypt != nullptr) {
-    filter = encrypt.get();
-  } else {
-    //no encryption, we can try compression
-    if (compression_type != "none") {
-      plugin = get_compressor_plugin(s, compression_type);
-      if (!plugin) {
-        ldpp_dout(this, 1) << "Cannot load plugin for compression type "
-            << compression_type << dendl;
-      } else {
-        compressor.emplace(s->cct, plugin, filter);
-        filter = &*compressor;
-      }
+    filter = &*encrypt;
+  } else if (compression_type != "none") {
+    plugin = get_compressor_plugin(s, compression_type);
+    if (!plugin) {
+      ldpp_dout(this, 1) << "Cannot load plugin for compression type "
+          << compression_type << dendl;
+    } else {
+      compressor.emplace(s->cct, plugin, filter);
+      filter = &*compressor;
     }
   }
-
   tracepoint(rgw_op, before_data_transfer, s->req_id.c_str());
   do {
     bufferlist data;
@@ -3687,7 +3555,7 @@ void RGWPutObj::execute()
       uint64_t cur_lst = min(fst + s->cct->_conf->rgw_max_chunk_size - 1, lst);
       op_ret = get_data(fst, cur_lst, data);
       if (op_ret < 0)
-        goto done;
+        return;
       len = data.length();
       s->content_length += len;
       fst += len;
@@ -3695,7 +3563,9 @@ void RGWPutObj::execute()
     if (len < 0) {
       op_ret = len;
       ldpp_dout(this, 20) << "get_data() returned ret=" << op_ret << dendl;
-      goto done;
+      return;
+    } else if (len == 0) {
+      break;
     }
 
     if (need_calc_md5) {
@@ -3705,81 +3575,26 @@ void RGWPutObj::execute()
     /* update torrrent */
     torrent.update(data);
 
-    /* do we need this operation to be synchronous? if we're dealing with an object with immutable
-     * head, e.g., multipart object we need to make sure we're the first one writing to this object
-     */
-    bool need_to_wait = (ofs == 0) && multipart;
-
-    bufferlist orig_data;
-
-    if (need_to_wait) {
-      orig_data = data;
-    }
-
-    op_ret = put_data_and_throttle(filter, data, ofs, need_to_wait);
+    op_ret = filter->process(std::move(data), ofs);
     if (op_ret < 0) {
-      if (op_ret != -EEXIST) {
-        ldpp_dout(this, 20) << "processor->thottle_data() returned ret="
-			  << op_ret << dendl;
-        goto done;
-      }
-      /* need_to_wait == true and op_ret == -EEXIST */
-      ldpp_dout(this, 5) << "NOTICE: processor->throttle_data() returned -EEXIST, need to restart write" << dendl;
-
-      /* restore original data */
-      data.swap(orig_data);
-
-      /* restart processing with different oid suffix */
-
-      dispose_processor(processor);
-      processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx), &multipart);
-      filter = processor;
-
-      string oid_rand;
-      char buf[33];
-      gen_rand_alphanumeric(store->ctx(), buf, sizeof(buf) - 1);
-      oid_rand.append(buf);
-
-      op_ret = processor->prepare(store, &oid_rand);
-      if (op_ret < 0) {
-        ldpp_dout(this, 0) << "ERROR: processor->prepare() returned "
-			 << op_ret << dendl;
-        goto done;
-      }
-
-      op_ret = get_encrypt_filter(&encrypt, filter);
-      if (op_ret < 0) {
-        goto done;
-      }
-      if (encrypt != nullptr) {
-        filter = encrypt.get();
-      } else {
-        if (compressor) {
-          compressor.emplace(s->cct, plugin, filter);
-          filter = &*compressor;
-        }
-      }
-      op_ret = put_data_and_throttle(filter, data, ofs, false);
-      if (op_ret < 0) {
-        goto done;
-      }
+      ldpp_dout(this, 20) << "processor->process() returned ret="
+          << op_ret << dendl;
+      return;
     }
 
     ofs += len;
   } while (len > 0);
   tracepoint(rgw_op, after_data_transfer, s->req_id.c_str(), ofs);
 
-  {
-    bufferlist flush;
-    op_ret = put_data_and_throttle(filter, flush, ofs, false);
-    if (op_ret < 0) {
-      goto done;
-    }
+  // flush any data in filters
+  op_ret = filter->process({}, ofs);
+  if (op_ret < 0) {
+    return;
   }
 
   if (!chunked_upload && ofs != s->content_length) {
     op_ret = -ERR_REQUEST_TIMEOUT;
-    goto done;
+    return;
   }
   s->obj_size = ofs;
 
@@ -3787,20 +3602,20 @@ void RGWPutObj::execute()
 
   op_ret = do_aws4_auth_completion();
   if (op_ret < 0) {
-    goto done;
+    return;
   }
 
   op_ret = store->check_quota(s->bucket_owner.get_id(), s->bucket,
                               user_quota, bucket_quota, s->obj_size);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "second check_quota() returned op_ret=" << op_ret << dendl;
-    goto done;
+    return;
   }
 
   op_ret = store->check_bucket_shards(s->bucket_info, s->bucket, bucket_quota);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "check_bucket_shards() returned ret=" << op_ret << dendl;
-    goto done;
+    return;
   }
 
   hash.Final(m);
@@ -3825,7 +3640,7 @@ void RGWPutObj::execute()
 
   if (supplied_md5_b64 && strcmp(calc_md5, supplied_md5)) {
     op_ret = -ERR_BAD_DIGEST;
-    goto done;
+    return;
   }
 
   policy.encode(aclbl);
@@ -3835,7 +3650,7 @@ void RGWPutObj::execute()
     op_ret = encode_dlo_manifest_attr(dlo_manifest, attrs);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "bad user manifest: " << dlo_manifest << dendl;
-      goto done;
+      return;
     }
     complete_etag(hash, &etag);
     ldpp_dout(this, 10) << __func__ << ": calculated md5 for user manifest: " << etag << dendl;
@@ -3853,7 +3668,7 @@ void RGWPutObj::execute()
 
   if (supplied_etag && etag.compare(supplied_etag) != 0) {
     op_ret = -ERR_UNPROCESSABLE_ENTITY;
-    goto done;
+    return;
   }
   bl.append(etag.c_str(), etag.size());
   emplace_attr(RGW_ATTR_ETAG, std::move(bl));
@@ -3861,7 +3676,7 @@ void RGWPutObj::execute()
   populate_with_generic_attrs(s, attrs);
   op_ret = rgw_get_request_metadata(s->cct, s->info, attrs);
   if (op_ret < 0) {
-    goto done;
+    return;
   }
   encode_delete_at_attr(delete_at, attrs);
   encode_obj_tags_attr(obj_tags.get(), attrs);
@@ -3878,12 +3693,8 @@ void RGWPutObj::execute()
   tracepoint(rgw_op, processor_complete_enter, s->req_id.c_str());
   op_ret = processor->complete(s->obj_size, etag, &mtime, real_time(), attrs,
                                (delete_at ? *delete_at : real_time()), if_match, if_nomatch,
-                               (user_data.empty() ? nullptr : &user_data));
+                               (user_data.empty() ? nullptr : &user_data), nullptr, nullptr);
   tracepoint(rgw_op, processor_complete_exit, s->req_id.c_str());
-
-  // only atomic upload will upate version_id here
-  if (!multipart) 
-    version_id = (static_cast<RGWPutObjProcessor_Atomic *>(processor))->get_version_id();
 
   /* produce torrent */
   if (s->cct->_conf->rgw_torrent_flag && (ofs == torrent.get_data_len()))
@@ -3894,13 +3705,9 @@ void RGWPutObj::execute()
     if (0 != op_ret)
     {
       ldpp_dout(this, 0) << "ERROR: torrent.handle_data() returned " << op_ret << dendl;
-      goto done;
+      return;
     }
   }
-
-done:
-  dispose_processor(processor);
-  perfcounter->tinc(l_rgw_put_lat, s->time_elapsed());
 }
 
 int RGWPostObj::verify_permission()
@@ -3915,7 +3722,6 @@ void RGWPostObj::pre_exec()
 
 void RGWPostObj::execute()
 {
-  RGWPutObjDataProcessor *filter = nullptr;
   boost::optional<RGWPutObj_Compress> compressor;
   CompressorRef plugin;
   char supplied_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
@@ -3958,7 +3764,6 @@ void RGWPostObj::execute()
   /* Start iteration over data fields. It's necessary as Swift's FormPost
    * is capable to handle multiple files in single form. */
   do {
-    std::unique_ptr<RGWPutObjDataProcessor> encrypt;
     char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
     unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
     MD5 hash;
@@ -3994,23 +3799,26 @@ void RGWPostObj::execute()
       ldpp_dout(this, 15) << "supplied_md5=" << supplied_md5 << dendl;
     }
 
-    RGWPutObjProcessor_Atomic processor(*static_cast<RGWObjectCtx *>(s->obj_ctx),
-                                        s->bucket_info,
-                                        s->bucket,
-                                        get_current_filename(),
-                                        /* part size */
-                                        s->cct->_conf->rgw_obj_stripe_size,
-                                        s->req_id,
-                                        s->bucket_info.versioning_enabled());
-    processor.set_olh_epoch(0);
-    /* No filters by default. */
-    filter = &processor;
+    rgw_obj obj(s->bucket, get_current_filename());
+    if (s->bucket_info.versioning_enabled()) {
+      store->gen_rand_obj_instance_name(&obj);
+    }
 
-    op_ret = processor.prepare(store, nullptr);
+    using namespace rgw::putobj;
+    AioThrottle aio(s->cct->_conf->rgw_put_obj_min_window_size);
+    AtomicObjectProcessor processor(&aio, store, s->bucket_info,
+                                    s->bucket_owner.get_id(),
+                                    *static_cast<RGWObjectCtx*>(s->obj_ctx),
+                                    obj, 0, s->req_id);
+    op_ret = processor.prepare();
     if (op_ret < 0) {
       return;
     }
 
+    /* No filters by default. */
+    DataProcessor *filter = &processor;
+
+    std::unique_ptr<DataProcessor> encrypt;
     op_ret = get_encrypt_filter(&encrypt, filter);
     if (op_ret < 0) {
       return;
@@ -4047,7 +3855,7 @@ void RGWPostObj::execute()
       }
 
       hash.Update((const unsigned char *)data.c_str(), data.length());
-      op_ret = put_data_and_throttle(filter, data, ofs, false);
+      op_ret = filter->process(std::move(data), ofs);
 
       ofs += len;
 
@@ -4057,9 +3865,10 @@ void RGWPostObj::execute()
       }
     } while (again);
 
-    {
-      bufferlist flush;
-      op_ret = put_data_and_throttle(filter, flush, ofs, false);
+    // flush
+    op_ret = filter->process({}, ofs);
+    if (op_ret < 0) {
+      return;
     }
 
     if (len < min_len) {
@@ -4114,8 +3923,12 @@ void RGWPostObj::execute()
       emplace_attr(RGW_ATTR_COMPRESSION, std::move(tmp));
     }
 
-    op_ret = processor.complete(s->obj_size, etag, nullptr, real_time(),
-                                attrs, (delete_at ? *delete_at : real_time()));
+    op_ret = processor.complete(s->obj_size, etag, nullptr, real_time(), attrs,
+                                (delete_at ? *delete_at : real_time()),
+                                nullptr, nullptr, nullptr, nullptr, nullptr);
+    if (op_ret < 0) {
+      return;
+    }
   } while (is_next_file_to_upload());
 }
 
@@ -6714,9 +6527,6 @@ int RGWBulkUploadOp::handle_file(const boost::string_ref path,
 
   ldpp_dout(this, 20) << "got file=" << path << ", size=" << size << dendl;
 
-  RGWPutObjDataProcessor *filter = nullptr;
-  boost::optional<RGWPutObj_Compress> compressor;
-
   if (size > static_cast<size_t>(s->cct->_conf->rgw_max_put_size)) {
     op_ret = -ERR_TOO_LARGE;
     return op_ret;
@@ -6757,27 +6567,30 @@ int RGWBulkUploadOp::handle_file(const boost::string_ref path,
     return op_ret;
   }
 
-  RGWPutObjProcessor_Atomic processor(obj_ctx,
-                                      binfo,
-                                      binfo.bucket,
-                                      object.name,
-                                      /* part size */
-                                      s->cct->_conf->rgw_obj_stripe_size,
-                                      s->req_id,
-                                      binfo.versioning_enabled());
+  rgw_obj obj(binfo.bucket, object);
+  if (s->bucket_info.versioning_enabled()) {
+    store->gen_rand_obj_instance_name(&obj);
+  }
 
-  /* No filters by default. */
-  filter = &processor;
+  using namespace rgw::putobj;
+  AioThrottle aio(store->ctx()->_conf->rgw_put_obj_min_window_size);
 
-  op_ret = processor.prepare(store, nullptr);
+  AtomicObjectProcessor processor(&aio, store, binfo, bowner.get_id(),
+                                  obj_ctx, obj, 0, s->req_id);
+
+  op_ret = processor.prepare();
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "cannot prepare processor due to ret=" << op_ret << dendl;
     return op_ret;
   }
 
+  /* No filters by default. */
+  DataProcessor *filter = &processor;
+
   const auto& compression_type = store->get_zone_params().get_compression_type(
       binfo.placement_rule);
   CompressorRef plugin;
+  boost::optional<RGWPutObj_Compress> compressor;
   if (compression_type != "none") {
     plugin = Compressor::create(s->cct, compression_type);
     if (! plugin) {
@@ -6803,9 +6616,9 @@ int RGWBulkUploadOp::handle_file(const boost::string_ref path,
       return op_ret;
     } else if (len > 0) {
       hash.Update((const unsigned char *)data.c_str(), data.length());
-      op_ret = put_data_and_throttle(filter, data, ofs, false);
+      op_ret = filter->process(std::move(data), ofs);
       if (op_ret < 0) {
-        ldpp_dout(this, 20) << "processor->thottle_data() returned ret=" << op_ret << dendl;
+        ldpp_dout(this, 20) << "filter->process() returned ret=" << op_ret << dendl;
         return op_ret;
       }
 
@@ -6814,9 +6627,16 @@ int RGWBulkUploadOp::handle_file(const boost::string_ref path,
 
   } while (len > 0);
 
+  // flush
+  op_ret = filter->process({}, ofs);
+  if (op_ret < 0) {
+    return op_ret;
+  }
+
   if (ofs != size) {
     ldpp_dout(this, 10) << "real file size different from declared" << dendl;
     op_ret = -EINVAL;
+    return op_ret;
   }
 
   op_ret = store->check_quota(bowner.get_id(), binfo.bucket,
@@ -6862,8 +6682,9 @@ int RGWBulkUploadOp::handle_file(const boost::string_ref path,
   }
 
   /* Complete the transaction. */
-  op_ret = processor.complete(size, etag, nullptr, ceph::real_time(), attrs,
-                              ceph::real_time() /* delete_at */);
+  op_ret = processor.complete(size, etag, nullptr, ceph::real_time(),
+                              attrs, ceph::real_time() /* delete_at */,
+                              nullptr, nullptr, nullptr, nullptr, nullptr);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "processor::complete returned op_ret=" << op_ret << dendl;
   }
