@@ -71,7 +71,7 @@ public:
   ~Client();
   seastar::future<> load_keyring();
   seastar::future<> build_initial_map();
-  seastar::future<> authenticate(std::chrono::seconds seconds);
+  seastar::future<> authenticate();
   seastar::future<> stop();
   get_version_t get_version(const std::string& map);
   command_result_t run_command(const std::vector<std::string>& cmd,
