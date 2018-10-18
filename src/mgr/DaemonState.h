@@ -168,6 +168,7 @@ class DaemonState
   }
 
   void set_metadata(const std::map<std::string,std::string>& m) {
+    devices.clear();
     metadata = m;
     auto p = m.find("device_ids");
     if (p != m.end()) {
