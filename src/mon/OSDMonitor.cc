@@ -8614,6 +8614,26 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
        goto reply;
      }
 
+     // check if class is used by any erasure-code-profiles
+     mempool::osdmap::map<string,map<string,string>> old_ec_profiles =
+       osdmap.get_erasure_code_profiles();
+     auto ec_profiles = pending_inc.get_erasure_code_profiles();
+     ec_profiles.merge(old_ec_profiles);
+     list<string> referenced_by;
+     for (auto &i: ec_profiles) {
+       for (auto &j: i.second) {
+         if ("crush-device-class" == j.first && device_class == j.second) {
+           referenced_by.push_back(i.first);
+         }
+       }
+     }
+     if (!referenced_by.empty()) {
+       err = -EBUSY;
+       ss << "class '" << device_class
+          << "' is still referenced by erasure-code-profile(s): " << referenced_by;
+       goto reply;
+     }
+
      set<int> osds;
      newcrush.get_devices_by_class(device_class, &osds);
      for (auto& p: osds) {

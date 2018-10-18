@@ -451,6 +451,9 @@ public:
 				  const map<string,string>& profile) {
       new_erasure_code_profiles[name] = profile;
     }
+    mempool::osdmap::map<string,map<string,string>> get_erasure_code_profiles() const {
+      return new_erasure_code_profiles;
+    }
 
     /// propagate update pools' snap metadata to any of their tiers
     int propagate_snaps_to_tiers(CephContext *cct, const OSDMap &base);
