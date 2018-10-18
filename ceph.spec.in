@@ -252,6 +252,7 @@ Requires:      python-requests
 Requires:      python-setuptools
 Requires:      grep
 Requires:      xfsprogs
+Requires:      e2fsprogs
 Requires:      logrotate
 Requires:      util-linux
 Requires:      cryptsetup
