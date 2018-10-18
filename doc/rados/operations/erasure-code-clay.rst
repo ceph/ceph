@@ -32,7 +32,7 @@ Terabytes.
 	+-------------+---------------------------+
 
 where *S* is the amount of data stored on a single OSD undergoing repair. In the table above, we have 
-used the largest possible value of d as this will result in the smallest amount of data download needed
+used the largest possible value of *d* as this will result in the smallest amount of data download needed
 to achieve recovery from an OSD failure.
 
 Erasure-code profile examples
@@ -170,7 +170,7 @@ Notion of sub-chunks
 ====================
 
 The Clay code is able to save in terms of disk IO, network bandwidth as it
-is a vector code and it is able t view and manipulate data within a chunk 
+is a vector code and it is able to view and manipulate data within a chunk 
 at a finer granularity termed as a sub-chunk. The number of sub-chunks within 
 a chunk for a Clay code is given by:
 
@@ -200,7 +200,7 @@ How to choose a configuration given a workload
 
 Only a few sub-chunks are read of all the sub-chunks within a chunk. These sub-chunks
 are not necessarily stored consecutively within a chunk. For best disk IO 
-performance, it is helpful to read contiguous data. For this reaspn, it is suggested that
+performance, it is helpful to read contiguous data. For this reason, it is suggested that
 you choose stripe-size such that the sub-chunk size is sufficiently large.
 
 For a given stripe-size (that's fixed based on a workload), choose ``k``, ``m``, ``d`` such that::
@@ -210,7 +210,7 @@ For a given stripe-size (that's fixed based on a workload), choose ``k``, ``m``,
 #. For large size workloads for which the stripe size is large, it is easy to choose k, m, d.
    For example consider a stripe-size of size 64MB, choosing *k=16*, *m=4* and *d=19* will
    result in a sub-chunk count of 1024 and a sub-chunk size of 4KB.
-#. For small size workloads *k=4*, *m=2* is a good configuration that provides both network
+#. For small size workloads, *k=4*, *m=2* is a good configuration that provides both network
    and disk IO benefits.
 
 Comparisons with LRC
