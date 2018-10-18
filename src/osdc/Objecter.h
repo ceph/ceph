@@ -737,6 +737,7 @@ struct ObjectOperation {
     uint32_t *out_data_digest;
     uint32_t *out_omap_digest;
     mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > *out_reqids;
+    mempool::osd_pglog::map<uint32_t, int> *out_reqid_return_codes;
     uint64_t *out_truncate_seq;
     uint64_t *out_truncate_size;
     int *prval;
@@ -752,6 +753,7 @@ struct ObjectOperation {
 			      uint32_t *dd,
 			      uint32_t *od,
 			      mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > *oreqids,
+			      mempool::osd_pglog::map<uint32_t, int> *oreqid_return_codes,
 			      uint64_t *otseq,
 			      uint64_t *otsize,
 			      int *r)
@@ -761,6 +763,7 @@ struct ObjectOperation {
 	out_omap_data(o), out_snaps(osnaps), out_snap_seq(osnap_seq),
 	out_flags(flags), out_data_digest(dd), out_omap_digest(od),
 	out_reqids(oreqids),
+	out_reqid_return_codes(oreqid_return_codes),
 	out_truncate_seq(otseq),
 	out_truncate_size(otsize),
 	prval(r) {}
@@ -801,6 +804,8 @@ struct ObjectOperation {
 	  *out_omap_digest = copy_reply.omap_digest;
 	if (out_reqids)
 	  *out_reqids = copy_reply.reqids;
+	if (out_reqid_return_codes)
+	  *out_reqid_return_codes = copy_reply.reqid_return_codes;
 	if (out_truncate_seq)
 	  *out_truncate_seq = copy_reply.truncate_seq;
 	if (out_truncate_size)
@@ -827,6 +832,7 @@ struct ObjectOperation {
 		uint32_t *out_data_digest,
 		uint32_t *out_omap_digest,
 		mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > *out_reqids,
+		mempool::osd_pglog::map<uint32_t, int> *out_reqid_return_codes,
 		uint64_t *truncate_seq,
 		uint64_t *truncate_size,
 		int *prval) {
@@ -841,7 +847,8 @@ struct ObjectOperation {
 				    out_attrs, out_data, out_omap_header,
 				    out_omap_data, out_snaps, out_snap_seq,
 				    out_flags, out_data_digest,
-				    out_omap_digest, out_reqids, truncate_seq,
+				    out_omap_digest, out_reqids,
+				    out_reqid_return_codes, truncate_seq,
 				    truncate_size, prval);
     out_bl[p] = &h->bl;
     out_handler[p] = h;
