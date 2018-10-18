@@ -21,4 +21,8 @@ export class ConfigurationService {
   create(configOption: ConfigFormCreateRequestModel) {
     return this.http.post('api/cluster_conf/', configOption);
   }
+
+  bulkCreate(configOptions: Object) {
+    return this.http.put('api/cluster_conf', configOptions);
+  }
 }
