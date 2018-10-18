@@ -289,13 +289,20 @@ public:
       }
       p = extra_caller_ops.find(r);
       if (p != extra_caller_ops.end()) {
+	uint32_t idx = 0;
 	for (auto i = p->second->extra_reqids.begin();
 	     i != p->second->extra_reqids.end();
-	     ++i) {
+	     ++idx, ++i) {
 	  if (i->first == r) {
 	    *version = p->second->version;
 	    *user_version = i->second;
 	    *return_code = p->second->return_code;
+	    if (*return_code >= 0) {
+	      auto it = p->second->extra_reqid_return_codes.find(idx);
+	      if (it != p->second->extra_reqid_return_codes.end()) {
+		*return_code = it->second;
+	      }
+	    }
 	    return true;
 	  }
 	}
