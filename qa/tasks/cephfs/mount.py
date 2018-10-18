@@ -37,6 +37,15 @@ class CephFSMount(object):
     def is_mounted(self):
         raise NotImplementedError()
 
+    def setupfs(self, name=None):
+        if name is None and self.fs is not None:
+            # Previous mount existed, reuse the old name
+            name = self.fs.name
+        self.fs = Filesystem(self.ctx, name=name)
+        log.info('Wait for MDS to reach steady state...')
+        self.fs.wait_for_daemons()
+        log.info('Ready to start {}...'.format(type(self).__name__))
+
     def mount(self, mount_path=None, mount_fs_name=None):
         raise NotImplementedError()
 
