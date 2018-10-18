@@ -2254,9 +2254,8 @@ private:
   ~OSD() override;
 
   // static bits
-  static int mkfs(CephContext *cct, ObjectStore *store,
-		  const string& dev,
-		  uuid_d fsid, int whoami);
+  static int mkfs(CephContext *cct, ObjectStore *store, uuid_d fsid, int whoami);
+
   /* remove any non-user xattrs from a map of them */
   void filter_xattrs(map<string, bufferptr>& attrs) {
     for (map<string, bufferptr>::iterator iter = attrs.begin();
