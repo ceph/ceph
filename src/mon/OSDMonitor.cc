@@ -8595,12 +8595,16 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
        goto reply;
      }
 
+     if (!osdmap.crush->class_exists(device_class)) {
+       err = 0;
+       goto reply;
+     }
+
      CrushWrapper newcrush;
      _get_pending_crush(newcrush);
      if (!newcrush.class_exists(device_class)) {
-       err = -ENOENT;
-       ss << "class '" << device_class << "' does not exist";
-       goto reply;
+       err = 0; // make command idempotent
+       goto wait;
      }
      int class_id = newcrush.get_class_id(device_class);
      stringstream ts;
