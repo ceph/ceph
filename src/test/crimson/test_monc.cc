@@ -39,7 +39,9 @@ static seastar::future<> test_monc()
         }).then([&msgr, &monc] {
           return msgr.start(&monc);
         }).then([&monc] {
-          return monc.authenticate(std::chrono::seconds{10});
+          return seastar::with_timeout(
+            seastar::lowres_clock::now() + std::chrono::seconds{10},
+            monc.authenticate());
         }).finally([&monc] {
           return monc.stop();
         });
