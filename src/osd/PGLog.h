@@ -325,7 +325,8 @@ public:
 
     /// get a (bounded) list of recent reqids for the given object
     void get_object_reqids(const hobject_t& oid, unsigned max,
-			   mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > *pls) const {
+			   mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > *pls,
+			   mempool::osd_pglog::map<uint32_t, int> *return_codes) const {
        // make sure object is present at least once before we do an
        // O(n) search.
       if (!(indexed_data & PGLOG_INDEXED_OBJECTS)) {
@@ -333,12 +334,19 @@ public:
       }
       if (objects.count(oid) == 0)
 	return;
+
       for (list<pg_log_entry_t>::const_reverse_iterator i = log.rbegin();
            i != log.rend();
            ++i) {
 	if (i->soid == oid) {
-	  if (i->reqid_is_indexed())
+	  if (i->reqid_is_indexed()) {
+	    if (i->op == pg_log_entry_t::ERROR) {
+	      // propagate op errors to the cache tier's PG log
+	      return_codes->emplace(pls->size(), i->return_code);
+	    }
 	    pls->push_back(make_pair(i->reqid, i->user_version));
+	  }
+
 	  pls->insert(pls->end(), i->extra_reqids.begin(), i->extra_reqids.end());
 	  if (pls->size() >= max) {
 	    if (pls->size() > max) {
