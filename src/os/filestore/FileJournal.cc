@@ -304,11 +304,6 @@ int FileJournal::create()
 
   print_header(header);
 
-  // static zeroed buffer for alignment padding
-  delete [] zero_buf;
-  zero_buf = new char[header.alignment];
-  memset(zero_buf, 0, header.alignment);
-
   bp = prepare_header();
   if (TEMP_FAILURE_RETRY(::pwrite(fd, bp.c_str(), bp.length(), 0)) < 0) {
     ret = -errno;
@@ -394,11 +389,6 @@ int FileJournal::open(uint64_t fs_op_seq)
   err = read_header(&header);
   if (err < 0)
     goto out;
-
-  // static zeroed buffer for alignment padding
-  delete [] zero_buf;
-  zero_buf = new char[header.alignment];
-  memset(zero_buf, 0, header.alignment);
 
   dout(10) << "open header.fsid = " << header.fsid
     //<< " vs expected fsid = " << fsid
@@ -1573,12 +1563,12 @@ int FileJournal::prepare_entry(vector<ObjectStore::Transaction>& tls, bufferlist
   // header
   ebl.append((const char*)&h, sizeof(h));
   if (h.pre_pad) {
-    ebl.push_back(buffer::create_static(h.pre_pad, zero_buf));
+    ebl.append_zero_static_precalc_crc(h.pre_pad, 0);
   }
   // payload
   ebl.claim_append(bl, buffer::list::CLAIM_ALLOW_NONSHAREABLE); // potential zero-copy
   if (h.post_pad) {
-    ebl.push_back(buffer::create_static(h.post_pad, zero_buf));
+    ebl.append_zero_static_precalc_crc(h.post_pad, 0);
   }
   // footer
   ebl.append((const char*)&h, sizeof(h));

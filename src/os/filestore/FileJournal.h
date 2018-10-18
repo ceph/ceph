@@ -241,7 +241,6 @@ public:
 private:
   string fn;
 
-  char *zero_buf;
   off64_t max_size;
   size_t block_size;
   bool directio, aio, force_aio;
@@ -408,7 +407,6 @@ private:
     completions_lock(
       "FileJournal::completions_lock", false, true, false),
     fn(f),
-    zero_buf(NULL),
     max_size(0), block_size(0),
     directio(dio), aio(ai), force_aio(faio),
     must_write_header(false),
@@ -449,7 +447,6 @@ private:
   }
   ~FileJournal() override {
     ceph_assert(fd == -1);
-    delete[] zero_buf;
     cct->_conf.remove_observer(this);
   }
 
