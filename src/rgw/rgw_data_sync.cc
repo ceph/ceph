@@ -2247,6 +2247,9 @@ struct bucket_list_entry {
     JSONDecoder::decode_json("Owner", owner, obj);
     JSONDecoder::decode_json("VersionedEpoch", versioned_epoch, obj);
     JSONDecoder::decode_json("RgwxTag", rgw_tag, obj);
+    if (key.instance == "null" && !versioned_epoch) {
+      key.instance.clear();
+    }
   }
 };
 

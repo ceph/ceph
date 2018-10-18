@@ -1399,6 +1399,20 @@ int RGWPutObj_ObjStore_S3::get_params()
     }
   }
 
+  multipart_upload_id = s->info.args.get("uploadId");
+  multipart_part_str = s->info.args.get("partNumber");
+  if (!multipart_part_str.empty()) {
+    string err;
+    multipart_part_num = strict_strtol(multipart_part_str.c_str(), 10, &err);
+    if (!err.empty()) {
+      ldpp_dout(s, 10) << "bad part number: " << multipart_part_str << ": " << err << dendl;
+      return -EINVAL;
+    }
+  } else if (!multipart_upload_id.empty()) {
+    ldpp_dout(s, 10) << "part number with no multipart upload id" << dendl;
+    return -EINVAL;
+  }
+
   return RGWPutObj_ObjStore::get_params();
 }
 
@@ -1524,32 +1538,24 @@ int RGWPutObj_ObjStore_S3::get_decrypt_filter(
 }
 
 int RGWPutObj_ObjStore_S3::get_encrypt_filter(
-    std::unique_ptr<RGWPutObjDataProcessor>* filter,
-    RGWPutObjDataProcessor* cb)
+    std::unique_ptr<rgw::putobj::DataProcessor> *filter,
+    rgw::putobj::DataProcessor *cb)
 {
   int res = 0;
-  RGWPutObjProcessor_Multipart* multi_processor=dynamic_cast<RGWPutObjProcessor_Multipart*>(cb);
-  if (multi_processor != nullptr) {
-    RGWMPObj* mp = nullptr;
-    multi_processor->get_mp(&mp);
-    if (mp != nullptr) {
-      map<string, bufferlist> xattrs;
-      string meta_oid;
-      meta_oid = mp->get_meta();
-
-      rgw_obj obj;
-      obj.init_ns(s->bucket, meta_oid, RGW_OBJ_NS_MULTIPART);
-      obj.set_in_extra_data(true);
-      res = get_obj_attrs(store, s, obj, xattrs);
-      if (res == 0) {
-        std::unique_ptr<BlockCrypt> block_crypt;
-        /* We are adding to existing object.
-         * We use crypto mode that configured as if we were decrypting. */
-        res = rgw_s3_prepare_decrypt(s, xattrs, &block_crypt, crypt_http_responses);
-        if (res == 0 && block_crypt != nullptr)
-          *filter = std::unique_ptr<RGWPutObj_BlockEncrypt>(
-              new RGWPutObj_BlockEncrypt(s->cct, cb, std::move(block_crypt)));
-      }
+  if (!multipart_upload_id.empty()) {
+    RGWMPObj mp(s->object.name, multipart_upload_id);
+    rgw_obj obj;
+    obj.init_ns(s->bucket, mp.get_meta(), RGW_OBJ_NS_MULTIPART);
+    obj.set_in_extra_data(true);
+    map<string, bufferlist> xattrs;
+    res = get_obj_attrs(store, s, obj, xattrs);
+    if (res == 0) {
+      std::unique_ptr<BlockCrypt> block_crypt;
+      /* We are adding to existing object.
+       * We use crypto mode that configured as if we were decrypting. */
+      res = rgw_s3_prepare_decrypt(s, xattrs, &block_crypt, crypt_http_responses);
+      if (res == 0 && block_crypt != nullptr)
+        filter->reset(new RGWPutObj_BlockEncrypt(s->cct, cb, std::move(block_crypt)));
     }
     /* it is ok, to not have encryption at all */
   }
@@ -1558,8 +1564,7 @@ int RGWPutObj_ObjStore_S3::get_encrypt_filter(
     std::unique_ptr<BlockCrypt> block_crypt;
     res = rgw_s3_prepare_encrypt(s, attrs, nullptr, &block_crypt, crypt_http_responses);
     if (res == 0 && block_crypt != nullptr) {
-      *filter = std::unique_ptr<RGWPutObj_BlockEncrypt>(
-          new RGWPutObj_BlockEncrypt(s->cct, cb, std::move(block_crypt)));
+      filter->reset(new RGWPutObj_BlockEncrypt(s->cct, cb, std::move(block_crypt)));
     }
   }
   return res;
@@ -2066,17 +2071,15 @@ done:
 }
 
 int RGWPostObj_ObjStore_S3::get_encrypt_filter(
-    std::unique_ptr<RGWPutObjDataProcessor>* filter, RGWPutObjDataProcessor* cb)
+    std::unique_ptr<rgw::putobj::DataProcessor> *filter,
+    rgw::putobj::DataProcessor *cb)
 {
-  int res = 0;
   std::unique_ptr<BlockCrypt> block_crypt;
-  res = rgw_s3_prepare_encrypt(s, attrs, &parts, &block_crypt, crypt_http_responses);
+  int res = rgw_s3_prepare_encrypt(s, attrs, &parts, &block_crypt,
+                                   crypt_http_responses);
   if (res == 0 && block_crypt != nullptr) {
-    *filter = std::unique_ptr<RGWPutObj_BlockEncrypt>(
-        new RGWPutObj_BlockEncrypt(s->cct, cb, std::move(block_crypt)));
+    filter->reset(new RGWPutObj_BlockEncrypt(s->cct, cb, std::move(block_crypt)));
   }
-  else
-    *filter = nullptr;
   return res;
 }
 

@@ -1,0 +1,460 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2018 Red Hat, Inc.
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software
+ * Foundation. See file COPYING.
+ *
+ */
+
+#include "rgw_putobj_aio.h"
+#include "rgw_putobj_processor.h"
+#include "rgw_multi.h"
+
+#define dout_subsys ceph_subsys_rgw
+
+namespace rgw::putobj {
+
+int HeadObjectProcessor::process(bufferlist&& data, uint64_t logical_offset)
+{
+  const bool flush = (data.length() == 0);
+
+  // capture the first chunk for special handling
+  if (data_offset < head_chunk_size) {
+    if (flush) {
+      // flush partial chunk
+      return process_first_chunk(std::move(head_data), &processor);
+    }
+
+    auto remaining = head_chunk_size - data_offset;
+    auto count = std::min<uint64_t>(data.length(), remaining);
+    data.splice(0, count, &head_data);
+    data_offset += count;
+
+    if (data_offset == head_chunk_size) {
+      // process the first complete chunk
+      ceph_assert(head_data.length() == head_chunk_size);
+      int r = process_first_chunk(std::move(head_data), &processor);
+      if (r < 0) {
+        return r;
+      }
+    }
+    if (data.length() == 0) { // avoid flushing stripe processor
+      return 0;
+    }
+  }
+  ceph_assert(processor); // process_first_chunk() must initialize
+
+  // send everything else through the processor
+  auto write_offset = data_offset;
+  data_offset += data.length();
+  return processor->process(std::move(data), write_offset);
+}
+
+
+static int process_completed(const ResultList& completed, RawObjSet *written)
+{
+  std::optional<int> error;
+  for (auto& r : completed) {
+    if (r.result >= 0) {
+      written->insert(r.obj);
+    } else if (!error) { // record first error code
+      error = r.result;
+    }
+  }
+  return error.value_or(0);
+}
+
+int RadosWriter::set_stripe_obj(rgw_raw_obj&& obj)
+{
+  rgw_rados_ref ref;
+  int r = store->get_raw_obj_ref(obj, &ref);
+  if (r < 0) {
+    return r;
+  }
+  stripe_obj = std::move(obj);
+  stripe_ref = std::move(ref);
+  return 0;
+}
+
+int RadosWriter::process(bufferlist&& bl, uint64_t offset)
+{
+  bufferlist data = std::move(bl);
+  const uint64_t cost = data.length();
+  if (cost == 0) { // no empty writes, use aio directly for creates
+    return 0;
+  }
+  librados::ObjectWriteOperation op;
+  if (offset == 0) {
+    op.write_full(data);
+  } else {
+    op.write(offset, data);
+  }
+  auto c = aio->submit(stripe_ref, stripe_obj, &op, cost);
+  return process_completed(c, &written);
+}
+
+int RadosWriter::write_exclusive(const bufferlist& data)
+{
+  const uint64_t cost = data.length();
+
+  librados::ObjectWriteOperation op;
+  op.create(true); // exclusive create
+  op.write_full(data);
+
+  auto c = aio->submit(stripe_ref, stripe_obj, &op, cost);
+  auto d = aio->drain();
+  c.splice(c.end(), d);
+  return process_completed(c, &written);
+}
+
+int RadosWriter::drain()
+{
+  return process_completed(aio->drain(), &written);
+}
+
+RadosWriter::~RadosWriter()
+{
+  // wait on any outstanding aio completions
+  process_completed(aio->drain(), &written);
+
+  bool need_to_remove_head = false;
+  std::optional<rgw_raw_obj> raw_head;
+  if (!head_obj.empty()) {
+    raw_head.emplace();
+    store->obj_to_raw(bucket_info.placement_rule, head_obj, &*raw_head);
+  }
+
+  /**
+   * We should delete the object in the "multipart" namespace to avoid race condition.
+   * Such race condition is caused by the fact that the multipart object is the gatekeeper of a multipart
+   * upload, when it is deleted, a second upload would start with the same suffix("2/"), therefore, objects
+   * written by the second upload may be deleted by the first upload.
+   * details is describled on #11749
+   *
+   * The above comment still stands, but instead of searching for a specific object in the multipart
+   * namespace, we just make sure that we remove the object that is marked as the head object after
+   * we remove all the other raw objects. Note that we use different call to remove the head object,
+   * as this one needs to go via the bucket index prepare/complete 2-phase commit scheme.
+   */
+  for (const auto& obj : written) {
+    if (raw_head && obj == *raw_head) {
+      ldout(store->ctx(), 5) << "NOTE: we should not process the head object (" << obj << ") here" << dendl;
+      need_to_remove_head = true;
+      continue;
+    }
+
+    int r = store->delete_raw_obj(obj);
+    if (r < 0 && r != -ENOENT) {
+      ldout(store->ctx(), 5) << "WARNING: failed to remove obj (" << obj << "), leaked" << dendl;
+    }
+  }
+
+  if (need_to_remove_head) {
+    ldout(store->ctx(), 5) << "NOTE: we are going to process the head obj (" << *raw_head << ")" << dendl;
+    int r = store->delete_obj(obj_ctx, bucket_info, head_obj, 0, 0);
+    if (r < 0 && r != -ENOENT) {
+      ldout(store->ctx(), 0) << "WARNING: failed to remove obj (" << *raw_head << "), leaked" << dendl;
+    }
+  }
+}
+
+
+// advance to the next stripe
+int ManifestObjectProcessor::next(uint64_t offset, uint64_t *pstripe_size)
+{
+  // advance the manifest
+  int r = manifest_gen.create_next(offset);
+  if (r < 0) {
+    return r;
+  }
+
+  rgw_raw_obj stripe_obj = manifest_gen.get_cur_obj(store);
+
+  uint64_t chunk_size = 0;
+  r = store->get_max_chunk_size(stripe_obj.pool, &chunk_size);
+  if (r < 0) {
+    return r;
+  }
+  r = writer.set_stripe_obj(std::move(stripe_obj));
+  if (r < 0) {
+    return r;
+  }
+
+  chunk = ChunkProcessor(&writer, chunk_size);
+  *pstripe_size = manifest_gen.cur_stripe_max_size();
+  return 0;
+}
+
+
+int AtomicObjectProcessor::process_first_chunk(bufferlist&& data,
+                                               DataProcessor **processor)
+{
+  first_chunk = std::move(data);
+  *processor = &stripe;
+  return 0;
+}
+
+int AtomicObjectProcessor::prepare()
+{
+  uint64_t max_chunk_size = 0;
+  int r = store->get_max_chunk_size(bucket_info.placement_rule, head_obj,
+                                    &max_chunk_size);
+  if (r < 0) {
+    return r;
+  }
+  const uint64_t default_stripe_size = store->ctx()->_conf->rgw_obj_stripe_size;
+  manifest.set_trivial_rule(max_chunk_size, default_stripe_size);
+
+  r = manifest_gen.create_begin(store->ctx(), &manifest,
+                                bucket_info.placement_rule,
+                                head_obj.bucket, head_obj);
+  if (r < 0) {
+    return r;
+  }
+
+  rgw_raw_obj stripe_obj = manifest_gen.get_cur_obj(store);
+
+  uint64_t chunk_size = 0;
+  r = store->get_max_chunk_size(stripe_obj.pool, &chunk_size);
+  if (r < 0) {
+    return r;
+  }
+  r = writer.set_stripe_obj(std::move(stripe_obj));
+  if (r < 0) {
+    return r;
+  }
+  // only the first chunk goes to the head object
+  uint64_t stripe_size = chunk_size;
+
+  set_head_chunk_size(chunk_size);
+  // initialize the processors
+  chunk = ChunkProcessor(&writer, chunk_size);
+  stripe = StripeProcessor(&chunk, this, stripe_size);
+  return 0;
+}
+
+int AtomicObjectProcessor::complete(size_t accounted_size,
+                                    const std::string& etag,
+                                    ceph::real_time *mtime,
+                                    ceph::real_time set_mtime,
+                                    std::map<std::string, bufferlist>& attrs,
+                                    ceph::real_time delete_at,
+                                    const char *if_match,
+                                    const char *if_nomatch,
+                                    const std::string *user_data,
+                                    rgw_zone_set *zones_trace,
+                                    bool *pcanceled)
+{
+  int r = writer.drain();
+  if (r < 0) {
+    return r;
+  }
+  const uint64_t actual_size = get_actual_size();
+  r = manifest_gen.create_next(actual_size);
+  if (r < 0) {
+    return r;
+  }
+
+  obj_ctx.obj.set_atomic(head_obj);
+
+  RGWRados::Object op_target(store, bucket_info, obj_ctx, head_obj);
+
+  /* some object types shouldn't be versioned, e.g., multipart parts */
+  op_target.set_versioning_disabled(!bucket_info.versioning_enabled());
+
+  RGWRados::Object::Write obj_op(&op_target);
+
+  obj_op.meta.data = &first_chunk;
+  obj_op.meta.manifest = &manifest;
+  obj_op.meta.ptag = &unique_tag; /* use req_id as operation tag */
+  obj_op.meta.if_match = if_match;
+  obj_op.meta.if_nomatch = if_nomatch;
+  obj_op.meta.mtime = mtime;
+  obj_op.meta.set_mtime = set_mtime;
+  obj_op.meta.owner = owner;
+  obj_op.meta.flags = PUT_OBJ_CREATE;
+  obj_op.meta.olh_epoch = olh_epoch;
+  obj_op.meta.delete_at = delete_at;
+  obj_op.meta.user_data = user_data;
+  obj_op.meta.zones_trace = zones_trace;
+  obj_op.meta.modify_tail = true;
+
+  r = obj_op.write_meta(actual_size, accounted_size, attrs);
+  if (r < 0) {
+    return r;
+  }
+  if (!obj_op.meta.canceled) {
+    // on success, clear the set of objects for deletion
+    writer.clear_written();
+  }
+  if (pcanceled) {
+    *pcanceled = obj_op.meta.canceled;
+  }
+  return 0;
+}
+
+
+int MultipartObjectProcessor::process_first_chunk(bufferlist&& data,
+                                                  DataProcessor **processor)
+{
+  // write the first chunk of the head object as part of an exclusive create,
+  // then drain to wait for the result in case of EEXIST
+  int r = writer.write_exclusive(data);
+  if (r == -EEXIST) {
+    // randomize the oid prefix and reprepare the head/manifest
+    std::string oid_rand(32, 0);
+    gen_rand_alphanumeric(store->ctx(), oid_rand.data(), oid_rand.size());
+
+    mp.init(target_obj.key.name, upload_id, oid_rand);
+    manifest.set_prefix(target_obj.key.name + "." + oid_rand);
+
+    r = prepare_head();
+    if (r < 0) {
+      return r;
+    }
+    // resubmit the write op on the new head object
+    r = writer.write_exclusive(data);
+  }
+  if (r < 0) {
+    return r;
+  }
+  *processor = &stripe;
+  return 0;
+}
+
+int MultipartObjectProcessor::prepare_head()
+{
+  int r = manifest_gen.create_begin(store->ctx(), &manifest,
+                                    bucket_info.placement_rule,
+                                    target_obj.bucket, target_obj);
+  if (r < 0) {
+    return r;
+  }
+
+  rgw_raw_obj stripe_obj = manifest_gen.get_cur_obj(store);
+  rgw_raw_obj_to_obj(head_obj.bucket, stripe_obj, &head_obj);
+  head_obj.index_hash_source = target_obj.key.name;
+
+  uint64_t chunk_size = 0;
+  r = store->get_max_chunk_size(stripe_obj.pool, &chunk_size);
+  if (r < 0) {
+    return r;
+  }
+  r = writer.set_stripe_obj(std::move(stripe_obj));
+  if (r < 0) {
+    return r;
+  }
+  uint64_t stripe_size = manifest_gen.cur_stripe_max_size();
+
+  uint64_t max_head_size = std::min(chunk_size, stripe_size);
+  set_head_chunk_size(max_head_size);
+
+  chunk = ChunkProcessor(&writer, chunk_size);
+  stripe = StripeProcessor(&chunk, this, stripe_size);
+  return 0;
+}
+
+int MultipartObjectProcessor::prepare()
+{
+  const uint64_t default_stripe_size = store->ctx()->_conf->rgw_obj_stripe_size;
+  manifest.set_multipart_part_rule(default_stripe_size, part_num);
+  manifest.set_prefix(target_obj.key.name + "." + upload_id);
+
+  return prepare_head();
+}
+
+int MultipartObjectProcessor::complete(size_t accounted_size,
+                                       const std::string& etag,
+                                       ceph::real_time *mtime,
+                                       ceph::real_time set_mtime,
+                                       std::map<std::string, bufferlist>& attrs,
+                                       ceph::real_time delete_at,
+                                       const char *if_match,
+                                       const char *if_nomatch,
+                                       const std::string *user_data,
+                                       rgw_zone_set *zones_trace,
+                                       bool *pcanceled)
+{
+  int r = writer.drain();
+  if (r < 0) {
+    return r;
+  }
+  const uint64_t actual_size = get_actual_size();
+  r = manifest_gen.create_next(actual_size);
+  if (r < 0) {
+    return r;
+  }
+
+  RGWRados::Object op_target(store, bucket_info, obj_ctx, head_obj);
+  op_target.set_versioning_disabled(true);
+  RGWRados::Object::Write obj_op(&op_target);
+
+  obj_op.meta.set_mtime = set_mtime;
+  obj_op.meta.mtime = mtime;
+  obj_op.meta.owner = owner;
+  obj_op.meta.delete_at = delete_at;
+  obj_op.meta.zones_trace = zones_trace;
+  obj_op.meta.modify_tail = true;
+
+  r = obj_op.write_meta(actual_size, accounted_size, attrs);
+  if (r < 0)
+    return r;
+
+  bufferlist bl;
+  RGWUploadPartInfo info;
+  string p = "part.";
+  bool sorted_omap = is_v2_upload_id(upload_id);
+
+  if (sorted_omap) {
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%08d", part_num);
+    p.append(buf);
+  } else {
+    p.append(part_num_str);
+  }
+  info.num = part_num;
+  info.etag = etag;
+  info.size = actual_size;
+  info.accounted_size = accounted_size;
+  info.modified = real_clock::now();
+  info.manifest = manifest;
+
+  bool compressed;
+  r = rgw_compression_info_from_attrset(attrs, compressed, info.cs_info);
+  if (r < 0) {
+    ldout(store->ctx(), 1) << "cannot get compression info" << dendl;
+    return r;
+  }
+
+  encode(info, bl);
+
+  rgw_obj meta_obj;
+  meta_obj.init_ns(bucket_info.bucket, mp.get_meta(), RGW_OBJ_NS_MULTIPART);
+  meta_obj.set_in_extra_data(true);
+
+  rgw_raw_obj raw_meta_obj;
+
+  store->obj_to_raw(bucket_info.placement_rule, meta_obj, &raw_meta_obj);
+  const bool must_exist = true;// detect races with abort
+  r = store->omap_set(raw_meta_obj, p, bl, must_exist);
+  if (r < 0) {
+    return r;
+  }
+
+  if (!obj_op.meta.canceled) {
+    // on success, clear the set of objects for deletion
+    writer.clear_written();
+  }
+  if (pcanceled) {
+    *pcanceled = obj_op.meta.canceled;
+  }
+  return 0;
+}
+
+} // namespace rgw::putobj

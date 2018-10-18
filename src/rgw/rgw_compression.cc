@@ -8,20 +8,17 @@
 
 //------------RGWPutObj_Compress---------------
 
-int RGWPutObj_Compress::handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_raw_obj *pobj, bool *again)
+int RGWPutObj_Compress::process(bufferlist&& in, uint64_t logical_offset)
 {
-  bufferlist in_bl;
-  if (*again) {
-    return next->handle_data(in_bl, ofs, phandle, pobj, again);
-  }
-  if (bl.length() > 0) {
+  bufferlist out;
+  if (in.length() > 0) {
     // compression stuff
-    if ((ofs > 0 && compressed) ||                                // if previous part was compressed
-        (ofs == 0)) {                                             // or it's the first part
-      ldout(cct, 10) << "Compression for rgw is enabled, compress part " << bl.length() << dendl;
-      int cr = compressor->compress(bl, in_bl);
+    if ((logical_offset > 0 && compressed) || // if previous part was compressed
+        (logical_offset == 0)) {              // or it's the first part
+      ldout(cct, 10) << "Compression for rgw is enabled, compress part " << in.length() << dendl;
+      int cr = compressor->compress(in, out);
       if (cr < 0) {
-        if (ofs > 0) {
+        if (logical_offset > 0) {
           lderr(cct) << "Compression failed with exit code " << cr
               << " for next part, compression process failed" << dendl;
           return -EIO;
@@ -29,24 +26,24 @@ int RGWPutObj_Compress::handle_data(bufferlist& bl, off_t ofs, void **phandle, r
         compressed = false;
         ldout(cct, 5) << "Compression failed with exit code " << cr
             << " for first part, storing uncompressed" << dendl;
-        in_bl.claim(bl);
+        out.claim(in);
       } else {
         compressed = true;
     
         compression_block newbl;
         size_t bs = blocks.size();
-        newbl.old_ofs = ofs;
+        newbl.old_ofs = logical_offset;
         newbl.new_ofs = bs > 0 ? blocks[bs-1].len + blocks[bs-1].new_ofs : 0;
-        newbl.len = in_bl.length();
+        newbl.len = out.length();
         blocks.push_back(newbl);
       }
     } else {
       compressed = false;
-      in_bl.claim(bl);
+      out.claim(in);
     }
     // end of compression stuff
   }
-  return next->handle_data(in_bl, ofs, phandle, pobj, again);
+  return Pipe::process(std::move(out), logical_offset);
 }
 
 //----------------RGWGetObj_Decompress---------------------
