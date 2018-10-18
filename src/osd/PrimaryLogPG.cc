@@ -2167,7 +2167,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
       } else {
 	dout(10) << " waiting for " << version << " to commit" << dendl;
         // always queue ondisk waiters, so that we can requeue if needed
-	waiting_for_ondisk[version].push_back(make_pair(op, user_version));
+	waiting_for_ondisk[version].emplace_back(op, user_version, return_code);
 	op->mark_delayed("waiting for ondisk");
       }
       return;
@@ -10371,12 +10371,13 @@ void PrimaryLogPG::eval_repop(RepGather *repop)
     auto it = waiting_for_ondisk.find(repop->v);
     if (it != waiting_for_ondisk.end()) {
       ceph_assert(waiting_for_ondisk.begin()->first == repop->v);
-      for (list<pair<OpRequestRef, version_t> >::iterator i =
-	     it->second.begin();
-	   i != it->second.end();
-	   ++i) {
-	osd->reply_op_error(i->first, repop->r, repop->v,
-			    i->second);
+      for (auto& i : it->second) {
+        int return_code = repop->r;
+        if (return_code >= 0) {
+          return_code = std::get<2>(i);
+        }
+        osd->reply_op_error(std::get<0>(i), return_code, repop->v,
+                            std::get<1>(i));
       }
       waiting_for_ondisk.erase(it);
     }
@@ -11885,15 +11886,11 @@ void PrimaryLogPG::apply_and_flush_repops(bool requeue)
       }
 
       // also requeue any dups, interleaved into position
-      map<eversion_t, list<pair<OpRequestRef, version_t> > >::iterator p =
-	waiting_for_ondisk.find(repop->v);
+      auto p = waiting_for_ondisk.find(repop->v);
       if (p != waiting_for_ondisk.end()) {
 	dout(10) << " also requeuing ondisk waiters " << p->second << dendl;
-	for (list<pair<OpRequestRef, version_t> >::iterator i =
-	       p->second.begin();
-	     i != p->second.end();
-	     ++i) {
-	  rq.push_back(i->first);
+	for (auto& i : p->second) {
+	  rq.push_back(std::get<0>(i));
 	}
 	waiting_for_ondisk.erase(p);
       }
@@ -11907,17 +11904,11 @@ void PrimaryLogPG::apply_and_flush_repops(bool requeue)
   if (requeue) {
     requeue_ops(rq);
     if (!waiting_for_ondisk.empty()) {
-      for (map<eversion_t, list<pair<OpRequestRef, version_t> > >::iterator i =
-	     waiting_for_ondisk.begin();
-	   i != waiting_for_ondisk.end();
-	   ++i) {
-	for (list<pair<OpRequestRef, version_t> >::iterator j =
-	       i->second.begin();
-	     j != i->second.end();
-	     ++j) {
-	  derr << __func__ << ": op " << *(j->first->get_req()) << " waiting on "
-	       << i->first << dendl;
-	}
+      for (auto& i : waiting_for_ondisk) {
+        for (auto& j : i.second) {
+          derr << __func__ << ": op " << *(std::get<0>(j)->get_req())
+               << " waiting on " << i.first << dendl;
+        }
       }
       ceph_assert(waiting_for_ondisk.empty());
     }
