@@ -28,8 +28,6 @@ ThreadPool::ThreadPool(CephContext *cct_, string nm, string tn, int n, const cha
     _stop(false),
     _pause(0),
     _draining(0),
-    ioprio_class(-1),
-    ioprio_priority(-1),
     _num_threads(n),
     processing(0)
 {
@@ -158,11 +156,6 @@ void ThreadPool::start_threads()
     _threads.insert(wt);
 
     wt->create(thread_name.c_str());
-
-    int r = wt->set_ioprio(ioprio_class, ioprio_priority);
-    if (r < 0)
-      lderr(cct) << " set_ioprio got " << cpp_strerror(r) << dendl;
-
   }
 }
 
@@ -259,24 +252,6 @@ void ThreadPool::drain(WorkQueue_* wq)
     _wait_cond.Wait(_lock);
   _draining--;
   _lock.unlock();
-}
-
-void ThreadPool::set_ioprio(int cls, int priority)
-{
-  std::lock_guard<Mutex> l(_lock);
-  ioprio_class = cls;
-  ioprio_priority = priority;
-  for (set<WorkThread*>::iterator p = _threads.begin();
-       p != _threads.end();
-       ++p) {
-    ldout(cct,10) << __func__ 
-		  << " class " << cls << " priority " << priority
-		  << " pid " << (*p)->get_pid()
-		  << dendl;
-    int r = (*p)->set_ioprio(cls, priority);
-    if (r < 0)
-      lderr(cct) << " set_ioprio got " << cpp_strerror(r) << dendl;
-  }
 }
 
 ShardedThreadPool::ShardedThreadPool(CephContext *pcct_, string nm, string tn,

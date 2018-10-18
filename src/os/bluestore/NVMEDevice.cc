@@ -38,7 +38,6 @@
 #include "common/errno.h"
 #include "common/debug.h"
 #include "common/perf_counters.h"
-#include "common/io_priority.h"
 
 #include "NVMEDevice.h"
 
