@@ -190,8 +190,7 @@ class OpenStackInstance(object):
         OpenStack().run("server delete --wait " + self['id'] +
                         " || true")
         for volume in volumes:
-            OpenStack().run("volume set --name REMOVE-ME " + volume + " || true")
-            OpenStack().run("volume delete " + volume + " || true")
+            OpenStack().volume_delete(volume)
         return True
 
 
@@ -662,6 +661,10 @@ class OpenStack(object):
 
     def get_default_arch(self):
         return self.get_available_archs()[0]
+
+    def volume_delete(self, name_or_id):
+        self.run("volume set --name REMOVE-ME " + name_or_id + " || true")
+        self.run("volume delete " + name_or_id + " || true")
 
 
 class TeuthologyOpenStack(OpenStack):
