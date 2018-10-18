@@ -4484,6 +4484,9 @@ struct object_copy_data_t {
   ///< recent reqids on this object
   mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > reqids;
 
+  ///< map reqids by index to error return code (if any)
+  mempool::osd_pglog::map<uint32_t, int> reqid_return_codes;
+
   uint64_t truncate_seq;
   uint64_t truncate_size;
 
