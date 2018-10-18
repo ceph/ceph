@@ -156,7 +156,7 @@ function TEST_mon_classes() {
     ceph osd crush class rename TEMP CLASS || return 1
     ceph osd crush class ls | grep CLASS  || return 1
     ceph osd crush class rm CLASS || return 1
-    expect_failure $dir ENOENT ceph osd crush class rm CLASS || return 1
+    ceph osd crush class rm CLASS || return 1 # test idempotence
 
     # test rm-device-class
     ceph osd crush set-device-class aaa osd.0 || return 1
