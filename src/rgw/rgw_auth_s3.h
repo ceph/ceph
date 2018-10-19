@@ -345,6 +345,7 @@ void rgw_create_s3_canonical_header(
   const char *content_type,
   const char *date,
   const std::map<std::string, std::string>& meta_map,
+  const std::map<std::string, std::string>& qs_map,
   const char *request_uri,
   const std::map<std::string, std::string>& sub_resources,
   std::string& dest_str);
