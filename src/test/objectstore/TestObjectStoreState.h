@@ -13,12 +13,14 @@
 #ifndef TEST_OBJECTSTORE_STATE_H_
 #define TEST_OBJECTSTORE_STATE_H_
 
-#include "os/ObjectStore.h"
 #include <boost/scoped_ptr.hpp>
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int.hpp>
 #include <map>
 #include <vector>
+
+#include "os/ObjectStore.h"
+#include "common/Cond.h"
 
 typedef boost::mt11213b rngen_t;
 
