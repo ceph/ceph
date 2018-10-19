@@ -164,7 +164,7 @@ function deploy_ceph {
         test -n "$RGW" -a -n "$SSL" && rgw_ssl_init
     fi
     if [ "$TEUTHOLOGY" ] ; then
-        echo "Teuthology testing underway. Finishing early!"
+        echo "Development work in progress: finishing early!"
         exit 0
     fi
     if [ "$START_STAGE" -le "1" ] ; then
