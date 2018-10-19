@@ -558,9 +558,38 @@ public:
   }
   bool get_dirfrags_under(frag_t fg, std::list<CDir*>& ls);
   CDir* get_approx_dirfrag(frag_t fg);
-  void get_dirfrags(std::list<CDir*>& ls) const;
-  void get_nested_dirfrags(std::list<CDir*>& ls);
-  void get_subtree_dirfrags(std::list<CDir*>& ls);
+
+  template<typename Container>
+  void get_dirfrags(Container& ls) const {
+    // all dirfrags
+    if constexpr (std::is_same_v<Container, std::vector<CDir*>>)
+      ls.reserve(ls.size() + dirfrags.size());
+    for (const auto &p : dirfrags)
+      ls.push_back(p.second);
+  }
+  template<typename Container>
+  void get_nested_dirfrags(Container& ls) const {
+    // dirfrags in same subtree
+    if constexpr (std::is_same_v<Container, std::vector<CDir*>>)
+      ls.reserve(ls.size() + dirfrags.size() - num_subtree_roots);
+    for (const auto &p : dirfrags) {
+      typename Container::value_type dir = p.second;
+      if (!dir->is_subtree_root())
+        ls.push_back(dir);
+    }
+  }
+  template<typename Container>
+  void get_subtree_dirfrags(Container& ls) {
+    // dirfrags that are roots of new subtrees
+    if constexpr (std::is_same_v<Container, std::vector<CDir*>>)
+      ls.reserve(ls.size() + num_subtree_roots);
+    for (const auto &p : dirfrags) {
+      typename Container::value_type dir = p.second;
+      if (dir->is_subtree_root())
+        ls.push_back(dir);
+    }
+  }
+
   CDir *get_or_open_dirfrag(MDCache *mdcache, frag_t fg);
   CDir *add_dirfrag(CDir *dir);
   void close_dirfrag(frag_t fg);

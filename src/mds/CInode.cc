@@ -698,31 +698,6 @@ CDir *CInode::get_approx_dirfrag(frag_t fg)
   return NULL;
 }	
 
-void CInode::get_dirfrags(std::list<CDir*>& ls) const
-{
-  // all dirfrags
-  for (const auto &p : dirfrags) {
-    ls.push_back(p.second);
-  }
-}
-void CInode::get_nested_dirfrags(list<CDir*>& ls) 
-{  
-  // dirfrags in same subtree
-  for (const auto &p : dirfrags) {
-    if (!p.second->is_subtree_root())
-      ls.push_back(p.second);
-  }
-}
-void CInode::get_subtree_dirfrags(list<CDir*>& ls) 
-{ 
-  // dirfrags that are roots of new subtrees
-  for (const auto &p : dirfrags) {
-    if (p.second->is_subtree_root())
-      ls.push_back(p.second);
-  }
-}
-
-
 CDir *CInode::get_or_open_dirfrag(MDCache *mdcache, frag_t fg)
 {
   assert(is_dir());
