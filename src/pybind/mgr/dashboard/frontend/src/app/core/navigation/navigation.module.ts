@@ -12,6 +12,7 @@ import { AdministrationComponent } from './administration/administration.compone
 import { BreadcrumbsComponent } from './breadcrumbs/breadcrumbs.component';
 import { DashboardHelpComponent } from './dashboard-help/dashboard-help.component';
 import { IdentityComponent } from './identity/identity.component';
+import { LanguageSelectorComponent } from './language-selector/language-selector.component';
 import { NavigationComponent } from './navigation/navigation.component';
 import { NotificationsComponent } from './notifications/notifications.component';
 import { TaskManagerComponent } from './task-manager/task-manager.component';
@@ -32,6 +33,7 @@ import { TaskManagerComponent } from './task-manager/task-manager.component';
   declarations: [
     AboutComponent,
     BreadcrumbsComponent,
+    LanguageSelectorComponent,
     NavigationComponent,
     NotificationsComponent,
     TaskManagerComponent,
