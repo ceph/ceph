@@ -896,6 +896,53 @@ TEST(BufferListIterator, advance) {
   }
 }
 
+TEST(BufferListIterator, iterate_with_empties) {
+  ceph::bufferlist bl;
+  EXPECT_EQ(bl.get_num_buffers(), 0);
+
+  bl.push_back(ceph::buffer::create(0));
+  EXPECT_EQ(bl.length(), 0);
+  EXPECT_EQ(bl.get_num_buffers(), 1);
+
+  encode(42l, bl);
+  EXPECT_EQ(bl.get_num_buffers(), 2);
+
+  bl.push_back(ceph::buffer::create(0));
+  EXPECT_EQ(bl.get_num_buffers(), 3);
+
+  // append bufferlist with single, 0-sized ptr inside
+  {
+    ceph::bufferlist bl_with_empty_ptr;
+    bl_with_empty_ptr.push_back(ceph::buffer::create(0));
+    EXPECT_EQ(bl_with_empty_ptr.length(), 0);
+    EXPECT_EQ(bl_with_empty_ptr.get_num_buffers(), 1);
+
+    bl.append(bl_with_empty_ptr);
+  }
+
+  encode(24l, bl);
+  EXPECT_EQ(bl.get_num_buffers(), 5);
+
+  auto i = bl.cbegin();
+  long val;
+  decode(val, i);
+  EXPECT_EQ(val, 42l);
+
+  decode(val, i);
+  EXPECT_EQ(val, 24l);
+
+  val = 0;
+  i.seek(sizeof(long));
+  decode(val, i);
+  EXPECT_EQ(val, 24l);
+  EXPECT_TRUE(i == bl.end());
+
+  i.seek(0);
+  decode(val, i);
+  EXPECT_EQ(val, 42);
+  EXPECT_FALSE(i == bl.end());
+}
+
 TEST(BufferListIterator, get_ptr_and_advance)
 {
   bufferptr a("one", 3);
