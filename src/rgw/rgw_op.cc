@@ -46,6 +46,7 @@
 #include "rgw_role.h"
 #include "rgw_tag_s3.h"
 #include "rgw_putobj_processor.h"
+#include "rgw_crypt.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_quota.h"
