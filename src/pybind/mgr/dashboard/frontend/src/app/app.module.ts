@@ -1,5 +1,5 @@
 import { HTTP_INTERCEPTORS, HttpClientModule } from '@angular/common/http';
-import { ErrorHandler, NgModule } from '@angular/core';
+import { ErrorHandler, LOCALE_ID, NgModule } from '@angular/core';
 import { BrowserModule } from '@angular/platform-browser';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
@@ -46,6 +46,9 @@ export class CustomOption extends ToastOptions {
       provide: HTTP_INTERCEPTORS,
       useClass: ApiInterceptorService,
       multi: true
+    },
+    {
+      provide: LOCALE_ID, useValue: '' // TODO LANG somehow
     },
     {
       provide: ToastOptions,
