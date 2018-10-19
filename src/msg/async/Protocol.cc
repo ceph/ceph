@@ -367,7 +367,7 @@ void ProtocolV1::write_event() {
         ack_left -= left;
         left = ack_left;
         r = connection->_try_send(left);
-      } else if (connection->is_queued()) {
+      } else if (is_queued()) {
         r = connection->_try_send();
       }
     }
@@ -385,8 +385,7 @@ void ProtocolV1::write_event() {
     connection->write_lock.unlock();
     connection->lock.lock();
     connection->write_lock.lock();
-    if (state == STANDBY && !connection->policy.server &&
-        connection->is_queued()) {
+    if (state == STANDBY && !connection->policy.server && is_queued()) {
       ldout(cct, 10) << __func__ << " policy.server is false" << dendl;
       connection->_connect();
     } else if (connection->cs && state != NONE && state != CLOSED &&
@@ -405,7 +404,9 @@ void ProtocolV1::write_event() {
   }
 }
 
-bool ProtocolV1::is_queued() { return !out_q.empty(); }
+bool ProtocolV1::is_queued() {
+  return !out_q.empty() || connection->is_queued();
+}
 
 void ProtocolV1::run_continuation(CtPtr continuation) {
   CONTINUATION_RUN(continuation);
@@ -453,7 +454,7 @@ CtPtr ProtocolV1::ready() {
 
   connection->write_lock.lock();
   can_write = WriteStatus::CANWRITE;
-  if (connection->is_queued()) {
+  if (is_queued()) {
     connection->center->dispatch_event_external(connection->write_handler);
   }
   connection->write_lock.unlock();

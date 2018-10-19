@@ -551,7 +551,7 @@ void AsyncConnection::_stop() {
 }
 
 bool AsyncConnection::is_queued() const {
-  return protocol->is_queued() || outcoming_bl.length();
+  return outcoming_bl.length();
 }
 
 void AsyncConnection::shutdown_socket() {
