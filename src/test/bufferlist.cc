@@ -2775,6 +2775,27 @@ TEST(BufferList, EmptyAppend) {
   ASSERT_EQ(bl.begin().end(), 1);
 }
 
+TEST(BufferList, InternalCarriage) {
+  ceph::bufferlist bl;
+  EXPECT_EQ(bl.get_num_buffers(), 0);
+
+  encode(42l, bl);
+  EXPECT_EQ(bl.get_num_buffers(), 1);
+
+  {
+    ceph::bufferlist bl_with_foo;
+    bl_with_foo.append("foo", 3);
+    EXPECT_EQ(bl_with_foo.length(), 3);
+    EXPECT_EQ(bl_with_foo.get_num_buffers(), 1);
+
+    bl.append(bl_with_foo);
+    EXPECT_EQ(bl.get_num_buffers(), 2);
+  }
+
+  encode(24l, bl);
+  EXPECT_EQ(bl.get_num_buffers(), 3);
+}
+
 TEST(BufferList, TestPtrAppend) {
   bufferlist bl;
   char correct[MAX_TEST];
