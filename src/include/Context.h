@@ -24,6 +24,7 @@
 #include <memory>
 
 #include "include/ceph_assert.h"
+#include "common/Mutex.h"
 
 #define mydout(cct, v) lgeneric_subdout(cct, context, v)
 

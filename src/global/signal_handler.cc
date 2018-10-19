@@ -17,6 +17,7 @@
 #include "include/compat.h"
 #include "pthread.h"
 
+#include "common/Mutex.h"
 #include "common/BackTrace.h"
 #include "common/debug.h"
 #include "common/safe_io.h"

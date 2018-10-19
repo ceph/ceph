@@ -20,6 +20,7 @@
 #include "gtest/gtest.h"
 #include "common/ceph_context.h"
 #include "common/config.h"
+#include "common/Mutex.h"
 #include "compressor/Compressor.h"
 #include "compressor/CompressionPlugin.h"
 #include "global/global_context.h"

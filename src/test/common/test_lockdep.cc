@@ -7,6 +7,7 @@
 #include "common/ceph_mutex.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
+#include "common/lockdep.h"
 
 TEST(lockdep, abba)
 {
