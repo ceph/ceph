@@ -218,8 +218,6 @@ public:
                                         CryptoKey& service_secret, uint64_t secret_id);
 
   /* get current secret for specific service type */
-  bool get_service_secret(uint32_t service_id, ExpiringCryptoKey& service_key,
-			  uint64_t& secret_id) const;
   bool get_service_secret(uint32_t service_id, CryptoKey& service_key, 
 			  uint64_t& secret_id) const;
   bool get_service_secret(uint32_t service_id, uint64_t secret_id,
