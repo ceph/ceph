@@ -1023,12 +1023,14 @@ may or may not be some processing conducted.
 Subcommand ``disable`` disables the given application on the given pool.
 
 Usage::
+
         ceph osd pool application disable <pool-name> <app> {--yes-i-really-mean-it}
 
 Subcommand ``enable`` adds an annotation to the given pool for the mentioned
 application.
 
 Usage::
+
         ceph osd pool application enable <pool-name> <app> {--yes-i-really-mean-it}
 
 Subcommand ``get`` displays the value for the given key that is assosciated
@@ -1037,18 +1039,21 @@ arguments would display all key-value pairs for all applications for all
 pools.
 
 Usage::
+
         ceph osd pool application get {<pool-name>} {<app>} {<key>}
 
 Subcommand ``rm`` removes the key-value pair for the given key in the given
 application of the given pool.
 
 Usage::
+
         ceph osd pool application rm <pool-name> <app> <key>
 
 Subcommand ``set`` assosciates or updates, if it already exists, a key-value
 pair with the given application for the given pool.
 
 Usage::
+
         ceph osd pool application set <pool-name> <app> <key> <value>
 
 Subcommand ``primary-affinity`` adjust osd primary-affinity from 0.0 <=<weight>
