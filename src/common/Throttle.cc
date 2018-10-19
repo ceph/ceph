@@ -18,7 +18,6 @@
 
 using ceph::mono_clock;
 using ceph::mono_time;
-using ceph::uniquely_lock;
 
 enum {
   l_throttle_first = 532430,
@@ -39,7 +38,9 @@ enum {
 
 Throttle::Throttle(CephContext *cct, const std::string& n, int64_t m,
 		   bool _use_perf)
-  : cct(cct), name(n), max(m), use_perf(_use_perf)
+  : cct(cct), name(n), max(m),
+    lock(ceph::make_mutex(name)),
+    use_perf(_use_perf)
 {
   ceph_assert(m >= 0);
 
@@ -69,7 +70,7 @@ Throttle::Throttle(CephContext *cct, const std::string& n, int64_t m,
 
 Throttle::~Throttle()
 {
-  auto l = uniquely_lock(lock);
+  std::lock_guard l(lock);
   ceph_assert(conds.empty());
 }
 
@@ -85,7 +86,7 @@ void Throttle::_reset_max(int64_t m)
   max = m;
 }
 
-bool Throttle::_wait(int64_t c, UNIQUE_LOCK_T(lock)& l)
+bool Throttle::_wait(int64_t c, std::unique_lock<ceph::mutex>& l)
 {
   mono_time start;
   bool waited = false;
@@ -120,7 +121,7 @@ bool Throttle::wait(int64_t m)
     return false;
   }
 
-  auto l = uniquely_lock(lock);
+  std::unique_lock l(lock);
   if (m) {
     ceph_assert(m > 0);
     _reset_max(m);
@@ -137,7 +138,7 @@ int64_t Throttle::take(int64_t c)
   ceph_assert(c >= 0);
   ldout(cct, 10) << "take " << c << dendl;
   {
-    auto l = uniquely_lock(lock);
+    std::lock_guard l(lock);
     count += c;
   }
   if (logger) {
@@ -161,7 +162,7 @@ bool Throttle::get(int64_t c, int64_t m)
   }
   bool waited = false;
   {
-    auto l = uniquely_lock(lock);
+    std::unique_lock l(lock);
     if (m) {
       ceph_assert(m > 0);
       _reset_max(m);
@@ -187,7 +188,7 @@ bool Throttle::get_or_fail(int64_t c)
   }
 
   assert (c >= 0);
-  auto l = uniquely_lock(lock);
+  std::lock_guard l(lock);
   if (_should_wait(c) || !conds.empty()) {
     ldout(cct, 10) << "get_or_fail " << c << " failed" << dendl;
     if (logger) {
@@ -217,7 +218,7 @@ int64_t Throttle::put(int64_t c)
   ceph_assert(c >= 0);
   ldout(cct, 10) << "put " << c << " (" << count.load() << " -> "
 		 << (count.load()-c) << ")" << dendl;
-  auto l = uniquely_lock(lock);
+  std::lock_guard l(lock);
   if (c) {
     if (!conds.empty())
       conds.front().notify_one();
@@ -235,7 +236,7 @@ int64_t Throttle::put(int64_t c)
 
 void Throttle::reset()
 {
-  auto l = uniquely_lock(lock);
+  std::lock_guard l(lock);
   if (!conds.empty())
     conds.front().notify_one();
   count = 0;
@@ -261,6 +262,7 @@ enum {
 BackoffThrottle::BackoffThrottle(CephContext *cct, const std::string& n,
 				 unsigned expected_concurrency, bool _use_perf)
   : cct(cct), name(n),
+    lock(ceph::make_mutex(name)),
     conds(expected_concurrency),///< [in] determines size of conds
     use_perf(_use_perf)
 {
@@ -288,7 +290,7 @@ BackoffThrottle::BackoffThrottle(CephContext *cct, const std::string& n,
 
 BackoffThrottle::~BackoffThrottle()
 {
-  auto l = uniquely_lock(lock);
+  std::lock_guard l(lock);
   ceph_assert(waiters.empty());
 }
 
@@ -521,14 +523,14 @@ SimpleThrottle::SimpleThrottle(uint64_t max, bool ignore_enoent)
 
 SimpleThrottle::~SimpleThrottle()
 {
-  auto l = uniquely_lock(m_lock);
+  std::lock_guard l(m_lock);
   ceph_assert(m_current == 0);
   ceph_assert(waiters == 0);
 }
 
 void SimpleThrottle::start_op()
 {
-  auto l = uniquely_lock(m_lock);
+  std::unique_lock l(m_lock);
   waiters++;
   m_cond.wait(l, [this]() { return m_max != m_current; });
   waiters--;
@@ -537,7 +539,7 @@ void SimpleThrottle::start_op()
 
 void SimpleThrottle::end_op(int r)
 {
-  auto l = uniquely_lock(m_lock);
+  std::lock_guard l(m_lock);
   --m_current;
   if (r < 0 && !m_ret && !(r == -ENOENT && m_ignore_enoent))
     m_ret = r;
@@ -546,13 +548,13 @@ void SimpleThrottle::end_op(int r)
 
 bool SimpleThrottle::pending_error() const
 {
-  auto l = uniquely_lock(m_lock);
+  std::lock_guard l(m_lock);
   return (m_ret < 0);
 }
 
 int SimpleThrottle::wait_for_ret()
 {
-  auto l = uniquely_lock(m_lock);
+  std::unique_lock l(m_lock);
   waiters++;
   m_cond.wait(l, [this]() { return m_current == 0; });
   waiters--;
@@ -567,14 +569,14 @@ OrderedThrottle::OrderedThrottle(uint64_t max, bool ignore_enoent)
   : m_max(max), m_ignore_enoent(ignore_enoent) {}
 
 OrderedThrottle::~OrderedThrottle() {
-  auto l  = uniquely_lock(m_lock);
+  std::lock_guard l(m_lock);
   ceph_assert(waiters == 0);
 }
 
 C_OrderedThrottle *OrderedThrottle::start_op(Context *on_finish) {
   ceph_assert(on_finish);
 
-  auto l = uniquely_lock(m_lock);
+  std::unique_lock l(m_lock);
   uint64_t tid = m_next_tid++;
   m_tid_result[tid] = Result(on_finish);
   auto ctx = std::make_unique<C_OrderedThrottle>(this, tid);
@@ -592,7 +594,7 @@ C_OrderedThrottle *OrderedThrottle::start_op(Context *on_finish) {
 }
 
 void OrderedThrottle::end_op(int r) {
-  auto l = uniquely_lock(m_lock);
+  std::lock_guard l(m_lock);
   ceph_assert(m_current > 0);
 
   if (r < 0 && m_ret_val == 0 && (r != -ENOENT || !m_ignore_enoent)) {
@@ -603,7 +605,7 @@ void OrderedThrottle::end_op(int r) {
 }
 
 void OrderedThrottle::finish_op(uint64_t tid, int r) {
-  auto l = uniquely_lock(m_lock);
+  std::lock_guard l(m_lock);
 
   auto it = m_tid_result.find(tid);
   ceph_assert(it != m_tid_result.end());
@@ -614,12 +616,12 @@ void OrderedThrottle::finish_op(uint64_t tid, int r) {
 }
 
 bool OrderedThrottle::pending_error() const {
-  auto l = uniquely_lock(m_lock);
+  std::lock_guard l(m_lock);
   return (m_ret_val < 0);
 }
 
 int OrderedThrottle::wait_for_ret() {
-  auto l = uniquely_lock(m_lock);
+  std::unique_lock l(m_lock);
   complete_pending_ops(l);
 
   while (m_current > 0) {
@@ -631,7 +633,7 @@ int OrderedThrottle::wait_for_ret() {
   return m_ret_val;
 }
 
-void OrderedThrottle::complete_pending_ops(UNIQUE_LOCK_T(m_lock)& l) {
+void OrderedThrottle::complete_pending_ops(std::unique_lock<ceph::mutex>& l) {
   while (true) {
     auto it = m_tid_result.begin();
     if (it == m_tid_result.end() || it->first != m_complete_tid ||
