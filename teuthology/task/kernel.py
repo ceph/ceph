@@ -1064,7 +1064,8 @@ def get_latest_image_version_deb(remote, ostype):
     # Ubuntu is a depend in a depend.
     if 'ubuntu' in ostype:
         try:
-            remote.run(args=['sudo', 'apt-get', '-y', 'install',
+            remote.run(args=['sudo', 'DEBIAN_FRONTEND=noninteractive',
+                             'apt-get', '-y', 'install',
                              'linux-image-current-generic'])
             remote.run(args=['dpkg', '-s', 'linux-image-current-generic'],
                        stdout=output)
@@ -1077,7 +1078,8 @@ def get_latest_image_version_deb(remote, ostype):
         except run.CommandFailedError:
             # Non precise ubuntu machines (like trusty) don't have
             # linux-image-current-generic so use linux-image-generic instead.
-            remote.run(args=['sudo', 'apt-get', '-y', 'install',
+            remote.run(args=['sudo', 'DEBIAN_FRONTEND=noninteractive',
+                             'apt-get', '-y', 'install',
                              'linux-image-generic'], stdout=output)
             remote.run(args=['dpkg', '-s', 'linux-image-generic'],
                        stdout=output)
