@@ -4267,7 +4267,7 @@ bool OSD::maybe_wait_for_max_pg(const OSDMapRef& osdmap,
     return false;
   }
 
-  [[gnu::unused]] auto&& pending_creates_locker = guardedly_lock(pending_creates_lock);
+  std::lock_guard l(pending_creates_lock);
   if (is_mon_create) {
     pending_creates_from_mon++;
   } else {
@@ -4305,7 +4305,7 @@ void OSD::resume_creating_pg()
       return;
     }
     unsigned spare_pgs = max_pgs_per_osd - num_pgs;
-    [[gnu::unused]] auto&& locker = guardedly_lock(pending_creates_lock);
+    std::lock_guard l(pending_creates_lock);
     if (pending_creates_from_mon > 0) {
       dout(20) << __func__ << " pending_creates_from_mon "
 	       << pending_creates_from_mon << dendl;
@@ -7288,15 +7288,16 @@ vector<DaemonHealthMetric> OSD::get_health_metrics()
       metrics.emplace_back(daemon_metric::SLOW_OPS, 0, 0);
     }
   }
-  with_unique_lock(pending_creates_lock, [&]() {
-      auto n_primaries = pending_creates_from_mon;
-      for (const auto& create : pending_creates_from_osd) {
-	if (create.second) {
-	  n_primaries++;
-	}
+  {
+    std::lock_guard l(pending_creates_lock);
+    auto n_primaries = pending_creates_from_mon;
+    for (const auto& create : pending_creates_from_osd) {
+      if (create.second) {
+	n_primaries++;
       }
-      metrics.emplace_back(daemon_metric::PENDING_CREATING_PGS, n_primaries);
-    });
+    }
+    metrics.emplace_back(daemon_metric::PENDING_CREATING_PGS, n_primaries);
+  }
   return metrics;
 }
 
@@ -8339,7 +8340,7 @@ void OSD::consume_map()
 
   {
     // FIXME (as part of seastar rewrite): move to OSDShard
-    [[gnu::unused]] auto&& pending_create_locker = guardedly_lock(pending_creates_lock);
+    std::lock_guard l(pending_creates_lock);
     for (auto pg = pending_creates_from_osd.begin();
 	 pg != pending_creates_from_osd.end();) {
       if (osdmap->get_pg_acting_rank(pg->first, whoami) < 0) {
@@ -8664,11 +8665,12 @@ void OSD::handle_pg_create(OpRequestRef op)
 	  )));
   }
 
-  with_unique_lock(pending_creates_lock, [=]() {
-      if (pending_creates_from_mon == 0) {
-	last_pg_create_epoch = m->epoch;
-      }
-    });
+  {
+    std::lock_guard l(pending_creates_lock);
+    if (pending_creates_from_mon == 0) {
+      last_pg_create_epoch = m->epoch;
+    }
+  }
 
   maybe_update_heartbeat_peers();
 }
@@ -8875,11 +8877,12 @@ void OSD::handle_fast_pg_create(MOSDPGCreate2 *m)
 	  )));
   }
 
-  with_unique_lock(pending_creates_lock, [=]() {
-      if (pending_creates_from_mon == 0) {
-	last_pg_create_epoch = m->epoch;
-      }
-    });
+  {
+    std::lock_guard l(pending_creates_lock);
+    if (pending_creates_from_mon == 0) {
+      last_pg_create_epoch = m->epoch;
+    }
+  }
 
   m->put();
 }
