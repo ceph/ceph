@@ -3849,14 +3849,14 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
   boost::string_view client_signature;
   boost::string_view session_token;
 
-  int ret = rgw::auth::s3::parse_credentials(s->info,
-                                             access_key_id,
-                                             credential_scope,
-                                             signed_hdrs,
-                                             client_signature,
-                                             date,
-                                             session_token,
-                                             using_qs);
+  int ret = rgw::auth::s3::parse_v4_credentials(s->info,
+						access_key_id,
+						credential_scope,
+						signed_hdrs,
+						client_signature,
+						date,
+						session_token,
+						using_qs);
   if (ret < 0) {
     throw ret;
   }
