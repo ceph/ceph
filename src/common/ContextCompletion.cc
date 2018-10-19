@@ -6,7 +6,7 @@ namespace ceph
 {
 
 ContextCompletion::ContextCompletion(Context *ctx, bool ignore_enoent)
-  : m_lock("ceph::ContextCompletion::m_lock"), m_ctx(ctx),
+  : m_ctx(ctx),
     m_ignore_enoent(ignore_enoent), m_ret(0), m_building(true), m_current_ops(0)
 {
 }
