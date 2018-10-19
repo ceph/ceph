@@ -11272,7 +11272,7 @@ SnapSetContext *PrimaryLogPG::get_snapset_context(
   const map<string, bufferlist> *attrs,
   bool oid_existed)
 {
-  Mutex::Locker l(snapset_contexts_lock);
+  std::lock_guard l(snapset_contexts_lock);
   SnapSetContext *ssc;
   map<hobject_t, SnapSetContext*>::iterator p = snapset_contexts.find(
     oid.get_snapdir());
@@ -11318,7 +11318,7 @@ SnapSetContext *PrimaryLogPG::get_snapset_context(
 
 void PrimaryLogPG::put_snapset_context(SnapSetContext *ssc)
 {
-  Mutex::Locker l(snapset_contexts_lock);
+  std::lock_guard l(snapset_contexts_lock);
   --ssc->ref;
   if (ssc->ref == 0) {
     if (ssc->registered)

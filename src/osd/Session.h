@@ -175,7 +175,7 @@ struct Session : public RefCountedObject {
     if (!backoff_count.load()) {
       return nullptr;
     }
-    Mutex::Locker l(backoff_lock);
+    std::lock_guard l(backoff_lock);
     ceph_assert(!backoff_count == backoffs.empty());
     auto i = backoffs.find(pgid);
     if (i == backoffs.end()) {
@@ -203,7 +203,7 @@ struct Session : public RefCountedObject {
     CephContext *cct, spg_t pgid, const hobject_t& oid, const Message *m);
 
   void add_backoff(BackoffRef b) {
-    Mutex::Locker l(backoff_lock);
+    std::lock_guard l(backoff_lock);
     ceph_assert(!backoff_count == backoffs.empty());
     backoffs[b->pgid][b->begin].insert(b);
     ++backoff_count;
@@ -211,7 +211,7 @@ struct Session : public RefCountedObject {
 
   // called by PG::release_*_backoffs and PG::clear_backoffs()
   void rm_backoff(BackoffRef b) {
-    Mutex::Locker l(backoff_lock);
+    std::lock_guard l(backoff_lock);
     ceph_assert(b->lock.is_locked_by_me());
     ceph_assert(b->session == this);
     auto i = backoffs.find(b->pgid);

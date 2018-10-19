@@ -131,7 +131,7 @@ public:
    */
   void get_commands(std::vector<ModuleCommand> *out) const
   {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     ceph_assert(out != nullptr);
     out->insert(out->end(), commands.begin(), commands.end());
   }
@@ -143,28 +143,28 @@ public:
    */
   void fail(const std::string &reason)
   {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     failed = true;
     error_string = reason;
   }
 
   bool is_enabled() const {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     return enabled || always_on;
   }
 
-  bool is_failed() const { Mutex::Locker l(lock) ; return failed; }
-  bool is_loaded() const { Mutex::Locker l(lock) ; return loaded; }
-  bool is_always_on() const { Mutex::Locker l(lock) ; return always_on; }
+  bool is_failed() const { std::lock_guard l(lock) ; return failed; }
+  bool is_loaded() const { std::lock_guard l(lock) ; return loaded; }
+  bool is_always_on() const { std::lock_guard l(lock) ; return always_on; }
 
   const std::string &get_name() const {
-    Mutex::Locker l(lock) ; return module_name;
+    std::lock_guard l(lock) ; return module_name;
   }
   const std::string &get_error_string() const {
-    Mutex::Locker l(lock) ; return error_string;
+    std::lock_guard l(lock) ; return error_string;
   }
   bool get_can_run() const {
-    Mutex::Locker l(lock) ; return can_run;
+    std::lock_guard l(lock) ; return can_run;
   }
 };
 

@@ -1790,7 +1790,7 @@ private:
 
 void ObjectCacher::C_WaitForWrite::finish(int r)
 {
-  Mutex::Locker l(m_oc->lock);
+  std::lock_guard l(m_oc->lock);
   m_oc->maybe_wait_for_writeback(m_len, &m_trace);
   m_onfinish->complete(r);
 }

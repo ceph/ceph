@@ -46,7 +46,7 @@ StandbyPyModules::StandbyPyModules(
 // FIXME: completely identical to ActivePyModules
 void StandbyPyModules::shutdown()
 {
-  Mutex::Locker locker(lock);
+  std::lock_guard locker(lock);
 
   // Signal modules to drop out of serve() and/or tear down resources
   for (auto &i : modules) {
@@ -74,7 +74,7 @@ void StandbyPyModules::shutdown()
 
 int StandbyPyModules::start_one(PyModuleRef py_module)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   const std::string &module_name = py_module->get_name();
 
   ceph_assert(modules.count(module_name) == 0);

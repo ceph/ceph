@@ -147,7 +147,7 @@ int DaemonServer::init(uint64_t gid, entity_addrvec_t client_addrs)
 
   started_at = ceph_clock_now();
 
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   timer.init();
 
   schedule_tick_locked(
@@ -207,7 +207,7 @@ int DaemonServer::ms_handle_authentication(Connection *con)
   }
 
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_OSD) {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     s->osd_id = atoi(s->entity_name.get_id().c_str());
     dout(10) << "registering osd." << s->osd_id << " session "
 	     << s << " con " << con << dendl;
@@ -244,7 +244,7 @@ bool DaemonServer::ms_handle_reset(Connection *con)
     if (!session) {
       return false;
     }
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     dout(10) << "unregistering osd." << session->osd_id
 	     << "  session " << session << " con " << con << dendl;
     osd_cons[session->osd_id].erase(con);
@@ -294,7 +294,7 @@ void DaemonServer::maybe_ready(int32_t osd_id)
     // Fast path: we don't need to take lock because pgmap_ready
     // is already set
   } else {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
 
     if (reported_osds.find(osd_id) == reported_osds.end()) {
       dout(4) << "initial report from osd " << osd_id << dendl;
@@ -360,7 +360,7 @@ void DaemonServer::schedule_tick_locked(double delay_sec)
 
 void DaemonServer::schedule_tick(double delay_sec)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   schedule_tick_locked(delay_sec);
 }
 
@@ -371,7 +371,7 @@ void DaemonServer::handle_osd_perf_metric_query_updated()
   // Send a fresh MMgrConfigure to all clients, so that they can follow
   // the new policy for transmitting stats
   finisher.queue(new FunctionContext([this](int r) {
-        Mutex::Locker l(lock);
+        std::lock_guard l(lock);
         for (auto &c : daemon_connections) {
           if (c->peer_is_osd()) {
             _send_configure(c);
@@ -387,7 +387,7 @@ void DaemonServer::shutdown()
   msgr->wait();
   dout(10) << "done" << dendl;
 
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   shutting_down = true;
   timer.shutdown();
 }
@@ -419,7 +419,7 @@ static bool key_from_string(
 
 bool DaemonServer::handle_open(MMgrOpen *m)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
 
   DaemonKey key = key_from_service(m->service_name,
 				   m->get_connection()->get_peer_type(),
@@ -445,7 +445,7 @@ bool DaemonServer::handle_open(MMgrOpen *m)
   }
   if (daemon) {
     dout(20) << "updating existing DaemonState for " << m->daemon_name << dendl;
-    Mutex::Locker l(daemon->lock);
+    std::lock_guard l(daemon->lock);
     daemon->perf_counters.clear();
 
     if (m->service_daemon) {
@@ -494,7 +494,7 @@ bool DaemonServer::handle_open(MMgrOpen *m)
 
 bool DaemonServer::handle_close(MMgrClose *m)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
 
   DaemonKey key = key_from_service(m->service_name,
 				   m->get_connection()->get_peer_type(),
@@ -505,7 +505,7 @@ bool DaemonServer::handle_close(MMgrClose *m)
     DaemonStatePtr daemon = daemon_state.get(key);
     daemon_state.rm(key);
     {
-      Mutex::Locker l(daemon->lock);
+      std::lock_guard l(daemon->lock);
       if (daemon->service_daemon) {
 	pending_service_map.rm_daemon(m->service_name, m->daemon_name);
 	pending_service_map_dirty = pending_service_map.epoch;
@@ -574,7 +574,7 @@ bool DaemonServer::handle_report(MMgrReport *m)
     }
     
     {
-      Mutex::Locker l(lock);
+      std::lock_guard l(lock);
       // kill session
       auto priv = m->get_connection()->get_priv();
       auto session = static_cast<MgrSession*>(priv.get());
@@ -602,7 +602,7 @@ bool DaemonServer::handle_report(MMgrReport *m)
   // Update the DaemonState
   ceph_assert(daemon != nullptr);
   {
-    Mutex::Locker l(daemon->lock);
+    std::lock_guard l(daemon->lock);
     auto &daemon_counters = daemon->perf_counters;
     daemon_counters.update(m);
 
@@ -778,7 +778,7 @@ public:
 
 bool DaemonServer::handle_command(MCommand *m)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   std::shared_ptr<CommandContext> cmdctx = std::make_shared<CommandContext>(m);
   try {
     return _handle_command(m, cmdctx);
@@ -911,7 +911,7 @@ bool DaemonServer::_handle_command(
 	DaemonKey key(p.first, q.first);
 	ceph_assert(daemon_state.exists(key));
 	auto daemon = daemon_state.get(key);
-	Mutex::Locker l(daemon->lock);
+	std::lock_guard l(daemon->lock);
 	f->dump_stream("status_stamp") << daemon->service_status_stamp;
 	f->dump_stream("last_beacon") << daemon->last_service_beacon;
 	f->open_object_section("status");
@@ -1608,7 +1608,7 @@ bool DaemonServer::_handle_command(
 	}
       }
     } else if (daemon->config_defaults_bl.length() > 0) {
-      Mutex::Locker l(daemon->lock);
+      std::lock_guard l(daemon->lock);
       TextTable tbl;
       if (f) {
 	f->open_array_section("config");
@@ -2110,7 +2110,7 @@ void DaemonServer::_prune_pending_service_map()
 	continue;
       }
       auto daemon = daemon_state.get(key);
-      Mutex::Locker l(daemon->lock);
+      std::lock_guard l(daemon->lock);
       if (daemon->last_service_beacon == utime_t()) {
 	// we must have just restarted; assume they are alive now.
 	daemon->last_service_beacon = ceph_clock_now();
@@ -2190,7 +2190,7 @@ void DaemonServer::send_report()
   for (auto service : {"osd", "mon"} ) {
     auto daemons = daemon_state.get_by_service(service);
     for (const auto& [key,state] : daemons) {
-      Mutex::Locker l{state->lock};
+      std::lock_guard l{state->lock};
       for (const auto& metric : state->daemon_health_metrics) {
         auto acc = accumulated.find(metric.get_type());
         if (acc == accumulated.end()) {
@@ -2408,7 +2408,7 @@ void DaemonServer::adjust_pgs()
 
 void DaemonServer::got_service_map()
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
 
   cluster_state.with_servicemap([&](const ServiceMap& service_map) {
       if (pending_service_map.epoch == 0) {
@@ -2447,7 +2447,7 @@ void DaemonServer::got_service_map()
 
 void DaemonServer::got_mgr_map()
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   set<std::string> have;
   cluster_state.with_mgrmap([&](const MgrMap& mgrmap) {
       auto md_update = [&] (DaemonKey key) {

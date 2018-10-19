@@ -199,7 +199,7 @@ int librados::RadosClient::get_fsid(std::string *s)
 {
   if (!s)
     return -EINVAL;
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   ostringstream oss;
   oss << monclient.get_fsid();
   *s = oss.str();
@@ -508,7 +508,7 @@ bool librados::RadosClient::ms_dispatch(Message *m)
 {
   bool ret;
 
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   if (state == DISCONNECTED) {
     ldout(cct, 10) << "disconnected, discarding " << *m << dendl;
     m->put();
@@ -579,7 +579,7 @@ int librados::RadosClient::wait_for_osdmap()
     });
 
   if (need_map) {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
 
     utime_t timeout;
     if (cct->_conf->rados_mon_op_timeout > 0)
@@ -688,13 +688,13 @@ int librados::RadosClient::get_fs_stats(ceph_statfs& stats)
 }
 
 void librados::RadosClient::get() {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   ceph_assert(refcnt > 0);
   refcnt++;
 }
 
 bool librados::RadosClient::put() {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   ceph_assert(refcnt > 0);
   refcnt--;
   return (refcnt == 0);
@@ -808,7 +808,7 @@ int librados::RadosClient::pool_delete_async(const char *name, PoolAsyncCompleti
 }
 
 void librados::RadosClient::blacklist_self(bool set) {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   objecter->blacklist_self(set);
 }
 
@@ -867,7 +867,7 @@ int librados::RadosClient::mgr_command(const vector<string>& cmd,
 				       const bufferlist &inbl,
 				       bufferlist *outbl, string *outs)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
 
   C_SaferCond cond;
   int r = mgrclient.start_command(cmd, inbl, outbl, outs, &cond);
@@ -974,7 +974,7 @@ int librados::RadosClient::monitor_log(const string& level,
 				       rados_log_callback2_t cb2,
 				       void *arg)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
 
   if (state != CONNECTED) {
     return -ENOTCONN;
