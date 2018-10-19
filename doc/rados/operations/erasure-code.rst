@@ -47,7 +47,7 @@ to be created and all objects from the previous pool moved to the new.
 The most important parameters of the profile are *K*, *M* and
 *crush-failure-domain* because they define the storage overhead and
 the data durability. For instance, if the desired architecture must
-sustain the loss of two racks with a storage overhead of 40% overhead,
+sustain the loss of two racks with a storage overhead of 67% overhead,
 the following profile can be defined::
 
     $ ceph osd erasure-code-profile set myprofile \
