@@ -37,7 +37,7 @@ class SaltManager(object):
         self.ctx = ctx
         self.cluster = ctx.cluster
         self.master_remote = Remote(self.config.get('master_remote'))
-        self.remotes = ctx.cluster.remotes
+        self.minions = ctx.cluster.remotes
 
     def __systemctl_cluster(self, subcommand=None, service=None):
         """
@@ -61,6 +61,23 @@ class SaltManager(object):
                 '{}.service'.format(service), run.Raw('||'), 'true'])
             raise
 
+    def __cat_file_cluster(self, filename=None):
+        """
+        cat a file everywhere on the whole cluster
+        """
+        self.cluster.run(args=[
+            'sudo', 'cat', filename])
+
+    def __cat_file_remote(self, remote, filename=None):
+        """
+        cat a file on a particular remote
+        """
+        try:
+            remote.run(args=[
+                'sudo', 'cat', filename])
+        except CommandFailedError:
+            log.warning("{} not found on {}".format(filename, remote.name))
+
     def __ping(self, ping_cmd, expected):
         with safe_while(sleep=15, tries=20,
                         action=ping_cmd) as proceed:
@@ -68,8 +85,9 @@ class SaltManager(object):
                 output = StringIO()
                 self.master_remote.run(args=ping_cmd, stdout=output)
                 responded = len(re.findall('True', output.getvalue()))
-                log.debug('{} minion(s) responded'.format(responded))
                 output.close()
+                log.info("{} of {} minions responded"
+                         .format(responded, expected))
                 if (expected == responded):
                     return None
 
@@ -135,11 +153,13 @@ class SaltManager(object):
         """
         Pings minions; raises exception if they don't respond
         """
+        number_of_minions = len(self.minions)
         self.__ping(
             [
             'sudo', 'sh', '-c', 'salt \* test.ping || true',
             ],
-            len(self.remotes))
+            number_of_minions)
+        return number_of_minions
 
     def start_minions(self):
         """Starts salt-minion.service on all cluster nodes"""
@@ -158,3 +178,18 @@ class SaltManager(object):
         """Starts salt-master.service on the Salt Master node"""
         self.__systemctl_remote(self.master_remote,
             subcommand="restart", service="salt-master")
+
+    def sync_pillar_data(self):
+        self.master_remote.run(args=[
+            'sudo',
+            'sh',
+            '-c',
+            'salt \\* saltutil.sync_all 2>/dev/null'
+        ])
+
+    def cat_salt_master_conf(self):
+        self.__cat_file_remote(self.master_remote, filename="/etc/salt/master")
+
+    def cat_salt_minion_confs(self):
+        self.__cat_file_cluster(filename="/etc/salt/minion")
+
