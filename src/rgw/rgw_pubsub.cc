@@ -35,7 +35,7 @@ void rgw_pubsub_topic_subs::dump(Formatter *f) const
 
 void rgw_pubsub_bucket_topics::dump(Formatter *f) const
 {
-  Formatter::ObjectSection s(*f, "topics");
+  Formatter::ArraySection s(*f, "topics");
   for (auto& t : topics) {
     encode_json(t.first.c_str(), t.second, f);
   }
@@ -43,7 +43,7 @@ void rgw_pubsub_bucket_topics::dump(Formatter *f) const
 
 void rgw_pubsub_user_topics::dump(Formatter *f) const
 {
-  Formatter::ObjectSection s(*f, "topics");
+  Formatter::ArraySection s(*f, "topics");
   for (auto& t : topics) {
     encode_json(t.first.c_str(), t.second, f);
   }
