@@ -4,6 +4,7 @@
 #include "librbd/io/ImageRequestWQ.h"
 #include "common/errno.h"
 #include "common/zipkin_trace.h"
+#include "common/Cond.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
@@ -738,7 +739,7 @@ void *ImageRequestWQ<I>::_void_dequeue() {
   ceph_assert(peek_item == item);
 
   if (lock_required) {
-    this->get_pool_lock().Unlock();
+    this->get_pool_lock().unlock();
     m_image_ctx.owner_lock.get_read();
     if (m_image_ctx.exclusive_lock != nullptr) {
       ldout(cct, 5) << "exclusive lock required: delaying IO " << item << dendl;
@@ -759,7 +760,7 @@ void *ImageRequestWQ<I>::_void_dequeue() {
       lock_required = false;
     }
     m_image_ctx.owner_lock.put_read();
-    this->get_pool_lock().Lock();
+    this->get_pool_lock().lock();
 
     if (lock_required) {
       return nullptr;
@@ -772,9 +773,9 @@ void *ImageRequestWQ<I>::_void_dequeue() {
     // stall IO until the refresh completes
     ++m_io_blockers;
 
-    this->get_pool_lock().Unlock();
+    this->get_pool_lock().unlock();
     m_image_ctx.state->refresh(new C_RefreshFinish(this, item));
-    this->get_pool_lock().Lock();
+    this->get_pool_lock().lock();
     return nullptr;
   }
 
