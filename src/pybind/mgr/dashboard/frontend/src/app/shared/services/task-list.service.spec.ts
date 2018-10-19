@@ -15,7 +15,6 @@ describe('TaskListService', () => {
   let summaryService: SummaryService;
   let taskMessageService: TaskMessageService;
 
-  let reset: boolean;
   let list: any[];
   let apiResp: any;
   let tasks: any[];
@@ -39,7 +38,6 @@ describe('TaskListService', () => {
     taskMessageService.messages['test/edit'] = taskMessageService.messages['rbd/edit'];
     taskMessageService.messages['test/delete'] = taskMessageService.messages['rbd/delete'];
 
-    reset = false;
     tasks = [];
     apiResp = [];
     list = [];
@@ -51,7 +49,7 @@ describe('TaskListService', () => {
       () => of(apiResp),
       undefined,
       (updatedList) => (list = updatedList),
-      () => (reset = true),
+      () => true,
       (task) => task.name.startsWith('test'),
       (item, task) => item.name === task.metadata['name'],
       {
