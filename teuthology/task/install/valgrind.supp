@@ -544,6 +544,15 @@
 }
 
 {
+  libc_csu_init (strdup, rte_log_register, etc.)
+  Memcheck:Leak
+  match-leak-kinds: reachable
+  ...
+  fun:__libc_csu_init
+  ...
+}
+
+{
   Boost.Thread fails to call tls_destructor() when the thread exists
   Memcheck:Leak
   match-leak-kinds: reachable
