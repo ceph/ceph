@@ -1171,7 +1171,8 @@ public:
   int operate() override {
     reenter(this) {
       ldout(sync_env->cct, 10) << ": handle event: obj: z=" << sync_env->source_zone
-                               << " event=" << json_str("event", *event, false) << dendl;
+                               << " event=" << json_str("event", *event, false)
+                               << " owner=" << owner << dendl;
 
       ldout(sync_env->cct, 20) << "pubsub: " << topics->size() << " topics found for path" << dendl;
 
@@ -1187,10 +1188,11 @@ public:
              */
             yield PSManager::call_get_subscription_cr(sync_env, env->manager, this, *oiter, *siter, &sub);
             if (retcode < 0) {
-              ldout(sync_env->cct, 10) << "ERROR: failed to find subscription config for subscription=" << *siter << " ret=" << retcode << dendl;
+              ldout(sync_env->cct, 10) << "ERROR: failed to find subscription config for subscription=" << *siter << " owner=" << *oiter << " ret=" << retcode << dendl;
               continue;
             }
 
+            ldout(sync_env->cct, 20) << "storing event for subscription=" << *siter << " owner=" << *oiter << " ret=" << retcode << dendl;
             yield call(PSSubscription::store_event_cr(sync_env, sub, event));
             if (retcode < 0) {
               ldout(sync_env->cct, 10) << "ERROR: failed to store event for subscription=" << *siter << " ret=" << retcode << dendl;
