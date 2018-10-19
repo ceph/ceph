@@ -1532,9 +1532,9 @@ TEST(BlueStoreRepairer, StoreSpaceTracker)
  
   BlueStoreRepairer::StoreSpaceTracker bmap2;
   bmap2.init((uint64_t)0x3223b1d1000, 0x10000);
-  ASSERT_EQ(bmap2.granularity, 0x1a0000);
-  ASSERT_EQ(bmap2.collections_bfs.size(), 0x1edae4);
-  ASSERT_EQ(bmap2.objects_bfs.size(), 0x1edae4);
+  ASSERT_EQ(0x1a0000u, bmap2.granularity);
+  ASSERT_EQ(0x1edae4u, bmap2.collections_bfs.size());
+  ASSERT_EQ(0x1edae4u, bmap2.objects_bfs.size());
   bmap2.set_used(0x3223b190000, 0x10000, cid, hoid);
   ASSERT_TRUE(bmap2.is_used(cid, 0x3223b190000));
   ASSERT_TRUE(bmap2.is_used(hoid, 0x3223b190000));
