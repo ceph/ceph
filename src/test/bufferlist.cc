@@ -2796,6 +2796,38 @@ TEST(BufferList, InternalCarriage) {
   EXPECT_EQ(bl.get_num_buffers(), 3);
 }
 
+TEST(BufferList, ContiguousAppender) {
+  ceph::bufferlist bl;
+  EXPECT_EQ(bl.get_num_buffers(), 0);
+
+  // we expect a flush in ~contiguous_appender
+  {
+    auto ap = bl.get_contiguous_appender(100);
+
+    denc(42l, ap);
+    EXPECT_EQ(bl.get_num_buffers(), 1);
+
+    // append bufferlist with single ptr inside. This should
+    // commit changes to bl::_len and the underlying bp::len.
+    {
+      ceph::bufferlist bl_with_foo;
+      bl_with_foo.append("foo", 3);
+      EXPECT_EQ(bl_with_foo.length(), 3);
+      EXPECT_EQ(bl_with_foo.get_num_buffers(), 1);
+
+      ap.append(bl_with_foo);
+      // 3 as the ap::append(const bl&) splits the bp with free
+      // space.
+      EXPECT_EQ(bl.get_num_buffers(), 3);
+    }
+
+    denc(24l, ap);
+    EXPECT_EQ(bl.get_num_buffers(), 3);
+    EXPECT_EQ(bl.length(), sizeof(long) + 3);
+  }
+  EXPECT_EQ(bl.length(), 2 * sizeof(long) + 3);
+}
+
 TEST(BufferList, TestPtrAppend) {
   bufferlist bl;
   char correct[MAX_TEST];
