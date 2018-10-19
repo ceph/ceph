@@ -794,16 +794,20 @@ class TestVDOParents(object):
 class TestSplitNameParser(object):
 
     def test_keys_are_parsed_without_prefix(self):
-        line = ["DM_VG_NAME='/dev/mapper/vg';DM_LV_NAME='lv';DM_LV_LAYER=''"]
-        result = api._splitname_parser(line)
+        lines = ["DM_VG_NAME='/dev/mapper/vg';DM_LV_NAME='lv';DM_LV_LAYER=''"]
+        result = api._splitname_parser(lines, "/dev/mapper/vg")
         assert result['VG_NAME'] == 'vg'
         assert result['LV_NAME'] == 'lv'
         assert result['LV_LAYER'] == ''
 
     def test_vg_name_sans_mapper(self):
-        line = ["DM_VG_NAME='/dev/mapper/vg';DM_LV_NAME='lv';DM_LV_LAYER=''"]
-        result = api._splitname_parser(line)
+        lines = ["DM_VG_NAME='/dev/mapper/vg';DM_LV_NAME='lv';DM_LV_LAYER=''"]
+        result = api._splitname_parser(lines, "/dev/mapper/vg")
         assert '/dev/mapper' not in result['VG_NAME']
+
+    def test_empty_dmsetup(self):
+        result = api._splitname_parser([], "/dev/mapper/vg")
+        assert {} == result
 
 
 class TestIsLV(object):

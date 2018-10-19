@@ -51,7 +51,7 @@ def _output_parser(output, fields):
     return report
 
 
-def _splitname_parser(line):
+def _splitname_parser(lines, dev):
     """
     Parses the output from ``dmsetup splitname``, that should contain prefixes
     (--nameprefixes) and set the separator to ";"
@@ -67,7 +67,11 @@ def _splitname_parser(line):
 
     :returns: dictionary with stripped prefixes
     """
-    parts = line[0].split(';')
+    if len(lines) != 1:
+        logger.error('Unexpected "dmsetup splitname" output for "%s"', dev)
+        return {}
+
+    parts = lines[0].split(';')
     parsed = {}
     for part in parts:
         part = part.replace("'", '')
@@ -259,7 +263,7 @@ def dmsetup_splitname(dev):
         "--separator=';'", '--nameprefixes', dev
     ]
     out, err, rc = process.call(command)
-    return _splitname_parser(out)
+    return _splitname_parser(out, dev)
 
 
 def is_lv(dev, lvs=None):
