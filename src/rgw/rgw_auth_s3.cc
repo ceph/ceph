@@ -412,13 +412,13 @@ static inline int parse_v4_auth_header(const req_info& info,               /* in
   return 0;
 }
 
-int parse_credentials(const req_info& info,                     /* in */
-                      boost::string_view& access_key_id,        /* out */
-                      boost::string_view& credential_scope,     /* out */
-                      boost::string_view& signedheaders,        /* out */
-                      boost::string_view& signature,            /* out */
-                      boost::string_view& date,                 /* out */
-                      bool& using_qs)                           /* out */
+int parse_v4_credentials(const req_info& info,                     /* in */
+			 boost::string_view& access_key_id,        /* out */
+			 boost::string_view& credential_scope,     /* out */
+			 boost::string_view& signedheaders,        /* out */
+			 boost::string_view& signature,            /* out */
+			 boost::string_view& date,                 /* out */
+                         bool& using_qs)                           /* out */
 {
   const char* const http_auth = info.env->get("HTTP_AUTHORIZATION");
   using_qs = http_auth == nullptr || http_auth[0] == '\0';
