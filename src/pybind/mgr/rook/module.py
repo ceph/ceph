@@ -33,7 +33,7 @@ class RookReadCompletion(orchestrator.ReadCompletion):
     def __init__(self, cb):
         super(RookReadCompletion, self).__init__()
         self.cb = cb
-        self.result = None
+        self._result = None
         self._complete = False
 
         self.message = "<read op>"
@@ -43,11 +43,15 @@ class RookReadCompletion(orchestrator.ReadCompletion):
         all_completions.append(self)
 
     @property
+    def result(self):
+        return self._result
+
+    @property
     def is_complete(self):
         return self._complete
 
     def execute(self):
-        self.result = self.cb()
+        self._result = self.cb()
         self._complete = True
 
 

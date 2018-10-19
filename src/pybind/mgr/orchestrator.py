@@ -7,7 +7,8 @@ Please see the ceph-mgr module developer's guide for more information.
 
 
 class _Completion(object):
-    def get_result(self):
+    @property
+    def result(self):
         """
         Return the result of the operation that we were waited
         for.  Only valid after calling Orchestrator.wait() on this
