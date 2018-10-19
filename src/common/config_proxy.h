@@ -6,14 +6,14 @@
 #include "common/config.h"
 #include "common/config_obs.h"
 #include "common/config_obs_mgr.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 
 // @c ConfigProxy is a facade of multiple config related classes. it exposes
 // the legacy settings with arrow operator, and the new-style config with its
 // member methods.
 class ConfigProxy {
   static ConfigValues get_config_values(const ConfigProxy &config_proxy) {
-    Mutex::Locker locker(config_proxy.lock);
+    std::lock_guard locker(config_proxy.lock);
     return config_proxy.values;
   }
 
@@ -28,17 +28,15 @@ class ConfigProxy {
    * recursive, for simplicity.
    * It is best if this lock comes first in the lock hierarchy. We will
    * hold this lock when calling configuration observers.  */
-  mutable Mutex lock;
+  mutable ceph::mutex lock = ceph::make_mutex("ConfigProxy::lock");
 
 public:
   explicit ConfigProxy(bool is_daemon)
-    : config{values, obs_mgr, is_daemon},
-      lock{"ConfigProxy", true, false}
+    : config{values, obs_mgr, is_daemon}
   {}
   explicit ConfigProxy(const ConfigProxy &config_proxy)
     : values(get_config_values(config_proxy)),
-      config{values, obs_mgr, config_proxy.config.is_daemon},
-      lock{"ConfigProxy", true, false}
+      config{values, obs_mgr, config_proxy.config.is_daemon}
   {}
   const ConfigValues* operator->() const noexcept {
     return &values;
