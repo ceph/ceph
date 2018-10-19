@@ -17,6 +17,7 @@ import { ErrorPanelComponent } from './error-panel/error-panel.component';
 import { GrafanaComponent } from './grafana/grafana.component';
 import { HelperComponent } from './helper/helper.component';
 import { InfoPanelComponent } from './info-panel/info-panel.component';
+import { LanguageSelectorComponent } from './language-selector/language-selector.component';
 import { LoadingPanelComponent } from './loading-panel/loading-panel.component';
 import { ModalComponent } from './modal/modal.component';
 import { SelectBadgesComponent } from './select-badges/select-badges.component';
@@ -55,6 +56,7 @@ import { WarningPanelComponent } from './warning-panel/warning-panel.component';
     CriticalConfirmationModalComponent,
     ConfirmationModalComponent,
     WarningPanelComponent,
+    LanguageSelectorComponent,
     GrafanaComponent
   ],
   providers: [],
@@ -70,6 +72,7 @@ import { WarningPanelComponent } from './warning-panel/warning-panel.component';
     UsageBarComponent,
     ModalComponent,
     WarningPanelComponent,
+    LanguageSelectorComponent,
     GrafanaComponent
   ],
   entryComponents: [ModalComponent, CriticalConfirmationModalComponent, ConfirmationModalComponent]

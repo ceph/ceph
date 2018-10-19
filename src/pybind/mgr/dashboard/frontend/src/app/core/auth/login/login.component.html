@@ -13,6 +13,11 @@
             #loginForm="ngForm"
             novalidate>
 
+        <!-- I18N -->
+        <div class="form-group has-feedback">
+          <cd-language-selector [isDropdown]="false"></cd-language-selector>
+        </div>
+
         <!-- Username -->
         <div class="form-group has-feedback"
              [ngClass]="{'has-error': (loginForm.submitted || username.dirty) && username.invalid}">
