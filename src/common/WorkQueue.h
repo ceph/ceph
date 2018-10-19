@@ -315,10 +315,6 @@ public:
       pool->_lock.unlock();
     }
 
-    Mutex &get_lock() {
-      return pool->_lock;
-    }
-
     void lock() {
       pool->lock();
     }
