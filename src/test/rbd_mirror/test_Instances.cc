@@ -7,6 +7,7 @@
 #include "tools/rbd_mirror/InstanceWatcher.h"
 #include "tools/rbd_mirror/Instances.h"
 #include "tools/rbd_mirror/Threads.h"
+#include "common/Cond.h"
 
 #include "test/librados/test.h"
 #include "gtest/gtest.h"

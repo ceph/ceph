@@ -10,6 +10,7 @@
 
 #include "osd/osd_types.h"
 #include "common/WorkQueue.h"
+#include "common/Cond.h"
 
 class OSDMap;
 
