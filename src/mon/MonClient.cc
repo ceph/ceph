@@ -79,7 +79,7 @@ int MonClient::build_initial_monmap()
 int MonClient::get_monmap()
 {
   ldout(cct, 10) << __func__ << dendl;
-  Mutex::Locker l(monc_lock);
+  std::lock_guard l(monc_lock);
   
   sub.want("monmap", 0, 0);
   if (!_opened())
@@ -142,7 +142,7 @@ int MonClient::get_monmap_and_config()
       break;
     }
     {
-      Mutex::Locker l(monc_lock);
+      std::lock_guard l(monc_lock);
       if (monmap.get_epoch() &&
 	  !monmap.persistent_features.contains_all(
 	    ceph::features::mon::FEATURE_MIMIC)) {
@@ -267,7 +267,7 @@ bool MonClient::ms_dispatch(Message *m)
     return false;
   }
 
-  Mutex::Locker lock(monc_lock);
+  std::lock_guard lock(monc_lock);
 
   if (_hunting()) {
     auto p = _find_pending_con(m->get_connection());
@@ -335,7 +335,7 @@ void MonClient::send_log(bool flush)
 
 void MonClient::flush_log()
 {
-  Mutex::Locker l(monc_lock);
+  std::lock_guard l(monc_lock);
   send_log();
 }
 
@@ -390,7 +390,7 @@ int MonClient::init()
 
   entity_name = cct->_conf->name;
 
-  Mutex::Locker l(monc_lock);
+  std::lock_guard l(monc_lock);
 
   string method;
   if (!cct->_conf->auth_supported.empty())
@@ -477,7 +477,7 @@ void MonClient::shutdown()
 
 int MonClient::authenticate(double timeout)
 {
-  Mutex::Locker lock(monc_lock);
+  std::lock_guard lock(monc_lock);
 
   if (active_con) {
     ldout(cct, 5) << "already authenticated" << dendl;
@@ -697,7 +697,7 @@ void MonClient::_add_conns(uint64_t global_id)
 
 bool MonClient::ms_handle_reset(Connection *con)
 {
-  Mutex::Locker lock(monc_lock);
+  std::lock_guard lock(monc_lock);
 
   if (con->get_peer_type() != CEPH_ENTITY_TYPE_MON)
     return false;
@@ -928,7 +928,7 @@ int MonClient::_check_auth_rotating()
 
 int MonClient::wait_auth_rotating(double timeout)
 {
-  Mutex::Locker l(monc_lock);
+  std::lock_guard l(monc_lock);
   utime_t now = ceph_clock_now();
   utime_t until = now;
   until += timeout;
@@ -1074,7 +1074,7 @@ void MonClient::start_mon_command(const vector<string>& cmd,
 				 bufferlist *outbl, string *outs,
 				 Context *onfinish)
 {
-  Mutex::Locker l(monc_lock);
+  std::lock_guard l(monc_lock);
   MonCommand *r = new MonCommand(++last_mon_command_tid);
   r->cmd = cmd;
   r->inbl = inbl;
@@ -1105,7 +1105,7 @@ void MonClient::start_mon_command(const string &mon_name,
 				 bufferlist *outbl, string *outs,
 				 Context *onfinish)
 {
-  Mutex::Locker l(monc_lock);
+  std::lock_guard l(monc_lock);
   MonCommand *r = new MonCommand(++last_mon_command_tid);
   r->target_name = mon_name;
   r->cmd = cmd;
@@ -1123,7 +1123,7 @@ void MonClient::start_mon_command(int rank,
 				 bufferlist *outbl, string *outs,
 				 Context *onfinish)
 {
-  Mutex::Locker l(monc_lock);
+  std::lock_guard l(monc_lock);
   MonCommand *r = new MonCommand(++last_mon_command_tid);
   r->target_rank = rank;
   r->cmd = cmd;
@@ -1141,7 +1141,7 @@ void MonClient::get_version(string map, version_t *newest, version_t *oldest, Co
 {
   version_req_d *req = new version_req_d(onfinish, newest, oldest);
   ldout(cct, 10) << "get_version " << map << " req " << req << dendl;
-  Mutex::Locker l(monc_lock);
+  std::lock_guard l(monc_lock);
   MMonGetVersion *m = new MMonGetVersion();
   m->what = map;
   m->handle = ++version_req_id;
@@ -1171,7 +1171,7 @@ void MonClient::handle_get_version_reply(MMonGetVersionReply* m)
 }
 
 AuthAuthorizer* MonClient::build_authorizer(int service_id) const {
-  Mutex::Locker l(monc_lock);
+  std::lock_guard l(monc_lock);
   if (auth) {
     return auth->build_authorizer(service_id);
   } else {

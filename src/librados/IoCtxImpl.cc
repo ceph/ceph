@@ -327,7 +327,7 @@ void librados::IoCtxImpl::flush_aio_writes_async(AioCompletionImpl *c)
 {
   ldout(client->cct, 20) << "flush_aio_writes_async " << this
 			 << " completion " << c << dendl;
-  Mutex::Locker l(aio_write_list_lock);
+  std::lock_guard l(aio_write_list_lock);
   ceph_tid_t seq = aio_write_seq;
   if (aio_write_list.empty()) {
     ldout(client->cct, 20) << "flush_aio_writes_async no writes. (tid "

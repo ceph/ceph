@@ -1213,7 +1213,7 @@ void RocksDBStore::compact_thread_entry()
 
 void RocksDBStore::compact_range_async(const string& start, const string& end)
 {
-  Mutex::Locker l(compact_queue_lock);
+  std::lock_guard l(compact_queue_lock);
 
   // try to merge adjacent ranges.  this is O(n), but the queue should
   // be short.  note that we do not cover all overlap cases and merge

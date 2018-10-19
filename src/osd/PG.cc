@@ -154,7 +154,7 @@ void PG::get(const char* tag)
 {
   ref++;
 #ifdef PG_DEBUG_REFS
-  Mutex::Locker l(_ref_id_lock);
+  std::lock_guard l(_ref_id_lock);
   _tag_counts[tag]++;
 #endif
 }
@@ -163,7 +163,7 @@ void PG::put(const char* tag)
 {
 #ifdef PG_DEBUG_REFS
   {
-    Mutex::Locker l(_ref_id_lock);
+    std::lock_guard l(_ref_id_lock);
     auto tag_counts_entry = _tag_counts.find(tag);
     ceph_assert(tag_counts_entry != _tag_counts.end());
     --tag_counts_entry->second;
@@ -180,7 +180,7 @@ void PG::put(const char* tag)
 uint64_t PG::get_with_id()
 {
   ref++;
-  Mutex::Locker l(_ref_id_lock);
+  std::lock_guard l(_ref_id_lock);
   uint64_t id = ++_ref_id;
   BackTrace bt(0);
   stringstream ss;
@@ -195,7 +195,7 @@ void PG::put_with_id(uint64_t id)
 {
   dout(20) << __func__ << ": " << info.pgid << " put id " << id << " (current) ref==" << ref << dendl;
   {
-    Mutex::Locker l(_ref_id_lock);
+    std::lock_guard l(_ref_id_lock);
     ceph_assert(_live_ids.count(id));
     _live_ids.erase(id);
   }
@@ -205,7 +205,7 @@ void PG::put_with_id(uint64_t id)
 
 void PG::dump_live_ids()
 {
-  Mutex::Locker l(_ref_id_lock);
+  std::lock_guard l(_ref_id_lock);
   dout(0) << "\t" << __func__ << ": " << info.pgid << " live ids:" << dendl;
   for (map<uint64_t, string>::iterator i = _live_ids.begin();
        i != _live_ids.end();
@@ -2797,7 +2797,7 @@ void PG::add_backoff(SessionRef s, const hobject_t& begin, const hobject_t& end)
 	 << " " << *b << dendl;
     ceph_abort();
   }
-  Mutex::Locker l(backoff_lock);
+  std::lock_guard l(backoff_lock);
   {
     b = new Backoff(info.pgid, this, s, ++s->backoff_seq, begin, end);
     backoffs[begin].insert(b);
@@ -2819,7 +2819,7 @@ void PG::release_backoffs(const hobject_t& begin, const hobject_t& end)
   dout(10) << __func__ << " [" << begin << "," << end << ")" << dendl;
   vector<BackoffRef> bv;
   {
-    Mutex::Locker l(backoff_lock);
+    std::lock_guard l(backoff_lock);
     auto p = backoffs.lower_bound(begin);
     while (p != backoffs.end()) {
       int r = cmp(p->first, end);
@@ -2850,7 +2850,7 @@ void PG::release_backoffs(const hobject_t& begin, const hobject_t& end)
     }
   }
   for (auto b : bv) {
-    Mutex::Locker l(b->lock);
+    std::lock_guard l(b->lock);
     dout(10) << __func__ << " " << *b << dendl;
     if (b->session) {
       ceph_assert(b->pg == this);
@@ -2881,12 +2881,12 @@ void PG::clear_backoffs()
   dout(10) << __func__ << " " << dendl;
   map<hobject_t,set<BackoffRef>> ls;
   {
-    Mutex::Locker l(backoff_lock);
+    std::lock_guard l(backoff_lock);
     ls.swap(backoffs);
   }
   for (auto& p : ls) {
     for (auto& b : p.second) {
-      Mutex::Locker l(b->lock);
+      std::lock_guard l(b->lock);
       dout(10) << __func__ << " " << *b << dendl;
       if (b->session) {
 	ceph_assert(b->pg == this);
@@ -2906,7 +2906,7 @@ void PG::clear_backoffs()
 void PG::rm_backoff(BackoffRef b)
 {
   dout(10) << __func__ << " " << *b << dendl;
-  Mutex::Locker l(backoff_lock);
+  std::lock_guard l(backoff_lock);
   ceph_assert(b->lock.is_locked_by_me());
   ceph_assert(b->pg == this);
   auto p = backoffs.find(b->begin);
@@ -2997,7 +2997,7 @@ void PG::purge_strays()
 
 void PG::set_probe_targets(const set<pg_shard_t> &probe_set)
 {
-  Mutex::Locker l(heartbeat_peer_lock);
+  std::lock_guard l(heartbeat_peer_lock);
   probe_targets.clear();
   for (set<pg_shard_t>::iterator i = probe_set.begin();
        i != probe_set.end();
@@ -3008,7 +3008,7 @@ void PG::set_probe_targets(const set<pg_shard_t> &probe_set)
 
 void PG::clear_probe_targets()
 {
-  Mutex::Locker l(heartbeat_peer_lock);
+  std::lock_guard l(heartbeat_peer_lock);
   probe_targets.clear();
 }
 
@@ -4469,7 +4469,7 @@ void PG::reject_reservation()
 
 void PG::schedule_backfill_retry(float delay)
 {
-  Mutex::Locker lock(osd->recovery_request_lock);
+  std::lock_guard lock(osd->recovery_request_lock);
   osd->recovery_request_timer.add_event_after(
     delay,
     new QueuePeeringEvt<RequestBackfill>(
@@ -4479,7 +4479,7 @@ void PG::schedule_backfill_retry(float delay)
 
 void PG::schedule_recovery_retry(float delay)
 {
-  Mutex::Locker lock(osd->recovery_request_lock);
+  std::lock_guard lock(osd->recovery_request_lock);
   osd->recovery_request_timer.add_event_after(
     delay,
     new QueuePeeringEvt<DoRecovery>(
@@ -4920,7 +4920,7 @@ void PG::scrub(epoch_t queued, ThreadPool::TPHandle &handle)
           pg->scrubber.sleep_start = utime_t();
           pg->unlock();
         });
-    Mutex::Locker l(osd->sleep_lock);
+    std::lock_guard l(osd->sleep_lock);
     osd->sleep_timer.add_event_after(cct->_conf->osd_scrub_sleep,
                                            scrub_requeue_callback);
     scrubber.sleeping = true;

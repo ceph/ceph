@@ -48,14 +48,14 @@ public:
       }
     }
     bool is_done() {
-      Mutex::Locker l(lock);
+      std::lock_guard l(lock);
       return shards == 0;
     }
     utime_t get_duration() {
       return finish - start;
     }
     void wait() {
-      Mutex::Locker l(lock);
+      std::lock_guard l(lock);
       while (shards > 0) {
 	cond.Wait(lock);
       }
@@ -63,7 +63,7 @@ public:
     bool wait_for(double duration) {
       utime_t until = start;
       until += duration;
-      Mutex::Locker l(lock);
+      std::lock_guard l(lock);
       while (shards > 0) {
 	if (ceph_clock_now() >= until) {
 	  return false;
@@ -75,7 +75,7 @@ public:
     void abort() {
       Context *fin = nullptr;
       {
-	Mutex::Locker l(lock);
+	std::lock_guard l(lock);
 	aborted = true;
 	fin = onfinish;
 	onfinish = nullptr;
@@ -89,7 +89,7 @@ public:
     }
 
     void start_one() {
-      Mutex::Locker l(lock);
+      std::lock_guard l(lock);
       ++shards;
     }
     void finish_one();
