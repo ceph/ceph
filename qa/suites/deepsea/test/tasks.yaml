@@ -1,0 +1,6 @@
+tasks:
+- dump_ctx: 'Welcome to deepsea/test!'
+- workunit:
+    clients:
+      client.salt_master:
+        - deepsea/suites/test/default-profile-cli.sh
