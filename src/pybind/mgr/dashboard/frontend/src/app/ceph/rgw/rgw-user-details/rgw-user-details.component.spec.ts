@@ -1,4 +1,3 @@
-import { HttpClientModule } from '@angular/common/http';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
@@ -16,7 +15,7 @@ describe('RgwUserDetailsComponent', () => {
 
   configureTestBed({
     declarations: [RgwUserDetailsComponent],
-    imports: [HttpClientTestingModule, HttpClientModule, SharedModule, TabsModule.forRoot()],
+    imports: [HttpClientTestingModule, SharedModule, TabsModule.forRoot()],
     providers: [BsModalService]
   });
 

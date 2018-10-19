@@ -1,4 +1,4 @@
-import { HttpClientModule } from '@angular/common/http';
+import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { DebugElement } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
@@ -22,7 +22,12 @@ describe('OsdDetailsComponent', () => {
   let getDetailsSpy;
 
   configureTestBed({
-    imports: [HttpClientModule, TabsModule.forRoot(), PerformanceCounterModule, SharedModule],
+    imports: [
+      HttpClientTestingModule,
+      TabsModule.forRoot(),
+      PerformanceCounterModule,
+      SharedModule
+    ],
     declarations: [OsdDetailsComponent, OsdPerformanceHistogramComponent]
   });
 

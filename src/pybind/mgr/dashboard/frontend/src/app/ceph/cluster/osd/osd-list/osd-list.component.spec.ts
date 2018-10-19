@@ -1,4 +1,4 @@
-import { HttpClientModule } from '@angular/common/http';
+import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
@@ -27,7 +27,7 @@ describe('OsdListComponent', () => {
 
   configureTestBed({
     imports: [
-      HttpClientModule,
+      HttpClientTestingModule,
       PerformanceCounterModule,
       TabsModule.forRoot(),
       SharedModule,
