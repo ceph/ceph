@@ -203,6 +203,10 @@ we need to use the ngx-translator extractor to parse the typescript files.
 When the command ran successfully it should have created or updated the file src/locale/messages.xlf. Now, you can use
 this file to add a new translation to the project or update an existing languages.
 
+A new language should be placed in ``src/locale/<country-code>/messages.xlf``. For example the path for german would be
+``src/locale/de/messages.xlf``. Furthermore the language must be defined in the file
+``language-selector-supported-languages.enum``.
+
 Backend Development
 -------------------
 
