@@ -630,6 +630,9 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
         return self._ceph_get_mgr_id()
 
+    def get_option(self, key):
+        return self._ceph_get_option(key)
+
     def _validate_option(self, key):
         """
         Helper: don't allow get/set config callers to 
