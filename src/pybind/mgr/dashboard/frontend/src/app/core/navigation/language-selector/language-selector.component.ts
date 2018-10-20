@@ -12,7 +12,6 @@ export class LanguageSelectorComponent implements OnInit {
   selectedLanguage: string;
 
   ngOnInit() {
-    console.log(SupportedLanguages.de);
     this.selectedLanguage = this.localStorage.getItem('lang') || 'en-US';
   }
 
