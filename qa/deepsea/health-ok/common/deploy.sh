@@ -161,13 +161,13 @@ function deploy_ceph {
         run_stage_0 "$CLI"
         _zypper_ps
         salt_api_test
-        test -n "$RGW" -a -n "$SSL" && rgw_ssl_init
     fi
     if [ "$TEUTHOLOGY" ] ; then
         echo "Development work in progress: finishing early!"
         exit 0
     fi
     if [ "$START_STAGE" -le "1" ] ; then
+        test -n "$RGW" -a -n "$SSL" && rgw_ssl_init
         run_stage_1 "$CLI"
         policy_cfg_base
         policy_cfg_mon_flex
