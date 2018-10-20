@@ -1853,8 +1853,7 @@ int heap(CephContext& cct, const cmdmap_t& cmdmap, Formatter& f, std::ostream& o
  
 }} // namespace ceph::osd_cmds
 
-int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
-	      uuid_d fsid, int whoami)
+int OSD::mkfs(CephContext *cct, ObjectStore *store, uuid_d fsid, int whoami)
 {
   int ret;
 
