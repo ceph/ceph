@@ -1,4 +1,4 @@
 tasks:
   - deepsea:
-      deploy:
-        health-ok:
+      install: package
+  - deepsea_deploy:

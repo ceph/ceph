@@ -1,0 +1,4 @@
+roles:
+- [client.salt_master, mon.a, mgr.x]
+- [igw.0, rgw.5]
+- [client.0]
