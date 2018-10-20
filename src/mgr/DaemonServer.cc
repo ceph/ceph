@@ -2224,9 +2224,12 @@ void DaemonServer::adjust_pgs()
 {
   dout(20) << dendl;
   unsigned max = std::max<int64_t>(1, g_conf()->mon_osd_max_creating_pgs);
+  double max_misplaced = g_conf().get_val<double>("target_max_misplaced_ratio");
+  bool aggro = g_conf().get_val<bool>("mgr_debug_aggressive_pg_num_changes");
 
   map<string,unsigned> pg_num_to_set;
   map<string,unsigned> pgp_num_to_set;
+  set<pg_t> upmaps_to_clear;
   cluster_state.with_pgmap([&](const PGMap& pg_map) {
       unsigned creating_or_unknown = 0;
       for (auto& i : pg_map.num_pg_by_state) {
@@ -2244,13 +2247,22 @@ void DaemonServer::adjust_pgs()
 	       << " max_creating " << max
                << " left " << left
                << dendl;
+
+      // FIXME: These checks are fundamentally racy given that adjust_pgs()
+      // can run more frequently than we get updated pg stats from OSDs.  We
+      // may make multiple adjustments with stale informaiton.
+      double misplaced_ratio, degraded_ratio;
+      double inactive_pgs_ratio, unknown_pgs_ratio;
+      pg_map.get_recovery_stats(&misplaced_ratio, &degraded_ratio,
+				&inactive_pgs_ratio, &unknown_pgs_ratio);
+      dout(20) << "misplaced_ratio " << misplaced_ratio
+	       << " degraded_ratio " << degraded_ratio
+	       << " inactive_pgs_ratio " << inactive_pgs_ratio
+	       << " unknown_pgs_ratio " << unknown_pgs_ratio
+	       << "; target_max_misplaced_ratio " << max_misplaced
+	       << dendl;
+
       cluster_state.with_osdmap([&](const OSDMap& osdmap) {
-	  if (pg_map.last_osdmap_epoch != osdmap.get_epoch()) {
-	    // do nothing if maps aren't in sync
-	    dout(10) << "last_osdmap_epoch " << pg_map.last_osdmap_epoch
-		     << " osdmap " << osdmap.get_epoch() << dendl;
-	    //return;
-	  }
 	  for (auto& i : osdmap.get_pools()) {
 	    const pg_pool_t& p = i.second;
 
@@ -2262,27 +2274,53 @@ void DaemonServer::adjust_pgs()
 		       << dendl;
 	      if (p.has_flag(pg_pool_t::FLAG_CREATING)) {
 		dout(10) << "pool " << i.first
-			 << " target " << p.get_pg_num_target()
+			 << " pg_num_target " << p.get_pg_num_target()
 			 << " pg_num " << p.get_pg_num()
 			 << " - still creating initial pgs"
 			 << dendl;
-	      } else if (p.get_pg_num() != p.get_pg_num_pending()) {
-		dout(10) << "pool " << i.first
-			 << " target " << p.get_pg_num_target()
-			 << " pg_num " << p.get_pg_num()
-			 << " - pg_num_pending != pg_num, waiting"
-			 << dendl;
-		// FIXME: we might consider allowing pg_num increases without
-		// waiting for the previously planned merge to complete.
 	      } else if (p.get_pg_num_target() < p.get_pg_num()) {
 		// pg_num decrease (merge)
 		pg_t merge_source(p.get_pg_num() - 1, i.first);
 		pg_t merge_target = merge_source.get_parent();
 		bool ok = true;
-		auto q = pg_map.pg_stat.find(merge_source);
-		if (q == pg_map.pg_stat.end()) {
+
+		if (osdmap.have_pg_upmaps(merge_target)) {
 		  dout(10) << "pool " << i.first
-			   << " target " << p.get_pg_num_target()
+			   << " pg_num_target " << p.get_pg_num_target()
+			   << " pg_num " << p.get_pg_num()
+			   << " - merge target " << merge_target
+			   << " has upmap" << dendl;
+		  upmaps_to_clear.insert(merge_target);
+		  ok = false;
+		} else if (osdmap.have_pg_upmaps(merge_source)) {
+		  dout(10) << "pool " << i.first
+			   << " pg_num_target " << p.get_pg_num_target()
+			   << " pg_num " << p.get_pg_num()
+			   << " - merge source " << merge_source
+			   << " has upmap" << dendl;
+		  upmaps_to_clear.insert(merge_source);
+		  ok = false;
+		}
+
+		auto q = pg_map.pg_stat.find(merge_source);
+		if (p.get_pg_num() != p.get_pg_num_pending()) {
+		  dout(10) << "pool " << i.first
+			   << " pg_num_target " << p.get_pg_num_target()
+			   << " pg_num " << p.get_pg_num()
+			   << " - decrease and pg_num_pending != pg_num, waiting"
+			   << dendl;
+		  ok = false;
+		} else if (p.get_pg_num() == p.get_pgp_num()) {
+		  dout(10) << "pool " << i.first
+			   << " pg_num_target " << p.get_pg_num_target()
+			   << " pg_num " << p.get_pg_num()
+			   << " - decrease blocked by pgp_num "
+			   << p.get_pgp_num()
+			   << dendl;
+		  ok = false;
+		} else if (q == pg_map.pg_stat.end()) {
+		  dout(10) << "pool " << i.first
+			   << " pg_num_target " << p.get_pg_num_target()
 			   << " pg_num " << p.get_pg_num()
 			   << " - no state for " << merge_source
 			   << " (merge source)"
@@ -2291,17 +2329,25 @@ void DaemonServer::adjust_pgs()
 		} else if (!(q->second.state & (PG_STATE_ACTIVE |
 						PG_STATE_CLEAN))) {
 		  dout(10) << "pool " << i.first
-			   << " target " << p.get_pg_num_target()
+			   << " pg_num_target " << p.get_pg_num_target()
 			   << " pg_num " << p.get_pg_num()
 			   << " - merge source " << merge_source
 			   << " not clean (" << pg_state_string(q->second.state)
 			   << ")" << dendl;
 		  ok = false;
+		} else if (q->second.state & PG_STATE_REMAPPED) {
+		  dout(10) << "pool " << i.first
+			   << " pg_num_target " << p.get_pg_num_target()
+			   << " pg_num " << p.get_pg_num()
+			   << " - merge source " << merge_source
+			   << " remapped" << dendl;
+		  ok = false;
 		}
+
 		q = pg_map.pg_stat.find(merge_target);
 		if (q == pg_map.pg_stat.end()) {
 		  dout(10) << "pool " << i.first
-			   << " target " << p.get_pg_num_target()
+			   << " pg_num_target " << p.get_pg_num_target()
 			   << " pg_num " << p.get_pg_num()
 			   << " - no state for " << merge_target
 			   << " (merge target)"
@@ -2310,17 +2356,24 @@ void DaemonServer::adjust_pgs()
 		} else if (!(q->second.state & (PG_STATE_ACTIVE |
 						PG_STATE_CLEAN))) {
 		  dout(10) << "pool " << i.first
-			   << " target " << p.get_pg_num_target()
+			   << " pg_num_target " << p.get_pg_num_target()
 			   << " pg_num " << p.get_pg_num()
 			   << " - merge target " << merge_target
 			   << " not clean (" << pg_state_string(q->second.state)
 			   << ")" << dendl;
 		  ok = false;
+		} else if (q->second.state & PG_STATE_REMAPPED) {
+		  dout(10) << "pool " << i.first
+			   << " pg_num_target " << p.get_pg_num_target()
+			   << " pg_num " << p.get_pg_num()
+			   << " - merge target " << merge_target
+			   << " remapped" << dendl;
+		  ok = false;
 		}
 		if (ok) {
 		  unsigned target = p.get_pg_num() - 1;
 		  dout(10) << "pool " << i.first
-			   << " target " << p.get_pg_num_target()
+			   << " pg_num_target " << p.get_pg_num_target()
 			   << " pg_num " << p.get_pg_num()
 			   << " -> " << target
 			   << " (merging " << merge_source
@@ -2347,7 +2400,7 @@ void DaemonServer::adjust_pgs()
 		}
 		if (!active) {
 		  dout(10) << "pool " << i.first
-			   << " target " << p.get_pg_num_target()
+			   << " pg_num_target " << p.get_pg_num_target()
 			   << " pg_num " << p.get_pg_num()
 			   << " - not all pgs active"
 			   << dendl;
@@ -2358,7 +2411,7 @@ void DaemonServer::adjust_pgs()
 		  unsigned target = p.get_pg_num() + add;
 		  left -= add;
 		  dout(10) << "pool " << i.first
-			   << " target " << p.get_pg_num_target()
+			   << " pg_num_target " << p.get_pg_num_target()
 			   << " pg_num " << p.get_pg_num()
 			   << " -> " << target << dendl;
 		  pg_num_to_set[osdmap.get_pool_name(i.first)] = target;
@@ -2370,13 +2423,65 @@ void DaemonServer::adjust_pgs()
 	    unsigned target = std::min(p.get_pg_num_pending(),
 				       p.get_pgp_num_target());
 	    if (target != p.get_pgp_num()) {
-	      // FIXME: we should throttle this to limit mispalced objects, like
-	      // we do in the balancer module.
-	      dout(10) << "pool " << i.first
-		       << " pgp target " << p.get_pgp_num_target()
+	      dout(20) << "pool " << i.first
+		       << " pgp_num_target " << p.get_pgp_num_target()
 		       << " pgp_num " << p.get_pgp_num()
 		       << " -> " << target << dendl;
-	      pgp_num_to_set[osdmap.get_pool_name(i.first)] = target;
+	      if (target > p.get_pgp_num() &&
+		  p.get_pgp_num() == p.get_pg_num()) {
+		dout(10) << "pool " << i.first
+			 << " pgp_num_target " << p.get_pgp_num_target()
+			 << " pgp_num " << p.get_pgp_num()
+			 << " - increase blocked by pg_num " << p.get_pg_num()
+			 << dendl;
+	      } else if (!aggro && (inactive_pgs_ratio > 0 ||
+				    degraded_ratio > 0 ||
+				    unknown_pgs_ratio > 0)) {
+		dout(10) << "pool " << i.first
+			 << " pgp_num_target " << p.get_pgp_num_target()
+			 << " pgp_num " << p.get_pgp_num()
+			 << " - inactive|degraded|unknown pgs, deferring pgp_num"
+			 << " update" << dendl;
+	      } else if (!aggro && (misplaced_ratio > max_misplaced)) {
+		dout(10) << "pool " << i.first
+			 << " pgp_num_target " << p.get_pgp_num_target()
+			 << " pgp_num " << p.get_pgp_num()
+			 << " - misplaced_ratio " << misplaced_ratio
+			 << " > max " << max_misplaced
+			 << ", deferring pgp_num update" << dendl;
+	      } else {
+		// NOTE: this calculation assumes objects are
+		// basically uniformly distributed across all PGs
+		// (regardless of pool), which is probably not
+		// perfectly correct, but it's a start.  make no
+		// single adjustment that's more than half of the
+		// max_misplaced, to somewhat limit the magnitude of
+		// our potential error here.
+		int next;
+		if (aggro) {
+		  next = target;
+		} else {
+		  double room =
+		    std::min<double>(max_misplaced - misplaced_ratio,
+				     misplaced_ratio / 2.0);
+		  unsigned estmax = std::max<unsigned>(
+		    (double)p.get_pg_num() * room, 1u);
+		  int delta = target - p.get_pgp_num();
+		  next = p.get_pgp_num();
+		  if (delta < 0) {
+		    next += std::max<int>(-estmax, delta);
+		  } else {
+		    next += std::min<int>(estmax, delta);
+		  }
+		  dout(20) << " room " << room << " estmax " << estmax
+			   << " delta " << delta << " next " << next << dendl;
+		}
+		dout(10) << "pool " << i.first
+			 << " pgp_num_target " << p.get_pgp_num_target()
+			 << " pgp_num " << p.get_pgp_num()
+			 << " -> " << next << dendl;
+		pgp_num_to_set[osdmap.get_pool_name(i.first)] = next;
+	      }
 	    }
 	    if (left == 0) {
 	      return;
@@ -2403,6 +2508,20 @@ void DaemonServer::adjust_pgs()
       "\"val\": \"" + stringify(i.second) + "\""
       "}";
     monc->start_mon_command({cmd}, {}, nullptr, nullptr, nullptr);
+  }
+  for (auto pg : upmaps_to_clear) {
+    const string cmd =
+      "{"
+      "\"prefix\": \"osd rm-pg-upmap\", "
+      "\"pgid\": \"" + stringify(pg) + "\""
+      "}";
+    monc->start_mon_command({cmd}, {}, nullptr, nullptr, nullptr);
+    const string cmd2 =
+      "{"
+      "\"prefix\": \"osd rm-pg-upmap-items\", "
+      "\"pgid\": \"" + stringify(pg) + "\"" +
+      "}";
+    monc->start_mon_command({cmd2}, {}, nullptr, nullptr, nullptr);
   }
 }
 

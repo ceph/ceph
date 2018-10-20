@@ -6918,6 +6918,11 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       return -EBUSY;
     }
     if (n > (int)p.get_pg_num()) {
+      if (p.get_pg_num() != p.get_pg_num_pending()) {
+	// force pre-nautilus clients to resend their ops, since they
+	// don't understand pg_num_pending changes form a new interval
+	p.last_force_op_resend_prenautilus = pending_inc.epoch;
+      }
       p.set_pg_num(n);
     } else {
       if (osdmap.require_osd_release < CEPH_RELEASE_NAUTILUS) {
@@ -6987,12 +6992,14 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
 	return -EPERM;
       }
     }
-    // set target; mgr will adjust pg_num_actual later
-    p.set_pg_num_target(n);
-    // adjust pgp_num_target down too (as needed)
-    if (p.get_pgp_num_target() > n) {
+    // set targets; mgr will adjust pg_num_actual and pgp_num later.
+    // make pgp_num track pg_num if it already matches.  if it is set
+    // differently, leave it different and let the user control it
+    // manually.
+    if (p.get_pg_num_target() == p.get_pgp_num_target()) {
       p.set_pgp_num_target(n);
     }
+    p.set_pg_num_target(n);
   } else if (var == "pgp_num_actual") {
     if (p.has_flag(pg_pool_t::FLAG_NOPGCHANGE)) {
       ss << "pool pgp_num change is disabled; you must unset nopgchange flag for the pool first";

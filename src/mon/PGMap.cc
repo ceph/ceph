@@ -392,6 +392,36 @@ void PGMapDigest::print_oneline_summary(Formatter *f, ostream *out) const
     *out << "; " << ssr.str() << " recovering";
 }
 
+void PGMapDigest::get_recovery_stats(
+    double *misplaced_ratio,
+    double *degraded_ratio,
+    double *inactive_pgs_ratio,
+    double *unknown_pgs_ratio) const
+{
+  if (pg_sum.stats.sum.num_objects_degraded &&
+      pg_sum.stats.sum.num_object_copies > 0) {
+    *degraded_ratio = (double)pg_sum.stats.sum.num_objects_degraded /
+      (double)pg_sum.stats.sum.num_object_copies;
+  } else {
+    *degraded_ratio = 0;
+  }
+  if (pg_sum.stats.sum.num_objects_misplaced &&
+      pg_sum.stats.sum.num_object_copies > 0) {
+    *misplaced_ratio = (double)pg_sum.stats.sum.num_objects_misplaced /
+      (double)pg_sum.stats.sum.num_object_copies;
+  } else {
+    *misplaced_ratio = 0;
+  }
+  if (num_pg > 0) {
+    int num_pg_inactive = num_pg - num_pg_active - num_pg_unknown;
+    *inactive_pgs_ratio = (double)num_pg_inactive / (double)num_pg;
+    *unknown_pgs_ratio = (double)num_pg_unknown / (double)num_pg;
+ } else {
+    *inactive_pgs_ratio = 0;
+    *unknown_pgs_ratio = 0;
+  }
+}
+
 void PGMapDigest::recovery_summary(Formatter *f, list<string> *psl,
                              const pool_stat_t& pool_sum) const
 {
