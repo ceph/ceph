@@ -934,6 +934,7 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
             if self.get_provider() != 'rackspace':
                 self.create_security_group()
             self.create_cluster()
+            self.reminders()
 
     def setup_logs(self):
         """
