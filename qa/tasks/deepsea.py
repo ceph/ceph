@@ -15,6 +15,7 @@ from util import check_config_key, copy_directory_recursively, get_remote_for_ro
 
 log = logging.getLogger(__name__)
 health_ok_cmd = "health-ok.sh --teuthology"
+cluster_roles = ['mon', 'mgr', 'osd', 'mds', 'rgw', 'igw', 'ganesha']
 
 class DeepSea(Task):
     """
@@ -63,7 +64,7 @@ class DeepSea(Task):
         self.master_remote = self.sm.master_remote
         #self.log.debug("ctx.config {}".format(ctx.config))
         self.roles = ctx.config['roles']
-        self._introspect_nodes()
+        self._introspect_roles()
         if self.config['deploy']:
             if not isinstance(self.config['deploy'], dict):
                 raise ConfigError("deepsea: deploy config param takes a dict")
@@ -280,25 +281,94 @@ class DeepSea(Task):
         self.sm.cat_salt_master_conf()
         self.sm.cat_salt_minion_confs()
 
-    def _introspect_nodes(self):
+    def _introspect_roles(self):
         """
-        Sets self.role_nodes, self.salt_nodes, self.cluster_nodes,
-        self.client_nodes. Tthe latter are understood to be client-ONLY nodes,
-        and:
-        self.role_nodes == self.salt_nodes == (self.cluster_nodes + self.client_nodes)
+        Sets:
+
+            self.role_nodes,
+            self.cluster_nodes, and
+            self.client_nodes.
+
+        The latter are understood to be client-ONLY nodes, and:
+
+        self.role_nodes == (self.cluster_nodes + self.client_nodes)
+
+        Also sets:
+
+            self.role_remotes,
+            self.cluster_remotes, and
+            self.client_remotes.
+
+        These are dicts of teuthology "remote" objects, which look like this:
+
+            { remote1_name: remote1_obj, ..., remoten_name: remoten_obj }
+
+        Finally, sets:
+
+            self.role_lookup_table
+
+        which will look something like this:
+
+            {
+                "osd": { "osd.0": osd0remotename, ..., "osd.n": osdnremotename },
+                "mon": { "mon.a": monaremotename, ..., "mon.n": monnremotename },
+                ...
+            }
+
+        and
+
+            self.remote_lookup_table
+
+        which looks like this:
+
+            {
+                remote0name: [ "osd.0", "client.0" ],
+                ...
+                remotenname: [ remotenrole0, ..., remotenrole99 ],
+            }
+
+        (In other words, self.remote_lookup_table is just like the roles
+        stanza, except the role lists are keyed by remote name.)
         """
         self.role_nodes = len(self.roles)
-        self.salt_nodes = self.sm.ping_minions()
-        if self.role_nodes == self.salt_nodes:
-            self.log.info("Role nodes ({}) is equal to Salt nodes ({})"
-                          .format(self.role_nodes, self.salt_nodes))
-        else:
-            raise ConfigError("deepsea: Role nodes ({}) is NOT equal to Salt nodes ({})"
-                              .format(self.role_nodes, self.salt_nodes))
-        # FIXME: set self.cluster_nodes
-        # FIXME: set self.client_nodes
-        log.debug("role_nodes {}, salt_nodes {}"
-                  .format(self.role_nodes, self.salt_nodes))
+        self.role_remotes = {}
+        self.cluster_remotes = {}
+        self.role_lookup_table = {}
+        self.remote_lookup_table = {}
+        for node_roles_list in self.roles:
+            remote = get_remote_for_role(self.ctx, node_roles_list[0])
+            self.log.debug("Considering remote name {}, hostname {}"
+                           .format(remote.name, remote.hostname))
+            self.remote_lookup_table[remote.hostname] = node_roles_list
+            # inner loop: roles (something like "osd.1" or "c2.mon.a")
+            for role in node_roles_list:
+                # FIXME: support multiple clusters as used in, e.g., rgw/multisite suite
+                role_arr = role.split('.')
+                if len(role_arr) != 2:
+                    raise ConfigError("deepsea: unsupported role ->{}<- encountered!"
+                                      .format(role))
+                (role_type, role_idx) = role_arr
+                remote = get_remote_for_role(self.ctx, role)
+                self.role_remotes[remote.hostname] = remote
+                if role_type not in self.role_lookup_table.keys():
+                    self.role_lookup_table[role_type] = {}
+                self.role_lookup_table[role_type][role] = remote.hostname
+                if role_type in cluster_roles:
+                    self.cluster_remotes[remote.hostname] = remote
+        self.cluster_nodes = len(self.cluster_remotes)
+        self.client_remotes = self.role_remotes
+        for remote_name, remote_obj in self.cluster_remotes.iteritems():
+            del(self.client_remotes[remote_name])
+        self.client_nodes = len(self.client_remotes)
+        self.log.info("ROLE INTROSPECTION REPORT")
+        self.log.info("self.role_nodes == {}".format(self.role_nodes))
+        self.log.info("self.cluster_nodes == {}".format(self.cluster_nodes))
+        self.log.info("self.client_remotes == {}".format(self.client_remotes))
+        self.log.info("self.role_remotes == {}".format(self.role_remotes))
+        self.log.info("self.cluster_remotes == {}".format(self.cluster_remotes))
+        self.log.info("self.client_nodes == {}".format(self.client_nodes))
+        self.log.info("self.role_lookup_table == {}".format(self.role_lookup_table))
+        self.log.info("self.remote_lookup_table == {}".format(self.remote_lookup_table))
 
     def _check_config_deploy_health_ok(self, deploy):
         check_config_key(deploy, 'health-ok', None)
