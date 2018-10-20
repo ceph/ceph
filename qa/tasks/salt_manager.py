@@ -145,6 +145,18 @@ class SaltManager(object):
     def master_role(self):
         return master_role
 
+    def master_rpm_q(self, pkg_name):
+        """Run rpm -q on the Salt Master node"""
+        # FIXME: should possibly take a list of pkg_names
+        installed = True
+        try:
+            self.master_remote.run(args=[
+                'rpm', '-q', pkg_name
+            ])
+        except CommandFailedError:
+            installed = False
+        return installed
+
     def ping_minion(self, mid):
         """Pings a minion; raises exception if it doesn't respond"""
         self.__ping(['sudo', 'salt', mid, 'test.ping'], 1)
