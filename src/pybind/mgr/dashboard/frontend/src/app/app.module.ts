@@ -48,7 +48,7 @@ export class CustomOption extends ToastOptions {
       multi: true
     },
     {
-      provide: LOCALE_ID, useValue: '' // TODO LANG somehow
+      provide: LOCALE_ID, useValue: window.localStorage.getItem('lang') || 'en-US'
     },
     {
       provide: ToastOptions,

@@ -1,21 +1,18 @@
-import { enableProdMode, TRANSLATIONS, TRANSLATIONS_FORMAT } from '@angular/core';
+import { enableProdMode } from '@angular/core';
 import { platformBrowserDynamic } from '@angular/platform-browser-dynamic';
 
 import { AppModule } from './app/app.module';
 import { environment } from './environments/environment';
 
+import { getTranslationProviders } from './app/providers/i18n.provider';
+
 if (environment.production) {
   enableProdMode();
 }
 
-// import the appropriate language translation file as a string constant
-const translations = ""; // TODO import somehow
+const locale = window.localStorage.getItem('lang');
 
-platformBrowserDynamic()
-  .bootstrapModule(AppModule, {
-    providers: [
-      {provide: TRANSLATIONS, useValue: translations},
-      {provide: TRANSLATIONS_FORMAT, useValue: 'xlf'}
-    ]
-  })
-  .catch((err) => console.log(err));
+getTranslationProviders(locale).then(providers => {
+  platformBrowserDynamic().bootstrapModule(AppModule, {providers})
+    .catch(err => console.log(err));
+});
