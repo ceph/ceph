@@ -79,7 +79,7 @@ class SaltManager(object):
             log.warning("{} not found on {}".format(filename, remote.name))
 
     def __ping(self, ping_cmd, expected):
-        with safe_while(sleep=15, tries=20,
+        with safe_while(sleep=15, tries=50,
                         action=ping_cmd) as proceed:
             while proceed():
                 output = StringIO()
@@ -156,6 +156,18 @@ class SaltManager(object):
         except CommandFailedError:
             installed = False
         return installed
+
+    def all_minions_zypper_ps(self):
+        """Run "zypper ps -s" on all nodes"""
+        self.master_remote.run(args=[
+            'sudo',
+            'salt',
+            '*',
+            'cmd.run',
+            'zypper ps -s',
+            run.Raw('||'),
+            'true',
+            ])
 
     def ping_minion(self, mid):
         """Pings a minion; raises exception if it doesn't respond"""

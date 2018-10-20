@@ -170,23 +170,21 @@ class Salt(Task):
                 '/etc/salt/minion',
             ])
 
-    def __provision_minions(self):
+    def setup(self):
+        super(Salt, self).setup()
+        log.debug("beginning of Salt task setup method")
         self.__generate_minion_keys()
         self.__preseed_minions()
         self.__set_minion_master()
         self.__set_debug_log_level()
         self.sm.start_master()
-
-    def setup(self):
-        super(Salt, self).setup()
-        log.debug("beginning of Salt task setup method")
-        self.__provision_minions()
+        self.sm.start_minions()
+        self.sm.restart_master()
         log.debug("end of Salt task setup method")
 
     def begin(self):
         super(Salt, self).begin()
         log.debug("beginning of Salt task begin method")
-        self.sm.start_minions()
         self.sm.check_salt_daemons()
         self.sm.ping_minions()
         log.debug("end of Salt task begin method")
