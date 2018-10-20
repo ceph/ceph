@@ -28,8 +28,8 @@ public:
 
   void open(Context *on_finish);
 
-  // ##
-  void open();
+  void create();
+  int open_file();
   bool try_open();
   void close(Context *on_finish);
   void remove(Context *on_finish);
@@ -52,14 +52,14 @@ public:
 
   int remove();
 
-  // ##
   int write_object_to_file(ceph::bufferlist read_buf, uint64_t object_len);
   int read_object_from_file(ceph::bufferlist* read_buf, uint64_t object_off, uint64_t object_len);
+  uint64_t get_file_size();
 
 private:
   CephContext *cct;
   std::string m_name;
-  int m_fd = -1;
+  int m_fd;
 
   int write(uint64_t offset, const ceph::bufferlist &bl, bool fdatasync);
   int read(uint64_t offset, uint64_t length, ceph::bufferlist *bl);

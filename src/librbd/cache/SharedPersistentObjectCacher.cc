@@ -41,7 +41,7 @@ int SharedPersistentObjectCacher<I>::read_object(std::string oid, ceph::bufferli
 
   //TODO(): make a cache for cachefile fd
   SyncFile* target_cache_file = new SyncFile(cct, cache_file_name);
-  target_cache_file->open();
+  target_cache_file->open_file();
 
   int ret = target_cache_file->read_object_from_file(read_data, offset, length);
   if (ret < 0) {

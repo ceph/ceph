@@ -22,7 +22,7 @@ namespace librbd {
 namespace cache {
 
 SyncFile::SyncFile(CephContext *cct, const std::string &name)
-  : cct(cct) {
+  : cct(cct), m_fd(-1) {
   m_name = cct->_conf.get_val<std::string>("rbd_shared_cache_path") + "/rbd_cache." + name;
   ldout(cct, 20) << "file path=" << m_name << dendl;
 }
@@ -52,7 +52,15 @@ void SyncFile::open(Context *on_finish) {
   on_finish->complete(0);
 }
 
-void SyncFile::open() {
+int SyncFile::open_file() {
+  m_fd = ::open(m_name.c_str(), O_RDONLY);
+  if(m_fd == -1) {
+    lderr(cct) << "open fails : " << std::strerror(errno) << dendl;
+  }
+  return m_fd;
+}
+
+void SyncFile::create() {
   while (true) 
   {
     m_fd = ::open(m_name.c_str(), O_CREAT | O_NOATIME | O_RDWR | O_SYNC,
@@ -109,6 +117,21 @@ int SyncFile::read_object_from_file(ceph::bufferlist* read_buf, uint64_t object_
 
   return ret;
 }
+
+uint64_t SyncFile::get_file_size() {
+  struct stat buf;
+  if(m_fd == -1) {
+    lderr(cct)<<"get_file_size fail: file is closed status." << dendl;
+    assert(0);
+  }
+  int ret = fstat(m_fd, &buf);
+  if(ret == -1) {
+    lderr(cct)<<"fstat fail:" << std::strerror(errno) << dendl;
+    assert(0);
+  }
+  return buf.st_size;
+}
+
 
 } // namespace cache
 } // namespace librbd
