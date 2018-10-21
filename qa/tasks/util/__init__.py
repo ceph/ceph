@@ -1,4 +1,5 @@
 from teuthology import misc
+from teuthology.orchestra import run
 
 def check_config_key(conf_dict, keyname, default_value):
     """
@@ -44,3 +45,20 @@ def copy_directory_recursively(from_path, to_remote, to_path=None):
     misc.sh("scp -r -v {from_path} {host}:{to_path}".format(
             from_path=from_path, host=to_remote.name, to_path=to_path))
 
+def sudo_append_to_file(remote, path, data):
+    """
+    Append data to a remote file
+
+    :param remote: Remote site.
+    :param path: Path on the remote being written to.
+    :param data: Data to be written.
+    """
+    remote.run(
+        args=[
+            'sudo',
+            'sh',
+            '-c',
+            'cat >> ' + path,
+        ],
+        stdin=data,
+    )

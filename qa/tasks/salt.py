@@ -186,6 +186,8 @@ class Salt(Task):
         super(Salt, self).begin()
         log.debug("beginning of Salt task begin method")
         self.sm.check_salt_daemons()
+        self.sm.cat_salt_master_conf()
+        self.sm.cat_salt_minion_confs()
         self.sm.ping_minions()
         log.debug("end of Salt task begin method")
 
