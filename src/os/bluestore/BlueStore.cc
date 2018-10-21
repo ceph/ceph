@@ -11261,6 +11261,8 @@ void BlueStore::_choose_write_options(
 
   dout(20) << __func__ << " prefer csum_order " << wctx->csum_order
            << " target_blob_size 0x" << std::hex << wctx->target_blob_size
+	   << " compress=" << (int)wctx->compress
+	   << " buffered=" << (int)wctx->buffered
            << std::dec << dendl;
 }
 
