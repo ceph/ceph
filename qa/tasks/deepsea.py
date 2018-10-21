@@ -4,11 +4,10 @@ Task that installs DeepSea
 import logging
 
 from salt_manager import SaltManager
-from teuthology.exceptions import (CommandFailedError, ConfigError)
+from teuthology.exceptions import ConfigError
 from teuthology.orchestra import run
-from teuthology.misc import sh
 from teuthology.task import Task
-from util import check_config_key, copy_directory_recursively, get_remote_for_role
+from util import check_config_key
 
 log = logging.getLogger(__name__)
 
@@ -17,7 +16,8 @@ class DeepSea(Task):
     """
     Install DeepSea on the Salt Master node.
 
-    Assumes a Salt cluster is already running (use the Salt task to achieve this).
+    Assumes a Salt cluster is already running (use the Salt task to achieve
+    this).
 
     This task understands the following config keys:
 
@@ -41,13 +41,17 @@ class DeepSea(Task):
 
     def __init__(self, ctx, config):
         super(DeepSea, self).__init__(ctx, config)
-        check_config_key(self.config, 'repo', 'https://github.com/SUSE/DeepSea.git')
+        check_config_key(
+                self.config,
+                'repo',
+                'https://github.com/SUSE/DeepSea.git'
+            )
         check_config_key(self.config, 'branch', 'master')
         install_conf = check_config_key(self.config, 'install', 'source')
         self._determine_install_method(install_conf)
         self.sm = SaltManager(self.ctx, self.config)
         self.master_remote = self.sm.master_remote
-        #self.log.debug("ctx.config {}".format(ctx.config))
+#       self.log.debug("ctx.config {}".format(ctx.config))
         log.debug("Munged config is {}".format(self.config))
 
     def _determine_install_method(self, conf_val):
@@ -60,8 +64,10 @@ class DeepSea(Task):
         if conf_val in ['source', 'src', 'package', 'pkg']:
             self._install_deepsea = install_lookup[conf_val]
         else:
-            raise ConfigError("deepsea: unrecognized install config value ->{}<-"
-                              .format(conf_val))
+            raise ConfigError(
+                    "deepsea: unrecognized install config value ->{}<-"
+                    .format(conf_val)
+                )
 
     def _master_whoami(self):
         """Demonstrate that remote.run() does not run stuff as root"""
@@ -115,13 +121,16 @@ class DeepSea(Task):
             ])
 
         self.log.info("installing deepsea dependencies...")
-        self.master_remote.run(args = [
+        rpmspec_cmd = (
+                '$(rpmspec --requires -q DeepSea/deepsea.spec.in 2>/dev/null)'
+            )
+        self.master_remote.run(args=[
             'sudo',
             'zypper',
             '--non-interactive',
             'install',
             '--no-recommends',
-            run.Raw('$(rpmspec --requires -q DeepSea/deepsea.spec.in 2>/dev/null)')
+            run.Raw(rpmspec_cmd)
             ])
 
     def _install_deepsea_using_zypper(self):
@@ -153,29 +162,29 @@ class DeepSea(Task):
         # in its teardown phase
         for _remote in self.ctx.cluster.remotes.iterkeys():
             self.log.info("stopping OSD services on {}"
-                .format(_remote.hostname))
+                          .format(_remote.hostname))
             _remote.run(args=[
                 'sudo', 'sh', '-c',
                 'systemctl stop ceph-osd.target ; sleep 10'
                 ])
             self.log.info("unmounting OSD partitions on {}"
-                .format(_remote.hostname))
-            # bluestore XFS partition is vd?1 - unmount up to five OSDs
-            _remote.run(args=[
-                'sudo', 'sh', '-c',
-                'for f in vdb1 vdc1 vdd1 vde1 vdf1 ; do test -b /dev/$f && umount /dev/$f || true ; done'
-                ])
-            # filestore XFS partition is vd?2 - unmount up to five OSDs
-            _remote.run(args=[
-                'sudo', 'sh', '-c',
-                'for f in vdb2 vdc2 vdd2 vde2 vdf2; do test -b /dev/$f && umount /dev/$f || true ; done'
-                ])
+                          .format(_remote.hostname))
+            # unmount up to five OSDs
+            # bluestore XFS partition is vd?1
+            # filestore XFS partition is vd?2
+            for_loop = (
+                    'for f in vdb{pn} vdc{pn} vdd{pn} vde{pn} vdf{pn} ; '
+                    'do test -b /dev/$f && umount /dev/$f || true ; '
+                    'done'
+                )
+            for pn in [1, 2]:
+                _remote.run(args=['sudo', 'sh', '-c', for_loop.format(pn=1)])
 
     def setup(self):
         super(DeepSea, self).setup()
-        #log.debug("beginning of DeepSea task setup method...")
+#       log.debug("beginning of DeepSea task setup method...")
         pass
-        #log.debug("end of DeepSea task setup...")
+#       log.debug("end of DeepSea task setup...")
 
     def begin(self):
         super(DeepSea, self).begin()
@@ -185,9 +194,9 @@ class DeepSea(Task):
 
     def end(self):
         super(DeepSea, self).end()
-        #log.debug("beginning of DeepSea task end method...")
+#       log.debug("beginning of DeepSea task end method...")
         pass
-        #log.debug("end of DeepSea task end method...")
+#       log.debug("end of DeepSea task end method...")
 
     def teardown(self):
         super(DeepSea, self).teardown()
