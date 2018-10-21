@@ -81,6 +81,7 @@ class Module(MgrModule):
         keys = []
         for key in six.iterkeys(self.get_store_prefix('crash/')):
             keys.append(key.replace('crash/', ''))
+        keys.sort()
         return 0, '\n'.join(keys), ''
 
     def do_rm(self, cmd, inbuf):
