@@ -48,13 +48,12 @@ namespace ceph {
     ostringstream tss;
     tss << ceph_clock_now();
 
-    char buf[8096];
-    snprintf(buf, sizeof(buf),
+    snprintf(g_assert_msg, sizeof(g_assert_msg),
 	     "%s: In function '%s' thread %llx time %s\n"
 	     "%s: %d: FAILED ceph_assert(%s)\n",
 	     file, func, (unsigned long long)pthread_self(), tss.str().c_str(),
 	     file, line, assertion);
-    dout_emergency(buf);
+    dout_emergency(g_assert_msg);
 
     // TODO: get rid of this memory allocation.
     ostringstream oss;
@@ -62,7 +61,7 @@ namespace ceph {
     dout_emergency(oss.str());
 
     if (g_assert_context) {
-      lderr(g_assert_context) << buf << std::endl;
+      lderr(g_assert_context) << g_assert_msg << std::endl;
       *_dout << oss.str() << dendl;
 
       // dump recent only if the abort signal handler won't do it for us
@@ -124,8 +123,7 @@ namespace ceph {
     ceph_pthread_getname(pthread_self(), g_assert_thread_name,
 		       sizeof(g_assert_thread_name));
 
-    char buf[8096];
-    BufAppender ba(buf, sizeof(buf));
+    BufAppender ba(g_assert_msg, sizeof(g_assert_msg));
     BackTrace *bt = new BackTrace(1);
     ba.printf("%s: In function '%s' thread %llx time %s\n"
 	     "%s: %d: FAILED ceph_assert(%s)\n",
@@ -137,7 +135,7 @@ namespace ceph {
     ba.vprintf(msg, args);
     va_end(args);
     ba.printf("\n");
-    dout_emergency(buf);
+    dout_emergency(g_assert_msg);
 
     // TODO: get rid of this memory allocation.
     ostringstream oss;
@@ -145,7 +143,7 @@ namespace ceph {
     dout_emergency(oss.str());
 
     if (g_assert_context) {
-      lderr(g_assert_context) << buf << std::endl;
+      lderr(g_assert_context) << g_assert_msg << std::endl;
       *_dout << oss.str() << dendl;
 
       // dump recent only if the abort signal handler won't do it for us
