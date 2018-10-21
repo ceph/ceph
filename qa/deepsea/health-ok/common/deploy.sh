@@ -165,10 +165,6 @@ function deploy_ceph {
     if [ "$START_STAGE" -le "1" ] ; then
         test -n "$RGW" -a -n "$SSL" && rgw_ssl_init
         run_stage_1 "$CLI"
-        if [ "$TEUTHOLOGY" ] ; then
-            echo "Development work in progress: finishing early!"
-            exit 0
-        fi
         policy_cfg_base
         policy_cfg_mon_flex
         test -n "$MDS" && policy_cfg_mds
