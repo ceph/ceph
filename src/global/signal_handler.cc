@@ -249,6 +249,9 @@ static void handle_fatal_signal(int signum)
 	if (g_assert_thread_name[0]) {
 	  jf.dump_string("assert_thread_name", g_assert_thread_name);
 	}
+	if (g_assert_msg[0]) {
+	  jf.dump_string("assert_msg", g_assert_msg);
+	}
 
 	// backtrace
 	bt.dump(&jf);
