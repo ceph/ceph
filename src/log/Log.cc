@@ -349,7 +349,7 @@ void Log::dump_recent()
     EntryVector t;
     t.insert(t.end(), std::make_move_iterator(m_recent.begin()), std::make_move_iterator(m_recent.end()));
     m_recent.clear();
-    _flush(t, false, true);
+    _flush(t, true, true);
   }
 
   char buf[4096];
