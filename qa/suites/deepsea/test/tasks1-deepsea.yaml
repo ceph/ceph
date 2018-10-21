@@ -2,3 +2,7 @@ tasks:
   - deepsea:
       install: package
   - deepsea_deploy:
+      cli: true
+      commands:
+        - stage0:
+        - 'health-ok.sh --teuthology --cli --start-stage=1'
