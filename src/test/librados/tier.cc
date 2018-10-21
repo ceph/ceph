@@ -3378,13 +3378,29 @@ TEST_F(LibRadosTwoPoolsPP, ManifestUnset) {
   {
     bufferlist in, out;
     cache_ioctx.exec("bar", "cas", "chunk_read", in, out);
-    ASSERT_EQ(0U, out.length());
+    if (out.length() != 0U) {
+      ObjectWriteOperation op;
+      op.unset_manifest();
+      librados::AioCompletion *completion = cluster.aio_create_completion();
+      ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &op));
+      completion->wait_for_safe();
+      ASSERT_EQ(-EOPNOTSUPP, completion->get_return_value());
+      completion->release();
+    }
   }
   // chunk's refcount 
   {
     bufferlist in, out;
     cache_ioctx.exec("bar-chunk", "cas", "chunk_read", in, out);
-    ASSERT_EQ(0u, out.length());
+    if (out.length() != 0U) {
+      ObjectWriteOperation op;
+      op.unset_manifest();
+      librados::AioCompletion *completion = cluster.aio_create_completion();
+      ASSERT_EQ(0, ioctx.aio_operate("foo-chunk", completion, &op));
+      completion->wait_for_safe();
+      ASSERT_EQ(-EOPNOTSUPP, completion->get_return_value());
+      completion->release();
+    }
   }
 
   // wait for maps to settle before next test
