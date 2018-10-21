@@ -5,4 +5,6 @@ tasks:
       cli: true
       commands:
         - stage0:
-        - 'health-ok.sh --teuthology --cli --start-stage=1'
+        - stage1:
+        - stage2:
+        - 'health-ok.sh --teuthology --cli --start-stage=3'
