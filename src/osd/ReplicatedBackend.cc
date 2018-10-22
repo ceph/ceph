@@ -526,7 +526,6 @@ void ReplicatedBackend::op_commit(
   if (op->waiting_for_commit.empty()) {
     op->on_commit->complete(0);
     op->on_commit = 0;
-    ceph_assert(!op->on_commit);
     in_progress_ops.erase(op->tid);
   }
 }
