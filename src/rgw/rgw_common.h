@@ -420,6 +420,10 @@ public:
   const std::map<string, string, ltstr_nocase>& get_map() const { return env_map; }
 };
 
+// return true if the connection is secure. this either means that the
+// connection arrived via ssl, or was forwarded as https by a trusted proxy
+bool rgw_transport_is_secure(CephContext *cct, const RGWEnv& env);
+
 enum http_op {
   OP_GET,
   OP_PUT,
