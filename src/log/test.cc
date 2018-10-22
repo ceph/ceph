@@ -232,6 +232,28 @@ TEST(Log, LargeLog)
   log.stop();
 }
 
+TEST(Log, LargeFromSmallLog)
+{
+  SubsystemMap subs;
+  subs.set_log_level(1, 20);
+  subs.set_gather_level(1, 10);
+  Log log(&subs);
+  log.start();
+  log.set_log_file("/tmp/big");
+  log.reopen_log_file();
+  int l = 10;
+  {
+    MutableEntry e(l, 1);
+    for (int i = 0; i < 1000000; i++) {
+      std::string msg(10, 'a');
+      e.get_ostream() << msg;
+    }
+    log.submit_entry(std::move(e));
+  }
+  log.flush();
+  log.stop();
+}
+
 // Make sure nothing bad happens when we switch
 
 TEST(Log, TimeSwitch)

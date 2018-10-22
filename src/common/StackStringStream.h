@@ -39,7 +39,6 @@ public:
 
   void push(std::string_view sv)
   {
-    vec.reserve(vec.size() + sv.size());
     vec.insert(vec.end(), sv.begin(), sv.end());
   }
 
