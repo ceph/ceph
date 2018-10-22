@@ -134,9 +134,10 @@ void SessionMapStore::decode_header(
 void SessionMapStore::encode_header(
     bufferlist *header_bl)
 {
-  ENCODE_START(1, 1, *header_bl);
-  encode(version, *header_bl);
-  ENCODE_FINISH(*header_bl);
+  auto& hbl = *header_bl;
+  ENCODE_START(1, 1, hbl);
+  encode(version, hbl);
+  ENCODE_FINISH(hbl);
 }
 
 /**

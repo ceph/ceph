@@ -3322,16 +3322,11 @@ public:
     swap(other.rollback_info_completed, rollback_info_completed);
     swap(other.max_required_version, max_required_version);
   }
-  void append_id(ModID id) {
-    using ceph::encode;
-    uint8_t _id(id);
-    encode(_id, bl);
-  }
   void append(uint64_t old_size) {
     if (!can_local_rollback || rollback_info_completed)
       return;
     ENCODE_START(1, 1, bl);
-    append_id(APPEND);
+    encode(static_cast<uint8_t>(APPEND), bl);
     encode(old_size, bl);
     ENCODE_FINISH(bl);
   }
@@ -3339,7 +3334,7 @@ public:
     if (!can_local_rollback || rollback_info_completed)
       return;
     ENCODE_START(1, 1, bl);
-    append_id(SETATTRS);
+    encode(static_cast<uint8_t>(SETATTRS), bl);
     encode(old_attrs, bl);
     ENCODE_FINISH(bl);
   }
@@ -3347,7 +3342,7 @@ public:
     if (!can_local_rollback || rollback_info_completed)
       return false;
     ENCODE_START(1, 1, bl);
-    append_id(DELETE);
+    encode(static_cast<uint8_t>(DELETE), bl);
     encode(deletion_version, bl);
     ENCODE_FINISH(bl);
     rollback_info_completed = true;
@@ -3357,7 +3352,7 @@ public:
     if (!can_local_rollback || rollback_info_completed)
       return false;
     ENCODE_START(1, 1, bl);
-    append_id(TRY_DELETE);
+    encode(static_cast<uint8_t>(TRY_DELETE), bl);
     encode(deletion_version, bl);
     ENCODE_FINISH(bl);
     rollback_info_completed = true;
@@ -3368,14 +3363,14 @@ public:
       return;
     rollback_info_completed = true;
     ENCODE_START(1, 1, bl);
-    append_id(CREATE);
+    encode(static_cast<uint8_t>(CREATE), bl);
     ENCODE_FINISH(bl);
   }
   void update_snaps(const set<snapid_t> &old_snaps) {
     if (!can_local_rollback || rollback_info_completed)
       return;
     ENCODE_START(1, 1, bl);
-    append_id(UPDATE_SNAPS);
+    encode(static_cast<uint8_t>(UPDATE_SNAPS), bl);
     encode(old_snaps, bl);
     ENCODE_FINISH(bl);
   }
@@ -3386,7 +3381,7 @@ public:
     if (max_required_version < 2)
       max_required_version = 2;
     ENCODE_START(2, 2, bl);
-    append_id(ROLLBACK_EXTENTS);
+    encode(static_cast<uint8_t>(ROLLBACK_EXTENTS), bl);
     encode(gen, bl);
     encode(extents, bl);
     ENCODE_FINISH(bl);

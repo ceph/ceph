@@ -275,7 +275,8 @@ void MgrClient::_send_report()
       session->declared.erase(path);
     };
 
-    ENCODE_START(1, 1, report->packed);
+    auto& packed = report->packed;
+    ENCODE_START(1, 1, packed);
 
     // Find counters that no longer exist, and undeclare them
     for (auto p = session->declared.begin(); p != session->declared.end(); ) {
@@ -316,13 +317,13 @@ void MgrClient::_send_report()
 	session->declared.insert(path);
       }
 
-      encode(static_cast<uint64_t>(data.u64), report->packed);
+      encode(static_cast<uint64_t>(data.u64), packed);
       if (data.type & PERFCOUNTER_LONGRUNAVG) {
-        encode(static_cast<uint64_t>(data.avgcount), report->packed);
-        encode(static_cast<uint64_t>(data.avgcount2), report->packed);
+        encode(static_cast<uint64_t>(data.avgcount), packed);
+        encode(static_cast<uint64_t>(data.avgcount2), packed);
       }
     }
-    ENCODE_FINISH(report->packed);
+    ENCODE_FINISH(packed);
 
     ldout(cct, 20) << "sending " << session->declared.size() << " counters ("
                       "of possible " << by_path.size() << "), "

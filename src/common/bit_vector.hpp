@@ -276,7 +276,7 @@ void BitVector<_b>::encode_header(bufferlist& bl) const {
   ENCODE_FINISH(header_bl);
   m_header_crc = header_bl.crc32c(0);
 
-  encode(header_bl, bl);
+  ceph::encode(header_bl, bl);
 }
 
 template <uint8_t _b>

@@ -701,6 +701,7 @@ namespace buffer CEPH_BUFFER_API {
 
     class contiguous_filler {
       friend buffer::list;
+      friend class contiguous_reserver;
       char* pos;
 
       contiguous_filler(char* const pos) : pos(pos) {}
@@ -714,6 +715,86 @@ namespace buffer CEPH_BUFFER_API {
     // The contiguous_filler is supposed to be not costlier than a single
     // pointer. Keep it dumb, please.
     static_assert(sizeof(contiguous_filler) == sizeof(char*));
+
+    class contiguous_reserver {
+      ceph::bufferlist& bl;
+      std::uint8_t reserved;
+      ceph::bufferlist::reserve_t promise;
+
+      static constexpr std::uint8_t RESERVATION_UNIT = 64;
+      static constexpr std::uint8_t RESERVATION_INVALID = -1;
+
+      static_assert(
+        RESERVATION_UNIT < std::numeric_limits<decltype(reserved)>::max());
+
+      void commit_length_update() {
+        if (reserved != RESERVATION_INVALID) {
+          const auto used = RESERVATION_UNIT - reserved;
+          *promise.bl_len += used;
+          *promise.bp_len += used;
+        }
+      }
+
+      void commit_length_update_n_invalidate() {
+        commit_length_update();
+        reserved = RESERVATION_INVALID;
+      }
+
+    public:
+      contiguous_reserver(ceph::bufferlist& bl)
+        : bl(bl),
+          reserved(RESERVATION_INVALID) {
+      }
+      ~contiguous_reserver() {
+        commit_length_update();
+      }
+
+      template <std::size_t LenV>
+      void append(const char* __restrict__ const c) {
+        if (reserved != RESERVATION_INVALID && reserved >= LenV) {
+          // The fast, direct memcpy path. The check above is expected to be
+          // a subject to DCE (dead code elimination). As we are taking data
+          // as restricted pointer, compiler is promised the reserved member
+          // can be updated only by us. Thankfully to that, operations on it
+          // are heavily optimizable.
+          memcpy(promise.bp_data + (RESERVATION_UNIT - reserved), c, LenV);
+          reserved -= LenV;
+        } else {
+          append(c, LenV);
+        }
+      }
+
+      void append(const char* __restrict__ const c, const unsigned len) {
+        commit_length_update();
+        promise = bl.append_n_reserve(c, len, RESERVATION_UNIT);
+        reserved = RESERVATION_UNIT;
+      }
+
+      void append(const ceph::bufferlist& __restrict__ ibl) {
+        commit_length_update_n_invalidate();
+        bl.append(ibl);
+      }
+
+      // TODO: consider making len a non-type template parameter.
+      auto append_hole(const unsigned len) {
+        commit_length_update_n_invalidate();
+        return bl.append_hole(len);
+      }
+
+      auto length() const {
+        const auto copied_but_uncommitted = \
+          reserved == RESERVATION_INVALID ? 0 : RESERVATION_UNIT - reserved;
+        return bl.length() + copied_but_uncommitted;
+      }
+
+      operator ceph::bufferlist&() {
+        // We're losing the underlying bufferlist to someone (typically ::encode)
+        // who does not know about contiguous_reserver. We need to commit updates
+        // to the bufferlist's size fields before.
+        commit_length_update_n_invalidate();
+        return bl;
+      }
+    };
 
     class page_aligned_appender {
       bufferlist *pbl;
