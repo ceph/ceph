@@ -115,7 +115,7 @@ def generate_iso(ctx, config):
 
         (remote,) = ctx.cluster.only(client).remotes.keys()
 
-        clone_dir = '{tdir}/clone.{role}'.format(tdir=testdir, role=client)
+        clone_dir = '{tdir}/qemu_clone.{role}'.format(tdir=testdir, role=client)
         remote.run(args=refspec.clone(git_url, clone_dir))
 
         src_dir = os.path.dirname(__file__)
@@ -212,7 +212,7 @@ def generate_iso(ctx, config):
                     os.path.join(testdir, 'qemu', 'userdata.' + client),
                     os.path.join(testdir, 'qemu', 'metadata.' + client),
                     '{tdir}/qemu/{client}.test.sh'.format(tdir=testdir, client=client),
-                    '{tdir}/clone.{client}'.format(tdir=testdir, client=client),
+                    '{tdir}/qemu_clone.{client}'.format(tdir=testdir, client=client),
                     ],
                 )
 
