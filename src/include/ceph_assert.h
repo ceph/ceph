@@ -92,21 +92,39 @@ using namespace ceph;
 #define ceph_abort_msgf(...)                                             \
   __ceph_abortf( __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION, __VA_ARGS__)
 
+#ifdef __SANITIZE_ADDRESS__
+#define ceph_assert(expr)                           \
+  do {                                              \
+    ((expr))                                        \
+    ? _CEPH_ASSERT_VOID_CAST (0)                    \
+    : __ceph_assert_fail(__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION); \
+  } while (false)
+#else
 #define ceph_assert(expr)							\
   do { static const ceph::assert_data assert_data_ctx = \
    {__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION}; \
    ((expr) \
    ? _CEPH_ASSERT_VOID_CAST (0) \
    : __ceph_assert_fail(assert_data_ctx)); } while(false)
+#endif
 
 // this variant will *never* get compiled out to NDEBUG in the future.
 // (ceph_assert currently doesn't either, but in the future it might.)
+#ifdef __SANITIZE_ADDRESS__
+#define ceph_assert_always(expr)                    \
+  do {                                              \
+    ((expr))                                        \
+    ? _CEPH_ASSERT_VOID_CAST (0)                    \
+    : __ceph_assert_fail(__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION); \
+  } while(false)
+#else
 #define ceph_assert_always(expr)							\
   do { static const ceph::assert_data assert_data_ctx = \
    {__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION}; \
    ((expr) \
    ? _CEPH_ASSERT_VOID_CAST (0) \
    : __ceph_assert_fail(assert_data_ctx)); } while(false)
+#endif
 
 // Named by analogy with printf.  Along with an expression, takes a format
 // string and parameters which are printed if the assertion fails.
