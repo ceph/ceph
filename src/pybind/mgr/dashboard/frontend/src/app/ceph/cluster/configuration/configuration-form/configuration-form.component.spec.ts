@@ -14,7 +14,6 @@ import { ConfigFormModel } from './configuration-form.model';
 describe('ConfigurationFormComponent', () => {
   let component: ConfigurationFormComponent;
   let fixture: ComponentFixture<ConfigurationFormComponent>;
-  let activatedRoute: ActivatedRoute;
 
   configureTestBed({
     imports: [
@@ -35,7 +34,6 @@ describe('ConfigurationFormComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(ConfigurationFormComponent);
     component = fixture.componentInstance;
-    activatedRoute = TestBed.get(ActivatedRoute);
   });
 
   it('should create', () => {
