@@ -5398,9 +5398,15 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
     (osd->store->has_builtin_csum() && osd->osd_skip_data_digest) ||
     g_conf->osd_distrust_data_digest;
 
+  dout(30) << __func__ << " oi.size: " << oi.size << dendl;
+  dout(30) << __func__ << " oi.truncate_seq: " << oi.truncate_seq << dendl;
+  dout(30) << __func__ << " op.extent.truncate_seq: " << op.extent.truncate_seq << dendl;
+  dout(30) << __func__ << " op.extent.truncate_size: " << op.extent.truncate_size << dendl;
+
   // are we beyond truncate_size?
   if ( (seq < op.extent.truncate_seq) &&
-       (op.extent.offset + op.extent.length > op.extent.truncate_size) )
+       (op.extent.offset + op.extent.length > op.extent.truncate_size) &&
+       (size > op.extent.truncate_size) )
     size = op.extent.truncate_size;
 
   if (op.extent.length == 0) //length is zero mean read the whole object
@@ -5413,6 +5419,8 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
     op.extent.length = size - op.extent.offset;
     trimmed_read = true;
   }
+
+  dout(30) << __func__ << "op.extent.length is now " << op.extent.length << dendl;
 
   // read into a buffer
   int result = 0;
