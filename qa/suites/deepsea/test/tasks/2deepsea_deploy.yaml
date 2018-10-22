@@ -1,0 +1,12 @@
+tasks:
+  - deepsea_deploy:
+      cli: true
+      commands:
+        - stage0:
+            update: false
+        - stage1:
+        - policy_cfg:
+            profile: default
+        - stage2:
+        - stage3:
+        - 'ceph -s'

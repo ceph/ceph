@@ -1,10 +1,11 @@
 tasks:
-  - deepsea:
-      install: package
   - deepsea_deploy:
       cli: true
       commands:
         - stage0:
         - stage1:
+        - policy_cfg:
+            profile: default
         - stage2:
-        - 'health-ok.sh --teuthology --cli --start-stage=3'
+        - stage3:
+        - 'ceph -s'
