@@ -178,7 +178,9 @@ namespace buffer CEPH_BUFFER_API {
    */
   class CEPH_BUFFER_API ptr {
     raw *_raw;
+  public: // dirty hack for testing; if it works, this will be abstracted
     unsigned _off, _len;
+  private:
 
     void release();
 
@@ -653,6 +655,11 @@ namespace buffer CEPH_BUFFER_API {
   private:
     // my private bits
     buffers_t _buffers;
+
+    // track bufferptr we can modify (especially ::append() to). Not all bptrs
+    // bufferlist holds have this trait -- if somebody ::push_back(const ptr&),
+    // he expects it won't change.
+    ptr* _carriage;
     unsigned _len;
     unsigned _memcopy_count; //the total of memcopy using rebuild().
 
@@ -780,7 +787,7 @@ namespace buffer CEPH_BUFFER_API {
 	  bp = buffer::create(len);
 	  pos = bp.c_str();
 	} else {
-	  pos = pbl->_buffers.back().end_c_str();
+	  pos = pbl->_carriage->end_c_str();
 	}
       }
 
@@ -959,18 +966,35 @@ namespace buffer CEPH_BUFFER_API {
   private:
     mutable iterator last_p;
 
+    // always_empty_bptr has no underlying raw but its _len is always 0.
+    // This is useful for e.g. get_append_buffer_unused_tail_length() as
+    // it allows to avoid conditionals on hot paths.
+    static ptr always_empty_bptr;
     ptr_node& refill_append_space(const unsigned len);
 
   public:
     // cons/des
-    list() : _len(0), _memcopy_count(0), last_p(this) {}
+    list()
+      : _carriage(&always_empty_bptr),
+        _len(0),
+        _memcopy_count(0),
+        last_p(this) {
+    }
     // cppcheck-suppress noExplicitConstructor
-    list(unsigned prealloc) : _len(0), _memcopy_count(0), last_p(this) {
+    // cppcheck-suppress noExplicitConstructor
+    list(unsigned prealloc)
+      : _carriage(&always_empty_bptr),
+        _len(0),
+        _memcopy_count(0),
+	last_p(this) {
       reserve(prealloc);
     }
 
-    list(const list& other) : _len(other._len),
-			      _memcopy_count(other._memcopy_count), last_p(this) {
+    list(const list& other)
+      : _carriage(&always_empty_bptr),
+        _len(other._len),
+        _memcopy_count(other._memcopy_count),
+        last_p(this) {
       _buffers.clone_from(other._buffers);
       make_shareable();
     }
@@ -982,6 +1006,7 @@ namespace buffer CEPH_BUFFER_API {
 
     list& operator= (const list& other) {
       if (this != &other) {
+        _carriage = &always_empty_bptr;
         _buffers.clone_from(other._buffers);
         _len = other._len;
 	make_shareable();
@@ -990,6 +1015,7 @@ namespace buffer CEPH_BUFFER_API {
     }
     list& operator= (list&& other) noexcept {
       _buffers = std::move(other._buffers);
+      _carriage = other._carriage;
       _len = other._len;
       _memcopy_count = other._memcopy_count;
       last_p = begin();
@@ -1007,16 +1033,7 @@ namespace buffer CEPH_BUFFER_API {
     void try_assign_to_mempool(int pool);
 
     size_t get_append_buffer_unused_tail_length() const {
-      if (_buffers.empty()) {
-	return 0;
-      }
-
-      auto& buf = _buffers.back();
-      if (buf.raw_nref() != 1) {
-	return 0;
-      }
-
-      return buf.unused_tail_length();
+      return _carriage->unused_tail_length();
     }
 
     unsigned get_memcopy_count() const {return _memcopy_count; }
@@ -1054,6 +1071,7 @@ namespace buffer CEPH_BUFFER_API {
 
     // modifiers
     void clear() noexcept {
+      _carriage = &always_empty_bptr;
       _buffers.clear_and_dispose();
       _len = 0;
       _memcopy_count = 0;
@@ -1070,6 +1088,7 @@ namespace buffer CEPH_BUFFER_API {
 	return;
       _len += bp.length();
       _buffers.push_back(*ptr_node::create(std::move(bp)).release());
+      _carriage = &always_empty_bptr;
     }
     void push_back(const ptr_node&) = delete;
     void push_back(ptr_node&) = delete;
@@ -1077,11 +1096,13 @@ namespace buffer CEPH_BUFFER_API {
     void push_back(std::unique_ptr<ptr_node, ptr_node::disposer> bp) {
       if (bp->length() == 0)
 	return;
+      _carriage = bp.get();
       _len += bp->length();
       _buffers.push_back(*bp.release());
     }
     void push_back(raw* const r) {
       _buffers.push_back(*ptr_node::create(r).release());
+      _carriage = &_buffers.back();
       _len += _buffers.back().length();
     }
 
@@ -1123,9 +1144,10 @@ namespace buffer CEPH_BUFFER_API {
     {
       if (this != &bl) {
         clear();
-	for (const auto& pb : bl._buffers) {
-          push_back(static_cast<const ptr&>(pb));
+	for (const auto& bp : bl._buffers) {
+          _buffers.push_back(*ptr_node::create(bp).release());
         }
+        _len = bl._len;
       }
     }
 
