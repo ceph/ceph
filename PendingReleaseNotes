@@ -59,6 +59,10 @@
 
     - ``ceph tell osd.x cache status'
 
+* The libcephfs added several functions that allow restarted client to destroy
+  or reclaim state held by a previous incarnation. These functions are for NFS
+  servers.
+
 >=13.1.0
 --------
 
