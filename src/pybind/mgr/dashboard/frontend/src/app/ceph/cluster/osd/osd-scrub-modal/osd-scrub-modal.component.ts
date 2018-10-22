@@ -1,7 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { FormGroup } from '@angular/forms';
 
-import { BsModalRef } from 'ngx-bootstrap';
+import { BsModalRef } from 'ngx-bootstrap/modal';
 
 import { OsdService } from '../../../../shared/api/osd.service';
 import { NotificationType } from '../../../../shared/enum/notification-type.enum';

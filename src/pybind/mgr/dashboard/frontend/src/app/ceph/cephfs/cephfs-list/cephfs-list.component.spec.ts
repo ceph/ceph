@@ -3,7 +3,6 @@ import { Component, Input } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { configureTestBed } from '../../../../testing/unit-test-helper';
-import { CephfsService } from '../../../shared/api/cephfs.service';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { SharedModule } from '../../../shared/shared.module';
 import { CephfsListComponent } from './cephfs-list.component';
@@ -20,8 +19,7 @@ describe('CephfsListComponent', () => {
 
   configureTestBed({
     imports: [SharedModule, HttpClientTestingModule],
-    declarations: [CephfsListComponent, CephfsDetailStubComponent],
-    providers: [CephfsService]
+    declarations: [CephfsListComponent, CephfsDetailStubComponent]
   });
 
   beforeEach(() => {

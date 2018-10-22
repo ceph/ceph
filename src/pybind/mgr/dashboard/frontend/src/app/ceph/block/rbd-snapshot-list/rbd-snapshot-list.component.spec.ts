@@ -4,7 +4,7 @@ import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastModule } from 'ng2-toastr';
-import { BsModalRef, BsModalService } from 'ngx-bootstrap';
+import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 import { Subject, throwError as observableThrowError } from 'rxjs';
 
 import { configureTestBed, PermissionHelper } from '../../../../testing/unit-test-helper';
@@ -50,11 +50,7 @@ describe('RbdSnapshotListComponent', () => {
       RouterTestingModule,
       PipesModule
     ],
-    providers: [
-      { provide: AuthStorageService, useValue: fakeAuthStorageService },
-      SummaryService,
-      TaskListService
-    ]
+    providers: [{ provide: AuthStorageService, useValue: fakeAuthStorageService }, TaskListService]
   });
 
   beforeEach(() => {

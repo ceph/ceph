@@ -1,7 +1,7 @@
 import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import * as _ from 'lodash';
-import { BsModalService } from 'ngx-bootstrap';
+import { BsModalService } from 'ngx-bootstrap/modal';
 
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';

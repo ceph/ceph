@@ -3,7 +3,7 @@ import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testin
 import { NgForm, ReactiveFormsModule } from '@angular/forms';
 import { By } from '@angular/platform-browser';
 
-import { BsModalRef, BsModalService, ModalModule } from 'ngx-bootstrap';
+import { BsModalRef, BsModalService, ModalModule } from 'ngx-bootstrap/modal';
 import { Observable, Subscriber, timer as observableTimer } from 'rxjs';
 
 import { configureTestBed } from '../../../../testing/unit-test-helper';

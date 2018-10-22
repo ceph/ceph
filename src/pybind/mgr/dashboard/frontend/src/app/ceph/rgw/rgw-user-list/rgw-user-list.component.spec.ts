@@ -4,10 +4,9 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ModalModule } from 'ngx-bootstrap';
+import { ModalModule } from 'ngx-bootstrap/modal';
 
 import { configureTestBed, PermissionHelper } from '../../../../testing/unit-test-helper';
-import { RgwUserService } from '../../../shared/api/rgw-user.service';
 import { TableActionsComponent } from '../../../shared/datatable/table-actions/table-actions.component';
 import { SharedModule } from '../../../shared/shared.module';
 import { RgwUserListComponent } from './rgw-user-list.component';
@@ -19,7 +18,6 @@ describe('RgwUserListComponent', () => {
   configureTestBed({
     declarations: [RgwUserListComponent],
     imports: [RouterTestingModule, HttpClientTestingModule, ModalModule.forRoot(), SharedModule],
-    providers: [RgwUserService],
     schemas: [NO_ERRORS_SCHEMA]
   });
 

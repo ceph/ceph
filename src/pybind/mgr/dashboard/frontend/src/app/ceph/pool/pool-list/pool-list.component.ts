@@ -1,6 +1,6 @@
 import { Component, OnInit, ViewChild } from '@angular/core';
 
-import { BsModalRef, BsModalService } from 'ngx-bootstrap';
+import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 
 import { PoolService } from '../../../shared/api/pool.service';
 import { DeletionModalComponent } from '../../../shared/components/deletion-modal/deletion-modal.component';

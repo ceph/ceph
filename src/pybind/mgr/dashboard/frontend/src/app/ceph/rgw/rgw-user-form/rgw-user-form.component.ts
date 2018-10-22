@@ -3,7 +3,7 @@ import { AbstractControl, ValidationErrors, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
 import * as _ from 'lodash';
-import { BsModalService } from 'ngx-bootstrap';
+import { BsModalService } from 'ngx-bootstrap/modal';
 import { forkJoin as observableForkJoin, Observable } from 'rxjs';
 
 import { RgwUserService } from '../../../shared/api/rgw-user.service';

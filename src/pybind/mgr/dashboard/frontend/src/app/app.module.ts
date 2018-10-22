@@ -4,8 +4,10 @@ import { BrowserModule } from '@angular/platform-browser';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
 import { ToastModule, ToastOptions } from 'ng2-toastr/ng2-toastr';
+import { AccordionModule } from 'ngx-bootstrap/accordion';
+import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
+import { TabsModule } from 'ngx-bootstrap/tabs';
 
-import { AccordionModule, BsDropdownModule, TabsModule } from 'ngx-bootstrap';
 import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
 import { CephModule } from './ceph/ceph.module';
