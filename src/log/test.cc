@@ -124,27 +124,6 @@ TEST(Log, ManyGatherLog)
   log.stop();
 }
 
-TEST(Log, ManyGatherLogStringAssign)
-{
-  SubsystemMap subs;
-  subs.set_log_level(1, 20);
-  subs.set_gather_level(1, 10);
-  Log log(&subs);
-  log.start();
-  log.set_log_file("/tmp/big");
-  log.reopen_log_file();
-  for (int i=0; i<many; i++) {
-    int l = 10;
-    if (subs.should_gather(1, l)) {
-      MutableEntry e(l, 1);
-      e.get_ostream() << "this i a long stream asdf asdf asdf asdf asdf asdf asdf asdf asdf as fd";
-      log.submit_entry(std::move(e));
-    }
-  }
-  log.flush();
-  log.stop();
-}
-
 TEST(Log, ManyGatherLogStackSpillover)
 {
   SubsystemMap subs;
