@@ -52,12 +52,14 @@ struct Page {
     }
   };
   void encode(bufferlist &bl, size_t page_size) const {
+    using ceph::encode;
     bl.append(buffer::copy(data, page_size));
-    ::encode(offset, bl);
+    encode(offset, bl);
   }
-  void decode(bufferlist::iterator &p, size_t page_size) {
+  void decode(bufferlist::const_iterator &p, size_t page_size) {
+    using ceph::decode;
     p.copy(page_size, data);
-    ::decode(offset, p);
+    decode(offset, p);
   }
 
   static Ref create(size_t page_size, uint64_t offset = 0) {
@@ -184,7 +186,7 @@ class PageSet {
       length -= c;
     }
     // make sure we sized the vector correctly
-    assert(out == range.rend());
+    ceph_assert(out == range.rend());
   }
 
   // return all allocated pages that intersect the range [offset,length)
@@ -205,17 +207,19 @@ class PageSet {
   }
 
   void encode(bufferlist &bl) const {
-    ::encode(page_size, bl);
+    using ceph::encode;
+    encode(page_size, bl);
     unsigned count = pages.size();
-    ::encode(count, bl);
+    encode(count, bl);
     for (auto p = pages.rbegin(); p != pages.rend(); ++p)
       p->encode(bl, page_size);
   }
-  void decode(bufferlist::iterator &p) {
-    assert(empty());
-    ::decode(page_size, p);
+  void decode(bufferlist::const_iterator &p) {
+    using ceph::decode;
+    ceph_assert(empty());
+    decode(page_size, p);
     unsigned count;
-    ::decode(count, p);
+    decode(count, p);
     auto cur = pages.end();
     for (unsigned i = 0; i < count; i++) {
       auto page = Page::create(page_size);

@@ -101,6 +101,18 @@ class TestDeviceIsMounted(object):
     def test_is_mounted_at_destination(self, fake_proc):
         assert system.device_is_mounted('/dev/sda1', destination='/far/lib/ceph/osd/ceph-7') is False
 
+    def test_is_realpath_dev_mounted_at_destination(self, fake_proc, monkeypatch):
+        monkeypatch.setattr(system.os.path, 'realpath', lambda x: '/dev/sda1' if 'foo' in x else x)
+        result = system.device_is_mounted('/dev/maper/foo', destination='/far/lib/ceph/osd/ceph-0')
+        assert result is True
+
+    def test_is_realpath_path_mounted_at_destination(self, fake_proc, monkeypatch):
+        monkeypatch.setattr(
+            system.os.path, 'realpath',
+            lambda x: '/far/lib/ceph/osd/ceph-0' if 'symlink' in x else x)
+        result = system.device_is_mounted('/dev/sda1', destination='/symlink/lib/ceph/osd/ceph-0')
+        assert result is True
+
 
 class TestGetMounts(object):
 
@@ -154,3 +166,53 @@ class TestIsBinary(object):
     def test_is_not_binary(self, tmpfile):
         binary_path = tmpfile(contents='asd\n\nlkjh0')
         assert system.is_binary(binary_path) is False
+
+
+class TestGetFileContents(object):
+
+    def test_path_does_not_exist(self, tmpdir):
+        filepath = os.path.join(str(tmpdir), 'doesnotexist')
+        assert system.get_file_contents(filepath, 'default') == 'default'
+
+    def test_path_has_contents(self, tmpfile):
+        interesting_file = tmpfile(contents="1")
+        result = system.get_file_contents(interesting_file)
+        assert result == "1"
+
+    def test_path_has_multiline_contents(self, tmpfile):
+        interesting_file = tmpfile(contents="0\n1")
+        result = system.get_file_contents(interesting_file)
+        assert result == "0\n1"
+
+    def test_exception_returns_default(self, tmpfile):
+        interesting_file = tmpfile(contents="0")
+        # remove read, causes IOError
+        os.chmod(interesting_file, 0o000)
+        result = system.get_file_contents(interesting_file)
+        assert result == ''
+
+
+class TestWhich(object):
+
+    def test_executable_exists_but_is_not_file(self, monkeypatch):
+        monkeypatch.setattr(system.os.path, 'isfile', lambda x: False)
+        monkeypatch.setattr(system.os.path, 'exists', lambda x: True)
+        assert system.which('exedir') == 'exedir'
+
+    def test_executable_does_not_exist(self, monkeypatch):
+        monkeypatch.setattr(system.os.path, 'isfile', lambda x: False)
+        monkeypatch.setattr(system.os.path, 'exists', lambda x: False)
+        assert system.which('exedir') == 'exedir'
+
+    def test_executable_exists_as_file(self, monkeypatch):
+        monkeypatch.setattr(system.os.path, 'isfile', lambda x: True)
+        monkeypatch.setattr(system.os.path, 'exists', lambda x: True)
+        assert system.which('ceph') == '/usr/local/bin/ceph'
+
+    def test_warnings_when_executable_isnt_matched(self, monkeypatch, capsys):
+        monkeypatch.setattr(system.os.path, 'isfile', lambda x: True)
+        monkeypatch.setattr(system.os.path, 'exists', lambda x: False)
+        system.which('exedir')
+        stdout, stderr = capsys.readouterr()
+        assert 'Absolute path not found for executable: exedir' in stdout
+        assert 'Ensure $PATH environment variable contains common executable locations' in stdout

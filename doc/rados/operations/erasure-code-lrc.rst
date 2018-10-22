@@ -98,7 +98,7 @@ Where:
 ``crush-root={root}``
 
 :Description: The name of the crush bucket used for the first step of
-              the ruleset. For intance **step take default**.
+              the CRUSH rule. For instance **step take default**.
 
 :Type: String
 :Required: No.
@@ -110,7 +110,7 @@ Where:
               defined by **l** will be stored. For instance, if it is
               set to **rack**, each group of **l** chunks will be
               placed in a different rack. It is used to create a
-              ruleset step such as **step choose rack**. If it is not
+              CRUSH rule step such as **step choose rack**. If it is not
               set, no such grouping is done.
 
 :Type: String
@@ -121,7 +121,7 @@ Where:
 :Description: Ensure that no two chunks are in a bucket with the same
               failure domain. For instance, if the failure domain is
               **host** no two chunks will be stored on the same
-              host. It is used to create a ruleset step such as **step
+              host. It is used to create a CRUSH rule step such as **step
               chooseleaf host**.
 
 :Type: String
@@ -159,7 +159,7 @@ Low level plugin configuration
 
 The sum of **k** and **m** must be a multiple of the **l** parameter.
 The low level configuration parameters do not impose such a
-restriction and it may be more convienient to use it for specific
+restriction and it may be more convenient to use it for specific
 purposes. It is for instance possible to define two groups, one with 4
 chunks and another with 3 chunks. It is also possible to recursively
 define locality sets, for instance datacenters and racks into
@@ -280,7 +280,7 @@ The steps found in the layers description::
    step 3      ____cDDD
 
 are applied in order. For instance, if a 4K object is encoded, it will
-first go thru *step 1* and be divided in four 1K chunks (the four
+first go through *step 1* and be divided in four 1K chunks (the four
 uppercase D). They are stored in the chunks 2, 3, 6 and 7, in
 order. From these, two coding chunks are calculated (the two lowercase
 c). The coding chunks are stored in the chunks 1 and 5, respectively.
@@ -343,10 +343,10 @@ recover the content of chunk *2, 3*::
    step 2      cDDD____
    step 3      ____cDDD
 
-Controlling crush placement
+Controlling CRUSH placement
 ===========================
 
-The default crush ruleset provides OSDs that are on different hosts. For instance::
+The default CRUSH rule provides OSDs that are on different hosts. For instance::
 
    chunk nr    01234567
 
@@ -364,8 +364,8 @@ For instance::
 
    crush-steps='[ [ "choose", "rack", 2 ], [ "chooseleaf", "host", 4 ] ]'
 
-will create a ruleset that will select two crush buckets of type
+will create a rule that will select two crush buckets of type
 *rack* and for each of them choose four OSDs, each of them located in
 different buckets of type *host*.
 
-The ruleset can also be manually crafted for finer control.
+The CRUSH rule can also be manually crafted for finer control.

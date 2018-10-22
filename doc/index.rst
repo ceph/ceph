@@ -102,8 +102,9 @@ about Ceph, see our `Architecture`_ section.
    mgr/index
    api/index
    architecture
-   Development <dev/index>
+   Developer Guide <dev/index>
+   dev/internals
+   governance
    ceph-volume/index
-   release-notes
-   releases
+   releases/index
    Glossary <glossary>

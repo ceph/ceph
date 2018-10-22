@@ -21,7 +21,7 @@ void register_test_leader_watcher() {
 
 class TestLeaderWatcher : public ::rbd::mirror::TestFixture {
 public:
-  class Listener : public rbd::mirror::LeaderWatcher<>::Listener {
+  class Listener : public rbd::mirror::leader_watcher::Listener {
   public:
     Listener()
       : m_test_lock(unique_lock_name("LeaderWatcher::m_test_lock", this)) {
@@ -74,6 +74,11 @@ public:
     void update_leader_handler(const std::string &leader_instance_id) override {
     }
 
+    void handle_instances_added(const InstanceIds& instance_ids) override {
+    }
+    void handle_instances_removed(const InstanceIds& instance_ids) override {
+    }
+
   private:
     mutable Mutex m_test_lock;
     int m_acquire_count = 0;
@@ -96,17 +101,11 @@ public:
     EXPECT_EQ(0, librbd::api::Mirror<>::mode_set(m_local_io_ctx,
                                                  RBD_MIRROR_MODE_POOL));
 
-    if (is_librados_test_stub()) {
+    if (is_librados_test_stub(*_rados)) {
       // speed testing up a little
       EXPECT_EQ(0, _rados->conf_set("rbd_mirror_leader_heartbeat_interval",
                                     "1"));
     }
-  }
-
-  bool is_librados_test_stub() {
-    std::string fsid;
-    EXPECT_EQ(0, _rados->cluster_fsid(&fsid));
-    return fsid == "00000000-1111-2222-3333-444444444444";
   }
 
   librados::IoCtx &create_connection(bool no_heartbeats = false) {
@@ -117,7 +116,7 @@ public:
     if (no_heartbeats) {
       EXPECT_EQ(0, c->cluster.conf_set("rbd_mirror_leader_heartbeat_interval",
                                        "3600"));
-    } else if (is_librados_test_stub()) {
+    } else if (is_librados_test_stub(*_rados)) {
       EXPECT_EQ(0, c->cluster.conf_set("rbd_mirror_leader_heartbeat_interval",
                                        "1"));
     }

@@ -1,4 +1,4 @@
- // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -16,8 +16,13 @@
 #ifndef CEPH_THREAD_H
 #define CEPH_THREAD_H
 
+#include <system_error>
+#include <thread>
+
 #include <pthread.h>
 #include <sys/types.h>
+
+#include "include/compat.h"
 
 class Thread {
  private:
@@ -55,5 +60,21 @@ class Thread {
   int set_ioprio(int cls, int prio);
   int set_affinity(int cpuid);
 };
+
+// Functions for with std::thread
+
+void set_thread_name(std::thread& t, const std::string& s);
+std::string get_thread_name(const std::thread& t);
+void kill(std::thread& t, int signal);
+
+template<typename Fun, typename... Args>
+std::thread make_named_thread(const std::string& s,
+			      Fun&& fun,
+			      Args&& ...args) {
+  auto t = std::thread(std::forward<Fun>(fun),
+		       std::forward<Args>(args)...);
+  set_thread_name(t, s);
+  return t;
+}
 
 #endif

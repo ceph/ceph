@@ -35,7 +35,7 @@ echo "comparing snapshots and new tree"
 dir1=`find 1/ | wc -w`
 dir2=`find 2/.snap/barsnap2/a/b/c | wc -w`
 #diff $dir1 $dir2 && echo "Success!"
-test $dir1==$dir2 && echo "Sucess!"
+test $dir1==$dir2 && echo "Success!"
 rmdir 1/.snap/*
 rmdir 2/.snap/*
 echo "OK"

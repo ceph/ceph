@@ -16,6 +16,5 @@
     compact
     compact-prefix <prefix>
     compact-range <prefix> <start> <end>
-    repair
+    destructive-repair  (use only as last resort! may corrupt healthy data)
   
-  [1]

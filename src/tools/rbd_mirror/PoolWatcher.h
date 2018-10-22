@@ -13,10 +13,11 @@
 #include "common/ceph_context.h"
 #include "common/Mutex.h"
 #include "include/rados/librados.hpp"
-#include "types.h"
+#include "tools/rbd_mirror/Types.h"
 #include <boost/functional/hash.hpp>
 #include <boost/optional.hpp>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
+#include "tools/rbd_mirror/pool_watcher/Types.h"
 
 namespace librbd { struct ImageCtx; }
 
@@ -32,17 +33,14 @@ template <typename> struct Threads;
 template <typename ImageCtxT = librbd::ImageCtx>
 class PoolWatcher {
 public:
-  struct Listener {
-    virtual ~Listener() {
-    }
-
-    virtual void handle_update(const std::string &mirror_uuid,
-                               ImageIds &&added_image_ids,
-                               ImageIds &&removed_image_ids) = 0;
-  };
+  static PoolWatcher* create(Threads<ImageCtxT> *threads,
+                             librados::IoCtx &remote_io_ctx,
+                             pool_watcher::Listener &listener) {
+    return new PoolWatcher(threads, remote_io_ctx, listener);
+  }
 
   PoolWatcher(Threads<ImageCtxT> *threads, librados::IoCtx &remote_io_ctx,
-              Listener &listener);
+              pool_watcher::Listener &listener);
   ~PoolWatcher();
   PoolWatcher(const PoolWatcher&) = delete;
   PoolWatcher& operator=(const PoolWatcher&) = delete;
@@ -106,7 +104,7 @@ private:
 
   Threads<ImageCtxT> *m_threads;
   librados::IoCtx m_remote_io_ctx;
-  Listener &m_listener;
+  pool_watcher::Listener &m_listener;
 
   ImageIds m_refresh_image_ids;
   bufferlist m_out_bl;

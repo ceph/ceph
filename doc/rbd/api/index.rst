@@ -5,4 +5,4 @@
 .. toctree::
    :maxdepth: 2
 
-   librados (Python) <librbdpy>
+   librbd (Python) <librbdpy>

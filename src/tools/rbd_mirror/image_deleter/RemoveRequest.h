@@ -23,18 +23,17 @@ template <typename ImageCtxT = librbd::ImageCtx>
 class RemoveRequest {
 public:
   static RemoveRequest* create(librados::IoCtx &io_ctx,
-                               const std::string &global_image_id,
-                               bool ignore_orphaned, ErrorResult *error_result,
+                               const std::string &image_id,
+                               ErrorResult *error_result,
                                ContextWQ *op_work_queue, Context *on_finish) {
-    return new RemoveRequest(io_ctx, global_image_id, ignore_orphaned,
-                             error_result, op_work_queue, on_finish);
+    return new RemoveRequest(io_ctx, image_id, error_result, op_work_queue,
+                             on_finish);
   }
 
-  RemoveRequest(librados::IoCtx &io_ctx, const std::string &global_image_id,
-                bool ignore_orphaned, ErrorResult *error_result,
-                ContextWQ *op_work_queue, Context *on_finish)
-    : m_io_ctx(io_ctx), m_global_image_id(global_image_id),
-      m_ignore_orphaned(ignore_orphaned), m_error_result(error_result),
+  RemoveRequest(librados::IoCtx &io_ctx, const std::string &image_id,
+                ErrorResult *error_result, ContextWQ *op_work_queue,
+                Context *on_finish)
+    : m_io_ctx(io_ctx), m_image_id(image_id), m_error_result(error_result),
       m_op_work_queue(op_work_queue), m_on_finish(on_finish) {
   }
 
@@ -47,16 +46,7 @@ private:
    * <start>
    *    |
    *    v
-   * GET_MIRROR_IMAGE_ID
-   *    |
-   *    v
-   * GET_TAG_OWNER
-   *    |
-   *    v
    * GET_SNAP_CONTEXT
-   *    |
-   *    v
-   * SET_MIRROR_IMAGE_DISABLING
    *    |
    *    v
    * PURGE_SNAPSHOTS
@@ -65,47 +55,29 @@ private:
    * REMOVE_IMAGE
    *    |
    *    v
-   * REMOVE_MIRROR_IMAGE
-   *    |
-   *    v
    * <finish>
    *
    * @endverbatim
    */
 
   librados::IoCtx &m_io_ctx;
-  std::string m_global_image_id;
-  bool m_ignore_orphaned;
+  std::string m_image_id;
   ErrorResult *m_error_result;
   ContextWQ *m_op_work_queue;
   Context *m_on_finish;
 
   ceph::bufferlist m_out_bl;
-  std::string m_image_id;
-  std::string m_mirror_uuid;
   bool m_has_snapshots = false;
   librbd::NoOpProgressContext m_progress_ctx;
 
-  void get_mirror_image_id();
-  void handle_get_mirror_image_id(int r);
-
-  void get_tag_owner();
-  void handle_get_tag_owner(int r);
-
   void get_snap_context();
   void handle_get_snap_context(int r);
-
-  void set_mirror_image_disabling();
-  void handle_set_mirror_image_disabling(int r);
 
   void purge_snapshots();
   void handle_purge_snapshots(int r);
 
   void remove_image();
   void handle_remove_image(int r);
-
-  void remove_mirror_image();
-  void handle_remove_mirror_image(int r);
 
   void finish(int r);
 

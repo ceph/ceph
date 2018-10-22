@@ -15,6 +15,7 @@
 #include "librbd/watcher/Types.h"
 #include "Instances.h"
 #include "MirrorStatusWatcher.h"
+#include "tools/rbd_mirror/instances/Types.h"
 #include "tools/rbd_mirror/leader_watcher/Types.h"
 
 namespace librbd { class ImageCtx; }
@@ -28,19 +29,14 @@ template <typename ImageCtxT = librbd::ImageCtx>
 class LeaderWatcher : protected librbd::Watcher {
   using librbd::Watcher::unregister_watch; // Silence overloaded virtual warning
 public:
-  struct Listener {
-    virtual ~Listener() {
-    }
-
-    virtual void post_acquire_handler(Context *on_finish) = 0;
-    virtual void pre_release_handler(Context *on_finish) = 0;
-
-    virtual void update_leader_handler(
-      const std::string &leader_instance_id) = 0;
-  };
+  static LeaderWatcher* create(Threads<ImageCtxT> *threads,
+                               librados::IoCtx &io_ctx,
+                               leader_watcher::Listener *listener) {
+    return new LeaderWatcher(threads, io_ctx, listener);
+  }
 
   LeaderWatcher(Threads<ImageCtxT> *threads, librados::IoCtx &io_ctx,
-                Listener *listener);
+                leader_watcher::Listener *listener);
   ~LeaderWatcher() override;
 
   int init();
@@ -62,13 +58,16 @@ private:
    * @verbatim
    *
    *  <uninitialized> <------------------------------ WAIT_FOR_TASKS
-   *     | (init)      ^                                      ^
-   *     v             *                                      |
-   *  CREATE_OBJECT  * *  (error)                     UNREGISTER_WATCH
-   *     |             *                                      ^
-   *     v             *                                      |
-   *  REGISTER_WATCH * *                              SHUT_DOWN_LEADER_LOCK
-   *     |                                                    ^
+   *     | (init)            ^                                ^
+   *     v                   *                                |
+   *  CREATE_OBJECT  * * * * *  (error)               UNREGISTER_WATCH
+   *     |                   *                                ^
+   *     v                   *                                |
+   *  REGISTER_WATCH * * * * *                        SHUT_DOWN_STATUS_WATCHER
+   *     |                   *                                ^
+   *     v                   *                                |
+   *  INIT_STATUS_WATCHER  * *                        SHUT_DOWN_LEADER_LOCK
+   *     |                                                    |
    *     |           (no leader heartbeat and acquire failed) |
    *     | BREAK_LOCK <-------------------------------------\ |
    *     |    |                 (no leader heartbeat)       | | (shut down)
@@ -84,16 +83,14 @@ private:
    *     |                   *                           ^
    * ....|...................*....................  .....|.....................
    * .   v                   *                   .  .    |       post_release .
-   * .INIT_STATUS_WATCHER  * * (error)           .  .NOTIFY_LOCK_RELEASED     .
-   * .   |                   ^                   .  .....^.....................
-   * .   v         (error)   |                   .       |
-   * .INIT_INSTANCES *> SHUT_DOWN_STATUS_WATCHER .   RELEASE_LEADER_LOCK
+   * .INIT_INSTANCES * * * * *                   .  .NOTIFY_LOCK_RELEASED     .
+   * .   |                                       .  .....^.....................
+   * .   v                                       .       |
+   * .NOTIFY_LISTENER                            .   RELEASE_LEADER_LOCK
    * .   |                                       .       ^
    * .   v                                       .  .....|.....................
-   * .NOTIFY_LISTENER                            .  .SHUT_DOWN_STATUS_WATCHER .
-   * .   |                                       .  .    ^                    .
-   * .   v                                       .  .    |                    .
-   * .NOTIFY_LOCK_ACQUIRED          post_acquire .  .SHUT_DOWN_INSTANCES      .
+   * .NOTIFY_LOCK_ACQUIRED                       .  .    |                    .
+   * .   |                          post_acquire .  .SHUT_DOWN_INSTANCES      .
    * ....|........................................  .    ^                    .
    *     v                                          .    |                    .
    *  <leader> -----------------------------------> .NOTIFY_LISTENER          .
@@ -101,6 +98,22 @@ private:
    *             notify error)                      ...........................
    * @endverbatim
    */
+
+  struct InstancesListener : public instances::Listener {
+    LeaderWatcher* leader_watcher;
+
+    InstancesListener(LeaderWatcher* leader_watcher)
+      : leader_watcher(leader_watcher) {
+    }
+
+    void handle_added(const InstanceIds& instance_ids) override {
+      leader_watcher->m_listener->handle_instances_added(instance_ids);
+    }
+
+    void handle_removed(const InstanceIds& instance_ids) override {
+      leader_watcher->m_listener->handle_instances_removed(instance_ids);
+    }
+  };
 
   class LeaderLock : public librbd::ManagedLock<ImageCtxT> {
   public:
@@ -192,14 +205,16 @@ private:
   };
 
   Threads<ImageCtxT> *m_threads;
-  Listener *m_listener;
+  leader_watcher::Listener *m_listener;
 
+  InstancesListener m_instances_listener;
   mutable Mutex m_lock;
   uint64_t m_notifier_id;
+  std::string m_instance_id;
   LeaderLock *m_leader_lock;
   Context *m_on_finish = nullptr;
   Context *m_on_shut_down_finish = nullptr;
-  int m_acquire_attempts = 0;
+  uint64_t m_acquire_attempts = 0;
   int m_ret_val = 0;
   MirrorStatusWatcher<ImageCtxT> *m_status_watcher = nullptr;
   Instances<ImageCtxT> *m_instances = nullptr;
@@ -273,15 +288,14 @@ private:
   void notify_heartbeat();
   void handle_notify_heartbeat(int r);
 
-  void get_instances();
-  void handle_get_instances(int r);
-
   void handle_post_acquire_leader_lock(int r, Context *on_finish);
   void handle_pre_release_leader_lock(Context *on_finish);
   void handle_post_release_leader_lock(int r, Context *on_finish);
 
   void handle_notify(uint64_t notify_id, uint64_t handle,
                      uint64_t notifier_id, bufferlist &bl) override;
+
+  void handle_rewatch_complete(int r) override;
 
   void handle_heartbeat(Context *on_ack);
   void handle_lock_acquired(Context *on_ack);

@@ -326,7 +326,7 @@ following conventions work on Linux and some Unix platforms:
 
 From the command line::
 
-  mount -t nfs -o nfsvers=4,noauto,soft,proto=tcp <ganesha-host-name>:/ <mount-point>
+  mount -t nfs -o nfsvers=4.1,noauto,soft,sync,proto=tcp <ganesha-host-name>:/ <mount-point>
 
 In /etc/fstab::
 

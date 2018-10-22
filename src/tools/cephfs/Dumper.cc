@@ -25,6 +25,7 @@
 #include "mds/LogEvent.h"
 #include "mds/JournalPointer.h"
 #include "osdc/Journaler.h"
+#include "mon/MonClient.h"
 
 #include "Dumper.h"
 
@@ -33,7 +34,7 @@
 
 #define HEADER_LEN 4096
 
-int Dumper::init(mds_role_t role_)
+int Dumper::init(mds_role_t role_, const std::string &type)
 {
   role = role_;
 
@@ -43,17 +44,23 @@ int Dumper::init(mds_role_t role_)
   }
 
   auto fs =  fsmap->get_filesystem(role.fscid);
-  assert(fs != nullptr);
+  ceph_assert(fs != nullptr);
 
-  JournalPointer jp(role.rank, fs->mds_map.get_metadata_pool());
-  int jp_load_result = jp.load(objecter);
-  if (jp_load_result != 0) {
-    std::cerr << "Error loading journal: " << cpp_strerror(jp_load_result) << std::endl;
-    return jp_load_result;
+  if (type == "mdlog") {
+    JournalPointer jp(role.rank, fs->mds_map.get_metadata_pool());
+    int jp_load_result = jp.load(objecter);
+    if (jp_load_result != 0) {
+      std::cerr << "Error loading journal: " << cpp_strerror(jp_load_result) << std::endl;
+      return jp_load_result;
+    } else {
+      ino = jp.front;
+    }
+  } else if (type == "purge_queue") {
+    ino = MDS_INO_PURGE_QUEUE + role.rank;
   } else {
-    ino = jp.front;
-    return 0;
+    ceph_abort(); // should not get here 
   }
+  return 0;
 }
 
 
@@ -80,7 +87,7 @@ int Dumper::dump(const char *dump_file)
   int r = 0;
 
   auto fs =  fsmap->get_filesystem(role.fscid);
-  assert(fs != nullptr);
+  ceph_assert(fs != nullptr);
 
   Journaler journaler("dumper", ino, fs->mds_map.get_metadata_pool(),
                       CEPH_FS_ONDISK_MAGIC, objecter, 0, 0,
@@ -100,15 +107,25 @@ int Dumper::dump(const char *dump_file)
   int fd = ::open(dump_file, O_WRONLY|O_CREAT|O_TRUNC, 0644);
   if (fd >= 0) {
     // include an informative header
+    uuid_d fsid = monc->get_fsid();
+    char fsid_str[40];
+    fsid.print(fsid_str);
     char buf[HEADER_LEN];
     memset(buf, 0, sizeof(buf));
-    snprintf(buf, HEADER_LEN, "Ceph mds%d journal dump\n start offset %llu (0x%llx)\n       length %llu (0x%llx)\n    write_pos %llu (0x%llx)\n    format %llu\n    trimmed_pos %llu (0x%llx)\n%c",
+    snprintf(buf, HEADER_LEN, "Ceph mds%d journal dump\n start offset %llu (0x%llx)\n\
+       length %llu (0x%llx)\n    write_pos %llu (0x%llx)\n    format %llu\n\
+       trimmed_pos %llu (0x%llx)\n    stripe_unit %lu (0x%lx)\n    stripe_count %lu (0x%lx)\n\
+       object_size %lu (0x%lx)\n    fsid %s\n%c",
 	    role.rank, 
 	    (unsigned long long)start, (unsigned long long)start,
 	    (unsigned long long)len, (unsigned long long)len,
 	    (unsigned long long)journaler.last_committed.write_pos, (unsigned long long)journaler.last_committed.write_pos,
 	    (unsigned long long)journaler.last_committed.stream_format,
 	    (unsigned long long)journaler.last_committed.trimmed_pos, (unsigned long long)journaler.last_committed.trimmed_pos,
+            (unsigned long)journaler.last_committed.layout.stripe_unit, (unsigned long)journaler.last_committed.layout.stripe_unit,
+            (unsigned long)journaler.last_committed.layout.stripe_count, (unsigned long)journaler.last_committed.layout.stripe_count,
+            (unsigned long)journaler.last_committed.layout.object_size, (unsigned long)journaler.last_committed.layout.object_size,
+	    fsid_str,
 	    4);
     r = safe_write(fd, buf, sizeof(buf));
     if (r) {
@@ -135,7 +152,7 @@ int Dumper::dump(const char *dump_file)
       bufferlist bl;
       dout(10) << "Reading at pos=0x" << std::hex << pos << std::dec << dendl;
 
-      const uint32_t read_size = MIN(chunk_size, end - pos);
+      const uint32_t read_size = std::min<uint64_t>(chunk_size, end - pos);
 
       C_SaferCond cond;
       lock.Lock();
@@ -179,14 +196,23 @@ int Dumper::dump(const char *dump_file)
   }
 }
 
-int Dumper::undump(const char *dump_file)
+int Dumper::undump(const char *dump_file, bool force)
 {
   cout << "undump " << dump_file << std::endl;
   
   auto fs =  fsmap->get_filesystem(role.fscid);
-  assert(fs != nullptr);
+  ceph_assert(fs != nullptr);
 
   int r = 0;
+  // try get layout info from cluster
+  Journaler journaler("umdumper", ino, fs->mds_map.get_metadata_pool(),
+                      CEPH_FS_ONDISK_MAGIC, objecter, 0, 0,
+                      &finisher);
+  int recovered = recover_journal(&journaler);
+  if (recovered != 0) {
+    derr << "recover_journal failed, try to get header from dump file " << dendl;
+  }
+
   int fd = ::open(dump_file, O_RDONLY);
   if (fd < 0) {
     r = errno;
@@ -206,16 +232,67 @@ int Dumper::undump(const char *dump_file)
   }
 
   long long unsigned start, len, write_pos, format, trimmed_pos;
+  long unsigned stripe_unit, stripe_count, object_size;
   sscanf(strstr(buf, "start offset"), "start offset %llu", &start);
   sscanf(strstr(buf, "length"), "length %llu", &len);
   sscanf(strstr(buf, "write_pos"), "write_pos %llu", &write_pos);
   sscanf(strstr(buf, "format"), "format %llu", &format);
+
+  if (!force) {
+    // need to check if fsid match onlien cluster fsid
+    if (strstr(buf, "fsid")) {
+      uuid_d fsid;
+      char fsid_str[40];
+      sscanf(strstr(buf, "fsid"), "fsid %s", fsid_str);
+      r = fsid.parse(fsid_str);
+      if (!r) {
+	derr  << "Invalid fsid" << dendl;
+	::close(fd);
+	return -EINVAL;
+      }
+
+      if (fsid != monc->get_fsid()) {
+	derr << "Imported journal fsid does not match online cluster fsid" << dendl;
+	derr << "Use --force to skip fsid check" << dendl;
+	::close(fd);
+	return -EINVAL;
+      }
+    } else {
+      derr  << "Invalid header, no fsid embeded" << dendl;
+      ::close(fd);
+      return -EINVAL;
+    }
+  }
+
+  if (recovered == 0) {
+    stripe_unit = journaler.last_committed.layout.stripe_unit;
+    stripe_count = journaler.last_committed.layout.stripe_count;
+    object_size = journaler.last_committed.layout.object_size;
+  } else {
+    // try to get layout from dump file header, if failed set layout to default
+    if (strstr(buf, "stripe_unit")) {
+      sscanf(strstr(buf, "stripe_unit"), "stripe_unit %lu", &stripe_unit);
+    } else {
+      stripe_unit = file_layout_t::get_default().stripe_unit;
+    }
+    if (strstr(buf, "stripe_count")) {
+      sscanf(strstr(buf, "stripe_count"), "stripe_count %lu", &stripe_count);
+    } else {
+      stripe_count = file_layout_t::get_default().stripe_count;
+    }
+    if (strstr(buf, "object_size")) {
+      sscanf(strstr(buf, "object_size"), "object_size %lu", &object_size);
+    } else {
+      object_size = file_layout_t::get_default().object_size;
+    }
+  }
+
   if (strstr(buf, "trimmed_pos")) {
     sscanf(strstr(buf, "trimmed_pos"), "trimmed_pos %llu", &trimmed_pos);
   } else {
     // Old format dump, any untrimmed objects before expire_pos will
     // be discarded as trash.
-    trimmed_pos = start - (start % file_layout_t::get_default().object_size);
+    trimmed_pos = start - (start % object_size);
   }
 
   if (trimmed_pos > start) {
@@ -236,7 +313,10 @@ int Dumper::undump(const char *dump_file)
     " len " << len <<
     " write_pos " << write_pos <<
     " format " << format <<
-    " trimmed_pos " << trimmed_pos << std::endl;
+    " trimmed_pos " << trimmed_pos <<
+    " stripe_unit " << stripe_unit <<
+    " stripe_count " << stripe_count <<
+    " object_size " << object_size << std::endl;
   
   Journaler::Header h;
   h.trimmed_pos = trimmed_pos;
@@ -245,11 +325,13 @@ int Dumper::undump(const char *dump_file)
   h.stream_format = format;
   h.magic = CEPH_FS_ONDISK_MAGIC;
 
-  h.layout = file_layout_t::get_default();
+  h.layout.stripe_unit = stripe_unit;
+  h.layout.stripe_count = stripe_count;
+  h.layout.object_size = object_size;
   h.layout.pool_id = fs->mds_map.get_metadata_pool();
   
   bufferlist hbl;
-  ::encode(h, hbl);
+  encode(h, hbl);
 
   object_t oid = file_object_t(ino, 0);
   object_locator_t oloc(fs->mds_map.get_metadata_pool());
@@ -279,9 +361,16 @@ int Dumper::undump(const char *dump_file)
    * prezeroing behaviour */
   {
     uint32_t const object_size = h.layout.object_size;
-    assert(object_size > 0);
-    uint64_t const last_obj = h.write_pos / object_size;
-    uint64_t const purge_count = 2;
+    ceph_assert(object_size > 0);
+    uint64_t last_obj = h.write_pos / object_size;
+    uint64_t purge_count = 2;
+    /* When the length is zero, the last_obj should be zeroed 
+     * from the offset determined by the new write_pos instead of being purged.
+     */
+    if (!len) {
+        purge_count = 1;
+        ++last_obj;
+    }
     C_SaferCond purge_cond;
     cout << "Purging " << purge_count << " objects from " << last_obj << std::endl;
     lock.Lock();
@@ -289,6 +378,20 @@ int Dumper::undump(const char *dump_file)
 		      ceph::real_clock::now(), 0, &purge_cond);
     lock.Unlock();
     purge_cond.wait();
+  }
+  /* When the length is zero, zero the last object 
+   * from the offset determined by the new write_pos.
+   */
+  if (!len) {
+    uint64_t offset_in_obj = h.write_pos % h.layout.object_size;
+    uint64_t len           = h.layout.object_size - offset_in_obj;
+    C_SaferCond zero_cond;
+    cout << "Zeroing " << len << " bytes in the last object." << std::endl;
+    
+    lock.Lock();
+    filer.zero(ino, &h.layout, snapc, h.write_pos, len, ceph::real_clock::now(), 0, &zero_cond);
+    lock.Unlock();
+    zero_cond.wait();
   }
 
   // Stream from `fd` to `filer`
@@ -298,7 +401,7 @@ int Dumper::undump(const char *dump_file)
     // Read
     bufferlist j;
     lseek64(fd, pos, SEEK_SET);
-    uint64_t l = MIN(left, 1024*1024);
+    uint64_t l = std::min<uint64_t>(left, 1024*1024);
     j.read_fd(fd, l);
 
     // Write

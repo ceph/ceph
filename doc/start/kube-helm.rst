@@ -2,8 +2,8 @@
 Installation (Kubernetes + Helm)
 ================================
 
-The ceph-helm_ project enables you to deploy Ceph in a Kubernetes environement.
-This documentation assumes a Kubernetes environement is available.
+The ceph-helm_ project enables you to deploy Ceph in a Kubernetes environment.
+This documentation assumes a Kubernetes environment is available.
 
 Current limitations
 ===================
@@ -13,14 +13,19 @@ Current limitations
    in your Ceph cluster and create its secret in Kubernetes
  - ceph-mgr can only run with 1 replica
 
-Install and start helm
+Install and start Helm
 ======================
 
 Helm can be installed by following these instructions_.
 
-Once installed, run::
+Helm finds the Kubernetes cluster by reading from the local Kubernetes config file; make sure this is downloaded and accessible to the ``helm`` client.
+
+A Tiller server must be configured and running for your Kubernetes cluster, and the local Helm client must be connected to it. It may be helpful to look at the Helm documentation for init_. To run Tiller locally and connect Helm to it, run::
 
     $ helm init
+
+The ceph-helm project uses a local Helm repo by default to store charts. To start a local Helm repo server, run::
+
     $ helm serve &
     $ helm repo add local http://localhost:8879/charts
 
@@ -35,7 +40,7 @@ Add ceph-helm to Helm local repos
 Configure your Ceph cluster
 ===========================
 
-Create a ``~/ceph-overrides.yaml`` that will contain your Ceph configuration::
+Create a ``ceph-overrides.yaml`` that will contain your Ceph configuration. This file may exist anywhere, but for this document will be assumed to reside in the user's home directory.::
 
     $ cat ~/ceph-overrides.yaml
     network:
@@ -59,6 +64,13 @@ Create a ``~/ceph-overrides.yaml`` that will contain your Ceph configuration::
 
 .. note:: The ``ceph-helm/ceph/ceph/values.yaml`` file contains the full
           list of option that can be set
+
+Create the Ceph cluster namespace
+==================================
+
+By default, ceph-helm components assume they are to be run in the ``ceph`` Kubernetes namespace. To create the namespace, run::
+
+    $ kubectl create namespace ceph
 
 Configure RBAC permissions
 ==========================
@@ -145,7 +157,7 @@ Run the helm install command to deploy Ceph::
     NAME     TYPE
     ceph-rbd  ceph.com/rbd
 
-The output from helm install shows us the different types of ressources that will be deployed.
+The output from helm install shows us the different types of resources that will be deployed.
 
 A StorageClass named ``ceph-rbd`` of type ``ceph.com/rbd`` will be created with ``ceph-rbd-provisioner`` Pods. These
 will allow a RBD to be automatically provisioned upon creation of a PVC. RBDs will also be formatted when mapped for the first
@@ -342,3 +354,4 @@ For instance, to access the cluster-tail-log, one can run::
 
 .. _ceph-helm: https://github.com/ceph/ceph-helm/
 .. _instructions: https://github.com/kubernetes/helm/blob/master/docs/install.md
+.. _init: https://github.com/kubernetes/helm/blob/master/docs/helm/helm_init.md

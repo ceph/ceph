@@ -123,7 +123,6 @@ find(string name)
 XMLObj *XMLObj::
 find_first(string name)
 {
-  XMLObjIter iter;
   map<string, XMLObj *>::iterator first;
   first = children.find(name);
   if (first != children.end())

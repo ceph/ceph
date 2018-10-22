@@ -1,7 +1,7 @@
 overrides:
   ceph:
     log-whitelist:
-      - \(REQUEST_SLOW\)
+      - \(SLOW_OPS\)
 tasks:
 - workunit:
     clients:

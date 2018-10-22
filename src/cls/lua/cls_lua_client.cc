@@ -27,7 +27,7 @@ namespace cls_lua_client {
     op.input = input;
 
     bufferlist inbl;
-    ::encode(op, inbl);
+    encode(op, inbl);
 
     return ioctx.exec(oid, "lua", "eval_bufferlist", inbl, output);
   }

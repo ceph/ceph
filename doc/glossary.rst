@@ -69,7 +69,9 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 	Ceph Filesystem
 	CephFS
 	Ceph FS
-		The POSIX filesystem components of Ceph.
+		The POSIX filesystem components of Ceph. Refer
+		:ref:`CephFS Architecture <arch-cephfs>` and :ref:`ceph-filesystem` for
+		more details.
 
 	Cloud Platforms
 	Cloud Stacks
@@ -101,7 +103,7 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 		``fsid`` term is used interchangeably with ``uuid``
 
 	OSD uuid
-		Just like the OSD fsid, this is the OSD unique identifer and is used
+		Just like the OSD fsid, this is the OSD unique identifier and is used
 		interchangeably with ``fsid``
 
 	bluestore
@@ -121,6 +123,13 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 	MGR
 		The Ceph manager software, which collects all the state from the whole
 		cluster in one place.
+
+	Ceph Manager Dashboard
+	Ceph Dashboard
+	Dashboard Plugin
+	Dashboard
+                A built-in web based monitoring and administration application to
+                Ceph Manager. Refer :ref:`mgr-dashboard` for more details.
 
 	Ceph Metadata Server
 	MDS
@@ -167,8 +176,8 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 		Controlled Replication Under Scalable Hashing. It is the algorithm
 		Ceph uses to compute object storage locations.
 
-	ruleset
-		A set of CRUSH data placement rules that applies to a particular pool(s).
+	CRUSH rule
+		The CRUSH data placement rule that applies to a particular pool(s).
 
 	Pool
 	Pools

@@ -5,6 +5,7 @@
 #define CEPH_LIBRBD_OPERATION_SNAPSHOT_REMOVE_REQUEST_H
 
 #include "librbd/operation/Request.h"
+#include "include/buffer.h"
 #include "librbd/Types.h"
 #include <string>
 
@@ -20,41 +21,33 @@ template <typename ImageCtxT = ImageCtx>
 class SnapshotRemoveRequest : public Request<ImageCtxT> {
 public:
   /**
-   * Snap Remove goes through the following state machine:
-   *
    * @verbatim
    *
-   * <start> ------\
-   *  .            |
-   *  .            v
-   *  .     STATE_REMOVE_OBJECT_MAP
-   *  .            |            .
-   *  .            v            .
-   *  . . > STATE_REMOVE_CHILD  .
-   *  .            |            .
-   *  .            |      . . . .
-   *  .            |      .
-   *  .            v      v
-   *  . . > STATE_REMOVE_SNAP
-   *               |
-   *               v
-   *        STATE_RELEASE_SNAP_ID
-   *               |
-   *               v
-   *           <finish>
+   * <start>
+   *    |
+   *    v
+   * TRASH_SNAP
+   *    |
+   *    v (skip if unsupported)
+   * GET_SNAP
+   *    |
+   *    v (skip if unnecessary)
+   * DETACH_CHILD
+   *    |
+   *    v (skip if disabled/in-use)
+   * REMOVE_OBJECT_MAP
+   *    |
+   *    v (skip if in-use)
+   * RELEASE_SNAP_ID
+   *    |
+   *    v (skip if in-use)
+   * REMOVE_SNAP
+   *    |
+   *    v
+   * <finish>
    *
    * @endverbatim
-   *
-   * The _REMOVE_OBJECT_MAP state is skipped if the object map is not enabled.
-   * The _REMOVE_CHILD state is skipped if the parent is still in-use.
    */
-  enum State {
-    STATE_REMOVE_OBJECT_MAP,
-    STATE_REMOVE_CHILD,
-    STATE_REMOVE_SNAP,
-    STATE_RELEASE_SNAP_ID,
-    STATE_ERROR
-  };
 
   static SnapshotRemoveRequest *create(
       ImageCtxT &image_ctx, const cls::rbd::SnapshotNamespace &snap_namespace,
@@ -80,22 +73,31 @@ private:
   cls::rbd::SnapshotNamespace m_snap_namespace;
   std::string m_snap_name;
   uint64_t m_snap_id;
-  State m_state;
+  bool m_trashed_snapshot = false;
+  bool m_child_attached = false;
 
-  int filter_state_return_code(int r) const {
-    if (m_state == STATE_REMOVE_CHILD && r == -ENOENT) {
-      return 0;
-    }
-    return r;
-  }
+  ceph::bufferlist m_out_bl;
 
-  void send_remove_object_map();
-  void send_remove_child();
-  void send_remove_snap();
-  void send_release_snap_id();
+  void trash_snap();
+  void handle_trash_snap(int r);
+
+  void get_snap();
+  void handle_get_snap(int r);
+
+  void detach_child();
+  void handle_detach_child(int r);
+
+  void remove_object_map();
+  void handle_remove_object_map(int r);
+
+  void release_snap_id();
+  void handle_release_snap_id(int r);
+
+  void remove_snap();
+  void handle_remove_snap(int r);
 
   void remove_snap_context();
-  int scan_for_parents(ParentSpec &pspec);
+  int scan_for_parents(cls::rbd::ParentImageSpec &pspec);
 
 };
 

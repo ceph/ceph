@@ -23,7 +23,8 @@ MDSUtility::MDSUtility() :
   objecter(NULL),
   lock("MDSUtility::lock"),
   finisher(g_ceph_context, "MDSUtility", "fn_mds_utility"),
-  waiting_for_mds_map(NULL)
+  waiting_for_mds_map(NULL),
+  inited(false)
 {
   monc = new MonClient(g_ceph_context);
   messenger = Messenger::create_client_messenger(g_ceph_context, "mds");
@@ -34,18 +35,21 @@ MDSUtility::MDSUtility() :
 
 MDSUtility::~MDSUtility()
 {
+  if (inited) {
+    shutdown();
+  }
   delete objecter;
   delete monc;
   delete messenger;
   delete fsmap;
-  assert(waiting_for_mds_map == NULL);
+  ceph_assert(waiting_for_mds_map == NULL);
 }
 
 
 int MDSUtility::init()
 {
   // Initialize Messenger
-  int r = messenger->bind(g_conf->public_addr);
+  int r = messenger->bind(g_conf()->public_addr);
   if (r < 0)
     return r;
 
@@ -90,7 +94,7 @@ int MDSUtility::init()
   Mutex init_lock("MDSUtility:init");
   Cond cond;
   bool done = false;
-  assert(!fsmap->get_epoch());
+  ceph_assert(!fsmap->get_epoch());
   lock.Lock();
   waiting_for_mds_map = new C_SafeCond(&init_lock, &cond, &done, NULL);
   lock.Unlock();
@@ -107,6 +111,7 @@ int MDSUtility::init()
 
   finisher.start();
 
+  inited = true;
   return 0;
 }
 

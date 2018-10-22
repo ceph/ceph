@@ -26,12 +26,7 @@ For Debian and Ubuntu distributions, perform the following steps:
 
 	wget -q -O- 'https://download.ceph.com/keys/release.asc' | sudo apt-key add -
 
-#. Add the Ceph packages to your repository::
-
-	echo deb https://download.ceph.com/debian/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
-
-   The above URL contains the latest stable release of Ceph.  If you
-   would like to select a specific release, use the command below and
+#. Add the Ceph packages to your repository. Use the command below and
    replace ``{ceph-stable-release}`` with a stable Ceph release (e.g.,
    ``luminous``.)  For example::
 
@@ -63,18 +58,18 @@ For CentOS 7, perform the following steps:
 
    Please see the `EPEL wiki`_ page for more information.
 
-#. Add the Ceph repository to your yum configuration file at ``/etc/yum.repos.d/ceph.repo`` with the following command::
+#. Add the Ceph repository to your yum configuration file at ``/etc/yum.repos.d/ceph.repo`` with the following command. Replace  ``{ceph-stable-release}`` with a stable Ceph release (e.g.,
+   ``luminous``.)  For example::
 
-     cat >/etc/yum.repos.d/ceph.repo
+     cat << EOM > /etc/yum.repos.d/ceph.repo
      [ceph-noarch]
      name=Ceph noarch packages
-     baseurl=https://download.ceph.com/rpm/el7/noarch
+     baseurl=https://download.ceph.com/rpm-{ceph-stable-release}/el7/noarch
      enabled=1
      gpgcheck=1
      type=rpm-md
      gpgkey=https://download.ceph.com/keys/release.asc
-
-   and then this *Control-D*.  This will use the latest stable Ceph release. If you would like to install a different release, replace ``https://download.ceph.com/rpm/el7/noarch`` with ``https://download.ceph.com/rpm-{ceph-release}/el7/noarch`` where ``{ceph-release}`` is a release name like ``luminous``.
+     EOM
 
 #. Update your repository and install ``ceph-deploy``::
 
@@ -110,7 +105,7 @@ the following repositories:
 Ceph Node Setup
 ===============
 
-The admin node must be have password-less SSH access to Ceph nodes.
+The admin node must have password-less SSH access to Ceph nodes.
 When ceph-deploy logs in to a Ceph node as a user, that particular
 user must have passwordless ``sudo`` privileges.
 
@@ -171,7 +166,7 @@ hacks (e.g., ``root``,  ``admin``, ``{productname}``). The following procedure,
 substituting  ``{username}`` for the user name you define, describes how to
 create a user with passwordless ``sudo``.
 
-.. note:: Starting with the `Infernalis release`_ the "ceph" user name is reserved
+.. note:: Starting with the :ref:`Infernalis release <infernalis-release-notes>`, the "ceph" user name is reserved
    for the Ceph daemons. If the "ceph" user already exists on the Ceph nodes,
    removing the user must be done before attempting an upgrade.
 

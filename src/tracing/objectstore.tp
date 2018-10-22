@@ -369,6 +369,22 @@ TRACEPOINT_EVENT(objectstore, split_coll2_exit,
     )
 )
 
+TRACEPOINT_EVENT(objectstore, merge_coll_enter,
+    TP_ARGS(
+        const char *, osr_name),
+    TP_FIELDS(
+        ctf_string(osr_name, osr_name)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, merge_coll_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
 TRACEPOINT_EVENT(objectstore, omap_setheader_enter,
     TP_ARGS(
         const char *, osr_name),

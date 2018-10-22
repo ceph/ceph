@@ -2,4 +2,4 @@ overrides:
   ceph:
     conf:
       global:
-        ms inject socket failures: 500
+        ms inject socket failures: 1000

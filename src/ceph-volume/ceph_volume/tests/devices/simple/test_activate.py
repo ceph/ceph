@@ -21,3 +21,67 @@ class TestActivate(object):
         activate.Activate([]).main()
         stdout, stderr = capsys.readouterr()
         assert 'Activate OSDs by mounting devices previously configured' in stdout
+
+
+class TestValidateDevices(object):
+
+    def test_filestore_missing_journal(self):
+        activation = activate.Activate([])
+        with pytest.raises(RuntimeError) as error:
+            activation.validate_devices({'type': 'filestore', 'data': {}})
+        assert 'Unable to activate filestore OSD due to missing devices' in str(error)
+
+    def test_filestore_missing_data(self):
+        activation = activate.Activate([])
+        with pytest.raises(RuntimeError) as error:
+            activation.validate_devices({'type': 'filestore', 'journal': {}})
+        assert 'Unable to activate filestore OSD due to missing devices' in str(error)
+
+    def test_filestore_journal_device_found(self, capsys):
+        activation = activate.Activate([])
+        with pytest.raises(RuntimeError):
+            activation.validate_devices({'type': 'filestore', 'journal': {}})
+        stdout, stderr = capsys.readouterr()
+        assert "devices found: ['journal']" in stdout
+
+    def test_filestore_data_device_found(self, capsys):
+        activation = activate.Activate([])
+        with pytest.raises(RuntimeError):
+            activation.validate_devices({'type': 'filestore', 'data': {}})
+        stdout, stderr = capsys.readouterr()
+        assert "devices found: ['data']" in stdout
+
+    def test_filestore_with_all_devices(self):
+        activation = activate.Activate([])
+        result = activation.validate_devices({'type': 'filestore', 'journal': {}, 'data': {}})
+        assert result is True
+
+    def test_bluestore_with_all_devices(self):
+        activation = activate.Activate([])
+        result = activation.validate_devices({'type': 'bluestore', 'data': {}, 'block': {}})
+        assert result is True
+
+    def test_bluestore_is_default(self):
+        activation = activate.Activate([])
+        result = activation.validate_devices({'data': {}, 'block': {}})
+        assert result is True
+
+    def test_bluestore_data_device_found(self, capsys):
+        activation = activate.Activate([])
+        with pytest.raises(RuntimeError):
+            activation.validate_devices({'data': {}})
+        stdout, stderr = capsys.readouterr()
+        assert "devices found: ['data']" in stdout
+
+    def test_bluestore_missing_data(self):
+        activation = activate.Activate([])
+        with pytest.raises(RuntimeError) as error:
+            activation.validate_devices({'type': 'bluestore', 'block': {}})
+        assert 'Unable to activate bluestore OSD due to missing devices' in str(error)
+
+    def test_bluestore_block_device_found(self, capsys):
+        activation = activate.Activate([])
+        with pytest.raises(RuntimeError):
+            activation.validate_devices({'block': {}})
+        stdout, stderr = capsys.readouterr()
+        assert "devices found: ['block']" in stdout

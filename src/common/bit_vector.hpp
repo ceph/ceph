@@ -12,7 +12,7 @@
 #define BIT_VECTOR_HPP
 
 #include "common/Formatter.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/encoding.h"
 #include <utility>
 
@@ -107,7 +107,7 @@ public:
       uint64_t index;
       compute_index(m_offset, &index, &m_shift);
 
-      assert(index == m_index || index == m_index + 1);
+      ceph_assert(index == m_index || index == m_index + 1);
       if (index > m_index) {
         m_index = index;
         ++m_data_iterator;
@@ -187,21 +187,21 @@ public:
   ConstReference operator[](uint64_t offset) const;
 
   void encode_header(bufferlist& bl) const;
-  void decode_header(bufferlist::iterator& it);
+  void decode_header(bufferlist::const_iterator& it);
   uint64_t get_header_length() const;
 
   void encode_data(bufferlist& bl, uint64_t byte_offset,
 		   uint64_t byte_length) const;
-  void decode_data(bufferlist::iterator& it, uint64_t byte_offset);
+  void decode_data(bufferlist::const_iterator& it, uint64_t byte_offset);
   void get_data_extents(uint64_t offset, uint64_t length,
 		        uint64_t *byte_offset, uint64_t *byte_length) const;
 
   void encode_footer(bufferlist& bl) const;
-  void decode_footer(bufferlist::iterator& it);
+  void decode_footer(bufferlist::const_iterator& it);
   uint64_t get_footer_offset() const;
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& it);
+  void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 
   bool operator==(const BitVector &b) const;
@@ -272,22 +272,23 @@ template <uint8_t _b>
 void BitVector<_b>::encode_header(bufferlist& bl) const {
   bufferlist header_bl;
   ENCODE_START(1, 1, header_bl);
-  ::encode(m_size, header_bl);
+  encode(m_size, header_bl);
   ENCODE_FINISH(header_bl);
   m_header_crc = header_bl.crc32c(0);
 
-  ::encode(header_bl, bl);
+  encode(header_bl, bl);
 }
 
 template <uint8_t _b>
-void BitVector<_b>::decode_header(bufferlist::iterator& it) {
+void BitVector<_b>::decode_header(bufferlist::const_iterator& it) {
+  using ceph::decode;
   bufferlist header_bl;
-  ::decode(header_bl, it);
+  decode(header_bl, it);
 
-  bufferlist::iterator header_it = header_bl.begin();
+  auto header_it = header_bl.cbegin();
   uint64_t size;
   DECODE_START(1, header_it);
-  ::decode(size, header_it);
+  decode(size, header_it);
   DECODE_FINISH(header_it);
 
   resize(size);
@@ -303,13 +304,13 @@ uint64_t BitVector<_b>::get_header_length() const {
 template <uint8_t _b>
 void BitVector<_b>::encode_data(bufferlist& bl, uint64_t byte_offset,
 				uint64_t byte_length) const {
-  assert(byte_offset % BLOCK_SIZE == 0);
-  assert(byte_offset + byte_length == m_data.length() ||
+  ceph_assert(byte_offset % BLOCK_SIZE == 0);
+  ceph_assert(byte_offset + byte_length == m_data.length() ||
 	 byte_length % BLOCK_SIZE == 0);
 
   uint64_t end_offset = byte_offset + byte_length;
   while (byte_offset < end_offset) {
-    uint64_t len = MIN(BLOCK_SIZE, end_offset - byte_offset);
+    uint64_t len = std::min<uint64_t>(BLOCK_SIZE, end_offset - byte_offset);
 
     bufferlist bit;
     bit.substr_of(m_data, byte_offset, len);
@@ -321,8 +322,8 @@ void BitVector<_b>::encode_data(bufferlist& bl, uint64_t byte_offset,
 }
 
 template <uint8_t _b>
-void BitVector<_b>::decode_data(bufferlist::iterator& it, uint64_t byte_offset) {
-  assert(byte_offset % BLOCK_SIZE == 0);
+void BitVector<_b>::decode_data(bufferlist::const_iterator& it, uint64_t byte_offset) {
+  ceph_assert(byte_offset % BLOCK_SIZE == 0);
   if (it.end()) {
     return;
   }
@@ -338,7 +339,7 @@ void BitVector<_b>::decode_data(bufferlist::iterator& it, uint64_t byte_offset) 
   }
 
   while (byte_offset < end_offset) {
-    uint64_t len = MIN(BLOCK_SIZE, end_offset - byte_offset);
+    uint64_t len = std::min<uint64_t>(BLOCK_SIZE, end_offset - byte_offset);
 
     bufferptr ptr;
     it.copy_deep(len, ptr);
@@ -358,7 +359,7 @@ void BitVector<_b>::decode_data(bufferlist::iterator& it, uint64_t byte_offset) 
     tail.substr_of(m_data, end_offset, m_data.length() - end_offset);
     data.append(tail);
   }
-  assert(data.length() == m_data.length());
+  ceph_assert(data.length() == m_data.length());
   data.swap(m_data);
 }
 
@@ -367,7 +368,7 @@ void BitVector<_b>::get_data_extents(uint64_t offset, uint64_t length,
 				     uint64_t *byte_offset,
 				     uint64_t *byte_length) const {
   // read BLOCK_SIZE-aligned chunks
-  assert(length > 0 && offset + length <= m_size);
+  ceph_assert(length > 0 && offset + length <= m_size);
   uint64_t shift;
   compute_index(offset, byte_offset, &shift);
   *byte_offset -= (*byte_offset % BLOCK_SIZE);
@@ -375,7 +376,7 @@ void BitVector<_b>::get_data_extents(uint64_t offset, uint64_t length,
   uint64_t end_offset;
   compute_index(offset + length - 1, &end_offset, &shift);
   end_offset += (BLOCK_SIZE - (end_offset % BLOCK_SIZE));
-  assert(*byte_offset <= end_offset);
+  ceph_assert(*byte_offset <= end_offset);
 
   *byte_length = end_offset - *byte_offset;
   if (*byte_offset + *byte_length > m_data.length()) {
@@ -385,31 +386,33 @@ void BitVector<_b>::get_data_extents(uint64_t offset, uint64_t length,
 
 template <uint8_t _b>
 void BitVector<_b>::encode_footer(bufferlist& bl) const {
+  using ceph::encode;
   bufferlist footer_bl;
   if (m_crc_enabled) {
-    ::encode(m_header_crc, footer_bl);
-    ::encode(m_data_crcs, footer_bl);
+    encode(m_header_crc, footer_bl);
+    encode(m_data_crcs, footer_bl);
   }
-  ::encode(footer_bl, bl);
+  encode(footer_bl, bl);
 }
 
 template <uint8_t _b>
-void BitVector<_b>::decode_footer(bufferlist::iterator& it) {
+void BitVector<_b>::decode_footer(bufferlist::const_iterator& it) {
+  using ceph::decode;
   bufferlist footer_bl;
-  ::decode(footer_bl, it);
+  decode(footer_bl, it);
 
   m_crc_enabled = (footer_bl.length() > 0);
   if (m_crc_enabled) {
-    bufferlist::iterator footer_it = footer_bl.begin();
+    auto footer_it = footer_bl.cbegin();
 
     __u32 header_crc;
-    ::decode(header_crc, footer_it);
+    decode(header_crc, footer_it);
     if (m_header_crc != header_crc) {
       throw buffer::malformed_input("incorrect header CRC");
     }
 
     uint64_t block_count = (m_data.length() + BLOCK_SIZE - 1) / BLOCK_SIZE;
-    ::decode(m_data_crcs, footer_it);
+    decode(m_data_crcs, footer_it);
     if (m_data_crcs.size() != block_count) {
       throw buffer::malformed_input("invalid data block CRCs");
     }
@@ -429,7 +432,7 @@ void BitVector<_b>::encode(bufferlist& bl) const {
 }
 
 template <uint8_t _b>
-void BitVector<_b>::decode(bufferlist::iterator& it) {
+void BitVector<_b>::decode(bufferlist::const_iterator& it) {
   decode_header(it);
 
   bufferlist data_bl;
@@ -439,7 +442,7 @@ void BitVector<_b>::decode(bufferlist::iterator& it) {
 
   decode_footer(it);
 
-  bufferlist::iterator data_it = data_bl.begin();
+  auto data_it = data_bl.cbegin();
   decode_data(data_it, 0);
 }
 
@@ -505,7 +508,6 @@ void BitVector<_b>::generate_test_instances(std::list<BitVector *> &o) {
   o.push_back(b);
 }
 
-}
 
 WRITE_CLASS_ENCODER(ceph::BitVector<2>)
 
@@ -515,6 +517,7 @@ inline std::ostream& operator<<(std::ostream& out, const ceph::BitVector<_b> &b)
   out << "ceph::BitVector<" << _b << ">(size=" << b.size() << ", data="
       << b.get_data() << ")";
   return out;
+}
 }
 
 #endif // BIT_VECTOR_HPP

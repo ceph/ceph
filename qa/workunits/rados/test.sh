@@ -15,7 +15,7 @@ trap cleanup EXIT ERR HUP INT QUIT
 declare -A pids
 
 for f in \
-    api_aio api_io api_list api_lock api_misc \
+    api_aio api_io api_asio api_list api_lock api_misc \
     api_tier api_pool api_snapshots api_stat api_watch_notify api_cmd \
     api_service \
     api_c_write_operations \
@@ -27,7 +27,8 @@ for f in \
 do
     if [ $parallel -eq 1 ]; then
 	r=`printf '%25s' $f`
-	bash -o pipefail -exc "ceph_test_rados_$f $color 2>&1 | tee ceph_test_rados_$f.log | sed \"s/^/$r: /\"" &
+	ff=`echo $f | awk '{print $1}'`
+	bash -o pipefail -exc "ceph_test_rados_$f $color 2>&1 | tee ceph_test_rados_$ff.log | sed \"s/^/$r: /\"" &
 	pid=$!
 	echo "test $f on pid $pid"
 	pids[$f]=$pid

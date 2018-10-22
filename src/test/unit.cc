@@ -35,17 +35,11 @@
  */
 int main(int argc, char **argv) {
   std::vector<const char*> args(argv, argv + argc);
-  env_to_vec(args);
   auto cct = global_init(NULL, args,
 			 CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_MON_CONFIG);
   common_init_finish(g_ceph_context);
-
-  const char* env = getenv("CEPH_LIB");
-  if (env) {
-    g_conf->set_val_or_die("erasure_code_dir", env, false);
-    g_conf->set_val_or_die("plugin_dir", env, false);
-  }
 
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

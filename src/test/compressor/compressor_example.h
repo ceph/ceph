@@ -43,9 +43,9 @@ public:
     out = in;
     return 0;
   }
-  int decompress(bufferlist::iterator &p, size_t compressed_len, bufferlist &out) override
+  int decompress(bufferlist::const_iterator &p, size_t compressed_len, bufferlist &out) override
   {
-    p.copy(MIN(p.get_remaining(), compressed_len), out);
+    p.copy(std::min<size_t>(p.get_remaining(), compressed_len), out);
     return 0;
   }
 };

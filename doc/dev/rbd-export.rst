@@ -83,8 +83,20 @@ End
 
 
 Diffs records
-~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~
+
 Record the all snapshots and the HEAD in this section. 
+
+Snap Protection status
+----------------------
+
+Record the snapshot's protection status if `--export-format=2`.
+- u8: 'p'
+- le64: length of appending data (8)
+- u8: snap protection status (0 for false, 1 for true)
+
+Others
+------
 
 - le64: number of diffs
 - Diffs ...

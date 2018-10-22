@@ -18,7 +18,7 @@
 #include "rgw/rgw_rados.h"
 #include "rgw/rgw_crypt.h"
 #include <gtest/gtest.h>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
@@ -27,7 +27,7 @@ using namespace std;
 std::unique_ptr<BlockCrypt> AES_256_CBC_create(CephContext* cct, const uint8_t* key, size_t len);
 
 
-class ut_get_sink : public RGWGetDataCB {
+class ut_get_sink : public RGWGetObj_Filter {
   std::stringstream sink;
 public:
   ut_get_sink() {}
@@ -44,20 +44,13 @@ public:
   }
 };
 
-class ut_put_sink: public RGWPutObjDataProcessor
+class ut_put_sink: public rgw::putobj::DataProcessor
 {
   std::stringstream sink;
 public:
-  ut_put_sink(){}
-  virtual ~ut_put_sink(){}
-  int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_raw_obj *pobj, bool *again) override
+  int process(bufferlist&& bl, uint64_t ofs) override
   {
     sink << boost::string_ref(bl.c_str(),bl.length());
-    *again = false;
-    return 0;
-  }
-  int throttle_data(void *handle, const rgw_raw_obj& obj, uint64_t size, bool need_to_wait) override
-  {
     return 0;
   }
   std::string get_sink()
@@ -562,18 +555,11 @@ TEST(TestRGWCrypto, verify_RGWPutObj_BlockEncrypt_chunks)
 
       bufferlist bl;
       bl.append(input.c_str()+pos, size);
-      void* handle;
-      bool again = false;
-      rgw_raw_obj ro;
-      encrypt.handle_data(bl, 0, &handle, nullptr, &again);
-      encrypt.throttle_data(handle, ro, size, false);
+      encrypt.process(std::move(bl), pos);
 
       pos = pos + size;
     } while (pos < test_size);
-    bufferlist bl;
-    void* handle;
-    bool again = false;
-    encrypt.handle_data(bl, 0, &handle, nullptr, &again);
+    encrypt.process({}, pos);
 
     ASSERT_EQ(put_sink.get_sink().length(), static_cast<size_t>(test_size));
 
@@ -619,13 +605,8 @@ TEST(TestRGWCrypto, verify_Encrypt_Decrypt)
 				   AES_256_CBC_create(g_ceph_context, &key[0], 32) );
     bufferlist bl;
     bl.append((char*)test_in, test_size);
-    void* handle;
-    bool again = false;
-    rgw_raw_obj ro;
-    encrypt.handle_data(bl, 0, &handle, nullptr, &again);
-    encrypt.throttle_data(handle, ro, test_size, false);
-    bl.clear();
-    encrypt.handle_data(bl, 0, &handle, nullptr, &again);
+    encrypt.process(std::move(bl), 0);
+    encrypt.process({}, test_size);
     ASSERT_EQ(put_sink.get_sink().length(), test_size);
 
     bl.append(put_sink.get_sink().data(), put_sink.get_sink().length());
@@ -651,7 +632,9 @@ int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
 
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
 
   ::testing::InitGoogleTest(&argc, argv);

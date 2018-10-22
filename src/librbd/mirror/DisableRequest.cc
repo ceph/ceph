@@ -49,7 +49,7 @@ void DisableRequest<I>::send_get_mirror_image() {
     create_rados_callback<klass, &klass::handle_get_mirror_image>(this);
   m_out_bl.clear();
   int r = m_image_ctx->md_ctx.aio_operate(RBD_MIRRORING, comp, &op, &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 
@@ -59,7 +59,7 @@ Context *DisableRequest<I>::handle_get_mirror_image(int *result) {
   ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
 
   if (*result == 0) {
-    bufferlist::iterator iter = m_out_bl.begin();
+    auto iter = m_out_bl.cbegin();
     *result = cls_client::mirror_image_get_finish(&iter, &m_mirror_image);
   }
 
@@ -72,7 +72,7 @@ Context *DisableRequest<I>::handle_get_mirror_image(int *result) {
       ldout(cct, 5) << this << " " << __func__
                     << ": mirroring is not supported by OSD" << dendl;
     } else {
-      lderr(cct) << "failed to retreive mirror image: " << cpp_strerror(*result)
+      lderr(cct) << "failed to retrieve mirror image: " << cpp_strerror(*result)
                  << dendl;
     }
     return m_on_finish;
@@ -131,7 +131,7 @@ void DisableRequest<I>::send_set_mirror_image() {
     create_rados_callback<klass, &klass::handle_set_mirror_image>(this);
   m_out_bl.clear();
   int r = m_image_ctx->md_ctx.aio_operate(RBD_MIRRORING, comp, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 
@@ -190,7 +190,7 @@ void DisableRequest<I>::send_promote_image() {
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
   // Not primary -- shouldn't have the journal open
-  assert(m_image_ctx->journal == nullptr);
+  ceph_assert(m_image_ctx->journal == nullptr);
 
   using klass = DisableRequest<I>;
   Context *ctx = util::create_context_callback<
@@ -241,13 +241,14 @@ Context *DisableRequest<I>::handle_get_clients(int *result) {
 
   Mutex::Locker locker(m_lock);
 
-  assert(m_current_ops.empty());
+  ceph_assert(m_current_ops.empty());
 
   for (auto client : m_clients) {
     journal::ClientData client_data;
-    bufferlist::iterator bl_it = client.data.begin();
+    auto bl_it = client.data.cbegin();
     try {
-      ::decode(client_data, bl_it);
+      using ceph::decode;
+      decode(client_data, bl_it);
     } catch (const buffer::error &err) {
       lderr(cct) << "failed to decode client data" << dendl;
       m_error_result = -EBADMSG;
@@ -305,7 +306,7 @@ void DisableRequest<I>::send_remove_snap(const std::string &client_id,
   ldout(cct, 10) << this << " " << __func__ << ": client_id=" << client_id
                  << ", snap_name=" << snap_name << dendl;
 
-  assert(m_lock.is_locked());
+  ceph_assert(m_lock.is_locked());
 
   m_current_ops[client_id]++;
 
@@ -313,10 +314,9 @@ void DisableRequest<I>::send_remove_snap(const std::string &client_id,
     &DisableRequest<I>::handle_remove_snap, client_id);
 
   ctx = new FunctionContext([this, snap_namespace, snap_name, ctx](int r) {
-      RWLock::WLocker owner_locker(m_image_ctx->owner_lock);
-      m_image_ctx->operations->execute_snap_remove(snap_namespace,
-						   snap_name.c_str(),
-						   ctx);
+      m_image_ctx->operations->snap_remove(snap_namespace,
+                                           snap_name.c_str(),
+                                           ctx);
     });
 
   m_image_ctx->op_work_queue->queue(ctx, 0);
@@ -330,7 +330,7 @@ Context *DisableRequest<I>::handle_remove_snap(int *result,
 
   Mutex::Locker locker(m_lock);
 
-  assert(m_current_ops[client_id] > 0);
+  ceph_assert(m_current_ops[client_id] > 0);
   m_current_ops[client_id]--;
 
   if (*result < 0 && *result != -ENOENT) {
@@ -353,8 +353,8 @@ void DisableRequest<I>::send_unregister_client(
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
-  assert(m_lock.is_locked());
-  assert(m_current_ops[client_id] == 0);
+  ceph_assert(m_lock.is_locked());
+  ceph_assert(m_current_ops[client_id] == 0);
 
   Context *ctx = create_context_callback(
     &DisableRequest<I>::handle_unregister_client, client_id);
@@ -370,7 +370,7 @@ void DisableRequest<I>::send_unregister_client(
   librados::AioCompletion *comp = create_rados_callback(ctx);
 
   int r = m_image_ctx->md_ctx.aio_operate(header_oid, comp, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 
@@ -382,7 +382,7 @@ Context *DisableRequest<I>::handle_unregister_client(
   ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
 
   Mutex::Locker locker(m_lock);
-  assert(m_current_ops[client_id] == 0);
+  ceph_assert(m_current_ops[client_id] == 0);
   m_current_ops.erase(client_id);
 
   if (*result < 0 && *result != -ENOENT) {
@@ -417,7 +417,7 @@ void DisableRequest<I>::send_remove_mirror_image() {
     create_rados_callback<klass, &klass::handle_remove_mirror_image>(this);
   m_out_bl.clear();
   int r = m_image_ctx->md_ctx.aio_operate(RBD_MIRRORING, comp, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 

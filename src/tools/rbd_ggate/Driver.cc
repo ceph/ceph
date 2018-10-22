@@ -29,32 +29,31 @@ int Driver::kill(const std::string &devname) {
   return r;
 }
 
-int Driver::list(std::list<std::string> &devs) {
+int Driver::list(std::map<std::string, DevInfo> *devices) {
   size_t size = 1024;
-  char **devs_ = nullptr;
+  ggate_drv_info *devs = nullptr;
   int r;
 
   while (size <= 1024 * 1024) {
-    devs_ = static_cast<char **>(
-        realloc(static_cast<void *>(devs_), size * sizeof(*devs_)));
-    r = ggate_drv_list(devs_, &size);
+    devs = static_cast<ggate_drv_info *>(
+        realloc(static_cast<void *>(devs), size * sizeof(*devs)));
+    r = ggate_drv_list(devs, &size);
     if (r != -ERANGE) {
       break;
     }
-    size *= 2;
   }
   if (r < 0) {
     goto free;
   }
 
-  devs.clear();
+  devices->clear();
   for (size_t i = 0; i < size; i++) {
-    devs.push_back(devs_[i]);
+    auto &dev = devs[i];
+    (*devices)[dev.id] = {dev.name, dev.info};
   }
 
-  ggate_drv_list_free(devs_, size);
 free:
-  free(devs_);
+  free(devs);
 
   return r;
 }
@@ -148,7 +147,7 @@ int Driver::send(Request *req) {
 
   if (ggate_drv_req_cmd(req->req) == GGATE_DRV_CMD_READ &&
       ggate_drv_req_error(req->req) == 0) {
-    assert(req->bl.length() == ggate_drv_req_length(req->req));
+    ceph_assert(req->bl.length() == ggate_drv_req_length(req->req));
     // TODO: avoid copying?
     req->bl.copy(0, ggate_drv_req_length(req->req),
                  static_cast<char *>(ggate_drv_req_buf(req->req)));

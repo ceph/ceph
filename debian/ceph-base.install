@@ -1,6 +1,7 @@
 etc/init.d/ceph
+lib/systemd/system/ceph-crash.service
+usr/bin/ceph-crash
 usr/bin/ceph-debugpack
-usr/bin/ceph-detect-init
 usr/bin/ceph-run
 usr/bin/crushtool
 usr/bin/monmaptool
@@ -8,14 +9,12 @@ usr/bin/osdmaptool
 usr/bin/ceph-kvstore-tool
 usr/lib/ceph/ceph_common.sh
 usr/lib/ceph/erasure-code/*
-usr/lib/python*/dist-packages/ceph_detect_init*
 usr/lib/rados-classes/*
 usr/sbin/ceph-create-keys
 usr/share/doc/ceph/sample.ceph.conf
 usr/share/man/man8/ceph-create-keys.8
 usr/share/man/man8/ceph-debugpack.8
 usr/share/man/man8/ceph-deploy.8
-usr/share/man/man8/ceph-detect-init.8
 usr/share/man/man8/ceph-run.8
 usr/share/man/man8/crushtool.8
 usr/share/man/man8/monmaptool.8

@@ -17,7 +17,7 @@
 #include "osd/mClockOpClassSupport.h"
 #include "osd/OpQueueItem.h"
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 namespace ceph {
 
@@ -39,6 +39,9 @@ namespace ceph {
       scrub(cct->_conf->osd_op_queue_mclock_scrub_res,
 	    cct->_conf->osd_op_queue_mclock_scrub_wgt,
 	    cct->_conf->osd_op_queue_mclock_scrub_lim),
+      pg_delete(cct->_conf->osd_op_queue_mclock_pg_delete_res,
+	    cct->_conf->osd_op_queue_mclock_pg_delete_wgt,
+	    cct->_conf->osd_op_queue_mclock_pg_delete_lim),
       peering_event(cct->_conf->osd_op_queue_mclock_peering_event_res,
 		    cct->_conf->osd_op_queue_mclock_peering_event_wgt,
 		    cct->_conf->osd_op_queue_mclock_peering_event_lim)
@@ -72,7 +75,7 @@ namespace ceph {
     }
 
     void OpClassClientInfoMgr::add_rep_op_msg(int message_code) {
-      assert(message_code >= 0 && message_code < int(rep_op_msg_bitset_size));
+      ceph_assert(message_code >= 0 && message_code < int(rep_op_msg_bitset_size));
       rep_op_msg_bitset.set(message_code);
     }
 
@@ -86,7 +89,7 @@ namespace ceph {
 	// stores type as unsigned little endian, so be sure to
 	// convert to CPU byte ordering
 	boost::optional<OpRequestRef> op_ref_maybe = op.maybe_get_op();
-	assert(op_ref_maybe);
+	ceph_assert(op_ref_maybe);
 	__le16 mtype_le = (*op_ref_maybe)->get_req()->get_header().type;
 	__u16 mtype = le16_to_cpu(mtype_le);
 	if (rep_op_msg_bitset.test(mtype)) {

@@ -7,13 +7,20 @@
 #include "mds/mdstypes.h"
 #include "Inode.h"
 #include "InodeRef.h"
+#include "Dir.h"
 
 class Dentry : public LRUObject {
 public:
-  explicit Dentry(const std::string &name) : name(name), inode_xlist_link(this) {}
+  explicit Dentry(Dir *_dir, const std::string &_name) :
+    dir(_dir), name(_name), inode_xlist_link(this)
+  {
+    auto r = dir->dentries.insert(make_pair(name, this));
+    ceph_assert(r.second);
+    dir->num_null_dentries++;
+  }
   ~Dentry() {
-    assert(ref == 0);
-    inode_xlist_link.remove_myself();
+    ceph_assert(ref == 0);
+    ceph_assert(dir == nullptr);
   }
 
   /*
@@ -21,13 +28,13 @@ public:
    * ref >1 -> pinned in lru
    */
   void get() {
-    assert(ref > 0);
+    ceph_assert(ref > 0);
     if (++ref == 2)
       lru_pin();
     //cout << "dentry.get on " << this << " " << name << " now " << ref << std::endl;
   }
   void put() {
-    assert(ref > 0);
+    ceph_assert(ref > 0);
     if (--ref == 1)
       lru_unpin();
     //cout << "dentry.put on " << this << " " << name << " now " << ref << std::endl;
@@ -43,6 +50,7 @@ public:
       if (inode->ll_ref)
         get(); // ll_ref -> dn pin
     }
+    dir->num_null_dentries--;
   }
   void unlink(void) {
     if (inode->is_dir()) {
@@ -51,16 +59,25 @@ public:
       if (inode->ll_ref)
         put(); // ll_ref -> dn pin
     }
-    assert(inode_xlist_link.get_list() == &inode->dentries);
+    ceph_assert(inode_xlist_link.get_list() == &inode->dentries);
     inode_xlist_link.remove_myself();
     inode.reset();
+    dir->num_null_dentries++;
+  }
+  void detach(void) {
+    ceph_assert(!inode);
+    auto p = dir->dentries.find(name);
+    ceph_assert(p != dir->dentries.end());
+    dir->dentries.erase(p);
+    dir->num_null_dentries--;
+    dir = nullptr;
   }
 
   void dump(Formatter *f) const;
   friend std::ostream &operator<<(std::ostream &oss, const Dentry &Dentry);
 
-  string   name;                      // sort of lame
-  class Dir	   *dir = nullptr;
+  Dir	   *dir;
+  const string name;
   InodeRef inode;
   int	   ref = 1; // 1 if there's a dir beneath me.
   int64_t offset = 0;

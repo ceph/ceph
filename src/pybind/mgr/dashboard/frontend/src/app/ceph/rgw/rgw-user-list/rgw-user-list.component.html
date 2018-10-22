@@ -1,0 +1,18 @@
+<cd-table #table
+          [autoReload]="false"
+          [data]="users"
+          [columns]="columns"
+          columnMode="flex"
+          selectionType="multi"
+          (updateSelection)="updateSelection($event)"
+          identifier="user_id"
+          (fetchData)="getUserList($event)">
+  <cd-table-actions class="table-actions"
+                    [permission]="permission"
+                    [selection]="selection"
+                    [tableActions]="tableActions">
+  </cd-table-actions>
+  <cd-rgw-user-details cdTableDetail
+                       [selection]="selection">
+  </cd-rgw-user-details>
+</cd-table>

@@ -293,30 +293,69 @@ static __u64 crush_ln(unsigned int xin)
 /*
  * straw2
  *
+ * Suppose we have two osds: osd.0 and osd.1, with weight 8 and 4 respectively, It means:
+ *   a). For osd.0, the time interval between each io request apply to exponential distribution 
+ *       with lamba equals 8
+ *   b). For osd.1, the time interval between each io request apply to exponential distribution 
+ *       with lamba equals 4
+ *   c). If we apply to each osd's exponential random variable, then the total pgs on each osd
+ *       is proportional to its weight.
+ *
  * for reference, see:
  *
  * http://en.wikipedia.org/wiki/Exponential_distribution#Distribution_of_the_minimum_of_exponential_random_variables
- *
  */
 
 static inline __u32 *get_choose_arg_weights(const struct crush_bucket_straw2 *bucket,
                                             const struct crush_choose_arg *arg,
                                             int position)
 {
-  if ((arg == NULL) ||
-      (arg->weight_set == NULL))
-    return bucket->item_weights;
-  if (position >= arg->weight_set_size)
-    position = arg->weight_set_size - 1;
-  return arg->weight_set[position].weights;
+	if ((arg == NULL) || (arg->weight_set == NULL))
+		return bucket->item_weights;
+	if (position >= arg->weight_set_positions)
+		position = arg->weight_set_positions - 1;
+	return arg->weight_set[position].weights;
 }
 
 static inline __s32 *get_choose_arg_ids(const struct crush_bucket_straw2 *bucket,
 					const struct crush_choose_arg *arg)
 {
-  if ((arg == NULL) || (arg->ids == NULL))
-    return bucket->h.items;
-  return arg->ids;
+	if ((arg == NULL) || (arg->ids == NULL))
+		return bucket->h.items;
+	return arg->ids;
+}
+
+/*
+ * Compute exponential random variable using inversion method.
+ *
+ * for reference, see the exponential distribution example at:  
+ * https://en.wikipedia.org/wiki/Inverse_transform_sampling#Examples
+ */
+static inline __s64 generate_exponential_distribution(int type, int x, int y, int z, 
+                                                      int weight)
+{
+	unsigned int u = crush_hash32_3(type, x, y, z);
+	u &= 0xffff;
+
+	/*
+	 * for some reason slightly less than 0x10000 produces
+	 * a slightly more accurate distribution... probably a
+	 * rounding effect.
+	 *
+	 * the natural log lookup table maps [0,0xffff]
+	 * (corresponding to real numbers [1/0x10000, 1] to
+	 * [0, 0xffffffffffff] (corresponding to real numbers
+	 * [-11.090355,0]).
+	 */
+	__s64 ln = crush_ln(u) - 0x1000000000000ll;
+
+	/*
+	 * divide by 16.16 fixed-point weight.  note
+	 * that the ln value is negative, so a larger
+	 * weight means a larger (less negative) value
+	 * for draw.
+	 */
+	return div64_s64(ln, weight);
 }
 
 static int bucket_straw2_choose(const struct crush_bucket_straw2 *bucket,
@@ -324,35 +363,13 @@ static int bucket_straw2_choose(const struct crush_bucket_straw2 *bucket,
                                 int position)
 {
 	unsigned int i, high = 0;
-	unsigned int u;
-	__s64 ln, draw, high_draw = 0;
+	__s64 draw, high_draw = 0;
         __u32 *weights = get_choose_arg_weights(bucket, arg, position);
         __s32 *ids = get_choose_arg_ids(bucket, arg);
 	for (i = 0; i < bucket->h.size; i++) {
                 dprintk("weight 0x%x item %d\n", weights[i], ids[i]);
 		if (weights[i]) {
-			u = crush_hash32_3(bucket->h.hash, x, ids[i], r);
-			u &= 0xffff;
-
-			/*
-			 * for some reason slightly less than 0x10000 produces
-			 * a slightly more accurate distribution... probably a
-			 * rounding effect.
-			 *
-			 * the natural log lookup table maps [0,0xffff]
-			 * (corresponding to real numbers [1/0x10000, 1] to
-			 * [0, 0xffffffffffff] (corresponding to real numbers
-			 * [-11.090355,0]).
-			 */
-			ln = crush_ln(u) - 0x1000000000000ll;
-
-			/*
-			 * divide by 16.16 fixed-point weight.  note
-			 * that the ln value is negative, so a larger
-			 * weight means a larger (less negative) value
-			 * for draw.
-			 */
-			draw = div64_s64(ln, weights[i]);
+			draw = generate_exponential_distribution(bucket->h.hash, x, ids[i], r, weights[i]);
 		} else {
 			draw = S64_MIN;
 		}

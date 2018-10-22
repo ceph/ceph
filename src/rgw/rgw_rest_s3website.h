@@ -17,6 +17,7 @@
 #include "rgw_rest_s3.h"
 
 class RGWHandler_REST_S3Website : public RGWHandler_REST_S3 {
+  std::string original_object_name; // object name before retarget()
   bool web_dir() const;
 protected:
   int retarget(RGWOp *op, RGWOp **new_op) override;
@@ -37,6 +38,8 @@ protected:
 public:
   using RGWHandler_REST_S3::RGWHandler_REST_S3;
   ~RGWHandler_REST_S3Website() override = default;
+
+  int init(RGWRados *store, req_state *s, rgw::io::BasicClient* cio) override;
   int error_handler(int err_no, string *error_content) override;
 };
 

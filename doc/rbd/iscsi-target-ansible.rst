@@ -11,7 +11,7 @@ install, and configure the Ceph iSCSI gateway for basic operation.
 
 -  A running Ceph Luminous (12.2.x) cluster or newer
 
--  RHEL/CentOS 7.4; or Linux kernel v4.14 or newer
+-  RHEL/CentOS 7.5; Linux kernel v4.16 or newer; or the `Ceph iSCSI client test kernel <https://shaman.ceph.com/repos/kernel/ceph-iscsi-test>`_
 
 -  The ``ceph-iscsi-config`` package installed on all the iSCSI gateway nodes
 
@@ -160,7 +160,7 @@ On the Ansible installer node, perform the following steps.
 
    .. note::
     For more information on using the ``gwcli`` command to install and configure
-    a Ceph iSCSI gateaway, see the `Configuring the iSCSI Target using the Command Line Interface`_
+    a Ceph iSCSI gateway, see the `Configuring the iSCSI Target using the Command Line Interface`_
     section.
 
    .. important::

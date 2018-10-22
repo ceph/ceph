@@ -32,7 +32,7 @@ public:
   Replay(ImageCtxT &image_ctx);
   ~Replay();
 
-  int decode(bufferlist::iterator *it, EventEntry *event_entry);
+  int decode(bufferlist::const_iterator *it, EventEntry *event_entry);
   void process(const EventEntry &event_entry,
                Context *on_ready, Context *on_safe);
 
@@ -78,13 +78,17 @@ private:
     Context *on_ready;
     Context *on_safe;
     std::set<int> filters;
+    bool writeback_cache_enabled;
     C_AioModifyComplete(Replay *replay, Context *on_ready,
-                        Context *on_safe, std::set<int> &&filters)
+                        Context *on_safe, std::set<int> &&filters,
+                        bool writeback_cache_enabled)
       : replay(replay), on_ready(on_ready), on_safe(on_safe),
-        filters(std::move(filters)) {
+        filters(std::move(filters)),
+        writeback_cache_enabled(writeback_cache_enabled) {
     }
     void finish(int r) override {
-      replay->handle_aio_modify_complete(on_ready, on_safe, r, filters);
+      replay->handle_aio_modify_complete(on_ready, on_safe, r, filters,
+                                         writeback_cache_enabled);
     }
   };
 
@@ -177,7 +181,8 @@ private:
                     Context *on_safe);
 
   void handle_aio_modify_complete(Context *on_ready, Context *on_safe,
-                                  int r, std::set<int> &filters);
+                                  int r, std::set<int> &filters,
+                                  bool writeback_cache_enabled);
   void handle_aio_flush_complete(Context *on_flush_safe, Contexts &on_safe_ctxs,
                                  int r);
 
@@ -192,6 +197,8 @@ private:
                                                   std::set<int> &&filters);
   io::AioCompletion *create_aio_flush_completion(Context *on_safe);
   void handle_aio_completion(io::AioCompletion *aio_comp);
+
+  bool clipped_io(uint64_t image_offset, io::AioCompletion *aio_comp);
 
 };
 

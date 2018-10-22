@@ -11,7 +11,7 @@ static void test_encode_and_decode(const T& src)
   bufferlist bl(1000000);
   encode(src, bl);
   T dst;
-  bufferlist::iterator i(bl.begin());
+  auto i = bl.cbegin();
   decode(dst, i);
   ASSERT_EQ(src, dst) << "Encoding roundtrip changed the string: orig=" << src << ", but new=" << dst;
 }
@@ -38,7 +38,7 @@ static void test_encode_and_nohead_nohead(Size len, const T& src)
   encode(len, bl);
   encode_nohead(src, bl);
   T dst;
-  bufferlist::iterator i(bl.begin());
+  auto i = bl.cbegin();
   decode(len, i);
   decode_nohead(len, dst, i);
   ASSERT_EQ(src, dst) << "Encoding roundtrip changed the string: orig=" << src << ", but new=" << dst;
@@ -163,14 +163,14 @@ public:
     return data == rhs.data;
   }
 
-  friend void decode(ConstructorCounter &s, bufferlist::iterator& p)
+  friend void decode(ConstructorCounter &s, bufferlist::const_iterator& p)
   {
-    ::decode(s.data, p);
+    decode(s.data, p);
   }
 
   friend void encode(const ConstructorCounter &s, bufferlist& p)
   {
-    ::encode(s.data, p);
+    encode(s.data, p);
   }
 
   friend ostream& operator<<(ostream &oss, const ConstructorCounter &cc)
@@ -234,6 +234,7 @@ TEST(EncodingRoundTrip, MultimapConstructorCounter) {
   EXPECT_EQ(my_val_t::get_assigns(), 0);
 }
 
+namespace ceph {
 // make sure that the legacy encode/decode methods are selected
 // over the ones defined using templates. the later is likely to
 // be slower, see also the definition of "WRITE_INT_DENC" in
@@ -262,6 +263,7 @@ void encode<ceph_le64, denc_traits<ceph_le64>>(const ceph_le64&,
   ASSERT_EQ(0UL, f);
   // make sure the test fails if i get called
   ASSERT_TRUE(false);
+}
 }
 
 namespace {
@@ -382,7 +384,7 @@ TEST(small_encoding, varint) {
       cout << std::endl;
       ASSERT_EQ(bl.length(), v[i][1]);
       uint32_t u;
-      auto p = bl.begin().get_current_ptr().begin();
+      auto p = bl.begin().get_current_ptr().cbegin();
       denc_varint(u, p);
       ASSERT_EQ(v[i][0], u);
     }
@@ -397,7 +399,7 @@ TEST(small_encoding, varint) {
       cout << std::endl;
       ASSERT_EQ(bl.length(), v[i][2]);
       int32_t u;
-      auto p = bl.begin().get_current_ptr().begin();
+      auto p = bl.begin().get_current_ptr().cbegin();
       denc_signed_varint(u, p);
       ASSERT_EQ((int32_t)v[i][0], u);
     }
@@ -413,7 +415,7 @@ TEST(small_encoding, varint) {
       cout << std::endl;
       ASSERT_EQ(bl.length(), v[i][3]);
       int64_t u;
-      auto p = bl.begin().get_current_ptr().begin();
+      auto p = bl.begin().get_current_ptr().cbegin();
       denc_signed_varint(u, p);
       ASSERT_EQ(x, u);
     }
@@ -460,7 +462,7 @@ TEST(small_encoding, varint_lowz) {
       cout << std::endl;
       ASSERT_EQ(bl.length(), v[i][1]);
       uint32_t u;
-      auto p = bl.begin().get_current_ptr().begin();
+      auto p = bl.begin().get_current_ptr().cbegin();
       denc_varint_lowz(u, p);
       ASSERT_EQ(v[i][0], u);
     }
@@ -476,7 +478,7 @@ TEST(small_encoding, varint_lowz) {
       cout << std::endl;
       ASSERT_EQ(bl.length(), v[i][2]);
       int64_t u;
-      auto p = bl.begin().get_current_ptr().begin();
+      auto p = bl.begin().get_current_ptr().cbegin();
       denc_signed_varint_lowz(u, p);
       ASSERT_EQ(x, u);
     }
@@ -492,7 +494,7 @@ TEST(small_encoding, varint_lowz) {
       cout << std::endl;
       ASSERT_EQ(bl.length(), v[i][3]);
       int64_t u;
-      auto p = bl.begin().get_current_ptr().begin();
+      auto p = bl.begin().get_current_ptr().cbegin();
       denc_signed_varint_lowz(u, p);
       ASSERT_EQ(x, u);
     }    
@@ -531,7 +533,7 @@ TEST(small_encoding, lba) {
     cout << std::endl;
     ASSERT_EQ(bl.length(), v[i][1]);
     uint64_t u;
-    auto p = bl.begin().get_current_ptr().begin();
+    auto p = bl.begin().get_current_ptr().cbegin();
     denc_lba(u, p);
     ASSERT_EQ(v[i][0], u);
   }

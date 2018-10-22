@@ -17,7 +17,6 @@
 
 #include <string>
 #include <vector>
-#include "include/memory.h"
 
 #include "osd/osd_types.h"
 #include "include/object.h"
@@ -77,7 +76,7 @@ protected:
 
   RWLock access_lock;
   /// Type of returned paths
-  typedef ceph::shared_ptr<Path> IndexedPath;
+  typedef std::shared_ptr<Path> IndexedPath;
 
   static IndexedPath get_testing_path(string path, coll_t collection) {
     return std::make_shared<Path>(path, collection);
@@ -110,8 +109,8 @@ protected:
   /**
    * Cleanup before replaying journal
    *
-   * Index implemenations may need to perform compound operations
-   * which may leave the collection unstable if interupted.  cleanup
+   * Index implementations may need to perform compound operations
+   * which may leave the collection unstable if interrupted.  cleanup
    * is called on mount to allow the CollectionIndex implementation
    * to stabilize.
    *
@@ -160,6 +159,11 @@ protected:
   virtual int split(
     uint32_t match,                             //< [in] value to match
     uint32_t bits,                              //< [in] bits to check
+    CollectionIndex* dest  //< [in] destination index
+    ) { ceph_abort(); return 0; }
+
+  virtual int merge(
+    uint32_t bits,                              //< [in] common (target) bits
     CollectionIndex* dest  //< [in] destination index
     ) { ceph_abort(); return 0; }
 

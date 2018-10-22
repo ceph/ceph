@@ -72,7 +72,7 @@ static int list_sections(const std::string &prefix,
 			 const std::map<string,string>& filter_key_value)
 {
   std::vector <std::string> sections;
-  int ret = g_conf->get_all_sections(sections);
+  int ret = g_conf().get_all_sections(sections);
   if (ret)
     return 2;
   for (std::vector<std::string>::const_iterator p = sections.begin();
@@ -86,7 +86,7 @@ static int list_sections(const std::string &prefix,
     int r = 0;
     for (std::list<string>::const_iterator q = filter_key.begin(); q != filter_key.end(); ++q) {
       string v;
-      r = g_conf->get_val_from_conf_file(sec, q->c_str(), v, false);
+      r = g_conf().get_val_from_conf_file(sec, q->c_str(), v, false);
       if (r < 0)
 	break;
     }
@@ -97,7 +97,7 @@ static int list_sections(const std::string &prefix,
 	 q != filter_key_value.end();
 	 ++q) {
       string v;
-      r = g_conf->get_val_from_conf_file(sec, q->first.c_str(), v, false);
+      r = g_conf().get_val_from_conf_file(sec, q->first.c_str(), v, false);
       if (r < 0 || v != q->second) {
 	r = -1;
 	break;
@@ -118,9 +118,9 @@ static int lookup(const std::deque<std::string> &sections,
   for (deque<string>::const_iterator s = sections.begin(); s != sections.end(); ++s) {
     my_sections.push_back(*s);
   }
-  g_conf->get_my_sections(my_sections);
+  g_conf().get_my_sections(my_sections);
   std::string val;
-  int ret = g_conf->get_val_from_conf_file(my_sections, key.c_str(), val, true);
+  int ret = g_conf().get_val_from_conf_file(my_sections, key.c_str(), val, true);
   if (ret == -ENOENT)
     return 1;
   else if (ret == 0) {
@@ -144,13 +144,13 @@ static int lookup(const std::deque<std::string> &sections,
 static int dump_all(const string& format)
 {
   if (format == "" || format == "plain") {
-    g_conf->show_config(std::cout);
+    g_conf().show_config(std::cout);
     return 0;
   } else {
     unique_ptr<Formatter> f(Formatter::create(format));
     if (f) {
       f->open_object_section("ceph-conf");
-      g_conf->show_config(f.get());
+      g_conf().show_config(f.get());
       f->close_section();
       f->flush(std::cout);
       return 0;
@@ -174,19 +174,19 @@ int main(int argc, const char **argv)
   std::string dump_format;
 
   argv_to_vec(argc, argv, args);
-  env_to_vec(args);
   vector<const char*> orig_args = args;
 
   global_pre_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_DAEMON,
-		  CINIT_FLAG_NO_DAEMON_ACTIONS);
+		  CINIT_FLAG_NO_DAEMON_ACTIONS |
+		  CINIT_FLAG_NO_MON_CONFIG);
   std::unique_ptr<CephContext,
 		  std::function<void(CephContext*)> > cct_deleter{
       g_ceph_context,
       [](CephContext *p) {p->put();}
   };
 
-  g_conf->apply_changes(NULL);
-  g_conf->complain_about_parse_errors(g_ceph_context);
+  g_conf().apply_changes(nullptr);
+  g_conf().complain_about_parse_errors(g_ceph_context);
 
   // do not common_init_finish(); do not start threads; do not do any of thing
   // wonky things the daemon whose conf we are examining would do (like initialize

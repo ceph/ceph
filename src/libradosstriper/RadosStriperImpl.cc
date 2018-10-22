@@ -60,7 +60,7 @@
  *
  * Still the writing to a striped object is not atomic. This means in particular that
  * the size of an object may not be in sync with its content at all times.
- * As the size is always garanteed to be updated first and in an atomic way, and as
+ * As the size is always guaranteed to be updated first and in an atomic way, and as
  * sparse striped objects are supported (see below), what will typically happen is
  * that a reader that comes too soon after a write will read 0s instead of the actual
  * data.
@@ -1080,7 +1080,7 @@ int libradosstriper::RadosStriperImpl::internal_aio_remove(
     // return
     return rcr;
   } catch (ErrorCode &e) {
-    // errror caught when trying to take the exclusive lock
+    // error caught when trying to take the exclusive lock
     return e.m_code;
   }
 

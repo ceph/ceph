@@ -11,7 +11,8 @@
  * Data types for message passing layer used by Ceph.
  */
 
-#define CEPH_MON_PORT    6789  /* default monitor port */
+#define CEPH_MON_PORT_LEGACY    6789  /* legacy default monitor port */
+#define CEPH_MON_PORT_IANA      3300  /* IANA monitor port */
 
 /*
  * client-side processes will try to bind to ports in this
@@ -93,7 +94,7 @@ struct ceph_entity_inst {
 #define CEPH_MSGR_TAG_SEQ           13 /* 64-bit int follows with seen seq number */
 #define CEPH_MSGR_TAG_KEEPALIVE2     14
 #define CEPH_MSGR_TAG_KEEPALIVE2_ACK 15  /* keepalive reply */
-
+#define CEPH_MSGR_TAG_CHALLENGE_AUTHORIZER 16  /* ceph v2 doing server challenge */
 
 /*
  * connection negotiation

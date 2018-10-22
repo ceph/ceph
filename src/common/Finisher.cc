@@ -16,32 +16,31 @@ void Finisher::start()
 void Finisher::stop()
 {
   ldout(cct, 10) << __func__ << dendl;
-  finisher_lock.Lock();
+  finisher_lock.lock();
   finisher_stop = true;
   // we don't have any new work to do, but we want the worker to wake up anyway
   // to process the stop condition.
-  finisher_cond.Signal();
-  finisher_lock.Unlock();
+  finisher_cond.notify_all();
+  finisher_lock.unlock();
   finisher_thread.join(); // wait until the worker exits completely
   ldout(cct, 10) << __func__ << " finish" << dendl;
 }
 
 void Finisher::wait_for_empty()
 {
-  finisher_lock.Lock();
+  std::unique_lock ul(finisher_lock);
   while (!finisher_queue.empty() || finisher_running) {
     ldout(cct, 10) << "wait_for_empty waiting" << dendl;
     finisher_empty_wait = true;
-    finisher_empty_cond.Wait(finisher_lock);
+    finisher_empty_cond.wait(ul);
   }
   ldout(cct, 10) << "wait_for_empty empty" << dendl;
   finisher_empty_wait = false;
-  finisher_lock.Unlock();
 }
 
 void *Finisher::finisher_thread_entry()
 {
-  finisher_lock.Lock();
+  std::unique_lock ul(finisher_lock);
   ldout(cct, 10) << "finisher_thread start" << dendl;
 
   utime_t start;
@@ -50,13 +49,12 @@ void *Finisher::finisher_thread_entry()
     /// Every time we are woken up, we process the queue until it is empty.
     while (!finisher_queue.empty()) {
       // To reduce lock contention, we swap out the queue to process.
-      // This way other threads can submit new contexts to complete while we are working.
-      vector<Context*> ls;
-      list<pair<Context*,int> > ls_rval;
+      // This way other threads can submit new contexts to complete
+      // while we are working.
+      vector<pair<Context*,int>> ls;
       ls.swap(finisher_queue);
-      ls_rval.swap(finisher_queue_rval);
       finisher_running = true;
-      finisher_lock.Unlock();
+      ul.unlock();
       ldout(cct, 10) << "finisher_thread doing " << ls << dendl;
 
       if (logger) {
@@ -65,21 +63,8 @@ void *Finisher::finisher_thread_entry()
       }
 
       // Now actually process the contexts.
-      for (vector<Context*>::iterator p = ls.begin();
-	   p != ls.end();
-	   ++p) {
-	if (*p) {
-	  (*p)->complete(0);
-	} else {
-	  // When an item is NULL in the finisher_queue, it means
-	  // we should instead process an item from finisher_queue_rval,
-	  // which has a parameter for complete() other than zero.
-	  // This preserves the order while saving some storage.
-	  assert(!ls_rval.empty());
-	  Context *c = ls_rval.front().first;
-	  c->complete(ls_rval.front().second);
-	  ls_rval.pop_front();
-	}
+      for (auto p : ls) {
+	p.first->complete(p.second);
       }
       ldout(cct, 10) << "finisher_thread done with " << ls << dendl;
       ls.clear();
@@ -88,25 +73,24 @@ void *Finisher::finisher_thread_entry()
 	logger->tinc(l_finisher_complete_lat, ceph_clock_now() - start);
       }
 
-      finisher_lock.Lock();
+      ul.lock();
       finisher_running = false;
     }
     ldout(cct, 10) << "finisher_thread empty" << dendl;
     if (unlikely(finisher_empty_wait))
-      finisher_empty_cond.Signal();
+      finisher_empty_cond.notify_all();
     if (finisher_stop)
       break;
     
     ldout(cct, 10) << "finisher_thread sleeping" << dendl;
-    finisher_cond.Wait(finisher_lock);
+    finisher_cond.wait(ul);
   }
   // If we are exiting, we signal the thread waiting in stop(),
   // otherwise it would never unblock
-  finisher_empty_cond.Signal();
+  finisher_empty_cond.notify_all();
 
   ldout(cct, 10) << "finisher_thread stop" << dendl;
   finisher_stop = false;
-  finisher_lock.Unlock();
   return 0;
 }
 

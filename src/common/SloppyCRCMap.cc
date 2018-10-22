@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "common/SloppyCRCMap.h"
+#include "common/Formatter.h"
 
 using namespace std;
 
@@ -141,22 +142,22 @@ void SloppyCRCMap::clone_range(uint64_t offset, uint64_t len,
 void SloppyCRCMap::encode(bufferlist& bl) const
 {
   ENCODE_START(1, 1, bl);
-  ::encode(block_size, bl);
-  ::encode(crc_map, bl);
+  encode(block_size, bl);
+  encode(crc_map, bl);
   ENCODE_FINISH(bl);
 }
 
-void SloppyCRCMap::decode(bufferlist::iterator& bl)
+void SloppyCRCMap::decode(bufferlist::const_iterator& bl)
 {
   DECODE_START(1, bl);
   uint32_t bs;
-  ::decode(bs, bl);
+  decode(bs, bl);
   set_block_size(bs);
-  ::decode(crc_map, bl);
+  decode(crc_map, bl);
   DECODE_FINISH(bl);
 }
 
-void SloppyCRCMap::dump(Formatter *f) const
+void SloppyCRCMap::dump(ceph::Formatter *f) const
 {
   f->dump_unsigned("block_size", block_size);
   f->open_array_section("crc_map");

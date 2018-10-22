@@ -969,7 +969,7 @@ public:
 
   int check_bucket_shards(uint64_t max_objs_per_shard, uint64_t num_shards,
 			  const rgw_user& user, const rgw_bucket& bucket, RGWQuotaInfo& bucket_quota,
-			  uint64_t num_objs, bool& need_resharding, uint32_t *suggested_num_shards)
+			  uint64_t num_objs, bool& need_resharding, uint32_t *suggested_num_shards) override
   {
     RGWStorageStats bucket_stats;
     int ret = bucket_stats_cache.get_stats(user, bucket, bucket_stats,
@@ -1006,3 +1006,26 @@ void RGWQuotaHandler::free_handler(RGWQuotaHandler *handler)
 }
 
 
+void rgw_apply_default_bucket_quota(RGWQuotaInfo& quota, const ConfigProxy& conf)
+{
+  if (conf->rgw_bucket_default_quota_max_objects >= 0) {
+    quota.max_objects = conf->rgw_bucket_default_quota_max_objects;
+    quota.enabled = true;
+  }
+  if (conf->rgw_bucket_default_quota_max_size >= 0) {
+    quota.max_size = conf->rgw_bucket_default_quota_max_size;
+    quota.enabled = true;
+  }
+}
+
+void rgw_apply_default_user_quota(RGWQuotaInfo& quota, const ConfigProxy& conf)
+{
+  if (conf->rgw_user_default_quota_max_objects >= 0) {
+    quota.max_objects = conf->rgw_user_default_quota_max_objects;
+    quota.enabled = true;
+  }
+  if (conf->rgw_user_default_quota_max_size >= 0) {
+    quota.max_size = conf->rgw_user_default_quota_max_size;
+    quota.enabled = true;
+  }
+}

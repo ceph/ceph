@@ -21,33 +21,110 @@ if test $(id -u) != 0 ; then
 fi
 export LC_ALL=C # the following is vulnerable to i18n
 
+ARCH=$(uname -m)
+
+function install_seastar_deps {
+    if [ $WITH_SEASTAR ]; then
+        $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y \
+              ragel libc-ares-dev libhwloc-dev libnuma-dev libpciaccess-dev \
+              libcrypto++-dev libgnutls28-dev libsctp-dev libprotobuf-dev \
+              protobuf-compiler systemtap-sdt-dev libyaml-cpp-dev
+    fi
+}
+
 function munge_ceph_spec_in {
     local OUTFILE=$1
     sed -e 's/@//g' -e 's/%bcond_with make_check/%bcond_without make_check/g' < ceph.spec.in > $OUTFILE
+    if type python2 > /dev/null 2>&1 ; then
+        sed -i -e 's/%bcond_with python2/%bcond_without python2/g' $OUTFILE
+    else
+        sed -i -e 's/%bcond_without python2/%bcond_with python2/g' $OUTFILE
+    fi
+    if [ $WITH_SEASTAR ]; then
+        sed -i -e 's/%bcond_with seastar/%bcond_without seastar/g' $OUTFILE
+    fi
 }
 
-function ensure_decent_gcc_on_deb {
+function ensure_decent_gcc_on_ubuntu {
     # point gcc to the one offered by g++-7 if the used one is not
     # new enough
     local old=$(gcc -dumpversion)
     local new=$1
-    if dpkg --compare-versions $old ge 5.1; then
+    local codename=$2
+    if dpkg --compare-versions $old ge 7.0; then
 	return
     fi
 
+    if [ ! -f /usr/bin/g++-${new} ]; then
+	$SUDO tee /etc/apt/sources.list.d/ubuntu-toolchain-r.list <<EOF
+deb [lang=none] http://ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu $codename main
+deb [arch=amd64 lang=none] http://mirror.cs.uchicago.edu/ubuntu-toolchain-r $codename main
+deb [arch=amd64,i386 lang=none] http://mirror.yandex.ru/mirrors/launchpad/ubuntu-toolchain-r $codename main
+EOF
+	# import PPA's signing key into APT's keyring
+	cat << ENDOFKEY | $SUDO apt-key add -
+-----BEGIN PGP PUBLIC KEY BLOCK-----
+Version: SKS 1.1.6
+Comment: Hostname: keyserver.ubuntu.com
+
+mI0ESuBvRwEEAMi4cDba7xlKaaoXjO1n1HX8RKrkW+HEIl79nSOSJyvzysajs7zUow/OzCQp
+9NswqrDmNuH1+lPTTRNAGtK8r2ouq2rnXT1mTl23dpgHZ9spseR73s4ZBGw/ag4bpU5dNUSt
+vfmHhIjVCuiSpNn7cyy1JSSvSs3N2mxteKjXLBf7ABEBAAG0GkxhdW5jaHBhZCBUb29sY2hh
+aW4gYnVpbGRziLYEEwECACAFAkrgb0cCGwMGCwkIBwMCBBUCCAMEFgIDAQIeAQIXgAAKCRAe
+k3eiup7yfzGKA/4xzUqNACSlB+k+DxFFHqkwKa/ziFiAlkLQyyhm+iqz80htRZr7Ls/ZRYZl
+0aSU56/hLe0V+TviJ1s8qdN2lamkKdXIAFfavA04nOnTzyIBJ82EAUT3Nh45skMxo4z4iZMN
+msyaQpNl/m/lNtOLhR64v5ZybofB2EWkMxUzX8D/FQ==
+=LcUQ
+-----END PGP PUBLIC KEY BLOCK-----
+ENDOFKEY
+	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get update -y || true
+	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y g++-7
+    fi
+
+    case $codename in
+        trusty)
+            old=4.8;;
+        xenial)
+            old=5;;
+    esac
+    $SUDO update-alternatives --remove-all gcc || true
     $SUDO update-alternatives \
 	 --install /usr/bin/gcc gcc /usr/bin/gcc-${new} 20 \
 	 --slave   /usr/bin/g++ g++ /usr/bin/g++-${new}
 
-    $SUDO update-alternatives \
-	 --install /usr/bin/gcc gcc /usr/bin/gcc-${old} 10 \
-	 --slave   /usr/bin/g++ g++ /usr/bin/g++-${old}
+    if [ -f /usr/bin/g++-${old} ]; then
+      $SUDO update-alternatives \
+  	 --install /usr/bin/gcc gcc /usr/bin/gcc-${old} 10 \
+  	 --slave   /usr/bin/g++ g++ /usr/bin/g++-${old}
+    fi
 
     $SUDO update-alternatives --auto gcc
 
     # cmake uses the latter by default
-    $SUDO ln -nsf /usr/bin/gcc /usr/bin/x86_64-linux-gnu-gcc
-    $SUDO ln -nsf /usr/bin/g++ /usr/bin/x86_64-linux-gnu-g++
+    $SUDO ln -nsf /usr/bin/gcc /usr/bin/$(uname -m)-linux-gnu-gcc
+    $SUDO ln -nsf /usr/bin/g++ /usr/bin/$(uname -m)-linux-gnu-g++
+}
+
+function install_pkg_on_ubuntu {
+    local project=$1
+    shift
+    local sha1=$1
+    shift
+    local codename=$1
+    shift
+    local pkgs=$@
+    local missing_pkgs
+    for pkg in $pkgs; do
+	if ! dpkg -s $pkg &> /dev/null; then
+	    missing_pkgs+=" $pkg"
+	fi
+    done
+    if test -n "$missing_pkgs"; then
+	local shaman_url="https://shaman.ceph.com/api/repos/${project}/master/${sha1}/ubuntu/${codename}/repo"
+	$SUDO curl --silent --location $shaman_url --output /etc/apt/sources.list.d/$project.list
+	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get update -y -o Acquire::Languages=none -o Acquire::Translation=none || true
+	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get install --allow-unauthenticated -y $missing_pkgs
+    fi
 }
 
 function version_lt {
@@ -59,10 +136,9 @@ function ensure_decent_gcc_on_rh {
     local expected=5.1
     local dts_ver=$1
     if version_lt $old $expected; then
-	case $- in
-	    *i*)
-		# interactive shell
-		cat <<EOF
+	if test -t 1; then
+	    # interactive shell
+	    cat <<EOF
 Your GCC is too old. Please run following command to add DTS to your environment:
 
 scl enable devtoolset-7 bash
@@ -73,16 +149,14 @@ source scl_source enable devtoolset-7
 
 see https://www.softwarecollections.org/en/scls/rhscl/devtoolset-7/ for more details.
 EOF
-	    ;;
-	    *)
-		# non-interactive shell
-		source /opt/rh/devtoolset-$dts_ver/enable
-		;;
-	esac
+	else
+	    # non-interactive shell
+	    source /opt/rh/devtoolset-$dts_ver/enable
+	fi
     fi
 }
 
-if [ x`uname`x = xFreeBSDx ]; then
+if [ x$(uname)x = xFreeBSDx ]; then
     $SUDO pkg install -yq \
         devel/babeltrace \
         devel/git \
@@ -100,16 +174,17 @@ if [ x`uname`x = xFreeBSDx ]; then
         lang/cython \
         devel/py-virtualenv \
         databases/leveldb \
-        net/openldap-client \
+        net/openldap24-client \
         security/nss \
-        security/cryptopp \
         archivers/snappy \
+        archivers/liblz4 \
         ftp/curl \
         misc/e2fsprogs-libuuid \
         misc/getopt \
         net/socat \
         textproc/expat2 \
         textproc/gsed \
+        lang/gawk \
         textproc/libxml2 \
         textproc/xmlstarlet \
         textproc/jq \
@@ -122,8 +197,12 @@ if [ x`uname`x = xFreeBSDx ]; then
         devel/py-argparse \
         devel/py-nose \
         devel/py-prettytable \
+	www/py-routes \
         www/py-flask \
+	www/node \
+	www/npm \
         www/fcgi \
+	security/oath-toolkit \
         sysutils/flock \
         sysutils/fusefs-libs \
 
@@ -136,15 +215,33 @@ else
     case $ID in
     debian|ubuntu|devuan)
         echo "Using apt-get to install dependencies"
-        $SUDO apt-get install -y lsb-release devscripts equivs
+        $SUDO apt-get install -y devscripts equivs
         $SUDO apt-get install -y dpkg-dev
         case "$VERSION" in
             *Trusty*)
-                $SUDO apt-get install -y software-properties-common
-                $SUDO add-apt-repository ppa:ubuntu-toolchain-r/test
-                $SUDO apt-get update
-                $SUDO apt-get install -y g++-7
-                ensure_decent_gcc_on_deb 7
+                ensure_decent_gcc_on_ubuntu 7 trusty
+                ;;
+            *Xenial*)
+                ensure_decent_gcc_on_ubuntu 7 xenial
+                install_pkg_on_ubuntu \
+		    ceph-libboost1.67 \
+		    dd38c27740c1f9a9e6719a07eef84a1369dc168b \
+		    xenial \
+		    ceph-libboost-atomic1.67-dev \
+		    ceph-libboost-chrono1.67-dev \
+		    ceph-libboost-container1.67-dev \
+		    ceph-libboost-context1.67-dev \
+		    ceph-libboost-coroutine1.67-dev \
+		    ceph-libboost-date-time1.67-dev \
+		    ceph-libboost-filesystem1.67-dev \
+		    ceph-libboost-iostreams1.67-dev \
+		    ceph-libboost-program-options1.67-dev \
+		    ceph-libboost-python1.67-dev \
+		    ceph-libboost-random1.67-dev \
+		    ceph-libboost-regex1.67-dev \
+		    ceph-libboost-system1.67-dev \
+		    ceph-libboost-thread1.67-dev \
+		    ceph-libboost-timer1.67-dev
                 ;;
             *)
                 $SUDO apt-get install -y gcc
@@ -158,11 +255,11 @@ else
 
 	backports=""
 	control="debian/control"
-        case $(lsb_release -sc) in
-            squeeze|wheezy)
+        case "$VERSION" in
+            *squeeze*|*wheezy*)
 		control="/tmp/control.$$"
 		grep -v babeltrace debian/control > $control
-                backports="-t $(lsb_release -sc)-backports"
+                backports="-t $codename-backports"
                 ;;
         esac
 
@@ -171,6 +268,7 @@ else
 	# work is done
 	$SUDO env DEBIAN_FRONTEND=noninteractive mk-build-deps --install --remove --tool="apt-get -y --no-install-recommends $backports" $control || exit 1
 	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove ceph-build-deps
+	install_seastar_deps
 	if [ -n "$backports" ] ; then rm $control; fi
         ;;
     centos|fedora|rhel|ol|virtuozzo)
@@ -181,30 +279,28 @@ else
             builddepcmd="dnf -y builddep --allowerasing"
         fi
         echo "Using $yumdnf to install dependencies"
-	if [ $(lsb_release -si) = CentOS -a $(uname -m) = aarch64 ]; then
+	if [ "$ID" = "centos" -a $(uname -m) = aarch64 ]; then
 	    $SUDO yum-config-manager --disable centos-sclo-sclo || true
 	    $SUDO yum-config-manager --disable centos-sclo-rh || true
 	    $SUDO yum remove centos-release-scl || true
 	fi
 
-        $SUDO $yumdnf install -y redhat-lsb-core
-        case $(lsb_release -si) in
-            Fedora)
+        case $ID in
+            fedora)
                 if test $yumdnf = yum; then
                     $SUDO $yumdnf install -y yum-utils
                 fi
                 ;;
-            CentOS|RedHatEnterpriseServer|VirtuozzoLinux)
+            centos|rhel|ol|virtuozzo)
                 $SUDO yum install -y yum-utils
-                MAJOR_VERSION=$(lsb_release -rs | cut -f1 -d.)
-                if test $(lsb_release -si) = RedHatEnterpriseServer ; then
-                    $SUDO yum-config-manager --enable rhel-$MAJOR_VERSION-server-optional-rpms
+                if test $ID = rhel ; then
+                    $SUDO yum-config-manager --enable rhel-$VERSION_ID-server-optional-rpms
                 fi
-                $SUDO yum-config-manager --add-repo https://dl.fedoraproject.org/pub/epel/$MAJOR_VERSION/x86_64/
+                $SUDO yum-config-manager --add-repo https://dl.fedoraproject.org/pub/epel/$VERSION_ID/x86_64/
                 $SUDO yum install --nogpgcheck -y epel-release
-                $SUDO rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-$MAJOR_VERSION
+                $SUDO rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-$VERSION_ID
                 $SUDO rm -f /etc/yum.repos.d/dl.fedoraproject.org*
-                if test $(lsb_release -si) = CentOS -a $MAJOR_VERSION = 7 ; then
+                if test $ID = centos -a $VERSION_ID = 7 ; then
                     $SUDO yum-config-manager --enable cr
 		    case $(uname -m) in
 			x86_64)
@@ -215,29 +311,31 @@ else
 			    $SUDO yum -y install centos-release-scl-rh
 			    $SUDO yum-config-manager --disable centos-sclo-rh
 			    $SUDO yum-config-manager --enable centos-sclo-rh-testing
-			    dts_ver=6
+			    dts_ver=7
 			    ;;
 		    esac
-                elif test $(lsb_release -si) = RedHatEnterpriseServer -a $MAJOR_VERSION = 7 ; then
+                elif test $ID = rhel -a $MAJOR_VERSION = 7 ; then
                     $SUDO yum-config-manager --enable rhel-server-rhscl-7-rpms
                     dts_ver=7
-                elif test $(lsb_release -si) = VirtuozzoLinux -a $MAJOR_VERSION = 7 ; then
+                elif test $ID = virtuozzo -a $MAJOR_VERSION = 7 ; then
                     $SUDO yum-config-manager --enable cr
                 fi
                 ;;
         esac
         munge_ceph_spec_in $DIR/ceph.spec
         $SUDO $builddepcmd $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
-	if [ -n dts_ver ]; then
+        [ ${PIPESTATUS[0]} -ne 0 ] && exit 1
+	if [ -n "$dts_ver" ]; then
             ensure_decent_gcc_on_rh $dts_ver
 	fi
         ! grep -q -i error: $DIR/yum-builddep.out || exit 1
         ;;
-    opensuse|suse|sles)
+    opensuse*|suse|sles)
         echo "Using zypper to install dependencies"
-        $SUDO zypper --gpg-auto-import-keys --non-interactive install lsb-release systemd-rpm-macros
+        zypp_install="zypper --gpg-auto-import-keys --non-interactive install --no-recommends"
+        $SUDO $zypp_install systemd-rpm-macros
         munge_ceph_spec_in $DIR/ceph.spec
-        $SUDO zypper --non-interactive install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
+        $SUDO $zypp_install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
         ;;
     alpine)
         # for now we need the testing repo for leveldb
@@ -309,6 +407,12 @@ find . -name tox.ini | while read ini ; do
     (
         cd $(dirname $ini)
         require=$(ls *requirements.txt 2>/dev/null | sed -e 's/^/-r /')
+        md5=wheelhouse/md5
+        if test "$require"; then
+            if ! test -f $md5 || ! md5sum -c $md5 ; then
+                rm -rf wheelhouse
+            fi
+        fi
         if test "$require" && ! test -d wheelhouse ; then
             for interpreter in python2.7 python3 ; do
                 type $interpreter > /dev/null 2>&1 || continue
@@ -316,6 +420,7 @@ find . -name tox.ini | while read ini ; do
                 populate_wheelhouse "wheel -w $wip_wheelhouse" $require || exit 1
             done
             mv $wip_wheelhouse wheelhouse
+            md5sum *requirements.txt > $md5
         fi
     )
 done
@@ -324,3 +429,4 @@ for interpreter in python2.7 python3 ; do
     rm -rf $top_srcdir/install-deps-$interpreter
 done
 rm -rf $XDG_CACHE_HOME
+git --version || (echo "Dashboard uses git to pull dependencies." ; false)

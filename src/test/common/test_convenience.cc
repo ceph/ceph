@@ -30,19 +30,40 @@ TEST(Convenience, MaybeDo)
 {
   boost::optional<std::string> s("qwerty");
   boost::optional<std::string> t;
-  auto r = maybe_do(s, l);
+  auto r = ceph::maybe_do(s, l);
   EXPECT_TRUE(r);
   EXPECT_EQ(*r, s->size());
 
-  EXPECT_FALSE(maybe_do(t, l));
+  EXPECT_FALSE(ceph::maybe_do(t, l));
 }
 
 TEST(Convenience, MaybeDoOr)
 {
   const boost::optional<std::string> s("qwerty");
   const boost::optional<std::string> t;
-  auto r = maybe_do_or(s, l, 0);
+  auto r = ceph::maybe_do_or(s, l, 0);
   EXPECT_EQ(r, s->size());
 
-  EXPECT_EQ(maybe_do_or(t, l, 0), 0);
+  EXPECT_EQ(ceph::maybe_do_or(t, l, 0u), 0u);
+}
+
+TEST(Convenience, StdMaybeDo)
+{
+  std::optional<std::string> s("qwerty");
+  std::optional<std::string> t;
+  auto r = ceph::maybe_do(s, l);
+  EXPECT_TRUE(r);
+  EXPECT_EQ(*r, s->size());
+
+  EXPECT_FALSE(ceph::maybe_do(t, l));
+}
+
+TEST(Convenience, StdMaybeDoOr)
+{
+  const std::optional<std::string> s("qwerty");
+  const std::optional<std::string> t;
+  auto r = ceph::maybe_do_or(s, l, 0);
+  EXPECT_EQ(r, s->size());
+
+  EXPECT_EQ(ceph::maybe_do_or(t, l, 0u), 0u);
 }

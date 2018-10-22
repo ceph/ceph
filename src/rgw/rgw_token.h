@@ -93,25 +93,25 @@ namespace rgw {
       uint32_t ver = version();
       string typestr{from_type(type)};
       ENCODE_START(1, 1, bl);
-      ::encode(type_name, bl);
-      ::encode(ver, bl);
-      ::encode(typestr, bl);
-      ::encode(id, bl);
-      ::encode(key, bl);
+      encode(type_name, bl);
+      encode(ver, bl);
+      encode(typestr, bl);
+      encode(id, bl);
+      encode(key, bl);
       ENCODE_FINISH(bl);
     }
 
-    void decode(bufferlist::iterator& bl) {
+    void decode(bufferlist::const_iterator& bl) {
       string name;
       string typestr;
       uint32_t version;
       DECODE_START(1, bl);
-      ::decode(name, bl);
-      ::decode(version, bl);
-      ::decode(typestr, bl);
+      decode(name, bl);
+      decode(version, bl);
+      decode(typestr, bl);
       type = to_type(typestr);
-      ::decode(id, bl);
-      ::decode(key, bl);
+      decode(id, bl);
+      decode(key, bl);
       DECODE_FINISH(bl);
     }
 

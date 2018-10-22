@@ -83,6 +83,7 @@ public:
       target.num_entries += entry_stats.num_entries;
       target.total_size += entry_stats.total_size;
       target.total_size_rounded += entry_stats.total_size_rounded;
+      target.actual_size += entry_stats.actual_size;
     }
     if (entries.size() >= RESHARD_SHARD_WINDOW) {
       int ret = flush();
@@ -292,6 +293,19 @@ int RGWBucketReshard::create_new_bucket_instance(int new_num_shards,
   return ::create_new_bucket_instance(store, new_num_shards, bucket_info, bucket_attrs, new_bucket_info);
 }
 
+int RGWBucketReshard::cancel()
+{
+  int ret = lock_bucket();
+  if (ret < 0) {
+    return ret;
+  }
+
+  ret = clear_resharding();
+
+  unlock_bucket();
+  return 0;
+}
+
 class BucketInfoReshardUpdate
 {
   RGWRados *store;
@@ -345,7 +359,7 @@ public:
 
 int RGWBucketReshard::do_reshard(
 		   int num_shards,
-		   const RGWBucketInfo& new_bucket_info,
+		   RGWBucketInfo& new_bucket_info,
 		   int max_entries,
                    bool verbose,
                    ostream *out,
@@ -469,16 +483,10 @@ int RGWBucketReshard::do_reshard(
     return EIO;
   }
 
-  RGWBucketAdminOpState bucket_op;
-
-  bucket_op.set_bucket_name(new_bucket_info.bucket.name);
-  bucket_op.set_bucket_id(new_bucket_info.bucket.bucket_id);
-  bucket_op.set_user_id(new_bucket_info.owner);
-  string err;
-  int r = RGWBucketAdminOp::link(store, bucket_op, &err);
-  if (r < 0) {
-    lderr(store->ctx()) << "failed to link new bucket instance (bucket_id=" << new_bucket_info.bucket.bucket_id << ": " << err << "; " << cpp_strerror(-r) << ")" << dendl;
-    return -r;
+  ret = rgw_link_bucket(store, new_bucket_info.owner, new_bucket_info.bucket, bucket_info.creation_time);
+  if (ret < 0) {
+    lderr(store->ctx()) << "failed to link new bucket instance (bucket_id=" << new_bucket_info.bucket.bucket_id << ": " << cpp_strerror(-ret) << ")" << dendl;
+    return -ret;
   }
 
   ret = bucket_info_updater.complete();
@@ -668,7 +676,10 @@ int RGWReshard::get(cls_rgw_reshard_entry& entry)
 
   int ret = cls_rgw_reshard_get(store->reshard_pool_ctx, logshard_oid, entry);
   if (ret < 0) {
-    lderr(store->ctx()) << "ERROR: failed to get entry from reshard log, oid=" << logshard_oid << " tenant=" << entry.tenant << " bucket=" << entry.bucket_name << dendl;
+    if (ret != -ENOENT) {
+      lderr(store->ctx()) << "ERROR: failed to get entry from reshard log, oid=" << logshard_oid << " tenant=" << entry.tenant <<
+	" bucket=" << entry.bucket_name << dendl;
+    }
     return ret;
   }
 

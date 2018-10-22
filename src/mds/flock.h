@@ -251,12 +251,14 @@ private:
 
 public:
   void encode(bufferlist& bl) const {
-    ::encode(held_locks, bl);
-    ::encode(client_held_lock_counts, bl);
+    using ceph::encode;
+    encode(held_locks, bl);
+    encode(client_held_lock_counts, bl);
   }
-  void decode(bufferlist::iterator& bl) {
-    ::decode(held_locks, bl);
-    ::decode(client_held_lock_counts, bl);
+  void decode(bufferlist::const_iterator& bl) {
+    using ceph::decode;
+    decode(held_locks, bl);
+    decode(client_held_lock_counts, bl);
   }
   bool empty() const {
     return held_locks.empty() && waiting_locks.empty() &&

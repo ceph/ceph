@@ -27,7 +27,6 @@ namespace ceph {
     int create_socket(int domain, bool reuse_addr=false);
     explicit NetHandler(CephContext *c): cct(c) {}
     int set_nonblock(int sd);
-    void set_close_on_exec(int sd);
     int set_socket_options(int sd, bool nodelay, int size);
     int connect(const entity_addr_t &addr, const entity_addr_t& bind_addr);
     

@@ -34,7 +34,7 @@ struct ECSubWrite {
   set<hobject_t> temp_added;
   set<hobject_t> temp_removed;
   boost::optional<pg_hit_set_history_t> updated_hit_set_history;
-  bool backfill = false;
+  bool backfill_or_async_recovery = false;
   ECSubWrite() : tid(0) {}
   ECSubWrite(
     pg_shard_t from,
@@ -50,7 +50,7 @@ struct ECSubWrite {
     boost::optional<pg_hit_set_history_t> updated_hit_set_history,
     const set<hobject_t> &temp_added,
     const set<hobject_t> &temp_removed,
-    bool backfill)
+    bool backfill_or_async_recovery)
     : from(from), tid(tid), reqid(reqid),
       soid(soid), stats(stats), t(t),
       at_version(at_version),
@@ -59,7 +59,7 @@ struct ECSubWrite {
       temp_added(temp_added),
       temp_removed(temp_removed),
       updated_hit_set_history(updated_hit_set_history),
-      backfill(backfill)
+      backfill_or_async_recovery(backfill_or_async_recovery)
     {}
   void claim(ECSubWrite &other) {
     from = other.from;
@@ -75,10 +75,10 @@ struct ECSubWrite {
     temp_added.swap(other.temp_added);
     temp_removed.swap(other.temp_removed);
     updated_hit_set_history = other.updated_hit_set_history;
-    backfill = other.backfill;
+    backfill_or_async_recovery = other.backfill_or_async_recovery;
   }
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<ECSubWrite*>& o);
 private:
@@ -96,7 +96,7 @@ struct ECSubWriteReply {
   bool applied;
   ECSubWriteReply() : tid(0), committed(false), applied(false) {}
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<ECSubWriteReply*>& o);
 };
@@ -109,7 +109,7 @@ struct ECSubRead {
   set<hobject_t> attrs_to_read;
   map<hobject_t, vector<pair<int, int>>> subchunks;
   void encode(bufferlist &bl, uint64_t features) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<ECSubRead*>& o);
 };
@@ -122,7 +122,7 @@ struct ECSubReadReply {
   map<hobject_t, map<string, bufferlist>> attrs_read;
   map<hobject_t, int> errors;
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<ECSubReadReply*>& o);
 };

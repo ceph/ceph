@@ -71,15 +71,15 @@ template <typename I>
 int ServiceDaemon<I>::init() {
   dout(20) << dendl;
 
-  std::string name = m_cct->_conf->name.get_id();
-  if (name.find(RBD_MIRROR_AUTH_ID_PREFIX) == 0) {
-    name = name.substr(RBD_MIRROR_AUTH_ID_PREFIX.size());
+  std::string id = m_cct->_conf->name.get_id();
+  if (id.find(RBD_MIRROR_AUTH_ID_PREFIX) == 0) {
+    id = id.substr(RBD_MIRROR_AUTH_ID_PREFIX.size());
   }
 
+  std::string instance_id = stringify(m_rados->get_instance_id());
   std::map<std::string, std::string> service_metadata = {
-      {"instance_id", stringify(m_rados->get_instance_id())}
-    };
-  int r = m_rados->service_daemon_register("rbd-mirror", name,
+    {"id", id}, {"instance_id", instance_id}};
+  int r = m_rados->service_daemon_register("rbd-mirror", instance_id,
                                            service_metadata);
   if (r < 0) {
     return r;
@@ -208,7 +208,7 @@ void ServiceDaemon<I>::schedule_update_status() {
 template <typename I>
 void ServiceDaemon<I>::update_status() {
   dout(20) << dendl;
-  assert(m_threads->timer_lock.is_locked());
+  ceph_assert(m_threads->timer_lock.is_locked());
 
   ceph::JSONFormatter f;
   {

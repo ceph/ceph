@@ -14,10 +14,8 @@ int ceph_flags_to_mode(int flags)
 	/* because CEPH_FILE_MODE_PIN is zero, so mode = -1 is error */
 	int mode = -1;
 
-#ifdef O_DIRECTORY  /* fixme */
 	if ((flags & CEPH_O_DIRECTORY) == CEPH_O_DIRECTORY)
 		return CEPH_FILE_MODE_PIN;
-#endif
 
 	switch (flags & O_ACCMODE) {
 	case CEPH_O_WRONLY:
@@ -31,6 +29,9 @@ int ceph_flags_to_mode(int flags)
 		mode = CEPH_FILE_MODE_RDWR;
 		break;
 	}
+
+	if (flags & CEPH_O_LAZY)
+		mode |= CEPH_FILE_MODE_LAZY;
 
 	return mode;
 }

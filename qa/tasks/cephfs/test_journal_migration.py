@@ -82,13 +82,14 @@ class TestJournalMigration(CephFSTestCase):
             ))
 
         # Verify that cephfs-journal-tool can now read the rewritten journal
-        inspect_out = self.fs.journal_tool(["journal", "inspect"])
+        inspect_out = self.fs.journal_tool(["journal", "inspect"], 0)
         if not inspect_out.endswith(": OK"):
             raise RuntimeError("Unexpected journal-tool result: '{0}'".format(
                 inspect_out
             ))
 
-        self.fs.journal_tool(["event", "get", "json", "--path", "/tmp/journal.json"])
+        self.fs.journal_tool(["event", "get", "json",
+                              "--path", "/tmp/journal.json"], 0)
         p = self.fs.tool_remote.run(
             args=[
                 "python",

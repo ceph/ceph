@@ -103,6 +103,7 @@ public:
 #define ES_NUM_SHARDS_DEFAULT 16
 #define ES_NUM_REPLICAS_DEFAULT 1
 
+
 struct ElasticConfig {
   uint64_t sync_instance{0};
   string id;
@@ -115,19 +116,19 @@ struct ElasticConfig {
   uint32_t num_shards{0};
   uint32_t num_replicas{0};
 
-  void init(CephContext *cct, const map<string, string, ltstr_nocase>& config) {
-    string elastic_endpoint = rgw_conf_get(config, "endpoint", "");
+  void init(CephContext *cct, const JSONFormattable& config) {
+    string elastic_endpoint = config["endpoint"];
     id = string("elastic:") + elastic_endpoint;
     conn.reset(new RGWRESTConn(cct, nullptr, id, { elastic_endpoint }));
-    explicit_custom_meta = rgw_conf_get_bool(config, "explicit_custom_meta", true);
-    index_buckets.init(rgw_conf_get(config, "index_buckets_list", ""), true); /* approve all buckets by default */
-    allow_owners.init(rgw_conf_get(config, "approved_owners_list", ""), true); /* approve all bucket owners by default */
-    override_index_path = rgw_conf_get(config, "override_index_path", "");
-    num_shards = rgw_conf_get_int(config, "num_shards", ES_NUM_SHARDS_DEFAULT);
+    explicit_custom_meta = config["explicit_custom_meta"](true);
+    index_buckets.init(config["index_buckets_list"], true); /* approve all buckets by default */
+    allow_owners.init(config["approved_owners_list"], true); /* approve all bucket owners by default */
+    override_index_path = config["override_index_path"];
+    num_shards = config["num_shards"](ES_NUM_SHARDS_DEFAULT);
     if (num_shards < ES_NUM_SHARDS_MIN) {
       num_shards = ES_NUM_SHARDS_MIN;
     }
-    num_replicas = rgw_conf_get_int(config, "num_replicas", ES_NUM_REPLICAS_DEFAULT);
+    num_replicas = config["num_replicas"](ES_NUM_REPLICAS_DEFAULT);
   }
 
   void init_instance(RGWRealm& realm, uint64_t instance_id) {
@@ -149,7 +150,7 @@ struct ElasticConfig {
   }
 
   string get_obj_path(const RGWBucketInfo& bucket_info, const rgw_obj_key& key) {
-    return index_path +  "/object/" + bucket_info.bucket.bucket_id + ":" + key.name + ":" + (key.instance.empty() ? "null" : key.instance);
+    return index_path +  "/object/" + url_encode(bucket_info.bucket.bucket_id + ":" + key.name + ":" + (key.instance.empty() ? "null" : key.instance));
   }
 
   bool should_handle_operation(RGWBucketInfo& bucket_info) {
@@ -284,8 +285,8 @@ struct es_obj_metadata {
 
       if (name == "acl") {
         try {
-          auto i = val.begin();
-          ::decode(policy, i);
+          auto i = val.cbegin();
+          decode(policy, i);
         } catch (buffer::error& err) {
           ldout(cct, 0) << "ERROR: failed to decode acl for " << bucket_info.bucket << "/" << key << dendl;
         }
@@ -304,8 +305,13 @@ struct es_obj_metadata {
           }
         }
       } else if (name == "x-amz-tagging") {
-        auto tags_bl = val.begin();
-        ::decode(obj_tags, tags_bl);
+        auto tags_bl = val.cbegin();
+        decode(obj_tags, tags_bl);
+      } else if (name == "compression") {
+        RGWCompressionInfo cs_info;
+        auto vals_bl = val.cbegin();
+        decode(cs_info, vals_bl);
+        out_attrs[name] = cs_info.compression_type;
       } else {
         if (name != "pg_ver" &&
             name != "source_zone" &&
@@ -534,7 +540,7 @@ public:
 class RGWElasticDataSyncModule : public RGWDataSyncModule {
   ElasticConfigRef conf;
 public:
-  RGWElasticDataSyncModule(CephContext *cct, const map<string, string, ltstr_nocase>& config) : conf(std::make_shared<ElasticConfig>()) {
+  RGWElasticDataSyncModule(CephContext *cct, const JSONFormattable& config) : conf(std::make_shared<ElasticConfig>()) {
     conf->init(cct, config);
   }
   ~RGWElasticDataSyncModule() override {}
@@ -547,13 +553,13 @@ public:
     ldout(sync_env->cct, 5) << conf->id << ": init" << dendl;
     return new RGWElasticInitConfigCBCR(sync_env, conf);
   }
-  RGWCoroutine *sync_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override {
-    ldout(sync_env->cct, 10) << conf->id << ": sync_object: b=" << bucket_info.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch << dendl;
+  RGWCoroutine *sync_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, rgw_zone_set *zones_trace) override {
+    ldout(sync_env->cct, 10) << conf->id << ": sync_object: b=" << bucket_info.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch.value_or(0) << dendl;
     if (!conf->should_handle_operation(bucket_info)) {
       ldout(sync_env->cct, 10) << conf->id << ": skipping operation (bucket not approved)" << dendl;
       return nullptr;
     }
-    return new RGWElasticHandleRemoteObjCR(sync_env, bucket_info, key, conf, versioned_epoch);
+    return new RGWElasticHandleRemoteObjCR(sync_env, bucket_info, key, conf, versioned_epoch.value_or(0));
   }
   RGWCoroutine *remove_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, real_time& mtime, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override {
     /* versioned and versioned epoch params are useless in the elasticsearch backend case */
@@ -580,7 +586,7 @@ public:
   }
 };
 
-RGWElasticSyncModuleInstance::RGWElasticSyncModuleInstance(CephContext *cct, const map<string, string, ltstr_nocase>& config)
+RGWElasticSyncModuleInstance::RGWElasticSyncModuleInstance(CephContext *cct, const JSONFormattable& config)
 {
   data_handler = std::unique_ptr<RGWElasticDataSyncModule>(new RGWElasticDataSyncModule(cct, config));
 }
@@ -607,12 +613,8 @@ RGWRESTMgr *RGWElasticSyncModuleInstance::get_rest_filter(int dialect, RGWRESTMg
   return new RGWRESTMgr_MDSearch_S3();
 }
 
-int RGWElasticSyncModule::create_instance(CephContext *cct, map<string, string, ltstr_nocase>& config, RGWSyncModuleInstanceRef *instance) {
-  string endpoint;
-  auto i = config.find("endpoint");
-  if (i != config.end()) {
-    endpoint = i->second;
-  }
+int RGWElasticSyncModule::create_instance(CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) {
+  string endpoint = config["endpoint"];
   instance->reset(new RGWElasticSyncModuleInstance(cct, config));
   return 0;
 }

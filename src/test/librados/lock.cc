@@ -5,16 +5,41 @@
 #include "cls/lock/cls_lock_client.h"
 
 #include <algorithm>
+#include <chrono>
+#include <thread>
 #include <errno.h>
 #include "gtest/gtest.h"
 #include <sys/time.h>
 
+using namespace std::chrono_literals;
 using namespace librados;
 
 typedef RadosTest LibRadosLock;
 typedef RadosTestPP LibRadosLockPP;
 typedef RadosTestEC LibRadosLockEC;
 typedef RadosTestECPP LibRadosLockECPP;
+
+
+template<class Rep, class Period, typename Func, typename... Args,
+         typename Return = std::result_of_t<Func&&(Args&&...)>>
+Return wait_until(const std::chrono::duration<Rep, Period>& rel_time,
+                const std::chrono::duration<Rep, Period>& step,
+                const Return& expected,
+                Func&& func, Args&&... args)
+{
+  std::this_thread::sleep_for(rel_time - step);
+  for (auto& s : {step, step}) {
+    if (!s.count()) {
+      break;
+    }
+    auto ret = func(std::forward<Args>(args)...);
+    if (ret == expected) {
+      return ret;
+    }
+    std::this_thread::sleep_for(s);
+  }
+  return func(std::forward<Args>(args)...);
+}
 
 TEST_F(LibRadosLock, LockExclusive) {
   ASSERT_EQ(0, rados_lock_exclusive(ioctx, "foo", "TestLock1", "Cookie", "", NULL,  0));
@@ -40,36 +65,48 @@ TEST_F(LibRadosLock, LockExclusiveDur) {
   struct timeval tv;
   tv.tv_sec = 1;
   tv.tv_usec = 0;
-  ASSERT_EQ(0, rados_lock_exclusive(ioctx, "foo", "TestLock3", "Cookie", "", &tv,  0));
-  sleep(1);
-  ASSERT_EQ(0, rados_lock_exclusive(ioctx, "foo", "TestLock3", "Cookie", "", NULL, 0));
+  auto lock_exclusive = [this](timeval* tv) {
+    return rados_lock_exclusive(ioctx, "foo", "TestLock3", "Cookie", "", tv, 0);
+  };
+  constexpr int expected = 0;
+  ASSERT_EQ(expected, lock_exclusive(&tv));
+  ASSERT_EQ(expected, wait_until(1.0s, 0.1s, expected, lock_exclusive, nullptr));
 }
 
 TEST_F(LibRadosLockPP, LockExclusiveDurPP) {
   struct timeval tv;
   tv.tv_sec = 1;
   tv.tv_usec = 0;
-  ASSERT_EQ(0, ioctx.lock_exclusive("foo", "TestLockPP3", "Cookie", "", &tv,  0));
-  sleep(1);
-  ASSERT_EQ(0, ioctx.lock_exclusive("foo", "TestLockPP3", "Cookie", "", NULL, 0));
+  auto lock_exclusive = [this](timeval* tv) {
+    return ioctx.lock_exclusive("foo", "TestLockPP3", "Cookie", "", tv, 0);
+  };
+  constexpr int expected = 0;
+  ASSERT_EQ(expected, lock_exclusive(&tv));
+  ASSERT_EQ(expected, wait_until(1.0s, 0.1s, expected, lock_exclusive, nullptr));
 }
 
 TEST_F(LibRadosLock, LockSharedDur) {
   struct timeval tv;
   tv.tv_sec = 1;
   tv.tv_usec = 0;
-  ASSERT_EQ(0, rados_lock_shared(ioctx, "foo", "TestLock4", "Cookie", "Tag", "", &tv, 0));
-  sleep(1);
-  ASSERT_EQ(0, rados_lock_shared(ioctx, "foo", "TestLock4", "Cookie", "Tag", "", NULL, 0));
+  auto lock_shared = [this](timeval* tv) {
+    return rados_lock_shared(ioctx, "foo", "TestLock4", "Cookie", "Tag", "", tv, 0);
+  };
+  constexpr int expected = 0;
+  ASSERT_EQ(expected, lock_shared(&tv));
+  ASSERT_EQ(expected, wait_until(1.0s, 0.1s, expected, lock_shared, nullptr));
 }
 
 TEST_F(LibRadosLockPP, LockSharedDurPP) {
   struct timeval tv;
   tv.tv_sec = 1;
   tv.tv_usec = 0;
-  ASSERT_EQ(0, ioctx.lock_shared("foo", "TestLockPP4", "Cookie", "Tag", "", &tv, 0));
-  sleep(1);
-  ASSERT_EQ(0, ioctx.lock_shared("foo", "TestLockPP4", "Cookie", "Tag", "", NULL, 0));
+  auto lock_shared = [this](timeval* tv) {
+    return ioctx.lock_shared("foo", "TestLockPP4", "Cookie", "Tag", "", tv, 0);
+  };
+  constexpr int expected = 0;
+  ASSERT_EQ(expected, lock_shared(&tv));
+  ASSERT_EQ(expected, wait_until(1.0s, 0.1s, expected, lock_shared, nullptr));
 }
 
 TEST_F(LibRadosLock, LockRenew) {
@@ -219,36 +256,48 @@ TEST_F(LibRadosLockEC, LockExclusiveDur) {
   struct timeval tv;
   tv.tv_sec = 1;
   tv.tv_usec = 0;
-  ASSERT_EQ(0, rados_lock_exclusive(ioctx, "foo", "TestLockEC3", "Cookie", "", &tv,  0));
-  sleep(1);
-  ASSERT_EQ(0, rados_lock_exclusive(ioctx, "foo", "TestLockEC3", "Cookie", "", NULL, 0));
+  auto lock_exclusive = [this](timeval* tv) {
+    return rados_lock_exclusive(ioctx, "foo", "TestLockEC3", "Cookie", "", tv, 0);
+  };
+  constexpr int expected = 0;
+  ASSERT_EQ(expected, lock_exclusive(&tv));
+  ASSERT_EQ(expected, wait_until(1.0s, 0.1s, expected, lock_exclusive, nullptr));
 }
 
 TEST_F(LibRadosLockECPP, LockExclusiveDurPP) {
   struct timeval tv;
   tv.tv_sec = 1;
   tv.tv_usec = 0;
-  ASSERT_EQ(0, ioctx.lock_exclusive("foo", "TestLockECPP3", "Cookie", "", &tv,  0));
-  sleep(1);
-  ASSERT_EQ(0, ioctx.lock_exclusive("foo", "TestLockECPP3", "Cookie", "", NULL, 0));
+  auto lock_exclusive = [this](timeval* tv) {
+    return ioctx.lock_exclusive("foo", "TestLockECPP3", "Cookie", "", tv, 0);
+  };
+  constexpr int expected = 0;
+  ASSERT_EQ(expected, lock_exclusive(&tv));
+  ASSERT_EQ(expected, wait_until(1.0s, 0.1s, expected, lock_exclusive, nullptr));
 }
 
 TEST_F(LibRadosLockEC, LockSharedDur) {
   struct timeval tv;
   tv.tv_sec = 1;
   tv.tv_usec = 0;
-  ASSERT_EQ(0, rados_lock_shared(ioctx, "foo", "TestLockEC4", "Cookie", "Tag", "", &tv, 0));
-  sleep(1);
-  ASSERT_EQ(0, rados_lock_shared(ioctx, "foo", "TestLockEC4", "Cookie", "Tag", "", NULL, 0));
+  auto lock_shared = [this](timeval* tv) {
+    return rados_lock_shared(ioctx, "foo", "TestLockEC4", "Cookie", "Tag", "", tv, 0);
+  };
+  constexpr int expected = 0;
+  ASSERT_EQ(expected, lock_shared(&tv));
+  ASSERT_EQ(expected, wait_until(1.0s, 0.1s, expected, lock_shared, nullptr));
 }
 
 TEST_F(LibRadosLockECPP, LockSharedDurPP) {
   struct timeval tv;
   tv.tv_sec = 1;
   tv.tv_usec = 0;
-  ASSERT_EQ(0, ioctx.lock_shared("foo", "TestLockECPP4", "Cookie", "Tag", "", &tv, 0));
-  sleep(1);
-  ASSERT_EQ(0, ioctx.lock_shared("foo", "TestLockECPP4", "Cookie", "Tag", "", NULL, 0));
+  auto lock_shared = [this](timeval* tv) {
+    return ioctx.lock_shared("foo", "TestLockECPP4", "Cookie", "Tag", "", tv, 0);
+  };
+  const int expected = 0;
+  ASSERT_EQ(expected, lock_shared(&tv));
+  ASSERT_EQ(expected, wait_until(1.0s, 0.1s, expected, lock_shared, nullptr));
 }
 
 TEST_F(LibRadosLockEC, LockRenew) {

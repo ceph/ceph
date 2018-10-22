@@ -14,9 +14,10 @@ namespace librbd {
 namespace journal {
 namespace util {
 
-int C_DecodeTag::decode(bufferlist::iterator *it, TagData *tag_data) {
+int C_DecodeTag::decode(bufferlist::const_iterator *it, TagData *tag_data) {
   try {
-    ::decode(*tag_data, *it);
+    using ceph::decode;
+    decode(*tag_data, *it);
   } catch (const buffer::error &err) {
     return -EBADMSG;
   }
@@ -34,7 +35,7 @@ int C_DecodeTag::process(int r) {
   Mutex::Locker locker(*lock);
   *tag_tid = tag.tid;
 
-  bufferlist::iterator data_it = tag.data.begin();
+  auto data_it = tag.data.cbegin();
   r = decode(&data_it, tag_data);
   if (r < 0) {
     lderr(cct) << "C_DecodeTag: " << this << " " << __func__ << ": "
@@ -65,7 +66,7 @@ int C_DecodeTags::process(int r) {
 
   Mutex::Locker locker(*lock);
   *tag_tid = tags.back().tid;
-  bufferlist::iterator data_it = tags.back().data.begin();
+  auto data_it = tags.back().data.cbegin();
   r = C_DecodeTag::decode(&data_it, tag_data);
   if (r < 0) {
     lderr(cct) << "C_DecodeTags: " << this << " " << __func__ << ": "

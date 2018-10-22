@@ -29,10 +29,6 @@
 #include "mon/health_check.h"
 #include <sstream>
 
-// FIXME: don't like including this here to get OSDMap::Incremental, maybe
-// PGMapUpdater needs its own header.
-#include "osd/OSDMap.h"
-
 namespace ceph { class Formatter; }
 
 class PGMapDigest {
@@ -58,14 +54,16 @@ public:
     int32_t up = 0;
     int32_t primary = 0;
     void encode(bufferlist& bl) const {
-      ::encode(acting, bl);
-      ::encode(up, bl);
-      ::encode(primary, bl);
+      using ceph::encode;
+      encode(acting, bl);
+      encode(up, bl);
+      encode(primary, bl);
     }
-    void decode(bufferlist::iterator& p) {
-      ::decode(acting, p);
-      ::decode(up, p);
-      ::decode(primary, p);
+    void decode(bufferlist::const_iterator& p) {
+      using ceph::decode;
+      decode(acting, p);
+      decode(up, p);
+      decode(primary, p);
     }
   };
   mempool::pgmap::unordered_map<int32_t,pg_count> num_pg_by_osd;
@@ -86,7 +84,7 @@ public:
   /**
    * keep track of sum deltas, per-pool, taking into account any previous
    * deltas existing in @p per_pool_sum_deltas.  The utime_t as second member
-   * of the pair is the timestamp refering to the last update (i.e., the first
+   * of the pair is the timestamp referring to the last update (i.e., the first
    * member of the pair) for a given pool.
    */
   mempool::pgmap::unordered_map<uint64_t, pair<pool_stat_t,utime_t> > per_pool_sum_delta;
@@ -94,12 +92,17 @@ public:
   pool_stat_t pg_sum_delta;
   utime_t stamp_delta;
 
+  void get_recovery_stats(
+    double *misplaced_ratio,
+    double *degraded_ratio,
+    double *inactive_ratio,
+    double *unknown_pgs_ratio) const;
 
   void print_summary(Formatter *f, ostream *out) const;
   void print_oneline_summary(Formatter *f, ostream *out) const;
 
   void recovery_summary(Formatter *f, list<string> *psl,
-                        const pool_stat_t& delta_sum) const;
+                        const pool_stat_t& pool_sum) const;
   void overall_recovery_summary(Formatter *f, list<string> *psl) const;
   void pool_recovery_summary(Formatter *f, list<string> *psl,
                              uint64_t poolid) const;
@@ -154,6 +157,10 @@ public:
    */
   int64_t get_pool_free_space(const OSDMap &osd_map, int64_t poolid) const;
 
+
+  /**
+   * Dump pool usage and io ops/bytes, used by "ceph df" command
+   */
   virtual void dump_pool_stats_full(const OSDMap &osd_map, stringstream *ss,
 				    Formatter *f, bool verbose) const;
   void dump_fs_stats(stringstream *ss, Formatter *f, bool verbose) const;
@@ -205,7 +212,7 @@ public:
   }
 
   void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::iterator& p);
+  void decode(bufferlist::const_iterator& p);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<PGMapDigest*>& ls);
 };
@@ -279,6 +286,7 @@ public:
   mempool::pgmap::unordered_map<int,set<pg_t> > pg_by_osd;
   mempool::pgmap::unordered_map<int,int> blocked_by_sum;
   mempool::pgmap::list< pair<pool_stat_t, utime_t> > pg_sum_deltas;
+  mempool::pgmap::unordered_map<int64_t,mempool::pgmap::unordered_map<uint64_t,int32_t>> num_pg_by_pool_state;
 
   utime_t stamp;
 
@@ -385,7 +393,7 @@ public:
   void stat_osd_sub(int osd, const osd_stat_t &s);
   
   void encode(bufferlist &bl, uint64_t features=-1) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
 
   /// encode subset of our data to a PGMapDigest
   void encode_digest(const OSDMap& osdmap,
@@ -406,6 +414,13 @@ public:
     get_rules_avail(osd_map, &avail_space_by_rule);
     PGMapDigest::dump_pool_stats_full(osd_map, ss, f, verbose);
   }
+
+  /*
+  * Dump client io rate, recovery io rate, cache io rate and recovery information.
+  * this function is used by "ceph osd pool stats" command
+  */
+  void dump_pool_stats_and_io_rate(int64_t poolid, const OSDMap &osd_map, Formatter *f,
+                              stringstream *ss) const;
 
   void dump_pg_stats_plain(
     ostream& ss,
@@ -455,7 +470,7 @@ inline ostream& operator<<(ostream& out, const PGMapDigest& m) {
 
 int process_pg_map_command(
   const string& prefix,
-  const map<string,cmd_vartype>& cmdmap,
+  const cmdmap_t& cmdmap,
   const PGMap& pg_map,
   const OSDMap& osdmap,
   Formatter *f,

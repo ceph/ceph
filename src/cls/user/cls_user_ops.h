@@ -15,17 +15,17 @@ struct cls_user_set_buckets_op {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(entries, bl);
-    ::encode(add, bl);
-    ::encode(time, bl);
+    encode(entries, bl);
+    encode(add, bl);
+    encode(time, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(entries, bl);
-    ::decode(add, bl);
-    ::decode(time, bl);
+    decode(entries, bl);
+    decode(add, bl);
+    decode(time, bl);
     DECODE_FINISH(bl);
   }
 
@@ -41,13 +41,13 @@ struct cls_user_remove_bucket_op {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(bucket, bl);
+    encode(bucket, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(bucket, bl);
+    decode(bucket, bl);
     DECODE_FINISH(bl);
   }
 
@@ -67,18 +67,18 @@ struct cls_user_list_buckets_op {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 1, bl);
-    ::encode(marker, bl);
-    ::encode(max_entries, bl);
-    ::encode(end_marker, bl);
+    encode(marker, bl);
+    encode(max_entries, bl);
+    encode(end_marker, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(2, bl);
-    ::decode(marker, bl);
-    ::decode(max_entries, bl);
+    decode(marker, bl);
+    decode(max_entries, bl);
     if (struct_v >= 2) {
-      ::decode(end_marker, bl);
+      decode(end_marker, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -97,17 +97,17 @@ struct cls_user_list_buckets_ret {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(entries, bl);
-    ::encode(marker, bl);
-    ::encode(truncated, bl);
+    encode(entries, bl);
+    encode(marker, bl);
+    encode(truncated, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(entries, bl);
-    ::decode(marker, bl);
-    ::decode(truncated, bl);
+    decode(entries, bl);
+    decode(marker, bl);
+    decode(truncated, bl);
     DECODE_FINISH(bl);
   }
 
@@ -125,7 +125,7 @@ struct cls_user_get_header_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     DECODE_FINISH(bl);
   }
@@ -135,6 +135,27 @@ struct cls_user_get_header_op {
 };
 WRITE_CLASS_ENCODER(cls_user_get_header_op)
 
+struct cls_user_reset_stats_op {
+  real_time time;
+  cls_user_reset_stats_op() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(time, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(time, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<cls_user_reset_stats_op*>& ls);
+};
+WRITE_CLASS_ENCODER(cls_user_reset_stats_op);
+
 struct cls_user_get_header_ret {
   cls_user_header header;
 
@@ -142,13 +163,13 @@ struct cls_user_get_header_ret {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(header, bl);
+    encode(header, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(header, bl);
+    decode(header, bl);
     DECODE_FINISH(bl);
   }
 
@@ -164,13 +185,13 @@ struct cls_user_complete_stats_sync_op {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(time, bl);
+    encode(time, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(time, bl);
+    decode(time, bl);
     DECODE_FINISH(bl);
   }
 

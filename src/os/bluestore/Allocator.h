@@ -13,15 +13,12 @@
 #define CEPH_OS_BLUESTORE_ALLOCATOR_H
 
 #include <ostream>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "os/bluestore/bluestore_types.h"
 
 class Allocator {
 public:
   virtual ~Allocator() {}
-
-  virtual int reserve(uint64_t need) = 0;
-  virtual void unreserve(uint64_t unused) = 0;
 
   /*
    * Allocate required number of blocks in n number of extents.
@@ -34,16 +31,17 @@ public:
    */
   virtual int64_t allocate(uint64_t want_size, uint64_t alloc_unit,
 			   uint64_t max_alloc_size, int64_t hint,
-			   AllocExtentVector *extents) = 0;
+			   PExtentVector *extents) = 0;
 
   int64_t allocate(uint64_t want_size, uint64_t alloc_unit,
-		   int64_t hint, AllocExtentVector *extents) {
+		   int64_t hint, PExtentVector *extents) {
     return allocate(want_size, alloc_unit, want_size, hint, extents);
   }
 
   /* Bulk release. Implementations may override this method to handle the whole
    * set at once. This could save e.g. unnecessary mutex dance. */
   virtual void release(const interval_set<uint64_t>& release_set) = 0;
+  void release(const PExtentVector& release_set);
 
   virtual void dump() = 0;
 
@@ -51,6 +49,10 @@ public:
   virtual void init_rm_free(uint64_t offset, uint64_t length) = 0;
 
   virtual uint64_t get_free() = 0;
+  virtual double get_fragmentation(uint64_t alloc_unit)
+  {
+    return 0.0;
+  }
 
   virtual void shutdown() = 0;
   static Allocator *create(CephContext* cct, string type, int64_t size,

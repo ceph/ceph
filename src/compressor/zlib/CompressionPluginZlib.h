@@ -19,7 +19,6 @@
 #include "arch/probe.h"
 #include "arch/intel.h"
 #include "arch/arm.h"
-#include "common/config.h"
 #include "compressor/CompressionPlugin.h"
 #include "ZlibCompressor.h"
 

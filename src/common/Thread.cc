@@ -12,7 +12,8 @@
  *
  */
 
-#include "include/compat.h"
+#include <signal.h>
+
 #include "common/Thread.h"
 #include "common/code_environment.h"
 #include "common/debug.h"
@@ -140,7 +141,7 @@ int Thread::try_create(size_t stacksize)
 
 void Thread::create(const char *name, size_t stacksize)
 {
-  assert(strlen(name) < 16);
+  ceph_assert(strlen(name) < 16);
   thread_name = name;
 
   int ret = try_create(stacksize);
@@ -149,14 +150,14 @@ void Thread::create(const char *name, size_t stacksize)
     snprintf(buf, sizeof(buf), "Thread::try_create(): pthread_create "
 	     "failed with error %d", ret);
     dout_emergency(buf);
-    assert(ret == 0);
+    ceph_assert(ret == 0);
   }
 }
 
 int Thread::join(void **prval)
 {
   if (thread_id == 0) {
-    assert("join on thread that was never started" == 0);
+    ceph_abort_msg("join on thread that was never started");
     return -EINVAL;
   }
 
@@ -166,7 +167,7 @@ int Thread::join(void **prval)
     snprintf(buf, sizeof(buf), "Thread::join(): pthread_join "
              "failed with error %d\n", status);
     dout_emergency(buf);
-    assert(status == 0);
+    ceph_assert(status == 0);
   }
 
   thread_id = 0;
@@ -197,4 +198,33 @@ int Thread::set_affinity(int id)
   if (pid && ceph_gettid() == pid)
     r = _set_affinity(id);
   return r;
+}
+
+// Functions for std::thread
+// =========================
+
+void set_thread_name(std::thread& t, const std::string& s) {
+  int r = ceph_pthread_setname(t.native_handle(), s.c_str());
+  if (r != 0) {
+    throw std::system_error(r, std::generic_category());
+  }
+}
+std::string get_thread_name(const std::thread& t) {
+  std::string s(256, '\0');
+
+  int r = ceph_pthread_getname(const_cast<std::thread&>(t).native_handle(),
+			       s.data(), s.length());
+  if (r != 0) {
+    throw std::system_error(r, std::generic_category());
+  }
+  s.resize(std::strlen(s.data()));
+  return s;
+}
+
+void kill(std::thread& t, int signal)
+{
+  auto r = pthread_kill(t.native_handle(), signal);
+  if (r != 0) {
+    throw std::system_error(r, std::generic_category());
+  }
 }

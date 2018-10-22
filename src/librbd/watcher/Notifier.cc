@@ -26,8 +26,8 @@ void Notifier::C_AioNotify::finish(int r) {
   if (response != nullptr) {
     if (r == 0 || r == -ETIMEDOUT) {
       try {
-        bufferlist::iterator it = out_bl.begin();
-        ::decode(*response, it);
+        auto it = out_bl.cbegin();
+        decode(*response, it);
       } catch (const buffer::error &err) {
         r = -EBADMSG;
       }
@@ -45,7 +45,7 @@ Notifier::Notifier(ContextWQ *work_queue, IoCtx &ioctx, const std::string &oid)
 
 Notifier::~Notifier() {
   Mutex::Locker aio_notify_locker(m_aio_notify_lock);
-  assert(m_pending_aio_notifies == 0);
+  ceph_assert(m_pending_aio_notifies == 0);
 }
 
 void Notifier::flush(Context *on_finish) {
@@ -70,7 +70,7 @@ void Notifier::notify(bufferlist &bl, NotifyResponse *response,
   C_AioNotify *ctx = new C_AioNotify(this, response, on_finish);
   librados::AioCompletion *comp = util::create_rados_callback(ctx);
   int r = m_ioctx.aio_notify(m_oid, comp, bl, NOTIFY_TIMEOUT, &ctx->out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 
@@ -78,7 +78,7 @@ void Notifier::handle_notify(int r, Context *on_finish) {
   ldout(m_cct, 20) << "r=" << r << dendl;
 
   Mutex::Locker aio_notify_locker(m_aio_notify_lock);
-  assert(m_pending_aio_notifies > 0);
+  ceph_assert(m_pending_aio_notifies > 0);
   --m_pending_aio_notifies;
 
   ldout(m_cct, 20) << "pending=" << m_pending_aio_notifies << dendl;

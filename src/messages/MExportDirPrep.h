@@ -19,7 +19,10 @@
 #include "msg/Message.h"
 #include "include/types.h"
 
-class MExportDirPrep : public Message {
+class MExportDirPrep : public MessageInstance<MExportDirPrep> {
+public:
+  friend factory;
+private:
   dirfrag_t dirfrag;
  public:
   bufferlist basedir;
@@ -30,22 +33,22 @@ private:
   bool b_did_assim;
 
 public:
-  dirfrag_t get_dirfrag() { return dirfrag; }
-  list<dirfrag_t>& get_bounds() { return bounds; }
-  set<mds_rank_t> &get_bystanders() { return bystanders; }
+  dirfrag_t get_dirfrag() const { return dirfrag; }
+  const list<dirfrag_t>& get_bounds() const { return bounds; }
+  const set<mds_rank_t> &get_bystanders() const { return bystanders; }
 
-  bool did_assim() { return b_did_assim; }
+  bool did_assim() const { return b_did_assim; }
   void mark_assim() { b_did_assim = true; }
 
+protected:
   MExportDirPrep() {
     b_did_assim = false;
   }
   MExportDirPrep(dirfrag_t df, uint64_t tid) :
-    Message(MSG_MDS_EXPORTDIRPREP),
+    MessageInstance(MSG_MDS_EXPORTDIRPREP),
     dirfrag(df), b_did_assim(false) {
     set_tid(tid);
   }
-private:
   ~MExportDirPrep() override {}
 
 public:
@@ -65,20 +68,22 @@ public:
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(dirfrag, p);
-    ::decode(basedir, p);
-    ::decode(bounds, p);
-    ::decode(traces, p);
-    ::decode(bystanders, p);
+    using ceph::decode;
+    auto p = payload.cbegin();
+    decode(dirfrag, p);
+    decode(basedir, p);
+    decode(bounds, p);
+    decode(traces, p);
+    decode(bystanders, p);
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(dirfrag, payload);
-    ::encode(basedir, payload);
-    ::encode(bounds, payload);
-    ::encode(traces, payload);
-    ::encode(bystanders, payload);
+    using ceph::encode;
+    encode(dirfrag, payload);
+    encode(basedir, payload);
+    encode(bounds, payload);
+    encode(traces, payload);
+    encode(bystanders, payload);
   }
 };
 

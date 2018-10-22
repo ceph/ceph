@@ -1,5 +1,4 @@
 tasks:
-- kclient:
 - workunit:
     clients:
       all: [fs/misc/trivial_sync.sh]

@@ -81,7 +81,7 @@ TYPED_TEST(ErasureCodeTest, encode_decode)
       "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
     in_ptr.append(payload, strlen(payload));
     bufferlist in;
-    in.push_front(in_ptr);
+    in.push_back(in_ptr);
     int want_to_encode[] = { 0, 1, 2, 3 };
     map<int, bufferlist> encoded;
     EXPECT_EQ(0, jerasure.encode(set<int>(want_to_encode, want_to_encode+4),
@@ -279,7 +279,7 @@ TEST(ErasureCodeTest, encode)
 
 TEST(ErasureCodeTest, create_rule)
 {
-  CrushWrapper *c = new CrushWrapper;
+  std::unique_ptr<CrushWrapper> c = std::make_unique<CrushWrapper>();
   c->create();
   int root_type = 2;
   c->set_type_name(root_type, "root");

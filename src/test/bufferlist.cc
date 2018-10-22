@@ -19,7 +19,6 @@
  *
  */
 
-#include "include/memory.h"
 #include <limits.h>
 #include <errno.h>
 #include <sys/uio.h>
@@ -89,6 +88,7 @@ TEST(Buffer, constructors) {
     history_alloc_bytes += len;
     history_alloc_num++;
     EXPECT_EQ(0, ::memcmp(clone.c_str(), ptr.c_str(), len));
+    delete [] str;
   }
   //
   // buffer::create_static
@@ -203,36 +203,6 @@ TEST(Buffer, constructors) {
       EXPECT_EQ(history_alloc_num, buffer::get_history_alloc_num());
     }
   }
-#ifdef CEPH_HAVE_SPLICE
-  if (ceph_buffer_track) {
-    EXPECT_EQ(0, buffer::get_total_alloc());
-  }
-  
-  {
-    // no fd
-    EXPECT_THROW(buffer::create_zero_copy(len, -1, NULL), buffer::error_code);
-    history_alloc_bytes += len;
-    history_alloc_num++;
-
-    unsigned zc_len = 4;
-    ::unlink(FILENAME);
-    snprintf(cmd, sizeof(cmd), "echo ABC > %s", FILENAME);
-    EXPECT_EQ(0, ::system(cmd));
-    int fd = ::open(FILENAME, O_RDONLY);
-    assert (fd >= 0);
-    bufferptr ptr(buffer::create_zero_copy(zc_len, fd, NULL));
-    history_alloc_bytes += zc_len;
-    history_alloc_num++;
-    EXPECT_EQ(zc_len, ptr.length());
-    if (ceph_buffer_track) {
-      EXPECT_EQ(zc_len, (unsigned)buffer::get_total_alloc());
-      EXPECT_EQ(history_alloc_bytes, buffer::get_history_alloc_bytes());
-      EXPECT_EQ(history_alloc_num, buffer::get_history_alloc_num());
-    }
-    ::close(fd);
-    ::unlink(FILENAME);
-  }
-#endif
   if (ceph_buffer_track) {
     EXPECT_EQ(0, buffer::get_total_alloc());
   }
@@ -266,149 +236,6 @@ TEST(BufferRaw, ostream) {
   EXPECT_GT(stream.str().size(), stream.str().find("buffer::raw("));
   EXPECT_GT(stream.str().size(), stream.str().find("len 1 nref 1)"));
 }
-
-#ifdef CEPH_HAVE_SPLICE
-class TestRawPipe : public ::testing::Test {
-protected:
-  void SetUp() override {
-    len = 4;
-    ::unlink(FILENAME);
-    snprintf(cmd, sizeof(cmd), "echo ABC > %s", FILENAME);
-    EXPECT_EQ(0, ::system(cmd));
-    fd = ::open(FILENAME, O_RDONLY);
-    assert(fd >= 0);
-  }
-  void TearDown() override {
-    ::close(fd);
-    ::unlink(FILENAME);
-  }
-  int fd;
-  unsigned len;
-};
-
-TEST_F(TestRawPipe, create_zero_copy) {
-  bufferptr ptr(buffer::create_zero_copy(len, fd, NULL));
-  EXPECT_EQ(len, ptr.length());
-  if (get_env_bool("CEPH_BUFFER_TRACK")) {
-    EXPECT_EQ(len, (unsigned)buffer::get_total_alloc());
-  }
-}
-
-TEST_F(TestRawPipe, c_str_no_fd) {
-  EXPECT_THROW(bufferptr ptr(buffer::create_zero_copy(len, -1, NULL)),
-	       buffer::error_code);
-}
-
-TEST_F(TestRawPipe, c_str_basic) {
-  bufferptr ptr = bufferptr(buffer::create_zero_copy(len, fd, NULL));
-  EXPECT_EQ(0, memcmp(ptr.c_str(), "ABC\n", len));
-  EXPECT_EQ(len, ptr.length());
-}
-
-TEST_F(TestRawPipe, c_str_twice) {
-  // make sure we're creating a copy of the data and not consuming it
-  bufferptr ptr = bufferptr(buffer::create_zero_copy(len, fd, NULL));
-  EXPECT_EQ(len, ptr.length());
-  EXPECT_EQ(0, memcmp(ptr.c_str(), "ABC\n", len));
-  EXPECT_EQ(0, memcmp(ptr.c_str(), "ABC\n", len));
-}
-
-TEST_F(TestRawPipe, c_str_basic_offset) {
-  loff_t offset = len - 1;
-  ::lseek(fd, offset, SEEK_SET);
-  bufferptr ptr = bufferptr(buffer::create_zero_copy(len - offset, fd, NULL));
-  EXPECT_EQ(len - offset, ptr.length());
-  EXPECT_EQ(0, memcmp(ptr.c_str(), "\n", len - offset));
-}
-
-TEST_F(TestRawPipe, c_str_dest_short) {
-  ::lseek(fd, 1, SEEK_SET);
-  bufferptr ptr = bufferptr(buffer::create_zero_copy(2, fd, NULL));
-  EXPECT_EQ(2u, ptr.length());
-  EXPECT_EQ(0, memcmp(ptr.c_str(), "BC", 2));
-}
-
-TEST_F(TestRawPipe, c_str_source_short) {
-  ::lseek(fd, 1, SEEK_SET);
-  bufferptr ptr = bufferptr(buffer::create_zero_copy(len, fd, NULL));
-  EXPECT_EQ(len - 1, ptr.length());
-  EXPECT_EQ(0, memcmp(ptr.c_str(), "BC\n", len - 1));
-}
-
-TEST_F(TestRawPipe, c_str_explicit_zero_offset) {
-  int64_t offset = 0;
-  ::lseek(fd, 1, SEEK_SET);
-  bufferptr ptr = bufferptr(buffer::create_zero_copy(len, fd, &offset));
-  EXPECT_EQ(len, offset);
-  EXPECT_EQ(len, ptr.length());
-  EXPECT_EQ(0, memcmp(ptr.c_str(), "ABC\n", len));
-}
-
-TEST_F(TestRawPipe, c_str_explicit_positive_offset) {
-  int64_t offset = 1;
-  bufferptr ptr = bufferptr(buffer::create_zero_copy(len - offset, fd,
-						     &offset));
-  EXPECT_EQ(len, offset);
-  EXPECT_EQ(len - 1, ptr.length());
-  EXPECT_EQ(0, memcmp(ptr.c_str(), "BC\n", len - 1));
-}
-
-TEST_F(TestRawPipe, c_str_explicit_positive_empty_result) {
-  int64_t offset = len;
-  bufferptr ptr = bufferptr(buffer::create_zero_copy(len - offset, fd,
-						     &offset));
-  EXPECT_EQ(len, offset);
-  EXPECT_EQ(0u, ptr.length());
-}
-
-TEST_F(TestRawPipe, c_str_source_short_explicit_offset) {
-  int64_t offset = 1;
-  bufferptr ptr = bufferptr(buffer::create_zero_copy(len, fd, &offset));
-  EXPECT_EQ(len, offset);
-  EXPECT_EQ(len - 1, ptr.length());
-  EXPECT_EQ(0, memcmp(ptr.c_str(), "BC\n", len - 1));
-}
-
-TEST_F(TestRawPipe, c_str_dest_short_explicit_offset) {
-  int64_t offset = 1;
-  bufferptr ptr = bufferptr(buffer::create_zero_copy(2, fd, &offset));
-  EXPECT_EQ(3, offset);
-  EXPECT_EQ(2u, ptr.length());
-  EXPECT_EQ(0, memcmp(ptr.c_str(), "BC", 2));
-}
-
-TEST_F(TestRawPipe, buffer_list_read_fd_zero_copy) {
-  bufferlist bl;
-  EXPECT_EQ(-EBADF, bl.read_fd_zero_copy(-1, len));
-  bl = bufferlist();
-  EXPECT_EQ(0, bl.read_fd_zero_copy(fd, len));
-  EXPECT_EQ(len, bl.length());
-  EXPECT_EQ(0u, bl.front().unused_tail_length());
-  EXPECT_EQ(1u, bl.get_num_buffers());
-  EXPECT_EQ(len, bl.front().raw_length());
-  EXPECT_EQ(0, memcmp(bl.c_str(), "ABC\n", len));
-  EXPECT_TRUE(bl.can_zero_copy());
-}
-
-TEST_F(TestRawPipe, buffer_list_write_fd_zero_copy) {
-  ::unlink(FILENAME);
-  bufferlist bl;
-  EXPECT_EQ(0, bl.read_fd_zero_copy(fd, len));
-  EXPECT_TRUE(bl.can_zero_copy());
-  int out_fd = ::open(FILENAME, O_RDWR|O_CREAT|O_TRUNC, 0600);
-  ASSERT_NE(-1, out_fd);
-  EXPECT_EQ(0, bl.write_fd_zero_copy(out_fd));
-  struct stat st;
-  memset(&st, 0, sizeof(st));
-  ASSERT_EQ(0, ::stat(FILENAME, &st));
-  EXPECT_EQ(len, st.st_size);
-  char buf[len + 1];
-  EXPECT_EQ((int)len, safe_read(out_fd, buf, len + 1));
-  EXPECT_EQ(0, memcmp(buf, "ABC\n", len));
-  ::close(out_fd);
-  ::unlink(FILENAME);
-}
-#endif // CEPH_HAVE_SPLICE
 
 //                                     
 // +-----------+                +-----+
@@ -872,7 +699,7 @@ TEST(BufferPtr, append_bench) {
       bufferptr bp(buflen);
       bp.set_length(0);
       for (int64_t j=0; j<buflen; j += s) {
-	bp.append(src, s);
+	bp.append(src + j, s);
       }
     }
     utime_t end = ceph_clock_now();
@@ -1048,6 +875,39 @@ TEST(BufferListIterator, end) {
     bufferlist::iterator i(&bl);
     EXPECT_FALSE(i.end());
   }
+}
+
+static void bench_bufferlistiter_deref(const size_t step,
+				       const size_t bufsize,
+				       const size_t bufnum) {
+  const std::string buf('a', bufsize);
+  ceph::bufferlist bl;
+
+  for (size_t i = 0; i < bufnum; i++) {
+    bl.append(ceph::bufferptr(buf.c_str(), buf.size()));
+  }
+
+  utime_t start = ceph_clock_now();
+  bufferlist::iterator iter = bl.begin();
+  while (iter != bl.end()) {
+    iter.advance(step);
+  }
+  utime_t end = ceph_clock_now();
+  cout << bufsize * bufnum << " derefs over bl with " << bufnum
+       << " buffers, each " << bufsize << " bytes long"
+       << " in " << (end - start) << std::endl;
+}
+
+TEST(BufferListIterator, BenchDeref) {
+  bench_bufferlistiter_deref(1, 1, 4096000);
+  bench_bufferlistiter_deref(1, 10, 409600);
+  bench_bufferlistiter_deref(1, 100, 40960);
+  bench_bufferlistiter_deref(1, 1000, 4096);
+
+  bench_bufferlistiter_deref(4, 1, 1024000);
+  bench_bufferlistiter_deref(4, 10, 102400);
+  bench_bufferlistiter_deref(4, 100, 10240);
+  bench_bufferlistiter_deref(4, 1000, 1024);
 }
 
 TEST(BufferListIterator, advance) {
@@ -1256,6 +1116,7 @@ TEST(BufferListIterator, copy) {
     i.seek(0);
     i.copy(3, copy);
     EXPECT_EQ(0, ::memcmp(copy, expected, 3));
+    free(copy);
   }
   //
   // void buffer::list::iterator::copy_deep(unsigned len, ptr &dest)
@@ -1464,6 +1325,48 @@ TEST(BufferList, BenchAlloc) {
   bench_bufferlist_alloc(4, 100000, 16);
 }
 
+TEST(BufferList, append_bench_with_size_hint) {
+  std::array<char, 1048576> src = { 0, };
+
+  for (size_t step = 4; step <= 16384; step *= 4) {
+    const utime_t start = ceph_clock_now();
+
+    constexpr size_t rounds = 4000;
+    for (size_t r = 0; r < rounds; ++r) {
+      ceph::bufferlist bl(std::size(src));
+      for (auto iter = std::begin(src);
+	   iter != std::end(src);
+	   iter = std::next(iter, step)) {
+	bl.append(&*iter, step);
+      }
+    }
+    cout << rounds << " fills of buffer len " << src.size()
+	 << " with " << step << " byte appends in "
+	 << (ceph_clock_now() - start) << std::endl;
+  }
+}
+
+TEST(BufferList, append_bench) {
+  std::array<char, 1048576> src = { 0, };
+
+  for (size_t step = 4; step <= 16384; step *= 4) {
+    const utime_t start = ceph_clock_now();
+
+    constexpr size_t rounds = 4000;
+    for (size_t r = 0; r < rounds; ++r) {
+      ceph::bufferlist bl;
+      for (auto iter = std::begin(src);
+	   iter != std::end(src);
+	   iter = std::next(iter, step)) {
+	bl.append(&*iter, step);
+      }
+    }
+    cout << rounds << " fills of buffer len " << src.size()
+	 << " with " << step << " byte appends in "
+	 << (ceph_clock_now() - start) << std::endl;
+  }
+}
+
 TEST(BufferList, operator_equal) {
   //
   // list& operator= (const list& other)
@@ -1517,55 +1420,6 @@ TEST(BufferList, to_str) {
     bl.append(b);
     bl.append(c);
     ASSERT_EQ(bl.to_str(), string("foobarbaz123456789ABCDEFGHI"));
-  }
-}
-
-TEST(BufferList, get_contiguous) {
-  {
-    bufferptr a("foobarbaz", 9);
-    bufferptr b("123456789", 9);
-    bufferptr c("ABCDEFGHI", 9);
-    bufferlist bl;
-    ASSERT_EQ(0, bl.get_contiguous(0, 0));
-
-    bl.append(a);
-    bl.append(b);
-    bl.append(c);
-    ASSERT_EQ(3u, bl.get_num_buffers());
-    ASSERT_EQ(0, memcmp("bar", bl.get_contiguous(3, 3), 3));
-    ASSERT_EQ(0, memcmp("456", bl.get_contiguous(12, 3), 3));
-    ASSERT_EQ(0, memcmp("ABC", bl.get_contiguous(18, 3), 3));
-    ASSERT_EQ(3u, bl.get_num_buffers());
-    ASSERT_EQ(0, memcmp("789ABC", bl.get_contiguous(15, 6), 6));
-    ASSERT_EQ(2u, bl.get_num_buffers());
-  }
-
-  {
-    bufferptr a("foobarbaz", 9);
-    bufferptr b("123456789", 9);
-    bufferptr c("ABCDEFGHI", 9);
-    bufferlist bl;
-
-    bl.append(a);
-    bl.append(b);
-    bl.append(c);
-
-    ASSERT_EQ(0, memcmp("789ABCDEFGHI", bl.get_contiguous(15, 12), 12));
-    ASSERT_EQ(2u, bl.get_num_buffers());
-  }
-
-  {
-    bufferptr a("foobarbaz", 9);
-    bufferptr b("123456789", 9);
-    bufferptr c("ABCDEFGHI", 9);
-    bufferlist bl;
-
-    bl.append(a);
-    bl.append(b);
-    bl.append(c);
-
-    ASSERT_EQ(0, memcmp("z123456789AB", bl.get_contiguous(8, 12), 12));
-    ASSERT_EQ(1u, bl.get_num_buffers());
   }
 }
 
@@ -1815,66 +1669,6 @@ TEST(BufferList, clear) {
   EXPECT_EQ((unsigned)0, bl.get_num_buffers());
 }
 
-TEST(BufferList, push_front) {
-  //
-  // void push_front(ptr& bp)
-  //
-  {
-    bufferlist bl;
-    bufferptr ptr;
-    bl.push_front(ptr);
-    EXPECT_EQ((unsigned)0, bl.length());
-    EXPECT_EQ((unsigned)0, bl.get_num_buffers());
-  }
-  unsigned len = 17;
-  {
-    bufferlist bl;
-    bl.append('A');
-    bufferptr ptr(len);
-    ptr.c_str()[0] = 'B';
-    bl.push_front(ptr);
-    EXPECT_EQ((unsigned)(1 + len), bl.length());
-    EXPECT_EQ((unsigned)2, bl.get_num_buffers());
-    EXPECT_EQ('B', bl.front()[0]);
-    EXPECT_EQ(ptr.get_raw(), bl.front().get_raw());
-  }
-  //
-  // void push_front(raw *r)
-  //
-  {
-    bufferlist bl;
-    bl.append('A');
-    bufferptr ptr(len);
-    ptr.c_str()[0] = 'B';
-    bl.push_front(ptr.get_raw());
-    EXPECT_EQ((unsigned)(1 + len), bl.length());
-    EXPECT_EQ((unsigned)2, bl.get_num_buffers());
-    EXPECT_EQ('B', bl.front()[0]);
-    EXPECT_EQ(ptr.get_raw(), bl.front().get_raw());
-  }
-  //
-  // void push_front(ptr&& bp)
-  //
-  {
-    bufferlist bl;
-    bufferptr ptr;
-    bl.push_front(std::move(ptr));
-    EXPECT_EQ((unsigned)0, bl.length());
-    EXPECT_EQ((unsigned)0, bl.buffers().size());
-  }
-  {
-    bufferlist bl;
-    bl.append('A');
-    bufferptr ptr(len);
-    ptr.c_str()[0] = 'B';
-    bl.push_front(std::move(ptr));
-    EXPECT_EQ((unsigned)(1 + len), bl.length());
-    EXPECT_EQ((unsigned)2, bl.buffers().size());
-    EXPECT_EQ('B', bl.buffers().front()[0]);
-    EXPECT_FALSE(ptr.get_raw());
-  }
-}
-
 TEST(BufferList, push_back) {
   //
   // void push_back(ptr& bp)
@@ -2102,56 +1896,6 @@ TEST(BufferList, claim_append) {
   EXPECT_EQ((unsigned)2, to.get_num_buffers());
   EXPECT_EQ((unsigned)0, from.get_num_buffers());
   EXPECT_EQ((unsigned)0, from.length());
-}
-
-TEST(BufferList, claim_prepend) {
-  bufferlist from;
-  {
-    bufferptr ptr(2);
-    from.append(ptr);
-  }
-  bufferlist to;
-  {
-    bufferptr ptr(4);
-    to.append(ptr);
-  }
-  EXPECT_EQ((unsigned)4, to.length());
-  EXPECT_EQ((unsigned)1, to.get_num_buffers());
-  to.claim_prepend(from);
-  EXPECT_EQ((unsigned)(2 + 4), to.length());
-  EXPECT_EQ((unsigned)2, to.front().length());
-  EXPECT_EQ((unsigned)4, to.back().length());
-  EXPECT_EQ((unsigned)2, to.get_num_buffers());
-  EXPECT_EQ((unsigned)0, from.get_num_buffers());
-  EXPECT_EQ((unsigned)0, from.length());
-}
-
-TEST(BufferList, claim_prepend_misc) {
-  bufferlist src_buf;
-  bufferlist dest_buf;
-  
-  bufferlist b1;
-  b1.append("12345", 5);
-  bufferlist b2;
-  b2.append("123456", 6);
-  bufferlist b3;
-  b3.append("1234567", 7);
-
-  EXPECT_EQ(5u, b1.length());
-  EXPECT_EQ(6u, b2.length());
-  EXPECT_EQ(7u, b3.length());
-  src_buf.claim_append(b1);
-  src_buf.claim_append(b2);
-  EXPECT_EQ((unsigned)(5+6), src_buf.length());
-  src_buf.splice(0, 3);
-  EXPECT_EQ((unsigned)(5-3), src_buf.front().length());
-  EXPECT_EQ((unsigned)(11-3), src_buf.length());
-  src_buf.claim_prepend(b3);
-  EXPECT_EQ((unsigned)(8+7), src_buf.length());
-  EXPECT_EQ(0u, b3.get_num_buffers());
-  EXPECT_EQ(0u, b3.length());
-  src_buf.copy(0, src_buf.length(), dest_buf);
-  EXPECT_EQ(3u, dest_buf.get_num_buffers()); 
 }
 
 TEST(BufferList, claim_append_piecewise) {
@@ -2392,7 +2136,7 @@ TEST(BufferList, append_zero) {
   EXPECT_EQ((unsigned)1, bl.get_num_buffers());
   EXPECT_EQ((unsigned)1, bl.length());
   bl.append_zero(1);
-  EXPECT_EQ((unsigned)2, bl.get_num_buffers());
+  EXPECT_EQ((unsigned)1, bl.get_num_buffers());
   EXPECT_EQ((unsigned)2, bl.length());
   EXPECT_EQ('\0', bl[1]);
 }
@@ -2686,8 +2430,8 @@ TEST(BufferList, crc32c_append_perf) {
   // track usage of cached crcs
   buffer::track_cached_crc(true);
 
-  int base_cached = buffer::get_cached_crc();
-  int base_cached_adjusted = buffer::get_cached_crc_adjusted();
+  [[maybe_unused]] int base_cached = buffer::get_cached_crc();
+  [[maybe_unused]] int base_cached_adjusted = buffer::get_cached_crc_adjusted();
 
   bufferlist bla;
   bla.push_back(a);
@@ -2701,7 +2445,7 @@ TEST(BufferList, crc32c_append_perf) {
     std::cout << "a.crc32c(0) = " << r << " at " << rate << " MB/sec" << std::endl;
     ASSERT_EQ(r, 1138817026u);
   }
-  assert(buffer::get_cached_crc() == 0 + base_cached);
+  ceph_assert(buffer::get_cached_crc() == 0 + base_cached);
   {
     utime_t start = ceph_clock_now();
     uint32_t r = bla.crc32c(0);
@@ -2710,7 +2454,7 @@ TEST(BufferList, crc32c_append_perf) {
     std::cout << "a.crc32c(0) (again) = " << r << " at " << rate << " MB/sec" << std::endl;
     ASSERT_EQ(r, 1138817026u);
   }
-  assert(buffer::get_cached_crc() == 1 + base_cached);
+  ceph_assert(buffer::get_cached_crc() == 1 + base_cached);
 
   {
     utime_t start = ceph_clock_now();
@@ -2720,8 +2464,8 @@ TEST(BufferList, crc32c_append_perf) {
     std::cout << "a.crc32c(5) = " << r << " at " << rate << " MB/sec" << std::endl;
     ASSERT_EQ(r, 3239494520u);
   }
-  assert(buffer::get_cached_crc() == 1 + base_cached);
-  assert(buffer::get_cached_crc_adjusted() == 1 + base_cached_adjusted);
+  ceph_assert(buffer::get_cached_crc() == 1 + base_cached);
+  ceph_assert(buffer::get_cached_crc_adjusted() == 1 + base_cached_adjusted);
   {
     utime_t start = ceph_clock_now();
     uint32_t r = bla.crc32c(5);
@@ -2730,8 +2474,8 @@ TEST(BufferList, crc32c_append_perf) {
     std::cout << "a.crc32c(5) (again) = " << r << " at " << rate << " MB/sec" << std::endl;
     ASSERT_EQ(r, 3239494520u);
   }
-  assert(buffer::get_cached_crc() == 1 + base_cached);
-  assert(buffer::get_cached_crc_adjusted() == 2 + base_cached_adjusted);
+  ceph_assert(buffer::get_cached_crc() == 1 + base_cached);
+  ceph_assert(buffer::get_cached_crc_adjusted() == 2 + base_cached_adjusted);
   {
     utime_t start = ceph_clock_now();
     uint32_t r = blb.crc32c(0);
@@ -2740,7 +2484,7 @@ TEST(BufferList, crc32c_append_perf) {
     std::cout << "b.crc32c(0) = " << r << " at " << rate << " MB/sec" << std::endl;
     ASSERT_EQ(r, 2481791210u);
   }
-  assert(buffer::get_cached_crc() == 1 + base_cached);
+  ceph_assert(buffer::get_cached_crc() == 1 + base_cached);
   {
     utime_t start = ceph_clock_now();
     uint32_t r = blb.crc32c(0);
@@ -2749,7 +2493,7 @@ TEST(BufferList, crc32c_append_perf) {
     std::cout << "b.crc32c(0) (again)= " << r << " at " << rate << " MB/sec" << std::endl;
     ASSERT_EQ(r, 2481791210u);
   }
-  assert(buffer::get_cached_crc() == 2 + base_cached);
+  ceph_assert(buffer::get_cached_crc() == 2 + base_cached);
 
   bufferlist ab;
   ab.push_back(a);
@@ -2762,8 +2506,8 @@ TEST(BufferList, crc32c_append_perf) {
     std::cout << "ab.crc32c(0) = " << r << " at " << rate << " MB/sec" << std::endl;
     ASSERT_EQ(r, 2988268779u);
   }
-  assert(buffer::get_cached_crc() == 3 + base_cached);
-  assert(buffer::get_cached_crc_adjusted() == 3 + base_cached_adjusted);
+  ceph_assert(buffer::get_cached_crc() == 3 + base_cached);
+  ceph_assert(buffer::get_cached_crc_adjusted() == 3 + base_cached_adjusted);
   bufferlist ac;
   ac.push_back(a);
   ac.push_back(c);
@@ -2775,8 +2519,8 @@ TEST(BufferList, crc32c_append_perf) {
     std::cout << "ac.crc32c(0) = " << r << " at " << rate << " MB/sec" << std::endl;
     ASSERT_EQ(r, 2988268779u);
   }
-  assert(buffer::get_cached_crc() == 4 + base_cached);
-  assert(buffer::get_cached_crc_adjusted() == 3 + base_cached_adjusted);
+  ceph_assert(buffer::get_cached_crc() == 4 + base_cached);
+  ceph_assert(buffer::get_cached_crc_adjusted() == 3 + base_cached_adjusted);
 
   bufferlist ba;
   ba.push_back(b);
@@ -2789,8 +2533,8 @@ TEST(BufferList, crc32c_append_perf) {
     std::cout << "ba.crc32c(0) = " << r << " at " << rate << " MB/sec" << std::endl;
     ASSERT_EQ(r, 169240695u);
   }
-  assert(buffer::get_cached_crc() == 5 + base_cached);
-  assert(buffer::get_cached_crc_adjusted() == 4 + base_cached_adjusted);
+  ceph_assert(buffer::get_cached_crc() == 5 + base_cached);
+  ceph_assert(buffer::get_cached_crc_adjusted() == 4 + base_cached_adjusted);
   {
     utime_t start = ceph_clock_now();
     uint32_t r = ba.crc32c(5);
@@ -2799,8 +2543,8 @@ TEST(BufferList, crc32c_append_perf) {
     std::cout << "ba.crc32c(5) = " << r << " at " << rate << " MB/sec" << std::endl;
     ASSERT_EQ(r, 1265464778u);
   }
-  assert(buffer::get_cached_crc() == 5 + base_cached);
-  assert(buffer::get_cached_crc_adjusted() == 6 + base_cached_adjusted);
+  ceph_assert(buffer::get_cached_crc() == 5 + base_cached);
+  ceph_assert(buffer::get_cached_crc_adjusted() == 6 + base_cached_adjusted);
 
   cout << "crc cache hits (same start) = " << buffer::get_cached_crc() << std::endl;
   cout << "crc cache hits (adjusted) = " << buffer::get_cached_crc_adjusted() << std::endl;
@@ -3024,7 +2768,7 @@ TEST(BufferList, TestCloneNonShareable) {
 
 TEST(BufferList, TestCopyAll) {
   const static size_t BIG_SZ = 10737414;
-  ceph::shared_ptr <unsigned char> big(
+  std::shared_ptr <unsigned char> big(
       (unsigned char*)malloc(BIG_SZ), free);
   unsigned char c = 0;
   for (size_t i = 0; i < BIG_SZ; ++i) {
@@ -3036,7 +2780,7 @@ TEST(BufferList, TestCopyAll) {
   bufferlist bl2;
   i.copy_all(bl2);
   ASSERT_EQ(bl2.length(), BIG_SZ);
-  ceph::shared_ptr <unsigned char> big2(
+  std::shared_ptr <unsigned char> big2(
       (unsigned char*)malloc(BIG_SZ), free);
   bl2.copy(0, BIG_SZ, (char*)big2.get());
   ASSERT_EQ(memcmp(big.get(), big2.get(), BIG_SZ), 0);
@@ -3044,7 +2788,7 @@ TEST(BufferList, TestCopyAll) {
 
 TEST(BufferList, InvalidateCrc) {
   const static size_t buffer_size = 262144;
-  ceph::shared_ptr <unsigned char> big(
+  std::shared_ptr <unsigned char> big(
       (unsigned char*)malloc(buffer_size), free);
   unsigned char c = 0;
   char* ptr = (char*) big.get();
@@ -3089,6 +2833,46 @@ TEST(BufferList, TestIsProvidedBuffer) {
   ASSERT_TRUE(bl.is_provided_buffer(buff));
   bl.append_zero(100);
   ASSERT_FALSE(bl.is_provided_buffer(buff));
+}
+
+TEST(BufferList, TestSHA1) {
+  {
+    bufferlist bl;
+    sha1_digest_t sha1 = bl.sha1();
+    EXPECT_EQ("da39a3ee5e6b4b0d3255bfef95601890afd80709", sha1.to_str());
+  }
+  {
+    bufferlist bl;
+    bl.append("");
+    sha1_digest_t sha1 = bl.sha1();
+    EXPECT_EQ("da39a3ee5e6b4b0d3255bfef95601890afd80709", sha1.to_str());
+  }
+  {
+    bufferlist bl;
+    bl.append("Hello");
+    sha1_digest_t sha1 = bl.sha1();
+    EXPECT_EQ("f7ff9e8b7bb2e09b70935a5d785e0cc5d9d0abf0", sha1.to_str());
+  }
+  {
+    bufferlist bl, bl2;
+    bl.append("Hello");
+    bl2.append(", world!");
+    bl.claim_append(bl2);
+    sha1_digest_t sha1 = bl.sha1();
+    EXPECT_EQ("943a702d06f34599aee1f8da8ef9f7296031d699", sha1.to_str());
+    bl2.append("  How are you today?");
+    bl.claim_append(bl2);
+    sha1 = bl.sha1();
+    EXPECT_EQ("778b5d10e5133aa28fb8de71d35b6999b9a25eb4", sha1.to_str());
+  }
+  {
+    bufferptr p(65536);
+    memset(p.c_str(), 0, 65536);
+    bufferlist bl;
+    bl.append(p);
+    sha1_digest_t sha1 = bl.sha1();
+    EXPECT_EQ("1adc95bebe9eea8c112d40cd04ab7a8d75c4f961", sha1.to_str());
+  }
 }
 
 TEST(BufferHash, all) {

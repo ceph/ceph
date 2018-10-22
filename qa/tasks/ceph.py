@@ -257,8 +257,8 @@ def assign_devs(roles, devs):
 @contextlib.contextmanager
 def valgrind_post(ctx, config):
     """
-    After the tests run, look throught all the valgrind logs.  Exceptions are raised
-    if textual errors occured in the logs, or if valgrind exceptions were detected in
+    After the tests run, look through all the valgrind logs.  Exceptions are raised
+    if textual errors occurred in the logs, or if valgrind exceptions were detected in
     the logs.
 
     :param ctx: Context
@@ -376,8 +376,7 @@ def cephfs_setup(ctx, config):
         all_roles = [item for remote_roles in mdss.remotes.values() for item in remote_roles]
         num_active = len([r for r in all_roles if is_active_mds(r)])
 
-        fs.set_max_mds(num_active)
-        fs.set_allow_dirfrags(True)
+        fs.set_max_mds(config.get('max_mds', num_active))
 
     yield
 
@@ -391,7 +390,7 @@ def cluster(ctx, config):
         Create directories needed for the cluster.
         Create remote journals for all osds.
         Create and set keyring.
-        Copy the monmap to tht test systems.
+        Copy the monmap to the test systems.
         Setup mon nodes.
         Setup mds nodes.
         Mkfs osd nodes.
@@ -399,7 +398,7 @@ def cluster(ctx, config):
         Mkfs mon nodes.
 
     On exit:
-        If errors occured, extract a failure message and store in ctx.summary.
+        If errors occurred, extract a failure message and store in ctx.summary.
         Unmount all test files and temporary journaling files.
         Save the monitor information and archive all ceph logs.
         Cleanup the keyring setup, and remove all monitor map and data files left over.
@@ -570,7 +569,6 @@ def cluster(ctx, config):
             'ceph-authtool',
             '--gen-key',
             '--name=client.admin',
-            '--set-uid=0',
             '--cap', 'mon', 'allow *',
             '--cap', 'osd', 'allow *',
             '--cap', 'mds', 'allow *',
@@ -778,22 +776,42 @@ def cluster(ctx, config):
 
         for role in teuthology.cluster_roles_of_type(roles_for_host, 'osd', cluster_name):
             _, _, id_ = teuthology.split_role(role)
-            remote.run(
-                args=[
-                    'sudo',
-                    'MALLOC_CHECK_=3',
-                    'adjust-ulimits',
-                    'ceph-coverage',
-                    coverage_dir,
-                    'ceph-osd',
-                    '--cluster',
-                    cluster_name,
-                    '--mkfs',
-                    '--mkkey',
-                    '-i', id_,
+            try:
+                remote.run(
+                    args=[
+                        'sudo',
+                        'MALLOC_CHECK_=3',
+                        'adjust-ulimits',
+                        'ceph-coverage',
+                        coverage_dir,
+                        'ceph-osd',
+                        '--no-mon-config',
+                        '--cluster',
+                        cluster_name,
+                        '--mkfs',
+                        '--mkkey',
+                        '-i', id_,
                     '--monmap', monmap_path,
-                ],
-            )
+                    ],
+                )
+            except run.CommandFailedError:
+                # try without --no-mon-config.. this may be an upgrade test
+                remote.run(
+                    args=[
+                        'sudo',
+                        'MALLOC_CHECK_=3',
+                        'adjust-ulimits',
+                        'ceph-coverage',
+                        coverage_dir,
+                        'ceph-osd',
+                        '--cluster',
+                        cluster_name,
+                        '--mkfs',
+                        '--mkkey',
+                        '-i', id_,
+                    '--monmap', monmap_path,
+                    ],
+                )
             mnt_point = DATA_PATH.format(
                 type_='osd', cluster=cluster_name, id_=id_)
             remote.run(args=[
@@ -918,7 +936,7 @@ def cluster(ctx, config):
 
         def first_in_ceph_log(pattern, excludes):
             """
-            Find the first occurence of the pattern specified in the Ceph log,
+            Find the first occurrence of the pattern specified in the Ceph log,
             Returns None if none found.
 
             :param pattern: Pattern scanned for.
@@ -1042,7 +1060,7 @@ def osd_scrub_pgs(ctx, config):
     First make sure all pgs are active and clean.
     Next scrub all osds.
     Then periodically check until all pgs have scrub time stamps that
-    indicate the last scrub completed.  Time out if no progess is made
+    indicate the last scrub completed.  Time out if no progress is made
     here after two minutes.
     """
     retries = 40
@@ -1070,6 +1088,8 @@ def osd_scrub_pgs(ctx, config):
         # allow this to fail; in certain cases the OSD might not be up
         # at this point.  we will catch all pgs below.
         try:
+            manager.raw_cluster_cmd('tell', 'osd.' + id_, 'config', 'set',
+                                    'osd_debug_deep_scrub_sleep', '0');
             manager.raw_cluster_cmd('osd', 'deep-scrub', id_)
         except run.CommandFailedError:
             pass
@@ -1096,7 +1116,7 @@ def osd_scrub_pgs(ctx, config):
             if gap_cnt % 6 == 0:
                 for (pgid, tmval) in timez:
                     # re-request scrub every so often in case the earlier
-                    # request was missed.  do not do it everytime because
+                    # request was missed.  do not do it every time because
                     # the scrub may be in progress or not reported yet and
                     # we will starve progress.
                     manager.raw_cluster_cmd('pg', 'deep-scrub', pgid)
@@ -1267,12 +1287,13 @@ def healthy(ctx, config):
         log.info('ignoring flush pg stats error, probably testing upgrade: %s', e)
     manager.wait_for_clean()
 
-    log.info('Waiting until ceph cluster %s is healthy...', cluster_name)
-    teuthology.wait_until_healthy(
-        ctx,
-        remote=mon0_remote,
-        ceph_cluster=cluster_name,
-    )
+    if config.get('wait-for-healthy', True):
+        log.info('Waiting until ceph cluster %s is healthy...', cluster_name)
+        teuthology.wait_until_healthy(
+            ctx,
+            remote=mon0_remote,
+            ceph_cluster=cluster_name,
+        )
 
     if ctx.cluster.only(teuthology.is_type('mds', cluster_name)).remotes:
         # Some MDSs exist, wait for them to be healthy

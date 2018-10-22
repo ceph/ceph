@@ -1,7 +1,8 @@
 macro(build_spdk)
+  set(DPDK_DIR ${CMAKE_BINARY_DIR}/src/dpdk)
   if(NOT TARGET dpdk-ext)
     include(BuildDPDK)
-    build_dpdk()
+    build_dpdk(${DPDK_DIR})
   endif()
   find_package(CUnit REQUIRED)
   if(LINUX)
@@ -29,11 +30,11 @@ macro(build_spdk)
     list(APPEND SPDK_LIBRARIES spdk::${c})
   endforeach()
   set_target_properties(spdk::env_dpdk PROPERTIES
-    INTERFACE_LINK_LIBRARIES "${DPDK_LIBRARIES};rt")
-  if(LINUX)
-    set_target_properties(spdk::lvol PROPERTIES
-      INTERFACE_LINK_LIBRARIES ${UUID_LIBRARIES})
-  endif()
+    INTERFACE_LINK_LIBRARIES "dpdk::dpdk;rt")
+  set_target_properties(spdk::lvol PROPERTIES
+    INTERFACE_LINK_LIBRARIES spdk::util)
+  set_target_properties(spdk::util PROPERTIES
+    INTERFACE_LINK_LIBRARIES ${UUID_LIBRARIES})
   set(SPDK_INCLUDE_DIR "${source_dir}/include")
   unset(source_dir)
 endmacro()

@@ -25,7 +25,7 @@ directory=/mnt/fio-bluestore # directory for osd_data
 
 #pglog_dup_omap_len=57 # specifies duplicate PG log entry length range
                        # to couple writes with. Default: 0 (disabled)
-
+#single_pool_mode=0   # Enables the mode when all jobs run against for the same pool.
 
 rw=randwrite
 iodepth=16

@@ -26,15 +26,15 @@ using util::create_context_callback;
 class ImageUpdateWatchers {
 public:
 
-  ImageUpdateWatchers(CephContext *cct) : m_cct(cct),
+  explicit ImageUpdateWatchers(CephContext *cct) : m_cct(cct),
     m_lock(util::unique_lock_name("librbd::ImageUpdateWatchers::m_lock", this)) {
   }
 
   ~ImageUpdateWatchers() {
-    assert(m_watchers.empty());
-    assert(m_in_flight.empty());
-    assert(m_pending_unregister.empty());
-    assert(m_on_shut_down_finish == nullptr);
+    ceph_assert(m_watchers.empty());
+    ceph_assert(m_in_flight.empty());
+    ceph_assert(m_pending_unregister.empty());
+    ceph_assert(m_on_shut_down_finish == nullptr);
 
     destroy_work_queue();
   }
@@ -63,7 +63,7 @@ public:
     ldout(m_cct, 20) << "ImageUpdateWatchers::" << __func__ << dendl;
     {
       Mutex::Locker locker(m_lock);
-      assert(m_on_shut_down_finish == nullptr);
+      ceph_assert(m_on_shut_down_finish == nullptr);
       m_watchers.clear();
       if (!m_in_flight.empty()) {
 	m_on_shut_down_finish = on_finish;
@@ -79,7 +79,7 @@ public:
     ldout(m_cct, 20) << __func__ << ": watcher=" << watcher << dendl;
 
     Mutex::Locker locker(m_lock);
-    assert(m_on_shut_down_finish == nullptr);
+    ceph_assert(m_on_shut_down_finish == nullptr);
 
     create_work_queue();
 
@@ -98,7 +98,7 @@ public:
 	r = -ENOENT;
       } else {
 	if (m_in_flight.find(handle) != m_in_flight.end()) {
-	  assert(m_pending_unregister.find(handle) == m_pending_unregister.end());
+	  ceph_assert(m_pending_unregister.find(handle) == m_pending_unregister.end());
 	  m_pending_unregister[handle] = on_finish;
 	  on_finish = nullptr;
 	}
@@ -123,7 +123,7 @@ public:
   }
 
   void send_notify(uint64_t handle, UpdateWatchCtx *watcher) {
-    assert(m_lock.is_locked());
+    ceph_assert(m_lock.is_locked());
 
     ldout(m_cct, 20) << "ImageUpdateWatchers::" << __func__ << ": handle="
 		     << handle << ", watcher=" << watcher << dendl;
@@ -152,7 +152,7 @@ public:
       Mutex::Locker locker(m_lock);
 
       auto in_flight_it = m_in_flight.find(handle);
-      assert(in_flight_it != m_in_flight.end());
+      ceph_assert(in_flight_it != m_in_flight.end());
       m_in_flight.erase(in_flight_it);
 
       // If there is no more in flight notifications for this watcher
@@ -166,7 +166,7 @@ public:
       }
 
       if (m_in_flight.empty()) {
-	assert(m_pending_unregister.empty());
+	ceph_assert(m_pending_unregister.empty());
 	if (m_on_shut_down_finish != nullptr) {
 	  std::swap(m_on_shut_down_finish, on_shut_down_finish);
 	}
@@ -212,12 +212,12 @@ private:
     if (m_work_queue != nullptr) {
       return;
     }
-    ThreadPoolSingleton *thread_pool_singleton;
-    m_cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
-      thread_pool_singleton, "librbd::ImageUpdateWatchers::thread_pool");
+    auto& thread_pool = m_cct->lookup_or_create_singleton_object<
+      ThreadPoolSingleton>("librbd::ImageUpdateWatchers::thread_pool",
+			   false, m_cct);
     m_work_queue = new ContextWQ("librbd::ImageUpdateWatchers::op_work_queue",
-				 m_cct->_conf->get_val<int64_t>("rbd_op_thread_timeout"),
-				 thread_pool_singleton);
+				 m_cct->_conf.get_val<uint64_t>("rbd_op_thread_timeout"),
+				 &thread_pool);
   }
 
   void destroy_work_queue() {
@@ -234,20 +234,19 @@ ImageState<I>::ImageState(I *image_ctx)
   : m_image_ctx(image_ctx), m_state(STATE_UNINITIALIZED),
     m_lock(util::unique_lock_name("librbd::ImageState::m_lock", this)),
     m_last_refresh(0), m_refresh_seq(0),
-    m_update_watchers(new ImageUpdateWatchers(image_ctx->cct)),
-    m_skip_open_parent_image(false) {
+    m_update_watchers(new ImageUpdateWatchers(image_ctx->cct)) {
 }
 
 template <typename I>
 ImageState<I>::~ImageState() {
-  assert(m_state == STATE_UNINITIALIZED || m_state == STATE_CLOSED);
+  ceph_assert(m_state == STATE_UNINITIALIZED || m_state == STATE_CLOSED);
   delete m_update_watchers;
 }
 
 template <typename I>
-int ImageState<I>::open(bool skip_open_parent) {
+int ImageState<I>::open(uint64_t flags) {
   C_SaferCond ctx;
-  open(skip_open_parent, &ctx);
+  open(flags, &ctx);
 
   int r = ctx.wait();
   if (r < 0) {
@@ -257,13 +256,13 @@ int ImageState<I>::open(bool skip_open_parent) {
 }
 
 template <typename I>
-void ImageState<I>::open(bool skip_open_parent, Context *on_finish) {
+void ImageState<I>::open(uint64_t flags, Context *on_finish) {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 20) << __func__ << dendl;
 
   m_lock.Lock();
-  assert(m_state == STATE_UNINITIALIZED);
-  m_skip_open_parent_image = skip_open_parent;
+  ceph_assert(m_state == STATE_UNINITIALIZED);
+  m_open_flags = flags;
 
   Action action(ACTION_TYPE_OPEN);
   action.refresh_seq = m_refresh_seq;
@@ -287,7 +286,7 @@ void ImageState<I>::close(Context *on_finish) {
   ldout(cct, 20) << __func__ << dendl;
 
   m_lock.Lock();
-  assert(!is_closed());
+  ceph_assert(!is_closed());
 
   Action action(ACTION_TYPE_CLOSE);
   action.refresh_seq = m_refresh_seq;
@@ -367,7 +366,7 @@ int ImageState<I>::refresh_if_required() {
 template <typename I>
 const typename ImageState<I>::Action *
 ImageState<I>::find_pending_refresh() const {
-  assert(m_lock.is_locked());
+  ceph_assert(m_lock.is_locked());
 
   auto it = std::find_if(m_actions_contexts.rbegin(),
                          m_actions_contexts.rend(),
@@ -381,15 +380,12 @@ ImageState<I>::find_pending_refresh() const {
 }
 
 template <typename I>
-void ImageState<I>::snap_set(const cls::rbd::SnapshotNamespace &snap_namespace,
-			     const std::string &snap_name,
-			     Context *on_finish) {
+void ImageState<I>::snap_set(uint64_t snap_id, Context *on_finish) {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << __func__ << ": snap_name=" << snap_name << dendl;
+  ldout(cct, 20) << __func__ << ": snap_id=" << snap_id << dendl;
 
   Action action(ACTION_TYPE_SET_SNAP);
-  action.snap_namespace = snap_namespace;
-  action.snap_name = snap_name;
+  action.snap_id = snap_id;
 
   m_lock.Lock();
   execute_action_unlock(action, on_finish);
@@ -483,7 +479,7 @@ bool ImageState<I>::is_transition_state() const {
 
 template <typename I>
 bool ImageState<I>::is_closed() const {
-  assert(m_lock.is_locked());
+  ceph_assert(m_lock.is_locked());
 
   return ((m_state == STATE_CLOSED) ||
           (!m_actions_contexts.empty() &&
@@ -492,7 +488,7 @@ bool ImageState<I>::is_closed() const {
 
 template <typename I>
 void ImageState<I>::append_context(const Action &action, Context *context) {
-  assert(m_lock.is_locked());
+  ceph_assert(m_lock.is_locked());
 
   ActionContexts *action_contexts = nullptr;
   for (auto &action_ctxs : m_actions_contexts) {
@@ -514,8 +510,8 @@ void ImageState<I>::append_context(const Action &action, Context *context) {
 
 template <typename I>
 void ImageState<I>::execute_next_action_unlock() {
-  assert(m_lock.is_locked());
-  assert(!m_actions_contexts.empty());
+  ceph_assert(m_lock.is_locked());
+  ceph_assert(!m_actions_contexts.empty());
   switch (m_actions_contexts.front().first.action_type) {
   case ACTION_TYPE_OPEN:
     send_open_unlock();
@@ -539,7 +535,7 @@ void ImageState<I>::execute_next_action_unlock() {
 template <typename I>
 void ImageState<I>::execute_action_unlock(const Action &action,
                                           Context *on_finish) {
-  assert(m_lock.is_locked());
+  ceph_assert(m_lock.is_locked());
 
   append_context(action, on_finish);
   if (!is_transition_state()) {
@@ -551,8 +547,8 @@ void ImageState<I>::execute_action_unlock(const Action &action,
 
 template <typename I>
 void ImageState<I>::complete_action_unlock(State next_state, int r) {
-  assert(m_lock.is_locked());
-  assert(!m_actions_contexts.empty());
+  ceph_assert(m_lock.is_locked());
+  ceph_assert(!m_actions_contexts.empty());
 
   ActionContexts action_contexts(std::move(m_actions_contexts.front()));
   m_actions_contexts.pop_front();
@@ -576,7 +572,7 @@ void ImageState<I>::complete_action_unlock(State next_state, int r) {
 
 template <typename I>
 void ImageState<I>::send_open_unlock() {
-  assert(m_lock.is_locked());
+  ceph_assert(m_lock.is_locked());
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
@@ -586,7 +582,7 @@ void ImageState<I>::send_open_unlock() {
     *m_image_ctx, create_context_callback<
       ImageState<I>, &ImageState<I>::handle_open>(this));
   image::OpenRequest<I> *req = image::OpenRequest<I>::create(
-    m_image_ctx, m_skip_open_parent_image, ctx);
+    m_image_ctx, m_open_flags, ctx);
 
   m_lock.Unlock();
   req->send();
@@ -607,7 +603,7 @@ void ImageState<I>::handle_open(int r) {
 
 template <typename I>
 void ImageState<I>::send_close_unlock() {
-  assert(m_lock.is_locked());
+  ceph_assert(m_lock.is_locked());
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
@@ -638,14 +634,14 @@ void ImageState<I>::handle_close(int r) {
 
 template <typename I>
 void ImageState<I>::send_refresh_unlock() {
-  assert(m_lock.is_locked());
+  ceph_assert(m_lock.is_locked());
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
   m_state = STATE_REFRESHING;
-  assert(!m_actions_contexts.empty());
+  ceph_assert(!m_actions_contexts.empty());
   auto &action_context = m_actions_contexts.front().first;
-  assert(action_context.action_type == ACTION_TYPE_REFRESH);
+  ceph_assert(action_context.action_type == ACTION_TYPE_REFRESH);
 
   Context *ctx = create_async_context_callback(
     *m_image_ctx, create_context_callback<
@@ -663,11 +659,11 @@ void ImageState<I>::handle_refresh(int r) {
   ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
 
   m_lock.Lock();
-  assert(!m_actions_contexts.empty());
+  ceph_assert(!m_actions_contexts.empty());
 
   ActionContexts &action_contexts(m_actions_contexts.front());
-  assert(action_contexts.first.action_type == ACTION_TYPE_REFRESH);
-  assert(m_last_refresh <= action_contexts.first.refresh_seq);
+  ceph_assert(action_contexts.first.action_type == ACTION_TYPE_REFRESH);
+  ceph_assert(m_last_refresh <= action_contexts.first.refresh_seq);
 
   if (r == -ERESTART) {
     ldout(cct, 5) << "incomplete refresh: not updating sequence" << dendl;
@@ -681,23 +677,23 @@ void ImageState<I>::handle_refresh(int r) {
 
 template <typename I>
 void ImageState<I>::send_set_snap_unlock() {
-  assert(m_lock.is_locked());
+  ceph_assert(m_lock.is_locked());
 
   m_state = STATE_SETTING_SNAP;
 
-  assert(!m_actions_contexts.empty());
+  ceph_assert(!m_actions_contexts.empty());
   ActionContexts &action_contexts(m_actions_contexts.front());
-  assert(action_contexts.first.action_type == ACTION_TYPE_SET_SNAP);
+  ceph_assert(action_contexts.first.action_type == ACTION_TYPE_SET_SNAP);
 
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << ": "
-                 << "snap_name=" << action_contexts.first.snap_name << dendl;
+                 << "snap_id=" << action_contexts.first.snap_id << dendl;
 
   Context *ctx = create_async_context_callback(
     *m_image_ctx, create_context_callback<
       ImageState<I>, &ImageState<I>::handle_set_snap>(this));
   image::SetSnapRequest<I> *req = image::SetSnapRequest<I>::create(
-    *m_image_ctx, action_contexts.first.snap_namespace, action_contexts.first.snap_name, ctx);
+    *m_image_ctx, action_contexts.first.snap_id, ctx);
 
   m_lock.Unlock();
   req->send();
@@ -721,12 +717,12 @@ void ImageState<I>::send_prepare_lock_unlock() {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
-  assert(m_lock.is_locked());
+  ceph_assert(m_lock.is_locked());
   m_state = STATE_PREPARING_LOCK;
 
-  assert(!m_actions_contexts.empty());
+  ceph_assert(!m_actions_contexts.empty());
   ActionContexts &action_contexts(m_actions_contexts.front());
-  assert(action_contexts.first.action_type == ACTION_TYPE_LOCK);
+  ceph_assert(action_contexts.first.action_type == ACTION_TYPE_LOCK);
 
   Context *on_ready = action_contexts.first.on_ready;
   m_lock.Unlock();

@@ -1,3 +1,4 @@
+import logging
 import sys
 
 
@@ -114,12 +115,62 @@ def error(msg):
     return _Write(prefix=red_arrow).raw(msg)
 
 
+def info(msg):
+    return _Write(prefix=blue_arrow).raw(msg)
+
+
+def debug(msg):
+    return _Write(prefix=blue_arrow).raw(msg)
+
+
 def warning(msg):
     return _Write(prefix=yellow_arrow).raw(msg)
 
 
 def success(msg):
     return _Write(prefix=green_arrow).raw(msg)
+
+
+class MultiLogger(object):
+    """
+    Proxy class to be able to report on both logger instances and terminal
+    messages avoiding the issue of having to call them both separately
+
+    Initialize it in the same way a logger object::
+
+        logger = terminal.MultiLogger(__name__)
+    """
+
+    def __init__(self, name):
+        self.logger = logging.getLogger(name)
+
+    def _make_record(self, msg, *args):
+        if len(str(args)):
+            try:
+                return msg % args
+            except TypeError:
+                self.logger.exception('unable to produce log record: %s' % msg)
+        return msg
+
+    def warning(self, msg, *args):
+        record = self._make_record(msg, *args)
+        warning(record)
+        self.logger.warning(record)
+
+    def debug(self, msg, *args):
+        record = self._make_record(msg, *args)
+        debug(record)
+        self.logger.debug(record)
+
+    def info(self, msg, *args):
+        record = self._make_record(msg, *args)
+        info(record)
+        self.logger.info(record)
+
+    def error(self, msg, *args):
+        record = self._make_record(msg, *args)
+        error(record)
+        self.logger.error(record)
 
 
 def dispatch(mapper, argv=None):

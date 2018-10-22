@@ -33,12 +33,12 @@ void UpdateRequest<I>::send() {
 
 template <typename I>
 void UpdateRequest<I>::update_object_map() {
-  assert(m_image_ctx.snap_lock.is_locked());
-  assert(m_image_ctx.object_map_lock.is_locked());
+  ceph_assert(m_image_ctx.snap_lock.is_locked());
+  ceph_assert(m_image_ctx.object_map_lock.is_locked());
   CephContext *cct = m_image_ctx.cct;
 
   // break very large requests into manageable batches
-  m_update_end_object_no = MIN(
+  m_update_end_object_no = std::min(
     m_end_object_no, m_update_start_object_no + MAX_OBJECTS_PER_UPDATE);
 
   std::string oid(ObjectMap<>::object_map_name(m_image_ctx.id, m_snap_id));
@@ -64,13 +64,20 @@ void UpdateRequest<I>::update_object_map() {
   int r = m_image_ctx.md_ctx.aio_operate(
     oid, rados_completion, &op, 0, snaps,
     (m_trace.valid() ? m_trace.get_info() : nullptr));
-  assert(r == 0);
+  ceph_assert(r == 0);
   rados_completion->release();
 }
 
 template <typename I>
 void UpdateRequest<I>::handle_update_object_map(int r) {
   ldout(m_image_ctx.cct, 20) << "r=" << r << dendl;
+
+  if (r == -ENOENT && m_ignore_enoent) {
+    r = 0;
+  }
+  if (r < 0 && m_ret_val == 0) {
+    m_ret_val = r;
+  }
 
   {
     RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
@@ -85,22 +92,22 @@ void UpdateRequest<I>::handle_update_object_map(int r) {
   }
 
   // no more batch updates to send
-  complete(r);
+  complete(m_ret_val);
 }
 
 template <typename I>
 void UpdateRequest<I>::update_in_memory_object_map() {
-  assert(m_image_ctx.snap_lock.is_locked());
-  assert(m_image_ctx.object_map_lock.is_locked());
+  ceph_assert(m_image_ctx.snap_lock.is_locked());
+  ceph_assert(m_image_ctx.object_map_lock.is_locked());
 
   // rebuilding the object map might update on-disk only
   if (m_snap_id == m_image_ctx.snap_id) {
     ldout(m_image_ctx.cct, 20) << dendl;
 
     auto it = m_object_map.begin() +
-                    MIN(m_update_start_object_no, m_object_map.size());
+      std::min(m_update_start_object_no, m_object_map.size());
     auto end_it = m_object_map.begin() +
-                    MIN(m_update_end_object_no, m_object_map.size());
+      std::min(m_update_end_object_no, m_object_map.size());
     for (; it != end_it; ++it) {
       auto state_ref = *it;
       uint8_t state = state_ref;

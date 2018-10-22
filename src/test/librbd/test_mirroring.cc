@@ -279,7 +279,7 @@ public:
     ASSERT_EQ(-ENOENT, init_ctx.wait());
 
     bufferlist client_data_bl;
-    ::encode(client_data, client_data_bl);
+    encode(client_data, client_data_bl);
     ASSERT_EQ(0, journaler.register_client(client_data_bl));
 
     C_SaferCond shut_down_ctx;
@@ -660,7 +660,7 @@ TEST_F(TestMirroring, RemoveBootstrapped)
   // simulate the image is open by rbd-mirror bootstrap
   uint64_t handle;
   struct MirrorWatcher : public librados::WatchCtx2 {
-    MirrorWatcher(librados::IoCtx &ioctx) : m_ioctx(ioctx) {
+    explicit MirrorWatcher(librados::IoCtx &ioctx) : m_ioctx(ioctx) {
     }
     void handle_notify(uint64_t notify_id, uint64_t cookie,
                                uint64_t notifier_id, bufferlist& bl) override {

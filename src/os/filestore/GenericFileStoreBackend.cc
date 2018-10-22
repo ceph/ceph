@@ -70,42 +70,28 @@ GenericFileStoreBackend::GenericFileStoreBackend(FileStore *fs):
   {
     // NOTE: the below won't work on btrfs; we'll assume rotational.
     string fn = get_basedir_path();
-    int fd = ::open(fn.c_str(), O_RDONLY);
+    int fd = ::open(fn.c_str(), O_RDONLY|O_CLOEXEC);
     if (fd < 0) {
       return;
     }
-    char partition[PATH_MAX], devname[PATH_MAX];
-    int r = get_device_by_fd(fd, partition, devname, sizeof(devname));
-    if (r < 0) {
-      dout(1) << "unable to get device name for " << get_basedir_path() << ": "
-	      << cpp_strerror(r) << dendl;
-      m_rotational = true;
-    } else {
-      m_rotational = block_device_is_rotational(devname);
-      dout(20) << __func__ << " devname " << devname
-	       << " rotational " << (int)m_rotational << dendl;
-    }
+    BlkDev blkdev(fd);
+    m_rotational = blkdev.is_rotational();
+    dout(20) << __func__ << " basedir " << fn
+	     << " rotational " << (int)m_rotational << dendl;
     ::close(fd);
   }
   // journal rotational?
   {
     // NOTE: the below won't work on btrfs; we'll assume rotational.
     string fn = get_journal_path();
-    int fd = ::open(fn.c_str(), O_RDONLY);
+    int fd = ::open(fn.c_str(), O_RDONLY|O_CLOEXEC);
     if (fd < 0) {
       return;
     }
-    char partition[PATH_MAX], devname[PATH_MAX];
-    int r = get_device_by_fd(fd, partition, devname, sizeof(devname));
-    if (r < 0) {
-      dout(1) << "unable to get journal device name for "
-              << get_journal_path() << ": " << cpp_strerror(r) << dendl;
-      m_journal_rotational = true;
-    } else {
-      m_journal_rotational = block_device_is_rotational(devname);
-      dout(20) << __func__ << " journal devname " << devname
-               << " journal rotational " << (int)m_journal_rotational << dendl;
-    }
+    BlkDev blkdev(fd);
+    m_journal_rotational = blkdev.is_rotational();
+    dout(20) << __func__ << " journal filename " << fn.c_str()
+	     << " journal rotational " << (int)m_journal_rotational << dendl;
     ::close(fd);
   }
 }
@@ -115,7 +101,7 @@ int GenericFileStoreBackend::detect_features()
   char fn[PATH_MAX];
   snprintf(fn, sizeof(fn), "%s/fiemap_test", get_basedir_path().c_str());
 
-  int fd = ::open(fn, O_CREAT|O_RDWR|O_TRUNC, 0644);
+  int fd = ::open(fn, O_CREAT|O_RDWR|O_TRUNC|O_CLOEXEC, 0644);
   if (fd < 0) {
     fd = -errno;
     derr << "detect_features: unable to create " << fn << ": " << cpp_strerror(fd) << dendl;
@@ -218,9 +204,10 @@ int GenericFileStoreBackend::detect_features()
     int pipefd[2];
     loff_t off_in = 0;
     int r;
-    if ((r = pipe(pipefd)) < 0)
-      dout(0) << "detect_features: splice  pipe met error " << cpp_strerror(errno) << dendl;
-    else {
+    if (pipe_cloexec(pipefd) < 0) {
+      int e = errno;
+      dout(0) << "detect_features: splice pipe met error " << cpp_strerror(e) << dendl;
+    } else {
       lseek(fd, 0, SEEK_SET);
       r = splice(fd, &off_in, pipefd[1], NULL, 10, 0);
       if (!(r < 0 && errno == EINVAL)) {
@@ -395,9 +382,9 @@ int GenericFileStoreBackend::_crc_load_or_init(int fd, SloppyCRCMap *cm)
   }
   bufferlist bl;
   bl.append(std::move(bp));
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
   try {
-    ::decode(*cm, p);
+    decode(*cm, p);
   }
   catch (buffer::error &e) {
     r = -EIO;
@@ -410,7 +397,7 @@ int GenericFileStoreBackend::_crc_load_or_init(int fd, SloppyCRCMap *cm)
 int GenericFileStoreBackend::_crc_save(int fd, SloppyCRCMap *cm)
 {
   bufferlist bl;
-  ::encode(*cm, bl);
+  encode(*cm, bl);
   int r = chain_fsetxattr(fd, SLOPPY_CRC_XATTR, bl.c_str(), bl.length());
   if (r < 0)
     derr << __func__ << " got " << cpp_strerror(r) << dendl;

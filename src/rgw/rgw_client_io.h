@@ -28,13 +28,13 @@ using Exception = std::system_error;
  * interacted with. */
 class BasicClient {
 protected:
-  virtual void init_env(CephContext *cct) = 0;
+  virtual int init_env(CephContext *cct) = 0;
 
 public:
   virtual ~BasicClient() = default;
 
   /* Initialize the BasicClient and inject CephContext. */
-  void init(CephContext *cct);
+  int init(CephContext *cct);
 
   /* Return the RGWEnv describing the environment that a given request lives in.
    * The method does not throw exceptions. */
@@ -197,12 +197,12 @@ protected:
     decoratee = &new_dec;
   }
 
-  void init_env(CephContext *cct) override {
+  int init_env(CephContext *cct) override {
     return get_decoratee().init_env(cct);
   }
 
 public:
-  DecoratedRestfulClient(DecorateeT&& decoratee)
+  explicit DecoratedRestfulClient(DecorateeT&& decoratee)
     : decoratee(std::forward<DecorateeT>(decoratee)) {
   }
 
@@ -308,15 +308,15 @@ class StaticOutputBufferer : public std::streambuf {
   std::streambuf::char_type buffer[BufferSizeV];
 
 public:
-  StaticOutputBufferer(BuffererSink& sink)
+  explicit StaticOutputBufferer(BuffererSink& sink)
     : sink(sink) {
     constexpr size_t len = sizeof(buffer) - sizeof(std::streambuf::char_type);
     std::streambuf::setp(buffer, buffer + len);
   }
 };
 
-} /* namespace rgw */
 } /* namespace io */
+} /* namespace rgw */
 
 
 /* We're doing this nasty thing only because of extensive usage of templates
@@ -354,20 +354,20 @@ public:
 /* Type conversions to work around lack of req_state type hierarchy matching
  * (e.g.) REST backends (may be replaced w/dynamic typed req_state). */
 static inline rgw::io::RestfulClient* RESTFUL_IO(struct req_state* s) {
-  assert(dynamic_cast<rgw::io::RestfulClient*>(s->cio) != nullptr);
+  ceph_assert(dynamic_cast<rgw::io::RestfulClient*>(s->cio) != nullptr);
 
   return static_cast<rgw::io::RestfulClient*>(s->cio);
 }
 
 static inline rgw::io::Accounter* ACCOUNTING_IO(struct req_state* s) {
   auto ptr = dynamic_cast<rgw::io::Accounter*>(s->cio);
-  assert(ptr != nullptr);
+  ceph_assert(ptr != nullptr);
 
   return ptr;
 }
 
 static inline RGWRestfulIO* AWS_AUTHv4_IO(const req_state* const s) {
-  assert(dynamic_cast<RGWRestfulIO*>(s->cio) != nullptr);
+  ceph_assert(dynamic_cast<RGWRestfulIO*>(s->cio) != nullptr);
 
   return static_cast<RGWRestfulIO*>(s->cio);
 }

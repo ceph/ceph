@@ -1,0 +1,53 @@
+<cd-modal>
+  <ng-container i18n
+                class="modal-title">Restore Image</ng-container>
+
+  <ng-container class="modal-content">
+    <form name="restoreForm"
+          class="form"
+          #formDir="ngForm"
+          [formGroup]="restoreForm"
+          novalidate>
+      <div class="modal-body">
+        <p>
+          <ng-container i18n>To restore</ng-container>&nbsp;
+          <kbd>{{ poolName }}/{{ imageName }}@{{ imageId }}</kbd>,&nbsp;
+          <ng-container i18n>type the image's new name and click</ng-container>&nbsp;
+          <kbd i18n>Restore Image</kbd>.
+        </p>
+
+        <div class="form-group"
+             [ngClass]="{'has-error': restoreForm.showError('name', formDir)}">
+          <label for="name"
+                 i18n>New Name</label>
+          <input type="text"
+                 class="form-control"
+                 name="name"
+                 id="name"
+                 autocomplete="off"
+                 formControlName="name"
+                 autofocus>
+          <span class="help-block"
+                *ngIf="restoreForm.showError('name', formDir, 'required')"
+                i18n>
+            This field is required.
+          </span>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <div class="button-group text-right">
+          <cd-submit-button i18n
+                            [form]="restoreForm"
+                            (submitAction)="restore()">
+            Restore Image
+          </cd-submit-button>
+          <button i18n
+                  type="button"
+                  class="btn btn-sm btn-default"
+                  (click)="modalRef.hide()">Cancel</button>
+        </div>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>

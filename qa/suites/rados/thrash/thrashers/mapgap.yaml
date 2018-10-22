@@ -6,7 +6,12 @@ overrides:
     - osd_map_cache_size
     conf:
       mon:
-        mon min osdmap epochs: 2
+        mon min osdmap epochs: 50
+        paxos service trim min: 10
+        # prune full osdmaps regularly
+        mon osdmap full prune min: 15
+        mon osdmap full prune interval: 2
+        mon osdmap full prune txsize: 2
       osd:
         osd map cache size: 1
         osd scrub min interval: 60
@@ -17,5 +22,6 @@ tasks:
 - thrashosds:
     timeout: 1800
     chance_pgnum_grow: 0.25
+    chance_pgnum_shrink: 0.25
     chance_pgpnum_fix: 0.25
     chance_test_map_discontinuity: 2

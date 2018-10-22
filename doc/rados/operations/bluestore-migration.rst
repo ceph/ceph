@@ -32,7 +32,7 @@ Mark out and replace
 --------------------
 
 The simplest approach is to mark out each device in turn, wait for the
-data to rereplicate across the cluster, reprovision the OSD, and mark
+data to replicate across the cluster, reprovision the OSD, and mark
 it back in again.  It is simple and easy to automate.  However, it requires
 more data migration than should be necessary, so it is not optimal.
 
@@ -55,7 +55,7 @@ more data migration than should be necessary, so it is not optimal.
 
 #. Wait for the data to migrate off the OSD in question::
 
-     while ! ceph osd safe-to-destroy $ID ; sleep 60 ; done
+     while ! ceph osd safe-to-destroy $ID ; do sleep 60 ; done
 
 #. Stop the OSD::
 
@@ -84,7 +84,7 @@ more data migration than should be necessary, so it is not optimal.
    This requires you do identify which device to wipe based on what you saw
    mounted above. BE CAREFUL! ::
 
-     ceph-volume create --bluestore --data $DEVICE --osd-id $ID
+     ceph-volume lvm create --bluestore --data $DEVICE --osd-id $ID
 
 #. Repeat.
 

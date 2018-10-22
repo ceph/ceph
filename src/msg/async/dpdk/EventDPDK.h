@@ -26,7 +26,7 @@ class DPDKDriver : public EventDriver {
  public:
   UserspaceEventManager manager;
 
-  DPDKDriver(CephContext *c): cct(c), manager(c) {}
+  explicit DPDKDriver(CephContext *c): cct(c), manager(c) {}
   virtual ~DPDKDriver() { }
 
   int init(EventCenter *c, int nevent) override;
@@ -34,7 +34,7 @@ class DPDKDriver : public EventDriver {
   int del_event(int fd, int cur_mask, int del_mask) override;
   int resize_events(int newsize) override;
   int event_wait(vector<FiredFileEvent> &fired_events, struct timeval *tp) override;
-  bool need_wakeup() { return false; }
+  bool need_wakeup() override { return false; }
 };
 
 #endif //CEPH_EVENTDPDK_H

@@ -25,13 +25,14 @@ void get_arguments_init(po::options_description *positional,
        "force initialize pool for RBD use if registered by another application");
 }
 
-int execute_init(const po::variables_map &vm) {
+int execute_init(const po::variables_map &vm,
+                 const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name = utils::get_pool_name(vm, &arg_index);
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  int r = utils::init(pool_name, &rados, &io_ctx);
+  int r = utils::init(pool_name, "", &rados, &io_ctx);
   if (r < 0) {
     return r;
   }

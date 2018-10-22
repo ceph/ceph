@@ -8,7 +8,7 @@ class ESQueryStack {
   list<string>::iterator iter;
 
 public:
-  ESQueryStack(list<string>& src) {
+  explicit ESQueryStack(list<string>& src) {
     assign(src);
   }
 
@@ -58,7 +58,7 @@ class ESInfixQueryParser {
   bool parse_close_bracket();
 
 public:
-  ESInfixQueryParser(const string& _query) : query(_query), size(query.size()), str(query.c_str()) {}
+  explicit ESInfixQueryParser(const string& _query) : query(_query), size(query.size()), str(query.c_str()) {}
   bool parse(list<string> *result);
 };
 
@@ -74,7 +74,7 @@ struct ESEntityTypeMap {
 
   map<string, EntityType> m;
 
-  ESEntityTypeMap(map<string, EntityType>& _m) : m(_m) {}
+  explicit ESEntityTypeMap(map<string, EntityType>& _m) : m(_m) {}
 
   bool find(const string& entity, EntityType *ptype) {
     auto i = m.find(entity);

@@ -37,12 +37,6 @@
 	url = https://github.com/ceph/lua.git
 	branch = lua-5.3-ceph
 	ignore = dirty
-[submodule "src/Beast"]
-	path = src/Beast
-	url = https://github.com/ceph/Beast.git
-[submodule "src/dpdk"]
-	path = src/dpdk
-	url = https://github.com/ceph/dpdk
 [submodule "src/zstd"]
 	path = src/zstd
 	url = https://github.com/facebook/zstd
@@ -55,3 +49,15 @@
 [submodule "src/rapidjson"]
 	path = src/rapidjson
 	url = https://github.com/ceph/rapidjson
+[submodule "src/dmclock"]
+	path = src/dmclock
+	url = https://github.com/ceph/dmclock.git
+[submodule "src/seastar"]
+	path = src/seastar
+	url = https://github.com/ceph/seastar.git
+[submodule "src/fmt"]
+	path = src/fmt
+	url = https://github.com/ceph/fmt.git
+[submodule "src/c-ares"]
+	path = src/c-ares
+	url = https://github.com/ceph/c-ares.git

@@ -1,0 +1,24 @@
+meta:
+- desc: |
+   perf-basic is a basic performance suite.
+   Must be run on bare-metal machines.
+   On VMs performance results will be inconsistent
+   and can't be compared across runs.
+   Run ceph on a single node.
+   Use xfs beneath the osds.
+   Setup rgw on client.0
+
+roles:
+- [mon.a, mgr.x, osd.0, osd.1, osd.2, client.0]
+tasks:
+- install:
+- ceph:
+    fs: xfs
+    wait-for-scrub: false
+    log-whitelist:
+      - \(PG_
+      - \(OSD_
+      - \(OBJECT_
+      - overall HEALTH
+- rgw: [client.0]
+- ssh_keys:

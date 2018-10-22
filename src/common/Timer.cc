@@ -47,7 +47,7 @@ SafeTimer::SafeTimer(CephContext *cct_, Mutex &l, bool safe_callbacks)
 
 SafeTimer::~SafeTimer()
 {
-  assert(thread == NULL);
+  ceph_assert(thread == NULL);
 }
 
 void SafeTimer::init()
@@ -61,13 +61,13 @@ void SafeTimer::shutdown()
 {
   ldout(cct,10) << "shutdown" << dendl;
   if (thread) {
-    assert(lock.is_locked());
+    ceph_assert(lock.is_locked());
     cancel_all_events();
     stopping = true;
     cond.Signal();
-    lock.Unlock();
+    lock.unlock();
     thread->join();
-    lock.Lock();
+    lock.lock();
     delete thread;
     thread = NULL;
   }
@@ -75,7 +75,7 @@ void SafeTimer::shutdown()
 
 void SafeTimer::timer_thread()
 {
-  lock.Lock();
+  lock.lock();
   ldout(cct,10) << "timer_thread starting" << dendl;
   while (!stopping) {
     utime_t now = ceph_clock_now();
@@ -93,10 +93,10 @@ void SafeTimer::timer_thread()
       ldout(cct,10) << "timer_thread executing " << callback << dendl;
       
       if (!safe_callbacks)
-	lock.Unlock();
+	lock.unlock();
       callback->complete(0);
       if (!safe_callbacks)
-	lock.Lock();
+	lock.lock();
     }
 
     // recheck stopping if we dropped the lock
@@ -111,12 +111,12 @@ void SafeTimer::timer_thread()
     ldout(cct,20) << "timer_thread awake" << dendl;
   }
   ldout(cct,10) << "timer_thread exiting" << dendl;
-  lock.Unlock();
+  lock.unlock();
 }
 
 Context* SafeTimer::add_event_after(double seconds, Context *callback)
 {
-  assert(lock.is_locked());
+  ceph_assert(lock.is_locked());
 
   utime_t when = ceph_clock_now();
   when += seconds;
@@ -125,7 +125,7 @@ Context* SafeTimer::add_event_after(double seconds, Context *callback)
 
 Context* SafeTimer::add_event_at(utime_t when, Context *callback)
 {
-  assert(lock.is_locked());
+  ceph_assert(lock.is_locked());
   ldout(cct,10) << __func__ << " " << when << " -> " << callback << dendl;
   if (stopping) {
     ldout(cct,5) << __func__ << " already shutdown, event not added" << dendl;
@@ -139,7 +139,7 @@ Context* SafeTimer::add_event_at(utime_t when, Context *callback)
   pair < event_lookup_map_t::iterator, bool > rval(events.insert(e_val));
 
   /* If you hit this, you tried to insert the same Context* twice. */
-  assert(rval.second);
+  ceph_assert(rval.second);
 
   /* If the event we have just inserted comes before everything else, we need to
    * adjust our timeout. */
@@ -150,7 +150,7 @@ Context* SafeTimer::add_event_at(utime_t when, Context *callback)
 
 bool SafeTimer::cancel_event(Context *callback)
 {
-  assert(lock.is_locked());
+  ceph_assert(lock.is_locked());
   
   auto p = events.find(callback);
   if (p == events.end()) {
@@ -169,8 +169,8 @@ bool SafeTimer::cancel_event(Context *callback)
 void SafeTimer::cancel_all_events()
 {
   ldout(cct,10) << "cancel_all_events" << dendl;
-  assert(lock.is_locked());
-  
+  ceph_assert(lock.is_locked());
+
   while (!events.empty()) {
     auto p = events.begin();
     ldout(cct,10) << " cancelled " << p->second->first << " -> " << p->first << dendl;

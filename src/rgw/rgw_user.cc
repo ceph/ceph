@@ -11,7 +11,6 @@
 #include "common/Formatter.h"
 #include "common/ceph_json.h"
 #include "common/RWLock.h"
-#include "common/backport14.h"
 #include "rgw_rados.h"
 #include "rgw_acl.h"
 
@@ -23,6 +22,7 @@
 #include "rgw_common.h"
 
 #include "rgw_bucket.h"
+#include "rgw_quota.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -67,7 +67,8 @@ int rgw_user_sync_all_stats(RGWRados *store, const rgw_user& user_id)
       RGWBucketEnt& bucket_ent = i->second;
       RGWBucketInfo bucket_info;
 
-      ret = store->get_bucket_instance_info(obj_ctx, bucket_ent.bucket, bucket_info, NULL, NULL);
+      ret = store->get_bucket_info(obj_ctx, user_id.tenant, bucket_ent.bucket.name,
+                                   bucket_info, nullptr, nullptr);
       if (ret < 0) {
         ldout(cct, 0) << "ERROR: could not read bucket info: bucket=" << bucket_ent.bucket << " ret=" << ret << dendl;
         continue;
@@ -193,11 +194,11 @@ int rgw_store_user_info(RGWRados *store,
   ui.user_id = info.user_id;
 
   bufferlist link_bl;
-  ::encode(ui, link_bl);
+  encode(ui, link_bl);
 
   bufferlist data_bl;
-  ::encode(ui, data_bl);
-  ::encode(info, data_bl);
+  encode(ui, data_bl);
+  encode(info, data_bl);
 
   string key;
   info.user_id.to_str(key);
@@ -210,7 +211,7 @@ int rgw_store_user_info(RGWRados *store,
     if (!old_info ||
         old_info->user_email.compare(info.user_email) != 0) { /* only if new index changed */
       ret = rgw_put_system_obj(store, store->get_zone_params().user_email_pool, info.user_email,
-                               link_bl.c_str(), link_bl.length(), exclusive, NULL, real_time());
+                               link_bl, exclusive, NULL, real_time());
       if (ret < 0)
         return ret;
     }
@@ -224,8 +225,7 @@ int rgw_store_user_info(RGWRados *store,
 	continue;
 
       ret = rgw_put_system_obj(store, store->get_zone_params().user_keys_pool, k.id,
-                               link_bl.c_str(), link_bl.length(), exclusive,
-                               NULL, real_time());
+                               link_bl, exclusive, NULL, real_time());
       if (ret < 0)
         return ret;
     }
@@ -238,8 +238,7 @@ int rgw_store_user_info(RGWRados *store,
       continue;
 
     ret = rgw_put_system_obj(store, store->get_zone_params().user_swift_pool, k.id,
-                             link_bl.c_str(), link_bl.length(), exclusive,
-                             NULL, real_time());
+                             link_bl, exclusive, NULL, real_time());
     if (ret < 0)
       return ret;
   }
@@ -262,16 +261,16 @@ int rgw_get_user_info_from_index(RGWRados * const store,
                                  RGWObjVersionTracker * const objv_tracker,
                                  real_time * const pmtime)
 {
-  user_info_entry e;
-  if (uinfo_cache.find(key, &e)) {
-    info = e.info;
+  if (auto e = uinfo_cache.find(key)) {
+    info = e->info;
     if (objv_tracker)
-      *objv_tracker = e.objv_tracker;
+      *objv_tracker = e->objv_tracker;
     if (pmtime)
-      *pmtime = e.mtime;
+      *pmtime = e->mtime;
     return 0;
   }
 
+  user_info_entry e;
   bufferlist bl;
   RGWUID uid;
   RGWObjectCtx obj_ctx(store);
@@ -282,9 +281,9 @@ int rgw_get_user_info_from_index(RGWRados * const store,
 
   rgw_cache_entry_info cache_info;
 
-  bufferlist::iterator iter = bl.begin();
+  auto iter = bl.cbegin();
   try {
-    ::decode(uid, iter);
+    decode(uid, iter);
     int ret = rgw_get_user_info_by_uid(store, uid.user_id, e.info, &e.objv_tracker, NULL, &cache_info);
     if (ret < 0) {
       return ret;
@@ -294,10 +293,7 @@ int rgw_get_user_info_from_index(RGWRados * const store,
     return -EIO;
   }
 
-  list<rgw_cache_entry_info *> cache_info_entries;
-  cache_info_entries.push_back(&cache_info);
-
-  uinfo_cache.put(store, key, &e, cache_info_entries);
+  uinfo_cache.put(store, key, &e, { &cache_info });
 
   info = e.info;
   if (objv_tracker)
@@ -330,15 +326,15 @@ int rgw_get_user_info_by_uid(RGWRados *store,
     return ret;
   }
 
-  bufferlist::iterator iter = bl.begin();
+  auto iter = bl.cbegin();
   try {
-    ::decode(user_id, iter);
+    decode(user_id, iter);
     if (user_id.user_id.compare(uid) != 0) {
       lderr(store->ctx())  << "ERROR: rgw_get_user_info_by_uid(): user id mismatch: " << user_id.user_id << " != " << uid << dendl;
       return -EIO;
     }
     if (!iter.end()) {
-      ::decode(info, iter);
+      decode(info, iter);
     }
   } catch (buffer::error& err) {
     ldout(store->ctx(), 0) << "ERROR: failed to decode user info, caught buffer::error" << dendl;
@@ -531,7 +527,7 @@ static struct rgw_flags_desc rgw_perms[] = {
  { RGW_PERM_READ, "read" },
  { RGW_PERM_WRITE, "write" },
  { RGW_PERM_READ_ACP, "read-acp" },
- { RGW_PERM_WRITE_ACP, "read-acp" },
+ { RGW_PERM_WRITE_ACP, "write-acp" },
  { 0, NULL }
 };
 
@@ -725,7 +721,7 @@ static void dump_user_info(Formatter *f, RGWUserInfo &info,
   f->dump_string("email", info.user_email);
   f->dump_int("suspended", (int)info.suspended);
   f->dump_int("max_buckets", (int)info.max_buckets);
-
+  f->dump_bool("system", (bool)info.system);
   dump_subusers_info(f, info);
   dump_access_keys_info(f, info);
   dump_swift_keys_info(f, info);
@@ -1969,14 +1965,7 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
   if (op_state.has_bucket_quota()) {
     user_info.bucket_quota = op_state.get_bucket_quota();
   } else {
-    if (cct->_conf->rgw_bucket_default_quota_max_objects >= 0) {
-      user_info.bucket_quota.max_objects = cct->_conf->rgw_bucket_default_quota_max_objects;
-      user_info.bucket_quota.enabled = true;
-    }
-    if (cct->_conf->rgw_bucket_default_quota_max_size >= 0) {
-      user_info.bucket_quota.max_size = cct->_conf->rgw_bucket_default_quota_max_size;
-      user_info.bucket_quota.enabled = true;
-    }
+    rgw_apply_default_bucket_quota(user_info.bucket_quota, cct->_conf);
   }
 
   if (op_state.temp_url_key_specified) {
@@ -1990,14 +1979,7 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
   if (op_state.has_user_quota()) {
     user_info.user_quota = op_state.get_user_quota();
   } else {
-    if (cct->_conf->rgw_user_default_quota_max_objects >= 0) {
-      user_info.user_quota.max_objects = cct->_conf->rgw_user_default_quota_max_objects;
-      user_info.user_quota.enabled = true;
-    }
-    if (cct->_conf->rgw_user_default_quota_max_size >= 0) {
-      user_info.user_quota.max_size = cct->_conf->rgw_user_default_quota_max_size;
-      user_info.user_quota.enabled = true;
-    }
+    rgw_apply_default_user_quota(user_info.user_quota, cct->_conf);
   }
 
   // update the request
@@ -2261,6 +2243,10 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
 
     } while (is_truncated);
   }
+
+  if (op_state.mfa_ids_specified) {
+    user_info.mfa_ids = op_state.mfa_ids;
+  }
   op_state.set_user_info(user_info);
 
   // if we're supposed to modify keys, do so
@@ -2354,7 +2340,7 @@ int RGWUserAdminOp_User::info(RGWRados *store, RGWUserAdminOpState& op_state,
   RGWStorageStats *arg_stats = NULL;
   if (op_state.fetch_stats) {
     int ret = store->get_user_stats(info.user_id, stats);
-    if (ret < 0) {
+    if (ret < 0 && ret != -ENOENT) {
       return ret;
     }
 
@@ -2762,7 +2748,7 @@ public:
 
   int list_keys_init(RGWRados *store, const string& marker, void **phandle) override
   {
-    auto info = ceph::make_unique<list_keys_info>();
+    auto info = std::make_unique<list_keys_info>();
 
     info->store = store;
 
@@ -2795,7 +2781,7 @@ public:
     if (ret == -ENOENT) {
       if (truncated)
         *truncated = false;
-      return -ENOENT;
+      return 0;
     }
 
     // now filter out the buckets entries
@@ -2816,7 +2802,7 @@ public:
     delete info;
   }
 
-  string get_marker(void *handle) {
+  string get_marker(void *handle) override {
     list_keys_info *info = static_cast<list_keys_info *>(handle);
     return info->store->list_raw_objs_get_cursor(info->ctx);
   }

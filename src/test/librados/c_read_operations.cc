@@ -1,14 +1,18 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // Tests for the C API coverage of atomic read operations
 
+#include <cstring> // For memcpy
 #include <errno.h>
 #include <string>
 
+#include "include/buffer.h"
+#include "include/denc.h"
 #include "include/err.h"
 #include "include/rados/librados.h"
-#include "test/librados/test.h"
-#include "test/librados/TestCase.h"
+#include "include/rbd/features.h" // For RBD_FEATURES_ALL
 #include "include/scope_guard.h"
+#include "test/librados/TestCase.h"
+#include "test/librados/test.h"
 
 const char *data = "testdata";
 const char *obj = "testobj";
@@ -70,6 +74,7 @@ protected:
     char *key = NULL;
     char *val = NULL;
     size_t val_len = 0;
+    ASSERT_EQ(len, rados_omap_iter_size(iter));
     while (i < len) {
       ASSERT_EQ(0, rados_omap_get_next(iter, &key, &val, &val_len));
       if (val_len == 0 && key == NULL && val == NULL)
@@ -86,6 +91,60 @@ protected:
     ASSERT_EQ(0, rados_omap_get_next(iter, &key, &val, &val_len));
     ASSERT_EQ((char*)NULL, key);
     ASSERT_EQ((char*)NULL, val);
+    ASSERT_EQ(0u, val_len);
+    rados_omap_get_end(iter);
+  }
+
+  // these two used to test omap funcs that accept length for both keys and vals
+  void fetch_and_verify_omap_vals2(char const* const* keys,
+                                  char const* const* vals,
+                                  const size_t *keylens,
+                                  const size_t *vallens,
+                                  size_t len)
+  {
+    rados_omap_iter_t iter_vals_by_key;
+    int r_vals_by_key;
+    rados_read_op_t op = rados_create_read_op();
+    rados_read_op_omap_get_vals_by_keys2(op, keys, len, keylens,
+                                        &iter_vals_by_key, &r_vals_by_key);
+    ASSERT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
+    rados_release_read_op(op);
+    ASSERT_EQ(0, r_vals_by_key);
+
+    compare_omap_vals2(keys, vals, keylens, vallens, len, iter_vals_by_key);
+  }
+
+  void compare_omap_vals2(char const* const* keys,
+                         char const* const* vals,
+                         const size_t *keylens,
+                         const size_t *vallens,
+                         size_t len,
+                         rados_omap_iter_t iter)
+  {
+    size_t i = 0;
+    char *key = NULL;
+    char *val = NULL;
+    size_t key_len = 0;
+    size_t val_len = 0;
+    ASSERT_EQ(len, rados_omap_iter_size(iter));
+    while (i < len) {
+      ASSERT_EQ(0, rados_omap_get_next2(iter, &key, &val, &key_len, &val_len));
+      if (key_len == 0 && val_len == 0 && key == NULL && val == NULL)
+        break;
+      if (key)
+        EXPECT_EQ(std::string(keys[i], keylens[i]), std::string(key, key_len));
+      else
+        EXPECT_EQ(keys[i], key);
+      ASSERT_EQ(val_len, vallens[i]);
+      ASSERT_EQ(key_len, keylens[i]);
+      ASSERT_EQ(0, memcmp(vals[i], val, val_len));
+      ++i;
+    }
+    ASSERT_EQ(i, len);
+    ASSERT_EQ(0, rados_omap_get_next2(iter, &key, &val, &key_len, &val_len));
+    ASSERT_EQ((char*)NULL, key);
+    ASSERT_EQ((char*)NULL, val);
+    ASSERT_EQ(0u, key_len);
     ASSERT_EQ(0u, val_len);
     rados_omap_get_end(iter);
   }
@@ -470,7 +529,11 @@ TEST_F(CReadOpsTest, Exec) {
   uint64_t features;
   EXPECT_EQ(sizeof(features), bytes_read);
   // make sure buffer is at least as long as it claims
-  ASSERT_TRUE(out[bytes_read-1] == out[bytes_read-1]);
+  bufferlist bl;
+  bl.append(out, bytes_read);
+  auto it = bl.cbegin();
+  ceph::decode(features, it);
+  ASSERT_EQ(RBD_FEATURES_ALL, features);
   rados_buffer_free(out);
 
   remove_object();
@@ -585,6 +648,8 @@ TEST_F(CReadOpsTest, Omap) {
   rados_release_read_op(rop);
   EXPECT_EQ(0, r_vals);
   EXPECT_EQ(0, r_keys);
+  EXPECT_EQ(1u, rados_omap_iter_size(iter_vals));
+  EXPECT_EQ(1u, rados_omap_iter_size(iter_keys));
 
   compare_omap_vals(&keys[2], &vals[2], &lens[2], 1, iter_vals);
   compare_omap_vals(&keys[2], &vals[0], &lens[0], 1, iter_keys);
@@ -634,6 +699,80 @@ TEST_F(CReadOpsTest, Omap) {
   remove_object();
 }
 
+TEST_F(CReadOpsTest, OmapNuls) {
+  char *keys[] = {(char*)"1\0bar",
+                      (char*)"2baar\0",
+                      (char*)"3baa\0rr"};
+  char *vals[] = {(char*)"_\0var",
+                      (char*)"_vaar\0",
+                      (char*)"__vaa\0rr"};
+  size_t nklens[] = {5, 6, 7};
+  size_t nvlens[] = {5, 6, 8};
+  const int paircount = 3;
+
+  // check for -ENOENT before the object exists and when it exists
+  // with no omap entries
+  rados_omap_iter_t iter_vals;
+  rados_read_op_t rop = rados_create_read_op();
+  rados_read_op_omap_get_vals2(rop, "", "", 10, &iter_vals, NULL, NULL);
+  ASSERT_EQ(-ENOENT, rados_read_op_operate(rop, ioctx, obj, 0));
+  rados_release_read_op(rop);
+  compare_omap_vals(NULL, NULL, NULL, 0, iter_vals);
+
+  write_object();
+
+  fetch_and_verify_omap_vals(NULL, NULL, NULL, 0);
+
+  // write and check for the k/v pairs
+  rados_write_op_t op = rados_create_write_op();
+  rados_write_op_omap_set2(op, keys, vals, nklens, nvlens, paircount);
+  ASSERT_EQ(0, rados_write_op_operate(op, ioctx, obj, NULL, 0));
+  rados_release_write_op(op);
+
+  fetch_and_verify_omap_vals2(keys, vals, nklens, nvlens, paircount);
+
+  // check omap_cmp finds all expected values
+  rop = rados_create_read_op();
+  int rvals[4];
+  for (int i = 0; i < paircount; ++i)
+    rados_read_op_omap_cmp2(rop, keys[i], LIBRADOS_CMPXATTR_OP_EQ,
+                           vals[i], nklens[i], nvlens[i], &rvals[i]);
+  EXPECT_EQ(0, rados_read_op_operate(rop, ioctx, obj, 0));
+  rados_release_read_op(rop);
+  for (int i = 0; i < paircount; ++i)
+    EXPECT_EQ(0, rvals[i]);
+
+  // try to remove keys with a guard that should fail
+  int r_vals = -1;
+  op = rados_create_write_op();
+  rados_write_op_omap_cmp2(op, keys[2], LIBRADOS_CMPXATTR_OP_LT,
+                          vals[2], nklens[2], nvlens[2], &r_vals);
+  rados_write_op_omap_rm_keys(op, keys, 2);
+  EXPECT_EQ(-ECANCELED, rados_write_op_operate(op, ioctx, obj, NULL, 0));
+  rados_release_write_op(op);
+
+  // verifying the keys are still there, and then remove them
+  op = rados_create_write_op();
+  rados_write_op_omap_cmp2(op, keys[0], LIBRADOS_CMPXATTR_OP_EQ,
+                          vals[0], nklens[0], nvlens[0], NULL);
+  rados_write_op_omap_cmp2(op, keys[1], LIBRADOS_CMPXATTR_OP_EQ,
+                          vals[1], nklens[1], nvlens[1], NULL);
+  rados_write_op_omap_rm_keys2(op, keys, nklens, 2);
+  EXPECT_EQ(0, rados_write_op_operate(op, ioctx, obj, NULL, 0));
+  rados_release_write_op(op);
+
+  fetch_and_verify_omap_vals2(&keys[2], &vals[2], &nklens[2], &nvlens[2], 1);
+
+  // clear the rest and check there are none left
+  op = rados_create_write_op();
+  rados_write_op_omap_clear(op);
+  EXPECT_EQ(0, rados_write_op_operate(op, ioctx, obj, NULL, 0));
+  rados_release_write_op(op);
+
+  fetch_and_verify_omap_vals(NULL, NULL, NULL, 0);
+
+  remove_object();
+}
 TEST_F(CReadOpsTest, GetXattrs) {
   write_object();
 

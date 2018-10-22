@@ -6,7 +6,7 @@
 
 #include <numeric>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/types.h"
 #include "include/xlist.h"
 
@@ -32,10 +32,11 @@ class Fh;
 class Cap {
 public:
   Cap() = delete;
-  Cap(Inode *i, MetaSession *s) :
-      session(s), inode(i), cap_id(0), issued(0),
-      implemented(0), wanted(0), seq(0), issue_seq(0), mseq(0), gen(s->cap_gen),
-      latest_perms(), cap_item(this) {
+  Cap(Inode &i, MetaSession *s) : inode(i),
+                                  session(s),
+                                  gen(s->cap_gen),
+                                  cap_item(this)
+  {
     s->caps.push_back(&cap_item);
   }
   ~Cap() {
@@ -49,14 +50,15 @@ public:
 
   void dump(Formatter *f) const;
 
+  Inode &inode;
   MetaSession *session;
-  Inode *inode;
-  uint64_t cap_id;
-  unsigned issued;
-  unsigned implemented;
-  unsigned wanted;   // as known to mds.
-  uint64_t seq, issue_seq;
-  __u32 mseq;  // migration seq
+  uint64_t cap_id = 0;
+  unsigned issued = 0;
+  unsigned implemented = 0;
+  unsigned wanted = 0;   // as known to mds.
+  uint64_t seq = 0;
+  uint64_t issue_seq = 0;
+  __u32 mseq = 0;  // migration seq
   __u32 gen;
   UserPerm latest_perms;
 
@@ -93,10 +95,14 @@ struct CapSnap {
   bool writing, dirty_data;
   uint64_t flush_tid;
 
+  int64_t cap_dirtier_uid;
+  int64_t cap_dirtier_gid;
+
   explicit CapSnap(Inode *i)
     : in(i), issued(0), dirty(0), size(0), time_warp_seq(0), change_attr(0),
       mode(0), uid(0), gid(0), xattr_version(0), inline_version(0),
-      writing(false), dirty_data(false), flush_tid(0)
+      writing(false), dirty_data(false), flush_tid(0), cap_dirtier_uid(-1),
+      cap_dirtier_gid(-1)
   {}
 
   void dump(Formatter *f) const;
@@ -168,7 +174,7 @@ struct Inode {
     int which = dir_layout.dl_dir_hash;
     if (!which)
       which = CEPH_STR_HASH_LINUX;
-    assert(ceph_str_hash_valid(which));
+    ceph_assert(ceph_str_hash_valid(which));
     return ceph_str_hash(which, dn.data(), dn.length());
   }
 
@@ -198,7 +204,7 @@ struct Inode {
   int shared_gen, cache_gen;
   int snap_caps, snap_cap_refs;
   utime_t hold_caps_until;
-  xlist<Inode*>::item cap_item, flushing_cap_item;
+  xlist<Inode*>::item delay_cap_item, dirty_cap_item, flushing_cap_item;
 
   SnapRealm *snaprealm;
   xlist<Inode*>::item snaprealm_item;
@@ -225,7 +231,7 @@ struct Inode {
   list<Cond*>	    waitfor_deleg;
 
   Dentry *get_first_parent() {
-    assert(!dentries.empty());
+    ceph_assert(!dentries.empty());
     return *dentries.begin();
   }
 
@@ -243,7 +249,7 @@ struct Inode {
     ll_ref++;
   }
   void ll_put(int n=1) {
-    assert(ll_ref >= n);
+    ceph_assert(ll_ref >= n);
     ll_ref -= n;
   }
 
@@ -268,14 +274,13 @@ struct Inode {
       cap_dirtier_uid(-1), cap_dirtier_gid(-1),
       dirty_caps(0), flushing_caps(0), shared_gen(0), cache_gen(0),
       snap_caps(0), snap_cap_refs(0),
-      cap_item(this), flushing_cap_item(this),
+      delay_cap_item(this), dirty_cap_item(this), flushing_cap_item(this),
       snaprealm(0), snaprealm_item(this),
       oset((void *)this, newlayout->pool_id, this->ino),
       reported_size(0), wanted_max_size(0), requested_max_size(0),
       _ref(0), ll_ref(0)
   {
     memset(&dir_layout, 0, sizeof(dir_layout));
-    memset(&quota, 0, sizeof(quota));
   }
   ~Inode();
 
@@ -302,7 +307,7 @@ struct Inode {
   bool cap_is_valid(const Cap &cap) const;
   int caps_issued(int *implemented = 0) const;
   void try_touch_cap(mds_rank_t mds);
-  bool caps_issued_mask(unsigned mask);
+  bool caps_issued_mask(unsigned mask, bool allow_impl=false);
   int caps_used();
   int caps_file_wanted();
   int caps_wanted();
@@ -325,6 +330,8 @@ struct Inode {
   int set_deleg(Fh *fh, unsigned type, ceph_deleg_cb_t cb, void *priv);
   void unset_deleg(Fh *fh);
 
+  void mark_caps_dirty(int caps);
+  void mark_caps_clean();
 private:
   // how many opens for write on this Inode?
   long open_count_for_write()
