@@ -42,10 +42,12 @@ enum {
 class BlueFS {
 public:
   CephContext* cct;
-  static constexpr unsigned MAX_BDEV = 3;
+  static constexpr unsigned MAX_BDEV = 5;
   static constexpr unsigned BDEV_WAL = 0;
   static constexpr unsigned BDEV_DB = 1;
   static constexpr unsigned BDEV_SLOW = 2;
+  static constexpr unsigned BDEV_NEWWAL = 3;
+  static constexpr unsigned BDEV_NEWDB = 4;
 
   enum {
     WRITER_UNKNOWN,
@@ -273,6 +275,9 @@ private:
 
   int _allocate(uint8_t bdev, uint64_t len,
 		bluefs_fnode_t* node);
+  int _allocate_without_fallback(uint8_t id, uint64_t len,
+				 PExtentVector* extents);
+
   int _flush_range(FileWriter *h, uint64_t offset, uint64_t length);
   int _flush(FileWriter *h, bool force);
   int _fsync(FileWriter *h, std::unique_lock<ceph::mutex>& l);
@@ -287,9 +292,23 @@ private:
 			  uint64_t jump_to = 0);
   uint64_t _estimate_log_size();
   bool _should_compact_log();
-  void _compact_log_dump_metadata(bluefs_transaction_t *t);
+
+  enum {
+    REMOVE_DB = 1,
+    REMOVE_WAL = 2,
+    RENAME_SLOW2DB = 4,
+    RENAME_DB2SLOW = 8,
+  };
+  void _compact_log_dump_metadata(bluefs_transaction_t *t,
+				  int flags);
   void _compact_log_sync();
   void _compact_log_async(std::unique_lock<ceph::mutex>& l);
+
+  void _rewrite_log_sync(bool allocate_with_fallback,
+			 int super_dev,
+			 int log_dev,
+			 int new_log_dev,
+			 int flags);
 
   //void _aio_finish(void *priv);
 
@@ -316,7 +335,7 @@ private:
   void _invalidate_cache(FileRef f, uint64_t offset, uint64_t length);
 
   int _open_super();
-  int _write_super();
+  int _write_super(int dev);
   int _replay(bool noop, bool to_stdout = false); ///< replay journal
 
   FileWriter *_create_writer(FileRef f);
@@ -339,12 +358,22 @@ public:
   int mkfs(uuid_d osd_uuid);
   int mount();
   void umount();
+  int prepare_new_device(int id);
   
   int log_dump();
 
   void collect_metadata(map<string,string> *pm, unsigned skip_bdev_id);
   void get_devices(set<string> *ls);
   int fsck();
+
+  int device_migrate_to_new(
+    CephContext *cct,
+    const set<int>& devs_source,
+    int dev_target);
+  int device_migrate_to_existing(
+    CephContext *cct,
+    const set<int>& devs_source,
+    int dev_target);
 
   uint64_t get_used();
   uint64_t get_total(unsigned id);
