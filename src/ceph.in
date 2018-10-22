@@ -68,7 +68,7 @@ MYPDIR = os.path.dirname(MYDIR)
 DEVMODEMSG = '*** DEVELOPER MODE: setting PATH, PYTHONPATH and LD_LIBRARY_PATH ***'
 
 
-def respawn_in_path(lib_path, pybind_path, pythonlib_path):
+def respawn_in_path(lib_path, pybind_path, pythonlib_path, asan_lib_path):
     execv_cmd = []
     if 'CEPH_DBG' in os.environ:
         execv_cmd += ['@PYTHON_EXECUTABLE@', '-mpdb']
@@ -79,6 +79,8 @@ def respawn_in_path(lib_path, pybind_path, pythonlib_path):
         lib_path_var = "LD_LIBRARY_PATH"
 
     execv_cmd += sys.argv
+    if asan_lib_path:
+        os.environ['LD_PRELOAD'] = asan_lib_path
     if lib_path_var in os.environ:
         if lib_path not in os.environ[lib_path_var]:
             os.environ[lib_path_var] += ':' + lib_path
@@ -114,8 +116,9 @@ def get_cmake_variables(names):
 
 if os.path.exists(os.path.join(MYPDIR, "CMakeCache.txt")) \
      and os.path.exists(os.path.join(MYPDIR, "bin/init-ceph")):
-    src_path = get_cmake_variables(["ceph_SOURCE_DIR"])["ceph_SOURCE_DIR"]
-
+    vars = get_cmake_variables(["ceph_SOURCE_DIR", "ASAN_LIBRARY"])
+    src_path = vars["ceph_SOURCE_DIR"]
+    asan_lib_path = vars["ASAN_LIBRARY"]
     if src_path is None:
         # Huh, maybe we're not really in a cmake environment?
         pass
@@ -128,7 +131,7 @@ if os.path.exists(os.path.join(MYPDIR, "CMakeCache.txt")) \
                                       "cython_modules",
                                       get_pythonlib_dir())
 
-        respawn_in_path(lib_path, pybind_path, pythonlib_path)
+        respawn_in_path(lib_path, pybind_path, pythonlib_path, asan_lib_path)
 
         if 'PATH' in os.environ and bin_path not in os.environ['PATH']:
             os.environ['PATH'] = os.pathsep.join([bin_path, os.environ['PATH']])
