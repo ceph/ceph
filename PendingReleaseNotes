@@ -1,6 +1,82 @@
 14.0.1
 ------
 
+* ceph df [detail] output (GLOBAL section) has been modified in plain
+  format:
+  * new 'USED' column shows the space (accumulated over all OSDs) allocated
+    purely for data objects kept at block(slow) device.
+  * 'RAW USED' is now a sum of 'USED' space and space allocated/reserved at
+     block device for Ceph purposes, e.g. BlueFS part for BlueStore.
+
+* ceph df [detail] output (GLOBAL section) has been modified in json
+  format:
+  * 'total_used_bytes' column now shows the space (accumulated over all OSDs)
+    allocated purely for data objects kept at block(slow) device
+  * new 'total_used_raw_bytes' column shows a sum of 'USED' space and space
+    allocated/reserved at block device for Ceph purposes, e.g. BlueFS part for
+    BlueStore.
+
+* ceph df [detail] output (POOLS section) has been modified in plain
+  format:
+  * 'BYTES USED' column renamed to 'STORED'. Represents amount of data
+    stored by the user.
+  * 'USED' column now represent amount of space allocated purely for data
+    by all OSD nodes in KB.
+  * 'QUOTA BYTES', 'QUOTA OBJECTS' aren't showed anumore in non-detailed mode.
+  * new column 'USED COMPR' - amount of space allocated for compressed
+    data. I.e. comrpessed data plus all the allocation, replication and erasure
+    coding overhead.
+  * new column 'UNDER COMPR' - amount of data passed through compression
+   (summed over all replicas) and beneficial enough to be stored in a
+    compressed form.
+  * Some columns reordering
+
+* ceph df [detail] output (POOLS section) has been modified in json
+  format:
+  * 'bytes used' column renamed to 'stored'. Represents amount of data
+    stored by the user.
+  * 'raw bytes used' column renamed to "stored_raw". Totals of user data
+     over all OSD excluding degraded.
+  * new 'bytes_used' column now represent amount of space allocated by 
+    all OSD nodes.
+  * 'kb_used' column - the same as 'bytes_used' but in KB.
+  * new column 'compress_bytes_used' - amount of space allocated for compressed
+    data. I.e. comrpessed data plus all the allocation, replication and erasure
+    coding overhead.
+  * new column 'compress_under_bytes' amount of data passed through compression
+   (summed over all replicas) and beneficial enough to be stored in a
+    compressed form.
+
+* rados df [detail] output (POOLS section) has been modified in plain
+  format:
+  * 'USED' column now shows the space (accumulated over all OSDs) allocated
+    purely for data objects kept at block(slow) device.
+  * new column 'USED COMPR' - amount of space allocated for compressed
+    data. I.e. comrpessed data plus all the allocation, replication and erasure
+    coding overhead.
+  * new column 'UNDER COMPR' - amount of data passed through compression
+   (summed over all replicas) and beneficial enough to be stored in a
+    compressed form.
+
+* rados df [detail] output (POOLS section) has been modified in json
+  format:
+  * 'size_bytes' and 'size_kb' columns now show the space (accumulated
+    over all OSDs) allocated purely for data objects kept at block
+    device.
+  * new column 'compress_bytes_used' - amount of space allocated for compressed
+    data. I.e. comrpessed data plus all the allocation, replication and erasure
+    coding overhead.
+  * new column 'compress_under_bytes' amount of data passed through compression
+   (summed over all replicas) and beneficial enough to be stored in a
+    compressed form.
+
+* ceph pg dump output (totals section) has been modified in json
+  format:
+  * new 'USED' column shows the space (accumulated over all OSDs) allocated
+    purely for data objects kept at block(slow) device.
+  * 'USED_RAW' is now a sum of 'USED' space and space allocated/reserved at
+     block device for Ceph purposes, e.g. BlueFS part for BlueStore.
+
 * The 'ceph osd rm' command has been deprecated.  Users should use
   'ceph osd destroy' or 'ceph osd purge' (but after first confirming it is
   safe to do so via the 'ceph osd safe-to-destroy' command).
