@@ -1015,6 +1015,7 @@ namespace buffer CEPH_BUFFER_API {
     void append_zero(unsigned len);
     void prepend_zero(unsigned len);
 
+    reserve_t append_n_reserve(const char* data, unsigned len, unsigned reserve);
     reserve_t obtain_contiguous_space(unsigned len);
     reserve_t obtain_contiguous_space_rounded(unsigned len);
 
