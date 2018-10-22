@@ -1038,7 +1038,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
         return -ERR_INVALID_ENCRYPTION_ALGORITHM;
       }
       if (s->cct->_conf->rgw_crypt_require_ssl &&
-          !s->info.env->exists("SERVER_PORT_SECURE")) {
+          !rgw_transport_is_secure(s->cct, *s->info.env)) {
         ldout(s->cct, 5) << "ERROR: Insecure request, rgw_crypt_require_ssl is set" << dendl;
         return -ERR_INVALID_REQUEST;
       }
@@ -1144,7 +1144,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
         return -EINVAL;
       }
       if (s->cct->_conf->rgw_crypt_require_ssl &&
-          !s->info.env->exists("SERVER_PORT_SECURE")) {
+          !rgw_transport_is_secure(s->cct, *s->info.env)) {
         ldout(s->cct, 5) << "ERROR: insecure request, rgw_crypt_require_ssl is set" << dendl;
         return -ERR_INVALID_REQUEST;
       }
@@ -1260,7 +1260,7 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
 
   if (stored_mode == "SSE-C-AES256") {
     if (s->cct->_conf->rgw_crypt_require_ssl &&
-        !s->info.env->exists("SERVER_PORT_SECURE")) {
+        !rgw_transport_is_secure(s->cct, *s->info.env)) {
       ldout(s->cct, 5) << "ERROR: Insecure request, rgw_crypt_require_ssl is set" << dendl;
       return -ERR_INVALID_REQUEST;
     }
@@ -1342,7 +1342,7 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
 
   if (stored_mode == "SSE-KMS") {
     if (s->cct->_conf->rgw_crypt_require_ssl &&
-        !s->info.env->exists("SERVER_PORT_SECURE")) {
+        !rgw_transport_is_secure(s->cct, *s->info.env)) {
       ldout(s->cct, 5) << "ERROR: Insecure request, rgw_crypt_require_ssl is set" << dendl;
       return -ERR_INVALID_REQUEST;
     }
