@@ -1183,6 +1183,7 @@ using namespace ceph;
 
   buffer::list::list(list&& other) noexcept
     : _buffers(std::move(other._buffers)),
+      _carriage(&always_empty_bptr),
       _len(other._len),
       _memcopy_count(other._memcopy_count) {
     other.clear();
@@ -1192,6 +1193,7 @@ using namespace ceph;
   {
     std::swap(_len, other._len);
     std::swap(_memcopy_count, other._memcopy_count);
+    std::swap(_carriage, other._carriage);
     _buffers.swap(other._buffers);
   }
 
@@ -1374,6 +1376,7 @@ using namespace ceph;
   void buffer::list::rebuild()
   {
     if (_len == 0) {
+      _carriage = &always_empty_bptr;
       _buffers.clear_and_dispose(hangable_ptr::disposer());
       return;
     }
@@ -1393,9 +1396,12 @@ using namespace ceph;
       pos += it->length();
     }
     _memcopy_count += pos;
+    _carriage = &always_empty_bptr;
     _buffers.clear_and_dispose(hangable_ptr::disposer());
-    if (nb.length())
+    if (nb.length()) {
       _buffers.push_back(nb);
+      _carriage = &nb;
+    }
     invalidate_crc();
   }
 
@@ -1440,7 +1446,8 @@ using namespace ceph;
         offset += p->length();
         // no need to reallocate, relinking is enough thankfully to bi::list.
         auto after = _buffers.erase(p);
-        unaligned.push_back(*p);
+        unaligned._buffers.push_back(*p);
+        unaligned._len += p->length();
         p = after;
       } while (p != _buffers.end() &&
   	     (!p->is_aligned(align_memory) ||
@@ -1468,6 +1475,7 @@ using namespace ceph;
     if (_buffers.empty() || _buffers.back().unused_tail_length() < prealloc) {
       auto& ptr = hangable_ptr::create(buffer::create_page_aligned(prealloc));
       _buffers.push_back(ptr);
+      _carriage = &ptr;
       ptr.set_length(0);   // unused, so far.
     }
   }
@@ -1487,6 +1495,7 @@ using namespace ceph;
     if (!(flags & CLAIM_ALLOW_NONSHAREABLE))
       bl.make_shareable();
     _buffers.splice(std::end(_buffers), bl._buffers);
+    bl._carriage = &always_empty_bptr;
     bl._buffers.clear_and_dispose(hangable_ptr::disposer());
     bl._len = 0;
   }
@@ -1603,11 +1612,18 @@ using namespace ceph;
       auto& buf = hangable_ptr::create(
 	raw_combined::create(CEPH_BUFFER_APPEND_SIZE, 0, get_mempool()));
       _buffers.push_back(buf);
+      _carriage = &buf;
       buf.set_length(0);   // unused, so far.
+    } else if (unlikely(_carriage != &_buffers.back())) {
+      auto& bptr = hangable_ptr::create(*_carriage, _carriage->length(), 0);
+      _carriage = &bptr;
+      _buffers.push_back(bptr);
     }
     _buffers.back().append(c);
     _len++;
   }
+
+  buffer::ptr buffer::list::always_empty_bptr;
 
   buffer::hangable_ptr& buffer::list::refill_append_space(const unsigned len)
   {
@@ -1620,6 +1636,7 @@ using namespace ceph;
       hangable_ptr::create(raw_combined::create(alen, 0, get_mempool()));
     new_back.set_length(0);   // unused, so far.
     _buffers.push_back(new_back);
+    _carriage = &new_back;
     return new_back;
   }
 
@@ -1630,7 +1647,16 @@ using namespace ceph;
     const unsigned free_in_last = get_append_buffer_unused_tail_length();
     const unsigned first_round = std::min(len, free_in_last);
     if (first_round) {
-      _buffers.back().append(data, first_round);
+      // _buffers and carriage can desynchronize when 1) a new ptr
+      // we don't own has been added into the _buffers 2) _buffers
+      // has been emptied as as a result of std::move or stolen by
+      // claim_append.
+      if (unlikely(_carriage != &_buffers.back())) {
+        auto& bptr = hangable_ptr::create(*_carriage, _carriage->length(), 0);
+	_carriage = &bptr;
+	_buffers.push_back(bptr);
+      }
+      _carriage->append(data, first_round);
     }
 
     const unsigned second_round = len - first_round;
@@ -1666,7 +1692,8 @@ using namespace ceph;
       }
     }
     // add new item to list
-    push_back(hangable_ptr::create(bp, off, len));
+    _buffers.push_back(hangable_ptr::create(bp, off, len));
+    _len += len;
   }
 
   void buffer::list::append(const list& bl)
@@ -1699,8 +1726,11 @@ using namespace ceph;
       auto& new_back = refill_append_space(len);
       new_back.set_length(len);
       return { new_back.c_str() };
+    } else if (unlikely(_carriage != &_buffers.back())) {
+      auto& bptr = hangable_ptr::create(*_carriage, _carriage->length(), 0);
+      _carriage = &bptr;
+      _buffers.push_back(bptr);
     }
-
     auto& cur_back = _buffers.back();
     cur_back.set_length(cur_back.length() + len);
     return { cur_back.end_c_str() - len };
@@ -1721,6 +1751,11 @@ using namespace ceph;
     const unsigned free_in_last = get_append_buffer_unused_tail_length();
     const unsigned first_round = std::min(len, free_in_last);
     if (first_round) {
+      if (unlikely(_carriage != &_buffers.back())) {
+        auto& bptr = hangable_ptr::create(*_carriage, _carriage->length(), 0);
+	_carriage = &bptr;
+	_buffers.push_back(bptr);
+      }
       _buffers.back().append_zeros(first_round);
     }
 
@@ -1898,6 +1933,8 @@ using namespace ceph;
       _len += off;
     }
     
+    _carriage = &always_empty_bptr;
+
     while (len > 0) {
       // partial?
       if (off + len < (*curbuf).length()) {
