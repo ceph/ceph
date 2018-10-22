@@ -98,12 +98,23 @@ def get_pythonlib_dir():
     """Returns the name of a distutils build directory"""
     return "lib.{version[0]}".format(version=sys.version_info)
 
+
+def get_cmake_variables(names):
+    vars = dict((name, None) for name in names)
+    for line in open(os.path.join(MYPDIR, "CMakeCache.txt")):
+        # parse lines like "WITH_ASAN:BOOL=ON"
+        for name in names:
+            if line.startswith("{}:".format(name)):
+                vars[name] = line.split("=")[1].strip()
+                break
+        if all(vars.itervalues()):
+            break
+    return vars
+
+
 if os.path.exists(os.path.join(MYPDIR, "CMakeCache.txt")) \
      and os.path.exists(os.path.join(MYPDIR, "bin/init-ceph")):
-    src_path = None
-    for l in open(os.path.join(MYPDIR, "CMakeCache.txt")):
-        if l.startswith("ceph_SOURCE_DIR:STATIC="):
-            src_path = l.split("=")[1].strip()
+    src_path = get_cmake_variables(["ceph_SOURCE_DIR"])["ceph_SOURCE_DIR"]
 
     if src_path is None:
         # Huh, maybe we're not really in a cmake environment?
