@@ -1666,6 +1666,53 @@ using namespace ceph;
     }
   }
 
+  buffer::list::reserve_t buffer::list::obtain_contiguous_space(
+    const unsigned len)
+  {
+    // note: if len < the normal append_buffer size it *might*
+    // be better to allocate a normal-sized append_buffer and
+    // use part of it.  however, that optimizes for the case of
+    // old-style types including new-style types.  and in most
+    // such cases, this won't be the very first thing encoded to
+    // the list, so append_buffer will already be allocated.
+    // OTOH if everything is new-style, we *should* allocate
+    // only what we need and conserve memory.
+    if (unlikely(get_append_buffer_unused_tail_length() < len)) {
+      auto& new_back = buffer::hangable_ptr::create(buffer::create(len));
+      new_back.set_length(0);   // unused, so far.
+      _buffers.push_back(new_back);
+      _carriage = &new_back;
+      return { new_back.c_str(), &new_back._len, &_len };
+    } else {
+      if (unlikely(_carriage != &_buffers.back())) {
+        auto& bptr = hangable_ptr::create(*_carriage, _carriage->length(), 0);
+	_carriage = &bptr;
+	_buffers.push_back(bptr);
+      }
+      auto& cur_back = _buffers.back();
+      return { cur_back.end_c_str(), &cur_back._len, &_len };
+    }
+  }
+
+  buffer::list::reserve_t buffer::list::obtain_contiguous_space_rounded(
+    const unsigned len)
+  {
+    if (unlikely(get_append_buffer_unused_tail_length() < len)) {
+      // make a new append_buffer.  fill out a complete page, factoring in
+      // the raw_combined overhead.
+      auto& new_back = refill_append_space(len);
+      return { new_back.c_str(), &new_back._len, &_len };
+    } else {
+      if (unlikely(_carriage != &_buffers.back())) {
+        auto& bptr = hangable_ptr::create(*_carriage, _carriage->length(), 0);
+	_carriage = &bptr;
+	_buffers.push_back(bptr);
+      }
+      auto& cur_back = _buffers.back();
+      return { cur_back.end_c_str(), &cur_back._len, &_len };
+    }
+  }
+
   void buffer::list::append(const ptr& bp)
   {
     if (bp.length())
