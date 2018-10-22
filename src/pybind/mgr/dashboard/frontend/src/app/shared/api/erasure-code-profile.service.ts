@@ -6,7 +6,6 @@ import { ApiModule } from './api.module';
 @Injectable({
   providedIn: ApiModule
 })
-@Injectable()
 export class ErasureCodeProfileService {
   constructor(private http: HttpClient) {}
 
