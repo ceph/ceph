@@ -20,7 +20,26 @@ from util import (
     )
 
 log = logging.getLogger(__name__)
+ceph_cluster_status = """# Display ceph cluster status
+set -ex
+ceph pg stat -f json-pretty
+ceph health detail -f json-pretty
+ceph osd tree
+ceph osd pool ls detail -f json-pretty
+ceph -s
+"""
 cluster_roles = ['mon', 'mgr', 'osd', 'mds', 'rgw', 'igw', 'ganesha']
+disable_update_in_stage_0 = """# Disable update in Stage 0
+set -ex
+cp /srv/salt/ceph/stage/prep/master/default.sls \
+   /srv/salt/ceph/stage/prep/master/default-orig.sls
+cp /srv/salt/ceph/stage/prep/master/default-no-update-no-reboot.sls \
+   /srv/salt/ceph/stage/prep/master/default.sls
+cp /srv/salt/ceph/stage/prep/minion/default.sls \
+   /srv/salt/ceph/stage/prep/minion/default-orig.sls
+cp /srv/salt/ceph/stage/prep/minion/default-no-update-no-reboot.sls \
+   /srv/salt/ceph/stage/prep/minion/default.sls
+"""
 global_conf = '/srv/salt/ceph/configuration/files/ceph.conf.d/global.conf'
 health_ok_cmd = "health-ok.sh --teuthology"
 mon_conf = '/srv/salt/ceph/configuration/files/ceph.conf.d/mon.conf'
@@ -37,6 +56,16 @@ echo -en "\\n" # this is just for log readability
 rm $TMPFILE
 echo "Salt API test: END"
 """
+
+
+def remote_run_script_as_root(remote, path, data):
+    """
+    Wrapper around write_file to simplify the design pattern:
+    1. use write_file to create bash script on the remote
+    2. use Remote.run to run that bash script via "sudo bash $SCRIPT"
+    """
+    write_file(remote, path, data)
+    remote.run(label=path, args='sudo bash {}'.format(path))
 
 
 class DeepSeaDeploy(Task):
@@ -82,12 +111,18 @@ class DeepSeaDeploy(Task):
 #       self.log.debug("ctx.config {}".format(ctx.config))
         log.debug("Munged config is {}".format(self.config))
 
+    def _ceph_cluster_status(self):
+        remote_run_script_as_root(
+            self.master_remote,
+            'ceph_cluster_status.sh',
+            ceph_cluster_status,
+            )
+
     def _ceph_conf_mon_allow_pool_delete(self):
         info_msg = (
             "deepsea_deploy: adjusted ceph.conf "
             "to allow pool deletes")
-        data = """mon allow pool delete = true
-"""
+        data = "mon allow pool delete = true\n"
         sudo_append_to_file(
             self.master_remote,
             global_conf,
@@ -99,8 +134,7 @@ class DeepSeaDeploy(Task):
         info_msg = (
             "deepsea_deploy: adjusted ceph.conf "
             "for deployment of dashboard MGR module")
-        data = """mgr initial modules = dashboard
-"""
+        data = "mgr initial modules = dashboard\n"
         sudo_append_to_file(
             self.master_remote,
             mon_conf,
@@ -118,14 +152,16 @@ class DeepSeaDeploy(Task):
             ).format(self.cluster_nodes)
         data = None
         if self.cluster_nodes == 1:
-            data = """mon pg warn min per osd = 16
-osd pool default size = 2
-osd crush chooseleaf type = 0 # failure domain == osd
-"""
+            data = (
+                   "mon pg warn min per osd = 16\n"
+                   "osd pool default size = 2\n"
+                   "osd crush chooseleaf type = 0 # failure domain == osd\n"
+                   )
         elif self.cluster_nodes == 2 or self.cluster_nodes == 3:
-            data = """mon pg warn min per osd = 8
-osd pool default size = 2
-"""
+            data = (
+                   "mon pg warn min per osd = 8\n"
+                   "osd pool default size = 2\n"
+                   )
         if data:
             self.log.info(info_msg)
             sudo_append_to_file(
@@ -133,6 +169,16 @@ osd pool default size = 2
                 global_conf,
                 data,
                 )
+
+    def _ceph_health_test(self):
+        self.master_remote.run(args=[
+            'sudo',
+            'salt-call',
+            'wait.until',
+            run.Raw('status=HEALTH_OK'),
+            'timeout=900',
+            'check=1',
+            ])
 
     def _copy_health_ok(self):
         """
@@ -216,6 +262,7 @@ osd pool default size = 2
                               " - bailing out!")
         self._deepsea_cli_version()
         self._set_pillar_deepsea_minions()
+        # Stage 0 does this, but we have no guarantee Stage 0 will run
         self.sm.sync_pillar_data()
 
     def _introspect_roles(self):
@@ -304,10 +351,10 @@ osd pool default size = 2
         self.log.info("ROLE INTROSPECTION REPORT")
         self.log.info("role_nodes == {}".format(self.role_nodes))
         self.log.info("cluster_nodes == {}".format(self.cluster_nodes))
-        self.log.info("client_remotes == {}".format(self.client_remotes))
+        self.log.info("client_nodes == {}".format(self.client_nodes))
         self.log.info("role_remotes == {}".format(self.role_remotes))
         self.log.info("cluster_remotes == {}".format(self.cluster_remotes))
-        self.log.info("client_nodes == {}".format(self.client_nodes))
+        self.log.info("client_remotes == {}".format(self.client_remotes))
         self.log.info("role_lookup_table == {}".format(self.role_lookup_table))
         self.log.info("remote_lookup_table == {}"
                       .format(self.remote_lookup_table))
@@ -348,10 +395,17 @@ osd pool default size = 2
             'pillar.items',
             ])
 
+    # FIXME: convert this into its own class
     def _policy_cfg(self, config):
         """
         Generate policy.cfg from the results of role introspection
         """
+        self.log.info("deepsea_deploy: WWWW: generating policy.cfg")
+        self.log.debug("deepsea_deploy: roles stanza from job yaml: {}"
+                       .format(self.roles))
+        if not config:
+            config = {}
+        check_config_key(config, "profile", "teuthology")
         self._policy_cfg_dump_proposals_dir()
         self._policy_cfg_build_base()
         self._policy_cfg_build_x('mon', required=True)
@@ -385,12 +439,18 @@ role-admin/cluster/*.sls
         """
         Add storage profile to policy.cfg
         """
-        profile = check_config_key(config, "profile", "default")
+        profile = config['profile']
         if not isinstance(profile, str):
-            ConfigError("deepsea_deploy post-Stage 1: "
-                        "profile config param must be a string")
-        if profile == 'default':
-            self.__policy_cfg_build_profile_x(profile)
+            raise ConfigError(
+                "deepsea_deploy post-Stage 1: "
+                "profile config param must be a string"
+                )
+        if profile == 'teuthology':
+            raise ConfigError(
+                "deepsea_deploy: teuthology profile not implemented yet"
+                )
+        elif profile == 'default':
+            self.__policy_cfg_build_profile_x('default')
         else:
             ConfigError(
                 "deepsea_deploy post-Stage 1: unknown profile ->{}<-"
@@ -402,15 +462,15 @@ role-admin/cluster/*.sls
         no_osd_roles = ("deepsea_deploy: no osd roles configured"
                         ", but at least one of these is required.")
         role_dict = {}
-        try:
+        if 'osd' in self.role_lookup_table:
             role_dict = self.role_lookup_table['osd']
-        except KeyError:
+        else:
             raise ConfigError(no_osd_roles)
         self.log.debug((
             "deepsea_deploy: generating policy.cfg lines for osd "
             "profile ->{}<- based on {}"
             ).format(profile, role_dict))
-        if len(role_dict.keys()) < 1:
+        if len(role_dict) == 0:
             raise ConfigError(no_osd_roles)
         osd_remotes = list(set(role_dict.values()))
         for osd_remote in osd_remotes:
@@ -430,14 +490,13 @@ profile-{profile}/cluster/{remote}.sls
                             .format(role_type))
         but_required = ", but at least one of these is required."
         role_dict = {}
-        try:
+        if role_type in self.role_lookup_table:
             role_dict = self.role_lookup_table[role_type]
-        except KeyError:
-            if required:
-                raise ConfigError(no_roles_of_type + but_required)
-            else:
-                self.log.debug(no_roles_of_type)
-                return None
+        elif required:
+            raise ConfigError(no_roles_of_type + but_required)
+        else:
+            self.log.debug(no_roles_of_type)
+            return None
         self.log.debug(
             "deepsea_deploy: generating policy.cfg lines for {} based on {}"
             .format(role_type, role_dict)
@@ -446,13 +505,10 @@ profile-{profile}/cluster/{remote}.sls
             if len(role_dict.keys()) < 1:
                 raise ConfigError(no_roles_of_type + but_required)
         for role_spec, remote_name in role_dict.iteritems():
-            self.log.debug("deepsea_deploy: {} role ->{}<-"
-                           .format(role_type, role_spec))
-            self.log.debug("deepsea_deploy: {} remote name ->{}<-"
-                           .format(role_type, remote_name))
-            self.policy_cfg += """# Role assignment - {role}
-role-{role_type}/cluster/{remote}.sls
-""".format(role=role_spec, role_type=role_type, remote=remote_name)
+            self.policy_cfg += (
+                '# Role assignment - {}\n'
+                'role-{}/cluster/{}.sls\n'
+                ).format(role_spec, role_type, remote_name)
 
     def _policy_cfg_cat(self):
         """
@@ -514,7 +570,7 @@ role-{role_type}/cluster/{remote}.sls
                 update: true,
                 reboot: false
         """
-        if len(cmd_dict.keys()) != 1:
+        if len(cmd_dict) != 1:
             raise ConfigError(
                     "deepsea_deploy: command dict must have only one key")
         directive = cmd_dict.keys()[0]
@@ -524,22 +580,29 @@ role-{role_type}/cluster/{remote}.sls
         elif directive == "stage1":
             config = cmd_dict['stage1']
             target = self._run_stage_1
+        elif directive == "policy_cfg":
+            config = cmd_dict['policy_cfg']
+            target = self._policy_cfg
         elif directive == "stage2":
             config = cmd_dict['stage2']
             target = self._run_stage_2
+        elif directive == "stage3":
+            config = cmd_dict['stage3']
+            target = self._run_stage_3
         else:
             raise ConfigError(
                 "deepsea_deploy: unknown directive ->{}<- in command dict"
                 .format(directive))
         target(config)
 
-    def _run_command_str(self, cmd):
+    def _run_command_str(self, cmd, quiet=False):
         if cmd.startswith('health-ok.sh'):
             cmd = "health-ok/" + cmd
-        if self.dev_env:
-            cmd = "DEV_ENV=true " + cmd
-        self.log.info("deepsea_deploy: WWWW: running command ->{}<-"
-                      .format(cmd))
+            if self.dev_env:
+                cmd = "DEV_ENV=true " + cmd
+        if not quiet:
+            self.log.info("deepsea_deploy: WWWW: running command ->{}<-"
+                          .format(cmd))
         self.master_remote.run(args=[
             'sudo',
             'bash',
@@ -561,20 +624,25 @@ role-{role_type}/cluster/{remote}.sls
 
     def _run_stage(self, stage_num):
         """Run a stage. Dump journalctl on error."""
-        self.log.info("deepsea_deploy: running Stage {}".format(stage_num))
+        self.log.info("deepsea_deploy: WWWW: running Stage {}"
+                      .format(stage_num))
+        cmd_str = None
+        if self.config['cli']:
+            cmd_str = (
+                'timeout 60m deepsea '
+                '--log-file=/var/log/salt/deepsea.log '
+                '--log-level=debug '
+                'stage run ceph.stage.{} --simple-output'
+                ).format(stage_num)
+        else:
+            cmd_str = (
+                'timeout 60m salt-run '
+                '--no-color state.orch ceph.stage.{}'
+                ).format(stage_num)
+        if self.dev_env:
+            cmd_str = 'DEV_ENV=true ' + cmd_str
         try:
-            if self.config['cli']:
-                self._run_command_str((
-                    'timeout 60m deepsea '
-                    '--log-file=/var/log/salt/deepsea.log '
-                    '--log-level=debug '
-                    'stage run ceph.stage.{} --simple-output'
-                    ).format(stage_num))
-            else:
-                self._run_command_str((
-                    'timeout 60m salt-run --no-color '
-                    'state.orch ceph.stage.{}'
-                    ).format(stage_num))
+            self._run_command_str(cmd_str, quiet=True)
         except CommandFailedError:
             self.log.error(
                 "deepsea_deploy: WWWW: Stage {} failed. ".format(stage_num)
@@ -595,8 +663,14 @@ role-{role_type}/cluster/{remote}.sls
         check_config_key(config, "update", True)
         check_config_key(config, "reboot", False)
         # FIXME: implement alternative defaults
+        if not config['update']:
+            remote_run_script_as_root(
+                self.master_remote,
+                'disable_update_in_stage_0.sh',
+                disable_update_in_stage_0
+                )
         self._run_stage(0)
-        self.sm.all_minions_zypper_ps()
+        self.sm.all_minions_zypper_status()
         self._salt_api_test()
 
     def _run_stage_1(self, config):
@@ -606,7 +680,6 @@ role-{role_type}/cluster/{remote}.sls
         if not config:
             config = {}
         self._run_stage(1)
-        self._policy_cfg(config)
 
     def _run_stage_2(self, config):
         """
@@ -614,6 +687,7 @@ role-{role_type}/cluster/{remote}.sls
         """
         if not config:
             config = {}
+        check_config_key(config, "conf", None)
         self._run_stage(2)
         self._pillar_items()
         self._ceph_conf_small_cluster()
@@ -622,12 +696,22 @@ role-{role_type}/cluster/{remote}.sls
         self._dump_global_conf()
         self._dump_mon_conf()
 
+    def _run_stage_3(self, config):
+        """
+        Run Stage 3
+        """
+        if not config:
+            config = {}
+        self._run_stage(3)
+        self._ceph_cluster_status()
+        self._ceph_health_test()
+
     def _salt_api_test(self):
-        write_file(self.master_remote, 'salt_api_test.sh', salt_api_test)
-        self.master_remote.run(args=[
-            'bash',
+        remote_run_script_as_root(
+            self.master_remote,
             'salt_api_test.sh',
-            ])
+            salt_api_test,
+            )
 
     def _set_pillar_deepsea_minions(self):
         """

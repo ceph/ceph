@@ -18,9 +18,8 @@ import logging
 import re
 
 from cStringIO import StringIO
-from teuthology import misc
 from teuthology.contextutil import safe_while
-from teuthology.exceptions import (CommandFailedError, ConfigError)
+from teuthology.exceptions import CommandFailedError
 from teuthology.orchestra.remote import Remote
 from teuthology.orchestra import run
 from util import get_remote_for_role
@@ -38,6 +37,17 @@ class SaltManager(object):
         self.cluster = ctx.cluster
         self.master_remote = Remote(self.config.get('master_remote'))
         self.minions = ctx.cluster.remotes
+
+    def _all_minions_cmd_run(self, cmd, abort_on_fail=True, show_stderr=False):
+        """
+        Use cmd.run to run a command on all nodes.
+        """
+        if abort_on_fail:
+            cmd += ' || true'
+        redirect = "" if show_stderr else " 2>/dev/null"
+        self.master_remote.run(args=(
+            'sudo salt \\* cmd.run \'{}\'{}'.format(cmd, redirect)
+            ))
 
     def __systemctl_cluster(self, subcommand=None, service=None):
         """
@@ -92,26 +102,28 @@ class SaltManager(object):
                     return None
 
     def check_salt_daemons(self):
-        self.master_remote.run(args = ['sudo', 'salt-key', '-L'])
-        self.master_remote.run(args = ['sudo', 'systemctl', 'status',
-                'salt-master.service'])
+        self.master_remote.run(args=['sudo', 'salt-key', '-L'])
+        self.master_remote.run(args=[
+            'sudo', 'systemctl', 'status', 'salt-master.service'
+            ])
         for _remote in self.ctx.cluster.remotes.iterkeys():
-            _remote.run(args = ['sudo', 'systemctl', 'status',
-                'salt-minion.service'])
-            _remote.run(args = ['sudo', 'cat', '/etc/salt/minion_id'])
-            _remote.run(args = ['sudo', 'cat', '/etc/salt/minion.d/master.conf'])
+            _remote.run(args=[
+                'sudo', 'systemctl', 'status', 'salt-minion.service'
+                ])
+            _remote.run(args=['sudo', 'cat', '/etc/salt/minion_id'])
+            _remote.run(args=['sudo', 'cat', '/etc/salt/minion.d/master.conf'])
 
     def gather_logs(self, logdir):
         for _remote in self.ctx.cluster.remotes.iterkeys():
             try:
-                _remote.run(args = [
+                _remote.run(args=[
                     'sudo', 'test', '-d', '/var/log/{}/'.format(logdir),
                     ])
             except CommandFailedError:
                 continue
             log.info("Gathering {} logs from remote {}"
-                .format(logdir, _remote.hostname))
-            _remote.run(args = [
+                     .format(logdir, _remote.hostname))
+            _remote.run(args=[
                 'sudo', 'cp', '-a', '/var/log/{}/'.format(logdir),
                 '/home/ubuntu/cephtest/archive/',
                 run.Raw(';'),
@@ -127,14 +139,14 @@ class SaltManager(object):
     def gather_logfile(self, logfile):
         for _remote in self.ctx.cluster.remotes.iterkeys():
             try:
-                _remote.run(args = [
+                _remote.run(args=[
                     'sudo', 'test', '-f', '/var/log/{}'.format(logfile),
                     ])
             except CommandFailedError:
                 continue
             log.info("Gathering logfile /var/log/{} from remote {}"
-                .format(logfile, _remote.hostname))
-            _remote.run(args = [
+                     .format(logfile, _remote.hostname))
+            _remote.run(args=[
                 'sudo', 'cp', '-a', '/var/log/{}'.format(logfile),
                 '/home/ubuntu/cephtest/archive/',
                 run.Raw(';'),
@@ -157,17 +169,28 @@ class SaltManager(object):
             installed = False
         return installed
 
+    def all_minions_zypper_lu(self):
+        """Run "zypper lu" on all nodes"""
+        cmd = "zypper --non-interactive --no-gpg-checks list-updates"
+        self._all_minions_cmd_run(cmd, abort_on_fail=False)
+
     def all_minions_zypper_ps(self):
         """Run "zypper ps -s" on all nodes"""
-        self.master_remote.run(args=[
-            'sudo',
-            'salt',
-            '*',
-            'cmd.run',
-            'zypper ps -s',
-            run.Raw('||'),
-            'true',
-            ])
+        cmd = "zypper ps -s"
+        self._all_minions_cmd_run(cmd, abort_on_fail=False)
+
+    def all_minions_zypper_ref(self):
+        """Run "zypper ref" on all nodes"""
+        cmd = "zypper --non-interactive --gpg-auto-import-keys refresh"
+        self._all_minions_cmd_run(cmd, abort_on_fail=False)
+
+    def all_minions_zypper_status(self):
+        """
+        Implement someone's idea of a general 'zypper status'
+        """
+        self.all_minions_zypper_ref()
+        self.all_minions_zypper_lu()
+        self.all_minions_zypper_ps()
 
     def ping_minion(self, mid):
         """Pings a minion; raises exception if it doesn't respond"""
@@ -179,10 +202,9 @@ class SaltManager(object):
         """
         number_of_minions = len(self.minions)
         self.__ping(
-            [
-            'sudo', 'sh', '-c', 'salt \* test.ping || true',
-            ],
-            number_of_minions)
+            "sudo sh -c \'salt \\* test.ping\' || true",
+            number_of_minions,
+            )
         return number_of_minions
 
     def start_minions(self):
@@ -195,13 +217,15 @@ class SaltManager(object):
 
     def start_master(self):
         """Starts salt-master.service on the Salt Master node"""
-        self.__systemctl_remote(self.master_remote,
-            subcommand="start", service="salt-master")
+        self.__systemctl_remote(
+            self.master_remote, subcommand="start", service="salt-master"
+            )
 
     def restart_master(self):
         """Starts salt-master.service on the Salt Master node"""
-        self.__systemctl_remote(self.master_remote,
-            subcommand="restart", service="salt-master")
+        self.__systemctl_remote(
+            self.master_remote, subcommand="restart", service="salt-master"
+            )
 
     def sync_pillar_data(self):
         self.master_remote.run(args=[
@@ -216,4 +240,3 @@ class SaltManager(object):
 
     def cat_salt_minion_confs(self):
         self.__cat_file_cluster(filename="/etc/salt/minion")
-
