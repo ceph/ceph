@@ -576,6 +576,17 @@ Swift Settings
 :Default: ``false``
 
 
+``rgw trust forwarded https``
+
+:Description: When a proxy in front of radosgw is used for ssl termination, radosgw
+              does not know whether incoming http connections are secure. Enable
+              this option to trust the ``Forwarded`` and ``X-Forwarded-Proto`` headers
+              sent by the proxy when determining whether the connection is secure.
+              This is required for some features, such as server side encryption.
+:Type: Boolean
+:Default: ``false``
+
+
 
 Logging Settings
 ================
