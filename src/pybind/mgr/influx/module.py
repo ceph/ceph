@@ -178,12 +178,12 @@ class Module(MgrModule):
         pool_info = {}
 
         df_types = [
-            'bytes_used',
+            'stored',
             'kb_used',
             'dirty',
             'rd',
             'rd_bytes',
-            'raw_bytes_used',
+            'stored_raw',
             'wr',
             'wr_bytes',
             'objects',

@@ -87,7 +87,7 @@ Pools
 +---------------+-----------------------------------------------------+
 |Counter        | Description                                         |
 +===============+=====================================================+
-|bytes_used     | Bytes used in the pool not including copies         |
+|stored         | Bytes stored in the pool not including copies       |
 +---------------+-----------------------------------------------------+
 |max_avail      | Max available number of bytes in the pool           |
 +---------------+-----------------------------------------------------+
@@ -99,7 +99,7 @@ Pools
 +---------------+-----------------------------------------------------+
 |rd_bytes       | Number of bytes read in the pool                    |
 +---------------+-----------------------------------------------------+
-|raw_bytes_used | Bytes used in pool including copies made            |
+|stored_raw     | Bytes used in pool including copies made            |
 +---------------+-----------------------------------------------------+
 
 ^^^^
