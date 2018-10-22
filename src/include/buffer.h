@@ -747,9 +747,16 @@ namespace buffer CEPH_BUFFER_API {
         : bl(bl),
           reserved(RESERVATION_INVALID) {
       }
+      contiguous_reserver(contiguous_reserver& cr)
+        : bl(cr.bl),
+          reserved(cr.reserved),
+          promise(cr.promise) {
+        cr.reserved = RESERVATION_INVALID;
+      }
       ~contiguous_reserver() {
         commit_length_update();
       }
+      contiguous_reserver& operator=(const contiguous_reserver&) = delete;
 
       template <std::size_t LenV>
       void CEPH_INLINE append(const char* __restrict__ const c) {
@@ -786,7 +793,13 @@ namespace buffer CEPH_BUFFER_API {
       // TODO: consider making len a non-type template parameter.
       auto CEPH_INLINE append_hole(const unsigned len) {
         commit_length_update_n_invalidate();
-        return bl.append_hole(len);
+        if /*constexpr*/ (RESERVATION_UNIT >= len) {
+	  promise = bl.obtain_contiguous_space_rounded(RESERVATION_UNIT);
+          reserved = RESERVATION_UNIT - len;
+          return contiguous_filler(promise.bp_data);
+        } else {
+          return bl.append_hole(len);
+        }
       }
 
       auto CEPH_INLINE length() const {
