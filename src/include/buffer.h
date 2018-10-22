@@ -762,6 +762,12 @@ namespace buffer CEPH_BUFFER_API {
       void copy_in(unsigned len, const list& otherl);
     };
 
+    struct reserve_t {
+      char* bp_data;
+      unsigned* bp_len;
+      unsigned* bl_len;
+    };
+
     class contiguous_appender {
       bufferlist *pbl;
       char *pos;
@@ -1208,6 +1214,8 @@ namespace buffer CEPH_BUFFER_API {
     contiguous_filler append_hole(unsigned len);
     void append_zero(unsigned len);
     void prepend_zero(unsigned len);
+
+    reserve_t obtain_contiguous_space(unsigned len);
 
     /*
      * get a char
