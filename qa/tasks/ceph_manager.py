@@ -2025,7 +2025,7 @@ class CephManager:
         """
         out = self.raw_cluster_cmd('pg', 'dump_stuck', type_, str(threshold),
                                    '--format=json')
-        return json.loads(out)
+        return json.loads(out).get('stuck_pg_stats',[])
 
     def get_num_unfound_objects(self):
         """
