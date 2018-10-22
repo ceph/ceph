@@ -996,6 +996,7 @@ static ceph::spinlock debug_lock;
 
   buffer::list::list(list&& other) noexcept
     : _buffers(std::move(other._buffers)),
+      _carriage(&always_empty_bptr),
       _len(other._len),
       _memcopy_count(other._memcopy_count),
       last_p(this) {
@@ -1006,6 +1007,7 @@ static ceph::spinlock debug_lock;
   {
     std::swap(_len, other._len);
     std::swap(_memcopy_count, other._memcopy_count);
+    std::swap(_carriage, other._carriage);
     _buffers.swap(other._buffers);
     //last_p.swap(other.last_p);
     last_p = begin();
@@ -1209,6 +1211,7 @@ static ceph::spinlock debug_lock;
   void buffer::list::rebuild()
   {
     if (_len == 0) {
+      _carriage = &always_empty_bptr;
       _buffers.clear_and_dispose();
       return;
     }
@@ -1227,8 +1230,10 @@ static ceph::spinlock debug_lock;
       pos += node.length();
     }
     _memcopy_count += pos;
+    _carriage = &always_empty_bptr;
     _buffers.clear_and_dispose();
     if (likely(nb->length())) {
+      _carriage = nb.get();
       _buffers.push_back(*nb.release());
     }
     invalidate_crc();
@@ -1308,6 +1313,7 @@ static ceph::spinlock debug_lock;
     if (get_append_buffer_unused_tail_length() < prealloc) {
       auto ptr = ptr_node::create(buffer::create_page_aligned(prealloc));
       ptr->set_length(0);   // unused, so far.
+      _carriage = ptr.get();
       _buffers.push_back(*ptr.release());
     }
   }
@@ -1327,6 +1333,8 @@ static ceph::spinlock debug_lock;
     if (!(flags & CLAIM_ALLOW_NONSHAREABLE))
       bl.make_shareable();
     _buffers.splice_back(bl._buffers);
+    bl._carriage = &always_empty_bptr;
+    bl._buffers.clear_and_dispose();
     bl._len = 0;
     bl.last_p = bl.begin();
   }
@@ -1391,11 +1399,18 @@ static ceph::spinlock debug_lock;
       auto buf = ptr_node::create(
 	raw_combined::create(CEPH_BUFFER_APPEND_SIZE, 0, get_mempool()));
       buf->set_length(0);   // unused, so far.
+      _carriage = buf.get();
       _buffers.push_back(*buf.release());
+    } else if (unlikely(_carriage != &_buffers.back())) {
+      auto bptr = ptr_node::create(*_carriage, _carriage->length(), 0);
+      _carriage = bptr.get();
+      _buffers.push_back(*bptr.release());
     }
-    _buffers.back().append(c);
+    _carriage->append(c);
     _len++;
   }
+
+  buffer::ptr buffer::list::always_empty_bptr;
 
   buffer::ptr_node& buffer::list::refill_append_space(const unsigned len)
   {
@@ -1407,6 +1422,7 @@ static ceph::spinlock debug_lock;
     auto new_back = \
       ptr_node::create(raw_combined::create(alen, 0, get_mempool()));
     new_back->set_length(0);   // unused, so far.
+    _carriage = new_back.get();
     _buffers.push_back(*new_back.release());
     return _buffers.back();
   }
@@ -1418,7 +1434,16 @@ static ceph::spinlock debug_lock;
     const unsigned free_in_last = get_append_buffer_unused_tail_length();
     const unsigned first_round = std::min(len, free_in_last);
     if (first_round) {
-      _buffers.back().append(data, first_round);
+      // _buffers and carriage can desynchronize when 1) a new ptr
+      // we don't own has been added into the _buffers 2) _buffers
+      // has been emptied as as a result of std::move or stolen by
+      // claim_append.
+      if (unlikely(_carriage != &_buffers.back())) {
+        auto bptr = ptr_node::create(*_carriage, _carriage->length(), 0);
+	_carriage = bptr.get();
+	_buffers.push_back(*bptr.release());
+      }
+      _carriage->append(data, first_round);
     }
 
     const unsigned second_round = len - first_round;
@@ -1452,7 +1477,8 @@ static ceph::spinlock debug_lock;
       }
     }
     // add new item to list
-    push_back(ptr_node::create(bp, off, len));
+    _buffers.push_back(*ptr_node::create(bp, off, len).release());
+    _len += len;
   }
 
   void buffer::list::append(const list& bl)
@@ -1484,11 +1510,13 @@ static ceph::spinlock debug_lock;
       auto& new_back = refill_append_space(len);
       new_back.set_length(len);
       return { new_back.c_str() };
+    } else if (unlikely(_carriage != &_buffers.back())) {
+      auto bptr = ptr_node::create(*_carriage, _carriage->length(), 0);
+      _carriage = bptr.get();
+      _buffers.push_back(*bptr.release());
     }
-
-    auto& cur_back = _buffers.back();
-    cur_back.set_length(cur_back.length() + len);
-    return { cur_back.end_c_str() - len };
+    _carriage->set_length(_carriage->length() + len);
+    return { _carriage->end_c_str() - len };
   }
 
   void buffer::list::prepend_zero(unsigned len)
@@ -1506,7 +1534,12 @@ static ceph::spinlock debug_lock;
     const unsigned free_in_last = get_append_buffer_unused_tail_length();
     const unsigned first_round = std::min(len, free_in_last);
     if (first_round) {
-      _buffers.back().append_zeros(first_round);
+      if (unlikely(_carriage != &_buffers.back())) {
+        auto bptr = ptr_node::create(*_carriage, _carriage->length(), 0);
+	_carriage = bptr.get();
+	_buffers.push_back(*bptr.release());
+      }
+      _carriage->append_zeros(first_round);
     }
 
     const unsigned second_round = len - first_round;
@@ -1640,6 +1673,8 @@ static ceph::spinlock debug_lock;
       ++curbuf_prev;
     }
     
+    _carriage = &always_empty_bptr;
+
     while (len > 0) {
       // partial?
       if (off + len < (*curbuf).length()) {
