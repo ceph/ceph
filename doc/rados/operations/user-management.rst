@@ -99,20 +99,48 @@ a user.
 
 Capability syntax follows the form::
 
-	{daemon-type} '{capspec}[, {capspec} ...]'
+	{daemon-type} '{cap-spec}[, {cap-spec} ...]'
 
 - **Monitor Caps:** Monitor capabilities include ``r``, ``w``, ``x`` access
   settings or ``profile {name}``. For example::
 
-	mon 'allow rwx'
-	mon 'profile osd'
+	mon 'allow {access-spec} [network {network/prefix}]'
+
+	mon 'profile {name}'
+
+  The ``{access-spec}`` syntax is as follows: ::
+
+        * | all | [r][w][x]
+
+  The optional ``{network/prefix}`` is a standard network name and
+  prefix length in CIDR notation (e.g., ``10.3.0.0/16``).  If present,
+  the use of this capability is restricted to clients connecting from
+  this network.
 
 - **OSD Caps:** OSD capabilities include ``r``, ``w``, ``x``, ``class-read``,
   ``class-write`` access settings or ``profile {name}``. Additionally, OSD
   capabilities also allow for pool and namespace settings. ::
 
-	osd 'allow {access} [pool={pool-name} [namespace={namespace-name}]] [tag {application} {key}={value}]'
-	osd 'profile {name} [pool={pool-name} [namespace={namespace-name}]]'
+	osd 'allow {access-spec} [{match-spec}] [network {network/prefix}]'
+
+	osd 'profile {name} [pool={pool-name} [namespace={namespace-name}]] [network {network/prefix}]'
+
+  The ``{access-spec}`` syntax is either of the following: ::
+
+        * | all | [r][w][x] [class-read] [class-write]
+
+        class {class name} [{method name}]
+
+  The optional ``{match-spec}`` syntax is either of the following: ::
+
+        pool={pool-name} [namespace={namespace-name}] [object_prefix {prefix}]
+
+        [namespace={namespace-name}] tag {application} {key}={value}
+
+  The optional ``{network/prefix}`` is a standard network name and
+  prefix length in CIDR notation (e.g., ``10.3.0.0/16``).  If present,
+  the use of this capability is restricted to clients connecting from
+  this network.
 
 - **Metadata Server Caps:** For administrators, use ``allow *``.  For all
   other users, such as CephFS clients, consult :doc:`/cephfs/client-auth`
@@ -122,7 +150,7 @@ Capability syntax follows the form::
           Ceph Storage Cluster, so it is not represented as a Ceph Storage
           Cluster daemon type.
 
-The following entries describe each capability.
+The following entries describe each access capability.
 
 ``allow``
 
@@ -160,12 +188,13 @@ The following entries describe each capability.
               Subset of ``x``.
 
 
-``*``
+``*``, ``all``
 
 :Description: Gives the user read, write and execute permissions for a
               particular daemon/pool, and the ability to execute
               admin commands.
 
+The following entries describe valid capability profiles:
 
 ``profile osd`` (Monitor only)
 
@@ -195,6 +224,20 @@ The following entries describe each capability.
               so they have permissions to add keys, etc. when bootstrapping
               a metadata server.
 
+``profile bootstrap-rbd`` (Monitor only)
+
+:Description: Gives a user permissions to bootstrap an RBD user.
+              Conferred on deployment tools such as ``ceph-deploy``, etc.
+              so they have permissions to add keys, etc. when bootstrapping
+              an RBD user.
+
+``profile bootstrap-rbd-mirror`` (Monitor only)
+
+:Description: Gives a user permissions to bootstrap an ``rbd-mirror`` daemon
+              user. Conferred on deployment tools such as ``ceph-deploy``, etc.
+              so they have permissions to add keys, etc. when bootstrapping
+              an ``rbd-mirror`` daemon.
+
 ``profile rbd`` (Monitor and OSD)
 
 :Description: Gives a user permissions to manipulate RBD images. When used
@@ -202,9 +245,15 @@ The following entries describe each capability.
               by an RBD client application. When used as an OSD cap, it
               provides read-write access to an RBD client application.
 
+``profile rbd-mirror`` (Monitor only)
+
+:Description: Gives a user permissions to manipulate RBD images and retrieve
+              RBD mirroring config-key secrets. It provides the minimal
+              privileges required for the ``rbd-mirror`` daemon.
+
 ``profile rbd-read-only`` (OSD only)
 
-:Description: Gives a user read-only permissions to an RBD image.
+:Description: Gives a user read-only permissions to RBD images.
 
 
 Pool
@@ -327,8 +376,7 @@ save the output to a file. Developers may also execute the following::
 
 	ceph auth export {TYPE.ID}
 
-The ``auth export`` command is identical to ``auth get``, but also prints
-out the internal ``auid``, which is not relevant to end users.
+The ``auth export`` command is identical to ``auth get``.
 
 
 

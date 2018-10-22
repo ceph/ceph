@@ -32,7 +32,7 @@ Network (SAN).
       |                           +---------+                           |
       |                                                                 |
       |                      +-------------------+                      |
-      |   +--------------+   |  iSCSI Initators  |   +--------------+   |
+      |   +--------------+   | iSCSI Initiators  |   +--------------+   |
       |   | iSCSI GW     |   |   +-----------+   |   | iSCSI GW     |   |
       +-->|  RBD Module  |<--+   | Various   |   +-->|  RBD Module  |<--+
           |              |   |   | Operating |   |   |              |

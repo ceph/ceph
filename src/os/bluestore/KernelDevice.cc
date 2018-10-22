@@ -22,9 +22,9 @@
 #include "include/types.h"
 #include "include/compat.h"
 #include "include/stringify.h"
+#include "common/blkdev.h"
 #include "common/errno.h"
 #include "common/debug.h"
-#include "common/blkdev.h"
 #include "common/align.h"
 
 #define dout_context cct
@@ -32,15 +32,19 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "bdev(" << this << " " << path << ") "
 
-KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv)
+KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, aio_callback_t d_cb, void *d_cbpriv)
   : BlockDevice(cct, cb, cbpriv),
     fd_direct(-1),
     fd_buffered(-1),
-    fs(NULL), aio(false), dio(false),
-    debug_lock("KernelDevice::debug_lock"),
+    aio(false), dio(false),
     aio_queue(cct->_conf->bdev_aio_max_queue_depth),
+    discard_callback(d_cb),
+    discard_callback_priv(d_cbpriv),
     aio_stop(false),
+    discard_started(false),
+    discard_stop(false),
     aio_thread(this),
+    discard_thread(this),
     injecting_crash(0)
 {
 }
@@ -63,13 +67,15 @@ int KernelDevice::open(const string& p)
   int r = 0;
   dout(1) << __func__ << " path " << path << dendl;
 
-  fd_direct = ::open(path.c_str(), O_RDWR | O_DIRECT);
+  fd_direct = ::open(path.c_str(), O_RDWR | O_DIRECT | O_CLOEXEC);
+  BlkDev blkdev_direct(fd_direct);
   if (fd_direct < 0) {
     r = -errno;
     derr << __func__ << " open got: " << cpp_strerror(r) << dendl;
     return r;
   }
-  fd_buffered = ::open(path.c_str(), O_RDWR);
+  fd_buffered = ::open(path.c_str(), O_RDWR | O_CLOEXEC);
+  BlkDev blkdev_buffered(fd_buffered);
   if (fd_buffered < 0) {
     r = -errno;
     derr << __func__ << " open got: " << cpp_strerror(r) << dendl;
@@ -78,7 +84,7 @@ int KernelDevice::open(const string& p)
   dio = true;
   aio = cct->_conf->bdev_aio;
   if (!aio) {
-    assert(0 == "non-aio not supported");
+    ceph_abort_msg("non-aio not supported");
   }
 
   // disable readahead as it will wreak havoc on our mix of
@@ -118,7 +124,7 @@ int KernelDevice::open(const string& p)
 
   if (S_ISBLK(st.st_mode)) {
     int64_t s;
-    r = get_block_device_size(fd_direct, &s);
+    r = blkdev_direct.get_size(&s);
     if (r < 0) {
       goto out_fail;
     }
@@ -129,15 +135,16 @@ int KernelDevice::open(const string& p)
 
   {
     char partition[PATH_MAX], devname[PATH_MAX];
-    r = get_device_by_fd(fd_buffered, partition, devname, sizeof(devname));
-    if (r < 0) {
+    if ((r = blkdev_buffered.partition(partition, PATH_MAX)) ||
+	(r = blkdev_buffered.wholedisk(devname, PATH_MAX))) {
       derr << "unable to get device name for " << path << ": "
 	   << cpp_strerror(r) << dendl;
       rotational = true;
     } else {
       dout(20) << __func__ << " devname " << devname << dendl;
-      rotational = block_device_is_rotational(devname);
+      rotational = blkdev_buffered.is_rotational();
       this->devname = devname;
+      _detect_vdo();
     }
   }
 
@@ -145,9 +152,7 @@ int KernelDevice::open(const string& p)
   if (r < 0) {
     goto out_fail;
   }
-
-  fs = FS::create_by_fd(fd_direct);
-  assert(fs);
+  _discard_start();
 
   // round size down to an even block
   size &= ~(block_size - 1);
@@ -155,9 +160,9 @@ int KernelDevice::open(const string& p)
   dout(1) << __func__
 	  << " size " << size
 	  << " (0x" << std::hex << size << std::dec << ", "
-	  << pretty_si_t(size) << "B)"
+	  << byte_u_t(size) << ")"
 	  << " block_size " << block_size
-	  << " (" << pretty_si_t(block_size) << "B)"
+	  << " (" << byte_u_t(block_size) << ")"
 	  << " " << (rotational ? "rotational" : "non-rotational")
 	  << dendl;
   return 0;
@@ -187,27 +192,22 @@ void KernelDevice::close()
 {
   dout(1) << __func__ << dendl;
   _aio_stop();
+  _discard_stop();
 
-  assert(fs);
-  delete fs;
-  fs = NULL;
+  if (vdo_fd >= 0) {
+    VOID_TEMP_FAILURE_RETRY(::close(vdo_fd));
+    vdo_fd = -1;
+  }
 
-  assert(fd_direct >= 0);
+  ceph_assert(fd_direct >= 0);
   VOID_TEMP_FAILURE_RETRY(::close(fd_direct));
   fd_direct = -1;
 
-  assert(fd_buffered >= 0);
+  ceph_assert(fd_buffered >= 0);
   VOID_TEMP_FAILURE_RETRY(::close(fd_buffered));
   fd_buffered = -1;
 
   path.clear();
-}
-
-static string get_dev_property(const char *dev, const char *property)
-{
-  char val[1024] = {0};
-  get_block_device_string_property(dev, property, val, sizeof(val));
-  return val;
 }
 
 int KernelDevice::collect_metadata(const string& prefix, map<string,string> *pm) const
@@ -221,6 +221,12 @@ int KernelDevice::collect_metadata(const string& prefix, map<string,string> *pm)
   } else {
     (*pm)[prefix + "type"] = "ssd";
   }
+  if (vdo_fd >= 0) {
+    (*pm)[prefix + "vdo"] = "true";
+    uint64_t total, avail;
+    get_vdo_utilization(vdo_fd, &total, &avail);
+    (*pm)[prefix + "vdo_physical_size"] = stringify(total);
+  }
 
   struct stat st;
   int r = ::fstat(fd_buffered, &st);
@@ -228,45 +234,63 @@ int KernelDevice::collect_metadata(const string& prefix, map<string,string> *pm)
     return -errno;
   if (S_ISBLK(st.st_mode)) {
     (*pm)[prefix + "access_mode"] = "blk";
-    char partition_path[PATH_MAX];
-    char dev_node[PATH_MAX];
-    int rc = get_device_by_fd(fd_buffered, partition_path, dev_node, PATH_MAX);
-    switch (rc) {
-    case -EOPNOTSUPP:
-    case -EINVAL:
+
+    char buffer[1024] = {0};
+    BlkDev blkdev{fd_buffered};
+    if (r = blkdev.partition(buffer, sizeof(buffer)); r) {
       (*pm)[prefix + "partition_path"] = "unknown";
-      (*pm)[prefix + "dev_node"] = "unknown";
-      break;
-    case -ENODEV:
-      (*pm)[prefix + "partition_path"] = string(partition_path);
-      (*pm)[prefix + "dev_node"] = "unknown";
-      break;
-    default:
-      {
-	(*pm)[prefix + "partition_path"] = string(partition_path);
-	(*pm)[prefix + "dev_node"] = string(dev_node);
-	(*pm)[prefix + "model"] = get_dev_property(dev_node, "device/model");
-	(*pm)[prefix + "dev"] = get_dev_property(dev_node, "dev");
-
-	// nvme exposes a serial number
-	string serial = get_dev_property(dev_node, "device/serial");
-	if (serial.length()) {
-	  (*pm)[prefix + "serial"] = serial;
-	}
-
-	// nvme has a device/device/* structure; infer from that.  there
-	// is probably a better way?
-	string nvme_vendor = get_dev_property(dev_node, "device/device/vendor");
-	if (nvme_vendor.length()) {
-	  (*pm)[prefix + "type"] = "nvme";
-	}
-      }
+    } else {
+      (*pm)[prefix + "partition_path"] = buffer;
     }
+    buffer[0] = '\0';
+    if (r = blkdev.partition(buffer, sizeof(buffer)); r) {
+      (*pm)[prefix + "dev_node"] = "unknown";
+    } else {
+      (*pm)[prefix + "dev_node"] = buffer;
+    }
+    if (!r) {
+      return 0;
+    }
+    buffer[0] = '\0';
+    blkdev.model(buffer, sizeof(buffer));
+    (*pm)[prefix + "model"] = buffer;
+
+    buffer[0] = '\0';
+    blkdev.dev(buffer, sizeof(buffer));
+    (*pm)[prefix + "dev"] = buffer;
+
+    // nvme exposes a serial number
+    buffer[0] = '\0';
+    blkdev.serial(buffer, sizeof(buffer));
+    (*pm)[prefix + "serial"] = buffer;
+
+    if (blkdev.is_nvme())
+      (*pm)[prefix + "type"] = "nvme";
   } else {
     (*pm)[prefix + "access_mode"] = "file";
     (*pm)[prefix + "path"] = path;
   }
   return 0;
+}
+
+void KernelDevice::_detect_vdo()
+{
+  vdo_fd = get_vdo_stats_handle(devname.c_str(), &vdo_name);
+  if (vdo_fd >= 0) {
+    dout(1) << __func__ << " VDO volume " << vdo_name
+	    << " maps to " << devname << dendl;
+  } else {
+    dout(20) << __func__ << " no VDO volume maps to " << devname << dendl;
+  }
+  return;
+}
+
+bool KernelDevice::get_thin_utilization(uint64_t *total, uint64_t *avail) const
+{
+  if (vdo_fd < 0) {
+    return false;
+  }
+  return get_vdo_utilization(vdo_fd, total, avail);
 }
 
 int KernelDevice::flush()
@@ -279,7 +303,7 @@ int KernelDevice::flush()
   // aio completion notification will not return before that aio is
   // stable on disk: whichever thread sees the flag first will block
   // followers until the aio is stable.
-  std::lock_guard<std::mutex> l(flush_mutex);
+  std::lock_guard l(flush_mutex);
 
   bool expect = true;
   if (!io_since_flush.compare_exchange_strong(expect, false)) {
@@ -342,6 +366,49 @@ void KernelDevice::_aio_stop()
   }
 }
 
+int KernelDevice::_discard_start()
+{
+    discard_thread.create("bstore_discard");
+    return 0;
+}
+
+void KernelDevice::_discard_stop()
+{
+  dout(10) << __func__ << dendl;
+  {
+    std::unique_lock l(discard_lock);
+    while (!discard_started) {
+      discard_cond.wait(l);
+    }
+    discard_stop = true;
+    discard_cond.notify_all();
+  }
+  discard_thread.join();
+  {
+    std::lock_guard l(discard_lock);
+    discard_stop = false;
+  }
+  dout(10) << __func__ << " stopped" << dendl;
+}
+
+void KernelDevice::discard_drain()
+{
+  dout(10) << __func__ << dendl;
+  std::unique_lock l(discard_lock);
+  while (!discard_queued.empty() || discard_running) {
+    discard_cond.wait(l);
+  }
+}
+
+static bool is_expected_ioerr(const int r)
+{
+  // https://lxr.missinglinkelectronics.com/linux+v4.15/block/blk-core.c#L135
+  return (r == -EOPNOTSUPP || r == -ETIMEDOUT || r == -ENOSPC ||
+	  r == -ENOLINK || r == -EREMOTEIO || r == -EBADE ||
+	  r == -ENODATA || r == -EILSEQ || r == -ENOMEM ||
+	  r == -EAGAIN || r == -EREMCHG || r == -EIO);
+}
+
 void KernelDevice::_aio_thread()
 {
   dout(10) << __func__ << " start" << dendl;
@@ -354,7 +421,7 @@ void KernelDevice::_aio_thread()
 					 aio, max);
     if (r < 0) {
       derr << __func__ << " got " << cpp_strerror(r) << dendl;
-      assert(0 == "got unexpected error from io_getevents");
+      ceph_abort_msg("got unexpected error from io_getevents");
     }
     if (r > 0) {
       dout(30) << __func__ << " got " << r << " completed aios" << dendl;
@@ -362,7 +429,7 @@ void KernelDevice::_aio_thread()
 	IOContext *ioc = static_cast<IOContext*>(aio[i]->priv);
 	_aio_log_finish(ioc, aio[i]->offset, aio[i]->length);
 	if (aio[i]->queue_item.is_linked()) {
-	  std::lock_guard<std::mutex> l(debug_queue_lock);
+	  std::lock_guard l(debug_queue_lock);
 	  debug_aio_unlink(*aio[i]);
 	}
 
@@ -374,18 +441,22 @@ void KernelDevice::_aio_thread()
 	// later flush() occurs.
 	io_since_flush.store(true);
 
-	int r = aio[i]->get_return_value();
+	long r = aio[i]->get_return_value();
         if (r < 0) {
-          derr << __func__ << " got " << cpp_strerror(r) << dendl;
-          if (ioc->allow_eio && r == -EIO) {
-            ioc->set_return_value(r);
+          derr << __func__ << " got r=" << r << " (" << cpp_strerror(r) << ")"
+	       << dendl;
+          if (ioc->allow_eio && is_expected_ioerr(r)) {
+            derr << __func__ << " translating the error to EIO for upper layer"
+		 << dendl;
+            ioc->set_return_value(-EIO);
           } else {
-            assert(0 == "got unexpected error from io_getevents");
+            ceph_assert(0 == "got unexpected error from aio_t::get_return_value. "
+			"This may suggest HW issue. Please check your dmesg!");
           }
         } else if (aio[i]->length != (uint64_t)r) {
           derr << "aio to " << aio[i]->offset << "~" << aio[i]->length
                << " but returned: " << r << dendl;
-          assert(0 == "unexpected aio error");
+          ceph_abort_msg("unexpected aio error");
         }
 
         dout(10) << __func__ << " finished aio " << aio[i] << " r " << r
@@ -407,7 +478,7 @@ void KernelDevice::_aio_thread()
     }
     if (cct->_conf->bdev_debug_aio) {
       utime_t now = ceph_clock_now();
-      std::lock_guard<std::mutex> l(debug_queue_lock);
+      std::lock_guard l(debug_queue_lock);
       if (debug_oldest) {
 	if (debug_stall_since == utime_t()) {
 	  debug_stall_since = now;
@@ -419,7 +490,7 @@ void KernelDevice::_aio_thread()
 		 << " since " << debug_stall_since << ", timeout is "
 		 << cct->_conf->bdev_debug_aio_suicide_timeout
 		 << "s, suicide" << dendl;
-	    assert(0 == "stalled aio... buggy kernel or bad device?");
+	    ceph_abort_msg("stalled aio... buggy kernel or bad device?");
 	  }
 	}
       }
@@ -440,6 +511,54 @@ void KernelDevice::_aio_thread()
   dout(10) << __func__ << " end" << dendl;
 }
 
+void KernelDevice::_discard_thread()
+{
+  std::unique_lock l(discard_lock);
+  ceph_assert(!discard_started);
+  discard_started = true;
+  discard_cond.notify_all();
+  while (true) {
+    ceph_assert(discard_finishing.empty());
+    if (discard_queued.empty()) {
+      if (discard_stop)
+	break;
+      dout(20) << __func__ << " sleep" << dendl;
+      discard_cond.notify_all(); // for the thread trying to drain...
+      discard_cond.wait(l);
+      dout(20) << __func__ << " wake" << dendl;
+    } else {
+      discard_finishing.swap(discard_queued);
+      discard_running = true;
+      l.unlock();
+      dout(20) << __func__ << " finishing" << dendl;
+      for (auto p = discard_finishing.begin();p != discard_finishing.end(); ++p) {
+	discard(p.get_start(), p.get_len());
+      }
+
+      discard_callback(discard_callback_priv, static_cast<void*>(&discard_finishing));
+      discard_finishing.clear();
+      l.lock();
+      discard_running = false;
+    }
+  }
+  dout(10) << __func__ << " finish" << dendl;
+  discard_started = false;
+}
+
+int KernelDevice::queue_discard(interval_set<uint64_t> &to_release)
+{
+  if (rotational)
+    return -1;
+
+  if (to_release.empty())
+    return 0;
+
+  std::lock_guard l(discard_lock);
+  discard_queued.insert(to_release);
+  discard_cond.notify_all();
+  return 0;
+}
+
 void KernelDevice::_aio_log_start(
   IOContext *ioc,
   uint64_t offset,
@@ -448,7 +567,7 @@ void KernelDevice::_aio_log_start(
   dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << std::dec << dendl;
   if (cct->_conf->bdev_debug_inflight_ios) {
-    Mutex::Locker l(debug_lock);
+    std::lock_guard l(debug_lock);
     if (debug_inflight.intersects(offset, length)) {
       derr << __func__ << " inflight overlap of 0x"
 	   << std::hex
@@ -491,7 +610,7 @@ void KernelDevice::_aio_log_finish(
   dout(20) << __func__ << " " << aio << " 0x"
 	   << std::hex << offset << "~" << length << std::dec << dendl;
   if (cct->_conf->bdev_debug_inflight_ios) {
-    Mutex::Locker l(debug_lock);
+    std::lock_guard l(debug_lock);
     debug_inflight.erase(offset, length);
   }
 }
@@ -516,28 +635,28 @@ void KernelDevice::aio_submit(IOContext *ioc)
   int pending = ioc->num_pending.load();
   ioc->num_running += pending;
   ioc->num_pending -= pending;
-  assert(ioc->num_pending.load() == 0);  // we should be only thread doing this
-  assert(ioc->pending_aios.size() == 0);
+  ceph_assert(ioc->num_pending.load() == 0);  // we should be only thread doing this
+  ceph_assert(ioc->pending_aios.size() == 0);
   
   if (cct->_conf->bdev_debug_aio) {
     list<aio_t>::iterator p = ioc->running_aios.begin();
     while (p != e) {
       dout(30) << __func__ << " " << *p << dendl;
-      std::lock_guard<std::mutex> l(debug_queue_lock);
+      std::lock_guard l(debug_queue_lock);
       debug_aio_link(*p++);
     }
   }
 
   void *priv = static_cast<void*>(ioc);
   int r, retries = 0;
-  r = aio_queue.submit_batch(ioc->running_aios.begin(), e, 
+  r = aio_queue.submit_batch(ioc->running_aios.begin(), e,
 			     pending, priv, &retries);
-  
+
   if (retries)
     derr << __func__ << " retries " << retries << dendl;
   if (r < 0) {
     derr << " aio submit got " << cpp_strerror(r) << dendl;
-    assert(r == 0);
+    ceph_assert(r == 0);
   }
 }
 
@@ -545,7 +664,7 @@ int KernelDevice::_sync_write(uint64_t off, bufferlist &bl, bool buffered)
 {
   uint64_t len = bl.length();
   dout(5) << __func__ << " 0x" << std::hex << off << "~" << len
-	  << std::dec << " buffered" << dendl;
+	  << std::dec << (buffered ? " (buffered)" : " (direct)") << dendl;
   if (cct->_conf->bdev_inject_crash &&
       rand() % cct->_conf->bdev_inject_crash == 0) {
     derr << __func__ << " bdev_inject_crash: dropping io 0x" << std::hex
@@ -587,7 +706,7 @@ int KernelDevice::write(
   dout(20) << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
 	   << (buffered ? " (buffered)" : " (direct)")
 	   << dendl;
-  assert(is_valid_io(off, len));
+  ceph_assert(is_valid_io(off, len));
 
   if ((!buffered || bl.get_num_buffers() >= IOV_MAX) &&
       bl.rebuild_aligned_size_and_memory(block_size, block_size, IOV_MAX)) {
@@ -610,11 +729,7 @@ int KernelDevice::aio_write(
   dout(20) << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
 	   << (buffered ? " (buffered)" : " (direct)")
 	   << dendl;
-  assert(off % block_size == 0);
-  assert(len % block_size == 0);
-  assert(len > 0);
-  assert(off < size);
-  assert(off + len <= size);
+  ceph_assert(is_valid_io(off, len));
 
   if ((!buffered || bl.get_num_buffers() >= IOV_MAX) &&
       bl.rebuild_aligned_size_and_memory(block_size, block_size, IOV_MAX)) {
@@ -659,6 +774,19 @@ int KernelDevice::aio_write(
   return 0;
 }
 
+int KernelDevice::discard(uint64_t offset, uint64_t len)
+{
+  int r = 0;
+  if (!rotational) {
+      dout(10) << __func__
+	       << " 0x" << std::hex << offset << "~" << len << std::dec
+	       << dendl;
+
+      r = BlkDev{fd_direct}.discard((int64_t)offset, (int64_t)len);
+  }
+  return r;
+}
+
 int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
 		      IOContext *ioc,
 		      bool buffered)
@@ -666,18 +794,18 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   dout(5) << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
 	  << (buffered ? " (buffered)" : " (direct)")
 	  << dendl;
-  assert(is_valid_io(off, len));
+  ceph_assert(is_valid_io(off, len));
 
   _aio_log_start(ioc, off, len);
 
-  bufferptr p = buffer::create_page_aligned(len);
+  bufferptr p = buffer::create_small_page_aligned(len);
   int r = ::pread(buffered ? fd_buffered : fd_direct,
 		  p.c_str(), len, off);
   if (r < 0) {
     r = -errno;
     goto out;
   }
-  assert((uint64_t)r == len);
+  ceph_assert((uint64_t)r == len);
   pbl->push_back(std::move(p));
 
   dout(40) << "data: ";
@@ -701,6 +829,7 @@ int KernelDevice::aio_read(
   int r = 0;
 #ifdef HAVE_LIBAIO
   if (aio && dio) {
+    ceph_assert(is_valid_io(off, len));
     _aio_log_start(ioc, off, len);
     ioc->pending_aios.push_back(aio_t(ioc, fd_direct));
     ++ioc->num_pending;
@@ -723,17 +852,17 @@ int KernelDevice::direct_read_unaligned(uint64_t off, uint64_t len, char *buf)
 {
   uint64_t aligned_off = align_down(off, block_size);
   uint64_t aligned_len = align_up(off+len, block_size) - aligned_off;
-  bufferptr p = buffer::create_page_aligned(aligned_len);
+  bufferptr p = buffer::create_small_page_aligned(aligned_len);
   int r = 0;
 
   r = ::pread(fd_direct, p.c_str(), aligned_len, aligned_off);
   if (r < 0) {
     r = -errno;
-    derr << __func__ << " 0x" << std::hex << off << "~" << len << std::dec 
+    derr << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
       << " error: " << cpp_strerror(r) << dendl;
     goto out;
   }
-  assert((uint64_t)r == aligned_len);
+  ceph_assert((uint64_t)r == aligned_len);
   memcpy(buf, p.c_str() + (off - aligned_off), len);
 
   dout(40) << __func__ << " data: ";
@@ -751,9 +880,9 @@ int KernelDevice::read_random(uint64_t off, uint64_t len, char *buf,
 {
   dout(5) << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
 	  << dendl;
-  assert(len > 0);
-  assert(off < size);
-  assert(off + len <= size);
+  ceph_assert(len > 0);
+  ceph_assert(off < size);
+  ceph_assert(off + len <= size);
   int r = 0;
 
   //if it's direct io and unaligned, we have to use a internal buffer
@@ -770,7 +899,7 @@ int KernelDevice::read_random(uint64_t off, uint64_t len, char *buf,
       r = ::pread(fd_buffered, t, left, off);
       if (r < 0) {
 	r = -errno;
-        derr << __func__ << " 0x" << std::hex << off << "~" << left 
+        derr << __func__ << " 0x" << std::hex << off << "~" << left
           << std::dec << " error: " << cpp_strerror(r) << dendl;
 	goto out;
       }
@@ -783,12 +912,12 @@ int KernelDevice::read_random(uint64_t off, uint64_t len, char *buf,
     r = ::pread(fd_direct, buf, len, off);
     if (r < 0) {
       r = -errno;
-      derr << __func__ << " direct_aligned_read" << " 0x" << std::hex 
-        << off << "~" << left << std::dec << " error: " << cpp_strerror(r) 
+      derr << __func__ << " direct_aligned_read" << " 0x" << std::hex
+        << off << "~" << left << std::dec << " error: " << cpp_strerror(r)
         << dendl;
       goto out;
     }
-    assert((uint64_t)r == len);
+    ceph_assert((uint64_t)r == len);
   }
 
   dout(40) << __func__ << " data: ";
@@ -805,8 +934,8 @@ int KernelDevice::invalidate_cache(uint64_t off, uint64_t len)
 {
   dout(5) << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
 	  << dendl;
-  assert(off % block_size == 0);
-  assert(len % block_size == 0);
+  ceph_assert(off % block_size == 0);
+  ceph_assert(len % block_size == 0);
   int r = posix_fadvise(fd_buffered, off, len, POSIX_FADV_DONTNEED);
   if (r) {
     r = -r;

@@ -6,7 +6,6 @@
 #include <set>
 #include <map>
 #include <string>
-#include "include/memory.h"
 #include <errno.h>
 using std::string;
 #include "common/perf_counters.h"
@@ -40,7 +39,7 @@ int KineticStore::_test_init(CephContext *c)
   kinetic::Status status = conn_factory.NewThreadsafeBlockingConnection(options, kinetic_conn, 10);
   kinetic_conn.reset();
   if (!status.ok())
-    derr << __func__ << "Unable to connect to kinetic store " << options.host
+    derr << __func__ << " Unable to connect to kinetic store " << options.host
          << ":" << options.port << " : " << status.ToString() << dendl;
   return status.ok() ? 0 : -EIO;
 }
@@ -48,7 +47,7 @@ int KineticStore::_test_init(CephContext *c)
 int KineticStore::open(ostream &out, const vector<ColumnFamily>& cfs)
 {
   if (!cfs.empty()) {
-    assert(0 == "Not implemented");
+    ceph_abort_msg("Not implemented");
   }
   return do_open(out, false);
 }
@@ -56,7 +55,7 @@ int KineticStore::open(ostream &out, const vector<ColumnFamily>& cfs)
 int KineticStore::create_and_open(ostream &out, const vector<ColumnFamily>& cfs)
 {
   if (!cfs.empty()) {
-    assert(0 == "Not implemented");
+    ceph_abort_msg("Not implemented");
   }
   return do_open(out, true);
 }
@@ -129,7 +128,7 @@ int KineticStore::submit_transaction(KeyValueDB::Transaction t)
 				 record);
       dout(30) << "kinetic after put of " << it->key << dendl;
     } else {
-      assert(it->type == KINETIC_OP_DELETE);
+      ceph_assert(it->type == KINETIC_OP_DELETE);
       dout(30) << "kinetic before delete" << dendl;
       status = kinetic_conn->Delete(it->key, "",
 				    kinetic::WriteMode::IGNORE_VERSION);

@@ -11,7 +11,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_context g_ceph_context
 static volatile sig_atomic_t got_sigusr1 = 0;
@@ -70,7 +70,7 @@ void testhandler(int signal)
     usr2 = true;
     break;
   default:
-    assert(0 == "unexpected signal");
+    ceph_abort_msg("unexpected signal");
   }
 }
 

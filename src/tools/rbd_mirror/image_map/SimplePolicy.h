@@ -17,18 +17,19 @@ public:
   }
 
 protected:
-  using Policy::m_map_lock;
-  using Policy::m_map;
-
   SimplePolicy(librados::IoCtx &ioctx);
 
-  std::string do_map(const std::string &global_image_id) override;
+  std::string do_map(const InstanceToImageMap& map,
+                     const std::string &global_image_id) override;
 
-  void do_shuffle_add_instances(const std::vector<std::string> &instance_ids,
-                                std::set<std::string> *remap_global_image_ids) override;
+  void do_shuffle_add_instances(
+      const InstanceToImageMap& map, size_t image_count,
+      std::set<std::string> *remap_global_image_ids) override;
 
 private:
-  uint64_t calc_images_per_instance(int nr_instances);
+  size_t calc_images_per_instance(const InstanceToImageMap& map,
+                                  size_t image_count);
+
 };
 
 } // namespace image_map

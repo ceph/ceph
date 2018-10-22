@@ -16,13 +16,40 @@
 
 #include <atomic>
 #include "common/histogram.h"
-#include "msg/Message.h"
 #include "common/RWLock.h"
+#include "common/Thread.h"
+#include "include/spinlock.h"
+#include "msg/Message.h"
 
 #define OPTRACKER_PREALLOC_EVENTS 20
 
 class TrackedOp;
+class OpHistory;
+
 typedef boost::intrusive_ptr<TrackedOp> TrackedOpRef;
+
+class OpHistoryServiceThread : public Thread
+{
+private:
+  list<pair<utime_t, TrackedOpRef>> _external_queue;
+  OpHistory* _ophistory;
+  mutable ceph::spinlock queue_spinlock;
+  bool _break_thread;
+public:
+  explicit OpHistoryServiceThread(OpHistory* parent)
+    : _ophistory(parent),
+      _break_thread(false) { }
+
+  void break_thread();
+  void insert_op(const utime_t& now, TrackedOpRef op) {
+    queue_spinlock.lock();
+    _external_queue.emplace_back(now, op);
+    queue_spinlock.unlock();
+  }
+
+  void *entry() override;
+};
+
 
 class OpHistory {
   set<pair<utime_t, TrackedOpRef> > arrived;
@@ -30,24 +57,36 @@ class OpHistory {
   set<pair<utime_t, TrackedOpRef> > slow_op;
   Mutex ops_history_lock;
   void cleanup(utime_t now);
-  bool shutdown;
   uint32_t history_size;
   uint32_t history_duration;
   uint32_t history_slow_op_size;
   uint32_t history_slow_op_threshold;
+  std::atomic_bool shutdown;
+  OpHistoryServiceThread opsvc;
+  friend class OpHistoryServiceThread;
 
 public:
-  OpHistory() : ops_history_lock("OpHistory::Lock"), shutdown(false),
+  OpHistory() : ops_history_lock("OpHistory::Lock"),
     history_size(0), history_duration(0),
-    history_slow_op_size(0), history_slow_op_threshold(0) {}
-  ~OpHistory() {
-    assert(arrived.empty());
-    assert(duration.empty());
-    assert(slow_op.empty());
+    history_slow_op_size(0), history_slow_op_threshold(0),
+    shutdown(false), opsvc(this) {
+    opsvc.create("OpHistorySvc");
   }
-  void insert(utime_t now, TrackedOpRef op);
-  void dump_ops(utime_t now, Formatter *f, set<string> filters = {""});
-  void dump_ops_by_duration(utime_t now, Formatter *f, set<string> filters = {""});
+  ~OpHistory() {
+    ceph_assert(arrived.empty());
+    ceph_assert(duration.empty());
+    ceph_assert(slow_op.empty());
+  }
+  void insert(const utime_t& now, TrackedOpRef op)
+  {
+    if (shutdown)
+      return;
+
+    opsvc.insert_op(now, op);
+  }
+
+  void _insert_delayed(const utime_t& now, TrackedOpRef op);
+  void dump_ops(utime_t now, Formatter *f, set<string> filters = {""}, bool by_duration=false);
   void dump_slow_ops(utime_t now, Formatter *f, set<string> filters = {""});
   void on_shutdown();
   void set_size_and_duration(uint32_t new_size, uint32_t new_duration) {
@@ -65,8 +104,8 @@ class OpTracker {
   friend class OpHistory;
   std::atomic<int64_t> seq = { 0 };
   vector<ShardedTrackingData*> sharded_in_flight_list;
-  uint32_t num_optracker_shards;
   OpHistory history;
+  uint32_t num_optracker_shards;
   float complaint_time;
   int log_threshold;
   std::atomic<bool> tracking_enabled;
@@ -97,6 +136,7 @@ public:
   bool dump_historic_slow_ops(Formatter *f, set<string> filters = {""});
   bool register_inflight_op(TrackedOp *i);
   void unregister_inflight_op(TrackedOp *i);
+  void record_history_op(TrackedOpRef&& i);
 
   void get_age_ms_histogram(pow2_hist_t *h);
 
@@ -115,12 +155,14 @@ public:
    *
    * @param[out] oldest_sec the amount of time since the oldest op was initiated
    * @param[out] num_slow_ops total number of slow ops
+   * @param[out] num_warned_ops total number of warned ops
    * @param on_warn a function consuming tracked ops, the function returns
    *                false if it don't want to be fed with more ops
    * @return True if there are any Ops to warn on, false otherwise
    */
   bool with_slow_ops_in_flight(utime_t* oldest_secs,
 			       int* num_slow_ops,
+			       int* num_warned_ops,
 			       std::function<void(TrackedOp&)>&& on_warn);
   /**
    * Look for Ops which are too old, and insert warning
@@ -146,6 +188,14 @@ public:
   {
     typename T::Ref retval(new T(params, this));
     retval->tracking_start();
+
+    if (is_tracking()) {
+      retval->mark_event("header_read", params->get_recv_stamp());
+      retval->mark_event("throttled", params->get_throttle_stamp());
+      retval->mark_event("all_read", params->get_recv_complete_stamp());
+      retval->mark_event("dispatched", params->get_dispatch_stamp());
+    }
+
     return retval;
   }
 };
@@ -256,7 +306,9 @@ public:
     ++nref;
   }
   void put() {
-    if (--nref == 0) {
+  again:
+    auto nref_snap = nref.load();
+    if (nref_snap == 1) {
       switch (state.load()) {
       case STATE_UNTRACKED:
 	_unregistered();
@@ -266,6 +318,14 @@ public:
       case STATE_LIVE:
 	mark_event("done");
 	tracker->unregister_inflight_op(this);
+	_unregistered();
+	if (!tracker->is_tracking()) {
+	  delete this;
+	} else {
+	  state = TrackedOp::STATE_HISTORY;
+	  tracker->record_history_op(
+	    TrackedOpRef(this, /* add_ref = */ false));
+	}
 	break;
 
       case STATE_HISTORY:
@@ -275,12 +335,14 @@ public:
       default:
 	ceph_abort();
       }
+    } else if (!nref.compare_exchange_weak(nref_snap, nref_snap - 1)) {
+      goto again;
     }
   }
 
   const char *get_desc() const {
     if (!desc || want_new_desc.load()) {
-      Mutex::Locker l(lock);
+      std::lock_guard<Mutex> l(lock);
       _gen_desc();
     }
     return desc;
@@ -303,7 +365,7 @@ public:
   }
 
   double get_duration() const {
-    Mutex::Locker l(lock);
+    std::lock_guard<Mutex> l(lock);
     if (!events.empty() && events.rbegin()->compare("done") == 0)
       return events.rbegin()->stamp - get_initiated();
     else
@@ -315,8 +377,12 @@ public:
   void mark_event(const char *event,
 		  utime_t stamp=ceph_clock_now());
 
+  void mark_nowarn() {
+    warn_interval_multiplier = 0;
+  }
+
   virtual const char *state_string() const {
-    Mutex::Locker l(lock);
+    std::lock_guard<Mutex> l(lock);
     return events.rbegin()->c_str();
   }
 
@@ -324,7 +390,7 @@ public:
 
   void tracking_start() {
     if (tracker->register_inflight_op(this)) {
-      events.push_back(Event(initiated_at, "initiated"));
+      events.emplace_back(initiated_at, "initiated");
       state = STATE_LIVE;
     }
   }

@@ -26,7 +26,50 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 
-int Resetter::reset(mds_role_t role)
+int Resetter::init(mds_role_t role_, const std::string &type, bool hard)
+{
+  role = role_;
+  int r = MDSUtility::init();
+  if (r < 0) {
+    return r;
+  }
+
+  auto fs = fsmap->get_filesystem(role.fscid);
+  ceph_assert(nullptr != fs);
+
+  is_mdlog = false;
+  if (type == "mdlog") {
+    JournalPointer jp(role.rank, fs->mds_map.get_metadata_pool());
+    int rt = 0;
+    if (hard) {
+      jp.front = role.rank + MDS_INO_LOG_OFFSET;
+      jp.back = 0;
+      rt = jp.save(objecter);
+      if (rt != 0) {
+        derr << "Error writing journal pointer:  " << cpp_strerror(rt) << dendl;
+        return rt;
+      }
+      ino = jp.front; // only need to reset ino for mdlog
+    } else {
+      rt = jp.load(objecter);
+      if (rt != 0) {
+        std::cerr << "Error loading journal: " << cpp_strerror(rt) <<
+        ", pass --force to forcibly reset this journal" << std::endl;
+        return rt;
+      } else {
+        ino = jp.front;
+      }
+    }
+    is_mdlog = true;
+  } else if (type == "purge_queue") {
+    ino = MDS_INO_PURGE_QUEUE + role.rank;
+  } else {
+    ceph_abort(); // should not get here
+  }
+  return 0; 
+}
+
+int Resetter::reset()
 {
   Mutex mylock("Resetter::reset::lock");
   Cond cond;
@@ -34,19 +77,10 @@ int Resetter::reset(mds_role_t role)
   int r;
 
   auto fs =  fsmap->get_filesystem(role.fscid);
-  assert(fs != nullptr);
-  int64_t const pool_id = fs->mds_map.get_metadata_pool();
+  ceph_assert(fs != nullptr);
 
-  JournalPointer jp(role.rank, pool_id);
-  int jp_load_result = jp.load(objecter);
-  if (jp_load_result != 0) {
-    std::cerr << "Error loading journal: " << cpp_strerror(jp_load_result) <<
-      ", pass --force to forcibly reset this journal" << std::endl;
-    return jp_load_result;
-  }
-
-  Journaler journaler("resetter", jp.front,
-      pool_id,
+  Journaler journaler("resetter", ino,
+      fs->mds_map.get_metadata_pool(),
       CEPH_FS_ONDISK_MAGIC,
       objecter, 0, 0, &finisher);
 
@@ -78,7 +112,7 @@ int Resetter::reset(mds_role_t role)
   uint64_t old_len = old_end - old_start;
   cout << "old journal was " << old_start << "~" << old_len << std::endl;
 
-  uint64_t new_start = ROUND_UP_TO(old_end+1, journaler.get_layout_period());
+  uint64_t new_start = round_up_to(old_end+1, journaler.get_layout_period());
   cout << "new journal start will be " << new_start
        << " (" << (new_start - old_end) << " bytes past old end)" << std::endl;
 
@@ -101,81 +135,90 @@ int Resetter::reset(mds_role_t role)
   if (r != 0) {
     return r;
   }
-
-  r = _write_reset_event(&journaler);
-  if (r != 0) {
-    return r;
+ 
+  if (is_mdlog) {
+    r = _write_reset_event(&journaler); // reset envent is specific for mdlog journal
+    if (r != 0) {
+      return r;
+    }
   }
-
   cout << "done" << std::endl;
 
   return 0;
 }
 
-int Resetter::reset_hard(mds_role_t role)
+int Resetter::reset_hard()
 {
   auto fs =  fsmap->get_filesystem(role.fscid);
-  assert(fs != nullptr);
-  int64_t const pool_id = fs->mds_map.get_metadata_pool();
-
-  JournalPointer jp(role.rank, pool_id);
-  jp.front = role.rank + MDS_INO_LOG_OFFSET;
-  jp.back = 0;
-  int r = jp.save(objecter);
-  if (r != 0) {
-    derr << "Error writing journal pointer: " << cpp_strerror(r) << dendl;
-    return r;
-  }
-
-  Journaler journaler("resetter", jp.front,
-    pool_id,
+  
+  Journaler journaler("resetter", ino,
+    fs->mds_map.get_metadata_pool(),
     CEPH_FS_ONDISK_MAGIC,
     objecter, 0, 0, &finisher);
   journaler.set_writeable();
 
   file_layout_t default_log_layout = MDCache::gen_default_log_layout(
       fsmap->get_filesystem(role.fscid)->mds_map);
-  journaler.create(&default_log_layout, g_conf->mds_journal_format);
+  journaler.create(&default_log_layout, g_conf()->mds_journal_format);
 
   C_SaferCond cond;
   {
     Mutex::Locker l(lock);
     journaler.write_head(&cond);
   }
-  r = cond.wait();
+  
+  int r = cond.wait();
   if (r != 0) {
     derr << "Error writing journal header: " << cpp_strerror(r) << dendl;
     return r;
   }
-
+  
+  if (is_mdlog) // reset event is specific for mdlog journal
   {
     Mutex::Locker l(lock);
     r = _write_reset_event(&journaler);
+    if (r != 0) {
+      derr << "Error writing EResetJournal: " << cpp_strerror(r) << dendl;
+      return r;
+    }
   }
-  if (r != 0) {
-    derr << "Error writing EResetJournal: " << cpp_strerror(r) << dendl;
-    return r;
+  
+  if (is_mdlog) {
+    dout(4) << "Successfully wrote new journal pointer and header for rank "
+      << role << dendl;
+  } else {
+    dout(4) << "Successfully wrote header for rank " << role << dendl;
   }
-
-  dout(4) << "Successfully wrote new journal pointer and header for rank "
-    << role << dendl;
   return 0;
 }
 
 int Resetter::_write_reset_event(Journaler *journaler)
 {
-  assert(journaler != NULL);
+  ceph_assert(journaler != NULL);
 
   LogEvent *le = new EResetJournal;
 
   bufferlist bl;
   le->encode_with_header(bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
-  
-  cout << "writing EResetJournal entry" << std::endl;
-  C_SaferCond cond;
-  journaler->append_entry(bl);
-  journaler->flush(&cond);
 
-  return cond.wait();
+  cout << "writing EResetJournal entry" << std::endl;
+  journaler->append_entry(bl);
+
+  int ret;
+  {
+    C_SaferCond cond;
+    journaler->flush(&cond);
+    ret = cond.wait();
+    if (ret < 0)
+      return ret;
+  }
+  {
+    // wait until all journal prezero ops are done
+    C_SaferCond cond;
+    journaler->wait_for_prezero(&cond);
+    cond.wait();
+  }
+
+  return ret;
 }
 

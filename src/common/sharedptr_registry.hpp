@@ -27,8 +27,8 @@
 template <class K, class V, class C = std::less<K> >
 class SharedPtrRegistry {
 public:
-  typedef ceph::shared_ptr<V> VPtr;
-  typedef ceph::weak_ptr<V> WeakVPtr;
+  typedef std::shared_ptr<V> VPtr;
+  typedef std::weak_ptr<V> WeakVPtr;
   int waiting;
 private:
   Mutex lock;

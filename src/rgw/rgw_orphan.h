@@ -48,19 +48,19 @@ struct RGWOrphanSearchStage {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode((int)stage, bl);
-    ::encode(shard, bl);
-    ::encode(marker, bl);
+    encode((int)stage, bl);
+    encode(shard, bl);
+    encode(marker, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     int s;
-    ::decode(s, bl);
+    decode(s, bl);
     stage = (RGWOrphanSearchStageId)s;
-    ::decode(shard, bl);
-    ::decode(marker, bl);
+    decode(shard, bl);
+    decode(marker, bl);
     DECODE_FINISH(bl);
   }
 
@@ -76,21 +76,21 @@ struct RGWOrphanSearchInfo {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 1, bl);
-    ::encode(job_name, bl);
-    ::encode(pool.to_str(), bl);
-    ::encode(num_shards, bl);
-    ::encode(start_time, bl);
+    encode(job_name, bl);
+    encode(pool.to_str(), bl);
+    encode(num_shards, bl);
+    encode(start_time, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(2, bl);
-    ::decode(job_name, bl);
+    decode(job_name, bl);
     string s;
-    ::decode(s, bl);
+    decode(s, bl);
     pool.from_str(s);
-    ::decode(num_shards, bl);
-    ::decode(start_time, bl);
+    decode(num_shards, bl);
+    decode(start_time, bl);
     DECODE_FINISH(bl);
   }
 
@@ -106,15 +106,15 @@ struct RGWOrphanSearchState {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(info, bl);
-    ::encode(stage, bl);
+    encode(info, bl);
+    encode(stage, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(info, bl);
-    ::decode(stage, bl);
+    decode(info, bl);
+    decode(stage, bl);
     DECODE_FINISH(bl);
   }
 

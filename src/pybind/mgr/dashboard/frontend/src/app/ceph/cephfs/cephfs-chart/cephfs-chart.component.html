@@ -1,0 +1,12 @@
+<div class="chart-container">
+  <canvas baseChart
+          #chartCanvas
+          [datasets]="chart?.datasets"
+          [options]="chart?.options"
+          [chartType]="chart?.chartType">
+  </canvas>
+  <div class="chartjs-tooltip"
+       #chartTooltip>
+    <table></table>
+  </div>
+</div>

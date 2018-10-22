@@ -188,18 +188,18 @@ struct DummyBlock {
   int a = 1, b = 2, c = 3, d = 4;
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(a, bl);
-    ::encode(b, bl);
-    ::encode(c, bl);
-    ::encode(d, bl);
+    encode(a, bl);
+    encode(b, bl);
+    encode(c, bl);
+    encode(d, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START(1, bl);
-    ::decode(a, bl);
-    ::decode(b, bl);
-    ::decode(c, bl);
-    ::decode(d, bl);
+    decode(a, bl);
+    decode(b, bl);
+    decode(c, bl);
+    decode(d, bl);
     DECODE_FINISH(bl);
   }
 };
@@ -214,9 +214,9 @@ double buffer_encode_decode()
   for (int i = 0; i < count; i++) {
     bufferlist b;
     DummyBlock dummy_block;
-    ::encode(dummy_block, b);
-    bufferlist::iterator iter = b.begin();
-    ::decode(dummy_block, iter);
+    encode(dummy_block, b);
+    auto iter = b.cbegin();
+    decode(dummy_block, iter);
   }
   uint64_t stop = Cycles::rdtsc();
   return Cycles::to_seconds(stop - start)/count;
@@ -261,37 +261,21 @@ double buffer_encode()
   for (int i = 0; i < count; i++) {
     bufferlist b;
     DummyBlock dummy_block;
-    ::encode(dummy_block, b);
+    encode(dummy_block, b);
     uint64_t start = Cycles::rdtsc();
-    ::encode(dummy_block, b);
-    ::encode(dummy_block, b);
-    ::encode(dummy_block, b);
-    ::encode(dummy_block, b);
-    ::encode(dummy_block, b);
-    ::encode(dummy_block, b);
-    ::encode(dummy_block, b);
-    ::encode(dummy_block, b);
-    ::encode(dummy_block, b);
-    ::encode(dummy_block, b);
+    encode(dummy_block, b);
+    encode(dummy_block, b);
+    encode(dummy_block, b);
+    encode(dummy_block, b);
+    encode(dummy_block, b);
+    encode(dummy_block, b);
+    encode(dummy_block, b);
+    encode(dummy_block, b);
+    encode(dummy_block, b);
+    encode(dummy_block, b);
     total += Cycles::rdtsc() - start;
   }
   return Cycles::to_seconds(total)/(count*10);
-}
-
-// Measure the cost of retrieving an object from the beginning of a buffer.
-double buffer_get_contiguous()
-{
-  int count = 1000000;
-  int value = 11;
-  bufferlist b;
-  b.append((char*)&value, sizeof(value));
-  int sum = 0;
-  uint64_t start = Cycles::rdtsc();
-  for (int i = 0; i < count; i++) {
-    sum += *reinterpret_cast<int*>(b.get_contiguous(0, sizeof(value)));
-  }
-  uint64_t stop = Cycles::rdtsc();
-  return Cycles::to_seconds(stop - start)/count;
 }
 
 // Measure the cost of creating an iterator and iterating over 10
@@ -308,7 +292,7 @@ double buffer_iterator()
   int sum = 0;
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
-    bufferlist::iterator it = b.begin();
+    auto it = b.cbegin();
     while (!it.end()) {
       sum += (static_cast<const char*>(it.get_current_ptr().c_str()))[it.get_remaining()-1];
       ++it;
@@ -637,11 +621,10 @@ double perf_prefetch()
   uint64_t total_ticks = 0;
   int count = 10;
   char buf[16 * 64];
-  uint64_t start, stop;
 
   for (int i = 0; i < count; i++) {
     PerfHelper::flush_cache();
-    start = Cycles::rdtsc();
+    uint64_t start = Cycles::rdtsc();
     prefetch(&buf[576], 64);
     prefetch(&buf[0],   64);
     prefetch(&buf[512], 64);
@@ -658,7 +641,7 @@ double perf_prefetch()
     prefetch(&buf[832], 64);
     prefetch(&buf[64],  64);
     prefetch(&buf[192], 64);
-    stop = Cycles::rdtsc();
+    uint64_t stop = Cycles::rdtsc();
     total_ticks += stop - start;
   }
   return Cycles::to_seconds(total_ticks) / count / 16;
@@ -931,8 +914,6 @@ TestInfo tests[] = {
     "copy out 2 small ptrs from buffer"},
   {"buffer_encode10", buffer_encode,
     "buffer encoding 10 structures onto existing ptr"},
-  {"buffer_get_contiguous", buffer_get_contiguous,
-    "Buffer::get_contiguous"},
   {"buffer_iterator", buffer_iterator,
     "iterate over buffer with 5 ptrs"},
   {"cond_ping_pong", cond_ping_pong,
@@ -1021,7 +1002,8 @@ int main(int argc, char *argv[])
   argv_to_vec(argc, (const char **)argv, args);
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
   Cycles::init();
 

@@ -22,8 +22,10 @@
 #include <arpa/inet.h>
 
 #include "net_handler.h"
-#include "common/errno.h"
 #include "common/debug.h"
+#include "common/errno.h"
+#include "include/compat.h"
+#include "include/sock_compat.h"
 
 #define dout_subsys ceph_subsys_ms
 #undef dout_prefix
@@ -36,7 +38,7 @@ int NetHandler::create_socket(int domain, bool reuse_addr)
   int s;
   int r = 0;
 
-  if ((s = ::socket(domain, SOCK_STREAM, 0)) == -1) {
+  if ((s = socket_cloexec(domain, SOCK_STREAM, 0)) == -1) {
     r = errno;
     lderr(cct) << __func__ << " couldn't create socket " << cpp_strerror(r) << dendl;
     return -r;
@@ -80,22 +82,6 @@ int NetHandler::set_nonblock(int sd)
   }
 
   return 0;
-}
-
-void NetHandler::set_close_on_exec(int sd)
-{
-  int flags = fcntl(sd, F_GETFD, 0);
-  if (flags < 0) {
-    int r = errno;
-    lderr(cct) << __func__ << " fcntl(F_GETFD): "
-	       << cpp_strerror(r) << dendl;
-    return;
-  }
-  if (fcntl(sd, F_SETFD, flags | FD_CLOEXEC)) {
-    int r = errno;
-    lderr(cct) << __func__ << " fcntl(F_SETFD): "
-	       << cpp_strerror(r) << dendl;
-  }
 }
 
 int NetHandler::set_socket_options(int sd, bool nodelay, int size)

@@ -48,7 +48,7 @@ namespace ceph {
 
     int create_rule(const std::string &name,
 		    CrushWrapper &crush,
-		    std::ostream *ss) const;
+		    std::ostream *ss) const override;
 
     int sanity_check_k(int k, std::ostream *ss);
 
@@ -56,7 +56,7 @@ namespace ceph {
       return get_chunk_count() - get_data_chunk_count();
     }
 
-    virtual int get_sub_chunk_count() {
+    virtual int get_sub_chunk_count() override {
       return 1;
     }
 
@@ -66,7 +66,7 @@ namespace ceph {
 
     int minimum_to_decode(const std::set<int> &want_to_read,
 			  const std::set<int> &available,
-			  std::map<int, std::vector<std::pair<int, int>>> *minimum) final override;
+			  std::map<int, std::vector<std::pair<int, int>>> *minimum) override;
 
     int minimum_to_decode_with_cost(const std::set<int> &want_to_read,
                                             const std::map<int, int> &available,
@@ -84,7 +84,7 @@ namespace ceph {
 
     int decode(const std::set<int> &want_to_read,
                 const std::map<int, bufferlist> &chunks,
-                std::map<int, bufferlist> *decoded, int chunk_size) override final;
+                std::map<int, bufferlist> *decoded, int chunk_size) override;
 
     virtual int _decode(const std::set<int> &want_to_read,
 			const std::map<int, bufferlist> &chunks,

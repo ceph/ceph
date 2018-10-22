@@ -44,7 +44,7 @@ std::string get_temp_pool_name(const char* prefix);
 class SysTestRunnable
 {
 public:
-  static const int ID_STR_SZ = 128;
+  static const int ID_STR_SZ = 196;
 
   SysTestRunnable(int argc, const char **argv);
   virtual ~SysTestRunnable();

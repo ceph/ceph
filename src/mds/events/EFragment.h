@@ -22,7 +22,7 @@ struct dirfrag_rollback {
   fnode_t fnode;
   dirfrag_rollback() { }
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
 };
 WRITE_CLASS_ENCODER(dirfrag_rollback)
 
@@ -62,15 +62,16 @@ public:
   }
 
   void add_orig_frag(frag_t df, dirfrag_rollback *drb=NULL) {
+    using ceph::encode;
     orig_frags.push_back(df);
     if (drb)
-      ::encode(*drb, rollback);
+      encode(*drb, rollback);
   }
 
   EMetaBlob *get_metablob() override { return &metablob; }
 
   void encode(bufferlist &bl, uint64_t features) const override;
-  void decode(bufferlist::iterator &bl) override;
+  void decode(bufferlist::const_iterator &bl) override;
   void dump(Formatter *f) const override;
   static void generate_test_instances(list<EFragment*>& ls);
   void replay(MDSRank *mds) override;

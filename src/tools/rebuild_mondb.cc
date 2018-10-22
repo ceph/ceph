@@ -12,7 +12,6 @@ static int update_monitor(const OSDSuperblock& sb, MonitorDBStore& ms);
 static int update_osdmap(ObjectStore& fs,
                          OSDSuperblock& sb,
                          MonitorDBStore& ms);
-static int update_pgmap_pg(ObjectStore& fs, MonitorDBStore& ms);
 
 int update_mon_db(ObjectStore& fs, OSDSuperblock& sb,
                   const string& keyring,
@@ -30,9 +29,6 @@ int update_mon_db(ObjectStore& fs, OSDSuperblock& sb,
   if ((r = update_osdmap(fs, sb, ms)) < 0) {
     goto out;
   }
-  if ((r = update_pgmap_pg(fs, ms)) < 0) {
-    goto out;
-  }
   if ((r = update_monitor(sb, ms)) < 0) {
     goto out;
   }
@@ -46,12 +42,12 @@ static void add_auth(KeyServerData::Incremental& auth_inc,
 {
   AuthMonitor::Incremental inc;
   inc.inc_type = AuthMonitor::AUTH_DATA;
-  ::encode(auth_inc, inc.auth_data);
+  encode(auth_inc, inc.auth_data);
   inc.auth_type = CEPH_AUTH_CEPHX;
 
   bufferlist bl;
   __u8 v = 1;
-  ::encode(v, bl);
+  encode(v, bl);
   inc.encode(bl, CEPH_FEATURES_ALL);
 
   const string prefix("auth");
@@ -98,9 +94,9 @@ static int get_auth_inc(const string& keyring_path,
       cout << "ignoring empty keyring: " << keyring_path << std::endl;
       return 0;
     }
-    auto bp = bl.begin();
+    auto bp = bl.cbegin();
     try {
-      ::decode(keyring, bp);
+      decode(keyring, bp);
     } catch (const buffer::error& e) {
       cerr << "error decoding keyring: " << keyring_path << std::endl;
       return -EINVAL;
@@ -122,8 +118,8 @@ static int get_auth_inc(const string& keyring_path,
     // fallback to default caps for an OSD
     //   osd 'allow *' mon 'allow rwx'
     // as suggested by document.
-    ::encode(string("allow *"), caps["osd"]);
-    ::encode(string("allow rwx"), caps["mon"]);
+    encode(string("allow *"), caps["osd"]);
+    encode(string("allow rwx"), caps["mon"]);
   } else {
     caps = new_inc.caps;
   }
@@ -240,8 +236,9 @@ int update_osdmap(ObjectStore& fs, OSDSuperblock& sb, MonitorDBStore& ms)
 
   unsigned nadded = 0;
 
+  auto ch = fs.open_collection(coll_t::meta());
   OSDMap osdmap;
-  for (auto e = ceph::max(last_committed+1, sb.oldest_map);
+  for (auto e = std::max(last_committed+1, sb.oldest_map);
        e <= sb.newest_map; e++) {
     bool have_crc = false;
     uint32_t crc = -1;
@@ -250,7 +247,7 @@ int update_osdmap(ObjectStore& fs, OSDSuperblock& sb, MonitorDBStore& ms)
     {
       const auto oid = OSD::get_inc_osdmap_pobject_name(e);
       bufferlist bl;
-      int nread = fs.read(coll_t::meta(), oid, 0, 0, bl);
+      int nread = fs.read(ch, oid, 0, 0, bl);
       if (nread <= 0) {
         cerr << "missing " << oid << std::endl;
         return -EINVAL;
@@ -258,7 +255,7 @@ int update_osdmap(ObjectStore& fs, OSDSuperblock& sb, MonitorDBStore& ms)
       t->put(prefix, e, bl);
 
       OSDMap::Incremental inc;
-      auto p = bl.begin();
+      auto p = bl.cbegin();
       inc.decode(p);
       features = inc.encode_features | CEPH_FEATURE_RESERVED;
       if (osdmap.get_epoch() && e > 1) {
@@ -285,14 +282,14 @@ int update_osdmap(ObjectStore& fs, OSDSuperblock& sb, MonitorDBStore& ms)
     {
       const auto oid = OSD::get_osdmap_pobject_name(e);
       bufferlist bl;
-      int nread = fs.read(coll_t::meta(), oid, 0, 0, bl);
+      int nread = fs.read(ch, oid, 0, 0, bl);
       if (nread <= 0) {
         cerr << "missing " << oid << std::endl;
         return -EINVAL;
       }
       t->put(prefix, ms.combine_strings("full", e), bl);
 
-      auto p = bl.begin();
+      auto p = bl.cbegin();
       osdmap.decode(p);
       if (osdmap.have_crc()) {
         if (have_crc && osdmap.get_crc() != crc) {
@@ -340,58 +337,3 @@ int update_osdmap(ObjectStore& fs, OSDSuperblock& sb, MonitorDBStore& ms)
   return 0;
 }
 
-// rebuild
-//  - pgmap_pg/${pgid}
-int update_pgmap_pg(ObjectStore& fs, MonitorDBStore& ms)
-{
-  // pgmap/${epoch} is the incremental of: stamp, pgmap_pg, pgmap_osd
-  // if PGMonitor fails to read it, it will fall back to the pgmap_pg, i.e.
-  // the fullmap.
-  vector<coll_t> collections;
-  int r = fs.list_collections(collections);
-  if (r < 0) {
-    cerr << "failed to list pgs: "  << cpp_strerror(r) << std::endl;
-    return r;
-  }
-  const string prefix("pgmap_pg");
-  // in general, there are less than 100 PGs per OSD, so no need to apply
-  // transaction in batch.
-  auto t = make_shared<MonitorDBStore::Transaction>();
-  unsigned npg = 0;
-  for (const auto& coll : collections) {
-    spg_t pgid;
-    if (!coll.is_pg(&pgid))
-      continue;
-    pg_info_t info(pgid);
-    PastIntervals past_intervals;
-    __u8 struct_v;
-    r = PG::read_info(&fs, pgid, coll, info, past_intervals, struct_v);
-    if (r < 0) {
-      cerr << "failed to read_info: " << cpp_strerror(r) << std::endl;
-      return r;
-    }
-    if (struct_v < PG::get_latest_struct_v()) {
-      cerr << "incompatible pg_info: v" << struct_v << std::endl;
-      return -EINVAL;
-    }
-    version_t latest_epoch = 0;
-    bufferlist bl;
-    r = ms.get(prefix, stringify(pgid.pgid), bl);
-    if (r >= 0) {
-      pg_stat_t pg_stat;
-      auto bp = bl.begin();
-      ::decode(pg_stat, bp);
-      latest_epoch = pg_stat.reported_epoch;
-    }
-    if (info.stats.reported_epoch > latest_epoch) {
-      bufferlist bl;
-      ::encode(info.stats, bl);
-      t->put(prefix, stringify(pgid.pgid), bl);
-      npg++;
-    }
-  }
-  ms.apply_transaction(t);
-  cout << std::left << setw(10)
-       << " " << npg << " pgs added." << std::endl;
-  return 0;
-}

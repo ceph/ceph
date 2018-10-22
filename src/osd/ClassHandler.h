@@ -28,7 +28,7 @@ public:
     void unregister();
 
     int get_flags() {
-      Mutex::Locker l(cls->handler->mutex);
+      std::lock_guard l(cls->handler->mutex);
       return flags;
     }
 
@@ -59,7 +59,7 @@ public:
     ClassHandler *handler;
     void *handle;
 
-    bool whitelisted;
+    bool whitelisted = false;
 
     map<string, ClassMethod> methods_map;
     map<string, ClassFilter> filters_map;
@@ -84,14 +84,14 @@ public:
     void unregister_filter(ClassFilter *method);
 
     ClassMethod *get_method(const char *mname) {
-      Mutex::Locker l(handler->mutex);
+      std::lock_guard l(handler->mutex);
       return _get_method(mname);
     }
     int get_method_flags(const char *mname);
 
     ClassFilter *get_filter(const std::string &filter_name)
     {
-      Mutex::Locker l(handler->mutex);
+      std::lock_guard l(handler->mutex);
       std::map<std::string, ClassFilter>::iterator i = filters_map.find(filter_name);
       if (i == filters_map.end()) {
         return NULL;

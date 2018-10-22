@@ -326,16 +326,16 @@ TEST_F(LibRadosIoPP, Checksum) {
   bl.append(buf, sizeof(buf));
   ASSERT_EQ(0, ioctx.write("foo", bl, sizeof(buf), 0));
   bufferlist init_value_bl;
-  ::encode(static_cast<uint32_t>(-1), init_value_bl);
+  encode(static_cast<uint32_t>(-1), init_value_bl);
   bufferlist csum_bl;
   ASSERT_EQ(0, ioctx.checksum("foo", LIBRADOS_CHECKSUM_TYPE_CRC32C,
 			      init_value_bl, sizeof(buf), 0, 0, &csum_bl));
-  auto csum_bl_it = csum_bl.begin();
+  auto csum_bl_it = csum_bl.cbegin();
   uint32_t csum_count;
-  ::decode(csum_count, csum_bl_it);
+  decode(csum_count, csum_bl_it);
   ASSERT_EQ(1U, csum_count);
   uint32_t csum;
-  ::decode(csum, csum_bl_it);
+  decode(csum, csum_bl_it);
   ASSERT_EQ(bl.crc32c(-1), csum);
 }
 

@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "tools/rbd_mirror/image_deleter/SnapshotPurgeRequest.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
@@ -9,6 +10,7 @@
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
 #include "librbd/journal/Policy.h"
+#include "tools/rbd_mirror/image_deleter/Types.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
@@ -19,23 +21,6 @@
 namespace rbd {
 namespace mirror {
 namespace image_deleter {
-
-namespace {
-
-struct DeleteJournalPolicy : public librbd::journal::Policy {
-  bool append_disabled() const override {
-    return true;
-  }
-  bool journal_disabled() const override {
-    return false;
-  }
-
-  void allocate_tag_on_lock(Context *on_finish) override {
-    on_finish->complete(0);
-  }
-};
-
-} // anonymous namespace
 
 using librbd::util::create_context_callback;
 
@@ -51,13 +36,13 @@ void SnapshotPurgeRequest<I>::open_image() {
 
   {
     RWLock::WLocker snap_locker(m_image_ctx->snap_lock);
-    m_image_ctx->set_journal_policy(new DeleteJournalPolicy());
+    m_image_ctx->set_journal_policy(new JournalPolicy());
   }
 
   Context *ctx = create_context_callback<
     SnapshotPurgeRequest<I>, &SnapshotPurgeRequest<I>::handle_open_image>(
       this);
-  m_image_ctx->state->open(true, ctx);
+  m_image_ctx->state->open(librbd::OPEN_FLAG_SKIP_OPEN_PARENT, ctx);
 }
 
 template <typename I>
@@ -67,6 +52,9 @@ void SnapshotPurgeRequest<I>::handle_open_image(int r) {
   if (r < 0) {
     derr << "failed to open image '" << m_image_id << "': " << cpp_strerror(r)
          << dendl;
+    m_image_ctx->destroy();
+    m_image_ctx = nullptr;
+
     finish(r);
     return;
   }
@@ -163,10 +151,10 @@ void SnapshotPurgeRequest<I>::snap_unprotect() {
            << "snap_namespace=" << m_snap_namespace << ", "
            << "snap_name=" << m_snap_name << dendl;
 
-  auto finish_op_ctx = start_lock_op();
+  auto finish_op_ctx = start_lock_op(&r);
   if (finish_op_ctx == nullptr) {
     derr << "lost exclusive lock" << dendl;
-    m_ret_val = -EROFS;
+    m_ret_val = r;
     close_image();
     return;
   }
@@ -217,10 +205,11 @@ void SnapshotPurgeRequest<I>::snap_remove() {
            << "snap_namespace=" << m_snap_namespace << ", "
            << "snap_name=" << m_snap_name << dendl;
 
-  auto finish_op_ctx = start_lock_op();
+  int r;
+  auto finish_op_ctx = start_lock_op(&r);
   if (finish_op_ctx == nullptr) {
     derr << "lost exclusive lock" << dendl;
-    m_ret_val = -EROFS;
+    m_ret_val = r;
     close_image();
     return;
   }
@@ -238,7 +227,12 @@ template <typename I>
 void SnapshotPurgeRequest<I>::handle_snap_remove(int r) {
   dout(10) << "r=" << r << dendl;
 
-  if (r < 0) {
+  if (r == -EBUSY) {
+    dout(10) << "snapshot in-use" << dendl;
+    m_ret_val = r;
+    close_image();
+    return;
+  } else if (r < 0) {
     derr << "failed to remove snapshot: " << cpp_strerror(r) << dendl;
     m_ret_val = r;
     close_image();
@@ -284,9 +278,9 @@ void SnapshotPurgeRequest<I>::finish(int r) {
 }
 
 template <typename I>
-Context *SnapshotPurgeRequest<I>::start_lock_op() {
+Context *SnapshotPurgeRequest<I>::start_lock_op(int* r) {
   RWLock::RLocker owner_locker(m_image_ctx->owner_lock);
-  return m_image_ctx->exclusive_lock->start_op();
+  return m_image_ctx->exclusive_lock->start_op(r);
 }
 
 } // namespace image_deleter

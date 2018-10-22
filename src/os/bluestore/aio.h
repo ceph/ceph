@@ -16,7 +16,7 @@ struct aio_t {
   int fd;
   boost::container::small_vector<iovec,4> iov;
   uint64_t offset, length;
-  int rval;
+  long rval;
   bufferlist bl;  ///< write payload (so that it remains stable for duration)
 
   boost::intrusive::list_member_hook<> queue_item;
@@ -32,12 +32,12 @@ struct aio_t {
   void pread(uint64_t _offset, uint64_t len) {
     offset = _offset;
     length = len;
-    bufferptr p = buffer::create_page_aligned(length);
+    bufferptr p = buffer::create_small_page_aligned(length);
     io_prep_pread(&iocb, fd, p.c_str(), length, offset);
     bl.append(std::move(p));
   }
 
-  int get_return_value() {
+  long get_return_value() {
     return rval;
   }
 };
@@ -62,11 +62,11 @@ struct aio_queue_t {
       ctx(0) {
   }
   ~aio_queue_t() {
-    assert(ctx == 0);
+    ceph_assert(ctx == 0);
   }
 
   int init() {
-    assert(ctx == 0);
+    ceph_assert(ctx == 0);
     int r = io_setup(max_iodepth, &ctx);
     if (r < 0) {
       if (ctx) {
@@ -79,7 +79,7 @@ struct aio_queue_t {
   void shutdown() {
     if (ctx) {
       int r = io_destroy(ctx);
-      assert(r == 0);
+      ceph_assert(r == 0);
       ctx = 0;
     }
   }

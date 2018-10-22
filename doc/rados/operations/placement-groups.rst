@@ -11,7 +11,7 @@ When creating a new pool with::
 
         ceph osd pool create {pool-name} pg_num
 
-it is mandatory to choose the value of ``pg_num`` because it cannot be
+it is mandatory to choose the value of ``pg_num`` because it cannot (currently) be
 calculated automatically. Here are a few values commonly used:
 
 - Less than 5 OSDs set ``pg_num`` to 128
@@ -25,7 +25,7 @@ calculated automatically. Here are a few values commonly used:
 
 - For calculating ``pg_num`` value by yourself please take help of `pgcalc`_ tool
 
-As the number of OSDs increases, chosing the right value for pg_num
+As the number of OSDs increases, choosing the right value for pg_num
 becomes more important because it has a significant influence on the
 behavior of the cluster as well as the durability of the data when
 something goes wrong (i.e. the probability that a catastrophic event
@@ -90,7 +90,7 @@ is changed from two to three, an additional OSD will be assigned to
 the placement group and will receive copies of all objects in the
 placement group.
 
-Placement groups do not own the OSD, they share it with other
+Placement groups do not own the OSD; they share it with other
 placement groups from the same pool or even other pools. If OSD #2
 fails, the Placement Group #2 will also have to restore copies of
 objects, using OSD #3.
@@ -274,7 +274,7 @@ designed your Ceph cluster to maximize `data durability`_,
 `object distribution`_ and minimize `resource usage`_.
 
 The result should be **rounded up to the nearest power of two.**
-Rounding up is optional, but recommended for CRUSH to evenly balance
+Rounding up is optional, but recommended for CRUSH to more evenly balance
 the number of objects among placement groups.
 
 As an example, for a cluster with 200 OSDs and a pool size of 3
@@ -308,14 +308,11 @@ Set the Number of Placement Groups
 
 To set the number of placement groups in a pool, you must specify the
 number of placement groups at the time you create the pool.
-See `Create a Pool`_ for details. Once you have set placement groups for a
-pool, you may increase the number of placement groups (but you cannot
-decrease the number of placement groups). To increase the number of
-placement groups, execute the following::
+See `Create a Pool`_ for details.  Even after a pool is created you can also change the number of placement groups with::
 
         ceph osd pool set {pool-name} pg_num {pg_num}
 
-Once you increase the number of placement groups, you must also
+After you increase the number of placement groups, you must also
 increase the number of placement groups for placement (``pgp_num``)
 before your cluster will rebalance. The ``pgp_num`` will be the number of
 placement groups that will be considered for placement by the CRUSH
@@ -327,6 +324,8 @@ placement groups for placement, execute the following::
 
         ceph osd pool set {pool-name} pgp_num {pgp_num}
 
+When decreasing the number of PGs, ``pgp_num`` is adjusted
+automatically for you.
 
 Get the Number of Placement Groups
 ==================================

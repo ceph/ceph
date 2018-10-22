@@ -38,7 +38,7 @@ class RGWLoadGenIO : public rgw::io::RestfulClient
   RGWLoadGenRequestEnv* req;
   RGWEnv env;
 
-  void init_env(CephContext *cct) override;
+  int init_env(CephContext *cct) override;
   size_t read_data(char *buf, size_t len);
   size_t write_data(const char *buf, size_t len);
 

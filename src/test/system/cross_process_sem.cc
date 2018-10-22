@@ -19,6 +19,8 @@
 #include <stdlib.h>
 #include <sys/mman.h>
 
+#include "include/ceph_assert.h"
+
 /* We put our cross-process semaphore into a page of memory mapped with mmap. */
 struct cross_process_sem_data_t
 {
@@ -66,7 +68,7 @@ wait()
     int err = errno;
     if (err == -EINTR)
       continue;
-    abort();
+    ceph_abort();
   }
 }
 
@@ -75,7 +77,7 @@ post()
 {
   int ret = sem_post(&m_data->sem);
   if (ret == -1) {
-    abort();
+    ceph_abort();
   }
 }
 

@@ -75,8 +75,8 @@ In the end, you will want to close your IO context and connection to RADOS with 
 	rados_shutdown(cluster);
 
 
-Asychronous IO
-==============
+Asynchronous IO
+===============
 
 When doing lots of IO, you often don't need to wait for one operation
 to complete before starting the next one. `Librados` provides

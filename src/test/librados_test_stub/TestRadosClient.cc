@@ -4,7 +4,7 @@
 #include "test/librados_test_stub/TestRadosClient.h"
 #include "test/librados_test_stub/TestIoCtxImpl.h"
 #include "librados/AioCompletionImpl.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "common/ceph_json.h"
 #include "common/Finisher.h"
 #include <boost/bind.hpp>

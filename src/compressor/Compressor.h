@@ -15,13 +15,16 @@
 #ifndef CEPH_COMPRESSOR_H
 #define CEPH_COMPRESSOR_H
 
-
 #include <memory>
 #include <string>
+#include <string_view>
 #include <boost/optional.hpp>
-#include "include/assert.h"	// boost clobbers this
+#include "include/ceph_assert.h"    // boost clobbers this
 #include "include/buffer.h"
 #include "include/int_types.h"
+#ifdef HAVE_QATZIP
+  #include "QatAccel.h"
+#endif
 
 class Compressor;
 typedef std::shared_ptr<Compressor> CompressorRef;
@@ -37,8 +40,26 @@ public:
 #ifdef HAVE_LZ4
     COMP_ALG_LZ4 = 4,
 #endif
-    COMP_ALG_LAST	//the last value for range checks
+#ifdef HAVE_BROTLI
+    COMP_ALG_BROTLI = 5,
+#endif
+    COMP_ALG_LAST   //the last value for range checks
   };
+
+  using pair_type = std::pair<const char*, CompressionAlgorithm>;
+  static constexpr std::initializer_list<pair_type> compression_algorithms {
+	{ "none",	COMP_ALG_NONE },
+	{ "snappy",	COMP_ALG_SNAPPY },
+	{ "zlib",	COMP_ALG_ZLIB },
+	{ "zstd",	COMP_ALG_ZSTD },
+#ifdef HAVE_LZ4
+	{ "lz4",	COMP_ALG_LZ4 },
+#endif
+#ifdef HAVE_BROTLI
+	{ "brotli",	COMP_ALG_BROTLI },
+#endif
+  };
+
   // compression options
   enum CompressionMode {
     COMP_NONE,                  ///< compress never
@@ -47,7 +68,12 @@ public:
     COMP_FORCE                  ///< compress always
   };
 
-  static const char * get_comp_alg_name(int a);
+#ifdef HAVE_QATZIP
+  bool qat_enabled;
+  QatAccel qat_accel;
+#endif
+
+  static const char* get_comp_alg_name(int a);
   static boost::optional<CompressionAlgorithm> get_comp_alg_type(const std::string &s);
 
   static const char *get_comp_mode_name(int m);
@@ -66,7 +92,7 @@ public:
   virtual int decompress(const ceph::bufferlist &in, ceph::bufferlist &out) = 0;
   // this is a bit weird but we need non-const iterator to be in
   // alignment with decode methods
-  virtual int decompress(ceph::bufferlist::iterator &p, size_t compressed_len, ceph::bufferlist &out) = 0;
+  virtual int decompress(ceph::bufferlist::const_iterator &p, size_t compressed_len, ceph::bufferlist &out) = 0;
 
   static CompressorRef create(CephContext *cct, const std::string &type);
   static CompressorRef create(CephContext *cct, int alg);

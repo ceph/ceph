@@ -37,7 +37,7 @@ struct ObjectPosition {
   }
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& iter);
+  void decode(bufferlist::const_iterator& iter);
   void dump(Formatter *f) const;
 
   inline bool operator<(const ObjectPosition &rhs) const {
@@ -63,7 +63,7 @@ struct ObjectSetPosition {
     : object_positions(_object_positions) {}
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& iter);
+  void decode(bufferlist::const_iterator& iter);
   void dump(Formatter *f) const;
 
   inline bool operator==(const ObjectSetPosition &rhs) const {
@@ -101,7 +101,7 @@ struct Client {
   }
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& iter);
+  void decode(bufferlist::const_iterator& iter);
   void dump(Formatter *f) const;
 
   static void generate_test_instances(std::list<Client *> &o);
@@ -128,7 +128,7 @@ struct Tag {
   }
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& iter);
+  void decode(bufferlist::const_iterator& iter);
   void dump(Formatter *f) const;
 
   static void generate_test_instances(std::list<Tag *> &o);
@@ -150,8 +150,5 @@ std::ostream &operator<<(std::ostream &os, const Tag &tag);
 
 } // namespace journal
 } // namespace cls
-
-using cls::journal::encode;
-using cls::journal::decode;
 
 #endif // CEPH_CLS_JOURNAL_TYPES_H

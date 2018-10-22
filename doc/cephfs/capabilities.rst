@@ -75,8 +75,8 @@ Graphically:
 
 The second bit is currently unused.
 
-Abilities granted by each cap:
-------------------------------
+Abilities granted by each cap
+-----------------------------
 While that is how capabilities are granted (and communicated), the important
 bit is what they actually allow the client to do:
 
@@ -98,12 +98,13 @@ bit is what they actually allow the client to do:
   file data. It also covers certain metadata relating to file data -- the
   size, mtime, atime and ctime, in particular.
 
-Shorthand:
-----------
+Shorthand
+---------
 Note that the client logging can also present a compact representation of the
 capabilities. For example:
 
 ::
+
         pAsLsXsFs
 
 The 'p' represents the pin. Each capital letter corresponds to the shift

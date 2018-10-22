@@ -48,7 +48,7 @@ void GetLockerRequest<I>::send_get_lockers() {
     create_rados_callback<klass, &klass::handle_get_lockers>(this);
   m_out_bl.clear();
   int r = m_ioctx.aio_operate(m_oid, rados_completion, &op, &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   rados_completion->release();
 }
 
@@ -61,7 +61,7 @@ void GetLockerRequest<I>::handle_get_lockers(int r) {
   ClsLockType lock_type = LOCK_NONE;
   std::string lock_tag;
   if (r == 0) {
-    bufferlist::iterator it = m_out_bl.begin();
+    auto it = m_out_bl.cbegin();
     r = rados::cls::lock::get_lock_info_finish(&it, &lockers, &lock_type,
                                                &lock_tag);
   }

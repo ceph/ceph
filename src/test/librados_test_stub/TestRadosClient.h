@@ -42,15 +42,17 @@ public:
 
   class Transaction {
   public:
-    Transaction(TestRadosClient *rados_client, const std::string &oid)
-      : rados_client(rados_client), oid(oid) {
-      rados_client->transaction_start(oid);
+    Transaction(TestRadosClient *rados_client, const std::string& nspace,
+                const std::string &oid)
+      : rados_client(rados_client), nspace(nspace), oid(oid) {
+      rados_client->transaction_start(nspace, oid);
     }
     ~Transaction() {
-      rados_client->transaction_finish(oid);
+      rados_client->transaction_finish(nspace, oid);
     }
   private:
     TestRadosClient *rados_client;
+    std::string nspace;
     std::string oid;
   };
 
@@ -63,6 +65,10 @@ public:
 
   virtual uint32_t get_nonce() = 0;
   virtual uint64_t get_instance_id() = 0;
+
+  virtual int get_min_compatible_osd(int8_t* require_osd_release) = 0;
+  virtual int get_min_compatible_client(int8_t* min_compat_client,
+                                        int8_t* require_min_compat_client) = 0;
 
   virtual int connect();
   virtual void shutdown();
@@ -114,8 +120,10 @@ public:
 protected:
   virtual ~TestRadosClient();
 
-  virtual void transaction_start(const std::string &oid) = 0;
-  virtual void transaction_finish(const std::string &oid) = 0;
+  virtual void transaction_start(const std::string& nspace,
+                                 const std::string &oid) = 0;
+  virtual void transaction_finish(const std::string& nspace,
+                                  const std::string &oid) = 0;
 
 private:
 

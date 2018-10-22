@@ -1,7 +1,3 @@
 overrides:
   rgw:
     frontend: beast
-  ceph:
-    conf:
-      client:
-        enable experimental unrecoverable data corrupting features: "rgw-beast-frontend"

@@ -24,7 +24,7 @@ def main():
     fcntl.flock(f1, fcntl.LOCK_SH | fcntl.LOCK_NB)
 
     """
-    is flock interruptable?
+    is flock interruptible?
     """
     signal.signal(signal.SIGALRM, handler)
     signal.alarm(5)
@@ -52,7 +52,7 @@ def main():
     fcntl.fcntl(f2, fcntl.F_OFD_SETLK, lockdata)
 
     """
-    is poxis lock interruptable?
+    is posix lock interruptible?
     """
     signal.signal(signal.SIGALRM, handler)
     signal.alarm(5)

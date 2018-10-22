@@ -35,6 +35,9 @@ public:
    *            STATE_RESIZE_IMAGE (skip if resize not
    *                  |             required)
    *                  v
+   *            STATE_GET_SNAP_OBJECT_MAP (skip if object)
+   *                  |                    map disabled)
+   *                  v
    *            STATE_ROLLBACK_OBJECT_MAP (skip if object
    *                  |                    map disabled)
    *                  v
@@ -78,18 +81,23 @@ private:
   std::string m_snap_name;
   uint64_t m_snap_id;
   uint64_t m_snap_size;
+  uint64_t m_head_num_objects;
   ProgressContext &m_prog_ctx;
 
   NoOpProgressContext m_no_op_prog_ctx;
 
   bool m_blocking_writes = false;
   decltype(ImageCtxT::object_map) m_object_map;
+  decltype(ImageCtxT::object_map) m_snap_object_map;
 
   void send_block_writes();
   Context *handle_block_writes(int *result);
 
   void send_resize_image();
   Context *handle_resize_image(int *result);
+
+  void send_get_snap_object_map();
+  Context *handle_get_snap_object_map(int *result);
 
   void send_rollback_object_map();
   Context *handle_rollback_object_map(int *result);

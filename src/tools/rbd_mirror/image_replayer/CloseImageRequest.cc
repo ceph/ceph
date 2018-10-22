@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "CloseImageRequest.h"
-#include "common/dout.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/WorkQueue.h"
 #include "librbd/ImageCtx.h"

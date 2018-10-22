@@ -4,6 +4,7 @@
 #define LIBRBD_TASK_FINISHER_H
 
 #include "include/Context.h"
+#include "common/ceph_context.h"
 #include "common/Finisher.h"
 #include "common/Mutex.h"
 #include "common/Timer.h"
@@ -43,12 +44,12 @@ template <typename Task>
 class TaskFinisher {
 public:
   TaskFinisher(CephContext &cct) : m_cct(cct) {
-    TaskFinisherSingleton *singleton;
-    cct.lookup_or_create_singleton_object<TaskFinisherSingleton>(
-      singleton, "librbd::TaskFinisher::m_safe_timer");
-    m_lock = &singleton->m_lock;
-    m_safe_timer = singleton->m_safe_timer;
-    m_finisher = singleton->m_finisher;
+    auto& singleton =
+      cct.lookup_or_create_singleton_object<TaskFinisherSingleton>(
+	"librbd::TaskFinisher::m_safe_timer", false, &cct);
+    m_lock = &singleton.m_lock;
+    m_safe_timer = singleton.m_safe_timer;
+    m_finisher = singleton.m_finisher;
   }
 
   void cancel(const Task& task) {
@@ -97,7 +98,7 @@ public:
     typename TaskContexts::iterator it = m_task_contexts.find(task);
     if (it != m_task_contexts.end()) {
       if (it->second.second != NULL) {
-        assert(m_safe_timer->cancel_event(it->second.second));
+        ceph_assert(m_safe_timer->cancel_event(it->second.second));
         delete it->second.first;
       } else {
         // task already scheduled on the finisher

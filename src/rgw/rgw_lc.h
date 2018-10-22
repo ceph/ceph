@@ -4,7 +4,6 @@
 #include <map>
 #include <string>
 #include <iostream>
-#include <include/types.h>
 
 #include "common/debug.h"
 
@@ -48,15 +47,15 @@ public:
 
   void encode(bufferlist& bl) const {
     ENCODE_START(3, 2, bl);
-    ::encode(days, bl);
-    ::encode(date, bl);
+    encode(days, bl);
+    encode(date, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
-    ::decode(days, bl);
+    decode(days, bl);
     if (struct_v >= 3) {
-      ::decode(date, bl);
+      decode(date, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -132,15 +131,15 @@ class LCFilter
 
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 1, bl);
-    ::encode(prefix, bl);
-    ::encode(obj_tags, bl);
+    encode(prefix, bl);
+    encode(obj_tags, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(2, bl);
-    ::decode(prefix, bl);
+    decode(prefix, bl);
     if (struct_v >= 2) {
-      ::decode(obj_tags, bl);
+      decode(obj_tags, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -232,33 +231,33 @@ public:
   
   void encode(bufferlist& bl) const {
      ENCODE_START(5, 1, bl);
-     ::encode(id, bl);
-     ::encode(prefix, bl);
-     ::encode(status, bl);
-     ::encode(expiration, bl);
-     ::encode(noncur_expiration, bl);
-     ::encode(mp_expiration, bl);
-     ::encode(dm_expiration, bl);
-     ::encode(filter, bl);
+     encode(id, bl);
+     encode(prefix, bl);
+     encode(status, bl);
+     encode(expiration, bl);
+     encode(noncur_expiration, bl);
+     encode(mp_expiration, bl);
+     encode(dm_expiration, bl);
+     encode(filter, bl);
      ENCODE_FINISH(bl);
    }
-   void decode(bufferlist::iterator& bl) {
+   void decode(bufferlist::const_iterator& bl) {
      DECODE_START_LEGACY_COMPAT_LEN(5, 1, 1, bl);
-     ::decode(id, bl);
-     ::decode(prefix, bl);
-     ::decode(status, bl);
-     ::decode(expiration, bl);
+     decode(id, bl);
+     decode(prefix, bl);
+     decode(status, bl);
+     decode(expiration, bl);
      if (struct_v >=2) {
-       ::decode(noncur_expiration, bl);
+       decode(noncur_expiration, bl);
      }
      if (struct_v >= 3) {
-       ::decode(mp_expiration, bl);
+       decode(mp_expiration, bl);
      }
      if (struct_v >= 4) {
-        ::decode(dm_expiration, bl);
+        decode(dm_expiration, bl);
      }
      if (struct_v >= 5) {
-       ::decode(filter, bl);
+       decode(filter, bl);
      }
      DECODE_FINISH(bl);
    }
@@ -290,7 +289,7 @@ protected:
   bool _add_rule(LCRule *rule);
   bool has_same_action(const lc_op& first, const lc_op& second);
 public:
-  RGWLifecycleConfiguration(CephContext *_cct) : cct(_cct) {}
+  explicit RGWLifecycleConfiguration(CephContext *_cct) : cct(_cct) {}
   RGWLifecycleConfiguration() : cct(NULL) {}
 
   void set_ctx(CephContext *ctx) {
@@ -303,12 +302,12 @@ public:
 //  int get_group_perm(ACLGroupTypeEnum group, int perm_mask);
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(rule_map, bl);
+    encode(rule_map, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
-    ::decode(rule_map, bl);
+    decode(rule_map, bl);
     multimap<string, LCRule>::iterator iter;
     for (iter = rule_map.begin(); iter != rule_map.end(); ++iter) {
       LCRule& rule = iter->second;
@@ -382,7 +381,7 @@ class RGWLC {
   void stop_processor();
 
   private:
-  int remove_expired_obj(RGWBucketInfo& bucket_info, rgw_obj_key obj_key, bool remove_indeed = true);
+  int remove_expired_obj(RGWBucketInfo& bucket_info, rgw_obj_key obj_key, const string& owner, const string& owner_display_name, bool remove_indeed = true);
   bool obj_has_expired(ceph::real_time mtime, int days);
   int handle_multipart_expiration(RGWRados::Bucket *target, const map<string, lc_op>& prefix_map);
 };

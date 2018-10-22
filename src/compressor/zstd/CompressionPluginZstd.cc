@@ -14,9 +14,8 @@
 
 #include "acconfig.h"
 #include "ceph_ver.h"
+#include "common/ceph_context.h"
 #include "CompressionPluginZstd.h"
-
-#ifndef BUILDING_FOR_EMBEDDED
 
 // -----------------------------------------------------------------------------
 
@@ -35,5 +34,3 @@ int __ceph_plugin_init(CephContext *cct,
 
   return instance->add(type, name, new CompressionPluginZstd(cct));
 }
-
-#endif // !BUILDING_FOR_EMBEDDED

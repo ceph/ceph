@@ -14,8 +14,6 @@ find_library(FCGI_LIBRARY NAMES fcgi libfcgi PATHS
   /usr/local/lib
   /usr/lib)
 
-# handle the QUIETLY and REQUIRED arguments and set UUID_FOUND to TRUE if
-# all listed variables are TRUE
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(fcgi DEFAULT_MSG FCGI_LIBRARY FCGI_INCLUDE_DIR)
 

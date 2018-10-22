@@ -12,7 +12,7 @@
  *
  */
 #include "common/ConfUtils.h"
-#include "common/config.h"
+#include "common/config_proxy.h"
 #include "common/errno.h"
 #include "gtest/gtest.h"
 #include "include/buffer.h"
@@ -24,7 +24,6 @@
 #include <stdint.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include "include/memory.h"
 
 using ceph::bufferlist;
 using std::cerr;
@@ -78,7 +77,7 @@ static int create_tempfile(const std::string &fname, const char *text)
 	 << get_temp_dir() << "'. " << cpp_strerror(err) << std::endl;
     return err;
   }
-  ceph::shared_ptr<FILE> fpp(fp, fclose);
+  std::shared_ptr<FILE> fpp(fp, fclose);
   if (unlink_idx >= MAX_FILES_TO_DELETE)
     return -ENOBUFS;
   if (unlink_idx == 0) {
@@ -470,35 +469,35 @@ TEST(ConfUtils, EscapingFiles) {
 }
 
 TEST(ConfUtils, Overrides) {
-  md_config_t conf;
+  ConfigProxy conf{false};
   std::ostringstream warn;
   std::string override_conf_1_f(next_tempfile(override_config_1));
 
-  conf.name.set(CEPH_ENTITY_TYPE_MON, "0");
+  conf->name.set(CEPH_ENTITY_TYPE_MON, "0");
   conf.parse_config_files(override_conf_1_f.c_str(), &warn, 0);
-  ASSERT_EQ(conf.parse_errors.size(), 0U);
-  ASSERT_EQ(conf.log_file, "global_log");
+  ASSERT_EQ(conf.num_parse_errors(), 0U);
+  ASSERT_EQ(conf->log_file, "global_log");
 
-  conf.name.set(CEPH_ENTITY_TYPE_MDS, "a");
+  conf->name.set(CEPH_ENTITY_TYPE_MDS, "a");
   conf.parse_config_files(override_conf_1_f.c_str(), &warn, 0);
-  ASSERT_EQ(conf.parse_errors.size(), 0U);
-  ASSERT_EQ(conf.log_file, "mds_log");
+  ASSERT_EQ(conf.num_parse_errors(), 0U);
+  ASSERT_EQ(conf->log_file, "mds_log");
 
-  conf.name.set(CEPH_ENTITY_TYPE_OSD, "0");
+  conf->name.set(CEPH_ENTITY_TYPE_OSD, "0");
   conf.parse_config_files(override_conf_1_f.c_str(), &warn, 0);
-  ASSERT_EQ(conf.parse_errors.size(), 0U);
-  ASSERT_EQ(conf.log_file, "osd0_log");
+  ASSERT_EQ(conf.num_parse_errors(), 0U);
+  ASSERT_EQ(conf->log_file, "osd0_log");
 }
 
 TEST(ConfUtils, DupKey) {
-  md_config_t conf;
+  ConfigProxy conf{false};
   std::ostringstream warn;
   std::string dup_key_config_f(next_tempfile(dup_key_config_1));
 
-  conf.name.set(CEPH_ENTITY_TYPE_MDS, "a");
+  conf->name.set(CEPH_ENTITY_TYPE_MDS, "a");
   conf.parse_config_files(dup_key_config_f.c_str(), &warn, 0);
-  ASSERT_EQ(conf.parse_errors.size(), 0U);
-  ASSERT_EQ(conf.log_file, string("3"));
+  ASSERT_EQ(conf.num_parse_errors(), 0U);
+  ASSERT_EQ(conf->log_file, string("3"));
 }
 
 

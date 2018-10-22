@@ -79,3 +79,16 @@ class MultipleVGsError(Exception):
     def __str__(self):
         msg = "Got more than 1 result looking for volume group: %s" % self.vg_name
         return msg
+
+
+class SizeAllocationError(Exception):
+
+    def __init__(self, requested, available):
+        self.requested = requested
+        self.available = available
+
+    def __str__(self):
+        msg = 'Unable to allocate size (%s), not enough free space (%s)' % (
+            self.requested, self.available
+        )
+        return msg

@@ -31,20 +31,20 @@ class Semaphore
 
   void Put()
   { 
-    m.Lock();
+    m.lock();
     count++;
     c.Signal();
-    m.Unlock();
+    m.unlock();
   }
 
   void Get() 
   { 
-    m.Lock();
+    m.lock();
     while(count <= 0) {
       c.Wait(m);
     }
     count--;
-    m.Unlock();
+    m.unlock();
   }
 };
 

@@ -178,10 +178,10 @@ public:
     }
   }
 
-  bool call(std::string command, cmdmap_t& cmdmap, std::string format,
-	    bufferlist& out) override {
+  bool call(std::string_view command, const cmdmap_t& cmdmap,
+	    std::string_view format, bufferlist& out) override {
     Commands::const_iterator i = commands.find(command);
-    assert(i != commands.end());
+    ceph_assert(i != commands.end());
     Formatter *f = Formatter::create(format);
     stringstream ss;
     bool r = i->second->call(f, &ss);
@@ -191,7 +191,7 @@ public:
   }
 
 private:
-  typedef std::map<std::string, MirrorAdminSocketCommand*> Commands;
+  typedef std::map<std::string, MirrorAdminSocketCommand*, std::less<>> Commands;
 
   AdminSocket *admin_socket;
   Commands commands;
@@ -204,8 +204,9 @@ Mirror::Mirror(CephContext *cct, const std::vector<const char*> &args) :
   m_local(new librados::Rados()),
   m_asok_hook(new MirrorAdminSocketHook(cct, this))
 {
-  cct->lookup_or_create_singleton_object<Threads<librbd::ImageCtx> >(
-    m_threads, "rbd_mirror::threads");
+  m_threads =
+    &(cct->lookup_or_create_singleton_object<Threads<librbd::ImageCtx>>(
+	"rbd_mirror::threads", false, cct));
   m_service_daemon.reset(new ServiceDaemon<>(m_cct, m_local, m_threads));
 }
 
@@ -245,11 +246,6 @@ int Mirror::init()
 
   m_local_cluster_watcher.reset(new ClusterWatcher(m_local, m_lock,
                                                    m_service_daemon.get()));
-
-  m_image_deleter.reset(new ImageDeleter<>(m_threads->work_queue,
-                                           m_threads->timer,
-                                           &m_threads->timer_lock,
-                                           m_service_daemon.get()));
   return r;
 }
 
@@ -264,7 +260,7 @@ void Mirror::run()
     }
     m_cond.WaitInterval(
       m_lock,
-      utime_t(m_cct->_conf->get_val<int64_t>("rbd_mirror_pool_replayers_refresh_interval"), 0));
+      utime_t(m_cct->_conf.get_val<uint64_t>("rbd_mirror_pool_replayers_refresh_interval"), 0));
   }
 
   // stop all pool replayers in parallel
@@ -296,10 +292,7 @@ void Mirror::print_status(Formatter *f, stringstream *ss)
 
   if (f) {
     f->close_section();
-    f->open_object_section("image_deleter");
   }
-
-  m_image_deleter->print_status(f, ss);
 }
 
 void Mirror::start()
@@ -381,7 +374,7 @@ void Mirror::release_leader()
 void Mirror::update_pool_replayers(const PoolPeers &pool_peers)
 {
   dout(20) << "enter" << dendl;
-  assert(m_lock.is_locked());
+  ceph_assert(m_lock.is_locked());
 
   // remove stale pool replayers before creating new pool replayers
   for (auto it = m_pool_replayers.begin(); it != m_pool_replayers.end();) {
@@ -418,9 +411,8 @@ void Mirror::update_pool_replayers(const PoolPeers &pool_peers)
         }
       } else {
         dout(20) << "starting pool replayer for " << peer << dendl;
-        unique_ptr<PoolReplayer> pool_replayer(new PoolReplayer(
-	  m_threads, m_service_daemon.get(), m_image_deleter.get(), kv.first,
-          peer, m_args));
+        unique_ptr<PoolReplayer<>> pool_replayer(new PoolReplayer<>(
+	  m_threads, m_service_daemon.get(), kv.first, peer, m_args));
 
         // TODO: make async
         pool_replayer->init();

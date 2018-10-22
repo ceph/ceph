@@ -1,0 +1,12 @@
+<cd-table [data]="filesystems"
+          columnMode="flex"
+          [columns]="columns"
+          (fetchData)="loadFilesystems($event)"
+          identifier="id"
+          forceIdentifier="true"
+          selectionType="single"
+          (updateSelection)="updateSelection($event)">
+  <cd-cephfs-detail cdTableDetail
+                    [selection]="selection">
+  </cd-cephfs-detail>
+</cd-table>

@@ -12,7 +12,7 @@ included in FileStore as FileStore::wbthrottle.  The intention is to
 bound the amount of outstanding IO we need to do to flush the journal.
 At the same time, we don't want to necessarily do it inline in case we
 might be able to combine several IOs on the same object close together
-in time.  Thus, in FileStore::_write, we queue the fd for asyncronous
+in time.  Thus, in FileStore::_write, we queue the fd for asynchronous
 flushing and block in FileStore::_do_op if we have exceeded any hard
 limits until the background flusher catches up.
 

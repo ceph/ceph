@@ -53,88 +53,88 @@ public:
 
 TEST(TestOSDScrub, scrub_time_permit) {
   ObjectStore *store = ObjectStore::create(g_ceph_context,
-             g_conf->osd_objectstore,
-             g_conf->osd_data,
-             g_conf->osd_journal);
-  std::string cluster_msgr_type = g_conf->ms_cluster_type.empty() ? g_conf->get_val<std::string>("ms_type") : g_conf->ms_cluster_type;
+             g_conf()->osd_objectstore,
+             g_conf()->osd_data,
+             g_conf()->osd_journal);
+  std::string cluster_msgr_type = g_conf()->ms_cluster_type.empty() ? g_conf().get_val<std::string>("ms_type") : g_conf()->ms_cluster_type;
   Messenger *ms = Messenger::create(g_ceph_context, cluster_msgr_type,
 				    entity_name_t::OSD(0), "make_checker",
 				    getpid(), 0);
   ms->set_cluster_protocol(CEPH_OSD_PROTOCOL);
   ms->set_default_policy(Messenger::Policy::stateless_server(0));
-  ms->bind(g_conf->public_addr);
+  ms->bind(g_conf()->public_addr);
   MonClient mc(g_ceph_context);
   mc.build_initial_monmap();
   TestOSDScrub* osd = new TestOSDScrub(g_ceph_context, store, 0, ms, ms, ms, ms, ms, ms, ms, &mc, "", "");
 
-  g_ceph_context->_conf->set_val("osd_scrub_begin_hour", "0");
-  g_ceph_context->_conf->set_val("osd_scrub_end_hour", "24");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.set_val("osd_scrub_begin_hour", "0");
+  g_ceph_context->_conf.set_val("osd_scrub_end_hour", "24");
+  g_ceph_context->_conf.apply_changes(nullptr);
   tm tm;
   strptime("2015-01-16 12:05:13", "%Y-%m-%d %H:%M:%S", &tm);
   utime_t now = utime_t(mktime(&tm), 0);
   bool ret = osd->scrub_time_permit(now);
   ASSERT_TRUE(ret);
 
-  g_ceph_context->_conf->set_val("osd_scrub_begin_hour", "24");
-  g_ceph_context->_conf->set_val("osd_scrub_end_hour", "0");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.set_val("osd_scrub_begin_hour", "24");
+  g_ceph_context->_conf.set_val("osd_scrub_end_hour", "0");
+  g_ceph_context->_conf.apply_changes(nullptr);
   strptime("2015-01-16 12:05:13", "%Y-%m-%d %H:%M:%S", &tm);
   now = utime_t(mktime(&tm), 0);
   ret = osd->scrub_time_permit(now);
   ASSERT_FALSE(ret);
 
-  g_ceph_context->_conf->set_val("osd_scrub_begin_hour", "0");
-  g_ceph_context->_conf->set_val("osd_scrub_end_hour", "0");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.set_val("osd_scrub_begin_hour", "0");
+  g_ceph_context->_conf.set_val("osd_scrub_end_hour", "0");
+  g_ceph_context->_conf.apply_changes(nullptr);
   strptime("2015-01-16 12:05:13", "%Y-%m-%d %H:%M:%S", &tm);
   now = utime_t(mktime(&tm), 0);
   ret = osd->scrub_time_permit(now);
   ASSERT_TRUE(ret);
 
-  g_ceph_context->_conf->set_val("osd_scrub_begin_hour", "20");
-  g_ceph_context->_conf->set_val("osd_scrub_end_hour", "07");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.set_val("osd_scrub_begin_hour", "20");
+  g_ceph_context->_conf.set_val("osd_scrub_end_hour", "07");
+  g_ceph_context->_conf.apply_changes(nullptr);
   strptime("2015-01-16 01:05:13", "%Y-%m-%d %H:%M:%S", &tm);
   now = utime_t(mktime(&tm), 0);
   ret = osd->scrub_time_permit(now);
   ASSERT_TRUE(ret);
 
-  g_ceph_context->_conf->set_val("osd_scrub_begin_hour", "20");
-  g_ceph_context->_conf->set_val("osd_scrub_end_hour", "07");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.set_val("osd_scrub_begin_hour", "20");
+  g_ceph_context->_conf.set_val("osd_scrub_end_hour", "07");
+  g_ceph_context->_conf.apply_changes(nullptr);
   strptime("2015-01-16 20:05:13", "%Y-%m-%d %H:%M:%S", &tm);
   now = utime_t(mktime(&tm), 0);
   ret = osd->scrub_time_permit(now);
   ASSERT_TRUE(ret);
 
-  g_ceph_context->_conf->set_val("osd_scrub_begin_hour", "20");
-  g_ceph_context->_conf->set_val("osd_scrub_end_hour", "07");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.set_val("osd_scrub_begin_hour", "20");
+  g_ceph_context->_conf.set_val("osd_scrub_end_hour", "07");
+  g_ceph_context->_conf.apply_changes(nullptr);
   strptime("2015-01-16 08:05:13", "%Y-%m-%d %H:%M:%S", &tm);
   now = utime_t(mktime(&tm), 0);
   ret = osd->scrub_time_permit(now);
   ASSERT_FALSE(ret);
 
-  g_ceph_context->_conf->set_val("osd_scrub_begin_hour", "01");
-  g_ceph_context->_conf->set_val("osd_scrub_end_hour", "07");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.set_val("osd_scrub_begin_hour", "01");
+  g_ceph_context->_conf.set_val("osd_scrub_end_hour", "07");
+  g_ceph_context->_conf.apply_changes(nullptr);
   strptime("2015-01-16 20:05:13", "%Y-%m-%d %H:%M:%S", &tm);
   now = utime_t(mktime(&tm), 0);
   ret = osd->scrub_time_permit(now);
   ASSERT_FALSE(ret);
 
-  g_ceph_context->_conf->set_val("osd_scrub_begin_hour", "01");
-  g_ceph_context->_conf->set_val("osd_scrub_end_hour", "07");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.set_val("osd_scrub_begin_hour", "01");
+  g_ceph_context->_conf.set_val("osd_scrub_end_hour", "07");
+  g_ceph_context->_conf.apply_changes(nullptr);
   strptime("2015-01-16 00:05:13", "%Y-%m-%d %H:%M:%S", &tm);
   now = utime_t(mktime(&tm), 0);
   ret = osd->scrub_time_permit(now);
   ASSERT_FALSE(ret);
 
-  g_ceph_context->_conf->set_val("osd_scrub_begin_hour", "01");
-  g_ceph_context->_conf->set_val("osd_scrub_end_hour", "07");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.set_val("osd_scrub_begin_hour", "01");
+  g_ceph_context->_conf.set_val("osd_scrub_end_hour", "07");
+  g_ceph_context->_conf.apply_changes(nullptr);
   strptime("2015-01-16 04:05:13", "%Y-%m-%d %H:%M:%S", &tm);
   now = utime_t(mktime(&tm), 0);
   ret = osd->scrub_time_permit(now);

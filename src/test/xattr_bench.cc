@@ -106,7 +106,7 @@ uint64_t do_run(ObjectStore *store, int attrsize, int numattrs,
     }
     collections[coll] = make_pair(objects, new ObjectStore::Sequencer(coll.to_str()));
   }
-  store->apply_transaction(&osr, std::move(t));
+  store->queue_transaction(&osr, std::move(t));
 
   bufferlist bl;
   for (int i = 0; i < attrsize; ++i) {
@@ -151,9 +151,18 @@ uint64_t do_run(ObjectStore *store, int attrsize, int numattrs,
 int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
+  if (args.empty()) {
+    cerr << argv[0] << ": -h or --help for usage" << std::endl;
+    exit(1);
+  }
+  if (ceph_argparse_need_usage(args)) {
+    usage(argv[0]);
+    exit(0);
+  }
 
   auto cct = global_init(0, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
 
   std::cerr << "args: " << args << std::endl;
@@ -169,8 +178,8 @@ int main(int argc, char **argv) {
 						     store_dev));
 
   std::cerr << "mkfs starting" << std::endl;
-  assert(!store->mkfs());
-  assert(!store->mount());
+  ceph_assert(!store->mkfs());
+  ceph_assert(!store->mount());
   std::cerr << "mounted" << std::endl;
 
   std::cerr << "attrsize\tnumattrs\ttranssize\tops\ttime" << std::endl;

@@ -10,17 +10,17 @@ namespace journal {
 
 void ObjectPosition::encode(bufferlist& bl) const {
   ENCODE_START(1, 1, bl);
-  ::encode(object_number, bl);
-  ::encode(tag_tid, bl);
-  ::encode(entry_tid, bl);
+  encode(object_number, bl);
+  encode(tag_tid, bl);
+  encode(entry_tid, bl);
   ENCODE_FINISH(bl);
 }
 
-void ObjectPosition::decode(bufferlist::iterator& iter) {
+void ObjectPosition::decode(bufferlist::const_iterator& iter) {
   DECODE_START(1, iter);
-  ::decode(object_number, iter);
-  ::decode(tag_tid, iter);
-  ::decode(entry_tid, iter);
+  decode(object_number, iter);
+  decode(tag_tid, iter);
+  decode(entry_tid, iter);
   DECODE_FINISH(iter);
 }
 
@@ -37,13 +37,13 @@ void ObjectPosition::generate_test_instances(std::list<ObjectPosition *> &o) {
 
 void ObjectSetPosition::encode(bufferlist& bl) const {
   ENCODE_START(1, 1, bl);
-  ::encode(object_positions, bl);
+  encode(object_positions, bl);
   ENCODE_FINISH(bl);
 }
 
-void ObjectSetPosition::decode(bufferlist::iterator& iter) {
+void ObjectSetPosition::decode(bufferlist::const_iterator& iter) {
   DECODE_START(1, iter);
-  ::decode(object_positions, iter);
+  decode(object_positions, iter);
   DECODE_FINISH(iter);
 }
 
@@ -65,21 +65,21 @@ void ObjectSetPosition::generate_test_instances(
 
 void Client::encode(bufferlist& bl) const {
   ENCODE_START(1, 1, bl);
-  ::encode(id, bl);
-  ::encode(data, bl);
-  ::encode(commit_position, bl);
-  ::encode(static_cast<uint8_t>(state), bl);
+  encode(id, bl);
+  encode(data, bl);
+  encode(commit_position, bl);
+  encode(static_cast<uint8_t>(state), bl);
   ENCODE_FINISH(bl);
 }
 
-void Client::decode(bufferlist::iterator& iter) {
+void Client::decode(bufferlist::const_iterator& iter) {
   DECODE_START(1, iter);
-  ::decode(id, iter);
-  ::decode(data, iter);
-  ::decode(commit_position, iter);
+  decode(id, iter);
+  decode(data, iter);
+  decode(commit_position, iter);
 
   uint8_t state_raw;
-  ::decode(state_raw, iter);
+  decode(state_raw, iter);
   state = static_cast<ClientState>(state_raw);
   DECODE_FINISH(iter);
 }
@@ -109,17 +109,17 @@ void Client::generate_test_instances(std::list<Client *> &o) {
 
 void Tag::encode(bufferlist& bl) const {
   ENCODE_START(1, 1, bl);
-  ::encode(tid, bl);
-  ::encode(tag_class, bl);
-  ::encode(data, bl);
+  encode(tid, bl);
+  encode(tag_class, bl);
+  encode(data, bl);
   ENCODE_FINISH(bl);
 }
 
-void Tag::decode(bufferlist::iterator& iter) {
+void Tag::decode(bufferlist::const_iterator& iter) {
   DECODE_START(1, iter);
-  ::decode(tid, iter);
-  ::decode(tag_class, iter);
-  ::decode(data, iter);
+  decode(tid, iter);
+  decode(tag_class, iter);
+  decode(data, iter);
   DECODE_FINISH(iter);
 }
 

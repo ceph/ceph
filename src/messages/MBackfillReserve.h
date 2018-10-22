@@ -16,10 +16,14 @@
 #define CEPH_MBACKFILL_H
 
 #include "msg/Message.h"
+#include "messages/MOSDPeeringOp.h"
 
-class MBackfillReserve : public Message {
-  static const int HEAD_VERSION = 4;
-  static const int COMPAT_VERSION = 4;
+class MBackfillReserve : public MessageInstance<MBackfillReserve, MOSDPeeringOp> {
+public:
+  friend factory;
+private:
+  static constexpr int HEAD_VERSION = 4;
+  static constexpr int COMPAT_VERSION = 4;
 public:
   spg_t pgid;
   epoch_t query_epoch;
@@ -35,13 +39,65 @@ public:
   uint32_t type;
   uint32_t priority;
 
+  spg_t get_spg() const {
+    return pgid;
+  }
+  epoch_t get_map_epoch() const {
+    return query_epoch;
+  }
+  epoch_t get_min_epoch() const {
+    return query_epoch;
+  }
+
+  PGPeeringEvent *get_event() override {
+    switch (type) {
+    case REQUEST:
+      return new PGPeeringEvent(
+	query_epoch,
+	query_epoch,
+	RequestBackfillPrio(priority));
+    case GRANT:
+      return new PGPeeringEvent(
+	query_epoch,
+	query_epoch,
+	RemoteBackfillReserved());
+    case REJECT:
+      // NOTE: this is replica -> primary "i reject your request"
+      //      and also primary -> replica "cancel my previously-granted request"
+      //                                  (for older peers)
+      //      and also replica -> primary "i revoke your reservation"
+      //                                  (for older peers)
+      return new PGPeeringEvent(
+	query_epoch,
+	query_epoch,
+	RemoteReservationRejected());
+    case RELEASE:
+      return new PGPeeringEvent(
+	query_epoch,
+	query_epoch,
+	RemoteReservationCanceled());
+    case TOOFULL:
+      return new PGPeeringEvent(
+	query_epoch,
+	query_epoch,
+	RemoteReservationRevokedTooFull());
+    case REVOKE:
+      return new PGPeeringEvent(
+	query_epoch,
+	query_epoch,
+	RemoteReservationRevoked());
+    default:
+      ceph_abort();
+    }
+  }
+
   MBackfillReserve()
-    : Message(MSG_OSD_BACKFILL_RESERVE, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_BACKFILL_RESERVE, HEAD_VERSION, COMPAT_VERSION),
       query_epoch(0), type(-1), priority(-1) {}
   MBackfillReserve(int type,
 		   spg_t pgid,
 		   epoch_t query_epoch, unsigned prio = -1)
-    : Message(MSG_OSD_BACKFILL_RESERVE, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_BACKFILL_RESERVE, HEAD_VERSION, COMPAT_VERSION),
       pgid(pgid), query_epoch(query_epoch),
       type(type), priority(prio) {}
 
@@ -49,61 +105,60 @@ public:
     return "MBackfillReserve";
   }
 
-  void print(ostream& out) const override {
-    out << "MBackfillReserve ";
+  void inner_print(ostream& out) const override {
     switch (type) {
     case REQUEST:
-      out << "REQUEST ";
+      out << "REQUEST";
       break;
     case GRANT:
-      out << "GRANT "; 
+      out << "GRANT";
       break;
     case REJECT:
       out << "REJECT ";
       break;
     case RELEASE:
-      out << "RELEASE ";
+      out << "RELEASE";
       break;
     case TOOFULL:
-      out << "TOOFULL ";
+      out << "TOOFULL";
       break;
     case REVOKE:
-      out << "REVOKE ";
+      out << "REVOKE";
       break;
     }
-    out << " pgid: " << pgid << ", query_epoch: " << query_epoch;
-    if (type == REQUEST) out << ", prio: " << priority;
+    if (type == REQUEST) out << " prio: " << priority;
     return;
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(pgid.pgid, p);
-    ::decode(query_epoch, p);
-    ::decode(type, p);
-    ::decode(priority, p);
-    ::decode(pgid.shard, p);
+    auto p = payload.cbegin();
+    decode(pgid.pgid, p);
+    decode(query_epoch, p);
+    decode(type, p);
+    decode(priority, p);
+    decode(pgid.shard, p);
   }
 
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     if (!HAVE_FEATURE(features, RECOVERY_RESERVATION_2)) {
       header.version = 3;
       header.compat_version = 3;
-      ::encode(pgid.pgid, payload);
-      ::encode(query_epoch, payload);
-      ::encode((type == RELEASE || type == TOOFULL || type == REVOKE) ?
+      encode(pgid.pgid, payload);
+      encode(query_epoch, payload);
+      encode((type == RELEASE || type == TOOFULL || type == REVOKE) ?
 	       REJECT : type, payload);
-      ::encode(priority, payload);
-      ::encode(pgid.shard, payload);
+      encode(priority, payload);
+      encode(pgid.shard, payload);
       return;
     }
     header.version = HEAD_VERSION;
     header.compat_version = COMPAT_VERSION;
-    ::encode(pgid.pgid, payload);
-    ::encode(query_epoch, payload);
-    ::encode(type, payload);
-    ::encode(priority, payload);
-    ::encode(pgid.shard, payload);
+    encode(pgid.pgid, payload);
+    encode(query_epoch, payload);
+    encode(type, payload);
+    encode(priority, payload);
+    encode(pgid.shard, payload);
   }
 };
 

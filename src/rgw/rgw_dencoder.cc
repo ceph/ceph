@@ -358,14 +358,15 @@ void ObjectMetaInfo::generate_test_instances(list<ObjectMetaInfo*>& o)
 
 void ObjectCacheInfo::generate_test_instances(list<ObjectCacheInfo*>& o)
 {
+  using ceph::encode;
   ObjectCacheInfo *i = new ObjectCacheInfo;
   i->status = 0;
   i->flags = CACHE_FLAG_MODIFY_XATTRS;
   string s = "this is a string";
   string s2 = "this is a another string";
   bufferlist data, data2;
-  ::encode(s, data);
-  ::encode(s2, data2);
+  encode(s, data);
+  encode(s2, data2);
   i->data = data;
   i->xattrs["x1"] = data;
   i->xattrs["x2"] = data2;
@@ -403,7 +404,6 @@ void RGWSubUser::generate_test_instances(list<RGWSubUser*>& o)
 void RGWUserInfo::generate_test_instances(list<RGWUserInfo*>& o)
 {
   RGWUserInfo *i = new RGWUserInfo;
-  i->auid = 1;
   i->user_id = "user_id";
   i->display_name =  "display_name";
   i->user_email = "user@email";

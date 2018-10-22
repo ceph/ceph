@@ -3,7 +3,7 @@
 
 #include "journal/Future.h"
 #include "journal/FutureImpl.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 namespace journal {
 
@@ -12,7 +12,7 @@ void Future::flush(Context *on_safe) {
 }
 
 void Future::wait(Context *on_safe) {
-  assert(on_safe != NULL);
+  ceph_assert(on_safe != NULL);
   m_future_impl->wait(on_safe);
 }
 

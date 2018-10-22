@@ -16,7 +16,7 @@
 #define _INCLUDED_RBD_REPLAY_DEBUG_H
 
 #include "common/debug.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 namespace rbd_replay {
 

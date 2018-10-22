@@ -1,0 +1,17 @@
+meta:
+- desc: install ceph/mimic latest
+tasks:
+- install:
+    branch: mimic
+- print: "**** done install mimic"
+- ceph:
+- exec:
+    osd.0:
+      - ceph osd require-osd-release mimic
+      - ceph osd set-require-min-compat-client mimic
+- print: "**** done ceph"
+overrides:
+  ceph:
+    conf:
+      mon:
+        mon warn on osd down out interval zero: false

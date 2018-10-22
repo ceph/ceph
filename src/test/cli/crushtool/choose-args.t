@@ -45,7 +45,7 @@
               "type_id": 1,
               "type_name": "host",
               "weight": 65536,
-              "alg": "straw",
+              "alg": "straw2",
               "hash": "rjenkins1",
               "items": [
                   {
@@ -61,7 +61,7 @@
               "type_id": 1,
               "type_name": "host",
               "weight": 65536,
-              "alg": "straw",
+              "alg": "straw2",
               "hash": "rjenkins1",
               "items": [
                   {
@@ -77,7 +77,7 @@
               "type_id": 2,
               "type_name": "rack",
               "weight": 196608,
-              "alg": "straw",
+              "alg": "straw2",
               "hash": "rjenkins1",
               "items": [
                   {
@@ -103,7 +103,7 @@
               "type_id": 3,
               "type_name": "root",
               "weight": 262144,
-              "alg": "straw",
+              "alg": "straw2",
               "hash": "rjenkins1",
               "items": [
                   {
@@ -119,7 +119,7 @@
               "type_id": 1,
               "type_name": "host",
               "weight": 65536,
-              "alg": "straw",
+              "alg": "straw2",
               "hash": "rjenkins1",
               "items": [
                   {
@@ -167,13 +167,13 @@
           "profile": "argonaut",
           "optimal_tunables": 0,
           "legacy_tunables": 1,
-          "minimum_required_version": "argonaut",
+          "minimum_required_version": "hammer",
           "require_feature_tunables": 0,
           "require_feature_tunables2": 0,
           "has_v2_rules": 0,
           "require_feature_tunables3": 0,
           "has_v3_rules": 0,
-          "has_v4_buckets": 0,
+          "has_v4_buckets": 1,
           "require_feature_tunables5": 0,
           "has_v5_rules": 0
       },

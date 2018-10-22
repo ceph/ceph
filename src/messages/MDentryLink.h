@@ -16,7 +16,14 @@
 #ifndef CEPH_MDENTRYLINK_H
 #define CEPH_MDENTRYLINK_H
 
-class MDentryLink : public Message {
+#include <string_view>
+
+#include "msg/Message.h"
+
+class MDentryLink : public MessageInstance<MDentryLink> {
+public:
+  friend factory;
+private:
   dirfrag_t subtree;
   dirfrag_t dirfrag;
   string dn;
@@ -30,15 +37,15 @@ class MDentryLink : public Message {
 
   bufferlist bl;
 
+protected:
   MDentryLink() :
-    Message(MSG_MDS_DENTRYLINK) { }
-  MDentryLink(dirfrag_t r, dirfrag_t df, string& n, bool p) :
-    Message(MSG_MDS_DENTRYLINK),
+    MessageInstance(MSG_MDS_DENTRYLINK) { }
+  MDentryLink(dirfrag_t r, dirfrag_t df, std::string_view n, bool p) :
+    MessageInstance(MSG_MDS_DENTRYLINK),
     subtree(r),
     dirfrag(df),
     dn(n),
     is_primary(p) {}
-private:
   ~MDentryLink() override {}
 
 public:
@@ -48,19 +55,20 @@ public:
   }
   
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(subtree, p);
-    ::decode(dirfrag, p);
-    ::decode(dn, p);
-    ::decode(is_primary, p);
-    ::decode(bl, p);
+    auto p = payload.cbegin();
+    decode(subtree, p);
+    decode(dirfrag, p);
+    decode(dn, p);
+    decode(is_primary, p);
+    decode(bl, p);
   }
   void encode_payload(uint64_t features) override {
-    ::encode(subtree, payload);
-    ::encode(dirfrag, payload);
-    ::encode(dn, payload);
-    ::encode(is_primary, payload);
-    ::encode(bl, payload);
+    using ceph::encode;
+    encode(subtree, payload);
+    encode(dirfrag, payload);
+    encode(dn, payload);
+    encode(is_primary, payload);
+    encode(bl, payload);
   }
 };
 

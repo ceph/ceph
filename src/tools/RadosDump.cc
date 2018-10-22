@@ -17,7 +17,7 @@
 int RadosDump::read_super()
 {
   bufferlist ebl;
-  bufferlist::iterator ebliter = ebl.begin();
+  auto ebliter = ebl.cbegin();
   ssize_t bytes;
 
   bytes = ebl.read_fd(file_fd, super_header::FIXED_LENGTH);
@@ -37,7 +37,7 @@ int RadosDump::get_header(header *h)
   assert (h != NULL);
 
   bufferlist ebl;
-  bufferlist::iterator ebliter = ebl.begin();
+  auto ebliter = ebl.cbegin();
   ssize_t bytes;
 
   bytes = ebl.read_fd(file_fd, sh.header_size);
@@ -53,10 +53,10 @@ int RadosDump::get_header(header *h)
 
 int RadosDump::get_footer(footer *f)
 {
-  assert(f != NULL);
+  ceph_assert(f != NULL);
 
   bufferlist ebl;
-  bufferlist::iterator ebliter = ebl.begin();
+  auto ebliter = ebl.cbegin();
   ssize_t bytes;
 
   bytes = ebl.read_fd(file_fd, sh.footer_size);
@@ -106,7 +106,6 @@ int RadosDump::read_section(sectiontype_t *type, bufferlist *bl)
 
 int RadosDump::skip_object(bufferlist &bl)
 {
-  bufferlist::iterator ebliter = bl.begin();
   bufferlist ebl;
   bool done = false;
   while(!done) {
@@ -115,7 +114,6 @@ int RadosDump::skip_object(bufferlist &bl)
     if (ret)
       return ret;
 
-    ebliter = ebl.begin();
     if (type >= END_OF_TYPES) {
       cout << "Skipping unknown object section type" << std::endl;
       continue;
@@ -163,6 +161,6 @@ void RadosDump::write_super()
   superbl.clear();
 
   sh.encode(superbl);
-  assert(super_header::FIXED_LENGTH == superbl.length());
+  ceph_assert(super_header::FIXED_LENGTH == superbl.length());
   superbl.write_fd(file_fd);
 }

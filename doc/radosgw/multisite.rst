@@ -1,3 +1,5 @@
+.. _multisite:
+
 ==========
 Multi-Site
 ==========
@@ -61,10 +63,13 @@ A multi-site configuration requires at least two Ceph storage clusters,
 preferably given a distinct cluster name. At least two Ceph object
 gateway instances, one for each Ceph storage cluster.
 
-This guide assumes at least two Ceph storage clusters in geographically
+This guide assumes at least two Ceph storage clusters are in geographically
 separate locations; however, the configuration can work on the same
 site. This guide also assumes two Ceph object gateway servers named
 ``rgw1`` and ``rgw2``.
+
+.. important:: Running a single Ceph storage cluster is NOT recommended unless you have 
+               low latency WAN connections.
 
 A multi-site configuration requires a master zone group and a master
 zone. Additionally, each zone group requires a master zone. Zone groups
@@ -239,11 +244,11 @@ they exist.
 
 ::
 
-    # rados rmpool default.rgw.control default.rgw.control --yes-i-really-really-mean-it
-    # rados rmpool default.rgw.data.root default.rgw.data.root --yes-i-really-really-mean-it
-    # rados rmpool default.rgw.gc default.rgw.gc --yes-i-really-really-mean-it
-    # rados rmpool default.rgw.log default.rgw.log --yes-i-really-really-mean-it
-    # rados rmpool default.rgw.users.uid default.rgw.users.uid --yes-i-really-really-mean-it
+    # ceph osd pool rm default.rgw.control default.rgw.control --yes-i-really-really-mean-it
+    # ceph osd pool rm default.rgw.data.root default.rgw.data.root --yes-i-really-really-mean-it
+    # ceph osd pool rm default.rgw.gc default.rgw.gc --yes-i-really-really-mean-it
+    # ceph osd pool rm default.rgw.log default.rgw.log --yes-i-really-really-mean-it
+    # ceph osd pool rm default.rgw.users.uid default.rgw.users.uid --yes-i-really-really-mean-it
 
 Create a System User
 --------------------
@@ -419,11 +424,11 @@ needed.
 
 ::
 
-    # rados rmpool default.rgw.control default.rgw.control --yes-i-really-really-mean-it
-    # rados rmpool default.rgw.data.root default.rgw.data.root --yes-i-really-really-mean-it
-    # rados rmpool default.rgw.gc default.rgw.gc --yes-i-really-really-mean-it
-    # rados rmpool default.rgw.log default.rgw.log --yes-i-really-really-mean-it
-    # rados rmpool default.rgw.users.uid default.rgw.users.uid --yes-i-really-really-mean-it
+    # ceph osd pool rm default.rgw.control default.rgw.control --yes-i-really-really-mean-it
+    # ceph osd pool rm default.rgw.data.root default.rgw.data.root --yes-i-really-really-mean-it
+    # ceph osd pool rm default.rgw.gc default.rgw.gc --yes-i-really-really-mean-it
+    # ceph osd pool rm default.rgw.log default.rgw.log --yes-i-really-really-mean-it
+    # ceph osd pool rm default.rgw.users.uid default.rgw.users.uid --yes-i-really-really-mean-it
 
 Update the Ceph Configuration File
 ----------------------------------
@@ -1310,11 +1315,11 @@ with the deleted zone’s name.
 
 ::
 
-    # rados rmpool <del-zone>.rgw.control <del-zone>.rgw.control --yes-i-really-really-mean-it
-    # rados rmpool <del-zone>.rgw.data.root <del-zone>.rgw.data.root --yes-i-really-really-mean-it
-    # rados rmpool <del-zone>.rgw.gc <del-zone>.rgw.gc --yes-i-really-really-mean-it
-    # rados rmpool <del-zone>.rgw.log <del-zone>.rgw.log --yes-i-really-really-mean-it
-    # rados rmpool <del-zone>.rgw.users.uid <del-zone>.rgw.users.uid --yes-i-really-really-mean-it
+    # ceph osd pool rm <del-zone>.rgw.control <del-zone>.rgw.control --yes-i-really-really-mean-it
+    # ceph osd pool rm <del-zone>.rgw.data.root <del-zone>.rgw.data.root --yes-i-really-really-mean-it
+    # ceph osd pool rm <del-zone>.rgw.gc <del-zone>.rgw.gc --yes-i-really-really-mean-it
+    # ceph osd pool rm <del-zone>.rgw.log <del-zone>.rgw.log --yes-i-really-really-mean-it
+    # ceph osd pool rm <del-zone>.rgw.users.uid <del-zone>.rgw.users.uid --yes-i-really-really-mean-it
 
 Modify a Zone
 ~~~~~~~~~~~~~
@@ -1449,10 +1454,6 @@ instance.
 | ``rgw_default_zone_group_info_oid`` | The OID for storing the default   | String  | ``default.zonegroup`` |
 |                                     | zone group. We do not recommend   |         |                       |
 |                                     | changing this setting.            |         |                       |
-+-------------------------------------+-----------------------------------+---------+-----------------------+
-| ``rgw_num_zone_opstate_shards``     | The maximum number of shards for  | Integer | ``128``               |
-|                                     | keeping inter-zone group          |         |                       |
-|                                     | synchronization progress.         |         |                       |
 +-------------------------------------+-----------------------------------+---------+-----------------------+
 
 

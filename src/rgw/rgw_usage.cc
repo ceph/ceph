@@ -145,3 +145,8 @@ int RGWUsage::trim(RGWRados *store, rgw_user& uid, uint64_t start_epoch,
 {
   return store->trim_usage(uid, start_epoch, end_epoch);
 }
+
+int RGWUsage::clear(RGWRados *store)
+{
+  return store->clear_usage();
+}

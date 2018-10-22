@@ -258,7 +258,6 @@ void encode_xml(const char *name, unsigned long val, ceph::Formatter *f);
 void encode_xml(const char *name, long long val, ceph::Formatter *f);
 void encode_xml(const char *name, const utime_t& val, ceph::Formatter *f);
 void encode_xml(const char *name, const bufferlist& bl, ceph::Formatter *f);
-void encode_xml(const char *name, long long val, ceph::Formatter *f);
 void encode_xml(const char *name, long long unsigned val, ceph::Formatter *f);
 
 template<class T>

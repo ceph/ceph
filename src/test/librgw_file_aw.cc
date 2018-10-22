@@ -75,7 +75,7 @@ namespace {
     std::vector<ZPage*> pages;
     struct iovec* iovs;
 
-    ZPageSet(int n) {
+    explicit ZPageSet(int n) {
       pages.reserve(n);
       iovs = (struct iovec*) calloc(n, sizeof(struct iovec));
       for (int page_ix = 0; page_ix < n; ++page_ix) {
@@ -414,7 +414,7 @@ int main(int argc, char *argv[])
     }
   }
 
-  /* dont accidentally run as anonymous */
+  /* don't accidentally run as anonymous */
   if ((access_key == "") ||
       (secret_key == "")) {
     std::cout << argv[0] << " no AWS credentials, exiting" << std::endl;

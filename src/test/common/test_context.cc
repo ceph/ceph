@@ -23,7 +23,7 @@
 #include "include/types.h"
 #include "include/msgr.h"
 #include "common/ceph_context.h"
-#include "common/config.h"
+#include "common/config_proxy.h"
 #include "log/Log.h"
 
 TEST(CephContext, do_command)
@@ -34,7 +34,7 @@ TEST(CephContext, do_command)
 
   string key("key");
   string value("value");
-  cct->_conf->set_val(key.c_str(), value.c_str(), false);
+  cct->_conf.set_val(key.c_str(), value.c_str());
   cmdmap_t cmdmap;
   cmdmap["var"] = key;
 
@@ -56,8 +56,7 @@ TEST(CephContext, do_command)
     bufferlist out;
     cct->do_command("config diff get", cmdmap, "xml", &out);
     string s(out.c_str(), out.length());
-    EXPECT_EQ("<config_diff_get><diff><current><key>" + value + 
-      "</key></current><defaults><key></key></defaults></diff></config_diff_get>", s);
+    EXPECT_EQ("<config_diff_get><diff><key><default></default><override>" + value + "</override><final>value</final></key></diff></config_diff_get>", s);
   }
   cct->put();
 }
@@ -72,30 +71,30 @@ TEST(CephContext, experimental_features)
   ASSERT_FALSE(cct->check_experimental_feature_enabled("bar"));
   ASSERT_FALSE(cct->check_experimental_feature_enabled("baz"));
 
-  cct->_conf->set_val("enable_experimental_unrecoverable_data_corrupting_features",
+  cct->_conf.set_val("enable_experimental_unrecoverable_data_corrupting_features",
 		      "foo,bar");
-  cct->_conf->apply_changes(&cout);
+  cct->_conf.apply_changes(&cout);
   ASSERT_TRUE(cct->check_experimental_feature_enabled("foo"));
   ASSERT_TRUE(cct->check_experimental_feature_enabled("bar"));
   ASSERT_FALSE(cct->check_experimental_feature_enabled("baz"));
 
-  cct->_conf->set_val("enable_experimental_unrecoverable_data_corrupting_features",
+  cct->_conf.set_val("enable_experimental_unrecoverable_data_corrupting_features",
 		      "foo bar");
-  cct->_conf->apply_changes(&cout);
+  cct->_conf.apply_changes(&cout);
   ASSERT_TRUE(cct->check_experimental_feature_enabled("foo"));
   ASSERT_TRUE(cct->check_experimental_feature_enabled("bar"));
   ASSERT_FALSE(cct->check_experimental_feature_enabled("baz"));
 
-  cct->_conf->set_val("enable_experimental_unrecoverable_data_corrupting_features",
+  cct->_conf.set_val("enable_experimental_unrecoverable_data_corrupting_features",
 		      "baz foo");
-  cct->_conf->apply_changes(&cout);
+  cct->_conf.apply_changes(&cout);
   ASSERT_TRUE(cct->check_experimental_feature_enabled("foo"));
   ASSERT_FALSE(cct->check_experimental_feature_enabled("bar"));
   ASSERT_TRUE(cct->check_experimental_feature_enabled("baz"));
 
-  cct->_conf->set_val("enable_experimental_unrecoverable_data_corrupting_features",
+  cct->_conf.set_val("enable_experimental_unrecoverable_data_corrupting_features",
 		      "*");
-  cct->_conf->apply_changes(&cout);
+  cct->_conf.apply_changes(&cout);
   ASSERT_TRUE(cct->check_experimental_feature_enabled("foo"));
   ASSERT_TRUE(cct->check_experimental_feature_enabled("bar"));
   ASSERT_TRUE(cct->check_experimental_feature_enabled("baz"));

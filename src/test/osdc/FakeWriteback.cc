@@ -9,7 +9,7 @@
 #include "common/Cond.h"
 #include "common/Finisher.h"
 #include "common/Mutex.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "common/ceph_time.h"
 
 #include "FakeWriteback.h"

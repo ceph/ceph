@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "SyncPointPruneRequest.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "journal/Journaler.h"
 #include "librbd/ImageCtx.h"
@@ -119,7 +120,7 @@ template <typename I>
 void SyncPointPruneRequest<I>::handle_remove_snap(int r) {
   dout(20) << ": r=" << r << dendl;
 
-  assert(!m_snap_names.empty());
+  ceph_assert(!m_snap_names.empty());
   std::string snap_name = m_snap_names.front();
   m_snap_names.pop_front();
 
@@ -180,7 +181,7 @@ void SyncPointPruneRequest<I>::send_update_client() {
 
   bufferlist client_data_bl;
   librbd::journal::ClientData client_data(m_client_meta_copy);
-  ::encode(client_data, client_data_bl);
+  encode(client_data, client_data_bl);
 
   Context *ctx = create_context_callback<
     SyncPointPruneRequest<I>, &SyncPointPruneRequest<I>::handle_update_client>(

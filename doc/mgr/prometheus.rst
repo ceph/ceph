@@ -49,6 +49,12 @@ The *cluster* statistics (i.e. those global to the Ceph cluster)
 have labels appropriate to what they report on.  For example, 
 metrics relating to pools have a ``pool_id`` label.
 
+
+The long running averages that represent the histograms from core Ceph
+are represented by a pair of ``<name>_sum`` and ``<name>_count`` metrics.
+This is similar to how histograms are represented in `Prometheus <https://prometheus.io/docs/concepts/metric_types/#histogram>`_
+and they can also be treated `similarly <https://prometheus.io/docs/practices/histograms/>`_.
+
 Pool and OSD metadata series
 ----------------------------
 
@@ -59,13 +65,13 @@ Pools have a ``ceph_pool_metadata`` field like this:
 
 ::
 
-    ceph_pool_metadata{pool_id="2",name="cephfs_metadata_a"} 0.0
+    ceph_pool_metadata{pool_id="2",name="cephfs_metadata_a"} 1.0
 
 OSDs have a ``ceph_osd_metadata`` field like this:
 
 ::
 
-    ceph_osd_metadata{cluster_addr="172.21.9.34:6802/19096",device_class="ssd",id="0",public_addr="172.21.9.34:6801/19096",weight="1.0"} 0.0
+    ceph_osd_metadata{cluster_addr="172.21.9.34:6802/19096",device_class="ssd",ceph_daemon="osd.0",public_addr="172.21.9.34:6801/19096",weight="1.0"} 1.0
 
 
 Correlating drive statistics with node_exporter
@@ -79,34 +85,46 @@ drive statistics, special series are output like this:
 
 ::
 
-    ceph_disk_occupation{ceph_daemon="osd.0",device="sdd",instance="myhost",job="ceph"}
+    ceph_disk_occupation{ceph_daemon="osd.0",device="sdd", exported_instance="myhost"}
 
-To use this to get disk statistics by OSD ID, use the ``and on`` syntax
-in your prometheus query like this:
+To use this to get disk statistics by OSD ID, use either the ``and`` operator or
+the ``*`` operator in your prometheus query. All metadata metrics (like ``
+ceph_disk_occupation`` have the value 1 so they act neutral with ``*``. Using ``*``
+allows to use ``group_left`` and ``group_right`` grouping modifiers, so that
+the resulting metric has additional labels from one side of the query.
+
+See the
+`prometheus documentation`__ for more information about constructing queries.
+
+__ https://prometheus.io/docs/prometheus/latest/querying/basics
+
+The goal is to run a query like
 
 ::
 
     rate(node_disk_bytes_written[30s]) and on (device,instance) ceph_disk_occupation{ceph_daemon="osd.0"}
 
-See the prometheus documentation for more information about constructing
-queries.
+Out of the box the above query will not return any metrics since the ``instance`` labels of
+both metrics don't match. The ``instance`` label of ``ceph_disk_occupation``
+will be the currently active MGR node.
 
-Note that for this mechanism to work, Ceph and node_exporter must agree
-about the values of the ``instance`` label.  See the following section
-for guidance about to to set up Prometheus in a way that sets
-``instance`` properly.
+ The following two section outline two approaches to remedy this.
+
+Use label_replace
+=================
+
+The ``label_replace`` function (cp.
+`label_replace documentation <https://prometheus.io/docs/prometheus/latest/querying/functions/#label_replace>`_)
+can add a label to, or alter a label of, a metric within a query.
+
+To correlate an OSD and its disks write rate, the following query can be used:
+
+::
+
+    label_replace(rate(node_disk_bytes_written[30s]), "exported_instance", "$1", "instance", "(.*):.*") and on (device,exported_instance) ceph_disk_occupation{ceph_daemon="osd.0"}
 
 Configuring Prometheus server
 =============================
-
-See the prometheus documentation for full details of how to add
-scrape endpoints: the notes
-in this section are tips on how to configure Prometheus to capture
-the Ceph statistics in the most usefully-labelled form.
-
-This configuration is necessary because Ceph is reporting metrics
-from many hosts and services via a single endpoint, and some
-metrics that relate to no physical host (such as pool statistics).
 
 honor_labels
 ------------
@@ -115,27 +133,18 @@ To enable Ceph to output properly-labelled data relating to any host,
 use the ``honor_labels`` setting when adding the ceph-mgr endpoints
 to your prometheus configuration.
 
-Without this setting, any ``instance`` labels that Ceph outputs, such
-as those in ``ceph_disk_occupation`` series, will be overridden
-by Prometheus.
+This allows Ceph to export the proper ``instance`` label without prometheus
+overwriting it. Without this setting, Prometheus applies an ``instance`` label
+that includes the hostname and port of the endpoint that the series game from.
+Because Ceph clusters have multiple manager daemons, this results in an
+``instance`` label that changes spuriously when the active manager daemon
+changes.
 
-Ceph instance label
--------------------
-
-By default, Prometheus applies an ``instance`` label that includes
-the hostname and port of the endpoint that the series game from.  Because
-Ceph clusters have multiple manager daemons, this results in an ``instance``
-label that changes spuriously when the active manager daemon changes.
-
-Set a custom ``instance`` label in your Prometheus target configuration: 
-you might wish to set it to the hostname of your first monitor, or something
-completely arbitrary like "ceph_cluster".
-
-node_exporter instance labels
+node_exporter hostname labels
 -----------------------------
 
 Set your ``instance`` labels to match what appears in Ceph's OSD metadata
-in the ``hostname`` field.  This is generally the short hostname of the node.
+in the ``instance`` field.  This is generally the short hostname of the node.
 
 This is only necessary if you want to correlate Ceph stats with host stats,
 but you may find it useful to do it in all cases in case you want to do
@@ -145,7 +154,8 @@ Example configuration
 ---------------------
 
 This example shows a single node configuration running ceph-mgr and
-node_exporter on a server called ``senta04``.
+node_exporter on a server called ``senta04``. Note that this requires to add the
+appropriate instance label to every ``node_exporter`` target individually.
 
 This is just an example: there are other ways to configure prometheus
 scrape targets and label rewrite rules.
@@ -180,9 +190,7 @@ ceph_targets.yml
     [
         {
             "targets": [ "senta04.mydomain.com:9283" ],
-            "labels": {
-                "instance": "ceph_cluster"
-            }
+            "labels": {}
         }
     ]
 

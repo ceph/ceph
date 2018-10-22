@@ -1,0 +1,34 @@
+<div dropdown>
+  <a dropdownToggle
+     class="dropdown-toggle"
+     data-toggle="dropdown"
+     i18n-title
+     title="Help">
+    <i class="fa fa-question-circle-o"></i>
+    <span class="caret"></span>
+  </a>
+  <ul *dropdownMenu
+      class="dropdown-menu dropdown-menu-right">
+    <li>
+      <a i18n
+         class="dropdown-item"
+         [ngClass]="{'disabled': !docsUrl}"
+         href="{{ docsUrl }}"
+         target="_blank">Documentation
+      </a>
+    </li>
+    <li>
+      <a i18n
+         class="dropdown-item"
+         href="/docs"
+         target="_blank">API
+      </a>
+    </li>
+    <li>
+      <a i18n
+         class="dropdown-item"
+         (click)="openAboutModal()">About
+      </a>
+    </li>
+  </ul>
+</div>

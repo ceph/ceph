@@ -15,7 +15,7 @@ enum ClsLockType {
   LOCK_SHARED    = 2,
 };
 
-static inline const char *cls_lock_type_str(ClsLockType type)
+inline const char *cls_lock_type_str(ClsLockType type)
 {
     switch (type) {
       case LOCK_NONE:
@@ -45,14 +45,14 @@ namespace rados {
 
         void encode(bufferlist &bl) const {
           ENCODE_START(1, 1, bl);
-          ::encode(locker, bl);
-          ::encode(cookie, bl);
+          encode(locker, bl);
+          encode(cookie, bl);
           ENCODE_FINISH(bl);
         }
-        void decode(bufferlist::iterator &bl) {
+        void decode(bufferlist::const_iterator &bl) {
           DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
-          ::decode(locker, bl);
-          ::decode(cookie, bl);
+          decode(locker, bl);
+          decode(cookie, bl);
           DECODE_FINISH(bl);
         }
 
@@ -66,7 +66,7 @@ namespace rados {
         void dump(Formatter *f) const;
         static void generate_test_instances(list<locker_id_t*>& o);
       };
-      WRITE_CLASS_ENCODER(rados::cls::lock::locker_id_t)
+      WRITE_CLASS_ENCODER(locker_id_t)
 
       struct locker_info_t
       {
@@ -80,22 +80,22 @@ namespace rados {
 
         void encode(bufferlist &bl, uint64_t features) const {
           ENCODE_START(1, 1, bl);
-          ::encode(expiration, bl);
-          ::encode(addr, bl, features);
-          ::encode(description, bl);
+          encode(expiration, bl);
+          encode(addr, bl, features);
+          encode(description, bl);
           ENCODE_FINISH(bl);
         }
-        void decode(bufferlist::iterator &bl) {
+        void decode(bufferlist::const_iterator &bl) {
           DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
-          ::decode(expiration, bl);
-          ::decode(addr, bl);
-          ::decode(description, bl);
+          decode(expiration, bl);
+          decode(addr, bl);
+          decode(description, bl);
           DECODE_FINISH(bl);
         }
         void dump(Formatter *f) const;
         static void generate_test_instances(list<locker_info_t *>& o);
       };
-      WRITE_CLASS_ENCODER_FEATURES(rados::cls::lock::locker_info_t)
+      WRITE_CLASS_ENCODER_FEATURES(locker_info_t)
 
       struct lock_info_t {
         map<locker_id_t, locker_info_t> lockers; // map of lockers
@@ -106,31 +106,28 @@ namespace rados {
 
         void encode(bufferlist &bl, uint64_t features) const {
           ENCODE_START(1, 1, bl);
-          ::encode(lockers, bl, features);
+          encode(lockers, bl, features);
           uint8_t t = (uint8_t)lock_type;
-          ::encode(t, bl);
-          ::encode(tag, bl);
+          encode(t, bl);
+          encode(tag, bl);
           ENCODE_FINISH(bl);
         }
-        void decode(bufferlist::iterator &bl) {
+        void decode(bufferlist::const_iterator &bl) {
           DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
-          ::decode(lockers, bl);
+          decode(lockers, bl);
           uint8_t t;
-          ::decode(t, bl);
+          decode(t, bl);
           lock_type = (ClsLockType)t;
-          ::decode(tag, bl);
+          decode(tag, bl);
           DECODE_FINISH(bl);
         }
         lock_info_t() : lock_type(LOCK_NONE) {}
         void dump(Formatter *f) const;
         static void generate_test_instances(list<lock_info_t *>& o);
       };
-      WRITE_CLASS_ENCODER_FEATURES(rados::cls::lock::lock_info_t)
+      WRITE_CLASS_ENCODER_FEATURES(lock_info_t);
     }
   }
 }
-WRITE_CLASS_ENCODER_FEATURES(rados::cls::lock::locker_info_t)
-WRITE_CLASS_ENCODER(rados::cls::lock::locker_id_t)
-WRITE_CLASS_ENCODER_FEATURES(rados::cls::lock::lock_info_t)
 
 #endif

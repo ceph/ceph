@@ -62,7 +62,7 @@ Configure a Block Device
 
 #. On the ``ceph-client`` node, create a block device image. :: 
 
-	rbd create foo --size 4096 [-m {mon-IP}] [-k /path/to/ceph.client.admin.keyring]
+	rbd create foo --size 4096 --image-feature layering [-m {mon-IP}] [-k /path/to/ceph.client.admin.keyring]
 
 #. On the ``ceph-client`` node, map the image to a block device. :: 
 

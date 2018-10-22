@@ -15,7 +15,6 @@
 #ifndef CEPH_MSGR_PIPE_H
 #define CEPH_MSGR_PIPE_H
 
-#include "include/memory.h"
 #include "auth/AuthSessionHandler.h"
 
 #include "msg/msg_types.h"
@@ -128,7 +127,7 @@ static const int SM_IOV_MAX = (IOV_MAX >= 1024 ? IOV_MAX / 4 : IOV_MAX);
 
     // session_security handles any signatures or encryptions required for this pipe's msgs. PLR
 
-    ceph::shared_ptr<AuthSessionHandler> session_security;
+    std::shared_ptr<AuthSessionHandler> session_security;
 
   protected:
     friend class SimpleMessenger;
@@ -229,17 +228,17 @@ static const int SM_IOV_MAX = (IOV_MAX >= 1024 ? IOV_MAX / 4 : IOV_MAX);
     void stop_and_wait();
 
     void _send(Message *m) {
-      assert(pipe_lock.is_locked());
+      ceph_assert(pipe_lock.is_locked());
       out_q[m->get_priority()].push_back(m);
       cond.Signal();
     }
     void _send_keepalive() {
-      assert(pipe_lock.is_locked());
+      ceph_assert(pipe_lock.is_locked());
       send_keepalive = true;
       cond.Signal();
     }
     Message *_get_next_outgoing() {
-      assert(pipe_lock.is_locked());
+      ceph_assert(pipe_lock.is_locked());
       Message *m = 0;
       while (!m && !out_q.empty()) {
         map<int, list<Message*> >::reverse_iterator p = out_q.rbegin();

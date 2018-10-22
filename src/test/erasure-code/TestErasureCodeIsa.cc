@@ -442,7 +442,7 @@ TEST_F(IsaErasureCodeTest, isa_vandermonde_exhaustive)
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
   in_ptr.append(payload, strlen(payload));
   bufferlist in;
-  in.push_front(in_ptr);
+  in.push_back(in_ptr);
 
   set<int>want_to_encode;
 
@@ -569,7 +569,7 @@ TEST_F(IsaErasureCodeTest, isa_cauchy_exhaustive)
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
   in_ptr.append(payload, strlen(payload));
   bufferlist in;
-  in.push_front(in_ptr);
+  in.push_back(in_ptr);
 
   set<int>want_to_encode;
 
@@ -696,7 +696,7 @@ TEST_F(IsaErasureCodeTest, isa_cauchy_cache_trash)
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
   in_ptr.append(payload, strlen(payload));
   bufferlist in;
-  in.push_front(in_ptr);
+  in.push_back(in_ptr);
 
   set<int>want_to_encode;
 
@@ -822,7 +822,7 @@ TEST_F(IsaErasureCodeTest, isa_xor_codec)
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
   in_ptr.append(payload, strlen(payload));
   bufferlist in;
-  in.push_front(in_ptr);
+  in.push_back(in_ptr);
 
   set<int>want_to_encode;
 
@@ -876,7 +876,7 @@ TEST_F(IsaErasureCodeTest, isa_xor_codec)
 
 TEST_F(IsaErasureCodeTest, create_rule)
 {
-  CrushWrapper *c = new CrushWrapper;
+  std::unique_ptr<CrushWrapper> c = std::make_unique<CrushWrapper>();
   c->create();
   int root_type = 2;
   c->set_type_name(root_type, "root");

@@ -20,10 +20,12 @@
 #include "include/health.h"
 #include "mon/health_check.h"
 
-class MMonMgrReport : public PaxosServiceMessage {
-
-  static const int HEAD_VERSION = 1;
-  static const int COMPAT_VERSION = 1;
+class MMonMgrReport : public MessageInstance<MMonMgrReport, PaxosServiceMessage> {
+public:
+  friend factory;
+private:
+  static constexpr int HEAD_VERSION = 1;
+  static constexpr int COMPAT_VERSION = 1;
 
 public:
   // PGMapDigest is in data payload
@@ -31,7 +33,7 @@ public:
   bufferlist service_map_bl;  // encoded ServiceMap
 
   MMonMgrReport()
-    : PaxosServiceMessage(MSG_MON_MGR_REPORT, 0, HEAD_VERSION, COMPAT_VERSION)
+    : MessageInstance(MSG_MON_MGR_REPORT, 0, HEAD_VERSION, COMPAT_VERSION)
   {}
 private:
   ~MMonMgrReport() override {}
@@ -44,15 +46,16 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     paxos_encode();
-    ::encode(health_checks, payload);
-    ::encode(service_map_bl, payload);
+    encode(health_checks, payload);
+    encode(service_map_bl, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     paxos_decode(p);
-    ::decode(health_checks, p);
-    ::decode(service_map_bl, p);
+    decode(health_checks, p);
+    decode(service_map_bl, p);
   }
 };
 

@@ -122,7 +122,7 @@ on the raw data in the message.  The encryption is performed with the same ``enc
 routine used on the sending end, using the key stored in the local ``session\_security``
 data structure.  
 
-If everything checks out, the CEPHX routine returns 0, indicating succcess.  If there is a 
+If everything checks out, the CEPHX routine returns 0, indicating success.  If there is a 
 problem, the routine returns ``SESSION\_SIGNATURE\_FAILURE``.
 
 Adding New Session Authentication Methods

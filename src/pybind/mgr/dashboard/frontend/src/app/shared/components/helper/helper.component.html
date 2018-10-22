@@ -1,0 +1,11 @@
+<ng-template #popoverTpl>
+  <div [innerHtml]="html"></div>
+  <ng-content></ng-content>
+</ng-template>
+<i class="fa fa-question-circle"
+   aria-hidden="true"
+   [popover]="popoverTpl"
+   placement="bottom"
+   container="body"
+   [outsideClick]="true">
+</i>

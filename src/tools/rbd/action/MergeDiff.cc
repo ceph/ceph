@@ -66,8 +66,8 @@ static int parse_diff_header(int fd, __u8 *tag, string *from, string *to, uint64
 
       bufferlist bl;
       bl.append(buf, 8);
-      bufferlist::iterator p = bl.begin();
-      ::decode(*size, p);
+      auto p = bl.cbegin();
+      decode(*size, p);
     } else {
       break;
     }
@@ -102,9 +102,9 @@ static int parse_diff_body(int fd, __u8 *tag, uint64_t *offset, uint64_t *length
 
   bufferlist bl;
   bl.append(buf, 16);
-  bufferlist::iterator p = bl.begin();
-  ::decode(*offset, p);
-  ::decode(*length, p);
+  auto p = bl.cbegin();
+  decode(*offset, p);
+  decode(*length, p);
 
   if (!(*length))
     return -ENOTSUP;
@@ -122,9 +122,9 @@ static int accept_diff_body(int fd, int pd, __u8 tag, uint64_t offset, uint64_t 
     return 0;
 
   bufferlist bl;
-  ::encode(tag, bl);
-  ::encode(offset, bl);
-  ::encode(length, bl);
+  encode(tag, bl);
+  encode(offset, bl);
+  encode(length, bl);
   int r;
   r = bl.write_fd(pd);
   if (r < 0)
@@ -228,19 +228,19 @@ static int do_merge_diff(const char *first, const char *second,
     __u8 tag;
     if (f_from.size()) {
       tag = RBD_DIFF_FROM_SNAP;
-      ::encode(tag, bl);
-      ::encode(f_from, bl);
+      encode(tag, bl);
+      encode(f_from, bl);
     }
 
     if (s_to.size()) {
       tag = RBD_DIFF_TO_SNAP;
-      ::encode(tag, bl);
-      ::encode(s_to, bl);
+      encode(tag, bl);
+      encode(s_to, bl);
     }
 
     tag = RBD_DIFF_IMAGE_SIZE;
-    ::encode(tag, bl);
-    ::encode(s_size, bl);
+    encode(tag, bl);
+    encode(s_size, bl);
 
     r = bl.write_fd(pd);
     if (r < 0) {
@@ -336,7 +336,7 @@ static int do_merge_diff(const char *first, const char *second,
         continue;
       }
     }
-    assert(f_off >= s_off);
+    ceph_assert(f_off >= s_off);
 
     if (f_off < s_off + s_len && f_len) {
       uint64_t delta = s_off + s_len - f_off;
@@ -363,7 +363,7 @@ static int do_merge_diff(const char *first, const char *second,
         continue;
       }
     }
-    assert(f_off >= s_off + s_len);
+    ceph_assert(f_off >= s_off + s_len);
     if (s_len) {
       r = accept_diff_body(sd, pd, s_tag, s_off, s_len);
       if (r < 0) {
@@ -374,7 +374,7 @@ static int do_merge_diff(const char *first, const char *second,
       s_len = 0;
       s_tag = 0;
     } else {
-      assert(f_end && s_end);
+      ceph_assert(f_end && s_end);
     }
     continue;
   }
@@ -382,7 +382,7 @@ static int do_merge_diff(const char *first, const char *second,
   {//tail
     __u8 tag = RBD_DIFF_END;
     bufferlist bl;
-    ::encode(tag, bl);
+    encode(tag, bl);
     r = bl.write_fd(pd);
   }
 
@@ -414,7 +414,8 @@ void get_arguments(po::options_description *positional,
   at::add_no_progress_option(options);
 }
 
-int execute(const po::variables_map &vm) {
+int execute(const po::variables_map &vm,
+            const std::vector<std::string> &ceph_global_init_args) {
   std::string first_diff = utils::get_positional_argument(vm, 0);
   if (first_diff.empty()) {
     std::cerr << "rbd: first diff was not specified" << std::endl;
@@ -428,8 +429,8 @@ int execute(const po::variables_map &vm) {
   }
 
   std::string path;
-  int r = utils::get_path(vm, utils::get_positional_argument(vm, 2),
-                          &path);
+  size_t arg_index = 2;
+  int r = utils::get_path(vm, &arg_index, &path);
   if (r < 0) {
     return r;
   }

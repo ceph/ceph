@@ -21,9 +21,9 @@
 const static int dout_subsys = ceph_subsys_auth;
 
 
-AuthMethodList::AuthMethodList(CephContext *cct, string str)
+AuthMethodList::AuthMethodList(CephContext *cct, std::string str)
 {
-  list<string> sup_list;
+  std::list<std::string> sup_list;
   get_str_list(str, sup_list);
   if (sup_list.empty()) {
     lderr(cct) << "WARNING: empty auth protocol list" << dendl;

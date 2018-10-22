@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include "include/on_exit.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #ifndef MAP_ANONYMOUS
 # ifdef MAP_ANON
@@ -60,30 +60,30 @@ static void call_exit()
 int main(int argc, char **argv)
 {
   // test basic function scope behavior
-  assert(func_scope_val == 0);
+  ceph_assert(func_scope_val == 0);
   func_scope();
-  assert(func_scope_val == 8);
+  ceph_assert(func_scope_val == 8);
 
   // shared mem for exit tests
   shared_val = (int*)mmap(NULL, sizeof(int),
       PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
-  assert(shared_val != MAP_FAILED);
+  ceph_assert(shared_val != MAP_FAILED);
 
   // test normal exit returning from main
   *shared_val = 0;
   int pid = fork();
-  assert(pid >= 0);
+  ceph_assert(pid >= 0);
   if (pid) {
     int status;
     int ret = waitpid(pid, &status, 0);
-    assert(ret == pid); // should be our child
-    assert(status == 0);
-    assert(*shared_val == MAIN_SCOPE_VAL);
+    ceph_assert(ret == pid); // should be our child
+    ceph_assert(status == 0);
+    ceph_assert(*shared_val == MAIN_SCOPE_VAL);
   } else {
     // child adds a callback to the static scope callback manager and then
     // exits by returning from main. The parent checks the value after the
     // child exits via the memory map.
-    assert(*shared_val == 0);
+    ceph_assert(*shared_val == 0);
     int *new_val = (int*)malloc(sizeof(*new_val));
     *new_val = MAIN_SCOPE_VAL;
     main_scope_mgr.add_callback(main_scope_cb, new_val);
@@ -93,17 +93,17 @@ int main(int argc, char **argv)
   // test exit via exit()
   *shared_val = 0;
   pid = fork();
-  assert(pid >= 0);
+  ceph_assert(pid >= 0);
   if (pid) {
     int status;
     int ret = waitpid(pid, &status, 0);
-    assert(ret == pid); // should be our child
-    assert(WEXITSTATUS(status) == 3);
-    assert(*shared_val == EXIT_FUNC_VAL);
+    ceph_assert(ret == pid); // should be our child
+    ceph_assert(WEXITSTATUS(status) == 3);
+    ceph_assert(*shared_val == EXIT_FUNC_VAL);
   } else {
     // child adds a callback to the static scope callback manager and then
     // exits via exit().
-    assert(*shared_val == 0);
+    ceph_assert(*shared_val == 0);
     int *new_val = (int*)malloc(sizeof(*new_val));
     *new_val = EXIT_FUNC_VAL;
     exit_func_mgr.add_callback(exit_func_cb, new_val);

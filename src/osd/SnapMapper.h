@@ -29,7 +29,7 @@
 
 class OSDriver : public MapCacher::StoreDriver<std::string, bufferlist> {
   ObjectStore *os;
-  coll_t cid;
+  ObjectStore::CollectionHandle ch;
   ghobject_t hoid;
 
 public:
@@ -39,7 +39,7 @@ public:
     ghobject_t hoid;
     ObjectStore::Transaction *t;
     OSTransaction(
-      coll_t cid,
+      const coll_t &cid,
       const ghobject_t &hoid,
       ObjectStore::Transaction *t)
       : cid(cid), hoid(hoid), t(t) {}
@@ -60,11 +60,14 @@ public:
 
   OSTransaction get_transaction(
     ObjectStore::Transaction *t) {
-    return OSTransaction(cid, hoid, t);
+    return OSTransaction(ch->cid, hoid, t);
   }
 
-  OSDriver(ObjectStore *os, coll_t cid, const ghobject_t &hoid) :
-    os(os), cid(cid), hoid(hoid) {}
+  OSDriver(ObjectStore *os, const coll_t& cid, const ghobject_t &hoid) :
+    os(os),
+    hoid(hoid) {
+    ch = os->open_collection(cid);
+  }
   int get_keys(
     const std::set<std::string> &keys,
     std::map<std::string, bufferlist> *out) override;
@@ -105,7 +108,7 @@ public:
       : oid(oid), snaps(snaps) {}
     object_snaps() {}
     void encode(bufferlist &bl) const;
-    void decode(bufferlist::iterator &bp);
+    void decode(bufferlist::const_iterator &bp);
   };
 
 private:
@@ -141,9 +144,7 @@ private:
     MapCacher::Transaction<std::string, bufferlist> *t);
 
   // True if hoid belongs in this mapping based on mask_bits and match
-  bool check(const hobject_t &hoid) const {
-    return hoid.match(mask_bits, match);
-  }
+  bool check(const hobject_t &hoid) const;
 
   int _remove_oid(
     const hobject_t &oid,    ///< [in] oid to remove
@@ -156,7 +157,7 @@ public:
       return string();
     char buf[20];
     int r = snprintf(buf, sizeof(buf), ".%x", (int)shard);
-    assert(r < (int)sizeof(buf));
+    ceph_assert(r < (int)sizeof(buf));
     return string(buf, r) + '_';
   }
   uint32_t mask_bits;
@@ -179,11 +180,10 @@ public:
   }
 
   set<string> prefixes;
-  /// Update bits in case of pg split
+  /// Update bits in case of pg split or merge
   void update_bits(
     uint32_t new_bits  ///< [in] new split bits
     ) {
-    assert(new_bits >= mask_bits);
     mask_bits = new_bits;
     set<string> _prefixes = hobject_t::get_prefixes(
       mask_bits,

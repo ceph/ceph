@@ -6,11 +6,10 @@
 #include "common/Throttle.h"
 #include "common/ceph_time.h"
 #include "common/perf_counters.h"
-#include "common/Throttle.h"
 
 
 // re-include our assert to clobber the system one; fix dout:
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_subsys ceph_subsys_throttle
 
@@ -42,7 +41,7 @@ Throttle::Throttle(CephContext *cct, const std::string& n, int64_t m,
 		   bool _use_perf)
   : cct(cct), name(n), max(m), use_perf(_use_perf)
 {
-  assert(m >= 0);
+  ceph_assert(m >= 0);
 
   if (!use_perf)
     return;
@@ -71,13 +70,13 @@ Throttle::Throttle(CephContext *cct, const std::string& n, int64_t m,
 Throttle::~Throttle()
 {
   auto l = uniquely_lock(lock);
-  assert(conds.empty());
+  ceph_assert(conds.empty());
 }
 
 void Throttle::_reset_max(int64_t m)
 {
   // lock must be held.
-  if (static_cast<int64_t>(max) == m)
+  if (max == m)
     return;
   if (!conds.empty())
     conds.front().notify_one();
@@ -123,7 +122,7 @@ bool Throttle::wait(int64_t m)
 
   auto l = uniquely_lock(lock);
   if (m) {
-    assert(m > 0);
+    ceph_assert(m > 0);
     _reset_max(m);
   }
   ldout(cct, 10) << "wait" << dendl;
@@ -135,7 +134,7 @@ int64_t Throttle::take(int64_t c)
   if (0 == max) {
     return 0;
   }
-  assert(c >= 0);
+  ceph_assert(c >= 0);
   ldout(cct, 10) << "take " << c << dendl;
   {
     auto l = uniquely_lock(lock);
@@ -155,7 +154,7 @@ bool Throttle::get(int64_t c, int64_t m)
     return false;
   }
 
-  assert(c >= 0);
+  ceph_assert(c >= 0);
   ldout(cct, 10) << "get " << c << " (" << count.load() << " -> " << (count.load() + c) << ")" << dendl;
   if (logger) {
     logger->inc(l_throttle_get_started);
@@ -164,7 +163,7 @@ bool Throttle::get(int64_t c, int64_t m)
   {
     auto l = uniquely_lock(lock);
     if (m) {
-      assert(m > 0);
+      ceph_assert(m > 0);
       _reset_max(m);
     }
     waited = _wait(c, l);
@@ -215,7 +214,7 @@ int64_t Throttle::put(int64_t c)
     return 0;
   }
 
-  assert(c >= 0);
+  ceph_assert(c >= 0);
   ldout(cct, 10) << "put " << c << " (" << count.load() << " -> "
 		 << (count.load()-c) << ")" << dendl;
   auto l = uniquely_lock(lock);
@@ -223,7 +222,7 @@ int64_t Throttle::put(int64_t c)
     if (!conds.empty())
       conds.front().notify_one();
     // if count goes negative, we failed somewhere!
-    assert(static_cast<int64_t>(count) >= c);
+    ceph_assert(count >= c);
     count -= c;
     if (logger) {
       logger->inc(l_throttle_put);
@@ -290,7 +289,7 @@ BackoffThrottle::BackoffThrottle(CephContext *cct, const std::string& n,
 BackoffThrottle::~BackoffThrottle()
 {
   auto l = uniquely_lock(lock);
-  assert(waiters.empty());
+  ceph_assert(waiters.empty());
 }
 
 bool BackoffThrottle::set_params(
@@ -457,7 +456,7 @@ std::chrono::duration<double> BackoffThrottle::get(uint64_t c)
     } else {
       break;
     }
-    assert(ticket == waiters.begin());
+    ceph_assert(ticket == waiters.begin());
     delay = _get_delay(c) - (std::chrono::system_clock::now() - start);
   }
   waiters.pop_front();
@@ -478,7 +477,7 @@ std::chrono::duration<double> BackoffThrottle::get(uint64_t c)
 uint64_t BackoffThrottle::put(uint64_t c)
 {
   locker l(lock);
-  assert(current >= c);
+  ceph_assert(current >= c);
   current -= c;
   _kick_waiters();
 
@@ -523,8 +522,8 @@ SimpleThrottle::SimpleThrottle(uint64_t max, bool ignore_enoent)
 SimpleThrottle::~SimpleThrottle()
 {
   auto l = uniquely_lock(m_lock);
-  assert(m_current == 0);
-  assert(waiters == 0);
+  ceph_assert(m_current == 0);
+  ceph_assert(waiters == 0);
 }
 
 void SimpleThrottle::start_op()
@@ -569,16 +568,16 @@ OrderedThrottle::OrderedThrottle(uint64_t max, bool ignore_enoent)
 
 OrderedThrottle::~OrderedThrottle() {
   auto l  = uniquely_lock(m_lock);
-  assert(waiters == 0);
+  ceph_assert(waiters == 0);
 }
 
 C_OrderedThrottle *OrderedThrottle::start_op(Context *on_finish) {
-  assert(on_finish);
+  ceph_assert(on_finish);
 
   auto l = uniquely_lock(m_lock);
   uint64_t tid = m_next_tid++;
   m_tid_result[tid] = Result(on_finish);
-  auto ctx = make_unique<C_OrderedThrottle>(this, tid);
+  auto ctx = std::make_unique<C_OrderedThrottle>(this, tid);
 
   complete_pending_ops(l);
   while (m_max == m_current) {
@@ -594,7 +593,7 @@ C_OrderedThrottle *OrderedThrottle::start_op(Context *on_finish) {
 
 void OrderedThrottle::end_op(int r) {
   auto l = uniquely_lock(m_lock);
-  assert(m_current > 0);
+  ceph_assert(m_current > 0);
 
   if (r < 0 && m_ret_val == 0 && (r != -ENOENT || !m_ignore_enoent)) {
     m_ret_val = r;
@@ -607,7 +606,7 @@ void OrderedThrottle::finish_op(uint64_t tid, int r) {
   auto l = uniquely_lock(m_lock);
 
   auto it = m_tid_result.find(tid);
-  assert(it != m_tid_result.end());
+  ceph_assert(it != m_tid_result.end());
 
   it->second.finished = true;
   it->second.ret_val = r;
@@ -686,7 +685,7 @@ uint64_t TokenBucketThrottle::Bucket::put(uint64_t c) {
 }
 
 void TokenBucketThrottle::Bucket::set_max(uint64_t m) {
-  if (remain > m)
+  if (remain > m || max == 0)
     remain = m;
   max = m;
 }
@@ -701,7 +700,7 @@ TokenBucketThrottle::TokenBucketThrottle(
     m_avg(avg), m_timer(timer), m_timer_lock(timer_lock),
     m_lock("token_bucket_throttle_lock")
 {
-  Mutex::Locker timer_locker(*m_timer_lock);
+  std::lock_guard<Mutex> timer_locker(*m_timer_lock);
   schedule_timer();
 }
 
@@ -709,13 +708,13 @@ TokenBucketThrottle::~TokenBucketThrottle()
 {
   // cancel the timer events.
   {
-    Mutex::Locker timer_locker(*m_timer_lock);
+    std::lock_guard<Mutex> timer_locker(*m_timer_lock);
     cancel_timer();
   }
 
   list<Blocker> tmp_blockers;
   {
-    Mutex::Locker blockers_lock(m_lock);
+    std::lock_guard<Mutex> blockers_lock(m_lock);
     tmp_blockers.splice(tmp_blockers.begin(), m_blockers, m_blockers.begin(), m_blockers.end());
   }
 
@@ -725,7 +724,7 @@ TokenBucketThrottle::~TokenBucketThrottle()
 }
 
 void TokenBucketThrottle::set_max(uint64_t m) {
-  Mutex::Locker lock(m_lock);
+  std::lock_guard<Mutex> lock(m_lock);
   m_throttle.set_max(m);
 }
 
@@ -737,12 +736,12 @@ void TokenBucketThrottle::add_tokens() {
   list<Blocker> tmp_blockers;
   {
     // put m_avg tokens into bucket.
-    Mutex::Locker lock(m_lock);
+    std::lock_guard<Mutex> lock(m_lock);
     m_throttle.put(m_avg);
     // check the m_blockers from head to tail, if blocker can get
     // enough tokens, let it go.
     while (!m_blockers.empty()) {
-      Blocker blocker = m_blockers.front();
+      Blocker &blocker = m_blockers.front();
       uint64_t got = m_throttle.get(blocker.tokens_requested);
       if (got == blocker.tokens_requested) {
 	// got enough tokens for front.

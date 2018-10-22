@@ -166,8 +166,13 @@ def get_nodes_using_role(ctx, target_role):
                 modified_remotes[_remote].append(svc_id)
 
     ctx.cluster.remotes = modified_remotes
-    ctx.cluster.mapped_role = ceph_deploy_mapped
-
+    # since the function is called multiple times for target roles
+    # append new mapped roles
+    if not hasattr(ctx.cluster, 'mapped_role'):
+        ctx.cluster.mapped_role = ceph_deploy_mapped
+    else:
+        ctx.cluster.mapped_role.update(ceph_deploy_mapped)
+    log.info("New mapped_role={mr}".format(mr=ctx.cluster.mapped_role))
     return nodes_of_interest
 
 
@@ -781,13 +786,15 @@ def upgrade(ctx, config):
     # get the roles that are mapped as per ceph-deploy
     # roles are mapped for mon/mds eg: mon.a  => mon.host_short_name
     mapped_role = ctx.cluster.mapped_role
+    log.info("roles={r}, mapped_roles={mr}".format(r=roles, mr=mapped_role))
     if config.get('branch'):
         branch = config.get('branch')
         (var, val) = branch.items()[0]
         ceph_branch = '--{var}={val}'.format(var=var, val=val)
     else:
-        # default to master
-        ceph_branch = '--dev=master'
+        # default to wip-branch under test
+        dev_branch = ctx.config['branch']
+        ceph_branch = '--dev={branch}'.format(branch=dev_branch)
     # get the node used for initial deployment which is mon.a
     mon_a = mapped_role.get('mon.a')
     (ceph_admin,) = ctx.cluster.only(mon_a).remotes.iterkeys()

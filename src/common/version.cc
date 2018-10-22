@@ -28,6 +28,11 @@ const char *ceph_version_to_str(void)
   return CEPH_GIT_NICE_VER;
 }
 
+const char *ceph_release_to_str(void)
+{
+  return ceph_release_name(CEPH_RELEASE);
+}
+
 const char *git_version_to_str(void)
 {
   return STRINGIFY(CEPH_GIT_VER);

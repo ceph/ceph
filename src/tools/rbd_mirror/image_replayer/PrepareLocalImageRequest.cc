@@ -4,6 +4,7 @@
 #include "tools/rbd_mirror/image_replayer/PrepareLocalImageRequest.h"
 #include "include/rados/librados.hpp"
 #include "cls/rbd/cls_rbd_client.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Journal.h"
@@ -54,6 +55,42 @@ void PrepareLocalImageRequest<I>::handle_get_local_image_id(int r) {
     return;
   }
 
+  get_local_image_name();
+}
+
+template <typename I>
+void PrepareLocalImageRequest<I>::get_local_image_name() {
+  dout(20) << dendl;
+
+  librados::ObjectReadOperation op;
+  librbd::cls_client::dir_get_name_start(&op, *m_local_image_id);
+
+  m_out_bl.clear();
+  librados::AioCompletion *aio_comp = create_rados_callback<
+    PrepareLocalImageRequest<I>,
+    &PrepareLocalImageRequest<I>::handle_get_local_image_name>(this);
+  int r = m_io_ctx.aio_operate(RBD_DIRECTORY, aio_comp, &op, &m_out_bl);
+  ceph_assert(r == 0);
+  aio_comp->release();
+}
+
+template <typename I>
+void PrepareLocalImageRequest<I>::handle_get_local_image_name(int r) {
+  dout(20) << "r=" << r << dendl;
+
+  if (r == 0) {
+    auto it = m_out_bl.cbegin();
+    r = librbd::cls_client::dir_get_name_finish(&it, m_local_image_name);
+  }
+
+  if (r < 0) {
+    if (r != -ENOENT) {
+      derr << "failed to retrieve image name: " << cpp_strerror(r) << dendl;
+    }
+    finish(r);
+    return;
+  }
+
   get_mirror_state();
 }
 
@@ -69,7 +106,7 @@ void PrepareLocalImageRequest<I>::get_mirror_state() {
     PrepareLocalImageRequest<I>,
     &PrepareLocalImageRequest<I>::handle_get_mirror_state>(this);
   int r = m_io_ctx.aio_operate(RBD_MIRRORING, aio_comp, &op, &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   aio_comp->release();
 }
 
@@ -79,7 +116,7 @@ void PrepareLocalImageRequest<I>::handle_get_mirror_state(int r) {
 
   cls::rbd::MirrorImage mirror_image;
   if (r == 0) {
-    bufferlist::iterator iter = m_out_bl.begin();
+    auto iter = m_out_bl.cbegin();
     r = librbd::cls_client::mirror_image_get_finish(&iter, &mirror_image);
   }
 

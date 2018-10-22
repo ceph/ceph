@@ -12,6 +12,8 @@ extern rgw_http_errors rgw_http_s3_errors;
 
 extern rgw_http_errors rgw_http_swift_errors;
 
+extern rgw_http_errors rgw_http_sts_errors;
+
 static inline int rgw_http_error_to_errno(int http_err)
 {
   if (http_err >= 200 && http_err <= 299)

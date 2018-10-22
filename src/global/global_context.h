@@ -15,10 +15,18 @@
 #ifndef CEPH_GLOBAL_CONTEXT_H
 #define CEPH_GLOBAL_CONTEXT_H
 
+#include "common/config_fwd.h"
+
 class CephContext;
-struct md_config_t;
 
 extern CephContext *g_ceph_context;
-extern md_config_t *g_conf;
+ConfigProxy& g_conf();
+
+extern const char *g_assert_file;
+extern int g_assert_line;
+extern const char *g_assert_func;
+extern const char *g_assert_condition;
+extern unsigned long long g_assert_thread;
+extern char g_assert_thread_name[4096];
 
 #endif

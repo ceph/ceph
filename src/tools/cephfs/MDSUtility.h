@@ -41,6 +41,7 @@ protected:
 
   Context *waiting_for_mds_map;
 
+  bool inited;
 public:
   MDSUtility();
   ~MDSUtility() override;

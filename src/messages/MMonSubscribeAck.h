@@ -17,15 +17,17 @@
 
 #include "msg/Message.h"
 
-struct MMonSubscribeAck : public Message {
+class MMonSubscribeAck : public MessageInstance<MMonSubscribeAck> {
+public:
+  friend factory;
+
   __u32 interval;
   uuid_d fsid;
   
-  MMonSubscribeAck() : Message(CEPH_MSG_MON_SUBSCRIBE_ACK),
+  MMonSubscribeAck() : MessageInstance(CEPH_MSG_MON_SUBSCRIBE_ACK),
 		       interval(0) {
-    memset(&fsid, 0, sizeof(fsid));
   }
-  MMonSubscribeAck(uuid_d& f, int i) : Message(CEPH_MSG_MON_SUBSCRIBE_ACK),
+  MMonSubscribeAck(uuid_d& f, int i) : MessageInstance(CEPH_MSG_MON_SUBSCRIBE_ACK),
 				       interval(i), fsid(f) { }
 private:
   ~MMonSubscribeAck() override {}
@@ -37,13 +39,14 @@ public:
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(interval, p);
-    ::decode(fsid, p);
+    auto p = payload.cbegin();
+    decode(interval, p);
+    decode(fsid, p);
   }
   void encode_payload(uint64_t features) override {
-    ::encode(interval, payload);
-    ::encode(fsid, payload);
+    using ceph::encode;
+    encode(interval, payload);
+    encode(fsid, payload);
   }
 };
 

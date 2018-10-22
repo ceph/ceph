@@ -29,6 +29,7 @@ set(mds_srcs
   SimpleLock.cc
   SnapRealm.cc
   SnapServer.cc
+  SnapClient.cc
   snap.cc
   SessionMap.cc
   MDSContext.cc
@@ -36,9 +37,11 @@ set(mds_srcs
   MDLog.cc
   MDSCacheObject.cc
   Mantle.cc
+  Anchor.cc
+  OpenFileTable.cc
   ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
   ${CMAKE_SOURCE_DIR}/src/common/MemoryModel.cc
   ${CMAKE_SOURCE_DIR}/src/osdc/Journaler.cc)
-add_library(mds STATIC ${mds_srcs}
-  $<TARGET_OBJECTS:heap_profiler_objs>)
-target_link_libraries(mds ${ALLOC_LIBS} osdc liblua)
+add_library(mds STATIC ${mds_srcs})
+target_link_libraries(mds PRIVATE
+  heap_profiler cpu_profiler osdc liblua)
