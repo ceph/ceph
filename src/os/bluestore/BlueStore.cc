@@ -5143,10 +5143,13 @@ int BlueStore::allocate_bluefs_freespace(uint64_t size)
       dout(10) << __func__ << " gifting " << gift
 	       << " (" << byte_u_t(gift) << ")" << dendl;
 
+      int r = alloc->reserve(gift);
+      ceph_assert(r == 0);
       int64_t alloc_len = alloc->allocate(gift, cct->_conf->bluefs_alloc_size,
 					  0, 0, &extents);
 
       if (alloc_len < (int64_t)gift) {
+        alloc->unreserve(gift - std::max<int64_t>(0, alloc_len));
 	dout(0) << __func__ << " no allocate on 0x" << std::hex << gift
 		<< " min_alloc_size 0x" << cct->_conf->bluefs_alloc_size
 		<< std::dec << dendl;
@@ -5777,7 +5780,7 @@ int BlueStore::migrate_to_existing_bluefs_device(const set<int>& devs_source,
   int r = _mount_for_bluefs();
 
   // require bluestore_bluefs_min_free to be free at target device!
-  uint64_t used_space = cct->_conf.get_val<Option::size_t>("bluestore_bluefs_min_free");
+  uint64_t used_space = cct->_conf->get_val<uint64_t>("bluestore_bluefs_min_free");
   for(auto src_id : devs_source) {
     used_space += bluefs->get_total(src_id) - bluefs->get_free(src_id);
   }
@@ -8498,6 +8501,11 @@ ObjectMap::ObjectMapIterator BlueStore::get_omap_iterator(
 // -----------------
 // write helpers
 
+uint64_t BlueStore::_get_ondisk_reserved() const {
+  return round_up_to(
+    std::max<uint64_t>(SUPER_RESERVED, min_alloc_size), min_alloc_size);
+}
+
 void BlueStore::_prepare_ondisk_format_super(KeyValueDB::Transaction& t)
 {
   dout(10) << __func__ << " ondisk_format " << ondisk_format
@@ -8572,7 +8580,7 @@ int BlueStore::_open_super_meta()
       bluefs_extents.clear();
       bufferlist bl;
       db->get(PREFIX_SUPER, "bluefs_extents_back", &bl);
-      auto p = bl.cbegin();
+      auto p = bl.begin();
       try {
 	decode(bluefs_extents, p);
       }

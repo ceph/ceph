@@ -2338,9 +2338,12 @@ int BlueFS::_allocate_without_fallback(uint8_t id, uint64_t len,
     return -ENOENT;
   }
   extents->reserve(4);  // 4 should be (more than) enough for most allocations
+  int r = alloc[id]->reserve(left);
+  ceph_assert(r == 0); // caller shouldn't ask for more than they can get
   int64_t alloc_len = alloc[id]->allocate(left, min_alloc_size, 0, extents);
   if (alloc_len < (int64_t)left) {
     if (alloc_len != 0) {
+      alloc[id]->unreserve(left - std::max<int64_t>(0, alloc_len));
       alloc[id]->release(*extents);
     }
     if (bdev[id])

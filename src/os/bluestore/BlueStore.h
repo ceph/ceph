@@ -2131,6 +2131,7 @@ private:
   int32_t ondisk_format = 0;  ///< value detected on mount
 
   int _upgrade_super();  ///< upgrade (called during open_super)
+  uint64_t _get_ondisk_reserved() const;
   void _prepare_ondisk_format_super(KeyValueDB::Transaction& t);
 
   // --- public interface ---
