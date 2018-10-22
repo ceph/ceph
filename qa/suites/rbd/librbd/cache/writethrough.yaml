@@ -5,3 +5,8 @@ tasks:
       client:
         rbd cache: true
         rbd cache max dirty: 0
+overrides:
+  ceph:
+    conf:
+      client:
+        rbd op threads: 8

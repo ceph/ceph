@@ -3,6 +3,7 @@ overrides:
     conf:
       client:
         rbd cache: false
+        rbd op threads: 8
 op_workload:
   sequential:
     - workunit:

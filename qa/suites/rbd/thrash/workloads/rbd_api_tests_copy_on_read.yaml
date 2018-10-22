@@ -14,3 +14,4 @@ overrides:
     conf:
       client:
         rbd clone copy on read: true
+        rbd op threads: 8

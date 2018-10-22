@@ -2,3 +2,8 @@ tasks:
 - rbd_fsx:
     clients: [client.0]
     ops: 20000
+overrides:
+  ceph:
+    conf:
+      client:
+        rbd op threads: 8

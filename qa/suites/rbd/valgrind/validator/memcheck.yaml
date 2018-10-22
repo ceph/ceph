@@ -6,6 +6,9 @@ overrides:
     ceph:
       flavor: notcmalloc
       debuginfo: true
+    conf:
+      client:
+        rbd op threads: 8
   rbd_fsx:
     valgrind: ["--tool=memcheck"]
   workunit:

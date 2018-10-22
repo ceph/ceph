@@ -7,5 +7,6 @@ overrides:
     conf:
       client:
         rbd qos iops limit: 50
+        rbd op threads: 8
         rbd qos iops burst: 100
         rbd qos schedule tick min: 100

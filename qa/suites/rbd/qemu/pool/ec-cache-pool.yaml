@@ -4,6 +4,9 @@ overrides:
       - overall HEALTH_
       - \(CACHE_POOL_NEAR_FULL\)
       - \(CACHE_POOL_NO_HIT_SET\)
+    conf:
+      client:
+        rbd op threads: 8
 tasks:
 - exec:
     client.0:

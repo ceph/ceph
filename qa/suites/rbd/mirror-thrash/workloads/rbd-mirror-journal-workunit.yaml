@@ -1,5 +1,10 @@
 meta:
 - desc: run the rbd_mirror_journal.sh workunit to test the rbd-mirror daemon
+overrides:
+  ceph:
+    conf:
+      client:
+        rbd op threads: 8
 tasks:
 - workunit:
     clients:

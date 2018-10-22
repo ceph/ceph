@@ -8,3 +8,4 @@ overrides:
       client:
         rbd cache: true
         rbd clone copy on read: true
+        rbd op threads: 8

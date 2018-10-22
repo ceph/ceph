@@ -5,3 +5,8 @@ tasks:
         - rbd/test_librbd_python.sh
     env:
       RBD_FEATURES: "125"
+overrides:
+  ceph:
+    conf:
+      client:
+        rbd op threads: 8

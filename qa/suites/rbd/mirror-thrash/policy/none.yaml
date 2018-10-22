@@ -3,3 +3,4 @@ overrides:
     conf:
       client:
         rbd mirror image policy type: none
+        rbd op threads: 8

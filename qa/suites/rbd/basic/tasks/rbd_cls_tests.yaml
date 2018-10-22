@@ -5,3 +5,8 @@ tasks:
         - cls/test_cls_rbd.sh
         - cls/test_cls_lock.sh
         - cls/test_cls_journal.sh
+overrides:
+  ceph:
+    conf:
+      client:
+        rbd op threads: 8

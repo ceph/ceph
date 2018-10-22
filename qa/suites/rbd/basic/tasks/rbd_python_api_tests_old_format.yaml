@@ -3,6 +3,9 @@ overrides:
     log-whitelist:
       - \(SLOW_OPS\)
       - slow request
+    conf:
+      client:
+        rbd op threads: 8
 tasks:
 - workunit:
     clients:

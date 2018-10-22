@@ -3,3 +3,8 @@ tasks:
     clients:
       client.0:
         - rbd/test_lock_fence.sh
+overrides:
+  ceph:
+    conf:
+      client:
+        rbd op threads: 8

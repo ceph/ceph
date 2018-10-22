@@ -1,5 +1,10 @@
 meta:
 - desc: run four rbd-mirror daemons per cluster
+overrides:
+  ceph:
+    conf:
+      client:
+        rbd op threads: 8
 tasks:
 - rbd-mirror:
     client: cluster1.client.mirror.0

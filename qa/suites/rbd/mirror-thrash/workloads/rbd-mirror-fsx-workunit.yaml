@@ -1,6 +1,11 @@
 meta:
 - desc: run multiple FSX workloads to simulate cluster load and then verify
         that the images were replicated
+overrides:
+  ceph:
+    conf:
+      client:
+        rbd op threads: 8
 tasks:
 - workunit:
     clients:

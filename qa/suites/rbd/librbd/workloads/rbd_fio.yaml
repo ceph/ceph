@@ -8,3 +8,8 @@ tasks:
       test-clone-io: 1
       rw: randrw
       runtime: 900
+overrides:
+  ceph:
+    conf:
+      client:
+        rbd op threads: 8

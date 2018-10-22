@@ -3,3 +3,4 @@ overrides:
     conf:
       client:
         rbd default features: 1
+        rbd op threads: 8

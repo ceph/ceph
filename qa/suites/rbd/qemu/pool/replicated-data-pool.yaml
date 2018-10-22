@@ -9,3 +9,4 @@ overrides:
     conf:
       client:
         rbd default data pool: datapool
+        rbd op threads: 8

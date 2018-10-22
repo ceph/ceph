@@ -3,6 +3,9 @@ overrides:
     log-whitelist:
     - but it is still running
     - objects unfound and apparently lost
+    conf:
+      client:
+        rbd op threads: 8
 tasks:
 - thrashosds:
     timeout: 1200

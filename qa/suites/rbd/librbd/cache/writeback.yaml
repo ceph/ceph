@@ -5,3 +5,8 @@ tasks:
       client:
         rbd cache: true
         rbd cache policy: writeback
+overrides:
+  ceph:
+    conf:
+      client:
+        rbd op threads: 8

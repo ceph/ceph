@@ -18,6 +18,7 @@ overrides:
     conf:
       client:
         rbd default data pool: datapool
+        rbd op threads: 8
       osd: # force bluestore since it's required for ec overwrites
         osd objectstore: bluestore
         bluestore block size: 96636764160

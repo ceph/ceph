@@ -8,3 +8,4 @@ overrides:
       client:
         rbd cache: true
         rbd cache policy: writeback
+        rbd op threads: 8
