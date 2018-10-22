@@ -30,30 +30,10 @@ namespace ceph {
 struct BackTrace;
 
 /*
- * For GNU, test specific version features. Otherwise (e.g. LLVM) we'll use
- * the defaults selected below.
- */
-#ifdef __GNUC_PREREQ
-
-/*
- * Version 2.4 and later of GCC define a magical variable
- * `__PRETTY_FUNCTION__' which contains the name of the function currently
- * being defined.  This is broken in G++ before version 2.6.  C9x has a
- * similar variable called __func__, but prefer the GCC one since it demangles
- * C++ function names. We define __CEPH_NO_PRETTY_FUNC if we want to avoid
- * broken versions of G++.
- */
-# if defined __cplusplus ? !__GNUC_PREREQ (2, 6) : !__GNUC_PREREQ (2, 4)
-#   define __CEPH_NO_PRETTY_FUNC
-# endif
-
-#endif
-
-/*
  * Select a function-name variable based on compiler tests, and any compiler
  * specific overrides.
  */
-#if defined(HAVE_PRETTY_FUNC) && !defined(__CEPH_NO_PRETTY_FUNC)
+#if defined(HAVE_PRETTY_FUNC)
 # define __CEPH_ASSERT_FUNCTION __PRETTY_FUNCTION__
 #elif defined(HAVE_FUNC)
 # define __CEPH_ASSERT_FUNCTION __func__
