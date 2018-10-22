@@ -1122,7 +1122,12 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
                 "{user} >> /tmp/init.out "
                 "2>&1".format(user=self.username,
                               opts=' '.join(setup_options + all_options))),
-            "/etc/init.d/teuthology restart"
+            # wa: we want to stop paddles and pulpito started by
+            # setup-openstack before starting teuthology service
+            "pkill -f 'pecan serve'",
+            "pkill -f 'python run.py'",
+            "systemctl enable teuthology",
+            "systemctl start teuthology",
         ]
         if cacert_cmd:
             cmds.insert(0,cmd_str(cacert_cmd))
