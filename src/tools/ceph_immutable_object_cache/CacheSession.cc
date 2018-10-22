@@ -19,25 +19,29 @@ CacheSession::CacheSession(uint64_t session_id, boost::asio::io_service& io_serv
     : m_session_id(session_id), m_dm_socket(io_service), process_msg(processmsg), cct(cct)
     {}
 
-CacheSession::~CacheSession(){}
+CacheSession::~CacheSession() {
+  close();
+}
 
 stream_protocol::socket& CacheSession::socket() {
   return m_dm_socket;
 }
 
-void CacheSession::start() {
-  if(true) {
-    serial_handing_request();
-  } else {
-    parallel_handing_request();
+void CacheSession::close() {
+  if(m_dm_socket.is_open()) {
+    boost::system::error_code close_ec;
+    m_dm_socket.close(close_ec);
+    if(close_ec) {
+       ldout(cct, 20) << "close: " << close_ec.message() << dendl;
+    }
   }
 }
-// flow:
-//
-// recv request --> process request --> reply ack
-//   |                                      |
-//   --------------<-------------------------
-void CacheSession::serial_handing_request() {
+
+void CacheSession::start() {
+  handing_request();
+}
+
+void CacheSession::handing_request() {
   boost::asio::async_read(m_dm_socket, boost::asio::buffer(m_buffer, RBDSC_MSG_LEN),
                           boost::asio::transfer_exactly(RBDSC_MSG_LEN),
                           boost::bind(&CacheSession::handle_read,
@@ -46,36 +50,26 @@ void CacheSession::serial_handing_request() {
                                       boost::asio::placeholders::bytes_transferred));
 }
 
-// flow :
-//
-//              --> thread 1: process request
-// recv request --> thread 2: process request --> reply ack
-//              --> thread n: process request
-//
-void CacheSession::parallel_handing_request() {
-  // TODO
-}
-
-void CacheSession::handle_read(const boost::system::error_code& error, size_t bytes_transferred) {
-  // when recv eof, the most proble is that client side close socket.
-  // so, server side need to end handing_request
-  if(error == boost::asio::error::eof) {
-    ldout(cct, 20) << "session: async_read : " << error.message() << dendl;
+void CacheSession::handle_read(const boost::system::error_code& err, size_t bytes_transferred) {
+  if (err == boost::asio::error::eof ||
+     err == boost::asio::error::connection_reset ||
+     err == boost::asio::error::operation_aborted ||
+     err == boost::asio::error::bad_descriptor) {
+    ldout(cct, 20) << "fail to handle read : " << err.message() << dendl;
+    close();
     return;
   }
 
-  if(error) {
-    ldout(cct, 20) << "session: async_read fails: " << error.message() << dendl;
-    assert(0);
+  if(err) {
+    ldout(cct, 1) << "faile to handle read: " << err.message() << dendl;
+    return;
   }
 
   if(bytes_transferred != RBDSC_MSG_LEN) {
-    ldout(cct, 20) << "session : request in-complete. "<<dendl;
-    assert(0);
+    ldout(cct, 1) << "incomplete read" << dendl;
+    return;
   }
 
-  // TODO async_process can increse coding readable.
-  // process_msg_callback call handle async_send
   process_msg(m_session_id, std::string(m_buffer, bytes_transferred));
 }
 

@@ -27,8 +27,8 @@ public:
 
   stream_protocol::socket& socket();
   void start();
-  void serial_handing_request();
-  void parallel_handing_request();
+  void close();
+  void handing_request();
 
 private:
 
