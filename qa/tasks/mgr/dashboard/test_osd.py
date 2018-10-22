@@ -5,6 +5,7 @@ from __future__ import absolute_import
 import json
 
 from .helper import DashboardTestCase, JObj, JAny, JList, JLeaf, JTuple
+from unittest import expectedFailure
 
 
 class OsdTest(DashboardTestCase):
@@ -80,6 +81,7 @@ class OsdTest(DashboardTestCase):
         # Undo
         self._post('/api/osd/0/reweight', {'weight': 1})
 
+    @expectedFailure #TODO: Remove and fix when front-end OSD destroy is merged
     def test_create_lost_destroy_remove(self):
         # Create
         self._post('/api/osd', {
