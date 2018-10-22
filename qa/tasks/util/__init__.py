@@ -47,11 +47,13 @@ def copy_directory_recursively(from_path, to_remote, to_path=None):
 
 def sudo_append_to_file(remote, path, data):
     """
-    Append data to a remote file
+    Append data to a remote file. Standard 'cat >>' - creates file
+    if it doesn't exist, but all directory components in the file
+    path must exist.
 
     :param remote: Remote site.
     :param path: Path on the remote being written to.
-    :param data: Data to be written.
+    :param data: Python string containing data to be written.
     """
     remote.run(
         args=[
