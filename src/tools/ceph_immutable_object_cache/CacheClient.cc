@@ -137,6 +137,7 @@ namespace immutable_obj_cache {
     rbdsc_req_type_t *message = new rbdsc_req_type_t();
     message->type = RBDSC_READ;
     memcpy(message->pool_name, pool_name.c_str(), pool_name.size());
+    //TODO(): new member name
     memcpy(message->vol_name, object_id.c_str(), object_id.size());
     message->vol_size = 0;
     message->offset = 0;
@@ -166,42 +167,46 @@ namespace immutable_obj_cache {
   }
 
   void CacheClient::get_result(Context* on_finish) {
-    boost::asio::async_read(m_dm_socket, boost::asio::buffer(m_recv_buffer, RBDSC_MSG_LEN),
+    char* lookup_result = new char[RBDSC_MSG_LEN + 1];
+    boost::asio::async_read(m_dm_socket, boost::asio::buffer(lookup_result, RBDSC_MSG_LEN),
                             boost::asio::transfer_exactly(RBDSC_MSG_LEN),
-        [this, on_finish](const boost::system::error_code& err, size_t cb) {
-          if(err == boost::asio::error::eof) {
-            ldout(cct, 20) << "get_result: ack is EOF." << dendl;
+        [this, lookup_result, on_finish](const boost::system::error_code& err, size_t cb) {
+          if(err == boost::asio::error::eof ||
+            err == boost::asio::error::connection_reset ||
+            err == boost::asio::error::operation_aborted ||
+            err == boost::asio::error::bad_descriptor) {
+            ldout(cct, 20) << "fail to read lookup result" << err.message() << dendl;
             close();
             on_finish->complete(false);
+            delete lookup_result;
             return;
           }
+
           if(err) {
-            ldout(cct, 20) << "get_result: async_read fails:" << err.message() << dendl;
+            ldout(cct, 1) << "fail to read lookup result" << err.message() << dendl;
             close();
-            on_finish->complete(false); // TODO replace this assert with some metohds.
+            on_finish->complete(false);
+            delete lookup_result;
             return;
           }
+
           if (cb != RBDSC_MSG_LEN) {
+            ldout(cct, 1) << "incomplete lookup result" << dendl;
             close();
-            ldout(cct, 20) << "get_result: in-complete ack." << dendl;
-	    on_finish->complete(false); // TODO: replace this assert with some methods.
+            on_finish->complete(false);
+            delete lookup_result;
+            return;
           }
 
-	  rbdsc_req_type_t *io_ctx = (rbdsc_req_type_t*)(m_recv_buffer);
-
-          // TODO: re-occur yuan's bug
-          if(io_ctx->type == RBDSC_READ) {
-            ldout(cct, 20) << "get rbdsc_read... " << dendl;
-            assert(0);
-          }
+	  rbdsc_req_type_t *io_ctx = (rbdsc_req_type_t*)(lookup_result);
 
           if (io_ctx->type == RBDSC_READ_REPLY) {
 	    on_finish->complete(true);
-            return;
           } else {
 	    on_finish->complete(false);
-            return;
           }
+          delete lookup_result;
+          return;
     });
   }
 
