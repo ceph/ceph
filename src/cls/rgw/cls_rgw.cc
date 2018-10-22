@@ -2167,6 +2167,7 @@ static int rgw_obj_check_mtime(cls_method_context_t hctx, bufferlist *in, buffer
   }
   if (ret == -ENOENT) {
     CLS_LOG(10, "object does not exist, skipping check");
+    return 0;
   }
 
   ceph_timespec obj_ts = ceph::real_clock::to_ceph_timespec(obj_ut);
