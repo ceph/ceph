@@ -101,7 +101,10 @@ class FakeDispatcher : public Dispatcher {
 
   explicit FakeDispatcher(bool s): Dispatcher(g_ceph_context), lock("FakeDispatcher::lock"),
                           is_server(s), got_new(false), got_remote_reset(false),
-                          got_connect(false), loopback(false) {}
+                          got_connect(false), loopback(false) {
+    // don't need authorizers
+    ms_set_require_authorizer(false);
+  }
   bool ms_can_fast_dispatch_any() const override { return true; }
   bool ms_can_fast_dispatch(const Message *m) const override {
     switch (m->get_type()) {
@@ -834,7 +837,10 @@ class SyntheticDispatcher : public Dispatcher {
 
   SyntheticDispatcher(bool s, SyntheticWorkload *wl):
       Dispatcher(g_ceph_context), lock("SyntheticDispatcher::lock"), is_server(s), got_new(false),
-      got_remote_reset(false), got_connect(false), index(0), workload(wl) {}
+      got_remote_reset(false), got_connect(false), index(0), workload(wl) {
+    // don't need authorizers
+    ms_set_require_authorizer(false);
+  }
   bool ms_can_fast_dispatch_any() const override { return true; }
   bool ms_can_fast_dispatch(const Message *m) const override {
     switch (m->get_type()) {
@@ -1394,7 +1400,10 @@ class MarkdownDispatcher : public Dispatcher {
  public:
   std::atomic<uint64_t> count = { 0 };
   explicit MarkdownDispatcher(bool s): Dispatcher(g_ceph_context), lock("MarkdownDispatcher::lock"),
-                              last_mark(false) {}
+                              last_mark(false) {
+    // don't need authorizers
+    ms_set_require_authorizer(false);
+  }
   bool ms_can_fast_dispatch_any() const override { return false; }
   bool ms_can_fast_dispatch(const Message *m) const override {
     switch (m->get_type()) {
