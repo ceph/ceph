@@ -106,8 +106,8 @@ private:
 
   int handle_read_cache(
       bool cache,
-      const std::string &oid, uint64_t object_off,
-      uint64_t object_len, ceph::bufferlist* read_data,
+      const std::string &oid, uint64_t read_off,
+      uint64_t read_len, ceph::bufferlist* read_data,
       io::DispatchResult* dispatch_result,
       Context* on_dispatched);
   void client_handle_request(std::string msg);

@@ -108,28 +108,30 @@ bool SharedReadOnlyObjectDispatch<I>::read(
 
 template <typename I>
 int SharedReadOnlyObjectDispatch<I>::handle_read_cache(
-    bool cache, const std::string &oid, uint64_t object_off,
-    uint64_t object_len, ceph::bufferlist* read_data,
+    bool cache, const std::string &oid, uint64_t read_off,
+    uint64_t read_len, ceph::bufferlist* read_data,
     io::DispatchResult* dispatch_result, Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << dendl;
 
   // try to read from parent image
   if (cache) {
-    int r = m_object_store->read_object(oid, read_data, object_off, object_len, on_dispatched);
-    if (r != 0) {
+    int r = m_object_store->read_object(oid, read_data, read_off, read_len, on_dispatched);
+    if (r == read_len) {
       *dispatch_result = io::DISPATCH_RESULT_COMPLETE;
       //TODO(): complete in syncfile
       on_dispatched->complete(r);
       ldout(cct, 20) << "read cache: " << *dispatch_result <<dendl;
       return true;
     }
-  } else {
-    *dispatch_result = io::DISPATCH_RESULT_CONTINUE;
-    on_dispatched->complete(0);
-    ldout(cct, 20) << "read rados: " << *dispatch_result <<dendl;
-    return false;
   }
+
+ // fall back to read rados
+ *dispatch_result = io::DISPATCH_RESULT_CONTINUE;
+ on_dispatched->complete(0);
+ ldout(cct, 20) << "read rados: " << *dispatch_result <<dendl;
+ return false;
+
 }
 template <typename I>
 void SharedReadOnlyObjectDispatch<I>::client_handle_request(std::string msg) {
