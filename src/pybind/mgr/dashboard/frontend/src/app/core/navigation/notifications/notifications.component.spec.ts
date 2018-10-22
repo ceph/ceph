@@ -4,7 +4,6 @@ import { ToastModule } from 'ng2-toastr';
 import { PopoverModule } from 'ngx-bootstrap/popover';
 
 import { configureTestBed } from '../../../../testing/unit-test-helper';
-import { NotificationService } from '../../../shared/services/notification.service';
 import { SharedModule } from '../../../shared/shared.module';
 import { NotificationsComponent } from './notifications.component';
 
@@ -14,8 +13,7 @@ describe('NotificationsComponent', () => {
 
   configureTestBed({
     imports: [PopoverModule.forRoot(), SharedModule, ToastModule.forRoot()],
-    declarations: [NotificationsComponent],
-    providers: [NotificationService]
+    declarations: [NotificationsComponent]
   });
 
   beforeEach(() => {

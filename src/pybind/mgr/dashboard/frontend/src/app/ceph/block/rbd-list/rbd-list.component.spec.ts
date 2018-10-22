@@ -4,18 +4,15 @@ import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastModule } from 'ng2-toastr';
-import {
-  AlertModule,
-  BsDropdownModule,
-  ModalModule,
-  TabsModule,
-  TooltipModule
-} from 'ngx-bootstrap';
+import { AlertModule } from 'ngx-bootstrap/alert';
+import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
+import { ModalModule } from 'ngx-bootstrap/modal';
+import { TabsModule } from 'ngx-bootstrap/tabs';
+import { TooltipModule } from 'ngx-bootstrap/tooltip';
 import { BehaviorSubject, of } from 'rxjs';
 
 import { configureTestBed, PermissionHelper } from '../../../../testing/unit-test-helper';
 import { RbdService } from '../../../shared/api/rbd.service';
-import { ComponentsModule } from '../../../shared/components/components.module';
 import { TableActionsComponent } from '../../../shared/datatable/table-actions/table-actions.component';
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
 import { ExecutingTask } from '../../../shared/models/executing-task';
@@ -46,12 +43,11 @@ describe('RbdListComponent', () => {
       TooltipModule.forRoot(),
       ToastModule.forRoot(),
       AlertModule.forRoot(),
-      ComponentsModule,
       RouterTestingModule,
       HttpClientTestingModule
     ],
     declarations: [RbdListComponent, RbdDetailsComponent, RbdSnapshotListComponent],
-    providers: [SummaryService, TaskListService, RbdService]
+    providers: [TaskListService]
   });
 
   beforeEach(() => {
