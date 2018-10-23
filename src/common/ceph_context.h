@@ -35,14 +35,13 @@
 #include "common/config_proxy.h"
 #include "include/spinlock.h"
 #endif
+#include "common/perf_counters_collection.h"
 
 
 #include "crush/CrushLocation.h"
 
 class AdminSocket;
 class CephContextServiceThread;
-class PerfCountersCollection;
-class PerfCounters;
 class CephContextHook;
 class CephContextObs;
 class CryptoHandler;
@@ -70,7 +69,6 @@ public:
   CryptoRandom* random() const;
   PerfCountersCollection* get_perfcounters_collection();
   ceph::common::ConfigProxy& _conf;
-
   CephContext* get();
   void put();
 private:

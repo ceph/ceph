@@ -257,7 +257,7 @@ void MgrClient::_send_report()
   auto pcc = cct->get_perfcounters_collection();
 
   pcc->with_counters([this, report](
-        const PerfCountersCollection::CounterMap &by_path)
+        const PerfCountersCollectionImpl::CounterMap &by_path)
   {
     // Helper for checking whether a counter should be included
     auto include_counter = [this](
