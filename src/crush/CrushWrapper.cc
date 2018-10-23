@@ -1959,6 +1959,21 @@ int CrushWrapper::reclassify(
     }
   }
 
+  // make sure new buckets have parents
+  for (auto& i : new_buckets) {
+    int parent;
+    if (get_immediate_parent_id(i.first, &parent) < 0) {
+      cout << "new bucket " << i.first << " missing parent, adding at "
+	   << i.second << std::endl;
+      int r = link_bucket(cct, i.first, i.second);
+      if (r != 0) {
+	cout << __func__ << " err from insert_item: " << cpp_strerror(r)
+	     << std::endl;
+	return r;
+      }
+    }
+  }
+
   // set class mappings
   //cout << "pre class_bucket: " << class_bucket << std::endl;
   for (auto& i : new_class_bucket) {
