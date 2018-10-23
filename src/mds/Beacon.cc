@@ -260,14 +260,6 @@ bool Beacon::is_laggy()
 	      << "s since last acked beacon" << dendl;
     }
     laggy = true;
-    auto last_reconnect = std::chrono::duration<double>(now-last_mon_reconnect).count();
-    if (since > (g_conf()->mds_beacon_grace*2) && last_reconnect > g_conf()->mds_beacon_interval) {
-      // maybe it's not us?
-      dout(1) << "initiating monitor reconnect; maybe we're not the slow one"
-              << dendl;
-      last_mon_reconnect = now;
-      monc->reopen_session();
-    }
     return true;
   }
   return false;
