@@ -3,10 +3,12 @@ tasks:
       cli: true
       commands:
         - stage0:
-            update: false
         - stage1:
         - policy_cfg:
             profile: default
         - stage2:
         - stage3:
+        - stage4:
         - 'ceph -s'
+        - state_orch:
+            name: ceph.functests.1node
