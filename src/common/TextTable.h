@@ -134,7 +134,7 @@ public:
    */
 
   struct endrow_t {};
-  static endrow_t endrow;
+  static constexpr endrow_t endrow{};
 
   /**
    * Implements TextTable::endrow
