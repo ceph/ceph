@@ -41,13 +41,7 @@ class DeepSea(Task):
 
     def __init__(self, ctx, config):
         super(DeepSea, self).__init__(ctx, config)
-        check_config_key(
-                self.config,
-                'repo',
-                'https://github.com/SUSE/DeepSea.git'
-            )
-        check_config_key(self.config, 'branch', 'master')
-        install_conf = check_config_key(self.config, 'install', 'source')
+        install_conf = check_config_key(self.config, 'install', 'package')
         self._determine_install_method(install_conf)
         self.sm = SaltManager(self.ctx, self.config)
         self.master_remote = self.sm.master_remote
@@ -80,6 +74,12 @@ class DeepSea(Task):
         if self.sm.master_rpm_q('deepsea'):
             self.log.info("DeepSea already installed from RPM")
             return None
+        check_config_key(
+                self.config,
+                'repo',
+                'https://github.com/SUSE/DeepSea.git'
+            )
+        check_config_key(self.config, 'branch', 'master')
         self.log.info("Installing DeepSea from source - repo: {}, branch: {}"
                       .format(self.config["repo"], self.config["branch"]))
         self.master_remote.run(args=[
