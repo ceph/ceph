@@ -94,12 +94,14 @@ export class IscsiComponent {
   }
 
   refresh() {
-    this.tcmuIscsiService.tcmuiscsi().then((resp) => {
+    this.tcmuIscsiService.tcmuiscsi().subscribe((resp: any) => {
       this.daemons = resp.daemons;
       this.images = resp.images;
       this.images.map((image) => {
-        image.stats_history.rd_bytes = image.stats_history.rd_bytes.map((i) => i[1]);
-        image.stats_history.wr_bytes = image.stats_history.wr_bytes.map((i) => i[1]);
+        if (image.stats_history) {
+          image.stats_history.rd_bytes = image.stats_history.rd_bytes.map((i) => i[1]);
+          image.stats_history.wr_bytes = image.stats_history.wr_bytes.map((i) => i[1]);
+        }
         image.cdIsBinary = true;
         return image;
       });

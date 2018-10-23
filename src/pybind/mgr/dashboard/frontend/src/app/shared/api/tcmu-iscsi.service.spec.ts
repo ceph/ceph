@@ -30,7 +30,7 @@ describe('TcmuIscsiService', () => {
     'should call tcmuiscsi',
     fakeAsync(() => {
       let result;
-      service.tcmuiscsi().then((resp) => {
+      service.tcmuiscsi().subscribe((resp) => {
         result = resp;
       });
       const req = httpTesting.expectOne('api/tcmuiscsi');
