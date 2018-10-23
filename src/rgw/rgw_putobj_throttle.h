@@ -16,6 +16,7 @@
 
 #include <memory>
 #include "common/ceph_mutex.h"
+#include "services/svc_rados.h"
 #include "rgw_putobj_aio.h"
 
 namespace librados {
@@ -66,12 +67,13 @@ class AioThrottle : public Aio {
     ceph_assert(completed.empty());
   }
 
-  ResultList submit(rgw_rados_ref& ref, const rgw_raw_obj& obj,
-                    librados::ObjectReadOperation *op, bufferlist *data,
-                    uint64_t cost) override;
+  ResultList submit(RGWSI_RADOS::Obj& obj, const rgw_raw_obj& raw_obj,
+                    librados::ObjectReadOperation *op,
+                    bufferlist *data, uint64_t cost) override;
 
-  ResultList submit(rgw_rados_ref& ref, const rgw_raw_obj& obj,
-                    librados::ObjectWriteOperation *op, uint64_t cost) override;
+  ResultList submit(RGWSI_RADOS::Obj& obj, const rgw_raw_obj& raw_obj,
+                    librados::ObjectWriteOperation *op,
+                    uint64_t cost) override;
 
   ResultList poll() override;
 

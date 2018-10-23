@@ -71,16 +71,11 @@ static int process_completed(const ResultList& completed, RawObjSet *written)
   return error.value_or(0);
 }
 
-int RadosWriter::set_stripe_obj(rgw_raw_obj&& obj)
+int RadosWriter::set_stripe_obj(rgw_raw_obj&& raw_obj)
 {
-  rgw_rados_ref ref;
-  int r = store->get_raw_obj_ref(obj, &ref);
-  if (r < 0) {
-    return r;
-  }
-  stripe_obj = std::move(obj);
-  stripe_ref = std::move(ref);
-  return 0;
+  stripe_raw = std::move(raw_obj);
+  stripe_obj = store->svc.rados->obj(stripe_raw);
+  return stripe_obj.open();
 }
 
 int RadosWriter::process(bufferlist&& bl, uint64_t offset)
@@ -96,7 +91,7 @@ int RadosWriter::process(bufferlist&& bl, uint64_t offset)
   } else {
     op.write(offset, data);
   }
-  auto c = aio->submit(stripe_ref, stripe_obj, &op, cost);
+  auto c = aio->submit(stripe_obj, stripe_raw, &op, cost);
   return process_completed(c, &written);
 }
 
@@ -108,7 +103,7 @@ int RadosWriter::write_exclusive(const bufferlist& data)
   op.create(true); // exclusive create
   op.write_full(data);
 
-  auto c = aio->submit(stripe_ref, stripe_obj, &op, cost);
+  auto c = aio->submit(stripe_obj, stripe_raw, &op, cost);
   auto d = aio->drain();
   c.splice(c.end(), d);
   return process_completed(c, &written);
