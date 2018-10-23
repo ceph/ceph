@@ -614,6 +614,9 @@ profile-{profile}/cluster/{remote}.sls
         elif directive == "stage4":
             config = cmd_dict['stage4']
             target = self._run_stage_4
+        elif directive == "state_orch":
+            config = cmd_dict['state_orch']
+            target = self._state_orch
         else:
             raise ConfigError(
                 "deepsea_deploy: unknown directive ->{}<- in command dict"
@@ -745,6 +748,32 @@ profile-{profile}/cluster/{remote}.sls
             'salt_api_test.sh',
             salt_api_test,
             )
+
+    def _state_orch(self, config, reboot=False):
+        """
+        Run an orchestration. Optionally survive a reboot of the master node.
+        """
+        if not config:
+            config = {}
+        check_config_key(config, "name", None)
+        if not config["name"]:
+            raise ConfigError(
+                "deepsea_deploy: state_orch requires name "
+                "of orchestration to run"
+                )
+        cmd_str = None
+        if self.config['cli']:
+            cmd_str = (
+                'timeout 60m deepsea '
+                '--log-file=/var/log/salt/deepsea.log '
+                '--log-level=debug '
+                'salt-run state.orch {} --simple-output'
+                ).format(config["name"])
+        else:
+            cmd_str = (
+                'timeout 60m salt-run --no-color state.orch {}'
+                ).format(config["name"])
+        self.master_remote.run(args=cmd_str)
 
     def setup(self):
         super(DeepSeaDeploy, self).setup()
