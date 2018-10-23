@@ -41,6 +41,7 @@ class DeepSea(Task):
 
     def __init__(self, ctx, config):
         super(DeepSea, self).__init__(ctx, config)
+        self.log.debug("beginning of deepsea task constructor method")
         if 'install' in self.config:
             if self.config['install'] in ['package', 'pkg']:
                 self.config['install'] = 'package'
@@ -56,10 +57,11 @@ class DeepSea(Task):
                 self.config['install'] = 'source'
             else:
                 self.config['install'] = 'package'
-        self.sm = SaltManager(self.ctx, self.config)
+        self.sm = SaltManager(self.ctx)
         self.master_remote = self.sm.master_remote
 #       self.log.debug("ctx.config {}".format(ctx.config))
         log.debug("Munged config is {}".format(self.config))
+        self.log.debug("end of deepsea task constructor method")
 
     def _install_deepsea(self):
         if self.config['install'] == 'package':
@@ -183,27 +185,27 @@ class DeepSea(Task):
 
     def setup(self):
         super(DeepSea, self).setup()
-#       log.debug("beginning of DeepSea task setup method...")
+#       log.debug("beginning of deepsea task setup method")
         pass
-#       log.debug("end of DeepSea task setup...")
+#       log.debug("end of deepsea task setup")
 
     def begin(self):
         super(DeepSea, self).begin()
-        log.debug("beginning of DeepSea task begin method...")
+        log.debug("beginning of deepsea task begin method")
         self._install_deepsea()
-        log.debug("end of DeepSea task begin method...")
+        log.debug("end of deepsea task begin method")
 
     def end(self):
         super(DeepSea, self).end()
-#       log.debug("beginning of DeepSea task end method...")
+#       log.debug("beginning of deepsea task end method")
         pass
-#       log.debug("end of DeepSea task end method...")
+#       log.debug("end of deepsea task end method")
 
     def teardown(self):
         super(DeepSea, self).teardown()
-        log.debug("beginning of DeepSea task teardown method...")
+        log.debug("beginning of deepsea task teardown method")
         self._purge_osds()
-        log.debug("end of DeepSea task teardown method...")
+        log.debug("end of deepsea task teardown method")
 
 
 task = DeepSea

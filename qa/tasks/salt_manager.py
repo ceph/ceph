@@ -7,7 +7,7 @@ task, instantiate a SaltManager object:
 
     from salt_manager import SaltManager
 
-    sm = SaltManager(ctx, config)
+    sm = SaltManager(ctx)
 
 Third, enjoy the SaltManager goodness - e.g.:
 
@@ -20,7 +20,6 @@ import re
 from cStringIO import StringIO
 from teuthology.contextutil import safe_while
 from teuthology.exceptions import CommandFailedError
-from teuthology.orchestra.remote import Remote
 from teuthology.orchestra import run
 from util import get_remote_for_role
 
@@ -30,13 +29,9 @@ master_role = 'client.salt_master'
 
 class SaltManager(object):
 
-    def __init__(self, ctx, config):
-        config["master_remote"] = get_remote_for_role(ctx, master_role).name
-        self.config = config
+    def __init__(self, ctx):
         self.ctx = ctx
-        self.cluster = ctx.cluster
-        self.master_remote = Remote(self.config.get('master_remote'))
-        self.minions = ctx.cluster.remotes
+        self.master_remote = get_remote_for_role(self.ctx, master_role)
 
     def _all_minions_cmd_run(self, cmd, abort_on_fail=True, show_stderr=False):
         """
@@ -54,7 +49,7 @@ class SaltManager(object):
         Do something to a systemd service unit on all remotes (test nodes) at
         once
         """
-        self.cluster.run(args=[
+        self.ctx.cluster.run(args=[
             'sudo', 'systemctl', subcommand, '{}.service'.format(service)])
 
     def __systemctl_remote(self, remote, subcommand=None, service=None):
@@ -65,7 +60,9 @@ class SaltManager(object):
             remote.run(args=[
                 'sudo', 'systemctl', subcommand, '{}.service'.format(service)])
         except CommandFailedError:
-            log.warning("Failed to {} {}.service!".format(subcommand, service))
+            log.warning((
+                "salt_manager: failed to {} {}.service!"
+                ).format(subcommand, service))
             remote.run(args=[
                 'sudo', 'systemctl', 'status', '--full', '--lines=50',
                 '{}.service'.format(service), run.Raw('||'), 'true'])
@@ -75,7 +72,7 @@ class SaltManager(object):
         """
         cat a file everywhere on the whole cluster
         """
-        self.cluster.run(args=[
+        self.ctx.cluster.run(args=[
             'sudo', 'cat', filename])
 
     def __cat_file_remote(self, remote, filename=None):
@@ -86,7 +83,9 @@ class SaltManager(object):
             remote.run(args=[
                 'sudo', 'cat', filename])
         except CommandFailedError:
-            log.warning("{} not found on {}".format(filename, remote.name))
+            log.warning((
+                "salt_manager: {} not found on {}"
+                ).format(filename, remote.name))
 
     def __ping(self, ping_cmd, expected):
         with safe_while(sleep=15, tries=50,
@@ -96,7 +95,7 @@ class SaltManager(object):
                 self.master_remote.run(args=ping_cmd, stdout=output)
                 responded = len(re.findall('  True', output.getvalue()))
                 output.close()
-                log.info("{} of {} minions responded"
+                log.info("salt_manager: {} of {} minions responded"
                          .format(responded, expected))
                 if (expected == responded):
                     return None
@@ -121,7 +120,7 @@ class SaltManager(object):
                     ])
             except CommandFailedError:
                 continue
-            log.info("Gathering {} logs from remote {}"
+            log.info("salt_manager: gathering {} logs from remote {}"
                      .format(logdir, _remote.hostname))
             _remote.run(args=[
                 'sudo', 'cp', '-a', '/var/log/{}/'.format(logdir),
@@ -144,8 +143,9 @@ class SaltManager(object):
                     ])
             except CommandFailedError:
                 continue
-            log.info("Gathering logfile /var/log/{} from remote {}"
-                     .format(logfile, _remote.hostname))
+            log.info((
+                "salt_manager: gathering logfile /var/log/{} from remote {}"
+                ).format(logfile, _remote.hostname))
             _remote.run(args=[
                 'sudo', 'cp', '-a', '/var/log/{}'.format(logfile),
                 '/home/ubuntu/cephtest/archive/',
@@ -200,7 +200,7 @@ class SaltManager(object):
         """
         Pings minions; raises exception if they don't respond
         """
-        number_of_minions = len(self.minions)
+        number_of_minions = len(self.ctx.cluster.remotes)
         self.__ping(
             "sudo sh -c \'salt \\* test.ping\' || true",
             number_of_minions,

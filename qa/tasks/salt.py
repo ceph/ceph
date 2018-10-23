@@ -2,13 +2,8 @@
 Task that deploys a Salt cluster on all the nodes
 '''
 import logging
-import re
-
-from cStringIO import StringIO
-from netifaces import ifaddresses
 
 from salt_manager import SaltManager
-from teuthology.exceptions import (CommandFailedError, ConfigError)
 from teuthology.misc import delete_file, move_file, sh, sudo_write_file
 from teuthology.orchestra import run
 from teuthology.task import Task
@@ -19,15 +14,16 @@ log = logging.getLogger(__name__)
 class Salt(Task):
     """
     Deploy a Salt cluster on all remotes (test nodes).
-    
-    This task assumes all relevant Salt packages (salt, salt-master, salt-minion,
-    salt-api, python-salt, etc. - whatever they may be called for the OS in
-    question) are already installed. This should be done using the install task.
+
+    This task assumes all relevant Salt packages (salt, salt-master,
+    salt-minion, salt-api, python-salt, etc. - whatever they may be called for
+    the OS in question) are already installed. This should be done using the
+    install task.
 
     One, and only one, of the machines must have a role corresponding to the
     value of the variable salt.sm.master_role (see salt_manager.py). This node
     is referred to as the "Salt Master", or the "master node".
-    
+
     The task starts the Salt Master daemon on the master node, and Salt Minion
     daemons on all the nodes (including the master node), and ensures that the
     minions are properly linked to the master. Finally, it tries to ping all
@@ -39,9 +35,11 @@ class Salt(Task):
 
     def __init__(self, ctx, config):
         super(Salt, self).__init__(ctx, config)
-        log.debug("Munged config is {}".format(self.config))
+        self.log.debug("beginning of salt task constructor method")
+        self.log.debug("salt: munged config is {}".format(self.config))
         self.remotes = self.cluster.remotes
-        self.sm = SaltManager(self.ctx, self.config)
+        self.sm = SaltManager(self.ctx)
+        self.log.debug("end of salt task constructor method")
 
     def __generate_minion_keys(self):
         '''
@@ -91,9 +89,9 @@ class Salt(Task):
                 'sh',
                 '-c',
                 ('if [ ! -f {d} ]; then '
-                'cp {s} {d} ; '
-                'chown root {d} ; '
-                'fi').format(s=src, d=dest)
+                 'cp {s} {d} ; '
+                 'chown root {d} ; '
+                 'fi').format(s=src, d=dest)
             ])
             self.sm.master_remote.run(args=[
                 'sudo',
@@ -180,28 +178,28 @@ class Salt(Task):
         self.sm.start_master()
         self.sm.start_minions()
         self.sm.restart_master()
-        log.debug("end of Salt task setup method")
+        log.debug("end of salt task setup method")
 
     def begin(self):
         super(Salt, self).begin()
-        log.debug("beginning of Salt task begin method")
+        log.debug("beginning of salt task begin method")
         self.sm.check_salt_daemons()
         self.sm.cat_salt_master_conf()
         self.sm.cat_salt_minion_confs()
         self.sm.ping_minions()
-        log.debug("end of Salt task begin method")
+        log.debug("end of salt task begin method")
 
     def end(self):
         super(Salt, self).end()
-        log.debug("beginning of Salt task end method")
+        log.debug("beginning of salt task end method")
         self.sm.gather_logs('salt')
-        log.debug("end of Salt task end method")
-    
+        log.debug("end of salt task end method")
+
     def teardown(self):
         super(Salt, self).teardown()
-        log.debug("beginning of Salt task teardown method")
+        log.debug("beginning of salt task teardown method")
         pass
-        log.debug("end of Salt task teardown method")
+        log.debug("end of salt task teardown method")
 
 
 task = Salt

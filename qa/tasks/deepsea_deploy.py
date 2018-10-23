@@ -90,6 +90,7 @@ class DeepSeaDeploy(Task):
 
     def __init__(self, ctx, config):
         super(DeepSeaDeploy, self).__init__(ctx, config)
+        self.log.debug("beginning of deepsea_deploy task constructor method")
         self.roles = ctx.config['roles']
         self._introspect_roles()
         check_config_key(self.config, 'cli', True)
@@ -106,10 +107,11 @@ class DeepSeaDeploy(Task):
                     "deepsea_deploy: commands config param takes a list")
         self.log.info("deepsea_deploy: deployment command list: {}"
                       .format(deploy_cmdlist))
-        self.sm = SaltManager(self.ctx, self.config)
+        self.sm = SaltManager(self.ctx)
         self.master_remote = self.sm.master_remote
 #       self.log.debug("ctx.config {}".format(ctx.config))
         log.debug("Munged config is {}".format(self.config))
+        self.log.debug("end of deepsea_deploy task constructor method")
 
     def _ceph_cluster_status(self):
         remote_run_script_as_root(
@@ -226,6 +228,24 @@ class DeepSeaDeploy(Task):
         else:
             self.log.info("deepsea CLI not installed")
 
+    def _deepsea_minions(self):
+        """
+        Set deepsea_minions pillar value
+        """
+        echo_cmd = (
+            'echo "deepsea_minions: \'*\'" > '
+            '/srv/pillar/ceph/deepsea_minions.sls'
+        )
+        self.master_remote.run(args=[
+            'sudo',
+            'sh',
+            '-c',
+            echo_cmd,
+            run.Raw(';'),
+            'cat',
+            '/srv/pillar/ceph/deepsea_minions.sls',
+            ])
+
     def _dump_global_conf(self):
         self.master_remote.run(args=[
             'ls',
@@ -261,7 +281,7 @@ class DeepSeaDeploy(Task):
             raise ConfigError("Python 3 not installed on master node"
                               " - bailing out!")
         self._deepsea_cli_version()
-        self._set_pillar_deepsea_minions()
+        self._deepsea_minions()
         # Stage 0 does this, but we have no guarantee Stage 0 will run
         self.sm.sync_pillar_data()
 
@@ -387,6 +407,8 @@ class DeepSeaDeploy(Task):
                           .format(python_binary))
         return installed
 
+    # FIXME: run on each minion individually, and compare deepsea "roles"
+    # with teuthology roles!
     def _pillar_items(self):
         self.master_remote.run(args=[
             'sudo',
@@ -713,48 +735,30 @@ profile-{profile}/cluster/{remote}.sls
             salt_api_test,
             )
 
-    def _set_pillar_deepsea_minions(self):
-        """
-        Set deepsea_minions pillar value
-        """
-        echo_cmd = (
-            'echo "deepsea_minions: \'*\'" > '
-            '/srv/pillar/ceph/deepsea_minions.sls'
-        )
-        self.master_remote.run(args=[
-            'sudo',
-            'sh',
-            '-c',
-            echo_cmd,
-            run.Raw(';'),
-            'cat',
-            '/srv/pillar/ceph/deepsea_minions.sls',
-            ])
-
     def setup(self):
         super(DeepSeaDeploy, self).setup()
-        log.debug("beginning of DeepSeaDeploy task setup method...")
+        log.debug("beginning of deepsea_deploy task setup method")
         self._copy_health_ok()
-        log.debug("end of DeepSeaDeploy task setup...")
+        log.debug("end of deepsea_deploy task setup")
 
     def begin(self):
         super(DeepSeaDeploy, self).begin()
-        log.debug("beginning of DeepSeaDeploy task begin method...")
+        log.debug("beginning of deepsea_deploy task begin method")
         self._deploy_ceph()
-        log.debug("end of DeepSeaDeploy task begin method...")
+        log.debug("end of deepsea_deploy task begin method")
 
     def end(self):
         super(DeepSeaDeploy, self).end()
-        log.debug("beginning of DeepSeaDeploy task end method...")
+        log.debug("beginning of deepsea_deploy task end method")
         self.sm.gather_logfile('deepsea.log')
         self.sm.gather_logs('ganesha')
-        log.debug("end of DeepSeaDeploy task end method...")
+        log.debug("end of deepsea_deploy task end method")
 
     def teardown(self):
         super(DeepSeaDeploy, self).teardown()
-#       log.debug("beginning of DeepSeaDeploy task teardown method...")
+#       log.debug("beginning of deepsea_deploy task teardown method")
         pass
-#       log.debug("end of DeepSeaDeploy task teardown method...")
+#       log.debug("end of deepsea_deploy task teardown method")
 
 
 task = DeepSeaDeploy
