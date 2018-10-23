@@ -213,7 +213,7 @@ function TEST_pool_create_rep_expected_num_objects() {
     setup $dir || return 1
 
     # disable pg dir merge
-    export CEPH_ARGS
+    export CEPH_ARGS="--osd-objectstore=filestore"
     run_mon $dir a || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
