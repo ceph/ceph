@@ -30,30 +30,10 @@ namespace ceph {
 struct BackTrace;
 
 /*
- * For GNU, test specific version features. Otherwise (e.g. LLVM) we'll use
- * the defaults selected below.
- */
-#ifdef __GNUC_PREREQ
-
-/*
- * Version 2.4 and later of GCC define a magical variable
- * `__PRETTY_FUNCTION__' which contains the name of the function currently
- * being defined.  This is broken in G++ before version 2.6.  C9x has a
- * similar variable called __func__, but prefer the GCC one since it demangles
- * C++ function names. We define __CEPH_NO_PRETTY_FUNC if we want to avoid
- * broken versions of G++.
- */
-# if defined __cplusplus ? !__GNUC_PREREQ (2, 6) : !__GNUC_PREREQ (2, 4)
-#   define __CEPH_NO_PRETTY_FUNC
-# endif
-
-#endif
-
-/*
  * Select a function-name variable based on compiler tests, and any compiler
  * specific overrides.
  */
-#if defined(HAVE_PRETTY_FUNC) && !defined(__CEPH_NO_PRETTY_FUNC)
+#if defined(HAVE_PRETTY_FUNC)
 # define __CEPH_ASSERT_FUNCTION __PRETTY_FUNCTION__
 #elif defined(HAVE_FUNC)
 # define __CEPH_ASSERT_FUNCTION __func__
@@ -112,21 +92,39 @@ using namespace ceph;
 #define ceph_abort_msgf(...)                                             \
   __ceph_abortf( __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION, __VA_ARGS__)
 
+#ifdef __SANITIZE_ADDRESS__
+#define ceph_assert(expr)                           \
+  do {                                              \
+    ((expr))                                        \
+    ? _CEPH_ASSERT_VOID_CAST (0)                    \
+    : __ceph_assert_fail(__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION); \
+  } while (false)
+#else
 #define ceph_assert(expr)							\
   do { static const ceph::assert_data assert_data_ctx = \
    {__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION}; \
    ((expr) \
    ? _CEPH_ASSERT_VOID_CAST (0) \
    : __ceph_assert_fail(assert_data_ctx)); } while(false)
+#endif
 
 // this variant will *never* get compiled out to NDEBUG in the future.
 // (ceph_assert currently doesn't either, but in the future it might.)
+#ifdef __SANITIZE_ADDRESS__
+#define ceph_assert_always(expr)                    \
+  do {                                              \
+    ((expr))                                        \
+    ? _CEPH_ASSERT_VOID_CAST (0)                    \
+    : __ceph_assert_fail(__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION); \
+  } while(false)
+#else
 #define ceph_assert_always(expr)							\
   do { static const ceph::assert_data assert_data_ctx = \
    {__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION}; \
    ((expr) \
    ? _CEPH_ASSERT_VOID_CAST (0) \
    : __ceph_assert_fail(assert_data_ctx)); } while(false)
+#endif
 
 // Named by analogy with printf.  Along with an expression, takes a format
 // string and parameters which are printed if the assertion fails.

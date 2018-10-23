@@ -45,7 +45,9 @@ function(distutils_add_cython_module name src)
   string(STRIP "${CMAKE_CXX_COMPILER_ARG1}" cxx_compiler_arg1)
   # Note: no quotes, otherwise distutils will execute "/usr/bin/ccache gcc"
   # CMake's implicit conversion between strings and lists is wonderful, isn't it?
-  set(PY_CC ${compiler_launcher} ${CMAKE_C_COMPILER} ${c_compiler_arg1})
+  string(REPLACE " " ";" cflags ${CMAKE_C_FLAGS})
+  list(APPEND cflags -iquote${CMAKE_SOURCE_DIR}/src/include -w)
+  set(PY_CC ${compiler_launcher} ${CMAKE_C_COMPILER} ${c_compiler_arg1} ${cflags})
   set(PY_CXX ${compiler_launcher} ${CMAKE_CXX_COMPILER} ${cxx_compiler_arg1})
   set(PY_LDSHARED ${link_launcher} ${CMAKE_C_COMPILER} ${c_compiler_arg1} "-shared")
   add_custom_target(${name} ALL
@@ -58,7 +60,6 @@ function(distutils_add_cython_module name src)
     LDFLAGS=-L${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
     CYTHON_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}
     CEPH_LIBDIR=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
-    CFLAGS=\"-iquote${CMAKE_SOURCE_DIR}/src/include -w\"
     ${PYTHON${PYTHON_VERSION}_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/setup.py
     build --verbose --build-base ${CYTHON_MODULE_DIR}
     --build-platlib ${CYTHON_MODULE_DIR}/lib.${PYTHON${PYTHON_VERSION}_VERSION_MAJOR}
