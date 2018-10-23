@@ -1775,6 +1775,7 @@ int CrushWrapper::reclassify(
   map<int,map<int,int>> new_class_bucket;
   map<int,string> new_bucket_names;
   map<int,map<string,string>> new_buckets;
+  map<string,int> new_bucket_by_name;
   for (auto& i : classify_bucket) {
     const string& match = i.first;  // prefix% or %suffix
     const string& new_class = i.second.first;
@@ -1840,6 +1841,9 @@ int CrushWrapper::reclassify(
       if (name_exists(basename)) {
 	base_id = get_item_id(basename);
 	cout << "  have base " << base_id << std::endl;
+      } else if (new_bucket_by_name.count(basename)) {
+	base_id = new_bucket_by_name[basename];
+	cout << "  already creating base " << base_id << std::endl;
       } else {
 	base_id = get_new_bucket_id();
 	crush->buckets[-1-base_id] = crush_make_bucket(crush,
@@ -1849,6 +1853,7 @@ int CrushWrapper::reclassify(
 						       0, NULL, NULL);
 	crush->buckets[-1-base_id]->id = base_id;
 	name_map[base_id] = basename;
+	new_bucket_by_name[basename] = base_id;
 	cout << "  created base " << base_id << std::endl;
 
 	new_buckets[base_id][default_parent_type_name] = default_parent;
