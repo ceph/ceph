@@ -611,6 +611,9 @@ profile-{profile}/cluster/{remote}.sls
         elif directive == "stage3":
             config = cmd_dict['stage3']
             target = self._run_stage_3
+        elif directive == "stage4":
+            config = cmd_dict['stage4']
+            target = self._run_stage_4
         else:
             raise ConfigError(
                 "deepsea_deploy: unknown directive ->{}<- in command dict"
@@ -727,6 +730,14 @@ profile-{profile}/cluster/{remote}.sls
         self._run_stage(3)
         self._ceph_cluster_status()
         self._ceph_health_test()
+
+    def _run_stage_4(self, config):
+        """
+        Run Stage 4
+        """
+        if not config:
+            config = {}
+        self._run_stage(4)
 
     def _salt_api_test(self):
         remote_run_script_as_root(
