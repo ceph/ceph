@@ -199,7 +199,7 @@ class BackoffThrottle {
   uint64_t max = 0;
   uint64_t current = 0;
 
-  std::chrono::duration<double> _get_delay(uint64_t c) const;
+  ceph::timespan _get_delay(uint64_t c) const;
 
 public:
   /**
@@ -218,8 +218,8 @@ public:
     uint64_t throttle_max,
     ostream *errstream);
 
-  std::chrono::duration<double> get(uint64_t c = 1);
-  std::chrono::duration<double> wait() {
+  ceph::timespan get(uint64_t c = 1);
+  ceph::timespan wait() {
     return get(0);
   }
   uint64_t put(uint64_t c = 1);
