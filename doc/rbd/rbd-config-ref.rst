@@ -134,3 +134,54 @@ Read-ahead is automatically disabled if caching is disabled.
 :Type: 64-bit Integer
 :Required: No
 :Default: ``50 MiB``
+
+
+RBD Default Features
+====================
+
+RBD supports advanced features which can be specified via the command line when creating images or the default features can be specified via Ceph config file via 'rbd_default_features = <sum of feature numeric values>' or 'rbd_default_features = <comma-delimited list of CLI values>'
+
+``Layering``
+
+:Description: Layering enables you to use cloning.
+:Internal value: 1
+:CLI value: layering
+
+``Striping v2``
+
+:Description: Striping spreads data across multiple objects. Striping helps with parallelism for sequential read/write workloads.
+:Internal value: 2
+:CLI value: striping
+
+``Exclusive locking``
+
+:Description: When enabled, it requires a client to get a lock on an object before making a write. Exclusive lock should only be enabled when a single client is accessing an image at the same time. 
+:Internal value: 4
+:CLI value: exclusive-lock
+
+``Object map``
+
+:Description: Object map support depends on exclusive lock support. Block devices are thin provisioned—meaning, they only store data that actually exists. Object map support helps track which objects actually exist (have data stored on a drive). Enabling object map support speeds up I/O operations for cloning; importing and exporting a sparsely populated image; and deleting.
+:Internal value: 8
+:CLI value: object-map
+
+
+``Fast-diff``
+
+:Description: Fast-diff support depends on object map support and exclusive lock support. It adds another property to the object map, which makes it much faster to generate diffs between snapshots of an image, and the actual data usage of a snapshot much faster.
+:Internal value: 16
+:CLI value: fast-diff
+
+
+``Deep-flatten``
+
+:Description: Deep-flatten makes rbd flatten work on all the snapshots of an image, in addition to the image itself. Without it, snapshots of an image will still rely on the parent, so the parent will not be delete-able until the snapshots are deleted. Deep-flatten makes a parent independent of its clones, even if they have snapshots.
+:Internal value: 32
+:CLI value: deep-flatten
+
+
+``Journaling``
+
+:Description: Journaling support depends on exclusive lock support. Journaling records all modifications to an image in the order they occur. RBD mirroring utilizes the journal to replicate a crash consistent image to a remote cluster.
+:Internal value: 64
+:CLI value: journaling

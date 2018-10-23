@@ -48,7 +48,7 @@ to operate the :ref:`Ceph RADOS Gateway <object-gateway>`, the
 	LIO iSCSI Gateway <iscsi-overview>
 	QEMU <qemu-rbd>
 	libvirt <libvirt>
-	Cache Settings <rbd-config-ref/>
+	librbd Settings <rbd-config-ref/>
 	OpenStack <rbd-openstack>
 	CloudStack <rbd-cloudstack>
 	RBD Replay <rbd-replay>
