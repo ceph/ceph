@@ -41,33 +41,36 @@ class DeepSea(Task):
 
     def __init__(self, ctx, config):
         super(DeepSea, self).__init__(ctx, config)
-        install_conf = check_config_key(self.config, 'install', 'package')
-        self._determine_install_method(install_conf)
+        if 'install' in self.config:
+            if self.config['install'] in ['package', 'pkg']:
+                self.config['install'] = 'package'
+            elif self.config['install'] in ['source', 'src']:
+                self.config['install'] = 'source'
+            else:
+                raise ConfigError(
+                        "deepsea: unrecognized install config value ->{}<-"
+                        .format(self.config['install'])
+                    )
+        else:
+            if 'repo' in self.config or 'branch' in self.config:
+                self.config['install'] = 'source'
+            else:
+                self.config['install'] = 'package'
         self.sm = SaltManager(self.ctx, self.config)
         self.master_remote = self.sm.master_remote
 #       self.log.debug("ctx.config {}".format(ctx.config))
         log.debug("Munged config is {}".format(self.config))
 
-    def _determine_install_method(self, conf_val):
-        install_lookup = {
-                'source': self._install_deepsea_from_source,
-                'src': self._install_deepsea_from_source,
-                'package': self._install_deepsea_using_zypper,
-                'pkg': self._install_deepsea_using_zypper,
-            }
-        if conf_val in ['source', 'src', 'package', 'pkg']:
-            self._install_deepsea = install_lookup[conf_val]
+    def _install_deepsea(self):
+        if self.config['install'] == 'package':
+            self._install_deepsea_using_zypper()
+        elif self.config['install'] == 'source':
+            self._install_deepsea_from_source()
         else:
             raise ConfigError(
                     "deepsea: unrecognized install config value ->{}<-"
-                    .format(conf_val)
+                    .format(self.config['install'])
                 )
-
-    def _master_whoami(self):
-        """Demonstrate that remote.run() does not run stuff as root"""
-        self.master_remote.run(args=[
-            'whoami',
-        ])
 
     def _install_deepsea_from_source(self):
         """Install DeepSea from source (unless already installed from RPM)"""
@@ -109,7 +112,6 @@ class DeepSea(Task):
             run.Raw('||'),
             'true',
             ])
-
         self.log.info("Running \"make install\" in DeepSea clone...")
         self.master_remote.run(args=[
             'cd',
@@ -119,7 +121,6 @@ class DeepSea(Task):
             'make',
             'install',
             ])
-
         self.log.info("installing deepsea dependencies...")
         rpmspec_cmd = (
                 '$(rpmspec --requires -q DeepSea/deepsea.spec.in 2>/dev/null)'
