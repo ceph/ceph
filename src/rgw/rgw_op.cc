@@ -6950,6 +6950,14 @@ std::ostream& RGWOp::gen_prefix(std::ostream& out) const
   return s->gen_prefix(out) << s->dialect << ':' << name() << ' ';
 }
 
+void RGWDefaultResponseOp::send_response() {
+  if (op_ret) {
+    set_req_state_err(s, op_ret);
+  }
+  dump_errno(s);
+  end_header(s);
+}
+
 void RGWPutBucketPolicy::send_response()
 {
   if (op_ret) {
