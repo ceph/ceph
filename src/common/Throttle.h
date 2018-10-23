@@ -16,7 +16,7 @@
 #include "common/ThrottleInterface.h"
 #include "common/Timer.h"
 #include "common/convenience.h"
-#include "common/perf_counters.h"
+#include "common/perf_counters_collection.h"
 
 /**
  * @class Throttle

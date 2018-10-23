@@ -13,6 +13,8 @@
  *
  */
 
+#include "common/ceph_context.h"
+
 #include <mutex>
 #include <iostream>
 
@@ -22,7 +24,6 @@
 
 #include "include/mempool.h"
 #include "common/admin_socket.h"
-#include "common/perf_counters.h"
 #include "common/code_environment.h"
 #include "common/Cond.h"
 #include "common/config.h"
