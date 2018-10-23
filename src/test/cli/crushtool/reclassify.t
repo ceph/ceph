@@ -348,11 +348,11 @@ below is an adjusted version of the same cluster's map
   classify_bucket %-ssd as ssd default bucket default (root)
     new class ssd exists as 1
   match %-ssd to frauenhaus-ssd basename frauenhaus
-    created base -154
+    already creating base -145
   match %-ssd to herrenhaus-ssd basename herrenhaus
-    created base -155
+    already creating base -146
   match %-ssd to zoo-ssd basename zoo
-    created base -156
+    already creating base -147
   match %-ssd to berta-ssd basename berta
     have base -37
   match %-ssd to euphrosyne-ssd basename euphrosyne
@@ -372,11 +372,11 @@ below is an adjusted version of the same cluster's map
   match %-ssd to hirsch-ssd basename hirsch
     have base -41
   match %-ssd to phaidon-ssd basename phaidon
-    created base -157
+    created base -154
   match %-ssd to glykera-ssd basename glykera
-    created base -158
+    created base -155
   match %-ssd to bonobo-ssd basename bonobo
-    created base -159
+    created base -156
   classify_bucket hdd as hdd default bucket default (root)
     new class hdd exists as 0
   match hdd to hdd basename default
@@ -385,9 +385,9 @@ below is an adjusted version of the same cluster's map
     new class ssd exists as 1
   match ssd to ssd basename default
     have base -1
-  moving items from -124 (bonobo-ssd) to -159 (bonobo)
-  moving items from -123 (glykera-ssd) to -158 (glykera)
-  moving items from -122 (phaidon-ssd) to -157 (phaidon)
+  moving items from -124 (bonobo-ssd) to -156 (bonobo)
+  moving items from -123 (glykera-ssd) to -155 (glykera)
+  moving items from -122 (phaidon-ssd) to -154 (phaidon)
   moving items from -121 (carl-hdd) to -32 (carl)
   moving items from -120 (hugo-hdd) to -153 (hugo)
   moving items from -119 (achim-hdd) to -152 (achim)
@@ -400,18 +400,35 @@ below is an adjusted version of the same cluster's map
   moving items from -29 (borkenkaefer-ssd) to -4 (borkenkaefer)
   moving items from -28 (hdd) to -1 (default)
   moving items from -27 (ssd) to -1 (default)
-  reclassify err from insert_item: (17) File exists
-  failed to reclassify map
-  [1]
-
-this makes changes, but it doesn't really clean up the map, which is
-a mess!
+  moving items from -26 (uhu-ssd) to -34 (uhu)
+  moving items from -25 (gottlieb-ssd) to -30 (gottlieb)
+  moving items from -24 (hieronymus-ssd) to -31 (hieronymus)
+  moving items from -23 (leonhard-ssd) to -33 (leonhard)
+  moving items from -22 (borkenkaefer-hdd) to -4 (borkenkaefer)
+  moving items from -21 (oelgard-ssd) to -36 (oelgard)
+  moving items from -20 (euphrosyne-ssd) to -35 (euphrosyne)
+  moving items from -19 (berta-ssd) to -37 (berta)
+  moving items from -17 (zoo-ssd) to -147 (zoo)
+  moving items from -16 (herrenhaus-ssd) to -146 (herrenhaus)
+  moving items from -15 (frauenhaus-ssd) to -145 (frauenhaus)
+  moving items from -12 (zoo-hdd) to -147 (zoo)
+  moving items from -11 (herrenhaus-hdd) to -146 (herrenhaus)
+  moving items from -10 (frauenhaus-hdd) to -145 (frauenhaus)
+  moving items from -9 (euphrosyne-hdd) to -35 (euphrosyne)
+  moving items from -8 (uhu-hdd) to -34 (uhu)
+  moving items from -7 (hieronymus-hdd) to -31 (hieronymus)
+  moving items from -6 (gottlieb-hdd) to -30 (gottlieb)
+  moving items from -5 (leonhard-hdd) to -33 (leonhard)
+  moving items from -3 (oelgard-hdd) to -36 (oelgard)
+  moving items from -2 (berta-hdd) to -37 (berta)
+  new bucket -156 missing parent, adding at {root=default}
+  new bucket -155 missing parent, adding at {root=default}
+  new bucket -154 missing parent, adding at {root=default}
 
   $ crushtool -i $TESTDIR/crush-classes/b --compare foo
-  rule 0 had 3068/3072 mismatched mappings (0.998698)
-  rule 1 had 4096/4096 mismatched mappings (1)
-  warning: maps are NOT equivalent
-  [1]
+  rule 0 had 0/3072 mismatched mappings (0)
+  rule 1 had 0/4096 mismatched mappings (0)
+  maps appear equivalent
 
   $ crushtool -i $TESTDIR/crush-classes/f --reclassify --reclassify-root default hdd -o foo
   classify_root default (-1) as hdd
@@ -450,3 +467,122 @@ default that we aren't changing the class on.
   rule 1 had 422/6144 mismatched mappings (0.0686849)
   warning: maps are NOT equivalent
   [1]
+
+  $ crushtool -i $TESTDIR/crush-classes/g --reclassify --reclassify-bucket sata-% hdd-sata default --reclassify-bucket sas-% hdd-sas default --reclassify-bucket sas hdd-sas default --reclassify-bucket sata hdd-sata default -o foo
+  classify_bucket sas as hdd-sas default bucket default (root)
+    created new class hdd-sas as 1
+  match sas to sas basename default
+    have base -1
+  classify_bucket sas-% as hdd-sas default bucket default (root)
+    new class hdd-sas exists as 1
+  match sas-% to sas-osd01 basename osd01
+    created base -73
+  match sas-% to sas-osd02 basename osd02
+    created base -74
+  match sas-% to sas-osd03 basename osd03
+    created base -75
+  match sas-% to sas-osd04 basename osd04
+    created base -76
+  match sas-% to sas-osd05 basename osd05
+    created base -77
+  match sas-% to sas-osd06 basename osd06
+    created base -78
+  match sas-% to sas-osd07 basename osd07
+    created base -79
+  match sas-% to sas-osd08 basename osd08
+    created base -80
+  match sas-% to sas-osd09 basename osd09
+    created base -81
+  match sas-% to sas-rack1 basename rack1
+    created base -82
+  match sas-% to sas-rack2 basename rack2
+    created base -83
+  match sas-% to sas-rack3 basename rack3
+    created base -84
+  classify_bucket sata as hdd-sata default bucket default (root)
+    created new class hdd-sata as 2
+  match sata to sata basename default
+    have base -1
+  classify_bucket sata-% as hdd-sata default bucket default (root)
+    new class hdd-sata exists as 2
+  match sata-% to sata-osd11 basename osd11
+    created base -85
+  match sata-% to sata-osd10 basename osd10
+    created base -86
+  match sata-% to sata-osd14 basename osd14
+    created base -87
+  match sata-% to sata-osd13 basename osd13
+    created base -88
+  match sata-% to sata-osd12 basename osd12
+    created base -89
+  match sata-% to sata-osd15 basename osd15
+    created base -90
+  match sata-% to sata-osd16 basename osd16
+    created base -91
+  match sata-% to sata-osd18 basename osd18
+    created base -92
+  match sata-% to sata-osd19 basename osd19
+    created base -93
+  match sata-% to sata-osd17 basename osd17
+    created base -94
+  match sata-% to sata-osd20 basename osd20
+    created base -95
+  match sata-% to sata-osd21 basename osd21
+    created base -96
+  match sata-% to sata-osd22 basename osd22
+    created base -97
+  match sata-% to sata-osd23 basename osd23
+    created base -98
+  match sata-% to sata-osd24 basename osd24
+    created base -99
+  match sata-% to sata-osd25 basename osd25
+    created base -100
+  match sata-% to sata-osd26 basename osd26
+    created base -101
+  match sata-% to sata-osd27 basename osd27
+    created base -102
+  match sata-% to sata-rack1 basename rack1
+    already creating base -82
+  match sata-% to sata-rack2 basename rack2
+    already creating base -83
+  match sata-% to sata-rack3 basename rack3
+    already creating base -84
+  moving items from -36 (sas) to -1 (default)
+  moving items from -35 (sata) to -1 (default)
+  moving items from -34 (sas-rack3) to -84 (rack3)
+  moving items from -33 (sas-rack2) to -83 (rack2)
+  moving items from -32 (sas-rack1) to -82 (rack1)
+  moving items from -31 (sata-rack3) to -84 (rack3)
+  moving items from -30 (sata-rack2) to -83 (rack2)
+  moving items from -29 (sata-rack1) to -82 (rack1)
+  moving items from -28 (sas-osd09) to -81 (osd09)
+  moving items from -27 (sas-osd08) to -80 (osd08)
+  moving items from -26 (sas-osd07) to -79 (osd07)
+  moving items from -25 (sas-osd06) to -78 (osd06)
+  moving items from -24 (sas-osd05) to -77 (osd05)
+  moving items from -23 (sas-osd04) to -76 (osd04)
+  moving items from -22 (sas-osd03) to -75 (osd03)
+  moving items from -21 (sas-osd02) to -74 (osd02)
+  moving items from -20 (sata-osd27) to -102 (osd27)
+  moving items from -19 (sas-osd01) to -73 (osd01)
+  moving items from -18 (sata-osd26) to -101 (osd26)
+  moving items from -17 (sata-osd25) to -100 (osd25)
+  moving items from -16 (sata-osd24) to -99 (osd24)
+  moving items from -15 (sata-osd23) to -98 (osd23)
+  moving items from -14 (sata-osd22) to -97 (osd22)
+  moving items from -13 (sata-osd21) to -96 (osd21)
+  moving items from -12 (sata-osd20) to -95 (osd20)
+  moving items from -11 (sata-osd17) to -94 (osd17)
+  moving items from -10 (sata-osd19) to -93 (osd19)
+  moving items from -9 (sata-osd18) to -92 (osd18)
+  moving items from -8 (sata-osd16) to -91 (osd16)
+  moving items from -7 (sata-osd15) to -90 (osd15)
+  moving items from -6 (sata-osd12) to -89 (osd12)
+  moving items from -5 (sata-osd13) to -88 (osd13)
+  moving items from -4 (sata-osd14) to -87 (osd14)
+  moving items from -3 (sata-osd10) to -86 (osd10)
+  moving items from -2 (sata-osd11) to -85 (osd11)
+  $ crushtool -i $TESTDIR/crush-classes/g --compare foo
+  rule 0 had 0/10240 mismatched mappings (0)
+  rule 1 had 0/10240 mismatched mappings (0)
+  maps appear equivalent
