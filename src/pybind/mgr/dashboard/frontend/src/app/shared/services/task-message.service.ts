@@ -146,7 +146,7 @@ export class TaskMessageService {
     'rbd/trash/restore': new TaskMessage(
       new TaskMessageOperation('Restoring', 'restore', 'Restored'),
       (metadata) =>
-        `image '${metadata.pool_name}/${metadata.image_name}@${metadata.image_id}' \
+        `image '${metadata.pool_name}@${metadata.image_id}' \
         into '${metadata.pool_name}/${metadata.new_image_name}'`,
       (metadata) => ({
         17: `Image name '${metadata.pool_name}/${metadata.new_image_name}' is already in use.`
