@@ -279,6 +279,15 @@ int ceph_select_filesystem(struct ceph_mount_info *cmount, const char *fs_name);
 int ceph_mount(struct ceph_mount_info *cmount, const char *root);
 
 /**
+ * Return cluster ID for a mounted ceph filesystem
+ *
+ * Every ceph filesystem has a filesystem ID associated with it. This
+ * function returns that value. If the ceph_mount_info does not refer to a
+ * mounted filesystem, this returns a negative error code.
+ */
+int64_t ceph_get_fs_cid(struct ceph_mount_info *cmount);
+
+/**
  * Execute a management command remotely on an MDS.
  *
  * Must have called ceph_init or ceph_mount before calling this.
