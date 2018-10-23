@@ -166,8 +166,20 @@ protected:
   void _handle_mds_map(const MDSMap &oldmap);
 
 private:
-    mono_time starttime = mono_clock::zero();
-};
+  struct MDSCommand {
+    MDSCommand(std::string_view signature, std::string_view help)
+        : cmdstring(signature), helpstring(help)
+    {}
 
+    std::string cmdstring;
+    std::string helpstring;
+    std::string module = "mds";
+    std::string availability = "cli,rest";
+  };
+
+  static const std::vector<MDSCommand>& get_commands();
+
+  mono_time starttime = mono_clock::zero();
+};
 
 #endif
