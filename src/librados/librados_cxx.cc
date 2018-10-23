@@ -1051,6 +1051,19 @@ librados::IoCtx& librados::IoCtx::operator=(const IoCtx& rhs)
   return *this;
 }
 
+librados::IoCtx::IoCtx(IoCtx&& rhs) noexcept
+  : io_ctx_impl(std::exchange(rhs.io_ctx_impl, nullptr))
+{
+}
+
+librados::IoCtx& librados::IoCtx::operator=(IoCtx&& rhs) noexcept
+{
+  if (io_ctx_impl)
+    io_ctx_impl->put();
+  io_ctx_impl = std::exchange(rhs.io_ctx_impl, nullptr);
+  return *this;
+}
+
 librados::IoCtx::~IoCtx()
 {
   close();
