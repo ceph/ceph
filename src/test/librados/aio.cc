@@ -8,7 +8,6 @@
 #include "gtest/gtest.h"
 #include <errno.h>
 #include <fcntl.h>
-#include <semaphore.h>
 #include <sstream>
 #include <string>
 #include <boost/scoped_ptr.hpp>
@@ -35,30 +34,21 @@ public:
     if (m_init) {
       rados_ioctx_destroy(m_ioctx);
       destroy_one_pool(m_pool_name, &m_cluster);
-      sem_close(m_sem);
     }
   }
 
   std::string init()
   {
     int ret;
-    if (SEM_FAILED == (m_sem = sem_open("/test_aio_sem", O_CREAT, 0644, 0))) {
-      int err = errno;
-      ostringstream oss;
-      oss << "sem_open failed: " << cpp_strerror(err);
-      return oss.str();
-    }
     m_pool_name = get_temp_pool_name();
     std::string err = create_one_pool(m_pool_name, &m_cluster);
     if (!err.empty()) {
-      sem_close(m_sem);
       ostringstream oss;
       oss << "create_one_pool(" << m_pool_name << ") failed: error " << err;
       return oss.str();
     }
     ret = rados_ioctx_create(m_cluster, m_pool_name.c_str(), &m_ioctx);
     if (ret) {
-      sem_close(m_sem);
       destroy_one_pool(m_pool_name, &m_cluster);
       ostringstream oss;
       oss << "rados_ioctx_create failed: error " << ret;
@@ -68,7 +58,6 @@ public:
     return "";
   }
 
-  sem_t *m_sem = nullptr;
   rados_t m_cluster;
   rados_ioctx_t m_ioctx;
   std::string m_pool_name;
@@ -92,7 +81,6 @@ public:
     if (m_init) {
       m_ioctx.close();
       destroy_one_pool_pp(m_pool_name, m_cluster);
-      sem_close(m_sem);
     }
   }
 
@@ -105,23 +93,15 @@ public:
   {
     int ret;
 
-    if (SEM_FAILED == (m_sem = sem_open("/test_aio_sem", O_CREAT, 0644, 0))) {
-      int err = errno;
-      ostringstream oss;
-      oss << "sem_open failed: " << cpp_strerror(err);
-      return oss.str();
-    }
     m_pool_name = get_temp_pool_name();
     std::string err = create_one_pool_pp(m_pool_name, m_cluster, config);
     if (!err.empty()) {
-      sem_close(m_sem);
       ostringstream oss;
       oss << "create_one_pool(" << m_pool_name << ") failed: error " << err;
       return oss.str();
     }
     ret = m_cluster.ioctx_create(m_pool_name.c_str(), m_ioctx);
     if (ret) {
-      sem_close(m_sem);
       destroy_one_pool_pp(m_pool_name, m_cluster);
       ostringstream oss;
       oss << "rados_ioctx_create failed: error " << ret;
@@ -131,7 +111,6 @@ public:
     return "";
   }
 
-  sem_t *m_sem = nullptr;
   Rados m_cluster;
   IoCtx m_ioctx;
   std::string m_pool_name;
@@ -144,28 +123,24 @@ void set_completion_complete(rados_completion_t cb, void *arg)
 {
   AioTestData *test = static_cast<AioTestData*>(arg);
   test->m_complete = true;
-  sem_post(test->m_sem);
 }
 
 void set_completion_safe(rados_completion_t cb, void *arg)
 {
   AioTestData *test = static_cast<AioTestData*>(arg);
   test->m_safe = true;
-  sem_post(test->m_sem);
 }
 
 void set_completion_completePP(rados_completion_t cb, void *arg)
 {
   AioTestDataPP *test = static_cast<AioTestDataPP*>(arg);
   test->m_complete = true;
-  sem_post(test->m_sem);
 }
 
 void set_completion_safePP(rados_completion_t cb, void *arg)
 {
   AioTestDataPP *test = static_cast<AioTestDataPP*>(arg);
   test->m_safe = true;
-  sem_post(test->m_sem);
 }
 
 TEST(LibRadosAio, TooBig) {
@@ -266,8 +241,7 @@ TEST(LibRadosAio, SimpleWrite) {
 			       my_completion, buf, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(test_data.m_sem);
-    sem_wait(test_data.m_sem);
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion));
   }
   ASSERT_EQ(0, rados_aio_get_return_value(my_completion));
 
@@ -279,8 +253,7 @@ TEST(LibRadosAio, SimpleWrite) {
 			       my_completion2, buf, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(test_data.m_sem);
-    sem_wait(test_data.m_sem);
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion2));
   }
   ASSERT_EQ(0, rados_aio_get_return_value(my_completion2));
   rados_aio_release(my_completion);
@@ -303,8 +276,7 @@ TEST(LibRadosAio, SimpleWritePP) {
 			       my_completion, bl1, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(test_data.m_sem);
-    sem_wait(test_data.m_sem);
+    ASSERT_EQ(0, my_completion->wait_for_complete());
   }
   ASSERT_EQ(0, my_completion->get_return_value());
   delete my_completion;
@@ -320,8 +292,7 @@ TEST(LibRadosAio, SimpleWritePP) {
 			       my_completion, bl1, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(test_data.m_sem);
-    sem_wait(test_data.m_sem);
+    ASSERT_EQ(0, my_completion->wait_for_complete());
   }
   ASSERT_EQ(0, my_completion->get_return_value());
   delete my_completion;
@@ -375,8 +346,7 @@ TEST(LibRadosAio, RoundTrip) {
 			       my_completion, buf, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(test_data.m_sem);
-    sem_wait(test_data.m_sem);
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion));
   }
   ASSERT_EQ(0, rados_aio_get_return_value(my_completion));
   char buf2[256];
@@ -408,8 +378,7 @@ TEST(LibRadosAio, RoundTrip2) {
 			       my_completion, buf, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(test_data.m_sem);
-    sem_wait(test_data.m_sem);
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion));
   }
   ASSERT_EQ(0, rados_aio_get_return_value(my_completion));
   char buf2[128];
@@ -447,8 +416,7 @@ TEST(LibRadosAio, RoundTrip3) {
 
   {
     TestAlarm alarm;
-    sem_wait(test_data.m_sem);
-    sem_wait(test_data.m_sem);
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion));
   }
 
   ASSERT_EQ(0, rados_aio_get_return_value(my_completion));
@@ -504,8 +472,7 @@ TEST(LibRadosAio, RoundTripPP) {
 					   bl1, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(test_data.m_sem);
-    sem_wait(test_data.m_sem);
+    ASSERT_EQ(0, my_completion->wait_for_complete());
   }
   ASSERT_EQ(0, my_completion->get_return_value());
   bufferlist bl2;
@@ -540,8 +507,7 @@ TEST(LibRadosAio, RoundTripPP2) {
 					   bl1, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(test_data.m_sem);
-    sem_wait(test_data.m_sem);
+    ASSERT_EQ(0, my_completion->wait_for_complete());
   }
   ASSERT_EQ(0, my_completion->get_return_value());
   bufferlist bl2;
@@ -632,8 +598,7 @@ TEST(LibRadosAio, RoundTripSparseReadPP) {
 					   bl1, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(test_data.m_sem);
-    sem_wait(test_data.m_sem);
+    ASSERT_EQ(0, my_completion->wait_for_complete());
   }
   ASSERT_EQ(0, my_completion->get_return_value());
   std::map<uint64_t, uint64_t> extents;
@@ -1160,8 +1125,7 @@ TEST(LibRadosAio, IsComplete) {
 			       my_completion, buf, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(test_data.m_sem);
-    sem_wait(test_data.m_sem);
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion));
   }
   ASSERT_EQ(0, rados_aio_get_return_value(my_completion));
   char buf2[128];
@@ -1203,8 +1167,7 @@ TEST(LibRadosAio, IsCompletePP) {
 					   bl1, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(test_data.m_sem);
-    sem_wait(test_data.m_sem);
+    ASSERT_EQ(0, my_completion->wait_for_complete());
   }
   ASSERT_EQ(0, my_completion->get_return_value());
   bufferlist bl2;
@@ -1790,8 +1753,7 @@ TEST(LibRadosAio, SimpleStat) {
 			       my_completion, buf, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(test_data.m_sem);
-    sem_wait(test_data.m_sem);
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion));
   }
   ASSERT_EQ(0, rados_aio_get_return_value(my_completion));
   uint64_t psize;
@@ -1826,8 +1788,7 @@ TEST(LibRadosAio, SimpleStatPP) {
 					   bl1, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(test_data.m_sem);
-    sem_wait(test_data.m_sem);
+    ASSERT_EQ(0, my_completion->wait_for_complete());
   }
   ASSERT_EQ(0, my_completion->get_return_value());
   uint64_t psize;
@@ -1859,8 +1820,7 @@ TEST(LibRadosAio, SimpleStatNS) {
 			       my_completion, buf, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(test_data.m_sem);
-    sem_wait(test_data.m_sem);
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion));
   }
   ASSERT_EQ(0, rados_aio_get_return_value(my_completion));
   rados_ioctx_set_namespace(test_data.m_ioctx, "nspace");
@@ -1872,8 +1832,7 @@ TEST(LibRadosAio, SimpleStatNS) {
 			       my_completion, buf2, sizeof(buf2), 0));
   {
     TestAlarm alarm;
-    sem_wait(test_data.m_sem);
-    sem_wait(test_data.m_sem);
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion));
   }
   ASSERT_EQ(0, rados_aio_get_return_value(my_completion));
   uint64_t psize;
@@ -1924,8 +1883,7 @@ TEST(LibRadosAio, SimpleStatPPNS) {
 					   bl1, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(test_data.m_sem);
-    sem_wait(test_data.m_sem);
+    ASSERT_EQ(0, my_completion->wait_for_complete());
   }
   ASSERT_EQ(0, my_completion->get_return_value());
   uint64_t psize;
@@ -1957,8 +1915,7 @@ TEST(LibRadosAio, StatRemove) {
 			       my_completion, buf, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(test_data.m_sem);
-    sem_wait(test_data.m_sem);
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion));
   }
   ASSERT_EQ(0, rados_aio_get_return_value(my_completion));
   uint64_t psize;
@@ -2016,8 +1973,7 @@ TEST(LibRadosAio, StatRemovePP) {
 					   bl1, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(test_data.m_sem);
-    sem_wait(test_data.m_sem);
+    ASSERT_EQ(0, my_completion->wait_for_complete());
   }
   ASSERT_EQ(0, my_completion->get_return_value());
   uint64_t psize;
@@ -2073,10 +2029,8 @@ TEST(LibRadosAio, ExecuteClass) {
 			       my_completion, buf, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(test_data.m_sem);
-    sem_wait(test_data.m_sem);
+    ASSERT_EQ(0, rados_aio_get_return_value(my_completion));
   }
-  ASSERT_EQ(0, rados_aio_get_return_value(my_completion));
   rados_completion_t my_completion2;
   ASSERT_EQ(0, rados_aio_create_completion((void*)&test_data,
 	      set_completion_complete, set_completion_safe, &my_completion2));
@@ -2108,8 +2062,7 @@ TEST(LibRadosAio, ExecuteClassPP) {
 					   bl1, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(test_data.m_sem);
-    sem_wait(test_data.m_sem);
+    ASSERT_EQ(0, my_completion->wait_for_complete());
   }
   ASSERT_EQ(0, my_completion->get_return_value());
   AioCompletion *my_completion2 = test_data.m_cluster.aio_create_completion(
@@ -2483,30 +2436,21 @@ public:
     if (m_init) {
       rados_ioctx_destroy(m_ioctx);
       destroy_one_ec_pool(m_pool_name, &m_cluster);
-      sem_close(m_sem);
     }
   }
 
   std::string init()
   {
     int ret;
-    if (SEM_FAILED == (m_sem = sem_open("/test_aio_sem", O_CREAT, 0644, 0))) {
-      int err = errno;
-      ostringstream oss;
-      oss << "sem_open failed: " << cpp_strerror(err);
-      return oss.str();
-    }
     m_pool_name = get_temp_pool_name();
     std::string err = create_one_ec_pool(m_pool_name, &m_cluster);
     if (!err.empty()) {
-      sem_close(m_sem);
       ostringstream oss;
       oss << "create_one_ec_pool(" << m_pool_name << ") failed: error " << err;
       return oss.str();
     }
     ret = rados_ioctx_create(m_cluster, m_pool_name.c_str(), &m_ioctx);
     if (ret) {
-      sem_close(m_sem);
       destroy_one_ec_pool(m_pool_name, &m_cluster);
       ostringstream oss;
       oss << "rados_ioctx_create failed: error " << ret;
@@ -2516,7 +2460,6 @@ public:
     return "";
   }
 
-  sem_t *m_sem;
   rados_t m_cluster;
   rados_ioctx_t m_ioctx;
   std::string m_pool_name;
@@ -2540,30 +2483,21 @@ public:
     if (m_init) {
       m_ioctx.close();
       destroy_one_ec_pool_pp(m_pool_name, m_cluster);
-      sem_close(m_sem);
     }
   }
 
   std::string init()
   {
     int ret;
-    if (SEM_FAILED == (m_sem = sem_open("/test_aio_sem", O_CREAT, 0644, 0))) {
-      int err = errno;
-      ostringstream oss;
-      oss << "sem_open failed: " << cpp_strerror(err);
-      return oss.str();
-    }
     m_pool_name = get_temp_pool_name();
     std::string err = create_one_ec_pool_pp(m_pool_name, m_cluster);
     if (!err.empty()) {
-      sem_close(m_sem);
       ostringstream oss;
       oss << "create_one_ec_pool(" << m_pool_name << ") failed: error " << err;
       return oss.str();
     }
     ret = m_cluster.ioctx_create(m_pool_name.c_str(), m_ioctx);
     if (ret) {
-      sem_close(m_sem);
       destroy_one_ec_pool_pp(m_pool_name, m_cluster);
       ostringstream oss;
       oss << "rados_ioctx_create failed: error " << ret;
@@ -2573,7 +2507,6 @@ public:
     return "";
   }
 
-  sem_t *m_sem = nullptr;
   Rados m_cluster;
   IoCtx m_ioctx;
   std::string m_pool_name;
@@ -2586,28 +2519,24 @@ void set_completion_completeEC(rados_completion_t cb, void *arg)
 {
   AioTestDataEC *test = static_cast<AioTestDataEC*>(arg);
   test->m_complete = true;
-  sem_post(test->m_sem);
 }
 
 void set_completion_safeEC(rados_completion_t cb, void *arg)
 {
   AioTestDataEC *test = static_cast<AioTestDataEC*>(arg);
   test->m_safe = true;
-  sem_post(test->m_sem);
 }
 
 void set_completion_completeECPP(rados_completion_t cb, void *arg)
 {
   AioTestDataECPP *test = static_cast<AioTestDataECPP*>(arg);
   test->m_complete = true;
-  sem_post(test->m_sem);
 }
 
 void set_completion_safeECPP(rados_completion_t cb, void *arg)
 {
   AioTestDataECPP *test = static_cast<AioTestDataECPP*>(arg);
   test->m_safe = true;
-  sem_post(test->m_sem);
 }
 
 TEST(LibRadosAioEC, SimpleWrite) {
@@ -2622,8 +2551,7 @@ TEST(LibRadosAioEC, SimpleWrite) {
 			       my_completion, buf, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(test_data.m_sem);
-    sem_wait(test_data.m_sem);
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion));
   }
   ASSERT_EQ(0, rados_aio_get_return_value(my_completion));
 
@@ -2635,8 +2563,7 @@ TEST(LibRadosAioEC, SimpleWrite) {
 			       my_completion2, buf, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(test_data.m_sem);
-    sem_wait(test_data.m_sem);
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion2));
   }
   ASSERT_EQ(0, rados_aio_get_return_value(my_completion2));
   rados_aio_release(my_completion);
@@ -2659,8 +2586,7 @@ TEST(LibRadosAioEC, SimpleWritePP) {
 			       my_completion, bl1, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(test_data.m_sem);
-    sem_wait(test_data.m_sem);
+    ASSERT_EQ(0, my_completion->wait_for_complete());
   }
   ASSERT_EQ(0, my_completion->get_return_value());
   delete my_completion;
@@ -2676,8 +2602,7 @@ TEST(LibRadosAioEC, SimpleWritePP) {
 			       my_completion, bl1, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(test_data.m_sem);
-    sem_wait(test_data.m_sem);
+    ASSERT_EQ(0, my_completion->wait_for_complete());
   }
   ASSERT_EQ(0, my_completion->get_return_value());
   delete my_completion;
@@ -2731,8 +2656,7 @@ TEST(LibRadosAioEC, RoundTrip) {
 			       my_completion, buf, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(test_data.m_sem);
-    sem_wait(test_data.m_sem);
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion));
   }
   ASSERT_EQ(0, rados_aio_get_return_value(my_completion));
   char buf2[256];
@@ -2764,8 +2688,7 @@ TEST(LibRadosAioEC, RoundTrip2) {
 			       my_completion, buf, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(test_data.m_sem);
-    sem_wait(test_data.m_sem);
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion));
   }
   ASSERT_EQ(0, rados_aio_get_return_value(my_completion));
   char buf2[128];
@@ -2800,8 +2723,7 @@ TEST(LibRadosAioEC, RoundTripPP) {
 					   bl1, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(test_data.m_sem);
-    sem_wait(test_data.m_sem);
+    ASSERT_EQ(0, my_completion->wait_for_complete());
   }
   ASSERT_EQ(0, my_completion->get_return_value());
   bufferlist bl2;
@@ -2836,8 +2758,7 @@ TEST(LibRadosAioEC, RoundTripPP2) {
 					   bl1, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(test_data.m_sem);
-    sem_wait(test_data.m_sem);
+    ASSERT_EQ(0, my_completion->wait_for_complete());
   }
   ASSERT_EQ(0, my_completion->get_return_value());
   bufferlist bl2;
@@ -2915,8 +2836,7 @@ TEST(LibRadosAioEC, RoundTripSparseReadPP) {
 					   bl1, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(test_data.m_sem);
-    sem_wait(test_data.m_sem);
+    ASSERT_EQ(0, my_completion->wait_for_complete());
   }
   ASSERT_EQ(0, my_completion->get_return_value());
 
@@ -3094,8 +3014,7 @@ TEST(LibRadosAioEC, IsComplete) {
 			       my_completion, buf, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(test_data.m_sem);
-    sem_wait(test_data.m_sem);
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion));
   }
   ASSERT_EQ(0, rados_aio_get_return_value(my_completion));
   char buf2[128];
@@ -3137,8 +3056,7 @@ TEST(LibRadosAioEC, IsCompletePP) {
 					   bl1, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(test_data.m_sem);
-    sem_wait(test_data.m_sem);
+    ASSERT_EQ(0, my_completion->wait_for_complete());
   }
   ASSERT_EQ(0, my_completion->get_return_value());
   bufferlist bl2;
@@ -3574,8 +3492,7 @@ TEST(LibRadosAioEC, SimpleStat) {
 			       my_completion, buf, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(test_data.m_sem);
-    sem_wait(test_data.m_sem);
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion));
   }
   ASSERT_EQ(0, rados_aio_get_return_value(my_completion));
   uint64_t psize;
@@ -3610,8 +3527,7 @@ TEST(LibRadosAioEC, SimpleStatPP) {
 					   bl1, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(test_data.m_sem);
-    sem_wait(test_data.m_sem);
+    ASSERT_EQ(0, my_completion->wait_for_complete());
   }
   ASSERT_EQ(0, my_completion->get_return_value());
   uint64_t psize;
@@ -3643,8 +3559,7 @@ TEST(LibRadosAioEC, SimpleStatNS) {
 			       my_completion, buf, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(test_data.m_sem);
-    sem_wait(test_data.m_sem);
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion));
   }
   ASSERT_EQ(0, rados_aio_get_return_value(my_completion));
   rados_ioctx_set_namespace(test_data.m_ioctx, "nspace");
@@ -3656,8 +3571,7 @@ TEST(LibRadosAioEC, SimpleStatNS) {
 			       my_completion, buf2, sizeof(buf2), 0));
   {
     TestAlarm alarm;
-    sem_wait(test_data.m_sem);
-    sem_wait(test_data.m_sem);
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion));
   }
   ASSERT_EQ(0, rados_aio_get_return_value(my_completion));
   uint64_t psize;
@@ -3708,8 +3622,7 @@ TEST(LibRadosAioEC, SimpleStatPPNS) {
 					   bl1, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(test_data.m_sem);
-    sem_wait(test_data.m_sem);
+    ASSERT_EQ(0, my_completion->wait_for_complete());
   }
   ASSERT_EQ(0, my_completion->get_return_value());
   uint64_t psize;
@@ -3741,8 +3654,7 @@ TEST(LibRadosAioEC, StatRemove) {
 			       my_completion, buf, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(test_data.m_sem);
-    sem_wait(test_data.m_sem);
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion));
   }
   ASSERT_EQ(0, rados_aio_get_return_value(my_completion));
   uint64_t psize;
@@ -3800,8 +3712,7 @@ TEST(LibRadosAioEC, StatRemovePP) {
 					   bl1, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(test_data.m_sem);
-    sem_wait(test_data.m_sem);
+    ASSERT_EQ(0, my_completion->wait_for_complete());
   }
   ASSERT_EQ(0, my_completion->get_return_value());
   uint64_t psize;
@@ -3857,8 +3768,7 @@ TEST(LibRadosAioEC, ExecuteClass) {
 			       my_completion, buf, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(test_data.m_sem);
-    sem_wait(test_data.m_sem);
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion));
   }
   ASSERT_EQ(0, rados_aio_get_return_value(my_completion));
   rados_completion_t my_completion2;
@@ -3892,8 +3802,7 @@ TEST(LibRadosAioEC, ExecuteClassPP) {
 					   bl1, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(test_data.m_sem);
-    sem_wait(test_data.m_sem);
+    ASSERT_EQ(0, my_completion->wait_for_complete());
   }
   ASSERT_EQ(0, my_completion->get_return_value());
   AioCompletion *my_completion2 = test_data.m_cluster.aio_create_completion(
@@ -4060,8 +3969,6 @@ TEST(LibRadosAio, RacingRemovePP) {
                                          bl, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(test_data.m_sem);
-    sem_wait(test_data.m_sem);
     my_completion2->wait_for_complete();
     my_completion->wait_for_complete();
   }
