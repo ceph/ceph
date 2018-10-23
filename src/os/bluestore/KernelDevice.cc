@@ -847,7 +847,7 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
 
   _aio_log_start(ioc, off, len);
 
-  bufferptr p = buffer::create_small_page_aligned(len);
+  auto& p = buffer::ptr_node::create(buffer::create_small_page_aligned(len));
   int r = ::pread(buffered ? fd_buffereds[WRITE_LIFE_NOT_SET] : fd_directs[WRITE_LIFE_NOT_SET],
 		  p.c_str(), len, off);
   if (r < 0) {
