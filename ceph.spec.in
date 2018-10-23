@@ -324,6 +324,7 @@ Provides:      ceph-test:/usr/bin/ceph-kvstore-tool
 Requires:      ceph-common = %{_epoch_prefix}%{version}-%{release}
 Requires:      librbd1 = %{_epoch_prefix}%{version}-%{release}
 Requires:      librados2 = %{_epoch_prefix}%{version}-%{release}
+Requires:      libradospp1 = %{_epoch_prefix}%{version}-%{release}
 Requires:      libcephfs2 = %{_epoch_prefix}%{version}-%{release}
 Requires:      librgw2 = %{_epoch_prefix}%{version}-%{release}
 %if 0%{with selinux}
@@ -361,6 +362,7 @@ Group:		System/Filesystems
 %endif
 Requires:	librbd1 = %{_epoch_prefix}%{version}-%{release}
 Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
+Requires:	libradospp1 = %{_epoch_prefix}%{version}-%{release}
 Requires:	libcephfs2 = %{_epoch_prefix}%{version}-%{release}
 Requires:	python%{_python_buildid}-rados = %{_epoch_prefix}%{version}-%{release}
 Requires:	python%{_python_buildid}-rbd = %{_epoch_prefix}%{version}-%{release}
@@ -468,7 +470,7 @@ Summary:	Ceph daemon for mirroring RBD images
 Group:		System/Filesystems
 %endif
 Requires:	ceph-common = %{_epoch_prefix}%{version}-%{release}
-Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
+Requires:	libradospp1 = %{_epoch_prefix}%{version}-%{release}
 %description -n rbd-mirror
 Daemon for mirroring RBD images between Ceph clusters, streaming
 changes asynchronously.
@@ -478,7 +480,7 @@ Summary:	Ceph RBD client base on NBD
 %if 0%{?suse_version}
 Group:		System/Filesystems
 %endif
-Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
+Requires:	libradospp1 = %{_epoch_prefix}%{version}-%{release}
 Requires:	librbd1 = %{_epoch_prefix}%{version}-%{release}
 %description -n rbd-nbd
 NBD based client to map Ceph rbd images to local device
@@ -493,6 +495,7 @@ Requires:	ceph-common = %{_epoch_prefix}%{version}-%{release}
 Requires:	ceph-selinux = %{_epoch_prefix}%{version}-%{release}
 %endif
 Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
+Requires:	libradospp1 = %{_epoch_prefix}%{version}-%{release}
 Requires:	librgw2 = %{_epoch_prefix}%{version}-%{release}
 %if 0%{?rhel} || 0%{?fedora}
 Requires:	mailcap
@@ -555,7 +558,28 @@ Obsoletes:	ceph-devel < %{_epoch_prefix}%{version}-%{release}
 Provides:	librados2-devel = %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	librados2-devel < %{_epoch_prefix}%{version}-%{release}
 %description -n librados-devel
-This package contains libraries and headers needed to develop programs
+This package contains C libraries and headers needed to develop programs
+that use RADOS object store.
+
+%package -n libradospp1
+Summary:	RADOS distributed object store client C++ library
+%if 0%{?suse_version}
+Group:		System/Libraries
+%endif
+%description -n libradospp1
+RADOS is a reliable, autonomic distributed object storage cluster
+developed as part of the Ceph distributed storage system. This is a
+shared library allowing C++ applications to access the distributed object
+store using a simple file-like interface.
+
+%package -n libradospp-devel
+Summary:	RADOS headers
+%if 0%{?suse_version}
+Group:		Development/Libraries/C and C++
+%endif
+Requires:	libradospp1 = %{_epoch_prefix}%{version}-%{release}
+%description -n libradospp-devel
+This package contains C++ libraries and headers needed to develop programs
 that use RADOS object store.
 
 %package -n librgw2
@@ -637,6 +661,7 @@ Summary:	RADOS striping interface
 Group:		System/Libraries
 %endif
 Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
+Requires:	libradospp1 = %{_epoch_prefix}%{version}-%{release}
 %description -n libradosstriper1
 Striping interface built on top of the rados library, allowing
 to stripe bigger objects onto several standard rados objects using
@@ -649,6 +674,7 @@ Group:		Development/Libraries/C and C++
 %endif
 Requires:	libradosstriper1 = %{_epoch_prefix}%{version}-%{release}
 Requires:	librados-devel = %{_epoch_prefix}%{version}-%{release}
+Requires:	libradospp-devel = %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	ceph-devel < %{_epoch_prefix}%{version}-%{release}
 Provides:	libradosstriper1-devel = %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	libradosstriper1-devel < %{_epoch_prefix}%{version}-%{release}
@@ -663,6 +689,7 @@ Summary:	RADOS block device client library
 Group:		System/Libraries
 %endif
 Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
+Requires:	libradospp1 = %{_epoch_prefix}%{version}-%{release}
 %if 0%{?suse_version}
 Requires(post): coreutils
 %endif
@@ -682,6 +709,7 @@ Group:		Development/Libraries/C and C++
 %endif
 Requires:	librbd1 = %{_epoch_prefix}%{version}-%{release}
 Requires:	librados-devel = %{_epoch_prefix}%{version}-%{release}
+Requires:	libradospp-devel = %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	ceph-devel < %{_epoch_prefix}%{version}-%{release}
 Provides:	librbd1-devel = %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	librbd1-devel < %{_epoch_prefix}%{version}-%{release}
@@ -867,7 +895,7 @@ Summary:        RADOS object class development kit
 %if 0%{?suse_version}
 Group:		Development/Libraries/C and C++
 %endif
-Requires:       librados2-devel = %{_epoch_prefix}%{version}-%{release}
+Requires:       libradospp1-devel = %{_epoch_prefix}%{version}-%{release}
 %description -n rados-objclass-devel
 This package contains libraries and headers needed to develop RADOS object
 class plugins.
@@ -1676,20 +1704,31 @@ fi
 %files -n librados-devel
 %dir %{_includedir}/rados
 %{_includedir}/rados/librados.h
-%{_includedir}/rados/librados.hpp
-%{_includedir}/rados/buffer.h
-%{_includedir}/rados/buffer_fwd.h
-%{_includedir}/rados/inline_memory.h
-%{_includedir}/rados/page.h
-%{_includedir}/rados/crc32c.h
 %{_includedir}/rados/rados_types.h
-%{_includedir}/rados/rados_types.hpp
 %{_libdir}/librados.so
 %if %{with lttng}
 %{_libdir}/librados_tp.so
 %endif
 %{_bindir}/librados-config
 %{_mandir}/man8/librados-config.8*
+
+%files -n libradospp1
+%{_libdir}/libradospp.so.*
+
+%post -n libradospp1 -p /sbin/ldconfig
+
+%postun -n libradospp1 -p /sbin/ldconfig
+
+%files -n libradospp-devel
+%dir %{_includedir}/rados
+%{_includedir}/rados/buffer.h
+%{_includedir}/rados/buffer_fwd.h
+%{_includedir}/rados/crc32c.h
+%{_includedir}/rados/inline_memory.h
+%{_includedir}/rados/librados.hpp
+%{_includedir}/rados/page.h
+%{_includedir}/rados/rados_types.hpp
+%{_libdir}/libradospp.so
 
 %if 0%{with python2}
 %files -n python-rados
