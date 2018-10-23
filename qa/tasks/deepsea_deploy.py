@@ -741,6 +741,8 @@ profile-{profile}/cluster/{remote}.sls
         if not config:
             config = {}
         self._run_stage(4)
+        self._ceph_cluster_status()
+        self._ceph_health_test()
 
     def _salt_api_test(self):
         remote_run_script_as_root(
@@ -773,7 +775,7 @@ profile-{profile}/cluster/{remote}.sls
             cmd_str = (
                 'timeout 60m salt-run --no-color state.orch {}'
                 ).format(config["name"])
-        self.master_remote.run(args=cmd_str)
+        self._run_command_str(cmd_str)
 
     def setup(self):
         super(DeepSeaDeploy, self).setup()
