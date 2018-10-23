@@ -11,6 +11,7 @@ overrides:
     conf:
       osd:
         filestore xfs extsize: true
+        osd objectstore: filestore
 
 tasks:
 - install:
