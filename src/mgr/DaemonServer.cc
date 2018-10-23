@@ -1277,7 +1277,7 @@ bool DaemonServer::_handle_command(
       cmdctx->reply(r, ss);
       return true;
     }
-    set<int> active_osds, missing_stats, stored_pgs;
+    set<int> active_osds, missing_stats, stored_pgs, safe_to_destroy;
     int affected_pgs = 0;
     cluster_state.with_pgmap([&](const PGMap& pg_map) {
 	if (pg_map.num_pg_unknown > 0) {
@@ -1296,6 +1296,7 @@ bool DaemonServer::_handle_command(
 	cluster_state.with_osdmap([&](const OSDMap& osdmap) {
 	    for (auto osd : osds) {
 	      if (!osdmap.exists(osd)) {
+                safe_to_destroy.insert(osd);
 		continue;  // clearly safe to destroy
 	      }
 	      auto q = pg_map.num_pg_by_osd.find(osd);
@@ -1311,26 +1312,40 @@ bool DaemonServer::_handle_command(
 		auto p = pg_map.osd_stat.find(osd);
 		if (p == pg_map.osd_stat.end()) {
 		  missing_stats.insert(osd);
+                  continue;
 		} else if (p->second.num_pgs > 0) {
 		  stored_pgs.insert(osd);
+                  continue;
 		}
 	      }
+              safe_to_destroy.insert(osd);
 	    }
 	  });
       });
-    if (!r && !active_osds.empty()) {
-      ss << "OSD(s) " << active_osds << " have " << affected_pgs
-	 << " pgs currently mapped to them";
-      r = -EBUSY;
-    } else if (!missing_stats.empty()) {
-      ss << "OSD(s) " << missing_stats << " have no reported stats, and not all"
-	 << " PGs are active+clean; we cannot draw any conclusions";
-      r = -EAGAIN;
-    } else if (!stored_pgs.empty()) {
-      ss << "OSD(s) " << stored_pgs << " last reported they still store some PG"
-	 << " data, and not all PGs are active+clean; we cannot be sure they"
-	 << " aren't still needed.";
-      r = -EBUSY;
+    if (!r && (!active_osds.empty() ||
+               !missing_stats.empty() || !stored_pgs.empty())) {
+       if (!safe_to_destroy.empty()) {
+         ss << "OSD(s) " << safe_to_destroy
+            << " are safe to destroy without reducing data durability. ";
+       }
+       if (!active_osds.empty()) {
+         ss << "OSD(s) " << active_osds << " have " << affected_pgs
+            << " pgs currently mapped to them. ";
+       }
+       if (!missing_stats.empty()) {
+         ss << "OSD(s) " << missing_stats << " have no reported stats, and not all"
+            << " PGs are active+clean; we cannot draw any conclusions. ";
+       }
+       if (!stored_pgs.empty()) {
+         ss << "OSD(s) " << stored_pgs << " last reported they still store some PG"
+            << " data, and not all PGs are active+clean; we cannot be sure they"
+            << " aren't still needed.";
+       }
+       if (!active_osds.empty() || !stored_pgs.empty()) {
+         r = -EBUSY;
+       } else {
+         r = -EAGAIN;
+       }
     }
 
     if (r && (prefix == "osd destroy" ||
