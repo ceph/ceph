@@ -581,14 +581,13 @@ int librados::RadosClient::wait_for_osdmap()
   if (need_map) {
     std::lock_guard l(lock);
 
-    ceph::timespan timeout;
+    ceph::timespan timeout{0};
     if (cct->_conf->rados_mon_op_timeout > 0) {
       timeout = ceph::make_timespan(cct->_conf->rados_mon_op_timeout);
     }
 
     if (objecter->with_osdmap(std::mem_fn(&OSDMap::get_epoch)) == 0) {
       ldout(cct, 10) << __func__ << " waiting" << dendl;
-      auto start = mono_clock::now();
       while (objecter->with_osdmap(std::mem_fn(&OSDMap::get_epoch)) == 0) {
         if (timeout == timeout.zero()) {
           cond.Wait(lock);
