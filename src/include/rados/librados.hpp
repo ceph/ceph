@@ -710,6 +710,8 @@ namespace librados
     static void from_rados_ioctx_t(rados_ioctx_t p, IoCtx &pool);
     IoCtx(const IoCtx& rhs);
     IoCtx& operator=(const IoCtx& rhs);
+    IoCtx(IoCtx&& rhs) noexcept;
+    IoCtx& operator=(IoCtx&& rhs) noexcept;
 
     ~IoCtx();
 
