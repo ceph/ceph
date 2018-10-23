@@ -144,7 +144,15 @@ class CherryPyConfig(object):
             'server.socket_host': server_addr,
             'server.socket_port': int(server_port),
             'error_page.default': json_error_page,
-            'tools.request_logging.on': True
+            'tools.request_logging.on': True,
+            'tools.gzip.on': True,
+            'tools.gzip.mime_types': [
+                # text/html and text/plain are the default types to compress
+                'text/html', 'text/plain',
+                # We also want JSON and JavaScript to be compressed
+                'application/json',
+                'application/javascript',
+            ],
         }
 
         if ssl:
