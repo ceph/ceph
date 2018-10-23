@@ -8,8 +8,7 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
-
-class RGWPSCreateTopicOp : public RGWOp {
+class RGWPSCreateTopicOp : public RGWDefaultResponseOp {
 protected:
   std::unique_ptr<RGWUserPubSub> ups;
   string topic_name;
@@ -172,7 +171,7 @@ public:
   }
 };
 
-class RGWPSDeleteTopicOp : public RGWOp {
+class RGWPSDeleteTopicOp : public RGWDefaultResponseOp {
 protected:
   string topic_name;
   std::unique_ptr<RGWUserPubSub> ups;
@@ -257,7 +256,7 @@ public:
 };
 
 
-class RGWPSCreateSubOp : public RGWOp {
+class RGWPSCreateSubOp : public RGWDefaultResponseOp {
 protected:
   string sub_name;
   string topic_name;
@@ -389,7 +388,7 @@ public:
   }
 };
 
-class RGWPSDeleteSubOp : public RGWOp {
+class RGWPSDeleteSubOp : public RGWDefaultResponseOp {
 protected:
   string sub_name;
   string topic_name;
@@ -438,7 +437,7 @@ public:
   }
 };
 
-class RGWPSAckSubEventOp : public RGWOp {
+class RGWPSAckSubEventOp : public RGWDefaultResponseOp {
 protected:
   string sub_name;
   string event_id;
@@ -633,7 +632,7 @@ static int notif_bucket_path(const string& path, string *bucket_name)
   return 0;
 }
 
-class RGWPSCreateNotifOp : public RGWOp {
+class RGWPSCreateNotifOp : public RGWDefaultResponseOp {
 protected:
   std::unique_ptr<RGWUserPubSub> ups;
   string topic_name;
@@ -712,7 +711,7 @@ public:
   }
 };
 
-class RGWPSDeleteNotifOp : public RGWOp {
+class RGWPSDeleteNotifOp : public RGWDefaultResponseOp {
 protected:
   std::unique_ptr<RGWUserPubSub> ups;
   string topic_name;
