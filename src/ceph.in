@@ -716,10 +716,10 @@ def ping_monitor(cluster_handle, name, timeout):
             if s is None:
                 print("mon.{0}".format(m) + '\n' + "Error connecting to monitor.")
             else:
-                print("mon.{0}".format(m) + '\n' + s)
+                print("mon.{0}".format(m) + '\n' + str(s))
     else:
             s = run_in_thread(cluster_handle.ping_monitor, mon_id)
-            print(s)
+            print(name + '\n' + str(s))
     return 0
 
 
