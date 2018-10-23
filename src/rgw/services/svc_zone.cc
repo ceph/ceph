@@ -54,7 +54,7 @@ int RGWSI_Zone::do_start()
     return ret;
   }
 
-  assert(sysobj_svc->start_state == StateStarted); /* if not then there's ordering issue */
+  assert(sysobj_svc->is_started()); /* if not then there's ordering issue */
 
   ret = rados_svc->start();
   if (ret < 0) {
