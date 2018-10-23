@@ -16,6 +16,7 @@
 #include "common/perf_counters.h"
 #include "common/dout.h"
 #include "common/valgrind.h"
+#include "common/Clock.h"
 
 using std::ostringstream;
 
@@ -137,7 +138,7 @@ void PerfCountersCollection::dump_formatted_generic(
 {
   std::lock_guard<Mutex> lck(m_lock);
   f->open_object_section("perfcounter_collection");
-  
+  f->dump_stream("timestamp") << ceph_clock_now().sec();
   for (perf_counters_set_t::iterator l = m_loggers.begin();
        l != m_loggers.end(); ++l) {
     // Optionally filter on logger name, pass through counter filter
