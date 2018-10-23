@@ -131,23 +131,23 @@ public:
  * BackoffThrottle
  *
  * Creates a throttle which gradually induces delays when get() is called
- * based on params low_threshhold, high_threshhold, expected_throughput,
+ * based on params low_threshold, high_threshold, expected_throughput,
  * high_multiple, and max_multiple.
  *
- * In [0, low_threshhold), we want no delay.
+ * In [0, low_threshold), we want no delay.
  *
- * In [low_threshhold, high_threshhold), delays should be injected based
- * on a line from 0 at low_threshhold to
- * high_multiple * (1/expected_throughput) at high_threshhold.
+ * In [low_threshold, high_threshold), delays should be injected based
+ * on a line from 0 at low_threshold to
+ * high_multiple * (1/expected_throughput) at high_threshold.
  *
- * In [high_threshhold, 1), we want delays injected based on a line from
- * (high_multiple * (1/expected_throughput)) at high_threshhold to
+ * In [high_threshold, 1), we want delays injected based on a line from
+ * (high_multiple * (1/expected_throughput)) at high_threshold to
  * (high_multiple * (1/expected_throughput)) +
  * (max_multiple * (1/expected_throughput)) at 1.
  *
- * Let the current throttle ratio (current/max) be r, low_threshhold be l,
- * high_threshhold be h, high_delay (high_multiple / expected_throughput) be e,
- * and max_delay (max_muliple / expected_throughput) be m.
+ * Let the current throttle ratio (current/max) be r, low_threshold be l,
+ * high_threshold be h, high_delay (high_multiple / expected_throughput) be e,
+ * and max_delay (max_multiple / expected_throughput) be m.
  *
  * delay = 0, r \in [0, l)
  * delay = (r - l) * (e / (h - l)), r \in [l, h)
@@ -184,8 +184,8 @@ class BackoffThrottle {
   }
 
   /// see above, values are in [0, 1].
-  double low_threshhold = 0;
-  double high_threshhold = 1;
+  double low_threshold = 0;
+  double high_threshold = 1;
 
   /// see above, values are in seconds
   double high_delay_per_count = 0;
@@ -210,8 +210,8 @@ public:
    * explanation.
    */
   bool set_params(
-    double low_threshhold,
-    double high_threshhold,
+    double _low_threshold,
+    double _high_threshold,
     double expected_throughput,
     double high_multiple,
     double max_multiple,

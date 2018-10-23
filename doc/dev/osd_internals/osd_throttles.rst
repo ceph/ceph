@@ -54,7 +54,7 @@ filestore_expected_throughput_bytes
 filestore_queue_high_delay_multiple
 filestore_queue_max_delay_multiple
 
-While each throttle is at less than low_threshhold of the max,
+While each throttle is at less than low_threshold of the max,
 no delay happens.  Between low and high, the throttle will
 inject a per-op delay (per op or byte) ramping from 0 at low to
 high_delay_multiple/expected_throughput at high.  From high to

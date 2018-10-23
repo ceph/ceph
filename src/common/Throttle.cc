@@ -293,8 +293,8 @@ BackoffThrottle::~BackoffThrottle()
 }
 
 bool BackoffThrottle::set_params(
-  double _low_threshhold,
-  double _high_threshhold,
+  double _low_threshold,
+  double _high_threshold,
   double _expected_throughput,
   double _high_multiple,
   double _max_multiple,
@@ -302,11 +302,11 @@ bool BackoffThrottle::set_params(
   ostream *errstream)
 {
   bool valid = true;
-  if (_low_threshhold > _high_threshhold) {
+  if (_low_threshold > _high_threshold) {
     valid = false;
     if (errstream) {
-      *errstream << "low_threshhold (" << _low_threshhold
-		 << ") > high_threshhold (" << _high_threshhold
+      *errstream << "low_threshold (" << _low_threshold
+		 << ") > high_threshold (" << _high_threshold
 		 << ")" << std::endl;
     }
   }
@@ -320,18 +320,18 @@ bool BackoffThrottle::set_params(
     }
   }
 
-  if (_low_threshhold > 1 || _low_threshhold < 0) {
+  if (_low_threshold > 1 || _low_threshold < 0) {
     valid = false;
     if (errstream) {
-      *errstream << "invalid low_threshhold (" << _low_threshhold << ")"
+      *errstream << "invalid low_threshold (" << _low_threshold << ")"
 		 << std::endl;
     }
   }
 
-  if (_high_threshhold > 1 || _high_threshhold < 0) {
+  if (_high_threshold > 1 || _high_threshold < 0) {
     valid = false;
     if (errstream) {
-      *errstream << "invalid high_threshhold (" << _high_threshhold << ")"
+      *errstream << "invalid high_threshold (" << _high_threshold << ")"
 		 << std::endl;
     }
   }
@@ -367,8 +367,8 @@ bool BackoffThrottle::set_params(
     return false;
 
   locker l(lock);
-  low_threshhold = _low_threshhold;
-  high_threshhold = _high_threshhold;
+  low_threshold = _low_threshold;
+  high_threshold = _high_threshold;
   high_delay_per_count = _high_multiple / _expected_throughput;
   max_delay_per_count = _max_multiple / _expected_throughput;
   max = _throttle_max;
@@ -376,18 +376,18 @@ bool BackoffThrottle::set_params(
   if (logger)
     logger->set(l_backoff_throttle_max, max);
 
-  if (high_threshhold - low_threshhold > 0) {
-    s0 = high_delay_per_count / (high_threshhold - low_threshhold);
+  if (high_threshold - low_threshold > 0) {
+    s0 = high_delay_per_count / (high_threshold - low_threshold);
   } else {
-    low_threshhold = high_threshhold;
+    low_threshold = high_threshold;
     s0 = 0;
   }
 
-  if (1 - high_threshhold > 0) {
+  if (1 - high_threshold > 0) {
     s1 = (max_delay_per_count - high_delay_per_count)
-      / (1 - high_threshhold);
+      / (1 - high_threshold);
   } else {
-    high_threshhold = 1;
+    high_threshold = 1;
     s1 = 0;
   }
 
@@ -401,14 +401,14 @@ std::chrono::duration<double> BackoffThrottle::_get_delay(uint64_t c) const
     return std::chrono::duration<double>(0);
 
   double r = ((double)current) / ((double)max);
-  if (r < low_threshhold) {
+  if (r < low_threshold) {
     return std::chrono::duration<double>(0);
-  } else if (r < high_threshhold) {
+  } else if (r < high_threshold) {
     return c * std::chrono::duration<double>(
-      (r - low_threshhold) * s0);
+      (r - low_threshold) * s0);
   } else {
     return c * std::chrono::duration<double>(
-      high_delay_per_count + ((r - high_threshhold) * s1));
+      high_delay_per_count + ((r - high_threshold) * s1));
   }
 }
 
