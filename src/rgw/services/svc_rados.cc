@@ -146,7 +146,6 @@ int RGWSI_RADOS::Obj::open()
     return r;
   }
 
-  ref.has_ioctx = true;
   ref.ioctx.locator_set_key(ref.key);
 
   return 0;
