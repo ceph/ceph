@@ -16,12 +16,12 @@
 
 #include <boost/intrusive/list.hpp>
 #include "rgw_common.h"
+#include "services/svc_rados.h" // cant forward declare RGWSI_RADOS::Obj
 
 namespace librados {
 class ObjectReadOperation;
 class ObjectWriteOperation;
 }
-struct rgw_rados_ref;
 
 namespace rgw::putobj {
 
@@ -60,11 +60,13 @@ class Aio {
  public:
   virtual ~Aio() {}
 
-  virtual ResultList submit(rgw_rados_ref& ref, const rgw_raw_obj& obj,
+  virtual ResultList submit(RGWSI_RADOS::Obj& obj,
+                            const rgw_raw_obj& raw_obj,
                             librados::ObjectReadOperation *op,
                             bufferlist *data, uint64_t cost) = 0;
 
-  virtual ResultList submit(rgw_rados_ref& ref, const rgw_raw_obj& obj,
+  virtual ResultList submit(RGWSI_RADOS::Obj& obj,
+                            const rgw_raw_obj& raw_obj,
                             librados::ObjectWriteOperation *op,
                             uint64_t cost) = 0;
 

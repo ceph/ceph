@@ -18,6 +18,7 @@
 
 #include "rgw_putobj.h"
 #include "rgw_rados.h"
+#include "services/svc_rados.h"
 
 namespace rgw::putobj {
 
@@ -76,8 +77,8 @@ class RadosWriter : public DataProcessor {
   const RGWBucketInfo& bucket_info;
   RGWObjectCtx& obj_ctx;
   const rgw_obj& head_obj;
-  rgw_rados_ref stripe_ref; // current stripe ref
-  rgw_raw_obj stripe_obj; // current stripe object
+  rgw_raw_obj stripe_raw;
+  RGWSI_RADOS::Obj stripe_obj; // current stripe object
   RawObjSet written; // set of written objects for deletion
 
  public:

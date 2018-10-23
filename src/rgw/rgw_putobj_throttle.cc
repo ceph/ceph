@@ -36,12 +36,13 @@ bool AioThrottle::waiter_ready() const
   }
 }
 
-ResultList AioThrottle::submit(rgw_rados_ref& ref, const rgw_raw_obj& obj,
+ResultList AioThrottle::submit(RGWSI_RADOS::Obj& obj,
+                               const rgw_raw_obj& raw_obj,
                                librados::ObjectWriteOperation *op,
                                uint64_t cost)
 {
   auto p = std::make_unique<Pending>();
-  p->obj = obj;
+  p->obj = raw_obj;
   p->cost = cost;
 
   if (cost > window) {
@@ -49,7 +50,7 @@ ResultList AioThrottle::submit(rgw_rados_ref& ref, const rgw_raw_obj& obj,
     completed.push_back(*p);
   } else {
     get(*p);
-    p->result = ref.ioctx.aio_operate(ref.oid, p->completion, op);
+    p->result = obj.aio_operate(p->completion, op);
     if (p->result < 0) {
       put(*p);
     }
@@ -58,12 +59,13 @@ ResultList AioThrottle::submit(rgw_rados_ref& ref, const rgw_raw_obj& obj,
   return std::move(completed);
 }
 
-ResultList AioThrottle::submit(rgw_rados_ref& ref, const rgw_raw_obj& obj,
+ResultList AioThrottle::submit(RGWSI_RADOS::Obj& obj,
+                               const rgw_raw_obj& raw_obj,
                                librados::ObjectReadOperation *op,
                                bufferlist *data, uint64_t cost)
 {
   auto p = std::make_unique<Pending>();
-  p->obj = obj;
+  p->obj = raw_obj;
   p->cost = cost;
 
   if (cost > window) {
@@ -71,7 +73,7 @@ ResultList AioThrottle::submit(rgw_rados_ref& ref, const rgw_raw_obj& obj,
     completed.push_back(*p);
   } else {
     get(*p);
-    p->result = ref.ioctx.aio_operate(ref.oid, p->completion, op, data);
+    p->result = obj.aio_operate(p->completion, op, data);
     if (p->result < 0) {
       put(*p);
     }

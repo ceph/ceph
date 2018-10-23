@@ -23,46 +23,35 @@ struct RadosEnv : public ::testing::Environment {
  public:
   static constexpr auto poolname = "ceph_test_rgw_throttle";
 
-  static librados::Rados rados;
-  static librados::IoCtx io;
+  static std::optional<RGWSI_RADOS> rados;
 
   void SetUp() override {
-    ASSERT_EQ(0, rados.init_with_context(g_ceph_context));
-    ASSERT_EQ(0, rados.connect());
-    // open/create test pool
-    int r = rados.ioctx_create(poolname, io);
-    if (r == -ENOENT) {
-      r = rados.pool_create(poolname);
-      if (r == -EEXIST) {
-        r = 0;
-      } else if (r == 0) {
-        r = rados.ioctx_create(poolname, io);
-      }
-    }
+    rados.emplace(g_ceph_context);
+    ASSERT_EQ(0, rados->start());
+    int r = rados->pool({poolname}).create();
+    if (r == -EEXIST)
+      r = 0;
     ASSERT_EQ(0, r);
   }
   void TearDown() {
-    rados.shutdown();
+    rados.reset();
   }
 };
-librados::Rados RadosEnv::rados;
-librados::IoCtx RadosEnv::io;
+std::optional<RGWSI_RADOS> RadosEnv::rados;
 
 auto *const rados_env = ::testing::AddGlobalTestEnvironment(new RadosEnv);
 
 // test fixture for global setup/teardown
 class RadosFixture : public ::testing::Test {
  protected:
-  librados::IoCtx& io;
-
-  rgw_raw_obj make_obj(const std::string& oid) {
+  rgw_raw_obj make_raw_obj(const std::string& oid) {
     return {{RadosEnv::poolname}, oid};
   }
-  rgw_rados_ref make_ref(const rgw_raw_obj& obj) {
-    return {obj.pool, obj.oid, "", io};
+  RGWSI_RADOS::Obj make_obj(const rgw_raw_obj& raw) {
+    auto obj = RadosEnv::rados->obj(raw);
+    ceph_assert_always(0 == obj.open());
+    return obj;
   }
- public:
-  RadosFixture() : io(RadosEnv::io) {}
 };
 
 using PutObj_Throttle = RadosFixture;
@@ -79,20 +68,20 @@ std::ostream& operator<<(std::ostream& out, const Result& r) {
 TEST_F(PutObj_Throttle, NoThrottleUpToMax)
 {
   AioThrottle throttle(4);
-  auto obj = make_obj(__PRETTY_FUNCTION__);
-  auto ref = make_ref(obj);
+  auto raw = make_raw_obj(__PRETTY_FUNCTION__);
+  auto obj = make_obj(raw);
   {
     librados::ObjectWriteOperation op1;
-    auto c1 = throttle.submit(ref, obj, &op1, 1);
+    auto c1 = throttle.submit(obj, raw, &op1, 1);
     EXPECT_TRUE(c1.empty());
     librados::ObjectWriteOperation op2;
-    auto c2 = throttle.submit(ref, obj, &op2, 1);
+    auto c2 = throttle.submit(obj, raw, &op2, 1);
     EXPECT_TRUE(c2.empty());
     librados::ObjectWriteOperation op3;
-    auto c3 = throttle.submit(ref, obj, &op3, 1);
+    auto c3 = throttle.submit(obj, raw, &op3, 1);
     EXPECT_TRUE(c3.empty());
     librados::ObjectWriteOperation op4;
-    auto c4 = throttle.submit(ref, obj, &op4, 1);
+    auto c4 = throttle.submit(obj, raw, &op4, 1);
     EXPECT_TRUE(c4.empty());
     // no completions because no ops had to wait
     auto c5 = throttle.poll();
@@ -100,20 +89,20 @@ TEST_F(PutObj_Throttle, NoThrottleUpToMax)
   auto completions = throttle.drain();
   ASSERT_EQ(4u, completions.size());
   for (auto& c : completions) {
-    EXPECT_EQ(Result({obj, -EINVAL}), c);
+    EXPECT_EQ(Result({raw, -EINVAL}), c);
   }
 }
 
 TEST_F(PutObj_Throttle, CostOverWindow)
 {
   AioThrottle throttle(4);
-  auto obj = make_obj(__PRETTY_FUNCTION__);
-  auto ref = make_ref(obj);
+  auto raw = make_raw_obj(__PRETTY_FUNCTION__);
+  auto obj = make_obj(raw);
 
   librados::ObjectWriteOperation op;
-  auto c = throttle.submit(ref, obj, &op, 8);
+  auto c = throttle.submit(obj, raw, &op, 8);
   ASSERT_EQ(1u, c.size());
-  EXPECT_EQ(Result({obj, -EDEADLK}), c.front());
+  EXPECT_EQ(Result({raw, -EDEADLK}), c.front());
 }
 
 TEST_F(PutObj_Throttle, AioThrottleOverMax)
@@ -121,8 +110,8 @@ TEST_F(PutObj_Throttle, AioThrottleOverMax)
   constexpr uint64_t window = 4;
   AioThrottle throttle(window);
 
-  auto obj = make_obj(__PRETTY_FUNCTION__);
-  auto ref = make_ref(obj);
+  auto raw = make_raw_obj(__PRETTY_FUNCTION__);
+  auto obj = make_obj(raw);
 
   // issue 32 writes, and verify that max_outstanding <= window
   constexpr uint64_t total = 32;
@@ -131,7 +120,7 @@ TEST_F(PutObj_Throttle, AioThrottleOverMax)
 
   for (uint64_t i = 0; i < total; i++) {
     librados::ObjectWriteOperation op;
-    auto c = throttle.submit(ref, obj, &op, 1);
+    auto c = throttle.submit(obj, raw, &op, 1);
     outstanding++;
     outstanding -= c.size();
     if (max_outstanding < outstanding) {
