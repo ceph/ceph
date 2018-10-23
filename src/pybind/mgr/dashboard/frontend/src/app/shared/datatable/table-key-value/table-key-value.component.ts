@@ -97,7 +97,7 @@ export class TableKeyValueComponent implements OnInit, OnChanges {
       return; // Wait for data
     } else if (_.isArray(data)) {
       temp = this._makePairsFromArray(data);
-    } else if (_.isPlainObject(data)) {
+    } else if (_.isObject(data)) {
       temp = this._makePairsFromObject(data);
     } else {
       throw new Error('Wrong data format');
@@ -109,22 +109,23 @@ export class TableKeyValueComponent implements OnInit, OnChanges {
   _makePairsFromArray(data: any[]) {
     let temp = [];
     const first = data[0];
-    if (_.isPlainObject(first)) {
+    if (_.isArray(first)) {
+      if (first.length === 2) {
+        temp = data.map((a) => ({
+          key: a[0],
+          value: a[1]
+        }));
+      } else {
+        throw new Error('Wrong array format: [string, any][]');
+      }
+    } else if (_.isObject(first)) {
       if (_.has(first, 'key') && _.has(first, 'value')) {
         temp = [...data];
       } else {
-        throw new Error('Wrong object array format: {key: string, value: any}[]');
-      }
-    } else {
-      if (_.isArray(first)) {
-        if (first.length === 2) {
-          temp = data.map((a) => ({
-            key: a[0],
-            value: a[1]
-          }));
-        } else {
-          throw new Error('Wrong array format: [string, any][]');
-        }
+        temp = data.reduce(
+          (previous: any[], item) => previous.concat(this._makePairsFromObject(item)),
+          temp
+        );
       }
     }
     return temp;
@@ -139,7 +140,7 @@ export class TableKeyValueComponent implements OnInit, OnChanges {
 
   _insertFlattenObjects(temp: any[]) {
     temp.forEach((v, i) => {
-      if (_.isPlainObject(v.value)) {
+      if (_.isObject(v.value)) {
         temp.splice(i, 1);
         this._makePairs(v.value).forEach((item) => {
           if (this.appendParentKey) {
@@ -155,10 +156,8 @@ export class TableKeyValueComponent implements OnInit, OnChanges {
 
   _convertValue(v: any) {
     if (_.isArray(v.value)) {
-      v.value = v.value
-        .map((item) => (_.isPlainObject(item) ? JSON.stringify(item) : item))
-        .join(', ');
-    } else if (_.isPlainObject(v.value) && !this.renderObjects) {
+      v.value = v.value.map((item) => (_.isObject(item) ? JSON.stringify(item) : item)).join(', ');
+    } else if (_.isObject(v.value) && !this.renderObjects) {
       return;
     }
     return v;
