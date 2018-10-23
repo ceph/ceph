@@ -395,24 +395,24 @@ bool BackoffThrottle::set_params(
   return true;
 }
 
-std::chrono::duration<double> BackoffThrottle::_get_delay(uint64_t c) const
+ceph::timespan BackoffThrottle::_get_delay(uint64_t c) const
 {
   if (max == 0)
-    return std::chrono::duration<double>(0);
+    return ceph::timespan(0);
 
   double r = ((double)current) / ((double)max);
   if (r < low_threshold) {
-    return std::chrono::duration<double>(0);
+    return ceph::timespan(0);
   } else if (r < high_threshold) {
-    return c * std::chrono::duration<double>(
+    return c * ceph::make_timespan(
       (r - low_threshold) * s0);
   } else {
-    return c * std::chrono::duration<double>(
+    return c * ceph::make_timespan(
       high_delay_per_count + ((r - high_threshold) * s1));
   }
 }
 
-std::chrono::duration<double> BackoffThrottle::get(uint64_t c)
+ceph::timespan BackoffThrottle::get(uint64_t c)
 {
   locker l(lock);
   auto delay = _get_delay(c);
@@ -423,7 +423,7 @@ std::chrono::duration<double> BackoffThrottle::get(uint64_t c)
   }
 
   // fast path
-  if (delay == std::chrono::duration<double>(0) &&
+  if (delay == ceph::make_timespan(0) &&
       waiters.empty() &&
       ((max == 0) || (current == 0) || ((current + c) <= max))) {
     current += c;
@@ -432,7 +432,7 @@ std::chrono::duration<double> BackoffThrottle::get(uint64_t c)
       logger->set(l_backoff_throttle_val, current);
     }
 
-    return std::chrono::duration<double>(0);
+    return ceph::make_timespan(0);
   }
 
   auto ticket = _push_waiter();
@@ -444,20 +444,20 @@ std::chrono::duration<double> BackoffThrottle::get(uint64_t c)
     waited = true;
   }
 
-  auto start = std::chrono::system_clock::now();
+  auto start = ceph::real_clock::now();
   delay = _get_delay(c);
   while (true) {
     if (!((max == 0) || (current == 0) || (current + c) <= max)) {
       (*ticket)->wait(l);
       waited = true;
-    } else if (delay > std::chrono::duration<double>(0)) {
+    } else if (delay > ceph::timespan(0)) {
       (*ticket)->wait_for(l, delay);
       waited = true;
     } else {
       break;
     }
     ceph_assert(ticket == waiters.begin());
-    delay = _get_delay(c) - (std::chrono::system_clock::now() - start);
+    delay = _get_delay(c) - (ceph::real_clock::now() - start);
   }
   waiters.pop_front();
   _kick_waiters();
@@ -471,7 +471,7 @@ std::chrono::duration<double> BackoffThrottle::get(uint64_t c)
     }
   }
 
-  return std::chrono::system_clock::now() - start;
+  return ceph::real_clock::now() - start;
 }
 
 uint64_t BackoffThrottle::put(uint64_t c)
