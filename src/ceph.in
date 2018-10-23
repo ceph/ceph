@@ -712,13 +712,13 @@ def ping_monitor(cluster_handle, name, timeout):
     if mon_id == '*':
         run_in_thread(cluster_handle.connect, timeout=timeout)
         for m in monids():
-            s = run_in_thread(cluster_handle.ping_monitor, m)
+            s = run_in_thread(cluster_handle.ping_monitor, m, timeout=timeout)
             if s is None:
                 print("mon.{0}".format(m) + '\n' + "Error connecting to monitor.")
             else:
                 print("mon.{0}".format(m) + '\n' + str(s))
     else:
-            s = run_in_thread(cluster_handle.ping_monitor, mon_id)
+            s = run_in_thread(cluster_handle.ping_monitor, mon_id, timeout=timeout)
             print(name + '\n' + str(s))
     return 0
 
