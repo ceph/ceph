@@ -693,6 +693,10 @@ EOF
             echo adding osd$osd key to auth repository
             ceph_adm -i "$key_fn" auth add osd.$osd osd "allow *" mon "allow profile osd" mgr "allow profile osd"
         fi
+        # wait for NVMe device ready when SPDK is enabled
+        if [ "$spdk_enabled" -eq 1 ]; then
+            sleep 3
+        fi
         echo start osd.$osd
         run 'osd' $SUDO $CEPH_BIN/ceph-osd -i $osd $ARGS $COSD_ARGS
     done
