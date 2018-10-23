@@ -778,6 +778,10 @@ namespace buffer CEPH_BUFFER_API {
         commit_length_update_n_invalidate();
         bl.append(ibl);
       }
+      void CEPH_INLINE append(const ceph::bufferptr& __restrict__ ibp) {
+        commit_length_update_n_invalidate();
+        bl.append(ibp);
+      }
 
       // TODO: consider making len a non-type template parameter.
       auto CEPH_INLINE append_hole(const unsigned len) {

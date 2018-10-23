@@ -44,7 +44,6 @@ using namespace ceph;
 
 namespace ceph {
 
-using contiguous_reserver =  buffer::list::contiguous_reserver;
 /*
  * Notes on feature encoding:
  *
@@ -74,7 +73,9 @@ inline void encode_raw(const T& t, bufferlist& bl)
 }
 
 template<class T>
-inline void CEPH_INLINE encode_raw(const T& t, contiguous_reserver& cr)
+inline void CEPH_INLINE encode_raw(
+  const T& t,
+  ceph::bufferlist::contiguous_reserver& cr)
 {
   cr.append<sizeof(t)>((char*)&t);
 }
@@ -86,17 +87,21 @@ inline void decode_raw(T& t, bufferlist::const_iterator &p)
 }
 
 #define WRITE_RAW_ENCODER(etype)					\
-  inline void encode(const etype& v,                                    \
-                     bufferlist& t,                                     \
-                     uint64_t features=0) {                             \
-    ::ceph::encode_raw(v, t);                                           \
+  inline void encode(							\
+    const etype& v,							\
+    ceph::bufferlist& t,						\
+    const uint64_t features=0)						\
+  {									\
+    ::ceph::encode_raw(v, t);						\
   }									\
-  inline void CEPH_INLINE encode(const etype& v,                        \
-                                 contiguous_reserver& t,                \
-                                 uint64_t features=0) {			\
-    ::ceph::encode_raw(v, t);                                           \
+  inline void CEPH_INLINE encode(					\
+    const etype& v,							\
+    ceph::bufferlist::contiguous_reserver& t,				\
+    uint64_t features=0)						\
+  {									\
+    ::ceph::encode_raw(v, t);						\
   }									\
-  inline void decode(etype& v, ::ceph::bufferlist::const_iterator& p) { \
+  inline void decode(etype& v, ::ceph::bufferlist::const_iterator& p) {	\
     ::ceph::decode_raw(v, p);						\
   }
 
@@ -117,9 +122,10 @@ inline void encode(const bool &v, bufferlist& bl) {
   __u8 vv = v;
   encode_raw(vv, bl);
 }
-inline void CEPH_INLINE encode(const bool &v, contiguous_reserver& bl) {
+inline void CEPH_INLINE
+encode(const bool &v, ceph::bufferlist::contiguous_reserver& cr) {
   __u8 vv = v;
-  encode_raw(vv, bl);
+  encode_raw(vv, cr);
 }
 inline void decode(bool &v, bufferlist::const_iterator& p) {
   __u8 vv;
@@ -131,17 +137,20 @@ inline void decode(bool &v, bufferlist::const_iterator& p) {
 // int types
 
 #define WRITE_INTTYPE_ENCODER(rtype, etype)				\
-  inline void \
-  encode(rtype v, ceph::bufferlist& bl, uint64_t features=0) { 			\
-    ceph_##etype e;					                \
-    e = v;                                                              \
+  inline void								\
+  encode(rtype v, ceph::bufferlist& bl, uint64_t features=0) { 		\
+    ceph_##etype e;							\
+    e = v;								\
     ::ceph::encode_raw(e, bl);						\
   }									\
-  inline void CEPH_INLINE \
-  encode(rtype v, ceph::contiguous_reserver& bl, uint64_t features=0) { 			\
+  inline void CEPH_INLINE encode(					\
+    rtype v,								\
+    ceph::bufferlist::contiguous_reserver& cr,				\
+    const uint64_t features=0)						\
+  {									\
     ceph_##etype e;					                \
     e = v;                                                              \
-    ::ceph::encode_raw(e, bl);						\
+    ::ceph::encode_raw(e, cr);						\
   }									\
   inline void decode(rtype &v, ::ceph::bufferlist::const_iterator& p) {	\
     ceph_##etype e;							\
@@ -186,32 +195,77 @@ WRITE_INTTYPE_ENCODER(int16_t, le16)
 
 
 #define WRITE_CLASS_ENCODER(cl)						\
-  inline void encode(const cl &c, ::ceph::bufferlist &bl, uint64_t features=0) { \
-    ENCODE_DUMP_PRE(); c.encode(bl); ENCODE_DUMP_POST(cl); }		\
-  inline void CEPH_INLINE encode(const cl &c, ::ceph::contiguous_reserver &bl, uint64_t features=0) { \
-    ENCODE_DUMP_PRE(); c.encode(bl); ENCODE_DUMP_POST(cl); }		\
-  inline void decode(cl &c, ::ceph::bufferlist::const_iterator &p) { c.decode(p); }
+  inline void encode(							\
+    const cl& c,							\
+    ::ceph::bufferlist& bl,						\
+    const uint64_t features=0)						\
+  {									\
+    ENCODE_DUMP_PRE(); c.encode(bl); ENCODE_DUMP_POST(cl);		\
+  }									\
+  inline void CEPH_INLINE encode(					\
+    const cl& c,							\
+    ::ceph::bufferlist::contiguous_reserver& cr,			\
+    const uint64_t features=0)						\
+  {									\
+    ENCODE_DUMP_PRE(); c.encode(cr); ENCODE_DUMP_POST(cl);		\
+  }									\
+  inline void decode(cl& c, ::ceph::bufferlist::const_iterator& p)	\
+  {									\
+    c.decode(p);							\
+  }
 
 #define WRITE_CLASS_MEMBER_ENCODER(cl)					\
   inline void encode(const cl &c, ::ceph::bufferlist &bl) const {	\
     ENCODE_DUMP_PRE(); c.encode(bl); ENCODE_DUMP_POST(cl); }		\
-  inline void CEPH_INLINE encode(const cl &c, ::ceph::contiguous_reserver &bl) const {	\
-    ENCODE_DUMP_PRE(); c.encode(bl); ENCODE_DUMP_POST(cl); }		\
-  inline void decode(cl &c, ::ceph::bufferlist::const_iterator &p) { c.decode(p); }
+  inline void CEPH_INLINE encode(					\
+    const cl& c,							\
+    ::ceph::bufferlist::contiguous_reserver& cr) const			\
+  {									\
+    ENCODE_DUMP_PRE(); c.encode(cr); ENCODE_DUMP_POST(cl);		\
+  }									\
+  inline void decode(cl& c, ::ceph::bufferlist::const_iterator& p)	\
+  {									\
+    c.decode(p);							\
+  }
 
 #define WRITE_CLASS_ENCODER_FEATURES(cl)				\
-  inline void encode(const cl &c, ::ceph::bufferlist &bl, uint64_t features) { \
-    ENCODE_DUMP_PRE(); c.encode(bl, features); ENCODE_DUMP_POST(cl); }	\
-  inline void CEPH_INLINE encode(const cl &c, ::ceph::contiguous_reserver &bl, uint64_t features) { \
-    ENCODE_DUMP_PRE(); c.encode(bl, features); ENCODE_DUMP_POST(cl); }	\
-  inline void decode(cl &c, ::ceph::bufferlist::const_iterator &p) { c.decode(p); }
+  inline void encode(							\
+    const cl& c,							\
+    ::ceph::bufferlist &bl, uint64_t features)				\
+  {									\
+    ENCODE_DUMP_PRE(); c.encode(bl, features); ENCODE_DUMP_POST(cl);	\
+  }									\
+  inline void CEPH_INLINE encode(					\
+    const cl& c,							\
+    ::ceph::bufferlist::contiguous_reserver& cr,			\
+    const uint64_t features)						\
+  {									\
+    ENCODE_DUMP_PRE(); c.encode(cr, features); ENCODE_DUMP_POST(cl);	\
+  }									\
+  inline void decode(cl& c, ::ceph::bufferlist::const_iterator& p)	\
+  {									\
+    c.decode(p);							\
+  }
 
-#define WRITE_CLASS_ENCODER_OPTIONAL_FEATURES(cl)				\
-  inline void encode(const cl &c, ::ceph::bufferlist &bl, uint64_t features = 0) { \
-    ENCODE_DUMP_PRE(); c.encode(bl, features); ENCODE_DUMP_POST(cl); }	\
-  inline void CEPH_INLINE encode(const cl &c, ::ceph::contiguous_reserver &bl, uint64_t features = 0) { \
-    ENCODE_DUMP_PRE(); c.encode(bl, features); ENCODE_DUMP_POST(cl); }	\
-  inline void decode(cl &c, ::ceph::bufferlist::const_iterator &p) { c.decode(p); }
+#define WRITE_CLASS_ENCODER_OPTIONAL_FEATURES(cl)			\
+  inline void encode(							\
+    const cl& c,							\
+    ::ceph::bufferlist &bl,						\
+    uint64_t features = 0)						\
+  {									\
+    ENCODE_DUMP_PRE(); c.encode(bl, features); ENCODE_DUMP_POST(cl);	\
+  }									\
+  inline void CEPH_INLINE encode(					\
+    const cl& c,							\
+    ::ceph::bufferlist::contiguous_reserver &cr,			\
+    uint64_t features = 0)						\
+  {									\
+    ENCODE_DUMP_PRE(); c.encode(cr, features); ENCODE_DUMP_POST(cl);	\
+  }									\
+  inline void decode(cl& c, ::ceph::bufferlist::const_iterator& p)	\
+  {									\
+    c.decode(p);							\
+  }
 
 
 // string
@@ -222,7 +276,10 @@ inline void encode(std::string_view s, bufferlist& bl, uint64_t features=0)
   if (len)
     bl.append(s.data(), len);
 }
-inline void CEPH_INLINE encode(std::string_view s, contiguous_reserver& cr, uint64_t features=0)
+inline void CEPH_INLINE encode(
+  std::string_view s,
+  ceph::bufferlist::contiguous_reserver& cr,
+  uint64_t features=0)
 {
   __u32 len = s.length();
   encode(len, cr);
@@ -233,7 +290,10 @@ inline void encode(const std::string& s, bufferlist& bl, uint64_t features=0)
 {
   return encode(std::string_view(s), bl, features);
 }
-inline void CEPH_INLINE encode(const std::string& s, contiguous_reserver& cr, uint64_t features=0)
+inline void CEPH_INLINE encode(
+  const std::string& s,
+  ceph::bufferlist::contiguous_reserver& cr,
+  uint64_t features=0)
 {
   return encode(std::string_view(s), cr, features);
 }
@@ -249,9 +309,21 @@ inline void encode_nohead(std::string_view s, bufferlist& bl)
 {
   bl.append(s.data(), s.length());
 }
+inline void CEPH_INLINE encode_nohead(
+  std::string_view s,
+  ceph::bufferlist::contiguous_reserver& cr)
+{
+  cr.append(s.data(), s.length());
+}
 inline void encode_nohead(const std::string& s, bufferlist& bl)
 {
   encode_nohead(std::string_view(s), bl);
+}
+inline void CEPH_INLINE encode_nohead(
+  const std::string& s,
+  ceph::bufferlist::contiguous_reserver& cr)
+{
+  encode_nohead(std::string_view(s), cr);
 }
 inline void decode_nohead(int len, std::string& s, bufferlist::const_iterator& p)
 {
@@ -265,7 +337,9 @@ inline void encode(const char *s, bufferlist& bl)
   encode(std::string_view(s, strlen(s)), bl);
 }
 // const char* (encode only, string compatible)
-inline void CEPH_INLINE encode(const char *s, contiguous_reserver& cr)
+inline void CEPH_INLINE encode(
+  const char *s,
+  ceph::bufferlist::contiguous_reserver& cr)
 {
   encode(std::string_view(s, strlen(s)), cr);
 }
@@ -281,6 +355,15 @@ inline void encode(const buffer::ptr& bp, bufferlist& bl)
   encode(len, bl);
   if (len)
     bl.append(bp);
+}
+inline void CEPH_INLINE encode(
+  const ceph::buffer::ptr& bp,
+  ceph::bufferlist::contiguous_reserver& cr)
+{
+  __u32 len = bp.length();
+  encode(len, cr);
+  if (len)
+    cr.append(bp);
 }
 inline void decode(buffer::ptr& bp, bufferlist::const_iterator& p)
 {
@@ -305,7 +388,9 @@ inline void encode(const bufferlist& s, bufferlist& bl)
   encode(len, bl);
   bl.append(s);
 }
-inline void CEPH_INLINE encode(const bufferlist& s, contiguous_reserver& cr)
+inline void CEPH_INLINE encode(
+  const ceph::bufferlist& s,
+  ceph::bufferlist::contiguous_reserver& cr)
 {
   __u32 len = s.length();
   encode(len, cr);
@@ -317,11 +402,27 @@ inline void encode(bufferlist& s, bufferlist& bl)
   encode(len, bl);
   bl.append(s);
 }
+inline void CEPH_INLINE encode(
+  ceph::bufferlist& s,
+  ceph::bufferlist::contiguous_reserver& cr)
+{
+  __u32 len = s.length();
+  encode(len, cr);
+  cr.append(s);
+}
 inline void encode_destructively(bufferlist& s, bufferlist& bl) 
 {
   __u32 len = s.length();
   encode(len, bl);
   bl.claim_append(s);
+}
+inline void CEPH_INLINE encode_destructively(
+  ceph::bufferlist& s,
+  ceph::bufferlist::contiguous_reserver& cr)
+{
+  __u32 len = s.length();
+  encode(len, cr);
+  static_cast<bufferlist&>(cr).claim_append(s);
 }
 inline void decode(bufferlist& s, bufferlist::const_iterator& p)
 {
@@ -334,6 +435,12 @@ inline void decode(bufferlist& s, bufferlist::const_iterator& p)
 inline void encode_nohead(const bufferlist& s, bufferlist& bl) 
 {
   bl.append(s);
+}
+inline void CEPH_INLINE encode_nohead(
+  const ceph::bufferlist& s,
+  ceph::bufferlist::contiguous_reserver& cr)
+{
+  cr.append(s);
 }
 inline void decode_nohead(int len, bufferlist& s, bufferlist::const_iterator& p)
 {
@@ -688,7 +795,8 @@ inline std::enable_if_t<!traits::supported>
 }
 template<class T, class Alloc, typename traits>
 inline CEPH_INLINE std::enable_if_t<!traits::supported>
-  encode(const std::list<T, Alloc>& ls, contiguous_reserver& cr)
+  encode(const std::list<T, Alloc>& ls,
+	 ceph::bufferlist::contiguous_reserver& cr)
 {
   __u32 n = (__u32)(ls.size());  // c++11 std::list::size() is O(1)
   encode(n, cr);
@@ -708,7 +816,9 @@ inline std::enable_if_t<!traits::supported>
 }
 template<class T, class Alloc, typename traits>
 inline CEPH_INLINE std::enable_if_t<!traits::supported>
-  encode(const std::list<T,Alloc>& ls, contiguous_reserver& cr, uint64_t features)
+  encode(const std::list<T,Alloc>& ls,
+	 ceph::bufferlist::contiguous_reserver& cr,
+	 const uint64_t features)
 {
   __u32 n = (__u32)(ls.size());  // c++11 std::list::size() is O(1)
   encode(n, cr);
@@ -883,7 +993,9 @@ inline std::enable_if_t<!traits::supported>
 }
 template<class T, class Alloc, typename traits>
 inline CEPH_INLINE std::enable_if_t<!traits::supported>
-  encode(const std::vector<T,Alloc>& v, contiguous_reserver& bl, uint64_t features)
+  encode(const std::vector<T,Alloc>& v,
+	 ceph::bufferlist::contiguous_reserver& bl,
+	 const uint64_t features)
 {
   __u32 n = (__u32)(v.size());
   encode(n, bl);
@@ -901,7 +1013,8 @@ inline std::enable_if_t<!traits::supported>
 }
 template<class T, class Alloc, typename traits>
 inline CEPH_INLINE std::enable_if_t<!traits::supported>
-  encode(const std::vector<T,Alloc>& v, contiguous_reserver& bl)
+  encode(const std::vector<T,Alloc>& v,
+	 ceph::bufferlist::contiguous_reserver& bl)
 {
   __u32 n = (__u32)(v.size());
   encode(n, bl);
@@ -1284,13 +1397,21 @@ decode(std::array<T, N>& v, bufferlist::const_iterator& p)
 }
 
 template <class T>
-inline void CEPH_INLINE encode(T& t, contiguous_reserver& cr, uint64_t features) {
+inline void CEPH_INLINE encode(
+  const T& t,
+  ceph::bufferlist::contiguous_reserver& cr,
+  const uint64_t features)
+{
   encode(t, static_cast<bufferlist&>(cr), features);
 }
 template <class T>
-inline void CEPH_INLINE encode(T& t, contiguous_reserver& cr) {
+inline void CEPH_INLINE encode(
+  const T& t,
+  ceph::bufferlist::contiguous_reserver& cr)
+{
   encode(t, static_cast<bufferlist&>(cr));
 }
+
 } // namespace ceph
 
 
@@ -1309,7 +1430,7 @@ inline void CEPH_INLINE encode(T& t, contiguous_reserver& cr) {
 #define ENCODE_START(v, compat, bl)			     \
 {							     \
   decltype(bl)& _scoped_bl_ref = bl;			     \
-  ::ceph::contiguous_reserver bl(_scoped_bl_ref);	     \
+  ::ceph::bufferlist::contiguous_reserver bl(_scoped_bl_ref);\
   __u8 struct_v = v;                                         \
   __u8 struct_compat = compat;		                     \
   ceph_le32 struct_len;				             \

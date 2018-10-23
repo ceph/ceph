@@ -445,6 +445,18 @@ struct pg_t {
     encode(m_seed, bl);
     encode((int32_t)-1, bl); // was preferred
   }
+  void CEPH_INLINE encode(bufferlist::contiguous_reserver& cr) const {
+    using ceph::encode;
+    __u8 v = 1;
+    encode(v, cr);
+#if defined(CEPH_LITTLE_ENDIAN)
+    cr.append<sizeof(m_pool) + sizeof(m_seed)>((char*)this);
+#else
+    encode(m_pool, cr);
+    encode(m_seed, cr);
+#endif
+    encode((int32_t)-1, cr); // was preferred
+  }
   void decode(bufferlist::const_iterator& bl) {
     using ceph::decode;
     __u8 v;
@@ -852,6 +864,15 @@ public:
     using ceph::encode;
     encode(version, bl);
     encode(epoch, bl);
+#endif
+  }
+  void CEPH_INLINE encode(bufferlist::contiguous_reserver& cr) const {
+#if defined(CEPH_LITTLE_ENDIAN)
+    cr.append<sizeof(version_t) + sizeof(epoch_t)>((char*)this);
+#else
+    using ceph::encode;
+    encode(version, cr);
+    encode(epoch, cr);
 #endif
   }
   void decode(bufferlist::const_iterator &bl) {

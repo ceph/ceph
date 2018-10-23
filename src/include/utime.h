@@ -139,6 +139,15 @@ public:
     encode(tv.tv_nsec, bl);
 #endif
   }
+  void CEPH_INLINE encode(bufferlist::contiguous_reserver& cr) const {
+#if defined(CEPH_LITTLE_ENDIAN)
+    cr.append<sizeof(__u32) + sizeof(__u32)>((char*)this);
+#else
+    using ceph::encode;
+    encode(tv.tv_sec, cr);
+    encode(tv.tv_nsec, cr);
+#endif
+  }
   void decode(bufferlist::const_iterator &p) {
 #if defined(CEPH_LITTLE_ENDIAN)
     p.copy(sizeof(__u32) + sizeof(__u32), (char *)(this));

@@ -124,8 +124,12 @@ struct snapid_t {
 };
 
 inline void encode(snapid_t i, bufferlist &bl) { encode(i.val, bl); }
-inline void encode(snapid_t i, contiguous_reserver &bl) { encode(i.val, bl); }
-inline void decode(snapid_t &i, bufferlist::const_iterator &p) { decode(i.val, p); }
+inline void encode(snapid_t i, bufferlist::contiguous_reserver &bl) {
+  encode(i.val, bl);
+}
+inline void decode(snapid_t &i, bufferlist::const_iterator &p) {
+  decode(i.val, p);
+}
 
 template<>
 struct denc_traits<snapid_t> {

@@ -489,7 +489,8 @@ struct shard_id_t {
 
   const static shard_id_t NO_SHARD;
 
-  void encode(bufferlist &bl) const {
+  template <class T>
+  void encode(T& bl) const {
     using ceph::encode;
     encode(id, bl);
   }
