@@ -35,11 +35,11 @@ class Salt(Task):
 
     def __init__(self, ctx, config):
         super(Salt, self).__init__(ctx, config)
-        self.log.debug("beginning of salt task constructor method")
-        self.log.debug("salt: munged config is {}".format(self.config))
+        log.debug("beginning of constructor method")
+        log.debug("munged config is {}".format(self.config))
         self.remotes = self.cluster.remotes
         self.sm = SaltManager(self.ctx)
-        self.log.debug("end of salt task constructor method")
+        log.debug("end of constructor method")
 
     def __generate_minion_keys(self):
         '''
@@ -170,7 +170,7 @@ class Salt(Task):
 
     def setup(self):
         super(Salt, self).setup()
-        log.debug("beginning of Salt task setup method")
+        log.debug("beginning of setup method")
         self.__generate_minion_keys()
         self.__preseed_minions()
         self.__set_minion_master()
@@ -178,28 +178,28 @@ class Salt(Task):
         self.sm.start_master()
         self.sm.start_minions()
         self.sm.restart_master()
-        log.debug("end of salt task setup method")
+        log.debug("end of setup method")
 
     def begin(self):
         super(Salt, self).begin()
-        log.debug("beginning of salt task begin method")
+        log.debug("beginning of begin method")
         self.sm.check_salt_daemons()
         self.sm.cat_salt_master_conf()
         self.sm.cat_salt_minion_confs()
         self.sm.ping_minions()
-        log.debug("end of salt task begin method")
+        log.debug("end of begin method")
 
     def end(self):
         super(Salt, self).end()
-        log.debug("beginning of salt task end method")
+        log.debug("beginning of end method")
         self.sm.gather_logs('salt')
-        log.debug("end of salt task end method")
+        log.debug("end of end method")
 
     def teardown(self):
         super(Salt, self).teardown()
-        log.debug("beginning of salt task teardown method")
+        # log.debug("beginning of teardown method")
         pass
-        log.debug("end of salt task teardown method")
+        # log.debug("end of teardown method")
 
 
 task = Salt

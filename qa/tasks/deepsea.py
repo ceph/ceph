@@ -41,7 +41,7 @@ class DeepSea(Task):
 
     def __init__(self, ctx, config):
         super(DeepSea, self).__init__(ctx, config)
-        self.log.debug("beginning of deepsea task constructor method")
+        log.debug("beginning of constructor method")
         if 'install' in self.config:
             if self.config['install'] in ['package', 'pkg']:
                 self.config['install'] = 'package'
@@ -59,9 +59,9 @@ class DeepSea(Task):
                 self.config['install'] = 'package'
         self.sm = SaltManager(self.ctx)
         self.master_remote = self.sm.master_remote
-#       self.log.debug("ctx.config {}".format(ctx.config))
-        log.debug("Munged config is {}".format(self.config))
-        self.log.debug("end of deepsea task constructor method")
+        # log.debug("ctx.config {}".format(ctx.config))
+        log.debug("munged config is {}".format(self.config))
+        log.debug("end of constructor method")
 
     def _install_deepsea(self):
         if self.config['install'] == 'package':
@@ -77,7 +77,7 @@ class DeepSea(Task):
     def _install_deepsea_from_source(self):
         """Install DeepSea from source (unless already installed from RPM)"""
         if self.sm.master_rpm_q('deepsea'):
-            self.log.info("DeepSea already installed from RPM")
+            log.info("DeepSea already installed from RPM")
             return None
         check_config_key(
                 self.config,
@@ -85,8 +85,8 @@ class DeepSea(Task):
                 'https://github.com/SUSE/DeepSea.git'
             )
         check_config_key(self.config, 'branch', 'master')
-        self.log.info("Installing DeepSea from source - repo: {}, branch: {}"
-                      .format(self.config["repo"], self.config["branch"]))
+        log.info("Installing DeepSea from source - repo: {}, branch: {}"
+                 .format(self.config["repo"], self.config["branch"]))
         self.master_remote.run(args=[
             'git',
             '--version',
@@ -114,7 +114,7 @@ class DeepSea(Task):
             run.Raw('||'),
             'true',
             ])
-        self.log.info("Running \"make install\" in DeepSea clone...")
+        log.info("Running \"make install\" in DeepSea clone...")
         self.master_remote.run(args=[
             'cd',
             'DeepSea',
@@ -123,7 +123,7 @@ class DeepSea(Task):
             'make',
             'install',
             ])
-        self.log.info("installing deepsea dependencies...")
+        log.info("installing deepsea dependencies...")
         rpmspec_cmd = (
                 '$(rpmspec --requires -q DeepSea/deepsea.spec.in 2>/dev/null)'
             )
@@ -138,7 +138,7 @@ class DeepSea(Task):
 
     def _install_deepsea_using_zypper(self):
         """Install DeepSea using zypper"""
-        self.log.info("Installing DeepSea using zypper")
+        log.info("Installing DeepSea using zypper")
         self.master_remote.run(args=[
             'sudo',
             'zypper',
@@ -164,14 +164,14 @@ class DeepSea(Task):
         # needed as long as teuthology install task purges /var/lib/ceph
         # in its teardown phase
         for _remote in self.ctx.cluster.remotes.iterkeys():
-            self.log.info("stopping OSD services on {}"
-                          .format(_remote.hostname))
+            log.info("stopping OSD services on {}"
+                     .format(_remote.hostname))
             _remote.run(args=[
                 'sudo', 'sh', '-c',
                 'systemctl stop ceph-osd.target ; sleep 10'
                 ])
-            self.log.info("unmounting OSD partitions on {}"
-                          .format(_remote.hostname))
+            log.info("unmounting OSD partitions on {}"
+                     .format(_remote.hostname))
             # unmount up to five OSDs
             # bluestore XFS partition is vd?1
             # filestore XFS partition is vd?2
@@ -185,27 +185,27 @@ class DeepSea(Task):
 
     def setup(self):
         super(DeepSea, self).setup()
-#       log.debug("beginning of deepsea task setup method")
+        # log.debug("beginning of setup method")
         pass
-#       log.debug("end of deepsea task setup")
+        # log.debug("end of setup method")
 
     def begin(self):
         super(DeepSea, self).begin()
-        log.debug("beginning of deepsea task begin method")
+        log.debug("beginning of begin method")
         self._install_deepsea()
-        log.debug("end of deepsea task begin method")
+        log.debug("end of begin method")
 
     def end(self):
         super(DeepSea, self).end()
-#       log.debug("beginning of deepsea task end method")
+        # log.debug("beginning of end method")
         pass
-#       log.debug("end of deepsea task end method")
+        # log.debug("end of end method")
 
     def teardown(self):
         super(DeepSea, self).teardown()
-        log.debug("beginning of deepsea task teardown method")
+        log.debug("beginning of teardown method")
         self._purge_osds()
-        log.debug("end of deepsea task teardown method")
+        log.debug("end of teardown method")
 
 
 task = DeepSea

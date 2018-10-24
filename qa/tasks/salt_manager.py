@@ -95,7 +95,7 @@ class SaltManager(object):
                 self.master_remote.run(args=ping_cmd, stdout=output)
                 responded = len(re.findall('  True', output.getvalue()))
                 output.close()
-                log.info("salt_manager: {} of {} minions responded"
+                log.info("{} of {} minions responded"
                          .format(responded, expected))
                 if (expected == responded):
                     return None
@@ -120,7 +120,7 @@ class SaltManager(object):
                     ])
             except CommandFailedError:
                 continue
-            log.info("salt_manager: gathering {} logs from remote {}"
+            log.info("gathering {} logs from remote {}"
                      .format(logdir, _remote.hostname))
             _remote.run(args=[
                 'sudo', 'cp', '-a', '/var/log/{}/'.format(logdir),
@@ -144,7 +144,7 @@ class SaltManager(object):
             except CommandFailedError:
                 continue
             log.info((
-                "salt_manager: gathering logfile /var/log/{} from remote {}"
+                "gathering logfile /var/log/{} from remote {}"
                 ).format(logfile, _remote.hostname))
             _remote.run(args=[
                 'sudo', 'cp', '-a', '/var/log/{}'.format(logfile),
