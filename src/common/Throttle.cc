@@ -39,7 +39,6 @@ enum {
 Throttle::Throttle(CephContext *cct, const std::string& n, int64_t m,
 		   bool _use_perf)
   : cct(cct), name(n), max(m),
-    lock(ceph::make_mutex(name)),
     use_perf(_use_perf)
 {
   ceph_assert(m >= 0);
@@ -86,7 +85,7 @@ void Throttle::_reset_max(int64_t m)
   max = m;
 }
 
-bool Throttle::_wait(int64_t c, std::unique_lock<ceph::mutex>& l)
+bool Throttle::_wait(int64_t c, std::unique_lock<std::mutex>& l)
 {
   mono_time start;
   bool waited = false;
@@ -262,7 +261,6 @@ enum {
 BackoffThrottle::BackoffThrottle(CephContext *cct, const std::string& n,
 				 unsigned expected_concurrency, bool _use_perf)
   : cct(cct), name(n),
-    lock(ceph::make_mutex(name)),
     conds(expected_concurrency),///< [in] determines size of conds
     use_perf(_use_perf)
 {
@@ -633,7 +631,7 @@ int OrderedThrottle::wait_for_ret() {
   return m_ret_val;
 }
 
-void OrderedThrottle::complete_pending_ops(std::unique_lock<ceph::mutex>& l) {
+void OrderedThrottle::complete_pending_ops(std::unique_lock<std::mutex>& l) {
   while (true) {
     auto it = m_tid_result.begin();
     if (it == m_tid_result.end() || it->first != m_complete_tid ||
