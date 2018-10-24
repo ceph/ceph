@@ -31,11 +31,12 @@
 #include "common/code_environment.h"
 #ifdef WITH_SEASTAR
 #include "crimson/common/config_proxy.h"
+#include "crimson/common/perf_counters_collection.h"
 #else
 #include "common/config_proxy.h"
 #include "include/spinlock.h"
-#endif
 #include "common/perf_counters_collection.h"
+#endif
 
 
 #include "crush/CrushLocation.h"
@@ -67,8 +68,9 @@ public:
   ~CephContext();
 
   CryptoRandom* random() const;
-  PerfCountersCollection* get_perfcounters_collection();
+  PerfCountersCollectionImpl* get_perfcounters_collection();
   ceph::common::ConfigProxy& _conf;
+  ceph::common::PerfCountersCollection& _perf_counters_collection;
   CephContext* get();
   void put();
 private:
