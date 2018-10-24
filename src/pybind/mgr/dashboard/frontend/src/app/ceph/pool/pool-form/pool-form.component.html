@@ -138,42 +138,59 @@
           </div>
 
           <!-- Crush ruleset selection -->
-          <ng-template #crushSteps>
-            <ng-container *ngIf="form.getValue('crushRule')">
-              <div class="crush-rule-steps">
-                <ol>
-                  <li *ngFor="let step of form.get('crushRule').value.steps">
-                    {{ describeCrushStep(step) }}
-                  </li>
-                </ol>
-              </div>
-            </ng-container>
-          </ng-template>
           <div class="form-group"
                [ngClass]="{'has-error': form.showError('crushRule', formDir)}"
                *ngIf="form.getValue('poolType') && current.rules.length > 0">
             <label class="control-label col-sm-3"
-                   for="crushSet"
+                   for="crushRule"
                    i18n>
               Crush ruleset
             </label>
-            <div class="col-sm-9"
-                 [popover]="crushSteps"
-                 popoverTitle="Steps"
-                 triggers="mouseenter:mouseleave">
-              <select class="form-control"
-                      id="crushSet"
-                      formControlName="crushRule"
-                      name="crushSet">
-                <option i18n
-                        [ngValue]="null">
-                  -- Select a crush rule --
-                </option>
-                <option *ngFor="let rule of current.rules"
-                        [ngValue]="rule">
-                  {{ rule.rule_name }}
-                </option>
-              </select>
+            <div class="col-sm-9">
+              <div class="input-group">
+                <select class="form-control"
+                        id="crushRule"
+                        formControlName="crushRule"
+                        name="crushSet">
+                  <option i18n
+                          [ngValue]="null">
+                    -- Select a crush rule --
+                  </option>
+                  <option *ngFor="let rule of current.rules"
+                          [ngValue]="rule">
+                    {{ rule.rule_name }}
+                  </option>
+                </select>
+                <span class="input-group-btn">
+                  <button class="btn btn-default"
+                          [ngClass]="{'active': data.crushInfo}"
+                          id="crush-info-button"
+                          type="button"
+                          (click)="data.crushInfo = !data.crushInfo">
+                    <i class="fa fa-question-circle"
+                       aria-hidden="true"></i>
+                  </button>
+                </span>
+              </div>
+              <span class="help-block"
+                    id="crush-info-block"
+                    *ngIf="data.crushInfo && form.getValue('crushRule')">
+                <tabset>
+                  <tab i18n-heading heading="Crush rule" class="crush-rule-info">
+                    <cd-table-key-value [renderObjects]="true"
+                                        [data]="form.getValue('crushRule')"
+                                        [autoReload]="false">
+                    </cd-table-key-value>
+                  </tab>
+                  <tab i18n-heading heading="Crush steps" class="crush-rule-steps">
+                    <ol>
+                      <li *ngFor="let step of form.get('crushRule').value.steps">
+                        {{ describeCrushStep(step) }}
+                      </li>
+                    </ol>
+                  </tab>
+                </tabset>
+              </span>
               <span class="help-block"
                     i18n
                     *ngIf="form.showError('crushRule', formDir, 'tooFewOsds')">
