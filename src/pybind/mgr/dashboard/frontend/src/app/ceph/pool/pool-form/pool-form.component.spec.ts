@@ -7,6 +7,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastModule } from 'ng2-toastr';
 import { BsModalService } from 'ngx-bootstrap/modal';
+import { TabsModule } from 'ngx-bootstrap/tabs';
 import { of } from 'rxjs';
 
 import { configureTestBed, FormHelper } from '../../../../testing/unit-test-helper';
@@ -127,6 +128,7 @@ describe('PoolFormComponent', () => {
       HttpClientTestingModule,
       RouterTestingModule.withRoutes(routes),
       ToastModule.forRoot(),
+      TabsModule.forRoot(),
       PoolModule
     ],
     providers: [
@@ -731,6 +733,30 @@ describe('PoolFormComponent', () => {
         testPgKeyUp('-', 32);
         testPgKeyUp('-', 16);
       });
+    });
+  });
+
+  describe('crushRule', () => {
+    beforeEach(() => {
+      createCrushRule({ name: 'replicatedRule' });
+      fixture.detectChanges();
+      formHelper.setValue('poolType', 'replicated');
+      fixture.detectChanges();
+    });
+
+    it('should not show info per default', () => {
+      formHelper.expectElementVisible(fixture, '#crushRule', true);
+      formHelper.expectElementVisible(fixture, '#crush-info-block', false);
+    });
+
+    it('should show info if the info button is clicked', () => {
+      fixture.detectChanges();
+      const infoButton = fixture.debugElement.query(By.css('#crush-info-button'));
+      infoButton.triggerEventHandler('click', null);
+      expect(component.data.crushInfo).toBeTruthy();
+      fixture.detectChanges();
+      expect(infoButton.classes['active']).toBeTruthy();
+      formHelper.expectIdElementsVisible(fixture, ['crushRule', 'crush-info-block'], true);
     });
   });
 
