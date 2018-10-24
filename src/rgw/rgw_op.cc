@@ -887,6 +887,13 @@ void rgw_build_iam_environment(RGWRados* store,
     // identifier that can persist through name changes?
     s->env.emplace("aws:username", s->user->user_id.id);
   }
+
+  i = m.find("HTTP_X_AMZ_SECURITY_TOKEN");
+  if (i != m.end()) {
+    s->env.emplace("sts:authentication", "true");
+  } else {
+    s->env.emplace("sts:authentication", "false");
+  }
 }
 
 void rgw_bucket_object_pre_exec(struct req_state *s)
