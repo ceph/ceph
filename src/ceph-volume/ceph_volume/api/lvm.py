@@ -293,7 +293,8 @@ def get_api_vgs():
     """
     fields = 'vg_name,pv_count,lv_count,snap_count,vg_attr,vg_size,vg_free,vg_free_count'
     stdout, stderr, returncode = process.call(
-        ['vgs', '--noheadings', '--readonly', '--units=g', '--separator=";"', '-o', fields]
+        ['vgs', '--noheadings', '--readonly', '--units=g', '--separator=";"', '-o', fields],
+        verbose_on_failure=False
     )
     return _output_parser(stdout, fields)
 
@@ -312,7 +313,8 @@ def get_api_lvs():
     """
     fields = 'lv_tags,lv_path,lv_name,vg_name,lv_uuid,lv_size'
     stdout, stderr, returncode = process.call(
-        ['lvs', '--noheadings', '--readonly', '--separator=";"', '-o', fields]
+        ['lvs', '--noheadings', '--readonly', '--separator=";"', '-o', fields],
+        verbose_on_failure=False
     )
     return _output_parser(stdout, fields)
 
@@ -334,7 +336,8 @@ def get_api_pvs():
     fields = 'pv_name,pv_tags,pv_uuid,vg_name,lv_uuid'
 
     stdout, stderr, returncode = process.call(
-        ['pvs', '--no-heading', '--readonly', '--separator=";"', '-o', fields]
+        ['pvs', '--no-heading', '--readonly', '--separator=";"', '-o', fields],
+        verbose_on_failure=False
     )
 
     return _output_parser(stdout, fields)
