@@ -68,7 +68,7 @@ def remote_run_script_as_root(remote, path, data):
     remote.run(label=path, args='sudo bash {}'.format(path))
 
 
-class DeepSeaDeploy(Task):
+class DeepSea_Deploy(Task):
     """
     Deploy Ceph using DeepSea
 
@@ -89,7 +89,7 @@ class DeepSeaDeploy(Task):
     """
 
     def __init__(self, ctx, config):
-        super(DeepSeaDeploy, self).__init__(ctx, config)
+        super(DeepSea_Deploy, self).__init__(ctx, config)
         self.log.debug("beginning of deepsea_deploy task constructor method")
         self.roles = ctx.config['roles']
         self._introspect_roles()
@@ -778,29 +778,29 @@ profile-{profile}/cluster/{remote}.sls
         self._run_command_str(cmd_str)
 
     def setup(self):
-        super(DeepSeaDeploy, self).setup()
+        super(DeepSea_Deploy, self).setup()
         log.debug("beginning of deepsea_deploy task setup method")
         self._copy_health_ok()
         log.debug("end of deepsea_deploy task setup")
 
     def begin(self):
-        super(DeepSeaDeploy, self).begin()
+        super(DeepSea_Deploy, self).begin()
         log.debug("beginning of deepsea_deploy task begin method")
         self._deploy_ceph()
         log.debug("end of deepsea_deploy task begin method")
 
     def end(self):
-        super(DeepSeaDeploy, self).end()
+        super(DeepSea_Deploy, self).end()
         log.debug("beginning of deepsea_deploy task end method")
         self.sm.gather_logfile('deepsea.log')
         self.sm.gather_logs('ganesha')
         log.debug("end of deepsea_deploy task end method")
 
     def teardown(self):
-        super(DeepSeaDeploy, self).teardown()
+        super(DeepSea_Deploy, self).teardown()
 #       log.debug("beginning of deepsea_deploy task teardown method")
         pass
 #       log.debug("end of deepsea_deploy task teardown method")
 
 
-task = DeepSeaDeploy
+task = DeepSea_Deploy
