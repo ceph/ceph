@@ -20,9 +20,16 @@ class SingleType(object):
         # TODO: add --fast-devices and --slow-devices so these can be customized
         self.hdds = [device for device in devices if device.sys_api['rotational'] == '1']
         self.ssds = [device for device in devices if device.sys_api['rotational'] == '0']
-        self.computed = {'osds': [], 'vgs': []}
-        self.validate()
-        self.compute()
+        self.computed = {'osds': [], 'vgs': [], 'filtered_devices': args.filtered_devices}
+        if self.devices:
+            self.validate()
+            self.compute()
+        else:
+            self.computed["changed"] = False
+
+    @staticmethod
+    def type():
+        return "bluestore.SingleType"
 
     @property
     def total_osds(self):
@@ -36,6 +43,8 @@ class SingleType(object):
 
     def report_pretty(self):
         string = ""
+        if self.args.filtered_devices:
+            string += templates.filtered_devices(self.args.filtered_devices)
         string += templates.total_osds.format(
             total_osds=self.total_osds,
         )
@@ -94,6 +103,8 @@ class SingleType(object):
                 osd['data']['human_readable_size'] = str(disk.Size(b=extents['sizes']))
                 osds.append(osd)
 
+        self.computed['changed'] = len(osds) > 0
+
     def execute(self):
         """
         Create vgs/lvs from the incoming set of devices, assign their roles
@@ -135,12 +146,19 @@ class MixedType(object):
         # TODO: add --fast-devices and --slow-devices so these can be customized
         self.hdds = [device for device in devices if device.sys_api['rotational'] == '1']
         self.ssds = [device for device in devices if device.sys_api['rotational'] == '0']
-        self.computed = {'osds': []}
+        self.computed = {'osds': [], 'filtered_devices': args.filtered_devices}
         self.block_db_size = self.get_block_size()
         self.system_vgs = lvm.VolumeGroups()
         self.dbs_needed = len(self.hdds) * self.osds_per_device
-        self.validate()
-        self.compute()
+        if self.devices:
+            self.validate()
+            self.compute()
+        else:
+            self.computed["changed"] = False
+
+    @staticmethod
+    def type():
+        return "bluestore.MixedType"
 
     def report_json(self):
         print(json.dumps(self.computed, indent=4, sort_keys=True))
@@ -156,6 +174,8 @@ class MixedType(object):
         db_size = str(disk.Size(b=(vg_extents['sizes'])))
 
         string = ""
+        if self.args.filtered_devices:
+            string += templates.filtered_devices(self.args.filtered_devices)
         string += templates.total_osds.format(
             total_osds=len(self.hdds) * self.osds_per_device
         )
@@ -199,11 +219,11 @@ class MixedType(object):
             # there isn't a common vg, so a new one must be created with all
             # the blank SSDs
             self.computed['vg'] = {
-                'devices': self.blank_ssds,
+                'devices': ", ".join([ssd.abspath for ssd in self.blank_ssds]),
                 'parts': self.dbs_needed,
                 'percentages': self.vg_extents['percentages'],
-                'sizes': self.block_db_size.b,
-                'size': int(self.total_blank_ssd_size.b),
+                'sizes': self.block_db_size.b.as_int(),
+                'size': self.total_blank_ssd_size.b.as_int(),
                 'human_readable_sizes': str(self.block_db_size),
                 'human_readable_size': str(self.total_available_db_space),
             }
@@ -225,6 +245,8 @@ class MixedType(object):
                 osd['block.db']['human_readable_size'] = str(self.block_db_size)
                 osd['block.db']['percentage'] = self.vg_extents['percentages']
                 osds.append(osd)
+
+        self.computed['changed'] = len(osds) > 0
 
     def execute(self):
         """

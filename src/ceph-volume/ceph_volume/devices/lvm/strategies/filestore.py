@@ -31,10 +31,17 @@ class SingleType(object):
         self.devices = devices
         self.hdds = [device for device in devices if device.sys_api['rotational'] == '1']
         self.ssds = [device for device in devices if device.sys_api['rotational'] == '0']
-        self.computed = {'osds': [], 'vgs': []}
+        self.computed = {'osds': [], 'vgs': [], 'filtered_devices': args.filtered_devices}
         self.journal_size = get_journal_size(args)
-        self.validate()
-        self.compute()
+        if self.devices:
+            self.validate()
+            self.compute()
+        else:
+            self.computed["changed"] = False
+
+    @staticmethod
+    def type():
+        return "filestore.SingleType"
 
     @property
     def total_osds(self):
@@ -48,6 +55,8 @@ class SingleType(object):
 
     def report_pretty(self):
         string = ""
+        if self.args.filtered_devices:
+            string += templates.filtered_devices(self.args.filtered_devices)
         string += templates.total_osds.format(
             total_osds=self.total_osds
         )
@@ -118,6 +127,8 @@ class SingleType(object):
                 osd['journal']['human_readable_size'] = str(journal_size)
                 osds.append(osd)
 
+        self.computed['changed'] = len(osds) > 0
+
     def execute(self):
         """
         Create vgs/lvs from the incoming set of devices, assign their roles
@@ -176,13 +187,20 @@ class MixedType(object):
         self.devices = devices
         self.hdds = [device for device in devices if device.sys_api['rotational'] == '1']
         self.ssds = [device for device in devices if device.sys_api['rotational'] == '0']
-        self.computed = {'osds': [], 'vg': None}
+        self.computed = {'osds': [], 'vg': None, 'filtered_devices': args.filtered_devices}
         self.blank_ssds = []
         self.journals_needed = len(self.hdds) * self.osds_per_device
         self.journal_size = get_journal_size(args)
         self.system_vgs = lvm.VolumeGroups()
-        self.validate()
-        self.compute()
+        if self.devices:
+            self.validate()
+            self.compute()
+        else:
+            self.computed["changed"] = False
+
+    @staticmethod
+    def type():
+        return "filestore.MixedType"
 
     def report_json(self):
         print(json.dumps(self.computed, indent=4, sort_keys=True))
@@ -196,6 +214,8 @@ class MixedType(object):
 
     def report_pretty(self):
         string = ""
+        if self.args.filtered_devices:
+            string += templates.filtered_devices(self.args.filtered_devices)
         string += templates.total_osds.format(
             total_osds=self.total_osds
         )
@@ -302,11 +322,11 @@ class MixedType(object):
             # there isn't a common vg, so a new one must be created with all
             # the blank SSDs
             self.computed['vg'] = {
-                'devices': self.blank_ssds,
+                'devices': ", ".join([ssd.abspath for ssd in self.blank_ssds]),
                 'parts': self.journals_needed,
                 'percentages': self.vg_extents['percentages'],
-                'sizes': self.journal_size.b,
-                'size': int(self.total_blank_ssd_size.b),
+                'sizes': self.journal_size.b.as_int(),
+                'size': self.total_blank_ssd_size.b.as_int(),
                 'human_readable_sizes': str(self.journal_size),
                 'human_readable_size': str(self.total_available_journal_space),
             }
@@ -320,14 +340,16 @@ class MixedType(object):
                 data_size = device_size / self.osds_per_device
                 osd = {'data': {}, 'journal': {}}
                 osd['data']['path'] = device.path
-                osd['data']['size'] = data_size.b
+                osd['data']['size'] = data_size.b.as_int()
                 osd['data']['percentage'] = 100 / self.osds_per_device
                 osd['data']['human_readable_size'] = str(data_size)
                 osd['journal']['path'] = 'vg: %s' % vg_name
-                osd['journal']['size'] = self.journal_size.b
+                osd['journal']['size'] = self.journal_size.b.as_int()
                 osd['journal']['percentage'] = int(self.journal_size.gb * 100 / vg_free)
                 osd['journal']['human_readable_size'] = str(self.journal_size)
                 osds.append(osd)
+
+        self.computed['changed'] = len(osds) > 0
 
     def execute(self):
         """
