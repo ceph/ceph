@@ -470,6 +470,7 @@ static const actpair actpairs[] =
  { "iam:DeleteRolePolicy", iamDeleteRolePolicy},
  { "sts:AssumeRole", stsAssumeRole},
  { "sts:AssumeRoleWithWebIdentity", stsAssumeRoleWithWebIdentity},
+ { "sts:GetSessionToken", stsGetSessionToken},
 };
 
 struct PolicyParser;
@@ -1561,6 +1562,9 @@ const char* action_bit_string(uint64_t action) {
 
   case stsAssumeRoleWithWebIdentity:
     return "sts:AssumeRoleWithWebIdentity";
+
+  case stsGetSessionToken:
+    return "sts:GetSessionToken";
   }
   return "s3Invalid";
 }
