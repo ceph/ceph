@@ -2114,26 +2114,27 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   }
 
   // blocked on snap?
-  map<hobject_t, snapid_t>::iterator blocked_iter =
-    objects_blocked_on_degraded_snap.find(head);
-  if (write_ordered && blocked_iter != objects_blocked_on_degraded_snap.end()) {
-    hobject_t to_wait_on(head);
-    to_wait_on.snap = blocked_iter->second;
-    wait_for_degraded_object(to_wait_on, op);
-    return;
-  }
-  map<hobject_t, ObjectContextRef>::iterator blocked_snap_promote_iter =
-    objects_blocked_on_snap_promotion.find(head);
-  if (write_ordered && 
-      blocked_snap_promote_iter != objects_blocked_on_snap_promotion.end()) {
-    wait_for_blocked_object(
-      blocked_snap_promote_iter->second->obs.oi.soid,
-      op);
-    return;
-  }
-  if (write_ordered && objects_blocked_on_cache_full.count(head)) {
-    block_write_on_full_cache(head, op);
-    return;
+  if (write_ordered) {
+    map<hobject_t, snapid_t>::iterator blocked_iter =
+      objects_blocked_on_degraded_snap.find(head);
+    if (blocked_iter != objects_blocked_on_degraded_snap.end()) {
+      hobject_t to_wait_on(head);
+      to_wait_on.snap = blocked_iter->second;
+      wait_for_degraded_object(to_wait_on, op);
+      return;
+    }
+    map<hobject_t, ObjectContextRef>::iterator blocked_snap_promote_iter =
+      objects_blocked_on_snap_promotion.find(head);
+    if (blocked_snap_promote_iter != objects_blocked_on_snap_promotion.end()) {
+      wait_for_blocked_object(
+        blocked_snap_promote_iter->second->obs.oi.soid,
+        op);
+      return;
+    }
+    if (objects_blocked_on_cache_full.count(head)) {
+      block_write_on_full_cache(head, op);
+      return;
+    }
   }
 
   // dup/resent?
