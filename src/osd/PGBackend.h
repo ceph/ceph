@@ -206,6 +206,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      virtual const PGLog &get_log() const = 0;
      virtual bool pgb_is_primary() const = 0;
      virtual OSDMapRef pgb_get_osdmap() const = 0;
+     virtual epoch_t pgb_get_osdmap_epoch() const = 0;
      virtual const pg_info_t &get_info() const = 0;
      virtual const pg_pool_t &get_pool() const = 0;
 
@@ -309,6 +310,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      parent(l) {}
    bool is_primary() const { return get_parent()->pgb_is_primary(); }
    OSDMapRef get_osdmap() const { return get_parent()->pgb_get_osdmap(); }
+   epoch_t get_osdmap_epoch() const { return get_parent()->pgb_get_osdmap_epoch(); }
    const pg_info_t &get_info() { return get_parent()->get_info(); }
 
    std::ostream& gen_prefix(std::ostream& out) const {
