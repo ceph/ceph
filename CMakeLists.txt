@@ -707,6 +707,11 @@ if(LINUX)
   add_subdirectory(etc/sysctl)
 endif()
 
+option(WITH_GRAFANA "install grafana dashboards" OFF)
+if(WITH_GRAFANA)
+  add_subdirectory(monitoring/grafana/dashboards)
+endif()
+
 include(CTags)
 option(CTAG_EXCLUDES "Exclude files/directories when running ctag.")
 add_tags(ctags
