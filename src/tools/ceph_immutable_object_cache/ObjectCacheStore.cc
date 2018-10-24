@@ -19,9 +19,9 @@ ObjectCacheStore::ObjectCacheStore(CephContext *cct, ContextWQ* work_queue)
         m_ioctxs_lock("ceph::cache::ObjectCacheStore::m_ioctxs_lock") {
 
   uint64_t object_cache_entries =
-    cct->_conf.get_val<int64_t>("rbd_shared_cache_entries");
+    m_cct->_conf.get_val<int64_t>("rbd_shared_cache_entries");
 
-  //TODO(): allow to set level
+  //TODO(): allow to set cache level
   m_policy = new SimplePolicy(object_cache_entries, 0.5);
 }
 
@@ -30,6 +30,7 @@ ObjectCacheStore::~ObjectCacheStore() {
 }
 
 int ObjectCacheStore::init(bool reset) {
+  ldout(m_cct, 20) << dendl;
 
   int ret = m_rados->init_with_context(m_cct);
   if(ret < 0) {
@@ -55,10 +56,31 @@ int ObjectCacheStore::init(bool reset) {
   return ret;
 }
 
+void ObjectCacheStore::evict_thread_body() {
+  int ret;
+  while(m_evict_go) {
+    ret = evict_objects();
+  }
+}
+
+int ObjectCacheStore::shutdown() {
+  m_evict_go = false;
+  evict_thd->join();
+  m_rados->shutdown();
+  return 0;
+}
+
+int ObjectCacheStore::init_cache(std::string vol_name, uint64_t vol_size) {
+  return 0;
+}
+
 int ObjectCacheStore::do_promote(std::string pool_name, std::string object_name) {
+  ldout(m_cct, 20) << "to promote object = "
+                   << object_name << " from pool: "
+                   << pool_name << dendl;
+
   int ret = 0;
   std::string cache_file_name =  pool_name + object_name;
-
   {
     Mutex::Locker _locker(m_ioctxs_lock);
     if (m_ioctxs.find(pool_name) == m_ioctxs.end()) {
@@ -90,12 +112,13 @@ int ObjectCacheStore::do_promote(std::string pool_name, std::string object_name)
 int ObjectCacheStore::handle_promote_callback(int ret, bufferlist* read_buf,
   std::string cache_file_name, uint32_t object_size) {
   ldout(m_cct, 20) << dendl;
+
   // rados read error
   if(ret != -ENOENT && ret < 0) {
     lderr(m_cct) << "fail to read from rados" << dendl;
 
-    delete read_buf;
     m_policy->update_status(cache_file_name, OBJ_CACHE_NONE);
+    delete read_buf;
     return ret;
   }
 
@@ -132,19 +155,21 @@ int ObjectCacheStore::handle_promote_callback(int ret, bufferlist* read_buf,
 }
  
 int ObjectCacheStore::lookup_object(std::string pool_name, std::string object_name) {
+  ldout(m_cct, 20) << "object name = " << object_name
+                   << "in pool: " << pool_name << dendl;
 
-  int pret;
-  CACHESTATUS ret;
-  ret = m_policy->lookup_object(pool_name + object_name);
+  int pret = -1;
+  CACHESTATUS ret = m_policy->lookup_object(pool_name + object_name);
 
   switch(ret) {
-    case OBJ_CACHE_NONE:
+    case OBJ_CACHE_NONE: {
       evict_objects();
       pret = do_promote(pool_name, object_name);
       if (pret < 0) {
-        lderr(m_cct) << "fail to start promoting" << dendl;
+        lderr(m_cct) << "fail to start promote" << dendl;
       }
       return -1;
+    }
     case OBJ_CACHE_PROMOTED:
       return 0;
     case OBJ_CACHE_PROMOTING:
@@ -155,27 +180,12 @@ int ObjectCacheStore::lookup_object(std::string pool_name, std::string object_na
   }
 }
 
-void ObjectCacheStore::evict_thread_body() {
-  int ret;
-  while(m_evict_go) {
-    ret = evict_objects();
-  }
-}
-
-int ObjectCacheStore::shutdown() {
-  m_evict_go = false;
-  evict_thd->join();
-  m_rados->shutdown();
-  return 0;
-}
-
-int ObjectCacheStore::init_cache(std::string vol_name, uint64_t vol_size) {
-  return 0;
-}
-
 int ObjectCacheStore::promote_object(librados::IoCtx* ioctx, std::string object_name, 
                                      librados::bufferlist* read_buf, uint64_t read_len,
                                      Context* on_finish) {
+  ldout(m_cct, 20) << "object name = " << object_name
+                   << "read len = " << read_len << dendl;
+
   auto ctx = new FunctionContext([on_finish](int ret) {
     on_finish->complete(ret);
   });
@@ -184,13 +194,14 @@ int ObjectCacheStore::promote_object(librados::IoCtx* ioctx, std::string object_
   int ret = ioctx->aio_read(object_name, read_completion, read_buf, read_len, 0);
   if(ret < 0) {
     lderr(m_cct) << "fail to read from rados" << dendl;
-    assert(0);
-    return ret;
   }
-  return 0;
+
+  return ret;
 }
 
 int ObjectCacheStore::evict_objects() {
+  ldout(m_cct, 20) << dendl;
+
   std::list<std::string> obj_list;
   m_policy->get_evict_list(&obj_list);
   for (auto& obj: obj_list) {
@@ -199,6 +210,8 @@ int ObjectCacheStore::evict_objects() {
 }
 
 int ObjectCacheStore::do_evict(std::string cache_file) {
+  ldout(m_cct, 20) << "file = " << cache_file << dendl;
+
   //TODO(): call SyncFile API
   int ret = std::remove(cache_file.c_str());
    // evict entry in policy

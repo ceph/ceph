@@ -17,43 +17,43 @@ using boost::asio::local::stream_protocol;
 namespace ceph {
 namespace immutable_obj_cache {
 
-CacheServer::CacheServer(const std::string& file, ProcessMsg processmsg, CephContext* cct)
+CacheServer::CacheServer(CephContext* cct, const std::string& file, ProcessMsg processmsg)
   : cct(cct), m_server_process_msg(processmsg),
     m_local_path(file), m_acceptor(m_io_service) {}
 
 CacheServer::~CacheServer(){}
 
 void CacheServer::run() {
-  bool ret;
-  ret = start_accept();
+  ldout(cct, 20) << dendl;
+
+  bool ret = start_accept();
   if(!ret) {
     return;
   }
   m_io_service.run();
 }
 
-// TODO : use callback to replace this function.
 void CacheServer::send(uint64_t session_id, std::string msg) {
+  ldout(cct, 20) << dendl;
+
   auto it = m_session_map.find(session_id);
   if (it != m_session_map.end()) {
     it->second->send(msg);
   } else {
-    // TODO : why don't find existing session id ?
-    ldout(cct, 20) << "don't find session id..." << dendl;
+    ldout(cct, 20) << "missing reply session id" << dendl;
     assert(0);
   }
 }
 
-// when creating one acceptor, can control every step in this way.
 bool CacheServer::start_accept() {
+  ldout(cct, 20) << dendl;
+
   boost::system::error_code ec;
   m_acceptor.open(m_local_path.protocol(), ec);
   if(ec) {
     ldout(cct, 20) << "m_acceptor open fails: " << ec.message() << dendl;
     return false;
   }
-
-  // TODO control acceptor attribute.
 
   m_acceptor.bind(m_local_path, ec);
   if(ec) {
@@ -72,6 +72,8 @@ bool CacheServer::start_accept() {
 }
 
 void CacheServer::accept() {
+  ldout(cct, 20) << dendl;
+
   CacheSessionPtr new_session(new CacheSession(m_session_id, m_io_service, m_server_process_msg, cct));
   m_acceptor.async_accept(new_session->socket(),
       boost::bind(&CacheServer::handle_accept, this, new_session,
@@ -79,6 +81,7 @@ void CacheServer::accept() {
 }
 
 void CacheServer::handle_accept(CacheSessionPtr new_session, const boost::system::error_code& error) {
+  ldout(cct, 20) << dendl;
 
   if(error) {
     lderr(cct) << "async accept fails : " << error.message() << dendl;

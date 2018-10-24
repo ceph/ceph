@@ -27,7 +27,7 @@ namespace immutable_obj_cache {
 class CacheServer {
 
  public:
-  CacheServer(const std::string& file, ProcessMsg processmsg, CephContext* cct);
+  CacheServer(CephContext* cct, const std::string& file, ProcessMsg processmsg);
   ~CacheServer();
 
   void run();

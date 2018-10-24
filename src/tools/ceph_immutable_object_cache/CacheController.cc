@@ -14,14 +14,15 @@ namespace immutable_obj_cache {
 
 CacheController::CacheController(CephContext *cct, const std::vector<const char*> &args):
   m_args(args), m_cct(cct) {
-
+  ldout(m_cct, 20) << dendl;
 }
 
 CacheController::~CacheController() {
-
+  delete m_object_cache_store;
 }
 
 int CacheController::init() {
+  ldout(m_cct, 20) << dendl;
 
   m_object_cache_store = new ObjectCacheStore(m_cct, pcache_op_work_queue);
   //TODO(): make this configurable
@@ -33,6 +34,8 @@ int CacheController::init() {
 }
 
 int CacheController::shutdown() {
+  ldout(m_cct, 20) << dendl;
+
   int r = m_object_cache_store->shutdown();
   return r;
 }
@@ -41,12 +44,12 @@ void CacheController::handle_signal(int signum){}
 
 void CacheController::run() {
   try {
-    //TODO(): use new socket path
     std::string controller_path = m_cct->_conf.get_val<std::string>("rbd_shared_cache_sock");
     std::remove(controller_path.c_str()); 
     
-    m_cache_server = new CacheServer(controller_path,
-      ([&](uint64_t p, std::string s){handle_request(p, s);}), m_cct);
+    m_cache_server = new CacheServer(m_cct, controller_path,
+      ([&](uint64_t p, std::string s){handle_request(p, s);}));
+
     m_cache_server->run();
   } catch (std::exception& e) {
     lderr(m_cct) << "Exception: " << e.what() << dendl;
@@ -54,10 +57,10 @@ void CacheController::run() {
 }
 
 void CacheController::handle_request(uint64_t session_id, std::string msg){
+  ldout(m_cct, 20) << dendl;
+
   rbdsc_req_type_t *io_ctx = (rbdsc_req_type_t*)(msg.c_str());
 
-  int ret = 0;
-  
   switch (io_ctx->type) {
     case RBDSC_REGISTER: {
       // init cache layout for volume        
@@ -69,7 +72,7 @@ void CacheController::handle_request(uint64_t session_id, std::string msg){
     }
     case RBDSC_READ: {
       // lookup object in local cache store
-      ret = m_object_cache_store->lookup_object(io_ctx->pool_name, io_ctx->vol_name);
+      int ret = m_object_cache_store->lookup_object(io_ctx->pool_name, io_ctx->vol_name);
       if (ret < 0) {
         io_ctx->type = RBDSC_READ_RADOS;
       } else {
