@@ -72,6 +72,7 @@ ptyprocess==0.5.1         # via pexpect
 py==1.5.3                 # via pytest, tox
 pyasn1==0.2.3
 pycparser==2.17           # via cffi
+PyJWT==1.6.4
 pyopenssl==16.2.0
 pyparsing==2.2.0          # via cliff, cmd2, oslo.utils
 pytest==3.7.1
