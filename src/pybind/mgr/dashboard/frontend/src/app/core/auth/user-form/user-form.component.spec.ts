@@ -6,7 +6,7 @@ import { Router, Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastModule } from 'ng2-toastr';
-import { BsModalService } from 'ngx-bootstrap';
+import { BsModalService } from 'ngx-bootstrap/modal';
 import { of } from 'rxjs';
 
 import { configureTestBed } from '../../../../testing/unit-test-helper';
@@ -41,10 +41,9 @@ describe('UserFormComponent', () => {
   configureTestBed(
     {
       imports: [
-        [RouterTestingModule.withRoutes(routes)],
+        RouterTestingModule.withRoutes(routes),
         HttpClientTestingModule,
         ReactiveFormsModule,
-        RouterTestingModule,
         ComponentsModule,
         ToastModule.forRoot(),
         SharedModule

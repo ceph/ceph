@@ -333,7 +333,7 @@ public:
 			     std::set<std::string> *ls) {
     auto m = get_by_server(server);
     for (auto& i : m) {
-      Mutex::Locker l(i.second->lock);
+      std::lock_guard l(i.second->lock);
       for (auto& j : i.second->devices) {
 	ls->insert(j.first);
       }

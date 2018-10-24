@@ -124,7 +124,7 @@ public:
           std::function<void(OSDPerfMetricReport *)> cb_get)
 
   {
-      Mutex::Locker l(lock);
+      std::lock_guard l(lock);
       set_perf_queries_cb = cb_set;
       get_perf_report_cb = cb_get;
   }
@@ -133,7 +133,7 @@ public:
   void send_pgstats();
   void set_pgstats_cb(std::function<MPGStats*()>&& cb_)
   {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     pgstats_cb = std::move(cb_);
   }
 

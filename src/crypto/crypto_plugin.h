@@ -25,6 +25,7 @@
 class CryptoPlugin : public Plugin {
 
 public:
+  CryptoAccelRef cryptoaccel;
   explicit CryptoPlugin(CephContext* cct) : Plugin(cct)
   {}
   ~CryptoPlugin()

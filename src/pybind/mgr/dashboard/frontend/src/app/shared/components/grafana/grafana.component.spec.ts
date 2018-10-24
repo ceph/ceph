@@ -1,9 +1,8 @@
-import { HttpClientModule } from '@angular/common/http';
-
+import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { AlertModule } from 'ngx-bootstrap';
+import { AlertModule } from 'ngx-bootstrap/alert';
 
 import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { SettingsService } from '../../../shared/api/settings.service';
@@ -19,7 +18,7 @@ describe('GrafanaComponent', () => {
 
   configureTestBed({
     declarations: [GrafanaComponent, InfoPanelComponent, LoadingPanelComponent],
-    imports: [AlertModule.forRoot(), HttpClientModule, RouterTestingModule],
+    imports: [AlertModule.forRoot(), HttpClientTestingModule, RouterTestingModule],
     providers: [CephReleaseNamePipe, SettingsService, SummaryService]
   });
 

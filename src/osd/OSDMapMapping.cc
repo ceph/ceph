@@ -129,7 +129,7 @@ void ParallelPGMapper::Job::finish_one()
 {
   Context *fin = nullptr;
   {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     if (--shards == 0) {
       if (!aborted) {
 	finish = ceph_clock_now();

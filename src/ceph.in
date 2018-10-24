@@ -68,7 +68,7 @@ MYPDIR = os.path.dirname(MYDIR)
 DEVMODEMSG = '*** DEVELOPER MODE: setting PATH, PYTHONPATH and LD_LIBRARY_PATH ***'
 
 
-def respawn_in_path(lib_path, pybind_path, pythonlib_path):
+def respawn_in_path(lib_path, pybind_path, pythonlib_path, asan_lib_path):
     execv_cmd = []
     if 'CEPH_DBG' in os.environ:
         execv_cmd += ['@PYTHON_EXECUTABLE@', '-mpdb']
@@ -79,6 +79,8 @@ def respawn_in_path(lib_path, pybind_path, pythonlib_path):
         lib_path_var = "LD_LIBRARY_PATH"
 
     execv_cmd += sys.argv
+    if asan_lib_path:
+        os.environ['LD_PRELOAD'] = asan_lib_path
     if lib_path_var in os.environ:
         if lib_path not in os.environ[lib_path_var]:
             os.environ[lib_path_var] += ':' + lib_path
@@ -98,13 +100,25 @@ def get_pythonlib_dir():
     """Returns the name of a distutils build directory"""
     return "lib.{version[0]}".format(version=sys.version_info)
 
+
+def get_cmake_variables(names):
+    vars = dict((name, None) for name in names)
+    for line in open(os.path.join(MYPDIR, "CMakeCache.txt")):
+        # parse lines like "WITH_ASAN:BOOL=ON"
+        for name in names:
+            if line.startswith("{}:".format(name)):
+                vars[name] = line.split("=")[1].strip()
+                break
+        if all(vars.itervalues()):
+            break
+    return vars
+
+
 if os.path.exists(os.path.join(MYPDIR, "CMakeCache.txt")) \
      and os.path.exists(os.path.join(MYPDIR, "bin/init-ceph")):
-    src_path = None
-    for l in open(os.path.join(MYPDIR, "CMakeCache.txt")):
-        if l.startswith("ceph_SOURCE_DIR:STATIC="):
-            src_path = l.split("=")[1].strip()
-
+    vars = get_cmake_variables(["ceph_SOURCE_DIR", "ASAN_LIBRARY"])
+    src_path = vars["ceph_SOURCE_DIR"]
+    asan_lib_path = vars["ASAN_LIBRARY"]
     if src_path is None:
         # Huh, maybe we're not really in a cmake environment?
         pass
@@ -117,7 +131,7 @@ if os.path.exists(os.path.join(MYPDIR, "CMakeCache.txt")) \
                                       "cython_modules",
                                       get_pythonlib_dir())
 
-        respawn_in_path(lib_path, pybind_path, pythonlib_path)
+        respawn_in_path(lib_path, pybind_path, pythonlib_path, asan_lib_path)
 
         if 'PATH' in os.environ and bin_path not in os.environ['PATH']:
             os.environ['PATH'] = os.pathsep.join([bin_path, os.environ['PATH']])

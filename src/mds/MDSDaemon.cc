@@ -95,7 +95,7 @@ MDSDaemon::MDSDaemon(std::string_view n, Messenger *m, MonClient *mc) :
 }
 
 MDSDaemon::~MDSDaemon() {
-  Mutex::Locker lock(mds_lock);
+  std::lock_guard lock(mds_lock);
 
   delete mds_rank;
   mds_rank = NULL;
@@ -162,7 +162,7 @@ void MDSDaemon::dump_status(Formatter *f)
   f->dump_string("state", ceph_mds_state_name(mdsmap->get_state_gid(mds_gid_t(
 	    monc->get_global_id()))));
   if (mds_rank) {
-    Mutex::Locker l(mds_lock);
+    std::lock_guard l(mds_lock);
     mds_rank->dump_status(f);
   }
 
@@ -643,69 +643,30 @@ void MDSDaemon::handle_command(const MCommand::const_ref &m)
   }
 }
 
-
-struct MDSCommand {
-  string cmdstring;
-  string helpstring;
-  string module;
-  string perm;
-  string availability;
-} mds_commands[] = {
-
-#define COMMAND(parsesig, helptext, module, perm, availability) \
-  {parsesig, helptext, module, perm, availability},
-
-COMMAND("injectargs " \
-	"name=injected_args,type=CephString,n=N",
-	"inject configuration arguments into running MDS",
-	"mds", "*", "cli,rest")
-COMMAND("config set " \
-	"name=key,type=CephString name=value,type=CephString",
-	"Set a configuration option at runtime (not persistent)",
-	"mds", "*", "cli,rest")
-COMMAND("config unset " \
-	"name=key,type=CephString",
-	"Unset a configuration option at runtime (not persistent)",
-	"mds", "*", "cli,rest")
-COMMAND("exit",
-	"Terminate this MDS",
-	"mds", "*", "cli,rest")
-COMMAND("respawn",
-	"Restart this MDS",
-	"mds", "*", "cli,rest")
-COMMAND("session kill " \
-        "name=session_id,type=CephInt",
-	"End a client session",
-	"mds", "*", "cli,rest")
-COMMAND("cpu_profiler " \
-	"name=arg,type=CephChoices,strings=status|flush",
-	"run cpu profiling on daemon", "mds", "rw", "cli,rest")
-COMMAND("session ls " \
-	"name=filters,type=CephString,n=N,req=false",
-	"List client sessions", "mds", "r", "cli,rest")
-COMMAND("client ls " \
-	"name=filters,type=CephString,n=N,req=false",
-	"List client sessions", "mds", "r", "cli,rest")
-COMMAND("session evict " \
-	"name=filters,type=CephString,n=N,req=false",
-	"Evict client session(s)", "mds", "rw", "cli,rest")
-COMMAND("client evict " \
-	"name=filters,type=CephString,n=N,req=false",
-	"Evict client session(s)", "mds", "rw", "cli,rest")
-COMMAND("damage ls",
-	"List detected metadata damage", "mds", "r", "cli,rest")
-COMMAND("damage rm name=damage_id,type=CephInt",
-	"Remove a damage table entry", "mds", "rw", "cli,rest")
-COMMAND("version", "report version of MDS", "mds", "r", "cli,rest")
-COMMAND("heap " \
-	"name=heapcmd,type=CephChoices,strings=dump|start_profiler|stop_profiler|release|stats", \
-	"show heap usage info (available only if compiled with tcmalloc)", \
-	"mds", "*", "cli,rest")
-COMMAND("cache drop name=timeout,type=CephInt,range=1", "trim cache and optionally "
-	"request client to release all caps and flush the journal", "mds",
-	"r", "cli,rest")
+const std::vector<MDSDaemon::MDSCommand>& MDSDaemon::get_commands()
+{
+  static const std::vector<MDSCommand> commands = {
+    MDSCommand("injectargs name=injected_args,type=CephString,n=N", "inject configuration arguments into running MDS"),
+    MDSCommand("config set name=key,type=CephString name=value,type=CephString", "Set a configuration option at runtime (not persistent)"),
+    MDSCommand("config unset name=key,type=CephString", "Unset a configuration option at runtime (not persistent)"),
+    MDSCommand("exit", "Terminate this MDS"),
+    MDSCommand("respawn", "Restart this MDS"),
+    MDSCommand("session kill name=session_id,type=CephInt", "End a client session"),
+    MDSCommand("cpu_profiler name=arg,type=CephChoices,strings=status|flush", "run cpu profiling on daemon"),
+    MDSCommand("session ls name=filters,type=CephString,n=N,req=false", "List client sessions"),
+    MDSCommand("client ls name=filters,type=CephString,n=N,req=false", "List client sessions"),
+    MDSCommand("session evict name=filters,type=CephString,n=N,req=false", "Evict client session(s)"),
+    MDSCommand("client evict name=filters,type=CephString,n=N,req=false", "Evict client session(s)"),
+    MDSCommand("damage ls", "List detected metadata damage"),
+    MDSCommand("damage rm name=damage_id,type=CephInt", "Remove a damage table entry"),
+    MDSCommand("version", "report version of MDS"),
+    MDSCommand("heap "
+        "name=heapcmd,type=CephChoices,strings=dump|start_profiler|stop_profiler|release|stats",
+        "show heap usage info (available only if compiled with tcmalloc)"),
+    MDSCommand("cache drop name=timeout,type=CephInt,range=1", "trim cache and optionally request client to release all caps and flush the journal"),
+  };
+  return commands;
 };
-
 
 int MDSDaemon::_handle_command(
     const cmdmap_t &cmdmap,
@@ -763,13 +724,11 @@ int MDSDaemon::_handle_command(
     int cmdnum = 0;
     std::unique_ptr<JSONFormatter> f(std::make_unique<JSONFormatter>());
     f->open_object_section("command_descriptions");
-    for (MDSCommand *cp = mds_commands;
-	 cp < &mds_commands[ARRAY_SIZE(mds_commands)]; cp++) {
-
+    for (auto& c : get_commands()) {
       ostringstream secname;
       secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
-      dump_cmddesc_to_json(f.get(), secname.str(), cp->cmdstring, cp->helpstring,
-			   cp->module, cp->perm, cp->availability, 0);
+      dump_cmddesc_to_json(f.get(), secname.str(), c.cmdstring, c.helpstring,
+			   c.module, "*", c.availability, 0);
       cmdnum++;
     }
     f->close_section();	// command_descriptions
@@ -1044,7 +1003,7 @@ void MDSDaemon::handle_signal(int signum)
   ceph_assert(signum == SIGINT || signum == SIGTERM);
   derr << "*** got signal " << sig_str(signum) << " ***" << dendl;
   {
-    Mutex::Locker l(mds_lock);
+    std::lock_guard l(mds_lock);
     if (stopping) {
       return;
     }
@@ -1153,7 +1112,7 @@ void MDSDaemon::respawn()
 
 bool MDSDaemon::ms_dispatch2(const Message::ref &m)
 {
-  Mutex::Locker l(mds_lock);
+  std::lock_guard l(mds_lock);
   if (stopping) {
     return false;
   }
@@ -1245,7 +1204,7 @@ bool MDSDaemon::ms_handle_reset(Connection *con)
   if (con->get_peer_type() != CEPH_ENTITY_TYPE_CLIENT)
     return false;
 
-  Mutex::Locker l(mds_lock);
+  std::lock_guard l(mds_lock);
   if (stopping) {
     return false;
   }
@@ -1272,7 +1231,7 @@ void MDSDaemon::ms_handle_remote_reset(Connection *con)
   if (con->get_peer_type() != CEPH_ENTITY_TYPE_CLIENT)
     return;
 
-  Mutex::Locker l(mds_lock);
+  std::lock_guard l(mds_lock);
   if (stopping) {
     return;
   }
@@ -1387,7 +1346,7 @@ int MDSDaemon::ms_handle_authentication(Connection *con)
 
 void MDSDaemon::ms_handle_accept(Connection *con)
 {
-  Mutex::Locker l(mds_lock);
+  std::lock_guard l(mds_lock);
   if (stopping) {
     return;
   }

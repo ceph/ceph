@@ -6,7 +6,7 @@ import time
 
 from . import DummyResonse
 from .clusterdata import ClusterAPI
-from ..predictor.DiskFailurePredictor import DiskFailurePredictor, get_diskfailurepredictor_path
+from ..predictor.disk_failure_predictor import DiskFailurePredictor, get_diskfailurepredictor_path
 
 
 def gen_configuration(**kwargs):

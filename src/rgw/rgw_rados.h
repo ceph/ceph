@@ -807,15 +807,15 @@ public:
   public:
     generator() : manifest(NULL), last_ofs(0), cur_part_ofs(0), cur_part_id(0), 
 		  cur_stripe(0), cur_stripe_size(0) {}
-    int create_begin(CephContext *cct, RGWObjManifest *manifest, const string& placement_rule, rgw_bucket& bucket, rgw_obj& obj);
+    int create_begin(CephContext *cct, RGWObjManifest *manifest, const string& placement_rule, const rgw_bucket& bucket, const rgw_obj& obj);
 
     int create_next(uint64_t ofs);
 
     rgw_raw_obj get_cur_obj(RGWZoneGroup& zonegroup, RGWZoneParams& zone_params) { return cur_obj.get_raw_obj(zonegroup, zone_params); }
-    rgw_raw_obj get_cur_obj(RGWRados *store) { return cur_obj.get_raw_obj(store); }
+    rgw_raw_obj get_cur_obj(RGWRados *store) const { return cur_obj.get_raw_obj(store); }
 
     /* total max size of current stripe (including head obj) */
-    uint64_t cur_stripe_max_size() {
+    uint64_t cur_stripe_max_size() const {
       return cur_stripe_size;
     }
   };
@@ -2062,30 +2062,14 @@ public:
     assert (!obj.empty());
     objs_state[obj].prefetch_data = true;
   }
-  void invalidate(T& obj) {
-    RWLock::WLocker wl(lock);
-    auto iter = objs_state.find(obj);
-    if (iter == objs_state.end()) {
-      return;
-    }
-    bool is_atomic = iter->second.is_atomic;
-    bool prefetch_data = iter->second.prefetch_data;
-  
-    objs_state.erase(iter);
-
-    if (is_atomic || prefetch_data) {
-      auto& s = objs_state[obj];
-      s.is_atomic = is_atomic;
-      s.prefetch_data = prefetch_data;
-    }
-  }
+  void invalidate(const T& obj);
 };
 
 template<>
-void RGWObjectCtxImpl<rgw_obj, RGWObjState>::invalidate(rgw_obj& obj);
+void RGWObjectCtxImpl<rgw_obj, RGWObjState>::invalidate(const rgw_obj& obj);
 
 template<>
-void RGWObjectCtxImpl<rgw_raw_obj, RGWRawObjState>::invalidate(rgw_raw_obj& obj);
+void RGWObjectCtxImpl<rgw_raw_obj, RGWRawObjState>::invalidate(const rgw_raw_obj& obj);
 
 struct RGWObjectCtx {
   RGWRados *store;
@@ -3043,7 +3027,7 @@ public:
     ATTRSMOD_MERGE   = 2
   };
 
-  int rewrite_obj(RGWBucketInfo& dest_bucket_info, rgw_obj& obj);
+  int rewrite_obj(RGWBucketInfo& dest_bucket_info, const rgw_obj& obj);
 
   int stat_remote_obj(RGWObjectCtx& obj_ctx,
                const rgw_user& user_id,
@@ -3068,8 +3052,8 @@ public:
                        const rgw_user& user_id,
                        req_info *info,
                        const string& source_zone,
-                       rgw_obj& dest_obj,
-                       rgw_obj& src_obj,
+                       const rgw_obj& dest_obj,
+                       const rgw_obj& src_obj,
                        RGWBucketInfo& dest_bucket_info,
                        RGWBucketInfo& src_bucket_info,
                        ceph::real_time *src_mtime,
@@ -3085,7 +3069,6 @@ public:
                        RGWObjCategory category,
                        std::optional<uint64_t> olh_epoch,
 		       ceph::real_time delete_at,
-                       string *version_id,
                        string *ptag,
                        string *petag,
                        void (*progress_cb)(off_t, void *),
@@ -3135,13 +3118,12 @@ public:
   int copy_obj_data(RGWObjectCtx& obj_ctx,
                RGWBucketInfo& dest_bucket_info,
 	       RGWRados::Object::Read& read_op, off_t end,
-               rgw_obj& dest_obj,
+               const rgw_obj& dest_obj,
 	       ceph::real_time *mtime,
 	       ceph::real_time set_mtime,
                map<string, bufferlist>& attrs,
                uint64_t olh_epoch,
 	       ceph::real_time delete_at,
-               string *version_id,
                string *petag);
   
   int check_bucket_empty(RGWBucketInfo& bucket_info);
@@ -3836,168 +3818,6 @@ public:
   }
 }; /* RGWChainedCacheImpl */
 
-/**
- * Base of PUT operation.
- * Allow to create chained data transformers like compresors and encryptors.
- */
-class RGWPutObjDataProcessor
-{
-public:
-  RGWPutObjDataProcessor(){}
-  virtual ~RGWPutObjDataProcessor(){}
-  virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_raw_obj *pobj, bool *again) = 0;
-  virtual int throttle_data(void *handle, const rgw_raw_obj& obj, uint64_t size, bool need_to_wait) = 0;
-}; /* RGWPutObjDataProcessor */
-
-
-class RGWPutObjProcessor : public RGWPutObjDataProcessor
-{
-protected:
-  RGWRados *store;
-  RGWObjectCtx& obj_ctx;
-  bool is_complete;
-  RGWBucketInfo bucket_info;
-  bool canceled;
-
-  virtual int do_complete(size_t accounted_size, const string& etag,
-                          ceph::real_time *mtime, ceph::real_time set_mtime,
-                          map<string, bufferlist>& attrs, ceph::real_time delete_at,
-                          const char *if_match, const char *if_nomatch, const string *user_data,
-                          rgw_zone_set* zones_trace = nullptr) = 0;
-
-public:
-  RGWPutObjProcessor(RGWObjectCtx& _obj_ctx, RGWBucketInfo& _bi) : store(NULL), 
-                                                                   obj_ctx(_obj_ctx), 
-                                                                   is_complete(false), 
-                                                                   bucket_info(_bi), 
-                                                                   canceled(false) {}
-  ~RGWPutObjProcessor() override {}
-  virtual int prepare(RGWRados *_store, string *oid_rand) {
-    store = _store;
-    return 0;
-  }
-
-  int complete(size_t accounted_size, const string& etag, 
-               ceph::real_time *mtime, ceph::real_time set_mtime,
-               map<string, bufferlist>& attrs, ceph::real_time delete_at,
-               const char *if_match = NULL, const char *if_nomatch = NULL, const string *user_data = nullptr,
-               rgw_zone_set *zones_trace = nullptr);
-
-  CephContext *ctx();
-
-  bool is_canceled() { return canceled; }
-}; /* RGWPutObjProcessor */
-
-struct put_obj_aio_info {
-  void *handle;
-  rgw_raw_obj obj;
-  uint64_t size;
-};
-
-#define RGW_PUT_OBJ_MIN_WINDOW_SIZE_DEFAULT (16 * 1024 * 1024)
-
-class RGWPutObjProcessor_Aio : public RGWPutObjProcessor
-{
-  list<struct put_obj_aio_info> pending;
-  uint64_t window_size{RGW_PUT_OBJ_MIN_WINDOW_SIZE_DEFAULT};
-  uint64_t pending_size{0};
-
-  struct put_obj_aio_info pop_pending();
-  int wait_pending_front();
-  bool pending_has_completed();
-
-  rgw_raw_obj last_written_obj;
-
-protected:
-  uint64_t obj_len{0};
-
-  set<rgw_raw_obj> written_objs;
-  rgw_obj head_obj;
-
-  void add_written_obj(const rgw_raw_obj& obj) {
-    written_objs.insert(obj);
-  }
-
-  int drain_pending();
-  int handle_obj_data(rgw_raw_obj& obj, bufferlist& bl, off_t ofs, off_t abs_ofs, void **phandle, bool exclusive);
-
-public:
-  int prepare(RGWRados *store, string *oid_rand) override;
-  int throttle_data(void *handle, const rgw_raw_obj& obj, uint64_t size, bool need_to_wait) override;
-
-  RGWPutObjProcessor_Aio(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info) : RGWPutObjProcessor(obj_ctx, bucket_info) {}
-  ~RGWPutObjProcessor_Aio() override;
-}; /* RGWPutObjProcessor_Aio */
-
-class RGWPutObjProcessor_Atomic : public RGWPutObjProcessor_Aio
-{
-  bufferlist first_chunk;
-  uint64_t part_size;
-  off_t cur_part_ofs;
-  off_t next_part_ofs;
-  int cur_part_id;
-  off_t data_ofs;
-
-  bufferlist pending_data_bl;
-  uint64_t max_chunk_size;
-
-  bool versioned_object;
-  std::optional<uint64_t> olh_epoch;
-  string version_id;
-
-protected:
-  rgw_bucket bucket;
-  string obj_str;
-
-  string unique_tag;
-
-  rgw_raw_obj cur_obj;
-  RGWObjManifest manifest;
-  RGWObjManifest::generator manifest_gen;
-
-  int write_data(bufferlist& bl, off_t ofs, void **phandle, rgw_raw_obj *pobj, bool exclusive);
-  int do_complete(size_t accounted_size, const string& etag,
-                  ceph::real_time *mtime, ceph::real_time set_mtime,
-                  map<string, bufferlist>& attrs, ceph::real_time delete_at,
-                  const char *if_match, const char *if_nomatch, const string *user_data, rgw_zone_set *zones_trace) override;
-
-  int prepare_next_part(off_t ofs);
-  int complete_parts();
-  int complete_writing_data();
-
-  int prepare_init(RGWRados *store, string *oid_rand);
-
-public:
-  ~RGWPutObjProcessor_Atomic() override {}
-  RGWPutObjProcessor_Atomic(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info,
-                            rgw_bucket& _b, const string& _o, uint64_t _p, const string& _t, bool versioned) :
-                                RGWPutObjProcessor_Aio(obj_ctx, bucket_info),
-                                part_size(_p),
-                                cur_part_ofs(0),
-                                next_part_ofs(_p),
-                                cur_part_id(0),
-                                data_ofs(0),
-                                max_chunk_size(0),
-                                versioned_object(versioned),
-                                bucket(_b),
-                                obj_str(_o),
-                                unique_tag(_t) {}
-  int prepare(RGWRados *store, string *oid_rand) override;
-  virtual bool immutable_head() { return false; }
-  int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_raw_obj *pobj, bool *again) override;
-
-  void set_olh_epoch(uint64_t epoch) {
-    olh_epoch = epoch;
-  }
-
-  void set_version_id(const string& vid) {
-    version_id = vid;
-  }
-
-  const string& get_version_id() const {
-    return version_id;
-  }
-}; /* RGWPutObjProcessor_Atomic */
 
 #define MP_META_SUFFIX ".meta"
 
@@ -4065,26 +3885,6 @@ public:
   }
 };
 
-class RGWPutObjProcessor_Multipart : public RGWPutObjProcessor_Atomic
-{
-  string part_num;
-  RGWMPObj mp;
-  req_state *s;
-  string upload_id;
-
-protected:
-  int prepare(RGWRados *store, string *oid_rand) override;
-  int do_complete(size_t accounted_size, const string& etag,
-                  ceph::real_time *mtime, ceph::real_time set_mtime,
-                  map<string, bufferlist>& attrs, ceph::real_time delete_at,
-                  const char *if_match, const char *if_nomatch, const string *user_data,
-                  rgw_zone_set *zones_trace) override;
-public:
-  bool immutable_head() override { return true; }
-  RGWPutObjProcessor_Multipart(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, uint64_t _p, req_state *_s) :
-                   RGWPutObjProcessor_Atomic(obj_ctx, bucket_info, _s->bucket, _s->object.name, _p, _s->req_id, false), s(_s) {}
-  void get_mp(RGWMPObj** _mp);
-}; /* RGWPutObjProcessor_Multipart */
 
 class RGWRadosThread {
   class Worker : public Thread {

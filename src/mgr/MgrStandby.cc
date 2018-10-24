@@ -105,7 +105,7 @@ int MgrStandby::init()
   init_async_signal_handler();
   register_async_signal_handler(SIGHUP, sighup_handler);
 
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
 
   // Initialize Messenger
   client_messenger->add_dispatcher_tail(this);
@@ -248,7 +248,7 @@ void MgrStandby::tick()
 
 void MgrStandby::handle_signal(int signum)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   ceph_assert(signum == SIGINT || signum == SIGTERM);
   derr << "*** Got signal " << sig_str(signum) << " ***" << dendl;
   shutdown();
@@ -372,7 +372,7 @@ void MgrStandby::handle_mgr_map(MMgrMap* mmap)
             [this](int r){
               // Advertise our active-ness ASAP instead of waiting for
               // next tick.
-              Mutex::Locker l(lock);
+              std::lock_guard l(lock);
               send_beacon();
             }));
       dout(1) << "I am now activating" << dendl;
@@ -404,7 +404,7 @@ void MgrStandby::handle_mgr_map(MMgrMap* mmap)
 
 bool MgrStandby::ms_dispatch(Message *m)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   dout(4) << state_str() << " " << *m << dendl;
 
   if (m->get_type() == MSG_MGR_MAP) {

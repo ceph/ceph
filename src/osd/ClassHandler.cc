@@ -36,7 +36,7 @@ void ClassHandler::add_embedded_class(const string& cname)
 
 int ClassHandler::open_class(const string& cname, ClassData **pcls)
 {
-  Mutex::Locker lock(mutex);
+  std::lock_guard lock(mutex);
   ClassData *cls = _get_class(cname, true);
   if (!cls)
     return -EPERM;
@@ -283,7 +283,7 @@ ClassHandler::ClassMethod *ClassHandler::ClassData::_get_method(const char *mnam
 
 int ClassHandler::ClassData::get_method_flags(const char *mname)
 {
-  Mutex::Locker l(handler->mutex);
+  std::lock_guard l(handler->mutex);
   ClassMethod *method = _get_method(mname);
   if (!method)
     return -ENOENT;

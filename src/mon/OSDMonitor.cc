@@ -999,7 +999,7 @@ void OSDMonitor::prime_pg_temp(
 	   << ", priming " << acting
 	   << dendl;
   {
-    Mutex::Locker l(prime_pg_temp_lock);
+    std::lock_guard l(prime_pg_temp_lock);
     // do not touch a mapping if a change is pending
     pending_inc.new_pg_temp.emplace(
       pgid,
@@ -6918,6 +6918,11 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       return -EBUSY;
     }
     if (n > (int)p.get_pg_num()) {
+      if (p.get_pg_num() != p.get_pg_num_pending()) {
+	// force pre-nautilus clients to resend their ops, since they
+	// don't understand pg_num_pending changes form a new interval
+	p.last_force_op_resend_prenautilus = pending_inc.epoch;
+      }
       p.set_pg_num(n);
     } else {
       if (osdmap.require_osd_release < CEPH_RELEASE_NAUTILUS) {
@@ -6987,12 +6992,14 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
 	return -EPERM;
       }
     }
-    // set target; mgr will adjust pg_num_actual later
-    p.set_pg_num_target(n);
-    // adjust pgp_num_target down too (as needed)
-    if (p.get_pgp_num_target() > n) {
+    // set targets; mgr will adjust pg_num_actual and pgp_num later.
+    // make pgp_num track pg_num if it already matches.  if it is set
+    // differently, leave it different and let the user control it
+    // manually.
+    if (p.get_pg_num_target() == p.get_pgp_num_target()) {
       p.set_pgp_num_target(n);
     }
+    p.set_pg_num_target(n);
   } else if (var == "pgp_num_actual") {
     if (p.has_flag(pg_pool_t::FLAG_NOPGCHANGE)) {
       ss << "pool pgp_num change is disabled; you must unset nopgchange flag for the pool first";
@@ -8553,6 +8560,88 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         new Monitor::C_Command(mon,op, 0, rs, get_last_committed() + 1));
       return true;
     }
+  } else if (prefix == "osd crush class create") {
+    string device_class;
+    if (!cmd_getval(g_ceph_context, cmdmap, "class", device_class)) {
+      err = -EINVAL; // no value!
+      goto reply;
+    }
+    if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+      ss << "you must complete the upgrade and 'ceph osd require-osd-release "
+         << "luminous' before using crush device classes";
+      err = -EPERM;
+      goto reply;
+    }
+    if (!_have_pending_crush() &&
+        _get_stable_crush().class_exists(device_class)) {
+      ss << "class '" << device_class << "' already exists";
+      goto reply;
+    }
+     CrushWrapper newcrush;
+    _get_pending_crush(newcrush);
+     if (newcrush.class_exists(device_class)) {
+      ss << "class '" << device_class << "' already exists";
+      goto update;
+    }
+    int class_id = newcrush.get_or_create_class_id(device_class);
+    pending_inc.crush.clear();
+    newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
+    ss << "created class " << device_class << " with id " << class_id
+       << " to crush map";
+    goto update;
+  } else if (prefix == "osd crush class rm") {
+    string device_class;
+    if (!cmd_getval(g_ceph_context, cmdmap, "class", device_class)) {
+       err = -EINVAL; // no value!
+       goto reply;
+     }
+     if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+       ss << "you must complete the upgrade and 'ceph osd require-osd-release "
+         << "luminous' before using crush device classes";
+       err = -EPERM;
+       goto reply;
+     }
+
+     CrushWrapper newcrush;
+     _get_pending_crush(newcrush);
+     if (!newcrush.class_exists(device_class)) {
+       err = -ENOENT;
+       ss << "class '" << device_class << "' does not exist";
+       goto reply;
+     }
+     int class_id = newcrush.get_class_id(device_class);
+     stringstream ts;
+     if (newcrush.class_is_in_use(class_id, &ts)) {
+       err = -EBUSY;
+       ss << "class '" << device_class << "' " << ts.str();
+       goto reply;
+     }
+
+     set<int> osds;
+     newcrush.get_devices_by_class(device_class, &osds);
+     for (auto& p: osds) {
+       err = newcrush.remove_device_class(g_ceph_context, p, &ss);
+       if (err < 0) {
+         // ss has reason for failure
+         goto reply;
+       }
+     }
+
+     if (osds.empty()) {
+       // empty class, remove directly
+       err = newcrush.remove_class_name(device_class);
+       if (err < 0) {
+         ss << "class '" << device_class << "' cannot be removed '"
+            << cpp_strerror(err) << "'";
+         goto reply;
+       }
+     }
+
+     pending_inc.crush.clear();
+     newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
+     ss << "removed class " << device_class << " with id " << class_id
+        << " from crush map";
+     goto update;
   } else if (prefix == "osd crush class rename") {
     string srcname, dstname;
     if (!cmd_getval(cct, cmdmap, "srcname", srcname)) {

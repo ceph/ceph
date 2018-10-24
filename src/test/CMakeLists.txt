@@ -447,18 +447,18 @@ if(${WITH_CEPHFS})
     cephfs)
 endif(${WITH_CEPHFS})
 
-if(HAVE_BLKID)
-  add_executable(ceph_test_get_blkdev_size
-    test_get_blkdev_size.cc
+if(HAVE_BLKID OR FREEBSD)
+  add_executable(ceph_test_get_blkdev_props
+    test_get_blkdev_props.cc
     )
-  target_link_libraries(ceph_test_get_blkdev_size
+  target_link_libraries(ceph_test_get_blkdev_props
     ceph-common
     pthread
     ${EXTRALIBS}
     ${BLKID_LIBRARIES}
     ${CMAKE_DL_LIBS}
     )
-endif(HAVE_BLKID)
+endif(HAVE_BLKID OR FREEBSD)
 
 # ceph_test_admin_socket_output
 

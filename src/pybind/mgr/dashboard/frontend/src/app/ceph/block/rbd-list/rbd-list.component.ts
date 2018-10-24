@@ -1,7 +1,7 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import * as _ from 'lodash';
-import { BsModalRef, BsModalService } from 'ngx-bootstrap';
+import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 
 import { RbdService } from '../../../shared/api/rbd.service';
 import { ConfirmationModalComponent } from '../../../shared/components/confirmation-modal/confirmation-modal.component';
@@ -103,7 +103,8 @@ export class RbdListComponent implements OnInit {
     const copyAction: CdTableAction = {
       permission: 'create',
       buttonCondition: (selection: CdTableSelection) => selection.hasSingleSelection,
-      disable: (selection: CdTableSelection) => !selection.hasSingleSelection,
+      disable: (selection: CdTableSelection) =>
+        !selection.hasSingleSelection || selection.first().cdExecuting,
       icon: 'fa-copy',
       routerLink: () => `/block/rbd/copy/${getImageUri()}`,
       name: 'Copy'
@@ -118,8 +119,6 @@ export class RbdListComponent implements OnInit {
     };
     const moveAction: CdTableAction = {
       permission: 'delete',
-      disable: (selection: CdTableSelection) =>
-        !selection.hasSingleSelection || selection.first().cdExecuting,
       icon: 'fa-trash-o',
       click: () => this.trashRbdModal(),
       name: 'Move to Trash'

@@ -59,6 +59,10 @@
 
     - ``ceph tell osd.x cache status'
 
+* The libcephfs added several functions that allow restarted client to destroy
+  or reclaim state held by a previous incarnation. These functions are for NFS
+  servers.
+
 >=13.1.0
 --------
 
@@ -124,6 +128,12 @@
   additional 500 MB to 1 GB of RAM for large clusters, and much less
   for small clusters.
 
+* The ``mgr/balancer/max_misplaced`` option has been replaced by a new
+  global ``target_max_misplaced_ratio`` option that throttles both
+  balancer activity and automated adjustments to ``pgp_num`` (normally as a
+  result of ``pg_num`` changes).  If you have customized the balancer module
+  option, you will need to adjust your config to set the new global option
+  or revert to the default of .05 (5%).
 
 
 Upgrading from Luminous

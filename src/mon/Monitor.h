@@ -663,7 +663,7 @@ public:
 
   template<typename Func, typename...Args>
   void with_session_map(Func&& func) {
-    Mutex::Locker l(session_map_lock);
+    std::lock_guard l(session_map_lock);
     std::forward<Func>(func)(session_map);
   }
   void send_latest_monmap(Connection *con);

@@ -34,6 +34,8 @@
 #include "rgw_lib.h"
 #include "rgw_ldap.h"
 #include "rgw_token.h"
+#include "rgw_putobj_processor.h"
+#include "rgw_putobj_throttle.h"
 #include "rgw_compression.h"
 
 
@@ -2289,8 +2291,9 @@ public:
   const std::string& bucket_name;
   const std::string& obj_name;
   RGWFileHandle* rgw_fh;
-  RGWPutObjProcessor* processor;
-  RGWPutObjDataProcessor* filter;
+  std::optional<rgw::putobj::AioThrottle> aio;
+  std::optional<rgw::putobj::AtomicObjectProcessor> processor;
+  rgw::putobj::DataProcessor* filter;
   boost::optional<RGWPutObj_Compress> compressor;
   CompressorRef plugin;
   buffer::list data;
@@ -2298,14 +2301,13 @@ public:
   MD5 hash;
   off_t real_ofs;
   size_t bytes_written;
-  bool multipart;
   bool eio;
 
   RGWWriteRequest(CephContext* _cct, RGWUserInfo *_user, RGWFileHandle* _fh,
 		  const std::string& _bname, const std::string& _oname)
     : RGWLibContinuedReq(_cct, _user), bucket_name(_bname), obj_name(_oname),
-      rgw_fh(_fh), processor(nullptr), filter(nullptr), real_ofs(0),
-      bytes_written(0), multipart(false), eio(false) {
+      rgw_fh(_fh), filter(nullptr), real_ofs(0),
+      bytes_written(0), eio(false) {
 
     int ret = header_init();
     if (ret == 0) {
@@ -2346,19 +2348,6 @@ public:
     s->bucket_tenant = user->user_id.tenant;
 
     return 0;
-  }
-
-  RGWPutObjProcessor *select_processor(RGWObjectCtx& obj_ctx,
-                                       bool *is_multipart) override {
-    struct req_state* s = get_state();
-    uint64_t part_size = s->cct->_conf->rgw_obj_stripe_size;
-    RGWPutObjProcessor_Atomic *processor =
-      new RGWPutObjProcessor_Atomic(obj_ctx, s->bucket_info, s->bucket,
-				    s->object.name, part_size, s->req_id,
-				    s->bucket_info.versioning_enabled());
-    processor->set_olh_epoch(olh_epoch);
-    processor->set_version_id(version_id);
-    return processor;
   }
 
   int get_params() override {

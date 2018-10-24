@@ -7,7 +7,7 @@ call methods.
 This module is runnable outside of ceph-mgr, useful for testing.
 """
 
-from six.moves.urllib import parse
+from six.moves.urllib.parse import urljoin  # pylint: disable=import-error
 import logging
 import json
 
@@ -74,7 +74,7 @@ class RookCluster(object):
     def rook_url(self, path):
         prefix = "/apis/ceph.rook.io/%s/namespaces/%s/" % (
             ROOK_API_VERSION, self.rook_namespace)
-        return urlparse.urljoin(prefix, path)
+        return urljoin(prefix, path)
 
     def rook_api_call(self, verb, path, **kwargs):
         full_path = self.rook_url(path)

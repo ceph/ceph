@@ -195,6 +195,7 @@ int main(int argc, const char **argv)
       return r;
     }
     if (forker.is_parent()) {
+      g_ceph_context->_log->start();
       if (forker.parent_wait(err) != 0) {
         return -ENXIO;
       }
@@ -331,8 +332,7 @@ int main(int argc, const char **argv)
       forker.exit(-EINVAL);
     }
 
-    int err = OSD::mkfs(g_ceph_context, store, data_path,
-			g_conf().get_val<uuid_d>("fsid"),
+    int err = OSD::mkfs(g_ceph_context, store, g_conf().get_val<uuid_d>("fsid"),
                         whoami);
     if (err < 0) {
       derr << TEXT_RED << " ** ERROR: error creating empty object store in "
@@ -511,11 +511,11 @@ flushjournal_out:
   ms_hb_back_server->set_cluster_protocol(CEPH_OSD_PROTOCOL);
   ms_hb_front_server->set_cluster_protocol(CEPH_OSD_PROTOCOL);
 
-  cout << "starting osd." << whoami
-       << " osd_data " << data_path
-       << " " << ((journal_path.empty()) ?
-		  "(no journal)" : journal_path)
-       << std::endl;
+  dout(0) << "starting osd." << whoami
+          << " osd_data " << data_path
+          << " " << ((journal_path.empty()) ?
+		    "(no journal)" : journal_path)
+          << dendl;
 
   uint64_t message_size =
     g_conf().get_val<Option::size_t>("osd_client_message_size_cap");
@@ -560,8 +560,16 @@ flushjournal_out:
   ms_objecter->set_default_policy(Messenger::Policy::lossy_client(CEPH_FEATURE_OSDREPLYMUX));
 
   entity_addrvec_t public_addrs, cluster_addrs;
-  pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC, &public_addrs);
-  pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_CLUSTER, &cluster_addrs);
+  r = pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC, &public_addrs);
+  if (r < 0) {
+    derr << "Failed to pick public address." << dendl;
+    forker.exit(1);
+  }
+  r = pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_CLUSTER, &cluster_addrs);
+  if (r < 0) {
+    derr << "Failed to pick cluster address." << dendl;
+    forker.exit(1);
+  }
 
   if (ms_public->bindv(public_addrs) < 0)
     forker.exit(1);
