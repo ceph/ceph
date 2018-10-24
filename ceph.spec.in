@@ -908,6 +908,19 @@ depending on python-ceph should be fixed to depend on python-rados,
 python-rbd, python-rgw or python-cephfs instead.
 %endif
 
+%package grafana-dashboards
+Summary:	The set of Grafana dashboards for monitoring purposes
+BuildArch:	noarch
+%if 0%{?suse_version}
+Group:		System/Filesystems
+%endif
+%description grafana-dashboards
+This package provides a set of Grafana dashboards for monitoring of
+Ceph clusters. The dashboards require a Prometheus server setup
+collecting data from Ceph Manager "prometheus" module and Prometheus
+project "node_exporter" module. The dashboards are designed to be
+integrated with the Ceph Manager Dashboard web UI.
+
 #################################################################################
 # common
 #################################################################################
@@ -1022,7 +1035,8 @@ ${CMAKE} .. \
 %else
     -DWITH_LIBRADOSSTRIPER=OFF \
 %endif
-    -DBOOST_J=$CEPH_SMP_NCPUS
+    -DBOOST_J=$CEPH_SMP_NCPUS \
+    -DWITH_GRAFANA=ON
 
 make "$CEPH_MFLAGS_JOBS"
 
@@ -1944,6 +1958,12 @@ exit 0
 # We need an empty %%files list for python-ceph-compat, to tell rpmbuild to
 # actually build this meta package.
 %endif
+
+%files grafana-dashboards
+%attr(0755,root,root) %dir %{_sysconfdir}/grafana/dashboards/ceph-dashboard
+%config %{_sysconfdir}/grafana/dashboards/ceph-dashboard/*
+%doc monitoring/grafana/dashboards/README
+%doc monitoring/grafana/README.md
 
 
 %changelog
