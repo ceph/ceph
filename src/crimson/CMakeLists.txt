@@ -5,6 +5,7 @@ set_target_properties(crimson::cflags PROPERTIES
 
 set(crimson_common_srcs
   common/config_proxy.cc
+  common/perf_counters_collection.cc
   common/assert.cc
   common/log.cc)
 
