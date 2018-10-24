@@ -311,6 +311,16 @@ export class TaskMessageService {
       this.commonOperations.delete,
       this.rbd_mirroring.pool_peer,
       (metadata) => ({})
+    ),
+    // iSCSI target tasks
+    'iscsi/target/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
+      this.iscsiTarget(metadata)
+    ),
+    'iscsi/target/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
+      this.iscsiTarget(metadata)
+    ),
+    'iscsi/target/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
+      this.iscsiTarget(metadata)
     )
   };
 
@@ -330,6 +340,10 @@ export class TaskMessageService {
 
   ecp(metadata) {
     return this.i18n(`erasure code profile '{{name}}'`, { name: metadata.name });
+  }
+
+  iscsiTarget(metadata) {
+    return this.i18n(`target '{{target_iqn}}'`, { target_iqn: metadata.target_iqn });
   }
 
   _getTaskTitle(task: Task) {
