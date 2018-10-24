@@ -19,6 +19,10 @@ from OpenSSL import crypto
 
 from mgr_module import MgrModule, MgrStandbyModule
 
+# Imports required for CLI commands registration
+# pylint: disable=unused-import
+from .services import iscsi_cli
+
 try:
     import cherrypy
     from cherrypy._cptools import HandlerWrapperTool
