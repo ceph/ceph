@@ -133,13 +133,6 @@ add_executable(unittest_lru
 add_ceph_unittest(unittest_lru)
 target_link_libraries(unittest_lru ceph-common)
 
-# unittest_io_priority
-add_executable(unittest_io_priority
-  test_io_priority.cc
-  )
-add_ceph_unittest(unittest_io_priority)
-target_link_libraries(unittest_io_priority ceph-common)
-
 # unittest_crc32c
 add_executable(unittest_crc32c
   test_crc32c.cc
