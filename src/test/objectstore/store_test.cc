@@ -7325,7 +7325,7 @@ TEST_P(StoreTest, allocateBlueFSTest) {
   struct store_statfs_t statfs;
   store->statfs(&statfs);
 
-  uint64_t to_alloc = g_conf().get_val<uint64_t>("bluefs_alloc_size");
+  uint64_t to_alloc = g_conf().get_val<Option::size_t>("bluefs_alloc_size");
 
   int r = bstore->allocate_bluefs_freespace(to_alloc);
   ASSERT_EQ(r, 0);
