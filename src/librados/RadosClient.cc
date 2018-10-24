@@ -25,6 +25,7 @@
 #include "common/ceph_context.h"
 #include "common/config.h"
 #include "common/common_init.h"
+#include "common/ceph_json.h"
 #include "common/errno.h"
 #include "include/buffer.h"
 #include "include/stringify.h"
@@ -1117,4 +1118,52 @@ mon_feature_t librados::RadosClient::get_required_monitor_features() const
 {
   return monclient.with_monmap([](const MonMap &monmap) {
       return monmap.get_required_features(); } );
+}
+
+int librados::RadosClient::get_inconsistent_pgs(int64_t pool_id,
+                                                std::vector<std::string>* pgs)
+{
+  vector<string> cmd = {
+    "{\"prefix\": \"pg ls\","
+    "\"pool\": " + std::to_string(pool_id) + ","
+    "\"states\": [\"inconsistent\"],"
+    "\"format\": \"json\"}"
+  };
+  bufferlist inbl, outbl;
+  string outstring;
+  if (auto ret = mgr_command(cmd, inbl, &outbl, &outstring); ret) {
+    return ret;
+  }
+  if (!outbl.length()) {
+    // no pg returned
+    return 0;
+  }
+  JSONParser parser;
+  if (!parser.parse(outbl.c_str(), outbl.length())) {
+    return -EINVAL;
+  }
+  vector<string> v;
+  if (!parser.is_array()) {
+    JSONObj *pgstat_obj = parser.find_obj("pg_stats");
+    if (!pgstat_obj)
+      return 0;
+    auto s = pgstat_obj->get_data();
+    JSONParser pg_stats;
+    if (!pg_stats.parse(s.c_str(), s.length())) {
+      return -EINVAL;
+    }
+    v = pg_stats.get_array_elements();
+  } else {
+    v = parser.get_array_elements();
+  }
+  for (auto i : v) {
+    JSONParser pg_json;
+    if (!pg_json.parse(i.c_str(), i.length())) {
+      return -EINVAL;
+    }
+    string pgid;
+    JSONDecoder::decode_json("pgid", pgid, &pg_json);
+    pgs->emplace_back(std::move(pgid));
+  }
+  return 0;
 }

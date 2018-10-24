@@ -2696,77 +2696,21 @@ std::ostream& librados::operator<<(std::ostream& out,
   return out << pg.impl->pgid;
 }
 
-namespace {
-  int decode_json(JSONObj *obj, pg_t& pg)
-  {
-    string pg_str;
-    JSONDecoder::decode_json("pgid", pg_str, obj);
-    if (pg.parse(pg_str.c_str())) {
-      return 0;
-    } else {
-      return -EINVAL;
-    }
-  }
-
-  int get_inconsistent_pgs(librados::RadosClient& client,
-			   int64_t pool_id,
-			   std::vector<librados::PlacementGroup>* pgs)
-  {
-    vector<string> cmd = {
-      "{\"prefix\": \"pg ls\","
-      "\"pool\": " + std::to_string(pool_id) + ","
-      "\"states\": [\"inconsistent\"],"
-      "\"format\": \"json\"}"
-    };
-    bufferlist inbl, outbl;
-    string outstring;
-    int ret = client.mgr_command(cmd, inbl, &outbl, &outstring);
-    if (ret) {
-      return ret;
-    }
-    if (!outbl.length()) {
-      // no pg returned
-      return ret;
-    }
-    JSONParser parser;
-    if (!parser.parse(outbl.c_str(), outbl.length())) {
-      return -EINVAL;
-    }
-    
-    vector<string> v;
-    if (!parser.is_array()) {
-      JSONObj *pgstat_obj = parser.find_obj("pg_stats");
-      if (NULL == pgstat_obj)
-        return 0;
-      string s = pgstat_obj->get_data();
-      JSONParser pg_stats;
-      if (!pg_stats.parse(s.c_str(), s.length()))
-        return -EINVAL;
-      v = pg_stats.get_array_elements();
-    }
-    else {
-      v = parser.get_array_elements();
-    }
-
-    for (auto i : v) {
-      JSONParser pg_json;
-      if (!pg_json.parse(i.c_str(), i.length())) {
-	return -EINVAL;
-      }
-      librados::PlacementGroup pg;
-      if (decode_json(&pg_json, pg.impl->pgid)) {
-	return -EINVAL;
-      }
-      pgs->emplace_back(pg);
-    }
-    return 0;
-  }
-}
-
 int librados::Rados::get_inconsistent_pgs(int64_t pool_id,
 					  std::vector<PlacementGroup>* pgs)
 {
-  return ::get_inconsistent_pgs(*client, pool_id, pgs);
+  std::vector<string> pgids;
+  if (auto ret = client->get_inconsistent_pgs(pool_id, &pgids); ret) {
+    return ret;
+  }
+  for (const auto& pgid : pgids) {
+    librados::PlacementGroup pg;
+    if (!pg.parse(pgid.c_str())) {
+      return -EINVAL;
+    }
+    pgs->emplace_back(std::move(pg));
+  }
+  return 0;
 }
 
 int librados::Rados::get_inconsistent_objects(const PlacementGroup& pg,
@@ -3378,9 +3322,8 @@ CEPH_RADOS_API int rados_inconsistent_pg_list(rados_t cluster, int64_t pool_id,
 {
   tracepoint(librados, rados_inconsistent_pg_list_enter, cluster, pool_id, len);
   librados::RadosClient *client = (librados::RadosClient *)cluster;
-  std::vector<librados::PlacementGroup> pgs;
-  int r = ::get_inconsistent_pgs(*client, pool_id, &pgs);
-  if (r < 0) {
+  std::vector<std::string> pgs;
+  if (int r = client->get_inconsistent_pgs(pool_id, &pgs); r < 0) {
     tracepoint(librados, rados_inconsistent_pg_list_exit, r);
     return r;
   }
@@ -3394,10 +3337,7 @@ CEPH_RADOS_API int rados_inconsistent_pg_list(rados_t cluster, int64_t pool_id,
   if (b)
     memset(b, 0, len);
   int needed = 0;
-  for (const auto pg : pgs) {
-    std::ostringstream ss;
-    ss << pg;
-    auto s = ss.str();
+  for (const auto& s : pgs) {
     unsigned rl = s.length() + 1;
     if (b && len >= rl) {
       tracepoint(librados, rados_inconsistent_pg_list_pg, s.c_str());
