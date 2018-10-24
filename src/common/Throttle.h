@@ -30,8 +30,8 @@ class Throttle final : public ThrottleInterface {
   const std::string name;
   PerfCountersRef logger;
   std::atomic<int64_t> count = { 0 }, max = { 0 };
-  ceph::mutex lock;
-  std::list<ceph::condition_variable> conds;
+  std::mutex lock;
+  std::list<std::condition_variable> conds;
   const bool use_perf;
 
 public:
@@ -49,7 +49,7 @@ private:
        (c >= m && cur > m));     // except for large c
   }
 
-  bool _wait(int64_t c, std::unique_lock<ceph::mutex>& l);
+  bool _wait(int64_t c, std::unique_lock<std::mutex>& l);
 
 public:
   /**
@@ -157,20 +157,20 @@ class BackoffThrottle {
   const std::string name;
   PerfCountersRef logger;
 
-  ceph::mutex lock;
-  using locker = std::unique_lock<ceph::mutex>;
+  std::mutex lock;
+  using locker = std::unique_lock<std::mutex>;
 
   unsigned next_cond = 0;
 
   /// allocated once to avoid constantly allocating new ones
-  vector<ceph::condition_variable> conds;
+  vector<std::condition_variable> conds;
 
   const bool use_perf;
 
   /// pointers into conds
-  list<ceph::condition_variable*> waiters;
+  list<std::condition_variable*> waiters;
 
-  std::list<ceph::condition_variable*>::iterator _push_waiter() {
+  std::list<std::condition_variable*>::iterator _push_waiter() {
     unsigned next = next_cond++;
     if (next_cond == conds.size())
       next_cond = 0;
@@ -253,8 +253,8 @@ public:
   bool pending_error() const;
   int wait_for_ret();
 private:
-  mutable ceph::mutex m_lock = ceph::make_mutex("SimpleThrottle::m_lock");
-  ceph::condition_variable m_cond;
+  mutable std::mutex m_lock;
+  std::condition_variable m_cond;
   uint64_t m_max;
   uint64_t m_current = 0;
   int m_ret = 0;
@@ -315,8 +315,8 @@ private:
 
   typedef std::map<uint64_t, Result> TidResult;
 
-  mutable ceph::mutex m_lock = ceph::make_mutex("OrderedThrottle::m_lock");
-  ceph::condition_variable m_cond;
+  mutable std::mutex m_lock;
+  std::condition_variable m_cond;
   uint64_t m_max;
   uint64_t m_current = 0;
   int m_ret_val = 0;
@@ -327,7 +327,7 @@ private:
 
   TidResult m_tid_result;
 
-  void complete_pending_ops(std::unique_lock<ceph::mutex>& l);
+  void complete_pending_ops(std::unique_lock<std::mutex>& l);
   uint32_t waiters = 0;
 };
 
