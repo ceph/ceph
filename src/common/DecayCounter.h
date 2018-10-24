@@ -123,9 +123,8 @@ inline void decode(DecayCounter &c, bufferlist::const_iterator &p) {
 
 inline std::ostream& operator<<(std::ostream& out, const DecayCounter& d) {
   std::ostringstream oss;
-  oss.precision(2);
   double val = d.get();
-  oss << "[C " << std::scientific << val << "]";
+  oss << "[C " << val << "]";
   return out << oss.str();
 }
 
