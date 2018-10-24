@@ -40,6 +40,14 @@ class Options(object):
     GRAFANA_API_USERNAME = ('admin', str)
     GRAFANA_API_PASSWORD = ('admin', str)
 
+    # Ceph-iscsi settings
+    CEPH_ISCSI_API_HOST = ('', str)
+    CEPH_ISCSI_API_PORT = (5001, int)
+    CEPH_ISCSI_API_SCHEME = ('http', str)
+    CEPH_ISCSI_API_SSL_VERIFY = (True, bool)
+    CEPH_ISCSI_API_USERNAME = ('admin', str)
+    CEPH_ISCSI_API_PASSWORD = ('admin', str)
+
     @staticmethod
     def has_default_value(name):
         return getattr(Settings, name, None) is None or \

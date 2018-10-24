@@ -249,6 +249,19 @@ into timeouts, then you can set the timeout value to your needs::
 
 The default value is 45 seconds.
 
+Enabling iSCSI Management
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The Ceph Manager Dashboard uses the `ceph-iscsi <https://github.com/ceph/ceph-iscsi>`_
+REST API to manage iSCSI, and can be configured by using the following commands::
+
+    $ ceph dashboard set-ceph-iscsi-api-host <host>
+    $ ceph dashboard set-ceph-iscsi-api-port <port>             # Defaults to 5001
+    $ ceph dashboard set-ceph-iscsi-api-username <username>     # Defaults to admin
+    $ ceph dashboard set-ceph-iscsi-api-password <password>     # Defaults to admin
+    $ ceph dashboard set-ceph-iscsi-api-scheme <scheme>         # Defaults to http
+    $ ceph dashboard set-ceph-iscsi-api-ssl-verify <ssl-verify> # Defaults to True
+
 Enabling the Embedding of Grafana Dashboards
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
