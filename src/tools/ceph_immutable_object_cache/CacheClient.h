@@ -22,7 +22,7 @@ namespace immutable_obj_cache {
 
 class CacheClient {
 public:
-  CacheClient(const std::string& file, ClientProcessMsg processmsg, CephContext* ceph_ctx);
+  CacheClient(const std::string& file, CephContext* ceph_ctx);
   ~CacheClient();
   void run();
   bool is_session_work();
@@ -30,7 +30,7 @@ public:
   void close();
   int connect();
 
-  int register_volume(std::string pool_name, std::string vol_name, uint64_t vol_size);
+  int register_volume(std::string pool_name, std::string vol_name, uint64_t vol_size, Context* on_finish);
   int lookup_object(std::string pool_name, std::string vol_name, std::string object_id, Context* on_finish);
   void get_result(Context* on_finish);
 

@@ -77,7 +77,7 @@ int ObjectCacheStore::do_promote(std::string pool_name, std::string object_name)
   librados::IoCtx* ioctx = m_ioctxs[pool_name]; 
 
   librados::bufferlist* read_buf = new librados::bufferlist();
-  int object_size = 4096*1024; //TODO(): read config from image metadata
+  uint32_t object_size = 4096*1024; //TODO(): read config from image metadata
 
   auto ctx = new FunctionContext([this, read_buf, cache_file_name,
     object_size](int ret) {
@@ -88,8 +88,8 @@ int ObjectCacheStore::do_promote(std::string pool_name, std::string object_name)
 }
 
 int ObjectCacheStore::handle_promote_callback(int ret, bufferlist* read_buf,
-  std::string cache_file_name, uint8_t object_size) {
-
+  std::string cache_file_name, uint32_t object_size) {
+  ldout(m_cct, 20) << dendl;
   // rados read error
   if(ret != -ENOENT && ret < 0) {
     lderr(m_cct) << "fail to read from rados" << dendl;

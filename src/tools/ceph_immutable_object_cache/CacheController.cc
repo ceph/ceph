@@ -75,9 +75,6 @@ void CacheController::handle_request(uint64_t session_id, std::string msg){
       } else {
         io_ctx->type = RBDSC_READ_REPLY;
       }
-      if (io_ctx->type != RBDSC_READ_REPLY) {
-        assert(0);
-      }
       m_cache_server->send(session_id, std::string((char*)io_ctx, msg.size()));
 
       break;

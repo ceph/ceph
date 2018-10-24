@@ -15,10 +15,9 @@ using boost::asio::local::stream_protocol;
 namespace ceph {
 namespace immutable_obj_cache {
 
-  CacheClient::CacheClient(const std::string& file, ClientProcessMsg processmsg, CephContext* ceph_ctx)
+  CacheClient::CacheClient(const std::string& file, CephContext* ceph_ctx)
     : m_io_service_work(m_io_service),
       m_dm_socket(m_io_service),
-      m_client_process_msg(processmsg),
       m_ep(stream_protocol::endpoint(file)),
       m_session_work(false),
       cct(ceph_ctx)
@@ -79,7 +78,7 @@ namespace immutable_obj_cache {
     return 0;
   }
 
-  int CacheClient::register_volume(std::string pool_name, std::string vol_name, uint64_t vol_size) {
+  int CacheClient::register_volume(std::string pool_name, std::string vol_name, uint64_t vol_size, Context* on_finish) {
     // cache controller will init layout
     rbdsc_req_type_t *message = new rbdsc_req_type_t();
     message->type = RBDSC_REGISTER;
@@ -120,7 +119,14 @@ namespace immutable_obj_cache {
       return -1;
     }
 
-    m_client_process_msg(std::string(m_recv_buffer, ret));
+    std::string reply_msg(m_recv_buffer, ret);
+    rbdsc_req_type_t *io_ctx = (rbdsc_req_type_t*)(reply_msg.c_str());
+
+    if (io_ctx->type == RBDSC_REGISTER_REPLY) {
+      on_finish->complete(true);
+    } else {
+      on_finish->complete(false);
+    }
 
     delete message;
 

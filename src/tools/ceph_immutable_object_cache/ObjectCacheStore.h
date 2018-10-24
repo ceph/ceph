@@ -49,7 +49,7 @@ class ObjectCacheStore
                        librados::bufferlist* read_buf,
                        uint64_t length, Context* on_finish);
 
-   int handle_promote_callback(int, bufferlist*, std::string, uint8_t);
+   int handle_promote_callback(int, bufferlist*, std::string, uint32_t);
    int do_evict(std::string cache_file);
 
     CephContext *m_cct;

@@ -110,6 +110,7 @@ private:
       uint64_t read_len, ceph::bufferlist* read_data,
       io::DispatchResult* dispatch_result,
       Context* on_dispatched);
+  int handle_register_volume(bool reg);
   void client_handle_request(std::string msg);
 
   ImageCtxT* m_image_ctx;

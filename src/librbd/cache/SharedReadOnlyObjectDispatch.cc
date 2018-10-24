@@ -48,8 +48,7 @@ void SharedReadOnlyObjectDispatch<I>::init() {
   ldout(cct, 5) << "parent image: setup SRO cache client" << dendl;
 
   std::string controller_path = ((CephContext*)cct)->_conf.get_val<std::string>("rbd_shared_cache_sock");
-  m_cache_client = new ceph::immutable_obj_cache::CacheClient(controller_path.c_str(),
-    ([&](std::string s){client_handle_request(s);}), m_image_ctx->cct);
+  m_cache_client = new ceph::immutable_obj_cache::CacheClient(controller_path.c_str(), m_image_ctx->cct);
 
   int ret = m_cache_client->connect();
   if (ret < 0) {
@@ -59,11 +58,14 @@ void SharedReadOnlyObjectDispatch<I>::init() {
   } else {
     ldout(cct, 5) << "SRO cache client to register volume "
                   << "name = " << m_image_ctx->name
-                  << "on ceph-immutable-object-cache daemon: "
+                  << " on ceph-immutable-object-cache daemon"
                   << dendl;
 
+    auto ctx = new FunctionContext([this](bool reg) {
+      handle_register_volume(reg);
+    });
     ret = m_cache_client->register_volume(m_image_ctx->data_ctx.get_pool_name(),
-                                          m_image_ctx->id, m_image_ctx->size);
+                                          m_image_ctx->id, m_image_ctx->size, ctx);
 
     if (ret >= 0) {
       // add ourself to the IO object dispatcher chain
@@ -126,44 +128,31 @@ int SharedReadOnlyObjectDispatch<I>::handle_read_cache(
     }
   }
 
- // fall back to read rados
- *dispatch_result = io::DISPATCH_RESULT_CONTINUE;
- on_dispatched->complete(0);
- ldout(cct, 20) << "read rados: " << *dispatch_result <<dendl;
- return false;
+  // fall back to read rados
+  *dispatch_result = io::DISPATCH_RESULT_CONTINUE;
+  on_dispatched->complete(0);
+  ldout(cct, 20) << "read rados: " << *dispatch_result <<dendl;
+  return false;
 
 }
+
+template <typename I>
+int SharedReadOnlyObjectDispatch<I>::handle_register_volume(bool reg) {
+  auto cct = m_image_ctx->cct;
+  ldout(cct, 20) << dendl;
+
+  if (reg) {
+    ldout(cct, 20) << "SRO cache client open cache handler" << dendl;
+    m_object_store = new SharedPersistentObjectCacher<I>(m_image_ctx, m_image_ctx->shared_cache_path);
+  }
+  return 0;
+}
+
 template <typename I>
 void SharedReadOnlyObjectDispatch<I>::client_handle_request(std::string msg) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << dendl;
 
-  ceph::immutable_obj_cache::rbdsc_req_type_t *io_ctx = (ceph::immutable_obj_cache::rbdsc_req_type_t*)(msg.c_str());
-
-  switch (io_ctx->type) {
-    case ceph::immutable_obj_cache::RBDSC_REGISTER_REPLY: {
-      // open cache handler for volume
-      ldout(cct, 20) << "SRO cache client open cache handler" << dendl;
-      m_object_store = new SharedPersistentObjectCacher<I>(m_image_ctx, m_image_ctx->shared_cache_path);
-
-      break;
-    }
-    case ceph::immutable_obj_cache::RBDSC_READ_REPLY: {
-      ldout(cct, 20) << "SRO cache client start to read cache" << dendl;
-      //TODO(): should call read here
-
-      break;
-    }
-    case ceph::immutable_obj_cache::RBDSC_READ_RADOS: {
-      ldout(cct, 20) << "SRO cache client start to read rados" << dendl;
-      //TODO(): should call read here
-
-      break;
-    }
-    default: ldout(cct, 20) << "nothing" << io_ctx->type <<dendl;
-      break;
-
-  }
 }
 
 } // namespace cache
