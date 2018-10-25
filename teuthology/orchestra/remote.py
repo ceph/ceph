@@ -52,9 +52,17 @@ class Remote(object):
         self._console = console
         self.ssh = ssh
 
-    def connect(self, timeout=None):
+    def connect(self, timeout=None, create_key=None, context='connect'):
         args = dict(user_at_host=self.name, host_key=self._host_key,
-                    keep_alive=self.keep_alive)
+                    keep_alive=self.keep_alive, _create_key=create_key)
+        if context == 'reconnect':
+            # The reason for the 'context' workaround is not very
+            # clear from the technical side.
+            # I'll get "[Errno 98] Address already in use" altough
+            # there are no open tcp(ssh) connections.
+            # When connecting without keepalive, host_key and _create_key 
+            # set, it will proceed.
+            args = dict(user_at_host=self.name, _create_key=False, host_key=None)
         if timeout:
             args['timeout'] = timeout
 
@@ -75,6 +83,7 @@ class Remote(object):
         while elapsed_time() < timeout:
             success = self._reconnect(timeout=socket_timeout)
             if success:
+                log.info('Successfully reconnected to host')
                 break
             # Don't let time_remaining be < 0
             time_remaining = max(0, timeout - elapsed_time())
@@ -83,8 +92,9 @@ class Remote(object):
         return success
 
     def _reconnect(self, timeout=None):
+        log.info("Trying to reconnect to host")
         try:
-            self.connect(timeout=timeout)
+            self.connect(timeout=timeout, context='reconnect')
             return self.is_online
         except Exception as e:
             log.debug(e)
@@ -189,7 +199,13 @@ class Remote(object):
         TODO refactor to move run.run here?
         """
         if self.ssh is None:
-            self.reconnect()
+            self.reconnect(timeout=5)
+        if self.ssh:
+            # There is a chance that the ssh(paramiko) instance
+            # is populated but has no transport yet.
+            if self.ssh.get_transport():
+                if not self.ssh.get_transport().is_active():
+                    self.reconnect(timeout=5)
         r = self._runner(client=self.ssh, name=self.shortname, **kwargs)
         r.remote = self
         return r
