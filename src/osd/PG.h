@@ -2747,6 +2747,7 @@ protected:
 
   /// most recently consumed osdmap's require_osd_version
   unsigned last_require_osd_release = 0;
+  bool delete_needs_sleep = false;
 
 protected:
   void reset_min_peer_features() {
