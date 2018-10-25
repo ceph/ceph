@@ -55,3 +55,8 @@ class ClusterConfiguration(RESTController):
                     break
             else:
                 CephService.send_command('mon', 'config rm', who=section, name=name)
+
+    def bulk_set(self, options):
+        for name, value in options.items():
+            CephService.send_command('mon', 'config set', who=value['section'],
+                                     name=name, value=str(value['value']))

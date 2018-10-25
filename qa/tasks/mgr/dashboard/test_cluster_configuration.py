@@ -133,6 +133,33 @@ class ClusterConfigurationTest(DashboardTestCase):
         self._clear_all_values_for_config_option(config_name)
         self._reset_original_values(config_name, orig_value)
 
+    def test_bulk_set(self):
+        expected_result = {
+            'osd_max_backfills': {'section': 'osd', 'value': '1'},
+            'osd_recovery_max_active': {'section': 'osd', 'value': '3'},
+            'osd_recovery_max_single_start': {'section': 'osd', 'value': '1'},
+            'osd_recovery_sleep': {'section': 'osd', 'value': '2.000000'}
+        }
+        orig_values = dict()
+
+        for config_name in expected_result:
+            orig_values[config_name] = self._get_config_by_name(config_name)
+
+            # remove all existing settings for equal preconditions
+            self._clear_all_values_for_config_option(config_name)
+
+        self._put('/api/cluster_conf', {'options': expected_result})
+        self.assertStatus(200)
+
+        for config_name, value in expected_result.items():
+            result = self._wait_for_expected_get_result(self._get_config_by_name, config_name,
+                                                        [value])
+            self.assertEqual(result, [value])
+
+            # reset original value
+            self._clear_all_values_for_config_option(config_name)
+            self._reset_original_values(config_name, orig_values[config_name])
+
     def _validate_single(self, data):
         self.assertIn('name', data)
         self.assertIn('daemon_default', data)
