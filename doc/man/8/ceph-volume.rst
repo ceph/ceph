@@ -58,6 +58,7 @@ Optional arguments:
 * [--bluestore]         Use the bluestore objectstore (default)
 * [--filestore]         Use the filestore objectstore
 * [--yes]               Skip the report and prompt to continue provisioning
+* [--prepare]           Only prepare OSDs, do not activate
 * [--dmcrypt]           Enable encryption for the underlying OSD devices
 * [--crush-device-class] Define a CRUSH device class to assign the OSD to
 * [--no-systemd]         Do not enable or create any systemd units
