@@ -2217,6 +2217,7 @@ private:
   int get_num_op_threads();
 
   float get_osd_recovery_sleep();
+  float get_osd_delete_sleep();
 
   void probe_smart(ostream& ss);
   int probe_smart_device(const char *device, int timeout, std::string *result);

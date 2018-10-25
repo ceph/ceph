@@ -3323,6 +3323,22 @@ std::vector<Option> get_global_options() {
     .set_default(30)
     .set_description(""),
 
+    Option("osd_delete_sleep", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("Time in seconds to sleep before next removal transaction (overrides values below)"),
+
+    Option("osd_delete_sleep_hdd", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(5)
+    .set_description("Time in seconds to sleep before next removal transaction for HDDs"),
+
+    Option("osd_delete_sleep_ssd", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("Time in seconds to sleep before next removal transaction for SSDs"),
+
+    Option("osd_delete_sleep_hybrid", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(2)
+    .set_description("Time in seconds to sleep before next removal transaction when data is on HDD and journal is on SSD"),
+
     Option("osd_failsafe_full_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.97)
     .set_description(""),
