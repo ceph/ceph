@@ -1146,7 +1146,7 @@ int RGWSI_Zone::update_placement_map()
 
 int RGWSI_Zone::add_bucket_placement(const rgw_pool& new_pool)
 {
-  int ret = rados_svc->pool().lookup(new_pool);
+  int ret = rados_svc->pool(new_pool).lookup();
   if (ret < 0) { // DNE, or something
     return ret;
   }
