@@ -227,6 +227,13 @@ class SaltManager(object):
             self.master_remote, subcommand="restart", service="salt-master"
             )
 
+    # FIXME: run in a try-wait loop, because it sometimes does this:
+    # Running: "sudo sh -c 'salt \\* saltutil.sync_all 2>/dev/null'"
+    # stdout:target192168000035.teuthology:
+    # stdout:    Minion did not return. [No response]
+    # (which means capturing the stdout and parsing it to ensure that
+    # the string "Minion did not return" did not appear after any of
+    # the minion names)
     def sync_pillar_data(self):
         self.master_remote.run(args=[
             'sudo',

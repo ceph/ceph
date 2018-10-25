@@ -1,14 +1,19 @@
 tasks:
-  - deepsea_deploy:
-      cli: true
-      commands:
-        - stage0:
-        - stage1:
-        - policy_cfg:
-            profile: default
-        - stage2:
-        - stage3:
-        - stage4:
-        - 'ceph -s'
-        - state_orch:
-            name: ceph.functests.1node
+        - deepsea.preflight:
+        - deepsea.orch:
+                stage: prep
+        - deepsea.orch:
+                stage: 1
+        - deepsea.policy:
+                profile: default
+        - deepsea.orch:
+                stage: 2
+        - deepsea.orch:
+                stage: 3
+        - deepsea.orch:
+                stage: 4
+        - exec:
+                client.salt_master:
+                        - 'ceph -s'
+        - deepsea.orch:
+                state_orch: ceph.functests.1node

@@ -1,15 +1,5 @@
 from teuthology import misc
-from teuthology.orchestra import run
 
-def check_config_key(conf_dict, keyname, default_value):
-    """
-    Ensure config dict (can be any dictionary) has a value for a given key.
-    """
-    if not isinstance(conf_dict, dict):
-        raise ConfigError("Non-dict value provided for configuration dictionary")
-    if keyname not in conf_dict:
-        conf_dict[keyname] = default_value
-    return conf_dict[keyname]
 
 def get_remote(ctx, cluster, service_type, service_id):
     """
@@ -33,8 +23,10 @@ def get_remote(ctx, cluster, service_type, service_id):
                                                               service_id))
     return remote
 
+
 def get_remote_for_role(ctx, role):
     return get_remote(ctx, *misc.split_role(role))
+
 
 def copy_directory_recursively(from_path, to_remote, to_path=None):
     """
@@ -44,6 +36,7 @@ def copy_directory_recursively(from_path, to_remote, to_path=None):
         to_path = from_path
     misc.sh("scp -r -v {from_path} {host}:{to_path}".format(
             from_path=from_path, host=to_remote.name, to_path=to_path))
+
 
 def sudo_append_to_file(remote, path, data):
     """
