@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "tools/rbd/ArgumentTypes.h"
+#include "tools/rbd/MirrorDaemonServiceInfo.h"
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
 #include "include/Context.h"
@@ -588,10 +589,14 @@ private:
 
 class StatusImageRequest : public ImageRequestBase {
 public:
-  StatusImageRequest(librados::IoCtx &io_ctx, OrderedThrottle &throttle,
-                     const std::string &image_name,
-                     at::Format::Formatter formatter)
+  StatusImageRequest(
+      librados::IoCtx &io_ctx, OrderedThrottle &throttle,
+      const std::string &image_name,
+      const std::map<std::string, std::string> &instance_ids,
+      const MirrorDaemonServiceInfo &daemon_service_info,
+      at::Format::Formatter formatter)
     : ImageRequestBase(io_ctx, throttle, image_name),
+      m_instance_ids(instance_ids), m_daemon_service_info(daemon_service_info),
       m_formatter(formatter) {
   }
 
@@ -602,6 +607,7 @@ protected:
 
   void execute_action(librbd::Image &image,
                       librbd::RBD::AioCompletion *aio_comp) override {
+    image.get_id(&m_image_id);
     image.aio_mirror_image_get_status(&m_mirror_image_status,
                                       sizeof(m_mirror_image_status), aio_comp);
   }
@@ -612,6 +618,9 @@ protected:
     }
 
     std::string state = utils::mirror_image_status_state(m_mirror_image_status);
+    std::string instance_id = (m_mirror_image_status.up &&
+                               m_instance_ids.count(m_image_id)) ?
+        m_instance_ids.find(m_image_id)->second : "";
     std::string last_update = (
       m_mirror_image_status.last_update == 0 ?
         "" : utils::timestr(m_mirror_image_status.last_update));
@@ -624,6 +633,7 @@ protected:
       m_formatter->dump_string("state", state);
       m_formatter->dump_string("description",
                                m_mirror_image_status.description);
+      m_daemon_service_info.dump(instance_id, m_formatter);
       m_formatter->dump_string("last_update", last_update);
       m_formatter->close_section(); // image
     } else {
@@ -632,8 +642,12 @@ protected:
                 << m_mirror_image_status.info.global_id << "\n"
 	        << "  state:       " << state << "\n"
 	        << "  description: "
-                << m_mirror_image_status.description << "\n"
-	        << "  last_update: " << last_update << std::endl;
+                << m_mirror_image_status.description << "\n";
+      if (!instance_id.empty()) {
+        std::cout << "  service:     "
+                  << m_daemon_service_info.get_description(instance_id) << "\n";
+      }
+      std::cout << "  last_update: " << last_update << std::endl;
     }
   }
 
@@ -642,9 +656,11 @@ protected:
   }
 
 private:
+  const std::map<std::string, std::string> &m_instance_ids;
+  const MirrorDaemonServiceInfo &m_daemon_service_info;
   at::Format::Formatter m_formatter;
+  std::string m_image_id;
   librbd::mirror_image_status_t m_mirror_image_status;
-
 };
 
 template <typename RequestT>
@@ -1165,7 +1181,37 @@ int execute_status(const po::variables_map &vm,
       formatter->open_array_section("images");
     }
 
-    ImageRequestGenerator<StatusImageRequest> generator(io_ctx, formatter);
+    std::map<std::string, std::string> instance_ids;
+    MirrorDaemonServiceInfo daemon_service_info(io_ctx);
+
+    std::string start_image_id;
+    while (true) {
+      std::map<std::string, std::string> ids;
+      r = rbd.mirror_image_instance_id_list(io_ctx, start_image_id, 1024, &ids);
+      if (r < 0) {
+        if (r == -EOPNOTSUPP) {
+          std::cerr << "rbd: newer release of Ceph OSDs required to map image "
+                    << "to rbd-mirror daemon instance" << std::endl;
+        } else {
+          std::cerr << "rbd: failed to get instance id list: "
+                    << cpp_strerror(r) << std::endl;
+        }
+        // not fatal
+        break;
+      }
+      if (ids.empty()) {
+        break;
+      }
+      instance_ids.insert(ids.begin(), ids.end());
+      start_image_id = ids.rbegin()->first;
+    }
+
+    if (!instance_ids.empty()) {
+      daemon_service_info.init();
+    }
+
+    ImageRequestGenerator<StatusImageRequest> generator(
+        io_ctx, instance_ids, daemon_service_info, formatter);
     ret = generator.execute();
 
     if (formatter != nullptr) {

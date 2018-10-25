@@ -2,6 +2,7 @@ set(rbd_srcs
   rbd.cc
   ArgumentTypes.cc
   IndentStream.cc
+  MirrorDaemonServiceInfo.cc
   OptionPrinter.cc
   Shell.cc
   Utils.cc
