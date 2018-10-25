@@ -103,14 +103,26 @@ describe('RbdListComponent', () => {
     const addTask = (name: string, image_name: string) => {
       const task = new ExecutingTask();
       task.name = name;
-      task.metadata = {
-        pool_name: 'rbd',
-        image_name: image_name,
-        child_pool_name: 'rbd',
-        child_image_name: 'd',
-        dest_pool_name: 'rbd',
-        dest_image_name: 'd'
-      };
+      switch (task.name) {
+        case 'rbd/copy':
+          task.metadata = {
+            dest_pool_name: 'rbd',
+            dest_image_name: 'd'
+          };
+          break;
+        case 'rbd/clone':
+          task.metadata = {
+            child_pool_name: 'rbd',
+            child_image_name: 'd'
+          };
+          break;
+        default:
+          task.metadata = {
+            pool_name: 'rbd',
+            image_name: image_name
+          };
+          break;
+      }
       summaryService.addRunningTask(task);
     };
 

@@ -231,8 +231,24 @@ export class RbdListComponent implements OnInit {
   }
 
   itemFilter(entry, task) {
+    let pool_name_k: string;
+    let image_name_k: string;
+    switch (task.name) {
+      case 'rbd/copy':
+        pool_name_k = 'dest_pool_name';
+        image_name_k = 'dest_image_name';
+        break;
+      case 'rbd/clone':
+        pool_name_k = 'child_pool_name';
+        image_name_k = 'child_image_name';
+        break;
+      default:
+        pool_name_k = 'pool_name';
+        image_name_k = 'image_name';
+        break;
+    }
     return (
-      entry.pool_name === task.metadata['pool_name'] && entry.name === task.metadata['image_name']
+      entry.pool_name === task.metadata[pool_name_k] && entry.name === task.metadata[image_name_k]
     );
   }
 
