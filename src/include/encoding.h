@@ -1058,7 +1058,7 @@ decode(std::array<T, N>& v, bufferlist::iterator& p)
 #define ENCODE_FINISH(bl) ENCODE_FINISH_NEW_COMPAT(bl, 0)
 
 #define DECODE_ERR_OLDVERSION(func, v, compatv)					\
-  (std::string(func) + " no longer understand old encoding version " #v " < " #compatv)
+  (std::string(func) + " no longer understand old encoding version " #v " < " + std::to_string(compatv))
 
 #define DECODE_ERR_PAST(func) \
   (std::string(func) + " decode past end of struct encoding")
