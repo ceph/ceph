@@ -13,7 +13,7 @@
  *
  */
 #include "acconfig.h"
-
+#include <unistd.h>
 #include <fstream>
 #include <iostream>
 #include <errno.h>
@@ -7595,8 +7595,10 @@ bool OSD::scrub_load_below_threshold()
   }
 
   // allow scrub if below configured threshold
-  if (loadavgs[0] < cct->_conf->osd_scrub_load_threshold) {
-    dout(20) << __func__ << " loadavg " << loadavgs[0]
+  long cpus = sysconf(_SC_NPROCESSORS_ONLN);
+  double loadavg_per_cpu = cpus > 0 ? loadavgs[0] / cpus : loadavgs[0];
+  if (loadavg_per_cpu < cct->_conf->osd_scrub_load_threshold) {
+    dout(20) << __func__ << " loadavg per cpu " << loadavg_per_cpu
 	     << " < max " << cct->_conf->osd_scrub_load_threshold
 	     << " = yes" << dendl;
     return true;
