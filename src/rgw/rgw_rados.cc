@@ -6481,6 +6481,12 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl)
   if (r < 0)
     return r;
 
+  if (astate->size == 0) {
+    end = 0;
+  } else if (end >= (int64_t)astate->size) {
+    end = astate->size - 1;
+  }
+
   if (end < 0)
     len = 0;
   else
