@@ -127,8 +127,8 @@ ostream& operator<<(ostream& out, const CInode& in)
   if (in.get_projected_version() > in.get_version())
     out << " pv" << in.get_projected_version();
 
-  if (in.is_auth_pinned()) {
-    out << " ap=" << in.get_num_auth_pins() << "+" << in.get_num_nested_auth_pins();
+  if (in.get_num_auth_pins()) {
+    out << " ap=" << in.get_num_auth_pins();
 #ifdef MDS_AUTHPIN_SET
     in.print_authpin_set(out);
 #endif
@@ -2559,12 +2559,10 @@ void CInode::auth_pin(void *by)
   auth_pin_set.insert(by);
 #endif
 
-  dout(10) << "auth_pin by " << by << " on " << *this
-	   << " now " << auth_pins << "+" << nested_auth_pins
-	   << dendl;
+  dout(10) << "auth_pin by " << by << " on " << *this << " now " << auth_pins << dendl;
   
   if (parent)
-    parent->adjust_nested_auth_pins(1, 1, this);
+    parent->adjust_nested_auth_pins(1, this);
 }
 
 void CInode::auth_unpin(void *by) 
@@ -2582,14 +2580,12 @@ void CInode::auth_unpin(void *by)
   if (auth_pins == 0)
     put(PIN_AUTHPIN);
   
-  dout(10) << "auth_unpin by " << by << " on " << *this
-	   << " now " << auth_pins << "+" << nested_auth_pins
-	   << dendl;
+  dout(10) << "auth_unpin by " << by << " on " << *this << " now " << auth_pins << dendl;
   
   ceph_assert(auth_pins >= 0);
 
   if (parent)
-    parent->adjust_nested_auth_pins(-1, -1, by);
+    parent->adjust_nested_auth_pins(-1, by);
 
   if (is_freezing_inode() &&
       auth_pins == auth_pin_freeze_allowance) {
@@ -2601,31 +2597,6 @@ void CInode::auth_unpin(void *by)
     finish_waiting(WAIT_FROZEN);
   }  
 }
-
-void CInode::adjust_nested_auth_pins(int a, void *by)
-{
-  ceph_assert(a);
-  nested_auth_pins += a;
-  dout(35) << __func__ << " by " << by
-	   << " change " << a << " yields "
-	   << auth_pins << "+" << nested_auth_pins << dendl;
-  ceph_assert(nested_auth_pins >= 0);
-
-  if (g_conf()->mds_debug_auth_pins) {
-    // audit
-    int s = 0;
-    for (const auto &p : dirfrags) {
-      CDir *dir = p.second;
-      if (!dir->is_subtree_root() && dir->get_cum_auth_pins())
-	s++;
-    } 
-    ceph_assert(s == nested_auth_pins);
-  } 
-
-  if (parent)
-    parent->adjust_nested_auth_pins(a, 0, by);
-}
-
 
 // authority
 
