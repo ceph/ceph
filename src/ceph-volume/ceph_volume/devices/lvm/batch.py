@@ -263,6 +263,11 @@ class Batch(object):
             type=int,
             help='Override the "osd_journal_size" value, in megabytes'
         )
+        parser.add_argument(
+            '--prepare',
+            action='store_true',
+            help='Only prepare all OSDs, do not activate',
+        )
         args = parser.parse_args(self.argv)
 
         if not args.devices:
