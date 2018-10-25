@@ -705,9 +705,7 @@ rgw::IAM::Environment rgw_build_iam_environment(RGWRados* store,
     e.emplace("aws:Referer", i->second);
   }
 
-  // These seem to be the semantics, judging from rest_rgw_s3.cc
-  i = m.find("SERVER_PORT_SECURE");
-  if (i != m.end()) {
+  if (rgw_transport_is_secure(s->cct, *s->info.env)) {
     e.emplace("aws:SecureTransport", "true");
   }
 
