@@ -2024,16 +2024,19 @@ int CrushWrapper::get_new_bucket_id()
 void CrushWrapper::reweight(CephContext *cct)
 {
   set<int> roots;
-  find_roots(&roots);
-  for (set<int>::iterator p = roots.begin(); p != roots.end(); ++p) {
-    if (*p >= 0)
+  find_nonshadow_roots(&roots);
+  for (auto id : roots) {
+    if (id >= 0)
       continue;
-    crush_bucket *b = get_bucket(*p);
-    ldout(cct, 5) << "reweight bucket " << *p << dendl;
+    crush_bucket *b = get_bucket(id);
+    ldout(cct, 5) << "reweight root bucket " << id << dendl;
     int r = crush_reweight_bucket(crush, b);
     ceph_assert(r == 0);
   }
+  int r = rebuild_roots_with_classes();
+  ceph_assert(r == 0);
 }
+
 
 int CrushWrapper::add_simple_rule_at(
   string name, string root_name,
