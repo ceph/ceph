@@ -822,6 +822,7 @@ protected:
 
   // fake inode number for 32-bits ino_t
   void _assign_faked_ino(Inode *in);
+  void _assign_faked_root(Inode *in);
   void _release_faked_ino(Inode *in);
   void _reset_faked_inos();
   vinodeno_t _map_faked_ino(ino_t ino);
@@ -1253,6 +1254,7 @@ private:
   ceph::unordered_map<ino_t, vinodeno_t> faked_ino_map;
   interval_set<ino_t> free_faked_inos;
   ino_t last_used_faked_ino;
+  ino_t last_used_faked_root;
 
   // When an MDS has sent us a REJECT, remember that and don't
   // contact it again.  Remember which inst rejected us, so that

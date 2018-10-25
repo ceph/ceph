@@ -180,14 +180,17 @@ void Client::_reset_faked_inos()
   free_faked_inos.clear();
   free_faked_inos.insert(start, (uint32_t)-1 - start + 1);
   last_used_faked_ino = 0;
+  last_used_faked_root = 0;
   _use_faked_inos = sizeof(ino_t) < 8 || cct->_conf->client_use_faked_inos;
 }
 
 void Client::_assign_faked_ino(Inode *in)
 {
+  if (0 == last_used_faked_ino)
+    last_used_faked_ino = last_used_faked_ino + 2048; // start(1024)~2048 reserved for _assign_faked_root
   interval_set<ino_t>::const_iterator it = free_faked_inos.lower_bound(last_used_faked_ino + 1);
   if (it == free_faked_inos.end() && last_used_faked_ino > 0) {
-    last_used_faked_ino = 0;
+    last_used_faked_ino = 2048;
     it = free_faked_inos.lower_bound(last_used_faked_ino + 1);
   }
   ceph_assert(it != free_faked_inos.end());
@@ -199,6 +202,32 @@ void Client::_assign_faked_ino(Inode *in)
     ceph_assert(it.get_start() + it.get_len() > last_used_faked_ino);
   }
   in->faked_ino = last_used_faked_ino;
+  free_faked_inos.erase(in->faked_ino);
+  faked_ino_map[in->faked_ino] = in->vino();
+}
+
+/*
+ * In the faked mode, if you export multiple subdirectories,
+ * you will see that the inode numbers of the exported subdirectories
+ * are the same. so we distinguish the mount point by reserving 
+ * the "fake ids" between "1024~2048" and combining the last 
+ * 10bits(0x3ff) of the "root inodes".
+*/
+void Client::_assign_faked_root(Inode *in)
+{
+  interval_set<ino_t>::const_iterator it = free_faked_inos.lower_bound(last_used_faked_root + 1);
+  if (it == free_faked_inos.end() && last_used_faked_root > 0) {
+    last_used_faked_root = 0;
+    it = free_faked_inos.lower_bound(last_used_faked_root + 1);
+  }
+  assert(it != free_faked_inos.end());
+  vinodeno_t inode_info = in->vino();
+  uint64_t inode_num = (uint64_t)inode_info.ino;
+  ldout(cct, 10) << "inode_num " << inode_num << "inode_num & 0x3ff=" << (inode_num & 0x3ff)<< dendl;
+  last_used_faked_root = it.get_start()  + (inode_num & 0x3ff); // 0x3ff mask and get_start will not exceed 2048
+  assert(it.get_start() + it.get_len() > last_used_faked_root);
+
+  in->faked_ino = last_used_faked_root;
   free_faked_inos.erase(in->faked_ino);
   faked_ino_map[in->faked_ino] = in->vino();
 }
@@ -790,6 +819,8 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
 
     if (!root) {
       root = in;
+      if (use_faked_inos())
+        _assign_faked_root(root);
       root_ancestor = in;
       cwd = root;
     } else if (!mounted) {
