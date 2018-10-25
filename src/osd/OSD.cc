@@ -2055,7 +2055,7 @@ double OSD::get_tick_interval() const
 {
   // vary +/- 5% to avoid scrub scheduling livelocks
   constexpr auto delta = 0.05;
-  std::default_random_engine rng{whoami};
+  std::default_random_engine rng{static_cast<unsigned>(whoami)};
   return (OSD_TICK_INTERVAL *
           std::uniform_real_distribution<>{1.0 - delta, 1.0 + delta}(rng));
 }
