@@ -115,6 +115,7 @@ public:
   public:
     Pool() {}
 
+    int create();
     int create(const std::vector<rgw_pool>& pools, std::vector<int> *retcodes);
     int lookup();
 

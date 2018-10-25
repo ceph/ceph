@@ -206,6 +206,28 @@ uint64_t RGWSI_RADOS::Obj::get_last_version()
   return ref.ioctx.get_last_version();
 }
 
+int RGWSI_RADOS::Pool::create()
+{
+  librados::Rados *rad = rados_svc->get_rados_handle(rados_handle);
+  int r = rad->pool_create(pool.name.c_str());
+  if (r < 0) {
+    ldout(rados_svc->cct, 0) << "WARNING: pool_create returned " << r << dendl;
+    return r;
+  }
+  librados::IoCtx io_ctx;
+  r = rad->ioctx_create(pool.name.c_str(), io_ctx);
+  if (r < 0) {
+    ldout(rados_svc->cct, 0) << "WARNING: ioctx_create returned " << r << dendl;
+    return r;
+  }
+  r = io_ctx.application_enable(pg_pool_t::APPLICATION_NAME_RGW, false);
+  if (r < 0) {
+    ldout(rados_svc->cct, 0) << "WARNING: application_enable returned " << r << dendl;
+    return r;
+  }
+  return 0;
+}
+
 int RGWSI_RADOS::Pool::create(const vector<rgw_pool>& pools, vector<int> *retcodes)
 {
   vector<librados::PoolAsyncCompletion *> completions;
