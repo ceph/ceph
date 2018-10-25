@@ -6724,6 +6724,35 @@ void PG::_delete_some(ObjectStore::Transaction *t)
 {
   dout(10) << __func__ << dendl;
 
+  {
+    float osd_delete_sleep = osd->osd->get_osd_delete_sleep();
+    if (osd_delete_sleep > 0 && delete_needs_sleep) {
+      epoch_t e = get_osdmap()->get_epoch();
+      PGRef pgref(this);
+      auto delete_requeue_callback = new FunctionContext([this, pgref, e](int r) {
+        dout(20) << __func__ << " wake up at "
+                 << ceph_clock_now()
+	         << ", re-queuing delete" << dendl;
+        lock();
+        delete_needs_sleep = false;
+        if (!pg_has_reset_since(e)) {
+          osd->queue_for_pg_delete(get_pgid(), e);
+        }
+        unlock();
+      });
+
+      utime_t delete_schedule_time = ceph_clock_now();
+      delete_schedule_time += osd_delete_sleep;
+      Mutex::Locker l(osd->sleep_lock);
+      osd->sleep_timer.add_event_at(delete_schedule_time,
+	                                        delete_requeue_callback);
+      dout(20) << __func__ << " Delete scheduled at " << delete_schedule_time << dendl;
+      return;
+    }
+  }
+
+  delete_needs_sleep = true;
+
   vector<ghobject_t> olist;
   int max = std::min(osd->store->get_ideal_list_max(),
 		     (int)cct->_conf->osd_target_transaction_size);
