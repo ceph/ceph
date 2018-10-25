@@ -1,6 +1,5 @@
 import logging
-
-from itertools import chain
+import os.path
 
 from teuthology.config import config as teuth_config
 from teuthology.orchestra import run
@@ -148,48 +147,37 @@ def _update_package_list_and_install(ctx, remote, rpm, config):
         _yum_set_check_obsoletes(remote)
 
     if dist_release in ['opensuse', 'sle']:
-        remote.run(
-            args=[
-                'sudo', 'zypper', 'clean', '-a',
-            ])
+        remote.run(args='sudo zypper clean -a')
     else:
-        remote.run(
-            args=[
-                'sudo', 'yum', 'clean', 'all',
-            ])
+        remote.run(args='sudo yum clean all')
 
     ldir = _get_local_dir(config, remote)
 
     if dist_release in ['opensuse', 'sle']:
-        pkg_remove_cmd = 'sudo zypper -n remove --capability {pkg}'
-        pkg_install_cmd = 'sudo zypper -n --no-gpg-checks install --capability --no-recommends {pkg}'
+        remove_cmd = 'sudo zypper -n remove --capability'
+        install_cmd = 'sudo zypper -n --no-gpg-checks install --capability --no-recommends'
     else:
-        pkg_remove_cmd = 'sudo yum -y remove {pkg}'
-        pkg_install_cmd = 'sudo yum -y install {pkg}'
+        remove_cmd = 'sudo yum -y remove'
+        install_cmd = 'sudo yum -y install'
 
     for cpack in rpm:
-        pkg = None
         if ldir:
-            pkg = "{ldir}/{cpack}".format(
-                ldir=ldir,
-                cpack=cpack,
-            )
-            remote.run(
-                args=chain(
-                    ['if', 'test', '-e', run.Raw(pkg), run.Raw(';'), 'then'],
-                    pkg_remove_cmd.format(pkg=pkg).split(), [run.Raw(';')],
-                    pkg_install_cmd.format(pkg=pkg).split(), [run.Raw(';')],
-                    ['fi'])
-            )
-        if pkg is None:
-            remote.run(args=pkg_install_cmd.format(pkg=cpack).split())
+            remote.run(args='''
+              if test -e {pkg} ; then
+                {remove_cmd} {pkg} ;
+                {install_cmd} {pkg} ;
+              else
+                {install_cmd} {cpack} ;
+              fi
+            '''.format(remove_cmd=remove_cmd,
+                       install_cmd=install_cmd,
+                       pkg=os.path.join(ldir, cpack),
+                       cpack=cpack))
         else:
-            remote.run(
-                args=chain(
-                    ['if', 'test', run.Raw('!'), '-e', run.Raw(pkg), run.Raw(';'), 'then'],
-                    pkg_install_cmd.format(pkg=cpack).split(), [run.Raw(';')],
-                    ['fi'])
-            )
+            remote.run(args='''
+              {install_cmd} {cpack}
+            '''.format(install_cmd=install_cmd,
+                       cpack=cpack))
 
 
 def _yum_fix_repo_priority(remote, project, uri):
