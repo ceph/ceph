@@ -2,15 +2,9 @@ FIO
 ===
 
 Ceph uses the fio workload generator and benchmarking utility.
+(https://github.com/axboe/fio.git)
 
-To fetch the fio sources:
-
-    git clone git://git.kernel.dk/fio.git
-
-To build fio:
-
-    ./configure
-    make
+FIO tool is automatically fetched to build/src/fio, and build if necessary.
 
 RBD
 ---
@@ -31,6 +25,10 @@ To build fio with rbd:
 If configure fails with "Rados Block Device engine   no", see config.log for
 details and adjust the cflags as necessary.
 
+If ceph was compiled with tcmalloc, it may be necessary to compile fio with:
+    make EXTLIBS=tcmalloc
+Otherwise fio might crash in malloc_usable_size().
+
 To view the fio options specific to the rbd engine:
 
     ./fio --enghelp=rbd
@@ -49,18 +47,14 @@ Because the ObjectStore is not a public-facing interface, we build it inside
 of the ceph tree and load libfio_ceph_objectstore.so into fio as an external
 engine.
 
-To build fio_ceph_objectstore against external(downloadable) FIO source code:
+To build fio_ceph_objectstore run:
 ```
-  ./do_cmake.sh -DWITH_FIO=ON -DCMAKE_BUILD_TYPE=Release
+  ./do_cmake.sh -DWITH_FIO=ON
   cd build
-  make fio_ceph_objectstore install
+  make fio_ceph_objectstore
 ```
-To build against existing FIO source code:
-```
-  FIO_ROOT_DIR=<path to fio source code> ./do_cmake.sh -DWITH_SYSTEM_FIO=ON
-  cd build
-  make fio_ceph_objectstore install
-```
+This will fetch FIO to build/src/fio directory,
+compile fio tool and libfio_ceph_objectstore.so.
 
 If you install the ceph libraries to a location that isn't in your
 LD_LIBRARY_PATH, be sure to add it:
