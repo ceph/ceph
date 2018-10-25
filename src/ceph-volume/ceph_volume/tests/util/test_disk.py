@@ -45,6 +45,17 @@ class TestBlkid(object):
         assert result['UUID'] == '62416664-cbaf-40bd-9689-10bd337379c3'
         assert result['TYPE'] == 'xfs'
 
+class TestDeviceRecognition(object):
+
+    def test_marks_regular_disk_as_device(self, stub_call):
+        out = 'NAME="sda" TYPE="disk"',
+        stub_call((out, '', 0))
+        assert disk.is_device('/dev/sda')
+
+    def test_marks_loop_device_as_device(self, stub_call):
+        out = 'NAME="loop0" TYPE="loop"',
+        stub_call((out, '', 0))
+        assert disk.is_device('/dev/loop0')
 
 class TestDeviceFamily(object):
 
