@@ -437,6 +437,10 @@ public:
   }
 };
 
+// return true if the connection is secure. this either means that the
+// connection arrived via ssl, or was forwarded as https by a trusted proxy
+bool rgw_transport_is_secure(CephContext *cct, const RGWEnv& env);
+
 enum http_op {
   OP_GET,
   OP_PUT,
