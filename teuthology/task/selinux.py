@@ -94,6 +94,9 @@ class SELinux(Task):
         """
         log.info("Putting SELinux into %s mode", self.mode)
         for remote in self.cluster.remotes.iterkeys():
+            mode = self.old_modes[remote.name]
+            if mode == "Disabled" or mode == "disabled":
+                continue
             remote.run(
                 args=['sudo', '/usr/sbin/setenforce', self.mode],
             )
@@ -153,6 +156,8 @@ class SELinux(Task):
         log.info("Restoring old SELinux modes")
         for remote in self.cluster.remotes.iterkeys():
             mode = self.old_modes[remote.name]
+            if mode == "Disabled" or mode == "disabled":
+                continue
             if mode != self.mode:
                 remote.run(
                     args=['sudo', '/usr/sbin/setenforce', mode],
