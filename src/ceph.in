@@ -109,7 +109,7 @@ def get_cmake_variables(names):
             if line.startswith("{}:".format(name)):
                 vars[name] = line.split("=")[1].strip()
                 break
-        if all(vars.itervalues()):
+        if all(vars.values()):
             break
     return vars
 
