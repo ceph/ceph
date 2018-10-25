@@ -31,22 +31,23 @@ namespace ssl = boost::asio::ssl;
 
 template <typename Stream>
 class StreamIO : public rgw::asio::ClientIO {
+  CephContext* const cct;
   Stream& stream;
   beast::flat_buffer& buffer;
  public:
-  StreamIO(Stream& stream, rgw::asio::parser_type& parser,
+  StreamIO(CephContext *cct, Stream& stream, rgw::asio::parser_type& parser,
            beast::flat_buffer& buffer, bool is_ssl,
            const tcp::endpoint& local_endpoint,
            const tcp::endpoint& remote_endpoint)
       : ClientIO(parser, is_ssl, local_endpoint, remote_endpoint),
-        stream(stream), buffer(buffer)
+        cct(cct), stream(stream), buffer(buffer)
   {}
 
   size_t write_data(const char* buf, size_t len) override {
     boost::system::error_code ec;
     auto bytes = boost::asio::write(stream, boost::asio::buffer(buf, len), ec);
     if (ec) {
-      derr << "write_data failed: " << ec.message() << dendl;
+      ldout(cct, 4) << "write_data failed: " << ec.message() << dendl;
       throw rgw::io::Exception(ec.value(), std::system_category());
     }
     return bytes;
@@ -66,7 +67,7 @@ class StreamIO : public rgw::asio::ClientIO {
         break;
       }
       if (ec) {
-        derr << "failed to read body: " << ec.message() << dendl;
+        ldout(cct, 4) << "failed to read body: " << ec.message() << dendl;
         throw rgw::io::Exception(ec.value(), std::system_category());
       }
     }
@@ -137,7 +138,7 @@ void handle_connection(RGWProcessEnv& env, Stream& stream,
       RGWRequest req{env.store->get_new_req_id()};
 
       auto& socket = stream.lowest_layer();
-      StreamIO real_client{stream, parser, buffer, is_ssl,
+      StreamIO real_client{cct, stream, parser, buffer, is_ssl,
                            socket.local_endpoint(),
                            socket.remote_endpoint()};
 
