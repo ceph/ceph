@@ -130,7 +130,6 @@ protected:
     map<inodeno_t,map<client_t,Capability::Import> > peer_imported;
     MutationRef mut;
     size_t approx_size = 0;
-    size_t orig_size = 0;
     // for freeze tree deadlock detection
     utime_t last_cum_auth_pins_change;
     int last_cum_auth_pins = 0;
@@ -319,9 +318,6 @@ public:
   
   void maybe_split_export(CDir* dir, uint64_t max_size, bool null_okay,
 			  vector<pair<CDir*, size_t> >& results);
-  void restart_export_dir(CDir *dir, uint64_t tid);
-  bool adjust_export_size(export_state_t &stat, CDir *dir);
-  void adjust_export_after_rename(CInode* diri, CDir *olddir);
   void child_export_finish(std::shared_ptr<export_base_t>& parent, bool success);
 
   void get_export_lock_set(CDir *dir, MutationImpl::LockOpVec& lov);

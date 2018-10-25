@@ -42,7 +42,6 @@ void MDSCacheObject::dump(Formatter *f) const
   f->close_section();  // replica_state
 
   f->dump_int("auth_pins", auth_pins);
-  f->dump_int("nested_auth_pins", nested_auth_pins);
   f->dump_bool("is_frozen", is_frozen());
   f->dump_bool("is_freezing", is_freezing());
 
