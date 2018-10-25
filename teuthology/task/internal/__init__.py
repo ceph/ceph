@@ -82,8 +82,8 @@ def check_packages(ctx, config):
     # in the job config.
     if os_type and sha1:
         package = get_builder_project()("ceph", ctx.config)
-        template = "Checking packages for os_type,'{os}' flavor '{flav}' and" \
-            " ceph hash '{ver}'"
+        template = "Checking packages for os_type '{os}', " \
+            "flavor '{flav}' and ceph hash '{ver}'"
         log.info(
             template.format(
                 os=package.os_type,

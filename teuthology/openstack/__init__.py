@@ -34,6 +34,7 @@ import tempfile
 import teuthology
 import time
 import types
+import yaml
 
 from subprocess import CalledProcessError
 
@@ -231,8 +232,8 @@ class OpenStack(object):
             os.environ['OS_TOKEN_VALUE'] = OpenStack.token
             OpenStack.token_expires = int(time.time() + OpenStack.token_cache_duration)
             os.environ['OS_TOKEN_EXPIRES'] = str(OpenStack.token_expires)
-            log.info("caching OS_TOKEN_VALUE "
-                     "during %s seconds" % OpenStack.token_cache_duration)
+            log.debug("caching OS_TOKEN_VALUE "
+                      "during %s seconds" % OpenStack.token_cache_duration)
         return True
 
     def get_os_url(self, cmd, type=None):
@@ -551,6 +552,64 @@ class TeuthologyOpenStack(OpenStack):
                 self.teardown()
         return exit_code
 
+    def _upload_yaml_file(self, fp):
+        """
+        Given an absolute path fp, assume it is a YAML file existing
+        on the local machine and upload it to the remote teuthology machine
+        (see https://github.com/SUSE/teuthology/issues/56 for details)
+        """
+        f = open(fp, 'r') # will throw exception on failure
+        f.close()
+        log.info("Detected local YAML file {}".format(fp))
+        machine = self.username + "@" + self.instance.get_floating_ip_or_ip()
+
+        sshopts=('-o ConnectTimeout=3 -o UserKnownHostsFile=/dev/null '
+                 '-o StrictHostKeyChecking=no')
+
+        def ssh_command(s):
+            return "ssh {o} -i {k} {m} sh -c \\\"{s}\\\"".format(
+                o=sshopts,
+                k=self.key_filename,
+                m=machine,
+                s=s,
+            )
+
+        log.info("Uploading local file {} to teuthology machine".format(fp))
+        remote_fp=os.path.normpath(
+            '/home/{un}/yaml/{fp}'.format(
+                un=self.username,
+                fp=fp,
+            )
+        )
+        command = ssh_command("stat {aug_fp}".format(
+            aug_fp=remote_fp,
+        ))
+        try:
+            misc.sh(command)
+        except:
+            pass
+        else:
+            log.warning(
+                ('{fp} probably already exists remotely as {aug_fp}; '
+                 'the remote one will be clobbered').format(
+                fp=fp,
+                aug_fp=remote_fp,
+            ))
+        remote_dn=os.path.dirname(remote_fp)
+        command = ssh_command("mkdir -p {aug_dn}".format(
+            aug_dn=remote_dn,
+        ))
+        misc.sh(command) # will throw exception on failure
+        command = "scp {o} -i {k} {yamlfile} {m}:{dn}".format(
+            o=sshopts,
+            k=self.key_filename,
+            yamlfile=fp,
+            m=machine,
+            dn=remote_dn,
+        )
+        misc.sh(command) # will throw exception on failure
+        return remote_fp
+
     def run_suite(self):
         """
         Delegate running teuthology-suite to the OpenStack instance
@@ -562,19 +621,46 @@ class TeuthologyOpenStack(OpenStack):
             if original_argv[0] in ('--name',
                                     '--teuthology-branch',
                                     '--teuthology-git-url',
+                                    '--test-repo',
                                     '--archive-upload',
                                     '--archive-upload-url',
                                     '--key-name',
                                     '--key-filename',
-                                    '--simultaneous-jobs',
-                                    '--ceph-git-url',
-                                    '--ceph-qa-suite-git-url'):
+                                    '--simultaneous-jobs'):
                 del original_argv[0:2]
             elif original_argv[0] in ('--teardown',
                                       '--upload'):
                 del original_argv[0]
+            elif os.path.isabs(original_argv[0]):
+                remote_path = self._upload_yaml_file(original_argv[0])
+                argv.append(remote_path)
+                original_argv.pop(0)
             else:
                 argv.append(original_argv.pop(0))
+        if self.args.test_repo:
+            repos = [{'name':k, 'url': v}
+                                    for k, v in [x.split(':', 1)
+                                    for x in self.args.test_repo]]
+            log.info("Using repos: %s" % self.args.test_repo)
+
+            overrides = {
+                'overrides': {
+                    'install': {
+                        'repos' : repos
+                    }
+                }
+            }
+            yaml_data = yaml.dump(overrides, default_flow_style=False)
+            with tempfile.NamedTemporaryFile(mode='w+b',
+                                             suffix='-artifact.yaml',
+                                             delete=False) as f:
+                yaml_file = f.name
+                log.debug("Using file " + yaml_file)
+                print >> f, yaml_data
+
+            path = self._upload_yaml_file(yaml_file)
+            argv.append(path)
+
         #
         # If --upload, provide --archive-upload{,-url} regardless of
         # what was originally provided on the command line because the
@@ -584,15 +670,20 @@ class TeuthologyOpenStack(OpenStack):
         if self.args.upload:
             argv.extend(['--archive-upload', self.args.archive_upload,
                          '--archive-upload-url', self.args.archive_upload_url])
-        for arg in ('ceph_git_url', 'ceph_qa_suite_git_url'):
-            if getattr(self.args, arg):
-                command = (
-                    "perl -pi -e 's|.*{arg}.*|{arg}: {value}|'"
-                    " ~/.teuthology.yaml"
-                ).format(arg=arg, value=getattr(self.args, arg))
-                self.ssh(command)
-        argv.append('/home/' + self.username +
-                    '/teuthology/teuthology/openstack/openstack.yaml')
+        ceph_repo = getattr(self.args, 'ceph_repo')
+        if ceph_repo:
+            command = (
+                "perl -pi -e 's|.*{opt}.*|{opt}: {value}|'"
+                " ~/.teuthology.yaml"
+            ).format(opt='ceph_git_url', value=ceph_repo)
+            self.ssh(command)
+        user_home = '/home/' + self.username
+        openstack_home = user_home + '/teuthology/teuthology/openstack'
+        if self.args.test_repo:
+            argv.append(openstack_home + '/openstack-basic.yaml')
+        else:
+            argv.append(openstack_home + '/openstack-basic.yaml')
+            argv.append(openstack_home + '/openstack-buildpackages.yaml')
         command = (
             "source ~/.bashrc_teuthology ; " + self.teuthology_suite + " " +
             " --machine-type openstack " +

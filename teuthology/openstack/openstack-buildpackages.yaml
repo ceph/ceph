@@ -1,0 +1,10 @@
+tasks:
+   - buildpackages:
+       good_machine:
+         disk: 100 # GB
+         ram: 15000 # MB
+         cpus: 16
+       min_machine:
+         disk: 100 # GB
+         ram: 8000 # MB
+         cpus: 1

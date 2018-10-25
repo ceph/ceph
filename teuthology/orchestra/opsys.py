@@ -42,6 +42,10 @@ DISTRO_CODENAME_MAP = {
         "42.2": "leap",
         "42.3": "leap",
     },
+    "sle": {
+        "12.2": "sle",
+        "12.3": "sle",
+    },
     "opensuse-leap": {
         "42.2": "leap",
         "42.3": "leap",
@@ -53,8 +57,8 @@ DEFAULT_OS_VERSION = dict(
     ubuntu="16.04",
     fedora="25",
     centos="7.4",
-    opensuse="12.2",
-    sles="11-sp2",
+    opensuse="42.1",
+    sle="12.3",
     rhel="7.4",
     debian='8.0'
 )
@@ -71,7 +75,7 @@ class OS(object):
     __slots__ = ['name', 'version', 'codename', 'package_type']
 
     _deb_distros = ('debian', 'ubuntu')
-    _rpm_distros = ('fedora', 'rhel', 'centos', 'opensuse', 'opensuse-leap')
+    _rpm_distros = ('fedora', 'rhel', 'centos', 'opensuse', 'opensuse-leap', 'sles')
 
     def __init__(self, name=None, version=None, codename=None):
         self.name = name
@@ -82,7 +86,7 @@ class OS(object):
     @staticmethod
     def _version_to_codename(name, version):
         for (_version, codename) in DISTRO_CODENAME_MAP[name].iteritems():
-            if version == _version or version.split('.')[0] == _version:
+            if str(version) == _version or str(version).split('.')[0] == _version:
                 return codename
 
     @staticmethod
@@ -117,8 +121,10 @@ class OS(object):
         name = cls._get_value(str_, 'Distributor ID')
         if name == 'RedHatEnterpriseServer':
             name = 'rhel'
-	elif name.startswith('openSUSE'):
-	    name = 'opensuse'
+        elif name.startswith('openSUSE'):
+            name = 'opensuse'
+        elif name.startswith('SUSE'):
+            name = 'sle'
         name = name.lower()
 
         version = cls._get_value(str_, 'Release')
@@ -149,6 +155,8 @@ class OS(object):
         """
         str_ = os_release_str.strip()
         name = cls._get_value(str_, 'ID').lower()
+        if name == 'sles':
+            name = 'sle'
         version = cls._get_value(str_, 'VERSION_ID')
         obj = cls(name=name, version=version)
 
