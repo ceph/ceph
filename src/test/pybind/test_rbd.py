@@ -1762,6 +1762,10 @@ class TestMirroring(object):
         states = self.rbd.mirror_image_status_summary(ioctx)
         eq([(MIRROR_IMAGE_STATUS_STATE_UNKNOWN, 1)], states)
 
+        assert_raises(ImageNotFound, self.image.mirror_image_get_instance_id)
+        instance_ids = list(self.rbd.mirror_image_instance_id_list(ioctx))
+        eq(0, len(instance_ids))
+
         N = 65
         for i in range(N):
             self.rbd.create(ioctx, image_name + str(i), IMG_SIZE, IMG_ORDER,
