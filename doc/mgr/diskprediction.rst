@@ -10,18 +10,22 @@ Enabling
 ========
 
 Run the following command to enable the *diskprediction* module in the Ceph
-environment:
-
-::
+environment::
 
     ceph mgr module enable diskprediction
 
 
-Select the prediction mode:
+Select the prediction mode::
 
-::
+    ceph config set global device_health_prediction_mode local
 
-    ceph device set-prediction-mode <local/cloud>
+or::
+  
+    ceph config set global device_health_prediction_mode cloud
+
+To disable prediction,::
+
+  ceph config set global device_health_prediction_mode none
 
 
 Connection settings
