@@ -1,5 +1,7 @@
 import logging
 
+from itertools import chain
+
 from teuthology.config import config as teuth_config
 from teuthology.orchestra import run
 from teuthology import packaging
@@ -159,17 +161,11 @@ def _update_package_list_and_install(ctx, remote, rpm, config):
     ldir = _get_local_dir(config, remote)
 
     if dist_release in ['opensuse', 'sle']:
-        pkg_mng_cmd = 'zypper'
-        pkg_mng_opts = '-n'
-        pkg_mng_gpg_opt = '--no-gpg-checks'
-        pkg_mng_subcommand_opts = '--capability'
-        pkg_mng_install_opts = '--no-recommends'
+        pkg_remove_cmd = 'sudo zypper -n remove --capability {pkg}'
+        pkg_install_cmd = 'sudo zypper -n --no-gpg-checks install --capability --no-recommends {pkg}'
     else:
-        pkg_mng_cmd = 'yum'
-        pkg_mng_opts = '-y'
-        pkg_mng_gpg_opt = ''
-        pkg_mng_subcommand_opts = ''
-        pkg_mng_install_opts = ''
+        pkg_remove_cmd = 'sudo yum -y remove {pkg}'
+        pkg_install_cmd = 'sudo yum -y install {pkg}'
 
     for cpack in rpm:
         pkg = None
@@ -179,28 +175,21 @@ def _update_package_list_and_install(ctx, remote, rpm, config):
                 cpack=cpack,
             )
             remote.run(
-                args=['if', 'test', '-e',
-                      run.Raw(pkg), run.Raw(';'), 'then',
-                      'sudo', pkg_mng_cmd, pkg_mng_opts, 'remove',
-                      pkg_mng_subcommand_opts, pkg, run.Raw(';'),
-                      'sudo', pkg_mng_cmd, pkg_mng_opts, pkg_mng_gpg_opt, 'install',
-                      pkg_mng_subcommand_opts, pkg_mng_install_opts,
-                      pkg, run.Raw(';'),
-                      'fi']
+                args=chain(
+                    ['if', 'test', '-e', run.Raw(pkg), run.Raw(';'), 'then'],
+                    pkg_remove_cmd.format(pkg=pkg).split(), [run.Raw(';')],
+                    pkg_install_cmd.format(pkg=pkg).split(), [run.Raw(';')],
+                    ['fi'])
             )
         if pkg is None:
-            remote.run(args=[
-                'sudo', pkg_mng_cmd, pkg_mng_opts, pkg_mng_gpg_opt, 'install',
-                pkg_mng_subcommand_opts, pkg_mng_install_opts, cpack
-            ])
+            remote.run(args=pkg_install_cmd.format(pkg=cpack).split())
         else:
             remote.run(
-                args=['if', 'test', run.Raw('!'), '-e',
-                      run.Raw(pkg), run.Raw(';'), 'then',
-                      'sudo', pkg_mng_cmd, pkg_mng_opts, 'install',
-                      pkg_mng_subcommand_opts, pkg_mng_install_opts,
-                      cpack, run.Raw(';'),
-                      'fi'])
+                args=chain(
+                    ['if', 'test', run.Raw('!'), '-e', run.Raw(pkg), run.Raw(';'), 'then'],
+                    pkg_install_cmd.format(pkg=cpack).split(), [run.Raw(';')],
+                    ['fi'])
+            )
 
 
 def _yum_fix_repo_priority(remote, project, uri):
