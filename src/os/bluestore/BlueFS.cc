@@ -1634,10 +1634,9 @@ void BlueFS::_rewrite_log_sync(bool allocate_with_fallback,
   uint64_t need = bl.length() + cct->_conf->bluefs_max_log_runway;
   dout(20) << __func__ << " need " << need << dendl;
 
-  mempool::bluefs::vector<bluefs_extent_t> old_extents;
-  uint64_t old_allocated = 0;
+  bluefs_fnode_t old_fnode;
   int r;
-  log_file->fnode.swap_extents(old_extents, old_allocated);
+  log_file->fnode.swap_extents(old_fnode);
   if (allocate_with_fallback) {
     r = _allocate(log_dev, need, &log_file->fnode);
     ceph_assert(r == 0);
@@ -1684,8 +1683,8 @@ void BlueFS::_rewrite_log_sync(bool allocate_with_fallback,
   _write_super(super_dev);
   flush_bdev();
 
-  dout(10) << __func__ << " release old log extents " << old_extents << dendl;
-  for (auto& r : old_extents) {
+  dout(10) << __func__ << " release old log extents " << old_fnode.extents << dendl;
+  for (auto& r : old_fnode.extents) {
     pending_release[r.bdev].insert(r.offset, r.length);
   }
 }
