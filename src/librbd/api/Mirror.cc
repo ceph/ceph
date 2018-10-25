@@ -465,6 +465,38 @@ int Mirror<I>::image_get_status(I *ictx, mirror_image_status_t *status) {
 }
 
 template <typename I>
+int Mirror<I>::image_get_instance_id(I *ictx, std::string *instance_id) {
+  CephContext *cct = ictx->cct;
+  ldout(cct, 20) << "ictx=" << ictx << dendl;
+
+  cls::rbd::MirrorImage mirror_image;
+  int r = cls_client::mirror_image_get(&ictx->md_ctx, ictx->id, &mirror_image);
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "failed to retrieve mirroring state: " << cpp_strerror(r)
+               << dendl;
+    return r;
+  } else if (mirror_image.state != cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
+    lderr(cct) << "mirroring is not currently enabled" << dendl;
+    return -EINVAL;
+  }
+
+  entity_inst_t instance;
+  r = cls_client::mirror_image_instance_get(&ictx->md_ctx,
+                                            mirror_image.global_image_id,
+                                            &instance);
+  if (r < 0) {
+    if (r != -ENOENT && r != -ESTALE) {
+      lderr(cct) << "failed to get mirror image instance: " << cpp_strerror(r)
+                 << dendl;
+    }
+    return r;
+  }
+
+  *instance_id = stringify(instance.name.num());
+  return 0;
+}
+
+template <typename I>
 int Mirror<I>::mode_get(librados::IoCtx& io_ctx,
                         rbd_mirror_mode_t *mirror_mode) {
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
@@ -867,6 +899,28 @@ int Mirror<I>::image_status_summary(librados::IoCtx& io_ctx,
   for (auto &s : states_) {
     (*states)[static_cast<mirror_image_status_state_t>(s.first)] = s.second;
   }
+  return 0;
+}
+
+template <typename I>
+int Mirror<I>::image_instance_id_list(
+    librados::IoCtx& io_ctx, const std::string &start_image_id, size_t max,
+    std::map<std::string, std::string> *instance_ids) {
+  CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
+  std::map<std::string, entity_inst_t> instances;
+
+  int r = librbd::cls_client::mirror_image_instance_list(
+      &io_ctx, start_image_id, max, &instances);
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "failed to list mirror image instances: " << cpp_strerror(r)
+               << dendl;
+    return r;
+  }
+
+  for (auto it : instances) {
+    (*instance_ids)[it.first] = stringify(it.second.name.num());
+  }
+
   return 0;
 }
 
