@@ -23,18 +23,14 @@ Ceph Conf: {ceph_path}
 {warning}
     """
 
-    def __init__(self, argv=None, parse=True):
+    def __init__(self):
         self.mapper = {
             'lvm': devices.lvm.LVM,
             'simple': devices.simple.Simple,
         }
         self.plugin_help = "No plugins found/loaded"
-        if argv is None:
-            self.argv = sys.argv
-        else:
-            self.argv = argv
-        if parse:
-            self.main(self.argv)
+        self.argv = sys.argv
+        self.main()
 
     def help(self, warning=False):
         warning = 'See "ceph-volume --help" for full list of options.' if warning else ''
@@ -93,7 +89,7 @@ Ceph Conf: {ceph_path}
         return pruned_args[:slice_on_index], pruned_args[slice_on_index:]
 
     @catches()
-    def main(self, argv):
+    def main(self):
         # these need to be available for the help, which gets parsed super
         # early
         configuration.load_ceph_conf_path()
@@ -102,7 +98,7 @@ Ceph Conf: {ceph_path}
         main_args, subcommand_args = self._get_split_args()
         # no flags where passed in, return the help menu instead of waiting for
         # argparse which will end up complaning that there are no args
-        if len(argv) <= 1:
+        if len(self.argv) <= 1:
             print(self.help(warning=True))
             return
         parser = argparse.ArgumentParser(

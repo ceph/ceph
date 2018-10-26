@@ -15,6 +15,7 @@ setup(
     zip_safe = False,
     tests_require=[
         'pytest >=2.1.3',
+        "mock; python_version < '3.4'",
         'tox',
     ],
     scripts = ['bin/ceph-volume', 'bin/ceph-volume-systemd'],
