@@ -1,9 +1,12 @@
 from __future__ import print_function
 import argparse
 import base64
+import grp
 import json
 import logging
 import os
+import pwd
+import stat
 from textwrap import dedent
 from ceph_volume import decorators, terminal, conf
 from ceph_volume.api import lvm
@@ -263,6 +266,15 @@ class Scan(object):
             with open(json_path, 'w') as fp:
                 json.dump(osd_metadata, fp, indent=4, sort_keys=True, ensure_ascii=False)
                 fp.write(os.linesep)
+            try:
+                os.chown(json_path, args.owner, args.group)
+                os.chmod(json_path, stat.S_IRUSR)  # 0400
+            except OSError as e:
+                msg = "Failed to set owner/group/permissions of %s: %s" % (
+                    json_path, str(e))
+                logger.warning(msg)
+                terminal.warning(msg)
+
             terminal.success(
                 'OSD %s got scanned and metadata persisted to file: %s' % (
                     osd_id,
@@ -323,6 +335,16 @@ class Scan(object):
             '--stdout',
             action='store_true',
             help='Do not save to a file, output metadata to stdout'
+        )
+        parser.add_argument(
+            '--owner', default="ceph",
+            type=lambda x: pwd.getpwnam(x).pw_uid,
+            help='owner of the JSON file'
+        )
+        parser.add_argument(
+            '--group', default="ceph",
+            type=lambda x: grp.getgrnam(x).gr_gid,
+            help='group of the JSON file'
         )
 
         parser.add_argument(
