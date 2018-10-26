@@ -3,22 +3,11 @@ from __future__ import absolute_import
 
 from . import ApiController, AuthRequired, RESTController
 from .. import mgr
+from ..services.ceph_service import CephService
 
 
 class PerfCounter(RESTController):
     service_type = None  # type: str
-
-    def _get_rate(self, daemon_type, daemon_name, stat):
-        data = mgr.get_counter(daemon_type, daemon_name, stat)[stat]
-        if data and len(data) > 1:
-            return (data[-1][1] - data[-2][1]) / float(data[-1][0] - data[-2][0])
-        return 0
-
-    def _get_latest(self, daemon_type, daemon_name, stat):
-        data = mgr.get_counter(daemon_type, daemon_name, stat)[stat]
-        if data:
-            return data[-1][1]
-        return 0
 
     def get(self, service_id):
         schema_dict = mgr.get_perf_schema(self.service_type, str(service_id))
@@ -31,11 +20,11 @@ class PerfCounter(RESTController):
             counter['description'] = value['description']
             # pylint: disable=W0212
             if mgr._stattype_to_str(value['type']) == 'counter':
-                counter['value'] = self._get_rate(
+                counter['value'] = CephService.get_rate(
                     self.service_type, service_id, key)
                 counter['unit'] = mgr._unit_to_str(value['units'])
             else:
-                counter['value'] = self._get_latest(
+                counter['value'] = mgr.get_latest(
                     self.service_type, service_id, key)
                 counter['unit'] = ''
             counters.append(counter)
