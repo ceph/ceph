@@ -132,6 +132,7 @@ public:
   virtual void chain_cb(const string& key, void *data) = 0;
   virtual void invalidate(const string& key) = 0;
   virtual void invalidate_all() = 0;
+  virtual void unregistered() {}
 
   struct Entry {
     RGWChainedCache *cache;
@@ -173,8 +174,10 @@ class ObjectCache {
   void invalidate_lru(ObjectCacheEntry& entry);
 
   void do_invalidate_all();
+
 public:
   ObjectCache() : lru_size(0), lru_counter(0), lru_window(0), lock("ObjectCache"), cct(NULL), enabled(false) { }
+  ~ObjectCache();
   int get(const std::string& name, ObjectCacheInfo& bl, uint32_t mask, rgw_cache_entry_info *cache_info);
   std::optional<ObjectCacheInfo> get(const std::string& name) {
     std::optional<ObjectCacheInfo> info{std::in_place};

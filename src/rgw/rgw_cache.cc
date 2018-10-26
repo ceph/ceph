@@ -329,8 +329,16 @@ void ObjectCache::unchain_cache(RGWChainedCache *cache) {
   for (; iter != chained_cache.end(); ++iter) {
     if (cache == *iter) {
       chained_cache.erase(iter);
+      cache->unregistered();
       return;
     }
+  }
+}
+
+ObjectCache::~ObjectCache()
+{
+  for (auto cache : chained_cache) {
+    cache->unregistered();
   }
 }
 

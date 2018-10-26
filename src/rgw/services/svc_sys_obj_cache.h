@@ -112,6 +112,10 @@ public:
     svc->unregister_chained_cache(this);
   }
 
+  void unregistered() override {
+    svc = nullptr;
+  }
+
   void init(RGWSI_SysObj_Cache *_svc) {
     if (!_svc) {
       return;
