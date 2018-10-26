@@ -5,6 +5,7 @@
 #include "AsyncMessenger.h"
 
 #include "common/errno.h"
+#include "include/random.h"
 
 #define dout_subsys ceph_subsys_ms
 #undef dout_prefix
@@ -31,6 +32,8 @@ ProtocolV2::ProtocolV2(AsyncConnection *connection)
     : Protocol(2, connection),
       temp_buffer(nullptr),
       state(NONE),
+      peer_required_features(0),
+      cookie(0),
       bannerExchangeCallback(nullptr),
       next_frame_len(0) {
   temp_buffer = new char[4096];
@@ -200,7 +203,8 @@ unsigned banner_prefix_len = strlen(CEPH_BANNER_V2_PREFIX);
 
   ldout(cct, 1) << __func__ << " banner peer_type=" << (int)peer_type
                 << " supported=" << std::hex << peer_supported_features
-                << " required=" << std::hex << peer_required_features << dendl;
+                << " required=" << std::hex << peer_required_features
+                << std::dec << dendl;
 
   if (connection->get_peer_type() == -1) {
     connection->set_peer_type(peer_type);
@@ -224,7 +228,7 @@ unsigned banner_prefix_len = strlen(CEPH_BANNER_V2_PREFIX);
     ldout(cct, 1) << __func__ << " peer does not support all required features"
                   << " required=" << std::hex << required_features
                   << " supported=" << std::hex << peer_supported_features
-                  << dendl;
+                  << std::dec << dendl;
     stop();
     connection->dispatch_queue->queue_reset(connection);
     return nullptr;
@@ -292,6 +296,10 @@ CtPtr ProtocolV2::handle_frame(char *buffer, int r) {
       return handle_auth_more(buffer, payload_len);
     case Tag::AUTH_DONE:
       return handle_auth_done(buffer, payload_len);
+    case Tag::IDENT:
+      return handle_ident(buffer, payload_len);
+    case Tag::IDENT_MISSING_FEATURES:
+      return handle_ident_missing_features(buffer, payload_len);
     default:
       ceph_abort();
   }
@@ -347,6 +355,16 @@ CtPtr ProtocolV2::handle_auth_more_write(int r) {
   }
 
   return CONTINUE(read_frame);
+}
+
+CtPtr ProtocolV2::handle_ident(char *payload, uint32_t length) {
+  if (state == CONNECTING) {
+    return handle_server_ident(payload, length);
+  }
+  if (state == ACCEPTING) {
+    return handle_client_ident(payload, length);
+  }
+  ceph_abort("wrong state at handle_ident");
 }
 
 /* Client Protocol Methods */
@@ -440,7 +458,74 @@ CtPtr ProtocolV2::handle_auth_done(char *payload, uint32_t length) {
 CtPtr ProtocolV2::send_client_ident() {
   ldout(cct, 20) << __func__ << dendl;
 
-  return nullptr;
+  uint64_t flags = 0;
+  if (connection->policy.lossy) {
+    flags |= CEPH_MSG_CONNECT_LOSSY;
+  }
+
+  cookie = ceph::util::generate_random_number<uint64_t>(0, -1ll);
+
+  IdentFrame ident(messenger->get_myaddrs(), messenger->get_myname().num(),
+                   connection->policy.features_supported,
+                   connection->policy.features_required, flags, cookie);
+
+  ldout(cct, 5) << __func__ << " sending identification: "
+                << "addrs: " << ident.addrs << " gid: " << ident.gid
+                << " features_supported: " << std::hex
+                << ident.supported_features
+                << " features_required: " << ident.required_features
+                << " flags: " << ident.flags << " cookie: " << std::dec
+                << ident.cookie << dendl;
+
+  bufferlist bl = ident.to_bufferlist();
+  return WRITE(bl, handle_client_ident_write);
+}
+
+CtPtr ProtocolV2::handle_client_ident_write(int r) {
+  ldout(cct, 20) << __func__ << " r=" << r << dendl;
+
+  if (r < 0) {
+    ldout(cct, 1) << __func__ << " client ident write failed r=" << r << " ("
+                  << cpp_strerror(r) << ")" << dendl;
+    return _fault();
+  }
+
+  return CONTINUE(read_frame);
+}
+
+CtPtr ProtocolV2::handle_ident_missing_features(char *payload,
+                                                uint32_t length) {
+  ldout(cct, 20) << __func__ << " payload_len=" << length << dendl;
+
+  IdentMissingFeaturesFrame ident_missing(payload, length);
+  lderr(cct) << __func__
+             << " client does not support all server features: " << std::hex
+             << ident_missing.features << std::dec << dendl;
+
+  return _fault();
+}
+
+CtPtr ProtocolV2::handle_server_ident(char *payload, uint32_t length) {
+  ldout(cct, 20) << __func__ << " payload_len=" << length << dendl;
+
+  IdentFrame server_ident(payload, length);
+  ldout(cct, 5) << __func__ << " received server identification: "
+                << "addrs: " << server_ident.addrs
+                << " gid: " << server_ident.gid
+                << " features_supported: " << std::hex
+                << server_ident.supported_features
+                << " features_required: " << server_ident.required_features
+                << " flags: " << server_ident.flags << " cookie: " << std::dec
+                << server_ident.cookie << dendl;
+
+  connection->set_peer_addrs(server_ident.addrs);
+  connection->peer_global_id = server_ident.gid;
+  connection->set_features(server_ident.required_features &
+                           connection->policy.features_supported);
+
+  state = READY;
+
+  return CONTINUE(read_frame);
 }
 
 /* Server Protocol Methods */
@@ -568,5 +653,89 @@ CtPtr ProtocolV2::handle_auth_done_write(int r) {
     return _fault();
   }
 
-  return nullptr;
+  return CONTINUE(read_frame);
+}
+
+CtPtr ProtocolV2::handle_client_ident(char *payload, uint32_t length) {
+  ldout(cct, 20) << __func__ << " payload_len=" << std::dec << length << dendl;
+
+  IdentFrame client_ident(payload, length);
+
+  ldout(cct, 5) << __func__ << " received client identification: "
+                << "addrs: " << client_ident.addrs
+                << " gid: " << client_ident.gid
+                << " features_supported: " << std::hex
+                << client_ident.supported_features
+                << " features_required: " << client_ident.required_features
+                << " flags: " << client_ident.flags << " cookie: " << std::dec
+                << client_ident.cookie << dendl;
+
+  if (client_ident.addrs.empty()) {
+    connection->set_peer_addr(connection->target_addr);
+  } else {
+    // Should we check if one of the ident.addrs match connection->target_addr
+    // as we do in ProtocolV1?
+    connection->set_peer_addrs(client_ident.addrs);
+  }
+
+  uint64_t feat_missing = connection->policy.features_required &
+                          ~(uint64_t)client_ident.supported_features;
+  if (feat_missing) {
+    ldout(cct, 1) << __func__ << " peer missing required features " << std::hex
+                  << feat_missing << std::dec << dendl;
+    IdentMissingFeaturesFrame ident_missing_features(feat_missing);
+
+    bufferlist bl;
+    bl = ident_missing_features.to_bufferlist();
+    return WRITE(bl, handle_ident_missing_features_write);
+  }
+
+  // if everything is OK reply with server identification
+  connection->peer_global_id = client_ident.gid;
+  cookie = client_ident.cookie;
+
+  uint64_t flags = 0;
+  if (connection->policy.lossy) {
+    flags = flags | CEPH_MSG_CONNECT_LOSSY;
+  }
+  IdentFrame ident(messenger->get_myaddrs(), messenger->get_myname().num(),
+                   connection->policy.features_supported,
+                   connection->policy.features_required, flags, cookie);
+
+  ldout(cct, 5) << __func__ << " sending identification: "
+                << "addrs: " << ident.addrs << " gid: " << ident.gid
+                << " features_supported: " << std::hex
+                << ident.supported_features
+                << " features_required: " << ident.required_features
+                << " flags: " << ident.flags << " cookie: " << std::dec
+                << ident.cookie << dendl;
+
+  bufferlist bl = ident.to_bufferlist();
+  return WRITE(bl, handle_send_server_ident_write);
+}
+
+CtPtr ProtocolV2::handle_ident_missing_features_write(int r) {
+  ldout(cct, 20) << __func__ << " r=" << r << dendl;
+
+  if (r < 0) {
+    ldout(cct, 1) << __func__ << " ident missing features write failed r=" << r
+                  << " (" << cpp_strerror(r) << ")" << dendl;
+    return _fault();
+  }
+
+  return CONTINUE(read_frame);
+}
+
+CtPtr ProtocolV2::handle_send_server_ident_write(int r) {
+  ldout(cct, 20) << __func__ << " r=" << r << dendl;
+
+  if (r < 0) {
+    ldout(cct, 1) << __func__ << " server ident write failed r=" << r << " ("
+                  << cpp_strerror(r) << ")" << dendl;
+    return _fault();
+  }
+
+  state = READY;
+
+  return CONTINUE(read_frame);
 }
