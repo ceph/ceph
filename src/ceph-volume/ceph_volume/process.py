@@ -103,7 +103,8 @@ def obfuscate(command_, on=None):
     return "Running command: %s" % ' '.join(command)
 
 
-def run(command, **kw):
+def run(command, stop_on_error=True, obfuscate=None, fail_msg=None,
+        terminal_logging=True, **popen_kwargs):
     """
     A real-time-logging implementation of a remote subprocess.Popen call where
     a command is just executed on the remote end and no other handling is done.
@@ -114,19 +115,16 @@ def run(command, **kw):
     """
     executable = which(command.pop(0))
     command.insert(0, executable)
-    stop_on_error = kw.pop('stop_on_error', True)
-    command_msg = obfuscate(command, kw.pop('obfuscate', None))
-    fail_msg = kw.pop('fail_msg', None)
+    command_msg = obfuscate(command, obfuscate)
     logger.info(command_msg)
     terminal.write(command_msg)
-    terminal_logging = kw.pop('terminal_logging', True)
 
     process = subprocess.Popen(
         command,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         close_fds=True,
-        **kw
+        **popen_kwargs
     )
 
     while True:
@@ -157,7 +155,8 @@ def run(command, **kw):
             logger.warning(msg)
 
 
-def call(command, **kw):
+def call(command, terminal_verbose=False, logfile_verbose=True,
+         verbose_on_failure=True, show_command=True, stdin=None, **popen_kwargs):
     """
     Similar to ``subprocess.Popen`` with the following changes:
 
@@ -182,12 +181,7 @@ def call(command, **kw):
     """
     executable = which(command.pop(0))
     command.insert(0, executable)
-    terminal_verbose = kw.pop('terminal_verbose', False)
-    logfile_verbose = kw.pop('logfile_verbose', True)
-    verbose_on_failure = kw.pop('verbose_on_failure', True)
-    show_command = kw.pop('show_command', False)
     command_msg = "Running command: %s" % ' '.join(command)
-    stdin = kw.pop('stdin', None)
     logger.info(command_msg)
     if show_command:
         terminal.write(command_msg)
@@ -198,7 +192,7 @@ def call(command, **kw):
         stderr=subprocess.PIPE,
         stdin=subprocess.PIPE,
         close_fds=True,
-        **kw
+        **popen_kwargs
     )
 
     if stdin:
