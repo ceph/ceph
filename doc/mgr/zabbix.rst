@@ -92,6 +92,14 @@ The current configuration of the module can also be shown:
 
    ceph zabbix config-show
 
+
+Template
+^^^^^^^^
+A `template <https://raw.githubusercontent.com/ceph/ceph/9c54334b615362e0a60442c2f41849ed630598ab/src/pybind/mgr/zabbix/zabbix_template.xml>`_. 
+(XML) to be used on the Zabbix server can be found in the source directory of the plugin.
+
+This template contains all items and a few triggers. You can customize the triggers afterwards to fit your needs.
+
 Manually sending data
 ---------------------
 If needed the module can be asked to send data immediately instead of waiting for
@@ -100,6 +108,7 @@ the interval.
 This can be done with this command:
 
 ::
+
     ceph zabbix send
 
 The module will now send its latest data to the Zabbix server.
