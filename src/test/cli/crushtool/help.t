@@ -63,6 +63,8 @@
      -i mapfn --move       name --loc type name ...
                            move the given item to specified location
      -i mapfn --reweight   recalculate all bucket weights
+     -i mapfn --rebuild-class-roots
+                           rebuild the per-class shadow trees (normally a no-op)
      -i mapfn --create-simple-rule name root type mode
                            create crush rule <name> to start from <root>,
                            replicate across buckets of type <type>, using
