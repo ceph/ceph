@@ -963,7 +963,7 @@ bool DaemonServer::_handle_command(
 	pg_exists = osdmap.pg_exists(pgid);
       });
     if (!pg_exists) {
-      ss << "pg " << pgid << " dne";
+      ss << "pg " << pgid << " does not exist";
       cmdctx->reply(-ENOENT, ss);
       return true;
     }
