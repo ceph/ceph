@@ -771,6 +771,8 @@ public:
 
   virtual int apply_layout_settings(const coll_t &cid, int target_level);
 
+  void get_db_statistics(Formatter* f) override;
+
 private:
   void _inject_failure();
 

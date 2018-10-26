@@ -6206,6 +6206,11 @@ void FileStore::dump_transactions(vector<ObjectStore::Transaction>& ls, uint64_t
   m_filestore_dump.flush();
 }
 
+void FileStore::get_db_statistics(Formatter* f)
+{
+  object_map->db->get_statistics(f);
+}
+
 void FileStore::set_xattr_limits_via_conf()
 {
   uint32_t fs_xattr_size;
