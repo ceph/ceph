@@ -104,7 +104,9 @@ void ProtocolV2::connect() {
   global_seq = messenger->get_global_seq();
 }
 
-void ProtocolV2::accept() { this->state = START_ACCEPT; }
+void ProtocolV2::accept() {
+  this->state = START_ACCEPT;
+}
 
 bool ProtocolV2::is_connected() {
   return can_write.load() == WriteStatus::CANWRITE;
@@ -1311,9 +1313,8 @@ CtPtr ProtocolV2::wait_server_banner() {
 
   ldout(cct, 20) << __func__ << dendl;
 
-  bufferlist myaddrbl;
   unsigned banner_len = strlen(CEPH_BANNER);
-  unsigned need_len = banner_len + sizeof(unsigned);
+  unsigned need_len = banner_len + sizeof(uint32_t);
   return READ(need_len, handle_server_banner);
 }
 
@@ -1332,11 +1333,10 @@ CtPtr ProtocolV2::handle_server_banner(char *buffer, int r) {
     return _fault();
   }
 
-  peer_addr_count = *(unsigned *)(buffer + banner_len);
+  peer_addr_count = *(uint32_t *)(buffer + banner_len);
   ldout(cct, 10) << __func__ << " server has " << peer_addr_count
-                 << " addresses" << dendl;
-
-  unsigned need_len = sizeof(ceph_entity_addr) * (peer_addr_count + 1);
+                 << " bytes of addresses" << dendl;
+  unsigned need_len = peer_addr_count;
   return READ(need_len, handle_server_addrvec_and_identify);
 }
 
@@ -1349,47 +1349,41 @@ CtPtr ProtocolV2::handle_server_addrvec_and_identify(char *buffer, int r) {
     return _fault();
   }
 
+  bufferlist bl;
+  bl.append(buffer, peer_addr_count);
+
+  entity_addr_t peer_addr;
   entity_addrvec_t paddrs;
   entity_addr_t peer_addr_for_me;
-  bufferlist bl;
-  bl.append(buffer, sizeof(ceph_entity_addr) * (peer_addr_count + 1));
 
   auto p = bl.cbegin();
   try {
-    for (unsigned i = 0; i < peer_addr_count; i++) {
-      entity_addr_t paddr;
-      decode(paddr, p);
-      paddrs.v.push_back(paddr);
-    }
+    decode(peer_addr, p);
+    decode(paddrs, p);
     decode(peer_addr_for_me, p);
   } catch (const buffer::error &e) {
     lderr(cct) << __func__ << " decode peer addr failed " << dendl;
     return _fault();
   }
-
-  ldout(cct, 20) << __func__ << " connect read peer addr " << paddrs
+  ldout(cct, 20) << __func__ << " connect read peer addr " << peer_addr
+		 << " of " << paddrs
                  << " on socket " << connection->cs.fd() << dendl;
 
-  bool found = false;
-  entity_addr_t peer_addr = connection->peer_addrs.msgr2_addr();
-  for (auto &paddr : paddrs.v) {
-    if (peer_addr != paddr) {
-      if (paddr.probably_equals(peer_addr)) {
-        ldout(cct, 0) << __func__ << " connect claims to be " << paddr
-                      << " not " << peer_addr
-                      << " - presumably this is the same node!" << dendl;
-        found = true;
-        break;
-      }
-    }
+  if (peer_addr != connection->peer_addrs.msgr2_addr()) {
+    ldout(cct, 10) << __func__ << " connect claims to be " << peer_addr
+		   << " not "
+                   << connection->peer_addrs.msgr2_addr() << dendl;
+    return _fault();
   }
-  if (!found) {
-    ldout(cct, 10) << __func__ << " connect claims to be " << paddrs << " not "
+  if (paddrs != connection->peer_addrs) {
+    ldout(cct, 10) << __func__ << " connect claims to be " << paddrs
+		   << " not "
                    << connection->peer_addrs << dendl;
     return _fault();
   }
 
   connection->set_peer_addrs(paddrs);
+  connection->socket_addr = peer_addr_for_me;
 
   ldout(cct, 20) << __func__ << " connect peer addr for me is "
                  << peer_addr_for_me << dendl;
@@ -1415,12 +1409,11 @@ CtPtr ProtocolV2::handle_server_addrvec_and_identify(char *buffer, int r) {
   }
 
   bufferlist myaddrbl;
-  ldout(cct, 25) << "encoding myaddrs: " << messenger->get_myaddrs() << dendl;
-  encode(messenger->get_myaddrs().size(), myaddrbl, 0);
-  for (auto &addr : messenger->get_myaddrs().v) {
-    encode(addr, myaddrbl, 0);
-  }
-  return WRITE(myaddrbl, handle_my_addrs_write);
+  ldout(cct, 20) << "encoding myaddrs: " << messenger->get_myaddrs() << dendl;
+  encode(messenger->get_myaddrs(), myaddrbl, -1ll);
+  bufferlist conbl;
+  encode(myaddrbl, conbl);
+  return WRITE(conbl, handle_my_addrs_write);
 }
 
 CtPtr ProtocolV2::handle_my_addrs_write(int r) {
@@ -1753,17 +1746,20 @@ CtPtr ProtocolV2::send_server_banner() {
 
   bl.append(CEPH_BANNER, strlen(CEPH_BANNER));
 
-  encode(messenger->get_myaddrs().size(), bl, 0);
-  ldout(messenger->cct, 25)
-      << "encoding myaddrs: " << messenger->get_myaddrs() << dendl;
-  for (auto &addr : messenger->get_myaddrs().v) {
-    encode(addr, bl, 0);
-  }
-  connection->port = messenger->get_myaddrs().msgr2_addr().get_port();
-  encode(connection->socket_addr, bl, 0);  // legacy
+  bufferlist addrbl;
+  encode(connection->socket_addr, addrbl, -1ll);
+  encode(messenger->get_myaddrs(), addrbl, -1ll);
+  encode(connection->target_addr, addrbl, -1ll);
+
+  encode(addrbl, bl);
+
+  connection->port = connection->target_addr.get_port();
 
   ldout(cct, 1) << __func__ << " sd=" << connection->cs.fd() << " "
-                << connection->socket_addr << dendl;
+                << connection->socket_addr
+		<< " myaddrs " << messenger->get_myaddrs()
+		<< " target_addr " << connection->target_addr
+		<< " addrs are " << addrbl.length() << dendl;
 
   return WRITE(bl, handle_server_banner_write);
 }
@@ -1805,23 +1801,17 @@ CtPtr ProtocolV2::handle_client_banner(char *buffer, int r) {
   ldout(cct, 10) << __func__ << " peer has " << peer_addr_count << " addresses"
                  << dendl;
 
-  unsigned need_len = sizeof(ceph_entity_addr) * peer_addr_count;
-  return READ(need_len, handle_client_addrvec);
+  return READ(peer_addr_count, handle_client_addrvec);
 }
 
 CtPtr ProtocolV2::handle_client_addrvec(char *buffer, int r) {
   bufferlist addr_bl;
   entity_addrvec_t peer_addrs;
 
-  unsigned need_len = sizeof(ceph_entity_addr) * peer_addr_count;
-  addr_bl.append(buffer, need_len);
+  addr_bl.append(buffer, peer_addr_count);
   try {
     auto ti = addr_bl.cbegin();
-    for (unsigned i = 0; i < peer_addr_count; i++) {
-      entity_addr_t peer_addr;
-      decode(peer_addr, ti);
-      peer_addrs.v.push_back(peer_addr);
-    }
+    decode(peer_addrs, ti);
   } catch (const buffer::error &e) {
     lderr(cct) << __func__ << " decode peer_addrs failed " << dendl;
     return _fault();
