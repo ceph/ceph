@@ -326,6 +326,11 @@ class DashboardTestCase(MgrTestCase):
         else:
             self.assertEqual(self._resp.status_code, status)
 
+    def assertHeaders(self, headers):
+        for name, value in headers.items():
+            self.assertIn(name, self._resp.headers)
+            self.assertEqual(self._resp.headers[name], value)
+
     def assertError(self, code=None, component=None, detail=None):
         body = self._resp.json()
         if code:
