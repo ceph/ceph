@@ -653,6 +653,28 @@ def is_mapper_device(device_name):
     return device_name.startswith(('/dev/mapper', '/dev/dm-'))
 
 
+def is_locked_raw_device(disk_path):
+    """
+    A device can be locked by a third party software like a database.
+    To detect that case, the device is opened in Read/Write and exclusive mode
+    """
+    open_flags = (os.O_RDWR | os.O_EXCL)
+    open_mode = 0
+    fd = None
+
+    try:
+        fd = os.open(disk_path, open_flags, open_mode)
+    except OSError:
+        return 1
+
+    try:
+        os.close(fd)
+    except OSError:
+        return 1
+
+    return 0
+
+
 def get_devices(_sys_block_path='/sys/block', _dev_path='/dev', _mapper_path='/dev/mapper'):
     """
     Captures all available devices from /sys/block/, including its partitions,
@@ -694,12 +716,12 @@ def get_devices(_sys_block_path='/sys/block', _dev_path='/dev', _mapper_path='/d
             if lvm.is_lv(diskname):
                 continue
 
-        # If the device reports itself as 'removable', get it excluded
         metadata['removable'] = get_file_contents(os.path.join(sysdir, 'removable'))
-        if metadata['removable'] == '1':
-            continue
+        # Is the device read-only ?
+        metadata['ro'] = get_file_contents(os.path.join(sysdir, 'ro'))
 
-        for key in ['vendor', 'model', 'sas_address', 'sas_device_handle']:
+
+        for key in ['vendor', 'model', 'rev', 'sas_address', 'sas_device_handle']:
             metadata[key] = get_file_contents(sysdir + "/device/" + key)
 
         for key in ['sectors', 'size']:
@@ -710,7 +732,9 @@ def get_devices(_sys_block_path='/sys/block', _dev_path='/dev', _mapper_path='/d
 
         metadata['partitions'] = get_partitions_facts(sysdir)
 
-        metadata['rotational'] = get_file_contents(sysdir + "/queue/rotational")
+        for key in ['rotational', 'nr_requests']:
+            metadata[key] = get_file_contents(sysdir + "/queue/" + key)
+
         metadata['scheduler_mode'] = ""
         scheduler = get_file_contents(sysdir + "/queue/scheduler")
         if scheduler is not None:
@@ -727,6 +751,7 @@ def get_devices(_sys_block_path='/sys/block', _dev_path='/dev', _mapper_path='/d
         metadata['human_readable_size'] = human_readable_size(float(size) * 512)
         metadata['size'] = float(size) * 512
         metadata['path'] = diskname
+        metadata['locked'] = is_locked_raw_device(metadata['path'])
 
         device_facts[diskname] = metadata
     return device_facts
