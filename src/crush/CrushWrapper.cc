@@ -2032,11 +2032,46 @@ void CrushWrapper::reweight(CephContext *cct)
     ldout(cct, 5) << "reweight root bucket " << id << dendl;
     int r = crush_reweight_bucket(crush, b);
     ceph_assert(r == 0);
+
+    for (auto& i : choose_args) {
+      //cout << "carg " << i.first << std::endl;
+      vector<uint32_t> w;  // discard top-level weights
+      reweight_bucket(b, i.second, &w);
+    }
   }
   int r = rebuild_roots_with_classes();
   ceph_assert(r == 0);
 }
 
+void CrushWrapper::reweight_bucket(
+  crush_bucket *b,
+  crush_choose_arg_map& arg_map,
+  vector<uint32_t> *weightv)
+{
+  int idx = -1 - b->id;
+  unsigned npos = arg_map.args[idx].weight_set_positions;
+  //cout << __func__ << " " << b->id << " npos " << npos << std::endl;
+  weightv->resize(npos);
+  for (unsigned i = 0; i < b->size; ++i) {
+    int item = b->items[i];
+    if (item >= 0) {
+      for (unsigned pos = 0; pos < npos; ++pos) {
+	(*weightv)[pos] += arg_map.args[idx].weight_set->weights[i];
+      }
+    } else {
+      vector<uint32_t> subw(npos);
+      crush_bucket *sub = get_bucket(item);
+      assert(sub);
+      reweight_bucket(sub, arg_map, &subw);
+      for (unsigned pos = 0; pos < npos; ++pos) {
+	(*weightv)[pos] += subw[pos];
+	// strash the real bucket weight as the weights for this reference
+	arg_map.args[idx].weight_set->weights[i] = subw[pos];
+      }
+    }
+  }
+  //cout << __func__ << " finish " << b->id << " " << *weightv << std::endl;
+}
 
 int CrushWrapper::add_simple_rule_at(
   string name, string root_name,
