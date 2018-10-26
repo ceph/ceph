@@ -966,7 +966,7 @@ def cluster(ctx, config):
         if first_in_ceph_log('\[ERR\]|\[WRN\]|\[SEC\]',
                              config['log_whitelist']) is not None:
             log.warning('Found errors (ERR|WRN|SEC) in cluster log')
-            ctx.summary['success'] = False
+            # ctx.summary['success'] = False
             # use the most severe problem as the failure reason
             if 'failure_reason' not in ctx.summary:
                 for pattern in ['\[SEC\]', '\[ERR\]', '\[WRN\]']:
