@@ -56,7 +56,6 @@
  */
 class DBObjectMap : public ObjectMap {
 public:
-  boost::scoped_ptr<KeyValueDB> db;
 
   KeyValueDB *get_db() override { return db.get(); }
 
@@ -117,7 +116,7 @@ public:
   };
 
   DBObjectMap(CephContext* cct, KeyValueDB *db)
-    : ObjectMap(cct), db(db), header_lock("DBOBjectMap"),
+    : ObjectMap(cct, db), header_lock("DBOBjectMap"),
       cache_lock("DBObjectMap::CacheLock"),
       caches(cct->_conf->filestore_omap_header_cache_size)
     {}
