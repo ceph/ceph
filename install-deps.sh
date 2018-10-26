@@ -48,7 +48,7 @@ function munge_ceph_spec_in {
 function ensure_decent_gcc_on_ubuntu {
     # point gcc to the one offered by g++-7 if the used one is not
     # new enough
-    local old=$(gcc -dumpversion)
+    local old=$(gcc -dumpfullversion -dumpversion)
     local new=$1
     local codename=$2
     if dpkg --compare-versions $old ge 7.0; then
