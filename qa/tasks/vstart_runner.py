@@ -606,7 +606,7 @@ class LocalCephManager(CephManager):
         proc = self.controller.run([os.path.join(BIN_PREFIX, "ceph")] + list(args), **kwargs)
         return proc.exitstatus
 
-    def admin_socket(self, daemon_type, daemon_id, command, check_status=True):
+    def admin_socket(self, daemon_type, daemon_id, command, check_status=True, timeout=None):
         return self.controller.run(
             args=[os.path.join(BIN_PREFIX, "ceph"), "daemon", "{0}.{1}".format(daemon_type, daemon_id)] + command, check_status=check_status
         )
