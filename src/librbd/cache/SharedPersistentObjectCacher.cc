@@ -37,10 +37,19 @@ int SharedPersistentObjectCacher<I>::read_object(std::string oid, ceph::bufferli
   auto *cct = m_image_ctx->cct;
   ldout(cct, 20) << "object: " << oid << dendl;
 
+  //TODO(): do not calculate the path, get from the response from daemon
+  int dir_num = 10;
   std::string cache_file_name = m_image_ctx->data_ctx.get_pool_name() + oid;
+  std::string cache_dir = m_image_ctx->data_ctx.get_pool_name() + "_" + m_image_ctx->name;
+
+   if (dir_num > 0) {
+    auto const pos = oid.find_last_of('.');
+    cache_dir = cache_dir + "/" + std::to_string(stoul(oid.substr(pos+1)) % dir_num);
+  }
+  std::string cache_file_path = cache_dir + "/" + cache_file_name;
 
   //TODO(): make a cache for cachefile fd
-  SyncFile* target_cache_file = new SyncFile(cct, cache_file_name);
+  SyncFile* target_cache_file = new SyncFile(cct, cache_file_path);
   target_cache_file->open_file();
 
   int ret = target_cache_file->read_object_from_file(read_data, offset, length);

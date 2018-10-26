@@ -5,11 +5,15 @@
 #include "include/Context.h"
 #include "librbd/Utils.h"
 
+#include <experimental/filesystem>
+
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_immutable_obj_cache
 #undef dout_prefix
 #define dout_prefix *_dout << "ceph::cache::ObjectCacheStore: " << this << " " \
                            << __func__ << ": "
+
+namespace efs = std::experimental::filesystem;
 
 namespace ceph {
 namespace immutable_obj_cache {
@@ -18,8 +22,11 @@ ObjectCacheStore::ObjectCacheStore(CephContext *cct, ContextWQ* work_queue)
       : m_cct(cct), m_work_queue(work_queue), m_rados(new librados::Rados()),
         m_ioctxs_lock("ceph::cache::ObjectCacheStore::m_ioctxs_lock") {
 
-  uint64_t object_cache_entries =
+  object_cache_entries =
     m_cct->_conf.get_val<int64_t>("rbd_shared_cache_entries");
+
+  std::string cache_path = m_cct->_conf.get_val<std::string>("rbd_shared_cache_path");
+  m_cache_root_dir = cache_path + "/ceph_immutable_obj_cache/";
 
   //TODO(): allow to set cache level
   m_policy = new SimplePolicy(object_cache_entries, 0.5);
@@ -44,12 +51,12 @@ int ObjectCacheStore::init(bool reset) {
     return ret;
   }
 
-  std::string cache_path = m_cct->_conf.get_val<std::string>("rbd_shared_cache_path");
-  //TODO(): check and reuse existing cache objects
-  if(reset) {
-    std::string cmd = "exec rm -rf " + cache_path + "/rbd_cache*; exec mkdir -p " + cache_path;
-    //TODO(): to use std::filesystem
-    int r = system(cmd.c_str());
+  //TODO(): fsck and reuse existing cache objects
+  if (reset) {
+    if (efs::exists(m_cache_root_dir)) {
+      efs::remove_all(m_cache_root_dir);
+    }
+    efs::create_directories(m_cache_root_dir);
   }
 
   evict_thd = new std::thread([this]{this->evict_thread_body();});
@@ -64,23 +71,37 @@ void ObjectCacheStore::evict_thread_body() {
 }
 
 int ObjectCacheStore::shutdown() {
+  ldout(m_cct, 20) << dendl;
+
   m_evict_go = false;
   evict_thd->join();
   m_rados->shutdown();
   return 0;
 }
 
-int ObjectCacheStore::init_cache(std::string vol_name, uint64_t vol_size) {
+int ObjectCacheStore::init_cache(std::string pool_name, std::string vol_name, uint64_t vol_size) {
+  ldout(m_cct, 20) << "pool name = " << pool_name
+                   << " volume name = " << vol_name
+                   << " volume size = " << vol_size << dendl;
+
+  std::string vol_cache_dir = m_cache_root_dir + pool_name + "_" + vol_name;
+
+  int dir = dir_num - 1;
+  while (dir >= 0) {
+    efs::create_directories(vol_cache_dir + "/" + std::to_string(dir));
+    dir --;
+  }
   return 0;
 }
 
-int ObjectCacheStore::do_promote(std::string pool_name, std::string object_name) {
+int ObjectCacheStore::do_promote(std::string pool_name, std::string vol_name, std::string object_name) {
   ldout(m_cct, 20) << "to promote object = "
                    << object_name << " from pool: "
                    << pool_name << dendl;
 
   int ret = 0;
   std::string cache_file_name =  pool_name + object_name;
+  std::string vol_cache_dir = pool_name + "_" + vol_name;
   {
     Mutex::Locker _locker(m_ioctxs_lock);
     if (m_ioctxs.find(pool_name) == m_ioctxs.end()) {
@@ -101,17 +122,18 @@ int ObjectCacheStore::do_promote(std::string pool_name, std::string object_name)
   librados::bufferlist* read_buf = new librados::bufferlist();
   uint32_t object_size = 4096*1024; //TODO(): read config from image metadata
 
-  auto ctx = new FunctionContext([this, read_buf, cache_file_name,
+  auto ctx = new FunctionContext([this, read_buf, vol_cache_dir, cache_file_name,
     object_size](int ret) {
-      handle_promote_callback(ret, read_buf, cache_file_name, object_size);
+      handle_promote_callback(ret, read_buf, vol_cache_dir, cache_file_name, object_size);
    });
 
    return promote_object(ioctx, object_name, read_buf, object_size, ctx);
 }
 
 int ObjectCacheStore::handle_promote_callback(int ret, bufferlist* read_buf,
-  std::string cache_file_name, uint32_t object_size) {
-  ldout(m_cct, 20) << dendl;
+  std::string cache_dir, std::string cache_file_name, uint32_t object_size) {
+  ldout(m_cct, 20) << "cache dir: " << cache_dir
+                   << " cache_file_name: " << cache_file_name << dendl;
 
   // rados read error
   if(ret != -ENOENT && ret < 0) {
@@ -132,8 +154,12 @@ int ObjectCacheStore::handle_promote_callback(int ret, bufferlist* read_buf,
     read_buf->append(std::string(object_size - ret, '0'));
   }
 
+  if (dir_num > 0) {
+    auto const pos = cache_file_name.find_last_of('.');
+    cache_dir = cache_dir + "/" + std::to_string(stoul(cache_file_name.substr(pos+1)) % dir_num);
+  }
   // write to cache
-  librbd::cache::SyncFile cache_file(m_cct, cache_file_name);
+  librbd::cache::SyncFile cache_file(m_cct, cache_dir + "/" + cache_file_name);
   cache_file.create();
 
   ret = cache_file.write_object_to_file(*read_buf, object_size);
@@ -154,9 +180,10 @@ int ObjectCacheStore::handle_promote_callback(int ret, bufferlist* read_buf,
   return ret;
 }
  
-int ObjectCacheStore::lookup_object(std::string pool_name, std::string object_name) {
+int ObjectCacheStore::lookup_object(std::string pool_name,
+    std::string vol_name, std::string object_name) {
   ldout(m_cct, 20) << "object name = " << object_name
-                   << "in pool: " << pool_name << dendl;
+                   << " in pool: " << pool_name << dendl;
 
   int pret = -1;
   CACHESTATUS ret = m_policy->lookup_object(pool_name + object_name);
@@ -164,7 +191,7 @@ int ObjectCacheStore::lookup_object(std::string pool_name, std::string object_na
   switch(ret) {
     case OBJ_CACHE_NONE: {
       evict_objects();
-      pret = do_promote(pool_name, object_name);
+      pret = do_promote(pool_name, vol_name, object_name);
       if (pret < 0) {
         lderr(m_cct) << "fail to start promote" << dendl;
       }
@@ -184,7 +211,7 @@ int ObjectCacheStore::promote_object(librados::IoCtx* ioctx, std::string object_
                                      librados::bufferlist* read_buf, uint64_t read_len,
                                      Context* on_finish) {
   ldout(m_cct, 20) << "object name = " << object_name
-                   << "read len = " << read_len << dendl;
+                   << " read len = " << read_len << dendl;
 
   auto ctx = new FunctionContext([on_finish](int ret) {
     on_finish->complete(ret);

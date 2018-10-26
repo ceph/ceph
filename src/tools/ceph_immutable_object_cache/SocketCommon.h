@@ -29,6 +29,7 @@ struct rbdsc_req_type_t {
   uint64_t length;
   char pool_name[256];
   char vol_name[256];
+  char oid[256];
 
   uint64_t size() {
     return sizeof(rbdsc_req_type_t);
