@@ -220,19 +220,6 @@ class TestGetDevices(object):
         assert result[dev_sda_path]['model'] == ''
         assert result[dev_sda_path]['partitions'] == {}
 
-    def test_sda_is_removable_gets_skipped(self, tmpfile, tmpdir):
-        block_path, dev_path, mapper_path = self.setup_paths(tmpdir)
-        dev_sda_path = os.path.join(dev_path, 'sda')
-        block_sda_path = os.path.join(block_path, 'sda')
-        os.makedirs(block_sda_path)
-        os.makedirs(dev_sda_path)
-
-        tmpfile('removable', contents='1', directory=block_sda_path)
-        result = disk.get_devices(
-            _sys_block_path=block_path,
-            _dev_path=dev_path,
-            _mapper_path=mapper_path)
-        assert result == {}
 
     def test_dm_device_is_not_used(self, monkeypatch, tmpdir):
         # the link to the mapper is used instead
