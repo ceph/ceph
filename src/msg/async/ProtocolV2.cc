@@ -104,17 +104,21 @@ CtPtr ProtocolV2::_banner_exchange(CtPtr callback) {
   ldout(cct, 20) << __func__ << dendl;
   bannerExchangeCallback = callback;
 
-  __u64 supported_features = CEPH_MSGR2_SUPPORTED_FEATURES;
-  __u64 required_features = CEPH_MSGR2_REQUIRED_FEATURES;
+  uint8_t type = messenger->get_mytype();
+  __le64 supported_features = CEPH_MSGR2_SUPPORTED_FEATURES;
+  __le64 required_features = CEPH_MSGR2_REQUIRED_FEATURES;
 
   size_t banner_prefix_len = strlen(CEPH_BANNER_V2_PREFIX);
-  size_t banner_len = banner_prefix_len + 2 * sizeof(__u64);
+  size_t banner_len = banner_prefix_len + sizeof(uint8_t) + 2 * sizeof(__le64);
   char banner[banner_len];
+  uint8_t offset = 0;
   memcpy(banner, CEPH_BANNER_V2_PREFIX, banner_prefix_len);
-  memcpy(banner + banner_prefix_len, (void *)&supported_features,
-         sizeof(__u64));
-  memcpy(banner + banner_prefix_len + sizeof(__u64), (void *)&required_features,
-         sizeof(__u64));
+  offset += banner_prefix_len;
+  memcpy(banner + offset, (void *)&type, sizeof(uint8_t));
+  offset += sizeof(uint8_t);
+  memcpy(banner + offset, (void *)&supported_features, sizeof(__le64));
+  offset += sizeof(__le64);
+  memcpy(banner + offset, (void *)&required_features, sizeof(__le64));
 
   bufferlist bl;
   bl.append(banner, banner_len);
@@ -130,7 +134,8 @@ CtPtr ProtocolV2::_banner_exchange_handle_write(int r) {
     return _fault();
   }
 
-  unsigned banner_len = strlen(CEPH_BANNER_V2_PREFIX) + 2 * sizeof(__u64);
+  unsigned banner_len =
+      strlen(CEPH_BANNER_V2_PREFIX) + sizeof(uint8_t) + 2 * sizeof(__le64);
   return READ(banner_len, _banner_exchange_handle_peer_banner);
 }
 
@@ -155,21 +160,38 @@ unsigned banner_prefix_len = strlen(CEPH_BANNER_V2_PREFIX);
     return _fault();
   }
 
-  __u64 peer_supported_features;
-  __u64 peer_required_features;
+  uint8_t peer_type = 0;
+  __le64 peer_supported_features;
+  __le64 peer_required_features;
 
-  peer_supported_features = *(__u64 *)(buffer + banner_prefix_len);
-  peer_required_features =
-      *(__u64 *)(buffer + banner_prefix_len + sizeof(__u64));
+  uint8_t offset = banner_prefix_len;
+  peer_type = *(uint8_t *)(buffer + offset);
+  offset += sizeof(uint8_t);
+  peer_supported_features = *(__le64 *)(buffer + offset);
+  offset += sizeof(__le64);
+  peer_required_features = *(__le64 *)(buffer + offset);
 
-  ldout(cct, 1) << __func__ << " peer " << *connection->peer_addrs
-                << " banner supported=" << std::hex << peer_supported_features
+  ldout(cct, 1) << __func__ << " banner peer_type=" << (int)peer_type
+                << " supported=" << std::hex << peer_supported_features
                 << " required=" << std::hex << peer_required_features << dendl;
+
+  if (connection->get_peer_type() == -1) {
+    connection->set_peer_type(peer_type);
+  } else {
+    if (connection->get_peer_type() != peer_type) {
+      ldout(cct, 1) << __func__ << " connection peer type does not match what"
+                    << " peer advertises " << connection->get_peer_type()
+                    << " != " << peer_type << dendl;
+      stop();
+      connection->dispatch_queue->queue_reset(connection);
+      return nullptr;
+    }
+  }
 
   // Check feature bit compatibility
 
-  __u64 supported_features = CEPH_MSGR2_SUPPORTED_FEATURES;
-  __u64 required_features = CEPH_MSGR2_REQUIRED_FEATURES;
+  __le64 supported_features = CEPH_MSGR2_SUPPORTED_FEATURES;
+  __le64 required_features = CEPH_MSGR2_REQUIRED_FEATURES;
 
   if ((required_features & peer_supported_features) != required_features) {
     ldout(cct, 1) << __func__ << " peer does not support all required features"
