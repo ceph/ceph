@@ -10203,9 +10203,12 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
   // peek at spg_t
   sdata->shard_lock.Lock();
   if (sdata->pqueue->empty() &&
-     !(is_smallest_thread_index && !sdata->context_queue.empty())) {
+     (!is_smallest_thread_index || sdata->context_queue.empty())) {
     sdata->sdata_wait_lock.Lock();
-    if (!sdata->stop_waiting) {
+    if (is_smallest_thread_index && !sdata->context_queue.empty()) {
+      // we raced with a context_queue addition, don't wait
+      sdata->sdata_wait_lock.Unlock();
+    } else if (!sdata->stop_waiting) {
       dout(20) << __func__ << " empty q, waiting" << dendl;
       osd->cct->get_heartbeat_map()->clear_timeout(hb);
       sdata->shard_lock.Unlock();
