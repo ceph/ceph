@@ -578,6 +578,7 @@ AsyncConnectionRef AsyncMessenger::create_connect(
     // FIXME: for ipv4 vs ipv6, check whether local host can handle ipv6 before
     // trying it?  for now, just pick whichever is listed first.
     target = a;
+    break;
   }
 
   // create connection
@@ -692,19 +693,23 @@ void AsyncMessenger::submit_message(Message *m, AsyncConnectionRef con,
  */
 bool AsyncMessenger::set_addr_unknowns(const entity_addrvec_t &addrs)
 {
+  ldout(cct,1) << __func__ << " " << addrs << dendl;
   bool ret = false;
   Mutex::Locker l(lock);
 
   entity_addrvec_t newaddrs = *my_addrs;
   for (auto& a : newaddrs.v) {
     if (a.is_blank_ip()) {
+      int type = a.get_type();
       int port = a.get_port();
+      uint32_t nonce = a.get_nonce();
       for (auto& b : addrs.v) {
-	if (a.get_type() == b.get_type() &&
-	    a.get_family() == b.get_family()) {
+	if (a.get_family() == b.get_family()) {
 	  ldout(cct,1) << __func__ << " assuming my addr " << a
 		       << " matches provided addr " << b << dendl;
 	  a = b;
+	  a.set_nonce(nonce);
+	  a.set_type(type);
 	  a.set_port(port);
 	  ret = true;
 	  break;
@@ -716,6 +721,7 @@ bool AsyncMessenger::set_addr_unknowns(const entity_addrvec_t &addrs)
   if (ret) {
     _init_local_connection();
   }
+  ldout(cct,1) << __func__ << " now " << *my_addrs << dendl;
   return ret;
 }
 
