@@ -462,16 +462,19 @@ void AsyncConnection::_connect()
   center->dispatch_event_external(read_handler);
 }
 
-void AsyncConnection::accept(ConnectedSocket socket, entity_addr_t &addr)
+void AsyncConnection::accept(ConnectedSocket socket,
+			     const entity_addr_t &listen_addr,
+			     const entity_addr_t &peer_addr)
 {
   ldout(async_msgr->cct, 10) << __func__ << " sd=" << socket.fd()
-			     << " on " << addr << dendl;
+			     << " listen_addr " << listen_addr
+			     << " peer_addr " << peer_addr << dendl;
   ceph_assert(socket.fd() >= 0);
 
   std::lock_guard<std::mutex> l(lock);
   cs = std::move(socket);
-  socket_addr = addr;
-  target_addr = addr; // until we know better
+  socket_addr = listen_addr;
+  target_addr = peer_addr; // until we know better
   state = STATE_ACCEPTING;
   protocol->accept();
   // rescheduler connection in order to avoid lock dep
@@ -485,7 +488,7 @@ int AsyncConnection::send_message(Message *m)
 		   1) << "-- " << async_msgr->get_myaddrs() << " --> "
 		      << get_peer_addrs() << " -- "
 		      << *m << " -- " << m << " con "
-		      << m->get_connection().get()
+		      << this
 		      << dendl;
 
   // optimistic think it's ok to encode(actually may broken now)
