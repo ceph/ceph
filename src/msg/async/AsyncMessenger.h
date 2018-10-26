@@ -373,7 +373,9 @@ public:
   }
 
   void learned_addr(const entity_addr_t &peer_addr_for_me);
-  void add_accept(Worker *w, ConnectedSocket cli_socket, entity_addr_t &addr);
+  void add_accept(Worker *w, ConnectedSocket cli_socket,
+		  const entity_addr_t &listen_addr,
+		  const entity_addr_t &peer_addr);
   NetworkStack *get_stack() {
     return stack;
   }

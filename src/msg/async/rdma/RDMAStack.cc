@@ -483,15 +483,20 @@ void RDMAWorker::initialize()
   }
 }
 
-int RDMAWorker::listen(entity_addr_t &sa, const SocketOptions &opt,ServerSocket *sock)
+int RDMAWorker::listen(entity_addr_t &sa, unsigned addr_slot,
+		       const SocketOptions &opt,ServerSocket *sock)
 {
   get_stack()->get_infiniband().init();
   dispatcher->polling_start();
   RDMAServerSocketImpl *p;
   if (cct->_conf->ms_async_rdma_type == "iwarp") {
-    p = new RDMAIWARPServerSocketImpl(cct, &get_stack()->get_infiniband(), &get_stack()->get_dispatcher(), this, sa);
+    p = new RDMAIWARPServerSocketImpl(
+      cct, &get_stack()->get_infiniband(), &get_stack()->get_dispatcher(), this,
+      sa, addr_slot);
   } else {
-    p = new RDMAServerSocketImpl(cct, &get_stack()->get_infiniband(), &get_stack()->get_dispatcher(), this, sa);
+    p = new RDMAServerSocketImpl(cct, &get_stack()->get_infiniband(),
+				 &get_stack()->get_dispatcher(), this, sa,
+				 addr_slot);
   }
   int r = p->listen(sa, opt);
   if (r < 0) {

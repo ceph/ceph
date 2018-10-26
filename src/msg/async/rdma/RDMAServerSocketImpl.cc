@@ -26,8 +26,8 @@
 
 RDMAServerSocketImpl::RDMAServerSocketImpl(
   CephContext *cct, Infiniband* i, RDMADispatcher *s, RDMAWorker *w,
-  entity_addr_t& a)
-  : ServerSocketImpl(a.get_type()),
+  entity_addr_t& a, unsigned slot)
+  : ServerSocketImpl(a.get_type(), slot),
     cct(cct), net(cct), server_setup_socket(-1), infiniband(i),
     dispatcher(s), worker(w), sa(a)
 {

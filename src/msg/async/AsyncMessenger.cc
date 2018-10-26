@@ -88,9 +88,10 @@ int Processor::bind(const entity_addrvec_t &bind_addrs,
       }
 
       if (listen_addr.get_port()) {
-	worker->center.submit_to(worker->center.get_id(),
-				 [this, k, &listen_addr, &opts, &r]() {
-	    r = worker->listen(listen_addr, opts, &listen_sockets[k]);
+	worker->center.submit_to(
+	  worker->center.get_id(),
+	  [this, k, &listen_addr, &opts, &r]() {
+	    r = worker->listen(listen_addr, k, opts, &listen_sockets[k]);
 	  }, false);
 	if (r < 0) {
 	  lderr(msgr->cct) << __func__ << " unable to bind to " << listen_addr
@@ -106,9 +107,10 @@ int Processor::bind(const entity_addrvec_t &bind_addrs,
 	    continue;
 
 	  listen_addr.set_port(port);
-	  worker->center.submit_to(worker->center.get_id(),
-				   [this, k, &listen_addr, &opts, &r]() {
-	      r = worker->listen(listen_addr, opts, &listen_sockets[k]);
+	  worker->center.submit_to(
+	    worker->center.get_id(),
+	    [this, k, &listen_addr, &opts, &r]() {
+	      r = worker->listen(listen_addr, k, opts, &listen_sockets[k]);
 	    }, false);
 	  if (r == 0)
 	    break;
@@ -186,7 +188,10 @@ void Processor::accept()
 	ldout(msgr->cct, 10) << __func__ << " accepted incoming on sd "
 			     << cli_socket.fd() << dendl;
 
-	msgr->add_accept(w, std::move(cli_socket), addr);
+	msgr->add_accept(
+	  w, std::move(cli_socket),
+	  msgr->get_myaddrs().v[listen_socket.get_addr_slot()],
+	  addr);
 	accept_error_num = 0;
 	continue;
       } else {
@@ -549,12 +554,14 @@ void AsyncMessenger::wait()
   started = false;
 }
 
-void AsyncMessenger::add_accept(Worker *w, ConnectedSocket cli_socket, entity_addr_t &addr)
+void AsyncMessenger::add_accept(Worker *w, ConnectedSocket cli_socket,
+				const entity_addr_t &listen_addr,
+				const entity_addr_t &peer_addr)
 {
   lock.Lock();
   AsyncConnectionRef conn = new AsyncConnection(cct, this, &dispatch_queue, w,
-						addr.is_msgr2(), false);
-  conn->accept(std::move(cli_socket), addr);
+						listen_addr.is_msgr2(), false);
+  conn->accept(std::move(cli_socket), listen_addr, peer_addr);
   accepting_conns.insert(conn);
   lock.Unlock();
 }
