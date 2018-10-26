@@ -36,7 +36,7 @@
 #undef dout_prefix
 #define dout_prefix _conn_prefix(_dout)
 ostream& AsyncConnection::_conn_prefix(std::ostream *_dout) {
-  return *_dout << "-- " << async_msgr->get_myaddrs() << " >> "
+  return *_dout << "-- " << socket_addr << " >> "
 		<< target_addr << " conn(" << this
 		<< (msgr2 ? " msgr2" : " legacy")
                 << " :" << port
