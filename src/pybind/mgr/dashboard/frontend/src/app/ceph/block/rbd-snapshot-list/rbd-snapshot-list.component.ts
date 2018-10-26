@@ -6,7 +6,7 @@ import { of } from 'rxjs';
 
 import { RbdService } from '../../../shared/api/rbd.service';
 import { ConfirmationModalComponent } from '../../../shared/components/confirmation-modal/confirmation-modal.component';
-import { DeletionModalComponent } from '../../../shared/components/deletion-modal/deletion-modal.component';
+import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
 import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
@@ -269,7 +269,7 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
 
   deleteSnapshotModal() {
     const snapshotName = this.selection.selected[0].name;
-    this.modalRef = this.modalService.show(DeletionModalComponent, {
+    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
       initialState: {
         itemDescription: 'RBD snapshot',
         submitAction: () => this._asyncTask('deleteSnapshot', 'rbd/snap/delete', snapshotName)

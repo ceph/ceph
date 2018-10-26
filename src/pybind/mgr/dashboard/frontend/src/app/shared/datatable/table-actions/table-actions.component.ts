@@ -35,6 +35,13 @@ export class TableActionsComponent implements OnInit {
     this.updateDropDownActions();
   }
 
+  toClassName(name: string): string {
+    return name
+      .replace(/ /g, '-')
+      .replace(/[^a-z-]/gi, '')
+      .toLowerCase();
+  }
+
   /**
    * Removes all actions from 'tableActions' that need a permission the user doesn't have.
    */
@@ -84,7 +91,7 @@ export class TableActionsComponent implements OnInit {
    * @returns {boolean}
    */
   private showableAction(action: CdTableAction): boolean {
-    const condition = action.buttonCondition;
+    const condition = action.canBePrimary;
     const singleSelection = this.selection.hasSingleSelection;
     const defaultCase = action.permission === 'create' ? !singleSelection : singleSelection;
     return (condition && condition(this.selection)) || (!condition && defaultCase);

@@ -9,8 +9,7 @@ export class CdTableAction {
   // This is the function that will be triggered on a click event if defined
   click?: Function;
 
-  // Only change permissions are allowed
-  permission: 'create' | 'update' | 'delete';
+  permission: 'create' | 'update' | 'delete' | 'read';
 
   // The name of the action
   name: string;
@@ -23,10 +22,14 @@ export class CdTableAction {
   // if one selection is made and no task is running on the selected item.
   disable?: (_: CdTableSelection) => boolean;
 
-  // You can define the condition to disable the action.
-  // By default all 'create' actions can be the action button if no or multiple items are selected
-  // By default all 'update' and 'delete' actions can be the action button if one item is selected
-  buttonCondition?: (_: CdTableSelection) => boolean;
+  /**
+   * Defines if the button can become 'primary' (displayed as button and not
+   * 'hidden' in the menu). Only one button can be primary at a time. By
+   * default all 'create' actions can be the action button if no or multiple
+   * items are selected. Also, all 'update' and 'delete' actions can be the
+   * action button by default, provided only one item is selected.
+   */
+  canBePrimary?: (_: CdTableSelection) => boolean;
 
   // In some rare cases you want to hide a action that can be used by the user for example
   // if one action can lock the item and another action unlocks it
