@@ -13,9 +13,6 @@
 
 class CephContext;
 
-/* this is handy; can't believe it's not standard */
-#define ARRAY_SIZE(a)	(sizeof(a) / sizeof(*a))
-
 typedef boost::variant<std::string,
 		       bool,
 		       int64_t,

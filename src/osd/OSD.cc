@@ -18,6 +18,7 @@
 #include <cctype>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 
 #include <unistd.h>
 #include <sys/stat.h>
@@ -6090,7 +6091,7 @@ int OSD::_do_command(
     JSONFormatter *f = new JSONFormatter();
     f->open_object_section("command_descriptions");
     for (OSDCommand *cp = osd_commands;
-	 cp < &osd_commands[ARRAY_SIZE(osd_commands)]; cp++) {
+	 cp < &osd_commands[std::size(osd_commands)]; cp++) {
 
       ostringstream secname;
       secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
