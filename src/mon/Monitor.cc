@@ -13,6 +13,7 @@
  */
 
 
+#include <iterator>
 #include <sstream>
 #include <tuple>
 #include <stdlib.h>
@@ -214,8 +215,8 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   exited_quorum = ceph_clock_now();
 
   // prepare local commands
-  local_mon_commands.resize(ARRAY_SIZE(mon_commands));
-  for (unsigned i = 0; i < ARRAY_SIZE(mon_commands); ++i) {
+  local_mon_commands.resize(std::size(mon_commands));
+  for (unsigned i = 0; i < std::size(mon_commands); ++i) {
     local_mon_commands[i] = mon_commands[i];
   }
   MonCommand::encode_vector(local_mon_commands, local_mon_commands_bl);
