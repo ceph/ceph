@@ -14,6 +14,7 @@ private:
     CONNECTING,
     START_ACCEPT,
     ACCEPTING,
+    READY,
     CLOSED
   };
 
@@ -29,7 +30,9 @@ private:
     AUTH_BAD_METHOD,
     AUTH_BAD_AUTH,
     AUTH_MORE,
-    AUTH_DONE
+    AUTH_DONE,
+    IDENT,
+    IDENT_MISSING_FEATURES,
   };
 
   struct Frame {
@@ -49,6 +52,12 @@ private:
       bl.claim_append(payload);
       return bl;
     }
+  };
+
+  struct SignedEncryptedFrame : public Frame {
+    SignedEncryptedFrame(Tag tag, __le32 payload_len)
+        : Frame(tag, payload_len) {}
+    bufferlist to_bufferlist() { return Frame::to_bufferlist(); }
   };
 
   struct AuthRequestFrame : public Frame {
@@ -155,10 +164,68 @@ private:
     }
   };
 
+  struct IdentFrame : public SignedEncryptedFrame {
+    entity_addrvec_t addrs;
+    int64_t gid;
+    uint64_t supported_features;  // CEPH_FEATURE_*
+    uint64_t required_features;   // CEPH_FEATURE_*
+    uint64_t flags;               // CEPH_MSG_CONNECT_*
+    uint64_t cookie;
+
+    IdentFrame(entity_addrvec_t addrs, int64_t gid, uint64_t supported_features,
+               uint64_t required_features, uint64_t flags, uint64_t cookie)
+        : SignedEncryptedFrame(Tag::IDENT, 0),
+          addrs(addrs),
+          gid(gid),
+          supported_features(supported_features),
+          required_features(required_features),
+          flags(flags),
+          cookie(cookie) {
+      encode(addrs, payload, -1ll);
+      encode(gid, payload, -1ll);
+      encode(supported_features, payload, -1ll);
+      encode(required_features, payload, -1ll);
+      encode(flags, payload, -1ll);
+      encode(cookie, payload, -1ll);
+      frame_len = sizeof(uint32_t) + payload.length();
+    }
+
+    IdentFrame(char *payload, uint32_t length)
+        : SignedEncryptedFrame(Tag::IDENT, length) {
+      bufferlist bl;
+      bl.append(payload, length);
+      try {
+        auto ti = bl.cbegin();
+        decode(addrs, ti);
+        decode(gid, ti);
+        decode(supported_features, ti);
+        decode(required_features, ti);
+        decode(flags, ti);
+        decode(cookie, ti);
+      } catch (const buffer::error &e) {
+      }
+    }
+  };
+
+  struct IdentMissingFeaturesFrame : public SignedEncryptedFrame {
+    __le64 features;
+
+    IdentMissingFeaturesFrame(uint64_t features)
+        : SignedEncryptedFrame(Tag::IDENT_MISSING_FEATURES, sizeof(uint64_t)),
+          features(features) {
+      encode(features, payload, -1ll);
+    }
+
+    IdentMissingFeaturesFrame(char *payload, uint32_t length)
+        : SignedEncryptedFrame(Tag::IDENT_MISSING_FEATURES, length) {
+      features = *(uint64_t *)payload;
+    }
+  };
+
   char *temp_buffer;
   State state;
-
   uint64_t peer_required_features;
+  uint64_t cookie;
 
   using ProtFuncPtr = void (ProtocolV2::*)();
   Ct<ProtocolV2> *bannerExchangeCallback;
@@ -194,6 +261,7 @@ private:
   Ct<ProtocolV2> *handle_frame(char *buffer, int r);
   Ct<ProtocolV2> *handle_auth_more(char *payload, uint32_t length);
   Ct<ProtocolV2> *handle_auth_more_write(int r);
+  Ct<ProtocolV2> *handle_ident(char *payload, uint32_t length);
 
 public:
   ProtocolV2(AsyncConnection *connection);
@@ -216,6 +284,7 @@ private:
   CONTINUATION_DECL(ProtocolV2, start_client_banner_exchange);
   CONTINUATION_DECL(ProtocolV2, post_client_banner_exchange);
   WRITE_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_auth_request_write);
+  WRITE_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_client_ident_write);
 
   Ct<ProtocolV2> *start_client_banner_exchange();
   Ct<ProtocolV2> *post_client_banner_exchange();
@@ -225,6 +294,9 @@ private:
   Ct<ProtocolV2> *handle_auth_bad_auth(char *payload, uint32_t length);
   Ct<ProtocolV2> *handle_auth_done(char *payload, uint32_t length);
   Ct<ProtocolV2> *send_client_ident();
+  Ct<ProtocolV2> *handle_client_ident_write(int r);
+  Ct<ProtocolV2> *handle_ident_missing_features(char *payload, uint32_t length);
+  Ct<ProtocolV2> *handle_server_ident(char *payload, uint32_t length);
 
   // Server Protocol
   CONTINUATION_DECL(ProtocolV2, start_server_banner_exchange);
@@ -232,6 +304,9 @@ private:
   WRITE_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_auth_bad_method_write);
   WRITE_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_auth_bad_auth_write);
   WRITE_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_auth_done_write);
+  WRITE_HANDLER_CONTINUATION_DECL(ProtocolV2,
+                                  handle_ident_missing_features_write);
+  WRITE_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_send_server_ident_write);
 
   Ct<ProtocolV2> *start_server_banner_exchange();
   Ct<ProtocolV2> *post_server_banner_exchange();
@@ -239,6 +314,9 @@ private:
   Ct<ProtocolV2> *handle_auth_bad_method_write(int r);
   Ct<ProtocolV2> *handle_auth_bad_auth_write(int r);
   Ct<ProtocolV2> *handle_auth_done_write(int r);
+  Ct<ProtocolV2> *handle_client_ident(char *payload, uint32_t length);
+  Ct<ProtocolV2> *handle_ident_missing_features_write(int r);
+  Ct<ProtocolV2> *handle_send_server_ident_write(int r);
 };
 
 #endif /* _MSG_ASYNC_PROTOCOL_V2_ */
