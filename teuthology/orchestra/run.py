@@ -90,8 +90,9 @@ class RemoteProcess(object):
         prefix = "Running:"
         if self.label:
             prefix = "Running ({label}):".format(label=self.label)
-        log.getChild(self.hostname).info(u"{prefix} {cmd!r}".format(
-            cmd=self.command, prefix=prefix))
+        log.getChild(self.hostname).info(prefix)
+        for line in self.command.split('\n'):
+            log.getChild(self.hostname).info('> %s' % line)
 
         if hasattr(self, 'timeout'):
             (self._stdin_buf, self._stdout_buf, self._stderr_buf) = \
