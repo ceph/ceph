@@ -23,6 +23,7 @@
 #include "AsyncConnection.h"
 
 #include "ProtocolV1.h"
+#include "ProtocolV2.h"
 
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
@@ -130,6 +131,8 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQu
   recv_buf = new char[2*recv_max_prefetch];
   if (local) {
     protocol = std::unique_ptr<Protocol>(new LoopbackProtocolV1(this));
+  } else if (m2) {
+    protocol = std::unique_ptr<Protocol>(new ProtocolV2(this));
   } else {
     protocol = std::unique_ptr<Protocol>(new ProtocolV1(this));
   }

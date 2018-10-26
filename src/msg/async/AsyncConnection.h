@@ -224,6 +224,7 @@ class AsyncConnection : public Connection {
 
   friend class Protocol;
   friend class ProtocolV1;
+  friend class ProtocolV2;
 }; /* AsyncConnection */
 
 typedef boost::intrusive_ptr<AsyncConnection> AsyncConnectionRef;
