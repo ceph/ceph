@@ -71,13 +71,32 @@ class TestCall(object):
 class TestFunctionalCall(object):
 
     def test_stdin(self):
-        process.call(['xargs', 'ls'], stdin="echo '/'")
+        out, err, ret = process.call(['xargs', 'ls'], stdin="/")
+        assert ret == 0
+        assert out != []
+        assert err == []
+
+    def test_stdin_with_bad_return(self):
+        out, err, ret = process.call(
+            ['xargs', 'ls'],
+            stdin="/not-exists-directory-for-ceph-volume-tests")
+        assert ret == 123
+        assert out == []
+        assert err == ["ls: cannot access "
+                       "'/not-exists-directory-for-ceph-volume-tests': "
+                       "No such file or directory"]
 
     def test_unicode_encoding(self):
-        process.call(['echo', u'\xd0'])
+        out, err, ret = process.call(['echo', u'\xd0'])
+        assert ret == 0
+        assert out[0].decode('utf-8') == u'\xd0'
+        assert err == []
 
     def test_unicode_encoding_stdin(self):
-        process.call(['echo'], stdin=u'\xd0'.encode('utf-8'))
+        out, err, ret = process.call(['xargs', 'echo'], stdin=u'\xd0'.encode('utf-8'))
+        assert ret == 0
+        assert out[0].decode('utf-8') == u'\xd0'
+        assert err == []
 
 
 class TestFunctionalRun(object):
