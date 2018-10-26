@@ -963,6 +963,9 @@ public:
     return adjust_item_weight_in_loc(cct, id, (int)(weight * (float)0x10000), loc);
   }
   void reweight(CephContext *cct);
+  void reweight_bucket(crush_bucket *b,
+		       crush_choose_arg_map& arg_map,
+		       vector<uint32_t> *weightv);
 
   int adjust_subtree_weight(CephContext *cct, int id, int weight);
   int adjust_subtree_weightf(CephContext *cct, int id, float weight) {
