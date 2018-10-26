@@ -11,8 +11,8 @@
 #undef dout_prefix
 #define dout_prefix _conn_prefix(_dout)
 ostream &ProtocolV2::_conn_prefix(std::ostream *_dout) {
-  return *_dout << "-- " << messenger->get_myaddrs().legacy_addr() << " >> "
-                << connection->peer_addrs.legacy_addr() << " conn("
+  return *_dout << "-- " << connection->socket_addr << " >> "
+                << connection->target_addr << " conn("
                 << connection << (connection->msgr2 ? " msgr2" : " legacy")
                 << " :" << connection->port << " s=" << get_state_name(state)
                 << " pgs=" << peer_global_seq << " cs=" << connect_seq
