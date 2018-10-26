@@ -166,9 +166,8 @@ describe('CdValidators', () => {
 
     beforeEach(() => {
       form = new FormGroup({
-        x: new FormControl()
+        x: new FormControl(null, CdValidators.uuid())
       });
-      form.controls['x'].setValidators(CdValidators.uuid());
     });
 
     it('should accept empty value', () => {
@@ -194,27 +193,30 @@ describe('CdValidators', () => {
 
     it('should error on uuid containing too many blocks', () => {
       const x = form.get('x');
+      x.markAsDirty();
       x.setValue('e33bbcb6-fcc3-40b1-ae81-3f81706a35d5-23d3');
       expect(x.valid).toBeFalsy();
-      expect(x.hasError('pattern')).toBeTruthy();
+      expect(x.hasError('invalidUuid')).toBeTruthy();
     });
 
     it('should error on uuid containing too many chars in block', () => {
       const x = form.get('x');
+      x.markAsDirty();
       x.setValue('aae33bbcb6-fcc3-40b1-ae81-3f81706a35d5');
       expect(x.valid).toBeFalsy();
-      expect(x.hasError('pattern')).toBeTruthy();
+      expect(x.hasError('invalidUuid')).toBeTruthy();
     });
 
     it('should error on uuid containing invalid char', () => {
       const x = form.get('x');
+      x.markAsDirty();
       x.setValue('x33bbcb6-fcc3-40b1-ae81-3f81706a35d5');
       expect(x.valid).toBeFalsy();
-      expect(x.hasError('pattern')).toBeTruthy();
+      expect(x.hasError('invalidUuid')).toBeTruthy();
 
       x.setValue('$33bbcb6-fcc3-40b1-ae81-3f81706a35d5');
       expect(x.valid).toBeFalsy();
-      expect(x.hasError('pattern')).toBeTruthy();
+      expect(x.hasError('invalidUuid')).toBeTruthy();
     });
   });
 

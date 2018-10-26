@@ -46,7 +46,7 @@ describe('TableActionsComponent', () => {
     addAction = {
       permission: 'create',
       icon: 'fa-plus',
-      buttonCondition: (selection: CdTableSelection) => !selection.hasSelection,
+      canBePrimary: (selection: CdTableSelection) => !selection.hasSelection,
       name: 'Add'
     };
     editAction = {
@@ -57,7 +57,7 @@ describe('TableActionsComponent', () => {
     copyAction = {
       permission: 'create',
       icon: 'fa-copy',
-      buttonCondition: (selection: CdTableSelection) => selection.hasSingleSelection,
+      canBePrimary: (selection: CdTableSelection) => selection.hasSingleSelection,
       disable: (selection: CdTableSelection) =>
         !selection.hasSingleSelection || selection.first().cdExecuting,
       name: 'Copy'
@@ -65,7 +65,7 @@ describe('TableActionsComponent', () => {
     deleteAction = {
       permission: 'delete',
       icon: 'fa-times',
-      buttonCondition: (selection: CdTableSelection) => selection.hasSelection,
+      canBePrimary: (selection: CdTableSelection) => selection.hasSelection,
       disable: (selection: CdTableSelection) =>
         !selection.hasSelection || selection.first().cdExecuting,
       name: 'Delete'
@@ -73,14 +73,14 @@ describe('TableActionsComponent', () => {
     protectAction = {
       permission: 'update',
       icon: 'fa-lock',
-      buttonCondition: () => false,
+      canBePrimary: () => false,
       visible: (selection: CdTableSelection) => selection.hasSingleSelection,
       name: 'Protect'
     };
     unprotectAction = {
       permission: 'update',
       icon: 'fa-unlock',
-      buttonCondition: () => false,
+      canBePrimary: () => false,
       visible: (selection: CdTableSelection) => !selection.hasSingleSelection,
       name: 'Unprotect'
     };
@@ -277,5 +277,11 @@ describe('TableActionsComponent', () => {
     it('should not return any button with getCurrentButton', () => {
       expect(component.getCurrentButton()).toBeFalsy();
     });
+  });
+
+  it('should convert any name to a proper CSS class', () => {
+    expect(component.toClassName('Create')).toBe('create');
+    expect(component.toClassName('Mark x down')).toBe('mark-x-down');
+    expect(component.toClassName('?Su*per!')).toBe('super');
   });
 });

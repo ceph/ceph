@@ -33,6 +33,8 @@ export class SubmitButtonComponent implements OnInit {
   type = 'submit';
   @Output()
   submitAction = new EventEmitter();
+  @Input()
+  disabled = false;
 
   loading = false;
 

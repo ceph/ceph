@@ -5,7 +5,7 @@ import { forkJoin } from 'rxjs';
 
 import { RoleService } from '../../../shared/api/role.service';
 import { ScopeService } from '../../../shared/api/scope.service';
-import { DeletionModalComponent } from '../../../shared/components/deletion-modal/deletion-modal.component';
+import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { EmptyPipe } from '../../../shared/empty.pipe';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
@@ -115,7 +115,7 @@ export class RoleListComponent implements OnInit {
 
   deleteRoleModal() {
     const name = this.selection.first().name;
-    this.modalRef = this.modalService.show(DeletionModalComponent, {
+    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
       initialState: {
         itemDescription: 'Role',
         submitAction: () => this.deleteRole(name)

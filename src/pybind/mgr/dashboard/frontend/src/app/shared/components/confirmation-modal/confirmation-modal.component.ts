@@ -24,13 +24,8 @@ export class ConfirmationModalComponent implements OnInit {
   }
 
   ngOnInit() {
-    this.bodyContext = {
-      $implicit: this.bodyData
-    };
-  }
-
-  submit() {
-    this.onSubmit();
+    this.bodyContext = this.bodyContext || {};
+    this.bodyContext['$implicit'] = this.bodyData;
   }
 
   cancel() {

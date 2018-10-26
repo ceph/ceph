@@ -20,6 +20,7 @@
   <ul *dropdownMenu class="dropdown-menu" role="menu">
     <ng-container *ngFor="let action of dropDownActions">
       <li role="menuitem"
+          class="{{ toClassName(action['name']) }}"
           [ngClass]="{'disabled': disableSelectionAction(action)}">
         <a class="dropdown-item"
            (click)="useClickAction(action)"

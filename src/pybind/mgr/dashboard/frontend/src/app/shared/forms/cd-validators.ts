@@ -53,16 +53,6 @@ export class CdValidators {
   }
 
   /**
-   * Validator function in order to validate uuids.
-   * @returns {ValidatorFn} A validator function that returns an error map containing `pattern`
-   * if the validation failed, otherwise `null`.
-   */
-  static uuid(): ValidatorFn {
-    const uuidRgx = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-    return Validators.pattern(uuidRgx);
-  }
-
-  /**
    * Validator function in order to validate numbers.
    * @returns {ValidatorFn} A validator function that returns an error map containing `pattern`
    * if the validation failed, otherwise `null`.
@@ -236,6 +226,26 @@ export class CdValidators {
         }),
         take(1)
       );
+    };
+  }
+
+  /**
+   * Validator function for UUIDs.
+   * @param required - Defines if it is mandatory to fill in the UUID
+   * @return Validator function that returns an error object containing `invalidUuid` if the
+   * validation failed, `null` otherwise.
+   */
+  static uuid(required = false): ValidatorFn {
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    return (control: AbstractControl): { [key: string]: any } | null => {
+      if (control.pristine && control.untouched) {
+        return null;
+      } else if (!required && !control.value) {
+        return null;
+      } else if (uuidRe.test(control.value)) {
+        return null;
+      }
+      return { invalidUuid: 'This is not a valid UUID' };
     };
   }
 }
