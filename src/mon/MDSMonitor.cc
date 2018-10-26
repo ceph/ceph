@@ -1344,7 +1344,7 @@ int MDSMonitor::filesystem_command(
       return -EINVAL;
     }
     if (!fsmap.gid_exists(gid)) {
-      ss << "mds gid " << gid << " dne";
+      ss << "mds gid " << gid << " does not exist";
       r = 0;
     } else {
       const auto &info = fsmap.get_info_gid(gid);
