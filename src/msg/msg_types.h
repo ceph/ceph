@@ -566,6 +566,15 @@ struct entity_addrvec_t {
     return entity_addr_t();
   }
 
+  entity_addr_t msgr2_addr() const {
+    for (auto &a : v) {
+      if (a.type == entity_addr_t::TYPE_MSGR2) {
+        return a;
+      }
+    }
+    return entity_addr_t();
+  }
+
   bool parse(const char *s, const char **end = 0);
 
   void get_ports(set<int> *ports) const {
