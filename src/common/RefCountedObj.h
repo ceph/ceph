@@ -75,6 +75,8 @@ public:
   }
 };
 
+#ifndef WITH_SEASTAR
+
 /**
  * RefCountedCond
  *
@@ -162,6 +164,8 @@ struct RefCountedWaitObject {
     cond->put();
   }
 };
+
+#endif // WITH_SEASTAR
 
 static inline void intrusive_ptr_add_ref(const RefCountedObject *p) {
   p->get();
