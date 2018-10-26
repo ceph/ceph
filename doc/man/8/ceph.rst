@@ -510,6 +510,7 @@ Usage::
 
   ceph mgr count-metadata <field>
 
+.. _ceph-admin-osd:
 
 osd
 ---
