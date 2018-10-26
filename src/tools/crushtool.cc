@@ -171,6 +171,8 @@ void usage()
   cout << "   -i mapfn --move       name --loc type name ...\n"
        << "                         move the given item to specified location\n";
   cout << "   -i mapfn --reweight   recalculate all bucket weights\n";
+  cout << "   -i mapfn --rebuild-class-roots\n";
+  cout << "                         rebuild the per-class shadow trees (normally a no-op)\n";
   cout << "   -i mapfn --create-simple-rule name root type mode\n"
        << "                         create crush rule <name> to start from <root>,\n"
        << "                         replicate across buckets of type <type>, using\n"
@@ -388,6 +390,8 @@ int main(int argc, const char **argv)
   int verbose = 0;
   bool unsafe_tunables = false;
 
+  bool rebuild_class_roots = false;
+
   bool reweight = false;
   int add_item = -1;
   bool add_bucket = false;
@@ -552,6 +556,8 @@ int main(int argc, const char **argv)
       adjust = true;
     } else if (ceph_argparse_flag(args, i, "--reweight", (char*)NULL)) {
       reweight = true;
+    } else if (ceph_argparse_flag(args, i, "--rebuild-class-roots", (char*)NULL)) {
+      rebuild_class_roots = true;
     } else if (ceph_argparse_witharg(args, i, &add_item, err, "--add_item", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
@@ -821,7 +827,7 @@ int main(int argc, const char **argv)
   }
   if (!check && !compile && !decompile && !build && !test && !reweight && !adjust && !tree && !dump &&
       add_item < 0 && !add_bucket && !move_item && !add_rule && !del_rule && full_location < 0 &&
-      !reclassify &&
+      !reclassify && !rebuild_class_roots &&
       compare.empty() &&
       remove_name.empty() && reweight_name.empty()) {
     cerr << "no action specified; -h for help" << std::endl;
@@ -1162,6 +1168,14 @@ int main(int argc, const char **argv)
 
   if (reweight) {
     crush.reweight(g_ceph_context);
+    modified = true;
+  }
+  if (rebuild_class_roots) {
+    int r = crush.rebuild_roots_with_classes();
+    if (r < 0) {
+      cerr << "failed to rebuidl roots with classes" << std::endl;
+      return EXIT_FAILURE;
+    }
     modified = true;
   }
 
