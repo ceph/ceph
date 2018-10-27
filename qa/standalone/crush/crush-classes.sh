@@ -155,8 +155,11 @@ function TEST_mon_classes() {
     ceph osd crush class ls | grep TEMP || return 1
     ceph osd crush class rename TEMP CLASS || return 1
     ceph osd crush class ls | grep CLASS  || return 1
+    ceph osd erasure-code-profile set myprofile plugin=jerasure technique=reed_sol_van k=2 m=1 crush-failure-domain=osd crush-device-class=CLASS || return 1
+    expect_failure $dir EBUSY ceph osd crush class rm CLASS || return 1
+    ceph osd erasure-code-profile rm myprofile || return 1
     ceph osd crush class rm CLASS || return 1
-    expect_failure $dir ENOENT ceph osd crush class rm CLASS || return 1
+    ceph osd crush class rm CLASS || return 1 # test idempotence
 
     # test rm-device-class
     ceph osd crush set-device-class aaa osd.0 || return 1
