@@ -880,6 +880,49 @@ role-admin/cluster/*.sls
         self.logger.debug("end of begin method")
 
 
+class CreatePools(DeepSea):
+
+    def __init__(self, ctx, config):
+        self.logger = log.getChild('create_pools')
+        self.logger.debug("beginning of constructor method")
+        self.logger.debug("initial config is {}".format(config))
+        super(CreatePools, self).__init__(ctx, config)
+        self.logger.debug(
+            "post-parent-constructor config is {}".format(self.config)
+            )
+        self.logger.debug("munged config is {}".format(self.config))
+        self.args = []
+        if isinstance(self.config, list):
+            self.args = self.config
+        elif isinstance(self.config, dict):
+            self.config = {
+                "mds": self.config.get("mds", False),
+                "openstack": self.config.get("openstack", False),
+                "rbd": self.config.get("rbd", False),
+                }
+        else:
+            self.config = {
+                "openstack": False,
+                "rbd": False
+                }
+        if not self.args:
+            for key in self.config:
+                if self.config[key] is None:
+                    self.config[key] = True
+                if self.config[key]:
+                    self.args.append(key)
+        if 'mds' in self.role_lookup_table:
+            self.args.append('mds')
+        self.args = list(set(self.args))
+        self.scripts = Scripts(self.master_remote, self.logger)
+        self.logger.debug("end of constructor method")
+
+    def begin(self):
+        self.logger.debug("beginning of begin method")
+        self.scripts.create_all_pools_at_once(self.args)
+        self.logger.debug("end of begin method")
+
+
 class Preflight(DeepSea):
 
     def __init__(self, ctx, config):
@@ -987,6 +1030,60 @@ ceph osd tree
 ceph osd pool ls detail -f json-pretty
 ceph -s
 """,
+        "create_all_pools_at_once": """# Pre-create Stage 4 pools
+# with calculated number of PGs so we don't get health warnings
+# during/after Stage 4 due to "too few" or "too many" PGs per OSD
+
+set -ex
+
+function json_total_osds {
+    # total number of OSDs in the cluster
+    ceph osd ls --format json | jq '. | length'
+}
+
+function pgs_per_pool {
+    local TOTALPOOLS=$1
+    test -n "$TOTALPOOLS"
+    local TOTALOSDS=$(json_total_osds)
+    test -n "$TOTALOSDS"
+    # given the total number of pools and OSDs,
+    # assume triple replication and equal number of PGs per pool
+    # and aim for 100 PGs per OSD
+    let "TOTALPGS = $TOTALOSDS * 100"
+    let "PGSPEROSD = $TOTALPGS / $TOTALPOOLS / 3"
+    echo $PGSPEROSD
+}
+
+function create_all_pools_at_once {
+    # sample usage: create_all_pools_at_once foo bar
+    local TOTALPOOLS="${#@}"
+    local PGSPERPOOL=$(pgs_per_pool $TOTALPOOLS)
+    for POOLNAME in "$@"
+    do
+        ceph osd pool create $POOLNAME $PGSPERPOOL $PGSPERPOOL replicated
+    done
+    ceph osd pool ls detail
+}
+
+MDS=""
+OPENSTACK=""
+RBD=""
+for arg in "$@"
+    arg="${arg,,}"
+    case "$arg" in
+        mds) MDS="$arg" ;;
+        openstack) OPENSTACK="$arg" ;;
+        rbd) RBD="$arg" ;;
+    esac
+do
+
+POOLS="write_test"
+test "$MDS" && POOLS+=" cephfs_data cephfs_metadata"
+test "$OPENSTACK" && POOLS+=" smoketest-cloud-backups smoketest-cloud-volumes smoketest-cloud-images smoketest-cloud-vms cloud-backups cloud-volumes cloud-images cloud-vms"
+test "$RBD" && POOLS+=" rbd"
+create_all_pools_at_once $POOLS
+ceph osd pool application enable write_test deepsea_qa
+""",
         "disable_update_in_stage_0": """# Disable update in Stage 0
 set -ex
 cp /srv/salt/ceph/stage/prep/master/default.sls \
@@ -1016,20 +1113,34 @@ echo "Salt API test: END"
         self.log = logger
         self.master_remote = master_remote
 
-    def _remote_run_script_as_root(self, remote, path, data):
+    def _remote_run_script_as_root(self, remote, path, data, args=None):
         """
         Wrapper around write_file to simplify the design pattern:
         1. use write_file to create bash script on the remote
         2. use Remote.run to run that bash script via "sudo bash $SCRIPT"
         """
         write_file(remote, path, data)
-        remote.run(label=path, args='sudo bash {}'.format(path))
+        cmd = 'sudo bash {}'.format(path)
+        if args:
+            cmd += ' ' + ' '.join(args)
+        remote.run(label=path, args=[
+            'sudo', 'bash', '-c', cmd
+            ])
 
     def ceph_cluster_status(self):
         self._remote_run_script_as_root(
             self.master_remote,
             'ceph_cluster_status.sh',
             self.script_dict["ceph_cluster_status"],
+            )
+
+    def create_all_pools_at_once(self, args):
+        self.log("creating pools: {}".format(' '.join(args)))
+        self._remote_run_script_as_root(
+            self.master_remote,
+            'create_all_pools_at_once.sh',
+            self.script_dict["create_all_pools_at_once"],
+            args=args,
             )
 
     def disable_update_in_stage_0(self):
@@ -1048,6 +1159,7 @@ echo "Salt API test: END"
 
 
 task = DeepSea
+create_pools = CreatePools
 deploy = Deploy
 dummy = Dummy
 orch = Orch
