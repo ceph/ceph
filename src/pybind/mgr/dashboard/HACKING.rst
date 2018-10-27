@@ -227,8 +227,8 @@ Alternatively, you can use Python's native package installation method::
   $ pip install tox
   $ pip install coverage
 
-To run the tests, run ``tox`` in the dashboard directory (where ``tox.ini``
-is located).
+To run the tests, run ``run-tox.sh`` in the dashboard directory (where
+``tox.ini`` is located).
 
 We also collect coverage information from the backend code. You can check the
 coverage information provided by the tox output, or by running the following
@@ -587,7 +587,7 @@ If we want to write a unit test for the above ``Ping`` controller, create a
   class PingTest(ControllerTestCase):
       @classmethod
       def setup_test(cls):
-          Ping._cp_config['tools.authentication.on'] = False
+          Ping._cp_config['tools.authenticate.on'] = False
           cls.setup_controllers([Ping])
 
       def test_ping(self):
