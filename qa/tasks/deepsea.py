@@ -2,6 +2,7 @@ import logging
 
 from salt_manager import SaltManager
 from util import (
+    copy_directory_recursively,
     get_remote_for_role,
     sudo_append_to_file,
     )
@@ -11,6 +12,7 @@ from teuthology.exceptions import (
     ConfigError,
     )
 from teuthology.misc import (
+    sh,
     sudo_write_file,
     write_file,
     )
@@ -94,6 +96,25 @@ class DeepSea(Task):
         # log.debug("ctx.config {}".format(ctx.config))
         log.debug("deepsea context: {}".format(deepsea_ctx))
         log.debug("end of constructor method")
+
+    def _copy_health_ok(self):
+        """
+        Copy health-ok.sh from teuthology VM to master_remote
+        """
+        suite_path = self.ctx.config.get('suite_path')
+        log.info("suite_path is ->{}<-".format(suite_path))
+        sh("ls -l {}".format(suite_path))
+        health_ok_path = suite_path + "/deepsea/health-ok"
+        sh("test -d " + health_ok_path)
+        copy_directory_recursively(
+                health_ok_path, self.master_remote, "health-ok")
+        self.master_remote.run(args=[
+            "pwd",
+            run.Raw(";"),
+            "ls",
+            "-lR",
+            "health-ok",
+            ])
 
     def _disable_gpg_checks(self):
         log.info("disabling zypper GPG checks on all test nodes")
@@ -347,32 +368,34 @@ class DeepSea(Task):
                     'done'
                 )
             for pn in [1, 2]:
-                _remote.run(args=['sudo', 'sh', '-c', for_loop.format(pn=1)])
+                _remote.run(args=['sudo', 'sh', '-c', for_loop.format(pn=pn)])
 
     def setup(self):
-        super(DeepSea, self).setup()
         # log.debug("beginning of setup method")
+        super(DeepSea, self).setup()
         pass
         # log.debug("end of setup method")
 
     def begin(self):
         super(DeepSea, self).begin()
         log.debug("beginning of begin method")
+        self._copy_health_ok()
         self._disable_gpg_checks()
         self._install_deepsea()
         log.debug("end of begin method")
 
     def end(self):
-        super(DeepSea, self).end()
         # log.debug("beginning of end method")
+        super(DeepSea, self).end()
         pass
         # log.debug("end of end method")
 
     def teardown(self):
-        log.debug("beginning of teardown method")
+        # log.debug("beginning of teardown method")
         super(DeepSea, self).teardown()
-        self._purge_osds()
-        log.debug("end of teardown method")
+        pass
+        # self._purge_osds()
+        # log.debug("end of teardown method")
 
 
 class CephConf(DeepSea):
@@ -1031,6 +1054,14 @@ class Preflight(DeepSea):
         # Stage 0 does this, but we have no guarantee Stage 0 will run
         self.sm.sync_pillar_data()
         self.logger.debug("end of begin method")
+
+    def teardown(self):
+        self.logger.debug("beginning of teardown method")
+        super(DeepSea, self).teardown()
+        self._purge_osds()  # the install task does "rm -r /var/lib/ceph"
+                            # on every test node, and that fails when there
+                            # are OSDs running
+        self.logger.debug("end of teardown method")
 
 
 class Scripts:
