@@ -2978,7 +2978,7 @@ protected:
     return e <= cur_epoch;
   }
   bool have_same_or_newer_map(epoch_t e) {
-    return e <= get_osdmap()->get_epoch();
+    return e <= get_osdmap_epoch();
   }
 
   bool op_has_sufficient_caps(OpRequestRef& op);

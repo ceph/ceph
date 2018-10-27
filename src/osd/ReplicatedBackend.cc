@@ -902,7 +902,7 @@ Message * ReplicatedBackend::generate_subop(
     reqid, parent->whoami_shard(),
     spg_t(get_info().pgid.pgid, peer.shard),
     soid, acks_wanted,
-    get_osdmap()->get_epoch(),
+    get_osdmap_epoch(),
     parent->get_last_peering_reset_epoch(),
     tid, at_version);
 
@@ -981,7 +981,7 @@ void ReplicatedBackend::issue_op(
       if (op->op && op->op->pg_trace)
 	wr->trace.init("replicated op", nullptr, &op->op->pg_trace);
       get_parent()->send_message_osd_cluster(
-	  shard.osd, wr, get_osdmap()->get_epoch());
+	  shard.osd, wr, get_osdmap_epoch());
     }
   }
 }
@@ -1016,7 +1016,7 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
   rm->op = op;
   rm->ackerosd = ackerosd;
   rm->last_complete = get_info().last_complete;
-  rm->epoch_started = get_osdmap()->get_epoch();
+  rm->epoch_started = get_osdmap_epoch();
 
   ceph_assert(m->logbl.length());
   // shipped transaction and log entries
@@ -1106,12 +1106,12 @@ void ReplicatedBackend::repop_commit(RepModifyRef rm)
   MOSDRepOpReply *reply = new MOSDRepOpReply(
     m,
     get_parent()->whoami_shard(),
-    0, get_osdmap()->get_epoch(), m->get_min_epoch(), CEPH_OSD_FLAG_ONDISK);
+    0, get_osdmap_epoch(), m->get_min_epoch(), CEPH_OSD_FLAG_ONDISK);
   reply->set_last_complete_ondisk(rm->last_complete);
   reply->set_priority(CEPH_MSG_PRIO_HIGH); // this better match ack priority!
   reply->trace = rm->op->pg_trace;
   get_parent()->send_message_osd_cluster(
-    rm->ackerosd, reply, get_osdmap()->get_epoch());
+    rm->ackerosd, reply, get_osdmap_epoch());
 
   log_subop_stats(get_parent()->get_logger(), rm->op, l_osd_sop_w);
 }

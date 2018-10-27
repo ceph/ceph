@@ -369,8 +369,11 @@ public:
   bool pgb_is_primary() const override {
     return is_primary();
   }
-  OSDMapRef pgb_get_osdmap() const override {
+  OSDMapRef pgb_get_osdmap() const override final {
     return get_osdmap();
+  }
+  epoch_t pgb_get_osdmap_epoch() const override final {
+    return get_osdmap_epoch();
   }
   const pg_info_t &get_info() const override {
     return info;

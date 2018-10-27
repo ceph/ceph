@@ -134,7 +134,7 @@ public:
 GenContext<ThreadPool::TPHandle&> *PrimaryLogPG::bless_gencontext(
   GenContext<ThreadPool::TPHandle&> *c) {
   return new BlessedGenContext<ThreadPool::TPHandle&>(
-    this, c, get_osdmap()->get_epoch());
+    this, c, get_osdmap_epoch());
 }
 
 template <typename T>
@@ -161,7 +161,7 @@ public:
 GenContext<ThreadPool::TPHandle&> *PrimaryLogPG::bless_unlocked_gencontext(
   GenContext<ThreadPool::TPHandle&> *c) {
   return new UnlockedBlessedGenContext<ThreadPool::TPHandle&>(
-    this, c, get_osdmap()->get_epoch());
+    this, c, get_osdmap_epoch());
 }
 
 class PrimaryLogPG::BlessedContext : public Context {
@@ -187,7 +187,7 @@ public:
 };
 
 Context *PrimaryLogPG::bless_context(Context *c) {
-  return new BlessedContext(this, c, get_osdmap()->get_epoch());
+  return new BlessedContext(this, c, get_osdmap_epoch());
 }
 
 class PrimaryLogPG::C_PG_ObjectContext : public Context {
@@ -3951,7 +3951,7 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
 
   bool successful_write = !ctx->op_t->empty() && op->may_write() && result >= 0;
   // prepare the reply
-  ctx->reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0,
+  ctx->reply = new MOSDOpReply(m, 0, get_osdmap_epoch(), 0,
 			       successful_write);
 
   // Write operations aren't allowed to return a data payload because
@@ -4039,7 +4039,7 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
 	if (reply)
 	  ctx->reply = nullptr;
 	else {
-	  reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0, true);
+	  reply = new MOSDOpReply(m, 0, get_osdmap_epoch(), 0, true);
 	  reply->set_reply_versions(ctx->at_version,
 				    ctx->user_at_version);
 	}
