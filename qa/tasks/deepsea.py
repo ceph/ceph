@@ -375,7 +375,7 @@ class DeepSea(Task):
         log.debug("end of teardown method")
 
 
-class CephConf:
+class CephConf(DeepSea):
 
     ceph_conf_d = '/srv/salt/ceph/configuration/files/ceph.conf.d'
 
@@ -388,15 +388,18 @@ class CephConf:
         "osd": "osd.conf",
         }
 
-    def __init__(self, logger):
-        self.logger = logger.getChild('cephconf')
-        self.master_remote = deepsea_ctx['master_remote']
+    def __init__(self, ctx, config):
+        self.logger = log.getChild('ceph_conf')
+        self.logger.debug("beginning of constructor method")
+        super(CephConf, self).__init__(ctx, config)
+        self.logger.debug("munged config is {}".format(self.config))
+        self.logger.debug("end of constructor method")
 
     def _ceph_conf_d_full_path(self, component):
         if component in self.customize.keys():
             return "{}/{}".format(self.ceph_conf_d, self.customize[component])
 
-    def dashboard(self, logger):
+    def _dashboard(self):
         info_msg = "adjusted ceph.conf for deployment of dashboard MGR module"
         data = "mgr initial modules = dashboard\n"
         sudo_append_to_file(
@@ -404,9 +407,9 @@ class CephConf:
             self._ceph_conf_d_full_path("mon"),
             data,
             )
-        logger.info(info_msg)
+        self.logger.info(info_msg)
 
-    def dump_customizations(self, logger):
+    def _dump_customizations(self):
         for component in self.customize.keys():
             path = self._ceph_conf_d_full_path(component)
             path_exists = True
@@ -429,9 +432,37 @@ class CephConf:
                     path,
                     ])
             else:
-                logger.info("no {} file on remote".format(path))
+                self.logger.info("no {} file on remote".format(path))
 
-    def mon_allow_pool_delete(self, logger):
+    def _maybe_a_small_cluster(self):
+        """
+        Apply necessary ceph.conf for small clusters
+        """
+        info_msg = (
+            "adjusting ceph.conf for operation with {} storage node(s)"
+            .format(self.cluster_nodes)
+            )
+        data = None
+        if self.cluster_nodes == 1:
+            data = (
+                   "mon pg warn min per osd = 16\n"
+                   "osd pool default size = 2\n"
+                   "osd crush chooseleaf type = 0 # failure domain == osd\n"
+                   )
+        elif self.cluster_nodes == 2 or self.cluster_nodes == 3:
+            data = (
+                   "mon pg warn min per osd = 8\n"
+                   "osd pool default size = 2\n"
+                   )
+        if data:
+            self.logger.info(info_msg)
+            sudo_append_to_file(
+                self.master_remote,
+                self._ceph_conf_d_full_path("global"),
+                data,
+                )
+
+    def _mon_allow_pool_delete(self):
         info_msg = "adjusted ceph.conf to allow pool deletes"
         data = "mon allow pool delete = true\n"
         sudo_append_to_file(
@@ -439,49 +470,37 @@ class CephConf:
             self._ceph_conf_d_full_path("mon"),
             data,
             )
-        logger.info(info_msg)
+        self.logger.info(info_msg)
 
-    def maybe_a_small_cluster(self, cluster_nodes, logger):
-        """
-        Apply necessary ceph.conf for small clusters
-        """
-        info_msg = (
-            "adjusting ceph.conf for operation with {} storage node(s)"
-            .format(cluster_nodes)
-            )
-        data = None
-        if cluster_nodes == 1:
-            data = (
-                   "mon pg warn min per osd = 16\n"
-                   "osd pool default size = 2\n"
-                   "osd crush chooseleaf type = 0 # failure domain == osd\n"
-                   )
-        elif cluster_nodes == 2 or cluster_nodes == 3:
-            data = (
-                   "mon pg warn min per osd = 8\n"
-                   "osd pool default size = 2\n"
-                   )
-        if data:
-            logger.info(info_msg)
-            sudo_append_to_file(
-                self.master_remote,
-                self._ceph_conf_d_full_path("global"),
-                data,
-                )
+    def setup(self):
+        self.logger.debug("beginning of setup method")
+        if self.config.get('dashboard', True):
+            self._dashboard()
+        if self.config.get('mon_allow_pool_delete', True):
+            self._mon_allow_pool_delete()
+        if self.config.get('small_cluster', True):
+            self._maybe_a_small_cluster()
+        self.logger.debug("end of setup method")
+
+    def begin(self):
+        self.logger.debug("beginning of begin method")
+        # TODO: custom ceph conf
+        self._dump_customizations()
+        self.logger.debug("end of begin method")
 
 
 class Dummy(DeepSea):
 
     def __init__(self, ctx, config):
-        self.log = logging.getLogger('task.deepsea.dummy')
-        self.log.debug("beginning of constructor method")
+        self.logger = logging.getLogger('task.deepsea.dummy')
+        self.logger.debug("beginning of constructor method")
         pass
-        self.log.debug("end of constructor method")
+        self.logger.debug("end of constructor method")
 
     def begin(self):
-        self.log.debug("beginning of begin method")
-        self.log.info("deepsea_ctx == {}".format(deepsea_ctx))
-        self.log.debug("end of begin method")
+        self.logger.debug("beginning of begin method")
+        self.logger.info("deepsea_ctx == {}".format(deepsea_ctx))
+        self.logger.debug("end of begin method")
 
 
 class Deploy:
@@ -631,13 +650,8 @@ class Orch(DeepSea):
         """
         stage = 2
         self.__log_stage_start(stage)
-        ceph_conf = CephConf(self.logger)
         self._run_orch(("stage", stage))
         self._pillar_items()
-        ceph_conf.maybe_a_small_cluster(self.cluster_nodes, self.logger)
-        ceph_conf.mon_allow_pool_delete(self.logger)
-        ceph_conf.dashboard(self.logger)
-        ceph_conf.dump_customizations(self.logger)
 
     def _run_stage_3(self):
         """
@@ -1068,18 +1082,31 @@ function create_all_pools_at_once {
 MDS=""
 OPENSTACK=""
 RBD=""
-for arg in "$@"
+for arg in "$@" ; do
     arg="${arg,,}"
     case "$arg" in
         mds) MDS="$arg" ;;
         openstack) OPENSTACK="$arg" ;;
         rbd) RBD="$arg" ;;
     esac
-do
+done
 
 POOLS="write_test"
 test "$MDS" && POOLS+=" cephfs_data cephfs_metadata"
-test "$OPENSTACK" && POOLS+=" smoketest-cloud-backups smoketest-cloud-volumes smoketest-cloud-images smoketest-cloud-vms cloud-backups cloud-volumes cloud-images cloud-vms"
+if [ "$OPENSTACK" ] ; then
+    ADD_POOLS="smoketest-cloud-backups
+smoketest-cloud-volumes
+smoketest-cloud-images
+smoketest-cloud-vms
+cloud-backups
+cloud-volumes
+cloud-images
+cloud-vms
+"
+    for add_pool in $ADD_POOLS ; do
+        POOLS+=" $add_pool"
+    done
+fi
 test "$RBD" && POOLS+=" rbd"
 create_all_pools_at_once $POOLS
 ceph osd pool application enable write_test deepsea_qa
@@ -1135,7 +1162,7 @@ echo "Salt API test: END"
             )
 
     def create_all_pools_at_once(self, args):
-        self.log("creating pools: {}".format(' '.join(args)))
+        self.log.info("creating pools: {}".format(' '.join(args)))
         self._remote_run_script_as_root(
             self.master_remote,
             'create_all_pools_at_once.sh',
@@ -1159,6 +1186,7 @@ echo "Salt API test: END"
 
 
 task = DeepSea
+ceph_conf = CephConf
 create_pools = CreatePools
 deploy = Deploy
 dummy = Dummy

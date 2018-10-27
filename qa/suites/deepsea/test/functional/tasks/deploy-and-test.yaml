@@ -8,6 +8,7 @@ tasks:
                 profile: default
         - deepsea.orch:
                 stage: 2
+        - deepsea.ceph_conf:
         - deepsea.orch:
                 stage: 3
         - deepsea.create_pools:
