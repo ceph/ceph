@@ -2094,41 +2094,36 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     return;
   }
 
-  // degraded object?
-  if (write_ordered && is_degraded_or_backfilling_object(head)) {
-    if (can_backoff && g_conf()->osd_backoff_on_degraded) {
-      add_backoff(session, head, head);
-      maybe_kick_recovery(head);
-    } else {
-      wait_for_degraded_object(head, op);
-    }
-    return;
-  }
-
-  if (write_ordered && scrubber.is_chunky_scrub_active() &&
-      write_blocked_by_scrub(head)) {
-    dout(20) << __func__ << ": waiting for scrub" << dendl;
-    waiting_for_scrub.push_back(op);
-    op->mark_delayed("waiting for scrub");
-    return;
-  }
-
-  // blocked on snap?
   if (write_ordered) {
-    map<hobject_t, snapid_t>::iterator blocked_iter =
-      objects_blocked_on_degraded_snap.find(head);
-    if (blocked_iter != objects_blocked_on_degraded_snap.end()) {
+    // degraded object?
+    if (is_degraded_or_backfilling_object(head)) {
+      if (can_backoff && g_conf()->osd_backoff_on_degraded) {
+        add_backoff(session, head, head);
+        maybe_kick_recovery(head);
+      } else {
+        wait_for_degraded_object(head, op);
+      }
+      return;
+    }
+
+    if (scrubber.is_chunky_scrub_active() && write_blocked_by_scrub(head)) {
+      dout(20) << __func__ << ": waiting for scrub" << dendl;
+      waiting_for_scrub.push_back(op);
+      op->mark_delayed("waiting for scrub");
+      return;
+    }
+
+    // blocked on snap?
+    if (auto blocked_iter = objects_blocked_on_degraded_snap.find(head);
+	blocked_iter != std::end(objects_blocked_on_degraded_snap)) {
       hobject_t to_wait_on(head);
       to_wait_on.snap = blocked_iter->second;
       wait_for_degraded_object(to_wait_on, op);
       return;
     }
-    map<hobject_t, ObjectContextRef>::iterator blocked_snap_promote_iter =
-      objects_blocked_on_snap_promotion.find(head);
-    if (blocked_snap_promote_iter != objects_blocked_on_snap_promotion.end()) {
-      wait_for_blocked_object(
-        blocked_snap_promote_iter->second->obs.oi.soid,
-        op);
+    if (auto blocked_snap_promote_iter = objects_blocked_on_snap_promotion.find(head);
+	blocked_snap_promote_iter != std::end(objects_blocked_on_snap_promotion)) {
+      wait_for_blocked_object(blocked_snap_promote_iter->second->obs.oi.soid, op);
       return;
     }
     if (objects_blocked_on_cache_full.count(head)) {
