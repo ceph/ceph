@@ -287,7 +287,7 @@ OSD for each drive by repeating this procedure.
 
 #. Let the cluster forget the OSD first. This step removes the OSD from the CRUSH
    map, removes its authentication key. And it is removed from the OSD map as
-   well. Please note the `purge subcommand`_ is introduced in Luminous, for older
+   well. Please note the :ref:`purge subcommand <ceph-admin-osd>` is introduced in Luminous, for older
    versions, please see below ::
 
     ceph osd purge {id} --yes-i-really-mean-it
@@ -335,4 +335,3 @@ you need to perform this step manually:
 
 
 .. _Remove an OSD: ../crush-map#removeosd
-.. _purge subcommand: /man/8/ceph#osd
