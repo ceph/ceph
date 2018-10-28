@@ -57,7 +57,7 @@ class DeepSea(Task):
         log.debug("beginning of constructor method")
         super(DeepSea, self).__init__(ctx, config)
         if deepsea_ctx:
-            log.debug("deepsea_ctx already populated - this is a subtask")
+            log.debug("deepsea_ctx already populated (we are in a subtask)")
             self.cluster_nodes = deepsea_ctx['cluster_nodes']
             self.deepsea_cli = deepsea_ctx['cli']
             self.dev_env = deepsea_ctx['dev_env']
@@ -108,13 +108,8 @@ class DeepSea(Task):
         sh("test -d " + health_ok_path)
         copy_directory_recursively(
                 health_ok_path, self.master_remote, "health-ok")
-        self.master_remote.run(args=[
-            "pwd",
-            run.Raw(";"),
-            "ls",
-            "-lR",
-            "health-ok",
-            ])
+        self.master_remote.run(args="pwd ; ls -lR health-ok")
+        deepsea_ctx['health_ok_copied'] = True
 
     def _disable_gpg_checks(self):
         log.info("disabling zypper GPG checks on all test nodes")
@@ -147,9 +142,10 @@ class DeepSea(Task):
                     "deepsea: unrecognized install config value ->{}<-"
                     .format(self.config['install'])
                 )
+        deepsea_ctx['deepsea_installed'] = True
 
     def _install_deepsea_from_source(self):
-        """Install DeepSea from source (unless already installed from RPM)"""
+        log.info("WWWW: installing deepsea from source")
         if self.sm.master_rpm_q('deepsea'):
             log.info("DeepSea already installed from RPM")
             return None
@@ -207,8 +203,7 @@ class DeepSea(Task):
             ])
 
     def _install_deepsea_using_zypper(self):
-        """Install DeepSea using zypper"""
-        log.info("Installing DeepSea using zypper")
+        log.info("WWWW: installing DeepSea using zypper")
         self.master_remote.run(args=[
             'sudo',
             'zypper',
@@ -370,6 +365,19 @@ class DeepSea(Task):
             for pn in [1, 2]:
                 _remote.run(args=['sudo', 'sh', '-c', for_loop.format(pn=pn)])
 
+    # Teuthology iterates through the tasks stanza twice: once to "execute"
+    # the tasks and a second time to "unwind" them. During the first pass
+    # it pushes each task onto a stack, and during the second pass it "unwinds"
+    # the stack, with the result being that the tasks are unwound in reverse
+    # order. During the execution phase it calls three methods: the
+    # constructor, setup(), and begin() - in that order -, and during the
+    # unwinding phase it calls end() and teardown() - in that order.
+
+    # The task does not have to implement any of the methods. If not
+    # implemented, the method in question will be called via inheritance.
+    # If a method _is_ implemented, the implementation can optionally call
+    # the parent's implementation of that method as well. This is illustrated
+    # here:
     def setup(self):
         # log.debug("beginning of setup method")
         super(DeepSea, self).setup()
@@ -377,11 +385,15 @@ class DeepSea(Task):
         # log.debug("end of setup method")
 
     def begin(self):
-        super(DeepSea, self).begin()
         log.debug("beginning of begin method")
-        self._copy_health_ok()
-        self._disable_gpg_checks()
-        self._install_deepsea()
+        super(DeepSea, self).begin()
+        if 'health_ok_copied' not in deepsea_ctx:
+            self._copy_health_ok()
+            assert deepsea_ctx['health_ok_copied']
+        if 'deepsea_installed' not in deepsea_ctx:
+            self._disable_gpg_checks()
+            self._install_deepsea()
+            assert deepsea_ctx['deepsea_installed']
         log.debug("end of begin method")
 
     def end(self):
@@ -394,7 +406,6 @@ class DeepSea(Task):
         # log.debug("beginning of teardown method")
         super(DeepSea, self).teardown()
         pass
-        # self._purge_osds()
         # log.debug("end of teardown method")
 
 
@@ -968,28 +979,24 @@ class Preflight(DeepSea):
         super(Preflight, self).__init__(ctx, config)
         self.logger.debug("end of constructor method")
 
-    def _deepsea_cli_version(self):
-        """
-        Use DeepSea CLI to display the DeepSea version under test
-        """
-        installed = True
-        try:
-            self.master_remote.run(args=[
-                'type',
-                'deepsea',
-                run.Raw('>'),
-                '/dev/null',
-                run.Raw('2>&1'),
-                ])
-        except CommandFailedError:
-            installed = False
-        if installed:
-            self.master_remote.run(args=[
-                'deepsea',
-                '--version',
-                ])
+    def _deepsea_version(self):
+        if self.deepsea_cli:
+            try:
+                self.master_remote.run(args=[
+                    'type',
+                    'deepsea',
+                    run.Raw('>'),
+                    '/dev/null',
+                    run.Raw('2>&1'),
+                    ])
+            except CommandFailedError:
+                raise ConfigError(
+                    "_deepsea_version: test case calls for deepsea CLI, "
+                    "but it is not installed"
+                    )
+            self.master_remote.run(args='deepsea --version')
         else:
-            self.logger.info("deepsea CLI not installed")
+            self.master_remote.run(args="sudo salt-run deepsea.version")
 
     def _deepsea_minions(self):
         """
@@ -1049,7 +1056,7 @@ class Preflight(DeepSea):
         if not self._master_python_version(3):
             raise ConfigError("Python 3 not installed on master node"
                               " - bailing out!")
-        self._deepsea_cli_version()
+        self._deepsea_version()
         self._deepsea_minions()
         # Stage 0 does this, but we have no guarantee Stage 0 will run
         self.sm.sync_pillar_data()
@@ -1058,9 +1065,10 @@ class Preflight(DeepSea):
     def teardown(self):
         self.logger.debug("beginning of teardown method")
         super(DeepSea, self).teardown()
-        self._purge_osds()  # the install task does "rm -r /var/lib/ceph"
-                            # on every test node, and that fails when there
-                            # are OSDs running
+        #
+        # the install task does "rm -r /var/lib/ceph" on every test node,
+        # and that fails when there are OSDs running
+        self._purge_osds()
         self.logger.debug("end of teardown method")
 
 
