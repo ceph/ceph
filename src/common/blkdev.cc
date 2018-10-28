@@ -697,7 +697,7 @@ int BlkDev::model(char *model, size_t max) const
   return 0;
 }
 
-int BlkDev::serial(char *serial, size_t max)
+int BlkDev::serial(char *serial, size_t max) const
 {
   char ident[DISK_IDENT_SIZE];
 
