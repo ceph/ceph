@@ -1263,6 +1263,7 @@ KeyStore *MDSDaemon::ms_get_auth1_authorizer_keystore()
 
 int MDSDaemon::ms_handle_authentication(Connection *con)
 {
+  std::lock_guard l(mds_lock);
   int ret = 0;
   entity_name_t n(con->get_peer_type(), con->get_peer_global_id());
 
