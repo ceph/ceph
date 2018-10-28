@@ -446,27 +446,18 @@ class CephConf(DeepSea):
     def _dump_customizations(self):
         for component in self.customize.keys():
             path = self._ceph_conf_d_full_path(component)
-            path_exists = True
             try:
                 self.master_remote.run(
                     args="test -f {}".format(path)
-                )
+                    )
             except CommandFailedError:
                 self.logger.info(
                     "{} does not exist on the remote".format(path)
                     )
                 continue
-            if path_exists:
-                self.master_remote.run(args=[
-                    'ls',
-                    '-l',
-                    path,
-                    run.Raw(';'),
-                    'cat',
-                    path,
-                    ])
-            else:
-                self.logger.info("no {} file on remote".format(path))
+            self.master_remote.run(
+                args="ls -l {p} ; cat {p}".format(p=path)
+                )
 
     def _maybe_a_small_cluster(self):
         """
