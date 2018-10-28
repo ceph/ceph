@@ -30,11 +30,19 @@ class DeepSea(Task):
     Assumes a Salt cluster is already running (use the Salt task to achieve
     this).
 
-    This task understands the following config keys:
+    This task understands the following config keys which apply to
+    this task and all its subtasks:
 
         cli:
             true        deepsea CLI will be used (default)
             false       deepsea CLI will not be used
+        quiet_salt:
+            true        suppress stderr on salt commands (default)
+            false       let salt commands spam the log
+
+    This task also understands the following config keys that affect
+    the behavior of just this one task (no effect on subtasks):
+
         repo: (DeepSea git repo, e.g. https://github.com/SUSE/DeepSea.git)
         branch: (DeepSea git branch, e.g. master)
         install:
@@ -65,10 +73,13 @@ class DeepSea(Task):
             self.master_remote = deepsea_ctx['master_remote']
             self.roles = deepsea_ctx['roles']
             self.role_lookup_table = deepsea_ctx['role_lookup_table']
+            self.quiet_salt = deepsea_ctx['quiet_salt']
             log.debug("end of constructor method")
             return None
         deepsea_ctx['cli'] = self.config.get('cli', True)
         self.deepsea_cli = deepsea_ctx['cli']
+        deepsea_ctx['quiet_salt'] = self.config.get('quiet_salt', True)
+        self.quiet_salt = deepsea_ctx['quiet_salt']
         deepsea_ctx['salt_manager_instance'] = SaltManager(self.ctx)
         self.sm = deepsea_ctx['salt_manager_instance']
         deepsea_ctx['master_remote'] = self.sm.master_remote
@@ -594,12 +605,10 @@ class Orch(DeepSea):
     # FIXME: run on each minion individually, and compare deepsea "roles"
     # with teuthology roles!
     def _pillar_items(self):
-        self.master_remote.run(args=[
-            'sudo',
-            'salt',
-            '*',
-            'pillar.items',
-            ])
+        cmd = "sudo salt \\* pillar.items"
+        if self.quiet_salt:
+            cmd += " 2>/dev/null"
+        self.master_remote.run(args=cmd)
 
     def _run_orch(self, orch_tuple):
         """Run an orchestration. Dump journalctl on error."""
@@ -626,6 +635,8 @@ class Orch(DeepSea):
                 'timeout 60m salt-run '
                 '--no-color state.orch {}'
                 ).format(orch_spec)
+            if self.quiet_salt:
+                cmd_str += ' 2>/dev/null'
         if self.dev_env:
             cmd_str = 'DEV_ENV=true ' + cmd_str
         try:
@@ -987,7 +998,10 @@ class Preflight(DeepSea):
                     )
             self.master_remote.run(args='deepsea --version')
         else:
-            self.master_remote.run(args="sudo salt-run deepsea.version")
+            cmd_str = "sudo salt-run deepsea.version"
+            if self.quiet_salt:
+                cmd_str += " 2>/dev/null"
+            self.master_remote.run(args=cmd_str)
 
     def _deepsea_minions(self):
         """
@@ -1050,7 +1064,7 @@ class Preflight(DeepSea):
         self._deepsea_version()
         self._deepsea_minions()
         # Stage 0 does this, but we have no guarantee Stage 0 will run
-        self.sm.sync_pillar_data()
+        self.sm.sync_pillar_data(quiet=self.quiet_salt)
         self.logger.debug("end of begin method")
 
     def teardown(self):

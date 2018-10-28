@@ -234,13 +234,11 @@ class SaltManager(object):
     # (which means capturing the stdout and parsing it to ensure that
     # the string "Minion did not return" did not appear after any of
     # the minion names)
-    def sync_pillar_data(self):
-        self.master_remote.run(args=[
-            'sudo',
-            'sh',
-            '-c',
-            'salt \\* saltutil.sync_all 2>/dev/null'
-        ])
+    def sync_pillar_data(self, quiet=True):
+        cmd = "sudo salt \\* saltutil.sync_all"
+        if quiet:
+            cmd += " 2>/dev/null"
+        self.master_remote.run(args=cmd)
 
     def cat_salt_master_conf(self):
         self.__cat_file_remote(self.master_remote, filename="/etc/salt/master")
