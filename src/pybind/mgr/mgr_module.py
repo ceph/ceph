@@ -4,7 +4,10 @@ import ceph_module  # noqa
 import logging
 import six
 import threading
-from collections import defaultdict
+try:
+    from collections.abc import defaultdict
+except ImportError:
+    from collections import defaultdict
 import rados
 
 PG_STATES = [
