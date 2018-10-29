@@ -114,7 +114,7 @@ if [ x`uname`x = xFreeBSDx ]; then
 else
     source /etc/os-release
     case $ID in
-    debian|ubuntu|devuan)
+    debian|ubuntu|devuan|raspbian)
         echo "Using apt-get to install dependencies"
         $SUDO apt-get install -y lsb-release devscripts equivs
         $SUDO apt-get install -y dpkg-dev gcc
