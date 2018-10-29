@@ -4760,7 +4760,6 @@ bool OSD::heartbeat_reset(Connection *con)
   auto s = con->get_priv();
   if (s) {
     if (is_stopping()) {
-      heartbeat_lock.Unlock();
       return true;
     }
     auto heartbeat_session = static_cast<HeartbeatSession*>(s.get());
