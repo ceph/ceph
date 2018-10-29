@@ -421,6 +421,23 @@ class DeepSea(Task):
 
 
 class CephConf(DeepSea):
+    """
+    Adds custom options to ceph.conf.
+    Edit yaml file between stage 2 and 3.
+    Example:
+        - deepsea.orch:
+                stage: 2
+        - deepsea.ceph_conf:
+                global:
+                  mon lease: 15
+                  mon lease ack timeout: 25
+                mon:
+                  debug mon: 20
+                osd:
+                  debug filestore: 20
+        - deepsea.orch:
+                stage: 3
+    """
 
     ceph_conf_d = '/srv/salt/ceph/configuration/files/ceph.conf.d'
 
@@ -520,7 +537,23 @@ class CephConf(DeepSea):
 
     def begin(self):
         self.logger.debug("beginning of begin method")
-        # TODO: custom ceph conf
+        self.logger.debug("WWWW: Adding custom options to ceph.conf")
+        if not self.config:
+            self.logger.info("empty config: not setting any custom ceph.conf")
+            return None
+        for section in self.config.keys():
+            if isinstance(self.config[section], dict):
+                for conf_item, conf_value in self.config[section].iteritems():
+                    data = '{} = {}\n'.format(conf_item, conf_value)
+                    sudo_append_to_file(
+                        self.master_remote,
+                        self._ceph_conf_d_full_path(section),
+                        data
+                        )
+                    self.logger.info(
+                        "Adding to ceph.conf, {} section: {}"
+                        .format(section, data)
+                        )
         self._dump_customizations()
         self.logger.debug("end of begin method")
 

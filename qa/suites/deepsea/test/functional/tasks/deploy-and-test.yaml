@@ -9,6 +9,13 @@ tasks:
         - deepsea.orch:
                 stage: 2
         - deepsea.ceph_conf:
+                global:
+                        mon lease: 15
+                        mon lease ack timeout: 25
+                mon:
+                        debug mon: 20
+                osd:
+                        debug filestore: 20
         - deepsea.orch:
                 stage: 3
         - deepsea.create_pools:
