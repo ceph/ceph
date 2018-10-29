@@ -222,6 +222,7 @@ int ObjectCacheStore::promote_object(librados::IoCtx* ioctx, std::string object_
   if(ret < 0) {
     lderr(m_cct) << "fail to read from rados" << dendl;
   }
+  read_completion->release();
 
   return ret;
 }
