@@ -2,19 +2,19 @@ import { HttpClientTestingModule, HttpTestingController } from '@angular/common/
 import { TestBed } from '@angular/core/testing';
 
 import { configureTestBed } from '../../../testing/unit-test-helper';
-import { DashboardService } from './dashboard.service';
+import { HealthService } from './health.service';
 
-describe('DashboardService', () => {
-  let service: DashboardService;
+describe('HealthService', () => {
+  let service: HealthService;
   let httpTesting: HttpTestingController;
 
   configureTestBed({
-    providers: [DashboardService],
+    providers: [HealthService],
     imports: [HttpClientTestingModule]
   });
 
   beforeEach(() => {
-    service = TestBed.get(DashboardService);
+    service = TestBed.get(HealthService);
     httpTesting = TestBed.get(HttpTestingController);
   });
 
@@ -26,9 +26,15 @@ describe('DashboardService', () => {
     expect(service).toBeTruthy();
   });
 
-  it('should call getHealth', () => {
-    service.getHealth().subscribe();
-    const req = httpTesting.expectOne('api/dashboard/health');
+  it('should call getFullHealth', () => {
+    service.getFullHealth().subscribe();
+    const req = httpTesting.expectOne('api/health/full');
+    expect(req.request.method).toBe('GET');
+  });
+
+  it('should call getMinimalHealth', () => {
+    service.getMinimalHealth().subscribe();
+    const req = httpTesting.expectOne('api/health/minimal');
     expect(req.request.method).toBe('GET');
   });
 });

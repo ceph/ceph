@@ -8,7 +8,7 @@ import { TreeModule } from 'ng2-tree';
 import { TabsModule } from 'ngx-bootstrap/tabs';
 
 import { configureTestBed } from '../../../../testing/unit-test-helper';
-import { DashboardService } from '../../../shared/api/dashboard.service';
+import { HealthService } from '../../../shared/api/health.service';
 import { SharedModule } from '../../../shared/shared.module';
 import { CrushmapComponent } from './crushmap.component';
 
@@ -19,7 +19,7 @@ describe('CrushmapComponent', () => {
   configureTestBed({
     imports: [HttpClientTestingModule, TreeModule, TabsModule.forRoot(), SharedModule],
     declarations: [CrushmapComponent],
-    providers: [DashboardService]
+    providers: [HealthService]
   });
 
   beforeEach(() => {
@@ -39,21 +39,21 @@ describe('CrushmapComponent', () => {
   });
 
   describe('test tree', () => {
-    let dashboardService: DashboardService;
+    let healthService: HealthService;
     const prepareGetHealth = (nodes: object[]) => {
-      spyOn(dashboardService, 'getHealth').and.returnValue(
+      spyOn(healthService, 'getFullHealth').and.returnValue(
         of({ osd_map: { tree: { nodes: nodes } } })
       );
       fixture.detectChanges();
     };
 
     beforeEach(() => {
-      dashboardService = debugElement.injector.get(DashboardService);
+      healthService = debugElement.injector.get(HealthService);
     });
 
     it('should display "No nodes!" if ceph tree nodes is empty array', () => {
       prepareGetHealth([]);
-      expect(dashboardService.getHealth).toHaveBeenCalled();
+      expect(healthService.getFullHealth).toHaveBeenCalled();
       expect(component.tree.value).toEqual('No nodes!');
     });
 
