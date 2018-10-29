@@ -19,6 +19,11 @@
 #define PROCPREFIX
 #endif
 
+#include <sys/stat.h>
+#ifndef ACCESSPERMS
+#define ACCESSPERMS (S_IRWXU|S_IRWXG|S_IRWXO)
+#endif
+
 #if defined(__FreeBSD__)
 
 // FreeBSD supports Linux procfs with its compatibility module
