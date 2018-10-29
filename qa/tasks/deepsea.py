@@ -108,20 +108,6 @@ class DeepSea(Task):
         log.debug("deepsea context: {}".format(deepsea_ctx))
         log.debug("end of constructor method")
 
-    def _copy_health_ok(self):
-        """
-        Copy health-ok.sh from teuthology VM to master_remote
-        """
-        suite_path = self.ctx.config.get('suite_path')
-        log.info("suite_path is ->{}<-".format(suite_path))
-        sh("ls -l {}".format(suite_path))
-        health_ok_path = suite_path + "/deepsea/health-ok"
-        sh("test -d " + health_ok_path)
-        copy_directory_recursively(
-                health_ok_path, self.master_remote, "health-ok")
-        self.master_remote.run(args="pwd ; ls -lR health-ok")
-        deepsea_ctx['health_ok_copied'] = True
-
     def _disable_gpg_checks(self):
         log.info("disabling zypper GPG checks on all test nodes")
         self.master_remote.run(args=(
@@ -398,9 +384,6 @@ class DeepSea(Task):
     def begin(self):
         log.debug("beginning of begin method")
         super(DeepSea, self).begin()
-        if 'health_ok_copied' not in deepsea_ctx:
-            self._copy_health_ok()
-            assert deepsea_ctx['health_ok_copied']
         if 'deepsea_installed' not in deepsea_ctx:
             self._disable_gpg_checks()
             self._install_deepsea()
@@ -575,6 +558,73 @@ class Dummy(DeepSea):
 class Deploy:
 
     pass
+
+
+class HealthOK(DeepSea):
+    """
+    Copy health_ok.sh to Salt Master node and run commands.
+
+    This task understands the following config key:
+
+        commands:
+            [list of health-ok.sh commands]
+
+
+    The list of commands will be executed as root on the Salt Master node.
+    """
+
+    prefix = 'health-ok/'
+
+    def __init__(self, ctx, config):
+        self.logger = log.getChild('health_ok')
+        self.logger.debug("beginning of constructor method")
+        super(HealthOK, self).__init__(ctx, {})
+        self.config = config
+        self.logger.debug("end of constructor method")
+
+    def _copy_health_ok(self):
+        """
+        Copy health-ok.sh from teuthology VM to master_remote
+        """
+        suite_path = self.ctx.config.get('suite_path')
+        log.info("suite_path is ->{}<-".format(suite_path))
+        sh("ls -l {}".format(suite_path))
+        health_ok_path = suite_path + "/deepsea/health-ok"
+        sh("test -d " + health_ok_path)
+        copy_directory_recursively(
+                health_ok_path, self.master_remote, "health-ok")
+        self.master_remote.run(args="pwd ; ls -lR health-ok")
+        deepsea_ctx['health_ok_copied'] = True
+
+    def setup(self):
+        if 'health_ok_copied' not in deepsea_ctx:
+            self._copy_health_ok()
+            assert deepsea_ctx['health_ok_copied']
+
+    def begin(self):
+        commands = self.config.get('commands', [])
+        if not isinstance(commands, list):
+            raise ConfigError(
+                "(health_ok subtask) commands must be a list of strings"
+                )
+        if not commands:
+            self.logger.warning(
+                "The health_ok task was run, but no commands were specified. "
+                "Doing nothing."
+                )
+        for cmd_str in commands:
+            if not isinstance(cmd_str, str):
+                raise ConfigError((
+                    "(health_ok subtask) commands must be a list of strings. "
+                    "Non-string command ->{}<- found!").format(cmd_str)
+                    )
+            if cmd_str.startswith('health-ok.sh'):
+                cmd_str = self.prefix + cmd_str
+                if self.dev_env:
+                    cmd_str = 'DEV_ENV=true ' + cmd_str
+            self.master_remote.run(args=[
+                'sudo', 'bash', '-c', cmd_str,
+                ])
 
 
 class Orch(DeepSea):
@@ -1267,6 +1317,7 @@ ceph_conf = CephConf
 create_pools = CreatePools
 deploy = Deploy
 dummy = Dummy
+health_ok = HealthOK
 orch = Orch
 policy = Policy
 preflight = Preflight
