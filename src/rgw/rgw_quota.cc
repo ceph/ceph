@@ -900,11 +900,19 @@ class RGWQuotaHandlerImpl : public RGWQuotaHandler {
 
 
     if (quota_applier.is_num_objs_exceeded(entity, quota, stats, num_objs)) {
-      return -ERR_QUOTA_EXCEEDED;
+      if (0 == strcmp(entity,"user")) {
+        return -ERR_USER_NUMBER_QUOTA_EXCEEDED;
+      } else {
+        return -ERR_BUCKET_NUMBER_QUOTA_EXCEEDED;
+      }
     }
 
     if (quota_applier.is_size_exceeded(entity, quota, stats, size)) {
-      return -ERR_QUOTA_EXCEEDED;
+      if (0 == strcmp(entity, "user")) {
+        return -ERR_USER_SIZE_QUOTA_EXCEEDED;
+      } else {
+        return -ERR_BUCKET_SIZE_QUOTA_EXCEEDED;
+      }
     }
 
     ldout(store->ctx(), 20) << entity << " quota OK:"
