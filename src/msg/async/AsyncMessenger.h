@@ -372,7 +372,7 @@ public:
     return 0;
   }
 
-  void learned_addr(const entity_addr_t &peer_addr_for_me);
+  bool learned_addr(const entity_addr_t &peer_addr_for_me);
   void add_accept(Worker *w, ConnectedSocket cli_socket,
 		  const entity_addr_t &listen_addr,
 		  const entity_addr_t &peer_addr);

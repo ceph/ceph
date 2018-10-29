@@ -1383,12 +1383,11 @@ CtPtr ProtocolV2::handle_server_addrvec_and_identify(char *buffer, int r) {
   }
 
   connection->set_peer_addrs(paddrs);
-  connection->socket_addr = peer_addr_for_me;
 
   ldout(cct, 20) << __func__ << " connect peer addr for me is "
                  << peer_addr_for_me << dendl;
   connection->lock.unlock();
-  messenger->learned_addr(peer_addr_for_me);
+  bool learned = messenger->learned_addr(peer_addr_for_me);
   if (cct->_conf->ms_inject_internal_delays &&
       cct->_conf->ms_inject_socket_failures) {
     if (rand() % cct->_conf->ms_inject_socket_failures == 0) {
@@ -1401,6 +1400,9 @@ CtPtr ProtocolV2::handle_server_addrvec_and_identify(char *buffer, int r) {
   }
 
   connection->lock.lock();
+  if (learned) {
+    connection->socket_addr = peer_addr_for_me;
+  }
   if (state != CONNECTING_WAIT_BANNER_AND_IDENTIFY) {
     ldout(cct, 1) << __func__
                   << " state changed while learned_addr, mark_down or "
