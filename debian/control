@@ -107,7 +107,7 @@ Depends: binutils,
          ${shlibs:Depends},
 Recommends: btrfs-tools,
             ceph-mds (= ${binary:Version}),
-            librados2 (= ${binary:Version}),
+            librados3 (= ${binary:Version}),
             libradosstriper1 (= ${binary:Version}),
             librbd1 (= ${binary:Version}),
             ntp | time-daemon,
@@ -336,7 +336,7 @@ Description: debugging symbols for rbd-fuse
 Package: rbd-mirror
 Architecture: linux-any
 Depends: ceph-common (= ${binary:Version}),
-         librados2 (= ${binary:Version}),
+         librados3 (= ${binary:Version}),
          ${misc:Depends},
          ${shlibs:Depends},
 Description: Ceph daemon for mirroring RBD images
@@ -457,11 +457,13 @@ Description: OCF-compliant resource agents for Ceph
  Ceph with OCF-compliant cluster resource managers,
  such as Pacemaker.
 
-Package: librados2
+Package: librados3
 Conflicts: librados,
            librados1,
+           librados2
 Replaces: librados,
           librados1,
+          librados2,
 Architecture: linux-any
 Section: libs
 Depends: ${misc:Depends},
@@ -472,13 +474,13 @@ Description: RADOS distributed object store client library
  shared library allowing applications to access the distributed object
  store using a simple file-like interface.
 
-Package: librados2-dbg
+Package: librados3-dbg
 Conflicts: librados1-dbg,
 Replaces: librados1-dbg,
 Architecture: linux-any
 Section: debug
 Priority: extra
-Depends: librados2 (= ${binary:Version}),
+Depends: librados3 (= ${binary:Version}),
          ${misc:Depends},
 Description: debugging symbols for librados
  RADOS is a reliable, autonomic distributed object storage cluster
@@ -491,13 +493,13 @@ Description: debugging symbols for librados
 Package: librados-dev
 Architecture: linux-any
 Section: libdevel
-Depends: librados2 (= ${binary:Version}),
+Depends: librados3 (= ${binary:Version}),
          ${misc:Depends},
          ${shlibs:Depends},
 Conflicts: librados1-dev,
-           librados2-dev,
+           librados3-dev,
 Replaces: librados1-dev,
-          librados2-dev,
+          librados3-dev,
 Description: RADOS distributed object store client library (development files)
  RADOS is a reliable, autonomic distributed object storage cluster
  developed as part of the Ceph distributed storage system.  This is a
@@ -550,7 +552,7 @@ Description: RADOS distributed object store client C++ library (development file
 Package: libradosstriper1
 Architecture: linux-any
 Section: libs
-Depends: librados2 (= ${binary:Version}),
+Depends: librados3 (= ${binary:Version}),
          ${misc:Depends},
          ${shlibs:Depends},
 Description: RADOS striping interface
@@ -587,7 +589,7 @@ Description: RADOS striping interface (development files)
 Package: librbd1
 Architecture: linux-any
 Section: libs
-Depends: librados2 (= ${binary:Version}),
+Depends: librados3 (= ${binary:Version}),
          ${misc:Depends},
          ${shlibs:Depends},
 Description: RADOS block device client library
@@ -686,7 +688,7 @@ Description: Ceph distributed file system client library (development files)
 Package: librgw2
 Architecture: linux-any
 Section: libs
-Depends: librados2 (= ${binary:Version}),
+Depends: librados3 (= ${binary:Version}),
          ${misc:Depends},
          ${shlibs:Depends},
 Description: RADOS Gateway client library
@@ -799,7 +801,7 @@ Description: Meta-package for python libraries for the Ceph libraries
 Package: python-rados
 Architecture: linux-any
 Section: python
-Depends: librados2 (= ${binary:Version}),
+Depends: librados3 (= ${binary:Version}),
          ${misc:Depends},
          ${python:Depends},
          ${shlibs:Depends},
@@ -833,7 +835,7 @@ Description: Python 2 libraries for the Ceph librados library
 Package: python3-rados
 Architecture: linux-any
 Section: python
-Depends: librados2 (= ${binary:Version}),
+Depends: librados3 (= ${binary:Version}),
          ${misc:Depends},
          ${python3:Depends},
          ${shlibs:Depends},
