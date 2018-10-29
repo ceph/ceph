@@ -1,7 +1,10 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
+import { Observable } from 'rxjs';
+
 import { cdEncode } from '../decorators/cd-encode';
+import { PoolFormInfo } from '../models/pool-form-info';
 import { ApiModule } from './api.module';
 
 @cdEncode
@@ -35,8 +38,8 @@ export class PoolService {
     return this.http.get(this.apiPath);
   }
 
-  getInfo() {
-    return this.http.get(`${this.apiPath}/_info`);
+  getInfo(): Observable<PoolFormInfo> {
+    return this.http.get<PoolFormInfo>(`${this.apiPath}/_info`);
   }
 
   list(attrs = []) {
