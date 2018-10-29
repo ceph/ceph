@@ -12,6 +12,8 @@
  *
  */
 
+#include "include/compat.h"
+
 #ifdef __FreeBSD__
 #include <sys/param.h>
 #include <geom/geom_disk.h>
