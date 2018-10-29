@@ -60,6 +60,14 @@
           <context context-type="sourcefile">app/core/navigation/navigation/navigation.component.html</context>
           <context context-type="linenumber">78</context>
         </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/rbd-details/rbd-details.component.html</context>
+          <context context-type="linenumber">125</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/pool/pool-details/pool-details.component.html</context>
+          <context context-type="linenumber">22</context>
+        </context-group>
       </trans-unit><trans-unit id="8c95898abff46bfac3ed6eb2afef74597e60b15c" datatype="html">
         <source>CRUSH map</source>
         <context-group purpose="location">
@@ -240,7 +248,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
-          <context context-type="linenumber">303</context>
+          <context context-type="linenumber">315</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/cluster/configuration/configuration-form/configuration-form.component.html</context>
@@ -252,7 +260,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">443</context>
+          <context context-type="linenumber">451</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-bucket-form/rgw-bucket-form.component.html</context>
@@ -493,19 +501,19 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
-          <context context-type="linenumber">49</context>
+          <context context-type="linenumber">51</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
-          <context context-type="linenumber">91</context>
+          <context context-type="linenumber">93</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
-          <context context-type="linenumber">151</context>
+          <context context-type="linenumber">153</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
-          <context context-type="linenumber">175</context>
+          <context context-type="linenumber">177</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/cluster/osd/osd-recv-speed-modal/osd-recv-speed-modal.component.html</context>
@@ -848,7 +856,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
-          <context context-type="linenumber">36</context>
+          <context context-type="linenumber">38</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/cluster/configuration/configuration-form/configuration-form.component.html</context>
@@ -994,23 +1002,23 @@
         <source>{VAR_SELECT, select, editing {Edit} cloning {Clone} copying {Copy} other {Add} }</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
-          <context context-type="linenumber">10</context>
+          <context context-type="linenumber">11</context>
         </context-group>
       </trans-unit><trans-unit id="52dd89f49fc440660cbbb3665b88d80f5baa7437" datatype="html">
         <source>{VAR_SELECT, select, cloning {Clone from} copying {Copy from} other {Parent} }</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
-          <context context-type="linenumber">20</context>
+          <context context-type="linenumber">22</context>
         </context-group>
       </trans-unit><trans-unit id="94516fa213706c67ce5a5b5765681d7fb032033a" datatype="html">
         <source>Loading...</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
-          <context context-type="linenumber">79</context>
+          <context context-type="linenumber">81</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
-          <context context-type="linenumber">139</context>
+          <context context-type="linenumber">141</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/nfs/nfs-form/nfs-form.component.html</context>
@@ -1062,7 +1070,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">341</context>
+          <context context-type="linenumber">342</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-bucket-form/rgw-bucket-form.component.html</context>
@@ -1072,37 +1080,37 @@
         <source>-- No rbd pools available --</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
-          <context context-type="linenumber">82</context>
+          <context context-type="linenumber">84</context>
         </context-group>
       </trans-unit><trans-unit id="ef83ec9c304a89d45650e580dcdc2978c37b3a83" datatype="html">
         <source>-- Select a pool --</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
-          <context context-type="linenumber">85</context>
+          <context context-type="linenumber">87</context>
         </context-group>
       </trans-unit><trans-unit id="49449943d8cbf59d8c401c8bd2e76f92e207cc5f" datatype="html">
         <source>Use a dedicated data pool</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
-          <context context-type="linenumber">105</context>
+          <context context-type="linenumber">107</context>
         </context-group>
       </trans-unit><trans-unit id="870aee0dd31a9643bf62007beb8f1ae1deb34d42" datatype="html">
         <source>Data pool</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
-          <context context-type="linenumber">116</context>
+          <context context-type="linenumber">118</context>
         </context-group>
       </trans-unit><trans-unit id="3792ca829d9b9f687e1f5d7733d30e9bb0bfec47" datatype="html">
         <source>Dedicated pool that stores the object-data of the RBD.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
-          <context context-type="linenumber">120</context>
+          <context context-type="linenumber">122</context>
         </context-group>
       </trans-unit><trans-unit id="151c80ea931037cd92e854442927f8a0f6ae7795" datatype="html">
         <source>-- No data pools available --</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
-          <context context-type="linenumber">142</context>
+          <context context-type="linenumber">144</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/nfs/nfs-form/nfs-form.component.html</context>
@@ -1112,7 +1120,7 @@
         <source>Size</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
-          <context context-type="linenumber">160</context>
+          <context context-type="linenumber">162</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-details/rbd-details.component.html</context>
@@ -1122,19 +1130,19 @@
         <source>e.g., 10GiB</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
-          <context context-type="linenumber">170</context>
+          <context context-type="linenumber">172</context>
         </context-group>
       </trans-unit><trans-unit id="0a88bbee20570aaf9615332fb27020627044874d" datatype="html">
         <source>You have to increase the size.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
-          <context context-type="linenumber">178</context>
+          <context context-type="linenumber">180</context>
         </context-group>
       </trans-unit><trans-unit id="6cdb1fea93d77c07950c0c76c6e0ad79ebbef084" datatype="html">
         <source>Features</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
-          <context context-type="linenumber">188</context>
+          <context context-type="linenumber">190</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-details/rbd-details.component.html</context>
@@ -1144,19 +1152,25 @@
         <source>Advanced...</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
-          <context context-type="linenumber">211</context>
+          <context context-type="linenumber">213</context>
         </context-group>
       </trans-unit><trans-unit id="bc2e854e111ecf2bd7db170da5e3c2ed08181d88" datatype="html">
         <source>Advanced</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
-          <context context-type="linenumber">217</context>
+          <context context-type="linenumber">219</context>
+        </context-group>
+      </trans-unit><trans-unit id="3562a3778695a5f9c0445660e35301f0a39aaf73" datatype="html">
+        <source>Striping</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
+          <context context-type="linenumber">222</context>
         </context-group>
       </trans-unit><trans-unit id="ceac8e132384322ec778ba760875a6c6897d3e42" datatype="html">
         <source>Object size</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
-          <context context-type="linenumber">224</context>
+          <context context-type="linenumber">229</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-details/rbd-details.component.html</context>
@@ -1166,49 +1180,55 @@
         <source>Stripe unit</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
-          <context context-type="linenumber">241</context>
+          <context context-type="linenumber">246</context>
         </context-group>
       </trans-unit><trans-unit id="84471be1049006edecbcaef1a32ae0893c229c50" datatype="html">
         <source>-- Select stripe unit --</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
-          <context context-type="linenumber">252</context>
+          <context context-type="linenumber">257</context>
         </context-group>
       </trans-unit><trans-unit id="8d32c5c54c8581c774a7f467fbd4e329b15a74fa" datatype="html">
         <source>This field is required because stripe count is defined!</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
-          <context context-type="linenumber">258</context>
+          <context context-type="linenumber">263</context>
         </context-group>
       </trans-unit><trans-unit id="6bbf9040be7c5491d4a03f2185708f43a6582a3b" datatype="html">
         <source>Stripe unit is greater than object size.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
-          <context context-type="linenumber">261</context>
+          <context context-type="linenumber">266</context>
         </context-group>
       </trans-unit><trans-unit id="a682f49f9b761591661276d7c6f550e641a130a4" datatype="html">
         <source>Stripe count</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
-          <context context-type="linenumber">270</context>
+          <context context-type="linenumber">275</context>
         </context-group>
       </trans-unit><trans-unit id="baa74031990c5370008ba622d0a250f0929097f4" datatype="html">
         <source>This field is required because stripe unit is defined!</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
-          <context context-type="linenumber">283</context>
+          <context context-type="linenumber">288</context>
         </context-group>
       </trans-unit><trans-unit id="cd2ada6d5ecbd5cbf89eae0a1f5326efedac0dbc" datatype="html">
         <source>Stripe count must be greater than 0.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
-          <context context-type="linenumber">286</context>
+          <context context-type="linenumber">291</context>
+        </context-group>
+      </trans-unit><trans-unit id="21afa21d069c7fdfc742e6fbbe7e6c0f6ff4e580" datatype="html">
+        <source><x id="ICU" equiv-text="{mode, select, editing {...} cloning {...} copying {...} other {...}}"/> RBD</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
+          <context context-type="linenumber">310</context>
         </context-group>
       </trans-unit><trans-unit id="96d97d99d8c30942ace7d29cad9dcfb5d32315a1" datatype="html">
         <source>{VAR_SELECT, select, editing {Update} cloning {Clone} copying {Copy} other {Create} }</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
-          <context context-type="linenumber">298</context>
+          <context context-type="linenumber">310</context>
         </context-group>
       </trans-unit><trans-unit id="aba82bfd8e177d35b76cad7cd43941f8e5e5acac" datatype="html">
         <source>Trash</source>
@@ -2368,19 +2388,19 @@
         <source>Applications</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">290</context>
+          <context context-type="linenumber">291</context>
         </context-group>
       </trans-unit><trans-unit id="2208d63d5940ce656006a220102b1eb2b5e553da" datatype="html">
         <source>Compression</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">308</context>
+          <context context-type="linenumber">309</context>
         </context-group>
       </trans-unit><trans-unit id="37e10df2d9c0c25ef04ac112c9c9a7723e8efae0" datatype="html">
         <source>Mode</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">314</context>
+          <context context-type="linenumber">315</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/mirroring/pool-edit-mode-modal/pool-edit-mode-modal.component.html</context>
@@ -2390,89 +2410,89 @@
         <source>Algorithm</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">333</context>
+          <context context-type="linenumber">334</context>
         </context-group>
       </trans-unit><trans-unit id="4903231d42089325a28892c0fde1aed46b733ae6" datatype="html">
         <source>-- No erasure compression algorithm available --</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">344</context>
+          <context context-type="linenumber">345</context>
         </context-group>
       </trans-unit><trans-unit id="5d68ddb254275f8f44221e9ad6d8ceeb59ca46a6" datatype="html">
         <source>Minimum blob size</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">358</context>
+          <context context-type="linenumber">359</context>
         </context-group>
       </trans-unit><trans-unit id="fb2f176df80647137cbb02bbeb29e5dec707a400" datatype="html">
         <source>e.g., 128KiB</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">367</context>
+          <context context-type="linenumber">368</context>
         </context-group>
       </trans-unit><trans-unit id="1b7f6e53a4521c6eb3ced4c007fdd4cf80bb7707" datatype="html">
         <source>Value should be greater than 0</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">372</context>
+          <context context-type="linenumber">373</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">397</context>
+          <context context-type="linenumber">398</context>
         </context-group>
       </trans-unit><trans-unit id="54be22af9625a595ee5d70917ee1fb116be7c4be" datatype="html">
         <source>Value should be greater than the maximum blob size</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">375</context>
+          <context context-type="linenumber">376</context>
         </context-group>
       </trans-unit><trans-unit id="151efb127a9a4dd25259a0b2055442318a141f5b" datatype="html">
         <source>Maximum blob size</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">384</context>
+          <context context-type="linenumber">385</context>
         </context-group>
       </trans-unit><trans-unit id="0c656f0e346bbadf46eb1a5d20d0307a3bd20ba8" datatype="html">
         <source>e.g., 512KiB</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">392</context>
+          <context context-type="linenumber">393</context>
         </context-group>
       </trans-unit><trans-unit id="0a65a24eee8a026f3b1113fe9e157e9a0dd69486" datatype="html">
         <source>Value should be greater than the minimum blob size</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">400</context>
+          <context context-type="linenumber">401</context>
         </context-group>
       </trans-unit><trans-unit id="261ba09c4a59de83f48f52a23fd328da37e61ff4" datatype="html">
         <source>Ratio</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">409</context>
+          <context context-type="linenumber">410</context>
         </context-group>
       </trans-unit><trans-unit id="c1430457a9c3c66366e51d76bf10396014c576be" datatype="html">
         <source>Compression ratio</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">420</context>
+          <context context-type="linenumber">421</context>
         </context-group>
       </trans-unit><trans-unit id="ae5ce6de352cde949998fb10754459c3a4eb183b" datatype="html">
         <source>Value should be between 0.0 and 1.0</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">423</context>
+          <context context-type="linenumber">424</context>
         </context-group>
       </trans-unit><trans-unit id="c6d3131ce5386154504dc91b5ad08855d85881d3" datatype="html">
         <source><x id="ICU" equiv-text="{editing, select, 1 {...} other {...}}"/> pool</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">438</context>
+          <context context-type="linenumber">446</context>
         </context-group>
       </trans-unit><trans-unit id="e2b15aacc2f17a9c3276895eeeaadd342ab26555" datatype="html">
         <source>{VAR_SELECT, select, 1 {Edit} other {Create} }</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">438</context>
+          <context context-type="linenumber">446</context>
         </context-group>
       </trans-unit><trans-unit id="1d8a7c8aea58294a3c57c23af0468ddf0ba0c9c7" datatype="html">
         <source>Pools List</source>
@@ -3521,6 +3541,54 @@
           <context context-type="sourcefile">app/ceph/performance-counter/table-performance-counter/table-performance-counter.component.html</context>
           <context context-type="linenumber">12</context>
         </context-group>
+      </trans-unit><trans-unit id="5decb3917d46a9ac6e5813699801becb7c3c1455" datatype="html">
+        <source>Global</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/rbd-configuration-list/rbd-configuration-list.component.html</context>
+          <context context-type="linenumber">10</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/rbd-details/rbd-details.component.html</context>
+          <context context-type="linenumber">137</context>
+        </context-group>
+      </trans-unit><trans-unit id="a5f9ba9bb9faa8284bcadb1cdbc6aaf969e9c4bb" datatype="html">
+        <source>Image</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/rbd-configuration-list/rbd-configuration-list.component.html</context>
+          <context context-type="linenumber">11</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/rbd-details/rbd-details.component.html</context>
+          <context context-type="linenumber">135</context>
+        </context-group>
+      </trans-unit><trans-unit id="e70fcca5a99575cffef3ff8cbd5e69f06ffd0f1c" datatype="html">
+        <source>Pool</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/rbd-configuration-list/rbd-configuration-list.component.html</context>
+          <context context-type="linenumber">12</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/rbd-details/rbd-details.component.html</context>
+          <context context-type="linenumber">18</context>
+        </context-group>
+      </trans-unit><trans-unit id="ff92fbdec9fdd5054493eeda0d7ee8b450f83e72" datatype="html">
+        <source>RBD Configuration</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/rbd-configuration-form/rbd-configuration-form.component.html</context>
+          <context context-type="linenumber">2</context>
+        </context-group>
+      </trans-unit><trans-unit id="b62d9efc8eb3b589904f6cb96a0406bbda55673a" datatype="html">
+        <source>Remove the local configuration value. The parent configuration value will be inherited and used instead.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/rbd-configuration-form/rbd-configuration-form.component.html</context>
+          <context context-type="linenumber">60</context>
+        </context-group>
+      </trans-unit><trans-unit id="963488a1010d46067b238c4ae917fab3907c0a3a" datatype="html">
+        <source>The mininum value is 0</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/rbd-configuration-form/rbd-configuration-form.component.html</context>
+          <context context-type="linenumber">73</context>
+        </context-group>
       </trans-unit><trans-unit id="91853167141c37b58868f3b0421383dd72fa8a01" datatype="html">
         <source>Attributes (OSD map)</source>
         <context-group purpose="location">
@@ -3790,12 +3858,6 @@
           <context context-type="sourcefile">app/ceph/block/rbd-details/rbd-details.component.html</context>
           <context context-type="linenumber">2</context>
         </context-group>
-      </trans-unit><trans-unit id="e70fcca5a99575cffef3ff8cbd5e69f06ffd0f1c" datatype="html">
-        <source>Pool</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/block/rbd-details/rbd-details.component.html</context>
-          <context context-type="linenumber">18</context>
-        </context-group>
       </trans-unit><trans-unit id="03cc5b14b0a20d075e9009ff021f4f1660ba348a" datatype="html">
         <source>Data Pool</source>
         <context-group purpose="location">
@@ -3865,6 +3927,18 @@
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-details/rbd-details.component.html</context>
           <context context-type="linenumber">119</context>
+        </context-group>
+      </trans-unit><trans-unit id="58e58f1a8786da9031a05e6770c5dafce82badf5" datatype="html">
+        <source>This setting overrides the global value</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/rbd-details/rbd-details.component.html</context>
+          <context context-type="linenumber">135</context>
+        </context-group>
+      </trans-unit><trans-unit id="36b46714164964c6258b08ed0a25f57d8a950f92" datatype="html">
+        <source>This is the global value. No value for this option has been set for this image.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/rbd-details/rbd-details.component.html</context>
+          <context context-type="linenumber">137</context>
         </context-group>
       </trans-unit><trans-unit id="3f67f30568e9ae47507d46e28e1e82a7dca772e2" datatype="html">
         <source><x id="ICU" equiv-text="{ editing, select, true {...} other {...}}"/> RBD Snapshot</source>
@@ -4141,7 +4215,7 @@
         <source>Cache Tiers Details</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-details/pool-details.component.html</context>
-          <context context-type="linenumber">22</context>
+          <context context-type="linenumber">27</context>
         </context-group>
       </trans-unit><trans-unit id="0c1e17956453ad772dbe82d6946f62748c692f3e" datatype="html">
         <source>Ranks</source>
@@ -4242,29 +4316,6 @@
         <source># Active/Non-Optimized</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/iscsi/iscsi.component.ts</context>
-          <context context-type="linenumber">1</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="a5f9ba9bb9faa8284bcadb1cdbc6aaf969e9c4bb" datatype="html">
-        <source>Image</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/ceph/block/iscsi/iscsi.component.ts</context>
-          <context context-type="linenumber">1</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/ceph/block/mirroring/image-list/image-list.component.ts</context>
-          <context context-type="linenumber">1</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/ceph/block/mirroring/image-list/image-list.component.ts</context>
-          <context context-type="linenumber">1</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/ceph/block/mirroring/image-list/image-list.component.ts</context>
-          <context context-type="linenumber">1</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/ceph/block/mirroring/pool-edit-mode-modal/pool-edit-mode-modal.component.ts</context>
           <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
@@ -4425,6 +4476,24 @@
         <source>mirror peer</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/mirroring/pool-list/pool-list.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="a6493c6ca346cd052da40423eda9c132de2b2002" datatype="html">
+        <source>Key</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/rbd-configuration-list/rbd-configuration-list.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5049e204c14c648691ac775a64fb504467aeb549" datatype="html">
+        <source>Value</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/rbd-configuration-list/rbd-configuration-list.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/performance-counter/table-performance-counter/table-performance-counter.component.ts</context>
           <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
@@ -5426,13 +5495,6 @@
           <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="5049e204c14c648691ac775a64fb504467aeb549" datatype="html">
-        <source>Value</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/ceph/performance-counter/table-performance-counter/table-performance-counter.component.ts</context>
-          <context context-type="linenumber">1</context>
-        </context-group>
-      </trans-unit>
       <trans-unit id="60fb10c145f9c7ede2b9ddf9b2b0b0f6191d0ebd" datatype="html">
         <source>Cache Mode</source>
         <context-group purpose="location">
@@ -6162,6 +6224,181 @@
         <source>There are no items available.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/select/select-messages.model.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8fd98fb2a0f24ba72cde0787dd3f02cfc17de469" datatype="html">
+        <source>Quality of Service</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/services/rbd-configuration.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2c53f3ce2c6fff9025a7b41cc334521725da6e7b" datatype="html">
+        <source>BPS Limit</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/services/rbd-configuration.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="e897624a392419386b035bcd8529337e262fc41d" datatype="html">
+        <source>The desired limit of IO bytes per second.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/services/rbd-configuration.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="dc56f77e4507da7e86a3accd0a2a7099a838d539" datatype="html">
+        <source>IOPS Limit</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/services/rbd-configuration.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="141c3f6eadbb35b0e17b2f847e4cac23240a6ea9" datatype="html">
+        <source>The desired limit of IO operations per second.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/services/rbd-configuration.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3b3b101f16c38806e984b157e0cf22cd21451122" datatype="html">
+        <source>Read BPS Limit</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/services/rbd-configuration.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="87835fabb6a645873f3829a450ca1d58f97754f2" datatype="html">
+        <source>The desired limit of read bytes per second.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/services/rbd-configuration.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="28b485e700df46d70b96666099f714e3ae9e5c2e" datatype="html">
+        <source>Read IOPS Limit</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/services/rbd-configuration.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5907bd1a5cf3e20e740bca676cb1538372e1f9ff" datatype="html">
+        <source>The desired limit of read operations per second.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/services/rbd-configuration.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="07317121f0b194987d4dee8b322f521ac17bf124" datatype="html">
+        <source>Write BPS Limit</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/services/rbd-configuration.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4022c78bd9132ca2ec67927f8484c437d1d9b6fd" datatype="html">
+        <source>The desired limit of write bytes per second.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/services/rbd-configuration.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="52c22c19f98ff3a09bd811292954a889b93d28b7" datatype="html">
+        <source>Write IOPS Limit</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/services/rbd-configuration.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="0ed62e3fd8654b3191fc7fa959ad3f10f1ea773a" datatype="html">
+        <source>The desired limit of write operations per second.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/services/rbd-configuration.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="d90c99d77864f21f932ee1369019f400c4ad0e2d" datatype="html">
+        <source>BPS Burst</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/services/rbd-configuration.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="29c32192f4d185139aaaf6d3a766a3411dfeabbe" datatype="html">
+        <source>The desired burst limit of IO bytes.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/services/rbd-configuration.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="b988b90489e899941e196c3dd0ecc22e37540224" datatype="html">
+        <source>IOPS Burst</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/services/rbd-configuration.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="02c5de8ff11870f1b3896f2b45637ce0dba1ed4b" datatype="html">
+        <source>The desired burst limit of IO operations.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/services/rbd-configuration.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7a160538129b37cf595f1651f28b5fac62fbc0f8" datatype="html">
+        <source>Read BPS Burst</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/services/rbd-configuration.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="b573a5df16a53b9947288461bc24e6a0eb4341d6" datatype="html">
+        <source>The desired burst limit of read bytes.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/services/rbd-configuration.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1d5b8c2a0c653651cc4ca4b8fed9456f449220d1" datatype="html">
+        <source>Read IOPS Burst</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/services/rbd-configuration.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="20b199f9d4a8d08ffefec66040e27639ec221512" datatype="html">
+        <source>The desired burst limit of read operations.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/services/rbd-configuration.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="824525ae57992aee629ddffcd500a8b77087ddec" datatype="html">
+        <source>Write BPS Burst</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/services/rbd-configuration.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="a90aac4050a5d79765da5e1186909f6d4d7f981d" datatype="html">
+        <source>The desired burst limit of write bytes.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/services/rbd-configuration.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="35a8c6e6c249c7d16e26aa7c4ef97c06db405070" datatype="html">
+        <source>Write IOPS Burst</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/services/rbd-configuration.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="b356abd41d7e9eea4d20c03d2e6892b6d435ecbd" datatype="html">
+        <source>The desired burst limit of write operations.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/services/rbd-configuration.service.ts</context>
           <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>

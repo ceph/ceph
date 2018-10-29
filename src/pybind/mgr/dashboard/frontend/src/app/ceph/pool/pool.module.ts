@@ -6,9 +6,11 @@ import { RouterModule } from '@angular/router';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { PopoverModule } from 'ngx-bootstrap/popover';
 import { TabsModule } from 'ngx-bootstrap/tabs';
+import { TooltipModule } from 'ngx-bootstrap/tooltip';
 
 import { ServicesModule } from '../../shared/services/services.module';
 import { SharedModule } from '../../shared/shared.module';
+import { BlockModule } from '../block/block.module';
 import { CephSharedModule } from '../shared/ceph-shared.module';
 import { ErasureCodeProfileFormComponent } from './erasure-code-profile-form/erasure-code-profile-form.component';
 import { PoolDetailsComponent } from './pool-details/pool-details.component';
@@ -25,7 +27,9 @@ import { PoolListComponent } from './pool-list/pool-list.component';
     RouterModule,
     ReactiveFormsModule,
     BsDropdownModule,
-    ServicesModule
+    ServicesModule,
+    TooltipModule.forRoot(),
+    BlockModule
   ],
   exports: [PoolListComponent, PoolFormComponent],
   declarations: [

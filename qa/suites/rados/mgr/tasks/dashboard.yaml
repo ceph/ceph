@@ -20,6 +20,7 @@ tasks:
         - \(MDS_UP_LESS_THAN_MAX\)
         - \(OSD_DOWN\)
         - \(OSD_HOST_DOWN\)
+        - \(POOL_APP_NOT_ENABLED\)
         - pauserd,pausewr flag\(s\) set
         - Monitor daemon marked osd\.[[:digit:]]+ down, but it is still running
   - rgw: [client.0]

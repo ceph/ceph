@@ -1,10 +1,12 @@
-import { Component, Input, ViewChild } from '@angular/core';
+import { Component, Input, OnChanges, ViewChild } from '@angular/core';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import { TabsetComponent } from 'ngx-bootstrap/tabs';
 
+import { PoolService } from '../../../shared/api/pool.service';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
+import { RbdConfigurationEntry } from '../../../shared/models/configuration';
 import { Permissions } from '../../../shared/models/permissions';
 
 @Component({
@@ -12,7 +14,7 @@ import { Permissions } from '../../../shared/models/permissions';
   templateUrl: './pool-details.component.html',
   styleUrls: ['./pool-details.component.scss']
 })
-export class PoolDetailsComponent {
+export class PoolDetailsComponent implements OnChanges {
   cacheTierColumns: Array<CdTableColumn> = [];
 
   @Input()
@@ -23,8 +25,9 @@ export class PoolDetailsComponent {
   cacheTiers: any[];
   @ViewChild(TabsetComponent)
   tabsetChild: TabsetComponent;
+  selectedPoolConfiguration: RbdConfigurationEntry[];
 
-  constructor(private i18n: I18n) {
+  constructor(private i18n: I18n, private poolService: PoolService) {
     this.cacheTierColumns = [
       {
         prop: 'pool_name',
@@ -57,5 +60,13 @@ export class PoolDetailsComponent {
         flexGrow: 2
       }
     ];
+  }
+
+  ngOnChanges() {
+    if (this.selection.hasSingleSelection) {
+      this.poolService.getConfiguration(this.selection.first().pool_name).subscribe((poolConf) => {
+        this.selectedPoolConfiguration = poolConf;
+      });
+    }
   }
 }

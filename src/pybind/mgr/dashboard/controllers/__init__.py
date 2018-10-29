@@ -317,24 +317,24 @@ class Task(object):
         @wraps(func)
         def wrapper(*args, **kwargs):
             arg_map = self._gen_arg_map(func, args, kwargs)
-            md = {}
+            metadata = {}
             for k, v in self.metadata.items():
                 if isinstance(v, str) and v and v[0] == '{' and v[-1] == '}':
                     param = v[1:-1]
                     try:
                         pos = int(param)
-                        md[k] = arg_map[pos]
+                        metadata[k] = arg_map[pos]
                     except ValueError:
                         if param.find('.') == -1:
-                            md[k] = arg_map[param]
+                            metadata[k] = arg_map[param]
                         else:
                             path = param.split('.')
-                            md[k] = arg_map[path[0]]
+                            metadata[k] = arg_map[path[0]]
                             for i in range(1, len(path)):
-                                md[k] = md[k][path[i]]
+                                metadata[k] = metadata[k][path[i]]
                 else:
-                    md[k] = v
-            task = TaskManager.run(self.name, md, func, args, kwargs,
+                    metadata[k] = v
+            task = TaskManager.run(self.name, metadata, func, args, kwargs,
                                    exception_handler=self.exception_handler)
             try:
                 status, value = task.wait(self.wait_for)
@@ -350,7 +350,7 @@ class Task(object):
                 raise ex
             if status == TaskManager.VALUE_EXECUTING:
                 cherrypy.response.status = 202
-                return {'name': self.name, 'metadata': md}
+                return {'name': self.name, 'metadata': metadata}
             return value
         return wrapper
 

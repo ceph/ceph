@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, EventEmitter, OnInit } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
@@ -12,6 +12,10 @@ import { PoolService } from '../../../shared/api/pool.service';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../shared/forms/cd-validators';
+import {
+  RbdConfigurationEntry,
+  RbdConfigurationSourceField
+} from '../../../shared/models/configuration';
 import { CrushRule } from '../../../shared/models/crush-rule';
 import { CrushStep } from '../../../shared/models/crush-step';
 import { ErasureCodeProfile } from '../../../shared/models/erasure-code-profile';
@@ -53,6 +57,11 @@ export class PoolFormComponent implements OnInit {
   current = {
     rules: []
   };
+  initializeConfigData = new EventEmitter<{
+    initialData: RbdConfigurationEntry[];
+    sourceType: RbdConfigurationSourceField;
+  }>();
+  currentConfigurationValues: { [configKey: string]: any } = {};
 
   constructor(
     private dimlessBinaryPipe: DimlessBinaryPipe,
@@ -177,6 +186,11 @@ export class PoolFormComponent implements OnInit {
   }
 
   private initEditFormData(pool: Pool) {
+    this.initializeConfigData.emit({
+      initialData: pool.configuration,
+      sourceType: RbdConfigurationSourceField.pool
+    });
+
     const dataMap = {
       name: pool.pool_name,
       poolType: pool.type,
@@ -569,10 +583,21 @@ export class PoolFormComponent implements OnInit {
         ]);
       }
     }
+
     const apps = this.data.applications.selected;
     if (apps.length > 0 || this.editing) {
       pool['application_metadata'] = apps;
     }
+
+    // Only collect configuration data for replicated pools, as QoS cannot be configured on EC
+    // pools. EC data pools inherit their settings from the corresponding replicated metadata pool.
+    if (
+      this.form.get('poolType').value === 'replicated' &&
+      !_.isEmpty(this.currentConfigurationValues)
+    ) {
+      pool['configuration'] = this.currentConfigurationValues;
+    }
+
     this.triggerApiTask(pool);
   }
 

@@ -21,6 +21,8 @@ import { IscsiTargetIqnSettingsModalComponent } from './iscsi-target-iqn-setting
 import { IscsiTargetListComponent } from './iscsi-target-list/iscsi-target-list.component';
 import { IscsiComponent } from './iscsi/iscsi.component';
 import { MirroringModule } from './mirroring/mirroring.module';
+import { RbdConfigurationFormComponent } from './rbd-configuration-form/rbd-configuration-form.component';
+import { RbdConfigurationListComponent } from './rbd-configuration-list/rbd-configuration-list.component';
 import { RbdDetailsComponent } from './rbd-details/rbd-details.component';
 import { RbdFormComponent } from './rbd-form/rbd-form.component';
 import { RbdImagesComponent } from './rbd-images/rbd-images.component';
@@ -77,7 +79,10 @@ import { RbdTrashRestoreModalComponent } from './rbd-trash-restore-modal/rbd-tra
     IscsiTargetFormComponent,
     IscsiTargetImageSettingsModalComponent,
     IscsiTargetIqnSettingsModalComponent,
-    IscsiTargetDiscoveryModalComponent
-  ]
+    IscsiTargetDiscoveryModalComponent,
+    RbdConfigurationListComponent,
+    RbdConfigurationFormComponent
+  ],
+  exports: [RbdConfigurationListComponent, RbdConfigurationFormComponent]
 })
 export class BlockModule {}
