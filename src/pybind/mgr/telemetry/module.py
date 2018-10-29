@@ -12,7 +12,10 @@ import uuid
 import time
 from datetime import datetime
 from threading import Event
-from collections import defaultdict
+try:
+    from collections.abc import defaultdict
+except ImportError:
+    from collections import defaultdict
 
 from mgr_module import MgrModule
 

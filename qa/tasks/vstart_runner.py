@@ -26,7 +26,10 @@ Alternative usage:
 """
 
 from StringIO import StringIO
-from collections import defaultdict
+try:
+    from collections.abc import defaultdict
+except ImportError:
+    from collections import defaultdict
 import getpass
 import signal
 import tempfile
