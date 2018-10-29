@@ -140,6 +140,9 @@ public:
       ++file->num_writers;
       iocv.fill(nullptr);
       dirty_devs.fill(false);
+      if (f->fnode.ino == 1) {
+	write_hint = WRITE_LIFE_MEDIUM;
+      }
     }
     // NOTE: caller must call BlueFS::close_writer()
     ~FileWriter() {
