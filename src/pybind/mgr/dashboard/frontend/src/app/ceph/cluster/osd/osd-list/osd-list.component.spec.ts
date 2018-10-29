@@ -35,6 +35,36 @@ describe('OsdListComponent', () => {
     }
   };
 
+  const getTableAction = (name) => component.tableActions.find((action) => action.name === name);
+
+  const setFakeSelection = () => {
+    // Default data and selection
+    const selection = [{ id: 1 }];
+    const data = [{ id: 1 }];
+
+    // Table data and selection
+    component.selection = new CdTableSelection();
+    component.selection.selected = selection;
+    component.selection.update();
+    component.osds = data;
+  };
+
+  const openActionModal = (actionName) => {
+    setFakeSelection();
+    getTableAction(actionName).click();
+  };
+
+  /**
+   * The following modals are called after the information about their
+   * safety to destroy/remove/mark them lost has been retrieved, hence
+   * we will have to fake its request to be able to open those modals.
+   */
+  const mockSafeToDestroy = () => {
+    spyOn(TestBed.get(OsdService), 'safeToDestroy').and.callFake(() =>
+      of({ 'safe-to-destroy': true })
+    );
+  };
+
   configureTestBed({
     imports: [
       HttpClientTestingModule,
@@ -58,18 +88,6 @@ describe('OsdListComponent', () => {
     component = fixture.componentInstance;
     modalServiceShowSpy = spyOn(TestBed.get(BsModalService), 'show').and.stub();
   });
-
-  const setFakeSelection = () => {
-    // Default data and selection
-    const selection = [{ id: 1 }];
-    const data = [{ id: 1 }];
-
-    // Table data and selection
-    component.selection = new CdTableSelection();
-    component.selection.selected = selection;
-    component.selection.update();
-    component.osds = data;
-  };
 
   it('should create', () => {
     fixture.detectChanges();
@@ -142,72 +160,70 @@ describe('OsdListComponent', () => {
   describe('tests if all modals are opened correctly', () => {
     /**
      * Helper function to check if a function opens a modal
-     * @param fn
+     *
      * @param modalClass - The expected class of the modal
      */
-    const expectOpensModal = (fn, modalClass): void => {
-      setFakeSelection();
-      fn();
+    const expectOpensModal = (actionName: string, modalClass): void => {
+      openActionModal(actionName);
 
       expect(modalServiceShowSpy.calls.any()).toBe(true, 'modalService.show called');
-      expect(modalServiceShowSpy.calls.first()).toBeTruthy();
       expect(modalServiceShowSpy.calls.first().args[0]).toBe(modalClass);
 
       modalServiceShowSpy.calls.reset();
     };
 
-    it('opens the appropriate modal', () => {
-      expectOpensModal(() => component.reweight(), OsdReweightModalComponent);
-      expectOpensModal(() => component.markOut(), ConfirmationModalComponent);
-      expectOpensModal(() => component.markIn(), ConfirmationModalComponent);
-      expectOpensModal(() => component.markDown(), ConfirmationModalComponent);
+    it('opens the reweight modal', () => {
+      expectOpensModal('Reweight', OsdReweightModalComponent);
+    });
 
-      // The following modals are called after the information about their
-      // safety to destroy/remove/mark them lost has been retrieved, hence
-      // we will have to fake its request to be able to open those modals.
-      spyOn(TestBed.get(OsdService), 'safeToDestroy').and.callFake(() =>
-        of({ 'safe-to-destroy': true })
-      );
+    it('opens all confirmation modals', () => {
+      const modalClass = ConfirmationModalComponent;
+      expectOpensModal('Mark Out', modalClass);
+      expectOpensModal('Mark In', modalClass);
+      expectOpensModal('Mark Down', modalClass);
+    });
 
-      expectOpensModal(() => component.markLost(), CriticalConfirmationModalComponent);
-      expectOpensModal(() => component.remove(), CriticalConfirmationModalComponent);
-      expectOpensModal(() => component.destroy(), CriticalConfirmationModalComponent);
+    it('opens all critical confirmation modals', () => {
+      const modalClass = CriticalConfirmationModalComponent;
+      mockSafeToDestroy();
+      expectOpensModal('Mark Lost', modalClass);
+      expectOpensModal('Remove', modalClass);
+      expectOpensModal('Destroy', modalClass);
     });
   });
 
   describe('tests if the correct methods are called on confirmation', () => {
-    const expectOsdServiceMethodCalled = (fn: Function, osdServiceMethodName: string): void => {
-      setFakeSelection();
+    const expectOsdServiceMethodCalled = (
+      actionName: string,
+      osdServiceMethodName: string
+    ): void => {
       const osdServiceSpy = spyOn(TestBed.get(OsdService), osdServiceMethodName).and.callFake(
         () => EMPTY
       );
-
-      modalServiceShowSpy.calls.reset();
-      fn(); // calls show on BsModalService
-      // Calls onSubmit given to `bsModalService.show()`
+      openActionModal(actionName);
       const initialState = modalServiceShowSpy.calls.first().args[1].initialState;
-      const action = initialState.onSubmit || initialState.submitAction;
-      action.call(component);
+      const submit = initialState.onSubmit || initialState.submitAction;
+      submit.call(component);
 
       expect(osdServiceSpy.calls.count()).toBe(1);
       expect(osdServiceSpy.calls.first().args[0]).toBe(1);
-      modalServiceShowSpy.calls.reset();
+
+      // Reset spies to be able to recreate them
       osdServiceSpy.calls.reset();
+      modalServiceShowSpy.calls.reset();
     };
 
-    it('calls the corresponding service methods', () => {
-      // Purposely `reweight`
-      expectOsdServiceMethodCalled(() => component.markOut(), 'markOut');
-      expectOsdServiceMethodCalled(() => component.markIn(), 'markIn');
-      expectOsdServiceMethodCalled(() => component.markDown(), 'markDown');
+    it('calls the corresponding service methods in confirmation modals', () => {
+      expectOsdServiceMethodCalled('Mark Out', 'markOut');
+      expectOsdServiceMethodCalled('Mark In', 'markIn');
+      expectOsdServiceMethodCalled('Mark Down', 'markDown');
+    });
 
-      spyOn(TestBed.get(OsdService), 'safeToDestroy').and.callFake(() =>
-        of({ 'safe-to-destroy': true })
-      );
-
-      expectOsdServiceMethodCalled(() => component.markLost(), 'markLost');
-      expectOsdServiceMethodCalled(() => component.remove(), 'remove');
-      expectOsdServiceMethodCalled(() => component.destroy(), 'destroy');
+    it('calls the corresponding service methods in critical confirmation modals', () => {
+      mockSafeToDestroy();
+      expectOsdServiceMethodCalled('Mark Lost', 'markLost');
+      expectOsdServiceMethodCalled('Remove', 'remove');
+      expectOsdServiceMethodCalled('Destroy', 'destroy');
     });
   });
 });
