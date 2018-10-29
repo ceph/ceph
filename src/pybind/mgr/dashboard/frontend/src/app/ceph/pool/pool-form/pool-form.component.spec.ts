@@ -216,7 +216,7 @@ describe('PoolFormComponent', () => {
       ['crushRule', 'size', 'erasureProfile', 'ecOverwrites'].forEach((name) =>
         formHelper.expectValid(name)
       );
-      expect(component.compressionForm.valid).toBeTruthy();
+      expect(component.form.get('compression').valid).toBeTruthy();
     });
 
     it('validates name', () => {
@@ -297,7 +297,7 @@ describe('PoolFormComponent', () => {
       });
 
       it('is valid', () => {
-        expect(component.compressionForm.valid).toBeTruthy();
+        expect(component.form.get('compression').valid).toBeTruthy();
       });
 
       it('validates minBlobSize to be only valid between 0 and maxBlobSize', () => {
