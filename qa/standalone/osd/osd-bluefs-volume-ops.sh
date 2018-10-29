@@ -4,30 +4,6 @@ source $CEPH_ROOT/qa/standalone/ceph-helpers.sh
 
 [ `uname` = FreeBSD ] && exit 0
 
-function run0() {
-    local dir=$1
-    mkdir $dir/0 || return 1
-    export CEPH_ARGS
-    ofsid=$(uuidgen)
-    CEPH_ARGS+="--fsid=$(ofsid) --auth-supported=none "
-    CEPH_ARGS+="--mon-host=$CEPH_MON "
-
-    #ofsid=$(cat $dir/0.old/fsid)
-    echo "osd fsid $ofsid"
-    O=$CEPH_ARGS
-    CEPH_ARGS+="--log-file $dir/cot.log --log-max-recent 0 "
-    ceph-objectstore-tool --type bluestore --data-path $dir/0 --fsid $ofsid \
-			  --op mkfs --no-mon-config || return 1
-    ceph-objectstore-tool --data-path $dir/0.old --target-data-path $dir/0 \
-			  --op dup || return 1
-    CEPH_ARGS=$O
-
-    run_osd_bluestore $dir 0 || return 1
-
-    while ! ceph osd stat | grep '3 up' ; do sleep 1 ; done
-    ceph osd metadata 0 | grep bluestore || return 1
-}
-
 function run() {
     local dir=$1
     shift
