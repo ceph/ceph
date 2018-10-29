@@ -323,7 +323,7 @@ Group:         System/Filesystems
 Provides:      ceph-test:/usr/bin/ceph-kvstore-tool
 Requires:      ceph-common = %{_epoch_prefix}%{version}-%{release}
 Requires:      librbd1 = %{_epoch_prefix}%{version}-%{release}
-Requires:      librados2 = %{_epoch_prefix}%{version}-%{release}
+Requires:      librados3 = %{_epoch_prefix}%{version}-%{release}
 Requires:      libradospp1 = %{_epoch_prefix}%{version}-%{release}
 Requires:      libcephfs2 = %{_epoch_prefix}%{version}-%{release}
 Requires:      librgw2 = %{_epoch_prefix}%{version}-%{release}
@@ -361,7 +361,7 @@ Summary:	Ceph Common
 Group:		System/Filesystems
 %endif
 Requires:	librbd1 = %{_epoch_prefix}%{version}-%{release}
-Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
+Requires:	librados3 = %{_epoch_prefix}%{version}-%{release}
 Requires:	libradospp1 = %{_epoch_prefix}%{version}-%{release}
 Requires:	libcephfs2 = %{_epoch_prefix}%{version}-%{release}
 Requires:	python%{_python_buildid}-rados = %{_epoch_prefix}%{version}-%{release}
@@ -459,7 +459,7 @@ Summary:	Ceph fuse-based client
 %if 0%{?suse_version}
 Group:		System/Filesystems
 %endif
-Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
+Requires:	librados3 = %{_epoch_prefix}%{version}-%{release}
 Requires:	librbd1 = %{_epoch_prefix}%{version}-%{release}
 %description -n rbd-fuse
 FUSE based client to map Ceph rbd images to files
@@ -494,7 +494,7 @@ Requires:	ceph-common = %{_epoch_prefix}%{version}-%{release}
 %if 0%{with selinux}
 Requires:	ceph-selinux = %{_epoch_prefix}%{version}-%{release}
 %endif
-Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
+Requires:	librados3 = %{_epoch_prefix}%{version}-%{release}
 Requires:	libradospp1 = %{_epoch_prefix}%{version}-%{release}
 Requires:	librgw2 = %{_epoch_prefix}%{version}-%{release}
 %if 0%{?rhel} || 0%{?fedora}
@@ -534,7 +534,7 @@ ceph-osd is the object storage daemon for the Ceph distributed file
 system.  It is responsible for storing objects on a local file system
 and providing access to them over the network.
 
-%package -n librados2
+%package -n librados3
 Summary:	RADOS distributed object store client library
 %if 0%{?suse_version}
 Group:		System/Libraries
@@ -542,7 +542,7 @@ Group:		System/Libraries
 %if 0%{?rhel} || 0%{?fedora}
 Obsoletes:	ceph-libs < %{_epoch_prefix}%{version}-%{release}
 %endif
-%description -n librados2
+%description -n librados3
 RADOS is a reliable, autonomic distributed object storage cluster
 developed as part of the Ceph distributed storage system. This is a
 shared library allowing applications to access the distributed object
@@ -553,10 +553,10 @@ Summary:	RADOS headers
 %if 0%{?suse_version}
 Group:		Development/Libraries/C and C++
 %endif
-Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
+Requires:	librados3 = %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	ceph-devel < %{_epoch_prefix}%{version}-%{release}
-Provides:	librados2-devel = %{_epoch_prefix}%{version}-%{release}
-Obsoletes:	librados2-devel < %{_epoch_prefix}%{version}-%{release}
+Provides:	librados3-devel = %{_epoch_prefix}%{version}-%{release}
+Obsoletes:	librados3-devel < %{_epoch_prefix}%{version}-%{release}
 %description -n librados-devel
 This package contains C libraries and headers needed to develop programs
 that use RADOS object store.
@@ -587,7 +587,7 @@ Summary:	RADOS gateway client library
 %if 0%{?suse_version}
 Group:		System/Libraries
 %endif
-Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
+Requires:	librados3 = %{_epoch_prefix}%{version}-%{release}
 %description -n librgw2
 This package provides a library implementation of the RADOS gateway
 (distributed object store with S3 and Swift personalities).
@@ -636,7 +636,7 @@ Summary:	Python 2 libraries for the RADOS object store
 %if 0%{?suse_version}
 Group:		Development/Libraries/Python
 %endif
-Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
+Requires:	librados3 = %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	python-ceph < %{_epoch_prefix}%{version}-%{release}
 %description -n python-rados
 This package contains Python 2 libraries for interacting with Cephs RADOS
@@ -649,7 +649,7 @@ Summary:	Python 3 libraries for the RADOS object store
 Group:		Development/Libraries/Python
 %endif
 Requires:	python%{python3_pkgversion}
-Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
+Requires:	librados3 = %{_epoch_prefix}%{version}-%{release}
 %description -n python%{python3_pkgversion}-rados
 This package contains Python 3 libraries for interacting with Cephs RADOS
 object store.
@@ -660,7 +660,7 @@ Summary:	RADOS striping interface
 %if 0%{?suse_version}
 Group:		System/Libraries
 %endif
-Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
+Requires:	librados3 = %{_epoch_prefix}%{version}-%{release}
 Requires:	libradospp1 = %{_epoch_prefix}%{version}-%{release}
 %description -n libradosstriper1
 Striping interface built on top of the rados library, allowing
@@ -688,7 +688,7 @@ Summary:	RADOS block device client library
 %if 0%{?suse_version}
 Group:		System/Libraries
 %endif
-Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
+Requires:	librados3 = %{_epoch_prefix}%{version}-%{release}
 Requires:	libradospp1 = %{_epoch_prefix}%{version}-%{release}
 %if 0%{?suse_version}
 Requires(post): coreutils
@@ -1689,7 +1689,7 @@ fi
 
 %endif
 
-%files -n librados2
+%files -n librados3
 %{_libdir}/librados.so.*
 %dir %{_libdir}/ceph
 %{_libdir}/ceph/libceph-common.so*
@@ -1697,9 +1697,9 @@ fi
 %{_libdir}/librados_tp.so.*
 %endif
 
-%post -n librados2 -p /sbin/ldconfig
+%post -n librados3 -p /sbin/ldconfig
 
-%postun -n librados2 -p /sbin/ldconfig
+%postun -n librados3 -p /sbin/ldconfig
 
 %files -n librados-devel
 %dir %{_includedir}/rados
