@@ -593,10 +593,19 @@ struct entity_addrvec_t {
   void dump(Formatter *f) const;
   static void generate_test_instances(list<entity_addrvec_t*>& ls);
 
-  bool probably_equals(const entity_addrvec_t& o) const {
-    if (o.v.size() != v.size()) {
-      return false;
+  bool legacy_equals(const entity_addrvec_t& o) const {
+    if (v == o.v) {
+      return true;
     }
+    if (v.size() == 1 &&
+	front().is_legacy() &&
+	front() == o.legacy_addr()) {
+      return true;
+    }
+    return false;
+  }
+
+  bool probably_equals(const entity_addrvec_t& o) const {
     for (unsigned i = 0; i < v.size(); ++i) {
       if (!v[i].probably_equals(o.v[i])) {
 	return false;
