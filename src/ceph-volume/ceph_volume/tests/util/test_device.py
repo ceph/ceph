@@ -150,6 +150,30 @@ class TestCephDiskDevice(object):
 
         assert disk.is_member is True
 
+    def test_reject_removable_device(self, device_info):
+        data = {"/dev/sdb": {"removable": 1}}
+        device_info(devices=data)
+        disk = device.Device("/dev/sdb")
+        assert not disk.is_valid
+
+    def test_accept_non_removable_device(self, device_info):
+        data = {"/dev/sdb": {"removable": 0}}
+        device_info(devices=data)
+        disk = device.Device("/dev/sdb")
+        assert disk.is_valid
+
+    def test_reject_readonly_device(self, device_info):
+        data = {"/dev/cdrom": {"ro": 1}}
+        device_info(devices=data)
+        disk = device.Device("/dev/cdrom")
+        assert not disk.is_valid
+
+    def test_accept_non_readonly_device(self, device_info):
+        data = {"/dev/sda": {"ro": 0}}
+        device_info(devices=data)
+        disk = device.Device("/dev/sda")
+        assert disk.is_valid
+
     @pytest.mark.parametrize("label", ceph_partlabels)
     def test_is_member_lsblk(self, device_info, label):
         lsblk = {"PARTLABEL": label}
