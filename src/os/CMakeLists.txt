@@ -76,6 +76,14 @@ add_library(os STATIC ${libos_srcs}
 
 target_link_libraries(os heap_profiler)
 
+if(WITH_BLUESTORE)
+  if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
+    target_link_libraries(os -lstdc++fs)
+  elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
+    target_link_libraries(os -lc++experimental)
+  endif()
+endif()
+
 if(WITH_BLUEFS)
   add_library(bluefs SHARED 
     bluestore/BlueRocksEnv.cc)

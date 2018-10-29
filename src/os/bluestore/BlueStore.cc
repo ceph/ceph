@@ -17,6 +17,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <experimental/filesystem>
 
 #include "include/cpp-btree/btree_set.h"
 
@@ -39,6 +40,8 @@
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_bluestore
+
+namespace fs = std::experimental::filesystem;
 
 using bid_t = decltype(BlueStore::Blob::id);
 
@@ -5554,20 +5557,12 @@ int BlueStore::_setup_block_symlink_or_file(
   if (create)
     flags |= O_CREAT;
   if (epath.length()) {
-    r = ::symlinkat(epath.c_str(), path_fd, name.c_str());
-    if (r < 0) {
-      r = -errno;
-      derr << __func__ << " failed to create " << name << " symlink to "
-           << epath << ": " << cpp_strerror(r) << dendl;
-      return r;
-    }
-
     if (!epath.compare(0, strlen(SPDK_PREFIX), SPDK_PREFIX)) {
       int fd = ::openat(path_fd, epath.c_str(), flags, 0644);
       if (fd < 0) {
 	r = -errno;
 	derr << __func__ << " failed to open " << epath << " file: "
-	     << cpp_strerror(r) << dendl;
+	  << cpp_strerror(r) << dendl;
 	return r;
       }
       // write the Transport ID of the NVMe device
@@ -5580,10 +5575,21 @@ int BlueStore::_setup_block_symlink_or_file(
       r = ::write(fd, trid.c_str(), trid.size());
       ceph_assert(r == static_cast<int>(trid.size()));
       dout(1) << __func__ << " created " << name << " symlink to "
-              << epath << dendl;
+	<< epath << dendl;
       VOID_TEMP_FAILURE_RETRY(::close(fd));
+    } else if (!create && !fs::exists(epath.c_str())) {
+      return 0;
+    }
+
+    r = ::symlinkat(epath.c_str(), path_fd, name.c_str());
+    if (r < 0) {
+      r = -errno;
+      derr << __func__ << " failed to create " << name << " symlink to "
+	<< epath << ": " << cpp_strerror(r) << dendl;
+      return r;
     }
   }
+
   if (size) {
     int fd = ::openat(path_fd, name.c_str(), flags, 0644);
     if (fd >= 0) {
