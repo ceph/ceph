@@ -1,0 +1,22 @@
+tasks:
+        - deepsea.preflight:
+        - deepsea.orch:
+                stage: prep
+        - deepsea.orch:
+                stage: 1
+        - deepsea.policy:
+                profile: default
+        - deepsea.orch:
+                stage: 2
+        - deepsea.ceph_conf:
+        - deepsea.orch:
+                stage: 3
+        - deepsea.create_pools:
+        - deepsea.orch:
+                stage: 4
+        - exec:
+                client.salt_master:
+                        - 'ceph -s'
+        - deepsea.health_ok:
+                commands:
+                        - health-ok.sh --client-nodes=1 --mds --min-nodes=2
