@@ -10,9 +10,11 @@ import {
 } from '@angular/core';
 
 import * as Chart from 'chart.js';
+import * as _ from 'lodash';
 
 import { ChartTooltip } from '../../../shared/models/chart-tooltip';
 import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
+import { HealthPieColor } from './health-pie-color.enum';
 
 @Component({
   selector: 'cd-health-pie',
@@ -56,12 +58,7 @@ export class HealthPieComponent implements OnChanges, OnInit {
       tooltips: {
         enabled: false
       }
-    },
-    colors: [
-      {
-        borderColor: 'transparent'
-      }
-    ]
+    }
   };
 
   constructor(private dimlessBinary: DimlessBinaryPipe) {}
@@ -122,13 +119,15 @@ export class HealthPieComponent implements OnChanges, OnInit {
 
     this.chart.options.legend.display = this.displayLegend;
 
-    const redColor = '#FF6384';
-    const blueColor = '#36A2EB';
-    const yellowColor = '#FFCD56';
-    const greenColor = '#4BC0C0';
     this.chart.colors = [
       {
-        backgroundColor: [redColor, blueColor, yellowColor, greenColor]
+        backgroundColor: [
+          HealthPieColor.MEDIUM_LIGHT_SHADE_PINK_RED,
+          HealthPieColor.MEDIUM_DARK_SHADE_CYAN_BLUE,
+          HealthPieColor.LIGHT_SHADE_BROWN,
+          HealthPieColor.SHADE_GREEN_CYAN,
+          HealthPieColor.MEDIUM_DARK_SHADE_BLUE_MAGENTA
+        ]
       }
     ];
 
@@ -137,6 +136,8 @@ export class HealthPieComponent implements OnChanges, OnInit {
 
   ngOnChanges() {
     this.prepareFn.emit([this.chart, this.data]);
+
+    this.setChartSliceBorderWidth(this.chart.dataset[0]);
   }
 
   private getChartTooltipBody(body) {
@@ -157,6 +158,19 @@ export class HealthPieComponent implements OnChanges, OnInit {
       this.chart.chartType = selectedChartType;
     } else {
       this.chart.chartType = chartTypes[0];
+    }
+  }
+
+  private setChartSliceBorderWidth(dataset) {
+    let nonZeroValueSlices = 0;
+    _.forEach(dataset.data, function(slice) {
+      if (slice > 0) {
+        nonZeroValueSlices += 1;
+      }
+    });
+
+    if (nonZeroValueSlices > 1) {
+      this.chart.dataset[0].borderWidth = 1;
     }
   }
 }
