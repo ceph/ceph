@@ -5259,7 +5259,6 @@ bool OSD::heartbeat_reset(Connection *con)
   HeartbeatSession *s = static_cast<HeartbeatSession*>(con->get_priv());
   if (s) {
     if (is_stopping()) {
-      heartbeat_lock.Unlock();
       s->put();
       return true;
     }
