@@ -3485,6 +3485,10 @@ struct pg_log_entry_t {
   hobject_t  soid;
   osd_reqid_t reqid;  // caller+tid to uniquely identify request
   mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > extra_reqids;
+
+  ///< map extra_reqids by index to error return code (if any)
+  mempool::osd_pglog::map<uint32_t, int> extra_reqid_return_codes;
+
   eversion_t version, prior_version, reverting_to;
   version_t user_version; // the user version for this entry
   utime_t     mtime;  // this is the _user_ mtime, mind you
@@ -4483,6 +4487,9 @@ struct object_copy_data_t {
 
   ///< recent reqids on this object
   mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > reqids;
+
+  ///< map reqids by index to error return code (if any)
+  mempool::osd_pglog::map<uint32_t, int> reqid_return_codes;
 
   uint64_t truncate_seq;
   uint64_t truncate_size;

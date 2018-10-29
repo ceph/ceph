@@ -6436,3 +6436,55 @@ TEST_F(LibRadosTwoPoolsECPP, ManifestPromoteRead) {
   // wait for maps to settle before next test
   cluster.wait_for_latest_osdmap();
 }
+
+TEST_F(LibRadosTwoPoolsPP, PropagateBaseTierError) {
+  // write object  to base tier
+  bufferlist omap_bl;
+  encode(static_cast<uint32_t>(0U), omap_bl);
+
+  ObjectWriteOperation op1;
+  op1.omap_set({{"somekey", omap_bl}});
+  ASSERT_EQ(0, ioctx.operate("propagate-base-tier-error", &op1));
+
+  // configure cache
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
+    "\", \"tierpool\": \"" + cache_pool_name +
+    "\", \"force_nonempty\": \"--force-nonempty\" }",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
+    "\", \"mode\": \"writeback\"}",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
+    "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
+    inbl, NULL, NULL));
+
+  ASSERT_EQ(0, cluster.mon_command(
+    set_pool_str(cache_pool_name, "hit_set_type", "bloom"),
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    set_pool_str(cache_pool_name, "hit_set_count", 1),
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    set_pool_str(cache_pool_name, "hit_set_period", 600),
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    set_pool_str(cache_pool_name, "target_max_objects", 250),
+    inbl, NULL, NULL));
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // guarded op should fail so expect error to propagate to cache tier
+  bufferlist test_omap_bl;
+  encode(static_cast<uint32_t>(1U), test_omap_bl);
+
+  ObjectWriteOperation op2;
+  op2.omap_cmp({{"somekey", {test_omap_bl, CEPH_OSD_CMPXATTR_OP_EQ}}}, nullptr);
+  op2.omap_set({{"somekey", test_omap_bl}});
+
+  ASSERT_EQ(-ECANCELED, ioctx.operate("propagate-base-tier-error", &op2));
+}
