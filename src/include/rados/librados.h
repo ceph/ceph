@@ -39,9 +39,9 @@ extern "C" {
 #define CEPH_OSD_TMAP_RM  'r'
 #endif
 
-#define LIBRADOS_VER_MAJOR 0
-#define LIBRADOS_VER_MINOR 69
-#define LIBRADOS_VER_EXTRA 1
+#define LIBRADOS_VER_MAJOR 3
+#define LIBRADOS_VER_MINOR 0
+#define LIBRADOS_VER_EXTRA 0
 
 #define LIBRADOS_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
 
