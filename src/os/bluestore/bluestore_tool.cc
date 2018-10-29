@@ -262,7 +262,10 @@ int main(int argc, char **argv)
     std::cerr << e.what() << std::endl;
     exit(EXIT_FAILURE);
   }
-
+  // normalize path (remove ending '/' if any)
+  if (path.size() > 1 && *(path.end() - 1) == '/') {
+    path.resize(path.size() - 1);
+  }
   if (vm.count("help")) {
     usage(po_all);
     exit(EXIT_SUCCESS);
