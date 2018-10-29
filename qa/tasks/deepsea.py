@@ -63,6 +63,26 @@ class DeepSea(Task):
         log.debug("munged config is {}".format(self.config))
         log.debug("end of constructor method")
 
+    def _disable_gpg_checks(self):
+        log.info("disabling zypper GPG checks on all test nodes")
+        self.master_remote.run(args=(
+            "echo \"pre-disable repo state\" ; "
+            "zypper lr -upEP ; grep gpg /etc/zypp/repos.d/*"
+            ))
+        cmd = (
+            'sed -i -e \'/gpgcheck/ d\' /etc/zypp/repos.d/* ; '
+            'sed -i -e \'/gpgkey/ d\' /etc/zypp/repos.d/* ; '
+            'sed -i -e \'$a gpgcheck=0\' /etc/zypp/repos.d/*'
+            )
+        log.info("zypper repos after disabling GPG checks")
+        self.ctx.cluster.run(args=[
+            'sudo', 'sh', '-c', cmd
+            ])
+        self.master_remote.run(args=(
+            "echo \"post-disable repo state\" ; "
+            "zypper lr -upEP ; grep gpg /etc/zypp/repos.d/*"
+            ))
+
     def _install_deepsea(self):
         if self.config['install'] == 'package':
             self._install_deepsea_using_zypper()
@@ -192,6 +212,7 @@ class DeepSea(Task):
     def begin(self):
         super(DeepSea, self).begin()
         log.debug("beginning of begin method")
+        self._disable_gpg_checks()
         self._install_deepsea()
         log.debug("end of begin method")
 
