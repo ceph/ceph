@@ -6,10 +6,10 @@ import { ApiModule } from './api.module';
 @Injectable({
   providedIn: ApiModule
 })
-export class DashboardService {
+export class LogsService {
   constructor(private http: HttpClient) {}
 
-  getHealth() {
-    return this.http.get('api/dashboard/health');
+  getLogs() {
+    return this.http.get('api/logs/all');
   }
 }

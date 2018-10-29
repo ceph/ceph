@@ -1,6 +1,6 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 
-import { DashboardService } from '../../../shared/api/dashboard.service';
+import { LogsService } from '../../../shared/api/logs.service';
 
 @Component({
   selector: 'cd-logs',
@@ -11,7 +11,7 @@ export class LogsComponent implements OnInit, OnDestroy {
   contentData: any;
   interval: number;
 
-  constructor(private dashboardService: DashboardService) {}
+  constructor(private logsService: LogsService) {}
 
   ngOnInit() {
     this.getInfo();
@@ -25,7 +25,7 @@ export class LogsComponent implements OnInit, OnDestroy {
   }
 
   getInfo() {
-    this.dashboardService.getHealth().subscribe((data: any) => {
+    this.logsService.getLogs().subscribe((data: any) => {
       this.contentData = data;
     });
   }
