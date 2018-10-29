@@ -6,6 +6,7 @@ from __future__ import absolute_import
 
 import errno
 from distutils.version import StrictVersion
+from distutils.util import strtobool
 import os
 import socket
 import tempfile
@@ -86,7 +87,7 @@ class ServerConfigException(Exception):
     pass
 
 
-class SSLCherryPyConfig(object):
+class CherryPyConfig(object):
     """
     Class for common server configuration done by both active and
     standby module, especially setting up SSL.
@@ -112,7 +113,12 @@ class SSLCherryPyConfig(object):
         :returns our URI
         """
         server_addr = self.get_localized_config('server_addr', '::')
-        server_port = self.get_localized_config('server_port', '8443')
+        ssl = strtobool(self.get_localized_config('ssl', 'True'))
+        def_server_port = 8443
+        if not ssl:
+            def_server_port = 8080
+
+        server_port = self.get_localized_config('server_port', def_server_port)
         if server_addr is None:
             raise ServerConfigException(
                 'no server_addr configured; '
@@ -126,49 +132,53 @@ class SSLCherryPyConfig(object):
         cherrypy.tools.session_expire_at_browser_close = SessionExpireAtBrowserCloseTool()
         cherrypy.tools.request_logging = RequestLoggingTool()
 
-        # SSL initialization
-        cert = self.get_store("crt")
-        if cert is not None:
-            self.cert_tmp = tempfile.NamedTemporaryFile()
-            self.cert_tmp.write(cert.encode('utf-8'))
-            self.cert_tmp.flush()  # cert_tmp must not be gc'ed
-            cert_fname = self.cert_tmp.name
-        else:
-            cert_fname = self.get_localized_config('crt_file')
-
-        pkey = self.get_store("key")
-        if pkey is not None:
-            self.pkey_tmp = tempfile.NamedTemporaryFile()
-            self.pkey_tmp.write(pkey.encode('utf-8'))
-            self.pkey_tmp.flush()  # pkey_tmp must not be gc'ed
-            pkey_fname = self.pkey_tmp.name
-        else:
-            pkey_fname = self.get_localized_config('key_file')
-
-        if not cert_fname or not pkey_fname:
-            raise ServerConfigException('no certificate configured')
-        if not os.path.isfile(cert_fname):
-            raise ServerConfigException('certificate %s does not exist' % cert_fname)
-        if not os.path.isfile(pkey_fname):
-            raise ServerConfigException('private key %s does not exist' % pkey_fname)
-
         # Apply the 'global' CherryPy configuration.
         config = {
             'engine.autoreload.on': False,
             'server.socket_host': server_addr,
             'server.socket_port': int(server_port),
-            'server.ssl_module': 'builtin',
-            'server.ssl_certificate': cert_fname,
-            'server.ssl_private_key': pkey_fname,
             'error_page.default': json_error_page,
             'tools.request_logging.on': True
         }
+
+        if ssl:
+            # SSL initialization
+            cert = self.get_store("crt")
+            if cert is not None:
+                self.cert_tmp = tempfile.NamedTemporaryFile()
+                self.cert_tmp.write(cert.encode('utf-8'))
+                self.cert_tmp.flush()  # cert_tmp must not be gc'ed
+                cert_fname = self.cert_tmp.name
+            else:
+                cert_fname = self.get_localized_config('crt_file')
+
+            pkey = self.get_store("key")
+            if pkey is not None:
+                self.pkey_tmp = tempfile.NamedTemporaryFile()
+                self.pkey_tmp.write(pkey.encode('utf-8'))
+                self.pkey_tmp.flush()  # pkey_tmp must not be gc'ed
+                pkey_fname = self.pkey_tmp.name
+            else:
+                pkey_fname = self.get_localized_config('key_file')
+
+            if not cert_fname or not pkey_fname:
+                raise ServerConfigException('no certificate configured')
+            if not os.path.isfile(cert_fname):
+                raise ServerConfigException('certificate %s does not exist' % cert_fname)
+            if not os.path.isfile(pkey_fname):
+                raise ServerConfigException('private key %s does not exist' % pkey_fname)
+
+            config['server.ssl_module'] = 'builtin'
+            config['server.ssl_certificate'] = cert_fname
+            config['server.ssl_private_key'] = pkey_fname
+
         cherrypy.config.update(config)
 
         self._url_prefix = prepare_url_prefix(self.get_config('url_prefix',
                                                               default=''))
 
-        uri = "https://{0}:{1}{2}/".format(
+        uri = "{0}://{1}:{2}{3}/".format(
+            'https' if ssl else 'http',
             socket.getfqdn() if server_addr == "::" else server_addr,
             server_port,
             self.url_prefix
@@ -197,7 +207,7 @@ class SSLCherryPyConfig(object):
                 return uri
 
 
-class Module(MgrModule, SSLCherryPyConfig):
+class Module(MgrModule, CherryPyConfig):
     """
     dashboard module entrypoint
     """
@@ -233,12 +243,13 @@ class Module(MgrModule, SSLCherryPyConfig):
         {'name': 'username'},
         {'name': 'key_file'},
         {'name': 'crt_file'},
+        {'name': 'ssl'}
     ]
     OPTIONS.extend(options_schema_list())
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
-        SSLCherryPyConfig.__init__(self)
+        CherryPyConfig.__init__(self)
 
         mgr.init(self)
 
@@ -301,7 +312,7 @@ class Module(MgrModule, SSLCherryPyConfig):
 
     def shutdown(self):
         super(Module, self).shutdown()
-        SSLCherryPyConfig.shutdown(self)
+        CherryPyConfig.shutdown(self)
         logger.info('Stopping engine...')
         self.shutdown_event.set()
 
@@ -348,10 +359,10 @@ class Module(MgrModule, SSLCherryPyConfig):
         NotificationQueue.new_notification(notify_type, notify_id)
 
 
-class StandbyModule(MgrStandbyModule, SSLCherryPyConfig):
+class StandbyModule(MgrStandbyModule, CherryPyConfig):
     def __init__(self, *args, **kwargs):
         super(StandbyModule, self).__init__(*args, **kwargs)
-        SSLCherryPyConfig.__init__(self)
+        CherryPyConfig.__init__(self)
         self.shutdown_event = threading.Event()
 
         # We can set the global mgr instance to ourselves even though
@@ -403,7 +414,7 @@ class StandbyModule(MgrStandbyModule, SSLCherryPyConfig):
         self.log.info("Engine stopped.")
 
     def shutdown(self):
-        SSLCherryPyConfig.shutdown(self)
+        CherryPyConfig.shutdown(self)
 
         self.log.info("Stopping engine...")
         self.shutdown_event.set()
