@@ -5790,19 +5790,20 @@ int FileStore::_merge_collection(const coll_t& cid,
   bool is_pg = dest.is_pg(&pgid);
   ceph_assert(is_pg);
 
+  int dstcmp = _check_replay_guard(dest, spos);
+  if (dstcmp < 0)
+    return 0;
+
+  int srccmp = _check_replay_guard(cid, spos);
+  if (srccmp < 0)
+    return 0;
+
+  _set_global_replay_guard(cid, spos);
+  _set_replay_guard(cid, spos, true);
+  _set_replay_guard(dest, spos, true);
+
+  // main collection
   {
-    int dstcmp = _check_replay_guard(dest, spos);
-    if (dstcmp < 0)
-      return 0;
-
-    int srccmp = _check_replay_guard(cid, spos);
-    if (srccmp < 0)
-      return 0;
-
-    _set_global_replay_guard(cid, spos);
-    _set_replay_guard(cid, spos, true);
-    _set_replay_guard(dest, spos, true);
-
     Index from;
     r = get_index(cid, &from);
 
@@ -5819,25 +5820,10 @@ int FileStore::_merge_collection(const coll_t& cid,
 
       r = from->merge(bits, to.index);
     }
-
-    _close_replay_guard(cid, spos);
-    _close_replay_guard(dest, spos);
   }
 
   // temp too
   {
-    int dstcmp = _check_replay_guard(dest.get_temp(), spos);
-    if (dstcmp < 0)
-      return 0;
-
-    int srccmp = _check_replay_guard(cid.get_temp(), spos);
-    if (srccmp < 0)
-      return 0;
-
-    _set_global_replay_guard(cid.get_temp(), spos);
-    _set_replay_guard(cid.get_temp(), spos, true);
-    _set_replay_guard(dest.get_temp(), spos, true);
-
     Index from;
     r = get_index(cid.get_temp(), &from);
 
@@ -5854,15 +5840,14 @@ int FileStore::_merge_collection(const coll_t& cid,
 
       r = from->merge(bits, to.index);
     }
-
-    _close_replay_guard(cid.get_temp(), spos);
-    _close_replay_guard(dest.get_temp(), spos);
-
   }
 
   // remove source
-  if (_check_replay_guard(cid, spos) > 0)
-    r = _destroy_collection(cid);
+  _destroy_collection(cid);
+
+  _close_replay_guard(dest, spos);
+  _close_replay_guard(dest.get_temp(), spos);
+  // no need to close guards on cid... it's removed.
 
   if (!r && cct->_conf->filestore_debug_verify_split) {
     vector<ghobject_t> objects;
