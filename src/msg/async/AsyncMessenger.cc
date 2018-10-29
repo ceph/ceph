@@ -808,7 +808,7 @@ int AsyncMessenger::get_proto_version(int peer_type, bool connect) const
   return 0;
 }
 
-void AsyncMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
+bool AsyncMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
 {
   // be careful here: multiple threads may block here, and readers of
   // my_addr do NOT hold any lock.
@@ -817,8 +817,8 @@ void AsyncMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
   // mutex.  if it is already false, we need not retake the mutex at
   // all.
   if (!need_addr)
-    return ;
-  lock.Lock();
+    return false;
+  std::lock_guard l(lock);
   if (need_addr) {
     need_addr = false;
     if (my_addrs->empty()) {
@@ -844,8 +844,9 @@ void AsyncMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
     ldout(cct, 1) << __func__ << " learned my addr " << *my_addrs
 		  << " (peer_addr_for_me " << peer_addr_for_me << ")" << dendl;
     _init_local_connection();
+    return true;
   }
-  lock.Unlock();
+  return false;
 }
 
 int AsyncMessenger::reap_dead()
