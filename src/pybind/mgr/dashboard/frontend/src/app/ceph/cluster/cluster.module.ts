@@ -3,6 +3,7 @@ import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 
+import { TreeModule } from 'ng2-tree';
 import { AlertModule } from 'ngx-bootstrap/alert';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { ModalModule } from 'ngx-bootstrap/modal';
@@ -14,6 +15,7 @@ import { PerformanceCounterModule } from '../performance-counter/performance-cou
 import { ConfigurationDetailsComponent } from './configuration/configuration-details/configuration-details.component';
 import { ConfigurationFormComponent } from './configuration/configuration-form/configuration-form.component';
 import { ConfigurationComponent } from './configuration/configuration.component';
+import { CrushmapComponent } from './crushmap/crushmap.component';
 import { HostDetailsComponent } from './hosts/host-details/host-details.component';
 import { HostsComponent } from './hosts/hosts.component';
 import { MonitorComponent } from './monitor/monitor.component';
@@ -42,7 +44,8 @@ import { OsdScrubModalComponent } from './osd/osd-scrub-modal/osd-scrub-modal.co
     BsDropdownModule.forRoot(),
     ModalModule.forRoot(),
     AlertModule.forRoot(),
-    TooltipModule.forRoot()
+    TooltipModule.forRoot(),
+    TreeModule
   ],
   declarations: [
     HostsComponent,
@@ -56,7 +59,8 @@ import { OsdScrubModalComponent } from './osd/osd-scrub-modal/osd-scrub-modal.co
     HostDetailsComponent,
     ConfigurationDetailsComponent,
     ConfigurationFormComponent,
-    OsdReweightModalComponent
+    OsdReweightModalComponent,
+    CrushmapComponent
   ]
 })
 export class ClusterModule {}

@@ -1,0 +1,22 @@
+<div class="row">
+  <div class="col-sm-12 col-lg-12">
+    <div class="panel panel-default">
+      <div class="panel-heading">
+        <h3 class="panel-title">
+          <span i18n>{{ panelTitle }}</span>
+        </h3>
+      </div>
+      <div class="panel-body">
+        <div class="col-sm-6 col-lg-6">
+          <tree [tree]="tree"
+                (nodeSelected)="onNodeSelected($event)"></tree>
+        </div>
+        <div class="col-sm-6 col-lg-6 metadata">
+          <cd-table-key-value *ngIf="metadata"
+                              [data]="metadata">
+          </cd-table-key-value>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

@@ -62,6 +62,7 @@
     "moment": "2.22.2",
     "ng2-charts": "1.6.0",
     "ng2-toastr": "zzakir/ng2-toastr#0eafd72",
+    "ng2-tree": "2.0.0-rc.11",
     "ngx-bootstrap": "2.0.5",
     "rxjs": "6.2.2",
     "rxjs-compat": "6.2.2",
