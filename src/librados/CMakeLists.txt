@@ -24,8 +24,8 @@ add_library(librados ${CEPH_SHARED}
 if(ENABLE_SHARED)
   set_target_properties(librados PROPERTIES
     OUTPUT_NAME rados
-    VERSION 2.0.0
-    SOVERSION 2
+    VERSION 3.0.0
+    SOVERSION 3
     CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN ON)
   if(NOT APPLE)
