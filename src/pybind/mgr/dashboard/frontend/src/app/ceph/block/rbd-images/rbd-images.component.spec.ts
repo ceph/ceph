@@ -9,6 +9,7 @@ import { TooltipModule } from 'ngx-bootstrap/tooltip';
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { TaskListService } from '../../../shared/services/task-list.service';
 import { SharedModule } from '../../../shared/shared.module';
+import { RbdConfigurationListComponent } from '../rbd-configuration-list/rbd-configuration-list.component';
 import { RbdDetailsComponent } from '../rbd-details/rbd-details.component';
 import { RbdListComponent } from '../rbd-list/rbd-list.component';
 import { RbdSnapshotListComponent } from '../rbd-snapshot-list/rbd-snapshot-list.component';
@@ -25,7 +26,8 @@ describe('RbdImagesComponent', () => {
       RbdImagesComponent,
       RbdListComponent,
       RbdSnapshotListComponent,
-      RbdTrashListComponent
+      RbdTrashListComponent,
+      RbdConfigurationListComponent
     ],
     imports: [
       HttpClientTestingModule,

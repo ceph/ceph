@@ -13,10 +13,11 @@ import six
 import rbd
 
 from . import ApiController, RESTController, Task, UpdatePermission, \
-              DeletePermission, CreatePermission
+              DeletePermission, CreatePermission, ReadPermission
 from .. import mgr
 from ..security import Scope
 from ..services.ceph_service import CephService
+from ..services.rbd import RbdConfiguration
 from ..tools import ViewCache, str_to_bool
 from ..services.exception import handle_rados_error, handle_rbd_error, \
                                  serialize_dashboard_exception
@@ -121,12 +122,11 @@ class Rbd(RESTController):
     RESOURCE_ID = "pool_name/image_name"
 
     # set of image features that can be enable on existing images
-    ALLOW_ENABLE_FEATURES = set(["exclusive-lock", "object-map", "fast-diff",
-                                 "journaling"])
+    ALLOW_ENABLE_FEATURES = {"exclusive-lock", "object-map", "fast-diff", "journaling"}
 
     # set of image features that can be disabled on existing images
-    ALLOW_DISABLE_FEATURES = set(["exclusive-lock", "object-map", "fast-diff",
-                                  "deep-flatten", "journaling"])
+    ALLOW_DISABLE_FEATURES = {"exclusive-lock", "object-map", "fast-diff", "deep-flatten",
+                              "journaling"}
 
     @classmethod
     def _rbd_disk_usage(cls, image, snaps, whole_object=True):
@@ -152,7 +152,8 @@ class Rbd(RESTController):
 
         return total_used_size, snap_map
 
-    def _rbd_image(self, ioctx, pool_name, image_name):
+    @classmethod
+    def _rbd_image(cls, ioctx, pool_name, image_name):
         with rbd.Image(ioctx, image_name) as img:
             stat = img.stat()
             stat['name'] = image_name
@@ -213,7 +214,7 @@ class Rbd(RESTController):
                          for s in stat['snapshots']]
                 snaps.sort(key=lambda s: s[0])
                 snaps += [(snaps[-1][0]+1 if snaps else 0, stat['size'], None)]
-                total_prov_bytes, snaps_prov_bytes = self._rbd_disk_usage(
+                total_prov_bytes, snaps_prov_bytes = cls._rbd_disk_usage(
                     img, snaps, True)
                 stat['total_disk_usage'] = total_prov_bytes
                 for snap, prov_bytes in snaps_prov_bytes.items():
@@ -228,17 +229,20 @@ class Rbd(RESTController):
                 stat['total_disk_usage'] = None
                 stat['disk_usage'] = None
 
+            stat['configuration'] = RbdConfiguration(pool_ioctx=ioctx, image_name=image_name).list()
+
             return stat
 
+    @classmethod
     @ViewCache()
-    def _rbd_pool_list(self, pool_name):
+    def _rbd_pool_list(cls, pool_name):
         rbd_inst = rbd.RBD()
         with mgr.rados.open_ioctx(pool_name) as ioctx:
             names = rbd_inst.list(ioctx)
             result = []
             for name in names:
                 try:
-                    stat = self._rbd_image(ioctx, pool_name, name)
+                    stat = cls._rbd_image(ioctx, pool_name, name)
                 except rbd.ImageNotFound:
                     # may have been removed in the meanwhile
                     continue
@@ -255,6 +259,8 @@ class Rbd(RESTController):
         for pool in pools:
             # pylint: disable=unbalanced-tuple-unpacking
             status, value = self._rbd_pool_list(pool)
+            for i, image in enumerate(value):
+                value[i]['configuration'] = RbdConfiguration(pool, image['name']).list()
             result.append({'status': status, 'value': value, 'pool_name': pool})
         return result
 
@@ -275,7 +281,7 @@ class Rbd(RESTController):
     @RbdTask('create',
              {'pool_name': '{pool_name}', 'image_name': '{name}'}, 2.0)
     def create(self, name, pool_name, size, obj_size=None, features=None,
-               stripe_unit=None, stripe_count=None, data_pool=None):
+               stripe_unit=None, stripe_count=None, data_pool=None, configuration=None):
 
         size = int(size)
 
@@ -293,8 +299,9 @@ class Rbd(RESTController):
             rbd_inst.create(ioctx, name, size, order=l_order, old_format=False,
                             features=feature_bitmask, stripe_unit=stripe_unit,
                             stripe_count=stripe_count, data_pool=data_pool)
+            RbdConfiguration(pool_ioctx=ioctx, image_name=name).set_configuration(configuration)
 
-        return _rbd_call(pool_name, _create)
+        _rbd_call(pool_name, _create)
 
     @RbdTask('delete', ['{pool_name}', '{image_name}'], 2.0)
     def delete(self, pool_name, image_name):
@@ -302,7 +309,7 @@ class Rbd(RESTController):
         return _rbd_call(pool_name, rbd_inst.remove, image_name)
 
     @RbdTask('edit', ['{pool_name}', '{image_name}', '{name}'], 4.0)
-    def set(self, pool_name, image_name, name=None, size=None, features=None):
+    def set(self, pool_name, image_name, name=None, size=None, features=None, configuration=None):
         def _edit(ioctx, image):
             rbd_inst = rbd.RBD()
             # check rename image
@@ -329,6 +336,9 @@ class Rbd(RESTController):
                         f_bitmask = _format_features([feature])
                         image.update_features(f_bitmask, True)
 
+            RbdConfiguration(pool_ioctx=ioctx, image_name=image_name).set_configuration(
+                configuration)
+
         return _rbd_image_call(pool_name, image_name, _edit)
 
     @RbdTask('copy',
@@ -339,7 +349,7 @@ class Rbd(RESTController):
     @RESTController.Resource('POST')
     def copy(self, pool_name, image_name, dest_pool_name, dest_image_name,
              snapshot_name=None, obj_size=None, features=None, stripe_unit=None,
-             stripe_count=None, data_pool=None):
+             stripe_count=None, data_pool=None, configuration=None):
 
         def _src_copy(s_ioctx, s_img):
             def _copy(d_ioctx):
@@ -356,6 +366,8 @@ class Rbd(RESTController):
 
                 s_img.copy(d_ioctx, dest_image_name, feature_bitmask, l_order,
                            stripe_unit, stripe_count, data_pool)
+                RbdConfiguration(pool_ioctx=d_ioctx, image_name=dest_image_name).set_configuration(
+                    configuration)
 
             return _rbd_call(dest_pool_name, _copy)
 
@@ -385,6 +397,11 @@ class Rbd(RESTController):
         """
         rbd_inst = rbd.RBD()
         return _rbd_call(pool_name, rbd_inst.trash_move, image_name, delay)
+
+    @RESTController.Resource()
+    @ReadPermission
+    def configuration(self, pool_name, image_name):
+        return RbdConfiguration(pool_name, image_name).list()
 
 
 @ApiController('/block/image/{pool_name}/{image_name}/snap', Scope.RBD_IMAGE)
@@ -444,8 +461,11 @@ class RbdSnapshot(RESTController):
               'child_image_name': '{child_image_name}'}, 2.0)
     @RESTController.Resource('POST')
     def clone(self, pool_name, image_name, snapshot_name, child_pool_name,
-              child_image_name, obj_size=None, features=None,
-              stripe_unit=None, stripe_count=None, data_pool=None):
+              child_image_name, obj_size=None, features=None, stripe_unit=None, stripe_count=None,
+              data_pool=None, configuration=None):
+        """
+        Clones a snapshot to an image
+        """
 
         def _parent_clone(p_ioctx):
             def _clone(ioctx):
@@ -462,9 +482,12 @@ class RbdSnapshot(RESTController):
                                child_image_name, feature_bitmask, l_order,
                                stripe_unit, stripe_count, data_pool)
 
+                RbdConfiguration(pool_ioctx=ioctx, image_name=child_image_name).set_configuration(
+                    configuration)
+
             return _rbd_call(child_pool_name, _clone)
 
-        return _rbd_call(pool_name, _parent_clone)
+        _rbd_call(pool_name, _parent_clone)
 
 
 @ApiController('/block/image/trash', Scope.RBD_IMAGE)

@@ -89,9 +89,9 @@ class RbdTest(DashboardTestCase):
 
     # pylint: disable=too-many-arguments
     @classmethod
-    def edit_image(cls, pool, image, name=None, size=None, features=None):
-        return cls._task_put('/api/block/image/{}/{}'.format(pool, image),
-                             {'name': name, 'size': size, 'features': features})
+    def edit_image(cls, pool, image, name=None, size=None, features=None, **kwargs):
+        kwargs.update({'name': name, 'size': size, 'features': features})
+        return cls._task_put('/api/block/image/{}/{}'.format(pool, image), kwargs)
 
     @classmethod
     def flatten_image(cls, pool, image):
@@ -139,7 +139,7 @@ class RbdTest(DashboardTestCase):
                        '--yes-i-really-really-mean-it'])
 
     @classmethod
-    def create_image_in_trash(cls, pool, name, delay=0, **kwargs):
+    def create_image_in_trash(cls, pool, name, delay=0):
         cls.create_image(pool, name, 10240)
         img = cls._get('/api/block/image/{}/{}'.format(pool, name))
 
@@ -201,6 +201,11 @@ class RbdTest(DashboardTestCase):
             'timestamp': JLeaf(str, none=True),
             'disk_usage': JLeaf(int, none=True),
             'total_disk_usage': JLeaf(int, none=True),
+            'configuration': JList(JObj(sub_elems={
+                'name': JLeaf(str),
+                'source': JLeaf(int),
+                'value': JLeaf(str),
+            })),
         })
         self.assertSchema(img, schema)
 
@@ -287,6 +292,33 @@ class RbdTest(DashboardTestCase):
                                             'object-map'])
 
         self.remove_image('rbd', rbd_name)
+
+    def test_create_with_configuration(self):
+        pool = 'rbd'
+        image_name = 'image_with_config'
+        size = 10240
+        configuration = {
+            'rbd_qos_bps_limit': 10240,
+            'rbd_qos_bps_burst': 10240 * 2,
+        }
+        expected = [{
+            'name': 'rbd_qos_bps_limit',
+            'source': 2,
+            'value': str(10240),
+        }, {
+            'name': 'rbd_qos_bps_burst',
+            'source': 2,
+            'value': str(10240 * 2),
+        }]
+
+        self.create_image(pool, image_name, size, configuration=configuration)
+        self.assertStatus(201)
+        img = self._get('/api/block/image/rbd/{}'.format(image_name))
+        self.assertStatus(200)
+        for conf in expected:
+            self.assertIn(conf, img['configuration'])
+
+        self.remove_image(pool, image_name)
 
     def test_create_rbd_in_data_pool(self):
         if not self.bluestore_support:
@@ -458,6 +490,57 @@ class RbdTest(DashboardTestCase):
         self._validate_image(img, features_name=['exclusive-lock',
                                                  'journaling', 'layering'])
         self.remove_image('rbd', 'edit_img')
+        self.assertStatus(204)
+
+    def test_image_change_config(self):
+        pool = 'rbd'
+        image = 'image_with_config'
+        initial_conf = {
+            'rbd_qos_bps_limit': 10240,
+            'rbd_qos_write_iops_limit': None
+        }
+        initial_expect = [{
+            'name': 'rbd_qos_bps_limit',
+            'source': 2,
+            'value': '10240',
+        }, {
+            'name': 'rbd_qos_write_iops_limit',
+            'source': 0,
+            'value': '0',
+        }]
+        new_conf = {
+            'rbd_qos_bps_limit': 0,
+            'rbd_qos_bps_burst': 20480,
+            'rbd_qos_write_iops_limit': None
+        }
+        new_expect = [{
+            'name': 'rbd_qos_bps_limit',
+            'source': 2,
+            'value': '0',
+        }, {
+            'name': 'rbd_qos_bps_burst',
+            'source': 2,
+            'value': '20480',
+        }, {
+            'name': 'rbd_qos_write_iops_limit',
+            'source': 0,
+            'value': '0',
+        }]
+
+        self.create_image(pool, image, 2**30, configuration=initial_conf)
+        self.assertStatus(201)
+        img = self._get('/api/block/image/{}/{}'.format(pool, image))
+        self.assertStatus(200)
+        for conf in initial_expect:
+            self.assertIn(conf, img['configuration'])
+
+        self.edit_image(pool, image, configuration=new_conf)
+        img = self._get('/api/block/image/{}/{}'.format(pool, image))
+        self.assertStatus(200)
+        for conf in new_expect:
+            self.assertIn(conf, img['configuration'])
+
+        self.remove_image(pool, image)
         self.assertStatus(204)
 
     def test_update_snapshot(self):
