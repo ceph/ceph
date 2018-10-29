@@ -2,4 +2,4 @@ tasks:
 - cram:
     clients:
       client.0:
-      - http://git.ceph.com/?p={repo};a=blob_plain;hb={branch};f=qa/rbd/krbd_parent_overlap.t
+      - qa/rbd/krbd_parent_overlap.t
