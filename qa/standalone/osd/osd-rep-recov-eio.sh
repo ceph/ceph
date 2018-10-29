@@ -321,6 +321,7 @@ function TEST_rep_read_unfound() {
 
     sleep 5
 
+    flush_pg_stats
     ceph --format=json pg dump pgs | jq '.'
 
     if ! ceph --format=json pg dump pgs | jq '.pg_stats | .[0].state' | grep -q recovery_unfound
