@@ -187,6 +187,7 @@ function deploy_ceph {
     fi
     test -n "$NFS_GANESHA" && nfs_ganesha_no_root_squash
     zypper lr -upEP
+    zypper -n refresh -f
     run_stage_4 "$CLI"
     if [ -n "$NFS_GANESHA" ] ; then
         nfs_ganesha_cat_config_file
