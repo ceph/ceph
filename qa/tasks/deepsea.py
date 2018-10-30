@@ -440,9 +440,22 @@ class CephConf(DeepSea):
         self.logger.debug("munged config is {}".format(self.config))
         self.logger.debug("end of constructor method")
 
-    def _ceph_conf_d_full_path(self, component):
-        if component in self.customize.keys():
-            return "{}/{}".format(self.ceph_conf_d, self.customize[component])
+    def _ceph_conf_d_full_path(self, section):
+        if section in self.customize.keys():
+            return "{}/{}".format(self.ceph_conf_d, self.customize[section])
+
+    def _custom_ceph_conf(self, section, customizations):
+        for conf_item, conf_value in customizations.iteritems():
+            data = '{} = {}\n'.format(conf_item, conf_value)
+            sudo_append_to_file(
+                self.master_remote,
+                self._ceph_conf_d_full_path(section),
+                data
+                )
+            self.logger.info(
+                "Adding to ceph.conf, {} section: {}"
+                .format(section, data)
+                )
 
     def _dashboard(self):
         info_msg = "adjusted ceph.conf for deployment of dashboard MGR module"
@@ -455,8 +468,8 @@ class CephConf(DeepSea):
         self.logger.info(info_msg)
 
     def _dump_customizations(self):
-        for component in self.customize.keys():
-            path = self._ceph_conf_d_full_path(component)
+        for section in self.customize.keys():
+            path = self._ceph_conf_d_full_path(section)
             try:
                 self.master_remote.run(
                     args="test -f {}".format(path)
@@ -508,35 +521,19 @@ class CephConf(DeepSea):
             )
         self.logger.info(info_msg)
 
-    def setup(self):
-        self.logger.debug("beginning of setup method")
+    def begin(self):
+        self.logger.debug("beginning of begin method")
+        self.logger.info("WWWW: Adding custom options to ceph.conf")
         if self.config.get('dashboard', True):
             self._dashboard()
         if self.config.get('mon_allow_pool_delete', True):
             self._mon_allow_pool_delete()
         if self.config.get('small_cluster', True):
             self._maybe_a_small_cluster()
-        self.logger.debug("end of setup method")
-
-    def begin(self):
-        self.logger.debug("beginning of begin method")
-        self.logger.debug("WWWW: Adding custom options to ceph.conf")
-        if not self.config:
-            self.logger.info("empty config: not setting any custom ceph.conf")
-            return None
-        for section in self.config.keys():
-            if isinstance(self.config[section], dict):
-                for conf_item, conf_value in self.config[section].iteritems():
-                    data = '{} = {}\n'.format(conf_item, conf_value)
-                    sudo_append_to_file(
-                        self.master_remote,
-                        self._ceph_conf_d_full_path(section),
-                        data
-                        )
-                    self.logger.info(
-                        "Adding to ceph.conf, {} section: {}"
-                        .format(section, data)
-                        )
+        for section in self.customize.keys():
+            if section in self.config and isinstance(self.config[section],
+                                                     dict):
+                    self._custom_ceph_conf(section, self.config[section])
         self._dump_customizations()
         self.logger.debug("end of begin method")
 
