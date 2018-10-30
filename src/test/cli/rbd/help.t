@@ -107,6 +107,7 @@
       object-map check                  Verify the object map is correct.
       object-map rebuild                Rebuild an invalid object map.
       pool init                         Initialize pool for use by RBD.
+      pool stats                        Display pool statistics.
       remove (rm)                       Delete an image.
       rename (mv)                       Rename image within pool.
       resize                            Resize (expand or shrink) image.
@@ -1837,6 +1838,23 @@
     --force              force initialize pool for RBD use if registered by
                          another application
   
+  rbd help pool stats
+  usage: rbd pool stats [--pool <pool>] [--namespace <namespace>] 
+                        [--format <format>] [--pretty-format] 
+                        <pool-name> 
+  
+  Display pool statistics.
+  
+  Positional arguments
+    <pool-name>          pool name
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --format arg         output format (plain, json, or xml) [default: plain]
+    --pretty-format      pretty formatting (json and xml)
+  
+  Note: legacy v1 images are not included in stats
   rbd help remove
   usage: rbd remove [--pool <pool>] [--namespace <namespace>] [--image <image>] 
                     [--no-progress] 
