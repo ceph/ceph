@@ -143,6 +143,7 @@ int KernelDevice::open(const string& p)
     } else {
       dout(20) << __func__ << " devname " << devname << dendl;
       rotational = blkdev_buffered.is_rotational();
+      support_discard = blkdev_buffered.support_discard();
       this->devname = devname;
       _detect_vdo();
     }
@@ -164,6 +165,7 @@ int KernelDevice::open(const string& p)
 	  << " block_size " << block_size
 	  << " (" << byte_u_t(block_size) << ")"
 	  << " " << (rotational ? "rotational" : "non-rotational")
+      << " discard " << (support_discard ? "supported" : "not supported")
 	  << dendl;
   return 0;
 
@@ -212,6 +214,7 @@ void KernelDevice::close()
 
 int KernelDevice::collect_metadata(const string& prefix, map<string,string> *pm) const
 {
+  (*pm)[prefix + "support_discard"] = stringify((int)(bool)support_discard);
   (*pm)[prefix + "rotational"] = stringify((int)(bool)rotational);
   (*pm)[prefix + "size"] = stringify(get_size());
   (*pm)[prefix + "block_size"] = stringify(get_block_size());
@@ -547,7 +550,7 @@ void KernelDevice::_discard_thread()
 
 int KernelDevice::queue_discard(interval_set<uint64_t> &to_release)
 {
-  if (rotational)
+  if (!support_discard)
     return -1;
 
   if (to_release.empty())
@@ -637,7 +640,7 @@ void KernelDevice::aio_submit(IOContext *ioc)
   ioc->num_pending -= pending;
   ceph_assert(ioc->num_pending.load() == 0);  // we should be only thread doing this
   ceph_assert(ioc->pending_aios.size() == 0);
-  
+
   if (cct->_conf->bdev_debug_aio) {
     list<aio_t>::iterator p = ioc->running_aios.begin();
     while (p != e) {
@@ -777,7 +780,7 @@ int KernelDevice::aio_write(
 int KernelDevice::discard(uint64_t offset, uint64_t len)
 {
   int r = 0;
-  if (!rotational) {
+  if (support_discard) {
       dout(10) << __func__
 	       << " 0x" << std::hex << offset << "~" << len << std::dec
 	       << dendl;
@@ -944,4 +947,3 @@ int KernelDevice::invalidate_cache(uint64_t off, uint64_t len)
   }
   return r;
 }
-
