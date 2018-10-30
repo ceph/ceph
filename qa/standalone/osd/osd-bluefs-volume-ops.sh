@@ -91,8 +91,7 @@ function TEST_bluestore() {
     ceph osd down 3
 
     # slow, DB, WAL -> slow, DB
-    ceph-objectstore-tool --type bluestore --data-path $dir/0 \
-			  --op fsck --no-mon-config || return 1
+    ceph-bluestore-tool --path $dir/0 fsck || return 1
 
     ceph-bluestore-tool --path $dir/0 bluefs-bdev-sizes
 
@@ -101,8 +100,7 @@ function TEST_bluestore() {
       --dev-target $dir/0/block.db \
       --command bluefs-bdev-migrate || return 1
 
-    ceph-objectstore-tool --type bluestore --data-path $dir/0 \
-			  --op fsck --no-mon-config || return 1
+    ceph-bluestore-tool --path $dir/0 fsck || return 1
 
     # slow, DB, WAL -> slow, WAL
     ceph-bluestore-tool --path $dir/1 \
@@ -110,8 +108,7 @@ function TEST_bluestore() {
       --dev-target $dir/1/block \
       --command bluefs-bdev-migrate || return 1
 
-    ceph-objectstore-tool --type bluestore --data-path $dir/1 \
-			  --op fsck --no-mon-config || return 1
+    ceph-bluestore-tool --path $dir/1 fsck || return 1
 
     # slow, DB, WAL -> slow
     ceph-bluestore-tool --path $dir/2 \
@@ -120,8 +117,7 @@ function TEST_bluestore() {
       --dev-target $dir/2/block \
       --command bluefs-bdev-migrate || return 1
 
-    ceph-objectstore-tool --type bluestore --data-path $dir/2 \
-			  --op fsck --no-mon-config || return 1
+    ceph-bluestore-tool --path $dir/2 fsck || return 1
 
     # slow, DB, WAL -> slow, WAL (negative case)
     ceph-bluestore-tool --path $dir/3 \
@@ -133,8 +129,7 @@ function TEST_bluestore() {
     if [ $? -eq 0 ]; then
         return 1
     fi
-    ceph-objectstore-tool --type bluestore --data-path $dir/3 \
-			  --op fsck --no-mon-config || return 1
+    ceph-bluestore-tool --path $dir/3 fsck || return 1
 
     # slow, DB, WAL -> slow, DB (WAL to slow then slow to DB)
     ceph-bluestore-tool --path $dir/3 \
@@ -142,17 +137,14 @@ function TEST_bluestore() {
       --dev-target $dir/3/block \
       --command bluefs-bdev-migrate || return 1
 
-    ceph-objectstore-tool --type bluestore --data-path $dir/3 \
-			  --op fsck --no-mon-config || return 1
+    ceph-bluestore-tool --path $dir/3 fsck || return 1
 
     ceph-bluestore-tool --path $dir/3 \
       --devs-source $dir/3/block \
       --dev-target $dir/3/block.db \
       --command bluefs-bdev-migrate || return 1
 
-    ceph-objectstore-tool --type bluestore --data-path $dir/3 \
-			  --op fsck --no-mon-config || return 1
-
+    ceph-bluestore-tool --path $dir/3 fsck || return 1
 
     run_osd_bluestore $dir 0 || return 1
     osd_pid0=$(cat $dir/osd.0.pid)
@@ -179,20 +171,17 @@ function TEST_bluestore() {
     ceph osd down 3
 
     # slow, DB -> slow, DB, WAL
-    ceph-objectstore-tool --type bluestore --data-path $dir/0 \
-			  --op fsck --no-mon-config || return 1
+    ceph-bluestore-tool --path $dir/0 fsck || return 1
 
     dd if=/dev/zero  of=$dir/0/wal count=512 bs=1M
     ceph-bluestore-tool --path $dir/0 \
       --dev-target $dir/0/wal \
       --command bluefs-bdev-new-wal || return 1
 
-    ceph-objectstore-tool --type bluestore --data-path $dir/0 \
-			  --op fsck --no-mon-config || return 1
+    ceph-bluestore-tool --path $dir/0 fsck || return 1
 
     # slow, WAL -> slow, DB, WAL
-    ceph-objectstore-tool --type bluestore --data-path $dir/1 \
-			  --op fsck --no-mon-config || return 1
+    ceph-bluestore-tool --path $dir/1 fsck || return 1
 
     dd if=/dev/zero  of=$dir/1/db count=1024 bs=1M
     ceph-bluestore-tool --path $dir/1 \
@@ -204,12 +193,10 @@ function TEST_bluestore() {
       --dev-target $dir/1/block.db \
       --command bluefs-bdev-migrate || return 1
 
-    ceph-objectstore-tool --type bluestore --data-path $dir/1 \
-			  --op fsck --no-mon-config || return 1
+    ceph-bluestore-tool --path $dir/1 fsck || return 1
 
     # slow -> slow, DB, WAL
-    ceph-objectstore-tool --type bluestore --data-path $dir/2 \
-			  --op fsck --no-mon-config || return 1
+    ceph-bluestore-tool --path $dir/2 fsck || return 1
 
     ceph-bluestore-tool --path $dir/2 \
       --command bluefs-bdev-new-db || return 1
@@ -222,13 +209,10 @@ function TEST_bluestore() {
       --dev-target $dir/2/block.db \
       --command bluefs-bdev-migrate || return 1
 
-
-    ceph-objectstore-tool --type bluestore --data-path $dir/2 \
-			  --op fsck --no-mon-config || return 1
+    ceph-bluestore-tool --path $dir/2 fsck || return 1
 
     # slow, DB -> slow, WAL
-    ceph-objectstore-tool --type bluestore --data-path $dir/3 \
-			  --op fsck --no-mon-config || return 1
+    ceph-bluestore-tool --path $dir/3 fsck || return 1
 
     ceph-bluestore-tool --path $dir/3 \
       --command bluefs-bdev-new-wal || return 1
@@ -238,9 +222,7 @@ function TEST_bluestore() {
       --dev-target $dir/3/block \
       --command bluefs-bdev-migrate || return 1
 
-    ceph-objectstore-tool --type bluestore --data-path $dir/3 \
-			  --op fsck --no-mon-config || return 1
-
+    ceph-bluestore-tool --path $dir/3 fsck || return 1
 
     run_osd_bluestore $dir 0 || return 1
     osd_pid0=$(cat $dir/osd.0.pid)
@@ -265,8 +247,7 @@ function TEST_bluestore() {
     ceph osd down 3
 
     # slow, DB1, WAL -> slow, DB2, WAL
-    ceph-objectstore-tool --type bluestore --data-path $dir/0 \
-			  --op fsck --no-mon-config || return 1
+    ceph-bluestore-tool --path $dir/0 fsck || return 1
 
     dd if=/dev/zero  of=$dir/0/db2 count=1024 bs=1M
     ceph-bluestore-tool --path $dir/0 \
@@ -274,8 +255,7 @@ function TEST_bluestore() {
       --dev-target $dir/0/db2 \
       --command bluefs-bdev-migrate || return 1
 
-    ceph-objectstore-tool --type bluestore --data-path $dir/0 \
-			  --op fsck --no-mon-config || return 1
+    ceph-bluestore-tool --path $dir/0 fsck || return 1
 
     # slow, DB, WAL1 -> slow, DB, WAL2
 
@@ -286,12 +266,10 @@ function TEST_bluestore() {
       --command bluefs-bdev-migrate || return 1
     rm -rf $dir/0/wal
 
-    ceph-objectstore-tool --type bluestore --data-path $dir/0 \
-			  --op fsck --no-mon-config || return 1
+    ceph-bluestore-tool --path $dir/0 fsck || return 1
 
     # slow, DB + WAL -> slow, DB2 -> slow
-    ceph-objectstore-tool --type bluestore --data-path $dir/1 \
-			  --op fsck --no-mon-config || return 1
+    ceph-bluestore-tool --path $dir/1 fsck || return 1
 
     dd if=/dev/zero  of=$dir/1/db2 count=1024 bs=1M
     ceph-bluestore-tool --path $dir/1 \
@@ -302,8 +280,7 @@ function TEST_bluestore() {
 
     rm -rf $dir/1/db
 
-    ceph-objectstore-tool --type bluestore --data-path $dir/1 \
-			  --op fsck --no-mon-config || return 1
+    ceph-bluestore-tool --path $dir/1 fsck || return 1
 
     ceph-bluestore-tool --path $dir/1 \
       --devs-source $dir/1/block.db \
@@ -312,8 +289,7 @@ function TEST_bluestore() {
 
     rm -rf $dir/1/db2
 
-    ceph-objectstore-tool --type bluestore --data-path $dir/1 \
-			  --op fsck --no-mon-config || return 1
+    ceph-bluestore-tool --path $dir/1 fsck || return 1
 
     # slow -> slow, DB (negative case)
     ceph-objectstore-tool --type bluestore --data-path $dir/2 \
@@ -329,8 +305,7 @@ function TEST_bluestore() {
     if [ $? -eq 0 ]; then
         return 1
     fi
-    ceph-objectstore-tool --type bluestore --data-path $dir/2 \
-			  --op fsck --no-mon-config || return 1
+    ceph-bluestore-tool --path $dir/2 fsck || return 1
 
     # slow + DB + WAL -> slow, DB2
     dd if=/dev/zero  of=$dir/2/db2 count=1024 bs=1M
@@ -342,8 +317,7 @@ function TEST_bluestore() {
       --dev-target $dir/2/db2 \
       --command bluefs-bdev-migrate || return 1
 
-    ceph-objectstore-tool --type bluestore --data-path $dir/2 \
-			  --op fsck --no-mon-config || return 1
+    ceph-bluestore-tool --path $dir/2 fsck || return 1
 
     # slow + WAL -> slow2, WAL2
     dd if=/dev/zero  of=$dir/3/wal2 count=1024 bs=1M
@@ -354,8 +328,7 @@ function TEST_bluestore() {
       --dev-target $dir/3/wal2 \
       --command bluefs-bdev-migrate || return 1
 
-    ceph-objectstore-tool --type bluestore --data-path $dir/3 \
-			  --op fsck --no-mon-config || return 1
+    ceph-bluestore-tool --path $dir/3 fsck || return 1
 
     run_osd_bluestore $dir 0 || return 1
     osd_pid0=$(cat $dir/osd.0.pid)
