@@ -488,7 +488,7 @@ void ECBackend::dispatch_recovery_messages(RecoveryMessages &m, int priority)
        m.pushes.erase(i++)) {
     MOSDPGPush *msg = new MOSDPGPush();
     msg->set_priority(priority);
-    msg->map_epoch = get_parent()->get_epoch();
+    msg->map_epoch = get_osdmap_epoch();
     msg->min_epoch = get_parent()->get_last_peering_reset_epoch();
     msg->from = get_parent()->whoami_shard();
     msg->pgid = spg_t(get_parent()->get_info().pgid.pgid, i->first.shard);
@@ -505,7 +505,7 @@ void ECBackend::dispatch_recovery_messages(RecoveryMessages &m, int priority)
        m.push_replies.erase(i++)) {
     MOSDPGPushReply *msg = new MOSDPGPushReply();
     msg->set_priority(priority);
-    msg->map_epoch = get_parent()->get_epoch();
+    msg->map_epoch = get_osdmap_epoch();
     msg->min_epoch = get_parent()->get_last_peering_reset_epoch();
     msg->from = get_parent()->whoami_shard();
     msg->pgid = spg_t(get_parent()->get_info().pgid.pgid, i->first.shard);
@@ -519,7 +519,7 @@ void ECBackend::dispatch_recovery_messages(RecoveryMessages &m, int priority)
 	get_parent()->bless_context(
 	  new SendPushReplies(
 	    get_parent(),
-	    get_parent()->get_epoch(),
+	    get_osdmap_epoch(),
 	    replies)));
     get_parent()->queue_transaction(std::move(m.t));
   } 
@@ -776,12 +776,12 @@ bool ECBackend::_handle_message(
     const MOSDECSubOpRead *op = static_cast<const MOSDECSubOpRead*>(_op->get_req());
     MOSDECSubOpReadReply *reply = new MOSDECSubOpReadReply;
     reply->pgid = get_parent()->primary_spg_t();
-    reply->map_epoch = get_parent()->get_epoch();
+    reply->map_epoch = get_osdmap_epoch();
     reply->min_epoch = get_parent()->get_interval_start_epoch();
     handle_sub_read(op->op.from, op->op, &(reply->op), _op->pg_trace);
     reply->trace = _op->pg_trace;
     get_parent()->send_message_osd_cluster(
-      op->op.from.osd, reply, get_parent()->get_epoch());
+      op->op.from.osd, reply, get_osdmap_epoch());
     return true;
   }
   case MSG_OSD_EC_READ_REPLY: {
@@ -862,7 +862,7 @@ void ECBackend::sub_write_committed(
     get_parent()->update_last_complete_ondisk(last_complete);
     MOSDECSubOpWriteReply *r = new MOSDECSubOpWriteReply;
     r->pgid = get_parent()->primary_spg_t();
-    r->map_epoch = get_parent()->get_epoch();
+    r->map_epoch = get_osdmap_epoch();
     r->min_epoch = get_parent()->get_interval_start_epoch();
     r->op.tid = tid;
     r->op.last_complete = last_complete;
@@ -873,7 +873,7 @@ void ECBackend::sub_write_committed(
     r->trace = trace;
     r->trace.event("sending sub op commit");
     get_parent()->send_message_osd_cluster(
-      get_parent()->primary_shard().osd, r, get_parent()->get_epoch());
+      get_parent()->primary_shard().osd, r, get_osdmap_epoch());
   }
 }
 
@@ -1722,7 +1722,7 @@ void ECBackend::do_read_op(ReadOp &op)
     msg->pgid = spg_t(
       get_parent()->whoami_spg_t().pgid,
       i->first.shard);
-    msg->map_epoch = get_parent()->get_epoch();
+    msg->map_epoch = get_osdmap_epoch();
     msg->min_epoch = get_parent()->get_interval_start_epoch();
     msg->op = i->second;
     msg->op.from = get_parent()->whoami_shard();
@@ -1735,7 +1735,7 @@ void ECBackend::do_read_op(ReadOp &op)
     get_parent()->send_message_osd_cluster(
       i->first.osd,
       msg,
-      get_parent()->get_epoch());
+      get_osdmap_epoch());
   }
   dout(10) << __func__ << ": started " << op << dendl;
 }
@@ -2032,11 +2032,11 @@ bool ECBackend::try_reads_to_commit()
     } else {
       MOSDECSubOpWrite *r = new MOSDECSubOpWrite(sop);
       r->pgid = spg_t(get_parent()->primary_spg_t().pgid, i->shard);
-      r->map_epoch = get_parent()->get_epoch();
+      r->map_epoch = get_osdmap_epoch();
       r->min_epoch = get_parent()->get_interval_start_epoch();
       r->trace = trace;
       get_parent()->send_message_osd_cluster(
-	i->osd, r, get_parent()->get_epoch());
+	i->osd, r, get_osdmap_epoch());
     }
   }
   if (should_write_local) {
