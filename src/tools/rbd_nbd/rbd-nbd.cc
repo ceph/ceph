@@ -1164,12 +1164,11 @@ static int rbd_nbd(int argc, const char *argv[])
   r = parse_args(args, &err_msg, &cmd, &cfg);
   if (r == HELP_INFO) {
     usage();
-    ceph_abort();
+    return 0;
   } else if (r == VERSION_INFO) {
     std::cout << pretty_version_to_str() << std::endl;
     return 0;
-  }
-  else if (r < 0) {
+  } else if (r < 0) {
     cerr << err_msg.str() << std::endl;
     return r;
   }
@@ -1197,7 +1196,6 @@ static int rbd_nbd(int argc, const char *argv[])
       break;
     default:
       usage();
-      ceph_abort();
       break;
   }
 
