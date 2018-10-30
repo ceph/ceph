@@ -1396,7 +1396,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("mon_clock_drift_allowed", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(.050)
+    .set_default(1.0)
     .set_description(""),
 
     Option("mon_clock_drift_warn_backoff", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
