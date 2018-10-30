@@ -102,7 +102,7 @@ POOL_METADATA = ('pool_id', 'name')
 
 RGW_METADATA = ('ceph_daemon', 'hostname', 'ceph_version')
 
-DISK_OCCUPATION = ( 'ceph_daemon', 'device','instance')
+DISK_OCCUPATION = ('ceph_daemon', 'device', 'db_device', 'wal_device', 'instance')
 
 NUM_OBJECTS = ['degraded', 'misplaced', 'unfound']
 
@@ -483,13 +483,24 @@ class Module(MgrModule):
             osd_metadata = self.get_metadata("osd", str(id_))
             if osd_metadata is None:
                 continue
-            dev_keys = ("backend_filestore_dev_node", "bluestore_bdev_dev_node")
-            osd_dev_node = None
-            for dev_key in dev_keys:
-                val = osd_metadata.get(dev_key, None)
-                if val and val != "unknown":
-                    osd_dev_node = val
-                    break
+
+            osd_objectstore = osd_metadata.get('osd_objectstore', None)
+            if osd_objectstore == "filestore":
+            # collect filestore backend device
+                osd_dev_node = osd_metadata.get('backend_filestore_dev_node', None)
+            # collect filestore journal device
+                osd_wal_dev_node = osd_metadata.get('osd_journal', '')
+                osd_db_dev_node = ''
+            elif osd_objectstore == "bluestore":
+            # collect bluestore backend device
+                osd_dev_node = osd_metadata.get('bluestore_bdev_dev_node', None)
+            # collect bluestore wal backend
+                osd_wal_dev_node = osd_metadata.get('bluefs_wal_dev_node', '')
+            # collect bluestore db backend
+                osd_db_dev_node = osd_metadata.get('bluefs_db_dev_node', '')
+            if osd_dev_node and osd_dev_node == "unknown":
+                osd_dev_node = None
+
             osd_hostname = osd_metadata.get('hostname', None)
             if osd_dev_node and osd_hostname:
                 self.log.debug("Got dev for osd {0}: {1}/{2}".format(
@@ -497,6 +508,8 @@ class Module(MgrModule):
                 self.metrics['disk_occupation'].set(1, (
                     "osd.{0}".format(id_),
                     osd_dev_node,
+                    osd_db_dev_node,
+                    osd_wal_dev_node,
                     osd_hostname
                 ))
             else:
