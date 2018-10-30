@@ -51,18 +51,6 @@
           </div>
         </div>
 
-        <!-- Stay signed in -->
-        <div class="checkbox checkbox-primary">
-          <input id="stay_signed_in"
-                 name="stay_signed_in"
-                 type="checkbox"
-                 [(ngModel)]="model.stay_signed_in">
-          <label for="stay_signed_in"
-                 i18n="A checkbox on the login page to do not expire session on browser close">
-            Keep me logged in
-          </label>
-        </div>
-
         <input type="submit"
                class="btn btn-primary btn-block"
                [disabled]="loginForm.invalid"
