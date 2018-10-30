@@ -8,7 +8,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { ToastModule } from 'ng2-toastr';
 import { of } from 'rxjs';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
+import { configureTestBed, FormHelper } from '../../../../testing/unit-test-helper';
 import { RoleService } from '../../../shared/api/role.service';
 import { ScopeService } from '../../../shared/api/scope.service';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
@@ -64,9 +64,12 @@ describe('RoleFormComponent', () => {
   });
 
   describe('create mode', () => {
+    let formHelper: FormHelper;
+
     beforeEach(() => {
       setUrl('/user-management/roles/add');
       component.ngOnInit();
+      formHelper = new FormHelper(form);
     });
 
     it('should not disable fields', () => {
@@ -76,8 +79,7 @@ describe('RoleFormComponent', () => {
     });
 
     it('should validate name required', () => {
-      form.get('name').setValue('');
-      expect(form.get('name').hasError('required')).toBeTruthy();
+      formHelper.expectErrorChange('name', '', 'required');
     });
 
     it('should set mode', () => {
@@ -90,7 +92,7 @@ describe('RoleFormComponent', () => {
         description: 'Role 1',
         scopes_permissions: { osd: ['read'] }
       };
-      Object.keys(role).forEach((k) => form.get(k).setValue(role[k]));
+      formHelper.setMultipleValues(role);
       component.submit();
       const roleReq = httpTesting.expectOne('api/role');
       expect(roleReq.request.method).toBe('POST');
@@ -100,7 +102,7 @@ describe('RoleFormComponent', () => {
     });
 
     it('should check all perms for a scope', () => {
-      form.get('scopes_permissions').setValue({ cephfs: ['read'] });
+      formHelper.setValue('scopes_permissions', { cephfs: ['read'] });
       component.onClickCellCheckbox('grafana', 'scope');
       const scopes_permissions = form.getValue('scopes_permissions');
       expect(Object.keys(scopes_permissions)).toContain('grafana');
@@ -108,7 +110,7 @@ describe('RoleFormComponent', () => {
     });
 
     it('should uncheck all perms for a scope', () => {
-      form.get('scopes_permissions').setValue({ cephfs: ['read', 'create', 'update', 'delete'] });
+      formHelper.setValue('scopes_permissions', { cephfs: ['read', 'create', 'update', 'delete'] });
       component.onClickCellCheckbox('cephfs', 'scope');
       const scopes_permissions = form.getValue('scopes_permissions');
       expect(Object.keys(scopes_permissions)).not.toContain('cephfs');
@@ -116,7 +118,10 @@ describe('RoleFormComponent', () => {
 
     it('should uncheck all scopes and perms', () => {
       component.scopes = ['cephfs', 'grafana'];
-      form.get('scopes_permissions').setValue({ cephfs: ['read', 'delete'], grafana: ['update'] });
+      formHelper.setValue('scopes_permissions', {
+        cephfs: ['read', 'delete'],
+        grafana: ['update']
+      });
       component.onClickHeaderCheckbox('scope', { target: { checked: false } });
       const scopes_permissions = form.getValue('scopes_permissions');
       expect(scopes_permissions).toEqual({});
@@ -124,9 +129,10 @@ describe('RoleFormComponent', () => {
 
     it('should check all scopes and perms', () => {
       component.scopes = ['cephfs', 'grafana'];
-      form
-        .get('scopes_permissions')
-        .setValue({ cephfs: ['create', 'update'], grafana: ['delete'] });
+      formHelper.setValue('scopes_permissions', {
+        cephfs: ['create', 'update'],
+        grafana: ['delete']
+      });
       component.onClickHeaderCheckbox('scope', { target: { checked: true } });
       const scopes_permissions = form.getValue('scopes_permissions');
       const keys = Object.keys(scopes_permissions);

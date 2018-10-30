@@ -6,7 +6,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { BsModalService } from 'ngx-bootstrap/modal';
 import { of as observableOf } from 'rxjs';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
+import { configureTestBed, FormHelper } from '../../../../testing/unit-test-helper';
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
 import { SharedModule } from '../../../shared/shared.module';
 import { RgwUserS3Key } from '../models/rgw-user-s3-key';
@@ -114,41 +114,33 @@ describe('RgwUserFormComponent', () => {
 
   describe('username validation', () => {
     let rgwUserService: RgwUserService;
+    let formHelper: FormHelper;
 
     beforeEach(() => {
       rgwUserService = TestBed.get(RgwUserService);
       spyOn(rgwUserService, 'enumerate').and.returnValue(observableOf(['abc', 'xyz']));
+      formHelper = new FormHelper(component.userForm);
     });
 
     it('should validate that username is required', () => {
-      const user_id = component.userForm.get('user_id');
-      user_id.markAsDirty();
-      user_id.setValue('');
-      expect(user_id.hasError('required')).toBeTruthy();
-      expect(user_id.valid).toBeFalsy();
+      formHelper.expectErrorChange('user_id', '', 'required', true);
     });
 
     it(
       'should validate that username is valid',
       fakeAsync(() => {
-        const user_id = component.userForm.get('user_id');
-        user_id.markAsDirty();
-        user_id.setValue('ab');
+        formHelper.setValue('user_id', 'ab', true);
         tick(500);
-        expect(user_id.hasError('notUnique')).toBeFalsy();
-        expect(user_id.valid).toBeTruthy();
+        formHelper.expectValid('user_id');
       })
     );
 
     it(
       'should validate that username is invalid',
       fakeAsync(() => {
-        const user_id = component.userForm.get('user_id');
-        user_id.markAsDirty();
-        user_id.setValue('abc');
+        formHelper.setValue('user_id', 'abc', true);
         tick(500);
-        expect(user_id.hasError('notUnique')).toBeTruthy();
-        expect(user_id.valid).toBeFalsy();
+        formHelper.expectError('user_id', 'notUnique');
       })
     );
   });

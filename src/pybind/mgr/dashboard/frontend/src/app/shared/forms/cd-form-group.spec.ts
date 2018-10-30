@@ -2,7 +2,7 @@ import { AbstractControl, FormControl, FormGroup, NgForm } from '@angular/forms'
 
 import { CdFormGroup } from './cd-form-group';
 
-describe('FormsHelperService', () => {
+describe('CdFormGroup', () => {
   let form: CdFormGroup;
 
   const createTestForm = (controlName: string, value: any): FormGroup =>
