@@ -4347,7 +4347,7 @@ void PG::_scan_snaps(ScrubMap &smap)
 	  bool done;
 	  t.register_on_applied_sync(
 	    new C_SafeCond(&my_lock, &my_cond, &done, &r));
-	  r = osd->store->apply_transaction(osr.get(), std::move(t));
+	  r = osd->store->queue_transaction(osr.get(), std::move(t), nullptr);
 	  if (r != 0) {
 	    derr << __func__ << ": apply_transaction got " << cpp_strerror(r)
 		 << dendl;
