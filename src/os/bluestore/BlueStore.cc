@@ -10931,25 +10931,29 @@ void BlueStore::_do_write_small(
 	  }
 	  logger->inc(l_bluestore_write_small_pre_read);
 
-	  bluestore_deferred_op_t *op = _get_deferred_op(txc, o);
-	  op->op = bluestore_deferred_op_t::OP_WRITE;
 	  _buffer_cache_write(txc, b, b_off, bl,
 			      wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
 
-	  int r = b->get_blob().map(
-	    b_off, b_len,
-	    [&](uint64_t offset, uint64_t length) {
-	      op->extents.emplace_back(bluestore_pextent_t(offset, length));
-	      return 0;
-	    });
-	  ceph_assert(r == 0);
 	  if (b->get_blob().csum_type) {
 	    b->dirty_blob().calc_csum(b_off, bl);
 	  }
-	  op->data.claim(bl);
-	  dout(20) << __func__ << "  deferred write 0x" << std::hex << b_off << "~"
-		   << b_len << std::dec << " of mutable " << *b
-		   << " at " << op->extents << dendl;
+
+	  if (!g_conf()->bluestore_debug_omit_block_device_write) {
+	    bluestore_deferred_op_t *op = _get_deferred_op(txc, o);
+	    op->op = bluestore_deferred_op_t::OP_WRITE;
+	    int r = b->get_blob().map(
+	      b_off, b_len,
+	      [&](uint64_t offset, uint64_t length) {
+		op->extents.emplace_back(bluestore_pextent_t(offset, length));
+		return 0;
+	      });
+	    ceph_assert(r == 0);
+	    op->data.claim(bl);
+	    dout(20) << __func__ << "  deferred write 0x" << std::hex << b_off << "~"
+		     << b_len << std::dec << " of mutable " << *b
+		     << " at " << op->extents << dendl;
+	  }
+
 	  Extent *le = o->extent_map.set_lextent(c, offset, offset - bstart, length,
 						 b, &wctx->old_extents);
 	  b->dirty_blob().mark_used(le->blob_offset, le->length);
