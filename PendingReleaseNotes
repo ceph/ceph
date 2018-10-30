@@ -32,3 +32,11 @@ notes (?))
   filesystem ``cephfs_a``, use command:
 
     - ``ceph auth caps client.foo mon 'allow r' osd 'allow rw tag cephfs data=cephfs_a' mds 'allow rw, allow rws path=/bar'``
+
+13.2.3
+======
+
+* Ceph v13.2.2 includes a wrong backport, which may cause mds to go into
+  'damaged' state when upgrading Ceph cluster from previous version.
+  The bug is fixed in v13.2.3. For ceph v13.2.2 installation, upgrading
+  to v13.2.3 does not requires special action.

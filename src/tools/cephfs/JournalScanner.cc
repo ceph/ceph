@@ -303,7 +303,7 @@ int JournalScanner::scan_events()
         } else if (type == "purge_queue"){
            PurgeItem* pi = new PurgeItem();
            try {
-             bufferlist::iterator q = le_bl.begin();
+             auto q = le_bl.begin();
              pi->decode(q);
 	     if (filter.apply(read_offset, *pi)) {
 	       events[read_offset] = EventRecord(pi, consumed);

@@ -50,14 +50,14 @@ public:
   fragtree_t fragtree;
 
   PurgeItem()
-   : stamp(ceph_clock_now()), pad_size(0), action(NONE), ino(0), size(0)
+   : pad_size(0), action(NONE), ino(0), size(0)
   {}
 
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &p);
 
   static Action str_to_type(std::string_view str) {
-    return PurgeItem::actions.at(str);
+    return PurgeItem::actions.at(std::string(str));
   }
 
   void dump(Formatter *f) const
@@ -78,7 +78,7 @@ public:
 
   std::string get_type_str() const;
 private:
-  static const std::map<std::string_view, PurgeItem::Action> actions;
+  static const std::map<std::string, PurgeItem::Action> actions;
 };
 WRITE_CLASS_ENCODER(PurgeItem)
 
