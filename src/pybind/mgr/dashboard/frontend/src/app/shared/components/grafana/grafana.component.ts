@@ -3,9 +3,9 @@ import { Component, Input, OnChanges, OnInit } from '@angular/core';
 import { DomSanitizer } from '@angular/platform-browser';
 import { SafeUrl } from '@angular/platform-browser';
 
-import { SettingsService } from '../../../shared/api/settings.service';
-import { CephReleaseNamePipe } from '../../../shared/pipes/ceph-release-name.pipe';
-import { SummaryService } from '../../../shared/services/summary.service';
+import { SettingsService } from '../../api/settings.service';
+import { CephReleaseNamePipe } from '../../pipes/ceph-release-name.pipe';
+import { SummaryService } from '../../services/summary.service';
 
 @Component({
   selector: 'cd-grafana',
