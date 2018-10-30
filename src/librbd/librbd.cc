@@ -33,6 +33,7 @@
 #include "librbd/api/Migration.h"
 #include "librbd/api/Mirror.h"
 #include "librbd/api/Namespace.h"
+#include "librbd/api/Pool.h"
 #include "librbd/api/PoolMetadata.h"
 #include "librbd/api/Snapshot.h"
 #include "librbd/api/Trash.h"
@@ -284,8 +285,23 @@ namespace librbd {
   };
 
   /*
-    RBD
-  */
+   * Pool stats
+   */
+  PoolStats::PoolStats() {
+    rbd_pool_stats_create(&pool_stats);
+  }
+
+  PoolStats::~PoolStats() {
+    rbd_pool_stats_destroy(pool_stats);
+  }
+
+  int PoolStats::add(rbd_pool_stat_option_t option, uint64_t* opt_val) {
+    return rbd_pool_stats_option_add_uint64(pool_stats, option, opt_val);
+  }
+
+  /*
+   *  RBD
+   */
   RBD::RBD()
   {
   }
@@ -648,6 +664,16 @@ namespace librbd {
   int RBD::namespace_exists(IoCtx& io_ctx, const char *namespace_name,
                             bool *exists) {
     return librbd::api::Namespace<>::exists(io_ctx, namespace_name, exists);
+  }
+
+  int RBD::pool_init(IoCtx& io_ctx, bool force) {
+    return librbd::api::Pool<>::init(io_ctx, force);
+  }
+
+  int RBD::pool_stats_get(IoCtx& io_ctx, PoolStats* stats) {
+    auto pool_stat_options =
+      reinterpret_cast<librbd::api::Pool<>::StatOptions*>(stats->pool_stats);
+    return librbd::api::Pool<>::get_stats(io_ctx, pool_stat_options);
   }
 
   int RBD::list(IoCtx& io_ctx, vector<string>& names)
@@ -3034,6 +3060,44 @@ extern "C" int rbd_namespace_exists(rados_ioctx_t io,
   librados::IoCtx::from_rados_ioctx_t(io, io_ctx);
 
   return librbd::api::Namespace<>::exists(io_ctx, namespace_name, exists);
+}
+
+extern "C" int rbd_pool_init(rados_ioctx_t io, bool force) {
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(io, io_ctx);
+
+  return librbd::api::Pool<>::init(io_ctx, force);
+}
+
+extern "C" void rbd_pool_stats_create(rbd_pool_stats_t *stats) {
+  *stats = reinterpret_cast<rbd_pool_stats_t>(
+    new librbd::api::Pool<>::StatOptions{});
+}
+
+extern "C" void rbd_pool_stats_destroy(rbd_pool_stats_t stats) {
+  auto pool_stat_options =
+    reinterpret_cast<librbd::api::Pool<>::StatOptions*>(stats);
+  delete pool_stat_options;
+}
+
+extern "C" int rbd_pool_stats_option_add_uint64(rbd_pool_stats_t stats,
+                                                int stat_option,
+                                                uint64_t* stat_val) {
+  auto pool_stat_options =
+    reinterpret_cast<librbd::api::Pool<>::StatOptions*>(stats);
+  return librbd::api::Pool<>::add_stat_option(
+    pool_stat_options, static_cast<rbd_pool_stat_option_t>(stat_option),
+    stat_val);
+}
+
+extern "C" int rbd_pool_stats_get(
+    rados_ioctx_t io, rbd_pool_stats_t pool_stats) {
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(io, io_ctx);
+
+  auto pool_stat_options =
+    reinterpret_cast<librbd::api::Pool<>::StatOptions*>(pool_stats);
+  return librbd::api::Pool<>::get_stats(io_ctx, pool_stat_options);
 }
 
 extern "C" int rbd_copy(rbd_image_t image, rados_ioctx_t dest_p,

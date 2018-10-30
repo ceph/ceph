@@ -115,9 +115,9 @@ int create_image_data_pool(librados::Rados &rados, std::string &data_pool, bool 
   if (r < 0) {
     return r;
   }
-  ioctx.application_enable("rbd", true);
 
-  return r;
+  librbd::RBD rbd;
+  return rbd.pool_init(ioctx, true);
 }
 
 bool is_librados_test_stub(librados::Rados &rados) {
