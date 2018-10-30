@@ -262,7 +262,10 @@ int main(int argc, char **argv)
     std::cerr << e.what() << std::endl;
     exit(EXIT_FAILURE);
   }
-
+  // normalize path (remove ending '/' if any)
+  if (path.size() > 1 && *(path.end() - 1) == '/') {
+    path.resize(path.size() - 1);
+  }
   if (vm.count("help")) {
     usage(po_all);
     exit(EXIT_SUCCESS);
@@ -660,6 +663,8 @@ int main(int argc, char **argv)
 
     bool has_wal = false;
     bool has_db = false;
+    char target_path[PATH_MAX] = "";
+
     parse_devices(cct.get(), devs, &cur_devs_map, &has_db, &has_wal);
 
     if (has_db && has_wal) {
@@ -674,35 +679,43 @@ int main(int argc, char **argv)
       cerr << "can't allocate new WAL device, already exists"
 	    << std::endl;
       exit(EXIT_FAILURE);
-    } else {
-      // Create either DB or WAL volume
-      BlueStore bluestore(cct.get(), path);
+    } else if(!dev_target.empty() &&
+	      realpath(dev_target.c_str(), target_path) == nullptr) {
+      cerr << "failed to retrieve absolute path for " << dev_target
+           << ": " << cpp_strerror(errno)
+           << std::endl;
+      exit(EXIT_FAILURE);
+    }
 
-      char target_path[PATH_MAX] = "";
-      if(!dev_target.empty()) {
-	if (realpath(dev_target.c_str(), target_path) == nullptr) {
-	  cerr << "failed to retrieve absolute path for " << dev_target
-	       << ": " << cpp_strerror(errno)
-	       << std::endl;
-	}
-      }
-      int r = bluestore.add_new_bluefs_device(
-	need_db ? BlueFS::BDEV_NEWDB : BlueFS::BDEV_NEWWAL,
-	target_path);
+    // Create either DB or WAL volume
+    int r = EXIT_FAILURE;
+    if (need_db && cct->_conf->bluestore_block_db_size == 0) {
+      cerr << "DB size isn't specified, "
+              "please set Ceph bluestore-block-db-size config parameter "
+           << std::endl;
+    } else if (!need_db && cct->_conf->bluestore_block_wal_size == 0) {
+      cerr << "WAL size isn't specified, "
+              "please set Ceph bluestore-block-wal-size config parameter "
+           << std::endl;
+    } else {
+      BlueStore bluestore(cct.get(), path);
+      r = bluestore.add_new_bluefs_device(
+        need_db ? BlueFS::BDEV_NEWDB : BlueFS::BDEV_NEWWAL,
+        target_path);
       if (r == 0) {
-	cout << (need_db ? "DB" : "WAL") << " device added " << target_path
-	     << std::endl;
+        cout << (need_db ? "DB" : "WAL") << " device added " << target_path
+             << std::endl;
       } else {
-	cerr << "failed to add " << (need_db ? "DB" : "WAL") << " device:"
-	     << cpp_strerror(r)
-	     << std::endl;
+        cerr << "failed to add " << (need_db ? "DB" : "WAL") << " device:"
+             << cpp_strerror(r)
+             << std::endl;
       }
+      return r;
     }
   } else if (action == "bluefs-bdev-migrate") {
     map<string, int> cur_devs_map;
     set<int> src_dev_ids;
     map<string, int> src_devs;
-
 
     parse_devices(cct.get(), devs, &cur_devs_map, nullptr, nullptr);
     for (auto& s :  devs_source) {
@@ -754,6 +767,7 @@ int main(int argc, char **argv)
     } else {
       // Migrate to a new BlueFS volume
       // via creating either DB or WAL volume
+      char target_path[PATH_MAX] = "";
       int dev_target_id;
       if (src_dev_ids.count(BlueFS::BDEV_DB)) {
 	// if we have DB device in the source list - we create DB device
@@ -768,17 +782,16 @@ int main(int argc, char **argv)
 	     << std::endl;
 	exit(EXIT_FAILURE);
       }
+      if(!dev_target.empty() &&
+	        realpath(dev_target.c_str(), target_path) == nullptr) {
+	cerr << "failed to retrieve absolute path for " << dev_target
+	     << ": " << cpp_strerror(errno)
+	     << std::endl;
+	exit(EXIT_FAILURE);
+      }
 
       BlueStore bluestore(cct.get(), path);
 
-      char target_path[PATH_MAX] = "";
-      if(!dev_target.empty()) {
-	if (realpath(dev_target.c_str(), target_path) == nullptr) {
-	  cerr << "failed to retrieve absolute path for " << dev_target
-	       << ": " << cpp_strerror(errno)
-	       << std::endl;
-	}
-      }
       bool need_db = dev_target_id == BlueFS::BDEV_NEWDB;
       int r = bluestore.migrate_to_new_bluefs_device(
 	src_dev_ids,
@@ -802,8 +815,7 @@ int main(int argc, char **argv)
 	     << cpp_strerror(r)
 	     << std::endl;
       }
-
-      ceph_assert(r == 0);
+      return r;
     }
   } else {
     cerr << "unrecognized action " << action << std::endl;
