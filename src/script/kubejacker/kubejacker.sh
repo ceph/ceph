@@ -59,12 +59,17 @@ find ./ -name "*.pyc" -exec rm -f {} \;
 tar --exclude=node_modules --exclude=tests --exclude-backups -czf $BUILDPATH/kubejacker/mgr_plugins.tar.gz *
 popd
 
-ECLIBS="libec_*.so"
+ECLIBS="libec_*.so*"
 pushd lib
 strip $ECLIBS  #TODO: make stripping optional
 tar czf $BUILDPATH/kubejacker/eclib.tar.gz $ECLIBS
 popd
 
+CLSLIBS="libcls_*.so*"
+pushd lib
+strip $CLSLIBS  #TODO: make stripping optional
+tar czf $BUILDPATH/kubejacker/clslib.tar.gz $CLSLIBS
+popd
 
 pushd kubejacker
 docker build -t $REPO/$IMAGE:$TAG .
