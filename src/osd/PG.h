@@ -255,7 +255,7 @@ public:
 
   ObjectStore::CollectionHandle ch;
 
-  class RecoveryCtx;
+  struct RecoveryCtx;
 
   // -- methods --
   std::ostream& gen_prefix(std::ostream& out) const override;
