@@ -1604,6 +1604,7 @@ bool DaemonServer::_handle_command(
     key.first = who.substr(0, dot);
     key.second = who.substr(dot + 1);
     DaemonStatePtr daemon = daemon_state.get(key);
+    std::lock_guard l(daemon->lock);
     string name;
     if (!daemon) {
       ss << "no config state for daemon " << who;
@@ -1614,7 +1615,7 @@ bool DaemonServer::_handle_command(
 	  !p->second.empty()) {
 	cmdctx->odata.append(p->second.rbegin()->second + "\n");
       } else {
-	auto& defaults = daemon->get_config_defaults();
+	auto& defaults = daemon->_get_config_defaults();
 	auto q = defaults.find(name);
 	if (q != defaults.end()) {
 	  cmdctx->odata.append(q->second + "\n");
@@ -1623,7 +1624,6 @@ bool DaemonServer::_handle_command(
 	}
       }
     } else if (daemon->config_defaults_bl.length() > 0) {
-      std::lock_guard l(daemon->lock);
       TextTable tbl;
       if (f) {
 	f->open_array_section("config");
@@ -1690,7 +1690,7 @@ bool DaemonServer::_handle_command(
 	}
       } else {
 	// show-with-defaults
-	auto& defaults = daemon->get_config_defaults();
+	auto& defaults = daemon->_get_config_defaults();
 	for (auto& i : defaults) {
 	  if (f) {
 	    f->open_object_section("value");

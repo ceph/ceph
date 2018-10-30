@@ -94,19 +94,18 @@ void MetadataUpdate::finish(int r)
       DaemonStatePtr state;
       if (daemon_state.exists(key)) {
         state = daemon_state.get(key);
-	std::lock_guard l(state->lock);
         if (key.first == "mds" || key.first == "mgr") {
           daemon_meta.erase("name");
         } else if (key.first == "osd") {
           daemon_meta.erase("id");
         }
         daemon_meta.erase("hostname");
-        state->metadata.clear();
 	map<string,string> m;
         for (const auto &i : daemon_meta) {
           m[i.first] = i.second.get_str();
 	}
-	state->set_metadata(m);
+
+	daemon_state.update_metadata(state, m);
       } else {
         state = std::make_shared<DaemonState>(daemon_state.types);
         state->key = key;
