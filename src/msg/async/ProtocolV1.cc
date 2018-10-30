@@ -1779,7 +1779,7 @@ CtPtr ProtocolV1::handle_client_banner(char *buffer, int r) {
     peer_addr.set_port(port);
 
     ldout(cct, 0) << __func__ << " accept peer addr is really " << peer_addr
-                  << " (socket is " << connection->socket_addr << ")" << dendl;
+                  << " (socket is " << connection->target_addr << ")" << dendl;
   }
   connection->set_peer_addr(peer_addr);  // so that connection_state gets set up
   connection->target_addr = peer_addr;
