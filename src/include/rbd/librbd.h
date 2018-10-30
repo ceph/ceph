@@ -59,6 +59,7 @@ extern "C" {
 
 typedef void *rbd_image_t;
 typedef void *rbd_image_options_t;
+typedef void *rbd_pool_stats_t;
 
 typedef void *rbd_completion_t;
 typedef void (*rbd_callback_t)(rbd_completion_t cb, void *arg);
@@ -263,6 +264,17 @@ typedef struct {
   char *value;
   rbd_config_source_t source;
 } rbd_config_option_t;
+
+typedef enum {
+  RBD_POOL_STAT_OPTION_IMAGES,
+  RBD_POOL_STAT_OPTION_IMAGE_PROVISIONED_BYTES,
+  RBD_POOL_STAT_OPTION_IMAGE_MAX_PROVISIONED_BYTES,
+  RBD_POOL_STAT_OPTION_IMAGE_SNAPSHOTS,
+  RBD_POOL_STAT_OPTION_TRASH_IMAGES,
+  RBD_POOL_STAT_OPTION_TRASH_PROVISIONED_BYTES,
+  RBD_POOL_STAT_OPTION_TRASH_MAX_PROVISIONED_BYTES,
+  RBD_POOL_STAT_OPTION_TRASH_SNAPSHOTS
+} rbd_pool_stat_option_t;
 
 CEPH_RBD_API void rbd_image_options_create(rbd_image_options_t* opts);
 CEPH_RBD_API void rbd_image_options_destroy(rbd_image_options_t opts);
@@ -1103,8 +1115,18 @@ CEPH_RBD_API int rbd_namespace_remove(rados_ioctx_t io,
                                       const char *namespace_name);
 CEPH_RBD_API int rbd_namespace_list(rados_ioctx_t io, char *namespace_names,
                                     size_t *size);
-CEPH_RBD_API int rbd_namespace_exists(rados_ioctx_t io, const char *namespace_name,
+CEPH_RBD_API int rbd_namespace_exists(rados_ioctx_t io,
+                                      const char *namespace_name,
                                       bool *exists);
+
+CEPH_RBD_API int rbd_pool_init(rados_ioctx_t io, bool force);
+
+CEPH_RBD_API void rbd_pool_stats_create(rbd_pool_stats_t *stats);
+CEPH_RBD_API void rbd_pool_stats_destroy(rbd_pool_stats_t stats);
+CEPH_RBD_API int rbd_pool_stats_option_add_uint64(rbd_pool_stats_t stats,
+					          int stat_option,
+                                                  uint64_t* stat_val);
+CEPH_RBD_API int rbd_pool_stats_get(rados_ioctx_t io, rbd_pool_stats_t stats);
 
 #ifdef __cplusplus
 }

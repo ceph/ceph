@@ -31,6 +31,7 @@ set(librbd_internal_srcs
   api/Migration.cc
   api/Mirror.cc
   api/Namespace.cc
+  api/Pool.cc
   api/PoolMetadata.cc
   api/Snapshot.cc
   api/Trash.cc

@@ -87,6 +87,7 @@ cdef extern from "rbd/librbd.h" nogil:
     ctypedef void* rados_ioctx_t
     ctypedef void* rbd_image_t
     ctypedef void* rbd_image_options_t
+    ctypedef void* rbd_pool_stats_t
     ctypedef void *rbd_completion_t
 
     ctypedef struct rbd_image_info_t:
@@ -227,6 +228,16 @@ cdef extern from "rbd/librbd.h" nogil:
         char *name
         char *value
         rbd_config_source_t source
+
+    ctypedef enum rbd_pool_stat_option_t:
+        _RBD_POOL_STAT_OPTION_IMAGES "RBD_POOL_STAT_OPTION_IMAGES"
+        _RBD_POOL_STAT_OPTION_IMAGE_PROVISIONED_BYTES "RBD_POOL_STAT_OPTION_IMAGE_PROVISIONED_BYTES"
+        _RBD_POOL_STAT_OPTION_IMAGE_MAX_PROVISIONED_BYTES "RBD_POOL_STAT_OPTION_IMAGE_MAX_PROVISIONED_BYTES"
+        _RBD_POOL_STAT_OPTION_IMAGE_SNAPSHOTS "RBD_POOL_STAT_OPTION_IMAGE_SNAPSHOTS"
+        _RBD_POOL_STAT_OPTION_TRASH_IMAGES "RBD_POOL_STAT_OPTION_TRASH_IMAGES"
+        _RBD_POOL_STAT_OPTION_TRASH_PROVISIONED_BYTES "RBD_POOL_STAT_OPTION_TRASH_PROVISIONED_BYTES"
+        _RBD_POOL_STAT_OPTION_TRASH_MAX_PROVISIONED_BYTES "RBD_POOL_STAT_OPTION_TRASH_MAX_PROVISIONED_BYTES"
+        _RBD_POOL_STAT_OPTION_TRASH_SNAPSHOTS "RBD_POOL_STAT_OPTION_TRASH_SNAPSHOTS"
 
     ctypedef void (*rbd_callback_t)(rbd_completion_t cb, void *arg)
     ctypedef int (*librbd_progress_fn_t)(uint64_t offset, uint64_t total, void* ptr)
@@ -536,6 +547,14 @@ cdef extern from "rbd/librbd.h" nogil:
     void rbd_config_image_list_cleanup(rbd_config_option_t *options,
                                        int max_options)
 
+    int rbd_pool_init(rados_ioctx_t, bint force)
+
+    void rbd_pool_stats_create(rbd_pool_stats_t *stats)
+    void rbd_pool_stats_destroy(rbd_pool_stats_t stats)
+    int rbd_pool_stats_option_add_uint64(rbd_pool_stats_t stats,
+                                         int stat_option, uint64_t* stat_val)
+    int rbd_pool_stats_get(rados_ioctx_t io, rbd_pool_stats_t stats)
+
 RBD_FEATURE_LAYERING = _RBD_FEATURE_LAYERING
 RBD_FEATURE_STRIPINGV2 = _RBD_FEATURE_STRIPINGV2
 RBD_FEATURE_EXCLUSIVE_LOCK = _RBD_FEATURE_EXCLUSIVE_LOCK
@@ -606,6 +625,16 @@ RBD_IMAGE_MIGRATION_STATE_EXECUTED = _RBD_IMAGE_MIGRATION_STATE_EXECUTED
 RBD_CONFIG_SOURCE_CONFIG = _RBD_CONFIG_SOURCE_CONFIG
 RBD_CONFIG_SOURCE_POOL = _RBD_CONFIG_SOURCE_POOL
 RBD_CONFIG_SOURCE_IMAGE = _RBD_CONFIG_SOURCE_IMAGE
+
+RBD_POOL_STAT_OPTION_IMAGES = _RBD_POOL_STAT_OPTION_IMAGES
+RBD_POOL_STAT_OPTION_IMAGE_PROVISIONED_BYTES = _RBD_POOL_STAT_OPTION_IMAGE_PROVISIONED_BYTES
+RBD_POOL_STAT_OPTION_IMAGE_MAX_PROVISIONED_BYTES = _RBD_POOL_STAT_OPTION_IMAGE_MAX_PROVISIONED_BYTES
+RBD_POOL_STAT_OPTION_IMAGE_SNAPSHOTS = _RBD_POOL_STAT_OPTION_IMAGE_SNAPSHOTS
+RBD_POOL_STAT_OPTION_TRASH_IMAGES = _RBD_POOL_STAT_OPTION_TRASH_IMAGES
+RBD_POOL_STAT_OPTION_TRASH_PROVISIONED_BYTES = _RBD_POOL_STAT_OPTION_TRASH_PROVISIONED_BYTES
+RBD_POOL_STAT_OPTION_TRASH_MAX_PROVISIONED_BYTES = _RBD_POOL_STAT_OPTION_TRASH_MAX_PROVISIONED_BYTES
+RBD_POOL_STAT_OPTION_TRASH_SNAPSHOTS = _RBD_POOL_STAT_OPTION_TRASH_SNAPSHOTS
+
 
 class Error(Exception):
     pass
@@ -1817,6 +1846,94 @@ class RBD(object):
             ret = rbd_group_rename(_ioctx, _src, _dest)
         if ret != 0:
             raise make_ex(ret, 'error renaming group')
+
+    def pool_init(self, ioctx, force):
+        """
+        Initialize an RBD pool
+        :param ioctx: determines which RADOS pool
+        :type ioctx: :class:`rados.Ioctx`
+        :param force: force init
+        :type force: bool
+        """
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            bint _force = force
+        with nogil:
+            ret = rbd_pool_init(_ioctx, _force)
+        if ret != 0:
+            raise make_ex(ret, 'error initializing pool')
+
+    def pool_stats_get(self, ioctx):
+        """
+        Return RBD pool stats
+
+        :param ioctx: determines which RADOS pool
+        :type ioctx: :class:`rados.Ioctx`
+        :returns: dict - contains the following keys:
+
+            * ``image_count`` (int) - image count
+
+            * ``image_provisioned_bytes`` (int) - image total HEAD provisioned bytes
+
+            * ``image_max_provisioned_bytes`` (int) - image total max provisioned bytes
+
+            * ``image_snap_count`` (int) - image snap count
+
+            * ``trash_count`` (int) - trash image count
+
+            * ``trash_provisioned_bytes`` (int) - trash total HEAD provisioned bytes
+
+            * ``trash_max_provisioned_bytes`` (int) - trash total max provisioned bytes
+
+            * ``trash_snap_count`` (int) - trash snap count
+
+        """
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            uint64_t _image_count = 0
+            uint64_t _image_provisioned_bytes = 0
+            uint64_t _image_max_provisioned_bytes = 0
+            uint64_t _image_snap_count = 0
+            uint64_t _trash_count = 0
+            uint64_t _trash_provisioned_bytes = 0
+            uint64_t _trash_max_provisioned_bytes = 0
+            uint64_t _trash_snap_count = 0
+            rbd_pool_stats_t _stats
+
+        rbd_pool_stats_create(&_stats)
+        rbd_pool_stats_option_add_uint64(_stats, RBD_POOL_STAT_OPTION_IMAGES,
+                                         &_image_count)
+        rbd_pool_stats_option_add_uint64(_stats, RBD_POOL_STAT_OPTION_IMAGE_PROVISIONED_BYTES,
+                                         &_image_provisioned_bytes)
+        rbd_pool_stats_option_add_uint64(_stats, RBD_POOL_STAT_OPTION_IMAGE_MAX_PROVISIONED_BYTES,
+                                         &_image_max_provisioned_bytes)
+        rbd_pool_stats_option_add_uint64(_stats, RBD_POOL_STAT_OPTION_IMAGE_SNAPSHOTS,
+                                         &_image_snap_count)
+        rbd_pool_stats_option_add_uint64(_stats, RBD_POOL_STAT_OPTION_TRASH_IMAGES,
+                                         &_trash_count)
+        rbd_pool_stats_option_add_uint64(_stats, RBD_POOL_STAT_OPTION_TRASH_PROVISIONED_BYTES,
+                                         &_trash_provisioned_bytes)
+        rbd_pool_stats_option_add_uint64(_stats, RBD_POOL_STAT_OPTION_TRASH_MAX_PROVISIONED_BYTES,
+                                         &_trash_max_provisioned_bytes)
+        rbd_pool_stats_option_add_uint64(_stats, RBD_POOL_STAT_OPTION_TRASH_SNAPSHOTS,
+                                         &_trash_snap_count)
+        try:
+            with nogil:
+                ret = rbd_pool_stats_get(_ioctx, _stats)
+            if ret != 0:
+                raise make_ex(ret, 'error retrieving pool stats')
+        else:
+            return {'image_count': _image_count,
+                    'image_provisioned_bytes': _image_provisioned_bytes,
+                    'image_max_provisioned_bytes': _image_max_provisioned_bytes,
+                    'image_snap_count': _image_snap_count,
+                    'trash_count': _trash_count,
+                    'trash_provisioned_bytes': _trash_provisioned_bytes,
+                    'trash_max_provisioned_bytes': _trash_max_provisioned_bytes,
+                    'trash_snap_count': _trash_snap_count}
+        finally:
+            rbd_pool_stats_destroy(_stats)
+
 
 cdef class MirrorPeerIterator(object):
     """

@@ -7363,6 +7363,82 @@ TEST_F(TestLibRBD, ConfigPP)
   }
 }
 
+TEST_F(TestLibRBD, PoolStatsPP)
+{
+  REQUIRE_FORMAT_V2();
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(create_pool(true).c_str(), ioctx));
+
+  librbd::RBD rbd;
+  std::string image_name;
+  uint64_t size = 2 << 20;
+  uint64_t expected_size = 0;
+  for (size_t idx = 0; idx < 4; ++idx) {
+    image_name = get_temp_image_name();
+
+    int order = 0;
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, image_name.c_str(), size, &order));
+    expected_size += size;
+  }
+
+  librbd::Image image;
+  ASSERT_EQ(0, rbd.open(ioctx, image, image_name.c_str(), NULL));
+  ASSERT_EQ(0, image.snap_create("snap1"));
+  ASSERT_EQ(0, image.resize(0));
+  ASSERT_EQ(0, image.close());
+  uint64_t expect_head_size = (expected_size - size);
+
+  uint64_t image_count;
+  uint64_t provisioned_bytes;
+  uint64_t max_provisioned_bytes;
+  uint64_t snap_count;
+  uint64_t trash_image_count;
+  uint64_t trash_provisioned_bytes;
+  uint64_t trash_max_provisioned_bytes;
+  uint64_t trash_snap_count;
+
+  librbd::PoolStats pool_stats1;
+  pool_stats1.add(RBD_POOL_STAT_OPTION_IMAGES, &image_count);
+  pool_stats1.add(RBD_POOL_STAT_OPTION_IMAGE_PROVISIONED_BYTES,
+                  &provisioned_bytes);
+  ASSERT_EQ(0, rbd.pool_stats_get(ioctx, &pool_stats1));
+
+  ASSERT_EQ(4U, image_count);
+  ASSERT_EQ(expect_head_size, provisioned_bytes);
+
+  pool_stats1.add(RBD_POOL_STAT_OPTION_IMAGE_MAX_PROVISIONED_BYTES,
+                  &max_provisioned_bytes);
+  ASSERT_EQ(0, rbd.pool_stats_get(ioctx, &pool_stats1));
+  ASSERT_EQ(4U, image_count);
+  ASSERT_EQ(expect_head_size, provisioned_bytes);
+  ASSERT_EQ(expected_size, max_provisioned_bytes);
+
+  librbd::PoolStats pool_stats2;
+  pool_stats2.add(RBD_POOL_STAT_OPTION_IMAGE_SNAPSHOTS, &snap_count);
+  pool_stats2.add(RBD_POOL_STAT_OPTION_TRASH_IMAGES, &trash_image_count);
+  pool_stats2.add(RBD_POOL_STAT_OPTION_TRASH_SNAPSHOTS, &trash_snap_count);
+  ASSERT_EQ(0, rbd.pool_stats_get(ioctx, &pool_stats2));
+  ASSERT_EQ(1U, snap_count);
+  ASSERT_EQ(0U, trash_image_count);
+  ASSERT_EQ(0U, trash_snap_count);
+
+  ASSERT_EQ(0, rbd.trash_move(ioctx, image_name.c_str(), 0));
+
+  librbd::PoolStats pool_stats3;
+  pool_stats3.add(RBD_POOL_STAT_OPTION_TRASH_IMAGES, &trash_image_count);
+  pool_stats3.add(RBD_POOL_STAT_OPTION_TRASH_PROVISIONED_BYTES,
+                  &trash_provisioned_bytes);
+  pool_stats3.add(RBD_POOL_STAT_OPTION_TRASH_MAX_PROVISIONED_BYTES,
+                  &trash_max_provisioned_bytes);
+  pool_stats3.add(RBD_POOL_STAT_OPTION_TRASH_SNAPSHOTS, &trash_snap_count);
+  ASSERT_EQ(0, rbd.pool_stats_get(ioctx, &pool_stats3));
+  ASSERT_EQ(1U, trash_image_count);
+  ASSERT_EQ(0U, trash_provisioned_bytes);
+  ASSERT_EQ(size, trash_max_provisioned_bytes);
+  ASSERT_EQ(1U, trash_snap_count);
+}
+
 // poorman's ceph_assert()
 namespace ceph {
   void __ceph_assert_fail(const char *assertion, const char *file, int line,
