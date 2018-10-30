@@ -1,7 +1,9 @@
+import { LOCALE_ID, TRANSLATIONS, TRANSLATIONS_FORMAT } from '@angular/core';
 import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 import { AbstractControl } from '@angular/forms';
 import { By } from '@angular/platform-browser';
 
+import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 
 import { TableActionsComponent } from '../app/shared/datatable/table-actions/table-actions.component';
@@ -179,3 +181,21 @@ export class FormHelper {
     expect(Boolean(fixture.debugElement.query(By.css(css)))).toBe(visibility);
   }
 }
+
+const XLIFF = `<?xml version="1.0" encoding="UTF-8" ?>
+<xliff version="1.2" xmlns="urn:oasis:names:tc:xliff:document:1.2">
+  <file source-language="en" datatype="plaintext" original="ng2.template">
+    <body>
+    </body>
+  </file>
+</xliff>
+`;
+
+const i18nProviders = [
+  { provide: TRANSLATIONS_FORMAT, useValue: 'xlf' },
+  { provide: TRANSLATIONS, useValue: XLIFF },
+  { provide: LOCALE_ID, useValue: 'en' },
+  I18n
+];
+
+export { i18nProviders };

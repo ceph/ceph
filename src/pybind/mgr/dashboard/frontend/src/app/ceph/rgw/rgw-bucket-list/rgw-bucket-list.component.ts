@@ -1,5 +1,6 @@
 import { Component, ViewChild } from '@angular/core';
 
+import { I18n } from '@ngx-translate/i18n-polyfill';
 import { BsModalService } from 'ngx-bootstrap/modal';
 import { forkJoin as observableForkJoin, Observable, Subscriber } from 'rxjs';
 
@@ -31,17 +32,18 @@ export class RgwBucketListComponent {
   constructor(
     private authStorageService: AuthStorageService,
     private rgwBucketService: RgwBucketService,
-    private bsModalService: BsModalService
+    private bsModalService: BsModalService,
+    private i18n: I18n
   ) {
     this.permission = this.authStorageService.getPermissions().rgw;
     this.columns = [
       {
-        name: 'Name',
+        name: this.i18n('Name'),
         prop: 'bucket',
         flexGrow: 1
       },
       {
-        name: 'Owner',
+        name: this.i18n('Owner'),
         prop: 'owner',
         flexGrow: 1
       }
@@ -52,19 +54,19 @@ export class RgwBucketListComponent {
       permission: 'create',
       icon: 'fa-plus',
       routerLink: () => '/rgw/bucket/add',
-      name: 'Add'
+      name: this.i18n('Add')
     };
     const editAction: CdTableAction = {
       permission: 'update',
       icon: 'fa-pencil',
       routerLink: () => `/rgw/bucket/edit/${getBucketUri()}`,
-      name: 'Edit'
+      name: this.i18n('Edit')
     };
     const deleteAction: CdTableAction = {
       permission: 'delete',
       icon: 'fa-times',
       click: () => this.deleteAction(),
-      name: 'Delete'
+      name: this.i18n('Delete')
     };
     this.tableActions = [addAction, editAction, deleteAction];
   }
@@ -87,7 +89,9 @@ export class RgwBucketListComponent {
   deleteAction() {
     this.bsModalService.show(CriticalConfirmationModalComponent, {
       initialState: {
-        itemDescription: this.selection.hasSingleSelection ? 'bucket' : 'buckets',
+        itemDescription: this.selection.hasSingleSelection
+          ? this.i18n('bucket')
+          : this.i18n('buckets'),
         submitActionObservable: () => {
           return new Observable((observer: Subscriber<any>) => {
             // Delete all selected data table rows.

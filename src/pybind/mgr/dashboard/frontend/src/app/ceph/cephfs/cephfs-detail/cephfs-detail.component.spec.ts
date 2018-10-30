@@ -7,7 +7,7 @@ import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { ProgressbarModule } from 'ngx-bootstrap/progressbar';
 import { TabsModule } from 'ngx-bootstrap/tabs';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
+import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../shared/shared.module';
 import { CephfsDetailComponent } from './cephfs-detail.component';
 
@@ -36,7 +36,8 @@ describe('CephfsDetailComponent', () => {
       TabsModule.forRoot(),
       HttpClientTestingModule
     ],
-    declarations: [CephfsDetailComponent, CephfsChartStubComponent, CephfsClientsStubComponent]
+    declarations: [CephfsDetailComponent, CephfsChartStubComponent, CephfsClientsStubComponent],
+    providers: i18nProviders
   });
 
   beforeEach(() => {

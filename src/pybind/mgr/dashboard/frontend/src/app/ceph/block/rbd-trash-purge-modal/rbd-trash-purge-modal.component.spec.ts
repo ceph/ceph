@@ -6,7 +6,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { ToastModule } from 'ng2-toastr';
 import { BsModalRef } from 'ngx-bootstrap/modal';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
+import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { Permission } from '../../../shared/models/permissions';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { SharedModule } from '../../../shared/shared.module';
@@ -26,7 +26,7 @@ describe('RbdTrashPurgeModalComponent', () => {
       RouterTestingModule
     ],
     declarations: [RbdTrashPurgeModalComponent],
-    providers: [BsModalRef]
+    providers: [BsModalRef, i18nProviders]
   });
 
   beforeEach(() => {

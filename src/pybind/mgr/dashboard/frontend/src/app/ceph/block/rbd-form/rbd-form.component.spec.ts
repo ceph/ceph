@@ -7,7 +7,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { ToastModule } from 'ng2-toastr';
 
 import { ActivatedRouteStub } from '../../../../testing/activated-route-stub';
-import { configureTestBed } from '../../../../testing/unit-test-helper';
+import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { RbdService } from '../../../shared/api/rbd.service';
 import { SharedModule } from '../../../shared/shared.module';
 import { RbdFormMode } from './rbd-form-mode.enum';
@@ -31,7 +31,8 @@ describe('RbdFormComponent', () => {
       {
         provide: ActivatedRoute,
         useValue: new ActivatedRouteStub({ pool: 'foo', name: 'bar', snap: undefined })
-      }
+      },
+      i18nProviders
     ]
   });
 

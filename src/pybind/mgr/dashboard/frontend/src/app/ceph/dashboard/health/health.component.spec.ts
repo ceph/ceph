@@ -6,7 +6,7 @@ import * as _ from 'lodash';
 import { PopoverModule } from 'ngx-bootstrap/popover';
 import { of } from 'rxjs';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
+import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { DashboardService } from '../../../shared/api/dashboard.service';
 import { SharedModule } from '../../../shared/shared.module';
 import { LogColorPipe } from '../log-color.pipe';
@@ -50,7 +50,8 @@ describe('HealthComponent', () => {
       LogColorPipe,
       PgStatusPipe
     ],
-    schemas: [NO_ERRORS_SCHEMA]
+    schemas: [NO_ERRORS_SCHEMA],
+    providers: i18nProviders
   });
 
   beforeEach(() => {

@@ -4,7 +4,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BsModalService } from 'ngx-bootstrap/modal';
 import { TabsModule } from 'ngx-bootstrap/tabs';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
+import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { SharedModule } from '../../../shared/shared.module';
 import { RgwUserDetailsComponent } from './rgw-user-details.component';
@@ -16,7 +16,7 @@ describe('RgwUserDetailsComponent', () => {
   configureTestBed({
     declarations: [RgwUserDetailsComponent],
     imports: [HttpClientTestingModule, SharedModule, TabsModule.forRoot()],
-    providers: [BsModalService]
+    providers: [BsModalService, i18nProviders]
   });
 
   beforeEach(() => {

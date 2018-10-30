@@ -7,7 +7,7 @@ import { ToastModule } from 'ng2-toastr';
 import { BsModalRef } from 'ngx-bootstrap/modal';
 import { of } from 'rxjs';
 
-import { configureTestBed, FormHelper } from '../../../../testing/unit-test-helper';
+import { configureTestBed, FormHelper, i18nProviders } from '../../../../testing/unit-test-helper';
 import { ErasureCodeProfileService } from '../../../shared/api/erasure-code-profile.service';
 import { ErasureCodeProfile } from '../../../shared/models/erasure-code-profile';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
@@ -23,7 +23,7 @@ describe('ErasureCodeProfileFormComponent', () => {
 
   configureTestBed({
     imports: [HttpClientTestingModule, RouterTestingModule, ToastModule.forRoot(), PoolModule],
-    providers: [ErasureCodeProfileService, BsModalRef]
+    providers: [ErasureCodeProfileService, BsModalRef, i18nProviders]
   });
 
   beforeEach(() => {

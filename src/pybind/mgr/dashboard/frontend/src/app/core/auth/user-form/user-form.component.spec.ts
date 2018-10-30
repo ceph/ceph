@@ -9,7 +9,7 @@ import { ToastModule } from 'ng2-toastr';
 import { BsModalService } from 'ngx-bootstrap/modal';
 import { of } from 'rxjs';
 
-import { configureTestBed, FormHelper } from '../../../../testing/unit-test-helper';
+import { configureTestBed, FormHelper, i18nProviders } from '../../../../testing/unit-test-helper';
 import { RoleService } from '../../../shared/api/role.service';
 import { UserService } from '../../../shared/api/user.service';
 import { ComponentsModule } from '../../../shared/components/components.module';
@@ -50,7 +50,8 @@ describe('UserFormComponent', () => {
         ToastModule.forRoot(),
         SharedModule
       ],
-      declarations: [UserFormComponent, FakeComponent]
+      declarations: [UserFormComponent, FakeComponent],
+      providers: i18nProviders
     },
     true
   );

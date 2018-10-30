@@ -6,7 +6,11 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { ModalModule } from 'ngx-bootstrap/modal';
 
-import { configureTestBed, PermissionHelper } from '../../../../testing/unit-test-helper';
+import {
+  configureTestBed,
+  i18nProviders,
+  PermissionHelper
+} from '../../../../testing/unit-test-helper';
 import { TableActionsComponent } from '../../../shared/datatable/table-actions/table-actions.component';
 import { SharedModule } from '../../../shared/shared.module';
 import { RgwUserListComponent } from './rgw-user-list.component';
@@ -18,7 +22,8 @@ describe('RgwUserListComponent', () => {
   configureTestBed({
     declarations: [RgwUserListComponent],
     imports: [RouterTestingModule, HttpClientTestingModule, ModalModule.forRoot(), SharedModule],
-    schemas: [NO_ERRORS_SCHEMA]
+    schemas: [NO_ERRORS_SCHEMA],
+    providers: i18nProviders
   });
 
   beforeEach(() => {

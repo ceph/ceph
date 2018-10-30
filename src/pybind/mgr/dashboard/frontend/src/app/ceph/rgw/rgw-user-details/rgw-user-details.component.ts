@@ -1,5 +1,6 @@
 import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
+import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 import { BsModalService } from 'ngx-bootstrap/modal';
 
@@ -33,17 +34,21 @@ export class RgwUserDetailsComponent implements OnChanges, OnInit {
   keysColumns: CdTableColumn[] = [];
   keysSelection: CdTableSelection = new CdTableSelection();
 
-  constructor(private rgwUserService: RgwUserService, private bsModalService: BsModalService) {}
+  constructor(
+    private rgwUserService: RgwUserService,
+    private bsModalService: BsModalService,
+    private i18n: I18n
+  ) {}
 
   ngOnInit() {
     this.keysColumns = [
       {
-        name: 'Username',
+        name: this.i18n('Username'),
         prop: 'username',
         flexGrow: 1
       },
       {
-        name: 'Type',
+        name: this.i18n('Type'),
         prop: 'type',
         flexGrow: 1
       }

@@ -5,7 +5,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { ToastModule } from 'ng2-toastr';
 import { TabsModule } from 'ngx-bootstrap/tabs';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
+import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { SharedModule } from '../../../shared/shared.module';
 import { RoleDetailsComponent } from './role-details.component';
@@ -22,7 +22,8 @@ describe('RoleDetailsComponent', () => {
       RouterTestingModule,
       HttpClientTestingModule
     ],
-    declarations: [RoleDetailsComponent]
+    declarations: [RoleDetailsComponent],
+    providers: i18nProviders
   });
 
   beforeEach(() => {

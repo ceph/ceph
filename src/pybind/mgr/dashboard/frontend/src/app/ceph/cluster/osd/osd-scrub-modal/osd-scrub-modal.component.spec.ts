@@ -4,7 +4,7 @@ import { ReactiveFormsModule } from '@angular/forms';
 
 import { BsModalRef } from 'ngx-bootstrap/modal';
 
-import { configureTestBed } from '../../../../../testing/unit-test-helper';
+import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
 import { OsdService } from '../../../../shared/api/osd.service';
 import { NotificationService } from '../../../../shared/services/notification.service';
 import { OsdScrubModalComponent } from './osd-scrub-modal.component';
@@ -38,7 +38,8 @@ describe('OsdScrubModalComponent', () => {
     providers: [
       BsModalRef,
       { provide: OsdService, useValue: fakeService },
-      { provide: NotificationService, useValue: fakeService }
+      { provide: NotificationService, useValue: fakeService },
+      i18nProviders
     ]
   });
 
