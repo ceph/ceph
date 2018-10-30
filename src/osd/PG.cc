@@ -3915,9 +3915,9 @@ void PG::_scan_snaps(ScrubMap &smap)
 			    << "...repaired";
 	}
 	snap_mapper.add_oid(hoid, oi_snaps, &_t);
-	r = osd->store->apply_transaction(osr.get(), std::move(t));
+	r = osd->store->queue_transaction(osr.get(), std::move(t), nullptr);
 	if (r != 0) {
-	  derr << __func__ << ": apply_transaction got " << cpp_strerror(r)
+	  derr << __func__ << ": queue_transaction got " << cpp_strerror(r)
 	       << dendl;
 	}
       }
