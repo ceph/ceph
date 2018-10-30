@@ -600,6 +600,561 @@ function TEST_backfill_grow() {
     ! grep -q "num_bytes mismatch" $dir/osd.*.log || return 1
 }
 
+# Create a 5 shard EC pool on 6 OSD cluster
+# Fill 1 OSD with 2600K of data take that osd down.
+# Write the EC pool on 5 OSDs
+# Take down 1 (must contain an EC shard)
+# Bring up OSD with fill data
+# Not enought room to backfill to partially full OSD
+function TEST_ec_backfill_simple() {
+    local dir=$1
+    local EC=$2
+    local pools=1
+    local OSDS=6
+    local k=3
+    local m=2
+    local ecobjects=$(expr $objects / $k)
+
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+    export CEPH_ARGS
+
+    for osd in $(seq 0 $(expr $OSDS - 1))
+    do
+      run_osd $dir $osd || return 1
+    done
+
+    ceph osd set-backfillfull-ratio .85
+    create_pool fillpool 1 1
+    ceph osd pool set fillpool size 1
+
+    # Partially fill an osd
+    # We have room for 200 18K replicated objects, if we create 13K objects
+    # there is only 3600K - (13K * 200) = 1000K which won't hold
+    # a k=3 shard below ((18K / 3) + 4K) * 200 = 2000K
+    # Actual usage per shard is 8K * 200 = 1600K because 18K/3 is 6K which
+    # rounds to 8K.  The 2000K is the ceiling on the 18K * 200 = 3600K logical
+    # bytes in the pool.
+    dd if=/dev/urandom of=$dir/datafile bs=1024 count=13
+    for o in $(seq 1 $ecobjects)
+    do
+      rados -p fillpool put obj$o $dir/datafile
+    done
+
+    local fillosd=$(get_primary fillpool obj1)
+    osd=$(expr $fillosd + 1)
+    if [ "$osd" = "$OSDS" ]; then
+      osd="0"
+    fi
+
+    sleep 5
+    kill $(cat $dir/osd.$fillosd.pid)
+    ceph osd out osd.$fillosd
+    sleep 2
+    ceph osd erasure-code-profile set ec-profile k=$k m=$m crush-failure-domain=osd technique=reed_sol_van plugin=jerasure || return 1
+
+    for p in $(seq 1 $pools)
+    do
+        ceph osd pool create "${poolprefix}$p" 1 1 erasure ec-profile
+    done
+
+    # Can't wait for clean here because we created a stale pg
+    #wait_for_clean || return 1
+    sleep 5
+
+    ceph pg dump pgs
+
+    dd if=/dev/urandom of=$dir/datafile bs=1024 count=18
+    for o in $(seq 1 $ecobjects)
+    do
+      for p in $(seq 1 $pools)
+      do
+	rados -p "${poolprefix}$p" put obj$o $dir/datafile
+      done
+    done
+
+    kill $(cat $dir/osd.$osd.pid)
+    ceph osd out osd.$osd
+
+    activate_osd $dir $fillosd || return 1
+    ceph osd in osd.$fillosd
+    sleep 30
+
+    ceph pg dump pgs
+
+    wait_for_backfill 120 || return 1
+    wait_for_active 30 || return 1
+
+    ceph pg dump pgs
+
+    ERRORS=0
+    if [ "$(ceph pg dump pgs | grep -v "^1.0" | grep +backfill_toofull | wc -l)" != "1" ]; then
+      echo "One pool should have been in backfill_toofull"
+      ERRORS="$(expr $ERRORS + 1)"
+    fi
+
+    if [ $ERRORS != "0" ];
+    then
+      return 1
+    fi
+
+    delete_pool fillpool
+    for i in $(seq 1 $pools)
+    do
+      delete_pool "${poolprefix}$i"
+    done
+    kill_daemons $dir || return 1
+}
+
+function osdlist() {
+    local OSDS=$1
+    local excludeosd=$2
+
+    osds=""
+    for osd in $(seq 0 $(expr $OSDS - 1))
+    do
+      if [ $osd = $excludeosd ];
+      then
+        continue
+      fi
+      if [ -n "$osds" ]; then
+        osds="${osds} "
+      fi
+      osds="${osds}${osd}"
+    done
+    echo $osds
+}
+
+# Create a pool with size 1 and fill with data so that only 1 EC shard can fit.
+# Write data to 2 EC pools mapped to the same OSDs (excluding filled one)
+# Remap the last OSD to partially full OSD on both pools
+# The 2 pools should race to backfill.
+# One pool goes active+clean
+# The other goes acitve+...+backfill_toofull
+function TEST_ec_backfill_multi() {
+    local dir=$1
+    local EC=$2
+    local pools=2
+    local OSDS=6
+    local k=3
+    local m=2
+    local ecobjects=$(expr $objects / $k)
+
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+    export CEPH_ARGS
+
+    for osd in $(seq 0 $(expr $OSDS - 1))
+    do
+      run_osd $dir $osd || return 1
+    done
+
+    # This test requires that shards from 2 different pools
+    # fit on a given OSD, but both will not fix.  I'm using
+    # making the fillosd plus 1 shard use 75% of the space,
+    # leaving not enough to be under the 85% set here.
+    ceph osd set-backfillfull-ratio .85
+
+    ceph osd set-require-min-compat-client luminous
+    create_pool fillpool 1 1
+    ceph osd pool set fillpool size 1
+
+    # Partially fill an osd
+    # We have room for 200 18K replicated objects, if we create 9K objects
+    # there is only 3600K - (9K * 200) = 1800K which will only hold
+    # one k=3 shard below ((12K / 3) + 4K) * 200 = 1600K
+    # The actual data will be (12K / 3) * 200 = 800K because the extra
+    # is the reservation padding for chunking.
+    dd if=/dev/urandom of=$dir/datafile bs=1024 count=9
+    for o in $(seq 1 $ecobjects)
+    do
+      rados -p fillpool put obj$o $dir/datafile
+    done
+
+    local fillosd=$(get_primary fillpool obj1)
+    ceph osd erasure-code-profile set ec-profile k=3 m=2 crush-failure-domain=osd technique=reed_sol_van plugin=jerasure || return 1
+
+    nonfillosds="$(osdlist $OSDS $fillosd)"
+
+    for p in $(seq 1 $pools)
+    do
+        ceph osd pool create "${poolprefix}$p" 1 1 erasure ec-profile
+        ceph osd pg-upmap "$(expr $p + 1).0" $nonfillosds
+    done
+
+    # Can't wait for clean here because we created a stale pg
+    #wait_for_clean || return 1
+    sleep 15
+
+    ceph pg dump pgs
+
+    dd if=/dev/urandom of=$dir/datafile bs=1024 count=12
+    for o in $(seq 1 $ecobjects)
+    do
+      for p in $(seq 1 $pools)
+      do
+	rados -p "${poolprefix}$p" put obj$o-$p $dir/datafile
+      done
+    done
+
+    ceph pg dump pgs
+
+    for p in $(seq 1 $pools)
+    do
+      ceph osd pg-upmap $(expr $p + 1).0 ${nonfillosds% *} $fillosd
+    done
+
+    sleep 10
+
+    wait_for_backfill 120 || return 1
+    wait_for_active 30 || return 1
+
+    ceph pg dump pgs
+
+    ERRORS=0
+    if [ "$(ceph pg dump pgs | grep -v "^1.0" | grep +backfill_toofull | wc -l)" != "1" ];
+    then
+      echo "One pool should have been in backfill_toofull"
+      ERRORS="$(expr $ERRORS + 1)"
+    fi
+
+    if [ "$(ceph pg dump pgs | grep -v "^1.0" | grep active+clean | wc -l)" != "1" ];
+    then
+      echo "One didn't finish backfill"
+      ERRORS="$(expr $ERRORS + 1)"
+    fi
+
+    if [ $ERRORS != "0" ];
+    then
+      return 1
+    fi
+
+    delete_pool fillpool
+    for i in $(seq 1 $pools)
+    do
+      delete_pool "${poolprefix}$i"
+    done
+    kill_daemons $dir || return 1
+}
+
+# Similar to TEST_ec_backfill_multi but one of the ec pools
+# already had some data on the target OSD
+
+# Create a pool with size 1 and fill with data so that only 1 EC shard can fit.
+# Write a small amount of data to 1 EC pool that still includes the filled one
+# Take down fillosd with noout set
+# Write data to 2 EC pools mapped to the same OSDs (excluding filled one)
+# Remap the last OSD to partially full OSD on both pools
+# The 2 pools should race to backfill.
+# One pool goes active+clean
+# The other goes acitve+...+backfill_toofull
+function SKIP_TEST_ec_backfill_multi_partial() {
+    local dir=$1
+    local EC=$2
+    local pools=2
+    local OSDS=5
+    local k=3
+    local m=2
+    local ecobjects=$(expr $objects / $k)
+    local lastosd=$(expr $OSDS - 1)
+
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+    export CEPH_ARGS
+
+    for osd in $(seq 0 $(expr $OSDS - 1))
+    do
+      run_osd $dir $osd || return 1
+    done
+
+    # This test requires that shards from 2 different pools
+    # fit on a given OSD, but both will not fix.  I'm using
+    # making the fillosd plus 1 shard use 75% of the space,
+    # leaving not enough to be under the 85% set here.
+    ceph osd set-backfillfull-ratio .85
+
+    ceph osd set-require-min-compat-client luminous
+    create_pool fillpool 1 1
+    ceph osd pool set fillpool size 1
+    # last osd
+    ceph osd pg-upmap 1.0 $lastosd
+
+    # Partially fill an osd
+    # We have room for 200 18K replicated objects, if we create 9K objects
+    # there is only 3600K - (9K * 200) = 1800K which will only hold
+    # one k=3 shard below ((12K / 3) + 4K) * 200 = 1600K
+    # The actual data will be (12K / 3) * 200 = 800K because the extra
+    # is the reservation padding for chunking.
+    dd if=/dev/urandom of=$dir/datafile bs=1024 count=9
+    for o in $(seq 1 $ecobjects)
+    do
+      rados -p fillpool put obj$o $dir/datafile
+    done
+
+    local fillosd=$(get_primary fillpool obj1)
+    ceph osd erasure-code-profile set ec-profile k=3 m=2 crush-failure-domain=osd technique=reed_sol_van plugin=jerasure || return 1
+
+    nonfillosds="$(osdlist $OSDS $fillosd)"
+
+    for p in $(seq 1 $pools)
+    do
+        ceph osd pool create "${poolprefix}$p" 1 1 erasure ec-profile
+        ceph osd pg-upmap "$(expr $p + 1).0" $(seq 0 $lastosd)
+    done
+
+    # Can't wait for clean here because we created a stale pg
+    #wait_for_clean || return 1
+    sleep 15
+
+    ceph pg dump pgs
+
+    dd if=/dev/urandom of=$dir/datafile bs=1024 count=1
+    for o in $(seq 1 $ecobjects)
+    do
+      rados -p "${poolprefix}1" put obj$o-1 $dir/datafile
+    done
+
+    for p in $(seq 1 $pools)
+    do
+        ceph osd pg-upmap "$(expr $p + 1).0" $(seq 0 $(expr $lastosd - 1))
+    done
+    ceph pg dump pgs
+
+    #ceph osd set noout
+    #kill_daemons $dir TERM osd.$lastosd || return 1
+
+    dd if=/dev/urandom of=$dir/datafile bs=1024 count=12
+    for o in $(seq 1 $ecobjects)
+    do
+      for p in $(seq 1 $pools)
+      do
+	rados -p "${poolprefix}$p" put obj$o-$p $dir/datafile
+      done
+    done
+
+    ceph pg dump pgs
+
+    # Now backfill lastosd by adding back into the upmap
+    for p in $(seq 1 $pools)
+    do
+        ceph osd pg-upmap "$(expr $p + 1).0" $(seq 0 $lastosd)
+    done
+    #activate_osd $dir $lastosd || return 1
+    #ceph tell osd.0 debug kick_recovery_wq 0
+
+    sleep 10
+    ceph pg dump pgs
+
+    wait_for_backfill 120 || return 1
+    wait_for_active 30 || return 1
+
+    ceph pg dump pgs
+
+    ERRORS=0
+    if [ "$(ceph pg dump pgs | grep -v "^1.0" | grep +backfill_toofull | wc -l)" != "1" ];
+    then
+      echo "One pool should have been in backfill_toofull"
+      ERRORS="$(expr $ERRORS + 1)"
+    fi
+
+    if [ "$(ceph pg dump pgs | grep -v "^1.0" | grep active+clean | wc -l)" != "1" ];
+    then
+      echo "One didn't finish backfill"
+      ERRORS="$(expr $ERRORS + 1)"
+    fi
+
+    if [ $ERRORS != "0" ];
+    then
+      return 1
+    fi
+
+    delete_pool fillpool
+    for i in $(seq 1 $pools)
+    do
+      delete_pool "${poolprefix}$i"
+    done
+    kill_daemons $dir || return 1
+}
+
+function SKIP_TEST_ec_backfill_multi_partial() {
+    local dir=$1
+    local EC=$2
+    local pools=2
+    local OSDS=6
+
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+    export CEPH_ARGS
+
+    for osd in $(seq 0 $(expr $OSDS - 1))
+    do
+      run_osd $dir $osd || return 1
+    done
+
+    # Below we need to fit 3200K in 3600K which is 88%
+    # so set to 90%
+    ceph osd set-backfillfull-ratio .90
+
+    ceph osd set-require-min-compat-client luminous
+    create_pool fillpool 1 1
+    ceph osd pool set fillpool size 1
+
+    # Partially fill an osd
+    # We have room for 200 48K ec objects, if we create 4k replicated objects
+    # there is 3600K - (4K * 200) = 2800K which won't hold 2 k=3 shard
+    # of 200 12K objects which takes ((12K / 3) + 4K) * 200 = 1600K each.
+    # On the other OSDs 2 * 1600K = 3200K which is 88% of 3600K.
+    dd if=/dev/urandom of=$dir/datafile bs=1024 count=4
+    for o in $(seq 1 $objects)
+    do
+      rados -p fillpool put obj$o $dir/datafile
+    done
+
+    local fillosd=$(get_primary fillpool obj1)
+    osd=$(expr $fillosd + 1)
+    if [ "$osd" = "$OSDS" ]; then
+      osd="0"
+    fi
+
+    sleep 5
+    kill $(cat $dir/osd.$fillosd.pid)
+    ceph osd out osd.$fillosd
+    sleep 2
+    ceph osd erasure-code-profile set ec-profile k=3 m=2 crush-failure-domain=osd technique=reed_sol_van plugin=jerasure || return 1
+
+    for p in $(seq 1 $pools)
+    do
+        ceph osd pool create "${poolprefix}$p" 1 1 erasure ec-profile
+    done
+
+    # Can't wait for clean here because we created a stale pg
+    #wait_for_clean || return 1
+    sleep 5
+
+    ceph pg dump pgs
+
+    dd if=/dev/urandom of=$dir/datafile bs=1024 count=12
+    for o in $(seq 1 $objects)
+    do
+      for p in $(seq 1 $pools)
+      do
+	rados -p "${poolprefix}$p" put obj$o $dir/datafile
+      done
+    done
+
+    #ceph pg map 2.0 --format=json | jq '.'
+    kill $(cat $dir/osd.$osd.pid)
+    ceph osd out osd.$osd
+
+    _objectstore_tool_nodown $dir $osd --op export --pgid 2.0 --file $dir/export.out
+    _objectstore_tool_nodown $dir $fillosd --op import --pgid 2.0 --file $dir/export.out
+
+    activate_osd $dir $fillosd || return 1
+    ceph osd in osd.$fillosd
+    sleep 15
+
+    wait_for_backfill 120 || return 1
+    wait_for_active 30 || return 1
+
+    ERRORS=0
+    if [ "$(ceph pg dump pgs | grep -v "^1.0" | grep +backfill_toofull | wc -l)" != "1" ];
+    then
+      echo "One pool should have been in backfill_toofull"
+      ERRORS="$(expr $ERRORS + 1)"
+    fi
+
+    if [ "$(ceph pg dump pgs | grep -v "^1.0" | grep active+clean | wc -l)" != "1" ];
+    then
+      echo "One didn't finish backfill"
+      ERRORS="$(expr $ERRORS + 1)"
+    fi
+
+    ceph pg dump pgs
+
+    if [ $ERRORS != "0" ];
+    then
+      return 1
+    fi
+
+    delete_pool fillpool
+    for i in $(seq 1 $pools)
+    do
+      delete_pool "${poolprefix}$i"
+    done
+    kill_daemons $dir || return 1
+}
+
+# Create 1 EC pool
+# Write 200 12K objects ((12K / 3) + 4K) *200) = 1600K
+# Take 1 shard's OSD down (with noout set)
+# Remove 50 objects ((12K / 3) + 4k) * 50) = 400K
+# Write 150 36K objects (grow 150 objects) 2400K
+# 	But there is already 1600K usage so backfill
+# 	would be too full if it didn't account for existing data
+# Bring back down OSD so it must backfill
+# It should go active+clean taking into account data already there
+function TEST_ec_backfill_grow() {
+    local dir=$1
+    local poolname="test"
+    local OSDS=6
+    local k=3
+    local m=2
+    local ecobjects=$(expr $objects / $k)
+
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+
+    for osd in $(seq 0 $(expr $OSDS - 1))
+    do
+      run_osd $dir $osd || return 1
+    done
+
+    ceph osd set-backfillfull-ratio .85
+
+    ceph osd set-require-min-compat-client luminous
+    ceph osd erasure-code-profile set ec-profile k=$k m=$m crush-failure-domain=osd technique=reed_sol_van plugin=jerasure || return 1
+    ceph osd pool create $poolname 1 1 erasure ec-profile
+
+    wait_for_clean || return 1
+
+    dd if=/dev/urandom of=${dir}/12kdata bs=1k count=12
+    for i in $(seq 1 $ecobjects)
+    do
+	rados -p $poolname put obj$i $dir/12kdata
+    done
+
+    local PG=$(get_pg $poolname obj1)
+    # Remember primary during the backfill
+    local primary=$(get_primary $poolname obj1)
+    local otherosd=$(get_not_primary $poolname obj1)
+
+    ceph osd set noout
+    kill_daemons $dir TERM $otherosd || return 1
+
+    rmobjects=$(expr $ecobjects / 4)
+    for i in $(seq 1 $rmobjects)
+    do
+        rados -p $poolname rm obj$i
+    done
+
+    dd if=/dev/urandom of=${dir}/36kdata bs=1k count=36
+    for i in $(seq $(expr $rmobjects + 1) $ecobjects)
+    do
+	rados -p $poolname put obj$i $dir/36kdata
+    done
+
+    activate_osd $dir $otherosd || return 1
+
+    ceph tell osd.$primary debug kick_recovery_wq 0
+
+    sleep 2
+
+    wait_for_clean || return 1
+
+    delete_pool $poolname
+    kill_daemons $dir || return 1
+}
+
 main osd-backfill-space "$@"
 
 # Local Variables:
