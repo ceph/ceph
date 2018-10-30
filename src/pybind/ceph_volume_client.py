@@ -573,14 +573,14 @@ class CephFSVolumeClient(object):
         else:
             return pool_id
 
-    def create_group(self, group_id):
+    def create_group(self, group_id, mode=0o755):
         # Prevent craftily-named volume groups from colliding with the meta
         # files.
         if group_id.endswith(META_FILE_EXT):
             raise ValueError("group ID cannot end with '{0}'.".format(
                 META_FILE_EXT))
         path = self._get_group_path(group_id)
-        self._mkdir_p(path)
+        self._mkdir_p(path, mode)
 
     def destroy_group(self, group_id):
         path = self._get_group_path(group_id)
@@ -591,7 +591,7 @@ class CephFSVolumeClient(object):
         else:
             self.fs.rmdir(path)
 
-    def _mkdir_p(self, path):
+    def _mkdir_p(self, path, mode=0o755):
         try:
             self.fs.stat(path)
         except cephfs.ObjectNotFound:
@@ -606,9 +606,10 @@ class CephFSVolumeClient(object):
             try:
                 self.fs.stat(subpath)
             except cephfs.ObjectNotFound:
-                self.fs.mkdir(subpath, 0o755)
+                self.fs.mkdir(subpath, mode)
 
-    def create_volume(self, volume_path, size=None, data_isolated=False, namespace_isolated=True):
+    def create_volume(self, volume_path, size=None, data_isolated=False, namespace_isolated=True,
+                      mode=0o755):
         """
         Set up metadata, pools and auth for a volume.
 
@@ -624,7 +625,7 @@ class CephFSVolumeClient(object):
         path = self._get_path(volume_path)
         log.info("create_volume: {0}".format(path))
 
-        self._mkdir_p(path)
+        self._mkdir_p(path, mode)
 
         if size is not None:
             self.fs.setxattr(path, 'ceph.quota.max_bytes', to_bytes(size), 0)
@@ -1366,9 +1367,9 @@ class CephFSVolumeClient(object):
             dir_path, self.rados.conf_get('client_snapdir'), snapshot_name
         )
 
-    def _snapshot_create(self, dir_path, snapshot_name):
+    def _snapshot_create(self, dir_path, snapshot_name, mode=0o755):
         # TODO: raise intelligible exception for clusters where snaps are disabled
-        self.fs.mkdir(self._snapshot_path(dir_path, snapshot_name), 0o755)
+        self.fs.mkdir(self._snapshot_path(dir_path, snapshot_name), mode)
 
     def _snapshot_destroy(self, dir_path, snapshot_name):
         """
@@ -1379,17 +1380,18 @@ class CephFSVolumeClient(object):
         except cephfs.ObjectNotFound:
             log.warn("Snapshot was already gone: {0}".format(snapshot_name))
 
-    def create_snapshot_volume(self, volume_path, snapshot_name):
-        self._snapshot_create(self._get_path(volume_path), snapshot_name)
+    def create_snapshot_volume(self, volume_path, snapshot_name, mode=0o755):
+        self._snapshot_create(self._get_path(volume_path), snapshot_name, mode)
 
     def destroy_snapshot_volume(self, volume_path, snapshot_name):
         self._snapshot_destroy(self._get_path(volume_path), snapshot_name)
 
-    def create_snapshot_group(self, group_id, snapshot_name):
+    def create_snapshot_group(self, group_id, snapshot_name, mode=0o755):
         if group_id is None:
             raise RuntimeError("Group ID may not be None")
 
-        return self._snapshot_create(self._get_group_path(group_id), snapshot_name)
+        return self._snapshot_create(self._get_group_path(group_id), snapshot_name,
+                                     mode)
 
     def destroy_snapshot_group(self, group_id, snapshot_name):
         if group_id is None:
