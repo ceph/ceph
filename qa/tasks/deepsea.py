@@ -786,6 +786,7 @@ class Orch(DeepSea):
         stage = 4
         self.__log_stage_start(stage)
         self._run_orch(("stage", stage))
+        self._ceph_health_test()
 
     def _run_stage_5(self):
         """
