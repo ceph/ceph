@@ -43,6 +43,15 @@ filtered to a particular node:
 
     orchestrator device ls [node]
 
+Print a list of services known to the orchestrator. The list can be limited to
+services on a particular host with the optional --host parameter and/or
+services of a particular type via optional --type parameter
+(mon, osd, mgr, mds, rgw):
+
+::
+
+    orchestrator service ls [--host=host] [--type=type]
+
 Query the status of a particular service (mon, osd, mgr, mds, rgw).  For OSDs
 the id is the numeric OSD ID, for MDS services it is the filesystem name:
 
