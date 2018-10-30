@@ -2810,7 +2810,8 @@ TEST_F(TestClsRbd, migration)
   ASSERT_EQ(0, create_image(&ioctx, oid, 0, 22, 0, oid, -1));
 
   cls::rbd::MigrationSpec migration_spec(cls::rbd::MIGRATION_HEADER_TYPE_DST, 1,
-                                         "name", "id", {}, 0, false, false,
+                                         "name", "ns", "id", {}, 0, false,
+                                         false,
                                          cls::rbd::MIGRATION_STATE_PREPARING,
                                          "123");
   cls::rbd::MigrationSpec read_migration_spec;
@@ -2879,7 +2880,8 @@ TEST_F(TestClsRbd, migration_v1)
   ASSERT_EQ(0, ioctx.write(oid, header, header.length(), 0));
 
   cls::rbd::MigrationSpec migration_spec(cls::rbd::MIGRATION_HEADER_TYPE_DST, 1,
-                                         "name", "id", {}, 0, false, false,
+                                         "name", "ns", "id", {}, 0, false,
+                                         false,
                                          cls::rbd::MIGRATION_STATE_PREPARING,
                                          "123");
   cls::rbd::MigrationSpec read_migration_spec;

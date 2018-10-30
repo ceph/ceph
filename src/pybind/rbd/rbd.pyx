@@ -208,9 +208,11 @@ cdef extern from "rbd/librbd.h" nogil:
 
     ctypedef struct rbd_image_migration_status_t:
         int64_t source_pool_id
+        char *source_pool_namespace
         char *source_image_name
         char *source_image_id
         int64_t dest_pool_id
+        char *dest_pool_namespace
         char *dest_image_name
         char *dest_image_id
         rbd_image_migration_state_t state
@@ -1385,11 +1387,15 @@ class RBD(object):
 
             * ``source_pool_id`` (int) - source image pool id
 
+            * ``source_pool_namespace`` (str) - source image pool namespace
+
             * ``source_image_name`` (str) - source image name
 
             * ``source_image_id`` (str) - source image id
 
             * ``dest_pool_id`` (int) - destination image pool id
+
+            * ``dest_pool_namespace`` (str) - destination image pool namespace
 
             * ``dest_image_name`` (str) - destination image name
 
@@ -1413,14 +1419,16 @@ class RBD(object):
             raise make_ex(ret, 'error getting migration status')
 
         status = {
-            'source_pool_id'    : c_status.source_pool_id,
-            'source_image_name' : decode_cstr(c_status.source_image_name),
-            'source_image_id'   : decode_cstr(c_status.source_image_id),
-            'dest_pool_id'      : c_status.source_pool_id,
-            'dest_image_name'   : decode_cstr(c_status.dest_image_name),
-            'dest_image_id'     : decode_cstr(c_status.dest_image_id),
-            'state'             : c_status.state,
-            'state_description' : decode_cstr(c_status.state_description)
+            'source_pool_id'        : c_status.source_pool_id,
+            'source_pool_namespace' : decode_cstr(c_status.source_pool_namespace),
+            'source_image_name'     : decode_cstr(c_status.source_image_name),
+            'source_image_id'       : decode_cstr(c_status.source_image_id),
+            'dest_pool_id'          : c_status.source_pool_id,
+            'dest_pool_namespace'   : decode_cstr(c_status.dest_pool_namespace),
+            'dest_image_name'       : decode_cstr(c_status.dest_image_name),
+            'dest_image_id'         : decode_cstr(c_status.dest_image_id),
+            'state'                 : c_status.state,
+            'state_description'     : decode_cstr(c_status.state_description)
          }
 
         rbd_migration_status_cleanup(&c_status)

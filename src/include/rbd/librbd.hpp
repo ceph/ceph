@@ -132,9 +132,11 @@ namespace librbd {
 
   typedef struct {
     int64_t source_pool_id;
+    std::string source_pool_namespace;
     std::string source_image_name;
     std::string source_image_id;
     int64_t dest_pool_id;
+    std::string dest_pool_namespace;
     std::string dest_image_name;
     std::string dest_image_id;
     image_migration_state_t state;
