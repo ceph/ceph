@@ -241,9 +241,11 @@ typedef enum {
 
 typedef struct {
   int64_t source_pool_id;
+  char *source_pool_namespace;
   char *source_image_name;
   char *source_image_id;
   int64_t dest_pool_id;
+  char *dest_pool_namespace;
   char *dest_image_name;
   char *dest_image_id;
   rbd_image_migration_state_t state;

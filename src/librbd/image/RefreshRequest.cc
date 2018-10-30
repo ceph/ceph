@@ -1455,6 +1455,7 @@ bool RefreshRequest<I>::get_migration_info(ParentImageInfo *parent_md,
   }
 
   parent_md->spec.pool_id = m_migration_spec.pool_id;
+  parent_md->spec.pool_namespace = m_migration_spec.pool_namespace;
   parent_md->spec.image_id = m_migration_spec.image_id;
   parent_md->spec.snap_id = CEPH_NOSNAP;
   parent_md->overlap = std::min(m_size, m_migration_spec.overlap);
@@ -1484,9 +1485,9 @@ bool RefreshRequest<I>::get_migration_info(ParentImageInfo *parent_md,
     }
   }
 
-  *migration_info = {m_migration_spec.pool_id, m_migration_spec.image_name,
-                     m_migration_spec.image_id, {}, overlap,
-                     m_migration_spec.flatten};
+  *migration_info = {m_migration_spec.pool_id, m_migration_spec.pool_namespace,
+                     m_migration_spec.image_name, m_migration_spec.image_id, {},
+                     overlap, m_migration_spec.flatten};
 
   deep_copy::util::compute_snap_map(0, CEPH_NOSNAP, snap_seqs,
                                     &migration_info->snap_map);

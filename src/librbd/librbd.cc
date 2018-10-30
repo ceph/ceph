@@ -3300,9 +3300,13 @@ extern "C" int rbd_migration_status(rados_ioctx_t p, const char *image_name,
   int r = librbd::api::Migration<>::status(io_ctx, image_name, &cpp_status);
   if (r >= 0) {
     status->source_pool_id = cpp_status.source_pool_id;
+    status->source_pool_namespace =
+      strdup(cpp_status.source_pool_namespace.c_str());
     status->source_image_name = strdup(cpp_status.source_image_name.c_str());
     status->source_image_id = strdup(cpp_status.source_image_id.c_str());
     status->dest_pool_id = cpp_status.dest_pool_id;
+    status->dest_pool_namespace =
+      strdup(cpp_status.dest_pool_namespace.c_str());
     status->dest_image_name = strdup(cpp_status.dest_image_name.c_str());
     status->dest_image_id = strdup(cpp_status.dest_image_id.c_str());
     status->state = cpp_status.state;
@@ -3315,8 +3319,10 @@ extern "C" int rbd_migration_status(rados_ioctx_t p, const char *image_name,
 
 extern "C" void rbd_migration_status_cleanup(rbd_image_migration_status_t *s)
 {
+  free(s->source_pool_namespace);
   free(s->source_image_name);
   free(s->source_image_id);
+  free(s->dest_pool_namespace);
   free(s->dest_image_name);
   free(s->dest_image_id);
   free(s->state_description);
