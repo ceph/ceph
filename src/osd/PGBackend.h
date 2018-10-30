@@ -154,7 +154,6 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
        vector<ObjectStore::Transaction>& tls,
        OpRequestRef op = OpRequestRef()
        ) = 0;
-     virtual epoch_t get_epoch() const = 0;
      virtual epoch_t get_interval_start_epoch() const = 0;
      virtual epoch_t get_last_peering_reset_epoch() const = 0;
 

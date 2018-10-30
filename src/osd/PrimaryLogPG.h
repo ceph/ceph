@@ -323,9 +323,6 @@ public:
 			  OpRequestRef op) override {
     osd->store->queue_transactions(ch, tls, op, NULL);
   }
-  epoch_t get_epoch() const override {
-    return get_osdmap()->get_epoch();
-  }
   epoch_t get_interval_start_epoch() const override {
     return info.history.same_interval_since;
   }
