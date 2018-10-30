@@ -313,7 +313,7 @@ public:
     GenContext<ThreadPool::TPHandle&> *c) override;
     
   void send_message(int to_osd, Message *m) override {
-    osd->send_message_osd_cluster(to_osd, m, get_osdmap()->get_epoch());
+    osd->send_message_osd_cluster(to_osd, m, get_osdmap_epoch());
   }
   void queue_transaction(ObjectStore::Transaction&& t,
 			 OpRequestRef op) override {
@@ -1621,7 +1621,7 @@ private:
 	std::lock_guard l(pg->osd->sleep_lock);
 	wakeup = pg->osd->sleep_timer.add_event_after(
 	  pg->cct->_conf->osd_snap_trim_sleep,
-	  new OnTimer{pg, pg->get_osdmap()->get_epoch()});
+	  new OnTimer{pg, pg->get_osdmap_epoch()});
       } else {
 	post_event(SnapTrimTimerReady());
       }

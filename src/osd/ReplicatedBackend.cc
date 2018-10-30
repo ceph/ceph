@@ -1753,7 +1753,7 @@ void ReplicatedBackend::send_pushes(int prio, map<pg_shard_t, vector<PushOp> > &
        ++i) {
     ConnectionRef con = get_parent()->get_con_osd_cluster(
       i->first.osd,
-      get_osdmap()->get_epoch());
+      get_osdmap_epoch());
     if (!con)
       continue;
     vector<PushOp>::iterator j = i->second.begin();
@@ -1763,7 +1763,7 @@ void ReplicatedBackend::send_pushes(int prio, map<pg_shard_t, vector<PushOp> > &
       MOSDPGPush *msg = new MOSDPGPush();
       msg->from = get_parent()->whoami_shard();
       msg->pgid = get_parent()->primary_spg_t();
-      msg->map_epoch = get_osdmap()->get_epoch();
+      msg->map_epoch = get_osdmap_epoch();
       msg->min_epoch = get_parent()->get_last_peering_reset_epoch();
       msg->set_priority(prio);
       for (;
@@ -1790,7 +1790,7 @@ void ReplicatedBackend::send_pulls(int prio, map<pg_shard_t, vector<PullOp> > &p
        ++i) {
     ConnectionRef con = get_parent()->get_con_osd_cluster(
       i->first.osd,
-      get_osdmap()->get_epoch());
+      get_osdmap_epoch());
     if (!con)
       continue;
     dout(20) << __func__ << ": sending pulls " << i->second
@@ -1799,7 +1799,7 @@ void ReplicatedBackend::send_pulls(int prio, map<pg_shard_t, vector<PullOp> > &p
     msg->from = parent->whoami_shard();
     msg->set_priority(prio);
     msg->pgid = get_parent()->primary_spg_t();
-    msg->map_epoch = get_osdmap()->get_epoch();
+    msg->map_epoch = get_osdmap_epoch();
     msg->min_epoch = get_parent()->get_last_peering_reset_epoch();
     msg->set_pulls(&i->second);
     msg->compute_cost(cct);
