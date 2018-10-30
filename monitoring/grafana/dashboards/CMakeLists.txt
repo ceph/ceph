@@ -1,0 +1,8 @@
+set(CEPH_GRAFANA_DASHBOARDS_DIR "${CMAKE_INSTALL_SYSCONFDIR}/grafana/dashboards/ceph-dashboard"
+  CACHE PATH "Location for grafana dashboards")
+
+FILE(GLOB CEPH_GRAFANA_DASHBOARDS "*.json")
+
+install(FILES
+  ${CEPH_GRAFANA_DASHBOARDS}
+  DESTINATION ${CEPH_GRAFANA_DASHBOARDS_DIR})
