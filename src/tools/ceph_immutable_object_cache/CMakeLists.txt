@@ -4,6 +4,7 @@ add_executable(ceph-immutable-object-cache
   CacheController.cc
   CacheServer.cc
   CacheSession.cc
+  SimplePolicy.cc
   main.cc)
 target_link_libraries(ceph-immutable-object-cache
   librados

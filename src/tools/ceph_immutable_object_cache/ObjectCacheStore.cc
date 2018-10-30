@@ -29,7 +29,7 @@ ObjectCacheStore::ObjectCacheStore(CephContext *cct, ContextWQ* work_queue)
   m_cache_root_dir = cache_path + "/ceph_immutable_obj_cache/";
 
   //TODO(): allow to set cache level
-  m_policy = new SimplePolicy(object_cache_entries, 0.5);
+  m_policy = new SimplePolicy(m_cct, object_cache_entries, 0.8);
 }
 
 ObjectCacheStore::~ObjectCacheStore() {
@@ -172,7 +172,7 @@ int ObjectCacheStore::handle_promote_callback(int ret, bufferlist* read_buf,
   }
 
   // update metadata
-  assert(OBJ_CACHE_PROMOTING == m_policy->get_status(cache_file_name));
+  assert(OBJ_CACHE_SKIP == m_policy->get_status(cache_file_name));
   m_policy->update_status(cache_file_name, OBJ_CACHE_PROMOTED);
   assert(OBJ_CACHE_PROMOTED == m_policy->get_status(cache_file_name));
 
@@ -186,7 +186,7 @@ int ObjectCacheStore::lookup_object(std::string pool_name,
                    << " in pool: " << pool_name << dendl;
 
   int pret = -1;
-  CACHESTATUS ret = m_policy->lookup_object(pool_name + object_name);
+  cache_status_t ret = m_policy->lookup_object(pool_name + object_name);
 
   switch(ret) {
     case OBJ_CACHE_NONE: {
@@ -199,7 +199,7 @@ int ObjectCacheStore::lookup_object(std::string pool_name,
     }
     case OBJ_CACHE_PROMOTED:
       return 0;
-    case OBJ_CACHE_PROMOTING:
+    case OBJ_CACHE_SKIP:
       return -1;
     default:
       lderr(m_cct) << "unrecognized object cache status." << dendl;

@@ -13,7 +13,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/cache/SharedPersistentObjectCacherFile.h"
-#include "SimplePolicy.hpp"
+#include "SimplePolicy.h"
 
 
 using librados::Rados;
