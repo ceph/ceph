@@ -36,9 +36,12 @@ function run() {
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
+    CEPH_ARGS+="--bluestore_block_size=4294967296 "
     CEPH_ARGS+="--bluestore_block_db_create=true "
-    CEPH_ARGS+="--bluestore_block_db_size=2147483648 "
-    CEPH_ARGS+="--bluestore_block_wal_size=2147483648 "
+    CEPH_ARGS+="--bluestore_block_db_size=1073741824 "
+    CEPH_ARGS+="--bluestore_block_wal_size=536870912 "
+    CEPH_ARGS+="--bluestore_bluefs_min=536870912 "
+    CEPH_ARGS+="--bluestore_bluefs_min_free=536870912 "
     CEPH_ARGS+="--bluestore_block_wal_create=true "
     CEPH_ARGS+="--bluestore_fsck_on_mount=true "
     local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
@@ -179,7 +182,7 @@ function TEST_bluestore() {
     ceph-objectstore-tool --type bluestore --data-path $dir/0 \
 			  --op fsck --no-mon-config || return 1
 
-    dd if=/dev/zero  of=$dir/0/wal count=2048 bs=1M
+    dd if=/dev/zero  of=$dir/0/wal count=512 bs=1M
     ceph-bluestore-tool --path $dir/0 \
       --dev-target $dir/0/wal \
       --command bluefs-bdev-new-wal || return 1
@@ -191,7 +194,7 @@ function TEST_bluestore() {
     ceph-objectstore-tool --type bluestore --data-path $dir/1 \
 			  --op fsck --no-mon-config || return 1
 
-    dd if=/dev/zero  of=$dir/1/db count=2048 bs=1M
+    dd if=/dev/zero  of=$dir/1/db count=1024 bs=1M
     ceph-bluestore-tool --path $dir/1 \
       --dev-target $dir/1/db \
       --command bluefs-bdev-new-db || return 1
@@ -265,7 +268,7 @@ function TEST_bluestore() {
     ceph-objectstore-tool --type bluestore --data-path $dir/0 \
 			  --op fsck --no-mon-config || return 1
 
-    dd if=/dev/zero  of=$dir/0/db2 count=2048 bs=1M
+    dd if=/dev/zero  of=$dir/0/db2 count=1024 bs=1M
     ceph-bluestore-tool --path $dir/0 \
       --devs-source $dir/0/block.db \
       --dev-target $dir/0/db2 \
@@ -276,11 +279,12 @@ function TEST_bluestore() {
 
     # slow, DB, WAL1 -> slow, DB, WAL2
 
-    dd if=/dev/zero  of=$dir/0/wal2 count=2048 bs=1M
+    dd if=/dev/zero  of=$dir/0/wal2 count=512 bs=1M
     ceph-bluestore-tool --path $dir/0 \
       --devs-source $dir/0/block.wal \
       --dev-target $dir/0/wal2 \
       --command bluefs-bdev-migrate || return 1
+    rm -rf $dir/0/wal
 
     ceph-objectstore-tool --type bluestore --data-path $dir/0 \
 			  --op fsck --no-mon-config || return 1
@@ -289,12 +293,14 @@ function TEST_bluestore() {
     ceph-objectstore-tool --type bluestore --data-path $dir/1 \
 			  --op fsck --no-mon-config || return 1
 
-    dd if=/dev/zero  of=$dir/1/db2 count=2048 bs=1M
+    dd if=/dev/zero  of=$dir/1/db2 count=1024 bs=1M
     ceph-bluestore-tool --path $dir/1 \
       --devs-source $dir/1/block.db \
       --devs-source $dir/1/block.wal \
       --dev-target $dir/1/db2 \
       --command bluefs-bdev-migrate || return 1
+
+    rm -rf $dir/1/db
 
     ceph-objectstore-tool --type bluestore --data-path $dir/1 \
 			  --op fsck --no-mon-config || return 1
@@ -304,6 +310,8 @@ function TEST_bluestore() {
       --dev-target $dir/1/block \
       --command bluefs-bdev-migrate || return 1
 
+    rm -rf $dir/1/db2
+
     ceph-objectstore-tool --type bluestore --data-path $dir/1 \
 			  --op fsck --no-mon-config || return 1
 
@@ -311,7 +319,7 @@ function TEST_bluestore() {
     ceph-objectstore-tool --type bluestore --data-path $dir/2 \
 			  --op fsck --no-mon-config || return 1
 
-    dd if=/dev/zero  of=$dir/2/db2 count=2048 bs=1M
+    dd if=/dev/zero  of=$dir/2/db2 count=1024 bs=1M
     ceph-bluestore-tool --path $dir/2 \
       --devs-source $dir/2/block \
       --dev-target $dir/2/db2 \
@@ -325,7 +333,7 @@ function TEST_bluestore() {
 			  --op fsck --no-mon-config || return 1
 
     # slow + DB + WAL -> slow, DB2
-    dd if=/dev/zero  of=$dir/2/db2 count=2048 bs=1M
+    dd if=/dev/zero  of=$dir/2/db2 count=1024 bs=1M
 
     ceph-bluestore-tool --path $dir/2 \
       --devs-source $dir/2/block \
@@ -338,7 +346,7 @@ function TEST_bluestore() {
 			  --op fsck --no-mon-config || return 1
 
     # slow + WAL -> slow2, WAL2
-    dd if=/dev/zero  of=$dir/3/wal2 count=2048 bs=1M
+    dd if=/dev/zero  of=$dir/3/wal2 count=1024 bs=1M
 
     ceph-bluestore-tool --path $dir/3 \
       --devs-source $dir/3/block \
