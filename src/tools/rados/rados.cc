@@ -3630,8 +3630,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       usage_exit();
     ret = do_cache_flush_evict_all(io_ctx, true);
     if (ret < 0) {
-      cerr << "error from cache-flush-evict-all: "
-	   << cpp_strerror(ret) << std::endl;
+      cerr << "cache-flush-evict-all finished with errors" << std::endl;
       goto out;
     }
   } else if (strcmp(nargs[0], "cache-try-flush-evict-all") == 0) {
@@ -3639,8 +3638,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       usage_exit();
     ret = do_cache_flush_evict_all(io_ctx, false);
     if (ret < 0) {
-      cerr << "error from cache-try-flush-evict-all: "
-	   << cpp_strerror(ret) << std::endl;
+      cerr << "cache-try-flush-evict-all finished with errors" << std::endl;
       goto out;
     }
   } else if (strcmp(nargs[0], "set-redirect") == 0) {
