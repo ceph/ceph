@@ -31,8 +31,9 @@
               class="btn btn-sm btn-primary"
               *ngIf="selection.hasSingleSelection"
               [ngClass]="{'disabled': selection.first().executing}"
-              routerLink="/rbd/edit/{{ selection.first()?.pool_name }}/{{ selection.first()?.name }}">
-        <i class="fa fa-fw fa-pencil"></i><span i18n>Edit</span>
+              routerLink="/rbd/edit/{{ selection.first()?.pool_name | encodeUri }}/{{ selection.first()?.name | encodeUri }}">
+        <i class="fa fa-fw fa-pencil"></i>
+        <span i18n>Edit</span>
       </button>
       <button type="button" dropdownToggle class="btn btn-sm btn-primary dropdown-toggle dropdown-toggle-split">
         <span class="caret"></span>
@@ -44,11 +45,19 @@
         </li>
         <li role="menuitem"
             [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().executing}">
-          <a class="dropdown-item" routerLink="/rbd/edit/{{ selection.first()?.pool_name }}/{{ selection.first()?.name }}"><i class="fa fa-fw fa-pencil"></i><span i18n>Edit</span></a>
+          <a class="dropdown-item"
+             routerLink="/rbd/edit/{{ selection.first()?.pool_name | encodeUri }}/{{ selection.first()?.name | encodeUri }}">
+            <i class="fa fa-fw fa-pencil"></i>
+            <span i18n>Edit</span>
+          </a>
         </li>
         <li role="menuitem"
             [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().executing}">
-          <a class="dropdown-item" routerLink="/rbd/copy/{{ selection.first()?.pool_name }}/{{ selection.first()?.name }}"><i class="fa fa-fw fa-copy"></i><span i18n>Copy</span></a>
+          <a class="dropdown-item"
+             routerLink="/rbd/copy/{{ selection.first()?.pool_name | encodeUri }}/{{ selection.first()?.name | encodeUri }}">
+            <i class="fa fa-fw fa-copy"></i>
+            <span i18n>Copy</span>
+          </a>
         </li>
         <li role="menuitem"
             [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().executing || !selection.first().parent}">

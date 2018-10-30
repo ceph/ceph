@@ -6,6 +6,9 @@ import 'rxjs/add/observable/forkJoin';
 import 'rxjs/add/observable/of';
 import { Observable } from 'rxjs/Observable';
 
+import { cdEncode } from '../decorators/cd-encode';
+
+@cdEncode
 @Injectable()
 export class RgwBucketService {
 
@@ -57,7 +60,7 @@ export class RgwBucketService {
     params = params.append('bucket', bucket);
     params = params.append('bucket-id', bucketId as string);
     params = params.append('uid', uid);
-    return this.http.put(this.url, null, {params: params});
+    return this.http.put(this.url, null, { params: params });
   }
 
   delete(bucket: string, purgeObjects = true) {

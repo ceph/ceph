@@ -17,7 +17,8 @@
           identifier="bucket"
           (fetchData)="getBucketList()">
   <div class="table-actions">
-    <div class="btn-group" dropdown>
+    <div class="btn-group"
+         dropdown>
       <button type="button"
               class="btn btn-sm btn-primary"
               *ngIf="!selection.hasSelection"
@@ -28,7 +29,7 @@
       <button type="button"
               class="btn btn-sm btn-primary"
               *ngIf="selection.hasSingleSelection"
-              routerLink="/rgw/bucket/edit/{{ selection.first()?.bucket }}">
+              routerLink="/rgw/bucket/edit/{{ selection.first()?.bucket | encodeUri }}">
         <i class="fa fa-fw fa-pencil"></i>
         <ng-container i18n>Edit</ng-container>
       </button>
@@ -59,7 +60,7 @@
         <li role="menuitem"
             [ngClass]="{'disabled': !selection.hasSingleSelection}">
           <a class="dropdown-item"
-             routerLink="/rgw/bucket/edit/{{ selection.first()?.bucket }}"
+             routerLink="/rgw/bucket/edit/{{ selection.first()?.bucket | encodeUri }}"
              i18n>
             <i class="fa fa-fw fa-pencil"></i>
             Edit
