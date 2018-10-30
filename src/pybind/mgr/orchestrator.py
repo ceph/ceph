@@ -154,7 +154,7 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def describe_service(self, service_type, service_id):
+    def describe_service(self, service_type=None, service_id=None, node_name=None):
         """
         Describe a service (of any kind) that is already configured in
         the orchestrator.  For example, when viewing an OSD in the dashboard
@@ -319,6 +319,9 @@ class ServiceLocation(object):
         # This is the <foo> in mds.<foo>, the ID that will appear
         # in the FSMap/ServiceMap.
         self.daemon_name = None
+
+        # The type of service (osd, mon, mgr, etc.)
+        self.service_type = None
 
 
 class ServiceDescription(object):
