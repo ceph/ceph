@@ -17,7 +17,12 @@ setup(
         'pytest >=2.1.3',
         'tox',
     ],
-    scripts = ['bin/ceph-volume', 'bin/ceph-volume-systemd'],
+    entry_points = dict(
+        console_scripts = [
+            'ceph-volume = ceph_volume.main:Volume',
+            'ceph-volume-systemd = ceph_volume.systemd:main',
+        ],
+    ),
     classifiers = [
         'Environment :: Console',
         'Intended Audience :: Information Technology',
@@ -29,5 +34,4 @@ setup(
         'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
     ]
-
 )
