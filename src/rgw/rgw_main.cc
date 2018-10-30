@@ -340,6 +340,12 @@ int main(int argc, const char **argv)
     apis_map[*li] = true;
   }
 
+  /* warn about insecure keystone secret config options */
+  if (!(g_ceph_context->_conf->rgw_keystone_admin_token.empty() ||
+	g_ceph_context->_conf->rgw_keystone_admin_password.empty())) {
+    dout(0) << "WARNING: rgw_keystone_admin_token and rgw_keystone_admin_password should be avoided as they can expose secrets.  Prefer the new rgw_keystone_admin_token_path and rgw_keystone_admin_password_path options, which read their secrets from files." << dendl;
+  }
+
   // S3 website mode is a specialization of S3
   const bool s3website_enabled = apis_map.count("s3website") > 0;
   const bool sts_enabled = apis_map.count("sts") > 0;
