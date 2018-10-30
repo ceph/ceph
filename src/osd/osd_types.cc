@@ -4022,7 +4022,7 @@ void pg_log_entry_t::decode_with_checksum(bufferlist::const_iterator& p)
 
 void pg_log_entry_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(11, 4, bl);
+  ENCODE_START(12, 4, bl);
   encode(op, bl);
   encode(soid, bl);
   encode(version, bl);
@@ -4049,12 +4049,14 @@ void pg_log_entry_t::encode(bufferlist &bl) const
   encode(extra_reqids, bl);
   if (op == ERROR)
     encode(return_code, bl);
+  if (!extra_reqids.empty())
+    encode(extra_reqid_return_codes, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_log_entry_t::decode(bufferlist::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(11, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(12, 4, 4, bl);
   decode(op, bl);
   if (struct_v < 2) {
     sobject_t old_soid;
@@ -4108,6 +4110,8 @@ void pg_log_entry_t::decode(bufferlist::const_iterator &bl)
     decode(extra_reqids, bl);
   if (struct_v >= 11 && op == ERROR)
     decode(return_code, bl);
+  if (struct_v >= 12 && !extra_reqids.empty())
+    decode(extra_reqid_return_codes, bl);
   DECODE_FINISH(bl);
 }
 
@@ -4119,12 +4123,17 @@ void pg_log_entry_t::dump(Formatter *f) const
   f->dump_stream("prior_version") << prior_version;
   f->dump_stream("reqid") << reqid;
   f->open_array_section("extra_reqids");
+  uint32_t idx = 0;
   for (auto p = extra_reqids.begin();
        p != extra_reqids.end();
-       ++p) {
+       ++idx, ++p) {
     f->open_object_section("extra_reqid");
     f->dump_stream("reqid") << p->first;
     f->dump_stream("user_version") << p->second;
+    auto it = extra_reqid_return_codes.find(idx);
+    if (it != extra_reqid_return_codes.end()) {
+      f->dump_int("return_code", it->second);
+    }
     f->close_section();
   }
   f->close_section();
@@ -4495,7 +4504,7 @@ void object_copy_cursor_t::generate_test_instances(list<object_copy_cursor_t*>& 
 
 void object_copy_data_t::encode(bufferlist& bl, uint64_t features) const
 {
-  ENCODE_START(7, 5, bl);
+  ENCODE_START(8, 5, bl);
   encode(size, bl);
   encode(mtime, bl);
   encode(attrs, bl);
@@ -4511,6 +4520,7 @@ void object_copy_data_t::encode(bufferlist& bl, uint64_t features) const
   encode(reqids, bl);
   encode(truncate_seq, bl);
   encode(truncate_size, bl);
+  encode(reqid_return_codes, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -4574,6 +4584,9 @@ void object_copy_data_t::decode(bufferlist::const_iterator& bl)
       decode(truncate_seq, bl);
       decode(truncate_size, bl);
     }
+    if (struct_v >= 8) {
+      decode(reqid_return_codes, bl);
+    }
   }
   DECODE_FINISH(bl);
 }
@@ -4633,12 +4646,17 @@ void object_copy_data_t::dump(Formatter *f) const
     f->dump_unsigned("snap", *p);
   f->close_section();
   f->open_array_section("reqids");
+  uint32_t idx = 0;
   for (auto p = reqids.begin();
        p != reqids.end();
-       ++p) {
+       ++idx, ++p) {
     f->open_object_section("extra_reqid");
     f->dump_stream("reqid") << p->first;
     f->dump_stream("user_version") << p->second;
+    auto it = reqid_return_codes.find(idx);
+    if (it != reqid_return_codes.end()) {
+      f->dump_int("return_code", it->second);
+    }
     f->close_section();
   }
   f->close_section();
