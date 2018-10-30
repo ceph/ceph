@@ -6668,20 +6668,20 @@ struct region_t {
   uint64_t logical_offset;
   uint64_t blob_xoffset;   //region offset within the blob
   uint64_t length;
-  bufferlist bl;
 
   // used later in read process
   uint64_t front = 0;
-  uint64_t r_off = 0;
 
-  region_t(uint64_t offset, uint64_t b_offs, uint64_t len)
+  region_t(uint64_t offset, uint64_t b_offs, uint64_t len, uint64_t front = 0)
     : logical_offset(offset),
     blob_xoffset(b_offs),
-    length(len){}
+    length(len),
+    front(front){}
   region_t(const region_t& from)
     : logical_offset(from.logical_offset),
     blob_xoffset(from.blob_xoffset),
-    length(from.length){}
+    length(from.length),
+    front(from.front){}
 
   friend ostream& operator<<(ostream& out, const region_t& r) {
     return out << "0x" << std::hex << r.logical_offset << ":"
@@ -6689,7 +6689,24 @@ struct region_t {
   }
 };
 
-typedef list<region_t> regions2read_t;
+// merged blob read request
+struct read_req_t {
+  uint64_t r_off = 0;
+  uint64_t r_len = 0;
+  bufferlist bl;
+  std::list<region_t> regs; // original read regions
+
+  read_req_t(uint64_t off, uint64_t len) : r_off(off), r_len(len) {}
+
+  friend ostream& operator<<(ostream& out, const read_req_t& r) {
+    out << "{<0x" << std::hex << r.r_off << ", 0x" << r.r_len << "> : [";
+    for (const auto& reg : r.regs)
+      out << reg;
+    return out << "]}" << std::dec;
+  }
+};
+
+typedef list<read_req_t> regions2read_t;
 typedef map<BlueStore::BlobRef, regions2read_t> blobs2read_t;
 
 int BlueStore::_do_read(
@@ -6777,6 +6794,7 @@ int BlueStore::_do_read(
 	     << std::dec << dendl;
 
     auto pc = cache_res.begin();
+    uint64_t chunk_size = bptr->get_blob().get_chunk_size(block_size);
     while (b_len > 0) {
       unsigned l;
       if (pc != cache_res.end() &&
@@ -6794,7 +6812,36 @@ int BlueStore::_do_read(
 	}
 	dout(30) << __func__ << "    will read 0x" << std::hex << pos << ": 0x"
 		 << b_off << "~" << l << std::dec << dendl;
-	blobs2read[bptr].emplace_back(region_t(pos, b_off, l));
+	// merge regions
+	{
+	  uint64_t r_off = b_off;
+	  uint64_t r_len = l;
+	  uint64_t front = r_off % chunk_size;
+	  if (front) {
+	    r_off -= front;
+	    r_len += front;
+	  }
+	  unsigned tail = r_len % chunk_size;
+	  if (tail) {
+	    r_len += chunk_size - tail;
+	  }
+	  bool merged = false;
+	  regions2read_t& r2r = blobs2read[bptr];
+	  if (r2r.size()) {
+	    read_req_t& pre = r2r.back();
+	    if (r_off <= (pre.r_off + pre.r_len)) {
+	      front += (r_off - pre.r_off);
+	      pre.r_len += (r_off + r_len - pre.r_off - pre.r_len);
+	      pre.regs.emplace_back(region_t(pos, b_off, l, front));
+	      merged = true;
+	    }
+          }
+	  if (!merged) {
+	    read_req_t req(r_off, r_len);
+	    req.regs.emplace_back(region_t(pos, b_off, l, front));
+	    r2r.emplace_back(std::move(req));
+	  }
+	}
 	++num_regions;
       }
       pos += l;
@@ -6813,8 +6860,9 @@ int BlueStore::_do_read(
   IOContext ioc(cct, NULL, true); // allow EIO
   for (auto& p : blobs2read) {
     const BlobRef& bptr = p.first;
+    regions2read_t& r2r = p.second;
     dout(20) << __func__ << "  blob " << *bptr << std::hex
-	     << " need " << p.second << std::dec << dendl;
+	     << " need " << r2r << std::dec << dendl;
     if (bptr->get_blob().is_compressed()) {
       // read the whole thing
       if (compressed_blob_bls.empty()) {
@@ -6828,7 +6876,7 @@ int BlueStore::_do_read(
 	[&](uint64_t offset, uint64_t length) {
 	  int r;
 	  // use aio if there are more regions to read than those in this blob
-	  if (num_regions > p.second.size()) {
+	  if (num_regions > r2r.size()) {
 	    r = bdev->aio_read(offset, length, &bl, &ioc);
 	  } else {
 	    r = bdev->read(offset, length, &bl, &ioc, false);
@@ -6847,36 +6895,24 @@ int BlueStore::_do_read(
       }
     } else {
       // read the pieces
-      for (auto& reg : p.second) {
-	// determine how much of the blob to read
-	uint64_t chunk_size = bptr->get_blob().get_chunk_size(block_size);
-	reg.r_off = reg.blob_xoffset;
-	uint64_t r_len = reg.length;
-	reg.front = reg.r_off % chunk_size;
-	if (reg.front) {
-	  reg.r_off -= reg.front;
-	  r_len += reg.front;
-	}
-	unsigned tail = r_len % chunk_size;
-	if (tail) {
-	  r_len += chunk_size - tail;
-	}
+      for (auto& req : r2r) {
 	dout(20) << __func__ << "    region 0x" << std::hex
-		 << reg.logical_offset
-		 << ": 0x" << reg.blob_xoffset << "~" << reg.length
-		 << " reading 0x" << reg.r_off << "~" << r_len << std::dec
+		 << req.regs.front().logical_offset
+		 << ": 0x" << req.regs.front().blob_xoffset
+		 << " reading 0x" << req.r_off
+		 << "~" << req.r_len << std::dec
 		 << dendl;
 
 	// read it
 	r = bptr->get_blob().map(
-	  reg.r_off, r_len,
+	  req.r_off, req.r_len,
 	  [&](uint64_t offset, uint64_t length) {
 	    int r;
 	    // use aio if there is more than one region to read
 	    if (num_regions > 1) {
-	      r = bdev->aio_read(offset, length, &reg.bl, &ioc);
+	      r = bdev->aio_read(offset, length, &req.bl, &ioc);
 	    } else {
-	      r = bdev->read(offset, length, &reg.bl, &ioc, false);
+	      r = bdev->read(offset, length, &req.bl, &ioc, false);
 	    }
 	    if (r < 0)
               return r;
@@ -6891,7 +6927,7 @@ int BlueStore::_do_read(
           }
           assert(r == 0);
         }
-	assert(reg.bl.length() == r_len);
+	assert(req.bl.length() == req.r_len);
       }
     }
   }
@@ -6912,13 +6948,14 @@ int BlueStore::_do_read(
   blobs2read_t::iterator b2r_it = blobs2read.begin();
   while (b2r_it != blobs2read.end()) {
     const BlobRef& bptr = b2r_it->first;
+    regions2read_t& r2r = b2r_it->second;
     dout(20) << __func__ << "  blob " << *bptr << std::hex
-	     << " need 0x" << b2r_it->second << std::dec << dendl;
+	     << " need 0x" << r2r << std::dec << dendl;
     if (bptr->get_blob().is_compressed()) {
       assert(p != compressed_blob_bls.end());
       bufferlist& compressed_bl = *p++;
       if (_verify_csum(o, &bptr->get_blob(), 0, compressed_bl,
-		       b2r_it->second.front().logical_offset) < 0) {
+                      r2r.front().regs.front().logical_offset) < 0) {
 	return -EIO;
       }
       bufferlist raw_bl;
@@ -6929,24 +6966,27 @@ int BlueStore::_do_read(
 	bptr->shared_blob->bc.did_read(bptr->shared_blob->get_cache(), 0,
 				       raw_bl);
       }
-      for (auto& i : b2r_it->second) {
-	ready_regions[i.logical_offset].substr_of(
-	  raw_bl, i.blob_xoffset, i.length);
+      for (auto& req : r2r) {
+        for (auto& r : req.regs) {
+          ready_regions[r.logical_offset].substr_of(
+            raw_bl, r.blob_xoffset, r.length);
+        }
       }
     } else {
-      for (auto& reg : b2r_it->second) {
-	if (_verify_csum(o, &bptr->get_blob(), reg.r_off, reg.bl,
-			 reg.logical_offset) < 0) {
-	  return -EIO;
+      for (auto& req : r2r) {
+	if (_verify_csum(o, &bptr->get_blob(), req.r_off, req.bl,
+			 req.regs.front().logical_offset) < 0) {
+          return -EIO;
 	}
 	if (buffered) {
 	  bptr->shared_blob->bc.did_read(bptr->shared_blob->get_cache(),
-					 reg.r_off, reg.bl);
+					 req.r_off, req.bl);
 	}
 
 	// prune and keep result
-	ready_regions[reg.logical_offset].substr_of(
-	  reg.bl, reg.front, reg.length);
+	for (const auto& r : req.regs) {
+	  ready_regions[r.logical_offset].substr_of(req.bl, r.front, r.length);
+        }
       }
     }
     ++b2r_it;
