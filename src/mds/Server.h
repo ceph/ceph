@@ -66,6 +66,7 @@ enum {
   l_mdss_req_setxattr_latency,
   l_mdss_req_symlink_latency,
   l_mdss_req_unlink_latency,
+  l_mdss_cap_revoke_eviction,
   l_mdss_last,
 };
 
@@ -89,6 +90,8 @@ private:
 
   feature_bitset_t supported_features;
   feature_bitset_t required_client_features;
+
+  double cap_revoke_eviction_timeout = 0;
 
   friend class MDSContinuation;
   friend class ServerContext;
@@ -316,6 +319,10 @@ public:
   void _rename_rollback_finish(MutationRef& mut, MDRequestRef& mdr, CDentry *srcdn, version_t srcdnpv,
 			       CDentry *destdn, CDentry *staydn, map<client_t,MClientSnap*> splits[2],
 			       bool finish_mdr);
+
+  void evict_cap_revoke_non_responders();
+  void handle_conf_change(const struct md_config_t *conf,
+                          const std::set <std::string> &changed);
 
 private:
   void reply_client_request(MDRequestRef& mdr, MClientReply *reply);
