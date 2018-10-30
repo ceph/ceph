@@ -1,0 +1,21 @@
+ceph-menv
+
+Environment assistant for use in conjuction with multiple ceph vstart (or more accurately mstart) clusters. Eliminates the need to specify the cluster that is being used with each and every command. Can provide a shell prompt feedback about the currently used cluster.
+
+
+Usage:
+
+$ mset <cluster>
+
+
+For example:
+
+$ mstart.sh c1 -n
+$ mset c1
+[ c1 ] $ ceph -w
+
+
+To un-set cluster:
+
+$ mset
+
