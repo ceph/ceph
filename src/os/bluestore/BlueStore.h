@@ -2589,13 +2589,6 @@ private:
     RWLock::RLocker l(debug_read_error_lock);
     return debug_mdata_error_objects.count(o);
   }
-  void _debug_obj_on_delete(const ghobject_t& o) {
-    if (cct->_conf->bluestore_debug_inject_read_err) {
-      RWLock::WLocker l(debug_read_error_lock);
-      debug_data_error_objects.erase(o);
-      debug_mdata_error_objects.erase(o);
-    }
-  }
 
 private:
 
