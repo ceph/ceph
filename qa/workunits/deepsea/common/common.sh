@@ -88,7 +88,7 @@ function run_stage_3 {
         _disable_tuned
     fi
     _run_stage 3 "$@"
-    ceph_disk_list_on_storage_node
+    lsblk_on_storage_node
     ceph osd tree
     cat_ceph_conf
     admin_auth_status
@@ -290,20 +290,6 @@ EOF
     _run_test_script_on_node $TESTSCRIPT $STORAGENODE
 }
 
-function ceph_disk_list_on_storage_node {
-    local TESTSCRIPT=/tmp/ceph_disk_list_test.sh
-    local STORAGENODE=$(_first_x_node storage)
-    cat << 'EOF' > $TESTSCRIPT
-set -ex
-trap 'echo "Result: NOT_OK"' ERR
-echo "running lsblk and ceph-disk list as $(whoami) on $(hostname --fqdn)"
-lsblk
-ceph-disk list
-echo "Result: OK"
-EOF
-    _run_test_script_on_node $TESTSCRIPT $STORAGENODE
-}
-
 function cephfs_mount_and_sanity_test {
     #
     # run cephfs mount test script on the client node
@@ -449,17 +435,6 @@ test -d "$ETC_CEPH_OSD_WANTS" && false
 echo "Asserting that $RUN_CEPH_OSD_WANTS exists, is a directory, and is not empty"
 test -d "$RUN_CEPH_OSD_WANTS"
 test -n "$(ls --almost-all $RUN_CEPH_OSD_WANTS)"
-echo "Result: OK"
-EOF
-    _run_test_script_on_node $TESTSCRIPT $STORAGENODE
-}
-
-function ceph_disk_list {
-    local TESTSCRIPT=/tmp/ceph_disk_list.sh
-    local STORAGENODE=$(_first_x_node storage)
-    cat << 'EOF' > $TESTSCRIPT
-set -x
-ceph-disk list
 echo "Result: OK"
 EOF
     _run_test_script_on_node $TESTSCRIPT $STORAGENODE
