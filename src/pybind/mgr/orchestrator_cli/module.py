@@ -21,6 +21,13 @@ class OrchestratorCli(MgrModule):
             "perm": "r"
         },
         {
+            'cmd': "orchestrator service ls "
+                   "name=host,type=CephString,req=false "
+                   "name=type,type=CephString,req=false ",
+            "desc": "List services known to orchestrator" ,
+            "perm": "r"
+        },
+        {
             'cmd': "orchestrator service status "
                    "name=svc_type,type=CephString "
                    "name=svc_id,type=CephString ",
@@ -118,6 +125,29 @@ class OrchestratorCli(MgrModule):
 
         return 0, result, ""
 
+    def _list_services(self, cmd):
+        hostname = cmd.get('host', None)
+        service_type = cmd.get('type', None)
+
+        completion = self._oremote("describe_service", service_type, None, hostname)
+        self._wait([completion])
+        services = completion.result
+
+        if len(services) == 0:
+            return 0, "", "No services reported"
+        else:
+            # Sort the list for display
+            services.sort(key = lambda s: (s.service_type, s.nodename, s.daemon_name))
+            lines = []
+            for s in services:
+                lines.append("{0}.{1} {2} {3}".format(
+                    s.service_type,
+                    s.daemon_name,
+                    s.nodename,
+                    s.container_id))
+
+            return 0, "\n".join(lines), ""
+
     def _service_status(self, cmd):
         svc_type = cmd['svc_type']
         svc_id = cmd['svc_id']
@@ -125,7 +155,7 @@ class OrchestratorCli(MgrModule):
         # XXX this is kind of confusing for people because in the orchestrator
         # context the service ID for MDS is the filesystem ID, not the daemon ID
 
-        completion = self._oremote("describe_service", svc_type, svc_id)
+        completion = self._oremote("describe_service", svc_type, svc_id, None)
 
         self._wait([completion])
 
@@ -275,6 +305,8 @@ class OrchestratorCli(MgrModule):
     def _handle_command(self, _, cmd):
         if cmd['prefix'] == "orchestrator device ls":
             return self._list_devices(cmd)
+        elif cmd['prefix'] == "orchestrator service ls":
+            return self._list_services(cmd)
         elif cmd['prefix'] == "orchestrator service status":
             return self._service_status(cmd)
         elif cmd['prefix'] == "orchestrator service add":
