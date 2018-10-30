@@ -9,7 +9,7 @@ from . import Controller, BaseController, Endpoint, ENDPOINT_MAP
 from .. import logger, mgr
 
 
-@Controller('/docs')
+@Controller('/docs', secure=False)
 class Docs(BaseController):
 
     @classmethod
@@ -62,15 +62,10 @@ class Docs(BaseController):
             return None
 
         return {
-            'in': "body",
-            'name': "body",
-            'description': "",
-            'required': True,
-            'schema': {
-                'type': "object",
-                'required': required,
-                'properties': props
-            }
+            'title': '',
+            'type': "object",
+            'required': required,
+            'properties': props
         }
 
     @classmethod
@@ -111,7 +106,9 @@ class Docs(BaseController):
         res = {
             'name': param['name'],
             'in': ptype,
-            'type': cls._gen_type(param)
+            'schema': {
+                'type': cls._gen_type(param)
+            }
         }
         if param['required']:
             res['required'] = True
@@ -149,11 +146,6 @@ class Docs(BaseController):
                 params.extend([self._gen_param(p, 'query')
                                for p in endpoint.query_params])
 
-                if method.lower() in ['post', 'put']:
-                    body_params = self._gen_body_param(endpoint.body_params)
-                    if body_params:
-                        params.append(body_params)
-
                 methods[method.lower()] = {
                     'tags': [endpoint.group],
                     'summary': "",
@@ -164,9 +156,22 @@ class Docs(BaseController):
                         "application/json"
                     ],
                     'parameters': params,
-                    'responses': self._gen_responses_descriptions(method),
-                    "security": [""]
+                    'responses': self._gen_responses_descriptions(method)
                 }
+
+                if method.lower() in ['post', 'put']:
+                    body_params = self._gen_body_param(endpoint.body_params)
+                    if body_params:
+                        methods[method.lower()]['requestBody'] = {
+                            'content': {
+                                'application/json': {
+                                    'schema': body_params
+                                }
+                            }
+                        }
+
+                if endpoint.is_secure:
+                    methods[method.lower()]['security'] = [{'jwt': []}]
 
             if not skip:
                 paths[path[len(baseUrl):]] = methods
@@ -180,7 +185,7 @@ class Docs(BaseController):
             scheme = 'http'
 
         spec = {
-            'swagger': "2.0",
+            'openapi': "3.0.0",
             'info': {
                 'description': "Please note that this API is not an official "
                                "Ceph REST API to be used by third-party "
@@ -193,9 +198,19 @@ class Docs(BaseController):
             },
             'host': host,
             'basePath': baseUrl,
+            'servers': [{'url': "{}{}".format(cherrypy.request.base, baseUrl)}],
             'tags': self._gen_tags(all_endpoints),
             'schemes': [scheme],
-            'paths': paths
+            'paths': paths,
+            'components': {
+                'securitySchemes': {
+                    'jwt': {
+                        'type': 'http',
+                        'scheme': 'bearer',
+                        'bearerFormat': 'JWT'
+                    }
+                }
+            }
         }
 
         return spec
@@ -208,13 +223,28 @@ class Docs(BaseController):
     def api_all_json(self):
         return self._gen_spec(True, "/api")
 
-    @Endpoint(json_response=False)
-    def __call__(self, all_endpoints=False):
+    def _swagger_ui_page(self, all_endpoints=False, token=None):
         base = cherrypy.request.base
         if all_endpoints:
             spec_url = "{}/docs/api-all.json".format(base)
         else:
             spec_url = "{}/docs/api.json".format(base)
+
+        auth_header = cherrypy.request.headers.get('authorization')
+        jwt_token = ""
+        if auth_header is not None:
+            scheme, params = auth_header.split(' ', 1)
+            if scheme.lower() == 'bearer':
+                jwt_token = params
+        else:
+            if token is not None:
+                jwt_token = token
+
+        apiKeyCallback = """, onComplete: () => {{
+                        ui.preauthorizeApiKey('jwt', '{}');
+                    }}
+        """.format(jwt_token)
+
         page = """
         <!DOCTYPE html>
         <html>
@@ -261,12 +291,22 @@ class Docs(BaseController):
                         SwaggerUIBundle.presets.apis
                     ],
                     layout: "BaseLayout"
+                    {}
                 }})
                 window.ui = ui
             }}
         </script>
         </body>
         </html>
-        """.format(spec_url)
+        """.format(spec_url, apiKeyCallback)
 
         return page
+
+    @Endpoint(json_response=False)
+    def __call__(self, all_endpoints=False):
+        return self._swagger_ui_page(all_endpoints)
+
+    @Endpoint('POST', path="/", json_response=False,
+              query_params="{all_endpoints}")
+    def _with_token(self, token, all_endpoints=False):
+        return self._swagger_ui_page(all_endpoints, token)

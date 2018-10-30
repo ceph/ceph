@@ -59,9 +59,8 @@ if 'COVERAGE_ENABLED' in os.environ:
 # pylint: disable=wrong-import-position
 from . import logger, mgr
 from .controllers import generate_routes, json_error_page
-from .tools import SessionExpireAtBrowserCloseTool, NotificationQueue, \
-                   RequestLoggingTool, TaskManager
-from .services.auth import AuthManager, AuthManagerTool
+from .tools import NotificationQueue, RequestLoggingTool, TaskManager
+from .services.auth import AuthManager, AuthManagerTool, JwtManager
 from .services.access_control import ACCESS_CONTROL_COMMANDS, \
                                      handle_access_control_command
 from .services.exception import dashboard_exception_handler
@@ -133,7 +132,6 @@ class CherryPyConfig(object):
 
         # Initialize custom handlers.
         cherrypy.tools.authenticate = AuthManagerTool()
-        cherrypy.tools.session_expire_at_browser_close = SessionExpireAtBrowserCloseTool()
         cherrypy.tools.request_logging = RequestLoggingTool()
         cherrypy.tools.dashboard_exception_handler = HandlerWrapperTool(dashboard_exception_handler,
                                                                         priority=31)
@@ -228,10 +226,15 @@ class Module(MgrModule, CherryPyConfig):
 
     COMMANDS = [
         {
-            'cmd': 'dashboard set-session-expire '
+            'cmd': 'dashboard set-jwt-token-ttl '
                    'name=seconds,type=CephInt',
-            'desc': 'Set the session expire timeout',
+            'desc': 'Set the JWT token TTL in seconds',
             'perm': 'w'
+        },
+        {
+            'cmd': 'dashboard get-jwt-token-ttl',
+            'desc': 'Get the JWT token TTL in seconds',
+            'perm': 'r'
         },
         {
             "cmd": "dashboard create-self-signed-cert",
@@ -245,7 +248,7 @@ class Module(MgrModule, CherryPyConfig):
     OPTIONS = [
         {'name': 'server_addr'},
         {'name': 'server_port'},
-        {'name': 'session-expire'},
+        {'name': 'jwt_token_ttl'},
         {'name': 'password'},
         {'name': 'url_prefix'},
         {'name': 'username'},
@@ -336,9 +339,12 @@ class Module(MgrModule, CherryPyConfig):
         res = handle_access_control_command(cmd)
         if res[0] != -errno.ENOSYS:
             return res
-        elif cmd['prefix'] == 'dashboard set-session-expire':
-            self.set_config('session-expire', str(cmd['seconds']))
-            return 0, 'Session expiration timeout updated', ''
+        elif cmd['prefix'] == 'dashboard set-jwt-token-ttl':
+            self.set_config('jwt_token_ttl', str(cmd['seconds']))
+            return 0, 'JWT token TTL updated', ''
+        elif cmd['prefix'] == 'dashboard get-jwt-token-ttl':
+            ttl = self.get_config('jwt_token_ttl', JwtManager.JWT_TOKEN_TTL)
+            return 0, str(ttl), ''
         elif cmd['prefix'] == 'dashboard create-self-signed-cert':
             self.create_self_signed_cert()
             return 0, 'Self-signed certificate created', ''

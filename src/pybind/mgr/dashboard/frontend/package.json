@@ -16,7 +16,6 @@
     "fix:prettier": "prettier --write \"{src,e2e}/**/*.{ts,scss}\"",
     "fix:tslint": "npm run lint:tslint -- --fix",
     "fix": "npm run fix:tslint; npm run fix:prettier"
-
   },
   "private": true,
   "jest": {
@@ -52,6 +51,7 @@
     "@angular/platform-browser": "6.1.4",
     "@angular/platform-browser-dynamic": "6.1.4",
     "@angular/router": "6.1.4",
+    "@auth0/angular-jwt": "^2.0.0",
     "@swimlane/ngx-datatable": "13.1.0",
     "@types/lodash": "4.14.116",
     "awesome-bootstrap-checkbox": "0.3.7",
