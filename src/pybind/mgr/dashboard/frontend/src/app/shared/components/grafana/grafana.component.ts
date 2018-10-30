@@ -55,7 +55,9 @@ export class GrafanaComponent implements OnInit, OnChanges {
       }
 
       const releaseName = this.cephReleaseNamePipe.transform(summary.version);
-      this.docsUrl = `http://docs.ceph.com/docs/${releaseName}/mgr/dashboard/`;
+      this.docsUrl =
+        `http://docs.ceph.com/docs/${releaseName}/mgr/dashboard/` +
+        `#enabling-the-embedding-of-grafana-dashboards`;
 
       setTimeout(() => {
         subs.unsubscribe();
