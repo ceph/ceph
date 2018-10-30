@@ -97,8 +97,8 @@ function _initialize_and_vet_nodes {
     test "$TOTAL_NODES" -ge "$MIN_NODES"
     STORAGE_NODES=$((TOTAL_NODES - CLIENT_NODES))
     echo "WWWW"
-    echo "This script will use DeepSea to deploy a cluster of $TOTAL_NODES nodes total (including Salt Master)."
-    echo "Of these, $CLIENT_NODES will be clients (nodes without any DeepSea roles except \"admin\")."
+    echo "This script will use DeepSea with a cluster of $TOTAL_NODES nodes total (including Salt Master)."
+    echo "Of these, $CLIENT_NODES are assumed to be clients (nodes without any DeepSea roles except \"admin\")."
 }
 
 function _zypper_ps {
@@ -130,6 +130,19 @@ function initialization_sequence {
     _initialize_storage_profile
     _initialize_and_vet_nodes
     set -x
+    test $STORAGE_NODES -lt 4 && export DEV_ENV="true"
+}
+
+function pared_down_init_sequence {
+    test "$ALREADY_INITIALIZED" && return 0
+    set +x
+    TOTAL_MINIONS=$(_initialize_minion_array)
+    TOTAL_NODES=$(json_total_nodes)
+    test "$TOTAL_NODES" = "$TOTAL_MINIONS"
+    _ping_minions_until_all_respond
+    _initialize_and_vet_nodes
+    set -x
+    test "$STORAGE_NODES" -lt "4" -a -z "$DEV_ENV" && export DEV_ENV="true" || true
 }
 
 function salt_api_test {
@@ -151,12 +164,12 @@ function deploy_ceph {
     fi
     if _ceph_cluster_running ; then
         echo "Running ceph cluster detected: skipping deploy phase"
+        pared_down_init_sequence
         return 0
     fi
     if [ "$START_STAGE" = "0" ] ; then
         if [ -z "$TEUTHOLOGY" ] ; then
             initialization_sequence
-            test $STORAGE_NODES -lt 4 && export DEV_ENV="true"
         fi
         run_stage_0 "$CLI"
         _zypper_ps

@@ -149,10 +149,6 @@ set -x
 
 # deploy phase
 deploy_ceph
-if [ "$TEUTHOLOGY" ] ; then
-    echo "Development work underway: finishing early!"
-    exit 0
-fi
 
 # verification phase
 ceph_health_test
