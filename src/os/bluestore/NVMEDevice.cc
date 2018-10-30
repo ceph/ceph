@@ -85,7 +85,7 @@ class SharedDriverData {
   spdk_nvme_transport_id trid;
   spdk_nvme_ctrlr *ctrlr;
   spdk_nvme_ns *ns;
-  uint64_t block_size = 0;
+  uint32_t block_size = 0;
   uint32_t sector_size = 0;
   uint64_t size = 0;
 
@@ -99,7 +99,7 @@ class SharedDriverData {
         ctrlr(c),
         ns(ns_) {
     sector_size = spdk_nvme_ns_get_sector_size(ns);
-    block_size = std::max(CEPH_PAGE_SIZE, sector_size);
+    block_size = spdk_nvme_ns_get_extended_sector_size(ns);
     size = ((uint64_t)sector_size) * spdk_nvme_ns_get_num_sectors(ns);
   }
 
@@ -122,7 +122,7 @@ class SharedDriverData {
     registered_devices.swap(new_devices);
   }
 
-  uint64_t get_block_size() {
+  uint32_t get_block_size() {
     return block_size;
   }
   uint64_t get_size() {
@@ -136,7 +136,7 @@ class SharedDriverQueueData {
   spdk_nvme_ctrlr *ctrlr;
   spdk_nvme_ns *ns;
   std::string sn;
-  uint64_t block_size;
+  uint32_t block_size;
   uint32_t sector_size;
   uint32_t max_queue_depth;
   struct spdk_nvme_qpair *qpair;
