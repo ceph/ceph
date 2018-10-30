@@ -7339,6 +7339,89 @@ TEST_P(StoreTest, allocateBlueFSTest) {
   ASSERT_EQ(r, 0);
 }
 
+TEST_P(StoreTest, mergeRegionTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  SetVal(g_conf(), "bluestore_fsck_on_mount", "true");
+  SetVal(g_conf(), "bluestore_fsck_on_umount", "true");
+  SetVal(g_conf(), "bdev_debug_inflight_ios", "true");
+  g_ceph_context->_conf.apply_changes(nullptr);
+
+  uint32_t chunk_size = g_ceph_context->_conf->bdev_block_size; 
+  int r = -1;
+  coll_t cid;
+  ghobject_t hoid(hobject_t(sobject_t("Object", CEPH_NOSNAP)));
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.touch(cid, hoid);
+    cerr << "Creating object " << hoid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  bufferlist bl5;
+  bl5.append("abcde");
+  uint64_t offset = 0;
+  { // 1. same region
+    ObjectStore::Transaction t;
+    t.write(cid, hoid, offset, 5, bl5);
+    t.write(cid, hoid, 0xa + offset, 5, bl5);
+    t.write(cid, hoid, 0x14 + offset, 5, bl5);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  { // 2. adjacent regions
+    ObjectStore::Transaction t;
+    offset = chunk_size;
+    t.write(cid, hoid, offset, 5, bl5);
+    t.write(cid, hoid, offset + chunk_size + 3, 5, bl5);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  { // 3. front merge
+    ObjectStore::Transaction t;
+    offset = chunk_size * 2;
+    t.write(cid, hoid, offset, 5, bl5);
+    t.write(cid, hoid, offset + chunk_size - 2, 5, bl5);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  { // 4. back merge
+    ObjectStore::Transaction t;
+    bufferlist blc2;
+    blc2.append_zero(chunk_size + 2);
+
+    offset = chunk_size * 3;
+    t.write(cid, hoid, offset, chunk_size + 2, blc2);
+    t.write(cid, hoid, offset + chunk_size + 3, 5, bl5);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  { // 5. overlapping
+    ObjectStore::Transaction t;
+    uint64_t final_len = 0;
+    offset = chunk_size * 10;
+    bufferlist bl2c2;
+    bl2c2.append_zero(chunk_size * 2);
+    t.write(cid, hoid, offset + chunk_size * 3 - 3, chunk_size * 2, bl2c2);
+    bl2c2.append_zero(2);
+    t.write(cid, hoid, offset + chunk_size - 2, chunk_size * 2 + 2, bl2c2);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    final_len = (offset + chunk_size * 3 - 3) + (chunk_size * 2);
+    bufferlist bl;
+    r = store->read(ch, hoid, 0, final_len, bl);
+    ASSERT_EQ(r, final_len);
+  }
+}
 #endif  // WITH_BLUESTORE
 
 int main(int argc, char **argv) {
