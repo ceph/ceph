@@ -654,7 +654,8 @@ namespace buffer CEPH_BUFFER_API {
     };
     // The contiguous_filler is supposed to be not costlier than a single
     // pointer. Keep it dumb, please.
-    static_assert(sizeof(contiguous_filler) == sizeof(char*));
+    static_assert(sizeof(contiguous_filler) == sizeof(char*),
+		  "contiguous_filler should be no costlier than pointer");
 
     class page_aligned_appender {
       bufferlist *pbl;
