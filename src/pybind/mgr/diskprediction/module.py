@@ -21,10 +21,6 @@ class Module(MgrModule):
 
     OPTIONS = [
         {
-            'name': 'diskprediction_config_mode',
-            'default': 'local'
-        },
-        {
             'name': 'diskprediction_server',
             'default': ''
         },
@@ -67,12 +63,6 @@ class Module(MgrModule):
     ]
 
     COMMANDS = [
-        {
-            'cmd': 'device set-prediction-mode '
-                   'name=mode,type=CephString,req=true',
-            'desc': 'config disk prediction mode [\"cloud\"|\"local\"]',
-            'perm': 'rw'
-        },
         {
             'cmd': 'device show-prediction-config',
             'desc': 'Prints diskprediction configuration',
@@ -167,21 +157,6 @@ class Module(MgrModule):
     def _show_prediction_config(self, inbuf, cmd):
         self.show_module_config()
         return 0, json.dumps(self.config, indent=4), ''
-
-    def _set_prediction_mode(self, inbuf, cmd):
-        self.status = {}
-        str_mode = cmd.get('mode', 'cloud')
-        if str_mode.lower() not in ['cloud', 'local']:
-            return -errno.EINVAL, '', 'invalid configuration, enable=[cloud|local]'
-        try:
-            self.set_config('diskprediction_config_mode', str_mode)
-            for _agent in self._agents:
-                _agent.event.set()
-            return (0,
-                    'success to config disk prediction mode: %s'
-                    % str_mode.lower(), 0)
-        except Exception as e:
-            return -errno.EINVAL, '', str(e)
 
     def _self_test(self, inbuf, cmd):
         from .test.test_agents import test_agents
@@ -341,20 +316,19 @@ class Module(MgrModule):
         self.status = {'status': DP_MGR_STAT_ENABLED}
 
         while True:
-            if self.get_configuration('diskprediction_config_mode').lower() == 'cloud':
-                enable_cloud = True
+            mode = self.get_option('device_failure_prediction_mode')
+            if mode == 'cloud':
+                if not self._activated_cloud:
+                    self.start_cloud_disk_prediction()
             else:
-                enable_cloud = False
-            # Enable cloud mode prediction process
-            if enable_cloud and not self._activated_cloud:
-                if self._activated_local:
-                    self.stop_disk_prediction()
-                self.start_cloud_disk_prediction()
-            # Enable local mode prediction process
-            elif not enable_cloud and not self._activated_local:
                 if self._activated_cloud:
                     self.stop_disk_prediction()
-                self.start_local_disk_prediction()
+            if mode == 'local':
+                if not self._activated_local:
+                    self.start_local_disk_prediction()
+            else:
+                if self._activated_local:
+                    self.stop_disk_prediction()
 
             self.shutdown_event.wait(5)
             if self.shutdown_event.is_set():
