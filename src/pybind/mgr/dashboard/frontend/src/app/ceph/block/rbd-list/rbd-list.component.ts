@@ -1,5 +1,6 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
+import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 
@@ -75,7 +76,8 @@ export class RbdListComponent implements OnInit {
     private dimlessPipe: DimlessPipe,
     private modalService: BsModalService,
     private taskWrapper: TaskWrapperService,
-    private taskListService: TaskListService
+    private taskListService: TaskListService,
+    private i18n: I18n
   ) {
     this.permission = this.authStorageService.getPermissions().rbdImage;
     const getImageUri = () =>
@@ -86,19 +88,19 @@ export class RbdListComponent implements OnInit {
       icon: 'fa-plus',
       routerLink: () => '/block/rbd/add',
       canBePrimary: (selection: CdTableSelection) => !selection.hasSingleSelection,
-      name: 'Add'
+      name: this.i18n('Add')
     };
     const editAction: CdTableAction = {
       permission: 'update',
       icon: 'fa-pencil',
       routerLink: () => `/block/rbd/edit/${getImageUri()}`,
-      name: 'Edit'
+      name: this.i18n('Edit')
     };
     const deleteAction: CdTableAction = {
       permission: 'delete',
       icon: 'fa-times',
       click: () => this.deleteRbdModal(),
-      name: 'Delete'
+      name: this.i18n('Delete')
     };
     const copyAction: CdTableAction = {
       permission: 'create',
@@ -107,7 +109,7 @@ export class RbdListComponent implements OnInit {
         !selection.hasSingleSelection || selection.first().cdExecuting,
       icon: 'fa-copy',
       routerLink: () => `/block/rbd/copy/${getImageUri()}`,
-      name: 'Copy'
+      name: this.i18n('Copy')
     };
     const flattenAction: CdTableAction = {
       permission: 'update',
@@ -115,13 +117,13 @@ export class RbdListComponent implements OnInit {
         !selection.hasSingleSelection || selection.first().cdExecuting || !selection.first().parent,
       icon: 'fa-chain-broken',
       click: () => this.flattenRbdModal(),
-      name: 'Flatten'
+      name: this.i18n('Flatten')
     };
     const moveAction: CdTableAction = {
       permission: 'delete',
       icon: 'fa-trash-o',
       click: () => this.trashRbdModal(),
-      name: 'Move to Trash'
+      name: this.i18n('Move to Trash')
     };
     this.tableActions = [
       addAction,
@@ -136,53 +138,53 @@ export class RbdListComponent implements OnInit {
   ngOnInit() {
     this.columns = [
       {
-        name: 'Name',
+        name: this.i18n('Name'),
         prop: 'name',
         flexGrow: 2,
         cellTransformation: CellTemplate.executing
       },
       {
-        name: 'Pool',
+        name: this.i18n('Pool'),
         prop: 'pool_name',
         flexGrow: 2
       },
       {
-        name: 'Size',
+        name: this.i18n('Size'),
         prop: 'size',
         flexGrow: 1,
         cellClass: 'text-right',
         pipe: this.dimlessBinaryPipe
       },
       {
-        name: 'Objects',
+        name: this.i18n('Objects'),
         prop: 'num_objs',
         flexGrow: 1,
         cellClass: 'text-right',
         pipe: this.dimlessPipe
       },
       {
-        name: 'Object size',
+        name: this.i18n('Object size'),
         prop: 'obj_size',
         flexGrow: 1,
         cellClass: 'text-right',
         pipe: this.dimlessBinaryPipe
       },
       {
-        name: 'Provisioned',
+        name: this.i18n('Provisioned'),
         prop: 'disk_usage',
         cellClass: 'text-center',
         flexGrow: 1,
         pipe: this.dimlessBinaryPipe
       },
       {
-        name: 'Total provisioned',
+        name: this.i18n('Total provisioned'),
         prop: 'total_disk_usage',
         cellClass: 'text-center',
         flexGrow: 1,
         pipe: this.dimlessBinaryPipe
       },
       {
-        name: 'Parent',
+        name: this.i18n('Parent'),
         prop: 'parent',
         flexGrow: 2,
         cellTemplate: this.parentTpl

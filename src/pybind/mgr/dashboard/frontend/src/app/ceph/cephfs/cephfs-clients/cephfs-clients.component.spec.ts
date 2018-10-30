@@ -4,7 +4,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
+import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../shared/shared.module';
 import { CephfsClientsComponent } from './cephfs-clients.component';
 
@@ -19,7 +19,8 @@ describe('CephfsClientsComponent', () => {
       SharedModule,
       HttpClientTestingModule
     ],
-    declarations: [CephfsClientsComponent]
+    declarations: [CephfsClientsComponent],
+    providers: i18nProviders
   });
 
   beforeEach(() => {

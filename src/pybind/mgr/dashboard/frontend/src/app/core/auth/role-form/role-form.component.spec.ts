@@ -8,7 +8,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { ToastModule } from 'ng2-toastr';
 import { of } from 'rxjs';
 
-import { configureTestBed, FormHelper } from '../../../../testing/unit-test-helper';
+import { configureTestBed, FormHelper, i18nProviders } from '../../../../testing/unit-test-helper';
 import { RoleService } from '../../../shared/api/role.service';
 import { ScopeService } from '../../../shared/api/scope.service';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
@@ -40,7 +40,8 @@ describe('RoleFormComponent', () => {
         ToastModule.forRoot(),
         SharedModule
       ],
-      declarations: [RoleFormComponent, FakeComponent]
+      declarations: [RoleFormComponent, FakeComponent],
+      providers: i18nProviders
     },
     true
   );

@@ -1,5 +1,6 @@
 import { Component, OnInit, ViewChild } from '@angular/core';
 
+import { I18n } from '@ngx-translate/i18n-polyfill';
 import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 
 import { PoolService } from '../../../shared/api/pool.service';
@@ -42,67 +43,73 @@ export class PoolListComponent implements OnInit {
     private taskWrapper: TaskWrapperService,
     private authStorageService: AuthStorageService,
     private taskListService: TaskListService,
-    private modalService: BsModalService
+    private modalService: BsModalService,
+    private i18n: I18n
   ) {
     this.permission = this.authStorageService.getPermissions().pool;
     this.tableActions = [
-      { permission: 'create', icon: 'fa-plus', routerLink: () => '/pool/add', name: 'Add' },
+      {
+        permission: 'create',
+        icon: 'fa-plus',
+        routerLink: () => '/pool/add',
+        name: this.i18n('Add')
+      },
       {
         permission: 'update',
         icon: 'fa-pencil',
         routerLink: () => '/pool/edit/' + this.selection.first().pool_name,
-        name: 'Edit'
+        name: this.i18n('Edit')
       },
       {
         permission: 'delete',
         icon: 'fa-trash-o',
         click: () => this.deletePoolModal(),
-        name: 'Delete'
+        name: this.i18n('Delete')
       }
     ];
     this.columns = [
       {
         prop: 'pool_name',
-        name: 'Name',
+        name: this.i18n('Name'),
         flexGrow: 3,
         cellTransformation: CellTemplate.executing
       },
       {
         prop: 'type',
-        name: 'Type',
+        name: this.i18n('Type'),
         flexGrow: 2
       },
       {
         prop: 'application_metadata',
-        name: 'Applications',
+        name: this.i18n('Applications'),
         flexGrow: 3
       },
       {
         prop: 'pg_placement_num',
-        name: 'Placement Groups',
+        name: this.i18n('Placement Groups'),
         flexGrow: 1,
         cellClass: 'text-right'
       },
       {
         prop: 'size',
-        name: 'Replica Size',
+        name: this.i18n('Replica Size'),
         flexGrow: 1,
         cellClass: 'text-right'
       },
       {
         prop: 'last_change',
-        name: 'Last Change',
+        name: this.i18n('Last Change'),
         flexGrow: 1,
         cellClass: 'text-right'
       },
       {
         prop: 'erasure_code_profile',
-        name: 'Erasure Coded Profile',
+        name: this.i18n('Erasure Coded Profile'),
         flexGrow: 2
       },
       {
         prop: 'crush_rule',
-        name: 'Crush Ruleset',
+        name: this.i18n('Crush Ruleset'),
         flexGrow: 2
       }
     ];

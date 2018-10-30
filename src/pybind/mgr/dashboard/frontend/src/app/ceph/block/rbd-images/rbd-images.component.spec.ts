@@ -6,7 +6,7 @@ import { ToastModule } from 'ng2-toastr';
 import { TabsModule } from 'ngx-bootstrap/tabs';
 import { TooltipModule } from 'ngx-bootstrap/tooltip';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
+import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { TaskListService } from '../../../shared/services/task-list.service';
 import { SharedModule } from '../../../shared/shared.module';
 import { RbdDetailsComponent } from '../rbd-details/rbd-details.component';
@@ -35,7 +35,7 @@ describe('RbdImagesComponent', () => {
       ToastModule.forRoot(),
       TooltipModule.forRoot()
     ],
-    providers: [TaskListService]
+    providers: [TaskListService, i18nProviders]
   });
 
   beforeEach(() => {

@@ -10,7 +10,7 @@ import { BsModalService } from 'ngx-bootstrap/modal';
 import { TabsModule } from 'ngx-bootstrap/tabs';
 import { of } from 'rxjs';
 
-import { configureTestBed, FormHelper } from '../../../../testing/unit-test-helper';
+import { configureTestBed, FormHelper, i18nProviders } from '../../../../testing/unit-test-helper';
 import { NotFoundComponent } from '../../../core/not-found/not-found.component';
 import { ErasureCodeProfileService } from '../../../shared/api/erasure-code-profile.service';
 import { PoolService } from '../../../shared/api/pool.service';
@@ -134,7 +134,8 @@ describe('PoolFormComponent', () => {
     providers: [
       ErasureCodeProfileService,
       SelectBadgesComponent,
-      { provide: ActivatedRoute, useValue: { params: of({ name: 'somePoolName' }) } }
+      { provide: ActivatedRoute, useValue: { params: of({ name: 'somePoolName' }) } },
+      i18nProviders
     ]
   });
 
