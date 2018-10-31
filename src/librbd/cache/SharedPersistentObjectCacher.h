@@ -9,7 +9,7 @@
 #include "SharedPersistentObjectCacherFile.h"
 #include "common/Mutex.h"
 #include <vector>
-#include <map>
+#include <unordered_map>
 
 struct Context;
 
@@ -33,7 +33,7 @@ private:
   ImageCtxT *m_image_ctx;
   std::string m_cache_path;
   Mutex m_file_map_lock;
-  std::map<std::string,  SyncFile*> file_map;
+  std::unordered_map<std::string,  SyncFile*> file_map;
 
 };
 

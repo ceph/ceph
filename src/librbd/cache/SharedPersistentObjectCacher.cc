@@ -48,9 +48,14 @@ int SharedPersistentObjectCacher<I>::read_object(std::string oid, ceph::bufferli
   }
   std::string cache_file_path = cache_dir + "/" + cache_file_name;
 
-  //TODO(): make a cache for cachefile fd
-  SyncFile* target_cache_file = new SyncFile(cct, cache_file_path);
-  target_cache_file->open_file();
+  SyncFile* target_cache_file;
+  if (file_map.find(cache_file_path) == file_map.end()) {
+    target_cache_file = new SyncFile(cct, cache_file_path);
+    target_cache_file->open_file();
+    file_map[cache_file_path] = target_cache_file;
+  } else {
+    target_cache_file = file_map[cache_file_path];
+  }
 
   int ret = target_cache_file->read_object_from_file(read_data, offset, length);
   if (ret < 0) {
@@ -59,7 +64,6 @@ int SharedPersistentObjectCacher<I>::read_object(std::string oid, ceph::bufferli
                   << dendl;
   }
 
-  delete target_cache_file;
   return ret;
 }
 
