@@ -660,6 +660,11 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
     if (s->bucket_exists) {
       s->dest_placement.storage_class = s->info.storage_class;
       s->dest_placement.inherit_from(s->bucket_info.placement_rule);
+
+      if (!store->svc.zone->get_zone_params().valid_placement(s->dest_placement)) {
+        ldpp_dout(s, 0) << "NOTICE: invalid dest placement: " << s->dest_placement.to_str() << dendl;
+        return -EINVAL;
+      }
     }
   }
 

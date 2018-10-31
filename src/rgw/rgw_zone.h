@@ -209,6 +209,9 @@ public:
   }
 
   bool exists(const string& sc) const {
+    if (sc.empty()) {
+      return true;
+    }
     auto iter = m.find(sc);
     return (iter != m.end());
   }
@@ -520,6 +523,14 @@ struct RGWZoneParams : RGWSystemMetaObj {
       *pool = iter->second.get_data_extra_pool();
     }
     return true;
+  }
+
+  bool valid_placement(const rgw_placement_rule& rule) const {
+    auto iter = placement_pools.find(rule.name);
+    if (iter == placement_pools.end()) {
+      return false;
+    }
+    return iter->second.storage_class_exists(rule.storage_class);
   }
 };
 WRITE_CLASS_ENCODER(RGWZoneParams)
