@@ -15,17 +15,31 @@ private:
     START_ACCEPT,
     ACCEPTING,
     READY,
+    THROTTLE_MESSAGE,
+    THROTTLE_BYTES,
+    THROTTLE_DISPATCH_QUEUE,
+    READ_MESSAGE_FRONT,
+    READ_MESSAGE_COMPLETE,
     CLOSED
   };
 
   static const char *get_state_name(int state) {
-    const char *const statenames[] = {"NONE",       "START_CONNECT",
-                                      "CONNECTING", "START_ACCEPT",
-                                      "ACCEPTING",  "CLOSED"};
+    const char *const statenames[] = {"NONE",
+                                      "START_CONNECT",
+                                      "CONNECTING",
+                                      "START_ACCEPT",
+                                      "ACCEPTING",
+                                      "READY",
+                                      "THROTTLE_MESSAGE",
+                                      "THROTTLE_BYTES",
+                                      "THROTTLE_DISPATCH_QUEUE",
+                                      "READ_MESSAGE_FRONT",
+                                      "READ_MESSAGE_COMPLETE",
+                                      "CLOSED"};
     return statenames[state];
   }
 
-  enum class Tag : __le32 {
+  enum class Tag : uint32_t {
     AUTH_REQUEST,
     AUTH_BAD_METHOD,
     AUTH_BAD_AUTH,
@@ -33,40 +47,46 @@ private:
     AUTH_DONE,
     IDENT,
     IDENT_MISSING_FEATURES,
+    MESSAGE,
+    KEEPALIVE2,
+    KEEPALIVE2_ACK,
+    ACK
   };
 
   struct Frame {
-    __le32 frame_len;
-    __le32 tag;
+    uint32_t tag;
     bufferlist payload;
+    bufferlist frame_buffer;
 
-    Frame(Tag tag, __le32 payload_len)
-        : frame_len(sizeof(__le32) + payload_len),
-          tag(static_cast<__le32>(tag)) {}
+    Frame(Tag tag) : tag(static_cast<uint32_t>(tag)) {
+      encode(this->tag, payload, 0);
+    }
 
-    bufferlist to_bufferlist() {
-      ceph_assert(payload.length() == (frame_len - sizeof(__le32)));
-      bufferlist bl;
-      encode(frame_len, bl, 0);
-      encode(tag, bl, 0);
-      bl.claim_append(payload);
-      return bl;
+    Frame() {}
+
+    bufferlist &get_buffer() {
+      if (frame_buffer.length()) {
+        return frame_buffer;
+      }
+      encode((uint32_t)payload.length(), frame_buffer, 0);
+      frame_buffer.claim_append(payload);
+      return frame_buffer;
     }
   };
 
   struct SignedEncryptedFrame : public Frame {
-    SignedEncryptedFrame(Tag tag, __le32 payload_len)
-        : Frame(tag, payload_len) {}
-    bufferlist to_bufferlist() { return Frame::to_bufferlist(); }
+    SignedEncryptedFrame(Tag tag) : Frame(tag) {}
+    SignedEncryptedFrame() : Frame() {}
+    bufferlist &get_buffer() { return Frame::get_buffer(); }
   };
 
   struct AuthRequestFrame : public Frame {
-    __le32 method;
-    __le32 len;
+    uint32_t method;
+    uint32_t len;
     bufferlist auth_payload;
 
-    AuthRequestFrame(__le32 method, bufferlist &auth_payload)
-        : Frame(Tag::AUTH_REQUEST, sizeof(__le32) * 2 + auth_payload.length()),
+    AuthRequestFrame(uint32_t method, bufferlist &auth_payload)
+        : Frame(Tag::AUTH_REQUEST),
           method(method),
           len(auth_payload.length()),
           auth_payload(auth_payload) {
@@ -75,92 +95,87 @@ private:
       payload.claim_append(auth_payload);
     }
 
-    AuthRequestFrame(char *payload, uint32_t length)
-        : Frame(Tag::AUTH_REQUEST, length) {
-      method = *(__le32 *)payload;
-      len = *(__le32 *)(payload + sizeof(__le32));
-      ceph_assert((length - (sizeof(__le32) * 2)) == len);
-      auth_payload.append((payload + (sizeof(__le32) * 2)), len);
+    AuthRequestFrame(char *payload, uint32_t length) : Frame() {
+      method = *(uint32_t *)payload;
+      len = *(uint32_t *)(payload + sizeof(uint32_t));
+      ceph_assert((length - (sizeof(uint32_t) * 2)) == len);
+      auth_payload.append((payload + (sizeof(uint32_t) * 2)), len);
     }
   };
 
   struct AuthBadMethodFrame : public Frame {
-    __le32 method;
+    uint32_t method;
     std::vector<__u32> allowed_methods;
 
-    AuthBadMethodFrame(__le32 method, std::vector<__u32> methods)
-        : Frame(Tag::AUTH_BAD_METHOD, sizeof(__le32) * (2 + methods.size())),
+    AuthBadMethodFrame(uint32_t method, std::vector<__u32> methods)
+        : Frame(Tag::AUTH_BAD_METHOD),
           method(method),
           allowed_methods(methods) {
       encode(method, payload, 0);
-      encode((__le32)allowed_methods.size(), payload, 0);
+      encode((uint32_t)allowed_methods.size(), payload, 0);
       for (const auto &a_meth : allowed_methods) {
         encode(a_meth, payload, 0);
       }
     }
 
-    AuthBadMethodFrame(char *payload, uint32_t length)
-        : Frame(Tag::AUTH_BAD_METHOD, length) {
-      method = *(__le32 *)payload;
-      __le32 num_methods = *(__le32 *)(payload + sizeof(__le32));
-      payload += sizeof(__le32) * 2;
+    AuthBadMethodFrame(char *payload, uint32_t length) : Frame() {
+      method = *(uint32_t *)payload;
+      uint32_t num_methods = *(uint32_t *)(payload + sizeof(uint32_t));
+      payload += sizeof(uint32_t) * 2;
       for (unsigned i = 0; i < num_methods; ++i) {
-        allowed_methods.push_back(*(__le32 *)(payload + sizeof(__le32) * i));
+        allowed_methods.push_back(
+            *(uint32_t *)(payload + sizeof(uint32_t) * i));
       }
     }
   };
 
   struct AuthBadAuthFrame : public Frame {
-    __le32 error_code;
+    uint32_t error_code;
     std::string error_msg;
 
-    AuthBadAuthFrame(__le32 error_code, std::string error_msg)
-        : Frame(Tag::AUTH_BAD_AUTH, sizeof(__le32) * 2 + error_msg.size()),
+    AuthBadAuthFrame(uint32_t error_code, std::string error_msg)
+        : Frame(Tag::AUTH_BAD_AUTH),
           error_code(error_code),
           error_msg(error_msg) {
       encode(error_code, payload, 0);
       encode(error_msg, payload, 0);
     }
 
-    AuthBadAuthFrame(char *payload, uint32_t length)
-        : Frame(Tag::AUTH_BAD_AUTH, length) {
-      error_code = *(__le32 *)payload;
-      __le32 len = *(__le32 *)(payload + sizeof(__le32));
-      error_msg = std::string(payload + sizeof(__le32) * 2, len);
+    AuthBadAuthFrame(char *payload, uint32_t length) : Frame() {
+      error_code = *(uint32_t *)payload;
+      uint32_t len = *(uint32_t *)(payload + sizeof(uint32_t));
+      error_msg = std::string(payload + sizeof(uint32_t) * 2, len);
     }
   };
 
   struct AuthMoreFrame : public Frame {
-    __le32 len;
+    uint32_t len;
     bufferlist auth_payload;
 
     AuthMoreFrame(bufferlist &auth_payload)
-        : Frame(Tag::AUTH_MORE, sizeof(__le32) + auth_payload.length()),
+        : Frame(Tag::AUTH_MORE),
           len(auth_payload.length()),
           auth_payload(auth_payload) {
       encode(len, payload, 0);
       payload.claim_append(auth_payload);
     }
 
-    AuthMoreFrame(char *payload, uint32_t length)
-        : Frame(Tag::AUTH_BAD_AUTH, length) {
-      len = *(__le32 *)payload;
-      ceph_assert((length - sizeof(__le32)) == len);
-      auth_payload.append(payload + sizeof(__le32), len);
+    AuthMoreFrame(char *payload, uint32_t length) : Frame() {
+      len = *(uint32_t *)payload;
+      ceph_assert((length - sizeof(uint32_t)) == len);
+      auth_payload.append(payload + sizeof(uint32_t), len);
     }
   };
 
   struct AuthDoneFrame : public Frame {
-    __le64 flags;
+    uint64_t flags;
 
-    AuthDoneFrame(uint64_t flags)
-        : Frame(Tag::AUTH_DONE, sizeof(__le64)), flags(flags) {
+    AuthDoneFrame(uint64_t flags) : Frame(Tag::AUTH_DONE), flags(flags) {
       encode(flags, payload, 0);
     }
 
-    AuthDoneFrame(char *payload, uint32_t length)
-        : Frame(Tag::AUTH_DONE, length) {
-      flags = *(__le64 *)payload;
+    AuthDoneFrame(char *payload, uint32_t length) : Frame() {
+      flags = *(uint64_t *)payload;
     }
   };
 
@@ -174,7 +189,7 @@ private:
 
     IdentFrame(entity_addrvec_t addrs, int64_t gid, uint64_t supported_features,
                uint64_t required_features, uint64_t flags, uint64_t cookie)
-        : SignedEncryptedFrame(Tag::IDENT, 0),
+        : SignedEncryptedFrame(Tag::IDENT),
           addrs(addrs),
           gid(gid),
           supported_features(supported_features),
@@ -187,13 +202,11 @@ private:
       encode(required_features, payload, -1ll);
       encode(flags, payload, -1ll);
       encode(cookie, payload, -1ll);
-      frame_len = sizeof(uint32_t) + payload.length();
     }
 
-    IdentFrame(char *payload, uint32_t length)
-        : SignedEncryptedFrame(Tag::IDENT, length) {
+    IdentFrame(char *payload, uint32_t length) : SignedEncryptedFrame() {
       bufferlist bl;
-      bl.append(payload, length);
+      bl.push_back(buffer::create_static(length, payload));
       try {
         auto ti = bl.cbegin();
         decode(addrs, ti);
@@ -211,14 +224,86 @@ private:
     __le64 features;
 
     IdentMissingFeaturesFrame(uint64_t features)
-        : SignedEncryptedFrame(Tag::IDENT_MISSING_FEATURES, sizeof(uint64_t)),
+        : SignedEncryptedFrame(Tag::IDENT_MISSING_FEATURES),
           features(features) {
       encode(features, payload, -1ll);
     }
 
     IdentMissingFeaturesFrame(char *payload, uint32_t length)
-        : SignedEncryptedFrame(Tag::IDENT_MISSING_FEATURES, length) {
+        : SignedEncryptedFrame() {
       features = *(uint64_t *)payload;
+    }
+  };
+
+  struct MessageFrame : public SignedEncryptedFrame {
+    const unsigned int ASYNC_COALESCE_THRESHOLD = 256;
+
+    ceph_msg_header2 header2;
+
+    MessageFrame(Message *msg, bufferlist &data, uint64_t ack_seq,
+                 bool calc_crc)
+        : SignedEncryptedFrame(Tag::MESSAGE) {
+      ceph_msg_header &header = msg->get_header();
+      ceph_msg_footer &footer = msg->get_footer();
+
+      header2 = ceph_msg_header2{header.seq,        header.tid,
+                                 header.type,       header.priority,
+                                 header.version,    header.front_len,
+                                 header.middle_len, 0,
+                                 header.data_len,   header.data_off,
+                                 ack_seq,           footer.front_crc,
+                                 footer.middle_crc, footer.data_crc,
+                                 footer.flags,      header.compat_version,
+                                 header.reserved,   0};
+
+      if (calc_crc) {
+        header2.header_crc =
+            ceph_crc32c(0, (unsigned char *)&header2,
+                        sizeof(header2) - sizeof(header2.header_crc));
+      }
+
+      payload.append((char *)&header2, sizeof(header2));
+      if ((data.length() <= ASYNC_COALESCE_THRESHOLD) &&
+          (data.buffers().size() > 1)) {
+        for (const auto &pb : data.buffers()) {
+          payload.append((char *)pb.c_str(), pb.length());
+        }
+      } else {
+        payload.claim_append(data);
+      }
+    }
+  };
+
+  struct KeepAliveFrame : public SignedEncryptedFrame {
+    struct ceph_timespec timestamp;
+
+    KeepAliveFrame() : SignedEncryptedFrame(Tag::KEEPALIVE2) {
+      struct ceph_timespec ts;
+      utime_t t = ceph_clock_now();
+      t.encode_timeval(&ts);
+      payload.append((char *)&ts, sizeof(ts));
+    }
+
+    KeepAliveFrame(struct ceph_timespec &timestamp)
+        : SignedEncryptedFrame(Tag::KEEPALIVE2_ACK) {
+      payload.append((char *)&timestamp, sizeof(timestamp));
+    }
+
+    KeepAliveFrame(char *payload, uint32_t length) : SignedEncryptedFrame() {
+      ceph_assert(length == sizeof(timestamp));
+      timestamp = *(struct ceph_timespec *)payload;
+    }
+  };
+
+  struct AckFrame : public SignedEncryptedFrame {
+    uint64_t seq;
+
+    AckFrame(uint64_t seq) : SignedEncryptedFrame(Tag::ACK) {
+      encode(seq, payload, 0);
+    }
+
+    AckFrame(char *payload, uint32_t length) : SignedEncryptedFrame() {
+      seq = *(uint64_t *)payload;
     }
   };
 
@@ -226,9 +311,29 @@ private:
   State state;
   uint64_t peer_required_features;
   uint64_t cookie;
+  uint64_t message_seq;
+  bool can_write;
+  std::map<int, std::list<std::pair<bufferlist, Message *>>> out_queue;
+  std::list<Message *> sent;
+  std::atomic<uint64_t> out_seq{0};
+  std::atomic<uint64_t> in_seq{0};
+  std::atomic<uint64_t> ack_left{0};
 
   using ProtFuncPtr = void (ProtocolV2::*)();
   Ct<ProtocolV2> *bannerExchangeCallback;
+
+  uint32_t next_frame_len;
+  Tag next_tag;
+  ceph_msg_header2 current_header;
+  utime_t backoff;  // backoff time
+  utime_t recv_stamp;
+  utime_t throttle_stamp;
+  unsigned msg_left;
+  bufferlist data_buf;
+  bufferlist::iterator data_blp;
+  bufferlist front, middle, data;
+
+  bool keepalive;
 
   ostream &_conn_prefix(std::ostream *_dout);
 
@@ -242,6 +347,14 @@ private:
     return nullptr;
   }
 
+  void discard_out_queue();
+  void prepare_send_message(uint64_t features, Message *m, bufferlist &bl);
+  Message *_get_next_outgoing(bufferlist *bl);
+  ssize_t write_message(Message *m, bufferlist &bl, bool more);
+  void append_keepalive();
+  void append_keepalive_ack(utime_t &timestamp);
+  void handle_message_ack(uint64_t seq);
+
   WRITE_HANDLER_CONTINUATION_DECL(ProtocolV2, _banner_exchange_handle_write);
   READ_HANDLER_CONTINUATION_DECL(ProtocolV2,
                                  _banner_exchange_handle_peer_banner);
@@ -250,18 +363,48 @@ private:
   Ct<ProtocolV2> *_banner_exchange_handle_write(int r);
   Ct<ProtocolV2> *_banner_exchange_handle_peer_banner(char *buffer, int r);
 
-  uint32_t next_frame_len;
   CONTINUATION_DECL(ProtocolV2, read_frame);
-  READ_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_read_frame_length);
-  READ_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_frame);
+  READ_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_read_frame_length_and_tag);
+  READ_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_frame_payload);
   WRITE_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_auth_more_write);
+  READ_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_message_header);
+  CONTINUATION_DECL(ProtocolV2, throttle_message);
+  CONTINUATION_DECL(ProtocolV2, throttle_bytes);
+  CONTINUATION_DECL(ProtocolV2, throttle_dispatch_queue);
+  READ_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_message_front);
+  READ_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_message_middle);
+  CONTINUATION_DECL(ProtocolV2, read_message_data);
+  READ_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_message_data);
 
   Ct<ProtocolV2> *read_frame();
-  Ct<ProtocolV2> *handle_read_frame_length(char *buffer, int r);
-  Ct<ProtocolV2> *handle_frame(char *buffer, int r);
+  Ct<ProtocolV2> *handle_read_frame_length_and_tag(char *buffer, int r);
+  Ct<ProtocolV2> *handle_frame_payload(char *buffer, int r);
+
   Ct<ProtocolV2> *handle_auth_more(char *payload, uint32_t length);
   Ct<ProtocolV2> *handle_auth_more_write(int r);
+
   Ct<ProtocolV2> *handle_ident(char *payload, uint32_t length);
+
+  Ct<ProtocolV2> *ready();
+
+  Ct<ProtocolV2> *handle_message();
+  Ct<ProtocolV2> *handle_message_header(char *buffer, int r);
+  Ct<ProtocolV2> *throttle_message();
+  Ct<ProtocolV2> *throttle_bytes();
+  Ct<ProtocolV2> *throttle_dispatch_queue();
+  Ct<ProtocolV2> *read_message_front();
+  Ct<ProtocolV2> *handle_message_front(char *buffer, int r);
+  Ct<ProtocolV2> *read_message_middle();
+  Ct<ProtocolV2> *handle_message_middle(char *buffer, int r);
+  Ct<ProtocolV2> *read_message_data_prepare();
+  Ct<ProtocolV2> *read_message_data();
+  Ct<ProtocolV2> *handle_message_data(char *buffer, int r);
+  Ct<ProtocolV2> *handle_message_complete();
+
+  Ct<ProtocolV2> *handle_keepalive2(char *payload, uint32_t length);
+  Ct<ProtocolV2> *handle_keepalive2_ack(char *payload, uint32_t length);
+
+  Ct<ProtocolV2> *handle_message_ack(char *payload, uint32_t length);
 
 public:
   ProtocolV2(AsyncConnection *connection);
