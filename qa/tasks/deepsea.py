@@ -777,6 +777,10 @@ class Orch(DeepSea):
         stage = 3
         self.__log_stage_start(stage)
         self._run_orch(("stage", stage))
+        self.sm.all_minions_cmd_run(
+            'cat /etc/ceph/ceph.conf',
+            abort_on_fail=False
+            )
         self.scripts.ceph_cluster_status()
         self._ceph_health_test()
 
