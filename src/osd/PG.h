@@ -266,7 +266,7 @@ public:
     return ceph_subsys_osd;
   }
 
-  OSDMapRef get_osdmap() const {
+  const OSDMapRef& get_osdmap() const {
     ceph_assert(is_locked());
     ceph_assert(osdmap_ref);
     return osdmap_ref;
