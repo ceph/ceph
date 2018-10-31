@@ -52,6 +52,9 @@ struct rgw_http_req_data : public RefCountedObject {
 
   int wait() {
     Mutex::Locker l(lock);
+    if (done) {
+      return ret;
+    }
     cond.Wait(lock);
     return ret;
   }
@@ -527,11 +530,7 @@ bool RGWHTTPClient::is_done()
  */
 int RGWHTTPClient::wait()
 {
-  if (!req_data->is_done()) {
-    return req_data->wait();
-  }
-
-  return req_data->ret;
+  return req_data->wait();
 }
 
 void RGWHTTPClient::cancel()
