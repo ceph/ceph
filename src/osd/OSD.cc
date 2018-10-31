@@ -6092,7 +6092,8 @@ int OSD::_do_command(
 
       ostringstream secname;
       secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
-      dump_cmddesc_to_json(f, secname.str(), cp->cmdstring, cp->helpstring,
+      dump_cmddesc_to_json(f, con->get_features(),
+                           secname.str(), cp->cmdstring, cp->helpstring,
 			   cp->module, cp->perm, 0);
       cmdnum++;
     }

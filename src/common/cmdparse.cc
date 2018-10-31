@@ -72,7 +72,7 @@ arg_desc_t cmddesc_get_args(const String& cmddesc)
  */
 
 void
-dump_cmd_to_json(Formatter *f, const string& cmd)
+dump_cmd_to_json(Formatter *f, uint64_t features, const string& cmd)
 {
   // put whole command signature in an already-opened container
   // elements are: "name", meaning "the typeless name that means a literal"
@@ -91,6 +91,23 @@ dump_cmd_to_json(Formatter *f, const string& cmd)
     auto desckv = cmddesc_get_args(word);
     // name the individual desc object based on the name key
     f->open_object_section(string(desckv["name"]).c_str());
+
+    // Compatibility for pre-nautilus clients that don't know about CephBool
+    if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
+      auto i = desckv.find("type");
+      if (i != desckv.end() && i->second == "CephBool") {
+        // Instruct legacy clients to send --foo-bar string in place
+        // of a 'true'/'false' value
+        std::ostringstream oss;
+        oss << std::string("--") << desckv["name"];
+        std::string val = oss.str();
+        std::replace(val.begin(), val.end(), '_', '-');
+
+        desckv["type"] = "CephChoices";
+        desckv["strings"] = val;
+      }
+    }
+
     // dump all the keys including name into the array
     for (auto [key, value] : desckv) {
       f->dump_string(string(key).c_str(), string(value));
@@ -101,13 +118,14 @@ dump_cmd_to_json(Formatter *f, const string& cmd)
 
 void
 dump_cmd_and_help_to_json(Formatter *jf,
+			  uint64_t features,
 			  const string& secname,
 			  const string& cmdsig,
 			  const string& helptext)
 {
       jf->open_object_section(secname.c_str());
       jf->open_array_section("sig");
-      dump_cmd_to_json(jf, cmdsig);
+      dump_cmd_to_json(jf, features, cmdsig);
       jf->close_section(); // sig array
       jf->dump_string("help", helptext.c_str());
       jf->close_section(); // cmd
@@ -115,6 +133,7 @@ dump_cmd_and_help_to_json(Formatter *jf,
 
 void
 dump_cmddesc_to_json(Formatter *jf,
+		     uint64_t features,
 		     const string& secname,
 		     const string& cmdsig,
 		     const string& helptext,
@@ -124,7 +143,7 @@ dump_cmddesc_to_json(Formatter *jf,
 {
       jf->open_object_section(secname.c_str());
       jf->open_array_section("sig");
-      dump_cmd_to_json(jf, cmdsig);
+      dump_cmd_to_json(jf, features, cmdsig);
       jf->close_section(); // sig array
       jf->dump_string("help", helptext.c_str());
       jf->dump_string("module", module.c_str());
@@ -560,3 +579,37 @@ bool validate_cmd(CephContext* cct,
     }
   });
 }
+
+bool cmd_getval(CephContext *cct, const cmdmap_t& cmdmap,
+		const std::string& k, bool& val)
+{
+  /*
+   * Specialized getval for booleans.  CephBool didn't exist before Nautilus,
+   * so earlier clients are sent a CephChoices argdesc instead, and will
+   * send us a "--foo-bar" value string for boolean arguments.
+   */
+  if (cmdmap.count(k)) {
+    try {
+      val = boost::get<bool>(cmdmap.find(k)->second);
+      return true;
+    } catch (boost::bad_get&) {
+      try {
+        std::string expected = "--" + k;
+        std::replace(expected.begin(), expected.end(), '_', '-');
+
+        std::string v_str = boost::get<std::string>(cmdmap.find(k)->second);
+        if (v_str == expected) {
+          val = true;
+          return true;
+        } else {
+          throw bad_cmd_get(k, cmdmap);
+        }
+      } catch (boost::bad_get&) {
+        throw bad_cmd_get(k, cmdmap);
+      }
+    }
+  }
+  return false;
+}
+
+

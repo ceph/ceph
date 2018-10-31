@@ -830,10 +830,11 @@ bool DaemonServer::_handle_command(
     JSONFormatter f;
     f.open_object_section("command_descriptions");
 
-    auto dump_cmd = [&cmdnum, &f](const MonCommand &mc){
+    auto dump_cmd = [&cmdnum, &f, m](const MonCommand &mc){
       ostringstream secname;
       secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
-      dump_cmddesc_to_json(&f, secname.str(), mc.cmdstring, mc.helpstring,
+      dump_cmddesc_to_json(&f, m->get_connection()->get_features(),
+                           secname.str(), mc.cmdstring, mc.helpstring,
                            mc.module, mc.req_perms, 0);
       cmdnum++;
     };

@@ -999,6 +999,62 @@ class TestOSD(TestArgparse):
         assert_equal({}, validate_command(sigdict,
             ['osd', 'pool', 'create', "foo", "8", "--foo=bar"]))
 
+    def test_foo(self):
+        # Long form of a boolean argument (--foo=true)
+        assert_equal(
+            {
+                "prefix": "osd pool delete",
+                "pool": "foo",
+                "pool2": "foo",
+                "yes_i_really_really_mean_it": True
+            }, validate_command(sigdict, [
+                'osd', 'pool', 'delete', "foo", "foo",
+                "--yes-i-really-really-mean-it=true"]))
+
+    def test_pool_bool_args(self):
+        """
+        Use pool deletion to exercise boolean arguments since it has
+        the --yes-i-really-really-mean-it flags
+        """
+
+        # Short form of a boolean argument (--foo)
+        assert_equal(
+            {
+                "prefix": "osd pool delete",
+                "pool": "foo",
+                "pool2": "foo",
+                "yes_i_really_really_mean_it": True
+            }, validate_command(sigdict, [
+                'osd', 'pool', 'delete', "foo", "foo",
+                "--yes-i-really-really-mean-it"]))
+
+        # Long form of a boolean argument (--foo=true)
+        assert_equal(
+            {
+                "prefix": "osd pool delete",
+                "pool": "foo",
+                "pool2": "foo",
+                "yes_i_really_really_mean_it": True
+            }, validate_command(sigdict, [
+                'osd', 'pool', 'delete', "foo", "foo",
+                "--yes-i-really-really-mean-it=true"]))
+
+        # Negative form of a boolean argument (--foo=false)
+        assert_equal(
+            {
+                "prefix": "osd pool delete",
+                "pool": "foo",
+                "pool2": "foo",
+                "yes_i_really_really_mean_it": False
+            }, validate_command(sigdict, [
+                'osd', 'pool', 'delete', "foo", "foo",
+                "--yes-i-really-really-mean-it=false"]))
+
+        # Invalid value boolean argument (--foo=somethingelse)
+        assert_equal({}, validate_command(sigdict, [
+                'osd', 'pool', 'delete', "foo", "foo",
+                "--yes-i-really-really-mean-it=rhubarb"]))
+
     def test_pool_create(self):
         self.assert_valid_command(['osd', 'pool', 'create',
                                    'poolname', '128'])

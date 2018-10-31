@@ -566,6 +566,7 @@ public:
       ostringstream secname;
       secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
       dump_cmd_and_help_to_json(&jf,
+                                CEPH_FEATURES_ALL,
 				secname.str().c_str(),
 				info.desc,
 				info.help);

@@ -9589,13 +9589,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     cmd_getval(cct, cmdmap, "name", name);
     vector<string> profile;
     cmd_getval(cct, cmdmap, "profile", profile);
-    bool force;
-    if (profile.size() > 0 && profile.back() == "--force") {
-      profile.pop_back();
-      force = true;
-    } else {
-      force = false;
-    }
+
+    bool force = false;
+    cmd_getval(cct, cmdmap, "force", force);
+
     map<string,string> profile_map;
     err = parse_erasure_code_profile(profile, &profile_map, &ss);
     if (err)
@@ -11591,7 +11588,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     string poolstr, poolstr2, sure;
     cmd_getval(cct, cmdmap, "pool", poolstr);
     cmd_getval(cct, cmdmap, "pool2", poolstr2);
-    cmd_getval(cct, cmdmap, "sure", sure);
     int64_t pool = osdmap.lookup_pg_pool_name(poolstr.c_str());
     if (pool < 0) {
       ss << "pool '" << poolstr << "' does not exist";
@@ -11599,9 +11595,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
-    bool force_no_fake = sure == "--yes-i-really-really-mean-it-not-faking";
+    bool force_no_fake = false;
+    cmd_getval(cct, cmdmap, "yes_i_really_really_mean_it", force_no_fake);
+    bool force = false;
+    cmd_getval(cct, cmdmap, "yes_i_really_really_mean_it_not_faking", force);
     if (poolstr2 != poolstr ||
-	(sure != "--yes-i-really-really-mean-it" && !force_no_fake)) {
+	(!force && !force_no_fake)) {
       ss << "WARNING: this will *PERMANENTLY DESTROY* all data stored in pool " << poolstr
 	 << ".  If you are *ABSOLUTELY CERTAIN* that is what you want, pass the pool name *twice*, "
 	 << "followed by --yes-i-really-really-mean-it.";
