@@ -31,8 +31,7 @@ Parameters:
     **SerialNumber** (String/ Optional): The Id number of the MFA device associated 
     with the user making the GetSessionToken call.
 
-    **TokenCode** (String/ Optional): The value provided by the MFA device, if the 
-    trust policy of the role being assumed requires MFA.
+    **TokenCode** (String/ Optional): The value provided by the MFA device, if MFA is required.
 
 
 2. AssumeRole: Returns a set of temporary credentials that can be used for 
@@ -159,6 +158,31 @@ Keystone.
                     name = bucket['Name'],
                     created = bucket['CreationDate'],
     )
+
+4. The following is an example of AssumeRole API call:
+
+.. code-block:: python
+
+    import boto3
+
+    access_key = <ec2 access key>
+    secret_key = <ec2 secret key>
+
+    client = boto3.client('sts',
+    aws_access_key_id=access_key,
+    aws_secret_access_key=secret_key,
+    endpoint_url=<STS URL>,
+    region_name='',
+    )
+
+    response = client.assume_role(
+    RoleArn='arn:aws:iam:::role/application_abc/component_xyz/S3Access',
+    RoleSessionName='Bob',
+    DurationSeconds=3600
+    )
+
+
+Note: A role 'S3Access', needs to be created before calling the AssumeRole API.
 
 Limitations and Workarounds
 ===========================
