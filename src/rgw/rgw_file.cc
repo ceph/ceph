@@ -660,6 +660,10 @@ namespace rgw {
     }
 
     get<1>(mkr) = rc;
+   
+    /* case like : quota exceed will be considered as fail too*/
+    if(rc2 < 0)
+       get<1>(mkr) = rc2;
 
     return mkr;
   } /* RGWLibFS::create */
@@ -1367,6 +1371,12 @@ namespace rgw {
       return -EIO;
     }
 
+    op_ret = get_store()->check_quota(s->bucket_owner.get_id(), s->bucket,
+                                      user_quota, bucket_quota, real_ofs, true);
+    /* max_size exceed */
+    if (op_ret < 0)
+      return -EIO;
+
     size_t len = data.length();
     if (! len)
       return 0;
@@ -1405,7 +1415,8 @@ namespace rgw {
     }
 
     op_ret = get_store()->check_quota(s->bucket_owner.get_id(), s->bucket,
-				      user_quota, bucket_quota, s->obj_size);
+				      user_quota, bucket_quota, s->obj_size, true);
+    /* max_size exceed */
     if (op_ret < 0) {
       goto done;
     }
