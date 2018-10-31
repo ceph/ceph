@@ -806,7 +806,7 @@ void ImageReplayer<I>::on_stop_journal_replay(int r, const std::string &desc)
   }
 
   set_state_description(r, desc);
-  update_mirror_image_status(false, boost::none);
+  update_mirror_image_status(true, boost::none);
   reschedule_update_status_task(-1);
   shut_down(0);
 }
@@ -1411,7 +1411,7 @@ void ImageReplayer<I>::send_mirror_status_update(const OptionalState &opt_state)
   case STATE_STOPPING:
     if (stopping_replay) {
       status.state = cls::rbd::MIRROR_IMAGE_STATUS_STATE_STOPPING_REPLAY;
-      status.description = "stopping replay";
+      status.description = state_desc.empty() ? "stopping replay" : state_desc;
       break;
     }
     // FALLTHROUGH
