@@ -1038,7 +1038,12 @@ int RGWSI_Zone::select_bucket_location_by_rule(const rgw_placement_rule& locatio
     return -EINVAL;
   }
 
-#warning FIXME check that location_rule.storage_class exists in piter->second
+  auto storage_class = location_rule.get_storage_class();
+  if (!piter->second.storage_class_exists(storage_class)) {
+    ldout(cct, 5) << "requested storage class does not exist: " << storage_class << dendl;
+    return -EINVAL;
+  }
+
 
   RGWZonePlacementInfo& placement_info = piter->second;
 
