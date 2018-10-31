@@ -1,0 +1,29 @@
+add_executable(unittest_ceph_immutable_obj_cache
+  test_main.cc
+  )
+add_ceph_unittest(unittest_ceph_immutable_obj_cache)
+
+target_link_libraries(unittest_ceph_immutable_obj_cache
+  rados_test_stub
+  librados
+  osdc
+  global
+  radostest
+  GTest::GTest
+  )
+
+
+add_executable(ceph_test_immutable_obj_cache
+  test_main.cc
+  )
+
+target_link_libraries(ceph_test_immutable_obj_cache
+  librados
+  radostest
+  ${UNITTEST_LIBS}
+  )
+
+
+install(TARGETS
+  ceph_test_immutable_obj_cache
+  DESTINATION ${CMAKE_INSTALL_BINDIR})
