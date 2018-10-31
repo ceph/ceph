@@ -43,7 +43,7 @@ filtered to a particular node:
 
     orchestrator device ls [node]
 
-Query the status of a particular service (mon, osd, mds, rgw).  For OSDs
+Query the status of a particular service (mon, osd, mgr, mds, rgw).  For OSDs
 the id is the numeric OSD ID, for MDS services it is the filesystem name:
 
 ::

@@ -154,8 +154,7 @@ class RookCluster(object):
             # label like mon=rook-ceph-mon0
             label_filter += ",mon={0}".format(service_id)
         elif service_type == "mgr":
-            # TODO: get Rook to label mgr pods
-            pass
+            label_filter += ",mgr={0}".format(service_id)
         elif service_type == "rgw":
             # TODO: rgw
             pass
