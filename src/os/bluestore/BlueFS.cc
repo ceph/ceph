@@ -124,6 +124,23 @@ void BlueFS::_init_logger()
 		    "Maximum bytes allocated from DB");
   b.add_u64_counter(l_bluefs_max_bytes_slow, "max_bytes_slow",
 		    "Maximum bytes allocated from SLOW");
+  b.add_u64_counter(l_bluefs_read_random_count, "read_random_count",
+		    "buffered random reads");
+  b.add_u64_counter(l_bluefs_read_random_bytes, "read_random_bytes",
+		    "Bytes read in buffered random read mode", NULL,
+		    PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
+  b.add_u64_counter(l_bluefs_read_random_disk_count, "read_random_disk_count",
+		    "buffered random reads going to disk");
+  b.add_u64_counter(l_bluefs_read_random_disk_bytes, "read_random_disk_bytes",
+		    "Bytes read from disk in buffered random read mode", NULL,
+		    PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
+
+  b.add_u64_counter(l_bluefs_read_random_buffer_count, "read_random_buffer_count",
+		    "buffered random reads going to buffer");
+  b.add_u64_counter(l_bluefs_read_random_buffer_bytes, "bluefs_read_random_buffer_bytes",
+		    "Bytes read from buffer in buffered random read mode", NULL,
+		    PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
+
   logger = b.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 }
@@ -1308,6 +1325,7 @@ int BlueFS::_read_random(
   size_t len,            ///< [in] this many bytes
   char *out)             ///< [out] optional: or copy it here
 {
+  int ret = 0;
   dout(10) << __func__ << " h " << h
            << " 0x" << std::hex << off << "~" << len << std::dec
 	   << " from " << h->file->fnode << dendl;
@@ -1323,27 +1341,144 @@ int BlueFS::_read_random(
     dout(20) << __func__ << " reaching (or past) eof, len clipped to 0x"
 	     << std::hex << len << std::dec << dendl;
   }
+  bool read_done = false;
+  if (h->buf.max_prefetch >= len && h->lock.try_lock()) {
+    if (h->track_read(off, len)) {
+      dout(5) << __func__ << " new sequence: ino "
+	      << h->file->fnode.ino << " "
+	      << h->seq_cnt_last << ","
+	      << h->seq_len_last << ","
+	      << (double)h->seq_len_last / h->seq_cnt_last
+	      << dendl;
+    }
+    if (h->seq_cnt > 2) { //FIXME: make configurable
+      dout(5) << __func__ << " buf read: ino "
+	      << h->file->fnode.ino
+	      << " 0x" << std::hex << off << "~" << len << std::dec
+	      << dendl;
+      ret = _read_random_buffered(h, off, len, out);
+      read_done = true;
+    }
+    h->lock.unlock();
+  }
+  if (!read_done) {
+    dout(5) << __func__ << " non-buf read: ino "
+	    << h->file->fnode.ino << " "
+           << " 0x" << std::hex << off << "~" << len << std::dec
+	    << h->buf.max_prefetch << " "
+	    << cct->_conf->bluefs_max_prefetch
+	    << dendl;
 
-  int ret = 0;
-  while (len > 0) {
-    uint64_t x_off = 0;
-    auto p = h->file->fnode.seek(off, &x_off);
-    uint64_t l = std::min(p->length - x_off, static_cast<uint64_t>(len));
-    dout(20) << __func__ << " read buffered 0x"
-             << std::hex << x_off << "~" << l << std::dec
-             << " of " << *p << dendl;
-    int r = bdev[p->bdev]->read_random(p->offset + x_off, l, out,
-				       cct->_conf->bluefs_buffered_io);
-    ceph_assert(r == 0);
-    off += l;
-    len -= l;
-    ret += l;
-    out += l;
+    while (len > 0) {
+      uint64_t x_off = 0;
+      auto p = h->file->fnode.seek(off, &x_off);
+      uint64_t l = std::min(p->length - x_off, static_cast<uint64_t>(len));
+      dout(20) << __func__ << " read buffered 0x"
+	       << std::hex << x_off << "~" << l << std::dec
+	       << " of " << *p << dendl;
+      int r = bdev[p->bdev]->read_random(p->offset + x_off, l, out,
+					 cct->_conf->bluefs_buffered_io);
+      ceph_assert(r == 0);
+      off += l;
+      len -= l;
+      ret += l;
+      out += l;
+    }
   }
 
   dout(20) << __func__ << " got " << ret << dendl;
   --h->file->num_reading;
   return ret;
+}
+
+int BlueFS::_read_random_buffered(
+  FileReader *h,         ///< [in] read from here
+  uint64_t off,          ///< [in] offset
+  size_t len,            ///< [in] this many bytes
+  char *out)             ///< [out] optional: or copy it here
+{
+  auto* buf = &h->buf;
+
+  logger->inc(l_bluefs_read_random_count, 1);
+  logger->inc(l_bluefs_read_random_bytes, len);
+
+  int ret = 0;
+  dout(10) << __func__ << " read_rand_buf 0x"
+            << std::hex << off << "~" << len << std::dec
+	    << dendl;
+
+  while (len > 0) {
+    size_t left;
+    if (off < buf->bl_off || off >= buf->get_buf_end()) {
+      buf->bl.clear();
+      buf->bl_off = off & super.block_mask();
+      uint64_t x_off = 0;
+      auto p = h->file->fnode.seek(buf->bl_off, &x_off);
+
+      uint64_t want = round_up_to(len + buf->bl_off, super.block_size) - buf->bl_off;
+      want = std::max(want, buf->max_prefetch);
+      uint64_t l = std::min(p->length - x_off, want);
+
+      uint64_t eof_offset = round_up_to(h->file->fnode.size, super.block_size);
+      if (!h->ignore_eof &&
+	  buf->bl_off + l > eof_offset) {
+	l = eof_offset - buf->bl_off;
+      }
+      dout(5) << __func__ << " 0x"
+               << std::hex << off << "~" << len << std::dec
+	       << " fetching 0x"
+               << std::hex << x_off << "~" << l << std::dec
+               << " of " << *p << dendl;
+      int r = bdev[p->bdev]->read(p->offset + x_off, l, &buf->bl, ioc[p->bdev],
+				  cct->_conf->bluefs_buffered_io);
+      logger->inc(l_bluefs_read_random_disk_count, 1);
+      logger->inc(l_bluefs_read_random_disk_bytes, l);
+
+      ceph_assert(r == 0);
+      left = buf->get_buf_remaining(off);
+    } else {
+      left = buf->get_buf_remaining(off);
+      int r = std::min(len, left);
+      logger->inc(l_bluefs_read_random_buffer_count, 1);
+      logger->inc(l_bluefs_read_random_buffer_bytes, r);
+    }
+    dout(5) << __func__ << " left 0x" << std::hex << left
+            << " 0x" << off << "~" << len << std::dec
+	    << dendl;
+
+    int r = std::min(len, left);
+    if (out) {
+      // NOTE: h->bl is normally a contiguous buffer so c_str() is free.
+      memcpy(out, buf->bl.c_str() + off - buf->bl_off, r);
+      out += r;
+    }
+
+    dout(30) << __func__ << " result chunk (0x"
+             << std::hex << r << std::dec << " bytes):\n";
+    bufferlist t;
+    t.substr_of(buf->bl, off - buf->bl_off, r);
+    t.hexdump(*_dout);
+    *_dout << dendl;
+
+    off += r;
+    len -= r;
+    ret += r;
+    buf->pos += r;
+  }
+
+  return ret;
+}
+
+void BlueFS::_got_hint(FileReader* h, bool random)
+{
+  dout(5) << __func__ << " " << random << " ino "
+            << h->file->fnode.ino
+	    << dendl;
+  if (random) {
+    h->buf.max_prefetch = 65536; //FIXME: make configurable
+  } else {
+    h->buf.max_prefetch = cct->_conf->bluefs_max_prefetch;
+  }
 }
 
 int BlueFS::_read(
@@ -2640,6 +2775,19 @@ BlueFS::FileWriter *BlueFS::_create_writer(FileRef f)
   return w;
 }
 
+void BlueFS::close_reader(FileReader *h)
+{
+  if (h->seq_found()) {
+    dout(5) << __func__ << " new sequence: ino "
+            << h->file->fnode.ino << " "
+            << h->seq_cnt_last << ","
+            << h->seq_len_last << ","
+            << (double)h->seq_len_last / h->seq_cnt_last
+            << dendl;
+  }
+  delete h;
+}
+
 void BlueFS::_close_writer(FileWriter *h)
 {
   dout(10) << __func__ << " " << h << " type " << h->writer_type << dendl;
@@ -2679,7 +2827,8 @@ int BlueFS::open_for_read(
   }
   File *file = q->second.get();
 
-  *h = new FileReader(file, random ? 4096 : cct->_conf->bluefs_max_prefetch,
+  *h = new FileReader(file,
+		      random ? 65536 : cct->_conf->bluefs_max_prefetch, // FIXME: make configurable
 		      random, false);
   dout(10) << __func__ << " h " << *h << " on " << file->fnode << dendl;
   return 0;

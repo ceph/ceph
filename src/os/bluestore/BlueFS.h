@@ -39,6 +39,12 @@ enum {
   l_bluefs_max_bytes_wal,
   l_bluefs_max_bytes_db,
   l_bluefs_max_bytes_slow,
+  l_bluefs_read_random_count,
+  l_bluefs_read_random_bytes,
+  l_bluefs_read_random_disk_count,
+  l_bluefs_read_random_disk_bytes,
+  l_bluefs_read_random_buffer_count,
+  l_bluefs_read_random_buffer_bytes,
   l_bluefs_last,
 };
 
@@ -216,6 +222,14 @@ public:
     FileReaderBuffer buf;
     bool random;
     bool ignore_eof;        ///< used when reading our log file
+    uint64_t prev_offset = 0;
+    uint64_t seq_cnt = 0;
+    uint64_t seq_len = 0;
+    uint64_t seq_cnt_last = 0;
+    uint64_t seq_len_last = 0;
+    size_t sequences = 0;
+
+    ceph::mutex lock = ceph::make_mutex("BlueFS::FileReader::lock");
 
     FileReader(FileRef f, uint64_t mpf, bool rand, bool ie)
       : file(f),
@@ -226,6 +240,28 @@ public:
     }
     ~FileReader() {
       --file->num_readers;
+    }
+    bool seq_found() {
+      bool f = seq_cnt > 3;
+      if (f) {
+	seq_cnt_last = seq_cnt;
+	seq_len_last = seq_len;
+	sequences++;
+      }
+      return f;
+    }
+    bool track_read(uint64_t offset, uint64_t len) {
+      bool found = false;
+      if (prev_offset == offset) {
+	seq_len += len;
+	++seq_cnt;
+      } else {
+	found = seq_found();
+	seq_len = len;
+	seq_cnt = 1;
+     }
+      prev_offset = offset + len;
+      return found;
     }
   };
 
@@ -358,6 +394,11 @@ private:
     uint64_t offset, ///< [in] offset
     size_t len,      ///< [in] this many bytes
     char *out);      ///< [out] optional: or copy it here
+  int _read_random_buffered(
+    FileReader *h,   ///< [in] read from here
+    uint64_t offset, ///< [in] offset
+    size_t len,      ///< [in] this many bytes
+    char *out);      ///< [out] optional: or copy it here
 
   void _invalidate_cache(FileRef f, uint64_t offset, uint64_t length);
 
@@ -431,6 +472,10 @@ public:
     std::lock_guard l(lock);
     _close_writer(h);
   }
+
+  void close_reader(FileReader *h);
+
+  void _got_hint(FileReader* h, bool random);
 
   int rename(const string& old_dir, const string& old_file,
 	     const string& new_dir, const string& new_file);

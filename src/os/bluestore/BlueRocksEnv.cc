@@ -35,7 +35,7 @@ class BlueRocksSequentialFile : public rocksdb::SequentialFile {
  public:
   BlueRocksSequentialFile(BlueFS *fs, BlueFS::FileReader *h) : fs(fs), h(h) {}
   ~BlueRocksSequentialFile() override {
-    delete h;
+    fs->close_reader(h);
   }
 
   // Read up to "n" bytes from the file.  "scratch[0..n-1]" may be
@@ -81,7 +81,7 @@ class BlueRocksRandomAccessFile : public rocksdb::RandomAccessFile {
  public:
   BlueRocksRandomAccessFile(BlueFS *fs, BlueFS::FileReader *h) : fs(fs), h(h) {}
   ~BlueRocksRandomAccessFile() override {
-    delete h;
+    fs->close_reader(h);
   }
 
   // Read up to "n" bytes from the file starting at "offset".
@@ -124,10 +124,18 @@ class BlueRocksRandomAccessFile : public rocksdb::RandomAccessFile {
   //enum AccessPattern { NORMAL, RANDOM, SEQUENTIAL, WILLNEED, DONTNEED };
 
   void Hint(AccessPattern pattern) override {
-    if (pattern == RANDOM)
-      h->buf.max_prefetch = 4096;
-    else if (pattern == SEQUENTIAL)
-      h->buf.max_prefetch = fs->cct->_conf->bluefs_max_prefetch;
+    switch (pattern) {
+    case RANDOM:
+    case NORMAL:
+      fs->_got_hint(h, true);
+      break;
+    case SEQUENTIAL:
+      fs->_got_hint(h, false);
+      break;
+    default:
+      // do nothing
+      break;
+    }
   }
 
   // Remove any kind of caching of data from the offset to offset+length
