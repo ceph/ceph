@@ -52,4 +52,18 @@ describe('HealthPieComponent', () => {
 
     expect(component.chart.chartType).toEqual('pie');
   });
+
+  it('Remove slice border if there is only one slice with non zero value', () => {
+    component.chart.dataset[0].data = [48, 0, 0, 0];
+    component.ngOnChanges();
+
+    expect(component.chart.dataset[0].borderWidth).toEqual(0);
+  });
+
+  it('Keep slice border if there is more than one slice with non zero value', () => {
+    component.chart.dataset[0].data = [48, 0, 1, 0];
+    component.ngOnChanges();
+
+    expect(component.chart.dataset[0].borderWidth).toEqual(1);
+  });
 });
