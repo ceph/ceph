@@ -332,30 +332,30 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         return result
 
     @deferred_read
-    def describe_service(self, service_type, service_id):
+    def describe_service(self, service_type, service_id, nodename):
 
-        assert service_type in ("mds", "osd", "mgr", "mon", "rgw"), service_type + " unsupported"
+        assert service_type in ("mds", "osd", "mgr", "mon", None), service_type + " unsupported"
 
-        pods = self.rook_cluster.describe_pods(service_type, service_id)
+        pods = self.rook_cluster.describe_pods(service_type, service_id, nodename)
 
         result = orchestrator.ServiceDescription()
         for p in pods:
             sl = orchestrator.ServiceLocation()
             sl.nodename = p['nodename']
             sl.container_id = p['name']
+            sl.service_type = p['labels']['app'].replace('rook-ceph-', '')
 
-            if service_type == "osd":
+            if sl.service_type == "osd":
                 sl.daemon_name = "%s" % p['labels']["ceph-osd-id"]
-            elif service_type == "mds":
+            elif sl.service_type == "mds":
                 sl.daemon_name = p['labels']["rook_file_system"]
-            elif service_type == "mon":
+            elif sl.service_type == "mon":
                 sl.daemon_name = p['labels']["mon"]
-            elif service_type == "mgr":
+            elif sl.service_type == "mgr":
                 sl.daemon_name = p['labels']["mgr"]
-            elif service_type == "rgw":
-                # FIXME: put a label on the pod to consume
-                # from here
-                raise NotImplementedError("rgw")
+            else:
+                # Unknown type -- skip it
+                continue
 
             result.locations.append(sl)
 
