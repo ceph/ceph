@@ -169,6 +169,7 @@
      --max-buckets             max number of buckets for a user
      --admin                   set the admin flag on the user
      --system                  set the system flag on the user
+     --op-mask                 set the op mask on the user
      --bucket=<bucket>         Specify the bucket name. Also used by the quota command.
      --pool=<pool>             Specify the pool name. Also used to scan for leaked rados objects.
      --object=<object>         object name
