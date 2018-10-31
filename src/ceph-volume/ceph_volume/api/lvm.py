@@ -1081,6 +1081,7 @@ class Volume(object):
         self.name = kw['lv_name']
         self.tags = parse_tags(kw['lv_tags'])
         self.encrypted = self.tags.get('ceph.encrypted', '0') == '1'
+        self.used_by_ceph = 'ceph.osd_id' in self.tags
 
     def __str__(self):
         return '<%s>' % self.lv_api['lv_path']
@@ -1096,6 +1097,26 @@ class Volume(object):
         obj['type'] = self.tags['ceph.type']
         obj['path'] = self.lv_path
         return obj
+
+    def report(self):
+        if not self.used_by_ceph:
+            return {
+                'name': self.lv_name,
+                'comment': 'not used by ceph'
+            }
+        else:
+            type_ = self.tags['ceph.type']
+            report = {
+                'name': self.lv_name,
+                'osd_id': self.tags['ceph.osd_id'],
+                'cluster_name': self.tags['ceph.cluster_name'],
+                'type': type_,
+                'osd_fsid': self.tags['ceph.osd_fsid'],
+                'cluster_fsid': self.tags['ceph.cluster_fsid'],
+            }
+            type_uuid = '{}_uuid'.format(type_)
+            report[type_uuid] = self.tags['ceph.{}'.format(type_uuid)]
+            return report
 
     def clear_tags(self):
         """
