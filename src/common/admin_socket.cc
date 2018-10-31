@@ -300,33 +300,14 @@ bool AdminSocket::do_accept()
       retry_sys_call(::close, connection_fd);
       return false;
     }
-    if (cmd[0] == '\0') {
-      // old protocol: __be32
-      if (pos == 3 && cmd[0] == '\0') {
-	switch (cmd[3]) {
-	case 0:
-	  c = "0";
-	  break;
-	case 1:
-	  c = "perfcounters_dump";
-	  break;
-	case 2:
-	  c = "perfcounters_schema";
-	  break;
-	default:
-	  c = "foo";
-	  break;
-	}
-	break;
-      }
-    } else {
-      // new protocol: null or \n terminated string
-      if (cmd[pos] == '\n' || cmd[pos] == '\0') {
-	cmd[pos] = '\0';
-	c = cmd;
-	break;
-      }
+
+    // new protocol: null or \n terminated string
+    if (cmd[pos] == '\n' || cmd[pos] == '\0') {
+      cmd[pos] = '\0';
+      c = cmd;
+      break;
     }
+
     if (++pos >= sizeof(cmd)) {
       lderr(m_cct) << "AdminSocket: error reading request too long" << dendl;
       retry_sys_call(::close, connection_fd);
