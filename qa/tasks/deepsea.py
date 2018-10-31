@@ -644,14 +644,15 @@ class Orch(DeepSea):
     def __init__(self, ctx, config):
         self.logger = log.getChild('orch')
         self.logger.debug("beginning of constructor method")
-        self.stage = config.get("stage", '')
-        self.state_orch = config.get("state_orch", '')
-        if not str(self.stage) and not self.state_orch:
+        # cast stage value to str because it might be a number
+        self.stage = str(config.get("stage", ''))
+        self.state_orch = str(config.get("state_orch", ''))
+        if not self.stage and not self.state_orch:
             raise ConfigError(
-                "deepsea.orch: nothing to do. Missing 'stage' or 'state_orch' "
-                "key in config dict ->{}<-".format(self.config)
+                "deepsea.orch: nothing to do. Specify a value for 'stage' or "
+                "'state_orch' key in config dict"
                 )
-        if str(self.stage) and str(self.stage) not in self.all_stages:
+        if self.stage and self.stage not in self.all_stages:
             raise ConfigError("unrecognized Stage ->{}<-".format(self.stage))
         super(Orch, self).__init__(ctx, config)
         self.scripts = Scripts(self.master_remote, self.logger)
@@ -806,7 +807,7 @@ class Orch(DeepSea):
             self.logger.debug("end of begin method")
             return None
         # it's not an orch, so it must be a stage
-        assert str(self.stage), "Neither state_orch, nor stage"
+        assert self.stage, "Neither state_orch, nor stage"
         if self._is_int_between_0_and_5(self.stage):
             exec('self._run_stage_{}()'.format(self.stage))
         elif self.stage == 'prep':
