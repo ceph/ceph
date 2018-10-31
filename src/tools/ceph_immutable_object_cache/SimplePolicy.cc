@@ -43,12 +43,13 @@ SimplePolicy::~SimplePolicy() {
 cache_status_t SimplePolicy::alloc_entry(std::string file_name) {
   ldout(cct, 20) << "alloc entry for: " << file_name << dendl;
 
-  Mutex::Locker locker(m_free_list_lock);
+  m_free_list_lock.lock();
 
   if (m_free_list.size()) {
     Entry* entry = m_free_list.front();
     ceph_assert(entry != nullptr);
     m_free_list.pop_front();
+    m_free_list_lock.unlock();
 
     {
       RWLock::WLocker wlocker(m_cache_map_lock);
@@ -58,6 +59,7 @@ cache_status_t SimplePolicy::alloc_entry(std::string file_name) {
     return OBJ_CACHE_NONE;
   }
 
+  m_free_list_lock.unlock();
   // if there's no free entry, return skip to read from rados
   return OBJ_CACHE_SKIP;
 }

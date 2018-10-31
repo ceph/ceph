@@ -1,12 +1,13 @@
 add_executable(unittest_ceph_immutable_obj_cache
   test_main.cc
+  test_SimplePolicy.cc
   )
 add_ceph_unittest(unittest_ceph_immutable_obj_cache)
 
 target_link_libraries(unittest_ceph_immutable_obj_cache
+  ceph_immutable_object_cache_lib
   rados_test_stub
   librados
-  osdc
   global
   radostest
   GTest::GTest
