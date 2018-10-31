@@ -86,7 +86,6 @@ class SharedDriverData {
   spdk_nvme_ctrlr *ctrlr;
   spdk_nvme_ns *ns;
   uint32_t block_size = 0;
-  uint32_t sector_size = 0;
   uint64_t size = 0;
 
   public:
@@ -98,9 +97,8 @@ class SharedDriverData {
         trid(trid_),
         ctrlr(c),
         ns(ns_) {
-    sector_size = spdk_nvme_ns_get_sector_size(ns);
     block_size = spdk_nvme_ns_get_extended_sector_size(ns);
-    size = ((uint64_t)sector_size) * spdk_nvme_ns_get_num_sectors(ns);
+    size = spdk_nvme_ns_get_size(ns);
   }
 
   bool is_equal(const spdk_nvme_transport_id& trid2) const {
@@ -137,7 +135,6 @@ class SharedDriverQueueData {
   spdk_nvme_ns *ns;
   std::string sn;
   uint32_t block_size;
-  uint32_t sector_size;
   uint32_t max_queue_depth;
   struct spdk_nvme_qpair *qpair;
   bool reap_io = false;
@@ -156,7 +153,6 @@ class SharedDriverQueueData {
     ctrlr = driver->ctrlr;
     ns = driver->ns;
     block_size = driver->block_size;
-    sector_size = driver->sector_size;
 
     struct spdk_nvme_io_qpair_opts opts = {};
     spdk_nvme_ctrlr_get_default_io_qpair_opts(ctrlr, &opts, sizeof(opts));
@@ -385,8 +381,8 @@ void SharedDriverQueueData::_aio_handle(Task *t, IOContext *ioc)
       }
 
       t->queue = this;
-      lba_off = t->offset / sector_size;
-      lba_count = t->len / sector_size;
+      lba_off = t->offset / block_size;
+      lba_count = t->len / block_size;
       switch (t->command) {
         case IOCommand::WRITE_COMMAND:
         {
