@@ -347,10 +347,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             if service_type == "osd":
                 sl.daemon_name = "%s" % p['labels']["ceph-osd-id"]
             elif service_type == "mds":
-                # MDS daemon names are the tail of the pod name with
-                # an 'm' prefix.
-                # TODO: Would be nice to get this out a label though.
-                sl.daemon_name = "m" + sl.container_id.split("-")[-1]
+                sl.daemon_name = p['labels']["rook_file_system"]
             elif service_type == "mon":
                 sl.daemon_name = p['labels']["mon"]
             elif service_type == "mgr":
