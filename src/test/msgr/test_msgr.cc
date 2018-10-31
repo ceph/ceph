@@ -298,9 +298,9 @@ TEST_P(MessengerTest, SimpleTest) {
 TEST_P(MessengerTest, SimpleMsgr2Test) {
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t legacy_addr;
-  legacy_addr.parse("127.0.0.1");
+  legacy_addr.parse("v1:127.0.0.1");
   entity_addr_t msgr2_addr;
-  msgr2_addr.parse("msgr2:127.0.0.1");
+  msgr2_addr.parse("v2:127.0.0.1");
   entity_addrvec_t bind_addrs;
   bind_addrs.v.push_back(legacy_addr);
   bind_addrs.v.push_back(msgr2_addr);
