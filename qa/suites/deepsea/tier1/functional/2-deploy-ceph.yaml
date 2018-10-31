@@ -18,5 +18,3 @@ tasks:
         - exec:
                 client.salt_master:
                         - 'ceph -s'
-        - deepsea.orch:
-                state_orch: ceph.functests.1node
