@@ -1483,6 +1483,8 @@ public:
   void do_request(
     OpRequestRef& op,
     ThreadPool::TPHandle &handle) override;
+  bool is_fastpath_op(OpRequestRef& op);
+  bool do_fastpath_op(OpRequestRef& op);
   void do_op(OpRequestRef& op);
   void record_write_error(OpRequestRef op, const hobject_t &soid,
 			  MOSDOpReply *orig_reply, int r);

@@ -44,6 +44,7 @@
 #include "common/EventTrace.h"
 
 #include "common/config.h"
+#include "common/likely.h"
 #include "include/compat.h"
 #include "mon/MonClient.h"
 #include "osdc/Objecter.h"
@@ -1806,6 +1807,9 @@ void PrimaryLogPG::do_request(
   if (pgbackend->handle_message(op))
     return;
 
+  if (likely(msg_type == CEPH_MSG_OSD_OP)) {
+  }
+
   switch (msg_type) {
   case CEPH_MSG_OSD_OP:
   case CEPH_MSG_OSD_BACKOFF:
@@ -1899,6 +1903,193 @@ hobject_t PrimaryLogPG::earliest_backfill() const
       e = iter->second.last_backfill;
   }
   return e;
+}
+
+bool PrimaryLogPG::is_fastpath_op(OpRequestRef& op)
+{
+  if (unlikely(pool.info.is_erasure())) {
+    return false;
+  }
+  if (unlikely(pool.info.cache_mode != pg_pool_t::CACHEMODE_NONE)) {
+    return false;
+  }
+
+#if 0
+  if (unlikely(op->includes_pg_op())) {
+    return false;
+  }
+#endif
+
+  if (unlikely(op->rwordered())) {
+    return false;
+  }
+
+  const auto* m = op->get_req<MOSDOp>();
+  // sorry, fast path doesn't support LIST_SNAPS
+  if (unlikely(m->get_snapid() == CEPH_SNAPDIR)) {
+    return false;
+  }
+  if (unlikely(m->has_flag(CEPH_OSD_FLAG_SKIPRWLOCKS))) {
+    return false;
+  }
+  if (unlikely(m->get_flags() & CEPH_OSD_FLAG_FLUSH)) {
+    return false;
+  }
+
+  return true;
+}
+
+
+bool PrimaryLogPG::do_fastpath_op(OpRequestRef& op)
+{
+  if (unlikely(!is_fastpath_op(op))) {
+    return false; // ask for fallback to slow path; REFACTOR ME
+  }
+
+  ObjectContextRef obc;
+  {
+    const auto* m = op->get_req<MOSDOp>();
+    hobject_t missing_oid;
+    int r = find_object_context(m->get_hobj(),
+				&obc,
+				false /* can_create */,
+				m->has_flag(CEPH_OSD_FLAG_MAP_SNAP_CLONE),
+				&missing_oid);
+
+    if (unlikely(r == -EAGAIN && is_primary())) {
+      // If we're not the primary of this OSD, we just return -EAGAIN. Otherwise,
+      // we have to wait for the object.
+      ceph_assert(!op->may_write()); // only happens on a read/cache
+      wait_for_unreadable_object(missing_oid, op);
+      return true;
+    } else if (unlikely(r == -ENOENT || !obc)) {
+      osd->reply_op_error(op, r);
+      return true;
+    } else if (r == 0 && unlikely(is_unreadable_object(obc->obs.oi.soid))) {
+      dout(10) << __func__ << ": clone " << obc->obs.oi.soid
+	       << " is unreadable, waiting" << dendl;
+      wait_for_unreadable_object(obc->obs.oi.soid, op);
+      return true;
+    }
+  }
+
+  // TODO: move the `exists` check
+  if (unlikely(obc->obs.exists && unlikely(obc->obs.oi.has_manifest()))) {
+    return false;
+  }
+  if (unlikely(obc->is_blocked())) {
+    // io blocked on obc and this IS NOT a flush as we're on the fast
+    // path which doesn't support them
+    wait_for_blocked_object(obc->obs.oi.soid, op);
+    return true;
+  }
+  if (unlikely(obc->obs.oi.is_lost())) {
+    // This object is lost. Reading from it returns an error.
+    dout(20) << __func__ << ": object " << obc->obs.oi.soid
+	     << " is lost" << dendl;
+    osd->reply_op_error(op, -ENFILE);
+    return true;
+  }
+
+  // Locked section
+  {
+    auto [ guard, is_locked ] = get_rw_locks_fastread(op, obc);
+    if (unlikely(!is_locked)) {
+      op->mark_delayed("waiting for rw locks");
+      return true;
+    } else {
+      op->mark_started();
+    }
+
+    int result = 0;
+    std::optional<int> data_off;
+    auto* m = op->get_nonconst_req<MOSDOp>();
+    ceph_assert(!m->ops.empty());
+    // TODO: const
+    for (OSDOp& osd_op : m->ops) {
+      if (unlikely(osd_op.op.op & CEPH_OSD_OP_MODE_WR)) {
+	return false;
+      }
+      // TODO: CEPH_OSD_OP_SYNC_READ, CEPH_OSD_OP_SPARSE_READ:
+      if (likely(osd_op.op.op == CEPH_OSD_OP_READ)) {
+	if (!data_off) {
+	  data_off = osd_op.op.extent.offset;
+	}
+	bool trimmed_read;
+	// TODO: never ever touch osd_op that way. This applies also
+	// to original path.
+	std::tie(osd_op.op.extent.length, trimmed_read) = \
+	  do_read_preprocess(obc->obs, osd_op);
+	if (likely(!trimmed_read || osd_op.op.extent.length != 0)) {
+	  result = do_read_rep(op, obc->obs, osd_op);
+	}
+      } else {
+	return false; // let's take the fallback
+      }
+      if (unlikely(result < 0)) {
+	break;
+      }
+    }
+
+    // TODO: unify this crafting with ::complete_read_ctx(). Handle errors.
+    auto* reply = new MOSDOpReply(m, 0, get_osdmap_epoch(), 0, false);
+    reply->claim_op_out_data(m->ops);
+    reply->get_header().data_off = (data_off ? *data_off : 0);
+    reply->set_reply_versions(eversion_t(), obc->obs.oi.user_version);
+    reply->set_result(result);
+    reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
+    osd->send_message_osd_client(reply, m->get_connection());
+    // don't need reply->put();
+  }
+
+  // TODO: perf counters, publish stats etc.
+  return true;
+
+#if 0
+  execute_ctx(ctx);
+  int result = prepare_transaction(ctx);
+
+  // HINT for new_obs:
+  //  OpContext(OpRequestRef _op, osd_reqid_t _reqid, vector<OSDOp>* _ops,
+  //	      ObjectContextRef& obc,
+  //	      PrimaryLogPG *_pg) :
+  //    op(_op), reqid(_reqid), ops(_ops),
+  //    obs(&obc->obs),
+  //    snapset(0),
+  //    new_obs(obs->oi, obs->exists),
+
+
+  // ObjectStore::CollectionHandle &ch
+  return store->read(ch, ghobject_t(hoid), off, len, *bl, op_flags);
+
+  // TODO: perf counters
+
+  // prepare the reply
+  ctx->reply = new MOSDOpReply(m, 0, get_osdmap_epoch(), 0,
+			       successful_write);
+  ctx->reply->set_result(result);
+  ctx->reply->put();
+
+  // read or error?
+  if ((ctx->op_t->empty() || result < 0) && !ctx->update_log_only) {
+    // update_log_only should be always false for pure reads (no ::may_write()
+    // and op_t::empty() == true.
+
+    // finish side-effects
+    if (result >= 0)
+      do_osd_op_effects(ctx, m->get_connection());
+      // don't need to handle:
+      //  * ctx.watch_connects as there are pushed only by CEPH_OSD_OP_WATCH
+      //  * ctx.watch_disconnects - CEPH_OSD_OP_WATCH and _delete_oid
+      //  * ctx.notifies - CEPH_OSD_OP_NOTIFY
+      //  * ctx.notify_acks - CEPH_OSD_OP_NOTIFY_ACK
+      // Wow, do_osd_op_effects can be killed entirely!
+
+    complete_read_ctx(result, ctx);
+   // Grabs locks for OpContext, should be cleaned up in close_op_ctx
+    return;
+  }
+#endif
 }
 
 /** do_op - do an op
@@ -2021,6 +2212,12 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   if (get_osdmap()->is_blacklisted(m->get_source_addr())) {
     dout(10) << "do_op " << m->get_source_addr() << " is blacklisted" << dendl;
     osd->reply_op_error(op, -EBLACKLISTED);
+    return;
+  }
+
+  // TODO: make a real interface for this. We might want to more
+  // shortcuts.
+  if (do_fastpath_op(op)) {
     return;
   }
 
