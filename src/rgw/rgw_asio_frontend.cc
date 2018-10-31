@@ -257,6 +257,7 @@ unsigned short parse_port(const char *input, boost::system::error_code& ec)
 }
 
 tcp::endpoint parse_endpoint(BOOST_ASIO_STRING_VIEW_PARAM input,
+                             unsigned short default_port,
                              boost::system::error_code& ec)
 {
   tcp::endpoint endpoint;
@@ -266,7 +267,7 @@ tcp::endpoint parse_endpoint(BOOST_ASIO_STRING_VIEW_PARAM input,
     auto port_str = input.substr(colon + 1);
     endpoint.port(parse_port(port_str.data(), ec));
   } else {
-    endpoint.port(80);
+    endpoint.port(default_port);
   }
   if (!ec) {
     auto addr = input.substr(0, colon);
@@ -324,7 +325,7 @@ int AsioFrontend::init()
 
   auto endpoints = config.equal_range("endpoint");
   for (auto i = endpoints.first; i != endpoints.second; ++i) {
-    auto endpoint = parse_endpoint(i->second, ec);
+    auto endpoint = parse_endpoint(i->second, 80, ec);
     if (ec) {
       lderr(ctx()) << "failed to parse endpoint=" << i->second << dendl;
       return -ec.value();
@@ -427,7 +428,7 @@ int AsioFrontend::init_ssl()
       lderr(ctx()) << "no ssl_certificate configured for ssl_endpoint" << dendl;
       return -EINVAL;
     }
-    auto endpoint = parse_endpoint(i->second, ec);
+    auto endpoint = parse_endpoint(i->second, 443, ec);
     if (ec) {
       lderr(ctx()) << "failed to parse ssl_endpoint=" << i->second << dendl;
       return -ec.value();
