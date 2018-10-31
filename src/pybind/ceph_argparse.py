@@ -499,6 +499,27 @@ class CephChoices(CephArgtype):
         return all_elems
 
 
+class CephBool(CephArgtype):
+    """
+    A boolean argument, values may be case insensitive 'true', 'false', '0',
+    '1'.  In keyword form, value may be left off (implies true).
+    """
+    def __init__(self, strings='', **kwargs):
+        self.strings = strings.split('|')
+
+    def valid(self, s, partial=False):
+        lower_case = s.lower()
+        if lower_case in ['true', '1']:
+            self.val = True
+        elif lower_case in ['false', '0']:
+            self.val = False
+        else:
+            raise ArgumentValid("{0} not one of 'true', 'false'".format(s))
+
+    def __str__(self):
+        return '<bool>'
+
+
 class CephFilepath(CephArgtype):
     """
     Openable file
@@ -681,6 +702,8 @@ class argdesc(object):
         """
         if self.t == CephString:
             chunk = '<{0}>'.format(self.name)
+        elif self.t == CephBool:
+            chunk = "--{0}".format(self.name.replace("_", "-"))
         else:
             chunk = str(self.instance)
         s = chunk
@@ -943,7 +966,6 @@ def validate(args, signature, flags=0, partial=False):
 
             # A keyword argument?
             if myarg:
-
                 # argdesc for the keyword argument, if we find one
                 kwarg_desc = None
 
@@ -956,15 +978,31 @@ def validate(args, signature, flags=0, partial=False):
                 if kwarg_match:
                     # We have a "--foo=bar" style argument
                     kwarg_k, kwarg_v = kwarg_match.groups()
+
+                    # Either "--foo-bar" or "--foo_bar" style is accepted
+                    kwarg_k = kwarg_k.replace('-', '_')
+
                     kwarg_desc = arg_descs_by_name.get(kwarg_k, None)
-                elif len(myargs):  # Some trailing arguments exist
-                    # Maybe this is a "--foo bar" style argument
+                else:
+                    # Maybe this is a "--foo bar" or "--bool" style argument
                     key_match = re.match(KWARG_SPACE, myarg)
                     if key_match:
                         kwarg_k = key_match.group(1)
+
+                        # Permit --foo-bar=123 form or --foo_bar=123 form,
+                        # assuming all command definitions use foo_bar argument
+                        # naming style
+                        kwarg_k = kwarg_k.replace('-', '_')
+
                         kwarg_desc = arg_descs_by_name.get(kwarg_k, None)
                         if kwarg_desc:
-                            kwarg_v = myargs.pop(0)
+                            if kwarg_desc.t == CephBool:
+                                kwarg_v = 'true'
+                            elif len(myargs):  # Some trailing arguments exist
+                                kwarg_v = myargs.pop(0)
+                            else:
+                                # Forget it, this is not a valid kwarg
+                                kwarg_desc = None
 
                 if kwarg_desc:
                     validate_one(kwarg_v, kwarg_desc)
@@ -976,18 +1014,16 @@ def validate(args, signature, flags=0, partial=False):
             # "--yes-i-really-mean-it")
             if myarg and myarg.startswith("--"):
                 # Special cases for instances of confirmation flags
-                # that were defined as CephString instead of CephChoices
+                # that were defined as CephString/CephChoices instead of CephBool
                 # in pre-nautilus versions of Ceph daemons.
                 is_value = desc.t == CephChoices \
                         or myarg == "--yes-i-really-mean-it" \
                         or myarg == "--yes-i-really-really-mean-it" \
                         or myarg == "--yes-i-really-really-mean-it-not-faking" \
+                        or myarg == "--force" \
                         or injectargs
 
                 if not is_value:
-                    sys.stderr.write("desc={0} t={1}".format(
-                        desc, desc.t))
-
                     # Didn't get caught by kwarg handling, but has a "--", so
                     # we must assume it's something invalid, to avoid naively
                     # passing through mis-typed options as the values of

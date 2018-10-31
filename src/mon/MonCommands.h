@@ -738,7 +738,8 @@ COMMAND("osd pause", "pause osd", "osd", "rw")
 COMMAND("osd unpause", "unpause osd", "osd", "rw")
 COMMAND("osd erasure-code-profile set " \
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] " \
-	"name=profile,type=CephString,n=N,req=false", \
+	"name=profile,type=CephString,n=N,req=false " \
+	"name=force,type=CephBool,req=false", \
 	"create erasure code profile <name> with [<key[=value]> ...] pairs. Add a --force at the end to override an existing profile (VERY DANGEROUS)", \
 	"osd", "rw")
 COMMAND("osd erasure-code-profile get " \
@@ -942,16 +943,16 @@ COMMAND("osd pool create " \
 COMMAND_WITH_FLAG("osd pool delete " \
 	"name=pool,type=CephPoolname " \
 	"name=pool2,type=CephPoolname,req=false " \
-	"name=sure,type=CephChoices,strings=--yes-i-really-really-mean-it|" \
-        "--yes-i-really-really-mean-it-not-faking,req=false", \
+	"name=yes_i_really_really_mean_it,type=CephBool,req=false "
+	"name=yes_i_really_really_mean_it_not_faking,type=CephBool,req=false ", \
 	"delete pool", \
 	"osd", "rw", \
     FLAG(DEPRECATED))
 COMMAND("osd pool rm " \
 	"name=pool,type=CephPoolname " \
 	"name=pool2,type=CephPoolname,req=false " \
-	"name=sure,type=CephChoices,strings=--yes-i-really-really-mean-it|" \
-        "--yes-i-really-really-mean-it-not-faking,req=false", \
+	"name=yes_i_really_really_mean_it,type=CephBool,req=false "
+	"name=yes_i_really_really_mean_it_not_faking,type=CephBool,req=false ", \
 	"remove pool", \
 	"osd", "rw")
 COMMAND("osd pool rename " \

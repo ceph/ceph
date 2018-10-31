@@ -2869,6 +2869,7 @@ bool Monitor::_allowed_command(MonSession *s, const string &module,
 
 void Monitor::format_command_descriptions(const std::vector<MonCommand> &commands,
 					  Formatter *f,
+					  uint64_t features,
 					  bufferlist *rdata)
 {
   int cmdnum = 0;
@@ -2877,7 +2878,7 @@ void Monitor::format_command_descriptions(const std::vector<MonCommand> &command
     unsigned flags = cmd.flags;
     ostringstream secname;
     secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
-    dump_cmddesc_to_json(f, secname.str(),
+    dump_cmddesc_to_json(f, features, secname.str(),
 			 cmd.cmdstring, cmd.helpstring, cmd.module,
 			 cmd.req_perms, flags);
     cmdnum++;
@@ -2979,7 +2980,8 @@ void Monitor::handle_command(MonOpRequestRef op)
       }
     }
 
-    format_command_descriptions(commands, f, &rdata);
+    auto features = m->get_connection()->get_features();
+    format_command_descriptions(commands, f, features, &rdata);
     delete f;
     reply_command(op, 0, "", rdata, 0);
     return;
