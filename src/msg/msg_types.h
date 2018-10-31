@@ -237,8 +237,8 @@ struct entity_addr_t {
   static const char *get_type_name(int t) {
     switch (t) {
     case TYPE_NONE: return "none";
-    case TYPE_LEGACY: return "legacy";
-    case TYPE_MSGR2: return "msgr2";
+    case TYPE_LEGACY: return "v1";
+    case TYPE_MSGR2: return "v2";
     default: return "???";
     }
   };

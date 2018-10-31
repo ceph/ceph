@@ -69,11 +69,11 @@ bool entity_addr_t::parse(const char *s, const char **end)
   const char *start = s;
 
   int newtype = TYPE_DEFAULT;
-  if (strncmp("legacy:", s, 7) == 0) {
-    start += 7;
+  if (strncmp("v1:", s, 3) == 0) {
+    start += 3;
     newtype = TYPE_LEGACY;
-  } else if (strncmp("msgr2:", s, 6) == 0) {
-    start += 6;
+  } else if (strncmp("v2:", s, 3) == 0) {
+    start += 3;
     newtype = TYPE_MSGR2;
   } else if (*s == '-') {
     *this = entity_addr_t();
@@ -172,10 +172,8 @@ ostream& operator<<(ostream& out, const entity_addr_t &addr)
   if (addr.type == entity_addr_t::TYPE_NONE) {
     return out << "-";
   }
-  if (addr.type != entity_addr_t::TYPE_DEFAULT) {
-    out << entity_addr_t::get_type_name(addr.type) << ":";
-  }
-  out << addr.get_sockaddr() << '/' << addr.nonce;
+  out << entity_addr_t::get_type_name(addr.type) << ":"
+      << addr.get_sockaddr() << '/' << addr.nonce;
   return out;
 }
 
