@@ -334,7 +334,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
     @deferred_read
     def describe_service(self, service_type, service_id):
 
-        assert service_type in ("mds", "osd", "mon", "rgw"), service_type + " unsupported"
+        assert service_type in ("mds", "osd", "mgr", "mon", "rgw"), service_type + " unsupported"
 
         pods = self.rook_cluster.describe_pods(service_type, service_id)
 
@@ -354,9 +354,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             elif service_type == "mon":
                 sl.daemon_name = p['labels']["mon"]
             elif service_type == "mgr":
-                # FIXME: put a label on the pod to consume
-                # from here
-                raise NotImplementedError("mgr")
+                sl.daemon_name = p['labels']["mgr"]
             elif service_type == "rgw":
                 # FIXME: put a label on the pod to consume
                 # from here
