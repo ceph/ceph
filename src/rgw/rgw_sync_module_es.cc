@@ -312,6 +312,8 @@ struct es_obj_metadata {
         auto vals_bl = val.cbegin();
         decode(cs_info, vals_bl);
         out_attrs[name] = cs_info.compression_type;
+      } else if (name == "etag") {
+        out_attrs[name] = string(val.c_str(), val.length());
       } else {
         if (name != "pg_ver" &&
             name != "source_zone" &&
