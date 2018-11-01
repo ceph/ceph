@@ -581,6 +581,89 @@ public:
   }
 };
 
+class InspectHook : public AdminSocketHook {
+private:
+  std::map<std::string, std::function<bool(Formatter*)>, std::less<> > instances;
+public:
+  bool hook(const std::string&& id, std::function<bool(Formatter*)> f) {
+    if (instances.count(id) == 1)
+      return false;
+    instances.emplace(id, f);
+    return true;
+  }
+  bool unhook(std::string_view id) {
+    auto it = instances.find(id);
+    if (it == instances.cend())
+      return false;
+    instances.erase(it);
+    return true;
+  }
+  bool empty() {
+    return instances.empty();
+  }
+  bool call(std::string_view command, const cmdmap_t& cmdmap,
+              std::string_view format, bufferlist& out) override {
+    stringstream ss;
+    Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
+    if (instances.size() != 1)
+      f->open_array_section("instances");
+    bool b = true;
+    for (auto &it: instances) {
+      f->open_object_section("instance");
+      f->dump_string("id", it.first);
+      b = it.second(f);
+      if (!b)
+        break;
+      f->close_section();
+    }
+
+    if (b) {
+      if (instances.size() != 1)
+        f->close_section();
+      f->flush(ss);
+      out.append(ss);
+    }
+    delete f;
+    return b;
+  }
+};
+
+bool AdminSocket::register_inspect(std::string_view command_path,
+                                   std::string_view id,
+                                   std::function<bool(Formatter*)> f)
+{
+  std::unique_lock l(inspect_lock);
+  auto it = inspects.find(command_path);
+  InspectHook* h;
+  if (it != inspects.cend()) {
+    h = it->second;
+  } else {
+    h = new InspectHook();
+    inspects.emplace(command_path, h);
+    int r = register_command(command_path, command_path, h, "debug info slot");
+    ceph_assert(r == 0);
+  }
+  return h->hook(std::string(id), f);
+}
+
+bool AdminSocket::unregister_inspect(std::string_view command_path,
+                                     std::string_view id)
+{
+  std::unique_lock l(inspect_lock);
+  auto it = inspects.find(command_path);
+  if (it == inspects.cend())
+    return false;
+  InspectHook* h = it->second;
+  h->unhook(id);
+  if (h->empty()) {
+    int r = unregister_command(command_path);
+    ceph_assert(r == 0);
+    delete h;
+    inspects.erase(it);
+  }
+  return true;
+}
+
 bool AdminSocket::init(const std::string& path)
 {
   ldout(m_cct, 5) << "init " << path << dendl;
