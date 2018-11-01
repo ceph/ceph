@@ -819,7 +819,8 @@ int NVMEDevice::aio_write(
     uint64_t off,
     bufferlist &bl,
     IOContext *ioc,
-    bool buffered)
+    bool buffered,
+    int write_hint)
 {
   uint64_t len = bl.length();
   dout(20) << __func__ << " " << off << "~" << len << " ioc " << ioc
@@ -832,7 +833,7 @@ int NVMEDevice::aio_write(
   return 0;
 }
 
-int NVMEDevice::write(uint64_t off, bufferlist &bl, bool buffered)
+int NVMEDevice::write(uint64_t off, bufferlist &bl, bool buffered, int write_hint)
 {
   uint64_t len = bl.length();
   dout(20) << __func__ << " " << off << "~" << len << " buffered "
