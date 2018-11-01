@@ -27,8 +27,9 @@ export class Rgw501Component implements OnInit, OnDestroy {
       }
 
       const releaseName = this.cephReleaseNamePipe.transform(summary.version);
-      this.docsUrl = `http://docs.ceph.com/docs/${releaseName}/mgr/dashboard/
-        #enabling-the-object-gateway-management-frontend`;
+      this.docsUrl =
+        `http://docs.ceph.com/docs/${releaseName}/mgr/dashboard/` +
+        `#enabling-the-object-gateway-management-frontend`;
 
       setTimeout(() => {
         subs.unsubscribe();
