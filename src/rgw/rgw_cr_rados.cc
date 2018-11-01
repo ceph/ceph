@@ -170,7 +170,7 @@ int RGWAsyncLockSystemObj::_send_request()
   utime_t duration(duration_secs, 0);
   l.set_duration(duration);
   l.set_cookie(cookie);
-  l.set_renew(true);
+  l.set_may_renew(true);
 
   return l.lock_exclusive(&ref.ioctx, ref.oid);
 }

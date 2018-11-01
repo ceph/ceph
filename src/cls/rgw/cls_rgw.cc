@@ -3764,7 +3764,7 @@ static int rgw_set_bucket_resharding(cls_method_context_t hctx, bufferlist *in, 
 
 static int rgw_clear_bucket_resharding(cls_method_context_t hctx, bufferlist *in,  bufferlist *out)
 {
-  cls_rgw_set_bucket_resharding_op op;
+  cls_rgw_clear_bucket_resharding_op op;
 
   auto in_iter = in->cbegin();
   try {
