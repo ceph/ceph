@@ -72,7 +72,7 @@ class PoolId(RestController):
             'prefix': 'osd pool delete',
             'pool': pool['pool_name'],
             'pool2': pool['pool_name'],
-            'sure': '--yes-i-really-really-mean-it'
+            'yes_i_really_really_mean_it': True
         }]], **kwargs)
 
 

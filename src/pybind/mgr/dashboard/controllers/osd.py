@@ -124,7 +124,7 @@ class Osd(RESTController):
             'mon',
             'osd lost',
             id=int(svc_id),
-            sure='--yes-i-really-mean-it')
+            yes_i_really_mean_it=True)
 
     def create(self, uuid=None, svc_id=None):
         """
@@ -157,7 +157,7 @@ class Osd(RESTController):
         The osd must be marked down before being destroyed.
         """
         CephService.send_command(
-            'mon', 'osd destroy-actual', id=int(svc_id), sure='--yes-i-really-mean-it')
+            'mon', 'osd destroy-actual', id=int(svc_id), yes_i_really_mean_it=True)
 
     @RESTController.Resource('GET')
     def safe_to_destroy(self, svc_id):
