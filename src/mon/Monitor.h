@@ -669,7 +669,7 @@ public:
   static void _generate_command_map(map<string,cmd_vartype>& cmdmap,
                                     map<string,string> &param_str_map);
   static const MonCommand *_get_moncommand(const string &cmd_prefix,
-                                           MonCommand *cmds, int cmds_size);
+                                           MonCommand *cmds, int cmds_size,map<string,cmd_vartype> cmdmap);
   bool _allowed_command(MonSession *s, string &module, string &prefix,
                         const map<string,cmd_vartype>& cmdmap,
                         const map<string,string>& param_str_map,
