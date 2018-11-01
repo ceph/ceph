@@ -708,6 +708,9 @@ void FileStore::collect_metadata(map<string,string> *pm)
       (*pm)["vdo_physical_size"] =
 	stringify(4096 * get_vdo_stat(vdo_fd, "physical_blocks"));
     }
+    if (journal) {
+      journal->collect_metadata(pm);
+    }
   }
 }
 
