@@ -88,7 +88,7 @@ COMMAND("osd test-reweight-by-utilization " \
 	"name=oload,type=CephInt,req=false " \
 	"name=max_change,type=CephFloat,req=false "			\
 	"name=max_osds,type=CephInt,req=false "			\
-	"name=no_increasing,type=CephChoices,strings=--no-increasing,req=false",\
+	"name=no_increasing,type=CephBool,req=false",\
 	"dry run of reweight OSDs by utilization [overload-percentage-for-consideration, default 120]", \
 	"osd", "r")
 COMMAND("osd reweight-by-pg " \
@@ -108,14 +108,18 @@ COMMAND("osd test-reweight-by-pg " \
 
 COMMAND("osd destroy "	    \
         "name=id,type=CephOsdName " \
-	"name=sure,type=CephChoices,strings=--force|--yes-i-really-mean-it,req=false", \
+	"name=force,type=CephBool,req=false "
+        // backward compat synonym for --force
+	"name=yes_i_really_mean_it,type=CephBool,req=false", \
         "mark osd as being destroyed. Keeps the ID intact (allowing reuse), " \
         "but removes cephx keys, config-key data and lockbox keys, "\
         "rendering data permanently unreadable.", \
         "osd", "rw")
 COMMAND("osd purge " \
         "name=id,type=CephOsdName " \
-	"name=sure,type=CephChoices,strings=--force|--yes-i-really-mean-it,req=false", \
+	"name=force,type=CephBool,req=false "
+        // backward compat synonym for --force
+	"name=yes_i_really_mean_it,type=CephBool,req=false", \
         "purge all osd data from the monitors including the OSD id " \
 	"and CRUSH position",					     \
 	"osd", "rw")

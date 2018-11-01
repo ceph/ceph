@@ -1360,9 +1360,9 @@ int MDSMonitor::filesystem_command(
       }
     }
   } else if (prefix == "mds rmfailed") {
-    string confirm;
-    if (!cmd_getval(g_ceph_context, cmdmap, "confirm", confirm) ||
-       confirm != "--yes-i-really-mean-it") {
+    bool confirm = false;
+    cmd_getval(g_ceph_context, cmdmap, "yes_i_really_mean_it", confirm);
+    if (!confirm) {
          ss << "WARNING: this can make your filesystem inaccessible! "
                "Add --yes-i-really-mean-it if you are sure you wish to continue.";
          return -EPERM;

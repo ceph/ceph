@@ -654,9 +654,9 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
       goto reply;
     }
 
-    string sure;
-    if (!cmd_getval(g_ceph_context, cmdmap, "sure", sure) ||
-        sure != "--yes-i-really-mean-it") {
+    bool sure = false;
+    cmd_getval(g_ceph_context, cmdmap, "yes_i_really_mean_it", sure);
+    if (!sure) {
       ss << "please specify '--yes-i-really-mean-it' if you "
          << "really, **really** want to set feature '"
          << feature << "' in the monmap.";

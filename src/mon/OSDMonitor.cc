@@ -6986,10 +6986,9 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       if (r) {
 	return r;
       }
-      string force;
-      cmd_getval(cct,cmdmap, "force", force);
-      if (p.cache_mode != pg_pool_t::CACHEMODE_NONE &&
-	  force != "--yes-i-really-mean-it") {
+      bool force = false;
+      cmd_getval(cct,cmdmap, "yes_i_really_mean_it", force);
+      if (p.cache_mode != pg_pool_t::CACHEMODE_NONE && !force) {
 	ss << "splits in cache pools must be followed by scrubs and leave sufficient free space to avoid overfilling.  use --yes-i-really-mean-it to force.";
 	return -EPERM;
       }
@@ -7086,9 +7085,10 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     }
   } else if (var == "hashpspool") {
     uint64_t flag = pg_pool_t::get_flag_by_name(var);
-    string force;
-    cmd_getval(cct, cmdmap, "force", force);
-    if (force != "--yes-i-really-mean-it") {
+    bool force = false;
+    cmd_getval(cct, cmdmap, "yes_i_really_mean_it", force);
+
+    if (!force) {
       ss << "are you SURE?  this will remap all placement groups in this pool,"
 	    " this triggers large data movement,"
 	    " pass --yes-i-really-mean-it if you really do.";
@@ -7455,11 +7455,10 @@ int OSDMonitor::_command_pool_application(const string &prefix,
       return -EINVAL;
     }
 
-    string force;
-    cmd_getval(cct, cmdmap, "force", force);
+    bool force = false;
+    cmd_getval(cct, cmdmap, "yes_i_really_mean_it", force);
 
-    if (!app_exists && !p.application_metadata.empty() &&
-        force != "--yes-i-really-mean-it") {
+    if (!app_exists && !p.application_metadata.empty() && !force) {
       ss << "Are you SURE? Pool '" << pool_name << "' already has an enabled "
          << "application; pass --yes-i-really-mean-it to proceed anyway";
       return -EPERM;
@@ -7483,10 +7482,10 @@ int OSDMonitor::_command_pool_application(const string &prefix,
     ss << "enabled application '" << app << "' on pool '" << pool_name << "'";
 
   } else if (boost::algorithm::ends_with(prefix, "disable")) {
-    string force;
-    cmd_getval(cct, cmdmap, "force", force);
+    bool force = false;
+    cmd_getval(cct, cmdmap, "yes_i_really_mean_it", force);
 
-    if (force != "--yes-i-really-mean-it") {
+    if (!force) {
       ss << "Are you SURE? Disabling an application within a pool might result "
          << "in loss of application functionality; pass "
          << "--yes-i-really-mean-it to proceed anyway";
@@ -9142,10 +9141,13 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       }
     } while (false);
   } else if (prefix == "osd crush swap-bucket") {
-    string source, dest, force;
+    string source, dest;
     cmd_getval(cct, cmdmap, "source", source);
     cmd_getval(cct, cmdmap, "dest", dest);
-    cmd_getval(cct, cmdmap, "force", force);
+
+    bool force = false;
+    cmd_getval(cct, cmdmap, "yes_i_really_mean_it", force);
+
     CrushWrapper newcrush;
     _get_pending_crush(newcrush);
     if (!newcrush.name_exists(source)) {
@@ -9161,14 +9163,13 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     int sid = newcrush.get_item_id(source);
     int did = newcrush.get_item_id(dest);
     int sparent;
-    if (newcrush.get_immediate_parent_id(sid, &sparent) == 0 &&
-	force != "--yes-i-really-mean-it") {
+    if (newcrush.get_immediate_parent_id(sid, &sparent) == 0 && !force) {
       ss << "source item " << source << " is not an orphan bucket; pass --yes-i-really-mean-it to proceed anyway";
       err = -EPERM;
       goto reply;
     }
     if (newcrush.get_bucket_alg(sid) != newcrush.get_bucket_alg(did) &&
-	force != "--yes-i-really-mean-it") {
+	!force) {
       ss << "source bucket alg " << crush_alg_name(newcrush.get_bucket_alg(sid)) << " != "
 	 << "dest bucket alg " << crush_alg_name(newcrush.get_bucket_alg(did))
 	 << "; pass --yes-i-really-mean-it to proceed anyway";
@@ -9871,9 +9872,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EPERM;
       goto reply;
     }
-    string sure;
-    cmd_getval(cct, cmdmap, "sure", sure);
-    if (sure != "--yes-i-really-mean-it") {
+    bool sure = false;
+    cmd_getval(cct, cmdmap, "yes_i_really_mean_it", sure);
+    if (!sure) {
       FeatureMap m;
       mon->get_combined_feature_map(&m);
       uint64_t features = ceph_release_features(vno);
@@ -9923,8 +9924,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     return prepare_unset_flag(op, CEPH_OSDMAP_PAUSERD | CEPH_OSDMAP_PAUSEWR);
 
   } else if (prefix == "osd set") {
-    string sure;
-    cmd_getval(cct, cmdmap, "sure", sure);
+    bool sure = false;
+    cmd_getval(g_ceph_context, cmdmap, "yes_i_really_mean_it", sure);
+
     string key;
     cmd_getval(cct, cmdmap, "key", key);
     if (key == "full")
@@ -9956,14 +9958,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     else if (key == "sortbitwise") {
       return prepare_set_flag(op, CEPH_OSDMAP_SORTBITWISE);
     } else if (key == "recovery_deletes") {
-      if (!osdmap.get_num_up_osds() && sure != "--yes-i-really-mean-it") {
+      if (!osdmap.get_num_up_osds() && !sure) {
         ss << "Not advisable to continue since no OSDs are up. Pass "
            << "--yes-i-really-mean-it if you really wish to continue.";
         err = -EPERM;
         goto reply;
       }
       if (HAVE_FEATURE(osdmap.get_up_osd_features(), OSD_RECOVERY_DELETES)
-          || sure == "--yes-i-really-mean-it") {
+          || sure) {
 	return prepare_set_flag(op, CEPH_OSDMAP_RECOVERY_DELETES);
       } else {
 	ss << "not all up OSDs have OSD_RECOVERY_DELETES feature";
@@ -9971,7 +9973,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	goto reply;
       }
     } else if (key == "require_jewel_osds") {
-      if (!osdmap.get_num_up_osds() && sure != "--yes-i-really-mean-it") {
+      if (!osdmap.get_num_up_osds() && !sure) {
         ss << "Not advisable to continue since no OSDs are up. Pass "
            << "--yes-i-really-mean-it if you really wish to continue.";
         err = -EPERM;
@@ -9986,14 +9988,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	err = 0;
 	goto reply;
       } else if (HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_JEWEL)
-                 || sure == "--yes-i-really-mean-it") {
+                 || sure) {
 	return prepare_set_flag(op, CEPH_OSDMAP_REQUIRE_JEWEL);
       } else {
 	ss << "not all up OSDs have CEPH_FEATURE_SERVER_JEWEL feature";
 	err = -EPERM;
       }
     } else if (key == "require_kraken_osds") {
-      if (!osdmap.get_num_up_osds() && sure != "--yes-i-really-mean-it") {
+      if (!osdmap.get_num_up_osds() && !sure) {
         ss << "Not advisable to continue since no OSDs are up. Pass "
            << "--yes-i-really-mean-it if you really wish to continue.";
         err = -EPERM;
@@ -10008,7 +10010,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	err = 0;
 	goto reply;
       } else if (HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_KRAKEN)
-                 || sure == "--yes-i-really-mean-it") {
+                 || sure) {
 	bool r = prepare_set_flag(op, CEPH_OSDMAP_REQUIRE_KRAKEN);
 	// ensure JEWEL is also set
 	pending_inc.new_flags |= CEPH_OSDMAP_REQUIRE_JEWEL;
@@ -10059,8 +10061,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   } else if (prefix == "osd require-osd-release") {
     string release;
     cmd_getval(cct, cmdmap, "release", release);
-    string sure;
-    cmd_getval(cct, cmdmap, "sure", sure);
+    bool sure = false;
+    cmd_getval(cct, cmdmap, "yes_i_really_mean_it", sure);
     if (!osdmap.test_flag(CEPH_OSDMAP_SORTBITWISE)) {
       ss << "the sortbitwise flag must be set first";
       err = -EPERM;
@@ -10083,7 +10085,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     ceph_assert(osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS);
-    if (!osdmap.get_num_up_osds() && sure != "--yes-i-really-mean-it") {
+    if (!osdmap.get_num_up_osds() && !sure) {
       ss << "Not advisable to continue since no OSDs are up. Pass "
 	 << "--yes-i-really-mean-it if you really wish to continue.";
       err = -EPERM;
@@ -10091,14 +10093,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
     if (rel == CEPH_RELEASE_MIMIC) {
       if ((!HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_MIMIC))
-           && sure != "--yes-i-really-mean-it") {
+           && !sure) {
 	ss << "not all up OSDs have CEPH_FEATURE_SERVER_MIMIC feature";
 	err = -EPERM;
 	goto reply;
       }
     } else if (rel == CEPH_RELEASE_NAUTILUS) {
       if ((!HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_NAUTILUS))
-           && sure != "--yes-i-really-mean-it") {
+           && !sure) {
 	ss << "not all up OSDs have CEPH_FEATURE_SERVER_NAUTILUS feature";
 	err = -EPERM;
 	goto reply;
@@ -11016,8 +11018,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EINVAL;
       goto reply;
     }
-    string sure;
-    if (!cmd_getval(cct, cmdmap, "sure", sure) || sure != "--yes-i-really-mean-it") {
+    bool sure = false;
+    cmd_getval(g_ceph_context, cmdmap, "yes_i_really_mean_it", sure);
+    if (!sure) {
       ss << "are you SURE?  this might mean real, permanent data loss.  pass "
 	    "--yes-i-really-mean-it if you really do.";
       err = -EPERM;
@@ -11082,9 +11085,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	     "osd purge-new" == prefix);
     }
 
-    string sure;
-    if (!cmd_getval(cct, cmdmap, "sure", sure) ||
-        sure != "--yes-i-really-mean-it") {
+    bool sure = false;
+    cmd_getval(g_ceph_context, cmdmap, "yes_i_really_mean_it", sure);
+    if (!sure) {
       ss << "Are you SURE?  Did you verify with 'ceph osd safe-to-destroy'?  "
 	 << "This will mean real, permanent data loss, as well "
          << "as deletion of cephx and lockbox keys. "
@@ -11924,13 +11927,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
-    string sure;
-    cmd_getval(cct, cmdmap, "sure", sure);
+    bool sure = false;
+    cmd_getval(cct, cmdmap, "yes_i_really_mean_it", sure);
+
     if ((mode != pg_pool_t::CACHEMODE_WRITEBACK &&
 	 mode != pg_pool_t::CACHEMODE_NONE &&
 	 mode != pg_pool_t::CACHEMODE_PROXY &&
 	 mode != pg_pool_t::CACHEMODE_READPROXY) &&
-	sure != "--yes-i-really-mean-it") {
+	 !sure) {
       ss << "'" << modestr << "' is not a well-supported cache mode and may "
 	 << "corrupt your data.  pass --yes-i-really-mean-it to force.";
       err = -EPERM;
@@ -12215,9 +12219,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -ENOENT;
       goto reply;
     }
-    string sure;
-    cmd_getval(cct, cmdmap, "sure", sure);
-    if (sure != "--yes-i-really-mean-it") {
+    bool sure = false;
+    cmd_getval(cct, cmdmap, "yes_i_really_mean_it", sure);
+    if (!sure) {
       ss << "This command will recreate a lost (as in data lost) PG with data in it, such "
 	 << "that the cluster will give up ever trying to recover the lost data.  Do this "
 	 << "only if you are certain that all copies of the PG are in fact lost and you are "
