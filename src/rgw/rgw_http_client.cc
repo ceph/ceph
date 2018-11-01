@@ -1197,11 +1197,11 @@ void rgw_http_client_cleanup()
 }
 
 
-int RGWHTTP::send(RGWHTTPClient *req) {
+int RGWHTTP::send(RGWHTTPClient *req, bool send_data_hint) {
   if (!req) {
     return 0;
   }
-  int r = rgw_http_manager->add_request(req);
+  int r = rgw_http_manager->add_request(req, send_data_hint);
   if (r < 0) {
     return r;
   }
@@ -1209,11 +1209,11 @@ int RGWHTTP::send(RGWHTTPClient *req) {
   return 0;
 }
 
-int RGWHTTP::process(RGWHTTPClient *req) {
+int RGWHTTP::process(RGWHTTPClient *req, bool send_data_hint) {
   if (!req) {
     return 0;
   }
-  int r = send(req);
+  int r = send(req, send_data_hint);
   if (r < 0) {
     return r;
   }

@@ -785,7 +785,7 @@ int RGWRESTStreamRWRequest::send_request(RGWAccessKey *key, map<string, string>&
 int RGWRESTStreamRWRequest::send(RGWHTTPManager *mgr)
 {
   if (!mgr) {
-    return RGWHTTP::send(this);
+    return RGWHTTP::send(this, send_data_hint);
   }
 
   int r = mgr->add_request(this, send_data_hint);

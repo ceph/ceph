@@ -355,7 +355,7 @@ public:
 class RGWHTTP
 {
 public:
-  static int send(RGWHTTPClient *req);
-  static int process(RGWHTTPClient *req);
+  static int send(RGWHTTPClient *req, bool send_data_hint = false);
+  static int process(RGWHTTPClient *req, bool send_data_hint = false);
 };
 #endif
