@@ -13,7 +13,7 @@ ceph:
   - libcephfs-dev
   - libcephfs-java
   - libcephfs-jni
-  - librados2
+  - librados3
   - librbd1
   - rbd-fuse
   - ceph-common-dbg
@@ -24,7 +24,7 @@ ceph:
   - ceph-osd-dbg
   - ceph-test-dbg
   - libcephfs2-dbg
-  - librados2-dbg
+  - librados3-dbg
   - libradosstriper1-dbg
   - librbd1-dbg
   - librgw2-dbg
@@ -42,7 +42,7 @@ ceph:
   - libcephfs_jni1
   - libcephfs2
   - libcephfs-devel
-  - librados2
+  - librados3
   - librbd1
   - python-ceph
   - rbd-fuse
