@@ -303,6 +303,10 @@ public:
 		    const std::string& fs_name);
   void finish_reclaim();
 
+  fs_cluster_id_t get_fs_cid() {
+    return fscid;
+  }
+
   int mds_command(
     const std::string &mds_spec,
     const std::vector<std::string>& cmd,
@@ -1238,6 +1242,9 @@ private:
   CommandTable<MDSCommandOp> command_table;
 
   bool _use_faked_inos;
+
+  // Cluster fsid
+  fs_cluster_id_t fscid;
 
   // file handles, etc.
   interval_set<int> free_fd_set;  // unused fds
