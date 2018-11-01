@@ -227,6 +227,10 @@ class BlueRocksWritableFile : public rocksdb::WritableFile {
     return false;
   }
 
+  void SetWriteLifeTimeHint(rocksdb::Env::WriteLifeTimeHint hint) override {
+    h->write_hint = (const int)hint;
+  }
+
   /*
    * Get the size of valid data in the file.
    */

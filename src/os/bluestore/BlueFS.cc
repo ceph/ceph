@@ -2163,9 +2163,9 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
       }
     }
     if (cct->_conf->bluefs_sync_write) {
-      bdev[p->bdev]->write(p->offset + x_off, t, buffered);
+      bdev[p->bdev]->write(p->offset + x_off, t, buffered, h->write_hint);
     } else {
-      bdev[p->bdev]->aio_write(p->offset + x_off, t, h->iocv[p->bdev], buffered);
+      bdev[p->bdev]->aio_write(p->offset + x_off, t, h->iocv[p->bdev], buffered, h->write_hint);
     }
     h->dirty_devs[p->bdev] = true;
     if (p->bdev == BDEV_SLOW) {
