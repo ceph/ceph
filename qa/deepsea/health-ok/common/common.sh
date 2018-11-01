@@ -398,22 +398,6 @@ EOF
     _run_test_script_on_node $TESTSCRIPT $CLIENTNODE
 }
 
-function validate_rgw_cert_perm {
-    local TESTSCRIPT=/tmp/test_rados_put.sh
-    local RGWNODE=$(_first_x_node rgw-ssl)
-    cat << 'EOF' > $TESTSCRIPT
-set -ex
-trap 'echo "Result: NOT_OK"' ERR
-RGW_PEM=/etc/ceph/rgw.pem
-test -f "$RGW_PEM"
-test "$(stat -c'%U' $RGW_PEM)" == "ceph"
-test "$(stat -c'%G' $RGW_PEM)" == "ceph"
-test "$(stat -c'%a' $RGW_PEM)" -eq 600
-echo "Result: OK"
-EOF
-    _run_test_script_on_node $TESTSCRIPT $RGWNODE
-}
-
 function test_systemd_ceph_osd_target_wants {
     #
     # see bsc#1051598 in which ceph-disk was omitting --runtime when it enabled

@@ -182,7 +182,7 @@ function deploy_ceph {
         policy_cfg_mon_flex
         test -n "$MDS" && policy_cfg_mds
         policy_cfg_openattic_rgw_igw_ganesha
-        test "$NFS_GANESHA" -a "$RGW" && rgw_demo_users
+        test "$RGW" && rgw_demo_users
         case "$STORAGE_PROFILE" in
             dmcrypt) proposal_populate_dmcrypt ;;
             filestore) proposal_populate_filestore ;;

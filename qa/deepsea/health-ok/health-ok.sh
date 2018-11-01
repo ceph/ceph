@@ -166,6 +166,7 @@ if [ -n "$RGW" ] ; then
     test -n "$SSL" && validate_rgw_cert_perm
     rgw_user_and_bucket_list
     rgw_validate_system_user
+    rgw_validate_demo_users
 fi
 test -n "$MDS" -a "$CLIENT_NODES" -ge 1 && cephfs_mount_and_sanity_test
 if [ "$NFS_GANESHA" ] ; then

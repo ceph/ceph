@@ -1,3 +1,4 @@
+import copy
 import logging
 
 from salt_manager import SaltManager
@@ -39,6 +40,10 @@ class DeepSea(Task):
         quiet_salt:
             true        suppress stderr on salt commands (default)
             false       let salt commands spam the log
+        rgw_ssl:
+            true        use SSL if RGW is deployed
+            false       if RGW is deployed, do not use SSL (default)
+
 
     This task also understands the following config keys that affect
     the behavior of just this one task (no effect on subtasks):
@@ -71,8 +76,10 @@ class DeepSea(Task):
             self.dev_env = deepsea_ctx['dev_env']
             self.sm = deepsea_ctx['salt_manager_instance']
             self.master_remote = deepsea_ctx['master_remote']
+            self.rgw_ssl = deepsea_ctx['rgw_ssl']
             self.roles = deepsea_ctx['roles']
             self.role_lookup_table = deepsea_ctx['role_lookup_table']
+            self.role_remotes = deepsea_ctx['role_remotes']
             self.quiet_salt = deepsea_ctx['quiet_salt']
             log.debug("end of constructor method")
             return None
@@ -84,6 +91,8 @@ class DeepSea(Task):
         self.sm = deepsea_ctx['salt_manager_instance']
         deepsea_ctx['master_remote'] = self.sm.master_remote
         self.master_remote = deepsea_ctx['master_remote']
+        deepsea_ctx['rgw_ssl'] = self.config.get('rgw_ssl', False)
+        self.rgw_ssl = deepsea_ctx['rgw_ssl']
         deepsea_ctx['roles'] = ctx.config['roles']
         self._introspect_roles(deepsea_ctx)
         self.cluster_nodes = deepsea_ctx['cluster_nodes']
@@ -109,24 +118,14 @@ class DeepSea(Task):
         log.debug("end of constructor method")
 
     def _disable_gpg_checks(self):
-        log.info("disabling zypper GPG checks on all test nodes")
-        self.master_remote.run(args=(
-            "echo \"pre-disable repo state\" ; "
-            "zypper lr -upEP ; grep gpg /etc/zypp/repos.d/*"
-            ))
         cmd = (
             'sed -i -e \'/gpgcheck/ d\' /etc/zypp/repos.d/* ; '
             'sed -i -e \'/gpgkey/ d\' /etc/zypp/repos.d/* ; '
             'sed -i -e \'$a gpgcheck=0\' /etc/zypp/repos.d/*'
             )
-        log.info("zypper repos after disabling GPG checks")
         self.ctx.cluster.run(args=[
             'sudo', 'sh', '-c', cmd
             ])
-        self.master_remote.run(args=(
-            "echo \"post-disable repo state\" ; "
-            "zypper lr -upEP ; grep gpg /etc/zypp/repos.d/*"
-            ))
 
     def _install_deepsea(self):
         install_method = deepsea_ctx['install_method']
@@ -308,7 +307,7 @@ class DeepSea(Task):
                 if role_type in cluster_roles:
                     cluster_remotes[remote.hostname] = remote
         cluster_nodes = len(cluster_remotes)
-        client_remotes = role_remotes
+        client_remotes = copy.copy(role_remotes)
         for remote_name, _ in cluster_remotes.iteritems():
             del(client_remotes[remote_name])
         deepsea_ctx['client_nodes'] = len(client_remotes)
@@ -362,6 +361,21 @@ class DeepSea(Task):
             for pn in [1, 2]:
                 _remote.run(args=['sudo', 'sh', '-c', for_loop.format(pn=pn)])
 
+    def role_type_present(self, role_type):
+        """
+        Method for determining if _any_ test node has the given role type
+        (teuthology role, not DeepSea role). Examples: "osd", "mon" (not
+        "mon.a").
+
+        If the role type is present, returns the hostname of the first remote
+        with that role type.
+
+        If the role type is absent, returns the empty string.
+        """
+        role_dict = self.role_lookup_table.get(role_type, {})
+        host = role_dict[role_dict.keys()[0]] if role_dict else ''
+        return host
+
     # Teuthology iterates through the tasks stanza twice: once to "execute"
     # the tasks and a second time to "unwind" them. During the first pass
     # it pushes each task onto a stack, and during the second pass it "unwinds"
@@ -386,6 +400,7 @@ class DeepSea(Task):
         super(DeepSea, self).begin()
         if 'deepsea_installed' not in deepsea_ctx:
             self._disable_gpg_checks()
+            self.master_remote.run(args="zypper lr -upEP")
             self._install_deepsea()
             assert deepsea_ctx['deepsea_installed']
         log.debug("end of begin method")
@@ -397,10 +412,13 @@ class DeepSea(Task):
         # log.debug("end of end method")
 
     def teardown(self):
-        # log.debug("beginning of teardown method")
+        log.debug("beginning of teardown method")
         super(DeepSea, self).teardown()
-        pass
-        # log.debug("end of teardown method")
+        #
+        # the install task does "rm -r /var/lib/ceph" on every test node,
+        # and that fails when there are OSDs running
+        self._purge_osds()
+        log.debug("end of teardown method")
 
 
 class CephConf(DeepSea):
@@ -466,6 +484,11 @@ class CephConf(DeepSea):
             data,
             )
         self.logger.info(info_msg)
+
+    def _dump_ceph_conf_d(self):
+        self.master_remote.run(
+            args="ls -lR {}".format(self.ceph_conf_d)
+            )
 
     def _dump_customizations(self):
         for section in self.customize.keys():
@@ -534,8 +557,13 @@ class CephConf(DeepSea):
             if section in self.config and isinstance(self.config[section],
                                                      dict):
                     self._custom_ceph_conf(section, self.config[section])
-        self._dump_customizations()
+        self._dump_ceph_conf_d()
         self.logger.debug("end of begin method")
+
+    def teardown(self):
+        # self.logger.debug("beginning of teardown method")
+        pass
+        # self.logger.debug("end of teardown method")
 
 
 class Dummy(DeepSea):
@@ -550,6 +578,11 @@ class Dummy(DeepSea):
         self.logger.debug("beginning of begin method")
         self.logger.info("deepsea_ctx == {}".format(deepsea_ctx))
         self.logger.debug("end of begin method")
+
+    def teardown(self):
+        # self.logger.debug("beginning of teardown method")
+        pass
+        # self.logger.debug("end of teardown method")
 
 
 class Deploy:
@@ -575,8 +608,8 @@ class HealthOK(DeepSea):
     def __init__(self, ctx, config):
         self.logger = log.getChild('health_ok')
         self.logger.debug("beginning of constructor method")
-        super(HealthOK, self).__init__(ctx, {})
-        self.config = config
+        super(HealthOK, self).__init__(ctx, config)
+        self.logger.debug("munged config is {}".format(self.config))
         self.logger.debug("end of constructor method")
 
     def _copy_health_ok(self):
@@ -619,9 +652,18 @@ class HealthOK(DeepSea):
                 cmd_str = self.prefix + cmd_str
                 if self.dev_env:
                     cmd_str = 'DEV_ENV=true ' + cmd_str
+                if self.deepsea_cli:
+                    cmd_str += ' --cli'
+                if self.rgw_ssl:
+                    cmd_str += ' --ssl'
             self.master_remote.run(args=[
                 'sudo', 'bash', '-c', cmd_str,
                 ])
+
+    def teardown(self):
+        # self.logger.debug("beginning of teardown method")
+        pass
+        # self.logger.debug("end of teardown method")
 
 
 class Orch(DeepSea):
@@ -655,6 +697,7 @@ class Orch(DeepSea):
         if self.stage and self.stage not in self.all_stages:
             raise ConfigError("unrecognized Stage ->{}<-".format(self.stage))
         super(Orch, self).__init__(ctx, config)
+        self.logger.debug("munged config is {}".format(self.config))
         self.scripts = Scripts(self.master_remote, self.logger)
         self.logger.debug("end of constructor method")
 
@@ -674,6 +717,18 @@ class Orch(DeepSea):
             'check=1',
             ])
 
+    def _configure_rgw(self):
+        self.logger.debug("self.rgw_ssl is ->{}<-".format(self.rgw_ssl))
+        rgw_host = self.role_type_present('rgw')
+        if rgw_host:
+            self.logger.debug(
+                "detected rgw host ->{}<-".format(rgw_host)
+                )
+            self.logger.info("WWWW: configuring RGW")
+            self.scripts.rgw_init()
+            if self.rgw_ssl:
+                self.scripts.rgw_init_ssl()
+
     def _is_int_between_0_and_5(self, num):
         try:
             num = int(num)
@@ -689,6 +744,22 @@ class Orch(DeepSea):
         cmd = "sudo salt \\* pillar.items"
         if self.quiet_salt:
             cmd += " 2>/dev/null"
+        self.master_remote.run(args=cmd)
+
+    def _maybe_cat_ganesha_conf(self):
+        ganesha_host = self.role_type_present('ganesha')
+        if ganesha_host:
+            ganesha_remote = self.role_remotes[ganesha_host]
+            ganesha_remote.run(args="cat /etc/ganesha/ganesha.conf")
+
+    def _nfs_ganesha_no_root_squash(self):
+        self.logger.info("WWWW: NFS-Ganesha set No_root_squash")
+        ganeshaj2 = '/srv/salt/ceph/ganesha/files/ganesha.conf.j2'
+        cmd = [
+            "sudo", "sed", "-i",
+            '/Access_Type = RW;/a \tSquash = No_root_squash;',
+            ganeshaj2,
+            ]
         self.master_remote.run(args=cmd)
 
     def _run_orch(self, orch_tuple):
@@ -758,6 +829,7 @@ class Orch(DeepSea):
         Run Stage 1
         """
         stage = 1
+        self._configure_rgw()
         self.__log_stage_start(stage)
         self._run_orch(("stage", stage))
 
@@ -789,8 +861,11 @@ class Orch(DeepSea):
         Run Stage 4
         """
         stage = 4
+        if self.role_type_present("ganesha"):
+            self._nfs_ganesha_no_root_squash()
         self.__log_stage_start(stage)
         self._run_orch(("stage", stage))
+        self._maybe_cat_ganesha_conf()
         self._ceph_health_test()
 
     def _run_stage_5(self):
@@ -841,6 +916,11 @@ class Orch(DeepSea):
             raise ConfigError('unsupported stage ->{}<-'.format(self.stage))
         self.logger.debug("end of begin method")
 
+    def teardown(self):
+        # self.logger.debug("beginning of teardown method")
+        pass
+        # self.logger.debug("end of teardown method")
+
 
 class Policy(DeepSea):
 
@@ -849,8 +929,9 @@ class Policy(DeepSea):
     def __init__(self, ctx, config):
         self.logger = log.getChild('policy')
         self.logger.debug("beginning of constructor method")
-        self.profile = config.get("profile", "teuthology")
         super(Policy, self).__init__(ctx, config)
+        self.logger.debug("munged config is {}".format(self.config))
+        self.profile = self.config.get("profile", "teuthology")
         self.logger.debug("end of constructor method")
 
     def __build_profile_x(self, profile):
@@ -920,15 +1001,6 @@ role-admin/cluster/*.sls
                 .format(self.profile)
                 )
 
-    def _cat_policy_cfg(self):
-        """
-        Dump the remote policy.cfg file to teuthology log.
-        """
-        self.master_remote.run(args=[
-            'cat',
-            self.proposals_dir + "/policy.cfg"
-            ])
-
     def _build_x(self, role_type, required=False):
         no_roles_of_type = "no {} roles configured".format(role_type)
         but_required = ", but at least one of these is required."
@@ -952,6 +1024,15 @@ role-admin/cluster/*.sls
                 '# Role assignment - {}\n'
                 'role-{}/cluster/{}.sls\n'
                 ).format(role_spec, role_type, remote_name)
+
+    def _cat_policy_cfg(self):
+        """
+        Dump the remote policy.cfg file to teuthology log.
+        """
+        self.master_remote.run(args=[
+            'cat',
+            self.proposals_dir + "/policy.cfg"
+            ])
 
     def _dump_profile_ymls(self):
         """
@@ -1015,17 +1096,18 @@ role-admin/cluster/*.sls
         self._dump_profile_ymls()
         self.logger.debug("end of begin method")
 
+    def teardown(self):
+        # self.logger.debug("beginning of teardown method")
+        pass
+        # self.logger.debug("end of teardown method")
+
 
 class CreatePools(DeepSea):
 
     def __init__(self, ctx, config):
         self.logger = log.getChild('create_pools')
         self.logger.debug("beginning of constructor method")
-        self.logger.debug("initial config is {}".format(config))
         super(CreatePools, self).__init__(ctx, config)
-        self.logger.debug(
-            "post-parent-constructor config is {}".format(self.config)
-            )
         self.logger.debug("munged config is {}".format(self.config))
         self.args = []
         if isinstance(self.config, list):
@@ -1058,6 +1140,11 @@ class CreatePools(DeepSea):
         self.scripts.create_all_pools_at_once(self.args)
         self.logger.debug("end of begin method")
 
+    def teardown(self):
+        # self.logger.debug("beginning of teardown method")
+        pass
+        # self.logger.debug("end of teardown method")
+
 
 class Preflight(DeepSea):
 
@@ -1065,6 +1152,7 @@ class Preflight(DeepSea):
         self.logger = log.getChild('preflight')
         self.logger.debug("beginning of constructor method")
         super(Preflight, self).__init__(ctx, config)
+        self.logger.debug("munged config is {}".format(self.config))
         self.logger.debug("end of constructor method")
 
     def _deepsea_version(self):
@@ -1154,13 +1242,9 @@ class Preflight(DeepSea):
         self.logger.debug("end of begin method")
 
     def teardown(self):
-        self.logger.debug("beginning of teardown method")
-        super(DeepSea, self).teardown()
-        #
-        # the install task does "rm -r /var/lib/ceph" on every test node,
-        # and that fails when there are OSDs running
-        self._purge_osds()
-        self.logger.debug("end of teardown method")
+        # self.logger.debug("beginning of teardown method")
+        pass
+        # self.logger.debug("end of teardown method")
 
 
 class Scripts:
@@ -1264,6 +1348,37 @@ echo -en "\\n" # this is just for log readability
 rm $TMPFILE
 echo "Salt API test: END"
 """,
+        "rgw_init": """# Set up RGW
+set -ex
+USERSYML=/srv/salt/ceph/rgw/users/users.d/rgw.yml
+cat <<EOF > $USERSYML
+- { uid: "demo", name: "Demo", email: "demo@demo.nil" }
+- { uid: "demo1", name: "Demo1", email: "demo1@demo.nil" }
+EOF
+cat $USERSYML
+""",
+        "rgw_init_ssl": """# Set up RGW-over-SSL
+set -ex
+CERTDIR=/srv/salt/ceph/rgw/cert
+mkdir -p $CERTDIR
+pushd $CERTDIR
+openssl req -x509 \
+        -nodes \
+        -days 1095 \
+        -newkey rsa:4096 \
+        -keyout rgw.key \
+        -out rgw.crt \
+        -subj "/C=DE"
+cat rgw.key > rgw.pem && cat rgw.crt >> rgw.pem
+popd
+GLOBALYML=/srv/pillar/ceph/stack/global.yml
+cat <<EOF >> $GLOBALYML
+rgw_init: default-ssl
+EOF
+cat $GLOBALYML
+cp /srv/salt/ceph/configuration/files/rgw-ssl.conf \
+    /srv/salt/ceph/configuration/files/ceph.conf.d/rgw.conf
+""",
         }
 
     def __init__(self, master_remote, logger):
@@ -1305,6 +1420,20 @@ echo "Salt API test: END"
             self.master_remote,
             'disable_update_in_stage_0.sh',
             self.script_dict["disable_update_in_stage_0"],
+            )
+
+    def rgw_init(self):
+        self._remote_run_script_as_root(
+            self.master_remote,
+            'rgw_init.sh',
+            self.script_dict["rgw_init"],
+            )
+
+    def rgw_init_ssl(self):
+        self._remote_run_script_as_root(
+            self.master_remote,
+            'rgw_init_ssl.sh',
+            self.script_dict["rgw_init_ssl"],
             )
 
     def salt_api_test(self):

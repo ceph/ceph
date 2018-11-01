@@ -1,6 +1,7 @@
 #
 # This file is part of the DeepSea integration test suite
 #
+RGW_ROLE=rgw
 
 function rgw_demo_users {
     local RGWSLS=/srv/salt/ceph/rgw/users/users.d/users.yml
@@ -16,7 +17,7 @@ function rgw_user_and_bucket_list {
     # just list rgw users and buckets
     #
     local TESTSCRIPT=/tmp/rgw_user_and_bucket_list.sh
-    local RGWNODE=$(_first_x_node rgw)
+    local RGWNODE=$(_first_x_node $RGW_ROLE)
     cat << EOF > $TESTSCRIPT
 set -ex
 radosgw-admin user list
@@ -31,7 +32,7 @@ function rgw_validate_system_user {
     # prove the system user "admin" was really set up
     #
     local TESTSCRIPT=/tmp/rgw_validate_system_user.sh
-    local RGWNODE=$(_first_x_node rgw)
+    local RGWNODE=$(_first_x_node $RGW_ROLE)
     cat << EOF > $TESTSCRIPT
 set -ex
 trap 'echo "Result: NOT_OK"' ERR
@@ -47,7 +48,7 @@ function rgw_validate_demo_users {
     # prove the demo users from rgw_demo_users were really set up
     #
     local TESTSCRIPT=/tmp/rgw_validate_demo_users.sh
-    local RGWNODE=$(_first_x_node rgw)
+    local RGWNODE=$(_first_x_node $RGW_ROLE)
     cat << EOF > $TESTSCRIPT
 set -ex
 trap 'echo "Result: NOT_OK"' ERR
@@ -59,6 +60,7 @@ EOF
 }
 
 function rgw_curl_test {
+    local RGWNODE=$(_first_x_node $RGW_ROLE)
     test -n "$SSL" && PROTOCOL="https" || PROTOCOL="http"
     test -n "$SSL" && CURL_OPTS="--insecure"
     set +x
@@ -72,7 +74,8 @@ function rgw_curl_test {
     salt-run state.orch ceph.restart.rgw 2>/dev/null
     systemctl restart rsyslog.service
     _zypper_ps
-    RGWNODE=$(salt --no-color -C "I@roles:rgw" test.ping | grep -o -P '^\S+(?=:)' | head -1)
+    salt --no-color -C "I@roles:$RGW_ROLE" cmd.run 'systemctl | grep radosgw'
+    #RGWNODE=$(salt --no-color -C "I@roles:$RGW_ROLE" test.ping | grep -o -P '^\S+(?=:)' | head -1)
     RGWXMLOUT=/tmp/rgw_test.xml
     curl $CURL_OPTS "${PROTOCOL}://$RGWNODE" > $RGWXMLOUT
     test -f $RGWXMLOUT
@@ -107,3 +110,20 @@ function rgw_ssl_init {
     popd
     rgw_add_ssl_global
 }
+
+function validate_rgw_cert_perm {
+    local TESTSCRIPT=/tmp/test_validate_rgw_cert_perm.sh
+    local RGWNODE=$(_first_x_node $RGW_ROLE)
+    cat << 'EOF' > $TESTSCRIPT
+set -ex
+trap 'echo "Result: NOT_OK"' ERR
+RGW_PEM=/etc/ceph/rgw.pem
+test -f "$RGW_PEM"
+test "$(stat -c'%U' $RGW_PEM)" == "ceph"
+test "$(stat -c'%G' $RGW_PEM)" == "ceph"
+test "$(stat -c'%a' $RGW_PEM)" -eq 600
+echo "Result: OK"
+EOF
+    _run_test_script_on_node $TESTSCRIPT $RGWNODE
+}
+
