@@ -722,6 +722,9 @@ int FileStore::get_devices(set<string> *ls)
   if (strncmp(dev_node, "dm-", 3) == 0) {
     get_dm_parents(dev_node, ls);
   }
+  if (journal) {
+    journal->get_devices(ls);
+  }
   return 0;
 }
 

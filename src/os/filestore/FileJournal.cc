@@ -2185,3 +2185,16 @@ off64_t FileJournal::get_journal_size_estimate()
   dout(20) << __func__ << " journal size=" << size << dendl;
   return size;
 }
+
+void FileJournal::get_devices(set<string> *ls)
+{
+  char dev_node[PATH_MAX];
+  BlkDev blkdev(fd);
+  if (int rc = blkdev.wholedisk(dev_node, PATH_MAX); rc) {
+    return rc;
+  }
+  ls->insert(dev_node);
+  if (strncmp(dev_node, "dm-", 3) == 0) {
+    get_dm_parents(dev_node, ls);
+  }
+}
