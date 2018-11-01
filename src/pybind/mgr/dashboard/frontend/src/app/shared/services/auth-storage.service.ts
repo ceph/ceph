@@ -9,19 +9,13 @@ import { ServicesModule } from './services.module';
 export class AuthStorageService {
   constructor() {}
 
-  set(username: string, token: string, permissions: object = {}) {
+  set(username: string, permissions: any = {}) {
     localStorage.setItem('dashboard_username', username);
-    localStorage.setItem('access_token', token);
     localStorage.setItem('dashboard_permissions', JSON.stringify(new Permissions(permissions)));
   }
 
   remove() {
-    localStorage.removeItem('access_token');
     localStorage.removeItem('dashboard_username');
-  }
-
-  getToken(): string {
-    return localStorage.getItem('access_token');
   }
 
   isLoggedIn() {

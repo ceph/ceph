@@ -9,15 +9,12 @@ if [ "$API_URL" = "null" ]; then
 fi
 cd $CURR_DIR
 
-TOKEN=`curl --insecure -s -H "Content-Type: application/json" -X POST \
-            -d '{"username":"admin","password":"admin"}'  $API_URL/api/auth \
-			| jq .token | sed -e 's/"//g'`
+curl --insecure  -s -c /tmp/cd-cookie.txt -H "Content-Type: application/json" -X POST -d '{"username":"admin","password":"admin"}'  $API_URL/api/auth > /dev/null
 
 echo "METHOD: $1"
 echo "URL: ${API_URL}${2}"
 echo "DATA: $3"
 echo ""
 
-curl --insecure -s -b /tmp/cd-cookie.txt -H "Authorization: Bearer $TOKEN " \
-	 -H "Content-Type: application/json" -X $1 -d "$3" ${API_URL}$2 | jq
+curl --insecure -s -b /tmp/cd-cookie.txt -H "Content-Type: application/json" -X $1 -d "$3" ${API_URL}$2 | jq
 

@@ -2,7 +2,6 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
 import { Credentials } from '../models/credentials';
-import { LoginResponse } from '../models/login-response';
 import { AuthStorageService } from '../services/auth-storage.service';
 import { ApiModule } from './api.module';
 
@@ -16,8 +15,8 @@ export class AuthService {
     return this.http
       .post('api/auth', credentials)
       .toPromise()
-      .then((resp: LoginResponse) => {
-        this.authStorageService.set(resp.username, resp.token, resp.permissions);
+      .then((resp: Credentials) => {
+        this.authStorageService.set(resp.username, resp.permissions);
       });
   }
 

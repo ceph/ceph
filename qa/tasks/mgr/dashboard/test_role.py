@@ -110,12 +110,11 @@ class RoleTest(DashboardTestCase):
                          component='role')
 
     def test_delete_role_associated_with_user(self):
-        self.create_user("user", "user", ['read-only'])
         self._create_role(name='role1',
                           description='Description 1',
                           scopes_permissions={'user': ['create', 'read', 'update', 'delete']})
         self.assertStatus(201)
-        self._put('/api/user/user', {'roles': ['role1']})
+        self._put('/api/user/admin', {'roles': ['role1']})
         self.assertStatus(200)
 
         self._delete('/api/role/role1')
@@ -123,11 +122,10 @@ class RoleTest(DashboardTestCase):
         self.assertError(code='role_is_associated_with_user',
                          component='role')
 
-        self._put('/api/user/user', {'roles': ['administrator']})
+        self._put('/api/user/admin', {'roles': ['administrator']})
         self.assertStatus(200)
         self._delete('/api/role/role1')
         self.assertStatus(204)
-        self.delete_user("user")
 
     def test_update_role_does_not_exist(self):
         self._put('/api/role/role2', {})

@@ -22,11 +22,11 @@ import cherrypy
 from .. import logger
 from ..security import Scope, Permission
 from ..settings import Settings
-from ..tools import wraps, getargspec, TaskManager
+from ..tools import Session, wraps, getargspec, TaskManager
 from ..exceptions import ViewCacheNoDataException, DashboardException, \
                          ScopeNotValid, PermissionNotValid
 from ..services.exception import serialize_dashboard_exception
-from ..services.auth import AuthManager, JwtManager
+from ..services.auth import AuthManager
 
 
 class Controller(object):
@@ -57,6 +57,9 @@ class Controller(object):
         cls._security_scope = self.security_scope
 
         config = {
+            'tools.sessions.on': True,
+            'tools.sessions.name': Session.NAME,
+            'tools.session_expire_at_browser_close.on': True,
             'tools.dashboard_exception_handler.on': True,
             'tools.authenticate.on': self.secure,
         }
@@ -479,7 +482,7 @@ class BaseController(object):
         if scope is None:
             raise Exception("Cannot verify permissions without scope security"
                             " defined")
-        username = JwtManager.LOCAL_USER.username
+        username = cherrypy.session.get(Session.USERNAME)
         return AuthManager.authorize(username, scope, permissions)
 
     @classmethod
