@@ -28,6 +28,7 @@ public:
 		    bufferlist& out) = 0;
   virtual ~AdminSocketHook() {}
 };
+class InspectHook;
 
 class AdminSocket : public Thread
 {
@@ -73,6 +74,39 @@ public:
   void chown(uid_t uid, gid_t gid);
   void chmod(mode_t mode);
 
+  /**
+   * register an inspection probe on admin socket command
+   *
+   * Inspection probe is a simplified admin command that
+   * does not accept arguments. It extracts information in
+   * from running instance and returns it in formatted form.
+   * It is acceptable to register multiple probes under same command_path
+   * but 'id' must be different.
+   * In such case all registered probes are invoked, in undetermined order.
+   *
+   * @param command_path command string
+   * @param id probe specific identification
+   * @param function probe to invoke
+   *
+   * @return true for success, false otherwise
+   */
+  bool register_inspect(const std::string& command_path,
+                        const std::string& id,
+                        std::function<bool(Formatter*)> function);
+
+  /**
+   * unregister an inspection probe
+   *
+   * Remove previously registered probe.
+   *
+   * @param command_path command string
+   * @param id probe specific identification
+   *
+   * @return true for success, false otherwise
+   */
+
+  bool unregister_inspect(const std::string& command_path,
+                          const std::string& id);
 private:
   AdminSocket(const AdminSocket& rhs);
   AdminSocket& operator=(const AdminSocket &rhs);
@@ -100,6 +134,9 @@ private:
   std::map<std::string,AdminSocketHook*> m_hooks;
   std::map<std::string,std::string> m_descs;
   std::map<std::string,std::string> m_help;
+
+  Mutex inspect_lock;
+  std::map<std::string, InspectHook*> inspects;
 
   friend class AdminSocketTest;
   friend class HelpHook;
