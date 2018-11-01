@@ -245,7 +245,7 @@ void MDSDaemon::set_up_admin_socket()
                                      "show cache status");
   ceph_assert(r == 0);
   r = admin_socket->register_command("cache drop",
-                                     "cache drop name=timeout,type=CephInt,range=1",
+                                     "cache drop name=timeout,type=CephInt,range=0,req=false",
                                      asok_hook,
                                      "drop cache");
   ceph_assert(r == 0);
@@ -663,7 +663,7 @@ const std::vector<MDSDaemon::MDSCommand>& MDSDaemon::get_commands()
     MDSCommand("heap "
         "name=heapcmd,type=CephChoices,strings=dump|start_profiler|stop_profiler|release|stats",
         "show heap usage info (available only if compiled with tcmalloc)"),
-    MDSCommand("cache drop name=timeout,type=CephInt,range=1", "trim cache and optionally request client to release all caps and flush the journal"),
+    MDSCommand("cache drop name=timeout,type=CephInt,range=0,req=false", "trim cache and optionally request client to release all caps and flush the journal"),
   };
   return commands;
 };

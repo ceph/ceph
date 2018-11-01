@@ -13,12 +13,12 @@
   necessary for clients to give up capabilities in order for the MDS to fully
   drop its cache. This is accomplished by asking all clients to trim as many
   caps as possible. The timeout argument to the `cache drop` command controls
-  how long the MDS waits for clients to complete trimming caps. Keep in mind
-  that clients may still retain caps to open files which will prevent the
-  metadata for those files from being dropped by both the client and the MDS.
-  (This is an equivalent scenario to dropping the Linux
-  page/buffer/inode/dentry caches with some processes pinning some
-  inodes/dentries/pages in cache.)
+  how long the MDS waits for clients to complete trimming caps. This is optional
+  and is 0 by default (no timeout). Keep in mind that clients may still retain
+  caps to open files which will prevent the metadata for those files from being
+  dropped by both the client and the MDS. (This is an equivalent scenario to
+  dropping the Linux page/buffer/inode/dentry caches with some processes pinning
+  some inodes/dentries/pages in cache.)
 
 * The mon_health_preluminous_compat and mon_health_preluminous_compat_warning
   config options are removed, as the related functionality is more
