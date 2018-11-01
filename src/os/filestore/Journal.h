@@ -52,6 +52,8 @@ public:
 
   virtual void flush() = 0;
 
+  virtual void get_devices(set<string> *ls) {}
+
   /**
    * reserve_throttle_and_backoff
    *
