@@ -397,7 +397,7 @@ add_library(ceph-common SHARED ${ceph_common_objs})
 target_link_libraries(ceph-common ${ceph_common_deps})
 # appease dpkg-shlibdeps
 set_target_properties(ceph-common PROPERTIES
-  SOVERSION 0
+  SOVERSION 1
   INSTALL_RPATH "")
 if(NOT APPLE)
   # Apple uses Mach-O, not ELF. so this option does not apply to APPLE.
@@ -413,7 +413,11 @@ if(NOT APPLE)
     PROPERTY LINK_FLAGS "-Wl,-Bsymbolic -Wl,-Bsymbolic-functions")
 endif()
 
-install(TARGETS ceph-common DESTINATION ${CMAKE_INSTALL_PKGLIBDIR})
+install(
+  TARGETS ceph-common
+  LIBRARY
+  DESTINATION ${CMAKE_INSTALL_PKGLIBDIR}
+  NAMELINK_SKIP)
 
 if(${WITH_LTTNG})
   add_subdirectory(tracing)
