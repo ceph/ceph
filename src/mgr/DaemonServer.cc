@@ -1136,7 +1136,7 @@ bool DaemonServer::_handle_command(
       cmdctx->reply(-EINVAL, ss);
       return true;
     }
-    string no_increasing;
+    bool no_increasing = false;
     cmd_getval(g_ceph_context, cmdctx->cmdmap, "no_increasing", no_increasing);
     string out_str;
     mempool::osdmap::map<int32_t, uint32_t> new_weights;
@@ -1148,7 +1148,7 @@ bool DaemonServer::_handle_command(
 					    max_osds,
 					    by_pg,
 					    pools.empty() ? NULL : &pools,
-					    no_increasing == "--no-increasing",
+					    no_increasing,
 					    &new_weights,
 					    &ss, &out_str, f.get());
 	  });
@@ -1351,10 +1351,13 @@ bool DaemonServer::_handle_command(
 
     if (r && (prefix == "osd destroy" ||
 	      prefix == "osd purge")) {
-      string sure;
-      if (!cmd_getval(cct, cmdctx->cmdmap, "sure", sure) ||
-	  (sure != "--force" &&
-	   sure != "--yes-i-really-mean-it" /* for backward compat */)) {
+      bool force = false;
+      cmd_getval(cct, cmdctx->cmdmap, "force", force);
+      if (!force) {
+        // Backward compat
+        cmd_getval(cct, cmdctx->cmdmap, "yes_i_really_mean_it", force);
+      }
+      if (!force) {
 	ss << "\nYou can proceed by passing --force, but be warned that this will likely mean real, permanent data loss.";
       } else {
 	r = 0;
@@ -1370,7 +1373,7 @@ bool DaemonServer::_handle_command(
 	"{"
 	"\"prefix\": \"" + prefix + "-actual\", "
 	"\"id\": " + stringify(osds) + ", "
-	"\"sure\": \"--yes-i-really-mean-it\""
+	"\"yes_i_really_mean_it\": true"
 	"}";
       auto on_finish = new ReplyOnFinish(cmdctx);
       monc->start_mon_command({cmd}, {}, nullptr, &on_finish->outs, on_finish);

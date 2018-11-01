@@ -3490,11 +3490,12 @@ void Monitor::handle_command(MonOpRequestRef op)
     r = 0;
   } else if (prefix == "sync force" ||
              prefix == "mon sync force") {
-    string validate1, validate2;
-    cmd_getval(g_ceph_context, cmdmap, "validate1", validate1);
-    cmd_getval(g_ceph_context, cmdmap, "validate2", validate2);
-    if (validate1 != "--yes-i-really-mean-it" ||
-	validate2 != "--i-know-what-i-am-doing") {
+    bool validate1 = false;
+    cmd_getval(g_ceph_context, cmdmap, "yes_i_really_mean_it", validate1);
+    bool validate2 = false;
+    cmd_getval(g_ceph_context, cmdmap, "i_know_what_i_am_doing", validate2);
+
+    if (!validate1 || !validate2) {
       r = -EINVAL;
       rs = "are you SURE? this will mean the monitor store will be "
 	   "erased.  pass '--yes-i-really-mean-it "
