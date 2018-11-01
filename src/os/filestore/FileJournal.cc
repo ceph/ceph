@@ -2198,3 +2198,18 @@ void FileJournal::get_devices(set<string> *ls)
     get_dm_parents(dev_node, ls);
   }
 }
+
+void FileJournal::collect_metadata(map<string,string> *pm)
+{
+  BlkDev blkdev(fd);
+  if (rc = blkdev.partition(partition_path, PATH_MAX); rc) {
+    (*pm)["backend_filestore_journal_partition_path"] = "unknown";
+  } else {
+    (*pm)["backend_filestore_journal_partition_path"] = string(partition_path);
+  }
+  if (rc = blkdev.wholedisk(dev_node, PATH_MAX); rc) {
+    (*pm)["backend_filestore_journal_dev_node"] = "unknown";
+  } else {
+    (*pm)["backend_filestore_journal_dev_node"] = string(dev_node);
+  }
+}
