@@ -2524,12 +2524,29 @@ void Monitor::_generate_command_map(map<string,cmd_vartype>& cmdmap,
 }
 
 const MonCommand *Monitor::_get_moncommand(const string &cmd_prefix,
-                                           MonCommand *cmds, int cmds_size)
+                                           MonCommand *cmds, int cmds_size,map<string,cmd_vartype> cmdmap)
 {
   MonCommand *this_cmd = NULL;
   for (MonCommand *cp = cmds;
        cp < &cmds[cmds_size]; cp++) {
     if (cp->cmdstring.compare(0, cmd_prefix.size(), cmd_prefix) == 0) {
+		bool found_cmd = true;
+		for(map<string,cmd_vartype>::iterator it = cmdmap.begin(); it != cmdmap.end(); it++)
+		{
+			if(it->first == "prefix")
+				continue;
+			else
+			{
+				string kvstr = "name="+it->first;
+				if(cp->cmdstring.find(kvstr) == string::npos)
+				{
+					found_cmd = false;
+					break;
+				}
+			}
+		}
+		if(!found_cmd)
+			continue;
       this_cmd = cp;
       break;
     }
@@ -2701,14 +2718,14 @@ void Monitor::handle_command(MonOpRequestRef op)
   leader_cmd = _get_moncommand(prefix,
                                // the boost underlying this isn't const for some reason
                                const_cast<MonCommand*>(leader_supported_mon_commands),
-                               leader_supported_mon_commands_size);
+                               leader_supported_mon_commands_size,cmdmap);
   if (!leader_cmd) {
     reply_command(op, -EINVAL, "command not known", 0);
     return;
   }
   // validate command is in our map & matches, or forward if it is allowed
   const MonCommand *mon_cmd = _get_moncommand(prefix, mon_commands,
-                                              ARRAY_SIZE(mon_commands));
+                                              ARRAY_SIZE(mon_commands),cmdmap);
   if (!is_leader()) {
     if (!mon_cmd) {
       if (leader_cmd->is_noforward()) {
