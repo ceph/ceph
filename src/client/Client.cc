@@ -272,7 +272,8 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
     interrupt_finisher(m->cct),
     remount_finisher(m->cct),
     objecter_finisher(m->cct),
-    m_command_hook(this)
+    m_command_hook(this),
+    fscid(0)
 {
   _reset_faked_inos();
 
@@ -5772,13 +5773,13 @@ int Client::subscribe_mdsmap(const std::string &fs_name)
     r = fetch_fsmap(true);
     if (r < 0)
       return r;
-    fs_cluster_id_t cid = fsmap_user->get_fs_cid(resolved_fs_name);
-    if (cid == FS_CLUSTER_ID_NONE) {
+    fscid = fsmap_user->get_fs_cid(resolved_fs_name);
+    if (fscid == FS_CLUSTER_ID_NONE) {
       return -ENOENT;
     }
 
     std::ostringstream oss;
-    oss << want << "." << cid;
+    oss << want << "." << fscid;
     want = oss.str();
   }
   ldout(cct, 10) << "Subscribing to map '" << want << "'" << dendl;
