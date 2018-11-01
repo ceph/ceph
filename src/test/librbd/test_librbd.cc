@@ -6691,7 +6691,7 @@ TEST_F(TestLibRBD, TestTrashPurge) {
   uint64_t size = 1 << 18;
   int order = 12;
   ASSERT_EQ(0, create_image_pp(rbd, ioctx, name1.c_str(), size, &order));
-  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name1.c_str(), size, &order));
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name2.c_str(), size, &order));
 
   librbd::Image image1;
   ASSERT_EQ(0, rbd.open(ioctx, image1, name1.c_str(), nullptr));
