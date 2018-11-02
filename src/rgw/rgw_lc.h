@@ -36,7 +36,7 @@ typedef enum {
   lc_processing,
   lc_failed,
   lc_complete,
-}LC_BUCKET_STATUS;
+} LC_BUCKET_STATUS;
 
 class LCExpiration
 {
@@ -46,7 +46,7 @@ protected:
   string date;
 public:
   LCExpiration() {}
-  ~LCExpiration() {}
+  LCExpiration(const string& _days, const string& _date) : days(_days), date(_date) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(3, 2, bl);
@@ -92,7 +92,7 @@ public:
     return true;
   }
 };
-WRITE_CLASS_ENCODER(LCExpiration);
+WRITE_CLASS_ENCODER(LCExpiration)
 
 class LCTransition
 {
@@ -153,7 +153,7 @@ public:
   }
   void dump(Formatter *f) const;
 };
-WRITE_CLASS_ENCODER(LCTransition);
+WRITE_CLASS_ENCODER(LCTransition)
 
 class LCFilter
 {
@@ -209,7 +209,7 @@ class LCFilter
   }
   void dump(Formatter *f) const;
 };
-WRITE_CLASS_ENCODER(LCFilter);
+WRITE_CLASS_ENCODER(LCFilter)
 
 
 

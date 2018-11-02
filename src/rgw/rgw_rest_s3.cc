@@ -402,7 +402,7 @@ void RGWGetObjTags_ObjStore_S3::send_response_data(bufferlist& bl)
 
 int RGWPutObjTags_ObjStore_S3::get_params()
 {
-  RGWObjTagsXMLParser parser;
+  RGWXMLParser parser;
 
   if (!parser.init()){
     return -EINVAL;
@@ -421,17 +421,17 @@ int RGWPutObjTags_ObjStore_S3::get_params()
     return -ERR_MALFORMED_XML;
   }
 
-  RGWObjTagSet_S3 *obj_tags_s3;
-  RGWObjTagging_S3 *tagging;
+  RGWObjTagging_S3 tagging;
 
-  tagging = static_cast<RGWObjTagging_S3 *>(parser.find_first("Tagging"));
-  obj_tags_s3 = static_cast<RGWObjTagSet_S3 *>(tagging->find_first("TagSet"));
-  if(!obj_tags_s3){
+  try {
+    RGWXMLDecoder::decode_xml("Tagging", tagging, &parser);
+  } catch (RGWXMLDecoder::err& err) {
+    ldout(s->cct, 5) << "Malformed tagging request: " << err << dendl;
     return -ERR_MALFORMED_XML;
   }
 
   RGWObjTags obj_tags;
-  r = obj_tags_s3->rebuild(obj_tags);
+  r = tagging.rebuild(obj_tags);
   if (r < 0)
     return r;
 
@@ -1758,7 +1758,7 @@ int RGWPostObj_ObjStore_S3::get_tags()
 {
   string tags_str;
   if (part_str(parts, "tagging", &tags_str)) {
-    RGWObjTagsXMLParser parser;
+    RGWXMLParser parser;
     if (!parser.init()){
       ldout(s->cct, 0) << "Couldn't init RGWObjTags XML parser" << dendl;
       err_msg = "Server couldn't process the request";
@@ -1770,17 +1770,17 @@ int RGWPostObj_ObjStore_S3::get_tags()
       return -EINVAL;
     }
 
-    RGWObjTagSet_S3 *obj_tags_s3;
-    RGWObjTagging_S3 *tagging;
+    RGWObjTagging_S3 tagging;
 
-    tagging = static_cast<RGWObjTagging_S3 *>(parser.find_first("Tagging"));
-    obj_tags_s3 = static_cast<RGWObjTagSet_S3 *>(tagging->find_first("TagSet"));
-    if(!obj_tags_s3){
-      return -ERR_MALFORMED_XML;
+    try {
+      RGWXMLDecoder::decode_xml("Tagging", tagging, &parser);
+    } catch (RGWXMLDecoder::err& err) {
+      ldout(s->cct, 5) << "Malformed tagging request: " << err << dendl;
+      return -EINVAL;
     }
 
     RGWObjTags obj_tags;
-    int r = obj_tags_s3->rebuild(obj_tags);
+    int r = tagging.rebuild(obj_tags);
     if (r < 0)
       return r;
 

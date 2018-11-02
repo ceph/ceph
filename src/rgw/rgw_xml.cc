@@ -120,6 +120,20 @@ find(string name)
   return iter;
 }
 
+XMLObjIter XMLObj::find_first()
+{
+  XMLObjIter iter;
+  map<string, XMLObj *>::iterator first;
+  map<string, XMLObj *>::iterator last;
+  first = children.begin();
+  if (first != children.end()) {
+    last = children.upper_bound(first->first);
+  }else
+    last = children.end();
+  iter.set(first, last);
+  return iter;
+}
+
 XMLObj *XMLObj::
 find_first(string name)
 {

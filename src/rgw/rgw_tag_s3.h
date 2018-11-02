@@ -14,15 +14,7 @@
 #include "rgw_tag.h"
 #include "rgw_xml.h"
 
-struct RGWObjTagKey_S3: public XMLObj
-{
-};
-
-struct RGWObjTagValue_S3: public XMLObj
-{
-};
-
-class RGWObjTagEntry_S3: public XMLObj
+class RGWObjTagEntry_S3
 {
   std::string key;
   std::string val;
@@ -31,32 +23,31 @@ public:
   RGWObjTagEntry_S3(const std::string &k, const std::string &v):key(k),val(v) {};
   ~RGWObjTagEntry_S3() {}
 
-  bool xml_end(const char*) override;
-  const std::string& get_key () const { return key;}
-  const std::string& get_val () const { return val;}
-  //void to_xml(CephContext *cct, ostream& out) const;
-};
+  const std::string& get_key () const { return key; }
+  const std::string& get_val () const { return val; }
 
-class RGWObjTagSet_S3: public RGWObjTags, public XMLObj
-{
-public:
-  bool xml_end(const char*) override;
   void dump_xml(Formatter *f) const;
+  void decode_xml(XMLObj *obj);
+};
+
+class RGWObjTagSet_S3: public RGWObjTags
+{
+public:
   int rebuild(RGWObjTags& dest);
+
+  void dump_xml(Formatter *f) const;
+  void decode_xml(XMLObj *obj);
 };
 
-class RGWObjTagging_S3: public XMLObj
+class RGWObjTagging_S3
 {
+  RGWObjTagSet_S3 tagset;
 public:
-  bool xml_end(const char*) override;
+  void decode_xml(XMLObj *obj);
+  int rebuild(RGWObjTags& dest) {
+    return tagset.rebuild(dest);
+  }
 };
 
-class RGWObjTagsXMLParser : public RGWXMLParser
-{
-  XMLObj *alloc_obj(const char *el) override;
-public:
-  RGWObjTagsXMLParser() {}
-  ~RGWObjTagsXMLParser() {}
-};
 
 #endif /* RGW_TAG_S3_H */

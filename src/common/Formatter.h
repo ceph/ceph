@@ -30,6 +30,9 @@ namespace ceph {
       ObjectSection(Formatter& f, const char *name) : formatter(f) {
         formatter.open_object_section(name);
       }
+      ObjectSection(Formatter& f, const char *name, const char *ns) : formatter(f) {
+        formatter.open_object_section_in_ns(name, ns);
+      }
       ~ObjectSection() {
         formatter.close_section();
       }
@@ -40,6 +43,9 @@ namespace ceph {
     public:
       ArraySection(Formatter& f, const char *name) : formatter(f) {
         formatter.open_array_section(name);
+      }
+      ArraySection(Formatter& f, const char *name, const char *ns) : formatter(f) {
+        formatter.open_array_section_in_ns(name, ns);
       }
       ~ArraySection() {
         formatter.close_section();

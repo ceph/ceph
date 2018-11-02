@@ -51,6 +51,7 @@ public:
   void add_child(string el, XMLObj *obj);
   bool get_attr(string name, string& attr);
   XMLObjIter find(string name);
+  XMLObjIter find_first();
   XMLObj *find_first(string name);
 
   friend ostream& operator<<(ostream &out, const XMLObj &obj);
@@ -117,6 +118,11 @@ public:
   static void decode_xml(const char *name, T& val, T& default_val, XMLObj *obj);
 };
 
+static inline ostream& operator<<(ostream &out, RGWXMLDecoder::err& err)
+{
+  return out << err.message;
+}
+
 template<class T>
 void decode_xml_obj(T& val, XMLObj *obj)
 {
@@ -155,17 +161,17 @@ void do_decode_xml_obj(list<T>& l, const string& name, XMLObj *obj)
 }
 
 template<class T>
-void do_decode_xml_obj(vector<T>& l, const string& name, XMLObj *obj)
+void decode_xml_obj(std::vector<T>& v, XMLObj *obj)
 {
-  l.clear();
+  v.clear();
 
-  XMLObjIter iter = obj->find(name);
+  XMLObjIter iter = obj->find_first();
   XMLObj *o;
 
-  while (o = iter.get_next()) {
+  while ((o = iter.get_next())) {
     T val;
     decode_xml_obj(val, o);
-    l.push_back(val);
+    v.push_back(val);
   }
 }
 

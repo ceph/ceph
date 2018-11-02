@@ -5118,8 +5118,8 @@ void RGWPutLC::execute()
 {
   bufferlist bl;
   
-  RGWLifecycleConfiguration_S3 *config = NULL;
-  RGWLCXMLParser_S3 parser(s->cct);
+  RGWLifecycleConfiguration_S3 config;
+  RGWXMLParser parser;
   RGWLifecycleConfiguration_S3 new_config(s->cct);
 
   content_md5 = s->info.env->get("HTTP_CONTENT_MD5");
@@ -5172,20 +5172,25 @@ void RGWPutLC::execute()
     op_ret = -ERR_MALFORMED_XML;
     return;
   }
-  config = static_cast<RGWLifecycleConfiguration_S3 *>(parser.find_first("LifecycleConfiguration"));
-  if (!config) {
-    op_ret = -ERR_MALFORMED_XML;
+
+  try {
+    RGWXMLDecoder::decode_xml("LifecycleConfiguration", config, &parser);
+  } catch (RGWXMLDecoder::err& err) {
+    ldpp_dout(this, 5) << "Bad lifecycle configuration: " << err << dendl;
+    op_ret = -EINVAL;
     return;
   }
 
-  op_ret = config->rebuild(store, new_config);
+  op_ret = config.rebuild(store, new_config);
   if (op_ret < 0)
     return;
 
   if (s->cct->_conf->subsys.should_gather<ceph_subsys_rgw, 15>()) {
-    ldpp_dout(this, 15) << "New LifecycleConfiguration:";
-    new_config.to_xml(*_dout);
-    *_dout << dendl;
+    XMLFormatter xf;
+    new_config.dump_xml(&xf);
+    stringstream ss;
+    xf.flush(ss);
+    ldpp_dout(this, 15) << "New LifecycleConfiguration:" << ss.str() << dendl;
   }
 
   op_ret = store->get_lc()->set_bucket_config(s->bucket_info, s->bucket_attrs, &new_config);
