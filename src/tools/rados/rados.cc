@@ -120,7 +120,6 @@ void usage(ostream& out)
 "   clearomap <obj-name> [obj-name2 obj-name3...] clear all the omap keys for the specified objects\n"
 "   getomapheader <obj-name> [file]\n"
 "   setomapheader <obj-name> <val>\n"
-"   tmap-to-omap <obj-name>          convert tmap keys/values to omap\n"
 "   watch <obj-name>                 add watcher on this object\n"
 "   notify <obj-name> <message>      notify watcher of this object with message\n"
 "   listwatchers <obj-name>          list the watchers of this object\n"
@@ -2927,100 +2926,6 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       goto out;
     }
   }
-
-  else if (strcmp(nargs[0], "tmap") == 0) {
-    if (nargs.size() < 3)
-      usage_exit();
-    if (strcmp(nargs[1], "dump") == 0) {
-      bufferlist outdata;
-      string oid(nargs[2]);
-      ret = io_ctx.read(oid, outdata, 0, 0);
-      if (ret < 0) {
-	cerr << "error reading " << pool_name << "/" << oid << ": " << cpp_strerror(ret) << std::endl;
-	goto out;
-      }
-      auto p = outdata.cbegin();
-      bufferlist header;
-      map<string, bufferlist> kv;
-      try {
-	decode(header, p);
-	decode(kv, p);
-      }
-      catch (buffer::error& e) {
-	cerr << "error decoding tmap " << pool_name << "/" << oid << std::endl;
-	ret = -EINVAL;
-	goto out;
-      }
-      cout << "header (" << header.length() << " bytes):\n";
-      header.hexdump(cout);
-      cout << "\n";
-      cout << kv.size() << " keys\n";
-      for (map<string,bufferlist>::iterator q = kv.begin(); q != kv.end(); ++q) {
-	cout << "key '" << q->first << "' (" << q->second.length() << " bytes):\n";
-	q->second.hexdump(cout);
-	cout << "\n";
-      }
-    }
-    else if (strcmp(nargs[1], "set") == 0 ||
-	     strcmp(nargs[1], "create") == 0) {
-      if (nargs.size() < 5)
-	usage_exit();
-      string oid(nargs[2]);
-      string k(nargs[3]);
-      string v(nargs[4]);
-      bufferlist bl;
-      char c = (strcmp(nargs[1], "set") == 0) ? CEPH_OSD_TMAP_SET : CEPH_OSD_TMAP_CREATE;
-      encode(c, bl);
-      encode(k, bl);
-      encode(v, bl);
-      ret = io_ctx.tmap_update(oid, bl);
-    }
-  }
-
-  else if (strcmp(nargs[0], "tmap-to-omap") == 0) {
-    if (!pool_name || nargs.size() < 2)
-      usage_exit();
-    string oid(nargs[1]);
-
-    bufferlist bl;
-    int r = io_ctx.tmap_get(oid, bl);
-    if (r < 0) {
-      ret = r;
-      cerr << "error reading tmap " << pool_name << "/" << oid
-	   << ": " << cpp_strerror(ret) << std::endl;
-      goto out;
-    }
-    bufferlist hdr;
-    map<string, bufferlist> kv;
-    auto p = bl.cbegin();
-    try {
-      decode(hdr, p);
-      decode(kv, p);
-    }
-    catch (buffer::error& e) {
-      cerr << "error decoding tmap " << pool_name << "/" << oid << std::endl;
-      ret = -EINVAL;
-      goto out;
-    }
-    if (!p.end()) {
-      cerr << "error decoding tmap (stray trailing data) in " << pool_name << "/" << oid << std::endl;
-      ret = -EINVAL;
-      goto out;
-    }
-    librados::ObjectWriteOperation wr;
-    wr.omap_set_header(hdr);
-    wr.omap_set(kv);
-    wr.truncate(0);  // delete the old tmap data
-    r = io_ctx.operate(oid, &wr);
-    if (r < 0) {
-      ret = r;
-      cerr << "error writing tmap data as omap on " << pool_name << "/" << oid
-	   << ": " << cpp_strerror(ret) << std::endl;
-      goto out;
-    }
-    ret = 0;
-  }
-
   else if (strcmp(nargs[0], "cppool") == 0) {
     bool force = nargs.size() == 4 && !strcmp(nargs[3], "--yes-i-really-mean-it");
     if (nargs.size() != 3 && !(nargs.size() == 4 && force))

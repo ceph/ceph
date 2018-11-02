@@ -145,13 +145,6 @@
 :Default: ``true``
 
 
-``mds use tmap``
-
-:Description: Use trivialmap for directory updates.
-:Type:  Boolean
-:Default: ``true``
-
-
 ``mds default dir hash``
 
 :Description: The function to use for hashing files across directory fragments.

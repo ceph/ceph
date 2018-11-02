@@ -221,12 +221,6 @@ void librados::ObjectReadOperation::checksum(rados_checksum_type_t type,
 	      pbl, prval, nullptr);
 }
 
-void librados::ObjectReadOperation::tmap_get(bufferlist *pbl, int *prval)
-{
-  ::ObjectOperation *o = &impl->o;
-  o->tmap_get(pbl, prval);
-}
-
 void librados::ObjectReadOperation::getxattr(const char *name, bufferlist *pbl, int *prval)
 {
   ::ObjectOperation *o = &impl->o;
@@ -598,13 +592,6 @@ void librados::ObjectWriteOperation::unset_manifest()
 {
   ::ObjectOperation *o = &impl->o;
   o->unset_manifest();
-}
-
-void librados::ObjectWriteOperation::tmap_put(const bufferlist &bl)
-{
-  ::ObjectOperation *o = &impl->o;
-  bufferlist c = bl;
-  o->tmap_put(c);
 }
 
 void librados::ObjectWriteOperation::tmap_update(const bufferlist& cmdbl)
@@ -1264,24 +1251,6 @@ int librados::IoCtx::tmap_update(const std::string& oid, bufferlist& cmdbl)
 {
   object_t obj(oid);
   return io_ctx_impl->tmap_update(obj, cmdbl);
-}
-
-int librados::IoCtx::tmap_put(const std::string& oid, bufferlist& bl)
-{
-  object_t obj(oid);
-  return io_ctx_impl->tmap_put(obj, bl);
-}
-
-int librados::IoCtx::tmap_get(const std::string& oid, bufferlist& bl)
-{
-  object_t obj(oid);
-  return io_ctx_impl->tmap_get(obj, bl);
-}
-
-int librados::IoCtx::tmap_to_omap(const std::string& oid, bool nullok)
-{
-  object_t obj(oid);
-  return io_ctx_impl->tmap_to_omap(obj, nullok);
 }
 
 int librados::IoCtx::omap_get_vals(const std::string& oid,
