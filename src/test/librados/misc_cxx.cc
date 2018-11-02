@@ -633,18 +633,18 @@ TEST_F(LibRadosMiscPP, CopyPP) {
   {
     // pass future version
     ObjectWriteOperation op;
-    op.copy_from2("foo", ioctx, uv + 1, LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
+    op.copy_from("foo", ioctx, uv + 1, LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
     ASSERT_EQ(-EOVERFLOW, ioctx.operate("foo.copy", &op));
   }
   {
     // pass old version
     ObjectWriteOperation op;
-    op.copy_from2("foo", ioctx, uv - 1, LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
+    op.copy_from("foo", ioctx, uv - 1, LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
     ASSERT_EQ(-ERANGE, ioctx.operate("foo.copy", &op));
   }
   {
     ObjectWriteOperation op;
-    op.copy_from2("foo", ioctx, uv, LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
+    op.copy_from("foo", ioctx, uv, LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
     ASSERT_EQ(0, ioctx.operate("foo.copy", &op));
 
     bufferlist bl2, x2;
@@ -657,7 +657,7 @@ TEST_F(LibRadosMiscPP, CopyPP) {
   // small object without a version
   {
     ObjectWriteOperation op;
-    op.copy_from2("foo", ioctx, 0, LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
+    op.copy_from("foo", ioctx, 0, LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
     ASSERT_EQ(0, ioctx.operate("foo.copy2", &op));
 
     bufferlist bl2, x2;
@@ -678,7 +678,7 @@ TEST_F(LibRadosMiscPP, CopyPP) {
 
   {
     ObjectWriteOperation op;
-    op.copy_from2("big", ioctx, ioctx.get_last_version(), LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
+    op.copy_from("big", ioctx, ioctx.get_last_version(), LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
     ASSERT_EQ(0, ioctx.operate("big.copy", &op));
 
     bufferlist bl2, x2;
@@ -690,7 +690,7 @@ TEST_F(LibRadosMiscPP, CopyPP) {
 
   {
     ObjectWriteOperation op;
-    op.copy_from2("big", ioctx, 0, LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL);
+    op.copy_from("big", ioctx, 0, LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL);
     ASSERT_EQ(0, ioctx.operate("big.copy2", &op));
 
     bufferlist bl2, x2;
@@ -761,7 +761,7 @@ TEST_F(LibRadosTwoPoolsECPP, CopyFrom) {
     ASSERT_EQ(0, src_ioctx.omap_set_header("foo", b));
     version_t uv = src_ioctx.get_last_version();
     ObjectWriteOperation op;
-    op.copy_from("foo", src_ioctx, uv);
+    op.copy_from("foo", src_ioctx, uv, 0);
     ASSERT_EQ(-EOPNOTSUPP, ioctx.operate("foo.copy", &op));
   }
 
@@ -770,7 +770,7 @@ TEST_F(LibRadosTwoPoolsECPP, CopyFrom) {
     ASSERT_EQ(0, src_ioctx.omap_set_header("bar", b));
     version_t uv = src_ioctx.get_last_version();
     ObjectWriteOperation op;
-    op.copy_from("bar", src_ioctx, uv);
+    op.copy_from("bar", src_ioctx, uv, 0);
     ASSERT_EQ(-EOPNOTSUPP, ioctx.operate("bar.copy", &op));
   }
 }
@@ -828,25 +828,25 @@ TEST_F(LibRadosMiscPP, CopyScrubPP) {
 
   {
     ObjectWriteOperation op;
-    op.copy_from("small", ioctx, 0);
+    op.copy_from("small", ioctx, 0, 0);
     ASSERT_EQ(0, ioctx.operate("small.copy", &op));
   }
 
   {
     ObjectWriteOperation op;
-    op.copy_from("big", ioctx, 0);
+    op.copy_from("big", ioctx, 0, 0);
     ASSERT_EQ(0, ioctx.operate("big.copy", &op));
   }
 
   {
     ObjectWriteOperation op;
-    op.copy_from("big2", ioctx, 0);
+    op.copy_from("big2", ioctx, 0, 0);
     ASSERT_EQ(0, ioctx.operate("big2.copy", &op));
   }
 
   {
     ObjectWriteOperation op;
-    op.copy_from("big3", ioctx, 0);
+    op.copy_from("big3", ioctx, 0, 0);
     ASSERT_EQ(0, ioctx.operate("big3.copy", &op));
   }
 

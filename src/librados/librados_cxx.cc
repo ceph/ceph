@@ -526,16 +526,9 @@ void librados::ObjectWriteOperation::omap_rm_keys(
 }
 
 void librados::ObjectWriteOperation::copy_from(const std::string& src,
-                                               const IoCtx& src_ioctx,
-                                               uint64_t src_version)
-{
-  copy_from2(src, src_ioctx, src_version, 0);
-}
-
-void librados::ObjectWriteOperation::copy_from2(const std::string& src,
-					        const IoCtx& src_ioctx,
-					        uint64_t src_version,
-					        uint32_t src_fadvise_flags)
+					       const IoCtx& src_ioctx,
+					       uint64_t src_version,
+					       uint32_t src_fadvise_flags)
 {
   ::ObjectOperation *o = &impl->o;
   o->copy_from(object_t(src), src_ioctx.io_ctx_impl->snap_seq,
