@@ -293,8 +293,9 @@ public:
     for (auto& global_image_id : global_image_ids) {
       auto it = peer_ack_ctxs->find(global_image_id);
       ASSERT_TRUE(it != peer_ack_ctxs->end());
-      it->second->complete(ret);
+      auto ack_ctx = it->second;
       peer_ack_ctxs->erase(it);
+      ack_ctx->complete(ret);
       wait_for_scheduled_task();
     }
   }
@@ -306,8 +307,9 @@ public:
     for (auto& global_image_id : global_image_ids) {
       auto it = peer_ack_ctxs->find(global_image_id);
       ASSERT_TRUE(it != peer_ack_ctxs->end());
-      it->second->complete(ret);
+      auto ack_ctx = it->second;
       peer_ack_ctxs->erase(it);
+      ack_ctx->complete(ret);
       wait_for_scheduled_task();
       ASSERT_TRUE(wait_for_map_update(1));
     }
@@ -320,8 +322,9 @@ public:
     for (auto& global_image_id : global_image_ids) {
       auto it = peer_ack_ctxs->find(global_image_id);
       ASSERT_TRUE(it != peer_ack_ctxs->end());
-      it->second->complete(ret);
+      auto ack_ctx = it->second;
       peer_ack_ctxs->erase(it);
+      ack_ctx->complete(ret);
       ASSERT_TRUE(wait_for_map_update(1));
       ASSERT_TRUE(wait_for_listener_notify(1));
     }
