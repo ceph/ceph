@@ -101,9 +101,13 @@ static int do_show_status(librados::IoCtx& io_ctx, const std::string &image_name
     if (!migration_state.empty()) {
       f->open_object_section("migration");
       f->dump_string("source_pool_name", source_pool_name);
+      f->dump_string("source_pool_namespace",
+                     migration_status.source_pool_namespace);
       f->dump_string("source_image_name", migration_status.source_image_name);
       f->dump_string("source_image_id", migration_status.source_image_id);
       f->dump_string("dest_pool_name", dest_pool_name);
+      f->dump_string("dest_pool_namespace",
+                     migration_status.dest_pool_namespace);
       f->dump_string("dest_image_name", migration_status.dest_image_name);
       f->dump_string("dest_image_id", migration_status.dest_image_id);
       f->dump_string("state", migration_state);
@@ -121,6 +125,13 @@ static int do_show_status(librados::IoCtx& io_ctx, const std::string &image_name
       std::cout << "Watchers: none" << std::endl;
     }
     if (!migration_state.empty()) {
+      if (!migration_status.source_pool_namespace.empty()) {
+        source_pool_name += ("/" + migration_status.source_pool_namespace);
+      }
+      if (!migration_status.dest_pool_namespace.empty()) {
+        dest_pool_name += ("/" + migration_status.dest_pool_namespace);
+      }
+
       std::cout << "Migration:" << std::endl;
       std::cout << "\tsource: " << source_pool_name << "/"
               << migration_status.source_image_name;
