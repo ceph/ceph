@@ -168,10 +168,8 @@ void PGLog::trim(
   dout(10) << __func__ << " proposed trim_to = " << trim_to << dendl;
   // trim?
   if (trim_to > log.tail) {
-    dout(10) << __func__ << " missing = " << missing.num_missing() << dendl;
     // Don't assert for backfill_targets
-    // or whenever there are missing items
-    if (transaction_applied && (missing.num_missing() == 0))
+    if (transaction_applied)
       assert(trim_to <= info.last_complete);
 
     dout(10) << "trim " << log << " to " << trim_to << dendl;
