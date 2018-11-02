@@ -897,16 +897,13 @@ namespace librados
 
 
     /// Start enumerating objects for a pool
-    NObjectIterator nobjects_begin();
-    NObjectIterator nobjects_begin(const bufferlist &filter);
+    NObjectIterator nobjects_begin(const bufferlist &filter=bufferlist());
     /// Start enumerating objects for a pool starting from a hash position
-    NObjectIterator nobjects_begin(uint32_t start_hash_position);
     NObjectIterator nobjects_begin(uint32_t start_hash_position,
-                                   const bufferlist &filter);
+                                   const bufferlist &filter=bufferlist());
     /// Start enumerating objects for a pool starting from cursor
-    NObjectIterator nobjects_begin(const librados::ObjectCursor& cursor);
     NObjectIterator nobjects_begin(const librados::ObjectCursor& cursor,
-                                   const bufferlist &filter);
+                                   const bufferlist &filter=bufferlist());
     /// Iterator indicating the end of a pool
     const NObjectIterator& nobjects_end() const;
 

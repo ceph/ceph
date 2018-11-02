@@ -1719,12 +1719,6 @@ int librados::IoCtx::list_lockers(const std::string &oid, const std::string &nam
   return tmp_lockers.size();
 }
 
-librados::NObjectIterator librados::IoCtx::nobjects_begin()
-{
-  bufferlist bl;
-  return nobjects_begin(bl);
-}
-
 librados::NObjectIterator librados::IoCtx::nobjects_begin(
     const bufferlist &filter)
 {
@@ -1738,12 +1732,6 @@ librados::NObjectIterator librados::IoCtx::nobjects_begin(
   return iter;
 }
 
-librados::NObjectIterator librados::IoCtx::nobjects_begin(uint32_t pos)
-{
-  bufferlist bl;
-  return nobjects_begin(pos, bl);
-}
-
 librados::NObjectIterator librados::IoCtx::nobjects_begin(
   uint32_t pos, const bufferlist &filter)
 {
@@ -1755,12 +1743,6 @@ librados::NObjectIterator librados::IoCtx::nobjects_begin(
   }
   iter.seek(pos);
   return iter;
-}
-
-librados::NObjectIterator librados::IoCtx::nobjects_begin(const ObjectCursor& cursor)
-{
-  bufferlist bl;
-  return nobjects_begin(cursor, bl);
 }
 
 librados::NObjectIterator librados::IoCtx::nobjects_begin(
