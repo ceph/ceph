@@ -1085,13 +1085,11 @@ using namespace ceph;
     if (p == ls->end())
       seek(off);
     unsigned left = len;
-    for (buffers_t::const_iterator i = otherl._buffers.begin();
-	 i != otherl._buffers.end();
-	 ++i) {
-      unsigned l = (*i).length();
+    for (const auto& node : otherl._buffers) {
+      unsigned l = node.length();
       if (left < l)
 	l = left;
-      copy_in(l, i->c_str());
+      copy_in(l, node.c_str());
       left -= l;
       if (left == 0)
 	break;
@@ -1127,10 +1125,10 @@ using namespace ceph;
 
     // buffer-wise comparison
     if (true) {
-      buffers_t::const_iterator a = _buffers.begin();
-      buffers_t::const_iterator b = other._buffers.begin();
+      auto a = std::cbegin(_buffers);
+      auto b = std::cbegin(other._buffers);
       unsigned aoff = 0, boff = 0;
-      while (a != _buffers.end()) {
+      while (a != std::cend(_buffers)) {
 	unsigned len = a->length() - aoff;
 	if (len > b->length() - boff)
 	  len = b->length() - boff;
@@ -1147,7 +1145,7 @@ using namespace ceph;
 	  ++b;
 	}
       }
-      ceph_assert(b == other._buffers.end());
+      ceph_assert(b == std::cend(other._buffers));
       return true;
     }
 
@@ -1165,50 +1163,49 @@ using namespace ceph;
     }
   }
 
-  bool buffer::list::is_provided_buffer(const char *dst) const
+  bool buffer::list::is_provided_buffer(const char* const dst) const
   {
-    if (_buffers.empty())
+    if (_buffers.empty()) {
       return false;
+    }
     return (is_contiguous() && (_buffers.front().c_str() == dst));
   }
 
-  bool buffer::list::is_aligned(unsigned align) const
+  bool buffer::list::is_aligned(const unsigned align) const
   {
-    for (buffers_t::const_iterator it = _buffers.begin();
-	 it != _buffers.end();
-	 ++it) 
-      if (!it->is_aligned(align))
+    for (const auto& node : _buffers) {
+      if (!node.is_aligned(align)) {
 	return false;
+      }
+    }
     return true;
   }
 
-  bool buffer::list::is_n_align_sized(unsigned align) const
+  bool buffer::list::is_n_align_sized(const unsigned align) const
   {
-    for (buffers_t::const_iterator it = _buffers.begin();
-	 it != _buffers.end();
-	 ++it) 
-      if (!it->is_n_align_sized(align))
+    for (const auto& node : _buffers) {
+      if (!node.is_n_align_sized(align)) {
 	return false;
+      }
+    }
     return true;
   }
 
-  bool buffer::list::is_aligned_size_and_memory(unsigned align_size,
-						  unsigned align_memory) const
+  bool buffer::list::is_aligned_size_and_memory(
+    const unsigned align_size,
+    const unsigned align_memory) const
   {
-    for (buffers_t::const_iterator it = _buffers.begin();
-	 it != _buffers.end();
-	 ++it) {
-      if (!it->is_aligned(align_memory) || !it->is_n_align_sized(align_size))
+    for (const auto& node : _buffers) {
+      if (!node.is_aligned(align_memory) || !node.is_n_align_sized(align_size)) {
 	return false;
+      }
     }
     return true;
   }
 
   bool buffer::list::is_zero() const {
-    for (buffers_t::const_iterator it = _buffers.begin();
-	 it != _buffers.end();
-	 ++it) {
-      if (!it->is_zero()) {
+    for (const auto& node : _buffers) {
+      if (!node.is_zero()) {
 	return false;
       }
     }
@@ -1217,41 +1214,39 @@ using namespace ceph;
 
   void buffer::list::zero()
   {
-    for (buffers_t::iterator it = _buffers.begin();
-	 it != _buffers.end();
-	 ++it)
-      it->zero();
+    for (auto& node : _buffers) {
+      node.zero();
+    }
   }
 
-  void buffer::list::zero(unsigned o, unsigned l)
+  void buffer::list::zero(const unsigned o, const unsigned l)
   {
     ceph_assert(o+l <= _len);
     unsigned p = 0;
-    for (buffers_t::iterator it = _buffers.begin();
-	 it != _buffers.end();
-	 ++it) {
-      if (p + it->length() > o) {
-        if (p >= o && p+it->length() <= o+l) {
+    for (auto& node : _buffers) {
+      if (p + node.length() > o) {
+        if (p >= o && p+node.length() <= o+l) {
           // 'o'------------- l -----------|
-          //      'p'-- it->length() --|
-	  it->zero();
+          //      'p'-- node.length() --|
+	  node.zero();
         } else if (p >= o) {
           // 'o'------------- l -----------|
-          //    'p'------- it->length() -------|
-	  it->zero(0, o+l-p);
-        } else if (p + it->length() <= o+l) {
+          //    'p'------- node.length() -------|
+	  node.zero(0, o+l-p);
+        } else if (p + node.length() <= o+l) {
           //     'o'------------- l -----------|
-          // 'p'------- it->length() -------|
-	  it->zero(o-p, it->length()-(o-p));
+          // 'p'------- node.length() -------|
+	  node.zero(o-p, node.length()-(o-p));
         } else {
           //       'o'----------- l -----------|
-          // 'p'---------- it->length() ----------|
-          it->zero(o-p, l);
+          // 'p'---------- node.length() ----------|
+          node.zero(o-p, l);
         }
       }
-      p += it->length();
-      if (o+l <= p)
+      p += node.length();
+      if (o+l <= p) {
 	break;  // done
+      }
     }
   }
 
@@ -1341,11 +1336,9 @@ using namespace ceph;
   void buffer::list::rebuild(ptr& nb)
   {
     unsigned pos = 0;
-    for (buffers_t::iterator it = _buffers.begin();
-	 it != _buffers.end();
-	 ++it) {
-      nb.copy_in(pos, it->length(), it->c_str(), false);
-      pos += it->length();
+    for (auto& node : _buffers) {
+      nb.copy_in(pos, node.length(), node.c_str(), false);
+      pos += node.length();
     }
     _memcopy_count += pos;
     _buffers.clear();
@@ -1370,8 +1363,8 @@ using namespace ceph;
 	&& _len > (max_buffers * align_size)) {
       align_size = round_up_to(round_up_to(_len, max_buffers) / max_buffers, align_size);
     }
-    buffers_t::iterator p = _buffers.begin();
-    while (p != _buffers.end()) {
+    auto p = std::begin(_buffers);
+    while (p != std::end(_buffers)) {
       // keep anything that's already align and sized aligned
       if (p->is_aligned(align_memory) && p->is_n_align_sized(align_size)) {
         /*cout << " segment " << (void*)p->c_str()
@@ -1396,7 +1389,7 @@ using namespace ceph;
         offset += p->length();
         unaligned.push_back(*p);
         p = _buffers.erase(p);
-      } while (p != _buffers.end() &&
+      } while (p != std::end(_buffers) &&
   	     (!p->is_aligned(align_memory) ||
   	      !p->is_n_align_sized(align_size) ||
   	      (offset % align_size)));
@@ -1439,7 +1432,7 @@ using namespace ceph;
     _len += bl._len;
     if (!(flags & CLAIM_ALLOW_NONSHAREABLE))
       bl.make_shareable();
-    std::move(bl._buffers.begin(), bl._buffers.end(),
+    std::move(std::begin(bl._buffers), std::end(bl._buffers),
       std::back_inserter(_buffers));
     bl._buffers.clear();
     bl._len = 0;
@@ -1449,9 +1442,8 @@ using namespace ceph;
   void buffer::list::claim_append_piecewise(list& bl)
   {
     // steal the other guy's buffers
-    for (buffers_t::const_iterator i = bl.buffers().begin();
-        i != bl.buffers().end(); ++i) {
-      append(*i, 0, i->length());
+    for (const auto& node : bl.buffers()) {
+      append(node, 0, node.length());
     }
     bl.clear();
   }
@@ -1569,10 +1561,9 @@ using namespace ceph;
   void buffer::list::append(const list& bl)
   {
     _len += bl._len;
-    for (buffers_t::const_iterator p = bl._buffers.begin();
-	 p != bl._buffers.end();
-	 ++p) 
-      _buffers.push_back(*p);
+    for (const auto& node : bl._buffers) {
+      _buffers.push_back(node);
+    }
   }
 
   void buffer::list::append(std::istream& in)
@@ -1637,14 +1628,12 @@ using namespace ceph;
     if (n >= _len)
       throw end_of_buffer();
     
-    for (buffers_t::const_iterator p = _buffers.begin();
-	 p != _buffers.end();
-	 ++p) {
-      if (n >= p->length()) {
-	n -= p->length();
+    for (const auto& node : _buffers) {
+      if (n >= node.length()) {
+	n -= node.length();
 	continue;
       }
-      return (*p)[n];
+      return node[n];
     }
     ceph_abort();
   }
@@ -1657,22 +1646,21 @@ using namespace ceph;
     if (_buffers.empty())
       return 0;                         // no buffers
 
-    buffers_t::const_iterator iter = _buffers.begin();
+    auto iter = std::cbegin(_buffers);
     ++iter;
 
-    if (iter != _buffers.end())
+    if (iter != std::cend(_buffers)) {
       rebuild();
+    }
     return _buffers.front().c_str();  // good, we're already contiguous.
   }
 
   string buffer::list::to_str() const {
     string s;
     s.reserve(length());
-    for (buffers_t::const_iterator p = _buffers.begin();
-	 p != _buffers.end();
-	 ++p) {
-      if (p->length()) {
-	s.append(p->c_str(), p->length());
+    for (const auto& node : _buffers) {
+      if (node.length()) {
+	s.append(node.c_str(), node.length());
       }
     }
     return s;
@@ -1686,15 +1674,14 @@ using namespace ceph;
     clear();
 
     // skip off
-    buffers_t::const_iterator curbuf = other._buffers.begin();
-    while (off > 0 &&
-	   off >= curbuf->length()) {
+    auto curbuf = std::cbegin(other._buffers);
+    while (off > 0 && off >= curbuf->length()) {
       // skip this buffer
       //cout << "skipping over " << *curbuf << std::endl;
       off -= (*curbuf).length();
       ++curbuf;
     }
-    ceph_assert(len == 0 || curbuf != other._buffers.end());
+    ceph_assert(len == 0 || curbuf != std::cend(other._buffers));
     
     while (len > 0) {
       // partial?
@@ -1729,9 +1716,9 @@ using namespace ceph;
     //cout << "splice off " << off << " len " << len << " ... mylen = " << length() << std::endl;
       
     // skip off
-    buffers_t::iterator curbuf = _buffers.begin();
+    auto curbuf = std::begin(_buffers);
     while (off > 0) {
-      ceph_assert(curbuf != _buffers.end());
+      ceph_assert(curbuf != std::end(_buffers));
       if (off >= (*curbuf).length()) {
 	// skip this buffer
 	//cout << "off = " << off << " skipping over " << *curbuf << std::endl;
@@ -1785,19 +1772,11 @@ using namespace ceph;
   {
     list s;
     s.substr_of(*this, off, len);
-    for (buffers_t::const_iterator it = s._buffers.begin(); 
-	 it != s._buffers.end(); 
-	 ++it)
-      if (it->length())
-	out.write(it->c_str(), it->length());
-    /*iterator p(this, off);
-      while (len > 0 && !p.end()) {
-      int l = p.left_in_this_buf();
-      if (l > len)
-      l = len;
-      out.write(p.c_str(), l);
-      len -= l;
-      }*/
+    for (const auto& node : s._buffers) {
+      if (node.length()) {
+	out.write(node.c_str(), node.length());
+      }
+    }
   }
   
 void buffer::list::encode_base64(buffer::list& o)
@@ -1951,8 +1930,8 @@ int buffer::list::write_fd(int fd) const
   int iovlen = 0;
   ssize_t bytes = 0;
 
-  buffers_t::const_iterator p = _buffers.begin();
-  while (p != _buffers.end()) {
+  auto p = std::cbegin(_buffers);
+  while (p != std::cend(_buffers)) {
     if (p->length() > 0) {
       iov[iovlen].iov_base = (void *)p->c_str();
       iov[iovlen].iov_len = p->length();
@@ -2000,8 +1979,8 @@ int buffer::list::write_fd(int fd, uint64_t offset) const
 {
   iovec iov[IOV_MAX];
 
-  buffers_t::const_iterator p = _buffers.begin();
-  uint64_t left_pbrs = _buffers.size();
+  auto p = std::cbegin(_buffers);
+  uint64_t left_pbrs = std::size(_buffers);
   while (left_pbrs) {
     ssize_t bytes = 0;
     unsigned iovlen = 0;
@@ -2030,12 +2009,10 @@ __u32 buffer::list::crc32c(__u32 crc) const
   int cache_hits = 0;
   int cache_adjusts = 0;
 
-  for (buffers_t::const_iterator it = _buffers.begin();
-       it != _buffers.end();
-       ++it) {
-    if (it->length()) {
-      raw *r = it->get_raw();
-      pair<size_t, size_t> ofs(it->offset(), it->offset() + it->length());
+  for (const auto& node : _buffers) {
+    if (node.length()) {
+      raw* const r = node.get_raw();
+      pair<size_t, size_t> ofs(node.offset(), node.offset() + node.length());
       pair<uint32_t, uint32_t> ccrc;
       if (r->get_crc(ofs, &ccrc)) {
 	if (ccrc.first == crc) {
@@ -2051,13 +2028,13 @@ __u32 buffer::list::crc32c(__u32 crc) const
 	   * http://crcutil.googlecode.com/files/crc-doc.1.0.pdf
 	   * note, u for our crc32c implementation is 0
 	   */
-	  crc = ccrc.second ^ ceph_crc32c(ccrc.first ^ crc, NULL, it->length());
+	  crc = ccrc.second ^ ceph_crc32c(ccrc.first ^ crc, NULL, node.length());
 	  cache_adjusts++;
 	}
       } else {
 	cache_misses++;
 	uint32_t base = crc;
-	crc = ceph_crc32c(crc, (unsigned char*)it->c_str(), it->length());
+	crc = ceph_crc32c(crc, (unsigned char*)node.c_str(), node.length());
 	r->set_crc(ofs, make_pair(base, crc));
       }
     }
@@ -2077,8 +2054,8 @@ __u32 buffer::list::crc32c(__u32 crc) const
 
 void buffer::list::invalidate_crc()
 {
-  for (buffers_t::const_iterator p = _buffers.begin(); p != _buffers.end(); ++p) {
-    raw *r = p->get_raw();
+  for (const auto& node : _buffers) {
+    raw* const r = node.get_raw();
     if (r) {
       r->invalidate_crc();
     }
@@ -2104,9 +2081,9 @@ sha1_digest_t buffer::list::sha1()
  */
 void buffer::list::write_stream(std::ostream &out) const
 {
-  for (buffers_t::const_iterator p = _buffers.begin(); p != _buffers.end(); ++p) {
-    if (p->length() > 0) {
-      out.write(p->c_str(), p->length());
+  for (const auto& node : _buffers) {
+    if (node.length() > 0) {
+      out.write(node.c_str(), node.length());
     }
   }
 }
@@ -2221,11 +2198,11 @@ std::ostream& buffer::operator<<(std::ostream& out, const buffer::ptr& bp) {
 std::ostream& buffer::operator<<(std::ostream& out, const buffer::list& bl) {
   out << "buffer::list(len=" << bl.length() << "," << std::endl;
 
-  buffer::list::buffers_t::const_iterator it = bl.buffers().begin();
-  while (it != bl.buffers().end()) {
-    out << "\t" << *it;
-    if (++it == bl.buffers().end()) break;
-    out << "," << std::endl;
+  for (const auto& node : bl.buffers()) {
+    out << "\t" << node;
+    if (&node != &bl.buffers().back()) {
+      out << "," << std::endl;
+    }
   }
   out << std::endl << ")";
   return out;

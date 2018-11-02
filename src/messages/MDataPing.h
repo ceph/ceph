@@ -64,10 +64,8 @@ private:
 	mdata_hook(&mp);
 
       if (free_data)  {
-	const ceph::bufferlist::buffers_t& buffers = data.buffers();
-	ceph::bufferlist::buffers_t::const_iterator pb;
-	for (pb = buffers.begin(); pb != buffers.end(); ++pb) {
-	  free((void*) pb->c_str());
+	for (const auto& node : data.buffers()) {
+	  free(const_cast<void*>(static_cast<const void*>(node.c_str())));
 	}
       }
     }
