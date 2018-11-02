@@ -235,15 +235,10 @@ int open_source_image(librados::IoCtx& io_ctx, const std::string &image_name,
         return r;
       }
 
-      // TODO support namespaces
-      if (io_ctx.get_id() == migration_spec.pool_id) {
-        src_io_ctx.dup(io_ctx);
-      } else {
-        r = util::create_ioctx(io_ctx, "source image", migration_spec.pool_id,
-                               {}, &src_io_ctx);
-        if (r < 0) {
-          return r;
-        }
+      r = util::create_ioctx(io_ctx, "source image", migration_spec.pool_id,
+                             migration_spec.pool_namespace, &src_io_ctx);
+      if (r < 0) {
+        return r;
       }
 
       src_image_name = migration_spec.image_name;
@@ -306,15 +301,11 @@ int open_source_image(librados::IoCtx& io_ctx, const std::string &image_name,
     ldout(cct, 20) << "migration spec: " << migration_spec << dendl;
   }
 
-  // TODO support namespaces
-  if (image_ctx->md_ctx.get_id() == migration_spec.pool_id) {
-    dst_io_ctx->dup(io_ctx);
-  } else {
-    r = util::create_ioctx(image_ctx->md_ctx, "source image",
-                           migration_spec.pool_id, {}, dst_io_ctx);
-    if (r < 0) {
-      return r;
-    }
+  r = util::create_ioctx(image_ctx->md_ctx, "source image",
+                         migration_spec.pool_id, migration_spec.pool_namespace,
+                         dst_io_ctx);
+  if (r < 0) {
+    return r;
   }
 
   *src_image_ctx = image_ctx;
@@ -635,13 +626,14 @@ Migration<I>::Migration(I *src_image_ctx, librados::IoCtx& dst_io_ctx,
     m_dst_header_oid(util::header_name(m_dst_image_id)), m_image_options(opts),
     m_flatten(flatten), m_mirroring(mirroring), m_prog_ctx(prog_ctx),
     m_src_migration_spec(cls::rbd::MIGRATION_HEADER_TYPE_SRC,
-                         m_dst_io_ctx.get_id(), m_dst_image_name,
-                         m_dst_image_id, {}, 0, flatten, mirroring, state,
-                         state_description),
+                         m_dst_io_ctx.get_id(), m_dst_io_ctx.get_namespace(),
+                         m_dst_image_name, m_dst_image_id, {}, 0, flatten,
+                         mirroring, state, state_description),
     m_dst_migration_spec(cls::rbd::MIGRATION_HEADER_TYPE_DST,
-                         src_image_ctx->md_ctx.get_id(), m_src_image_ctx->name,
-                         m_src_image_ctx->id, {}, 0, flatten, mirroring, state,
-                         state_description) {
+                         src_image_ctx->md_ctx.get_id(),
+                         src_image_ctx->md_ctx.get_namespace(),
+                         m_src_image_ctx->name, m_src_image_ctx->id, {}, 0,
+                         flatten, mirroring, state, state_description) {
   m_src_io_ctx.dup(src_image_ctx->md_ctx);
 }
 
@@ -906,9 +898,11 @@ int Migration<I>::status(image_migration_status_t *status) {
   ldout(m_cct, 10) << dendl;
 
   status->source_pool_id = m_dst_migration_spec.pool_id;
+  status->source_pool_namespace = m_dst_migration_spec.pool_namespace;
   status->source_image_name = m_dst_migration_spec.image_name;
   status->source_image_id = m_dst_migration_spec.image_id;
   status->dest_pool_id = m_src_migration_spec.pool_id;
+  status->dest_pool_namespace = m_src_migration_spec.pool_namespace;
   status->dest_image_name = m_src_migration_spec.image_name;
   status->dest_image_id = m_src_migration_spec.image_id;
 
@@ -1232,9 +1226,10 @@ int Migration<I>::create_dst_image() {
   }
 
   m_dst_migration_spec = {cls::rbd::MIGRATION_HEADER_TYPE_DST,
-                          m_src_io_ctx.get_id(), m_src_image_name,
-                          m_src_image_id, snap_seqs, size, m_flatten,
-                          m_mirroring, cls::rbd::MIGRATION_STATE_PREPARING, ""};
+                          m_src_io_ctx.get_id(), m_src_io_ctx.get_namespace(),
+                          m_src_image_name, m_src_image_id, snap_seqs, size,
+                          m_flatten, m_mirroring,
+                          cls::rbd::MIGRATION_STATE_PREPARING, ""};
 
   r = cls_client::migration_set(&m_dst_io_ctx, m_dst_header_oid,
                                 m_dst_migration_spec);

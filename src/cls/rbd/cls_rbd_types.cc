@@ -812,6 +812,7 @@ void MigrationSpec::encode(bufferlist& bl) const {
   ENCODE_START(1, 1, bl);
   encode(header_type, bl);
   encode(pool_id, bl);
+  encode(pool_namespace, bl);
   encode(image_name, bl);
   encode(image_id, bl);
   encode(snap_seqs, bl);
@@ -827,6 +828,7 @@ void MigrationSpec::decode(bufferlist::const_iterator& bl) {
   DECODE_START(1, bl);
   decode(header_type, bl);
   decode(pool_id, bl);
+  decode(pool_namespace, bl);
   decode(image_name, bl);
   decode(image_id, bl);
   decode(snap_seqs, bl);
@@ -853,6 +855,7 @@ std::ostream& operator<<(std::ostream& os,
 void MigrationSpec::dump(Formatter *f) const {
   f->dump_stream("header_type") << header_type;
   f->dump_int("pool_id", pool_id);
+  f->dump_string("pool_namespace", pool_namespace);
   f->dump_string("image_name", image_name);
   f->dump_string("image_id", image_id);
   f->dump_stream("snap_seqs") << snap_seqs;
@@ -862,9 +865,9 @@ void MigrationSpec::dump(Formatter *f) const {
 
 void MigrationSpec::generate_test_instances(std::list<MigrationSpec*> &o) {
   o.push_back(new MigrationSpec());
-  o.push_back(new MigrationSpec(MIGRATION_HEADER_TYPE_SRC, 1, "image_name",
-                                "image_id", {{1, 2}}, 123, true, true,
-                                MIGRATION_STATE_PREPARED, "description"));
+  o.push_back(new MigrationSpec(MIGRATION_HEADER_TYPE_SRC, 1, "ns",
+                                "image_name", "image_id", {{1, 2}}, 123, true,
+                                true, MIGRATION_STATE_PREPARED, "description"));
 }
 
 std::ostream& operator<<(std::ostream& os,
@@ -872,6 +875,7 @@ std::ostream& operator<<(std::ostream& os,
   os << "["
      << "header_type=" << migration_spec.header_type << ", "
      << "pool_id=" << migration_spec.pool_id << ", "
+     << "pool_namespace=" << migration_spec.pool_namespace << ", "
      << "image_name=" << migration_spec.image_name << ", "
      << "image_id=" << migration_spec.image_id << ", "
      << "snap_seqs=" << migration_spec.snap_seqs << ", "

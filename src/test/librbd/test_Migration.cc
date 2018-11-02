@@ -213,9 +213,11 @@ struct TestMigration : public TestFixture {
     EXPECT_EQ(0, librbd::api::Migration<>::status(m_ioctx, m_image_name,
                                                   &status));
     EXPECT_EQ(status.source_pool_id, m_ioctx.get_id());
+    EXPECT_EQ(status.source_pool_namespace, m_ioctx.get_namespace());
     EXPECT_EQ(status.source_image_name, m_image_name);
     EXPECT_EQ(status.source_image_id, m_image_id);
     EXPECT_EQ(status.dest_pool_id, m_ictx->md_ctx.get_id());
+    EXPECT_EQ(status.dest_pool_namespace, m_ictx->md_ctx.get_namespace());
     EXPECT_EQ(status.dest_image_name, m_ictx->name);
     EXPECT_EQ(status.dest_image_id, m_ictx->id);
     EXPECT_EQ(status.state, state);
