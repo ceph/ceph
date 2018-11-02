@@ -132,7 +132,7 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
     }
 
     uint64_t features;
-    int r = image.features(&features);
+    r = image.features(&features);
     if (r < 0) {
       std::cerr << "rbd: failed to retrieve image features: " << cpp_strerror(r)
                 << std::endl;
