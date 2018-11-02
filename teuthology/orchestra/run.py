@@ -75,7 +75,7 @@ class RemoteProcess(object):
         if hostname:
             self.hostname = hostname
         else:
-            (self.hostname, port) = client.get_transport().getpeername()
+            (self.hostname, port) = client.get_transport().getpeername()[0:2]
 
         self.greenlets = []
         self.stdin, self.stdout, self.stderr = (None, None, None)
@@ -407,7 +407,7 @@ def run(
     try:
         transport = client.get_transport()
         if transport:
-            (host, port) = transport.getpeername()
+            (host, port) = transport.getpeername()[0:2]
         else:
             raise ConnectionLostError(command=quote(args), node=name)
     except socket.error:

@@ -21,6 +21,8 @@ import json
 import re
 import pprint
 
+from netaddr.strategy.ipv4 import valid_str as _is_ipv4
+from netaddr.strategy.ipv6 import valid_str as _is_ipv6
 from teuthology import safepath
 from teuthology.exceptions import (CommandCrashedError, CommandFailedError,
                                    ConnectionLostError)
@@ -39,11 +41,18 @@ is_arm = lambda x: x.startswith('tala') or x.startswith(
 
 hostname_expr_templ = '(?P<user>.*@)?(?P<shortname>.*)\.{lab_domain}'
 
+def host_shortname(hostname):
+    if _is_ipv4(hostname) or _is_ipv6(hostname):
+        return hostname
+    else:
+        return hostname.split('.', 1)[0]
 
 def canonicalize_hostname(hostname, user='ubuntu'):
     hostname_expr = hostname_expr_templ.format(
         lab_domain=config.lab_domain.replace('.', '\.'))
     match = re.match(hostname_expr, hostname)
+    if _is_ipv4(hostname) or _is_ipv6(hostname):
+        return "%s@%s" % (user, hostname)
     if match:
         match_d = match.groupdict()
         shortname = match_d['shortname']
@@ -52,7 +61,7 @@ def canonicalize_hostname(hostname, user='ubuntu'):
         else:
             user_ = match_d.get('user') or user
     else:
-        shortname = hostname.split('.')[0]
+        shortname = host_shortname(hostname)
         user_ = user
 
     user_at = user_.strip('@') + '@' if user_ else ''

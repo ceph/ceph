@@ -7,6 +7,7 @@ from . import run
 from .opsys import OS
 import connection
 from teuthology import misc
+from teuthology.misc import host_shortname
 import time
 import re
 import logging
@@ -45,7 +46,7 @@ class Remote(object):
             # should work on any unix system
             self.user = pwd.getpwuid(os.getuid()).pw_name
             hostname = name
-        self._shortname = shortname or hostname.split('.')[0]
+        self._shortname = shortname or host_shortname(hostname)
         self._host_key = host_key
         self.keep_alive = keep_alive
         self._console = console
@@ -149,7 +150,7 @@ class Remote(object):
     @property
     def shortname(self):
         if self._shortname is None:
-            self._shortname = self.hostname.split('.')[0]
+            self._shortname = host_shortname(self.hostname)
         return self._shortname
 
     @property
@@ -509,10 +510,8 @@ def getShortName(name):
     """
     Extract the name portion from remote name strings.
     """
-    hn = name.split('@')[-1]
-    p = re.compile('([^.]+)\.?.*')
-    return p.match(hn).groups()[0]
-
+    hostname = name.split('@')[-1]
+    return host_shortname(hostname)
 
 def getRemoteConsole(name, ipmiuser=None, ipmipass=None, ipmidomain=None,
                      logfile=None, timeout=20):
