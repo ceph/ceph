@@ -162,15 +162,13 @@ void PGLog::clear_info_log(
 
 void PGLog::trim(
   eversion_t trim_to,
-  pg_info_t &info,
-  bool transaction_applied)
+  pg_info_t &info)
 {
   dout(10) << __func__ << " proposed trim_to = " << trim_to << dendl;
   // trim?
   if (trim_to > log.tail) {
-    // Don't assert for backfill_targets
-    if (transaction_applied)
-      assert(trim_to <= info.last_complete);
+    // We shouldn't be trimming the log past last_complete
+    assert(trim_to <= info.last_complete);
 
     dout(10) << "trim " << log << " to " << trim_to << dendl;
     log.trim(cct, trim_to, &trimmed, &trimmed_dups, &write_from_dups);
