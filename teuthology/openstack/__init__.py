@@ -679,6 +679,11 @@ class TeuthologyOpenStack(OpenStack):
         self.up_string = 'teuthology is up and running'
         self.user_data = 'teuthology/openstack/openstack-user-data.txt'
 
+    def get_instance(self):
+        if not hasattr(self, 'instance'):
+            self.instance = OpenStackInstance(self.server_name())
+        return self.instance
+
     def main(self):
         """
         Entry point implementing the teuthology-openstack command.
@@ -697,13 +702,13 @@ class TeuthologyOpenStack(OpenStack):
             raise Exception('No key file provided, please, use --key-filename option')
         self.verify_openstack()
         if self.args.teardown:
-            self.instance = OpenStackInstance(self.server_name())
             self.teardown()
             return 0
         if self.args.setup:
             self.setup()
         exit_code = 0
         if self.args.suite:
+            self.get_instance()
             if self.args.wait:
                 self.reminders()
             exit_code = self.run_suite()
@@ -929,8 +934,8 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
                    upload=upload))
 
     def setup(self):
-        self.instance = OpenStackInstance(self.server_name())
-        if not self.instance.exists():
+        instance = self.get_instance()
+        if not instance.exists():
             if self.get_provider() != 'rackspace':
                 self.create_security_group()
             self.create_cluster()
@@ -1280,9 +1285,8 @@ openstack security group rule create --protocol udp --src-group {server} --dst-p
 
         return None
 
-    @staticmethod
-    def get_instance_id(name):
-        instance = OpenStackInstance(name)
+    def get_instance_id(self):
+        instance = self.get_instance()
         if instance.info:
             return instance['id']
         else:
@@ -1338,7 +1342,8 @@ openstack security group rule create --protocol udp --src-group {server} --dst-p
         Delete all instances run by the teuthology cluster and delete the
         instance running the teuthology cluster.
         """
-        instance_id = self.get_instance_id(self.server_name())
+        instance_id = self.get_instance_id()
+
         if instance_id:
             self.ssh("sudo /etc/init.d/teuthology stop || true")
             self.delete_floating_ip(instance_id)
