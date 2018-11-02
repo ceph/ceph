@@ -1525,6 +1525,8 @@ OPTION(rgw_torrent_encoding, OPT_STR)    // torrent field encoding
 OPTION(rgw_torrent_origin, OPT_STR)    // torrent origin
 OPTION(rgw_torrent_sha_unit, OPT_INT)    // torrent field piece length 512K
 
+OPTION(rgw_data_notify_interval_msec, OPT_INT) // data changes notification interval to followers
+
 OPTION(event_tracing, OPT_BOOL) // true if LTTng-UST tracepoints should be enabled
 
 OPTION(debug_deliberately_leak_memory, OPT_BOOL)
