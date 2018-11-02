@@ -218,6 +218,47 @@ class Remote(object):
         data = proc.stdout.getvalue()
         return data
 
+    def sh(self, script, **kwargs):
+        """
+        Shortcut for run method.
+
+        Usage:
+            my_name = remote.sh('whoami')
+            remote_date = remote.sh('date')
+        """
+        if 'stdout' not in kwargs:
+            kwargs['stdout'] = StringIO()
+        if 'args' not in kwargs:
+            kwargs['args'] = script
+        proc=self.run(**kwargs)
+        return proc.stdout.getvalue()
+
+
+    def sh_file(self, script, label="script", sudo=False, **kwargs):
+        """
+        Run shell script after copying its contents to a remote file
+
+        :param script:  string with script text, or file object
+        :param sudo:    run command with sudo if True,
+                        run as user name if string value (defaults to False)
+        :param label:   string value which will be part of file name
+        Returns: stdout
+        """
+        ftempl = '/tmp/teuthology-remote-$(date +%Y%m%d%H%M%S)-{}-XXXX'\
+                 .format(label)
+        script_file = self.sh("mktemp %s" % ftempl, stdout=StringIO()).strip()
+        self.sh("cat - | tee {script} ; chmod a+rx {script}"\
+            .format(script=script_file), stdin=script)
+        if sudo:
+            if isinstance(sudo, str):
+                command="sudo -u %s %s" % (sudo, script_file)
+            else:
+                command="sudo %s" % script_file
+        else:
+            command="%s" % script_file
+
+        return self.sh(command, **kwargs)
+
     def chmod(self, file_path, permissions):
         """
         As super-user, set permissions on the remote file specified.
