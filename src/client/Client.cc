@@ -9886,21 +9886,39 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
     return -ENOTCONN;
 
   ceph_statfs stats;
-  C_SaferCond cond;
-
+  ceph_statfs sum_stats;
+  memset(&sum_stats, 0, sizeof(ceph_statfs));
+  int rval;
   const vector<int64_t> &data_pools = mdsmap->get_data_pools();
-  if (data_pools.size() == 1) {
-    objecter->get_fs_stats(stats, data_pools[0], &cond);
+  if (data_pools.size() >= 1) {
+    for(auto iter = data_pools.cbegin(); iter != data_pools.cend(); iter++) {
+      C_SaferCond cond;
+      memset(&stats, 0, sizeof(ceph_statfs));
+      objecter->get_fs_stats(stats, *iter, &cond);
+      client_lock.Unlock();
+      rval = cond.wait();
+      client_lock.Lock();
+      if (rval < 0)
+        goto out;
+      sum_stats.kb = sum_stats.kb + stats.kb;
+      sum_stats.kb_used = sum_stats.kb_used + stats.kb_used;
+      sum_stats.kb_avail = sum_stats.kb_avail + stats.kb_avail; 
+      sum_stats.num_objects = sum_stats.num_objects + stats.num_objects;
+    }
   } else {
-    objecter->get_fs_stats(stats, boost::optional<int64_t>(), &cond);
+    C_SaferCond cond;
+    objecter->get_fs_stats(sum_stats, boost::optional<int64_t>(), &cond);
+    client_lock.Unlock();
+    rval = cond.wait();
+    client_lock.Lock();
   }
-
+    
   client_lock.Unlock();
-  int rval = cond.wait();
   assert(root);
   total_files_on_fs = root->rstat.rfiles + root->rstat.rsubdirs;
   client_lock.Lock();
-
+ 
+ out:
   if (rval < 0) {
     ldout(cct, 1) << "underlying call to statfs returned error: "
                   << cpp_strerror(rval)
@@ -9969,9 +9987,9 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
     // General case: report the cluster statistics returned from RADOS. Because
     // multiple pools may be used without one filesystem namespace via
     // layouts, this is the most correct thing we can do.
-    stbuf->f_blocks = stats.kb >> (CEPH_BLOCK_SHIFT - 10);
-    stbuf->f_bfree = stats.kb_avail >> (CEPH_BLOCK_SHIFT - 10);
-    stbuf->f_bavail = stats.kb_avail >> (CEPH_BLOCK_SHIFT - 10);
+    stbuf->f_blocks = sum_stats.kb >> (CEPH_BLOCK_SHIFT - 10);
+    stbuf->f_bfree = sum_stats.kb_avail >> (CEPH_BLOCK_SHIFT - 10);
+    stbuf->f_bavail = sum_stats.kb_avail >> (CEPH_BLOCK_SHIFT - 10);
   }
 
   return rval;
