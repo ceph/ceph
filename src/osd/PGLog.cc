@@ -51,7 +51,7 @@ void PGLog::IndexedLog::trim(
   eversion_t *write_from_dups)
 {
   assert(s <= can_rollback_to);
-  lgeneric_subdout(cct, osd, 20) << " complete_to " << complete_to->version << dendl;
+  generic_dout(20) << " complete_to " << complete_to->version << dendl;
 
   auto earliest_dup_version =
     log.rbegin()->version.version < cct->_conf->osd_pg_log_dups_tracked
@@ -62,17 +62,17 @@ void PGLog::IndexedLog::trim(
     const pg_log_entry_t &e = *log.begin();
     if (e.version > s)
       break;
-    lgeneric_subdout(cct, osd, 20) << "trim " << e << dendl;
+    generic_dout(20) << "trim " << e << dendl;
     if (trimmed)
       trimmed->insert(e.version);
 
     unindex(e);         // remove from index,
 
     // add to dup list
-    lgeneric_subdout(cct, osd, 20) << "earliest_dup_version = " << earliest_dup_version << dendl;
+    generic_dout(20) << "earliest_dup_version = " << earliest_dup_version << dendl;
     if (e.version.version >= earliest_dup_version) {
       if (write_from_dups != nullptr && *write_from_dups > e.version) {
-	lgeneric_subdout(cct, osd, 20) << "updating write_from_dups from " << *write_from_dups << " to " << e.version << dendl;
+	generic_dout(20) << "updating write_from_dups from " << *write_from_dups << " to " << e.version << dendl;
 	*write_from_dups = e.version;
       }
       dups.push_back(pg_log_dup_t(e));
@@ -99,7 +99,7 @@ void PGLog::IndexedLog::trim(
 
     // reset complete_to to the beginning of the log
     if (reset_complete_to) {
-      lgeneric_subdout(cct, osd, 20) << " moving complete_to " << " to "
+      generic_dout(0) << " moving complete_to " << " to "
                       << log.begin()->version << dendl;
       complete_to = log.begin();
     }
@@ -109,7 +109,7 @@ void PGLog::IndexedLog::trim(
     const auto& e = *dups.begin();
     if (e.version.version >= earliest_dup_version)
       break;
-    lgeneric_subdout(cct, osd, 20) << "trim dup " << e << dendl;
+    generic_dout(20) << "trim dup " << e << dendl;
     if (trimmed_dups)
       trimmed_dups->insert(e.get_key_name());
     if (indexed_data & PGLOG_INDEXED_DUPS) {
