@@ -782,11 +782,6 @@ using namespace ceph;
     return _len + _off;
   }
 
-  void buffer::ptr::copy_in(unsigned o, unsigned l, const char *src)
-  {
-    copy_in(o, l, src, true);
-  }
-
   void buffer::ptr::copy_in(unsigned o, unsigned l, const char *src, bool crc_reset)
   {
     ceph_assert(_raw);
@@ -798,21 +793,11 @@ using namespace ceph;
     maybe_inline_memcpy(dest, src, l, 64);
   }
 
-  void buffer::ptr::zero()
-  {
-    zero(true);
-  }
-
   void buffer::ptr::zero(bool crc_reset)
   {
     if (crc_reset)
         _raw->invalidate_crc();
     memset(c_str(), 0, _len);
-  }
-
-  void buffer::ptr::zero(unsigned o, unsigned l)
-  {
-    zero(o, l, true);
   }
 
   void buffer::ptr::zero(unsigned o, unsigned l, bool crc_reset)
@@ -1074,78 +1059,6 @@ using namespace ceph;
     : iterator_impl(l, o, ip, po)
   {}
 
-  void buffer::list::iterator::advance(unsigned o)
-  {
-    buffer::list::iterator_impl<false>::advance(o);
-  }
-
-  void buffer::list::iterator::seek(unsigned o)
-  {
-    buffer::list::iterator_impl<false>::seek(o);
-  }
-
-  char buffer::list::iterator::operator*()
-  {
-    if (p == ls->end()) {
-      throw end_of_buffer();
-    }
-    return (*p)[p_off];
-  }
-
-  buffer::list::iterator& buffer::list::iterator::operator++()
-  {
-    buffer::list::iterator_impl<false>::operator++();
-    return *this;
-  }
-
-  buffer::ptr buffer::list::iterator::get_current_ptr()
-  {
-    if (p == ls->end()) {
-      throw end_of_buffer();
-    }
-    return ptr(*p, p_off, p->length() - p_off);
-  }
-
-  void buffer::list::iterator::copy(unsigned len, char *dest)
-  {
-    return buffer::list::iterator_impl<false>::copy(len, dest);
-  }
-
-  void buffer::list::iterator::copy(unsigned len, ptr &dest)
-  {
-    return buffer::list::iterator_impl<false>::copy_deep(len, dest);
-  }
-
-  void buffer::list::iterator::copy_deep(unsigned len, ptr &dest)
-  {
-    buffer::list::iterator_impl<false>::copy_deep(len, dest);
-  }
-
-  void buffer::list::iterator::copy_shallow(unsigned len, ptr &dest)
-  {
-    buffer::list::iterator_impl<false>::copy_shallow(len, dest);
-  }
-
-  void buffer::list::iterator::copy(unsigned len, list &dest)
-  {
-    buffer::list::iterator_impl<false>::copy(len, dest);
-  }
-
-  void buffer::list::iterator::copy(unsigned len, std::string &dest)
-  {
-    buffer::list::iterator_impl<false>::copy(len, dest);
-  }
-
-  void buffer::list::iterator::copy_all(list &dest)
-  {
-    buffer::list::iterator_impl<false>::copy_all(dest);
-  }
-
-  void buffer::list::iterator::copy_in(unsigned len, const char *src)
-  {
-    copy_in(len, src, true);
-  }
-
   // copy data in
   void buffer::list::iterator::copy_in(unsigned len, const char *src, bool crc_reset)
   {
@@ -1205,11 +1118,6 @@ using namespace ceph;
     //last_p.swap(other.last_p);
     last_p = begin();
     other.last_p = other.begin();
-  }
-
-  bool buffer::list::contents_equal(buffer::list& other)
-  {
-    return static_cast<const buffer::list*>(this)->contents_equal(other);
   }
 
   bool buffer::list::contents_equal(const ceph::buffer::list& other) const
@@ -1571,11 +1479,6 @@ using namespace ceph;
     return last_p.copy(len, dest);
   }
     
-  void buffer::list::copy_in(unsigned off, unsigned len, const char *src)
-  {
-    copy_in(off, len, src, true);
-  }
-
   void buffer::list::copy_in(unsigned off, unsigned len, const char *src, bool crc_reset)
   {
     if (off + len > length())
