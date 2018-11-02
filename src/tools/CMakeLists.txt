@@ -8,7 +8,7 @@ set(rados_srcs
   ${PROJECT_SOURCE_DIR}/src/osd/ECUtil.cc)
 add_executable(rados ${rados_srcs})
 
-target_link_libraries(rados librados global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
+target_link_libraries(rados librados-cxx global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
 if(WITH_LIBRADOSSTRIPER)
   target_link_libraries(rados radosstriper)
 else()
@@ -22,11 +22,11 @@ target_link_libraries(ceph_scratchtool librados global)
 install(TARGETS ceph_scratchtool DESTINATION bin)
 
 add_executable(ceph_scratchtoolpp scratchtoolpp.cc)
-target_link_libraries(ceph_scratchtoolpp librados global)
+target_link_libraries(ceph_scratchtoolpp librados-cxx global)
 install(TARGETS ceph_scratchtoolpp DESTINATION bin)
 
 add_executable(ceph_radosacl radosacl.cc)
-target_link_libraries(ceph_radosacl librados global)
+target_link_libraries(ceph_radosacl librados-cxx global)
 install(TARGETS ceph_radosacl DESTINATION bin)
 
 install(PROGRAMS

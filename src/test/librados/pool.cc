@@ -1,9 +1,8 @@
-#include "include/rados/librados.h"
-#include "test/librados/test.h"
-
-#include "gtest/gtest.h"
 #include <errno.h>
 #include <vector>
+#include "gtest/gtest.h"
+#include "include/rados/librados.h"
+#include "test/librados/test.h"
 
 #define POOL_LIST_BUF_SZ 32768
 

@@ -27,6 +27,6 @@ target_link_libraries(unittest_journal
   cls_journal_client
   rados_test_stub
   librados
-  radostest
+  radostest-cxx
   global 
   )
