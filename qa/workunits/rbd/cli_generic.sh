@@ -724,6 +724,18 @@ test_migration() {
     rbd rm rbd2/test1 && exit 1 || true
     rbd migration commit test1
 
+    # Migration to other namespace
+    rbd namespace create rbd2 ns1
+    rbd namespace create rbd2 ns2
+    rbd migration prepare rbd2/test1 rbd2/ns1/test1
+    test "$(get_migration_state rbd2/ns1/test1)" = prepared
+    rbd migration execute rbd2/test1
+    test "$(get_migration_state rbd2/ns1/test1)" = executed
+    rbd migration commit rbd2/test1
+    rbd migration prepare rbd2/ns1/test1 rbd2/ns2/test1
+    rbd migration execute rbd2/ns2/test1
+    rbd migration commit rbd2/ns2/test1
+
     # Enable data pool
     rbd create -s 128M test1
     rbd migration prepare test1 --data-pool rbd2
@@ -767,6 +779,16 @@ test_migration() {
         rbd create -s 128M --image-format ${format} test2
         rbd migration prepare test2 rbd2/test2
         rbd migration abort rbd2/test2
+        rbd bench --io-type write --io-size 1024 --io-total 1024 test2
+        rbd rm test2
+
+        test $format = 1 && continue
+
+        # Abort migration to other namespace
+        rbd create -s 128M --image-format ${format} test2
+        rbd migration prepare test2 rbd2/ns1/test3
+        rbd bench --io-type write --io-size 1024 --io-total 1024 rbd2/ns1/test3
+        rbd migration abort test2
         rbd bench --io-type write --io-size 1024 --io-total 1024 test2
         rbd rm test2
     done
