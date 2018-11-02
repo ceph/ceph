@@ -1050,20 +1050,6 @@ Miscellaneous
 :Default: ``256``
 
 
-``osd auto upgrade tmap``
-
-:Description: Uses ``tmap`` for ``omap`` on old objects.
-:Type: Boolean
-:Default: ``true``
-
-
-``osd tmapput sets users tmap``
-
-:Description: Uses ``tmap`` for debugging only.
-:Type: Boolean
-:Default: ``false``
-
-
 ``osd fast fail on connection refused``
 
 :Description: If this option is enabled, crashed OSDs are marked down
