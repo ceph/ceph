@@ -1,12 +1,12 @@
-#include "include/rados/librados.h"
-#include "include/rados/librados.hpp"
-#include "test/librados/test.h"
-
-#include "gtest/gtest.h"
 #include <errno.h>
 #include <map>
 #include <sstream>
 #include <string>
+
+#include "gtest/gtest.h"
+
+#include "include/rados/librados.hpp"
+#include "test/librados/test_cxx.h"
 
 using namespace librados;
 using std::map;

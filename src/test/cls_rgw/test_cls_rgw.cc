@@ -6,7 +6,7 @@
 #include "cls/rgw/cls_rgw_ops.h"
 
 #include "gtest/gtest.h"
-#include "test/librados/test.h"
+#include "test/librados/test_cxx.h"
 #include "global/global_context.h"
 
 #include <errno.h>

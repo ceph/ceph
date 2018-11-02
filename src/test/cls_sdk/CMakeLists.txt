@@ -2,12 +2,12 @@ add_executable(ceph_test_cls_sdk
   test_cls_sdk.cc
   )
 target_link_libraries(ceph_test_cls_sdk
-  librados
+  librados-cxx
   global
   ${EXTRALIBS}
   ${BLKID_LIBRARIES}
   ${CMAKE_DL_LIBS}
-  radostest
+  radostest-cxx
   ${UNITTEST_LIBS}
   )
 install(TARGETS

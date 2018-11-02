@@ -4,13 +4,13 @@ if(${WITH_RADOSGW})
     )
   target_link_libraries(ceph_test_cls_rgw
     cls_rgw_client
-    librados
+    librados-cxx
     global
     ${UNITTEST_LIBS}
     ${EXTRALIBS}
     ${BLKID_LIBRARIES}
     ${CMAKE_DL_LIBS}
-    radostest)
+    radostest-cxx)
   install(TARGETS
     ceph_test_cls_rgw
     DESTINATION ${CMAKE_INSTALL_BINDIR})

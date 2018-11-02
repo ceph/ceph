@@ -130,7 +130,7 @@ target_link_libraries(ceph_bench_log global pthread rt ${BLKID_LIBRARIES} ${CMAK
 add_executable(ceph_test_mutate
   test_mutate.cc
   )
-target_link_libraries(ceph_test_mutate global librados ${BLKID_LIBRARIES}
+target_link_libraries(ceph_test_mutate global librados-cxx ${BLKID_LIBRARIES} 
   ${CMAKE_DL_LIBS})
 
 # test_trans
@@ -150,7 +150,7 @@ add_executable(ceph_omapbench
   ${omapbench_srcs}
   )
 target_link_libraries(ceph_omapbench
-  librados
+  librados-cxx
   Boost::program_options
   global
   ${BLKID_LIBRARIES}
@@ -164,7 +164,7 @@ if(WITH_KVS)
     ${CMAKE_SOURCE_DIR}/src/key_value_store/kv_flat_btree_async.cc
     )
   add_executable(ceph_kvstorebench ${kvstorebench_srcs})
-  target_link_libraries(ceph_kvstorebench librados global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
+  target_link_libraries(ceph_kvstorebench librados-cxx global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
   install(TARGETS ceph_kvstorebench DESTINATION bin)
 endif(WITH_KVS)
 
@@ -356,7 +356,7 @@ endif(${WITH_RADOSGW})
 add_executable(ceph_multi_stress_watch
   multi_stress_watch.cc
   )
-target_link_libraries(ceph_multi_stress_watch librados global radostest
+target_link_libraries(ceph_multi_stress_watch librados-cxx global radostest-cxx
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
 
 #ceph_perf_local
@@ -418,9 +418,9 @@ add_executable(ceph_test_stress_watch
   test_stress_watch.cc
   )
 target_link_libraries(ceph_test_stress_watch
-  librados
+  librados-cxx
   ${UNITTEST_LIBS}
-  radostest
+  radostest-cxx
   ${EXTRALIBS}
   ${BLKID_LIBRARIES}
   ${CMAKE_DL_LIBS}

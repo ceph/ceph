@@ -4,7 +4,7 @@
 #include "cls/journal/cls_journal_client.h"
 #include "include/stringify.h"
 #include "common/Cond.h"
-#include "test/librados/test.h"
+#include "test/librados/test_cxx.h"
 #include "gtest/gtest.h"
 #include <errno.h>
 #include <set>

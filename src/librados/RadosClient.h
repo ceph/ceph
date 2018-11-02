@@ -172,6 +172,8 @@ public:
     std::map<std::string,std::string>&& status);
 
   mon_feature_t get_required_monitor_features() const;
+
+  int get_inconsistent_pgs(int64_t pool_id, std::vector<std::string>* pgs);
 };
 
 #endif
