@@ -12,7 +12,7 @@ void cls_chunk_refcount_get(librados::ObjectWriteOperation& op, const hobject_t&
   cls_chunk_refcount_get_op call;
   call.source = soid;
   encode(call, in);
-  op.exec("refcount", "chunk_get", in);
+  op.exec("cas", "chunk_get", in);
 }
 
 void cls_chunk_refcount_put(librados::ObjectWriteOperation& op, const hobject_t& soid)
@@ -21,7 +21,7 @@ void cls_chunk_refcount_put(librados::ObjectWriteOperation& op, const hobject_t&
   cls_chunk_refcount_put_op call;
   call.source = soid;
   encode(call, in);
-  op.exec("refcount", "chunk_put", in);
+  op.exec("cas", "chunk_put", in);
 }
 
 void cls_chunk_refcount_set(librados::ObjectWriteOperation& op, set<hobject_t>& refs)
@@ -30,13 +30,13 @@ void cls_chunk_refcount_set(librados::ObjectWriteOperation& op, set<hobject_t>& 
   cls_chunk_refcount_set_op call;
   call.refs = refs;
   encode(call, in);
-  op.exec("refcount", "chunk_set", in);
+  op.exec("cas", "chunk_set", in);
 }
 
 int cls_chunk_refcount_read(librados::IoCtx& io_ctx, string& oid, set<hobject_t> *refs)
 {
   bufferlist in, out;
-  int r = io_ctx.exec(oid, "refcount", "chunk_read", in, out);
+  int r = io_ctx.exec(oid, "cas", "chunk_read", in, out);
   if (r < 0)
     return r;
 
@@ -50,5 +50,13 @@ int cls_chunk_refcount_read(librados::IoCtx& io_ctx, string& oid, set<hobject_t>
 
   *refs = ret.refs;
 
+  return r;
+}
+
+int cls_chunk_has_chunk(librados::IoCtx& io_ctx, string& oid, string& fp_oid)
+{
+  bufferlist in, out;
+  encode(fp_oid, in);
+  int r = io_ctx.exec(oid, "cas", "has_chunk", in, out);
   return r;
 }
