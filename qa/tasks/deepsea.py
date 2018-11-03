@@ -24,6 +24,11 @@ log = logging.getLogger(__name__)
 deepsea_ctx = {}
 
 
+def anchored(log_message):
+    assert 'log_anchor' in deepsea_ctx, "deepsea_ctx not populated"
+    return "{}{}".format(deepsea_ctx['log_anchor'], log_message)
+
+
 class DeepSea(Task):
     """
     Install DeepSea on the Salt Master node.
@@ -37,6 +42,9 @@ class DeepSea(Task):
         cli:
             true        deepsea CLI will be used (default)
             false       deepsea CLI will not be used
+        log_anchor      a string (default: "WWWW: ") which will precede
+                        log messages emitted at key points during the
+                        deployment
         quiet_salt:
             true        suppress stderr on salt commands (default)
             false       let salt commands spam the log
@@ -66,56 +74,33 @@ class DeepSea(Task):
     :param config: the config dict
     """
 
+    log_anchor_str = "WWWW: "
+
     def __init__(self, ctx, config):
-        log.debug("beginning of constructor method")
         super(DeepSea, self).__init__(ctx, config)
         if deepsea_ctx:
-            log.debug("deepsea_ctx already populated (we are in a subtask)")
-            self.cluster_nodes = deepsea_ctx['cluster_nodes']
-            self.deepsea_cli = deepsea_ctx['cli']
-            self.dev_env = deepsea_ctx['dev_env']
-            self.sm = deepsea_ctx['salt_manager_instance']
-            self.master_remote = deepsea_ctx['master_remote']
-            self.rgw_ssl = deepsea_ctx['rgw_ssl']
-            self.roles = deepsea_ctx['roles']
-            self.role_lookup_table = deepsea_ctx['role_lookup_table']
-            self.role_remotes = deepsea_ctx['role_remotes']
-            self.quiet_salt = deepsea_ctx['quiet_salt']
-            log.debug("end of constructor method")
-            return None
-        deepsea_ctx['cli'] = self.config.get('cli', True)
-        self.deepsea_cli = deepsea_ctx['cli']
-        deepsea_ctx['quiet_salt'] = self.config.get('quiet_salt', True)
-        self.quiet_salt = deepsea_ctx['quiet_salt']
-        deepsea_ctx['salt_manager_instance'] = SaltManager(self.ctx)
-        self.sm = deepsea_ctx['salt_manager_instance']
-        deepsea_ctx['master_remote'] = self.sm.master_remote
-        self.master_remote = deepsea_ctx['master_remote']
-        deepsea_ctx['rgw_ssl'] = self.config.get('rgw_ssl', False)
-        self.rgw_ssl = deepsea_ctx['rgw_ssl']
-        deepsea_ctx['roles'] = ctx.config['roles']
-        self._introspect_roles(deepsea_ctx)
+            self.log = deepsea_ctx['logger_obj']
+            self.log.debug(
+                "deepsea_ctx already populated (we are in a subtask)")
+        if not deepsea_ctx:
+            deepsea_ctx['logger_obj'] = log
+            self.log = log
+            self.log.debug(
+                "populating deepsea_ctx (we are *not* in a subtask)")
+            self._populate_deepsea_context()
         self.cluster_nodes = deepsea_ctx['cluster_nodes']
+        self.deepsea_cli = deepsea_ctx['cli']
         self.dev_env = deepsea_ctx['dev_env']
+        self.master_remote = deepsea_ctx['master_remote']
+        self.quiet_salt = deepsea_ctx['quiet_salt']
+        self.rgw_ssl = deepsea_ctx['rgw_ssl']
+        self.roles = deepsea_ctx['roles']
         self.role_lookup_table = deepsea_ctx['role_lookup_table']
-        if 'install' in self.config:
-            if self.config['install'] in ['package', 'pkg']:
-                deepsea_ctx['install_method'] = 'package'
-            elif self.config['install'] in ['source', 'src']:
-                deepsea_ctx['install_method'] = 'source'
-            else:
-                raise ConfigError(
-                        "deepsea: unrecognized install config value ->{}<-"
-                        .format(self.config['install'])
-                    )
-        else:
-            if 'repo' in self.config or 'branch' in self.config:
-                deepsea_ctx['install_method'] = 'source'
-            else:
-                deepsea_ctx['install_method'] = 'package'
-        # log.debug("ctx.config {}".format(ctx.config))
-        log.debug("deepsea context: {}".format(deepsea_ctx))
-        log.debug("end of constructor method")
+        self.role_remotes = deepsea_ctx['role_remotes']
+        self.scripts = Scripts(self.master_remote, deepsea_ctx['logger_obj'])
+        self.sm = deepsea_ctx['salt_manager_instance']
+        # self.log.debug("ctx.config {}".format(ctx.config))
+        # self.log.debug("deepsea context: {}".format(deepsea_ctx))
 
     def _disable_gpg_checks(self):
         cmd = (
@@ -141,14 +126,16 @@ class DeepSea(Task):
         deepsea_ctx['deepsea_installed'] = True
 
     def _install_deepsea_from_source(self):
-        log.info("WWWW: installing deepsea from source")
+        self.log.info(anchored("installing deepsea from source"))
         if self.sm.master_rpm_q('deepsea'):
-            log.info("DeepSea already installed from RPM")
+            self.log.info("DeepSea already installed from RPM")
             return None
         repo = self.config.get('repo', 'https://github.com/SUSE/DeepSea.git')
         branch = self.config.get('branch', 'master')
-        log.info("Installing DeepSea from source - repo: {}, branch: {}"
-                 .format(repo, branch))
+        self.log.info(
+            "Installing DeepSea from source - repo: {}, branch: {}"
+            .format(repo, branch)
+            )
         self.master_remote.run(args=[
             'git',
             '--version',
@@ -176,7 +163,7 @@ class DeepSea(Task):
             run.Raw('||'),
             'true',
             ])
-        log.info("Running \"make install\" in DeepSea clone...")
+        self.log.info("Running \"make install\" in DeepSea clone...")
         self.master_remote.run(args=[
             'cd',
             'DeepSea',
@@ -185,7 +172,7 @@ class DeepSea(Task):
             'make',
             'install',
             ])
-        log.info("installing deepsea dependencies...")
+        self.log.info("installing deepsea dependencies...")
         rpmspec_cmd = (
                 '$(rpmspec --requires -q DeepSea/deepsea.spec.in 2>/dev/null)'
             )
@@ -199,7 +186,7 @@ class DeepSea(Task):
             ])
 
     def _install_deepsea_using_zypper(self):
-        log.info("WWWW: installing DeepSea using zypper")
+        self.log.info(anchored("installing DeepSea using zypper"))
         self.master_remote.run(args=[
             'sudo',
             'zypper',
@@ -285,8 +272,8 @@ class DeepSea(Task):
                 "node_roles_list is a list"
             assert node_roles_list, "node_roles_list is not empty"
             remote = get_remote_for_role(self.ctx, node_roles_list[0])
-            log.debug("Considering remote name {}, hostname {}"
-                      .format(remote.name, remote.hostname))
+            self.log.debug("Considering remote name {}, hostname {}"
+                           .format(remote.name, remote.hostname))
             remote_lookup_table[remote.hostname] = node_roles_list
             # inner loop: roles (something like "osd.1" or "c2.mon.a")
             for role in node_roles_list:
@@ -313,7 +300,7 @@ class DeepSea(Task):
         deepsea_ctx['client_nodes'] = len(client_remotes)
         deepsea_ctx['dev_env'] = True if cluster_nodes < 4 else False
         # report phase
-        log.info("ROLE INTROSPECTION REPORT")
+        self.log.info("ROLE INTROSPECTION REPORT")
         assign_vars = [
             'cluster_nodes',
             'role_remotes',
@@ -336,20 +323,55 @@ class DeepSea(Task):
             'dev_env',
             ]
         for var in report_vars:
-            log.info("{} == {}".format(var, deepsea_ctx[var]))
+            self.log.info("{} == {}".format(var, deepsea_ctx[var]))
+
+    def _populate_deepsea_context(self):
+        deepsea_ctx['roles'] = self.ctx.config['roles']
+        deepsea_ctx['cli'] = self.config.get('cli', True)
+        deepsea_ctx['log_anchor'] = self.config.get('log_anchor',
+                                                    self.log_anchor_str)
+        if not isinstance(deepsea_ctx['log_anchor'], str):
+            self.log.warning(
+                "log_anchor was set to non-string value ->{}<-, "
+                "changing to empty string"
+                .format(deepsea_ctx['log_anchor'])
+                )
+            deepsea_ctx['log_anchor'] = ''
+        deepsea_ctx['quiet_salt'] = self.config.get('quiet_salt', True)
+        deepsea_ctx['salt_manager_instance'] = SaltManager(self.ctx)
+        deepsea_ctx['master_remote'] = (
+                deepsea_ctx['salt_manager_instance'].master_remote
+                )
+        deepsea_ctx['rgw_ssl'] = self.config.get('rgw_ssl', False)
+        self._introspect_roles(deepsea_ctx)
+        if 'install' in self.config:
+            if self.config['install'] in ['package', 'pkg']:
+                deepsea_ctx['install_method'] = 'package'
+            elif self.config['install'] in ['source', 'src']:
+                deepsea_ctx['install_method'] = 'source'
+            else:
+                raise ConfigError(
+                        "deepsea: unrecognized install config value ->{}<-"
+                        .format(self.config['install'])
+                    )
+        else:
+            if 'repo' in self.config or 'branch' in self.config:
+                deepsea_ctx['install_method'] = 'source'
+            else:
+                deepsea_ctx['install_method'] = 'package'
 
     def _purge_osds(self):
         # needed as long as teuthology install task purges /var/lib/ceph
         # in its teardown phase
         for _remote in self.ctx.cluster.remotes.iterkeys():
-            log.info("stopping OSD services on {}"
-                     .format(_remote.hostname))
+            self.log.info("stopping OSD services on {}"
+                          .format(_remote.hostname))
             _remote.run(args=[
                 'sudo', 'sh', '-c',
                 'systemctl stop ceph-osd.target ; sleep 10'
                 ])
-            log.info("unmounting OSD partitions on {}"
-                     .format(_remote.hostname))
+            self.log.info("unmounting OSD partitions on {}"
+                          .format(_remote.hostname))
             # unmount up to five OSDs
             # bluestore XFS partition is vd?1
             # filestore XFS partition is vd?2
@@ -390,35 +412,35 @@ class DeepSea(Task):
     # the parent's implementation of that method as well. This is illustrated
     # here:
     def setup(self):
-        # log.debug("beginning of setup method")
+        # self.log.debug("beginning of setup method")
         super(DeepSea, self).setup()
         pass
-        # log.debug("end of setup method")
+        # self.log.debug("end of setup method")
 
     def begin(self):
-        log.debug("beginning of begin method")
+        self.log.debug("beginning of begin method")
         super(DeepSea, self).begin()
         if 'deepsea_installed' not in deepsea_ctx:
             self._disable_gpg_checks()
             self.master_remote.run(args="zypper lr -upEP")
             self._install_deepsea()
             assert deepsea_ctx['deepsea_installed']
-        log.debug("end of begin method")
+        self.log.debug("end of begin method")
 
     def end(self):
-        # log.debug("beginning of end method")
+        # self.log.debug("beginning of end method")
         super(DeepSea, self).end()
         pass
-        # log.debug("end of end method")
+        # self.log.debug("end of end method")
 
     def teardown(self):
-        log.debug("beginning of teardown method")
+        self.log.debug("beginning of teardown method")
         super(DeepSea, self).teardown()
         #
         # the install task does "rm -r /var/lib/ceph" on every test node,
         # and that fails when there are OSDs running
         self._purge_osds()
-        log.debug("end of teardown method")
+        self.log.debug("end of teardown method")
 
 
 class CephConf(DeepSea):
@@ -452,11 +474,8 @@ class CephConf(DeepSea):
         }
 
     def __init__(self, ctx, config):
-        self.logger = log.getChild('ceph_conf')
-        self.logger.debug("beginning of constructor method")
+        deepsea_ctx['logger_obj'] = log.getChild('ceph_conf')
         super(CephConf, self).__init__(ctx, config)
-        self.logger.debug("munged config is {}".format(self.config))
-        self.logger.debug("end of constructor method")
 
     def _ceph_conf_d_full_path(self, section):
         if section in self.customize.keys():
@@ -470,7 +489,7 @@ class CephConf(DeepSea):
                 self._ceph_conf_d_full_path(section),
                 data
                 )
-            self.logger.info(
+            self.log.info(
                 "Adding to ceph.conf, {} section: {}"
                 .format(section, data)
                 )
@@ -483,7 +502,7 @@ class CephConf(DeepSea):
             self._ceph_conf_d_full_path("mon"),
             data,
             )
-        self.logger.info(info_msg)
+        self.log.info(info_msg)
 
     def _dump_ceph_conf_d(self):
         self.master_remote.run(
@@ -498,7 +517,7 @@ class CephConf(DeepSea):
                     args="test -f {}".format(path)
                     )
             except CommandFailedError:
-                self.logger.info(
+                self.log.info(
                     "{} does not exist on the remote".format(path)
                     )
                 continue
@@ -527,7 +546,7 @@ class CephConf(DeepSea):
                    "osd pool default size = 2\n"
                    )
         if data:
-            self.logger.info(info_msg)
+            self.log.info(info_msg)
             sudo_append_to_file(
                 self.master_remote,
                 self._ceph_conf_d_full_path("global"),
@@ -542,11 +561,10 @@ class CephConf(DeepSea):
             self._ceph_conf_d_full_path("mon"),
             data,
             )
-        self.logger.info(info_msg)
+        self.log.info(info_msg)
 
     def begin(self):
-        self.logger.debug("beginning of begin method")
-        self.logger.info("WWWW: Adding custom options to ceph.conf")
+        self.log.info(anchored("Adding custom options to ceph.conf"))
         if self.config.get('dashboard', True):
             self._dashboard()
         if self.config.get('mon_allow_pool_delete', True):
@@ -558,31 +576,24 @@ class CephConf(DeepSea):
                                                      dict):
                     self._custom_ceph_conf(section, self.config[section])
         self._dump_ceph_conf_d()
-        self.logger.debug("end of begin method")
 
     def teardown(self):
-        # self.logger.debug("beginning of teardown method")
         pass
-        # self.logger.debug("end of teardown method")
 
 
 class Dummy(DeepSea):
 
     def __init__(self, ctx, config):
-        self.logger = logging.getLogger('task.deepsea.dummy')
-        self.logger.debug("beginning of constructor method")
-        pass
-        self.logger.debug("end of constructor method")
+        deepsea_ctx['logger_obj'] = log.getChild('dummy')
+        super(Dummy, self).__init__(ctx, config)
 
     def begin(self):
-        self.logger.debug("beginning of begin method")
-        self.logger.info("deepsea_ctx == {}".format(deepsea_ctx))
-        self.logger.debug("end of begin method")
+        self.log.debug("beginning of begin method")
+        self.log.info("deepsea_ctx == {}".format(deepsea_ctx))
+        self.log.debug("end of begin method")
 
     def teardown(self):
-        # self.logger.debug("beginning of teardown method")
         pass
-        # self.logger.debug("end of teardown method")
 
 
 class Deploy:
@@ -606,11 +617,8 @@ class HealthOK(DeepSea):
     prefix = 'health-ok/'
 
     def __init__(self, ctx, config):
-        self.logger = log.getChild('health_ok')
-        self.logger.debug("beginning of constructor method")
+        deepsea_ctx['logger_obj'] = log.getChild('health_ok')
         super(HealthOK, self).__init__(ctx, config)
-        self.logger.debug("munged config is {}".format(self.config))
-        self.logger.debug("end of constructor method")
 
     def _copy_health_ok(self):
         """
@@ -638,7 +646,7 @@ class HealthOK(DeepSea):
                 "(health_ok subtask) commands must be a list of strings"
                 )
         if not commands:
-            self.logger.warning(
+            self.log.warning(
                 "The health_ok task was run, but no commands were specified. "
                 "Doing nothing."
                 )
@@ -661,9 +669,9 @@ class HealthOK(DeepSea):
                 ])
 
     def teardown(self):
-        # self.logger.debug("beginning of teardown method")
+        # self.log.debug("beginning of teardown method")
         pass
-        # self.logger.debug("end of teardown method")
+        # self.log.debug("end of teardown method")
 
 
 class Orch(DeepSea):
@@ -684,11 +692,11 @@ class Orch(DeepSea):
         }
 
     def __init__(self, ctx, config):
-        self.logger = log.getChild('orch')
-        self.logger.debug("beginning of constructor method")
-        # cast stage value to str because it might be a number
-        self.stage = str(config.get("stage", ''))
-        self.state_orch = str(config.get("state_orch", ''))
+        deepsea_ctx['logger_obj'] = log.getChild('orch')
+        super(Orch, self).__init__(ctx, config)
+        # cast stage/state_orch value to str because it might be a number
+        self.stage = str(self.config.get("stage", ''))
+        self.state_orch = str(self.config.get("state_orch", ''))
         if not self.stage and not self.state_orch:
             raise ConfigError(
                 "deepsea.orch: nothing to do. Specify a value for 'stage' or "
@@ -696,16 +704,12 @@ class Orch(DeepSea):
                 )
         if self.stage and self.stage not in self.all_stages:
             raise ConfigError("unrecognized Stage ->{}<-".format(self.stage))
-        super(Orch, self).__init__(ctx, config)
-        self.logger.debug("munged config is {}".format(self.config))
-        self.scripts = Scripts(self.master_remote, self.logger)
-        self.logger.debug("end of constructor method")
 
     def __log_stage_start(self, stage):
-        self.logger.info(
-            "WWWW: running Stage {} ({})"
+        self.log.info(anchored(
+            "running Stage {} ({})"
             .format(stage, self.stage_synonyms[stage])
-            )
+            ))
 
     def _ceph_health_test(self):
         self.master_remote.run(args=[
@@ -718,13 +722,13 @@ class Orch(DeepSea):
             ])
 
     def _configure_rgw(self):
-        self.logger.debug("self.rgw_ssl is ->{}<-".format(self.rgw_ssl))
+        self.log.debug("self.rgw_ssl is ->{}<-".format(self.rgw_ssl))
         rgw_host = self.role_type_present('rgw')
         if rgw_host:
-            self.logger.debug(
+            self.log.debug(
                 "detected rgw host ->{}<-".format(rgw_host)
                 )
-            self.logger.info("WWWW: configuring RGW")
+            self.log.info(anchored("configuring RGW"))
             self.scripts.rgw_init()
             if self.rgw_ssl:
                 self.scripts.rgw_init_ssl()
@@ -753,7 +757,7 @@ class Orch(DeepSea):
             ganesha_remote.run(args="cat /etc/ganesha/ganesha.conf")
 
     def _nfs_ganesha_no_root_squash(self):
-        self.logger.info("WWWW: NFS-Ganesha set No_root_squash")
+        self.log.info("NFS-Ganesha set No_root_squash")
         ganeshaj2 = '/srv/salt/ceph/ganesha/files/ganesha.conf.j2'
         cmd = [
             "sudo", "sed", "-i",
@@ -796,10 +800,10 @@ class Orch(DeepSea):
                 'sudo', 'bash', '-c', cmd_str,
                 ])
         except CommandFailedError:
-            log.error(
-                "WWWW: orchestration {} failed. ".format(orch_spec)
+            self.log.error(anchored(
+                "orchestration {} failed. ".format(orch_spec)
                 + "Here comes journalctl!"
-                )
+                ))
             self.master_remote.run(args=[
                 'sudo',
                 'journalctl',
@@ -877,49 +881,49 @@ class Orch(DeepSea):
         self._run_orch(("stage", 5))
 
     def begin(self):
-        self.logger.debug("beginning of begin method")
+        self.log.debug("beginning of begin method")
         if self.state_orch:
-            self.logger.info(
-                "WWWW: running orchestration {}".format(self.state_orch)
-                )
+            self.log.info(anchored(
+                "running orchestration {}".format(self.state_orch)
+                ))
             self._run_orch(("orch", self.state_orch))
-            self.logger.debug("end of begin method")
+            self.log.debug("end of begin method")
             return None
         # it's not an orch, so it must be a stage
         assert self.stage, "Neither state_orch, nor stage"
         if self._is_int_between_0_and_5(self.stage):
             exec('self._run_stage_{}()'.format(self.stage))
         elif self.stage == 'prep':
-            self.logger.info("Running Stage 0 instead of Stage \"prep\"")
+            self.log.info("Running Stage 0 instead of Stage \"prep\"")
             self._run_stage_0()
         elif self.stage == 'discovery':
-            self.logger.info("Running Stage 1 instead of Stage \"discovery\"")
+            self.log.info("Running Stage 1 instead of Stage \"discovery\"")
             self._run_stage_1()
         elif self.stage == 'configure':
-            self.logger.info("Running Stage 2 instead of Stage \"configure\"")
+            self.log.info("Running Stage 2 instead of Stage \"configure\"")
             self._run_stage_2()
         elif self.stage == 'deploy':
-            self.logger.info("Running Stage 3 instead of Stage \"deploy\"")
+            self.log.info("Running Stage 3 instead of Stage \"deploy\"")
             self._run_stage_3()
         elif self.stage == 'services':
-            self.logger.info("Running Stage 4 instead of Stage \"services\"")
+            self.log.info("Running Stage 4 instead of Stage \"services\"")
             self._run_stage_4()
         elif self.stage == 'removal':
-            self.logger.info("Running Stage 5 instead of Stage \"removal\"")
+            self.log.info("Running Stage 5 instead of Stage \"removal\"")
             self._run_stage_5()
         elif self.stage in self.all_stages:
-            self.logger.info(
+            self.log.info(
                 "Running non-numeric Stage \"{}\"".format(self.stage)
                 )
             self._run_orch(("stage", self.stage))
         else:
             raise ConfigError('unsupported stage ->{}<-'.format(self.stage))
-        self.logger.debug("end of begin method")
+        self.log.debug("end of begin method")
 
     def teardown(self):
-        # self.logger.debug("beginning of teardown method")
+        # self.log.debug("beginning of teardown method")
         pass
-        # self.logger.debug("end of teardown method")
+        # self.log.debug("end of teardown method")
 
 
 class Policy(DeepSea):
@@ -927,12 +931,9 @@ class Policy(DeepSea):
     proposals_dir = "/srv/pillar/ceph/proposals"
 
     def __init__(self, ctx, config):
-        self.logger = log.getChild('policy')
-        self.logger.debug("beginning of constructor method")
+        deepsea_ctx['logger_obj'] = log.getChild('policy')
         super(Policy, self).__init__(ctx, config)
-        self.logger.debug("munged config is {}".format(self.config))
         self.profile = self.config.get("profile", "teuthology")
-        self.logger.debug("end of constructor method")
 
     def __build_profile_x(self, profile):
         self.profile_ymls_to_dump = []
@@ -943,7 +944,7 @@ class Policy(DeepSea):
             role_dict = self.role_lookup_table['osd']
         else:
             raise ConfigError(no_osd_roles)
-        self.logger.debug(
+        self.log.debug(
             "generating policy.cfg lines for osd profile ->{}<- based on {}"
             .format(profile, role_dict)
             )
@@ -951,7 +952,7 @@ class Policy(DeepSea):
             raise ConfigError(no_osd_roles)
         osd_remotes = list(set(role_dict.values()))
         for osd_remote in osd_remotes:
-            self.logger.debug(
+            self.log.debug(
                 "{} has one or more osd roles".format(osd_remote)
                 )
             self.policy_cfg += """# Storage profile - {remote}
@@ -1010,9 +1011,9 @@ role-admin/cluster/*.sls
         elif required:
             raise ConfigError(no_roles_of_type + but_required)
         else:
-            self.logger.debug(no_roles_of_type)
+            self.log.debug(no_roles_of_type)
             return None
-        self.logger.debug(
+        self.log.debug(
             "generating policy.cfg lines for {} based on {}"
             .format(role_type, role_dict)
             )
@@ -1080,8 +1081,8 @@ role-admin/cluster/*.sls
         """
         Generate policy.cfg from the results of role introspection
         """
-        self.logger.debug("beginning of begin method")
-        self.logger.info("WWWW: generating policy.cfg")
+        self.log.debug("beginning of begin method")
+        self.log.info(anchored("generating policy.cfg"))
         self._dump_proposals_dir()
         self._build_base()
         self._build_x('mon', required=True)
@@ -1094,21 +1095,19 @@ role-admin/cluster/*.sls
         self._write_policy_cfg()
         self._cat_policy_cfg()
         self._dump_profile_ymls()
-        self.logger.debug("end of begin method")
+        self.log.debug("end of begin method")
 
     def teardown(self):
-        # self.logger.debug("beginning of teardown method")
+        # self.log.debug("beginning of teardown method")
         pass
-        # self.logger.debug("end of teardown method")
+        # self.log.debug("end of teardown method")
 
 
 class CreatePools(DeepSea):
 
     def __init__(self, ctx, config):
-        self.logger = log.getChild('create_pools')
-        self.logger.debug("beginning of constructor method")
+        deepsea_ctx['logger_obj'] = log.getChild('create_pools')
         super(CreatePools, self).__init__(ctx, config)
-        self.logger.debug("munged config is {}".format(self.config))
         self.args = []
         if isinstance(self.config, list):
             self.args = self.config
@@ -1132,28 +1131,23 @@ class CreatePools(DeepSea):
         if 'mds' in self.role_lookup_table:
             self.args.append('mds')
         self.args = list(set(self.args))
-        self.scripts = Scripts(self.master_remote, self.logger)
-        self.logger.debug("end of constructor method")
 
     def begin(self):
-        self.logger.debug("beginning of begin method")
+        self.log.debug("beginning of begin method")
         self.scripts.create_all_pools_at_once(self.args)
-        self.logger.debug("end of begin method")
+        self.log.debug("end of begin method")
 
     def teardown(self):
-        # self.logger.debug("beginning of teardown method")
+        # self.log.debug("beginning of teardown method")
         pass
-        # self.logger.debug("end of teardown method")
+        # self.log.debug("end of teardown method")
 
 
 class Preflight(DeepSea):
 
     def __init__(self, ctx, config):
-        self.logger = log.getChild('preflight')
-        self.logger.debug("beginning of constructor method")
+        deepsea_ctx['logger_obj'] = log.getChild('preflight')
         super(Preflight, self).__init__(ctx, config)
-        self.logger.debug("munged config is {}".format(self.config))
-        self.logger.debug("end of constructor method")
 
     def _deepsea_version(self):
         if self.deepsea_cli:
@@ -1218,14 +1212,14 @@ class Preflight(DeepSea):
                 '--version'
                 ])
         else:
-            self.logger.info(
+            self.log.info(
                 '{} not installed on master node'.format(python_binary)
                 )
         return installed
 
     def begin(self):
-        self.logger.debug("beginning of begin method")
-        self.logger.info("WWWW: preflight sequence")
+        self.log.debug("beginning of begin method")
+        self.log.info(anchored("preflight sequence"))
         self.sm.master_rpm_q('ceph')
         self.sm.master_rpm_q('ceph-test')
         self.sm.master_rpm_q('salt-master')
@@ -1239,12 +1233,12 @@ class Preflight(DeepSea):
         self._deepsea_minions()
         # Stage 0 does this, but we have no guarantee Stage 0 will run
         self.sm.sync_pillar_data(quiet=self.quiet_salt)
-        self.logger.debug("end of begin method")
+        self.log.debug("end of begin method")
 
     def teardown(self):
-        # self.logger.debug("beginning of teardown method")
+        # self.log.debug("beginning of teardown method")
         pass
-        # self.logger.debug("end of teardown method")
+        # self.log.debug("end of teardown method")
 
 
 class Scripts:
