@@ -2,4 +2,4 @@ tasks:
 - workunit:
     clients:
       client.salt_master:
-        - deepsea/suites/rgw/rgw-ssl.sh
+        - deepsea/suites/rgw/rgw-ssl-cli.sh
