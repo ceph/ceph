@@ -1,4 +1,3 @@
-import copy
 import logging
 
 from salt_manager import SaltManager
@@ -27,6 +26,21 @@ deepsea_ctx = {}
 def anchored(log_message):
     assert 'log_anchor' in deepsea_ctx, "deepsea_ctx not populated"
     return "{}{}".format(deepsea_ctx['log_anchor'], log_message)
+
+
+def remote_run_script_as_root(remote, path, data, args=None):
+    """
+    Wrapper around write_file to simplify the design pattern:
+    1. use write_file to create bash script on the remote
+    2. use Remote.run to run that bash script via "sudo bash $SCRIPT"
+    """
+    write_file(remote, path, data)
+    cmd = 'sudo bash {}'.format(path)
+    if args:
+        cmd += ' ' + ' '.join(args)
+    remote.run(label=path, args=[
+        'sudo', 'bash', '-c', cmd
+        ])
 
 
 class DeepSea(Task):
@@ -88,17 +102,23 @@ class DeepSea(Task):
             self.log.debug(
                 "populating deepsea_ctx (we are *not* in a subtask)")
             self._populate_deepsea_context()
+        self.client_only_nodes = deepsea_ctx['client_only_nodes']
         self.cluster_nodes = deepsea_ctx['cluster_nodes']
         self.deepsea_cli = deepsea_ctx['cli']
         self.dev_env = deepsea_ctx['dev_env']
+        self.gateway_nodes = deepsea_ctx['gateway_nodes']
+        self.log_anchor = deepsea_ctx['log_anchor']
         self.master_remote = deepsea_ctx['master_remote']
+        self.nodes = deepsea_ctx['nodes']
         self.quiet_salt = deepsea_ctx['quiet_salt']
         self.rgw_ssl = deepsea_ctx['rgw_ssl']
         self.roles = deepsea_ctx['roles']
+        self.role_types = deepsea_ctx['role_types']
         self.role_lookup_table = deepsea_ctx['role_lookup_table']
-        self.role_remotes = deepsea_ctx['role_remotes']
+        self.remotes = deepsea_ctx['remotes']
         self.scripts = Scripts(self.master_remote, deepsea_ctx['logger_obj'])
         self.sm = deepsea_ctx['salt_manager_instance']
+        self.storage_nodes = deepsea_ctx['storage_nodes']
         # self.log.debug("ctx.config {}".format(ctx.config))
         # self.log.debug("deepsea context: {}".format(deepsea_ctx))
 
@@ -120,7 +140,7 @@ class DeepSea(Task):
             self._install_deepsea_from_source()
         else:
             raise ConfigError(
-                    "deepsea: unrecognized install config value ->{}<-"
+                    "(deepsea task) unrecognized install config value ->{}<-"
                     .format(self.config['install'])
                 )
         deepsea_ctx['deepsea_installed'] = True
@@ -212,25 +232,30 @@ class DeepSea(Task):
         """
         Creates the following keys in deepsea_ctx:
 
-            role_nodes,
-            cluster_nodes, and
-            client_nodes.
+            nodes,
+            cluster_nodes,
+            gateway_nodes,
+            storage_nodes, and
+            client_only_nodes.
 
-        The latter are understood to be client-ONLY nodes, and:
+        These are all simple lists of hostnames.
 
-        role_nodes == (cluster_nodes + client_nodes)
+        Also creates
 
-        Also sets:
+            remotes,
 
-            role_remotes,
-            cluster_remotes, and
-            client_remotes.
-
-        These are dicts of teuthology "remote" objects, which look like this:
+        which is a dict of teuthology "remote" objects, which look like this:
 
             { remote1_name: remote1_obj, ..., remoten_name: remoten_obj }
 
-        Finally, sets:
+        Also creates
+
+            role_types
+
+        which is just like the "roles" list, except it contains only unique
+        role types per node.
+
+        Finally, creates:
 
             role_lookup_table
 
@@ -258,22 +283,31 @@ class DeepSea(Task):
         stanza, except the role lists are keyed by remote name.)
         """
         # initialization phase
-        cluster_roles = ['mon', 'mgr', 'osd', 'mds', 'rgw', 'igw', 'ganesha']
+        cluster_roles = ['mon', 'mgr', 'osd', 'mds']
+        gateway_roles = ['rgw', 'igw', 'ganesha']
         d_ctx = deepsea_ctx
         roles = d_ctx['roles']
-        d_ctx['role_nodes'] = len(roles)
-        role_remotes = {}
-        cluster_remotes = {}
+        nodes = []
+        cluster_nodes = []
+        gateway_nodes = []
+        storage_nodes = []
+        client_only_nodes = []
+        remotes = {}
+        role_types = []
         role_lookup_table = {}
         remote_lookup_table = {}
         # introspection phase
+        idx = 0
         for node_roles_list in roles:
             assert isinstance(node_roles_list, list), \
                 "node_roles_list is a list"
             assert node_roles_list, "node_roles_list is not empty"
             remote = get_remote_for_role(self.ctx, node_roles_list[0])
+            role_types.append([])
             self.log.debug("Considering remote name {}, hostname {}"
                            .format(remote.name, remote.hostname))
+            nodes += [remote.hostname]
+            remotes[remote.hostname] = remote
             remote_lookup_table[remote.hostname] = node_roles_list
             # inner loop: roles (something like "osd.1" or "c2.mon.a")
             for role in node_roles_list:
@@ -282,46 +316,48 @@ class DeepSea(Task):
                 role_arr = role.split('.')
                 if len(role_arr) != 2:
                     raise ConfigError(
-                        "deepsea_deploy: unsupported role ->{}<- encountered!"
+                        "(deepsea task) unsupported role ->{}<- encountered!"
                         .format(role)
                         )
                 (role_type, _) = role_arr
-                remote = get_remote_for_role(self.ctx, role)
-                role_remotes[remote.hostname] = remote
                 if role_type not in role_lookup_table:
                     role_lookup_table[role_type] = {}
                 role_lookup_table[role_type][role] = remote.hostname
                 if role_type in cluster_roles:
-                    cluster_remotes[remote.hostname] = remote
-        cluster_nodes = len(cluster_remotes)
-        client_remotes = copy.copy(role_remotes)
-        for remote_name, _ in cluster_remotes.iteritems():
-            del(client_remotes[remote_name])
-        deepsea_ctx['client_nodes'] = len(client_remotes)
-        deepsea_ctx['dev_env'] = True if cluster_nodes < 4 else False
-        # report phase
-        self.log.info("ROLE INTROSPECTION REPORT")
+                    cluster_nodes += [remote.hostname]
+                if role_type in gateway_roles:
+                    gateway_nodes += [remote.hostname]
+                if role_type == 'osd':
+                    storage_nodes += [remote.hostname]
+                if role_type not in role_types[idx]:
+                    role_types[idx] += [role_type]
+            idx += 1
+        cluster_nodes = list(set(cluster_nodes))
+        gateway_nodes = list(set(gateway_nodes))
+        storage_nodes = list(set(storage_nodes))
+        client_only_nodes = list(
+            set(nodes).difference(set(cluster_nodes).union(set(gateway_nodes)))
+            )
+        self.log.debug(
+            "client_only_nodes is ->{}<-".format(client_only_nodes)
+            )
         assign_vars = [
+            'nodes',
             'cluster_nodes',
-            'role_remotes',
-            'cluster_remotes',
-            'client_remotes',
+            'gateway_nodes',
+            'storage_nodes',
+            'client_only_nodes',
+            'remotes',
+            'role_types',
             'role_lookup_table',
             'remote_lookup_table',
             ]
         for var in assign_vars:
             exec("deepsea_ctx['{var}'] = {var}".format(var=var))
-        report_vars = [
-            'role_nodes',
-            'cluster_nodes',
-            'client_nodes',
-            'role_remotes',
-            'cluster_remotes',
-            'client_remotes',
-            'role_lookup_table',
-            'remote_lookup_table',
-            'dev_env',
-            ]
+        deepsea_ctx['dev_env'] = True if len(cluster_nodes) < 4 else False
+        # report phase
+        self.log.info("ROLE INTROSPECTION REPORT")
+        report_vars = ['roles'] + assign_vars + ['dev_env']
         for var in report_vars:
             self.log.info("{} == {}".format(var, deepsea_ctx[var]))
 
@@ -351,9 +387,9 @@ class DeepSea(Task):
                 deepsea_ctx['install_method'] = 'source'
             else:
                 raise ConfigError(
-                        "deepsea: unrecognized install config value ->{}<-"
-                        .format(self.config['install'])
-                    )
+                        "(deepsea task) unrecognized install config value "
+                        "->{}<-".format(self.config['install'])
+                        )
         else:
             if 'repo' in self.config or 'branch' in self.config:
                 deepsea_ctx['install_method'] = 'source'
@@ -529,18 +565,19 @@ class CephConf(DeepSea):
         """
         Apply necessary ceph.conf for small clusters
         """
+        storage_nodes = len(self.storage_nodes)
         info_msg = (
             "adjusting ceph.conf for operation with {} storage node(s)"
-            .format(self.cluster_nodes)
+            .format(storage_nodes)
             )
         data = None
-        if self.cluster_nodes == 1:
+        if storage_nodes == 1:
             data = (
                    "mon pg warn min per osd = 16\n"
                    "osd pool default size = 2\n"
                    "osd crush chooseleaf type = 0 # failure domain == osd\n"
                    )
-        elif self.cluster_nodes == 2 or self.cluster_nodes == 3:
+        elif storage_nodes == 2 or storage_nodes == 3:
             data = (
                    "mon pg warn min per osd = 8\n"
                    "osd pool default size = 2\n"
@@ -699,11 +736,13 @@ class Orch(DeepSea):
         self.state_orch = str(self.config.get("state_orch", ''))
         if not self.stage and not self.state_orch:
             raise ConfigError(
-                "deepsea.orch: nothing to do. Specify a value for 'stage' or "
+                "(orch subtask) nothing to do. Specify a value for 'stage' or "
                 "'state_orch' key in config dict"
                 )
         if self.stage and self.stage not in self.all_stages:
-            raise ConfigError("unrecognized Stage ->{}<-".format(self.stage))
+            raise ConfigError(
+                "(orch subtask) unrecognized Stage ->{}<-".format(self.stage)
+                )
 
     def __log_stage_start(self, stage):
         self.log.info(anchored(
@@ -753,7 +792,7 @@ class Orch(DeepSea):
     def _maybe_cat_ganesha_conf(self):
         ganesha_host = self.role_type_present('ganesha')
         if ganesha_host:
-            ganesha_remote = self.role_remotes[ganesha_host]
+            ganesha_remote = self.remotes[ganesha_host]
             ganesha_remote.run(args="cat /etc/ganesha/ganesha.conf")
 
     def _nfs_ganesha_no_root_squash(self):
@@ -775,7 +814,7 @@ class Orch(DeepSea):
             orch_spec = 'ceph.stage.{}'.format(orch_spec)
         else:
             raise ConfigError(
-                "Unrecognized orchestration type ->{}<-"
+                "(orch subtask) Unrecognized orchestration type ->{}<-"
                 .format(orch_type)
                 )
         cmd_str = None
@@ -917,7 +956,9 @@ class Orch(DeepSea):
                 )
             self._run_orch(("stage", self.stage))
         else:
-            raise ConfigError('unsupported stage ->{}<-'.format(self.stage))
+            raise ConfigError(
+                '(orch subtask) unsupported stage ->{}<-'.format(self.stage)
+                )
         self.log.debug("end of begin method")
 
     def teardown(self):
@@ -937,19 +978,19 @@ class Policy(DeepSea):
 
     def __build_profile_x(self, profile):
         self.profile_ymls_to_dump = []
-        no_osd_roles = ("deepsea_deploy: no osd roles configured"
-                        ", but at least one of these is required.")
+        no_osd_roles = ("no osd roles configured, but at least "
+                        "one of these is required.")
         role_dict = {}
         if 'osd' in self.role_lookup_table:
             role_dict = self.role_lookup_table['osd']
         else:
-            raise ConfigError(no_osd_roles)
+            raise ConfigError("(policy subtask) {}".format(no_osd_roles))
         self.log.debug(
             "generating policy.cfg lines for osd profile ->{}<- based on {}"
             .format(profile, role_dict)
             )
         if len(role_dict) == 0:
-            raise ConfigError(no_osd_roles)
+            raise ConfigError("(policy subtask) {}".format(no_osd_roles))
         osd_remotes = list(set(role_dict.values()))
         for osd_remote in osd_remotes:
             self.log.debug(
@@ -968,7 +1009,7 @@ profile-{profile}/cluster/{remote}.sls
         """
         policy.cfg boilerplate
         """
-        self.policy_cfg = """# policy.cfg generated by deepsea_deploy.py
+        self.policy_cfg = """# policy.cfg generated by deepsea.policy subtask
 # Cluster assignment
 cluster-ceph/cluster/*.sls
 # Common configuration
@@ -986,19 +1027,17 @@ role-admin/cluster/*.sls
         """
         if not isinstance(self.profile, str):
             raise ConfigError(
-                "deepsea.policy.build_profile: "
-                "profile config param must be a string"
+                "(policy subtask) profile config param must be a string"
                 )
         if self.profile == 'teuthology':
             raise ConfigError(
-                "deepsea.policy._build_profile: "
-                "\"teuthology\" profile not implemented yet"
+                "(policy subtask) \"teuthology\" profile not implemented yet"
                 )
         elif self.profile == 'default':
             self.__build_profile_x('default')
         else:
             ConfigError(
-                "deepsea_deploy post-Stage 1: unknown profile ->{}<-"
+                "(policy subtask) unknown profile ->{}<-"
                 .format(self.profile)
                 )
 
@@ -1009,7 +1048,9 @@ role-admin/cluster/*.sls
         if role_type in self.role_lookup_table:
             role_dict = self.role_lookup_table[role_type]
         elif required:
-            raise ConfigError(no_roles_of_type + but_required)
+            raise ConfigError(
+                "(policy subtask) {}".format(no_roles_of_type + but_required)
+                )
         else:
             self.log.debug(no_roles_of_type)
             return None
@@ -1019,7 +1060,10 @@ role-admin/cluster/*.sls
             )
         if required:
             if len(role_dict.keys()) < 1:
-                raise ConfigError(no_roles_of_type + but_required)
+                raise ConfigError(
+                    "(policy subtask) {}"
+                    .format(no_roles_of_type + but_required)
+                    )
         for role_spec, remote_name in role_dict.iteritems():
             self.policy_cfg += (
                 '# Role assignment - {}\n'
@@ -1161,7 +1205,7 @@ class Preflight(DeepSea):
                     ])
             except CommandFailedError:
                 raise ConfigError(
-                    "_deepsea_version: test case calls for deepsea CLI, "
+                    "(preflight subtask) test case calls for deepsea CLI, "
                     "but it is not installed"
                     )
             self.master_remote.run(args='deepsea --version')
@@ -1227,8 +1271,10 @@ class Preflight(DeepSea):
         self.sm.master_rpm_q('salt-api')
         self._master_python_version(2)
         if not self._master_python_version(3):
-            raise ConfigError("Python 3 not installed on master node"
-                              " - bailing out!")
+            raise ConfigError(
+                "(preflight subtask) Python 3 not installed on master node"
+                " - bailing out!"
+                )
         self._deepsea_version()
         self._deepsea_minions()
         # Stage 0 does this, but we have no guarantee Stage 0 will run
@@ -1379,22 +1425,8 @@ cp /srv/salt/ceph/configuration/files/rgw-ssl.conf \
         self.log = logger
         self.master_remote = master_remote
 
-    def _remote_run_script_as_root(self, remote, path, data, args=None):
-        """
-        Wrapper around write_file to simplify the design pattern:
-        1. use write_file to create bash script on the remote
-        2. use Remote.run to run that bash script via "sudo bash $SCRIPT"
-        """
-        write_file(remote, path, data)
-        cmd = 'sudo bash {}'.format(path)
-        if args:
-            cmd += ' ' + ' '.join(args)
-        remote.run(label=path, args=[
-            'sudo', 'bash', '-c', cmd
-            ])
-
     def ceph_cluster_status(self):
-        self._remote_run_script_as_root(
+        remote_run_script_as_root(
             self.master_remote,
             'ceph_cluster_status.sh',
             self.script_dict["ceph_cluster_status"],
@@ -1402,7 +1434,7 @@ cp /srv/salt/ceph/configuration/files/rgw-ssl.conf \
 
     def create_all_pools_at_once(self, args):
         self.log.info("creating pools: {}".format(' '.join(args)))
-        self._remote_run_script_as_root(
+        remote_run_script_as_root(
             self.master_remote,
             'create_all_pools_at_once.sh',
             self.script_dict["create_all_pools_at_once"],
@@ -1410,32 +1442,132 @@ cp /srv/salt/ceph/configuration/files/rgw-ssl.conf \
             )
 
     def disable_update_in_stage_0(self):
-        self._remote_run_script_as_root(
+        remote_run_script_as_root(
             self.master_remote,
             'disable_update_in_stage_0.sh',
             self.script_dict["disable_update_in_stage_0"],
             )
 
     def rgw_init(self):
-        self._remote_run_script_as_root(
+        remote_run_script_as_root(
             self.master_remote,
             'rgw_init.sh',
             self.script_dict["rgw_init"],
             )
 
     def rgw_init_ssl(self):
-        self._remote_run_script_as_root(
+        remote_run_script_as_root(
             self.master_remote,
             'rgw_init_ssl.sh',
             self.script_dict["rgw_init_ssl"],
             )
 
     def salt_api_test(self):
-        self._remote_run_script_as_root(
+        remote_run_script_as_root(
             self.master_remote,
             'salt_api_test.sh',
             self.script_dict["salt_api_test"],
             )
+
+
+class Validation(DeepSea):
+    """
+    A container for "validation tests", which are understood to mean
+    tests that validate the Ceph cluster (just) deployed by DeepSea.
+
+    Basic validation tests are triggered by default, while others
+    have to be explicitly mentioned in the YAML:
+
+    systemd_units_active    triggered by default, validates that the systemd
+                            units corresponding to the teuthology roles
+                            stanza are active on the respective test nodes
+
+    Each test can have its own configuration. See the deepsea suite YAML
+    for examples.
+    """
+    def __init__(self, ctx, config):
+        deepsea_ctx['logger_obj'] = log.getChild('validation')
+        super(Validation, self).__init__(ctx, config)
+        self._apply_config_default("systemd_units_active", None)
+
+    def _apply_config_default(self, validation_test, default_config):
+        """
+        Use to activate tests that should always be run.
+        """
+        self.config[validation_test] = self.config.get(validation_test,
+                                                       default_config)
+
+    def systemd_units_active(self, config):
+        """
+        For all cluster nodes, determine which systemd services
+        should be running and assert that the respective units
+        are in "active" state.
+        """
+        # map role types to systemd units
+        unit_map = {
+            "mds": "ceph-mds@",
+            "mgr": "ceph-mgr@",
+            "mon": "ceph-mon@",
+            "osd": "ceph-osd@",
+            "rgw": "ceph-radosgw@",
+            "ganesha": "nfs-ganesha"
+            }
+        # for each machine in the cluster
+        idx = 0
+        for rtl in self.role_types:
+            node = self.nodes[idx]
+            script = (
+                "# validate systemd units on {}\n"
+                "set -ex\n").format(node)
+            self.log.info(
+                "Machine {} ({}) has role types {}"
+                .format(idx, node, ','.join(rtl))
+                )
+            remote = self.remotes[node]
+            run_script = False
+            for role_type in rtl:
+                if role_type in unit_map:
+                    script += (
+                        'systemctl --state=active --type=service list-units '
+                        '| grep -e \'^{}\'\n').format(unit_map[role_type])
+                    run_script = True
+                else:
+                    self.log.debug((
+                        "Ignoring role_type {} which has no associated "
+                        "systemd unit").format(role_type)
+                        )
+            if run_script:
+                self.log.debug("About to run:\n" + script)
+                remote_run_script_as_root(
+                    remote, "systemd_validation.sh", script
+                    )
+            idx += 1
+
+    def begin(self):
+        """
+        Process self.config, which is taken to be a dictionary in which the
+        keys are the names of tests (methods to be run) and the values are the
+        config dictionaries of each test to be run.
+        """
+        self.log.debug("Processing tests: {}".format(self.config))
+        for validation_test, test_config in self.config.iteritems():
+            self.log.debug(
+                "Test {} has config ->{}<-"
+                .format(validation_test, test_config)
+                )
+            method = getattr(self, validation_test, None)
+            if method:
+                method(test_config)
+            else:
+                raise ConfigError(
+                    "(validation subtask) No such method ->{}<-"
+                    .format(method)
+                    )
+
+    def teardown(self):
+        # self.log.debug("beginning of teardown method")
+        pass
+        # self.log.debug("end of teardown method")
 
 
 task = DeepSea
@@ -1447,3 +1579,4 @@ health_ok = HealthOK
 orch = Orch
 policy = Policy
 preflight = Preflight
+validation = Validation

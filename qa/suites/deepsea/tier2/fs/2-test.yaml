@@ -1,0 +1,5 @@
+tasks:
+        - deepsea.validation:
+        - deepsea.health_ok:
+                commands:
+                        - health-ok.sh --client-nodes=1 --mds --min-nodes=2

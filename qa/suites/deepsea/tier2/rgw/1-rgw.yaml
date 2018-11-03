@@ -25,6 +25,7 @@ tasks:
         - exec:
                 client.salt_master:
                         - 'ceph -s'
+        - deepsea.validation:
         - deepsea.health_ok:
                 commands:
                         - health-ok.sh --rgw

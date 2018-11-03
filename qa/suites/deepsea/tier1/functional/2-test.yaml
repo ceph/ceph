@@ -1,3 +1,4 @@
 tasks:
+        - deepsea.validation:
         - deepsea.orch:
                 state_orch: ceph.functests.1node

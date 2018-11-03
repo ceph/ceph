@@ -1,9 +1,2 @@
 tasks:
   - deepsea.dummy:
-  - deepsea.preflight:
-  - deepsea.orch:
-      stage: 0
-  - deepsea.orch:
-      stage: 1
-  - deepsea.policy:
-      profile: default
