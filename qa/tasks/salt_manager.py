@@ -202,7 +202,7 @@ class SaltManager(object):
         """
         number_of_minions = len(self.ctx.cluster.remotes)
         self.__ping(
-            "sudo sh -c \'salt \\* test.ping\' || true",
+            "sudo sh -c \'salt \\* test.ping\' 2>/dev/null || true",
             number_of_minions,
             )
         return number_of_minions
