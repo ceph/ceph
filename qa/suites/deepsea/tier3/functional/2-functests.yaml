@@ -1,0 +1,3 @@
+tasks:
+        - deepsea.orch:
+                state_orch: ceph.functests.1node

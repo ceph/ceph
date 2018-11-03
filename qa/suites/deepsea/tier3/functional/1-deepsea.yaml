@@ -1,4 +1,5 @@
 tasks:
+        - deepsea:
         - deepsea.preflight:
         - deepsea.orch:
                 stage: prep
@@ -11,8 +12,10 @@ tasks:
         - deepsea.ceph_conf:
         - deepsea.orch:
                 stage: 3
+        - deepsea.create_pools:
+                openstack: 
+        - deepsea.orch:
+                stage: 4
         - exec:
                 client.salt_master:
                         - 'ceph -s'
-        - deepsea.orch:
-                state_orch: ceph.functests.1node.replace
