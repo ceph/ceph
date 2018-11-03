@@ -203,8 +203,10 @@ int RGWSI_SysObj_Core::read(RGWSysObjectCtxBase& obj_ctx,
   ldout(cct, 20) << "rados->read ofs=" << ofs << " len=" << len << dendl;
   op.read(ofs, len, bl, nullptr);
 
+  map<string, bufferlist> unfiltered_attrset;
+
   if (attrs) {
-    op.getxattrs(attrs, nullptr);
+    op.getxattrs(&unfiltered_attrset, nullptr);
   }
 
   RGWSI_RADOS::Obj rados_obj;
@@ -226,6 +228,10 @@ int RGWSI_SysObj_Core::read(RGWSysObjectCtxBase& obj_ctx,
       read_state.last_ver != op_ver) {
     ldout(cct, 5) << "raced with an object write, abort" << dendl;
     return -ECANCELED;
+  }
+
+  if (attrs) {
+    rgw_filter_attrset(unfiltered_attrset, RGW_ATTR_PREFIX, attrs);
   }
 
   read_state.last_ver = op_ver;
