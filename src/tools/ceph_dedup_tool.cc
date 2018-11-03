@@ -41,6 +41,7 @@
 #include <memory>
 
 #include "tools/RadosDump.h"
+#include "cls/cas/cls_cas_client.h"
 
 using namespace librados;
 unsigned default_op_size = 1 << 22;
@@ -48,7 +49,7 @@ map< string, pair <uint64_t, uint64_t> > chunk_statistics; // < key, <count, chu
 
 void usage()
 {
-  cout << " usage: [--op <estimate|chunk_scrub>] [--pool <pool_name> ] " << std::endl;
+  cout << " usage: [--op <estimate|chunk_scrub|add_chunk_ref|get_chunk_ref>] [--pool <pool_name> ] " << std::endl;
   cout << "   --object <object_name> " << std::endl;
   cout << "   --chunk-size <size> chunk-size (byte) " << std::endl;
   cout << "   --chunk-algorithm <fixed> " << std::endl;
@@ -233,10 +234,167 @@ int estimate_dedup_ratio(const std::map < std::string, std::string > &opts,
   return (ret < 0) ? 1 : 0;
 }
 
-int chunk_scrub(const std::map < std::string, std::string > &opts,
+int chunk_scrub_common(const std::map < std::string, std::string > &opts,
 			  std::vector<const char*> &nargs)
 {
-  return -1;
+  Rados rados;
+  IoCtx io_ctx, chunk_io_ctx;
+  std::string object_name, target_object_name;
+  string pool_name, chunk_pool_name, op_name;
+  int ret;
+  std::map<std::string, std::string>::const_iterator i;
+
+  i = opts.find("pool");
+  if (i != opts.end()) {
+    pool_name = i->second.c_str();
+  } else {
+    usage_exit();
+  }
+  i = opts.find("op_name");
+  if (i != opts.end()) {
+    op_name= i->second.c_str();
+  } else {
+    usage_exit();
+  }
+
+  i = opts.find("chunk-pool");
+  if (i != opts.end()) {
+    chunk_pool_name = i->second.c_str();
+  } else {
+    usage_exit();
+  }
+  i = opts.find("pgid");
+  boost::optional<pg_t> pgid(i != opts.end(), pg_t());
+
+  ret = rados.init_with_context(g_ceph_context);
+  if (ret < 0) {
+     cerr << "couldn't initialize rados: " << cpp_strerror(ret) << std::endl;
+     goto out;
+  }
+  ret = rados.connect();
+  if (ret) {
+     cerr << "couldn't connect to cluster: " << cpp_strerror(ret) << std::endl;
+     ret = -1;
+     goto out;
+  }
+  if (pool_name.empty()) {
+    cerr << "--create-pool requested but pool_name was not specified!" << std::endl;
+    usage_exit();
+  }
+  ret = rados.ioctx_create(pool_name.c_str(), io_ctx);
+  if (ret < 0) {
+    cerr << "error opening pool "
+	 << pool_name << ": "
+	 << cpp_strerror(ret) << std::endl;
+    goto out;
+  }
+  ret = rados.ioctx_create(chunk_pool_name.c_str(), chunk_io_ctx);
+  if (ret < 0) {
+    cerr << "error opening pool "
+	 << chunk_pool_name << ": "
+	 << cpp_strerror(ret) << std::endl;
+    goto out;
+  }
+
+  if (op_name == "add_chunk_ref") {
+    string target_object_name;
+    i = opts.find("object");
+    if (i != opts.end()) {
+      object_name = i->second.c_str();
+    } else {
+      usage_exit();
+    }
+    i = opts.find("target-ref");
+    if (i != opts.end()) {
+      target_object_name = i->second.c_str();
+    } else {
+      usage_exit();
+    }
+
+    set<hobject_t> refs;
+    ret = cls_chunk_refcount_read(chunk_io_ctx, object_name, &refs);
+    if (ret < 0) {
+      cerr << " cls_chunk_refcount_read fail : " << cpp_strerror(ret) << std::endl;
+      return ret;
+    }
+    for (auto p : refs) {
+      cout << " " << p.oid.name << " ";
+    }
+
+    uint32_t hash;
+    ret = chunk_io_ctx.get_object_hash_position2(object_name, &hash);
+    if (ret < 0) {
+      return ret;
+    }
+    hobject_t oid(sobject_t(target_object_name, CEPH_NOSNAP), "", hash, -1, "");
+    refs.insert(oid);
+
+    ObjectWriteOperation op;
+    cls_chunk_refcount_set(op, refs);
+    ret = chunk_io_ctx.operate(object_name, &op);
+    if (ret < 0) {
+      cerr << " operate fail : " << cpp_strerror(ret) << std::endl;
+    }
+
+    return ret;
+
+  } else if (op_name == "get_chunk_ref") {
+    i = opts.find("object");
+    if (i != opts.end()) {
+      object_name = i->second.c_str();
+    } else {
+      usage_exit();
+    }
+    cout << __func__ << " " << __LINE__ << std::endl;
+    set<hobject_t> refs;
+    cout << " refs: " << std::endl;
+    ret = cls_chunk_refcount_read(chunk_io_ctx, object_name, &refs);
+    for (auto p : refs) {
+      cout << " " << p.oid.name << " ";
+    }
+    cout << std::endl;
+    return ret;
+  }
+  
+  {
+    try {
+      librados::NObjectIterator i = pgid ? chunk_io_ctx.nobjects_begin(pgid->ps()) : chunk_io_ctx.nobjects_begin();
+      librados::NObjectIterator i_end = chunk_io_ctx.nobjects_end();
+      for (; i != i_end; ++i) {
+	set<hobject_t> refs;
+	set<hobject_t> real_refs;
+	string oid = i->get_oid();
+	ret = cls_chunk_refcount_read(chunk_io_ctx, oid, &refs);
+	if (ret < 0) {
+	  continue;
+	}
+
+	for (auto pp : refs) {
+	  ret = cls_chunk_has_chunk(io_ctx, pp.oid.name, oid);
+	  if (ret != -ENOENT) {
+	    real_refs.insert(pp);
+	  } 
+	}
+
+	if (refs.size() != real_refs.size()) {
+	  ObjectWriteOperation op;
+	  cls_chunk_refcount_set(op, real_refs);
+	  ret = chunk_io_ctx.operate(oid, &op);
+	  if (ret < 0) {
+	    continue;
+	  }
+	}
+      }
+    }
+    catch (const std::runtime_error& e) {
+      cerr << e.what() << std::endl;
+      ret = -1;
+      goto out;
+    }
+  }
+
+out:
+  return (ret < 0) ? 1 : 0;
 }
 
 int main(int argc, const char **argv)
@@ -267,11 +425,6 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--op", (char*)NULL)) {
       opts["op_name"] = val;
       op_name = val;
-      
-      if (op_name != "chunk_scrub" && op_name != "estimate") {
-	usage();
-	exit(0);
-      }
     } else if (ceph_argparse_witharg(args, i, &val, "--pool", (char*)NULL)) {
       opts["pool"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--object", (char*)NULL)) {
@@ -282,6 +435,10 @@ int main(int argc, const char **argv)
       opts["chunk-size"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--fingerprint-algorithm", (char*)NULL)) {
       opts["fingerprint-algorithm"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--chunk-pool", (char*)NULL)) {
+      opts["chunk-pool"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--target-ref", (char*)NULL)) {
+      opts["target-ref"] = val;
     } else {
       if (val[0] == '-')
         usage_exit();
@@ -292,9 +449,14 @@ int main(int argc, const char **argv)
   if (op_name == "estimate") {
     return estimate_dedup_ratio(opts, args);
   } else if (op_name == "chunk_scrub") {
-    return chunk_scrub(opts, args);
+    return chunk_scrub_common(opts, args);
+  } else if (op_name == "add_chunk_ref") {
+    return chunk_scrub_common(opts, args);
+  } else if (op_name == "get_chunk_ref") {
+    return chunk_scrub_common(opts, args);
   } else {
-    ceph_assert(0 == "no support op_name "); 
+    usage();
+    exit(0);
   }
   
   return 0;
