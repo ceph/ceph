@@ -384,35 +384,7 @@ namespace buffer CEPH_BUFFER_API {
 
 
   class ptr_node : public ptr, public boost::intrusive::list_base_hook<> {
-    template <class... Args>
-    ptr_node(Args&&... args) : ptr(std::forward<Args>(args)...) {
-    }
-    ptr_node(const ptr_node&) = default;
-
-    ptr& operator= (const ptr& p) = delete;
-    ptr& operator= (ptr&& p) noexcept = delete;
-    ptr_node& operator= (const ptr_node& p) = delete;
-    ptr_node& operator= (ptr_node&& p) noexcept = delete;
-    void swap(ptr& other) noexcept = delete;
-    void swap(ptr_node& other) noexcept = delete;
-
   public:
-    ~ptr_node() = default;
-
-    static bool dispose_if_hypercombined(ptr_node* delete_this);
-    static ptr_node& create_hypercombined(raw* r);
-
-    static ptr_node& create(raw* const r) {
-      return create_hypercombined(r);
-    }
-    static ptr_node& create(const unsigned l) {
-      return create_hypercombined(buffer::create(l));
-    }
-    template <class... Args>
-    static ptr_node& create(Args&&... args) {
-      return *new ptr_node(std::forward<Args>(args)...);
-    }
-
     struct cloner {
       ptr_node* operator()(const ptr_node& clone_this) {
 	return new ptr_node(clone_this);
@@ -425,6 +397,36 @@ namespace buffer CEPH_BUFFER_API {
 	}
       }
     };
+
+    ~ptr_node() = default;
+
+    static std::unique_ptr<ptr_node, disposer> create(raw* const r) {
+      return create_hypercombined(r);
+    }
+    static std::unique_ptr<ptr_node, disposer> create(const unsigned l) {
+      return create_hypercombined(buffer::create(l));
+    }
+    template <class... Args>
+    static std::unique_ptr<ptr_node, disposer> create(Args&&... args) {
+      return std::unique_ptr<ptr_node, disposer>(
+	new ptr_node(std::forward<Args>(args)...));
+    }
+
+  private:
+    template <class... Args>
+    ptr_node(Args&&... args) : ptr(std::forward<Args>(args)...) {
+    }
+    ptr_node(const ptr_node&) = default;
+
+    ptr& operator= (const ptr& p) = delete;
+    ptr& operator= (ptr&& p) noexcept = delete;
+    ptr_node& operator= (const ptr_node& p) = delete;
+    ptr_node& operator= (ptr_node&& p) noexcept = delete;
+    void swap(ptr& other) noexcept = delete;
+    void swap(ptr_node& other) noexcept = delete;
+
+    static bool dispose_if_hypercombined(ptr_node* delete_this);
+    static std::unique_ptr<ptr_node, disposer> create_hypercombined(raw* r);
   };
   /*
    * list - the useful bit!
@@ -838,23 +840,26 @@ namespace buffer CEPH_BUFFER_API {
     void push_back(const ptr& bp) {
       if (bp.length() == 0)
 	return;
-      _buffers.push_back(ptr_node::create(bp));
+      _buffers.push_back(*ptr_node::create(bp).release());
       _len += bp.length();
     }
     void push_back(ptr&& bp) {
       if (bp.length() == 0)
 	return;
       _len += bp.length();
-      _buffers.push_back(ptr_node::create(std::move(bp)));
+      _buffers.push_back(*ptr_node::create(std::move(bp)).release());
     }
-    void push_back(ptr_node& bp) {
-      if (bp.length() == 0)
+    void push_back(const ptr_node&) = delete;
+    void push_back(ptr_node&) = delete;
+    void push_back(ptr_node&&) = delete;
+    void push_back(std::unique_ptr<ptr_node, ptr_node::disposer> bp) {
+      if (bp->length() == 0)
 	return;
-      _len += bp.length();
-      _buffers.push_back(bp);
+      _len += bp->length();
+      _buffers.push_back(*bp.release());
     }
     void push_back(raw* const r) {
-      _buffers.push_back(ptr_node::create(r));
+      _buffers.push_back(*ptr_node::create(r).release());
       _len += _buffers.back().length();
     }
 
@@ -863,7 +868,7 @@ namespace buffer CEPH_BUFFER_API {
 
     bool is_contiguous() const;
     void rebuild();
-    void rebuild(ptr_node& nb);
+    void rebuild(std::unique_ptr<ptr_node, ptr_node::disposer> nb);
     bool rebuild_aligned(unsigned align);
     // max_buffers = 0 mean don't care _buffers.size(), other
     // must make _buffers.size() <= max_buffers after rebuilding.
@@ -896,9 +901,8 @@ namespace buffer CEPH_BUFFER_API {
     {
       if (this != &bl) {
         clear();
-        decltype(_buffers)::const_iterator pb;
-        for (pb = bl._buffers.begin(); pb != bl._buffers.end(); ++pb) {
-          push_back(*pb);
+	for (const auto& pb : bl._buffers) {
+          push_back(static_cast<const ptr&>(pb));
         }
       }
     }
