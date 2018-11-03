@@ -172,6 +172,7 @@ extern int cls_get_snapset_seq(cls_method_context_t hctx, uint64_t *snap_seq);
 int cls_cxx_chunk_write_and_set(cls_method_context_t hctx, int ofs, int len,
                    bufferlist *write_inbl, uint32_t op_flags, bufferlist *set_inbl,
 		   int set_len);
+bool cls_has_chunk(cls_method_context_t hctx, string fp_oid);
 
 #endif
 
