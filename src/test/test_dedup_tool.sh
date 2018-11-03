@@ -75,7 +75,60 @@ function test_dedup_ratio_fixed()
   rm -rf ./dedup_object_1k ./dedup_object_100k ./dedup_object_10m
 }
 
+function test_dedup_chunk_scrub()
+{
+
+  CHUNK_POOL=dedup_chunk_pool
+  run_expect_succ "$CEPH_TOOL" osd pool create "$CHUNK_POOL" 8
+
+  echo "hi there" > foo
+
+  echo "hi there" > bar
+ 
+  echo "there" > foo-chunk
+
+  echo "CHUNK" > bar-chunk
+  
+  $CEPH_TOOL osd pool set $POOL fingerprint_algorithm sha1 --yes-i-really-mean-it
+
+  $RADOS_TOOL -p $POOL put foo ./foo
+  $RADOS_TOOL -p $POOL put bar ./bar
+
+  $RADOS_TOOL -p $CHUNK_POOL put bar-chunk ./bar-chunk
+  $RADOS_TOOL -p $CHUNK_POOL put foo-chunk ./foo-chunk
+
+  $RADOS_TOOL -p $POOL set-chunk bar 0 8 --target-pool $CHUNK_POOL bar-chunk 0 --with-reference
+  $RADOS_TOOL -p $POOL set-chunk foo 0 8 --target-pool $CHUNK_POOL foo-chunk 0 --with-reference
+
+  echo "There hi" > test_obj
+  # dirty
+  $RADOS_TOOL -p $POOL put foo ./test_obj
+  # flush
+  $RADOS_TOOL -p $POOL put foo ./test_obj
+  sleep 2
+
+  rados ls -p $CHUNK_POOL
+  CHUNK_OID=$(echo -n "There hi" | sha1sum)
+
+  $DEDUP_TOOL --op add_chunk_ref --pool $POOL --chunk_pool $CHUNK_POOL --object $CHUNK_OID --target_ref bar
+  RESULT=$($DEDUP_TOOL --op get_chunk_ref --pool $POOL --chunk_pool $CHUNK_POOL --object $CHUNK_OID)
+
+  $DEDUP_TOOL --op chunk_scrub --pool $POOL --chunk_pool $CHUNK_POOL
+
+  RESULT=$($DEDUP_TOOL --op get_chunk_ref --pool $POOL --chunk_pool $CHUNK_POOL --object $CHUNK_OID | grep bar)
+  if [ -n "$RESULT" ] ; then
+    $CEPH_TOOL osd pool delete $POOL $POOL --yes-i-really-really-mean-it
+    $CEPH_TOOL osd pool delete $CHUNK_POOL $CHUNK_POOL --yes-i-really-really-mean-it
+    die "Scrub failed expecting bar is removed"
+  fi
+
+  $CEPH_TOOL osd pool delete $CHUNK_POOL $CHUNK_POOL --yes-i-really-really-mean-it
+  
+  rm -rf ./foo ./bar ./foo-chunk ./bar-chunk ./test_obj
+}
+
 test_dedup_ratio_fixed
+test_dedup_chunk_scrub
 
 $CEPH_TOOL osd pool delete $POOL $POOL --yes-i-really-really-mean-it
 
