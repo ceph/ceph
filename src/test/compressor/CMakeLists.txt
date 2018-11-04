@@ -6,5 +6,5 @@ add_executable(unittest_compression
   $<TARGET_OBJECTS:unit-main>
   )
 add_ceph_unittest(unittest_compression ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_compression)
-target_link_libraries(unittest_compression global)
+target_link_libraries(unittest_compression global gtest)
 add_dependencies(unittest_compression ceph_example)
