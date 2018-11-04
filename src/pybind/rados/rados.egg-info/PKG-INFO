@@ -1,0 +1,18 @@
+Metadata-Version: 1.1
+Name: rados
+Version: 2.0.0
+Summary: Python bindings for the Ceph librados library
+Home-page: https://github.com/ceph/ceph/tree/master/src/pybind/rados
+Author: UNKNOWN
+Author-email: UNKNOWN
+License: LGPLv2+
+Description: This package contains Python bindings for interacting with Ceph's RADOS library. RADOS is a reliable, autonomic distributed object storage cluster developed as part of the Ceph distributed storage system. This is a shared library allowing applications to access the distributed object store using a simple file-like interface.
+Platform: Linux
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: System Administrators
+Classifier: License :: OSI Approved :: GNU Lesser General Public License v2 or later (LGPLv2+)
+Classifier: Operating System :: POSIX :: Linux
+Classifier: Programming Language :: Cython
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3.4
+Classifier: Programming Language :: Python :: 3.5

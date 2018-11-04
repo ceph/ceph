@@ -1,0 +1,9 @@
+MANIFEST.in
+rados.c
+rados.pxd
+rados.pyx
+setup.py
+rados.egg-info/PKG-INFO
+rados.egg-info/SOURCES.txt
+rados.egg-info/dependency_links.txt
+rados.egg-info/top_level.txt
