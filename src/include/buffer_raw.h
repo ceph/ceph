@@ -28,7 +28,8 @@ namespace ceph::buffer {
   public:
     // In the future we might want to have a slab allocator here with few
     // embedded slots. This would allow to avoid the "if" in dtor of ptr_node.
-    std::aligned_storage_t<sizeof(ptr_node), alignof(ptr_node)> bptr_storage;
+    std::aligned_storage<sizeof(ptr_node),
+			 alignof(ptr_node)>::type bptr_storage;
     char *data;
     unsigned len;
     std::atomic<unsigned> nref { 0 };
