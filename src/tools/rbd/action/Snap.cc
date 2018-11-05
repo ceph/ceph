@@ -828,6 +828,7 @@ int execute_rename(const po::variables_map &vm,
   } else if (namespace_name != dest_namespace_name) {
     std::cerr << "rbd: source and destination namespace must be the same"
               << std::endl;
+    return -EINVAL;
   } else if (image_name != dest_image_name) {
     std::cerr << "rbd: source and destination image name must be the same"
               << std::endl;
