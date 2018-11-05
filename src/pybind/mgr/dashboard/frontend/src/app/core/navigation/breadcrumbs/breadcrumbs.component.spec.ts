@@ -65,7 +65,9 @@ describe('BreadcrumbsComponent', () => {
   });
 
   it('should run postProcess and split the breadcrumbs when navigating to hosts', fakeAsync(() => {
-    router.navigateByUrl('/hosts');
+    fixture.ngZone.run(() => {
+      router.navigateByUrl('/hosts');
+    });
     tick();
     expect(component.crumbs).toEqual([
       { path: null, text: 'Cluster' },
@@ -74,7 +76,9 @@ describe('BreadcrumbsComponent', () => {
   }));
 
   it('should display empty breadcrumb when navigating to perf_counters from unknown path', fakeAsync(() => {
-    router.navigateByUrl('/perf_counters');
+    fixture.ngZone.run(() => {
+      router.navigateByUrl('/perf_counters');
+    });
     tick();
     expect(component.crumbs).toEqual([
       { path: null, text: 'Cluster' },
@@ -84,7 +88,9 @@ describe('BreadcrumbsComponent', () => {
   }));
 
   it('should display Monitor breadcrumb when navigating to perf_counters from Monitors', fakeAsync(() => {
-    router.navigate(['/perf_counters'], { queryParams: { fromLink: '/monitor' } });
+    fixture.ngZone.run(() => {
+      router.navigate(['/perf_counters'], { queryParams: { fromLink: '/monitor' } });
+    });
     tick();
     expect(component.crumbs).toEqual([
       { path: null, text: 'Cluster' },
@@ -94,7 +100,9 @@ describe('BreadcrumbsComponent', () => {
   }));
 
   it('should display Hosts breadcrumb when navigating to perf_counters from Hosts', fakeAsync(() => {
-    router.navigate(['/perf_counters'], { queryParams: { fromLink: '/hosts' } });
+    fixture.ngZone.run(() => {
+      router.navigate(['/perf_counters'], { queryParams: { fromLink: '/hosts' } });
+    });
     tick();
     expect(component.crumbs).toEqual([
       { path: null, text: 'Cluster' },
@@ -104,7 +112,9 @@ describe('BreadcrumbsComponent', () => {
   }));
 
   it('should show all 3 breadcrumbs when navigating to RBD Add', fakeAsync(() => {
-    router.navigateByUrl('/block/rbd/add');
+    fixture.ngZone.run(() => {
+      router.navigateByUrl('/block/rbd/add');
+    });
     tick();
     expect(component.crumbs).toEqual([
       { path: null, text: 'Block' },
