@@ -2578,6 +2578,45 @@ public:
   }
 };
 
+class C_ExecAndReply : public C_MDS_Send_Command_Reply {
+public:
+  C_ExecAndReply(MDSRank *mds, const MCommand::const_ref &m)
+    : C_MDS_Send_Command_Reply(mds, m), f(true) {
+  }
+
+  void finish(int r) override {
+    std::stringstream ds;
+    std::stringstream ss;
+    if (r != 0) {
+      f.flush(ss);
+    } else {
+      f.flush(ds);
+    }
+
+    send(r, ss.str(), ds);
+  }
+
+  virtual void exec() = 0;
+
+protected:
+  JSONFormatter f;
+};
+
+class C_CacheDropExecAndReply : public C_ExecAndReply {
+public:
+  C_CacheDropExecAndReply(MDSRank *mds, const MCommand::const_ref &m,
+                          uint64_t timeout)
+    : C_ExecAndReply(mds, m), timeout(timeout) {
+  }
+
+  void exec() override {
+    mds->command_cache_drop(timeout, &f, this);
+  }
+
+private:
+  uint64_t timeout;
+};
+
 /**
  * This function drops the mds_lock, so don't do anything with
  * MDSRank after calling it (we could have gone into shutdown): just
@@ -3299,6 +3338,12 @@ void MDSRank::bcast_mds_map()
   last_client_mdsmap_bcast = mdsmap->get_epoch();
 }
 
+Context *MDSRank::create_async_exec_context(C_ExecAndReply *ctx) {
+  return new C_OnFinisher(new FunctionContext([ctx](int _) {
+        ctx->exec();
+      }), finisher);
+}
+
 MDSRankDispatcher::MDSRankDispatcher(
     mds_rank_t whoami_,
     Mutex &mds_lock_,
@@ -3381,38 +3426,13 @@ bool MDSRankDispatcher::handle_command(
       timeout = 0;
     }
 
-    JSONFormatter *f = new JSONFormatter(true);
-    C_MDS_Send_Command_Reply *reply = new C_MDS_Send_Command_Reply(this, m);
-    Context *on_finish = new FunctionContext([this, f, reply](int r) {
-        cache_drop_send_reply(f, reply, r);
-        delete f;
-        delete reply;
-      });
-
     *need_reply = false;
-    *run_later = new C_OnFinisher(
-      new FunctionContext([this, timeout, f, on_finish](int _) {
-          command_cache_drop((uint64_t)timeout, f, on_finish);
-        }), finisher);
-
+    *run_later = create_async_exec_context(new C_CacheDropExecAndReply
+                                           (this, m, (uint64_t)timeout));
     return true;
   } else {
     return false;
   }
-}
-
-void MDSRank::cache_drop_send_reply(Formatter *f, C_MDS_Send_Command_Reply *reply, int r) {
-  dout(20) << __func__ << ": r=" << r << dendl;
-
-  std::stringstream ds;
-  std::stringstream ss;
-  if (r != 0) {
-    f->flush(ss);
-  } else {
-    f->flush(ds);
-  }
-
-  reply->send(r, ss.str(), ds);
 }
 
 void MDSRank::command_cache_drop(uint64_t timeout, Formatter *f, Context *on_finish) {
