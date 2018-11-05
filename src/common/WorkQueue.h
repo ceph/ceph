@@ -15,6 +15,15 @@
 #ifndef CEPH_WORKQUEUE_H
 #define CEPH_WORKQUEUE_H
 
+#ifdef WITH_SEASTAR
+// for ObjectStore.h
+struct ThreadPool {
+  struct TPHandle {
+  };
+};
+
+#else
+
 #include <atomic>
 #include <list>
 #include <set>
@@ -722,5 +731,6 @@ public:
 
 };
 
+#endif
 
 #endif
