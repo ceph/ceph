@@ -15,6 +15,8 @@
 #ifndef CEPH_WORKQUEUE_H
 #define CEPH_WORKQUEUE_H
 
+#ifndef WITH_SEASTAR
+
 #include <atomic>
 #include <list>
 #include <set>
@@ -722,5 +724,6 @@ public:
 
 };
 
+#endif
 
 #endif
