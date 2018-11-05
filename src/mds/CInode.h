@@ -358,6 +358,9 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
    * be complete()ed.
    */
   void scrub_finished(MDSInternalContextBase **c);
+
+  void scrub_aborted(MDSInternalContextBase **c);
+
   /**
    * Report to the CInode that alldirfrags it owns have been scrubbed.
    */

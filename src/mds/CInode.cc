@@ -4770,6 +4770,24 @@ void CInode::scrub_dirfrag_finished(frag_t dirfrag)
   si.last_scrub_version = si.scrub_start_version;
 }
 
+void CInode::scrub_aborted(MDSInternalContextBase **c) {
+  dout(20) << __func__ << dendl;
+  ceph_assert(scrub_is_in_progress());
+
+  *c = nullptr;
+  std::swap(*c, scrub_infop->on_finish);
+
+  if (scrub_infop->scrub_parent) {
+    CDentry *dn = scrub_infop->scrub_parent;
+    scrub_infop->scrub_parent = NULL;
+    dn->dir->scrub_dentry_finished(dn);
+    dn->put(CDentry::PIN_SCRUBPARENT);
+  }
+
+  delete scrub_infop;
+  scrub_infop = nullptr;
+}
+
 void CInode::scrub_finished(MDSInternalContextBase **c) {
   dout(20) << __func__ << dendl;
   ceph_assert(scrub_is_in_progress());
