@@ -83,42 +83,55 @@ export class OsdListComponent implements OnInit {
       {
         name: 'Mark Out',
         permission: 'update',
-        click: () => this.markOut(),
+        click: () => this.showConfirmationModal('out', this.osdService.markOut),
         disable: () => this.isNotSelectedOrInState('out'),
         icon: 'fa-arrow-left'
       },
       {
         name: 'Mark In',
         permission: 'update',
-        click: () => this.markIn(),
+        click: () => this.showConfirmationModal('in', this.osdService.markIn),
         disable: () => this.isNotSelectedOrInState('in'),
         icon: 'fa-arrow-right'
       },
       {
         name: 'Mark Down',
         permission: 'update',
-        click: () => this.markDown(),
+        click: () => this.showConfirmationModal('down', this.osdService.markDown),
         disable: () => this.isNotSelectedOrInState('down'),
         icon: 'fa-arrow-down'
       },
       {
-        name: 'Mark lost',
+        name: 'Mark Lost',
         permission: 'delete',
-        click: () => this.markLost(),
+        click: () =>
+          this.showCriticalConfirmationModal(
+            'Mark',
+            'OSD lost',
+            'marked lost',
+            this.osdService.markLost
+          ),
         disable: () => this.isNotSelectedOrInState('up'),
         icon: 'fa-unlink'
       },
       {
         name: 'Remove',
         permission: 'delete',
-        click: () => this.remove(),
+        click: () =>
+          this.showCriticalConfirmationModal('Remove', 'OSD', 'removed', this.osdService.remove),
         disable: () => this.isNotSelectedOrInState('up'),
         icon: 'fa-remove'
       },
       {
         name: 'Destroy',
         permission: 'delete',
-        click: () => this.destroy(),
+        click: () =>
+          this.showCriticalConfirmationModal(
+            'destroy',
+            'OSD',
+            'destroyed',
+            this.osdService.destroy
+          ),
         disable: () => this.isNotSelectedOrInState('up'),
         icon: 'fa-eraser'
       }
@@ -238,18 +251,6 @@ export class OsdListComponent implements OnInit {
     });
   }
 
-  markOut() {
-    this.showConfirmationModal('out', this.osdService.markOut);
-  }
-
-  markIn() {
-    this.showConfirmationModal('in', this.osdService.markIn);
-  }
-
-  markDown() {
-    this.showConfirmationModal('down', this.osdService.markDown);
-  }
-
   reweight() {
     const selectedOsd = this.osds.filter((o) => o.id === this.selection.first().id).pop();
     this.modalService.show(OsdReweightModalComponent, {
@@ -284,17 +285,5 @@ export class OsdListComponent implements OnInit {
         }
       });
     });
-  }
-
-  markLost() {
-    this.showCriticalConfirmationModal('Mark', 'OSD lost', 'marked lost', this.osdService.markLost);
-  }
-
-  remove() {
-    this.showCriticalConfirmationModal('Remove', 'OSD', 'removed', this.osdService.remove);
-  }
-
-  destroy() {
-    this.showCriticalConfirmationModal('destroy', 'OSD', 'destroyed', this.osdService.destroy);
   }
 }
