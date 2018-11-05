@@ -6860,29 +6860,6 @@ PG::RecoveryState::Backfilling::Backfilling(my_context ctx)
 }
 
 boost::statechart::result
-PG::RecoveryState::Backfilling::react(const Backfilled &c)
-{
-  PG *pg = context< RecoveryMachine >().pg;
-  pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
-  for (set<pg_shard_t>::iterator it = pg->backfill_targets.begin();
-       it != pg->backfill_targets.end();
-       ++it) {
-    assert(*it != pg->pg_whoami);
-    ConnectionRef con = pg->osd->get_con_osd_cluster(
-      it->osd, pg->get_osdmap()->get_epoch());
-    if (con) {
-      pg->osd->send_message_osd_cluster(
-        new MBackfillReserve(
-	  MBackfillReserve::REJECT,
-	  spg_t(pg->info.pgid.pgid, it->shard),
-	  pg->get_osdmap()->get_epoch()),
-	con.get());
-    }
-  }
-  return transit<Recovered>();
-}
-
-boost::statechart::result
 PG::RecoveryState::Backfilling::react(const DeferBackfill &c)
 {
   PG *pg = context< RecoveryMachine >().pg;
@@ -6907,10 +6884,13 @@ PG::RecoveryState::Backfilling::react(const DeferBackfill &c)
 	con.get());
     }
   }
+
+
   if (!pg->waiting_on_backfill.empty()) {
     pg->waiting_on_backfill.clear();
     pg->finish_recovery_op(hobject_t::get_max());
   }
+
   pg->schedule_backfill_retry(c.delay);
   return transit<NotBackfilling>();
 }
