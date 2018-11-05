@@ -97,7 +97,7 @@ public:
    * @return true if ready to send, or false otherwise
    */
   virtual bool is_connected() = 0;
-
+  virtual void cancel_ops(const boost::container::flat_set<ceph_tid_t> &ops) {}
   Messenger *get_messenger() {
     return msgr;
   }

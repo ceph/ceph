@@ -621,6 +621,21 @@ using namespace ceph;
     return *this;
   }
 
+  void buffer::ptr::clone_replace() {
+    if (_raw) {
+      buffer::raw *tr = _raw;
+      _raw = tr->clone();
+      _raw->nref = 1;
+      if (unlikely(--tr->nref == 0)) {
+        ANNOTATE_HAPPENS_AFTER(&tr->nref);
+        ANNOTATE_HAPPENS_BEFORE_FORGET_ALL(&tr->nref);
+        delete tr;
+      } else {
+        ANNOTATE_HAPPENS_BEFORE(&tr->nref);
+      }
+    }
+  }
+
   void buffer::ptr::swap(ptr& other) noexcept
   {
     raw *r = _raw;
@@ -1246,6 +1261,21 @@ using namespace ceph;
           // 'p'---------- node.length() ----------|
           node.zero(o-p, l);
         }
+      }
+      p += node.length();
+      if (o+l <= p) {
+	break;  // done
+      }
+    }
+  }
+
+  void buffer::list::clone_replace(const unsigned o, const unsigned l)
+  {
+    ceph_assert(o+l <= _len);
+    unsigned p = 0;
+    for (auto& node : _buffers) {
+      if (p + node.length() > o) {
+        node.clone_replace();
       }
       p += node.length();
       if (o+l <= p) {

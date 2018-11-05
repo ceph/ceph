@@ -130,10 +130,12 @@ class AsyncConnection : public Connection {
     policy.lossy = true;
   }
 
- entity_addr_t get_peer_socket_addr() const override {
-   return target_addr;
- }
+  entity_addr_t get_peer_socket_addr() const override {
+    return target_addr;
+  }
 
+  void cancel_ops(const boost::container::flat_set<ceph_tid_t> &ops) override;
+ 
  private:
   enum {
     STATE_NONE,
@@ -170,6 +172,7 @@ class AsyncConnection : public Connection {
   bool open_write = false;
 
   std::mutex write_lock;
+  std::mutex send_lock;
 
   std::mutex lock;
   EventCallbackRef read_handler;

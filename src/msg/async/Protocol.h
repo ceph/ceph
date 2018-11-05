@@ -93,6 +93,8 @@ public:
   virtual void read_event() = 0;
   virtual void write_event() = 0;
   virtual bool is_queued() = 0;
+  virtual void cancel_ops(const boost::container::flat_set<ceph_tid_t> &ops) = 0;
+  virtual void add_sent(uint64_t sent) = 0;
 };
 
 class ProtocolV1;
@@ -291,7 +293,7 @@ protected:
   ssize_t write_message(Message *m, bufferlist &bl, bool more);
 
   void requeue_sent();
-  uint64_t discard_requeued_up_to(uint64_t out_seq, uint64_t seq);
+  void discard_requeued_up_to(uint64_t seq);
   void discard_out_queue();
 
   void reset_recv_state();
@@ -313,12 +315,23 @@ public:
   virtual void read_event() override;
   virtual void write_event() override;
   virtual bool is_queued() override;
+  virtual void cancel_ops(const boost::container::flat_set<ceph_tid_t> &ops) override;
+  virtual void add_sent(uint64_t sent) override;
 
   // Client Protocol
 private:
   int global_seq;
   bool got_bad_auth;
   AuthAuthorizer *authorizer;
+  struct writing_item {
+    ceph_tid_t tid;
+    // offset relative to outcoming_bl = start - sent_pos
+    uint64_t start;
+    unsigned len;
+    writing_item(ceph_tid_t tid, uint64_t start, unsigned len): tid(tid), start(start), len(len) {}
+  };
+  std::deque< writing_item* > messages_writing;
+  uint64_t sent_pos;
 
   CONTINUATION_DECL(ProtocolV1, send_client_banner);
   WRITE_HANDLER_CONTINUATION_DECL(ProtocolV1, handle_client_banner_write);

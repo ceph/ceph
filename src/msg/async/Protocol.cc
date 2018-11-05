@@ -77,6 +77,7 @@ ProtocolV1::ProtocolV1(AsyncConnection *connection)
       global_seq(0),
       got_bad_auth(false),
       authorizer(nullptr),
+      sent_pos(0),
       wait_for_seq(false) {
   temp_buffer = new char[4096];
 }
@@ -408,6 +409,72 @@ void ProtocolV1::write_event() {
 
 bool ProtocolV1::is_queued() {
   return !out_q.empty() || connection->is_queued();
+}
+
+void ProtocolV1::cancel_ops(const boost::container::flat_set<ceph_tid_t> &ops)
+{
+  connection->write_lock.lock();
+  auto it = out_q.begin();
+  while (it != out_q.end()) {
+    auto lit = it->second.begin();
+    while (lit != it->second.end()) {
+      auto p = ops.find(lit->second->get_tid());
+      if (p != ops.end()) {
+        lit->second->put();
+        lit = it->second.erase(lit);
+      } else {
+        lit++;
+      }
+    }
+    if (it->second.empty()) {
+      it = out_q.erase(it);
+    } else {
+      it++;
+    }
+  }
+  auto sit = sent.begin();
+  while (sit != sent.end()) {
+    auto p = ops.find((*sit)->get_tid());
+    if (p != ops.end()) {
+      (*sit)->put();
+      sit = sent.erase(sit);
+    } else {
+      sit++;
+    }
+  }
+  connection->write_lock.unlock();
+
+  for (auto it = messages_writing.begin(); it != messages_writing.end(); it++) {
+    auto p = ops.find((*it)->tid);
+    if (p != ops.end()) {
+      unsigned o, len;
+      if ((*it)->start < sent_pos) {
+        o = 0;
+        len -= ((*it)->start - sent_pos);
+      } else {
+        o = (*it)->start - sent_pos;
+        len = (*it)->len;
+      }
+      if (len > 0) {
+        // this will modify the inner buffer of outcoming_bl, and only _try_send will touch inner buffer of outcoming_bl,
+        // other places just append to outcoming_bl, and both _try_send and this are made exclusive by send_lock, so it is safe.
+        connection->outcoming_bl.clone_replace(o, len);
+      }
+    }
+  }
+}
+
+void ProtocolV1::add_sent(uint64_t sent) {
+  sent_pos += sent;
+  while(!messages_writing.empty()) {
+    auto it = messages_writing.front();
+    if (it->start + it->len <= sent_pos) {
+      delete it;
+      messages_writing.pop_front();
+    } else {
+      break;
+    }
+  }
 }
 
 void ProtocolV1::run_continuation(CtPtr continuation) {
@@ -1080,7 +1147,9 @@ void ProtocolV1::randomize_out_seq() {
 ssize_t ProtocolV1::write_message(Message *m, bufferlist &bl, bool more) {
   FUNCTRACE(cct);
   ceph_assert(connection->center->in_thread());
-  m->set_seq(++out_seq);
+  if (m->get_seq() == 0) {
+    m->set_seq(++out_seq);
+  }
 
   if (messenger->crcflags & MSG_CRC_HEADER) {
     m->calc_header_crc();
@@ -1106,7 +1175,6 @@ ssize_t ProtocolV1::write_message(Message *m, bufferlist &bl, bool more) {
                      << "): sig = " << footer.sig << dendl;
     }
   }
-
   connection->outcoming_bl.append(CEPH_MSGR_TAG_MSG);
   connection->outcoming_bl.append((char *)&header, sizeof(header));
 
@@ -1115,6 +1183,7 @@ ssize_t ProtocolV1::write_message(Message *m, bufferlist &bl, bool more) {
                  << " front=" << header.front_len << " data=" << header.data_len
                  << " off " << header.data_off << dendl;
 
+  ssize_t body_start = connection->outcoming_bl.length();
   if ((bl.length() <= ASYNC_COALESCE_THRESHOLD) && (bl.buffers().size() > 1)) {
     for (const auto &pb : bl.buffers()) {
       connection->outcoming_bl.append((char *)pb.c_str(), pb.length());
@@ -1122,6 +1191,10 @@ ssize_t ProtocolV1::write_message(Message *m, bufferlist &bl, bool more) {
   } else {
     connection->outcoming_bl.claim_append(bl);
   }
+  ssize_t body_end = connection->outcoming_bl.length();
+  connection->send_lock.lock();
+  messages_writing.push_back(new writing_item(m->get_tid(), sent_pos + body_start, body_end - body_start));
+  connection->send_lock.unlock();
 
   // send footer; if receiver doesn't support signatures, use the old footer
   // format
@@ -1171,7 +1244,6 @@ void ProtocolV1::requeue_sent() {
   }
 
   list<pair<bufferlist, Message *> > &rq = out_q[CEPH_MSG_PRIO_HIGHEST];
-  out_seq -= sent.size();
   while (!sent.empty()) {
     Message *m = sent.back();
     sent.pop_back();
@@ -1181,14 +1253,13 @@ void ProtocolV1::requeue_sent() {
   }
 }
 
-uint64_t ProtocolV1::discard_requeued_up_to(uint64_t out_seq, uint64_t seq) {
+void ProtocolV1::discard_requeued_up_to(uint64_t seq) {
   ldout(cct, 10) << __func__ << " " << seq << dendl;
   std::lock_guard<std::mutex> l(connection->write_lock);
   if (out_q.count(CEPH_MSG_PRIO_HIGHEST) == 0) {
-    return seq;
+    return;
   }
   list<pair<bufferlist, Message *> > &rq = out_q[CEPH_MSG_PRIO_HIGHEST];
-  uint64_t count = out_seq;
   while (!rq.empty()) {
     pair<bufferlist, Message *> p = rq.front();
     if (p.second->get_seq() == 0 || p.second->get_seq() > seq) break;
@@ -1197,10 +1268,8 @@ uint64_t ProtocolV1::discard_requeued_up_to(uint64_t out_seq, uint64_t seq) {
                    << dendl;
     p.second->put();
     rq.pop_front();
-    count++;
   }
   if (rq.empty()) out_q.erase(CEPH_MSG_PRIO_HIGHEST);
-  return count;
 }
 
 /*
@@ -1648,7 +1717,7 @@ CtPtr ProtocolV1::handle_ack_seq(char *buffer, int r) {
   newly_acked_seq = *((uint64_t *)buffer);
   ldout(cct, 2) << __func__ << " got newly_acked_seq " << newly_acked_seq
                 << " vs out_seq " << out_seq << dendl;
-  out_seq = discard_requeued_up_to(out_seq, newly_acked_seq);
+  discard_requeued_up_to(newly_acked_seq);
 
   bufferlist bl;
   uint64_t s = in_seq;
@@ -2306,7 +2375,6 @@ CtPtr ProtocolV1::open(ceph_msg_connect_reply &reply,
   } else {
     reply.tag = CEPH_MSGR_TAG_READY;
     wait_for_seq = false;
-    out_seq = discard_requeued_up_to(out_seq, 0);
     is_reset_from_peer = false;
     in_seq = 0;
   }
@@ -2414,7 +2482,7 @@ CtPtr ProtocolV1::handle_seq(char *buffer, int r) {
   uint64_t newly_acked_seq = *(uint64_t *)buffer;
   ldout(cct, 2) << __func__ << " accept get newly_acked_seq " << newly_acked_seq
                 << dendl;
-  out_seq = discard_requeued_up_to(out_seq, newly_acked_seq);
+  discard_requeued_up_to(newly_acked_seq);
 
   return server_ready();
 }

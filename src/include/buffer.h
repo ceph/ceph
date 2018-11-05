@@ -281,6 +281,7 @@ namespace buffer CEPH_BUFFER_API {
     raw *clone();
     void swap(ptr& other) noexcept;
     ptr& make_shareable();
+    void clone_replace();
 
     iterator begin(size_t offset=0) {
       return iterator(this, offset, false);
@@ -1094,6 +1095,13 @@ namespace buffer CEPH_BUFFER_API {
 
     void zero();
     void zero(unsigned o, unsigned l);
+    // allocate a new buffer, clone the old content, then replace old buffer.
+    // this is used when the old buffer may be already be freed but we still need to reference it.
+    // for example, when a write message to an osd is resent to an new osd when crushmap changes
+    // the new osd returned the response and the data buffer of the write message is freed by client
+    // but the write message may still be in the osd's outcoming_bl, then we can use a new buffer
+    // to replace the old freed buffer to avoid segfault.
+    void clone_replace(unsigned o, unsigned l);
 
     bool is_contiguous() const;
     void rebuild();

@@ -307,14 +307,18 @@ ssize_t AsyncConnection::_try_send(bool more)
   ceph_assert(center->in_thread());
   ldout(async_msgr->cct, 25) << __func__ << " cs.send " << outcoming_bl.length()
                              << " bytes" << dendl;
-  ssize_t r = cs.send(outcoming_bl, more);
-  if (r < 0) {
-    ldout(async_msgr->cct, 1) << __func__ << " send error: " << cpp_strerror(r) << dendl;
-    return r;
+  {
+    std::lock_guard<std::mutex> l(send_lock);
+    ssize_t r = cs.send(outcoming_bl, more);
+    if (r < 0) {
+      ldout(async_msgr->cct, 1) << __func__ << " send error: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+    protocol->add_sent(r);
+    ldout(async_msgr->cct, 10) << __func__ << " sent bytes " << r
+                               << " remaining bytes " << outcoming_bl.length() << dendl;
   }
 
-  ldout(async_msgr->cct, 10) << __func__ << " sent bytes " << r
-                             << " remaining bytes " << outcoming_bl.length() << dendl;
 
   if (!open_write && is_queued()) {
     center->create_file_event(cs.fd(), EVENT_WRITABLE, write_handler);
@@ -331,6 +335,7 @@ ssize_t AsyncConnection::_try_send(bool more)
 
   return outcoming_bl.length();
 }
+
 
 void AsyncConnection::inject_delay() {
   if (async_msgr->cct->_conf->ms_inject_internal_delays) {
@@ -639,6 +644,11 @@ void AsyncConnection::mark_down()
   ldout(async_msgr->cct, 1) << __func__ << dendl;
   std::lock_guard<std::mutex> l(lock);
   protocol->stop();
+}
+
+void AsyncConnection::cancel_ops(const boost::container::flat_set<ceph_tid_t> &ops) {
+  std::lock_guard<std::mutex> l(send_lock);
+  protocol->cancel_ops(ops);
 }
 
 void AsyncConnection::handle_write()

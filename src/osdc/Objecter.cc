@@ -1057,6 +1057,7 @@ void Objecter::_scan_requests(
 
   // check for changed request mappings
   map<ceph_tid_t,Op*>::iterator p = s->ops.begin();
+  map<ConnectionRef,  boost::container::flat_set<ceph_tid_t> > cancel_ops;
   while (p != s->ops.end()) {
     Op *op = p->second;
     ++p;   // check_op_pool_dne() may touch ops; prevent iterator invalidation
@@ -1077,7 +1078,10 @@ void Objecter::_scan_requests(
 	break;
       // -- fall-thru --
     case RECALC_OP_TARGET_NEED_RESEND:
-      _session_op_remove(op->session, op);
+      if (op->session) {
+        cancel_ops[op->session->con].insert(op->tid);
+        _session_op_remove(op->session, op);
+      }
       need_resend[op->tid] = op;
       _op_cancel_map_check(op);
       break;
@@ -1118,6 +1122,10 @@ void Objecter::_scan_requests(
   }
 
   sl.unlock();
+
+  for (auto const& p: cancel_ops) {
+    p.first->cancel_ops(p.second);
+  }
 
   for (list<LingerOp*>::iterator iter = unregister_lingers.begin();
        iter != unregister_lingers.end();
