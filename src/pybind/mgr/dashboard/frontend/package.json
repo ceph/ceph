@@ -76,7 +76,7 @@
     "@types/jasminewd2": "2.0.5",
     "@types/jest": "23.3.9",
     "@types/lodash": "4.14.117",
-    "@types/node": "8.10.37",
+    "@types/node": "10.12.2",
     "babel-preset-env": "1.7.0",
     "codelyzer": "4.5.0",
     "html-linter": "1.1.0",
