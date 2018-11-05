@@ -25,6 +25,7 @@ Contact and Description
 A contact and description can be added to the report, this is optional.
 
   ceph telemetry config-set contact 'John Doe <john.doe@example.com>'
+  
   ceph telemetry config-set description 'My first Ceph cluster'
 
 Show report
