@@ -25,6 +25,8 @@
 #include "include/ceph_assert.h"
 #include "common/debug.h"
 #include "common/errno.h"
+#include "include/buffer.h"
+#include "include/buffer_raw.h"
 #include "include/compat.h"
 
 #define dout_context g_ceph_context
@@ -452,7 +454,7 @@ int MemDB::get(const string &prefix, const std::set<string> &keys,
 void MemDB::MDBWholeSpaceIteratorImpl::fill_current()
 {
   bufferlist bl;
-  bl.append(m_iter->second.clone());
+  bl.push_back(m_iter->second.clone());
   m_key_value = std::make_pair(m_iter->first, bl);
 }
 

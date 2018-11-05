@@ -246,15 +246,16 @@ namespace buffer CEPH_BUFFER_API {
     using const_iterator = iterator_impl<true>;
     using iterator = iterator_impl<false>;
 
-    ptr() : _raw(0), _off(0), _len(0) {}
+    ptr() : _raw(nullptr), _off(0), _len(0) {}
     // cppcheck-suppress noExplicitConstructor
-    ptr(raw *r);
+    ptr(raw* r);
     // cppcheck-suppress noExplicitConstructor
     ptr(unsigned l);
     ptr(const char *d, unsigned l);
     ptr(const ptr& p);
     ptr(ptr&& p) noexcept;
     ptr(const ptr& p, unsigned o, unsigned l);
+    ptr(const ptr& p, std::unique_ptr<raw> r);
     ptr& operator= (const ptr& p);
     ptr& operator= (ptr&& p) noexcept;
     ~ptr() {
@@ -265,9 +266,8 @@ namespace buffer CEPH_BUFFER_API {
 
     bool have_raw() const { return _raw ? true:false; }
 
-    raw *clone();
+    std::unique_ptr<raw> clone();
     void swap(ptr& other) noexcept;
-    ptr& make_shareable();
 
     iterator begin(size_t offset=0) {
       return iterator(this, offset, false);
@@ -377,9 +377,7 @@ namespace buffer CEPH_BUFFER_API {
   class ptr_node : public ptr_hook, public ptr {
   public:
     struct cloner {
-      ptr_node* operator()(const ptr_node& clone_this) {
-	return new ptr_node(clone_this);
-      }
+      ptr_node* operator()(const ptr_node& clone_this);
     };
     struct disposer {
       void operator()(ptr_node* const delete_this) {
@@ -402,6 +400,8 @@ namespace buffer CEPH_BUFFER_API {
       return std::unique_ptr<ptr_node, disposer>(
 	new ptr_node(std::forward<Args>(args)...));
     }
+
+    static ptr_node* copy_hypercombined(const ptr_node& copy_this);
 
   private:
     template <class... Args>
@@ -961,7 +961,6 @@ namespace buffer CEPH_BUFFER_API {
         _memcopy_count(other._memcopy_count),
         last_p(this) {
       _buffers.clone_from(other._buffers);
-      make_shareable();
     }
     list(list&& other) noexcept;
 
@@ -974,7 +973,6 @@ namespace buffer CEPH_BUFFER_API {
         _carriage = &always_empty_bptr;
         _buffers.clone_from(other._buffers);
         _len = other._len;
-	make_shareable();
       }
       return *this;
     }
@@ -1070,6 +1068,9 @@ namespace buffer CEPH_BUFFER_API {
       _carriage = &_buffers.back();
       _len += _buffers.back().length();
     }
+    void push_back(std::unique_ptr<raw> r) {
+      push_back(r.release());
+    }
 
     void zero();
     void zero(unsigned o, unsigned l);
@@ -1095,13 +1096,6 @@ namespace buffer CEPH_BUFFER_API {
     void claim_append(list& bl, unsigned int flags = CLAIM_DEFAULT);
     // only for bl is bufferlist::page_aligned_appender
     void claim_append_piecewise(list& bl);
-
-    // clone non-shareable buffers (make shareable)
-    void make_shareable() {
-      for (auto& bp : _buffers) {
-        bp.make_shareable();
-      }
-    }
 
     // copy with explicit volatile-sharing semantics
     void share(const list& bl)
