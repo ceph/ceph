@@ -12351,8 +12351,18 @@ void MDCache::enqueue_scrub(
   }
 
   C_MDS_EnqueueScrub *cs = new C_MDS_EnqueueScrub(f, fin);
+
+  bool is_internal = false;
+  std::string tag_str(tag);
+  if (tag_str.empty()) {
+    uuid_d uuid_gen;
+    uuid_gen.generate_random();
+    tag_str = uuid_gen.to_string();
+    is_internal = true;
+  }
+
   cs->header = std::make_shared<ScrubHeader>(
-      tag, force, recursive, repair, f);
+    tag_str, is_internal, force, recursive, repair, f);
 
   mdr->internal_op_finish = cs;
   enqueue_scrub_work(mdr);
