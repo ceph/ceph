@@ -450,15 +450,19 @@ public:
       sb->coll = coll;
     }
 
-    void remove(SharedBlob *sb) {
+    bool remove(SharedBlob *sb, bool verify_nref_is_zero=false) {
       std::lock_guard<std::mutex> l(lock);
       assert(sb->get_parent() == this);
+      if (verify_nref_is_zero && sb->nref != 0) {
+	return false;
+      }
       // only remove if it still points to us
       auto p = sb_map.find(sb->get_sbid());
       if (p != sb_map.end() &&
 	  p->second == sb) {
 	sb_map.erase(p);
       }
+      return true;
     }
 
     bool empty() {

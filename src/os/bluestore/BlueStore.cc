@@ -1619,8 +1619,10 @@ void BlueStore::SharedBlob::put()
       if (coll_snap != coll) {
 	goto again;
       }
-      coll_snap->shared_blob_set.remove(this);
-
+      if (!coll_snap->shared_blob_set.remove(this, true)) {
+	// race with lookup
+	return;
+      }
       bc._clear(coll_snap->cache);
       coll_snap->cache->rm_blob();
     }
