@@ -95,5 +95,22 @@ describe('SummaryService', () => {
         name: 'rbd/delete'
       });
     });
+
+    it('should call addRunningTask with duplicate task', () => {
+      let result = summaryService.getCurrentSummary();
+      const exec_task = new ExecutingTask('rbd/delete', {
+        pool_name: 'somePool',
+        image_name: 'someImage'
+      });
+
+      result.executing_tasks = [exec_task];
+      summaryService['summaryDataSource'].next(result);
+      result = summaryService.getCurrentSummary();
+      expect(result.executing_tasks.length).toBe(1);
+
+      summaryService.addRunningTask(exec_task);
+      result = summaryService.getCurrentSummary();
+      expect(result.executing_tasks.length).toBe(1);
+    });
   });
 });
