@@ -163,28 +163,27 @@ export class PoolFormComponent implements OnInit {
   }
 
   private initEditFormData(pool: Pool) {
-    const transform = {
-      name: 'pool_name',
-      poolType: 'type',
-      crushRule: (p) =>
-        this.info['crush_rules_' + p.type].find(
-          (rule: CrushRule) => rule.rule_name === p.crush_rule
-        ),
-      size: 'size',
-      erasureProfile: (p) => this.ecProfiles.find((ecp) => ecp.name === p.erasure_code_profile),
-      pgNum: 'pg_num',
-      ecOverwrites: (p) => p.flags_names.includes('ec_overwrites'),
-      mode: 'options.compression_mode',
-      algorithm: 'options.compression_algorithm',
-      minBlobSize: (p) => this.dimlessBinaryPipe.transform(p.options.compression_min_blob_size),
-      maxBlobSize: (p) => this.dimlessBinaryPipe.transform(p.options.compression_max_blob_size),
-      ratio: 'options.compression_required_ratio'
+    const dataMap = {
+      name: pool.pool_name,
+      poolType: pool.type,
+      crushRule: this.info['crush_rules_' + pool.type].find(
+        (rule: CrushRule) => rule.rule_name === pool.crush_rule
+      ),
+      size: pool.size,
+      erasureProfile: this.ecProfiles.find((ecp) => ecp.name === pool.erasure_code_profile),
+      pgNum: pool.pg_num,
+      ecOverwrites: pool.flags_names.includes('ec_overwrites'),
+      mode: pool.options.compression_mode,
+      algorithm: pool.options.compression_algorithm,
+      minBlobSize: this.dimlessBinaryPipe.transform(pool.options.compression_min_blob_size),
+      maxBlobSize: this.dimlessBinaryPipe.transform(pool.options.compression_max_blob_size),
+      ratio: pool.options.compression_required_ratio
     };
-    Object.keys(transform).forEach((key) => {
-      const attrib = transform[key];
-      const value = _.isFunction(attrib) ? attrib(pool) : _.get(pool, attrib);
+
+    Object.keys(dataMap).forEach((controlName: string) => {
+      const value = dataMap[controlName];
       if (!_.isUndefined(value) && value !== '') {
-        this.form.silentSet(key, value);
+        this.form.silentSet(controlName, value);
       }
     });
     this.data.applications.selected = pool.application_metadata;
