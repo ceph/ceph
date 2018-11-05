@@ -1,0 +1,29 @@
+tasks:
+        - deepsea.preflight:
+        - deepsea.orch:
+                stage: prep
+                alternative_defaults:
+                  - stage_prep_master: default-update-reboot
+                  - stage_prep_minion: default-update-reboot
+                allow_reboot: True
+        - deepsea.orch:
+                stage: 1
+        - deepsea.policy:
+                profile: default
+        - deepsea.orch:
+                stage: 2
+        - deepsea.ceph_conf:
+        - deepsea.orch:
+                stage: 3
+        - exec:
+                client.salt_master:
+                        - 'ceph -s'
+        - deepsea.orch:
+                state_orch: ceph.maintenance.upgrade
+                alternative_defaults:
+                  - upgrade_init: zypper-dup
+                allow_reboot: True
+        - exec:
+                client.salt_master:
+                        - 'ceph -s'
+

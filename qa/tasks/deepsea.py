@@ -9,6 +9,7 @@ from util import (
 
 from teuthology.exceptions import (
     CommandFailedError,
+    ConnectionLostError,
     ConfigError,
     )
 from teuthology.misc import (
@@ -18,6 +19,7 @@ from teuthology.misc import (
     )
 from teuthology.orchestra import run
 from teuthology.task import Task
+from teuthology.contextutil import safe_while
 
 log = logging.getLogger(__name__)
 deepsea_ctx = {}
@@ -735,6 +737,8 @@ class Orch(DeepSea):
         self.stage = str(self.config.get("stage", ''))
         self.alternative_defaults = self.config.get('alternative_defaults', [])
         self.state_orch = str(self.config.get("state_orch", ''))
+        self.allow_reboot = self.config.get("allow_reboot", None)
+        self.survive_reboots = self._detect_reboots()
         if not self.stage and not self.state_orch:
             raise ConfigError(
                 "(orch subtask) nothing to do. Specify a value for 'stage' or "
@@ -851,22 +855,70 @@ class Orch(DeepSea):
                 cmd_str += ' 2>/dev/null'
         if self.dev_env:
             cmd_str = 'DEV_ENV=true ' + cmd_str
-        try:
-            self.master_remote.run(args=[
-                'sudo', 'bash', '-c', cmd_str,
-                ])
-        except CommandFailedError:
-            self.log.error(anchored(
-                "orchestration {} failed. ".format(orch_spec)
-                + "Here comes journalctl!"
-                ))
-            self.master_remote.run(args=[
-                'sudo',
-                'journalctl',
-                '--all',
-                ])
-            raise
-        self.log.info("orchestration {} completed".format(orch_spec))
+        tries = 0
+        if self.survive_reboots:
+            tries = 5
+        self._exec(cmd_str, orch_spec, tries=tries)
+
+    def _exec(self, cmd_str, orch_spec, tries=0):
+        """
+        Execute cmd_str and catch CommandFailedError and
+        ConnectionLostError and retry to run the command
+        until one of the conditons are fulfilled:
+        1) Execution succeeded
+        2) Attempts are exceeded
+        3) CommandFailedError is raised
+        """
+        with safe_while(sleep=60,
+                        tries=tries,
+                        action="wait for reconnect") as proceed:
+            while proceed():
+                try:
+                    self.master_remote.run(args=[
+                        'sudo', 'bash', '-c', cmd_str,
+                        ])
+                    break
+                except CommandFailedError:
+                    self.log.error(anchored(
+                        "orchestration {} failed. ".format(orch_spec)
+                        + "Here comes journalctl!"
+                    ))
+                    self.master_remote.run(args=[
+                        'sudo',
+                        'journalctl',
+                        '--all',
+                        ])
+                    raise
+                except ConnectionLostError:
+                    if tries < 1:
+                        raise
+                    self.log.warning("No connection established yet..")
+
+    def _detect_reboots(self):
+        """
+        Check for all known states/stages/alt-defaults that
+        may cause a reboot
+        If there is a 'allow_reboot' flag, it takes presedence.
+        """
+        orchs_prone_to_reboot = ['ceph.maintenance.upgrade']
+
+        if self.allow_reboot is not None:
+            self.log.info("Setting allow_reboot explicitly to {}".
+                          format(self.allow_reboot))
+            return self.allow_reboot
+
+        for cnf in self.alternative_defaults:
+            for k, v in cnf.items():
+                if 'reboot' in v and 'no-reboot' not in v:
+                    self.log.warning("This orchestration "
+                                     "may trigger a reboot")
+                    return True
+
+        if self.state_orch in orchs_prone_to_reboot:
+            self.log.warning("This orchestration may trigger a reboot")
+            return True
+
+        return False
 
     def _run_stage_0(self):
         """
@@ -874,13 +926,6 @@ class Orch(DeepSea):
         """
         stage = 0
         self.__log_stage_start(stage)
-        update = self.config.get("update", True)
-        reboot = self.config.get("reboot", False)
-        # FIXME: implement alternative defaults
-        if not update:
-            self.scripts.disable_update_in_stage_0()
-        if reboot:
-            log.warning("Stage {} reboot not supported".format(stage))
         self._run_orch(("stage", stage))
         self.sm.all_minions_zypper_status()
         self.scripts.salt_api_test()

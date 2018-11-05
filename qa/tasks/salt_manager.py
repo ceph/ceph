@@ -227,6 +227,16 @@ class SaltManager(object):
         """Starts salt-minion.service on all cluster nodes"""
         self.__systemctl_cluster(subcommand="start", service="salt-minion")
 
+    def enable_minions(self):
+        """Enables salt-minion.service on all cluster nodes"""
+        self.__systemctl_cluster(subcommand="enable", service="salt-minion")
+
+    def enable_master(self):
+        """Enables salt-master.service on the Salt Master node"""
+        self.__systemctl_remote(
+            self.master_remote, subcommand="enable", service="salt-master"
+            )
+
     def sync_pillar_data(self, quiet=True):
         cmd = "sudo salt \\* saltutil.sync_all"
         if quiet:
