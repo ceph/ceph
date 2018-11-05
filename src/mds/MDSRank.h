@@ -119,6 +119,7 @@ class MonClient;
 class Finisher;
 class ScrubStack;
 class C_MDS_Send_Command_Reply;
+class C_ExecAndReply;
 
 /**
  * The public part of this class's interface is what's exposed to all
@@ -137,6 +138,8 @@ class MDSRank {
 
     friend class C_Flush_Journal;
     friend class C_Drop_Cache;
+
+    friend class C_CacheDropExecAndReply;
 
     mds_rank_t get_nodeid() const { return whoami; }
     int64_t get_metadata_pool();
@@ -481,8 +484,6 @@ class MDSRank {
     void command_openfiles_ls(Formatter *f);
     void command_dump_tree(const cmdmap_t &cmdmap, std::ostream &ss, Formatter *f);
     void command_dump_inode(Formatter *f, const cmdmap_t &cmdmap, std::ostream &ss);
-
-    void cache_drop_send_reply(Formatter *f, C_MDS_Send_Command_Reply *reply, int r);
     void command_cache_drop(uint64_t timeout, Formatter *f, Context *on_finish);
 
   protected:
@@ -559,6 +560,9 @@ class MDSRank {
     void set_mdsmap_multimds_snaps_allowed();
 private:
     mono_time starttime = mono_clock::zero();
+
+protected:
+  Context *create_async_exec_context(C_ExecAndReply *ctx);
 };
 
 /* This expects to be given a reference which it is responsible for.
