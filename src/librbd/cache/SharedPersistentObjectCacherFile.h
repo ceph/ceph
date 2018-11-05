@@ -26,31 +26,12 @@ public:
 
   // TODO use scatter/gather API
 
-  void open(Context *on_finish);
-
-  void create();
+  int create();
   int open_file();
-  bool try_open();
-  void close(Context *on_finish);
-  void remove(Context *on_finish);
 
   void read(uint64_t offset, uint64_t length, ceph::bufferlist *bl, Context *on_finish);
 
   void write(uint64_t offset, ceph::bufferlist &&bl, bool fdatasync, Context *on_finish);
-
-  void discard(uint64_t offset, uint64_t length, bool fdatasync, Context *on_finish);
-
-  void truncate(uint64_t length, bool fdatasync, Context *on_finish);
-
-  void fsync(Context *on_finish);
-
-  void fdatasync(Context *on_finish);
-
-  uint64_t filesize();
-
-  int load(void** dest, uint64_t filesize);
-
-  int remove();
 
   int write_object_to_file(ceph::bufferlist read_buf, uint64_t object_len);
   int read_object_from_file(ceph::bufferlist* read_buf, uint64_t object_off, uint64_t object_len);
@@ -60,12 +41,6 @@ private:
   CephContext *cct;
   std::string m_name;
   int m_fd;
-
-  int write(uint64_t offset, const ceph::bufferlist &bl, bool fdatasync);
-  int read(uint64_t offset, uint64_t length, ceph::bufferlist *bl);
-  int discard(uint64_t offset, uint64_t length, bool fdatasync);
-  int truncate(uint64_t length, bool fdatasync);
-  int fdatasync();
 };
 
 } // namespace cache

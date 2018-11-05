@@ -1,6 +1,7 @@
 add_executable(unittest_ceph_immutable_obj_cache
   test_main.cc
   test_SimplePolicy.cc
+  test_sync_file.cc
   )
 add_ceph_unittest(unittest_ceph_immutable_obj_cache)
 
@@ -10,6 +11,7 @@ target_link_libraries(unittest_ceph_immutable_obj_cache
   librados
   global
   radostest
+  stdc++fs
   GTest::GTest
   )
 
