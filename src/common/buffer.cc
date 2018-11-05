@@ -278,7 +278,7 @@ static ceph::spinlock debug_lock;
     raw* clone_empty() override {
       return new raw_char(len);
     }
-    bool is_shareable() override {
+    bool is_shareable() const override {
       return false; // !shareable, will force make_shareable()
     }
     ~raw_unshareable() override {
@@ -317,7 +317,7 @@ static ceph::spinlock debug_lock;
 	unsigned l) :
       raw((char*)d, l), m_hook(_m_hook->get()) {}
 
-    bool is_shareable() { return false; }
+    bool is_shareable() const override { return false; }
     static void operator delete(void *p)
     {
       xio_msg_buffer *buf = static_cast<xio_msg_buffer*>(p);
@@ -430,7 +430,7 @@ static ceph::spinlock debug_lock;
     return new raw_unshareable(len);
   }
 
-  buffer::ptr::ptr(raw *r) : _raw(r), _off(0), _len(r->len)   // no lock needed; this is an unref raw.
+  buffer::ptr::ptr(raw* r) : _raw(r), _off(0), _len(r->len)   // no lock needed; this is an unref raw.
   {
     r->nref++;
     bdout << "ptr " << this << " get " << _raw << bendl;
@@ -467,6 +467,14 @@ static ceph::spinlock debug_lock;
     _raw->nref++;
     bdout << "ptr " << this << " get " << _raw << bendl;
   }
+  buffer::ptr::ptr(const ptr& p, std::unique_ptr<raw> r)
+    : _raw(r.release()),
+      _off(p._off),
+      _len(p._len)
+  {
+    _raw->nref.store(1, std::memory_order_release);
+    bdout << "ptr " << this << " get " << _raw << bendl;
+  }
   buffer::ptr& buffer::ptr::operator= (const ptr& p)
   {
     if (p._raw) {
@@ -500,25 +508,9 @@ static ceph::spinlock debug_lock;
     return *this;
   }
 
-  buffer::raw *buffer::ptr::clone()
+  std::unique_ptr<buffer::raw> buffer::ptr::clone()
   {
     return _raw->clone();
-  }
-
-  buffer::ptr& buffer::ptr::make_shareable() {
-    if (_raw && !_raw->is_shareable()) {
-      buffer::raw *tr = _raw;
-      _raw = tr->clone();
-      _raw->nref = 1;
-      if (unlikely(--tr->nref == 0)) {
-        ANNOTATE_HAPPENS_AFTER(&tr->nref);
-        ANNOTATE_HAPPENS_BEFORE_FORGET_ALL(&tr->nref);
-        delete tr;
-      } else {
-        ANNOTATE_HAPPENS_BEFORE(&tr->nref);
-      }
-    }
-    return *this;
   }
 
   void buffer::ptr::swap(ptr& other) noexcept
@@ -1330,8 +1322,21 @@ static ceph::spinlock debug_lock;
   {
     // steal the other guy's buffers
     _len += bl._len;
-    if (!(flags & CLAIM_ALLOW_NONSHAREABLE))
-      bl.make_shareable();
+    if (!(flags & CLAIM_ALLOW_NONSHAREABLE)) {
+      auto curbuf = bl._buffers.begin();
+      auto curbuf_prev = bl._buffers.before_begin();
+
+      while (curbuf != bl._buffers.end()) {
+	const auto* const raw = curbuf->get_raw();
+	if (unlikely(raw && !raw->is_shareable())) {
+	  auto* clone = ptr_node::copy_hypercombined(*curbuf);
+	  curbuf = bl._buffers.erase_after_and_dispose(curbuf_prev);
+	  bl._buffers.insert_after(curbuf_prev++, *clone);
+	} else {
+	  curbuf_prev = curbuf++;
+	}
+      }
+    }
     _buffers.splice_back(bl._buffers);
     bl._carriage = &always_empty_bptr;
     bl._buffers.clear_and_dispose();
@@ -2163,6 +2168,26 @@ buffer::ptr_node::create_hypercombined(buffer::raw* const r)
   } else {
     return std::unique_ptr<buffer::ptr_node, buffer::ptr_node::disposer>(
       new ptr_node(r));
+  }
+}
+
+buffer::ptr_node* buffer::ptr_node::copy_hypercombined(
+  const buffer::ptr_node& copy_this)
+{
+  auto raw_new = copy_this.get_raw()->clone();
+  return new (&raw_new->bptr_storage)
+    ptr_node(copy_this, std::move(raw_new));
+}
+
+buffer::ptr_node* buffer::ptr_node::cloner::operator()(
+  const buffer::ptr_node& clone_this)
+{
+  const raw* const raw_this = clone_this.get_raw();
+  if (likely(!raw_this || raw_this->is_shareable())) {
+    return new ptr_node(clone_this);
+  } else {
+    // clone non-shareable buffers (make shareable)
+   return copy_hypercombined(clone_this);
   }
 }
 
