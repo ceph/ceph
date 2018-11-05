@@ -2638,6 +2638,34 @@ private:
   std::vector<std::string> scrubop;
 };
 
+class C_ScrubControlExecAndReply : public C_ExecAndReply {
+public:
+  C_ScrubControlExecAndReply(MDSRank *mds, const MCommand::const_ref &m,
+                             const std::string &command)
+    : C_ExecAndReply(mds, m), command(command) {
+  }
+
+  void exec() override {
+    if (command == "abort") {
+      mds->command_scrub_abort(&f, this);
+    } else if (command == "pause") {
+      mds->command_scrub_pause(&f, this);
+    } else {
+      ceph_abort();
+    }
+  }
+
+  void finish(int r) override {
+    f.open_object_section("result");
+    f.dump_int("return_code", r);
+    f.close_section();
+    C_ExecAndReply::finish(r);
+  }
+
+private:
+  std::string command;
+};
+
 /**
  * This function drops the mds_lock, so don't do anything with
  * MDSRank after calling it (we could have gone into shutdown): just
@@ -2753,6 +2781,28 @@ void MDSRank::command_tag_path(Formatter *f,
     mdcache->enqueue_scrub(path, tag, true, true, false, f, &scond);
   }
   scond.wait();
+}
+
+void MDSRank::command_scrub_abort(Formatter *f, Context *on_finish) {
+  std::lock_guard l(mds_lock);
+  scrubstack->scrub_abort(on_finish);
+}
+
+void MDSRank::command_scrub_pause(Formatter *f, Context *on_finish) {
+  std::lock_guard l(mds_lock);
+  scrubstack->scrub_pause(on_finish);
+}
+
+void MDSRank::command_scrub_resume(Formatter *f) {
+  int r = scrubstack->scrub_resume();
+
+  f->open_object_section("result");
+  f->dump_int("return_code", r);
+  f->close_section();
+}
+
+void MDSRank::command_scrub_status(Formatter *f) {
+  scrubstack->scrub_status(f);
 }
 
 void MDSRank::command_flush_path(Formatter *f, std::string_view path)
@@ -3461,6 +3511,26 @@ bool MDSRankDispatcher::handle_command(
     *need_reply = false;
     *run_later = create_async_exec_context(new C_ScrubExecAndReply
                                            (this, m, path, tag, scrubop_vec));
+    return true;
+  } else if (prefix == "scrub abort") {
+    *need_reply = false;
+    *run_later = create_async_exec_context(new C_ScrubControlExecAndReply
+                                           (this, m, "abort"));
+    return true;
+  } else if (prefix == "scrub pause") {
+    *need_reply = false;
+    *run_later = create_async_exec_context(new C_ScrubControlExecAndReply
+                                           (this, m, "pause"));
+    return true;
+  } else if (prefix == "scrub resume") {
+    JSONFormatter f(true);
+    command_scrub_resume(&f);
+    f.flush(*ds);
+    return true;
+  } else if (prefix == "scrub status") {
+    JSONFormatter f(true);
+    command_scrub_status(&f);
+    f.flush(*ds);
     return true;
   } else {
     return false;
