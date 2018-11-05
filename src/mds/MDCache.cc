@@ -12339,6 +12339,7 @@ public:
       formatter->open_object_section("results");
       formatter->dump_int("return_code", r);
       formatter->close_section(); // results
+      r = 0; // already dumped in formatter
     }
     if (on_finish)
       on_finish->complete(r);
