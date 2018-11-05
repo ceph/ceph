@@ -11,7 +11,8 @@ from ..services.exception import handle_rados_error
 from .helper import ControllerTestCase
 from ..controllers import RESTController, ApiController, Controller, \
                           BaseController, Proxy
-from ..tools import is_valid_ipv6_address, dict_contains_path
+from ..tools import is_valid_ipv6_address, dict_contains_path, \
+                    RequestLoggingTool
 
 
 # pylint: disable=W0613
@@ -144,6 +145,29 @@ class RESTControllerTest(ControllerTestCase):
         # noinspection PyStatementEffect
         # pylint: disable=pointless-statement
         GenerateControllerRoutesController
+
+
+class RequestLoggingToolTest(ControllerTestCase):
+
+    def __init__(self, *args, **kwargs):
+        cherrypy.tools.request_logging = RequestLoggingTool()
+        cherrypy.config.update({'tools.request_logging.on': True})
+        super(RequestLoggingToolTest, self).__init__(*args, **kwargs)
+
+    @classmethod
+    def setup_server(cls):
+        cls.setup_controllers([FooResource])
+
+    def test_is_logged(self):
+        with patch('logging.Logger.debug') as mock_logger_debug:
+            self._put('/foo/0', {'newdata': 'xyz'})
+            self.assertStatus(200)
+            call_args_list = mock_logger_debug.call_args_list
+            _, host, _, method, user, path = call_args_list[0][0]
+            self.assertEqual(host, '127.0.0.1')
+            self.assertEqual(method, 'PUT')
+            self.assertIsNone(user)
+            self.assertEqual(path, '/foo/0')
 
 
 class TestFunctions(unittest.TestCase):

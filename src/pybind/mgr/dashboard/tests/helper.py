@@ -40,7 +40,11 @@ class ControllerTestCase(helper.CPWebCase):
         cherrypy.tools.authenticate = AuthManagerTool()
         cherrypy.tools.dashboard_exception_handler = HandlerWrapperTool(dashboard_exception_handler,
                                                                         priority=31)
-        cherrypy.config.update({'error_page.default': json_error_page})
+        cherrypy.config.update({
+            'error_page.default': json_error_page,
+            'tools.json_in.on': True,
+            'tools.json_in.force': False
+        })
         super(ControllerTestCase, self).__init__(*args, **kwargs)
 
     def _request(self, url, method, data=None):

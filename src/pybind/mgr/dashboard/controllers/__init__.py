@@ -21,11 +21,8 @@ import cherrypy
 
 from .. import logger
 from ..security import Scope, Permission
-from ..settings import Settings
-from ..tools import wraps, getargspec, TaskManager
-from ..exceptions import ViewCacheNoDataException, DashboardException, \
-                         ScopeNotValid, PermissionNotValid
-from ..services.exception import serialize_dashboard_exception
+from ..tools import wraps, getargspec, TaskManager, get_request_body_params
+from ..exceptions import ScopeNotValid, PermissionNotValid
 from ..services.auth import AuthManager, JwtManager
 
 
@@ -520,7 +517,7 @@ class BaseController(object):
         return result
 
     @staticmethod
-    def _request_wrapper(func, method, json_response):
+    def _request_wrapper(func, method, json_response):  # pylint: disable=unused-argument
         @wraps(func)
         def inner(*args, **kwargs):
             for key, value in kwargs.items():
@@ -529,27 +526,11 @@ class BaseController(object):
                         or isinstance(value, str):
                     kwargs[key] = unquote(value)
 
-            if method in ['GET', 'DELETE']:
-                ret = func(*args, **kwargs)
+            # Process method arguments.
+            params = get_request_body_params(cherrypy.request)
+            kwargs.update(params)
 
-            elif cherrypy.request.headers.get('Content-Type', '') == \
-                    'application/x-www-form-urlencoded':
-                ret = func(*args, **kwargs)
-
-            else:
-                content_length = int(cherrypy.request.headers['Content-Length'])
-                body = cherrypy.request.body.read(content_length)
-                if not body:
-                    ret = func(*args, **kwargs)
-                else:
-                    try:
-                        data = json.loads(body.decode('utf-8'))
-                    except Exception as e:
-                        raise cherrypy.HTTPError(400, 'Failed to decode JSON: {}'
-                                                 .format(str(e)))
-                    kwargs.update(data.items())
-                    ret = func(*args, **kwargs)
-
+            ret = func(*args, **kwargs)
             if isinstance(ret, bytes):
                 ret = ret.decode('utf-8')
             if json_response:
