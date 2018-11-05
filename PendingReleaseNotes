@@ -111,3 +111,14 @@
     has an error.  This head object is there to show the snapset that was used in
     determining errors.
 
+
+12.2.9
+------
+* 12.2.9 contains the pg hard hard limit patches(https://tracker.ceph.com/issues/23979).
+  A partial upgrade during recovery/backfill, can cause the osds on the previous version,
+  to fail with assert(trim_to <= info.last_complete). The workaround for users is to
+  upgrade and restart all OSDs to a version with the pg hard limit, or only upgrade
+  when all PGs are active+clean. This patch will be reverted in 12.2.10, until
+  a clean upgrade path is added to the pg log hard limit patches.
+
+  See also: http://tracker.ceph.com/issues/36686
