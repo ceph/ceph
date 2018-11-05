@@ -93,6 +93,7 @@ public:
   virtual void read_event() = 0;
   virtual void write_event() = 0;
   virtual bool is_queued() = 0;
+  virtual void cancel_ops(const set<ceph_tid_t> &ops) = 0;
 };
 
 class ProtocolV1;
@@ -291,7 +292,7 @@ protected:
   ssize_t write_message(Message *m, bufferlist &bl, bool more);
 
   void requeue_sent();
-  uint64_t discard_requeued_up_to(uint64_t out_seq, uint64_t seq);
+  void discard_requeued_up_to(uint64_t seq);
   void discard_out_queue();
 
   void reset_recv_state();
@@ -313,6 +314,7 @@ public:
   virtual void read_event() override;
   virtual void write_event() override;
   virtual bool is_queued() override;
+  virtual void cancel_ops(const set<ceph_tid_t> &ops) override;
 
   // Client Protocol
 private:

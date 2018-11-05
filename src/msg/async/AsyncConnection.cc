@@ -647,6 +647,10 @@ void AsyncConnection::handle_write()
   protocol->write_event();
 }
 
+void AsyncConnection::cancel_ops(const set<ceph_tid_t> &ops) {
+    protocol->cancel_ops(ops);
+};
+
 void AsyncConnection::handle_write_callback() {
   std::lock_guard<std::mutex> l(lock);
   last_active = ceph::coarse_mono_clock::now();

@@ -130,10 +130,12 @@ class AsyncConnection : public Connection {
     policy.lossy = true;
   }
 
- entity_addr_t get_peer_socket_addr() const override {
-   return target_addr;
- }
+  entity_addr_t get_peer_socket_addr() const override {
+    return target_addr;
+  }
 
+  void cancel_ops(const set<ceph_tid_t> &ops) override;
+  
  private:
   enum {
     STATE_NONE,
