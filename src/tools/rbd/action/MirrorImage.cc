@@ -12,6 +12,7 @@
  *
  */
 #include "tools/rbd/ArgumentTypes.h"
+#include "tools/rbd/MirrorDaemonServiceInfo.h"
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
 #include "include/stringify.h"
@@ -282,6 +283,24 @@ int execute_status(const po::variables_map &vm,
     return r;
   }
 
+  std::string instance_id;
+  MirrorDaemonServiceInfo daemon_service_info(io_ctx);
+
+  if (status.up) {
+    r = image.mirror_image_get_instance_id(&instance_id);
+    if (r == -EOPNOTSUPP) {
+      std::cerr << "rbd: newer release of Ceph OSDs required to map image "
+                << "to rbd-mirror daemon instance" << std::endl;
+      // not fatal
+    } else if (r < 0 && r != -ENOENT) {
+      std::cerr << "rbd: failed to get service id for image "
+                << image_name << ": " << cpp_strerror(r) << std::endl;
+      // not fatal
+    } else if (!instance_id.empty()) {
+      daemon_service_info.init();
+    }
+  }
+
   std::string state = utils::mirror_image_status_state(status);
   std::string last_update = (
     status.last_update == 0 ? "" : utils::timestr(status.last_update));
@@ -292,6 +311,7 @@ int execute_status(const po::variables_map &vm,
     formatter->dump_string("global_id", status.info.global_id);
     formatter->dump_string("state", state);
     formatter->dump_string("description", status.description);
+    daemon_service_info.dump(instance_id, formatter);
     formatter->dump_string("last_update", last_update);
     formatter->close_section(); // image
     formatter->flush(std::cout);
@@ -299,8 +319,12 @@ int execute_status(const po::variables_map &vm,
     std::cout << image_name << ":\n"
 	      << "  global_id:   " << status.info.global_id << "\n"
 	      << "  state:       " << state << "\n"
-	      << "  description: " << status.description << "\n"
-	      << "  last_update: " << last_update << std::endl;
+              << "  description: " << status.description << "\n";
+    if (!instance_id.empty()) {
+      std::cout << "  service:     " <<
+        daemon_service_info.get_description(instance_id) << "\n";
+    }
+    std::cout << "  last_update: " << last_update << std::endl;
   }
 
   return 0;

@@ -41,6 +41,10 @@ struct Mirror {
                                IdToMirrorImageStatus *images);
   static int image_status_summary(librados::IoCtx& io_ctx,
                                   MirrorImageStatusStates *states);
+  static int image_instance_id_list(librados::IoCtx& io_ctx,
+                                    const std::string &start_image_id,
+                                    size_t max,
+                                    std::map<std::string, std::string> *ids);
 
   static int image_enable(ImageCtxT *ictx, bool relax_same_pool_parent_check);
   static int image_disable(ImageCtxT *ictx, bool force);
@@ -57,7 +61,7 @@ struct Mirror {
   static int image_get_status(ImageCtxT *ictx, mirror_image_status_t *status);
   static void image_get_status(ImageCtxT *ictx, mirror_image_status_t *status,
                                Context *on_finish);
-
+  static int image_get_instance_id(ImageCtxT *ictx, std::string *instance_id);
 };
 
 } // namespace api

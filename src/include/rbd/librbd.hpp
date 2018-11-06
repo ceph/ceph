@@ -250,6 +250,8 @@ public:
       size_t max, std::map<std::string, mirror_image_status_t> *images);
   int mirror_image_status_summary(IoCtx& io_ctx,
       std::map<mirror_image_status_state_t, int> *states);
+  int mirror_image_instance_id_list(IoCtx& io_ctx, const std::string &start_id,
+      size_t max, std::map<std::string, std::string> *sevice_ids);
 
   // RBD groups support functions
   int group_create(IoCtx& io_ctx, const char *group_name);
@@ -570,6 +572,7 @@ public:
                             size_t info_size);
   int mirror_image_get_status(mirror_image_status_t *mirror_image_status,
 			      size_t status_size);
+  int mirror_image_get_instance_id(std::string *instance_id);
   int aio_mirror_image_promote(bool force, RBD::AioCompletion *c);
   int aio_mirror_image_demote(RBD::AioCompletion *c);
   int aio_mirror_image_get_info(mirror_image_info_t *mirror_image_info,
