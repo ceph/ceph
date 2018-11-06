@@ -47,8 +47,7 @@ class RequestLoggingTool(cherrypy.Tool):
             msg = '[DASHBOARD] from=\'{}\' path=\'{}\' method=\'{}\' ' \
                 'user=\'{}\''.format(url, req.path_info, req.method, user)
             if Settings.AUDIT_API_LOG_PAYLOAD:
-                params = req.params if req.params else {}
-                params.update(get_request_body_params(req))
+                params = dict(req.params or {}, **get_request_body_params(req))
                 # Hide sensitive data like passwords, secret keys, ...
                 # Extend the list of patterns to search for if necessary.
                 # Currently parameters like this are processed:
