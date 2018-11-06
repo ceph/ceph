@@ -76,7 +76,6 @@ bool entity_addr_t::parse(const char *s, const char **end)
     start += 3;
     newtype = TYPE_MSGR2;
   } else if (*s == '-') {
-    *this = entity_addr_t();
     if (end) {
       *end = s + 1;
     }
