@@ -232,6 +232,7 @@ struct entity_addr_t {
     TYPE_NONE = 0,
     TYPE_LEGACY = 1,  ///< legacy msgr1 protocol (ceph jewel and older)
     TYPE_MSGR2 = 2,   ///< msgr2 protocol (new in ceph kraken)
+    TYPE_V1ORV2 = 3,  ///< ambiguous
   } type_t;
   static const type_t TYPE_DEFAULT = TYPE_MSGR2;
   static const char *get_type_name(int t) {
@@ -414,7 +415,7 @@ struct entity_addr_t {
 
   std::string ip_only_to_str() const;
 
-  bool parse(const char *s, const char **end = 0);
+  bool parse(const char *s, const char **end = 0, int type=0);
 
   void decode_legacy_addr_after_marker(bufferlist::const_iterator& bl)
   {
