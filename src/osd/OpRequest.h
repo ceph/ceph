@@ -110,8 +110,14 @@ public:
   epoch_t min_epoch = 0;      ///< min epoch needed to handle this msg
 
   bool hitset_inserted;
-  const Message *get_req() const { return request; }
-  Message *get_nonconst_req() { return request; }
+
+  template<class T>
+  const T* get_req() const { return static_cast<const T*>(request); }
+  const Message* get_req() const { return get_req<Message>(); }
+
+  template<class T>
+  T* get_nonconst_req() { return static_cast<T*>(request); }
+  Message* get_nonconst_req() { return get_nonconst_req<Message>(); }
 
   entity_name_t get_source() {
     if (request) {
