@@ -14364,7 +14364,7 @@ bool PrimaryLogPG::agent_choose_mode(bool restart, OpRequestRef op)
 
   if (dirty_micro > flush_high_target) {
     flush_mode = TierAgentState::FLUSH_MODE_HIGH;
-  } else if (dirty_micro > flush_target) {
+  } else if (dirty_micro > flush_target || (!flush_target && num_dirty > 0)) {
     flush_mode = TierAgentState::FLUSH_MODE_LOW;
   }
 
