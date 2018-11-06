@@ -542,6 +542,24 @@ TEST(CommonIPAddr, ParseNetwork_IPv6_9000)
   ASSERT_EQ(0, memcmp(want.sin6_addr.s6_addr, network.sin6_addr.s6_addr, sizeof(network.sin6_addr.s6_addr)));
 }
 
+TEST(CommonIPAddr, ambiguous)
+{
+  entity_addr_t a;
+  bool ok;
+
+  ok = a.parse("1.2.3.4", nullptr, entity_addr_t::TYPE_V1ORV2);
+  ASSERT_TRUE(ok);
+  ASSERT_EQ(entity_addr_t::TYPE_V1ORV2, a.get_type());
+
+  ok = a.parse("v1:1.2.3.4", nullptr, entity_addr_t::TYPE_V1ORV2);
+  ASSERT_TRUE(ok);
+  ASSERT_EQ(entity_addr_t::TYPE_LEGACY, a.get_type());
+
+  ok = a.parse("v2:1.2.3.4", nullptr, entity_addr_t::TYPE_V1ORV2);
+  ASSERT_TRUE(ok);
+  ASSERT_EQ(entity_addr_t::TYPE_MSGR2, a.get_type());
+}
+
 TEST(CommonIPAddr, network_contains)
 {
   entity_addr_t network, addr;

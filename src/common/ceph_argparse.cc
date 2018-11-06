@@ -201,14 +201,14 @@ void ceph_arg_value_type(const char * nextargstr, bool *bool_option, bool *bool_
   return;
 }
 
-bool parse_ip_port_vec(const char *s, vector<entity_addr_t>& vec)
+bool parse_ip_port_vec(const char *s, vector<entity_addr_t>& vec, int type)
 {
   const char *p = s;
   const char *end = p + strlen(p);
   while (p < end) {
     entity_addr_t a;
     //cout << " parse at '" << p << "'" << std::endl;
-    if (!a.parse(p, &p)) {
+    if (!a.parse(p, &p, type)) {
       //dout(0) << " failed to parse address '" << p << "'" << dendl;
       return false;
     }

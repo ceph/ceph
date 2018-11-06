@@ -62,13 +62,13 @@ void entity_inst_t::generate_test_instances(list<entity_inst_t*>& o)
   o.push_back(a);
 }
 
-bool entity_addr_t::parse(const char *s, const char **end)
+bool entity_addr_t::parse(const char *s, const char **end, int default_type)
 {
   *this = entity_addr_t();
 
   const char *start = s;
 
-  int newtype = TYPE_DEFAULT;
+  int newtype;
   if (strncmp("v1:", s, 3) == 0) {
     start += 3;
     newtype = TYPE_LEGACY;
@@ -76,10 +76,13 @@ bool entity_addr_t::parse(const char *s, const char **end)
     start += 3;
     newtype = TYPE_MSGR2;
   } else if (*s == '-') {
+    newtype = TYPE_NONE;
     if (end) {
       *end = s + 1;
     }
     return true;
+  } else {
+    newtype = default_type ? default_type : TYPE_DEFAULT;
   }
 
   bool brackets = false;
