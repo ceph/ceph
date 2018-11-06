@@ -8,6 +8,7 @@
 #include "include/buffer.h"
 #include "common/map_cacher.hpp"
 #include "osd/SnapMapper.h"
+#include "common/Cond.h"
 
 #include "gtest/gtest.h"
 
