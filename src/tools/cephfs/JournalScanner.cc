@@ -23,6 +23,116 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 
+bool JournalScanner::buf_is_available(bufferlist& buf)
+{
+  if (buf.length() == 0)
+    return false;
+  int off = 0;
+  int sentinel_num = 0;
+  bufferlist temp_buf;
+  buf.copy(0, buf.length(), temp_buf);
+  do {
+    bufferlist::iterator p = temp_buf.begin();
+    uint64_t candidate_sentinel;
+
+    ::decode(candidate_sentinel, p);
+    if (candidate_sentinel == JournalStream::sentinel) {
+      sentinel_num++;
+      dout(1) << "read a sentinel at " << off << dendl;
+
+      if (sentinel_num == 2)
+	return true;
+    }
+    off++;
+    temp_buf.splice(0, 1);
+  } while(temp_buf.length() >= sizeof(uint64_t));
+
+  return false;
+}
+
+void JournalScanner::repair_journal(bufferlist& buf, uint64_t offset)
+{
+  bufferlist temp_buf;
+  bufferlist entry_data;
+  bufferlist perfect_entry;
+
+  uint32_t off = 0;
+  int sentinel_num = 0;
+  uint64_t start_ptr = 0;
+  uint32_t entry_size = 0;
+  uint32_t raw_entry_size = 0;
+  uint32_t real_entry_size = 0;
+  uint64_t candidate_sentinel = 0;
+
+  buf.copy(0, buf.length(), temp_buf);
+  do {
+    bufferlist::iterator p = temp_buf.begin();
+    ::decode(candidate_sentinel, p);
+    dout(10) << "Data at 0x" << std::hex << offset+off << " = 0x" << candidate_sentinel << std::dec << dendl;
+
+    if (candidate_sentinel == JournalStream::sentinel) {
+      sentinel_num++;
+      dout(4) << "Found sentinel at 0x" << std::hex << offset << std::dec << dendl;
+
+      // Encode sentinel and length to read_buf
+      if (sentinel_num == 2) {
+	/*
+	 * |            8            |       4       |           n bytes         |           8          |
+	 * |         Sentinel        |     Length    |            Data           |       Start_ptr      |
+	 * | <-----------------------                  raw_entry-size            ---------------------> |
+	 */
+	raw_entry_size = off;
+	real_entry_size = raw_entry_size -  (sizeof(candidate_sentinel) + sizeof(entry_size)
+			+ sizeof(start_ptr));
+
+	bufferlist::iterator buf_ptr = buf.begin();
+	uint64_t entry_sentinel = 0;
+
+	::decode(entry_sentinel, buf_ptr);
+	assert(entry_sentinel == JournalStream::sentinel);
+
+	::decode(entry_size, buf_ptr);
+	if (entry_size != real_entry_size) {
+	  dout(4) << "entry size 0x" << std::hex << entry_size  << " is invalid, should be 0x"
+		  << real_entry_size << std::dec << dendl;
+	  entry_size = real_entry_size;
+	}
+
+	// Read out the payload
+	buf_ptr.copy(entry_size, entry_data);
+
+	// Consume the envelope suffix (start_ptr)
+	::decode(start_ptr, buf_ptr);
+	if (start_ptr != offset) {
+	  dout(4) << "start_ptr 0x" << std::hex << start_ptr  << " is invalid, should be 0x"
+		  << offset << std::dec << dendl;
+	  start_ptr = offset;
+	}
+
+	// Trim the input buffer to discard the bytes we have consumed
+	buf.splice(0, buf_ptr.get_off());
+
+	// backfill the right entry to read_buf
+	// | sentinel |
+	::encode(candidate_sentinel, perfect_entry);
+	// | sentinel | length |
+	::encode(entry_size, perfect_entry);
+	// | sentinel | length | data |
+	perfect_entry.claim_append(entry_data);
+	// | sentinel | length | data | start_ptr |
+	::encode(start_ptr, perfect_entry);
+
+	buf.claim_prepend(perfect_entry);
+	dout(10) << "repair a event entry at 0x" << std::hex << start_ptr << std::dec << dendl;
+	break;
+      }
+    }
+    // No sentinel, discard this byte
+    temp_buf.splice(0, 1);
+    off += 1;
+  } while (buf.length() >= sizeof(JournalStream::sentinel));
+}
+
 /**
  * Read journal header, followed by sequential scan through journal space.
  *
@@ -170,6 +280,7 @@ int JournalScanner::scan_events()
 
   bufferlist read_buf;
   bool gap = false;
+  bool already_repair = false;
   uint64_t gap_start = -1;
   for (uint64_t obj_offset = (read_offset / object_size); ; obj_offset++) {
     uint64_t offset_in_obj = 0;
@@ -252,7 +363,23 @@ int JournalScanner::scan_events()
 
         if (!readable) {
           // Out of data, continue to read next object
-          break;
+          if (repair_corrupted_entry) {
+	    // The entry size maybe corrupt, so if the read_buf have two sentinel we still
+	    // consider it to be readable
+	    if (!buf_is_available(read_buf)) {
+	      dout(10) << "read_buf is unavailable at 0x" << std::hex
+		       << read_offset << std::dec << dendl;
+	      break;
+	    } else {
+	      dout(10) << "read_buf is available, start repair it: 0x" << std::hex
+		       << read_offset << std::dec << dendl;
+	      // Make read_buf readable
+	      repair_journal(read_buf, read_offset);
+	    }
+	  } else {
+	    dout(4) << "journal is not readble at 0x" << std::hex << read_offset << std::dec << dendl;
+	    break;
+	  }
         }
 
         bufferlist le_bl;  //< Serialized LogEvent blob
@@ -265,6 +392,31 @@ int JournalScanner::scan_events()
         if (start_ptr != read_offset) {
           derr << "Bad entry start ptr (0x" << std::hex << start_ptr << ") at 0x"
               << read_offset << std::dec << dendl;
+
+	  if (repair_corrupted_entry) {
+	    if (!already_repair) {
+	      bufferlist original_entry;
+	      uint32_t entry_size = le_bl.length();
+	      // Backfill the original entry to read_buf
+	      // | sentinel |
+	      ::encode(JournalStream::sentinel, original_entry);
+	      // | sentinel | length |
+	      ::encode(entry_size, original_entry);
+	      // | sentinel | length | data |
+	      original_entry.claim_append(le_bl);
+	      // | sentinel | length | data | start_ptr |
+	      ::encode(start_ptr, original_entry);
+
+	      read_buf.claim_prepend(original_entry);
+
+	      // Repair the read_buf
+	      repair_journal(read_buf, read_offset);
+	      already_repair = true;
+
+	      // Try read again
+	      continue;
+	    }
+	  }
           gap = true;
           gap_start = read_offset;
           // FIXME: given that entry was invalid, should we be skipping over it?
@@ -274,6 +426,10 @@ int JournalScanner::scan_events()
           read_offset += consumed;
           break;
         }
+
+	if (repair_corrupted_entry && already_repair)
+	  already_repair= false;
+
         bool valid_entry = true;
         if (is_mdlog) {
           LogEvent *le = LogEvent::decode(le_bl);

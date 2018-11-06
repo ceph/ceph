@@ -56,6 +56,7 @@ class JournalScanner
     pointer_valid(false),
     header_present(false),
     header_valid(false),
+    repair_corrupted_entry(false),
     header(NULL) {};
 
   JournalScanner(
@@ -71,6 +72,7 @@ class JournalScanner
     pointer_valid(false),
     header_present(false),
     header_valid(false),
+    repair_corrupted_entry(false),
     header(NULL) {};
 
   ~JournalScanner();
@@ -80,10 +82,14 @@ class JournalScanner
   int scan_pointer();
   int scan_header();
   int scan_events();
+  bool buf_is_available(bufferlist& buf);
+  void repair_journal(bufferlist& buf, uint64_t offset);
   void report(std::ostream &out) const;
 
   std::string obj_name(uint64_t offset) const;
   std::string obj_name(inodeno_t ino, uint64_t offset) const;
+
+  bool repair_corrupted_entry;
 
   // The results of the scan
   inodeno_t ino;  // Corresponds to journal ino according their type
