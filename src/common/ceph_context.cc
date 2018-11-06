@@ -44,6 +44,12 @@
 using ceph::bufferlist;
 using ceph::HeartbeatMap;
 
+// for CINIT_FLAGS
+#include "common/common_init.h"
+
+#include <iostream>
+#include <pthread.h>
+
 #ifdef WITH_SEASTAR
 CephContext::CephContext()
   : _conf{ceph::common::local_conf()},
@@ -195,7 +201,7 @@ public:
       _cct->_heartbeat_map->check_touch_file();
 
       // refresh the perf coutners
-      _cct->refresh_perf_values();
+      _cct->_refresh_perf_values();
     }
     return NULL;
   }
@@ -603,8 +609,7 @@ CephContext::CephContext(uint32_t module_type_,
     _crypto_aes(NULL),
     _plugin_registry(NULL),
     _lockdep_obs(NULL),
-    crush_location(this),
-    _cct_perf(NULL)
+    crush_location(this)
 {
   _log = new ceph::logging::Log(&_conf->subsys);
   _log->start();
@@ -744,6 +749,9 @@ void CephContext::start_service_thread()
     _service_thread->create("service");
   }
 
+  if (!(get_init_flags() & CINIT_FLAG_NO_CCT_PERF_COUNTERS))
+    _enable_perf_counter();
+
   // make logs flush on_exit()
   if (_conf->log_flush_on_exit)
     _log->set_flush_on_exit();
@@ -780,6 +788,9 @@ void CephContext::join_service_thread()
   thread->exit_thread();
   thread->join();
   delete thread;
+
+  if (!(get_init_flags() & CINIT_FLAG_NO_CCT_PERF_COUNTERS))
+    _disable_perf_counter();
 }
 
 uint32_t CephContext::get_module_type() const
@@ -802,37 +813,69 @@ PerfCountersCollection *CephContext::get_perfcounters_collection()
   return _perf_counters_collection;
 }
 
-void CephContext::enable_perf_counter()
+void CephContext::_enable_perf_counter()
 {
+  assert(!_cct_perf);
   PerfCountersBuilder plb(this, "cct", l_cct_first, l_cct_last);
   plb.add_u64(l_cct_total_workers, "total_workers", "Total workers");
   plb.add_u64(l_cct_unhealthy_workers, "unhealthy_workers", "Unhealthy workers");
-  PerfCounters *perf_tmp = plb.create_perf_counters();
-
-  std::unique_lock<ceph::spinlock> lg(_cct_perf_lock);
-  ceph_assert(_cct_perf == NULL);
-  _cct_perf = perf_tmp;
-  lg.unlock();
-
+  _cct_perf = plb.create_perf_counters();
   _perf_counters_collection->add(_cct_perf);
+
+  assert(_mempool_perf_names.empty());
+  assert(_mempool_perf_descriptions.empty());
+  _mempool_perf_names.reserve(mempool::num_pools * 2);
+  _mempool_perf_descriptions.reserve(mempool::num_pools * 2);
+  for (unsigned i = 0; i < mempool::num_pools; ++i) {
+    string n = mempool::get_pool_name(mempool::pool_index_t(i));
+    _mempool_perf_names.push_back(n + "_bytes");
+    _mempool_perf_descriptions.push_back(
+      string("mempool ") + n + " total bytes");
+    _mempool_perf_names.push_back(n + "_items");
+    _mempool_perf_descriptions.push_back(
+      string("mempool ") + n + " total items");
+  }
+
+  PerfCountersBuilder plb2(this, "mempool", l_mempool_first,
+			  l_mempool_first + 1 + 2*mempool::num_pools);
+  unsigned l = l_mempool_first + 1;
+  for (unsigned i = 0; i < mempool::num_pools; ++i) {
+    plb2.add_u64(l++, _mempool_perf_names[i*2].c_str(),
+		 _mempool_perf_descriptions[i*2].c_str());
+    plb2.add_u64(l++, _mempool_perf_names[i*2+1].c_str(),
+		 _mempool_perf_descriptions[i*2+1].c_str());
+  }
+  _mempool_perf = plb2.create_perf_counters();
+  _perf_counters_collection->add(_mempool_perf);
 }
 
-void CephContext::disable_perf_counter()
+void CephContext::_disable_perf_counter()
 {
+  if (!_cct_perf) {
+    return;
+  }
   _perf_counters_collection->remove(_cct_perf);
-
-  std::lock_guard<ceph::spinlock> lg(_cct_perf_lock);
   delete _cct_perf;
-  _cct_perf = NULL;
+  _cct_perf = nullptr;
+
+  _perf_counters_collection->remove(_mempool_perf);
+  delete _mempool_perf;
+  _mempool_perf = nullptr;
+  _mempool_perf_names.clear();
+  _mempool_perf_descriptions.clear();
 }
 
-void CephContext::refresh_perf_values()
+void CephContext::_refresh_perf_values()
 {
-  std::lock_guard<ceph::spinlock> lg(_cct_perf_lock);
-
   if (_cct_perf) {
     _cct_perf->set(l_cct_total_workers, _heartbeat_map->get_total_workers());
     _cct_perf->set(l_cct_unhealthy_workers, _heartbeat_map->get_unhealthy_workers());
+  }
+  unsigned l = l_mempool_first + 1;
+  for (unsigned i = 0; i < mempool::num_pools; ++i) {
+    mempool::pool_t& p = mempool::get_pool(mempool::pool_index_t(i));
+    _mempool_perf->set(l++, p.allocated_bytes());
+    _mempool_perf->set(l++, p.allocated_items());
   }
 }
 

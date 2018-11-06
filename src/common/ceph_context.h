@@ -138,22 +138,6 @@ public:
   }
 
   /**
-   * Enable the performance counter, currently we only have counter for the
-   * number of total/unhealthy workers.
-   */
-  void enable_perf_counter();
-
-  /**
-   * Disable the performance counter.
-   */
-  void disable_perf_counter();
-
-  /**
-   * Refresh perf counter values.
-   */
-  void refresh_perf_values();
-
-  /**
    * Get the admin socket associated with this CephContext.
    *
    * Currently there is always an admin socket object,
@@ -333,8 +317,30 @@ private:
     l_cct_unhealthy_workers,
     l_cct_last
   };
-  PerfCounters *_cct_perf;
-  ceph::spinlock _cct_perf_lock;
+  enum {
+    l_mempool_first = 873222,
+    l_mempool_bytes,
+    l_mempool_items,
+    l_mempool_last
+  };
+  PerfCounters *_cct_perf = nullptr;
+  PerfCounters* _mempool_perf = nullptr;
+  std::vector<std::string> _mempool_perf_names, _mempool_perf_descriptions;
+
+  /**
+   * Enable the performance counters.
+   */
+  void _enable_perf_counter();
+
+  /**
+   * Disable the performance counter.
+   */
+  void _disable_perf_counter();
+
+  /**
+   * Refresh perf counter values.
+   */
+  void _refresh_perf_values();
 
   friend class CephContextObs;
 };
