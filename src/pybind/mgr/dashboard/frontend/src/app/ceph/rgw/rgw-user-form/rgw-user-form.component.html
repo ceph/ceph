@@ -26,8 +26,8 @@
         <div class="form-group"
              [ngClass]="{'has-error': userForm.showError('user_id', frm)}">
           <label class="control-label col-sm-3"
-                 for="user_id"
-                 i18n>Username
+                 for="user_id">
+            <ng-container i18n>Username</ng-container>
             <span class="required"
                   *ngIf="!editing">
             </span>
@@ -56,8 +56,8 @@
         <div class="form-group"
              [ngClass]="{'has-error': userForm.showError('display_name', frm)}">
           <label class="control-label col-sm-3"
-                 for="display_name"
-                 i18n>Full name
+                 for="display_name">
+            <ng-container i18n>Full name</ng-container>
             <span class="required"
                   *ngIf="!editing">
             </span>
@@ -99,8 +99,8 @@
         <div class="form-group"
              [ngClass]="{'has-error': userForm.showError('max_buckets', frm)}">
           <label class="control-label col-sm-3"
-                 for="max_buckets"
-                 i18n>Max. buckets
+                 for="max_buckets">
+            <ng-container i18n>Max. buckets</ng-container>
             <span class="required"></span>
           </label>
           <div class="col-sm-9">
@@ -158,8 +158,8 @@
                [ngClass]="{'has-error': userForm.showError('access_key', frm)}"
                *ngIf="!editing && !userForm.getValue('generate_key')">
             <label class="control-label col-sm-3"
-                   for="access_key"
-                   i18n>Access key
+                   for="access_key">
+              <ng-container i18n>Access key</ng-container>
               <span class="required"></span>
             </label>
             <div class="col-sm-9">
@@ -192,8 +192,8 @@
                [ngClass]="{'has-error': userForm.showError('secret_key', frm)}"
                *ngIf="!editing && !userForm.getValue('generate_key')">
             <label class="control-label col-sm-3"
-                   for="secret_key"
-                   i18n>Secret key
+                   for="secret_key">
+              <ng-container i18n>Secret key</ng-container>
               <span class="required"></span>
             </label>
             <div class="col-sm-9">
@@ -468,8 +468,8 @@
                [ngClass]="{'has-error': userForm.showError('user_quota_max_size', frm)}"
                *ngIf="!userForm.getValue('user_quota_max_size_unlimited')">
             <label class="control-label col-sm-3"
-                   for="user_quota_max_size"
-                   i18n>Max. size
+                   for="user_quota_max_size">
+              <ng-container i18n>Max. size</ng-container>
               <span class="required"></span>
             </label>
             <div class="col-sm-9">
@@ -511,8 +511,8 @@
                [ngClass]="{'has-error': userForm.showError('user_quota_max_objects', frm)}"
                *ngIf="!userForm.getValue('user_quota_max_objects_unlimited')">
             <label class="control-label col-sm-3"
-                   for="user_quota_max_objects"
-                   i18n>Max. objects
+                   for="user_quota_max_objects">
+              <ng-container i18n>Max. objects</ng-container>
               <span class="required"></span>
             </label>
             <div class="col-sm-9">
@@ -528,8 +528,8 @@
               <span class="help-block"
                     *ngIf="userForm.showError('user_quota_max_objects', frm, 'min')"
                     i18n>
-              The entered value must be >= 0.
-            </span>
+                The entered value must be >= 0.
+              </span>
             </div>
           </div>
         </fieldset>
@@ -572,8 +572,8 @@
                [ngClass]="{'has-error': userForm.showError('bucket_quota_max_size', frm)}"
                *ngIf="!userForm.getValue('bucket_quota_max_size_unlimited')">
             <label class="control-label col-sm-3"
-                   for="bucket_quota_max_size"
-                   i18n>Max. size
+                   for="bucket_quota_max_size">
+              <ng-container i18n>Max. size</ng-container>
               <span class="required"></span>
             </label>
             <div class="col-sm-9">
@@ -615,8 +615,8 @@
                [ngClass]="{'has-error': userForm.showError('bucket_quota_max_objects', frm)}"
                *ngIf="!userForm.getValue('bucket_quota_max_objects_unlimited')">
             <label class="control-label col-sm-3"
-                   for="bucket_quota_max_objects"
-                   i18n>Max. objects
+                   for="bucket_quota_max_objects">
+              <ng-container i18n>Max. objects</ng-container>
               <span class="required"></span>
             </label>
             <div class="col-sm-9">
@@ -632,8 +632,8 @@
               <span class="help-block"
                     *ngIf="userForm.showError('bucket_quota_max_objects', frm, 'min')"
                     i18n>
-              The entered value must be >= 0.
-            </span>
+                The entered value must be >= 0.
+              </span>
             </div>
           </div>
         </fieldset>
@@ -643,9 +643,8 @@
         <div class="button-group text-right">
           <cd-submit-button type="button"
                             (submitAction)="onSubmit()"
-                            [form]="userForm"
-                            i18n>
-            {editing, select, 1 {Update} other {Add}}
+                            [form]="userForm">
+            <ng-container i18n>{editing, select, 1 {Update} other {Add}}</ng-container>
           </cd-submit-button>
           <button class="btn btn-sm btn-default"
                   type="button"

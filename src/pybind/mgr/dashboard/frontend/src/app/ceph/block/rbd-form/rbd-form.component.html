@@ -17,8 +17,7 @@
              *ngIf="rbdForm.getValue('parent')">
           <label i18n
                  class="control-label col-sm-3"
-                 for="name">{mode, select, cloning {Clone from} copying {Copy from} other {Parent}}
-          </label>
+                 for="name">{mode, select, cloning {Clone from} copying {Copy from} other {Parent}}</label>
           <div class="col-sm-9">
             <input class="form-control"
                    type="text"
@@ -32,9 +31,9 @@
         <!-- Name -->
         <div class="form-group"
              [ngClass]="{'has-error': rbdForm.showError('name', formDir)}">
-          <label i18n
-                 class="control-label col-sm-3"
-                 for="name">Name
+          <label class="control-label col-sm-3"
+                 for="name">
+            <ng-container i18n>Name</ng-container>
             <span class="required"></span>
           </label>
           <div class="col-sm-9">
@@ -161,9 +160,9 @@
         <!-- Size -->
         <div class="form-group"
              [ngClass]="{'has-error': rbdForm.showError('size', formDir)}">
-          <label i18n
-                 class="control-label col-sm-3"
-                 for="size">Size
+          <label class="control-label col-sm-3"
+                 for="size">
+            <ng-container i18n>Size</ng-container>
             <span class="required"></span>
           </label>
           <div class="col-sm-9">

@@ -15,9 +15,9 @@
         <!-- Name -->
         <div class="form-group"
              [ngClass]="{'has-error': roleForm.showError('name', formDir)}">
-          <label i18n
-                 class="control-label col-sm-3"
-                 for="name">Name
+          <label class="control-label col-sm-3"
+                 for="name">
+            <ng-container i18n>Name</ng-container>
             <span class="required"
                   *ngIf="mode !== roleFormMode.editing"></span>
           </label>
