@@ -27,6 +27,7 @@ import { OsdPerformanceHistogramComponent } from './osd/osd-performance-histogra
 import { OsdRecvSpeedModalComponent } from './osd/osd-recv-speed-modal/osd-recv-speed-modal.component';
 import { OsdReweightModalComponent } from './osd/osd-reweight-modal/osd-reweight-modal.component';
 import { OsdScrubModalComponent } from './osd/osd-scrub-modal/osd-scrub-modal.component';
+import { PrometheusListComponent } from './prometheus/prometheus-list/prometheus-list.component';
 
 @NgModule({
   entryComponents: [
@@ -65,6 +66,7 @@ import { OsdScrubModalComponent } from './osd/osd-scrub-modal/osd-scrub-modal.co
     OsdReweightModalComponent,
     CrushmapComponent,
     LogsComponent,
+    PrometheusListComponent,
     OsdRecvSpeedModalComponent
   ]
 })
