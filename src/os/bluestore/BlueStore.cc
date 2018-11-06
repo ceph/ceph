@@ -5132,7 +5132,7 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
       std::vector<std::string> res;
       // check for dir presence
       auto r = env->GetChildren(fn+".wal", &res);
-      if (r == rocksdb::Status::NotFound()) {
+      if (r.IsNotFound()) {
 	kv_options.erase("separate_wal_dir");
       }
     }
