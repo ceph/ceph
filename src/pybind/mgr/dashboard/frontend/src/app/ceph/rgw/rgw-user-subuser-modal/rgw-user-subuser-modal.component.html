@@ -35,8 +35,8 @@
     <div class="form-group"
          [ngClass]="{'has-error': formGroup.showError('subuid', frm)}">
       <label class="control-label col-sm-3"
-             for="subuid"
-             i18n>Subuser
+             for="subuid">
+        <ng-container i18n>Subuser</ng-container>
         <span class="required"
               *ngIf="!editing">
         </span>
@@ -65,8 +65,8 @@
     <div class="form-group"
          [ngClass]="{'has-error': formGroup.showError('perm', frm)}">
       <label class="control-label col-sm-3"
-             for="perm"
-             i18n>Permission
+             for="perm">
+        <ng-container i18n>Permission</ng-container>
         <span class="required"></span>
       </label>
       <div class="col-sm-9">
@@ -121,8 +121,8 @@
            [ngClass]="{'has-error': formGroup.showError('secret_key', frm)}"
            *ngIf="!editing && !formGroup.getValue('generate_secret')">
         <label class="control-label col-sm-3"
-               for="secret_key"
-               i18n>Secret key
+               for="secret_key">
+          <ng-container i18n>Secret key</ng-container>
           <span class="required"></span>
         </label>
         <div class="col-sm-9">
@@ -155,9 +155,8 @@
   </div>
   <div class="modal-footer">
     <cd-submit-button (submitAction)="onSubmit()"
-                      [form]="formGroup"
-                      i18n>
-      {editing, select, 1 {Update} other {Add}}
+                      [form]="formGroup">
+      <ng-container i18n>{editing, select, 1 {Update} other {Add}}</ng-container>
     </cd-submit-button>
     <button class="btn btn-sm btn-default"
             type="button"

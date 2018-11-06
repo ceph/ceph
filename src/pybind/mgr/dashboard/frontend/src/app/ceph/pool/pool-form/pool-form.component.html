@@ -1,9 +1,8 @@
 <div class="col-sm-12 col-lg-6">
   <h1 *ngIf="!(info && ecProfiles)"
-      i18n
       class="jumbotron">
     <i class="fa fa-lg fa-pulse fa-spinner text-primary"></i>
-    Loading...
+    <ng-container i18n>Loading...</ng-container>
   </h1>
   <form name="form"
         *ngIf="info && ecProfiles"
@@ -14,7 +13,7 @@
     <div class="panel panel-default">
       <div class="panel-heading">
         <h3 class="panel-title">
-          <span i18n>{{ editing ? 'Edit' : 'Add' }} pool</span>
+          <span i18n>{editing, select, 1 {Edit} other {Add}} pool</span>
         </h3>
       </div>
 
@@ -22,10 +21,9 @@
         <!-- Name -->
         <div class="form-group"
              [ngClass]="{'has-error': form.showError('name', formDir)}">
-          <label i18n
-                 class="control-label col-sm-3"
+          <label class="control-label col-sm-3"
                  for="name">
-            Name
+            <ng-container i18n>Name</ng-container>
             <span class="required"></span>
           </label>
           <div class="col-sm-9">
@@ -53,10 +51,9 @@
         <!-- Pool type selection -->
         <div class="form-group"
              [ngClass]="{'has-error': form.showError('poolType', formDir)}">
-          <label i18n
-                 class="control-label col-sm-3"
+          <label class="control-label col-sm-3"
                  for="poolType">
-            Pool type
+            <ng-container i18n>Pool type</ng-container>
             <span class="required"></span>
           </label>
           <div class="col-sm-9">
@@ -85,10 +82,9 @@
           <!-- Pg number -->
           <div class="form-group"
                [ngClass]="{'has-error': form.showError('pgNum', formDir)}">
-            <label i18n
-                   class="control-label col-sm-3"
+            <label class="control-label col-sm-3"
                    for="pgNum">
-              Placement groups
+              <ng-container i18n>Placement groups</ng-container>
               <span class="required"></span>
             </label>
             <div class="col-sm-9">
@@ -204,10 +200,9 @@
           <div class="form-group"
                [ngClass]="{'has-error': form.showError('size', formDir)}"
                *ngIf="form.getValue('poolType') === 'replicated'">
-            <label i18n
-                   class="control-label col-sm-3"
+            <label class="control-label col-sm-3"
                    for="size">
-              Replicated size
+              <ng-container i18n>Replicated size</ng-container>
               <span class="required"></span>
             </label>
             <div class="col-sm-9">
@@ -339,21 +334,21 @@
             </label>
             <div class="col-sm-9">
               <span class="form-control no-border full-height">
-                <cd-select-badges
-                  id="applications"
-                  [customBadges]="true"
-                  [customBadgeValidators]="data.applications.validators"
-                  [messages]="data.applications.messages"
-                  [data]="data.applications.selected"
-                  [options]="data.applications.available"
-                  [selectionLimit]="4">
+                <cd-select-badges id="applications"
+                                  [customBadges]="true"
+                                  [customBadgeValidators]="data.applications.validators"
+                                  [messages]="data.applications.messages"
+                                  [data]="data.applications.selected"
+                                  [options]="data.applications.available"
+                                  [selectionLimit]="4">
                 </cd-select-badges>
               </span>
             </div>
           </div>
 
           <!-- Compression -->
-          <div *ngIf="info.is_all_bluestore" formGroupName="compression">
+          <div *ngIf="info.is_all_bluestore"
+               formGroupName="compression">
             <legend i18n>Compression</legend>
 
             <!-- Compression Mode -->
@@ -476,7 +471,7 @@
                 <label i18n
                        class="control-label col-sm-3"
                        for="ratio">
-                   Ratio
+                  Ratio
                 </label>
                 <div class="col-sm-9">
                   <input id="ratio"
@@ -508,7 +503,7 @@
           <cd-submit-button [form]="formDir"
                             type="button"
                             (submitAction)="submit()">
-            <span i18n>{{ editing ? 'Edit' : 'Create' }} pool</span>
+            <span i18n>{editing, select, 1 {Edit} other {Create}} pool</span>
           </cd-submit-button>
           <button i18n
                   type="button"

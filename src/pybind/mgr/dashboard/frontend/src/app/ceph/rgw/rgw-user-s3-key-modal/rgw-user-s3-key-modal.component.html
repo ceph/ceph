@@ -19,8 +19,8 @@
     <div class="form-group"
          [ngClass]="{'has-error': formGroup.showError('user', frm)}">
       <label class="control-label col-sm-3"
-             for="user"
-             i18n>Username
+             for="user">
+        <ng-container i18n>Username</ng-container>
         <span class="required"
               *ngIf="!viewing">
         </span>
@@ -72,8 +72,8 @@
          [ngClass]="{'has-error': formGroup.showError('access_key', frm)}"
          *ngIf="!formGroup.getValue('generate_key')">
       <label class="control-label col-sm-3"
-             for="access_key"
-             i18n>Access key
+             for="access_key">
+        <ng-container i18n>Access key</ng-container>
         <span class="required"
               *ngIf="!viewing">
         </span>
@@ -109,8 +109,8 @@
          [ngClass]="{'has-error': formGroup.showError('secret_key', frm)}"
          *ngIf="!formGroup.getValue('generate_key')">
       <label class="control-label col-sm-3"
-             for="secret_key"
-             i18n>Secret key
+             for="secret_key">
+        <ng-container i18n>Secret key</ng-container>
         <span class="required"
               *ngIf="!viewing">
         </span>

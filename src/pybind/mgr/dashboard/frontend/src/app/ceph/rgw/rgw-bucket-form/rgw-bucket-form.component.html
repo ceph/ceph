@@ -80,9 +80,9 @@
         <!-- Owner -->
         <div class="form-group"
              [ngClass]="{'has-error': bucketForm.showError('owner', frm)}">
-          <label i18n
-                 class="control-label col-sm-3"
-                 for="owner">Owner
+          <label class="control-label col-sm-3"
+                 for="owner">
+            <ng-container i18n>Owner</ng-container>
             <span class="required"></span>
           </label>
           <div class="col-sm-9">
@@ -114,9 +114,8 @@
         <div class="button-group text-right">
           <cd-submit-button type="button"
                             (submitAction)="submit()"
-                            [form]="bucketForm"
-                            i18n>
-            {editing, select, 1 {Update} other {Add}}
+                            [form]="bucketForm">
+            <ng-container i18n>{editing, select, 1 {Update} other {Add}}</ng-container>
           </cd-submit-button>
           <button i18n
                   type="button"

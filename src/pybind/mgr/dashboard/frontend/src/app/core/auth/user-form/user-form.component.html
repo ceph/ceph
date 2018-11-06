@@ -15,9 +15,9 @@
         <!-- Username -->
         <div class="form-group"
              [ngClass]="{'has-error': userForm.showError('username', formDir)}">
-          <label i18n
-                 class="control-label col-sm-3"
-                 for="name">Username
+          <label class="control-label col-sm-3"
+                 for="name">
+            <ng-container i18n>Username</ng-container>
             <span class="required"
                   *ngIf="mode !== userFormMode.editing"></span>
           </label>

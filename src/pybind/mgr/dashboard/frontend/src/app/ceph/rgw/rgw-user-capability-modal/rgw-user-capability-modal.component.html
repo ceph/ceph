@@ -19,8 +19,8 @@
     <div class="form-group"
          [ngClass]="{'has-error': formGroup.showError('type', frm)}">
       <label class="control-label col-sm-3"
-             for="type"
-             i18n>Type
+             for="type">
+        <ng-container i18n>Type</ng-container>
         <span class="required"
               *ngIf="!editing">
         </span>
@@ -56,8 +56,8 @@
     <div class="form-group"
          [ngClass]="{'has-error': formGroup.showError('perm', frm)}">
       <label class="control-label col-sm-3"
-             for="perm"
-             i18n>Permission
+             for="perm">
+        <ng-container i18n>Permission</ng-container>
         <span class="required"></span>
       </label>
       <div class="col-sm-9">
@@ -83,9 +83,8 @@
   </div>
   <div class="modal-footer">
     <cd-submit-button (submitAction)="onSubmit()"
-                      [form]="formGroup"
-                      i18n>
-      {editing, select, 1 {Update} other {Add}}
+                      [form]="formGroup">
+      <ng-container i18n>{editing, select, 1 {Update} other {Add}}</ng-container>
     </cd-submit-button>
     <button class="btn btn-sm btn-default"
             type="button"

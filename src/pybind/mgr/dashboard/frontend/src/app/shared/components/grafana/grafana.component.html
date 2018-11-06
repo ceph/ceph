@@ -11,7 +11,8 @@
     </a> on how to configure and enable the monitoring functionality.
   </ng-container>
 </cd-info-panel>
-<div class="row" *ngIf="grafanaExist">
+<div class="row"
+     *ngIf="grafanaExist">
   <div class="col-md-12">
     <div dropdown>
       <button dropdownToggle
@@ -24,8 +25,7 @@
       <ul *dropdownMenu
           class="dropdown-menu">
         <li>
-          <a i18n
-             class="dropdown-item"
+          <a class="dropdown-item"
              (click)="timePickerToggle()">{{ modeText }}
           </a>
         </li>

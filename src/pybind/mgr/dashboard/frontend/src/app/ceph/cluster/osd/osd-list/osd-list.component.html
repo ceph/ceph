@@ -59,13 +59,14 @@
                 [usedBytes]="row.stats.stat_bytes_used"></cd-usage-bar>
 </ng-template>
 
-<ng-template #markOsdConfirmationTpl i18n let-markActionDescription="markActionDescription">
+<ng-template #markOsdConfirmationTpl
+             i18n
+             let-markActionDescription="markActionDescription">
   <strong>OSD {{ selection.first().id }}</strong> will be marked
   <strong>{{ markActionDescription }}</strong> if you proceed.
 </ng-template>
 
 <ng-template #criticalConfirmationTpl
-             i18n
              let-safeToDestroyResult="result"
              let-actionDescription="actionDescription">
   <div *ngIf="!safeToDestroyResult['safe-to-destroy']"
