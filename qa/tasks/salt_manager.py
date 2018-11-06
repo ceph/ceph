@@ -227,18 +227,21 @@ class SaltManager(object):
         """Starts salt-minion.service on all cluster nodes"""
         self.__systemctl_cluster(subcommand="start", service="salt-minion")
 
-    # FIXME: run in a try-wait loop, because it sometimes does this:
-    # Running: "sudo sh -c 'salt \\* saltutil.sync_all 2>/dev/null'"
-    # stdout:target192168000035.teuthology:
-    # stdout:    Minion did not return. [No response]
-    # (which means capturing the stdout and parsing it to ensure that
-    # the string "Minion did not return" did not appear after any of
-    # the minion names)
     def sync_pillar_data(self, quiet=True):
         cmd = "sudo salt \\* saltutil.sync_all"
         if quiet:
             cmd += " 2>/dev/null"
-        self.master_remote.run(args=cmd)
+        with safe_while(sleep=15, tries=10,
+                        action=cmd) as proceed:
+            while proceed():
+                no_response = len(
+                    re.findall('Minion did not return',
+                               self.master_remote.sh(cmd))
+                    )
+                if no_response:
+                    log.info("Not all minions responded. Retrying.")
+                else:
+                    return None
 
     def cat_salt_master_conf(self):
         self.__cat_file_remote(self.master_remote, filename="/etc/salt/master")
