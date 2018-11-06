@@ -1,5 +1,4 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { DebugElement } from '@angular/core';
 import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { By } from '@angular/platform-browser';
@@ -14,6 +13,7 @@ import { OsdService } from '../../../../shared/api/osd.service';
 import { ConfirmationModalComponent } from '../../../../shared/components/confirmation-modal/confirmation-modal.component';
 import { CriticalConfirmationModalComponent } from '../../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { TableActionsComponent } from '../../../../shared/datatable/table-actions/table-actions.component';
+import { CdTableAction } from '../../../../shared/models/cd-table-action';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
 import { Permissions } from '../../../../shared/models/permissions';
 import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
@@ -135,25 +135,15 @@ describe('OsdListComponent', () => {
       })
     );
 
-    /**
-     * Helper function to retrieve menu item
-     * @param selector
-     */
-    const getMenuItem = (selector: string): DebugElement => {
-      return fixture.debugElement
-        .query(By.directive(TableActionsComponent))
-        .query(By.css(selector));
-    };
+    it('has all menu entries disabled', () => {
+      const tableActionElement = fixture.debugElement.query(By.directive(TableActionsComponent));
+      const toClassName = TestBed.get(TableActionsComponent).toClassName;
+      const getActionClasses = (action: CdTableAction) =>
+        tableActionElement.query(By.css('.' + toClassName(action.name))).classes;
 
-    it('has menu entries disabled for entries without create permission', () => {
-      component.tableActions
-        .filter((tableAction) => tableAction.permission !== 'create')
-        .map((tableAction) => tableAction.name)
-        .map(TestBed.get(TableActionsComponent).toClassName)
-        .map((className) => getMenuItem(`.${className}`))
-        .forEach((debugElement) => {
-          expect(debugElement.classes.disabled).toBe(true);
-        });
+      component.tableActions.forEach((action) => {
+        expect(getActionClasses(action).disabled).toBe(true);
+      });
     });
   });
 
