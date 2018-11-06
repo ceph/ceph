@@ -1,6 +1,6 @@
 
 """
-A hello world module
+A Email module
 
 See doc/mgr/hello.rst for more info.
 """
