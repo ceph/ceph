@@ -22,8 +22,8 @@
   last_changed \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+ (re)
   created \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+ (re)
   0: v1:2.3.4.5:6789/0 mon.foo
-  1: v1:3.4.5.6:7890/0 mon.bar
-  2: v1:4.5.6.7:8901/0 mon.baz
+  1: v2:3.4.5.6:7890/0 mon.bar
+  2: v2:4.5.6.7:8901/0 mon.baz
 
   $ NEW_FSID="$(monmaptool --print mymonmap|grep ^fsid)"
   $ [ "$ORIG_FSID" = "$NEW_FSID" ]
