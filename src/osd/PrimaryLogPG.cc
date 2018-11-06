@@ -1919,9 +1919,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
 
   dout(20) << __func__ << ": op " << *m << dendl;
 
-  hobject_t head = m->get_hobj();
-  head.snap = CEPH_NOSNAP;
-
+  const hobject_t head = m->get_hobj().get_head();
   if (!info.pgid.pgid.contains(
 	info.pgid.pgid.get_split_bits(pool.info.get_pg_num()), head)) {
     derr << __func__ << " " << info.pgid.pgid << " does not contain "
@@ -2179,12 +2177,8 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   hobject_t missing_oid;
 
   // kludge around the fact that LIST_SNAPS sets CEPH_SNAPDIR for LIST_SNAPS
-  hobject_t _oid_head;
-  if (m->get_snapid() == CEPH_SNAPDIR) {
-    _oid_head = m->get_hobj().get_head();
-  }
-  const hobject_t& oid =
-    m->get_snapid() == CEPH_SNAPDIR ? _oid_head : m->get_hobj();
+  const hobject_t& oid = \
+    m->get_snapid() == CEPH_SNAPDIR ? head : m->get_hobj();
 
   // make sure LIST_SNAPS is on CEPH_SNAPDIR and nothing else
   for (vector<OSDOp>::iterator p = m->ops.begin(); p != m->ops.end(); ++p) {
