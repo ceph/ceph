@@ -17,7 +17,7 @@
 #ifndef CEPH_RANDOMCACHE_H
 #define CEPH_RANDOMCACHE_H
 
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "include/compat.h"
 #include "include/unordered_map.h"
 
@@ -30,7 +30,7 @@ template <class K, class V>
 class RandomCache {
   // The first element of pair is the frequency of item, it's used to evict item
   ceph::unordered_map<K, pair<uint64_t, V> > contents;
-  Mutex lock;
+  ceph::mutex lock = ceph::make_mutex("RandomCache::lock");
   uint64_t max_size;
   K last_trim_key;
 
@@ -69,19 +69,18 @@ class RandomCache {
   }
 
  public:
-  RandomCache(size_t max_size=20) : lock("RandomCache::lock"),
-                                    max_size(max_size) {}
+  RandomCache(size_t max_size=20) : max_size(max_size) {}
   ~RandomCache() {
     contents.clear();
   }
 
   void clear(K key) {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     contents.erase(key);
   }
 
   void set_size(size_t new_size) {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     max_size = new_size;
     if (max_size <= contents.size()) {
       trim_cache(contents.size() - max_size);
@@ -89,7 +88,7 @@ class RandomCache {
   }
 
   bool lookup(K key, V *out) {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     typename ceph::unordered_map<K, pair<uint64_t, V> >::iterator it = contents.find(key);
     if (it != contents.end()) {
       it->second.first++;
@@ -100,7 +99,7 @@ class RandomCache {
   }
 
   void add(K key, V value) {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     if (max_size <= contents.size()) {
       trim_cache(EVICT_COUNT);
     }
