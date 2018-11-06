@@ -61,7 +61,7 @@ target_link_libraries(unittest_rbd_mirror
   cls_lock_client
   cls_journal_client
   rbd_types
-  librados
+  librados-cxx
   osdc
   global
   radostest-cxx
