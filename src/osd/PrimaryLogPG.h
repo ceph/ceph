@@ -1400,6 +1400,9 @@ protected:
 
   friend class C_ExtentCmpRead;
 
+  std::pair<size_t, bool> do_read_preprocess(
+    const ObjectState& obs,
+    const OSDOp& osd_op);
   int do_read_rep(OpRequestRef&, const ObjectState& obs, OSDOp& osd_op);
   int do_read(OpContext *ctx, OSDOp& osd_op);
   int do_sparse_read(OpContext *ctx, OSDOp& osd_op);

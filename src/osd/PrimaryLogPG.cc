@@ -5462,38 +5462,51 @@ int PrimaryLogPG::do_read_rep(
   }
 }
 
-int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
-  dout(20) << __func__ << dendl;
-  auto& op = osd_op.op;
-  auto& oi = ctx->new_obs.oi;
-  auto& soid = oi.soid;
-  __u32 seq = oi.truncate_seq;
-  uint64_t size = oi.size;
-  bool trimmed_read = false;
-
-  dout(30) << __func__ << " oi.size: " << oi.size << dendl;
-  dout(30) << __func__ << " oi.truncate_seq: " << oi.truncate_seq << dendl;
-  dout(30) << __func__ << " op.extent.truncate_seq: " << op.extent.truncate_seq << dendl;
-  dout(30) << __func__ << " op.extent.truncate_size: " << op.extent.truncate_size << dendl;
-
+std::pair<size_t, bool> PrimaryLogPG::do_read_preprocess(
+  const ObjectState& obs,
+  const OSDOp& osd_op)
+{
+  const auto& op = osd_op.op;
+  __u32 seq = obs.oi.truncate_seq;
+  uint64_t size = obs.oi.size;
   // are we beyond truncate_size?
   if ( (seq < op.extent.truncate_seq) &&
        (op.extent.offset + op.extent.length > op.extent.truncate_size) &&
        (size > op.extent.truncate_size) )
     size = op.extent.truncate_size;
 
-  if (op.extent.length == 0) //length is zero mean read the whole object
-    op.extent.length = size;
-
   if (op.extent.offset >= size) {
-    op.extent.length = 0;
-    trimmed_read = true;
+    return std::make_pair(0, true);
   } else if (op.extent.offset + op.extent.length > size) {
-    op.extent.length = size - op.extent.offset;
-    trimmed_read = true;
+    return std::make_pair(size - op.extent.offset, true);
+  } else if (op.extent.length == 0) {
+    return std::make_pair(size, false);
+  } else {
+    //length is zero mean read the whole object
+    return std::make_pair(op.extent.length, false);
   }
+}
 
-  dout(30) << __func__ << "op.extent.length is now " << op.extent.length << dendl;
+int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
+  dout(20) << __func__ << dendl;
+  auto& op = osd_op.op;
+  auto& oi = ctx->new_obs.oi;
+  auto& soid = oi.soid;
+
+  dout(30) << __func__ << " oi.size: " << oi.size << dendl;
+  dout(30) << __func__ << " oi.truncate_seq: "
+	   << oi.truncate_seq << dendl;
+  dout(30) << __func__ << " op.extent.truncate_seq: "
+	   << op.extent.truncate_seq << dendl;
+  dout(30) << __func__ << " op.extent.truncate_size: "
+	   << op.extent.truncate_size << dendl;
+
+  bool trimmed_read;
+  std::tie(op.extent.length, trimmed_read) = \
+    do_read_preprocess(ctx->new_obs, osd_op);
+
+  dout(30) << __func__ << "op.extent.length is now " << op.extent.length
+	   << dendl;
 
   // read into a buffer
   int result = 0;
