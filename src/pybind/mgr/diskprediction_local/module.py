@@ -85,7 +85,7 @@ class Module(MgrModule):
                         self.log.debug('Last scrape never, next scrape due %s',
                                        next_predicted.strftime(TIME_FORMAT))
                 if now >= next_predicted:
-                    self.predict_all_device()
+                    self.predict_all_devices()
                     last_predicted = now
                     self.set_store('last_predicted', last_predicted.strftime(TIME_FORMAT))
 
