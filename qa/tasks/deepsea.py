@@ -849,6 +849,7 @@ class Orch(DeepSea):
                 '--all',
                 ])
             raise
+        self.log.info("orchestration {} completed".format(orch_spec))
 
     def _run_stage_0(self):
         """
