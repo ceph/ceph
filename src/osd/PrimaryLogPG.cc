@@ -5426,6 +5426,48 @@ int PrimaryLogPG::finish_extent_cmp(OSDOp& osd_op, const bufferlist &read_bl)
   return 0;
 }
 
+// read on replicated pool
+int PrimaryLogPG::do_read_rep(
+  OpRequestRef& op,
+  const ObjectState& obs,
+  OSDOp& osd_op)
+{
+  dout(20) << __func__ << dendl;
+
+  auto r = pgbackend->objects_read_sync(obs.oi.soid,
+					osd_op.op.extent.offset,
+					osd_op.op.extent.length,
+					osd_op.op.flags,
+					&osd_op.outdata);
+  // whole object?  can we verify the checksum?
+  if (r >= 0 && osd_op.op.extent.offset == 0 &&
+      static_cast<uint64_t>(r) == obs.oi.size && obs.oi.is_data_digest()) {
+    const uint32_t crc = osd_op.outdata.crc32c(-1);
+    if (obs.oi.data_digest != crc) {
+      osd->clog->error() << info.pgid << std::hex
+                         << " full-object read crc 0x" << crc
+                         << " != expected 0x" << obs.oi.data_digest
+                         << std::dec << " on " << obs.oi.soid;
+      r = -EIO; // try repair later
+    }
+  }
+  if (r == -EIO) {
+    r = rep_repair_primary_object(obs.oi.soid, op, obs);
+  }
+
+  dout(10) << " read got " << r << " / " << osd_op.op.extent.length
+	   << " bytes from obj " << obs.oi.soid << dendl;
+
+  if (r >= 0) {
+    // TODO: move the assignment outside, take osd_op by const-ref.
+    osd_op.op.extent.length = r;
+    return 0;
+  } else {
+    osd_op.op.extent.length = 0;
+    return r;
+  }
+}
+
 int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
   dout(20) << __func__ << dendl;
   auto& op = osd_op.op;
@@ -5487,31 +5529,7 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
     ctx->op_finishers[ctx->current_osd_subop_num].reset(
       new ReadFinisher(osd_op));
   } else {
-    int r = pgbackend->objects_read_sync(
-      soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata);
-    // whole object?  can we verify the checksum?
-    if (r >= 0 && op.extent.offset == 0 &&
-        (uint64_t)r == oi.size && oi.is_data_digest()) {
-      uint32_t crc = osd_op.outdata.crc32c(-1);
-      if (oi.data_digest != crc) {
-        osd->clog->error() << info.pgid << std::hex
-                           << " full-object read crc 0x" << crc
-                           << " != expected 0x" << oi.data_digest
-                           << std::dec << " on " << soid;
-        r = -EIO; // try repair later
-      }
-    }
-    if (r == -EIO) {
-      r = rep_repair_primary_object(soid, ctx->op, ctx->new_obs);
-    }
-    if (r >= 0)
-      op.extent.length = r;
-    else {
-      result = r;
-      op.extent.length = 0;
-    }
-    dout(10) << " read got " << r << " / " << op.extent.length
-	     << " bytes from obj " << soid << dendl;
+    result = do_read_rep(ctx->op, ctx->new_obs, osd_op);
   }
 
   // XXX the op.extent.length is the requested length for async read
