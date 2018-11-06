@@ -15,6 +15,8 @@ import { RgwUserFormComponent } from './rgw-user-form.component';
 describe('RgwUserFormComponent', () => {
   let component: RgwUserFormComponent;
   let fixture: ComponentFixture<RgwUserFormComponent>;
+  let rgwUserService: RgwUserService;
+  let formHelper: FormHelper;
 
   configureTestBed({
     declarations: [RgwUserFormComponent],
@@ -26,6 +28,8 @@ describe('RgwUserFormComponent', () => {
     fixture = TestBed.createComponent(RgwUserFormComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
+    rgwUserService = TestBed.get(RgwUserService);
+    formHelper = new FormHelper(component.userForm);
   });
 
   it('should create', () => {
@@ -33,10 +37,7 @@ describe('RgwUserFormComponent', () => {
   });
 
   describe('s3 key management', () => {
-    let rgwUserService: RgwUserService;
-
     beforeEach(() => {
-      rgwUserService = TestBed.get(RgwUserService);
       spyOn(rgwUserService, 'addS3Key').and.stub();
     });
 
@@ -113,13 +114,8 @@ describe('RgwUserFormComponent', () => {
   });
 
   describe('username validation', () => {
-    let rgwUserService: RgwUserService;
-    let formHelper: FormHelper;
-
     beforeEach(() => {
-      rgwUserService = TestBed.get(RgwUserService);
       spyOn(rgwUserService, 'enumerate').and.returnValue(observableOf(['abc', 'xyz']));
-      formHelper = new FormHelper(component.userForm);
     });
 
     it('should validate that username is required', () => {
@@ -143,5 +139,20 @@ describe('RgwUserFormComponent', () => {
         formHelper.expectError('user_id', 'notUnique');
       })
     );
+  });
+
+  describe('onSubmit', () => {
+    it('should be able to clear the mail field on update', () => {
+      spyOn(rgwUserService, 'update');
+      component.editing = true;
+      formHelper.setValue('email', '', true);
+      component.onSubmit();
+      expect(rgwUserService.update).toHaveBeenCalledWith(null, {
+        display_name: null,
+        email: '',
+        max_buckets: 1000,
+        suspended: false
+      });
+    });
   });
 });
