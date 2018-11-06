@@ -862,6 +862,38 @@ protected:
     }
   }
 
+  class ObjectLockGuard {
+    ObcLockManager lock_manager;
+    PrimaryLogPG& pg;
+
+  public:
+    ObjectLockGuard(ObcLockManager&& lock_manager, PrimaryLogPG& pg)
+      : lock_manager(std::move(lock_manager)),
+        pg(pg) {
+    }
+    ~ObjectLockGuard() {
+      pg.release_object_locks(lock_manager);
+    }
+  };
+
+  // TODO: use std::pair instead
+  struct get_rw_locks_fastread_ret_t {
+    ObjectLockGuard guard;
+    bool is_locked;
+  };
+  get_rw_locks_fastread_ret_t get_rw_locks_fastread(
+    OpRequestRef& op,
+    ObjectContextRef& obc)
+  {
+    ObcLockManager lock_manager;
+    if (lock_manager.get_lock_type(
+	  ObjectContext::RWState::RWREAD, obc->obs.oi.soid, obc, op)) {
+      return { ObjectLockGuard(std::move(lock_manager), *this), true };
+    } else {
+      return { ObjectLockGuard(std::move(lock_manager), *this), false };
+    }
+  }
+
   // replica ops
   // [primary|tail]
   xlist<RepGather*> repop_queue;

@@ -346,9 +346,8 @@ class ObcLockManager {
   struct ObjectLockState {
     ObjectContextRef obc;
     ObjectContext::RWState::State type;
-    ObjectLockState(
-      ObjectContextRef obc,
-      ObjectContext::RWState::State type)
+
+    ObjectLockState(ObjectContextRef obc, ObjectContext::RWState::State type)
       : obc(std::move(obc)), type(type) {}
   };
   map<hobject_t, ObjectLockState> locks;
@@ -364,7 +363,8 @@ public:
     ObjectContext::RWState::State type,
     const hobject_t &hoid,
     ObjectContextRef& obc,
-    OpRequestRef& op) {
+    OpRequestRef& op)
+  {
     ceph_assert(locks.find(hoid) == locks.end());
     if (obc->get_lock_type(op, type)) {
       locks.insert(make_pair(hoid, ObjectLockState(obc, type)));
