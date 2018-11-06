@@ -28,7 +28,7 @@
 
 class SharedPtrRegistryTest : public SharedPtrRegistry<unsigned int, int> {
 public:
-  Mutex &get_lock() { return lock; }
+  ceph::mutex &get_lock() { return lock; }
   map<unsigned int, pair<std::weak_ptr<int>, int*> > &get_contents() {
     return contents;
   }
@@ -85,7 +85,7 @@ public:
       if (delay > 0)
 	usleep(delay);
       {
-	Mutex::Locker l(registry.get_lock());
+	std::lock_guard l(registry.get_lock());
 	if (registry.waiting == waiting) 
 	  break;
       }
