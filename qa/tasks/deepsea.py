@@ -746,7 +746,7 @@ class Orch(DeepSea):
 
     def __log_stage_start(self, stage):
         self.log.info(anchored(
-            "running Stage {} ({})"
+            "Running DeepSea Stage {} ({})"
             .format(stage, self.stage_synonyms[stage])
             ))
 
