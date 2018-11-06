@@ -75,6 +75,10 @@ public:
     ASSERT_EQ(0, image.mirror_image_get_status(&status, sizeof(status)));
     ASSERT_EQ(MIRROR_IMAGE_STATUS_STATE_UNKNOWN, status.state);
 
+    std::string instance_id;
+    ASSERT_EQ(mirror_state == RBD_MIRROR_IMAGE_ENABLED ? -ENOENT : -EINVAL,
+              image.mirror_image_get_instance_id(&instance_id));
+
     ASSERT_EQ(0, image.close());
     ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
     ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_DISABLED));
@@ -104,6 +108,10 @@ public:
     ASSERT_EQ(0, image.mirror_image_get_status(&status, sizeof(status)));
     ASSERT_EQ(MIRROR_IMAGE_STATUS_STATE_UNKNOWN, status.state);
 
+    std::string instance_id;
+    ASSERT_EQ(mirror_state == RBD_MIRROR_IMAGE_ENABLED ? -ENOENT : -EINVAL,
+              image.mirror_image_get_instance_id(&instance_id));
+
     ASSERT_EQ(0, image.close());
     ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
     ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_DISABLED));
@@ -122,6 +130,11 @@ public:
     ASSERT_EQ(images.size(), states_count);
 
     *images_count = images.size();
+
+    std::map<std::string, std::string> instance_ids;
+    ASSERT_EQ(0, m_rbd.mirror_image_instance_id_list(m_ioctx, "", 4096,
+                                                     &instance_ids));
+    ASSERT_TRUE(instance_ids.empty());
   }
 
   void check_mirroring_on_create(uint64_t features,
