@@ -76,13 +76,16 @@
                     formControlName="pool"
                     *ngIf="mode !== 'editing' && poolPermission.read">
               <option *ngIf="pools === null"
-                      [ngValue]="null">Loading...
+                      [ngValue]="null"
+                      i18n>Loading...
               </option>
               <option *ngIf="pools !== null && pools.length === 0"
-                      [ngValue]="null">-- No rbd pools available --
+                      [ngValue]="null"
+                      i18n>-- No rbd pools available --
               </option>
               <option *ngIf="pools !== null && pools.length > 0"
-                      [ngValue]="null">-- Select a pool --
+                      [ngValue]="null"
+                      i18n>-- Select a pool --
               </option>
               <option *ngFor="let pool of pools"
                       [value]="pool.pool_name">{{ pool.pool_name }}</option>
@@ -116,7 +119,7 @@
              *ngIf="rbdForm.getValue('useDataPool')">
           <label class="control-label col-sm-3"
                  for="dataPool">
-            Data pool
+            <ng-container i18n>Data pool</ng-container>
             <span class="required"
                   *ngIf="mode !== 'editing'"></span>
             <cd-helper i18n-html
@@ -138,10 +141,12 @@
                     (change)="onDataPoolChange($event.target.value)"
                     *ngIf="mode !== 'editing' && poolPermission.read">
               <option *ngIf="dataPools === null"
-                      [ngValue]="null">Loading...
+                      [ngValue]="null"
+                      i18n>Loading...
               </option>
               <option *ngIf="dataPools !== null && dataPools.length === 0"
-                      [ngValue]="null">-- No data pools available --
+                      [ngValue]="null"
+                      i18n>-- No data pools available --
               </option>
               <option *ngIf="dataPools !== null && dataPools.length > 0"
                       [ngValue]="null">-- Select a data pool --
