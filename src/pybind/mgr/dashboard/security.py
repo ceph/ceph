@@ -23,6 +23,7 @@ class Scope(object):
     MANAGER = "manager"
     LOG = "log"
     GRAFANA = "grafana"
+    PROMETHEUS = "prometheus"
     USER = "user"
     DASHBOARD_SETTINGS = "dashboard-settings"
 
