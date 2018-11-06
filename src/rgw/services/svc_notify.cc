@@ -337,12 +337,13 @@ int RGWSI_Notify::watch_cb(uint64_t notify_id,
 
 void RGWSI_Notify::set_enabled(bool status)
 {
-  RWLock::RLocker l(watchers_lock);
+  RWLock::WLocker l(watchers_lock);
   _set_enabled(status);
 }
 
 void RGWSI_Notify::_set_enabled(bool status)
 {
+  enabled = status;
   if (cb) {
     cb->set_enabled(status);
   }
@@ -459,6 +460,7 @@ void RGWSI_Notify::register_watch_cb(CB *_cb)
 {
   RWLock::WLocker l(watchers_lock);
   cb = _cb;
+  _set_enabled(enabled);
 }
 
 void RGWSI_Notify::schedule_context(Context *c)

@@ -35,6 +35,8 @@ private:
   std::set<int> watchers_set;
   vector<RGWSI_RADOS::Obj> notify_objs;
 
+  bool enabled{false};
+
   double inject_notify_timeout_probability{0};
   unsigned max_notify_retries{0};
 
