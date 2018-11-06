@@ -1561,7 +1561,7 @@ void MDSRank::boot_start(BootStep step, int r)
 void MDSRank::validate_sessions()
 {
   ceph_assert(mds_lock.is_locked_by_me());
-  bool valid = true;
+  inodeno_t max_ino, last_ino;
 
   // Identify any sessions which have state inconsistent with other,
   // after they have been loaded from rados during startup.
@@ -1569,18 +1569,12 @@ void MDSRank::validate_sessions()
   const auto &sessions = sessionmap.get_sessions();
   for (const auto &i : sessions) {
     Session *session = i.second;
-    interval_set<inodeno_t> badones;
-    if (inotable->intersects_free(session->info.prealloc_inos, &badones)) {
-      clog->error() << "client " << *session
-		    << "loaded with preallocated inodes that are inconsistent with inotable";
-      valid = false;
-    }
+    last_ino = session->info.prealloc_inos.range_end();
+    if ( last_ino.val > max_ino.val)
+      max_ino = last_ino;
   }
-
-  if (!valid) {
-    damaged();
-    ceph_assert(valid);
-  }
+  dout(5) << "force sonsume to max_ino: " << max_ino << dendl;
+  inotable->force_consume_to(max_ino);
 }
 
 void MDSRank::starting_done()
