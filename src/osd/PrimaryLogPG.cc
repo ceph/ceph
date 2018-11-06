@@ -1807,9 +1807,6 @@ void PrimaryLogPG::do_request(
   if (pgbackend->handle_message(op))
     return;
 
-  if (likely(msg_type == CEPH_MSG_OSD_OP)) {
-  }
-
   switch (msg_type) {
   case CEPH_MSG_OSD_OP:
   case CEPH_MSG_OSD_BACKOFF:
@@ -2044,52 +2041,6 @@ bool PrimaryLogPG::do_fastpath_op(OpRequestRef& op)
 
   // TODO: perf counters, publish stats etc.
   return true;
-
-#if 0
-  execute_ctx(ctx);
-  int result = prepare_transaction(ctx);
-
-  // HINT for new_obs:
-  //  OpContext(OpRequestRef _op, osd_reqid_t _reqid, vector<OSDOp>* _ops,
-  //	      ObjectContextRef& obc,
-  //	      PrimaryLogPG *_pg) :
-  //    op(_op), reqid(_reqid), ops(_ops),
-  //    obs(&obc->obs),
-  //    snapset(0),
-  //    new_obs(obs->oi, obs->exists),
-
-
-  // ObjectStore::CollectionHandle &ch
-  return store->read(ch, ghobject_t(hoid), off, len, *bl, op_flags);
-
-  // TODO: perf counters
-
-  // prepare the reply
-  ctx->reply = new MOSDOpReply(m, 0, get_osdmap_epoch(), 0,
-			       successful_write);
-  ctx->reply->set_result(result);
-  ctx->reply->put();
-
-  // read or error?
-  if ((ctx->op_t->empty() || result < 0) && !ctx->update_log_only) {
-    // update_log_only should be always false for pure reads (no ::may_write()
-    // and op_t::empty() == true.
-
-    // finish side-effects
-    if (result >= 0)
-      do_osd_op_effects(ctx, m->get_connection());
-      // don't need to handle:
-      //  * ctx.watch_connects as there are pushed only by CEPH_OSD_OP_WATCH
-      //  * ctx.watch_disconnects - CEPH_OSD_OP_WATCH and _delete_oid
-      //  * ctx.notifies - CEPH_OSD_OP_NOTIFY
-      //  * ctx.notify_acks - CEPH_OSD_OP_NOTIFY_ACK
-      // Wow, do_osd_op_effects can be killed entirely!
-
-    complete_read_ctx(result, ctx);
-   // Grabs locks for OpContext, should be cleaned up in close_op_ctx
-    return;
-  }
-#endif
 }
 
 /** do_op - do an op
