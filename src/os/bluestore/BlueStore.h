@@ -2292,7 +2292,7 @@ public:
   BlueStore(CephContext *cct, const string& path);
   BlueStore(CephContext *cct, const string& path, uint64_t min_alloc_size); // Ctor for UT only
   ~BlueStore() override;
-
+  bool dump_bluestore(Formatter* f);
   string get_type() override {
     return "bluestore";
   }

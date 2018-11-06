@@ -37,6 +37,8 @@
 #include "common/EventTrace.h"
 #include "perfglue/heap_profiler.h"
 
+#include "common/admin_socket.h"
+
 #define dout_context cct
 #define dout_subsys ceph_subsys_bluestore
 
@@ -3836,6 +3838,64 @@ void BlueStore::handle_discard(interval_set<uint64_t>& to_release)
   alloc->release(to_release);
 }
 
+bool BlueStore::dump_bluestore(Formatter* f)
+{
+  vector<coll_t> ls;
+  if (list_collections(ls) != 0)
+    return false;
+  f->open_object_section("collections");
+  for (auto &it: ls) {
+    vector<ghobject_t> ls_o;
+    ghobject_t next;
+    f->dump_string("collection", it.to_str());
+    ObjectStore::CollectionHandle ch = open_collection(it);
+    if (collection_list(ch, ghobject_t(), ghobject_t::get_max(), 1000, &ls_o, &next) == 0) {
+      CollectionRef c = _get_collection(it);
+      ceph_assert(c);
+      for (auto &obj: ls_o) {
+        if (obj.is_pgmeta())
+          continue;
+        f->dump_string("file", obj.hobj.oid.name);
+        OnodeRef o;
+        {
+        RWLock::WLocker l(c->lock); // just to avoid internal asserts
+        o = c->get_onode(obj, false);
+        ceph_assert(o);
+        o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
+        if (o->extent_map.extent_map.size() > 0) {
+          std::map<uint64_t, uint32_t> blocks;
+          f->open_object_section("device");
+          for ( auto &e : o->extent_map.extent_map ) {
+            for (auto &g : e.blob->get_blob().get_extents()) {
+              if (g.is_valid()) {
+                std::stringstream offset_str;
+                std::stringstream length_str;
+                offset_str << "0x" << std::hex << g.offset;
+                length_str << "0x" << std::hex << g.length;
+                f->dump_string(offset_str.str().c_str(), length_str.str());
+                blocks.emplace(g.offset, g.length);
+              }
+            }
+          }
+          f->close_section();
+          int fragments = 0;
+          uint64_t expect = 0;
+          for (auto &it : blocks) {
+            if (it.first != expect)
+              fragments++;
+            expect = it.first + it.second;
+          }
+          f->dump_int("fragments", fragments);
+        }
+        }
+      }
+    }
+  }
+  f->close_section();
+  return true;
+}
+
+
 BlueStore::BlueStore(CephContext *cct, const string& path)
   : ObjectStore(cct, path),
     throttle_bytes(cct, "bluestore_throttle_bytes",
@@ -3852,6 +3912,9 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
   _init_logger();
   cct->_conf.add_observer(this);
   set_cache_shards(1);
+  AdminSocket *admin_socket = cct->get_admin_socket();
+  if (admin_socket) admin_socket->register_inspect("bluestore_dump", to_string(uintptr_t(this)),
+                                                   [this](Formatter* f) {return this->dump_bluestore(f);} );
 }
 
 BlueStore::BlueStore(CephContext *cct,
@@ -3874,10 +3937,16 @@ BlueStore::BlueStore(CephContext *cct,
   _init_logger();
   cct->_conf.add_observer(this);
   set_cache_shards(1);
+  AdminSocket *admin_socket = cct->get_admin_socket();
+  if (admin_socket) admin_socket->register_inspect("bluestore_dump", to_string(uintptr_t(this)),
+                                                   [this](Formatter* f) {return this->dump_bluestore(f);} );
 }
 
 BlueStore::~BlueStore()
 {
+  AdminSocket *admin_socket = cct->get_admin_socket();
+  if (admin_socket) admin_socket->unregister_inspect("bluestore_dump", to_string(uintptr_t(this)));
+
   cct->_conf.remove_observer(this);
   _shutdown_logger();
   ceph_assert(!mounted);
