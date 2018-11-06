@@ -27,6 +27,20 @@ enum class PerformanceCounterType : uint8_t {
 struct PerformanceCounterDescriptor {
   PerformanceCounterType type = static_cast<PerformanceCounterType>(-1);
 
+  bool is_supported() const {
+    switch (type) {
+    case PerformanceCounterType::WRITE_OPS:
+    case PerformanceCounterType::READ_OPS:
+    case PerformanceCounterType::WRITE_BYTES:
+    case PerformanceCounterType::READ_BYTES:
+    case PerformanceCounterType::WRITE_LATENCY:
+    case PerformanceCounterType::READ_LATENCY:
+      return true;
+    default:
+      return false;
+    }
+  }
+
   PerformanceCounterDescriptor() {
   }
 
@@ -50,6 +64,46 @@ WRITE_CLASS_DENC(PerformanceCounterDescriptor)
 std::ostream& operator<<(std::ostream& os,
                          const PerformanceCounterDescriptor &d);
 
+typedef std::vector<PerformanceCounterDescriptor> PerformanceCounterDescriptors;
+
+template<>
+struct denc_traits<PerformanceCounterDescriptors> {
+  static constexpr bool supported = true;
+  static constexpr bool bounded = false;
+  static constexpr bool featured = false;
+  static constexpr bool need_contiguous = true;
+  static void bound_encode(const PerformanceCounterDescriptors& v, size_t& p) {
+    p += sizeof(uint32_t);
+    const auto size = v.size();
+    if (size) {
+      size_t per = 0;
+      denc(v.front(), per);
+      p +=  per * size;
+    }
+  }
+  static void encode(const PerformanceCounterDescriptors& v,
+                     bufferlist::contiguous_appender& p) {
+    denc_varint(v.size(), p);
+    for (auto& i : v) {
+      denc(i, p);
+    }
+  }
+  static void decode(PerformanceCounterDescriptors& v,
+                     bufferptr::const_iterator& p) {
+    unsigned num;
+    denc_varint(num, p);
+    v.clear();
+    v.reserve(num);
+    for (unsigned i=0; i < num; ++i) {
+      PerformanceCounterDescriptor d;
+      denc(d, p);
+      if (d.is_supported()) {
+        v.push_back(std::move(d));
+      }
+    }
+  }
+};
+
 typedef int OSDPerfMetricQueryID;
 
 struct OSDPerfMetricQuery {
@@ -66,15 +120,17 @@ struct OSDPerfMetricQuery {
   }
 
   void get_performance_counter_descriptors(
-      std::vector<PerformanceCounterDescriptor> *descriptors) const {
+      PerformanceCounterDescriptors *descriptors) const {
     *descriptors = performance_counter_descriptors;
   }
+
+  void filter_out_unknown_performance_counter_descriptors();
 
   void update_counters(const OpRequest& op, uint64_t inb, uint64_t outb,
                        const utime_t &now, PerformanceCounters *counters) const;
   void pack_counters(const PerformanceCounters &counters, bufferlist *bl) const;
 
-  std::vector<PerformanceCounterDescriptor> performance_counter_descriptors = {
+  PerformanceCounterDescriptors performance_counter_descriptors = {
     {PerformanceCounterType::WRITE_OPS},
     {PerformanceCounterType::READ_OPS},
     {PerformanceCounterType::WRITE_BYTES},
@@ -88,7 +144,7 @@ WRITE_CLASS_DENC(OSDPerfMetricQuery)
 std::ostream& operator<<(std::ostream& os, const OSDPerfMetricQuery &query);
 
 struct OSDPerfMetricReport {
-  std::vector<PerformanceCounterDescriptor> performance_counter_descriptors;
+  PerformanceCounterDescriptors performance_counter_descriptors;
   std::map<std::string, bufferlist> group_packed_performance_counters;
 
   DENC(OSDPerfMetricReport, v, p) {
