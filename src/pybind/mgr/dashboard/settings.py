@@ -43,6 +43,10 @@ class Options(object):
     # Orchestrator settings
     ORCHESTRATOR_BACKEND = ('', str)
 
+    # Prometheus settings
+    PROMETHEUS_API_HOST = ('', str)  # Not in use ATM
+    ALERTMANAGER_API_HOST = ('', str)
+
     @staticmethod
     def has_default_value(name):
         return getattr(Settings, name, None) is None or \

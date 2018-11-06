@@ -13,6 +13,7 @@ import { HostsComponent } from './ceph/cluster/hosts/hosts.component';
 import { LogsComponent } from './ceph/cluster/logs/logs.component';
 import { MonitorComponent } from './ceph/cluster/monitor/monitor.component';
 import { OsdListComponent } from './ceph/cluster/osd/osd-list/osd-list.component';
+import { PrometheusListComponent } from './ceph/cluster/prometheus/prometheus-list/prometheus-list.component';
 import { DashboardComponent } from './ceph/dashboard/dashboard/dashboard.component';
 import { PerformanceCounterComponent } from './ceph/performance-counter/performance-counter/performance-counter.component';
 import { PoolFormComponent } from './ceph/pool/pool-form/pool-form.component';
@@ -108,6 +109,12 @@ const routes: Routes = [
     component: LogsComponent,
     canActivate: [AuthGuardService],
     data: { breadcrumbs: 'Cluster/Logs' }
+  },
+  {
+    path: 'alerts',
+    component: PrometheusListComponent,
+    canActivate: [AuthGuardService],
+    data: { breadcrumbs: 'Cluster/Alerts' }
   },
   {
     path: 'perf_counters/:type/:id',
