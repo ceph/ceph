@@ -30,7 +30,8 @@
                  required
                  autofocus>
           <div class="help-block"
-               *ngIf="(loginForm.submitted || username.dirty) && username.invalid">Username is required</div>
+               *ngIf="(loginForm.submitted || username.dirty) && username.invalid"
+               i18n>Username is required</div>
         </div>
 
         <!-- Password -->
@@ -53,14 +54,16 @@
             </span>
           </div>
           <div class="help-block"
-               *ngIf="(loginForm.submitted || password.dirty) && password.invalid">Password is required
+               *ngIf="(loginForm.submitted || password.dirty) && password.invalid"
+               i18n>Password is required
           </div>
         </div>
 
         <input type="submit"
                class="btn btn-primary btn-block"
                [disabled]="loginForm.invalid"
-               value="Login">
+               value="Login"
+               i18n-value>
       </form>
     </div>
   </div>

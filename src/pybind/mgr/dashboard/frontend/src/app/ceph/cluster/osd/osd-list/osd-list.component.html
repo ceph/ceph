@@ -75,6 +75,8 @@
       {{ safeToDestroyResult.message }}
     </cd-warning-panel>
   </div>
-  <strong>OSD {{ selection.first().id }}</strong> will be
-  <strong>{{ actionDescription }}</strong> if you proceed.
+  <ng-container i18n>
+    <strong>OSD {{ selection.first().id }}</strong> will be
+    <strong>{{ actionDescription }}</strong> if you proceed.
+  </ng-container>
 </ng-template>

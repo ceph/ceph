@@ -1,5 +1,6 @@
 <div class="modal-header">
-  <h4 class="modal-title pull-left">{{ editing ? 'Rename' : 'Create' }} RBD Snapshot</h4>
+  <h4 class="modal-title pull-left"
+      i18n>{ editing, select, true {Rename} other {Create}} RBD Snapshot</h4>
   <button type="button"
           class="close pull-right"
           aria-label="Close"
@@ -43,12 +44,14 @@
   <div class="modal-footer">
     <div class="button-group text-right">
       <cd-submit-button [form]="snapshotForm"
-                        (submitAction)="submit()">
-        {{ editing ? 'Rename' : 'Create' }} Snapshot
+                        (submitAction)="submit()"
+                        i18n>
+        { editing, select, true {Rename} other {Create}} Snapshot
       </cd-submit-button>
       <button type="button"
               class="btn btn-sm btn-default"
-              (click)="modalRef.hide()">Close</button>
+              (click)="modalRef.hide()"
+              i18n>Close</button>
     </div>
   </div>
 </form>
