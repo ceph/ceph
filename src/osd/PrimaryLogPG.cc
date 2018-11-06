@@ -5502,7 +5502,7 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
       }
     }
     if (r == -EIO) {
-      r = rep_repair_primary_object(soid, ctx);
+      r = rep_repair_primary_object(soid, ctx->op, ctx->new_obs);
     }
     if (r >= 0)
       op.extent.length = r;
@@ -5596,7 +5596,7 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
       r = pgbackend->objects_read_sync(soid, miter->first, miter->second,
 				       op.flags, &tmpbl);
       if (r == -EIO) {
-        r = rep_repair_primary_object(soid, ctx);
+        r = rep_repair_primary_object(soid, ctx->op, ctx->new_obs);
       }
       if (r < 0) {
 	return r;
@@ -5643,7 +5643,7 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
           << " full-object read crc 0x" << crc
           << " != expected 0x" << oi.data_digest
           << std::dec << " on " << soid;
-        r = rep_repair_primary_object(soid, ctx);
+        r = rep_repair_primary_object(soid, ctx->op, ctx->new_obs);
 	if (r < 0) {
 	  return r;
 	}
@@ -15078,9 +15078,11 @@ bool PrimaryLogPG::check_osdmap_full(const set<pg_shard_t> &missing_on)
     return osd->check_osdmap_full(missing_on);
 }
 
-int PrimaryLogPG::rep_repair_primary_object(const hobject_t& soid, OpContext *ctx)
+int PrimaryLogPG::rep_repair_primary_object(
+  const hobject_t& soid,
+  OpRequestRef& op,
+  const ObjectState& obs)
 {
-  OpRequestRef op = ctx->op;
   // Only supports replicated pools
   ceph_assert(!pool.info.is_erasure());
   ceph_assert(is_primary());
@@ -15094,8 +15096,7 @@ int PrimaryLogPG::rep_repair_primary_object(const hobject_t& soid, OpContext *ct
   }
 
   ceph_assert(!pg_log.get_missing().is_missing(soid));
-  auto& oi = ctx->new_obs.oi;
-  eversion_t v = oi.version;
+  eversion_t v = obs.oi.version;
 
   missing_loc.add_missing(soid, v, eversion_t());
   if (primary_error(soid, v)) {
