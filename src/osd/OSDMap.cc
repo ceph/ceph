@@ -26,6 +26,7 @@
 #include "common/errno.h"
 #include "common/Formatter.h"
 #include "common/TextTable.h"
+#include "common/stddev.h"
 #include "global/global_context.h"
 #include "include/ceph_features.h"
 #include "include/str_map.h"
@@ -4089,16 +4090,14 @@ int OSDMap::summarize_mapping_stats(
   }
 
   float avg_pg = (float)total_pg / (float)num_up_in;
-  float base_stddev = 0, new_stddev = 0;
+  Stddev base_stddev, new_stddev;
   int min = -1, max = -1;
   unsigned min_base_pg = 0, max_base_pg = 0;
   unsigned min_new_pg = 0, max_new_pg = 0;
   for (int osd = 0; osd < get_max_osd(); ++osd) {
     if (is_up(osd) && is_in(osd)) {
-      float base_diff = (float)base_by_osd[osd] - avg_pg;
-      base_stddev += base_diff * base_diff;
-      float new_diff = (float)new_by_osd[osd] - avg_pg;
-      new_stddev += new_diff * new_diff;
+      base_stddev.enter(base_by_osd[osd]);
+      new_stddev.enter(new_by_osd[osd]);
       if (min < 0 || base_by_osd[osd] < min_base_pg) {
 	min = osd;
 	min_base_pg = base_by_osd[osd];
@@ -4111,8 +4110,6 @@ int OSDMap::summarize_mapping_stats(
       }
     }
   }
-  base_stddev = sqrt(base_stddev / num_up_in);
-  new_stddev = sqrt(new_stddev / num_up_in);
 
   float edev = sqrt(avg_pg * (1.0 - (1.0 / (double)num_up_in)));
 
@@ -4133,15 +4130,15 @@ int OSDMap::summarize_mapping_stats(
   }
   if (f) {
     f->dump_float("avg_pgs", avg_pg);
-    f->dump_float("std_dev", base_stddev);
+    f->dump_float("std_dev", base_stddev.value());
     f->dump_float("expected_baseline_std_dev", edev);
     if (newmap)
-      f->dump_float("new_std_dev", new_stddev);
+      f->dump_float("new_std_dev", new_stddev.value());
   } else {
     ss << "avg " << avg_pg << "\n";
-    ss << "stddev " << base_stddev;
+    ss << "stddev " << base_stddev.value();
     if (newmap)
-      ss << " -> " << new_stddev;
+      ss << " -> " << new_stddev.value();
     ss << " (expected baseline " << edev << ")\n";
   }
   if (min >= 0) {

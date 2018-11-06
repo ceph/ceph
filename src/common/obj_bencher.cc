@@ -136,10 +136,7 @@ void *ObjBencher::status_printer(void *_bencher) {
       if (bandwidth < data.idata.min_bandwidth)
         data.idata.min_bandwidth = bandwidth;
 
-      ++data.idata.bandwidth_cycles;
-      double delta = bandwidth - data.idata.avg_bandwidth;
-      data.idata.avg_bandwidth += delta / data.idata.bandwidth_cycles;
-      data.idata.bandwidth_diff_sum += delta * (bandwidth - data.idata.avg_bandwidth);
+      data.idata.bandwidth_stddev.enter(bandwidth);
     }
 
     if (cycleSinceChange)
@@ -154,10 +151,7 @@ void *ObjBencher::status_printer(void *_bencher) {
       if (iops < data.idata.min_iops)
         data.idata.min_iops = iops;
 
-      ++data.idata.iops_cycles;
-      double delta = iops - data.idata.avg_iops;
-      data.idata.avg_iops += delta / data.idata.iops_cycles;
-      data.idata.iops_diff_sum += delta * (iops - data.idata.avg_iops);
+      data.idata.iops_stddev.enter(iops);
     }
     
     if (formatter)
@@ -278,7 +272,6 @@ int ObjBencher::aio_bench(
   data.min_latency = 9999.0; // this better be higher than initial latency!
   data.max_latency = 0;
   data.avg_latency = 0;
-  data.latency_diff_sum = 0;
   data.object_contents = contentsChars;
   lock.unlock();
 
@@ -501,9 +494,8 @@ int ObjBencher::write_bench(int secondsToRun,
     if (data.cur_latency.count() < data.min_latency)
       data.min_latency = data.cur_latency.count();
     ++data.finished;
-    double delta = data.cur_latency.count() - data.avg_latency;
     data.avg_latency = total_latency / data.finished;
-    data.latency_diff_sum += delta * (data.cur_latency.count() - data.avg_latency);
+    data.latency_stddev.enter(data.cur_latency.count());
     --data.in_flight;
     lock.unlock();
     release_completion(slot);
@@ -547,9 +539,8 @@ int ObjBencher::write_bench(int secondsToRun,
     if (data.cur_latency.count() < data.min_latency)
       data.min_latency = data.cur_latency.count();
     ++data.finished;
-    double delta = data.cur_latency.count() - data.avg_latency;
     data.avg_latency = total_latency / data.finished;
-    data.latency_diff_sum += delta * (data.cur_latency.count() - data.avg_latency);
+    data.latency_stddev.enter(data.cur_latency.count());
     --data.in_flight;
     lock.unlock();
     release_completion(slot);
@@ -569,40 +560,21 @@ int ObjBencher::write_bench(int secondsToRun,
        timePassed.count();
   bandwidth = bandwidth/(1024*1024); // we want it in MB/sec
 
-  double bandwidth_stddev;
-  double iops_stddev;
-  double latency_stddev;
-  if (data.idata.bandwidth_cycles > 1) {
-    bandwidth_stddev = std::sqrt(data.idata.bandwidth_diff_sum / (data.idata.bandwidth_cycles - 1));
-  } else {
-    bandwidth_stddev = 0;
-  }
-  if (data.idata.iops_cycles > 1) {
-    iops_stddev = std::sqrt(data.idata.iops_diff_sum / (data.idata.iops_cycles - 1));
-  } else {
-    iops_stddev = 0;
-  }
-  if (data.finished > 1) {
-    latency_stddev = std::sqrt(data.latency_diff_sum / (data.finished - 1));
-  } else {
-    latency_stddev = 0;
-  }
-
   if (!formatter) {
     out(cout) << "Total time run:         " << timePassed.count() << std::endl
        << "Total writes made:      " << data.finished << std::endl
        << "Write size:             " << data.op_size << std::endl
        << "Object size:            " << data.object_size << std::endl      
        << "Bandwidth (MB/sec):     " << setprecision(6) << bandwidth << std::endl
-       << "Stddev Bandwidth:       " << bandwidth_stddev << std::endl
+       << "Stddev Bandwidth:       " << data.idata.bandwidth_stddev.value() << std::endl
        << "Max bandwidth (MB/sec): " << data.idata.max_bandwidth << std::endl
        << "Min bandwidth (MB/sec): " << data.idata.min_bandwidth << std::endl
        << "Average IOPS:           " << (int)(data.finished/timePassed.count()) << std::endl
-       << "Stddev IOPS:            " << iops_stddev << std::endl
+       << "Stddev IOPS:            " << data.idata.iops_stddev.value() << std::endl
        << "Max IOPS:               " << data.idata.max_iops << std::endl
        << "Min IOPS:               " << data.idata.min_iops << std::endl
        << "Average Latency(s):     " << data.avg_latency << std::endl
-       << "Stddev Latency(s):      " << latency_stddev << std::endl
+       << "Stddev Latency(s):      " << data.latency_stddev.value() << std::endl
        << "Max latency(s):         " << data.max_latency << std::endl
        << "Min latency(s):         " << data.min_latency << std::endl;
   } else {
@@ -611,15 +583,15 @@ int ObjBencher::write_bench(int secondsToRun,
     formatter->dump_format("write_size", "%d", data.op_size);
     formatter->dump_format("object_size", "%d", data.object_size);
     formatter->dump_format("bandwidth", "%f", bandwidth);
-    formatter->dump_format("stddev_bandwidth", "%f", bandwidth_stddev);
+    formatter->dump_format("stddev_bandwidth", "%f", data.idata.bandwidth_stddev.value());
     formatter->dump_format("max_bandwidth", "%f", data.idata.max_bandwidth);
     formatter->dump_format("min_bandwidth", "%f", data.idata.min_bandwidth);
     formatter->dump_format("average_iops", "%d", (int)(data.finished/timePassed.count()));
-    formatter->dump_format("stddev_iops", "%d", iops_stddev);
+    formatter->dump_format("stddev_iops", "%f", data.idata.iops_stddev.value());
     formatter->dump_format("max_iops", "%d", data.idata.max_iops);
     formatter->dump_format("min_iops", "%d", data.idata.min_iops);
     formatter->dump_format("average_latency", "%f", data.avg_latency);
-    formatter->dump_format("stddev_latency", "%f", latency_stddev);
+    formatter->dump_format("stddev_latency", "%f", data.latency_stddev.value());
     formatter->dump_format("max_latency", "%f", data.max_latency);
     formatter->dump_format("min_latency", "%f", data.min_latency);
   }
@@ -838,13 +810,6 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
   double bandwidth;
   bandwidth = ((double)data.finished)*((double)data.op_size)/timePassed.count();
   bandwidth = bandwidth/(1024*1024); // we want it in MB/sec
-  
-  double iops_stddev;
-  if (data.idata.iops_cycles > 1) {
-    iops_stddev = std::sqrt(data.idata.iops_diff_sum / (data.idata.iops_cycles - 1));
-  } else {
-    iops_stddev = 0;
-  }
 
   if (!formatter) {
     out(cout) << "Total time run:       " << timePassed.count() << std::endl
@@ -853,7 +818,7 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
        << "Object size:          " << data.object_size << std::endl
        << "Bandwidth (MB/sec):   " << setprecision(6) << bandwidth << std::endl
        << "Average IOPS:         " << (int)(data.finished/timePassed.count()) << std::endl
-       << "Stddev IOPS:          " << iops_stddev << std::endl
+       << "Stddev IOPS:          " << data.idata.iops_stddev.value() << std::endl
        << "Max IOPS:             " << data.idata.max_iops << std::endl
        << "Min IOPS:             " << data.idata.min_iops << std::endl
        << "Average Latency(s):   " << data.avg_latency << std::endl
@@ -866,7 +831,7 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
     formatter->dump_format("object_size", "%d", data.object_size);
     formatter->dump_format("bandwidth", "%f", bandwidth);
     formatter->dump_format("average_iops", "%d", (int)(data.finished/timePassed.count()));
-    formatter->dump_format("stddev_iops", "%f", iops_stddev);
+    formatter->dump_format("stddev_iops", "%f", data.idata.iops_stddev.value());
     formatter->dump_format("max_iops", "%d", data.idata.max_iops);
     formatter->dump_format("min_iops", "%d", data.idata.min_iops);
     formatter->dump_format("average_latency", "%f", data.avg_latency);
@@ -1080,13 +1045,6 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
   double bandwidth;
   bandwidth = ((double)data.finished)*((double)data.op_size)/timePassed.count();
   bandwidth = bandwidth/(1024*1024); // we want it in MB/sec
-  
-  double iops_stddev;
-  if (data.idata.iops_cycles > 1) {
-    iops_stddev = std::sqrt(data.idata.iops_diff_sum / (data.idata.iops_cycles - 1));
-  } else {
-    iops_stddev = 0;
-  }
 
   if (!formatter) {
     out(cout) << "Total time run:       " << timePassed.count() << std::endl
@@ -1095,7 +1053,7 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
        << "Object size:          " << data.object_size << std::endl
        << "Bandwidth (MB/sec):   " << setprecision(6) << bandwidth << std::endl
        << "Average IOPS:         " << (int)(data.finished/timePassed.count()) << std::endl
-       << "Stddev IOPS:          " << iops_stddev << std::endl
+       << "Stddev IOPS:          " << data.idata.iops_stddev.value() << std::endl
        << "Max IOPS:             " << data.idata.max_iops << std::endl
        << "Min IOPS:             " << data.idata.min_iops << std::endl
        << "Average Latency(s):   " << data.avg_latency << std::endl
@@ -1108,7 +1066,7 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
     formatter->dump_format("object_size", "%d", data.object_size);
     formatter->dump_format("bandwidth", "%f", bandwidth);
     formatter->dump_format("average_iops", "%d", (int)(data.finished/timePassed.count()));
-    formatter->dump_format("stddev_iops", "%f", iops_stddev);
+    formatter->dump_format("stddev_iops", "%f", data.idata.iops_stddev.value());
     formatter->dump_format("max_iops", "%d", data.idata.max_iops);
     formatter->dump_format("min_iops", "%d", data.idata.min_iops);
     formatter->dump_format("average_latency", "%f", data.avg_latency);

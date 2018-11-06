@@ -18,6 +18,7 @@
 #include "common/ceph_argparse.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
+#include "common/stddev.h"
 #include "mon/health_check.h"
 
 #include "global/global_init.h"
@@ -583,24 +584,22 @@ int main(int argc, const char **argv)
 	max_osd = i;
 
     }
-    uint64_t avg = in ? (total / in) : 0;
-    double dev = 0;
+    double avg = in ? (total * 1.0 / in) : 0;
+    Stddev stddev;
     for (int i=0; i<n; i++) {
       if (!osdmap.is_in(i))
 	continue;
       if (osdmap.crush->get_item_weight(i) <= 0)
 	continue;
-      dev += (avg - count[i]) * (avg - count[i]);
+      stddev.enter(count[i]);
     }
-    dev /= in;
-    dev = sqrt(dev);
 
     //double edev = sqrt(pgavg) * (double)avg / pgavg;
     double edev = sqrt((double)total / (double)in * (1.0 - (1.0 / (double)in)));
     cout << " in " << in << std::endl;
     cout << " avg " << avg
-	 << " stddev " << dev
-	 << " (" << (dev/avg) << "x)"
+	 << " stddev " << stddev.value()
+	 << " (" << (stddev.value()/avg) << "x)"
 	 << " (expected " << edev << " " << (edev/avg) << "x))"
 	 << std::endl;
 

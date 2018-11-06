@@ -17,6 +17,7 @@
 
 #include "common/ceph_context.h"
 #include "common/Formatter.h"
+#include "common/stddev.h"
 #include "ceph_time.h"
 #include <cfloat>
 
@@ -25,14 +26,10 @@ using ceph::mono_clock;
 struct bench_interval_data {
   double min_bandwidth = DBL_MAX;
   double max_bandwidth = 0;
-  double avg_bandwidth = 0;
-  int bandwidth_cycles = 0;
-  double bandwidth_diff_sum = 0;
+  Stddev bandwidth_stddev;
   int min_iops = INT_MAX;
   int max_iops = 0;
-  double avg_iops = 0;
-  int iops_cycles = 0;
-  double iops_diff_sum = 0;
+  Stddev iops_stddev;
 };
 
 struct bench_data {
@@ -48,7 +45,7 @@ struct bench_data {
   double max_latency;
   double avg_latency;
   struct bench_interval_data idata; // data that is updated by time intervals and not by events
-  double latency_diff_sum;
+  Stddev latency_stddev;
   std::chrono::duration<double> cur_latency; //latency of last completed transaction - in seconds by default
   mono_time start_time; //start time for benchmark - use the monotonic clock as we'll measure the passage of time
   char *object_contents; //pointer to the contents written to each object

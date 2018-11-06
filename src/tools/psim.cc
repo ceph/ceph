@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "common/stddev.h"
 #include "osd/OSDMap.h"
 #include "include/buffer.h"
 
@@ -96,16 +97,14 @@ int main(int argc, char **argv)
     avg += count[i];
   }
   avg /= n;
-  double dev = 0;
+  Stddev stddev;
   for (int i=0; i<n; i++)
-    dev += (avg - count[i]) * (avg - count[i]);
-  dev /= n;
-  dev = sqrt(dev);
+    stddev.enter(count[i]);
 
   double pgavg = (double)osdmap.get_pg_pool(0)->get_pg_num() / (double)n;
   double edev = sqrt(pgavg) * (double)avg / pgavg;
   cout << " avg " << avg
-       << " stddev " << dev
+       << " stddev " << stddev.value()
        << " (expected " << edev << ")"
        << " (indep object placement would be " << sqrt(avg) << ")" << std::endl;
 
