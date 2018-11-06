@@ -53,9 +53,6 @@ export class ConfigurationFormComponent implements OnInit {
     });
 
     this.configForm = new CdFormGroup(formControls);
-    this.configForm._filterValue = (value) => {
-      return value;
-    };
   }
 
   ngOnInit() {
