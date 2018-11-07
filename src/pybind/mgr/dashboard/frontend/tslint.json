@@ -14,7 +14,6 @@
     "indent": [true, "spaces"],
     "interface-over-type-literal": true,
     "label-position": true,
-    "max-line-length": [true, { "limit": 100, "ignore-pattern": "^import |^export {(.*?)}" }],
     "member-access": false,
     "member-ordering": [
       true,

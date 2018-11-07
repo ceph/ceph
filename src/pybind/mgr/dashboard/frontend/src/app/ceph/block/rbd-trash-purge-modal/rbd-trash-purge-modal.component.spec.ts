@@ -40,27 +40,24 @@ describe('RbdTrashPurgeModalComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it(
-    'should finish ngOnInit',
-    fakeAsync(() => {
-      component.poolPermission = new Permission(['read', 'create', 'update', 'delete']);
-      fixture.detectChanges();
-      const req = httpTesting.expectOne('api/pool?attrs=pool_name,application_metadata');
-      req.flush([
-        {
-          application_metadata: ['foo'],
-          pool_name: 'bar'
-        },
-        {
-          application_metadata: ['rbd'],
-          pool_name: 'baz'
-        }
-      ]);
-      tick();
-      expect(component.pools).toEqual(['baz']);
-      expect(component.purgeForm).toBeTruthy();
-    })
-  );
+  it('should finish ngOnInit', fakeAsync(() => {
+    component.poolPermission = new Permission(['read', 'create', 'update', 'delete']);
+    fixture.detectChanges();
+    const req = httpTesting.expectOne('api/pool?attrs=pool_name,application_metadata');
+    req.flush([
+      {
+        application_metadata: ['foo'],
+        pool_name: 'bar'
+      },
+      {
+        application_metadata: ['rbd'],
+        pool_name: 'baz'
+      }
+    ]);
+    tick();
+    expect(component.pools).toEqual(['baz']);
+    expect(component.purgeForm).toBeTruthy();
+  }));
 
   it('should call ngOnInit without pool permissions', () => {
     component.poolPermission = new Permission([]);

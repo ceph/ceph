@@ -125,15 +125,13 @@ describe('OsdListComponent', () => {
   });
 
   describe('test table actions in submenu', () => {
-    beforeEach(
-      fakeAsync(() => {
-        // The menu needs a click to render the dropdown!
-        const dropDownToggle = fixture.debugElement.query(By.css('.dropdown-toggle'));
-        dropDownToggle.triggerEventHandler('click', null);
-        tick();
-        fixture.detectChanges();
-      })
-    );
+    beforeEach(fakeAsync(() => {
+      // The menu needs a click to render the dropdown!
+      const dropDownToggle = fixture.debugElement.query(By.css('.dropdown-toggle'));
+      dropDownToggle.triggerEventHandler('click', null);
+      tick();
+      fixture.detectChanges();
+    }));
 
     it('has all menu entries disabled', () => {
       const tableActionElement = fixture.debugElement.query(By.directive(TableActionsComponent));
