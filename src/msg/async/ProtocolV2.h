@@ -14,12 +14,15 @@ private:
     CONNECTING,
     START_ACCEPT,
     ACCEPTING,
+    ACCEPTED_CLIENT_IDENT,
     READY,
     THROTTLE_MESSAGE,
     THROTTLE_BYTES,
     THROTTLE_DISPATCH_QUEUE,
     READ_MESSAGE_FRONT,
     READ_MESSAGE_COMPLETE,
+    STANDBY,
+    WAIT,
     CLOSED
   };
 
@@ -29,16 +32,20 @@ private:
                                       "CONNECTING",
                                       "START_ACCEPT",
                                       "ACCEPTING",
+                                      "ACCEPTED_CLIENT_IDENT",
                                       "READY",
                                       "THROTTLE_MESSAGE",
                                       "THROTTLE_BYTES",
                                       "THROTTLE_DISPATCH_QUEUE",
                                       "READ_MESSAGE_FRONT",
                                       "READ_MESSAGE_COMPLETE",
+                                      "STANDBY",
+                                      "WAIT",
                                       "CLOSED"};
     return statenames[state];
   }
 
+public:
   enum class Tag : uint32_t {
     AUTH_REQUEST,
     AUTH_BAD_METHOD,
@@ -315,6 +322,7 @@ private:
   bool can_write;
   std::map<int, std::list<std::pair<bufferlist, Message *>>> out_queue;
   std::list<Message *> sent;
+  __u32 connect_seq;
   std::atomic<uint64_t> out_seq{0};
   std::atomic<uint64_t> in_seq{0};
   std::atomic<uint64_t> ack_left{0};
@@ -342,11 +350,9 @@ private:
   Ct<ProtocolV2> *write(CONTINUATION_PARAM(next, ProtocolV2, int),
                         bufferlist &bl);
 
-  inline Ct<ProtocolV2> *_fault() {
-    fault();
-    return nullptr;
-  }
-
+  void requeue_sent();
+  void reset_recv_state();
+  Ct<ProtocolV2> *_fault();
   void discard_out_queue();
   void prepare_send_message(uint64_t features, Message *m, bufferlist &bl);
   Message *_get_next_outgoing(bufferlist *bl);
