@@ -12,7 +12,8 @@ Enabling
 Run the following command to enable the *diskprediction* module in the Ceph
 environment::
 
-    ceph mgr module enable diskprediction
+    ceph mgr module enable diskprediction_cloud
+    ceph mgr module enable diskprediction_local
 
 
 Select the prediction mode::
