@@ -33,6 +33,18 @@ notes (?))
 
     - ``ceph auth caps client.foo mon 'allow r' osd 'allow rw tag cephfs data=cephfs_a' mds 'allow rw, allow rws path=/bar'``
 
+13.2.2
+======
+* 13.2.2 contains the pg hard limit patches(https://tracker.ceph.com/issues/24989).
+  When upgrading to this version, a partial upgrade during recovery/backfill, can cause
+  the osds on the previous version, to fail with assert(trim_to <= info.last_complete).
+  The workaround for users is to upgrade and restart all OSDs to a version with the
+  pg hard limit, or only upgrade when all PGs are active+clean. If you have successfully
+  upgraded to 13.2.2, this issue should not impact you. Going forward, we are working
+  on a clean upgrade path for this feature.
+
+  See also: http://tracker.ceph.com/issues/36686
+
 13.2.3
 ======
 
