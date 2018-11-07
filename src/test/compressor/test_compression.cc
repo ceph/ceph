@@ -337,6 +337,9 @@ INSTANTIATE_TEST_CASE_P(
 #ifdef HAVE_BROTLI
     "brotli",
 #endif
+#ifdef HAVE_ZSTDMT
+    "zstdmt",
+#endif
     "zstd"));
 
 #ifdef __x86_64__

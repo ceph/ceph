@@ -43,6 +43,9 @@ public:
 #ifdef HAVE_BROTLI
     COMP_ALG_BROTLI = 5,
 #endif
+#ifdef HAVE_ZSTDMT
+    COMP_ALG_ZSTDMT = 6,
+#endif
     COMP_ALG_LAST   //the last value for range checks
   };
 
@@ -57,6 +60,9 @@ public:
 #endif
 #ifdef HAVE_BROTLI
 	{ "brotli",	COMP_ALG_BROTLI },
+#endif
+#ifdef HAVE_ZSTDMT
+        { "zstdmt",     COMP_ALG_ZSTDMT},
 #endif
   };
 
