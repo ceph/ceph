@@ -33,14 +33,7 @@ def generate_uuid():
 
 def which(executable):
     """find the location of an executable"""
-    locations = (
-        '/usr/local/bin',
-        '/bin',
-        '/usr/bin',
-        '/usr/local/sbin',
-        '/usr/sbin',
-        '/sbin',
-    )
+    locations = os.getenv('PATH').split(':')
 
     for location in locations:
         executable_path = os.path.join(location, executable)
