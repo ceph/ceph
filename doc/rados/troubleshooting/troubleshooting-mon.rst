@@ -424,7 +424,7 @@ information stored in OSDs.::
     rsync -avz $ms/. user@host:$ms.remote
     rm -rf $ms
     ssh user@host <<EOF
-      for osd in /var/lib/osd/osd-*; do
+      for osd in /var/lib/ceph/osd/ceph-*; do
         ceph-objectstore-tool --data-path \$osd --op update-mon-db --mon-store-path $ms.remote
       done
     EOF
