@@ -10,9 +10,11 @@ tasks:
       deb:
         - libradosstriper-dev
         - librados-dev
+        - libradospp-dev
       rpm:
         - libradosstriper-devel
         - librados-devel
+        - libradospp-devel
 - ceph:
 - workunit:
     clients:
