@@ -13091,7 +13091,7 @@ bool RGWRados::process_expire_objects()
 int RGWRados::cls_rgw_init_index(librados::IoCtx& index_ctx, librados::ObjectWriteOperation& op, string& oid)
 {
   bufferlist in;
-  cls_rgw_bucket_init(op);
+  cls_rgw_bucket_init_index(op);
   return index_ctx.operate(oid, &op);
 }
 
