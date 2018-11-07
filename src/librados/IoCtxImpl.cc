@@ -2092,7 +2092,7 @@ void librados::IoCtxImpl::application_enable_async(const std::string& app_name,
       << "\"pool\": \"" << get_cached_pool_name() << "\","
       << "\"app\": \"" << app_name << "\"";
   if (force) {
-    cmd << ",\"force\":\"--yes-i-really-mean-it\"";
+    cmd << ",\"yes_i_really_mean_it\": true";
   }
   cmd << "}";
 
