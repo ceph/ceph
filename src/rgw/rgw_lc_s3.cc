@@ -114,49 +114,31 @@ bool LCFilter_S3::xml_end(const char* el) {
   return !(single_cond && num_conditions > 1);
 }
 
-bool LCTransition_S3::xml_end(const char* el) {
-  LCDays_S3 *lc_days = static_cast<LCDays_S3 *>(find_first("Days"));
-  LCDate_S3 *lc_date = static_cast<LCDate_S3 *>(find_first("Date"));
-  if ((lc_days && lc_date) || (!lc_days && !lc_date)) {
-    return false;
+void LCTransition_S3::decode_xml(XMLObj *obj) {
+  bool days_exist = RGWXMLDecoder::decode_xml("Days", days, obj);
+  bool date_exist = RGWXMLDecoder::decode_xml("Date", date, obj);
+  if (days_exist && date_exist) {
+    throw RGWXMLDecoder::err("transition action can't have both days and date");
+  } else if (!days_exist && !date_exist) {
+    throw RGWXMLDecoder::err("transition action must have days or date");
   }
-  if (lc_days) {
-    days = lc_days->get_data();
-  } else {
-    date = lc_date->get_data();
-    //We need return xml error according to S3
-    if (!check_date(date)) {
-      return false;
-    }
+  if (date_exist && !check_date(date)) {
+    throw RGWXMLDecoder::err("invalid date format");
   }
-  LCStorageClass_S3 *lc_storage_class = static_cast<LCStorageClass_S3 *>(find_first("StorageClass"));
-  if (!lc_storage_class) {
-    return false;
-  }
-  storage_class = lc_storage_class->get_data();
+  RGWXMLDecoder::decode_xml("StorageClass", storage_class, obj, true);
   if (storage_class.compare("STANDARD_IA") != 0 && storage_class.compare("ONEZONE_IA") != 0 &&
       storage_class.compare("GLACIER") != 0) {
-    return false;
+    throw RGWXMLDecoder::err("invalid storage class");
   }
-  return true;
 }
 
-bool LCNoncurTransition_S3::xml_end(const char* el) {
-  LCDays_S3 *lc_noncur_days = static_cast<LCDays_S3 *>(find_first("NoncurrentDays"));
-  if (!lc_noncur_days) {
-    return false;
-  }
-  days = lc_noncur_days->get_data();
-  LCStorageClass_S3 *lc_storage_class = static_cast<LCStorageClass_S3 *>(find_first("StorageClass"));
-  if (!lc_storage_class) {
-    return false;
-  }
-  storage_class = lc_storage_class->get_data();
+void LCNoncurTransition_S3::decode_xml(XMLObj *obj) {
+  RGWXMLDecoder::decode_xml("NoncurrentDays", days, obj, true);
+  RGWXMLDecoder::decode_xml("StorageClass", storage_class, obj, true);
   if (storage_class.compare("STANDARD_IA") != 0 && storage_class.compare("ONEZONE_IA") != 0 &&
       storage_class.compare("GLACIER") != 0) {
-    return false;
+    throw RGWXMLDecoder::err("invalid storage class");
   }
-  return true;
 }
 
 
@@ -168,8 +150,8 @@ bool LCRule_S3::xml_end(const char *el) {
   LCNoncurExpiration_S3 *lc_noncur_expiration;
   LCMPExpiration_S3 *lc_mp_expiration;
   LCFilter_S3 *lc_filter;
-  LCTransition_S3 *lc_transition;
-  LCNoncurTransition_S3 *lc_noncur_transition;
+  list<LCTransition_S3> lc_transitions;
+  list<LCNoncurTransition_S3> lc_noncur_transitions;
   id.clear();
   prefix.clear();
   status.clear();
@@ -220,12 +202,11 @@ bool LCRule_S3::xml_end(const char *el) {
   lc_noncur_expiration = static_cast<LCNoncurExpiration_S3 *>(find_first("NoncurrentVersionExpiration"));
   lc_mp_expiration = static_cast<LCMPExpiration_S3 *>(find_first("AbortIncompleteMultipartUpload"));
 
-  XMLObjIter iter = find("Transition");
-  lc_transition = static_cast<LCTransition_S3 *>(iter.get_next());
-  XMLObjIter noncur_iter = find("NoncurrentVersionTransition");
-  lc_noncur_transition = static_cast<LCNoncurTransition_S3 *>(noncur_iter.get_next());
+  do_decode_xml_obj(lc_transitions, "Transition", this);
+  do_decode_xml_obj(lc_noncur_transitions, "NoncurrentVersionTransition", this);
 
-  if (!lc_expiration && !lc_noncur_expiration && !lc_mp_expiration && !lc_transition && !lc_noncur_transition) {
+  if (!lc_expiration && !lc_noncur_expiration && !lc_mp_expiration &&
+      lc_transitions.empty() && lc_noncur_transitions.empty()) {
     return false;
   } else {
     if (lc_expiration) {
@@ -243,17 +224,15 @@ bool LCRule_S3::xml_end(const char *el) {
     if (lc_mp_expiration) {
       mp_expiration = *lc_mp_expiration;
     }
-    while (lc_transition) {
+    for(LCTransition_S3 &lc_transition: lc_transitions) {
       if (!add_transition(lc_transition)) {
         return false;
       }
-      lc_transition = static_cast<LCTransition_S3 *>(iter.get_next());
     }
-    while (lc_noncur_transition) {
+    for(LCNoncurTransition_S3 &lc_noncur_transition: lc_noncur_transitions) {
       if (!add_noncur_transition(lc_noncur_transition)) {
         return false;
       }
-      lc_noncur_transition = static_cast<LCNoncurTransition_S3 *>(noncur_iter.get_next());
     }
   }
   return true;
@@ -359,10 +338,6 @@ XMLObj *RGWLCXMLParser_S3::alloc_obj(const char *el)
     obj = new LCDays_S3();
   } else if (strcmp(el, "StorageClass") == 0) {
     obj = new LCStorageClass_S3();
-  } else if (strcmp(el, "Transition") == 0) {
-    obj = new LCTransition_S3();
-  } else if (strcmp(el, "NoncurrentVersionTransition") == 0) {
-    obj = new LCNoncurTransition_S3();
   }
   return obj;
 }

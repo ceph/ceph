@@ -89,7 +89,7 @@ public:
     return true;
   }
 };
-WRITE_CLASS_ENCODER(LCExpiration);
+WRITE_CLASS_ENCODER(LCExpiration)
 
 class LCTransition
 {
@@ -150,7 +150,7 @@ public:
   }
   void dump(Formatter *f) const;
 };
-WRITE_CLASS_ENCODER(LCTransition);
+WRITE_CLASS_ENCODER(LCTransition)
 
 class LCFilter
 {
@@ -206,7 +206,7 @@ class LCFilter
   }
   void dump(Formatter *f) const;
 };
-WRITE_CLASS_ENCODER(LCFilter);
+WRITE_CLASS_ENCODER(LCFilter)
 
 
 
@@ -298,13 +298,13 @@ public:
     dm_expiration = _dm_expiration;
   }
 
-  bool add_transition(LCTransition* _transition) {
-    auto ret = transitions.emplace(_transition->get_storage_class(), *_transition);
+  bool add_transition(const LCTransition& _transition) {
+    auto ret = transitions.emplace(_transition.get_storage_class(), _transition);
     return ret.second;
   }
 
-  bool add_noncur_transition(LCTransition* _noncur_transition) {
-    auto ret = noncur_transitions.emplace(_noncur_transition->get_storage_class(), *_noncur_transition);
+  bool add_noncur_transition(const LCTransition& _noncur_transition) {
+    auto ret = noncur_transitions.emplace(_noncur_transition.get_storage_class(), _noncur_transition);
     return ret.second;
   }
 
@@ -355,10 +355,9 @@ WRITE_CLASS_ENCODER(LCRule)
 
 struct transition_action
 {
-  int days;
+  int days{0};
   boost::optional<ceph::real_time> date;
   string storage_class;
-  transition_action() : days(0) {}
 };
 
 struct lc_op

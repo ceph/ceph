@@ -191,13 +191,13 @@ public:
   string& to_str() { return data; }
 };
 
-class LCTransition_S3 : public LCTransition, public XMLObj
+class LCTransition_S3 : public LCTransition
 {
 public:
   LCTransition_S3() {}
   ~LCTransition_S3() {}
 
-  bool xml_end(const char *el) override;
+  void decode_xml(XMLObj *obj);
   void to_xml(ostream& out) {
     out << "<Transition>";
     if (!days.empty()) {
@@ -220,13 +220,13 @@ public:
   }
 };
 
-class LCNoncurTransition_S3 : public LCTransition, public XMLObj
+class LCNoncurTransition_S3 : public LCTransition
 {
 public:
   LCNoncurTransition_S3() {}
   ~LCNoncurTransition_S3() {}
 
-  bool xml_end(const char *el) override;
+  void decode_xml(XMLObj *obj);
   void to_xml(ostream& out) {
     out << "<NoncurrentVersionTransition>" << "<NoncurrentDays>" << days << "</NoncurrentDays>"
         << "<StorageClass>" << storage_class << "</StorageClass>" << "</NoncurrentVersionTransition>";
