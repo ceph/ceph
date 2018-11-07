@@ -733,6 +733,7 @@ class Orch(DeepSea):
         super(Orch, self).__init__(ctx, config)
         # cast stage/state_orch value to str because it might be a number
         self.stage = str(self.config.get("stage", ''))
+        self.alternative_defaults = self.config.get('alternative_defaults', [])
         self.state_orch = str(self.config.get("state_orch", ''))
         if not self.stage and not self.state_orch:
             raise ConfigError(
@@ -743,6 +744,7 @@ class Orch(DeepSea):
             raise ConfigError(
                 "(orch subtask) unrecognized Stage ->{}<-".format(self.stage)
                 )
+        self.log.debug("munged config is {}".format(self.config))
 
     def __log_stage_start(self, stage):
         self.log.info(anchored(
@@ -788,6 +790,21 @@ class Orch(DeepSea):
         if self.quiet_salt:
             cmd += " 2>/dev/null"
         self.master_remote.run(args=cmd)
+
+    def _maybe_apply_alternative_defaults(self):
+        if self.alternative_defaults:
+            for cnf in self.alternative_defaults:
+                for k, v in cnf.items():
+                    info_msg = (
+                        "Applying alternative default {}: {}".format(k, v)
+                        )
+                    data = "{}: {}\n".format(k, v)
+                    sudo_append_to_file(
+                        self.master_remote,
+                        '/srv/pillar/ceph/stack/global.yml',
+                        data,
+                        )
+                    self.log.info(info_msg)
 
     def _maybe_cat_ganesha_conf(self):
         ganesha_host = self.role_type_present('ganesha')
@@ -922,6 +939,7 @@ class Orch(DeepSea):
 
     def begin(self):
         self.log.debug("beginning of begin method")
+        self._maybe_apply_alternative_defaults()
         if self.state_orch:
             self.log.info(anchored(
                 "running orchestration {}".format(self.state_orch)
