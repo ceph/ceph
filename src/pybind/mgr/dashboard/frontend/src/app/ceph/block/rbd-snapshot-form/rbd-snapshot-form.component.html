@@ -31,11 +31,9 @@
                name="snapshotName"
                formControlName="snapshotName"
                autofocus>
-        <span i18n
-              class="help-block"
-              *ngIf="snapshotForm.showError('snapshotName', formDir, 'required')">
-          This field is required.
-        </span>
+        <span class="help-block"
+              *ngIf="snapshotForm.showError('snapshotName', formDir, 'required')"
+              i18n>This field is required.</span>
       </div>
     </div>
 
@@ -45,9 +43,7 @@
     <div class="button-group text-right">
       <cd-submit-button [form]="snapshotForm"
                         (submitAction)="submit()"
-                        i18n>
-        { editing, select, true {Rename} other {Create}} Snapshot
-      </cd-submit-button>
+                        i18n>{ editing, select, true {Rename} other {Create}} Snapshot</cd-submit-button>
       <button type="button"
               class="btn btn-sm btn-default"
               (click)="modalRef.hide()"

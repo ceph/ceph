@@ -60,10 +60,9 @@
 </ng-template>
 
 <ng-template #markOsdConfirmationTpl
-             i18n
              let-markActionDescription="markActionDescription">
-  <strong>OSD {{ selection.first().id }}</strong> will be marked
-  <strong>{{ markActionDescription }}</strong> if you proceed.
+  <ng-container i18n><strong>OSD {{ selection.first().id }}</strong> will be marked
+  <strong>{{ markActionDescription }}</strong> if you proceed.</ng-container>
 </ng-template>
 
 <ng-template #criticalConfirmationTpl
@@ -75,8 +74,6 @@
       {{ safeToDestroyResult.message }}
     </cd-warning-panel>
   </div>
-  <ng-container i18n>
-    <strong>OSD {{ selection.first().id }}</strong> will be
-    <strong>{{ actionDescription }}</strong> if you proceed.
-  </ng-container>
+  <ng-container i18n><strong>OSD {{ selection.first().id }}</strong> will be
+  <strong>{{ actionDescription }}</strong> if you proceed.</ng-container>
 </ng-template>

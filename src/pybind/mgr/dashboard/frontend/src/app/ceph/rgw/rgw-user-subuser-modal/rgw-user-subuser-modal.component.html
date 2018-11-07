@@ -1,7 +1,6 @@
 <div class="modal-header">
   <h4 class="modal-title pull-left"
-      i18n>Subuser
-  </h4>
+      i18n>Subuser</h4>
   <button type="button"
           class="close pull-right"
           aria-label="Close"
@@ -20,8 +19,7 @@
          [ngClass]="{'has-error': formGroup.showError('uid', frm)}">
       <label class="control-label col-sm-3"
              for="uid"
-             i18n>Username
-      </label>
+             i18n>Username</label>
       <div class="col-sm-9">
         <input id="uid"
                class="form-control"
@@ -50,14 +48,10 @@
                autofocus>
         <span class="help-block"
               *ngIf="formGroup.showError('subuid', frm, 'required')"
-              i18n>
-          This field is required.
-        </span>
+              i18n>This field is required.</span>
         <span class="help-block"
               *ngIf="formGroup.showError('subuid', frm, 'subuserIdExists')"
-              i18n>
-          The chosen subuser ID is already in use.
-        </span>
+              i18n>The chosen subuser ID is already in use.</span>
       </div>
     </div>
 
@@ -74,27 +68,19 @@
                 class="form-control"
                 formControlName="perm">
           <option i18n
-                  [ngValue]="null">
-            -- Select a permission --
-          </option>
+                  [ngValue]="null">-- Select a permission --</option>
           <option *ngFor="let perm of ['read', 'write']"
                   [value]="perm">
             {{ perm }}
           </option>
           <option i18n
-                  value="read-write">
-            read, write
-          </option>
+                  value="read-write">read, write</option>
           <option i18n
-                  value="full-control">
-            full
-          </option>
+                  value="full-control">full</option>
         </select>
         <span class="help-block"
               *ngIf="formGroup.showError('perm', frm, 'required')"
-              i18n>
-          This field is required.
-        </span>
+              i18n>This field is required.</span>
       </div>
     </div>
 
@@ -110,8 +96,7 @@
                    type="checkbox"
                    formControlName="generate_secret">
             <label for="generate_secret"
-                   i18n>Auto-generate secret
-            </label>
+                   i18n>Auto-generate secret</label>
           </div>
         </div>
       </div>
@@ -144,9 +129,7 @@
           </div>
           <span class="help-block"
                 *ngIf="formGroup.showError('secret_key', frm, 'required')"
-                i18n>
-            This field is required.
-          </span>
+                i18n>This field is required.</span>
         </div>
       </div>
 
@@ -161,7 +144,6 @@
     <button class="btn btn-sm btn-default"
             type="button"
             (click)="bsModalRef.hide()"
-            i18n>Close
-    </button>
+            i18n>Close</button>
   </div>
 </form>

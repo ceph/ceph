@@ -12,9 +12,7 @@
       <div class="modal-body">
         <ng-container *ngTemplateOutlet="bodyTemplate; context: bodyContext"></ng-container>
         <div class="question">
-          <p i18n>
-            Are you sure that you want to {{ actionDescription | lowercase }} the selected {{ itemDescription }}?
-          </p>
+          <p i18n>Are you sure that you want to {{ actionDescription | lowercase }} the selected {{ itemDescription }}?</p>
           <div class="form-group"
                [ngClass]="{'has-error': deletionForm.showError('confirmation', formDir)}">
             <div class="checkbox checkbox-primary">
@@ -24,9 +22,7 @@
                      formControlName="confirmation"
                      autofocus>
               <label i18n
-                     for="confirmation">
-                Yes, I am sure.
-              </label>
+                     for="confirmation">Yes, I am sure.</label>
             </div>
           </div>
         </div>
@@ -39,9 +35,7 @@
         </cd-submit-button>
         <button class="btn btn-link btn-sm"
                 (click)="hideModal()"
-                i18n>
-          Cancel
-        </button>
+                i18n>Cancel</button>
       </div>
     </form>
   </ng-container>
