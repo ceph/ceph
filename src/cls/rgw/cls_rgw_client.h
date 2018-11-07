@@ -230,7 +230,7 @@ public:
 };
 
 /* bucket index */
-void cls_rgw_bucket_init(librados::ObjectWriteOperation& o);
+void cls_rgw_bucket_init_index(librados::ObjectWriteOperation& o);
 
 class CLSRGWConcurrentIO {
 protected:
