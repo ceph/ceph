@@ -36,14 +36,12 @@ class Email(MgrModule):
 
         email_message = cmd['msg']
 
-        if 'port' in cmd:
-            port = cmd['port']
-        else:
-            port = 465
         if 'host' in cmd:
             host = cmd['host']
         else:
             host = 'localhost'
+
+        port = cmd.get('port', 465)
 
         try:
             smtpObj = smtplib.SMTP(host, port)
