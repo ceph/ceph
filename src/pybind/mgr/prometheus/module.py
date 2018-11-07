@@ -706,19 +706,16 @@ class StandbyModule(MgrStandbyModule):
             @cherrypy.expose
             def index(self):
                 active_uri = module.get_active_uri()
-                return '''<!DOCTYPE html>
-<html>
-	<head><title>Ceph Exporter</title></head>
-	<body>
-		<h1>Ceph Exporter</h1>
-        <p><a href='{}metrics'>Metrics</a></p>
-	</body>
-</html>'''.format(active_uri)
+                if active_uri:
+                    module.log.info("Redirecting to active '%s'", active_uri)
+                    raise cherrypy.HTTPRedirect(active_uri)
 
             @cherrypy.expose
             def metrics(self):
-                cherrypy.response.headers['Content-Type'] = 'text/plain'
-                return ''
+                active_uri = module.get_active_uri()
+                if active_uri:
+                    module.log.info("Redirecting to active '%s/metrics'", active_uri)
+                    raise cherrypy.HTTPRedirect('{}/metrics'.format(active_uri))
 
         cherrypy.tree.mount(Root(), '/', {})
         self.log.info('Starting engine...')
