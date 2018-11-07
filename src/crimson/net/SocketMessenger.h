@@ -36,12 +36,6 @@ class SocketMessenger final : public Messenger {
   std::set<SocketConnectionRef> accepting_conns;
   using Throttle = ceph::thread::Throttle;
   ceph::net::PolicySet<Throttle> policy_set;
-  seastar::gate pending_dispatch;
-
-  seastar::future<> dispatch(SocketConnectionRef conn);
-
-  seastar::future<> accept(seastar::connected_socket socket,
-                           seastar::socket_address paddr);
 
  public:
   SocketMessenger(const entity_name_t& myname);
@@ -65,6 +59,9 @@ class SocketMessenger final : public Messenger {
 		 bool force_new) override;
 
  public:
+  // TODO: change to per-connection gate
+  seastar::gate pending_dispatch;
+
   void set_default_policy(const SocketPolicy& p);
   void set_policy(entity_type_t peer_type, const SocketPolicy& p);
   void set_policy_throttler(entity_type_t peer_type, Throttle* throttle);

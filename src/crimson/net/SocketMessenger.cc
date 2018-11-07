@@ -40,61 +40,6 @@ void SocketMessenger::bind(const entity_addr_t& addr)
   listener = seastar::listen(address, lo);
 }
 
-seastar::future<> SocketMessenger::dispatch(SocketConnectionRef conn)
-{
-  return seastar::keep_doing([=] {
-      return conn->read_message()
-        .then([=] (MessageRef msg) {
-          // start dispatch, ignoring exceptions from the application layer
-          seastar::with_gate(pending_dispatch, [=, msg = std::move(msg)] {
-              return dispatcher->ms_dispatch(conn, std::move(msg))
-                .handle_exception([] (std::exception_ptr eptr) {});
-            });
-          // return immediately to start on the next message
-          return seastar::now();
-        });
-    }).handle_exception_type([=] (const std::system_error& e) {
-      if (e.code() == error::connection_aborted ||
-          e.code() == error::connection_reset) {
-        return seastar::with_gate(pending_dispatch, [=] {
-            return dispatcher->ms_handle_reset(conn);
-          });
-      } else if (e.code() == error::read_eof) {
-        return seastar::with_gate(pending_dispatch, [=] {
-            return dispatcher->ms_handle_remote_reset(conn);
-          });
-      } else {
-        throw e;
-      }
-    });
-}
-
-seastar::future<> SocketMessenger::accept(seastar::connected_socket socket,
-                                          seastar::socket_address paddr)
-{
-  // allocate the connection
-  entity_addr_t peer_addr;
-  peer_addr.set_type(entity_addr_t::TYPE_DEFAULT);
-  peer_addr.set_sockaddr(&paddr.as_posix_sockaddr());
-  SocketConnectionRef conn = new SocketConnection(*this, get_myaddr());
-  // initiate the handshake
-  return conn->start_accept(std::move(socket), peer_addr)
-    .then([this, conn] {
-      // notify the dispatcher and allow them to reject the connection
-      return seastar::with_gate(pending_dispatch, [=] {
-          return dispatcher->ms_handle_accept(conn);
-        });
-    }).handle_exception([conn] (std::exception_ptr eptr) {
-      // close the connection before returning errors
-      return seastar::make_exception_future<>(eptr)
-        .finally([conn] { return conn->close(); });
-    }).then([this, conn] {
-      // dispatch messages until the connection closes or the dispatch
-      // queue shuts down
-      return dispatch(std::move(conn));
-    });
-}
-
 seastar::future<> SocketMessenger::start(Dispatcher *disp)
 {
   dispatcher = disp;
@@ -105,10 +50,13 @@ seastar::future<> SocketMessenger::start(Dispatcher *disp)
         return listener->accept()
           .then([this] (seastar::connected_socket socket,
                         seastar::socket_address paddr) {
-            // start processing the connection
-            accept(std::move(socket), paddr)
-              .handle_exception([] (std::exception_ptr eptr) {});
+            // allocate the connection
+            entity_addr_t peer_addr;
+            peer_addr.set_type(entity_addr_t::TYPE_DEFAULT);
+            peer_addr.set_sockaddr(&paddr.as_posix_sockaddr());
+            SocketConnectionRef conn = new SocketConnection(*this, get_myaddr(), *dispatcher);
             // don't wait before accepting another
+            conn->start_accept(std::move(socket), peer_addr);
           });
       }).handle_exception_type([this] (const std::system_error& e) {
         // stop gracefully on connection_aborted
@@ -127,23 +75,8 @@ SocketMessenger::connect(const entity_addr_t& peer_addr, const entity_type_t& pe
   if (auto found = lookup_conn(peer_addr); found) {
     return found;
   }
-  SocketConnectionRef conn = new SocketConnection(*this, get_myaddr());
-  conn->start_connect(peer_addr, peer_type)
-    .then([this, conn] {
-      // notify the dispatcher and allow them to reject the connection
-      return seastar::with_gate(pending_dispatch, [this, conn] {
-        return dispatcher->ms_handle_connect(conn);
-      });
-    }).handle_exception([conn] (std::exception_ptr eptr) {
-      // close the connection before returning errors
-      return seastar::make_exception_future<>(eptr)
-        .finally([conn] { return conn->close(); });
-      // TODO: retry on fault
-    }).then([this, conn] {
-      // dispatch replies on this connection
-      dispatch(conn)
-        .handle_exception([] (std::exception_ptr eptr) {});
-    });
+  SocketConnectionRef conn = new SocketConnection(*this, get_myaddr(), *dispatcher);
+  conn->start_connect(peer_addr, peer_type);
   return conn;
 }
 
