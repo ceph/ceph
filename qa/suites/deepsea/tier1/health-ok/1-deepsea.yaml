@@ -18,3 +18,4 @@ tasks:
         - exec:
                 client.salt_master:
                         - 'ceph -s'
+        - deepsea.validation:
