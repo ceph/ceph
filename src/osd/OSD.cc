@@ -2568,6 +2568,18 @@ float OSD::get_osd_recovery_sleep()
     return cct->_conf->osd_recovery_sleep_hdd;
 }
 
+float OSD::get_osd_delete_sleep()
+{
+  float osd_delete_sleep = cct->_conf.get_val<double>("osd_delete_sleep");
+  if (osd_delete_sleep > 0)
+    return osd_delete_sleep;
+  if (!store_is_rotational && !journal_is_rotational)
+    return cct->_conf.get_val<double>("osd_delete_sleep_ssd");
+  if (store_is_rotational && !journal_is_rotational)
+    return cct->_conf.get_val<double>("osd_delete_sleep_hybrid");
+  return cct->_conf.get_val<double>("osd_delete_sleep_hdd");
+}
+
 int OSD::init()
 {
   CompatSet initial, diff;
