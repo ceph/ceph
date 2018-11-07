@@ -28,6 +28,7 @@ public:
   bool is_session_work();
 
   void close();
+  int stop();
   int connect();
 
   int register_volume(std::string pool_name, std::string vol_name, uint64_t vol_size, Context* on_finish);
@@ -41,7 +42,7 @@ private:
   ClientProcessMsg m_client_process_msg;
   stream_protocol::endpoint m_ep;
   char m_recv_buffer[1024];
-  std::shared_ptr<std::thread> io_thread;
+  std::shared_ptr<std::thread> m_io_thread;
 
   // atomic modfiy for this variable.
   // thread 1 : asio callback thread modify it.

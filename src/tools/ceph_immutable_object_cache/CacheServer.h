@@ -30,11 +30,12 @@ class CacheServer {
   CacheServer(CephContext* cct, const std::string& file, ProcessMsg processmsg);
   ~CacheServer();
 
-  void run();
+  int run();
   void send(uint64_t session_id, std::string msg);
+  int start_accept();
+  int stop();
 
  private:
-  bool start_accept();
   void accept();
   void handle_accept(CacheSessionPtr new_session, const boost::system::error_code& error);
 

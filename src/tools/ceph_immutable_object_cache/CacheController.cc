@@ -18,6 +18,7 @@ CacheController::CacheController(CephContext *cct, const std::vector<const char*
 }
 
 CacheController::~CacheController() {
+  delete m_cache_server;
   delete m_object_cache_store;
 }
 
@@ -50,7 +51,10 @@ void CacheController::run() {
     m_cache_server = new CacheServer(m_cct, controller_path,
       ([&](uint64_t p, std::string s){handle_request(p, s);}));
 
-    m_cache_server->run();
+    int ret = m_cache_server->run();
+    if (ret != 0) {
+      throw std::runtime_error("io serivce run error");
+    }
   } catch (std::exception& e) {
     lderr(m_cct) << "Exception: " << e.what() << dendl;
   }

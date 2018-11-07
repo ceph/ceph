@@ -19,23 +19,31 @@ namespace immutable_obj_cache {
     : m_io_service_work(m_io_service),
       m_dm_socket(m_io_service),
       m_ep(stream_protocol::endpoint(file)),
+      m_io_thread(nullptr),
       m_session_work(false),
       cct(ceph_ctx)
-  {
-     // TODO wrapper io_service
-     io_thread.reset(new std::thread([this](){m_io_service.run(); }));
-  }
+  {}
 
   CacheClient::~CacheClient() {
-    m_io_service.stop();
-    io_thread->join();
+    stop();
   }
 
   void CacheClient::run(){
+     m_io_thread.reset(new std::thread([this](){m_io_service.run(); }));
   }
 
   bool CacheClient::is_session_work() {
     return m_session_work.load() == true;
+  }
+
+  int CacheClient::stop() {
+    m_session_work.store(false);
+    m_io_service.stop();
+
+    if(m_io_thread != nullptr) {
+      m_io_thread->join();
+    }
+    return 0;
   }
 
   // just when error occur, call this method.

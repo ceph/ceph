@@ -49,6 +49,7 @@ void SharedReadOnlyObjectDispatch<I>::init() {
 
   std::string controller_path = ((CephContext*)cct)->_conf.get_val<std::string>("rbd_shared_cache_sock");
   m_cache_client = new ceph::immutable_obj_cache::CacheClient(controller_path.c_str(), m_image_ctx->cct);
+  m_cache_client->run();
 
   int ret = m_cache_client->connect();
   if (ret < 0) {

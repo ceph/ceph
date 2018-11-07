@@ -21,16 +21,30 @@ CacheServer::CacheServer(CephContext* cct, const std::string& file, ProcessMsg p
   : cct(cct), m_server_process_msg(processmsg),
     m_local_path(file), m_acceptor(m_io_service) {}
 
-CacheServer::~CacheServer(){}
+CacheServer::~CacheServer() {
+  stop();
+}
 
-void CacheServer::run() {
+int CacheServer::run() {
   ldout(cct, 20) << dendl;
 
-  bool ret = start_accept();
-  if(!ret) {
-    return;
+  int ret = start_accept();
+  if(ret != 0) {
+    return ret;
   }
-  m_io_service.run();
+
+  boost::system::error_code ec;
+  ret = m_io_service.run(ec);
+  if(ec) {
+    ldout(cct, 1) << "m_io_service run fails: " << ec.message() << dendl;
+    return -1;
+  }
+  return 0;
+}
+
+int CacheServer::stop() {
+  m_io_service.stop();
+  return 0;
 }
 
 void CacheServer::send(uint64_t session_id, std::string msg) {
@@ -45,34 +59,33 @@ void CacheServer::send(uint64_t session_id, std::string msg) {
   }
 }
 
-bool CacheServer::start_accept() {
+int CacheServer::start_accept() {
   ldout(cct, 20) << dendl;
 
   boost::system::error_code ec;
   m_acceptor.open(m_local_path.protocol(), ec);
   if(ec) {
-    ldout(cct, 20) << "m_acceptor open fails: " << ec.message() << dendl;
-    return false;
+    ldout(cct, 1) << "m_acceptor open fails: " << ec.message() << dendl;
+    return -1;
   }
 
   m_acceptor.bind(m_local_path, ec);
   if(ec) {
-    ldout(cct, 20) << "m_acceptor bind fails: " << ec.message() << dendl;
-    return false;
+    ldout(cct, 1) << "m_acceptor bind fails: " << ec.message() << dendl;
+    return -1;
   }
 
   m_acceptor.listen(boost::asio::socket_base::max_connections, ec);
   if(ec) {
-    ldout(cct, 20) << "m_acceptor listen fails: " << ec.message() << dendl;
-    return false;
+    ldout(cct, 1) << "m_acceptor listen fails: " << ec.message() << dendl;
+    return -1;
   }
 
   accept();
-  return true;
+  return 0;
 }
 
 void CacheServer::accept() {
-  ldout(cct, 20) << dendl;
 
   CacheSessionPtr new_session(new CacheSession(m_session_id, m_io_service, m_server_process_msg, cct));
   m_acceptor.async_accept(new_session->socket(),
@@ -82,10 +95,10 @@ void CacheServer::accept() {
 
 void CacheServer::handle_accept(CacheSessionPtr new_session, const boost::system::error_code& error) {
   ldout(cct, 20) << dendl;
-
-  if(error) {
+  if (error) {
+    // operation_absort
     lderr(cct) << "async accept fails : " << error.message() << dendl;
-    assert(0); // TODO
+    return;
   }
 
   m_session_map.emplace(m_session_id, new_session);

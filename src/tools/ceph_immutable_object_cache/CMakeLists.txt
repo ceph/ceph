@@ -3,6 +3,7 @@ set(ceph_immutable_object_cache_files
   ObjectCacheStore.cc
   CacheController.cc
   CacheServer.cc
+  CacheClient.cc
   CacheSession.cc
   SimplePolicy.cc)
 add_library(ceph_immutable_object_cache_lib STATIC ${ceph_immutable_object_cache_files})
