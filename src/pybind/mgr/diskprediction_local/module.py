@@ -1,8 +1,8 @@
 """
 diskprediction with local predictor
 """
-from datetime import datetime
 import json
+import datetime
 from threading import Event
 import time
 
@@ -59,7 +59,7 @@ class Module(MgrModule):
         ls = self.get_store('last_predicted')
         if ls:
             try:
-                last_predicted = datetime.strptime(ls, TIME_FORMAT)
+                last_predicted = datetime.datetime.strptime(ls, TIME_FORMAT)
             except ValueError:
                 pass
         self.log.debug('Last predicted %s', last_predicted)
@@ -68,15 +68,15 @@ class Module(MgrModule):
             self.refresh_config()
             mode = self.get_option('device_failure_prediction_mode')
             if mode == 'local':
-                now = datetime.utcnow()
+                now = datetime.datetime.utcnow()
                 if not last_predicted:
                     next_predicted = now
                 else:
                     predicted_frequency = int(self.predict_interval) or 86400
-                    seconds = (last_predicted - datetime.utcfromtimestamp(0)).total_seconds()
+                    seconds = (last_predicted - datetime.datetime.utcfromtimestamp(0)).total_seconds()
                     seconds -= seconds % predicted_frequency
                     seconds += predicted_frequency
-                    next_predicted = datetime.utcfromtimestamp(seconds)
+                    next_predicted = datetime.datetime.utcfromtimestamp(seconds)
                     if last_predicted:
                         self.log.debug('Last scrape %s, next scrape due %s',
                                        last_predicted.strftime(TIME_FORMAT),
@@ -107,7 +107,7 @@ class Module(MgrModule):
         :return:
             date format '%Y-%m-%d' ex. 2018-01-01
         """
-        return datetime.fromtimestamp(
+        return datetime.datetime.fromtimestamp(
             predicted_timestamp / (1000 ** 3) + life_expectancy_day).strftime('%Y-%m-%d')
 
     def _predict_life_expentancy(self, devid):
