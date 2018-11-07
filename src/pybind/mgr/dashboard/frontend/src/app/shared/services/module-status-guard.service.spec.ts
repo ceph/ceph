@@ -1,5 +1,5 @@
 import { HttpClient } from '@angular/common/http';
-import { Component } from '@angular/core';
+import { Component, NgZone } from '@angular/core';
 import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { ActivatedRouteSnapshot, Router, Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
@@ -14,6 +14,7 @@ describe('ModuleStatusGuardService', () => {
   let httpClient: HttpClient;
   let router: Router;
   let route: ActivatedRouteSnapshot;
+  let ngZone: NgZone;
 
   @Component({ selector: 'cd-foo', template: '' })
   class FooComponent {}
@@ -27,8 +28,10 @@ describe('ModuleStatusGuardService', () => {
   const testCanActivate = (getResult: {}, activateResult: boolean, urlResult: string) => {
     let result: boolean;
     spyOn(httpClient, 'get').and.returnValue(observableOf(getResult));
-    service.canActivateChild(route, null).subscribe((resp) => {
-      result = resp;
+    ngZone.run(() => {
+      service.canActivateChild(route, null).subscribe((resp) => {
+        result = resp;
+      });
     });
 
     tick();
@@ -56,31 +59,23 @@ describe('ModuleStatusGuardService', () => {
         redirectTo: '/foo'
       }
     };
+    ngZone = TestBed.get(NgZone);
   });
 
   it('should be created', () => {
     expect(service).toBeTruthy();
   });
 
-  it(
-    'should test canActivate with status available',
-    fakeAsync(() => {
-      route.data.moduleStatusGuardConfig.redirectTo = 'foo';
-      testCanActivate({ available: true, message: 'foo' }, true, '/');
-    })
-  );
+  it('should test canActivate with status available', fakeAsync(() => {
+    route.data.moduleStatusGuardConfig.redirectTo = 'foo';
+    testCanActivate({ available: true, message: 'foo' }, true, '/');
+  }));
 
-  it(
-    'should test canActivateChild with status unavailable',
-    fakeAsync(() => {
-      testCanActivate({ available: false, message: null }, false, '/foo/');
-    })
-  );
+  it('should test canActivateChild with status unavailable', fakeAsync(() => {
+    testCanActivate({ available: false, message: null }, false, '/foo/');
+  }));
 
-  it(
-    'should test canActivateChild with status unavailable',
-    fakeAsync(() => {
-      testCanActivate(null, false, '/foo');
-    })
-  );
+  it('should test canActivateChild with status unavailable', fakeAsync(() => {
+    testCanActivate(null, false, '/foo');
+  }));
 });

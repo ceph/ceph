@@ -53,28 +53,22 @@ describe('TaskManagerService', () => {
     expect(taskManagerService).toBeTruthy();
   });
 
-  it(
-    'should subscribe and be notified when task is finished',
-    fakeAsync(() => {
-      expect(taskManagerService.subscriptions.length).toBe(1);
-      summaryService.refresh();
-      tick();
-      expect(called).toEqual(true);
-      expect(taskManagerService.subscriptions).toEqual([]);
-    })
-  );
+  it('should subscribe and be notified when task is finished', fakeAsync(() => {
+    expect(taskManagerService.subscriptions.length).toBe(1);
+    summaryService.refresh();
+    tick();
+    expect(called).toEqual(true);
+    expect(taskManagerService.subscriptions).toEqual([]);
+  }));
 
-  it(
-    'should subscribe and process executing taks',
-    fakeAsync(() => {
-      const original_subscriptions = _.cloneDeep(taskManagerService.subscriptions);
-      _.assign(summary, {
-        executing_tasks: [{ name: 'foo', metadata: {} }],
-        finished_tasks: []
-      });
-      summaryService.refresh();
-      tick();
-      expect(taskManagerService.subscriptions).toEqual(original_subscriptions);
-    })
-  );
+  it('should subscribe and process executing taks', fakeAsync(() => {
+    const original_subscriptions = _.cloneDeep(taskManagerService.subscriptions);
+    _.assign(summary, {
+      executing_tasks: [{ name: 'foo', metadata: {} }],
+      finished_tasks: []
+    });
+    summaryService.refresh();
+    tick();
+    expect(taskManagerService.subscriptions).toEqual(original_subscriptions);
+  }));
 });

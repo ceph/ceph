@@ -26,16 +26,13 @@ describe('HostService', () => {
     expect(service).toBeTruthy();
   });
 
-  it(
-    'should call list',
-    fakeAsync(() => {
-      let result;
-      service.list().then((resp) => (result = resp));
-      const req = httpTesting.expectOne('api/host');
-      expect(req.request.method).toBe('GET');
-      req.flush(['foo', 'bar']);
-      tick();
-      expect(result).toEqual(['foo', 'bar']);
-    })
-  );
+  it('should call list', fakeAsync(() => {
+    let result;
+    service.list().then((resp) => (result = resp));
+    const req = httpTesting.expectOne('api/host');
+    expect(req.request.method).toBe('GET');
+    req.flush(['foo', 'bar']);
+    tick();
+    expect(result).toEqual(['foo', 'bar']);
+  }));
 });

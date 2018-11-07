@@ -1,7 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { ModalModule } from 'ngx-bootstrap/modal';
-import { BsModalRef } from 'ngx-bootstrap/modal/bs-modal-ref.service';
+import { BsModalRef, ModalModule } from 'ngx-bootstrap/modal';
 
 import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { ModalComponent } from './modal.component';

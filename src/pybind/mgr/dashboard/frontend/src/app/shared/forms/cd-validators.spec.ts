@@ -435,22 +435,16 @@ describe('CdValidators', () => {
       expectValid('');
     });
 
-    it(
-      'should not error because of not existing input',
-      fakeAsync(() => {
-        formHelper.setValue('x', 'abc', true);
-        tick(500);
-        formHelper.expectValid('x');
-      })
-    );
+    it('should not error because of not existing input', fakeAsync(() => {
+      formHelper.setValue('x', 'abc', true);
+      tick(500);
+      formHelper.expectValid('x');
+    }));
 
-    it(
-      'should error because of already existing input',
-      fakeAsync(() => {
-        formHelper.setValue('x', 'xyz', true);
-        tick(500);
-        formHelper.expectError('x', 'notUnique');
-      })
-    );
+    it('should error because of already existing input', fakeAsync(() => {
+      formHelper.setValue('x', 'xyz', true);
+      tick(500);
+      formHelper.expectError('x', 'notUnique');
+    }));
   });
 });
