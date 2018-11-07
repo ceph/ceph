@@ -887,6 +887,7 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
       ldout(cct, 20) << " dir hash is " << (int)in->dir_layout.dl_dir_hash << dendl;
       in->rstat = st->rstat;
       in->quota = st->quota;
+      in->dir_pin = st->dir_pin;
     }
     // move me if/when version reflects fragtree changes.
     if (in->dirfragtree != st->dirfragtree) {
@@ -11742,6 +11743,14 @@ size_t Client::_vxattrcb_dir_rctime(Inode *in, char *val, size_t size)
   return snprintf(val, size, "%ld.09%ld", (long)in->rstat.rctime.sec(),
       (long)in->rstat.rctime.nsec());
 }
+bool Client::_vxattrcb_dir_pin_exists(Inode *in)
+{
+  return in->dir_pin != -ENODATA;
+}
+size_t Client::_vxattrcb_dir_pin(Inode *in, char *val, size_t size)
+{
+  return snprintf(val, size, "%ld", (long)in->dir_pin);
+}
 
 #define CEPH_XATTR_NAME(_type, _name) "ceph." #_type "." #_name
 #define CEPH_XATTR_NAME2(_type, _name, _name2) "ceph." #_type "." #_name "." #_name2
@@ -11815,6 +11824,14 @@ const Client::VXattr Client::_dir_vxattrs[] = {
   },
   XATTR_QUOTA_FIELD(quota, max_bytes),
   XATTR_QUOTA_FIELD(quota, max_files),
+  {
+    name: "ceph.dir.pin",
+    getxattr_cb: &Client::_vxattrcb_dir_pin,
+    readonly: false,
+    hidden: true,
+    exists_cb: &Client::_vxattrcb_dir_pin_exists,
+    flags: 0,
+  },
   { name: "" }     /* Required table terminator */
 };
 
