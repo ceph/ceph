@@ -2286,6 +2286,7 @@ private:
   int get_num_op_threads();
 
   float get_osd_recovery_sleep();
+  float get_osd_delete_sleep();
 
   void probe_smart(const string& devid, ostream& ss);
 
