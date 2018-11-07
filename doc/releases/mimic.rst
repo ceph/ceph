@@ -5,6 +5,14 @@ This is the second bugfix release of the Mimic v13.2.x long term stable release
 series. This release contains many fixes across all components of Ceph.
 We recommend that all users upgrade.
 
+* This version contains an upgrade bug, http://tracker.ceph.com/issues/36686,
+  due to which upgrading during recovery/backfill can cause OSDs to fail. This
+  bug can be worked around, either by restarting all the OSDs after the upgrade,
+  or by upgrading when all PGs are in "active+clean" state.
+
+  If you have successfully upgraded to 13.2.2, this issue should not impact
+  you. Going forward, we are working on a clean upgrade path for this feature.
+
 Changelog
 ---------
 * build/ops: Boost system library is no longer required to compile and link example librados program (`issue#25073 <http://tracker.ceph.com/issues/25073>`_, `issue#25054 <http://tracker.ceph.com/issues/25054>`_, `pr#23201 <https://github.com/ceph/ceph/pull/23201>`_, Nathan Cutler)
