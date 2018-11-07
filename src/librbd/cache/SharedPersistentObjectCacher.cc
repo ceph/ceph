@@ -40,7 +40,7 @@ int SharedPersistentObjectCacher<I>::read_object(std::string oid, ceph::bufferli
   //TODO(): do not calculate the path, get from the response from daemon
   int dir_num = 10;
   std::string cache_file_name = m_image_ctx->data_ctx.get_pool_name() + oid;
-  std::string cache_dir = m_image_ctx->data_ctx.get_pool_name() + "_" + m_image_ctx->name;
+  std::string cache_dir = m_image_ctx->data_ctx.get_pool_name() + "_" + m_image_ctx->id;
 
    if (dir_num > 0) {
     auto const pos = oid.find_last_of('.');

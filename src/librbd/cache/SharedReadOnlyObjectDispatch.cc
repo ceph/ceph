@@ -58,7 +58,7 @@ void SharedReadOnlyObjectDispatch<I>::init() {
 		  << dendl;
   } else {
     ldout(cct, 5) << "SRO cache client to register volume "
-                  << "name = " << m_image_ctx->name
+                  << "name = " << m_image_ctx->id
                   << " on ceph-immutable-object-cache daemon"
                   << dendl;
 
@@ -66,7 +66,7 @@ void SharedReadOnlyObjectDispatch<I>::init() {
       handle_register_volume(reg);
     });
     ret = m_cache_client->register_volume(m_image_ctx->data_ctx.get_pool_name(),
-                                          m_image_ctx->name, m_image_ctx->size, ctx);
+                                          m_image_ctx->id, m_image_ctx->size, ctx);
 
     if (ret >= 0) {
       // add ourself to the IO object dispatcher chain
@@ -104,7 +104,7 @@ bool SharedReadOnlyObjectDispatch<I>::read(
 
   if (m_cache_client && m_cache_client->is_session_work() && m_object_store) {
     m_cache_client->lookup_object(m_image_ctx->data_ctx.get_pool_name(),
-      m_image_ctx->name, oid, ctx);
+      m_image_ctx->id, oid, ctx);
   }
   return true;
 }

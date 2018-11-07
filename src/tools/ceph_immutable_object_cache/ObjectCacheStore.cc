@@ -240,8 +240,26 @@ int ObjectCacheStore::evict_objects() {
 int ObjectCacheStore::do_evict(std::string cache_file) {
   ldout(m_cct, 20) << "file = " << cache_file << dendl;
 
-  //TODO(): call SyncFile API
-  int ret = std::remove(cache_file.c_str());
+  //TODO(): need a better way to get file path
+  std::string pool_name = "rbd";
+
+  size_t pos1 = cache_file.rfind("rbd_data");
+  pool_name = cache_file.substr(0, pos1);
+
+  pos1 = cache_file.find_first_of('.');
+  size_t pos2 = cache_file.find_last_of('.');
+  std::string vol_name = cache_file.substr(pos1+1, pos2-pos1-1);
+
+  std::string cache_dir = m_cache_root_dir + pool_name + "_" + vol_name;
+
+   if (dir_num > 0) {
+    auto const pos = cache_file.find_last_of('.');
+    cache_dir = cache_dir + "/" + std::to_string(stoul(cache_file.substr(pos+1)) % dir_num);
+  }
+  std::string cache_file_path = cache_dir + "/" + cache_file;
+
+  ldout(m_cct, 20) << "delete file: " << cache_file_path << dendl;
+  int ret = std::remove(cache_file_path.c_str());
    // evict entry in policy
   if (ret == 0) {
     m_policy->evict_entry(cache_file);
