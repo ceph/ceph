@@ -2262,7 +2262,7 @@ void Objecter::resend_mon_ops()
 
 // read | write ---------------------------
 
-void Objecter::op_submit(Op *op, ceph_tid_t *ptid, int *ctx_budget)
+void Objecter::op_submit(Op *op, ceph_tid_t *ptid, int64_t *ctx_budget)
 {
   shunique_lock rl(rwlock, ceph::acquire_shared);
   ceph_tid_t tid = 0;
@@ -2274,7 +2274,7 @@ void Objecter::op_submit(Op *op, ceph_tid_t *ptid, int *ctx_budget)
 
 void Objecter::_op_submit_with_budget(Op *op, shunique_lock& sul,
 				      ceph_tid_t *ptid,
-				      int *ctx_budget)
+				      int64_t *ctx_budget)
 {
   ceph_assert(initialized);
 
@@ -2285,7 +2285,7 @@ void Objecter::_op_submit_with_budget(Op *op, shunique_lock& sul,
   // throttle.  before we look at any state, because
   // _take_op_budget() may drop our lock while it blocks.
   if (!op->ctx_budgeted || (ctx_budget && (*ctx_budget == -1))) {
-    int op_budget = _take_op_budget(op, sul);
+    int64_t op_budget = _take_op_budget(op, sul);
     // take and pass out the budget for the first OP
     // in the context session
     if (ctx_budget && (*ctx_budget == -1)) {
@@ -3292,9 +3292,9 @@ void Objecter::_send_op(Op *op)
   op->session->con->send_message(m);
 }
 
-int Objecter::calc_op_budget(const vector<OSDOp>& ops)
+int64_t Objecter::calc_op_budget(const vector<OSDOp>& ops)
 {
-  int op_budget = 0;
+  int64_t op_budget = 0;
   for (vector<OSDOp>::const_iterator i = ops.begin();
        i != ops.end();
        ++i) {
@@ -3314,7 +3314,7 @@ int Objecter::calc_op_budget(const vector<OSDOp>& ops)
 
 void Objecter::_throttle_op(Op *op,
 			    shunique_lock& sul,
-			    int op_budget)
+			    int64_t op_budget)
 {
   ceph_assert(sul && sul.mutex() == &rwlock);
   bool locked_for_write = sul.owns_lock();
@@ -5006,7 +5006,7 @@ struct C_EnumerateReply : public Context {
   Context *on_finish;
 
   epoch_t epoch;
-  int budget;
+  int64_t budget;
 
   C_EnumerateReply(Objecter *objecter_, hobject_t *next_,
       std::list<librados::ListObjectImpl> *result_,
@@ -5091,7 +5091,7 @@ void Objecter::_enumerate_reply(
     int r,
     const hobject_t &end,
     const int64_t pool_id,
-    int budget,
+    int64_t budget,
     epoch_t reply_epoch,
     std::list<librados::ListObjectImpl> *result,
     hobject_t *next,

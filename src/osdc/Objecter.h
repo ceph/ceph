@@ -1381,7 +1381,7 @@ public:
 
     epoch_t map_dne_bound;
 
-    int budget;
+    int64_t budget;
 
     /// true if we should resend this message on failure
     bool should_resend;
@@ -1543,7 +1543,7 @@ public:
     // the budget is not get/released on OP basis, instead the budget
     // is acquired before sending the first OP and released upon receiving
     // the last op reply.
-    int ctx_budget = -1;
+    int64_t ctx_budget = -1;
 
     bool at_end() const {
       return at_end_of_pool;
@@ -1724,7 +1724,7 @@ public:
     OSDSession *session;
 
     Objecter *objecter;
-    int ctx_budget;
+    int64_t ctx_budget;
     ceph_tid_t register_tid;
     ceph_tid_t ping_tid;
     epoch_t map_dne_bound;
@@ -1996,11 +1996,11 @@ private:
    * and returned whenever an op is removed from the map
    * If throttle_op needs to throttle it will unlock client_lock.
    */
-  int calc_op_budget(const vector<OSDOp>& ops);
-  void _throttle_op(Op *op, shunique_lock& sul, int op_size = 0);
-  int _take_op_budget(Op *op, shunique_lock& sul) {
+  int64_t calc_op_budget(const vector<OSDOp>& ops);
+  void _throttle_op(Op *op, shunique_lock& sul, int64_t op_size = 0);
+  int64_t _take_op_budget(Op *op, shunique_lock& sul) {
     ceph_assert(sul && sul.mutex() == &rwlock);
-    int op_budget = calc_op_budget(op->ops);
+    int64_t op_budget = calc_op_budget(op->ops);
     if (keep_balanced_budget) {
       _throttle_op(op, sul, op_budget);
     } else { // update take_linger_budget to match this!
@@ -2012,7 +2012,7 @@ private:
   }
   int take_linger_budget(LingerOp *info);
   friend class WatchContext; // to invoke put_up_budget_bytes
-  void put_op_budget_bytes(int op_budget) {
+  void put_op_budget_bytes(int64_t op_budget) {
     ceph_assert(op_budget >= 0);
     op_throttle_bytes.put(op_budget);
     op_throttle_ops.put(1);
@@ -2154,10 +2154,10 @@ private:
   void _op_submit(Op *op, shunique_lock& lc, ceph_tid_t *ptid);
   void _op_submit_with_budget(Op *op, shunique_lock& lc,
 			      ceph_tid_t *ptid,
-			      int *ctx_budget = NULL);
+			      int64_t *ctx_budget = NULL);
   // public interface
 public:
-  void op_submit(Op *op, ceph_tid_t *ptid = NULL, int *ctx_budget = NULL);
+  void op_submit(Op *op, ceph_tid_t *ptid = NULL, int64_t *ctx_budget = NULL);
   bool is_active() {
     shared_lock l(rwlock);
     return !((!inflight_ops) && linger_ops.empty() &&
@@ -2316,7 +2316,7 @@ public:
     uint32_t hash, object_locator_t oloc,
     ObjectOperation& op, bufferlist *pbl, int flags,
     Context *onack, epoch_t *reply_epoch,
-    int *ctx_budget) {
+    int64_t *ctx_budget) {
     Op *o = new Op(object_t(), oloc,
 		   op.ops,
 		   flags | global_op_flags | CEPH_OSD_FLAG_READ |
@@ -2341,7 +2341,7 @@ public:
     uint32_t hash, object_locator_t oloc,
     ObjectOperation& op, bufferlist *pbl, int flags,
     Context *onack, epoch_t *reply_epoch,
-    int *ctx_budget) {
+    int64_t *ctx_budget) {
     Op *o = prepare_pg_read_op(hash, oloc, op, pbl, flags,
 			       onack, reply_epoch, ctx_budget);
     ceph_tid_t tid;
@@ -2913,7 +2913,7 @@ public:
       int r,
       const hobject_t &end,
       const int64_t pool_id,
-      int budget,
+      int64_t budget,
       epoch_t reply_epoch,
       std::list<librados::ListObjectImpl> *result, 
       hobject_t *next,
