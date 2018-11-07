@@ -4948,8 +4948,7 @@ void RGWPutLC::execute()
 {
   bufferlist bl;
   
-  RGWLifecycleConfiguration_S3 *config = NULL;
-  RGWLCXMLParser_S3 parser(s->cct);
+  RGWLifecycleConfiguration_S3 config(s->cct);
   RGWLifecycleConfiguration_S3 new_config(s->cct);
 
   content_md5 = s->info.env->get("HTTP_CONTENT_MD5");
@@ -4971,7 +4970,9 @@ void RGWPutLC::execute()
     return;
   }
 
+  RGWXMLDecoder::XMLParser parser;
   if (!parser.init()) {
+    ldout(s->cct, 0) << "ERROR: failed to initialize parser" << dendl;
     op_ret = -EINVAL;
     return;
   }
@@ -5001,13 +5002,15 @@ void RGWPutLC::execute()
     op_ret = -ERR_MALFORMED_XML;
     return;
   }
-  config = static_cast<RGWLifecycleConfiguration_S3 *>(parser.find_first("LifecycleConfiguration"));
-  if (!config) {
+  try {
+    RGWXMLDecoder::decode_xml("LifecycleConfiguration", config, &parser, true);
+  } catch (RGWXMLDecoder::err& err) {
+    ldout(s->cct, 5) << "unexpected xml:" << err.message << dendl;
     op_ret = -ERR_MALFORMED_XML;
     return;
   }
 
-  op_ret = config->rebuild(store, new_config);
+  op_ret = config.rebuild(store, new_config);
   if (op_ret < 0)
     return;
 

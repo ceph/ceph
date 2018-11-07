@@ -11,27 +11,9 @@
 #include "rgw_xml.h"
 #include "rgw_tag_s3.h"
 
-class LCID_S3 : public XMLObj
-{
-public:
-  LCID_S3() {}
-  ~LCID_S3() override {}
-  string& to_str() { return data; }
-};
-
-class LCPrefix_S3 : public XMLObj
-{
-public:
-  LCPrefix_S3() {}
-  ~LCPrefix_S3() override {}
-  string& to_str() { return data; }
-};
-
-class LCFilter_S3 : public LCFilter, public XMLObj
+class LCFilter_S3 : public LCFilter
 {
  public:
-  ~LCFilter_S3() override {}
-  string& to_str() { return data; }
   void to_xml(ostream& out){
     out << "<Filter>";
     stringstream ss;
@@ -68,42 +50,10 @@ class LCFilter_S3 : public LCFilter, public XMLObj
       f->close_section(); // And;
     f->close_section(); // Filter
   }
-  bool xml_end(const char *el) override;
+  void decode_xml(XMLObj *obj);
 };
 
-class LCStatus_S3 : public XMLObj
-{
-public:
-  LCStatus_S3() {}
-  ~LCStatus_S3() override {}
-  string& to_str() { return data; }
-};
-
-class LCDays_S3 : public XMLObj
-{
-public:
-  LCDays_S3() {}
-  ~LCDays_S3() override {}
-  string& to_str() { return data; }
-};
-
-class LCDate_S3 : public XMLObj
-{
-public:
-  LCDate_S3() {}
-  ~LCDate_S3() override {}
-  string& to_str() { return data; }
-};
-
-class LCDeleteMarker_S3 : public XMLObj
-{
-public:
-  LCDeleteMarker_S3() {}
-  ~LCDeleteMarker_S3() override {}
-  string& to_str() { return data; }
-};
-
-class LCExpiration_S3 : public LCExpiration, public XMLObj
+class LCExpiration_S3 : public LCExpiration
 {
 private:
   bool dm_expiration;
@@ -114,9 +64,8 @@ public:
     date = _date;
     dm_expiration = _dm_expiration;
   }
-  ~LCExpiration_S3() override {}
 
-  bool xml_end(const char *el) override;
+  void decode_xml(XMLObj *obj);
   void to_xml(ostream& out) {
     out << "<Expiration>";
     if (dm_expiration) {
@@ -149,13 +98,10 @@ public:
   }
 };
 
-class LCNoncurExpiration_S3 : public LCExpiration, public XMLObj
+class LCNoncurExpiration_S3 : public LCExpiration
 {
 public:
-  LCNoncurExpiration_S3() {}
-  ~LCNoncurExpiration_S3() override {}
-  
-  bool xml_end(const char *el) override;
+  void decode_xml(XMLObj *obj);
   void to_xml(ostream& out) {
     out << "<NoncurrentVersionExpiration>" << "<NoncurrentDays>" << days << "</NoncurrentDays>"<< "</NoncurrentVersionExpiration>";
   }
@@ -166,13 +112,10 @@ public:
   }
 };
 
-class LCMPExpiration_S3 : public LCExpiration, public XMLObj
+class LCMPExpiration_S3 : public LCExpiration
 {
 public:
-  LCMPExpiration_S3() {}
-  ~LCMPExpiration_S3() {}
-
-  bool xml_end(const char *el) override;
+  void decode_xml(XMLObj *obj);
   void to_xml(ostream& out) {
     out << "<AbortIncompleteMultipartUpload>" << "<DaysAfterInitiation>" << days << "</DaysAfterInitiation>" << "</AbortIncompleteMultipartUpload>";
   }
@@ -183,20 +126,9 @@ public:
   }
 };
 
-class LCStorageClass_S3 : public XMLObj
-{
-public:
-  LCStorageClass_S3() {}
-  ~LCStorageClass_S3() override {}
-  string& to_str() { return data; }
-};
-
 class LCTransition_S3 : public LCTransition
 {
 public:
-  LCTransition_S3() {}
-  ~LCTransition_S3() {}
-
   void decode_xml(XMLObj *obj);
   void to_xml(ostream& out) {
     out << "<Transition>";
@@ -223,9 +155,6 @@ public:
 class LCNoncurTransition_S3 : public LCTransition
 {
 public:
-  LCNoncurTransition_S3() {}
-  ~LCNoncurTransition_S3() {}
-
   void decode_xml(XMLObj *obj);
   void to_xml(ostream& out) {
     out << "<NoncurrentVersionTransition>" << "<NoncurrentDays>" << days << "</NoncurrentDays>"
@@ -241,18 +170,11 @@ public:
 };
 
 
-class LCRule_S3 : public LCRule, public XMLObj
+class LCRule_S3 : public LCRule
 {
-private:
-  CephContext *cct;
 public:
-  LCRule_S3(): cct(nullptr) {}
-  explicit LCRule_S3(CephContext *_cct): cct(_cct) {}
-  ~LCRule_S3() override {}
-
   void to_xml(ostream& out);
-  bool xml_end(const char *el) override;
-  bool xml_start(const char *el, const char **attr);
+  void decode_xml(XMLObj *obj);
   void dump_xml(Formatter *f) const {
     f->open_object_section("Rule");
     encode_xml("ID", id, f);
@@ -290,30 +212,15 @@ public:
     }
     f->close_section(); // Rule
   }
-
-  void set_ctx(CephContext *ctx) {
-    cct = ctx;
-  }
 };
 
-class RGWLCXMLParser_S3 : public RGWXMLParser
-{
-  CephContext *cct;
-
-  XMLObj *alloc_obj(const char *el) override;
-public:
-  explicit RGWLCXMLParser_S3(CephContext *_cct) : cct(_cct) {}
-};
-
-class RGWLifecycleConfiguration_S3 : public RGWLifecycleConfiguration, public XMLObj
+class RGWLifecycleConfiguration_S3 : public RGWLifecycleConfiguration
 {
 public:
   explicit RGWLifecycleConfiguration_S3(CephContext *_cct) : RGWLifecycleConfiguration(_cct) {}
   RGWLifecycleConfiguration_S3() : RGWLifecycleConfiguration(NULL) {}
-  ~RGWLifecycleConfiguration_S3() override {}
 
-  bool xml_end(const char *el) override;
-
+  void decode_xml(XMLObj *obj);
   void to_xml(ostream& out) {
     out << "<LifecycleConfiguration xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">";
     multimap<string, LCRule>::iterator iter;

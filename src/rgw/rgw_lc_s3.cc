@@ -24,77 +24,63 @@ static bool check_date(const string& _date)
   return true;
 }
 
-bool LCExpiration_S3::xml_end(const char * el) {
-  LCDays_S3 *lc_days = static_cast<LCDays_S3 *>(find_first("Days"));
-  LCDeleteMarker_S3 *lc_dm = static_cast<LCDeleteMarker_S3 *>(find_first("ExpiredObjectDeleteMarker"));
-  LCDate_S3 *lc_date = static_cast<LCDate_S3 *>(find_first("Date"));
-
-  if ((!lc_days && !lc_dm && !lc_date) || (lc_days && lc_dm) 
-      || (lc_days && lc_date) || (lc_dm && lc_date)) {
-    return false;
+void LCExpiration_S3::decode_xml(XMLObj *obj) {
+  bool days_exist = RGWXMLDecoder::decode_xml("Days", days, obj);
+  bool dm_exist = RGWXMLDecoder::decode_xml("ExpiredObjectDeleteMarker", dm_expiration, obj);
+  bool date_exist = RGWXMLDecoder::decode_xml("Date", date, obj);
+  if ((!days_exist && !dm_exist && !date_exist) || (days_exist && dm_exist)
+      || (days_exist && date_exist) || (dm_exist && date_exist)) {
+    throw RGWXMLDecoder::err("invalid expiration action");
   }
-  if (lc_days) {
-    days = lc_days->get_data();
-  } else if (lc_dm) {
-    dm_expiration = lc_dm->get_data().compare("true") == 0;
-    if (!dm_expiration) {
-      return false;
+  if (dm_exist && !dm_expiration) {
+    throw RGWXMLDecoder::err("invalid delete marker expiration value");
+  }
+  if (date_exist && !check_date(date)) {
+    throw RGWXMLDecoder::err("invalid date format");
+  }
+
+}
+
+void LCNoncurExpiration_S3::decode_xml(XMLObj *obj) {
+  RGWXMLDecoder::decode_xml("NoncurrentDays", days, obj, true);
+}
+
+void LCMPExpiration_S3::decode_xml(XMLObj *obj) {
+  RGWXMLDecoder::decode_xml("DaysAfterInitiation", days, obj, true);
+}
+
+void RGWLifecycleConfiguration_S3::decode_xml(XMLObj *obj) {
+  list<LCRule_S3> rules;
+  do_decode_xml_obj(rules, "Rule", obj);
+  if (rules.empty()) {
+    throw RGWXMLDecoder::err("lifecycle config has no rules");
+  }
+  if (cct->_conf->rgw_lc_max_rules < rules.size()) {
+    throw RGWXMLDecoder::err("the lifecycle config has too many rules");
+  }
+
+  // S3 generates a 48 bit random ID, maybe we could generate shorter IDs
+  static constexpr auto LC_ID_LENGTH = 48;
+  for (LCRule_S3& rule: rules) {
+    string id;
+    rule.get_id(id);
+    if (id.empty()) {
+      gen_rand_alphanumeric_lower(cct, &id, LC_ID_LENGTH);
+      rule.set_id(&id);
     }
-  } else {
-    date = lc_date->get_data();
-    //We need return xml error according to S3
-    if (!check_date(date)) {
-      return false;
-    }
+    add_rule(&rule);
   }
-  return true;
 }
 
-bool LCNoncurExpiration_S3::xml_end(const char *el) {
-  LCDays_S3 *lc_noncur_days = static_cast<LCDays_S3 *>(find_first("NoncurrentDays"));
-  if (!lc_noncur_days) {
-    return false;
-  }
-  days = lc_noncur_days->get_data();
-  return true;
-}
-
-bool LCMPExpiration_S3::xml_end(const char *el) {
-  LCDays_S3 *lc_mp_days = static_cast<LCDays_S3 *>(find_first("DaysAfterInitiation"));
-  if (!lc_mp_days) {
-    return false;
-  }
-  days = lc_mp_days->get_data();
-  return true;
-}
-
-bool RGWLifecycleConfiguration_S3::xml_end(const char *el) {
-  XMLObjIter iter = find("Rule");
-  LCRule_S3 *rule = static_cast<LCRule_S3 *>(iter.get_next());
-  if (!rule)
-    return false;
-  while (rule) {
-    add_rule(rule);
-    rule = static_cast<LCRule_S3 *>(iter.get_next());
-  }
-  if (cct->_conf->rgw_lc_max_rules < rule_map.size()) {
-    ldout(cct, 5) << "Warn: The lifecycle config has too many rules, rule number is:" 
-                  << rule_map.size() << ", max number is:" << cct->_conf->rgw_lc_max_rules << dendl;
-    return false;
-  }
-  return true;
-}
-
-bool LCFilter_S3::xml_end(const char* el) {
-
-  XMLObj *o = find_first("And");
+void LCFilter_S3::decode_xml(XMLObj *obj) {
+  XMLObj *o = obj->find_first("And");
   bool single_cond = false;
   int num_conditions = 0;
   // If there is an AND condition, every tag is a child of and
   // else we only support single conditions and return false if we see multiple
 
   if (o == nullptr){
-    o = this;
+    o = obj;
     single_cond = true;
   }
 
@@ -110,8 +96,10 @@ bool LCFilter_S3::xml_end(const char* el) {
     obj_tags.emplace_tag(std::move(_key), std::move(_val));
     num_conditions++;
   }
+  if (single_cond && num_conditions > 1) {
+    throw RGWXMLDecoder::err("invalid filter");
+  }
 
-  return !(single_cond && num_conditions > 1);
 }
 
 void LCTransition_S3::decode_xml(XMLObj *obj) {
@@ -141,15 +129,11 @@ void LCNoncurTransition_S3::decode_xml(XMLObj *obj) {
   }
 }
 
-
-bool LCRule_S3::xml_end(const char *el) {
-  LCID_S3 *lc_id;
-  LCPrefix_S3 *lc_prefix;
-  LCStatus_S3 *lc_status;
-  LCExpiration_S3 *lc_expiration;
-  LCNoncurExpiration_S3 *lc_noncur_expiration;
-  LCMPExpiration_S3 *lc_mp_expiration;
-  LCFilter_S3 *lc_filter;
+void LCRule_S3::decode_xml(XMLObj *obj) {
+  LCExpiration_S3 lc_expiration;
+  LCNoncurExpiration_S3 lc_noncur_expiration;
+  LCMPExpiration_S3 lc_mp_expiration;
+  LCFilter_S3 lc_filter;
   list<LCTransition_S3> lc_transitions;
   list<LCNoncurTransition_S3> lc_noncur_transitions;
   id.clear();
@@ -157,21 +141,12 @@ bool LCRule_S3::xml_end(const char *el) {
   status.clear();
   dm_expiration = false;
 
-  // S3 generates a 48 bit random ID, maybe we could generate shorter IDs
-  static constexpr auto LC_ID_LENGTH = 48;
+  RGWXMLDecoder::decode_xml("ID", id, obj);
 
-  lc_id = static_cast<LCID_S3 *>(find_first("ID"));
-  if (lc_id){
-    id = lc_id->get_data();
-  } else {
-    gen_rand_alphanumeric_lower(cct, &id, LC_ID_LENGTH);
-  }
+  bool filter_exist = RGWXMLDecoder::decode_xml("Filter", lc_filter, obj);
 
-
-  lc_filter = static_cast<LCFilter_S3 *>(find_first("Filter"));
-
-  if (lc_filter){
-    filter = *lc_filter;
+  if (filter_exist){
+    filter = lc_filter;
   } else {
     // Ideally the following code should be deprecated and we should return
     // False here, The new S3 LC configuration xml spec. makes Filter mandatory
@@ -181,61 +156,49 @@ bool LCRule_S3::xml_end(const char *el) {
     // argument. A day will come when S3 enforces their own xml-spec, but it is
     // not this day
 
-    lc_prefix = static_cast<LCPrefix_S3 *>(find_first("Prefix"));
-
-    if (!lc_prefix){
-      return false;
-    }
-
-    prefix = lc_prefix->get_data();
+    RGWXMLDecoder::decode_xml("Prefix", prefix, obj, true);
   }
 
-
-  lc_status = static_cast<LCStatus_S3 *>(find_first("Status"));
-  if (!lc_status)
-    return false;
-  status = lc_status->get_data();
+  RGWXMLDecoder::decode_xml("Status", status, obj, true);
   if (status.compare("Enabled") != 0 && status.compare("Disabled") != 0)
-    return false;
+    throw RGWXMLDecoder::err("invalid status value");
 
-  lc_expiration = static_cast<LCExpiration_S3 *>(find_first("Expiration"));
-  lc_noncur_expiration = static_cast<LCNoncurExpiration_S3 *>(find_first("NoncurrentVersionExpiration"));
-  lc_mp_expiration = static_cast<LCMPExpiration_S3 *>(find_first("AbortIncompleteMultipartUpload"));
+  bool cur_exist = RGWXMLDecoder::decode_xml("Expiration", lc_expiration, obj);
+  bool noncur_exist = RGWXMLDecoder::decode_xml("NoncurrentVersionExpiration", lc_noncur_expiration, obj);
+  bool mp_exist = RGWXMLDecoder::decode_xml("AbortIncompleteMultipartUpload", lc_mp_expiration, obj);
+  do_decode_xml_obj(lc_transitions, "Transition", obj);
+  do_decode_xml_obj(lc_noncur_transitions, "NoncurrentVersionTransition", obj);
 
-  do_decode_xml_obj(lc_transitions, "Transition", this);
-  do_decode_xml_obj(lc_noncur_transitions, "NoncurrentVersionTransition", this);
-
-  if (!lc_expiration && !lc_noncur_expiration && !lc_mp_expiration &&
+  if (!cur_exist && !noncur_exist && !mp_exist &&
       lc_transitions.empty() && lc_noncur_transitions.empty()) {
-    return false;
+    throw RGWXMLDecoder::err("rule has no actions");
   } else {
-    if (lc_expiration) {
-      if (lc_expiration->has_days()) {
-        expiration.set_days(lc_expiration->get_days_str());
-      } else if (lc_expiration->has_date()) {
-        expiration.set_date(lc_expiration->get_date());
+    if (cur_exist) {
+      if (lc_expiration.has_days()) {
+        expiration.set_days(lc_expiration.get_days_str());
+      } else if (lc_expiration.has_date()) {
+        expiration.set_date(lc_expiration.get_date());
       } else {
-        dm_expiration = lc_expiration->get_dm_expiration();
+        dm_expiration = lc_expiration.get_dm_expiration();
       }
     }
-    if (lc_noncur_expiration) {
-      noncur_expiration = *lc_noncur_expiration;
+    if (noncur_exist) {
+      noncur_expiration = lc_noncur_expiration;
     }
-    if (lc_mp_expiration) {
-      mp_expiration = *lc_mp_expiration;
+    if (mp_exist) {
+      mp_expiration = lc_mp_expiration;
     }
-    for(LCTransition_S3 &lc_transition: lc_transitions) {
+    for (LCTransition_S3& lc_transition: lc_transitions) {
       if (!add_transition(lc_transition)) {
-        return false;
+        throw RGWXMLDecoder::err("same storage class in transition action");
       }
     }
-    for(LCNoncurTransition_S3 &lc_noncur_transition: lc_noncur_transitions) {
+    for (LCNoncurTransition_S3& lc_noncur_transition: lc_noncur_transitions) {
       if (!add_noncur_transition(lc_noncur_transition)) {
-        return false;
+        throw RGWXMLDecoder::err("same storage class in noncurrent transition action");
       }
     }
   }
-  return true;
 }
 
 void LCRule_S3::to_xml(ostream& out) {
@@ -303,43 +266,6 @@ void RGWLifecycleConfiguration_S3::dump_xml(Formatter *f) const
 	}
 
 	f->close_section(); // Lifecycle
-}
-
-XMLObj *RGWLCXMLParser_S3::alloc_obj(const char *el)
-{
-  XMLObj * obj = NULL;
-  if (strcmp(el, "LifecycleConfiguration") == 0) {
-    obj = new RGWLifecycleConfiguration_S3(cct);
-  } else if (strcmp(el, "Rule") == 0) {
-    obj = new LCRule_S3(cct);
-  } else if (strcmp(el, "ID") == 0) {
-    obj = new LCID_S3();
-  } else if (strcmp(el, "Prefix") == 0) {
-    obj = new LCPrefix_S3();
-  } else if (strcmp(el, "Filter") == 0) {
-    obj = new LCFilter_S3();
-  } else if (strcmp(el, "Status") == 0) {
-    obj = new LCStatus_S3();
-  } else if (strcmp(el, "Expiration") == 0) {
-    obj = new LCExpiration_S3();
-  } else if (strcmp(el, "Days") == 0) {
-    obj = new LCDays_S3();
-  } else if (strcmp(el, "Date") == 0) {
-    obj = new LCDate_S3();
-  } else if (strcmp(el, "ExpiredObjectDeleteMarker") == 0) {
-    obj = new LCDeleteMarker_S3();
-  } else if (strcmp(el, "NoncurrentVersionExpiration") == 0) {
-    obj = new LCNoncurExpiration_S3();
-  } else if (strcmp(el, "NoncurrentDays") == 0) {
-    obj = new LCDays_S3();
-  } else if (strcmp(el, "AbortIncompleteMultipartUpload") == 0) {
-    obj = new LCMPExpiration_S3();
-  } else if (strcmp(el, "DaysAfterInitiation") == 0) {
-    obj = new LCDays_S3();
-  } else if (strcmp(el, "StorageClass") == 0) {
-    obj = new LCStorageClass_S3();
-  }
-  return obj;
 }
 
 
