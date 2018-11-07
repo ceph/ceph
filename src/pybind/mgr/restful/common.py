@@ -6,7 +6,7 @@ OSD_FLAGS = [
 
 # Implemented osd commands
 OSD_IMPLEMENTED_COMMANDS = [
-    'scrub', 'deep_scrub', 'repair'
+    'scrub', 'deep-scrub', 'repair'
 ]
 
 # Valid values for the 'var' argument to 'ceph osd pool set'
