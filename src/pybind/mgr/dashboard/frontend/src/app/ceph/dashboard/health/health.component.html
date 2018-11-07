@@ -20,9 +20,7 @@
       <ng-container *ngIf="contentData.health?.checks?.length > 0">
         <ng-template #healthChecks>
           <p class="logs-link"
-             i18n>
-            &rarr; See <a (click)="viewportScroller.scrollToAnchor('logs')">Logs</a> for more details.
-          </p>
+             i18n>&rarr; See <a (click)="viewportScroller.scrollToAnchor('logs')">Logs</a> for more details.</p>
           <ul>
             <li *ngFor="let check of contentData.health.checks">
               <span [ngStyle]="check.severity | healthColor">{{ check.type }}</span>: {{ check.summary.message }}
@@ -232,9 +230,7 @@
                     *ngIf="contentData.pg_info">
         <ng-template #pgStatus>
           <p class="logs-link"
-             i18n>
-            &rarr; See <a (click)="viewportScroller.scrollToAnchor('logs')">Logs</a> for more details.
-          </p>
+             i18n>&rarr; See <a (click)="viewportScroller.scrollToAnchor('logs')">Logs</a> for more details.</p>
           <ul>
             <li *ngFor="let pgStatesText of contentData.pg_info.statuses | keyvalue">
               {{ pgStatesText.key }}: {{ pgStatesText.value }}

@@ -1,7 +1,6 @@
 <div class="modal-header">
   <h4 class="modal-title pull-left"
-      i18n>Add erasure code profile
-  </h4>
+      i18n>Add erasure code profile</h4>
   <button type="button"
           class="close pull-right"
           aria-label="Close"
@@ -30,20 +29,16 @@
                placeholder="Name..."
                formControlName="name"
                autofocus>
-        <span i18n
-              class="help-block"
-              *ngIf="form.showError('name', frm, 'required')">
-          This field is required!
-        </span>
+        <span class="help-block"
+              *ngIf="form.showError('name', frm, 'required')"
+              i18n>This field is required!</span>
         <span class="help-block"
               *ngIf="form.showError('name', frm, 'pattern')">
           The name can only consist of alphanumeric characters, dashes and underscores.
         </span>
-        <span i18n
-              class="help-block"
-              *ngIf="form.showError('name', frm, 'uniqueName')">
-          The chosen erasure code profile name is already in use.
-        </span>
+        <span class="help-block"
+              *ngIf="form.showError('name', frm, 'uniqueName')"
+              i18n>The chosen erasure code profile name is already in use.</span>
       </div>
     </div>
 
@@ -62,28 +57,23 @@
                 formControlName="plugin">
           <option *ngIf="!plugins"
                   ngValue=""
-                  i18n>
-            Loading...
-          </option>
+                  i18n>Loading...</option>
           <option *ngFor="let plugin of plugins"
                   [ngValue]="plugin">
             {{ plugin }}
           </option>
         </select>
-        <span i18n
-              class="help-block"
-              *ngIf="form.showError('name', frm, 'required')">
-          This field is required!
-        </span>
+        <span class="help-block"
+              *ngIf="form.showError('name', frm, 'required')"
+              i18n>This field is required!</span>
       </div>
     </div>
 
     <div class="form-group"
          [ngClass]="{'has-error': form.showError('k', frm)}">
-      <label i18n
-             for="k"
+      <label for="k"
              class="control-label col-sm-3">
-        Data chunks (k)
+        <ng-container i18n>Data chunks (k)</ng-container>
         <span class="required"
               *ngIf="requiredControls.includes('k')"></span>
         <cd-helper [html]="tooltips.k">
@@ -97,16 +87,12 @@
                ng-model="$ctrl.erasureCodeProfile.k"
                placeholder="Data chunks..."
                formControlName="k">
-        <span i18n
-              class="help-block"
-              *ngIf="form.showError('k', frm, 'required')">
-          This field is required!
-        </span>
-        <span i18n
-              class="help-block"
-              *ngIf="form.showError('k', frm, 'min')">
-          Must be equal to or greater than 2.
-        </span>
+        <span class="help-block"
+              *ngIf="form.showError('k', frm, 'required')"
+              i18n>This field is required!</span>
+        <span class="help-block"
+              *ngIf="form.showError('k', frm, 'min')"
+              i18n>Must be equal to or greater than 2.</span>
       </div>
     </div>
 
@@ -127,16 +113,12 @@
                class="form-control"
                placeholder="Coding chunks..."
                formControlName="m">
-        <span i18n
-              class="help-block"
-              *ngIf="form.showError('m', frm, 'required')">
-          This field is required!
-        </span>
-        <span i18n
-              class="help-block"
-              *ngIf="form.showError('m', frm, 'min')">
-          Must be equal to or greater than 1.
-        </span>
+        <span class="help-block"
+              *ngIf="form.showError('m', frm, 'required')"
+              i18n>This field is required!</span>
+        <span class="help-block"
+              *ngIf="form.showError('m', frm, 'min')"
+              i18n>Must be equal to or greater than 1.</span>
       </div>
     </div>
 
@@ -156,11 +138,9 @@
                class="form-control"
                placeholder="Coding chunks..."
                formControlName="c">
-        <span i18n
-              class="help-block"
-              *ngIf="form.showError('c', frm, 'min')">
-          Must be equal to or greater than 1.
-        </span>
+        <span class="help-block"
+              *ngIf="form.showError('c', frm, 'min')"
+              i18n>Must be equal to or greater than 1.</span>
       </div>
     </div>
 
@@ -181,16 +161,12 @@
                class="form-control"
                placeholder="Coding chunks..."
                formControlName="l">
-        <span i18n
-              class="help-block"
-              *ngIf="form.showError('l', frm, 'required')">
-          This field is required!
-        </span>
-        <span i18n
-              class="help-block"
-              *ngIf="form.showError('l', frm, 'min')">
-          Must be equal to or greater than 1.
-        </span>
+        <span class="help-block"
+              *ngIf="form.showError('l', frm, 'required')"
+              i18n>This field is required!</span>
+        <span class="help-block"
+              *ngIf="form.showError('l', frm, 'min')"
+              i18n>Must be equal to or greater than 1.</span>
       </div>
     </div>
 
@@ -208,9 +184,7 @@
                 formControlName="crushFailureDomain">
           <option *ngIf="!failureDomains"
                   ngValue=""
-                  i18n>
-            Loading...
-          </option>
+                  i18n>Loading...</option>
           <option *ngFor="let domain of failureDomains"
                   [ngValue]="domain">
             {{ domain }}
@@ -234,14 +208,10 @@
                 formControlName="crushLocality">
           <option *ngIf="!failureDomains"
                   ngValue=""
-                  i18n>
-            Loading...
-          </option>
+                  i18n>Loading...</option>
           <option *ngIf="failureDomains && failureDomains.length > 0"
                   ngValue=""
-                  i18n>
-            None
-          </option>
+                  i18n>None</option>
           <option *ngFor="let domain of failureDomains"
                   [ngValue]="domain">
             {{ domain }}
@@ -287,11 +257,9 @@
                class="form-control"
                placeholder="Packetsize..."
                formControlName="packetSize">
-        <span i18n
-              class="help-block"
-              *ngIf="form.showError('packetSize', frm, 'min')">
-          Must be equal to or greater than 1.
-        </span>
+        <span class="help-block"
+              *ngIf="form.showError('packetSize', frm, 'min')"
+              i18n>Must be equal to or greater than 1.</span>
       </div>
     </div>
 
@@ -326,9 +294,7 @@
                 name="crushDeviceClass"
                 formControlName="crushDeviceClass">
           <option ngValue=""
-                  i18n>
-            any
-          </option>
+                  i18n>any</option>
           <option *ngFor="let deviceClass of devices"
                   [ngValue]="deviceClass">
             {{ deviceClass }}
@@ -358,13 +324,10 @@
   <div class="modal-footer">
     <cd-submit-button (submitAction)="onSubmit()"
                       [form]="frm"
-                      i18n>
-      Add
-    </cd-submit-button>
+                      i18n>Add</cd-submit-button>
     <button class="btn btn-sm btn-default"
             type="button"
             (click)="bsModalRef.hide()"
-            i18n>Close
-    </button>
+            i18n>Close</button>
   </div>
 </form>

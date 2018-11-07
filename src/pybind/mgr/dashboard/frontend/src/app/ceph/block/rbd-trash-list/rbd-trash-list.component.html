@@ -31,12 +31,10 @@
              let-row="row"
              let-value="value">
   <ng-container *ngIf="row.cdIsExpired"
-                i18n>Expired at
-  </ng-container>
+                i18n>Expired at</ng-container>
 
   <ng-container *ngIf="!row.cdIsExpired"
-                i18n>Protected until
-  </ng-container>
+                i18n>Protected until</ng-container>
 
   {{ value | cdDate }}
 </ng-template>

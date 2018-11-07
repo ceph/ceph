@@ -12,9 +12,7 @@
                         [data]="osd.details.osd_metadata">
     </cd-table-key-value>
     <ng-template #noMetaData>
-      <cd-warning-panel i18n>
-        Metadata not available
-      </cd-warning-panel>
+      <cd-warning-panel i18n>Metadata not available</cd-warning-panel>
     </ng-template>
   </tab>
   <tab heading="Performance counter"
@@ -26,10 +24,8 @@
   </tab>
   <tab heading="Histogram"
        i18n-heading>
-    <cd-warning-panel i18n
-                      *ngIf="osd.loaded && osd.histogram_failed">
-      Histogram not available: {{ osd.histogram_failed }}
-    </cd-warning-panel>
+    <cd-warning-panel *ngIf="osd.loaded && osd.histogram_failed"
+                      i18n>Histogram not available: {{ osd.histogram_failed }}</cd-warning-panel>
 
     <div class="row"
          *ngIf="osd.loaded && osd.details.histogram">

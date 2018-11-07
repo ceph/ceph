@@ -1,8 +1,6 @@
 <cd-modal [modalRef]="bsModalRef">
   <ng-container class="modal-title"
-                i18n>
-    Reweight OSD
-  </ng-container>
+                i18n>Reweight OSD</ng-container>
 
   <ng-container class="modal-content">
     <form class="form-horizontal"
@@ -16,12 +14,10 @@
                    [value]="currentWeight">
             <span class="help-block"
                   *ngIf="weight.errors">
-              <span *ngIf="weight.errors?.required" i18n>
-                This field is required.
-              </span>
-              <span *ngIf="weight.errors?.max || weight.errors?.min" i18n>
-                The value needs to be between 0 and 1.
-              </span>
+              <span *ngIf="weight.errors?.required"
+                    i18n>This field is required.</span>
+              <span *ngIf="weight.errors?.max || weight.errors?.min"
+                    i18n>The value needs to be between 0 and 1.</span>
             </span>
           </div>
         </div>
@@ -31,15 +27,11 @@
         <cd-submit-button (submitAction)="reweight()"
                           [form]="reweightForm"
                           [disabled]="reweightForm.invalid"
-                          i18n>
-          Reweight
-        </cd-submit-button>
+                          i18n>Reweight</cd-submit-button>
 
         <button class="btn btn-link btn-sm"
                 (click)="bsModalRef.hide()"
-                i18n>
-          Cancel
-        </button>
+                i18n>Cancel</button>
       </div>
     </form>
   </ng-container>

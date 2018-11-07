@@ -1,7 +1,6 @@
 <div class="modal-header">
   <h4 class="modal-title pull-left"
-      i18n>Capability
-  </h4>
+      i18n>Capability</h4>
   <button type="button"
           class="close pull-right"
           aria-label="Close"
@@ -39,16 +38,13 @@
                 autofocus>
           <option i18n
                   *ngIf="types !== null"
-                  [ngValue]="null">-- Select a type --
-          </option>
+                  [ngValue]="null">-- Select a type --</option>
           <option *ngFor="let type of types"
                   [value]="type">{{ type }}</option>
         </select>
         <span class="help-block"
               *ngIf="formGroup.showError('type', frm, 'required')"
-              i18n>
-          This field is required.
-        </span>
+              i18n>This field is required.</span>
       </div>
     </div>
 
@@ -65,8 +61,7 @@
                 class="form-control"
                 formControlName="perm">
           <option i18n
-                  [ngValue]="null">-- Select a permission --
-          </option>
+                  [ngValue]="null">-- Select a permission --</option>
           <option *ngFor="let perm of ['read', 'write', '*']"
                   [value]="perm">
             {{ perm }}
@@ -74,9 +69,7 @@
         </select>
         <span class="help-block"
               *ngIf="formGroup.showError('perm', frm, 'required')"
-              i18n>
-          This field is required.
-        </span>
+              i18n>This field is required.</span>
       </div>
     </div>
 
@@ -89,7 +82,6 @@
     <button class="btn btn-sm btn-default"
             type="button"
             (click)="bsModalRef.hide()"
-            i18n>Close
-    </button>
+            i18n>Close</button>
   </div>
 </form>
