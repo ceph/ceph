@@ -385,7 +385,7 @@ TEST_F(LibRadosListNP, ListObjectsError) {
     size_t buflen, stlen;
     string c = "{\"prefix\":\"osd pool rm\",\"pool\": \"" + pool_name +
       "\",\"pool2\":\"" + pool_name +
-      "\",\"sure\": \"--yes-i-really-really-mean-it-not-faking\"}";
+      "\",\"yes_i_really_really_mean_it_not_faking\": true}";
     const char *cmd[2] = { c.c_str(), 0 };
     ASSERT_EQ(0, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen));
     ASSERT_EQ(0, rados_wait_for_latest_osdmap(cluster));
