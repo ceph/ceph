@@ -970,13 +970,10 @@ struct RGWSLOInfo {
   uint64_t total_size;
 
   /* in memory only */
-  char *raw_data;
-  int raw_data_len;
+  bufferlist raw_data;
 
-  RGWSLOInfo() : total_size(0), raw_data(NULL), raw_data_len(0) {}
-  ~RGWSLOInfo() {
-    free(raw_data);
-  }
+  RGWSLOInfo() : total_size(0) {}
+  ~RGWSLOInfo() {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -1374,18 +1371,12 @@ public:
 
 class RGWPutACLs : public RGWOp {
 protected:
-  int len;
-  char *data;
+  bufferlist data;
   ACLOwner owner;
 
 public:
-  RGWPutACLs() {
-    len = 0;
-    data = NULL;
-  }
-  ~RGWPutACLs() override {
-    free(data);
-  }
+  RGWPutACLs() {}
+  ~RGWPutACLs() override {}
 
   int verify_permission() override;
   void pre_exec() override;
@@ -1418,20 +1409,15 @@ public:
 
 class RGWPutLC : public RGWOp {
 protected:
-  int len;
-  char *data;
+  bufferlist data;
   const char *content_md5;
   string cookie;
 
 public:
   RGWPutLC() {
-    len = 0;
-    data = nullptr;
     content_md5 = nullptr;
   }
-  ~RGWPutLC() override {
-    free(data);
-  }
+  ~RGWPutLC() override {}
 
   void init(RGWRados *store, struct req_state *s, RGWHandler *dialect_handler) override {
 #define COOKIE_LEN 16
@@ -1611,8 +1597,7 @@ protected:
   string upload_id;
   string etag;
   string version_id;
-  char *data;
-  int len;
+  bufferlist data;
 
   struct MPSerializer {
     librados::IoCtx ioctx;
@@ -1636,13 +1621,8 @@ protected:
   } serializer;
 
 public:
-  RGWCompleteMultipart() {
-    data = NULL;
-    len = 0;
-  }
-  ~RGWCompleteMultipart() override {
-    free(data);
-  }
+  RGWCompleteMultipart() {}
+  ~RGWCompleteMultipart() override {}
 
   int verify_permission() override;
   void pre_exec() override;
@@ -1792,8 +1772,7 @@ public:
 
 class RGWDeleteMultiObj : public RGWOp {
 protected:
-  int len;
-  char *data;
+  bufferlist data;
   rgw_bucket bucket;
   bool quiet;
   bool status_dumped;
@@ -1801,8 +1780,6 @@ protected:
 
 public:
   RGWDeleteMultiObj() {
-    len = 0;
-    data = NULL;
     quiet = false;
     status_dumped = false;
   }
@@ -2063,14 +2040,10 @@ public:
 };
 
 class RGWPutBucketPolicy : public RGWOp {
-  int len = 0;
-  char *data = nullptr;
+  bufferlist data;
 public:
   RGWPutBucketPolicy() = default;
   ~RGWPutBucketPolicy() {
-    if (data) {
-      free(static_cast<void*>(data));
-    }
   }
   void send_response() override;
   int verify_permission() override;
