@@ -14,7 +14,7 @@ private:
     CONNECTING,
     START_ACCEPT,
     ACCEPTING,
-    ACCEPTED_CLIENT_IDENT,
+    ACCEPTING_SESSION,
     READY,
     THROTTLE_MESSAGE,
     THROTTLE_BYTES,
@@ -32,7 +32,7 @@ private:
                                       "CONNECTING",
                                       "START_ACCEPT",
                                       "ACCEPTING",
-                                      "ACCEPTED_CLIENT_IDENT",
+                                      "ACCEPTING_SESSION",
                                       "READY",
                                       "THROTTLE_MESSAGE",
                                       "THROTTLE_BYTES",
@@ -45,7 +45,6 @@ private:
     return statenames[state];
   }
 
-public:
   enum class Tag : uint32_t {
     AUTH_REQUEST,
     AUTH_BAD_METHOD,
@@ -54,6 +53,12 @@ public:
     AUTH_DONE,
     IDENT,
     IDENT_MISSING_FEATURES,
+    SESSION_RECONNECT,
+    SESSION_RESET,
+    SESSION_RETRY,
+    SESSION_RETRY_GLOBAL,
+    SESSION_RECONNECT_OK,
+    WAIT,
     MESSAGE,
     KEEPALIVE2,
     KEEPALIVE2_ACK,
@@ -93,12 +98,9 @@ public:
     bufferlist auth_payload;
 
     AuthRequestFrame(uint32_t method, bufferlist &auth_payload)
-        : Frame(Tag::AUTH_REQUEST),
-          method(method),
-          len(auth_payload.length()),
-          auth_payload(auth_payload) {
+        : Frame(Tag::AUTH_REQUEST) {
       encode(method, payload, 0);
-      encode(len, payload, 0);
+      encode(auth_payload.length(), payload, 0);
       payload.claim_append(auth_payload);
     }
 
@@ -115,12 +117,10 @@ public:
     std::vector<__u32> allowed_methods;
 
     AuthBadMethodFrame(uint32_t method, std::vector<__u32> methods)
-        : Frame(Tag::AUTH_BAD_METHOD),
-          method(method),
-          allowed_methods(methods) {
+        : Frame(Tag::AUTH_BAD_METHOD) {
       encode(method, payload, 0);
-      encode((uint32_t)allowed_methods.size(), payload, 0);
-      for (const auto &a_meth : allowed_methods) {
+      encode((uint32_t)methods.size(), payload, 0);
+      for (const auto &a_meth : methods) {
         encode(a_meth, payload, 0);
       }
     }
@@ -141,9 +141,7 @@ public:
     std::string error_msg;
 
     AuthBadAuthFrame(uint32_t error_code, std::string error_msg)
-        : Frame(Tag::AUTH_BAD_AUTH),
-          error_code(error_code),
-          error_msg(error_msg) {
+        : Frame(Tag::AUTH_BAD_AUTH) {
       encode(error_code, payload, 0);
       encode(error_msg, payload, 0);
     }
@@ -159,11 +157,8 @@ public:
     uint32_t len;
     bufferlist auth_payload;
 
-    AuthMoreFrame(bufferlist &auth_payload)
-        : Frame(Tag::AUTH_MORE),
-          len(auth_payload.length()),
-          auth_payload(auth_payload) {
-      encode(len, payload, 0);
+    AuthMoreFrame(bufferlist &auth_payload) : Frame(Tag::AUTH_MORE) {
+      encode(auth_payload.length(), payload, 0);
       payload.claim_append(auth_payload);
     }
 
@@ -177,7 +172,7 @@ public:
   struct AuthDoneFrame : public Frame {
     uint64_t flags;
 
-    AuthDoneFrame(uint64_t flags) : Frame(Tag::AUTH_DONE), flags(flags) {
+    AuthDoneFrame(uint64_t flags) : Frame(Tag::AUTH_DONE) {
       encode(flags, payload, 0);
     }
 
@@ -186,42 +181,165 @@ public:
     }
   };
 
-  struct IdentFrame : public SignedEncryptedFrame {
+  struct ClientIdentFrame : public SignedEncryptedFrame {
     entity_addrvec_t addrs;
     int64_t gid;
+    uint64_t global_seq;
     uint64_t supported_features;  // CEPH_FEATURE_*
     uint64_t required_features;   // CEPH_FEATURE_*
     uint64_t flags;               // CEPH_MSG_CONNECT_*
-    uint64_t cookie;
 
-    IdentFrame(entity_addrvec_t addrs, int64_t gid, uint64_t supported_features,
-               uint64_t required_features, uint64_t flags, uint64_t cookie)
-        : SignedEncryptedFrame(Tag::IDENT),
-          addrs(addrs),
-          gid(gid),
-          supported_features(supported_features),
-          required_features(required_features),
-          flags(flags),
-          cookie(cookie) {
+    ClientIdentFrame(const entity_addrvec_t &addrs, int64_t gid,
+                     uint64_t global_seq, uint64_t supported_features,
+                     uint64_t required_features, uint64_t flags)
+        : SignedEncryptedFrame(Tag::IDENT) {
       encode(addrs, payload, -1ll);
       encode(gid, payload, -1ll);
+      encode(global_seq, payload, -1ll);
       encode(supported_features, payload, -1ll);
       encode(required_features, payload, -1ll);
       encode(flags, payload, -1ll);
+    }
+
+    ClientIdentFrame(char *payload, uint32_t length) : SignedEncryptedFrame() {
+      bufferlist bl;
+      bl.push_back(buffer::create_static(length, payload));
+      try {
+        auto ti = bl.cbegin();
+        decode_frame(ti);
+      } catch (const buffer::error &e) {
+      }
+    }
+
+    ClientIdentFrame() : SignedEncryptedFrame() {}
+
+  protected:
+    void decode_frame(ceph::buffer::list::const_iterator &ti) {
+      decode(addrs, ti);
+      decode(gid, ti);
+      decode(global_seq, ti);
+      decode(supported_features, ti);
+      decode(required_features, ti);
+      decode(flags, ti);
+    }
+  };
+
+  struct ServerIdentFrame : public ClientIdentFrame {
+    uint64_t cookie;
+
+    ServerIdentFrame(const entity_addrvec_t &addrs, int64_t gid,
+                     uint64_t global_seq, uint64_t supported_features,
+                     uint64_t required_features, uint64_t flags,
+                     uint64_t cookie)
+        : ClientIdentFrame(addrs, gid, global_seq, supported_features,
+                           required_features, flags) {
       encode(cookie, payload, -1ll);
     }
 
-    IdentFrame(char *payload, uint32_t length) : SignedEncryptedFrame() {
+    ServerIdentFrame(char *payload, uint32_t length) : ClientIdentFrame() {
+      bufferlist bl;
+      bl.push_back(buffer::create_static(length, payload));
+      try {
+        auto ti = bl.cbegin();
+        ClientIdentFrame::decode_frame(ti);
+        decode(cookie, ti);
+      } catch (const buffer::error &e) {
+      }
+    }
+  };
+
+  struct ReconnectFrame : public SignedEncryptedFrame {
+    entity_addrvec_t addrs;
+    uint64_t cookie;
+    uint64_t global_seq;
+    uint64_t connect_seq;
+    uint64_t msg_seq;
+
+    ReconnectFrame(const entity_addrvec_t &addrs, uint64_t cookie,
+                   uint64_t global_seq, uint64_t connect_seq, uint64_t msg_seq)
+        : SignedEncryptedFrame(Tag::SESSION_RECONNECT) {
+      encode(addrs, payload, -1ll);
+      encode(cookie, payload, 0);
+      encode(global_seq, payload, 0);
+      encode(connect_seq, payload, 0);
+      encode(msg_seq, payload, 0);
+    }
+
+    ReconnectFrame(char *payload, uint32_t length) : SignedEncryptedFrame() {
       bufferlist bl;
       bl.push_back(buffer::create_static(length, payload));
       try {
         auto ti = bl.cbegin();
         decode(addrs, ti);
-        decode(gid, ti);
-        decode(supported_features, ti);
-        decode(required_features, ti);
-        decode(flags, ti);
         decode(cookie, ti);
+        decode(global_seq, ti);
+        decode(connect_seq, ti);
+        decode(msg_seq, ti);
+      } catch (const buffer::error &e) {
+      }
+    }
+  };
+
+  struct ResetFrame : public SignedEncryptedFrame {
+    ResetFrame() : SignedEncryptedFrame(Tag::SESSION_RESET) {}
+  };
+
+  struct RetryFrame : public SignedEncryptedFrame {
+    uint64_t connect_seq;
+
+    RetryFrame(uint64_t connect_seq)
+        : SignedEncryptedFrame(Tag::SESSION_RETRY) {
+      encode(connect_seq, payload);
+    }
+
+    RetryFrame(char *payload, uint32_t length) : SignedEncryptedFrame() {
+      bufferlist bl;
+      bl.push_back(buffer::create_static(length, payload));
+      try {
+        auto ti = bl.cbegin();
+        decode(connect_seq, ti);
+      } catch (const buffer::error &e) {
+      }
+    }
+  };
+
+  struct RetryGlobalFrame : public SignedEncryptedFrame {
+    uint64_t global_seq;
+
+    RetryGlobalFrame(uint64_t global_seq)
+        : SignedEncryptedFrame(Tag::SESSION_RETRY_GLOBAL) {
+      encode(global_seq, payload);
+    }
+
+    RetryGlobalFrame(char *payload, uint32_t length) : SignedEncryptedFrame() {
+      bufferlist bl;
+      bl.push_back(buffer::create_static(length, payload));
+      try {
+        auto ti = bl.cbegin();
+        decode(global_seq, ti);
+      } catch (const buffer::error &e) {
+      }
+    }
+  };
+
+  struct WaitFrame : public SignedEncryptedFrame {
+    WaitFrame() : SignedEncryptedFrame(Tag::WAIT) {}
+  };
+
+  struct ReconnectOkFrame : public SignedEncryptedFrame {
+    uint64_t msg_seq;
+
+    ReconnectOkFrame(uint64_t msg_seq)
+        : SignedEncryptedFrame(Tag::SESSION_RECONNECT_OK) {
+      encode(msg_seq, payload, 0);
+    }
+
+    ReconnectOkFrame(char *payload, uint32_t length) : SignedEncryptedFrame() {
+      bufferlist bl;
+      bl.push_back(buffer::create_static(length, payload));
+      try {
+        auto ti = bl.cbegin();
+        decode(msg_seq, ti);
       } catch (const buffer::error &e) {
       }
     }
@@ -317,12 +435,16 @@ public:
   char *temp_buffer;
   State state;
   uint64_t peer_required_features;
+  uint64_t connection_features;
   uint64_t cookie;
+  uint64_t global_seq;
+  uint64_t connect_seq;
+  uint64_t peer_global_seq;
   uint64_t message_seq;
+  bool replacing;
   bool can_write;
   std::map<int, std::list<std::pair<bufferlist, Message *>>> out_queue;
   std::list<Message *> sent;
-  __u32 connect_seq;
   std::atomic<uint64_t> out_seq{0};
   std::atomic<uint64_t> in_seq{0};
   std::atomic<uint64_t> ack_left{0};
@@ -351,9 +473,11 @@ public:
                         bufferlist &bl);
 
   void requeue_sent();
+  uint64_t discard_requeued_up_to(uint64_t out_seq, uint64_t seq);
   void reset_recv_state();
   Ct<ProtocolV2> *_fault();
   void discard_out_queue();
+  void reset_session();
   void prepare_send_message(uint64_t features, Message *m, bufferlist &bl);
   Message *_get_next_outgoing(bufferlist *bl);
   ssize_t write_message(Message *m, bufferlist &bl, bool more);
@@ -434,6 +558,7 @@ private:
   CONTINUATION_DECL(ProtocolV2, post_client_banner_exchange);
   WRITE_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_auth_request_write);
   WRITE_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_client_ident_write);
+  WRITE_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_reconnect_write);
 
   Ct<ProtocolV2> *start_client_banner_exchange();
   Ct<ProtocolV2> *post_client_banner_exchange();
@@ -444,7 +569,14 @@ private:
   Ct<ProtocolV2> *handle_auth_done(char *payload, uint32_t length);
   Ct<ProtocolV2> *send_client_ident();
   Ct<ProtocolV2> *handle_client_ident_write(int r);
+  Ct<ProtocolV2> *send_reconnect();
+  Ct<ProtocolV2> *handle_reconnect_write(int r);
   Ct<ProtocolV2> *handle_ident_missing_features(char *payload, uint32_t length);
+  Ct<ProtocolV2> *handle_session_reset();
+  Ct<ProtocolV2> *handle_session_retry(char *payload, uint32_t length);
+  Ct<ProtocolV2> *handle_session_retry_global(char *payload, uint32_t length);
+  Ct<ProtocolV2> *handle_wait();
+  Ct<ProtocolV2> *handle_reconnect_ok(char *payload, uint32_t length);
   Ct<ProtocolV2> *handle_server_ident(char *payload, uint32_t length);
 
   // Server Protocol
@@ -455,7 +587,11 @@ private:
   WRITE_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_auth_done_write);
   WRITE_HANDLER_CONTINUATION_DECL(ProtocolV2,
                                   handle_ident_missing_features_write);
-  WRITE_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_send_server_ident_write);
+  WRITE_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_session_reset_write);
+  WRITE_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_session_retry_write);
+  WRITE_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_wait_write);
+  WRITE_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_server_ident_write);
+  WRITE_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_reconnect_ok_write);
 
   Ct<ProtocolV2> *start_server_banner_exchange();
   Ct<ProtocolV2> *post_server_banner_exchange();
@@ -465,7 +601,17 @@ private:
   Ct<ProtocolV2> *handle_auth_done_write(int r);
   Ct<ProtocolV2> *handle_client_ident(char *payload, uint32_t length);
   Ct<ProtocolV2> *handle_ident_missing_features_write(int r);
-  Ct<ProtocolV2> *handle_send_server_ident_write(int r);
+  Ct<ProtocolV2> *handle_reconnect(char *payload, uint32_t length);
+  Ct<ProtocolV2> *handle_session_reset_write(int r);
+  Ct<ProtocolV2> *handle_session_retry_write(int r);
+  Ct<ProtocolV2> *handle_existing_connection(AsyncConnectionRef existing);
+  Ct<ProtocolV2> *handle_wait_write(int r);
+  Ct<ProtocolV2> *reuse_connection(AsyncConnectionRef existing,
+                                   ProtocolV2 *exproto, bool reconnect);
+  Ct<ProtocolV2> *send_server_ident();
+  Ct<ProtocolV2> *handle_server_ident_write(int r);
+  Ct<ProtocolV2> *send_reconnect_ok();
+  Ct<ProtocolV2> *handle_reconnect_ok_write(int r);
 };
 
 #endif /* _MSG_ASYNC_PROTOCOL_V2_ */
