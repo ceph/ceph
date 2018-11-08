@@ -554,7 +554,7 @@ int BlueFS::_write_super(int dev)
   ceph_assert(bl.length() <= get_super_length());
   bl.append_zero(get_super_length() - bl.length());
 
-  bdev[dev]->write(get_super_offset(), bl, false);
+  bdev[dev]->write(get_super_offset(), bl, false, WRITE_LIFE_SHORT);
   dout(20) << __func__ << " v " << super.version
            << " crc 0x" << std::hex << crc
            << " offset 0x" << get_super_offset() << std::dec
@@ -2163,9 +2163,9 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
       }
     }
     if (cct->_conf->bluefs_sync_write) {
-      bdev[p->bdev]->write(p->offset + x_off, t, buffered);
+      bdev[p->bdev]->write(p->offset + x_off, t, buffered, h->write_hint);
     } else {
-      bdev[p->bdev]->aio_write(p->offset + x_off, t, h->iocv[p->bdev], buffered);
+      bdev[p->bdev]->aio_write(p->offset + x_off, t, h->iocv[p->bdev], buffered, h->write_hint);
     }
     h->dirty_devs[p->bdev] = true;
     if (p->bdev == BDEV_SLOW) {
