@@ -13,6 +13,7 @@
 
 #include "rgw_common.h"
 #include "rgw_rados.h"
+#include "rgw_zone.h"
 #include "rgw_sync.h"
 #include "rgw_metadata.h"
 #include "rgw_rest_conn.h"
@@ -23,6 +24,8 @@
 #include "rgw_sync_trace.h"
 
 #include "cls/lock/cls_lock_client.h"
+
+#include "services/svc_zone.h"
 
 #include <boost/asio/yield.hpp>
 
@@ -251,7 +254,7 @@ int RGWRemoteMetaLog::read_log_info(rgw_mdlog_info *log_info)
 
 int RGWRemoteMetaLog::read_master_log_shards_info(const string &master_period, map<int, RGWMetadataLogInfo> *shards_info)
 {
-  if (store->is_meta_master()) {
+  if (store->svc.zone->is_meta_master()) {
     return 0;
   }
 
@@ -266,7 +269,7 @@ int RGWRemoteMetaLog::read_master_log_shards_info(const string &master_period, m
 
 int RGWRemoteMetaLog::read_master_log_shards_next(const string& period, map<int, string> shard_markers, map<int, rgw_mdlog_shard_data> *result)
 {
-  if (store->is_meta_master()) {
+  if (store->svc.zone->is_meta_master()) {
     return 0;
   }
 
@@ -275,7 +278,7 @@ int RGWRemoteMetaLog::read_master_log_shards_next(const string& period, map<int,
 
 int RGWRemoteMetaLog::init()
 {
-  conn = store->rest_master_conn;
+  conn = store->svc.zone->get_master_conn();
 
   int ret = http_manager.start();
   if (ret < 0) {
@@ -302,18 +305,18 @@ void RGWRemoteMetaLog::finish()
 
 int RGWMetaSyncStatusManager::init()
 {
-  if (store->is_meta_master()) {
+  if (store->svc.zone->is_meta_master()) {
     return 0;
   }
 
-  if (!store->rest_master_conn) {
+  if (!store->svc.zone->get_master_conn()) {
     lderr(store->ctx()) << "no REST connection to master zone" << dendl;
     return -EIO;
   }
 
-  int r = rgw_init_ioctx(store->get_rados_handle(), store->get_zone_params().log_pool, ioctx, true);
+  int r = rgw_init_ioctx(store->get_rados_handle(), store->svc.zone->get_zone_params().log_pool, ioctx, true);
   if (r < 0) {
-    lderr(store->ctx()) << "ERROR: failed to open log pool (" << store->get_zone_params().log_pool << " ret=" << r << dendl;
+    lderr(store->ctx()) << "ERROR: failed to open log pool (" << store->svc.zone->get_zone_params().log_pool << " ret=" << r << dendl;
     return r;
   }
 
@@ -335,7 +338,7 @@ int RGWMetaSyncStatusManager::init()
   int num_shards = sync_status.sync_info.num_shards;
 
   for (int i = 0; i < num_shards; i++) {
-    shard_objs[i] = rgw_raw_obj(store->get_zone_params().log_pool, sync_env.shard_obj_name(i));
+    shard_objs[i] = rgw_raw_obj(store->svc.zone->get_zone_params().log_pool, sync_env.shard_obj_name(i));
   }
 
   RWLock::WLocker wl(ts_to_shard_lock);
@@ -480,7 +483,7 @@ public:
 
   int operate() override {
     auto store = env->store;
-    RGWRESTConn *conn = store->rest_master_conn;
+    RGWRESTConn *conn = store->svc.zone->get_master_conn();
     reenter(this) {
       yield {
 	char buf[16];
@@ -631,7 +634,7 @@ public:
         string lock_name = "sync_lock";
         RGWRados *store = sync_env->store;
         lease_cr.reset(new RGWContinuousLeaseCR(sync_env->async_rados, store,
-                                                rgw_raw_obj(store->get_zone_params().log_pool, sync_env->status_oid()),
+                                                rgw_raw_obj(store->svc.zone->get_zone_params().log_pool, sync_env->status_oid()),
                                                 lock_name, lock_duration, this));
         lease_stack.reset(spawn(lease_cr.get(), false));
       }
@@ -647,8 +650,8 @@ public:
       yield {
         set_status("writing sync status");
         RGWRados *store = sync_env->store;
-        call(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(sync_env->async_rados, store,
-                                                           rgw_raw_obj(store->get_zone_params().log_pool, sync_env->status_oid()),
+        call(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(sync_env->async_rados, store->svc.sysobj,
+                                                           rgw_raw_obj(store->svc.zone->get_zone_params().log_pool, sync_env->status_oid()),
                                                            status));
       }
 
@@ -678,8 +681,8 @@ public:
 	  marker.timestamp = info.last_update;
           RGWRados *store = sync_env->store;
           spawn(new RGWSimpleRadosWriteCR<rgw_meta_sync_marker>(sync_env->async_rados,
-                                                                store,
-                                                                rgw_raw_obj(store->get_zone_params().log_pool, sync_env->shard_obj_name(i)),
+                                                                store->svc.sysobj,
+                                                                rgw_raw_obj(store->svc.zone->get_zone_params().log_pool, sync_env->shard_obj_name(i)),
                                                                 marker), true);
         }
       }
@@ -687,8 +690,8 @@ public:
         set_status("changing sync state: build full sync maps");
 	status.state = rgw_meta_sync_info::StateBuildingFullSyncMaps;
         RGWRados *store = sync_env->store;
-        call(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(sync_env->async_rados, store,
-                                                           rgw_raw_obj(store->get_zone_params().log_pool, sync_env->status_oid()),
+        call(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(sync_env->async_rados, store->svc.sysobj,
+                                                           rgw_raw_obj(store->svc.zone->get_zone_params().log_pool, sync_env->status_oid()),
                                                            status));
       }
       set_status("drop lock lease");
@@ -729,9 +732,9 @@ bool RGWReadSyncStatusMarkersCR::spawn_next()
     return false;
   }
   using CR = RGWSimpleRadosReadCR<rgw_meta_sync_marker>;
-  rgw_raw_obj obj{env->store->get_zone_params().log_pool,
+  rgw_raw_obj obj{env->store->svc.zone->get_zone_params().log_pool,
                   env->shard_obj_name(shard_id)};
-  spawn(new CR(env->async_rados, env->store, obj, &markers[shard_id]), false);
+  spawn(new CR(env->async_rados, env->store->svc.sysobj, obj, &markers[shard_id]), false);
   shard_id++;
   return true;
 }
@@ -755,9 +758,9 @@ int RGWReadSyncStatusCoroutine::operate()
     using ReadInfoCR = RGWSimpleRadosReadCR<rgw_meta_sync_info>;
     yield {
       bool empty_on_enoent = false; // fail on ENOENT
-      rgw_raw_obj obj{sync_env->store->get_zone_params().log_pool,
+      rgw_raw_obj obj{sync_env->store->svc.zone->get_zone_params().log_pool,
                       sync_env->status_oid()};
-      call(new ReadInfoCR(sync_env->async_rados, sync_env->store, obj,
+      call(new ReadInfoCR(sync_env->async_rados, sync_env->store->svc.sysobj, obj,
                           &sync_status->sync_info, empty_on_enoent));
     }
     if (retcode < 0) {
@@ -866,7 +869,7 @@ public:
         string lock_name = "sync_lock";
         lease_cr.reset(new RGWContinuousLeaseCR(sync_env->async_rados,
                                                 sync_env->store,
-                                                rgw_raw_obj(sync_env->store->get_zone_params().log_pool, sync_env->status_oid()),
+                                                rgw_raw_obj(sync_env->store->svc.zone->get_zone_params().log_pool, sync_env->status_oid()),
                                                 lock_name, lock_duration, this));
         lease_stack.reset(spawn(lease_cr.get(), false));
       }
@@ -880,7 +883,7 @@ public:
         yield;
       }
       entries_index.reset(new RGWShardedOmapCRManager(sync_env->async_rados, sync_env->store, this, num_shards,
-                                                      sync_env->store->get_zone_params().log_pool,
+                                                      sync_env->store->svc.zone->get_zone_params().log_pool,
                                                       mdlog_sync_full_sync_index_prefix));
       yield {
 	call(new RGWReadRESTResourceCR<list<string> >(cct, conn, sync_env->http_manager,
@@ -953,8 +956,8 @@ public:
           int shard_id = (int)iter->first;
           rgw_meta_sync_marker& marker = iter->second;
           marker.total_entries = entries_index->get_total_entries(shard_id);
-          spawn(new RGWSimpleRadosWriteCR<rgw_meta_sync_marker>(sync_env->async_rados, sync_env->store,
-                                                                rgw_raw_obj(sync_env->store->get_zone_params().log_pool, sync_env->shard_obj_name(shard_id)),
+          spawn(new RGWSimpleRadosWriteCR<rgw_meta_sync_marker>(sync_env->async_rados, sync_env->store->svc.sysobj,
+                                                                rgw_raw_obj(sync_env->store->svc.zone->get_zone_params().log_pool, sync_env->shard_obj_name(shard_id)),
                                                                 marker), true);
         }
       }
@@ -1210,8 +1213,8 @@ public:
     tn->log(20, SSTR("new marker=" << new_marker));
     RGWRados *store = sync_env->store;
     return new RGWSimpleRadosWriteCR<rgw_meta_sync_marker>(sync_env->async_rados,
-                                                           store,
-                                                           rgw_raw_obj(store->get_zone_params().log_pool, marker_oid),
+                                                           store->svc.sysobj,
+                                                           rgw_raw_obj(store->svc.zone->get_zone_params().log_pool, marker_oid),
                                                            sync_marker);
   }
 
@@ -1622,7 +1625,7 @@ public:
 	  ldpp_dout(sync_env->dpp, 4) << *this << ": saving marker pos=" << temp_marker->marker << " realm_epoch=" << realm_epoch << dendl;
 
 	  using WriteMarkerCR = RGWSimpleRadosWriteCR<rgw_meta_sync_marker>;
-	  yield call(new WriteMarkerCR(sync_env->async_rados, sync_env->store,
+	  yield call(new WriteMarkerCR(sync_env->async_rados, sync_env->store->svc.sysobj,
 				       rgw_raw_obj(pool, sync_env->shard_obj_name(shard_id)),
 				       *temp_marker));
         }
@@ -1866,7 +1869,7 @@ public:
 
   RGWCoroutine *alloc_finisher_cr() override {
     RGWRados *store = sync_env->store;
-    return new RGWSimpleRadosReadCR<rgw_meta_sync_marker>(sync_env->async_rados, store,
+    return new RGWSimpleRadosReadCR<rgw_meta_sync_marker>(sync_env->async_rados, store->svc.sysobj,
                                                           rgw_raw_obj(pool, sync_env->shard_obj_name(shard_id)),
                                                           &sync_marker);
   }
@@ -1895,7 +1898,7 @@ public:
   RGWMetaSyncCR(RGWMetaSyncEnv *_sync_env, const RGWPeriodHistory::Cursor &cursor,
                 const rgw_meta_sync_status& _sync_status, RGWSyncTraceNodeRef& _tn)
     : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
-      pool(sync_env->store->get_zone_params().log_pool),
+      pool(sync_env->store->svc.zone->get_zone_params().log_pool),
       cursor(cursor), sync_status(_sync_status), tn(_tn) {}
 
   ~RGWMetaSyncCR() {
@@ -1980,7 +1983,7 @@ public:
         sync_status.sync_info.period = cursor.get_period().get_id();
         sync_status.sync_info.realm_epoch = cursor.get_epoch();
         yield call(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(sync_env->async_rados,
-                                                                 sync_env->store,
+                                                                 sync_env->store->svc.sysobj,
                                                                  rgw_raw_obj(pool, sync_env->status_oid()),
                                                                  sync_status.sync_info));
       }
@@ -2011,7 +2014,7 @@ void RGWRemoteMetaLog::init_sync_env(RGWMetaSyncEnv *env) {
 
 int RGWRemoteMetaLog::read_sync_status(rgw_meta_sync_status *sync_status)
 {
-  if (store->is_meta_master()) {
+  if (store->svc.zone->is_meta_master()) {
     return 0;
   }
   // cannot run concurrently with run_sync(), so run in a separate manager
@@ -2032,7 +2035,7 @@ int RGWRemoteMetaLog::read_sync_status(rgw_meta_sync_status *sync_status)
 
 int RGWRemoteMetaLog::init_sync_status()
 {
-  if (store->is_meta_master()) {
+  if (store->svc.zone->is_meta_master()) {
     return 0;
   }
 
@@ -2057,8 +2060,8 @@ int RGWRemoteMetaLog::init_sync_status()
 int RGWRemoteMetaLog::store_sync_info(const rgw_meta_sync_info& sync_info)
 {
   tn->log(20, "store sync info");
-  return run(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(async_rados, store,
-                                                           rgw_raw_obj(store->get_zone_params().log_pool, sync_env.status_oid()),
+  return run(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(async_rados, store->svc.sysobj,
+                                                           rgw_raw_obj(store->svc.zone->get_zone_params().log_pool, sync_env.status_oid()),
                                                            sync_info));
 }
 
@@ -2105,7 +2108,7 @@ static RGWPeriodHistory::Cursor get_period_at(RGWRados* store,
 
 int RGWRemoteMetaLog::run_sync()
 {
-  if (store->is_meta_master()) {
+  if (store->svc.zone->is_meta_master()) {
     return 0;
   }
 
@@ -2511,7 +2514,7 @@ int PurgePeriodLogsCR::operate()
           << " period=" << cursor.get_period().get_id() << dendl;
       yield {
         const auto mdlog = metadata->get_log(cursor.get_period().get_id());
-        const auto& pool = store->get_zone_params().log_pool;
+        const auto& pool = store->svc.zone->get_zone_params().log_pool;
         auto num_shards = cct->_conf->rgw_md_log_max_shards;
         call(new PurgeLogShardsCR(store, mdlog, pool, num_shards));
       }
@@ -2563,7 +2566,7 @@ connection_map make_peer_connections(RGWRados *store,
   for (auto& g : zonegroups) {
     for (auto& z : g.second.zones) {
       std::unique_ptr<RGWRESTConn> conn{
-        new RGWRESTConn(store->ctx(), store, z.first, z.second.endpoints)};
+        new RGWRESTConn(store->ctx(), store->svc.zone, z.first, z.second.endpoints)};
       connections.emplace(z.first, std::move(conn));
     }
   }
@@ -2631,7 +2634,7 @@ struct TrimEnv {
 
   TrimEnv(const DoutPrefixProvider *dpp, RGWRados *store, RGWHTTPManager *http, int num_shards)
     : dpp(dpp), store(store), http(http), num_shards(num_shards),
-      zone(store->get_zone_params().get_id()),
+      zone(store->svc.zone->get_zone_params().get_id()),
       current(store->period_history->get_current())
   {}
 };
@@ -2946,7 +2949,7 @@ class MetaPeerTrimShardCollectCR : public RGWShardCollectCR {
     : RGWShardCollectCR(env.store->ctx(), MAX_CONCURRENT_SHARDS),
       env(env), mdlog(mdlog), period_id(env.current.get_period().get_id())
   {
-    meta_env.init(env.dpp, cct, env.store, env.store->rest_master_conn,
+    meta_env.init(env.dpp, cct, env.store, env.store->svc.zone->get_master_conn(),
                   env.store->get_async_rados(), env.http, nullptr,
                   env.store->get_sync_tracer());
   }
@@ -2988,7 +2991,7 @@ int MetaPeerTrimCR::operate()
       };
 
       using LogInfoCR = RGWReadRESTResourceCR<rgw_mdlog_info>;
-      call(new LogInfoCR(cct, env.store->rest_master_conn, env.http,
+      call(new LogInfoCR(cct, env.store->svc.zone->get_master_conn(), env.http,
                          "/admin/log/", params, &mdlog_info));
     }
     if (retcode < 0) {
@@ -3035,7 +3038,7 @@ class MetaTrimPollCR : public RGWCoroutine {
  public:
   MetaTrimPollCR(RGWRados *store, utime_t interval)
     : RGWCoroutine(store->ctx()), store(store), interval(interval),
-      obj(store->get_zone_params().log_pool, RGWMetadataLogHistory::oid),
+      obj(store->svc.zone->get_zone_params().log_pool, RGWMetadataLogHistory::oid),
       cookie(RGWSimpleRadosLockCR::gen_random_cookie(cct))
   {}
 
@@ -3101,7 +3104,7 @@ class MetaPeerTrimPollCR : public MetaTrimPollCR {
 RGWCoroutine* create_meta_log_trim_cr(const DoutPrefixProvider *dpp, RGWRados *store, RGWHTTPManager *http,
                                       int num_shards, utime_t interval)
 {
-  if (store->is_meta_master()) {
+  if (store->svc.zone->is_meta_master()) {
     return new MetaMasterTrimPollCR(dpp, store, http, num_shards, interval);
   }
   return new MetaPeerTrimPollCR(dpp, store, http, num_shards, interval);
@@ -3126,7 +3129,7 @@ RGWCoroutine* create_admin_meta_log_trim_cr(const DoutPrefixProvider *dpp, RGWRa
                                             RGWHTTPManager *http,
                                             int num_shards)
 {
-  if (store->is_meta_master()) {
+  if (store->svc.zone->is_meta_master()) {
     return new MetaMasterAdminTrimCR(dpp, store, http, num_shards);
   }
   return new MetaPeerAdminTrimCR(dpp, store, http, num_shards);

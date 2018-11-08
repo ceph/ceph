@@ -1795,6 +1795,9 @@ struct req_init_state {
 
 #include "rgw_auth.h"
 
+class RGWObjectCtx;
+class RGWSysObjectCtx;
+
 /** Store all the state necessary to complete and respond to an HTTP request*/
 struct req_state : DoutPrefixProvider {
   CephContext *cct;
@@ -1913,7 +1916,8 @@ struct req_state : DoutPrefixProvider {
 
   Clock::duration time_elapsed() const { return Clock::now() - time; }
 
-  void *obj_ctx{nullptr};
+  RGWObjectCtx *obj_ctx{nullptr};
+  RGWSysObjectCtx *sysobj_ctx{nullptr};
   string dialect;
   string req_id;
   string trans_id;

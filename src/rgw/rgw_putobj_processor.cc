@@ -15,6 +15,7 @@
 #include "rgw_putobj_aio.h"
 #include "rgw_putobj_processor.h"
 #include "rgw_multi.h"
+#include "services/svc_sys_obj.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -70,16 +71,11 @@ static int process_completed(const ResultList& completed, RawObjSet *written)
   return error.value_or(0);
 }
 
-int RadosWriter::set_stripe_obj(rgw_raw_obj&& obj)
+int RadosWriter::set_stripe_obj(rgw_raw_obj&& raw_obj)
 {
-  rgw_rados_ref ref;
-  int r = store->get_raw_obj_ref(obj, &ref);
-  if (r < 0) {
-    return r;
-  }
-  stripe_obj = std::move(obj);
-  stripe_ref = std::move(ref);
-  return 0;
+  stripe_raw = std::move(raw_obj);
+  stripe_obj = store->svc.rados->obj(stripe_raw);
+  return stripe_obj.open();
 }
 
 int RadosWriter::process(bufferlist&& bl, uint64_t offset)
@@ -95,7 +91,7 @@ int RadosWriter::process(bufferlist&& bl, uint64_t offset)
   } else {
     op.write(offset, data);
   }
-  auto c = aio->submit(stripe_ref, stripe_obj, &op, cost);
+  auto c = aio->submit(stripe_obj, stripe_raw, &op, cost);
   return process_completed(c, &written);
 }
 
@@ -107,7 +103,7 @@ int RadosWriter::write_exclusive(const bufferlist& data)
   op.create(true); // exclusive create
   op.write_full(data);
 
-  auto c = aio->submit(stripe_ref, stripe_obj, &op, cost);
+  auto c = aio->submit(stripe_obj, stripe_raw, &op, cost);
   auto d = aio->drain();
   c.splice(c.end(), d);
   return process_completed(c, &written);
@@ -261,7 +257,7 @@ int AtomicObjectProcessor::complete(size_t accounted_size,
     return r;
   }
 
-  obj_ctx.obj.set_atomic(head_obj);
+  obj_ctx.set_atomic(head_obj);
 
   RGWRados::Object op_target(store, bucket_info, obj_ctx, head_obj);
 
@@ -441,8 +437,13 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
   rgw_raw_obj raw_meta_obj;
 
   store->obj_to_raw(bucket_info.placement_rule, meta_obj, &raw_meta_obj);
-  const bool must_exist = true;// detect races with abort
-  r = store->omap_set(raw_meta_obj, p, bl, must_exist);
+
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
+  auto sysobj = obj_ctx.get_obj(raw_meta_obj);
+
+  r = sysobj.omap()
+      .set_must_exist(true)
+      .set(p, bl);
   if (r < 0) {
     return r;
   }

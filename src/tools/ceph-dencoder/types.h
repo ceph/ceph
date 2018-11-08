@@ -341,6 +341,8 @@ TYPE(rbd::mirror::image_map::PolicyData)
 TYPE(RGWOLHInfo)
 TYPE(RGWObjManifestPart)
 TYPE(RGWObjManifest)
+
+#include "rgw/rgw_zone.h"
 TYPE(RGWZoneParams)
 TYPE(RGWZone)
 TYPE(RGWZoneGroup)

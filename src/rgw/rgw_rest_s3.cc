@@ -45,6 +45,10 @@
 #include "rgw_crypt.h"
 #include "rgw_crypt_sanitize.h"
 #include "rgw_rest_user_policy.h"
+#include "rgw_zone.h"
+
+#include "services/svc_zone.h"
+
 #include "include/ceph_assert.h"
 #include "rgw_role.h"
 #include "rgw_rest_sts.h"
@@ -868,7 +872,7 @@ void RGWGetBucketLocation_ObjStore_S3::send_response()
   RGWZoneGroup zonegroup;
   string api_name;
 
-  int ret = store->get_zonegroup(s->bucket_info.zonegroup, zonegroup);
+  int ret = store->svc.zone->get_zonegroup(s->bucket_info.zonegroup, zonegroup);
   if (ret >= 0) {
     api_name = zonegroup.api_name;
   } else  {
@@ -967,7 +971,7 @@ int RGWSetBucketVersioning_ObjStore_S3::get_params()
     return -EINVAL;
   }
 
-  if (!store->is_meta_master()) {
+  if (!store->svc.zone->is_meta_master()) {
     /* only need to keep this data around if we're not meta master */
     in_data.append(data);
   }
@@ -1293,7 +1297,6 @@ int RGWPutObj_ObjStore_S3::get_params()
   if (!s->length)
     return -ERR_LENGTH_REQUIRED;
 
-  RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
   map<string, bufferlist> src_attrs;
   size_t pos;
   int ret;
@@ -1347,7 +1350,7 @@ int RGWPutObj_ObjStore_S3::get_params()
          return ret;
        }
     }
-    ret = store->get_bucket_info(obj_ctx,
+    ret = store->get_bucket_info(*s->sysobj_ctx,
                                  copy_source_tenant_name,
                                  copy_source_bucket_name,
                                  copy_source_bucket_info,
@@ -2413,7 +2416,7 @@ int RGWPutCORS_ObjStore_S3::get_params()
   }
 
   // forward bucket cors requests to meta master zone
-  if (!store->is_meta_master()) {
+  if (!store->svc.zone->is_meta_master()) {
     /* only need to keep this data around if we're not meta master */
     in_data.append(data);
   }
@@ -3556,8 +3559,8 @@ bool RGWHandler_REST_S3Website::web_dir() const {
   rgw_obj obj(s->bucket, subdir_name);
 
   RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
-  obj_ctx.obj.set_atomic(obj);
-  obj_ctx.obj.set_prefetch_data(obj);
+  obj_ctx.set_atomic(obj);
+  obj_ctx.set_prefetch_data(obj);
 
   RGWObjState* state = nullptr;
   if (store->get_obj_state(&obj_ctx, s->bucket_info, obj, &state, false) < 0) {
@@ -3587,8 +3590,7 @@ int RGWHandler_REST_S3Website::retarget(RGWOp* op, RGWOp** new_op) {
   if (!(s->prot_flags & RGW_REST_WEBSITE))
     return 0;
 
-  RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
-  int ret = store->get_bucket_info(obj_ctx, s->bucket_tenant,
+  int ret = store->get_bucket_info(*s->sysobj_ctx, s->bucket_tenant,
 				  s->bucket_name, s->bucket_info, NULL,
 				  &s->bucket_attrs);
   if (ret < 0) {
