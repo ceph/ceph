@@ -76,7 +76,12 @@ export class SummaryService {
     }
 
     if (_.isArray(current.executing_tasks)) {
-      current.executing_tasks.push(task);
+      const exists = current.executing_tasks.find((element) => {
+        return element.name === task.name && _.isEqual(element.metadata, task.metadata);
+      });
+      if (!exists) {
+        current.executing_tasks.push(task);
+      }
     } else {
       current.executing_tasks = [task];
     }
