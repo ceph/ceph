@@ -531,7 +531,8 @@ Description: debugging symbols for libradospp1
 Package: libradospp-dev
 Architecture: linux-any
 Section: libdevel
-Depends: libradospp1 (= ${binary:Version}),
+Depends: librados-dev (= ${binary:Version}),
+         libradospp1 (= ${binary:Version}),
          ${misc:Depends},
          ${shlibs:Depends},
 Description: RADOS distributed object store client C++ library (development files)
