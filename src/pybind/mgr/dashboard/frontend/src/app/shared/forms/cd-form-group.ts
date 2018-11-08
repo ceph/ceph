@@ -21,9 +21,6 @@ export class CdFormGroup extends FormGroup {
 
   /**
    * Get a control out of any control even if its nested in other CdFormGroups or a FormGroup
-   *
-   * @param {string} controlName
-   * @returns {AbstractControl}
    */
   get(controlName: string): AbstractControl {
     const control = this._get(controlName);
@@ -49,19 +46,10 @@ export class CdFormGroup extends FormGroup {
   }
 
   /**
-   * Get the value of a control if it has none it will return false
-   *
-   * @param {string} controlName
-   * @returns {any} false or the value of the control
+   * Get the value of a control
    */
   getValue(controlName: string): any {
-    const value = this.get(controlName).value;
-    return this._filterValue(value) && value;
-  }
-
-  // Overwrite this if needed.
-  _filterValue(value) {
-    return value !== '';
+    return this.get(controlName).value;
   }
 
   /**
@@ -69,9 +57,6 @@ export class CdFormGroup extends FormGroup {
    *
    * Very useful if a function is called through a value changes event but the value
    * should be changed within the call.
-   *
-   * @param {string} controlName
-   * @param value
    */
   silentSet(controlName: string, value: any) {
     this.get(controlName).setValue(value, { emitEvent: false });
@@ -79,13 +64,8 @@ export class CdFormGroup extends FormGroup {
 
   /**
    * Indicates errors of the control in templates
-   *
-   * @param {string} controlName
-   * @param {NgForm} form
-   * @param {string} errorName
-   * @returns {boolean}
    */
-  showError(controlName: string, form: NgForm, errorName?: string) {
+  showError(controlName: string, form: NgForm, errorName?: string): boolean {
     const control = this.get(controlName);
     return (
       (form.submitted || control.dirty) &&
