@@ -54,6 +54,7 @@ int RGWServices_Def::init(CephContext *cct,
     sysobj->init(rados.get(), sysobj_core.get());
   }
 
+  can_shutdown = true;
 
   int r = finisher->start();
   if (r < 0) {
@@ -122,6 +123,10 @@ int RGWServices_Def::init(CephContext *cct,
 
 void RGWServices_Def::shutdown()
 {
+  if (!can_shutdown) {
+    return;
+  }
+
   if (has_shutdown) {
     return;
   }

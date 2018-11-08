@@ -54,6 +54,7 @@ class RGWSI_SysObj_Cache;
 
 struct RGWServices_Def
 {
+  bool can_shutdown{false};
   bool has_shutdown{false};
 
   std::unique_ptr<RGWSI_Finisher> finisher;
