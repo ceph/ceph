@@ -39,6 +39,17 @@ function(gperf_generate input output)
 endfunction()
 
 set(librgw_common_srcs
+  services/svc_finisher.cc
+  services/svc_notify.cc
+  services/svc_quota.cc
+  services/svc_sync_modules.cc
+  services/svc_rados.cc
+  services/svc_sys_obj.cc
+  services/svc_sys_obj_cache.cc
+  services/svc_sys_obj_core.cc
+  services/svc_zone.cc
+  services/svc_zone_utils.cc
+  rgw_service.cc
   rgw_acl.cc
   rgw_acl_s3.cc
   rgw_acl_swift.cc
@@ -112,10 +123,13 @@ set(librgw_common_srcs
   rgw_crypt_sanitize.cc
   rgw_iam_policy.cc
   rgw_rest_user_policy.cc
+  rgw_zone.cc
   rgw_sts.cc
   rgw_rest_sts.cc)
 
 add_library(rgw_common OBJECT ${librgw_common_srcs})
+
+target_include_directories(rgw_common SYSTEM PUBLIC "services")
 
 if(WITH_LTTNG)
   # rgw/rgw_op.cc includes "tracing/rgw_op.h"

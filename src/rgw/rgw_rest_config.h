@@ -15,6 +15,8 @@
 #ifndef RGW_REST_CONFIG_H
 #define RGW_REST_CONFIG_H
 
+#include "rgw_zone.h"
+
 class RGWOp_ZoneGroupMap_Get : public RGWRESTOp {
   RGWZoneGroupMap zonegroup_map;
   bool old_format;

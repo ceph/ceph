@@ -12,6 +12,7 @@
 #include "include/str_list.h"
 #include "rgw_common.h"
 #include "rgw_rados.h"
+#include "rgw_zone.h"
 #include "rgw_formats.h"
 #include "rgw_op.h"
 #include "rgw_rest.h"
@@ -171,8 +172,6 @@ static set<string> hostnames_s3website_set;
 
 void rgw_rest_init(CephContext *cct, RGWRados *store, RGWZoneGroup& zone_group)
 {
-  store->init_host_id();
-
   for (const auto& rgw2http : base_rgw_to_http_attrs)  {
     rgw_to_http_attrs[rgw2http.rgw_attr] = rgw2http.http_attr;
   }

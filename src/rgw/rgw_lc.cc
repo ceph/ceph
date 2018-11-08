@@ -17,6 +17,8 @@
 #include "rgw_bucket.h"
 #include "rgw_lc.h"
 
+#include "services/svc_sys_obj.h"
+
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
@@ -368,7 +370,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
   string next_marker, no_ns, list_versions;
   bool is_truncated;
   vector<rgw_bucket_dir_entry> objs;
-  RGWObjectCtx obj_ctx(store);
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
   vector<std::string> result;
   auto delay_ms = cct->_conf.get_val<int64_t>("rgw_lc_thread_delay");
   boost::split(result, shard_id, boost::is_any_of(":"));

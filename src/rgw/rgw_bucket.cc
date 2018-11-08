@@ -13,6 +13,7 @@
 #include "common/errno.h"
 #include "common/ceph_json.h"
 #include "rgw_rados.h"
+#include "rgw_zone.h"
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h"
 
@@ -21,6 +22,9 @@
 #include "rgw_user.h"
 #include "rgw_string.h"
 #include "rgw_multi.h"
+
+#include "services/svc_zone.h"
+#include "services/svc_sys_obj.h"
 
 #include "include/rados/librados.hpp"
 // until everything is moved from rgw_common
@@ -106,7 +110,7 @@ int rgw_read_user_buckets(RGWRados * store,
   buckets.clear();
   std::string buckets_obj_id;
   rgw_get_buckets_obj(user_id, buckets_obj_id);
-  rgw_raw_obj obj(store->get_zone_params().user_uid_pool, buckets_obj_id);
+  rgw_raw_obj obj(store->svc.zone->get_zone_params().user_uid_pool, buckets_obj_id);
 
   bool truncated = false;
   string m = marker;
@@ -154,7 +158,7 @@ int rgw_bucket_sync_user_stats(RGWRados *store, const rgw_user& user_id, const R
 {
   string buckets_obj_id;
   rgw_get_buckets_obj(user_id, buckets_obj_id);
-  rgw_raw_obj obj(store->get_zone_params().user_uid_pool, buckets_obj_id);
+  rgw_raw_obj obj(store->svc.zone->get_zone_params().user_uid_pool, buckets_obj_id);
 
   return store->cls_user_sync_bucket_stats(obj, bucket_info);
 }
@@ -162,7 +166,7 @@ int rgw_bucket_sync_user_stats(RGWRados *store, const rgw_user& user_id, const R
 int rgw_bucket_sync_user_stats(RGWRados *store, const string& tenant_name, const string& bucket_name)
 {
   RGWBucketInfo bucket_info;
-  RGWObjectCtx obj_ctx(store);
+  RGWSysObjectCtx obj_ctx = store->svc.sysobj->init_obj_ctx();
   int ret = store->get_bucket_info(obj_ctx, tenant_name, bucket_name, bucket_info, NULL);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: could not fetch bucket info: ret=" << ret << dendl;
@@ -201,7 +205,7 @@ int rgw_link_bucket(RGWRados* const store,
     new_bucket.creation_time = creation_time;
 
   map<string, bufferlist> attrs;
-  RGWObjectCtx obj_ctx(store);
+  RGWSysObjectCtx obj_ctx = store->svc.sysobj->init_obj_ctx();
 
   if (update_entrypoint) {
     ret = store->get_bucket_entrypoint_info(obj_ctx, tenant_name, bucket_name, ep, &ot, NULL, &attrs);
@@ -214,7 +218,7 @@ int rgw_link_bucket(RGWRados* const store,
   string buckets_obj_id;
   rgw_get_buckets_obj(user_id, buckets_obj_id);
 
-  rgw_raw_obj obj(store->get_zone_params().user_uid_pool, buckets_obj_id);
+  rgw_raw_obj obj(store->svc.zone->get_zone_params().user_uid_pool, buckets_obj_id);
   ret = store->cls_user_add_bucket(obj, new_bucket);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: error adding bucket to directory: "
@@ -251,7 +255,7 @@ int rgw_unlink_bucket(RGWRados *store, const rgw_user& user_id, const string& te
 
   cls_user_bucket bucket;
   bucket.name = bucket_name;
-  rgw_raw_obj obj(store->get_zone_params().user_uid_pool, buckets_obj_id);
+  rgw_raw_obj obj(store->svc.zone->get_zone_params().user_uid_pool, buckets_obj_id);
   ret = store->cls_user_remove_bucket(obj, bucket);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: error removing bucket from directory: "
@@ -264,7 +268,7 @@ int rgw_unlink_bucket(RGWRados *store, const rgw_user& user_id, const string& te
   RGWBucketEntryPoint ep;
   RGWObjVersionTracker ot;
   map<string, bufferlist> attrs;
-  RGWObjectCtx obj_ctx(store);
+  RGWSysObjectCtx obj_ctx = store->svc.sysobj->init_obj_ctx();
   ret = store->get_bucket_entrypoint_info(obj_ctx, tenant_name, bucket_name, ep, &ot, NULL, &attrs);
   if (ret == -ENOENT)
     return 0;
@@ -407,7 +411,7 @@ int rgw_bucket_set_attrs(RGWRados *store, RGWBucketInfo& bucket_info,
 
   if (!bucket_info.has_instance_obj) {
     /* an old bucket object, need to convert it */
-    RGWObjectCtx obj_ctx(store);
+    RGWSysObjectCtx obj_ctx = store->svc.sysobj->init_obj_ctx();
     int ret = store->convert_old_bucket_info(obj_ctx, bucket.tenant, bucket.name);
     if (ret < 0) {
       ldout(store->ctx(), 0) << "ERROR: failed converting old bucket info: " << ret << dendl;
@@ -464,7 +468,7 @@ void check_bad_user_bucket_mapping(RGWRados *store, const rgw_user& user_id,
 
       RGWBucketInfo bucket_info;
       real_time mtime;
-      RGWObjectCtx obj_ctx(store);
+      RGWSysObjectCtx obj_ctx = store->svc.sysobj->init_obj_ctx();
       int r = store->get_bucket_info(obj_ctx, user_id.tenant, bucket.name, bucket_info, &mtime);
       if (r < 0) {
         ldout(store->ctx(), 0) << "could not get bucket info for bucket=" << bucket << dendl;
@@ -518,7 +522,7 @@ int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children)
   std::vector<rgw_bucket_dir_entry> objs;
   map<string, bool> common_prefixes;
   RGWBucketInfo info;
-  RGWObjectCtx obj_ctx(store);
+  RGWSysObjectCtx obj_ctx = store->svc.sysobj->init_obj_ctx();
 
   string bucket_ver, master_ver;
 
@@ -618,11 +622,12 @@ int rgw_remove_bucket_bypass_gc(RGWRados *store, rgw_bucket& bucket,
   map<string, bool> common_prefixes;
   RGWBucketInfo info;
   RGWObjectCtx obj_ctx(store);
+  RGWSysObjectCtx sysobj_ctx = store->svc.sysobj->init_obj_ctx();
   CephContext *cct = store->ctx();
 
   string bucket_ver, master_ver;
 
-  ret = store->get_bucket_info(obj_ctx, bucket.tenant, bucket.name, info, NULL);
+  ret = store->get_bucket_info(sysobj_ctx, bucket.tenant, bucket.name, info, NULL);
   if (ret < 0)
     return ret;
 
@@ -775,7 +780,7 @@ int RGWBucket::init(RGWRados *storage, RGWBucketAdminOpState& op_state)
   tenant = user_id.tenant;
   bucket_name = op_state.get_bucket_name();
   RGWUserBuckets user_buckets;
-  RGWObjectCtx obj_ctx(store);
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
 
   if (bucket_name.empty() && user_id.empty())
     return -EINVAL;
@@ -818,7 +823,7 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
   std::string display_name = op_state.get_user_display_name();
   rgw_bucket bucket = op_state.get_bucket();
 
-  const rgw_pool& root_pool = store->get_zone_params().domain_root;
+  const rgw_pool& root_pool = store->svc.zone->get_zone_params().domain_root;
   std::string bucket_entry;
   rgw_make_bucket_entry_name(tenant, bucket_name, bucket_entry);
   rgw_raw_obj obj(root_pool, bucket_entry);
@@ -827,7 +832,7 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
   map<string, bufferlist> attrs;
   RGWBucketInfo bucket_info;
 
-  RGWObjectCtx obj_ctx(store);
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
   int r = store->get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, &attrs);
   if (r < 0) {
     return r;
@@ -870,7 +875,10 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
     aclbl.clear();
     policy.encode(aclbl);
 
-    r = store->system_obj_set_attr(NULL, obj, RGW_ATTR_ACL, aclbl, &objv_tracker);
+    auto sysobj = obj_ctx.get_obj(obj);
+    r = sysobj.wop()
+              .set_objv_tracker(&objv_tracker)
+              .write_attr(RGW_ATTR_ACL, aclbl);
     if (r < 0) {
       return r;
     }
@@ -882,7 +890,10 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
 
     rgw_raw_obj obj_bucket_instance;
     store->get_bucket_instance_obj(bucket, obj_bucket_instance);
-    r = store->system_obj_set_attr(NULL, obj_bucket_instance, RGW_ATTR_ACL, aclbl, &objv_tracker);
+    auto inst_sysobj = obj_ctx.get_obj(obj_bucket_instance);
+    r = inst_sysobj.wop()
+                   .set_objv_tracker(&objv_tracker)
+                   .write_attr(RGW_ATTR_ACL, aclbl);
     if (r < 0) {
       return r;
     }
@@ -919,7 +930,7 @@ int RGWBucket::set_quota(RGWBucketAdminOpState& op_state, std::string *err_msg)
   rgw_bucket bucket = op_state.get_bucket();
   RGWBucketInfo bucket_info;
   map<string, bufferlist> attrs;
-  RGWObjectCtx obj_ctx(store);
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
   int r = store->get_bucket_info(obj_ctx, bucket.tenant, bucket.name, bucket_info, NULL, &attrs);
   if (r < 0) {
     set_err_msg(err_msg, "could not get bucket info for bucket=" + bucket.name + ": " + cpp_strerror(-r));
@@ -1029,7 +1040,7 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
   map<rgw_obj_index_key, string> all_objs;
 
   RGWBucketInfo bucket_info;
-  RGWObjectCtx obj_ctx(store);
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
   int r = store->get_bucket_instance_info(obj_ctx, bucket, bucket_info, nullptr, nullptr);
   if (r < 0) {
     ldout(store->ctx(), 0) << "ERROR: " << __func__ << "(): get_bucket_instance_info(bucket=" << bucket << ") returned r=" << r << dendl;
@@ -1222,11 +1233,12 @@ int RGWBucket::get_policy(RGWBucketAdminOpState& op_state, RGWAccessControlPolic
 {
   std::string object_name = op_state.get_object_name();
   rgw_bucket bucket = op_state.get_bucket();
+  auto sysobj_ctx = store->svc.sysobj->init_obj_ctx();
   RGWObjectCtx obj_ctx(store);
 
   RGWBucketInfo bucket_info;
   map<string, bufferlist> attrs;
-  int ret = store->get_bucket_info(obj_ctx, bucket.tenant, bucket.name, bucket_info, NULL, &attrs);
+  int ret = store->get_bucket_info(sysobj_ctx, bucket.tenant, bucket.name, bucket_info, NULL, &attrs);
   if (ret < 0) {
     return ret;
   }
@@ -1401,7 +1413,7 @@ static int bucket_stats(RGWRados *store, const std::string& tenant_name, std::st
   map<RGWObjCategory, RGWStorageStats> stats;
 
   real_time mtime;
-  RGWObjectCtx obj_ctx(store);
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
   int r = store->get_bucket_info(obj_ctx, tenant_name, bucket_name, bucket_info, &mtime);
   if (r < 0)
     return r;
@@ -1487,7 +1499,7 @@ int RGWBucketAdminOp::limit_check(RGWRados *store,
 
 	/* need info for num_shards */
 	RGWBucketInfo info;
-	RGWObjectCtx obj_ctx(store);
+	auto obj_ctx = store->svc.sysobj->init_obj_ctx();
 
 	marker = bucket.name; /* Casey's location for marker update,
 			       * as we may now not reach the end of
@@ -1703,7 +1715,7 @@ int RGWDataChangesLog::choose_oid(const rgw_bucket_shard& bs) {
 
 int RGWDataChangesLog::renew_entries()
 {
-  if (!store->need_to_log_data())
+  if (!store->svc.zone->need_to_log_data())
     return 0;
 
   /* we can't keep the bucket name as part of the cls_log_entry, and we need
@@ -1797,7 +1809,7 @@ int RGWDataChangesLog::get_log_shard_id(rgw_bucket& bucket, int shard_id) {
 }
 
 int RGWDataChangesLog::add_entry(rgw_bucket& bucket, int shard_id) {
-  if (!store->need_to_log_data())
+  if (!store->svc.zone->need_to_log_data())
     return 0;
 
   if (observer) {
@@ -2007,6 +2019,14 @@ int RGWDataChangesLog::trim_entries(const real_time& start_time, const real_time
   return 0;
 }
 
+int RGWDataChangesLog::lock_exclusive(int shard_id, timespan duration, string& zone_id, string& owner_id) {
+  return store->lock_exclusive(store->svc.zone->get_zone_params().log_pool, oids[shard_id], duration, zone_id, owner_id);
+}
+
+int RGWDataChangesLog::unlock(int shard_id, string& zone_id, string& owner_id) {
+  return store->unlock(store->svc.zone->get_zone_params().log_pool, oids[shard_id], zone_id, owner_id);
+}
+
 bool RGWDataChangesLog::going_down()
 {
   return down_flag;
@@ -2092,7 +2112,7 @@ public:
 
     real_time mtime;
     map<string, bufferlist> attrs;
-    RGWObjectCtx obj_ctx(store);
+    auto obj_ctx = store->svc.sysobj->init_obj_ctx();
 
     string tenant_name, bucket_name;
     parse_bucket(entry, &tenant_name, &bucket_name);
@@ -2120,7 +2140,7 @@ public:
     map<string, bufferlist> attrs;
 
     RGWObjVersionTracker old_ot;
-    RGWObjectCtx obj_ctx(store);
+    auto obj_ctx = store->svc.sysobj->init_obj_ctx();
 
     string tenant_name, bucket_name;
     parse_bucket(entry, &tenant_name, &bucket_name);
@@ -2159,7 +2179,7 @@ public:
 
   int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) override {
     RGWBucketEntryPoint be;
-    RGWObjectCtx obj_ctx(store);
+    auto obj_ctx = store->svc.sysobj->init_obj_ctx();
 
     string tenant_name, bucket_name;
     parse_bucket(entry, &tenant_name, &bucket_name);
@@ -2187,7 +2207,7 @@ public:
 
   void get_pool_and_oid(RGWRados *store, const string& key, rgw_pool& pool, string& oid) override {
     oid = key;
-    pool = store->get_zone_params().domain_root;
+    pool = store->svc.zone->get_zone_params().domain_root;
   }
 
   int list_keys_init(RGWRados *store, const string& marker, void **phandle) override {
@@ -2195,7 +2215,7 @@ public:
 
     info->store = store;
 
-    int ret = store->list_raw_objects_init(store->get_zone_params().domain_root, marker,
+    int ret = store->list_raw_objects_init(store->svc.zone->get_zone_params().domain_root, marker,
                                            &info->ctx);
     if (ret < 0) {
       return ret;
@@ -2259,7 +2279,7 @@ public:
     RGWBucketCompleteInfo bci;
 
     real_time mtime;
-    RGWObjectCtx obj_ctx(store);
+    auto obj_ctx = store->svc.sysobj->init_obj_ctx();
 
     int ret = store->get_bucket_instance_info(obj_ctx, oid, bci.info, &mtime, &bci.attrs);
     if (ret < 0)
@@ -2282,7 +2302,7 @@ public:
     }
 
     real_time orig_mtime;
-    RGWObjectCtx obj_ctx(store);
+    auto obj_ctx = store->svc.sysobj->init_obj_ctx();
 
     int ret = store->get_bucket_instance_info(obj_ctx, entry, old_bci.info,
             &orig_mtime, &old_bci.attrs);
@@ -2303,7 +2323,7 @@ public:
       bci.info.bucket.name = bucket_name;
       bci.info.bucket.bucket_id = bucket_instance;
       bci.info.bucket.tenant = tenant_name;
-      ret = store->select_bucket_location_by_rule(bci.info.placement_rule, &rule_info);
+      ret = store->svc.zone->select_bucket_location_by_rule(bci.info.placement_rule, &rule_info);
       if (ret < 0) {
         ldout(store->ctx(), 0) << "ERROR: select_bucket_placement() returned " << ret << dendl;
         return ret;
@@ -2374,7 +2394,7 @@ public:
 
   int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) override {
     RGWBucketInfo info;
-    RGWObjectCtx obj_ctx(store);
+    auto obj_ctx = store->svc.sysobj->init_obj_ctx();
 
     int ret = store->get_bucket_instance_info(obj_ctx, entry, info, NULL, NULL);
     if (ret < 0 && ret != -ENOENT)
@@ -2386,7 +2406,7 @@ public:
   void get_pool_and_oid(RGWRados *store, const string& key, rgw_pool& pool, string& oid) override {
     oid = RGW_BUCKET_INSTANCE_MD_PREFIX + key;
     rgw_bucket_instance_key_to_oid(oid);
-    pool = store->get_zone_params().domain_root;
+    pool = store->svc.zone->get_zone_params().domain_root;
   }
 
   int list_keys_init(RGWRados *store, const string& marker, void **phandle) override {
@@ -2394,7 +2414,7 @@ public:
 
     info->store = store;
 
-    int ret = store->list_raw_objects_init(store->get_zone_params().domain_root, marker,
+    int ret = store->list_raw_objects_init(store->svc.zone->get_zone_params().domain_root, marker,
                                            &info->ctx);
     if (ret < 0) {
       return ret;

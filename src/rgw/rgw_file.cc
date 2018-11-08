@@ -23,6 +23,7 @@
 #include "rgw_auth_s3.h"
 #include "rgw_user.h"
 #include "rgw_bucket.h"
+#include "rgw_zone.h"
 #include "rgw_file.h"
 #include "rgw_lib_frontend.h"
 #include "common/errno.h"
@@ -1286,7 +1287,7 @@ namespace rgw {
     struct req_state* s = get_state();
 
     auto compression_type =
-      get_store()->get_zone_params().get_compression_type(
+      get_store()->svc.zone->get_zone_params().get_compression_type(
 	s->bucket_info.placement_rule);
 
     /* not obviously supportable */

@@ -3,6 +3,7 @@
 
 #include "rgw_period_history.h"
 #include "rgw_rados.h"
+#include "rgw_zone.h"
 
 #include "include/ceph_assert.h"
 
