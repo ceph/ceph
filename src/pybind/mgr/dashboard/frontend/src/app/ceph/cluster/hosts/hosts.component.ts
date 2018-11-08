@@ -68,7 +68,8 @@ export class HostsComponent implements OnInit {
       osd: 'osd',
       rgw: 'rgw',
       'rbd-mirror': 'rbdMirroring',
-      mgr: 'manager'
+      mgr: 'manager',
+      'tcmu-runner': 'iscsi'
     };
     this.isLoadingHosts = true;
     this.hostService
@@ -77,8 +78,8 @@ export class HostsComponent implements OnInit {
         resp.map((host) => {
           host.services.map((service) => {
             service.cdLink = `/perf_counters/${service.type}/${service.id}`;
-            const permissionKey = typeToPermissionKey[service.type];
-            service.canRead = this.permissions[permissionKey].read;
+            const permission = this.permissions[typeToPermissionKey[service.type]];
+            service.canRead = permission ? permission.read : false;
             return service;
           });
           return host;
