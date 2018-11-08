@@ -5,6 +5,8 @@
 #include <fnmatch.h>
 
 #include <boost/algorithm/string/predicate.hpp>
+#include <boost/algorithm/string.hpp>
+#include <fstream>
 
 #include "common/errno.h"
 #include "common/ceph_json.h"
@@ -168,6 +170,61 @@ std::string CephCtxConfig::get_endpoint_url() const noexcept
     static const std::string url_normalised = url + '/';
     return url_normalised;
   }
+}
+
+/* secrets */
+const std::string CephCtxConfig::empty{""};
+
+static inline std::string read_secret(const std::string& file_path)
+{
+  using namespace std;
+
+  constexpr int16_t size{1024};
+  char buf[size];
+  string s;
+
+  s.reserve(size);
+  ifstream ifs(file_path, ios::in | ios::binary);
+  if (ifs) {
+    while (true) {
+      auto sbuf = ifs.rdbuf();
+      auto len =  sbuf->sgetn(buf, size);
+      if (!len)
+	break;
+      s.append(buf, len);
+    }
+    boost::algorithm::trim(s);
+    if (s.back() == '\n')
+      s.pop_back();
+  }
+  return s;
+}
+
+std::string CephCtxConfig::get_admin_token() const noexcept
+{
+  auto& atv = g_ceph_context->_conf->rgw_keystone_admin_token_path;
+  if (!atv.empty()) {
+    return read_secret(atv);
+  } else {
+    auto& atv = g_ceph_context->_conf->rgw_keystone_admin_token;
+    if (!atv.empty()) {
+      return atv;
+    }
+  }
+  return empty;
+}
+
+std::string CephCtxConfig::get_admin_password() const noexcept  {
+  auto& apv = g_ceph_context->_conf->rgw_keystone_admin_password_path;
+  if (!apv.empty()) {
+    return read_secret(apv);
+  } else {
+    auto& apv = g_ceph_context->_conf->rgw_keystone_admin_password;
+    if (!apv.empty()) {
+      return apv;
+    }
+  }
+  return empty;
 }
 
 int Service::get_admin_token(CephContext* const cct,

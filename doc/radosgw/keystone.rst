@@ -14,6 +14,7 @@ The following configuration options are available for Keystone integration::
 	rgw keystone api version = {keystone api version}
 	rgw keystone url = {keystone server url:keystone server admin port}
 	rgw keystone admin token = {keystone admin token}
+	rgw keystone admin token path = {path to keystone admin token} #preferred
 	rgw keystone accepted roles = {accepted user roles}
 	rgw keystone token cache size = {number of tokens to cache}
 	rgw keystone revocation interval = {number of seconds before checking revoked tickets}
@@ -32,6 +33,7 @@ configuration options for are::
 
    rgw keystone admin user = {keystone service tenant user name}
    rgw keystone admin password = {keystone service tenant user password}
+   rgw keystone admin password = {keystone service tenant user password path} # preferred
    rgw keystone admin tenant = {keystone service tenant name}
 
 

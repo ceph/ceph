@@ -53,9 +53,9 @@ public:
   virtual std::string get_endpoint_url() const noexcept = 0;
   virtual ApiVersion get_api_version() const noexcept = 0;
 
-  virtual boost::string_ref get_admin_token() const noexcept = 0;
+  virtual std::string get_admin_token() const noexcept = 0;
   virtual boost::string_ref get_admin_user() const noexcept = 0;
-  virtual boost::string_ref get_admin_password() const noexcept = 0;
+  virtual std::string get_admin_password() const noexcept = 0;
   virtual boost::string_ref get_admin_tenant() const noexcept = 0;
   virtual boost::string_ref get_admin_project() const noexcept = 0;
   virtual boost::string_ref get_admin_domain() const noexcept = 0;
@@ -66,6 +66,8 @@ protected:
   CephCtxConfig() = default;
   virtual ~CephCtxConfig() = default;
 
+  const static std::string empty;
+
 public:
   static CephCtxConfig& get_instance() {
     static CephCtxConfig instance;
@@ -75,17 +77,13 @@ public:
   std::string get_endpoint_url() const noexcept override;
   ApiVersion get_api_version() const noexcept override;
 
-  boost::string_ref get_admin_token() const noexcept override {
-    return g_ceph_context->_conf->rgw_keystone_admin_token;
-  }
+  std::string get_admin_token() const noexcept override;
 
   boost::string_ref get_admin_user() const noexcept override {
     return g_ceph_context->_conf->rgw_keystone_admin_user;
   }
 
-  boost::string_ref get_admin_password() const noexcept override {
-    return g_ceph_context->_conf->rgw_keystone_admin_password;
-  }
+  std::string get_admin_password() const noexcept override;
 
   boost::string_ref get_admin_tenant() const noexcept override {
     return g_ceph_context->_conf->rgw_keystone_admin_tenant;

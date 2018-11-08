@@ -5312,7 +5312,11 @@ std::vector<Option> get_rgw_options() {
 
     Option("rgw_keystone_admin_token", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
-    .set_description("The admin token (shared secret) that is used for the Keystone requests."),
+    .set_description("DEPRECATED: The admin token (shared secret) that is used for the Keystone requests."),
+
+    Option("rgw_keystone_admin_token_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("")
+    .set_description("Path to a file containing the admin token (shared secret) that is used for the Keystone requests."),
 
     Option("rgw_keystone_admin_user", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
@@ -5320,7 +5324,11 @@ std::vector<Option> get_rgw_options() {
 
     Option("rgw_keystone_admin_password", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
-    .set_description("Keystone admin password."),
+    .set_description("DEPRECATED: Keystone admin password."),
+
+    Option("rgw_keystone_admin_password_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("")
+    .set_description("Path to a file containing the Keystone admin password."),
 
     Option("rgw_keystone_admin_tenant", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
