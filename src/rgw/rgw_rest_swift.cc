@@ -965,7 +965,8 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
     
     slo_info = new RGWSLOInfo;
     
-    int r = rgw_rest_get_json_input_keep_data(s->cct, s, slo_info->entries, max_len, &slo_info->raw_data, &slo_info->raw_data_len);
+    int r = 0;
+    std::tie(r, slo_info->raw_data) = rgw_rest_get_json_input_keep_data(s->cct, s, slo_info->entries, max_len);
     if (r < 0) {
       ldout(s->cct, 5) << "failed to read input for slo r=" << r << dendl;
       return r;
@@ -1003,7 +1004,7 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
     complete_etag(etag_sum, &lo_etag);
     slo_info->total_size = total_size;
 
-    ofs = slo_info->raw_data_len;
+    ofs = slo_info->raw_data.length();
   }
 
   return RGWPutObj_ObjStore::get_params();
