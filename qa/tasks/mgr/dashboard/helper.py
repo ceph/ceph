@@ -162,10 +162,8 @@ class DashboardTestCase(MgrTestCase):
     @classmethod
     def _request(cls, url, method, data=None, params=None):
         url = "{}{}".format(cls._base_uri, url)
-        log.info("request %s to %s", method, url)
-        headers = {
-            'Content-Type': 'application/json'
-        }
+        log.info("Request %s to %s", method, url)
+        headers = {}
         if cls._token:
             headers['Authorization'] = "Bearer {}".format(cls._token)
 
@@ -184,6 +182,9 @@ class DashboardTestCase(MgrTestCase):
         else:
             assert False
         try:
+            if not cls._resp.ok:
+                # Output response for easier debugging.
+                log.error("Request response: %s", cls._resp.text)
             content_type = cls._resp.headers['content-type']
             if content_type == 'application/json' and cls._resp.text and cls._resp.text != "":
                 return cls._resp.json()

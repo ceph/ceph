@@ -133,10 +133,10 @@ class Osd(RESTController):
         :return:
         """
         result = CephService.send_command(
-            'mon', 'osd create', id=svc_id, uuid=uuid)
+            'mon', 'osd create', id=int(svc_id), uuid=uuid)
         return {
             'result': result,
-            'svc_id': svc_id,
+            'svc_id': int(svc_id),
             'uuid': uuid,
         }
 
