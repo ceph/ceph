@@ -615,6 +615,24 @@ enum cls_rgw_reshard_status {
   CLS_RGW_RESHARD_DONE        = 2,
 };
 
+static inline std::string to_string(const enum cls_rgw_reshard_status status)
+{
+  switch (status) {
+  case CLS_RGW_RESHARD_NONE:
+    return "CLS_RGW_RESHARD_NONE";
+    break;
+  case CLS_RGW_RESHARD_IN_PROGRESS:
+    return "CLS_RGW_RESHARD_IN_PROGRESS";
+    break;
+  case CLS_RGW_RESHARD_DONE:
+    return "CLS_RGW_RESHARD_DONE";
+    break;
+  default:
+    break;
+  };
+  return "Unknown reshard status";
+}
+
 struct cls_rgw_bucket_instance_entry {
   cls_rgw_reshard_status reshard_status{CLS_RGW_RESHARD_NONE};
   string new_bucket_instance_id;
