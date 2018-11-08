@@ -367,6 +367,10 @@ IoCtx::IoCtx(const IoCtx& rhs) {
   }
 }
 
+IoCtx::IoCtx(IoCtx&& rhs) noexcept : io_ctx_impl(std::exchange(rhs.io_ctx_impl, nullptr))
+{
+}
+
 IoCtx& IoCtx::operator=(const IoCtx& rhs) {
   if (io_ctx_impl) {
     TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
@@ -378,6 +382,17 @@ IoCtx& IoCtx::operator=(const IoCtx& rhs) {
     TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
     ctx->get();
   }
+  return *this;
+}
+
+librados::IoCtx& librados::IoCtx::operator=(IoCtx&& rhs) noexcept
+{
+  if (io_ctx_impl) {
+    TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+    ctx->put();
+  }
+
+  io_ctx_impl = std::exchange(rhs.io_ctx_impl, nullptr);
   return *this;
 }
 
