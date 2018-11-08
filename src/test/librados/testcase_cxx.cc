@@ -91,7 +91,7 @@ void RadosTestParamPPNS::TearDownTestCase()
       inbl, NULL, NULL));
     ASSERT_EQ(0, s_cluster.mon_command(
       "{\"prefix\": \"osd pool delete\", \"pool\": \"" + cache_pool_name +
-      "\", \"pool2\": \"" + cache_pool_name + "\", \"sure\": \"--yes-i-really-really-mean-it\"}",
+      "\", \"pool2\": \"" + cache_pool_name + "\", \"yes_i_really_really_mean_it\": true}",
       inbl, NULL, NULL));
     cache_pool_name = "";
   }
@@ -286,7 +286,7 @@ void RadosTestParamPP::TearDownTestCase()
       inbl, NULL, NULL));
     ASSERT_EQ(0, s_cluster.mon_command(
       "{\"prefix\": \"osd pool delete\", \"pool\": \"" + cache_pool_name +
-      "\", \"pool2\": \"" + cache_pool_name + "\", \"sure\": \"--yes-i-really-really-mean-it\"}",
+      "\", \"pool2\": \"" + cache_pool_name + "\", \"yes_i_really_really_mean_it\": true}",
       inbl, NULL, NULL));
     cache_pool_name = "";
   }

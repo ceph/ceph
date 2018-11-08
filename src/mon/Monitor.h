@@ -963,6 +963,7 @@ private:
 public:
   static void format_command_descriptions(const std::vector<MonCommand> &commands,
 					  Formatter *f,
+					  uint64_t features,
 					  bufferlist *rdata);
 
   const std::vector<MonCommand> &get_local_commands(mon_feature_t f) {

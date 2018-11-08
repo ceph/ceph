@@ -755,7 +755,7 @@ class CephFSVolumeClient(object):
                                 {
                                     "pool": pool_name,
                                     "pool2": pool_name,
-                                    "sure": "--yes-i-really-really-mean-it"
+                                    "yes_i_really_really_mean_it": True
                                 })
 
     def _get_ancestor_xattr(self, path, attr):
