@@ -381,7 +381,7 @@ static struct rgw_flags_desc op_type_flags[] = {
  { 0, NULL }
 };
 
-static void op_type_to_str(uint32_t mask, char *buf, int len)
+extern void op_type_to_str(uint32_t mask, char *buf, int len)
 {
   return mask_to_str(op_type_flags, mask, buf, len);
 }
