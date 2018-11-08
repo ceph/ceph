@@ -45,7 +45,7 @@ private:
 
   CB *cb{nullptr};
 
-  int finisher_handle{0};
+  std::optional<int> finisher_handle;
   RGWSI_Notify_ShutdownCB *shutdown_cb{nullptr};
 
   bool finalized{false};

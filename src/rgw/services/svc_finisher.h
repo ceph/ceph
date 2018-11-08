@@ -20,7 +20,7 @@ private:
   void shutdown() override;
 
   std::map<int, ShutdownCB *> shutdown_cbs;
-  std::atomic<int> handles_counter;
+  std::atomic<int> handles_counter{0};
 
 protected:
   void init() {}
