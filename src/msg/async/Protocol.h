@@ -46,7 +46,7 @@ public:
   }
 };
 
-#define CONTINUATION_DECL(C, F, ...)                \
+#define CONTINUATION_DECL(C, F, ...)                    \
   std::unique_ptr<CtFun<C, ##__VA_ARGS__>> F##_cont_ =  \
       std::make_unique<CtFun<C, ##__VA_ARGS__>>(&C::F); \
   CtFun<C, ##__VA_ARGS__> *F##_cont = F##_cont_.get()
@@ -64,7 +64,16 @@ public:
     }                                                             \
   }
 
-#define READ_HANDLER_CONTINUATION_DECL(C, F) CONTINUATION_DECL(C, F, char*, int)
+#define CONTINUATION_RUN2(I, CT)                               \
+  {                                                            \
+    Ct<std::remove_reference<decltype(*I)>::type> *_cont = CT; \
+    while (_cont) {                                            \
+      _cont = _cont->call(I);                                  \
+    }                                                          \
+  }
+
+#define READ_HANDLER_CONTINUATION_DECL(C, F) \
+  CONTINUATION_DECL(C, F, char *, int)
 #define WRITE_HANDLER_CONTINUATION_DECL(C, F) CONTINUATION_DECL(C, F, int)
 
 //////////////////////////////////////////////////////////////////////
