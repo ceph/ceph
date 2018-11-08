@@ -126,6 +126,7 @@ public:
     bufferlist tail_block;  ///< existing partial block at end of file, if any
     bufferlist::page_aligned_appender buffer_appender;  //< for const char* only
     int writer_type = 0;    ///< WRITER_*
+    int write_hint = WRITE_LIFE_NOT_SET;
 
     ceph::mutex lock = ceph::make_mutex("BlueFS::FileWriter::lock");
     std::array<IOContext*,MAX_BDEV> iocv; ///< for each bdev
@@ -139,6 +140,9 @@ public:
       ++file->num_writers;
       iocv.fill(nullptr);
       dirty_devs.fill(false);
+      if (f->fnode.ino == 1) {
+	write_hint = WRITE_LIFE_MEDIUM;
+      }
     }
     // NOTE: caller must call BlueFS::close_writer()
     ~FileWriter() {

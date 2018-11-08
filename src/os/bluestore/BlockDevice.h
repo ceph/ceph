@@ -37,6 +37,21 @@
 #include "include/interval_set.h"
 #define SPDK_PREFIX "spdk:"
 
+#if !defined(F_SET_FILE_RW_HINT)
+#define F_LINUX_SPECIFIC_BASE 1024
+#define F_SET_FILE_RW_HINT         (F_LINUX_SPECIFIC_BASE + 14)
+#endif
+
+// These values match Linux definition
+// https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/include/uapi/linux/fcntl.h#n56
+#define  WRITE_LIFE_NOT_SET  	0 	// No hint information set
+#define  WRITE_LIFE_NONE  	1       // No hints about write life time
+#define  WRITE_LIFE_SHORT  	2       // Data written has a short life time
+#define  WRITE_LIFE_MEDIUM  	3    	// Data written has a medium life time
+#define  WRITE_LIFE_LONG  	4       // Data written has a long life time
+#define  WRITE_LIFE_EXTREME  	5     	// Data written has an extremely long life time
+#define  WRITE_LIFE_MAX  	6
+
 class CephContext;
 
 /// track in-flight io
@@ -170,7 +185,8 @@ public:
   virtual int write(
     uint64_t off,
     bufferlist& bl,
-    bool buffered) = 0;
+    bool buffered,
+    int write_hint = WRITE_LIFE_NOT_SET) = 0;
 
   virtual int aio_read(
     uint64_t off,
@@ -181,7 +197,8 @@ public:
     uint64_t off,
     bufferlist& bl,
     IOContext *ioc,
-    bool buffered) = 0;
+    bool buffered,
+    int write_hint = WRITE_LIFE_NOT_SET) = 0;
   virtual int flush() = 0;
   virtual int discard(uint64_t offset, uint64_t len) { return 0; }
   virtual int queue_discard(interval_set<uint64_t> &to_release) { return -1; }
