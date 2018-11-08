@@ -86,24 +86,15 @@ report progress and status updates to the rest of the leadership team
 and to help facilitate any cross-component coordination of
 development.
 
-
-User Committee
---------------
-
-The user committee is intended to represent the needs and interests of
-the Ceph user community.  It is currently led by Wido den Hollander
-<wido@42on.com>.  The function of this body is not currently
-well-defined.
-
-
-Ceph Advisory Board
+The Ceph Foundation
 -------------------
 
-The Ceph Advisory Board is a collection of industry representatives
-that advise the project on strategy, direction, and resource
-allocation, and coordinate industry activities to support the Ceph
-project and community.
+The Ceph Foundation is organized as a directed fund under the Linux
+Foundation and is tasked with supporting the Ceph project community
+and ecosystem.  It has no direct control over the technical direction
+of the Ceph open source project beyond offering feedback and input
+into the collaborative development process.
 
-Currently the advisory board includes representatives from Ceph vendors
-(Red Hat, SUSE, Canonical), academia (CERN), industry partners
-(Fujitsu, Intel, WD), and a user committee representative.
+For more information, see `https://ceph.com/foundation
+<https://ceph.com/foundation>`_.
+
