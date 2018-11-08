@@ -763,11 +763,26 @@ Keystone Settings
               authentication with the admin credentials
               (``rgw keystone admin user``, ``rgw keystone admin password``,
               ``rgw keystone admin tenant``, ``rgw keystone admin project``,
-              ``rgw keystone admin domain``). Admin token feature is considered
-              as deprecated.
+              ``rgw keystone admin domain``). The Keystone admin token
+              has been deprecated, but can be used to integrate with
+              older environments.  Prefer ``rgw keystone admin token path``
+              to avoid exposing the token.
 :Type: String
 :Default: None
 
+``rgw keystone admin token path``
+
+:Description: Path to a file containing the Keystone admin token
+	      (shared secret).  In Ceph RadosGW authentication with
+	      the admin token has priority over authentication with
+	      the admin credentials
+              (``rgw keystone admin user``, ``rgw keystone admin password``,
+              ``rgw keystone admin tenant``, ``rgw keystone admin project``,
+              ``rgw keystone admin domain``).
+              The Keystone admin token has been deprecated, but can be
+              used to integrate with older environments.
+:Type: String
+:Default: None
 
 ``rgw keystone admin tenant``
 
@@ -788,7 +803,15 @@ Keystone Settings
 ``rgw keystone admin password``
 
 :Description: The password for OpenStack admin user when using OpenStack
-              Identity API v2
+              Identity API v2.  Prefer ``rgw keystone admin password path``
+              to avoid exposing the token.
+:Type: String
+:Default: None
+
+``rgw keystone admin password path``
+
+:Description: Path to a file containing the password for OpenStack
+              admin user when using OpenStack Identity API v2.
 :Type: String
 :Default: None
 
