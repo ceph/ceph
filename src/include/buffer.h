@@ -364,12 +364,9 @@ namespace buffer CEPH_BUFFER_API {
       return append(s.data(), s.length());
     }
 #endif // __cplusplus >= 201703L
-    void copy_in(unsigned o, unsigned l, const char *src);
-    void copy_in(unsigned o, unsigned l, const char *src, bool crc_reset);
-    void zero();
-    void zero(bool crc_reset);
-    void zero(unsigned o, unsigned l);
-    void zero(unsigned o, unsigned l, bool crc_reset);
+    void copy_in(unsigned o, unsigned l, const char *src, bool crc_reset = true);
+    void zero(bool crc_reset = true);
+    void zero(unsigned o, unsigned l, bool crc_reset = true);
     unsigned append_zeros(unsigned l);
 
 #ifdef HAVE_SEASTAR
@@ -485,38 +482,9 @@ namespace buffer CEPH_BUFFER_API {
       iterator() = default;
       iterator(bl_t *l, unsigned o=0);
       iterator(bl_t *l, unsigned o, list_iter_t ip, unsigned po);
-
-      void advance(int o) = delete;
-      void advance(unsigned o);
-      void advance(size_t o) { advance(static_cast<unsigned>(o)); }
-
-      void seek(unsigned o);
-      using iterator_impl<false>::operator*;
-      char operator*();
-      iterator& operator++();
-      ptr get_current_ptr();
-
-      // copy data out
-      void copy(unsigned len, char *dest);
-      // deprecated, use copy_deep()
-      void copy(unsigned len, ptr &dest) __attribute__((deprecated));
-      void copy_deep(unsigned len, ptr &dest);
-      void copy_shallow(unsigned len, ptr &dest);
-      void copy(unsigned len, list &dest);
-      void copy(unsigned len, std::string &dest);
-      void copy_all(list &dest);
-
       // copy data in
-      void copy_in(unsigned len, const char *src);
-      void copy_in(unsigned len, const char *src, bool crc_reset);
+      void copy_in(unsigned len, const char *src, bool crc_reset = true);
       void copy_in(unsigned len, const list& otherl);
-
-      bool operator==(const iterator& rhs) const {
-	return bl == rhs.bl && off == rhs.off;
-      }
-      bool operator!=(const iterator& rhs) const {
-	return bl != rhs.bl || off != rhs.off;
-      }
     };
 
     class contiguous_appender {
@@ -784,7 +752,6 @@ namespace buffer CEPH_BUFFER_API {
       return _len;
     }
 
-    bool contents_equal(buffer::list& other);
     bool contents_equal(const buffer::list& other) const;
 
     bool is_provided_buffer(const char *dst) const;
@@ -893,8 +860,7 @@ namespace buffer CEPH_BUFFER_API {
     void copy(unsigned off, unsigned len, char *dest) const;
     void copy(unsigned off, unsigned len, list &dest) const;
     void copy(unsigned off, unsigned len, std::string& dest) const;
-    void copy_in(unsigned off, unsigned len, const char *src);
-    void copy_in(unsigned off, unsigned len, const char *src, bool crc_reset);
+    void copy_in(unsigned off, unsigned len, const char *src, bool crc_reset = true);
     void copy_in(unsigned off, unsigned len, const list& src);
 
     void append(char c);

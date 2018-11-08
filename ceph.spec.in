@@ -578,6 +578,7 @@ Summary:	RADOS headers
 Group:		Development/Libraries/C and C++
 %endif
 Requires:	libradospp1 = %{_epoch_prefix}%{version}-%{release}
+Requires:	librados-devel = %{_epoch_prefix}%{version}-%{release}
 %description -n libradospp-devel
 This package contains C++ libraries and headers needed to develop programs
 that use RADOS object store.

@@ -1903,7 +1903,7 @@ public:
     }
 
     string src = context->prefix+oid_src;
-    op.copy_from(src.c_str(), context->io_ctx, src_value.version);
+    op.copy_from(src.c_str(), context->io_ctx, src_value.version, 0);
 
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,
@@ -2244,7 +2244,7 @@ public:
 
     string src = context->prefix+oid_src;
     context->find_object(oid_src, &src_value); 
-    op.copy_from(src.c_str(), context->io_ctx, src_value.version);
+    op.copy_from(src.c_str(), context->io_ctx, src_value.version, 0);
 
     cout << "copy op oid " << oid_src << " to " << oid << " tgt_pool_name " << tgt_pool_name <<  std::endl;
 
@@ -2443,7 +2443,7 @@ public:
       /* copy_from oid --> oid_tgt */
       comp = context->rados.aio_create_completion();
       string src = context->prefix+oid;
-      op.copy_from(src.c_str(), context->io_ctx, src_value.version);
+      op.copy_from(src.c_str(), context->io_ctx, src_value.version, 0);
       context->low_tier_io_ctx.aio_operate(context->prefix+oid_tgt, comp, &op,
 					   librados::OPERATION_ORDER_READS_WRITES);
       comp->wait_for_safe();
