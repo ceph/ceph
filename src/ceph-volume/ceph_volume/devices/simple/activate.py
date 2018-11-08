@@ -84,6 +84,43 @@ class Activate(object):
 
         return '/dev/mapper/%s' % uuid
 
+    def enable_systemd_units(self, osd_id, osd_fsid):
+        """
+        * disables the ceph-disk systemd units to prevent them from running when
+          a UDEV event matches Ceph rules
+        * creates the ``simple`` systemd units to handle the activation and
+          startup of the OSD with ``osd_id`` and ``osd_fsid``
+        * enables the OSD systemd unit and finally starts the OSD.
+        """
+        if not self.from_trigger and not self.skip_systemd:
+            # means it was scanned and now activated directly, so ensure that
+            # ceph-disk units are disabled, and that the `simple` systemd unit
+            # is created and enabled
+
+            # enable the ceph-volume unit for this OSD
+            systemctl.enable_volume(osd_id, osd_fsid, 'simple')
+
+            # disable any/all ceph-disk units
+            systemctl.mask_ceph_disk()
+            terminal.warning(
+                ('All ceph-disk systemd units have been disabled to '
+                 'prevent OSDs getting triggered by UDEV events')
+            )
+        else:
+            terminal.info('Skipping enabling of `simple` systemd unit')
+            terminal.info('Skipping masking of ceph-disk systemd units')
+
+        if not self.skip_systemd:
+            # enable the OSD
+            systemctl.enable_osd(osd_id)
+
+            # start the OSD
+            systemctl.start_osd(osd_id)
+        else:
+            terminal.info(
+                'Skipping enabling and starting OSD simple systemd unit because --no-systemd was used'
+            )
+
     @decorators.needs_root
     def activate(self, args):
         with open(args.json_config, 'r') as fp:
@@ -149,31 +186,7 @@ class Activate(object):
             # make sure that the journal has proper permissions
             system.chown(device)
 
-        if not self.from_trigger and not self.skip_systemd:
-            # means it was scanned and now activated directly, so ensure that
-            # ceph-disk units are disabled, and that the `simple` systemd unit
-            # is created and enabled
-
-            # enable the ceph-volume unit for this OSD
-            systemctl.enable_volume(osd_id, osd_fsid, 'simple')
-
-            # disable any/all ceph-disk units
-            systemctl.mask_ceph_disk()
-            terminal.warning(
-                ('All ceph-disk systemd units have been disabled to '
-                 'prevent OSDs getting triggered by UDEV events')
-            )
-
-        if not self.skip_systemd:
-            # enable the OSD
-            systemctl.enable_osd(osd_id)
-
-            # start the OSD
-            systemctl.start_osd(osd_id)
-        else:
-            terminal.info(
-                'Skipping enabling and starting OSD simple systemd unit because --no-systemd was used'
-            )
+        self.enable_systemd_units(osd_id, osd_fsid)
 
         terminal.success('Successfully activated OSD %s with FSID %s' % (osd_id, osd_fsid))
 
