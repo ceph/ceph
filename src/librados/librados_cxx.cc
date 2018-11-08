@@ -221,12 +221,6 @@ void librados::ObjectReadOperation::checksum(rados_checksum_type_t type,
 	      pbl, prval, nullptr);
 }
 
-void librados::ObjectReadOperation::tmap_get(bufferlist *pbl, int *prval)
-{
-  ::ObjectOperation *o = &impl->o;
-  o->tmap_get(pbl, prval);
-}
-
 void librados::ObjectReadOperation::getxattr(const char *name, bufferlist *pbl, int *prval)
 {
   ::ObjectOperation *o = &impl->o;
@@ -498,6 +492,13 @@ void librados::ObjectWriteOperation::setxattr(const char *name, const bufferlist
   o->setxattr(name, v);
 }
 
+void librados::ObjectWriteOperation::setxattr(const char *name,
+					      const buffer::list&& v)
+{
+  ::ObjectOperation *o = &impl->o;
+  o->setxattr(name, std::move(v));
+}		
+
 void librados::ObjectWriteOperation::omap_set(
   const map<string, bufferlist> &map)
 {
@@ -526,16 +527,9 @@ void librados::ObjectWriteOperation::omap_rm_keys(
 }
 
 void librados::ObjectWriteOperation::copy_from(const std::string& src,
-                                               const IoCtx& src_ioctx,
-                                               uint64_t src_version)
-{
-  copy_from2(src, src_ioctx, src_version, 0);
-}
-
-void librados::ObjectWriteOperation::copy_from2(const std::string& src,
-					        const IoCtx& src_ioctx,
-					        uint64_t src_version,
-					        uint32_t src_fadvise_flags)
+					       const IoCtx& src_ioctx,
+					       uint64_t src_version,
+					       uint32_t src_fadvise_flags)
 {
   ::ObjectOperation *o = &impl->o;
   o->copy_from(object_t(src), src_ioctx.io_ctx_impl->snap_seq,
@@ -598,13 +592,6 @@ void librados::ObjectWriteOperation::unset_manifest()
 {
   ::ObjectOperation *o = &impl->o;
   o->unset_manifest();
-}
-
-void librados::ObjectWriteOperation::tmap_put(const bufferlist &bl)
-{
-  ::ObjectOperation *o = &impl->o;
-  bufferlist c = bl;
-  o->tmap_put(c);
 }
 
 void librados::ObjectWriteOperation::tmap_update(const bufferlist& cmdbl)
@@ -1266,24 +1253,6 @@ int librados::IoCtx::tmap_update(const std::string& oid, bufferlist& cmdbl)
   return io_ctx_impl->tmap_update(obj, cmdbl);
 }
 
-int librados::IoCtx::tmap_put(const std::string& oid, bufferlist& bl)
-{
-  object_t obj(oid);
-  return io_ctx_impl->tmap_put(obj, bl);
-}
-
-int librados::IoCtx::tmap_get(const std::string& oid, bufferlist& bl)
-{
-  object_t obj(oid);
-  return io_ctx_impl->tmap_get(obj, bl);
-}
-
-int librados::IoCtx::tmap_to_omap(const std::string& oid, bool nullok)
-{
-  object_t obj(oid);
-  return io_ctx_impl->tmap_to_omap(obj, nullok);
-}
-
 int librados::IoCtx::omap_get_vals(const std::string& oid,
                                    const std::string& start_after,
                                    uint64_t max_return,
@@ -1726,12 +1695,6 @@ int librados::IoCtx::list_lockers(const std::string &oid, const std::string &nam
   return tmp_lockers.size();
 }
 
-librados::NObjectIterator librados::IoCtx::nobjects_begin()
-{
-  bufferlist bl;
-  return nobjects_begin(bl);
-}
-
 librados::NObjectIterator librados::IoCtx::nobjects_begin(
     const bufferlist &filter)
 {
@@ -1745,12 +1708,6 @@ librados::NObjectIterator librados::IoCtx::nobjects_begin(
   return iter;
 }
 
-librados::NObjectIterator librados::IoCtx::nobjects_begin(uint32_t pos)
-{
-  bufferlist bl;
-  return nobjects_begin(pos, bl);
-}
-
 librados::NObjectIterator librados::IoCtx::nobjects_begin(
   uint32_t pos, const bufferlist &filter)
 {
@@ -1762,12 +1719,6 @@ librados::NObjectIterator librados::IoCtx::nobjects_begin(
   }
   iter.seek(pos);
   return iter;
-}
-
-librados::NObjectIterator librados::IoCtx::nobjects_begin(const ObjectCursor& cursor)
-{
-  bufferlist bl;
-  return nobjects_begin(cursor, bl);
 }
 
 librados::NObjectIterator librados::IoCtx::nobjects_begin(

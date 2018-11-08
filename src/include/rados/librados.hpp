@@ -380,6 +380,7 @@ namespace librados
     void zero(uint64_t off, uint64_t len);
     void rmxattr(const char *name);
     void setxattr(const char *name, const bufferlist& bl);
+    void setxattr(const char *name, const bufferlist&& bl);
     void tmap_update(const bufferlist& cmdbl);
     void tmap_put(const bufferlist& bl);
     void selfmanaged_snap_rollback(uint64_t snapid);
@@ -432,9 +433,7 @@ namespace librados
      * @param src_fadvise_flags the fadvise flags for source object
      */
     void copy_from(const std::string& src, const IoCtx& src_ioctx,
-		   uint64_t src_version);
-    void copy_from2(const std::string& src, const IoCtx& src_ioctx,
-                    uint64_t src_version, uint32_t src_fadvise_flags);
+		   uint64_t src_version, uint32_t src_fadvise_flags);
 
     /**
      * undirty an object
@@ -505,7 +504,6 @@ namespace librados
      */
     void sparse_read(uint64_t off, uint64_t len, std::map<uint64_t,uint64_t> *m,
                     bufferlist *data_bl, int *prval);
-    void tmap_get(bufferlist *pbl, int *prval);
 
     /**
      * omap_get_vals: keys and values from the object omap
@@ -789,14 +787,6 @@ namespace librados
      * NOTE: this call steals the contents of @param bl
      */
     int tmap_update(const std::string& oid, bufferlist& cmdbl);
-    /**
-     * replace object contents with provided encoded tmap data
-     *
-     * NOTE: this call steals the contents of @param bl
-     */
-    int tmap_put(const std::string& oid, bufferlist& bl);
-    int tmap_get(const std::string& oid, bufferlist& bl);
-    int tmap_to_omap(const std::string& oid, bool nullok=false);
 
     int omap_get_vals(const std::string& oid,
                       const std::string& start_after,
@@ -899,16 +889,13 @@ namespace librados
 
 
     /// Start enumerating objects for a pool
-    NObjectIterator nobjects_begin();
-    NObjectIterator nobjects_begin(const bufferlist &filter);
+    NObjectIterator nobjects_begin(const bufferlist &filter=bufferlist());
     /// Start enumerating objects for a pool starting from a hash position
-    NObjectIterator nobjects_begin(uint32_t start_hash_position);
     NObjectIterator nobjects_begin(uint32_t start_hash_position,
-                                   const bufferlist &filter);
+                                   const bufferlist &filter=bufferlist());
     /// Start enumerating objects for a pool starting from cursor
-    NObjectIterator nobjects_begin(const librados::ObjectCursor& cursor);
     NObjectIterator nobjects_begin(const librados::ObjectCursor& cursor,
-                                   const bufferlist &filter);
+                                   const bufferlist &filter=bufferlist());
     /// Iterator indicating the end of a pool
     const NObjectIterator& nobjects_end() const;
 

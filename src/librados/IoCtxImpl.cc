@@ -1321,30 +1321,6 @@ int librados::IoCtxImpl::tmap_update(const object_t& oid, bufferlist& cmdbl)
   return operate(oid, &wr, NULL);
 }
 
-int librados::IoCtxImpl::tmap_put(const object_t& oid, bufferlist& bl)
-{
-  ::ObjectOperation wr;
-  prepare_assert_ops(&wr);
-  wr.tmap_put(bl);
-  return operate(oid, &wr, NULL);
-}
-
-int librados::IoCtxImpl::tmap_get(const object_t& oid, bufferlist& bl)
-{
-  ::ObjectOperation rd;
-  prepare_assert_ops(&rd);
-  rd.tmap_get(&bl, NULL);
-  return operate_read(oid, &rd, NULL);
-}
-
-int librados::IoCtxImpl::tmap_to_omap(const object_t& oid, bool nullok)
-{
-  ::ObjectOperation wr;
-  prepare_assert_ops(&wr);
-  wr.tmap_to_omap(nullok);
-  return operate(oid, &wr, NULL);
-}
-
 int librados::IoCtxImpl::exec(const object_t& oid,
 			      const char *cls, const char *method,
 			      bufferlist& inbl, bufferlist& outbl)

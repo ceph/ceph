@@ -1665,61 +1665,6 @@ extern "C" int rados_stat(rados_ioctx_t io, const char *o, uint64_t *psize, time
   return retval;
 }
 
-extern "C" int rados_tmap_update(rados_ioctx_t io, const char *o, const char *cmdbuf, size_t cmdbuflen)
-{
-  tracepoint(librados, rados_tmap_update_enter, io, o, cmdbuf, cmdbuflen);
-  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
-  object_t oid(o);
-  bufferlist cmdbl;
-  cmdbl.append(cmdbuf, cmdbuflen);
-  int retval = ctx->tmap_update(oid, cmdbl);
-  tracepoint(librados, rados_tmap_update_exit, retval);
-  return retval;
-}
-
-extern "C" int rados_tmap_put(rados_ioctx_t io, const char *o, const char *buf, size_t buflen)
-{
-  tracepoint(librados, rados_tmap_put_enter, io, o, buf, buflen);
-  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
-  object_t oid(o);
-  bufferlist bl;
-  bl.append(buf, buflen);
-  int retval = ctx->tmap_put(oid, bl);
-  tracepoint(librados, rados_tmap_put_exit, retval);
-  return retval;
-}
-
-extern "C" int rados_tmap_get(rados_ioctx_t io, const char *o, char *buf, size_t buflen)
-{
-  tracepoint(librados, rados_tmap_get_enter, io, o, buflen);
-  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
-  object_t oid(o);
-  bufferlist bl;
-  int r = ctx->tmap_get(oid, bl);
-  if (r < 0) {
-    tracepoint(librados, rados_tmap_get_exit, r, buf, 0);
-    return r;
-  }
-  if (bl.length() > buflen) {
-    tracepoint(librados, rados_tmap_get_exit, -ERANGE, buf, 0);
-    return -ERANGE;
-  }
-  bl.copy(0, bl.length(), buf);
-  int retval = bl.length();
-  tracepoint(librados, rados_tmap_get_exit, retval, buf, retval);
-  return retval;
-}
-
-extern "C" int rados_tmap_to_omap(rados_ioctx_t io, const char *o, bool nullok)
-{
-  tracepoint(librados, rados_tmap_to_omap_enter, io, o, nullok);
-  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
-  object_t oid(o);
-  int retval = ctx->tmap_to_omap(oid, nullok);
-  tracepoint(librados, rados_tmap_to_omap_exit, retval);
-  return retval;
-}
-
 extern "C" int rados_exec(rados_ioctx_t io, const char *o, const char *cls, const char *method,
                          const char *inbuf, size_t in_len, char *buf, size_t out_len)
 {
