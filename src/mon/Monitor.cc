@@ -108,10 +108,10 @@ const string Monitor::MONITOR_STORE_PREFIX = "monitor_store";
 #undef COMMAND
 #undef COMMAND_WITH_FLAG
 #define FLAG(f) (MonCommand::FLAG_##f)
-#define COMMAND(parsesig, helptext, modulename, req_perms, avail)	\
-  {parsesig, helptext, modulename, req_perms, avail, FLAG(NONE)},
-#define COMMAND_WITH_FLAG(parsesig, helptext, modulename, req_perms, avail, flags) \
-  {parsesig, helptext, modulename, req_perms, avail, flags},
+#define COMMAND(parsesig, helptext, modulename, req_perms)	\
+  {parsesig, helptext, modulename, req_perms, FLAG(NONE)},
+#define COMMAND_WITH_FLAG(parsesig, helptext, modulename, req_perms, flags) \
+  {parsesig, helptext, modulename, req_perms, flags},
 MonCommand mon_commands[] = {
 #include <mon/MonCommands.h>
 };
@@ -2869,6 +2869,7 @@ bool Monitor::_allowed_command(MonSession *s, const string &module,
 
 void Monitor::format_command_descriptions(const std::vector<MonCommand> &commands,
 					  Formatter *f,
+					  uint64_t features,
 					  bufferlist *rdata)
 {
   int cmdnum = 0;
@@ -2877,9 +2878,9 @@ void Monitor::format_command_descriptions(const std::vector<MonCommand> &command
     unsigned flags = cmd.flags;
     ostringstream secname;
     secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
-    dump_cmddesc_to_json(f, secname.str(),
+    dump_cmddesc_to_json(f, features, secname.str(),
 			 cmd.cmdstring, cmd.helpstring, cmd.module,
-			 cmd.req_perms, cmd.availability, flags);
+			 cmd.req_perms, flags);
     cmdnum++;
   }
   f->close_section();	// command_descriptions
@@ -2979,7 +2980,8 @@ void Monitor::handle_command(MonOpRequestRef op)
       }
     }
 
-    format_command_descriptions(commands, f, &rdata);
+    auto features = m->get_connection()->get_features();
+    format_command_descriptions(commands, f, features, &rdata);
     delete f;
     reply_command(op, 0, "", rdata, 0);
     return;
@@ -3488,11 +3490,12 @@ void Monitor::handle_command(MonOpRequestRef op)
     r = 0;
   } else if (prefix == "sync force" ||
              prefix == "mon sync force") {
-    string validate1, validate2;
-    cmd_getval(g_ceph_context, cmdmap, "validate1", validate1);
-    cmd_getval(g_ceph_context, cmdmap, "validate2", validate2);
-    if (validate1 != "--yes-i-really-mean-it" ||
-	validate2 != "--i-know-what-i-am-doing") {
+    bool validate1 = false;
+    cmd_getval(g_ceph_context, cmdmap, "yes_i_really_mean_it", validate1);
+    bool validate2 = false;
+    cmd_getval(g_ceph_context, cmdmap, "i_know_what_i_am_doing", validate2);
+
+    if (!validate1 || !validate2) {
       r = -EINVAL;
       rs = "are you SURE? this will mean the monitor store will be "
 	   "erased.  pass '--yes-i-really-mean-it "

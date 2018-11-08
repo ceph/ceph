@@ -727,8 +727,9 @@ int MDSDaemon::_handle_command(
     for (auto& c : get_commands()) {
       ostringstream secname;
       secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
-      dump_cmddesc_to_json(f.get(), secname.str(), c.cmdstring, c.helpstring,
-			   c.module, "*", c.availability, 0);
+      dump_cmddesc_to_json(f.get(), m->get_connection()->get_features(),
+                           secname.str(), c.cmdstring, c.helpstring,
+			   c.module, "*", 0);
       cmdnum++;
     }
     f->close_section();	// command_descriptions

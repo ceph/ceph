@@ -74,7 +74,7 @@ class Pool(RESTController):
     @handle_send_command_error('pool')
     def delete(self, pool_name):
         return CephService.send_command('mon', 'osd pool delete', pool=pool_name, pool2=pool_name,
-                                        sure='--yes-i-really-really-mean-it')
+                                        yes_i_really_really_mean_it=True)
 
     @pool_task('edit', ['{pool_name}'])
     def set(self, pool_name, flags=None, application_metadata=None, **kwargs):
@@ -101,7 +101,7 @@ class Pool(RESTController):
         if application_metadata is not None:
             def set_app(what, app):
                 CephService.send_command('mon', 'osd pool application ' + what, pool=pool, app=app,
-                                         force='--yes-i-really-mean-it')
+                                         yes_i_really_mean_it=True)
             if update_existing:
                 original_app_metadata = set(
                     current_pool.get('application_metadata'))
