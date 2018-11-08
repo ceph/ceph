@@ -1008,7 +1008,10 @@ TEST(BufferListIterator, operator_star) {
     bufferlist::iterator i(&bl);
     EXPECT_EQ('A', *i);
     EXPECT_THROW(i.advance(200u), buffer::end_of_buffer);
-    EXPECT_THROW(*i, buffer::end_of_buffer);
+    //
+    // demonstrates that it seeks back to offset if p == ls->end()
+    //
+    EXPECT_EQ('A', *i);
   }
 }
 

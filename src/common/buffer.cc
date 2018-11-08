@@ -861,8 +861,10 @@ using namespace ceph;
       return;
     }
     while (p_off > 0) {
-      if (p == ls->end())
+      if (p == ls->end()) {
+	seek(off);
         throw end_of_buffer();
+      }
       if (p_off >= p->length()) {
         // skip this buffer
         p_off -= p->length();
@@ -914,7 +916,6 @@ using namespace ceph;
   template<bool is_const>
   void buffer::list::iterator_impl<is_const>::copy(unsigned len, char *dest)
   {
-    if (p == ls->end()) seek(off);
     while (len > 0) {
       if (p == ls->end())
 	throw end_of_buffer();
@@ -971,8 +972,6 @@ using namespace ceph;
   template<bool is_const>
   void buffer::list::iterator_impl<is_const>::copy(unsigned len, list &dest)
   {
-    if (p == ls->end())
-      seek(off);
     while (len > 0) {
       if (p == ls->end())
 	throw end_of_buffer();
@@ -990,8 +989,6 @@ using namespace ceph;
   template<bool is_const>
   void buffer::list::iterator_impl<is_const>::copy(unsigned len, std::string &dest)
   {
-    if (p == ls->end())
-      seek(off);
     while (len > 0) {
       if (p == ls->end())
 	throw end_of_buffer();
@@ -1010,8 +1007,6 @@ using namespace ceph;
   template<bool is_const>
   void buffer::list::iterator_impl<is_const>::copy_all(list &dest)
   {
-    if (p == ls->end())
-      seek(off);
     while (1) {
       if (p == ls->end())
 	return;
@@ -1550,7 +1545,7 @@ using namespace ceph;
   {
     if (off + len > length())
       throw end_of_buffer();
-    if (last_p.get_off() != off) 
+    if (last_p.end() || last_p.get_off() != off)
       last_p.seek(off);
     last_p.copy(len, dest);
   }
@@ -1559,14 +1554,16 @@ using namespace ceph;
   {
     if (off + len > length())
       throw end_of_buffer();
-    if (last_p.get_off() != off) 
+    if (last_p.end() || last_p.get_off() != off)
       last_p.seek(off);
     last_p.copy(len, dest);
   }
 
   void buffer::list::copy(unsigned off, unsigned len, std::string& dest) const
   {
-    if (last_p.get_off() != off) 
+    if (off + len > length())
+      throw end_of_buffer();
+    if (last_p.end() || last_p.get_off() != off)
       last_p.seek(off);
     return last_p.copy(len, dest);
   }
