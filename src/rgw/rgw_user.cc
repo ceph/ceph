@@ -29,7 +29,7 @@
 
 
 static RGWMetadataHandler *user_meta_handler = NULL;
-
+extern void op_type_to_str(uint32_t mask, char *buf, int len);
 
 /**
  * Get the anonymous (ie, unauthenticated) user info.
@@ -722,6 +722,9 @@ static void dump_user_info(Formatter *f, RGWUserInfo &info,
   f->dump_int("suspended", (int)info.suspended);
   f->dump_int("max_buckets", (int)info.max_buckets);
   f->dump_bool("system", (bool)info.system);
+  char buf[256];
+  op_type_to_str(info.op_mask, buf, sizeof(buf));
+  f->dump_string("op_mask", (const char *)buf);
   dump_subusers_info(f, info);
   dump_access_keys_info(f, info);
   dump_swift_keys_info(f, info);
