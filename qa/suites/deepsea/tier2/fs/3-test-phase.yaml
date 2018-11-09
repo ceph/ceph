@@ -1,0 +1,8 @@
+tasks:
+        - exec:
+                client.salt_master:
+                        - 'ceph -s'
+        - deepsea.validation:
+        - deepsea.health_ok:
+                commands:
+                        - health-ok.sh --client-nodes=1 --mds --min-nodes=2

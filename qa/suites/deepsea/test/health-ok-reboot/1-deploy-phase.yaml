@@ -1,11 +1,14 @@
 tasks:
         - deepsea:
+                alternative_defaults:
+                        - stage_prep_master: default-update-reboot
+                        - stage_prep_minion: default-update-reboot
+                        - tuned_mgr_init: default-off
+                        - tuned_mon_init: default-off
+                        - tuned_osd_init: default-off
         - deepsea.preflight:
         - deepsea.orch:
                 stage: prep
-                alternative_defaults:
-                        - stage_prep_master: default-no-update-no-reboot
-                        - stage_prep_minion: default-no-update-no-reboot
         - deepsea.orch:
                 stage: 1
         - deepsea.policy:

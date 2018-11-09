@@ -1,0 +1,14 @@
+tasks:
+        - exec:
+                client.salt_master:
+                        - 'ceph -s'
+        - deepsea.validation:
+        - deepsea.orch:
+                state_orch: ceph.maintenance.upgrade
+                allow_reboot: True
+                alternative_defaults:
+                  - upgrade_init: zypper-dup
+        - exec:
+                client.salt_master:
+                        - 'ceph -s'
+

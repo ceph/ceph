@@ -1,3 +1,4 @@
 overrides:
-  deepsea:
-    rgw_ssl: false
+        deepsea:
+                cli: true
+                rgw_ssl: false

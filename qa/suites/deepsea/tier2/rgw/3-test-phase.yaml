@@ -1,0 +1,10 @@
+roles:
+        - [client.salt_master, mon.a, mgr.x, osd.0, rgw.0]
+tasks:
+        - exec:
+                client.salt_master:
+                        - 'ceph -s'
+        - deepsea.validation:
+        - deepsea.health_ok:
+                commands:
+                        - health-ok.sh --rgw
