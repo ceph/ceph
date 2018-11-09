@@ -79,9 +79,9 @@ describe('CrushmapComponent', () => {
       });
 
       it('should have 3 osds in orderd', () => {
-        expect(component.tree.children[0].children[0].value).toBe('osd.0 (osd)--up');
-        expect(component.tree.children[0].children[1].value).toBe('osd.1 (osd)--down');
-        expect(component.tree.children[0].children[2].value).toBe('osd.2 (osd)--up');
+        expect(component.tree.children[0].children[0].value).toBe('osd.0 (osd)');
+        expect(component.tree.children[0].children[1].value).toBe('osd.1 (osd)');
+        expect(component.tree.children[0].children[2].value).toBe('osd.2 (osd)');
       });
     });
   });
