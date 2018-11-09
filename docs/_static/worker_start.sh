@@ -24,8 +24,8 @@ function start_all {
 }
  
 function main {
-    echo "$@"
-    if [[ -z "$@" ]]
+    printf '%s\n' "$*"
+    if [[ -z "$*" ]]
     then
         start_all
     elif [ ! -z "$2" ] && [ "$2" -gt "0" ]
@@ -37,4 +37,4 @@ function main {
     fi
 }
  
-main $@
+main "$@"
