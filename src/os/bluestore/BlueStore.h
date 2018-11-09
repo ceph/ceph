@@ -1881,7 +1881,7 @@ private:
   unsigned bluefs_shared_bdev = 0;  ///< which bluefs bdev we are sharing
   bool bluefs_single_shared_device = true;
   mono_time bluefs_last_balance;
-  utime_t next_dump_on_bluefs_balance_failure;
+  utime_t next_dump_on_bluefs_alloc_failure;
 
   KeyValueDB *db = nullptr;
   BlockDevice *bdev = nullptr;
@@ -2209,7 +2209,7 @@ private:
   void _open_statfs();
   void _get_statfs_overall(struct store_statfs_t *buf);
 
-  void _dump_alloc_on_rebalance_failure();
+  void _dump_alloc_on_failure();
   int _balance_bluefs_freespace(PExtentVector *extents);
   void _commit_bluefs_freespace(const PExtentVector& extents);
 
