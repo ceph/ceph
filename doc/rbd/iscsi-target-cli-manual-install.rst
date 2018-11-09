@@ -1,28 +1,27 @@
-==================================
-Manual ceph-iscsi-cli Installation
-==================================
+==============================
+Manual ceph-iscsi Installation
+==============================
 
 **Requirements**
 
-to complete the installation of ceph-iscsi-cli, there are 4 different steps:
+To complete the installation of ceph-iscsi, there are 4 steps:
 
 1. Install common packages from your Linux distribution's software repository
 2. Install Git to fetch the remaining packages directly from their Git repositories
-3. Ensure a compatible kernel is used or install a ceph-iscsi-test client
-4. Install all the components of ceph-iscsi-cli and start associated daemons:
+3. Ensure a compatible kernel is used
+4. Install all the components of ceph-iscsi and start associated daemons:
 
    -  tcmu-runner
    -  rtslib-fb
    -  configshell-fb
    -  targetcli-fb
-   -  ceph-iscsi-config
-   -  ceph-iscsi-cli
+   -  ceph-iscsi
 
 
 1. Install Common Packages
 ==========================
 
-The following packages will be used by ceph-iscsi-cli and target tools.
+The following packages will be used by ceph-iscsi and target tools.
 They must be installed from your Linux distribution's software repository
 on each machine that will be a iSCSI gateway:
 
@@ -37,7 +36,6 @@ on each machine that will be a iSCSI gateway:
 -  python pyparsing
 -  python rados
 -  python rbd
--  python netaddr
 -  python netifaces
 -  python crypto
 -  python requests
@@ -72,25 +70,12 @@ Ensure you use a supported kernel that contains the required Ceph iSCSI patches:
 -  all Linux distribution with a kernel v4.16 or newer, or
 -  Red Hat Enterprise Linux or CentOS 7.5 or later (in these distributions ceph-iscsi support is backported)
 
-If you are already using  on the compatible kernels, you can go to next step.
-However, if you are NOT using a compatible kernel then ceph-client ceph-iscsi-test
-branch must be used. To get the branch run:
-    
-    ::
-    
-       > git clone https://github.com/ceph/ceph-client.git
-       > git checkout ceph-iscsi-test
-    
-    .. warning::
-       ceph-iscsi-test is not for production use. It should only be used
-       for proof of concept setups and testing. The kernel is only updated
-       with Ceph iSCSI patches. General security and bug fixes from upstream
-       are not applied.
-    
-    Check your distro's docs for specific instructions on how to build a
-    kernel. The only Ceph iSCSI specific requirements are the following
-    build options must be enabled:
-    
+If you are already using a compatible kernel, you can go to next step.
+However, if you are NOT using a compatible kernel then check your distro's
+documentation for specific instructions on how to build this kernel. The only
+Ceph iSCSI specific requirements are that the following build options must be
+enabled:
+
     ::
     
        CONFIG_TARGET_CORE=m
@@ -98,7 +83,7 @@ branch must be used. To get the branch run:
        CONFIG_ISCSI_TARGET=m
 
 
-4. Install ceph-iscsi-cli
+4. Install ceph-iscsi
 ========================================================
 
 Finally, the remaining tools can be fetched directly from their Git repositories and their associated services started
@@ -176,17 +161,18 @@ targetcli-fb
       on the system. If targets have been setup and are being managed by
       targetcli the target service must be disabled.
 
-ceph-iscsi-config
+ceph-iscsi
 -----------------
 
    Installation:
 
    ::
 
-       > git clone https://github.com/ceph/ceph-iscsi-config.git
-       > cd ceph-iscsi-config
+       > git clone https://github.com/ceph/ceph-iscsi.git
+       > cd ceph-iscsi
        > python setup.py install --install-scripts=/usr/bin
        > cp usr/lib/systemd/system/rbd-target-gw.service /lib/systemd/system
+       > cp usr/lib/systemd/system/rbd-target-api.service /lib/systemd/system
 
    Enable and start the daemon:
 
@@ -195,21 +181,10 @@ ceph-iscsi-config
        > systemctl daemon-reload
        > systemctl enable rbd-target-gw
        > systemctl start rbd-target-gw
-
-ceph-iscsi-cli
---------------
-
-   Installation:
-
-   ::
-
-       > git clone https://github.com/ceph/ceph-iscsi-cli.git
-       > cd ceph-iscsi-cli
-       > python setup.py install --install-scripts=/usr/bin
-       > cp usr/lib/systemd/system/rbd-target-api.service /lib/systemd/system
-
+       > systemctl enable rbd-target-api
+       > systemctl start rbd-target-api
 
 Installation is complete. Proceed to the setup section in the
-`main ceph-iscsi-cli page`_.
+`main ceph-iscsi CLI page`_.
 
-.. _`main ceph-iscsi-cli page`: ../iscsi-target-cli
+.. _`main ceph-iscsi CLI page`: ../iscsi-target-cli
