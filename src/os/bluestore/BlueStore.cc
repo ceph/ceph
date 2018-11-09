@@ -4649,11 +4649,6 @@ int BlueStore::_open_fm(bool create)
       reserved = round_up_to(p.get_start() + p.get_len(), min_alloc_size);
       dout(20) << __func__ << " reserved 0x" << std::hex << reserved << std::dec
 	       << " for bluefs" << dendl;
-      bufferlist bl;
-      encode(bluefs_extents, bl);
-      t->set(PREFIX_SUPER, "bluefs_extents", bl);
-      dout(20) << __func__ << " bluefs_extents 0x" << std::hex << bluefs_extents
-	       << std::dec << dendl;
     }
 
     if (cct->_conf->bluestore_debug_prefill > 0) {
@@ -4723,6 +4718,21 @@ int BlueStore::_open_alloc()
 {
   ceph_assert(alloc == NULL);
   ceph_assert(bdev->get_size());
+
+  if (bluefs) {
+    bluefs_extents.clear();
+    auto r = bluefs->get_block_extents(bluefs_shared_bdev, &bluefs_extents);
+    if (r < 0) {
+      lderr(cct) << __func__ << " failed to retrieve bluefs_extents: "
+		 << cpp_strerror(r) << dendl;
+
+      return r;
+    }
+    dout(10) << __func__ << " bluefs extents 0x"
+             << std::hex << bluefs_extents << std::dec
+	     << dendl;
+  }
+
   alloc = Allocator::create(cct, cct->_conf->bluestore_allocator,
                             bdev->get_size(),
                             min_alloc_size);
@@ -4753,8 +4763,6 @@ int BlueStore::_open_alloc()
   for (auto e = bluefs_extents.begin(); e != bluefs_extents.end(); ++e) {
     alloc->init_rm_free(e.get_start(), e.get_len());
   }
-  dout(10) << __func__ << " marked bluefs_extents 0x" << std::hex
-	   << bluefs_extents << std::dec << " as allocated" << dendl;
 
   return 0;
 }
@@ -4768,6 +4776,7 @@ void BlueStore::_close_alloc()
   alloc->shutdown();
   delete alloc;
   alloc = NULL;
+  bluefs_extents.clear();
 }
 
 int BlueStore::_open_fsid(bool create)
@@ -5282,49 +5291,6 @@ void BlueStore::_close_db()
   }
 }
 
-int BlueStore::_reconcile_bluefs_freespace()
-{
-  dout(10) << __func__ << dendl;
-  interval_set<uint64_t> bset;
-  int r = bluefs->get_block_extents(bluefs_shared_bdev, &bset);
-  ceph_assert(r == 0);
-  if (bset == bluefs_extents) {
-    dout(10) << __func__ << " we agree bluefs has 0x" << std::hex << bset
-	     << std::dec << dendl;
-    return 0;
-  }
-  dout(10) << __func__ << " bluefs says 0x" << std::hex << bset << std::dec
-	   << dendl;
-  dout(10) << __func__ << " super says  0x" << std::hex << bluefs_extents
-	   << std::dec << dendl;
-
-  interval_set<uint64_t> overlap;
-  overlap.intersection_of(bset, bluefs_extents);
-
-  bset.subtract(overlap);
-  if (!bset.empty()) {
-    derr << __func__ << " bluefs extra 0x" << std::hex << bset << std::dec
-	 << dendl;
-    return -EIO;
-  }
-
-  interval_set<uint64_t> super_extra;
-  super_extra = bluefs_extents;
-  super_extra.subtract(overlap);
-  if (!super_extra.empty()) {
-    // This is normal: it can happen if we commit to give extents to
-    // bluefs and we crash before bluefs commits that it owns them.
-    dout(10) << __func__ << " super extra " << super_extra << dendl;
-    for (interval_set<uint64_t>::iterator p = super_extra.begin();
-	 p != super_extra.end();
-	 ++p) {
-      bluefs->add_block_extent(bluefs_shared_bdev, p.get_start(), p.get_len());
-    }
-  }
-
-  return 0;
-}
-
 void BlueStore::_dump_alloc_on_rebalance_failure()
 {
   auto dump_interval =
@@ -5370,24 +5336,11 @@ int BlueStore::allocate_bluefs_freespace(uint64_t size)
       }
       size -= gift;
     } while (size);
-    KeyValueDB::Transaction synct = db->get_transaction();
     for (auto& e : extents) {
       dout(1) << __func__ << " gifting " << e << " to bluefs" << dendl;
       bluefs->add_block_extent( bluefs_shared_bdev, e.offset, e.length);
       bluefs_extents.insert(e.offset, e.length);
     }
-
-    bufferlist bl;
-
-    encode(bluefs_extents, bl);
-    dout(10) << __func__ << " bluefs_extents now 0x" << std::hex
-	      << bluefs_extents << std::dec << dendl;
-    synct->set(PREFIX_SUPER, "bluefs_extents", bl);
-
-    synct->set(PREFIX_SUPER, "bluefs_extents_back", bl);
-
-    int r = db->submit_transaction_sync(synct);
-    ceph_assert(r == 0);
   }
   return 0;
 }
@@ -6381,12 +6334,6 @@ int BlueStore::_mount(bool kv_only, bool open_db)
   if (r < 0)
     goto out_coll;
 
-  if (bluefs) {
-    r = _reconcile_bluefs_freespace();
-    if (r < 0)
-      goto out_coll;
-  }
-
   _kv_start();
 
   r = _deferred_replay();
@@ -6784,26 +6731,6 @@ int BlueStore::_fsck(bool deep, bool repair)
   }
 
   if (bluefs) {
-    interval_set<uint64_t> bset;
-    r = bluefs->get_block_extents(bluefs_shared_bdev, &bset);
-    ceph_assert(r == 0);
-    if (!(bset == bluefs_extents)) {
-      dout(10) << __func__ << " bluefs says 0x" << std::hex << bset << std::dec
-	       << dendl;
-      dout(10) << __func__ << " super says  0x" << std::hex << bluefs_extents
-	       << std::dec << dendl;
-
-      interval_set<uint64_t> overlap;
-      overlap.intersection_of(bset, bluefs_extents);
-
-      bset.subtract(overlap);
-      if (!bset.empty()) {
-	derr << "fsck error: bluefs extra 0x" << std::hex << bset << std::dec
-	     << dendl;
-	++errors;
-      }
-    }
-
     for (auto e = bluefs_extents.begin(); e != bluefs_extents.end(); ++e) {
       apply(
         e.get_start(), e.get_len(), fm->get_alloc_size(), used_blocks,
@@ -9328,39 +9255,6 @@ int BlueStore::_open_super_meta()
     }
   }
 
-  // bluefs alloc
-  if (cct->_conf->bluestore_bluefs) {
-    {
-      bluefs_extents.clear();
-      bufferlist bl;
-      db->get(PREFIX_SUPER, "bluefs_extents_back", &bl);
-      auto p = bl.cbegin();
-      try {
-	decode(bluefs_extents, p);
-      }
-      catch (buffer::error& e) {
-	dout(0) << __func__ << " unable to read bluefs_extents_back" << dendl;
-	//return -EIO;
-      }
-      dout(10) << __func__ << " bluefs_extents_back 0x" << std::hex << bluefs_extents
-	       << std::dec << dendl;
-    }
-    bluefs_extents.clear();
-    bufferlist bl;
-    db->get(PREFIX_SUPER, "bluefs_extents", &bl);
-    auto p = bl.cbegin();
-    try {
-      decode(bluefs_extents, p);
-    }
-    catch (buffer::error& e) {
-      derr << __func__ << " unable to read bluefs_extents" << dendl;
-      return -EIO;
-    }
-    dout(10) << __func__ << " bluefs_extents 0x" << std::hex << bluefs_extents
-	     << std::dec << dendl;
-    
-  }
-
   // ondisk format
   int32_t compat_ondisk_format = 0;
   {
@@ -10284,11 +10178,6 @@ void BlueStore::_kv_sync_thread()
 	  for (auto& p : bluefs_gift_extents) {
 	    bluefs_extents.insert(p.offset, p.length);
 	  }
-	  bufferlist bl;
-	  encode(bluefs_extents, bl);
-	  dout(10) << __func__ << " bluefs_extents now 0x" << std::hex
-		   << bluefs_extents << std::dec << dendl;
-	  synct->set(PREFIX_SUPER, "bluefs_extents", bl);
 	}
       }
 
