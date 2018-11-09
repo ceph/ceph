@@ -42,11 +42,11 @@
 
 #include "bluestore_types.h"
 #include "BlockDevice.h"
+#include "BlueFS.h"
 #include "common/EventTrace.h"
 
 class Allocator;
 class FreelistManager;
-class BlueFS;
 class BlueStoreRepairer;
 
 //#define DEBUG_CACHE
@@ -129,6 +129,7 @@ enum {
 #define META_POOL_ID ((uint64_t)-1ull)
 
 class BlueStore : public ObjectStore,
+		  public BlueFSDeviceExpander,
 		  public md_config_obs_t {
   // -----------------------------------------------------
   // types
@@ -2626,7 +2627,12 @@ public:
     return true;
   }
 
-  int allocate_bluefs_freespace(uint64_t size);
+  /*
+  Allocate space for BlueFS from slow device.
+  Either automatically applies allocated extents to underlying 
+  BlueFS (extents == nullptr) or just return them (non-null extents) provided
+  */
+  int allocate_bluefs_freespace(uint64_t size, PExtentVector* extents);
 
 private:
   bool _debug_data_eio(const ghobject_t& o) {
@@ -2912,6 +2918,13 @@ private:
 			CollectionRef *c,
 			CollectionRef& d,
 			unsigned bits);
+
+private:
+  // --------------------------------------------------------
+  // BlueFSDeviceExpander implementation
+  int allocate_freespace(uint64_t size, PExtentVector& extents) override {
+    return allocate_bluefs_freespace(size, &extents);
+  };
 };
 
 inline ostream& operator<<(ostream& out, const BlueStore::volatile_statfs& s) {
@@ -3125,5 +3138,4 @@ private:
   fsck_interval misreferenced_extents;
 
 };
-
 #endif

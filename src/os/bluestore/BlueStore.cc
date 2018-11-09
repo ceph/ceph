@@ -5144,6 +5144,7 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
     if (r < 0) {
       return r;
     }
+    bluefs->set_slow_device_expander(this);
 
     if (cct->_conf->bluestore_bluefs_env_mirror) {
       rocksdb::Env *a = new BlueRocksEnv(bluefs);
@@ -5304,13 +5305,15 @@ void BlueStore::_dump_alloc_on_failure()
 }
 
 
-int BlueStore::allocate_bluefs_freespace(uint64_t size)
+int BlueStore::allocate_bluefs_freespace(uint64_t size, PExtentVector* extents_out)
 {
-  PExtentVector extents;
-
   if (size) {
     // round up to alloc size
     size = p2roundup(size, cct->_conf->bluefs_alloc_size);
+
+    PExtentVector extents_local;
+    PExtentVector* extents = extents_out ? extents_out : &extents_local;
+
 
     uint64_t gift;
     do {
@@ -5320,7 +5323,7 @@ int BlueStore::allocate_bluefs_freespace(uint64_t size)
 	       << " (" << byte_u_t(gift) << ")" << dendl;
 
       int64_t alloc_len = alloc->allocate(gift, cct->_conf->bluefs_alloc_size,
-					  0, 0, &extents);
+					  0, 0, extents);
 
       if (alloc_len < (int64_t)gift) {
 	derr << __func__
@@ -5331,15 +5334,19 @@ int BlueStore::allocate_bluefs_freespace(uint64_t size)
 	     << std::dec << dendl;
 
         alloc->dump();
-        alloc->release(extents);
+        alloc->release(*extents);
+        extents->clear();
 	return -ENOSPC;
       }
       size -= gift;
     } while (size);
-    for (auto& e : extents) {
+    for (auto& e : *extents) {
       dout(1) << __func__ << " gifting " << e << " to bluefs" << dendl;
-      bluefs->add_block_extent( bluefs_shared_bdev, e.offset, e.length);
       bluefs_extents.insert(e.offset, e.length);
+      // apply to bluefs if not requested from outside
+      if (!extents_out) {
+        bluefs->add_block_extent(bluefs_shared_bdev, e.offset, e.length);
+      }
     }
   }
   return 0;
@@ -5999,7 +6006,8 @@ int BlueStore::migrate_to_existing_bluefs_device(const set<int>& devs_source,
     dout(1) << __func__
             << " Allocating more space at slow device for BlueFS: +"
 	    << used_space - target_free << " bytes" << dendl;
-    r = allocate_bluefs_freespace(used_space - target_free);
+    r = allocate_bluefs_freespace(used_space - target_free, nullptr);
+
     umount();
     if (r != 0) {
       derr << __func__
@@ -6322,7 +6330,7 @@ int BlueStore::_mount(bool kv_only, bool open_db)
   if (r < 0)
     goto out_db;
 
-  r = _open_alloc();
+  r = _open_alloc(); //FIXME: db might need allocator on open!!! hence needs relocation
   if (r < 0)
     goto out_fm;
 
