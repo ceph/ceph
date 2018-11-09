@@ -441,6 +441,7 @@ void MonClient::shutdown()
 {
   ldout(cct, 10) << __func__ << dendl;
   monc_lock.Lock();
+  stopping = true;
   while (!version_requests.empty()) {
     version_requests.begin()->second->context->complete(-ECANCELED);
     ldout(cct, 20) << __func__ << " canceling and discarding version request "
@@ -471,7 +472,7 @@ void MonClient::shutdown()
   }
   monc_lock.Lock();
   timer.shutdown();
-
+  stopping = false;
   monc_lock.Unlock();
 }
 
@@ -1075,6 +1076,10 @@ void MonClient::start_mon_command(const vector<string>& cmd,
 				 Context *onfinish)
 {
   std::lock_guard l(monc_lock);
+  if (!initialized || stopping) {
+    onfinish->complete(-ECANCELED);
+    return;
+  }
   MonCommand *r = new MonCommand(++last_mon_command_tid);
   r->cmd = cmd;
   r->inbl = inbl;
@@ -1106,6 +1111,10 @@ void MonClient::start_mon_command(const string &mon_name,
 				 Context *onfinish)
 {
   std::lock_guard l(monc_lock);
+  if (!initialized || stopping) {
+    onfinish->complete(-ECANCELED);
+    return;
+  }
   MonCommand *r = new MonCommand(++last_mon_command_tid);
   r->target_name = mon_name;
   r->cmd = cmd;
@@ -1124,6 +1133,10 @@ void MonClient::start_mon_command(int rank,
 				 Context *onfinish)
 {
   std::lock_guard l(monc_lock);
+  if (!initialized || stopping) {
+    onfinish->complete(-ECANCELED);
+    return;
+  }
   MonCommand *r = new MonCommand(++last_mon_command_tid);
   r->target_rank = rank;
   r->cmd = cmd;
