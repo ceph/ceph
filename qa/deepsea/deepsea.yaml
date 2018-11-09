@@ -1,11 +1,11 @@
 tasks:
         - deepsea:
-        - deepsea.preflight:
-        - deepsea.orch:
-                stage: prep
                 alternative_defaults:
                         - stage_prep_master: default-no-update-no-reboot
                         - stage_prep_minion: default-no-update-no-reboot
+        - deepsea.preflight:
+        - deepsea.orch:
+                stage: prep
         - deepsea.orch:
                 stage: 1
         - deepsea.policy:

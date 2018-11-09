@@ -104,6 +104,7 @@ class DeepSea(Task):
             self.log.debug(
                 "populating deepsea_ctx (we are *not* in a subtask)")
             self._populate_deepsea_context()
+        self.alternative_defaults = deepsea_ctx['alternative_defaults']
         self.client_only_nodes = deepsea_ctx['client_only_nodes']
         self.cluster_nodes = deepsea_ctx['cluster_nodes']
         self.deepsea_cli = deepsea_ctx['cli']
@@ -365,6 +366,7 @@ class DeepSea(Task):
 
     def _populate_deepsea_context(self):
         deepsea_ctx['roles'] = self.ctx.config['roles']
+        deepsea_ctx['alternative_defaults'] = self.config.get('alternative_defaults', [])
         deepsea_ctx['cli'] = self.config.get('cli', True)
         deepsea_ctx['log_anchor'] = self.config.get('log_anchor',
                                                     self.log_anchor_str)
@@ -735,7 +737,6 @@ class Orch(DeepSea):
         super(Orch, self).__init__(ctx, config)
         # cast stage/state_orch value to str because it might be a number
         self.stage = str(self.config.get("stage", ''))
-        self.alternative_defaults = self.config.get('alternative_defaults', [])
         self.state_orch = str(self.config.get("state_orch", ''))
         self.allow_reboot = self.config.get("allow_reboot", None)
         self.survive_reboots = self._detect_reboots()
@@ -794,21 +795,6 @@ class Orch(DeepSea):
         if self.quiet_salt:
             cmd += " 2>/dev/null"
         self.master_remote.run(args=cmd)
-
-    def _maybe_apply_alternative_defaults(self):
-        if self.alternative_defaults:
-            for cnf in self.alternative_defaults:
-                for k, v in cnf.items():
-                    info_msg = (
-                        "Applying alternative default {}: {}".format(k, v)
-                        )
-                    data = "{}: {}\n".format(k, v)
-                    sudo_append_to_file(
-                        self.master_remote,
-                        '/srv/pillar/ceph/stack/global.yml',
-                        data,
-                        )
-                    self.log.info(info_msg)
 
     def _maybe_cat_ganesha_conf(self):
         ganesha_host = self.role_type_present('ganesha')
@@ -984,7 +970,6 @@ class Orch(DeepSea):
 
     def begin(self):
         self.log.debug("beginning of begin method")
-        self._maybe_apply_alternative_defaults()
         if self.state_orch:
             self.log.info(anchored(
                 "running orchestration {}".format(self.state_orch)
@@ -1325,6 +1310,23 @@ class Preflight(DeepSea):
                 )
         return installed
 
+    def _maybe_apply_alternative_defaults(self):
+        if self.alternative_defaults:
+            data = ''
+            for cnf in self.alternative_defaults:
+                for k, v in cnf.items():
+                    info_msg = (
+                        "Applying alternative default {}: {}".format(k, v)
+                        )
+                    data += "{}: {}\n".format(k, v)
+                    self.log.info(info_msg)
+            if data:
+                sudo_append_to_file(
+                    self.master_remote,
+                    '/srv/pillar/ceph/stack/global.yml',
+                    data,
+                    )
+
     def begin(self):
         self.log.debug("beginning of begin method")
         self.log.info(anchored("preflight sequence"))
@@ -1341,6 +1343,7 @@ class Preflight(DeepSea):
                 )
         self._deepsea_version()
         self._deepsea_minions()
+        self._maybe_apply_alternative_defaults()
         # Stage 0 does this, but we have no guarantee Stage 0 will run
         self.sm.sync_pillar_data(quiet=self.quiet_salt)
         self.log.debug("end of begin method")
