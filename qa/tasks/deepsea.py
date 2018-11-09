@@ -913,6 +913,7 @@ class Orch(DeepSea):
         stage = 0
         self.__log_stage_start(stage)
         self._run_orch(("stage", stage))
+        self._pillar_items()
         self.sm.all_minions_zypper_status()
         self.scripts.salt_api_test()
 
