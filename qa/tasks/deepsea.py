@@ -560,6 +560,14 @@ class DeepSea(Task):
         self.sm.master_rpm_q('salt-master')
         self.sm.master_rpm_q('salt-minion')
         self.sm.master_rpm_q('salt-api')
+        # the Salt Master node is assumed to be running an already
+        # configured chrony for time synchronization within the cluster
+        # and DeepSea Stage 3 will point the minions at the Salt Master's
+        # chrony instance (?)
+        self.sm.master_rpm_q('chrony')
+        self.master_remote.run(
+            args="sudo systemctl status --lines=0 chronyd.service"
+            )
         self._master_python_version(2)
         if not self._master_python_version(3):
             raise ConfigError(
