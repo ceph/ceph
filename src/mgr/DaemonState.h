@@ -210,7 +210,9 @@ struct DeviceState : public RefCountedObject
   pair<utime_t,utime_t> life_expectancy;  ///< when device failure is expected
   utime_t life_expectancy_stamp;          ///< when life expectency was recorded
 
-  DeviceState(const std::string& n) : devid(n) {}
+  DeviceState(const std::string& n)
+    : RefCountedObject(nullptr, 0),
+      devid(n) {}
 
   void set_metadata(map<string,string>&& m);
 
