@@ -1109,6 +1109,8 @@ class Orch(DeepSea):
         self._run_orch(("stage", stage))
         self._pillar_items()
         self.sm.all_minions_zypper_status()
+        self.log.debug("all_minions_zypper_ps_requires_reboot says ->{}<-"
+                       .format(self.sm.all_minions_zypper_ps_requires_reboot()))
         self.scripts.salt_api_test()
 
     def _run_stage_1(self):

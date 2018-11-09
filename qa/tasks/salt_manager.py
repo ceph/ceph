@@ -110,6 +110,15 @@ class SaltManager(object):
         cmd = "zypper ps -s"
         self.all_minions_cmd_run(cmd, abort_on_fail=False)
 
+    def all_minions_zypper_ps_requires_reboot(self):
+        number_of_minions = len(self.ctx.cluster.remotes)
+        salt_cmd = "sudo salt '*' cmd.run 'zypper ps -s' 2>/dev/null"
+        number_with_no_processes = len(
+            re.findall('No processes using deleted files found',
+                       self.master_remote.sh(salt_cmd))
+            )
+        return number_with_no_processes != number_of_minions
+
     def all_minions_zypper_ref(self):
         """Run "zypper ref" on all nodes"""
         cmd = "zypper --non-interactive --gpg-auto-import-keys refresh"
@@ -122,6 +131,12 @@ class SaltManager(object):
         self.all_minions_zypper_ref()
         self.all_minions_zypper_lu()
         self.all_minions_zypper_ps()
+
+    def cat_salt_master_conf(self):
+        self.__cat_file_remote(self.master_remote, filename="/etc/salt/master")
+
+    def cat_salt_minion_confs(self):
+        self.__cat_file_cluster(filename="/etc/salt/minion")
 
     def check_salt_daemons(self):
         self.master_remote.run(args=['sudo', 'salt-key', '-L'])
@@ -252,9 +267,3 @@ class SaltManager(object):
                     log.info("Not all minions responded. Retrying.")
                 else:
                     return None
-
-    def cat_salt_master_conf(self):
-        self.__cat_file_remote(self.master_remote, filename="/etc/salt/master")
-
-    def cat_salt_minion_confs(self):
-        self.__cat_file_cluster(filename="/etc/salt/minion")
