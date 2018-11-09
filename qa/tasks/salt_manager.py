@@ -126,11 +126,11 @@ class SaltManager(object):
     def check_salt_daemons(self):
         self.master_remote.run(args=['sudo', 'salt-key', '-L'])
         self.master_remote.run(args=[
-            'sudo', 'systemctl', 'status', 'salt-master.service'
+            'sudo', 'systemctl', 'status', '--full', '--lines=50', 'salt-master.service'
             ])
         for _remote in self.ctx.cluster.remotes.iterkeys():
             _remote.run(args=[
-                'sudo', 'systemctl', 'status', 'salt-minion.service'
+                'sudo', 'systemctl', 'status', '--full', '--lines=50', 'salt-minion.service'
                 ])
             _remote.run(args=['sudo', 'cat', '/etc/salt/minion_id'])
             _remote.run(args=['sudo', 'cat', '/etc/salt/minion.d/master.conf'])
