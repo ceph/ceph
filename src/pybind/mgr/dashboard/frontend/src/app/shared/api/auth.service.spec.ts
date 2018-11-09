@@ -1,18 +1,21 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { fakeAsync, TestBed, tick } from '@angular/core/testing';
-
-import { AuthStorageService } from '../services/auth-storage.service';
+import { Routes } from '@angular/router';
+import { RouterTestingModule } from '@angular/router/testing';
 
 import { configureTestBed } from '../../../testing/unit-test-helper';
+import { AuthStorageService } from '../services/auth-storage.service';
 import { AuthService } from './auth.service';
 
 describe('AuthService', () => {
   let service: AuthService;
   let httpTesting: HttpTestingController;
 
+  const routes: Routes = [{ path: 'logout', children: [] }];
+
   configureTestBed({
     providers: [AuthService, AuthStorageService],
-    imports: [HttpClientTestingModule]
+    imports: [HttpClientTestingModule, RouterTestingModule.withRoutes(routes)]
   });
 
   beforeEach(() => {
@@ -43,9 +46,9 @@ describe('AuthService', () => {
 
   it('should logout and remove the user', fakeAsync(() => {
     service.logout();
-    const req = httpTesting.expectOne('api/auth');
-    expect(req.request.method).toBe('DELETE');
-    req.flush({ username: 'foo' });
+    const req = httpTesting.expectOne('api/auth/logout');
+    expect(req.request.method).toBe('POST');
+    req.flush({ redirect_url: '#/login' });
     tick();
     expect(localStorage.getItem('dashboard_username')).toBe(null);
   }));
