@@ -41,7 +41,21 @@ class Salt(Task):
         self.sm = SaltManager(self.ctx)
         log.debug("end of constructor method")
 
-    def __generate_minion_keys(self):
+    def _disable_autodiscovery(self):
+        """
+        It's supposed to be off by default, but just in case.
+        """
+        self.sm.master_remote.run(args=[
+            'sudo', 'sh', '-c',
+            'echo discovery: false >> /etc/salt/master'
+        ])
+        for rem in self.remotes.iterkeys():
+            rem.run(args=[
+                'sudo', 'sh', '-c',
+                'echo discovery: false >> /etc/salt/minion'
+            ])
+
+    def _generate_minion_keys(self):
         '''
         Generate minion key on salt master to be used to preseed this cluster's
         minions.
@@ -75,7 +89,7 @@ class Salt(Task):
                  ' fi').format(mid=minion_id),
             ])
 
-    def __preseed_minions(self):
+    def _preseed_minions(self):
         '''
         Preseed minions with generated and accepted keys; set minion id
         to the remote's hostname.
@@ -137,7 +151,7 @@ class Salt(Task):
                       '/etc/salt/pki/minion/minion.pub', sudo=True,
                       preserve_perms=False)
 
-    def __set_minion_master(self):
+    def _set_minion_master(self):
         """Points all minions to the master"""
         master_id = self.sm.master_remote.hostname
         for rem in self.remotes.iterkeys():
@@ -156,7 +170,7 @@ class Salt(Task):
                 sed_cmd,
             ])
 
-    def __set_debug_log_level(self):
+    def _set_debug_log_level(self):
         """Sets log_level: debug for all salt daemons"""
         for rem in self.remotes.iterkeys():
             rem.run(args=[
@@ -171,10 +185,11 @@ class Salt(Task):
     def setup(self):
         super(Salt, self).setup()
         log.debug("beginning of setup method")
-        self.__generate_minion_keys()
-        self.__preseed_minions()
-        self.__set_minion_master()
-        self.__set_debug_log_level()
+        self._generate_minion_keys()
+        self._preseed_minions()
+        self._set_minion_master()
+        self._disable_autodiscovery()
+        self._set_debug_log_level()
         self.sm.enable_master()
         self.sm.start_master()
         self.sm.enable_minions()
