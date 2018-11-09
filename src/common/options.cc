@@ -5007,6 +5007,7 @@ std::vector<Option> get_global_options() {
 
     Option("device_failure_prediction_mode", Option::TYPE_STR, Option::LEVEL_BASIC)
     .set_default("none")
+    .set_flag(Option::FLAG_RUNTIME)
     .set_enum_allowed({"none", "local", "cloud"})
     .set_description("Method used to predict device failures")
     .set_long_description("To disable prediction, use 'none',  'local' uses a prediction model that runs inside the mgr daemon.  'cloud' will share metrics with a cloud service and query the service for devicelife expectancy."),
