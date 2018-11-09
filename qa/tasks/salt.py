@@ -175,10 +175,10 @@ class Salt(Task):
         self.__preseed_minions()
         self.__set_minion_master()
         self.__set_debug_log_level()
-        self.sm.start_master()
-        self.sm.start_minions()
-        self.sm.enable_minions()
         self.sm.enable_master()
+        self.sm.start_master()
+        self.sm.enable_minions()
+        self.sm.start_minions()
         self.sm.restart_master()
         log.debug("end of setup method")
 

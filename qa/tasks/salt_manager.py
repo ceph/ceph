@@ -135,6 +135,16 @@ class SaltManager(object):
             _remote.run(args=['sudo', 'cat', '/etc/salt/minion_id'])
             _remote.run(args=['sudo', 'cat', '/etc/salt/minion.d/master.conf'])
 
+    def enable_master(self):
+        """Enables salt-master.service on the Salt Master node"""
+        self.__systemctl_remote(
+            self.master_remote, subcommand="enable", service="salt-master"
+            )
+
+    def enable_minions(self):
+        """Enables salt-minion.service on all cluster nodes"""
+        self.__systemctl_cluster(subcommand="enable", service="salt-minion")
+
     def gather_logfile(self, logfile):
         for _remote in self.ctx.cluster.remotes.iterkeys():
             try:
@@ -226,16 +236,6 @@ class SaltManager(object):
     def start_minions(self):
         """Starts salt-minion.service on all cluster nodes"""
         self.__systemctl_cluster(subcommand="start", service="salt-minion")
-
-    def enable_minions(self):
-        """Enables salt-minion.service on all cluster nodes"""
-        self.__systemctl_cluster(subcommand="enable", service="salt-minion")
-
-    def enable_master(self):
-        """Enables salt-master.service on the Salt Master node"""
-        self.__systemctl_remote(
-            self.master_remote, subcommand="enable", service="salt-master"
-            )
 
     def sync_pillar_data(self, quiet=True):
         cmd = "sudo salt \\* saltutil.sync_all"
