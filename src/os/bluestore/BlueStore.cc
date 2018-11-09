@@ -5291,15 +5291,15 @@ void BlueStore::_close_db()
   }
 }
 
-void BlueStore::_dump_alloc_on_rebalance_failure()
+void BlueStore::_dump_alloc_on_failure()
 {
   auto dump_interval =
-    cct->_conf->bluestore_bluefs_balance_failure_dump_interval;
+    cct->_conf->bluestore_bluefs_alloc_failure_dump_interval;
   if (dump_interval > 0 &&
-    next_dump_on_bluefs_balance_failure <= ceph_clock_now()) {
+    next_dump_on_bluefs_alloc_failure <= ceph_clock_now()) {
     alloc->dump();
-    next_dump_on_bluefs_balance_failure = ceph_clock_now();
-    next_dump_on_bluefs_balance_failure += dump_interval;
+    next_dump_on_bluefs_alloc_failure = ceph_clock_now();
+    next_dump_on_bluefs_alloc_failure += dump_interval;
   }
 }
 
@@ -5442,7 +5442,7 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
 	      << " allocated 0x" << alloc_len
 	      << " available 0x " << alloc->get_free()
 	      << std::dec << dendl;
-      _dump_alloc_on_rebalance_failure();
+      _dump_alloc_on_failure();
     }
     for (auto& e : *extents) {
       dout(1) << __func__ << " gifting " << e << " to bluefs" << dendl;

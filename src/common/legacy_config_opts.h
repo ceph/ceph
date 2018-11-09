@@ -955,8 +955,8 @@ OPTION(bluestore_bluefs_max_ratio, OPT_FLOAT)  // max fs free / total free
 OPTION(bluestore_bluefs_gift_ratio, OPT_FLOAT) // how much to add at a time
 OPTION(bluestore_bluefs_reclaim_ratio, OPT_FLOAT) // how much to reclaim at a time
 OPTION(bluestore_bluefs_balance_interval, OPT_FLOAT) // how often (sec) to balance free space between bluefs and bluestore
-// how often (sec) to dump allocation failure happened during bluefs rebalance
-OPTION(bluestore_bluefs_balance_failure_dump_interval, OPT_FLOAT)
+// how often (sec) to dump allocator on allocation failure
+OPTION(bluestore_bluefs_alloc_failure_dump_interval, OPT_FLOAT)
 
 // If you want to use spdk driver, you need to specify NVMe serial number here
 // with "spdk:" prefix.
