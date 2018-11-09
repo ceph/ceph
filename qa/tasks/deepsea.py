@@ -30,6 +30,41 @@ def anchored(log_message):
     return "{}{}".format(deepsea_ctx['log_anchor'], log_message)
 
 
+def remote_exec(remote, cmd_str, log_spec, tries=0):
+    """
+    Execute cmd_str and catch CommandFailedError and
+    ConnectionLostError and retry to run the command
+    until one of the conditons are fulfilled:
+    1) Execution succeeded
+    2) Attempts are exceeded
+    3) CommandFailedError is raised
+    """
+    with safe_while(sleep=60,
+                    tries=tries,
+                    action="wait for reconnect") as proceed:
+        while proceed():
+            try:
+                remote.run(args=[
+                    'sudo', 'bash', '-c', cmd_str,
+                    ])
+                break
+            except CommandFailedError:
+                log.error(anchored(
+                    "{} failed. ".format(log_spec)
+                    + "Here comes journalctl!"
+                ))
+                remote.run(args=[
+                    'sudo',
+                    'journalctl',
+                    '--all',
+                    ])
+                raise
+            except ConnectionLostError:
+                if tries < 1:
+                    raise
+                log.warning("No connection established yet..")
+
+
 def remote_run_script_as_root(remote, path, data, args=None):
     """
     Wrapper around write_file to simplify the design pattern:
@@ -1004,41 +1039,12 @@ class Orch(DeepSea):
         tries = 0
         if self.survive_reboots:
             tries = 5
-        self._exec(cmd_str, orch_spec, tries=tries)
-
-    def _exec(self, cmd_str, orch_spec, tries=0):
-        """
-        Execute cmd_str and catch CommandFailedError and
-        ConnectionLostError and retry to run the command
-        until one of the conditons are fulfilled:
-        1) Execution succeeded
-        2) Attempts are exceeded
-        3) CommandFailedError is raised
-        """
-        with safe_while(sleep=60,
-                        tries=tries,
-                        action="wait for reconnect") as proceed:
-            while proceed():
-                try:
-                    self.master_remote.run(args=[
-                        'sudo', 'bash', '-c', cmd_str,
-                        ])
-                    break
-                except CommandFailedError:
-                    self.log.error(anchored(
-                        "orchestration {} failed. ".format(orch_spec)
-                        + "Here comes journalctl!"
-                    ))
-                    self.master_remote.run(args=[
-                        'sudo',
-                        'journalctl',
-                        '--all',
-                        ])
-                    raise
-                except ConnectionLostError:
-                    if tries < 1:
-                        raise
-                    self.log.warning("No connection established yet..")
+        remote_exec(
+            self.master_remote,
+            cmd_str,
+            "orchestration {}".format(orch_spec),
+            tries=tries
+            )
 
     def _detect_reboots(self):
         """
