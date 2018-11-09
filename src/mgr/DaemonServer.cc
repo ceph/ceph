@@ -170,7 +170,7 @@ int DaemonServer::ms_handle_authentication(Connection *con)
 {
   int ret = 0;
   MgrSession *s = new MgrSession(cct);
-  con->set_priv(s->get());
+  con->set_priv(s);
   s->inst.addr = con->get_peer_addr();
   s->entity_name = con->peer_name;
   dout(10) << __func__ << " new session " << s << " con " << con
