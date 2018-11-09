@@ -125,6 +125,46 @@ class DeepSea(Task):
         # self.log.debug("ctx.config {}".format(ctx.config))
         # self.log.debug("deepsea context: {}".format(deepsea_ctx))
 
+    def _deepsea_minions(self):
+        """
+        Set deepsea_minions pillar value
+        """
+        echo_cmd = (
+            'echo "deepsea_minions: \'*\'" > '
+            '/srv/pillar/ceph/deepsea_minions.sls'
+        )
+        self.master_remote.run(args=[
+            'sudo',
+            'sh',
+            '-c',
+            echo_cmd,
+            run.Raw(';'),
+            'cat',
+            '/srv/pillar/ceph/deepsea_minions.sls',
+            ])
+
+    def _deepsea_version(self):
+        if self.deepsea_cli:
+            try:
+                self.master_remote.run(args=[
+                    'type',
+                    'deepsea',
+                    run.Raw('>'),
+                    '/dev/null',
+                    run.Raw('2>&1'),
+                    ])
+            except CommandFailedError:
+                raise ConfigError(
+                    "(preflight subtask) test case calls for deepsea CLI, "
+                    "but it is not installed"
+                    )
+            self.master_remote.run(args='deepsea --version')
+        else:
+            cmd_str = "sudo salt-run deepsea.version"
+            if self.quiet_salt:
+                cmd_str += " 2>/dev/null"
+            self.master_remote.run(args=cmd_str)
+
     def _disable_gpg_checks(self):
         cmd = (
             'sed -i -e \'/gpgcheck/ d\' /etc/zypp/repos.d/* ; '
@@ -364,6 +404,51 @@ class DeepSea(Task):
         for var in report_vars:
             self.log.info("{} == {}".format(var, deepsea_ctx[var]))
 
+    def _master_python_version(self, py_version):
+        """
+        Determine if a given python version is installed on the Salt Master
+        node.
+        """
+        python_binary = 'python{}'.format(py_version)
+        installed = True
+        try:
+            self.master_remote.run(args=[
+                'type',
+                python_binary,
+                run.Raw('>'),
+                '/dev/null',
+                run.Raw('2>&1'),
+                ])
+        except CommandFailedError:
+            installed = False
+        if installed:
+            self.master_remote.run(args=[
+                python_binary,
+                '--version'
+                ])
+        else:
+            self.log.info(
+                '{} not installed on master node'.format(python_binary)
+                )
+        return installed
+
+    def _maybe_apply_alternative_defaults(self):
+        if self.alternative_defaults:
+            data = ''
+            for cnf in self.alternative_defaults:
+                for k, v in cnf.items():
+                    info_msg = (
+                        "Applying alternative default {}: {}".format(k, v)
+                        )
+                    data += "{}: {}\n".format(k, v)
+                    self.log.info(info_msg)
+            if data:
+                sudo_append_to_file(
+                    self.master_remote,
+                    '/srv/pillar/ceph/stack/global.yml',
+                    data,
+                    )
+
     def _populate_deepsea_context(self):
         deepsea_ctx['roles'] = self.ctx.config['roles']
         deepsea_ctx['alternative_defaults'] = self.config.get('alternative_defaults', [])
@@ -460,11 +545,27 @@ class DeepSea(Task):
     def begin(self):
         self.log.debug("beginning of begin method")
         super(DeepSea, self).begin()
+        self.sm.master_rpm_q('ceph')
+        self.sm.master_rpm_q('ceph-test')
+        self.sm.master_rpm_q('salt-master')
+        self.sm.master_rpm_q('salt-minion')
+        self.sm.master_rpm_q('salt-api')
+        self._master_python_version(2)
+        if not self._master_python_version(3):
+            raise ConfigError(
+                "(deepsea task) Python 3 not installed on master node"
+                " - bailing out!"
+                )
         if 'deepsea_installed' not in deepsea_ctx:
             self._disable_gpg_checks()
             self.master_remote.run(args="zypper lr -upEP")
             self._install_deepsea()
             assert deepsea_ctx['deepsea_installed']
+        self._deepsea_version()
+        self._deepsea_minions()
+        self._maybe_apply_alternative_defaults()
+        # Stage 0 does this, but we have no guarantee Stage 0 will run
+        self.sm.sync_pillar_data(quiet=self.quiet_salt)
         self.log.debug("end of begin method")
 
     def end(self):
@@ -479,6 +580,7 @@ class DeepSea(Task):
         #
         # the install task does "rm -r /var/lib/ceph" on every test node,
         # and that fails when there are OSDs running
+        # FIXME - deprecated, remove after awhile
         self._purge_osds()
         self.log.debug("end of teardown method")
 
@@ -1237,124 +1339,6 @@ class CreatePools(DeepSea):
         # self.log.debug("end of teardown method")
 
 
-class Preflight(DeepSea):
-
-    def __init__(self, ctx, config):
-        deepsea_ctx['logger_obj'] = log.getChild('preflight')
-        super(Preflight, self).__init__(ctx, config)
-
-    def _deepsea_version(self):
-        if self.deepsea_cli:
-            try:
-                self.master_remote.run(args=[
-                    'type',
-                    'deepsea',
-                    run.Raw('>'),
-                    '/dev/null',
-                    run.Raw('2>&1'),
-                    ])
-            except CommandFailedError:
-                raise ConfigError(
-                    "(preflight subtask) test case calls for deepsea CLI, "
-                    "but it is not installed"
-                    )
-            self.master_remote.run(args='deepsea --version')
-        else:
-            cmd_str = "sudo salt-run deepsea.version"
-            if self.quiet_salt:
-                cmd_str += " 2>/dev/null"
-            self.master_remote.run(args=cmd_str)
-
-    def _deepsea_minions(self):
-        """
-        Set deepsea_minions pillar value
-        """
-        echo_cmd = (
-            'echo "deepsea_minions: \'*\'" > '
-            '/srv/pillar/ceph/deepsea_minions.sls'
-        )
-        self.master_remote.run(args=[
-            'sudo',
-            'sh',
-            '-c',
-            echo_cmd,
-            run.Raw(';'),
-            'cat',
-            '/srv/pillar/ceph/deepsea_minions.sls',
-            ])
-
-    def _master_python_version(self, py_version):
-        """
-        Determine if a given python version is installed on the Salt Master
-        node.
-        """
-        python_binary = 'python{}'.format(py_version)
-        installed = True
-        try:
-            self.master_remote.run(args=[
-                'type',
-                python_binary,
-                run.Raw('>'),
-                '/dev/null',
-                run.Raw('2>&1'),
-                ])
-        except CommandFailedError:
-            installed = False
-        if installed:
-            self.master_remote.run(args=[
-                python_binary,
-                '--version'
-                ])
-        else:
-            self.log.info(
-                '{} not installed on master node'.format(python_binary)
-                )
-        return installed
-
-    def _maybe_apply_alternative_defaults(self):
-        if self.alternative_defaults:
-            data = ''
-            for cnf in self.alternative_defaults:
-                for k, v in cnf.items():
-                    info_msg = (
-                        "Applying alternative default {}: {}".format(k, v)
-                        )
-                    data += "{}: {}\n".format(k, v)
-                    self.log.info(info_msg)
-            if data:
-                sudo_append_to_file(
-                    self.master_remote,
-                    '/srv/pillar/ceph/stack/global.yml',
-                    data,
-                    )
-
-    def begin(self):
-        self.log.debug("beginning of begin method")
-        self.log.info(anchored("preflight sequence"))
-        self.sm.master_rpm_q('ceph')
-        self.sm.master_rpm_q('ceph-test')
-        self.sm.master_rpm_q('salt-master')
-        self.sm.master_rpm_q('salt-minion')
-        self.sm.master_rpm_q('salt-api')
-        self._master_python_version(2)
-        if not self._master_python_version(3):
-            raise ConfigError(
-                "(preflight subtask) Python 3 not installed on master node"
-                " - bailing out!"
-                )
-        self._deepsea_version()
-        self._deepsea_minions()
-        self._maybe_apply_alternative_defaults()
-        # Stage 0 does this, but we have no guarantee Stage 0 will run
-        self.sm.sync_pillar_data(quiet=self.quiet_salt)
-        self.log.debug("end of begin method")
-
-    def teardown(self):
-        # self.log.debug("beginning of teardown method")
-        pass
-        # self.log.debug("end of teardown method")
-
-
 class Scripts:
 
     script_dict = {
@@ -1646,5 +1630,4 @@ dummy = Dummy
 health_ok = HealthOK
 orch = Orch
 policy = Policy
-preflight = Preflight
 validation = Validation

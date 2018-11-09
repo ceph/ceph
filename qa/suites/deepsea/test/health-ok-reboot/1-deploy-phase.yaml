@@ -6,7 +6,6 @@ tasks:
                         - tuned_mgr_init: default-off
                         - tuned_mon_init: default-off
                         - tuned_osd_init: default-off
-        - deepsea.preflight:
         - deepsea.orch:
                 stage: prep
         - deepsea.orch:
