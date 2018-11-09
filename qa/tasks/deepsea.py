@@ -742,6 +742,46 @@ class CephConf(DeepSea):
         pass
 
 
+class CreatePools(DeepSea):
+
+    def __init__(self, ctx, config):
+        deepsea_ctx['logger_obj'] = log.getChild('create_pools')
+        super(CreatePools, self).__init__(ctx, config)
+        self.args = []
+        if isinstance(self.config, list):
+            self.args = self.config
+        elif isinstance(self.config, dict):
+            self.config = {
+                "mds": self.config.get("mds", False),
+                "openstack": self.config.get("openstack", False),
+                "rbd": self.config.get("rbd", False),
+                }
+        else:
+            self.config = {
+                "openstack": False,
+                "rbd": False
+                }
+        if not self.args:
+            for key in self.config:
+                if self.config[key] is None:
+                    self.config[key] = True
+                if self.config[key]:
+                    self.args.append(key)
+        if 'mds' in self.role_lookup_table:
+            self.args.append('mds')
+        self.args = list(set(self.args))
+
+    def begin(self):
+        self.log.debug("beginning of begin method")
+        self.scripts.create_all_pools_at_once(self.args)
+        self.log.debug("end of begin method")
+
+    def teardown(self):
+        # self.log.debug("beginning of teardown method")
+        pass
+        # self.log.debug("end of teardown method")
+
+
 class Dummy(DeepSea):
 
     def __init__(self, ctx, config):
@@ -1309,46 +1349,6 @@ role-admin/cluster/*.sls
         self._write_policy_cfg()
         self._cat_policy_cfg()
         self._dump_profile_ymls()
-        self.log.debug("end of begin method")
-
-    def teardown(self):
-        # self.log.debug("beginning of teardown method")
-        pass
-        # self.log.debug("end of teardown method")
-
-
-class CreatePools(DeepSea):
-
-    def __init__(self, ctx, config):
-        deepsea_ctx['logger_obj'] = log.getChild('create_pools')
-        super(CreatePools, self).__init__(ctx, config)
-        self.args = []
-        if isinstance(self.config, list):
-            self.args = self.config
-        elif isinstance(self.config, dict):
-            self.config = {
-                "mds": self.config.get("mds", False),
-                "openstack": self.config.get("openstack", False),
-                "rbd": self.config.get("rbd", False),
-                }
-        else:
-            self.config = {
-                "openstack": False,
-                "rbd": False
-                }
-        if not self.args:
-            for key in self.config:
-                if self.config[key] is None:
-                    self.config[key] = True
-                if self.config[key]:
-                    self.args.append(key)
-        if 'mds' in self.role_lookup_table:
-            self.args.append('mds')
-        self.args = list(set(self.args))
-
-    def begin(self):
-        self.log.debug("beginning of begin method")
-        self.scripts.create_all_pools_at_once(self.args)
         self.log.debug("end of begin method")
 
     def teardown(self):
