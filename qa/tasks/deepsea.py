@@ -433,6 +433,7 @@ class DeepSea(Task):
         return installed
 
     def _maybe_apply_alternative_defaults(self):
+        global_yml = '/srv/pillar/ceph/stack/global.yml'
         if self.alternative_defaults:
             data = ''
             for cnf in self.alternative_defaults:
@@ -445,9 +446,18 @@ class DeepSea(Task):
             if data:
                 sudo_append_to_file(
                     self.master_remote,
-                    '/srv/pillar/ceph/stack/global.yml',
+                    global_yml,
                     data,
                     )
+        try:
+            self.master_remote.run(
+                args="test -f {}".format(global_yml)
+                )
+        except CommandFailedError:
+            return None
+        self.master_remote.run(
+            args="ls -l {p} ; cat {p}".format(p=global_yml)
+            )
 
     def _populate_deepsea_context(self):
         deepsea_ctx['roles'] = self.ctx.config['roles']
