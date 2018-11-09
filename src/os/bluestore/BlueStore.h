@@ -2210,7 +2210,6 @@ private:
   void _get_statfs_overall(struct store_statfs_t *buf);
 
   void _dump_alloc_on_rebalance_failure();
-  int _reconcile_bluefs_freespace();
   int _balance_bluefs_freespace(PExtentVector *extents);
   void _commit_bluefs_freespace(const PExtentVector& extents);
 
