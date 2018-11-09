@@ -155,7 +155,7 @@ class DeepSea(Task):
                     ])
             except CommandFailedError:
                 raise ConfigError(
-                    "(preflight subtask) test case calls for deepsea CLI, "
+                    "(deepsea task) test case calls for deepsea CLI, "
                     "but it is not installed"
                     )
             self.master_remote.run(args='deepsea --version')
