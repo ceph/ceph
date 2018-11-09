@@ -179,7 +179,6 @@ class Salt(Task):
         self.sm.start_master()
         self.sm.enable_minions()
         self.sm.start_minions()
-        self.sm.restart_master()
         log.debug("end of setup method")
 
     def begin(self):
