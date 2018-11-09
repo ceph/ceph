@@ -101,6 +101,12 @@ class Module(MgrModule):
             "desc": "Disable device health monitoring",
             "perm": "rw",
         },
+        {
+            'cmd': 'device predict-life-expectancy '
+                   'name=devid,type=CephString,req=true',
+            'desc': 'Predict life expectancy with local predictor',
+            'perm': 'r'
+        },
     ]
 
     def __init__(self, *args, **kwargs):
@@ -159,6 +165,8 @@ class Module(MgrModule):
             self.set_config('enable_monitoring', 'false')
             self.set_health_checks({})  # avoid stuck health alerts
             return 0, '', ''
+        elif cmd['prefix'] == 'device predict-life-expectancy':
+            return self.predict_lift_expectancy(cmd['devid'])
         else:
             # mgr should respect our self.COMMANDS and not call us for
             # any prefix we don't advertise
@@ -225,6 +233,7 @@ class Module(MgrModule):
                                    next_scrape.strftime(TIME_FORMAT))
                 if now >= next_scrape:
                     self.scrape_all()
+                    self.predict_all_devices()
                     last_scrape = now
                     self.set_store('last_scrape', last_scrape.strftime(TIME_FORMAT))
 
@@ -564,3 +573,33 @@ class Module(MgrModule):
         # FIXME: extract and normalize raw smartctl --json output and
         # generate a dict of the fields we care about.
         return raw
+
+    def predict_lift_expectancy(self, devid):
+        plugin_name = ''
+        model = self.get_option('device_failure_prediction_mode')
+        if model and model.lower() == 'cloud':
+            plugin_name = 'diskprediction_cloud'
+        elif model and model.lower() == 'local':
+            plugin_name = 'diskprediction_local'
+        else:
+            return -1, '', 'unable to enable any disk prediction model[local/cloud]'
+        try:
+            if self.remote(plugin_name, 'can_run'):
+                return self.remote(plugin_name, 'predict_life_expentancy', devid=devid)
+        except:
+            return -1, '', 'unable to invoke diskprediction local or remote plugin'
+
+    def predict_all_devices(self):
+        plugin_name = ''
+        model = self.get_option('device_failure_prediction_mode')
+        if model and model.lower() == 'cloud':
+            plugin_name = 'diskprediction_cloud'
+        elif model and model.lower() == 'local':
+            plugin_name = 'diskprediction_local'
+        else:
+            return -1, '', 'unable to enable any disk prediction model[local/cloud]'
+        try:
+            if self.remote(plugin_name, 'can_run'):
+                return self.remote(plugin_name, 'predict_all_devices')
+        except:
+            return -1, '', 'unable to invoke diskprediction local or remote plugin'

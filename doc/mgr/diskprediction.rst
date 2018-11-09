@@ -17,15 +17,15 @@ environment::
 
 Select the prediction mode::
 
-    ceph config set global device_health_prediction_mode local
+    ceph config set global device_failure_prediction_mode local
 
 or::
   
-    ceph config set global device_health_prediction_mode cloud
+    ceph config set global device_failure_prediction_mode cloud
 
 To disable prediction,::
 
-  ceph config set global device_health_prediction_mode none
+  ceph config set global device_failure_prediction_mode none
 
 
 Connection settings
