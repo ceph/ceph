@@ -18,17 +18,13 @@ from OpenSSL import crypto
 from mgr_module import MgrModule, MgrStandbyModule
 
 try:
-    from urlparse import urljoin
-except ImportError:
-    from urllib.parse import urljoin
-
-try:
     import cherrypy
     from cherrypy._cptools import HandlerWrapperTool
 except ImportError:
     # To be picked up and reported by .can_run()
     cherrypy = None
 
+from .services.sso import load_sso_db
 
 # The SSL code in CherryPy 3.5.0 is buggy.  It was fixed long ago,
 # but 3.5.0 is still shipping in major linux distributions
@@ -59,10 +55,13 @@ if 'COVERAGE_ENABLED' in os.environ:
 # pylint: disable=wrong-import-position
 from . import logger, mgr
 from .controllers import generate_routes, json_error_page
-from .tools import NotificationQueue, RequestLoggingTool, TaskManager
+from .tools import NotificationQueue, RequestLoggingTool, TaskManager, \
+                   prepare_url_prefix
 from .services.auth import AuthManager, AuthManagerTool, JwtManager
 from .services.access_control import ACCESS_CONTROL_COMMANDS, \
                                      handle_access_control_command
+from .services.sso import SSO_COMMANDS, \
+                          handle_sso_command
 from .services.exception import dashboard_exception_handler
 from .settings import options_command_list, options_schema_list, \
                       handle_option_command
@@ -76,14 +75,6 @@ def os_exit_noop(*args):
 
 # pylint: disable=W0212
 os._exit = os_exit_noop
-
-
-def prepare_url_prefix(url_prefix):
-    """
-    return '' if no prefix, or '/prefix' without slash in the end.
-    """
-    url_prefix = urljoin('/', url_prefix)
-    return url_prefix.rstrip('/')
 
 
 class ServerConfigException(Exception):
@@ -246,6 +237,7 @@ class Module(MgrModule, CherryPyConfig):
     ]
     COMMANDS.extend(options_command_list())
     COMMANDS.extend(ACCESS_CONTROL_COMMANDS)
+    COMMANDS.extend(SSO_COMMANDS)
 
     OPTIONS = [
         {'name': 'server_addr'},
@@ -289,6 +281,7 @@ class Module(MgrModule, CherryPyConfig):
             _cov.start()
 
         AuthManager.initialize()
+        load_sso_db()
 
         uri = self.await_configuration()
         if uri is None:
@@ -335,10 +328,14 @@ class Module(MgrModule, CherryPyConfig):
         self.shutdown_event.set()
 
     def handle_command(self, inbuf, cmd):
+        # pylint: disable=too-many-return-statements
         res = handle_option_command(cmd)
         if res[0] != -errno.ENOSYS:
             return res
         res = handle_access_control_command(cmd)
+        if res[0] != -errno.ENOSYS:
+            return res
+        res = handle_sso_command(cmd)
         if res[0] != -errno.ENOSYS:
             return res
         elif cmd['prefix'] == 'dashboard set-jwt-token-ttl':

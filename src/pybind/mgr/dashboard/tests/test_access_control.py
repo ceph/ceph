@@ -7,18 +7,13 @@ import json
 import time
 import unittest
 
+from . import CmdException, exec_dashboard_cmd
 from .. import mgr
 from ..security import Scope, Permission
 from ..services.access_control import handle_access_control_command, \
                                       load_access_control_db, \
                                       password_hash, AccessControlDB, \
                                       SYSTEM_ROLES
-
-
-class CmdException(Exception):
-    def __init__(self, retcode, message):
-        super(CmdException, self).__init__(message)
-        self.retcode = retcode
 
 
 class AccessControlTest(unittest.TestCase):
@@ -45,15 +40,7 @@ class AccessControlTest(unittest.TestCase):
 
     @classmethod
     def exec_cmd(cls, cmd, **kwargs):
-        cmd_dict = {'prefix': 'dashboard {}'.format(cmd)}
-        cmd_dict.update(kwargs)
-        ret, out, err = handle_access_control_command(cmd_dict)
-        if ret < 0:
-            raise CmdException(ret, err)
-        try:
-            return json.loads(out)
-        except ValueError:
-            return out
+        return exec_dashboard_cmd(handle_access_control_command, cmd, **kwargs)
 
     def load_persistent_db(self):
         config_key = AccessControlDB.accessdb_config_key()

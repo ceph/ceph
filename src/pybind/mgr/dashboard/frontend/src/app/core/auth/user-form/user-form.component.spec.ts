@@ -207,10 +207,8 @@ describe('UserFormComponent', () => {
       const userReq = httpTesting.expectOne(`api/user/${user.username}`);
       expect(userReq.request.method).toBe('PUT');
       userReq.flush({});
-      const authReq = httpTesting.expectOne('api/auth');
-      expect(authReq.request.method).toBe('DELETE');
-      authReq.flush(null);
-      expect(router.navigate).toHaveBeenCalledWith(['/login']);
+      const authReq = httpTesting.expectOne('api/auth/logout');
+      expect(authReq.request.method).toBe('POST');
     });
 
     it('should submit', () => {
