@@ -93,7 +93,7 @@ class SaltManager(object):
         """
         Use cmd.run to run a command on all nodes.
         """
-        if abort_on_fail:
+        if not abort_on_fail:
             cmd += ' || true'
         redirect = "" if show_stderr else " 2>/dev/null"
         self.master_remote.run(args=(

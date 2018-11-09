@@ -30,23 +30,34 @@ def anchored(log_message):
     return "{}{}".format(deepsea_ctx['log_anchor'], log_message)
 
 
-def remote_exec(remote, cmd_str, log_spec, tries=0):
+def remote_exec(remote, cmd_str, log_spec, quiet=True, rerun=False, tries=0):
     """
     Execute cmd_str and catch CommandFailedError and
-    ConnectionLostError and retry to run the command
+    ConnectionLostError (and rerun command if retry is set)
     until one of the conditons are fulfilled:
     1) Execution succeeded
     2) Attempts are exceeded
     3) CommandFailedError is raised
     """
+    cmd_args = ['sudo', 'bash', '-c', cmd_str]
+    if quiet:
+        cmd_args += [run.Raw('2>'), "/dev/null"]
+    already_rebooted_at_least_once = False
+    if tries:
+        log.info("Running command {} on {} which might cause the machine to reboot"
+                 .format(cmd_str, remote.hostname))
+        remote.run(args="uptime")
     with safe_while(sleep=60,
                     tries=tries,
                     action="wait for reconnect") as proceed:
         while proceed():
             try:
-                remote.run(args=[
-                    'sudo', 'bash', '-c', cmd_str,
-                    ])
+                if already_rebooted_at_least_once:
+                    if not rerun:
+                        log.info("Back from reboot")
+                        remote.run(args="uptime")
+                        break
+                remote.run(args=cmd_args)
                 break
             except CommandFailedError:
                 log.error(anchored(
@@ -60,6 +71,7 @@ def remote_exec(remote, cmd_str, log_spec, tries=0):
                     ])
                 raise
             except ConnectionLostError:
+                already_rebooted_at_least_once = True
                 if tries < 1:
                     raise
                 log.warning("No connection established yet..")
@@ -553,6 +565,20 @@ class DeepSea(Task):
             for pn in [1, 2]:
                 _remote.run(args=['sudo', 'sh', '-c', for_loop.format(pn=pn)])
 
+    def reboot_the_cluster_now(self, log_spec=None):
+        if not log_spec:
+            log_spec = "all nodes reboot now"
+        cmd_str = "salt \\* cmd.run reboot"
+        remote_exec(
+            self.master_remote,
+            cmd_str,
+            log_spec,
+            rerun=False,
+            quiet=True,
+            tries=5,
+            )
+        self.sm.ping_minions()
+
     def role_type_present(self, role_type):
         """
         Method for determining if _any_ test node has the given role type
@@ -1043,7 +1069,9 @@ class Orch(DeepSea):
             self.master_remote,
             cmd_str,
             "orchestration {}".format(orch_spec),
-            tries=tries
+            rerun=True,
+            quiet=True,
+            tries=tries,
             )
 
     def _detect_reboots(self):
@@ -1372,7 +1400,9 @@ class Reboot(DeepSea):
         super(Reboot, self).__init__(ctx, config)
 
     def begin(self):
-        pass
+        log_spec = "all nodes reboot now"
+        self.log.warning(anchored(log_spec))
+        self.reboot_the_cluster_now(log_spec=log_spec)
 
     def teardown(self):
         # self.log.debug("beginning of teardown method")

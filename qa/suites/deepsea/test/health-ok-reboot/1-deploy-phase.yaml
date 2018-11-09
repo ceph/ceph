@@ -1,13 +1,15 @@
 tasks:
         - deepsea:
                 alternative_defaults:
-                        - stage_prep_master: default-update-reboot
-                        - stage_prep_minion: default-update-reboot
                         - tuned_mgr_init: default-off
                         - tuned_mon_init: default-off
                         - tuned_osd_init: default-off
         - deepsea.orch:
                 stage: prep
+        - deepsea.reboot:
+        - exec:
+                client.salt_master:
+                        - 'zypper --non-interactive --no-gpg-checks list-updates'
         - deepsea.orch:
                 stage: 1
         - deepsea.policy:
