@@ -1357,6 +1357,23 @@ role-admin/cluster/*.sls
         # self.log.debug("end of teardown method")
 
 
+class Reboot(DeepSea):
+    """
+    A class that does nothing but unconditionally reboot the whole cluster.
+    """
+    def __init__(self, ctx, config):
+        deepsea_ctx['logger_obj'] = log.getChild('reboot')
+        super(Reboot, self).__init__(ctx, config)
+
+    def begin(self):
+        pass
+
+    def teardown(self):
+        # self.log.debug("beginning of teardown method")
+        pass
+        # self.log.debug("end of teardown method")
+
+
 class Scripts:
 
     script_dict = {
@@ -1648,4 +1665,5 @@ dummy = Dummy
 health_ok = HealthOK
 orch = Orch
 policy = Policy
+reboot = Reboot
 validation = Validation
