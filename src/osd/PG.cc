@@ -4015,7 +4015,10 @@ void PG::update_snap_map(
 	int r = snap_mapper.remove_oid(
 	  i->soid,
 	  &_t);
-	ceph_assert(r == 0);
+	if (r != 0)
+	  derr << __func__ << " remove_oid " << i->soid << " failed with " << r << dendl;
+        // On removal tolerate missing key corruption
+        ceph_assert(r == 0 || r == -ENOENT);
       } else if (i->is_update()) {
 	ceph_assert(i->snaps.length() > 0);
 	vector<snapid_t> snaps;
