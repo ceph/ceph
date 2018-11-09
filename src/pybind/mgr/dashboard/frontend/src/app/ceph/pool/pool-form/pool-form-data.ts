@@ -6,6 +6,8 @@ import { Pool } from '../pool';
 
 export class PoolFormData {
   poolTypes = ['erasure', 'replicated'];
+  erasureInfo = false;
+  crushInfo = false;
   applications = {
     selected: [],
     available: [

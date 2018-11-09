@@ -3,10 +3,12 @@ import { FormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
 import * as _ from 'lodash';
-import { forkJoin } from 'rxjs';
+import { BsModalService } from 'ngx-bootstrap/modal';
+import { forkJoin, Subscription } from 'rxjs';
 
 import { ErasureCodeProfileService } from '../../../shared/api/erasure-code-profile.service';
 import { PoolService } from '../../../shared/api/pool.service';
+import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../shared/forms/cd-validators';
 import { CrushRule } from '../../../shared/models/crush-rule';
@@ -18,6 +20,7 @@ import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { FormatterService } from '../../../shared/services/formatter.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
+import { ErasureCodeProfileFormComponent } from '../erasure-code-profile-form/erasure-code-profile-form.component';
 import { Pool } from '../pool';
 import { PoolFormData } from './pool-form-data';
 import { PoolFormInfo } from './pool-form-info';
@@ -37,6 +40,7 @@ export class PoolFormComponent implements OnInit {
   editing = false;
   data = new PoolFormData();
   externalPgChange = false;
+  private modalSubscription: Subscription;
   current = {
     rules: []
   };
@@ -45,9 +49,11 @@ export class PoolFormComponent implements OnInit {
     private dimlessBinaryPipe: DimlessBinaryPipe,
     private route: ActivatedRoute,
     private router: Router,
+    private modalService: BsModalService,
     private poolService: PoolService,
     private authStorageService: AuthStorageService,
     private formatter: FormatterService,
+    private bsModalService: BsModalService,
     private taskWrapper: TaskWrapperService,
     private ecpService: ErasureCodeProfileService
   ) {
@@ -138,10 +144,14 @@ export class PoolFormComponent implements OnInit {
   }
 
   private initEcp(ecProfiles: ErasureCodeProfile[]) {
-    if (ecProfiles.length === 1) {
-      const control = this.form.get('erasureProfile');
-      control.setValue(ecProfiles[0]);
+    const control = this.form.get('erasureProfile');
+    if (ecProfiles.length <= 1) {
       control.disable();
+    }
+    if (ecProfiles.length === 1) {
+      control.setValue(ecProfiles[0]);
+    } else if (ecProfiles.length > 1 && control.disabled) {
+      control.enable();
     }
     this.ecProfiles = ecProfiles;
   }
@@ -422,6 +432,35 @@ export class PoolFormComponent implements OnInit {
       step.item_name || '',
       step.type ? step.num + ' type ' + step.type : ''
     ].join(' ');
+  }
+
+  addErasureCodeProfile() {
+    this.modalSubscription = this.modalService.onHide.subscribe(() => this.reloadECPs());
+    this.bsModalService.show(ErasureCodeProfileFormComponent);
+  }
+
+  private reloadECPs() {
+    this.ecpService.list().subscribe((profiles: ErasureCodeProfile[]) => this.initEcp(profiles));
+    this.modalSubscription.unsubscribe();
+  }
+
+  deleteErasureCodeProfile() {
+    const ecp = this.form.getValue('erasureProfile');
+    if (!ecp) {
+      return;
+    }
+    const name = ecp.name;
+    this.modalSubscription = this.modalService.onHide.subscribe(() => this.reloadECPs());
+    this.modalService.show(CriticalConfirmationModalComponent, {
+      initialState: {
+        itemDescription: 'erasure code profile',
+        submitActionObservable: () =>
+          this.taskWrapper.wrapTaskAroundCall({
+            task: new FinishedTask('ecp/delete', { name: name }),
+            call: this.ecpService.delete(name)
+          })
+      }
+    });
   }
 
   submit() {
