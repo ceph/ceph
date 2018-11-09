@@ -6,7 +6,7 @@ import sys
 import logging
 
 from ceph_volume.decorators import catches
-from ceph_volume import log, devices, configuration, conf, exceptions, terminal
+from ceph_volume import log, devices, configuration, conf, exceptions, terminal, inventory
 
 
 class Volume(object):
@@ -27,6 +27,7 @@ Ceph Conf: {ceph_path}
         self.mapper = {
             'lvm': devices.lvm.LVM,
             'simple': devices.simple.Simple,
+            'inventory': inventory.Inventory,
         }
         self.plugin_help = "No plugins found/loaded"
         if argv is None:
