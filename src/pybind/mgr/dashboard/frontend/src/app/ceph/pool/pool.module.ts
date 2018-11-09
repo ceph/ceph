@@ -9,6 +9,7 @@ import { TabsModule } from 'ngx-bootstrap/tabs';
 
 import { ServicesModule } from '../../shared/services/services.module';
 import { SharedModule } from '../../shared/shared.module';
+import { ErasureCodeProfileFormComponent } from './erasure-code-profile-form/erasure-code-profile-form.component';
 import { PoolFormComponent } from './pool-form/pool-form.component';
 import { PoolListComponent } from './pool-list/pool-list.component';
 
@@ -24,6 +25,7 @@ import { PoolListComponent } from './pool-list/pool-list.component';
     ServicesModule
   ],
   exports: [PoolListComponent, PoolFormComponent],
-  declarations: [PoolListComponent, PoolFormComponent]
+  declarations: [PoolListComponent, PoolFormComponent, ErasureCodeProfileFormComponent],
+  entryComponents: [ErasureCodeProfileFormComponent]
 })
 export class PoolModule {}
