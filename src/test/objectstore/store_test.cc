@@ -4576,6 +4576,25 @@ TEST_P(StoreTest, Synthetic) {
   doSyntheticTest(10000, 400*1024, 40*1024, 0);
 }
 
+TEST_P(StoreTestSpecificAUSize, BlueFSExtenderTest) {
+  if(string(GetParam()) != "bluestore")
+    return;
+
+  SetVal(g_conf(), "bluestore_block_db_size", "0");
+  SetVal(g_conf(), "bluestore_block_wal_size", "0");
+  SetVal(g_conf(), "bluestore_bluefs_min", "12582912");
+  SetVal(g_conf(), "bluestore_bluefs_min_free", "4194304");
+  SetVal(g_conf(), "bluestore_bluefs_gift_ratio", "0");
+  SetVal(g_conf(), "bluestore_bluefs_min_ratio", "0");
+  SetVal(g_conf(), "bluestore_bluefs_balance_interval", "100000");
+
+  g_conf().apply_changes(nullptr);
+
+  StartDeferred(4096);
+
+  doSyntheticTest(10000, 400*1024, 40*1024, 0);
+}
+
 #if defined(WITH_BLUESTORE)
 TEST_P(StoreTestSpecificAUSize, SyntheticMatrixSharding) {
   if (string(GetParam()) != "bluestore")
