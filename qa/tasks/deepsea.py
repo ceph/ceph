@@ -39,14 +39,14 @@ def remote_exec(remote, cmd_str, log_spec, quiet=True, rerun=False, tries=0):
     2) Attempts are exceeded
     3) CommandFailedError is raised
     """
-    cmd_args = ['sudo', 'bash', '-c', cmd_str]
-    if quiet:
-        cmd_args += [run.Raw('2>'), "/dev/null"]
+    cmd_str = "sudo bash -c '{}'".format(cmd_str)
+    # if quiet:
+    #     cmd_args += [run.Raw('2>'), "/dev/null"]
     already_rebooted_at_least_once = False
     if tries:
-        log.info("Running command {} on {} which might cause the machine to reboot"
+        remote.sh("uptime")
+        log.info("Running command ->{}<- on {}. This might cause the machine to reboot!"
                  .format(cmd_str, remote.hostname))
-        remote.run(args="uptime")
     with safe_while(sleep=60,
                     tries=tries,
                     action="wait for reconnect") as proceed:
@@ -55,20 +55,16 @@ def remote_exec(remote, cmd_str, log_spec, quiet=True, rerun=False, tries=0):
                 if already_rebooted_at_least_once:
                     if not rerun:
                         log.info("Back from reboot")
-                        remote.run(args="uptime")
+                        remote.sh("uptime")
                         break
-                remote.run(args=cmd_args)
+                remote.sh(cmd_str)
                 break
             except CommandFailedError:
                 log.error(anchored(
                     "{} failed. ".format(log_spec)
                     + "Here comes journalctl!"
                 ))
-                remote.run(args=[
-                    'sudo',
-                    'journalctl',
-                    '--all',
-                    ])
+                remote.sh("sudo journalctl --all")
                 raise
             except ConnectionLostError:
                 already_rebooted_at_least_once = True
@@ -87,9 +83,7 @@ def remote_run_script_as_root(remote, path, data, args=None):
     cmd = 'sudo bash {}'.format(path)
     if args:
         cmd += ' ' + ' '.join(args)
-    remote.run(label=path, args=[
-        'sudo', 'bash', '-c', cmd
-        ])
+    remote.sh(label=path, args=cmd)
 
 
 class DeepSea(Task):
@@ -1108,9 +1102,14 @@ class Orch(DeepSea):
         self.__log_stage_start(stage)
         self._run_orch(("stage", stage))
         self._pillar_items()
-        self.sm.all_minions_zypper_status()
-        self.log.debug("all_minions_zypper_ps_requires_reboot says ->{}<-"
-                       .format(self.sm.all_minions_zypper_ps_requires_reboot()))
+        self.sm.all_minions_zypper_ref()
+        self.sm.all_minions_zypper_lu()
+        if self.sm.all_minions_zypper_ps_requires_reboot():
+            log_spec = "Detected updates requiring reboot: rebooting the whole cluster"
+            self.log.warning(anchored(log_spec))
+            self.reboot_the_cluster_now(log_spec=log_spec)
+            assert self.sm.all_minions_zypper_ps_requires_reboot() == False, \
+                "No more updates requiring reboot anywhere in the whole cluster"
         self.scripts.salt_api_test()
 
     def _run_stage_1(self):
