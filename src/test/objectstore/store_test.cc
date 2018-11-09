@@ -7603,11 +7603,11 @@ TEST_P(StoreTest, allocateBlueFSTest) {
 
   uint64_t to_alloc = g_conf().get_val<Option::size_t>("bluefs_alloc_size");
 
-  int r = bstore->allocate_bluefs_freespace(to_alloc);
+  int r = bstore->allocate_bluefs_freespace(to_alloc, nullptr);
   ASSERT_EQ(r, 0);
-  r = bstore->allocate_bluefs_freespace(statfs.total);
+  r = bstore->allocate_bluefs_freespace(statfs.total, nullptr);
   ASSERT_EQ(r, -ENOSPC);
-  r = bstore->allocate_bluefs_freespace(to_alloc * 16);
+  r = bstore->allocate_bluefs_freespace(to_alloc * 16, nullptr);
   ASSERT_EQ(r, 0);
   store->umount();
   ASSERT_EQ(store->fsck(false), 0); // do fsck explicitly
