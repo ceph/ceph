@@ -153,7 +153,7 @@ deploy_ceph
 # verification phase
 ceph_health_test
 test "$STORAGE_NODES" = "$(number_of_hosts_in_ceph_osd_tree)"
-salt -I roles:storage osd.report 2>/dev/null
+#salt -I roles:storage osd.report 2>/dev/null
 
 # test phase
 REPEAT_STAGE_0=""

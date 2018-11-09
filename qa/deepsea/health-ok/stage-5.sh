@@ -105,8 +105,8 @@ test "$OSDS_BEFORE"
 test "$STORAGE_NODES_AFTER" -eq "$((STORAGE_NODES_BEFORE - 1))"
 test "$OSDS_AFTER" -lt "$OSDS_BEFORE"
 
-# osd.report for good measure
-salt -I roles:storage osd.report 2>/dev/null
+## osd.report for good measure
+#salt -I roles:storage osd.report 2>/dev/null
 
 echo "YYYY"
 echo "stage-5 test result: PASS"
