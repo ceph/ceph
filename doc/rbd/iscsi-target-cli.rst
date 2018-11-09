@@ -11,7 +11,7 @@ install, and configure the Ceph iSCSI gateway for basic operation.
 
 -  A running Ceph Luminous or later storage cluster
 
--  RHEL/CentOS 7.5; Linux kernel v4.16 or newer; or the `Ceph iSCSI client test kernel <https://shaman.ceph.com/repos/kernel/ceph-iscsi-test>`_
+-  Red Hat Enterprise Linux/CentOS 7.5 (or newer); Linux kernel v4.16 (or newer)
 
 -  The following packages must be installed from your Linux distribution's software repository:
 
@@ -21,9 +21,7 @@ install, and configure the Ceph iSCSI gateway for basic operation.
 
    -  ``tcmu-runner-1.3.0`` or newer package
 
-   -  ``ceph-iscsi-config-2.4`` or newer package
-
-   -  ``ceph-iscsi-cli-2.5`` or newer package
+   -  ``ceph-iscsi-2.7`` or newer package
 
      .. important::
         If previous versions of these packages exist, then they must
@@ -52,7 +50,7 @@ to the *Installing* section:
 
 **Installing:**
 
-If you are using the upstream ceph-iscsi-cli package follow the
+If you are using the upstream ceph-iscsi package follow the
 `manual install instructions`_.
 
 .. _`manual install instructions`: ../iscsi-target-cli-manual-install
@@ -65,11 +63,11 @@ If you are using the upstream ceph-iscsi-cli package follow the
 For rpm based instructions execute the following commands:
 
 #. As ``root``, on all iSCSI gateway nodes, install the
-   ``ceph-iscsi-cli`` package:
+   ``ceph-iscsi`` package:
 
    ::
 
-       # yum install ceph-iscsi-cli
+       # yum install ceph-iscsi
 
 #. As ``root``, on all iSCSI gateway nodes, install the ``tcmu-runner``
    package:

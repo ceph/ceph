@@ -8,7 +8,7 @@ within OpenStack environments. Starting with the Ceph Luminous release,
 block-level access is expanding to offer standard iSCSI support allowing
 wider platform usage, and potentially opening new use cases.
 
--  RHEL/CentOS 7.5; Linux kernel v4.16 or newer; or the `Ceph iSCSI client test kernel <https://shaman.ceph.com/repos/kernel/ceph-iscsi-test>`_
+-  Red Hat Enterprise Linux/CentOS 7.5 (or newer); Linux kernel v4.16 (or newer)
 
 -  A working Ceph Storage cluster, deployed with ``ceph-ansible`` or using the command-line interface
 
