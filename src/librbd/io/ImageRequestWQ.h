@@ -73,8 +73,9 @@ public:
 
   void set_require_lock(Direction direction, bool enabled);
 
-  void apply_qos_limit(uint64_t limit, const uint64_t flag);
+  void apply_qos_schedule_tick_min(uint64_t tick);
 
+  void apply_qos_limit(const uint64_t flag, uint64_t limit, uint64_t burst);
 protected:
   void *_void_dequeue() override;
   void process(ImageDispatchSpec<ImageCtxT> *req) override;
