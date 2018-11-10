@@ -1,3 +1,60 @@
+v12.2.10 Luminous
+=================
+
+This is the tenth bug fix release of the Luminous v12.2.x long term stable
+release series. The previous release, v12.2.9, introduced the PG hard-limit
+patches which were found to cause an issue in certain upgrade scenarios, and
+this release was expedited to revert those patches. If you already successfully
+upgraded to v12.2.9, you should **not** upgrade to v12.2.10, but rather **wait**
+for a release in which http://tracker.ceph.com/issues/36686 is addressed. All
+other users are encouraged to upgrade to this release.
+
+Notable Changes
+---------------
+
+OSD
+
+* This release reverts the PG hard-limit patches added in v12.2.9.
+
+Changelog
+---------
+
+* ceph-volume: add some choose_disk capabilities (`issue#36446 <http://tracker.ceph.com/issues/36446>`_, `pr#24783 <https://github.com/ceph/ceph/pull/24783>`_, Erwan Velu)
+* ceph-volume: remove version reporting from help menu (`issue#36386 <http://tracker.ceph.com/issues/36386>`_, `pr#24754 <https://github.com/ceph/ceph/pull/24754>`_, Alfredo Deza)
+* ceph-volume: systemd import main so console_scripts work for executable (`issue#36648 <http://tracker.ceph.com/issues/36648>`_, `pr#24853 <https://github.com/ceph/ceph/pull/24853>`_, Alfredo Deza)
+* ceph-volume: tests install ceph-ansible's requirements.txt dependencies (`issue#36672 <http://tracker.ceph.com/issues/36672>`_, `pr#24960 <https://github.com/ceph/ceph/pull/24960>`_, Alfredo Deza)
+* ceph-volume: util.encryption don't push stderr to terminal (`issue#36246 <http://tracker.ceph.com/issues/36246>`_, `pr#24827 <https://github.com/ceph/ceph/pull/24827>`_, Alfredo Deza)
+* ceph-volume: util.encryption robust blkid+lsblk detection of lockbox (`pr#24981 <https://github.com/ceph/ceph/pull/24981>`_, Alfredo Deza)
+* ceph-volume: use console_scripts (`issue#36601 <http://tracker.ceph.com/issues/36601>`_, `pr#24837 <https://github.com/ceph/ceph/pull/24837>`_, Mehdi Abaakouk)
+* OSDMapMapping does not handle active.size() > pool size (`issue#26866 <http://tracker.ceph.com/issues/26866>`_, `issue#35935 <http://tracker.ceph.com/issues/35935>`_, `pr#24432 <https://github.com/ceph/ceph/pull/24432>`_, Sage Weil)
+* PG: add custom_reaction Backfilled and release reservations (`issue#24333 <http://tracker.ceph.com/issues/24333>`_, `pr#23493 <https://github.com/ceph/ceph/pull/23493>`_, Neha Ojha)
+* Revert "PG: add custom_reaction Backfilled and release reservations after backfill (`pr#24902 <https://github.com/ceph/ceph/pull/24902>`_, Neha Ojha)
+* Revert pg log limit changes (`issue#36686 <http://tracker.ceph.com/issues/36686>`_, `pr#24903 <https://github.com/ceph/ceph/pull/24903>`_, Neha Ojha)
+* backport and other test fixes for osd-scrub-repair.sh (`issue#35845 <http://tracker.ceph.com/issues/35845>`_, `issue#36393 <http://tracker.ceph.com/issues/36393>`_, `pr#24532 <https://github.com/ceph/ceph/pull/24532>`_, Xinying Song, David Zafman)
+* ceph-volume tests.systemd update imports for systemd module (`issue#36704 <http://tracker.ceph.com/issues/36704>`_, `pr#24958 <https://github.com/ceph/ceph/pull/24958>`_, Alfredo Deza)
+* ceph-volume: adds a --prepare flag to `lvm batch` (`issue#36363 <http://tracker.ceph.com/issues/36363>`_, `pr#24759 <https://github.com/ceph/ceph/pull/24759>`_, Andrew Schoen)
+* cls/user: cls_user_remove_bucket writes modified header (`issue#36534 <http://tracker.ceph.com/issues/36534>`_, `issue#36496 <http://tracker.ceph.com/issues/36496>`_, `pr#24855 <https://github.com/ceph/ceph/pull/24855>`_, Casey Bodley)
+* core: by pass cache if performing deep scrub (`issue#35067 <http://tracker.ceph.com/issues/35067>`_, `pr#24802 <https://github.com/ceph/ceph/pull/24802>`_, Xiaoguang Wang)
+* crush/CrushWrapper: fix crush tree json dumper (`issue#36149 <http://tracker.ceph.com/issues/36149>`_, `pr#24482 <https://github.com/ceph/ceph/pull/24482>`_, Oshyn Song)
+* ec: src/common/interval_map.h: 161: FAILED assert(len > 0) (`issue#21931 <http://tracker.ceph.com/issues/21931>`_, `issue#22330 <http://tracker.ceph.com/issues/22330>`_, `pr#24582 <https://github.com/ceph/ceph/pull/24582>`_, Neha Ojha)
+* gperftools-libs-2.6.1-1 or newer required for binaries linked against corresponding version at build time (`issue#36552 <http://tracker.ceph.com/issues/36552>`_, `issue#23657 <http://tracker.ceph.com/issues/23657>`_, `issue#36558 <http://tracker.ceph.com/issues/36558>`_, `issue#36508 <http://tracker.ceph.com/issues/36508>`_, `pr#24706 <https://github.com/ceph/ceph/pull/24706>`_, Brad Hubbard)
+* osd: add creating to pg_string_state (`issue#36174 <http://tracker.ceph.com/issues/36174>`_, `issue#36297 <http://tracker.ceph.com/issues/36297>`_, `pr#24602 <https://github.com/ceph/ceph/pull/24602>`_, Dan van der Ster)
+* osd: cast 'whoami' to unsigned so it can be used as the seed for RNG (`issue#26890 <http://tracker.ceph.com/issues/26890>`_, `pr#24659 <https://github.com/ceph/ceph/pull/24659>`_, Kefu Chai)
+* osd: get loadavg per cpu for scrub load threshold check (`pr#24593 <https://github.com/ceph/ceph/pull/24593>`_, kungf)
+* osdc/Objecter: possible race condition with connection reset (`issue#36183 <http://tracker.ceph.com/issues/36183>`_, `issue#36295 <http://tracker.ceph.com/issues/36295>`_, `pr#24574 <https://github.com/ceph/ceph/pull/24574>`_, Jason Dillaman)
+* qa: add test that builds example librados programs (`issue#36229 <http://tracker.ceph.com/issues/36229>`_, `issue#15100 <http://tracker.ceph.com/issues/15100>`_, `pr#24538 <https://github.com/ceph/ceph/pull/24538>`_, Nathan Cutler)
+* qa/ceph-ansible: Specify stable-3.2 branch (`issue#37331 <https://tracker.ceph.com/issues/37331>`_, `pr#25170 <https://github.com/ceph/ceph/pull/25170>`_, Brad Hubbard)
+* rgw/beast: drop privileges after binding ports (`issue#36041 <http://tracker.ceph.com/issues/36041>`_, `pr#24454 <https://github.com/ceph/ceph/pull/24454>`_, Paul Emmerich)
+* rgw: RGWAsyncGetBucketInstanceInfo does not access coroutine memory (`issue#35812 <http://tracker.ceph.com/issues/35812>`_, `issue#36212 <http://tracker.ceph.com/issues/36212>`_, `pr#24507 <https://github.com/ceph/ceph/pull/24507>`_, Casey Bodley)
+* rgw: fix leak of curl handle on shutdown (`issue#35715 <http://tracker.ceph.com/issues/35715>`_, `issue#36214 <http://tracker.ceph.com/issues/36214>`_, `pr#24519 <https://github.com/ceph/ceph/pull/24519>`_, Casey Bodley)
+* rgw: list bucket can not show the object uploaded by RGWPostObj when enable bucket versioning (`pr#24570 <https://github.com/ceph/ceph/pull/24570>`_, yuliyang)
+* rgw: multisite: enforce spawn_window for data full sync (`issue#26897 <http://tracker.ceph.com/issues/26897>`_, `pr#24857 <https://github.com/ceph/ceph/pull/24857>`_, Casey Bodley)
+* rgw: set default objecter_inflight_ops = 24576 (`issue#36570 <http://tracker.ceph.com/issues/36570>`_, `issue#25109 <http://tracker.ceph.com/issues/25109>`_, `pr#24862 <https://github.com/ceph/ceph/pull/24862>`_, Matt Benjamin)
+* rgw: user stats account for resharded buckets (`pr#24854 <https://github.com/ceph/ceph/pull/24854>`_, Casey Bodley)
+* segv in BlueStore::OldExtent::create (`issue#36526 <http://tracker.ceph.com/issues/36526>`_, `issue#36591 <http://tracker.ceph.com/issues/36591>`_, `pr#24746 <https://github.com/ceph/ceph/pull/24746>`_, Sage Weil)
+* test/common: unittest_mclock_priority_queue builds with "make" command (`pr#24808 <https://github.com/ceph/ceph/pull/24808>`_, J. Eric Ivancich)
+
+
 v12.2.9 Luminous
 ================
 
