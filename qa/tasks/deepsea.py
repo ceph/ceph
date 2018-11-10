@@ -969,13 +969,7 @@ class Orch(DeepSea):
                 )
         self.log.debug("munged config is {}".format(self.config))
 
-    def __log_stage_start(self, stage):
-        self.log.info(anchored(
-            "Running DeepSea Stage {} ({})"
-            .format(stage, self.stage_synonyms[stage])
-            ))
-
-    def _ceph_health_test(self):
+    def __ceph_health_test(self):
         self.master_remote.run(args=[
             'sudo',
             'salt-call',
@@ -984,6 +978,55 @@ class Orch(DeepSea):
             'timeout=900',
             'check=1',
             ])
+
+    def __check_salt_api_service(self):
+        base_cmd = 'sudo systemctl status --full {} {}.service'
+        try:
+            self.master_remote.run(args=base_cmd.format('0', 'salt-api'))
+        except CommandFailedError:
+            self.master_remote.run(args=base_cmd.format('100', 'salt-api'))
+            raise
+        self.scripts.salt_api_test()
+
+    def __is_stage_between_0_and_5(self):
+        """
+        This is implemented as a separate function because the stage specified
+        in the YAML might be a number or a string, and we really don't care
+        what Python sees it as.
+        """
+        num = self.stage
+        try:
+            num = int(num)
+        except ValueError:
+            return False
+        if num < 0 or num > 5:
+            return False
+        return True
+
+    def __maybe_cat_ganesha_conf(self):
+        ganesha_host = self.role_type_present('ganesha')
+        if ganesha_host:
+            ganesha_remote = self.remotes[ganesha_host]
+            ganesha_remote.run(args="cat /etc/ganesha/ganesha.conf")
+
+    def __log_stage_start(self, stage):
+        self.log.info(anchored(
+            "Running DeepSea Stage {} ({})"
+            .format(stage, self.stage_synonyms[stage])
+            ))
+
+    def __zypper_ps_with_possible_reboot(self):
+        if self.sm.all_minions_zypper_ps_requires_reboot():
+            log_spec = "Detected updates requiring reboot"
+            self.log.warning(anchored(log_spec))
+            if self.reboots_explicitly_forbidden:
+                self.log.info("Reboots explicitly forbidden in test configuration: not rebooting")
+                self.log.warning("Processes using deleted files may cause instability")
+            else:
+                self.log.warning(anchored("Rebooting the whole cluster now!"))
+                self.reboot_the_cluster_now(log_spec=log_spec)
+                assert not self.sm.all_minions_zypper_ps_requires_reboot(), \
+                    "No more updates requiring reboot anywhere in the whole cluster"
 
     def _configure_rgw(self):
         self.log.debug("self.rgw_ssl is ->{}<-".format(self.rgw_ssl))
@@ -997,15 +1040,6 @@ class Orch(DeepSea):
             if self.rgw_ssl:
                 self.scripts.rgw_init_ssl()
 
-    def _is_int_between_0_and_5(self, num):
-        try:
-            num = int(num)
-        except ValueError:
-            return False
-        if num < 0 or num > 5:
-            return False
-        return True
-
     # FIXME: run on each minion individually, and compare deepsea "roles"
     # with teuthology roles!
     def _pillar_items(self):
@@ -1013,12 +1047,6 @@ class Orch(DeepSea):
         if self.quiet_salt:
             cmd += " 2>/dev/null"
         self.master_remote.run(args=cmd)
-
-    def _maybe_cat_ganesha_conf(self):
-        ganesha_host = self.role_type_present('ganesha')
-        if ganesha_host:
-            ganesha_remote = self.remotes[ganesha_host]
-            ganesha_remote.run(args="cat /etc/ganesha/ganesha.conf")
 
     def _nfs_ganesha_no_root_squash(self):
         self.log.info("NFS-Ganesha set No_root_squash")
@@ -1111,18 +1139,8 @@ class Orch(DeepSea):
         self._pillar_items()
         self.sm.all_minions_zypper_ref()
         self.sm.all_minions_zypper_lu()
-        if self.sm.all_minions_zypper_ps_requires_reboot():
-            log_spec = "Detected updates requiring reboot"
-            self.log.warning(anchored(log_spec))
-            if self.reboots_explicitly_forbidden:
-                self.log.info("Reboots explicitly forbidden in test configuration: not rebooting")
-                self.log.warning("Processes using deleted files may cause instability")
-            else:
-                self.log.warning(anchored("Rebooting the whole cluster now!"))
-                self.reboot_the_cluster_now(log_spec=log_spec)
-                assert not self.sm.all_minions_zypper_ps_requires_reboot(), \
-                    "No more updates requiring reboot anywhere in the whole cluster"
-        self.scripts.salt_api_test()
+        self.__zypper_ps_with_possible_reboot()
+        self.__check_salt_api_service()
 
     def _run_stage_1(self):
         """
@@ -1154,7 +1172,7 @@ class Orch(DeepSea):
             abort_on_fail=False
             )
         self.scripts.ceph_cluster_status()
-        self._ceph_health_test()
+        self.__ceph_health_test()
 
     def _run_stage_4(self):
         """
@@ -1165,7 +1183,7 @@ class Orch(DeepSea):
             self._nfs_ganesha_no_root_squash()
         self.__log_stage_start(stage)
         self._run_orch(("stage", stage))
-        self._maybe_cat_ganesha_conf()
+        self.__maybe_cat_ganesha_conf()
         self._ceph_health_test()
 
     def _run_stage_5(self):
@@ -1187,7 +1205,7 @@ class Orch(DeepSea):
             return None
         # it's not an orch, so it must be a stage
         assert self.stage, "Neither state_orch, nor stage"
-        if self._is_int_between_0_and_5(self.stage):
+        if self.__is_stage_between_0_and_5():
             exec('self._run_stage_{}()'.format(self.stage))
         elif self.stage == 'prep':
             self.log.info("Running Stage 0 instead of Stage \"prep\"")
@@ -1516,7 +1534,6 @@ cp /srv/salt/ceph/stage/prep/minion/default-no-update-no-reboot.sls \
 set -e
 TMPFILE=$(mktemp)
 echo "Salt API test: BEGIN"
-systemctl --no-pager --full status salt-api.service
 curl http://$(hostname):8000/ | tee $TMPFILE # show curl output in log
 test -s $TMPFILE
 jq . $TMPFILE >/dev/null
