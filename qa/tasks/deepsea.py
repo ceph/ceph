@@ -30,6 +30,18 @@ def anchored(log_message):
     return "{}{}".format(deepsea_ctx['log_anchor'], log_message)
 
 
+def dump_file_that_might_not_exist(remote, fpath):
+    try:
+        remote.run(
+            args="test -f {}".format(fpath)
+            )
+    except CommandFailedError:
+        return None
+    remote.run(
+        args="ls -l {p} ; cat {p}".format(p=fpath)
+        )
+
+
 def remote_exec(remote, cmd_str, log_spec, quiet=True, rerun=False, tries=0):
     """
     Execute cmd_str and catch CommandFailedError and
@@ -477,32 +489,22 @@ class DeepSea(Task):
         global_yml = '/srv/pillar/ceph/stack/global.yml'
         if self.alternative_defaults:
             data = ''
-            for cnf in self.alternative_defaults:
-                for k, v in cnf.items():
-                    info_msg = (
-                        "Applying alternative default {}: {}".format(k, v)
-                        )
-                    data += "{}: {}\n".format(k, v)
-                    self.log.info(info_msg)
+            for k, v in self.alternative_defaults.items():
+                data += "{}: {}\n".format(k, v)
+                self.log.info("Applying alternative default {}: {}".format(k, v))
             if data:
                 sudo_append_to_file(
                     self.master_remote,
                     global_yml,
                     data,
                     )
-        try:
-            self.master_remote.run(
-                args="test -f {}".format(global_yml)
-                )
-        except CommandFailedError:
-            return None
-        self.master_remote.run(
-            args="ls -l {p} ; cat {p}".format(p=global_yml)
-            )
+        dump_file_that_might_not_exist(self.master_remote, global_yml)
 
     def _populate_deepsea_context(self):
         deepsea_ctx['roles'] = self.ctx.config['roles']
-        deepsea_ctx['alternative_defaults'] = self.config.get('alternative_defaults', [])
+        deepsea_ctx['alternative_defaults'] = self.config.get('alternative_defaults', {})
+        if not isinstance(deepsea_ctx['alternative_defaults'], dict):
+            raise ConfigError('(deepsea task) alternative_defaults must be a list')
         deepsea_ctx['cli'] = self.config.get('cli', True)
         deepsea_ctx['log_anchor'] = self.config.get('log_anchor',
                                                     self.log_anchor_str)
@@ -953,7 +955,6 @@ class Orch(DeepSea):
         # cast stage/state_orch value to str because it might be a number
         self.stage = str(self.config.get("stage", ''))
         self.state_orch = str(self.config.get("state_orch", ''))
-        self.allow_reboot = self.config.get("allow_reboot", None)
         self.survive_reboots = self._detect_reboots()
         if not self.stage and not self.state_orch:
             raise ConfigError(
@@ -1074,24 +1075,28 @@ class Orch(DeepSea):
         may cause a reboot
         If there is a 'allow_reboot' flag, it takes presedence.
         """
+        allow_reboot = self.config.get("allow_reboot", None)
+        if allow_reboot is not None:
+            self.log.info("Setting allow_reboot explicitly to {}"
+                          .format(self.allow_reboot))
+            return allow_reboot
         orchs_prone_to_reboot = ['ceph.maintenance.upgrade']
-
-        if self.allow_reboot is not None:
-            self.log.info("Setting allow_reboot explicitly to {}".
-                          format(self.allow_reboot))
-            return self.allow_reboot
-
-        for cnf in self.alternative_defaults:
-            for k, v in cnf.items():
-                if 'reboot' in v and 'no-reboot' not in v:
-                    self.log.warning("This orchestration "
-                                     "may trigger a reboot")
-                    return True
-
         if self.state_orch in orchs_prone_to_reboot:
             self.log.warning("This orchestration may trigger a reboot")
             return True
-
+        #
+        # The alternative_defaults stanza has been moved up to the deepsea task
+        # (for two reasons: because it's a global setting and also so we can do
+        # boilerplate overrides like qa/deepsea/boilerplate/disable_tuned.yaml).
+        # In that light, the following heuristic becomes problematic: since all
+        # the alternative defaults are concentrated in one place, it now loops
+        # over all alternative_defaults, whereas before it considered only
+        # those set for this stage/orchestration.
+        for k, v in self.alternative_defaults.items():
+            if 'reboot' in v and 'no-reboot' not in v:
+                self.log.warning("Orchestrations may trigger a reboot")
+                return True
+        self.log.info("Not allowing reboots for this orchestration")
         return False
 
     def _run_stage_0(self):
