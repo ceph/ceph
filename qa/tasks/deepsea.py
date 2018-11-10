@@ -956,6 +956,7 @@ class Orch(DeepSea):
         # cast stage/state_orch value to str because it might be a number
         self.stage = str(self.config.get("stage", ''))
         self.state_orch = str(self.config.get("state_orch", ''))
+        self.reboots_explicitly_forbidden = not self.config.get("allow_reboots", True)
         self.survive_reboots = self._detect_reboots()
         if not self.stage and not self.state_orch:
             raise ConfigError(
@@ -1111,11 +1112,16 @@ class Orch(DeepSea):
         self.sm.all_minions_zypper_ref()
         self.sm.all_minions_zypper_lu()
         if self.sm.all_minions_zypper_ps_requires_reboot():
-            log_spec = "Detected updates requiring reboot: rebooting the whole cluster"
+            log_spec = "Detected updates requiring reboot"
             self.log.warning(anchored(log_spec))
-            self.reboot_the_cluster_now(log_spec=log_spec)
-            assert self.sm.all_minions_zypper_ps_requires_reboot() == False, \
-                "No more updates requiring reboot anywhere in the whole cluster"
+            if self.reboots_explicitly_forbidden:
+                self.log.info("Reboots explicitly forbidden in test configuration: not rebooting")
+                self.log.warning("Processes using deleted files may cause instability")
+            else:
+                self.log.warning(anchored("Rebooting the whole cluster now!"))
+                self.reboot_the_cluster_now(log_spec=log_spec)
+                assert not self.sm.all_minions_zypper_ps_requires_reboot(), \
+                    "No more updates requiring reboot anywhere in the whole cluster"
         self.scripts.salt_api_test()
 
     def _run_stage_1(self):
