@@ -45,6 +45,8 @@
 #include "PGBackend.h"
 #include "PGPeeringEvent.h"
 
+#include "mgr/OSDPerfMetricTypes.h"
+
 #include <atomic>
 #include <list>
 #include <memory>
@@ -69,6 +71,7 @@ struct OpRequest;
 typedef OpRequest::Ref OpRequestRef;
 class MOSDPGLog;
 class CephContext;
+class DynamicPerfStats;
 
 namespace Scrub {
   class Store;
@@ -481,6 +484,12 @@ public:
   virtual void on_removal(ObjectStore::Transaction *t) = 0;
 
   void _delete_some(ObjectStore::Transaction *t);
+
+  virtual void set_dynamic_perf_stats_queries(
+    const std::list<OSDPerfMetricQuery> &queries) {
+  }
+  virtual void get_dynamic_perf_stats(DynamicPerfStats *stats) {
+  }
 
   // reference counting
 #ifdef PG_DEBUG_REFS
