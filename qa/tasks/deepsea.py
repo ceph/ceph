@@ -969,14 +969,10 @@ class Orch(DeepSea):
         self.log.debug("munged config is {}".format(self.config))
 
     def __ceph_health_test(self):
-        self.master_remote.run(args=[
-            'sudo',
-            'salt-call',
-            'wait.until',
-            run.Raw('status=HEALTH_OK'),
-            'timeout=900',
-            'check=1',
-            ])
+        cmd = 'sudo salt-call wait.until status=HEALTH_OK timeout=900 check=1'
+        if self.quiet_salt:
+            cmd += ' 2> /dev/null'
+        self.master_remote.run(args=cmd)
 
     def __check_salt_api_service(self):
         base_cmd = 'sudo systemctl status --full --lines={} {}.service'
@@ -1183,7 +1179,7 @@ class Orch(DeepSea):
         self.__log_stage_start(stage)
         self._run_orch(("stage", stage))
         self.__maybe_cat_ganesha_conf()
-        self._ceph_health_test()
+        self.__ceph_health_test()
 
     def _run_stage_5(self):
         """
