@@ -29,6 +29,7 @@ namespace librbd {
 
   class Image;
   class ImageOptions;
+  class PoolStats;
   typedef void *image_ctx_t;
   typedef void *completion_t;
   typedef void (*callback_t)(completion_t cb, void *arg);
@@ -290,6 +291,9 @@ public:
   int namespace_list(IoCtx& io_ctx, std::vector<std::string>* namespace_names);
   int namespace_exists(IoCtx& io_ctx, const char *namespace_name, bool *exists);
 
+  int pool_init(IoCtx& io_ctx, bool force);
+  int pool_stats_get(IoCtx& io_ctx, PoolStats *pool_stats);
+
   int pool_metadata_get(IoCtx &io_ctx, const std::string &key,
                         std::string *value);
   int pool_metadata_set(IoCtx &io_ctx, const std::string &key,
@@ -327,6 +331,22 @@ private:
   friend class Image;
 
   rbd_image_options_t opts;
+};
+
+class CEPH_RBD_API PoolStats {
+public:
+  PoolStats();
+  ~PoolStats();
+
+  PoolStats(const PoolStats&) = delete;
+  PoolStats& operator=(const PoolStats&) = delete;
+
+  int add(rbd_pool_stat_option_t option, uint64_t* opt_val);
+
+private:
+  friend class RBD;
+
+  rbd_pool_stats_t pool_stats;
 };
 
 class CEPH_RBD_API UpdateWatchCtx {
