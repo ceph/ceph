@@ -61,6 +61,7 @@ Current CLT members are:
  * Haomai Wang <haomai@xsky.com>
  * Lenz Grimmer <lgrimmer@suse.com>
  * Sage Weil <sage@redhat.com>
+ * Sebastian Wagner <swagner@suse.com>
  * Xie Xingguo <xie.xingguo@zte.com.cn>
  * Yehuda Sadeh <yehuda@redhat.com>
  * Zack Cerza <zcerza@redhat.com>
