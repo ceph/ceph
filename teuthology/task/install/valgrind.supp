@@ -562,3 +562,12 @@
   fun:*boost*detail*set_tss_data*
   ...
 }
+
+{
+  ignore *all* ceph-mgr python crap.  this is overkill, but better than nothing
+  Memcheck:Leak
+  match-leak-kinds: all
+  ...
+  fun:Py*
+  ...
+}
