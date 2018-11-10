@@ -2338,7 +2338,7 @@ void RGWGetLC_ObjStore_S3::send_response()
   if (op_ret < 0)
     return;
 
-  config.dump_xml(s->formatter);
+  encode_xml("LifecycleConfiguration", XMLNS_AWS_S3, config, s->formatter);
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
@@ -2531,7 +2531,7 @@ public:
     if (!field)
       return 0;
 
-    string& s = field->get_data();
+    auto& s = field->get_data();
 
     if (stringcasecmp(s, "Requester") == 0) {
       *requester_pays = true;

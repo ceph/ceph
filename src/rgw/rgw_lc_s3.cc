@@ -44,14 +44,19 @@ void LCExpiration_S3::decode_xml(XMLObj *obj)
   string dm;
   bool has_dm = RGWXMLDecoder::decode_xml("ExpiredObjectDeleteMarker", dm, obj);
 
-  if ((!has_days && !has_dm && !has_date) || (has_days && has_dm) 
-      || (has_days && has_date) || (has_dm && has_date)) {
+  int num = !!has_days + !!has_date + !!has_dm;
+
+  if (num != 1) {
     throw RGWXMLDecoder::err("bad Expiration section");
   }
 
   if (has_date && !check_date(date)) {
     //We need return xml error according to S3
     throw RGWXMLDecoder::err("bad date in Date section");
+  }
+
+  if (has_dm) {
+    dm_expiration = (dm == "true");
   }
 }
 
@@ -77,12 +82,25 @@ void LCMPExpiration_S3::dump_xml(Formatter *f) const
 
 void RGWLifecycleConfiguration_S3::decode_xml(XMLObj *obj)
 {
+  if (!cct) {
+    throw RGWXMLDecoder::err("ERROR: RGWLifecycleConfiguration_S3 can't be decoded without cct initialized");
+  }
   vector<LCRule_S3> rules;
 
   RGWXMLDecoder::decode_xml("Rule", rules, obj, true);
 
   for (auto& rule : rules) {
-    add_rule(&rule);
+    if (rule.get_id().empty()) {
+      string id;
+
+      // S3 generates a 48 bit random ID, maybe we could generate shorter IDs
+      static constexpr auto LC_ID_LENGTH = 48;
+
+      gen_rand_alphanumeric_lower(cct, &id, LC_ID_LENGTH);
+      rule.set_id(id);
+    }
+
+    add_rule(rule);
   }
 
   if (cct->_conf->rgw_lc_max_rules < rule_map.size()) {
@@ -192,12 +210,7 @@ void LCRule_S3::decode_xml(XMLObj *obj)
   status.clear();
   dm_expiration = false;
 
-  // S3 generates a 48 bit random ID, maybe we could generate shorter IDs
-  static constexpr auto LC_ID_LENGTH = 48;
-
-  if (!RGWXMLDecoder::decode_xml("ID", id, obj)) {
-    gen_rand_alphanumeric_lower(cct, &id, LC_ID_LENGTH);
-  }
+  RGWXMLDecoder::decode_xml("ID", id, obj);
 
   LCFilter_S3 filter_s3;
   if (!RGWXMLDecoder::decode_xml("Filter", filter_s3, obj)) {
@@ -222,10 +235,9 @@ void LCRule_S3::decode_xml(XMLObj *obj)
     throw RGWXMLDecoder::err("bad Status in Filter");
   }
 
-
   LCExpiration_S3 s3_expiration;
-  LCExpiration_S3 s3_noncur_expiration;
-  LCExpiration_S3 s3_mp_expiration;
+  LCNoncurExpiration_S3 s3_noncur_expiration;
+  LCMPExpiration_S3 s3_mp_expiration;
   LCFilter_S3 s3_filter;
 
   bool has_expiration = RGWXMLDecoder::decode_xml("Expiration", s3_expiration, obj);
@@ -261,12 +273,12 @@ void LCRule_S3::decode_xml(XMLObj *obj)
     mp_expiration = s3_mp_expiration;
   }
   for (auto& t : transitions) {
-    if (!add_transition(&t)) {
+    if (!add_transition(t)) {
       throw RGWXMLDecoder::err("Failed to add transition");
     }
   }
   for (auto& t : noncur_transitions) {
-    if (!add_noncur_transition(&t)) {
+    if (!add_noncur_transition(t)) {
       throw RGWXMLDecoder::err("Failed to add non-current version transition");
     }
   }
@@ -314,7 +326,7 @@ int RGWLifecycleConfiguration_S3::rebuild(RGWRados *store, RGWLifecycleConfigura
   multimap<string, LCRule>::iterator iter;
   for (iter = rule_map.begin(); iter != rule_map.end(); ++iter) {
     LCRule& src_rule = iter->second;
-    ret = dest.check_and_add_rule(&src_rule);
+    ret = dest.check_and_add_rule(src_rule);
     if (ret < 0)
       return ret;
   }

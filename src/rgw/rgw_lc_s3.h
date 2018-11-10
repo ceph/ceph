@@ -81,18 +81,11 @@ public:
 
 class LCRule_S3 : public LCRule
 {
-private:
-  CephContext *cct;
 public:
-  LCRule_S3(): cct(nullptr) {}
-  explicit LCRule_S3(CephContext *_cct): cct(_cct) {}
+  LCRule_S3() {}
 
   void dump_xml(Formatter *f) const;
   void decode_xml(XMLObj *obj);
-
-  void set_ctx(CephContext *ctx) {
-    cct = ctx;
-  }
 };
 
 class RGWLifecycleConfiguration_S3 : public RGWLifecycleConfiguration

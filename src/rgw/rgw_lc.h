@@ -232,16 +232,15 @@ public:
   LCRule(){};
   ~LCRule(){};
 
-  bool get_id(string& _id) {
-      _id = id;
-      return true;
+  const string& get_id() const {
+      return id;
   }
 
-  string& get_status() {
+  const string& get_status() const {
       return status;
   }
 
-  bool is_enabled() {
+  bool is_enabled() const {
     return status == "Enabled";
   }
 
@@ -249,35 +248,35 @@ public:
     status = (flag ? "Enabled" : "Disabled");
   }
 
-  string& get_prefix() {
+  const string& get_prefix() const {
       return prefix;
   }
 
-  LCFilter& get_filter() {
+  const LCFilter& get_filter() const {
     return filter;
   }
 
-  LCExpiration& get_expiration() {
+  const LCExpiration& get_expiration() const {
     return expiration;
   }
 
-  LCExpiration& get_noncur_expiration() {
+  const LCExpiration& get_noncur_expiration() const {
     return noncur_expiration;
   }
 
-  LCExpiration& get_mp_expiration() {
+  const LCExpiration& get_mp_expiration() const {
     return mp_expiration;
   }
 
-  bool get_dm_expiration() {
+  bool get_dm_expiration() const {
     return dm_expiration;
   }
 
-  map<string, LCTransition>& get_transitions() {
+  const map<string, LCTransition>& get_transitions() const {
     return transitions;
   }
 
-  map<string, LCTransition>& get_noncur_transitions() {
+  const map<string, LCTransition>& get_noncur_transitions() const {
     return noncur_transitions;
   }
 
@@ -309,17 +308,17 @@ public:
     dm_expiration = _dm_expiration;
   }
 
-  bool add_transition(LCTransition* _transition) {
-    auto ret = transitions.emplace(_transition->get_storage_class(), *_transition);
+  bool add_transition(const LCTransition& _transition) {
+    auto ret = transitions.emplace(_transition.get_storage_class(), _transition);
     return ret.second;
   }
 
-  bool add_noncur_transition(LCTransition* _noncur_transition) {
-    auto ret = noncur_transitions.emplace(_noncur_transition->get_storage_class(), *_noncur_transition);
+  bool add_noncur_transition(const LCTransition& _noncur_transition) {
+    auto ret = noncur_transitions.emplace(_noncur_transition.get_storage_class(), _noncur_transition);
     return ret.second;
   }
 
-  bool valid();
+  bool valid() const;
   
   void encode(bufferlist& bl) const {
      ENCODE_START(6, 1, bl);
@@ -394,7 +393,7 @@ protected:
   CephContext *cct;
   map<string, lc_op> prefix_map;
   multimap<string, LCRule> rule_map;
-  bool _add_rule(LCRule *rule);
+  bool _add_rule(const LCRule& rule);
   bool has_same_action(const lc_op& first, const lc_op& second);
 public:
   explicit RGWLifecycleConfiguration(CephContext *_cct) : cct(_cct) {}
@@ -419,16 +418,16 @@ public:
     multimap<string, LCRule>::iterator iter;
     for (iter = rule_map.begin(); iter != rule_map.end(); ++iter) {
       LCRule& rule = iter->second;
-      _add_rule(&rule);
+      _add_rule(rule);
     }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
   static void generate_test_instances(list<RGWLifecycleConfiguration*>& o);
 
-  void add_rule(LCRule* rule);
+  void add_rule(const LCRule& rule);
 
-  int check_and_add_rule(LCRule* rule);
+  int check_and_add_rule(const LCRule& rule);
 
   bool valid();
 
