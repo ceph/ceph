@@ -52,7 +52,7 @@ class SaltManager(object):
                 "salt_manager: failed to {} {}.service!"
                 ).format(subcommand, service))
             remote.run(args=[
-                'sudo', 'systemctl', 'status', '--full', '--lines=50',
+                'sudo', 'systemctl', 'status', '--full', '--lines=100',
                 '{}.service'.format(service), run.Raw('||'), 'true'])
             raise
 
@@ -135,7 +135,7 @@ class SaltManager(object):
 
     def check_salt_daemons(self):
         self.master_remote.run(args=['sudo', 'salt-key', '-L'])
-        base_cmd = 'sudo systemctl status --full {} {}.service'
+        base_cmd = 'sudo systemctl status --full --lines={} {}.service'
         try:
             self.master_remote.run(args=base_cmd.format('0', 'salt-master'))
         except CommandFailedError:

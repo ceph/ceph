@@ -979,7 +979,7 @@ class Orch(DeepSea):
             ])
 
     def __check_salt_api_service(self):
-        base_cmd = 'sudo systemctl status --full {} {}.service'
+        base_cmd = 'sudo systemctl status --full --lines={} {}.service'
         try:
             self.master_remote.run(args=base_cmd.format('0', 'salt-api'))
         except CommandFailedError:
