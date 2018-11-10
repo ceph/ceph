@@ -564,6 +564,8 @@ class DeepSea(Task):
         if not log_spec:
             log_spec = "all nodes reboot now"
         cmd_str = "salt \\* cmd.run reboot"
+        if self.quiet_salt:
+            cmd_str += " 2> /dev/null"
         remote_exec(
             self.master_remote,
             cmd_str,
