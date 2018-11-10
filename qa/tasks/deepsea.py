@@ -56,7 +56,7 @@ def remote_exec(remote, cmd_str, log_spec, quiet=True, rerun=False, tries=0):
     #     cmd_args += [run.Raw('2>'), "/dev/null"]
     already_rebooted_at_least_once = False
     if tries:
-        remote.sh("uptime")
+        remote.run(args="uptime")
         log.info("Running command ->{}<- on {}. This might cause the machine to reboot!"
                  .format(cmd_str, remote.hostname))
     with safe_while(sleep=60,
@@ -66,17 +66,16 @@ def remote_exec(remote, cmd_str, log_spec, quiet=True, rerun=False, tries=0):
             try:
                 if already_rebooted_at_least_once:
                     if not rerun:
-                        log.info("Back from reboot")
-                        remote.sh("uptime")
+                        remote.run(args="echo Back from reboot ; uptime")
                         break
-                remote.sh(cmd_str)
+                remote.run(args=cmd_str)
                 break
             except CommandFailedError:
                 log.error(anchored(
                     "{} failed. ".format(log_spec)
                     + "Here comes journalctl!"
                 ))
-                remote.sh("sudo journalctl --all")
+                remote.run(args="sudo journalctl --all")
                 raise
             except ConnectionLostError:
                 already_rebooted_at_least_once = True
@@ -95,7 +94,7 @@ def remote_run_script_as_root(remote, path, data, args=None):
     cmd = 'sudo bash {}'.format(path)
     if args:
         cmd += ' ' + ' '.join(args)
-    remote.sh(label=path, args=cmd)
+    remote.run(label=path, args=cmd)
 
 
 class DeepSea(Task):

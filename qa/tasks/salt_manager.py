@@ -17,7 +17,6 @@ Third, enjoy the SaltManager goodness - e.g.:
 import logging
 import re
 
-from cStringIO import StringIO
 from teuthology.contextutil import safe_while
 from teuthology.exceptions import CommandFailedError
 from teuthology.orchestra import run
@@ -80,12 +79,8 @@ class SaltManager(object):
         with safe_while(sleep=15, tries=50,
                         action=ping_cmd) as proceed:
             while proceed():
-                output = StringIO()
-                self.master_remote.run(args=ping_cmd, stdout=output)
-                responded = len(re.findall('  True', output.getvalue()))
-                output.close()
-                log.info("{} of {} minions responded"
-                         .format(responded, expected))
+                responded = len(re.findall('  True', self.master_remote.sh(ping_cmd)))
+                log.info("{} of {} minions responded".format(responded, expected))
                 if (expected == responded):
                     return None
 
@@ -112,7 +107,7 @@ class SaltManager(object):
 
     def all_minions_zypper_ps_requires_reboot(self):
         number_of_minions = len(self.ctx.cluster.remotes)
-        salt_cmd = "sudo salt '*' cmd.run 'zypper ps -s' 2>/dev/null"
+        salt_cmd = "sudo salt \\* cmd.run \'zypper ps -s\' 2>/dev/null"
         number_with_no_processes = len(
             re.findall('No processes using deleted files found',
                        self.master_remote.sh(salt_cmd))
@@ -259,10 +254,7 @@ class SaltManager(object):
         with safe_while(sleep=15, tries=10,
                         action=cmd) as proceed:
             while proceed():
-                no_response = len(
-                    re.findall('Minion did not return',
-                               self.master_remote.sh(cmd))
-                    )
+                no_response = len(re.findall('Minion did not return', self.master_remote.sh(cmd)))
                 if no_response:
                     log.info("Not all minions responded. Retrying.")
                 else:
