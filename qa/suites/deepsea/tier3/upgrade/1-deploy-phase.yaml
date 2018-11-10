@@ -1,17 +1,1 @@
-tasks:
-        - deepsea:
-                alternative_defaults:
-                  - stage_prep_master: default-update-reboot
-                  - stage_prep_minion: default-update-reboot
-        - deepsea.orch:
-                stage: prep
-                allow_reboot: True
-        - deepsea.orch:
-                stage: 1
-        - deepsea.policy:
-                profile: default
-        - deepsea.orch:
-                stage: 2
-        - deepsea.ceph_conf:
-        - deepsea.orch:
-                stage: 3
+.qa/deepsea/deepsea.yaml
