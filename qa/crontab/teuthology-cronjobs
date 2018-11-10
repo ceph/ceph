@@ -171,7 +171,7 @@ DISTRO_MIMIC="ubuntu_16.04,ubuntu_18.04,centos_7.4,rhel_7.5"
 #********** nautilus branch START
 
 #change to `nautilus` from master when it's ready
-30 02 * * 2,4,5,7  CEPH_BRANCH=master; MACHINE_NAME=smithi;/home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -m $MACHINE_NAME -s upgrade/mimic-x -k distro -e $CEPH_QA_EMAIL
+30 02 * * 2,4,5,7  CEPH_BRANCH=master; MACHINE_NAME=smithi;/home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -m $MACHINE_NAME -s upgrade/mimic-x -k distro -e $CEPH_QA_EMAIL -n 7
 #********** nautilus branch END
 
 ### upgrade runs on old releases
