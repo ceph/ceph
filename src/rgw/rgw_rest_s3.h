@@ -298,7 +298,7 @@ public:
 
 class RGWGetLC_ObjStore_S3 : public RGWGetLC_ObjStore {
 protected:
-  RGWLifecycleConfiguration_S3  config;
+  RGWLifecycleConfiguration_S3 config;
 public:
   RGWGetLC_ObjStore_S3() {}
   ~RGWGetLC_ObjStore_S3() override {}

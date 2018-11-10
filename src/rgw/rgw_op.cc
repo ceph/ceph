@@ -5118,7 +5118,7 @@ void RGWPutLC::execute()
 {
   bufferlist bl;
   
-  RGWLifecycleConfiguration_S3 config;
+  RGWLifecycleConfiguration_S3 config(s->cct);
   RGWXMLParser parser;
   RGWLifecycleConfiguration_S3 new_config(s->cct);
 
@@ -5177,7 +5177,7 @@ void RGWPutLC::execute()
     RGWXMLDecoder::decode_xml("LifecycleConfiguration", config, &parser);
   } catch (RGWXMLDecoder::err& err) {
     ldpp_dout(this, 5) << "Bad lifecycle configuration: " << err << dendl;
-    op_ret = -EINVAL;
+    op_ret = -ERR_MALFORMED_XML;
     return;
   }
 

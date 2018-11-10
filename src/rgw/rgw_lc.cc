@@ -31,7 +31,7 @@ const char* LC_STATUS[] = {
 
 using namespace librados;
 
-bool LCRule::valid()
+bool LCRule::valid() const
 {
   if (id.length() > MAX_ID_LEN) {
     return false;
@@ -76,31 +76,30 @@ void LCRule::init_simple_days_rule(std::string_view _id, std::string_view _prefi
   set_enabled(true);
 }
 
-void RGWLifecycleConfiguration::add_rule(LCRule *rule)
+void RGWLifecycleConfiguration::add_rule(const LCRule& rule)
 {
-  string id;
-  rule->get_id(id); // note that this will return false for groups, but that's ok, we won't search groups
-  rule_map.insert(pair<string, LCRule>(id, *rule));
+  auto& id = rule.get_id(); // note that this will return false for groups, but that's ok, we won't search groups
+  rule_map.insert(pair<string, LCRule>(id, rule));
 }
 
-bool RGWLifecycleConfiguration::_add_rule(LCRule *rule)
+bool RGWLifecycleConfiguration::_add_rule(const LCRule& rule)
 {
   lc_op op;
-  op.status = rule->is_enabled();
-  if (rule->get_expiration().has_days()) {
-    op.expiration = rule->get_expiration().get_days();
+  op.status = rule.is_enabled();
+  if (rule.get_expiration().has_days()) {
+    op.expiration = rule.get_expiration().get_days();
   }
-  if (rule->get_expiration().has_date()) {
-    op.expiration_date = ceph::from_iso_8601(rule->get_expiration().get_date());
+  if (rule.get_expiration().has_date()) {
+    op.expiration_date = ceph::from_iso_8601(rule.get_expiration().get_date());
   }
-  if (rule->get_noncur_expiration().has_days()) {
-    op.noncur_expiration = rule->get_noncur_expiration().get_days();
+  if (rule.get_noncur_expiration().has_days()) {
+    op.noncur_expiration = rule.get_noncur_expiration().get_days();
   }
-  if (rule->get_mp_expiration().has_days()) {
-    op.mp_expiration = rule->get_mp_expiration().get_days();
+  if (rule.get_mp_expiration().has_days()) {
+    op.mp_expiration = rule.get_mp_expiration().get_days();
   }
-  op.dm_expiration = rule->get_dm_expiration();
-  for (const auto &elem : rule->get_transitions()) {
+  op.dm_expiration = rule.get_dm_expiration();
+  for (const auto &elem : rule.get_transitions()) {
     transition_action action;
     if (elem.second.has_days()) {
       action.days = elem.second.get_days();
@@ -110,7 +109,7 @@ bool RGWLifecycleConfiguration::_add_rule(LCRule *rule)
     action.storage_class = elem.first;
     op.transitions.emplace(elem.first, std::move(action));
   }
-  for (const auto &elem : rule->get_noncur_transitions()) {
+  for (const auto &elem : rule.get_noncur_transitions()) {
     transition_action action;
     action.days = elem.second.get_days();
     action.date = ceph::from_iso_8601(elem.second.get_date());
@@ -118,30 +117,29 @@ bool RGWLifecycleConfiguration::_add_rule(LCRule *rule)
     op.noncur_transitions.emplace(elem.first, std::move(action));
   }
   std::string prefix;
-  if (rule->get_filter().has_prefix()){
-    prefix = rule->get_filter().get_prefix();
+  if (rule.get_filter().has_prefix()){
+    prefix = rule.get_filter().get_prefix();
   } else {
-    prefix = rule->get_prefix();
+    prefix = rule.get_prefix();
   }
 
-  if (rule->get_filter().has_tags()){
-    op.obj_tags = rule->get_filter().get_tags();
+  if (rule.get_filter().has_tags()){
+    op.obj_tags = rule.get_filter().get_tags();
   }
   auto ret = prefix_map.emplace(std::move(prefix), std::move(op));
   return ret.second;
 }
 
-int RGWLifecycleConfiguration::check_and_add_rule(LCRule *rule)
+int RGWLifecycleConfiguration::check_and_add_rule(const LCRule& rule)
 {
-  if (!rule->valid()) {
+  if (!rule.valid()) {
     return -EINVAL;
   }
-  string id;
-  rule->get_id(id);
+  auto& id = rule.get_id();
   if (rule_map.find(id) != rule_map.end()) {  //id shouldn't be the same 
     return -EINVAL;
   }
-  rule_map.insert(pair<string, LCRule>(id, *rule));
+  rule_map.insert(pair<string, LCRule>(id, rule));
 
   if (!_add_rule(rule)) {
     return -ERR_INVALID_REQUEST;
