@@ -51,15 +51,15 @@ Current CLT members are:
  * Ahbishek Lekshmanan <abhishek@suse.com>
  * Alfredo Deza <adeza@redhat.com>
  * Gregory Farnum <gfarnum@redhat.com>
+ * Haomai Wang <haomai@xsky.com>
  * Jason Dillaman <dillaman@redhat.com>
  * Josh Durgin <jdurgin@redhat.com>
  * Joao Eduardo Luis <joao@suse.de>
- * John Spray <john.spray@redhat.com>
+ * Ken Dreyer <kdreyer@redhat.com>
+ * Lenz Grimmer <lgrimmer@suse.com>
  * Matt Benjamin <mbenjami@redhat.com>
  * Myoungwon Oh <omwmw@sk.com>
- * Ken Dreyer <kdreyer@redhat.com>
- * Haomai Wang <haomai@xsky.com>
- * Lenz Grimmer <lgrimmer@suse.com>
+ * Neha Ojha <nojha@redhat.com>
  * Sage Weil <sage@redhat.com>
  * Sebastian Wagner <swagner@suse.com>
  * Xie Xingguo <xie.xingguo@zte.com.cn>
