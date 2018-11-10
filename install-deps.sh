@@ -291,6 +291,9 @@ function activate_virtualenv() {
         # because CentOS 7 has a buggy old version (v1.10.1)
         # https://github.com/pypa/virtualenv/issues/463
         virtualenv ${env_dir}_tmp
+        # install setuptools before upgrading virtualenv, as the latter needs
+        # a recent setuptools for setup commands like `extras_require`.
+        ${env_dir}_tmp/bin/pip install --upgrade setuptools
         ${env_dir}_tmp/bin/pip install --upgrade virtualenv
         ${env_dir}_tmp/bin/virtualenv --python $interpreter $env_dir
         rm -rf ${env_dir}_tmp
