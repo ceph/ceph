@@ -830,9 +830,8 @@ class CreatePools(DeepSea):
         self.args = list(set(self.args))
 
     def begin(self):
-        self.log.debug("beginning of begin method")
+        self.log.info(anchored("pre-creating pools"))
         self.scripts.create_all_pools_at_once(self.args)
-        self.log.debug("end of begin method")
 
     def teardown(self):
         # self.log.debug("beginning of teardown method")
