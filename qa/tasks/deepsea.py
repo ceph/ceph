@@ -809,33 +809,28 @@ class CreatePools(DeepSea):
     def __init__(self, ctx, config):
         deepsea_ctx['logger_obj'] = log.getChild('create_pools')
         super(CreatePools, self).__init__(ctx, config)
-        self.args = []
-        if isinstance(self.config, list):
-            self.args = self.config
-        elif isinstance(self.config, dict):
-            self.config = {
-                "mds": self.config.get("mds", False),
-                "openstack": self.config.get("openstack", False),
-                "rbd": self.config.get("rbd", False),
-                }
-        else:
-            self.config = {
-                "openstack": False,
-                "rbd": False
-                }
-        if not self.args:
-            for key in self.config:
-                if self.config[key] is None:
-                    self.config[key] = True
-                if self.config[key]:
-                    self.args.append(key)
-        if 'mds' in self.role_lookup_table:
-            self.args.append('mds')
-        self.args = list(set(self.args))
+        if not isinstance(self.config, dict):
+            raise ConfigError(
+                "(create_pools subtask) config must be a dictionary"
+                )
+        self.config = {
+            "mds": self.config.get("mds", False),
+            "openstack": self.config.get("openstack", False),
+            "rbd": self.config.get("rbd", False),
+            }
 
     def begin(self):
         self.log.info(anchored("pre-creating pools"))
-        self.scripts.create_all_pools_at_once(self.args)
+        args = []
+        for key in self.config:
+            if self.config[key] is None:
+                self.config[key] = True
+            if self.config[key]:
+                args.append(key)
+        if 'mds' in self.role_lookup_table:
+            args.append('mds')
+        args = list(set(args))
+        self.scripts.create_all_pools_at_once(args)
 
     def teardown(self):
         # self.log.debug("beginning of teardown method")
