@@ -188,6 +188,7 @@ class DeepSea(Task):
         self.sm = deepsea_ctx['salt_manager_instance']
         self.storage_profile = deepsea_ctx['storage_profile']
         self.storage_nodes = deepsea_ctx['storage_nodes']
+        self.storage_only_nodes = deepsea_ctx['storage_only_nodes']
         # self.log.debug("ctx.config {}".format(ctx.config))
         # self.log.debug("deepsea context: {}".format(deepsea_ctx))
 
@@ -393,13 +394,16 @@ class DeepSea(Task):
         """
         # initialization phase
         cluster_roles = ['mon', 'mgr', 'osd', 'mds']
+        non_storage_cluster_roles = ['mon', 'mgr', 'mds']
         gateway_roles = ['rgw', 'igw', 'ganesha']
         d_ctx = deepsea_ctx
         roles = d_ctx['roles']
         nodes = []
         cluster_nodes = []
+        non_storage_cluster_nodes = []
         gateway_nodes = []
         storage_nodes = []
+        storage_only_nodes = []
         client_only_nodes = []
         remotes = {}
         role_types = []
@@ -436,6 +440,8 @@ class DeepSea(Task):
                     cluster_nodes += [remote.hostname]
                 if role_type in gateway_roles:
                     gateway_nodes += [remote.hostname]
+                if role_type in non_storage_cluster_roles:
+                    non_storage_cluster_nodes += [remote.hostname]
                 if role_type == 'osd':
                     storage_nodes += [remote.hostname]
                 if role_type not in role_types[idx]:
@@ -444,6 +450,11 @@ class DeepSea(Task):
         cluster_nodes = list(set(cluster_nodes))
         gateway_nodes = list(set(gateway_nodes))
         storage_nodes = list(set(storage_nodes))
+        storage_only_nodes = []
+        for node in storage_nodes:
+            if node not in non_storage_cluster_nodes:
+                if node not in gateway_nodes:
+                    storage_only_nodes += [node]
         client_only_nodes = list(
             set(nodes).difference(set(cluster_nodes).union(set(gateway_nodes)))
             )
@@ -451,15 +462,16 @@ class DeepSea(Task):
             "client_only_nodes is ->{}<-".format(client_only_nodes)
             )
         assign_vars = [
-            'nodes',
+            'client_only_nodes',
             'cluster_nodes',
             'gateway_nodes',
-            'storage_nodes',
-            'client_only_nodes',
-            'remotes',
-            'role_types',
-            'role_lookup_table',
+            'nodes',
             'remote_lookup_table',
+            'remotes',
+            'role_lookup_table',
+            'role_types',
+            'storage_nodes',
+            'storage_only_nodes',
             ]
         for var in assign_vars:
             exec("deepsea_ctx['{var}'] = {var}".format(var=var))
@@ -1096,7 +1108,7 @@ class Orch(DeepSea):
                 'timeout 60m deepsea '
                 '--log-file=/var/log/salt/deepsea.log '
                 '--log-level=debug '
-                'stage run {} --simple-output'
+                'salt-run state.orch {} --simple-output'
                 ).format(orch_spec)
         else:
             cmd_str = (
@@ -1396,10 +1408,7 @@ role-admin/cluster/*.sls
 
     def _first_storage_only_node(self):
         for hostname in self.nodes:
-            storage = hostname in self.storage_nodes
-            cluster = hostname in self.cluster_nodes
-            gateway = hostname in self.gateway_nodes
-            if storage and not cluster and not gateway:
+            if hostname in self.storage_only_nodes:
                 return hostname
         return ''
 
@@ -1668,6 +1677,7 @@ cp /srv/salt/ceph/configuration/files/rgw-ssl.conf \
     /srv/salt/ceph/configuration/files/ceph.conf.d/rgw.conf
 """,
         "proposals_remove_storage_only_node": """# remove first storage-only node from proposals
+set -ex
 PROPOSALSDIR=$1
 STORAGE_PROFILE=$2
 NODE_TO_DELETE=$3
@@ -1684,6 +1694,51 @@ mv $basediryml/${NODE_TO_DELETE}.yml $basedirsls/${NODE_TO_DELETE}.yml-DISABLED
 echo "After"
 ls -1 $PROPOSALSDIR/profile-$STORAGE_PROFILE/cluster/
 ls -1 $PROPOSALSDIR/profile-$STORAGE_PROFILE/stack/default/ceph/minions/
+""",
+        "remove_storage_only_node": """# actually remove the node
+set -ex
+CLI=$1
+function number_of_hosts_in_ceph_osd_tree {
+    ceph osd tree -f json-pretty | jq '[.nodes[] | select(.type == "host")] | length'
+}
+#
+function number_of_osds_in_ceph_osd_tree {
+    ceph osd tree -f json-pretty | jq '[.nodes[] | select(.type == "osd")] | length'
+}
+#
+function run_stage {
+    local stage_num=$1
+    if [ "$CLI" ] ; then
+        timeout 60m deepsea \
+            --log-file=/var/log/salt/deepsea.log \
+            --log-level=debug \
+            salt-run state.orch ceph.stage.$stage_num \
+            --simple-output
+    else
+        timeout 60m salt-run \
+            state.orch ceph.stage.$stage_num \
+            2> /dev/null
+    fi
+}
+#
+STORAGE_NODES_BEFORE=$(number_of_hosts_in_ceph_osd_tree)
+OSDS_BEFORE=$(number_of_osds_in_ceph_osd_tree)
+test "$STORAGE_NODES_BEFORE"
+test "$OSDS_BEFORE"
+test "$STORAGE_NODES_BEFORE" -gt 1
+test "$OSDS_BEFORE" -gt 0
+#
+run_stage 2
+ceph -s
+run_stage 5
+ceph -s
+#
+STORAGE_NODES_AFTER=$(number_of_hosts_in_ceph_osd_tree)
+OSDS_AFTER=$(number_of_osds_in_ceph_osd_tree)
+test "$STORAGE_NODES_BEFORE"
+test "$OSDS_BEFORE"
+test "$STORAGE_NODES_AFTER" -eq "$((STORAGE_NODES_BEFORE - 1))"
+test "$OSDS_AFTER" -lt "$OSDS_BEFORE"
 """,
         }
 
@@ -1721,6 +1776,18 @@ ls -1 $PROPOSALSDIR/profile-$STORAGE_PROFILE/stack/default/ceph/minions/
             'proposals_remove_storage_only_node.sh',
             self.script_dict["proposals_remove_storage_only_node"],
             args=[proposals_dir, self.storage_profile, hostname],
+            )
+
+    def remove_storage_only_node(self, *args):
+        if self.deepsea_cli:
+            args = []
+        else:
+            args = ['--cli']
+        remote_run_script_as_root(
+            self.master_remote,
+            'remove_storage_only_node.sh',
+            self.script_dict["remove_storage_only_node"],
+            args=args,
             )
 
     def rgw_init(self, *args):

@@ -1,5 +1,3 @@
 tasks:
-- deepsea.orch:
-        stage: 2
-- deepsea.orch:
-        stage: 5
+        - deepsea.script:
+                remove_storage_only_node:
