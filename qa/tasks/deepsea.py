@@ -884,6 +884,7 @@ class Dummy(DeepSea):
         deepsea_ctx['logger_obj'] = log.getChild('dummy')
         self.name = 'deepsea.dummy'
         super(Dummy, self).__init__(ctx, config)
+        self.log.debug("munged config is {}".format(self.config))
 
     def begin(self):
         self.log.debug("beginning of begin method")
