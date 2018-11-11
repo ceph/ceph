@@ -5,6 +5,7 @@ Linter:
     flake8 --max-line-length=100
 """
 import logging
+import yaml
 
 from salt_manager import SaltManager
 from util import (
@@ -128,6 +129,8 @@ class DeepSea(Task):
             teuthology  populate DeepSea storage profile for 1:1 mapping
                         between teuthology osd roles and actual osds
                         deployed (the default, but not yet implemented)
+            (dict)      a dictionary is assumed to be a custom storage
+                        profile (yaml blob) to be passed verbatim to DeepSea
 
     This task also understands the following config keys that affect
     the behavior of just this one task (no effect on subtasks):
@@ -535,10 +538,6 @@ class DeepSea(Task):
                 )
             deepsea_ctx['log_anchor'] = ''
         deepsea_ctx['storage_profile'] = self.config.get("storage_profile", "teuthology")
-        if not isinstance(deepsea_ctx['storage_profile'], str):
-            raise ConfigError(
-                "(deepsea task) storage_profile config param must be a string"
-                )
         deepsea_ctx['quiet_salt'] = self.config.get('quiet_salt', True)
         deepsea_ctx['salt_manager_instance'] = SaltManager(self.ctx)
         deepsea_ctx['master_remote'] = (
@@ -1304,6 +1303,15 @@ class Policy(DeepSea):
         if len(role_dict) == 0:
             raise ConfigError("(policy subtask) {}".format(no_osd_roles))
         osd_remotes = list(set(role_dict.values()))
+        if profile == 'custom':
+            fpath = "/home/ubuntu/custom_profile"
+            sudo_write_file(
+                self.master_remote,
+                fpath,
+                yaml.dump(self.storage_profile),
+                perms="0644",
+                )
+            self.scripts.custom_storage_profile(fpath)
         for osd_remote in osd_remotes:
             self.log.debug(
                 "{} has one or more osd roles".format(osd_remote)
@@ -1337,16 +1345,23 @@ role-admin/cluster/*.sls
         """
         Add storage profile to policy.cfg
         """
-        if self.storage_profile == 'teuthology':
-            raise ConfigError(
-                "(policy subtask) \"teuthology\" storage profile not implemented yet"
-                )
-        elif self.storage_profile == 'default':
-            self.__build_profile_x('default')
+        if isinstance(self.storage_profile, str):
+            if self.storage_profile == 'teuthology':
+                raise ConfigError(
+                    "(policy subtask) \"teuthology\" storage profile not implemented yet"
+                    )
+            elif self.storage_profile == 'default':
+                self.__build_profile_x('default')
+            else:
+                ConfigError(
+                    "(policy subtask) unknown storage profile ->{}<-"
+                    .format(self.storage_profile)
+                    )
+        elif isinstance(self.storage_profile, dict):
+            self.__build_profile_x('custom')
         else:
-            ConfigError(
-                "(policy subtask) unknown storage profile ->{}<-"
-                .format(self.storage_profile)
+            raise ConfigError(
+                "(deepsea task) storage_profile config param must be a string or a dict"
                 )
 
     def _build_x(self, role_type, required=False):
@@ -1745,6 +1760,40 @@ test "$OSDS_BEFORE"
 test "$STORAGE_NODES_AFTER" -eq "$((STORAGE_NODES_BEFORE - 1))"
 test "$OSDS_AFTER" -lt "$OSDS_BEFORE"
 """,
+        "custom_storage_profile": """# custom storage profile
+set -ex
+PROPOSALSDIR=$1
+SOURCEFILE=$2
+#
+function _initialize_minion_configs_array {
+    local DIR=$1
+
+    shopt -s nullglob
+    pushd $DIR >/dev/null
+    MINION_CONFIGS_ARRAY=(*.yaml *.yml)
+    echo "Made global array containing the following files (from ->$DIR<-):"
+    printf '%s\n' "${MINION_CONFIGS_ARRAY[@]}"
+    popd >/dev/null
+    shopt -u nullglob
+}
+#
+test -f "$SOURCEFILE"
+file $SOURCEFILE
+#
+# prepare new profile, which will be exactly the same as the default
+# profile except the files in stack/default/ceph/minions/ will be
+# overwritten with our chosen OSD configuration
+#
+cp -a $PROPOSALSDIR/profile-default $PROPOSALSDIR/profile-custom
+DESTDIR="$PROPOSALSDIR/profile-custom/stack/default/ceph/minions"
+_initialize_minion_configs_array $DESTDIR
+for DESTFILE in "${MINION_CONFIGS_ARRAY[@]}" ; do
+    cp $SOURCEFILE $DESTDIR/$DESTFILE
+done
+echo "Your custom storage profile $SOURCEFILE has the following contents:"
+cat $DESTDIR/$DESTFILE
+ls -lR $PROPOSALSDIR/profile-custom
+""",
         }
 
     def __init__(self, master_remote, logger):
@@ -1765,6 +1814,15 @@ test "$OSDS_AFTER" -lt "$OSDS_BEFORE"
             'create_all_pools_at_once.sh',
             self.script_dict["create_all_pools_at_once"],
             args=args,
+            )
+
+    def custom_storage_profile(self, *args, **kwargs):
+        sourcefile = args[0]
+        remote_run_script_as_root(
+            self.master_remote,
+            'custom_storage_profile.sh',
+            self.script_dict["custom_storage_profile"],
+            args=[proposals_dir, sourcefile],
             )
 
     def disable_update_in_stage_0(self, *args, **kwargs):
