@@ -874,9 +874,7 @@ class CreatePools(DeepSea):
         self.scripts.create_all_pools_at_once(*args)
 
     def teardown(self):
-        # self.log.debug("beginning of teardown method")
         pass
-        # self.log.debug("end of teardown method")
 
 
 class Dummy(DeepSea):
@@ -935,22 +933,13 @@ class HealthOK(DeepSea):
         self.master_remote.run(args="pwd ; ls -lR health-ok")
         deepsea_ctx['health_ok_copied'] = True
 
-    def setup(self):
-        if 'health_ok_copied' not in deepsea_ctx:
-            self._copy_health_ok()
-            assert deepsea_ctx['health_ok_copied']
-
-    def begin(self):
-        commands = self.config.get('commands', [])
-        if not isinstance(commands, list):
-            raise ConfigError(
-                "(health_ok subtask) commands must be a list of strings"
-                )
+    def _maybe_run_commands(self, commands):
         if not commands:
             self.log.warning(
                 "The health_ok task was run, but no commands were specified. "
                 "Doing nothing."
                 )
+            return None
         for cmd_str in commands:
             if not isinstance(cmd_str, str):
                 raise ConfigError((
@@ -969,10 +958,21 @@ class HealthOK(DeepSea):
                 'sudo', 'bash', '-c', cmd_str,
                 ])
 
+    def setup(self):
+        if 'health_ok_copied' not in deepsea_ctx:
+            self._copy_health_ok()
+            assert deepsea_ctx['health_ok_copied']
+
+    def begin(self):
+        commands = self.config.get('commands', [])
+        if not isinstance(commands, list):
+            raise ConfigError(
+                "(health_ok subtask) commands must be a list of strings"
+                )
+        self._maybe_run_commands(commands)
+
     def teardown(self):
-        # self.log.debug("beginning of teardown method")
         pass
-        # self.log.debug("end of teardown method")
 
 
 class Orch(DeepSea):
@@ -1277,9 +1277,7 @@ class Orch(DeepSea):
         self.log.debug("end of begin method")
 
     def teardown(self):
-        # self.log.debug("beginning of teardown method")
         pass
-        # self.log.debug("end of teardown method")
 
 
 class Policy(DeepSea):
@@ -1475,9 +1473,7 @@ role-admin/cluster/*.sls
             self._dump_profile_ymls()
 
     def teardown(self):
-        # self.log.debug("beginning of teardown method")
         pass
-        # self.log.debug("end of teardown method")
 
 
 class Reboot(DeepSea):
@@ -1495,9 +1491,7 @@ class Reboot(DeepSea):
         self.reboot_the_cluster_now(log_spec=log_spec)
 
     def teardown(self):
-        # self.log.debug("beginning of teardown method")
         pass
-        # self.log.debug("end of teardown method")
 
 
 class Script(DeepSea):
@@ -1553,9 +1547,7 @@ class Script(DeepSea):
             self._run_script(script, args=args)
 
     def teardown(self):
-        # self.log.debug("beginning of teardown method")
         pass
-        # self.log.debug("end of teardown method")
 
 
 class Scripts:
@@ -1922,9 +1914,7 @@ class Validation(DeepSea):
                     )
 
     def teardown(self):
-        # self.log.debug("beginning of teardown method")
         pass
-        # self.log.debug("end of teardown method")
 
 
 task = DeepSea
