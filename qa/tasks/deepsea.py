@@ -29,6 +29,7 @@ from teuthology.contextutil import safe_while
 
 log = logging.getLogger(__name__)
 deepsea_ctx = {}
+proposals_dir = "/srv/pillar/ceph/proposals"
 
 
 def anchored(log_message):
@@ -111,19 +112,27 @@ class DeepSea(Task):
     This task understands the following config keys which apply to
     this task and all its subtasks:
 
+        alternative_defaults: (default: empty)
+                        a dictionary of DeepSea alternative defaults
+                        to be activated via the Salt Pillar
         cli:
-            true        deepsea CLI will be used (default)
+            true        deepsea CLI will be used (the default)
             false       deepsea CLI will not be used
         log_anchor      a string (default: "WWWW: ") which will precede
                         log messages emitted at key points during the
                         deployment
         quiet_salt:
-            true        suppress stderr on salt commands (default)
+            true        suppress stderr on salt commands (the default)
             false       let salt commands spam the log
         rgw_ssl:
             true        use SSL if RGW is deployed
-            false       if RGW is deployed, do not use SSL (default)
-
+            false       if RGW is deployed, do not use SSL (the default)
+        storage_profile:
+            default     if a teuthology osd role is present on a node,
+                        DeepSea will make all available disks into OSDs
+            teuthology  populate DeepSea storage profile for 1:1 mapping
+                        between teuthology osd roles and actual osds
+                        deployed (the default, but not yet implemented)
 
     This task also understands the following config keys that affect
     the behavior of just this one task (no effect on subtasks):
@@ -177,6 +186,7 @@ class DeepSea(Task):
         self.remotes = deepsea_ctx['remotes']
         self.scripts = Scripts(self.master_remote, deepsea_ctx['logger_obj'])
         self.sm = deepsea_ctx['salt_manager_instance']
+        self.storage_profile = deepsea_ctx['storage_profile']
         self.storage_nodes = deepsea_ctx['storage_nodes']
         # self.log.debug("ctx.config {}".format(ctx.config))
         # self.log.debug("deepsea context: {}".format(deepsea_ctx))
@@ -509,8 +519,7 @@ class DeepSea(Task):
         if not isinstance(deepsea_ctx['alternative_defaults'], dict):
             raise ConfigError('(deepsea task) alternative_defaults must be a list')
         deepsea_ctx['cli'] = self.config.get('cli', True)
-        deepsea_ctx['log_anchor'] = self.config.get('log_anchor',
-                                                    self.log_anchor_str)
+        deepsea_ctx['log_anchor'] = self.config.get('log_anchor', self.log_anchor_str)
         if not isinstance(deepsea_ctx['log_anchor'], str):
             self.log.warning(
                 "log_anchor was set to non-string value ->{}<-, "
@@ -518,6 +527,11 @@ class DeepSea(Task):
                 .format(deepsea_ctx['log_anchor'])
                 )
             deepsea_ctx['log_anchor'] = ''
+        deepsea_ctx['storage_profile'] = self.config.get("storage_profile", "teuthology")
+        if not isinstance(deepsea_ctx['storage_profile'], str):
+            raise ConfigError(
+                "(deepsea task) storage_profile config param must be a string"
+                )
         deepsea_ctx['quiet_salt'] = self.config.get('quiet_salt', True)
         deepsea_ctx['salt_manager_instance'] = SaltManager(self.ctx)
         deepsea_ctx['master_remote'] = (
@@ -1251,12 +1265,10 @@ class Orch(DeepSea):
 
 class Policy(DeepSea):
 
-    proposals_dir = "/srv/pillar/ceph/proposals"
-
     def __init__(self, ctx, config):
         deepsea_ctx['logger_obj'] = log.getChild('policy')
         super(Policy, self).__init__(ctx, config)
-        self.profile = self.config.get("profile", "teuthology")
+        self.munge_profile = self.config.get('munge_profile', {})
 
     def __build_profile_x(self, profile):
         self.profile_ymls_to_dump = []
@@ -1285,7 +1297,7 @@ profile-{profile}/cluster/{remote}.sls
                    .format(profile, osd_remote))
             self.policy_cfg += ypp + "\n"
             self.profile_ymls_to_dump.append(
-                "{}/{}".format(self.proposals_dir, ypp))
+                "{}/{}".format(proposals_dir, ypp))
 
     def _build_base(self):
         """
@@ -1303,24 +1315,20 @@ role-master/cluster/{master_minion}.sls
 role-admin/cluster/*.sls
 """.format(master_minion=self.master_remote.hostname)
 
-    def _build_profile(self):
+    def _build_storage_profile(self):
         """
         Add storage profile to policy.cfg
         """
-        if not isinstance(self.profile, str):
+        if self.storage_profile == 'teuthology':
             raise ConfigError(
-                "(policy subtask) profile config param must be a string"
+                "(policy subtask) \"teuthology\" storage profile not implemented yet"
                 )
-        if self.profile == 'teuthology':
-            raise ConfigError(
-                "(policy subtask) \"teuthology\" profile not implemented yet"
-                )
-        elif self.profile == 'default':
+        elif self.storage_profile == 'default':
             self.__build_profile_x('default')
         else:
             ConfigError(
-                "(policy subtask) unknown profile ->{}<-"
-                .format(self.profile)
+                "(policy subtask) unknown storage profile ->{}<-"
+                .format(self.storage_profile)
                 )
 
     def _build_x(self, role_type, required=False):
@@ -1358,7 +1366,7 @@ role-admin/cluster/*.sls
         """
         self.master_remote.run(args=[
             'cat',
-            self.proposals_dir + "/policy.cfg"
+            proposals_dir + "/policy.cfg"
             ])
 
     def _dump_profile_ymls(self):
@@ -1379,12 +1387,21 @@ role-admin/cluster/*.sls
         self.master_remote.run(args=[
             'test',
             '-d',
-            self.proposals_dir,
+            proposals_dir,
             run.Raw(';'),
             'ls',
             '-lR',
-            self.proposals_dir + '/',
+            proposals_dir + '/',
             ])
+
+    def _first_storage_only_node(self):
+        for hostname in self.nodes:
+            storage = hostname in self.storage_nodes
+            cluster = hostname in self.cluster_nodes
+            gateway = hostname in self.gateway_nodes
+            if storage and not cluster and not gateway:
+                return hostname
+        return ''
 
     def _write_policy_cfg(self):
         """
@@ -1392,7 +1409,7 @@ role-admin/cluster/*.sls
         """
         sudo_write_file(
             self.master_remote,
-            self.proposals_dir + "/policy.cfg",
+            proposals_dir + "/policy.cfg",
             self.policy_cfg,
             perms="0644",
             owner="salt",
@@ -1400,28 +1417,43 @@ role-admin/cluster/*.sls
         self.master_remote.run(args=[
             "ls",
             "-l",
-            self.proposals_dir + "/policy.cfg"
+            proposals_dir + "/policy.cfg"
             ])
 
     def begin(self):
         """
         Generate policy.cfg from the results of role introspection
         """
-        self.log.debug("beginning of begin method")
-        self.log.info(anchored("generating policy.cfg"))
-        self._dump_proposals_dir()
-        self._build_base()
-        self._build_x('mon', required=True)
-        self._build_x('mgr', required=True)
-        self._build_x('mds')
-        self._build_x('rgw')
-        self._build_x('igw')
-        self._build_x('ganesha')
-        self._build_profile()
-        self._write_policy_cfg()
-        self._cat_policy_cfg()
-        self._dump_profile_ymls()
-        self.log.debug("end of begin method")
+        if self.munge_profile:
+            for k, v in self.munge_profile.items():
+                if k == 'proposals_remove_storage_only_node':
+                    delete_me = self._first_storage_only_node()
+                    if delete_me:
+                        self.scripts.proposals_remove_storage_only_node(delete_me)
+                    else:
+                        raise ConfigError(
+                            '(policy subtask) proposals_remove_storage_only_node '
+                            'requires a storage-only node, but there is no such'
+                            )
+                else:
+                    raise ConfigError(
+                        "(policy subtask) unrecognized munge_profile directive {}"
+                        .format(k)
+                        )
+        else:
+            self.log.info(anchored("generating policy.cfg"))
+            self._dump_proposals_dir()
+            self._build_base()
+            self._build_x('mon', required=True)
+            self._build_x('mgr', required=True)
+            self._build_x('mds')
+            self._build_x('rgw')
+            self._build_x('igw')
+            self._build_x('ganesha')
+            self._build_storage_profile()
+            self._write_policy_cfg()
+            self._cat_policy_cfg()
+            self._dump_profile_ymls()
 
     def teardown(self):
         # self.log.debug("beginning of teardown method")
@@ -1579,6 +1611,24 @@ cat $GLOBALYML
 cp /srv/salt/ceph/configuration/files/rgw-ssl.conf \
     /srv/salt/ceph/configuration/files/ceph.conf.d/rgw.conf
 """,
+        "proposals_remove_storage_only_node": """# remove first storage-only node from proposals
+PROPOSALSDIR=$1
+STORAGE_PROFILE=$2
+NODE_TO_DELETE=$3
+#
+echo "Before"
+ls -1 $PROPOSALSDIR/profile-$STORAGE_PROFILE/cluster/
+ls -1 $PROPOSALSDIR/profile-$STORAGE_PROFILE/stack/default/ceph/minions/
+#
+basedirsls=$PROPOSALSDIR/profile-$STORAGE_PROFILE/cluster
+basediryml=$PROPOSALSDIR/profile-$STORAGE_PROFILE/stack/default/ceph/minions
+mv $basedirsls/${NODE_TO_DELETE}.sls $basedirsls/${NODE_TO_DELETE}.sls-DISABLED
+mv $basediryml/${NODE_TO_DELETE}.yml $basedirsls/${NODE_TO_DELETE}.yml-DISABLED
+#
+echo "After"
+ls -1 $PROPOSALSDIR/profile-$STORAGE_PROFILE/cluster/
+ls -1 $PROPOSALSDIR/profile-$STORAGE_PROFILE/stack/default/ceph/minions/
+""",
         }
 
     def __init__(self, master_remote, logger):
@@ -1606,6 +1656,14 @@ cp /srv/salt/ceph/configuration/files/rgw-ssl.conf \
             self.master_remote,
             'disable_update_in_stage_0.sh',
             self.script_dict["disable_update_in_stage_0"],
+            )
+
+    def proposals_remove_storage_only_node(self, hostname):
+        remote_run_script_as_root(
+            self.master_remote,
+            'proposals_remove_storage_only_node.sh',
+            self.script_dict["proposals_remove_storage_only_node"],
+            args=[proposals_dir, self.storage_profile, hostname],
             )
 
     def rgw_init(self):

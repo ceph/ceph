@@ -1,0 +1,5 @@
+tasks:
+- deepsea.orch:
+        stage: 2
+- deepsea.orch:
+        stage: 5
