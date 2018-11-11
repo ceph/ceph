@@ -1,13 +1,9 @@
 tasks:
-- workunit:
-    clients:
-      client.salt_master:
-        - deepsea/suites/rbd/librbd-and-rbd-cli.sh
 - exec:
-    client.salt_master:
+    client.0:
       - "ceph_test_librbd"
       - "chmod a+r /etc/ceph/ceph.client.admin.keyring"
 - workunit:
     clients:
-      client.salt_master:
+      client.0:
         - rbd/cli_generic.sh

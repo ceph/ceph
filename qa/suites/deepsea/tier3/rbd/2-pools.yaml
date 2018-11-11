@@ -1,0 +1,3 @@
+tasks:
+        - deepsea.create_pools:
+                rbd:

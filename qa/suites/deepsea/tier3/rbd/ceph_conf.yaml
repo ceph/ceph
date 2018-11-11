@@ -1,0 +1,3 @@
+overrides:
+        deepsea.ceph_conf:
+                rbd:

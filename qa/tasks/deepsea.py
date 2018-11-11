@@ -726,6 +726,17 @@ class CephConf(DeepSea):
             )
         self.log.info(info_msg)
 
+    def _delete_rbd_default_features(self):
+        """
+        by removing this line, we ensure that there will be no "rbd default
+        features" setting in ceph.conf, so the default value will be used
+        """
+        info_msg = "adjusted ceph.conf by removing 'rbd default features' line"
+        rbd_conf = '/srv/salt/ceph/configuration/files/rbd.conf'
+        cmd = 'sudo sed -i \'/^rbd default features =/d\' {}'.format(rbd_conf)
+        self.master_remote.run(args=cmd)
+        self.log.info(info_msg)
+
     def _dump_ceph_conf_d(self):
         self.master_remote.run(
             args="ls -lR {}".format(self.ceph_conf_d)
@@ -753,7 +764,7 @@ class CephConf(DeepSea):
         """
         storage_nodes = len(self.storage_nodes)
         info_msg = (
-            "adjusting ceph.conf for operation with {} storage node(s)"
+            "adjusted ceph.conf for operation with {} storage node(s)"
             .format(storage_nodes)
             )
         data = None
@@ -769,12 +780,12 @@ class CephConf(DeepSea):
                    "osd pool default size = 2\n"
                    )
         if data:
-            self.log.info(info_msg)
             sudo_append_to_file(
                 self.master_remote,
                 self._ceph_conf_d_full_path("global"),
                 data,
                 )
+            self.log.info(info_msg)
 
     def _mon_allow_pool_delete(self):
         info_msg = "adjusted ceph.conf to allow pool deletes"
@@ -794,10 +805,11 @@ class CephConf(DeepSea):
             self._mon_allow_pool_delete()
         if self.config.get('small_cluster', True):
             self._maybe_a_small_cluster()
+        if self.config.get('rbd', False):
+            self._delete_rbd_default_features()
         for section in self.customize.keys():
-            if section in self.config and isinstance(self.config[section],
-                                                     dict):
-                    self._custom_ceph_conf(section, self.config[section])
+            if section in self.config and isinstance(self.config[section], dict):
+                self._custom_ceph_conf(section, self.config[section])
         self._dump_ceph_conf_d()
 
     def teardown(self):
