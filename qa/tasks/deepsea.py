@@ -723,6 +723,7 @@ class CephConf(DeepSea):
 
     def __init__(self, ctx, config):
         deepsea_ctx['logger_obj'] = log.getChild('ceph_conf')
+        self.name = 'deepsea.ceph_conf'
         super(CephConf, self).__init__(ctx, config)
 
     def _ceph_conf_d_full_path(self, section):
@@ -846,6 +847,7 @@ class CreatePools(DeepSea):
 
     def __init__(self, ctx, config):
         deepsea_ctx['logger_obj'] = log.getChild('create_pools')
+        self.name = 'deepsea.create_pools'
         super(CreatePools, self).__init__(ctx, config)
         if not isinstance(self.config, dict):
             raise ConfigError(
@@ -880,6 +882,7 @@ class Dummy(DeepSea):
 
     def __init__(self, ctx, config):
         deepsea_ctx['logger_obj'] = log.getChild('dummy')
+        self.name = 'deepsea.dummy'
         super(Dummy, self).__init__(ctx, config)
 
     def begin(self):
@@ -913,6 +916,7 @@ class HealthOK(DeepSea):
 
     def __init__(self, ctx, config):
         deepsea_ctx['logger_obj'] = log.getChild('health_ok')
+        self.name = 'deepsea.health_ok'
         super(HealthOK, self).__init__(ctx, config)
 
     def _copy_health_ok(self):
@@ -988,6 +992,7 @@ class Orch(DeepSea):
 
     def __init__(self, ctx, config):
         deepsea_ctx['logger_obj'] = log.getChild('orch')
+        self.name = 'deepsea.orch'
         super(Orch, self).__init__(ctx, config)
         # cast stage/state_orch value to str because it might be a number
         self.stage = str(self.config.get("stage", ''))
@@ -1279,6 +1284,7 @@ class Policy(DeepSea):
 
     def __init__(self, ctx, config):
         deepsea_ctx['logger_obj'] = log.getChild('policy')
+        self.name = 'deepsea.policy'
         super(Policy, self).__init__(ctx, config)
         self.munge_profile = self.config.get('munge_profile', {})
 
@@ -1476,6 +1482,7 @@ class Reboot(DeepSea):
     """
     def __init__(self, ctx, config):
         deepsea_ctx['logger_obj'] = log.getChild('reboot')
+        self.name = 'deepsea.reboot'
         super(Reboot, self).__init__(ctx, config)
 
     def begin(self):
@@ -1504,6 +1511,7 @@ class Script(DeepSea):
     """
     def __init__(self, ctx, config):
         deepsea_ctx['logger_obj'] = log.getChild('script')
+        self.name = 'deepsea.script'
         super(Script, self).__init__(ctx, config)
 
     def _run_script(self, script, args=[]):
@@ -1829,6 +1837,7 @@ class Validation(DeepSea):
     """
     def __init__(self, ctx, config):
         deepsea_ctx['logger_obj'] = log.getChild('validation')
+        self.name = 'deepsea.validation'
         super(Validation, self).__init__(ctx, config)
         self._apply_config_default("systemd_units_active", None)
 
