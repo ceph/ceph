@@ -868,7 +868,7 @@ class CreatePools(DeepSea):
         if 'mds' in self.role_lookup_table:
             args.append('mds')
         args = list(set(args))
-        self.scripts.create_all_pools_at_once(args)
+        self.scripts.create_all_pools_at_once(*args)
 
     def teardown(self):
         # self.log.debug("beginning of teardown method")
@@ -1509,7 +1509,7 @@ class Script(DeepSea):
     def _run_script(self, script, args=[]):
         method = getattr(self.scripts, script, None)
         if method:
-            method(args)
+            method(*args)
         else:
             raise ConfigError(
                 "(script subtask) No such canned script ->{}<-"
