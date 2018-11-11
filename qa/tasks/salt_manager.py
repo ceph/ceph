@@ -13,6 +13,8 @@ Third, enjoy the SaltManager goodness - e.g.:
 
     sm.ping_minions()
 
+Linter:
+    flake8 --max-line-length=100
 '''
 import logging
 import re

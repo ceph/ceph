@@ -1,3 +1,9 @@
+"""
+Task (and subtasks) for automating deployment of Ceph using DeepSea
+
+Linter:
+    flake8 --max-line-length=100
+"""
 import logging
 
 from salt_manager import SaltManager
@@ -59,9 +65,7 @@ def remote_exec(remote, cmd_str, log_spec, quiet=True, rerun=False, tries=0):
         remote.run(args="uptime")
         log.info("Running command ->{}<- on {}. This might cause the machine to reboot!"
                  .format(cmd_str, remote.hostname))
-    with safe_while(sleep=60,
-                    tries=tries,
-                    action="wait for reconnect") as proceed:
+    with safe_while(sleep=60, tries=tries, action="wait for reconnect") as proceed:
         while proceed():
             try:
                 if already_rebooted_at_least_once:
@@ -1113,10 +1117,11 @@ class Orch(DeepSea):
         # The alternative_defaults stanza has been moved up to the deepsea task
         # (for two reasons: because it's a global setting and also so we can do
         # boilerplate overrides like qa/deepsea/boilerplate/disable_tuned.yaml).
-        # In that light, the following heuristic becomes problematic: since all
-        # the alternative defaults are concentrated in one place, it now loops
-        # over all alternative_defaults, whereas before it considered only
-        # those set for this stage/orchestration.
+        # That change makes the following heuristic becomes problematic: since
+        # all the alternative defaults are concentrated in one place, if any of
+        # them contains the string "reboot" (without preceding "no-"), **all**
+        # orchestrations in the test will run with survive_reboots, not just
+        # one.
         for k, v in self.alternative_defaults.items():
             if 'reboot' in v and 'no-reboot' not in v:
                 self.log.warning("Orchestrations may trigger a reboot")

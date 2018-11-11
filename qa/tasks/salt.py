@@ -1,5 +1,8 @@
 '''
 Task that deploys a Salt cluster on all the nodes
+
+Linter:
+    flake8 --max-line-length=100
 '''
 import logging
 
