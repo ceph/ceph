@@ -1519,9 +1519,10 @@ class Script(DeepSea):
         super(Script, self).__init__(ctx, config)
 
     def _run_script(self, script, args=[]):
+        kwargs = {'cli': self.deepsea_cli}
         method = getattr(self.scripts, script, None)
         if method:
-            method(*args)
+            method(*args, **kwargs)
         else:
             raise ConfigError(
                 "(script subtask) No such canned script ->{}<-"
@@ -1758,14 +1759,14 @@ test "$OSDS_AFTER" -lt "$OSDS_BEFORE"
         self.log = logger
         self.master_remote = master_remote
 
-    def ceph_cluster_status(self, *args):
+    def ceph_cluster_status(self, *args, **kwargs):
         remote_run_script_as_root(
             self.master_remote,
             'ceph_cluster_status.sh',
             self.script_dict["ceph_cluster_status"],
             )
 
-    def create_all_pools_at_once(self, *args):
+    def create_all_pools_at_once(self, *args, **kwargs):
         self.log.info("creating pools: {}".format(' '.join(args)))
         remote_run_script_as_root(
             self.master_remote,
@@ -1774,14 +1775,14 @@ test "$OSDS_AFTER" -lt "$OSDS_BEFORE"
             args=args,
             )
 
-    def disable_update_in_stage_0(self, *args):
+    def disable_update_in_stage_0(self, *args, **kwargs):
         remote_run_script_as_root(
             self.master_remote,
             'disable_update_in_stage_0.sh',
             self.script_dict["disable_update_in_stage_0"],
             )
 
-    def proposals_remove_storage_only_node(self, *args):
+    def proposals_remove_storage_only_node(self, *args, **kwargs):
         hostname = args[0]
         storage_profile = args[1]
         remote_run_script_as_root(
@@ -1791,11 +1792,11 @@ test "$OSDS_AFTER" -lt "$OSDS_BEFORE"
             args=[proposals_dir, storage_profile, hostname],
             )
 
-    def remove_storage_only_node(self, *args):
-        if self.deepsea_cli:
-            args = []
-        else:
+    def remove_storage_only_node(self, *args, **kwargs):
+        if kwargs['cli']:
             args = ['--cli']
+        else:
+            args = []
         remote_run_script_as_root(
             self.master_remote,
             'remove_storage_only_node.sh',
@@ -1803,21 +1804,21 @@ test "$OSDS_AFTER" -lt "$OSDS_BEFORE"
             args=args,
             )
 
-    def rgw_init(self, *args):
+    def rgw_init(self, *args, **kwargs):
         remote_run_script_as_root(
             self.master_remote,
             'rgw_init.sh',
             self.script_dict["rgw_init"],
             )
 
-    def rgw_init_ssl(self, *args):
+    def rgw_init_ssl(self, *args, **kwargs):
         remote_run_script_as_root(
             self.master_remote,
             'rgw_init_ssl.sh',
             self.script_dict["rgw_init_ssl"],
             )
 
-    def salt_api_test(self, *args):
+    def salt_api_test(self, *args, **kwargs):
         remote_run_script_as_root(
             self.master_remote,
             'salt_api_test.sh',
