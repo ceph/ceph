@@ -47,9 +47,9 @@ def dump_file_that_might_not_exist(remote, fpath):
 
 def remote_exec(remote, cmd_str, log_spec, quiet=True, rerun=False, tries=0):
     """
-    Execute cmd_str and catch CommandFailedError and
-    ConnectionLostError (and rerun command if retry is set)
-    until one of the conditons are fulfilled:
+    Execute cmd_str and catch CommandFailedError and ConnectionLostError (and
+    rerun cmd_str post-reboot if rerun flag is set) until one of the conditons
+    are fulfilled:
     1) Execution succeeded
     2) Attempts are exceeded
     3) CommandFailedError is raised
@@ -60,7 +60,8 @@ def remote_exec(remote, cmd_str, log_spec, quiet=True, rerun=False, tries=0):
     already_rebooted_at_least_once = False
     if tries:
         remote.run(args="uptime")
-        log.info("Running command ->{}<- on {}. This might cause the machine to reboot!"
+        log.info("Running command ->{}<- on {}. "
+                 "This might cause the machine to reboot!"
                  .format(cmd_str, remote.hostname))
     with safe_while(sleep=60, tries=tries, action="wait for reconnect") as proceed:
         while proceed():
@@ -72,10 +73,8 @@ def remote_exec(remote, cmd_str, log_spec, quiet=True, rerun=False, tries=0):
                 remote.run(args=cmd_str)
                 break
             except CommandFailedError:
-                log.error(anchored(
-                    "{} failed. ".format(log_spec)
-                    + "Here comes journalctl!"
-                ))
+                log.error(anchored("{} failed. Here comes journalctl!"
+                                   .format(log_spec)))
                 remote.run(args="sudo journalctl --all")
                 raise
             except ConnectionLostError:
@@ -153,6 +152,8 @@ class DeepSea(Task):
     :param config: the config dict
     """
 
+    err_prefix = "(deepsea task) "
+
     log_anchor_str = "WWWW: "
 
     def __init__(self, ctx, config):
@@ -190,70 +191,7 @@ class DeepSea(Task):
         # self.log.debug("ctx.config {}".format(ctx.config))
         # self.log.debug("deepsea context: {}".format(deepsea_ctx))
 
-    def _deepsea_minions(self):
-        """
-        Set deepsea_minions pillar value
-        """
-        echo_cmd = (
-            'echo "deepsea_minions: \'*\'" > '
-            '/srv/pillar/ceph/deepsea_minions.sls'
-        )
-        self.master_remote.run(args=[
-            'sudo',
-            'sh',
-            '-c',
-            echo_cmd,
-            run.Raw(';'),
-            'cat',
-            '/srv/pillar/ceph/deepsea_minions.sls',
-            ])
-
-    def _deepsea_version(self):
-        if self.deepsea_cli:
-            try:
-                self.master_remote.run(args=[
-                    'type',
-                    'deepsea',
-                    run.Raw('>'),
-                    '/dev/null',
-                    run.Raw('2>&1'),
-                    ])
-            except CommandFailedError:
-                raise ConfigError(
-                    "(deepsea task) test case calls for deepsea CLI, "
-                    "but it is not installed"
-                    )
-            self.master_remote.run(args='deepsea --version')
-        else:
-            cmd_str = "sudo salt-run deepsea.version"
-            if self.quiet_salt:
-                cmd_str += " 2>/dev/null"
-            self.master_remote.run(args=cmd_str)
-
-    def _disable_gpg_checks(self):
-        cmd = (
-            'sed -i -e \'/gpgcheck/ d\' /etc/zypp/repos.d/* ; '
-            'sed -i -e \'/gpgkey/ d\' /etc/zypp/repos.d/* ; '
-            'sed -i -e \'$a gpgcheck=0\' /etc/zypp/repos.d/*'
-            )
-        self.ctx.cluster.run(args=[
-            'sudo', 'sh', '-c', cmd
-            ])
-
-    def _install_deepsea(self):
-        install_method = deepsea_ctx['install_method']
-        if install_method == 'package':
-            self._install_deepsea_using_zypper()
-        elif install_method == 'source':
-            self._install_deepsea_from_source()
-        else:
-            raise ConfigError(
-                    "(deepsea task) unrecognized install config value ->{}<-"
-                    .format(self.config['install'])
-                )
-        deepsea_ctx['deepsea_installed'] = True
-
-    def _install_deepsea_from_source(self):
+    def __install_deepsea_from_source(self):
         self.log.info(anchored("installing deepsea from source"))
         if self.sm.master_rpm_q('deepsea'):
             self.log.info("DeepSea already installed from RPM")
@@ -313,7 +251,7 @@ class DeepSea(Task):
             run.Raw(rpmspec_cmd)
             ])
 
-    def _install_deepsea_using_zypper(self):
+    def __install_deepsea_using_zypper(self):
         self.log.info(anchored("installing DeepSea using zypper"))
         self.master_remote.run(args=[
             'sudo',
@@ -335,6 +273,64 @@ class DeepSea(Task):
             'deepsea-cli',
             'deepsea-qa'
             ])
+
+    def _deepsea_minions(self):
+        """
+        Set deepsea_minions pillar value
+        """
+        echo_cmd = (
+            'echo "deepsea_minions: \'*\'" > '
+            '/srv/pillar/ceph/deepsea_minions.sls'
+        )
+        self.master_remote.run(args=[
+            'sudo',
+            'sh',
+            '-c',
+            echo_cmd,
+            run.Raw(';'),
+            'cat',
+            '/srv/pillar/ceph/deepsea_minions.sls',
+            ])
+
+    def _deepsea_version(self):
+        if self.deepsea_cli:
+            try:
+                self.master_remote.run(args=[
+                    'type',
+                    'deepsea',
+                    run.Raw('>'),
+                    '/dev/null',
+                    run.Raw('2>&1'),
+                    ])
+            except CommandFailedError:
+                raise ConfigError(self.err_prefix + "Test case calls for "
+                                  "deepsea CLI, but it is not installed")
+            self.master_remote.run(args='deepsea --version')
+        else:
+            cmd_str = "sudo salt-run deepsea.version"
+            if self.quiet_salt:
+                cmd_str += " 2>/dev/null"
+            self.master_remote.run(args=cmd_str)
+
+    def _disable_gpg_checks(self):
+        cmd = (
+            'sed -i -e \'/gpgcheck/ d\' /etc/zypp/repos.d/* ; '
+            'sed -i -e \'/gpgkey/ d\' /etc/zypp/repos.d/* ; '
+            'sed -i -e \'$a gpgcheck=0\' /etc/zypp/repos.d/*'
+            )
+        self.ctx.cluster.run(args=[
+            'sudo', 'sh', '-c', cmd
+            ])
+
+    def _install_deepsea(self):
+        install_method = deepsea_ctx['install_method']
+        if install_method == 'package':
+            self.__install_deepsea_using_zypper()
+        elif install_method == 'source':
+            self.__install_deepsea_from_source()
+        else:
+            raise ConfigError(self.err_prefix + "internal error")
+        deepsea_ctx['deepsea_installed'] = True
 
     def _introspect_roles(self, deepsea_ctx):
         """
@@ -426,10 +422,8 @@ class DeepSea(Task):
                 # rgw/multisite suite
                 role_arr = role.split('.')
                 if len(role_arr) != 2:
-                    raise ConfigError(
-                        "(deepsea task) unsupported role ->{}<- encountered!"
-                        .format(role)
-                        )
+                    raise ConfigError(self.err_prefix + "Unsupported role ->{}<-"
+                                      .format(role))
                 (role_type, _) = role_arr
                 if role_type not in role_lookup_table:
                     role_lookup_table[role_type] = {}
@@ -527,7 +521,7 @@ class DeepSea(Task):
         deepsea_ctx['roles'] = self.ctx.config['roles']
         deepsea_ctx['alternative_defaults'] = self.config.get('alternative_defaults', {})
         if not isinstance(deepsea_ctx['alternative_defaults'], dict):
-            raise ConfigError('(deepsea task) alternative_defaults must be a list')
+            raise ConfigError(self.err_prefix + "alternative_defaults must be a list")
         deepsea_ctx['cli'] = self.config.get('cli', True)
         deepsea_ctx['log_anchor'] = self.config.get('log_anchor', self.log_anchor_str)
         if not isinstance(deepsea_ctx['log_anchor'], str):
@@ -551,10 +545,8 @@ class DeepSea(Task):
             elif self.config['install'] in ['source', 'src']:
                 deepsea_ctx['install_method'] = 'source'
             else:
-                raise ConfigError(
-                        "(deepsea task) unrecognized install config value "
-                        "->{}<-".format(self.config['install'])
-                        )
+                raise ConfigError(self.err_prefix + "Unrecognized install config "
+                                  "value ->{}<-".format(self.config['install']))
         else:
             if 'repo' in self.config or 'branch' in self.config:
                 deepsea_ctx['install_method'] = 'source'
@@ -583,6 +575,12 @@ class DeepSea(Task):
                 )
             for pn in [1, 2]:
                 _remote.run(args=['sudo', 'sh', '-c', for_loop.format(pn=pn)])
+
+    def first_storage_only_node(self):
+        if self.storage_only_nodes:
+            return self.storage_only_nodes[0]
+        else:
+            return None
 
     def reboot_the_cluster_now(self, log_spec=None):
         if not log_spec:
@@ -635,7 +633,6 @@ class DeepSea(Task):
         # self.log.debug("end of setup method")
 
     def begin(self):
-        self.log.debug("beginning of begin method")
         super(DeepSea, self).begin()
         self.sm.master_rpm_q('ceph')
         self.sm.master_rpm_q('ceph-test')
@@ -652,10 +649,7 @@ class DeepSea(Task):
             )
         self._master_python_version(2)
         if not self._master_python_version(3):
-            raise ConfigError(
-                "(deepsea task) Python 3 not installed on master node"
-                " - bailing out!"
-                )
+            raise ConfigError(self.err_prefix + "Python 3 not installed on master node")
         if 'deepsea_installed' not in deepsea_ctx:
             self._disable_gpg_checks()
             self.master_remote.run(args="zypper lr -upEP")
@@ -666,7 +660,6 @@ class DeepSea(Task):
         self._maybe_apply_alternative_defaults()
         # Stage 0 does this, but we have no guarantee Stage 0 will run
         self.sm.sync_pillar_data(quiet=self.quiet_salt)
-        self.log.debug("end of begin method")
 
     def end(self):
         # self.log.debug("beginning of end method")
@@ -1253,13 +1246,11 @@ class Orch(DeepSea):
         self._run_orch(("stage", 5))
 
     def begin(self):
-        self.log.debug("beginning of begin method")
         if self.state_orch:
             self.log.info(anchored(
                 "running orchestration {}".format(self.state_orch)
                 ))
             self._run_orch(("orch", self.state_orch))
-            self.log.debug("end of begin method")
             return None
         # it's not an orch, so it must be a stage
         assert self.stage, "Neither state_orch, nor stage"
@@ -1284,15 +1275,12 @@ class Orch(DeepSea):
             self.log.info("Running Stage 5 instead of Stage \"removal\"")
             self._run_stage_5()
         elif self.stage in self.all_stages:
-            self.log.info(
-                "Running non-numeric Stage \"{}\"".format(self.stage)
-                )
+            self.log.info("Running non-numeric Stage \"{}\"".format(self.stage))
             self._run_orch(("stage", self.stage))
         else:
             raise ConfigError(
                 '(orch subtask) unsupported stage ->{}<-'.format(self.stage)
                 )
-        self.log.debug("end of begin method")
 
     def teardown(self):
         pass
@@ -1300,65 +1288,59 @@ class Orch(DeepSea):
 
 class Policy(DeepSea):
 
+    err_prefix = "(policy subtask) "
+
     def __init__(self, ctx, config):
         deepsea_ctx['logger_obj'] = log.getChild('policy')
         self.name = 'deepsea.policy'
         super(Policy, self).__init__(ctx, config)
+        self.policy_cfg = ''
         self.munge_profile = self.config.get('munge_profile', {})
 
     def __build_profile_x(self, profile):
-        self.profile_ymls_to_dump = []
-        no_osd_roles = ("no osd roles configured, but at least "
-                        "one of these is required.")
-        role_dict = {}
-        if 'osd' in self.role_lookup_table:
-            role_dict = self.role_lookup_table['osd']
-        else:
-            raise ConfigError("(policy subtask) {}".format(no_osd_roles))
-        self.log.debug(
-            "generating policy.cfg lines for osd profile ->{}<- based on {}"
-            .format(profile, role_dict)
-            )
-        if len(role_dict) == 0:
-            raise ConfigError("(policy subtask) {}".format(no_osd_roles))
-        osd_remotes = list(set(role_dict.values()))
+        if not self.storage_nodes:
+            raise ConfigError(self.err_prefix + "no osd roles configured, "
+                              "but at least one of these is required.")
+        self.log.debug("building storage profile ->{}<- for {} storage nodes"
+                       .format(profile, len(self.storage_nodes)))
         if profile == 'custom':
-            fpath = "/home/ubuntu/custom_profile"
-            sudo_write_file(
-                self.master_remote,
-                fpath,
-                yaml.dump(self.storage_profile),
-                perms="0644",
-                )
-            self.scripts.custom_storage_profile(fpath)
-        for osd_remote in osd_remotes:
-            self.log.debug(
-                "{} has one or more osd roles".format(osd_remote)
-                )
-            self.policy_cfg += """# Storage profile - {remote}
-profile-{profile}/cluster/{remote}.sls
-""".format(remote=osd_remote, profile=profile)
+            self.__roll_out_custom_profile()
+        self.profile_ymls_to_dump = []
+        for hostname in self.storage_nodes:
+            self.policy_cfg += ("# Storage profile - {node}\n"
+                                "profile-{profile}/cluster/{node}.sls\n"
+                                .format(node=hostname, profile=profile))
             ypp = ("profile-{}/stack/default/ceph/minions/{}.yml"
-                   .format(profile, osd_remote))
+                   .format(profile, hostname))
             self.policy_cfg += ypp + "\n"
             self.profile_ymls_to_dump.append(
                 "{}/{}".format(proposals_dir, ypp))
+
+    def __roll_out_custom_profile(self, fpath):
+        fpath = "/home/ubuntu/custom_profile"
+        sudo_write_file(
+            self.master_remote,
+            fpath,
+            yaml.dump(self.storage_profile),
+            perms="0644",
+            )
+        self.scripts.custom_storage_profile(fpath)
 
     def _build_base(self):
         """
         policy.cfg boilerplate
         """
-        self.policy_cfg = """# policy.cfg generated by deepsea.policy subtask
-# Cluster assignment
-cluster-ceph/cluster/*.sls
-# Common configuration
-config/stack/default/global.yml
-config/stack/default/ceph/cluster.yml
-# Role assignment - master
-role-master/cluster/{master_minion}.sls
-# Role assignment - admin
-role-admin/cluster/*.sls
-""".format(master_minion=self.master_remote.hostname)
+        self.policy_cfg = ("# policy.cfg generated by deepsea.policy subtask\n"
+                           "# Cluster assignment\n"
+                           "cluster-ceph/cluster/*.sls\n"
+                           "# Common configuration\n"
+                           "config/stack/default/global.yml\n"
+                           "config/stack/default/ceph/cluster.yml\n"
+                           "# Role assignment - master\n"
+                           "role-master/cluster/{}.sls\n"
+                           "# Role assignment - admin\n"
+                           "role-admin/cluster/*.sls\n"
+                           .format(self.master_remote.hostname))
 
     def _build_storage_profile(self):
         """
@@ -1366,22 +1348,18 @@ role-admin/cluster/*.sls
         """
         if isinstance(self.storage_profile, str):
             if self.storage_profile == 'teuthology':
-                raise ConfigError(
-                    "(policy subtask) \"teuthology\" storage profile not implemented yet"
-                    )
+                raise ConfigError(self.err_prefix + "\"teuthology\" storage "
+                                  "profile not implemented yet")
             elif self.storage_profile == 'default':
                 self.__build_profile_x('default')
             else:
-                ConfigError(
-                    "(policy subtask) unknown storage profile ->{}<-"
-                    .format(self.storage_profile)
-                    )
+                ConfigError(self.err_prefix + "unknown storage profile ->{}<-"
+                            .format(self.storage_profile))
         elif isinstance(self.storage_profile, dict):
             self.__build_profile_x('custom')
         else:
-            raise ConfigError(
-                "(deepsea task) storage_profile config param must be a string or a dict"
-                )
+            raise ConfigError(self.err_prefix + "storage_profile config param "
+                              "must be a string or a dict")
 
     def _build_x(self, role_type, required=False):
         no_roles_of_type = "no {} roles configured".format(role_type)
@@ -1390,47 +1368,34 @@ role-admin/cluster/*.sls
         if role_type in self.role_lookup_table:
             role_dict = self.role_lookup_table[role_type]
         elif required:
-            raise ConfigError(
-                "(policy subtask) {}".format(no_roles_of_type + but_required)
-                )
+            raise ConfigError(self.err_prefix + no_roles_of_type + but_required)
         else:
             self.log.debug(no_roles_of_type)
             return None
-        self.log.debug(
-            "generating policy.cfg lines for {} based on {}"
-            .format(role_type, role_dict)
-            )
+        self.log.debug("generating policy.cfg lines for {} based on {}"
+                       .format(role_type, role_dict))
         if required:
             if len(role_dict.keys()) < 1:
-                raise ConfigError(
-                    "(policy subtask) {}"
-                    .format(no_roles_of_type + but_required)
-                    )
-        for role_spec, remote_name in role_dict.iteritems():
-            self.policy_cfg += (
-                '# Role assignment - {}\n'
-                'role-{}/cluster/{}.sls\n'
-                ).format(role_spec, role_type, remote_name)
+                raise ConfigError(self.err_prefix + no_roles_of_type + but_required)
+        for role_spec, remote_name in role_dict.items():
+            self.policy_cfg += ('# Role assignment - {}\n'
+                                'role-{}/cluster/{}.sls\n'
+                                .format(role_spec, role_type, remote_name))
 
     def _cat_policy_cfg(self):
         """
-        Dump the remote policy.cfg file to teuthology log.
+        Dump the final policy.cfg file to teuthology log.
         """
-        self.master_remote.run(args=[
-            'cat',
-            proposals_dir + "/policy.cfg"
-            ])
+        cmd_str = "cat {}/policy.cfg".format(proposals_dir)
+        self.master_remote.run(args=cmd_str)
 
     def _dump_profile_ymls(self):
         """
         Dump profile yml files that have been earmarked for dumping.
         """
         for yml_file in self.profile_ymls_to_dump:
-            self.master_remote.run(args=[
-                'sudo',
-                'cat',
-                yml_file,
-                ])
+            cmd_str = "sudo cat {}".format(yml_file)
+            self.master_remote.run(args=cmd_str)
 
     def _dump_proposals_dir(self):
         """
@@ -1446,12 +1411,6 @@ role-admin/cluster/*.sls
             proposals_dir + '/',
             ])
 
-    def _first_storage_only_node(self):
-        if self.storage_only_nodes:
-            return self.storage_only_nodes[0]
-        else:
-            return ''
-
     def _write_policy_cfg(self):
         """
         Write policy_cfg to master remote.
@@ -1463,11 +1422,8 @@ role-admin/cluster/*.sls
             perms="0644",
             owner="salt",
             )
-        self.master_remote.run(args=[
-            "ls",
-            "-l",
-            proposals_dir + "/policy.cfg"
-            ])
+        cmd_str = "ls -l {}/policy.cfg".format(proposals_dir)
+        self.master_remote.run(args=cmd_str)
 
     def begin(self):
         """
@@ -1476,21 +1432,19 @@ role-admin/cluster/*.sls
         if self.munge_profile:
             for k, v in self.munge_profile.items():
                 if k == 'proposals_remove_storage_only_node':
-                    delete_me = self._first_storage_only_node()
+                    delete_me = self.first_storage_only_node()
                     if not delete_me:
                         raise ConfigError(
-                            '(policy subtask) proposals_remove_storage_only_node '
-                            'requires a storage-only node, but there is no such'
+                            self.err_prefix + "proposals_remove_storage_only_node "
+                            "requires a storage-only node, but there is no such"
                             )
                     self.scripts.proposals_remove_storage_only_node(
                         delete_me,
                         self.storage_profile
                         )
                 else:
-                    raise ConfigError(
-                        "(policy subtask) unrecognized munge_profile directive {}"
-                        .format(k)
-                        )
+                    raise ConfigError(self.err_prefix + "unrecognized "
+                                      "munge_profile directive {}".format(k))
         else:
             self.log.info(anchored("generating policy.cfg"))
             self._dump_proposals_dir()
@@ -1552,33 +1506,30 @@ class Script(DeepSea):
         if method:
             method(*args, **kwargs)
         else:
-            raise ConfigError(
-                "(script subtask) No such canned script ->{}<-"
-                .format(method)
-                )
+            raise ConfigError("(script subtask) No such canned script ->{}<-"
+                              .format(method))
 
     def begin(self):
+        if not self.config:
+            self.log.warning("empty config: nothing to do")
+            return None
         config_keys = len(self.config)
-        if config_keys == 0:
-            self.log.warning("nothing to do")
-        elif config_keys > 1:
+        if config_keys > 1:
             raise ConfigError(
                 "(script subtask) config dictionary may contain only one key. "
                 "You provided ->{}<- keys".format(config_keys)
                 )
-        script = self.config.keys()[0]
-        v = self.config.values()[0]
-        if v is None:
-            self._run_script(script)
-        if isinstance(v, dict):
-            if len(v) > 1 or v.keys()[0] != 'args':
-                raise ConfigError(
-                    '(script subtask) script dicts may only contain one key (args)'
-                    )
-            args = script.values()[0].get('args', [])
+        script, script_dict = self.config.items()[0]
+        if script_dict is None:
+            args = []
+        if isinstance(script_dict, dict):
+            err_msg = '(script subtask) script dicts may only contain one key (args)'
+            if len(script_dict) > 1 or script_dict.keys()[0] != 'args':
+                raise ConfigError(err_msg)
+            args = script_dict.values()[0] or []
             if not isinstance(args, list):
                 raise ConfigError('(script subtask) script args must be a list')
-            self._run_script(script, args=args)
+        self._run_script(script, args=args)
 
     def teardown(self):
         pass
@@ -1598,14 +1549,13 @@ ceph -s
         "create_all_pools_at_once": """# Pre-create Stage 4 pools
 # with calculated number of PGs so we don't get health warnings
 # during/after Stage 4 due to "too few" or "too many" PGs per OSD
-
 set -ex
-
+#
 function json_total_osds {
     # total number of OSDs in the cluster
     ceph osd ls --format json | jq '. | length'
 }
-
+#
 function pgs_per_pool {
     local TOTALPOOLS=$1
     test -n "$TOTALPOOLS"
@@ -1618,7 +1568,7 @@ function pgs_per_pool {
     let "PGSPEROSD = $TOTALPGS / $TOTALPOOLS / 3"
     echo $PGSPEROSD
 }
-
+#
 function create_all_pools_at_once {
     # sample usage: create_all_pools_at_once foo bar
     local TOTALPOOLS="${#@}"
@@ -1629,7 +1579,7 @@ function create_all_pools_at_once {
     done
     ceph osd pool ls detail
 }
-
+#
 MDS=""
 OPENSTACK=""
 RBD=""
@@ -1641,7 +1591,7 @@ for arg in "$@" ; do
         rbd) RBD="$arg" ;;
     esac
 done
-
+#
 POOLS="write_test"
 test "$MDS" && POOLS+=" cephfs_data cephfs_metadata"
 if [ "$OPENSTACK" ] ; then
@@ -1862,10 +1812,7 @@ ls -lR $PROPOSALSDIR/profile-custom
             )
 
     def remove_storage_only_node(self, *args, **kwargs):
-        if kwargs['cli']:
-            args = ['--cli']
-        else:
-            args = []
+        args = ['--cli'] if kwargs['cli'] else []
         remote_run_script_as_root(
             self.master_remote,
             'remove_storage_only_node.sh',
@@ -1897,19 +1844,23 @@ ls -lR $PROPOSALSDIR/profile-custom
 
 class Validation(DeepSea):
     """
-    A container for "validation tests", which are understood to mean
-    tests that validate the Ceph cluster (just) deployed by DeepSea.
+    A container for "validation tests", which are understood to mean tests that
+    validate the Ceph cluster (just) deployed by DeepSea.
 
-    Basic validation tests are triggered by default, while others
-    have to be explicitly mentioned in the YAML:
+    The config YAML is a dictionary in which the keys are the names of tests
+    (methods to be run) and the values are the config dictionaries of each test
+    to be run.
 
-    systemd_units_active    triggered by default, validates that the systemd
+    Basic validation tests are triggered by default, while others have to be
+    explicitly mentioned in the YAML:
+
+    systemd_units_active    (triggered by default) validates that the systemd
                             units corresponding to the teuthology roles
                             stanza are active on the respective test nodes
-
-    Each test can have its own configuration. See the deepsea suite YAML
-    for examples.
     """
+
+    err_prefix = '(validation subtask) '
+
     def __init__(self, ctx, config):
         deepsea_ctx['logger_obj'] = log.getChild('validation')
         self.name = 'deepsea.validation'
@@ -1920,10 +1871,9 @@ class Validation(DeepSea):
         """
         Use to activate tests that should always be run.
         """
-        self.config[validation_test] = self.config.get(validation_test,
-                                                       default_config)
+        self.config[validation_test] = self.config.get(validation_test, default_config)
 
-    def systemd_units_active(self, config):
+    def systemd_units_active(self, **kwargs):
         """
         For all cluster nodes, determine which systemd services
         should be running and assert that the respective units
@@ -1942,53 +1892,43 @@ class Validation(DeepSea):
         idx = 0
         for rtl in self.role_types:
             node = self.nodes[idx]
-            script = (
-                "# validate systemd units on {}\n"
-                "set -ex\n").format(node)
-            self.log.info(
-                "Machine {} ({}) has role types {}"
-                .format(idx, node, ','.join(rtl))
-                )
+            script = ("# validate systemd units on {}\n"
+                      "set -ex\n").format(node)
+            self.log.info("Machine {} ({}) has role types {}"
+                          .format(idx, node, ','.join(rtl)))
             remote = self.remotes[node]
             run_script = False
             for role_type in rtl:
                 if role_type in unit_map:
-                    script += (
-                        'systemctl --state=active --type=service list-units '
-                        '| grep -e \'^{}\'\n').format(unit_map[role_type])
+                    script += ("systemctl --state=active --type=service list-units "
+                               "| grep -e '^{}'\n".format(unit_map[role_type]))
                     run_script = True
                 else:
-                    self.log.debug((
-                        "Ignoring role_type {} which has no associated "
-                        "systemd unit").format(role_type)
-                        )
+                    self.log.debug("Ignoring role_type {} which has no associated "
+                                   "systemd unit".format(role_type))
             if run_script:
                 self.log.debug("About to run:\n" + script)
                 remote_run_script_as_root(
-                    remote, "systemd_validation.sh", script
+                    remote,
+                    "systemd_validation.sh",
+                    script
                     )
             idx += 1
 
     def begin(self):
-        """
-        Process self.config, which is taken to be a dictionary in which the
-        keys are the names of tests (methods to be run) and the values are the
-        config dictionaries of each test to be run.
-        """
-        self.log.debug("Processing tests: {}".format(self.config))
-        for validation_test, test_config in self.config.iteritems():
-            self.log.debug(
-                "Test {} has config ->{}<-"
-                .format(validation_test, test_config)
-                )
-            method = getattr(self, validation_test, None)
+        self.log.debug("Processing tests: ->{}<-".format(self.config.keys()))
+        for method_spec, kwargs in self.config.iteritems():
+            kwargs = {} if not kwargs else kwargs
+            if not isinstance(kwargs, dict):
+                raise ConfigError(self.err_prefix + "Method config must be a dict")
+            self.log.debug("Test {} has config ->{}<-"
+                           .format(method_spec, kwargs))
+            method = getattr(self, method_spec, None)
             if method:
-                method(test_config)
+                method(**kwargs)
             else:
-                raise ConfigError(
-                    "(validation subtask) No such method ->{}<-"
-                    .format(method)
-                    )
+                raise ConfigError(self.err_prefix + "No such method ->{}<-"
+                                  .format(method_spec))
 
     def teardown(self):
         pass
