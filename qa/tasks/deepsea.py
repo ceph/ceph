@@ -39,14 +39,9 @@ def anchored(log_message):
 
 def dump_file_that_might_not_exist(remote, fpath):
     try:
-        remote.run(
-            args="test -f {}".format(fpath)
-            )
+        remote.run(args="cat {}".format(fpath))
     except CommandFailedError:
-        return None
-    remote.run(
-        args="ls -l {p} ; cat {p}".format(p=fpath)
-        )
+        pass
 
 
 def remote_exec(remote, cmd_str, log_spec, quiet=True, rerun=False, tries=0):
@@ -710,8 +705,6 @@ class CephConf(DeepSea):
                 stage: 3
     """
 
-    ceph_conf_d = '/srv/salt/ceph/configuration/files/ceph.conf.d'
-
     customize = {
         "client": "client.conf",
         "global": "global.conf",
@@ -721,21 +714,32 @@ class CephConf(DeepSea):
         "osd": "osd.conf",
         }
 
+    deepsea_configuration_files = '/srv/salt/ceph/configuration/files'
+
+    targets = {
+        "dashboard": True,
+        "mon_allow_pool_delete": True,
+        "small_cluster": True,
+        "rbd": False,
+        }
+
     def __init__(self, ctx, config):
         deepsea_ctx['logger_obj'] = log.getChild('ceph_conf')
         self.name = 'deepsea.ceph_conf'
         super(CephConf, self).__init__(ctx, config)
+        self.log.debug("munged config is {}".format(self.config))
 
-    def _ceph_conf_d_full_path(self, section):
+    def __ceph_conf_d_full_path(self, section):
+        ceph_conf_d = self.deepsea_configuration_files + '/ceph.conf.d'
         if section in self.customize.keys():
-            return "{}/{}".format(self.ceph_conf_d, self.customize[section])
+            return "{}/{}".format(ceph_conf_d, self.customize[section])
 
-    def _custom_ceph_conf(self, section, customizations):
+    def __custom_ceph_conf(self, section, customizations):
         for conf_item, conf_value in customizations.iteritems():
             data = '{} = {}\n'.format(conf_item, conf_value)
             sudo_append_to_file(
                 self.master_remote,
-                self._ceph_conf_d_full_path(section),
+                self.__ceph_conf_d_full_path(section),
                 data
                 )
             self.log.info(
@@ -743,20 +747,56 @@ class CephConf(DeepSea):
                 .format(section, data)
                 )
 
-    def _dashboard(self):
+    def _customizations(self):
+        for section in self.customize.keys():
+            if section in self.config and isinstance(self.config[section], dict):
+                self.__custom_ceph_conf(section, self.config[section])
+
+    def _dump_customizations(self):
+        for section in self.customize.keys():
+            path = self.__ceph_conf_d_full_path(section)
+            dump_file_that_might_not_exist(self.master_remote, path)
+
+    def _list_ceph_conf_d(self):
+        self.master_remote.run(
+            args="ls -l {}".format(self.deepsea_configuration_files)
+            )
+
+    def _targets(self):
+        for target, default in self.targets.items():
+            method = getattr(self, target, None)
+            assert method, "target ->{}<- has no method".format(target)
+            if target in self.config:
+                method()
+            else:
+                if default:
+                    method()
+
+    def dashboard(self):
         info_msg = "adjusted ceph.conf for deployment of dashboard MGR module"
         data = "mgr initial modules = dashboard\n"
         sudo_append_to_file(
             self.master_remote,
-            self._ceph_conf_d_full_path("mon"),
+            self.__ceph_conf_d_full_path("mon"),
             data,
             )
         self.log.info(info_msg)
 
-    def _delete_rbd_default_features(self):
+    def mon_allow_pool_delete(self):
+        info_msg = "adjusted ceph.conf to allow pool deletes"
+        data = "mon allow pool delete = true\n"
+        sudo_append_to_file(
+            self.master_remote,
+            self.__ceph_conf_d_full_path("mon"),
+            data,
+            )
+        self.log.info(info_msg)
+
+    def rbd(self):
         """
-        by removing this line, we ensure that there will be no "rbd default
-        features" setting in ceph.conf, so the default value will be used
+        Delete "rbd default features" from ceph.conf. By removing this line, we
+        ensure that there will be no explicit "rbd default features" setting,
+        so the default will be used.
         """
         info_msg = "adjusted ceph.conf by removing 'rbd default features' line"
         rbd_conf = '/srv/salt/ceph/configuration/files/rbd.conf'
@@ -764,28 +804,7 @@ class CephConf(DeepSea):
         self.master_remote.run(args=cmd)
         self.log.info(info_msg)
 
-    def _dump_ceph_conf_d(self):
-        self.master_remote.run(
-            args="ls -lR {}".format(self.ceph_conf_d)
-            )
-
-    def _dump_customizations(self):
-        for section in self.customize.keys():
-            path = self._ceph_conf_d_full_path(section)
-            try:
-                self.master_remote.run(
-                    args="test -f {}".format(path)
-                    )
-            except CommandFailedError:
-                self.log.info(
-                    "{} does not exist on the remote".format(path)
-                    )
-                continue
-            self.master_remote.run(
-                args="ls -l {p} ; cat {p}".format(p=path)
-                )
-
-    def _maybe_a_small_cluster(self):
+    def small_cluster(self):
         """
         Apply necessary ceph.conf for small clusters
         """
@@ -809,35 +828,17 @@ class CephConf(DeepSea):
         if data:
             sudo_append_to_file(
                 self.master_remote,
-                self._ceph_conf_d_full_path("global"),
+                self.__ceph_conf_d_full_path("global"),
                 data,
                 )
             self.log.info(info_msg)
 
-    def _mon_allow_pool_delete(self):
-        info_msg = "adjusted ceph.conf to allow pool deletes"
-        data = "mon allow pool delete = true\n"
-        sudo_append_to_file(
-            self.master_remote,
-            self._ceph_conf_d_full_path("mon"),
-            data,
-            )
-        self.log.info(info_msg)
-
     def begin(self):
         self.log.info(anchored("Adding custom options to ceph.conf"))
-        if self.config.get('dashboard', True):
-            self._dashboard()
-        if self.config.get('mon_allow_pool_delete', True):
-            self._mon_allow_pool_delete()
-        if self.config.get('small_cluster', True):
-            self._maybe_a_small_cluster()
-        if self.config.get('rbd', False):
-            self._delete_rbd_default_features()
-        for section in self.customize.keys():
-            if section in self.config and isinstance(self.config[section], dict):
-                self._custom_ceph_conf(section, self.config[section])
-        self._dump_ceph_conf_d()
+        self._targets()
+        self._customizations()
+        self._list_ceph_conf_d()
+        self._dump_customizations()
 
     def teardown(self):
         pass
