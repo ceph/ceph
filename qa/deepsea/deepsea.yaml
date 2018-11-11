@@ -1,11 +1,11 @@
 tasks:
         - deepsea:
+                storage_profile: default
         - deepsea.orch:
                 stage: prep
         - deepsea.orch:
                 stage: 1
         - deepsea.policy:
-                profile: default
         - deepsea.orch:
                 stage: 2
         - deepsea.ceph_conf:
