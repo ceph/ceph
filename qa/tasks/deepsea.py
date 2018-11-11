@@ -1415,10 +1415,10 @@ role-admin/cluster/*.sls
             ])
 
     def _first_storage_only_node(self):
-        for hostname in self.nodes:
-            if hostname in self.storage_only_nodes:
-                return hostname
-        return ''
+        if self.storage_only_nodes:
+            return self.storage_only_nodes[0]
+        else:
+            return ''
 
     def _write_policy_cfg(self):
         """
@@ -1445,13 +1445,15 @@ role-admin/cluster/*.sls
             for k, v in self.munge_profile.items():
                 if k == 'proposals_remove_storage_only_node':
                     delete_me = self._first_storage_only_node()
-                    if delete_me:
-                        self.scripts.proposals_remove_storage_only_node(delete_me)
-                    else:
+                    if not delete_me:
                         raise ConfigError(
                             '(policy subtask) proposals_remove_storage_only_node '
                             'requires a storage-only node, but there is no such'
                             )
+                    self.scripts.proposals_remove_storage_only_node(
+                        delete_me,
+                        self.storage_profile
+                        )
                 else:
                     raise ConfigError(
                         "(policy subtask) unrecognized munge_profile directive {}"
@@ -1781,11 +1783,12 @@ test "$OSDS_AFTER" -lt "$OSDS_BEFORE"
 
     def proposals_remove_storage_only_node(self, *args):
         hostname = args[0]
+        storage_profile = args[1]
         remote_run_script_as_root(
             self.master_remote,
             'proposals_remove_storage_only_node.sh',
             self.script_dict["proposals_remove_storage_only_node"],
-            args=[proposals_dir, self.storage_profile, hostname],
+            args=[proposals_dir, storage_profile, hostname],
             )
 
     def remove_storage_only_node(self, *args):
