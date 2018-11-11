@@ -1041,6 +1041,24 @@ class Orch(DeepSea):
             return False
         return True
 
+    def __lvm_status(self):
+        """
+        Run "pvs --all", "vgs --all", and "lvs --all" on all storage nodes.
+        """
+        self.log.info("Dumping LVM status on storage nodes ->{}<-"
+                      .format(self.storage_nodes))
+        lvm_status_script = ("set -ex\n"
+                             "pvs --all\n"
+                             "vgs --all\n"
+                             "lvs --all\n")
+        for hostname in self.storage_nodes:
+            remote = self.remotes[hostname]
+            remote_run_script_as_root(
+                remote,
+                'lvm_status.sh',
+                lvm_status_script,
+                )
+
     def __maybe_cat_ganesha_conf(self):
         ganesha_host = self.role_type_present('ganesha')
         if ganesha_host:
@@ -1210,6 +1228,7 @@ class Orch(DeepSea):
             'cat /etc/ceph/ceph.conf',
             abort_on_fail=False
             )
+        self.__lvm_status()
         self.scripts.ceph_cluster_status()
         self.__ceph_health_test()
 
