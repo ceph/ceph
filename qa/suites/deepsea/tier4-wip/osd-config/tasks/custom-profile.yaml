@@ -1,5 +1,0 @@
-tasks:
-- workunit:
-    clients:
-      client.salt_master:
-        - deepsea/suites/health-ok/custom-profile.sh
