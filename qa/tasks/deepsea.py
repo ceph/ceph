@@ -1480,6 +1480,62 @@ class Reboot(DeepSea):
         # self.log.debug("end of teardown method")
 
 
+class Script(DeepSea):
+    """
+    A class that runs a list of canned bash scripts
+
+    Example:
+
+    tasks:
+        - deepsea.script:
+              do_something_nice:
+                  args:
+                      - 'foo'
+                      - 'bar'
+    """
+    def __init__(self, ctx, config):
+        deepsea_ctx['logger_obj'] = log.getChild('script')
+        super(Script, self).__init__(ctx, config)
+
+    def _run_script(self, script, args=[]):
+        method = getattr(self.scripts, script, None)
+        if method:
+            method(args)
+        else:
+            raise ConfigError(
+                "(script subtask) No such canned script ->{}<-"
+                .format(method)
+                )
+
+    def begin(self):
+        config_keys = len(self.config)
+        if config_keys == 0:
+            self.log.warning("nothing to do")
+        elif config_keys > 1:
+            raise ConfigError(
+                "(script subtask) config dictionary may contain only one key. "
+                "You provided ->{}<- keys".format(config_keys)
+                )
+        script = self.config.keys()[0]
+        v = self.config.values()[0]
+        if v is None:
+            self._run_script(script)
+        if isinstance(v, dict):
+            if len(v) > 1 or v.keys()[0] != 'args':
+                raise ConfigError(
+                    '(script subtask) script dicts may only contain one key (args)'
+                    )
+            args = script.values()[0].get('args', [])
+            if not isinstance(args, list):
+                raise ConfigError('(script subtask) script args must be a list')
+            self._run_script(script, args=args)
+
+    def teardown(self):
+        # self.log.debug("beginning of teardown method")
+        pass
+        # self.log.debug("end of teardown method")
+
+
 class Scripts:
 
     script_dict = {
@@ -1635,14 +1691,14 @@ ls -1 $PROPOSALSDIR/profile-$STORAGE_PROFILE/stack/default/ceph/minions/
         self.log = logger
         self.master_remote = master_remote
 
-    def ceph_cluster_status(self):
+    def ceph_cluster_status(self, *args):
         remote_run_script_as_root(
             self.master_remote,
             'ceph_cluster_status.sh',
             self.script_dict["ceph_cluster_status"],
             )
 
-    def create_all_pools_at_once(self, args):
+    def create_all_pools_at_once(self, *args):
         self.log.info("creating pools: {}".format(' '.join(args)))
         remote_run_script_as_root(
             self.master_remote,
@@ -1651,14 +1707,15 @@ ls -1 $PROPOSALSDIR/profile-$STORAGE_PROFILE/stack/default/ceph/minions/
             args=args,
             )
 
-    def disable_update_in_stage_0(self):
+    def disable_update_in_stage_0(self, *args):
         remote_run_script_as_root(
             self.master_remote,
             'disable_update_in_stage_0.sh',
             self.script_dict["disable_update_in_stage_0"],
             )
 
-    def proposals_remove_storage_only_node(self, hostname):
+    def proposals_remove_storage_only_node(self, *args):
+        hostname = args[0]
         remote_run_script_as_root(
             self.master_remote,
             'proposals_remove_storage_only_node.sh',
@@ -1666,21 +1723,21 @@ ls -1 $PROPOSALSDIR/profile-$STORAGE_PROFILE/stack/default/ceph/minions/
             args=[proposals_dir, self.storage_profile, hostname],
             )
 
-    def rgw_init(self):
+    def rgw_init(self, *args):
         remote_run_script_as_root(
             self.master_remote,
             'rgw_init.sh',
             self.script_dict["rgw_init"],
             )
 
-    def rgw_init_ssl(self):
+    def rgw_init_ssl(self, *args):
         remote_run_script_as_root(
             self.master_remote,
             'rgw_init_ssl.sh',
             self.script_dict["rgw_init_ssl"],
             )
 
-    def salt_api_test(self):
+    def salt_api_test(self, *args):
         remote_run_script_as_root(
             self.master_remote,
             'salt_api_test.sh',
@@ -1797,4 +1854,5 @@ health_ok = HealthOK
 orch = Orch
 policy = Policy
 reboot = Reboot
+script = Script
 validation = Validation
