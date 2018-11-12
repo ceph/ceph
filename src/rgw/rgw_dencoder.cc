@@ -456,6 +456,20 @@ void RGWZone::generate_test_instances(list<RGWZone*> &o)
   o.push_back(new RGWZone);
 }
 
+void RGWRealm::generate_test_instances(list<RGWRealm*> &o)
+{
+  RGWRealm *z = new RGWRealm;
+  o.push_back(z);
+  o.push_back(new RGWRealm);
+}
+
+void RGWPeriod::generate_test_instances(list<RGWPeriod*> &o)
+{
+  RGWPeriod *z = new RGWPeriod;
+  o.push_back(z);
+  o.push_back(new RGWPeriod);
+}
+
 void RGWZoneParams::generate_test_instances(list<RGWZoneParams*> &o)
 {
   o.push_back(new RGWZoneParams);
