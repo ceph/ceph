@@ -161,15 +161,6 @@ int ErasureCodeBench::encode()
     return code;
   }
 
-  if (erasure_code->get_data_chunk_count() != (unsigned int)k ||
-      (erasure_code->get_chunk_count() - erasure_code->get_data_chunk_count()
-       != (unsigned int)m)) {
-    cout << "parameter k is " << k << "/m is " << m << ". But data chunk count is "
-      << erasure_code->get_data_chunk_count() <<"/parity chunk count is "
-      << erasure_code->get_chunk_count() - erasure_code->get_data_chunk_count() << endl;
-    return -EINVAL;
-  }
-
   bufferlist in;
   in.append(string(in_size, 'X'));
   in.rebuild_aligned(ErasureCode::SIMD_ALIGN);
@@ -264,14 +255,7 @@ int ErasureCodeBench::decode()
     cerr << messages.str() << endl;
     return code;
   }
-  if (erasure_code->get_data_chunk_count() != (unsigned int)k ||
-      (erasure_code->get_chunk_count() - erasure_code->get_data_chunk_count()
-       != (unsigned int)m)) {
-    cout << "parameter k is " << k << "/m is " << m << ". But data chunk count is "
-      << erasure_code->get_data_chunk_count() <<"/parity chunk count is "
-      << erasure_code->get_chunk_count() - erasure_code->get_data_chunk_count() << endl;
-    return -EINVAL;
-  }
+
   bufferlist in;
   in.append(string(in_size, 'X'));
   in.rebuild_aligned(ErasureCode::SIMD_ALIGN);
