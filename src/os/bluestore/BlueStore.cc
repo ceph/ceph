@@ -4618,15 +4618,14 @@ void BlueStore::_close_bdev()
   bdev = NULL;
 }
 
-int BlueStore::_open_fm(bool create)
+int BlueStore::_open_fm(KeyValueDB::Transaction t)
 {
   ceph_assert(fm == NULL);
   fm = FreelistManager::create(cct, freelist_type, PREFIX_ALLOC);
-
-  if (create) {
+  ceph_assert(fm);
+  if (t) {
     // initialize freespace
     dout(20) << __func__ << " initializing freespace" << dendl;
-    KeyValueDB::Transaction t = db->get_transaction();
     {
       bufferlist bl;
       bl.append(freelist_type);
@@ -4692,7 +4691,6 @@ int BlueStore::_open_fm(bool create)
 	start += l + u;
       }
     }
-    db->submit_transaction_sync(t);
   }
 
   int r = fm->init(db);
@@ -5084,10 +5082,117 @@ void BlueStore::_minimal_close_bluefs()
   bluefs = NULL;
 }
 
-int BlueStore::_open_db(bool create, bool to_repair_db)
+int BlueStore::_is_bluefs(bool create, bool* ret)
+{
+  if (create) {
+    *ret = cct->_conf->bluestore_bluefs;
+  } else {
+    string s;
+    int r = read_meta("bluefs", &s);
+    if (r < 0) {
+      derr << __func__ << " unable to read 'bluefs' meta" << dendl;
+      return -EIO;
+    }
+    if (s == "1") {
+      *ret = true;
+    } else if (s == "0") {
+      *ret = false;
+    } else {
+      derr << __func__ << " bluefs = " << s << " : not 0 or 1, aborting"
+	   << dendl;
+      return -EIO;
+    }
+  }
+  return 0;
+}
+
+/*
+* opens both DB and dependant super_meta, FreelistManager and allocator
+* in the proper order
+*/
+int BlueStore::_open_db_and_around(bool read_only)
+{
+  int r;
+  bool do_bluefs = false;
+  _is_bluefs(false, &do_bluefs); // ignore err code
+  if (do_bluefs) {
+    // open in read-only first to read FM list and init allocator
+    // as they might be needed for some BlueFS procedures
+    r = _open_db(false, false, true);
+    if (r < 0)
+      return r;
+
+    r = _open_super_meta();
+    if (r < 0) {
+      goto out_db;
+    }
+
+    r = _open_fm(nullptr);
+    if (r < 0)
+      goto out_db;
+
+    r = _open_alloc();
+    if (r < 0)
+      goto out_fm;
+
+    // now open in R/W mode
+    if (!read_only) {
+      _close_db();
+
+      r = _open_db(false, false, false);
+      if (r < 0) {
+	_close_alloc();
+	_close_fm();
+	return r;
+      }
+    }
+  } else {
+    r = _open_db(false, false);
+    if (r < 0) {
+      return r;
+    }
+    r = _open_super_meta();
+    if (r < 0) {
+      goto out_db;
+    }
+
+    r = _open_fm(nullptr);
+    if (r < 0)
+      goto out_db;
+
+    r = _open_alloc();
+    if (r < 0)
+      goto out_fm;
+  }
+  return 0;
+
+ out_fm:
+  _close_fm();
+ out_db:
+  _close_db();
+  return r;
+}
+
+void BlueStore::_close_db_and_around()
+{
+  if (bluefs) {
+    _close_db();
+    if (!_kv_only) {
+      _close_alloc();
+      _close_fm();
+    }
+  } else {
+    _close_alloc();
+    _close_fm();
+    _close_db();
+  }
+}
+
+int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
 {
   int r;
   ceph_assert(!db);
+  ceph_assert(!(create && read_only));
   string fn = path + "/db";
   string options;
   stringstream err;
@@ -5108,24 +5213,9 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
   dout(10) << __func__ << " kv_backend = " << kv_backend << dendl;
 
   bool do_bluefs;
-  if (create) {
-    do_bluefs = cct->_conf->bluestore_bluefs;
-  } else {
-    string s;
-    r = read_meta("bluefs", &s);
-    if (r < 0) {
-      derr << __func__ << " unable to read 'bluefs' meta" << dendl;
-      return -EIO;
-    }
-    if (s == "1") {
-      do_bluefs = true;
-    } else if (s == "0") {
-      do_bluefs = false;
-    } else {
-      derr << __func__ << " bluefs = " << s << " : not 0 or 1, aborting"
-	   << dendl;
-      return -EIO;
-    }
+  r = _is_bluefs(create, &do_bluefs);
+  if (r < 0) {
+    return r;
   }
   dout(10) << __func__ << " do_bluefs = " << do_bluefs << dendl;
 
@@ -5270,7 +5360,9 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
   } else {
     // we pass in cf list here, but it is only used if the db already has
     // column families created.
-    r = db->open(err, cfs);
+    r = read_only ?
+      db->open_read_only(err, cfs) :
+      db->open(err, cfs);
   }
   if (r) {
     derr << __func__ << " erroring opening db: " << err.str() << dendl;
@@ -5798,12 +5890,11 @@ int BlueStore::mkfs()
   if (r < 0)
     goto out_close_bdev;
 
-  r = _open_fm(true);
-  if (r < 0)
-    goto out_close_db;
-
   {
     KeyValueDB::Transaction t = db->get_transaction();
+    r = _open_fm(t);
+    if (r < 0)
+      goto out_close_db;
     {
       bufferlist bl;
       encode((uint64_t)0, bl);
@@ -5821,7 +5912,6 @@ int BlueStore::mkfs()
     _prepare_ondisk_format_super(t);
     db->submit_transaction_sync(t);
   }
-
 
   r = write_meta("kv_backend", cct->_conf->bluestore_kvbackend);
   if (r < 0)
@@ -6315,28 +6405,27 @@ int BlueStore::_mount(bool kv_only, bool open_db)
   if (r < 0)
     goto out_fsid;
 
-  r = _open_db(false, !open_db);
-  if (r < 0)
-    goto out_bdev;
+  if (open_db) {
+    r = _open_db_and_around(false);
+  } else {
+    // we can bypass db open exclusively in case of kv_only mode
+    ceph_assert(kv_only);
+    r = _open_db(false, true);
+    if (r < 0)
+      goto out_bdev;
+  }
 
   if (kv_only)
     return 0;
 
-  r = _open_super_meta();
-  if (r < 0)
+  r = _upgrade_super();
+  if (r < 0) {
     goto out_db;
-
-  r = _open_fm(false);
-  if (r < 0)
-    goto out_db;
-
-  r = _open_alloc(); //FIXME: db might need allocator on open!!! hence needs relocation
-  if (r < 0)
-    goto out_fm;
+  }
 
   r = _open_collections();
   if (r < 0)
-    goto out_alloc;
+    goto out_db;
 
   r = _reload_logger();
   if (r < 0)
@@ -6357,12 +6446,8 @@ int BlueStore::_mount(bool kv_only, bool open_db)
   _kv_stop();
  out_coll:
   _flush_cache();
- out_alloc:
-  _close_alloc();
- out_fm:
-  _close_fm();
  out_db:
-  _close_db();
+  _close_db_and_around();
  out_bdev:
   _close_bdev();
  out_fsid:
@@ -6387,10 +6472,8 @@ int BlueStore::umount()
     _flush_cache();
     dout(20) << __func__ << " closing" << dendl;
 
-    _close_alloc();
-    _close_fm();
   }
-  _close_db();
+  _close_db_and_around();
   _close_bdev();
   _close_fsid();
   _close_path();
@@ -6669,6 +6752,8 @@ int BlueStore::_fsck(bool deep, bool repair)
   uint64_t num_object_shards = 0;
   BlueStoreRepairer repairer;
   store_statfs_t* expected_statfs = nullptr;
+  // in deep mode we need R/W write access to be able to replay deferred ops
+  bool read_only = !(repair || deep);
 
   utime_t start = ceph_clock_now();
   const auto& no_pps_mode = cct->_conf->bluestore_no_per_pool_stats_tolerance;
@@ -6695,32 +6780,30 @@ int BlueStore::_fsck(bool deep, bool repair)
   if (r < 0)
     goto out_fsid;
 
-  r = _open_db(false);
+  r = _open_db_and_around(read_only);
   if (r < 0)
     goto out_bdev;
 
-  r = _open_super_meta();
-  if (r < 0)
-    goto out_db;
-
-  r = _open_fm(false);
-  if (r < 0)
-    goto out_db;
-
-  r = _open_alloc();
-  if (r < 0)
-    goto out_fm;
+  if (!read_only) {
+    r = _upgrade_super();
+    if (r < 0) {
+      goto out_db;
+    }
+  }
 
   r = _open_collections(&errors);
   if (r < 0)
-    goto out_alloc;
+    goto out_db;
 
   mempool_thread.init();
 
   // we need finisher and kv_{sync,finalize}_thread *just* for replay
-  _kv_start();
-  r = _deferred_replay();
-  _kv_stop();
+  // enable in repair or deep mode modes only
+  if (!read_only) {
+    _kv_start();
+    r = _deferred_replay();
+    _kv_stop();
+  }
   if (r < 0)
     goto out_scan;
 
@@ -7547,13 +7630,9 @@ int BlueStore::_fsck(bool deep, bool repair)
  out_scan:
   mempool_thread.shutdown();
   _flush_cache();
- out_alloc:
-  _close_alloc();
- out_fm:
-  _close_fm();
  out_db:
   it.reset();  // before db is closed
-  _close_db();
+  _close_db_and_around();
  out_bdev:
   _close_bdev();
  out_fsid:
@@ -9306,12 +9385,6 @@ int BlueStore::_open_super_meta()
 	 << latest_ondisk_format << dendl;
     return -EPERM;
   }
-  if (ondisk_format < latest_ondisk_format) {
-    int r = _upgrade_super();
-    if (r < 0) {
-      return r;
-    }
-  }
 
   {
     bufferlist bl;
@@ -9346,38 +9419,39 @@ int BlueStore::_upgrade_super()
 {
   dout(1) << __func__ << " from " << ondisk_format << ", latest "
 	  << latest_ondisk_format << dendl;
-  ceph_assert(ondisk_format > 0);
-  ceph_assert(ondisk_format < latest_ondisk_format);
+  if (ondisk_format < latest_ondisk_format) {
+    ceph_assert(ondisk_format > 0);
+    ceph_assert(ondisk_format < latest_ondisk_format);
 
-  if (ondisk_format == 1) {
-    // changes:
-    // - super: added ondisk_format
-    // - super: added min_readable_ondisk_format
-    // - super: added min_compat_ondisk_format
-    // - super: added min_alloc_size
-    // - super: removed min_min_alloc_size
-    KeyValueDB::Transaction t = db->get_transaction();
-    {
-      bufferlist bl;
-      db->get(PREFIX_SUPER, "min_min_alloc_size", &bl);
-      auto p = bl.cbegin();
-      try {
-	uint64_t val;
-	decode(val, p);
-	min_alloc_size = val;
-      } catch (buffer::error& e) {
-	derr << __func__ << " failed to read min_min_alloc_size" << dendl;
-	return -EIO;
+    if (ondisk_format == 1) {
+      // changes:
+      // - super: added ondisk_format
+      // - super: added min_readable_ondisk_format
+      // - super: added min_compat_ondisk_format
+      // - super: added min_alloc_size
+      // - super: removed min_min_alloc_size
+      KeyValueDB::Transaction t = db->get_transaction();
+      {
+	bufferlist bl;
+	db->get(PREFIX_SUPER, "min_min_alloc_size", &bl);
+	auto p = bl.cbegin();
+	try {
+	  uint64_t val;
+	  decode(val, p);
+	  min_alloc_size = val;
+	} catch (buffer::error& e) {
+	  derr << __func__ << " failed to read min_min_alloc_size" << dendl;
+	  return -EIO;
+	}
+	t->set(PREFIX_SUPER, "min_alloc_size", bl);
+	t->rmkey(PREFIX_SUPER, "min_min_alloc_size");
       }
-      t->set(PREFIX_SUPER, "min_alloc_size", bl);
-      t->rmkey(PREFIX_SUPER, "min_min_alloc_size");
+      ondisk_format = 2;
+      _prepare_ondisk_format_super(t);
+      int r = db->submit_transaction_sync(t);
+      ceph_assert(r == 0);
     }
-    ondisk_format = 2;
-    _prepare_ondisk_format_super(t);
-    int r = db->submit_transaction_sync(t);
-    ceph_assert(r == 0);
   }
-
   // done
   dout(1) << __func__ << " done" << dendl;
   return 0;

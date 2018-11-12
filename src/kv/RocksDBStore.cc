@@ -318,9 +318,9 @@ int RocksDBStore::create_and_open(ostream &out,
   if (r < 0)
     return r;
   if (cfs.empty()) {
-    return do_open(out, true, nullptr);
+    return do_open(out, true, false, nullptr);
   } else {
-    return do_open(out, true, &cfs);
+    return do_open(out, true, false, &cfs);
   }
 }
 
@@ -463,9 +463,12 @@ int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options&
   return 0;
 }
 
-int RocksDBStore::do_open(ostream &out, bool create_if_missing,
+int RocksDBStore::do_open(ostream &out,
+			  bool create_if_missing,
+			  bool open_readonly,
 			  const vector<ColumnFamily>* cfs)
 {
+  ceph_assert(!(create_if_missing && open_readonly));
   rocksdb::Options opt;
   int r = load_rocksdb_options(create_if_missing, opt);
   if (r) {
@@ -515,7 +518,11 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing,
     dout(1) << __func__ << " column families: " << existing_cfs << dendl;
     if (existing_cfs.empty()) {
       // no column families
-      status = rocksdb::DB::Open(opt, path, &db);
+      if (open_readonly) {
+	status = rocksdb::DB::Open(opt, path, &db);
+      } else {
+	status = rocksdb::DB::OpenForReadOnly(opt, path, &db);
+      }
       if (!status.ok()) {
 	derr << status.ToString() << dendl;
 	return -EINVAL;
@@ -554,8 +561,14 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing,
 	}
       }
       std::vector<rocksdb::ColumnFamilyHandle*> handles;
-      status = rocksdb::DB::Open(rocksdb::DBOptions(opt),
-				 path, column_families, &handles, &db);
+      if (open_readonly) {
+        status = rocksdb::DB::OpenForReadOnly(rocksdb::DBOptions(opt),
+				              path, column_families,
+					      &handles, &db);
+      } else {
+        status = rocksdb::DB::Open(rocksdb::DBOptions(opt),
+				   path, column_families, &handles, &db);
+      }
       if (!status.ok()) {
 	derr << status.ToString() << dendl;
 	return -EINVAL;
