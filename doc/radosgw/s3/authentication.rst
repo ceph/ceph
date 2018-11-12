@@ -49,6 +49,41 @@ To normalize the header into canonical form:
 
 Replace the ``{hash-of-header-and-secret}`` with the base-64 encoded HMAC string.
 
+Authentication against OpenStack Keystone
+-----------------------------------------
+
+In a radosgw instance that is configured with authentication against
+OpenStack Keystone, it is possible to use Keystone as an authoritative
+source for S3 API authentication. To do so, you must set:
+
+* the ``rgw keystone`` configuration options explained in :doc:`../keystone`,
+* ``rgw s3 auth use keystone = true``.
+
+In addition, a user wishing to use the S3 API must obtain an AWS-style
+access key and secret key. They can do so with the ``openstack ec2
+credentials create`` command::
+
+  $ openstack --os-interface public ec2 credentials create
+  +------------+---------------------------------------------------------------------------------------------------------------------------------------------+
+  | Field      | Value                                                                                                                                       |
+  +------------+---------------------------------------------------------------------------------------------------------------------------------------------+
+  | access     | c921676aaabbccdeadbeef7e8b0eeb2c                                                                                                            |
+  | links      | {u'self': u'https://auth.example.com:5000/v3/users/7ecbebaffeabbddeadbeefa23267ccbb24/credentials/OS-EC2/c921676aaabbccdeadbeef7e8b0eeb2c'} |
+  | project_id | 5ed51981aab4679851adeadbeef6ebf7                                                                                                            |
+  | secret     | ********************************                                                                                                            |
+  | trust_id   | None                                                                                                                                        |
+  | user_id    | 7ecbebaffeabbddeadbeefa23267cc24                                                                                                            |
+  +------------+---------------------------------------------------------------------------------------------------------------------------------------------+
+
+The thus-generated access and secret key can then be used for S3 API
+access to radosgw.
+
+.. note:: Consider that most production radosgw deployments
+          authenticating against OpenStack Keystone are also set up
+          for :doc:`../multitenancy`, for which special
+          considerations apply with respect to S3 signed URLs and
+          public read ACLs.
+
 Access Control Lists (ACLs)
 ---------------------------
 
