@@ -71,6 +71,10 @@ enum {
 };
 
 class Server {
+public:
+  using clock = ceph::coarse_mono_clock;
+  using time = ceph::coarse_mono_time;
+
 private:
   MDSRank *mds;
   MDCache *mdcache;

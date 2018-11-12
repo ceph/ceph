@@ -224,6 +224,7 @@ class MDSRank {
                             const std::set <std::string> &changed)
     {
       server->handle_conf_change(conf, changed);
+      sessionmap.handle_conf_change(conf, changed);
       mdcache->handle_conf_change(conf, changed, *mdsmap);
       purge_queue.handle_conf_change(conf, changed, *mdsmap);
     }
@@ -366,7 +367,10 @@ class MDSRank {
      */
     void damaged_unlocked();
 
-    utime_t get_laggy_until() const;
+    double last_cleared_laggy() const {
+      return beacon.last_cleared_laggy();
+    }
+
     double get_dispatch_queue_max_age(utime_t now) const;
 
     void send_message_mds(Message *m, mds_rank_t mds);

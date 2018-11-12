@@ -110,72 +110,82 @@ public:
 void Server::create_logger()
 {
   PerfCountersBuilder plb(g_ceph_context, "mds_server", l_mdss_first, l_mdss_last);
-  plb.add_u64_counter(l_mdss_handle_client_request,"handle_client_request",
-      "Client requests", "hcr", PerfCountersBuilder::PRIO_INTERESTING);
+
+  plb.add_u64_counter(l_mdss_handle_client_request, "handle_client_request",
+                      "Client requests", "hcr", PerfCountersBuilder::PRIO_INTERESTING);
   plb.add_u64_counter(l_mdss_handle_slave_request, "handle_slave_request",
-      "Slave requests", "hsr", PerfCountersBuilder::PRIO_INTERESTING);
-  plb.add_u64_counter(l_mdss_handle_client_session, "handle_client_session",
-      "Client session messages", "hcs", PerfCountersBuilder::PRIO_INTERESTING);
-  plb.add_u64_counter(l_mdss_dispatch_client_request, "dispatch_client_request", "Client requests dispatched");
-  plb.add_u64_counter(l_mdss_dispatch_slave_request, "dispatch_server_request", "Server requests dispatched");
+                      "Slave requests", "hsr", PerfCountersBuilder::PRIO_INTERESTING);
+  plb.add_u64_counter(l_mdss_handle_client_session,
+                      "handle_client_session", "Client session messages", "hcs",
+                      PerfCountersBuilder::PRIO_INTERESTING);
   plb.add_u64_counter(l_mdss_cap_revoke_eviction, "cap_revoke_eviction",
                       "Cap Revoke Client Eviction", "cre", PerfCountersBuilder::PRIO_INTERESTING);
+
+  // fop latencies are useful
+  plb.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
   plb.add_time_avg(l_mdss_req_lookuphash_latency, "req_lookuphash_latency",
-      "Request type lookup hash of inode latency");
+                   "Request type lookup hash of inode latency");
   plb.add_time_avg(l_mdss_req_lookupino_latency, "req_lookupino_latency",
-      "Request type lookup inode latency");
+                   "Request type lookup inode latency");
   plb.add_time_avg(l_mdss_req_lookupparent_latency, "req_lookupparent_latency",
-      "Request type lookup parent latency");
+                   "Request type lookup parent latency");
   plb.add_time_avg(l_mdss_req_lookupname_latency, "req_lookupname_latency",
-      "Request type lookup name latency");
+                   "Request type lookup name latency");
   plb.add_time_avg(l_mdss_req_lookup_latency, "req_lookup_latency",
-      "Request type lookup latency");
+                   "Request type lookup latency");
   plb.add_time_avg(l_mdss_req_lookupsnap_latency, "req_lookupsnap_latency",
-      "Request type lookup snapshot latency");
+                   "Request type lookup snapshot latency");
   plb.add_time_avg(l_mdss_req_getattr_latency, "req_getattr_latency",
-      "Request type get attribute latency");
+                   "Request type get attribute latency");
   plb.add_time_avg(l_mdss_req_setattr_latency, "req_setattr_latency",
-      "Request type set attribute latency");
+                   "Request type set attribute latency");
   plb.add_time_avg(l_mdss_req_setlayout_latency, "req_setlayout_latency",
-      "Request type set file layout latency");
+                   "Request type set file layout latency");
   plb.add_time_avg(l_mdss_req_setdirlayout_latency, "req_setdirlayout_latency",
-      "Request type set directory layout latency");
+                   "Request type set directory layout latency");
   plb.add_time_avg(l_mdss_req_setxattr_latency, "req_setxattr_latency",
-      "Request type set extended attribute latency");
+                   "Request type set extended attribute latency");
   plb.add_time_avg(l_mdss_req_rmxattr_latency, "req_rmxattr_latency",
-      "Request type remove extended attribute latency");
+                   "Request type remove extended attribute latency");
   plb.add_time_avg(l_mdss_req_readdir_latency, "req_readdir_latency",
-      "Request type read directory latency");
+                   "Request type read directory latency");
   plb.add_time_avg(l_mdss_req_setfilelock_latency, "req_setfilelock_latency",
-      "Request type set file lock latency");
+                   "Request type set file lock latency");
   plb.add_time_avg(l_mdss_req_getfilelock_latency, "req_getfilelock_latency",
-      "Request type get file lock latency");
+                   "Request type get file lock latency");
   plb.add_time_avg(l_mdss_req_create_latency, "req_create_latency",
-      "Request type create latency");
+                   "Request type create latency");
   plb.add_time_avg(l_mdss_req_open_latency, "req_open_latency",
-      "Request type open latency");
+                   "Request type open latency");
   plb.add_time_avg(l_mdss_req_mknod_latency, "req_mknod_latency",
-      "Request type make node latency");
+                   "Request type make node latency");
   plb.add_time_avg(l_mdss_req_link_latency, "req_link_latency",
-      "Request type link latency");
+                   "Request type link latency");
   plb.add_time_avg(l_mdss_req_unlink_latency, "req_unlink_latency",
-      "Request type unlink latency");
+                   "Request type unlink latency");
   plb.add_time_avg(l_mdss_req_rmdir_latency, "req_rmdir_latency",
-      "Request type remove directory latency");
+                   "Request type remove directory latency");
   plb.add_time_avg(l_mdss_req_rename_latency, "req_rename_latency",
-      "Request type rename latency");
+                   "Request type rename latency");
   plb.add_time_avg(l_mdss_req_mkdir_latency, "req_mkdir_latency",
-      "Request type make directory latency");
+                   "Request type make directory latency");
   plb.add_time_avg(l_mdss_req_symlink_latency, "req_symlink_latency",
-      "Request type symbolic link latency");
+                   "Request type symbolic link latency");
   plb.add_time_avg(l_mdss_req_lssnap_latency, "req_lssnap_latency",
-      "Request type list snapshot latency");
+                   "Request type list snapshot latency");
   plb.add_time_avg(l_mdss_req_mksnap_latency, "req_mksnap_latency",
-      "Request type make snapshot latency");
+                   "Request type make snapshot latency");
   plb.add_time_avg(l_mdss_req_rmsnap_latency, "req_rmsnap_latency",
-      "Request type remove snapshot latency");
+                   "Request type remove snapshot latency");
   plb.add_time_avg(l_mdss_req_renamesnap_latency, "req_renamesnap_latency",
-      "Request type rename snapshot latency");
+                   "Request type rename snapshot latency");
+
+  plb.set_prio_default(PerfCountersBuilder::PRIO_DEBUGONLY);
+  plb.add_u64_counter(l_mdss_dispatch_client_request, "dispatch_client_request",
+                      "Client requests dispatched");
+  plb.add_u64_counter(l_mdss_dispatch_slave_request, "dispatch_server_request",
+                      "Server requests dispatched");
+
   logger = plb.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(logger);
 }
@@ -753,27 +763,25 @@ void Server::terminate_sessions()
 
 void Server::find_idle_sessions()
 {
-  dout(10) << "find_idle_sessions.  laggy until " << mds->get_laggy_until() << dendl;
+  auto now = clock::now();
+  auto last_cleared_laggy = mds->last_cleared_laggy();
+
+  dout(10) << "find_idle_sessions. last cleared laggy state " << last_cleared_laggy << "s ago" << dendl;
   
   // timeout/stale
   //  (caps go stale, lease die)
-  utime_t now = ceph_clock_now();
-  double queue_max_age = mds->get_dispatch_queue_max_age(now);
-
-  utime_t cutoff = now;
-  cutoff -= queue_max_age;
-  cutoff -= mds->mdsmap->get_session_timeout();
+  double queue_max_age = mds->get_dispatch_queue_max_age(ceph_clock_now());
+  double cutoff = queue_max_age + mds->mdsmap->get_session_timeout();
   while (1) {
     Session *session = mds->sessionmap.get_oldest_session(Session::STATE_OPEN);
     if (!session) break;
-    dout(20) << "laggiest active session is " << session->info.inst << dendl;
-    if (session->last_cap_renew >= cutoff) {
-      dout(20) << "laggiest active session is " << session->info.inst << " and sufficiently new (" 
-	       << session->last_cap_renew << ")" << dendl;
+    auto last_cap_renew_span = std::chrono::duration<double>(now-session->last_cap_renew).count();
+    if (last_cap_renew_span < cutoff) {
+      dout(20) << "laggiest active session is " << session->info.inst << " and renewed caps recently (" << last_cap_renew_span << "s ago)" << dendl;
       break;
     }
 
-    dout(10) << "new stale session " << session->info.inst << " last " << session->last_cap_renew << dendl;
+    dout(10) << "new stale session " << session->info.inst << " last renewed caps " << last_cap_renew_span << "s ago" << dendl;
     mds->sessionmap.set_state(session, Session::STATE_STALE);
     mds->locker->revoke_stale_caps(session);
     mds->locker->remove_stale_leases(session);
@@ -782,21 +790,17 @@ void Server::find_idle_sessions()
   }
 
   // autoclose
-  cutoff = now;
-  cutoff -= queue_max_age;
-  cutoff -= mds->mdsmap->get_session_autoclose();
+  cutoff = queue_max_age + mds->mdsmap->get_session_autoclose();
 
   // don't kick clients if we've been laggy
-  if (mds->get_laggy_until() > cutoff) {
-    dout(10) << " laggy_until " << mds->get_laggy_until() << " > cutoff " << cutoff
-	     << ", not kicking any clients to be safe" << dendl;
+  if (last_cleared_laggy < cutoff) {
+    dout(10) << " last cleared laggy " << last_cleared_laggy << "s ago (< cutoff " << cutoff
+	     << "), not kicking any clients to be safe" << dendl;
     return;
   }
 
-  if (mds->sessionmap.get_sessions().size() == 1 &&
-      mds->mdsmap->get_num_in_mds() == 1) {
-    dout(20) << "not evicting a slow client, because there is only one"
-             << dendl;
+  if (mds->sessionmap.get_sessions().size() == 1 && mds->mdsmap->get_num_in_mds() == 1) {
+    dout(20) << "skipping client eviction because there is only one" << dendl;
     return;
   }
 
@@ -810,14 +814,14 @@ void Server::find_idle_sessions()
   assert(stale_sessions != nullptr);
 
   for (const auto &session: *stale_sessions) {
+    auto last_cap_renew_span = std::chrono::duration<double>(now-session->last_cap_renew).count();
     if (session->is_importing()) {
       dout(10) << "stopping at importing session " << session->info.inst << dendl;
       break;
     }
     assert(session->is_stale());
-    if (session->last_cap_renew >= cutoff) {
-      dout(20) << "oldest stale session is " << session->info.inst << " and sufficiently new (" 
-	       << session->last_cap_renew << ")" << dendl;
+    if (last_cap_renew_span < cutoff) {
+      dout(20) << "oldest stale session is " << session->info.inst << " and recently renewed caps " << last_cap_renew_span << "s ago" << dendl;
       break;
     }
 
@@ -825,12 +829,9 @@ void Server::find_idle_sessions()
   }
 
   for (const auto &session: to_evict) {
-    utime_t age = now;
-    age -= session->last_cap_renew;
-    mds->clog->warn() << "evicting unresponsive client " << *session
-                      << ", after " << age << " seconds";
-    dout(10) << "autoclosing stale session " << session->info.inst << " last "
-             << session->last_cap_renew << dendl;
+    auto last_cap_renew_span = std::chrono::duration<double>(now-session->last_cap_renew).count();
+    mds->clog->warn() << "evicting unresponsive client " << *session << ", after " << last_cap_renew_span << " seconds";
+    dout(10) << "autoclosing stale session " << session->info.inst << " last renewed caps " << last_cap_renew_span << "s ago" << dendl;
 
     if (g_conf->mds_session_blacklist_on_timeout) {
       std::stringstream ss;
@@ -1061,7 +1062,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
     reply->supported_features = supported_features;
   m->get_connection()->send_message(reply);
 
-  session->last_cap_renew = ceph_clock_now();
+  session->last_cap_renew = clock::now();
   mds->clog->debug() << "reconnect by " << session->info.inst << " after " << delay;
   
   // snaprealms
@@ -1576,6 +1577,9 @@ void Server::early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn)
   mds->logger->inc(l_mds_reply);
   utime_t lat = ceph_clock_now() - req->get_recv_stamp();
   mds->logger->tinc(l_mds_reply_latency, lat);
+  if (client_inst.name.is_client()) {
+    mds->sessionmap.hit_session(mdr->session);
+  }
   perf_gather_op_latency(req, lat);
   dout(20) << "lat " << lat << dendl;
 
@@ -1633,6 +1637,9 @@ void Server::reply_client_request(MDRequestRef& mdr, MClientReply *reply)
     mds->logger->inc(l_mds_reply);
     utime_t lat = ceph_clock_now() - mdr->client_request->get_recv_stamp();
     mds->logger->tinc(l_mds_reply_latency, lat);
+    if (client_inst.name.is_client()) {
+      mds->sessionmap.hit_session(session);
+    }
     perf_gather_op_latency(req, lat);
     dout(20) << "lat " << lat << dendl;
     

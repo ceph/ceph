@@ -21,6 +21,7 @@
 
 #include "common/config.h"
 #include "common/errno.h"
+#include "common/DecayCounter.h"
 #include "include/assert.h"
 #include "include/stringify.h"
 
@@ -46,12 +47,24 @@ void SessionMap::register_perfcounters()
 {
   PerfCountersBuilder plb(g_ceph_context, "mds_sessions",
       l_mdssm_first, l_mdssm_last);
+
   plb.add_u64(l_mdssm_session_count, "session_count",
       "Session count", "sess", PerfCountersBuilder::PRIO_INTERESTING);
+
+  plb.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
   plb.add_u64_counter(l_mdssm_session_add, "session_add",
       "Sessions added");
   plb.add_u64_counter(l_mdssm_session_remove, "session_remove",
       "Sessions removed");
+  plb.add_u64(l_mdssm_session_open, "sessions_open",
+              "Sessions currently open");
+  plb.add_u64(l_mdssm_session_stale, "sessions_stale",
+              "Sessions currently stale");
+  plb.add_u64(l_mdssm_total_load, "total_load", "Total Load");
+  plb.add_u64(l_mdssm_avg_load, "average_load", "Average Load");
+  plb.add_u64(l_mdssm_avg_session_uptime, "avg_session_uptime",
+               "Average session uptime");
+
   logger = plb.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(logger);
 }
@@ -144,9 +157,11 @@ void SessionMapStore::decode_values(std::map<std::string, bufferlist> &session_v
     }
 
     Session *s = get_or_add_session(inst);
-    if (s->is_closed())
+    if (s->is_closed()) {
       s->set_state(Session::STATE_OPEN);
-    bufferlist::iterator q = i->second.begin();
+      s->set_load_avg_decay_rate(decay_rate);
+    }
+    auto q = i->second.begin();
     s->decode(q);
   }
 }
@@ -483,13 +498,25 @@ uint64_t SessionMap::set_state(Session *session, int s) {
     if (by_state_entry == by_state.end())
       by_state_entry = by_state.emplace(s, new xlist<Session*>).first;
     by_state_entry->second->push_back(&session->item_session_list);
+
+    if (session->is_open() || session->is_stale()) {
+      session->set_load_avg_decay_rate(decay_rate);
+    }
+
+    // refresh number of sessions for states which have perf
+    // couters associated
+    logger->set(l_mdssm_session_open,
+                get_session_count_in_state(Session::STATE_OPEN));
+    logger->set(l_mdssm_session_stale,
+                get_session_count_in_state(Session::STATE_STALE));
   }
+
   return session->get_state_seq();
 }
 
 void SessionMapStore::decode_legacy(bufferlist::iterator& p)
 {
-  utime_t now = ceph_clock_now();
+  auto now = clock::now();
   uint64_t pre;
   decode(pre, p);
   if (pre == (uint64_t)-1) {
@@ -502,8 +529,10 @@ void SessionMapStore::decode_legacy(bufferlist::iterator& p)
       entity_inst_t inst;
       decode(inst.name, p);
       Session *s = get_or_add_session(inst);
-      if (s->is_closed())
+      if (s->is_closed()) {
         s->set_state(Session::STATE_OPEN);
+        s->set_load_avg_decay_rate(decay_rate);
+      }
       s->decode(p);
     }
 
@@ -532,6 +561,7 @@ void SessionMapStore::decode_legacy(bufferlist::iterator& p)
 	session_map[s->info.inst.name] = s;
       }
       s->set_state(Session::STATE_OPEN);
+      s->set_load_avg_decay_rate(decay_rate);
       s->last_cap_renew = now;
     }
   }
@@ -600,6 +630,8 @@ void SessionMap::add_session(Session *s)
   by_state_entry->second->push_back(&s->item_session_list);
   s->get();
 
+  update_average_birth_time(*s);
+
   logger->set(l_mdssm_session_count, session_map.size());
   logger->inc(l_mdssm_session_add);
 }
@@ -607,6 +639,8 @@ void SessionMap::add_session(Session *s)
 void SessionMap::remove_session(Session *s)
 {
   dout(10) << __func__ << " s=" << s << " name=" << s->info.inst.name << dendl;
+
+  update_average_birth_time(*s, false);
 
   s->trim_completed_requests(0);
   s->item_session_list.remove_myself();
@@ -632,7 +666,7 @@ void SessionMap::touch_session(Session *session)
 				      new xlist<Session*>).first;
   by_state_entry->second->push_back(&session->item_session_list);
 
-  session->last_cap_renew = ceph_clock_now();
+  session->last_cap_renew = clock::now();
 }
 
 void SessionMap::_mark_dirty(Session *s)
@@ -821,7 +855,7 @@ size_t Session::get_request_count()
  */
 void Session::notify_cap_release(size_t n_caps)
 {
-  if (!recalled_at.is_zero()) {
+  if (recalled_at != time::min()) {
     recall_release_count += n_caps;
     if (recall_release_count >= recall_count)
       clear_recalled_at();
@@ -836,21 +870,21 @@ void Session::notify_cap_release(size_t n_caps)
  */
 void Session::notify_recall_sent(const size_t new_limit)
 {
-  if (recalled_at.is_zero()) {
+  if (recalled_at == time::min()) {
     // Entering recall phase, set up counters so we can later
     // judge whether the client has respected the recall request
-    recalled_at = last_recall_sent = ceph_clock_now();
+    recalled_at = last_recall_sent = clock::now();
     assert (new_limit < caps.size());  // Behaviour of Server::recall_client_state
     recall_count = caps.size() - new_limit;
     recall_release_count = 0;
   } else {
-    last_recall_sent = ceph_clock_now();
+    last_recall_sent = clock::now();
   }
 }
 
 void Session::clear_recalled_at()
 {
-  recalled_at = last_recall_sent = utime_t();
+  recalled_at = last_recall_sent = time::min();
   recall_count = 0;
   recall_release_count = 0;
 }
@@ -934,6 +968,53 @@ int Session::check_access(CInode *in, unsigned mask,
     return -EACCES;
   }
   return 0;
+}
+
+// track total and per session load
+void SessionMap::hit_session(Session *session) {
+  uint64_t sessions = get_session_count_in_state(Session::STATE_OPEN) +
+                      get_session_count_in_state(Session::STATE_STALE);
+  assert(sessions != 0);
+
+  double total_load = total_load_avg.hit(ceph_clock_now(), total_load_avg_rate);
+  double avg_load = total_load / sessions;
+
+  logger->set(l_mdssm_total_load, (uint64_t)total_load);
+  logger->set(l_mdssm_avg_load, (uint64_t)avg_load);
+
+  session->hit_session();
+}
+
+void SessionMap::handle_conf_change(const struct md_config_t *conf,
+                                    const std::set <std::string> &changed) {
+  if (changed.count("mds_request_load_average_decay_rate")) {
+    decay_rate = conf->get_val<double>("mds_request_load_average_decay_rate");
+    dout(20) << __func__ << " decay rate changed to " << decay_rate << dendl;
+
+    total_load_avg_rate = DecayRate(decay_rate);
+
+    auto p = by_state.find(Session::STATE_OPEN);
+    if (p != by_state.end()) {
+      for (const auto &session : *(p->second)) {
+        session->set_load_avg_decay_rate(decay_rate);
+      }
+    }
+    p = by_state.find(Session::STATE_STALE);
+    if (p != by_state.end()) {
+      for (const auto &session : *(p->second)) {
+        session->set_load_avg_decay_rate(decay_rate);
+      }
+    }
+  }
+}
+
+void SessionMap::update_average_session_age() {
+  if (!session_map.size()) {
+    return;
+  }
+
+  double avg_uptime = std::chrono::duration<double>(clock::now()-avg_birth_time).count();
+  logger->set(l_mdssm_avg_session_uptime, (uint64_t)avg_uptime);
 }
 
 int SessionFilter::parse(
