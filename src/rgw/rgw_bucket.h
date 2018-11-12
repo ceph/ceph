@@ -163,6 +163,27 @@ public:
 WRITE_CLASS_ENCODER(RGWUserBuckets)
 
 class RGWMetadataManager;
+class RGWMetadataHandler;
+
+class RGWBucketMetaHandlerAllocator {
+public:
+  static RGWMetadataHandler *alloc();
+};
+
+class RGWBucketInstanceMetaHandlerAllocator {
+public:
+  static RGWMetadataHandler *alloc();
+};
+
+class RGWArchiveBucketMetaHandlerAllocator {
+public:
+  static RGWMetadataHandler *alloc();
+};
+
+class RGWArchiveBucketInstanceMetaHandlerAllocator {
+public:
+  static RGWMetadataHandler *alloc();
+};
 
 extern void rgw_bucket_init(RGWMetadataManager *mm);
 /**
