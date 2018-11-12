@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -x
 
 # run from ./ or from ../
 : ${MGR_INSIGHTS_VIRTUALENV:=/tmp/mgr-insights-virtualenv}
@@ -18,6 +19,7 @@ unset PYTHONPATH
 export CEPH_BUILD_DIR=$CEPH_BUILD_DIR
 
 source ${MGR_INSIGHTS_VIRTUALENV}/bin/activate
+trap "deactivate" EXIT
 
 if [ "$WITH_PYTHON2" = "ON" ]; then
   ENV_LIST+="py27"
