@@ -773,6 +773,7 @@ public:
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
+  static void generate_test_instances(list<RGWRealm*>& o);
 
   const std::string& get_current_period() const {
     return current_period;
@@ -971,6 +972,7 @@ public:
   }
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
+  static void generate_test_instances(list<RGWPeriod*>& o);
 
   static std::string get_staging_id(const std::string& realm_id) {
     return realm_id + ":staging";
