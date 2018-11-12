@@ -58,7 +58,7 @@ describe('InfoCardComponent', () => {
     const contentClass = 'my-css-content-class';
     component.contentClass = contentClass;
     fixture.detectChanges();
-    const card = fixture.debugElement.nativeElement.querySelector(`.card-body.${contentClass}`);
+    const card = fixture.debugElement.nativeElement.querySelector(`.card-body .${contentClass}`);
 
     expect(card).toBeTruthy();
   });

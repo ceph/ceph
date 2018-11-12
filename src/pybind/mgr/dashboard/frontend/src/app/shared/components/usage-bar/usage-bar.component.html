@@ -11,15 +11,15 @@
   </table>
 </ng-template>
 
-<div class="progress oaprogress"
+<div class="progress"
      data-placement="left"
      [tooltip]="usageTooltipTpl">
-  <div class="progress-bar progress-bar-info"
+  <div class="progress-bar bg-info"
        role="progressbar"
        [style.width]="usedPercentage + '%'">
     <span>{{ usedPercentage }}%</span>
   </div>
-  <div class="progress-bar progress-bar-freespace"
+  <div class="progress-bar bg-freespace"
        role="progressbar"
        [style.width]="freePercentage + '%'">
   </div>

@@ -2,19 +2,18 @@
      dropdown>
   <ng-container *ngIf="getCurrentButton() as action">
     <button type="button"
-            class="btn btn-sm btn-{{btnColor}}"
+            class="btn btn-{{btnColor}}"
             [ngClass]="{'disabled': disableSelectionAction(action)}"
             (click)="useClickAction(action)"
             [routerLink]="useRouterLink(action)">
-      <i [ngClass]="[action.icon, icons.width]"></i><span>{{ action.name }}</span>
+      <i [ngClass]="[action.icon]"></i><span>{{ action.name }}</span>
     </button>
   </ng-container>
   <button type="button"
           dropdownToggle
           *ngIf="showDropDownActions()"
-          class="btn btn-sm btn-{{btnColor}} dropdown-toggle dropdown-toggle-split">
+          class="btn btn-{{btnColor}} dropdown-toggle dropdown-toggle-split">
     <ng-container *ngIf="dropDownOnly">{{ dropDownOnly }} </ng-container>
-    <span class="caret"></span>
     <span *ngIf="!dropDownOnly"
           class="sr-only"></span>
   </button>
@@ -24,12 +23,12 @@
     <ng-container *ngFor="let action of dropDownActions">
       <li role="menuitem"
           class="{{ toClassName(action['name']) }}"
-          [ngClass]="{'disabled': disableSelectionAction(action)}"
           data-toggle="tooltip" title="{{ useDisableDesc(action) }}">
         <a class="dropdown-item"
            (click)="useClickAction(action)"
-           [routerLink]="useRouterLink(action)">
-          <i [ngClass]="[action.icon, icons.width]"></i><span>{{ action.name }}</span>
+           [routerLink]="useRouterLink(action)"
+           [ngClass]="{'disabled': disableSelectionAction(action)}">
+          <i [ngClass]="[action.icon]"></i><span>{{ action.name }}</span>
         </a>
       </li>
     </ng-container>

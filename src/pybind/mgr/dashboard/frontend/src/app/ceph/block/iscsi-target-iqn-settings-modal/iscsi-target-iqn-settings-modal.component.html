@@ -4,7 +4,6 @@
 
   <ng-container class="modal-content">
     <form name="settingsForm"
-          class="form"
           #formDir="ngForm"
           [formGroup]="settingsForm"
           novalidate>
@@ -14,9 +13,9 @@
 
         <div class="form-group row"
              *ngFor="let setting of settingsForm.controls | keyvalue"
-             [ngClass]="{'has-error': settingsForm.showError(setting.key, formDir)}">
+             [ngClass]="{':invalid': settingsForm.showError(setting.key, formDir)}">
           <div class="col-sm-12">
-            <label class="control-label"
+            <label class="col-form-label"
                    for="{{ setting.key }}">{{ setting.key }}</label>
             <input class="form-control"
                    *ngIf="!isRadio(setting.key)"
@@ -25,23 +24,27 @@
 
             <ng-container *ngIf="isRadio(setting.key)">
               <br>
-              <div class="radio radio-inline">
+              <div class="custom-control custom-radio custom-control-inline">
                 <input type="radio"
                        [id]="setting.key + 'Yes'"
                        value="Yes"
-                       [formControlName]="setting.key">
-                <label [for]="setting.key + 'Yes'">Yes</label>
+                       [formControlName]="setting.key"
+                       class="custom-control-input">
+                <label class="custom-col-form-label"
+                       [for]="setting.key + 'Yes'">Yes</label>
               </div>
-              <div class="radio radio-inline">
+              <div class="custom-control custom-radio custom-control-inline">
                 <input type="radio"
                        [id]="setting.key + 'No'"
                        value="No"
+                       class="custom-control-input"
                        [formControlName]="setting.key">
-                <label [for]="setting.key + 'No'">No</label>
+                <label class="custom-col-form-label"
+                       [for]="setting.key + 'No'">No</label>
               </div>
             </ng-container>
 
-            <span class="help-block">{{ helpText[setting.key]?.help }}</span>
+            <span class="form-text text-muted">{{ helpText[setting.key]?.help }}</span>
           </div>
         </div>
       </div>
