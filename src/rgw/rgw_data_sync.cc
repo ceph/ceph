@@ -1706,6 +1706,12 @@ public:
   RGWDataSyncModule *get_data_handler() override {
     return &data_handler;
   }
+  RGWMetadataHandler *alloc_bucket_meta_handler() override {
+    return RGWArchiveBucketMetaHandlerAllocator::alloc();
+  }
+  RGWMetadataHandler *alloc_bucket_instance_meta_handler() override {
+    return RGWArchiveBucketInstanceMetaHandlerAllocator::alloc();
+  }
 };
 
 int RGWArchiveSyncModule::create_instance(CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance)
