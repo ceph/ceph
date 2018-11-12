@@ -3,6 +3,7 @@
 #include "include/rados/librados.hpp"
 #include "common/errno.h"
 #include "osd/osd_types.h"
+#include "rgw/rgw_tools.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -151,14 +152,16 @@ int RGWSI_RADOS::Obj::open()
   return 0;
 }
 
-int RGWSI_RADOS::Obj::operate(librados::ObjectWriteOperation *op)
+int RGWSI_RADOS::Obj::operate(librados::ObjectWriteOperation *op,
+                              optional_yield y)
 {
-  return ref.ioctx.operate(ref.oid, op);
+  return rgw_rados_operate(ref.ioctx, ref.oid, op, y);
 }
 
-int RGWSI_RADOS::Obj::operate(librados::ObjectReadOperation *op, bufferlist *pbl)
+int RGWSI_RADOS::Obj::operate(librados::ObjectReadOperation *op, bufferlist *pbl,
+                              optional_yield y)
 {
-  return ref.ioctx.operate(ref.oid, op, pbl);
+  return rgw_rados_operate(ref.ioctx, ref.oid, op, pbl, y);
 }
 
 int RGWSI_RADOS::Obj::aio_operate(librados::AioCompletion *c, librados::ObjectWriteOperation *op)
