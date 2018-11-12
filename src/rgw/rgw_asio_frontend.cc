@@ -6,6 +6,7 @@
 #include <vector>
 
 #include <boost/asio.hpp>
+#define BOOST_COROUTINES_NO_DEPRECATION_WARNING
 #include <boost/asio/spawn.hpp>
 #include <boost/intrusive/list.hpp>
 
