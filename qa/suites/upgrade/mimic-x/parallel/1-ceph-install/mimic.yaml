@@ -6,6 +6,7 @@ meta:
 tasks:
 - install:
     branch: mimic
+    exclude_packages: ['librados3']
 - print: "**** done installing mimic"
 - ceph:
     log-whitelist:
