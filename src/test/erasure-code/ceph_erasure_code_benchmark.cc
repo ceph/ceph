@@ -122,8 +122,8 @@ int ErasureCodeBench::setup(int argc, char** argv) {
   if (vm.count("erased") > 0)
     erased = vm["erased"].as<vector<int> >();
 
-  k = atoi(profile["k"].c_str());
-  m = atoi(profile["m"].c_str());
+  k = stoi(profile["k"]);
+  m = stoi(profile["m"]);
   
   if (k <= 0) {
     cout << "parameter k is " << k << ". But k needs to be > 0." << endl;
