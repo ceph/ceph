@@ -2503,36 +2503,18 @@ void get_md5_digest(const RGWBucketEntryPoint *be, string& md5_digest) {
 }
 
 class RGWArchiveBucketMetadataHandler : public RGWBucketMetadataHandler {
-
 public:
-
-  int remove_by_metakey(RGWRados *store, string& metadata_key) override {
-
-    ldout(store->ctx(), 0) << "SKIP: bucket removal is not allowed on archive zone: " << metadata_key << " ... proceeding to rename" << dendl;
-
-    string type;
-    string entry;
-    store->meta_mgr->parse_metadata_key(metadata_key, type, entry);
-
-    RGWMetadataObject *obj;
-    int ret = get(store, entry, &obj);
-    if (ret < 0) {
-        return ret;
-    }
-
-    RGWBucketEntryPoint be;
-    RGWObjectCtx obj_ctx(store);
-    RGWObjVersionTracker objv_tracker;
-    objv_tracker.read_version = obj->get_version();
-
-    delete obj;
+  int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) override {
+    ldout(store->ctx(), 0) << "SKIP: bucket removal is not allowed on archive zone: bucket:" << entry << " ... proceeding to rename" << dendl;
 
     string tenant_name, bucket_name;
     parse_bucket(entry, &tenant_name, &bucket_name);
 
     real_time mtime;
 
-    ret = store->get_bucket_entrypoint_info(obj_ctx, tenant_name, bucket_name, be, &objv_tracker, &mtime, NULL);
+    RGWBucketEntryPoint be;
+    RGWObjectCtx obj_ctx(store);
+    int ret = store->get_bucket_entrypoint_info(obj_ctx, tenant_name, bucket_name, be, &objv_tracker, &mtime, NULL);
     if (ret < 0) {
         return ret;
     }
@@ -2544,6 +2526,8 @@ public:
     be.bucket.name = be.bucket.name + archive_zone_suffix;
 
     RGWBucketEntryMetadataObject *be_mdo = new RGWBucketEntryMetadataObject(be, objv_tracker.read_version, mtime);
+
+    string metadata_key = string("bucket:") + entry;
 
     JSONFormatter f(false);
     f.open_object_section("metadata_info");
@@ -2646,7 +2630,6 @@ public:
     /* idempotent */
     return 0;
   }
-
 };
 
 class RGWBucketInstanceMetadataHandler : public RGWMetadataHandler {
@@ -2869,24 +2852,39 @@ public:
 };
 
 class RGWArchiveBucketInstanceMetadataHandler : public RGWBucketInstanceMetadataHandler {
-
 public:
 
-   int remove_by_metakey(RGWRados *store, string& metadata_key) override {
-       ldout(store->ctx(), 0) << "SKIP: bucket instance removal is not allowed on archive zone: " << metadata_key << dendl;
-	   return 0;
-   }
-
+  int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) override {
+    ldout(store->ctx(), 0) << "SKIP: bucket instance removal is not allowed on archive zone: bucket.instance:" << entry << dendl;
+    return 0;
+  }
 };
+
+RGWMetadataHandler *RGWBucketMetaHandlerAllocator::alloc() {
+  return new RGWBucketMetadataHandler;
+}
+
+RGWMetadataHandler *RGWBucketInstanceMetaHandlerAllocator::alloc() {
+  return new RGWBucketInstanceMetadataHandler;
+}
+
+RGWMetadataHandler *RGWArchiveBucketMetaHandlerAllocator::alloc() {
+  return new RGWArchiveBucketMetadataHandler;
+}
+
+RGWMetadataHandler *RGWArchiveBucketInstanceMetaHandlerAllocator::alloc() {
+  return new RGWArchiveBucketInstanceMetadataHandler;
+}
 
 void rgw_bucket_init(RGWMetadataManager *mm)
 {
-  if (mm->get_store()->get_zone().tier_type == "archive") {
-      bucket_meta_handler = new RGWArchiveBucketMetadataHandler;
-      bucket_instance_meta_handler = new RGWArchiveBucketInstanceMetadataHandler;
+  auto sync_module = mm->get_store()->get_sync_module();
+  if (sync_module) {
+    bucket_meta_handler = sync_module->alloc_bucket_meta_handler();
+    bucket_instance_meta_handler = sync_module->alloc_bucket_instance_meta_handler();
   } else {
-      bucket_meta_handler = new RGWBucketMetadataHandler;
-      bucket_instance_meta_handler = new RGWBucketInstanceMetadataHandler;
+    bucket_meta_handler = RGWBucketMetaHandlerAllocator::alloc();
+    bucket_instance_meta_handler = RGWBucketInstanceMetaHandlerAllocator::alloc();
   }
   mm->register_handler(bucket_meta_handler);
   mm->register_handler(bucket_instance_meta_handler);
