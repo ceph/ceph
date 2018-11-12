@@ -77,7 +77,7 @@ object keys. Perhaps some modeling here can help resolve this
 issue. The data of the temporary object wants to be located as close
 to the data of the base object as possible. This may be best performed
 by adding a new ObjectStore creation primitive that takes the base
-object as an addtional parameter that is a hint to the allocator.
+object as an additional parameter that is a hint to the allocator.
 
 Sam: I think that the short lived thing may be a red herring.  We'll
 be updating the donor and primary objects atomically, so it seems like
@@ -263,7 +263,7 @@ on the prior_version which is not in the log.)  THe PGLog already has
 a way of handling those edge cases (see divergent_priors).  We'd
 simply expand that to contain the entire missing set and maintain it
 atomically with the log and the objects.  This isn't really an
-unreasonable option, the addiitonal keys would be fewer than the
+unreasonable option, the additional keys would be fewer than the
 existing log keys + divergent_priors and aren't updated in the fast
 write path anyway.
 
