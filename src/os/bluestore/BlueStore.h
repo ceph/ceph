@@ -2180,13 +2180,23 @@ private:
   void _umount_for_bluefs();
 
 
+  int _is_bluefs(bool create, bool* ret);
+  /*
+  * opens both DB and dependant super_meta, FreelistManager and allocator
+  * in the proper order
+  */
+  int _open_db_and_around(bool read_only);
+  void _close_db_and_around();
+
   /*
    * @warning to_repair_db means that we open this db to repair it, will not
    * hold the rocksdb's file lock.
    */
-  int _open_db(bool create, bool to_repair_db=false);
+  int _open_db(bool create,
+	       bool to_repair_db=false,
+	       bool read_only = false);
   void _close_db();
-  int _open_fm(bool create);
+  int _open_fm(KeyValueDB::Transaction t);
   void _close_fm();
   int _open_alloc();
   void _close_alloc();
