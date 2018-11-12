@@ -31,16 +31,22 @@ public:
   int remove_query(OSDPerfMetricQueryID query_id);
   void remove_all_queries();
 
+  int get_counters(OSDPerfMetricQueryID query_id,
+                   std::map<OSDPerfMetricKey, PerformanceCounters> *counters);
+
   void process_reports(
       const std::map<OSDPerfMetricQuery, OSDPerfMetricReport> &reports);
 
 private:
   typedef std::map<OSDPerfMetricQuery, std::set<OSDPerfMetricQueryID>> Queries;
+  typedef std::map<OSDPerfMetricQueryID,
+                   std::map<OSDPerfMetricKey, PerformanceCounters>> Counters;
 
   Listener &listener;
   mutable Mutex lock;
   OSDPerfMetricQueryID next_query_id = 0;
   Queries queries;
+  Counters counters;
 };
 
 #endif // OSD_PERF_METRIC_COLLECTOR_H_
