@@ -670,7 +670,14 @@ ceph_add_osd_perf_query(BaseMgrModule *self, PyObject *args)
     return nullptr;
   }
 
-  OSDPerfMetricQuery query;
+  OSDPerfMetricQuery query = {{{OSDPerfMetricSubKeyType::CLIENT_ID, "^.*$"}},
+                              {{PerformanceCounterType::WRITE_OPS},
+                               {PerformanceCounterType::READ_OPS},
+                               {PerformanceCounterType::WRITE_BYTES},
+                               {PerformanceCounterType::READ_BYTES},
+                               {PerformanceCounterType::WRITE_LATENCY},
+                               {PerformanceCounterType::READ_LATENCY}}};
+
   auto query_id = self->py_modules->add_osd_perf_query(query);
   return PyLong_FromLong(query_id);
 }
