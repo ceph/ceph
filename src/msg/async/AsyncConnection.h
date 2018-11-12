@@ -195,6 +195,10 @@ class AsyncConnection : public Connection {
     return can_write.load() == WriteStatus::CANWRITE;
   }
 
+  bool is_stopped() {
+    return state == STATE_CLOSED;
+  }
+
   // Only call when AsyncConnection first construct
   void connect(const entity_addr_t& addr, int type) {
     set_peer_type(type);

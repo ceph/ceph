@@ -301,22 +301,7 @@ private:
   Cond  stop_cond;
   bool stopped;
 
-  AsyncConnectionRef _lookup_conn(const entity_addr_t& k) {
-    assert(lock.is_locked());
-    ceph::unordered_map<entity_addr_t, AsyncConnectionRef>::iterator p = conns.find(k);
-    if (p == conns.end())
-      return NULL;
-
-    // lazy delete, see "deleted_conns"
-    Mutex::Locker l(deleted_lock);
-    if (deleted_conns.erase(p->second)) {
-      p->second->get_perf_counter()->dec(l_msgr_active_connections);
-      conns.erase(p);
-      return NULL;
-    }
-
-    return p->second;
-  }
+  AsyncConnectionRef _lookup_conn(const entity_addr_t& addr);
 
   void _init_local_connection() {
     assert(lock.is_locked());
@@ -347,20 +332,12 @@ public:
 
   int accept_conn(AsyncConnectionRef conn) {
     Mutex::Locker l(lock);
-    auto it = conns.find(conn->peer_addr);
-    if (it != conns.end()) {
-      AsyncConnectionRef existing = it->second;
 
-      // lazy delete, see "deleted_conns"
-      // If conn already in, we will return 0
-      Mutex::Locker l(deleted_lock);
-      if (deleted_conns.erase(existing)) {
-        existing->get_perf_counter()->dec(l_msgr_active_connections);
-        conns.erase(it);
-      } else if (conn != existing) {
-        return -1;
-      }
+    AsyncConnectionRef existing = _lookup_conn(conn->peer_addr);
+    if (existing != NULL && conn != existing) {
+      return -1;
     }
+
     conns[conn->peer_addr] = conn;
     conn->get_perf_counter()->inc(l_msgr_active_connections);
     accepting_conns.erase(conn);

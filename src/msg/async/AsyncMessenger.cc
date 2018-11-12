@@ -653,6 +653,34 @@ void AsyncMessenger::set_addr(const entity_addr_t &addr)
   _init_local_connection();
 }
 
+AsyncConnectionRef AsyncMessenger::_lookup_conn(const entity_addr_t& addr) {
+  assert(lock.is_locked());
+
+  AsyncConnectionRef existing = NULL;
+  auto it = conns.find(addr);
+  if (it != conns.end()) {
+    existing = it->second;
+
+    // lazy delete, see "deleted_conns"
+    Mutex::Locker l(deleted_lock);
+    bool erased_from_deleted = deleted_conns.erase(existing);
+    bool existing_and_stopped = existing->is_stopped();
+    if (erased_from_deleted || existing_and_stopped) {
+
+      if (!erased_from_deleted && existing_and_stopped) {
+        // Take attention if this warning will appears in logs
+        ldout(cct, 0) << __func__ << " warning: stopped and not completely deleted connection=" << existing.get() << " addr=" << addr << dendl;
+      }
+
+      existing->get_perf_counter()->dec(l_msgr_active_connections);
+      conns.erase(it);
+      existing = NULL;
+    }
+  }
+
+  return existing;
+}
+
 void AsyncMessenger::shutdown_connections(bool queue_reset)
 {
   ldout(cct,1) << __func__ << " " << dendl;
