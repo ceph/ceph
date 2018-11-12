@@ -76,11 +76,11 @@ describe('TaskManagerComponent', () => {
 
   it('should get an empty hour glass with only finished tasks', () => {
     component._setIcon(0);
-    expect(component.icon).toBe('fa-hourglass-o');
+    expect(component.icon).toBe('fa fa-hourglass-o');
   });
 
   it('should get a nearly empty hour glass with executing tasks', () => {
     component._setIcon(10);
-    expect(component.icon).toBe('fa-hourglass-start');
+    expect(component.icon).toBe('fa fa-hourglass-start');
   });
 });

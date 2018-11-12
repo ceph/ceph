@@ -9,15 +9,14 @@
   </button>
 </div>
 
-<form class="form-horizontal"
+<form class="form"
       #formDir="ngForm"
       [formGroup]="form"
       novalidate>
   <div class="modal-body">
     <!-- Name -->
-    <div class="form-group"
-         [ngClass]="{'has-error': form.showError('name', formDir)}">
-      <label class="control-label col-sm-3"
+    <div class="form-group row">
+      <label class="col-form-label col-sm-3"
              for="name">
         <ng-container i18n>Name</ng-container>
         <span class="required"></span>
@@ -41,9 +40,8 @@
     </div>
 
     <!-- Value -->
-    <div class="form-group"
-         [ngClass]="{'has-error': form.showError('value', formDir)}">
-      <label class="control-label col-sm-3"
+    <div class="form-group row">
+      <label class="col-form-label col-sm-3"
              for="value">
         <ng-container i18n>Value</ng-container>
         <span class="required"></span>
@@ -60,25 +58,26 @@
               i18n>This field is required!</span>
       </div>
       <div *ngIf="form.getValue('value') && !form.getValue('isRegex') && matcherMatch"
-           class="col-sm-offset-3 col-sm-9 {{matcherMatch.cssClass}}"
+           class="offset-sm-3 col-sm-9 {{matcherMatch.cssClass}}"
            id="match-state">
-        <span class="help-block {{matcherMatch.cssClass}}">
+        <span class="text-muted {{matcherMatch.cssClass}}">
           {{matcherMatch.status}}
         </span>
       </div>
     </div>
 
     <!-- isRegex -->
-    <div class="form-group">
-      <div class="col-sm-offset-3 col-sm-9">
-        <div class="input-group">
-          <div class="checkbox checkbox-primary">
-            <input id="is-regex"
-                   type="checkbox"
-                   formControlName="isRegex">
-            <label for="is-regex"
-                   i18n>Use regular expression</label>
-          </div>
+    <div class="form-group row">
+      <div class="offset-sm-3 col-sm-9">
+        <div class="custom-control custom-checkbox">
+          <input type="checkbox"
+                 class="custom-control-input"
+                 formControlName="isRegex"
+                 name="is-regex"
+                 id="is-regex">
+          <label for="is-regex"
+                 class="custom-control-label"
+                 i18n>Use regular expression</label>
         </div>
       </div>
     </div>
@@ -95,4 +94,3 @@
     </cd-back-button>
   </div>
 </form>
-

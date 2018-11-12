@@ -17,7 +17,6 @@ export class Copy2ClipboardButtonDirective implements OnInit {
 
   ngOnInit() {
     const iElement = this.renderer.createElement('i');
-    this.renderer.addClass(iElement, 'icon-prepend');
     this.renderer.addClass(iElement, 'fa');
     this.renderer.addClass(iElement, 'fa-clipboard');
     this.renderer.appendChild(this.elementRef.nativeElement, iElement);

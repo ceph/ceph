@@ -8,19 +8,21 @@
           [formGroup]="osdFlagsForm"
           novalidate>
       <div class="modal-body osd-modal">
-        <div class="checkbox checkbox-primary"
+        <div class="form-check abc-checkbox  abc-checkbox-primary"
              *ngFor="let flag of flags; let last = last">
-          <input type="checkbox"
+          <input class="form-check-input"
+                 type="checkbox"
                  [checked]="flag.value"
                  (change)="flag.value = !flag.value"
                  [name]="flag.code"
                  [id]="flag.code"
                  [disabled]="flag.disabled">
-          <label [for]="flag.code"
+          <label class="form-check-label"
+                 [for]="flag.code"
                  ng-class="['tc_' + key]">
             <strong>{{ flag.name }}</strong>
             <br>
-            <span class="text-muted">{{ flag.description }}</span>
+            <span class="form-text text-muted">{{ flag.description }}</span>
           </label>
           <hr class="oa-hr-small"
               *ngIf="!last">

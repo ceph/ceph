@@ -1,23 +1,23 @@
 <div class="modal-header">
   <h4 i18n="form title|Example: Create Pool@@formTitle"
-      class="modal-title pull-left">{{ action | titlecase }} {{ resource | upperFirst }}</h4>
+      class="modal-title float-left">{{ action | titlecase }} {{ resource | upperFirst }}</h4>
+
   <button type="button"
-          class="close pull-right"
+          class="close float-right"
           aria-label="Close"
           (click)="bsModalRef.hide()">
     <span aria-hidden="true">&times;</span>
   </button>
 </div>
-<form class="form-horizontal"
-      #frm="ngForm"
+<form #frm="ngForm"
       [formGroup]="formGroup"
       novalidate>
   <div class="modal-body">
 
     <!-- Type -->
-    <div class="form-group"
-         [ngClass]="{'has-error': formGroup.showError('type', frm)}">
-      <label class="control-label col-sm-3"
+    <div class="form-group row"
+         [ngClass]="{':invalid': formGroup.showError('type', frm)}">
+      <label class="col-form-label col-sm-3"
              for="type">
         <ng-container i18n>Type</ng-container>
         <span class="required"
@@ -42,16 +42,16 @@
           <option *ngFor="let type of types"
                   [value]="type">{{ type }}</option>
         </select>
-        <span class="help-block"
+        <span class="form-text text-muted"
               *ngIf="formGroup.showError('type', frm, 'required')"
               i18n>This field is required.</span>
       </div>
     </div>
 
     <!-- Permission -->
-    <div class="form-group"
-         [ngClass]="{'has-error': formGroup.showError('perm', frm)}">
-      <label class="control-label col-sm-3"
+    <div class="form-group row"
+         [ngClass]="{':invalid': formGroup.showError('perm', frm)}">
+      <label class="col-form-label col-sm-3"
              for="perm">
         <ng-container i18n>Permission</ng-container>
         <span class="required"></span>
@@ -67,7 +67,7 @@
             {{ perm }}
           </option>
         </select>
-        <span class="help-block"
+        <span class="form-text text-muted"
               *ngIf="formGroup.showError('perm', frm, 'required')"
               i18n>This field is required.</span>
       </div>
@@ -75,10 +75,9 @@
 
   </div>
   <div class="modal-footer">
-    <cd-submit-button
-      (submitAction)="onSubmit()"
-      i18n="form action button|Example: Create Pool@@formActionButton"
-      [form]="formGroup">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
+    <cd-submit-button (submitAction)="onSubmit()"
+                      i18n="form action button|Example: Create Pool@@formActionButton"
+                      [form]="formGroup">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
     <cd-back-button [back]="bsModalRef.hide"></cd-back-button>
   </div>
 </form>

@@ -9,7 +9,7 @@ export enum Icons {
   exchange = 'fa fa-exchange', // Edit-Peer
   copy = 'fa fa-copy', // Copy
   clipboard = 'fa fa-clipboard', // Clipboard
-  flatten = 'fa-chain-broken', // Flatten, Link broken, Mark Lost
+  flatten = 'fa fa-chain-broken', // Flatten, Link broken, Mark Lost
   trash = 'fa fa-trash-o', // Move to trash
   lock = 'fa fa-lock', // Protect
   unlock = 'fa fa-unlock', // Unprotect
@@ -20,7 +20,7 @@ export enum Icons {
   stop = 'fa fa-stop', // Disable
   analyse = 'fa fa-stethoscope', // Scrub
   deepCheck = 'fa fa-cog', // Deep Scrub, Setting, Configuration
-  reweight = 'fa-balance-scale', // Reweight
+  reweight = 'fa fa-balance-scale', // Reweight
   left = 'fa fa-arrow-left', // Mark out
   right = 'fa fa-arrow-right', // Mark in
   down = 'fa fa-arrow-down', // Mark Down
@@ -59,7 +59,6 @@ export enum Icons {
   flag = 'fa fa-flag', // OSD configuration
 
   /* Icons for special effect */
-  width = 'fa fa-fw', // set one or more icons to the same fixed width
   large = 'fa fa-lg', // icon becomes 33% larger
   large2x = 'fa fa-2x', // icon becomes 50% larger
   large3x = 'fa fa-3x', // icon becomes 3 times larger

@@ -1,19 +1,19 @@
 <fieldset #cfgFormGroup [formGroup]="form.get('configuration')">
   <legend i18n>RBD Configuration</legend>
 
-  <div *ngFor="let section of rbdConfigurationService.sections">
-    <h3 class="page-header">
+  <div *ngFor="let section of rbdConfigurationService.sections" class="col-12">
+    <h3 class="cd-header">
       <span
         (click)="toggleSectionVisibility(section.class)"
         class="collapsible">{{ section.heading }} <i [ngClass]="!sectionVisibility[section.class] ? icons.addCircle : icons.minusCircle" aria-hidden="true"></i></span>
     </h3>
     <div class="{{ section.class }}" [hidden]="!sectionVisibility[section.class]">
       <div
-        class="form-group"
+        class="form-group row"
         *ngFor="let option of section.options"
-        [ngClass]="{'has-error': form.showError('configuration.' + option.name, cfgFormGroup)}">
+        [ngClass]="{':invalid': form.showError('configuration.' + option.name, cfgFormGroup)}">
         <label
-          class="control-label col-sm-3"
+          class="col-form-label col-sm-3"
           [for]="option.name">{{ option.displayName }}<cd-helper>{{ option.description }}</cd-helper></label>
 
         <div class="col-sm-9 {{ section.heading }}">
@@ -51,9 +51,9 @@
                   cdIops>
               </ng-container>
             </ng-container>
-            <span class="input-group-btn">
+            <span class="input-group-append">
               <button
-                class="btn btn-default"
+                class="btn btn-light"
                 type="button"
                 data-toggle="button"
                 [ngClass]="{'active': isDisabled(option.name)}"
@@ -67,7 +67,7 @@
           </div>
           <span
             i18n
-            class="help-block"
+            class="form-text text-muted"
             *ngIf="form.showError('configuration.' + option.name, cfgFormGroup, 'min')">The mininum value is 0</span>
         </div>
       </div>

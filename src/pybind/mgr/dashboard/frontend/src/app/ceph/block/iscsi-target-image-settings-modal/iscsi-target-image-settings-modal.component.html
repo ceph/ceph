@@ -12,7 +12,7 @@
       <!-- BACKSTORE -->
       <div class="form-group row">
         <div class="col-sm-12">
-          <label class="control-label"
+          <label class="col-form-label"
                  i18n>Backstore</label>
           <select id="backstore"
                   name="backstore"
@@ -31,12 +31,12 @@
           <div class="form-group row"
                *ngFor="let setting of disk_default_controls[bs] | keyvalue">
             <div class="col-sm-12">
-              <label class="control-label"
+              <label class="col-form-label"
                      for="{{ setting.key }}">{{ setting.key }}</label>
               <input type="number"
                      class="form-control"
                      [(ngModel)]="model[bs][setting.key]">
-              <span class="help-block">{{ helpText[setting.key]?.help }}</span>
+              <span class="form-text text-muted">{{ helpText[setting.key]?.help }}</span>
             </div>
           </div>
         </ng-container>
@@ -45,7 +45,7 @@
 
     <div class="modal-footer">
       <div class="button-group text-right">
-        <button class="btn btn-sm btn-primary"
+        <button class="btn btn-secondary"
                 (click)="save()"
                 i18n>Confirm</button>
         <cd-back-button [back]="modalRef.hide"

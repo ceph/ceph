@@ -83,7 +83,10 @@ describe('RbdFormComponent', () => {
   describe('test image configuration component', () => {
     it('is visible', () => {
       fixture.detectChanges();
-      expect(queryNativeElement('cd-rbd-configuration-form').parentElement.hidden).toBe(false);
+      expect(
+        fixture.debugElement.query(By.css('cd-rbd-configuration-form')).nativeElement.parentElement
+          .hidden
+      ).toBe(true);
     });
   });
 

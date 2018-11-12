@@ -15,7 +15,7 @@ describe('PrometheusTabsComponent', () => {
   let router: Router;
 
   const selectTab = (index) => {
-    fixture.debugElement.queryAll(By.css('tab'))[index].triggerEventHandler('select', null);
+    fixture.debugElement.queryAll(By.css('tab'))[index].triggerEventHandler('selectTab', null);
   };
 
   configureTestBed({

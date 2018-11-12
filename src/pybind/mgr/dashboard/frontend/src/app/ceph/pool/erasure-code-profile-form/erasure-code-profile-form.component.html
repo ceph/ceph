@@ -1,23 +1,23 @@
 <div class="modal-header">
   <h4 i18n="form title|Example: Create Pool@@formTitle"
-      class="modal-title pull-left">{{ action | titlecase }} {{ resource | upperFirst }}</h4>
+      class="modal-title float-left">{{ action | titlecase }} {{ resource | upperFirst }}</h4>
+
   <button type="button"
-          class="close pull-right"
+          class="close float-right"
           aria-label="Close"
           (click)="bsModalRef.hide()">
     <span aria-hidden="true">&times;</span>
   </button>
 </div>
 
-<form class="form-horizontal"
-      #frm="ngForm"
+<form #frm="ngForm"
       [formGroup]="form"
       novalidate>
   <div class="modal-body">
-    <div class="form-group"
-         [ngClass]="{'has-error': form.showError('name', frm)}">
+    <div class="form-group row"
+         [ngClass]="{':invalid': form.showError('name', frm)}">
       <label for="name"
-             class="control-label col-sm-3">
+             class="col-form-label col-sm-3">
         <ng-container i18n>Name</ng-container>
         <span class="required"></span>
       </label>
@@ -29,21 +29,21 @@
                placeholder="Name..."
                formControlName="name"
                autofocus>
-        <span class="help-block"
+        <span class="form-text text-muted"
               *ngIf="form.showError('name', frm, 'required')"
               i18n>This field is required!</span>
-        <span class="help-block"
+        <span class="form-text text-muted"
               *ngIf="form.showError('name', frm, 'pattern')"
               i18n>The name can only consist of alphanumeric characters, dashes and underscores.</span>
-        <span class="help-block"
+        <span class="form-text text-muted"
               *ngIf="form.showError('name', frm, 'uniqueName')"
               i18n>The chosen erasure code profile name is already in use.</span>
       </div>
     </div>
 
-    <div class="form-group">
+    <div class="form-group row">
       <label for="plugin"
-             class="control-label col-sm-3">
+             class="col-form-label col-sm-3">
         <ng-container i18n>Plugin</ng-container>
         <span class="required"></span>
         <cd-helper [html]="tooltips.plugins[plugin].description">
@@ -62,16 +62,16 @@
             {{ plugin }}
           </option>
         </select>
-        <span class="help-block"
+        <span class="form-text text-muted"
               *ngIf="form.showError('name', frm, 'required')"
               i18n>This field is required!</span>
       </div>
     </div>
 
-    <div class="form-group"
-         [ngClass]="{'has-error': form.showError('k', frm)}">
+    <div class="form-group row"
+         [ngClass]="{':invalid': form.showError('k', frm)}">
       <label for="k"
-             class="control-label col-sm-3">
+             class="col-form-label col-sm-3">
         <ng-container i18n>Data chunks (k)</ng-container>
         <span class="required"
               *ngIf="requiredControls.includes('k')"></span>
@@ -86,19 +86,19 @@
                ng-model="$ctrl.erasureCodeProfile.k"
                placeholder="Data chunks..."
                formControlName="k">
-        <span class="help-block"
+        <span class="form-text text-muted"
               *ngIf="form.showError('k', frm, 'required')"
               i18n>This field is required!</span>
-        <span class="help-block"
+        <span class="form-text text-muted"
               *ngIf="form.showError('k', frm, 'min')"
               i18n>Must be equal to or greater than 2.</span>
       </div>
     </div>
 
-    <div class="form-group"
-         [ngClass]="{'has-error': form.showError('m', frm)}">
+    <div class="form-group row"
+         [ngClass]="{':invalid': form.showError('m', frm)}">
       <label for="m"
-             class="control-label col-sm-3">
+             class="col-form-label col-sm-3">
         <ng-container i18n>Coding chunks (m)</ng-container>
         <span class="required"
               *ngIf="requiredControls.includes('m')"></span>
@@ -112,20 +112,20 @@
                class="form-control"
                placeholder="Coding chunks..."
                formControlName="m">
-        <span class="help-block"
+        <span class="form-text text-muted"
               *ngIf="form.showError('m', frm, 'required')"
               i18n>This field is required!</span>
-        <span class="help-block"
+        <span class="form-text text-muted"
               *ngIf="form.showError('m', frm, 'min')"
               i18n>Must be equal to or greater than 1.</span>
       </div>
     </div>
 
-    <div class="form-group"
+    <div class="form-group row"
          *ngIf="plugin === 'shec'"
-         [ngClass]="{'has-error': form.showError('c', frm)}">
+         [ngClass]="{':invalid': form.showError('c', frm)}">
       <label for="c"
-             class="control-label col-sm-3">
+             class="col-form-label col-sm-3">
         <ng-container i18n>Durability estimator (c)</ng-container>
         <cd-helper [html]="tooltips.plugins.shec.c">
         </cd-helper>
@@ -137,17 +137,17 @@
                class="form-control"
                placeholder="Coding chunks..."
                formControlName="c">
-        <span class="help-block"
+        <span class="form-text text-muted"
               *ngIf="form.showError('c', frm, 'min')"
               i18n>Must be equal to or greater than 1.</span>
       </div>
     </div>
 
-    <div class="form-group"
+    <div class="form-group row"
          *ngIf="plugin === PLUGIN.LRC"
-         [ngClass]="{'has-error': form.showError('l', frm)}">
+         [ngClass]="{':invalid': form.showError('l', frm)}">
       <label for="l"
-             class="control-label col-sm-3">
+             class="col-form-label col-sm-3">
         <ng-container i18n>Locality (l)</ng-container>
         <span class="required"></span>
         <cd-helper [html]="tooltips.plugins.lrc.l">
@@ -160,18 +160,18 @@
                class="form-control"
                placeholder="Coding chunks..."
                formControlName="l">
-        <span class="help-block"
+        <span class="form-text text-muted"
               *ngIf="form.showError('l', frm, 'required')"
               i18n>This field is required!</span>
-        <span class="help-block"
+        <span class="form-text text-muted"
               *ngIf="form.showError('l', frm, 'min')"
               i18n>Must be equal to or greater than 1.</span>
       </div>
     </div>
 
-    <div class="form-group">
+    <div class="form-group row">
       <label for="crushFailureDomain"
-             class="control-label col-sm-3">
+             class="col-form-label col-sm-3">
         <ng-container i18n>Crush failure domain</ng-container>
         <cd-helper [html]="tooltips.crushFailureDomain">
         </cd-helper>
@@ -192,10 +192,10 @@
       </div>
     </div>
 
-    <div class="form-group"
+    <div class="form-group row"
          *ngIf="plugin === PLUGIN.LRC">
       <label for="crushLocality"
-             class="control-label col-sm-3">
+             class="col-form-label col-sm-3">
         <ng-container i18n>Crush Locality</ng-container>
         <cd-helper [html]="tooltips.plugins.lrc.crushLocality">
         </cd-helper>
@@ -219,10 +219,10 @@
       </div>
     </div>
 
-    <div class="form-group"
+    <div class="form-group row"
          *ngIf="[PLUGIN.JERASURE, PLUGIN.ISA].includes(plugin)">
       <label for="technique"
-             class="control-label col-sm-3">
+             class="col-form-label col-sm-3">
         <ng-container i18n>Technique</ng-container>
         <cd-helper [html]="tooltips.plugins[plugin].technique">
         </cd-helper>
@@ -240,11 +240,11 @@
       </div>
     </div>
 
-    <div class="form-group"
+    <div class="form-group row"
          *ngIf="plugin === PLUGIN.JERASURE"
-         [ngClass]="{'has-error': form.showError('packetSize', frm)}">
+         [ngClass]="{':invalid': form.showError('packetSize', frm)}">
       <label for="packetSize"
-             class="control-label col-sm-3">
+             class="col-form-label col-sm-3">
         <ng-container i18n>Packetsize</ng-container>
         <cd-helper [html]="tooltips.plugins.jerasure.packetSize">
         </cd-helper>
@@ -256,16 +256,16 @@
                class="form-control"
                placeholder="Packetsize..."
                formControlName="packetSize">
-        <span class="help-block"
+        <span class="form-text text-muted"
               *ngIf="form.showError('packetSize', frm, 'min')"
               i18n>Must be equal to or greater than 1.</span>
       </div>
     </div>
 
-    <div class="form-group"
-         [ngClass]="{'has-error': form.showError('crushRoot', frm)}">
+    <div class="form-group row"
+         [ngClass]="{':invalid': form.showError('crushRoot', frm)}">
       <label for="crushRoot"
-             class="control-label col-sm-3">
+             class="col-form-label col-sm-3">
         <ng-container i18n>Crush root</ng-container>
         <cd-helper [html]="tooltips.crushRoot">
         </cd-helper>
@@ -280,9 +280,9 @@
       </div>
     </div>
 
-    <div class="form-group">
+    <div class="form-group row">
       <label for="crushDeviceClass"
-             class="control-label col-sm-3">
+             class="col-form-label col-sm-3">
         <ng-container i18n>Crush device class</ng-container>
         <cd-helper [html]="tooltips.crushDeviceClass">
         </cd-helper>
@@ -302,9 +302,9 @@
       </div>
     </div>
 
-    <div class="form-group">
+    <div class="form-group row">
       <label for="directory"
-             class="control-label col-sm-3">
+             class="col-form-label col-sm-3">
         <ng-container i18n>Directory</ng-container>
         <cd-helper [html]="tooltips.directory">
         </cd-helper>
@@ -321,10 +321,9 @@
   </div>
 
   <div class="modal-footer">
-    <cd-submit-button
-      (submitAction)="onSubmit()"
-      i18n="form action button|Example: Create Pool@@formActionButton"
-      [form]="frm">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
+    <cd-submit-button (submitAction)="onSubmit()"
+                      i18n="form action button|Example: Create Pool@@formActionButton"
+                      [form]="frm">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
     <cd-back-button [back]="bsModalRef.hide"></cd-back-button>
   </div>
 </form>

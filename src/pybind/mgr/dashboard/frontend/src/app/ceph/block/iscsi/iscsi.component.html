@@ -13,8 +13,8 @@
 
 <ng-template #statusColorTpl
              let-value="value">
-  <span class="label"
-        [ngClass]="{'label-success': 'up' == value, 'label-danger': 'down' == value}">{{ value }}</span>
+  <span class="badge"
+        [ngClass]="{'badge-success': 'up' == value, 'badge-danger': 'down' == value}">{{ value }}</span>
 </ng-template>
 
 <ng-template #iscsiSparklineTpl

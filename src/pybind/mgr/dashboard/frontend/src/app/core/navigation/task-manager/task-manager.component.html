@@ -77,8 +77,8 @@
    outsideClick="true"
    i18n-title
    title="Background Tasks">
-  <i [ngClass]="[icon,icons.width]"></i>
+  <i [ngClass]="[icon]"></i>
   <span i18n
-        class="visible-xs-inline-block">Background Tasks</span>
+        class="d-md-none">Background Tasks</span>
   <span *ngIf="executingTasks.length > 0"> ({{ executingTasks.length }})</span>
 </a>
