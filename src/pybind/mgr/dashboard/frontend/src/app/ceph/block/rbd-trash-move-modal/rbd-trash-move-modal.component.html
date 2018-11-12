@@ -13,7 +13,7 @@
           click <kbd>Move Image</kbd>. Optionally, you can pick an expiration date.</p>
 
         <div class="form-group"
-             [ngClass]="{'has-error': moveForm.showError('expiresAt', formDir)}">
+             [ngClass]="{':invalid': moveForm.showError('expiresAt', formDir)}">
           <label for="expires"
                  i18n>Protection expires at</label>
           <input type="text"
@@ -24,10 +24,10 @@
                  [bsConfig]="bsConfig"
                  formControlName="expiresAt"
                  bsDatepicker>
-          <span class="help-block"
+          <span class="form-text text-muted"
                 *ngIf="moveForm.showError('expiresAt', formDir, 'format')"
                 i18n>Wrong date format. Please use "YYYY-MM-DD HH:mm:ss".</span>
-          <span class="help-block"
+          <span class="form-text text-muted"
                 *ngIf="moveForm.showError('expiresAt', formDir, 'expired')"
                 i18n>Protection has already expired. Please pick a future date or leave it empty.</span>
         </div>

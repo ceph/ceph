@@ -1,4 +1,5 @@
 <div dropdown
+     class="btn-group"
      *ngIf="isDropdown">
   <a dropdownToggle
      class="dropdown-toggle"
@@ -6,7 +7,6 @@
      i18n-title
      title="Select a Language">
     {{ supportedLanguages[selectedLanguage] }}
-    <span class="caret"></span>
   </a>
   <ul *dropdownMenu
       class="dropdown-menu dropdown-menu-right">

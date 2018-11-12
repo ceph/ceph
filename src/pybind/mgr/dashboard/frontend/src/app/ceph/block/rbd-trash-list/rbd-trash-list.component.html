@@ -16,11 +16,11 @@
                       [tableActions]="tableActions">
     </cd-table-actions>
 
-    <button class="btn btn-sm btn-default btn-label"
+    <button class="btn btn-light"
             type="button"
             (click)="purgeModal()"
             *ngIf="permission.delete">
-      <i [ngClass]="[icons.destroy, icons.width]"
+      <i [ngClass]="[icons.destroy]"
          aria-hidden="true"></i>
       <ng-container i18n>Purge Trash</ng-container>
     </button>

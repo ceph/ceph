@@ -78,23 +78,23 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
     this.metadata = { root: this.selectedItem.target_controls };
     const cssClasses = {
       target: {
-        expanded: _.join([Icons.width, Icons.large, Icons.bullseye], ' ')
+        expanded: _.join([Icons.large, Icons.bullseye], ' ')
       },
       initiators: {
-        expanded: _.join([Icons.width, Icons.large, Icons.user], ' '),
-        leaf: _.join([Icons.width, Icons.user], ' ')
+        expanded: _.join([Icons.large, Icons.user], ' '),
+        leaf: _.join([Icons.user], ' ')
       },
       groups: {
-        expanded: _.join([Icons.width, Icons.large, Icons.user], ' '),
-        leaf: _.join([Icons.width, Icons.user], ' ')
+        expanded: _.join([Icons.large, Icons.user], ' '),
+        leaf: _.join([Icons.user], ' ')
       },
       disks: {
-        expanded: _.join([Icons.width, Icons.large, Icons.disk], ' '),
-        leaf: _.join([Icons.width, Icons.disk], ' ')
+        expanded: _.join([Icons.large, Icons.disk], ' '),
+        leaf: _.join([Icons.disk], ' ')
       },
       portals: {
-        expanded: _.join([Icons.width, Icons.large, Icons.server], ' '),
-        leaf: _.join([Icons.width, Icons.large, Icons.server], ' ')
+        expanded: _.join([Icons.large, Icons.server], ' '),
+        leaf: _.join([Icons.large, Icons.server], ' ')
       }
     };
 

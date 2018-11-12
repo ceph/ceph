@@ -20,7 +20,7 @@ export class TableActionsComponent implements OnInit {
   @Input()
   tableActions: CdTableAction[];
   @Input()
-  btnColor = 'primary';
+  btnColor = 'secondary';
 
   // Use this if you just want to display a drop down button,
   // labeled with the given text, with all actions in it.

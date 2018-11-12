@@ -28,9 +28,9 @@ export class AlertListComponent implements OnInit {
   selection = new CdTableSelection();
   icons = Icons;
   customCss = {
-    'label label-danger': 'active',
-    'label label-warning': 'unprocessed',
-    'label label-info': 'suppressed'
+    'badge badge-danger': 'active',
+    'badge badge-warning': 'unprocessed',
+    'badge badge-info': 'suppressed'
   };
 
   constructor(
