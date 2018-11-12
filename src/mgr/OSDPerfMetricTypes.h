@@ -7,10 +7,110 @@
 #include "include/denc.h"
 #include "include/stringify.h"
 
-#include <ostream>
+#include <regex>
 
-class OpRequest;
-class utime_t;
+typedef std::vector<std::string> OSDPerfMetricSubKey; // array of regex match
+typedef std::vector<OSDPerfMetricSubKey> OSDPerfMetricKey;
+
+enum class OSDPerfMetricSubKeyType : uint8_t {
+  CLIENT_ID = 0,
+  POOL_ID = 1,
+  OBJECT_NAME = 2,
+};
+
+struct OSDPerfMetricSubKeyDescriptor {
+  OSDPerfMetricSubKeyType type = static_cast<OSDPerfMetricSubKeyType>(-1);
+  std::string regex_str;
+  std::regex regex;
+
+  bool is_supported() const {
+    switch (type) {
+    case OSDPerfMetricSubKeyType::CLIENT_ID:
+    case OSDPerfMetricSubKeyType::POOL_ID:
+    case OSDPerfMetricSubKeyType::OBJECT_NAME:
+      return true;
+    default:
+      return false;
+    }
+  }
+
+  OSDPerfMetricSubKeyDescriptor() {
+  }
+
+  OSDPerfMetricSubKeyDescriptor(OSDPerfMetricSubKeyType type,
+                                const std::string regex)
+    : type(type), regex_str(regex) {
+  }
+
+  bool operator<(const OSDPerfMetricSubKeyDescriptor &other) const {
+    if (type < other.type) {
+      return true;
+    }
+    if (type > other.type) {
+      return false;
+    }
+    return regex_str < other.regex_str;
+  }
+
+  DENC(OSDPerfMetricSubKeyDescriptor, v, p) {
+    DENC_START(1, 1, p);
+    denc(v.type, p);
+    denc(v.regex_str, p);
+    DENC_FINISH(p);
+  }
+};
+WRITE_CLASS_DENC(OSDPerfMetricSubKeyDescriptor)
+
+std::ostream& operator<<(std::ostream& os,
+                         const OSDPerfMetricSubKeyDescriptor &d);
+
+typedef std::vector<OSDPerfMetricSubKeyDescriptor> OSDPerfMetricKeyDescriptor;
+
+template<>
+struct denc_traits<OSDPerfMetricKeyDescriptor> {
+  static constexpr bool supported = true;
+  static constexpr bool bounded = false;
+  static constexpr bool featured = false;
+  static constexpr bool need_contiguous = true;
+  static void bound_encode(const OSDPerfMetricKeyDescriptor& v, size_t& p) {
+    p += sizeof(uint32_t);
+    const auto size = v.size();
+    if (size) {
+      size_t per = 0;
+      denc(v.front(), per);
+      p +=  per * size;
+    }
+  }
+  static void encode(const OSDPerfMetricKeyDescriptor& v,
+                     bufferlist::contiguous_appender& p) {
+    denc_varint(v.size(), p);
+    for (auto& i : v) {
+      denc(i, p);
+    }
+  }
+  static void decode(OSDPerfMetricKeyDescriptor& v,
+                     bufferptr::const_iterator& p) {
+    unsigned num;
+    denc_varint(num, p);
+    v.clear();
+    v.reserve(num);
+    for (unsigned i=0; i < num; ++i) {
+      OSDPerfMetricSubKeyDescriptor d;
+      denc(d, p);
+      if (!d.is_supported()) {
+        v.clear();
+        return;
+      }
+      try {
+        d.regex = {d.regex_str.c_str()};
+      } catch (const std::regex_error& e) {
+        v.clear();
+        return;
+      }
+      v.push_back(std::move(d));
+    }
+  }
+};
 
 typedef std::pair<uint64_t,uint64_t> PerformanceCounter;
 typedef std::vector<PerformanceCounter> PerformanceCounters;
@@ -47,14 +147,16 @@ struct PerformanceCounterDescriptor {
   PerformanceCounterDescriptor(PerformanceCounterType type) : type(type) {
   }
 
+  bool operator<(const PerformanceCounterDescriptor &other) const {
+    return type < other.type;
+  }
+
   DENC(PerformanceCounterDescriptor, v, p) {
     DENC_START(1, 1, p);
     denc(v.type, p);
     DENC_FINISH(p);
   }
 
-  void update_counter(const OpRequest& op, uint64_t inb, uint64_t outb,
-                      const utime_t &now, PerformanceCounter *c) const;
   void pack_counter(const PerformanceCounter &c, bufferlist *bl) const;
   void unpack_counter(bufferlist::const_iterator& bl,
                       PerformanceCounter *c) const;
@@ -108,13 +210,41 @@ typedef int OSDPerfMetricQueryID;
 
 struct OSDPerfMetricQuery {
   bool operator<(const OSDPerfMetricQuery &other) const {
-    return false;
+    if (key_descriptor < other.key_descriptor) {
+      return true;
+    }
+    if (key_descriptor > other.key_descriptor) {
+      return false;
+    }
+    return (performance_counter_descriptors <
+            other.performance_counter_descriptors);
   }
 
-  bool get_key(const OpRequest& op, std::string *key) const;
+  OSDPerfMetricQuery() {
+  }
+
+  OSDPerfMetricQuery(
+      const OSDPerfMetricKeyDescriptor &key_descriptor,
+      const PerformanceCounterDescriptors &performance_counter_descriptors)
+    : key_descriptor(key_descriptor),
+      performance_counter_descriptors(performance_counter_descriptors) {
+  }
+
+  template <typename L>
+  bool get_key(L&& get_sub_key, OSDPerfMetricKey *key) const {
+    for (auto &sub_key_descriptor : key_descriptor) {
+      OSDPerfMetricSubKey sub_key;
+      if (!get_sub_key(sub_key_descriptor, &sub_key)) {
+        return false;
+      }
+      key->push_back(sub_key);
+    }
+    return true;
+  }
 
   DENC(OSDPerfMetricQuery, v, p) {
     DENC_START(1, 1, p);
+    denc(v.key_descriptor, p);
     denc(v.performance_counter_descriptors, p);
     DENC_FINISH(p);
   }
@@ -124,20 +254,25 @@ struct OSDPerfMetricQuery {
     *descriptors = performance_counter_descriptors;
   }
 
-  void filter_out_unknown_performance_counter_descriptors();
+  template <typename L>
+  void update_counters(L &&update_counter,
+                       PerformanceCounters *counters) const {
+    auto it = counters->begin();
+    for (auto &descriptor : performance_counter_descriptors) {
+      // TODO: optimize
+      if (it == counters->end()) {
+        counters->push_back(PerformanceCounter());
+        it = std::prev(counters->end());
+      }
+      update_counter(descriptor, &(*it));
+      it++;
+    }
+  }
 
-  void update_counters(const OpRequest& op, uint64_t inb, uint64_t outb,
-                       const utime_t &now, PerformanceCounters *counters) const;
   void pack_counters(const PerformanceCounters &counters, bufferlist *bl) const;
 
-  PerformanceCounterDescriptors performance_counter_descriptors = {
-    {PerformanceCounterType::WRITE_OPS},
-    {PerformanceCounterType::READ_OPS},
-    {PerformanceCounterType::WRITE_BYTES},
-    {PerformanceCounterType::READ_BYTES},
-    {PerformanceCounterType::WRITE_LATENCY},
-    {PerformanceCounterType::READ_LATENCY},
-  };
+  OSDPerfMetricKeyDescriptor key_descriptor;
+  PerformanceCounterDescriptors performance_counter_descriptors;
 };
 WRITE_CLASS_DENC(OSDPerfMetricQuery)
 
@@ -145,7 +280,7 @@ std::ostream& operator<<(std::ostream& os, const OSDPerfMetricQuery &query);
 
 struct OSDPerfMetricReport {
   PerformanceCounterDescriptors performance_counter_descriptors;
-  std::map<std::string, bufferlist> group_packed_performance_counters;
+  std::map<OSDPerfMetricKey, bufferlist> group_packed_performance_counters;
 
   DENC(OSDPerfMetricReport, v, p) {
     DENC_START(1, 1, p);

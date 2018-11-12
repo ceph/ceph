@@ -9782,9 +9782,20 @@ int OSD::init_op_flags(OpRequestRef& op)
 void OSD::set_perf_queries(const std::list<OSDPerfMetricQuery> &queries) {
   dout(10) << "setting " << queries.size() << " queries" << dendl;
 
+  std::list<OSDPerfMetricQuery> supported_queries;
+  std::copy_if(queries.begin(), queries.end(),
+               std::back_inserter(supported_queries),
+               [](const OSDPerfMetricQuery &query) {
+                 return !query.key_descriptor.empty();
+               });
+  if (supported_queries.size() < queries.size()) {
+    dout(1) << queries.size() - supported_queries.size()
+            << " unsupported queries" << dendl;
+  }
+
   {
     Mutex::Locker locker(m_perf_queries_lock);
-    m_perf_queries = queries;
+    m_perf_queries = supported_queries;
   }
 
   std::vector<PGRef> pgs;
@@ -9792,7 +9803,7 @@ void OSD::set_perf_queries(const std::list<OSDPerfMetricQuery> &queries) {
   for (auto& pg : pgs) {
     if (pg->is_primary()) {
       pg->lock();
-      pg->set_dynamic_perf_stats_queries(queries);
+      pg->set_dynamic_perf_stats_queries(supported_queries);
       pg->unlock();
     }
   }
