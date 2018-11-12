@@ -89,7 +89,7 @@ Mantle with `vstart.sh`
 
 
    Note that if you look at the last MDS (which could be a, b, or c -- it's
-   random), you will see an an attempt to index a nil value. This is because the
+   random), you will see an attempt to index a nil value. This is because the
    last MDS tries to check the load of its neighbor, which does not exist.
 
 5. Run a simple benchmark. In our case, we use the Docker mdtest image to
@@ -224,7 +224,7 @@ in the MDS Map. The balancer pulls the Lua code from RADOS synchronously. We do
 this with a timeout: if the asynchronous read does not come back within half
 the balancing tick interval the operation is cancelled and a Connection Timeout
 error is returned. By default, the balancing tick interval is 10 seconds, so
-Mantle will use a 5 second second timeout. This design allows Mantle to
+Mantle will use a 5 second timeout. This design allows Mantle to
 immediately return an error if anything RADOS-related goes wrong.
 
 We use this implementation because we do not want to do a blocking OSD read
