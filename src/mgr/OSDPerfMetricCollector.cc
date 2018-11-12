@@ -40,6 +40,7 @@ int OSDPerfMetricCollector::add_query(const OSDPerfMetricQuery& query) {
       notify = true;
     }
     it->second.insert(query_id);
+    counters[query_id];
   }
 
   dout(10) << query << " query_id=" << query_id << dendl;
@@ -70,6 +71,7 @@ int OSDPerfMetricCollector::remove_query(int query_id) {
         break;
       }
     }
+    counters.erase(query_id);
   }
 
   if (!found) {
@@ -103,6 +105,23 @@ void OSDPerfMetricCollector::remove_all_queries() {
   }
 }
 
+int OSDPerfMetricCollector::get_counters(
+    OSDPerfMetricQueryID query_id,
+    std::map<OSDPerfMetricKey, PerformanceCounters> *c) {
+  std::lock_guard locker(lock);
+
+  auto it = counters.find(query_id);
+  if (it == counters.end()) {
+    dout(10) << "counters for " << query_id << " not found" << dendl;
+    return -ENOENT;
+  }
+
+  *c = std::move(it->second);
+  it->second.clear();
+
+  return 0;
+}
+
 void OSDPerfMetricCollector::process_reports(
     const std::map<OSDPerfMetricQuery, OSDPerfMetricReport> &reports) {
 
@@ -113,17 +132,42 @@ void OSDPerfMetricCollector::process_reports(
   std::lock_guard locker(lock);
 
   for (auto &it : reports) {
+    auto &query = it.first;
     auto &report = it.second;
-    dout(10) << "report for " << it.first << " query: "
+    dout(10) << "report for " << query << " query: "
              << report.group_packed_performance_counters.size() << " records"
              << dendl;
+
     for (auto &it : report.group_packed_performance_counters) {
       auto &key = it.first;
       auto bl_it = it.second.cbegin();
-      for (auto &d : report.performance_counter_descriptors) {
+
+      for (auto query_id : queries[query]) {
+        auto &key_counters = counters[query_id][key];
+        if (key_counters.empty()) {
+          key_counters.resize(query.performance_counter_descriptors.size(),
+                              {0, 0});
+        }
+      }
+
+      auto desc_it = report.performance_counter_descriptors.begin();
+      for (size_t i = 0; i < query.performance_counter_descriptors.size(); i++) {
+        if (desc_it == report.performance_counter_descriptors.end()) {
+          break;
+        }
+        if (desc_it->type != query.performance_counter_descriptors[i].type) {
+          continue;
+        }
         PerformanceCounter c;
-        d.unpack_counter(bl_it, &c);
-        dout(20) << "counter " << key << " " << d << ": " << c << dendl;
+        desc_it->unpack_counter(bl_it, &c);
+        dout(20) << "counter " << key << " " << *desc_it << ": " << c << dendl;
+
+        for (auto query_id : queries[query]) {
+          auto &key_counters = counters[query_id][key];
+          key_counters[i].first += c.first;
+          key_counters[i].second += c.second;
+        }
+        desc_it++;
       }
     }
   }
