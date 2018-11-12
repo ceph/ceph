@@ -7,7 +7,6 @@
 FreelistManager *FreelistManager::create(
   CephContext* cct,
   string type,
-  KeyValueDB *kvdb,
   string prefix)
 {
   // a bit of a hack... we hard-code the prefixes here.  we need to
@@ -16,7 +15,7 @@ FreelistManager *FreelistManager::create(
   // freelist type until after we open the db.
   ceph_assert(prefix == "B");
   if (type == "bitmap")
-    return new BitmapFreelistManager(cct, kvdb, "B", "b");
+    return new BitmapFreelistManager(cct, "B", "b");
   return NULL;
 }
 

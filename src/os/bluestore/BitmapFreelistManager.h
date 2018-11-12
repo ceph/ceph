@@ -15,7 +15,6 @@
 
 class BitmapFreelistManager : public FreelistManager {
   std::string meta_prefix, bitmap_prefix;
-  KeyValueDB *kvdb;
   std::shared_ptr<KeyValueDB::MergeOperator> merge_op;
   ceph::mutex lock = ceph::make_mutex("BitmapFreelistManager::lock");
 
@@ -41,13 +40,14 @@ class BitmapFreelistManager : public FreelistManager {
 
   void _init_misc();
 
-  void _verify_range(uint64_t offset, uint64_t length, int val);
+  void _verify_range(KeyValueDB *kvdb,
+    uint64_t offset, uint64_t length, int val);
   void _xor(
     uint64_t offset, uint64_t length,
     KeyValueDB::Transaction txn);
 
 public:
-  BitmapFreelistManager(CephContext* cct, KeyValueDB *db, string meta_prefix,
+  BitmapFreelistManager(CephContext* cct, string meta_prefix,
 			string bitmap_prefix);
 
   static void setup_merge_operator(KeyValueDB *db, string prefix);
@@ -58,14 +58,13 @@ public:
   int expand(uint64_t new_size,
              KeyValueDB::Transaction txn) override;
 
-
-  int init() override;
+  int init(KeyValueDB *kvdb) override;
   void shutdown() override;
 
-  void dump() override;
+  void dump(KeyValueDB *kvdb) override;
 
   void enumerate_reset() override;
-  bool enumerate_next(uint64_t *offset, uint64_t *length) override;
+  bool enumerate_next(KeyValueDB *kvdb, uint64_t *offset, uint64_t *length) override;
 
   void allocate(
     uint64_t offset, uint64_t length,

@@ -4621,7 +4621,7 @@ void BlueStore::_close_bdev()
 int BlueStore::_open_fm(bool create)
 {
   ceph_assert(fm == NULL);
-  fm = FreelistManager::create(cct, freelist_type, db, PREFIX_ALLOC);
+  fm = FreelistManager::create(cct, freelist_type, PREFIX_ALLOC);
 
   if (create) {
     // initialize freespace
@@ -4695,7 +4695,7 @@ int BlueStore::_open_fm(bool create)
     db->submit_transaction_sync(t);
   }
 
-  int r = fm->init();
+  int r = fm->init(db);
   if (r < 0) {
     derr << __func__ << " freelist init failed: " << cpp_strerror(r) << dendl;
     delete fm;
@@ -4749,7 +4749,7 @@ int BlueStore::_open_alloc()
   // initialize from freelist
   fm->enumerate_reset();
   uint64_t offset, length;
-  while (fm->enumerate_next(&offset, &length)) {
+  while (fm->enumerate_next(db, &offset, &length)) {
     alloc->init_add_free(offset, length);
     ++num;
     bytes += length;
@@ -7471,7 +7471,7 @@ int BlueStore::_fsck(bool deep, bool repair)
     }
     fm->enumerate_reset();
     uint64_t offset, length;
-    while (fm->enumerate_next(&offset, &length)) {
+    while (fm->enumerate_next(db, &offset, &length)) {
       bool intersects = false;
       apply(
         offset, length, fm->get_alloc_size(), used_blocks,

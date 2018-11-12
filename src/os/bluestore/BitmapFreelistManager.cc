@@ -47,13 +47,11 @@ void BitmapFreelistManager::setup_merge_operator(KeyValueDB *db, string prefix)
 }
 
 BitmapFreelistManager::BitmapFreelistManager(CephContext* cct,
-					     KeyValueDB *db,
 					     string meta_prefix,
 					     string bitmap_prefix)
   : FreelistManager(cct),
     meta_prefix(meta_prefix),
     bitmap_prefix(bitmap_prefix),
-    kvdb(db),
     enumerate_bl_pos(0)
 {
 }
@@ -152,7 +150,7 @@ int BitmapFreelistManager::expand(uint64_t new_size, KeyValueDB::Transaction txn
   return 0;
 }
 
-int BitmapFreelistManager::init()
+int BitmapFreelistManager::init(KeyValueDB *kvdb)
 {
   dout(1) << __func__ << dendl;
 
@@ -265,7 +263,7 @@ int get_next_set_bit(bufferlist& bl, int start)
   return -1; // not found
 }
 
-bool BitmapFreelistManager::enumerate_next(uint64_t *offset, uint64_t *length)
+bool BitmapFreelistManager::enumerate_next(KeyValueDB *kvdb, uint64_t *offset, uint64_t *length)
 {
   std::lock_guard l(lock);
 
@@ -371,17 +369,18 @@ bool BitmapFreelistManager::enumerate_next(uint64_t *offset, uint64_t *length)
   return false;
 }
 
-void BitmapFreelistManager::dump()
+void BitmapFreelistManager::dump(KeyValueDB *kvdb)
 {
   enumerate_reset();
   uint64_t offset, length;
-  while (enumerate_next(&offset, &length)) {
+  while (enumerate_next(kvdb, &offset, &length)) {
     dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
 	     << std::dec << dendl;
   }
 }
 
-void BitmapFreelistManager::_verify_range(uint64_t offset, uint64_t length,
+void BitmapFreelistManager::_verify_range(KeyValueDB *kvdb,
+					  uint64_t offset, uint64_t length,
 					  int val)
 {
   unsigned errors = 0;
