@@ -43,12 +43,12 @@ function wait_no_osd_down()
   check_no_osd_down
 }
 
+# echo $@ to see input! JFW
 function expect_false()
 {
 	set -x
 	if "$@"; then return 1; else return 0; fi
 }
-
 
 TEMP_DIR=$(mktemp -d ${TMPDIR-/tmp}/cephtool.XXX)
 trap "rm -fr $TEMP_DIR" 0
@@ -1660,6 +1660,41 @@ function test_mon_osd()
   ceph osd stat | grep up
 }
 
+function test_osd_set_unset()
+{
+  # First, be sure the candidate flags are un-set:
+  ceph osd unset noin noup 
+  ceph osd dump | grep flags | grep -qc -e 'flags.*(noin|noup)' && return 1
+
+  # Set the flags, see that they have been set:
+  ceph osd set noin noup 
+  ceph osd dump | grep -qc -e 'flags.*noin' || return 1
+  ceph osd dump | grep -qc -e 'flags.*noup' || return 1
+
+  # Unset the flags, see that they have been un-set:
+  ceph osd unset noin noup
+  ceph osd dump | grep flags | grep -qc -e 'flags.*(noin|noup)' && return 1
+
+  # Set the flags again, see that they have been set again:
+  ceph osd set noin noup 
+  ceph osd dump | grep -qc -e 'flags.*noin' || return 1
+  ceph osd dump | grep -qc -e 'flags.*noup' || return 1
+
+  # Setting a special flag individually should be fine:
+  ceph osd set recovery_deletes --yes-i-really-mean-it
+  ceph osd dump | grep flags | grep -qc -e 'flags.*recovery_deletes' || return 1
+
+  # We should be able to mix "regular" and "special" flags:
+  ceph osd unset noin noup
+  ceph osd set noin noup recovery_deletes --yes-i-really-mean-it || return 1
+  ceph osd dump | grep flags | grep -qc -e 'flags.*(noin|noup|recovery_deletes)' || return 1
+
+  # We should be able to mix "regular" and "special" flags:
+  ceph osd unset noin noup
+  ceph osd set noin noup recovery_deletes --yes-i-really-mean-it || return 1
+  ceph osd dump | grep flags | grep -qc -e 'flags.*(noin|noup|recovery_deletes)' || return 1
+}
+
 function test_mon_crush()
 {
   f=$TEMP_DIR/map.$$
@@ -2556,6 +2591,7 @@ OSD_TESTS+=" tiering_agent"
 OSD_TESTS+=" admin_heap_profiler"
 OSD_TESTS+=" osd_tell_help_command"
 OSD_TESTS+=" osd_compact"
+OSD_TESTS+=" osd_set_unset"
 
 MDS_TESTS+=" mds_tell"
 MDS_TESTS+=" mon_mds"
