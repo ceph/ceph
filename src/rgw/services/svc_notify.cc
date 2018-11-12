@@ -190,7 +190,7 @@ int RGWSI_Notify::init_watch()
 
     librados::ObjectWriteOperation op;
     op.create(false);
-    r = notify_obj.operate(&op);
+    r = notify_obj.operate(&op, null_yield);
     if (r < 0 && r != -EEXIST) {
       ldout(cct, 0) << "ERROR: notify_obj.operate() returned r=" << r << dendl;
       return r;

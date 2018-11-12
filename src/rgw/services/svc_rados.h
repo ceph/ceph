@@ -5,6 +5,7 @@
 #include "rgw/rgw_service.h"
 
 #include "include/rados/librados.hpp"
+#include "common/async/yield_context.h"
 
 class RGWAccessListFilter {
 public:
@@ -74,8 +75,9 @@ public:
 
     int open();
 
-    int operate(librados::ObjectWriteOperation *op);
-    int operate(librados::ObjectReadOperation *op, bufferlist *pbl);
+    int operate(librados::ObjectWriteOperation *op, optional_yield y);
+    int operate(librados::ObjectReadOperation *op, bufferlist *pbl,
+                optional_yield y);
     int aio_operate(librados::AioCompletion *c, librados::ObjectWriteOperation *op);
     int aio_operate(librados::AioCompletion *c, librados::ObjectReadOperation *op,
                     bufferlist *pbl);
