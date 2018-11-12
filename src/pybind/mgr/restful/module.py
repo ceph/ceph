@@ -362,7 +362,9 @@ class Module(MgrModule):
             if tag == 'seq':
                 return
 
-            request = [x for x in self.requests if x.is_running(tag)]
+            with self.requests_lock:
+                request = [x for x in self.requests if x.is_running(tag)]
+
             if len(request) != 1:
                 self.log.warn("Unknown request '%s'" % str(tag))
                 return
@@ -581,8 +583,8 @@ class Module(MgrModule):
 
 
     def submit_request(self, _request, **kwargs):
-        request = CommandsRequest(_request)
         with self.requests_lock:
+            request = CommandsRequest(_request)
             self.requests.append(request)
         if kwargs.get('wait', 0):
             while not request.is_finished():
