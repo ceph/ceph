@@ -361,16 +361,16 @@ static ceph::spinlock debug_lock;
   }
 #endif /* HAVE_XIO */
 
-  buffer::raw* buffer::copy(const char *c, unsigned len) {
-    raw* r = buffer::create_aligned(len, sizeof(size_t));
+  ceph::unique_leakable_ptr<buffer::raw> buffer::copy(const char *c, unsigned len) {
+    auto r = buffer::create_aligned(len, sizeof(size_t));
     memcpy(r->data, c, len);
     return r;
   }
 
-  buffer::raw* buffer::create(unsigned len) {
+  ceph::unique_leakable_ptr<buffer::raw> buffer::create(unsigned len) {
     return buffer::create_aligned(len, sizeof(size_t));
   }
-  buffer::raw* buffer::create_in_mempool(unsigned len, int mempool) {
+  ceph::unique_leakable_ptr<buffer::raw> buffer::create_in_mempool(unsigned len, int mempool) {
     return buffer::create_aligned_in_mempool(len, sizeof(size_t), mempool);
   }
   buffer::raw* buffer::claim_char(unsigned len, char *buf) {
@@ -389,7 +389,7 @@ static ceph::spinlock debug_lock;
     return new raw_claim_buffer(buf, len, std::move(del));
   }
 
-  buffer::raw* buffer::create_aligned_in_mempool(
+  ceph::unique_leakable_ptr<buffer::raw> buffer::create_aligned_in_mempool(
     unsigned len, unsigned align, int mempool) {
     // If alignment is a page multiple, use a separate buffer::raw to
     // avoid fragmenting the heap.
@@ -403,23 +403,24 @@ static ceph::spinlock debug_lock;
     if ((align & ~CEPH_PAGE_MASK) == 0 ||
 	len >= CEPH_PAGE_SIZE * 2) {
 #ifndef __CYGWIN__
-      return new raw_posix_aligned(len, align);
+      return ceph::unique_leakable_ptr<buffer::raw>(new raw_posix_aligned(len, align));
 #else
-      return new raw_hack_aligned(len, align);
+      return ceph::unique_leakable_ptr<buffer::raw>(new raw_hack_aligned(len, align));
 #endif
     }
-    return raw_combined::create(len, align, mempool);
+    return ceph::unique_leakable_ptr<buffer::raw>(
+      raw_combined::create(len, align, mempool));
   }
-  buffer::raw* buffer::create_aligned(
+  ceph::unique_leakable_ptr<buffer::raw> buffer::create_aligned(
     unsigned len, unsigned align) {
     return create_aligned_in_mempool(len, align,
 				     mempool::mempool_buffer_anon);
   }
 
-  buffer::raw* buffer::create_page_aligned(unsigned len) {
+  ceph::unique_leakable_ptr<buffer::raw> buffer::create_page_aligned(unsigned len) {
     return create_aligned(len, CEPH_PAGE_SIZE);
   }
-  buffer::raw* buffer::create_small_page_aligned(unsigned len) {
+  ceph::unique_leakable_ptr<buffer::raw> buffer::create_small_page_aligned(unsigned len) {
     if (len < CEPH_PAGE_SIZE) {
       return create_aligned(len, CEPH_BUFFER_ALLOC_UNIT);
     } else
@@ -435,16 +436,24 @@ static ceph::spinlock debug_lock;
     r->nref++;
     bdout << "ptr " << this << " get " << _raw << bendl;
   }
+  buffer::ptr::ptr(ceph::unique_leakable_ptr<raw> r)
+    : _raw(r.release()),
+      _off(0),
+      _len(_raw->len)
+  {
+    _raw->nref.store(1, std::memory_order_release);
+    bdout << "ptr " << this << " get " << _raw << bendl;
+  }
   buffer::ptr::ptr(unsigned l) : _off(0), _len(l)
   {
-    _raw = create(l);
-    _raw->nref++;
+    _raw = buffer::create(l).release();
+    _raw->nref.store(1, std::memory_order_release);
     bdout << "ptr " << this << " get " << _raw << bendl;
   }
   buffer::ptr::ptr(const char *d, unsigned l) : _off(0), _len(l)    // ditto.
   {
-    _raw = copy(d, l);
-    _raw->nref++;
+    _raw = buffer::copy(d, l).release();
+    _raw->nref.store(1, std::memory_order_release);
     bdout << "ptr " << this << " get " << _raw << bendl;
   }
   buffer::ptr::ptr(const ptr& p) : _raw(p._raw), _off(p._off), _len(p._len)
@@ -2157,6 +2166,13 @@ bool buffer::ptr_node::dispose_if_hypercombined(
     delete_this->~ptr_node();
   }
   return is_hypercombined;
+}
+
+std::unique_ptr<buffer::ptr_node, buffer::ptr_node::disposer>
+buffer::ptr_node::create_hypercombined(ceph::unique_leakable_ptr<buffer::raw> r)
+{
+  return std::unique_ptr<buffer::ptr_node, buffer::ptr_node::disposer>(
+    new (&r->bptr_storage) ptr_node(std::move(r)));
 }
 
 std::unique_ptr<buffer::ptr_node, buffer::ptr_node::disposer>
