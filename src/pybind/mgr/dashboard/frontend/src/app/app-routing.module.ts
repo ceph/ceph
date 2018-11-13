@@ -2,7 +2,7 @@ import { NgModule } from '@angular/core';
 import { ActivatedRouteSnapshot, RouterModule, Routes } from '@angular/router';
 
 import { IscsiComponent } from './ceph/block/iscsi/iscsi.component';
-import { MirroringComponent } from './ceph/block/mirroring/mirroring.component';
+import { OverviewComponent as RbdMirroringComponent } from './ceph/block/mirroring/overview/overview.component';
 import { RbdFormComponent } from './ceph/block/rbd-form/rbd-form.component';
 import { RbdImagesComponent } from './ceph/block/rbd-images/rbd-images.component';
 import { CephfsListComponent } from './ceph/cephfs/cephfs-list/cephfs-list.component';
@@ -163,7 +163,7 @@ const routes: Routes = [
       },
       {
         path: 'mirroring',
-        component: MirroringComponent,
+        component: RbdMirroringComponent,
         data: { breadcrumbs: 'Mirroring' }
       },
       { path: 'iscsi', component: IscsiComponent, data: { breadcrumbs: 'iSCSI' } }

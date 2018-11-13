@@ -5,17 +5,17 @@ import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { ProgressbarModule } from 'ngx-bootstrap/progressbar';
 import { TabsModule } from 'ngx-bootstrap/tabs';
 
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
-import { SharedModule } from '../../../shared/shared.module';
+import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
+import { SharedModule } from '../../../../shared/shared.module';
 import { MirrorHealthColorPipe } from '../mirror-health-color.pipe';
-import { MirroringComponent } from './mirroring.component';
+import { ImageListComponent } from './image-list.component';
 
-describe('MirroringComponent', () => {
-  let component: MirroringComponent;
-  let fixture: ComponentFixture<MirroringComponent>;
+describe('ImageListComponent', () => {
+  let component: ImageListComponent;
+  let fixture: ComponentFixture<ImageListComponent>;
 
   configureTestBed({
-    declarations: [MirroringComponent, MirrorHealthColorPipe],
+    declarations: [ImageListComponent, MirrorHealthColorPipe],
     imports: [
       SharedModule,
       BsDropdownModule.forRoot(),
@@ -27,7 +27,7 @@ describe('MirroringComponent', () => {
   });
 
   beforeEach(() => {
-    fixture = TestBed.createComponent(MirroringComponent);
+    fixture = TestBed.createComponent(ImageListComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
   });

@@ -1,34 +1,50 @@
-import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
-import { TestBed } from '@angular/core/testing';
+import { HttpClient } from '@angular/common/http';
+import { fakeAsync, TestBed, tick } from '@angular/core/testing';
+
+import { of as observableOf } from 'rxjs';
 
 import { configureTestBed } from '../../../testing/unit-test-helper';
 import { RbdMirroringService } from './rbd-mirroring.service';
 
 describe('RbdMirroringService', () => {
   let service: RbdMirroringService;
-  let httpTesting: HttpTestingController;
+
+  const summary = {
+    status: 0,
+    content_data: {
+      daemons: [],
+      pools: [],
+      image_error: [],
+      image_syncing: [],
+      image_ready: []
+    }
+  };
+
+  const httpClientSpy = {
+    get: () => observableOf(summary)
+  };
 
   configureTestBed({
-    providers: [RbdMirroringService],
-    imports: [HttpClientTestingModule]
+    providers: [RbdMirroringService, { provide: HttpClient, useValue: httpClientSpy }]
   });
 
   beforeEach(() => {
     service = TestBed.get(RbdMirroringService);
-    httpTesting = TestBed.get(HttpTestingController);
-  });
-
-  afterEach(() => {
-    httpTesting.verify();
   });
 
   it('should be created', () => {
     expect(service).toBeTruthy();
   });
 
-  it('should call get', () => {
-    service.get().subscribe();
-    const req = httpTesting.expectOne('api/rbdmirror');
-    expect(req.request.method).toBe('GET');
-  });
+  it('should call refresh', fakeAsync(() => {
+    let result = false;
+    service.refresh();
+    service.subscribe(() => {
+      result = true;
+    });
+    tick(30000);
+    spyOn(service, 'refresh').and.callFake(() => true);
+    tick(30000);
+    expect(result).toEqual(true);
+  }));
 });
