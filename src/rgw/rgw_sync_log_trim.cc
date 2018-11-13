@@ -17,6 +17,7 @@
 #include <boost/circular_buffer.hpp>
 #include <boost/container/flat_map.hpp>
 
+#include "include/scope_guard.h"
 #include "common/bounded_key_counter.h"
 #include "common/errno.h"
 #include "rgw_sync_log_trim.h"
@@ -573,7 +574,6 @@ class AsyncMetadataList : public RGWAsyncRadosRequest {
   const std::string section;
   const std::string start_marker;
   MetadataListCallback callback;
-  void *handle{nullptr};
 
   int _send_request() override;
  public:
@@ -584,54 +584,55 @@ class AsyncMetadataList : public RGWAsyncRadosRequest {
     : RGWAsyncRadosRequest(caller, cn), cct(cct), mgr(mgr),
       section(section), start_marker(start_marker), callback(callback)
   {}
-  ~AsyncMetadataList() override {
-    if (handle) {
-      mgr->list_keys_complete(handle);
-    }
-  }
 };
 
 int AsyncMetadataList::_send_request()
 {
-  // start a listing at the given marker
-  int r = mgr->list_keys_init(section, start_marker, &handle);
-  if (r < 0) {
-    ldout(cct, 10) << "failed to init metadata listing: "
-        << cpp_strerror(r) << dendl;
-    return r;
-  }
-  ldout(cct, 20) << "starting metadata listing at " << start_marker << dendl;
-
+  void* handle = nullptr;
   std::list<std::string> keys;
   bool truncated{false};
   std::string marker;
 
-  do {
-    // get the next key and marker
-    r = mgr->list_keys_next(handle, 1, keys, &truncated);
-    if (r < 0) {
-      ldout(cct, 10) << "failed to list metadata: "
-          << cpp_strerror(r) << dendl;
-      return r;
-    }
-    marker = mgr->get_marker(handle);
+  // start a listing at the given marker
+  int r = mgr->list_keys_init(section, start_marker, &handle);
+  if (r == -EINVAL) {
+    // restart with empty marker below
+  } else if (r < 0) {
+    ldout(cct, 10) << "failed to init metadata listing: "
+        << cpp_strerror(r) << dendl;
+    return r;
+  } else {
+    ldout(cct, 20) << "starting metadata listing at " << start_marker << dendl;
 
-    if (!keys.empty()) {
-      assert(keys.size() == 1);
-      auto& key = keys.front();
-      if (!callback(std::move(key), std::move(marker))) {
-        return 0;
+    // release the handle when scope exits
+    auto g = make_scope_guard([=] { mgr->list_keys_complete(handle); });
+
+    do {
+      // get the next key and marker
+      r = mgr->list_keys_next(handle, 1, keys, &truncated);
+      if (r < 0) {
+        ldout(cct, 10) << "failed to list metadata: "
+            << cpp_strerror(r) << dendl;
+        return r;
       }
-    }
-  } while (truncated);
+      marker = mgr->get_marker(handle);
 
-  if (start_marker.empty()) {
-    // already listed all keys
-    return 0;
+      if (!keys.empty()) {
+        ceph_assert(keys.size() == 1);
+        auto& key = keys.front();
+        if (!callback(std::move(key), std::move(marker))) {
+          return 0;
+        }
+      }
+    } while (truncated);
+
+    if (start_marker.empty()) {
+      // already listed all keys
+      return 0;
+    }
   }
 
   // restart the listing from the beginning (empty marker)
-  mgr->list_keys_complete(handle);
   handle = nullptr;
 
   r = mgr->list_keys_init(section, "", &handle);
@@ -642,6 +643,8 @@ int AsyncMetadataList::_send_request()
   }
   ldout(cct, 20) << "restarting metadata listing" << dendl;
 
+  // release the handle when scope exits
+  auto g = make_scope_guard([=] { mgr->list_keys_complete(handle); });
   do {
     // get the next key and marker
     r = mgr->list_keys_next(handle, 1, keys, &truncated);
