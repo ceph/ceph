@@ -1866,12 +1866,24 @@ class Validation(DeepSea):
         self.name = 'deepsea.validation'
         super(Validation, self).__init__(ctx, config)
         self._apply_config_default("systemd_units_active", None)
+        self._apply_config_default("rados_striper", None)
 
     def _apply_config_default(self, validation_test, default_config):
         """
         Use to activate tests that should always be run.
         """
         self.config[validation_test] = self.config.get(validation_test, default_config)
+
+    def rados_striper(self, **kwargs):
+        """
+        Verify that rados does not has the --striper option
+        """
+        self.log.debug("entering rados_striper method")
+        cmd_str = 'sudo rados --striper 2>&1 || true'
+        output = self.master_remote.sh(cmd_str)
+        assert 'unrecognized command --striper' in output, \
+            "ceph is compiled without libradosstriper"
+        self.log.debug("leaving rados_striper method")
 
     def systemd_units_active(self, **kwargs):
         """
