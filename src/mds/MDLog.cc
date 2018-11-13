@@ -721,7 +721,8 @@ int MDLog::trim_all()
   uint64_t last_seq = 0;
   if (!segments.empty()) {
     last_seq = get_last_segment_seq();
-    if (!mds->mdcache->open_file_table.is_any_committing() &&
+    if (!capped &&
+	!mds->mdcache->open_file_table.is_any_committing() &&
 	last_seq > mds->mdcache->open_file_table.get_committing_log_seq()) {
       submit_mutex.Unlock();
       mds->mdcache->open_file_table.commit(new C_OFT_Committed(this, last_seq),
@@ -732,7 +733,8 @@ int MDLog::trim_all()
 
   map<uint64_t,LogSegment*>::iterator p = segments.begin();
   while (p != segments.end() &&
-	 p->first < last_seq && p->second->end <= safe_pos) {
+	 p->first < last_seq &&
+	 p->second->end < safe_pos) { // next segment should have been started
     LogSegment *ls = p->second;
     ++p;
 
