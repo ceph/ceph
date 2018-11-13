@@ -770,16 +770,6 @@ int RGWMetadataManager::put(string& metadata_key, bufferlist& bl,
     return ret;
   }
 
-  // archive existing bucket if needed
-  if (store->get_zone().tier_type == "archive") {
-      if (handler->get_type() == "bucket") {
-          size_t found = metadata_key.find("-deleted-");
-          if(found != string::npos) {
-             remove(metadata_key);
-          }
-      }
-  }
-
   JSONParser parser;
   if (!parser.parse(bl.c_str(), bl.length())) {
     return -EINVAL;

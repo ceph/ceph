@@ -2630,6 +2630,31 @@ public:
     /* idempotent */
     return 0;
   }
+
+  int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker,
+          real_time mtime, JSONObj *obj, sync_type_t sync_type) override {
+    if (entry.find("-deleted-") != string::npos) {
+      RGWObjVersionTracker ot;
+      RGWMetadataObject *robj;
+      int ret = get(store, entry, &robj);
+      if (ret != -ENOENT) {
+        if (ret < 0) {
+          return ret;
+        }
+        ot.read_version = robj->get_version();
+        delete robj;
+
+        ret = remove(store, entry, ot);
+        if (ret < 0) {
+          return ret;
+        }
+      }
+    }
+
+    return RGWBucketMetadataHandler::put(store, entry, objv_tracker,
+                                         mtime, obj, sync_type);
+  }
+
 };
 
 class RGWBucketInstanceMetadataHandler : public RGWMetadataHandler {
