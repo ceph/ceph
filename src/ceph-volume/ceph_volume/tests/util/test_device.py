@@ -117,21 +117,41 @@ class TestDevice(object):
         disk = device.Device("/dev/sda")
         assert not disk.used_by_ceph
 
-    disk1 = device.Device("/dev/sda")
-    disk2 = device.Device("/dev/sdb")
-    disk2._valid = False
-    disk3 = device.Device("/dev/sdc")
-    disk4 = device.Device("/dev/sdd")
-    disk4._valid = False
 
-    @pytest.mark.parametrize("diska, diskb", [
-        pytest.param(disk1, disk2, id="(_, valid) < (_, invalid)"),
-        pytest.param(disk1, disk3, id="(sda, valid) < (sdc, valid)"),
-        pytest.param(disk3, disk2, id="(sdc, valid) < (sdb, invalid)"),
-        pytest.param(disk2, disk4, id="(sdb, invalid) < (sdd, invalid)"),
-    ])
-    def test_ordering(self, diska, diskb):
-        assert diska < diskb and diskb > diska
+class TestDeviceOrdering(object):
+
+    def setup(self):
+        self.data = {
+                "/dev/sda": {"removable": 0},
+                "/dev/sdb": {"removable": 1}, # invalid
+                "/dev/sdc": {"removable": 0},
+                "/dev/sdd": {"removable": 1}, # invalid
+        }
+
+    def test_valid_before_invalid(self, device_info):
+        device_info(devices=self.data)
+        sda = device.Device("/dev/sda")
+        sdb = device.Device("/dev/sdb")
+
+        assert sda < sdb
+        assert sdb > sda
+
+    def test_valid_alphabetical_ordering(self, device_info):
+        device_info(devices=self.data)
+        sda = device.Device("/dev/sda")
+        sdc = device.Device("/dev/sdc")
+
+        assert sda < sdc
+        assert sdc > sda
+
+    def test_invalid_alphabetical_ordering(self, device_info):
+        device_info(devices=self.data)
+        sdb = device.Device("/dev/sdb")
+        sdd = device.Device("/dev/sdd")
+
+        assert sdb < sdd
+        assert sdd > sdb
+
 
 ceph_partlabels = [
     'ceph data', 'ceph journal', 'ceph block',
