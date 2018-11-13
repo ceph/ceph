@@ -118,6 +118,37 @@ int Messenger::bindv(const entity_addrvec_t& addrs)
   return bind(addrs.legacy_addr());
 }
 
+void Messenger::ms_deliver_get_auth_allowed_methods(
+    int peer_type, std::vector<uint32_t> &allowed_methods)
+{
+  for (const auto &dispatcher : dispatchers) {
+    if (dispatcher->ms_get_auth_allowed_methods(peer_type, allowed_methods))
+      return;
+  }
+  if (allowed_methods.empty()) {
+    if (get_mytype() == CEPH_ENTITY_TYPE_MON &&
+        peer_type != CEPH_ENTITY_TYPE_MON) {
+      allowed_methods.push_back(CEPH_AUTH_NONE);
+      return;
+    }
+    std::string method;
+    if (!cct->_conf->auth_supported.empty()) {
+      method = cct->_conf->auth_supported;
+    } else if (peer_type == CEPH_ENTITY_TYPE_OSD ||
+               peer_type == CEPH_ENTITY_TYPE_MDS ||
+               peer_type == CEPH_ENTITY_TYPE_MON ||
+               peer_type == CEPH_ENTITY_TYPE_MGR) {
+      method = cct->_conf->auth_cluster_required;
+    } else {
+      method = cct->_conf->auth_client_required;
+    }
+    AuthMethodList auth_list(cct, method);
+    for (auto pt : auth_list.get_supported_set()) {
+      allowed_methods.push_back(pt);
+    }
+  }
+}
+
 bool Messenger::ms_deliver_verify_authorizer(
   Connection *con,
   int peer_type,

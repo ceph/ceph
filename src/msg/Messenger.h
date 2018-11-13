@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,9 +7,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 
@@ -334,7 +334,7 @@ public:
    *
    * @param d The Dispatcher to insert into the list.
    */
-  void add_dispatcher_head(Dispatcher *d) { 
+  void add_dispatcher_head(Dispatcher *d) {
     bool first = dispatchers.empty();
     dispatchers.push_front(d);
     if (d->ms_can_fast_dispatch_any())
@@ -349,7 +349,7 @@ public:
    *
    * @param d The Dispatcher to insert into the list.
    */
-  void add_dispatcher_tail(Dispatcher *d) { 
+  void add_dispatcher_tail(Dispatcher *d) {
     bool first = dispatchers.empty();
     dispatchers.push_back(d);
     if (d->ms_can_fast_dispatch_any())
@@ -744,6 +744,12 @@ public:
         return;
     }
   }
+
+  /**
+   * Get allowed authentication methods for a specific peer type
+   **/
+  void ms_deliver_get_auth_allowed_methods(
+      int peer_type, std::vector<uint32_t> &allowed_methods);
 
   /**
    * Get the AuthAuthorizer for a new outgoing Connection.
