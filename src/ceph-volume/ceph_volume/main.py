@@ -105,7 +105,7 @@ Ceph Conf: {ceph_path}
         # argparse which will end up complaning that there are no args
         if len(argv) <= 1:
             print(self.help(warning=True))
-            return
+            raise SystemExit(0)
         parser = argparse.ArgumentParser(
             prog='ceph-volume',
             formatter_class=argparse.RawDescriptionHelpFormatter,
