@@ -104,6 +104,11 @@ private:
       payload.claim_append(auth_payload);
     }
 
+    AuthRequestFrame(uint32_t method) : Frame(Tag::AUTH_REQUEST) {
+      encode(method, payload, 0);
+      encode((uint32_t)0, payload, 0);
+    }
+
     AuthRequestFrame(char *payload, uint32_t length) : Frame() {
       method = *(uint32_t *)payload;
       len = *(uint32_t *)(payload + sizeof(uint32_t));
@@ -114,9 +119,9 @@ private:
 
   struct AuthBadMethodFrame : public Frame {
     uint32_t method;
-    std::vector<__u32> allowed_methods;
+    std::vector<uint32_t> allowed_methods;
 
-    AuthBadMethodFrame(uint32_t method, std::vector<__u32> methods)
+    AuthBadMethodFrame(uint32_t method, std::vector<uint32_t> methods)
         : Frame(Tag::AUTH_BAD_METHOD) {
       encode(method, payload, 0);
       encode((uint32_t)methods.size(), payload, 0);
@@ -154,7 +159,6 @@ private:
   };
 
   struct AuthMoreFrame : public Frame {
-    uint32_t len;
     bufferlist auth_payload;
 
     AuthMoreFrame(bufferlist &auth_payload) : Frame(Tag::AUTH_MORE) {
@@ -163,7 +167,7 @@ private:
     }
 
     AuthMoreFrame(char *payload, uint32_t length) : Frame() {
-      len = *(uint32_t *)payload;
+      uint32_t len = *(uint32_t *)payload;
       ceph_assert((length - sizeof(uint32_t)) == len);
       auth_payload.append(payload + sizeof(uint32_t), len);
     }
@@ -171,13 +175,21 @@ private:
 
   struct AuthDoneFrame : public Frame {
     uint64_t flags;
+    bufferlist auth_payload;
 
-    AuthDoneFrame(uint64_t flags) : Frame(Tag::AUTH_DONE) {
+    AuthDoneFrame(uint64_t flags, bufferlist &auth_payload)
+        : Frame(Tag::AUTH_DONE) {
       encode(flags, payload, 0);
+      encode(auth_payload.length(), payload, 0);
+      payload.claim_append(auth_payload);
     }
 
     AuthDoneFrame(char *payload, uint32_t length) : Frame() {
       flags = *(uint64_t *)payload;
+      payload += sizeof(uint64_t);
+      uint32_t len = *(uint32_t *)payload;
+      ceph_assert((length - sizeof(uint32_t) - sizeof(uint64_t)) == len);
+      auth_payload.append(payload + sizeof(uint32_t), len);
     }
   };
 
@@ -435,6 +447,12 @@ private:
   char *temp_buffer;
   State state;
   uint64_t peer_required_features;
+  AuthAuthorizer *authorizer;
+  uint32_t auth_method;
+  bool got_bad_auth;
+  CryptoKey session_key;
+  std::shared_ptr<AuthSessionHandler> session_security;
+  std::unique_ptr<AuthAuthorizerChallenge> authorizer_challenge;
   uint64_t connection_features;
   uint64_t cookie;
   uint64_t global_seq;
@@ -562,7 +580,7 @@ private:
 
   Ct<ProtocolV2> *start_client_banner_exchange();
   Ct<ProtocolV2> *post_client_banner_exchange();
-  Ct<ProtocolV2> *send_auth_request(std::vector<__u32> allowed_methods = {});
+  Ct<ProtocolV2> *send_auth_request(std::vector<uint32_t> allowed_methods = {});
   Ct<ProtocolV2> *handle_auth_request_write(int r);
   Ct<ProtocolV2> *handle_auth_bad_method(char *payload, uint32_t length);
   Ct<ProtocolV2> *handle_auth_bad_auth(char *payload, uint32_t length);

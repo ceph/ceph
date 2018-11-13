@@ -53,6 +53,8 @@ ProtocolV2::ProtocolV2(AsyncConnection *connection)
       temp_buffer(nullptr),
       state(NONE),
       peer_required_features(0),
+      authorizer(nullptr),
+      got_bad_auth(false),
       cookie(0),
       connect_seq(0),
       peer_global_seq(0),
@@ -65,9 +67,23 @@ ProtocolV2::ProtocolV2(AsyncConnection *connection)
   temp_buffer = new char[4096];
 }
 
-ProtocolV2::~ProtocolV2() { delete[] temp_buffer; }
+ProtocolV2::~ProtocolV2() {
+  delete[] temp_buffer;
+  if (authorizer) {
+    delete authorizer;
+  }
+}
 
-void ProtocolV2::connect() { state = START_CONNECT; }
+void ProtocolV2::connect() {
+  state = START_CONNECT;
+
+  got_bad_auth = false;
+  if (authorizer) {
+    delete authorizer;
+    authorizer = nullptr;
+  }
+  global_seq = messenger->get_global_seq();
+}
 
 void ProtocolV2::accept() { state = START_ACCEPT; }
 
@@ -180,6 +196,14 @@ uint64_t ProtocolV2::discard_requeued_up_to(uint64_t out_seq, uint64_t seq) {
 }
 
 void ProtocolV2::reset_recv_state() {
+  if (state == CONNECTING) {
+    if (authorizer) {
+      delete authorizer;
+    }
+    authorizer = nullptr;
+    got_bad_auth = false;
+  }
+
   // clean read and write callbacks
   connection->pendingReadLen.reset();
   connection->writeCallback.reset();
@@ -863,39 +887,52 @@ CtPtr ProtocolV2::handle_auth_more(char *payload, uint32_t length) {
   ldout(cct, 20) << __func__ << " payload_len=" << length << dendl;
 
   AuthMoreFrame auth_more(payload, length);
-  ldout(cct, 1) << __func__ << " auth more len=" << auth_more.len << dendl;
+  ldout(cct, 1) << __func__
+                << " auth more len=" << auth_more.auth_payload.length()
+                << dendl;
 
-  /* BEGIN TO REMOVE */
-  auto p = auth_more.auth_payload.cbegin();
-  int32_t i;
-  std::string s;
-  try {
-    decode(i, p);
-    decode(s, p);
-  } catch (const buffer::error &e) {
-    lderr(cct) << __func__ << " decode auth_payload failed" << dendl;
-    return _fault();
+  if (state == CONNECTING) {
+    ldout(cct, 10) << __func__ << " connect got auth challenge" << dendl;
+
+    ceph_assert(authorizer);
+    authorizer->add_challenge(cct, auth_more.auth_payload);
+    AuthMoreFrame more_reply(authorizer->bl);
+    return WRITE(more_reply.get_buffer(), handle_auth_more_write);
+
+  } else if (state == ACCEPTING) {
+    connection->lock.unlock();
+    bool authorizer_valid;
+    bufferlist authorizer_reply;
+    ceph_assert((bool)authorizer_challenge);
+    if (!messenger->ms_deliver_verify_authorizer(
+            connection, connection->peer_type, auth_method,
+            auth_more.auth_payload, authorizer_reply, authorizer_valid,
+            session_key, &authorizer_challenge) ||
+        !authorizer_valid) {
+      connection->lock.lock();
+
+      ldout(cct, 0) << __func__ << " got bad authorizer, auth_reply_len="
+                    << authorizer_reply.length() << dendl;
+      session_security.reset();
+      AuthBadAuthFrame bad_auth(EPERM, "Bad Authorizer");
+      bufferlist &bl = bad_auth.get_buffer();
+      return WRITE(bl, handle_auth_bad_auth_write);
+    }
+
+    connection->lock.lock();
+
+    session_security.reset(get_auth_session_handler(
+        cct, auth_method, session_key,
+        CEPH_FEATURE_MSG_AUTH | CEPH_FEATURE_CEPHX_V2));
+
+    AuthDoneFrame auth_done(0, authorizer_reply);
+    bufferlist &bl = auth_done.get_buffer();
+    return WRITE(bl, handle_auth_done_write);
+  } else {
+    ceph_abort();
   }
 
-  ldout(cct, 10) << __func__ << " (TO REMOVE) auth_more (" << (int32_t)i << ", "
-                 << s << ")" << dendl;
-
-  if (i == 45 && s == "hello server more") {
-    bufferlist auth_bl;
-    encode((int32_t)55, auth_bl, 0);
-    std::string hello("hello client more");
-    encode(hello, auth_bl, 0);
-    /* END TO REMOVE */
-    AuthMoreFrame more(auth_bl);
-    bufferlist &bl = more.get_buffer();
-    return WRITE(bl, handle_auth_more_write);
-  }
-  /* END TO REMOVE */
-
-  AuthDoneFrame auth_done(0);
-
-  bufferlist &bl = auth_done.get_buffer();
-  return WRITE(bl, handle_auth_done_write);
+  return nullptr;
 }
 
 CtPtr ProtocolV2::handle_auth_more_write(int r) {
@@ -1412,8 +1449,6 @@ CtPtr ProtocolV2::start_client_banner_exchange() {
   ldout(cct, 20) << __func__ << dendl;
   state = CONNECTING;
 
-  global_seq = messenger->get_global_seq();
-
   return _banner_exchange(CONTINUATION(post_client_banner_exchange));
 }
 
@@ -1426,28 +1461,49 @@ CtPtr ProtocolV2::post_client_banner_exchange() {
   return send_auth_request();
 }
 
-CtPtr ProtocolV2::send_auth_request(std::vector<__u32> allowed_methods) {
+CtPtr ProtocolV2::send_auth_request(std::vector<uint32_t> allowed_methods) {
   ldout(cct, 20) << __func__ << dendl;
 
-  // We need to get an authorizer at this point.
-  // this->messenger->get_authorizer(...)
-
-  bufferlist auth_bl;
-  /* BEGIN TO REMOVE */
-  encode((int32_t)35, auth_bl, 0);
-  std::string hello("hello");
-  encode(hello, auth_bl, 0);
-  /* END TO REMOVE */
-  __le32 method;
-  if (allowed_methods.empty()) {
-    // choose client's preferred method
-    method = 23;  // 23 is just for testing purposes (REMOVE THIS)
-  } else {
-    // choose one of the allowed methods
-    method = allowed_methods[0];
+  if (!authorizer) {
+    authorizer =
+        messenger->ms_deliver_get_authorizer(connection->peer_type);
   }
-  AuthRequestFrame authFrame(method, auth_bl);
 
+  auth_method = CEPH_AUTH_NONE;
+  if (!authorizer) {
+    if (!allowed_methods.empty() &&
+        std::find(allowed_methods.begin(), allowed_methods.end(),
+                  auth_method) == allowed_methods.end()) {
+      ldout(cct, 0) << __func__
+                    << " peer requires authentication, stopping connection"
+                    << dendl;
+      stop();
+      connection->dispatch_queue->queue_reset(connection);
+      return nullptr;
+    }
+    ldout(cct, 10) << __func__ << " authorizer not found for peer_type="
+                   << connection->peer_type << dendl;
+    AuthRequestFrame authFrame(auth_method);
+    bufferlist &bl = authFrame.get_buffer();
+    return WRITE(bl, handle_auth_request_write);
+  }
+
+  auth_method = authorizer->protocol;
+  if (!allowed_methods.empty() &&
+      std::find(allowed_methods.begin(), allowed_methods.end(), auth_method) ==
+          allowed_methods.end()) {
+    ldout(cct, 0) << __func__ << " peer does not allow authentication method="
+                  << auth_method << dendl;
+    stop();
+    connection->dispatch_queue->queue_reset(connection);
+    return nullptr;
+  }
+
+  ldout(cct, 10) << __func__
+                 << " sending auth request len=" << authorizer->bl.length()
+                 << dendl;
+
+  AuthRequestFrame authFrame(auth_method, authorizer->bl);
   bufferlist &bl = authFrame.get_buffer();
   return WRITE(bl, handle_auth_request_write);
 }
@@ -1483,15 +1539,52 @@ CtPtr ProtocolV2::handle_auth_bad_auth(char *payload, uint32_t length) {
                 << " error code=" << bad_auth.error_code
                 << " error message=" << bad_auth.error_msg << dendl;
 
-  return _fault();
+  if (got_bad_auth) {
+    return _fault();
+  }
+
+  got_bad_auth = true;
+  delete authorizer;
+  authorizer = messenger->ms_deliver_get_authorizer(connection->peer_type,
+                                                    true);  // try harder
+  ldout(cct, 10) << __func__
+                 << " sending auth request len=" << authorizer->bl.length()
+                 << dendl;
+
+  AuthRequestFrame authFrame(auth_method, authorizer->bl);
+  bufferlist &bl = authFrame.get_buffer();
+  return WRITE(bl, handle_auth_request_write);
 }
 
 CtPtr ProtocolV2::handle_auth_done(char *payload, uint32_t length) {
   ldout(cct, 20) << __func__ << " payload_len=" << length << dendl;
 
   AuthDoneFrame auth_done(payload, length);
+
+  if (authorizer) {
+    auto iter = auth_done.auth_payload.cbegin();
+    if (!authorizer->verify_reply(iter)) {
+      ldout(cct, 0) << __func__ << " failed verifying authorize reply" << dendl;
+      return _fault();
+    }
+  }
+
   ldout(cct, 1) << __func__ << " authentication done,"
                 << " flags=" << auth_done.flags << dendl;
+
+  if (authorizer) {
+    ldout(cct, 10) << __func__ << " setting up session_security with auth "
+                   << authorizer << dendl;
+    session_security.reset(get_auth_session_handler(
+        cct, authorizer->protocol, authorizer->session_key,
+        CEPH_FEATURE_MSG_AUTH | CEPH_FEATURE_CEPHX_V2));
+  } else {
+    // We have no authorizer, so we shouldn't be applying security to messages
+    // in this connection.
+    ldout(cct, 10) << __func__ << " no authorizer, clearing session_security"
+                   << dendl;
+    session_security.reset();
+  }
 
   if (!cookie) {
     ceph_assert(connect_seq == 0);
@@ -1707,42 +1800,12 @@ CtPtr ProtocolV2::handle_auth_request(char *payload, uint32_t length) {
   ldout(cct, 10) << __func__ << " AuthRequest(method=" << auth_request.method
                  << ", auth_len=" << auth_request.len << ")" << dendl;
 
-  /* BEGIN TO REMOVE */
-  auto p = auth_request.auth_payload.cbegin();
-  int32_t i;
-  std::string s;
-  try {
-    decode(i, p);
-    decode(s, p);
-  } catch (const buffer::error &e) {
-    lderr(cct) << __func__ << " decode auth_payload failed" << dendl;
-    return _fault();
-  }
+  std::vector<uint32_t> allowed_methods;
+  messenger->ms_deliver_get_auth_allowed_methods(connection->peer_type,
+                                                 allowed_methods);
 
-  ldout(cct, 10) << __func__ << " (TO REMOVE) auth_payload (" << (int32_t)i
-                 << ", " << s << ")" << dendl;
-
-  /* END TO REMOVE */
-
-  /*
-   * Get the auth methods from somewhere.
-   * In V1 the allowed auth methods depend on the peer_type.
-   * In V2, at this stage, we still don't know the peer_type so either
-   * we define the set of allowed auth methods for any entity type,
-   * or we need to exchange the entity type before reaching this point.
-   */
-
-  std::vector<__u32> allowed_methods = {CEPH_AUTH_NONE, CEPH_AUTH_CEPHX};
-
-  bool found = false;
-  for (const auto &a_method : allowed_methods) {
-    if (a_method == auth_request.method) {
-      // auth method allowed by the server
-      found = true;
-      break;
-    }
-  }
-
+  bool found = std::find(allowed_methods.begin(), allowed_methods.end(),
+                         auth_request.method) != allowed_methods.end();
   if (!found) {
     ldout(cct, 1) << __func__ << " auth method=" << auth_request.method
                   << " not allowed" << dendl;
@@ -1753,24 +1816,54 @@ CtPtr ProtocolV2::handle_auth_request(char *payload, uint32_t length) {
 
   ldout(cct, 10) << __func__ << " auth method=" << auth_request.method
                  << " accepted" << dendl;
-  // verify authorization blob
-  bool valid = i == 35;
 
-  if (!valid) {
-    AuthBadAuthFrame bad_auth(12, "Permission denied");
-    bufferlist &bl = bad_auth.get_buffer();
-    return WRITE(bl, handle_auth_bad_auth_write);
+  auth_method = auth_request.method;
+
+  if (auth_request.method == CEPH_AUTH_NONE) {
+    ldout(cct, 1) << __func__ << " proceeding without authentication" << dendl;
+
+    session_security.reset();
+    bufferlist empty_bl;
+    AuthDoneFrame auth_done(0, empty_bl);
+    bufferlist &bl = auth_done.get_buffer();
+    return WRITE(bl, handle_auth_done_write);
   }
 
-  bufferlist auth_bl;
-  /* BEGIN TO REMOVE */
-  encode((int32_t)45, auth_bl, 0);
-  std::string hello("hello server more");
-  encode(hello, auth_bl, 0);
-  /* END TO REMOVE */
-  AuthMoreFrame more(auth_bl);
-  bufferlist &bl = more.get_buffer();
-  return WRITE(bl, handle_auth_more_write);
+  connection->lock.unlock();
+  bool authorizer_valid;
+  bufferlist authorizer_reply;
+  bool had_challenge = (bool)authorizer_challenge;
+  if (!messenger->ms_deliver_verify_authorizer(
+          connection, connection->peer_type, auth_request.method,
+          auth_request.auth_payload, authorizer_reply, authorizer_valid,
+          session_key, &authorizer_challenge) ||
+      !authorizer_valid) {
+    connection->lock.lock();
+
+    if (!had_challenge && authorizer_challenge) {
+      ldout(cct, 10) << __func__ << " challenging authorizer" << dendl;
+      ceph_assert(authorizer_reply.length());
+      AuthMoreFrame more(authorizer_reply);
+      return WRITE(more.get_buffer(), handle_auth_more_write);
+    } else {
+      ldout(cct, 0) << __func__ << " got bad authorizer, auth_reply_len="
+                    << authorizer_reply.length() << dendl;
+      session_security.reset();
+      AuthBadAuthFrame bad_auth(EPERM, "Bad Authorizer");
+      bufferlist &bl = bad_auth.get_buffer();
+      return WRITE(bl, handle_auth_bad_auth_write);
+    }
+  }
+
+  connection->lock.lock();
+
+  session_security.reset(
+      get_auth_session_handler(cct, auth_method, session_key,
+                               CEPH_FEATURE_MSG_AUTH | CEPH_FEATURE_CEPHX_V2));
+
+  AuthDoneFrame auth_done(0, authorizer_reply);
+  bufferlist &bl = auth_done.get_buffer();
+  return WRITE(bl, handle_auth_done_write);
 }
 
 CtPtr ProtocolV2::handle_auth_bad_method_write(int r) {
