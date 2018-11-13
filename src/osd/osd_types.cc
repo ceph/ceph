@@ -344,6 +344,16 @@ void osd_stat_t::dump(Formatter *f) const
   f->dump_unsigned("up_from", up_from);
   f->dump_unsigned("seq", seq);
   f->dump_unsigned("num_pgs", num_pgs);
+
+  /// dump legacy stats fields to ensure backward compatibility.
+  f->dump_unsigned("kb", statfs.kb());
+  f->dump_unsigned("kb_used", statfs.kb_used_raw());
+  f->dump_unsigned("kb_used_data", statfs.kb_used_data());
+  f->dump_unsigned("kb_used_omap", statfs.kb_used_omap());
+  f->dump_unsigned("kb_used_meta", statfs.kb_used_internal_metadata());
+  f->dump_unsigned("kb_avail", statfs.kb_avail());
+  ////////////////////
+
   f->open_object_section("statfs");
   statfs.dump(f);
   f->close_section();
