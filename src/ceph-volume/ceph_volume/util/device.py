@@ -70,6 +70,7 @@ class Device(object):
         self.lv_api = None
         self.lvs = []
         self.vg_name = None
+        self.lv_name = None
         self.pvs_api = []
         self.disk_api = {}
         self.blkid_api = {}
@@ -108,6 +109,7 @@ class Device(object):
             self.lvs = [lv]
             self.abspath = lv.lv_path
             self.vg_name = lv.vg_name
+            self.lv_name = lv.name
         else:
             dev = disk.lsblk(self.path)
             self.blkid_api = disk.blkid(self.path)
