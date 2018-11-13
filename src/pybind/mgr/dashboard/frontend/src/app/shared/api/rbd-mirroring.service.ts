@@ -20,7 +20,7 @@ export class RbdMirroringService {
   }
 
   refresh() {
-    this.http.get('api/rbdmirror').subscribe((data) => {
+    this.http.get('api/block/mirroring/summary').subscribe((data) => {
       this.summaryDataSource.next(data);
     });
   }
