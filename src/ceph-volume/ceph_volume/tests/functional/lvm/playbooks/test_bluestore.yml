@@ -40,9 +40,9 @@
       environment:
         CEPH_VOLUME_DEBUG: 1
 
-    # osd.0 device
+    # osd.0 device (zap without --destroy that removes the LV)
     - name: zap test_group/data-lv1
-      command: "ceph-volume --cluster {{ cluster }} lvm zap --destroy test_group/data-lv1"
+      command: "ceph-volume --cluster {{ cluster }} lvm zap test_group/data-lv1"
       environment:
         CEPH_VOLUME_DEBUG: 1
 
@@ -58,5 +58,44 @@
 
     - name: list all OSDs
       command: "ceph-volume lvm list"
+      environment:
+        CEPH_VOLUME_DEBUG: 1
+
+    - name: create temporary directory
+      tempfile:
+        state: directory
+        suffix: sparse
+      register: tmpdir
+
+    - name: create a 5GB sparse file
+      command: fallocate -l 5G {{ tmpdir.path }}/sparse.file
+
+    - name: find an empty loop device
+      command: losetup -f
+      register: losetup_list
+
+    - name: setup loop device with sparse file
+      command: losetup {{ losetup_list.stdout }} {{ tmpdir.path }}/sparse.file
+
+    - name: create volume group
+      command: vgcreate test_zap {{ losetup_list.stdout }}
+      failed_when: false
+
+    - name: create logical volume 1
+      command: lvcreate --yes -l 50%FREE -n data-lv1 test_zap
+      failed_when: false
+
+    - name: create logical volume 2
+      command: lvcreate --yes -l 50%FREE -n data-lv2 test_zap
+      failed_when: false
+
+    # zapping the first lv shouldn't remove the vg, allowing the second zap to succeed
+    - name: zap test_zap/data-lv1
+      command: "ceph-volume --cluster {{ cluster }} lvm zap --destroy test_zap/data-lv1"
+      environment:
+        CEPH_VOLUME_DEBUG: 1
+
+    - name: zap test_zap/data-lv2
+      command: "ceph-volume --cluster {{ cluster }} lvm zap --destroy test_zap/data-lv2"
       environment:
         CEPH_VOLUME_DEBUG: 1
