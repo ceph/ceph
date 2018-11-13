@@ -7675,7 +7675,16 @@ bool MDCache::shutdown_pass()
   // Fully trim the log so that all objects in cache are clean and may be
   // trimmed by a future MDCache::trim. Note that MDSRank::tick does not
   // trim the log such that the cache eventually becomes clean.
-  mds->mdlog->trim(0);
+  if (mds->mdlog->get_num_segments() > 0) {
+    auto ls = mds->mdlog->get_current_segment();
+    if (ls->num_events > 1 || !ls->dirty_dirfrags.empty()) {
+      // Current segment contains events other than subtreemap or
+      // there are dirty dirfrags (see CDir::log_mark_dirty())
+      mds->mdlog->start_new_segment();
+      mds->mdlog->flush();
+    }
+  }
+  mds->mdlog->trim_all();
   if (mds->mdlog->get_num_segments() > 1) {
     dout(7) << "still >1 segments, waiting for log to trim" << dendl;
     return false;
@@ -7708,6 +7717,12 @@ bool MDCache::shutdown_pass()
   ceph_assert(!migrator->is_exporting());
   ceph_assert(!migrator->is_importing());
 
+  // replicas may dirty scatter locks
+  if (myin && myin->is_replicated()) {
+    dout(7) << "still have replicated objects" << dendl;
+    return false;
+  }
+
   if ((myin && myin->get_num_auth_pins()) ||
       (mydir && (mydir->get_auth_pins() || mydir->get_dir_auth_pins()))) {
     dout(7) << "still have auth pinned objects" << dendl;
@@ -7718,9 +7733,11 @@ bool MDCache::shutdown_pass()
   if (!mds->mdlog->is_capped()) {
     dout(7) << "capping the log" << dendl;
     mds->mdlog->cap();
-    mds->mdlog->trim();
   }
   
+  if (!mds->mdlog->empty())
+    mds->mdlog->trim(0);
+
   if (!mds->mdlog->empty()) {
     dout(7) << "waiting for log to flush.. " << mds->mdlog->get_num_events() 
 	    << " in " << mds->mdlog->get_num_segments() << " segments" << dendl;
