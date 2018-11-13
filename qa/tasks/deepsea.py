@@ -282,19 +282,12 @@ class DeepSea(Task):
         """
         Set deepsea_minions pillar value
         """
-        echo_cmd = (
-            'echo "deepsea_minions: \'*\'" > '
-            '/srv/pillar/ceph/deepsea_minions.sls'
-        )
-        self.master_remote.run(args=[
-            'sudo',
-            'sh',
-            '-c',
-            echo_cmd,
-            run.Raw(';'),
-            'cat',
-            '/srv/pillar/ceph/deepsea_minions.sls',
-            ])
+        deepsea_minions_sls = '/srv/pillar/ceph/deepsea_minions.sls'
+        content = "deepsea_minions: \'*\'"
+        self.log.info("Clobbering {} with content ->{}<-".format(
+            deepsea_minions_sls, content))
+        cmd = 'sudo tee {}'.format(deepsea_minions_sls)
+        self.master_remote.sh(cmd, stdin=content)
 
     def _deepsea_version(self):
         if self.deepsea_cli:
