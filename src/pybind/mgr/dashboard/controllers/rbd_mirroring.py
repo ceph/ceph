@@ -99,7 +99,9 @@ def get_daemons_and_pools():  # pylint: disable=R0915
 
             stats = {}
             if mirror_mode == rbd.RBD_MIRROR_MODE_DISABLED:
-                continue
+                mirror_mode = "disabled"
+                stats['health_color'] = "info"
+                stats['health'] = "Disabled"
             elif mirror_mode == rbd.RBD_MIRROR_MODE_IMAGE:
                 mirror_mode = "image"
             elif mirror_mode == rbd.RBD_MIRROR_MODE_POOL:
@@ -138,6 +140,8 @@ def get_daemons_and_pools():  # pylint: disable=R0915
                     stats['health'] = 'OK'
 
         for _, stats in pool_stats.items():
+            if stats['mirror_mode'] == 'disabled':
+                continue
             if stats.get('health', None) is None:
                 # daemon doesn't know about pool
                 stats['health_color'] = 'error'
