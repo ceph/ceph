@@ -113,6 +113,9 @@ class DeepSea(Task):
         cli:
             true        deepsea CLI will be used (the default)
             false       deepsea CLI will not be used
+        dashboard_ssl:
+            true        deploy MGR dashboard module with SSL (the default)
+            false       deploy MGR dashboard module *without* SSL
         log_anchor      a string (default: "WWWW: ") which will precede
                         log messages emitted at key points during the
                         deployment
@@ -171,6 +174,7 @@ class DeepSea(Task):
         self.alternative_defaults = deepsea_ctx['alternative_defaults']
         self.client_only_nodes = deepsea_ctx['client_only_nodes']
         self.cluster_nodes = deepsea_ctx['cluster_nodes']
+        self.dashboard_ssl = deepsea_ctx['dashboard_ssl']
         self.deepsea_cli = deepsea_ctx['cli']
         self.dev_env = deepsea_ctx['dev_env']
         self.gateway_nodes = deepsea_ctx['gateway_nodes']
@@ -523,6 +527,7 @@ class DeepSea(Task):
         if not isinstance(deepsea_ctx['alternative_defaults'], dict):
             raise ConfigError(self.err_prefix + "alternative_defaults must be a list")
         deepsea_ctx['cli'] = self.config.get('cli', True)
+        deepsea_ctx['dashboard_ssl'] = self.config.get('dashboard_ssl', True)
         deepsea_ctx['log_anchor'] = self.config.get('log_anchor', self.log_anchor_str)
         if not isinstance(deepsea_ctx['log_anchor'], str):
             self.log.warning(
@@ -709,7 +714,6 @@ class CephConf(DeepSea):
     deepsea_configuration_files = '/srv/salt/ceph/configuration/files'
 
     targets = {
-        "dashboard": True,
         "mon_allow_pool_delete": True,
         "small_cluster": True,
         "rbd": False,
@@ -763,16 +767,6 @@ class CephConf(DeepSea):
             else:
                 if default:
                     method()
-
-    def dashboard(self):
-        info_msg = "adjusted ceph.conf for deployment of dashboard MGR module"
-        data = "mgr initial modules = dashboard\n"
-        sudo_append_to_file(
-            self.master_remote,
-            self.__ceph_conf_d_full_path("mon"),
-            data,
-            )
-        self.log.info(info_msg)
 
     def mon_allow_pool_delete(self):
         info_msg = "adjusted ceph.conf to allow pool deletes"
@@ -1034,6 +1028,12 @@ class Orch(DeepSea):
             return False
         return True
 
+    def __log_stage_start(self, stage):
+        self.log.info(anchored(
+            "Running DeepSea Stage {} ({})"
+            .format(stage, self.stage_synonyms[stage])
+            ))
+
     def __lvm_status(self):
         """
         Run "pvs --all", "vgs --all", and "lvs --all" on all storage nodes.
@@ -1058,11 +1058,19 @@ class Orch(DeepSea):
             ganesha_remote = self.remotes[ganesha_host]
             ganesha_remote.run(args="cat /etc/ganesha/ganesha.conf")
 
-    def __log_stage_start(self, stage):
-        self.log.info(anchored(
-            "Running DeepSea Stage {} ({})"
-            .format(stage, self.stage_synonyms[stage])
-            ))
+    def __mgr_dashboard_module_deploy(self):
+        script = ("# deploy MGR dashboard module\n"
+                  "set -ex\n"
+                  "ceph mgr module enable dashboard\n")
+        if self.dashboard_ssl:
+            script += "ceph dashboard create-self-signed-cert\n"
+        else:
+            script += "ceph config set mgr mgr/dashboard/ssl false\n"
+        remote_run_script_as_root(
+            self.master_remote,
+            'mgr_dashboard_module_deploy.sh',
+            script,
+            )
 
     def __zypper_ps_with_possible_reboot(self):
         if self.sm.all_minions_zypper_ps_requires_reboot():
@@ -1217,6 +1225,7 @@ class Orch(DeepSea):
         stage = 3
         self.__log_stage_start(stage)
         self._run_orch(("stage", stage))
+        self.__mgr_dashboard_module_deploy()
         self.sm.all_minions_cmd_run(
             'cat /etc/ceph/ceph.conf',
             abort_on_fail=False
@@ -1763,6 +1772,13 @@ echo "Your custom storage profile $SOURCEFILE has the following contents:"
 cat $DESTDIR/$DESTFILE
 ls -lR $PROPOSALSDIR/profile-custom
 """,
+        "mgr_dashboard_module_smoke": """# smoke test the MGR dashbaord module
+set -ex
+URL=$(ceph mgr services 2>/dev/null | jq .dashboard | sed -e 's/"//g')
+curl --insecure --silent $URL 2>&1 > dashboard.html
+test -s dashboard.html
+file dashboard.html | grep "HTML document"
+""",
         }
 
     def __init__(self, master_remote, logger):
@@ -1799,6 +1815,13 @@ ls -lR $PROPOSALSDIR/profile-custom
             self.master_remote,
             'disable_update_in_stage_0.sh',
             self.script_dict["disable_update_in_stage_0"],
+            )
+
+    def mgr_dashboard_module_smoke(self, *args, **kwargs):
+        remote_run_script_as_root(
+            self.master_remote,
+            'mgr_dashboard_module_smoke.sh',
+            self.script_dict["mgr_dashboard_module_smoke"],
             )
 
     def proposals_remove_storage_only_node(self, *args, **kwargs):
@@ -1865,14 +1888,21 @@ class Validation(DeepSea):
         deepsea_ctx['logger_obj'] = log.getChild('validation')
         self.name = 'deepsea.validation'
         super(Validation, self).__init__(ctx, config)
-        self._apply_config_default("systemd_units_active", None)
+        self._apply_config_default("mgr_dashboard_module_smoke", None)
         self._apply_config_default("rados_striper", None)
+        self._apply_config_default("systemd_units_active", None)
 
     def _apply_config_default(self, validation_test, default_config):
         """
         Use to activate tests that should always be run.
         """
         self.config[validation_test] = self.config.get(validation_test, default_config)
+
+    def mgr_dashboard_module_smoke(self, **kwargs):
+        """
+        Note: MGR dashboard module was already deployed in _run_stage_3
+        """
+        self.scripts.mgr_dashboard_module_smoke()
 
     def rados_striper(self, **kwargs):
         """
