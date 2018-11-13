@@ -1878,12 +1878,17 @@ class Validation(DeepSea):
         """
         Verify that rados does not has the --striper option
         """
-        self.log.debug("entering rados_striper method")
         cmd_str = 'sudo rados --striper 2>&1 || true'
         output = self.master_remote.sh(cmd_str)
-        assert 'unrecognized command --striper' in output, \
-            "ceph is compiled without libradosstriper"
-        self.log.debug("leaving rados_striper method")
+        os_type = self.ctx.config.get('os_type', 'unknown')
+        self.log.info("Checking for expected output on OS ->{}<-".format(os_type))
+        if os_type == 'sle':
+            assert 'unrecognized command --striper' in output, \
+                "ceph is compiled without libradosstriper"
+        else:
+            assert '--striper' not in output, \
+                "ceph is compiled with libradosstriper"
+        self.log.info("OK")
 
     def systemd_units_active(self, **kwargs):
         """
