@@ -4917,6 +4917,10 @@ int main(int argc, const char **argv)
 
   switch (opt_cmd) {
   case OPT_USER_INFO:
+    if (user_id.empty()) {
+      cerr << "ERROR: uid not specified" << std::endl;
+      return EINVAL;
+    }
     break;
   case OPT_USER_CREATE:
     if (!user_op.has_existing_user()) {
