@@ -28,35 +28,25 @@ log = logging.getLogger(__name__)
 master_role = 'client.salt_master'
 
 
+def systemctl_remote(remote, subcommand, service_name):
+    """
+    Caveat: only works for units ending in ".service"
+    """
+    def systemctl_cmd(subcommand, lines=0):
+        return ('sudo systemctl {} --full --lines={} {}.service'
+                .format(subcommand, lines, service_name))
+    try:
+        remote.run(args=systemctl_cmd(subcommand))
+    except CommandFailedError:
+        remote.run(args=systemctl_cmd('status', 100))
+        raise
+
+
 class SaltManager(object):
 
     def __init__(self, ctx):
         self.ctx = ctx
         self.master_remote = get_remote_for_role(self.ctx, master_role)
-
-    def __systemctl_cluster(self, subcommand=None, service=None):
-        """
-        Do something to a systemd service unit on all remotes (test nodes) at
-        once
-        """
-        self.ctx.cluster.run(args=[
-            'sudo', 'systemctl', subcommand, '{}.service'.format(service)])
-
-    def __systemctl_remote(self, remote, subcommand=None, service=None):
-        """
-        Do something to a systemd service unit on a single remote (test node)
-        """
-        try:
-            remote.run(args=[
-                'sudo', 'systemctl', subcommand, '{}.service'.format(service)])
-        except CommandFailedError:
-            log.warning((
-                "salt_manager: failed to {} {}.service!"
-                ).format(subcommand, service))
-            remote.run(args=[
-                'sudo', 'systemctl', 'status', '--full', '--lines=100',
-                '{}.service'.format(service), run.Raw('||'), 'true'])
-            raise
 
     def __cat_file_cluster(self, filename=None):
         """
@@ -146,30 +136,19 @@ class SaltManager(object):
 
     def check_salt_daemons(self):
         self.master_remote.run(args=['sudo', 'salt-key', '-L'])
-        base_cmd = 'sudo systemctl status --full --lines={} {}.service'
-        try:
-            self.master_remote.run(args=base_cmd.format('0', 'salt-master'))
-        except CommandFailedError:
-            self.master_remote.run(args=base_cmd.format('100', 'salt-master'))
-            raise
+        systemctl_remote(self.master_remote, 'status', 'salt-master')
         for _remote in self.ctx.cluster.remotes.iterkeys():
-            try:
-                _remote.run(args=base_cmd.format('0', 'salt-minion'))
-            except CommandFailedError:
-                _remote.run(args=base_cmd.format('100', 'salt-minion'))
-                raise
-            _remote.run(args=['sudo', 'cat', '/etc/salt/minion_id'])
-            _remote.run(args=['sudo', 'cat', '/etc/salt/minion.d/master.conf'])
+            systemctl_remote(_remote, 'status', 'salt-minion')
+            _remote.run(args='sudo cat /etc/salt/minion_id')
+            _remote.run(args='sudo cat /etc/salt/minion.d/master.conf')
 
     def enable_master(self):
         """Enables salt-master.service on the Salt Master node"""
-        self.__systemctl_remote(
-            self.master_remote, subcommand="enable", service="salt-master"
-            )
+        systemctl_remote(self.master_remote, "enable", "salt-master")
 
     def enable_minions(self):
         """Enables salt-minion.service on all cluster nodes"""
-        self.__systemctl_cluster(subcommand="enable", service="salt-minion")
+        systemctl_remote(self.ctx.cluster, "enable", "salt-minion")
 
     def gather_logfile(self, logfile):
         for _remote in self.ctx.cluster.remotes.iterkeys():
@@ -245,23 +224,19 @@ class SaltManager(object):
 
     def restart_master(self):
         """Starts salt-master.service on the Salt Master node"""
-        self.__systemctl_remote(
-            self.master_remote, subcommand="restart", service="salt-master"
-            )
+        systemctl_remote(self.master_remote, "restart", "salt-master")
 
     def restart_minions(self):
         """Restarts salt-minion.service on all cluster nodes"""
-        self.__systemctl_cluster(subcommand="restart", service="salt-minion")
+        systemctl_remote(self.ctx.cluster, "restart", "salt-minion")
 
     def start_master(self):
         """Starts salt-master.service on the Salt Master node"""
-        self.__systemctl_remote(
-            self.master_remote, subcommand="start", service="salt-master"
-            )
+        systemctl_remote(self.master_remote, "start", "salt-master")
 
     def start_minions(self):
         """Starts salt-minion.service on all cluster nodes"""
-        self.__systemctl_cluster(subcommand="start", service="salt-minion")
+        systemctl_remote(self.ctx.cluster, "start", "salt-minion")
 
     def sync_pillar_data(self, quiet=True):
         cmd = "sudo salt \\* saltutil.sync_all"
