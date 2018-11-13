@@ -23,6 +23,9 @@ class ValidDevice(object):
             raise argparse.ArgumentError(None, error)
 
         if self.as_string:
+            if device.is_lv:
+                # all codepaths expect an lv path to be returned in this format
+                return "{}/{}".format(device.vg_name, device.lv_name)
             return string
         return device
 
