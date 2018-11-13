@@ -155,11 +155,11 @@ def get_daemons_and_pools():  # pylint: disable=R0915
     }
 
 
-@ApiController('/rbdmirror', Scope.RBD_MIRRORING)
-class RbdMirror(BaseController):
+@ApiController('/block/mirroring/summary', Scope.RBD_MIRRORING)
+class RbdMirroringSummary(BaseController):
 
     def __init__(self):
-        super(RbdMirror, self).__init__()
+        super(RbdMirroringSummary, self).__init__()
         self.pool_data = {}
 
     @Endpoint()
