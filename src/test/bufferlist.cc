@@ -24,6 +24,7 @@
 #include <sys/uio.h>
 
 #include "include/buffer.h"
+#include "include/buffer_raw.h"
 #include "include/utime.h"
 #include "include/coredumpctl.h"
 #include "include/encoding.h"

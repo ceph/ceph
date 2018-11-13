@@ -165,17 +165,17 @@ namespace buffer CEPH_BUFFER_API {
   /*
    * named constructors
    */
-  raw* copy(const char *c, unsigned len);
-  raw* create(unsigned len);
-  raw* create_in_mempool(unsigned len, int mempool);
+  ceph::unique_leakable_ptr<raw> copy(const char *c, unsigned len);
+  ceph::unique_leakable_ptr<raw> create(unsigned len);
+  ceph::unique_leakable_ptr<raw> create_in_mempool(unsigned len, int mempool);
   raw* claim_char(unsigned len, char *buf);
   raw* create_malloc(unsigned len);
   raw* claim_malloc(unsigned len, char *buf);
   raw* create_static(unsigned len, char *buf);
-  raw* create_aligned(unsigned len, unsigned align);
-  raw* create_aligned_in_mempool(unsigned len, unsigned align, int mempool);
-  raw* create_page_aligned(unsigned len);
-  raw* create_small_page_aligned(unsigned len);
+  ceph::unique_leakable_ptr<raw> create_aligned(unsigned len, unsigned align);
+  ceph::unique_leakable_ptr<raw> create_aligned_in_mempool(unsigned len, unsigned align, int mempool);
+  ceph::unique_leakable_ptr<raw> create_page_aligned(unsigned len);
+  ceph::unique_leakable_ptr<raw> create_small_page_aligned(unsigned len);
   raw* create_unshareable(unsigned len);
   raw* create_static(unsigned len, char *buf);
   raw* claim_buffer(unsigned len, char *buf, deleter del);
@@ -269,6 +269,7 @@ namespace buffer CEPH_BUFFER_API {
     ptr() : _raw(nullptr), _off(0), _len(0) {}
     // cppcheck-suppress noExplicitConstructor
     ptr(raw* r);
+    ptr(ceph::unique_leakable_ptr<raw> r);
     // cppcheck-suppress noExplicitConstructor
     ptr(unsigned l);
     ptr(const char *d, unsigned l);
@@ -409,6 +410,10 @@ namespace buffer CEPH_BUFFER_API {
 
     ~ptr_node() = default;
 
+    static std::unique_ptr<ptr_node, disposer>
+    create(ceph::unique_leakable_ptr<raw> r) {
+      return create_hypercombined(std::move(r));
+    }
     static std::unique_ptr<ptr_node, disposer> create(raw* const r) {
       return create_hypercombined(r);
     }
@@ -437,7 +442,10 @@ namespace buffer CEPH_BUFFER_API {
     void swap(ptr_node& other) noexcept = delete;
 
     static bool dispose_if_hypercombined(ptr_node* delete_this);
-    static std::unique_ptr<ptr_node, disposer> create_hypercombined(raw* r);
+    static std::unique_ptr<ptr_node, disposer> create_hypercombined(
+      buffer::raw* r);
+    static std::unique_ptr<ptr_node, disposer> create_hypercombined(
+      ceph::unique_leakable_ptr<raw> r);
   };
   /*
    * list - the useful bit!
