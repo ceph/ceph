@@ -769,76 +769,39 @@ namespace buffer CEPH_BUFFER_API {
     };
 
     class contiguous_appender {
-      bufferlist *pbl;
-      char *pos;
-      ptr bp;
+      ceph::bufferlist& bl;
+      ceph::bufferlist::reserve_t space;
+      char* pos;
       bool deep;
 
       /// running count of bytes appended that are not reflected by @pos
       size_t out_of_band_offset = 0;
 
-      contiguous_appender(bufferlist *l, size_t len, bool d)
-	: pbl(l),
-	  deep(true) {
-	size_t unused = pbl->get_append_buffer_unused_tail_length();
-	if (len > unused) {
-	  // note: if len < the normal append_buffer size it *might*
-	  // be better to allocate a normal-sized append_buffer and
-	  // use part of it.  however, that optimizes for the case of
-	  // old-style types including new-style types.  and in most
-	  // such cases, this won't be the very first thing encoded to
-	  // the list, so append_buffer will already be allocated.
-	  // OTOH if everything is new-style, we *should* allocate
-	  // only what we need and conserve memory.
-	  bp = buffer::create(len);
-	  pos = bp.c_str();
-	} else {
-	  pos = pbl->_carriage->end_c_str();
-	}
+      contiguous_appender(bufferlist& bl, size_t len, bool d)
+	: bl(bl),
+	  space(bl.obtain_contiguous_space(len)),
+	  pos(space.bp_data),
+	  deep(d) {
       }
 
       void flush_and_continue() {
-	if (bp.have_raw()) {
-	  // we allocated a new buffer
-	  size_t l = pos - bp.c_str();
-	  pbl->append(bufferptr(bp, 0, l));
-	  bp.set_length(bp.length() - l);
-	  bp.set_offset(bp.offset() + l);
-	} else {
-	  // we are using pbl's append_buffer
-	  auto& buf = pbl->_buffers.back();
-	  size_t l = pos - buf.end_c_str();
-	  if (l) {
-	    buf.set_length(buf.length() + l);
-	    pbl->_len += l;
-	    pos = buf.end_c_str();
-	  }
-	}
+	const size_t l = pos - space.bp_data;
+	*space.bp_len += l;
+	*space.bl_len += l;
+	space.bp_data = pos;
       }
 
       friend class list;
 
     public:
       ~contiguous_appender() {
-	if (bp.have_raw()) {
-	  // we allocated a new buffer
-	  bp.set_length(pos - bp.c_str());
-	  pbl->append(std::move(bp));
-	} else {
-	  // we are using pbl's append_buffer
-	  auto& buf = pbl->_buffers.back();
-	  size_t l = pos - buf.end_c_str();
-	  if (l) {
-	    buf.set_length(buf.length() + l);
-	    pbl->_len += l;
-	  }
-	}
+	flush_and_continue();
       }
 
       size_t get_out_of_band_offset() const {
 	return out_of_band_offset;
       }
-      void append(const char *p, size_t l) {
+      void append(const char* __restrict__ p, size_t l) {
 	maybe_inline_memcpy(pos, p, l, 16);
 	pos += l;
       }
@@ -852,43 +815,39 @@ namespace buffer CEPH_BUFFER_API {
       }
 
       void append(const bufferptr& p) {
-	if (!p.length()) {
+	const auto plen = p.length();
+	if (!plen) {
 	  return;
 	}
 	if (deep) {
-	  append(p.c_str(), p.length());
+	  append(p.c_str(), plen);
 	} else {
 	  flush_and_continue();
-	  pbl->append(p);
-	  out_of_band_offset += p.length();
+	  bl.append(p);
+	  space = bl.obtain_contiguous_space(0);
+	  out_of_band_offset += plen;
 	}
       }
       void append(const bufferlist& l) {
-	if (!l.length()) {
-	  return;
-	}
 	if (deep) {
 	  for (const auto &p : l._buffers) {
 	    append(p.c_str(), p.length());
 	  }
 	} else {
 	  flush_and_continue();
-	  pbl->append(l);
+	  bl.append(l);
+	  space = bl.obtain_contiguous_space(0);
 	  out_of_band_offset += l.length();
 	}
       }
 
       size_t get_logical_offset() {
-	if (bp.have_raw()) {
-	  return out_of_band_offset + (pos - bp.c_str());
-	} else {
-	  return out_of_band_offset + (pos - pbl->_buffers.back().end_c_str());
-	}
+	return out_of_band_offset + (pos - space.bp_data);
       }
     };
 
     contiguous_appender get_contiguous_appender(size_t len, bool deep=false) {
-      return contiguous_appender(this, len, deep);
+      return contiguous_appender(*this, len, deep);
     }
 
     class contiguous_filler {
