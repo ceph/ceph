@@ -539,7 +539,8 @@ static ceph::spinlock debug_lock;
   {
     if (_raw) {
       bdout << "ptr " << this << " release " << _raw << bendl;
-      if (--_raw->nref == 0) {
+      const bool last_one = (1 == _raw->nref.load(std::memory_order_acquire));
+      if (likely(last_one) || --_raw->nref == 0) {
         // BE CAREFUL: this is called also for hypercombined ptr_node. After
         // freeing underlying raw, `*this` can become inaccessible as well!
         const auto* delete_raw = _raw;
