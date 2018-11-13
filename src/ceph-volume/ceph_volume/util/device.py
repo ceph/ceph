@@ -212,6 +212,10 @@ class Device(object):
         return os.path.exists(self.abspath)
 
     @property
+    def has_gpt_headers(self):
+        return self.blkid_api.get("PTTYPE") == "gpt"
+
+    @property
     def rotational(self):
         return self.sys_api['rotational'] == '1'
 
