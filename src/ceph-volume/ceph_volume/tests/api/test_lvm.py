@@ -541,6 +541,12 @@ class TestRemoveLV(object):
         monkeypatch.setattr(process, 'call', mock_call)
         assert api.remove_lv("vg/lv")
 
+    def test_removes_lv_object(self, fake_call):
+        foo_volume = api.Volume(lv_name='foo', lv_path='/path', vg_name='foo_group', lv_tags='')
+        api.remove_lv(foo_volume)
+        # last argument from the list passed to process.call
+        assert fake_call.calls[0]['args'][0][-1] == '/path'
+
     def test_fails_to_remove_lv(self, monkeypatch):
         def mock_call(cmd, **kw):
             return ('', '', 1)
