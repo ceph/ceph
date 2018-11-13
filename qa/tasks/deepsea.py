@@ -1953,7 +1953,6 @@ class Validation(DeepSea):
                     self.log.debug("Ignoring role_type {} which has no associated "
                                    "systemd unit".format(role_type))
             if run_script:
-                self.log.debug("About to run:\n" + script)
                 remote_run_script_as_root(
                     remote,
                     "systemd_validation.sh",
