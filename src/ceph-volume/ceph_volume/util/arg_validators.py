@@ -6,51 +6,24 @@ from ceph_volume.util import disk
 from ceph_volume.util.device import Device
 
 
-class LVPath(object):
-    """
-    A simple validator to ensure that a logical volume is specified like::
-
-        <vg name>/<lv name>
-
-    Or a full path to a device, like ``/dev/sda``
-
-    Because for LVM it is better to be specific on what group does an lv
-    belongs to.
-    """
-
-    def __call__(self, string):
-        error = None
-        if string.startswith('/'):
-            if not os.path.exists(string):
-                error = "Argument (device) does not exist: %s" % string
-                raise argparse.ArgumentError(None, error)
-            else:
-                return string
-        try:
-            vg, lv = string.split('/')
-        except ValueError:
-            error = "Logical volume must be specified as 'volume_group/logical_volume' but got: %s" % string
-            raise argparse.ArgumentError(None, error)
-
-        if not vg:
-            error = "Didn't specify a volume group like 'volume_group/logical_volume', got: %s" % string
-        if not lv:
-            error = "Didn't specify a logical volume like 'volume_group/logical_volume', got: %s" % string
-
-        if error:
-            raise argparse.ArgumentError(None, error)
-        return string
-
-
 class ValidDevice(object):
+
+    def __init__(self, as_string=False):
+        self.as_string = as_string
 
     def __call__(self, string):
         device = Device(string)
+        error = None
         if not device.exists:
-            raise argparse.ArgumentError(
-                None, "Unable to proceed with non-existing device: %s" % string
-            )
+            error = "Unable to proceed with non-existing device: %s" % string
+        elif device.has_gpt_headers:
+            error = "GPT headers found, they must be removed on: %s" % string
 
+        if error:
+            raise argparse.ArgumentError(None, error)
+
+        if self.as_string:
+            return string
         return device
 
 
