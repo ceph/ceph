@@ -346,6 +346,8 @@ TYPE(RGWObjManifest)
 TYPE(RGWZoneParams)
 TYPE(RGWZone)
 TYPE(RGWZoneGroup)
+TYPE(RGWRealm)
+TYPE(RGWPeriod)
 
 #include "rgw/rgw_acl.h"
 TYPE(ACLPermission)
