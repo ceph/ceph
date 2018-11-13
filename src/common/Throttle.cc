@@ -793,6 +793,8 @@ void TokenBucketThrottle::add_tokens() {
     std::lock_guard<Mutex> lock(m_lock);
     // put tokens into bucket.
     m_throttle.put(tokens_this_tick());
+    if (0 == m_avg || 0 == m_throttle.max)
+      tmp_blockers.swap(m_blockers);
     // check the m_blockers from head to tail, if blocker can get
     // enough tokens, let it go.
     while (!m_blockers.empty()) {
