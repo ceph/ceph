@@ -20,7 +20,7 @@ import logging
 import re
 
 from teuthology.contextutil import safe_while
-from teuthology.exceptions import CommandFailedError
+from teuthology.exceptions import CommandFailedError, MaxWhileTries
 from teuthology.orchestra import run
 from util import get_remote_for_role
 
@@ -78,13 +78,22 @@ class SaltManager(object):
                 ).format(filename, remote.name))
 
     def __ping(self, ping_cmd, expected):
-        with safe_while(sleep=15, tries=50,
-                        action=ping_cmd) as proceed:
-            while proceed():
-                responded = len(re.findall('  True', self.master_remote.sh(ping_cmd)))
-                log.info("{} of {} minions responded".format(responded, expected))
-                if (expected == responded):
-                    return None
+        try:
+            def instances_of_str(search_str, output):
+                return len(re.findall(search_str, output))
+            with safe_while(sleep=15, tries=50,
+                            action=ping_cmd) as proceed:
+                while proceed():
+                    output = self.master_remote.sh(ping_cmd)
+                    no_master = instances_of_str('The salt master could not be contacted', output)
+                    responded = instances_of_str('  True', output)
+                    log.info("{} of {} minions responded".format(responded, expected))
+                    if (expected == responded):
+                        return None
+        except MaxWhileTries:
+            if no_master:
+                cmd = 'sudo systemctl status --full --lines=100 salt-master.service'
+                self.master_remote.run(args=cmd)
 
     def all_minions_cmd_run(self, cmd, abort_on_fail=True, show_stderr=False):
         """
