@@ -204,10 +204,10 @@ struct RGWUserAdminOpState {
   bool system_specified;
   bool key_op;
   bool temp_url_key_specified;
-  bool found_by_uid; 
-  bool found_by_email;  
+  bool found_by_uid;
+  bool found_by_email;
   bool found_by_key;
- 
+
   // req parameters
   bool populated;
   bool initialized;
@@ -220,6 +220,10 @@ struct RGWUserAdminOpState {
 
   RGWQuotaInfo bucket_quota;
   RGWQuotaInfo user_quota;
+
+  // req parameters for listing user
+  std::string marker;
+  uint32_t max_entries;
 
   void set_access_key(std::string& access_key) {
     if (access_key.empty())
@@ -523,6 +527,8 @@ struct RGWUserAdminOpState {
     found_by_uid = false;
     found_by_email = false;
     found_by_key = false;
+    max_entries = 1000;
+    marker = "";
   }
 };
 
@@ -688,6 +694,9 @@ public:
   /* info from an already populated RGWUser */
   int info (RGWUserInfo& fetched_info, std::string *err_msg = NULL);
 
+  /* list the existing users */
+  int list(RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
+
   friend class RGWAccessKeyPool;
   friend class RGWSubUserPool;
   friend class RGWUserCapPool;
@@ -698,6 +707,9 @@ public:
 class RGWUserAdminOp_User
 {
 public:
+  static int list(RGWRados *store,
+                  RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
+
   static int info(RGWRados *store,
                   RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
 

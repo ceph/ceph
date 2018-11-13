@@ -2336,6 +2336,77 @@ int RGWUser::info(RGWUserInfo& fetched_info, std::string *err_msg)
   return 0;
 }
 
+int RGWUser::list(RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher)
+{
+  Formatter *formatter = flusher.get_formatter();
+  void *handle = nullptr;
+  std::string metadata_key = "user";
+  if (op_state.max_entries > 1000) {
+    op_state.max_entries = 1000;
+  }
+
+  int ret = store->meta_mgr->list_keys_init(metadata_key, op_state.marker, &handle);
+  if (ret < 0) {
+    return ret;
+  }
+
+  bool truncated = false;
+  uint64_t count = 0;
+  uint64_t left = 0;
+  flusher.start(0);
+
+  // open the result object section
+  formatter->open_object_section("result");
+
+  // open the user id list array section
+  formatter->open_array_section("keys");
+  do {
+    std::list<std::string> keys;
+    left = op_state.max_entries - count;
+    ret = store->meta_mgr->list_keys_next(handle, left, keys, &truncated);
+    if (ret < 0 && ret != -ENOENT) {
+      return ret;
+    } if (ret != -ENOENT) {
+      for (std::list<std::string>::iterator iter = keys.begin(); iter != keys.end(); ++iter) {
+      formatter->dump_string("key", *iter);
+        ++count;
+      }
+    }
+  } while (truncated && left > 0);
+  // close user id list section
+  formatter->close_section();
+
+  formatter->dump_bool("truncated", truncated);
+  formatter->dump_int("count", count);
+  if (truncated) {
+    formatter->dump_string("marker", store->meta_mgr->get_marker(handle));
+  }
+
+  // close result object section
+  formatter->close_section();
+
+  store->meta_mgr->list_keys_complete(handle);
+
+  flusher.flush();
+  return 0;
+}
+
+int RGWUserAdminOp_User::list(RGWRados *store, RGWUserAdminOpState& op_state,
+                  RGWFormatterFlusher& flusher)
+{
+  RGWUser user;
+
+  int ret = user.init_storage(store);
+  if (ret < 0)
+    return ret;
+
+  ret = user.list(op_state, flusher);
+  if (ret < 0)
+    return ret;
+
+  return 0;
+}
+
 int RGWUserAdminOp_User::info(RGWRados *store, RGWUserAdminOpState& op_state,
                   RGWFormatterFlusher& flusher)
 {

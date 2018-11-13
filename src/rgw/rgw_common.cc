@@ -997,6 +997,7 @@ void RGWHTTPArgs::append(const string& name, const string& val)
               (name.compare("index") == 0) ||
               (name.compare("policy") == 0) ||
               (name.compare("quota") == 0) ||
+              (name.compare("list") == 0) ||
               (name.compare("object") == 0)) {
 
     if (!admin_subresource_added) {
