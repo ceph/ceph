@@ -1635,13 +1635,12 @@ cp /srv/salt/ceph/stage/prep/minion/default-no-update-no-reboot.sls \
         "salt_api_test": """# Salt API test script
 set -e
 TMPFILE=$(mktemp)
-echo "Salt API test: BEGIN"
-curl http://$(hostname):8000/ | tee $TMPFILE # show curl output in log
+curl --silent http://$(hostname):8000/ | tee $TMPFILE # show curl output in log
 test -s $TMPFILE
 jq . $TMPFILE >/dev/null
 echo -en "\\n" # this is just for log readability
 rm $TMPFILE
-echo "Salt API test: END"
+echo "Salt API test passed"
 """,
         "rgw_init": """# Set up RGW
 set -ex
