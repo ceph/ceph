@@ -2513,7 +2513,7 @@ struct archive_meta_info {
       return false;
     }
 
-    auto bliter = iter->second.begin();
+    auto bliter = iter->second.cbegin();
     try {
       decode(bliter);
     } catch (buffer::error& err) {
@@ -2534,7 +2534,7 @@ struct archive_meta_info {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START(1, bl);
      decode(orig_bucket, bl);
      DECODE_FINISH(bl);
@@ -2555,7 +2555,7 @@ public:
     /* read original entrypoint */
 
     RGWBucketEntryPoint be;
-    RGWObjectCtx obj_ctx(store);
+    auto obj_ctx = store->svc.sysobj->init_obj_ctx();
     map<string, bufferlist> attrs;
     int ret = store->get_bucket_entrypoint_info(obj_ctx, tenant_name, bucket_name, be, &objv_tracker, &mtime, &attrs);
     if (ret < 0) {
@@ -2598,7 +2598,6 @@ public:
 
     get_md5_digest(&new_be, md5_digest);
     new_bucket_name = ami.orig_bucket.name + "-deleted-" + md5_digest;
-ldout(store->ctx(), 0) << __FILE__ << ":" << __LINE__ << ": new_bucket_name==" << new_bucket_name << dendl;
 
     new_bi.bucket.name = new_bucket_name;
     new_bi.objv_tracker.clear();
@@ -2647,7 +2646,7 @@ ldout(store->ctx(), 0) << __FILE__ << ":" << __LINE__ << ": new_bucket_name==" <
         lderr(store->ctx()) << "could not delete bucket=" << entry << dendl;
     }
 
-    ret = rgw_delete_system_obj(store, store->get_zone_params().domain_root, RGW_BUCKET_INSTANCE_MD_PREFIX + meta_name, NULL);
+    ret = rgw_delete_system_obj(store, store->svc.zone->get_zone_params().domain_root, RGW_BUCKET_INSTANCE_MD_PREFIX + meta_name, NULL);
 
     /* idempotent */
 

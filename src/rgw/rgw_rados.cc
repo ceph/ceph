@@ -7577,7 +7577,7 @@ int RGWRados::unlink_obj_instance(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_i
   return 0;
 }
 
-void RGWRados::gen_rand_obj_instance_name(rgw_obj *target_obj)
+void RGWRados::gen_rand_obj_instance_name(rgw_obj_key *target_key)
 {
 #define OBJ_INSTANCE_LEN 32
   char buf[OBJ_INSTANCE_LEN + 1];
@@ -7585,7 +7585,12 @@ void RGWRados::gen_rand_obj_instance_name(rgw_obj *target_obj)
   gen_rand_alphanumeric_no_underscore(cct, buf, OBJ_INSTANCE_LEN); /* don't want it to get url escaped,
                                                                       no underscore for instance name due to the way we encode the raw keys */
 
-  target_obj->key.set_instance(buf);
+  target_key->set_instance(buf);
+}
+
+void RGWRados::gen_rand_obj_instance_name(rgw_obj *target_obj)
+{
+  gen_rand_obj_instance_name(&target_obj->key);
 }
 
 int RGWRados::get_olh(const RGWBucketInfo& bucket_info, const rgw_obj& obj, RGWOLHInfo *olh)

@@ -582,7 +582,7 @@ int RGWAsyncFetchRemoteObj::_send_request()
 
   rgw_obj src_obj(bucket_info.bucket, key);
 
-  rgw_obj dest_obj(src_obj);
+  rgw_obj dest_obj(bucket_info.bucket, dest_key.value_or(key));
 
   int r = store->fetch_remote_obj(obj_ctx,
                        user_id,

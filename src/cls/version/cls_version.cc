@@ -70,6 +70,7 @@ static int read_version(cls_method_context_t hctx, obj_version *objv, bool impli
     CLS_LOG(0, "ERROR: read_version(): failed to decode version entry\n");
     return -EIO;
   }
+  CLS_LOG(20, "cls_version: read_version %s:%d", objv->tag.c_str(), (int)objv->ver);
 
   return 0;
 }
@@ -185,7 +186,6 @@ static int cls_version_check(cls_method_context_t hctx, bufferlist *in, bufferli
   int ret = read_version(hctx, &objv, false);
   if (ret < 0)
     return ret;
-  CLS_LOG(20, "cls_version: read_version %s:%d", objv.tag.c_str(), (int)objv.ver);
   
   if (!check_conds(op.conds, objv)) {
     CLS_LOG(20, "cls_version: failed condition check");
