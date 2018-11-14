@@ -24,7 +24,9 @@ from rbd import (RBD, Group, Image, ImageNotFound, InvalidArgument, ImageExists,
                  RBD_LOCK_MODE_EXCLUSIVE, RBD_OPERATION_FEATURE_GROUP,
                  RBD_SNAP_NAMESPACE_TYPE_TRASH,
                  RBD_IMAGE_MIGRATION_STATE_PREPARED, RBD_CONFIG_SOURCE_CONFIG,
-                 RBD_CONFIG_SOURCE_POOL, RBD_CONFIG_SOURCE_IMAGE)
+                 RBD_CONFIG_SOURCE_POOL, RBD_CONFIG_SOURCE_IMAGE,
+                 RBD_MIRROR_PEER_ATTRIBUTE_NAME_MON_HOST,
+                 RBD_MIRROR_PEER_ATTRIBUTE_NAME_KEY)
 
 rados = None
 ioctx = None
@@ -1717,6 +1719,14 @@ class TestMirroring(object):
             'client_name' : client_name,
             }
         eq([peer], list(self.rbd.mirror_peer_list(ioctx)))
+
+        attribs = {
+            RBD_MIRROR_PEER_ATTRIBUTE_NAME_MON_HOST: 'host1',
+            RBD_MIRROR_PEER_ATTRIBUTE_NAME_KEY: 'abc'
+            }
+        self.rbd.mirror_peer_set_attributes(ioctx, uuid, attribs)
+        eq(attribs, self.rbd.mirror_peer_get_attributes(ioctx, uuid))
+
         self.rbd.mirror_peer_remove(ioctx, uuid)
         eq([], list(self.rbd.mirror_peer_list(ioctx)))
 

@@ -25,6 +25,7 @@ from libc.string cimport strdup
 
 from collections import Iterable
 from datetime import datetime
+from itertools import chain
 
 cimport rados
 
@@ -128,6 +129,9 @@ cdef extern from "rbd/librbd.h" nogil:
         char *uuid
         char *cluster_name
         char *client_name
+
+    cdef char* _RBD_MIRROR_PEER_ATTRIBUTE_NAME_MON_HOST "RBD_MIRROR_PEER_ATTRIBUTE_NAME_MON_HOST"
+    cdef char* _RBD_MIRROR_PEER_ATTRIBUTE_NAME_KEY "RBD_MIRROR_PEER_ATTRIBUTE_NAME_KEY"
 
     ctypedef enum rbd_mirror_image_state_t:
         _RBD_MIRROR_IMAGE_DISABLING "RBD_MIRROR_IMAGE_DISABLING"
@@ -305,6 +309,14 @@ cdef extern from "rbd/librbd.h" nogil:
                                    const char *client_name)
     int rbd_mirror_peer_set_cluster(rados_ioctx_t io_ctx, const char *uuid,
                                     const char *cluster_name)
+    int rbd_mirror_peer_get_attributes(rados_ioctx_t io_ctx, const char *uuid,
+                                       char *keys, size_t *max_key_len,
+                                       char *values, size_t *max_val_length,
+                                       size_t *key_value_count)
+    int rbd_mirror_peer_set_attributes(rados_ioctx_t io_ctx, const char *uuid,
+                                       const char *keys, const char *values,
+                                       size_t count)
+
     int rbd_mirror_image_status_list(rados_ioctx_t io, const char *start_id,
                                      size_t max, char **image_ids,
                                      rbd_mirror_image_status_t *images,
@@ -582,6 +594,9 @@ RBD_FLAG_FAST_DIFF_INVALID = _RBD_FLAG_FAST_DIFF_INVALID
 RBD_MIRROR_MODE_DISABLED = _RBD_MIRROR_MODE_DISABLED
 RBD_MIRROR_MODE_IMAGE = _RBD_MIRROR_MODE_IMAGE
 RBD_MIRROR_MODE_POOL = _RBD_MIRROR_MODE_POOL
+
+RBD_MIRROR_PEER_ATTRIBUTE_NAME_MON_HOST = _RBD_MIRROR_PEER_ATTRIBUTE_NAME_MON_HOST
+RBD_MIRROR_PEER_ATTRIBUTE_NAME_KEY = _RBD_MIRROR_PEER_ATTRIBUTE_NAME_KEY
 
 RBD_MIRROR_IMAGE_DISABLING = _RBD_MIRROR_IMAGE_DISABLING
 RBD_MIRROR_IMAGE_ENABLED = _RBD_MIRROR_IMAGE_ENABLED
@@ -1609,6 +1624,76 @@ class RBD(object):
             ret = rbd_mirror_peer_set_cluster(_ioctx, _uuid, _cluster_name)
         if ret != 0:
             raise make_ex(ret, 'error setting mirror peer cluster')
+
+    def mirror_peer_get_attributes(self, ioctx, uuid):
+        """
+        Get optional mirror peer attributes
+
+        :param ioctx: determines which RADOS pool is written
+        :type ioctx: :class:`rados.Ioctx`
+        :param uuid: uuid of the mirror peer
+        :type uuid: str
+
+        :returns: dict - contains the following keys:
+
+            * ``mon_host`` (str) - monitor addresses
+
+            * ``key`` (str) - CephX key
+        """
+        uuid = cstr(uuid, 'uuid')
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            char *_uuid = uuid
+            char *_keys = NULL
+            char *_vals = NULL
+            size_t _keys_size = 512
+            size_t _vals_size = 512
+            size_t _count = 0
+        try:
+            while True:
+                _keys = <char *>realloc_chk(_keys, _keys_size)
+                _vals = <char *>realloc_chk(_vals, _vals_size)
+                with nogil:
+                    ret = rbd_mirror_peer_get_attributes(_ioctx, _uuid, _keys,
+                                                         &_keys_size, _vals,
+                                                         &_vals_size, &_count)
+                if ret >= 0:
+                    break
+                elif ret != -errno.ERANGE:
+                    raise make_ex(ret, 'error getting mirror peer attributes')
+            keys = [decode_cstr(x) for x in _keys[:_keys_size].split(b'\0') if x]
+            vals = [decode_cstr(x) for x in _vals[:_vals_size].split(b'\0') if x]
+            return dict(zip(keys, vals))
+        finally:
+            free(_keys)
+            free(_vals)
+
+    def mirror_peer_set_attributes(self, ioctx, uuid, attributes):
+        """
+        Set optional mirror peer attributes
+
+        :param ioctx: determines which RADOS pool is written
+        :type ioctx: :class:`rados.Ioctx`
+        :param uuid: uuid of the mirror peer
+        :type uuid: str
+        :param attributes: 'mon_host' and 'key' attributes
+        :type attributes: dict
+        """
+        uuid = cstr(uuid, 'uuid')
+        keys_str = '\0'.join([cstr(x[0], 'key') for x in attributes.items()])
+        vals_str = '\0'.join([cstr(x[1], 'val') for x in attributes.items()])
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            char *_uuid = uuid
+            char *_keys = keys_str
+            char *_vals = vals_str
+            size_t _count = len(attributes)
+
+        with nogil:
+            ret = rbd_mirror_peer_set_attributes(_ioctx, _uuid, _keys, _vals,
+                                                 _count)
+        if ret != 0:
+            raise make_ex(ret, 'error setting mirror peer attributes')
 
     def mirror_image_status_list(self, ioctx):
         """

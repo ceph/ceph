@@ -19,6 +19,7 @@ namespace api {
 
 template <typename ImageCtxT = librbd::ImageCtx>
 struct Mirror {
+  typedef std::map<std::string, std::string> Attributes;
   typedef std::map<std::string, mirror_image_status_t> IdToMirrorImageStatus;
   typedef std::map<mirror_image_status_state_t, int> MirrorImageStatusStates;
 
@@ -35,6 +36,12 @@ struct Mirror {
                              const std::string &client_name);
   static int peer_set_cluster(librados::IoCtx& io_ctx, const std::string &uuid,
                               const std::string &cluster_name);
+  static int peer_get_attributes(librados::IoCtx& io_ctx,
+                                 const std::string &uuid,
+                                 Attributes* attributes);
+  static int peer_set_attributes(librados::IoCtx& io_ctx,
+                                 const std::string &uuid,
+                                 const Attributes& attributes);
 
   static int image_status_list(librados::IoCtx& io_ctx,
                                const std::string &start_id, size_t max,
