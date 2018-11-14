@@ -281,7 +281,7 @@ void Instances<I>::handle_remove_instances(
   dout(10) << "r=" << r << ", instance_ids=" << instance_ids << dendl;
   ceph_assert(r == 0);
 
-  // fire removed notification now that instaces have been blacklisted
+  // fire removed notification now that instances have been blacklisted
   m_threads->work_queue->queue(
     new C_NotifyInstancesRemoved(this, instance_ids), 0);
 
