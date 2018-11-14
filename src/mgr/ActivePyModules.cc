@@ -420,14 +420,12 @@ void ActivePyModules::notify_all(const LogEntry &log_entry)
 bool ActivePyModules::get_config(const std::string &module_name,
     const std::string &key, std::string *val) const
 {
-  PyThreadState *tstate = PyEval_SaveThread();
-  Mutex::Locker l(lock);
-  PyEval_RestoreThread(tstate);
-
   const std::string global_key = PyModuleRegistry::config_prefix
     + module_name + "/" + key;
 
   dout(4) << __func__ << "key: " << global_key << dendl;
+
+  Mutex::Locker l(lock);
 
   if (config_cache.count(global_key)) {
     *val = config_cache.at(global_key);
