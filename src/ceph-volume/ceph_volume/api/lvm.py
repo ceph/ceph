@@ -505,13 +505,20 @@ def remove_pv(pv_name):
     )
 
 
-def remove_lv(path):
+def remove_lv(lv):
     """
     Removes a logical volume given it's absolute path.
 
     Will return True if the lv is successfully removed or
     raises a RuntimeError if the removal fails.
+
+    :param lv: A ``Volume`` object or the path for an LV
     """
+    if isinstance(lv, Volume):
+        path = lv.lv_path
+    else:
+        path = lv
+
     stdout, stderr, returncode = process.call(
         [
             'lvremove',
