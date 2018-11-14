@@ -462,10 +462,6 @@ bool ActivePyModules::get_store(const std::string &module_name,
 bool ActivePyModules::get_config(const std::string &module_name,
     const std::string &key, std::string *val) const
 {
-  PyThreadState *tstate = PyEval_SaveThread();
-  Mutex::Locker l(lock);
-  PyEval_RestoreThread(tstate);
-
   const std::string global_key = PyModule::config_prefix
     + module_name + "/" + key;
 

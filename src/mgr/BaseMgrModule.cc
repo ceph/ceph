@@ -356,9 +356,13 @@ ceph_config_get(BaseMgrModule *self, PyObject *args)
     return nullptr;
   }
 
+  PyThreadState *tstate = PyEval_SaveThread();
   std::string value;
   bool found = self->py_modules->get_config(self->this_module->get_name(),
       what, &value);
+
+  PyEval_RestoreThread(tstate);
+
   if (found) {
     dout(10) << "ceph_config_get " << what << " found: " << value.c_str() << dendl;
     return PyString_FromString(value.c_str());
