@@ -19,7 +19,7 @@ Add a Metadata Server
 
 #. Create the authentication key, if you use CephX. ::
 
-	$ sudo ceph auth get-or-create mds.{$id} mon 'profile mds' mgr 'profile mds' mds 'allow *' osd 'allow *' > /var/lib/ceph/mds/ceph-{$id}/keyring
+	$ sudo ceph auth get-or-create mds.{$id} mon 'allow profile mds' mgr 'allow profile mds' mds 'allow *' osd 'allow *' > /var/lib/ceph/mds/ceph-{$id}/keyring
 
 #. Start the service. ::
 
