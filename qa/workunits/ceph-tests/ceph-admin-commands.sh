@@ -1,12 +1,9 @@
-#!/bin/sh -e
+#!/bin/sh -ex
 
-#check ceph health
 ceph -s
-#list pools
 rados lspools
-#lisr rbd images
 rbd ls
-#check that the monitors work
+# check that the monitors work
 ceph osd set nodown
 ceph osd unset nodown
 
