@@ -749,7 +749,7 @@ public:
   }
 
   bool read_entry(bufferlist& bl, int& r) {
-    // Entries are storead in the file using the following format:
+    // Entries are stored in the file using the following format:
     //
     //   # Optional comments
     //   NNN {json encoded entry}
