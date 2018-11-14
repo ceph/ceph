@@ -2691,3 +2691,10 @@ int DaemonServer::remove_osd_perf_query(OSDPerfMetricQueryID query_id)
 {
   return osd_perf_metric_collector.remove_query(query_id);
 }
+
+int DaemonServer::get_osd_perf_counters(
+    OSDPerfMetricQueryID query_id,
+    std::map<OSDPerfMetricKey, PerformanceCounters> *counters)
+{
+  return osd_perf_metric_collector.get_counters(query_id, counters);
+}
