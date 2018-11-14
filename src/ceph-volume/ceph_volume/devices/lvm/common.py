@@ -52,7 +52,7 @@ def common_parser(prog, description):
     required_group.add_argument(
         '--data',
         required=True,
-        type=arg_validators.LVPath(),
+        type=arg_validators.ValidDevice(as_string=True),
         help='OSD data path. A physical device or logical volume',
     )
 

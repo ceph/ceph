@@ -62,14 +62,16 @@ class TestPrepare(object):
         assert 'Use the bluestore objectstore' in stdout
         assert 'A physical device or logical' in stdout
 
-    def test_excludes_filestore_bluestore_flags(self, capsys):
+    def test_excludes_filestore_bluestore_flags(self, capsys, device_info):
+        device_info()
         with pytest.raises(SystemExit):
             lvm.prepare.Prepare(argv=['--data', '/dev/sdfoo', '--filestore', '--bluestore']).main()
         stdout, stderr = capsys.readouterr()
         expected = 'Cannot use --filestore (filestore) with --bluestore (bluestore)'
         assert expected in stdout
 
-    def test_excludes_other_filestore_bluestore_flags(self, capsys):
+    def test_excludes_other_filestore_bluestore_flags(self, capsys, device_info):
+        device_info()
         with pytest.raises(SystemExit):
             lvm.prepare.Prepare(argv=[
                 '--bluestore', '--data', '/dev/sdfoo',
@@ -79,7 +81,8 @@ class TestPrepare(object):
         expected = 'Cannot use --bluestore (bluestore) with --journal (filestore)'
         assert expected in stdout
 
-    def test_excludes_block_and_journal_flags(self, capsys):
+    def test_excludes_block_and_journal_flags(self, capsys, device_info):
+        device_info()
         with pytest.raises(SystemExit):
             lvm.prepare.Prepare(argv=[
                 '--bluestore', '--data', '/dev/sdfoo', '--block.db', 'vg/ceph1',
@@ -89,8 +92,9 @@ class TestPrepare(object):
         expected = 'Cannot use --block.db (bluestore) with --journal (filestore)'
         assert expected in stdout
 
-    def test_journal_is_required_with_filestore(self, is_root, monkeypatch):
-        monkeypatch.setattr('os.path.exists', lambda x: True)
+    def test_journal_is_required_with_filestore(self, is_root, monkeypatch, device_info):
+        monkeypatch.setattr("os.path.exists", lambda path: True)
+        device_info()
         with pytest.raises(SystemExit) as error:
             lvm.prepare.Prepare(argv=['--filestore', '--data', '/dev/sdfoo']).main()
         expected = '--journal is required when using --filestore'

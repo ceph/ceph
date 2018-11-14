@@ -13,7 +13,7 @@ class TestDevice(object):
         assert "foo" in disk.sys_api
 
     def test_is_lv(self, device_info):
-        data = {"lv_path": "vg/lv", "vg_name": "vg"}
+        data = {"lv_path": "vg/lv", "vg_name": "vg", "name": "lv"}
         device_info(lv=data)
         disk = device.Device("vg/lv")
         assert disk.is_lv
