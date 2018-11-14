@@ -2502,6 +2502,46 @@ void get_md5_digest(const RGWBucketEntryPoint *be, string& md5_digest) {
    md5_digest = md5;
 }
 
+#define ARCHIVE_META_ATTR RGW_ATTR_PREFIX "zone.archive.info" 
+
+struct archive_meta_info {
+  rgw_bucket orig_bucket;
+
+  bool from_attrs(CephContext *cct, map<string, bufferlist>& attrs) {
+    auto iter = attrs.find(ARCHIVE_META_ATTR);
+    if (iter == attrs.end()) {
+      return false;
+    }
+
+    auto bliter = iter->second.begin();
+    try {
+      decode(bliter);
+    } catch (buffer::error& err) {
+      ldout(cct, 0) << "ERROR: failed to decode archive meta info" << dendl;
+      return false;
+    }
+
+    return true;
+  }
+
+  void store_in_attrs(map<string, bufferlist>& attrs) const {
+    encode(attrs[ARCHIVE_META_ATTR]);
+  }
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(orig_bucket, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+     DECODE_START(1, bl);
+     decode(orig_bucket, bl);
+     DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(archive_meta_info)
+
 class RGWArchiveBucketMetadataHandler : public RGWBucketMetadataHandler {
 public:
   int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) override {
@@ -2512,36 +2552,85 @@ public:
 
     real_time mtime;
 
+    /* read original entrypoint */
+
     RGWBucketEntryPoint be;
     RGWObjectCtx obj_ctx(store);
-    int ret = store->get_bucket_entrypoint_info(obj_ctx, tenant_name, bucket_name, be, &objv_tracker, &mtime, NULL);
+    map<string, bufferlist> attrs;
+    int ret = store->get_bucket_entrypoint_info(obj_ctx, tenant_name, bucket_name, be, &objv_tracker, &mtime, &attrs);
     if (ret < 0) {
         return ret;
     }
 
-    string md5_digest;
-    get_md5_digest(&be, md5_digest);
+    string meta_name = bucket_name + ":" + be.bucket.bucket_id;
 
-    string archive_zone_suffix = "-deleted-" + md5_digest;
-    be.bucket.name = be.bucket.name + archive_zone_suffix;
+    /* read original bucket instance info */
 
-    RGWBucketEntryMetadataObject *be_mdo = new RGWBucketEntryMetadataObject(be, objv_tracker.read_version, mtime);
+    map<string, bufferlist> attrs_m;
+    ceph::real_time orig_mtime;
+    RGWBucketInfo old_bi;
 
-    string metadata_key = string("bucket:") + entry;
-
-    JSONFormatter f(false);
-    f.open_object_section("metadata_info");
-    encode_json("key", metadata_key + archive_zone_suffix, &f);
-    encode_json("ver", be_mdo->get_version(), &f);
-    mtime = be_mdo->get_mtime();
-    if (!real_clock::is_zero(mtime)) {
-       utime_t ut(mtime);
-       encode_json("mtime", ut, &f);
+    ret = store->get_bucket_instance_info(obj_ctx, be.bucket, old_bi, &orig_mtime, &attrs_m);
+    if (ret < 0) {
+        return ret;
     }
-    encode_json("data", *be_mdo, &f);
-    f.close_section();
 
-    delete be_mdo;
+    archive_meta_info ami;
+
+    if (!ami.from_attrs(store->ctx(), attrs_m)) {
+      ami.orig_bucket = old_bi.bucket;
+      ami.store_in_attrs(attrs_m);
+    }
+
+    /* generate a new bucket instance. We could have avoided this if we could just point a new
+     * bucket entry point to the old bucket instance, however, due to limitation in the way
+     * we index buckets under the user, bucket entrypoint and bucket instance of the same
+     * bucket need to have the same name, so we need to copy the old bucket instance into
+     * to a new entry with the new name
+     */
+
+    string new_bucket_name;
+
+    RGWBucketInfo new_bi = old_bi;
+    RGWBucketEntryPoint new_be = be;
+
+    string md5_digest;
+
+    get_md5_digest(&new_be, md5_digest);
+    new_bucket_name = ami.orig_bucket.name + "-deleted-" + md5_digest;
+ldout(store->ctx(), 0) << __FILE__ << ":" << __LINE__ << ": new_bucket_name==" << new_bucket_name << dendl;
+
+    new_bi.bucket.name = new_bucket_name;
+    new_bi.objv_tracker.clear();
+
+    new_be.bucket.name = new_bucket_name;
+
+    ret = store->put_bucket_instance_info(new_bi, false, orig_mtime, &attrs_m);
+    if (ret < 0) {
+      ldout(store->ctx(), 0) << "ERROR: failed to put new bucket instance info for bucket=" << new_bi.bucket << " ret=" << ret << dendl;
+      return ret;
+    }
+
+    /* store a new entrypoint */
+
+    RGWObjVersionTracker ot;
+    ot.generate_new_write_ver(store->ctx());
+
+    ret = store->put_bucket_entrypoint_info(tenant_name, new_bucket_name, new_be, true, ot, mtime, &attrs);
+    if (ret < 0) {
+      ldout(store->ctx(), 0) << "ERROR: failed to put new bucket entrypoint for bucket=" << new_be.bucket << " ret=" << ret << dendl;
+      return ret;
+    }
+
+    /* link new bucket */
+
+    ret = rgw_link_bucket(store, new_be.owner, new_be.bucket, new_be.creation_time, false);
+    if (ret < 0) {
+      ldout(store->ctx(), 0) << "ERROR: failed to link new bucket for bucket=" << new_be.bucket << " ret=" << ret << dendl;
+      return ret;
+    }
+
+    /* clean up old stuff */
 
     ret = rgw_unlink_bucket(store, be.owner, tenant_name, bucket_name, false);
     if (ret < 0) {
@@ -2558,76 +2647,10 @@ public:
         lderr(store->ctx()) << "could not delete bucket=" << entry << dendl;
     }
 
-    string new_entry, new_bucket_name;
-    new_entry = entry + archive_zone_suffix;
-    parse_bucket(new_entry, &tenant_name, &new_bucket_name);
-
-    bufferlist bl;
-    f.flush(bl);
-
-    JSONParser parser;
-    if (!parser.parse(bl.c_str(), bl.length())) {
-        return -EINVAL;
-    }
-
-    JSONObj *jo = parser.find_obj("data");
-    if (!jo) {
-        return -EINVAL;
-    }
-
-    try {
-        decode_json_obj(be, jo);
-    } catch (JSONDecoder::err& e) {
-        return -EINVAL;
-    }
-
-    RGWBucketEntryPoint ep;
-    ep.linked = be.linked;
-    ep.owner = be.owner;
-    ep.bucket = be.bucket;
-
-    RGWObjVersionTracker ot;
-    ot.generate_new_write_ver(store->ctx());
-
-    map<string, bufferlist> attrs;
-
-    ret = store->put_bucket_entrypoint_info(tenant_name, new_bucket_name, ep, false, ot, mtime, &attrs);
-    if (ret < 0) {
-        return ret;
-    }
-
-    ret = rgw_link_bucket(store, be.owner, be.bucket, be.creation_time, false);
-    if (ret < 0) {
-        return ret;
-    }
-
-    // .bucket.meta.my-bucket-1:c0f7ef8c-2309-4ebb-a1d0-1b0a61dc5a78.4226.1
-    string meta_name = bucket_name + ":" + be.bucket.marker;
-
-    map<string, bufferlist> attrs_m;
-    RGWBucketInfo bi_m;
-
-    ret = store->get_bucket_instance_info(obj_ctx, meta_name, bi_m, NULL, &attrs_m);
-    if (ret < 0) {
-        return ret;
-    }
-
-    string new_meta_name = RGW_BUCKET_INSTANCE_MD_PREFIX + new_bucket_name + ":" + be.bucket.marker;
-
-    bi_m.bucket.name = new_bucket_name;
-
-    bufferlist bl_m;
-    using ceph::encode;
-    encode(bi_m, bl_m);
-
-    ret = rgw_put_system_obj(store, store->get_zone_params().domain_root, new_meta_name, bl_m, false, NULL, real_time(), NULL);
-    if (ret < 0) {
-        return ret;
-    }
-
     ret = rgw_delete_system_obj(store, store->get_zone_params().domain_root, RGW_BUCKET_INSTANCE_MD_PREFIX + meta_name, NULL);
 
     /* idempotent */
+
     return 0;
   }
 
