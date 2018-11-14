@@ -338,26 +338,26 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         pods = self.rook_cluster.describe_pods(service_type, service_id, nodename)
 
-        result = orchestrator.ServiceDescription()
+        result = []
         for p in pods:
-            sl = orchestrator.ServiceLocation()
-            sl.nodename = p['nodename']
-            sl.container_id = p['name']
-            sl.service_type = p['labels']['app'].replace('rook-ceph-', '')
+            sd = orchestrator.ServiceDescription()
+            sd.nodename = p['nodename']
+            sd.container_id = p['name']
+            sd.service_type = p['labels']['app'].replace('rook-ceph-', '')
 
-            if sl.service_type == "osd":
-                sl.daemon_name = "%s" % p['labels']["ceph-osd-id"]
-            elif sl.service_type == "mds":
-                sl.daemon_name = p['labels']["rook_file_system"]
-            elif sl.service_type == "mon":
-                sl.daemon_name = p['labels']["mon"]
-            elif sl.service_type == "mgr":
-                sl.daemon_name = p['labels']["mgr"]
+            if sd.service_type == "osd":
+                sd.daemon_name = "%s" % p['labels']["ceph-osd-id"]
+            elif sd.service_type == "mds":
+                sd.daemon_name = p['labels']["rook_file_system"]
+            elif sd.service_type == "mon":
+                sd.daemon_name = p['labels']["mon"]
+            elif sd.service_type == "mgr":
+                sd.daemon_name = p['labels']["mgr"]
             else:
                 # Unknown type -- skip it
                 continue
 
-            result.locations.append(sl)
+            result.append(sd)
 
         return result
 

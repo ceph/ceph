@@ -159,14 +159,13 @@ class OrchestratorCli(MgrModule):
 
         self._wait([completion])
 
-        service_description = completion.result
-        #assert isinstance(service_description, orchestrator.ServiceDescription)
+        service_list = completion.result
 
-        if len(service_description.locations) == 0:
+        if len(service_list) == 0:
             return 0, "", "No locations reported"
         else:
             lines = []
-            for l in service_description.locations:
+            for l in service_list:
                 lines.append("{0}.{1} {2} {3}".format(
                     svc_type,
                     l.daemon_name,
