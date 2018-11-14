@@ -9813,12 +9813,18 @@ void OSD::get_perf_reports(
     std::map<OSDPerfMetricQuery, OSDPerfMetricReport> *reports) {
   std::vector<PGRef> pgs;
   _get_pgs(&pgs);
-  DynamicPerfStats dps(m_perf_queries);
+  DynamicPerfStats dps;
   for (auto& pg : pgs) {
     if (pg->is_primary()) {
+      // m_perf_queries can be modified only in set_perf_queries by mgr client
+      // request, and it is protected by by mgr client's lock, which is held
+      // when set_perf_queries/get_perf_reports are called, so we may not hold
+      // m_perf_queries_lock here.
+      DynamicPerfStats pg_dps(m_perf_queries);
       pg->lock();
-      pg->get_dynamic_perf_stats(&dps);
+      pg->get_dynamic_perf_stats(&pg_dps);
       pg->unlock();
+      dps.merge(pg_dps);
     }
   }
   dps.add_to_reports(reports);

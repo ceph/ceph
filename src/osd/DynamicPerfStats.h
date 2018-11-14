@@ -19,6 +19,26 @@ public:
     }
   }
 
+  void merge(const DynamicPerfStats &dps) {
+    for (auto &query_it : dps.data) {
+      auto &query = query_it.first;
+      for (auto &key_it : query_it.second) {
+        auto &key = key_it.first;
+        auto counter_it = key_it.second.begin();
+        auto update_counter_fnc =
+            [&counter_it](const PerformanceCounterDescriptor &d,
+                          PerformanceCounter *c) {
+              c->first  += counter_it->first;
+              c->second += counter_it->second;
+              counter_it++;
+            };
+
+        ceph_assert(key_it.second.size() >= data[query][key].size());
+        query.update_counters(update_counter_fnc, &data[query][key]);
+      }
+    }
+  }
+
   void set_queries(const std::list<OSDPerfMetricQuery> &queries) {
     std::map<OSDPerfMetricQuery,
              std::map<OSDPerfMetricKey, PerformanceCounters>> new_data;
