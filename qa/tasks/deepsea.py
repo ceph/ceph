@@ -518,7 +518,7 @@ class DeepSea(Task):
         deepsea_ctx['roles'] = self.ctx.config['roles']
         deepsea_ctx['alternative_defaults'] = self.config.get('alternative_defaults', {})
         if not isinstance(deepsea_ctx['alternative_defaults'], dict):
-            raise ConfigError(self.err_prefix + "alternative_defaults must be a list")
+            raise ConfigError(self.err_prefix + "alternative_defaults must be a dict")
         deepsea_ctx['cli'] = self.config.get('cli', True)
         deepsea_ctx['dashboard_ssl'] = self.config.get('dashboard_ssl', True)
         deepsea_ctx['log_anchor'] = self.config.get('log_anchor', self.log_anchor_str)
