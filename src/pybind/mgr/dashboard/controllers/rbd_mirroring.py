@@ -6,14 +6,40 @@ import re
 
 from functools import partial
 
+import cherrypy
+
 import rbd
 
-from . import ApiController, Endpoint, BaseController, ReadPermission
+from . import ApiController, Endpoint, Task, BaseController, ReadPermission, \
+    RESTController
 from .. import logger, mgr
 from ..security import Scope
 from ..services.ceph_service import CephService
 from ..tools import ViewCache
-from ..services.exception import handle_rbd_error
+from ..services.exception import handle_rados_error, handle_rbd_error, \
+    serialize_dashboard_exception
+
+
+# pylint: disable=not-callable
+def handle_rbd_mirror_error():
+    def composed_decorator(func):
+        func = handle_rados_error('rbd-mirroring')(func)
+        return handle_rbd_error()(func)
+    return composed_decorator
+
+
+# pylint: disable=not-callable
+def RbdMirroringTask(name, metadata, wait_for):
+    def composed_decorator(func):
+        func = handle_rbd_mirror_error()(func)
+        return Task("rbd/mirroring/{}".format(name), metadata, wait_for,
+                    partial(serialize_dashboard_exception, include_http_status=True))(func)
+    return composed_decorator
+
+
+def _rbd_call(pool_name, func, *args, **kwargs):
+    with mgr.rados.open_ioctx(pool_name) as ioctx:
+        func(ioctx, *args, **kwargs)
 
 
 @ViewCache()
@@ -167,7 +193,7 @@ class RbdMirroringSummary(BaseController):
         self.pool_data = {}
 
     @Endpoint()
-    @handle_rbd_error()
+    @handle_rbd_mirror_error()
     @ReadPermission
     def __call__(self):
         status, content_data = self._get_content_data()
@@ -309,3 +335,118 @@ class RbdMirroringSummary(BaseController):
             'image_syncing': image_syncing,
             'image_ready': image_ready
         }
+
+
+@ApiController('/block/mirroring/pool', Scope.RBD_MIRRORING)
+class RbdMirroringPoolMode(RESTController):
+
+    RESOURCE_ID = "pool_name"
+    MIRROR_MODES = {
+        rbd.RBD_MIRROR_MODE_DISABLED: 'disabled',
+        rbd.RBD_MIRROR_MODE_IMAGE: 'image',
+        rbd.RBD_MIRROR_MODE_POOL: 'pool'
+    }
+
+    @handle_rbd_mirror_error()
+    def get(self, pool_name):
+        ioctx = mgr.rados.open_ioctx(pool_name)
+        mode = rbd.RBD().mirror_mode_get(ioctx)
+        data = {
+            'mirror_mode': self.MIRROR_MODES.get(mode, 'unknown')
+        }
+        return data
+
+    @RbdMirroringTask('pool/edit', {'pool_name': '{pool_name}'}, 5.0)
+    def set(self, pool_name, mirror_mode=None):
+        def _edit(ioctx, mirror_mode=None):
+            if mirror_mode:
+                mode_enum = dict([[x[1], x[0]] for x in
+                                  self.MIRROR_MODES.items()]).get(mirror_mode, None)
+                if mode_enum is None:
+                    raise rbd.Error('invalid mirror mode "{}"'.format(mirror_mode))
+
+                current_mode_enum = rbd.RBD().mirror_mode_get(ioctx)
+                if mode_enum != current_mode_enum:
+                    rbd.RBD().mirror_mode_set(ioctx, mode_enum)
+
+        return _rbd_call(pool_name, _edit, mirror_mode)
+
+
+@ApiController('/block/mirroring/pool/{pool_name}/peer', Scope.RBD_MIRRORING)
+class RbdMirroringPoolPeer(RESTController):
+
+    RESOURCE_ID = "peer_uuid"
+
+    @handle_rbd_mirror_error()
+    def list(self, pool_name):
+        ioctx = mgr.rados.open_ioctx(pool_name)
+        peer_list = rbd.RBD().mirror_peer_list(ioctx)
+        return [x['uuid'] for x in peer_list]
+
+    @handle_rbd_mirror_error()
+    def create(self, pool_name, cluster_name, client_id, mon_host=None,
+               key=None):
+        ioctx = mgr.rados.open_ioctx(pool_name)
+        mode = rbd.RBD().mirror_mode_get(ioctx)
+        if mode == rbd.RBD_MIRROR_MODE_DISABLED:
+            raise rbd.Error('mirroring must be enabled')
+
+        uuid = rbd.RBD().mirror_peer_add(ioctx, cluster_name,
+                                         'client.{}'.format(client_id))
+
+        attributes = {}
+        if mon_host is not None:
+            attributes[rbd.RBD_MIRROR_PEER_ATTRIBUTE_NAME_MON_HOST] = mon_host
+        if key is not None:
+            attributes[rbd.RBD_MIRROR_PEER_ATTRIBUTE_NAME_KEY] = key
+        if attributes:
+            rbd.RBD().mirror_peer_set_attributes(ioctx, uuid, attributes)
+        return {'uuid': uuid}
+
+    @handle_rbd_mirror_error()
+    def get(self, pool_name, peer_uuid):
+        ioctx = mgr.rados.open_ioctx(pool_name)
+        peer_list = rbd.RBD().mirror_peer_list(ioctx)
+        peer = next((x for x in peer_list if x['uuid'] == peer_uuid), None)
+        if not peer:
+            raise cherrypy.HTTPError(404)
+
+        # convert full client name to just the client id
+        peer['client_id'] = peer['client_name'].split('.', 1)[-1]
+        del peer['client_name']
+
+        try:
+            attributes = rbd.RBD().mirror_peer_get_attributes(ioctx, peer_uuid)
+        except rbd.ImageNotFound:
+            attributes = {}
+
+        peer['mon_host'] = attributes.get(rbd.RBD_MIRROR_PEER_ATTRIBUTE_NAME_MON_HOST, '')
+        peer['key'] = attributes.get(rbd.RBD_MIRROR_PEER_ATTRIBUTE_NAME_KEY, '')
+        return peer
+
+    @handle_rbd_mirror_error()
+    def delete(self, pool_name, peer_uuid):
+        ioctx = mgr.rados.open_ioctx(pool_name)
+        rbd.RBD().mirror_peer_remove(ioctx, peer_uuid)
+
+    @handle_rbd_mirror_error()
+    def set(self, pool_name, peer_uuid, cluster_name=None, client_id=None,
+            mon_host=None, key=None):
+        ioctx = mgr.rados.open_ioctx(pool_name)
+        if cluster_name:
+            rbd.RBD().mirror_peer_set_cluster(ioctx, peer_uuid, cluster_name)
+        if client_id:
+            rbd.RBD().mirror_peer_set_client(ioctx, peer_uuid,
+                                             'client.{}'.format(client_id))
+
+        if mon_host is not None or key is not None:
+            try:
+                attributes = rbd.RBD().mirror_peer_get_attributes(ioctx, peer_uuid)
+            except rbd.ImageNotFound:
+                attributes = {}
+
+            if mon_host is not None:
+                attributes[rbd.RBD_MIRROR_PEER_ATTRIBUTE_NAME_MON_HOST] = mon_host
+            if key is not None:
+                attributes[rbd.RBD_MIRROR_PEER_ATTRIBUTE_NAME_KEY] = key
+            rbd.RBD().mirror_peer_set_attributes(ioctx, peer_uuid, attributes)
