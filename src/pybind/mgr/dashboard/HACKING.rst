@@ -275,28 +275,63 @@ instance if you only want to run the linting tools, do::
 API tests based on Teuthology
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-To run our API tests against a real Ceph cluster, we leverage the Teuthology framework. This
-has the advantage of catching bugs originated from changes in the internal Ceph
-code.
+How to run existing API tests:
+  To run the API tests against a real Ceph cluster, we leverage the Teuthology
+  framework. This has the advantage of catching bugs originated from changes in
+  the internal Ceph code.
 
+  Our ``run-backend-api-tests.sh`` script will start a ``vstart`` Ceph cluster
+  before running the Teuthology tests, and then it stops the cluster after the
+  tests are run. Of course this implies that you have built/compiled Ceph
+  previously.
 
-Our ``run-backend-api-tests.sh`` script will start a ``vstart`` Ceph cluster before running the
-Teuthology tests, and then it stops the cluster after the tests are run. Of
-course this implies that you have built/compiled Ceph previously.
+  Start all dashboard tests by running::
 
-Start all dashboard tests by running::
+    $ ./run-backend-api-tests.sh
 
-  $ ./run-backend-api-tests.sh
+  Or, start one or multiple specific tests by specifying the test name::
 
-Or, start one or multiple specific tests by specifying the test name::
+    $ ./run-backend-api-tests.sh tasks.mgr.dashboard.test_pool.PoolTest
 
-  $ ./run-backend-api-tests.sh tasks.mgr.dashboard.test_pool.PoolTest
+  Or, ``source`` the script and run the tests manually::
 
-Or, ``source`` the script and run the tests manually::
+    $ source run-backend-api-tests.sh
+    $ run_teuthology_tests [tests]...
+    $ cleanup_teuthology
 
-  $ source run-backend-api-tests.sh
-  $ run_teuthology_tests [tests]...
-  $ cleanup_teuthology
+How to write your own tests:
+  There are two possible ways to write your own API tests:
+
+  The first is by extending one of the existing test classes in the
+  ``qa/tasks/mgr/dashboard`` directory.
+
+  The second way is by adding your own API test module if you're creating a new
+  controller for example. To do so you'll just need to add the file containing
+  your new test class to the ``qa/tasks/mgr/dashboard`` directory and implement
+  all your tests here.
+
+  .. note:: Don't forget to add the path of the newly created module to
+    ``modules`` section in ``qa/suites/rados/mgr/tasks/dashboard.yaml``.
+
+  Short example: Let's assume you created a new controller called
+  ``my_new_controller.py`` and the related test module
+  ``test_my_new_controller.py``. You'll need to add
+  ``tasks.mgr.dashboard.test_my_new_controller`` to the ``modules`` section in
+  the ``dashboard.yaml`` file.
+
+  Also, if you're removing test modules please keep in mind to remove the
+  related section. Otherwise the Teuthology test run will fail.
+
+  Please run your API tests on your dev environment (as explained above)
+  before submitting a pull request. Also make sure that a full QA run in
+  Teuthology/sepia lab (based on your changes) has completed successfully
+  before it gets merged. You don't need to schedule the QA run yourself, just
+  add the 'needs-qa' label to your pull request as soon as you think it's ready
+  for merging (e.g. make check was successful, the pull request is approved and
+  all comments have been addressed). One of the developers who has access to
+  Teuthology/the sepia lab will take care of it and report the result back to
+  you.
+
 
 How to add a new controller?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
