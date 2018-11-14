@@ -100,14 +100,7 @@ export class PoolFormComponent implements OnInit {
     this.form = new CdFormGroup(
       {
         name: new FormControl('', {
-          validators: [
-            Validators.pattern('[A-Za-z0-9_-]+'),
-            Validators.required,
-            CdValidators.custom(
-              'uniqueName',
-              (value) => this.info && this.info.pool_names.indexOf(value) !== -1
-            )
-          ]
+          validators: [Validators.pattern('[A-Za-z0-9_-]+'), Validators.required]
         }),
         poolType: new FormControl('', {
           validators: [Validators.required]
@@ -178,8 +171,8 @@ export class PoolFormComponent implements OnInit {
   }
 
   private disableForEdit() {
-    ['name', 'poolType', 'crushRule', 'size', 'erasureProfile', 'ecOverwrites'].forEach(
-      (controlName) => this.form.get(controlName).disable()
+    ['poolType', 'crushRule', 'size', 'erasureProfile', 'ecOverwrites'].forEach((controlName) =>
+      this.form.get(controlName).disable()
     );
   }
 
@@ -380,6 +373,20 @@ export class PoolFormComponent implements OnInit {
         .setValidators(
           CdValidators.custom('noDecrease', (pgs) => this.data.pool && pgs < this.data.pool.pg_num)
         );
+      this.form
+        .get('name')
+        .setValidators([
+          this.form.get('name').validator,
+          CdValidators.custom(
+            'uniqueName',
+            (name) =>
+              this.data.pool &&
+              this.info &&
+              this.info.pool_names.indexOf(name) !== -1 &&
+              this.info.pool_names.indexOf(name) !==
+                this.info.pool_names.indexOf(this.data.pool.pool_name)
+          )
+        ]);
     } else {
       CdValidators.validateIf(
         this.form.get('size'),
@@ -395,6 +402,15 @@ export class PoolFormComponent implements OnInit {
           )
         ]
       );
+      this.form
+        .get('name')
+        .setValidators([
+          this.form.get('name').validator,
+          CdValidators.custom(
+            'uniqueName',
+            (name) => this.info && this.info.pool_names.indexOf(name) !== -1
+          )
+        ]);
     }
     this.setCompressionValidators();
   }
@@ -543,6 +559,12 @@ export class PoolFormComponent implements OnInit {
             formControlName: 'mode',
             editable: true,
             replaceFn: () => 'unset'
+          },
+          {
+            externalFieldName: 'srcpool',
+            formControlName: 'name',
+            editable: true,
+            replaceFn: () => this.data.pool.pool_name
           }
         ]);
       }
@@ -598,7 +620,7 @@ export class PoolFormComponent implements OnInit {
     this.taskWrapper
       .wrapTaskAroundCall({
         task: new FinishedTask('pool/' + (this.editing ? 'edit' : 'create'), {
-          pool_name: pool.pool
+          pool_name: pool.hasOwnProperty('srcpool') ? pool.srcpool : pool.pool
         }),
         call: this.poolService[this.editing ? 'update' : 'create'](pool)
       })

@@ -21,8 +21,14 @@ export class PoolService {
   }
 
   update(pool) {
-    const name = pool.pool;
-    delete pool.pool;
+    let name: string;
+    if (pool.hasOwnProperty('srcpool')) {
+      name = pool.srcpool;
+      delete pool.srcpool;
+    } else {
+      name = pool.pool;
+      delete pool.pool;
+    }
     return this.http.put(`${this.apiPath}/${name}`, pool, { observe: 'response' });
   }
 
