@@ -324,7 +324,7 @@ int ErasureCodeLrc::parse_kml(ErasureCodeProfile &profile,
     }
   }
 
-  if ((k + m) % l) {
+  if (l == 0 || (k + m) % l) {
     *ss << "k + m must be a multiple of l in "
 	<< profile << std::endl;
     return ERROR_LRC_K_M_MODULO;
