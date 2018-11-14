@@ -163,6 +163,8 @@ class Orchestrator(object):
 
         When viewing a CephFS filesystem in the dashboard, we would use this
         to display the pods being currently run for MDS daemons.
+
+        Returns a list of ServiceDescription objects.
         """
         raise NotImplementedError()
 
@@ -302,9 +304,17 @@ class PlacementSpec(object):
         self.label = None
 
 
-class ServiceLocation(object):
+class ServiceDescription(object):
     """
-    See ServiceDescription
+    For responding to queries about the status of a particular service,
+    stateful or stateless.
+
+    This is not about health or performance monitoring of services: it's
+    about letting the orchestrator tell Ceph whether and where a
+    service is scheduled in the cluster.  When an orchestrator tells
+    Ceph "it's running on node123", that's not a promise that the process
+    is literally up this second, it's a description of where the orchestrator
+    has decided the service should run.
     """
     def __init__(self):
         # Node is at the same granularity as InventoryNode
@@ -322,23 +332,6 @@ class ServiceLocation(object):
 
         # The type of service (osd, mon, mgr, etc.)
         self.service_type = None
-
-
-class ServiceDescription(object):
-    """
-    For responding to queries about the status of a particular service,
-    stateful or stateless.
-
-    This is not about health or performance monitoring of services: it's
-    about letting the orchestrator tell Ceph whether and where a 
-    service is scheduled in the cluster.  When an orchestrator tells
-    Ceph "it's running on node123", that's not a promise that the process
-    is literally up this second, it's a description of where the orchestrator
-    has decided the service should run.
-    """
-
-    def __init__(self):
-        self.locations = []
 
 
 class DriveGroupSpec(object):

@@ -137,7 +137,6 @@ Inventory and status
 
 .. automethod:: Orchestrator.describe_service
 .. autoclass:: ServiceDescription
-.. autoclass:: ServiceLocation
 
 OSD management
 --------------
