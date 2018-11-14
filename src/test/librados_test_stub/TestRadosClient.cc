@@ -166,6 +166,8 @@ int TestRadosClient::mon_command(const std::vector<std::string>& cmd,
       return 0;
     } else if ((*j_it)->get_data() == "osd tier remove") {
       return 0;
+    } else if ((*j_it)->get_data() == "config-key rm") {
+      return 0;
     }
   }
   return -ENOSYS;

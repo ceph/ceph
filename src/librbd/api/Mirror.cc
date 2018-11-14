@@ -3,6 +3,8 @@
 
 #include "librbd/api/Mirror.h"
 #include "include/rados/librados.hpp"
+#include "include/stringify.h"
+#include "common/ceph_json.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "cls/rbd/cls_rbd_client.h"
@@ -30,6 +32,31 @@ namespace librbd {
 namespace api {
 
 namespace {
+
+std::string get_peer_config_key_name(int64_t pool_id,
+                                     const std::string& peer_uuid) {
+  return RBD_MIRROR_PEER_CONFIG_KEY_PREFIX + stringify(pool_id) + "/" +
+           peer_uuid;
+}
+
+int remove_peer_config_key(librados::IoCtx& io_ctx,
+                           const std::string& peer_uuid) {
+  int64_t pool_id = io_ctx.get_id();
+  std::string cmd =
+    "{"
+      "\"prefix\": \"config-key rm\", "
+      "\"key\": \"" + get_peer_config_key_name(pool_id, peer_uuid) + "\""
+    "}";
+
+  bufferlist in_bl;
+  bufferlist out_bl;
+  librados::Rados rados(io_ctx);
+  int r = rados.mon_command(cmd, in_bl, &out_bl, nullptr);
+  if (r < 0 && r != -ENOENT && r != -EPERM) {
+    return r;
+  }
+  return 0;
+}
 
 template <typename I>
 int validate_mirroring_enabled(I *ictx) {
@@ -768,7 +795,14 @@ int Mirror<I>::peer_remove(librados::IoCtx& io_ctx, const std::string &uuid) {
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 20) << "uuid=" << uuid << dendl;
 
-  int r = cls_client::mirror_peer_remove(&io_ctx, uuid);
+  int r = remove_peer_config_key(io_ctx, uuid);
+  if (r < 0) {
+    lderr(cct) << "failed to remove peer attributes '" << uuid << "': "
+               << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  r = cls_client::mirror_peer_remove(&io_ctx, uuid);
   if (r < 0 && r != -ENOENT) {
     lderr(cct) << "failed to remove peer '" << uuid << "': "
                << cpp_strerror(r) << dendl;
@@ -837,6 +871,106 @@ int Mirror<I>::peer_set_cluster(librados::IoCtx& io_ctx,
                << cpp_strerror(r) << dendl;
     return r;
   }
+  return 0;
+}
+
+template <typename I>
+int Mirror<I>::peer_get_attributes(librados::IoCtx& io_ctx,
+                                   const std::string &uuid,
+                                   Attributes* attributes) {
+  CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
+  ldout(cct, 20) << "uuid=" << uuid << dendl;
+
+  attributes->clear();
+  std::string cmd =
+    "{"
+      "\"prefix\": \"config-key get\", "
+      "\"key\": \"" + get_peer_config_key_name(io_ctx.get_id(), uuid) + "\""
+    "}";
+
+  bufferlist in_bl;
+  bufferlist out_bl;
+
+  librados::Rados rados(io_ctx);
+  int r = rados.mon_command(cmd, in_bl, &out_bl, nullptr);
+  if (r == -ENOENT || out_bl.length() == 0) {
+    return -ENOENT;
+  } else if (r < 0) {
+    lderr(cct) << "failed to retrieve peer attributes: " << cpp_strerror(r)
+               << dendl;
+    return r;
+  }
+
+  bool json_valid = false;
+  json_spirit::mValue json_root;
+  if(json_spirit::read(out_bl.to_str(), json_root)) {
+    try {
+      auto& json_obj = json_root.get_obj();
+      for (auto& pairs : json_obj) {
+        (*attributes)[pairs.first] = pairs.second.get_str();
+      }
+      json_valid = true;
+    } catch (std::runtime_error&) {
+    }
+  }
+
+  if (!json_valid) {
+    lderr(cct) << "invalid peer attributes JSON received" << dendl;
+    return -EINVAL;
+  }
+  return 0;
+}
+
+template <typename I>
+int Mirror<I>::peer_set_attributes(librados::IoCtx& io_ctx,
+                                   const std::string &uuid,
+                                   const Attributes& attributes) {
+  CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
+  ldout(cct, 20) << "uuid=" << uuid << ", "
+                 << "attributes=" << attributes << dendl;
+
+  std::vector<mirror_peer_t> mirror_peers;
+  int r = peer_list(io_ctx, &mirror_peers);
+  if (r < 0) {
+    return r;
+  }
+
+  if (std::find_if(mirror_peers.begin(), mirror_peers.end(),
+                   [&uuid](const librbd::mirror_peer_t& peer) {
+                     return uuid == peer.uuid;
+                   }) == mirror_peers.end()) {
+    ldout(cct, 5) << "mirror peer uuid " << uuid << " does not exist" << dendl;
+    return -ENOENT;
+  }
+
+  std::stringstream ss;
+  ss << "{";
+  for (auto& pair : attributes) {
+    ss << "\\\"" << pair.first << "\\\": "
+       << "\\\"" << pair.second << "\\\"";
+    if (&pair != &(*attributes.rbegin())) {
+      ss << ", ";
+    }
+  }
+  ss << "}";
+
+  std::string cmd =
+    "{"
+      "\"prefix\": \"config-key set\", "
+      "\"key\": \"" + get_peer_config_key_name(io_ctx.get_id(), uuid) + "\", "
+      "\"val\": \"" + ss.str() + "\""
+    "}";
+  bufferlist in_bl;
+  bufferlist out_bl;
+
+  librados::Rados rados(io_ctx);
+  r = rados.mon_command(cmd, in_bl, &out_bl, nullptr);
+  if (r < 0) {
+    lderr(cct) << "failed to update peer attributes: " << cpp_strerror(r)
+               << dendl;
+    return r;
+  }
+
   return 0;
 }
 
