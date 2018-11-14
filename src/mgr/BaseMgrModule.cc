@@ -695,6 +695,18 @@ ceph_remove_osd_perf_query(BaseMgrModule *self, PyObject *args)
   Py_RETURN_NONE;
 }
 
+static PyObject*
+ceph_get_osd_perf_counters(BaseMgrModule *self, PyObject *args)
+{
+  OSDPerfMetricQueryID query_id;
+  if (!PyArg_ParseTuple(args, "i:ceph_get_osd_perf_counters", &query_id)) {
+    derr << "Invalid args!" << dendl;
+    return nullptr;
+  }
+
+  return self->py_modules->get_osd_perf_counters(query_id);
+}
+
 PyMethodDef BaseMgrModule_methods[] = {
   {"_ceph_get", (PyCFunction)ceph_state_get, METH_VARARGS,
    "Get a cluster object"},
@@ -774,6 +786,9 @@ PyMethodDef BaseMgrModule_methods[] = {
 
   {"_ceph_remove_osd_perf_query", (PyCFunction)ceph_remove_osd_perf_query,
     METH_VARARGS, "Remove an osd perf query"},
+
+  {"_ceph_get_osd_perf_counters", (PyCFunction)ceph_get_osd_perf_counters,
+    METH_VARARGS, "Get osd perf counters"},
 
   {NULL, NULL, 0, NULL}
 };
