@@ -600,6 +600,7 @@ public:
 class RGWArchiveSyncModule : public RGWDefaultSyncModule {
 public:
   RGWArchiveSyncModule() {}
+  bool supports_writes() override { return false; }
   bool supports_data_export() override { return false; }
   int create_instance(CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) override;
 };
