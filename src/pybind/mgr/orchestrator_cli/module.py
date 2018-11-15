@@ -42,6 +42,13 @@ class OrchestratorCli(MgrModule):
             "perm": "rw"
         },
         {
+            'cmd': "orchestrator service rm "
+                   "name=svc_type,type=CephString "
+                   "name=svc_id,type=CephString ",
+            "desc": "Remove a service",
+            "perm": "rw"
+        },
+        {
             'cmd': "orchestrator set backend "
                    "name=module,type=CephString,req=true",
             "desc": "Select orchestrator module backend",
@@ -249,6 +256,14 @@ class OrchestratorCli(MgrModule):
         else:
             raise NotImplementedError(svc_type)
 
+    def _service_rm(self, cmd):
+        svc_type = cmd['svc_type']
+        svc_id = cmd['svc_id']
+
+        completion = self._oremote("remove_stateless_service", svc_type, svc_id)
+        self._wait([completion])
+        return HandleCommandResult(rs="Success.")
+
     def _set_backend(self, cmd):
         """
         We implement a setter command instead of just having the user
@@ -330,6 +345,8 @@ class OrchestratorCli(MgrModule):
             return self._service_status(cmd)
         elif cmd['prefix'] == "orchestrator service add":
             return self._service_add(cmd)
+        elif cmd['prefix'] == "orchestrator service rm":
+            return self._service_rm(cmd)
         elif cmd['prefix'] == "orchestrator set backend":
             return self._set_backend(cmd)
         elif cmd['prefix'] == "orchestrator status":
