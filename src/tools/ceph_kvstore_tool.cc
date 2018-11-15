@@ -52,8 +52,8 @@ class StoreTool
 #ifdef HAVE_LIBAIO
       // note: we'll leak this!  the only user is ceph-kvstore-tool and
       // we don't care.
-      bluestore.reset(new BlueStore(g_ceph_context, path, need_open_db));
-      int r = bluestore->start_kv_only(&db_ptr);
+      bluestore.reset(new BlueStore(g_ceph_context, path));
+      int r = bluestore->start_kv_only(&db_ptr, need_open_db);
       if (r < 0) {
 	exit(1);
       }
