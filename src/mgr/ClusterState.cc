@@ -135,7 +135,7 @@ void ClusterState::update_delta_stats()
 
 void ClusterState::notify_osdmap(const OSDMap &osd_map)
 {
-  std::lock_guard l(lock);
+  assert(ceph_mutex_is_locked(lock));
 
   pending_inc.stamp = ceph_clock_now();
   pending_inc.version = pg_map.version + 1; // to make apply_incremental happy
