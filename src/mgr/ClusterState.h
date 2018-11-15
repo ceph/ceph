@@ -127,6 +127,17 @@ public:
     return objecter->with_osdmap(std::forward<Args>(args)...);
   }
 
+  // call cb(osdmap, pg_map, ...args) with the appropriate locks
+  template <typename Callback, typename ...Args>
+  auto with_osdmap_and_pgmap(Callback&& cb, Args&& ...args) const {
+    ceph_assert(objecter != nullptr);
+    std::lock_guard l(lock);
+    return objecter->with_osdmap(
+      std::forward<Callback>(cb),
+      pg_map,
+      std::forward<Args>(args)...);
+  }
+
 };
 
 #endif
