@@ -92,6 +92,9 @@ class RookCluster(object):
     def rook_api_get(self, path, **kwargs):
         return self.rook_api_call("GET", path, **kwargs)
 
+    def rook_api_delete(self, path):
+        return self.rook_api_call("DELETE", path)
+
     def rook_api_patch(self, path, **kwargs):
         return self.rook_api_call("PATCH", path,
                                   header_params={"Content-Type": "application/json-patch+json"},
@@ -263,6 +266,25 @@ class RookCluster(object):
             if e.status == 409:
                 log.info("ObjectStore '{0}' already exists".format(spec.name))
                 # Idempotent, succeed.                                                                                                                                                                     
+            else:
+                raise
+
+    def rm_service(self, service_type, service_id):
+        assert service_type in ("mds", "rgw")
+
+        if service_type == "mds":
+            rooktype = "filesystems"
+        elif service_type == "rgw":
+            rooktype = "objectstores"
+
+        objpath = "{0}/{1}".format(rooktype, service_id)
+
+        try:
+            self.rook_api_delete(objpath)
+        except ApiException as e:
+            if e.status == 404:
+                log.info("{0} service '{1}' does not exist".format(service_type, service_id))
+                # Idempotent, succeed.
             else:
                 raise
 

@@ -376,6 +376,11 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             # TODO: RGW, NFS
             raise NotImplementedError(service_type)
 
+    def remove_stateless_service(self, service_type, service_id):
+        return RookWriteCompletion(
+            lambda: self.rook_cluster.rm_service(service_type, service_id), None,
+            "Removing {0} services for {1}".format(service_type, service_id))
+
     def create_osds(self, spec):
         # Validate spec.node
         if not self.rook_cluster.node_exists(spec.node):
