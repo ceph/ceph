@@ -10,6 +10,7 @@ tasks:
 - install:
     branch: hammer
     exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev', 'librados3', 'libradospp-devel']
+    extra_packages: ['librados2']
 - install.upgrade:
     mon.a:
     mon.b:
