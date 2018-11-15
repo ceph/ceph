@@ -62,9 +62,9 @@ class StoreTool
   StoreTool(string type, const string &path, bool need_open_db=true) : store_path(path) {
     if (type == "bluestore-kv") {
 #ifdef WITH_BLUESTORE
-      auto bluestore = new BlueStore(g_ceph_context, path, need_open_db);
+      auto bluestore = new BlueStore(g_ceph_context, path);
       KeyValueDB *db_ptr;
-      int r = bluestore->start_kv_only(&db_ptr);
+      int r = bluestore->start_kv_only(&db_ptr, need_open_db);
       if (r < 0) {
 	exit(1);
       }
