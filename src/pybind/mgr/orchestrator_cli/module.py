@@ -101,6 +101,30 @@ class OrchestratorCli(MgrModule):
             raise Exception([getattr(c, 'error') for c in completions])
 
     def _list_devices(self, cmd):
+        """
+
+        This (all lines starting with ">") is how it is supposed to work. As of
+        now, it's not yet implemented:
+        > :returns: Either JSON:
+        >     [
+        >       {
+        >         "name": "sda",
+        >         "host": "foo",
+        >         ... lots of stuff from ceph-volume ...
+        >         "stamp": when this state was refreshed
+        >       },
+        >     ]
+        >
+        > or human readable:
+        >
+        >     HOST  DEV  SIZE  DEVID(vendor\_model\_serial)   IN-USE  TIMESTAMP
+        >
+        > Note: needs ceph-volume on the host.
+
+        Note: this does not have to be completely synchronous. Slightly out of
+        date hardware inventory is fine as long as hardware ultimately appears
+        in the output of this command.
+        """
         node = cmd.get('node', None)
 
         if node:
