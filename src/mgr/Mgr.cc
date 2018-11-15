@@ -195,7 +195,8 @@ void Mgr::init()
   lock.Lock();
 
   // Populate PGs in ClusterState
-  objecter->with_osdmap([this](const OSDMap &osd_map) {
+  cluster_state.with_osdmap_and_pgmap([this](const OSDMap &osd_map,
+					     const PGMap& pg_map) {
     cluster_state.notify_osdmap(osd_map);
   });
 
@@ -387,7 +388,8 @@ void Mgr::handle_osd_map()
    * see if they have changed (service restart), and if so
    * reload the metadata.
    */
-  objecter->with_osdmap([this, &names_exist](const OSDMap &osd_map) {
+  cluster_state.with_osdmap_and_pgmap([this, &names_exist](const OSDMap &osd_map,
+							   const PGMap &pg_map) {
     for (unsigned int osd_id = 0; osd_id < osd_map.get_max_osd(); ++osd_id) {
       if (!osd_map.exists(osd_id)) {
         continue;
