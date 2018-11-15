@@ -99,6 +99,7 @@ EOF
 
 run_teuthology_tests() {
     cd "$BUILD_DIR"
+    find ../src/pybind/mgr/dashboard/ -name '*.pyc' -exec rm -f {} \;
     source $TEMP_DIR/venv/bin/activate
 
 
