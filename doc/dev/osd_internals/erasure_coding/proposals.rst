@@ -263,7 +263,7 @@ on the prior_version which is not in the log.)  THe PGLog already has
 a way of handling those edge cases (see divergent_priors).  We'd
 simply expand that to contain the entire missing set and maintain it
 atomically with the log and the objects.  This isn't really an
-unreasonable option, the addiitonal keys would be fewer than the
+unreasonable option, the additional keys would be fewer than the
 existing log keys + divergent_priors and aren't updated in the fast
 write path anyway.
 
