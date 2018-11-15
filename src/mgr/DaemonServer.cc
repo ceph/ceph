@@ -973,21 +973,19 @@ bool DaemonServer::handle_command(MCommand *m)
     for (auto osd : osds) {
       vector<spg_t> spgs;
       epoch_t epoch;
-      cluster_state.with_pgmap([&](const PGMap& pgmap) {
-	  cluster_state.with_osdmap([&](const OSDMap& osdmap) {
-	      epoch = osdmap.get_epoch();
-	      auto p = pgmap.pg_by_osd.find(osd);
-	      if (p != pgmap.pg_by_osd.end()) {
-		for (auto pgid : p->second) {
-		  int primary;
-		  spg_t spg;
-		  osdmap.get_primary_shard(pgid, &primary, &spg);
-		  if (primary == osd) {
-		    spgs.push_back(spg);
-		  }
-		}
+      cluster_state.with_osdmap_and_pgmap([&](const OSDMap& osdmap, const PGMap& pgmap) {
+	  epoch = osdmap.get_epoch();
+	  auto p = pgmap.pg_by_osd.find(osd);
+	  if (p != pgmap.pg_by_osd.end()) {
+	    for (auto pgid : p->second) {
+	      int primary;
+	      spg_t spg;
+	      osdmap.get_primary_shard(pgid, &primary, &spg);
+	      if (primary == osd) {
+		spgs.push_back(spg);
 	      }
-	    });
+	    }
+	  }
 	});
       auto p = osd_cons.find(osd);
       if (p == osd_cons.end()) {
@@ -1069,18 +1067,16 @@ bool DaemonServer::handle_command(MCommand *m)
     cmd_getval(g_ceph_context, cmdctx->cmdmap, "no_increasing", no_increasing);
     string out_str;
     mempool::osdmap::map<int32_t, uint32_t> new_weights;
-    r = cluster_state.with_pgmap([&](const PGMap& pgmap) {
-	return cluster_state.with_osdmap([&](const OSDMap& osdmap) {
-	    return reweight::by_utilization(osdmap, pgmap,
-					    oload,
-					    max_change,
-					    max_osds,
-					    by_pg,
-					    pools.empty() ? NULL : &pools,
-					    no_increasing == "--no-increasing",
-					    &new_weights,
-					    &ss, &out_str, f.get());
-	  });
+    r = cluster_state.with_osdmap_and_pgmap([&](const OSDMap &osdmap, const PGMap& pgmap) {
+	return reweight::by_utilization(osdmap, pgmap,
+					oload,
+					max_change,
+					max_osds,
+					by_pg,
+					pools.empty() ? NULL : &pools,
+					no_increasing == "--no-increasing",
+					&new_weights,
+					&ss, &out_str, f.get());
       });
     if (r >= 0) {
       dout(10) << "reweight::by_utilization: finished with " << out_str << dendl;
@@ -1120,14 +1116,12 @@ bool DaemonServer::handle_command(MCommand *m)
   } else if (prefix == "osd df") {
     string method;
     cmd_getval(g_ceph_context, cmdctx->cmdmap, "output_method", method);
-    r = cluster_state.with_pgmap([&](const PGMap& pgmap) {
-	return cluster_state.with_osdmap([&](const OSDMap& osdmap) {
-	    print_osd_utilization(osdmap, pgmap, ss,
-				  f.get(), method == "tree");
-				  
-	    cmdctx->odata.append(ss);
-	    return 0;
-	  });
+    r = cluster_state.with_osdmap_and_pgmap([&](const OSDMap& osdmap, const PGMap& pgmap) {
+	print_osd_utilization(osdmap, pgmap, ss,
+			      f.get(), method == "tree");
+	
+	cmdctx->odata.append(ss);
+	return 0;
       });
     cmdctx->reply(r, "");
     return true;
@@ -1136,8 +1130,7 @@ bool DaemonServer::handle_command(MCommand *m)
     cmd_getval(g_ceph_context, cmdctx->cmdmap, "pool_name", pool_name);
     int64_t poolid = -ENOENT;
     bool one_pool = false;
-    r = cluster_state.with_pgmap([&](const PGMap& pg_map) {
-      return cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+    r = cluster_state.with_osdmap_and_pgmap([&](const OSDMap& osdmap, const PGMap& pg_map) {
         if (!pool_name.empty()) {
           poolid = osdmap.lookup_pg_pool_name(pool_name);
           if (poolid < 0) {
@@ -1174,7 +1167,6 @@ bool DaemonServer::handle_command(MCommand *m)
         }
         return 0;
       });
-    });
     if (r != -EOPNOTSUPP) {
       cmdctx->reply(r, ss);
       return true;
@@ -1197,7 +1189,7 @@ bool DaemonServer::handle_command(MCommand *m)
     }
     set<int> active_osds, missing_stats, stored_pgs;
     int affected_pgs = 0;
-    cluster_state.with_pgmap([&](const PGMap& pg_map) {
+    cluster_state.with_osdmap_and_pgmap([&](const OSDMap& osdmap, const PGMap& pg_map) {
 	if (pg_map.num_pg_unknown > 0) {
 	  ss << pg_map.num_pg_unknown << " pgs have unknown state; cannot draw"
 	     << " any conclusions";
@@ -1211,30 +1203,30 @@ bool DaemonServer::handle_command(MCommand *m)
 	    num_active_clean += p.second;
 	  }
 	}
-	cluster_state.with_osdmap([&](const OSDMap& osdmap) {
-	    for (auto osd : osds) {
-	      if (!osdmap.exists(osd)) {
-		continue;  // clearly safe to destroy
-	      }
-	      auto q = pg_map.num_pg_by_osd.find(osd);
-	      if (q != pg_map.num_pg_by_osd.end()) {
-		if (q->second.acting > 0 || q->second.up > 0) {
-		  active_osds.insert(osd);
-		  affected_pgs += q->second.acting + q->second.up;
-		  continue;
-		}
-	      }
-	      if (num_active_clean < pg_map.num_pg) {
-		// all pgs aren't active+clean; we need to be careful.
-		auto p = pg_map.osd_stat.find(osd);
-		if (p == pg_map.osd_stat.end()) {
-		  missing_stats.insert(osd);
-		} else if (p->second.num_pgs > 0) {
-		  stored_pgs.insert(osd);
-		}
-	      }
+	for (auto osd : osds) {
+	  if (!osdmap.exists(osd)) {
+	    continue;  // clearly safe to destroy
+	  }
+	  auto q = pg_map.num_pg_by_osd.find(osd);
+	  if (q != pg_map.num_pg_by_osd.end()) {
+	    if (q->second.acting > 0 || q->second.up > 0) {
+	      active_osds.insert(osd);
+	      affected_pgs += q->second.acting + q->second.up;
+	      continue;
 	    }
-	  });
+	  }
+	  if (num_active_clean < pg_map.num_pg) {
+	    // all pgs aren't active+clean; we need to be careful.
+	    auto p = pg_map.osd_stat.find(osd);
+	    if (p == pg_map.osd_stat.end()) {
+	      missing_stats.insert(osd);
+	      continue;
+	    } else if (p->second.num_pgs > 0) {
+	      stored_pgs.insert(osd);
+	      continue;
+	    }
+	  }
+	}
       });
     if (!r && !active_osds.empty()) {
       ss << "OSD(s) " << active_osds << " have " << affected_pgs
@@ -1276,48 +1268,46 @@ bool DaemonServer::handle_command(MCommand *m)
     }
     map<pg_t,int> pg_delta;  // pgid -> net acting set size change
     int dangerous_pgs = 0;
-    cluster_state.with_pgmap([&](const PGMap& pg_map) {
-	return cluster_state.with_osdmap([&](const OSDMap& osdmap) {
-	    if (pg_map.num_pg_unknown > 0) {
-	      ss << pg_map.num_pg_unknown << " pgs have unknown state; "
-		 << "cannot draw any conclusions";
-	      r = -EAGAIN;
-	      return;
+    cluster_state.with_osdmap_and_pgmap([&](const OSDMap& osdmap, const PGMap& pg_map) {
+	if (pg_map.num_pg_unknown > 0) {
+	  ss << pg_map.num_pg_unknown << " pgs have unknown state; "
+	     << "cannot draw any conclusions";
+	  r = -EAGAIN;
+	  return;
+	}
+	for (auto osd : osds) {
+	  auto p = pg_map.pg_by_osd.find(osd);
+	  if (p != pg_map.pg_by_osd.end()) {
+	    for (auto& pgid : p->second) {
+	      --pg_delta[pgid];
 	    }
-	    for (auto osd : osds) {
-	      auto p = pg_map.pg_by_osd.find(osd);
-	      if (p != pg_map.pg_by_osd.end()) {
-		for (auto& pgid : p->second) {
-		  --pg_delta[pgid];
-		}
-	      }
+	  }
+	}
+	for (auto& p : pg_delta) {
+	  auto q = pg_map.pg_stat.find(p.first);
+	  if (q == pg_map.pg_stat.end()) {
+	    ss << "missing information about " << p.first << "; cannot draw"
+	       << " any conclusions";
+	    r = -EAGAIN;
+	    return;
+	  }
+	  if (!(q->second.state & PG_STATE_ACTIVE) ||
+	      (q->second.state & PG_STATE_DEGRADED)) {
+	    // we don't currently have a good way to tell *how* degraded
+	    // a degraded PG is, so we have to assume we cannot remove
+	    // any more replicas/shards.
+	    ++dangerous_pgs;
+	    continue;
+	  }
+	  const pg_pool_t *pi = osdmap.get_pg_pool(p.first.pool());
+	  if (!pi) {
+	    ++dangerous_pgs; // pool is creating or deleting
+	  } else {
+	    if (q->second.acting.size() + p.second < pi->min_size) {
+	      ++dangerous_pgs;
 	    }
-	    for (auto& p : pg_delta) {
-	      auto q = pg_map.pg_stat.find(p.first);
-	      if (q == pg_map.pg_stat.end()) {
-		ss << "missing information about " << p.first << "; cannot draw"
-		   << " any conclusions";
-		r = -EAGAIN;
-		return;
-	      }
-	      if (!(q->second.state & PG_STATE_ACTIVE) ||
-		  (q->second.state & PG_STATE_DEGRADED)) {
-		// we don't currently have a good way to tell *how* degraded
-		// a degraded PG is, so we have to assume we cannot remove
-		// any more replicas/shards.
-		++dangerous_pgs;
-		continue;
-	      }
-	      const pg_pool_t *pi = osdmap.get_pg_pool(p.first.pool());
-	      if (!pi) {
-		++dangerous_pgs; // pool is creating or deleting
-	      } else {
-		if (q->second.acting.size() + p.second < pi->min_size) {
-		  ++dangerous_pgs;
-		}
-	      }
-	    }
-	  });
+	  }
+	}
       });
     if (r) {
       cmdctx->reply(r, ss);
@@ -1649,11 +1639,9 @@ bool DaemonServer::handle_command(MCommand *m)
     return true;
   } else {
     // fall back to feeding command to PGMap
-    r = cluster_state.with_pgmap([&](const PGMap& pg_map) {
-	return cluster_state.with_osdmap([&](const OSDMap& osdmap) {
-	    return process_pg_map_command(prefix, cmdctx->cmdmap, pg_map, osdmap,
-					  f.get(), &ss, &cmdctx->odata);
-	  });
+    r = cluster_state.with_osdmap_and_pgmap([&](const OSDMap& osdmap, const PGMap& pg_map) {
+	return process_pg_map_command(prefix, cmdctx->cmdmap, pg_map, osdmap,
+				      f.get(), &ss, &cmdctx->odata);
       });
 
     if (r != -EOPNOTSUPP) {
