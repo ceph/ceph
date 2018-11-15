@@ -1,0 +1,11 @@
+tasks:
+        - exec:
+                client.salt_master:
+                        - 'echo Before reboot'
+                        - 'ceph -s'
+        - deepsea.reboot:
+        - exec:
+                client.salt_master:
+                        - 'echo After reboot'
+                        - 'ceph -s'
+        - deepsea.validation:
