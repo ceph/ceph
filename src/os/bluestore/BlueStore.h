@@ -2221,8 +2221,9 @@ private:
   void _get_statfs_overall(struct store_statfs_t *buf);
 
   void _dump_alloc_on_failure();
-  int _balance_bluefs_freespace(PExtentVector *extents);
-  void _commit_bluefs_freespace(const PExtentVector& extents);
+
+  int64_t _get_bluefs_size_delta(uint64_t bluefs_free, uint64_t bluefs_total);
+  int _balance_bluefs_freespace();
 
   CollectionRef _get_collection(const coll_t& cid);
   void _queue_reap_collection(CollectionRef& c);

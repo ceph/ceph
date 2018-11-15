@@ -5444,18 +5444,8 @@ int BlueStore::allocate_bluefs_freespace(uint64_t size, PExtentVector* extents_o
   return 0;
 }
 
-int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
+int64_t BlueStore::_get_bluefs_size_delta(uint64_t bluefs_free, uint64_t bluefs_total)
 {
-  int ret = 0;
-  ceph_assert(bluefs);
-
-  vector<pair<uint64_t,uint64_t>> bluefs_usage;  // <free, total> ...
-  bluefs->get_usage(&bluefs_usage);
-  ceph_assert(bluefs_usage.size() > bluefs_shared_bdev);
-
-  // fixme: look at primary bdev only for now
-  uint64_t bluefs_free = bluefs_usage[bluefs_shared_bdev].first;
-  uint64_t bluefs_total = bluefs_usage[bluefs_shared_bdev].second;
   float bluefs_free_ratio = (float)bluefs_free / (float)bluefs_total;
 
   uint64_t my_free = alloc->get_free();
@@ -5513,46 +5503,29 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
       gift = g;
     reclaim = 0;
   }
+  ceph_assert((int64_t)gift >= 0);
+  ceph_assert((int64_t)reclaim >= 0);
+  return gift > 0 ? (int64_t)gift : (int64_t)reclaim;
+}
 
-  if (gift) {
-    // round up to alloc size
-    gift = p2roundup(gift, cct->_conf->bluefs_alloc_size);
+int BlueStore::_balance_bluefs_freespace()
+{
+  int ret = 0;
+  ceph_assert(bluefs);
 
-    // hard cap to fit into 32 bits
-    gift = std::min<uint64_t>(gift, 1ull << 31);
-    dout(10) << __func__ << " gifting " << gift
-	     << " (" << byte_u_t(gift) << ")" << dendl;
+  vector<pair<uint64_t,uint64_t>> bluefs_usage;  // <free, total> ...
+  bluefs->get_usage(&bluefs_usage);
+  ceph_assert(bluefs_usage.size() > bluefs_shared_bdev);
 
-    int64_t alloc_len = alloc->allocate(gift, cct->_conf->bluefs_alloc_size,
-					0, 0, extents);
-
-    if (alloc_len <= 0) {
-      derr << __func__
-           << " failed to allocate 0x" << std::hex << gift
-	   << " min_alloc_size 0x" << cct->_conf->bluefs_alloc_size
-	   << " available 0x " << alloc->get_free()
-	   << std::dec << dendl;
-      _dump_alloc_on_rebalance_failure();
-      return 0;
-    } else if (alloc_len < (int64_t)gift) {
-      dout(0) << __func__
-	      << " insufficient allocate on 0x" << std::hex << gift
-              << " bluefs_alloc_size 0x" << cct->_conf->bluefs_alloc_size
-	      << " allocated 0x" << alloc_len
-	      << " available 0x " << alloc->get_free()
-	      << std::dec << dendl;
-      _dump_alloc_on_failure();
-    }
-    for (auto& e : *extents) {
-      dout(1) << __func__ << " gifting " << e << " to bluefs" << dendl;
-    }
-    ret = 1;
-  }
+  // fixme: look at primary bdev only for now
+  int64_t delta = _get_bluefs_size_delta(
+    bluefs_usage[bluefs_shared_bdev].first,
+    bluefs_usage[bluefs_shared_bdev].second);
 
   // reclaim from bluefs?
-  if (reclaim) {
+  if (delta < 0) {
     // round up to alloc size
-    reclaim = p2roundup(reclaim, cct->_conf->bluefs_alloc_size);
+    auto reclaim = p2roundup(uint64_t(-delta), cct->_conf->bluefs_alloc_size);
 
     // hard cap to fit into 32 bits
     reclaim = std::min<uint64_t>(reclaim, 1ull << 31);
@@ -5580,15 +5553,6 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
   }
 
   return ret;
-}
-
-void BlueStore::_commit_bluefs_freespace(
-  const PExtentVector& bluefs_gift_extents)
-{
-  dout(10) << __func__ << dendl;
-  for (auto& p : bluefs_gift_extents) {
-    bluefs->add_block_extent(bluefs_shared_bdev, p.offset, p.length);
-  }
 }
 
 int BlueStore::_open_collections(int *errors)
@@ -10249,18 +10213,12 @@ void BlueStore::_kv_sync_thread()
       // transaction is ready for commit.
       throttle_bytes.put(costs);
 
-      PExtentVector bluefs_gift_extents;
       if (bluefs &&
 	  after_flush - bluefs_last_balance >
 	  ceph::make_timespan(cct->_conf->bluestore_bluefs_balance_interval)) {
 	bluefs_last_balance = after_flush;
-	int r = _balance_bluefs_freespace(&bluefs_gift_extents);
+	int r = _balance_bluefs_freespace();
 	ceph_assert(r >= 0);
-	if (r > 0) {
-	  for (auto& p : bluefs_gift_extents) {
-	    bluefs_extents.insert(p.offset, p.length);
-	  }
-	}
       }
 
       // cleanup sync deferred keys
@@ -10326,9 +10284,6 @@ void BlueStore::_kv_sync_thread()
       }
 
       if (bluefs) {
-	if (!bluefs_gift_extents.empty()) {
-	  _commit_bluefs_freespace(bluefs_gift_extents);
-	}
 	if (!bluefs_extents_reclaiming.empty()) {
 	  dout(0) << __func__ << " releasing old bluefs 0x" << std::hex
 		   << bluefs_extents_reclaiming << std::dec << dendl;
