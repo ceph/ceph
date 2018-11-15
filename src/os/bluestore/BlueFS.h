@@ -46,6 +46,8 @@ class BlueFSDeviceExpander {
 protected:
   ~BlueFSDeviceExpander() {}
 public:
+  virtual uint64_t get_recommended_expansion_delta(uint64_t bluefs_free,
+    uint64_t bluefs_total) = 0;
   virtual int allocate_freespace(uint64_t size, PExtentVector& extents) = 0;
 };
 
@@ -296,6 +298,7 @@ private:
   FileRef _get_file(uint64_t ino);
   void _drop_link(FileRef f);
 
+  int _get_slow_device_id() { return bdev[BDEV_SLOW] ? BDEV_SLOW : BDEV_DB; }
   int _expand_slow_device(uint64_t min_size, PExtentVector& extents);
   int _allocate(uint8_t bdev, uint64_t len,
 		bluefs_fnode_t* node);

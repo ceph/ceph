@@ -2354,13 +2354,17 @@ void BlueFS::flush_bdev()
   }
 }
 
-int BlueFS::_expand_slow_device(uint64_t min_size, PExtentVector& extents)
+int BlueFS::_expand_slow_device(uint64_t need, PExtentVector& extents)
 {
   int r = -ENOSPC;
   if (slow_dev_expander) {
-    uint64_t need = std::min(
-      min_size, (uint64_t)cct->_conf.get_val<Option::size_t>("bluestore_bluefs_min_free"));
     auto min_alloc_size = cct->_conf->bluefs_alloc_size;
+    int id = _get_slow_device_id();
+    ceph_assert(id <= (int)alloc.size() && alloc[id]);
+    need = std::max(need,
+      slow_dev_expander->get_recommended_expansion_delta(
+        alloc[id]->get_free(), block_all[id].size()));
+
     need = round_up_to(need, min_alloc_size);
     dout(10) << __func__ << " expanding slow device by 0x"
              << std::hex << need << std::dec
@@ -2445,7 +2449,7 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
 	    << std::dec << dendl;
     extents.clear();
     if (_expand_slow_device(left, extents) == 0) {
-      id = alloc[BDEV_SLOW] ? BDEV_SLOW : BDEV_DB;
+      id = _get_slow_device_id();
       for (auto& e : extents) {
 	_add_block_extent(id, e.offset, e.length);
       }
