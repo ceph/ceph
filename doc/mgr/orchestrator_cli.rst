@@ -211,6 +211,8 @@ Creating/growing/shrinking services::
 
     ceph orchestrator {mds,rgw} update <name> <size> [host…]
     ceph orchestrator {mds,rgw} add <name>
+    ceph orchestrator nfs update <name> <size> [host…]
+    ceph orchestrator nfs add <name> <pool> [--namespace=<namespace>]
 
 e.g., ``ceph orchestrator mds update myfs 3 host1 host2 host3``
 
