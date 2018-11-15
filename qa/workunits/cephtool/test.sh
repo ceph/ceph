@@ -2093,6 +2093,14 @@ function test_mon_osd_tiered_pool_set()
   ceph osd pool create real-tier 2
   ceph osd tier add rbd real-tier
 
+  # expect us to be unable to set negative values for hit_set_*
+  for o in hit_set_period hit_set_count hit_set_fpp; do
+    expect_false ceph osd pool set real_tier $o -1
+  done
+
+  # and hit_set_fpp should be in range 0..1
+  expect_false ceph osd pool set real_tier hit_set_fpp 2
+
   ceph osd pool set real-tier hit_set_type explicit_hash
   ceph osd pool get real-tier hit_set_type | grep "hit_set_type: explicit_hash"
   ceph osd pool set real-tier hit_set_type explicit_object
