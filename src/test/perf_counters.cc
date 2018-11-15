@@ -16,7 +16,7 @@
                            // now, this include has to come before the others.
 
 
-#include "common/perf_counters.h"
+#include "common/perf_counters_collection.h"
 #include "common/admin_socket_client.h"
 #include "common/ceph_context.h"
 #include "common/config.h"

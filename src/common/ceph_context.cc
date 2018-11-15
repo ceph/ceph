@@ -13,6 +13,8 @@
  *
  */
 
+#include "common/ceph_context.h"
+
 #include <mutex>
 #include <iostream>
 
@@ -22,7 +24,6 @@
 
 #include "include/mempool.h"
 #include "common/admin_socket.h"
-#include "common/perf_counters.h"
 #include "common/code_environment.h"
 #include "common/Cond.h"
 #include "common/config.h"
@@ -53,6 +54,7 @@ using ceph::HeartbeatMap;
 #ifdef WITH_SEASTAR
 CephContext::CephContext()
   : _conf{ceph::common::local_conf()},
+    _perf_counters_collection{ceph::common::local_perf_coll()},
     _crypto_random{std::make_unique<CryptoRandom>()}
 {}
 
@@ -78,9 +80,9 @@ void CephContext::put()
   }
 }
 
-PerfCountersCollection* CephContext::get_perfcounters_collection()
+PerfCountersCollectionImpl* CephContext::get_perfcounters_collection()
 {
-  throw std::runtime_error("not yet implemented");
+  return _perf_counters_collection.get_perf_collection();
 }
 
 #else  // WITH_SEASTAR
