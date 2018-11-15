@@ -706,6 +706,8 @@ class CephConf(DeepSea):
 
     deepsea_configuration_files = '/srv/salt/ceph/configuration/files'
 
+    err_prefix = "(ceph_conf subtask) "
+
     targets = {
         "mon_allow_pool_delete": True,
         "small_cluster": True,
@@ -825,19 +827,14 @@ class CephConf(DeepSea):
 
 class CreatePools(DeepSea):
 
+    err_prefix = "(create_pools subtask) "
+
     def __init__(self, ctx, config):
         deepsea_ctx['logger_obj'] = log.getChild('create_pools')
         self.name = 'deepsea.create_pools'
         super(CreatePools, self).__init__(ctx, config)
         if not isinstance(self.config, dict):
-            raise ConfigError(
-                "(create_pools subtask) config must be a dictionary"
-                )
-        self.config = {
-            "mds": self.config.get("mds", False),
-            "openstack": self.config.get("openstack", False),
-            "rbd": self.config.get("rbd", False),
-            }
+            raise ConfigError(self.err_prefix + "config must be a dictionary")
 
     def begin(self):
         self.log.info(anchored("pre-creating pools"))
@@ -873,11 +870,6 @@ class Dummy(DeepSea):
         pass
 
 
-class Deploy:
-
-    pass
-
-
 class HealthOK(DeepSea):
     """
     Copy health_ok.sh to Salt Master node and run commands.
@@ -890,6 +882,8 @@ class HealthOK(DeepSea):
 
     The list of commands will be executed as root on the Salt Master node.
     """
+
+    err_prefix = "(health_ok subtask) "
 
     prefix = 'health-ok/'
 
@@ -921,9 +915,9 @@ class HealthOK(DeepSea):
             return None
         for cmd_str in commands:
             if not isinstance(cmd_str, str):
-                raise ConfigError((
-                    "(health_ok subtask) commands must be a list of strings. "
-                    "Non-string command ->{}<- found!").format(cmd_str)
+                raise ConfigError(
+                    self.err_prefix +
+                    "command ->{}<- is not a string".format(cmd_str)
                     )
             if cmd_str.startswith('health-ok.sh'):
                 cmd_str = self.prefix + cmd_str
@@ -945,9 +939,7 @@ class HealthOK(DeepSea):
     def begin(self):
         commands = self.config.get('commands', [])
         if not isinstance(commands, list):
-            raise ConfigError(
-                "(health_ok subtask) commands must be a list of strings"
-                )
+            raise ConfigError(self.err_prefix + "commands must be a list")
         self._maybe_run_commands(commands)
 
     def teardown(self):
@@ -961,6 +953,8 @@ class Orch(DeepSea):
         "4", "services", "5", "removal", "cephfs", "ganesha", "iscsi",
         "openattic", "openstack", "radosgw", "validate"
         ]
+
+    err_prefix = "(orch subtask) "
 
     stage_synonyms = {
         0: 'prep',
@@ -982,12 +976,14 @@ class Orch(DeepSea):
         self.survive_reboots = self._detect_reboots()
         if not self.stage and not self.state_orch:
             raise ConfigError(
-                "(orch subtask) nothing to do. Specify a value for 'stage' or "
+                self.err_prefix +
+                "nothing to do. Specify a value for 'stage' or "
                 "'state_orch' key in config dict"
                 )
         if self.stage and self.stage not in self.all_stages:
             raise ConfigError(
-                "(orch subtask) unrecognized Stage ->{}<-".format(self.stage)
+                self.err_prefix +
+                "unrecognized Stage ->{}<-".format(self.stage)
                 )
         self.log.debug("munged config is {}".format(self.config))
 
@@ -1117,8 +1113,8 @@ class Orch(DeepSea):
             orch_spec = 'ceph.stage.{}'.format(orch_spec)
         else:
             raise ConfigError(
-                "(orch subtask) Unrecognized orchestration type ->{}<-"
-                .format(orch_type)
+                self.err_prefix +
+                "Unrecognized orchestration type ->{}<-".format(orch_type)
                 )
         cmd_str = None
         if self.deepsea_cli:
@@ -1281,7 +1277,8 @@ class Orch(DeepSea):
             self._run_orch(("stage", self.stage))
         else:
             raise ConfigError(
-                '(orch subtask) unsupported stage ->{}<-'.format(self.stage)
+                self.err_prefix +
+                'unsupported stage ->{}<-'.format(self.stage)
                 )
 
     def teardown(self):
@@ -1497,6 +1494,9 @@ class Script(DeepSea):
                       - 'foo'
                       - 'bar'
     """
+
+    err_prefix = '(script subtask) '
+
     def __init__(self, ctx, config):
         deepsea_ctx['logger_obj'] = log.getChild('script')
         self.name = 'deepsea.script'
@@ -1508,7 +1508,7 @@ class Script(DeepSea):
         if method:
             method(*args, **kwargs)
         else:
-            raise ConfigError("(script subtask) No such canned script ->{}<-"
+            raise ConfigError(self.err_prefix + "No such canned script ->{}<-"
                               .format(method))
 
     def begin(self):
@@ -1518,19 +1518,22 @@ class Script(DeepSea):
         config_keys = len(self.config)
         if config_keys > 1:
             raise ConfigError(
-                "(script subtask) config dictionary may contain only one key. "
+                self.err_prefix +
+                "config dictionary may contain only one key. "
                 "You provided ->{}<- keys".format(config_keys)
                 )
         script, script_dict = self.config.items()[0]
         if script_dict is None:
             args = []
         if isinstance(script_dict, dict):
-            err_msg = '(script subtask) script dicts may only contain one key (args)'
             if len(script_dict) > 1 or script_dict.keys()[0] != 'args':
-                raise ConfigError(err_msg)
+                raise ConfigError(
+                    self.err_prefix +
+                    'script dicts may only contain one key (args)'
+                    )
             args = script_dict.values()[0] or []
             if not isinstance(args, list):
-                raise ConfigError('(script subtask) script args must be a list')
+                raise ConfigError(self.err_prefix + 'script args must be a list')
         self._run_script(script, args=args)
 
     def teardown(self):
@@ -1783,7 +1786,8 @@ test -n "$RPM_CEPH_VERSION"
 ceph --version
 BUFFER=$(ceph --version)
 CEPH_CEPH_VERSION=$(perl -e '"'"$BUFFER"'" =~ m/ceph version (\d+\.\d+\.\d+)/; print "$1\n";')
-echo "According to \"ceph --version\", the ceph upstream version is ->$CEPH_CEPH_VERSION<-" >/dev/null
+echo "According to \"ceph --version\", the ceph upstream version is ->$CEPH_CEPH_VERSION<-" \
+    >/dev/null
 test -n "$RPM_CEPH_VERSION"
 test "$RPM_CEPH_VERSION" = "$CEPH_CEPH_VERSION"
 """,
@@ -2002,7 +2006,6 @@ class Validation(DeepSea):
 task = DeepSea
 ceph_conf = CephConf
 create_pools = CreatePools
-deploy = Deploy
 dummy = Dummy
 health_ok = HealthOK
 orch = Orch
