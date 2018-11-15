@@ -502,10 +502,10 @@ class DeepSea(Task):
     def _maybe_apply_alternative_defaults(self):
         global_yml = '/srv/pillar/ceph/stack/global.yml'
         if self.alternative_defaults:
+            self.log.info(anchored("Applying alternative defaults"))
             data = ''
             for k, v in self.alternative_defaults.items():
                 data += "{}: {}\n".format(k, v)
-                self.log.info("Applying alternative default {}: {}".format(k, v))
             if data:
                 sudo_append_to_file(
                     self.master_remote,
@@ -1990,8 +1990,10 @@ class Validation(DeepSea):
             kwargs = {} if not kwargs else kwargs
             if not isinstance(kwargs, dict):
                 raise ConfigError(self.err_prefix + "Method config must be a dict")
-            self.log.debug("Test {} has config ->{}<-"
-                           .format(method_spec, kwargs))
+            self.log.info(anchored(
+                "Running validation test {} with config ->{}<-"
+                .format(method_spec, kwargs)
+                ))
             method = getattr(self, method_spec, None)
             if method:
                 method(**kwargs)
