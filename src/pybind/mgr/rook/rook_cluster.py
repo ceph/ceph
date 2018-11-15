@@ -229,6 +229,35 @@ class RookCluster(object):
         with self.ignore_409("CephFilesystem '{0}' already exists".format(spec.name)):
             self.rook_api_post("cephfilesystems/", body=rook_fs)
 
+    def add_nfsgw(self, spec):
+        # TODO use spec.placement
+        # TODO use spec.min_size (and use max_size meaningfully)
+        # TODO warn if spec.extended has entries we don't kow how
+        #      to action.
+
+        rook_nfsgw = {
+            "apiVersion": ROOK_API_NAME,
+            "kind": "CephNFS",
+            "metadata": {
+                "name": spec.name,
+                "namespace": self.rook_namespace
+            },
+            "spec": {
+                "RADOS": {
+                    "pool": spec.extended["pool"]
+                },
+                "server": {
+                    "active": spec.max_size,
+                }
+            }
+        }
+
+        if "namespace" in spec.extended:
+            rook_nfsgw["spec"]["RADOS"]["namespace"] = spec.extended["namespace"]
+
+        with self.ignore_409("NFS cluster '{0}' already exists".format(spec.name)):
+            self.rook_api_post("cephnfses/", body=rook_nfsgw)
+
     def add_objectstore(self, spec):
   
         rook_os = {
@@ -264,12 +293,14 @@ class RookCluster(object):
             self.rook_api_post("cephobjectstores/", body=rook_os)
 
     def rm_service(self, service_type, service_id):
-        assert service_type in ("mds", "rgw")
+        assert service_type in ("mds", "rgw", "nfs")
 
         if service_type == "mds":
             rooktype = "cephfilesystems"
         elif service_type == "rgw":
             rooktype = "cephobjectstores"
+        elif service_type == "nfs":
+            rooktype = "cephnfses"
 
         objpath = "{0}/{1}".format(rooktype, service_id)
 
