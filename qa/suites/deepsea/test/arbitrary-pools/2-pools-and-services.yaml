@@ -1,0 +1,6 @@
+tasks:
+        - deepsea.create_pools:
+                openstack:
+                foobar:
+        - deepsea.orch:
+                stage: 4

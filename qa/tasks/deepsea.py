@@ -847,7 +847,10 @@ class CreatePools(DeepSea):
         if 'mds' in self.role_lookup_table:
             args.append('mds')
         args = list(set(args))
-        self.scripts.create_all_pools_at_once(*args)
+        if args:
+            self.scripts.create_all_pools_at_once(*args)
+        else:
+            self.log.warn("No pools specified - create_pools subtask did nothing")
 
     def teardown(self):
         pass

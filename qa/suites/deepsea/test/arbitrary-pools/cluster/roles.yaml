@@ -1,4 +1,2 @@
 roles:
   - [client.salt_master, mon.a, mgr.x, osd.0, rgw.0, mds.0]
-  - [client.0]
-  - [foo.bar]
