@@ -336,15 +336,13 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     int64_t poolid = -ENOENT;
     string pool_name;
     PyFormatter f;
-    cluster_state.with_pgmap([&](const PGMap& pg_map) {
-      return cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+    cluster_state.with_osdmap_and_pgmap([&](const OSDMap& osdmap, const PGMap& pg_map) {
         f.open_array_section("pool_stats");
         for (auto &p : osdmap.get_pools()) {
           poolid = p.first;
           pg_map.dump_pool_stats_and_io_rate(poolid, osdmap, &f, nullptr);
         }
         f.close_section();
-      });
     });
     return f.get();
   } else if (what == "health" || what == "mon_status") {
