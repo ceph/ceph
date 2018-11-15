@@ -647,47 +647,66 @@ int Mirror<I>::mode_set(librados::IoCtx& io_ctx,
       }
     }
   } else if (next_mirror_mode == cls::rbd::MIRROR_MODE_DISABLED) {
-    std::set<std::string> image_ids;
-    r = list_mirror_images(io_ctx, image_ids);
-    if (r < 0) {
-      lderr(cct) << "failed listing images: " << cpp_strerror(r) << dendl;
-      return r;
-    }
+    while (true) {
+      bool retry_busy = false;
+      bool pending_busy = false;
 
-    for (const auto& img_id : image_ids) {
-      if (current_mirror_mode == cls::rbd::MIRROR_MODE_IMAGE) {
-        cls::rbd::MirrorImage mirror_image;
-        r = cls_client::mirror_image_get(&io_ctx, img_id, &mirror_image);
-        if (r < 0 && r != -ENOENT) {
-          lderr(cct) << "failed to retrieve mirroring state for image id "
-                     << img_id << ": " << cpp_strerror(r) << dendl;
-          return r;
-        }
-        if (mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
-          lderr(cct) << "failed to disable mirror mode: there are still "
-                     << "images with mirroring enabled" << dendl;
-          return -EINVAL;
-        }
-      } else {
-        I *img_ctx = I::create("", img_id, nullptr, io_ctx, false);
-        r = img_ctx->state->open(0);
-        if (r < 0) {
-          lderr(cct) << "error opening image id "<< img_id << ": "
-                     << cpp_strerror(r) << dendl;
-          return r;
-        }
+      std::set<std::string> image_ids;
+      r = list_mirror_images(io_ctx, image_ids);
+      if (r < 0) {
+        lderr(cct) << "failed listing images: " << cpp_strerror(r) << dendl;
+        return r;
+      }
 
-        r = image_disable(img_ctx, false);
-        int close_r = img_ctx->state->close();
-        if (r < 0) {
-          lderr(cct) << "error disabling mirroring for image id " << img_id
-                     << cpp_strerror(r) << dendl;
-          return r;
-        } else if (close_r < 0) {
-          lderr(cct) << "failed to close image id " << img_id << ": "
-                     << cpp_strerror(close_r) << dendl;
-          return close_r;
+      for (const auto& img_id : image_ids) {
+        if (current_mirror_mode == cls::rbd::MIRROR_MODE_IMAGE) {
+          cls::rbd::MirrorImage mirror_image;
+          r = cls_client::mirror_image_get(&io_ctx, img_id, &mirror_image);
+          if (r < 0 && r != -ENOENT) {
+            lderr(cct) << "failed to retrieve mirroring state for image id "
+                       << img_id << ": " << cpp_strerror(r) << dendl;
+            return r;
+          }
+          if (mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
+            lderr(cct) << "failed to disable mirror mode: there are still "
+                       << "images with mirroring enabled" << dendl;
+            return -EINVAL;
+          }
+        } else {
+          I *img_ctx = I::create("", img_id, nullptr, io_ctx, false);
+          r = img_ctx->state->open(0);
+          if (r < 0) {
+            lderr(cct) << "error opening image id "<< img_id << ": "
+                       << cpp_strerror(r) << dendl;
+            return r;
+          }
+
+          r = image_disable(img_ctx, false);
+          int close_r = img_ctx->state->close();
+          if (r == -EBUSY) {
+            pending_busy = true;
+          } else if (r < 0) {
+            lderr(cct) << "error disabling mirroring for image id " << img_id
+                       << cpp_strerror(r) << dendl;
+            return r;
+          } else if (close_r < 0) {
+            lderr(cct) << "failed to close image id " << img_id << ": "
+                       << cpp_strerror(close_r) << dendl;
+            return close_r;
+          } else if (pending_busy) {
+            // at least one mirrored image was successfully disabled, so we can
+            // retry any failures caused by busy parent/child relationships
+            retry_busy = true;
+          }
         }
+      }
+
+      if (!retry_busy && pending_busy) {
+        lderr(cct) << "error disabling mirroring for one or more images"
+                   << dendl;
+        return -EBUSY;
+      } else if (!retry_busy) {
+        break;
       }
     }
   }
