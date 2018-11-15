@@ -7419,7 +7419,7 @@ TEST_P(StoreTest, mergeRegionTest) {
     final_len = (offset + chunk_size * 3 - 3) + (chunk_size * 2);
     bufferlist bl;
     r = store->read(ch, hoid, 0, final_len, bl);
-    ASSERT_EQ(r, final_len);
+    ASSERT_EQ(final_len, static_cast<uint64_t>(r));
   }
 }
 #endif  // WITH_BLUESTORE
