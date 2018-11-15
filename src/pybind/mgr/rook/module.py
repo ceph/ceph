@@ -373,6 +373,9 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         elif service_type == "rgw" :
             return self._service_add_decorate("RGW", spec,
                                          self.rook_cluster.add_objectstore)
+        elif service_type == "nfs" :
+            return self._service_add_decorate("NFS", spec,
+                                         self.rook_cluster.add_nfsgw)
         else:
             raise NotImplementedError(service_type)
 
