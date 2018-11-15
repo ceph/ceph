@@ -2933,6 +2933,11 @@ private:
 private:
   // --------------------------------------------------------
   // BlueFSDeviceExpander implementation
+  uint64_t get_recommended_expansion_delta(uint64_t bluefs_free,
+    uint64_t bluefs_total) override {
+    auto delta = _get_bluefs_size_delta(bluefs_free, bluefs_total);
+    return delta > 0 ? delta : 0;
+  }
   int allocate_freespace(uint64_t size, PExtentVector& extents) override {
     return allocate_bluefs_freespace(size, &extents);
   };
