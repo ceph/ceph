@@ -9,12 +9,12 @@ C++ API, while the latter offers the C API.
 Signed-off-by: Kefu Chai <tchaikov@gmail.com>
 ---
  CMakeLists.txt                  |  3 ++-
- cmake/modules/Findradospp.cmake | 33 +++++++++++++++++++++++++++++++++
- 2 files changed, 35 insertions(+), 1 deletion(-)
+ cmake/modules/Findradospp.cmake | 31 +++++++++++++++++++++++++++++++
+ 2 files changed, 33 insertions(+), 1 deletion(-)
  create mode 100644 cmake/modules/Findradospp.cmake
 
 diff --git a/CMakeLists.txt b/CMakeLists.txt
-index 6cb80cd10..48c61f928 100644
+index 2a4bdb6..96972a2 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
 @@ -731,7 +731,8 @@ option(WITH_LIBRADOS "Build with librados" OFF)
@@ -29,10 +29,10 @@ index 6cb80cd10..48c61f928 100644
  if(WIN32)
 diff --git a/cmake/modules/Findradospp.cmake b/cmake/modules/Findradospp.cmake
 new file mode 100644
-index 000000000..18822adb9
+index 0000000..4f1672a
 --- /dev/null
 +++ b/cmake/modules/Findradospp.cmake
-@@ -0,0 +1,33 @@
+@@ -0,0 +1,31 @@
 +# - Find RADOS
 +# Find librados library and includes
 +#
@@ -50,15 +50,13 @@ index 000000000..18822adb9
 +
 +include(FindPackageHandleStandardArgs)
 +find_package_handle_standard_args(radospp
-+  DEFAULT_MSG RADOSPP_LIBRARIES RADOSPP_INCLUDE_DIR)
++  FOUND_VAR radospp_FOUND
++  REQUIRED_VARS RADOSPP_LIBRARIES RADOSPP_INCLUDE_DIR)
 +
 +mark_as_advanced(
 +  RADOSPP_INCLUDE_DIR
 +  RADOSPP_LIBRARIES)
 +
-+message(STATUS "${RADOSPP_INCLUDE_DIR}")
-+message(STATUS "${RADOSPP_LIBRARIES}")
-+message(STATUS "${radospp_FOUND}")
 +if(radospp_FOUND AND NOT (TARGET rados::radospp))
 +  add_library(rados::radospp UNKNOWN IMPORTED)
 +  set_target_properties(rados::radospp PROPERTIES
