@@ -1771,6 +1771,22 @@ curl --insecure --silent $URL 2>&1 > dashboard.html
 test -s dashboard.html
 file dashboard.html | grep "HTML document"
 """,
+        "ceph_version_sanity": """# Ceph version sanity test
+# test that ceph RPM version matches "ceph --version"
+# for a loose definition of "matches"
+set -ex
+rpm -q ceph
+RPM_NAME=$(rpm -q ceph)
+RPM_CEPH_VERSION=$(perl -e '"'"$RPM_NAME"'" =~ m/ceph-(\d+\.\d+\.\d+)/; print "$1\n";')
+echo "According to RPM, the ceph upstream version is ->$RPM_CEPH_VERSION<-" >/dev/null
+test -n "$RPM_CEPH_VERSION"
+ceph --version
+BUFFER=$(ceph --version)
+CEPH_CEPH_VERSION=$(perl -e '"'"$BUFFER"'" =~ m/ceph version (\d+\.\d+\.\d+)/; print "$1\n";')
+echo "According to \"ceph --version\", the ceph upstream version is ->$CEPH_CEPH_VERSION<-" >/dev/null
+test -n "$RPM_CEPH_VERSION"
+test "$RPM_CEPH_VERSION" = "$CEPH_CEPH_VERSION"
+""",
         }
 
     def __init__(self, master_remote, logger):
@@ -1782,6 +1798,13 @@ file dashboard.html | grep "HTML document"
             self.master_remote,
             'ceph_cluster_status.sh',
             self.script_dict["ceph_cluster_status"],
+            )
+
+    def ceph_version_sanity(self, *args, **kwargs):
+        remote_run_script_as_root(
+            self.master_remote,
+            'ceph_version_sanity.sh',
+            self.script_dict["ceph_version_sanity"],
             )
 
     def create_all_pools_at_once(self, *args, **kwargs):
@@ -1880,6 +1903,7 @@ class Validation(DeepSea):
         deepsea_ctx['logger_obj'] = log.getChild('validation')
         self.name = 'deepsea.validation'
         super(Validation, self).__init__(ctx, config)
+        self._apply_config_default("ceph_version_sanity", None)
         self._apply_config_default("mgr_dashboard_module_smoke", None)
         self._apply_config_default("rados_striper", None)
         self._apply_config_default("systemd_units_active", None)
@@ -1889,6 +1913,9 @@ class Validation(DeepSea):
         Use to activate tests that should always be run.
         """
         self.config[validation_test] = self.config.get(validation_test, default_config)
+
+    def ceph_version_sanity(self, **kwargs):
+        self.scripts.ceph_version_sanity()
 
     def mgr_dashboard_module_smoke(self, **kwargs):
         """
