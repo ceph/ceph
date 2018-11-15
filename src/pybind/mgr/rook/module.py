@@ -334,7 +334,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
     @deferred_read
     def describe_service(self, service_type, service_id, nodename):
 
-        assert service_type in ("mds", "osd", "mgr", "mon", None), service_type + " unsupported"
+        assert service_type in ("mds", "osd", "mgr", "mon", "nfs", None), service_type + " unsupported"
 
         pods = self.rook_cluster.describe_pods(service_type, service_id, nodename)
 
@@ -353,6 +353,8 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                 sd.daemon_name = p['labels']["mon"]
             elif sd.service_type == "mgr":
                 sd.daemon_name = p['labels']["mgr"]
+            elif sd.service_type == "nfs":
+                sd.daemon_name = p['labels']["ceph_nfs"]
             else:
                 # Unknown type -- skip it
                 continue

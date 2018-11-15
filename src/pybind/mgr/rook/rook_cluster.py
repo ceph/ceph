@@ -161,6 +161,8 @@ class RookCluster(object):
                     label_filter += ",mon={0}".format(service_id)
                 elif service_type == "mgr":
                     label_filter += ",mgr={0}".format(service_id)
+                elif service_type == "nfs":
+                    label_filter += ",ceph_nfs={0}".format(service_id)
                 elif service_type == "rgw":
                     # TODO: rgw
                     pass
