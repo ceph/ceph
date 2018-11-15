@@ -368,7 +368,8 @@ class Module(MgrModule):
         if tag == 'seq':
             return
         try:
-            request = next(x for x in self.requests if x.is_running(tag))
+            with self.requests_lock:
+                request = next(x for x in self.requests if x.is_running(tag))
             request.finish(tag)
             if request.is_ready():
                 request.next()
@@ -583,8 +584,8 @@ class Module(MgrModule):
 
 
     def submit_request(self, _request, **kwargs):
-        request = CommandsRequest(_request)
         with self.requests_lock:
+            request = CommandsRequest(_request)
             self.requests.append(request)
         if kwargs.get('wait', 0):
             while not request.is_finished():
