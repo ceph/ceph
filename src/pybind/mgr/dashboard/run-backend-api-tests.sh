@@ -74,7 +74,7 @@ EOF
     pip install -r $CURR_DIR/requirements.txt
     deactivate
 
-    git clone https://github.com/ceph/teuthology.git
+    git clone --depth 1 https://github.com/ceph/teuthology.git
 
     cd $BUILD_DIR
 
