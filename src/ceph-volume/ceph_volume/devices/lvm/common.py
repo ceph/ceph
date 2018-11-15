@@ -96,6 +96,11 @@ def common_parser(prog, description):
     )
 
     parser.add_argument(
+        '--cluster-fsid',
+        help='Specify the cluster fsid, useful when no ceph.conf is available',
+    )
+
+    parser.add_argument(
         '--crush-device-class',
         dest='crush_device_class',
         help='Crush device class to assign this OSD to',
