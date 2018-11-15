@@ -47,7 +47,7 @@ class ECPTest(DashboardTestCase):
             }
             if 'crush-failure-domain' in default[0]:
                 default_ecp['crush-failure-domain'] = default[0]['crush-failure-domain']
-            self.assertEqual(default[0], default_ecp)
+            self.assertSubset(default_ecp, default[0])
             get_data = self._get('/api/erasure_code_profile/default')
             self.assertEqual(get_data, default[0])
 
@@ -58,7 +58,7 @@ class ECPTest(DashboardTestCase):
         self.assertStatus(201)
 
         self._get('/api/erasure_code_profile/ecp32')
-        self.assertJsonBody({
+        self.assertJsonSubset({
             'crush-device-class': '',
             'crush-failure-domain': 'osd',
             'crush-root': 'default',
@@ -68,7 +68,6 @@ class ECPTest(DashboardTestCase):
             'name': 'ecp32',
             'plugin': 'jerasure',
             'technique': 'reed_sol_van',
-            'w': '8'
         })
 
         self.assertStatus(200)

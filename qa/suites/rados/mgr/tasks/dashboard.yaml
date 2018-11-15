@@ -44,3 +44,4 @@ tasks:
         - tasks.mgr.dashboard.test_role
         - tasks.mgr.dashboard.test_settings
         - tasks.mgr.dashboard.test_user
+        - tasks.mgr.dashboard.test_erasure_code_profile
