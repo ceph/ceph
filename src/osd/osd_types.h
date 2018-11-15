@@ -289,7 +289,6 @@ struct request_redirect_t {
 private:
   object_locator_t redirect_locator; ///< this is authoritative
   string redirect_object; ///< If non-empty, the request goes to this object name
-  bufferlist osd_instructions; ///< a bufferlist for the OSDs, passed but not interpreted by clients
 
   friend ostream& operator<<(ostream& out, const request_redirect_t& redir);
 public:
@@ -302,9 +301,6 @@ public:
   explicit request_redirect_t(const object_locator_t& orig,
                               const string& robj) :
       redirect_locator(orig), redirect_object(robj) {}
-
-  void set_instructions(const bufferlist& bl) { osd_instructions = bl; }
-  const bufferlist& get_instructions() { return osd_instructions; }
 
   bool empty() const { return redirect_locator.empty() &&
 			      redirect_object.empty(); }
