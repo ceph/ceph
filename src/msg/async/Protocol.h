@@ -64,14 +64,6 @@ public:
     }                                                             \
   }
 
-#define CONTINUATION_RUN2(I, CT)                               \
-  {                                                            \
-    Ct<std::remove_reference<decltype(*I)>::type> *_cont = CT; \
-    while (_cont) {                                            \
-      _cont = _cont->call(I);                                  \
-    }                                                          \
-  }
-
 #define READ_HANDLER_CONTINUATION_DECL(C, F) \
   CONTINUATION_DECL(C, F, char *, int)
 #define WRITE_HANDLER_CONTINUATION_DECL(C, F) CONTINUATION_DECL(C, F, int)
