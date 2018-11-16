@@ -240,9 +240,10 @@ done:
   if (op) {
     op_ret = op->get_ret();
     ldpp_dout(op, 2) << "op status=" << op_ret << dendl;
+    ldpp_dout(op, 2) << "http status=" << s->err.http_ret << dendl;
+  } else {
+    ldpp_dout(s, 2) << "http status=" << s->err.http_ret << dendl;
   }
-  ldpp_dout(s, 2) << "http status=" << s->err.http_ret << dendl;
-
   if (handler)
     handler->put_op(op);
   rest->put_handler(handler);
