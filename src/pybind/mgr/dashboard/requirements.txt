@@ -24,6 +24,7 @@ pylint==1.8.2
 pyopenssl==17.5.0
 pytest==3.3.2
 pytest-cov==2.5.1
+pytest-faulthandler==1.0.1
 pytz==2017.3
 requests==2.20.0
 Routes==2.4.1
