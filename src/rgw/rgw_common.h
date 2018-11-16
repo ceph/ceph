@@ -1207,6 +1207,18 @@ struct RGWObjVersionTracker {
   void generate_new_write_ver(CephContext *cct);
 };
 
+inline ostream& operator<<(ostream& out, const obj_version &v)
+{
+  out << v.tag << ":" << v.ver;
+  return out;
+}
+
+inline ostream& operator<<(ostream& out, const RGWObjVersionTracker &ot)
+{
+  out << "{r=" << ot.read_version << ",w=" << ot.write_version << "}";
+  return out;
+}
+
 enum RGWBucketFlags {
   BUCKET_SUSPENDED = 0x1,
   BUCKET_VERSIONED = 0x2,
