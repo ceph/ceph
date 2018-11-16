@@ -13088,13 +13088,6 @@ bool RGWRados::process_expire_objects()
   return obj_expirer->inspect_all_shards(utime_t(), ceph_clock_now());
 }
 
-int RGWRados::cls_rgw_init_index(librados::IoCtx& index_ctx, librados::ObjectWriteOperation& op, string& oid)
-{
-  bufferlist in;
-  cls_rgw_bucket_init_index(op);
-  return index_ctx.operate(oid, &op);
-}
-
 int RGWRados::cls_obj_prepare_op(BucketShard& bs, RGWModifyOp op, string& tag,
                                  rgw_obj& obj, uint16_t bilog_flags, rgw_zone_set *_zones_trace)
 {
