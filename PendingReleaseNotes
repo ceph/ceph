@@ -138,6 +138,10 @@
   option, you will need to adjust your config to set the new global option
   or revert to the default of .05 (5%).
 
+* By default, Ceph no longer issues a health warning when there are
+  misplaced objects (objects that are fully replicated but not stored
+  on the intended OSDs).  You can reenable the old warning by setting
+  ``mon_warn_on_misplaced`` to ``true``.
 
 Upgrading from Luminous
 -----------------------
