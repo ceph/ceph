@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,9 +7,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 
@@ -35,7 +35,7 @@ protected:
 public:
   explicit AuthSessionHandler(CephContext *cct_) : cct(cct_), protocol(CEPH_AUTH_UNKNOWN) {}
 
-  AuthSessionHandler(CephContext *cct_, int protocol_, CryptoKey key_) : cct(cct_), 
+  AuthSessionHandler(CephContext *cct_, int protocol_, CryptoKey key_) : cct(cct_),
     protocol(protocol_), key(key_) {}
   virtual ~AuthSessionHandler() { }
 
@@ -44,6 +44,9 @@ public:
   virtual int check_message_signature(Message *message) = 0;
   virtual int encrypt_message(Message *message) = 0;
   virtual int decrypt_message(Message *message) = 0;
+  virtual int sign_bufferlist(bufferlist &in, bufferlist &out) {
+    return 0;
+  };
 
   int get_protocol() {return protocol;}
   CryptoKey get_key() {return key;}
