@@ -87,6 +87,7 @@ static void usage()
        << "  --convert-filestore\n"
        << "                    run any pending upgrade operations\n"
        << "  --flush-journal   flush all data out of journal\n"
+       << "  --dump-journal    dump all data of journal\n"
        << "  --mkjournal       initialize a new journal\n"
        << "  --check-wants-journal\n"
        << "                    check whether a journal is desired\n"
