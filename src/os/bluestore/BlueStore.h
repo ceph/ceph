@@ -2188,6 +2188,10 @@ private:
   int _open_db_and_around(bool read_only);
   void _close_db_and_around();
 
+  // updates legacy bluefs related recs in DB to a state valid for
+  // downgrades from nautilus.
+  void _sync_bluefs_and_fm();
+
   /*
    * @warning to_repair_db means that we open this db to repair it, will not
    * hold the rocksdb's file lock.
@@ -2931,6 +2935,7 @@ private:
 			unsigned bits);
 
 private:
+  std::atomic<uint64_t> out_of_sync_fm = {0};
   // --------------------------------------------------------
   // BlueFSDeviceExpander implementation
   uint64_t get_recommended_expansion_delta(uint64_t bluefs_free,
@@ -3114,6 +3119,7 @@ public:
   bool fix_false_free(KeyValueDB *db,
 		      FreelistManager* fm,
 		      uint64_t offset, uint64_t len);
+  bool fix_bluefs_extents(std::atomic<uint64_t>& out_of_sync_flag);
 
   void init(uint64_t total_space, uint64_t lres_tracking_unit_size);
 

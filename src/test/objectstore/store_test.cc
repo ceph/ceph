@@ -4587,12 +4587,28 @@ TEST_P(StoreTestSpecificAUSize, BlueFSExtenderTest) {
   SetVal(g_conf(), "bluestore_bluefs_gift_ratio", "0");
   SetVal(g_conf(), "bluestore_bluefs_min_ratio", "0");
   SetVal(g_conf(), "bluestore_bluefs_balance_interval", "100000");
+  SetVal(g_conf(), "bluestore_bluefs_db_compatibility", "false");
 
   g_conf().apply_changes(nullptr);
 
   StartDeferred(4096);
 
   doSyntheticTest(10000, 400*1024, 40*1024, 0);
+
+  BlueStore* bstore = NULL;
+  EXPECT_NO_THROW(bstore = dynamic_cast<BlueStore*> (store.get()));
+
+  // verify downgrades are broken and repair that
+  bstore->umount();
+  ASSERT_EQ(bstore->fsck(false), 0);
+
+  SetVal(g_conf(), "bluestore_bluefs_db_compatibility", "true");
+  g_conf().apply_changes(nullptr);
+
+  ASSERT_EQ(bstore->fsck(false), 1);
+  ASSERT_EQ(bstore->repair(false), 0);
+  ASSERT_EQ(bstore->fsck(false), 0);
+  bstore->mount();
 }
 
 #if defined(WITH_BLUESTORE)
@@ -7444,8 +7460,6 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
     ASSERT_EQ(bstore->fsck(false), 3);
     ASSERT_LE(bstore->repair(false), 0);
     ASSERT_EQ(bstore->fsck(false), 0);
-    SetVal(g_conf(), "bluestore_debug_inject_bug21040", "true");
-    g_ceph_context->_conf.apply_changes(nullptr);
   }
 
   // enable per-pool stats collection hence causing fsck to fail

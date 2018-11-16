@@ -4112,6 +4112,12 @@ std::vector<Option> get_global_options() {
     .set_description("How frequently (in seconds) to dump allocator on"
       "BlueFS space allocation failure"),
 
+    Option("bluestore_bluefs_db_compatibility", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(true)
+    .set_description("Sync db with legacy bluefs extents info")
+    .set_long_description("Enforces db sync with legacy bluefs extents information on close."
+                          " Enables downgrades to pre-nautilus releases"),
+
     Option("bluestore_spdk_mem", Option::TYPE_SIZE, Option::LEVEL_DEV)
     .set_default(512)
     .set_description("Amount of dpdk memory size in MB")

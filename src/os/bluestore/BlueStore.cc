@@ -4624,7 +4624,7 @@ int BlueStore::_open_fm(KeyValueDB::Transaction t)
   fm = FreelistManager::create(cct, freelist_type, PREFIX_ALLOC);
   ceph_assert(fm);
   if (t) {
-    // initialize freespace
+    // create mode. initialize freespace
     dout(20) << __func__ << " initializing freespace" << dendl;
     {
       bufferlist bl;
@@ -5005,6 +5005,7 @@ int BlueStore::_minimal_open_bluefs(bool create)
 
     bluefs->add_block_extent(bluefs_shared_bdev, start, initial);
     bluefs_extents.insert(start, initial);
+    ++out_of_sync_fm;
   }
 
   bfn = path + "/block.wal";
@@ -5176,7 +5177,23 @@ int BlueStore::_open_db_and_around(bool read_only)
 void BlueStore::_close_db_and_around()
 {
   if (bluefs) {
+    if (out_of_sync_fm.fetch_and(0)) {
+      _sync_bluefs_and_fm();
+    }
     _close_db();
+    while(out_of_sync_fm.fetch_and(0)) {
+      // if seen some allocations during close - repeat open_db, sync fm, close
+      dout(0) << __func__ << " syncing FreelistManager" << dendl;
+      int r = _open_db(false, false, false);
+      if (r < 0) {
+	derr << __func__
+	      << " unable to open db, FreelistManager is probably out of sync"
+	      << dendl;
+	break;
+      }
+      _sync_bluefs_and_fm();
+      _close_db();
+    }
     if (!_kv_only) {
       _close_alloc();
       _close_fm();
@@ -5185,6 +5202,30 @@ void BlueStore::_close_db_and_around()
     _close_alloc();
     _close_fm();
     _close_db();
+  }
+}
+
+// updates legacy bluefs related recs in DB to a state valid for
+// downgrades from nautilus.
+void BlueStore::_sync_bluefs_and_fm()
+{
+  if (cct->_conf->bluestore_bluefs_db_compatibility) {
+    bufferlist bl;
+    encode(bluefs_extents, bl);
+    dout(20) << __func__ << " bluefs_extents at KV is now 0x"
+             << std::hex << bluefs_extents << std::dec
+	     << dendl;
+    KeyValueDB::Transaction synct = db->get_transaction();
+    synct->set(PREFIX_SUPER, "bluefs_extents", bl);
+    synct->set(PREFIX_SUPER, "bluefs_extents_back", bl);
+
+    // Nice thing is that we don't need to update FreelistManager here.
+    // It always has corresponding bits set to 'Free' for both Nautilus+ and
+    // pre-Nautilis releases.
+    // So once we get an extent to bluefs_extents this means it's
+    // been free in allocator and hence it's free in FM too.
+
+    db->submit_transaction_sync(synct);
   }
 }
 
@@ -5435,6 +5476,7 @@ int BlueStore::allocate_bluefs_freespace(uint64_t size, PExtentVector* extents_o
     for (auto& e : *extents) {
       dout(1) << __func__ << " gifting " << e << " to bluefs" << dendl;
       bluefs_extents.insert(e.offset, e.length);
+      ++out_of_sync_fm;
       // apply to bluefs if not requested from outside
       if (!extents_out) {
         bluefs->add_block_extent(bluefs_shared_bdev, e.offset, e.length);
@@ -5543,6 +5585,7 @@ int BlueStore::_balance_bluefs_freespace()
 	break;
       }
       for (auto e : extents) {
+	++out_of_sync_fm;
 	bluefs_extents.erase(e.offset, e.length);
 	bluefs_extents_reclaiming.insert(e.offset, e.length);
 	reclaim -= e.length;
@@ -5891,6 +5934,10 @@ int BlueStore::mkfs()
       derr << __func__ << " error writing fsid: " << cpp_strerror(r) << dendl;
       goto out_close_fm;
     }
+  }
+
+  if (out_of_sync_fm.fetch_and(0)) {
+    _sync_bluefs_and_fm();
   }
 
  out_close_fm:
@@ -6786,6 +6833,32 @@ int BlueStore::_fsck(bool deep, bool repair)
   }
 
   if (bluefs) {
+    if( cct->_conf->bluestore_bluefs_db_compatibility) {
+      interval_set<uint64_t> bluefs_extents_db;
+      bufferlist bl;
+      db->get(PREFIX_SUPER, "bluefs_extents", &bl);
+      auto p = bl.cbegin();
+      auto prev_errors = errors;
+      try {
+        decode(bluefs_extents_db, p);
+	bluefs_extents_db.union_of(bluefs_extents);
+	bluefs_extents_db.subtract(bluefs_extents);
+	if (!bluefs_extents_db.empty()) {
+	  derr << "fsck error: bluefs_extents inconsistency, "
+	       << "downgrade to previous releases might be broken."
+	       << dendl;
+	  ++errors;
+	}
+      }
+      catch (buffer::error& e) {
+	derr << "fsck error: failed to retrieve bluefs_extents from kv" << dendl;
+	++errors;
+      }
+      if (errors != prev_errors && repair) {
+	repairer.fix_bluefs_extents(out_of_sync_fm);
+      }
+    }
+
     for (auto e = bluefs_extents.begin(); e != bluefs_extents.end(); ++e) {
       apply(
         e.get_start(), e.get_len(), fm->get_alloc_size(), used_blocks,
@@ -13590,6 +13663,16 @@ bool BlueStoreRepairer::fix_false_free(KeyValueDB *db,
   }
   ++to_repair_cnt;
   fm->allocate(offset, len, fix_fm_false_free_txn);
+  return true;
+}
+
+bool BlueStoreRepairer::fix_bluefs_extents(std::atomic<uint64_t>& out_of_sync_flag)
+{
+  // this is just a stub to count num of repairs properly,
+  // actual repair happens in BlueStore::_close_db_and_around()
+  // while doing _sync_bluefs_and_fm
+  ++out_of_sync_flag;
+  ++to_repair_cnt;
   return true;
 }
 
