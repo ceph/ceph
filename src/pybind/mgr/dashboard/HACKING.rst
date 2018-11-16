@@ -153,6 +153,16 @@ Note:
   When using docker, as your device, you might need to run the script with sudo
   permissions.
 
+Writing End-to-End Tests
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+When writing e2e tests you don't want to recompile every time from scratch to
+try out if your test has succeeded. As usual you have your development server
+open (``npm start``) which already has compiled all files. To attach
+`Protractor <http://www.protractortest.org/>`__ to this process, instead of
+spinning up it's own server, you can use ``npm run e2e -- --dev-server-target``
+or just ``npm run e2e:dev`` which is equivalent.
+
 Further Help
 ~~~~~~~~~~~~
 
