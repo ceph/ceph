@@ -2732,7 +2732,8 @@ void PGMap::get_health_checks(
 
   // OBJECT_MISPLACED
   if (pg_sum.stats.sum.num_objects_misplaced &&
-      pg_sum.stats.sum.num_object_copies > 0) {
+      pg_sum.stats.sum.num_object_copies > 0 &&
+      cct->_conf->mon_warn_on_misplaced) {
     double pc = (double)pg_sum.stats.sum.num_objects_misplaced /
       (double)pg_sum.stats.sum.num_object_copies * (double)100.0;
     char b[20];
