@@ -1942,13 +1942,15 @@ RGWCoroutine *RGWRemoteBucketLog::init_sync_status_cr()
   return new RGWInitBucketShardSyncStatusCoroutine(&sync_env, bs, init_status);
 }
 
+#define BUCKET_SYNC_ATTR_PREFIX RGW_ATTR_PREFIX "bucket-sync."
+
 template <class T>
-static void decode_attr(CephContext *cct, map<string, bufferlist>& attrs, const string& attr_name, T *val)
+static bool decode_attr(CephContext *cct, map<string, bufferlist>& attrs, const string& attr_name, T *val)
 {
   map<string, bufferlist>::iterator iter = attrs.find(attr_name);
   if (iter == attrs.end()) {
     *val = T();
-    return;
+    return false;
   }
 
   auto biter = iter->second.cbegin();
@@ -1956,14 +1958,22 @@ static void decode_attr(CephContext *cct, map<string, bufferlist>& attrs, const 
     decode(*val, biter);
   } catch (buffer::error& err) {
     ldout(cct, 0) << "ERROR: failed to decode attribute: " << attr_name << dendl;
+    return false;
   }
+  return true;
 }
 
 void rgw_bucket_shard_sync_info::decode_from_attrs(CephContext *cct, map<string, bufferlist>& attrs)
 {
-  decode_attr(cct, attrs, "state", &state);
-  decode_attr(cct, attrs, "full_marker", &full_marker);
-  decode_attr(cct, attrs, "inc_marker", &inc_marker);
+  if (!decode_attr(cct, attrs, BUCKET_SYNC_ATTR_PREFIX "state", &state)) {
+    decode_attr(cct, attrs, "state", &state);
+  }
+  if (!decode_attr(cct, attrs, BUCKET_SYNC_ATTR_PREFIX "full_marker", &full_marker)) {
+    decode_attr(cct, attrs, "full_marker", &full_marker);
+  }
+  if (!decode_attr(cct, attrs, BUCKET_SYNC_ATTR_PREFIX "inc_marker", &inc_marker)) {
+    decode_attr(cct, attrs, "inc_marker", &inc_marker);
+  }
 }
 
 void rgw_bucket_shard_sync_info::encode_all_attrs(map<string, bufferlist>& attrs)
@@ -1976,19 +1986,19 @@ void rgw_bucket_shard_sync_info::encode_all_attrs(map<string, bufferlist>& attrs
 void rgw_bucket_shard_sync_info::encode_state_attr(map<string, bufferlist>& attrs)
 {
   using ceph::encode;
-  encode(state, attrs["state"]);
+  encode(state, attrs[BUCKET_SYNC_ATTR_PREFIX "state"]);
 }
 
 void rgw_bucket_shard_full_sync_marker::encode_attr(map<string, bufferlist>& attrs)
 {
   using ceph::encode;
-  encode(*this, attrs["full_marker"]);
+  encode(*this, attrs[BUCKET_SYNC_ATTR_PREFIX "full_marker"]);
 }
 
 void rgw_bucket_shard_inc_sync_marker::encode_attr(map<string, bufferlist>& attrs)
 {
   using ceph::encode;
-  encode(*this, attrs["inc_marker"]);
+  encode(*this, attrs[BUCKET_SYNC_ATTR_PREFIX "inc_marker"]);
 }
 
 class RGWReadBucketSyncStatusCoroutine : public RGWCoroutine {
@@ -2011,8 +2021,8 @@ int RGWReadBucketSyncStatusCoroutine::operate()
 {
   reenter(this) {
     yield call(new RGWSimpleRadosReadAttrsCR(sync_env->async_rados, sync_env->store->svc.sysobj,
-                                                   rgw_raw_obj(sync_env->store->svc.zone->get_zone_params().log_pool, oid),
-                                                   &attrs));
+                                             rgw_raw_obj(sync_env->store->svc.zone->get_zone_params().log_pool, oid),
+                                             &attrs, true));
     if (retcode == -ENOENT) {
       *status = rgw_bucket_shard_sync_info();
       return set_cr_done();

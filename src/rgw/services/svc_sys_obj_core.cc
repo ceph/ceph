@@ -105,7 +105,6 @@ int RGWSI_SysObj_Core::raw_stat(const rgw_raw_obj& obj, uint64_t *psize, real_ti
     return r;
   }
 
-  map<string, bufferlist> unfiltered_attrset;
   uint64_t size = 0;
   struct timespec mtime_ts;
 
@@ -113,9 +112,7 @@ int RGWSI_SysObj_Core::raw_stat(const rgw_raw_obj& obj, uint64_t *psize, real_ti
   if (objv_tracker) {
     objv_tracker->prepare_op_for_read(&op);
   }
-  if (attrs) {
-    op.getxattrs(&unfiltered_attrset, nullptr);
-  }
+  op.getxattrs(attrs, nullptr);
   if (psize || pmtime) {
     op.stat2(&size, &mtime_ts, nullptr);
   }
@@ -136,9 +133,6 @@ int RGWSI_SysObj_Core::raw_stat(const rgw_raw_obj& obj, uint64_t *psize, real_ti
     *psize = size;
   if (pmtime)
     *pmtime = ceph::real_clock::from_timespec(mtime_ts);
-  if (attrs) {
-    rgw_filter_attrset(unfiltered_attrset, RGW_ATTR_PREFIX, attrs);
-  }
 
   return 0;
 }
@@ -147,6 +141,7 @@ int RGWSI_SysObj_Core::stat(RGWSysObjectCtxBase& obj_ctx,
                             GetObjState& state,
                             const rgw_raw_obj& obj,
                             map<string, bufferlist> *attrs,
+			    bool raw_attrs,
                             real_time *lastmod,
                             uint64_t *obj_size,
                             RGWObjVersionTracker *objv_tracker)
@@ -162,7 +157,11 @@ int RGWSI_SysObj_Core::stat(RGWSysObjectCtxBase& obj_ctx,
   }
 
   if (attrs) {
-    *attrs = astate->attrset;
+    if (raw_attrs) {
+      *attrs = astate->attrset;
+    } else {
+      rgw_filter_attrset(astate->attrset, RGW_ATTR_PREFIX, attrs);
+    }
     if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
       map<string, bufferlist>::iterator iter;
       for (iter = attrs->begin(); iter != attrs->end(); ++iter) {
@@ -185,6 +184,7 @@ int RGWSI_SysObj_Core::read(RGWSysObjectCtxBase& obj_ctx,
                             const rgw_raw_obj& obj,
                             bufferlist *bl, off_t ofs, off_t end,
                             map<string, bufferlist> *attrs,
+			    bool raw_attrs,
                             rgw_cache_entry_info *cache_info,
                             boost::optional<obj_version>)
 {
@@ -231,7 +231,11 @@ int RGWSI_SysObj_Core::read(RGWSysObjectCtxBase& obj_ctx,
   }
 
   if (attrs) {
-    rgw_filter_attrset(unfiltered_attrset, RGW_ATTR_PREFIX, attrs);
+    if (raw_attrs) {
+      attrs->swap(unfiltered_attrset);
+    } else {
+      rgw_filter_attrset(unfiltered_attrset, RGW_ATTR_PREFIX, attrs);
+    }
   }
 
   read_state.last_ver = op_ver;

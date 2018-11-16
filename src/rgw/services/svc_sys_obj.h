@@ -50,6 +50,7 @@ public:
       
       RGWObjVersionTracker *objv_tracker{nullptr};
       map<string, bufferlist> *attrs{nullptr};
+      bool raw_attrs{false};
       boost::optional<obj_version> refresh_version{boost::none};
       ceph::real_time *lastmod{nullptr};
       uint64_t *obj_size{nullptr};
@@ -73,6 +74,11 @@ public:
       ROp& set_attrs(map<string, bufferlist> *_attrs) {
         attrs = _attrs;
         return *this;
+      }
+
+      ROp& set_raw_attrs(bool ra) {
+	raw_attrs = ra;
+	return *this;
       }
 
       ROp& set_refresh_version(boost::optional<obj_version>& rf) {

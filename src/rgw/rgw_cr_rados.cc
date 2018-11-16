@@ -98,14 +98,15 @@ int RGWAsyncGetSystemObj::_send_request()
   return sysobj.rop()
                .set_objv_tracker(&objv_tracker)
                .set_attrs(pattrs)
+	       .set_raw_attrs(raw_attrs)
                .read(&bl);
 }
 
 RGWAsyncGetSystemObj::RGWAsyncGetSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWSI_SysObj *_svc,
                        RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
-                       bool want_attrs)
+                       bool want_attrs, bool raw_attrs)
   : RGWAsyncRadosRequest(caller, cn), obj_ctx(_svc),
-    obj(_obj), want_attrs(want_attrs)
+    obj(_obj), want_attrs(want_attrs), raw_attrs(raw_attrs)
 {
   if (_objv_tracker) {
     objv_tracker = *_objv_tracker;
@@ -115,7 +116,7 @@ RGWAsyncGetSystemObj::RGWAsyncGetSystemObj(RGWCoroutine *caller, RGWAioCompletio
 int RGWSimpleRadosReadAttrsCR::send_request()
 {
   req = new RGWAsyncGetSystemObj(this, stack->create_completion_notifier(),
-			         svc, nullptr, obj, true);
+			         svc, nullptr, obj, true, raw_attrs);
   async_rados->queue(req);
   return 0;
 }
