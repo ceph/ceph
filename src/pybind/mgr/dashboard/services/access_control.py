@@ -107,6 +107,7 @@ READ_ONLY_ROLE = Role('read-only', 'Read-Only', dict([
 # block manager role provides all permission for block related scopes
 BLOCK_MGR_ROLE = Role('block-manager', 'Block Manager', {
     Scope.RBD_IMAGE: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+    Scope.POOL: [_P.READ],
     Scope.ISCSI: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
     Scope.RBD_MIRRORING: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
 })
