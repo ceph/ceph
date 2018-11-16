@@ -10,6 +10,7 @@
     "test": "jest --watch",
     "test:ci": "JEST_SILENT_REPORTER_DOTS=true jest --coverage --reporters jest-silent-reporter",
     "e2e": "ng e2e",
+    "e2e:dev": "ng e2e --dev-server-target",
     "lint:tslint": "ng lint",
     "lint:prettier": "prettier --list-different \"{src,e2e}/**/*.{ts,scss}\"",
     "lint:html": "html-linter --config html-linter.config.json",
