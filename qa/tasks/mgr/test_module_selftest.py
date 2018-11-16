@@ -47,8 +47,11 @@ class TestModuleSelftest(MgrTestCase):
     def test_influx(self):
         self._selftest_plugin("influx")
 
-    def test_diskprediction(self):
-        self._selftest_plugin("diskprediction")
+    def test_diskprediction_local(self):
+        self._selftest_plugin("diskprediction_local")
+
+    def test_diskprediction_cloud(self):
+        self._selftest_plugin("diskprediction_cloud")
 
     def test_telegraf(self):
         self._selftest_plugin("telegraf")
