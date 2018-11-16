@@ -1629,17 +1629,6 @@ if [ "$APPLICATION_ENABLE" ] ; then
     done
 fi
 """,
-        "disable_update_in_stage_0": """# Disable update in Stage 0
-set -ex
-cp /srv/salt/ceph/stage/prep/master/default.sls \
-   /srv/salt/ceph/stage/prep/master/default-orig.sls
-cp /srv/salt/ceph/stage/prep/master/default-no-update-no-reboot.sls \
-   /srv/salt/ceph/stage/prep/master/default.sls
-cp /srv/salt/ceph/stage/prep/minion/default.sls \
-   /srv/salt/ceph/stage/prep/minion/default-orig.sls
-cp /srv/salt/ceph/stage/prep/minion/default-no-update-no-reboot.sls \
-   /srv/salt/ceph/stage/prep/minion/default.sls
-""",
         "salt_api_test": """# Salt API test script
 set -e
 TMPFILE=$(mktemp)
@@ -1839,13 +1828,6 @@ test "$RPM_CEPH_VERSION" = "$CEPH_CEPH_VERSION"
             'custom_storage_profile.sh',
             self.script_dict["custom_storage_profile"],
             args=[proposals_dir, sourcefile],
-            )
-
-    def disable_update_in_stage_0(self, *args, **kwargs):
-        remote_run_script_as_root(
-            self.master_remote,
-            'disable_update_in_stage_0.sh',
-            self.script_dict["disable_update_in_stage_0"],
             )
 
     def mgr_dashboard_module_smoke(self, *args, **kwargs):
