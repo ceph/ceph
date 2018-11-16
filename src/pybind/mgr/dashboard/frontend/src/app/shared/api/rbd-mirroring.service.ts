@@ -40,15 +40,45 @@ export class RbdMirroringService {
   /**
    * Returns the current value of summaryData
    */
-  getCurrentSummary(): object {
+  getCurrentSummary(): { [key: string]: any; executing_tasks: object[] } {
     return this.summaryDataSource.getValue();
   }
 
   /**
    * Subscribes to the summaryData,
-   * which is updated once every 5 seconds or when a new task is created.
+   * which is updated once every 30 seconds or when a new task is created.
    */
-  subscribe(next: (summary: any) => void, error?: (error: any) => void): Subscription {
+  subscribeSummary(next: (summary: any) => void, error?: (error: any) => void): Subscription {
     return this.summaryData$.subscribe(next, error);
+  }
+
+  getPool(poolName) {
+    return this.http.get(`api/block/mirroring/pool/${poolName}`);
+  }
+
+  updatePool(poolName, request) {
+    return this.http.put(`api/block/mirroring/pool/${poolName}`, request, { observe: 'response' });
+  }
+
+  getPeer(poolName, peerUUID) {
+    return this.http.get(`api/block/mirroring/pool/${poolName}/peer/${peerUUID}`);
+  }
+
+  addPeer(poolName, request) {
+    return this.http.post(`api/block/mirroring/pool/${poolName}/peer`, request, {
+      observe: 'response'
+    });
+  }
+
+  updatePeer(poolName, peerUUID, request) {
+    return this.http.put(`api/block/mirroring/pool/${poolName}/peer/${peerUUID}`, request, {
+      observe: 'response'
+    });
+  }
+
+  deletePeer(poolName, peerUUID) {
+    return this.http.delete(`api/block/mirroring/pool/${poolName}/peer/${peerUUID}`, {
+      observe: 'response'
+    });
   }
 }

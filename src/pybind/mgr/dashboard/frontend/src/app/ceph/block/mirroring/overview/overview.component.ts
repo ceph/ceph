@@ -18,7 +18,7 @@ export class OverviewComponent implements OnInit, OnDestroy {
   constructor(private rbdMirroringService: RbdMirroringService) {}
 
   ngOnInit() {
-    this.subs = this.rbdMirroringService.subscribe((data: any) => {
+    this.subs = this.rbdMirroringService.subscribeSummary((data: any) => {
       if (!data) {
         return;
       }

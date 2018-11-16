@@ -104,6 +104,17 @@ export class TaskMessageService {
       })
   };
 
+  rbd_mirroring = {
+    pool: (metadata) =>
+      this.i18n(`mirror mode for pool '{{id}}'`, {
+        id: `${metadata.pool_name}`
+      }),
+    pool_peer: (metadata) =>
+      this.i18n(`mirror peer for pool '{{id}}'`, {
+        id: `${metadata.pool_name}`
+      })
+  };
+
   messages = {
     // Pool tasks
     'pool/create': new TaskMessage(
@@ -259,6 +270,29 @@ export class TaskMessageService {
           message: message
         });
       }
+    ),
+    // RBD mirroring tasks
+    'rbd/mirroring/pool/edit': new TaskMessage(
+      this.commonOperations.update,
+      this.rbd_mirroring.pool,
+      (metadata) => ({
+        16: this.i18n('Cannot disable mirroring because it contains a peer.')
+      })
+    ),
+    'rbd/mirroring/peer/add': new TaskMessage(
+      this.commonOperations.create,
+      this.rbd_mirroring.pool_peer,
+      (metadata) => ({})
+    ),
+    'rbd/mirroring/peer/edit': new TaskMessage(
+      this.commonOperations.update,
+      this.rbd_mirroring.pool_peer,
+      (metadata) => ({})
+    ),
+    'rbd/mirroring/peer/delete': new TaskMessage(
+      this.commonOperations.delete,
+      this.rbd_mirroring.pool_peer,
+      (metadata) => ({})
     )
   };
 

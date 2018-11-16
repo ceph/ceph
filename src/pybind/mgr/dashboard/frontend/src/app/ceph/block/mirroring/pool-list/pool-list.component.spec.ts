@@ -1,6 +1,8 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { RouterTestingModule } from '@angular/router/testing';
 
+import { ToastModule } from 'ng2-toastr';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { ProgressbarModule } from 'ngx-bootstrap/progressbar';
 import { TabsModule } from 'ngx-bootstrap/tabs';
@@ -21,7 +23,9 @@ describe('PoolListComponent', () => {
       BsDropdownModule.forRoot(),
       TabsModule.forRoot(),
       ProgressbarModule.forRoot(),
-      HttpClientTestingModule
+      HttpClientTestingModule,
+      RouterTestingModule,
+      ToastModule.forRoot()
     ],
     providers: i18nProviders
   });
