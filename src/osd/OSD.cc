@@ -5619,8 +5619,17 @@ bool OSD::_is_healthy()
   }
 
   if (is_waiting_for_healthy()) {
+     utime_t now = ceph_clock_now();
+     utime_t grace = utime_t(cct->_conf->osd_max_markdown_period, 0);
+     while (!osd_markdown_log.empty() &&
+             osd_markdown_log.front() + grace < now)
+       osd_markdown_log.pop_front();
+     if (osd_markdown_log.size() <= 1) {
+       dout(5) << __func__ << " first time marked as down,"
+               << " try reboot unconditionally" << dendl;
+       return true;
+    }
     std::lock_guard l(heartbeat_lock);
-    utime_t now = ceph_clock_now();
     int num = 0, up = 0;
     for (map<int,HeartbeatInfo>::iterator p = heartbeat_peers.begin();
 	 p != heartbeat_peers.end();
