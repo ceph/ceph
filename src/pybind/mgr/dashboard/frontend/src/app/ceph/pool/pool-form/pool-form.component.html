@@ -1,9 +1,8 @@
 <div class="col-sm-12 col-lg-6">
   <h1 *ngIf="!(info && ecProfiles)"
-      i18n
       class="jumbotron">
     <i class="fa fa-lg fa-pulse fa-spinner text-primary"></i>
-    Loading...
+    <ng-container i18n>Loading...</ng-container>
   </h1>
   <form name="form"
         *ngIf="info && ecProfiles"
@@ -14,7 +13,7 @@
     <div class="panel panel-default">
       <div class="panel-heading">
         <h3 class="panel-title">
-          <span i18n>{{ editing ? 'Edit' : 'Add' }} pool</span>
+          <span i18n>{editing, select, 1 {Edit} other {Add}} pool</span>
         </h3>
       </div>
 
@@ -22,10 +21,9 @@
         <!-- Name -->
         <div class="form-group"
              [ngClass]="{'has-error': form.showError('name', formDir)}">
-          <label i18n
-                 class="control-label col-sm-3"
+          <label class="control-label col-sm-3"
                  for="name">
-            Name
+            <ng-container i18n>Name</ng-container>
             <span class="required"></span>
           </label>
           <div class="col-sm-9">
@@ -37,26 +35,21 @@
                    i18n-placeholder
                    formControlName="name"
                    autofocus>
-            <span i18n
-                  class="help-block"
-                  *ngIf="form.showError('name', formDir, 'required')">
-              This field is required!
-            </span>
-            <span i18n
-                  class="help-block"
-                  *ngIf="form.showError('name', formDir, 'uniqueName')">
-              The chosen Ceph pool name is already in use.
-            </span>
+            <span class="help-block"
+                  *ngIf="form.showError('name', formDir, 'required')"
+                  i18n>This field is required!</span>
+            <span class="help-block"
+                  *ngIf="form.showError('name', formDir, 'uniqueName')"
+                  i18n>The chosen Ceph pool name is already in use.</span>
           </div>
         </div>
 
         <!-- Pool type selection -->
         <div class="form-group"
              [ngClass]="{'has-error': form.showError('poolType', formDir)}">
-          <label i18n
-                 class="control-label col-sm-3"
+          <label class="control-label col-sm-3"
                  for="poolType">
-            Pool type
+            <ng-container i18n>Pool type</ng-container>
             <span class="required"></span>
           </label>
           <div class="col-sm-9">
@@ -65,19 +58,15 @@
                     formControlName="poolType"
                     name="poolType">
               <option ngValue=""
-                      i18n>
-                -- Select a pool type --
-              </option>
+                      i18n>-- Select a pool type --</option>
               <option *ngFor="let poolType of data.poolTypes"
                       [value]="poolType">
                 {{ poolType }}
               </option>
             </select>
-            <span i18n
-                  class="help-block"
-                  *ngIf="form.showError('poolType', formDir, 'required')">
-              This field is required!
-            </span>
+            <span class="help-block"
+                  *ngIf="form.showError('poolType', formDir, 'required')"
+                  i18n>This field is required!</span>
           </div>
         </div>
 
@@ -85,10 +74,9 @@
           <!-- Pg number -->
           <div class="form-group"
                [ngClass]="{'has-error': form.showError('pgNum', formDir)}">
-            <label i18n
-                   class="control-label col-sm-3"
+            <label class="control-label col-sm-3"
                    for="pgNum">
-              Placement groups
+              <ng-container i18n>Placement groups</ng-container>
               <span class="required"></span>
             </label>
             <div class="col-sm-9">
@@ -102,38 +90,28 @@
                      (keyup)="pgKeyUp($event)"
                      (blur)="pgUpdate()"
                      required>
-              <span i18n
-                    class="help-block"
-                    *ngIf="form.showError('pgNum', formDir, 'required')">
-                This field is required!
-              </span>
-              <span i18n
-                    class="help-block"
-                    *ngIf="form.showError('pgNum', formDir, 'min')">
-                At least one placement group is needed!
-              </span>
-              <span i18n
-                    class="help-block"
-                    *ngIf="form.showError('pgNum', formDir, '34')">
-                Your cluster can't handle this many PGs. Please recalculate the PG amount needed.
-              </span>
-              <span i18n
-                    class="help-block"
-                    *ngIf="form.showError('pgNum', formDir, 'noDecrease')">
-                You can only increase the number of PGs of an existing pool.
-                Currently your pool has {{ data.pool.pg_num }} PGs.
-              </span>
+              <span class="help-block"
+                    *ngIf="form.showError('pgNum', formDir, 'required')"
+                    i18n>This field is required!</span>
+              <span class="help-block"
+                    *ngIf="form.showError('pgNum', formDir, 'min')"
+                    i18n>At least one placement group is needed!</span>
+              <span class="help-block"
+                    *ngIf="form.showError('pgNum', formDir, '34')"
+                    i18n>Your cluster can't handle this many PGs. Please recalculate the PG amount needed.</span>
+              <span class="help-block"
+                    *ngIf="form.showError('pgNum', formDir, 'noDecrease')"
+                    i18n>You can only increase the number of PGs of an existing pool.
+                Currently your pool has {{ data.pool.pg_num }} PGs.</span>
               <span class="help-block">
                 <a i18n
                    target="_blank"
                    href="http://ceph.com/pgcalc">Calculation help</a>
               </span>
               <span class="help-block"
-                    i18n
-                    *ngIf="externalPgChange">
-                The current PGs settings were calculated for you, you should make sure the values
-                suite your needs before submit.
-              </span>
+                    *ngIf="externalPgChange"
+                    i18n>The current PGs settings were calculated for you, you
+                    should make sure the values suite your needs before submit.</span>
             </div>
           </div>
 
@@ -143,19 +121,15 @@
                *ngIf="form.getValue('poolType') && current.rules.length > 0">
             <label class="control-label col-sm-3"
                    for="crushRule"
-                   i18n>
-              Crush ruleset
-            </label>
+                   i18n>Crush ruleset</label>
             <div class="col-sm-9">
               <div class="input-group">
                 <select class="form-control"
                         id="crushRule"
                         formControlName="crushRule"
                         name="crushSet">
-                  <option i18n
-                          [ngValue]="null">
-                    -- Select a crush rule --
-                  </option>
+                  <option [ngValue]="null"
+                          i18n>-- Select a crush rule --</option>
                   <option *ngFor="let rule of current.rules"
                           [ngValue]="rule">
                     {{ rule.rule_name }}
@@ -192,11 +166,9 @@
                 </tabset>
               </span>
               <span class="help-block"
-                    i18n
-                    *ngIf="form.showError('crushRule', formDir, 'tooFewOsds')">
-                The rule can't be used in the current cluster as it has to few OSDs to meet the
-                minimum required OSD by this rule.
-              </span>
+                    *ngIf="form.showError('crushRule', formDir, 'tooFewOsds')"
+                    i18n>The rule can't be used in the current cluster as it has
+                to few OSDs to meet the minimum required OSD by this rule.</span>
             </div>
           </div>
 
@@ -204,10 +176,9 @@
           <div class="form-group"
                [ngClass]="{'has-error': form.showError('size', formDir)}"
                *ngIf="form.getValue('poolType') === 'replicated'">
-            <label i18n
-                   class="control-label col-sm-3"
+            <label class="control-label col-sm-3"
                    for="size">
-              Replicated size
+              <ng-container i18n>Replicated size</ng-container>
               <span class="required"></span>
             </label>
             <div class="col-sm-9">
@@ -221,20 +192,14 @@
               <span class="help-block"
                     *ngIf="form.showError('size', formDir)">
                 <ul class="list-inline">
-                  <li i18n>
-                    Minimum: {{ getMinSize() }}
-                  </li>
-                  <li i18n>
-                    Maximum: {{ getMaxSize() }}
-                  </li>
+                  <li i18n>Minimum: {{ getMinSize() }}</li>
+                  <li i18n>Maximum: {{ getMaxSize() }}</li>
                 </ul>
               </span>
               <span class="help-block"
-                    i18n
-                    *ngIf="form.showError('size', formDir)">
-                The size specified is out of range.
-                A value from {{ getMinSize() }} to {{ getMaxSize() }} is valid.
-              </span>
+                    *ngIf="form.showError('size', formDir)"
+                    i18n>The size specified is out of range. A value from
+                    {{ getMinSize() }} to {{ getMaxSize() }} is valid.</span>
             </div>
           </div>
 
@@ -243,9 +208,7 @@
                *ngIf="form.getValue('poolType') === 'erasure'">
             <label i18n
                    class="control-label col-sm-3"
-                   for="erasureProfile">
-              Erasure code profile
-            </label>
+                   for="erasureProfile">Erasure code profile</label>
             <div class="col-sm-9">
               <div class="input-group">
                 <select class="form-control"
@@ -254,19 +217,13 @@
                         formControlName="erasureProfile">
                   <option *ngIf="!ecProfiles"
                           ngValue=""
-                          i18n>
-                    Loading...
-                  </option>
+                          i18n>Loading...</option>
                   <option *ngIf="ecProfiles && ecProfiles.length === 0"
-                          i18n
-                          [ngValue]="null">
-                    -- No erasure code profile available --
-                  </option>
+                          [ngValue]="null"
+                          i18n>-- No erasure code profile available --</option>
                   <option *ngIf="ecProfiles && ecProfiles.length > 0"
-                          i18n
-                          [ngValue]="null">
-                    -- Select an erasure code profile --
-                  </option>
+                          [ngValue]="null"
+                          i18n>-- Select an erasure code profile --</option>
                   <option *ngFor="let ecp of ecProfiles"
                           [ngValue]="ecp">
                     {{ ecp.name }}
@@ -312,19 +269,15 @@
           <div class="form-group"
                *ngIf="info.is_all_bluestore && form.getValue('poolType') === 'erasure'">
             <label i18n
-                   class="control-label col-sm-3">
-              Flags
-            </label>
+                   class="control-label col-sm-3">Flags</label>
             <div class="col-sm-9">
               <div class="input-group">
                 <div class="checkbox checkbox-primary">
                   <input id="ec-overwrites"
                          type="checkbox"
                          formControlName="ecOverwrites">
-                  <label i18n
-                         for="ec-overwrites">
-                    EC Overwrites
-                  </label>
+                  <label for="ec-overwrites"
+                         i18n>EC Overwrites</label>
                 </div>
               </div>
             </div>
@@ -334,35 +287,31 @@
           <div class="form-group">
             <label i18n
                    class="col-sm-3 control-label"
-                   for="applications">
-              Applications
-            </label>
+                   for="applications">Applications</label>
             <div class="col-sm-9">
               <span class="form-control no-border full-height">
-                <cd-select-badges
-                  id="applications"
-                  [customBadges]="true"
-                  [customBadgeValidators]="data.applications.validators"
-                  [messages]="data.applications.messages"
-                  [data]="data.applications.selected"
-                  [options]="data.applications.available"
-                  [selectionLimit]="4">
+                <cd-select-badges id="applications"
+                                  [customBadges]="true"
+                                  [customBadgeValidators]="data.applications.validators"
+                                  [messages]="data.applications.messages"
+                                  [data]="data.applications.selected"
+                                  [options]="data.applications.available"
+                                  [selectionLimit]="4">
                 </cd-select-badges>
               </span>
             </div>
           </div>
 
           <!-- Compression -->
-          <div *ngIf="info.is_all_bluestore" formGroupName="compression">
+          <div *ngIf="info.is_all_bluestore"
+               formGroupName="compression">
             <legend i18n>Compression</legend>
 
             <!-- Compression Mode -->
             <div class="form-group">
               <label i18n
                      class="control-label col-sm-3"
-                     for="mode">
-                Mode
-              </label>
+                     for="mode">Mode</label>
               <div class="col-sm-9">
                 <select class="form-control"
                         id="mode"
@@ -381,9 +330,7 @@
                    [ngClass]="{'has-error': form.showError('algorithm', formDir)}">
                 <label i18n
                        class="control-label col-sm-3"
-                       for="algorithm">
-                  Algorithm
-                </label>
+                       for="algorithm">Algorithm</label>
                 <div class="col-sm-9">
                   <select class="form-control"
                           id="algorithm"
@@ -391,14 +338,10 @@
                           formControlName="algorithm">
                     <option *ngIf="!info.compression_algorithms"
                             ngValue=""
-                            i18n>
-                      Loading...
-                    </option>
+                            i18n>Loading...</option>
                     <option *ngIf="info.compression_algorithms && info.compression_algorithms.length === 0"
                             i18n
-                            ngValue="">
-                      -- No erasure compression algorithm available --
-                    </option>
+                            ngValue="">-- No erasure compression algorithm available --</option>
                     <option *ngFor="let algorithm of info.compression_algorithms"
                             [value]="algorithm">
                       {{ algorithm }}
@@ -412,9 +355,7 @@
                    [ngClass]="{'has-error': form.showError('minBlobSize', formDir)}">
                 <label i18n
                        class="control-label col-sm-3"
-                       for="minBlobSize">
-                  Minimum blob size
-                </label>
+                       for="minBlobSize">Minimum blob size</label>
                 <div class="col-sm-9">
                   <input id="minBlobSize"
                          name="minBlobSize"
@@ -426,16 +367,12 @@
                          placeholder="e.g., 128KiB"
                          defaultUnit="KiB"
                          cdDimlessBinary>
-                  <span i18n
-                        class="help-block"
-                        *ngIf="form.showError('minBlobSize', formDir, 'min')">
-                    Value should be greater than 0
-                  </span>
-                  <span i18n
-                        class="help-block"
-                        *ngIf="form.showError('minBlobSize', formDir, 'maximum')">
-                    Value should be greater than the maximum blob size
-                  </span>
+                  <span class="help-block"
+                        *ngIf="form.showError('minBlobSize', formDir, 'min')"
+                        i18n>Value should be greater than 0</span>
+                  <span class="help-block"
+                        *ngIf="form.showError('minBlobSize', formDir, 'maximum')"
+                        i18n>Value should be greater than the maximum blob size</span>
                 </div>
               </div>
 
@@ -444,9 +381,7 @@
                    [ngClass]="{'has-error': form.showError('maxBlobSize', formDir)}">
                 <label i18n
                        class="control-label col-sm-3"
-                       for="maxBlobSize">
-                  Maximum blob size
-                </label>
+                       for="maxBlobSize">Maximum blob size</label>
                 <div class="col-sm-9">
                   <input id="maxBlobSize"
                          type="text"
@@ -457,16 +392,12 @@
                          placeholder="e.g., 512KiB"
                          defaultUnit="KiB"
                          cdDimlessBinary>
-                  <span i18n
-                        class="help-block"
-                        *ngIf="form.showError('maxBlobSize', formDir, 'min')">
-                    Value should be greater than 0
-                  </span>
-                  <span i18n
-                        class="help-block"
-                        *ngIf="form.showError('maxBlobSize', formDir, 'minimum')">
-                    Value should be greater than the minimum blob size
-                  </span>
+                  <span class="help-block"
+                        *ngIf="form.showError('maxBlobSize', formDir, 'min')"
+                        i18n>Value should be greater than 0</span>
+                  <span class="help-block"
+                        *ngIf="form.showError('maxBlobSize', formDir, 'minimum')"
+                        i18n>Value should be greater than the minimum blob size</span>
                 </div>
               </div>
 
@@ -475,9 +406,7 @@
                    [ngClass]="{'has-error': form.showError('ratio', formDir)}">
                 <label i18n
                        class="control-label col-sm-3"
-                       for="ratio">
-                   Ratio
-                </label>
+                       for="ratio">Ratio</label>
                 <div class="col-sm-9">
                   <input id="ratio"
                          name="ratio"
@@ -489,11 +418,9 @@
                          class="form-control"
                          i18n-placeholder
                          placeholder="Compression ratio">
-                  <span i18n
-                        class="help-block"
-                        *ngIf="form.showError('ratio', formDir, 'min') || form.showError('ratio', formDir, 'max')">
-                    Value should be between 0.0 and 1.0
-                  </span>
+                  <span class="help-block"
+                        *ngIf="form.showError('ratio', formDir, 'min') || form.showError('ratio', formDir, 'max')"
+                        i18n>Value should be between 0.0 and 1.0</span>
                 </div>
               </div>
 
@@ -508,14 +435,12 @@
           <cd-submit-button [form]="formDir"
                             type="button"
                             (submitAction)="submit()">
-            <span i18n>{{ editing ? 'Edit' : 'Create' }} pool</span>
+            <span i18n>{editing, select, 1 {Edit} other {Create}} pool</span>
           </cd-submit-button>
           <button i18n
                   type="button"
                   class="btn btn-sm btn-default"
-                  routerLink="/pool">
-            Back
-          </button>
+                  routerLink="/pool">Back</button>
         </div>
       </div>
     </div>

@@ -7,7 +7,7 @@ import { BsModalService } from 'ngx-bootstrap/modal';
 import { TabsModule } from 'ngx-bootstrap/tabs';
 import { of } from 'rxjs';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
+import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { PoolService } from '../../../shared/api/pool.service';
 import { DeletionModalComponent } from '../../../shared/components/deletion-modal/deletion-modal.component';
 import { ExecutingTask } from '../../../shared/models/executing-task';
@@ -30,7 +30,8 @@ describe('PoolListComponent', () => {
       RouterTestingModule,
       TabsModule.forRoot(),
       HttpClientTestingModule
-    ]
+    ],
+    providers: i18nProviders
   });
 
   beforeEach(() => {

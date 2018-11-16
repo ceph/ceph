@@ -1,8 +1,7 @@
 <ng-template #popTemplate>
   <div *ngIf="notifications.length > 0">
     <div class="separator">
-      Recent Notifications
-
+      <ng-container i18n>Recent Notifications</ng-container>
       <div *ngIf="notifications.length > 0"
            class="pull-right">
         <a (click)="removeAll()"

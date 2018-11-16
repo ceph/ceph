@@ -11,7 +11,11 @@ import { TabsModule } from 'ngx-bootstrap/tabs';
 import { TooltipModule } from 'ngx-bootstrap/tooltip';
 import { BehaviorSubject, of } from 'rxjs';
 
-import { configureTestBed, PermissionHelper } from '../../../../testing/unit-test-helper';
+import {
+  configureTestBed,
+  i18nProviders,
+  PermissionHelper
+} from '../../../../testing/unit-test-helper';
 import { RbdService } from '../../../shared/api/rbd.service';
 import { TableActionsComponent } from '../../../shared/datatable/table-actions/table-actions.component';
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
@@ -47,7 +51,7 @@ describe('RbdListComponent', () => {
       HttpClientTestingModule
     ],
     declarations: [RbdListComponent, RbdDetailsComponent, RbdSnapshotListComponent],
-    providers: [TaskListService]
+    providers: [TaskListService, i18nProviders]
   });
 
   beforeEach(() => {

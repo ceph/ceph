@@ -8,7 +8,11 @@ import { BsModalService } from 'ngx-bootstrap/modal';
 import { TabsModule } from 'ngx-bootstrap/tabs';
 import { EMPTY, of } from 'rxjs';
 
-import { configureTestBed, PermissionHelper } from '../../../../../testing/unit-test-helper';
+import {
+  configureTestBed,
+  i18nProviders,
+  PermissionHelper
+} from '../../../../../testing/unit-test-helper';
 import { OsdService } from '../../../../shared/api/osd.service';
 import { ConfirmationModalComponent } from '../../../../shared/components/confirmation-modal/confirmation-modal.component';
 import { CriticalConfirmationModalComponent } from '../../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
@@ -78,7 +82,8 @@ describe('OsdListComponent', () => {
     providers: [
       { provide: AuthStorageService, useValue: fakeAuthStorageService },
       TableActionsComponent,
-      BsModalService
+      BsModalService,
+      i18nProviders
     ]
   });
 

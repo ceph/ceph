@@ -31,12 +31,10 @@
              let-row="row"
              let-value="value">
   <ng-container *ngIf="row.cdIsExpired"
-                i18n>Expired at
-  </ng-container>
+                i18n>Expired at</ng-container>
 
   <ng-container *ngIf="!row.cdIsExpired"
-                i18n>Protected until
-  </ng-container>
+                i18n>Protected until</ng-container>
 
   {{ value | cdDate }}
 </ng-template>
@@ -44,8 +42,9 @@
 <ng-template #deleteTpl
              let-expiresAt>
   <p class="text-danger"
-     *ngIf="!isExpired(expiresAt)"
-     i18n>
-    <strong>This image is protected until {{ expiresAt | cdDate }}.</strong>
+     *ngIf="!isExpired(expiresAt)">
+    <strong>
+      <ng-container i18n>This image is protected until {{ expiresAt | cdDate }}.</ng-container>
+    </strong>
   </p>
 </ng-template>

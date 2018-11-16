@@ -1,5 +1,6 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
+import { I18n } from '@ngx-translate/i18n-polyfill';
 import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 import { Observable } from 'rxjs';
 
@@ -55,81 +56,87 @@ export class OsdListComponent implements OnInit {
     private authStorageService: AuthStorageService,
     private osdService: OsdService,
     private dimlessBinaryPipe: DimlessBinaryPipe,
-    private modalService: BsModalService
+    private modalService: BsModalService,
+    private i18n: I18n
   ) {
     this.permission = this.authStorageService.getPermissions().osd;
     this.tableActions = [
       {
-        name: 'Scrub',
+        name: this.i18n('Scrub'),
         permission: 'update',
         icon: 'fa-stethoscope',
         click: () => this.scrubAction(false),
         disable: () => !this.hasOsdSelected
       },
       {
-        name: 'Deep Scrub',
+        name: this.i18n('Deep Scrub'),
         permission: 'update',
         icon: 'fa-cog',
         click: () => this.scrubAction(true),
         disable: () => !this.hasOsdSelected
       },
       {
-        name: 'Reweight',
+        name: this.i18n('Reweight'),
         permission: 'update',
         click: () => this.reweight(),
         disable: () => !this.hasOsdSelected,
         icon: 'fa-balance-scale'
       },
       {
-        name: 'Mark Out',
+        name: this.i18n('Mark Out'),
         permission: 'update',
-        click: () => this.showConfirmationModal('out', this.osdService.markOut),
+        click: () => this.showConfirmationModal(this.i18n('out'), this.osdService.markOut),
         disable: () => this.isNotSelectedOrInState('out'),
         icon: 'fa-arrow-left'
       },
       {
-        name: 'Mark In',
+        name: this.i18n('Mark In'),
         permission: 'update',
-        click: () => this.showConfirmationModal('in', this.osdService.markIn),
+        click: () => this.showConfirmationModal(this.i18n('in'), this.osdService.markIn),
         disable: () => this.isNotSelectedOrInState('in'),
         icon: 'fa-arrow-right'
       },
       {
-        name: 'Mark Down',
+        name: this.i18n('Mark Down'),
         permission: 'update',
-        click: () => this.showConfirmationModal('down', this.osdService.markDown),
+        click: () => this.showConfirmationModal(this.i18n('down'), this.osdService.markDown),
         disable: () => this.isNotSelectedOrInState('down'),
         icon: 'fa-arrow-down'
       },
       {
-        name: 'Mark Lost',
+        name: this.i18n('Mark Lost'),
         permission: 'delete',
         click: () =>
           this.showCriticalConfirmationModal(
-            'Mark',
-            'OSD lost',
-            'marked lost',
+            this.i18n('Mark'),
+            this.i18n('OSD lost'),
+            this.i18n('marked lost'),
             this.osdService.markLost
           ),
         disable: () => this.isNotSelectedOrInState('up'),
         icon: 'fa-unlink'
       },
       {
-        name: 'Remove',
+        name: this.i18n('Remove'),
         permission: 'delete',
         click: () =>
-          this.showCriticalConfirmationModal('Remove', 'OSD', 'removed', this.osdService.remove),
+          this.showCriticalConfirmationModal(
+            this.i18n('Remove'),
+            this.i18n('OSD'),
+            this.i18n('removed'),
+            this.osdService.remove
+          ),
         disable: () => this.isNotSelectedOrInState('up'),
         icon: 'fa-remove'
       },
       {
-        name: 'Destroy',
+        name: this.i18n('Destroy'),
         permission: 'delete',
         click: () =>
           this.showCriticalConfirmationModal(
-            'destroy',
-            'OSD',
-            'destroyed',
+            this.i18n('destroy'),
+            this.i18n('OSD'),
+            this.i18n('destroyed'),
             this.osdService.destroy
           ),
         disable: () => this.isNotSelectedOrInState('up'),
@@ -140,24 +147,32 @@ export class OsdListComponent implements OnInit {
 
   ngOnInit() {
     this.columns = [
-      { prop: 'host.name', name: 'Host' },
-      { prop: 'id', name: 'ID', cellTransformation: CellTemplate.bold },
-      { prop: 'collectedStates', name: 'Status', cellTemplate: this.statusColor },
-      { prop: 'stats.numpg', name: 'PGs' },
-      { prop: 'stats.stat_bytes', name: 'Size', pipe: this.dimlessBinaryPipe },
-      { name: 'Usage', cellTemplate: this.osdUsageTpl },
+      { prop: 'host.name', name: this.i18n('Host') },
+      { prop: 'id', name: this.i18n('ID'), cellTransformation: CellTemplate.bold },
+      { prop: 'collectedStates', name: this.i18n('Status'), cellTemplate: this.statusColor },
+      { prop: 'stats.numpg', name: this.i18n('PGs') },
+      { prop: 'stats.stat_bytes', name: this.i18n('Size'), pipe: this.dimlessBinaryPipe },
+      { name: this.i18n('Usage'), cellTemplate: this.osdUsageTpl },
       {
         prop: 'stats_history.out_bytes',
-        name: 'Read bytes',
+        name: this.i18n('Read bytes'),
         cellTransformation: CellTemplate.sparkline
       },
       {
         prop: 'stats_history.in_bytes',
-        name: 'Writes bytes',
+        name: this.i18n('Writes bytes'),
         cellTransformation: CellTemplate.sparkline
       },
-      { prop: 'stats.op_r', name: 'Read ops', cellTransformation: CellTemplate.perSecond },
-      { prop: 'stats.op_w', name: 'Write ops', cellTransformation: CellTemplate.perSecond }
+      {
+        prop: 'stats.op_r',
+        name: this.i18n('Read ops'),
+        cellTransformation: CellTemplate.perSecond
+      },
+      {
+        prop: 'stats.op_w',
+        name: this.i18n('Write ops'),
+        cellTransformation: CellTemplate.perSecond
+      }
     ];
   }
 
@@ -236,8 +251,8 @@ export class OsdListComponent implements OnInit {
   showConfirmationModal(markAction: string, onSubmit: (id: number) => Observable<any>) {
     this.bsModalRef = this.modalService.show(ConfirmationModalComponent, {
       initialState: {
-        titleText: `Mark OSD ${markAction}`,
-        buttonText: `Mark ${markAction}`,
+        titleText: this.i18n('Mark OSD {{markAction}}', { markAction: markAction }),
+        buttonText: this.i18n('Mark {{markAction}}', { markAction: markAction }),
         bodyTpl: this.markOsdConfirmationTpl,
         bodyContext: {
           markActionDescription: markAction

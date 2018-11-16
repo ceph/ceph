@@ -1,5 +1,8 @@
+import { TestBed } from '@angular/core/testing';
+
 import * as _ from 'lodash';
 
+import { configureTestBed, i18nProviders } from '../../../testing/unit-test-helper';
 import { FinishedTask } from '../models/finished-task';
 import { TaskException } from '../models/task-exception';
 import { TaskMessageOperation, TaskMessageService } from './task-message.service';
@@ -8,8 +11,12 @@ describe('TaskManagerMessageService', () => {
   let service: TaskMessageService;
   let finishedTask: FinishedTask;
 
+  configureTestBed({
+    providers: [TaskMessageService, i18nProviders]
+  });
+
   beforeEach(() => {
-    service = new TaskMessageService();
+    service = TestBed.get(TaskMessageService);
     finishedTask = new FinishedTask();
   });
 
@@ -210,8 +217,8 @@ describe('TaskManagerMessageService', () => {
         finishedTask.name = 'rbd/trash/restore';
         testMessages(
           new TaskMessageOperation('Restoring', 'restore', 'Restored'),
-          `image '${metadata.pool_name}@${metadata.image_id}' \
-        into '${metadata.pool_name}/${metadata.new_image_name}'`
+          `image '${metadata.pool_name}@${metadata.image_id}' ` +
+            `into '${metadata.pool_name}/${metadata.new_image_name}'`
         );
         testErrorCode(
           17,

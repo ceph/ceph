@@ -16,8 +16,7 @@
 
         <div class="form-group">
           <label class="center-block"
-                 i18n>Pool:
-          </label>
+                 i18n>Pool:</label>
           <input class="form-control"
                  type="text"
                  placeholder="Pool name..."
@@ -37,11 +36,9 @@
 
       <div class="modal-footer">
         <div class="button-group text-right">
-          <cd-submit-button i18n
-                            [form]="purgeForm"
-                            (submitAction)="purge()">
-            Purge Trash
-          </cd-submit-button>
+          <cd-submit-button [form]="purgeForm"
+                            (submitAction)="purge()"
+                            i18n>Purge Trash</cd-submit-button>
           <button i18n
                   type="button"
                   class="btn btn-sm btn-default"

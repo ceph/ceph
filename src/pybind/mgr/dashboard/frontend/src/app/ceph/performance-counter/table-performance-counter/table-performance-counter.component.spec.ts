@@ -1,7 +1,7 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
+import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { AppModule } from '../../../app.module';
 import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
 import { TablePerformanceCounterComponent } from './table-performance-counter.component';
@@ -12,7 +12,8 @@ describe('TablePerformanceCounterComponent', () => {
   let httpTesting: HttpTestingController;
 
   configureTestBed({
-    imports: [AppModule, HttpClientTestingModule]
+    imports: [AppModule, HttpClientTestingModule],
+    providers: i18nProviders
   });
 
   beforeEach(() => {

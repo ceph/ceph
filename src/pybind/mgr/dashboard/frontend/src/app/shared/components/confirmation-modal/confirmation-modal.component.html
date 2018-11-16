@@ -11,8 +11,7 @@
       </div>
       <div class="modal-footer">
         <div class="button-group text-right">
-          <cd-submit-button i18n
-                            [form]="confirmationForm"
+          <cd-submit-button [form]="confirmationForm"
                             (submitAction)="onSubmit(confirmationForm.value)">
             {{ buttonText }}
           </cd-submit-button>
