@@ -134,6 +134,7 @@ protected:
                    const rgw_raw_obj& obj,
                    bufferlist *bl, off_t ofs, off_t end,
                    map<string, bufferlist> *attrs,
+		   bool raw_attrs,
                    rgw_cache_entry_info *cache_info,
                    boost::optional<obj_version>);
 
@@ -184,6 +185,7 @@ protected:
            GetObjState& state,
            const rgw_raw_obj& obj,
            map<string, bufferlist> *attrs,
+	   bool raw_attrs,
            real_time *lastmod,
            uint64_t *obj_size,
            RGWObjVersionTracker *objv_tracker);
