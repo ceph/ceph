@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,9 +7,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 #include "CephxSessionHandler.h"
@@ -21,7 +21,7 @@
 #include "common/config.h"
 #include "include/ceph_features.h"
 #include "msg/Message.h"
- 
+
 #define dout_subsys ceph_subsys_auth
 
 int CephxSessionHandler::_calc_signature(Message *m, uint64_t *psig)
@@ -181,3 +181,25 @@ int CephxSessionHandler::check_message_signature(Message *m)
   return 0;
 }
 
+int CephxSessionHandler::sign_bufferlist(bufferlist &in, bufferlist &out)
+{
+  char exp_buf[CryptoKey::get_max_outbuf_size(in.length())];
+
+  try {
+    const CryptoKey::in_slice_t sin{in.length(),
+        reinterpret_cast<const unsigned char *>(in.c_str())};
+    const CryptoKey::out_slice_t sout{
+        sizeof(exp_buf),
+        reinterpret_cast<unsigned char *>(&exp_buf)};
+    key.encrypt(cct, sin, sout);
+  }
+  catch (std::exception &e) {
+    lderr(cct) << __func__ << " failed to encrypt signature block" << dendl;
+    return -1;
+  }
+
+
+  out.append(exp_buf, sizeof(exp_buf));
+
+  return 0;
+}
