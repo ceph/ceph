@@ -300,13 +300,13 @@ static int create_new_bucket_instance(RGWRados *store,
   int ret = store->init_bucket_index(new_bucket_info, new_bucket_info.num_shards);
   if (ret < 0) {
     cerr << "ERROR: failed to init new bucket indexes: " << cpp_strerror(-ret) << std::endl;
-    return -ret;
+    return ret;
   }
 
   ret = store->put_bucket_instance_info(new_bucket_info, true, real_time(), &attrs);
   if (ret < 0) {
     cerr << "ERROR: failed to store new bucket instance info: " << cpp_strerror(-ret) << std::endl;
-    return -ret;
+    return ret;
   }
 
   return 0;
