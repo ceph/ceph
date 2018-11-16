@@ -1,4 +1,9 @@
 tasks:
+        - deepsea.create_pools:
+                cephfs:
+                openstack:
+        - deepsea.orch:
+                stage: 4
         - deepsea.validation:
         - exec:
                 client.salt_master:

@@ -2,6 +2,10 @@ roles:
         - [client.salt_master, mon.a, mgr.x, osd.0, mds.0, ganesha.0]
         - [client.0]
 tasks:
+        - deepsea.create_pools:
+                cephfs:
+        - deepsea.orch:
+                stage: 4
         - exec:
                 client.salt_master:
                         - 'ceph -s'

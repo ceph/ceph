@@ -844,13 +844,8 @@ class CreatePools(DeepSea):
                 self.config[key] = True
             if self.config[key]:
                 args.append(key)
-        if 'mds' in self.role_lookup_table:
-            args.append('mds')
         args = list(set(args))
-        if args:
-            self.scripts.create_all_pools_at_once(*args)
-        else:
-            self.log.warn("No pools specified - create_pools subtask did nothing")
+        self.scripts.create_all_pools_at_once(*args)
 
     def teardown(self):
         pass
@@ -1588,14 +1583,14 @@ function create_all_pools_at_once {
     ceph osd pool ls detail
 }
 #
-MDS=""
+CEPHFS=""
 OPENSTACK=""
 RBD=""
 OTHER=""
 for arg in "$@" ; do
     arg="${arg,,}"
     case "$arg" in
-        mds) MDS="$arg" ;;
+        cephfs) CEPHFS="$arg" ;;
         openstack) OPENSTACK="$arg" ;;
         rbd) RBD="$arg" ;;
         *) OTHER+=" $arg" ;;
@@ -1603,7 +1598,7 @@ for arg in "$@" ; do
 done
 #
 POOLS=""
-if [ $MDS ] ; then
+if [ $CEPHFS ] ; then
     POOLS+=" cephfs_data cephfs_metadata"
 fi
 if [ "$OPENSTACK" ] ; then

@@ -1,6 +1,8 @@
 roles:
         - [client.salt_master, mon.a, mgr.x, osd.0, rgw.0]
 tasks:
+        - deepsea.orch:
+                stage: 4
         - exec:
                 client.salt_master:
                         - 'ceph -s'

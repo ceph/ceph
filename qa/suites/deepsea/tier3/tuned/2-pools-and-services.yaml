@@ -1,5 +1,0 @@
-tasks:
-        - deepsea.create_pools:
-                openstack:
-        - deepsea.orch:
-                stage: 4
