@@ -234,6 +234,7 @@ void usage(ostream& out)
 "   --read-percent                   percent of operations that are read\n"
 "   --target-throughput              target throughput (in bytes)\n"
 "   --run-length                     total time (in seconds)\n"
+"   --offset-align                   at what boundary to align random op offsets"
 "CACHE POOLS OPTIONS:\n"
 "   --with-clones                    include clones when doing flush or evict\n"
 "OMAP OPTIONS:\n"
@@ -711,6 +712,7 @@ public:
   size_t max_ops;
   size_t max_backlog;
   size_t target_throughput;
+  size_t offset_align = 0;
   int run_length;
 
   enum {
@@ -915,6 +917,9 @@ void LoadGen::gen_op(LoadGenOp *op)
 
   if (off + len > info.len)
     off = info.len - len;
+
+  if (offset_align) 
+    off = p2align(off, offset_align);
 
   op->off = off;
   op->len = len;
@@ -1848,6 +1853,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   snap_t snapid = CEPH_NOSNAP;
   std::map<std::string, std::string>::const_iterator i;
 
+  uint64_t offset_align = 0;
   uint64_t min_obj_len = 0;
   uint64_t max_obj_len = 0;
   uint64_t min_op_len = 0;
@@ -2084,6 +2090,12 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (std::find_if_not(omap_key.begin(), omap_key.end(),
                          (int (*)(int))isprint) != omap_key.end()) {
         omap_key_pretty = "(binary key)";
+    }
+  }
+  i = opts.find("offset_align");
+  if (i != opts.end()) {
+    if (rados_sistrtoll(i, &offset_align)) {
+      return -EINVAL;
     }
   }
   i = opts.find("with-reference");
@@ -3239,6 +3251,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       lg.num_objs = num_objs;
     if (run_length)
       lg.run_length = run_length;
+    if (offset_align)
+      lg.offset_align = offset_align;
 
     cout << "run length " << run_length << " seconds" << std::endl;
     cout << "preparing " << lg.num_objs << " objects" << std::endl;
@@ -3872,6 +3886,8 @@ int main(int argc, const char **argv)
       opts["max-backlog"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--target-throughput", (char*)NULL)) {
       opts["target-throughput"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--offset-align", (char*)NULL)) {
+      opts["offset_align"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--read-percent", (char*)NULL)) {
       opts["read-percent"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--num-objects", (char*)NULL)) {
