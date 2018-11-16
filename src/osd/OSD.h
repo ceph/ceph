@@ -2008,6 +2008,7 @@ protected:
   void requeue_failures();
   void send_failures();
   void send_still_alive(epoch_t epoch, int osd, const entity_addrvec_t &addrs);
+  void cancel_pending_failures();
 
   ceph::coarse_mono_clock::time_point last_sent_beacon;
   Mutex min_last_epoch_clean_lock{"OSD::min_last_epoch_clean_lock"};
