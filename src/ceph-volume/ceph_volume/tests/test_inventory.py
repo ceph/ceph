@@ -65,7 +65,7 @@ class TestInventory(object):
         'path',
         'rejected_reasons',
         'sys_api',
-        'valid',
+        'available',
         'lvs',
     ]
 
