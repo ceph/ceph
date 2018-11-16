@@ -109,7 +109,7 @@ class OsdTest(DashboardTestCase):
             if 'safe-to-destroy' in self.jsonBody():
                 return self.jsonBody()['safe-to-destroy']
             return None
-        self.wait_until_equal(get_destroy_status, False, 10)
+        self.wait_until_equal(get_destroy_status, False, 30)
         self.assertStatus(200)
 
 
