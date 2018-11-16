@@ -958,6 +958,10 @@ OPTION(bluestore_bluefs_balance_interval, OPT_FLOAT) // how often (sec) to balan
 // how often (sec) to dump allocator on allocation failure
 OPTION(bluestore_bluefs_alloc_failure_dump_interval, OPT_FLOAT)
 
+// Enforces db sync with legacy bluefs extents information on close.
+// Enables downgrades to pre-nautilus releases
+OPTION(bluestore_bluefs_db_compatibility, OPT_BOOL)
+
 // If you want to use spdk driver, you need to specify NVMe serial number here
 // with "spdk:" prefix.
 // Users can use 'lspci -vvv -d 8086:0953 | grep "Device Serial Number"' to
