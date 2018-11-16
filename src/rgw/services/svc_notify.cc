@@ -260,7 +260,9 @@ int RGWSI_Notify::do_start()
   }
 
   shutdown_cb = new RGWSI_Notify_ShutdownCB(this);
-  finisher_svc->register_caller(shutdown_cb, &finisher_handle);
+  int handle;
+  finisher_svc->register_caller(shutdown_cb, &handle);
+  finisher_handle = handle;
 
   return 0;
 }
@@ -271,7 +273,9 @@ void RGWSI_Notify::shutdown()
     return;
   }
 
-  finisher_svc->unregister_caller(finisher_handle);
+  if (finisher_handle) {
+    finisher_svc->unregister_caller(*finisher_handle);
+  }
   finalize_watch();
 
   delete shutdown_cb;
