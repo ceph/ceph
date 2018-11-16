@@ -7,7 +7,7 @@ from ceph_volume.api import lvm
 from ceph_volume.util import disk
 
 report_template = """
-{dev:<25} {size:<12} {rot!s:<7} {valid!s:<7} {model}"""
+{dev:<25} {size:<12} {rot!s:<7} {available!s:<9} {model}"""
 
 
 class Devices(object):
@@ -28,7 +28,7 @@ class Devices(object):
                 size='Size',
                 rot='rotates',
                 model='Model name',
-                valid='valid',
+                available='available',
             )]
         for device in sorted(self.devices):
             output.append(device.report())
@@ -47,8 +47,8 @@ class Device(object):
      {attr:<25} {value}"""
 
     report_fields = [
-        '_rejected_reasons',
-        '_valid',
+        'rejected_reasons',
+        'available',
         'path',
         'sys_api',
     ]
@@ -77,22 +77,20 @@ class Device(object):
         self.sys_api = {}
         self._exists = None
         self._is_lvm_member = None
-        self._valid = False
-        self._rejected_reasons = []
         self._parse()
-        self.is_valid
+        self.available, self.rejected_reasons = self._check_reject_reasons()
 
     def __lt__(self, other):
         '''
         Implementing this method and __eq__ allows the @total_ordering
         decorator to turn the Device class into a totally ordered type.
         This can slower then implementing all comparison operations.
-        This sorting should put valid devices before invalid devices and sort
-        on the path otherwise (str sorting).
+        This sorting should put available devices before unavailable devices
+        and sort on the path otherwise (str sorting).
         '''
-        if self._valid == other._valid:
+        if self.available == other.available:
             return self.path < other.path
-        return self._valid and not other._valid
+        return self.available and not other.available
 
     def __eq__(self, other):
         return self.path == other.path
@@ -164,7 +162,7 @@ class Device(object):
             dev=self.abspath,
             size=self.size_human,
             rot=self.rotational,
-            valid=self.is_valid,
+            available=self.available,
             model=self.model,
         )
 
@@ -270,21 +268,21 @@ class Device(object):
                    if lv.tags.get("ceph.type") in ["data", "block"]]
         return any(osd_ids)
 
-
-    @property
-    def is_valid(self):
-        def reject_device(item, value, reason):
-            try:
-                if self.sys_api[item] == value:
-                    self._rejected_reasons.append(reason)
-            except KeyError:
-                pass
-        reject_device('removable', 1, 'removable')
-        reject_device('ro', 1, 'read-only')
-        reject_device('locked', 1, 'locked')
-
-        self._valid = len(self._rejected_reasons) == 0
-        return self._valid
+    def _check_reject_reasons(self):
+        """
+        This checks a number of potential reject reasons for a drive and
+        returns a tuple (boolean, list). The first element denotes whether a
+        drive is available or not, the second element lists reasons in case a
+        drive is not available.
+        """
+        reasons = [
+            ('removable', 1, 'removable'),
+            ('ro', 1, 'read-only'),
+            ('locked', 1, 'locked'),
+        ]
+        rejected = [reason for (k, v, reason) in reasons if
+                    self.sys_api.get(k, '') == v]
+        return len(rejected) == 0, rejected
 
 
 class CephDiskDevice(object):
