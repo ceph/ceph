@@ -355,7 +355,7 @@ TEST(Log, GarbleRecovery)
 
   std::string long_message(1000,'c');
   ldout(g_ceph_context, 0) << long_message << dendl;
-  ldout(g_ceph_context, 0) << "Prologue" << (char*)nullptr << long_message << dendl;
+  ldout(g_ceph_context, 0) << "Prologue" << (std::streambuf*)nullptr << long_message << dendl;
   ldout(g_ceph_context, 0) << "Epitaph" << long_message << dendl;
 
   g_ceph_context->_log = saved;
