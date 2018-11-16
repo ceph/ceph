@@ -1,5 +1,7 @@
 import { Component } from '@angular/core';
 
+import { I18n } from '@ngx-translate/i18n-polyfill';
+
 import { RgwDaemonService } from '../../../shared/api/rgw-daemon.service';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
@@ -18,21 +20,22 @@ export class RgwDaemonListComponent {
 
   constructor(
     private rgwDaemonService: RgwDaemonService,
-    cephShortVersionPipe: CephShortVersionPipe
+    cephShortVersionPipe: CephShortVersionPipe,
+    private i18n: I18n
   ) {
     this.columns = [
       {
-        name: 'ID',
+        name: this.i18n('ID'),
         prop: 'id',
         flexGrow: 2
       },
       {
-        name: 'Hostname',
+        name: this.i18n('Hostname'),
         prop: 'server_hostname',
         flexGrow: 2
       },
       {
-        name: 'Version',
+        name: this.i18n('Version'),
         prop: 'version',
         flexGrow: 1,
         pipe: cephShortVersionPipe

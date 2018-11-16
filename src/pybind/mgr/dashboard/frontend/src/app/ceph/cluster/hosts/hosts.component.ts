@@ -1,5 +1,7 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
+import { I18n } from '@ngx-translate/i18n-polyfill';
+
 import { HostService } from '../../../shared/api/host.service';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
@@ -27,7 +29,8 @@ export class HostsComponent implements OnInit {
   constructor(
     private authStorageService: AuthStorageService,
     private hostService: HostService,
-    private cephShortVersionPipe: CephShortVersionPipe
+    private cephShortVersionPipe: CephShortVersionPipe,
+    private i18n: I18n
   ) {
     this.permissions = this.authStorageService.getPermissions();
   }
@@ -35,18 +38,18 @@ export class HostsComponent implements OnInit {
   ngOnInit() {
     this.columns = [
       {
-        name: 'Hostname',
+        name: this.i18n('Hostname'),
         prop: 'hostname',
         flexGrow: 1
       },
       {
-        name: 'Services',
+        name: this.i18n('Services'),
         prop: 'services',
         flexGrow: 3,
         cellTemplate: this.servicesTpl
       },
       {
-        name: 'Version',
+        name: this.i18n('Version'),
         prop: 'ceph_version',
         flexGrow: 1,
         pipe: this.cephShortVersionPipe

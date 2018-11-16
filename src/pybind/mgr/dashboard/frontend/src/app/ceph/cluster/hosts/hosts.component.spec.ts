@@ -5,7 +5,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { TabsModule } from 'ngx-bootstrap/tabs';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
+import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { HostService } from '../../../shared/api/host.service';
 import { Permissions } from '../../../shared/models/permissions';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
@@ -32,7 +32,7 @@ describe('HostsComponent', () => {
       BsDropdownModule.forRoot(),
       RouterTestingModule
     ],
-    providers: [{ provide: AuthStorageService, useValue: fakeAuthStorageService }],
+    providers: [{ provide: AuthStorageService, useValue: fakeAuthStorageService }, i18nProviders],
     declarations: [HostsComponent, HostDetailsComponent]
   });
 

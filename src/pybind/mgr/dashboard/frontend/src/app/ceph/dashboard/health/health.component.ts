@@ -1,6 +1,7 @@
 import { ViewportScroller } from '@angular/common';
 import { Component, OnDestroy, OnInit } from '@angular/core';
 
+import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 
 import { DashboardService } from '../../../shared/api/dashboard.service';
@@ -16,7 +17,8 @@ export class HealthComponent implements OnInit, OnDestroy {
 
   constructor(
     private dashboardService: DashboardService,
-    public viewportScroller: ViewportScroller
+    public viewportScroller: ViewportScroller,
+    private i18n: I18n
   ) {}
 
   ngOnInit() {
@@ -40,9 +42,9 @@ export class HealthComponent implements OnInit, OnDestroy {
     const ratioLabels = [];
     const ratioData = [];
 
-    ratioLabels.push('Writes');
+    ratioLabels.push(this.i18n('Writes'));
     ratioData.push(this.contentData.client_perf.write_op_per_sec);
-    ratioLabels.push('Reads');
+    ratioLabels.push(this.i18n('Reads'));
     ratioData.push(this.contentData.client_perf.read_op_per_sec);
 
     chart.dataset[0].data = ratioData;
@@ -63,13 +65,16 @@ export class HealthComponent implements OnInit, OnDestroy {
     if (chart === 'doughnut') {
       chart.options.cutoutPercentage = 65;
     }
-    chart.labels = [`Used (${percentUsed}%)`, `Avail. (${percentAvailable}%)`];
+    chart.labels = [
+      `${this.i18n('Used')} (${percentUsed}%)`,
+      `${this.i18n('Avail.')} (${percentAvailable}%)`
+    ];
   }
 
   preparePgStatus(chart, data) {
-    const pgCategoryClean = 'Clean';
+    const pgCategoryClean = this.i18n('Clean');
     const pgCategoryCleanStates = ['active', 'clean'];
-    const pgCategoryWarning = 'Warning';
+    const pgCategoryWarning = this.i18n('Warning');
     const pgCategoryWarningStates = [
       'backfill_toofull',
       'backfill_unfound',
@@ -83,8 +88,8 @@ export class HealthComponent implements OnInit, OnDestroy {
       'stale',
       'undersized'
     ];
-    const pgCategoryUnknown = 'Unknown';
-    const pgCategoryWorking = 'Working';
+    const pgCategoryUnknown = this.i18n('Unknown');
+    const pgCategoryWorking = this.i18n('Working');
     const pgCategoryWorkingStates = [
       'activating',
       'backfill_wait',

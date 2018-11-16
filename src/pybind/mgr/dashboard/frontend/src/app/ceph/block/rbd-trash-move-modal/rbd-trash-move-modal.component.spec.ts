@@ -8,7 +8,7 @@ import { ToastModule } from 'ng2-toastr';
 import { BsDatepickerModule } from 'ngx-bootstrap/datepicker';
 import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
+import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { SharedModule } from '../../../shared/shared.module';
 import { RbdTrashMoveModalComponent } from './rbd-trash-move-modal.component';
@@ -28,7 +28,7 @@ describe('RbdTrashMoveModalComponent', () => {
       BsDatepickerModule.forRoot()
     ],
     declarations: [RbdTrashMoveModalComponent],
-    providers: [BsModalRef, BsModalService]
+    providers: [BsModalRef, BsModalService, i18nProviders]
   });
 
   beforeEach(() => {

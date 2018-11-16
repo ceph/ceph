@@ -3,7 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { of } from 'rxjs';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
+import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { TcmuIscsiService } from '../../../shared/api/tcmu-iscsi.service';
 import { CephShortVersionPipe } from '../../../shared/pipes/ceph-short-version.pipe';
 import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
@@ -36,7 +36,8 @@ describe('IscsiComponent', () => {
       FormatterService,
       RelativeDatePipe,
       ListPipe,
-      { provide: TcmuIscsiService, useValue: fakeService }
+      { provide: TcmuIscsiService, useValue: fakeService },
+      i18nProviders
     ]
   });
 

@@ -1,4 +1,5 @@
 export class ErasureCodeProfileFormTooltips {
+  // TODO: I18N
   // Copied from /srv/cephmgr/ceph-dev/doc/rados/operations/erasure-code.*.rst
   k = `Each object is split in data-chunks parts, each stored on a different OSD.`;
 

@@ -4,7 +4,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { TabsModule } from 'ngx-bootstrap/tabs';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
+import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../shared/shared.module';
 import { PerformanceCounterModule } from '../../performance-counter/performance-counter.module';
 import { RgwDaemonDetailsComponent } from '../rgw-daemon-details/rgw-daemon-details.component';
@@ -22,7 +22,8 @@ describe('RgwDaemonListComponent', () => {
       PerformanceCounterModule,
       SharedModule,
       RouterTestingModule
-    ]
+    ],
+    providers: i18nProviders
   });
 
   beforeEach(() => {

@@ -218,6 +218,62 @@ Example:
       Some <strong>helper</strong> html text
     </cd-helper>
 
+I18N
+----
+
+How to extract messages from source code?
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+To extract the I18N messages from the templates and the TypeScript files just
+run the following command in ``src/pybind/mgr/dashboard/frontend``:
+
+  $ npm run i18n
+
+This will extract all marked messages from the HTML templates first and then
+add all marked strings from the TypeScript files to the translation template.
+Since the extraction from TypeScript files is still not supported by Angular
+itself, we are using the
+`ngx-translator <https://github.com/ngx-translate/i18n-polyfill>`_ extractor to
+parse the TypeScript files.
+
+When the command ran successfully, it should have created or updated the file
+``src/locale/messages.xlf``.
+
+Supported languages
+~~~~~~~~~~~~~~~~~~~
+
+All our supported languages should be registeredd in
+``supported-languages.enum.ts``, this will then provide that list to both the
+language selectors in the frontend.
+
+Translating process
+~~~~~~~~~~~~~~~~~~~
+
+To facilitate the translation process of the dashboard we are using a web tool
+called `transifex <https://www.transifex.com/>`_.
+
+If you wish to help translating to any language just go to our `transifex
+project page <https://www.transifex.com/ceph/ceph-dashboard/>`_, join the
+project and you can start translating immediately.
+
+All translations will then be reviewed and later pushed upstream.
+
+Updating translated messages
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Any time there are new messages translated and reviewed in a specific language
+we should update the translation file upstream.
+
+To do that, we need to download the language xlf file from transifex and replace
+the current one in the repository. Since Angular doesn't support missing
+translations, we need to do an extra step and fill all the untranslated strings
+with the source string.
+
+Each language file should be placed in ``src/locale/messages.<locale-id>.xlf``.
+For example, the path for german would be ``src/locale/messages.de-DE.xlf``.
+``<locale-id>`` should match the id previouisly inserted in
+``supported-languages.enum.ts``.
+
 Backend Development
 -------------------
 

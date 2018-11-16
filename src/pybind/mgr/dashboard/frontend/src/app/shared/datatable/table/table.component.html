@@ -1,7 +1,6 @@
-<cd-error-panel i18n
-                *ngIf="loadingError">
-  Failed to load data.
-</cd-error-panel>
+<cd-error-panel *ngIf="loadingError"
+                i18n>Failed to load data.</cd-error-panel>
+
 <div class="dataTables_wrapper">
   <div class="dataTables_header clearfix form-inline"
        *ngIf="toolHeader">
@@ -109,11 +108,15 @@
                    let-offset="offset"
                    let-isVisible="isVisible">
         <div class="page-count">
-          <span *ngIf="selectionType"
-                i18n>{{ selectedCount }} selected / </span>
-          <span *ngIf="rowCount != data?.length"
-                i18n>{{ rowCount }} found / </span>
-          <span i18n>{{ data?.length || 0 }} total</span>
+          <span *ngIf="selectionType">
+            {{ selectedCount }} <ng-container i18n="X selected">selected</ng-container> /
+          </span>
+          <span *ngIf="rowCount != data?.length">
+            {{ rowCount }} <ng-container i18n="X found">found</ng-container> /
+          </span>
+          <span>
+            {{ data?.length || 0 }} <ng-container i18n="X total">total</ng-container>
+          </span>
         </div>
         <datatable-pager [pagerLeftArrowIcon]="paginationClasses.pagerLeftArrow"
                          [pagerRightArrowIcon]="paginationClasses.pagerRightArrow"

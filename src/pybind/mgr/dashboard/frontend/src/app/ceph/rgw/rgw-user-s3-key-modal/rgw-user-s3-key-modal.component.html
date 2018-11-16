@@ -1,7 +1,6 @@
 <div class="modal-header">
   <h4 class="modal-title pull-left"
-      i18n>S3 key
-  </h4>
+      i18n>S3 key</h4>
   <button type="button"
           class="close pull-right"
           aria-label="Close"
@@ -19,8 +18,8 @@
     <div class="form-group"
          [ngClass]="{'has-error': formGroup.showError('user', frm)}">
       <label class="control-label col-sm-3"
-             for="user"
-             i18n>Username
+             for="user">
+        <ng-container i18n>Username</ng-container>
         <span class="required"
               *ngIf="!viewing">
         </span>
@@ -39,16 +38,13 @@
                 autofocus>
           <option i18n
                   *ngIf="userCandidates !== null"
-                  [ngValue]="null">-- Select a username --
-          </option>
+                  [ngValue]="null">-- Select a username --</option>
           <option *ngFor="let userCandidate of userCandidates"
                   [value]="userCandidate">{{ userCandidate }}</option>
         </select>
         <span class="help-block"
               *ngIf="formGroup.showError('user', frm, 'required')"
-              i18n>
-          This field is required.
-        </span>
+              i18n>This field is required.</span>
       </div>
     </div>
 
@@ -61,8 +57,7 @@
                  type="checkbox"
                  formControlName="generate_key">
           <label for="generate_key"
-                 i18n>Auto-generate key
-          </label>
+                 i18n>Auto-generate key</label>
         </div>
       </div>
     </div>
@@ -72,8 +67,8 @@
          [ngClass]="{'has-error': formGroup.showError('access_key', frm)}"
          *ngIf="!formGroup.getValue('generate_key')">
       <label class="control-label col-sm-3"
-             for="access_key"
-             i18n>Access key
+             for="access_key">
+        <ng-container i18n>Access key</ng-container>
         <span class="required"
               *ngIf="!viewing">
         </span>
@@ -98,9 +93,7 @@
         </div>
         <span class="help-block"
               *ngIf="formGroup.showError('access_key', frm, 'required')"
-              i18n>
-          This field is required.
-        </span>
+              i18n>This field is required.</span>
       </div>
     </div>
 
@@ -109,8 +102,8 @@
          [ngClass]="{'has-error': formGroup.showError('secret_key', frm)}"
          *ngIf="!formGroup.getValue('generate_key')">
       <label class="control-label col-sm-3"
-             for="secret_key"
-             i18n>Secret key
+             for="secret_key">
+        <ng-container i18n>Secret key</ng-container>
         <span class="required"
               *ngIf="!viewing">
         </span>
@@ -135,9 +128,7 @@
         </div>
         <span class="help-block"
               *ngIf="formGroup.showError('secret_key', frm, 'required')"
-              i18n>
-          This field is required.
-        </span>
+              i18n>This field is required.</span>
       </div>
     </div>
 
@@ -146,12 +137,10 @@
     <cd-submit-button *ngIf="!viewing"
                       (submitAction)="onSubmit()"
                       [form]="formGroup"
-                      i18n>Add
-    </cd-submit-button>
+                      i18n>Add</cd-submit-button>
     <button class="btn btn-sm btn-default"
             type="button"
             (click)="bsModalRef.hide()"
-            i18n>Close
-    </button>
+            i18n>Close</button>
   </div>
 </form>

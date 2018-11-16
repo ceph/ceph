@@ -1,7 +1,18 @@
+import { TestBed } from '@angular/core/testing';
+
+import { configureTestBed, i18nProviders } from '../../../testing/unit-test-helper';
 import { MdsSummaryPipe } from './mds-summary.pipe';
 
 describe('MdsSummaryPipe', () => {
-  const pipe = new MdsSummaryPipe();
+  let pipe: MdsSummaryPipe;
+
+  configureTestBed({
+    providers: [MdsSummaryPipe, i18nProviders]
+  });
+
+  beforeEach(() => {
+    pipe = TestBed.get(MdsSummaryPipe);
+  });
 
   it('create an instance', () => {
     expect(pipe).toBeTruthy();

@@ -3,7 +3,7 @@ import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 import * as _ from 'lodash';
 import { ToastsManager } from 'ng2-toastr';
 
-import { configureTestBed } from '../../../testing/unit-test-helper';
+import { configureTestBed, i18nProviders } from '../../../testing/unit-test-helper';
 import { NotificationType } from '../enum/notification-type.enum';
 import { FinishedTask } from '../models/finished-task';
 import { NotificationService } from './notification.service';
@@ -21,7 +21,8 @@ describe('NotificationService', () => {
     providers: [
       NotificationService,
       TaskMessageService,
-      { provide: ToastsManager, useValue: toastFakeService }
+      { provide: ToastsManager, useValue: toastFakeService },
+      i18nProviders
     ]
   });
 

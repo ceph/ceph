@@ -1,5 +1,6 @@
 import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
+import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as moment from 'moment';
 import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 import { of } from 'rxjs';
@@ -72,7 +73,8 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
     private taskManagerService: TaskManagerService,
     private notificationService: NotificationService,
     private summaryService: SummaryService,
-    private taskListService: TaskListService
+    private taskListService: TaskListService,
+    private i18n: I18n
   ) {
     this.permission = this.authStorageService.getPermissions().rbdImage;
     const actions = new RbdSnapshotActionsModel();
@@ -95,34 +97,34 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
   ngOnInit() {
     this.columns = [
       {
-        name: 'Name',
+        name: this.i18n('Name'),
         prop: 'name',
         cellTransformation: CellTemplate.executing,
         flexGrow: 2
       },
       {
-        name: 'Size',
+        name: this.i18n('Size'),
         prop: 'size',
         flexGrow: 1,
         cellClass: 'text-right',
         pipe: this.dimlessBinaryPipe
       },
       {
-        name: 'Provisioned',
+        name: this.i18n('Provisioned'),
         prop: 'disk_usage',
         flexGrow: 1,
         cellClass: 'text-right',
         pipe: this.dimlessBinaryPipe
       },
       {
-        name: 'State',
+        name: this.i18n('State'),
         prop: 'is_protected',
         flexGrow: 1,
         cellClass: 'text-center',
         cellTemplate: this.protectTpl
       },
       {
-        name: 'Created',
+        name: this.i18n('Created'),
         prop: 'timestamp',
         flexGrow: 1,
         pipe: this.cdDatePipe
@@ -253,8 +255,8 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
   rollbackModal() {
     const snapshotName = this.selection.selected[0].name;
     const initialState = {
-      titleText: 'RBD snapshot rollback',
-      buttonText: 'Rollback',
+      titleText: this.i18n('RBD snapshot rollback'),
+      buttonText: this.i18n('Rollback'),
       bodyTpl: this.rollbackTpl,
       bodyData: {
         snapName: `${this.poolName}/${this.rbdName}@${snapshotName}`
@@ -271,7 +273,7 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
     const snapshotName = this.selection.selected[0].name;
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
       initialState: {
-        itemDescription: 'RBD snapshot',
+        itemDescription: this.i18n('RBD snapshot'),
         submitAction: () => this._asyncTask('deleteSnapshot', 'rbd/snap/delete', snapshotName)
       }
     });

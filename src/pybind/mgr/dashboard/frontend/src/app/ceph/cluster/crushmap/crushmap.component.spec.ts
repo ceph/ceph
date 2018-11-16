@@ -35,7 +35,7 @@ describe('CrushmapComponent', () => {
   it('should display right title', () => {
     fixture.detectChanges();
     const span = debugElement.nativeElement.querySelector('span');
-    expect(span.textContent).toContain(component.panelTitle);
+    expect(span.textContent).toBe('CRUSH map viewer');
   });
 
   describe('test tree', () => {

@@ -10,14 +10,11 @@ import { DashboardService } from '../../../shared/api/dashboard.service';
   styleUrls: ['./crushmap.component.scss']
 })
 export class CrushmapComponent implements OnInit {
-  panelTitle: string;
   tree: TreeModel;
   metadata: any;
   metadataKeyMap: { [key: number]: number } = {};
 
-  constructor(private dashboardService: DashboardService) {
-    this.panelTitle = 'CRUSH map viewer';
-  }
+  constructor(private dashboardService: DashboardService) {}
 
   ngOnInit() {
     this.dashboardService.getHealth().subscribe((data: any) => {

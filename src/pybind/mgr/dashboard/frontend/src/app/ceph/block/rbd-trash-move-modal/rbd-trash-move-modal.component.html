@@ -29,16 +29,12 @@
                  [bsConfig]="bsConfig"
                  formControlName="expiresAt"
                  bsDatepicker>
-          <span i18n
-                class="help-block"
-                *ngIf="moveForm.showError('expiresAt', formDir, 'format')">
-            Wrong date format. Please use "YYYY-MM-DD HH:mm:ss".
-          </span>
-          <span i18n
-                class="help-block"
-                *ngIf="moveForm.showError('expiresAt', formDir, 'expired')">
-            Protection has already expired. Please pick a future date or leave it empty.
-          </span>
+          <span class="help-block"
+                *ngIf="moveForm.showError('expiresAt', formDir, 'format')"
+                i18n>Wrong date format. Please use "YYYY-MM-DD HH:mm:ss".</span>
+          <span class="help-block"
+                *ngIf="moveForm.showError('expiresAt', formDir, 'expired')"
+                i18n>Protection has already expired. Please pick a future date or leave it empty.</span>
         </div>
       </div>
 
@@ -46,9 +42,7 @@
         <div class="button-group text-right">
           <cd-submit-button i18n
                             [form]="moveForm"
-                            (submitAction)="moveImage()">
-            Move Image
-          </cd-submit-button>
+                            (submitAction)="moveImage()">Move Image</cd-submit-button>
           <button i18n
                   type="button"
                   class="btn btn-sm btn-default"
