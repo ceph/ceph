@@ -1787,6 +1787,19 @@ echo "According to \"ceph --version\", the ceph upstream version is ->$CEPH_CEPH
 test -n "$RPM_CEPH_VERSION"
 test "$RPM_CEPH_VERSION" = "$CEPH_CEPH_VERSION"
 """,
+        "rados_write_test": """Write a RADOS object and read it back
+#
+# NOTE: function assumes the pool "write_test" already exists. Pool can be
+# created by calling e.g. "create_all_pools_at_once write_test" immediately
+# before calling this function.
+#
+set -ex
+ceph osd pool application enable write_test deepsea_qa
+echo "dummy_content" > verify.txt
+rados -p write_test put test_object verify.txt
+rados -p write_test get test_object verify_returned.txt
+test "x$(cat verify.txt)" = "x$(cat verify_returned.txt)"
+""",
         }
 
     def __init__(self, master_remote, logger):
@@ -1842,6 +1855,13 @@ test "$RPM_CEPH_VERSION" = "$CEPH_CEPH_VERSION"
             args=[proposals_dir, storage_profile, hostname],
             )
 
+    def rados_write_test(self, *args, **kwargs):
+        remote_run_script_as_root(
+            self.master_remote,
+            'rados_write_test.sh',
+            self.script_dict["rados_write_test"],
+            )
+
     def remove_storage_only_node(self, *args, **kwargs):
         args = ['--cli'] if kwargs['cli'] else []
         remote_run_script_as_root(
@@ -1882,12 +1902,12 @@ class Validation(DeepSea):
     (methods to be run) and the values are the config dictionaries of each test
     to be run.
 
-    Basic validation tests are triggered by default, while others have to be
-    explicitly mentioned in the YAML:
+    Validation tests with lines like this
 
-    systemd_units_active    (triggered by default) validates that the systemd
-                            units corresponding to the teuthology roles
-                            stanza are active on the respective test nodes
+        self._apply_config_default("foo_test", None)
+
+    are triggered by default, while others have to be explicitly mentioned in
+    the YAML.
     """
 
     err_prefix = '(validation subtask) '
@@ -1931,6 +1951,9 @@ class Validation(DeepSea):
             assert '--striper' not in output, \
                 "ceph is compiled with libradosstriper"
         self.log.info("OK")
+
+    def rados_write_test(self, **kwargs):
+        self.scripts.rados_write_test()
 
     def systemd_units_active(self, **kwargs):
         """

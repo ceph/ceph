@@ -1,5 +1,8 @@
 tasks:
+        - deepsea.create_pools:
+                write_test:
         - exec:
                 client.salt_master:
                         - 'ceph -s'
         - deepsea.validation:
+                rados_write_test:

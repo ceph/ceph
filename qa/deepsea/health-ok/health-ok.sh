@@ -159,8 +159,8 @@ test "$STORAGE_NODES" = "$(number_of_hosts_in_ceph_osd_tree)"
 REPEAT_STAGE_0=""
 ceph_log_grep_enoent_eaccess
 test_systemd_ceph_osd_target_wants
-rados_write_test
-ceph_version_test
+#rados_write_test
+#ceph_version_test
 if [ -n "$RGW" ] ; then
     rgw_curl_test
     test -n "$SSL" && validate_rgw_cert_perm
