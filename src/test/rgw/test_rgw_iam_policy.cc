@@ -941,7 +941,7 @@ TEST(MatchPolicy, Resource)
   EXPECT_TRUE(match_policy("a:b:c", "a:b:c", flag));
   EXPECT_FALSE(match_policy("a:b:c", "A:B:C", flag)); // case sensitive
   EXPECT_TRUE(match_policy("a:*:e", "a:bcd:e", flag));
-  EXPECT_FALSE(match_policy("a:*", "a:b:c", flag)); // cannot span segments
+  EXPECT_TRUE(match_policy("a:*", "a:b:c", flag)); // can span segments
 }
 
 TEST(MatchPolicy, ARN)
@@ -959,5 +959,5 @@ TEST(MatchPolicy, String)
   EXPECT_TRUE(match_policy("a:b:c", "a:b:c", flag));
   EXPECT_FALSE(match_policy("a:b:c", "A:B:C", flag)); // case sensitive
   EXPECT_TRUE(match_policy("a:*:e", "a:bcd:e", flag));
-  EXPECT_FALSE(match_policy("a:*", "a:b:c", flag)); // cannot span segments
+  EXPECT_TRUE(match_policy("a:*", "a:b:c", flag)); // can span segments
 }
