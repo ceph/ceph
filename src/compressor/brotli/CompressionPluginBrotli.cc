@@ -1,6 +1,8 @@
 #include "acconfig.h"
 #include "ceph_ver.h"
 #include "CompressionPluginBrotli.h"
+#include "common/ceph_context.h"
+
 
 const char *__ceph_plugin_version()
 {
