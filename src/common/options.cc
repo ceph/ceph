@@ -6262,13 +6262,32 @@ std::vector<Option> get_rgw_options() {
     .set_default(true)
     .set_description("Enable stats on bucket listing in Swift"),
 
-    Option("rgw_reshard_num_logs", Option::TYPE_INT, Option::LEVEL_DEV)
+    Option("rgw_reshard_num_logs", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(16)
-    .set_description(""),
+    .set_min(1)
+    .set_description("")
+    .add_service("rgw"),
 
-    Option("rgw_reshard_bucket_lock_duration", Option::TYPE_INT, Option::LEVEL_DEV)
-    .set_default(120)
-    .set_description(""),
+    Option("rgw_reshard_bucket_lock_duration", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(360)
+    .set_min(30)
+    .set_description("Number of seconds the timeout on the reshard locks (bucket reshard lock and reshard log lock) are set to. As a reshard proceeds these locks can be renewed/extended. If too short, reshards cannot complete and will fail, causing a future reshard attempt. If too long a hung or crashed reshard attempt will keep the bucket locked for an extended period, not allowing RGW to detect the failed reshard attempt and recover.")
+    .add_tag("performance")
+    .add_service("rgw"),
+    
+    Option("rgw_reshard_batch_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(64)
+    .set_min(8)
+    .set_description("Number of reshard entries to batch together before sending the operations to the CLS back-end")
+    .add_tag("performance")
+    .add_service("rgw"),
+
+    Option("rgw_reshard_max_aio", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(128)
+    .set_min(16)
+    .set_description("Maximum number of outstanding asynchronous I/O operations to allow at a time during resharding")
+    .add_tag("performance")
+    .add_service("rgw"),
 
     Option("rgw_trust_forwarded_https", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
@@ -6358,7 +6377,8 @@ std::vector<Option> get_rgw_options() {
 
     Option("rgw_reshard_thread_interval", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(10_min)
-    .set_description(""),
+    .set_min(10_min)
+    .set_description("Number of seconds between processing of reshard log entries"),
 
     Option("rgw_cache_expiry_interval", Option::TYPE_UINT,
 	   Option::LEVEL_ADVANCED)
