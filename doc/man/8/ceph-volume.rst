@@ -1,8 +1,8 @@
 :orphan:
 
-========================================
- ceph-volume -- Ceph OSD deployment tool
-========================================
+=======================================================
+ ceph-volume -- Ceph OSD deployment and inspection tool
+=======================================================
 
 .. program:: ceph-volume
 
@@ -11,6 +11,8 @@ Synopsis
 
 | **ceph-volume** [-h] [--cluster CLUSTER] [--log-level LOG_LEVEL]
 |                 [--log-path LOG_PATH]
+
+| **ceph-volume** **inventory**
 
 | **ceph-volume** **lvm** [ *trigger* | *create* | *activate* | *prepare*
 | *zap* | *list* | *batch*]
@@ -33,6 +35,27 @@ them.
 
 Commands
 ========
+
+inventory
+---------
+
+This subcommand provides information about a host's physical disc inventory and
+reports metadata about these discs. Among this metadata one can find disc
+specific data items (like model, size, rotational or solid state) as well as
+data items specific to ceph using a device, such as if it is available for
+use with ceph or if logical volumes are present.
+
+Examples::
+
+    ceph-volume inventory
+    ceph-volume inventory /dev/sda
+    ceph-volume inventory --format json-pretty
+
+Optional arguments:
+
+* [-h, --help]          show the help message and exit
+* [--format]            report format, valid values are ``plain`` (default),
+                        ``json`` and ``json-pretty``
 
 lvm
 ---
