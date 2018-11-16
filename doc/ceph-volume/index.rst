@@ -11,11 +11,17 @@ follow a predictable, and robust way of preparing, activating, and starting OSDs
 
 
 **Command Line Subcommands**
+
 There is currently support for ``lvm``, and plain disks (with GPT partitions)
 that may have been deployed with ``ceph-disk``.
 
 * :ref:`ceph-volume-lvm`
 * :ref:`ceph-volume-simple`
+
+**Node inventory**
+
+The :ref:`ceph-volume-inventory` subcommand provides information and metadata
+about a nodes physical disk inventory.
 
 
 Migrating
@@ -55,6 +61,7 @@ and ``ceph-disk`` is fully disabled. Encryption is fully supported.
 
    intro
    systemd
+   inventory
    lvm/index
    lvm/activate
    lvm/batch
