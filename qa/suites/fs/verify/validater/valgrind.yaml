@@ -22,6 +22,7 @@ overrides:
       mon: [--tool=memcheck, --leak-check=full, --show-reachable=yes]
       osd: [--tool=memcheck]
       mds: [--tool=memcheck]
+      mgr: [--tool=memcheck]
   ceph-fuse:
     client.0:
       valgrind: [--tool=memcheck, --leak-check=full, --show-reachable=yes]

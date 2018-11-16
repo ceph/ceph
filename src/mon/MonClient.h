@@ -163,6 +163,7 @@ private:
   Finisher finisher;
 
   bool initialized;
+  bool stopping = false;
   bool no_keyring_disabled_cephx;
 
   LogClient *log_client;
