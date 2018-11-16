@@ -381,7 +381,7 @@ bool ARN::match(const ARN& candidate) const {
     return false;
   }
 
-  if (!match_policy(resource, candidate.resource, MATCH_POLICY_ARN)) {
+  if (!match_policy(resource, candidate.resource, MATCH_POLICY_RESOURCE)) {
     return false;
   }
 
