@@ -206,7 +206,11 @@ int RGWSI_SysObj_Core::read(RGWSysObjectCtxBase& obj_ctx,
   map<string, bufferlist> unfiltered_attrset;
 
   if (attrs) {
-    op.getxattrs(&unfiltered_attrset, nullptr);
+    if (raw_attrs) {
+      op.getxattrs(attrs, nullptr);
+    } else {
+      op.getxattrs(&unfiltered_attrset, nullptr);
+    }
   }
 
   RGWSI_RADOS::Obj rados_obj;
@@ -230,12 +234,8 @@ int RGWSI_SysObj_Core::read(RGWSysObjectCtxBase& obj_ctx,
     return -ECANCELED;
   }
 
-  if (attrs) {
-    if (raw_attrs) {
-      attrs->swap(unfiltered_attrset);
-    } else {
-      rgw_filter_attrset(unfiltered_attrset, RGW_ATTR_PREFIX, attrs);
-    }
+  if (attrs && !raw_attrs) {
+    rgw_filter_attrset(unfiltered_attrset, RGW_ATTR_PREFIX, attrs);
   }
 
   read_state.last_ver = op_ver;
