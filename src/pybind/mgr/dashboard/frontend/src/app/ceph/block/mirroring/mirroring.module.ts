@@ -17,10 +17,12 @@ import { DaemonListComponent } from './daemon-list/daemon-list.component';
 import { ImageListComponent } from './image-list/image-list.component';
 import { MirrorHealthColorPipe } from './mirror-health-color.pipe';
 import { OverviewComponent } from './overview/overview.component';
+import { PoolEditModeModalComponent } from './pool-edit-mode-modal/pool-edit-mode-modal.component';
+import { PoolEditPeerModalComponent } from './pool-edit-peer-modal/pool-edit-peer-modal.component';
 import { PoolListComponent } from './pool-list/pool-list.component';
 
 @NgModule({
-  entryComponents: [OverviewComponent],
+  entryComponents: [OverviewComponent, PoolEditModeModalComponent, PoolEditPeerModalComponent],
   imports: [
     CommonModule,
     TabsModule.forRoot(),
@@ -39,6 +41,8 @@ import { PoolListComponent } from './pool-list/pool-list.component';
     DaemonListComponent,
     ImageListComponent,
     OverviewComponent,
+    PoolEditModeModalComponent,
+    PoolEditPeerModalComponent,
     PoolListComponent,
     MirrorHealthColorPipe
   ],

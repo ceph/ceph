@@ -1,7 +1,6 @@
 import { Component, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
-
 import { Subscription } from 'rxjs';
 
 import { RbdMirroringService } from '../../../../shared/api/rbd-mirroring.service';
@@ -46,7 +45,7 @@ export class DaemonListComponent implements OnInit, OnDestroy {
       }
     ];
 
-    this.subs = this.rbdMirroringService.subscribe((data: any) => {
+    this.subs = this.rbdMirroringService.subscribeSummary((data: any) => {
       if (!data) {
         return;
       }

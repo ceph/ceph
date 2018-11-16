@@ -1,8 +1,17 @@
 <cd-table [data]="data"
           columnMode="flex"
           [columns]="columns"
+          identifier="name"
+          forceIdentifier="true"
           [autoReload]="0"
-          (fetchData)="refresh()">
+          (fetchData)="refresh()"
+          selectionType="single"
+          (updateSelection)="updateSelection($event)">
+  <cd-table-actions class="table-actions"
+                    [permission]="permission"
+                    [selection]="selection"
+                    [tableActions]="tableActions">
+  </cd-table-actions>
 </cd-table>
 
 <ng-template #healthTmpl
