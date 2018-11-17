@@ -23,14 +23,14 @@ class ObjectReadOperation;
 class ObjectWriteOperation;
 }
 
-namespace rgw::putobj {
+namespace rgw {
 
-struct Result {
+struct AioResult {
   rgw_raw_obj obj;
   int result = 0;
 };
-struct ResultEntry : Result, boost::intrusive::list_base_hook<> {
-  virtual ~ResultEntry() {}
+struct AioResultEntry : AioResult, boost::intrusive::list_base_hook<> {
+  virtual ~AioResultEntry() {}
 };
 // a list of polymorphic entries that frees them on destruction
 template <typename T, typename ...Args>
@@ -42,10 +42,10 @@ struct OwningList : boost::intrusive::list<T, Args...> {
   OwningList(const OwningList&) = delete;
   OwningList& operator=(const OwningList&) = delete;
 };
-using ResultList = OwningList<ResultEntry>;
+using AioResultList = OwningList<AioResultEntry>;
 
 // returns the first error code or 0 if all succeeded
-inline int check_for_errors(const ResultList& results) {
+inline int check_for_errors(const AioResultList& results) {
   for (auto& e : results) {
     if (e.result < 0) {
       return e.result;
@@ -60,24 +60,24 @@ class Aio {
  public:
   virtual ~Aio() {}
 
-  virtual ResultList submit(RGWSI_RADOS::Obj& obj,
-                            const rgw_raw_obj& raw_obj,
-                            librados::ObjectReadOperation *op,
-                            bufferlist *data, uint64_t cost) = 0;
+  virtual AioResultList submit(RGWSI_RADOS::Obj& obj,
+                               const rgw_raw_obj& raw_obj,
+                               librados::ObjectReadOperation *op,
+                               bufferlist *data, uint64_t cost) = 0;
 
-  virtual ResultList submit(RGWSI_RADOS::Obj& obj,
-                            const rgw_raw_obj& raw_obj,
-                            librados::ObjectWriteOperation *op,
-                            uint64_t cost) = 0;
+  virtual AioResultList submit(RGWSI_RADOS::Obj& obj,
+                               const rgw_raw_obj& raw_obj,
+                               librados::ObjectWriteOperation *op,
+                               uint64_t cost) = 0;
 
   // poll for any ready completions without waiting
-  virtual ResultList poll() = 0;
+  virtual AioResultList poll() = 0;
 
   // return any ready completions. if there are none, wait for the next
-  virtual ResultList wait() = 0;
+  virtual AioResultList wait() = 0;
 
   // wait for all outstanding completions and return their results
-  virtual ResultList drain() = 0;
+  virtual AioResultList drain() = 0;
 };
 
-} // namespace rgw::putobj
+} // namespace rgw

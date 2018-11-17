@@ -35,7 +35,7 @@
 #include "rgw_ldap.h"
 #include "rgw_token.h"
 #include "rgw_putobj_processor.h"
-#include "rgw_putobj_throttle.h"
+#include "rgw_aio_throttle.h"
 #include "rgw_compression.h"
 
 
@@ -2320,7 +2320,7 @@ public:
   const std::string& bucket_name;
   const std::string& obj_name;
   RGWFileHandle* rgw_fh;
-  std::optional<rgw::putobj::AioThrottle> aio;
+  std::optional<rgw::AioThrottle> aio;
   std::optional<rgw::putobj::AtomicObjectProcessor> processor;
   rgw::putobj::DataProcessor* filter;
   boost::optional<RGWPutObj_Compress> compressor;
