@@ -58,13 +58,6 @@ using Aio_Throttle = RadosFixture;
 
 namespace rgw {
 
-inline bool operator==(const AioResult& lhs, const AioResult& rhs) {
-  return lhs.obj == rhs.obj && lhs.result == rhs.result;
-}
-std::ostream& operator<<(std::ostream& out, const AioResult& r) {
-  return out << "{r=" << r.result << " obj='" << r.obj << "'";
-}
-
 TEST_F(Aio_Throttle, NoThrottleUpToMax)
 {
   AioThrottle throttle(4);
@@ -72,16 +65,16 @@ TEST_F(Aio_Throttle, NoThrottleUpToMax)
   auto obj = make_obj(raw);
   {
     librados::ObjectWriteOperation op1;
-    auto c1 = throttle.submit(obj, raw, &op1, 1);
+    auto c1 = throttle.submit(obj, raw, &op1, 1, 0);
     EXPECT_TRUE(c1.empty());
     librados::ObjectWriteOperation op2;
-    auto c2 = throttle.submit(obj, raw, &op2, 1);
+    auto c2 = throttle.submit(obj, raw, &op2, 1, 0);
     EXPECT_TRUE(c2.empty());
     librados::ObjectWriteOperation op3;
-    auto c3 = throttle.submit(obj, raw, &op3, 1);
+    auto c3 = throttle.submit(obj, raw, &op3, 1, 0);
     EXPECT_TRUE(c3.empty());
     librados::ObjectWriteOperation op4;
-    auto c4 = throttle.submit(obj, raw, &op4, 1);
+    auto c4 = throttle.submit(obj, raw, &op4, 1, 0);
     EXPECT_TRUE(c4.empty());
     // no completions because no ops had to wait
     auto c5 = throttle.poll();
@@ -89,7 +82,7 @@ TEST_F(Aio_Throttle, NoThrottleUpToMax)
   auto completions = throttle.drain();
   ASSERT_EQ(4u, completions.size());
   for (auto& c : completions) {
-    EXPECT_EQ(AioResult({raw, -EINVAL}), c);
+    EXPECT_EQ(-EINVAL, c.result);
   }
 }
 
@@ -100,9 +93,9 @@ TEST_F(Aio_Throttle, CostOverWindow)
   auto obj = make_obj(raw);
 
   librados::ObjectWriteOperation op;
-  auto c = throttle.submit(obj, raw, &op, 8);
+  auto c = throttle.submit(obj, raw, &op, 8, 0);
   ASSERT_EQ(1u, c.size());
-  EXPECT_EQ(AioResult({raw, -EDEADLK}), c.front());
+  EXPECT_EQ(-EDEADLK, c.front().result);
 }
 
 TEST_F(Aio_Throttle, ThrottleOverMax)
@@ -120,7 +113,7 @@ TEST_F(Aio_Throttle, ThrottleOverMax)
 
   for (uint64_t i = 0; i < total; i++) {
     librados::ObjectWriteOperation op;
-    auto c = throttle.submit(obj, raw, &op, 1);
+    auto c = throttle.submit(obj, raw, &op, 1, 0);
     outstanding++;
     outstanding -= c.size();
     if (max_outstanding < outstanding) {

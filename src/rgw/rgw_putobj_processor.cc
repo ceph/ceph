@@ -91,7 +91,8 @@ int RadosWriter::process(bufferlist&& bl, uint64_t offset)
   } else {
     op.write(offset, data);
   }
-  auto c = aio->submit(stripe_obj, stripe_raw, &op, cost);
+  constexpr uint64_t id = 0; // unused
+  auto c = aio->submit(stripe_obj, stripe_raw, &op, cost, id);
   return process_completed(c, &written);
 }
 
@@ -103,7 +104,8 @@ int RadosWriter::write_exclusive(const bufferlist& data)
   op.create(true); // exclusive create
   op.write_full(data);
 
-  auto c = aio->submit(stripe_obj, stripe_raw, &op, cost);
+  constexpr uint64_t id = 0; // unused
+  auto c = aio->submit(stripe_obj, stripe_raw, &op, cost, id);
   auto d = aio->drain();
   c.splice(c.end(), d);
   return process_completed(c, &written);
