@@ -138,6 +138,9 @@ int MgrStandby::init()
       }
       return false;
     });
+  monc.register_config_notify_callback([this]() {
+      py_module_registry.handle_config_notify();
+    });
   dout(4) << "Registered monc callback" << dendl;
 
   int r = monc.init();

@@ -111,6 +111,8 @@ public:
 			 health_check_map_t&& checks);
   void get_health_checks(health_check_map_t *checks);
 
+  void config_notify();
+
   void set_uri(const std::string& module_name, const std::string &uri);
 
   int handle_command(

@@ -422,6 +422,14 @@ void PyModuleRegistry::handle_config(const std::string &k, const std::string &v)
   }
 }
 
+void PyModuleRegistry::handle_config_notify()
+{
+  std::lock_guard l(lock);
+  if (active_modules) {
+    active_modules->config_notify();
+  }
+}
+
 void PyModuleRegistry::upgrade_config(
     MonClient *monc,
     const std::map<std::string, std::string> &old_config)
