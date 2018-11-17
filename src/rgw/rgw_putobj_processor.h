@@ -20,7 +20,11 @@
 #include "rgw_rados.h"
 #include "services/svc_rados.h"
 
-namespace rgw::putobj {
+namespace rgw {
+
+class Aio;
+
+namespace putobj {
 
 // a data consumer that writes an object in a bucket
 class ObjectProcessor : public DataProcessor {
@@ -67,7 +71,6 @@ class HeadObjectProcessor : public ObjectProcessor {
 };
 
 
-class Aio;
 using RawObjSet = std::set<rgw_raw_obj>;
 
 // a data sink that writes to rados objects and deletes them on cancelation
@@ -210,4 +213,5 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
                rgw_zone_set *zones_trace, bool *canceled) override;
 };
 
-} // namespace rgw::putobj
+} // namespace putobj
+} // namespace rgw

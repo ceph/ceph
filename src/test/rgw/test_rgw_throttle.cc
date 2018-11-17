@@ -12,7 +12,7 @@
  *
  */
 
-#include "rgw/rgw_putobj_throttle.h"
+#include "rgw/rgw_aio_throttle.h"
 #include "rgw/rgw_rados.h"
 
 #include "include/rados/librados.hpp"
@@ -54,18 +54,18 @@ class RadosFixture : public ::testing::Test {
   }
 };
 
-using PutObj_Throttle = RadosFixture;
+using Aio_Throttle = RadosFixture;
 
-namespace rgw::putobj {
+namespace rgw {
 
-inline bool operator==(const Result& lhs, const Result& rhs) {
+inline bool operator==(const AioResult& lhs, const AioResult& rhs) {
   return lhs.obj == rhs.obj && lhs.result == rhs.result;
 }
-std::ostream& operator<<(std::ostream& out, const Result& r) {
+std::ostream& operator<<(std::ostream& out, const AioResult& r) {
   return out << "{r=" << r.result << " obj='" << r.obj << "'";
 }
 
-TEST_F(PutObj_Throttle, NoThrottleUpToMax)
+TEST_F(Aio_Throttle, NoThrottleUpToMax)
 {
   AioThrottle throttle(4);
   auto raw = make_raw_obj(__PRETTY_FUNCTION__);
@@ -89,11 +89,11 @@ TEST_F(PutObj_Throttle, NoThrottleUpToMax)
   auto completions = throttle.drain();
   ASSERT_EQ(4u, completions.size());
   for (auto& c : completions) {
-    EXPECT_EQ(Result({raw, -EINVAL}), c);
+    EXPECT_EQ(AioResult({raw, -EINVAL}), c);
   }
 }
 
-TEST_F(PutObj_Throttle, CostOverWindow)
+TEST_F(Aio_Throttle, CostOverWindow)
 {
   AioThrottle throttle(4);
   auto raw = make_raw_obj(__PRETTY_FUNCTION__);
@@ -102,10 +102,10 @@ TEST_F(PutObj_Throttle, CostOverWindow)
   librados::ObjectWriteOperation op;
   auto c = throttle.submit(obj, raw, &op, 8);
   ASSERT_EQ(1u, c.size());
-  EXPECT_EQ(Result({raw, -EDEADLK}), c.front());
+  EXPECT_EQ(AioResult({raw, -EDEADLK}), c.front());
 }
 
-TEST_F(PutObj_Throttle, AioThrottleOverMax)
+TEST_F(Aio_Throttle, ThrottleOverMax)
 {
   constexpr uint64_t window = 4;
   AioThrottle throttle(window);
@@ -133,4 +133,4 @@ TEST_F(PutObj_Throttle, AioThrottleOverMax)
   EXPECT_EQ(window, max_outstanding);
 }
 
-} // namespace rgw::putobj
+} // namespace rgw

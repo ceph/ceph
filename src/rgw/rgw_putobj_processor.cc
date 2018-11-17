@@ -12,7 +12,7 @@
  *
  */
 
-#include "rgw_putobj_aio.h"
+#include "rgw_aio.h"
 #include "rgw_putobj_processor.h"
 #include "rgw_multi.h"
 #include "services/svc_sys_obj.h"
@@ -58,7 +58,7 @@ int HeadObjectProcessor::process(bufferlist&& data, uint64_t logical_offset)
 }
 
 
-static int process_completed(const ResultList& completed, RawObjSet *written)
+static int process_completed(const AioResultList& completed, RawObjSet *written)
 {
   std::optional<int> error;
   for (auto& r : completed) {

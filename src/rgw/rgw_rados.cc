@@ -24,12 +24,12 @@
 #include "rgw_cache.h"
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h" /* for dumping s3policy in debug log */
+#include "rgw_aio_throttle.h"
 #include "rgw_bucket.h"
 #include "rgw_rest_conn.h"
 #include "rgw_cr_rados.h"
 #include "rgw_cr_rest.h"
 #include "rgw_putobj_processor.h"
-#include "rgw_putobj_throttle.h"
 
 #include "cls/rgw/cls_rgw_ops.h"
 #include "cls/rgw/cls_rgw_client.h"
@@ -4183,8 +4183,8 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   obj_time_weight set_mtime_weight;
   set_mtime_weight.high_precision = high_precision_time;
 
+  rgw::AioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
   using namespace rgw::putobj;
-  AioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
   AtomicObjectProcessor processor(&aio, this, dest_bucket_info, user_id,
                                   obj_ctx, dest_obj, olh_epoch, tag);
   int ret = processor.prepare();
@@ -4724,8 +4724,8 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
   string tag;
   append_rand_alpha(cct, tag, tag, 32);
 
+  rgw::AioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
   using namespace rgw::putobj;
-  AioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
   AtomicObjectProcessor processor(&aio, this, dest_bucket_info,
                                   dest_bucket_info.owner, obj_ctx,
                                   dest_obj, olh_epoch, tag);
