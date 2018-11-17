@@ -27,6 +27,7 @@ namespace rgw {
 
 struct AioResult {
   rgw_raw_obj obj;
+  bufferlist data; // result buffer for reads
   int result = 0;
 };
 struct AioResultEntry : AioResult, boost::intrusive::list_base_hook<> {
@@ -63,7 +64,7 @@ class Aio {
   virtual AioResultList submit(RGWSI_RADOS::Obj& obj,
                                const rgw_raw_obj& raw_obj,
                                librados::ObjectReadOperation *op,
-                               bufferlist *data, uint64_t cost) = 0;
+                               uint64_t cost) = 0;
 
   virtual AioResultList submit(RGWSI_RADOS::Obj& obj,
                                const rgw_raw_obj& raw_obj,

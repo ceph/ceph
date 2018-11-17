@@ -69,7 +69,7 @@ class AioThrottle : public Aio {
 
   AioResultList submit(RGWSI_RADOS::Obj& obj, const rgw_raw_obj& raw_obj,
                        librados::ObjectReadOperation *op,
-                       bufferlist *data, uint64_t cost) override;
+                       uint64_t cost) override;
 
   AioResultList submit(RGWSI_RADOS::Obj& obj, const rgw_raw_obj& raw_obj,
                        librados::ObjectWriteOperation *op,

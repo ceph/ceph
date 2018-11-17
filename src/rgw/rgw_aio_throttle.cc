@@ -62,7 +62,7 @@ AioResultList AioThrottle::submit(RGWSI_RADOS::Obj& obj,
 AioResultList AioThrottle::submit(RGWSI_RADOS::Obj& obj,
                                   const rgw_raw_obj& raw_obj,
                                   librados::ObjectReadOperation *op,
-                                  bufferlist *data, uint64_t cost)
+                                  uint64_t cost)
 {
   auto p = std::make_unique<Pending>();
   p->obj = raw_obj;
@@ -73,7 +73,7 @@ AioResultList AioThrottle::submit(RGWSI_RADOS::Obj& obj,
     completed.push_back(*p);
   } else {
     get(*p);
-    p->result = obj.aio_operate(p->completion, op, data);
+    p->result = obj.aio_operate(p->completion, op, &p->data);
     if (p->result < 0) {
       put(*p);
     }
