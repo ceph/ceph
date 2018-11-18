@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <boost/container/small_vector.hpp>
+
 #include "rgw_common.h"
 #include "rgw_rest_client.h"
 #include "rgw_auth_s3.h"
@@ -45,10 +47,10 @@ int RGWHTTPSimpleRequest::receive_header(void *ptr, size_t len)
 {
   unique_lock guard(out_headers_lock);
 
-  char line[len + 1];
+  boost::container::small_vector<char, 64> line(len);
 
   char *s = (char *)ptr, *end = (char *)ptr + len;
-  char *p = line;
+  auto p = begin(line);
   ldout(cct, 10) << "receive_http_header" << dendl;
 
   while (s != end) {
@@ -60,7 +62,7 @@ int RGWHTTPSimpleRequest::receive_header(void *ptr, size_t len)
       *p = '\0';
       ldout(cct, 10) << "received header:" << line << dendl;
       // TODO: fill whatever data required here
-      char *l = line;
+      char *l = line.data();
       char *tok = strsep(&l, " \t:");
       if (tok && l) {
         while (*l == ' ')
@@ -73,19 +75,7 @@ int RGWHTTPSimpleRequest::receive_header(void *ptr, size_t len)
           status = rgw_http_error_to_errno(http_status);
         } else {
           /* convert header field name to upper case  */
-          char *src = tok;
-          char buf[len + 1];
-          size_t i;
-          for (i = 0; i < len && *src; ++i, ++src) {
-            switch (*src) {
-              case '-':
-                buf[i] = '_';
-                break;
-              default:
-                buf[i] = toupper(*src);
-            }
-          }
-          buf[i] = '\0';
+          string buf = uppercase_dash_http_attr(tok);
           out_headers[buf] = l;
           int r = handle_header(buf, l);
           if (r < 0)
@@ -840,21 +830,8 @@ int RGWRESTStreamRWRequest::complete_request(string *etag,
   for (auto iter = out_headers.begin(); pattrs && iter != out_headers.end(); ++iter) {
     const string& attr_name = iter->first;
     if (attr_name.compare(0, sizeof(RGW_HTTP_RGWX_ATTR_PREFIX) - 1, RGW_HTTP_RGWX_ATTR_PREFIX) == 0) {
-      string name = attr_name.substr(sizeof(RGW_HTTP_RGWX_ATTR_PREFIX) - 1);
-      const char *src = name.c_str();
-      char buf[name.size() + 1];
-      char *dest = buf;
-      for (; *src; ++src, ++dest) {
-        switch(*src) {
-          case '_':
-            *dest = '-';
-            break;
-          default:
-            *dest = tolower(*src);
-        }
-      }
-      *dest = '\0';
-      (*pattrs)[buf] = iter->second;
+      string name = lowercase_dash_http_attr(attr_name.substr(sizeof(RGW_HTTP_RGWX_ATTR_PREFIX) - 1));
+      (*pattrs)[name] = iter->second;
     }
   }
 
