@@ -2895,9 +2895,9 @@ int RGWHandler_REST_SWIFT::init_from_header(struct req_state* const s,
 
   s->prot_flags |= RGW_REST_SWIFT;
 
-  char reqbuf[frontend_prefix.length() + s->decoded_uri.length() + 1];
-  sprintf(reqbuf, "%s%s", frontend_prefix.c_str(), s->decoded_uri.c_str());
-  const char *req_name = reqbuf;
+  string reqbuf = frontend_prefix + s->decoded_uri;
+
+  const char *req_name = reqbuf.c_str();
 
   const char *p;
 
@@ -2948,16 +2948,16 @@ int RGWHandler_REST_SWIFT::init_from_header(struct req_state* const s,
   }
 
   /* verify that the request_uri conforms with what's expected */
-  char buf[g_conf()->rgw_swift_url_prefix.length() + 16 + tenant_path.length()];
-  int blen;
-  if (g_conf()->rgw_swift_url_prefix == "/") {
-    blen = sprintf(buf, "/v1%s", tenant_path.c_str());
+  string buf;
+  string tp = "/v1" + tenant_path;
+  
+  if ("/" == g_conf()->rgw_swift_url_prefix) {
+    buf = tp;
   } else {
-    blen = sprintf(buf, "/%s/v1%s",
-                   g_conf()->rgw_swift_url_prefix.c_str(), tenant_path.c_str());
+    buf = "/" + g_conf()->rgw_swift_url_prefix + tp;
   }
 
-  if (strncmp(reqbuf, buf, blen) != 0) {
+  if (reqbuf != buf) {
     return -ENOENT;
   }
 
