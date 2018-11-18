@@ -1098,9 +1098,8 @@ namespace buffer CEPH_BUFFER_API {
 
     // clone non-shareable buffers (make shareable)
     void make_shareable() {
-      decltype(_buffers)::iterator pb;
-      for (pb = _buffers.begin(); pb != _buffers.end(); ++pb) {
-        (void) pb->make_shareable();
+      for (auto& bp : _buffers) {
+        bp.make_shareable();
       }
     }
 
