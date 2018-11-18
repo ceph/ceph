@@ -26,6 +26,7 @@
 #include "rgw_acl_s3.h" /* for dumping s3policy in debug log */
 #include "rgw_aio_throttle.h"
 #include "rgw_bucket.h"
+#include "rgw_string.h"
 #include "rgw_rest_conn.h"
 #include "rgw_cr_rados.h"
 #include "rgw_cr_rest.h"
@@ -59,7 +60,8 @@ using namespace librados;
 #include <atomic>
 #include <list>
 #include <map>
-#include "include/random.h"
+
+#include "fmt/format.h"
 
 #include "rgw_gc.h"
 #include "rgw_lc.h"
@@ -323,14 +325,7 @@ int RGWObjManifest::generator::create_begin(CephContext *cct, RGWObjManifest *_m
   last_ofs = 0;
 
   if (manifest->get_prefix().empty()) {
-    char buf[33];
-    gen_rand_alphanumeric(cct, buf, sizeof(buf) - 1);
-
-    string oid_prefix = ".";
-    oid_prefix.append(buf);
-    oid_prefix.append("_");
-
-    manifest->set_prefix(oid_prefix);
+    manifest->set_prefix(fmt::format(".{}_", gen_rand_alphanumeric(cct, 32)));
   }
 
   bool found = manifest->get_rule(0, &rule);
@@ -2461,15 +2456,14 @@ int RGWRados::Bucket::List::list_objects_ordered(int64_t max,
   if (!params.delim.empty()) {
     unsigned long val = decode_utf8((unsigned char *)params.delim.c_str(),
 				    params.delim.size());
-    char buf[params.delim.size() + 16];
-    int r = encode_utf8(val + 1, (unsigned char *)buf);
+    bigger_than_delim.reserve(params.delim.size() + 16 + 1);
+    int r = encode_utf8(val + 1, reinterpret_cast<unsigned char *>(bigger_than_delim.data()));
     if (r < 0) {
       ldout(cct,0) << "ERROR: encode_utf8() failed" << dendl;
       return -EINVAL;
     }
-    buf[r] = '\0';
-
-    bigger_than_delim = buf;
+    
+    bigger_than_delim.resize(r);
 
     /* if marker points at a common prefix, fast forward it into its upperbound string */
     int delim_pos = cur_marker.name.find(params.delim, cur_prefix.size());
@@ -3371,9 +3365,10 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
   }
 
   const string& src_name = obj.get_oid();
-  char buf[src_name.size() + 32];
+  string buf;
+  buf.resize(src_name.size() + 32);
   struct timespec ts = ceph::real_clock::to_timespec(state->mtime);
-  snprintf(buf, sizeof(buf), "%03x%s/%lld.%06ld", (int)src_name.size(),
+  snprintf(buf.data(), buf.size(), "%03x%s/%lld.%06ld", (int)src_name.size(),
            src_name.c_str(), (long long)ts.tv_sec, ts.tv_nsec / 1000);
 
   RGWBucketInfo dest_bucket_info;
@@ -3393,7 +3388,7 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
     return -ERR_PRECONDITION_FAILED;
   }
 
-  rgw_obj dest_obj(dest_bucket_info.bucket, buf);
+  rgw_obj dest_obj(dest_bucket_info.bucket, buf.data());
 
   if (dest_bucket_info.versioning_enabled()){
     gen_rand_obj_instance_name(&dest_obj);
@@ -7666,18 +7661,16 @@ int RGWRados::unlink_obj_instance(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_i
 
 void RGWRados::gen_rand_obj_instance_name(rgw_obj_key *target_key)
 {
-#define OBJ_INSTANCE_LEN 32
-  char buf[OBJ_INSTANCE_LEN + 1];
+  constexpr size_t obj_instance_len = 32;
 
-  gen_rand_alphanumeric_no_underscore(cct, buf, OBJ_INSTANCE_LEN); /* don't want it to get url escaped,
-                                                                      no underscore for instance name due to the way we encode the raw keys */
-
-  target_key->set_instance(buf);
-}
+  /* don't want it to get url escaped, no underscore for instance name due to 
+  the way we encode the raw keys */
+  target_key->set_instance(gen_rand_alphanumeric_no_underscore(cct, obj_instance_len));
+} 
 
 void RGWRados::gen_rand_obj_instance_name(rgw_obj *target_obj)
 {
-  gen_rand_obj_instance_name(&target_obj->key);
+ return gen_rand_obj_instance_name(&target_obj->key);
 }
 
 int RGWRados::get_olh(const RGWBucketInfo& bucket_info, const rgw_obj& obj, RGWOLHInfo *olh)
@@ -9875,9 +9868,7 @@ void RGWRados::get_bucket_index_object(const string& bucket_oid_base, uint32_t n
     // By default with no sharding, we use the bucket oid as itself
     (*bucket_obj) = bucket_oid_base;
   } else {
-    char buf[bucket_oid_base.size() + 32];
-    snprintf(buf, sizeof(buf), "%s.%d", bucket_oid_base.c_str(), shard_id);
-    (*bucket_obj) = buf;
+    *bucket_obj = fmt::format("{}.{}", bucket_oid_base, shard_id);
   }
 }
 
@@ -9895,9 +9886,7 @@ int RGWRados::get_bucket_index_object(const string& bucket_oid_base, const strin
         }
       } else {
         uint32_t sid = rgw_bucket_shard_index(obj_key, num_shards);
-        char buf[bucket_oid_base.size() + 32];
-        snprintf(buf, sizeof(buf), "%s.%d", bucket_oid_base.c_str(), sid);
-        (*bucket_obj) = buf;
+        *bucket_obj = fmt::format("{}.{}", bucket_oid_base, sid);
         if (shard_id) {
           *shard_id = (int)sid;
         }
