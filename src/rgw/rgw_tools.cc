@@ -3,6 +3,8 @@
 
 #include <errno.h>
 
+#include <boost/container/small_vector.hpp>
+
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "librados/librados_asio.h"
@@ -173,11 +175,11 @@ int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
 
 void parse_mime_map_line(const char *start, const char *end)
 {
-  char line[end - start + 1];
-  strncpy(line, start, end - start);
-  line[end - start] = '\0';
-  char *l = line;
-#define DELIMS " \t\n\r"
+  boost::container::small_vector<char, 64> line(start, end);
+
+  auto l = line.data();
+
+  const char *DELIMS = "auto  \t\n\r";
 
   while (isspace(*l))
     l++;
