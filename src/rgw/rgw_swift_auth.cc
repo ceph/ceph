@@ -391,10 +391,9 @@ ExternalTokenEngine::authenticate(const DoutPrefixProvider* dpp,
   }
 
   auth_url.append("token");
-  char url_buf[auth_url.size() + 1 + token.length() + 1];
-  sprintf(url_buf, "%s/%s", auth_url.c_str(), token.c_str());
+  string url_buf = auth_url + "/" + token;
 
-  RGWHTTPHeadersCollector validator(cct, "GET", url_buf, { "X-Auth-Groups", "X-Auth-Ttl" });
+  RGWHTTPHeadersCollector validator(cct, "GET", url_buf.c_str(), { "X-Auth-Groups", "X-Auth-Ttl" });
 
   ldpp_dout(dpp, 10) << "rgw_swift_validate_token url=" << url_buf << dendl;
 
@@ -451,8 +450,7 @@ static int build_token(const string& swift_user,
 
   bufferptr p(CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
 
-  char buf[bl.length() * 2 + 1];
-  buf_to_hex((const unsigned char *)bl.c_str(), bl.length(), buf);
+  string buf = buf_to_hex(reinterpret_cast<unsigned char const * const>(bl.c_str()), bl.length());
   dout(20) << "build_token token=" << buf << dendl;
 
   char k[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
@@ -574,12 +572,7 @@ SignedTokenEngine::authenticate(const DoutPrefixProvider* dpp,
 
   if (memcmp(local_tok_bl.c_str(), tok_bl.c_str(),
              local_tok_bl.length()) != 0) {
-    char buf[local_tok_bl.length() * 2 + 1];
-
-    buf_to_hex(reinterpret_cast<const unsigned char *>(local_tok_bl.c_str()),
-               local_tok_bl.length(), buf);
-
-    ldpp_dout(dpp, 0) << "NOTICE: tokens mismatch tok=" << buf << dendl;
+    ldpp_dout(dpp, 0) << "NOTICE: tokens mismatch tok=" << buf_to_hex(local_tok_bl) << dendl;
     return result_t::deny(-EPERM);
   }
 
@@ -696,12 +689,14 @@ void RGW_SWIFT_Auth_Get::execute()
     goto done;
 
   {
-    static constexpr size_t PREFIX_LEN = sizeof("AUTH_rgwtk") - 1;
-    char token_val[PREFIX_LEN + bl.length() * 2 + 1];
+    const char prefix[] = "AUTH_rgwtk";
+    constexpr size_t prefix_length = sizeof(prefix) - 1;
 
-    snprintf(token_val, PREFIX_LEN + 1, "AUTH_rgwtk");
-    buf_to_hex((const unsigned char *)bl.c_str(), bl.length(),
-	       token_val + PREFIX_LEN);
+    string token_val;
+    token_val.resize(bl.length() + prefix_length);
+    token_val = prefix;
+    buf_to_hex(reinterpret_cast<const unsigned char *>(bl.c_str()), bl.length(), 
+               token_val.data() + prefix_length);
 
     dump_header(s, "X-Storage-Token", token_val);
     dump_header(s, "X-Auth-Token", token_val);
