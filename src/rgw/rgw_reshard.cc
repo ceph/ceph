@@ -418,12 +418,9 @@ RGWBucketReshardLock::RGWBucketReshardLock(RGWRados* _store,
     "rgw_reshard_bucket_lock_duration");
   duration = std::chrono::seconds(lock_dur_secs);
 
-#define COOKIE_LEN 16
-  char cookie_buf[COOKIE_LEN + 1];
-  gen_rand_alphanumeric(store->ctx(), cookie_buf, sizeof(cookie_buf) - 1);
-  cookie_buf[COOKIE_LEN] = '\0';
+  constexpr size_t cookie_len = 16;
 
-  internal_lock.set_cookie(cookie_buf);
+  internal_lock.set_cookie(gen_rand_alphanumeric(store->ctx(), cookie_len));
   internal_lock.set_duration(duration);
 }
 
