@@ -3,6 +3,8 @@
 
 #include <boost/utility/string_ref.hpp>
 
+#include "fmt/format.h"
+
 #include "common/ceph_json.h"
 #include "common/RWLock.h"
 #include "common/RefCountedObj.h"
@@ -465,11 +467,8 @@ public:
 
     status->sync_info.instance_id = instance_id;
 
-#define COOKIE_LEN 16
-    char buf[COOKIE_LEN + 1];
-
-    gen_rand_alphanumeric(cct, buf, sizeof(buf) - 1);
-    cookie = buf;
+    constexpr size_t cookie_len = 16;
+    cookie = gen_rand_alphanumeric(cct, cookie_len);
 
     sync_status_oid = RGWDataSyncStatusManager::sync_status_oid(sync_env->source_zone);
 
@@ -688,10 +687,11 @@ int RGWRemoteDataLog::init_sync_status(int num_shards)
 }
 
 static string full_data_sync_index_shard_oid(const string& source_zone, int shard_id)
-{
-  char buf[datalog_sync_full_sync_index_prefix.size() + 1 + source_zone.size() + 1 + 16];
-  snprintf(buf, sizeof(buf), "%s.%s.%d", datalog_sync_full_sync_index_prefix.c_str(), source_zone.c_str(), shard_id);
-  return string(buf);
+{ 
+  return fmt::format("{}.{}.{}",
+                     datalog_sync_full_sync_index_prefix,
+                     source_zone,
+                     shard_id);
 }
 
 struct bucket_instance_meta_info {
@@ -1905,18 +1905,17 @@ std::ostream& RGWDataSyncStatusManager::gen_prefix(std::ostream& out) const
 
 string RGWDataSyncStatusManager::sync_status_oid(const string& source_zone)
 {
-  char buf[datalog_sync_status_oid_prefix.size() + source_zone.size() + 16];
-  snprintf(buf, sizeof(buf), "%s.%s", datalog_sync_status_oid_prefix.c_str(), source_zone.c_str());
-
-  return string(buf);
+  return fmt::format("{}.{}",
+                     datalog_sync_status_oid_prefix,
+                     source_zone);
 }
 
 string RGWDataSyncStatusManager::shard_obj_name(const string& source_zone, int shard_id)
 {
-  char buf[datalog_sync_status_shard_prefix.size() + source_zone.size() + 16];
-  snprintf(buf, sizeof(buf), "%s.%s.%d", datalog_sync_status_shard_prefix.c_str(), source_zone.c_str(), shard_id);
-
-  return string(buf);
+  return fmt::format("{}.{}.{}",
+                     datalog_sync_status_shard_prefix,
+                     source_zone,
+                     shard_id);
 }
 
 int RGWRemoteBucketLog::init(const string& _source_zone, RGWRESTConn *_conn,
