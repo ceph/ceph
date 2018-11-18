@@ -72,7 +72,25 @@ function test_dedup_ratio_fixed()
     die "Estimate failed expecting 4096 result $RESULT"
   fi
 
+  # case 3 max_thread
+  for num in `seq 0 20`
+  do
+    dd if=/dev/zero of=dedup_object_$num bs=4M count=1
+    $RADOS_TOOL -p $POOL put dedup_object_$num ./dedup_object_$num
+  done
+
+  RESULT=$($DEDUP_TOOL --op estimate --pool $POOL --chunk-size 4096  --chunk-algorithm fixed --fingerprint-algorithm sha1 --max-thread 4 | grep result | awk '{print$2}')
+  echo $RESULT
+  if [ 10485760 -ne $RESULT ];
+  then
+    die "Estimate failed expecting 10485760 result $RESULT"
+  fi
+
   rm -rf ./dedup_object_1k ./dedup_object_100k ./dedup_object_10m
+  for num in `seq 0 20`
+  do
+    rm -rf ./dedup_object_$num
+  done
 }
 
 function test_dedup_chunk_scrub()
