@@ -245,10 +245,8 @@ void RGWLC::initialize(CephContext *_cct, RGWRados *_store) {
     obj_names[i].append(buf);
   }
 
-#define COOKIE_LEN 16
-  char cookie_buf[COOKIE_LEN + 1];
-  gen_rand_alphanumeric(cct, cookie_buf, sizeof(cookie_buf) - 1);
-  cookie = cookie_buf;
+  constexpr size_t COOKIE_LEN = 26; // JFW: old checkout says 16 (+ 1 NULL)... which is right?
+  cookie = gen_rand_alphanumeric(cct, COOKIE_LEN);
 }
 
 void RGWLC::finalize()

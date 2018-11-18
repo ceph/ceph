@@ -21,6 +21,7 @@
 #include "rgw_multi.h"
 #include "cls/rgw/cls_rgw_types.h"
 #include "rgw_tag.h"
+#include "rgw_string.h"
 
 #include <atomic>
 
