@@ -141,10 +141,7 @@ public:
 
 string RGWSI_Notify::get_control_oid(int i)
 {
-  char buf[notify_oid_prefix.size() + 16];
-  snprintf(buf, sizeof(buf), "%s.%d", notify_oid_prefix.c_str(), i);
-
-  return string(buf);
+  return notify_oid_prefix + "." + to_string(i);
 }
 
 RGWSI_RADOS::Obj RGWSI_Notify::pick_control_obj(const string& key)
