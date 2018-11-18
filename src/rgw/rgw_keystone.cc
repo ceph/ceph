@@ -68,19 +68,14 @@ int rgw_decode_b64_cms(CephContext * const cct,
   char *dest = signed_ber.c_str();
   const char *src = signed_b64.c_str();
   size_t len = signed_b64.size();
-  char buf[len + 1];
+  boost::container::small_vector<char, 64> buf(len + 1);
   buf[len] = '\0';
 
-  for (size_t i = 0; i < len; i++, src++) {
-    if (*src != '-') {
-      buf[i] = *src;
-    } else {
-      buf[i] = '/';
-    }
-  }
+  transform(begin(buf), end(buf), begin(buf), [](const char ch) {
+            return '-' == ch ? '/' : ch; });
 
-  int ret = ceph_unarmor(dest, dest + signed_ber.length(), buf,
-                         buf + signed_b64.size());
+  int ret = ceph_unarmor(dest, dest + signed_ber.length(), buf.data(),
+                         buf.data() + signed_b64.size());
   if (ret < 0) {
     ldout(cct, 0) << "ceph_unarmor() failed, ret=" << ret << dendl;
     return ret;
