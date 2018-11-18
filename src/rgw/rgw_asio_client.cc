@@ -46,20 +46,10 @@ int ClientIO::init_env(CephContext *cct)
       continue;
     }
 
-    static const boost::string_ref HTTP_{"HTTP_"};
+    string buf("HTTP_");
+    buf.append(begin(name), name.size());
 
-    char buf[name.size() + HTTP_.size() + 1];
-    auto dest = std::copy(std::begin(HTTP_), std::end(HTTP_), buf);
-    for (auto src = name.begin(); src != name.end(); ++src, ++dest) {
-      if (*src == '-') {
-        *dest = '_';
-      } else {
-        *dest = std::toupper(*src);
-      }
-    }
-    *dest = '\0';
-
-    env.set(buf, value.to_string());
+    env.set(lowercase_dash_http_attr(buf), value.to_string());
   }
 
   int major = request.version() / 10;
