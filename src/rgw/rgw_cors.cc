@@ -67,18 +67,12 @@ void RGWCORSRule::erase_origin_if_present(string& origin, bool *rule_empty) {
  *
  * @todo When UTF-8 is allowed in HTTP headers, this function will need to change
  */
-string lowercase_http_attr(const string& orig)
+string lowercase_http_attr(string s)
 {
-  const char *s = orig.c_str();
-  char buf[orig.size() + 1];
-  buf[orig.size()] = '\0';
-
-  for (size_t i = 0; i < orig.size(); ++i, ++s) {
-	buf[i] = tolower(*s);
-  }
-  return string(buf);
+  return transform(begin(s), end(s), begin(s), [](const auto c) {
+            return tolower(c); }),
+         s;
 }
-
 
 static bool is_string_in_set(set<string>& s, string h) {
   if ((s.find("*") != s.end()) || 
