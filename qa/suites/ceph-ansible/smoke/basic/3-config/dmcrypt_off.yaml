@@ -3,5 +3,6 @@ meta:
 
 overrides:
    ceph_ansible:
+     branch: stable-3.2
      vars:
         dmcrypt: False
