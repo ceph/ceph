@@ -1028,9 +1028,11 @@ int RGWMetadataManager::post_modify(RGWMetadataHandler *handler, const string& s
 
 string RGWMetadataManager::heap_oid(RGWMetadataHandler *handler, const string& key, const obj_version& objv)
 {
-  char buf[objv.tag.size() + 32];
-  snprintf(buf, sizeof(buf), "%s:%lld", objv.tag.c_str(), (long long)objv.ver);
-  return string(".meta:") + handler->get_type() + ":" + key + ":" + buf;
+  return fmt::format(".meta:{}:{}:{}:{}",
+                     handler->get_type(),
+                     key,
+                     objv.tag,
+                     objv.ver);
 }
 
 int RGWMetadataManager::store_in_heap(RGWMetadataHandler *handler, const string& key, bufferlist& bl,
