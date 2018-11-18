@@ -5481,10 +5481,8 @@ void RGWInitMultipart::execute()
   }
 
   do {
-    char buf[33];
-    gen_rand_alphanumeric(s->cct, buf, sizeof(buf) - 1);
     upload_id = MULTIPART_UPLOAD_ID_PREFIX; /* v2 upload id */
-    upload_id.append(buf);
+    upload_id.append(gen_rand_alphanumeric(s->cct, 32));
 
     string tmp_obj_name;
     RGWMPObj mp(s->object.name, upload_id);

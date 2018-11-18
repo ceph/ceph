@@ -1456,12 +1456,10 @@ public:
   ~RGWPutLC() override {}
 
   void init(RGWRados *store, struct req_state *s, RGWHandler *dialect_handler) override {
-#define COOKIE_LEN 16
-    char buf[COOKIE_LEN + 1];
-
     RGWOp::init(store, s, dialect_handler);
-    gen_rand_alphanumeric(s->cct, buf, sizeof(buf) - 1);
-    cookie = buf;
+
+    constexpr size_t cookie_len = 16;
+    cookie = gen_rand_alphanumeric(s->cct, cookie_len);
   }
 
   int verify_permission() override;
