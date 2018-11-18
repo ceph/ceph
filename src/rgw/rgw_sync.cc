@@ -29,6 +29,8 @@
 
 #include <boost/asio/yield.hpp>
 
+#include "fmt/format.h"
+
 #define dout_subsys ceph_subsys_rgw
 
 #undef dout_prefix
@@ -44,9 +46,7 @@ RGWSyncErrorLogger::RGWSyncErrorLogger(RGWRados *_store, const string &oid_prefi
   }
 }
 string RGWSyncErrorLogger::get_shard_oid(const string& oid_prefix, int shard_id) {
-  char buf[oid_prefix.size() + 16];
-  snprintf(buf, sizeof(buf), "%s.%d", oid_prefix.c_str(), shard_id);
-  return string(buf);
+  return fmt::format("{}.{}", oid_prefix, shard_id);
 }
 
 RGWCoroutine *RGWSyncErrorLogger::log_error_cr(const string& source_zone, const string& section, const string& name, uint32_t error_code, const string& message) {
@@ -382,10 +382,7 @@ string RGWMetaSyncEnv::status_oid()
 
 string RGWMetaSyncEnv::shard_obj_name(int shard_id)
 {
-  char buf[mdlog_sync_status_shard_prefix.size() + 16];
-  snprintf(buf, sizeof(buf), "%s.%d", mdlog_sync_status_shard_prefix.c_str(), shard_id);
-
-  return string(buf);
+  return fmt::format("{}.{}", mdlog_sync_status_shard_prefix, shard_id);
 }
 
 class RGWAsyncReadMDLogEntries : public RGWAsyncRadosRequest {
@@ -993,9 +990,7 @@ public:
 
 static string full_sync_index_shard_oid(int shard_id)
 {
-  char buf[mdlog_sync_full_sync_index_prefix.size() + 16];
-  snprintf(buf, sizeof(buf), "%s.%d", mdlog_sync_full_sync_index_prefix.c_str(), shard_id);
-  return string(buf);
+  return fmt::format("{}.{}", mdlog_sync_full_sync_index_prefix, shard_id);
 }
 
 class RGWReadRemoteMetadataCR : public RGWCoroutine {
