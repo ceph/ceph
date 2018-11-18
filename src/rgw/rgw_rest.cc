@@ -189,12 +189,12 @@ void rgw_rest_init(CephContext *cct, RGWRados *store, const RGWZoneGroup& zone_g
   list<string>::iterator iter;
   for (iter = extended_http_attrs.begin(); iter != extended_http_attrs.end(); ++iter) {
     string rgw_attr = RGW_ATTR_PREFIX;
-    rgw_attr.append(lowercase_underscore_http_attr(*iter));
+    rgw_attr.append(lowercase_dash_http_attr(*iter));
 
     rgw_to_http_attrs[rgw_attr] = camelcase_dash_http_attr(*iter);
 
     string http_header = "HTTP_";
-    http_header.append(uppercase_underscore_http_attr(*iter));
+    http_header.append(uppercase_dash_http_attr(*iter));
 
     generic_attrs_map[http_header] = rgw_attr;
   }

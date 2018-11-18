@@ -8,6 +8,10 @@
 
 #include <boost/utility/string_ref.hpp>
 #include <boost/container/flat_set.hpp>
+#include <boost/container/small_vector.hpp>
+
+#include "fmt/format.h"
+
 #include "common/sstring.hh"
 #include "common/ceph_json.h"
 #include "include/ceph_assert.h" /* needed because of common/ceph_json.h */
@@ -679,14 +683,15 @@ static inline void dump_header_prefixed(struct req_state* s,
                                         const boost::string_ref& name_prefix,
                                         const boost::string_ref& name,
                                         Args&&... args) {
-  char full_name_buf[name_prefix.size() + name.size() + 1];
-  const auto len = snprintf(full_name_buf, sizeof(full_name_buf), "%.*s%.*s",
-                            static_cast<int>(name_prefix.length()),
-                            name_prefix.data(),
-                            static_cast<int>(name.length()),
-                            name.data());
-  boost::string_ref full_name(full_name_buf, len);
-  return dump_header(s, std::move(full_name), std::forward<Args>(args)...);
+  string full_name_buf;
+  full_name_buf.reserve(name_prefix.size() + name.size() + 1);
+  auto nwritten = snprintf(full_name_buf.data(), full_name_buf.size(), "%.*s%.*s",
+                           static_cast<int>(name_prefix.length()),
+                           name_prefix.data(),
+                           static_cast<int>(name.length()),
+                           name.data());
+  full_name_buf.resize(nwritten);
+  return dump_header(s, std::move(full_name_buf), std::forward<Args>(args)...);
 }
 
 template <class... Args>
@@ -695,15 +700,15 @@ static inline void dump_header_infixed(struct req_state* s,
                                        const boost::string_ref& infix,
                                        const boost::string_ref& sufix,
                                        Args&&... args) {
-  char full_name_buf[prefix.size() + infix.size() + sufix.size() + 1];
-  const auto len = snprintf(full_name_buf, sizeof(full_name_buf), "%.*s%.*s%.*s",
+  boost::container::small_vector<char, 64> full_name_buf(prefix.size() + infix.size() + sufix.size() + 1);
+  const auto len = snprintf(full_name_buf.data(), full_name_buf.size(), "%.*s%.*s%.*s",
                             static_cast<int>(prefix.length()),
                             prefix.data(),
                             static_cast<int>(infix.length()),
                             infix.data(),
                             static_cast<int>(sufix.length()),
                             sufix.data());
-  boost::string_ref full_name(full_name_buf, len);
+  boost::string_ref full_name(full_name_buf.data(), len);
   return dump_header(s, std::move(full_name), std::forward<Args>(args)...);
 }
 
@@ -711,11 +716,15 @@ template <class... Args>
 static inline void dump_header_quoted(struct req_state* s,
                                       const boost::string_ref& name,
                                       const boost::string_ref& val) {
-  /* We need two extra bytes for quotes. */
-  char qvalbuf[val.size() + 2 + 1];
-  const auto len = snprintf(qvalbuf, sizeof(qvalbuf), "\"%.*s\"",
+
+  boost::container::small_vector<char, 256> qvalbuf;
+  if(val.length() > qvalbuf.size()) {
+     qvalbuf.resize(val.length() + 2); // +2 for quotation marks
+  }
+  const auto len = snprintf(qvalbuf.data(), qvalbuf.size(), "\"%.*s\"",
                             static_cast<int>(val.length()), val.data());
-  return dump_header(s, name, boost::string_ref(qvalbuf, len));
+
+  return dump_header(s, name, boost::string_ref(qvalbuf.data(), len));
 }
 
 template <class ValueT>
