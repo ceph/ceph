@@ -5,6 +5,9 @@
 #define CEPH_RGW_CR_RADOS_H
 
 #include <boost/intrusive_ptr.hpp>
+
+#include <fmt/format.h>
+
 #include "include/ceph_assert.h"
 #include "rgw_coroutine.h"
 #include "rgw_rados.h"
@@ -599,10 +602,8 @@ public:
   int request_complete() override;
 
   static std::string gen_random_cookie(CephContext* cct) {
-#define COOKIE_LEN 16
-    char buf[COOKIE_LEN + 1];
-    gen_rand_alphanumeric(cct, buf, sizeof(buf) - 1);
-    return buf;
+    constexpr size_t cookie_len = 16;
+    return gen_rand_alphanumeric(cct, cookie_len);
   }
 };
 
@@ -743,9 +744,8 @@ public:
 		        store(_store), op(_op), num_shards(_num_shards) {
     shards.reserve(num_shards);
     for (int i = 0; i < num_shards; ++i) {
-      char buf[oid_prefix.size() + 16];
-      snprintf(buf, sizeof(buf), "%s.%d", oid_prefix.c_str(), i);
-      RGWOmapAppend *shard = new RGWOmapAppend(async_rados, store, rgw_raw_obj(pool, buf));
+	  auto buf = fmt::format("{}.{}", oid_prefix, i);
+      RGWOmapAppend *shard = new RGWOmapAppend(async_rados, store, rgw_raw_obj(pool, buf.c_str()));
       shard->get();
       shards.push_back(shard);
       op->spawn(shard, false);
