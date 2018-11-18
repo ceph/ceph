@@ -99,7 +99,7 @@ int RGWCivetWeb::init_env(CephContext *cct)
       return -EINVAL;
     }
 
-    const boost::string_ref name(header->name);
+    string_view name(header->name);
     const auto& value = header->value;
 
     if (boost::algorithm::iequals(name, "content-length")) {
@@ -115,20 +115,7 @@ int RGWCivetWeb::init_env(CephContext *cct)
       explicit_conn_close = boost::algorithm::iequals(value, "close");
     }
 
-    static const boost::string_ref HTTP_{"HTTP_"};
-
-    char buf[name.size() + HTTP_.size() + 1];
-    auto dest = std::copy(std::begin(HTTP_), std::end(HTTP_), buf);
-    for (auto src = name.begin(); src != name.end(); ++src, ++dest) {
-      if (*src == '-') {
-        *dest = '_';
-      } else {
-        *dest = std::toupper(*src);
-      }
-    }
-    *dest = '\0';
-
-    env.set(buf, value);
+    env.set(lowercase_dash_http_attr(string("HTTP_") += name), value);
   }
 
   perfcounter->inc(l_rgw_qlen);
