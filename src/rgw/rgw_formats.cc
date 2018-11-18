@@ -184,9 +184,9 @@ void RGWFormatter_Plain::write_raw_data(const char *data)
 
 void RGWFormatter_Plain::write_data(const char *fmt, ...)
 {
-#define LARGE_ENOUGH_LEN 128
+  constexpr int LARGE_ENOUGH_LEN = 128;
   int n, size = LARGE_ENOUGH_LEN;
-  char s[size + 8];
+  char s[LARGE_ENOUGH_LEN + 8];
   char *p, *np;
   bool p_on_stack;
   va_list ap;
