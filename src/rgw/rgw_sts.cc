@@ -47,15 +47,12 @@ int Credentials::generateCredentials(CephContext* cct,
                           rgw::auth::Identity* identity)
 {
   uuid_d accessKey, secretKey;
-  char accessKeyId_str[MAX_ACCESS_KEY_LEN], secretAccessKey_str[MAX_SECRET_KEY_LEN];
 
   //AccessKeyId
-  gen_rand_alphanumeric_plain(cct, accessKeyId_str, sizeof(accessKeyId_str));
-  accessKeyId = accessKeyId_str;
+  accessKeyId = gen_rand_alphanumeric_plain(cct, MAX_ACCESS_KEY_LEN);
 
   //SecretAccessKey
-  gen_rand_alphanumeric_upper(cct, secretAccessKey_str, sizeof(secretAccessKey_str));
-  secretAccessKey = secretAccessKey_str;
+  secretAccessKey = gen_rand_alphanumeric_upper(cct, MAX_SECRET_KEY_LEN);
 
   //Expiration
   real_clock::time_point t = real_clock::now();
