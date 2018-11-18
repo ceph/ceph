@@ -4,6 +4,8 @@
 
 #include "rgw/rgw_zone.h"
 
+#include "fmt/format.h"
+
 int RGWSI_ZoneUtils::do_start()
 {
   init_unique_trans_id_deps();
@@ -12,12 +14,10 @@ int RGWSI_ZoneUtils::do_start()
 }
 
 string RGWSI_ZoneUtils::gen_host_id() {
-  /* uint64_t needs 16, two '-' separators and a trailing null */
-  const string& zone_name = zone_svc->get_zone().name;
-  const string& zonegroup_name = zone_svc->get_zonegroup().get_name();
-  char charbuf[16 + zone_name.size() + zonegroup_name.size() + 2 + 1];
-  snprintf(charbuf, sizeof(charbuf), "%llx-%s-%s", (unsigned long long)rados_svc->instance_id(), zone_name.c_str(), zonegroup_name.c_str());
-  return string(charbuf);
+  return fmt::format("{}-{}-{}",
+                     rados_svc->instance_id(),
+                     zone_svc->get_zone().name,
+                     zone_svc->get_zonegroup().get_name());
 }
 
 string RGWSI_ZoneUtils::unique_id(uint64_t unique_num)
