@@ -5,7 +5,9 @@
 #include <vector>
 #include <algorithm>
 #include <string>
+
 #include <boost/tokenizer.hpp>
+#include <boost/container/small_vector.hpp>
 
 #include "json_spirit/json_spirit.h"
 #include "common/ceph_json.h"
@@ -25,6 +27,7 @@
 #include "common/perf_counters.h"
 #include "common/convenience.h"
 #include "common/strtol.h"
+#include "include/random.h"
 #include "include/str_list.h"
 #include "auth/Crypto.h"
 #include "rgw_crypt_sanitize.h"
@@ -425,16 +428,10 @@ void req_info::init_meta_info(bool *found_bad_meta)
         if (found_bad_meta && strncmp(name, "_META_", name_len) == 0)
           *found_bad_meta = true;
 
-        char name_low[meta_prefixes[0].len + name_len + 1];
-        snprintf(name_low, meta_prefixes[0].len - 5 + name_len + 1, "%s%s", meta_prefixes[0].str + 5 /* skip HTTP_ */, name); // normalize meta prefix
-        int j;
-        for (j = 0; name_low[j]; j++) {
-          if (name_low[j] != '_')
-            name_low[j] = tolower(name_low[j]);
-          else
-            name_low[j] = '-';
-        }
-        name_low[j] = 0;
+        std::string name_low;
+        name_low.resize(meta_prefixes[0].len + name_len + 1);
+        snprintf(name_low.data(), meta_prefixes[0].len - 5 + name_len + 1, "%s%s", meta_prefixes[0].str + 5 /* skip HTTP_ */, name); // normalize meta prefix
+        lowercase_dash_http_attr(name_low);
 
         auto it = x_meta_map.find(name_low);
         if (it != x_meta_map.end()) {
@@ -770,102 +767,27 @@ std::string calc_hash_sha256_restart_stream(SHA256 **phash)
 
 int gen_rand_base64(CephContext *cct, char *dest, int size) /* size should be the required string size + 1 */
 {
-  char buf[size];
-  char tmp_dest[size + 4]; /* so that there's space for the extra '=' characters, and some */
-  int ret;
+  using buffer_t = boost::container::small_vector<char, 64>;
 
-  cct->random()->get_bytes(buf, sizeof(buf));
+  buffer_t buf(size);
+  buffer_t tmp_dest(4 + size);    // space for extra '=' chars, and some 
 
-  ret = ceph_armor(tmp_dest, &tmp_dest[sizeof(tmp_dest)],
-		   (const char *)buf, ((const char *)buf) + ((size - 1) * 3 + 4 - 1) / 4);
+  cct->random()->get_bytes(buf.data(), sizeof(buf));
+
+  int ret = ceph_armor(tmp_dest.data(), &tmp_dest[sizeof(tmp_dest)],
+		              (const char *)buf.data(), 
+                      ((const char *)buf.data()) + ((size - 1) * 3 + 4 - 1) / 4);
   if (ret < 0) {
     lderr(cct) << "ceph_armor failed" << dendl;
     return ret;
   }
   tmp_dest[ret] = '\0';
-  memcpy(dest, tmp_dest, size);
+  memcpy(dest, tmp_dest.data(), size);
   dest[size-1] = '\0';
 
   return 0;
 }
 
-static const char alphanum_upper_table[]="0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-
-void gen_rand_alphanumeric_upper(CephContext *cct, char *dest, int size) /* size should be the required string size + 1 */
-{
-  cct->random()->get_bytes(dest, size);
-
-  int i;
-  for (i=0; i<size - 1; i++) {
-    int pos = (unsigned)dest[i];
-    dest[i] = alphanum_upper_table[pos % (sizeof(alphanum_upper_table) - 1)];
-  }
-  dest[i] = '\0';
-}
-
-static const char alphanum_lower_table[]="0123456789abcdefghijklmnopqrstuvwxyz";
-
-void gen_rand_alphanumeric_lower(CephContext *cct, char *dest, int size) /* size should be the required string size + 1 */
-{
-  cct->random()->get_bytes(dest, size);
-
-  int i;
-  for (i=0; i<size - 1; i++) {
-    int pos = (unsigned)dest[i];
-    dest[i] = alphanum_lower_table[pos % (sizeof(alphanum_lower_table) - 1)];
-  }
-  dest[i] = '\0';
-}
-
-void gen_rand_alphanumeric_lower(CephContext *cct, string *str, int length)
-{
-  char buf[length + 1];
-  gen_rand_alphanumeric_lower(cct, buf, sizeof(buf));
-  *str = buf;
-}
-
-// this is basically a modified base64 charset, url friendly
-static const char alphanum_table[]="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-
-void gen_rand_alphanumeric(CephContext *cct, char *dest, int size) /* size should be the required string size + 1 */
-{
-  cct->random()->get_bytes(dest, size);
-
-  int i;
-  for (i=0; i<size - 1; i++) {
-    int pos = (unsigned)dest[i];
-    dest[i] = alphanum_table[pos & 63];
-  }
-  dest[i] = '\0';
-}
-
-static const char alphanum_no_underscore_table[]="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-.";
-
-void gen_rand_alphanumeric_no_underscore(CephContext *cct, char *dest, int size) /* size should be the required string size + 1 */
-{
-  cct->random()->get_bytes(dest, size);
-
-  int i;
-  for (i=0; i<size - 1; i++) {
-    int pos = (unsigned)dest[i];
-    dest[i] = alphanum_no_underscore_table[pos & 63];
-  }
-  dest[i] = '\0';
-}
-
-static const char alphanum_plain_table[]="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-
-void gen_rand_alphanumeric_plain(CephContext *cct, char *dest, int size) /* size should be the required string size + 1 */
-{
-  cct->random()->get_bytes(dest, size);
-
-  int i;
-  for (i=0; i<size - 1; i++) {
-    int pos = (unsigned)dest[i];
-    dest[i] = alphanum_plain_table[pos % (sizeof(alphanum_plain_table) - 1)];
-  }
-  dest[i] = '\0';
-}
 
 int NameVal::parse()
 {
@@ -1990,37 +1912,36 @@ bool match_policy(boost::string_view pattern, boost::string_view input,
  * make attrs look-like-this
  * converts underscores to dashes
  */
-string lowercase_dash_http_attr(const string& orig)
-{
-  const char *s = orig.c_str();
-  char buf[orig.size() + 1];
-  buf[orig.size()] = '\0';
 
-  for (size_t i = 0; i < orig.size(); ++i, ++s) {
-    switch (*s) {
-      case '_':
-        buf[i] = '-';
-        break;
-      default:
-        buf[i] = tolower(*s);
-    }
-  }
-  return string(buf);
+// Mutate in-situ:
+void lowercase_dash_http_attr_mutate(string& s)
+{
+  transform(begin(s), end(s), begin(s), [](const char c) {
+             return '-' == c ? '_' : static_cast<char>(tolower(c));
+           });
+}
+
+// Make a modified copy:
+string lowercase_dash_http_attr(string s)
+{
+  transform(begin(s), end(s), begin(s), [](const char c) {
+             return '-' == c ? '_' : static_cast<char>(tolower(c));
+           });
+
+  return s;
 }
 
 /*
  * make attrs Look-Like-This
  * converts underscores to dashes
  */
-string camelcase_dash_http_attr(const string& orig)
+string camelcase_dash_http_attr(string buf)
 {
-  const char *s = orig.c_str();
-  char buf[orig.size() + 1];
-  buf[orig.size()] = '\0';
+  auto s = begin(buf);
 
   bool last_sep = true;
 
-  for (size_t i = 0; i < orig.size(); ++i, ++s) {
+  for (size_t i = 0; i < buf.size(); ++i, ++s) {
     switch (*s) {
       case '_':
       case '-':
@@ -2036,5 +1957,24 @@ string camelcase_dash_http_attr(const string& orig)
         last_sep = false;
     }
   }
-  return string(buf);
+  return buf;
 }
+
+// Make a modified copy:
+string uppercase_dash_http_attr(string s)
+{
+  transform(begin(s), end(s), begin(s), [](const char c) {
+             return '-' == c ? '_' : static_cast<char>(toupper(c));
+           });
+
+  return s;
+}
+
+// Mutate in-situ:
+void uppercase_dash_http_attr_mutate(string& s)
+{
+  transform(begin(s), end(s), begin(s), [](const char c) {
+             return '-' == c ? '_' : static_cast<char>(toupper(c));
+           });
+}
+
