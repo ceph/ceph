@@ -964,19 +964,14 @@ int RGWAccessKeyPool::generate_key(RGWUserAdminOpState& op_state, std::string *e
   
     key = op_state.get_secret_key();
   } else {
-    char secret_key_buf[SECRET_KEY_LEN + 1];
-    gen_rand_alphanumeric_plain(g_ceph_context, secret_key_buf, sizeof(secret_key_buf));
-    key = secret_key_buf;
+    key = gen_rand_alphanumeric_plain(g_ceph_context, SECRET_KEY_LEN);
   }
 
   // Generate the access key
   if (key_type == KEY_TYPE_S3 && gen_access) {
-    char public_id_buf[PUBLIC_ID_LEN + 1];
-
     do {
-      int id_buf_size = sizeof(public_id_buf);
-      gen_rand_alphanumeric_upper(g_ceph_context, public_id_buf, id_buf_size);
-      id = public_id_buf;
+      id = gen_rand_alphanumeric_upper(g_ceph_context, PUBLIC_ID_LEN);
+
       if (!validate_access_key(id))
         continue;
 
@@ -1063,10 +1058,7 @@ int RGWAccessKeyPool::modify_key(RGWUserAdminOpState& op_state, std::string *err
   }
 
   if (op_state.will_gen_secret()) {
-    char secret_key_buf[SECRET_KEY_LEN + 1];
-    int key_buf_size = sizeof(secret_key_buf);
-    gen_rand_alphanumeric_plain(g_ceph_context, secret_key_buf, key_buf_size);
-    key = secret_key_buf;
+    key = gen_rand_alphanumeric_plain(g_ceph_context, SECRET_KEY_LEN);
   }
 
   if (key.empty()) {

@@ -469,26 +469,14 @@ struct RGWUserAdminOpState {
   }
 
   std::string generate_subuser() {
-    if (user_id.empty())
+    if (user_id.empty() || 0 >= RAND_SUBUSER_LEN)
       return "";
 
-    std::string generated_subuser;
-    user_id.to_str(generated_subuser);
-    std::string rand_suffix;
+    user_id.to_str(subuser);
 
-    int sub_buf_size = RAND_SUBUSER_LEN + 1;
-    char sub_buf[RAND_SUBUSER_LEN + 1];
+    subuser += gen_rand_alphanumeric_upper(g_ceph_context, RAND_SUBUSER_LEN);
 
-    gen_rand_alphanumeric_upper(g_ceph_context, sub_buf, sub_buf_size);
-
-    rand_suffix = sub_buf;
-    if (rand_suffix.empty())
-      return "";
-
-    generated_subuser.append(rand_suffix);
-    subuser = generated_subuser;
-
-    return generated_subuser;
+    return subuser;
   }
 
   RGWUserAdminOpState() : user_id(RGW_USER_ANON_ID)
