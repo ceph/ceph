@@ -189,7 +189,11 @@ BuildRequires:	python%{_python_buildid}-nose
 BuildRequires:	python%{_python_buildid}-pecan
 BuildRequires:	python%{_python_buildid}-requests
 BuildRequires:	python%{_python_buildid}-six
+%if 0%{?fedora} >= 29
+BuildRequires:	python3-tox
+%else
 BuildRequires:	python%{_python_buildid}-tox
+%endif
 BuildRequires:	python%{_python_buildid}-virtualenv
 BuildRequires:	socat
 %endif
