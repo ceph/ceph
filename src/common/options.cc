@@ -1523,6 +1523,10 @@ std::vector<Option> get_global_options() {
     .set_default(true)
     .set_description("Enable POOL_APP_NOT_ENABLED health check"),
 
+    Option("mon_warn_on_misplaced", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("Issue a health warning if there are misplaced objects"),
+
     Option("mon_max_snap_prune_per_epoch", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(100)
     .set_description("Max number of pruned snaps we will process in a single OSDMap epoch"),
