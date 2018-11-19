@@ -6699,8 +6699,6 @@ void Server::_unlink_local(MDRequestRef& mdr, CDentry *dn, CDentry *straydn)
   if (in->is_dir()) {
     ceph_assert(straydn);
     mdcache->project_subtree_rename(in, dn->get_dir(), straydn->get_dir());
-
-    in->maybe_export_pin(true);
   }
 
   journal_and_reply(mdr, 0, dn, le, new C_MDS_unlink_local_finish(this, mdr, dn, straydn));
