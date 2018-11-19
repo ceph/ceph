@@ -180,8 +180,8 @@ void usage()
   cout << "                             (NOTE: required to specify formatting of date\n";
   cout << "                             to \"YYYY-MM-DD-hh\")\n";
   cout << "  log rm                     remove log object\n";
-  cout << "  usage show                 show usage (by user, date range)\n";
-  cout << "  usage trim                 trim usage (by user, date range)\n";
+  cout << "  usage show                 show usage (by user, by bucket, date range)\n";
+  cout << "  usage trim                 trim usage (by user, by bucket, date range)\n";
   cout << "  usage clear                reset all the usage stats for the cluster\n";
   cout << "  gc list                    dump expired garbage collection objects (specify\n";
   cout << "                             --include-all to list all entries, including unexpired)\n";
@@ -5579,7 +5579,7 @@ next:
     }
 
 
-    ret = RGWUsage::show(store, user_id, start_epoch, end_epoch,
+    ret = RGWUsage::show(store, user_id, bucket_name, start_epoch, end_epoch,
 			 show_log_entries, show_log_sum, &categories,
 			 f);
     if (ret < 0) {
@@ -5589,8 +5589,9 @@ next:
   }
 
   if (opt_cmd == OPT_USAGE_TRIM) {
-    if (user_id.empty() && !yes_i_really_mean_it) {
-      cerr << "usage trim without user specified will remove *all* users data" << std::endl;
+    if (user_id.empty() && bucket_name.empty() &&
+	start_date.empty() && end_date.empty() && !yes_i_really_mean_it) {
+      cerr << "usage trim without user/date/bucket specified will remove *all* users data" << std::endl;
       cerr << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
       return 1;
     }
@@ -5615,7 +5616,7 @@ next:
       }
     }
 
-    ret = RGWUsage::trim(store, user_id, start_epoch, end_epoch);
+    ret = RGWUsage::trim(store, user_id, bucket_name, start_epoch, end_epoch);
     if (ret < 0) {
       cerr << "ERROR: read_usage() returned ret=" << ret << std::endl;
       return 1;
