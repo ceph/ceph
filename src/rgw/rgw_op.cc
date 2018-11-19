@@ -2129,7 +2129,7 @@ void RGWGetUsage::execute()
   RGWUsageIter usage_iter;
   
   while (is_truncated) {
-    op_ret = store->read_usage(s->user->user_id, start_epoch, end_epoch, max_entries,
+    op_ret = store->read_usage(s->user->user_id, s->bucket_name, start_epoch, end_epoch, max_entries,
                                 &is_truncated, usage_iter, usage);
 
     if (op_ret == -ENOENT) {
