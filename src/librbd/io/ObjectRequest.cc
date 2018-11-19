@@ -378,20 +378,25 @@ AbstractObjectWriteRequest<I>::AbstractObjectWriteRequest(
 {
   m_snaps.insert(m_snaps.end(), snapc.snaps.begin(), snapc.snaps.end());
 
-  {
-    RWLock::RLocker snap_locker(ictx->snap_lock);
-    RWLock::RLocker parent_locker(ictx->parent_lock);
-    this->compute_parent_extents(&m_parent_extents, false);
-  }
-
   if (this->m_object_off == 0 &&
       this->m_object_len == ictx->get_object_size()) {
     m_full_object = true;
   }
 
+  compute_parent_info();
+}
+
+template <typename I>
+void AbstractObjectWriteRequest<I>::compute_parent_info() {
+  I *image_ctx = this->m_ictx;
+  RWLock::RLocker snap_locker(image_ctx->snap_lock);
+  RWLock::RLocker parent_locker(image_ctx->parent_lock);
+
+  this->compute_parent_extents(&m_parent_extents, false);
+
   if (!this->has_parent() ||
       (m_full_object && m_snaps.empty() && !is_post_copyup_write_required())) {
-    this->m_copyup_enabled = false;
+    m_copyup_enabled = false;
   }
 }
 
@@ -494,6 +499,7 @@ void AbstractObjectWriteRequest<I>::write_object() {
   if (m_copyup_enabled) {
     ldout(image_ctx->cct, 20) << "guarding write" << dendl;
     if (!image_ctx->migration_info.empty()) {
+      m_guarding_migration_write = true;
       cls_client::assert_snapc_seq(
         &write, m_snap_seq, cls::rbd::ASSERT_SNAPC_SEQ_LE_SNAPSET_SEQ);
     } else {
@@ -521,11 +527,21 @@ void AbstractObjectWriteRequest<I>::handle_write_object(int r) {
   ldout(image_ctx->cct, 20) << "r=" << r << dendl;
 
   r = filter_write_result(r);
-  if (r == -ENOENT || (r == -ERANGE && !image_ctx->migration_info.empty())) {
+  if (r == -ENOENT) {
     if (m_copyup_enabled) {
       copyup();
       return;
     }
+  } else if (r == -ERANGE && m_guarding_migration_write) {
+    if (!image_ctx->migration_info.empty()) {
+      copyup();
+    } else {
+      ldout(image_ctx->cct, 10) << "migration parent gone, restart io" << dendl;
+      m_guarding_migration_write = false;
+      compute_parent_info();
+      write_object();
+    }
+    return;
   } else if (r == -EILSEQ) {
     ldout(image_ctx->cct, 10) << "failed to write object" << dendl;
     this->finish(r);
