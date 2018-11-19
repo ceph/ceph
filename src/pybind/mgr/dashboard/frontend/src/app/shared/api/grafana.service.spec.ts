@@ -2,19 +2,19 @@ import { HttpClientTestingModule, HttpTestingController } from '@angular/common/
 import { TestBed } from '@angular/core/testing';
 
 import { configureTestBed } from '../../../testing/unit-test-helper';
-import { SettingsService } from './settings.service';
+import { GrafanaService } from './grafana.service';
 
-describe('SettingsService', () => {
-  let service: SettingsService;
+describe('GrafanaService', () => {
+  let service: GrafanaService;
   let httpTesting: HttpTestingController;
 
   configureTestBed({
-    providers: [SettingsService],
+    providers: [GrafanaService],
     imports: [HttpClientTestingModule]
   });
 
   beforeEach(() => {
-    service = TestBed.get(SettingsService);
+    service = TestBed.get(GrafanaService);
     httpTesting = TestBed.get(HttpTestingController);
   });
 
@@ -28,7 +28,7 @@ describe('SettingsService', () => {
 
   it('should get protocol', () => {
     service.getGrafanaApiUrl().subscribe();
-    const req = httpTesting.expectOne('api/settings/GRAFANA_API_URL');
+    const req = httpTesting.expectOne('api/grafana/url');
     expect(req.request.method).toBe('GET');
   });
 });

@@ -4,6 +4,8 @@ import * as _ from 'lodash';
 
 import { OsdService } from '../../../../shared/api/osd.service';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
+import { Permission } from '../../../../shared/models/permissions';
+import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
 
 @Component({
   selector: 'cd-osd-details',
@@ -15,8 +17,11 @@ export class OsdDetailsComponent implements OnChanges {
   selection: CdTableSelection;
 
   osd: any;
+  grafanaPermission: Permission;
 
-  constructor(private osdService: OsdService) {}
+  constructor(private osdService: OsdService, private authStorageService: AuthStorageService) {
+    this.grafanaPermission = this.authStorageService.getPermissions().grafana;
+  }
 
   ngOnChanges() {
     this.osd = {

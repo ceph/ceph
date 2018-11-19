@@ -10,7 +10,7 @@
               selectionType="single"
               (updateSelection)="updateSelection($event)">
       <cd-table-actions class="table-actions"
-                        [permission]="permission"
+                        [permission]="permissions.pool"
                         [selection]="selection"
                         [tableActions]="tableActions">
       </cd-table-actions>
@@ -23,6 +23,7 @@
           </cd-table-key-value>
         </tab>
         <tab i18n-heading
+             *ngIf="permissions.grafana.read"
              heading="Performance Details">
           <cd-grafana [grafanaPath]="'8ypfkWpik/ceph-pool-detail?var-pool_name='
                       + selection.first()['pool_name']"
@@ -34,6 +35,7 @@
   </tab>
 
   <tab i18n-heading
+       *ngIf="permissions.grafana.read"
        heading="Overall Performance">
     <cd-grafana [grafanaPath]="'z99hzWtmk/ceph-pools-overview?'"
                 grafanaStyle="two">

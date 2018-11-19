@@ -89,12 +89,8 @@ class Grafana(BaseController):
 
     @Endpoint()
     @ReadPermission
-    def status(self):
-        grafana = GrafanaRestClient.instance()
-        available, msg = grafana.is_service_online()
-        response = {'available': available}
-        if msg:
-            response['message'] = msg
+    def url(self):
+        response = {'instance': Settings.GRAFANA_API_URL}
 
         return response
 

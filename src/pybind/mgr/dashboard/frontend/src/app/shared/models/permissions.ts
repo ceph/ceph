@@ -26,6 +26,7 @@ export class Permissions {
   manager: Permission;
   log: Permission;
   user: Permission;
+  grafana: Permission;
 
   constructor(serverPermissions: any) {
     this.hosts = new Permission(serverPermissions['hosts']);
@@ -41,5 +42,6 @@ export class Permissions {
     this.manager = new Permission(serverPermissions['manager']);
     this.log = new Permission(serverPermissions['log']);
     this.user = new Permission(serverPermissions['user']);
+    this.grafana = new Permission(serverPermissions['grafana']);
   }
 }

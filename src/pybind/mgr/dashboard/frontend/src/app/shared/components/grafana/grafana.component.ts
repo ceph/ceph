@@ -3,9 +3,9 @@ import { Component, Input, OnChanges, OnInit } from '@angular/core';
 import { DomSanitizer } from '@angular/platform-browser';
 import { SafeUrl } from '@angular/platform-browser';
 
-import { SettingsService } from '../../api/settings.service';
-import { CephReleaseNamePipe } from '../../pipes/ceph-release-name.pipe';
-import { SummaryService } from '../../services/summary.service';
+import { GrafanaService } from '../../../shared/api/grafana.service';
+import { CephReleaseNamePipe } from '../../../shared/pipes/ceph-release-name.pipe';
+import { SummaryService } from '../../../shared/services/summary.service';
 
 @Component({
   selector: 'cd-grafana',
@@ -38,7 +38,7 @@ export class GrafanaComponent implements OnInit, OnChanges {
   constructor(
     private summaryService: SummaryService,
     private sanitizer: DomSanitizer,
-    private settingsService: SettingsService,
+    private grafanaService: GrafanaService,
     private cephReleaseNamePipe: CephReleaseNamePipe
   ) {}
 
@@ -64,8 +64,8 @@ export class GrafanaComponent implements OnInit, OnChanges {
       }, 0);
     });
 
-    this.settingsService.getGrafanaApiUrl().subscribe((data: any) => {
-      this.grafanaUrl = data.value;
+    this.grafanaService.getGrafanaApiUrl().subscribe((data: any) => {
+      this.grafanaUrl = data.instance;
       if (this.grafanaUrl === '') {
         this.grafanaExist = false;
         return;

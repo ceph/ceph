@@ -8,7 +8,7 @@
               (updateSelection)="updateSelection($event)"
               [updateSelectionOnRefresh]="'never'">
       <div class="table-actions btn-toolbar">
-        <cd-table-actions [permission]="permission"
+        <cd-table-actions [permission]="permissions.osd"
                           [selection]="selection"
                           class="btn-group"
                           [tableActions]="tableActions">
@@ -46,6 +46,7 @@
     </ng-template>
   </tab>
   <tab i18n-heading
+       *ngIf="permissions.grafana.read"
        heading="Overall Performance">
     <cd-grafana [grafanaPath]="'lo02I1Aiz/osd-overview?'"
                 grafanaStyle="three">

@@ -13,7 +13,7 @@ import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { ExecutingTask } from '../../../shared/models/executing-task';
 import { FinishedTask } from '../../../shared/models/finished-task';
-import { Permission } from '../../../shared/models/permissions';
+import { Permissions } from '../../../shared/models/permissions';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { TaskListService } from '../../../shared/services/task-list.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
@@ -34,7 +34,7 @@ export class PoolListComponent implements OnInit {
   selection = new CdTableSelection();
   modalRef: BsModalRef;
   executingTasks: ExecutingTask[] = [];
-  permission: Permission;
+  permissions: Permissions;
   tableActions: CdTableAction[];
   viewCacheStatusList: any[];
 
@@ -46,7 +46,7 @@ export class PoolListComponent implements OnInit {
     private modalService: BsModalService,
     private i18n: I18n
   ) {
-    this.permission = this.authStorageService.getPermissions().pool;
+    this.permissions = this.authStorageService.getPermissions();
     this.tableActions = [
       {
         permission: 'create',

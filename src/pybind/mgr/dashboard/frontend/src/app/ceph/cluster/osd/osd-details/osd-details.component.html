@@ -42,6 +42,7 @@
     </div>
   </tab>
   <tab i18n-heading
+       *ngIf="grafanaPermission.read"
        heading="Performance Details">
     <cd-grafana [grafanaPath]="'MKj_9ipiz/osd-device-details?var-osd_id=' + osd['id']"
                 grafanaStyle="GrafanaStyles.two">
