@@ -80,10 +80,9 @@ build_dashboard_frontend() {
   TEMP_DIR=`mktemp -d`
   $CURR_DIR/src/tools/setup-virtualenv.sh --python=$(_python_autoselect) $TEMP_DIR
   $TEMP_DIR/bin/pip install nodeenv
-  $TEMP_DIR/bin/nodeenv -p --node=8.11.3
+  $TEMP_DIR/bin/nodeenv -p --node=10.13.0
   cd src/pybind/mgr/dashboard/frontend
   . $TEMP_DIR/bin/activate
-  npm i -g npm --unsafe-perm
   npm ci
   npm run build -- --prod --progress=false
   deactivate
