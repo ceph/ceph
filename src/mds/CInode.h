@@ -736,6 +736,7 @@ public:
   int d_type() const { return IFTODT(inode.mode); }
 
   mempool_inode& get_inode() { return inode; }
+  const mempool_inode& get_inode() const { return inode; }
   CDentry* get_parent_dn() { return parent; }
   const CDentry* get_parent_dn() const { return parent; }
   const CDentry* get_projected_parent_dn() const { return !projected_parent.empty() ? projected_parent.back() : parent; }
