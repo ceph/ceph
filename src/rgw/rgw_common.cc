@@ -1113,6 +1113,10 @@ bool verify_user_permission(const DoutPrefixProvider* dpp,
     return false;
   }
 
+  if (usr_policy_res == Effect::Allow) {
+    return true;
+  }
+
   if (op == rgw::IAM::s3CreateBucket || op == rgw::IAM::s3ListAllMyBuckets) {
     auto perm = op_to_perm(op);
 
@@ -1122,9 +1126,7 @@ bool verify_user_permission(const DoutPrefixProvider* dpp,
   if (usr_policy_res == Effect::Pass) {
     return false;
   }
-  else if (usr_policy_res == Effect::Allow) {
-    return true;
-  }
+
   return false;
 }
 
