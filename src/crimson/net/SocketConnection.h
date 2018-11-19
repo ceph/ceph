@@ -27,6 +27,8 @@ class AuthSessionHandler;
 
 namespace ceph::net {
 
+using stop_t = seastar::stop_iteration;
+
 class SocketMessenger;
 class SocketConnection;
 using SocketConnectionRef = boost::intrusive_ptr<SocketConnection>;
@@ -99,7 +101,7 @@ class SocketConnection : public Connection {
 
   seastar::future<> maybe_throttle();
   void read_tags_until_next_message();
-  seastar::future<seastar::stop_iteration> handle_ack();
+  seastar::future<stop_t> handle_ack();
 
   /// becomes available when handshake completes, and when all previous messages
   /// have been sent to the output stream. send() chains new messages as

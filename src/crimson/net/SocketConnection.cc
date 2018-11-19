@@ -79,24 +79,22 @@ void SocketConnection::read_tags_until_next_message()
           switch (buf[0]) {
           case CEPH_MSGR_TAG_MSG:
             // stop looping and notify read_header()
-            return seastar::make_ready_future<seastar::stop_iteration>(
-                seastar::stop_iteration::yes);
+            return seastar::make_ready_future<stop_t>(stop_t::yes);
           case CEPH_MSGR_TAG_ACK:
             return handle_ack();
           case CEPH_MSGR_TAG_KEEPALIVE:
             break;
           case CEPH_MSGR_TAG_KEEPALIVE2:
             return handle_keepalive2()
-              .then([this] { return seastar::stop_iteration::no; });
+              .then([this] { return stop_t::no; });
           case CEPH_MSGR_TAG_KEEPALIVE2_ACK:
             return handle_keepalive2_ack()
-              .then([this] { return seastar::stop_iteration::no; });
+              .then([this] { return stop_t::no; });
           case CEPH_MSGR_TAG_CLOSE:
             std::cout << "close" << std::endl;
             break;
           }
-          return seastar::make_ready_future<seastar::stop_iteration>(
-              seastar::stop_iteration::no);
+          return seastar::make_ready_future<stop_t>(stop_t::no);
         });
     }).handle_exception_type([this] (const std::system_error& e) {
       if (e.code() == error::read_eof) {
@@ -115,7 +113,7 @@ seastar::future<seastar::stop_iteration> SocketConnection::handle_ack()
     .then([this] (auto buf) {
       auto seq = reinterpret_cast<const ceph_le64*>(buf.get());
       discard_up_to(&sent, *seq);
-      return seastar::stop_iteration::no;
+      return stop_t::no;
     });
 }
 
