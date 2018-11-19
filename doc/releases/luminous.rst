@@ -1704,7 +1704,7 @@ Upgrade from Jewel or Kraken
 
 #. Verify that all RBD client users have sufficient caps to blacklist
    other client users. RBD client users with only ``"allow r"``
-   monitor caps should to be updated as follows::
+   monitor caps should be updated as follows::
 
      # ceph auth caps client.<ID> mon 'allow r, allow command "osd blacklist"' osd '<existing OSD caps for user>'
 
