@@ -923,7 +923,16 @@ void Server::find_idle_sessions()
       if (last_cap_renew_span < cutoff) {
 	dout(20) << "laggiest active session is " << session->info.inst
 		 << " and renewed caps recently (" << last_cap_renew_span << "s ago)" << dendl;
-	continue;
+	break;
+      }
+
+      if (session->last_seen > session->last_cap_renew) {
+	last_cap_renew_span = std::chrono::duration<double>(now - session->last_seen).count();
+	if (last_cap_renew_span < cutoff) {
+	  dout(20) << "laggiest active session is " << session->info.inst
+		   << " and renewed caps recently (" << last_cap_renew_span << "s ago)" << dendl;
+	  continue;
+	}
       }
 
       auto it = session->info.client_metadata.find("timeout");
