@@ -708,6 +708,9 @@ void FileStore::collect_metadata(map<string,string> *pm)
       (*pm)["vdo_physical_size"] =
 	stringify(4096 * get_vdo_stat(vdo_fd, "physical_blocks"));
     }
+    if (journal) {
+      journal->collect_metadata(pm);
+    }
   }
 }
 
@@ -721,6 +724,9 @@ int FileStore::get_devices(set<string> *ls)
   ls->insert(dev_node);
   if (strncmp(dev_node, "dm-", 3) == 0) {
     get_dm_parents(dev_node, ls);
+  }
+  if (journal) {
+    journal->get_devices(ls);
   }
   return 0;
 }
