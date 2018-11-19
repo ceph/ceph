@@ -119,6 +119,9 @@ typedef struct {
   char *client_name;
 } rbd_mirror_peer_t;
 
+#define RBD_MIRROR_PEER_ATTRIBUTE_NAME_MON_HOST "mon_host"
+#define RBD_MIRROR_PEER_ATTRIBUTE_NAME_KEY      "key"
+
 typedef enum {
   RBD_MIRROR_IMAGE_DISABLING = 0,
   RBD_MIRROR_IMAGE_ENABLED = 1,
@@ -407,6 +410,13 @@ CEPH_RBD_API int rbd_mirror_peer_set_client(rados_ioctx_t io_ctx,
 CEPH_RBD_API int rbd_mirror_peer_set_cluster(rados_ioctx_t io_ctx,
                                              const char *uuid,
                                              const char *cluster_name);
+CEPH_RBD_API int rbd_mirror_peer_get_attributes(
+    rados_ioctx_t p, const char *uuid, char *keys, size_t *max_key_len,
+    char *values, size_t *max_value_len, size_t *key_value_count);
+CEPH_RBD_API int rbd_mirror_peer_set_attributes(
+    rados_ioctx_t p, const char *uuid, const char *keys, const char *values,
+    size_t key_value_count);
+
 CEPH_RBD_API int rbd_mirror_image_status_list(rados_ioctx_t io_ctx,
 					      const char *start_id, size_t max,
 					      char **image_ids,

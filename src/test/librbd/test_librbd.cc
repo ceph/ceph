@@ -6231,6 +6231,40 @@ TEST_F(TestLibRBD, Mirror) {
   ASSERT_EQ(expected_peers, peers);
 
   ASSERT_EQ(-EBUSY, rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_DISABLED));
+  ASSERT_EQ(0, rbd.mirror_peer_remove(ioctx, uuid1));
+  ASSERT_EQ(0, rbd.mirror_peer_remove(ioctx, uuid3));
+  ASSERT_EQ(0, rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_DISABLED));
+}
+
+TEST_F(TestLibRBD, MirrorPeerAttributes) {
+  REQUIRE(!is_librados_test_stub(_rados));
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  ASSERT_EQ(0, rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_IMAGE));
+
+  std::string uuid;
+  ASSERT_EQ(0, rbd.mirror_peer_add(ioctx, &uuid, "remote_cluster", "client"));
+
+  std::map<std::string, std::string> attributes;
+  ASSERT_EQ(-ENOENT, rbd.mirror_peer_get_attributes(ioctx, uuid, &attributes));
+  ASSERT_EQ(-ENOENT, rbd.mirror_peer_set_attributes(ioctx, "missing uuid",
+                                                    attributes));
+
+  std::map<std::string, std::string> expected_attributes{
+    {"mon_host", "1.2.3.4"},
+    {"key", "ABC"}};
+  ASSERT_EQ(0, rbd.mirror_peer_set_attributes(ioctx, uuid,
+                                              expected_attributes));
+
+  ASSERT_EQ(0, rbd.mirror_peer_get_attributes(ioctx, uuid,
+                                              &attributes));
+  ASSERT_EQ(expected_attributes, attributes);
+
+  ASSERT_EQ(0, rbd.mirror_peer_remove(ioctx, uuid));
+  ASSERT_EQ(0, rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_DISABLED));
 }
 
 TEST_F(TestLibRBD, FlushCacheWithCopyupOnExternalSnapshot) {

@@ -831,6 +831,18 @@ namespace librbd {
     return librbd::api::Mirror<>::peer_set_cluster(io_ctx, uuid, cluster_name);
   }
 
+  int RBD::mirror_peer_get_attributes(
+      IoCtx& io_ctx, const std::string &uuid,
+      std::map<std::string, std::string> *key_vals) {
+    return librbd::api::Mirror<>::peer_get_attributes(io_ctx, uuid, key_vals);
+  }
+
+  int RBD::mirror_peer_set_attributes(
+      IoCtx& io_ctx, const std::string &uuid,
+      const std::map<std::string, std::string>& key_vals) {
+    return librbd::api::Mirror<>::peer_set_attributes(io_ctx, uuid, key_vals);
+  }
+
   int RBD::mirror_image_status_list(IoCtx& io_ctx, const std::string &start_id,
       size_t max, std::map<std::string, mirror_image_status_t> *images) {
     return librbd::api::Mirror<>::image_status_list(io_ctx, start_id, max,
@@ -2636,6 +2648,66 @@ extern "C" int rbd_mirror_peer_set_cluster(rados_ioctx_t p, const char *uuid,
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
   return librbd::api::Mirror<>::peer_set_cluster(io_ctx, uuid, cluster_name);
+}
+
+extern "C" int rbd_mirror_peer_get_attributes(
+    rados_ioctx_t p, const char *uuid, char *keys, size_t *max_key_len,
+    char *values, size_t *max_val_len, size_t *key_value_count) {
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+
+  std::map<std::string, std::string> attributes;
+  int r = librbd::api::Mirror<>::peer_get_attributes(io_ctx, uuid, &attributes);
+  if (r < 0) {
+    return r;
+  }
+
+  size_t key_total_len = 0, val_total_len = 0;
+  for (auto& it : attributes) {
+    key_total_len += it.first.size() + 1;
+    val_total_len += it.second.length() + 1;
+  }
+
+  bool too_short = ((*max_key_len < key_total_len) ||
+                    (*max_val_len < val_total_len));
+
+  *max_key_len = key_total_len;
+  *max_val_len = val_total_len;
+  *key_value_count = attributes.size();
+  if (too_short) {
+    return -ERANGE;
+  }
+
+  char *keys_p = keys;
+  char *values_p = values;
+  for (auto& it : attributes) {
+    strncpy(keys_p, it.first.c_str(), it.first.size() + 1);
+    keys_p += it.first.size() + 1;
+
+    strncpy(values_p, it.second.c_str(), it.second.length() + 1);
+    values_p += it.second.length() + 1;
+  }
+
+  return 0;
+}
+
+extern "C" int rbd_mirror_peer_set_attributes(
+    rados_ioctx_t p, const char *uuid, const char *keys, const char *values,
+    size_t count) {
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+
+  std::map<std::string, std::string> attributes;
+
+  for (size_t i = 0; i < count; ++i) {
+    const char* key = keys;
+    keys += strlen(key) + 1;
+    const char* value = values;
+    values += strlen(value) + 1;
+    attributes[key] = value;
+  }
+
+  return librbd::api::Mirror<>::peer_set_attributes(io_ctx, uuid, attributes);
 }
 
 extern "C" int rbd_mirror_image_status_list(rados_ioctx_t p,
