@@ -298,7 +298,8 @@ int rgw_bucket_instance_store_info(RGWRados *store, string& entry, bufferlist& b
   return store->meta_mgr->put_entry(bucket_instance_meta_handler, entry, bl, exclusive, objv_tracker, mtime, pattrs);
 }
 
-int rgw_bucket_instance_remove_entry(RGWRados *store, string& entry, RGWObjVersionTracker *objv_tracker) {
+int rgw_bucket_instance_remove_entry(RGWRados *store, const string& entry,
+                                     RGWObjVersionTracker *objv_tracker) {
   return store->meta_mgr->remove_entry(bucket_instance_meta_handler, entry, objv_tracker);
 }
 
@@ -2589,7 +2590,8 @@ public:
     RGWListRawObjsCtx ctx;
   };
 
-  int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) override {
+  int remove(RGWRados *store, string& entry,
+	     RGWObjVersionTracker& objv_tracker) override {
     RGWBucketInfo info;
     RGWObjectCtx obj_ctx(store);
 
@@ -2597,7 +2599,8 @@ public:
     if (ret < 0 && ret != -ENOENT)
       return ret;
 
-    return rgw_bucket_instance_remove_entry(store, entry, &info.objv_tracker);
+    return rgw_bucket_instance_remove_entry(store, entry,
+					    &info.objv_tracker);
   }
 
   void get_pool_and_oid(RGWRados *store, const string& key, rgw_pool& pool, string& oid) override {

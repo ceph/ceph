@@ -1119,7 +1119,9 @@ done:
   return 0;
 }
 
-int RGWMetadataManager::remove_entry(RGWMetadataHandler *handler, string& key, RGWObjVersionTracker *objv_tracker)
+int RGWMetadataManager::remove_entry(RGWMetadataHandler *handler,
+				     const string& key,
+				     RGWObjVersionTracker *objv_tracker)
 {
   string section;
   RGWMetadataLogData log_data;

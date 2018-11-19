@@ -6066,8 +6066,9 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
       /* only remove it if it's a different bucket instance */
       if (info.bucket.bucket_id != bucket.bucket_id) {
         /* remove bucket meta instance */
-        string entry = bucket.get_key();
-        r = rgw_bucket_instance_remove_entry(this, entry, &instance_ver);
+        r = rgw_bucket_instance_remove_entry(this,
+					     bucket.get_key(),
+					     &instance_ver);
         if (r < 0)
           return r;
 
@@ -8717,8 +8718,7 @@ int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& ob
   /* if the bucket is not synced we can remove the meta file */
   if (!is_syncing_bucket_meta(bucket)) {
     RGWObjVersionTracker objv_tracker;
-    string entry = bucket.get_key();
-    r= rgw_bucket_instance_remove_entry(this, entry, &objv_tracker);
+    r = rgw_bucket_instance_remove_entry(this, bucket.get_key(), &objv_tracker);
     if (r < 0) {
       return r;
     }
