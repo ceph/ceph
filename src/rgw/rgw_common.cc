@@ -1133,7 +1133,7 @@ bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp, struct req_
                             const int perm)
 {
   /* S3 doesn't support account ACLs. */
-  if (!user_acl)
+  if (s->user->type != TYPE_NONE && !user_acl)
     return true;
 
   if ((perm & (int)s->perm_mask) != perm)
