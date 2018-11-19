@@ -124,7 +124,8 @@ public:
   }
 
   int get_count() {
-    return lru.size();
+    std::lock_guard locker{lock};
+    return size;
   }
 
   /// adjust container comparator (for purposes of get_next sort order)
