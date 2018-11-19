@@ -440,6 +440,9 @@ public:
   }
 
   void register_config_callback(md_config_t::config_callback fn);
+  void register_config_notify_callback(std::function<void(void)> f) {
+    config_notify_cb = f;
+  }
   md_config_t::config_callback get_config_callback();
 
 private:
@@ -454,6 +457,7 @@ private:
   void handle_get_version_reply(MMonGetVersionReply* m);
 
   md_config_t::config_callback config_cb;
+  std::function<void(void)> config_notify_cb;
 };
 
 #endif

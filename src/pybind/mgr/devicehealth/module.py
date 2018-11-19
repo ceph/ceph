@@ -173,7 +173,7 @@ class Module(MgrModule):
             raise NotImplementedError(cmd['prefix'])
 
     def self_test(self):
-        self.refresh_config()
+        self.config_notify()
         osdmap = self.get('osd_map')
         osd_id = osdmap['osds'][0]['osd']
         osdmeta = self.get('osd_metadata')
@@ -188,7 +188,7 @@ class Module(MgrModule):
             assert r == 0
             assert before != after
 
-    def refresh_config(self):
+    def config_notify(self):
         for opt in self.OPTIONS:
             setattr(self,
                     opt['name'],
@@ -197,6 +197,7 @@ class Module(MgrModule):
 
     def serve(self):
         self.log.info("Starting")
+        self.config_notify()
 
         last_scrape = None
         ls = self.get_store('last_scrape')
@@ -208,8 +209,6 @@ class Module(MgrModule):
         self.log.debug('Last scrape %s', last_scrape)
 
         while self.run:
-            self.refresh_config()
-
             if self.enable_monitoring == 'true' or self.enable_monitoring == 'True':
                 self.log.debug('Running')
                 self.check_health()

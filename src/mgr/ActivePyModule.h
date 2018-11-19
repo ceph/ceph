@@ -76,6 +76,7 @@ public:
     return changed;
   }
   void get_health_checks(health_check_map_t *checks);
+  void config_notify();
 
   void set_uri(const std::string &str)
   {

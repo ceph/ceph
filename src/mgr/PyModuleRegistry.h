@@ -61,6 +61,7 @@ private:
 
 public:
   void handle_config(const std::string &k, const std::string &v);
+  void handle_config_notify();
 
   /**
    * Get references to all modules (whether they have loaded and/or
