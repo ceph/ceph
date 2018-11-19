@@ -46,9 +46,10 @@ class OSDPerfQuery(MgrModule):
             {'type': 'client_id', 'regex': '^.+$'},
         ],
         'performance_counter_descriptors': [
-            'write_ops', 'read_ops', 'write_bytes', 'read_bytes',
+            'bytes', 'write_ops', 'read_ops', 'write_bytes', 'read_bytes',
             'write_latency', 'read_latency',
         ],
+        'limit': {'order_by': 'bytes', 'max_count': 10},
     }
 
     RBD_IMAGE_ID_QUERY = {
@@ -57,9 +58,10 @@ class OSDPerfQuery(MgrModule):
             {'type': 'object_name', 'regex': '^rbd_data\.([^.]+)\.'},
         ],
         'performance_counter_descriptors': [
-            'write_ops', 'read_ops', 'write_bytes', 'read_bytes',
+            'bytes', 'write_ops', 'read_ops', 'write_bytes', 'read_bytes',
             'write_latency', 'read_latency',
         ],
+        'limit': {'order_by': 'bytes', 'max_count': 10},
     }
 
     queries = {}
@@ -97,7 +99,9 @@ class OSDPerfQuery(MgrModule):
                 column_names = ["client_id"]
             for d in descriptors:
                 desc = d
-                if d in ['write_bytes', 'read_bytes']:
+                if d in ['bytes']:
+                    continue
+                elif d in ['write_bytes', 'read_bytes']:
                     desc += '/sec'
                 elif d in ['write_latency', 'read_latency']:
                     desc += '(msec)'
@@ -105,14 +109,24 @@ class OSDPerfQuery(MgrModule):
 
             table = prettytable.PrettyTable(tuple(column_names),
                                             hrules=prettytable.FRAME)
-            for c in res['counters']:
+
+            max_count = len(res['counters'])
+            if 'limit' in query:
+                if 'max_count' in query['limit']:
+                    max_count = query['limit']['max_count']
+                if 'order_by' in query['limit']:
+                    i = descriptors.index(query['limit']['order_by'])
+                    res['counters'].sort(key=lambda x: x['c'][i], reverse=True)
+            for c in res['counters'][:max_count]:
                 if query == self.RBD_IMAGE_ID_QUERY:
                     row = [c['k'][0][0], c['k'][1][1]]
                 else:
                     row = [c['k'][0][0]]
                 counters = c['c']
                 for i in range(len(descriptors)):
-                    if descriptors[i] in ['write_bytes', 'read_bytes']:
+                    if descriptors[i] in ['bytes']:
+                        continue
+                    elif descriptors[i] in ['write_bytes', 'read_bytes']:
                         bps = counters[i][0] / (now - last_update)
                         row.append(get_human_readable(bps))
                     elif descriptors[i] in ['write_latency', 'read_latency']:
