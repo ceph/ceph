@@ -9819,6 +9819,7 @@ void OSD::set_perf_queries(
   {
     Mutex::Locker locker(m_perf_queries_lock);
     m_perf_queries = supported_queries;
+    m_perf_limits = queries;
   }
 
   std::vector<PGRef> pgs;
@@ -9850,7 +9851,7 @@ void OSD::get_perf_reports(
       dps.merge(pg_dps);
     }
   }
-  dps.add_to_reports(reports);
+  dps.add_to_reports(m_perf_limits, reports);
   dout(20) << "reports for " << reports->size() << " queries" << dendl;
 }
 
