@@ -473,12 +473,11 @@ PerfCounters::PerfCounters(CephContext *cct, const std::string &name,
   : m_cct(cct),
     m_lower_bound(lower_bound),
     m_upper_bound(upper_bound),
+    m_name(name)
 #ifndef WITH_SEASTAR
-    m_name(name.c_str()),
+    ,
     m_lock_name(std::string("PerfCounters::") + name.c_str()),
     m_lock(ceph::make_mutex(m_lock_name))
-#else
-    m_name(name.c_str())
 #endif
 {
   m_data.resize(upper_bound - lower_bound - 1);
