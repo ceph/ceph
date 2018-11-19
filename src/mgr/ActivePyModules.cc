@@ -878,6 +878,19 @@ void ActivePyModules::get_health_checks(health_check_map_t *checks)
   }
 }
 
+void ActivePyModules::config_notify()
+{
+  std::lock_guard l(lock);
+  for (auto& i : modules) {
+    auto module = i.second.get();
+    // Send all python calls down a Finisher to avoid blocking
+    // C++ code, and avoid any potential lock cycles.
+    finisher.queue(new FunctionContext([module](int r){
+					 module->config_notify();
+				       }));
+  }
+}
+
 void ActivePyModules::set_uri(const std::string& module_name,
                         const std::string &uri)
 {

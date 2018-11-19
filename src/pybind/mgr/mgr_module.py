@@ -349,6 +349,14 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
         pass
 
+    def config_notify(self):
+        """
+        Called by the ceph-mgr service to notify the Python plugin
+        that the configuration may have changed.  Modules will want to
+        refresh any configuration values stored in config variables.
+        """
+        pass
+
     def serve(self):
         """
         Called by the ceph-mgr service to start any server that
