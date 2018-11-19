@@ -1388,6 +1388,12 @@ int RGWPeriod::update()
       return -EINVAL;
     }  
     
+    if (zg.zones.find(zg.master_zone) == zg.zones.end()) {
+      ldout(cct,0) << "ERROR: zonegroup " << zg.get_name()
+                   << " has a non existent master zone "<< dendl;
+      return -EINVAL;
+    }
+
     if (zg.is_master_zonegroup()) {
       master_zonegroup = zg.get_id();
       master_zone = zg.master_zone;
