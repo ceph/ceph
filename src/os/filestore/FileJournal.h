@@ -463,6 +463,9 @@ private:
 
   void flush() override;
 
+  void get_devices(set<string> *ls) override;
+  void collect_metadata(map<string,string> *pm) override;
+
   void reserve_throttle_and_backoff(uint64_t count) override;
 
   bool is_writeable() override {
