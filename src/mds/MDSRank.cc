@@ -910,9 +910,14 @@ void MDSRank::ProgressThread::shutdown()
 
 bool MDSRankDispatcher::ms_dispatch(Message *m)
 {
-  bool ret;
+  if (m->get_source().is_client()) {
+    Session *session = static_cast<Session*>(m->get_connection()->get_priv());
+    if (session)
+      session->last_seen = Session::clock::now();
+  }
+
   inc_dispatch_depth();
-  ret = _dispatch(m, true);
+  bool ret = _dispatch(m, true);
   dec_dispatch_depth();
   return ret;
 }
@@ -1257,6 +1262,7 @@ Session *MDSRank::get_session(Message *m)
         imported_session->auth_caps = session->auth_caps;
         assert(session->get_nref() == 1);
         imported_session->connection->set_priv(imported_session->get());
+        imported_session->last_seen = session->last_seen;
         session = imported_session;
       }
     }
