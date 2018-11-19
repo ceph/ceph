@@ -135,8 +135,80 @@ If *not* using a mix of fast and slow devices, it isn't required to create
 separate logical volumes for ``block.db`` (or ``block.wal``). Bluestore will
 automatically manage these within the space of ``block``.
 
-Cache size
-==========
+
+Automatic Cache Sizing
+======================
+
+Bluestore can be configured to automatically resize it's caches when tc_malloc
+is configured as the memory allocator and the ``bluestore_cache_autotune``
+setting is enabled.  This option is currently enabled by default.  Bluestore
+will attempt to keep OSD heap memory usage under a designated target size via
+the ``osd_memory_target`` configuration option.  This is a best effort
+algorithm and caches will not shrink smaller than the amount specified by
+``osd_memory_cache_min``.  Cache ratios will be chosen based on a hierarchy
+of priorities.  If priority information is not availabe, the
+``bluestore_cache_meta_ratio`` and ``bluestore_cache_kv_ratio`` options are
+used as fallbacks.
+
+``bluestore_cache_autotune``
+
+:Description: Automatically tune the ratios assigned to different bluestore caches while respecting minimum values.
+:Type: Boolean
+:Requered: Yes
+:Default: ``True``
+
+``osd_memory_target``
+
+:Description: When tcmalloc is available and cache autotuning is enabled, try to keep this many bytes mapped in memory. Note: This may not exactly match the RSS memory usage of the process.  While the total amount of heap memory mapped by the process should generally stay close to this target, there is no guarantee that the kernel will actually reclaim  memory that has been unmapped.  During initial developement, it was found that some kernels result in the OSD's RSS Memory exceeding the mapped memory by up to 20%.  It is hypothesised however, that the kernel generally may be more aggressive about reclaiming unmapped memory when there is a high amount of memory pressure.  Your mileage may vary.
+:Type: Unsigned Integer
+:Requered: Yes
+:Default: ``4294967296``
+
+``bluestore_cache_autotune_chunk_size``
+
+:Description: The chunk size in bytes to allocate to caches when cache autotune is enabled.  When the autotuner assigns memory to different caches, it will allocate memory in chunks.  This is done to avoid evictions when there are minor fluctuations in the heap size or autotuned cache ratios.
+:Type: Unsigned Integer
+:Requered: No
+:Default: ``33554432``
+
+``bluestore_cache_autotune_interval``
+
+:Description: The number of seconds to wait between rebalances when cache autotune is enabled.  This setting changes how quickly the ratios of the difference caches are recomputed.  Note:  Setting the interval too small can result in high CPU usage and lower performance.
+:Type: Float
+:Requered: No
+:Default: ``5``
+
+``osd_memory_base``
+
+:Description: When tcmalloc and cache autotuning is enabled, estimate the minimum amount of memory in bytes the OSD will need.  This is used to help the autotuner estimate the expected aggregate memory consumption of the caches.
+:Type: Unsigned Interger
+:Required: No
+:Default: ``805306368``
+
+``osd_memory_expected_fragmentation``
+
+:Description: When tcmalloc and cache autotuning is enabled, estimate the percent of memory fragmentation.  This is used to help the autotuner estimate the expected aggregate memory consumption of the caches.
+:Type: Float
+:Required: No
+:Default: ``0.15``
+
+``osd_memory_cache_min``
+
+:Description: When tcmalloc and cache autotuning is enabled, set the minimum amount of memory used for caches. Note: Setting this value too low can result in significant cache thrashing.
+:Type: Unsigned Integer
+:Required: No
+:Default: ``134217728``
+
+``osd_memory_cache_resize_interval``
+
+:Description: When tcmalloc and cache autotuning is enabled, wait this many seconds between resizing caches.  This setting changes the total amount of memory available for bluestore to use for caching.  Note: Setting the interval too small can result in memory allocator thrashing and lower performance.
+:Type: Float
+:Required: No
+:Default: ``1``
+
+
+Manual Cache Sizing
+===================
 
 The amount of memory consumed by each OSD for BlueStore's cache is
 determined by the ``bluestore_cache_size`` configuration option.  If
