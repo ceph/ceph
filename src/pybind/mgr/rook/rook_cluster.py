@@ -125,7 +125,7 @@ class RookCluster(object):
 
         return nodename_to_devices
 
-    def describe_pods(self, service_type, service_id):
+    def describe_pods(self, service_type, service_id, nodename):
         # Go query the k8s API about deployment, containers related to this
         # filesystem
 
@@ -143,26 +143,32 @@ class RookCluster(object):
         # Label filter is rook_cluster=<cluster name>
         #                 rook_file_system=<self.fs_name>
 
-        label_filter = "rook_cluster={0},app=rook-ceph-{1}".format(
-            self.cluster_name, service_type)
-        if service_type == "mds":
-            label_filter += ",rook_file_system={0}".format(service_id)
-        elif service_type == "osd":
-            # Label added in https://github.com/rook/rook/pull/1698
-            label_filter += ",ceph-osd-id={0}".format(service_id)
-        elif service_type == "mon":
-            # label like mon=rook-ceph-mon0
-            label_filter += ",mon={0}".format(service_id)
-        elif service_type == "mgr":
-            # TODO: get Rook to label mgr pods
-            pass
-        elif service_type == "rgw":
-            # TODO: rgw
-            pass
+        label_filter = "rook_cluster={0}".format(self.cluster_name)
+        if service_type != None:
+            label_filter += ",app=rook-ceph-{0}".format(service_type)
+            if service_id != None:
+                if service_type == "mds":
+                    label_filter += ",rook_file_system={0}".format(service_id)
+                elif service_type == "osd":
+                    # Label added in https://github.com/rook/rook/pull/1698
+                    label_filter += ",ceph-osd-id={0}".format(service_id)
+                elif service_type == "mon":
+                    # label like mon=rook-ceph-mon0
+                    label_filter += ",mon={0}".format(service_id)
+                elif service_type == "mgr":
+                    label_filter += ",mgr={0}".format(service_id)
+                elif service_type == "rgw":
+                    # TODO: rgw
+                    pass
+
+        field_filter = ""
+        if nodename != None:
+            field_filter = "spec.nodeName={0}".format(nodename);
 
         pods = self.k8s.list_namespaced_pod(
             self.rook_namespace,
-            label_selector=label_filter)
+            label_selector=label_filter,
+            field_selector=field_filter)
 
         # import json
         # print json.dumps(pods.items[0])

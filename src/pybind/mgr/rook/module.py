@@ -332,37 +332,32 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         return result
 
     @deferred_read
-    def describe_service(self, service_type, service_id):
+    def describe_service(self, service_type, service_id, nodename):
 
-        assert service_type in ("mds", "osd", "mon", "rgw"), service_type + " unsupported"
+        assert service_type in ("mds", "osd", "mgr", "mon", None), service_type + " unsupported"
 
-        pods = self.rook_cluster.describe_pods(service_type, service_id)
+        pods = self.rook_cluster.describe_pods(service_type, service_id, nodename)
 
-        result = orchestrator.ServiceDescription()
+        result = []
         for p in pods:
-            sl = orchestrator.ServiceLocation()
-            sl.nodename = p['nodename']
-            sl.container_id = p['name']
+            sd = orchestrator.ServiceDescription()
+            sd.nodename = p['nodename']
+            sd.container_id = p['name']
+            sd.service_type = p['labels']['app'].replace('rook-ceph-', '')
 
-            if service_type == "osd":
-                sl.daemon_name = "%s" % p['labels']["ceph-osd-id"]
-            elif service_type == "mds":
-                # MDS daemon names are the tail of the pod name with
-                # an 'm' prefix.
-                # TODO: Would be nice to get this out a label though.
-                sl.daemon_name = "m" + sl.container_id.split("-")[-1]
-            elif service_type == "mon":
-                sl.daemon_name = p['labels']["mon"]
-            elif service_type == "mgr":
-                # FIXME: put a label on the pod to consume
-                # from here
-                raise NotImplementedError("mgr")
-            elif service_type == "rgw":
-                # FIXME: put a label on the pod to consume
-                # from here
-                raise NotImplementedError("rgw")
+            if sd.service_type == "osd":
+                sd.daemon_name = "%s" % p['labels']["ceph-osd-id"]
+            elif sd.service_type == "mds":
+                sd.daemon_name = p['labels']["rook_file_system"]
+            elif sd.service_type == "mon":
+                sd.daemon_name = p['labels']["mon"]
+            elif sd.service_type == "mgr":
+                sd.daemon_name = p['labels']["mgr"]
+            else:
+                # Unknown type -- skip it
+                continue
 
-            result.locations.append(sl)
+            result.append(sd)
 
         return result
 
