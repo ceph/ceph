@@ -606,6 +606,9 @@ int RGWSI_Zone::init_zg_from_period(bool *initialized)
     // use endpoints from the zonegroup's master zone
     auto master = zg.zones.find(zg.master_zone);
     if (master == zg.zones.end()) {
+      // Check for empty zonegroup which can happen if zone was deleted before removal
+      if (zg.zones.size() == 0)
+        continue;
       // fix missing master zone for a single zone zonegroup
       if (zg.master_zone.empty() && zg.zones.size() == 1) {
 	master = zg.zones.begin();
