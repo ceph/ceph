@@ -2320,7 +2320,7 @@ public:
   int cls_user_get_bucket_stats(const rgw_bucket& bucket, cls_user_bucket_entry& entry);
 
   int check_quota(const rgw_user& bucket_owner, rgw_bucket& bucket,
-                  RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size);
+                  RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size, bool check_size_only = false);
 
   int check_bucket_shards(const RGWBucketInfo& bucket_info, const rgw_bucket& bucket,
 			  RGWQuotaInfo& bucket_quota);
