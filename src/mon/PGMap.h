@@ -163,7 +163,7 @@ public:
    */
   virtual void dump_pool_stats_full(const OSDMap &osd_map, stringstream *ss,
 				    Formatter *f, bool verbose) const;
-  void dump_fs_stats(stringstream *ss, Formatter *f, bool verbose) const;
+  void dump_cluster_stats(stringstream *ss, Formatter *f, bool verbose) const;
   static void dump_object_stat_sum(TextTable &tbl, Formatter *f,
 			    const pool_stat_t &pool_stat,
 			    uint64_t avail,
