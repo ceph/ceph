@@ -49,6 +49,8 @@
 #include "rgw_auth_s3.h"
 #include "rgw_lib.h"
 #include "rgw_lib_frontend.h"
+#include "rgw_http_client.h"
+#include "rgw_http_client_curl.h"
 
 #include <errno.h>
 #include <thread>
@@ -488,6 +490,8 @@ namespace rgw {
     rgw_tools_init(g_ceph_context);
 
     rgw_init_resolver();
+    rgw::curl::setup_curl(boost::none);
+    rgw_http_client_init(g_ceph_context);
 
     store = RGWStoreManager::get_storage(g_ceph_context,
 					 g_conf->rgw_enable_gc_threads,
@@ -597,6 +601,8 @@ namespace rgw {
 
     rgw_tools_cleanup();
     rgw_shutdown_resolver();
+    rgw_http_client_cleanup();
+    rgw::curl::cleanup_curl();
 
     rgw_perf_stop(g_ceph_context);
 
