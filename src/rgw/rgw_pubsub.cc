@@ -482,7 +482,7 @@ int RGWUserPubSub::Sub::remove_event(const string& event_id)
   rgw_bucket& bucket = bucket_info.bucket;
 
   RGWObjectCtx obj_ctx(store);
-  rgw_obj obj(bucket, event_id);
+  rgw_obj obj(bucket, sub_conf.dest.oid_prefix + event_id);
 
   obj_ctx.set_atomic(obj);
 
