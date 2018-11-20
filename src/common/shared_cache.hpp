@@ -348,14 +348,27 @@ public:
     VPtr val;
     list<VPtr> to_release;
     {
-      std::lock_guard l{lock};
-      typename map<K, pair<WeakVPtr, V*>, C>::iterator actual =
-	weak_refs.lower_bound(key);
-      if (actual != weak_refs.end() && actual->first == key) {
-        if (existed) 
-          *existed = true;
+      typename map<K, pair<WeakVPtr, V*>, C>::iterator actual;
+      std::unique_lock l{lock};
+      cond.wait(l, [this, &key, &actual, &val] {
+	  actual = weak_refs.lower_bound(key);
+	  if (actual != weak_refs.end() && actual->first == key) {
+	    val = actual->second.first.lock();
+	    if (val) {
+	      return true;
+	    } else {
+	      return false;
+	    }
+	  } else {
+	    return true;
+	  }
+      });
 
-        return actual->second.first.lock();
+      if (val) {
+	if (existed) {
+	  *existed = true;
+	}
+	return val;
       }
 
       if (existed)      
