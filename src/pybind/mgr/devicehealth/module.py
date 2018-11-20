@@ -585,8 +585,9 @@ class Module(MgrModule):
         else:
             return -1, '', 'unable to enable any disk prediction model[local/cloud]'
         try:
-            if self.remote(plugin_name, 'can_run'):
-                return self.remote(plugin_name, 'predict_life_expentancy', devid=devid)
+            can_run, _ = self.remote(plugin_name, 'can_run')
+            if can_run:
+                return self.remote(plugin_name, 'predict_life_expectancy', devid=devid)
         except:
             return -1, '', 'unable to invoke diskprediction local or remote plugin'
 
@@ -600,7 +601,8 @@ class Module(MgrModule):
         else:
             return -1, '', 'unable to enable any disk prediction model[local/cloud]'
         try:
-            if self.remote(plugin_name, 'can_run'):
+            can_run, _ = self.remote(plugin_name, 'can_run')
+            if can_run:
                 return self.remote(plugin_name, 'predict_all_devices')
         except:
             return -1, '', 'unable to invoke diskprediction local or remote plugin'
