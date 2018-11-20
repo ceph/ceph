@@ -87,7 +87,7 @@ private:
     if (i != weak_refs.end() && i->second.second == valptr) {
       weak_refs.erase(i);
     }
-    cond.notify_one();
+    cond.notify_all();
   }
 
   class Cleanup {
