@@ -50,11 +50,11 @@
 %endif
 %endif
 %bcond_with seastar
-%if 0%{?fedora} || 0%{?suse_version} >= 1500
-# distros where py2 is _optional_
+%if 0%{?fedora} >= 29 || 0%{?suse_version} >= 1500
+# distros that need a py3 Ceph build
 %bcond_with python2
 %else
-# distros where py2 is _mandatory_
+# distros that need a py2 Ceph build
 %bcond_without python2
 %endif
 %if 0%{?fedora} || 0%{?suse_version} >= 1500
