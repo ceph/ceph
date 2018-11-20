@@ -574,7 +574,11 @@ void RGWQuotaInfo::dump(Formatter *f) const
   f->dump_bool("check_on_raw", check_on_raw);
 
   f->dump_int("max_size", max_size);
-  f->dump_int("max_size_kb", rgw_rounded_kb(max_size));
+  if (max_size < 0){
+    f->dump_int("max_size_kb", max_size);
+  }else{
+   f->dump_int("max_size_kb", rgw_rounded_kb(max_size));
+  }
   f->dump_int("max_objects", max_objects);
 }
 
@@ -585,7 +589,11 @@ void RGWQuotaInfo::decode_json(JSONObj *obj)
     int64_t max_size_kb = 0;
 
     JSONDecoder::decode_json("max_size_kb", max_size_kb, obj);
-    max_size = max_size_kb * 1024;
+    if (max_size_kb < 0){
+      max_size = -1;
+    }else{
+     max_size = max_size_kb * 1024;
+    }
   }
   JSONDecoder::decode_json("max_objects", max_objects, obj);
 

@@ -900,6 +900,9 @@ void RGWOp_Quota_Set::execute()
       if (has_max_size_kb) {
         quota.max_size = max_size_kb * 1024;
       }
+      if (quota.max_size < 0){
+        quota.max_size = -1;
+      }
       RESTArgs::get_bool(s, "enabled", old_quota->enabled, &quota.enabled);
     }
 
