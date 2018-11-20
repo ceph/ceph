@@ -4478,9 +4478,13 @@ rgw::auth::s3::STSEngine::authenticate(
         role_policies.push_back(std::move(perm_policy));
       }
     }
-    role_policies.push_back(std::move(token.policy));
+    if (! token.policy.empty()) {
+      role_policies.push_back(std::move(token.policy));
+    }
+    // This is mostly needed to assign the owner of a bucket during its creation
+    user_info.user_id = token.user;
   }
-  if (! token.user.empty()) {
+  if (! token.user.empty() && token.acct_type != TYPE_NONE) {
     // get user info
     int ret = rgw_get_user_info_by_uid(store, token.user, user_info, NULL);
     if (ret < 0) {
