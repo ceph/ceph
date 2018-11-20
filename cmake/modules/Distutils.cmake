@@ -20,14 +20,16 @@ function(distutils_install_module name)
       if(EXISTS /etc/debian_version)
         list(APPEND options --install-layout=deb)
       endif()
-      list(APPEND options --root=\$ENV{DESTDIR})
+      list(APPEND options
+        --root=\$ENV{DESTDIR}
+        --single-version-externally-managed)
       if(NOT \"${DU_INSTALL_SCRIPT}\" STREQUAL \"\")
         list(APPEND options --install-script=${DU_INSTALL_SCRIPT})
       endif()
     endif()
     execute_process(
     COMMAND ${PYTHON${PYTHON_VERSION}_EXECUTABLE}
-        setup.py install \${options} --single-version-externally-managed
+        setup.py install \${options}
     WORKING_DIRECTORY \"${CMAKE_CURRENT_BINARY_DIR}\")")
 endfunction(distutils_install_module)
 
