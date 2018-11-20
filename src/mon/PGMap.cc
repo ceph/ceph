@@ -830,7 +830,9 @@ void PGMapDigest::dump_pool_stats_full(
   }
 }
 
-void PGMapDigest::dump_fs_stats(stringstream *ss, Formatter *f, bool verbose) const
+void PGMapDigest::dump_cluster_stats(stringstream *ss,
+				     Formatter *f,
+				     bool verbose) const
 {
   auto total = osd_sum.statfs.total;
   auto used_raw = osd_sum.statfs.get_used_raw();
