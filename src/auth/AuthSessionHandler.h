@@ -44,9 +44,16 @@ public:
   virtual int check_message_signature(Message *message) = 0;
   virtual int encrypt_message(Message *message) = 0;
   virtual int decrypt_message(Message *message) = 0;
+
   virtual int sign_bufferlist(bufferlist &in, bufferlist &out) {
     return 0;
   };
+  virtual int encrypt_bufferlist(bufferlist &in, bufferlist &out) {
+    return 0;
+  }
+  virtual int decrypt_bufferlist(bufferlist &in, bufferlist &out) {
+    return 0;
+  }
 
   int get_protocol() {return protocol;}
   CryptoKey get_key() {return key;}
