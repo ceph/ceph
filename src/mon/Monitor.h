@@ -976,7 +976,7 @@ public:
     leader_mon_commands = cmds;
   }
 
-  static bool is_keyring_required();
+  bool is_keyring_required();
 };
 
 #define CEPH_MON_FEATURE_INCOMPAT_BASE CompatSet::Feature (1, "initial feature set (~v.18)")
