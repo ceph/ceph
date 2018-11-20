@@ -570,12 +570,20 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
       return ret;
     }
   }
-
-  if (! s->user->user_id.empty()) {
+  // We don't need user policies in case of STS token returned by AssumeRole,
+  // hence the check for user type
+  if (! s->user->user_id.empty() && s->user->type != TYPE_NONE) {
     try {
       map<string, bufferlist> uattrs;
       if (ret = rgw_get_user_attrs_by_uid(store, s->user->user_id, uattrs); ! ret) {
-        s->iam_user_policies = get_iam_user_policy_from_attr(s->cct, store, uattrs, s->user->user_id.tenant);
+        if (s->iam_user_policies.empty()) {
+          s->iam_user_policies = get_iam_user_policy_from_attr(s->cct, store, uattrs, s->user->user_id.tenant);
+        } else {
+          // This scenario can happen when a STS token has a policy, then we need to append other user policies
+          // to the existing ones. (e.g. token returned by GetSessionToken)
+          auto user_policies = get_iam_user_policy_from_attr(s->cct, store, uattrs, s->user->user_id.tenant);
+          s->iam_user_policies.insert(s->iam_user_policies.end(), user_policies.begin(), user_policies.end());
+        }
       } else {
         if (ret == -ENOENT)
           ret = 0;

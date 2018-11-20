@@ -301,7 +301,7 @@ AssumeRoleResponse STSService::assumeRole(AssumeRoleRequest& req)
   //Role and Policy provide the authorization info, user id and applier info are not needed
   if (ret = cred.generateCredentials(cct, req.getDuration(),
                                       req.getPolicy(), roleId,
-                                      boost::none, nullptr); ret < 0) {
+                                      user_id, nullptr); ret < 0) {
     return make_tuple(ret, user, cred, packedPolicySize);
   }
 
