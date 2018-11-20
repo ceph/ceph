@@ -4,6 +4,8 @@ import * as _ from 'lodash';
 
 import { RgwDaemonService } from '../../../shared/api/rgw-daemon.service';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
+import { Permission } from '../../../shared/models/permissions';
+import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 
 @Component({
   selector: 'cd-rgw-daemon-details',
@@ -13,11 +15,17 @@ import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 export class RgwDaemonDetailsComponent implements OnChanges {
   metadata: any;
   serviceId = '';
+  grafanaPermission: Permission;
 
   @Input()
   selection: CdTableSelection;
 
-  constructor(private rgwDaemonService: RgwDaemonService) {}
+  constructor(
+    private rgwDaemonService: RgwDaemonService,
+    private authStorageService: AuthStorageService
+  ) {
+    this.grafanaPermission = this.authStorageService.getPermissions().grafana;
+  }
 
   ngOnChanges() {
     // Get the service id of the first selected row.
