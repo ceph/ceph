@@ -8684,7 +8684,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
      mempool::osdmap::map<string,map<string,string>> old_ec_profiles =
        osdmap.get_erasure_code_profiles();
      auto ec_profiles = pending_inc.get_erasure_code_profiles();
+#ifdef HAVE_STDLIB_MAP_SPLICING
      ec_profiles.merge(old_ec_profiles);
+#else
+     ec_profiles.insert(make_move_iterator(begin(old_ec_profiles)),
+                        make_move_iterator(end(old_ec_profiles)));
+#endif
      list<string> referenced_by;
      for (auto &i: ec_profiles) {
        for (auto &j: i.second) {
