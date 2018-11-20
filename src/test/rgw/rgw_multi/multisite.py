@@ -1,8 +1,9 @@
 from abc import ABCMeta, abstractmethod
-from cStringIO import StringIO
+from six import StringIO
+
 import json
 
-from conn import get_gateway_connection
+from .conn import get_gateway_connection
 
 class Cluster:
     """ interface to run commands against a distinct ceph cluster """
