@@ -34,3 +34,8 @@ add_executable(unittest_seastar_perfcounters
 add_ceph_unittest(unittest_seastar_perfcounters)
 target_link_libraries(unittest_seastar_perfcounters crimson)
 
+add_executable(unittest_seastar_memstore
+  test_memstore.cc)
+add_ceph_unittest(unittest_seastar_memstore)
+target_link_libraries(unittest_seastar_memstore crimson crimsonos common)
+

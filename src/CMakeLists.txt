@@ -276,36 +276,6 @@ add_subdirectory(json_spirit)
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/xxHash")
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/rapidjson/include")
 
-if(WITH_SEASTAR)
-  find_package(fmt 4.0.0 QUIET)
-  if(NOT fmt_FOUND)
-    message(STATUS "Could not find fmt, will build it")
-    add_subdirectory(fmt)
-  elseif(fmt_VERSION VERSION_GREATER_EQUAL 5.0.0)
-    message(WARNING "Could NOT find fmt: "
-      "Found unsuitable version \"${fmt_VERSION}\", "
-      "but required is at most \"5.0.0\" (found ${fmt_INCLUDE_DIR}). "
-      "Will build it")
-    add_subdirectory(fmt)
-  endif()
-  find_package(c-ares 1.13.0 QUIET)
-  if(NOT c-ares_FOUND)
-    message(STATUS "Could not find c-ares, will build it")
-    include(Buildc-ares)
-    build_c_ares()
-  endif()
-  macro(find_package name)
-    if(NOT TARGET ${name})
-      _find_package(${ARGV})
-    endif()
-  endmacro ()
-  set(Seastar_HWLOC OFF CACHE BOOL "" FORCE)
-  add_subdirectory(seastar)
-  # create the directory so cmake won't complain when looking at the imported
-  # target: Seastar exports this directory created at build-time
-  file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/seastar/gen")
-  add_subdirectory(crimson)
-endif()
 
 set(libcommon_files
   ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h
@@ -522,6 +492,36 @@ install(TARGETS ceph-mds DESTINATION bin)
 
 add_subdirectory(erasure-code)
 
+if(WITH_SEASTAR)
+  find_package(fmt 4.0.0 QUIET)
+  if(NOT fmt_FOUND)
+    message(STATUS "Could not find fmt, will build it")
+    add_subdirectory(fmt)
+  elseif(fmt_VERSION VERSION_GREATER_EQUAL 5.0.0)
+    message(WARNING "Could NOT find fmt: "
+      "Found unsuitable version \"${fmt_VERSION}\", "
+      "but required is at most \"5.0.0\" (found ${fmt_INCLUDE_DIR}). "
+      "Will build it")
+    add_subdirectory(fmt)
+  endif()
+  find_package(c-ares 1.13.0 QUIET)
+  if(NOT c-ares_FOUND)
+    message(STATUS "Could not find c-ares, will build it")
+    include(Buildc-ares)
+    build_c_ares()
+  endif()
+  macro(find_package name)
+    if(NOT TARGET ${name})
+      _find_package(${ARGV})
+    endif()
+  endmacro ()
+  set(Seastar_HWLOC OFF CACHE BOOL "" FORCE)
+  add_subdirectory(seastar)
+  # create the directory so cmake won't complain when looking at the imported
+  # target: Seastar exports this directory created at build-time
+  file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/seastar/gen")
+  add_subdirectory(crimson)
+endif()
 # Support/Tools
 if(WITH_TESTS)
   option(WITH_SYSTEM_GTEST "require and build with system gtest and gmock" OFF)
