@@ -399,7 +399,9 @@ class Module(MgrModule):
         # fetch metrics
         res = {}
         ioctx = self.open_connection(create_if_missing=False)
-        if ioctx:
+        if not ioctx:
+            return 0, json.dumps(res, indent=4), ''
+        with ioctx:
             with rados.ReadOpCtx() as op:
                 omap_iter, ret = ioctx.get_omap_vals(op, "", sample or '', 500)  # fixme
                 assert ret == 0
