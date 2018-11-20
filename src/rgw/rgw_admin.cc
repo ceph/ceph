@@ -2520,7 +2520,7 @@ int check_reshard_bucket_params(RGWRados *store,
   int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket, &attrs);
   if (ret < 0) {
     cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
-    return -ret;
+    return ret;
   }
 
   int num_source_shards = (bucket_info.num_shards > 0 ? bucket_info.num_shards : 1);
