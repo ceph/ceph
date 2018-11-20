@@ -191,10 +191,12 @@ public:
 class ContextQueue {
   list<Context *> q;
   std::mutex q_mutex;
-  Mutex& mutex;
-  Cond& cond;
+  ceph::mutex& mutex;
+  ceph::condition_variable& cond;
 public:
-  ContextQueue(Mutex& mut, Cond& con) : mutex(mut), cond(con) {}
+  ContextQueue(ceph::mutex& mut,
+	       ceph::condition_variable& con)
+    : mutex(mut), cond(con) {}
 
   void queue(list<Context *>& ls) {
     bool empty = false;
@@ -209,9 +211,8 @@ public:
     }
 
     if (empty) {
-      mutex.Lock();
-      cond.Signal();
-      mutex.Unlock();
+      std::scoped_lock l{mutex};
+      cond.notify_all();
     }
 
     ls.clear();
