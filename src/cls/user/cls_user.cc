@@ -145,6 +145,9 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
      entry = update_entry;
 
      ret = 0;
+    } else if (op.add) {
+      // bucket id may have changed (ie reshard)
+      entry.bucket.bucket_id = update_entry.bucket.bucket_id;
     }
 
     if (ret < 0) {
