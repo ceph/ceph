@@ -46,6 +46,7 @@ class TempURLEngine : public rgw::auth::Engine {
   void get_owner_info(const DoutPrefixProvider* dpp, 
                       const req_state* s,
                       RGWUserInfo& owner_info) const;
+  std::string convert_from_iso8601(std::string expires) const;
   bool is_applicable(const req_state* s) const noexcept;
   bool is_expired(const std::string& expires) const;
 
