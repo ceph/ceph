@@ -873,7 +873,7 @@ void PGMapDigest::dump_cluster_stats(stringstream *ss,
     }
     tbl << TextTable::endrow;
 
-    *ss << "GLOBAL:\n";
+    *ss << "RAW STORAGE:\n";
     tbl.set_indent(4);
     *ss << tbl;
   }
