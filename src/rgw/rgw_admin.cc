@@ -2691,11 +2691,11 @@ static int trim_sync_error_log(int shard_id, const ceph::real_time& start_time,
 }
 
 JSONFormattable& get_tier_config(RGWRados *store) {
-  return store->get_zone_params().tier_config;
+  return store->svc.zone->get_zone_params().tier_config;
 }
 
 const string& get_tier_type(RGWRados *store) {
-  return store->get_zone().tier_type;
+  return store->svc.zone->get_zone().tier_type;
 }
 
 int main(int argc, const char **argv)

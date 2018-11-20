@@ -3,6 +3,9 @@
 
 #include "rgw_common.h"
 #include "rgw_tools.h"
+#include "rgw_zone.h"
+
+#include "services/svc_sys_obj.h"
 
 
 struct rgw_pubsub_event {
@@ -209,7 +212,7 @@ class RGWUserPubSub
 
   RGWRados *store;
   rgw_user user;
-  RGWObjectCtx obj_ctx;
+  RGWSysObjectCtx obj_ctx;
 
   rgw_raw_obj user_meta_obj;
 
@@ -238,7 +241,7 @@ class RGWUserPubSub
 public:
   RGWUserPubSub(RGWRados *_store, const rgw_user& _user) : store(_store),
                                                            user(_user),
-                                                           obj_ctx(store) {
+                                                           obj_ctx(store->svc.sysobj->init_obj_ctx()) {
     get_user_meta_obj(&user_meta_obj);
   }
 
@@ -302,15 +305,15 @@ public:
   }
 
   void get_user_meta_obj(rgw_raw_obj *obj) const {
-    *obj = rgw_raw_obj(store->get_zone_params().log_pool, user_meta_oid());
+    *obj = rgw_raw_obj(store->svc.zone->get_zone_params().log_pool, user_meta_oid());
   }
 
   void get_bucket_meta_obj(const rgw_bucket& bucket, rgw_raw_obj *obj) const {
-    *obj = rgw_raw_obj(store->get_zone_params().log_pool, bucket_meta_oid(bucket));
+    *obj = rgw_raw_obj(store->svc.zone->get_zone_params().log_pool, bucket_meta_oid(bucket));
   }
 
   void get_sub_meta_obj(const string& name, rgw_raw_obj *obj) const {
-    *obj = rgw_raw_obj(store->get_zone_params().log_pool, sub_meta_oid(name));
+    *obj = rgw_raw_obj(store->svc.zone->get_zone_params().log_pool, sub_meta_oid(name));
   }
 
   int get_user_topics(rgw_pubsub_user_topics *result);

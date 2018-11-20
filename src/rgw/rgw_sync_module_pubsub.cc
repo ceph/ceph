@@ -720,7 +720,7 @@ class PSSubscription {
               string addr;
               if (split_endpoint(sub_conf->push_endpoint, &addr, &sub->push.path)) {
                 list<string> endpoints{addr};
-                sub->push.conn = std::make_shared<RGWRESTConn>(sync_env->cct, sync_env->store, remote_id, endpoints);
+                sub->push.conn = std::make_shared<RGWRESTConn>(sync_env->cct, sync_env->store->svc.zone, remote_id, endpoints);
               } else {
                 ldout(sync_env->cct, 20) << "failed to split push endpoint: " << sub_conf->push_endpoint << dendl;
               }
@@ -917,7 +917,7 @@ class PSManager
             rgw_raw_obj obj;
             ups.get_sub_meta_obj(sub_name, &obj);
             bool empty_on_enoent = false;
-            call(new ReadInfoCR(sync_env->async_rados, sync_env->store,
+            call(new ReadInfoCR(sync_env->async_rados, sync_env->store->svc.sysobj,
                                 obj,
                                 &user_sub_conf, empty_on_enoent));
           }
@@ -1098,7 +1098,7 @@ public:
       using ReadInfoCR = RGWSimpleRadosReadCR<rgw_pubsub_bucket_topics>;
       yield {
         bool empty_on_enoent = true;
-        call(new ReadInfoCR(sync_env->async_rados, sync_env->store,
+        call(new ReadInfoCR(sync_env->async_rados, sync_env->store->svc.sysobj,
                             bucket_obj,
                             &bucket_topics, empty_on_enoent));
       }
@@ -1112,7 +1112,7 @@ public:
 	using ReadUserTopicsInfoCR = RGWSimpleRadosReadCR<rgw_pubsub_user_topics>;
 	yield {
 	  bool empty_on_enoent = true;
-	  call(new ReadUserTopicsInfoCR(sync_env->async_rados, sync_env->store,
+	  call(new ReadUserTopicsInfoCR(sync_env->async_rados, sync_env->store->svc.sysobj,
 					user_obj,
 					&user_topics, empty_on_enoent));
 	}
@@ -1388,7 +1388,7 @@ public:
 
   void init(RGWDataSyncEnv *sync_env, uint64_t instance_id) override {
     PSManagerRef mgr = PSManager::get_shared(sync_env, env);
-    env->init_instance(sync_env->store->get_realm(), instance_id, mgr);
+    env->init_instance(sync_env->store->svc.zone->get_realm(), instance_id, mgr);
   }
 
   RGWCoroutine *start_sync(RGWDataSyncEnv *sync_env) override {

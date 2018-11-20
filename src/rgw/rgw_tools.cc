@@ -18,8 +18,10 @@
 #include "rgw_putobj_processor.h"
 #include "rgw_aio_throttle.h"
 #include "rgw_compression.h"
+#include "rgw_zone.h"
 
 #include "services/svc_sys_obj.h"
+#include "services/svc_zone_utils.h"
 
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context
@@ -277,7 +279,7 @@ void rgw_filter_attrset(map<string, bufferlist>& unfiltered_attrset, const strin
 
 RGWDataAccess::RGWDataAccess(RGWRados *_store) : store(_store)
 {
-  obj_ctx = std::make_unique<RGWObjectCtx>(store);
+  sysobj_ctx = std::make_unique<RGWSysObjectCtx>(store->svc.sysobj->init_obj_ctx());
 }
 
 
@@ -300,7 +302,7 @@ int RGWDataAccess::Bucket::finish_init()
 
 int RGWDataAccess::Bucket::init()
 {
-  int ret = sd->store->get_bucket_info(*sd->obj_ctx,
+  int ret = sd->store->get_bucket_info(*sd->sysobj_ctx,
 				       tenant, name,
 				       bucket_info,
 				       &mtime,
@@ -346,7 +348,7 @@ int RGWDataAccess::Object::put(bufferlist& data,
 
   auto& owner = bucket->policy.get_owner();
 
-  string req_id = store->unique_id(store->get_new_req_id());
+  string req_id = store->svc.zone_utils->unique_id(store->get_new_req_id());
 
   AtomicObjectProcessor processor(&aio, store, bucket_info,
                                   owner.get_id(),
@@ -363,7 +365,7 @@ int RGWDataAccess::Object::put(bufferlist& data,
   CompressorRef plugin;
   boost::optional<RGWPutObj_Compress> compressor;
 
-  const auto& compression_type = store->get_zone_params().get_compression_type(bucket_info.placement_rule);
+  const auto& compression_type = store->svc.zone->get_zone_params().get_compression_type(bucket_info.placement_rule);
   if (compression_type != "none") {
     plugin = Compressor::create(store->ctx(), compression_type);
     if (!plugin) {
@@ -442,6 +444,8 @@ int RGWDataAccess::Object::put(bufferlist& data,
 void RGWDataAccess::Object::set_policy(const RGWAccessControlPolicy& policy)
 {
   policy.encode(aclbl.emplace());
+}
+
 int rgw_tools_init(CephContext *cct)
 {
   ext_mime_map = new std::map<std::string, std::string>;
