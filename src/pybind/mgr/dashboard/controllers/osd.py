@@ -168,13 +168,15 @@ class Osd(RESTController):
             svc_id = [svc_id]
         svc_id = list(map(str, svc_id))
         try:
-            CephService.send_command(
+            result = CephService.send_command(
                 'mon', 'osd safe-to-destroy', ids=svc_id, target=('mgr', ''))
-            return {'safe-to-destroy': True}
+            result['is_safe_to_destroy'] = set(result['safe_to_destroy']) == set(map(int, svc_id))
+            return result
+
         except SendCommandError as e:
             return {
                 'message': str(e),
-                'safe-to-destroy': False,
+                'is_safe_to_destroy': False,
             }
 
 
