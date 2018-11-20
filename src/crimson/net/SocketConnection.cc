@@ -679,7 +679,6 @@ SocketConnection::handle_connect_reply(msgr_tag_t tag)
     // hooray!
     h.peer_global_seq = h.reply.global_seq;
     policy.lossy = h.reply.flags & CEPH_MSG_CONNECT_LOSSY;
-    state = state_t::open;
     h.connect_seq++;
     h.backoff = 0ms;
     set_features(h.reply.features & h.connect.features);
@@ -809,6 +808,7 @@ SocketConnection::start_connect(const entity_addr_t& _peer_addr,
       return seastar::repeat([this] {
         return repeat_connect();
       });
+      // TODO: handle errors for state_t::connecting
     }).then([this] {
       state = state_t::open;
       // start background processing of tags
@@ -851,6 +851,7 @@ SocketConnection::start_accept(seastar::connected_socket&& fd,
       return seastar::repeat([this] {
         return repeat_handle_connect();
       });
+      // TODO: handle errors for state_t::accepting
     }).then([this] {
       state = state_t::open;
       // start background processing of tags
