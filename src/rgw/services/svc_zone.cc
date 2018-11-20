@@ -151,8 +151,13 @@ int RGWSI_Zone::do_start()
 
   zone_short_id = current_period->get_map().get_zone_short_id(zone_params->get_id());
 
-#warning FIXME
-  writeable_zone = (zone_public_config->tier_type.empty() || zone_public_config->tier_type == "rgw");
+  RGWSyncModuleRef sm;
+  if (!sync_modules_svc->get_manager()->get_module(zone_public_config->tier_type, &sm)) {
+    lderr(cct) << "ERROR: tier type not found: " << zone_public_config->tier_type << dendl;
+    return -EINVAL;
+  }
+
+  writeable_zone = sm->supports_writes();
 
   /* first build all zones index */
   for (auto ziter : zonegroup->zones) {
