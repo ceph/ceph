@@ -169,6 +169,8 @@ else:
 
 def raw_write(buf):
     sys.stdout.flush()
+    if isinstance(buf, str):
+        buf = buf.encode()
     raw_stdout.write(buf)
 
 
