@@ -27,6 +27,8 @@ class AuthSessionHandler;
 
 namespace ceph::net {
 
+using stop_t = seastar::stop_iteration;
+
 class SocketMessenger;
 class SocketConnection;
 using SocketConnectionRef = boost::intrusive_ptr<SocketConnection>;
@@ -63,16 +65,16 @@ class SocketConnection : public Connection {
   } h;
 
   /// server side of handshake negotiation
-  seastar::future<> repeat_handle_connect();
-  seastar::future<> handle_connect_with_existing(SocketConnectionRef existing,
-						 bufferlist&& authorizer_reply);
-  seastar::future<> replace_existing(SocketConnectionRef existing,
-				     bufferlist&& authorizer_reply,
-				     bool is_reset_from_peer = false);
-  seastar::future<> send_connect_reply(ceph::net::msgr_tag_t tag,
-				       bufferlist&& authorizer_reply = {});
-  seastar::future<> send_connect_reply_ready(ceph::net::msgr_tag_t tag,
-					     bufferlist&& authorizer_reply);
+  seastar::future<stop_t> repeat_handle_connect();
+  seastar::future<stop_t> handle_connect_with_existing(SocketConnectionRef existing,
+                                                        bufferlist&& authorizer_reply);
+  seastar::future<stop_t> replace_existing(SocketConnectionRef existing,
+                                            bufferlist&& authorizer_reply,
+                                            bool is_reset_from_peer = false);
+  seastar::future<stop_t> send_connect_reply(ceph::net::msgr_tag_t tag,
+                                              bufferlist&& authorizer_reply = {});
+  seastar::future<stop_t> send_connect_reply_ready(ceph::net::msgr_tag_t tag,
+                                                    bufferlist&& authorizer_reply);
 
   seastar::future<> handle_keepalive2();
   seastar::future<> handle_keepalive2_ack();
@@ -80,8 +82,8 @@ class SocketConnection : public Connection {
   bool require_auth_feature() const;
   uint32_t get_proto_version(entity_type_t peer_type, bool connec) const;
   /// client side of handshake negotiation
-  seastar::future<> repeat_connect();
-  seastar::future<> handle_connect_reply(ceph::net::msgr_tag_t tag);
+  seastar::future<stop_t> repeat_connect();
+  seastar::future<stop_t> handle_connect_reply(ceph::net::msgr_tag_t tag);
   void reset_session();
 
   /// state for an incoming message
@@ -99,7 +101,7 @@ class SocketConnection : public Connection {
 
   seastar::future<> maybe_throttle();
   void read_tags_until_next_message();
-  seastar::future<seastar::stop_iteration> handle_ack();
+  seastar::future<stop_t> handle_ack();
 
   /// becomes available when handshake completes, and when all previous messages
   /// have been sent to the output stream. send() chains new messages as
