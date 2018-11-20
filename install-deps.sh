@@ -24,13 +24,9 @@ export LC_ALL=C # the following is vulnerable to i18n
 ARCH=`uname -m`
 
 function munge_ceph_spec_in {
+    # http://rpm.org/user_doc/conditional_builds.html
     local OUTFILE=$1
     sed -e 's/@//g' -e 's/%bcond_with make_check/%bcond_without make_check/g' < ceph.spec.in > $OUTFILE
-    if type python2 > /dev/null 2>&1 ; then
-        sed -i -e 's/%bcond_with python2/%bcond_without python2/g' $OUTFILE
-    else
-        sed -i -e 's/%bcond_without python2/%bcond_with python2/g' $OUTFILE
-    fi
 }
 
 function ensure_decent_gcc_on_ubuntu {
@@ -211,7 +207,6 @@ else
 	    $SUDO yum-config-manager --disable centos-sclo-rh || true
 	    $SUDO yum remove centos-release-scl || true
 	fi
-
         case $ID in
             fedora)
                 if test $yumdnf = yum; then
