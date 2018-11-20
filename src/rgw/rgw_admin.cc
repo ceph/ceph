@@ -1414,8 +1414,7 @@ int check_obj_locator_underscore(RGWBucketInfo& bucket_info, rgw_obj& obj, rgw_o
 
   string oid;
   string locator;
-
-  get_obj_bucket_and_oid_loc(obj, oid, locator);
+  obj.get_full_oid_and_loc(oid, locator);
 
   f->dump_string("oid", oid);
   f->dump_string("locator", locator);

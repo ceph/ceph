@@ -1878,13 +1878,36 @@ string rgw_pool::to_str() const
   return esc_name + ":" + esc_ns;
 }
 
+void rgw_prepend_bucket_marker(const rgw_bucket& bucket,
+                               const string& orig_oid, string& oid)
+{
+  if (bucket.marker.empty() || orig_oid.empty()) {
+    oid = orig_oid;
+  } else {
+    oid = bucket.marker;
+    oid.append("_");
+    oid.append(orig_oid);
+  }
+}
+
+void rgw_obj::get_full_oid_and_loc(std::string& oid, std::string& locator) const
+{
+  rgw_prepend_bucket_marker(bucket, get_oid(), oid);
+  const string& loc = key.get_loc();
+  if (!loc.empty()) {
+    rgw_prepend_bucket_marker(bucket, loc, locator);
+  } else {
+    locator.clear();
+  }
+}
+
 void rgw_raw_obj::decode_from_rgw_obj(bufferlist::const_iterator& bl)
 {
   using ceph::decode;
   rgw_obj old_obj;
   decode(old_obj, bl);
 
-  get_obj_bucket_and_oid_loc(old_obj, oid, loc);
+  old_obj.get_full_oid_and_loc(oid, loc);
   pool = old_obj.get_explicit_data_pool();
 }
 

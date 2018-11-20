@@ -45,7 +45,7 @@ std::string test_rgw_get_obj_oid(const rgw_obj& obj)
   std::string oid;
   std::string loc;
 
-  get_obj_bucket_and_oid_loc(obj, oid, loc);
+  obj.get_full_oid_and_loc(oid, loc);
   return oid;
 }
 

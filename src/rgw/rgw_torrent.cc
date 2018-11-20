@@ -63,7 +63,7 @@ int seed::get_torrent_file(RGWRados::Object::Read &read_op,
   }
 
   string oid, key;
-  get_obj_bucket_and_oid_loc(obj, oid, key);
+  obj.get_full_oid_and_loc(oid, key);
   ldout(s->cct, 20) << "NOTICE: head obj oid= " << oid << dendl;
 
   const set<string> obj_key{RGW_OBJ_TORRENT};

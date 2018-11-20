@@ -2080,6 +2080,9 @@ struct rgw_obj {
     return key.get_oid();
   }
 
+  // return the full oid and locator, including the bucket marker if present
+  void get_full_oid_and_loc(std::string& oid, std::string& locator) const;
+
   const string& get_hash_object() const {
     return index_hash_source.empty() ? key.name : index_hash_source;
   }
@@ -2167,6 +2170,9 @@ struct rgw_obj {
   }
 };
 WRITE_CLASS_ENCODER(rgw_obj)
+
+void rgw_prepend_bucket_marker(const rgw_bucket& bucket,
+                               const string& orig_oid, string& oid);
 
 struct rgw_cache_entry_info {
   string cache_locator;

@@ -129,7 +129,7 @@ static bool rgw_get_obj_data_pool(const RGWZoneGroup& zonegroup, const RGWZonePa
 static bool rgw_obj_to_raw(const RGWZoneGroup& zonegroup, const RGWZoneParams& zone_params,
                            const string& placement_id, const rgw_obj& obj, rgw_raw_obj *raw_obj)
 {
-  get_obj_bucket_and_oid_loc(obj, raw_obj->oid, raw_obj->loc);
+  obj.get_full_oid_and_loc(raw_obj->oid, raw_obj->loc);
 
   return rgw_get_obj_data_pool(zonegroup, zone_params, placement_id, obj, &raw_obj->pool);
 }
@@ -2893,7 +2893,7 @@ bool RGWRados::get_obj_data_pool(const string& placement_rule, const rgw_obj& ob
 
 bool RGWRados::obj_to_raw(const string& placement_rule, const rgw_obj& obj, rgw_raw_obj *raw_obj)
 {
-  get_obj_bucket_and_oid_loc(obj, raw_obj->oid, raw_obj->loc);
+  obj.get_full_oid_and_loc(raw_obj->oid, raw_obj->loc);
 
   return get_obj_data_pool(placement_rule, obj, &raw_obj->pool);
 }
@@ -2901,7 +2901,7 @@ bool RGWRados::obj_to_raw(const string& placement_rule, const rgw_obj& obj, rgw_
 int RGWRados::get_obj_head_ioctx(const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::IoCtx *ioctx)
 {
   string oid, key;
-  get_obj_bucket_and_oid_loc(obj, oid, key);
+  obj.get_full_oid_and_loc(oid, key);
 
   rgw_pool pool;
   if (!get_obj_data_pool(bucket_info.placement_rule, obj, &pool)) {
@@ -2921,7 +2921,7 @@ int RGWRados::get_obj_head_ioctx(const RGWBucketInfo& bucket_info, const rgw_obj
 
 int RGWRados::get_obj_head_ref(const RGWBucketInfo& bucket_info, const rgw_obj& obj, rgw_rados_ref *ref)
 {
-  get_obj_bucket_and_oid_loc(obj, ref->obj.oid, ref->obj.loc);
+  obj.get_full_oid_and_loc(ref->obj.oid, ref->obj.loc);
 
   rgw_pool pool;
   if (!get_obj_data_pool(bucket_info.placement_rule, obj, &pool)) {
@@ -2975,7 +2975,7 @@ int RGWRados::fix_head_obj_locator(const RGWBucketInfo& bucket_info, bool copy_o
 
   rgw_obj obj(bucket, key);
 
-  get_obj_bucket_and_oid_loc(obj, oid, locator);
+  obj.get_full_oid_and_loc(oid, locator);
 
   if (locator.empty()) {
     ldout(cct, 20) << "object does not have a locator, nothing to fix" << dendl;
@@ -3160,7 +3160,7 @@ int RGWRados::fix_tail_obj_locator(const RGWBucketInfo& bucket_info, rgw_obj_key
 	continue;
       }
 
-      get_obj_bucket_and_oid_loc(loc, oid, locator);
+      loc.get_full_oid_and_loc(oid, locator);
       ref.ioctx.locator_set_key(locator);
 
       ldout(cct, 20) << __func__ << ": key=" << key << " oid=" << oid << " locator=" << locator << dendl;
@@ -3171,7 +3171,7 @@ int RGWRados::fix_tail_obj_locator(const RGWBucketInfo& bucket_info, rgw_obj_key
       }
 
       string bad_loc;
-      prepend_bucket_marker(bucket, loc.key.name, bad_loc);
+      rgw_prepend_bucket_marker(bucket, loc.key.name, bad_loc);
 
       /* create a new ioctx with the bad locator */
       librados::IoCtx src_ioctx;
@@ -5179,7 +5179,7 @@ int RGWRados::defer_gc(void *ctx, const RGWBucketInfo& bucket_info, const rgw_ob
 {
   RGWObjectCtx *rctx = static_cast<RGWObjectCtx *>(ctx);
   std::string oid, key;
-  get_obj_bucket_and_oid_loc(obj, oid, key);
+  obj.get_full_oid_and_loc(oid, key);
   if (!rctx)
     return 0;
 
@@ -5466,7 +5466,7 @@ int RGWRados::delete_raw_obj(const rgw_raw_obj& obj)
 int RGWRados::delete_obj_index(const rgw_obj& obj)
 {
   std::string oid, key;
-  get_obj_bucket_and_oid_loc(obj, oid, key);
+  obj.get_full_oid_and_loc(oid, key);
 
   auto obj_ctx = svc.sysobj->init_obj_ctx();
 
@@ -5782,7 +5782,7 @@ int RGWRados::Object::Stat::stat_async()
 
   string oid;
   string loc;
-  get_obj_bucket_and_oid_loc(obj, oid, loc);
+  obj.get_full_oid_and_loc(oid, loc);
 
   int r = store->get_obj_head_ioctx(source->get_bucket_info(), obj, &state.io_ctx);
   if (r < 0) {
@@ -9096,7 +9096,7 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
   rgw_obj obj(bucket, list_state.key);
 
   string oid;
-  get_obj_bucket_and_oid_loc(obj, oid, loc);
+  obj.get_full_oid_and_loc(oid, loc);
 
   if (loc != list_state.locator) {
     ldout(cct, 0) << "WARNING: generated locator (" << loc << ") is different from listed locator (" << list_state.locator << ")" << dendl;
