@@ -301,17 +301,19 @@ public:
     list<VPtr> to_release;
     {
       std::unique_lock l{lock};
-      cond.wait(l, [this, &key, &val] {
-        if (auto i = weak_refs.find(key); i != weak_refs.end()) {
-          if (val = i->second.first.lock(); val) {
-            return true;
-          } else {
-            return false;
-          }
-        } else {
-          return true;
-        }
-      });
+      auto i = weak_refs.find(key);
+      if (i != weak_refs.end()) {
+	val = i->second.first.lock();
+	// if val=nullptr, mean VPtr will be or already did call desconstructor.
+	// because lock, so Cleanup::() don't enter cache->remove().
+	// For this case, if we judge key isn't existed and will do insert
+	// std::map don't allow inser a new value if key already existed.
+	// we must remove and then insert a new value or wait key remove by Cleanup.
+	// Later remove(key) check raw pointer and make this don't delete.
+	if (!val) {
+	  weak_refs.erase(i);
+	}
+      }
       if (!val) {
         val = VPtr{new V{}, Cleanup{this, key}};
         weak_refs.insert(make_pair(key, make_pair(val, val.get())));
