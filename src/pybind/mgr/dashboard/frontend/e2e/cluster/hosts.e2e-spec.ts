@@ -1,11 +1,11 @@
 import { Helper } from '../helper.po';
-import { OSDsPage } from './osds.po';
+import { HostsPage } from './hosts.po';
 
-describe('OSDs page', () => {
-  let page: OSDsPage;
+describe('Hosts page', () => {
+  let page: HostsPage;
 
   beforeAll(() => {
-    page = new OSDsPage();
+    page = new HostsPage();
   });
 
   afterEach(() => {
@@ -14,6 +14,6 @@ describe('OSDs page', () => {
 
   it('should open and show breadcrumb', () => {
     page.navigateTo();
-    expect(Helper.getBreadcrumbText()).toEqual('OSDs');
+    expect(Helper.getBreadcrumbText()).toEqual('Hosts');
   });
 });
