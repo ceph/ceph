@@ -459,7 +459,7 @@ namespace buffer CEPH_BUFFER_API {
 
       // copy data out.
       // note that these all _append_ to dest!
-      void copy(unsigned len, char *dest) {
+      void copy(unsigned len, char *dest) __attribute__((always_inline)) {
         if (likely(current + len < limit)) {
           memcpy(dest, current, len);
           current += len;

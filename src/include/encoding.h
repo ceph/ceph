@@ -76,9 +76,12 @@ inline void decode_raw(T& t, bufferlist::const_iterator &p)
 {
   p.copy(sizeof(t), (char*)&t);
 }
+template<class T>
+inline void decode_raw(T& t, bufferlist::const_iterator &p) __attribute__((always_inline));
 
 #define WRITE_RAW_ENCODER(type)						\
   inline void encode(const type &v, ::ceph::bufferlist& bl, uint64_t features=0) { ::ceph::encode_raw(v, bl); } \
+  inline void decode(type &v, ::ceph::bufferlist::const_iterator& p)  __attribute__((always_inline)); \
   inline void decode(type &v, ::ceph::bufferlist::const_iterator& p) { ::ceph::decode_raw(v, p); }
 
 WRITE_RAW_ENCODER(__u8)
@@ -114,6 +117,7 @@ inline void decode(bool &v, bufferlist::const_iterator& p) {
     e = v;                                                              \
     ::ceph::encode_raw(e, bl);						\
   }									\
+  inline void decode(type &v, ::ceph::bufferlist::const_iterator& p) __attribute__((always_inline)); \
   inline void decode(type &v, ::ceph::bufferlist::const_iterator& p) {	\
     ceph_##etype e;							\
     ::ceph::decode_raw(e, p);						\
