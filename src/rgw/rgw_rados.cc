@@ -6094,11 +6094,10 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
         if (r < 0)
           return r;
 
-        map<int, string>::const_iterator biter;
-        for (biter = bucket_objs.begin(); biter != bucket_objs.end(); ++biter) {
-          // Do best effort removal
-          index_ctx.remove(biter->second);
-        }
+	/* remove bucket index objects asynchronously by best effort */
+	(void) CLSRGWIssueBucketIndexClean(index_ctx,
+					   bucket_objs,
+					   cct->_conf->rgw_bucket_index_max_aio)();
       }
       /* ret == -ENOENT here */
     }
@@ -8744,12 +8743,13 @@ int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& ob
     if (r < 0) {
       return r;
     }
-    /* remove bucket index objects*/
-    map<int, string>::const_iterator biter;
-    for (biter = bucket_objs.begin(); biter != bucket_objs.end(); ++biter) {
-      index_ctx.remove(biter->second);
-    }
+
+   /* remove bucket index objects asynchronously by best effort */
+    (void) CLSRGWIssueBucketIndexClean(index_ctx,
+				       bucket_objs,
+				       cct->_conf->rgw_bucket_index_max_aio)();
   }
+
   return 0;
 }
 
