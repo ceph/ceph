@@ -127,6 +127,29 @@ function install_pkg_on_ubuntu {
     fi
 }
 
+function install_boost_on_ubuntu {
+    local codename=$1
+    install_pkg_on_ubuntu \
+	ceph-libboost1.67 \
+	dd38c27740c1f9a9e6719a07eef84a1369dc168b \
+	$codename \
+	ceph-libboost-atomic1.67-dev \
+	ceph-libboost-chrono1.67-dev \
+	ceph-libboost-container1.67-dev \
+	ceph-libboost-context1.67-dev \
+	ceph-libboost-coroutine1.67-dev \
+	ceph-libboost-date-time1.67-dev \
+	ceph-libboost-filesystem1.67-dev \
+	ceph-libboost-iostreams1.67-dev \
+	ceph-libboost-program-options1.67-dev \
+	ceph-libboost-python1.67-dev \
+	ceph-libboost-random1.67-dev \
+	ceph-libboost-regex1.67-dev \
+	ceph-libboost-system1.67-dev \
+	ceph-libboost-thread1.67-dev \
+	ceph-libboost-timer1.67-dev
+}
+
 function version_lt {
     test $1 != $(echo -e "$1\n$2" | sort -rV | head -n 1)
 }
@@ -223,25 +246,10 @@ else
                 ;;
             *Xenial*)
                 ensure_decent_gcc_on_ubuntu 7 xenial
-                install_pkg_on_ubuntu \
-		    ceph-libboost1.67 \
-		    dd38c27740c1f9a9e6719a07eef84a1369dc168b \
-		    xenial \
-		    ceph-libboost-atomic1.67-dev \
-		    ceph-libboost-chrono1.67-dev \
-		    ceph-libboost-container1.67-dev \
-		    ceph-libboost-context1.67-dev \
-		    ceph-libboost-coroutine1.67-dev \
-		    ceph-libboost-date-time1.67-dev \
-		    ceph-libboost-filesystem1.67-dev \
-		    ceph-libboost-iostreams1.67-dev \
-		    ceph-libboost-program-options1.67-dev \
-		    ceph-libboost-python1.67-dev \
-		    ceph-libboost-random1.67-dev \
-		    ceph-libboost-regex1.67-dev \
-		    ceph-libboost-system1.67-dev \
-		    ceph-libboost-thread1.67-dev \
-		    ceph-libboost-timer1.67-dev
+                install_boost_on_ubuntu xenial
+                ;;
+            *Bionic*)
+                install_boost_on_ubuntu bionic
                 ;;
             *)
                 $SUDO apt-get install -y gcc
