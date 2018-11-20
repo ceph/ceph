@@ -574,7 +574,7 @@ class DBRelayAgent(MetricsAgent):
         cluster_host = socket.gethostname()
         for d_name, d_node in self._dev_nodes.items():
             keys = {'data_osd': 'DataDiskOfOSD',
-                    'fs_journal_osd': 'FsJounalDiskOfOSD',
+                    'fs_journal_osd': 'FsJournalDiskOfOSD',
                     'bs_db_osd': 'BsDBDiskOfOSD',
                     'bs_wal_osd': 'BsWalDiskOfOSD'}
             for k, v in keys.items():
