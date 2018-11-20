@@ -347,7 +347,7 @@ struct CephXTicketManager {
     CephXTicketHandler newTicketHandler(cct, type);
     std::pair < tickets_map_t::iterator, bool > res =
 	tickets_map.insert(std::make_pair(type, newTicketHandler));
-    assert(res.second);
+    ceph_assert(res.second);
     return res.first->second;
   }
   CephXAuthorizer *build_authorizer(uint32_t service_id) const;

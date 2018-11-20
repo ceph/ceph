@@ -35,7 +35,7 @@ Quickstart with vstart
     Most of the time this guide will work but sometimes all MDSs lock up and you
     cannot actually see them spill. It is much better to run this on a cluster.
 
-As a pre-requistie, we assume you have installed `mdtest
+As a prerequisite, we assume you have installed `mdtest
 <https://sourceforge.net/projects/mdtest/>`_ or pulled the `Docker image
 <https://hub.docker.com/r/michaelsevilla/mdtest/>`_. We use mdtest because we
 need to generate enough load to get over the MIN_OFFLOAD threshold that is

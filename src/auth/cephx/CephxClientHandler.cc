@@ -20,6 +20,7 @@
 
 #include "auth/KeyRing.h"
 #include "include/random.h"
+#include "common/ceph_context.h"
 #include "common/config.h"
 #include "common/dout.h"
 
@@ -27,12 +28,9 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "cephx client: "
 
-
 int CephxClientHandler::build_request(bufferlist& bl) const
 {
   ldout(cct, 10) << "build_request" << dendl;
-
-  RWLock::RLocker l(lock);
 
   if (need & CEPH_ENTITY_TYPE_AUTH) {
     /* authenticate */
@@ -110,7 +108,6 @@ bool CephxClientHandler::_need_tickets() const
 int CephxClientHandler::handle_response(int ret, bufferlist::const_iterator& indata)
 {
   ldout(cct, 10) << "handle_response ret = " << ret << dendl;
-  RWLock::WLocker l(lock);
   
   if (ret < 0)
     return ret; // hrm!
@@ -201,10 +198,8 @@ int CephxClientHandler::handle_response(int ret, bufferlist::const_iterator& ind
 }
 
 
-
 AuthAuthorizer *CephxClientHandler::build_authorizer(uint32_t service_id) const
 {
-  RWLock::RLocker l(lock);
   ldout(cct, 10) << "build_authorizer for service " << ceph_entity_type_name(service_id) << dendl;
   return tickets.build_authorizer(service_id);
 }
@@ -221,7 +216,6 @@ bool CephxClientHandler::build_rotating_request(bufferlist& bl) const
 
 void CephxClientHandler::prepare_build_request()
 {
-  RWLock::WLocker l(lock);
   ldout(cct, 10) << "validate_tickets: want=" << want << " need=" << need
 		 << " have=" << have << dendl;
   validate_tickets();
@@ -239,7 +233,6 @@ void CephxClientHandler::validate_tickets()
 
 bool CephxClientHandler::need_tickets()
 {
-  RWLock::WLocker l(lock);
   validate_tickets();
 
   ldout(cct, 20) << "need_tickets: want=" << want

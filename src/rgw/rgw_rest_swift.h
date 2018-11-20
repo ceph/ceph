@@ -121,6 +121,8 @@ public:
   RGWPutObj_ObjStore_SWIFT() {}
   ~RGWPutObj_ObjStore_SWIFT() override {}
 
+  int update_slo_segment_size(rgw_slo_entry& entry);
+
   int verify_permission() override;
   int get_params() override;
   void send_response() override;
@@ -393,7 +395,7 @@ public:
   int validate_bucket_name(const string& bucket);
 
   int init(RGWRados *store, struct req_state *s, rgw::io::BasicClient *cio) override;
-  int authorize() override;
+  int authorize(const DoutPrefixProvider *dpp) override;
   int postauth_init() override;
 
   RGWAccessControlPolicy *alloc_policy() { return nullptr; /* return new RGWAccessControlPolicy_SWIFT; */ }
@@ -541,7 +543,7 @@ public:
     return RGWHandler::init(store, state, cio);
   }
 
-  int authorize() override {
+  int authorize(const DoutPrefixProvider *dpp) override {
     return 0;
   }
 
@@ -597,7 +599,7 @@ public:
     return RGWHandler::init(store, state, cio);
   }
 
-  int authorize() override {
+  int authorize(const DoutPrefixProvider *dpp) override {
     return 0;
   }
 
@@ -653,7 +655,7 @@ public:
     return RGWHandler::init(store, state, cio);
   }
 
-  int authorize() override {
+  int authorize(const DoutPrefixProvider *dpp) override {
     return 0;
   }
 

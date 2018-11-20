@@ -231,8 +231,7 @@ class LocalRemote(object):
 
     def run(self, args, check_status=True, wait=True,
             stdout=None, stderr=None, cwd=None, stdin=None,
-            logger=None, label=None, env=None):
-        log.info("run args={0}".format(args))
+            logger=None, label=None, env=None, timeout=None):
 
         # We don't need no stinkin' sudo
         args = [a for a in args if a != "sudo"]
@@ -240,32 +239,33 @@ class LocalRemote(object):
         # We have to use shell=True if any run.Raw was present, e.g. &&
         shell = any([a for a in args if isinstance(a, Raw)])
 
+        # Filter out helper tools that don't exist in a vstart environment
+        args = [a for a in args if a not in {
+            'adjust-ulimits', 'ceph-coverage', 'timeout'}]
+
+        # Adjust binary path prefix if given a bare program name
+        if "/" not in args[0]:
+            # If they asked for a bare binary name, and it exists
+            # in our built tree, use the one there.
+            local_bin = os.path.join(BIN_PREFIX, args[0])
+            if os.path.exists(local_bin):
+                args = [local_bin] + args[1:]
+            else:
+                log.debug("'{0}' is not a binary in the Ceph build dir".format(
+                    args[0]
+                ))
+
+        log.info("Running {0}".format(args))
+
         if shell:
-            filtered = []
-            i = 0
-            while i < len(args):
-                if args[i] == 'adjust-ulimits':
-                    i += 1
-                elif args[i] == 'ceph-coverage':
-                    i += 2
-                elif args[i] == 'timeout':
-                    i += 2
-                else:
-                    filtered.append(args[i])
-                    i += 1
-
-            args = quote(filtered)
-            log.info("Running {0}".format(args))
-
-            subproc = subprocess.Popen(args,
+            subproc = subprocess.Popen(quote(args),
                                        stdout=subprocess.PIPE,
                                        stderr=subprocess.PIPE,
                                        stdin=subprocess.PIPE,
                                        cwd=cwd,
                                        shell=True)
         else:
-            log.info("Running {0}".format(args))
-
+            # Sanity check that we've got a list of strings
             for arg in args:
                 if not isinstance(arg, basestring):
                     raise RuntimeError("Oops, can't handle arg {0} type {1}".format(
@@ -311,6 +311,10 @@ class LocalDaemon(object):
 
     def running(self):
         return self._get_pid() is not None
+
+    def check_status(self):
+        if self.proc:
+            return self.proc.poll()
 
     def _get_pid(self):
         """
@@ -560,6 +564,12 @@ class LocalCephManager(CephManager):
 
         self.log = lambda x: log.info(x)
 
+        # Don't bother constructing a map of pools: it should be empty
+        # at test cluster start, and in any case it would be out of date
+        # in no time.  The attribute needs to exist for some of the CephManager
+        # methods to work though.
+        self.pools = {}
+
     def find_remote(self, daemon_type, daemon_id):
         """
         daemon_type like 'mds', 'osd'
@@ -567,8 +577,17 @@ class LocalCephManager(CephManager):
         """
         return LocalRemote()
 
-    def run_ceph_w(self):
-        proc = self.controller.run([os.path.join(BIN_PREFIX, "ceph"), "-w"], wait=False, stdout=StringIO())
+    def run_ceph_w(self, watch_channel=None):
+        """
+        :param watch_channel: Specifies the channel to be watched.
+                              This can be 'cluster', 'audit', ...
+        :type watch_channel: str
+        """
+        args = [os.path.join(BIN_PREFIX, "ceph"), "-w"]
+        if watch_channel is not None:
+            args.append("--watch-channel")
+            args.append(watch_channel)
+        proc = self.controller.run(args, wait=False, stdout=StringIO())
         return proc
 
     def raw_cluster_cmd(self, *args, **kwargs):
@@ -587,9 +606,11 @@ class LocalCephManager(CephManager):
         proc = self.controller.run([os.path.join(BIN_PREFIX, "ceph")] + list(args), **kwargs)
         return proc.exitstatus
 
-    def admin_socket(self, daemon_type, daemon_id, command, check_status=True):
+    def admin_socket(self, daemon_type, daemon_id, command, check_status=True, timeout=None):
         return self.controller.run(
-            args=[os.path.join(BIN_PREFIX, "ceph"), "daemon", "{0}.{1}".format(daemon_type, daemon_id)] + command, check_status=check_status
+            args=[os.path.join(BIN_PREFIX, "ceph"), "daemon", "{0}.{1}".format(daemon_type, daemon_id)] + command,
+            check_status=check_status,
+            timeout=timeout
         )
 
 
@@ -668,7 +689,7 @@ class LocalMDSCluster(LocalCephCluster, MDSCluster):
     def __init__(self, ctx):
         super(LocalMDSCluster, self).__init__(ctx)
 
-        self.mds_ids = ctx.daemons.daemons['mds'].keys()
+        self.mds_ids = ctx.daemons.daemons['ceph.mds'].keys()
         self.mds_daemons = dict([(id_, LocalDaemon("mds", id_)) for id_ in self.mds_ids])
 
     def clear_firewall(self):
@@ -683,7 +704,7 @@ class LocalMgrCluster(LocalCephCluster, MgrCluster):
     def __init__(self, ctx):
         super(LocalMgrCluster, self).__init__(ctx)
 
-        self.mgr_ids = ctx.daemons.daemons['mgr'].keys()
+        self.mgr_ids = ctx.daemons.daemons['ceph.mgr'].keys()
         self.mgr_daemons = dict([(id_, LocalDaemon("mgr", id_)) for id_ in self.mgr_ids])
 
 
@@ -838,12 +859,13 @@ class LocalContext(object):
         # Inspect ceph.conf to see what roles exist
         for conf_line in open("ceph.conf").readlines():
             for svc_type in ["mon", "osd", "mds", "mgr"]:
-                if svc_type not in self.daemons.daemons:
-                    self.daemons.daemons[svc_type] = {}
+                prefixed_type = "ceph." + svc_type
+                if prefixed_type not in self.daemons.daemons:
+                    self.daemons.daemons[prefixed_type] = {}
                 match = re.match("^\[{0}\.(.+)\]$".format(svc_type), conf_line)
                 if match:
                     svc_id = match.group(1)
-                    self.daemons.daemons[svc_type][svc_id] = LocalDaemon(svc_type, svc_id)
+                    self.daemons.daemons[prefixed_type][svc_id] = LocalDaemon(svc_type, svc_id)
 
     def __del__(self):
         shutil.rmtree(self.teuthology_config['test_path'])
@@ -899,7 +921,7 @@ def exec_test():
         vstart_env = os.environ.copy()
         vstart_env["FS"] = "0"
         vstart_env["MDS"] = max_required_mds.__str__()
-        vstart_env["OSD"] = "1"
+        vstart_env["OSD"] = "4"
         vstart_env["MGR"] = max(max_required_mgr, 1).__str__()
 
         remote.run([os.path.join(SRC_PREFIX, "vstart.sh"), "-n", "-d", "--nolockdep"],

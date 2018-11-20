@@ -18,9 +18,10 @@
 #include "rocksdb/filter_policy.h"
 #include "rocksdb/utilities/convenience.h"
 #include "rocksdb/merge_operator.h"
+#include "kv/rocksdb_cache/BinnedLRUCache.h"
+
 using std::string;
 #include "common/perf_counters.h"
-#include "common/debug.h"
 #include "common/PriorityCache.h"
 #include "include/str_list.h"
 #include "include/stringify.h"
@@ -128,7 +129,7 @@ public:
   explicit MergeOperatorLinker(const std::shared_ptr<KeyValueDB::MergeOperator> &o) : mop(o) {}
 
   const char *Name() const override {
-    return mop->name().c_str();
+    return mop->name();
   }
 
   bool Merge(const rocksdb::Slice& key,
@@ -152,7 +153,7 @@ int RocksDBStore::set_merge_operator(
   std::shared_ptr<KeyValueDB::MergeOperator> mop)
 {
   // If you fail here, it's because you can't do this on an open database
-  assert(db == nullptr);
+  ceph_assert(db == nullptr);
   merge_ops.push_back(std::make_pair(prefix,mop));
   return 0;
 }
@@ -300,7 +301,7 @@ int RocksDBStore::install_cf_mergeop(
   const string &cf_name,
   rocksdb::ColumnFamilyOptions *cf_opt)
 {
-  assert(cf_opt != nullptr);
+  ceph_assert(cf_opt != nullptr);
   cf_opt->merge_operator.reset();
   for (auto& i : merge_ops) {
     if (i.first == cf_name) {
@@ -389,7 +390,11 @@ int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options&
   uint64_t row_cache_size = cache_size * g_conf()->rocksdb_cache_row_ratio;
   uint64_t block_cache_size = cache_size - row_cache_size;
 
-  if (g_conf()->rocksdb_cache_type == "lru") {
+  if (g_conf()->rocksdb_cache_type == "binned_lru") {
+    bbt_opts.block_cache = rocksdb_cache::NewBinnedLRUCache(
+      block_cache_size,
+      g_conf()->rocksdb_cache_shard_bits);
+  } else if (g_conf()->rocksdb_cache_type == "lru") {
     bbt_opts.block_cache = rocksdb::NewLRUCache(
       block_cache_size,
       g_conf()->rocksdb_cache_shard_bits);
@@ -397,6 +402,12 @@ int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options&
     bbt_opts.block_cache = rocksdb::NewClockCache(
       block_cache_size,
       g_conf()->rocksdb_cache_shard_bits);
+    if (!bbt_opts.block_cache) {
+      derr << "rocksdb_cache_type '" << g_conf()->rocksdb_cache_type
+           << "' chosen, but RocksDB not compiled with LibTBB. "
+           << dendl;
+      return -EINVAL;
+    }
   } else {
     derr << "unrecognized rocksdb_cache_type '" << g_conf()->rocksdb_cache_type
       << "'" << dendl;
@@ -559,7 +570,7 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing,
       }
     }
   }
-  assert(default_cf != nullptr);
+  ceph_assert(default_cf != nullptr);
   
   PerfCountersBuilder plb(g_ceph_context, "rocksdb", l_rocksdb_first, l_rocksdb_last);
   plb.add_u64_counter(l_rocksdb_gets, "get", "Gets");
@@ -665,6 +676,27 @@ void RocksDBStore::split_stats(const std::string &s, char delim, std::vector<std
     while (std::getline(ss, item, delim)) {
         elems.push_back(item);
     }
+}
+
+int64_t RocksDBStore::estimate_prefix_size(const string& prefix)
+{
+  auto cf = get_cf_handle(prefix);
+  uint64_t size = 0;
+  uint8_t flags =
+    //rocksdb::DB::INCLUDE_MEMTABLES |  // do not include memtables...
+    rocksdb::DB::INCLUDE_FILES;
+  if (cf) {
+    string start(1, '\x00');
+    string limit("\xff\xff\xff\xff");
+    rocksdb::Range r(start, limit);
+    db->GetApproximateSizes(cf, &r, 1, &size, flags);
+  } else {
+    string limit = prefix + "\xff\xff\xff\xff";
+    rocksdb::Range r(prefix, limit);
+    db->GetApproximateSizes(default_cf,
+			    &r, 1, &size, flags);
+  }
+  return size;
 }
 
 void RocksDBStore::get_statistics(Formatter *f)
@@ -1024,7 +1056,7 @@ int RocksDBStore::get(
       if (status.ok()) {
 	(*out)[key].append(value);
       } else if (status.IsIOError()) {
-	ceph_abort_msg(cct, status.ToString());
+	ceph_abort_msg(status.getState());
       }
     }
   } else {
@@ -1038,7 +1070,7 @@ int RocksDBStore::get(
       if (status.ok()) {
 	(*out)[key].append(value);
       } else if (status.IsIOError()) {
-	ceph_abort_msg(cct, status.ToString());
+	ceph_abort_msg(status.getState());
       }
     }
   }
@@ -1053,7 +1085,7 @@ int RocksDBStore::get(
     const string &key,
     bufferlist *out)
 {
-  assert(out && (out->length() == 0));
+  ceph_assert(out && (out->length() == 0));
   utime_t start = ceph_clock_now();
   int r = 0;
   string value;
@@ -1076,7 +1108,7 @@ int RocksDBStore::get(
   } else if (s.IsNotFound()) {
     r = -ENOENT;
   } else {
-    ceph_abort_msg(cct, s.ToString());
+    ceph_abort_msg(s.getState());
   }
   utime_t lat = ceph_clock_now() - start;
   logger->inc(l_rocksdb_gets);
@@ -1090,7 +1122,7 @@ int RocksDBStore::get(
   size_t keylen,
   bufferlist *out)
 {
-  assert(out && (out->length() == 0));
+  ceph_assert(out && (out->length() == 0));
   utime_t start = ceph_clock_now();
   int r = 0;
   string value;
@@ -1114,7 +1146,7 @@ int RocksDBStore::get(
   } else if (s.IsNotFound()) {
     r = -ENOENT;
   } else {
-    ceph_abort_msg(cct, s.ToString());
+    ceph_abort_msg(s.getState());
   }
   utime_t lat = ceph_clock_now() - start;
   logger->inc(l_rocksdb_gets);
@@ -1181,7 +1213,7 @@ void RocksDBStore::compact_thread_entry()
 
 void RocksDBStore::compact_range_async(const string& start, const string& end)
 {
-  Mutex::Locker l(compact_queue_lock);
+  std::lock_guard l(compact_queue_lock);
 
   // try to merge adjacent ranges.  this is O(n), but the queue should
   // be short.  note that we do not cover all overlap cases and merge
@@ -1239,36 +1271,41 @@ void RocksDBStore::compact_range(const string& start, const string& end)
 int64_t RocksDBStore::request_cache_bytes(PriorityCache::Priority pri, uint64_t chunk_bytes) const
 {
   auto cache = bbt_opts.block_cache;
-  int64_t assigned = get_cache_bytes(pri);
 
+  int64_t assigned = get_cache_bytes(pri);
+  int64_t usage = 0;
+  int64_t request = 0;
   switch (pri) {
   // PRI0 is for rocksdb's high priority items (indexes/filters)
   case PriorityCache::Priority::PRI0:
     {
-      int64_t usage = cache->GetHighPriPoolUsage();
-
-      // RocksDB sometimes flushes the high pri cache when the low priority
-      // cache exceeds the soft cap, so in that case use a "watermark" for 
-      // the usage instead.
-      if (high_pri_watermark > usage) {
-        usage = high_pri_watermark;
+      usage += cache->GetPinnedUsage();
+      if (g_conf()->rocksdb_cache_type == "binned_lru") {
+        auto binned_cache =
+            std::static_pointer_cast<rocksdb_cache::BinnedLRUCache>(cache);
+        usage += binned_cache->GetHighPriPoolUsage();
       }
-      dout(10) << __func__ << " high pri pool usage: " << usage << dendl;
-      int64_t request = PriorityCache::get_chunk(usage, chunk_bytes);
-      return (request > assigned) ? request - assigned : 0;
+      break;
     }
   // All other cache items are currently shoved into the LAST priority. 
   case PriorityCache::Priority::LAST:
     { 
-      uint64_t usage = cache->GetUsage() - cache->GetHighPriPoolUsage();
-      dout(10) << __func__ << " low pri pool usage: " << usage << dendl;
-      int64_t request = PriorityCache::get_chunk(usage, chunk_bytes);
-      return (request > assigned) ? request - assigned : 0;
+      usage = get_cache_usage() - cache->GetPinnedUsage(); 
+      if (g_conf()->rocksdb_cache_type == "binned_lru") {
+        auto binned_cache =
+            std::static_pointer_cast<rocksdb_cache::BinnedLRUCache>(cache);
+        usage -= binned_cache->GetHighPriPoolUsage();
+      }
+      break;
     }
   default:
     break;
   }
-  return -EOPNOTSUPP;
+  request = PriorityCache::get_chunk(usage, chunk_bytes);
+  request = (request > assigned) ? request - assigned : 0;
+  dout(10) << __func__ << " Priority: " << static_cast<uint32_t>(pri) 
+           << " Usage: " << usage << " Request: " << request << dendl;
+  return request;
 }
 
 int64_t RocksDBStore::get_cache_usage() const
@@ -1278,37 +1315,22 @@ int64_t RocksDBStore::get_cache_usage() const
 
 int64_t RocksDBStore::commit_cache_size()
 {
-  int64_t high_pri_bytes = get_cache_bytes(PriorityCache::Priority::PRI0);
-  int64_t total_bytes = get_cache_bytes();
-
-  double ratio = (double) high_pri_bytes / total_bytes;
   size_t old_bytes = bbt_opts.block_cache->GetCapacity();
+  int64_t total_bytes = get_cache_bytes();
   dout(10) << __func__ << " old: " << old_bytes
-           << ", new: " << total_bytes << dendl;
+           << " new: " << total_bytes << dendl;
   bbt_opts.block_cache->SetCapacity((size_t) total_bytes);
-  set_cache_high_pri_pool_ratio(ratio);
 
-  // After setting the cache sizes, updated the high pri watermark. 
-  int64_t high_pri_pool_usage = bbt_opts.block_cache->GetHighPriPoolUsage();
-  if (high_pri_watermark < high_pri_pool_usage) {
-    high_pri_watermark = high_pri_pool_usage;
-  } else {
-    high_pri_watermark = static_cast<int64_t>(0.90 * high_pri_watermark);
+  // Set the high priority pool ratio is this is the binned LRU cache.
+  if (g_conf()->rocksdb_cache_type == "binned_lru") {
+    auto binned_cache =
+        std::static_pointer_cast<rocksdb_cache::BinnedLRUCache>(bbt_opts.block_cache);
+    int64_t high_pri_bytes = get_cache_bytes(PriorityCache::Priority::PRI0);
+    double ratio = (double) high_pri_bytes / total_bytes;
+    dout(10) << __func__ << " High Pri Pool Ratio set to " << ratio << dendl;
+    binned_cache->SetHighPriPoolRatio(ratio);
   }
-
   return total_bytes;
-}
-
-int RocksDBStore::set_cache_high_pri_pool_ratio(double ratio)
-{
-  if (g_conf()->rocksdb_cache_type != "lru") {
-    return -EOPNOTSUPP;
-  }
-  dout(10) << __func__ << " old ratio: " 
-          << bbt_opts.block_cache->GetHighPriPoolRatio() << " new ratio: "
-          << ratio << dendl;
-  bbt_opts.block_cache->SetHighPriPoolRatio(ratio);
-  return 0;
 }
 
 int64_t RocksDBStore::get_cache_capacity() {
@@ -1322,20 +1344,20 @@ RocksDBStore::RocksDBWholeSpaceIteratorImpl::~RocksDBWholeSpaceIteratorImpl()
 int RocksDBStore::RocksDBWholeSpaceIteratorImpl::seek_to_first()
 {
   dbiter->SeekToFirst();
-  assert(!dbiter->status().IsIOError());
+  ceph_assert(!dbiter->status().IsIOError());
   return dbiter->status().ok() ? 0 : -1;
 }
 int RocksDBStore::RocksDBWholeSpaceIteratorImpl::seek_to_first(const string &prefix)
 {
   rocksdb::Slice slice_prefix(prefix);
   dbiter->Seek(slice_prefix);
-  assert(!dbiter->status().IsIOError());
+  ceph_assert(!dbiter->status().IsIOError());
   return dbiter->status().ok() ? 0 : -1;
 }
 int RocksDBStore::RocksDBWholeSpaceIteratorImpl::seek_to_last()
 {
   dbiter->SeekToLast();
-  assert(!dbiter->status().IsIOError());
+  ceph_assert(!dbiter->status().IsIOError());
   return dbiter->status().ok() ? 0 : -1;
 }
 int RocksDBStore::RocksDBWholeSpaceIteratorImpl::seek_to_last(const string &prefix)
@@ -1377,7 +1399,7 @@ int RocksDBStore::RocksDBWholeSpaceIteratorImpl::next()
   if (valid()) {
     dbiter->Next();
   }
-  assert(!dbiter->status().IsIOError());
+  ceph_assert(!dbiter->status().IsIOError());
   return dbiter->status().ok() ? 0 : -1;
 }
 int RocksDBStore::RocksDBWholeSpaceIteratorImpl::prev()
@@ -1385,7 +1407,7 @@ int RocksDBStore::RocksDBWholeSpaceIteratorImpl::prev()
   if (valid()) {
     dbiter->Prev();
   }
-  assert(!dbiter->status().IsIOError());
+  ceph_assert(!dbiter->status().IsIOError());
   return dbiter->status().ok() ? 0 : -1;
 }
 string RocksDBStore::RocksDBWholeSpaceIteratorImpl::key()

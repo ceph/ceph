@@ -7,35 +7,41 @@
 #include "include/int_types.h"
 #include "include/types.h"
 #include "include/rados/librados.hpp"
+#include "cls/journal/cls_journal_types.h"
 #include "librbd/Types.h"
+#include "librbd/journal/TypeTraits.h"
 #include <string>
 
 class Context;
 class ContextWQ;
+namespace journal { class Journaler; }
 namespace librbd { class ImageCtx; }
 namespace librbd { class ImageOptions; }
 
 namespace rbd {
 namespace mirror {
+
+template <typename> struct Threads;
+
 namespace image_replayer {
 
 template <typename ImageCtxT = librbd::ImageCtx>
 class CreateImageRequest {
 public:
-  static CreateImageRequest *create(librados::IoCtx &local_io_ctx,
-                                    ContextWQ *work_queue,
+  static CreateImageRequest *create(Threads<ImageCtxT> *threads,
+                                    librados::IoCtx &local_io_ctx,
                                     const std::string &global_image_id,
                                     const std::string &remote_mirror_uuid,
                                     const std::string &local_image_name,
 				    const std::string &local_image_id,
                                     ImageCtxT *remote_image_ctx,
                                     Context *on_finish) {
-    return new CreateImageRequest(local_io_ctx, work_queue, global_image_id,
+    return new CreateImageRequest(threads, local_io_ctx, global_image_id,
                                   remote_mirror_uuid, local_image_name,
                                   local_image_id, remote_image_ctx, on_finish);
   }
 
-  CreateImageRequest(librados::IoCtx &local_io_ctx, ContextWQ *work_queue,
+  CreateImageRequest(Threads<ImageCtxT> *threads, librados::IoCtx &local_io_ctx,
                      const std::string &global_image_id,
                      const std::string &remote_mirror_uuid,
                      const std::string &local_image_name,
@@ -55,7 +61,13 @@ private:
    *    |\------------> CREATE_IMAGE ---------------------\         * (error)
    *    |                                                 |         *
    *    | (clone)                                         |         *
-   *    \-------------> GET_PARENT_GLOBAL_IMAGE_ID  * * * | * * *   *
+   *    \-------------> GET_LOCAL_PARENT_MIRROR_UUID  * * | * * *   *
+   *                        |                             |       * *
+   *                        v                             |         *
+   *                    GET_REMOTE_PARENT_CLIENT_STATE  * | * * *   *
+   *                        |                             |       * *
+   *                        v                             |         *
+   *                    GET_PARENT_GLOBAL_IMAGE_ID  * * * | * * *   *
    *                        |                             |       * *
    *                        v                             |         *
    *                    GET_LOCAL_PARENT_IMAGE_ID * * * * | * * *   *
@@ -64,26 +76,20 @@ private:
    *                    OPEN_REMOTE_PARENT  * * * * * * * | * * *   *
    *                        |                             |       * *
    *                        v                             |         *
-   *                    OPEN_LOCAL_PARENT * * * * * * *   |         *
-   *                        |                         *   |         *
-   *                        v                         *   |         *
-   *                    SET_LOCAL_PARENT_SNAP         *   |         *
-   *                        |         *               *   |         *
-   *                        v         *               *   |         *
-   *                    CLONE_IMAGE   *               *   |         *
-   *                        |         *               *   |         *
-   *                        v         v               *   |         *
-   *                    CLOSE_LOCAL_PARENT            *   |         *
-   *                        |                         *   |         *
-   *                        v                         *   |         *
-   *                    CLOSE_REMOTE_PARENT < * * * * *   |         *
+   *                    CLONE_IMAGE                       |         *
+   *                        |                             |         *
+   *                        v                             |         *
+   *                    CLOSE_REMOTE_PARENT               |         *
    *                        |                             v         *
    *                        \------------------------> <finish> < * *
    * @endverbatim
    */
 
+  typedef librbd::journal::TypeTraits<ImageCtxT> TypeTraits;
+  typedef typename TypeTraits::Journaler Journaler;
+
+  Threads<ImageCtxT> *m_threads;
   librados::IoCtx &m_local_io_ctx;
-  ContextWQ *m_work_queue;
   std::string m_global_image_id;
   std::string m_remote_mirror_uuid;
   std::string m_local_image_name;
@@ -92,20 +98,28 @@ private:
   Context *m_on_finish;
 
   librados::IoCtx m_remote_parent_io_ctx;
+  std::string m_local_parent_mirror_uuid;
+  Journaler *m_remote_journaler = nullptr;
   ImageCtxT *m_remote_parent_image_ctx = nullptr;
-  librbd::ParentSpec m_remote_parent_spec;
+  cls::rbd::ParentImageSpec m_remote_parent_spec;
 
   librados::IoCtx m_local_parent_io_ctx;
-  ImageCtxT *m_local_parent_image_ctx = nullptr;
-  librbd::ParentSpec m_local_parent_spec;
+  cls::rbd::ParentImageSpec m_local_parent_spec;
 
   bufferlist m_out_bl;
   std::string m_parent_global_image_id;
   std::string m_parent_pool_name;
+  cls::journal::Client m_client;
   int m_ret_val = 0;
 
   void create_image();
   void handle_create_image(int r);
+
+  void get_local_parent_mirror_uuid();
+  void handle_get_local_parent_mirror_uuid(int r);
+
+  void get_remote_parent_client_state();
+  void handle_get_remote_parent_client_state(int r);
 
   void get_parent_global_image_id();
   void handle_get_parent_global_image_id(int r);
@@ -116,17 +130,8 @@ private:
   void open_remote_parent_image();
   void handle_open_remote_parent_image(int r);
 
-  void open_local_parent_image();
-  void handle_open_local_parent_image(int r);
-
-  void set_local_parent_snap();
-  void handle_set_local_parent_snap(int r);
-
   void clone_image();
   void handle_clone_image(int r);
-
-  void close_local_parent_image();
-  void handle_close_local_parent_image(int r);
 
   void close_remote_parent_image();
   void handle_close_remote_parent_image(int r);

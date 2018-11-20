@@ -10,7 +10,8 @@ import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 export class RgwBucketDetailsComponent implements OnChanges {
   bucket: any;
 
-  @Input() selection: CdTableSelection;
+  @Input()
+  selection: CdTableSelection;
 
   constructor() {}
 

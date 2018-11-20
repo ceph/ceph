@@ -44,7 +44,8 @@ int wait_for_healthy(rados_t *cluster)
     rados_buffer_free(outbuf);
 
     json_spirit::mValue root;
-    assert(json_spirit::read(out, root));
+    [[maybe_unused]] bool json_parse_success = json_spirit::read(out, root);
+    ceph_assert(json_parse_success);
     json_spirit::mObject root_obj = root.get_obj();
     json_spirit::mObject pgmap = root_obj["pgmap"].get_obj();
     json_spirit::mArray pgs_by_state = pgmap["pgs_by_state"].get_array();

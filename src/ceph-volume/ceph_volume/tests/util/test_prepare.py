@@ -366,3 +366,57 @@ class TestMkfsBluestore(object):
             '--osd-uuid', 'asdf-1234',
             '--setuser', 'ceph', '--setgroup', 'ceph'])
         assert expected in str(error)
+
+
+class TestGetJournalSize(object):
+
+    def test_undefined_size_fallbacks_formatted(self, conf_ceph_stub):
+        conf_ceph_stub(dedent("""
+        [global]
+        fsid = a25d19a6-7d57-4eda-b006-78e35d2c4d9f
+        """))
+        result = prepare.get_journal_size()
+        assert result == '5G'
+
+    def test_undefined_size_fallbacks_unformatted(self, conf_ceph_stub):
+        conf_ceph_stub(dedent("""
+        [global]
+        fsid = a25d19a6-7d57-4eda-b006-78e35d2c4d9f
+        """))
+        result = prepare.get_journal_size(lv_format=False)
+        assert result.gb.as_int() == 5
+
+    def test_defined_size_unformatted(self, conf_ceph_stub):
+        conf_ceph_stub(dedent("""
+        [global]
+        fsid = a25d19a6-7d57-4eda-b006-78e35d2c4d9f
+
+        [osd]
+        osd journal size = 10240
+        """))
+        result = prepare.get_journal_size(lv_format=False)
+        assert result.gb.as_int() == 10
+
+    def test_defined_size_formatted(self, conf_ceph_stub):
+        conf_ceph_stub(dedent("""
+        [global]
+        fsid = a25d19a6-7d57-4eda-b006-78e35d2c4d9f
+
+        [osd]
+        osd journal size = 10240
+        """))
+        result = prepare.get_journal_size()
+        assert result == '10G'
+
+    def test_refuse_tiny_journals(self, conf_ceph_stub):
+        conf_ceph_stub(dedent("""
+        [global]
+        fsid = a25d19a6-7d57-4eda-b006-78e35d2c4d9f
+
+        [osd]
+        osd journal size = 1024
+        """))
+        with pytest.raises(RuntimeError) as error:
+            prepare.get_journal_size()
+        assert 'journal sizes must be larger' in str(error)
+        assert 'detected: 1024.00 MB' in str(error)

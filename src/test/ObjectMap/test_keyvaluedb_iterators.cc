@@ -33,10 +33,10 @@ public:
   boost::scoped_ptr<KeyValueDBMemory> mock;
 
   void SetUp() override {
-    assert(!store_path.empty());
+    ceph_assert(!store_path.empty());
 
     KeyValueDB *db_ptr = KeyValueDB::create(g_ceph_context, "leveldb", store_path);
-    assert(!db_ptr->create_and_open(std::cerr));
+    ceph_assert(!db_ptr->create_and_open(std::cerr));
     db.reset(db_ptr);
     mock.reset(new KeyValueDBMemory());
   }

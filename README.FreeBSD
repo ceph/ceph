@@ -2,7 +2,7 @@
 Last updated: 2017-04-08
 
 The FreeBSD build will build most of the tools in Ceph.
-Note that the (kernel) RBD dependant items will not work
+Note that the (kernel) RBD dependent items will not work
 
 I started looking into Ceph, because the HAST solution with CARP and 
 ggate did not really do what I was looking for. But I'm aiming for 
@@ -70,7 +70,7 @@ Build Prerequisites
 	11-RELEASE will also work. And Clang is at 3.8.0.
 	It uses the CLANG toolset that is available, 3.7 is no longer tested, 
 	but was working when that was with 11-CURRENT. 
-	Clang 3.4 (on 10.2-STABLE) does not have all required capabilites to 
+	Clang 3.4 (on 10.2-STABLE) does not have all required capabilities to 
 	compile everything
 
 The following setup will get things running for FreeBSD:
@@ -158,5 +158,5 @@ Task to do:
 	with all the packages FreeBSD already has in place. Lots of minute 
 	details to figure out
 
- -	Design a vitual disk implementation that can be used with behyve and 
+ -	Design a virtual disk implementation that can be used with behyve and 
 	attached to an RBD image. 

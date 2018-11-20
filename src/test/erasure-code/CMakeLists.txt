@@ -165,7 +165,6 @@ target_link_libraries(unittest_erasure_code_example
   erasure_code
   ${UNITTEST_LIBS}
   )
-set_target_properties(unittest_erasure_code_example PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 
 include_directories(SYSTEM ${CMAKE_SOURCE_DIR}/src/erasure-code/jerasure/jerasure/include)
 include_directories(SYSTEM ${CMAKE_SOURCE_DIR}/src/erasure-code//jerasure/gf-complete/include)
@@ -235,3 +234,31 @@ target_link_libraries(unittest_erasure_code_shec_arguments
   ceph-common
   ec_shec
   )
+
+#unitest_erasure_code_clay
+add_executable(unittest_erasure_code_clay
+  TestErasureCodeClay.cc
+  $<TARGET_OBJECTS:unit-main>)
+add_ceph_unittest(unittest_erasure_code_clay)
+target_link_libraries(unittest_erasure_code_clay
+  global
+  ${CMAKE_DL_LIBS}
+  ${UNITTEST_LIBS}
+  ceph-common
+  ec_clay
+  )
+
+# unittest_erasure_code_plugin_clay
+add_executable(unittest_erasure_code_plugin_clay
+  TestErasureCodePluginClay.cc
+  $<TARGET_OBJECTS:unit-main>)
+add_ceph_unittest(unittest_erasure_code_plugin_clay)
+add_dependencies(unittest_erasure_code_plugin_clay
+  ec_clay)
+target_link_libraries(unittest_erasure_code_plugin_clay
+  GTest::Main
+  global
+  ${CMAKE_DL_LIBS}
+  ${UNITTEST_LIBS}
+  ceph-common)
+

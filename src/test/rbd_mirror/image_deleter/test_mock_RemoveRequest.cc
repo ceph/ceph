@@ -39,7 +39,7 @@ struct RemoveRequest<librbd::MockTestImageCtx> {
                                librbd::ProgressContext &progress_ctx,
                                ContextWQ *work_queue,
                                Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     EXPECT_TRUE(image_name.empty());
     EXPECT_TRUE(force);
     EXPECT_TRUE(remove_from_trash);
@@ -73,7 +73,7 @@ struct SnapshotPurgeRequest<librbd::MockTestImageCtx> {
   static SnapshotPurgeRequest *create(librados::IoCtx &io_ctx,
                                       const std::string &image_id,
                                       Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->construct(image_id);
     s_instance->on_finish = on_finish;
     return s_instance;

@@ -76,6 +76,8 @@ def task(ctx, config):
     chance_pgnum_grow: (0) chance to increase a pool's size
     chance_pgpnum_fix: (0) chance to adjust pgpnum to pg for a pool
     pool_grow_by: (10) amount to increase pgnum by
+    chance_pgnum_shrink: (0) chance to decrease a pool's size
+    pool_shrink_by: (10) amount to decrease pgnum by
     max_pgs_per_pool_osd: (1200) don't expand pools past this size per osd
 
     pause_short: (3) duration of short pause
@@ -125,6 +127,8 @@ def task(ctx, config):
     chance_thrash_pg_upmap: 1.0
     chance_thrash_pg_upmap_items: 1.0
 
+    aggressive_pg_num_changes: (true)  whether we should bypass the careful throttling of pg_num and pgp_num changes in mgr's adjust_pgs() controller
+
     example:
 
     tasks:
@@ -151,6 +155,7 @@ def task(ctx, config):
     config['noscrub_toggle_delay'] = config.get('noscrub_toggle_delay', 2.0)
     # add default value for random_eio
     config['random_eio'] = config.get('random_eio', 0.0)
+    aggro = config.get('aggressive_pg_num_changes', True)
 
     log.info("config is {config}".format(config=str(config)))
 
@@ -188,6 +193,12 @@ def task(ctx, config):
         if config.get(f):
             cluster_manager.config[f] = config.get(f)
 
+    if aggro:
+        cluster_manager.raw_cluster_cmd(
+            'config', 'set', 'mgr',
+            'mgr_debug_aggressive_pg_num_changes',
+            'true')
+
     log.info('Beginning thrashosds...')
     thrash_proc = ceph_manager.Thrasher(
         cluster_manager,
@@ -202,3 +213,7 @@ def task(ctx, config):
         cluster_manager.wait_for_all_osds_up()
         cluster_manager.flush_all_pg_stats()
         cluster_manager.wait_for_recovery(config.get('timeout', 360))
+        if aggro:
+            cluster_manager.raw_cluster_cmd(
+                'config', 'rm', 'mgr',
+                'mgr_debug_aggressive_pg_num_changes')

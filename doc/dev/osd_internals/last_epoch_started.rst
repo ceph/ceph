@@ -26,7 +26,7 @@ Thus, the minimum last_update across all infos with
 info.last_epoch_started >= MAX(history.last_epoch_started) must be an
 upper bound on writes reported as committed to the client.
 
-We update info.last_epoch_started with the intial activation message,
+We update info.last_epoch_started with the initial activation message,
 but we only update history.last_epoch_started after the new
 info.last_epoch_started is persisted (possibly along with the first
 write).  This ensures that we do not require an osd with the most

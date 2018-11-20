@@ -111,6 +111,8 @@ struct ceph_dir_layout {
 #define CEPH_MSG_CLIENT_REQUEST         24
 #define CEPH_MSG_CLIENT_REQUEST_FORWARD 25
 #define CEPH_MSG_CLIENT_REPLY           26
+#define CEPH_MSG_CLIENT_RECLAIM		27
+#define CEPH_MSG_CLIENT_RECLAIM_REPLY   28
 #define CEPH_MSG_CLIENT_CAPS            0x310
 #define CEPH_MSG_CLIENT_LEASE           0x311
 #define CEPH_MSG_CLIENT_SNAP            0x312
@@ -183,7 +185,7 @@ struct ceph_mon_poolop {
 	struct ceph_fsid fsid;
 	__le32 pool;
 	__le32 op;
-	__le64 auid;
+	__le64 __old_auid;  // obsolete
 	__le64 snapid;
 	__le32 name_len;
 } __attribute__ ((packed));
@@ -310,6 +312,9 @@ enum {
         CEPH_SESSION_REQUEST_FLUSH_MDLOG
 };
 
+// flags for state reclaim
+#define CEPH_RECLAIM_RESET	1
+
 extern const char *ceph_session_op_name(int op);
 
 struct ceph_mds_session_head {
@@ -381,10 +386,10 @@ extern const char *ceph_mds_op_name(int op);
 #define CEPH_SETATTR_ATIME	(1 << 4)
 #define CEPH_SETATTR_SIZE	(1 << 5)
 #define CEPH_SETATTR_CTIME	(1 << 6)
-#define CEPH_SETATTR_BTIME	(1 << 9)
-#endif
 #define CEPH_SETATTR_MTIME_NOW	(1 << 7)
 #define CEPH_SETATTR_ATIME_NOW	(1 << 8)
+#define CEPH_SETATTR_BTIME	(1 << 9)
+#endif
 #define CEPH_SETATTR_KILL_SGUID	(1 << 10)
 
 /*
@@ -495,7 +500,7 @@ struct ceph_mds_request_head_legacy {
 } __attribute__ ((packed));
 
 /*
- * Note that this is embedded wthin ceph_mds_request_head. Also, compatability
+ * Note that this is embedded wthin ceph_mds_request_head. Also, compatibility
  * with the ceph_mds_request_args_legacy must be maintained!
  */
 union ceph_mds_request_args {

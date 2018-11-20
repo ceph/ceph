@@ -1,9 +1,18 @@
 
 =============
-Ceph FS Shell
+CephFS Shell
 =============
 
-The File System (FS) shell includes various shell-like commands that directly interact with the Ceph File System.
+The File System (FS) shell includes various shell-like commands that directly interact with the :term:`Ceph Filesystem`.
+
+Usage :
+
+    cephfs-shell [-options] -- [command, command,...]
+
+Options :
+    -c, --config FILE     Set Configuration file.
+    -b, --batch FILE      Process a batch file.
+    -t, --test FILE       Test against transcript(s) in FILE
 
 Commands
 ========
@@ -26,14 +35,14 @@ Options :
 put
 ---
 
-Copy a file/directory to Ceph File System from Local File System.
+Copy a file/directory to Ceph Filesystem from Local Filesystem.
 
 Usage : 
     
         put [options] <source_path> [target_path]
 
 * source_path - local file/directory path to be copied to cephfs.
-    * if `.` copies all the file/directories in the local workind directory.
+    * if `.` copies all the file/directories in the local working directory.
     * if `-`  Reads the input from stdin. 
 
 * target_path - remote directory path where the files/directories are to be copied to.
@@ -46,14 +55,14 @@ Options :
 get
 ---
  
-Copy a file from Ceph File System to Local File System.
+Copy a file from Ceph Filesystem to Local Filesystem.
 
 Usage : 
 
     get [options] <source_path> [target_path]
 
-* source_path - remote file/directory path which is to be copied to local file system.
-    * if `.` copies all the file/directories in the remote workind directory.
+* source_path - remote file/directory path which is to be copied to local filesystem.
+    * if `.` copies all the file/directories in the remote working directory.
                     
 * target_path - local directory path where the files/directories are to be copied to.
     * if `.` files/directories are copied to the local working directory. 
@@ -227,7 +236,7 @@ Usage:
     pyscript <script_path> [script_arguments]
 
 * Console commands can be executed inside this script with cmd ("your command")
-  However, you cannot run nested "py" or "pyscript" commands from withinthis script
+  However, you cannot run nested "py" or "pyscript" commands from within this script
   Paths or arguments that contain spaces must be enclosed in quotes
 
 py
@@ -328,7 +337,7 @@ Usage:
 locate
 ------
 
-Find a item in File System
+Find an item in Filesystem
 
 Usage:
      locate [options] <name>

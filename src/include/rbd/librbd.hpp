@@ -29,6 +29,7 @@ namespace librbd {
 
   class Image;
   class ImageOptions;
+  class PoolStats;
   typedef void *image_ctx_t;
   typedef void *completion_t;
   typedef void (*callback_t)(completion_t cb, void *arg);
@@ -128,6 +129,29 @@ namespace librbd {
     uint64_t cookie;
   } image_watcher_t;
 
+  typedef rbd_image_migration_state_t image_migration_state_t;
+
+  typedef struct {
+    int64_t source_pool_id;
+    std::string source_pool_namespace;
+    std::string source_image_name;
+    std::string source_image_id;
+    int64_t dest_pool_id;
+    std::string dest_pool_namespace;
+    std::string dest_image_name;
+    std::string dest_image_id;
+    image_migration_state_t state;
+    std::string state_description;
+  } image_migration_status_t;
+
+  typedef rbd_config_source_t config_source_t;
+
+  typedef struct {
+    std::string name;
+    std::string value;
+    config_source_t source;
+  } config_option_t;
+
 class CEPH_RBD_API RBD
 {
 public:
@@ -195,6 +219,22 @@ public:
                                  bool force, ProgressContext &pctx);
   int trash_restore(IoCtx &io_ctx, const char *id, const char *name);
 
+  // Migration
+  int migration_prepare(IoCtx& io_ctx, const char *image_name,
+                        IoCtx& dest_io_ctx, const char *dest_image_name,
+                        ImageOptions& opts);
+  int migration_execute(IoCtx& io_ctx, const char *image_name);
+  int migration_execute_with_progress(IoCtx& io_ctx, const char *image_name,
+                                      ProgressContext &prog_ctx);
+  int migration_abort(IoCtx& io_ctx, const char *image_name);
+  int migration_abort_with_progress(IoCtx& io_ctx, const char *image_name,
+                                    ProgressContext &prog_ctx);
+  int migration_commit(IoCtx& io_ctx, const char *image_name);
+  int migration_commit_with_progress(IoCtx& io_ctx, const char *image_name,
+                                     ProgressContext &prog_ctx);
+  int migration_status(IoCtx& io_ctx, const char *image_name,
+                       image_migration_status_t *status, size_t status_size);
+
   // RBD pool mirroring support functions
   int mirror_mode_get(IoCtx& io_ctx, rbd_mirror_mode_t *mirror_mode);
   int mirror_mode_set(IoCtx& io_ctx, rbd_mirror_mode_t mirror_mode);
@@ -207,10 +247,19 @@ public:
                              const std::string &client_name);
   int mirror_peer_set_cluster(IoCtx& io_ctx, const std::string &uuid,
                               const std::string &cluster_name);
+  int mirror_peer_get_attributes(
+      IoCtx& io_ctx, const std::string &uuid,
+      std::map<std::string, std::string> *key_vals);
+  int mirror_peer_set_attributes(
+      IoCtx& io_ctx, const std::string &uuid,
+      const std::map<std::string, std::string>& key_vals);
+
   int mirror_image_status_list(IoCtx& io_ctx, const std::string &start_id,
       size_t max, std::map<std::string, mirror_image_status_t> *images);
   int mirror_image_status_summary(IoCtx& io_ctx,
       std::map<mirror_image_status_state_t, int> *states);
+  int mirror_image_instance_id_list(IoCtx& io_ctx, const std::string &start_id,
+      size_t max, std::map<std::string, std::string> *sevice_ids);
 
   // RBD groups support functions
   int group_create(IoCtx& io_ctx, const char *group_name);
@@ -238,10 +287,29 @@ public:
   int group_snap_list(IoCtx& group_ioctx, const char *group_name,
                       std::vector<group_snap_info_t> *snaps,
                       size_t group_snap_info_size);
+  int group_snap_rollback(IoCtx& io_ctx, const char *group_name,
+                          const char *snap_name);
+  int group_snap_rollback_with_progress(IoCtx& io_ctx, const char *group_name,
+                                        const char *snap_name,
+                                        ProgressContext& pctx);
 
   int namespace_create(IoCtx& ioctx, const char *namespace_name);
   int namespace_remove(IoCtx& ioctx, const char *namespace_name);
   int namespace_list(IoCtx& io_ctx, std::vector<std::string>* namespace_names);
+  int namespace_exists(IoCtx& io_ctx, const char *namespace_name, bool *exists);
+
+  int pool_init(IoCtx& io_ctx, bool force);
+  int pool_stats_get(IoCtx& io_ctx, PoolStats *pool_stats);
+
+  int pool_metadata_get(IoCtx &io_ctx, const std::string &key,
+                        std::string *value);
+  int pool_metadata_set(IoCtx &io_ctx, const std::string &key,
+                        const std::string &value);
+  int pool_metadata_remove(IoCtx &io_ctx, const std::string &key);
+  int pool_metadata_list(IoCtx &io_ctx, const std::string &start, uint64_t max,
+                         std::map<std::string, ceph::bufferlist> *pairs);
+
+  int config_list(IoCtx& io_ctx, std::vector<config_option_t> *options);
 
 private:
   /* We don't allow assignment or copying */
@@ -270,6 +338,22 @@ private:
   friend class Image;
 
   rbd_image_options_t opts;
+};
+
+class CEPH_RBD_API PoolStats {
+public:
+  PoolStats();
+  ~PoolStats();
+
+  PoolStats(const PoolStats&) = delete;
+  PoolStats& operator=(const PoolStats&) = delete;
+
+  int add(rbd_pool_stat_option_t option, uint64_t* opt_val);
+
+private:
+  friend class RBD;
+
+  rbd_pool_stats_t pool_stats;
 };
 
 class CEPH_RBD_API UpdateWatchCtx {
@@ -349,6 +433,8 @@ public:
   uint64_t get_stripe_count() const;
 
   int get_create_timestamp(struct timespec *timestamp);
+  int get_access_timestamp(struct timespec *timestamp);
+  int get_modify_timestamp(struct timespec *timestamp);
 
   int flatten();
   int flatten_with_progress(ProgressContext &prog_ctx);
@@ -513,6 +599,7 @@ public:
                             size_t info_size);
   int mirror_image_get_status(mirror_image_status_t *mirror_image_status,
 			      size_t status_size);
+  int mirror_image_get_instance_id(std::string *instance_id);
   int aio_mirror_image_promote(bool force, RBD::AioCompletion *c);
   int aio_mirror_image_demote(RBD::AioCompletion *c);
   int aio_mirror_image_get_info(mirror_image_info_t *mirror_image_info,
@@ -524,6 +611,8 @@ public:
   int update_unwatch(uint64_t handle);
 
   int list_watchers(std::list<image_watcher_t> &watchers);
+
+  int config_list(std::vector<config_option_t> *options);
 
 private:
   friend class RBD;

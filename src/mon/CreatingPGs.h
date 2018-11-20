@@ -47,18 +47,25 @@ struct creating_pgs_t {
   /// pools that exist in the osdmap for which at least one pg has been created
   std::set<int64_t> created_pools;
 
-  bool create_pool(int64_t poolid, uint32_t pg_num,
-		   epoch_t created, utime_t modified) {
-    if (created_pools.count(poolid) == 0) {
-      auto& c = queue[poolid];
-      c.created = created;
-      c.modified = modified;
-      c.end = pg_num;
-      created_pools.insert(poolid);
-      return true;
-    } else {
-      return false;
+  bool still_creating_pool(int64_t poolid) {
+    for (auto& i : pgs) {
+      if (i.first.pool() == poolid) {
+	return true;
+      }
     }
+    if (queue.count(poolid)) {
+      return true;
+    }
+    return false;
+  }
+  void create_pool(int64_t poolid, uint32_t pg_num,
+		   epoch_t created, utime_t modified) {
+    ceph_assert(created_pools.count(poolid) == 0);
+    auto& c = queue[poolid];
+    c.created = created;
+    c.modified = modified;
+    c.end = pg_num;
+    created_pools.insert(poolid);
   }
   unsigned remove_pool(int64_t removed_pool) {
     const unsigned total = pgs.size();

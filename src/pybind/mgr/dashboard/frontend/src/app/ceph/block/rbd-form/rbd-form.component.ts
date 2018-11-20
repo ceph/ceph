@@ -2,8 +2,9 @@ import { Component, OnInit } from '@angular/core';
 import { FormControl, ValidatorFn, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
+import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
-import { Observable } from 'rxjs/Observable';
+import { Observable } from 'rxjs';
 
 import { PoolService } from '../../../shared/api/pool.service';
 import { RbdService } from '../../../shared/api/rbd.service';
@@ -81,42 +82,43 @@ export class RbdFormComponent implements OnInit {
     private rbdService: RbdService,
     private formatter: FormatterService,
     private taskWrapper: TaskWrapperService,
-    private dimlessBinaryPipe: DimlessBinaryPipe
+    private dimlessBinaryPipe: DimlessBinaryPipe,
+    private i18n: I18n
   ) {
     this.poolPermission = this.authStorageService.getPermissions().pool;
     this.features = {
       'deep-flatten': {
-        desc: 'Deep flatten',
+        desc: this.i18n('Deep flatten'),
         requires: null,
         allowEnable: false,
         allowDisable: true
       },
       layering: {
-        desc: 'Layering',
+        desc: this.i18n('Layering'),
         requires: null,
         allowEnable: false,
         allowDisable: false
       },
       'exclusive-lock': {
-        desc: 'Exclusive lock',
+        desc: this.i18n('Exclusive lock'),
         requires: null,
         allowEnable: true,
         allowDisable: true
       },
       'object-map': {
-        desc: 'Object map (requires exclusive-lock)',
+        desc: this.i18n('Object map (requires exclusive-lock)'),
         requires: 'exclusive-lock',
         allowEnable: true,
         allowDisable: true
       },
       journaling: {
-        desc: 'Journaling (requires exclusive-lock)',
+        desc: this.i18n('Journaling (requires exclusive-lock)'),
         requires: 'exclusive-lock',
         allowEnable: true,
         allowDisable: true
       },
       'fast-diff': {
-        desc: 'Fast diff (requires object-map)',
+        desc: this.i18n('Fast diff (requires object-map)'),
         requires: 'object-map',
         allowEnable: true,
         allowDisable: true

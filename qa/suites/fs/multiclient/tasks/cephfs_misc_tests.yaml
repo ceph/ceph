@@ -8,3 +8,4 @@ overrides:
     log-whitelist:
       - evicting unresponsive client
       - POOL_APP_NOT_ENABLED
+      - has not responded to cap revoke by MDS for over

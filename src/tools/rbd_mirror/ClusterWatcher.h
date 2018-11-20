@@ -12,7 +12,7 @@
 #include "common/Mutex.h"
 #include "common/Timer.h"
 #include "include/rados/librados.hpp"
-#include "types.h"
+#include "tools/rbd_mirror/Types.h"
 #include "tools/rbd_mirror/service_daemon/Types.h"
 #include <unordered_map>
 
@@ -29,9 +29,13 @@ template <typename> class ServiceDaemon;
  */
 class ClusterWatcher {
 public:
-  typedef std::set<peer_t> Peers;
+  struct PeerSpecCompare {
+    bool operator()(const PeerSpec& lhs, const PeerSpec& rhs) const {
+      return (lhs.uuid < rhs.uuid);
+    }
+  };
+  typedef std::set<PeerSpec, PeerSpecCompare> Peers;
   typedef std::map<int64_t, Peers>  PoolPeers;
-  typedef std::set<std::string> PoolNames;
 
   ClusterWatcher(RadosRef cluster, Mutex &lock,
                  ServiceDaemon<librbd::ImageCtx>* service_daemon);
@@ -53,7 +57,10 @@ private:
   ServicePools m_service_pools;
   PoolPeers m_pool_peers;
 
-  void read_pool_peers(PoolPeers *pool_peers, PoolNames *pool_names);
+  void read_pool_peers(PoolPeers *pool_peers);
+
+  int resolve_peer_config_keys(int64_t pool_id, const std::string& pool_name,
+                               PeerSpec* peer);
 };
 
 } // namespace mirror

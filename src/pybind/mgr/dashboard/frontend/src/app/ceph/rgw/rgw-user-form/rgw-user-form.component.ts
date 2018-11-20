@@ -1,9 +1,9 @@
 import { Component, OnInit } from '@angular/core';
-import { AbstractControl, AsyncValidatorFn, ValidationErrors, Validators } from '@angular/forms';
+import { AbstractControl, ValidationErrors, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
 import * as _ from 'lodash';
-import { BsModalService } from 'ngx-bootstrap';
+import { BsModalService } from 'ngx-bootstrap/modal';
 import { forkJoin as observableForkJoin, Observable } from 'rxjs';
 
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
@@ -51,7 +51,11 @@ export class RgwUserFormComponent implements OnInit {
   createForm() {
     this.userForm = this.formBuilder.group({
       // General
-      user_id: [null, [Validators.required], [this.userIdValidator()]],
+      user_id: [
+        null,
+        [Validators.required],
+        [CdValidators.unique(this.rgwUserService.exists, this.rgwUserService)]
+      ],
       display_name: [null, [Validators.required]],
       email: [null, [CdValidators.email]],
       max_buckets: [1000, [Validators.required, Validators.min(0)]],
@@ -173,7 +177,7 @@ export class RgwUserFormComponent implements OnInit {
               value[type + '_quota_max_size'] = null;
             } else {
               value[type + '_quota_max_size_unlimited'] = false;
-              value[type + '_quota_max_size'] = quota.max_size;
+              value[type + '_quota_max_size'] = `${quota.max_size} B`;
             }
             if (quota.max_objects < 0) {
               value[type + '_quota_max_objects_unlimited'] = true;
@@ -270,30 +274,6 @@ export class RgwUserFormComponent implements OnInit {
     }
     const bytes = new FormatterService().toBytes(control.value);
     return bytes < 1024 ? { quotaMaxSize: true } : null;
-  }
-
-  /**
-   * Validate the username.
-   */
-  userIdValidator(): AsyncValidatorFn {
-    const rgwUserService = this.rgwUserService;
-    return (control: AbstractControl): Promise<ValidationErrors | null> => {
-      return new Promise((resolve) => {
-        // Exit immediately if user has not interacted with the control yet
-        // or the control value is empty.
-        if (control.pristine || control.value === '') {
-          resolve(null);
-          return;
-        }
-        rgwUserService.exists(control.value).subscribe((resp: boolean) => {
-          if (!resp) {
-            resolve(null);
-          } else {
-            resolve({ userIdExists: true });
-          }
-        });
-      });
-    };
   }
 
   /**

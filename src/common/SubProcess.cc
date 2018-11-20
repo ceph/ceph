@@ -5,11 +5,13 @@
 #include <signal.h>
 #endif
 #include <stdarg.h>
+#include <fcntl.h>
 #include <unistd.h>
 #include <iostream>
 
 #include "common/errno.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
+#include "include/compat.h"
 
 SubProcess::SubProcess(const char *cmd_, std_fd_op stdin_op_, std_fd_op stdout_op_, std_fd_op stderr_op_) :
   cmd(cmd_),
@@ -25,14 +27,14 @@ SubProcess::SubProcess(const char *cmd_, std_fd_op stdin_op_, std_fd_op stdout_o
 }
 
 SubProcess::~SubProcess() {
-  assert(!is_spawned());
-  assert(stdin_pipe_out_fd == -1);
-  assert(stdout_pipe_in_fd == -1);
-  assert(stderr_pipe_in_fd == -1);
+  ceph_assert(!is_spawned());
+  ceph_assert(stdin_pipe_out_fd == -1);
+  ceph_assert(stdout_pipe_in_fd == -1);
+  ceph_assert(stderr_pipe_in_fd == -1);
 }
 
 void SubProcess::add_cmd_args(const char *arg, ...) {
-  assert(!is_spawned());
+  ceph_assert(!is_spawned());
 
   va_list ap;
   va_start(ap, arg);
@@ -45,28 +47,28 @@ void SubProcess::add_cmd_args(const char *arg, ...) {
 }
 
 void SubProcess::add_cmd_arg(const char *arg) {
-  assert(!is_spawned());
+  ceph_assert(!is_spawned());
 
   cmd_args.push_back(arg);
 }
 
 int SubProcess::get_stdin() const {
-  assert(is_spawned());
-  assert(stdin_op == PIPE);
+  ceph_assert(is_spawned());
+  ceph_assert(stdin_op == PIPE);
 
   return stdin_pipe_out_fd;
 }
 
 int SubProcess::get_stdout() const {
-  assert(is_spawned());
-  assert(stdout_op == PIPE);
+  ceph_assert(is_spawned());
+  ceph_assert(stdout_op == PIPE);
 
   return stdout_pipe_in_fd;
 }
 
 int SubProcess::get_stderr() const {
-  assert(is_spawned());
-  assert(stderr_op == PIPE);
+  ceph_assert(is_spawned());
+  ceph_assert(stderr_op == PIPE);
 
   return stderr_pipe_in_fd;
 }
@@ -80,31 +82,31 @@ void SubProcess::close(int &fd) {
 }
 
 void SubProcess::close_stdin() {
-  assert(is_spawned());
-  assert(stdin_op == PIPE);
+  ceph_assert(is_spawned());
+  ceph_assert(stdin_op == PIPE);
 
   close(stdin_pipe_out_fd);
 }
 
 void SubProcess::close_stdout() {
-  assert(is_spawned());
-  assert(stdout_op == PIPE);
+  ceph_assert(is_spawned());
+  ceph_assert(stdout_op == PIPE);
 
   close(stdout_pipe_in_fd);
 }
 
 void SubProcess::close_stderr() {
-  assert(is_spawned());
-  assert(stderr_op == PIPE);
+  ceph_assert(is_spawned());
+  ceph_assert(stderr_op == PIPE);
 
   close(stderr_pipe_in_fd);
 }
 
 void SubProcess::kill(int signo) const {
-  assert(is_spawned());
+  ceph_assert(is_spawned());
 
   int ret = ::kill(pid, signo);
-  assert(ret == 0);
+  ceph_assert(ret == 0);
 }
 
 const std::string SubProcess::err() const {
@@ -131,10 +133,10 @@ protected:
 };
 
 int SubProcess::spawn() {
-  assert(!is_spawned());
-  assert(stdin_pipe_out_fd == -1);
-  assert(stdout_pipe_in_fd == -1);
-  assert(stderr_pipe_in_fd == -1);
+  ceph_assert(!is_spawned());
+  ceph_assert(stdin_pipe_out_fd == -1);
+  ceph_assert(stdout_pipe_in_fd == -1);
+  ceph_assert(stderr_pipe_in_fd == -1);
 
   enum { IN = 0, OUT = 1 };
 
@@ -144,9 +146,9 @@ int SubProcess::spawn() {
 
   int ret = 0;
 
-  if ((stdin_op == PIPE  && ::pipe(ipipe) == -1) ||
-      (stdout_op == PIPE && ::pipe(opipe) == -1) ||
-      (stderr_op == PIPE && ::pipe(epipe) == -1)) {
+  if ((stdin_op == PIPE  && pipe_cloexec(ipipe) == -1) ||
+      (stdout_op == PIPE && pipe_cloexec(opipe) == -1) ||
+      (stderr_op == PIPE && pipe_cloexec(epipe) == -1)) {
     ret = -errno;
     errstr << "pipe failed: " << cpp_strerror(errno);
     goto fail;
@@ -166,21 +168,33 @@ int SubProcess::spawn() {
     close(opipe[IN ]);
     close(epipe[IN ]);
 
-    if (ipipe[IN] != -1 && ipipe[IN] != STDIN_FILENO) {
-      ::dup2(ipipe[IN], STDIN_FILENO);
-      close(ipipe[IN]);
+    if (ipipe[IN] >= 0) {
+      if (ipipe[IN] == STDIN_FILENO) {
+        ::fcntl(STDIN_FILENO, F_SETFD, 0); /* clear FD_CLOEXEC */
+      } else {
+        ::dup2(ipipe[IN], STDIN_FILENO);
+        ::close(ipipe[IN]);
+      }
     }
-    if (opipe[OUT] != -1 && opipe[OUT] != STDOUT_FILENO) {
-      ::dup2(opipe[OUT], STDOUT_FILENO);
-      close(opipe[OUT]);
-      static fd_buf buf(STDOUT_FILENO);
-      std::cout.rdbuf(&buf);
+    if (opipe[OUT] >= 0) {
+      if (opipe[OUT] == STDOUT_FILENO) {
+        ::fcntl(STDOUT_FILENO, F_SETFD, 0); /* clear FD_CLOEXEC */
+      } else {
+        ::dup2(opipe[OUT], STDOUT_FILENO);
+        ::close(opipe[OUT]);
+        static fd_buf buf(STDOUT_FILENO);
+        std::cout.rdbuf(&buf);
+      }
     }
-    if (epipe[OUT] != -1 && epipe[OUT] != STDERR_FILENO) {
-      ::dup2(epipe[OUT], STDERR_FILENO);
-      close(epipe[OUT]);
-      static fd_buf buf(STDERR_FILENO);
-      std::cerr.rdbuf(&buf);
+    if (epipe[OUT] >= 0) {
+      if (epipe[OUT] == STDERR_FILENO) {
+        ::fcntl(STDERR_FILENO, F_SETFD, 0); /* clear FD_CLOEXEC */
+      } else {
+        ::dup2(epipe[OUT], STDERR_FILENO);
+        ::close(epipe[OUT]);
+        static fd_buf buf(STDERR_FILENO);
+        std::cerr.rdbuf(&buf);
+      }
     }
 
     int maxfd = sysconf(_SC_OPEN_MAX);
@@ -215,7 +229,7 @@ fail:
 }
 
 void SubProcess::exec() {
-  assert(is_child());
+  ceph_assert(is_child());
 
   std::vector<const char *> args;
   args.push_back(cmd.c_str());
@@ -227,14 +241,14 @@ void SubProcess::exec() {
   args.push_back(NULL);
 
   int ret = execvp(cmd.c_str(), (char * const *)&args[0]);
-  assert(ret == -1);
+  ceph_assert(ret == -1);
 
   std::cerr << cmd << ": exec failed: " << cpp_strerror(errno) << "\n";
   _exit(EXIT_FAILURE);
 }
 
 int SubProcess::join() {
-  assert(is_spawned());
+  ceph_assert(is_spawned());
 
   close(stdin_pipe_out_fd);
   close(stdout_pipe_in_fd);
@@ -243,7 +257,7 @@ int SubProcess::join() {
   int status;
 
   while (waitpid(pid, &status, 0) == -1)
-    assert(errno == EINTR);
+    ceph_assert(errno == EINTR);
 
   pid = -1;
 
@@ -275,7 +289,7 @@ void timeout_sighandler(int sig) {
 static void dummy_sighandler(int sig) {}
 
 void SubProcessTimed::exec() {
-  assert(is_child());
+  ceph_assert(is_child());
 
   if (timeout <= 0) {
     SubProcess::exec();

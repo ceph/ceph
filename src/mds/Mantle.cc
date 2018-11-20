@@ -82,7 +82,7 @@ int Mantle::balance(std::string_view script,
   /* set the name of the global mds table */
   lua_setglobal(L, "mds");
 
-  assert(lua_gettop(L) == 1);
+  ceph_assert(lua_gettop(L) == 1);
   if (lua_pcall(L, 0, 1, 0) != LUA_OK) {
     mantle_dout(0) << "WARNING: mantle could not execute script: "
             << lua_tostring(L, -1) << mantle_dendl;

@@ -894,7 +894,7 @@ int RGWHTTPStreamRWRequest::receive_data(void *ptr, size_t len, bool *pause)
       in_data.clear();
     } else {
       /* partial read */
-      assert(in_data.length() <= orig_in_data_len);
+      ceph_assert(in_data.length() <= orig_in_data_len);
       len = ret;
       bufferlist bl;
       size_t left_to_read = orig_in_data_len - len;

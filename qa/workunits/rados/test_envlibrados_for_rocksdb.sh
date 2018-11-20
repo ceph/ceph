@@ -42,10 +42,10 @@ CURRENT_PATH=`pwd`
 # for rocksdb
 case $(lsb_release -si) in
 	Ubuntu|Debian|Devuan)
-		install g++ libsnappy-dev zlib1g-dev libbz2-dev librados-dev
+		install g++ libsnappy-dev zlib1g-dev libbz2-dev libradospp-dev
 		;;
 	CentOS|Fedora|RedHatEnterpriseServer)
-		install gcc-c++.x86_64 snappy-devel zlib zlib-devel bzip2 bzip2-devel librados2-devel.x86_64
+		install gcc-c++.x86_64 snappy-devel zlib zlib-devel bzip2 bzip2-devel libradospp-devel.x86_64
 		;;
 	*)
         echo "$(lsb_release -si) is unknown, $@ will have to be installed manually."
@@ -73,6 +73,8 @@ git clone https://github.com/facebook/rocksdb.git --depth 1
 
 # compile code
 cd rocksdb
+patch -p1 <$(dirname $0)/0001-cmake-add-Findrados.cmake-and-use-it.patch
+
 mkdir build && cd build && cmake -DWITH_LIBRADOS=ON -DWITH_SNAPPY=ON -DWITH_GFLAGS=OFF -DFAIL_ON_WARNINGS=OFF ..
 make rocksdb_env_librados_test -j8
 

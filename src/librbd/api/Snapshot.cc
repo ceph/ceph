@@ -37,14 +37,12 @@ public:
 
   inline int operator()(
       const cls::rbd::GroupSnapshotNamespace& snap_namespace) {
-    librados::Rados rados(*image_ioctx);
     IoCtx group_ioctx;
-    int r = rados.ioctx_create2(snap_namespace.group_pool, group_ioctx);
+    int r = util::create_ioctx(*image_ioctx, "group", snap_namespace.group_pool,
+                               {}, &group_ioctx);
     if (r < 0) {
-      lderr(cct) << "failed to open group pool: " << cpp_strerror(r) << dendl;
       return r;
     }
-    group_ioctx.set_namespace(image_ioctx->get_namespace());
 
     cls::rbd::GroupSnapshot group_snapshot;
 

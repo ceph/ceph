@@ -85,7 +85,7 @@ public:
    * @param n_threads the number of threads in this thread pool.
    * @param cpu the CPU core to which this thread pool is assigned
    * @note each @c Task has its own ceph::thread::Condition, which possesses
-   * possesses an fd, so we should keep the size of queue under a resonable
+   * possesses an fd, so we should keep the size of queue under a reasonable
    * limit.
    */
   ThreadPool(size_t n_threads, size_t queue_sz, unsigned cpu);

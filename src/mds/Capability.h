@@ -155,7 +155,7 @@ public:
 	_revokes.pop_back();
     } else {
       // no change.
-      assert(_pending == c);
+      ceph_assert(_pending == c);
     }
     //last_issue = 
     ++last_sent;

@@ -631,13 +631,13 @@ TEST(LibCephFS, StatDirNlink) {
   ASSERT_GT(fd, 0);
   struct ceph_statx stx;
   ASSERT_EQ(ceph_fstatx(cmount, fd, &stx, CEPH_STATX_NLINK, AT_SYMLINK_NOFOLLOW), 0);
-  ASSERT_EQ(stx.stx_nlink, 2);
+  ASSERT_EQ(stx.stx_nlink, 2u);
 
   {
     char test_dir2[296];
     sprintf(test_dir2, "%s/.", test_dir1);
     ASSERT_EQ(ceph_statx(cmount, test_dir2, &stx, CEPH_STATX_NLINK, AT_SYMLINK_NOFOLLOW), 0);
-    ASSERT_EQ(stx.stx_nlink, 2);
+    ASSERT_EQ(stx.stx_nlink, 2u);
   }
 
   {
@@ -645,33 +645,33 @@ TEST(LibCephFS, StatDirNlink) {
     sprintf(test_dir2, "%s/1", test_dir1);
     ASSERT_EQ(ceph_mkdir(cmount, test_dir2, 0700), 0);
     ASSERT_EQ(ceph_statx(cmount, test_dir2, &stx, CEPH_STATX_NLINK, AT_SYMLINK_NOFOLLOW), 0);
-    ASSERT_EQ(stx.stx_nlink, 2);
+    ASSERT_EQ(stx.stx_nlink, 2u);
       ASSERT_EQ(ceph_statx(cmount, test_dir1, &stx, CEPH_STATX_NLINK, AT_SYMLINK_NOFOLLOW), 0);
-      ASSERT_EQ(stx.stx_nlink, 3);
+      ASSERT_EQ(stx.stx_nlink, 3u);
     sprintf(test_dir2, "%s/2", test_dir1);
     ASSERT_EQ(ceph_mkdir(cmount, test_dir2, 0700), 0);
       ASSERT_EQ(ceph_statx(cmount, test_dir1, &stx, CEPH_STATX_NLINK, AT_SYMLINK_NOFOLLOW), 0);
-      ASSERT_EQ(stx.stx_nlink, 4);
+      ASSERT_EQ(stx.stx_nlink, 4u);
     sprintf(test_dir2, "%s/1/1", test_dir1);
     ASSERT_EQ(ceph_mkdir(cmount, test_dir2, 0700), 0);
       ASSERT_EQ(ceph_statx(cmount, test_dir1, &stx, CEPH_STATX_NLINK, AT_SYMLINK_NOFOLLOW), 0);
-      ASSERT_EQ(stx.stx_nlink, 4);
+      ASSERT_EQ(stx.stx_nlink, 4u);
     ASSERT_EQ(ceph_rmdir(cmount, test_dir2), 0);
       ASSERT_EQ(ceph_statx(cmount, test_dir1, &stx, CEPH_STATX_NLINK, AT_SYMLINK_NOFOLLOW), 0);
-      ASSERT_EQ(stx.stx_nlink, 4);
+      ASSERT_EQ(stx.stx_nlink, 4u);
     sprintf(test_dir2, "%s/1", test_dir1);
     ASSERT_EQ(ceph_rmdir(cmount, test_dir2), 0);
       ASSERT_EQ(ceph_statx(cmount, test_dir1, &stx, CEPH_STATX_NLINK, AT_SYMLINK_NOFOLLOW), 0);
-      ASSERT_EQ(stx.stx_nlink, 3);
+      ASSERT_EQ(stx.stx_nlink, 3u);
     sprintf(test_dir2, "%s/2", test_dir1);
     ASSERT_EQ(ceph_rmdir(cmount, test_dir2), 0);
       ASSERT_EQ(ceph_statx(cmount, test_dir1, &stx, CEPH_STATX_NLINK, AT_SYMLINK_NOFOLLOW), 0);
-      ASSERT_EQ(stx.stx_nlink, 2);
+      ASSERT_EQ(stx.stx_nlink, 2u);
   }
 
   ASSERT_EQ(ceph_rmdir(cmount, test_dir1), 0);
   ASSERT_EQ(ceph_fstatx(cmount, fd, &stx, CEPH_STATX_NLINK, AT_SYMLINK_NOFOLLOW), 0);
-  ASSERT_EQ(stx.stx_nlink, 0);
+  ASSERT_EQ(stx.stx_nlink, 0u);
 
   ceph_close(cmount, fd);
 
@@ -2145,5 +2145,43 @@ TEST(LibCephFS, TestFutimens) {
   ASSERT_EQ(utime_t(stx.stx_mtime), utime_t(times[1]));
 
   ceph_close(cmount, fd);
+  ceph_shutdown(cmount);
+}
+
+TEST(LibCephFS, OperationsOnDotDot) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  char c_dir[512], c_dir_dot[1024], c_dir_dotdot[1024];
+  char c_non_existent_dir[1024], c_non_existent_dirs[1024];
+  char c_temp[1024];
+
+  pid_t mypid = getpid();
+  sprintf(c_dir, "/oodd_dir_%d", mypid);
+  sprintf(c_dir_dot, "/%s/.", c_dir);
+  sprintf(c_dir_dotdot, "/%s/..", c_dir);
+  sprintf(c_non_existent_dir, "/%s/../oodd_nonexistent/..", c_dir);
+  sprintf(c_non_existent_dirs,
+          "/%s/../ood_nonexistent1_%d/oodd_nonexistent2_%d", c_dir, mypid, mypid);
+  sprintf(c_temp, "/oodd_temp_%d", mypid);
+
+  ASSERT_EQ(0, ceph_mkdir(cmount, c_dir, 0777));
+  ASSERT_EQ(-EEXIST, ceph_mkdir(cmount, c_dir_dot, 0777));
+  ASSERT_EQ(-EEXIST, ceph_mkdir(cmount, c_dir_dotdot, 0777));
+  ASSERT_EQ(0, ceph_mkdirs(cmount, c_non_existent_dirs, 0777));
+
+  ASSERT_EQ(-ENOTEMPTY, ceph_rmdir(cmount, c_dir_dot));
+  ASSERT_EQ(-ENOTEMPTY, ceph_rmdir(cmount, c_dir_dotdot));
+  // non existent directory should return -ENOENT
+  ASSERT_EQ(-ENOENT, ceph_rmdir(cmount, c_non_existent_dir));
+
+  ASSERT_EQ(-EBUSY, ceph_rename(cmount, c_dir_dot, c_temp));
+  ASSERT_EQ(0, ceph_chdir(cmount, c_dir));
+  ASSERT_EQ(0, ceph_mkdir(cmount, c_temp, 0777));
+  ASSERT_EQ(-EBUSY, ceph_rename(cmount, c_temp, ".."));
+
   ceph_shutdown(cmount);
 }

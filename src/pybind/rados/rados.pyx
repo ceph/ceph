@@ -141,9 +141,7 @@ cdef extern from "rados/librados.h" nogil:
     int64_t rados_pool_lookup(rados_t cluster, const char *pool_name)
     int rados_pool_reverse_lookup(rados_t cluster, int64_t id, char *buf, size_t maxlen)
     int rados_pool_create(rados_t cluster, const char *pool_name)
-    int rados_pool_create_with_auid(rados_t cluster, const char *pool_name, uint64_t auid)
     int rados_pool_create_with_crush_rule(rados_t cluster, const char *pool_name, uint8_t crush_rule_num)
-    int rados_pool_create_with_all(rados_t cluster, const char *pool_name, uint64_t auid, uint8_t crush_rule_num)
     int rados_pool_get_base_tier(rados_t cluster, int64_t pool, int64_t *base_tier)
     int rados_pool_list(rados_t cluster, char *buf, size_t len)
     int rados_pool_delete(rados_t cluster, const char *pool_name)
@@ -201,7 +199,6 @@ cdef extern from "rados/librados.h" nogil:
     int rados_ioctx_create(rados_t cluster, const char *pool_name, rados_ioctx_t *ioctx)
     int rados_ioctx_create2(rados_t cluster, int64_t pool_id, rados_ioctx_t *ioctx)
     void rados_ioctx_destroy(rados_ioctx_t io)
-    int rados_ioctx_pool_set_auid(rados_ioctx_t io, uint64_t auid)
     void rados_ioctx_locator_set_key(rados_ioctx_t io, const char *key)
     void rados_ioctx_set_namespace(rados_ioctx_t io, const char * nspace)
 
@@ -1024,19 +1021,15 @@ Rados object in state %s." % self.state)
         finally:
             free(name)
 
-    @requires(('pool_name', str_type), ('auid', opt(int)), ('crush_rule', opt(int)))
-    def create_pool(self, pool_name, auid=None, crush_rule=None):
+    @requires(('pool_name', str_type), ('crush_rule', opt(int)))
+    def create_pool(self, pool_name, crush_rule=None):
         """
         Create a pool:
-        - with default settings: if auid=None and crush_rule=None
-        - owned by a specific auid: auid given and crush_rule=None
-        - with a specific CRUSH rule: if auid=None and crush_rule given
-        - with a specific CRUSH rule and auid: if auid and crush_rule given
+        - with default settings: if crush_rule=None
+        - with a specific CRUSH rule: crush_rule given
 
         :param pool_name: name of the pool to create
         :type pool_name: str
-        :param auid: the id of the owner of the new pool
-        :type auid: int
         :param crush_rule: rule to use for placement in the new pool
         :type crush_rule: int
 
@@ -1048,24 +1041,14 @@ Rados object in state %s." % self.state)
         cdef:
             char *_pool_name = pool_name
             uint8_t _crush_rule
-            uint64_t _auid
 
-        if auid is None and crush_rule is None:
+        if crush_rule is None:
             with nogil:
                 ret = rados_pool_create(self.cluster, _pool_name)
-        elif auid is None:
+        else:
             _crush_rule = crush_rule
             with nogil:
                 ret = rados_pool_create_with_crush_rule(self.cluster, _pool_name, _crush_rule)
-        elif crush_rule is None:
-            _auid = auid
-            with nogil:
-                ret = rados_pool_create_with_auid(self.cluster, _pool_name, _auid)
-        else:
-            _auid = auid
-            _crush_rule = crush_rule
-            with nogil:
-                ret = rados_pool_create_with_all(self.cluster, _pool_name, _auid, _crush_rule)
         if ret < 0:
             raise make_ex(ret, "error creating pool '%s'" % pool_name)
 
@@ -2284,7 +2267,7 @@ cdef class Ioctx(object):
     def aio_write_full(self, object_name, to_write,
                        oncomplete=None, onsafe=None):
         """
-        Asychronously write an entire object
+        Asynchronously write an entire object
 
         The object is filled with the provided data. If the object exists,
         it is atomically truncated and then written.
@@ -2328,7 +2311,7 @@ cdef class Ioctx(object):
               ('onsafe', opt(Callable)))
     def aio_append(self, object_name, to_append, oncomplete=None, onsafe=None):
         """
-        Asychronously append data to an object
+        Asynchronously append data to an object
 
         Queues the write and returns.
 
@@ -2382,7 +2365,7 @@ cdef class Ioctx(object):
               ('oncomplete', opt(Callable)))
     def aio_read(self, object_name, length, offset, oncomplete):
         """
-        Asychronously read data from an object
+        Asynchronously read data from an object
 
         oncomplete will be called with the returned read value as
         well as the completion:
@@ -2505,7 +2488,7 @@ cdef class Ioctx(object):
     @requires(('object_name', str_type), ('oncomplete', opt(Callable)), ('onsafe', opt(Callable)))
     def aio_remove(self, object_name, oncomplete=None, onsafe=None):
         """
-        Asychronously remove an object
+        Asynchronously remove an object
 
         :param object_name: name of the object to remove
         :type object_name: str
@@ -2543,26 +2526,6 @@ cdef class Ioctx(object):
         """
         if self.state != "open":
             raise IoctxStateError("The pool is %s" % self.state)
-
-    def change_auid(self, auid):
-        """
-        Attempt to change an io context's associated auid "owner."
-
-        Requires that you have write permission on both the current and new
-        auid.
-
-        :raises: :class:`Error`
-        """
-        self.require_ioctx_open()
-
-        cdef:
-            uint64_t _auid = auid
-
-        with nogil:
-            ret = rados_ioctx_pool_set_auid(self.io, _auid)
-        if ret < 0:
-            raise make_ex(ret, "error changing auid of '%s' to %d"
-                          % (self.name, auid))
 
     @requires(('loc_key', str_type))
     def set_locator_key(self, loc_key):

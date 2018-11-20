@@ -18,7 +18,7 @@
 
 class RGWGCIOManager;
 
-class RGWGC {
+class RGWGC : public DoutPrefixProvider {
   CephContext *cct;
   RGWRados *store;
   int max_objs;
@@ -28,13 +28,14 @@ class RGWGC {
   int tag_index(const string& tag);
 
   class GCWorker : public Thread {
+    const DoutPrefixProvider *dpp;
     CephContext *cct;
     RGWGC *gc;
     Mutex lock;
     Cond cond;
 
   public:
-    GCWorker(CephContext *_cct, RGWGC *_gc) : cct(_cct), gc(_gc), lock("GCWorker") {}
+    GCWorker(const DoutPrefixProvider *_dpp, CephContext *_cct, RGWGC *_gc) : dpp(_dpp), cct(_cct), gc(_gc), lock("GCWorker") {}
     void *entry() override;
     void stop();
   };
@@ -64,6 +65,12 @@ public:
   bool going_down();
   void start_processor();
   void stop_processor();
+
+  CephContext *get_cct() const override { return store->ctx(); }
+  unsigned get_subsys() const;
+
+  std::ostream& gen_prefix(std::ostream& out) const;
+
 };
 
 

@@ -23,7 +23,7 @@
 #include <vector>
 #include <list>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/int_types.h"
 #include "common/Tub.h"
 
@@ -81,7 +81,7 @@ class UserspaceEventManager {
     impl->listening_mask &= (~mask);
     if (!(impl->activating_mask & impl->listening_mask) && impl->waiting_idx) {
       if (waiting_fds[max_wait_idx] == fd) {
-        assert(impl->waiting_idx == max_wait_idx);
+        ceph_assert(impl->waiting_idx == max_wait_idx);
         --max_wait_idx;
       }
       waiting_fds[impl->waiting_idx] = -1;

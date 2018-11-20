@@ -132,7 +132,7 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
 
 static void handle_signal(int signum)
 {
-  assert(signum == SIGINT || signum == SIGTERM);
+  ceph_assert(signum == SIGINT || signum == SIGTERM);
   derr << "*** Got signal " << sig_str(signum) << " ***" << dendl;
   dout(20) << __func__ << ": " << "sending NBD_DISCONNECT" << dendl;
   if (ioctl(nbd, NBD_DISCONNECT) < 0) {
@@ -202,7 +202,7 @@ private:
   void io_finish(IOContext *ctx)
   {
     Mutex::Locker l(lock);
-    assert(ctx->item.is_on_list());
+    ceph_assert(ctx->item.is_on_list());
     ctx->item.remove_myself();
     io_finished.push_back(&ctx->item);
     cond.Signal();
@@ -225,7 +225,7 @@ private:
 
   void wait_clean()
   {
-    assert(!reader_thread.is_started());
+    ceph_assert(!reader_thread.is_started());
     Mutex::Locker l(lock);
     while(!io_pending.empty())
       cond.Wait(lock);
@@ -884,7 +884,7 @@ static int do_map(int argc, const char *argv[], Config *cfg)
     }
 
     r = image.update_unwatch(handle);
-    assert(r == 0);
+    ceph_assert(r == 0);
   }
 
 close_nbd:
@@ -1164,12 +1164,11 @@ static int rbd_nbd(int argc, const char *argv[])
   r = parse_args(args, &err_msg, &cmd, &cfg);
   if (r == HELP_INFO) {
     usage();
-    ceph_abort();
+    return 0;
   } else if (r == VERSION_INFO) {
     std::cout << pretty_version_to_str() << std::endl;
     return 0;
-  }
-  else if (r < 0) {
+  } else if (r < 0) {
     cerr << err_msg.str() << std::endl;
     return r;
   }
@@ -1197,7 +1196,6 @@ static int rbd_nbd(int argc, const char *argv[])
       break;
     default:
       usage();
-      ceph_abort();
       break;
   }
 

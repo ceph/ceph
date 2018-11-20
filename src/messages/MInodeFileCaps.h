@@ -16,21 +16,27 @@
 #ifndef CEPH_MINODEFILECAPS_H
 #define CEPH_MINODEFILECAPS_H
 
-class MInodeFileCaps : public Message {
+#include "msg/Message.h"
+
+class MInodeFileCaps : public MessageInstance<MInodeFileCaps> {
+public:
+  friend factory;
+private:
   inodeno_t ino;
   __u32     caps = 0;
 
  public:
-  inodeno_t get_ino() { return ino; }
-  int       get_caps() { return caps; }
 
-  MInodeFileCaps() : Message(MSG_MDS_INODEFILECAPS) {}
+  inodeno_t get_ino() const { return ino; }
+  int       get_caps() const { return caps; }
+
+protected:
+  MInodeFileCaps() : MessageInstance(MSG_MDS_INODEFILECAPS) {}
   MInodeFileCaps(inodeno_t ino, int caps) :
-    Message(MSG_MDS_INODEFILECAPS) {
+    MessageInstance(MSG_MDS_INODEFILECAPS) {
     this->ino = ino;
     this->caps = caps;
   }
-private:
   ~MInodeFileCaps() override {}
 
 public:

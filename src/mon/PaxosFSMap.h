@@ -18,22 +18,22 @@
 #include "mds/FSMap.h"
 #include "mds/MDSMap.h"
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 class PaxosFSMap {
 public:
   virtual ~PaxosFSMap() {}
 
-  const FSMap &get_pending_fsmap() const { assert(is_leader()); return pending_fsmap; }
+  const FSMap &get_pending_fsmap() const { ceph_assert(is_leader()); return pending_fsmap; }
   const FSMap &get_fsmap() const { return fsmap; }
 
   virtual bool is_leader() const = 0;
 
 protected:
-  FSMap &get_pending_fsmap_writeable() { assert(is_leader()); return pending_fsmap; }
+  FSMap &get_pending_fsmap_writeable() { ceph_assert(is_leader()); return pending_fsmap; }
 
   FSMap &create_pending() {
-    assert(is_leader());
+    ceph_assert(is_leader());
     pending_fsmap = fsmap;
     pending_fsmap.epoch++;
     return pending_fsmap;

@@ -27,9 +27,14 @@ import * as _ from 'lodash';
   styleUrls: ['./submit-button.component.scss']
 })
 export class SubmitButtonComponent implements OnInit {
-  @Input() form: FormGroup | NgForm;
-  @Input() type = 'submit';
-  @Output() submitAction = new EventEmitter();
+  @Input()
+  form: FormGroup | NgForm;
+  @Input()
+  type = 'submit';
+  @Output()
+  submitAction = new EventEmitter();
+  @Input()
+  disabled = false;
 
   loading = false;
 

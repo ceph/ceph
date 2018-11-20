@@ -26,9 +26,12 @@ using std::map;
 #include "common/Clock.h"
 #include "common/Cond.h"
 
-class MDSMap;
+#include "msg/Message.h"
+#include "messages/MHeartbeat.h"
+
+#include "MDSMap.h"
+
 class MDSRank;
-class Message;
 class MHeartbeat;
 class CInode;
 class CDir;
@@ -47,7 +50,7 @@ public:
                           const std::set <std::string> &changed,
                           const MDSMap &mds_map);
 
-  int proc_message(Message *m);
+  int proc_message(const Message::const_ref &m);
 
   /**
    * Regularly called upkeep function.
@@ -98,7 +101,7 @@ private:
   mds_load_t get_load();
   int localize_balancer();
   void send_heartbeat();
-  void handle_heartbeat(MHeartbeat *m);
+  void handle_heartbeat(const MHeartbeat::const_ref &m);
   void find_exports(CDir *dir,
                     double amount,
                     list<CDir*>& exports,

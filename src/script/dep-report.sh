@@ -15,10 +15,10 @@ cleanup() {
 }
 trap cleanup INT EXIT
 
-# find all the .deps directorys
+# find all the .deps directories
 DEPDIRS=`find . -name ".deps" -print`
 if [ -z "$DEPDIRS" ] ; then
-    echo "No depdirs found.  Ceph must be built before running dependecy check"
+    echo "No depdirs found.  Ceph must be built before running dependency check"
 fi
 
 # find all the headers

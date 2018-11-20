@@ -153,7 +153,7 @@ public:
     return impl->approx_unique_insert_count();
   }
   void seal() {
-    assert(!sealed);
+    ceph_assert(!sealed);
     sealed = true;
     impl->seal();
   }

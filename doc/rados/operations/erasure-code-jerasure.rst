@@ -63,7 +63,7 @@ Where:
 ``packetsize={bytes}``
 
 :Description: The encoding will be done on packets of *bytes* size at
-              a time. Chosing the right packet size is difficult. The
+              a time. Choosing the right packet size is difficult. The
               *jerasure* documentation contains extensive information
               on this topic.
 
@@ -74,7 +74,7 @@ Where:
 ``crush-root={root}``
 
 :Description: The name of the crush bucket used for the first step of
-              the CRUSH rule. For intance **step take default**.
+              the CRUSH rule. For instance **step take default**.
 
 :Type: String
 :Required: No.

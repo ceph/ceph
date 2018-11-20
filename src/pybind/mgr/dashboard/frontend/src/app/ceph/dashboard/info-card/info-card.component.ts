@@ -6,9 +6,12 @@ import { Component, Input } from '@angular/core';
   styleUrls: ['./info-card.component.scss']
 })
 export class InfoCardComponent {
-  @Input() title: string;
-  @Input() link: string;
-  @Input() cardClass = 'col-md-6';
-  @Input() imageClass: string;
-  @Input() contentClass: string;
+  @Input()
+  cardTitle: string;
+  @Input()
+  link: string;
+  @Input()
+  cardClass = '';
+  @Input()
+  contentClass: string;
 }

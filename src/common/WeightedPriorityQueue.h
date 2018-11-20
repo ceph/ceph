@@ -21,6 +21,8 @@
 #include <boost/intrusive/rbtree.hpp>
 #include <boost/intrusive/avl_set.hpp>
 
+#include "include/ceph_assert.h"
+
 namespace bi = boost::intrusive;
 
 template <typename T, typename S>
@@ -67,8 +69,11 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
         K key;		// klass
         ListPairs lp;
         Klass(K& k) :
-          key(k)
-          {}
+          key(k) {
+        }
+        ~Klass() {
+          lp.clear_and_dispose(DelItem<ListPair>());
+        }
       friend bool operator< (const Klass &a, const Klass &b)
         { return a.key < b.key; }
       friend bool operator> (const Klass &a, const Klass &b)
@@ -84,11 +89,11 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       }
       //Get the cost of the next item to dequeue
       unsigned get_cost() const {
-        assert(!empty());
+        ceph_assert(!empty());
         return lp.begin()->cost;
       }
       T pop() {
-	assert(!lp.empty());
+	ceph_assert(!lp.empty());
 	T ret = std::move(lp.begin()->item);
         lp.erase_and_dispose(lp.begin(), DelItem<ListPair>());
         return ret;
@@ -129,8 +134,11 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
 	Kit next;
 	SubQueue(unsigned& p) :
 	  key(p),
-	  next(klasses.begin())
-	  {}
+	  next(klasses.begin()) {
+	}
+	~SubQueue() {
+	  klasses.clear_and_dispose(DelItem<Klass>());
+	}
       friend bool operator< (const SubQueue &a, const SubQueue &b)
         { return a.key < b.key; }
       friend bool operator> (const SubQueue &a, const SubQueue &b)
@@ -151,7 +159,7 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
 	ret.first->insert(cost, std::move(item), front);
       }
       unsigned get_cost() const {
-        assert(!empty());
+        ceph_assert(!empty());
         return next->get_cost();
       }
       T pop() {
@@ -195,8 +203,11 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
 	Queue() :
 	  total_prio(0),
 	  max_cost(0),
-	  size(0)
-	  {}
+	  size(0) {
+	}
+	~Queue() {
+	  queues.clear_and_dispose(DelItem<SubQueue>());
+	}
 	bool empty() const {
 	  return !size;
 	}
@@ -229,7 +240,7 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
 	      // Pick a new priority out of the total priority.
 	      unsigned prio = rand() % total_prio + 1;
 	      unsigned tp = total_prio - i->key;
-	      // Find the priority coresponding to the picked number.
+	      // Find the priority corresponding to the picked number.
 	      // Subtract high priorities to low priorities until the picked number
 	      // is more than the total and try to dequeue that priority.
 	      // Reverse the direction from previous implementation because there is a higher
@@ -312,7 +323,7 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       normal.insert(p, cl, cost, std::move(item), true);
     }
     T dequeue() override {
-      assert(strict.size + normal.size > 0);
+      ceph_assert(strict.size + normal.size > 0);
       if (!strict.empty()) {
 	return strict.pop(true);
       }

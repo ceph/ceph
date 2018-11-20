@@ -13,9 +13,11 @@
  */
 
 
-#include "cls_cephfs_client.h"
+
 #include "include/rados/librados.hpp"
 #include "mds/CInode.h"
+
+#include "cls_cephfs_client.h"
 
 #define XATTR_CEILING "scan_ceiling"
 #define XATTR_MAX_MTIME "scan_max_mtime"
@@ -72,8 +74,8 @@ int ClsCephFSClient::fetch_inode_accumulate_result(
   file_layout_t *layout,
   AccumulateResult *result)
 {
-  assert(backtrace != NULL);
-  assert(result != NULL);
+  ceph_assert(backtrace != NULL);
+  ceph_assert(result != NULL);
 
   librados::ObjectReadOperation op;
 
@@ -163,7 +165,7 @@ void ClsCephFSClient::build_tag_filter(
           const std::string &scrub_tag,
           bufferlist *out_bl)
 {
-  assert(out_bl != NULL);
+  ceph_assert(out_bl != NULL);
 
   // Leading part of bl is un-versioned string naming the filter
   encode(std::string("cephfs.inode_tag"), *out_bl);

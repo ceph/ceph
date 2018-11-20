@@ -1,12 +1,12 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { BsModalService } from 'ngx-bootstrap/modal';
 import { of as observableOf } from 'rxjs';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
+import { configureTestBed, FormHelper } from '../../../../testing/unit-test-helper';
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
 import { SharedModule } from '../../../shared/shared.module';
 import { RgwUserS3Key } from '../models/rgw-user-s3-key';
@@ -15,24 +15,21 @@ import { RgwUserFormComponent } from './rgw-user-form.component';
 describe('RgwUserFormComponent', () => {
   let component: RgwUserFormComponent;
   let fixture: ComponentFixture<RgwUserFormComponent>;
-  let queryResult: Array<string> = [];
-
-  class MockRgwUserService extends RgwUserService {
-    enumerate() {
-      return observableOf(queryResult);
-    }
-  }
+  let rgwUserService: RgwUserService;
+  let formHelper: FormHelper;
 
   configureTestBed({
     declarations: [RgwUserFormComponent],
     imports: [HttpClientTestingModule, ReactiveFormsModule, RouterTestingModule, SharedModule],
-    providers: [BsModalService, { provide: RgwUserService, useClass: MockRgwUserService }]
+    providers: [BsModalService]
   });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(RgwUserFormComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
+    rgwUserService = TestBed.get(RgwUserService);
+    formHelper = new FormHelper(component.userForm);
   });
 
   it('should create', () => {
@@ -40,10 +37,7 @@ describe('RgwUserFormComponent', () => {
   });
 
   describe('s3 key management', () => {
-    let rgwUserService: RgwUserService;
-
     beforeEach(() => {
-      rgwUserService = TestBed.get(RgwUserService);
       spyOn(rgwUserService, 'addS3Key').and.stub();
     });
 
@@ -119,45 +113,40 @@ describe('RgwUserFormComponent', () => {
     });
   });
 
-  describe('userIdValidator', () => {
-    it('should validate user id (1/3)', () => {
-      const validatorFn = component.userIdValidator();
-      const ctrl = new FormControl('');
-      const validatorPromise = validatorFn(ctrl);
-      expect(validatorPromise instanceof Promise).toBeTruthy();
-      if (validatorPromise instanceof Promise) {
-        validatorPromise.then((resp) => {
-          expect(resp).toBe(null);
-        });
-      }
+  describe('username validation', () => {
+    beforeEach(() => {
+      spyOn(rgwUserService, 'enumerate').and.returnValue(observableOf(['abc', 'xyz']));
     });
 
-    it('should validate user id (2/3)', () => {
-      const validatorFn = component.userIdValidator();
-      const ctrl = new FormControl('ab');
-      ctrl.markAsDirty();
-      const validatorPromise = validatorFn(ctrl);
-      expect(validatorPromise instanceof Promise).toBeTruthy();
-      if (validatorPromise instanceof Promise) {
-        validatorPromise.then((resp) => {
-          expect(resp).toBe(null);
-        });
-      }
+    it('should validate that username is required', () => {
+      formHelper.expectErrorChange('user_id', '', 'required', true);
     });
 
-    it('should validate user id (3/3)', () => {
-      queryResult = ['abc'];
-      const validatorFn = component.userIdValidator();
-      const ctrl = new FormControl('abc');
-      ctrl.markAsDirty();
-      const validatorPromise = validatorFn(ctrl);
-      expect(validatorPromise instanceof Promise).toBeTruthy();
-      if (validatorPromise instanceof Promise) {
-        validatorPromise.then((resp) => {
-          expect(resp instanceof Object).toBeTruthy();
-          expect(resp.userIdExists).toBeTruthy();
-        });
-      }
+    it('should validate that username is valid', fakeAsync(() => {
+      formHelper.setValue('user_id', 'ab', true);
+      tick(500);
+      formHelper.expectValid('user_id');
+    }));
+
+    it('should validate that username is invalid', fakeAsync(() => {
+      formHelper.setValue('user_id', 'abc', true);
+      tick(500);
+      formHelper.expectError('user_id', 'notUnique');
+    }));
+  });
+
+  describe('onSubmit', () => {
+    it('should be able to clear the mail field on update', () => {
+      spyOn(rgwUserService, 'update');
+      component.editing = true;
+      formHelper.setValue('email', '', true);
+      component.onSubmit();
+      expect(rgwUserService.update).toHaveBeenCalledWith(null, {
+        display_name: null,
+        email: '',
+        max_buckets: 1000,
+        suspended: false
+      });
     });
   });
 });

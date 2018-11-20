@@ -13,7 +13,7 @@
  */
 #include "common/bit_str.h"
 #include "common/Formatter.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 static void _dump_bit_str(
     uint64_t bits,
@@ -37,7 +37,7 @@ static void _dump_bit_str(
           *out << "(" << r << ")";
         }
       } else {
-        assert(f != NULL);
+        ceph_assert(f != NULL);
         if (dump_bit_val) {
           f->dump_stream("bit_flag") << func(r)
                                      << "(" << r << ")";

@@ -260,7 +260,7 @@ class Worker {
   PerfCounters *get_perf_counter() { return perf_logger; }
   void release_worker() {
     int oldref = references.fetch_sub(1);
-    assert(oldref > 0);
+    ceph_assert(oldref > 0);
   }
   void init_done() {
     init_lock.lock();

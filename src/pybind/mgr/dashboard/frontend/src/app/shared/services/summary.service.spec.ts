@@ -1,5 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { fakeAsync, TestBed, tick } from '@angular/core/testing';
+import { RouterTestingModule } from '@angular/router/testing';
 
 import { of as observableOf, Subscriber } from 'rxjs';
 
@@ -28,6 +29,7 @@ describe('SummaryService', () => {
   };
 
   configureTestBed({
+    imports: [RouterTestingModule],
     providers: [
       SummaryService,
       AuthStorageService,
@@ -44,21 +46,18 @@ describe('SummaryService', () => {
     expect(summaryService).toBeTruthy();
   });
 
-  it(
-    'should call refresh',
-    fakeAsync(() => {
-      authStorageService.set('foobar');
-      let result = false;
-      summaryService.refresh();
-      summaryService.subscribe(() => {
-        result = true;
-      });
-      tick(5000);
-      spyOn(summaryService, 'refresh').and.callFake(() => true);
-      tick(5000);
-      expect(result).toEqual(true);
-    })
-  );
+  it('should call refresh', fakeAsync(() => {
+    authStorageService.set('foobar');
+    let result = false;
+    summaryService.refresh();
+    summaryService.subscribe(() => {
+      result = true;
+    });
+    tick(5000);
+    spyOn(summaryService, 'refresh').and.callFake(() => true);
+    tick(5000);
+    expect(result).toEqual(true);
+  }));
 
   describe('Should test methods after first refresh', () => {
     beforeEach(() => {
@@ -92,6 +91,23 @@ describe('SummaryService', () => {
         metadata: { image_name: 'someImage', pool_name: 'somePool' },
         name: 'rbd/delete'
       });
+    });
+
+    it('should call addRunningTask with duplicate task', () => {
+      let result = summaryService.getCurrentSummary();
+      const exec_task = new ExecutingTask('rbd/delete', {
+        pool_name: 'somePool',
+        image_name: 'someImage'
+      });
+
+      result.executing_tasks = [exec_task];
+      summaryService['summaryDataSource'].next(result);
+      result = summaryService.getCurrentSummary();
+      expect(result.executing_tasks.length).toBe(1);
+
+      summaryService.addRunningTask(exec_task);
+      result = summaryService.getCurrentSummary();
+      expect(result.executing_tasks.length).toBe(1);
     });
   });
 });

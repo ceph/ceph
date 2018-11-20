@@ -141,7 +141,7 @@ int pidfh::open(const ConfigProxy& conf)
     return -ENAMETOOLONG;
 
   int fd;
-  fd = ::open(pf_path, O_CREAT|O_RDWR, 0644);
+  fd = ::open(pf_path, O_CREAT|O_RDWR|O_CLOEXEC, 0644);
   if (fd < 0) {
     int err = errno;
     derr << __func__ << ": failed to open pid file '"
@@ -171,8 +171,14 @@ int pidfh::open(const ConfigProxy& conf)
   };
   int r = ::fcntl(pf_fd, F_SETLK, &l);
   if (r < 0) {
-    derr << __func__ << ": failed to lock pidfile "
-	 << pf_path << " because another process locked it." << dendl;
+    if (errno == EAGAIN || errno == EACCES) {
+      derr << __func__ << ": failed to lock pidfile "
+	   << pf_path << " because another process locked it" 
+	   << "': " << cpp_strerror(errno) << dendl;
+    } else {
+      derr << __func__ << ": failed to lock pidfile "
+	   << pf_path << "': " << cpp_strerror(errno) << dendl;
+    }
     ::close(pf_fd);
     reset();
     return -errno;
@@ -216,7 +222,7 @@ int pidfile_write(const ConfigProxy& conf)
     return 0;
   }
 
-  assert(pfh == nullptr);
+  ceph_assert(pfh == nullptr);
 
   pfh = new pidfh();
   if (atexit(pidfile_remove)) {

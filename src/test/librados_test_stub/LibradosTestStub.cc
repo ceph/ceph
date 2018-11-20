@@ -23,7 +23,7 @@
 #include <deque>
 #include <list>
 #include <vector>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/compat.h"
 
 #define dout_context g_ceph_context
@@ -181,6 +181,13 @@ extern "C" int rados_connect(rados_t cluster) {
 
 extern "C" int rados_create(rados_t *cluster, const char * const id) {
   *cluster = create_rados_client();
+  return 0;
+}
+
+extern "C" int rados_create_with_context(rados_t *cluster,
+                                         rados_config_t cct_) {
+  auto cct = reinterpret_cast<CephContext*>(cct_);
+  *cluster = librados_test_stub::get_cluster()->create_rados_client(cct);
   return 0;
 }
 
@@ -360,6 +367,10 @@ IoCtx::IoCtx(const IoCtx& rhs) {
   }
 }
 
+IoCtx::IoCtx(IoCtx&& rhs) noexcept : io_ctx_impl(std::exchange(rhs.io_ctx_impl, nullptr))
+{
+}
+
 IoCtx& IoCtx::operator=(const IoCtx& rhs) {
   if (io_ctx_impl) {
     TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
@@ -371,6 +382,17 @@ IoCtx& IoCtx::operator=(const IoCtx& rhs) {
     TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
     ctx->get();
   }
+  return *this;
+}
+
+librados::IoCtx& librados::IoCtx::operator=(IoCtx&& rhs) noexcept
+{
+  if (io_ctx_impl) {
+    TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+    ctx->put();
+  }
+
+  io_ctx_impl = std::exchange(rhs.io_ctx_impl, nullptr);
   return *this;
 }
 
@@ -945,7 +967,7 @@ Rados::Rados(IoCtx& ioctx) {
   impl->get();
 
   client = reinterpret_cast<RadosClient*>(impl);
-  assert(client != NULL);
+  ceph_assert(client != NULL);
 }
 
 Rados::~Rados() {
@@ -958,7 +980,7 @@ AioCompletion *Rados::aio_create_completion(void *cb_arg,
   AioCompletionImpl *c;
   int r = rados_aio_create_completion(cb_arg, cb_complete, cb_safe,
       reinterpret_cast<void**>(&c));
-  assert(r == 0);
+  ceph_assert(r == 0);
   return new AioCompletion(c);
 }
 
@@ -1020,6 +1042,11 @@ uint64_t Rados::get_instance_id() {
   return impl->get_instance_id();
 }
 
+int Rados::get_min_compatible_osd(int8_t* require_osd_release) {
+  TestRadosClient *impl = reinterpret_cast<TestRadosClient*>(client);
+  return impl->get_min_compatible_osd(require_osd_release);
+}
+
 int Rados::get_min_compatible_client(int8_t* min_compat_client,
                                      int8_t* require_min_compat_client) {
   TestRadosClient *impl = reinterpret_cast<TestRadosClient*>(client);
@@ -1029,6 +1056,10 @@ int Rados::get_min_compatible_client(int8_t* min_compat_client,
 
 int Rados::init(const char * const id) {
   return rados_create(reinterpret_cast<rados_t *>(&client), id);
+}
+
+int Rados::init_with_context(config_t cct_) {
+  return rados_create_with_context(reinterpret_cast<rados_t *>(&client), cct_);
 }
 
 int Rados::ioctx_create(const char *name, IoCtx &io) {
@@ -1158,6 +1189,12 @@ int cls_cxx_create(cls_method_context_t hctx, bool exclusive) {
   librados::TestClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
   return ctx->io_ctx_impl->create(ctx->oid, exclusive);
+}
+
+int cls_cxx_remove(cls_method_context_t hctx) {
+  librados::TestClassHandler::MethodContext *ctx =
+    reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
+  return ctx->io_ctx_impl->remove(ctx->oid, ctx->io_ctx_impl->get_snap_context());
 }
 
 int cls_get_request_origin(cls_method_context_t hctx, entity_inst_t *origin) {
@@ -1355,6 +1392,19 @@ uint64_t cls_get_client_features(cls_method_context_t hctx) {
   return CEPH_FEATURES_SUPPORTED_DEFAULT;
 }
 
+int cls_get_snapset_seq(cls_method_context_t hctx, uint64_t *snap_seq) {
+  librados::TestClassHandler::MethodContext *ctx =
+    reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
+  librados::snap_set_t snapset;
+  int r = ctx->io_ctx_impl->list_snaps(ctx->oid, &snapset);
+  if (r < 0) {
+    return r;
+  }
+
+  *snap_seq = snapset.seq;
+  return 0;
+}
+
 int cls_log(int level, const char *format, ...) {
   int size = 256;
   va_list ap;
@@ -1392,4 +1442,8 @@ int cls_register_cxx_filter(cls_handle_t hclass,
 {
   librados::TestClassHandler *cls = get_class_handler();
   return cls->create_filter(hclass, filter_name, fn);
+}
+
+int8_t cls_get_required_osd_release(cls_handle_t hclass) {
+  return CEPH_FEATURE_SERVER_NAUTILUS;
 }

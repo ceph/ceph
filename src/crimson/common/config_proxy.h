@@ -24,7 +24,7 @@ class ConfigProxy : public seastar::peering_sharded_service<ConfigProxy>
   md_config_t* remote_config = nullptr;
   std::unique_ptr<md_config_t> local_config;
 
-  using ConfigObserver = ceph::internal::md_config_obs_impl<ConfigProxy>;
+  using ConfigObserver = ceph::md_config_obs_impl<ConfigProxy>;
   ObserverMgr<ConfigObserver> obs_mgr;
 
   const md_config_t& get_config() const {
@@ -48,6 +48,8 @@ class ConfigProxy : public seastar::peering_sharded_service<ConfigProxy>
       // always apply the new settings synchronously on the owner shard, to
       // avoid racings with other do_change() calls in parallel.
       owner.values.reset(new_values);
+      owner.obs_mgr.apply_changes(owner.values->changed,
+                                  owner, nullptr);
 
       return seastar::parallel_for_each(boost::irange(1u, seastar::smp::count),
                                         [&owner, new_values] (auto cpu) {
@@ -109,10 +111,37 @@ public:
     return get_config().template get_val<T>(*values, key);
   }
 
+  int get_all_sections(std::vector<std::string>& sections) const {
+    return get_config().get_all_sections(sections);
+  }
+
+  int get_val_from_conf_file(const std::vector<std::string>& sections,
+			     const std::string& key, std::string& out,
+			     bool expand_meta) const {
+    return get_config().get_val_from_conf_file(*values, sections, key,
+					       out, expand_meta);
+  }
+
+  unsigned get_osd_pool_default_min_size() const {
+    return get_config().get_osd_pool_default_min_size(*values);
+  }
+
   seastar::future<> set_mon_vals(const std::map<std::string,std::string>& kv) {
     return do_change([kv, this](ConfigValues& values) {
       get_config().set_mon_vals(nullptr, values, obs_mgr, kv, nullptr);
     });
+  }
+
+  seastar::future<> parse_config_files(const std::string& conf_files) {
+    return do_change([this, conf_files](ConfigValues& values) {
+      const char* conf_file_paths =
+	conf_files.empty() ? nullptr : conf_files.c_str();
+      get_config().parse_config_files(values,
+				      obs_mgr,
+				      conf_file_paths,
+				      &std::cerr,
+				      CODE_ENVIRONMENT_DAEMON);
+      });
   }
 
   using ShardedConfig = seastar::sharded<ConfigProxy>;

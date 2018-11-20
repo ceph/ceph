@@ -77,10 +77,9 @@ namespace librbd {
 	    IoCtx& c_ioctx, const char *c_name,
 	    uint64_t features, int *c_order,
 	    uint64_t stripe_unit, int stripe_count);
-  int clone(IoCtx& p_ioctx, const char *p_name, const char *p_snap_name,
-	    IoCtx& c_ioctx, const char *c_name, ImageOptions& c_opts);
-  int clone(ImageCtx *p_imctx, IoCtx& c_ioctx, const std::string &c_name,
-            const std::string &c_id, ImageOptions& c_opts,
+  int clone(IoCtx& p_ioctx, const char *p_id, const char *p_name,
+            const char *p_snap_name, IoCtx& c_ioctx, const char *c_id,
+            const char *c_name, ImageOptions& c_opts,
             const std::string &non_primary_global_image_id,
             const std::string &primary_mirror_uuid);
   int rename(librados::IoCtx& io_ctx, const char *srcname, const char *dstname);
@@ -101,20 +100,6 @@ namespace librbd {
                       std::list<std::string> *lock_owners);
   int lock_break(ImageCtx *ictx, rbd_lock_mode_t lock_mode,
                  const std::string &lock_owner);
-
-  int remove(librados::IoCtx& io_ctx, const std::string &image_name,
-             const std::string &image_id, ProgressContext& prog_ctx,
-             bool force=false, bool from_trash_remove=false);
-
-  int trash_move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
-                 const std::string &image_name, uint64_t delay);
-  int trash_get(IoCtx &io_ctx, const std::string &id, trash_image_info_t *info);
-  int trash_list(librados::IoCtx &io_ctx,
-                 std::vector<trash_image_info_t> &entries);
-  int trash_remove(librados::IoCtx &io_ctx, const std::string &image_id,
-                   bool force, ProgressContext& prog_ctx);
-  int trash_restore(librados::IoCtx &io_ctx, const std::string &image_id,
-                    const std::string &image_new_name);
 
   int snap_list(ImageCtx *ictx, std::vector<snap_info_t>& snaps);
   int snap_exists(ImageCtx *ictx, const cls::rbd::SnapshotNamespace& snap_namespace,

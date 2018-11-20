@@ -58,7 +58,7 @@ public:
     : py_modules(py_modules_), python_completion(ev),
       tag(tag_), pThreadState(ts_)
   {
-    assert(python_completion != nullptr);
+    ceph_assert(python_completion != nullptr);
     Py_INCREF(python_completion);
   }
 
@@ -75,7 +75,7 @@ public:
 
   void finish(int r) override
   {
-    assert(python_completion != nullptr);
+    ceph_assert(python_completion != nullptr);
 
     dout(10) << "MonCommandCompletion::finish()" << dendl;
     {
@@ -85,7 +85,7 @@ public:
       Gil gil(pThreadState, true);
 
       auto set_fn = PyObject_GetAttrString(python_completion, "complete");
-      assert(set_fn != nullptr);
+      ceph_assert(set_fn != nullptr);
 
       auto pyR = PyInt_FromLong(r);
       auto pyOutBl = PyString_FromString(outbl.to_str().c_str());
@@ -131,7 +131,7 @@ ceph_send_command(BaseMgrModule *self, PyObject *args)
   if (set_fn == nullptr) {
     ceph_abort();  // TODO raise python exception instead
   } else {
-    assert(PyCallable_Check(set_fn));
+    ceph_assert(PyCallable_Check(set_fn));
   }
   Py_DECREF(set_fn);
 
@@ -348,6 +348,26 @@ ceph_get_mgr_id(BaseMgrModule *self, PyObject *args)
 }
 
 static PyObject*
+ceph_option_get(BaseMgrModule *self, PyObject *args)
+{
+  char *what = nullptr;
+  if (!PyArg_ParseTuple(args, "s:ceph_option_get", &what)) {
+    derr << "Invalid args!" << dendl;
+    return nullptr;
+  }
+
+  std::string value;
+  int r = g_conf().get_val(string(what), &value);
+  if (r >= 0) {
+    dout(10) << "ceph_option_get " << what << " found: " << value << dendl;
+    return PyString_FromString(value.c_str());
+  } else {
+    dout(4) << "ceph_config_get " << what << " not found " << dendl;
+    Py_RETURN_NONE;
+  }
+}
+
+static PyObject*
 ceph_config_get(BaseMgrModule *self, PyObject *args)
 {
   char *what = nullptr;
@@ -465,16 +485,41 @@ get_daemon_status(BaseMgrModule *self, PyObject *args)
 static PyObject*
 ceph_log(BaseMgrModule *self, PyObject *args)
 {
-
   int level = 0;
   char *record = nullptr;
   if (!PyArg_ParseTuple(args, "is:log", &level, &record)) {
     return nullptr;
   }
 
-  assert(self->this_module);
+  ceph_assert(self->this_module);
 
   self->this_module->log(level, record);
+
+  Py_RETURN_NONE;
+}
+
+static PyObject*
+ceph_cluster_log(BaseMgrModule *self, PyObject *args)
+{
+  int prio = 0;
+  char *channel = nullptr;
+  char *message = nullptr;
+  std::vector<std::string> channels = { "audit", "cluster" };
+
+  if (!PyArg_ParseTuple(args, "sis:ceph_cluster_log", &channel, &prio, &message)) {
+    return nullptr;
+  }
+
+  if (std::find(channels.begin(), channels.end(), std::string(channel)) == channels.end()) {
+    std::string msg("Unknown channel: ");
+    msg.append(channel);
+    PyErr_SetString(PyExc_ValueError, msg.c_str());
+    return nullptr;
+  }
+
+  PyThreadState *tstate = PyEval_SaveThread();
+  self->py_modules->cluster_log(channel, (clog_type)prio, message);
+  PyEval_RestoreThread(tstate);
 
   Py_RETURN_NONE;
 }
@@ -502,6 +547,20 @@ get_counter(BaseMgrModule *self, PyObject *args)
     return nullptr;
   }
   return self->py_modules->get_counter_python(
+      svc_name, svc_id, counter_path);
+}
+
+static PyObject*
+get_latest_counter(BaseMgrModule *self, PyObject *args)
+{
+  char *svc_name = nullptr;
+  char *svc_id = nullptr;
+  char *counter_path = nullptr;
+  if (!PyArg_ParseTuple(args, "sss:get_counter", &svc_name,
+                                                  &svc_id, &counter_path)) {
+    return nullptr;
+  }
+  return self->py_modules->get_latest_counter_python(
       svc_name, svc_id, counter_path);
 }
 
@@ -600,6 +659,34 @@ ceph_dispatch_remote(BaseMgrModule *self, PyObject *args)
   return result;
 }
 
+static PyObject*
+ceph_add_osd_perf_query(BaseMgrModule *self, PyObject *args)
+{
+  // TODO: parse args to build OSDPerfMetricQuery.
+  // For now it is ignored and can be anything.
+  PyObject *query_ = nullptr;
+  if (!PyArg_ParseTuple(args, "O:ceph_add_osd_perf_query", &query_)) {
+    derr << "Invalid args!" << dendl;
+    return nullptr;
+  }
+
+  OSDPerfMetricQuery query;
+  auto query_id = self->py_modules->add_osd_perf_query(query);
+  return PyLong_FromLong(query_id);
+}
+
+static PyObject*
+ceph_remove_osd_perf_query(BaseMgrModule *self, PyObject *args)
+{
+  OSDPerfMetricQueryID query_id;
+  if (!PyArg_ParseTuple(args, "i:ceph_remove_osd_perf_query", &query_id)) {
+    derr << "Invalid args!" << dendl;
+    return nullptr;
+  }
+
+  self->py_modules->remove_osd_perf_query(query_id);
+  Py_RETURN_NONE;
+}
 
 PyMethodDef BaseMgrModule_methods[] = {
   {"_ceph_get", (PyCFunction)ceph_state_get, METH_VARARGS,
@@ -623,6 +710,9 @@ PyMethodDef BaseMgrModule_methods[] = {
   {"_ceph_get_mgr_id", (PyCFunction)ceph_get_mgr_id, METH_NOARGS,
    "Get the name of the Mgr daemon where we are running"},
 
+  {"_ceph_get_option", (PyCFunction)ceph_option_get, METH_VARARGS,
+   "Get a configuration option value"},
+
   {"_ceph_get_config", (PyCFunction)ceph_config_get, METH_VARARGS,
    "Get a configuration value"},
 
@@ -641,11 +731,17 @@ PyMethodDef BaseMgrModule_methods[] = {
   {"_ceph_get_counter", (PyCFunction)get_counter, METH_VARARGS,
     "Get a performance counter"},
 
+  {"_ceph_get_latest_counter", (PyCFunction)get_latest_counter, METH_VARARGS,
+    "Get the latest performance counter"},
+
   {"_ceph_get_perf_schema", (PyCFunction)get_perf_schema, METH_VARARGS,
     "Get the performance counter schema"},
 
   {"_ceph_log", (PyCFunction)ceph_log, METH_VARARGS,
    "Emit a (local) log message"},
+
+  {"_ceph_cluster_log", (PyCFunction)ceph_cluster_log, METH_VARARGS,
+   "Emit a cluster log message"},
 
   {"_ceph_get_version", (PyCFunction)ceph_get_version, METH_VARARGS,
    "Get the ceph version of this process"},
@@ -665,6 +761,12 @@ PyMethodDef BaseMgrModule_methods[] = {
 
   {"_ceph_dispatch_remote", (PyCFunction)ceph_dispatch_remote,
     METH_VARARGS, "Dispatch a call to another module"},
+
+  {"_ceph_add_osd_perf_query", (PyCFunction)ceph_add_osd_perf_query,
+    METH_VARARGS, "Add an osd perf query"},
+
+  {"_ceph_remove_osd_perf_query", (PyCFunction)ceph_remove_osd_perf_query,
+    METH_VARARGS, "Remove an osd perf query"},
 
   {NULL, NULL, 0, NULL}
 };
@@ -696,10 +798,10 @@ BaseMgrModule_init(BaseMgrModule *self, PyObject *args, PyObject *kwds)
 
     self->py_modules = static_cast<ActivePyModules*>(PyCapsule_GetPointer(
         py_modules_capsule, nullptr));
-    assert(self->py_modules);
+    ceph_assert(self->py_modules);
     self->this_module = static_cast<ActivePyModule*>(PyCapsule_GetPointer(
         this_module_capsule, nullptr));
-    assert(self->this_module);
+    ceph_assert(self->this_module);
 
     return 0;
 }

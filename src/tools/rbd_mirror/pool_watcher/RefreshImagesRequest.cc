@@ -39,7 +39,7 @@ void RefreshImagesRequest<I>::mirror_image_list() {
     RefreshImagesRequest<I>,
     &RefreshImagesRequest<I>::handle_mirror_image_list>(this);
   int r = m_remote_io_ctx.aio_operate(RBD_MIRRORING, aio_comp, &op, &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   aio_comp->release();
 }
 

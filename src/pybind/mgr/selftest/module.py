@@ -4,6 +4,7 @@ import threading
 import random
 import json
 import errno
+import six
 
 
 class Module(MgrModule):
@@ -70,12 +71,35 @@ class Module(MgrModule):
                 "desc": "Run another module's self_test() method",
                 "perm": "rw"
             },
+            {
+                "cmd": "mgr self-test health set name=checks,type=CephString",
+                "desc": "Set a health check from a JSON-formatted description.",
+                "perm": "rw"
+            },
+            {
+                "cmd": "mgr self-test health clear name=checks,type=CephString,n=N,req=False",
+                "desc": "Clear health checks by name. If no names provided, clear all.",
+                "perm": "rw"
+            },
+            {
+                "cmd": "mgr self-test insights_set_now_offset name=hours,type=CephString",
+                "desc": "Set the now time for the insights module.",
+                "perm": "rw"
+            },
+            {
+                "cmd": "mgr self-test cluster-log name=channel,type=CephString "
+                       "name=priority,type=CephString "
+                       "name=message,type=CephString",
+                "desc": "Create an audit log record.",
+                "perm": "rw"
+            },
             ]
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
         self._event = threading.Event()
         self._workload = None
+        self._health = {}
 
     def handle_command(self, inbuf, command):
         if command['prefix'] == 'mgr self-test run':
@@ -113,9 +137,65 @@ class Module(MgrModule):
                 return -1, '', "Test failed: {0}".format(e.message)
             else:
                 return 0, str(r), "Self-test OK"
+        elif command['prefix'] == 'mgr self-test health set':
+            return self._health_set(inbuf, command)
+        elif command['prefix'] == 'mgr self-test health clear':
+            return self._health_clear(inbuf, command)
+        elif command['prefix'] == 'mgr self-test insights_set_now_offset':
+            return self._insights_set_now_offset(inbuf, command)
+        elif command['prefix'] == 'mgr self-test cluster-log':
+            priority_map = {
+                'info': self.CLUSTER_LOG_PRIO_INFO,
+                'security': self.CLUSTER_LOG_PRIO_SEC,
+                'warning': self.CLUSTER_LOG_PRIO_WARN,
+                'error': self.CLUSTER_LOG_PRIO_ERROR
+            }
+            self.cluster_log(command['channel'],
+                             priority_map[command['priority']],
+                             command['message'])
+            return 0, '', 'Successfully called'
         else:
             return (-errno.EINVAL, '',
                     "Command not found '{0}'".format(command['prefix']))
+
+    def _health_set(self, inbuf, command):
+        try:
+            checks = json.loads(command["checks"])
+        except Exception as e:
+            return -1, "", "Failed to decode JSON input: {}".format(e.message)
+
+        try:
+            for check, info in six.iteritems(checks):
+                self._health[check] = {
+                    "severity": str(info["severity"]),
+                    "summary": str(info["summary"]),
+                    "detail": [str(m) for m in info["detail"]]
+                }
+        except Exception as e:
+            return -1, "", "Invalid health check format: {}".format(e.message)
+
+        self.set_health_checks(self._health)
+        return 0, "", ""
+
+    def _health_clear(self, inbuf, command):
+        if "checks" in command:
+            for check in command["checks"]:
+                if check in self._health:
+                    del self._health[check]
+        else:
+            self._health = dict()
+
+        self.set_health_checks(self._health)
+        return 0, "", ""
+
+    def _insights_set_now_offset(self, inbuf, command):
+        try:
+            hours = long(command["hours"])
+        except Exception as e:
+            return -1, "", "Timestamp must be numeric: {}".format(e.message)
+
+        self.remote("insights", "testing_set_now_time_offset", hours)
+        return 0, "", ""
 
     def _self_test(self):
         self.log.info("Running self-test procedure...")
@@ -231,10 +311,15 @@ class Module(MgrModule):
         self.remote("influx", "handle_command", "", {"prefix": "influx self-test"})
 
         # Test calling module that exists but isn't enabled
+        # (arbitrarily pick a non-always-on module to use)
+        disabled_module = "telegraf"
         mgr_map = self.get("mgr_map")
-        all_modules = [m['name'] for m in mgr_map['available_modules']]
-        disabled_modules = set(all_modules) - set(mgr_map['modules'])
-        disabled_module = list(disabled_modules)[0]
+        assert disabled_module not in mgr_map['modules']
+
+        # (This works until the Z release in about 2027)
+        latest_release = sorted(mgr_map['always_on_modules'].keys())[-1]
+        assert disabled_module not in mgr_map['always_on_modules'][latest_release]
+
         try:
             self.remote(disabled_module, "handle_command", {"prefix": "influx self-test"})
         except ImportError:

@@ -6,7 +6,7 @@
 #include "common/config.h"
 
 #include "include/Context.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/mempool.h"
 #include "include/types.h"
 #include "include/xlist.h"
@@ -141,7 +141,7 @@ class MDSCacheObject {
 protected:
   __s32      ref = 0;       // reference count
 #ifdef MDS_REF_SET
-  mempool::mds_co::map<int,int> ref_map;
+  mempool::mds_co::flat_map<int,int> ref_map;
 #endif
 
  public:
@@ -164,9 +164,9 @@ protected:
   virtual void last_put() {}
   virtual void bad_put(int by) {
 #ifdef MDS_REF_SET
-    assert(ref_map[by] > 0);
+    ceph_assert(ref_map[by] > 0);
 #endif
-    assert(ref > 0);
+    ceph_assert(ref > 0);
   }
   virtual void _put() {}
   void put(int by) {
@@ -191,7 +191,7 @@ protected:
   virtual void first_get() {}
   virtual void bad_get(int by) {
 #ifdef MDS_REF_SET
-    assert(by < 0 || ref_map[by] == 0);
+    ceph_assert(by < 0 || ref_map[by] == 0);
 #endif
     ceph_abort();
   }
@@ -208,34 +208,41 @@ protected:
 
   void print_pin_set(std::ostream& out) const {
 #ifdef MDS_REF_SET
-    std::map<int, int>::const_iterator it = ref_map.begin();
-    while (it != ref_map.end()) {
-      out << " " << pin_name(it->first) << "=" << it->second;
-      ++it;
+    for(auto const &p : ref_map) {
+      out << " " << pin_name(p.first) << "=" << p.second;
     }
 #else
     out << " nref=" << ref;
 #endif
   }
 
-  protected:
+protected:
   int auth_pins = 0;
-  int nested_auth_pins = 0;
 #ifdef MDS_AUTHPIN_SET
   mempool::mds_co::multiset<void*> auth_pin_set;
 #endif
 
-  public:
-  bool is_auth_pinned() const { return auth_pins || nested_auth_pins; }
+public:
   int get_num_auth_pins() const { return auth_pins; }
-  int get_num_nested_auth_pins() const { return nested_auth_pins; }
+#ifdef MDS_AUTHPIN_SET
+  void print_authpin_set(std::ostream& out) const {
+    out << " (" << auth_pin_set << ")";
+  }
+#endif
 
   void dump_states(Formatter *f) const;
   void dump(Formatter *f) const;
 
   // --------------------------------------------
   // auth pins
-  virtual bool can_auth_pin() const = 0;
+  enum {
+    // can_auth_pin() error codes
+    ERR_NOT_AUTH = 1,
+    ERR_EXPORTING_TREE,
+    ERR_FRAGMENTING_DIR,
+    ERR_EXPORTING_INODE,
+  };
+  virtual bool can_auth_pin(int *err_code=nullptr) const = 0;
   virtual void auth_pin(void *who) = 0;
   virtual void auth_unpin(void *who) = 0;
   virtual bool is_frozen() const = 0;
@@ -269,11 +276,11 @@ protected:
     get_replicas()[mds] = nonce;
   }
   unsigned get_replica_nonce(mds_rank_t mds) {
-    assert(get_replicas().count(mds));
+    ceph_assert(get_replicas().count(mds));
     return get_replicas()[mds];
   }
   void remove_replica(mds_rank_t mds) {
-    assert(get_replicas().count(mds));
+    ceph_assert(get_replicas().count(mds));
     get_replicas().erase(mds);
     if (get_replicas().empty()) {
       put(PIN_REPLICATED);
@@ -376,7 +383,7 @@ protected:
   virtual SimpleLock* get_lock(int type) { ceph_abort(); return 0; }
   virtual void set_object_info(MDSCacheObjectInfo &info) { ceph_abort(); }
   virtual void encode_lock_state(int type, bufferlist& bl) { ceph_abort(); }
-  virtual void decode_lock_state(int type, bufferlist& bl) { ceph_abort(); }
+  virtual void decode_lock_state(int type, const bufferlist& bl) { ceph_abort(); }
   virtual void finish_lock_waiters(int type, uint64_t mask, int r=0) { ceph_abort(); }
   virtual void add_lock_waiter(int type, uint64_t mask, MDSInternalContextBase *c) { ceph_abort(); }
   virtual bool is_lock_waiting(int type, uint64_t mask) { ceph_abort(); return false; }

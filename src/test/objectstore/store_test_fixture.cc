@@ -79,7 +79,7 @@ void StoreTestFixture::TearDown()
 
 void StoreTestFixture::SetVal(ConfigProxy& _conf, const char* key, const char* val)
 {
-  assert(!conf || conf == &_conf);
+  ceph_assert(!conf || conf == &_conf);
   conf = &_conf;
   std::string skey(key);
   std::string prev_val;
@@ -91,7 +91,7 @@ void StoreTestFixture::SetVal(ConfigProxy& _conf, const char* key, const char* v
 void StoreTestFixture::PopSettings(size_t pos)
 {
   if (conf) {
-    assert(pos == 0 || pos <= saved_settings.size()); // for sanity
+    ceph_assert(pos == 0 || pos <= saved_settings.size()); // for sanity
     while(pos < saved_settings.size())
     {
       auto& e = saved_settings.top();

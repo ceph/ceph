@@ -23,6 +23,7 @@
 #include "rgw_auth_s3.h"
 #include "rgw_user.h"
 #include "rgw_bucket.h"
+#include "rgw_zone.h"
 #include "rgw_file.h"
 #include "rgw_lib_frontend.h"
 #include "common/errno.h"
@@ -481,7 +482,7 @@ namespace rgw {
       }
       goto out;
       default:
-	abort();
+	ceph_abort();
       } /* switch */
     } /* ix */
   unlock:
@@ -660,6 +661,10 @@ namespace rgw {
     }
 
     get<1>(mkr) = rc;
+   
+    /* case like : quota exceed will be considered as fail too*/
+    if(rc2 < 0)
+       get<1>(mkr) = rc2;
 
     return mkr;
   } /* RGWLibFS::create */
@@ -987,7 +992,7 @@ namespace rgw {
     auto bl_iter_key1 = ux_key1->cbegin();
     decode(fhk, bl_iter_key1);
     if (fhk.version >= 2) {
-      assert(this->fh.fh_hk == fhk.fh_hk);
+      ceph_assert(this->fh.fh_hk == fhk.fh_hk);
     } else {
       get<0>(dar) = true;
     }
@@ -1286,15 +1291,16 @@ namespace rgw {
     struct req_state* s = get_state();
 
     auto compression_type =
-      get_store()->get_zone_params().get_compression_type(
+      get_store()->svc.zone->get_zone_params().get_compression_type(
 	s->bucket_info.placement_rule);
 
     /* not obviously supportable */
-    assert(! dlo_manifest);
-    assert(! slo_info);
+    ceph_assert(! dlo_manifest);
+    ceph_assert(! slo_info);
 
     perfcounter->inc(l_rgw_put);
     op_ret = -EINVAL;
+    rgw_obj obj{s->bucket, s->object};
 
     if (s->object.empty()) {
       ldout(s->cct, 0) << __func__ << " called on empty object" << dendl;
@@ -1314,26 +1320,39 @@ namespace rgw {
     /* early quota check skipped--we don't have size yet */
     /* skipping user-supplied etag--we might have one in future, but
      * like data it and other attrs would arrive after open */
-    processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx),
-				 &multipart);
-    op_ret = processor->prepare(get_store(), NULL);
+
+    aio.emplace(s->cct->_conf->rgw_put_obj_min_window_size);
+
+    if (s->bucket_info.versioning_enabled()) {
+      if (!version_id.empty()) {
+        obj.key.set_instance(version_id);
+      } else {
+        get_store()->gen_rand_obj_instance_name(&obj);
+        version_id = obj.key.instance;
+      }
+    }
+    processor.emplace(&*aio, get_store(), s->bucket_info,
+                      s->bucket_owner.get_id(),
+                      *static_cast<RGWObjectCtx *>(s->obj_ctx),
+                      obj, olh_epoch, s->req_id);
+
+    op_ret = processor->prepare();
     if (op_ret < 0) {
       ldout(s->cct, 20) << "processor->prepare() returned ret=" << op_ret
 			<< dendl;
       goto done;
     }
-
-    filter = processor;
+    filter = &*processor;
     if (compression_type != "none") {
       plugin = Compressor::create(s->cct, compression_type);
-    if (! plugin) {
-      ldout(s->cct, 1) << "Cannot load plugin for rgw_compression_type "
-                       << compression_type << dendl;
-    } else {
-      compressor.emplace(s->cct, plugin, filter);
-      filter = &*compressor;
+      if (! plugin) {
+        ldout(s->cct, 1) << "Cannot load plugin for rgw_compression_type "
+                         << compression_type << dendl;
+      } else {
+        compressor.emplace(s->cct, plugin, filter);
+        filter = &*compressor;
+      }
     }
-  }
 
   done:
     return op_ret;
@@ -1353,60 +1372,20 @@ namespace rgw {
       return -EIO;
     }
 
+    op_ret = get_store()->check_quota(s->bucket_owner.get_id(), s->bucket,
+                                      user_quota, bucket_quota, real_ofs, true);
+    /* max_size exceed */
+    if (op_ret < 0)
+      return -EIO;
+
     size_t len = data.length();
     if (! len)
       return 0;
 
-    /* XXX we are currently synchronous--supplied data buffers cannot
-     * be used after the caller returns  */
-    bool need_to_wait = true;
-    bufferlist orig_data;
-
-    if (need_to_wait) {
-      orig_data = data;
-    }
     hash.Update((const unsigned char *)data.c_str(), data.length());
-    op_ret = put_data_and_throttle(filter, data, ofs, need_to_wait);
+    op_ret = filter->process(std::move(data), ofs);
     if (op_ret < 0) {
-      if (!need_to_wait || op_ret != -EEXIST) {
-	ldout(s->cct, 20) << "processor->thottle_data() returned ret="
-			  << op_ret << dendl;
-	goto done;
-      }
-
-      ldout(s->cct, 5) << "NOTICE: processor->throttle_data() returned -EEXIST, need to restart write" << dendl;
-
-      /* restore original data */
-      data.swap(orig_data);
-
-      /* restart processing with different oid suffix */
-      dispose_processor(processor);
-      processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx),
-				   &multipart);
-      filter = processor;
-
-      string oid_rand;
-      char buf[33];
-      gen_rand_alphanumeric(get_store()->ctx(), buf, sizeof(buf) - 1);
-      oid_rand.append(buf);
-
-      op_ret = processor->prepare(get_store(), &oid_rand);
-      if (op_ret < 0) {
-	ldout(s->cct, 0) << "ERROR: processor->prepare() returned "
-			 << op_ret << dendl;
-	goto done;
-      }
-
-      /* restore compression filter, if any */
-      if (compressor) {
-	compressor.emplace(s->cct, plugin, filter);
-	filter = &*compressor;
-      }
-
-      op_ret = put_data_and_throttle(filter, data, ofs, false);
-      if (op_ret < 0) {
-	goto done;
-      }
+      goto done;
     }
     bytes_written += len;
 
@@ -1430,8 +1409,15 @@ namespace rgw {
     s->obj_size = bytes_written;
     perfcounter->inc(l_rgw_put_b, s->obj_size);
 
+    // flush data in filters
+    op_ret = filter->process({}, s->obj_size);
+    if (op_ret < 0) {
+      goto done;
+    }
+
     op_ret = get_store()->check_quota(s->bucket_owner.get_id(), s->bucket,
-				      user_quota, bucket_quota, s->obj_size);
+				      user_quota, bucket_quota, s->obj_size, true);
+    /* max_size exceed */
     if (op_ret < 0) {
       goto done;
     }
@@ -1501,7 +1487,7 @@ namespace rgw {
 
     op_ret = processor->complete(s->obj_size, etag, &mtime, real_time(), attrs,
                                  (delete_at ? *delete_at : real_time()),
-                                if_match, if_nomatch);
+                                if_match, if_nomatch, nullptr, nullptr, nullptr);
     if (op_ret != 0) {
       /* revert attr updates */
       rgw_fh->set_mtime(omtime);
@@ -1510,7 +1496,6 @@ namespace rgw {
     }
 
   done:
-    dispose_processor(processor);
     perfcounter->tinc(l_rgw_put_lat, s->time_elapsed());
     return op_ret;
   } /* exec_finish */
@@ -1542,7 +1527,7 @@ void rgwfile_version(int *major, int *minor, int *extra)
   /* stash access data for "mount" */
   RGWLibFS* new_fs = new RGWLibFS(static_cast<CephContext*>(rgw), uid, acc_key,
 				  sec_key, "/");
-  assert(new_fs);
+  ceph_assert(new_fs);
 
   rc = new_fs->authorize(rgwlib.get_store());
   if (rc != 0) {
@@ -1573,7 +1558,7 @@ int rgw_mount2(librgw_t rgw, const char *uid, const char *acc_key,
   /* stash access data for "mount" */
   RGWLibFS* new_fs = new RGWLibFS(static_cast<CephContext*>(rgw), uid, acc_key,
 				  sec_key, root);
-  assert(new_fs);
+  ceph_assert(new_fs);
 
   rc = new_fs->authorize(rgwlib.get_store());
   if (rc != 0) {

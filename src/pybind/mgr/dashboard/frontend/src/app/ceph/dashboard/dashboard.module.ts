@@ -3,6 +3,7 @@ import { NgModule } from '@angular/core';
 import { RouterModule } from '@angular/router';
 
 import { ChartsModule } from 'ng2-charts';
+import { PopoverModule } from 'ngx-bootstrap/popover';
 import { TabsModule } from 'ngx-bootstrap/tabs';
 
 import { SharedModule } from '../../shared/shared.module';
@@ -10,6 +11,7 @@ import { DashboardComponent } from './dashboard/dashboard.component';
 import { HealthPieComponent } from './health-pie/health-pie.component';
 import { HealthComponent } from './health/health.component';
 import { InfoCardComponent } from './info-card/info-card.component';
+import { InfoGroupComponent } from './info-group/info-group.component';
 import { LogColorPipe } from './log-color.pipe';
 import { MdsSummaryPipe } from './mds-summary.pipe';
 import { MgrSummaryPipe } from './mgr-summary.pipe';
@@ -19,7 +21,15 @@ import { PgStatusStylePipe } from './pg-status-style.pipe';
 import { PgStatusPipe } from './pg-status.pipe';
 
 @NgModule({
-  imports: [CommonModule, TabsModule.forRoot(), SharedModule, ChartsModule, RouterModule],
+  imports: [
+    CommonModule,
+    TabsModule.forRoot(),
+    SharedModule,
+    ChartsModule,
+    RouterModule,
+    PopoverModule.forRoot()
+  ],
+
   declarations: [
     HealthComponent,
     DashboardComponent,
@@ -31,7 +41,8 @@ import { PgStatusPipe } from './pg-status.pipe';
     MdsSummaryPipe,
     PgStatusStylePipe,
     HealthPieComponent,
-    InfoCardComponent
+    InfoCardComponent,
+    InfoGroupComponent
   ]
 })
 export class DashboardModule {}

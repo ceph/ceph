@@ -4,9 +4,8 @@
 #include <list>
 #include <set>
 #include <string>
+#include <string_view>
 #include <vector>
-#include <boost/utility/string_view.hpp>
-
 
 namespace ceph {
 

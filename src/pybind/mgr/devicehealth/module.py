@@ -13,16 +13,6 @@ from six import iteritems
 
 TIME_FORMAT = '%Y%m%d-%H%M%S'
 
-DEFAULTS = {
-    'enable_monitoring': str(True),
-    'scrape_frequency': str(86400),
-    'retention_period': str(86400 * 14),
-    'pool_name': 'device_health_metrics',
-    'mark_out_threshold': str(86400*14),
-    'warn_threshold': str(86400*14*2),
-    'self_heal': str(True),
-}
-
 DEVICE_HEALTH = 'DEVICE_HEALTH'
 DEVICE_HEALTH_IN_USE = 'DEVICE_HEALTH_IN_USE'
 DEVICE_HEALTH_TOOMANY = 'DEVICE_HEALTH_TOOMANY'
@@ -35,20 +25,45 @@ HEALTH_MESSAGES = {
 
 class Module(MgrModule):
     OPTIONS = [
-        {'name': 'enable_monitoring'},
-        {'name': 'scrape_frequency'},
-        {'name': 'pool_name'},
-        {'name': 'retention_period'},
-        {'name': 'mark_out_threshold'},
-        {'name': 'warn_threshold'},
-        {'name': 'self_heal'},
+        {
+            'name': 'enable_monitoring',
+            'default': str(False),
+        },
+        {
+            'name': 'scrape_frequency',
+            'default': str(86400),
+        },
+        {
+            'name': 'pool_name',
+            'default': 'device_health_metrics',
+        },
+        {
+            'name': 'retention_period',
+            'default': str(86400 * 14),
+        },
+        {
+            'name': 'mark_out_threshold',
+            'default': str(86400 * 14 * 2),
+        },
+        {
+            'name': 'warn_threshold',
+            'default': str(86400 * 14 * 6),
+        },
+        {
+            'name': 'self_heal',
+            'default': str(True),
+        },
+        {
+            'name': 'sleep_interval',
+            'default': str(600),
+        },
     ]
 
     COMMANDS = [
         {
             "cmd": "device query-daemon-health-metrics "
                    "name=who,type=CephString",
-            "desc": "Get device health metrics for a given daemon (OSD)",
+            "desc": "Get device health metrics for a given daemon",
             "perm": "r"
         },
         {
@@ -65,7 +80,7 @@ class Module(MgrModule):
             "perm": "r"
         },
         {
-            "cmd": "device show-health-metrics "
+            "cmd": "device get-health-metrics "
                    "name=devid,type=CephString "
                    "name=sample,type=CephString,req=False",
             "desc": "Show stored device metrics for the device",
@@ -76,29 +91,53 @@ class Module(MgrModule):
             "desc": "Check life expectancy of devices",
             "perm": "rw",
         },
+        {
+            "cmd": "device monitoring on",
+            "desc": "Enable device health monitoring",
+            "perm": "rw",
+        },
+        {
+            "cmd": "device monitoring off",
+            "desc": "Disable device health monitoring",
+            "perm": "rw",
+        },
+        {
+            'cmd': 'device predict-life-expectancy '
+                   'name=devid,type=CephString,req=true',
+            'desc': 'Predict life expectancy with local predictor',
+            'perm': 'r'
+        },
     ]
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
 
         # options
-        for k, v in DEFAULTS.iteritems():
-            setattr(self, k, v)
+        for opt in self.OPTIONS:
+            setattr(self, opt['name'], opt['default'])
 
         # other
         self.run = True
         self.event = Event()
+
+    def is_valid_daemon_name(self, who):
+        l = cmd.get('who', '').split('.')
+        if len(l) != 2:
+            return False
+        if l[0] not in ('osd', 'mon'):
+            return False;
+        return True;
 
     def handle_command(self, _, cmd):
         self.log.error("handle_command")
 
         if cmd['prefix'] == 'device query-daemon-health-metrics':
             who = cmd.get('who', '')
-            if who[0:4] != 'osd.':
-                return -errno.EINVAL, '', 'not a valid <osd.NNN> id'
-            osd_id = who[4:]
+            if not self.is_valid_daemon_name(who):
+                return -errno.EINVAL, '', 'not a valid mon or osd daemon name'
+            (daemon_type, daemon_id) = cmd.get('who', '').split('.')
             result = CommandResult('')
-            self.send_command(result, 'osd', osd_id, json.dumps({
+            self.send_command(result, daemon_type, daemon_id, json.dumps({
                 'prefix': 'smart',
                 'format': 'json',
             }), '')
@@ -106,25 +145,35 @@ class Module(MgrModule):
             return r, outb, outs
         elif cmd['prefix'] == 'device scrape-daemon-health-metrics':
             who = cmd.get('who', '')
-            if who[0:4] != 'osd.':
-                return -errno.EINVAL, '', 'not a valid <osd.NNN> id'
-            osd_id = int(who[4:])
-            return self.scrape_osd(osd_id)
+            if not self.is_valid_daemon_name(who):
+                return -errno.EINVAL, '', 'not a valid mon or osd daemon name'
+            (daemon_type, daemon_id) = cmd.get('who', '').split('.')
+            return self.scrape_daemon(daemon_type, daemon_id)
         elif cmd['prefix'] == 'device scrape-health-metrics':
             if 'devid' in cmd:
                 return self.scrape_device(cmd['devid'])
             return self.scrape_all()
-        elif cmd['prefix'] == 'device show-health-metrics':
+        elif cmd['prefix'] == 'device get-health-metrics':
             return self.show_device_metrics(cmd['devid'], cmd.get('sample'))
         elif cmd['prefix'] == 'device check-health':
             return self.check_health()
+        elif cmd['prefix'] == 'device monitoring on':
+            self.set_config('enable_monitoring', 'true')
+            self.event.set()
+            return 0, '', ''
+        elif cmd['prefix'] == 'device monitoring off':
+            self.set_config('enable_monitoring', 'false')
+            self.set_health_checks({})  # avoid stuck health alerts
+            return 0, '', ''
+        elif cmd['prefix'] == 'device predict-life-expectancy':
+            return self.predict_lift_expectancy(cmd['devid'])
         else:
             # mgr should respect our self.COMMANDS and not call us for
             # any prefix we don't advertise
             raise NotImplementedError(cmd['prefix'])
 
     def self_test(self):
-        self.refresh_config()
+        self.config_notify()
         osdmap = self.get('osd_map')
         osd_id = osdmap['osds'][0]['osd']
         osdmeta = self.get('osd_metadata')
@@ -139,42 +188,66 @@ class Module(MgrModule):
             assert r == 0
             assert before != after
 
-    def refresh_config(self):
-        self.enable_monitoring = self.get_config('enable_monitoring',
-                                                 '') is not '' or 'false'
-        for opt, value in iteritems(DEFAULTS):
-            setattr(self, opt, self.get_config(opt) or value)
+    def config_notify(self):
+        for opt in self.OPTIONS:
+            setattr(self,
+                    opt['name'],
+                    self.get_config(opt['name']) or opt['default'])
+            self.log.debug(' %s = %s', opt['name'], getattr(self, opt['name']))
 
     def serve(self):
         self.log.info("Starting")
+        self.config_notify()
+
+        last_scrape = None
+        ls = self.get_store('last_scrape')
+        if ls:
+            try:
+                last_scrape = datetime.strptime(ls, TIME_FORMAT)
+            except ValueError as e:
+                pass
+        self.log.debug('Last scrape %s', last_scrape)
+
         while self.run:
-            self.refresh_config()
+            if self.enable_monitoring == 'true' or self.enable_monitoring == 'True':
+                self.log.debug('Running')
+                self.check_health()
 
-            # TODO normalize/align sleep interval
-            sleep_interval = int(self.scrape_frequency)
+                now = datetime.utcnow()
+                if not last_scrape:
+                    next_scrape = now
+                else:
+                    # align to scrape interval
+                    scrape_frequency = int(self.scrape_frequency) or 86400
+                    seconds = (last_scrape - datetime.utcfromtimestamp(0)).total_seconds()
+                    seconds -= seconds % scrape_frequency
+                    seconds += scrape_frequency
+                    next_scrape = datetime.utcfromtimestamp(seconds)
+                if last_scrape:
+                    self.log.debug('Last scrape %s, next scrape due %s',
+                                   last_scrape.strftime(TIME_FORMAT),
+                                   next_scrape.strftime(TIME_FORMAT))
+                else:
+                    self.log.debug('Last scrape never, next scrape due %s',
+                                   next_scrape.strftime(TIME_FORMAT))
+                if now >= next_scrape:
+                    self.scrape_all()
+                    self.predict_all_devices()
+                    last_scrape = now
+                    self.set_store('last_scrape', last_scrape.strftime(TIME_FORMAT))
 
+            # sleep
+            sleep_interval = int(self.sleep_interval) or 60
             self.log.debug('Sleeping for %d seconds', sleep_interval)
             ret = self.event.wait(sleep_interval)
             self.event.clear()
-
-            # in case 'wait' was interrupted, it could mean config was changed
-            # by the user; go back and read config vars
-            if ret:
-                continue
-
-            self.log.debug('Waking up [%s]',
-                           "active" if self.enable_monitoring else "inactive")
-            if not self.enable_monitoring:
-                continue
-            self.log.debug('Running')
-            self.check_health()
 
     def shutdown(self):
         self.log.info('Stopping')
         self.run = False
         self.event.set()
 
-    def open_connection(self):
+    def open_connection(self, create_if_missing=True):
         pools = self.rados.list_pools()
         is_pool = False
         for pool in pools:
@@ -182,6 +255,8 @@ class Module(MgrModule):
                 is_pool = True
                 break
         if not is_pool:
+            if not create_if_missing:
+                return None
             self.log.debug('create %s pool' % self.pool_name)
             # create pool
             result = CommandResult('')
@@ -208,9 +283,9 @@ class Module(MgrModule):
         ioctx = self.rados.open_ioctx(self.pool_name)
         return ioctx
 
-    def scrape_osd(self, osd_id):
+    def scrape_daemon(self, daemon_type, daemon_id):
         ioctx = self.open_connection()
-        raw_smart_data = self.do_scrape_osd(osd_id)
+        raw_smart_data = self.do_scrape_daemon(daemon_type, daemon_id)
         if raw_smart_data:
             for device, raw_data in raw_smart_data.items():
                 data = self.extract_smart_features(raw_data)
@@ -223,9 +298,14 @@ class Module(MgrModule):
         assert osdmap is not None
         ioctx = self.open_connection()
         did_device = {}
+        ids = []
         for osd in osdmap['osds']:
-            osd_id = osd['osd']
-            raw_smart_data = self.do_scrape_osd(osd_id)
+            ids.append(('osd', str(osd['osd'])))
+        monmap = self.get("mon_map")
+        for mon in monmap['mons']:
+            ids.append(('mon', mon['name']))
+        for daemon_type, daemon_id in ids:
+            raw_smart_data = self.do_scrape_daemon(daemon_type, daemon_id)
             if not raw_smart_data:
                 continue
             for device, raw_data in raw_smart_data.items():
@@ -235,7 +315,6 @@ class Module(MgrModule):
                 did_device[device] = 1
                 data = self.extract_smart_features(raw_data)
                 self.put_device_metrics(ioctx, device, data)
-
         ioctx.close()
         return 0, "", ""
 
@@ -244,14 +323,13 @@ class Module(MgrModule):
         if not r or 'device' not in r.keys():
             return -errno.ENOENT, '', 'device ' + devid + ' not found'
         daemons = r['device'].get('daemons', [])
-        osds = [int(r[4:]) for r in daemons if r.startswith('osd.')]
-        if not osds:
+        if not daemons:
             return (-errno.EAGAIN, '',
-                    'device ' + devid + ' not claimed by any active '
-                                        'OSD daemons')
-        osd_id = osds[0]
+                    'device ' + devid + ' not claimed by any active daemons')
+        (daemon_type, daemon_id) = daemons[0].split('.')
         ioctx = self.open_connection()
-        raw_smart_data = self.do_scrape_osd(osd_id, devid=devid)
+        raw_smart_data = self.do_scrape_daemon(daemon_type, daemon_id,
+                                               devid=devid)
         if raw_smart_data:
             for device, raw_data in raw_smart_data.items():
                 data = self.extract_smart_features(raw_data)
@@ -259,15 +337,13 @@ class Module(MgrModule):
         ioctx.close()
         return 0, "", ""
 
-    def do_scrape_osd(self, osd_id, devid=''):
+    def do_scrape_daemon(self, daemon_type, daemon_id, devid=''):
         """
         :return: a dict, or None if the scrape failed.
         """
-        self.log.debug('do_scrape_osd osd.%d' % osd_id)
-
-        # scrape from osd
+        self.log.debug('do_scrape_daemon %s.%s' % (daemon_type, daemon_id))
         result = CommandResult('')
-        self.send_command(result, 'osd', str(osd_id), json.dumps({
+        self.send_command(result, daemon_type, daemon_id, json.dumps({
             'prefix': 'smart',
             'format': 'json',
             'devid': devid,
@@ -278,11 +354,11 @@ class Module(MgrModule):
             return json.loads(outb)
         except (IndexError, ValueError):
             self.log.error(
-                "Fail to parse JSON result from OSD {0} ({1})".format(
-                    osd_id, outb))
+                "Fail to parse JSON result from daemon {0}.{1} ({2})".format(
+                    daemon_type, daemon_id, outb))
 
     def put_device_metrics(self, ioctx, devid, data):
-        old_key = datetime.now() - timedelta(
+        old_key = datetime.utcnow() - timedelta(
             seconds=int(self.retention_period))
         prune = old_key.strftime(TIME_FORMAT)
         self.log.debug('put_device_metrics device %s prune %s' %
@@ -303,10 +379,10 @@ class Module(MgrModule):
         except rados.Error as e:
             # Do not proceed with writes if something unexpected
             # went wrong with the reads.
-            log.exception("Error reading OMAP: {0}".format(e))
+            self.log.exception("Error reading OMAP: {0}".format(e))
             return
 
-        key = datetime.now().strftime(TIME_FORMAT)
+        key = datetime.utcnow().strftime(TIME_FORMAT)
         self.log.debug('put_device_metrics device %s key %s = %s, erase %s' %
                        (devid, key, data, erase))
         with rados.WriteOpCtx() as op:
@@ -321,29 +397,29 @@ class Module(MgrModule):
         if not r or 'device' not in r.keys():
             return -errno.ENOENT, '', 'device ' + devid + ' not found'
         # fetch metrics
-        ioctx = self.open_connection()
         res = {}
-        with rados.ReadOpCtx() as op:
-            omap_iter, ret = ioctx.get_omap_vals(op, "", sample or '', 500)  # fixme
-            assert ret == 0
-            try:
-                ioctx.operate_read_op(op, devid)
-                for key, value in list(omap_iter):
-                    if sample and key != sample:
-                        break
-                    try:
-                        v = json.loads(value)
-                    except (ValueError, IndexError):
-                        self.log.debug('unable to parse value for %s: "%s"' %
-                                       (key, value))
-                        pass
-                    else:
+        ioctx = self.open_connection(create_if_missing=False)
+        if ioctx:
+            with rados.ReadOpCtx() as op:
+                omap_iter, ret = ioctx.get_omap_vals(op, "", sample or '', 500)  # fixme
+                assert ret == 0
+                try:
+                    ioctx.operate_read_op(op, devid)
+                    for key, value in list(omap_iter):
+                        if sample and key != sample:
+                            break
+                        try:
+                            v = json.loads(value)
+                        except (ValueError, IndexError):
+                            self.log.debug('unable to parse value for %s: "%s"' %
+                                           (key, value))
+                            pass
                         res[key] = v
-            except rados.ObjectNotFound:
-                pass
-            except rados.Error as e:
-                log.exception("RADOS error reading omap: {0}".format(e))
-                raise
+                except rados.ObjectNotFound:
+                    pass
+                except rados.Error as e:
+                    self.log.exception("RADOS error reading omap: {0}".format(e))
+                    raise
 
         return 0, json.dumps(res, indent=4), ''
 
@@ -361,23 +437,29 @@ class Module(MgrModule):
         devs = self.get("devices")
         osds_in = {}
         osds_out = {}
-        now = datetime.now()
+        now = datetime.utcnow()
         osdmap = self.get("osd_map")
         assert osdmap is not None
         for dev in devs['devices']:
             devid = dev['devid']
-            if 'life_expectancy_min' not in dev:
+            if 'life_expectancy_max' not in dev:
+                continue
+            # ignore devices that are not consumed by any daemons
+            if not dev['daemons']:
+                continue
+            if not dev['life_expectancy_max'] or \
+               dev['life_expectancy_max'] == '0.000000':
                 continue
             # life_expectancy_(min/max) is in the format of:
             # '%Y-%m-%d %H:%M:%S.%f', e.g.:
             # '2019-01-20 21:12:12.000000'
-            life_expectancy_min = datetime.strptime(
-                dev['life_expectancy_min'],
+            life_expectancy_max = datetime.strptime(
+                dev['life_expectancy_max'],
                 '%Y-%m-%d %H:%M:%S.%f')
-            self.log.debug('device %s expectancy min %s', dev,
-                           life_expectancy_min)
+            self.log.debug('device %s expectancy max %s', dev,
+                           life_expectancy_max)
 
-            if life_expectancy_min - now <= mark_out_threshold_td:
+            if life_expectancy_max - now <= mark_out_threshold_td:
                 if self.self_heal:
                     # dev['daemons'] == ["osd.0","osd.1","osd.2"]
                     if dev['daemons']:
@@ -386,11 +468,11 @@ class Module(MgrModule):
                         osd_ids = map(lambda x: x[4:], osds)
                         for _id in osd_ids:
                             if self.is_osd_in(osdmap, _id):
-                                osds_in[_id] = life_expectancy_min
+                                osds_in[_id] = life_expectancy_max
                             else:
                                 osds_out[_id] = 1
 
-            if life_expectancy_min - now <= warn_threshold_td:
+            if life_expectancy_max - now <= warn_threshold_td:
                 # device can appear in more than one location in case
                 # of SCSI multipath
                 device_locations = map(lambda x: x['host'] + ':' + x['dev'],
@@ -400,11 +482,8 @@ class Module(MgrModule):
                     % (dev['devid'],
                        ','.join(device_locations),
                        ','.join(dev.get('daemons', ['none'])),
-                       dev['life_expectancy_min'],
+                       dev['life_expectancy_max'],
                        dev.get('life_expectancy_max', 'unknown')))
-                # TODO: by default, dev['life_expectancy_max'] == '0.000000',
-                # so dev.get('life_expectancy_max', 'unknown')
-                # above should be altered.
 
         # OSD might be marked 'out' (which means it has no
         # data), however PGs are still attached to it.
@@ -493,3 +572,33 @@ class Module(MgrModule):
         # FIXME: extract and normalize raw smartctl --json output and
         # generate a dict of the fields we care about.
         return raw
+
+    def predict_lift_expectancy(self, devid):
+        plugin_name = ''
+        model = self.get_option('device_failure_prediction_mode')
+        if model and model.lower() == 'cloud':
+            plugin_name = 'diskprediction_cloud'
+        elif model and model.lower() == 'local':
+            plugin_name = 'diskprediction_local'
+        else:
+            return -1, '', 'unable to enable any disk prediction model[local/cloud]'
+        try:
+            if self.remote(plugin_name, 'can_run'):
+                return self.remote(plugin_name, 'predict_life_expentancy', devid=devid)
+        except:
+            return -1, '', 'unable to invoke diskprediction local or remote plugin'
+
+    def predict_all_devices(self):
+        plugin_name = ''
+        model = self.get_option('device_failure_prediction_mode')
+        if model and model.lower() == 'cloud':
+            plugin_name = 'diskprediction_cloud'
+        elif model and model.lower() == 'local':
+            plugin_name = 'diskprediction_local'
+        else:
+            return -1, '', 'unable to enable any disk prediction model[local/cloud]'
+        try:
+            if self.remote(plugin_name, 'can_run'):
+                return self.remote(plugin_name, 'predict_all_devices')
+        except:
+            return -1, '', 'unable to invoke diskprediction local or remote plugin'

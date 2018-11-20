@@ -26,6 +26,8 @@ function run() {
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
+    # so we will not force auth_log_shard to be acting_primary
+    CEPH_ARGS+="--osd_force_auth_primary_missing_objects=1000000 "
     export margin=10
     export objects=200
     export poolname=test

@@ -196,9 +196,12 @@ class Module(MgrModule):
                 dns = self.get_latest("mds", daemon_info['name'], "mds_mem.dn")
 
                 activity = "Evts: " + self.format_dimless(
-                    self.get_rate("mds", daemon_info['name'], "mds_log.replay"),
+                    self.get_rate("mds", daemon_info['name'], "mds_log.replayed"),
                     5
                 ) + "/s"
+
+                metadata = self.get_metadata('mds', daemon_info['name'])
+                mds_versions[metadata.get('ceph_version', "unknown")].append(daemon_info['name'])
 
                 rank_table.add_row([
                     "{0}-s".format(daemon_info['rank']), "standby-replay",
@@ -229,6 +232,9 @@ class Module(MgrModule):
             output += "=" * len(mdsmap['fs_name']) + "\n"
             output += rank_table.get_string()
             output += "\n" + pools_table.get_string() + "\n"
+
+        if not output and fs_filter is not None:
+            return errno.EINVAL, "", "Invalid filesystem: " + fs_filter
 
         standby_table = PrettyTable(["Standby MDS"])
         for standby in fsmap['standbys']:

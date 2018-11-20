@@ -27,13 +27,13 @@ public:
     multiset<uint64_t> latencies;
     void begin(TestOp *in)
     {
-      assert(!inflight.count(in));
+      ceph_assert(!inflight.count(in));
       inflight[in] = gettime();
     }
 
     void end(TestOp *in)
     {
-      assert(inflight.count(in));
+      ceph_assert(inflight.count(in));
       uint64_t curtime = gettime();
       latencies.insert(curtime - inflight[in]);
       inflight.erase(in);

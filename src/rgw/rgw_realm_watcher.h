@@ -5,7 +5,7 @@
 #define RGW_REALM_WATCHER_H
 
 #include "include/rados/librados.hpp"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "common/Timer.h"
 #include "common/Cond.h"
 

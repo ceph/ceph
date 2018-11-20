@@ -415,14 +415,14 @@ that you do not lose any recent changes to objects in the cache before you
 disable and remove it.
 
 
-#. Change the cache mode to ``forward`` so that new and modified objects will 
+#. Change the cache mode to ``proxy`` so that new and modified objects will 
    flush to the backing storage pool. ::
 
-	ceph osd tier cache-mode {cachepool} forward
+	ceph osd tier cache-mode {cachepool} proxy
 
    For example:: 
 
-	ceph osd tier cache-mode hot-storage forward
+	ceph osd tier cache-mode hot-storage proxy
 
 
 #. Ensure that the cache pool has been flushed. This may take a few minutes::

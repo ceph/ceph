@@ -80,7 +80,7 @@ class CommandsRequest(object):
         # Gather the results (in parallel)
         results = []
         for index in range(len(commands)):
-            tag = '%s:%d' % (str(self.id), index)
+            tag = '%s:%s:%d' % (__name__, self.id, index)
 
             # Store the result
             result = CommandResult(tag)
@@ -361,22 +361,21 @@ class Module(MgrModule):
 
 
     def _notify(self, notify_type, tag):
-        if notify_type == "command":
-            # we can safely skip all the sequential commands
-            if tag == 'seq':
-                return
-
-            request = [x for x in self.requests if x.is_running(tag)]
-            if len(request) != 1:
-                self.log.warn("Unknown request '%s'" % str(tag))
-                return
-
-            request = request[0]
+        if notify_type != "command":
+            self.log.debug("Unhandled notification type '%s'", notify_type)
+            return
+        # we can safely skip all the sequential commands
+        if tag == 'seq':
+            return
+        try:
+            with self.requests_lock:
+                request = next(x for x in self.requests if x.is_running(tag))
             request.finish(tag)
             if request.is_ready():
                 request.next()
-        else:
-            self.log.debug("Unhandled notification type '%s'" % notify_type)
+        except StopIteration:
+            # the command was not issued by me
+            pass
 
 
     def create_self_signed_cert(self):
@@ -585,8 +584,8 @@ class Module(MgrModule):
 
 
     def submit_request(self, _request, **kwargs):
-        request = CommandsRequest(_request)
         with self.requests_lock:
+            request = CommandsRequest(_request)
             self.requests.append(request)
         if kwargs.get('wait', 0):
             while not request.is_finished():
@@ -595,7 +594,7 @@ class Module(MgrModule):
 
 
     def run_command(self, command):
-        # tag with 'seq' so that we can ingore these in notify function
+        # tag with 'seq' so that we can ignore these in notify function
         result = CommandResult('seq')
 
         self.send_command(result, 'mon', '', json.dumps(command), 'seq')

@@ -1,7 +1,6 @@
 <div class="modal-header">
   <h4 class="modal-title pull-left"
-      i18n>Capability
-  </h4>
+      i18n>Capability</h4>
   <button type="button"
           class="close pull-right"
           aria-label="Close"
@@ -19,8 +18,8 @@
     <div class="form-group"
          [ngClass]="{'has-error': formGroup.showError('type', frm)}">
       <label class="control-label col-sm-3"
-             for="type"
-             i18n>Type
+             for="type">
+        <ng-container i18n>Type</ng-container>
         <span class="required"
               *ngIf="!editing">
         </span>
@@ -39,16 +38,13 @@
                 autofocus>
           <option i18n
                   *ngIf="types !== null"
-                  [ngValue]="null">-- Select a type --
-          </option>
+                  [ngValue]="null">-- Select a type --</option>
           <option *ngFor="let type of types"
                   [value]="type">{{ type }}</option>
         </select>
         <span class="help-block"
               *ngIf="formGroup.showError('type', frm, 'required')"
-              i18n>
-          This field is required.
-        </span>
+              i18n>This field is required.</span>
       </div>
     </div>
 
@@ -56,8 +52,8 @@
     <div class="form-group"
          [ngClass]="{'has-error': formGroup.showError('perm', frm)}">
       <label class="control-label col-sm-3"
-             for="perm"
-             i18n>Permission
+             for="perm">
+        <ng-container i18n>Permission</ng-container>
         <span class="required"></span>
       </label>
       <div class="col-sm-9">
@@ -65,8 +61,7 @@
                 class="form-control"
                 formControlName="perm">
           <option i18n
-                  [ngValue]="null">-- Select a permission --
-          </option>
+                  [ngValue]="null">-- Select a permission --</option>
           <option *ngFor="let perm of ['read', 'write', '*']"
                   [value]="perm">
             {{ perm }}
@@ -74,23 +69,19 @@
         </select>
         <span class="help-block"
               *ngIf="formGroup.showError('perm', frm, 'required')"
-              i18n>
-          This field is required.
-        </span>
+              i18n>This field is required.</span>
       </div>
     </div>
 
   </div>
   <div class="modal-footer">
     <cd-submit-button (submitAction)="onSubmit()"
-                      [form]="formGroup"
-                      i18n>
-      {editing, select, 1 {Update} other {Add}}
+                      [form]="formGroup">
+      <ng-container i18n>{editing, select, 1 {Update} other {Add}}</ng-container>
     </cd-submit-button>
     <button class="btn btn-sm btn-default"
             type="button"
             (click)="bsModalRef.hide()"
-            i18n>Close
-    </button>
+            i18n>Close</button>
   </div>
 </form>

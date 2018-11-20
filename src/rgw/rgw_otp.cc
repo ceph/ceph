@@ -11,11 +11,14 @@
 #include "common/Formatter.h"
 #include "common/ceph_json.h"
 #include "rgw_rados.h"
+#include "rgw_zone.h"
 
 #include "include/types.h"
 
 #include "rgw_common.h"
 #include "rgw_tools.h"
+
+#include "services/svc_zone.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -85,7 +88,7 @@ public:
 
   void get_pool_and_oid(RGWRados *store, const string& key, rgw_pool& pool, string& oid) override {
     oid = key;
-    pool = store->get_zone_params().otp_pool;
+    pool = store->svc.zone->get_zone_params().otp_pool;
   }
 
   struct list_keys_info {
@@ -99,7 +102,7 @@ public:
 
     info->store = store;
 
-    int ret = store->list_raw_objects_init(store->get_zone_params().otp_pool, marker,
+    int ret = store->list_raw_objects_init(store->svc.zone->get_zone_params().otp_pool, marker,
                                            &info->ctx);
     if (ret < 0) {
       return ret;

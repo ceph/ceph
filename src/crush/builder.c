@@ -417,7 +417,7 @@ err:
  * next item or set of items.  or why pow() is used the way it is.
  *
  * note that the original version 1 of this function made special
- * accomodation for the case where straw lengths were identical.  this
+ * accommodation for the case where straw lengths were identical.  this
  * is also flawed in a non-obvious way; version 2 drops the special
  * handling and appears to work just as well.
  *
@@ -1426,10 +1426,10 @@ struct crush_choose_arg *crush_make_choose_args(struct crush_map *map, int num_p
   struct crush_choose_arg *arg = (struct crush_choose_arg *)space;
   struct crush_weight_set *weight_set = (struct crush_weight_set *)(arg + map->max_buckets);
   __u32 *weights = (__u32 *)(weight_set + bucket_count * num_positions);
-  char *weight_set_ends = (char*)weights;
+  char *weight_set_ends __attribute__((unused)) = (char*)weights;
   __s32 *ids = (__s32 *)(weights + sum_bucket_size * num_positions);
-  char *weights_end = (char *)ids;
-  char *ids_end = (char *)(ids + sum_bucket_size);
+  char *weights_end __attribute__((unused)) = (char *)ids;
+  char *ids_end __attribute__((unused)) = (char *)(ids + sum_bucket_size);
   BUG_ON(space + size != ids_end);
   for (b = 0; b < map->max_buckets; b++) {
     if (map->buckets[b] == 0) {

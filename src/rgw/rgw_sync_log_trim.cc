@@ -25,10 +25,13 @@
 #include "rgw_data_sync.h"
 #include "rgw_metadata.h"
 #include "rgw_rados.h"
+#include "rgw_zone.h"
 #include "rgw_sync.h"
 
+#include "services/svc_zone.h"
+
 #include <boost/asio/yield.hpp>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -351,7 +354,7 @@ int take_min_status(CephContext *cct, Iter first, Iter last,
   status->clear();
   // The initialisation below is required to silence a false positive
   // -Wmaybe-uninitialized warning
-  boost::optional<size_t> num_shards = boost::make_optional(false, 0UL);
+  boost::optional<uint64_t> num_shards = boost::make_optional(false, uint64_t());
   for (auto peer = first; peer != last; ++peer) {
     const size_t peer_shards = peer->size();
     if (!num_shards) {
@@ -434,8 +437,8 @@ class BucketTrimInstanceCR : public RGWCoroutine {
     : RGWCoroutine(store->ctx()), store(store),
       http(http), observer(observer),
       bucket_instance(bucket_instance),
-      zone_id(store->get_zone().id),
-      peer_status(store->zone_conn_map.size())
+      zone_id(store->svc.zone->get_zone().id),
+      peer_status(store->svc.zone->get_zone_conn_map().size())
   {}
 
   int operate() override;
@@ -459,7 +462,7 @@ int BucketTrimInstanceCR::operate()
       };
 
       auto p = peer_status.begin();
-      for (auto& c : store->zone_conn_map) {
+      for (auto& c : store->svc.zone->get_zone_conn_map()) {
         using StatusCR = RGWReadRESTResourceCR<StatusShards>;
         spawn(new StatusCR(cct, c.second, http, "/admin/log/", params, &*p),
               false);
@@ -621,7 +624,7 @@ int AsyncMetadataList::_send_request()
     marker = mgr->get_marker(handle);
 
     if (!keys.empty()) {
-      assert(keys.size() == 1);
+      ceph_assert(keys.size() == 1);
       auto& key = keys.front();
       if (!callback(std::move(key), std::move(marker))) {
         return 0;
@@ -657,7 +660,7 @@ int AsyncMetadataList::_send_request()
     marker = mgr->get_marker(handle);
 
     if (!keys.empty()) {
-      assert(keys.size() == 1);
+      ceph_assert(keys.size() == 1);
       auto& key = keys.front();
       // stop at original marker
       if (marker >= start_marker) {
@@ -781,7 +784,7 @@ int BucketTrimCR::operate()
       // read BucketTrimStatus for marker position
       set_status("reading trim status");
       using ReadStatus = RGWSimpleRadosReadCR<BucketTrimStatus>;
-      yield call(new ReadStatus(store->get_async_rados(), store, obj,
+      yield call(new ReadStatus(store->get_async_rados(), store->svc.sysobj, obj,
                                 &status, true, &objv));
       if (retcode < 0) {
         ldout(cct, 10) << "failed to read bilog trim status: "
@@ -839,7 +842,7 @@ int BucketTrimCR::operate()
       status.marker = std::move(last_cold_marker);
       ldout(cct, 20) << "writing bucket trim marker=" << status.marker << dendl;
       using WriteStatus = RGWSimpleRadosWriteCR<BucketTrimStatus>;
-      yield call(new WriteStatus(store->get_async_rados(), store, obj,
+      yield call(new WriteStatus(store->get_async_rados(), store->svc.sysobj, obj,
                                  status, &objv));
       if (retcode < 0) {
         ldout(cct, 4) << "failed to write updated trim status: "
@@ -938,7 +941,7 @@ class RecentEventList {
   /// insert an event at the given point in time. this time must be at least as
   /// recent as the last inserted event
   void insert(T&& value, const time_point& now) {
-    // assert(events.empty() || now >= events.back().time)
+    // ceph_assert(events.empty() || now >= events.back().time)
     events.push_back(Event{std::move(value), now});
   }
 
@@ -1016,7 +1019,7 @@ class BucketTrimManager::Impl : public TrimCounters::Server,
 
   Impl(RGWRados *store, const BucketTrimConfig& config)
     : store(store), config(config),
-      status_obj(store->get_zone_params().log_pool, BucketTrimStatus::oid),
+      status_obj(store->svc.zone->get_zone_params().log_pool, BucketTrimStatus::oid),
       counter(config.counter_size),
       trimmed(config.recent_size, config.recent_duration),
       watcher(store, status_obj, this)

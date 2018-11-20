@@ -27,7 +27,7 @@
 #include "common/Graylog.h"
 #include "common/errno.h"
 #include "common/strtol.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/str_list.h"
 #include "include/str_map.h"
 #include "include/compat.h"
@@ -82,7 +82,7 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
            << " summary v " << summary.version << dendl;
   if (version == summary.version)
     return;
-  assert(version >= summary.version);
+  ceph_assert(version >= summary.version);
 
   map<string,bufferlist> channel_blog;
 
@@ -91,7 +91,7 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
   if ((latest_full > 0) && (latest_full > summary.version)) {
     bufferlist latest_bl;
     get_version_full(latest_full, latest_bl);
-    assert(latest_bl.length() != 0);
+    ceph_assert(latest_bl.length() != 0);
     dout(7) << __func__ << " loading summary e" << latest_full << dendl;
     auto p = latest_bl.cbegin();
     decode(summary, p);
@@ -102,8 +102,8 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
   while (version > summary.version) {
     bufferlist bl;
     int err = get_version(summary.version+1, bl);
-    assert(err == 0);
-    assert(bl.length());
+    ceph_assert(err == 0);
+    ceph_assert(bl.length());
 
     auto p = bl.cbegin();
     __u8 v;
@@ -187,7 +187,7 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
              << "' logging " << p->second.length() << " bytes" << dendl;
     string log_file = channels.get_log_file(p->first);
 
-    int fd = ::open(log_file.c_str(), O_WRONLY|O_APPEND|O_CREAT, 0600);
+    int fd = ::open(log_file.c_str(), O_WRONLY|O_APPEND|O_CREAT|O_CLOEXEC, 0600);
     if (fd < 0) {
       int err = -errno;
       dout(1) << "unable to write to '" << log_file << "' for channel '"
@@ -230,7 +230,7 @@ void LogMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 void LogMonitor::encode_full(MonitorDBStore::TransactionRef t)
 {
   dout(10) << __func__ << " log v " << summary.version << dendl;
-  assert(get_last_committed() == summary.version);
+  ceph_assert(get_last_committed() == summary.version);
 
   bufferlist summary_bl;
   encode(summary, summary_bl, mon->get_quorum_con_features());
@@ -260,8 +260,7 @@ bool LogMonitor::preprocess_query(MonOpRequestRef op)
   case MSG_MON_COMMAND:
     try {
       return preprocess_command(op);
-    }
-    catch (const bad_cmd_get& e) {
+    } catch (const bad_cmd_get& e) {
       bufferlist bl;
       mon->reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
       return true;
@@ -285,8 +284,7 @@ bool LogMonitor::prepare_update(MonOpRequestRef op)
   case MSG_MON_COMMAND:
     try {
       return prepare_command(op);
-    }
-    catch (const bad_cmd_get& e) {
+    } catch (const bad_cmd_get& e) {
       bufferlist bl;
       mon->reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
       return true;
@@ -306,7 +304,7 @@ bool LogMonitor::preprocess_log(MonOpRequestRef op)
   dout(10) << "preprocess_log " << *m << " from " << m->get_orig_source() << dendl;
   int num_new = 0;
 
-  MonSession *session = m->get_session();
+  MonSession *session = op->get_session();
   if (!session)
     goto done;
   if (!session->is_capable("log", MON_CAP_W)) {
@@ -404,29 +402,29 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
     mon->reply_command(op, -EINVAL, rs, get_last_committed());
     return true;
   }
-  MonSession *session = m->get_session();
+  MonSession *session = op->get_session();
   if (!session) {
     mon->reply_command(op, -EACCES, "access denied", get_last_committed());
     return true;
   }
 
   string prefix;
-  cmd_getval_throws(g_ceph_context, cmdmap, "prefix", prefix);
+  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
 
   string format;
-  cmd_getval_throws(g_ceph_context, cmdmap, "format", format, string("plain"));
+  cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   if (prefix == "log last") {
     int64_t num = 20;
-    cmd_getval_throws(g_ceph_context, cmdmap, "num", num);
+    cmd_getval(g_ceph_context, cmdmap, "num", num);
     if (f) {
       f->open_array_section("tail");
     }
 
     std::string level_str;
     clog_type level;
-    if (cmd_getval_throws(g_ceph_context, cmdmap, "level", level_str)) {
+    if (cmd_getval(g_ceph_context, cmdmap, "level", level_str)) {
       level = LogEntry::str_to_level(level_str);
       if (level == CLOG_UNKNOWN) {
         ss << "Invalid severity '" << level_str << "'";
@@ -438,7 +436,7 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
     }
 
     std::string channel;
-    if (!cmd_getval_throws(g_ceph_context, cmdmap, "channel", channel)) {
+    if (!cmd_getval(g_ceph_context, cmdmap, "channel", channel)) {
       channel = CLOG_CHANNEL_DEFAULT;
     }
 
@@ -448,6 +446,7 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
       return entry.prio >= level;
     };
 
+    // Decrement operation that sets to container end when hitting rbegin
     ostringstream ss;
     if (channel == "*") {
       list<LogEntry> full_tail;
@@ -462,7 +461,21 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
       if (rp == full_tail.rend()) {
 	--rp;
       }
-      for (; rp != full_tail.rbegin(); --rp) {
+
+      // Decrement a reverse iterator such that going past rbegin()
+      // sets it to rend().  This is for writing a for() loop that
+      // goes up to (and including) rbegin()
+      auto dec = [&rp, &full_tail] () {
+        if (rp == full_tail.rbegin()) {
+          rp = full_tail.rend();
+        } else {
+          --rp;
+        }
+      };
+
+      // Move forward to the end of the container (decrement the reverse
+      // iterator).
+      for (; rp != full_tail.rend(); dec()) {
 	if (!match(*rp)) {
 	  continue;
 	}
@@ -473,7 +486,6 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
 	}
       }
     } else {
-      derr << "bar" << dendl;
       auto p = summary.tail_by_channel.find(channel);
       if (p != summary.tail_by_channel.end()) {
 	auto rp = p->second.rbegin();
@@ -485,7 +497,21 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
 	if (rp == p->second.rend()) {
 	  --rp;
 	}
-	for (; rp != p->second.rbegin(); --rp) {
+
+        // Decrement a reverse iterator such that going past rbegin()
+        // sets it to rend().  This is for writing a for() loop that
+        // goes up to (and including) rbegin()
+        auto dec = [&rp, &p] () {
+          if (rp == p->second.rbegin()) {
+            rp = p->second.rend();
+          } else {
+            --rp;
+          }
+        };
+
+        // Move forward to the end of the container (decrement the reverse
+        // iterator).
+	for (; rp != p->second.rend(); dec()) {
 	  if (!match(rp->second)) {
 	    continue;
 	  }
@@ -532,9 +558,9 @@ bool LogMonitor::prepare_command(MonOpRequestRef op)
   }
 
   string prefix;
-  cmd_getval_throws(g_ceph_context, cmdmap, "prefix", prefix);
+  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
 
-  MonSession *session = m->get_session();
+  MonSession *session = op->get_session();
   if (!session) {
     mon->reply_command(op, -EACCES, "access denied", get_last_committed());
     return true;
@@ -542,7 +568,7 @@ bool LogMonitor::prepare_command(MonOpRequestRef op)
 
   if (prefix == "log") {
     vector<string> logtext;
-    cmd_getval_throws(g_ceph_context, cmdmap, "logtext", logtext);
+    cmd_getval(g_ceph_context, cmdmap, "logtext", logtext);
     LogEntry le;
     le.rank = m->get_orig_source();
     le.addrs.v.push_back(m->get_orig_source_addr());
@@ -593,7 +619,7 @@ void LogMonitor::check_sub(Subscription *s)
   dout(10) << __func__ << " client wants " << s->type << " ver " << s->next << dendl;
 
   int sub_level = sub_name_to_id(s->type);
-  assert(sub_level >= 0);
+  ceph_assert(sub_level >= 0);
 
   version_t summary_version = summary.version;
   if (s->next > summary_version) {
@@ -659,8 +685,8 @@ void LogMonitor::_create_sub_incremental(MLog *mlog, int level, version_t sv)
   while (sv && sv <= summary_ver) {
     bufferlist bl;
     int err = get_version(sv, bl);
-    assert(err == 0);
-    assert(bl.length());
+    ceph_assert(err == 0);
+    ceph_assert(bl.length());
     auto p = bl.cbegin();
     __u8 v;
     decode(v,p);

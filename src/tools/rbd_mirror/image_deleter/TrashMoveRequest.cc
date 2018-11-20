@@ -45,7 +45,7 @@ void TrashMoveRequest<I>::get_mirror_image_id() {
     &TrashMoveRequest<I>::handle_get_mirror_image_id>(this);
   m_out_bl.clear();
   int r = m_io_ctx.aio_operate(RBD_MIRRORING, aio_comp, &op, &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   aio_comp->release();
 }
 
@@ -122,7 +122,7 @@ void TrashMoveRequest<I>::disable_mirror_image() {
     TrashMoveRequest<I>,
     &TrashMoveRequest<I>::handle_disable_mirror_image>(this);
   int r = m_io_ctx.aio_operate(RBD_MIRRORING, aio_comp, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   aio_comp->release();
 }
 
@@ -255,7 +255,8 @@ void TrashMoveRequest<I>::trash_move() {
 
   utime_t delete_time{ceph_clock_now()};
   utime_t deferment_end_time{delete_time};
-  deferment_end_time += m_image_ctx->mirroring_delete_delay;
+  deferment_end_time +=
+    m_image_ctx->config.template get_val<uint64_t>("rbd_mirroring_delete_delay");
 
   m_trash_image_spec = {
     cls::rbd::TRASH_IMAGE_SOURCE_MIRRORING, m_image_ctx->name, delete_time,
@@ -294,7 +295,7 @@ void TrashMoveRequest<I>::remove_mirror_image() {
     TrashMoveRequest<I>,
     &TrashMoveRequest<I>::handle_remove_mirror_image>(this);
   int r = m_io_ctx.aio_operate(RBD_MIRRORING, aio_comp, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   aio_comp->release();
 }
 

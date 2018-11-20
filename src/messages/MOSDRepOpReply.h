@@ -18,8 +18,6 @@
 
 #include "MOSDFastDispatchOp.h"
 
-#include "os/ObjectStore.h"
-
 /*
  * OSD Client Subop reply
  *
@@ -28,9 +26,12 @@
  *
  */
 
-class MOSDRepOpReply : public MOSDFastDispatchOp {
-  static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 1;
+class MOSDRepOpReply : public MessageInstance<MOSDRepOpReply, MOSDFastDispatchOp> {
+public:
+  friend factory;
+private:
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 1;
 public:
   epoch_t map_epoch, min_epoch;
 
@@ -47,7 +48,7 @@ public:
   eversion_t last_complete_ondisk;
 
   bufferlist::const_iterator p;
-  // Decoding flags. Decoding is only needed for messages catched by pipe reader.
+  // Decoding flags. Decoding is only needed for messages caught by pipe reader.
   bool final_decode_needed;
 
   epoch_t get_map_epoch() const override {
@@ -116,7 +117,7 @@ public:
   MOSDRepOpReply(
     const MOSDRepOp *req, pg_shard_t from, int result_, epoch_t e, epoch_t mine,
     int at) :
-    MOSDFastDispatchOp(MSG_OSD_REPOPREPLY, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstance(MSG_OSD_REPOPREPLY, HEAD_VERSION, COMPAT_VERSION),
     map_epoch(e),
     min_epoch(mine),
     reqid(req->reqid),
@@ -128,7 +129,7 @@ public:
     set_tid(req->get_tid());
   }
   MOSDRepOpReply() 
-    : MOSDFastDispatchOp(MSG_OSD_REPOPREPLY, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_REPOPREPLY, HEAD_VERSION, COMPAT_VERSION),
       map_epoch(0),
       min_epoch(0),
       ack_type(0), result(0),

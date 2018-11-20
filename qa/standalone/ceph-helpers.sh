@@ -21,7 +21,9 @@ TIMEOUT=300
 WAIT_FOR_CLEAN_TIMEOUT=90
 MAX_TIMEOUT=15
 PG_NUM=4
-CEPH_BUILD_VIRTUALENV=${TMPDIR:-/tmp}
+TMPDIR=${TMPDIR:-/tmp}
+CEPH_BUILD_VIRTUALENV=${TMPDIR}
+TESTDIR=${TESTDIR:-${TMPDIR}}
 
 if type xmlstarlet > /dev/null 2>&1; then
     XMLSTARLET=xmlstarlet
@@ -34,10 +36,12 @@ fi
 
 if [ `uname` = FreeBSD ]; then
     SED=gsed
+    AWK=gawk
     DIFFCOLOPTS=""
     KERNCORE="kern.corefile"
 else
     SED=sed
+    AWK=awk
     termwidth=$(stty -a | head -1 | sed -e 's/.*columns \([0-9]*\).*/\1/')
     if [ -n "$termwidth" -a "$termwidth" != "0" ]; then
         termwidth="-W ${termwidth}"
@@ -131,6 +135,9 @@ function setup() {
     if [ $(ulimit -n) -le 1024 ]; then
         ulimit -n 4096 || return 1
     fi
+    if [ -z "$LOCALRUN" ]; then
+        trap "teardown $dir 1" TERM HUP INT
+    fi
 }
 
 function test_setup() {
@@ -202,8 +209,8 @@ function teardown() {
 
 function __teardown_btrfs() {
     local btrfs_base_dir=$1
-    local btrfs_root=$(df -P . | tail -1 | awk '{print $NF}')
-    local btrfs_dirs=$(cd $btrfs_base_dir; sudo btrfs subvolume list -t . | awk '/^[0-9]/ {print $4}' | grep "$btrfs_base_dir/$btrfs_dir")
+    local btrfs_root=$(df -P . | tail -1 | $AWK '{print $NF}')
+    local btrfs_dirs=$(cd $btrfs_base_dir; sudo btrfs subvolume list -t . | $AWK '/^[0-9]/ {print $4}' | grep "$btrfs_base_dir/$btrfs_dir")
     for subvolume in $btrfs_dirs; do
        sudo btrfs subvolume delete $btrfs_root/$subvolume
     done
@@ -550,6 +557,7 @@ function run_mgr() {
         --admin-socket=$(get_asok_path) \
         --run-dir=$dir \
         --pid-file=$dir/\$name.pid \
+        --mgr-module-path=$(realpath ${CEPH_ROOT}/src/pybind/mgr) \
         "$@" || return 1
 }
 
@@ -1230,7 +1238,7 @@ function get_num_active_clean() {
     expression+="select(contains(\"active\") and contains(\"clean\")) | "
     expression+="select(contains(\"stale\") | not)"
     ceph --format json pg dump pgs 2>/dev/null | \
-        jq "[.[] | .state | $expression] | length"
+        jq ".pg_stats | [.[] | .state | $expression] | length"
 }
 
 function test_get_num_active_clean() {
@@ -1287,7 +1295,7 @@ function test_get_num_pgs() {
 # @return 0 on success, 1 on error
 #
 function get_osd_id_used_by_pgs() {
-    ceph --format json pg dump pgs 2>/dev/null | jq '.[] | .up[], .acting[]' | sort
+    ceph --format json pg dump pgs 2>/dev/null | jq '.pg_stats | .[] | .up[], .acting[]' | sort
 }
 
 function test_get_osd_id_used_by_pgs() {
@@ -1361,7 +1369,7 @@ function get_last_scrub_stamp() {
     local pgid=$1
     local sname=${2:-last_scrub_stamp}
     ceph --format json pg dump pgs 2>/dev/null | \
-        jq -r ".[] | select(.pgid==\"$pgid\") | .$sname"
+        jq -r ".pg_stats | .[] | select(.pgid==\"$pgid\") | .$sname"
 }
 
 function test_get_last_scrub_stamp() {
@@ -1407,7 +1415,7 @@ function test_is_clean() {
 
 #######################################################################
 
-calc() { awk "BEGIN{print $*}"; }
+calc() { $AWK "BEGIN{print $*}"; }
 
 ##
 # Return a list of numbers that are increasingly larger and whose
@@ -1824,7 +1832,7 @@ function run_in_background() {
     local pid_variable=$1
     shift
     # Execute the command and prepend the output with its pid
-    # We enforce to return the exit status of the command and not the awk one.
+    # We enforce to return the exit status of the command and not the sed one.
     ("$@" |& sed 's/^/'$$': /'; return "${PIPESTATUS[0]}") >&2 &
     eval "$pid_variable+=\" $!\""
 }
@@ -1927,7 +1935,7 @@ function test_flush_pg_stats()
     local jq_filter='.pools | .[] | select(.name == "rbd") | .stats'
     raw_bytes_used=`ceph df detail --format=json | jq "$jq_filter.raw_bytes_used"`
     bytes_used=`ceph df detail --format=json | jq "$jq_filter.bytes_used"`
-    test $raw_bytes_used > 0 || return 1
+    test $raw_bytes_used -gt 0 || return 1
     test $raw_bytes_used == $bytes_used || return 1
     teardown $dir
 }

@@ -5,7 +5,7 @@
 #define CEPH_TEST_MEM_RADOS_CLIENT_H
 
 #include "test/librados_test_stub/TestRadosClient.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include <list>
 #include <string>
 
@@ -27,6 +27,11 @@ public:
   }
   uint64_t get_instance_id() override {
     return m_global_id;
+  }
+
+  int get_min_compatible_osd(int8_t* require_osd_release) override {
+    *require_osd_release = CEPH_RELEASE_NAUTILUS;
+    return 0;
   }
 
   int get_min_compatible_client(int8_t* min_compat_client,

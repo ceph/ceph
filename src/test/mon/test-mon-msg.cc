@@ -35,7 +35,7 @@
 #include "gtest/gtest.h"
 
 #include "common/config.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #include "messages/MMonProbe.h"
 #include "messages/MRoute.h"
@@ -83,7 +83,7 @@ public:
     std::string public_msgr_type = cct->_conf->ms_public_type.empty() ? cct->_conf.get_val<std::string>("ms_type") : cct->_conf->ms_public_type;
     msg = Messenger::create(cct, public_msgr_type, entity_name_t::CLIENT(-1),
                             "test-mon-msg", 0, 0);
-    assert(msg != NULL);
+    ceph_assert(msg != NULL);
     msg->set_default_policy(Messenger::Policy::lossy_client(0));
     dout(0) << __func__ << " starting messenger at "
             << msg->get_myaddr() << dendl;
@@ -93,7 +93,7 @@ public:
 
   int init_monc() {
     dout(1) << __func__ << dendl;
-    assert(msg != NULL);
+    ceph_assert(msg != NULL);
     int err = monc.build_initial_monmap();
     if (err < 0) {
       derr << __func__ << " error building monmap: "

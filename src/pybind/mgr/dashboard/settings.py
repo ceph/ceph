@@ -21,6 +21,10 @@ class Options(object):
     ENABLE_BROWSABLE_API = (True, bool)
     REST_REQUESTS_TIMEOUT = (45, int)
 
+    # API auditing
+    AUDIT_API_ENABLED = (False, bool)
+    AUDIT_API_LOG_PAYLOAD = (True, bool)
+
     # RGW settings
     RGW_API_HOST = ('', str)
     RGW_API_PORT = (80, int)
@@ -32,11 +36,9 @@ class Options(object):
     RGW_API_SSL_VERIFY = (True, bool)
 
     # Grafana settings
-    GRAFANA_API_URL = ('http://localhost:3000', str)
+    GRAFANA_API_URL = ('', str)
     GRAFANA_API_USERNAME = ('admin', str)
     GRAFANA_API_PASSWORD = ('admin', str)
-    GRAFANA_API_TOKEN = ('', str)
-    GRAFANA_API_AUTH_METHOD = ('', str)  # Either 'password' or 'token'
 
     @staticmethod
     def has_default_value(name):

@@ -2,10 +2,8 @@
 add_executable(ceph_test_cls_refcount
   test_cls_refcount.cc
   )
-set_target_properties(ceph_test_cls_refcount PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
 target_link_libraries(ceph_test_cls_refcount
-  librados
+  librados-cxx
   cls_refcount_client
   global
   ${UNITTEST_LIBS}
@@ -13,7 +11,7 @@ target_link_libraries(ceph_test_cls_refcount
   ${CMAKE_DL_LIBS}
   ${CRYPTO_LIBS}
   ${EXTRALIBS}
-  radostest
+  radostest-cxx
   )
 install(TARGETS
   ceph_test_cls_refcount

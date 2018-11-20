@@ -74,14 +74,14 @@ bool lru_map<K, V>::_find(const K& key, V *value, UpdateContext *ctx)
 template <class K, class V>
 bool lru_map<K, V>::find(const K& key, V& value)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard<Mutex> l(lock);
   return _find(key, &value, NULL);
 }
 
 template <class K, class V>
 bool lru_map<K, V>::find_and_update(const K& key, V *value, UpdateContext *ctx)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard<Mutex> l(lock);
   return _find(key, value, ctx);
 }
 
@@ -102,7 +102,7 @@ void lru_map<K, V>::_add(const K& key, V& value)
   while (entries.size() > max) {
     typename std::list<K>::reverse_iterator riter = entries_lru.rbegin();
     iter = entries.find(*riter);
-    // assert(iter != entries.end());
+    // ceph_assert(iter != entries.end());
     entries.erase(iter);
     entries_lru.pop_back();
   }
@@ -112,14 +112,14 @@ void lru_map<K, V>::_add(const K& key, V& value)
 template <class K, class V>
 void lru_map<K, V>::add(const K& key, V& value)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard<Mutex> l(lock);
   _add(key, value);
 }
 
 template <class K, class V>
 void lru_map<K, V>::erase(const K& key)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard<Mutex> l(lock);
   typename std::map<K, entry>::iterator iter = entries.find(key);
   if (iter == entries.end())
     return;

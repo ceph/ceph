@@ -183,7 +183,7 @@ static inline int xpool_alloc(struct xio_mempool *pool, uint64_t size,
   }
   // fall back to malloc on errors
   mp->addr = malloc(size);
-  assert(mp->addr);
+  ceph_assert(mp->addr);
   mp->length = 0;
   if (unlikely(XioPool::trace_mempool))
     xp_stats.inc_overflow();

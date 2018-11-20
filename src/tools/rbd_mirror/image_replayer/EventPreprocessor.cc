@@ -39,7 +39,7 @@ EventPreprocessor<I>::EventPreprocessor(I &local_image_ctx,
 
 template <typename I>
 EventPreprocessor<I>::~EventPreprocessor() {
-  assert(!m_in_progress);
+  ceph_assert(!m_in_progress);
 }
 
 template <typename I>
@@ -53,7 +53,7 @@ bool EventPreprocessor<I>::is_required(const EventEntry &event_entry) {
 template <typename I>
 void EventPreprocessor<I>::preprocess(EventEntry *event_entry,
                                       Context *on_finish) {
-  assert(!m_in_progress);
+  ceph_assert(!m_in_progress);
   m_in_progress = true;
   m_event_entry = event_entry;
   m_on_finish = on_finish;

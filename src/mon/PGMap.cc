@@ -376,7 +376,7 @@ void PGMapDigest::print_oneline_summary(Formatter *f, ostream *out) const
     }
     int64_t iops = (pos_delta.stats.sum.num_rd + pos_delta.stats.sum.num_wr) / (double)stamp_delta;
     if (out)
-      *out << si_u_t(iops) << "op/s";
+      *out << si_u_t(iops) << " op/s";
     if (f)
       f->dump_unsigned("io_sec", iops);
   }
@@ -390,6 +390,36 @@ void PGMapDigest::print_oneline_summary(Formatter *f, ostream *out) const
   overall_recovery_rate_summary(f, &ssr);
   if (out && ssr.str().length())
     *out << "; " << ssr.str() << " recovering";
+}
+
+void PGMapDigest::get_recovery_stats(
+    double *misplaced_ratio,
+    double *degraded_ratio,
+    double *inactive_pgs_ratio,
+    double *unknown_pgs_ratio) const
+{
+  if (pg_sum.stats.sum.num_objects_degraded &&
+      pg_sum.stats.sum.num_object_copies > 0) {
+    *degraded_ratio = (double)pg_sum.stats.sum.num_objects_degraded /
+      (double)pg_sum.stats.sum.num_object_copies;
+  } else {
+    *degraded_ratio = 0;
+  }
+  if (pg_sum.stats.sum.num_objects_misplaced &&
+      pg_sum.stats.sum.num_object_copies > 0) {
+    *misplaced_ratio = (double)pg_sum.stats.sum.num_objects_misplaced /
+      (double)pg_sum.stats.sum.num_object_copies;
+  } else {
+    *misplaced_ratio = 0;
+  }
+  if (num_pg > 0) {
+    int num_pg_inactive = num_pg - num_pg_active - num_pg_unknown;
+    *inactive_pgs_ratio = (double)num_pg_inactive / (double)num_pg;
+    *unknown_pgs_ratio = (double)num_pg_unknown / (double)num_pg;
+ } else {
+    *inactive_pgs_ratio = 0;
+    *unknown_pgs_ratio = 0;
+  }
 }
 
 void PGMapDigest::recovery_summary(Formatter *f, list<string> *psl,
@@ -470,8 +500,8 @@ void PGMapDigest::recovery_rate_summary(Formatter *f, ostream *out,
     } else {
       *out << byte_u_t(bps) << "/s";
       if (pos_delta.stats.sum.num_keys_recovered)
-	*out << ", " << si_u_t(kps) << "keys/s";
-      *out << ", " << si_u_t(objps) << "objects/s";
+	*out << ", " << si_u_t(kps) << " keys/s";
+      *out << ", " << si_u_t(objps) << " objects/s";
     }
   }
 }
@@ -494,7 +524,7 @@ void PGMapDigest::pool_recovery_rate_summary(Formatter *f, ostream *out,
     return;
 
   auto ts = per_pool_sum_deltas_stamps.find(p->first);
-  assert(ts != per_pool_sum_deltas_stamps.end());
+  ceph_assert(ts != per_pool_sum_deltas_stamps.end());
   recovery_rate_summary(f, out, p->second.first, ts->second);
 }
 
@@ -538,7 +568,7 @@ void PGMapDigest::client_io_rate_summary(Formatter *f, ostream *out,
       f->dump_int("read_op_per_sec", iops_rd);
       f->dump_int("write_op_per_sec", iops_wr);
     } else {
-      *out << si_u_t(iops_rd) << "op/s rd, " << si_u_t(iops_wr) << "op/s wr";
+      *out << si_u_t(iops_rd) << " op/s rd, " << si_u_t(iops_wr) << " op/s wr";
     }
   }
 }
@@ -556,7 +586,7 @@ void PGMapDigest::pool_client_io_rate_summary(Formatter *f, ostream *out,
     return;
 
   auto ts = per_pool_sum_deltas_stamps.find(p->first);
-  assert(ts != per_pool_sum_deltas_stamps.end());
+  ceph_assert(ts != per_pool_sum_deltas_stamps.end());
   client_io_rate_summary(f, out, p->second.first, ts->second);
 }
 
@@ -595,7 +625,7 @@ void PGMapDigest::cache_io_rate_summary(Formatter *f, ostream *out,
     } else {
       if (have_output)
 	*out << ", ";
-      *out << si_u_t(promote) << "op/s promote";
+      *out << si_u_t(promote) << " op/s promote";
       have_output = true;
     }
   }
@@ -605,7 +635,7 @@ void PGMapDigest::cache_io_rate_summary(Formatter *f, ostream *out,
     } else {
       if (have_output)
 	*out << ", ";
-      *out << si_u_t(pos_delta.stats.sum.num_flush_mode_low) << "PG(s) flushing";
+      *out << si_u_t(pos_delta.stats.sum.num_flush_mode_low) << " PGs flushing";
       have_output = true;
     }
   }
@@ -615,7 +645,7 @@ void PGMapDigest::cache_io_rate_summary(Formatter *f, ostream *out,
     } else {
       if (have_output)
 	*out << ", ";
-      *out << si_u_t(pos_delta.stats.sum.num_flush_mode_high) << "PG(s) flushing (high)";
+      *out << si_u_t(pos_delta.stats.sum.num_flush_mode_high) << " PGs flushing (high)";
       have_output = true;
     }
   }
@@ -625,7 +655,7 @@ void PGMapDigest::cache_io_rate_summary(Formatter *f, ostream *out,
     } else {
       if (have_output)
 	*out << ", ";
-      *out << si_u_t(pos_delta.stats.sum.num_evict_mode_some) << "PG(s) evicting";
+      *out << si_u_t(pos_delta.stats.sum.num_evict_mode_some) << " PGs evicting";
       have_output = true;
     }
   }
@@ -635,7 +665,7 @@ void PGMapDigest::cache_io_rate_summary(Formatter *f, ostream *out,
     } else {
       if (have_output)
 	*out << ", ";
-      *out << si_u_t(pos_delta.stats.sum.num_evict_mode_full) << "PG(s) evicting (full)";
+      *out << si_u_t(pos_delta.stats.sum.num_evict_mode_full) << " PGs evicting (full)";
     }
   }
 }
@@ -653,7 +683,7 @@ void PGMapDigest::pool_cache_io_rate_summary(Formatter *f, ostream *out,
     return;
 
   auto ts = per_pool_sum_deltas_stamps.find(p->first);
-  assert(ts != per_pool_sum_deltas_stamps.end());
+  ceph_assert(ts != per_pool_sum_deltas_stamps.end());
   cache_io_rate_summary(f, out, p->second.first, ts->second);
 }
 
@@ -675,8 +705,8 @@ static float pool_raw_used_rate(const OSDMap &osd_map, int64_t poolid)
       int k = atoi(pk->second.c_str());
       int m = atoi(pm->second.c_str());
       int mk = m + k;
-      assert(mk != 0);
-      assert(k != 0);
+      ceph_assert(mk != 0);
+      ceph_assert(k != 0);
       return (float)mk / k;
     } else {
       return 0.0;
@@ -684,7 +714,7 @@ static float pool_raw_used_rate(const OSDMap &osd_map, int64_t poolid)
   }
   break;
   default:
-    assert(0 == "unrecognized pool type");
+    ceph_abort_msg("unrecognized pool type");
   }
 }
 
@@ -809,7 +839,7 @@ void PGMapDigest::dump_pool_stats_full(
   if (f)
     f->close_section();
   else {
-    assert(ss != nullptr);
+    ceph_assert(ss != nullptr);
     *ss << "POOLS:\n";
     tbl.set_indent(4);
     *ss << tbl;
@@ -818,17 +848,23 @@ void PGMapDigest::dump_pool_stats_full(
 
 void PGMapDigest::dump_fs_stats(stringstream *ss, Formatter *f, bool verbose) const
 {
+  float used = 0.0;
+  if (osd_sum.kb > 0) {
+    used = ((float)osd_sum.kb_used / osd_sum.kb);
+  }
+
   if (f) {
     f->open_object_section("stats");
     f->dump_int("total_bytes", osd_sum.kb * 1024ull);
     f->dump_int("total_used_bytes", osd_sum.kb_used * 1024ull);
     f->dump_int("total_avail_bytes", osd_sum.kb_avail * 1024ull);
+    f->dump_float("total_percent_used", used * 100);
     if (verbose) {
       f->dump_int("total_objects", pg_sum.stats.sum.num_objects);
     }
     f->close_section();
   } else {
-    assert(ss != nullptr);
+    ceph_assert(ss != nullptr);
     TextTable tbl;
     tbl.define_column("SIZE", TextTable::LEFT, TextTable::RIGHT);
     tbl.define_column("AVAIL", TextTable::LEFT, TextTable::RIGHT);
@@ -840,10 +876,6 @@ void PGMapDigest::dump_fs_stats(stringstream *ss, Formatter *f, bool verbose) co
     tbl << stringify(byte_u_t(osd_sum.kb*1024))
         << stringify(byte_u_t(osd_sum.kb_avail*1024))
         << stringify(byte_u_t(osd_sum.kb_used*1024));
-    float used = 0.0;
-    if (osd_sum.kb > 0) {
-      used = ((float)osd_sum.kb_used / osd_sum.kb);
-    }
     tbl << percentify(used*100);
     if (verbose) {
       tbl << stringify(si_u_t(pg_sum.stats.sum.num_objects));
@@ -1045,7 +1077,7 @@ void PGMap::Incremental::generate_test_instances(list<PGMap::Incremental*>& o)
 
 void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
 {
-  assert(inc.version == version+1);
+  ceph_assert(inc.version == version+1);
   version++;
 
   pool_stat_t pg_sum_old = pg_sum;
@@ -1094,7 +1126,9 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
       stat_pg_sub(removed_pg, s->second);
       pg_stat.erase(s);
     }
-    deleted_pools.insert(removed_pg.pool());
+    if (removed_pg.ps() == 0) {
+      deleted_pools.insert(removed_pg.pool());
+    }
   }
 
   for (auto p = inc.get_osd_stat_rm().begin();
@@ -1120,7 +1154,7 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
     pg_sum_delta.stats.add(d.stats);
     auto smooth_intervals =
       cct ? cct->_conf.get_val<uint64_t>("mon_stat_smooth_intervals") : 1;
-    if (pg_sum_deltas.size() > smooth_intervals) {
+    while (pg_sum_deltas.size() > smooth_intervals) {
       pg_sum_delta.stats.sub(pg_sum_deltas.front().first.stats);
       stamp_delta -= pg_sum_deltas.front().second;
       pg_sum_deltas.pop_front();
@@ -1154,6 +1188,7 @@ void PGMap::calc_stats()
   pg_sum = pool_stat_t();
   osd_sum = osd_stat_t();
   num_pg_by_state.clear();
+  num_pg_by_pool_state.clear();
   num_pg_by_osd.clear();
 
   for (auto p = pg_stat.begin();
@@ -1175,6 +1210,7 @@ void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s,
 
   num_pg++;
   num_pg_by_state[s.state]++;
+  num_pg_by_pool_state[pgid.pool()][s.state]++;
   num_pg_by_pool[pgid.pool()]++;
 
   if ((s.state & PG_STATE_CREATING) &&
@@ -1224,11 +1260,15 @@ void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
 
   num_pg--;
   int end = --num_pg_by_state[s.state];
-  assert(end >= 0);
+  ceph_assert(end >= 0);
   if (end == 0)
     num_pg_by_state.erase(s.state);
+  if (--num_pg_by_pool_state[pgid.pool()][s.state] == 0) {
+    num_pg_by_pool_state[pgid.pool()].erase(s.state);
+  }
   end = --num_pg_by_pool[pgid.pool()];
   if (end == 0) {
+    num_pg_by_pool_state.erase(pgid.pool());
     num_pg_by_pool.erase(pgid.pool());
     pg_pool_sum.erase(pgid.pool());
   }
@@ -1260,7 +1300,7 @@ void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
        p != s.blocked_by.end();
        ++p) {
     auto q = blocked_by_sum.find(*p);
-    assert(q != blocked_by_sum.end());
+    ceph_assert(q != blocked_by_sum.end());
     --q->second;
     if (q->second == 0)
       blocked_by_sum.erase(q);
@@ -1328,7 +1368,7 @@ void PGMap::stat_osd_sub(int osd, const osd_stat_t &s)
 {
   num_osd--;
   osd_sum.sub(s);
-  assert(osd < (int)osd_last_seq.size());
+  ceph_assert(osd < (int)osd_last_seq.size());
   osd_last_seq[osd] = 0;
 }
 
@@ -1694,7 +1734,7 @@ void PGMap::get_stuck_stats(
   int types, const utime_t cutoff,
   mempool::pgmap::unordered_map<pg_t, pg_stat_t>& stuck_pgs) const
 {
-  assert(types != 0);
+  ceph_assert(types != 0);
   for (auto i = pg_stat.begin();
        i != pg_stat.end();
        ++i) {
@@ -1962,7 +2002,7 @@ void PGMap::update_delta(
     result_pool_delta->stats.add(d.stats);
   }
   size_t s = cct ? cct->_conf.get_val<uint64_t>("mon_stat_smooth_intervals") : 1;
-  if (delta_avg_list->size() > s) {
+  while (delta_avg_list->size() > s) {
     result_pool_delta->stats.sub(delta_avg_list->front().first.stats);
     *result_ts_delta -= delta_avg_list->front().second;
     delta_avg_list->pop_front();
@@ -1984,8 +2024,8 @@ void PGMap::update_one_pool_delta(
   const pool_stat_t& old_pool_sum)
 {
   if (per_pool_sum_deltas.count(pool) == 0) {
-    assert(per_pool_sum_deltas_stamps.count(pool) == 0);
-    assert(per_pool_sum_delta.count(pool) == 0);
+    ceph_assert(per_pool_sum_deltas_stamps.count(pool) == 0);
+    ceph_assert(per_pool_sum_delta.count(pool) == 0);
   }
 
   auto& sum_delta = per_pool_sum_delta[pool];
@@ -2046,9 +2086,11 @@ void PGMap::get_filtered_pg_stats(uint64_t state, int64_t poolid, int64_t osdid,
       continue;
     if ((osdid >= 0) && !(i->second.is_acting_osd(osdid,primary)))
       continue;
-    if (!(i->second.state & state))
-      continue;
-    pgs.insert(i->first);
+    if (state == (uint64_t)-1 ||                 // "all"
+	(i->second.state & state) ||             // matches a state bit
+	(state == 0 && i->second.state == 0)) {  // matches "unknown" (== 0)
+      pgs.insert(i->first);
+    }
   }
 }
 
@@ -2567,19 +2609,24 @@ void PGMap::get_health_checks(
       if (!pi)
 	continue;   // in case osdmap changes haven't propagated to PGMap yet
       const string& name = osdmap.get_pool_name(p->first);
-      if (pi->get_pg_num() > pi->get_pgp_num() &&
+      // NOTE: we use pg_num_target and pgp_num_target for the purposes of
+      // the warnings.  If the cluster is failing to converge on the target
+      // values that is a separate issue!
+      if (pi->get_pg_num_target() > pi->get_pgp_num_target() &&
 	  !(name.find(".DELETED") != string::npos &&
 	    cct->_conf->mon_fake_pool_delete)) {
 	ostringstream ss;
 	ss << "pool " << name << " pg_num "
-	   << pi->get_pg_num() << " > pgp_num " << pi->get_pgp_num();
+	   << pi->get_pg_num_target()
+	   << " > pgp_num " << pi->get_pgp_num_target();
 	pgp_detail.push_back(ss.str());
       }
       int average_objects_per_pg = pg_sum.stats.sum.num_objects / pg_stat.size();
       if (average_objects_per_pg > 0 &&
           pg_sum.stats.sum.num_objects >= mon_pg_warn_min_objects &&
           p->second.stats.sum.num_objects >= mon_pg_warn_min_pool_objects) {
-	int objects_per_pg = p->second.stats.sum.num_objects / pi->get_pg_num();
+	int objects_per_pg = p->second.stats.sum.num_objects /
+	  pi->get_pg_num_target();
 	float ratio = (float)objects_per_pg / (float)average_objects_per_pg;
 	if (mon_pg_warn_max_object_skew > 0 &&
 	    ratio > mon_pg_warn_max_object_skew) {
@@ -2685,7 +2732,8 @@ void PGMap::get_health_checks(
 
   // OBJECT_MISPLACED
   if (pg_sum.stats.sum.num_objects_misplaced &&
-      pg_sum.stats.sum.num_object_copies > 0) {
+      pg_sum.stats.sum.num_object_copies > 0 &&
+      cct->_conf->mon_warn_on_misplaced) {
     double pc = (double)pg_sum.stats.sum.num_objects_misplaced /
       (double)pg_sum.stats.sum.num_object_copies * (double)100.0;
     char b[20];
@@ -3291,7 +3339,8 @@ void PGMapUpdater::check_osd_map(
     }
   }
 
-  // new pgs (split or new pool)?
+  // new (split or new pool) or merged pgs?
+  map<int64_t,unsigned> new_pg_num;
   for (auto& p : osdmap.get_pools()) {
     int64_t poolid = p.first;
     const pg_pool_t& pi = p.second;
@@ -3300,9 +3349,10 @@ void PGMapUpdater::check_osd_map(
     if (q != pgmap.num_pg_by_pool.end())
       my_pg_num = q->second;
     unsigned pg_num = pi.get_pg_num();
-    if (my_pg_num != pg_num) {
+    new_pg_num[poolid] = pg_num;
+    if (my_pg_num < pg_num) {
       ldout(cct,10) << __func__ << " pool " << poolid << " pg_num " << pg_num
-		    << " != my pg_num " << my_pg_num << dendl;
+		    << " > my pg_num " << my_pg_num << dendl;
       for (unsigned ps = my_pg_num; ps < pg_num; ++ps) {
 	pg_t pgid(ps, poolid);
 	if (pending_inc->pg_stat_updates.count(pgid) == 0) {
@@ -3321,6 +3371,29 @@ void PGMapUpdater::check_osd_map(
 	  stats.last_clean_scrub_stamp = osdmap.get_modified();
 	}
       }
+    } else if (my_pg_num > pg_num) {
+      ldout(cct,10) << __func__ << " pool " << poolid << " pg_num " << pg_num
+		    << " < my pg_num " << my_pg_num << dendl;
+      for (unsigned i = pg_num; i < my_pg_num; ++i) {
+	pg_t pgid(i, poolid);
+	ldout(cct,20) << __func__ << " removing merged " << pgid << dendl;
+	if (pgmap.pg_stat.count(pgid)) {
+	  pending_inc->pg_remove.insert(pgid);
+	}
+	pending_inc->pg_stat_updates.erase(pgid);
+      }
+    }
+  }
+  auto i = pending_inc->pg_stat_updates.begin();
+  while (i != pending_inc->pg_stat_updates.end()) {
+    auto j = new_pg_num.find(i->first.pool());
+    if (j == new_pg_num.end() ||
+	i->first.ps() >= j->second) {
+      ldout(cct,20) << __func__ << " removing pending update to old "
+		    << i->first << dendl;
+      i = pending_inc->pg_stat_updates.erase(i);
+    } else {
+      ++i;
     }
   }
 }
@@ -3385,7 +3458,7 @@ void PGMapUpdater::check_down_pgs(
 	}
 	for (auto pgid : p->second) {
 	  const pg_stat_t &stat = pg_map.pg_stat.at(pgid);
-	  assert(stat.acting_primary == osd);
+	  ceph_assert(stat.acting_primary == osd);
 	  _try_mark_pg_stale(osdmap, pgid, stat, pending_inc);
 	}
       }

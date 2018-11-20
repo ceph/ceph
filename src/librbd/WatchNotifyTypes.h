@@ -65,6 +65,7 @@ enum NotifyOp {
   NOTIFY_OP_SNAP_UNPROTECT     = 13,
   NOTIFY_OP_RENAME             = 14,
   NOTIFY_OP_UPDATE_FEATURES    = 15,
+  NOTIFY_OP_MIGRATE            = 16,
 };
 
 struct AcquiredLockPayload {
@@ -301,6 +302,14 @@ struct UpdateFeaturesPayload {
   void dump(Formatter *f) const;
 };
 
+struct MigratePayload : public AsyncRequestPayloadBase {
+  static const NotifyOp NOTIFY_OP = NOTIFY_OP_MIGRATE;
+  static const bool CHECK_FOR_REFRESH = true;
+
+  MigratePayload() {}
+  MigratePayload(const AsyncRequestId &id) : AsyncRequestPayloadBase(id) {}
+};
+
 struct UnknownPayload {
   static const NotifyOp NOTIFY_OP = static_cast<NotifyOp>(-1);
   static const bool CHECK_FOR_REFRESH = false;
@@ -326,6 +335,7 @@ typedef boost::variant<AcquiredLockPayload,
                        RebuildObjectMapPayload,
                        RenamePayload,
                        UpdateFeaturesPayload,
+                       MigratePayload,
                        UnknownPayload> Payload;
 
 struct NotifyMessage {

@@ -12,6 +12,8 @@ set(mgr_srcs
   Gil.cc
   Mgr.cc
   MgrStandby.cc
+  OSDPerfMetricTypes.cc
+  OSDPerfMetricCollector.cc
   PyFormatter.cc
   PyModule.cc
   PyModuleRegistry.cc
@@ -24,7 +26,8 @@ target_include_directories(ceph-mgr SYSTEM PRIVATE "${PYTHON_INCLUDE_DIRS}")
 target_link_libraries(ceph-mgr
   osdc client heap_profiler
   global-static ceph-common
-  Boost::python ${MGR_PYTHON_LIBRARIES} ${CMAKE_DL_LIBS})
+  Boost::python${MGR_PYTHON_VERSION_MAJOR}${MGR_PYTHON_VERSION_MINOR}
+  ${MGR_PYTHON_LIBRARIES} ${CMAKE_DL_LIBS})
 set_target_properties(ceph-mgr PROPERTIES
   POSITION_INDEPENDENT_CODE ${EXE_LINKER_USE_PIE})
 install(TARGETS ceph-mgr DESTINATION bin)

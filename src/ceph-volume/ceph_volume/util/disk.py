@@ -29,6 +29,79 @@ def get_partuuid(device):
     return ' '.join(out).strip()
 
 
+def _blkid_parser(output):
+    """
+    Parses the output from a system ``blkid`` call, requires output to be
+    produced using the ``-p`` flag which bypasses the cache, mangling the
+    names. These names are corrected to what it would look like without the
+    ``-p`` flag.
+
+    Normal output::
+
+        /dev/sdb1: UUID="62416664-cbaf-40bd-9689-10bd337379c3" TYPE="xfs" [...]
+    """
+    # first spaced separated item is garbage, gets tossed:
+    output = ' '.join(output.split()[1:])
+    # split again, respecting possible whitespace in quoted values
+    pairs = output.split('" ')
+    raw = {}
+    processed = {}
+    mapping = {
+        'UUID': 'UUID',
+        'TYPE': 'TYPE',
+        'PART_ENTRY_NAME': 'PARTLABEL',
+        'PART_ENTRY_UUID': 'PARTUUID',
+        'PTTYPE': 'PTTYPE',
+    }
+
+    for pair in pairs:
+        try:
+            column, value = pair.split('=')
+        except ValueError:
+            continue
+        raw[column] = value.strip().strip().strip('"')
+
+    for key, value in raw.items():
+        new_key = mapping.get(key)
+        if not new_key:
+            continue
+        processed[new_key] = value
+
+    return processed
+
+
+def blkid(device):
+    """
+    The blkid interface to its CLI, creating an output similar to what is
+    expected from ``lsblk``. In most cases, ``lsblk()`` should be the preferred
+    method for extracting information about a device. There are some corner
+    cases where it might provide information that is otherwise unavailable.
+
+    The system call uses the ``-p`` flag which bypasses the cache, the caveat
+    being that the keys produced are named completely different to expected
+    names.
+
+    For example, instead of ``PARTLABEL`` it provides a ``PART_ENTRY_NAME``.
+    A bit of translation between these known keys is done, which is why
+    ``lsblk`` should always be preferred: the output provided here is not as
+    rich, given that a translation of keys is required for a uniform interface
+    with the ``-p`` flag.
+
+    Label name to expected output chart:
+
+    cache bypass name               expected name
+
+    UUID                            UUID
+    TYPE                            TYPE
+    PART_ENTRY_NAME                 PARTLABEL
+    PART_ENTRY_UUID                 PARTUUID
+    """
+    out, err, rc = process.call(
+        ['blkid', '-p', device]
+    )
+    return _blkid_parser(' '.join(out))
+
+
 def get_part_entry_type(device):
     """
     Parses the ``ID_PART_ENTRY_TYPE`` from the "low level" (bypasses the cache)
@@ -331,6 +404,12 @@ class BaseFloatUnit(float):
             suffix=self.__class__.__name__.split('Float')[-1]
         )
 
+    def as_int(self):
+        return int(self.real)
+
+    def as_float(self):
+        return self.real
+
 
 class FloatB(BaseFloatUnit):
     pass
@@ -432,7 +511,7 @@ class Size(object):
 
         for k, v in kw.items():
             self._convert(v, k)
-            # only pursue the first occurence
+            # only pursue the first occurrence
             break
 
     def _convert(self, size, unit):
@@ -484,33 +563,33 @@ class Size(object):
 
     def __add__(self, other):
         if isinstance(other, Size):
-            self._b = self._b + other._b
-            return self
+            _b = self._b + other._b
+            return Size(b=_b)
         raise TypeError('Cannot add "Size" object with int')
 
     def __sub__(self, other):
         if isinstance(other, Size):
-            self._b = self._b - other._b
-            return self
+            _b = self._b - other._b
+            return Size(b=_b)
         raise TypeError('Cannot subtract "Size" object from int')
 
     def __mul__(self, other):
         if isinstance(other, Size):
             raise TypeError('Cannot multiply with "Size" object')
-        self._b = self._b * other
-        return self
+        _b = self._b * other
+        return Size(b=_b)
 
     def __truediv__(self, other):
         if isinstance(other, Size):
-            raise TypeError('Cannot divide by "Size" object')
-        self._b = self._b / other
-        return self
+            return self._b / other._b
+        _b = self._b / other
+        return Size(b=_b)
 
     def __div__(self, other):
         if isinstance(other, Size):
-            raise TypeError('Cannot divide by "Size" object')
-        self._b = self._b / other
-        return self
+            return self._b / other._b
+        _b = self._b / other
+        return Size(b=_b)
 
     def __getattr__(self, unit):
         """
@@ -575,6 +654,28 @@ def is_mapper_device(device_name):
     return device_name.startswith(('/dev/mapper', '/dev/dm-'))
 
 
+def is_locked_raw_device(disk_path):
+    """
+    A device can be locked by a third party software like a database.
+    To detect that case, the device is opened in Read/Write and exclusive mode
+    """
+    open_flags = (os.O_RDWR | os.O_EXCL)
+    open_mode = 0
+    fd = None
+
+    try:
+        fd = os.open(disk_path, open_flags, open_mode)
+    except OSError:
+        return 1
+
+    try:
+        os.close(fd)
+    except OSError:
+        return 1
+
+    return 0
+
+
 def get_devices(_sys_block_path='/sys/block', _dev_path='/dev', _mapper_path='/dev/mapper'):
     """
     Captures all available devices from /sys/block/, including its partitions,
@@ -608,18 +709,20 @@ def get_devices(_sys_block_path='/sys/block', _dev_path='/dev', _mapper_path='/d
         # Ensure that the diskname is an absolute path and that it never points
         # to a /dev/dm-* device
         diskname = mapper_devs.get(block) or dev_devs.get(block)
+        if not diskname:
+            continue
 
         # If the mapper device is a logical volume it gets excluded
         if is_mapper_device(diskname):
             if lvm.is_lv(diskname):
                 continue
 
-        # If the device reports itself as 'removable', get it excluded
         metadata['removable'] = get_file_contents(os.path.join(sysdir, 'removable'))
-        if metadata['removable'] == '1':
-            continue
+        # Is the device read-only ?
+        metadata['ro'] = get_file_contents(os.path.join(sysdir, 'ro'))
 
-        for key in ['vendor', 'model', 'sas_address', 'sas_device_handle']:
+
+        for key in ['vendor', 'model', 'rev', 'sas_address', 'sas_device_handle']:
             metadata[key] = get_file_contents(sysdir + "/device/" + key)
 
         for key in ['sectors', 'size']:
@@ -630,7 +733,9 @@ def get_devices(_sys_block_path='/sys/block', _dev_path='/dev', _mapper_path='/d
 
         metadata['partitions'] = get_partitions_facts(sysdir)
 
-        metadata['rotational'] = get_file_contents(sysdir + "/queue/rotational")
+        for key in ['rotational', 'nr_requests']:
+            metadata[key] = get_file_contents(sysdir + "/queue/" + key)
+
         metadata['scheduler_mode'] = ""
         scheduler = get_file_contents(sysdir + "/queue/scheduler")
         if scheduler is not None:
@@ -647,6 +752,7 @@ def get_devices(_sys_block_path='/sys/block', _dev_path='/dev', _mapper_path='/d
         metadata['human_readable_size'] = human_readable_size(float(size) * 512)
         metadata['size'] = float(size) * 512
         metadata['path'] = diskname
+        metadata['locked'] = is_locked_raw_device(metadata['path'])
 
         device_facts[diskname] = metadata
     return device_facts

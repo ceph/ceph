@@ -3,6 +3,7 @@
 
 #include "rgw_common.h"
 #include "rgw_rados.h"
+#include "rgw_zone.h"
 #include "rgw_log.h"
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h"
@@ -381,7 +382,7 @@ static struct rgw_flags_desc op_type_flags[] = {
  { 0, NULL }
 };
 
-static void op_type_to_str(uint32_t mask, char *buf, int len)
+extern void op_type_to_str(uint32_t mask, char *buf, int len)
 {
   return mask_to_str(op_type_flags, mask, buf, len);
 }
@@ -456,8 +457,6 @@ void RGWUserInfo::dump(Formatter *f) const
   encode_json("email", user_email, f);
   encode_json("suspended", (int)suspended, f);
   encode_json("max_buckets", (int)max_buckets, f);
-
-  encode_json("auid", auid, f);
 
   encode_json_map("subusers", NULL, "subuser", NULL, user_info_dump_subuser,(void *)this, subusers, f);
   encode_json_map("keys", NULL, "key", NULL, user_info_dump_key,(void *)this, access_keys, f);
@@ -535,7 +534,6 @@ void RGWUserInfo::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("suspended", susp, obj);
   suspended = (__u8)susp;
   JSONDecoder::decode_json("max_buckets", max_buckets, obj);
-  JSONDecoder::decode_json("auid", auid, obj);
 
   JSONDecoder::decode_json("keys", access_keys, decode_access_keys, obj);
   JSONDecoder::decode_json("swift_keys", swift_keys, decode_swift_keys, obj);

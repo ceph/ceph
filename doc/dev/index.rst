@@ -53,10 +53,13 @@ their nicks on `GitHub`_:
 Scope     Lead             GitHub nick
 ========= ================ =============
 Ceph      Sage Weil        liewegas
-RADOS     Josh Durgin      jdurgin
+RADOS     Neha Ojha        neha-ojha
 RGW       Yehuda Sadeh     yehudasa
+RGW       Matt Benjamin    mattbenjamin
 RBD       Jason Dillaman   dillaman
 CephFS    Patrick Donnelly batrick
+Dashboard Lenz Grimmer     LenzGr
+MON       Joao Luis        jecluis
 Build/Ops Ken Dreyer       ktdreyer
 ========= ================ =============
 
@@ -820,7 +823,7 @@ The ``suites`` directory of the `ceph/qa sub-directory`_ contains
 all the integration tests, for all the Ceph components.
 
 `ceph-deploy <https://github.com/ceph/ceph/tree/master/qa/suites/ceph-deploy>`_
-  install a Ceph cluster with ``ceph-deploy`` (`ceph-deploy man page`_)
+  install a Ceph cluster with ``ceph-deploy`` (:ref:`ceph-deploy man page <ceph-deploy>`)
 
 `dummy <https://github.com/ceph/ceph/tree/master/qa/suites/dummy>`_
   get a machine, do nothing and return success (commonly used to

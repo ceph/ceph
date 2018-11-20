@@ -145,6 +145,9 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
      entry = update_entry;
 
      ret = 0;
+    } else if (op.add) {
+      // bucket id may have changed (ie reshard)
+      entry.bucket.bucket_id = update_entry.bucket.bucket_id;
     }
 
     if (ret < 0) {
@@ -254,17 +257,23 @@ static int cls_user_remove_bucket(cls_method_context_t hctx, bufferlist *in, buf
     return ret;
   }
 
-  if (entry.user_stats_sync) {
-    dec_header_stats(&header.stats, entry);
-  }
-
   CLS_LOG(20, "removing entry at %s", key.c_str());
 
   ret = remove_entry(hctx, key);
   if (ret < 0)
     return ret;
-  
-  return 0;
+
+  if (!entry.user_stats_sync) {
+    return 0;
+  }
+
+  dec_header_stats(&header.stats, entry);
+
+  CLS_LOG(20, "header: total bytes=%lld entries=%lld", (long long)header.stats.total_bytes, (long long)header.stats.total_entries);
+
+  bufferlist bl;
+  encode(header, bl);
+  return cls_cxx_map_write_header(hctx, &bl);
 }
 
 static int cls_user_list_buckets(cls_method_context_t hctx, bufferlist *in, bufferlist *out)

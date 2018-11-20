@@ -177,7 +177,7 @@ class EventCenter {
 
   int process_time_events();
   FileEvent *_get_file_event(int fd) {
-    assert(fd < nevent);
+    ceph_assert(fd < nevent);
     return &file_events[fd];
   }
 
@@ -234,7 +234,7 @@ class EventCenter {
         delete this;
     }
     void wait() {
-      assert(!nonwait);
+      ceph_assert(!nonwait);
       std::unique_lock<std::mutex> l(lock);
       while (!done)
         cond.wait(l);
@@ -244,9 +244,9 @@ class EventCenter {
  public:
   template <typename func>
   void submit_to(int i, func &&f, bool nowait = false) {
-    assert(i < MAX_EVENTCENTER && global_centers);
+    ceph_assert(i < MAX_EVENTCENTER && global_centers);
     EventCenter *c = global_centers->centers[i];
-    assert(c);
+    ceph_assert(c);
     if (!nowait && c->in_thread()) {
       f();
       return ;

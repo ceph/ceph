@@ -43,7 +43,6 @@ public:
 };
 
 const uint64_t _1m = 1024 * 1024;
-const uint64_t _2m = 2 * 1024 * 1024;
 
 void dump_mempools()
 {
@@ -70,8 +69,8 @@ public:
   AllocTracker(uint64_t capacity, uint64_t alloc_unit)
     : u1(0, capacity)
   {
-    assert(alloc_unit >= 0x100);
-    assert(capacity <= (uint64_t(1) << 48)); // we use 5 octets (bytes 1 - 5) to store
+    ceph_assert(alloc_unit >= 0x100);
+    ceph_assert(capacity <= (uint64_t(1) << 48)); // we use 5 octets (bytes 1 - 5) to store
 				 // offset to save the required space.
 				 // This supports capacity up to 281 TB
 
@@ -89,9 +88,9 @@ public:
 
   bool push(uint64_t offs, uint32_t len)
   {
-    assert((len & 0xff) == 0);
-    assert((offs & 0xff) == 0);
-    assert((offs & 0xffff000000000000) == 0);
+    ceph_assert((len & 0xff) == 0);
+    ceph_assert((offs & 0xff) == 0);
+    ceph_assert((offs & 0xffff000000000000) == 0);
 
     if (head + 1 == tail)
       return false;
@@ -150,7 +149,8 @@ TEST_P(AllocTest, test_alloc_bench_seq)
   for (uint64_t i = 0; i < capacity; i += want_size)
   {
     tmp.clear();
-    EXPECT_EQ(want_size, alloc->allocate(want_size, alloc_unit, 0, 0, &tmp));
+    EXPECT_EQ(static_cast<int64_t>(want_size),
+	      alloc->allocate(want_size, alloc_unit, 0, 0, &tmp));
     if (0 == (i % (1 * 1024 * _1m))) {
       std::cout << "alloc " << i / 1024 / 1024 << " mb of "
         << capacity / 1024 / 1024 << std::endl;

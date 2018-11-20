@@ -16,7 +16,7 @@
 #include "librbd/journal/Types.h"
 #include "librbd/journal/TypeTraits.h"
 #include "ProgressContext.h"
-#include "types.h"
+#include "tools/rbd_mirror/Types.h"
 #include "tools/rbd_mirror/image_replayer/Types.h"
 
 #include <boost/noncopyable.hpp>

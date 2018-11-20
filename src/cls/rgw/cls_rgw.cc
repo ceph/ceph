@@ -597,6 +597,7 @@ int rgw_bucket_update_stats(cls_method_context_t hctx, bufferlist *in, bufferlis
       dest.total_size += s.second.total_size;
       dest.total_size_rounded += s.second.total_size_rounded;
       dest.num_entries += s.second.num_entries;
+      dest.actual_size += s.second.actual_size;
     }
   }
 
@@ -2837,21 +2838,21 @@ static void usage_record_prefix_by_time(uint64_t epoch, string& key)
   key = buf;
 }
 
-static void usage_record_prefix_by_user(string& user, uint64_t epoch, string& key)
+static void usage_record_prefix_by_user(const string& user, uint64_t epoch, string& key)
 {
   char buf[user.size() + 32];
   snprintf(buf, sizeof(buf), "%s_%011llu_", user.c_str(), (long long unsigned)epoch);
   key = buf;
 }
 
-static void usage_record_name_by_time(uint64_t epoch, const string& user, string& bucket, string& key)
+static void usage_record_name_by_time(uint64_t epoch, const string& user, const string& bucket, string& key)
 {
   char buf[32 + user.size() + bucket.size()];
   snprintf(buf, sizeof(buf), "%011llu_%s_%s", (long long unsigned)epoch, user.c_str(), bucket.c_str());
   key = buf;
 }
 
-static void usage_record_name_by_user(const string& user, uint64_t epoch, string& bucket, string& key)
+static void usage_record_name_by_user(const string& user, uint64_t epoch, const string& bucket, string& key)
 {
   char buf[32 + user.size() + bucket.size()];
   snprintf(buf, sizeof(buf), "%s_%011llu_%s", user.c_str(), (long long unsigned)epoch, bucket.c_str());
@@ -2929,8 +2930,8 @@ int rgw_user_usage_log_add(cls_method_context_t hctx, bufferlist *in, bufferlist
   return 0;
 }
 
-static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64_t end,
-                            string& user, string& key_iter, uint32_t max_entries, bool *truncated,
+static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64_t end, const string& user,
+                            const string& bucket, string& key_iter, uint32_t max_entries, bool *truncated,
                             int (*cb)(cls_method_context_t, const string&, rgw_usage_log_entry&, void *),
                             void *param)
 {
@@ -2945,7 +2946,7 @@ static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64
   string user_key;
   bool truncated_status = false;
 
-  assert(truncated != nullptr);
+  ceph_assert(truncated != nullptr);
 
   if (!by_user) {
     usage_record_prefix_by_time(end, end_key);
@@ -2998,6 +2999,9 @@ static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64
     ret = usage_record_decode(iter->second, e);
     if (ret < 0)
       return ret;
+
+    if (!bucket.empty() && bucket.compare(e.bucket))
+      continue;
 
     if (e.epoch < start)
       continue;
@@ -3056,7 +3060,7 @@ int rgw_user_usage_log_read(cls_method_context_t hctx, bufferlist *in, bufferlis
   string iter = op.iter;
 #define MAX_ENTRIES 1000
   uint32_t max_entries = (op.max_entries ? op.max_entries : MAX_ENTRIES);
-  int ret = usage_iterate_range(hctx, op.start_epoch, op.end_epoch, op.owner, iter, max_entries, &ret_info.truncated, usage_log_read_cb, (void *)usage);
+  int ret = usage_iterate_range(hctx, op.start_epoch, op.end_epoch, op.owner, op.bucket, iter, max_entries, &ret_info.truncated, usage_log_read_cb, (void *)usage);
   if (ret < 0)
     return ret;
 
@@ -3110,7 +3114,7 @@ int rgw_user_usage_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlis
   bool more;
   bool found = false;
 #define MAX_USAGE_TRIM_ENTRIES 128
-  ret = usage_iterate_range(hctx, op.start_epoch, op.end_epoch, op.user, iter, MAX_USAGE_TRIM_ENTRIES, &more, usage_log_trim_cb, (void *)&found);
+  ret = usage_iterate_range(hctx, op.start_epoch, op.end_epoch, op.user, op.bucket, iter, MAX_USAGE_TRIM_ENTRIES, &more, usage_log_trim_cb, (void *)&found);
   if (ret < 0)
     return ret;
 
@@ -3317,7 +3321,7 @@ static int gc_iterate_entries(cls_method_context_t hctx, const string& marker, b
     get_time_key(now, &now_str);
     prepend_index_prefix(now_str, GC_OBJ_TIME_INDEX, &end_key);
 
-    CLS_LOG(0, "gc_iterate_entries end_key=%s\n", end_key.c_str());
+    CLS_LOG(10, "gc_iterate_entries end_key=%s\n", end_key.c_str());
   }
 
   string filter;
@@ -3763,7 +3767,7 @@ static int rgw_set_bucket_resharding(cls_method_context_t hctx, bufferlist *in, 
 
 static int rgw_clear_bucket_resharding(cls_method_context_t hctx, bufferlist *in,  bufferlist *out)
 {
-  cls_rgw_set_bucket_resharding_op op;
+  cls_rgw_clear_bucket_resharding_op op;
 
   auto in_iter = in->cbegin();
   try {
@@ -3919,8 +3923,8 @@ CLS_INIT(rgw)
   cls_register_cxx_method(h_class, RGW_BI_LOG_TRIM, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bi_log_trim, &h_rgw_bi_log_list_op);
   cls_register_cxx_method(h_class, RGW_DIR_SUGGEST_CHANGES, CLS_METHOD_RD | CLS_METHOD_WR, rgw_dir_suggest_changes, &h_rgw_dir_suggest_changes);
 
-  cls_register_cxx_method(h_class, "bi_log_resync", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bi_log_resync, &h_rgw_bi_log_resync_op);
-  cls_register_cxx_method(h_class, "bi_log_stop", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bi_log_stop, &h_rgw_bi_log_stop_op);
+  cls_register_cxx_method(h_class, RGW_BI_LOG_RESYNC, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bi_log_resync, &h_rgw_bi_log_resync_op);
+  cls_register_cxx_method(h_class, RGW_BI_LOG_STOP, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bi_log_stop, &h_rgw_bi_log_stop_op);
 
   /* usage logging */
   cls_register_cxx_method(h_class, RGW_USER_USAGE_LOG_ADD, CLS_METHOD_RD | CLS_METHOD_WR, rgw_user_usage_log_add, &h_rgw_user_usage_log_add);
@@ -3941,17 +3945,21 @@ CLS_INIT(rgw)
   cls_register_cxx_method(h_class, RGW_LC_PUT_HEAD, CLS_METHOD_RD| CLS_METHOD_WR, rgw_cls_lc_put_head, &h_rgw_lc_put_head);
   cls_register_cxx_method(h_class, RGW_LC_GET_HEAD, CLS_METHOD_RD, rgw_cls_lc_get_head, &h_rgw_lc_get_head);
   cls_register_cxx_method(h_class, RGW_LC_LIST_ENTRIES, CLS_METHOD_RD, rgw_cls_lc_list_entries, &h_rgw_lc_list_entries);
-  cls_register_cxx_method(h_class, "reshard_add", CLS_METHOD_RD | CLS_METHOD_WR, rgw_reshard_add, &h_rgw_reshard_add);
-  cls_register_cxx_method(h_class, "reshard_list", CLS_METHOD_RD, rgw_reshard_list, &h_rgw_reshard_list);
-  cls_register_cxx_method(h_class, "reshard_get", CLS_METHOD_RD,rgw_reshard_get, &h_rgw_reshard_get);
-  cls_register_cxx_method(h_class, "reshard_remove", CLS_METHOD_RD | CLS_METHOD_WR, rgw_reshard_remove, &h_rgw_reshard_remove);
-  cls_register_cxx_method(h_class, "set_bucket_resharding", CLS_METHOD_RD | CLS_METHOD_WR,
+
+  /* resharding */
+  cls_register_cxx_method(h_class, RGW_RESHARD_ADD, CLS_METHOD_RD | CLS_METHOD_WR, rgw_reshard_add, &h_rgw_reshard_add);
+  cls_register_cxx_method(h_class, RGW_RESHARD_LIST, CLS_METHOD_RD, rgw_reshard_list, &h_rgw_reshard_list);
+  cls_register_cxx_method(h_class, RGW_RESHARD_GET, CLS_METHOD_RD,rgw_reshard_get, &h_rgw_reshard_get);
+  cls_register_cxx_method(h_class, RGW_RESHARD_REMOVE, CLS_METHOD_RD | CLS_METHOD_WR, rgw_reshard_remove, &h_rgw_reshard_remove);
+
+  /* resharding attribute  */
+  cls_register_cxx_method(h_class, RGW_SET_BUCKET_RESHARDING, CLS_METHOD_RD | CLS_METHOD_WR,
 			  rgw_set_bucket_resharding, &h_rgw_set_bucket_resharding);
-  cls_register_cxx_method(h_class, "clear_bucket_resharding", CLS_METHOD_RD | CLS_METHOD_WR,
+  cls_register_cxx_method(h_class, RGW_CLEAR_BUCKET_RESHARDING, CLS_METHOD_RD | CLS_METHOD_WR,
 			  rgw_clear_bucket_resharding, &h_rgw_clear_bucket_resharding);
-  cls_register_cxx_method(h_class, "guard_bucket_resharding", CLS_METHOD_RD ,
+  cls_register_cxx_method(h_class, RGW_GUARD_BUCKET_RESHARDING, CLS_METHOD_RD ,
 			  rgw_guard_bucket_resharding, &h_rgw_guard_bucket_resharding);
-  cls_register_cxx_method(h_class, "get_bucket_resharding", CLS_METHOD_RD ,
+  cls_register_cxx_method(h_class, RGW_GET_BUCKET_RESHARDING, CLS_METHOD_RD ,
 			  rgw_get_bucket_resharding, &h_rgw_get_bucket_resharding);
 
   return;

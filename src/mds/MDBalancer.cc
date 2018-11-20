@@ -27,7 +27,6 @@
 
 #include "include/Context.h"
 #include "msg/Messenger.h"
-#include "messages/MHeartbeat.h"
 
 #include <fstream>
 #include <iostream>
@@ -60,18 +59,17 @@ using std::chrono::duration_cast;
 #define MIN_OFFLOAD 10   // point at which i stop trying, close enough
 
 
-/* This function DOES put the passed message before returning */
-int MDBalancer::proc_message(Message *m)
+int MDBalancer::proc_message(const Message::const_ref &m)
 {
   switch (m->get_type()) {
 
   case MSG_MDS_HEARTBEAT:
-    handle_heartbeat(static_cast<MHeartbeat*>(m));
+    handle_heartbeat(MHeartbeat::msgref_cast(m));
     break;
 
   default:
     derr << " balancer unknown message " << m->get_type() << dendl_impl;
-    assert(0 == "balancer unknown message");
+    ceph_abort_msg("balancer unknown message");
   }
 
   return 0;
@@ -102,7 +100,7 @@ void MDBalancer::handle_export_pins(void)
   while (it != q.end()) {
     auto cur = it++;
     CInode *in = *cur;
-    assert(in->is_dir());
+    ceph_assert(in->is_dir());
     mds_rank_t export_pin = in->get_export_pin(false);
 
     bool remove = true;
@@ -392,23 +390,22 @@ void MDBalancer::send_heartbeat()
 
   set<mds_rank_t> up;
   mds->get_mds_map()->get_up_mds_set(up);
-  for (set<mds_rank_t>::iterator p = up.begin(); p != up.end(); ++p) {
-    if (*p == mds->get_nodeid())
+  for (const auto& r : up) {
+    if (r == mds->get_nodeid())
       continue;
-    MHeartbeat *hb = new MHeartbeat(load, beat_epoch);
+    auto hb = MHeartbeat::create(load, beat_epoch);
     hb->get_import_map() = import_map;
-    messenger->send_to_mds(hb, mds->mdsmap->get_addrs(*p));
+    mds->send_message_mds(hb, r);
   }
 }
 
-/* This function DOES put the passed message before returning */
-void MDBalancer::handle_heartbeat(MHeartbeat *m)
+void MDBalancer::handle_heartbeat(const MHeartbeat::const_ref &m)
 {
   mds_rank_t who = mds_rank_t(m->get_source().num());
   dout(25) << "=== got heartbeat " << m->get_beat() << " from " << m->get_source().num() << " " << m->get_load() << dendl;
 
   if (!mds->is_active())
-    goto out;
+    return;
 
   if (!mds->mdcache->is_open()) {
     dout(10) << "opening root on handle_heartbeat" << dendl;
@@ -418,7 +415,7 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
 
   if (mds->is_cluster_degraded()) {
     dout(10) << " degraded, ignoring" << dendl;
-    goto out;
+    return;
   }
 
   if (mds->get_nodeid() != 0 && m->get_beat() > beat_epoch) {
@@ -442,7 +439,7 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
   } else if (mds->get_nodeid() == 0) {
     if (beat_epoch != m->get_beat()) {
       dout(10) << " old heartbeat epoch, ignoring" << dendl;
-      goto out;
+      return;
     }
   }
 
@@ -463,7 +460,7 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
       /* avoid spamming ceph -w if user does not turn mantle on */
       if (mds->mdsmap->get_balancer() != "") {
         int r = mantle_prep_rebalance();
-        if (!r) goto out;
+        if (!r) return;
 	mds->clog->warn() << "using old balancer; mantle failed for "
                           << "balancer=" << mds->mdsmap->get_balancer()
                           << " : " << cpp_strerror(r);
@@ -471,10 +468,6 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
       prep_rebalance(m->get_beat());
     }
   }
-
-  // done
- out:
-  m->put();
 }
 
 double MDBalancer::try_match(balance_state_t& state, mds_rank_t ex, double& maxex,
@@ -555,7 +548,7 @@ void MDBalancer::queue_merge(CDir *dir)
 {
   const auto frag = dir->dirfrag();
   auto callback = [this, frag](int r) {
-    assert(frag.frag != frag_t());
+    ceph_assert(frag.frag != frag_t());
 
     // frag must be in this set because only one context is in flight
     // for a given frag at a time (because merge_pending is checked before
@@ -567,7 +560,7 @@ void MDBalancer::queue_merge(CDir *dir)
       dout(10) << "drop merge on " << frag << " because not in cache" << dendl;
       return;
     }
-    assert(dir->dirfrag() == frag);
+    ceph_assert(dir->dirfrag() == frag);
 
     if(!dir->is_auth()) {
       dout(10) << "drop merge on " << *dir << " because lost auth" << dendl;
@@ -881,9 +874,9 @@ void MDBalancer::try_rebalance(balance_state_t& state)
     mds_rank_t target = it.first;
     double amount = it.second;
 
-    if (amount / target_load < .2)
-      continue;
     if (amount < MIN_OFFLOAD)
+      continue;
+    if (amount * 10 * state.targets.size() < target_load)
       continue;
 
     dout(5) << "want to send " << amount << " to mds." << target
@@ -907,7 +900,7 @@ void MDBalancer::try_rebalance(balance_state_t& state)
 
 	if (dir->inode->is_base())
 	  continue;
-	assert(dir->inode->authority().first == target);  // cuz that's how i put it in the map, dummy
+	ceph_assert(dir->inode->authority().first == target);  // cuz that's how i put it in the map, dummy
 
 	if (pop <= amount-have) {
 	  dout(5) << "reexporting " << *dir << " pop " << pop
@@ -1017,7 +1010,7 @@ void MDBalancer::find_exports(CDir *dir,
     return;
   }
 
-  assert(dir->is_auth());
+  ceph_assert(dir->is_auth());
 
   double need = amount - have;
   if (need < amount * g_conf()->mds_bal_min_start)
@@ -1040,8 +1033,8 @@ void MDBalancer::find_exports(CDir *dir,
     CInode *in = *it;
     ++it;
 
-    assert(in->is_dir());
-    assert(in->get_parent_dir() == dir);
+    ceph_assert(in->is_dir());
+    ceph_assert(in->get_parent_dir() == dir);
 
     list<CDir*> dfls;
     in->get_nested_dirfrags(dfls);
@@ -1156,7 +1149,9 @@ void MDBalancer::maybe_fragment(CDir *dir, bool hot)
 {
   // split/merge
   if (bal_fragment_dirs && bal_fragment_interval > 0 &&
-      dir->is_auth() && !dir->inode->is_base()) {  // not root/base (for now at least)
+      dir->is_auth() &&
+      !dir->inode->is_base() &&  // not root/mdsdir (for now at least)
+      !dir->inode->is_stray()) { // not straydir
 
     // split
     if (g_conf()->mds_bal_split_size > 0 && (dir->should_split() || hot)) {

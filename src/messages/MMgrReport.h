@@ -18,6 +18,7 @@
 #include <boost/optional.hpp>
 
 #include "msg/Message.h"
+#include "mgr/OSDPerfMetricTypes.h"
 
 #include "common/perf_counters.h"
 #include "mgr/DaemonHealthMetric.h"
@@ -70,10 +71,13 @@ public:
 };
 WRITE_CLASS_ENCODER(PerfCounterType)
 
-class MMgrReport : public Message
-{
-  static const int HEAD_VERSION = 6;
-  static const int COMPAT_VERSION = 1;
+class MMgrReport : public MessageInstance<MMgrReport> {
+public:
+  friend factory;
+private:
+
+  static constexpr int HEAD_VERSION = 7;
+  static constexpr int COMPAT_VERSION = 1;
 
 public:
   /**
@@ -103,6 +107,8 @@ public:
   // encode map<string,map<int32_t,string>> of current config
   bufferlist config_bl;
 
+  std::map<OSDPerfMetricQuery, OSDPerfMetricReport>  osd_perf_metric_reports;
+
   void decode_payload() override
   {
     auto p = payload.cbegin();
@@ -121,6 +127,9 @@ public:
     if (header.version >= 6) {
       decode(config_bl, p);
     }
+    if (header.version >= 7) {
+      decode(osd_perf_metric_reports, p);
+    }
   }
 
   void encode_payload(uint64_t features) override {
@@ -133,6 +142,7 @@ public:
     encode(daemon_status, payload);
     encode(daemon_health_metrics, payload);
     encode(config_bl, payload);
+    encode(osd_perf_metric_reports, payload);
   }
 
   const char *get_type_name() const override { return "mgrreport"; }
@@ -157,7 +167,7 @@ public:
   }
 
   MMgrReport()
-    : Message(MSG_MGR_REPORT, HEAD_VERSION, COMPAT_VERSION)
+    : MessageInstance(MSG_MGR_REPORT, HEAD_VERSION, COMPAT_VERSION)
   {}
 };
 

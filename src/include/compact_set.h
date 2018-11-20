@@ -142,7 +142,7 @@ public:
   }
   iterator erase (iterator p) {
     if (set) {
-      assert(this == p.set);
+      ceph_assert(this == p.set);
       auto it = set->erase(p.it);
       if (set->empty()) {
         free_internal();

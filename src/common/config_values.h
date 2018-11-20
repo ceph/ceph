@@ -8,7 +8,6 @@
 #include <string>
 #include <utility>
 
-#include "common/config_fwd.h"
 #include "common/entity_name.h"
 #include "common/options.h"
 #include "log/SubsystemMap.h"

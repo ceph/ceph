@@ -29,16 +29,20 @@
 
 #include "common/cmdparse.h"
 #include "common/code_environment.h"
+#ifdef WITH_SEASTAR
+#include "crimson/common/config_proxy.h"
+#include "crimson/common/perf_counters_collection.h"
+#else
 #include "common/config_proxy.h"
-
 #include "include/spinlock.h"
+#include "common/perf_counters_collection.h"
+#endif
+
 
 #include "crush/CrushLocation.h"
 
 class AdminSocket;
 class CephContextServiceThread;
-class PerfCountersCollection;
-class PerfCounters;
 class CephContextHook;
 class CephContextObs;
 class CryptoHandler;
@@ -52,6 +56,28 @@ namespace ceph {
   }
 }
 
+#ifdef WITH_SEASTAR
+class CephContext {
+public:
+  CephContext();
+  CephContext(uint32_t,
+	      code_environment_t=CODE_ENVIRONMENT_UTILITY,
+	      int = 0)
+    : CephContext{}
+  {}
+  ~CephContext();
+
+  CryptoRandom* random() const;
+  PerfCountersCollectionImpl* get_perfcounters_collection();
+  ceph::common::ConfigProxy& _conf;
+  ceph::common::PerfCountersCollection& _perf_counters_collection;
+  CephContext* get();
+  void put();
+private:
+  std::unique_ptr<CryptoRandom> _crypto_random;
+  unsigned nref;
+};
+#else
 /* A CephContext represents the context held by a single library user.
  * There can be multiple CephContexts in the same process.
  *
@@ -112,22 +138,6 @@ public:
   }
 
   /**
-   * Enable the performance counter, currently we only have counter for the
-   * number of total/unhealthy workers.
-   */
-  void enable_perf_counter();
-
-  /**
-   * Disable the performance counter.
-   */
-  void disable_perf_counter();
-
-  /**
-   * Refresh perf counter values.
-   */
-  void refresh_perf_values();
-
-  /**
    * Get the admin socket associated with this CephContext.
    *
    * Currently there is always an admin socket object,
@@ -143,7 +153,7 @@ public:
   void do_command(std::string_view command, const cmdmap_t& cmdmap,
 		  std::string_view format, ceph::bufferlist *out);
 
-  static constexpr std::size_t largest_singleton = sizeof(void*) * 72;
+  static constexpr std::size_t largest_singleton = 8 * 72;
 
   template<typename T, typename... Args>
   T& lookup_or_create_singleton_object(std::string_view name,
@@ -244,6 +254,8 @@ private:
   friend class CephContextServiceThread;
   CephContextServiceThread *_service_thread;
 
+  using md_config_obs_t = ceph::md_config_obs_impl<ConfigProxy>;
+
   md_config_obs_t *_log_obs;
 
   /* The admin socket associated with this context */
@@ -305,10 +317,33 @@ private:
     l_cct_unhealthy_workers,
     l_cct_last
   };
-  PerfCounters *_cct_perf;
-  ceph::spinlock _cct_perf_lock;
+  enum {
+    l_mempool_first = 873222,
+    l_mempool_bytes,
+    l_mempool_items,
+    l_mempool_last
+  };
+  PerfCounters *_cct_perf = nullptr;
+  PerfCounters* _mempool_perf = nullptr;
+  std::vector<std::string> _mempool_perf_names, _mempool_perf_descriptions;
+
+  /**
+   * Enable the performance counters.
+   */
+  void _enable_perf_counter();
+
+  /**
+   * Disable the performance counter.
+   */
+  void _disable_perf_counter();
+
+  /**
+   * Refresh perf counter values.
+   */
+  void _refresh_perf_values();
 
   friend class CephContextObs;
 };
+#endif	// WITH_SEASTAR
 
 #endif

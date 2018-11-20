@@ -19,7 +19,7 @@
 #include "librados/AioCompletionImpl.h"
 #include "librados/PoolAsyncCompletionImpl.h"
 #include "librados/RadosClient.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "common/valgrind.h"
 #include "common/EventTrace.h"
 
@@ -285,7 +285,7 @@ void librados::IoCtxImpl::queue_aio_write(AioCompletionImpl *c)
 {
   get();
   aio_write_list_lock.Lock();
-  assert(c->io == this);
+  ceph_assert(c->io == this);
   c->aio_write_seq = ++aio_write_seq;
   ldout(client->cct, 20) << "queue_aio_write " << this << " completion " << c
 			 << " write_seq " << aio_write_seq << dendl;
@@ -297,7 +297,7 @@ void librados::IoCtxImpl::complete_aio_write(AioCompletionImpl *c)
 {
   ldout(client->cct, 20) << "complete_aio_write " << c << dendl;
   aio_write_list_lock.Lock();
-  assert(c->io == this);
+  ceph_assert(c->io == this);
   c->aio_write_list_item.remove_myself();
 
   map<ceph_tid_t, std::list<AioCompletionImpl*> >::iterator waiters = aio_write_waiters.begin();
@@ -327,7 +327,7 @@ void librados::IoCtxImpl::flush_aio_writes_async(AioCompletionImpl *c)
 {
   ldout(client->cct, 20) << "flush_aio_writes_async " << this
 			 << " completion " << c << dendl;
-  Mutex::Locker l(aio_write_list_lock);
+  std::lock_guard l(aio_write_list_lock);
   ceph_tid_t seq = aio_write_seq;
   if (aio_write_list.empty()) {
     ldout(client->cct, 20) << "flush_aio_writes_async no writes. (tid "
@@ -498,32 +498,6 @@ void librados::IoCtxImpl::aio_selfmanaged_snap_remove(uint64_t snapid,
 {
   Context *onfinish = new C_aio_selfmanaged_snap_op_Complete(client, c);
   objecter->delete_selfmanaged_snap(poolid, snapid, onfinish);
-}
-
-int librados::IoCtxImpl::pool_change_auid(unsigned long long auid)
-{
-  int reply;
-
-  Mutex mylock("IoCtxImpl::pool_change_auid::mylock");
-  Cond cond;
-  bool done;
-  objecter->change_pool_auid(poolid,
-			     new C_SafeCond(&mylock, &cond, &done, &reply),
-			     auid);
-
-  mylock.Lock();
-  while (!done) cond.Wait(mylock);
-  mylock.Unlock();
-  return reply;
-}
-
-int librados::IoCtxImpl::pool_change_auid_async(unsigned long long auid,
-						  PoolAsyncCompletionImpl *c)
-{
-  objecter->change_pool_auid(poolid,
-			     new C_PoolAsync_Safe(c),
-			     auid);
-  return 0;
 }
 
 int librados::IoCtxImpl::snap_list(vector<uint64_t> *snaps)
@@ -1347,30 +1321,6 @@ int librados::IoCtxImpl::tmap_update(const object_t& oid, bufferlist& cmdbl)
   return operate(oid, &wr, NULL);
 }
 
-int librados::IoCtxImpl::tmap_put(const object_t& oid, bufferlist& bl)
-{
-  ::ObjectOperation wr;
-  prepare_assert_ops(&wr);
-  wr.tmap_put(bl);
-  return operate(oid, &wr, NULL);
-}
-
-int librados::IoCtxImpl::tmap_get(const object_t& oid, bufferlist& bl)
-{
-  ::ObjectOperation rd;
-  prepare_assert_ops(&rd);
-  rd.tmap_get(&bl, NULL);
-  return operate_read(oid, &rd, NULL);
-}
-
-int librados::IoCtxImpl::tmap_to_omap(const object_t& oid, bool nullok)
-{
-  ::ObjectOperation wr;
-  prepare_assert_ops(&wr);
-  wr.tmap_to_omap(nullok);
-  return operate(oid, &wr, NULL);
-}
-
 int librados::IoCtxImpl::exec(const object_t& oid,
 			      const char *cls, const char *method,
 			      bufferlist& inbl, bufferlist& outbl)
@@ -1951,7 +1901,7 @@ librados::IoCtxImpl::C_aio_stat_Ack::C_aio_stat_Ack(AioCompletionImpl *_c,
 						    time_t *pm)
    : c(_c), pmtime(pm)
 {
-  assert(!c->io);
+  ceph_assert(!c->io);
   c->get();
 }
 
@@ -1979,7 +1929,7 @@ librados::IoCtxImpl::C_aio_stat2_Ack::C_aio_stat2_Ack(AioCompletionImpl *_c,
 						     struct timespec *pt)
    : c(_c), pts(pt)
 {
-  assert(!c->io);
+  ceph_assert(!c->io);
   c->get();
 }
 
@@ -2020,6 +1970,9 @@ void librados::IoCtxImpl::C_aio_Complete::finish(int r)
     if (c->out_buf && !c->blp->is_contiguous()) {
       c->rval = -ERANGE;
     } else {
+      if (c->out_buf && !c->blp->is_provided_buffer(c->out_buf))
+        c->blp->copy(0, c->blp->length(), c->out_buf);
+
       c->rval = c->blp->length();
     }
   }
@@ -2086,7 +2039,7 @@ int librados::IoCtxImpl::application_enable(const std::string& app_name,
   application_enable_async(app_name, force, c);
 
   int r = c->wait();
-  assert(r == 0);
+  ceph_assert(r == 0);
 
   r = c->get_return_value();
   c->release();
@@ -2115,7 +2068,7 @@ void librados::IoCtxImpl::application_enable_async(const std::string& app_name,
       << "\"pool\": \"" << get_cached_pool_name() << "\","
       << "\"app\": \"" << app_name << "\"";
   if (force) {
-    cmd << ",\"force\":\"--yes-i-really-mean-it\"";
+    cmd << ",\"yes_i_really_mean_it\": true";
   }
   cmd << "}";
 

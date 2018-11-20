@@ -275,7 +275,7 @@ function test_mon_injectargs_IEC()
   # actually expect IEC units to be passed.
   # Keep in mind that all integer based options that are based on bytes
   # (i.e., INT, LONG, U32, U64) will accept IEC unit modifiers, as well as SI
-  # unit modifiers (for backwards compatibility and convinience) and be parsed
+  # unit modifiers (for backwards compatibility and convenience) and be parsed
   # to base 2.
   initial_value=$(get_config_value_or_die "mon.a" "mon_data_size_warn")
   $SUDO ceph daemon mon.a config set mon_data_size_warn 15000000000
@@ -613,26 +613,6 @@ function test_auth()
   # script mode
   echo 'auth del client.xx' | ceph
   expect_false ceph auth get client.xx
-
-  #
-  # get / set auid
-  #
-  local auid=444
-  ceph-authtool --create-keyring --name client.TEST --gen-key --set-uid $auid TEST-keyring
-  expect_false ceph auth import --in-file TEST-keyring
-  rm TEST-keyring
-  ceph-authtool --create-keyring --name client.TEST --gen-key --cap mon "allow r" --set-uid $auid TEST-keyring
-  ceph auth import --in-file TEST-keyring
-  rm TEST-keyring
-  ceph auth get client.TEST > $TMPFILE
-  check_response "auid = $auid"
-  ceph --format json-pretty auth get client.TEST > $TMPFILE
-  check_response '"auid": '$auid
-  ceph auth ls > $TMPFILE
-  check_response "auid: $auid"
-  ceph --format json-pretty auth ls > $TMPFILE
-  check_response '"auid": '$auid
-  ceph auth del client.TEST
 }
 
 function test_auth_profiles()
@@ -937,7 +917,6 @@ function test_mon_mds()
   fail_all_mds $FS_NAME
 
   ceph mds compat show
-  expect_false ceph mds deactivate 2
   ceph fs dump
   ceph fs get $FS_NAME
   for mds_gid in $(get_mds_gids $FS_NAME) ; do
@@ -1678,7 +1657,7 @@ function test_mon_osd()
   ceph osd perf
   ceph osd blocked-by
 
-  ceph osd stat | grep up,
+  ceph osd stat | grep up
 }
 
 function test_mon_crush()
@@ -1786,7 +1765,7 @@ function test_mon_osd_pool_quota()
   # get quotas
   #
   ceph osd pool get-quota tmp-quota-pool | grep 'max bytes.*10 B'
-  ceph osd pool get-quota tmp-quota-pool | grep 'max objects.*10 M objects'
+  ceph osd pool get-quota tmp-quota-pool | grep 'max objects.*10.*M objects'
   #
   # set valid quotas with unit prefix
   #
@@ -1983,12 +1962,6 @@ function test_mon_osd_pool_set()
   set -e
   ceph osd pool get pool_erasure erasure_code_profile
 
-  auid=5555
-  ceph osd pool set $TEST_POOL_GETSET auid $auid
-  ceph osd pool get $TEST_POOL_GETSET auid | grep $auid
-  ceph --format=xml osd pool get $TEST_POOL_GETSET auid | grep $auid
-  ceph osd pool set $TEST_POOL_GETSET auid 0
-
   for flag in nodelete nopgchange nosizechange write_fadvise_dontneed noscrub nodeep-scrub; do
       ceph osd pool set $TEST_POOL_GETSET $flag false
       ceph osd pool get $TEST_POOL_GETSET $flag | grep "$flag: false"
@@ -2045,6 +2018,8 @@ function test_mon_osd_pool_set()
   ceph osd pool set $TEST_POOL_GETSET pg_num 10
   wait_for_clean
   ceph osd pool set $TEST_POOL_GETSET pgp_num 10
+  expect_false ceph osd pool set $TEST_POOL_GETSET pg_num 0
+  expect_false ceph osd pool set $TEST_POOL_GETSET pgp_num 0
 
   old_pgs=$(ceph osd pool get $TEST_POOL_GETSET pg_num | sed -e 's/pg_num: //')
   new_pgs=$(($old_pgs + $(ceph osd stat --format json | jq '.num_osds') * 32))
@@ -2117,6 +2092,14 @@ function test_mon_osd_tiered_pool_set()
   # this is really a tier pool
   ceph osd pool create real-tier 2
   ceph osd tier add rbd real-tier
+
+  # expect us to be unable to set negative values for hit_set_*
+  for o in hit_set_period hit_set_count hit_set_fpp; do
+    expect_false ceph osd pool set real_tier $o -1
+  done
+
+  # and hit_set_fpp should be in range 0..1
+  expect_false ceph osd pool set real_tier hit_set_fpp 2
 
   ceph osd pool set real-tier hit_set_type explicit_hash
   ceph osd pool get real-tier hit_set_type | grep "hit_set_type: explicit_hash"

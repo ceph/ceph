@@ -18,6 +18,8 @@
 #include "common/Finisher.h"
 #include "common/Mutex.h"
 
+#include "PyFormatter.h"
+
 #include "osdc/Objecter.h"
 #include "client/Client.h"
 #include "common/LogClient.h"
@@ -26,8 +28,10 @@
 
 #include "DaemonState.h"
 #include "ClusterState.h"
+#include "OSDPerfMetricTypes.h"
 
 class health_check_map_t;
+class DaemonServer;
 
 class ActivePyModules
 {
@@ -37,10 +41,11 @@ class ActivePyModules
   DaemonStateIndex &daemon_state;
   ClusterState &cluster_state;
   MonClient &monc;
-  LogChannelRef clog;
+  LogChannelRef clog, audit_clog;
   Objecter &objecter;
   Client   &client;
   Finisher &finisher;
+  DaemonServer &server;
 
 
   mutable Mutex lock{"ActivePyModules::lock"};
@@ -49,8 +54,8 @@ public:
   ActivePyModules(PyModuleConfig &module_config,
             std::map<std::string, std::string> store_data,
             DaemonStateIndex &ds, ClusterState &cs, MonClient &mc,
-            LogChannelRef clog_, Objecter &objecter_, Client &client_,
-            Finisher &f);
+            LogChannelRef clog_, LogChannelRef audit_clog_, Objecter &objecter_, Client &client_,
+            Finisher &f, DaemonServer &server);
 
   ~ActivePyModules();
 
@@ -69,11 +74,26 @@ public:
     const std::string &svc_type,
     const std::string &svc_id,
     const std::string &path);
+  PyObject *get_latest_counter_python(
+    const std::string &svc_type,
+    const std::string &svc_id,
+    const std::string &path);
   PyObject *get_perf_schema_python(
      const std::string &svc_type,
      const std::string &svc_id);
   PyObject *get_context();
   PyObject *get_osdmap();
+  PyObject *with_perf_counters(
+      std::function<void(
+        PerfCounterInstance& counter_instance,
+        PerfCounterType& counter_type,
+        PyFormatter& f)> fct,
+      const std::string &svc_name,
+      const std::string &svc_id,
+      const std::string &path) const;
+
+  OSDPerfMetricQueryID add_osd_perf_query(const OSDPerfMetricQuery &query);
+  void remove_osd_perf_query(OSDPerfMetricQueryID query_id);
 
   bool get_store(const std::string &module_name,
       const std::string &key, std::string *val) const;
@@ -90,6 +110,8 @@ public:
   void set_health_checks(const std::string& module_name,
 			 health_check_map_t&& checks);
   void get_health_checks(health_check_map_t *checks);
+
+  void config_notify();
 
   void set_uri(const std::string& module_name, const std::string &uri);
 
@@ -136,5 +158,8 @@ public:
   void dump_server(const std::string &hostname,
                    const DaemonStateCollection &dmc,
                    Formatter *f);
+
+  void cluster_log(const std::string &channel, clog_type prio,
+    const std::string &message);
 };
 

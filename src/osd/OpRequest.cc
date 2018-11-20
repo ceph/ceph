@@ -10,7 +10,7 @@
 #include "messages/MOSDOp.h"
 #include "messages/MOSDRepOp.h"
 #include "messages/MOSDRepOpReply.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "osd/osd_types.h"
 
 #ifdef WITH_LTTNG
@@ -59,7 +59,7 @@ void OpRequest::_dump(Formatter *f) const
   }
   {
     f->open_array_section("events");
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     for (auto& i : events) {
       f->dump_object("event", i);
     }
@@ -80,7 +80,7 @@ void OpRequest::_unregistered() {
 }
 
 bool OpRequest::check_rmw(int flag) const {
-  assert(rmw_flags != 0);
+  ceph_assert(rmw_flags != 0);
   return rmw_flags & flag;
 }
 bool OpRequest::may_read() const {

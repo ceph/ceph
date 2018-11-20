@@ -1,7 +1,18 @@
+import { TestBed } from '@angular/core/testing';
+
+import { configureTestBed, i18nProviders } from '../../../testing/unit-test-helper';
 import { MonSummaryPipe } from './mon-summary.pipe';
 
 describe('MonSummaryPipe', () => {
-  const pipe = new MonSummaryPipe();
+  let pipe: MonSummaryPipe;
+
+  configureTestBed({
+    providers: [MonSummaryPipe, i18nProviders]
+  });
+
+  beforeEach(() => {
+    pipe = TestBed.get(MonSummaryPipe);
+  });
 
   it('create an instance', () => {
     expect(pipe).toBeTruthy();

@@ -17,7 +17,6 @@ from mgr_module import CRUSHMap
 # available modes: 'none', 'crush', 'crush-compat', 'upmap', 'osd_weight'
 default_mode = 'none'
 default_sleep_interval = 60   # seconds
-default_max_misplaced = .05    # max ratio of pgs replaced at a time
 
 TIME_FORMAT = '%Y-%m-%d_%H:%M:%S'
 
@@ -206,9 +205,9 @@ class Module(MgrModule):
             {'name': 'active'},
             {'name': 'begin_time'},
             {'name': 'crush_compat_max_iterations'},
+            {'name': 'crush_compat_metrics'},
             {'name': 'crush_compat_step'},
             {'name': 'end_time'},
-            {'name': 'max_misplaced'},
             {'name': 'min_score'},
             {'name': 'mode'},
             {'name': 'sleep_interval'},
@@ -296,7 +295,7 @@ class Module(MgrModule):
         self.log.warn("Handling command: '%s'" % str(command))
         if command['prefix'] == 'balancer status':
             s = {
-                'plans': self.plans.keys(),
+                'plans': list(self.plans.keys()),
                 'active': self.active,
                 'mode': self.get_config('mode', default_mode),
             }
@@ -629,12 +628,16 @@ class Module(MgrModule):
         }
         self.log.debug('score_by_root %s' % pe.score_by_root)
 
+        # get the list of score metrics, comma separated
+        metrics = self.get_config('crush_compat_metrics', 'pgs,objects,bytes').split(',')
+
         # total score is just average of normalized stddevs
         pe.score = 0.0
         for r, vs in six.iteritems(pe.score_by_root):
             for k, v in six.iteritems(vs):
-                pe.score += v
-        pe.score /= 3 * len(roots)
+                if k in metrics:
+                    pe.score += v
+        pe.score /= len(metrics) * len(roots)
         return pe
 
     def evaluate(self, ms, pools, verbose=False):
@@ -644,8 +647,7 @@ class Module(MgrModule):
     def optimize(self, plan):
         self.log.info('Optimize plan %s' % plan.name)
         plan.mode = self.get_config('mode', default_mode)
-        max_misplaced = float(self.get_config('max_misplaced',
-                                              default_max_misplaced))
+        max_misplaced = float(self.get_option('target_max_misplaced_ratio'))
         self.log.info('Mode %s, max misplaced %f' %
                       (plan.mode, max_misplaced))
 
@@ -729,8 +731,7 @@ class Module(MgrModule):
         step = float(self.get_config('crush_compat_step', .5))
         if step <= 0 or step >= 1.0:
             return -errno.EINVAL, '"crush_compat_step" must be in (0, 1)'
-        max_misplaced = float(self.get_config('max_misplaced',
-                                              default_max_misplaced))
+        max_misplaced = float(self.get_option('target_max_misplaced_ratio'))
         min_pg_per_osd = 2
 
         ms = plan.initial
@@ -779,7 +780,12 @@ class Module(MgrModule):
             self.log.error(detail)
             return -errno.EOPNOTSUPP, detail
 
-        key = 'pgs'  # pgs objects or bytes
+        # rebalance by pgs, objects, or bytes
+        metrics = self.get_config('crush_compat_metrics', 'pgs,objects,bytes').split(',')
+        key = metrics[0] # balancing using the first score metric
+        if key not in ['pgs', 'bytes', 'objects']:
+            self.log.warn("Invalid crush_compat balancing key %s. Using 'pgs'." % key)
+            key = 'pgs'
 
         # go
         best_ws = copy.deepcopy(orig_ws)
@@ -881,8 +887,8 @@ class Module(MgrModule):
                 else:
                     bad_steps = 0
                     best_pe = next_pe
-                    best_ws = next_ws
-                    best_ow = next_ow
+                    best_ws = copy.deepcopy(next_ws)
+                    best_ow = copy.deepcopy(next_ow)
                     if best_pe.score == 0:
                         break
             left -= 1

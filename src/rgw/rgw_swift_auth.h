@@ -21,10 +21,10 @@ class TempURLApplier : public rgw::auth::LocalApplier {
 public:
   TempURLApplier(CephContext* const cct,
                  const RGWUserInfo& user_info)
-    : LocalApplier(cct, user_info, LocalApplier::NO_SUBUSER) {
+    : LocalApplier(cct, user_info, LocalApplier::NO_SUBUSER, boost::none, boost::none) {
   };
 
-  void modify_request_state(req_state * s) const override; /* in/out */
+  void modify_request_state(const DoutPrefixProvider* dpp, req_state * s) const override; /* in/out */
 
   struct Factory {
     virtual ~Factory() {}
@@ -43,7 +43,8 @@ class TempURLEngine : public rgw::auth::Engine {
   const TempURLApplier::Factory* const apl_factory;
 
   /* Helper methods. */
-  void get_owner_info(const req_state* s,
+  void get_owner_info(const DoutPrefixProvider* dpp, 
+                      const req_state* s,
                       RGWUserInfo& owner_info) const;
   bool is_applicable(const req_state* s) const noexcept;
   bool is_expired(const std::string& expires) const;
@@ -65,7 +66,7 @@ public:
     return "rgw::auth::swift::TempURLEngine";
   }
 
-  result_t authenticate(const req_state* const s) const override;
+  result_t authenticate(const DoutPrefixProvider* dpp, const req_state* const s) const override;
 };
 
 
@@ -79,7 +80,8 @@ class SignedTokenEngine : public rgw::auth::Engine {
   const rgw::auth::LocalApplier::Factory* const apl_factory;
 
   bool is_applicable(const std::string& token) const noexcept;
-  result_t authenticate(const std::string& token,
+  result_t authenticate(const DoutPrefixProvider* dpp,
+                        const std::string& token,
                         const req_state* s) const;
 
 public:
@@ -97,8 +99,8 @@ public:
     return "rgw::auth::swift::SignedTokenEngine";
   }
 
-  result_t authenticate(const req_state* const s) const override {
-    return authenticate(extractor->get_token(s), s);
+  result_t authenticate(const DoutPrefixProvider* dpp, const req_state* const s) const override {
+    return authenticate(dpp, extractor->get_token(s), s);
   }
 };
 
@@ -113,7 +115,8 @@ class ExternalTokenEngine : public rgw::auth::Engine {
   const rgw::auth::LocalApplier::Factory* const apl_factory;
 
   bool is_applicable(const std::string& token) const noexcept;
-  result_t authenticate(const std::string& token,
+  result_t authenticate(const DoutPrefixProvider* dpp,
+                        const std::string& token,
                         const req_state* s) const;
 
 public:
@@ -131,8 +134,8 @@ public:
     return "rgw::auth::swift::ExternalTokenEngine";
   }
 
-  result_t authenticate(const req_state* const s) const override {
-    return authenticate(extractor->get_token(s), s);
+  result_t authenticate(const DoutPrefixProvider* dpp, const req_state* const s) const override {
+    return authenticate(dpp, extractor->get_token(s), s);
   }
 };
 
@@ -200,11 +203,13 @@ class DefaultStrategy : public rgw::auth::Strategy,
   aplptr_t create_apl_local(CephContext* const cct,
                             const req_state* const s,
                             const RGWUserInfo& user_info,
-                            const std::string& subuser) const override {
+                            const std::string& subuser,
+                            const boost::optional<vector<std::string> >& role_policies,
+                            const boost::optional<uint32_t>& perm_mask) const override {
     auto apl = \
       rgw::auth::add_3rdparty(store, s->account_name,
         rgw::auth::add_sysreq(cct, store, s,
-          rgw::auth::LocalApplier(cct, user_info, subuser)));
+          rgw::auth::LocalApplier(cct, user_info, subuser, role_policies, perm_mask)));
     /* TODO(rzarzynski): replace with static_ptr. */
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
@@ -288,7 +293,7 @@ public:
   RGWOp *op_get() override;
 
   int init(RGWRados *store, struct req_state *state, rgw::io::BasicClient *cio) override;
-  int authorize() override;
+  int authorize(const DoutPrefixProvider *dpp) override;
   int postauth_init() override { return 0; }
   int read_permissions(RGWOp *op) override { return 0; }
 

@@ -7,7 +7,7 @@ class TestZap(object):
     def test_main_spits_help_with_no_arguments(self, capsys):
         lvm.zap.Zap([]).main()
         stdout, stderr = capsys.readouterr()
-        assert 'Zaps the given logical volume, raw device or partition' in stdout
+        assert 'Zaps the given logical volume(s), raw device(s) or partition(s)' in stdout
 
     def test_main_shows_full_help(self, capsys):
         with pytest.raises(SystemExit):

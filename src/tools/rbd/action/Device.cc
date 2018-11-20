@@ -7,6 +7,8 @@
 
 #include <boost/program_options.hpp>
 
+#include "include/ceph_assert.h"
+
 namespace rbd {
 namespace action {
 
@@ -109,7 +111,7 @@ const DeviceOperations *get_device_operations(const po::variables_map &vm) {
   case DEVICE_TYPE_NBD:
     return &nbd_operations;
   default:
-    assert(0);
+    ceph_abort();
     return nullptr;
   }
 }

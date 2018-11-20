@@ -29,6 +29,7 @@ class UserTest(DashboardTestCase):
                           email='my@email.com',
                           roles=['administrator'])
         self.assertStatus(201)
+        user = self.jsonBody()
 
         self._get('/api/user/user1')
         self.assertStatus(200)
@@ -36,7 +37,8 @@ class UserTest(DashboardTestCase):
             'username': 'user1',
             'name': 'My Name',
             'email': 'my@email.com',
-            'roles': ['administrator']
+            'roles': ['administrator'],
+            'lastUpdate': user['lastUpdate']
         })
 
         self._put('/api/user/user1', {
@@ -45,11 +47,13 @@ class UserTest(DashboardTestCase):
             'roles': ['block-manager'],
         })
         self.assertStatus(200)
+        user = self.jsonBody()
         self.assertJsonBody({
             'username': 'user1',
             'name': 'My New Name',
             'email': 'mynew@email.com',
-            'roles': ['block-manager']
+            'roles': ['block-manager'],
+            'lastUpdate': user['lastUpdate']
         })
 
         self._delete('/api/user/user1')
@@ -58,11 +62,15 @@ class UserTest(DashboardTestCase):
     def test_list_users(self):
         self._get('/api/user')
         self.assertStatus(200)
+        user = self.jsonBody()
+        self.assertEqual(len(user), 1)
+        user = user[0]
         self.assertJsonBody([{
             'username': 'admin',
             'name': None,
             'email': None,
-            'roles': ['administrator']
+            'roles': ['administrator'],
+            'lastUpdate': user['lastUpdate']
         }])
 
     def test_create_user_already_exists(self):
@@ -73,15 +81,6 @@ class UserTest(DashboardTestCase):
                           roles=['administrator'])
         self.assertStatus(400)
         self.assertError(code='username_already_exists',
-                         component='user')
-
-    def test_create_user_no_password(self):
-        self._create_user(username='user1',
-                          name='My Name',
-                          email='admin@email.com',
-                          roles=['administrator'])
-        self.assertStatus(400)
-        self.assertError(code='password_required',
                          component='user')
 
     def test_create_user_invalid_role(self):

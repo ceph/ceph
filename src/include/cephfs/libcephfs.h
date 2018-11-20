@@ -116,6 +116,8 @@ struct CephContext;
 # define CEPH_SETATTR_ATIME	16
 # define CEPH_SETATTR_SIZE	32
 # define CEPH_SETATTR_CTIME	64
+# define CEPH_SETATTR_MTIME_NOW	128
+# define CEPH_SETATTR_ATIME_NOW	256
 # define CEPH_SETATTR_BTIME	512
 #endif
 
@@ -244,6 +246,23 @@ int ceph_create_from_rados(struct ceph_mount_info **cmount, rados_t cluster);
  */
 int ceph_init(struct ceph_mount_info *cmount);
 
+/**
+ * Optionally set which filesystem to mount, before calling mount.
+ *
+ * An error will be returned if this libcephfs instance is already
+ * mounted. This function is an alternative to setting the global
+ * client_mds_namespace setting.  Using this function enables multiple
+ * libcephfs instances in the same process to mount different filesystems.
+ *
+ * The filesystem name is *not* validated in this function.  That happens
+ * during mount(), where an ENOENT error will result if a non-existent
+ * filesystem was specified here.
+ *
+ * @param cmount the mount info handle
+ * @returns 0 on success, negative error code on failure
+ */
+int ceph_select_filesystem(struct ceph_mount_info *cmount, const char *fs_name);
+
 
 /**
  * Perform a mount using the path for the root of the mount.
@@ -258,6 +277,15 @@ int ceph_init(struct ceph_mount_info *cmount);
  * @returns 0 on success, negative error code on failure
  */
 int ceph_mount(struct ceph_mount_info *cmount, const char *root);
+
+/**
+ * Return cluster ID for a mounted ceph filesystem
+ *
+ * Every ceph filesystem has a filesystem ID associated with it. This
+ * function returns that value. If the ceph_mount_info does not refer to a
+ * mounted filesystem, this returns a negative error code.
+ */
+int64_t ceph_get_fs_cid(struct ceph_mount_info *cmount);
 
 /**
  * Execute a management command remotely on an MDS.
@@ -1752,6 +1780,46 @@ int ceph_ll_delegation(struct ceph_mount_info *cmount, Fh *fh,
 		       unsigned int cmd, ceph_deleg_cb_t cb, void *priv);
 
 mode_t ceph_umask(struct ceph_mount_info *cmount, mode_t mode);
+
+/* state reclaim */
+#define CEPH_RECLAIM_RESET 	1
+
+/**
+ * Set ceph client uuid
+ * @param cmount the ceph mount handle to use.
+ * @param uuid the uuid to set
+ *
+ * Must be called before mount.
+ */
+void ceph_set_uuid(struct ceph_mount_info *cmount, const char *uuid);
+
+/**
+ * Set ceph client session timeout
+ * @param cmount the ceph mount handle to use.
+ * @param timeout the timeout to set
+ *
+ * Must be called before mount.
+ */
+void ceph_set_session_timeout(struct ceph_mount_info *cmount, unsigned timeout);
+
+/**
+ * Start to reclaim states of other client
+ * @param cmount the ceph mount handle to use.
+ * @param uuid uuid of client whose states need to be reclaimed
+ * @param flags flags that control how states get reclaimed
+ *
+ * Returns 0 success, -EOPNOTSUPP if mds does not support the operation,
+ * -ENOENT if CEPH_RECLAIM_RESET is specified and there is no client
+ * with the given uuid, -ENOTRECOVERABLE in all other error cases.
+ */
+int ceph_start_reclaim(struct ceph_mount_info *cmount,
+		       const char *uuid, unsigned flags);
+
+/**
+ * finish reclaiming states of other client (
+ * @param cmount the ceph mount handle to use.
+ */
+void ceph_finish_reclaim(struct ceph_mount_info *cmount);
 
 #ifdef __cplusplus
 }

@@ -1,7 +1,19 @@
+import { TestBed } from '@angular/core/testing';
+
+import { configureTestBed, i18nProviders } from '../../../testing/unit-test-helper';
+
 import { MgrSummaryPipe } from './mgr-summary.pipe';
 
 describe('MgrSummaryPipe', () => {
-  const pipe = new MgrSummaryPipe();
+  let pipe: MgrSummaryPipe;
+
+  configureTestBed({
+    providers: [MgrSummaryPipe, i18nProviders]
+  });
+
+  beforeEach(() => {
+    pipe = TestBed.get(MgrSummaryPipe);
+  });
 
   it('create an instance', () => {
     expect(pipe).toBeTruthy();

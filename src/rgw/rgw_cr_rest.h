@@ -3,7 +3,7 @@
 
 #include <boost/intrusive_ptr.hpp>
 #include <mutex>
-#include "include/assert.h" // boost header clobbers our assert.h
+#include "include/ceph_assert.h" // boost header clobbers our assert.h
 
 #include "rgw_coroutine.h"
 #include "rgw_rest_conn.h"

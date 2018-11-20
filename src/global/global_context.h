@@ -28,5 +28,6 @@ extern const char *g_assert_func;
 extern const char *g_assert_condition;
 extern unsigned long long g_assert_thread;
 extern char g_assert_thread_name[4096];
+extern char g_assert_msg[8096];
 
 #endif

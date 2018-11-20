@@ -45,13 +45,14 @@ class Module(MgrModule):
         :param f: f(time) return true to keep crash report
         :returns: crash reports for which f(time) returns true
         """
-        def inner((_, meta)):
+        def inner(pair):
+            _, meta = pair
             meta = json.loads(meta)
             time = self.time_from_string(meta["timestamp"])
             return f(time)
         matches = filter(inner, six.iteritems(
             self.get_store_prefix("crash/")))
-        return map(lambda (k, m): (k, json.loads(m)), matches)
+        return [(k, json.loads(m)) for k, m in matches]
 
     # command handlers
 
@@ -78,8 +79,9 @@ class Module(MgrModule):
 
     def do_ls(self, cmd, inbuf):
         keys = []
-        for key in self.get_store_prefix('crash/').iterkeys():
+        for key in six.iterkeys(self.get_store_prefix('crash/')):
             keys.append(key.replace('crash/', ''))
+        keys.sort()
         return 0, '\n'.join(keys), ''
 
     def do_rm(self, cmd, inbuf):

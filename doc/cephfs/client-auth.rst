@@ -56,7 +56,7 @@ the shell.
 
 See `User Management - Add a User to a Keyring`_. for additional details on user management
 
-To restrict a client to the specfied sub-directory only, we mention the specified
+To restrict a client to the specified sub-directory only, we mention the specified
 directory while mounting using the following syntax. ::
 
  ./ceph-fuse -n client.*client_name* *mount_path* -r *directory_to_be_mounted*
@@ -130,3 +130,19 @@ in the ``bar`` directory of filesystem ``cephfs_a``.
 
 
 .. _User Management - Add a User to a Keyring: ../../rados/operations/user-management/#add-a-user-to-a-keyring
+
+Network restriction
+===================
+
+::
+
+ client.foo
+   key: *key*
+   caps: [mds] allow r network 10.0.0.0/8, allow rw path=/bar network 10.0.0.0/8
+   caps: [mon] allow r network 10.0.0.0/8
+   caps: [osd] allow rw tag cephfs data=cephfs_a network 10.0.0.0/8
+
+The optional ``{network/prefix}`` is a standard network name and
+prefix length in CIDR notation (e.g., ``10.3.0.0/16``).  If present,
+the use of this capability is restricted to clients connecting from
+this network.

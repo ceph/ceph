@@ -49,7 +49,7 @@ BaseMgrStandbyModule_init(BaseMgrStandbyModule *self, PyObject *args, PyObject *
 
     self->this_module = static_cast<StandbyPyModule*>(PyCapsule_GetPointer(
         this_module_capsule, nullptr));
-    assert(self->this_module);
+    ceph_assert(self->this_module);
 
     return 0;
 }
@@ -121,7 +121,7 @@ ceph_log(BaseMgrStandbyModule *self, PyObject *args)
     return nullptr;
   }
 
-  assert(self->this_module);
+  ceph_assert(self->this_module);
 
   self->this_module->log(level, record);
 

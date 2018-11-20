@@ -1,7 +1,6 @@
 import { Injectable } from '@angular/core';
 
-import { Observable } from 'rxjs/Observable';
-import { Subscriber } from 'rxjs/Subscriber';
+import { Observable, Subscriber } from 'rxjs';
 
 import { NotificationType } from '../enum/notification-type.enum';
 import { ExecutingTask } from '../models/executing-task';
@@ -9,8 +8,8 @@ import { FinishedTask } from '../models/finished-task';
 import { NotificationService } from './notification.service';
 import { ServicesModule } from './services.module';
 import { SummaryService } from './summary.service';
-import { TaskManagerMessageService } from './task-manager-message.service';
 import { TaskManagerService } from './task-manager.service';
+import { TaskMessageService } from './task-message.service';
 
 @Injectable({
   providedIn: ServicesModule
@@ -19,7 +18,7 @@ export class TaskWrapperService {
   constructor(
     private notificationService: NotificationService,
     private summaryService: SummaryService,
-    private taskManagerMessageService: TaskManagerMessageService,
+    private taskMessageService: TaskMessageService,
     private taskManagerService: TaskManagerService
   ) {}
 
@@ -38,7 +37,7 @@ export class TaskWrapperService {
         (resp) => {
           task.success = false;
           task.exception = resp.error;
-          observer.error();
+          observer.error(resp);
         },
         () => {
           observer.complete();
@@ -50,8 +49,7 @@ export class TaskWrapperService {
   _handleExecutingTasks(task: FinishedTask) {
     this.notificationService.show(
       NotificationType.info,
-      this.taskManagerMessageService.getRunningMessage(task),
-      this.taskManagerMessageService.getDescription(task)
+      this.taskMessageService.getRunningTitle(task)
     );
 
     const executingTask = new ExecutingTask(task.name, task.metadata);

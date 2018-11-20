@@ -26,7 +26,7 @@
 #include "DPDKStack.h"
 
 #include "common/dout.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_subsys ceph_subsys_dpdk
 #undef dout_prefix
@@ -112,7 +112,7 @@ uint8_t tcp_option::fill(tcp_hdr* th, uint8_t options_size)
     new (off) tcp_option::eol;
     size += option_len::eol;
   }
-  assert(size == options_size);
+  ceph_assert(size == options_size);
 
   return size;
 }

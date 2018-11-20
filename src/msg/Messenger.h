@@ -18,6 +18,11 @@
 #define CEPH_MESSENGER_H
 
 #include <map>
+#include <deque>
+
+#include <errno.h>
+#include <sstream>
+#include <memory>
 
 #include "Message.h"
 #include "Dispatcher.h"
@@ -30,6 +35,8 @@
 #include "include/ceph_features.h"
 #include "auth/Crypto.h"
 #include "common/item_history.h"
+#include "auth/AuthAuthorizeHandler.h"
+#include "include/ceph_assert.h"
 
 #include <errno.h>
 #include <sstream>
@@ -39,10 +46,12 @@
 
 class Timer;
 
+class AuthAuthorizerHandlerRegistry;
+
 class Messenger {
 private:
-  list<Dispatcher*> dispatchers;
-  list <Dispatcher*> fast_dispatchers;
+  std::deque<Dispatcher*> dispatchers;
+  std::deque<Dispatcher*> fast_dispatchers;
   ZTracer::Endpoint trace_endpoint;
 
 protected:
@@ -79,6 +88,13 @@ public:
   int crcflags;
 
   using Policy = ceph::net::Policy<Throttle>;
+
+protected:
+  // for authentication
+  std::unique_ptr<AuthAuthorizeHandlerRegistry> auth_ah_service_registry;
+  std::unique_ptr<AuthAuthorizeHandlerRegistry> auth_ah_cluster_registry;
+
+public:
   /**
    * Messenger constructor. Call this from your implementation.
    * Messenger users should construct full implementations directly,
@@ -287,7 +303,7 @@ public:
    * @param p The cluster protocol to use. Defined externally.
    */
   void set_default_send_priority(int p) {
-    assert(!started);
+    ceph_assert(!started);
     default_send_priority = p;
   }
   /**
@@ -565,16 +581,16 @@ public:
       } else {
 	blocked = true;
 	int r = pthread_sigmask(SIG_BLOCK, &pipe_mask, &existing_mask);
-	assert(r == 0);
+	ceph_assert(r == 0);
       }
     }
     ~sigpipe_stopper() {
       if (blocked) {
 	struct timespec nowait{0};
 	int r = sigtimedwait(&pipe_mask, 0, &nowait);
-	assert(r == EAGAIN || r == 0);
+	ceph_assert(r == EAGAIN || r == 0);
 	r = pthread_sigmask(SIG_SETMASK, &existing_mask, 0);
-	assert(r == 0);
+	ceph_assert(r == 0);
       }
     }
   };
@@ -593,11 +609,9 @@ public:
    *
    * @param m The Message we are testing.
    */
-  bool ms_can_fast_dispatch(const Message *m) {
-    for (list<Dispatcher*>::iterator p = fast_dispatchers.begin();
-	 p != fast_dispatchers.end();
-	 ++p) {
-      if ((*p)->ms_can_fast_dispatch(m))
+  bool ms_can_fast_dispatch(const Message::const_ref& m) {
+    for (const auto &dispatcher : fast_dispatchers) {
+      if (dispatcher->ms_can_fast_dispatch2(m))
 	return true;
     }
     return false;
@@ -606,52 +620,49 @@ public:
   /**
    * Deliver a single Message via "fast dispatch".
    *
-   * @param m The Message we are fast dispatching. We take ownership
-   * of one reference to it.
+   * @param m The Message we are fast dispatching.
    * If none of our Dispatchers can handle it, ceph_abort().
    */
-  void ms_fast_dispatch(Message *m) {
+  void ms_fast_dispatch(const Message::ref &m) {
     m->set_dispatch_stamp(ceph_clock_now());
-    for (list<Dispatcher*>::iterator p = fast_dispatchers.begin();
-	 p != fast_dispatchers.end();
-	 ++p) {
-      if ((*p)->ms_can_fast_dispatch(m)) {
-	(*p)->ms_fast_dispatch(m);
+    for (const auto &dispatcher : fast_dispatchers) {
+      if (dispatcher->ms_can_fast_dispatch2(m)) {
+	dispatcher->ms_fast_dispatch2(m);
 	return;
       }
     }
     ceph_abort();
   }
+  void ms_fast_dispatch(Message *m) {
+    return ms_fast_dispatch(Message::ref(m, false)); /* consume ref */
+  }
   /**
    *
    */
-  void ms_fast_preprocess(Message *m) {
-    for (list<Dispatcher*>::iterator p = fast_dispatchers.begin();
-	 p != fast_dispatchers.end();
-	 ++p) {
-      (*p)->ms_fast_preprocess(m);
+  void ms_fast_preprocess(const Message::ref &m) {
+    for (const auto &dispatcher : fast_dispatchers) {
+      dispatcher->ms_fast_preprocess2(m);
     }
   }
   /**
    *  Deliver a single Message. Send it to each Dispatcher
    *  in sequence until one of them handles it.
-   *  If none of our Dispatchers can handle it, assert(0).
+   *  If none of our Dispatchers can handle it, ceph_abort().
    *
-   *  @param m The Message to deliver. We take ownership of
-   *  one reference to it.
+   *  @param m The Message to deliver.
    */
-  void ms_deliver_dispatch(Message *m) {
+  void ms_deliver_dispatch(const Message::ref &m) {
     m->set_dispatch_stamp(ceph_clock_now());
-    for (list<Dispatcher*>::iterator p = dispatchers.begin();
-	 p != dispatchers.end();
-	 ++p) {
-      if ((*p)->ms_dispatch(m))
+    for (const auto &dispatcher : dispatchers) {
+      if (dispatcher->ms_dispatch2(m))
 	return;
     }
     lsubdout(cct, ms, 0) << "ms_deliver_dispatch: unhandled message " << m << " " << *m << " from "
 			 << m->get_source_inst() << dendl;
-    assert(!cct->_conf->ms_die_on_unhandled_msg);
-    m->put();
+    ceph_assert(!cct->_conf->ms_die_on_unhandled_msg);
+  }
+  void ms_deliver_dispatch(Message *m) {
+    return ms_deliver_dispatch(Message::ref(m, false)); /* consume ref */
   }
   /**
    * Notify each Dispatcher of a new Connection. Call
@@ -661,10 +672,9 @@ public:
    * @param con Pointer to the new Connection.
    */
   void ms_deliver_handle_connect(Connection *con) {
-    for (list<Dispatcher*>::iterator p = dispatchers.begin();
-	 p != dispatchers.end();
-	 ++p)
-      (*p)->ms_handle_connect(con);
+    for (const auto& dispatcher : dispatchers) {
+      dispatcher->ms_handle_connect(con);
+    }
   }
 
   /**
@@ -675,23 +685,21 @@ public:
    * @param con Pointer to the new Connection.
    */
   void ms_deliver_handle_fast_connect(Connection *con) {
-    for (list<Dispatcher*>::iterator p = fast_dispatchers.begin();
-         p != fast_dispatchers.end();
-         ++p)
-      (*p)->ms_handle_fast_connect(con);
+    for (const auto& dispatcher : fast_dispatchers) {
+      dispatcher->ms_handle_fast_connect(con);
+    }
   }
 
   /**
-   * Notify each Dispatcher of a new incomming Connection. Call
+   * Notify each Dispatcher of a new incoming Connection. Call
    * this function whenever a new Connection is accepted.
    *
    * @param con Pointer to the new Connection.
    */
   void ms_deliver_handle_accept(Connection *con) {
-    for (list<Dispatcher*>::iterator p = dispatchers.begin();
-	 p != dispatchers.end();
-	 ++p)
-      (*p)->ms_handle_accept(con);
+    for (const auto& dispatcher : dispatchers) {
+      dispatcher->ms_handle_accept(con);
+    }
   }
 
   /**
@@ -701,10 +709,9 @@ public:
    * @param con Pointer to the new Connection.
    */
   void ms_deliver_handle_fast_accept(Connection *con) {
-    for (list<Dispatcher*>::iterator p = fast_dispatchers.begin();
-         p != fast_dispatchers.end();
-         ++p)
-      (*p)->ms_handle_fast_accept(con);
+    for (const auto& dispatcher : fast_dispatchers) {
+      dispatcher->ms_handle_fast_accept(con);
+    }
   }
 
   /**
@@ -715,10 +722,8 @@ public:
    * @param con Pointer to the broken Connection.
    */
   void ms_deliver_handle_reset(Connection *con) {
-    for (list<Dispatcher*>::iterator p = dispatchers.begin();
-	 p != dispatchers.end();
-	 ++p) {
-      if ((*p)->ms_handle_reset(con))
+    for (const auto& dispatcher : dispatchers) {
+      if (dispatcher->ms_handle_reset(con))
 	return;
     }
   }
@@ -730,10 +735,9 @@ public:
    * @param con Pointer to the broken Connection.
    */
   void ms_deliver_handle_remote_reset(Connection *con) {
-    for (list<Dispatcher*>::iterator p = dispatchers.begin();
-	 p != dispatchers.end();
-	 ++p)
-      (*p)->ms_handle_remote_reset(con);
+    for (const auto& dispatcher : dispatchers) {
+      dispatcher->ms_handle_remote_reset(con);
+    }
   }
 
   /**
@@ -745,10 +749,8 @@ public:
    * @param con Pointer to the broken Connection.
    */
   void ms_deliver_handle_refused(Connection *con) {
-    for (list<Dispatcher*>::iterator p = dispatchers.begin();
-         p != dispatchers.end();
-         ++p) {
-      if ((*p)->ms_handle_refused(con))
+    for (const auto& dispatcher : dispatchers) {
+      if (dispatcher->ms_handle_refused(con))
         return;
     }
   }
@@ -762,10 +764,8 @@ public:
    */
   AuthAuthorizer *ms_deliver_get_authorizer(int peer_type, bool force_new) {
     AuthAuthorizer *a = 0;
-    for (list<Dispatcher*>::iterator p = dispatchers.begin();
-	 p != dispatchers.end();
-	 ++p) {
-      if ((*p)->ms_get_authorizer(peer_type, &a, force_new))
+    for (const auto& dispatcher : dispatchers) {
+      if (dispatcher->ms_get_authorizer(peer_type, &a, force_new))
 	return a;
     }
     return NULL;
@@ -784,19 +784,11 @@ public:
    * @return True if we were able to prove or disprove correctness of
    * authorizer, false otherwise.
    */
-  bool ms_deliver_verify_authorizer(Connection *con, int peer_type,
-				    int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
-				    bool& isvalid, CryptoKey& session_key,
-				    std::unique_ptr<AuthAuthorizerChallenge> *challenge) {
-    for (list<Dispatcher*>::iterator p = dispatchers.begin();
-	 p != dispatchers.end();
-	 ++p) {
-      if ((*p)->ms_verify_authorizer(con, peer_type, protocol, authorizer, authorizer_reply,
-				     isvalid, session_key, challenge))
-	return true;
-    }
-    return false;
-  }
+  bool ms_deliver_verify_authorizer(
+    Connection *con, int peer_type,
+    int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
+    bool& isvalid, CryptoKey& session_key,
+    std::unique_ptr<AuthAuthorizerChallenge> *challenge);
 
   /**
    * @} // Dispatcher Interfacing

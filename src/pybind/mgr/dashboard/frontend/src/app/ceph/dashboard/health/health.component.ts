@@ -1,5 +1,7 @@
+import { ViewportScroller } from '@angular/common';
 import { Component, OnDestroy, OnInit } from '@angular/core';
 
+import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 
 import { DashboardService } from '../../../shared/api/dashboard.service';
@@ -13,7 +15,11 @@ export class HealthComponent implements OnInit, OnDestroy {
   contentData: any;
   interval: number;
 
-  constructor(private dashboardService: DashboardService) {}
+  constructor(
+    private dashboardService: DashboardService,
+    public viewportScroller: ViewportScroller,
+    private i18n: I18n
+  ) {}
 
   ngOnInit() {
     this.getInfo();
@@ -32,44 +38,99 @@ export class HealthComponent implements OnInit, OnDestroy {
     });
   }
 
-  prepareRawUsage(chart, data) {
-    let rawUsageChartColor;
+  prepareReadWriteRatio(chart, data) {
+    const ratioLabels = [];
+    const ratioData = [];
 
-    const rawUsageText =
-      Math.round(100 * (data.df.stats.total_used_bytes / data.df.stats.total_bytes)) + '%';
+    ratioLabels.push(this.i18n('Writes'));
+    ratioData.push(this.contentData.client_perf.write_op_per_sec);
+    ratioLabels.push(this.i18n('Reads'));
+    ratioData.push(this.contentData.client_perf.read_op_per_sec);
 
-    if (data.df.stats.total_used_bytes / data.df.stats.total_bytes >= data.osd_map.full_ratio) {
-      rawUsageChartColor = '#ff0000';
-    } else if (
-      data.df.stats.total_used_bytes / data.df.stats.total_bytes >=
-      data.osd_map.backfillfull_ratio
-    ) {
-      rawUsageChartColor = '#ff6600';
-    } else if (
-      data.df.stats.total_used_bytes / data.df.stats.total_bytes >=
-      data.osd_map.nearfull_ratio
-    ) {
-      rawUsageChartColor = '#ffc200';
-    } else {
-      rawUsageChartColor = '#00bb00';
-    }
-
-    chart.dataset[0].data = [data.df.stats.total_used_bytes, data.df.stats.total_avail_bytes];
-    chart.options.center_text = rawUsageText;
-    chart.colors = [{ backgroundColor: [rawUsageChartColor, '#424d52'] }];
-    chart.labels = ['Raw Used', 'Raw Available'];
+    chart.dataset[0].data = ratioData;
+    chart.labels = ratioLabels;
   }
 
-  preparePoolUsage(chart, data) {
-    const poolLabels = [];
-    const poolData = [];
+  prepareRawUsage(chart, data) {
+    const percentAvailable = Math.round(
+      100 *
+        ((data.df.stats.total_bytes - data.df.stats.total_used_bytes) / data.df.stats.total_bytes)
+    );
 
-    _.each(data.df.pools, (pool, i) => {
-      poolLabels.push(pool['name']);
-      poolData.push(pool['stats']['bytes_used']);
+    const percentUsed = Math.round(
+      100 * (data.df.stats.total_used_bytes / data.df.stats.total_bytes)
+    );
+
+    chart.dataset[0].data = [data.df.stats.total_used_bytes, data.df.stats.total_avail_bytes];
+    if (chart === 'doughnut') {
+      chart.options.cutoutPercentage = 65;
+    }
+    chart.labels = [
+      `${this.i18n('Used')} (${percentUsed}%)`,
+      `${this.i18n('Avail.')} (${percentAvailable}%)`
+    ];
+  }
+
+  preparePgStatus(chart, data) {
+    const pgCategoryClean = this.i18n('Clean');
+    const pgCategoryCleanStates = ['active', 'clean'];
+    const pgCategoryWarning = this.i18n('Warning');
+    const pgCategoryWarningStates = [
+      'backfill_toofull',
+      'backfill_unfound',
+      'down',
+      'incomplete',
+      'inconsistent',
+      'recovery_toofull',
+      'recovery_unfound',
+      'remapped',
+      'snaptrim_error',
+      'stale',
+      'undersized'
+    ];
+    const pgCategoryUnknown = this.i18n('Unknown');
+    const pgCategoryWorking = this.i18n('Working');
+    const pgCategoryWorkingStates = [
+      'activating',
+      'backfill_wait',
+      'backfilling',
+      'creating',
+      'deep',
+      'degraded',
+      'forced_backfill',
+      'forced_recovery',
+      'peering',
+      'peered',
+      'recovering',
+      'recovery_wait',
+      'repair',
+      'scrubbing',
+      'snaptrim',
+      'snaptrim_wait'
+    ];
+    let totalPgClean = 0;
+    let totalPgWarning = 0;
+    let totalPgUnknown = 0;
+    let totalPgWorking = 0;
+
+    _.forEach(data.pg_info.statuses, (pgAmount, pgStatesText) => {
+      const pgStates = pgStatesText.split('+');
+      const isWarning = _.intersection(pgCategoryWarningStates, pgStates).length > 0;
+      const pgWorkingStates = _.intersection(pgCategoryWorkingStates, pgStates);
+      const pgCleanStates = _.intersection(pgCategoryCleanStates, pgStates);
+
+      if (isWarning) {
+        totalPgWarning += pgAmount;
+      } else if (pgStates.length > pgCleanStates.length + pgWorkingStates.length) {
+        totalPgUnknown += pgAmount;
+      } else if (pgWorkingStates.length > 0) {
+        totalPgWorking = pgAmount;
+      } else {
+        totalPgClean += pgAmount;
+      }
     });
 
-    chart.dataset[0].data = poolData;
-    chart.labels = poolLabels;
+    chart.labels = [pgCategoryWarning, pgCategoryClean, pgCategoryUnknown, pgCategoryWorking];
+    chart.dataset[0].data = [totalPgWarning, totalPgClean, totalPgUnknown, totalPgWorking];
   }
 }

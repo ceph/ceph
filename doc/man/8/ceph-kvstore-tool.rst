@@ -15,7 +15,7 @@ Synopsis
 Description
 ===========
 
-:program:`ceph-kvstore-tool` is a kvstore manipulation tool. It allows users to manipule
+:program:`ceph-kvstore-tool` is a kvstore manipulation tool. It allows users to manipulate
 leveldb/rocksdb's data (like OSD's omap) offline.
 
 Commands
@@ -72,8 +72,10 @@ which are as follows:
 :command:`compact-range <prefix> <start> <end>`
     Compact some entries specified by the URL encoded prefix and range.
 
-:command:`repair`
-    Try to repair the kvstore.
+:command:`destructive-repair`
+    Make a (potentially destructive) effort to recover a corrupted database.
+    Note that in the case of rocksdb this may corrupt an otherwise uncorrupted
+    database--use this only as a last resort!
 
 Availability
 ============

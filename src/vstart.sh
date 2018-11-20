@@ -435,8 +435,8 @@ wconf() {
 	fi
 }
 
-get_nvme_serial_number() {
-    sudo lspci -vvv -d $pci_id | grep 'Device Serial Number' | awk '{print $NF}' | sed 's/-//g'
+get_pci_selector() {
+    lspci -mm -n -D -d $pci_id | cut -d' ' -f1
 }
 
 prepare_conf() {
@@ -448,7 +448,7 @@ prepare_conf() {
         heartbeat file = $CEPH_OUT_DIR/\$name.heartbeat
 "
 
-    local mgr_modules="restful status balancer iostat devicehealth"
+    local mgr_modules="restful iostat"
     if $with_mgr_dashboard; then
       mgr_modules="dashboard $mgr_modules"
     fi
@@ -496,7 +496,7 @@ EOF
 	fi
         if [ "$objectstore" == "bluestore" ]; then
             if [ "$spdk_enabled" -eq 1 ]; then
-                if [ "$(get_nvme_serial_number)" == "" ]; then
+                if [ "$(get_pci_selector)" == "" ]; then
                     echo "Not find the specified NVME device, please check."
                     exit
                 fi
@@ -507,7 +507,7 @@ EOF
         bluestore_block_wal_size = 0
         bluestore_block_wal_create = false
         bluestore_spdk_mem = 2048
-        bluestore_block_path = spdk:$(get_nvme_serial_number)"
+        bluestore_block_path = spdk:$(get_pci_selector)"
             else
                 BLUESTORE_OPTS="        bluestore block db path = $CEPH_DEV_DIR/osd\$id/block.db.file
         bluestore block db size = 67108864
@@ -525,6 +525,7 @@ EOF
 $extra_conf
 [client.rgw]
         rgw frontends = $rgw_frontend port=$CEPH_RGW_PORT
+        admin socket = ${CEPH_OUT_DIR}/radosgw.${CEPH_RGW_PORT}.asok
         ; needed for s3tests
         rgw crypt s3 kms encryption keys = testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
         rgw crypt require ssl = false
@@ -603,14 +604,14 @@ start_mon() {
 		fi
 
 		prun $SUDO "$CEPH_BIN/ceph-authtool" --create-keyring --gen-key --name=mon. "$keyring_fn" --cap mon 'allow *'
-		prun $SUDO "$CEPH_BIN/ceph-authtool" --gen-key --name=client.admin --set-uid=0 \
+		prun $SUDO "$CEPH_BIN/ceph-authtool" --gen-key --name=client.admin \
 			--cap mon 'allow *' \
 			--cap osd 'allow *' \
 			--cap mds 'allow *' \
 			--cap mgr 'allow *' \
 			"$keyring_fn"
 
-		prun $SUDO "$CEPH_BIN/ceph-authtool" --gen-key --name=client.fs --set-uid=0 \
+		prun $SUDO "$CEPH_BIN/ceph-authtool" --gen-key --name=client.fs\
 		   --cap mon 'allow r' \
 			--cap osd 'allow rw tag cephfs data=*' \
 			--cap mds 'allow rwp' \

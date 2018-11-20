@@ -11,7 +11,8 @@ import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
   styleUrls: ['./osd-details.component.scss']
 })
 export class OsdDetailsComponent implements OnChanges {
-  @Input() selection: CdTableSelection;
+  @Input()
+  selection: CdTableSelection;
 
   osd: any;
 
@@ -23,16 +24,14 @@ export class OsdDetailsComponent implements OnChanges {
     };
     if (this.selection.hasSelection) {
       this.osd = this.selection.first();
-      this.osd.autoRefresh = () => {
-        this.refresh();
-      };
       this.refresh();
     }
   }
 
   refresh() {
-    this.osdService.getDetails(this.osd.tree.id).subscribe((data: any) => {
+    this.osdService.getDetails(this.osd.id).subscribe((data: any) => {
       this.osd.details = data;
+      this.osd.histogram_failed = '';
       if (!_.isObject(data.histogram)) {
         this.osd.histogram_failed = data.histogram;
         this.osd.details.histogram = undefined;

@@ -36,7 +36,7 @@
 #include "crush/CrushWrapper.h"
 #include "crush/CrushCompiler.h"
 #include "crush/CrushTester.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_crush
@@ -61,7 +61,7 @@ static int get_fd_data(int fd, bufferlist &bl)
     total += bytes;
   } while(true);
 
-  assert(bl.length() == total);
+  ceph_assert(bl.length() == total);
   return 0;
 }
 
@@ -166,7 +166,7 @@ void usage()
   cout << "                         reweight a given item (and adjust ancestor\n"
        << "                         weights as needed)\n";
   cout << "   -i mapfn --add-bucket name type [--loc type name ...]\n"
-       << "                         insert a bucket into the hierachy at the given\n"
+       << "                         insert a bucket into the hierarchy at the given\n"
        << "                         location\n";
   cout << "   -i mapfn --move       name --loc type name ...\n"
        << "                         move the given item to specified location\n";
@@ -1101,7 +1101,7 @@ int main(int argc, const char **argv)
       return 0;
     }
     int ruleno = crush.get_rule_id(rule_name);
-    assert(ruleno >= 0);
+    ceph_assert(ruleno >= 0);
     int r = crush.remove_rule(ruleno);
     if (r < 0) {
       cerr << "fail to remove rule " << rule_name << std::endl;

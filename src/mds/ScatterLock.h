@@ -51,7 +51,7 @@ public:
   ScatterLock(MDSCacheObject *o, LockType *lt) :
     SimpleLock(o, lt) {}
   ~ScatterLock() override {
-    assert(!_more);
+    ceph_assert(!_more);
   }
 
   bool is_scatterlock() const override {
@@ -81,8 +81,8 @@ public:
 
   void set_xlock_snap_sync(MDSInternalContextBase *c)
   {
-    assert(get_type() == CEPH_LOCK_IFILE);
-    assert(state == LOCK_XLOCK || state == LOCK_XLOCKDONE);
+    ceph_assert(get_type() == CEPH_LOCK_IFILE);
+    ceph_assert(state == LOCK_XLOCK || state == LOCK_XLOCKDONE);
     state = LOCK_XLOCKSNAP;
     add_waiter(WAIT_STABLE, c);
   }
@@ -150,12 +150,13 @@ public:
       }
     }
   }
+  void clear_flushed() override {
+    state_flags &= ~FLUSHED;
+  }
   void remove_dirty() {
     start_flush();
     finish_flush();
-  }
-  void clear_flushed() override {
-    state_flags &= ~FLUSHED;
+    clear_flushed();
   }
 
   void infer_state_from_strong_rejoin(int rstate, bool locktoo) {
@@ -186,7 +187,7 @@ public:
     //
     // For example:
     // The recovering mds is auth mds of a dirfrag, this mds is auth mds
-    // of correspinding inode. when 'rm -rf' the direcotry, this mds should
+    // of corresponding inode. when 'rm -rf' the direcotry, this mds should
     // delay the rmdir request until the recovering mds has replayed unlink
     // requests.
     if (s == LOCK_MIX || s == LOCK_MIX_LOCK || s == LOCK_MIX_SYNC)

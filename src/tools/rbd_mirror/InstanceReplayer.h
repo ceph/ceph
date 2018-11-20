@@ -10,7 +10,7 @@
 #include "common/AsyncOpTracker.h"
 #include "common/Formatter.h"
 #include "common/Mutex.h"
-#include "types.h"
+#include "tools/rbd_mirror/Types.h"
 
 namespace librbd { class ImageCtx; }
 

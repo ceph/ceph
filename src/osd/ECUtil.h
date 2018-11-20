@@ -18,7 +18,7 @@
 #include <ostream>
 #include "erasure-code/ErasureCodeInterface.h"
 #include "include/buffer_fwd.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/encoding.h"
 #include "common/Formatter.h"
 
@@ -31,7 +31,7 @@ public:
   stripe_info_t(uint64_t stripe_size, uint64_t stripe_width)
     : stripe_width(stripe_width),
       chunk_size(stripe_width / stripe_size) {
-    assert(stripe_width % stripe_size == 0);
+    ceph_assert(stripe_width % stripe_size == 0);
   }
   bool logical_offset_is_stripe_aligned(uint64_t logical) const {
     return (logical % stripe_width) == 0;
@@ -57,11 +57,11 @@ public:
       offset);
   }
   uint64_t aligned_logical_offset_to_chunk_offset(uint64_t offset) const {
-    assert(offset % stripe_width == 0);
+    ceph_assert(offset % stripe_width == 0);
     return (offset / stripe_width) * chunk_size;
   }
   uint64_t aligned_chunk_offset_to_logical_offset(uint64_t offset) const {
-    assert(offset % chunk_size == 0);
+    ceph_assert(offset % chunk_size == 0);
     return (offset / chunk_size) * stripe_width;
   }
   std::pair<uint64_t, uint64_t> aligned_offset_len_to_chunk(
@@ -120,7 +120,7 @@ public:
   void dump(Formatter *f) const;
   static void generate_test_instances(std::list<HashInfo*>& o);
   uint32_t get_chunk_hash(int shard) const {
-    assert((unsigned)shard < cumulative_shard_hashes.size());
+    ceph_assert((unsigned)shard < cumulative_shard_hashes.size());
     return cumulative_shard_hashes[shard];
   }
   uint64_t get_total_chunk_size() const {
@@ -140,7 +140,7 @@ public:
   void set_projected_total_logical_size(
     const stripe_info_t &sinfo,
     uint64_t logical_size) {
-    assert(sinfo.logical_offset_is_stripe_aligned(logical_size));
+    ceph_assert(sinfo.logical_offset_is_stripe_aligned(logical_size));
     projected_total_chunk_size = sinfo.aligned_logical_offset_to_chunk_offset(
       logical_size);
   }

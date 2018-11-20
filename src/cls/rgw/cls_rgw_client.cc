@@ -21,7 +21,7 @@ private:
   T *data;
   int *ret_code;
 public:
-  ClsBucketIndexOpCtx(T* _data, int *_ret_code) : data(_data), ret_code(_ret_code) { assert(data); }
+  ClsBucketIndexOpCtx(T* _data, int *_ret_code) : data(_data), ret_code(_ret_code) { ceph_assert(data); }
   ~ClsBucketIndexOpCtx() override {}
   void handle_completion(int r, bufferlist& outbl) override {
     if (r >= 0) {
@@ -42,7 +42,7 @@ void BucketIndexAioManager::do_completion(int id) {
   Mutex::Locker l(lock);
 
   map<int, librados::AioCompletion*>::iterator iter = pendings.find(id);
-  assert(iter != pendings.end());
+  ceph_assert(iter != pendings.end());
   completions[id] = iter->second;
   pendings.erase(iter);
 
@@ -588,7 +588,7 @@ int cls_rgw_get_dir_header_async(IoCtx& io_ctx, string& oid, RGWGetDirHeader_CB 
   return 0;
 }
 
-int cls_rgw_usage_log_read(IoCtx& io_ctx, string& oid, string& user,
+int cls_rgw_usage_log_read(IoCtx& io_ctx, const string& oid, const string& user, const string& bucket,
                            uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
                            string& read_iter, map<rgw_user_bucket, rgw_usage_log_entry>& usage,
                            bool *is_truncated)
@@ -602,6 +602,7 @@ int cls_rgw_usage_log_read(IoCtx& io_ctx, string& oid, string& user,
   call.end_epoch = end_epoch;
   call.owner = user;
   call.max_entries = max_entries;
+  call.bucket = bucket;
   call.iter = read_iter;
   encode(call, in);
   int r = io_ctx.exec(oid, RGW_CLASS, RGW_USER_USAGE_LOG_READ, in, out);
@@ -624,7 +625,7 @@ int cls_rgw_usage_log_read(IoCtx& io_ctx, string& oid, string& user,
   return 0;
 }
 
-int cls_rgw_usage_log_trim(IoCtx& io_ctx, const string& oid, string& user,
+int cls_rgw_usage_log_trim(IoCtx& io_ctx, const string& oid, const string& user, const string& bucket,
 			   uint64_t start_epoch, uint64_t end_epoch)
 {
   bufferlist in;
@@ -632,6 +633,7 @@ int cls_rgw_usage_log_trim(IoCtx& io_ctx, const string& oid, string& user,
   call.start_epoch = start_epoch;
   call.end_epoch = end_epoch;
   call.user = user;
+  call.bucket = bucket;
   encode(call, in);
 
   bool done = false;
@@ -960,4 +962,3 @@ int CLSRGWIssueSetBucketResharding::issue_op(int shard_id, const string& oid)
 {
   return issue_set_bucket_resharding(io_ctx, oid, entry, &manager);
 }
-

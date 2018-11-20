@@ -212,7 +212,7 @@ void LogChannel::do_log(clog_type prio, std::stringstream& ss)
 
 void LogChannel::do_log(clog_type prio, const std::string& s)
 {
-  Mutex::Locker l(channel_lock);
+  std::lock_guard<Mutex> l(channel_lock);
   if (CLOG_ERROR == prio) {
     ldout(cct,-1) << "log " << prio << " : " << s << dendl;
   } else {
@@ -250,7 +250,7 @@ void LogChannel::do_log(clog_type prio, const std::string& s)
 
 Message *LogClient::get_mon_log_message(bool flush)
 {
-  Mutex::Locker l(log_lock);
+  std::lock_guard<Mutex> l(log_lock);
   if (flush) {
     if (log_queue.empty())
       return nullptr;
@@ -262,13 +262,13 @@ Message *LogClient::get_mon_log_message(bool flush)
 
 bool LogClient::are_pending()
 {
-  Mutex::Locker l(log_lock);
+  std::lock_guard<Mutex> l(log_lock);
   return last_log > last_log_sent;
 }
 
 Message *LogClient::_get_mon_log_message()
 {
-  assert(log_lock.is_locked());
+  ceph_assert(log_lock.is_locked());
   if (log_queue.empty())
     return NULL;
 
@@ -291,15 +291,15 @@ Message *LogClient::_get_mon_log_message()
 		<< " num " << log_queue.size()
 		<< " unsent " << num_unsent
 		<< " sending " << num_send << dendl;
-  assert(num_unsent <= log_queue.size());
+  ceph_assert(num_unsent <= log_queue.size());
   std::deque<LogEntry>::iterator p = log_queue.begin();
   std::deque<LogEntry> o;
   while (p->seq <= last_log_sent) {
     ++p;
-    assert(p != log_queue.end());
+    ceph_assert(p != log_queue.end());
   }
   while (num_send--) {
-    assert(p != log_queue.end());
+    ceph_assert(p != log_queue.end());
     o.push_back(*p);
     last_log_sent = p->seq;
     ldout(cct,10) << " will send " << *p << dendl;
@@ -314,9 +314,9 @@ Message *LogClient::_get_mon_log_message()
 
 void LogClient::_send_to_mon()
 {
-  assert(log_lock.is_locked());
-  assert(is_mon);
-  assert(messenger->get_myname().is_mon());
+  ceph_assert(log_lock.is_locked());
+  ceph_assert(is_mon);
+  ceph_assert(messenger->get_myname().is_mon());
   ldout(cct,10) << __func__ << " log to self" << dendl;
   Message *log = _get_mon_log_message();
   messenger->get_loopback_connection()->send_message(log);
@@ -324,7 +324,7 @@ void LogClient::_send_to_mon()
 
 version_t LogClient::queue(LogEntry &entry)
 {
-  Mutex::Locker l(log_lock);
+  std::lock_guard<Mutex> l(log_lock);
   entry.seq = ++last_log;
   log_queue.push_back(entry);
 
@@ -337,7 +337,7 @@ version_t LogClient::queue(LogEntry &entry)
 
 uint64_t LogClient::get_next_seq()
 {
-  Mutex::Locker l(log_lock);
+  std::lock_guard<Mutex> l(log_lock);
   return ++last_log;
 }
 
@@ -358,7 +358,7 @@ const EntityName& LogClient::get_myname()
 
 bool LogClient::handle_log_ack(MLogAck *m)
 {
-  Mutex::Locker l(log_lock);
+  std::lock_guard<Mutex> l(log_lock);
   ldout(cct,10) << "handle_log_ack " << *m << dendl;
 
   version_t last = m->last;

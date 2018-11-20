@@ -19,23 +19,21 @@
 #include <ostream>
 
 #include <boost/intrusive_ptr.hpp>
-// Because intusive_ptr clobbers our assert...
-#include "include/assert.h"
 
-#include "include/types.h"
-#include "include/buffer.h"
-
+#include "auth/Auth.h"
 #include "common/RefCountedObj.h"
-
-#include "common/debug.h"
 #include "common/config.h"
+#include "common/debug.h"
+#include "include/ceph_assert.h" // Because intusive_ptr clobbers our assert...
+#include "include/buffer.h"
+#include "include/types.h"
+#include "msg/MessageRef.h"
 
 
 // ======================================================
 
 // abstract Connection, for keeping per-connection state
 
-class Message;
 class Messenger;
 
 struct Connection : public RefCountedObject {
@@ -53,12 +51,19 @@ public:
   int rx_buffers_version;
   map<ceph_tid_t,pair<bufferlist,int> > rx_buffers;
 
+  // authentication state
+  // FIXME make these private after ms_handle_authorizer is removed
+public:
+  AuthCapsInfo peer_caps_info;
+  EntityName peer_name;
+  uint64_t peer_global_id = 0;
+
   friend class boost::intrusive_ptr<Connection>;
   friend class PipeConnection;
 
 public:
   Connection(CephContext *cct, Messenger *m)
-    // we are managed exlusively by ConnectionRef; make it so you can
+    // we are managed exclusively by ConnectionRef; make it so you can
     //   ConnectionRef foo = new Connection;
     : RefCountedObject(cct, 0),
       lock("Connection::lock"),
@@ -109,7 +114,7 @@ public:
    */
   virtual int send_message(Message *m) = 0;
 
-  int send_message(boost::intrusive_ptr<Message> m)
+  virtual int send_message2(MessageRef m)
   {
     return send_message(m.detach()); /* send_message(Message *m) consumes a reference */
   }
@@ -147,6 +152,15 @@ public:
    */
   virtual void mark_disposable() = 0;
 
+  AuthCapsInfo& get_peer_caps_info() {
+    return peer_caps_info;
+  }
+  const EntityName& get_peer_entity_name() {
+    return peer_name;
+  }
+  uint64_t get_peer_global_id() {
+    return peer_global_id;
+  }
 
   int get_peer_type() const { return peer_type; }
   void set_peer_type(int t) { peer_type = t; }
@@ -156,6 +170,9 @@ public:
   bool peer_is_mds() const { return peer_type == CEPH_ENTITY_TYPE_MDS; }
   bool peer_is_osd() const { return peer_type == CEPH_ENTITY_TYPE_OSD; }
   bool peer_is_client() const { return peer_type == CEPH_ENTITY_TYPE_CLIENT; }
+
+  /// which of the peer's addrs is actually in use for this connection
+  virtual entity_addr_t get_peer_socket_addr() const = 0;
 
   entity_addr_t get_peer_addr() const {
     return peer_addrs.front();

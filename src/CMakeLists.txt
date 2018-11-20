@@ -66,14 +66,8 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE "RelWithDebInfo" CACHE STRING "Default BUILD_TYPE is RelWithDebInfo, other options are: Debug, Release, and MinSizeRel." FORCE)
 endif()
 
-if(NOT CMAKE_BUILD_TYPE STREQUAL Debug)
-  # we use assert(3) for testing, so scrub the -DNDEBUG defined by default
-  string(TOUPPER "${CMAKE_BUILD_TYPE}" build_type_upper)
-  foreach(flags
-      CMAKE_CXX_FLAGS_${build_type_upper}
-      CMAKE_C_FLAGS_${build_type_upper})
-    string(REGEX REPLACE "(^| )[/-]D *NDEBUG($| )" " " "${flags}" "${${flags}}")
-  endforeach()
+if(WITH_CEPH_DEBUG_MUTEX OR CMAKE_BUILD_TYPE STREQUAL Debug)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DCEPH_DEBUG_MUTEX")
 endif()
 
 include(CheckCCompilerFlag)
@@ -143,17 +137,6 @@ int main() {
   m.merge(Map{});
 }
 " HAVE_STDLIB_MAP_SPLICING)
-
-if(CMAKE_COMPILER_IS_GNUCXX AND
-    CMAKE_CXX_COMPILER_VERSION VERSION_LESS 5.1)
-  # this is not always correct, as one can use clang with libstdc++ or
-  # use old gcc with new libstdc++, but it covers the most cases.
-  #
-  # libstdc++ 4.9 has O(n) list::size(), and its regex is buggy
-  message(SEND_ERROR "performance regression is expected due to an O(n) "
-    "implementation of 'std::list::size()' in libstdc++ older than 5.1.0, "
-    "Please use GCC 5.1 and up.")
-endif()
 
 ## Handle diagnostics color if compiler supports them.
 CHECK_C_COMPILER_FLAG("-fdiagnostics-color=always"
@@ -293,17 +276,6 @@ add_subdirectory(json_spirit)
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/xxHash")
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/rapidjson/include")
 
-set(GMOCK_INCLUDE_DIRS
-  "${CMAKE_SOURCE_DIR}/src/googletest/googletest/include/gmock")
-set(GTEST_INCLUDE_DIRS
-  "${CMAKE_SOURCE_DIR}/src/googletest/googletest/include/gtest")
-
-include_directories("${CMAKE_SOURCE_DIR}/src/dmclock/src")
-include_directories("${CMAKE_SOURCE_DIR}/src/dmclock/support/src")
-
-# needed for source files that friend unit tests (e.g., using FRIEND_TEST)
-include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/googletest/googletest/include")
-
 if(WITH_SEASTAR)
   find_package(fmt 4.0.0 QUIET)
   if(NOT fmt_FOUND)
@@ -327,7 +299,11 @@ if(WITH_SEASTAR)
       _find_package(${ARGV})
     endif()
   endmacro ()
+  set(Seastar_HWLOC OFF CACHE BOOL "" FORCE)
   add_subdirectory(seastar)
+  # create the directory so cmake won't complain when looking at the imported
+  # target: Seastar exports this directory created at build-time
+  file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/seastar/gen")
   add_subdirectory(crimson)
 endif()
 
@@ -339,6 +315,7 @@ set(libcommon_files
   mon/MonCap.cc
   mon/MonClient.cc
   mon/MonMap.cc
+  mon/MonSub.cc
   mgr/MgrClient.cc
   mgr/ServiceMap.cc
   osd/ECMsgTypes.cc
@@ -420,9 +397,9 @@ add_library(ceph-common SHARED ${ceph_common_objs})
 target_link_libraries(ceph-common ${ceph_common_deps})
 # appease dpkg-shlibdeps
 set_target_properties(ceph-common PROPERTIES
-  SOVERSION 0
+  SOVERSION 1
   INSTALL_RPATH "")
-if(NOT APPLE)
+if(NOT APPLE AND NOT FREEBSD)
   # Apple uses Mach-O, not ELF. so this option does not apply to APPLE.
   #
   # prefer the local symbol definitions when binding references to global
@@ -436,7 +413,11 @@ if(NOT APPLE)
     PROPERTY LINK_FLAGS "-Wl,-Bsymbolic -Wl,-Bsymbolic-functions")
 endif()
 
-install(TARGETS ceph-common DESTINATION ${CMAKE_INSTALL_PKGLIBDIR})
+install(
+  TARGETS ceph-common
+  LIBRARY
+  DESTINATION ${CMAKE_INSTALL_PKGLIBDIR}
+  NAMELINK_SKIP)
 
 if(${WITH_LTTNG})
   add_subdirectory(tracing)
@@ -458,9 +439,14 @@ add_subdirectory(perfglue)
 
 add_library(rados_snap_set_diff_obj OBJECT librados/snap_set_diff.cc)
 
+option(WITH_LIBRADOSSTRIPER "build with libradosstriper support" ON)
+
 add_subdirectory(include)
 add_subdirectory(librados)
-add_subdirectory(libradosstriper)
+
+if(WITH_LIBRADOSSTRIPER)
+  add_subdirectory(libradosstriper)
+endif()
 
 if(WITH_MGR)
   add_subdirectory(mgr)
@@ -511,9 +497,6 @@ endif()
 add_subdirectory(kv)
 add_subdirectory(os)
 
-set(cls_references_files objclass/class_api.cc)
-add_library(cls_references_objs OBJECT ${cls_references_files})
-
 add_subdirectory(osd)
 
 set(ceph_osd_srcs
@@ -541,27 +524,41 @@ add_subdirectory(erasure-code)
 
 # Support/Tools
 if(WITH_TESTS)
-  add_subdirectory(googletest/googlemock)
-  add_subdirectory(test)
+  option(WITH_SYSTEM_GTEST "require and build with system gtest and gmock" OFF)
+  if(WITH_SYSTEM_GTEST)
+    find_package(GTest REQUIRED)
+    find_package(GMock REQUIRED)
+  else()
+    add_subdirectory(googletest/googlemock)
+    add_library(GMock::GMock ALIAS gmock)
+    add_library(GMock::Main ALIAS gmock_main)
+    target_include_directories(gmock INTERFACE
+      $<TARGET_PROPERTY:gtest,INTERFACE_INCLUDE_DIRECTORIES>)
+    target_include_directories(gmock_main INTERFACE
+      $<TARGET_PROPERTY:gtest,INTERFACE_INCLUDE_DIRECTORIES>)
+    add_library(GTest::GTest ALIAS gtest)
+    add_library(GTest::Main ALIAS gtest_main)
+  endif()
 endif(WITH_TESTS)
 
-add_subdirectory(compressor)
-
-add_subdirectory(tools)
-
 # dmClock (after gmock)
-
-add_subdirectory(dmclock/src)
-
 option(WITH_DMCLOCK_TESTS
   "enable the build of dmclock-tests and dmclock-data-struct tests binaries"
   OFF)
 if(WITH_TESTS AND WITH_DMCLOCK_TESTS)
   # note: add_test is not being called, so dmclock tests aren't part
   # of ceph tests
-  add_subdirectory(dmclock/test)
-  add_subdirectory(dmclock/support/test)
-endif(WITH_TESTS AND WITH_DMCLOCK_TESTS)
+  set(dmclock_TEST ON CACHE BOOL "" FORCE)
+endif()
+add_subdirectory(dmclock)
+
+add_subdirectory(compressor)
+
+add_subdirectory(tools)
+
+if(WITH_TESTS)
+  add_subdirectory(test)
+endif()
 
 add_subdirectory(crypto)
 
@@ -581,6 +578,9 @@ configure_file(${CMAKE_SOURCE_DIR}/src/init-ceph.in
 configure_file(ceph-post-file.in
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-post-file @ONLY)
 
+configure_file(ceph-crash.in
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-crash @ONLY)
+
 if(WITH_TESTS)
   install(PROGRAMS
     ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-debugpack
@@ -591,6 +591,7 @@ endif()
 install(PROGRAMS
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-post-file
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-crash
   ${CMAKE_SOURCE_DIR}/src/ceph-run
   ${CMAKE_SOURCE_DIR}/src/ceph-clsinfo
   DESTINATION bin)
@@ -718,7 +719,7 @@ install(FILES
   sample.ceph.conf
   DESTINATION ${CMAKE_INSTALL_DOCDIR})
 
-# Now create a useable config.h
+# Now create a usable config.h
 configure_file(
   ${CMAKE_SOURCE_DIR}/src/include/config-h.in.cmake
   ${CMAKE_BINARY_DIR}/include/acconfig.h

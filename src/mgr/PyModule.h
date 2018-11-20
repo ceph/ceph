@@ -57,12 +57,14 @@ class PyModule
   mutable Mutex lock{"PyModule::lock"};
 private:
   const std::string module_name;
-  const bool always_on;
   std::string get_site_packages();
   int load_subclass_of(const char* class_name, PyObject** py_class);
 
   // Did the MgrMap identify this module as one that should run?
   bool enabled = false;
+
+  // Did the MgrMap flag this module as always on?
+  bool always_on = false;
 
   // Did we successfully import this python module and look up symbols?
   // (i.e. is it possible to instantiate a MgrModule subclass instance?)
@@ -97,8 +99,8 @@ public:
   PyObject *pClass = nullptr;
   PyObject *pStandbyClass = nullptr;
 
-  explicit PyModule(const std::string &module_name_, bool always_on)
-    : module_name(module_name_), always_on(always_on)
+  explicit PyModule(const std::string &module_name_)
+    : module_name(module_name_)
   {
   }
 
@@ -120,13 +122,17 @@ public:
     enabled = enabled_;
   }
 
+  void set_always_on(const bool always_on_) {
+    always_on = always_on_;
+  }
+
   /**
    * Extend `out` with the contents of `this->commands`
    */
   void get_commands(std::vector<ModuleCommand> *out) const
   {
-    Mutex::Locker l(lock);
-    assert(out != nullptr);
+    std::lock_guard l(lock);
+    ceph_assert(out != nullptr);
     out->insert(out->end(), commands.begin(), commands.end());
   }
 
@@ -137,28 +143,28 @@ public:
    */
   void fail(const std::string &reason)
   {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     failed = true;
     error_string = reason;
   }
 
   bool is_enabled() const {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     return enabled || always_on;
   }
 
-  bool is_failed() const { Mutex::Locker l(lock) ; return failed; }
-  bool is_loaded() const { Mutex::Locker l(lock) ; return loaded; }
-  bool is_always_on() const { Mutex::Locker l(lock) ; return always_on; }
+  bool is_failed() const { std::lock_guard l(lock) ; return failed; }
+  bool is_loaded() const { std::lock_guard l(lock) ; return loaded; }
+  bool is_always_on() const { std::lock_guard l(lock) ; return always_on; }
 
   const std::string &get_name() const {
-    Mutex::Locker l(lock) ; return module_name;
+    std::lock_guard l(lock) ; return module_name;
   }
   const std::string &get_error_string() const {
-    Mutex::Locker l(lock) ; return error_string;
+    std::lock_guard l(lock) ; return error_string;
   }
   bool get_can_run() const {
-    Mutex::Locker l(lock) ; return can_run;
+    std::lock_guard l(lock) ; return can_run;
   }
 };
 

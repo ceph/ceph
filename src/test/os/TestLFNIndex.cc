@@ -46,6 +46,10 @@ public:
 		     uint32_t bits,                            
 		     CollectionIndex* dest
 		     ) override { return 0; }
+  int _merge(
+		     uint32_t bits,
+		     CollectionIndex* dest
+		     ) override { return 0; }
 
   void test_generate_and_parse(const ghobject_t &hoid, const std::string &mangled_expected) {
     const std::string mangled_name = lfn_generate_object_name(hoid);
@@ -282,7 +286,7 @@ TEST_F(TestLFNIndex, remove_object) {
     EXPECT_EQ(0, exists);
     std::string pathname_1("PATH_1/" + mangled_name_1);
     auto retvalue = ::creat(pathname_1.c_str(), 0600);
-    assert(retvalue > 2);
+    ceph_assert(retvalue > 2);
     EXPECT_EQ(0, ::close(retvalue));
     EXPECT_EQ(0, created(hoid, pathname_1.c_str()));
 
@@ -422,7 +426,7 @@ TEST_F(TestLFNIndex, get_mangled_name) {
     mangled_name.clear();
     exists = 666;
     auto retvalue = ::creat(pathname.c_str(), 0600);
-    assert(retvalue > 2);
+    ceph_assert(retvalue > 2);
     EXPECT_EQ(0, ::close(retvalue));
     EXPECT_EQ(0, created(hoid, pathname.c_str()));
     EXPECT_EQ(0, get_mangled_name(path, hoid, &mangled_name, &exists));

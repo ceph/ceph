@@ -17,9 +17,12 @@
 
 #include "MOSDFastDispatchOp.h"
 
-class MOSDPGPushReply : public MOSDFastDispatchOp {
-  static const int HEAD_VERSION = 3;
-  static const int COMPAT_VERSION = 2;
+class MOSDPGPushReply : public MessageInstance<MOSDPGPushReply, MOSDFastDispatchOp> {
+public:
+  friend factory;
+private:
+  static constexpr int HEAD_VERSION = 3;
+  static constexpr int COMPAT_VERSION = 2;
 
 public:
   pg_shard_t from;
@@ -39,7 +42,7 @@ public:
   }
 
   MOSDPGPushReply()
-    : MOSDFastDispatchOp(MSG_OSD_PG_PUSH_REPLY, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_PG_PUSH_REPLY, HEAD_VERSION, COMPAT_VERSION),
       cost(0)
     {}
 

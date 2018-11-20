@@ -6,7 +6,7 @@
 #include "test/librados_test_stub/TestRadosClient.h"
 #include "test/librados_test_stub/TestWatchNotify.h"
 #include "librados/AioCompletionImpl.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "common/Finisher.h"
 #include "common/valgrind.h"
 #include "objclass/objclass.h"
@@ -40,7 +40,7 @@ TestIoCtxImpl::TestIoCtxImpl(const TestIoCtxImpl& rhs)
 }
 
 TestIoCtxImpl::~TestIoCtxImpl() {
-  assert(m_pending_ops == 0);
+  ceph_assert(m_pending_ops == 0);
 }
 
 void TestObjectOperationImpl::get() {

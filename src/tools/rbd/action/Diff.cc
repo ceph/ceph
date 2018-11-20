@@ -35,7 +35,7 @@ static int diff_cb(uint64_t ofs, size_t len, int exists, void *arg)
     om->f->dump_string("exists", exists ? "true" : "false");
     om->f->close_section();
   } else {
-    assert(om->t);
+    ceph_assert(om->t);
     *(om->t) << ofs << len << (exists ? "data" : "zero") << TextTable::endrow;
   }
   return 0;

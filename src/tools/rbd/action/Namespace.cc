@@ -159,7 +159,7 @@ int execute_list(const po::variables_map &vm,
   return 0;
 }
 
-Shell::Action action_move(
+Shell::Action action_create(
   {"namespace", "create"}, {},
    "Create an RBD image namespace.", "",
   &get_create_arguments, &execute_create);

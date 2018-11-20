@@ -20,7 +20,7 @@ static const std::map<std::string, uint64_t> RBD_FEATURE_MAP = {
   {RBD_FEATURE_NAME_JOURNALING, RBD_FEATURE_JOURNALING},
   {RBD_FEATURE_NAME_DATA_POOL, RBD_FEATURE_DATA_POOL},
 };
-static_assert((RBD_FEATURE_OPERATIONS << 1) > RBD_FEATURES_ALL,
+static_assert((RBD_FEATURE_MIGRATING << 1) > RBD_FEATURES_ALL,
 	      "new RBD feature added");
 
 

@@ -56,7 +56,7 @@ struct C_GetClient : public Context {
         C_GetClient, &C_GetClient::handle_get_client>);
 
     int r = ioctx.aio_operate(oid, comp, &op, &out_bl);
-    assert(r == 0);
+    ceph_assert(r == 0);
     comp->release();
   }
 
@@ -115,7 +115,7 @@ struct C_AllocateTag : public Context {
 
     out_bl.clear();
     int r = ioctx.aio_operate(oid, comp, &op, &out_bl);
-    assert(r == 0);
+    ceph_assert(r == 0);
     comp->release();
   }
 
@@ -144,7 +144,7 @@ struct C_AllocateTag : public Context {
         C_AllocateTag, &C_AllocateTag::handle_tag_create>);
 
     int r = ioctx.aio_operate(oid, comp, &op);
-    assert(r == 0);
+    ceph_assert(r == 0);
     comp->release();
   }
 
@@ -174,7 +174,7 @@ struct C_AllocateTag : public Context {
 
     out_bl.clear();
     int r = ioctx.aio_operate(oid, comp, &op, &out_bl);
-    assert(r == 0);
+    ceph_assert(r == 0);
     comp->release();
   }
 
@@ -233,7 +233,7 @@ struct C_GetTag : public Context {
         C_GetTag, &C_GetTag::handle_get_tag>);
 
     int r = ioctx.aio_operate(oid, comp, &op, &out_bl);
-    assert(r == 0);
+    ceph_assert(r == 0);
     comp->release();
   }
 
@@ -294,7 +294,7 @@ struct C_GetTags : public Context {
 
     out_bl.clear();
     int r = ioctx.aio_operate(oid, comp, &op, &out_bl);
-    assert(r == 0);
+    ceph_assert(r == 0);
     comp->release();
   }
 
@@ -372,7 +372,7 @@ struct C_AssertActiveTag : public Context {
         C_AssertActiveTag, &C_AssertActiveTag::handle_send>);
 
     int r = ioctx.aio_operate(oid, comp, &op, &out_bl);
-    assert(r == 0);
+    ceph_assert(r == 0);
     comp->release();
   }
 
@@ -419,13 +419,13 @@ JournalMetadata::JournalMetadata(ContextWQ *work_queue, SafeTimer *timer,
 
 JournalMetadata::~JournalMetadata() {
   Mutex::Locker locker(m_lock);
-  assert(!m_initialized);
+  ceph_assert(!m_initialized);
 }
 
 void JournalMetadata::init(Context *on_finish) {
   {
     Mutex::Locker locker(m_lock);
-    assert(!m_initialized);
+    ceph_assert(!m_initialized);
     m_initialized = true;
   }
 
@@ -449,7 +449,7 @@ void JournalMetadata::init(Context *on_finish) {
   librados::AioCompletion *comp = librados::Rados::aio_create_completion(
     on_finish, nullptr, utils::rados_ctx_callback);
   int r = m_ioctx.aio_watch(m_oid, comp, &m_watch_handle, &m_watch_ctx);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 
@@ -477,7 +477,7 @@ void JournalMetadata::shut_down(Context *on_finish) {
       librados::AioCompletion *comp = librados::Rados::aio_create_completion(
         on_finish, nullptr, utils::rados_ctx_callback);
       r = rados.aio_watch_flush(comp);
-      assert(r == 0);
+      ceph_assert(r == 0);
       comp->release();
     });
   on_finish = new FunctionContext([this, on_finish](int r) {
@@ -487,7 +487,7 @@ void JournalMetadata::shut_down(Context *on_finish) {
     librados::AioCompletion *comp = librados::Rados::aio_create_completion(
       on_finish, nullptr, utils::rados_ctx_callback);
     int r = m_ioctx.aio_unwatch(watch_handle, comp);
-    assert(r == 0);
+    ceph_assert(r == 0);
     comp->release();
   } else {
     on_finish->complete(0);
@@ -522,7 +522,7 @@ void JournalMetadata::register_client(const bufferlist &data,
     librados::Rados::aio_create_completion(ctx, NULL,
                                            utils::rados_ctx_callback);
   int r = m_ioctx.aio_operate(m_oid, comp, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 
@@ -538,12 +538,12 @@ void JournalMetadata::update_client(const bufferlist &data,
     librados::Rados::aio_create_completion(ctx, NULL,
                                            utils::rados_ctx_callback);
   int r = m_ioctx.aio_operate(m_oid, comp, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 
 void JournalMetadata::unregister_client(Context *on_finish) {
-  assert(!m_client_id.empty());
+  ceph_assert(!m_client_id.empty());
 
   ldout(m_cct, 10) << __func__ << ": " << m_client_id << dendl;
   librados::ObjectWriteOperation op;
@@ -555,7 +555,7 @@ void JournalMetadata::unregister_client(Context *on_finish) {
     librados::Rados::aio_create_completion(ctx, NULL,
                                            utils::rados_ctx_callback);
   int r = m_ioctx.aio_operate(m_oid, comp, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 
@@ -624,7 +624,7 @@ void JournalMetadata::set_minimum_set(uint64_t object_set) {
     librados::Rados::aio_create_completion(ctx, NULL,
                                            utils::rados_ctx_callback);
   int r = m_ioctx.aio_operate(m_oid, comp, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 
   m_minimum_set = object_set;
@@ -654,7 +654,7 @@ void JournalMetadata::set_active_set(uint64_t object_set, Context *on_finish) {
     librados::Rados::aio_create_completion(ctx, NULL,
                                            utils::rados_ctx_callback);
   int r = m_ioctx.aio_operate(m_oid, comp, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 
   m_active_set = object_set;
@@ -719,7 +719,7 @@ bool JournalMetadata::get_last_allocated_entry_tid(uint64_t tag_tid,
     return false;
   }
 
-  assert(it->second > 0);
+  ceph_assert(it->second > 0);
   *entry_tid = it->second - 1;
   return true;
 }
@@ -786,7 +786,7 @@ void JournalMetadata::handle_refresh_complete(C_Refresh *refresh, int r) {
   }
 
   Contexts refresh_ctxs;
-  assert(m_refreshes_in_progress > 0);
+  ceph_assert(m_refreshes_in_progress > 0);
   --m_refreshes_in_progress;
   if (m_refreshes_in_progress == 0) {
     std::swap(refresh_ctxs, m_refresh_ctxs);
@@ -801,10 +801,10 @@ void JournalMetadata::handle_refresh_complete(C_Refresh *refresh, int r) {
 void JournalMetadata::cancel_commit_task() {
   ldout(m_cct, 20) << __func__ << dendl;
 
-  assert(m_timer_lock->is_locked());
-  assert(m_lock.is_locked());
-  assert(m_commit_position_ctx != nullptr);
-  assert(m_commit_position_task_ctx != nullptr);
+  ceph_assert(m_timer_lock->is_locked());
+  ceph_assert(m_lock.is_locked());
+  ceph_assert(m_commit_position_ctx != nullptr);
+  ceph_assert(m_commit_position_task_ctx != nullptr);
   m_timer->cancel_event(m_commit_position_task_ctx);
   m_commit_position_task_ctx = NULL;
 }
@@ -812,9 +812,9 @@ void JournalMetadata::cancel_commit_task() {
 void JournalMetadata::schedule_commit_task() {
   ldout(m_cct, 20) << __func__ << dendl;
 
-  assert(m_timer_lock->is_locked());
-  assert(m_lock.is_locked());
-  assert(m_commit_position_ctx != nullptr);
+  ceph_assert(m_timer_lock->is_locked());
+  ceph_assert(m_lock.is_locked());
+  ceph_assert(m_commit_position_ctx != nullptr);
   if (m_commit_position_task_ctx == nullptr) {
     m_commit_position_task_ctx =
       m_timer->add_event_after(m_settings.commit_interval,
@@ -823,8 +823,8 @@ void JournalMetadata::schedule_commit_task() {
 }
 
 void JournalMetadata::handle_commit_position_task() {
-  assert(m_timer_lock->is_locked());
-  assert(m_lock.is_locked());
+  ceph_assert(m_timer_lock->is_locked());
+  ceph_assert(m_lock.is_locked());
   ldout(m_cct, 20) << __func__ << ": "
                    << "client_id=" << m_client_id << ", "
                    << "commit_position=" << m_commit_position << dendl;
@@ -839,7 +839,7 @@ void JournalMetadata::handle_commit_position_task() {
   Context* ctx = new FunctionContext([this, commit_position_ctx](int r) {
       Contexts flush_commit_position_ctxs;
       m_lock.Lock();
-      assert(m_flush_commits_in_progress > 0);
+      ceph_assert(m_flush_commits_in_progress > 0);
       --m_flush_commits_in_progress;
       if (m_flush_commits_in_progress == 0) {
         std::swap(flush_commit_position_ctxs, m_flush_commit_position_ctxs);
@@ -872,17 +872,17 @@ void JournalMetadata::handle_commit_position_task() {
   auto comp = librados::Rados::aio_create_completion(ctx, nullptr,
                                                      utils::rados_ctx_callback);
   int r = m_ioctx.aio_operate(m_oid, comp, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 
 void JournalMetadata::schedule_watch_reset() {
-  assert(m_timer_lock->is_locked());
+  ceph_assert(m_timer_lock->is_locked());
   m_timer->add_event_after(1, new C_WatchReset(this));
 }
 
 void JournalMetadata::handle_watch_reset() {
-  assert(m_timer_lock->is_locked());
+  ceph_assert(m_timer_lock->is_locked());
   if (!m_initialized) {
     return;
   }
@@ -965,8 +965,8 @@ void JournalMetadata::overflow_commit_tid(uint64_t commit_tid,
   Mutex::Locker locker(m_lock);
 
   auto it = m_pending_commit_tids.find(commit_tid);
-  assert(it != m_pending_commit_tids.end());
-  assert(it->second.object_num < object_num);
+  ceph_assert(it != m_pending_commit_tids.end());
+  ceph_assert(it->second.object_num < object_num);
 
   ldout(m_cct, 20) << __func__ << ": "
                    << "commit_tid=" << commit_tid << ", "
@@ -981,7 +981,7 @@ void JournalMetadata::get_commit_entry(uint64_t commit_tid,
   Mutex::Locker locker(m_lock);
 
   auto it = m_pending_commit_tids.find(commit_tid);
-  assert(it != m_pending_commit_tids.end());
+  ceph_assert(it != m_pending_commit_tids.end());
 
   *object_num = it->second.object_num;
   *tag_tid = it->second.tag_tid;
@@ -997,7 +997,7 @@ void JournalMetadata::committed(uint64_t commit_tid,
   {
     Mutex::Locker timer_locker(*m_timer_lock);
     Mutex::Locker locker(m_lock);
-    assert(commit_tid > m_commit_position_tid);
+    ceph_assert(commit_tid > m_commit_position_tid);
 
     if (!m_commit_position.object_positions.empty()) {
       // in-flight commit position update
@@ -1008,7 +1008,7 @@ void JournalMetadata::committed(uint64_t commit_tid,
     }
 
     CommitTids::iterator it = m_pending_commit_tids.find(commit_tid);
-    assert(it != m_pending_commit_tids.end());
+    ceph_assert(it != m_pending_commit_tids.end());
 
     CommitEntry &commit_entry = it->second;
     commit_entry.committed = true;
@@ -1079,7 +1079,7 @@ void JournalMetadata::async_notify_update(Context *on_safe) {
 
   bufferlist bl;
   int r = m_ioctx.aio_notify(m_oid, comp, bl, 5000, NULL);
-  assert(r == 0);
+  ceph_assert(r == 0);
 
   comp->release();
 }
@@ -1132,7 +1132,7 @@ void JournalMetadata::schedule_laggy_clients_disconnect(Context *on_finish) {
             auto comp = librados::Rados::aio_create_completion(
               ctx, nullptr, utils::rados_ctx_callback);
             int r = m_ioctx.aio_operate(m_oid, comp, &op);
-            assert(r == 0);
+            ceph_assert(r == 0);
             comp->release();
           });
       }

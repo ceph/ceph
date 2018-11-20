@@ -30,3 +30,4 @@ tasks:
       CEPH_ARGS: ''
       RBD_MIRROR_USE_EXISTING_CLUSTER: '1'
       RBD_MIRROR_USE_RBD_MIRROR: '1'
+    timeout: 6h

@@ -2,7 +2,7 @@ import { Component, EventEmitter, Output } from '@angular/core';
 import { Validators } from '@angular/forms';
 
 import * as _ from 'lodash';
-import { BsModalRef } from 'ngx-bootstrap/modal/bs-modal-ref.service';
+import { BsModalRef } from 'ngx-bootstrap/modal';
 
 import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
@@ -18,7 +18,8 @@ export class RgwUserCapabilityModalComponent {
    * The event that is triggered when the 'Add' or 'Update' button
    * has been pressed.
    */
-  @Output() submitAction = new EventEmitter();
+  @Output()
+  submitAction = new EventEmitter();
 
   formGroup: CdFormGroup;
   editing = true;

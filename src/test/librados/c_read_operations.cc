@@ -74,6 +74,7 @@ protected:
     char *key = NULL;
     char *val = NULL;
     size_t val_len = 0;
+    ASSERT_EQ(len, rados_omap_iter_size(iter));
     while (i < len) {
       ASSERT_EQ(0, rados_omap_get_next(iter, &key, &val, &val_len));
       if (val_len == 0 && key == NULL && val == NULL)
@@ -125,6 +126,7 @@ protected:
     char *val = NULL;
     size_t key_len = 0;
     size_t val_len = 0;
+    ASSERT_EQ(len, rados_omap_iter_size(iter));
     while (i < len) {
       ASSERT_EQ(0, rados_omap_get_next2(iter, &key, &val, &key_len, &val_len));
       if (key_len == 0 && val_len == 0 && key == NULL && val == NULL)
@@ -646,6 +648,8 @@ TEST_F(CReadOpsTest, Omap) {
   rados_release_read_op(rop);
   EXPECT_EQ(0, r_vals);
   EXPECT_EQ(0, r_keys);
+  EXPECT_EQ(1u, rados_omap_iter_size(iter_vals));
+  EXPECT_EQ(1u, rados_omap_iter_size(iter_keys));
 
   compare_omap_vals(&keys[2], &vals[2], &lens[2], 1, iter_vals);
   compare_omap_vals(&keys[2], &vals[0], &lens[0], 1, iter_keys);

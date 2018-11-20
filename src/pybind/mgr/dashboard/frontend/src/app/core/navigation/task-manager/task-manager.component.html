@@ -1,9 +1,7 @@
 <ng-template #popTemplate>
   <!-- Executing -->
   <div *ngIf="executingTasks.length > 0">
-    <div class="separator">
-      EXECUTING
-    </div>
+    <div class="separator">EXECUTING</div>
     <hr>
     <div *ngFor="let executingTask of executingTasks">
       <table>
@@ -28,9 +26,7 @@
   </div>
   <!-- Finished -->
   <div *ngIf="finishedTasks.length > 0">
-    <div class="separator">
-      FINISHED
-    </div>
+    <div class="separator">FINISHED</div>
     <hr>
     <div *ngFor="let finishedTask of finishedTasks">
       <table>
@@ -72,9 +68,7 @@
   </div>
   <!-- Empty -->
   <div *ngIf="executingTasks.length === 0 && finishedTasks.length === 0">
-    <div class="message">
-      There are no background tasks.
-    </div>
+    <div class="message" i18n>There are no background tasks.</div>
   </div>
 </ng-template>
 <a [popover]="popTemplate"

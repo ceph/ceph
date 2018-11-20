@@ -18,6 +18,12 @@
 
 std::string ceph_get_hostname()
 {
+  // are we in a container?  if so we would prefer the *real* hostname.
+  const char *node_name = getenv("NODE_NAME");
+  if (node_name) {
+    return node_name;
+  }
+
   char buf[1024];
   gethostname(buf, 1024);
   return std::string(buf);

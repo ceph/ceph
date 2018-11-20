@@ -89,8 +89,8 @@ EOF
         fi
     fi
 
-    export COVERAGE_ENABLED=true
-    export COVERAGE_FILE=.coverage.mgr.dashboard
+#    export COVERAGE_ENABLED=true
+#    export COVERAGE_FILE=.coverage.mgr.dashboard
 
     MGR=2 RGW=1 ../src/vstart.sh -n -d
     sleep 10

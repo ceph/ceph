@@ -43,7 +43,7 @@ public:
 
   C_MDC_Recover(RecoveryQueue *rq_, CInode *i) :
     MDSIOContextBase(false), rq(rq_), in(i), size(0) {
-    assert(rq != NULL);
+    ceph_assert(rq != NULL);
   }
   void print(ostream& out) const override {
     out << "file_recover(" << in->ino() << ")";
@@ -134,7 +134,7 @@ void RecoveryQueue::prioritize(CInode *in)
   if (!in->item_recover_queue_front.is_on_list()) {
     dout(20) << *in << dendl;
 
-    assert(in->item_recover_queue.is_on_list());
+    ceph_assert(in->item_recover_queue.is_on_list());
     in->item_recover_queue.remove_myself();
     file_recover_queue_size--;
 
@@ -161,8 +161,8 @@ static bool _is_in_any_recover_queue(CInode *in)
 void RecoveryQueue::enqueue(CInode *in)
 {
   dout(15) << "RecoveryQueue::enqueue " << *in << dendl;
-  assert(logger);  // Caller should have done set_logger before using me
-  assert(in->is_auth());
+  ceph_assert(logger);  // Caller should have done set_logger before using me
+  ceph_assert(in->is_auth());
 
   in->state_clear(CInode::STATE_NEEDSRECOVER);
   if (!in->state_test(CInode::STATE_RECOVERING)) {
@@ -205,7 +205,7 @@ void RecoveryQueue::_recovered(CInode *in, int r, uint64_t size, utime_t mtime)
   }
 
   auto p = file_recovering.find(in);
-  assert(p != file_recovering.end());
+  ceph_assert(p != file_recovering.end());
   bool restart = p->second;
   file_recovering.erase(p);
 

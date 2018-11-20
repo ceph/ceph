@@ -57,6 +57,8 @@ class MgrMonitor: public PaxosService
   Context *digest_event = nullptr;
   void cancel_timer();
 
+  std::vector<health_check_map_t> prev_health_checks;
+
   bool check_caps(MonOpRequestRef op, const uuid_d& fsid);
 
   health_status_t should_warn_about_mgr_down();
@@ -83,6 +85,7 @@ public:
   void create_initial() override;
   void get_store_prefixes(std::set<string>& s) const override;
   void update_from_paxos(bool *need_bootstrap) override;
+  void post_paxos_update() override;
   void create_pending() override;
   void encode_pending(MonitorDBStore::TransactionRef t) override;
 

@@ -35,7 +35,7 @@ HeartbeatMap::HeartbeatMap(CephContext *cct)
 
 HeartbeatMap::~HeartbeatMap()
 {
-  assert(m_workers.empty());
+  ceph_assert(m_workers.empty());
 }
 
 heartbeat_handle_d *HeartbeatMap::add_worker(const string& name, pthread_t thread_id)
@@ -79,7 +79,7 @@ bool HeartbeatMap::_check(const heartbeat_handle_d *h, const char *who,
 		    << " had suicide timed out after " << h->suicide_grace << dendl;
     pthread_kill(h->thread_id, SIGABRT);
     sleep(1);
-    assert(0 == "hit suicide timeout");
+    ceph_abort_msg("hit suicide timeout");
   }
   return healthy;
 }
@@ -170,7 +170,7 @@ void HeartbeatMap::check_touch_file()
   if (is_healthy()) {
     string path = m_cct->_conf->heartbeat_file;
     if (path.length()) {
-      int fd = ::open(path.c_str(), O_WRONLY|O_CREAT, 0644);
+      int fd = ::open(path.c_str(), O_WRONLY|O_CREAT|O_CLOEXEC, 0644);
       if (fd >= 0) {
 	::utimes(path.c_str(), NULL);
 	::close(fd);

@@ -18,7 +18,8 @@
 #define CEPH_REPLICATEDPG_H
 
 #include <boost/tuple/tuple.hpp>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
+#include "DynamicPerfStats.h"
 #include "OSD.h"
 #include "PG.h"
 #include "Watch.h"
@@ -29,7 +30,7 @@
 #include "common/shared_cache.hpp"
 #include "ReplicatedBackend.h"
 #include "PGTransaction.h"
-#include "cls/refcount/cls_refcount_ops.h"
+#include "cls/cas/cls_cas_ops.h"
 
 class CopyFromCallback;
 class PromoteCallback;
@@ -95,6 +96,7 @@ public:
     uint32_t source_data_digest, source_omap_digest;
     uint32_t data_digest, omap_digest;
     mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > reqids; // [(reqid, user_version)]
+    mempool::osd_pglog::map<uint32_t, int> reqid_return_codes; // map reqids by index to error code
     map<string, bufferlist> attrs; // xattrs
     uint64_t truncate_seq;
     uint64_t truncate_size;
@@ -251,7 +253,7 @@ public:
     FlushOp()
       : flushed_version(0), objecter_tid(0), rval(0),
 	blocking(false), removal(false), chunks(0) {}
-    ~FlushOp() { assert(!on_flush); }
+    ~FlushOp() { ceph_assert(!on_flush); }
   };
   typedef std::shared_ptr<FlushOp> FlushOpRef;
 
@@ -369,8 +371,11 @@ public:
   bool pgb_is_primary() const override {
     return is_primary();
   }
-  OSDMapRef pgb_get_osdmap() const override {
+  OSDMapRef pgb_get_osdmap() const override final {
     return get_osdmap();
+  }
+  epoch_t pgb_get_osdmap_epoch() const override final {
+    return get_osdmap_epoch();
   }
   const pg_info_t &get_info() const override {
     return info;
@@ -576,6 +581,7 @@ public:
     int num_write;   ///< count update ops
 
     mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > extra_reqids;
+    mempool::osd_pglog::map<uint32_t, int> extra_reqid_return_codes;
 
     hobject_t new_temp_oid, discard_temp_oid;  ///< temp objects we should start/stop tracking
 
@@ -664,7 +670,7 @@ public:
       }
     }
     ~OpContext() {
-      assert(!op_t);
+      ceph_assert(!op_t);
       if (reply)
 	reply->put();
       for (list<pair<boost::tuple<uint64_t, uint64_t, unsigned>,
@@ -755,7 +761,7 @@ public:
       return this;
     }
     void put() {
-      assert(nref > 0);
+      ceph_assert(nref > 0);
       if (--nref == 0) {
 	delete this;
 	//generic_dout(0) << "deleting " << this << dendl;
@@ -783,12 +789,12 @@ protected:
     } else if (write_ordered) {
       ctx->lock_type = ObjectContext::RWState::RWWRITE;
     } else {
-      assert(ctx->op->may_read());
+      ceph_assert(ctx->op->may_read());
       ctx->lock_type = ObjectContext::RWState::RWREAD;
     }
 
     if (ctx->head_obc) {
-      assert(!ctx->obc->obs.exists);
+      ceph_assert(!ctx->obc->obs.exists);
       if (!ctx->lock_manager.get_lock_type(
 	    ctx->lock_type,
 	    ctx->head_obc->obs.oi.soid,
@@ -805,7 +811,7 @@ protected:
 	  ctx->op)) {
       return true;
     } else {
-      assert(!ctx->head_obc);
+      ceph_assert(!ctx->head_obc);
       ctx->lock_type = ObjectContext::RWState::RWNONE;
       return false;
     }
@@ -1001,13 +1007,13 @@ protected:
     bool oid_existed = true //indicate this oid whether exsited in backend
     );
   void register_snapset_context(SnapSetContext *ssc) {
-    Mutex::Locker l(snapset_contexts_lock);
+    std::lock_guard l(snapset_contexts_lock);
     _register_snapset_context(ssc);
   }
   void _register_snapset_context(SnapSetContext *ssc) {
-    assert(snapset_contexts_lock.is_locked());
+    ceph_assert(snapset_contexts_lock.is_locked());
     if (!ssc->registered) {
-      assert(snapset_contexts.count(ssc->oid) == 0);
+      ceph_assert(snapset_contexts.count(ssc->oid) == 0);
       ssc->registered = true;
       snapset_contexts[ssc->oid] = ssc;
     }
@@ -1435,6 +1441,10 @@ public:
     ConnectionRef conn,
     ceph_tid_t tid) override;
 
+  void clear_cache();
+  int get_cache_obj_count() {
+    return object_contexts.get_count();
+  }
   void do_request(
     OpRequestRef& op,
     ThreadPool::TPHandle &handle) override;
@@ -1570,8 +1580,8 @@ private:
       : my_base(ctx),
 	NamedState(context< SnapTrimmer >().pg, "Trimming") {
       context< SnapTrimmer >().log_enter(state_name);
-      assert(context< SnapTrimmer >().can_trim());
-      assert(in_flight.empty());
+      ceph_assert(context< SnapTrimmer >().can_trim());
+      ceph_assert(in_flight.empty());
     }
     void exit() {
       context< SnapTrimmer >().log_exit(state_name, enter_time);
@@ -1595,7 +1605,7 @@ private:
       : my_base(ctx),
 	NamedState(context< SnapTrimmer >().pg, "Trimming/WaitTrimTimer") {
       context< SnapTrimmer >().log_enter(state_name);
-      assert(context<Trimming>().in_flight.empty());
+      ceph_assert(context<Trimming>().in_flight.empty());
       struct OnTimer : Context {
 	PrimaryLogPGRef pg;
 	epoch_t epoch;
@@ -1609,7 +1619,7 @@ private:
       };
       auto *pg = context< SnapTrimmer >().pg;
       if (pg->cct->_conf->osd_snap_trim_sleep > 0) {
-	Mutex::Locker l(pg->osd->sleep_lock);
+	std::lock_guard l(pg->osd->sleep_lock);
 	wakeup = pg->osd->sleep_timer.add_event_after(
 	  pg->cct->_conf->osd_snap_trim_sleep,
 	  new OnTimer{pg, pg->get_osdmap()->get_epoch()});
@@ -1621,7 +1631,7 @@ private:
       context< SnapTrimmer >().log_exit(state_name, enter_time);
       auto *pg = context< SnapTrimmer >().pg;
       if (wakeup) {
-	Mutex::Locker l(pg->osd->sleep_lock);
+	std::lock_guard l(pg->osd->sleep_lock);
 	pg->osd->sleep_timer.cancel_event(wakeup);
 	wakeup = nullptr;
       }
@@ -1645,7 +1655,7 @@ private:
       : my_base(ctx),
 	NamedState(context< SnapTrimmer >().pg, "Trimming/WaitRWLock") {
       context< SnapTrimmer >().log_enter(state_name);
-      assert(context<Trimming>().in_flight.empty());
+      ceph_assert(context<Trimming>().in_flight.empty());
     }
     void exit() {
       context< SnapTrimmer >().log_exit(state_name, enter_time);
@@ -1668,7 +1678,7 @@ private:
       : my_base(ctx),
 	NamedState(context< SnapTrimmer >().pg, "Trimming/WaitRepops") {
       context< SnapTrimmer >().log_enter(state_name);
-      assert(!context<Trimming>().in_flight.empty());
+      ceph_assert(!context<Trimming>().in_flight.empty());
     }
     void exit() {
       context< SnapTrimmer >().log_exit(state_name, enter_time);
@@ -1711,8 +1721,8 @@ private:
 	pg->unlock();
       }
       void cancel() {
-	assert(pg->is_locked());
-	assert(!canceled);
+	ceph_assert(pg->is_locked());
+	ceph_assert(!canceled);
 	canceled = true;
       }
     };
@@ -1722,7 +1732,7 @@ private:
       : my_base(ctx),
 	NamedState(context< SnapTrimmer >().pg, "Trimming/WaitReservation") {
       context< SnapTrimmer >().log_enter(state_name);
-      assert(context<Trimming>().in_flight.empty());
+      ceph_assert(context<Trimming>().in_flight.empty());
       auto *pg = context< SnapTrimmer >().pg;
       pending = new ReservationCB(pg);
       pg->osd->snap_reserver.request_reservation(
@@ -1839,7 +1849,7 @@ public:
   bool maybe_preempt_replica_scrub(const hobject_t& oid) override {
     return write_blocked_by_scrub(oid);
   }
-  int rep_repair_primary_object(const hobject_t& soid, OpRequestRef op);
+  int rep_repair_primary_object(const hobject_t& soid, OpContext *ctx);
 
   // attr cache handling
   void setattr_maybe_cache(
@@ -1862,6 +1872,14 @@ public:
   int getattrs_maybe_cache(
     ObjectContextRef obc,
     map<string, bufferlist> *out);
+
+public:
+  void set_dynamic_perf_stats_queries(
+      const std::list<OSDPerfMetricQuery> &queries)  override;
+  void get_dynamic_perf_stats(DynamicPerfStats *stats)  override;
+
+private:
+  DynamicPerfStats m_dynamic_perf_stats;
 };
 
 inline ostream& operator<<(ostream& out, const PrimaryLogPG::RepGather& repop)

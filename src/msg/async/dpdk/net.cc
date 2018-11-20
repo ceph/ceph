@@ -33,7 +33,7 @@
 #include "DPDKStack.h"
 
 #include "common/dout.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_subsys ceph_subsys_dpdk
 #undef dout_prefix
@@ -81,7 +81,7 @@ subscription<Packet, ethernet_address> interface::register_l3(
     std::function<bool (forward_hash&, Packet& p, size_t)> forward)
 {
   auto i = _proto_map.emplace(std::piecewise_construct, std::make_tuple(uint16_t(proto_num)), std::forward_as_tuple(std::move(forward)));
-  assert(i.second);
+  ceph_assert(i.second);
   l3_rx_stream& l3_rx = i.first->second;
   return l3_rx.packet_stream.listen(std::move(next));
 }

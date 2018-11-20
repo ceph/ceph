@@ -230,6 +230,7 @@ private:
   
   int leader;            // current leader (to best of knowledge)
   set<int> quorum;       // current active set of monitors (if !starting)
+  mono_clock::time_point quorum_since;  // when quorum formed
   utime_t leader_since;  // when this monitor became the leader, if it is the leader
   utime_t exited_quorum; // time detected as not in quorum; 0 if in
 
@@ -662,7 +663,7 @@ public:
 
   template<typename Func, typename...Args>
   void with_session_map(Func&& func) {
-    Mutex::Locker l(session_map_lock);
+    std::lock_guard l(session_map_lock);
     std::forward<Func>(func)(session_map);
   }
   void send_latest_monmap(Connection *con);
@@ -788,7 +789,6 @@ public:
     MonSession *session;
     ConnectionRef con;
     uint64_t con_features;
-    entity_inst_t client_inst;
     MonOpRequestRef op;
 
     RoutedRequest() : tid(0), session(NULL), con_features(0) {}
@@ -850,7 +850,7 @@ public:
       else if (r == -EAGAIN)
 	mon->dispatch_op(op);
       else
-	assert(0 == "bad C_Command return value");
+	ceph_abort_msg("bad C_Command return value");
     }
   };
 
@@ -867,7 +867,7 @@ public:
       else if (r == -ECANCELED)
         return;
       else
-	assert(0 == "bad C_RetryMessage return value");
+	ceph_abort_msg("bad C_RetryMessage return value");
     }
   };
 
@@ -884,10 +884,10 @@ public:
   //mon_caps is used for un-connected messages from monitors
   MonCap mon_caps;
   bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new) override;
-  bool ms_verify_authorizer(Connection *con, int peer_type,
-			    int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
-			    bool& isvalid, CryptoKey& session_key,
-			    std::unique_ptr<AuthAuthorizerChallenge> *challenge) override;
+  KeyStore *ms_get_auth1_authorizer_keystore();
+public: // for AuthMonitor msgr1:
+  int ms_handle_authentication(Connection *con) override;
+private:
   bool ms_handle_reset(Connection *con) override;
   void ms_handle_remote_reset(Connection *con) override {}
   bool ms_handle_refused(Connection *con) override;
@@ -963,6 +963,7 @@ private:
 public:
   static void format_command_descriptions(const std::vector<MonCommand> &commands,
 					  Formatter *f,
+					  uint64_t features,
 					  bufferlist *rdata);
 
   const std::vector<MonCommand> &get_local_commands(mon_feature_t f) {

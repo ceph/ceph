@@ -1,5 +1,6 @@
 import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
+import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 
 import { CephfsService } from '../../../shared/api/cephfs.service';
@@ -13,10 +14,13 @@ import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
   styleUrls: ['./cephfs-detail.component.scss']
 })
 export class CephfsDetailComponent implements OnChanges, OnInit {
-  @ViewChild('poolUsageTpl') poolUsageTpl: TemplateRef<any>;
-  @ViewChild('activityTmpl') activityTmpl: TemplateRef<any>;
+  @ViewChild('poolUsageTpl')
+  poolUsageTpl: TemplateRef<any>;
+  @ViewChild('activityTmpl')
+  activityTmpl: TemplateRef<any>;
 
-  @Input() selection: CdTableSelection;
+  @Input()
+  selection: CdTableSelection;
 
   selectedItem: any;
 
@@ -27,6 +31,7 @@ export class CephfsDetailComponent implements OnChanges, OnInit {
   standbys = [];
   clientCount: number;
   mdsCounters = {};
+  grafanaId: any;
 
   objectValues = Object.values;
   clientsSelect = false;
@@ -34,12 +39,15 @@ export class CephfsDetailComponent implements OnChanges, OnInit {
   constructor(
     private cephfsService: CephfsService,
     private dimlessBinary: DimlessBinaryPipe,
-    private dimless: DimlessPipe
+    private dimless: DimlessPipe,
+    private i18n: I18n
   ) {}
 
   ngOnChanges() {
     if (this.selection.hasSelection) {
       this.selectedItem = this.selection.first();
+      const mdsInfo: any[] = this.selectedItem.mdsmap.info;
+      this.grafanaId = Object.values(mdsInfo)[0].name;
 
       if (this.id !== this.selectedItem.id) {
         this.id = this.selectedItem.id;
@@ -54,23 +62,23 @@ export class CephfsDetailComponent implements OnChanges, OnInit {
   ngOnInit() {
     this.ranks = {
       columns: [
-        { prop: 'rank' },
-        { prop: 'state' },
-        { prop: 'mds', name: 'Daemon' },
-        { prop: 'activity', cellTemplate: this.activityTmpl },
-        { prop: 'dns', name: 'Dentries', pipe: this.dimless },
-        { prop: 'inos', name: 'Inodes', pipe: this.dimless }
+        { prop: 'rank', name: this.i18n('Rank') },
+        { prop: 'state', name: this.i18n('State') },
+        { prop: 'mds', name: this.i18n('Daemon') },
+        { prop: 'activity', name: this.i18n('Activity'), cellTemplate: this.activityTmpl },
+        { prop: 'dns', name: this.i18n('Dentries'), pipe: this.dimless },
+        { prop: 'inos', name: this.i18n('Inodes'), pipe: this.dimless }
       ],
       data: []
     };
 
     this.pools = {
       columns: [
-        { prop: 'pool' },
-        { prop: 'type' },
-        { prop: 'size', pipe: this.dimlessBinary },
+        { prop: 'pool', name: this.i18n('Pool') },
+        { prop: 'type', name: this.i18n('Type') },
+        { prop: 'size', name: this.i18n('Size'), pipe: this.dimlessBinary },
         {
-          name: 'Usage',
+          name: this.i18n('Usage'),
           cellTemplate: this.poolUsageTpl,
           comparator: (valueA, valueB, rowA, rowB, sortDirection) => {
             const valA = rowA.used / rowA.avail;
@@ -101,7 +109,7 @@ export class CephfsDetailComponent implements OnChanges, OnInit {
       });
       this.standbys = [
         {
-          key: 'Standby daemons',
+          key: this.i18n('Standby daemons'),
           value: data.standbys.map((value) => value.name).join(', ')
         }
       ];

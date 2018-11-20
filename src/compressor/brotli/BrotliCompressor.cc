@@ -20,7 +20,7 @@ int BrotliCompressor::compress(const bufferlist &in, bufferlist &out)
     size_t available_in = i->length();
     size_t max_comp_size = BrotliEncoderMaxCompressedSize(available_in);
     size_t available_out =  max_comp_size;
-    bufferptr ptr = buffer::create_page_aligned(max_comp_size);
+    bufferptr ptr = buffer::create_small_page_aligned(max_comp_size);
     uint8_t* next_out = (uint8_t*)ptr.c_str();
     const uint8_t* next_in = (uint8_t*)i->c_str();
     ++i;
@@ -90,6 +90,6 @@ int BrotliCompressor::decompress(bufferlist::const_iterator &p,
 
 int BrotliCompressor::decompress(const bufferlist &in, bufferlist &out) 
 {  
-  bufferlist::iterator i = const_cast<bufferlist&>(in).begin();
+  auto i = std::cbegin(in);
   return decompress(i, in.length(), out);
 }

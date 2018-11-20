@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <ostream>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "StateTransition.h"
 
 namespace rbd {
@@ -84,7 +84,7 @@ const StateTransition::TransitionTable StateTransition::s_transition_table {
 
 void StateTransition::transit(State state, Transition* transition) {
   auto it = s_transition_table.find({state, transition->action_type});
-  assert(it != s_transition_table.end());
+  ceph_assert(it != s_transition_table.end());
 
   *transition = it->second;
 }

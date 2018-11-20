@@ -28,6 +28,7 @@
 #include "PyModule.h"
 
 #include "ActivePyModules.h"
+#include "DaemonServer.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
@@ -37,11 +38,13 @@
 ActivePyModules::ActivePyModules(PyModuleConfig &module_config_,
           std::map<std::string, std::string> store_data,
           DaemonStateIndex &ds, ClusterState &cs,
-	  MonClient &mc, LogChannelRef clog_, Objecter &objecter_,
-          Client &client_, Finisher &f)
+          MonClient &mc, LogChannelRef clog_,
+          LogChannelRef audit_clog_, Objecter &objecter_,
+          Client &client_, Finisher &f, DaemonServer &server)
   : module_config(module_config_), daemon_state(ds), cluster_state(cs),
-    monc(mc), clog(clog_), objecter(objecter_), client(client_), finisher(f),
-    lock("ActivePyModules")
+    monc(mc), clog(clog_), audit_clog(audit_clog_), objecter(objecter_),
+    client(client_), finisher(f),
+    server(server), lock("ActivePyModules")
 {
   store_cache = std::move(store_data);
 }
@@ -57,7 +60,7 @@ void ActivePyModules::dump_server(const std::string &hostname,
   std::string ceph_version;
 
   for (const auto &i : dmc) {
-    Mutex::Locker l(i.second->lock);
+    std::lock_guard l(i.second->lock);
     const auto &key = i.first;
     const std::string &str_type = key.first;
     const std::string &svc_name = key.second;
@@ -85,7 +88,7 @@ void ActivePyModules::dump_server(const std::string &hostname,
 PyObject *ActivePyModules::get_server_python(const std::string &hostname)
 {
   PyThreadState *tstate = PyEval_SaveThread();
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   PyEval_RestoreThread(tstate);
   dout(10) << " (" << hostname << ")" << dendl;
 
@@ -100,7 +103,7 @@ PyObject *ActivePyModules::get_server_python(const std::string &hostname)
 PyObject *ActivePyModules::list_servers_python()
 {
   PyThreadState *tstate = PyEval_SaveThread();
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   PyEval_RestoreThread(tstate);
   dout(10) << " >" << dendl;
 
@@ -129,7 +132,7 @@ PyObject *ActivePyModules::get_metadata_python(
     Py_RETURN_NONE;
   }
 
-  Mutex::Locker l(metadata->lock);
+  std::lock_guard l(metadata->lock);
   PyFormatter f;
   f.dump_string("hostname", metadata->hostname);
   for (const auto &i : metadata->metadata) {
@@ -149,7 +152,7 @@ PyObject *ActivePyModules::get_daemon_status_python(
     Py_RETURN_NONE;
   }
 
-  Mutex::Locker l(metadata->lock);
+  std::lock_guard l(metadata->lock);
   PyFormatter f;
   for (const auto &i : metadata->service_status) {
     f.dump_string(i.first.c_str(), i.second);
@@ -160,7 +163,7 @@ PyObject *ActivePyModules::get_daemon_status_python(
 PyObject *ActivePyModules::get_python(const std::string &what)
 {
   PyThreadState *tstate = PyEval_SaveThread();
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   PyEval_RestoreThread(tstate);
 
   if (what == "fs_map") {
@@ -216,7 +219,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     PyFormatter f;
     auto dmc = daemon_state.get_by_service("osd");
     for (const auto &i : dmc) {
-      Mutex::Locker l(i.second->lock);
+      std::lock_guard l(i.second->lock);
       f.open_object_section(i.first.second.c_str());
       f.dump_string("hostname", i.second->hostname);
       for (const auto &j : i.second->metadata) {
@@ -314,9 +317,9 @@ PyObject *ActivePyModules::get_python(const std::string &what)
   } else if (what == "df") {
     PyFormatter f;
 
-    cluster_state.with_osdmap([this, &f](const OSDMap &osd_map){
-      cluster_state.with_pgmap(
-          [&osd_map, &f](const PGMap &pg_map) {
+    cluster_state.with_pgmap([this, &f](const PGMap &pg_map) {
+      cluster_state.with_osdmap(
+          [&pg_map, &f](const OSDMap &osd_map) {
         pg_map.dump_fs_stats(nullptr, &f, true);
         pg_map.dump_pool_stats_full(osd_map, nullptr, &f, true);
       });
@@ -333,15 +336,13 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     int64_t poolid = -ENOENT;
     string pool_name;
     PyFormatter f;
-    cluster_state.with_pgmap([&](const PGMap& pg_map) {
-      return cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+    cluster_state.with_osdmap_and_pgmap([&](const OSDMap& osdmap, const PGMap& pg_map) {
         f.open_array_section("pool_stats");
         for (auto &p : osdmap.get_pools()) {
           poolid = p.first;
           pg_map.dump_pool_stats_and_io_rate(poolid, osdmap, &f, nullptr);
         }
         f.close_section();
-      });
     });
     return f.get();
   } else if (what == "health" || what == "mon_status") {
@@ -370,9 +371,9 @@ PyObject *ActivePyModules::get_python(const std::string &what)
 
 int ActivePyModules::start_one(PyModuleRef py_module)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
 
-  assert(modules.count(py_module->get_name()) == 0);
+  ceph_assert(modules.count(py_module->get_name()) == 0);
 
   modules[py_module->get_name()].reset(new ActivePyModule(py_module, clog));
   auto active_module = modules.at(py_module->get_name()).get();
@@ -393,7 +394,7 @@ int ActivePyModules::start_one(PyModuleRef py_module)
 
 void ActivePyModules::shutdown()
 {
-  Mutex::Locker locker(lock);
+  std::lock_guard locker(lock);
 
   // Signal modules to drop out of serve() and/or tear down resources
   for (auto &i : modules) {
@@ -423,7 +424,7 @@ void ActivePyModules::shutdown()
 void ActivePyModules::notify_all(const std::string &notify_type,
                      const std::string &notify_id)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
 
   dout(10) << __func__ << ": notify_all " << notify_type << dendl;
   for (auto& i : modules) {
@@ -438,7 +439,7 @@ void ActivePyModules::notify_all(const std::string &notify_type,
 
 void ActivePyModules::notify_all(const LogEntry &log_entry)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
 
   dout(10) << __func__ << ": notify_all (clog)" << dendl;
   for (auto& i : modules) {
@@ -459,7 +460,7 @@ bool ActivePyModules::get_store(const std::string &module_name,
     const std::string &key, std::string *val) const
 {
   PyThreadState *tstate = PyEval_SaveThread();
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   PyEval_RestoreThread(tstate);
 
   const std::string global_key = PyModule::config_prefix
@@ -484,7 +485,7 @@ PyObject *ActivePyModules::dispatch_remote(
     std::string *err)
 {
   auto mod_iter = modules.find(other_module);
-  assert(mod_iter != modules.end());
+  ceph_assert(mod_iter != modules.end());
 
   return mod_iter->second->dispatch_remote(method, args, kwargs, err);
 }
@@ -493,7 +494,7 @@ bool ActivePyModules::get_config(const std::string &module_name,
     const std::string &key, std::string *val) const
 {
   PyThreadState *tstate = PyEval_SaveThread();
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   PyEval_RestoreThread(tstate);
 
   const std::string global_key = PyModule::config_prefix
@@ -501,7 +502,7 @@ bool ActivePyModules::get_config(const std::string &module_name,
 
   dout(4) << __func__ << " key: " << global_key << dendl;
 
-  Mutex::Locker lock(module_config.lock);
+  std::lock_guard lock(module_config.lock);
   
   auto i = module_config.config.find(global_key);
   if (i != module_config.config.end()) {
@@ -516,7 +517,7 @@ PyObject *ActivePyModules::get_store_prefix(const std::string &module_name,
     const std::string &prefix) const
 {
   PyThreadState *tstate = PyEval_SaveThread();
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   PyEval_RestoreThread(tstate);
 
   const std::string base_prefix = PyModule::config_prefix
@@ -526,7 +527,7 @@ PyObject *ActivePyModules::get_store_prefix(const std::string &module_name,
 
   PyFormatter f;
   
-  Mutex::Locker lock(module_config.lock);
+  std::lock_guard lock(module_config.lock);
   
   for (auto p = store_cache.lower_bound(global_prefix);
        p != store_cache.end() && p->first.find(global_prefix) == 0;
@@ -545,7 +546,7 @@ void ActivePyModules::set_store(const std::string &module_name,
   Command set_cmd;
   {
     PyThreadState *tstate = PyEval_SaveThread();
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     PyEval_RestoreThread(tstate);
 
     if (val) {
@@ -590,7 +591,7 @@ void ActivePyModules::set_config(const std::string &module_name,
 std::map<std::string, std::string> ActivePyModules::get_services() const
 {
   std::map<std::string, std::string> result;
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   for (const auto& i : modules) {
     const auto &module = i.second.get();
     std::string svc_str = module->get_uri();
@@ -602,13 +603,14 @@ std::map<std::string, std::string> ActivePyModules::get_services() const
   return result;
 }
 
-PyObject* ActivePyModules::get_counter_python(
+PyObject* ActivePyModules::with_perf_counters(
+    std::function<void(PerfCounterInstance& counter_instance, PerfCounterType& counter_type, PyFormatter& f)> fct,
     const std::string &svc_name,
     const std::string &svc_id,
-    const std::string &path)
+    const std::string &path) const
 {
   PyThreadState *tstate = PyEval_SaveThread();
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   PyEval_RestoreThread(tstate);
 
   PyFormatter f;
@@ -616,31 +618,14 @@ PyObject* ActivePyModules::get_counter_python(
 
   auto metadata = daemon_state.get(DaemonKey(svc_name, svc_id));
   if (metadata) {
-    Mutex::Locker l2(metadata->lock);
+    std::lock_guard l2(metadata->lock);
     if (metadata->perf_counters.instances.count(path)) {
       auto counter_instance = metadata->perf_counters.instances.at(path);
       auto counter_type = metadata->perf_counters.types.at(path);
-      if (counter_type.type & PERFCOUNTER_LONGRUNAVG) {
-        const auto &avg_data = counter_instance.get_data_avg();
-        for (const auto &datapoint : avg_data) {
-          f.open_array_section("datapoint");
-          f.dump_unsigned("t", datapoint.t.sec());
-          f.dump_unsigned("s", datapoint.s);
-          f.dump_unsigned("c", datapoint.c);
-          f.close_section();
-        }
-      } else {
-        const auto &data = counter_instance.get_data();
-        for (const auto &datapoint : data) {
-          f.open_array_section("datapoint");
-          f.dump_unsigned("t", datapoint.t.sec());
-          f.dump_unsigned("v", datapoint.v);
-          f.close_section();
-        }
-      }
+      fct(counter_instance, counter_type, f);
     } else {
       dout(4) << "Missing counter: '" << path << "' ("
-              << svc_name << "." << svc_id << ")" << dendl;
+        << svc_name << "." << svc_id << ")" << dendl;
       dout(20) << "Paths are:" << dendl;
       for (const auto &i : metadata->perf_counters.instances) {
         dout(20) << i.first << dendl;
@@ -648,10 +633,66 @@ PyObject* ActivePyModules::get_counter_python(
     }
   } else {
     dout(4) << "No daemon state for "
-              << svc_name << "." << svc_id << ")" << dendl;
+      << svc_name << "." << svc_id << ")" << dendl;
   }
   f.close_section();
   return f.get();
+}
+
+PyObject* ActivePyModules::get_counter_python(
+    const std::string &svc_name,
+    const std::string &svc_id,
+    const std::string &path)
+{
+  auto extract_counters = [](
+      PerfCounterInstance& counter_instance,
+      PerfCounterType& counter_type,
+      PyFormatter& f)
+  {
+    if (counter_type.type & PERFCOUNTER_LONGRUNAVG) {
+      const auto &avg_data = counter_instance.get_data_avg();
+      for (const auto &datapoint : avg_data) {
+        f.open_array_section("datapoint");
+        f.dump_unsigned("t", datapoint.t.sec());
+        f.dump_unsigned("s", datapoint.s);
+        f.dump_unsigned("c", datapoint.c);
+        f.close_section();
+      }
+    } else {
+      const auto &data = counter_instance.get_data();
+      for (const auto &datapoint : data) {
+        f.open_array_section("datapoint");
+        f.dump_unsigned("t", datapoint.t.sec());
+        f.dump_unsigned("v", datapoint.v);
+        f.close_section();
+      }
+    }
+  };
+  return with_perf_counters(extract_counters, svc_name, svc_id, path);
+}
+
+PyObject* ActivePyModules::get_latest_counter_python(
+    const std::string &svc_name,
+    const std::string &svc_id,
+    const std::string &path)
+{
+  auto extract_latest_counters = [](
+      PerfCounterInstance& counter_instance,
+      PerfCounterType& counter_type,
+      PyFormatter& f)
+  {
+    if (counter_type.type & PERFCOUNTER_LONGRUNAVG) {
+      const auto &datapoint = counter_instance.get_latest_data_avg();
+      f.dump_unsigned("t", datapoint.t.sec());
+      f.dump_unsigned("s", datapoint.s);
+      f.dump_unsigned("c", datapoint.c);
+    } else {
+      const auto &datapoint = counter_instance.get_latest_data();
+      f.dump_unsigned("t", datapoint.t.sec());
+      f.dump_unsigned("v", datapoint.v);
+    }
+  };
+  return with_perf_counters(extract_latest_counters, svc_name, svc_id, path);
 }
 
 PyObject* ActivePyModules::get_perf_schema_python(
@@ -659,7 +700,7 @@ PyObject* ActivePyModules::get_perf_schema_python(
     const std::string &svc_id)
 {
   PyThreadState *tstate = PyEval_SaveThread();
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   PyEval_RestoreThread(tstate);
 
   DaemonStateCollection daemons;
@@ -687,7 +728,7 @@ PyObject* ActivePyModules::get_perf_schema_python(
       daemon_name << key.first << "." << key.second;
       f.open_object_section(daemon_name.str().c_str());
 
-      Mutex::Locker l(state->lock);
+      std::lock_guard l(state->lock);
       for (auto ctr_inst_iter : state->perf_counters.instances) {
         const auto &counter_name = ctr_inst_iter.first;
 	f.open_object_section(counter_name.c_str());
@@ -713,7 +754,7 @@ PyObject* ActivePyModules::get_perf_schema_python(
 PyObject *ActivePyModules::get_context()
 {
   PyThreadState *tstate = PyEval_SaveThread();
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   PyEval_RestoreThread(tstate);
 
   // Construct a capsule containing ceph context.
@@ -737,7 +778,7 @@ PyObject *construct_with_capsule(
     derr << "Failed to import python module:" << dendl;
     derr << handle_pyerror() << dendl;
   }
-  assert(module);
+  ceph_assert(module);
 
   PyObject *wrapper_type = PyObject_GetAttrString(
       module, (const char*)clsname.c_str());
@@ -745,11 +786,11 @@ PyObject *construct_with_capsule(
     derr << "Failed to get python type:" << dendl;
     derr << handle_pyerror() << dendl;
   }
-  assert(wrapper_type);
+  ceph_assert(wrapper_type);
 
   // Construct a capsule containing an OSDMap.
   auto wrapped_capsule = PyCapsule_New(wrapped, nullptr, nullptr);
-  assert(wrapped_capsule);
+  ceph_assert(wrapped_capsule);
 
   // Construct the python OSDMap
   auto pArgs = PyTuple_Pack(1, wrapped_capsule);
@@ -758,7 +799,7 @@ PyObject *construct_with_capsule(
     derr << "Failed to construct python OSDMap:" << dendl;
     derr << handle_pyerror() << dendl;
   }
-  assert(wrapper_instance != nullptr);
+  ceph_assert(wrapper_instance != nullptr);
   Py_DECREF(pArgs);
   Py_DECREF(wrapped_capsule);
 
@@ -771,7 +812,7 @@ PyObject *construct_with_capsule(
 PyObject *ActivePyModules::get_osdmap()
 {
   PyThreadState *tstate = PyEval_SaveThread();
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   PyEval_RestoreThread(tstate);
 
   OSDMap *newmap = new OSDMap;
@@ -786,11 +827,29 @@ PyObject *ActivePyModules::get_osdmap()
 void ActivePyModules::set_health_checks(const std::string& module_name,
 				  health_check_map_t&& checks)
 {
-  Mutex::Locker l(lock);
+  bool changed = false;
+
+  lock.Lock();
   auto p = modules.find(module_name);
   if (p != modules.end()) {
-    p->second->set_health_checks(std::move(checks));
+    changed = p->second->set_health_checks(std::move(checks));
   }
+  lock.Unlock();
+
+  // immediately schedule a report to be sent to the monitors with the new
+  // health checks that have changed. This is done asynchronusly to avoid
+  // blocking python land. ActivePyModules::lock needs to be dropped to make
+  // lockdep happy:
+  //
+  //   send_report callers: DaemonServer::lock -> PyModuleRegistery::lock
+  //   active_start: PyModuleRegistry::lock -> ActivePyModules::lock
+  //
+  // if we don't release this->lock before calling schedule_tick a cycle is
+  // formed with the addition of ActivePyModules::lock -> DaemonServer::lock.
+  // This is still correct as send_report is run asynchronously under
+  // DaemonServer::lock.
+  if (changed)
+    server.schedule_tick(0);
 }
 
 int ActivePyModules::handle_command(
@@ -813,20 +872,58 @@ int ActivePyModules::handle_command(
 
 void ActivePyModules::get_health_checks(health_check_map_t *checks)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   for (auto& p : modules) {
     p.second->get_health_checks(checks);
+  }
+}
+
+void ActivePyModules::config_notify()
+{
+  std::lock_guard l(lock);
+  for (auto& i : modules) {
+    auto module = i.second.get();
+    // Send all python calls down a Finisher to avoid blocking
+    // C++ code, and avoid any potential lock cycles.
+    finisher.queue(new FunctionContext([module](int r){
+					 module->config_notify();
+				       }));
   }
 }
 
 void ActivePyModules::set_uri(const std::string& module_name,
                         const std::string &uri)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
 
   dout(4) << " module " << module_name << " set URI '" << uri << "'" << dendl;
 
   modules[module_name]->set_uri(uri);
 }
 
+OSDPerfMetricQueryID ActivePyModules::add_osd_perf_query(
+  const OSDPerfMetricQuery &query)
+{
+  return server.add_osd_perf_query(query);
+}
 
+void ActivePyModules::remove_osd_perf_query(OSDPerfMetricQueryID query_id)
+{
+  int r = server.remove_osd_perf_query(query_id);
+  if (r < 0) {
+    dout(0) << "remove_osd_perf_query for query_id=" << query_id << " failed: "
+            << cpp_strerror(r) << dendl;
+  }
+}
+
+void ActivePyModules::cluster_log(const std::string &channel, clog_type prio,
+  const std::string &message)
+{
+  std::lock_guard l(lock);
+
+  if (channel == "audit") {
+    audit_clog->do_log(prio, message);
+  } else {
+    clog->do_log(prio, message);
+  }
+}

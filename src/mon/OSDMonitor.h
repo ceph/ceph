@@ -44,7 +44,7 @@ class MOSDMap;
 #include "mon/MonOpRequest.h"
 #include <boost/functional/hash.hpp>
 // re-include our assert to clobber the system one; fix dout:
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 /// information about a particular peer's failure reports for one osd
 struct failure_reporter_t {
@@ -81,7 +81,7 @@ struct failure_info_t {
 			     MonOpRequestRef op) {
     map<int, failure_reporter_t>::iterator p = reporters.find(who);
     if (p == reporters.end()) {
-      if (max_failed_since < failed_since)
+      if (max_failed_since != utime_t() && max_failed_since < failed_since)
 	max_failed_since = failed_since;
       p = reporters.insert(map<int, failure_reporter_t>::value_type(who, failure_reporter_t(failed_since))).first;
     }
@@ -108,6 +108,7 @@ struct failure_info_t {
       return MonOpRequestRef();
     MonOpRequestRef ret = p->second.op;
     reporters.erase(p);
+    max_failed_since = utime_t();
     return ret;
   }
 };
@@ -266,7 +267,7 @@ private:
   void _prune_update_trimmed(
       MonitorDBStore::TransactionRef tx,
       version_t first);
-  void prune_init();
+  void prune_init(osdmap_manifest_t& manifest);
   bool _prune_sanitize_options() const;
   bool is_prune_enabled() const;
   bool is_prune_supported() const;
@@ -357,7 +358,7 @@ public:
 private:
   void print_utilization(ostream &out, Formatter *f, bool tree) const;
 
-  bool check_source(PaxosServiceMessage *m, uuid_d fsid);
+  bool check_source(MonOpRequestRef op, uuid_d fsid);
  
   bool preprocess_get_osdmap(MonOpRequestRef op);
 
@@ -387,6 +388,9 @@ private:
 
   bool preprocess_pg_created(MonOpRequestRef op);
   bool prepare_pg_created(MonOpRequestRef op);
+
+  bool preprocess_pg_ready_to_merge(MonOpRequestRef op);
+  bool prepare_pg_ready_to_merge(MonOpRequestRef op);
 
   int _check_remove_pool(int64_t pool_id, const pg_pool_t &pool, ostream *ss);
   bool _check_become_tier(
@@ -446,7 +450,7 @@ private:
 				unsigned *stripe_width,
 				ostream *ss);
   int check_pg_num(int64_t pool, int pg_num, int size, ostream* ss);
-  int prepare_new_pool(string& name, uint64_t auid,
+  int prepare_new_pool(string& name,
 		       int crush_rule,
 		       const string &crush_rule_name,
                        unsigned pg_num, unsigned pgp_num,
@@ -491,7 +495,7 @@ private:
       else if (r == -EAGAIN)
         cmon->dispatch(op);
       else
-	assert(0 == "bad C_Booted return value");
+	ceph_abort_msg("bad C_Booted return value");
     }
   };
 
@@ -508,7 +512,7 @@ private:
       else if (r == -EAGAIN)
 	osdmon->dispatch(op);
       else
-	assert(0 == "bad C_ReplyMap return value");
+	ceph_abort_msg("bad C_ReplyMap return value");
     }    
   };
   struct C_PoolOp : public C_MonOp {
@@ -529,7 +533,7 @@ private:
       else if (r == -EAGAIN)
 	osdmon->dispatch(op);
       else
-	assert(0 == "bad C_PoolOp return value");
+	ceph_abort_msg("bad C_PoolOp return value");
     }
   };
 
@@ -628,9 +632,19 @@ public:
 
   int prepare_command_pool_set(const cmdmap_t& cmdmap,
                                stringstream& ss);
+
   int prepare_command_pool_application(const string &prefix,
                                        const cmdmap_t& cmdmap,
                                        stringstream& ss);
+  int preprocess_command_pool_application(const string &prefix,
+                                          const cmdmap_t& cmdmap,
+                                          stringstream& ss,
+                                          bool *modified);
+  int _command_pool_application(const string &prefix,
+                                       const cmdmap_t& cmdmap,
+                                       stringstream& ss,
+                                       bool *modified,
+                                       bool preparing);
 
   bool handle_osd_timeouts(const utime_t &now,
 			   std::map<int,utime_t> &last_osd_report);

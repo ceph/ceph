@@ -7,14 +7,11 @@
 #include <stdexcept>
 #include <ostream>
 #include <boost/variant.hpp>
-#include "include/assert.h"	// boost clobbers this
+#include "include/ceph_assert.h"	// boost clobbers this
 #include "common/Formatter.h"
 #include "common/BackTrace.h"
 
 class CephContext;
-
-/* this is handy; can't believe it's not standard */
-#define ARRAY_SIZE(a)	(sizeof(a) / sizeof(*a))
 
 typedef boost::variant<std::string,
 		       bool,
@@ -26,18 +23,20 @@ typedef boost::variant<std::string,
 typedef std::map<std::string, cmd_vartype, std::less<>> cmdmap_t;
 
 std::string cmddesc_get_prefix(const std::string &cmddesc);
-void dump_cmd_to_json(ceph::Formatter *f, const std::string& cmd);
+void dump_cmd_to_json(ceph::Formatter *f, uint64_t features,
+                      const std::string& cmd);
 void dump_cmd_and_help_to_json(ceph::Formatter *f,
+			       uint64_t features,
 			       const std::string& secname,
 			       const std::string& cmd,
 			       const std::string& helptext);
 void dump_cmddesc_to_json(ceph::Formatter *jf,
+		          uint64_t features,
 		          const std::string& secname,
 		          const std::string& cmdsig,
 		          const std::string& helptext,
 		          const std::string& module,
 		          const std::string& perm,
-		          const std::string& avail,
 		          uint64_t flags);
 bool cmdmap_from_json(std::vector<std::string> cmd, cmdmap_t *mapp,
 		      std::stringstream &ss);
@@ -56,24 +55,12 @@ struct bad_cmd_get : public std::exception {
   }
 };
 
-template <typename T>
-bool cmd_getval(CephContext *cct, const cmdmap_t& cmdmap, const std::string& k,
-		T& val)
-{
-  if (cmdmap.count(k)) {
-    try {
-      val = boost::get<T>(cmdmap.find(k)->second);
-      return true;
-    } catch (boost::bad_get&) {
-      handle_bad_get(cct, k, typeid(T).name());
-    }
-  }
-  return false;
-}
+bool cmd_getval(CephContext *cct, const cmdmap_t& cmdmap,
+		const std::string& k, bool& val);
 
 template <typename T>
-bool cmd_getval_throws(CephContext *cct, const cmdmap_t& cmdmap,
-		       const std::string& k, T& val)
+bool cmd_getval(CephContext *cct, const cmdmap_t& cmdmap,
+		const std::string& k, T& val)
 {
   if (cmdmap.count(k)) {
     try {
@@ -89,15 +76,7 @@ bool cmd_getval_throws(CephContext *cct, const cmdmap_t& cmdmap,
 // with default
 
 template <typename T>
-void cmd_getval(CephContext *cct, const cmdmap_t& cmdmap, const std::string& k,
-		T& val, const T& defval)
-{
-  if (!cmd_getval(cct, cmdmap, k, val))
-    val = defval;
-}
-
-template <typename T>
-bool cmd_getval_throws(
+bool cmd_getval(
   CephContext *cct, const cmdmap_t& cmdmap, const std::string& k,
   T& val, const T& defval)
 {

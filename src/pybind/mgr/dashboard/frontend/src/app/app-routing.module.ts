@@ -4,14 +4,17 @@ import { ActivatedRouteSnapshot, RouterModule, Routes } from '@angular/router';
 import { IscsiComponent } from './ceph/block/iscsi/iscsi.component';
 import { MirroringComponent } from './ceph/block/mirroring/mirroring.component';
 import { RbdFormComponent } from './ceph/block/rbd-form/rbd-form.component';
-import { RbdListComponent } from './ceph/block/rbd-list/rbd-list.component';
+import { RbdImagesComponent } from './ceph/block/rbd-images/rbd-images.component';
 import { CephfsListComponent } from './ceph/cephfs/cephfs-list/cephfs-list.component';
+import { ConfigurationFormComponent } from './ceph/cluster/configuration/configuration-form/configuration-form.component';
 import { ConfigurationComponent } from './ceph/cluster/configuration/configuration.component';
+import { CrushmapComponent } from './ceph/cluster/crushmap/crushmap.component';
 import { HostsComponent } from './ceph/cluster/hosts/hosts.component';
 import { MonitorComponent } from './ceph/cluster/monitor/monitor.component';
 import { OsdListComponent } from './ceph/cluster/osd/osd-list/osd-list.component';
 import { DashboardComponent } from './ceph/dashboard/dashboard/dashboard.component';
 import { PerformanceCounterComponent } from './ceph/performance-counter/performance-counter/performance-counter.component';
+import { PoolFormComponent } from './ceph/pool/pool-form/pool-form.component';
 import { PoolListComponent } from './ceph/pool/pool-list/pool-list.component';
 import { Rgw501Component } from './ceph/rgw/rgw-501/rgw-501.component';
 import { RgwBucketFormComponent } from './ceph/rgw/rgw-bucket-form/rgw-bucket-form.component';
@@ -20,6 +23,8 @@ import { RgwDaemonListComponent } from './ceph/rgw/rgw-daemon-list/rgw-daemon-li
 import { RgwUserFormComponent } from './ceph/rgw/rgw-user-form/rgw-user-form.component';
 import { RgwUserListComponent } from './ceph/rgw/rgw-user-list/rgw-user-list.component';
 import { LoginComponent } from './core/auth/login/login.component';
+import { RoleFormComponent } from './core/auth/role-form/role-form.component';
+import { RoleListComponent } from './core/auth/role-list/role-list.component';
 import { UserFormComponent } from './core/auth/user-form/user-form.component';
 import { UserListComponent } from './core/auth/user-list/user-list.component';
 import { ForbiddenComponent } from './core/forbidden/forbidden.component';
@@ -69,15 +74,33 @@ const routes: Routes = [
   },
   {
     path: 'osd',
-    component: OsdListComponent,
     canActivate: [AuthGuardService],
-    data: { breadcrumbs: 'Cluster/OSDs' }
+    canActivateChild: [AuthGuardService],
+    data: { breadcrumbs: 'Cluster/OSDs' },
+    children: [
+      {
+        path: '',
+        component: OsdListComponent
+      }
+    ]
   },
   {
     path: 'configuration',
-    component: ConfigurationComponent,
+    data: { breadcrumbs: 'Cluster/Configuration' },
+    children: [
+      { path: '', component: ConfigurationComponent },
+      {
+        path: 'edit/:name',
+        component: ConfigurationFormComponent,
+        data: { breadcrumbs: 'Edit' }
+      }
+    ]
+  },
+  {
+    path: 'crush-map',
+    component: CrushmapComponent,
     canActivate: [AuthGuardService],
-    data: { breadcrumbs: 'Cluster/Configuration Documentation' }
+    data: { breadcrumbs: 'Cluster/CRUSH map' }
   },
   {
     path: 'perf_counters/:type/:id',
@@ -90,9 +113,14 @@ const routes: Routes = [
   // Pools
   {
     path: 'pool',
-    component: PoolListComponent,
     canActivate: [AuthGuardService],
-    data: { breadcrumbs: 'Pools' }
+    canActivateChild: [AuthGuardService],
+    data: { breadcrumbs: 'Pools' },
+    children: [
+      { path: '', component: PoolListComponent },
+      { path: 'add', component: PoolFormComponent, data: { breadcrumbs: 'Add' } },
+      { path: 'edit/:name', component: PoolFormComponent, data: { breadcrumbs: 'Edit' } }
+    ]
   },
   // Block
   {
@@ -102,10 +130,15 @@ const routes: Routes = [
     data: { breadcrumbs: true, text: 'Block', path: null },
     children: [
       {
+        path: '',
+        redirectTo: 'rbd',
+        pathMatch: 'full'
+      },
+      {
         path: 'rbd',
         data: { breadcrumbs: 'Images' },
         children: [
-          { path: '', component: RbdListComponent },
+          { path: '', component: RbdImagesComponent },
           { path: 'add', component: RbdFormComponent, data: { breadcrumbs: 'Add' } },
           { path: 'edit/:pool/:name', component: RbdFormComponent, data: { breadcrumbs: 'Edit' } },
           {
@@ -177,20 +210,41 @@ const routes: Routes = [
       }
     ]
   },
-  // Administration
+  // Dashboard Settings
   {
-    path: 'users',
+    path: 'user-management',
     canActivate: [AuthGuardService],
     canActivateChild: [AuthGuardService],
-    data: { breadcrumbs: 'Administration/Users' },
+    data: { breadcrumbs: 'User management', path: null },
     children: [
-      { path: '', component: UserListComponent },
-      { path: 'add', component: UserFormComponent, data: { breadcrumbs: 'Add' } },
-      { path: 'edit/:username', component: UserFormComponent, data: { breadcrumbs: 'Edit' } }
+      {
+        path: '',
+        redirectTo: 'users',
+        pathMatch: 'full'
+      },
+      {
+        path: 'users',
+        data: { breadcrumbs: 'Users' },
+        children: [
+          { path: '', component: UserListComponent },
+          { path: 'add', component: UserFormComponent, data: { breadcrumbs: 'Add' } },
+          { path: 'edit/:username', component: UserFormComponent, data: { breadcrumbs: 'Edit' } }
+        ]
+      },
+      {
+        path: 'roles',
+        data: { breadcrumbs: 'Roles' },
+        children: [
+          { path: '', component: RoleListComponent },
+          { path: 'add', component: RoleFormComponent, data: { breadcrumbs: 'Add' } },
+          { path: 'edit/:name', component: RoleFormComponent, data: { breadcrumbs: 'Edit' } }
+        ]
+      }
     ]
   },
   // System
   { path: 'login', component: LoginComponent },
+  { path: 'logout', children: [] },
   { path: '403', component: ForbiddenComponent },
   { path: '404', component: NotFoundComponent },
   { path: '**', redirectTo: '/404' }

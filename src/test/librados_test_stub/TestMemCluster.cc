@@ -54,7 +54,7 @@ int TestMemCluster::register_object_handler(int64_t pool_id,
 
   auto& object_handlers = pool->file_handlers[locator];
   auto it = object_handlers.find(object_handler);
-  assert(it == object_handlers.end());
+  ceph_assert(it == object_handlers.end());
 
   object_handlers.insert(object_handler);
   return 0;
@@ -189,13 +189,13 @@ void TestMemCluster::transaction_start(const ObjectLocator& locator) {
     m_transaction_cond.Wait(m_lock);
   }
   auto result = m_transactions.insert(locator);
-  assert(result.second);
+  ceph_assert(result.second);
 }
 
 void TestMemCluster::transaction_finish(const ObjectLocator& locator) {
   Mutex::Locker locker(m_lock);
   size_t count = m_transactions.erase(locator);
-  assert(count == 1);
+  ceph_assert(count == 1);
   m_transaction_cond.Signal();
 }
 

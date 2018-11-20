@@ -70,7 +70,7 @@ public:
     pg_pool_t empty;
     // make an ec pool
     uint64_t pool_id = ++new_pool_inc.new_pool_max;
-    assert(pool_id == my_ec_pool);
+    ceph_assert(pool_id == my_ec_pool);
     pg_pool_t *p = new_pool_inc.get_new_pool(pool_id, &empty);
     p->size = 3;
     p->set_pg_num(64);
@@ -80,7 +80,7 @@ public:
     new_pool_inc.new_pool_names[pool_id] = "ec";
     // and a replicated pool
     pool_id = ++new_pool_inc.new_pool_max;
-    assert(pool_id == my_rep_pool);
+    ceph_assert(pool_id == my_rep_pool);
     p = new_pool_inc.get_new_pool(pool_id, &empty);
     p->size = 3;
     p->set_pg_num(64);
@@ -368,7 +368,10 @@ TEST_F(OSDMapTest, CleanTemps) {
 
   osdmap.apply_incremental(pgtemp_map);
 
-  OSDMap::clean_temps(g_ceph_context, osdmap, &pending_inc);
+  OSDMap tmpmap;
+  tmpmap.deepish_copy_from(osdmap);
+  tmpmap.apply_incremental(pending_inc);
+  OSDMap::clean_temps(g_ceph_context, osdmap, tmpmap, &pending_inc);
 
   EXPECT_TRUE(pending_inc.new_pg_temp.count(pga) &&
 	      pending_inc.new_pg_temp[pga].size() == 0);
@@ -418,7 +421,10 @@ TEST_F(OSDMapTest, KeepsNecessaryTemps) {
 
   OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
 
-  OSDMap::clean_temps(g_ceph_context, osdmap, &pending_inc);
+  OSDMap tmpmap;
+  tmpmap.deepish_copy_from(osdmap);
+  tmpmap.apply_incremental(pending_inc);
+  OSDMap::clean_temps(g_ceph_context, osdmap, tmpmap, &pending_inc);
   EXPECT_FALSE(pending_inc.new_pg_temp.count(pgid));
   EXPECT_FALSE(pending_inc.new_primary_temp.count(pgid));
 }
@@ -612,6 +618,20 @@ TEST_F(OSDMapTest, CleanPGUpmaps) {
           break;
         }
       }
+      {
+        // Check we can handle a negative pg_upmap value
+        vector<int32_t> new_pg_upmap;
+        new_pg_upmap.push_back(up[0]);
+        new_pg_upmap.push_back(-823648512);
+        OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+        pending_inc.new_pg_upmap[pgid] = mempool::osdmap::vector<int32_t>(
+            new_pg_upmap.begin(), new_pg_upmap.end());
+        osdmap.apply_incremental(pending_inc);
+        vector<int> new_up;
+        int new_up_primary;
+        // crucial call - _apply_upmap should ignore the negative value
+        osdmap.pg_to_raw_up(pgid, &new_up, &new_up_primary);
+      }
       ASSERT_NE(-1, replaced_by);
       // generate a new pg_upmap item and apply
       vector<int32_t> new_pg_upmap;
@@ -640,7 +660,10 @@ TEST_F(OSDMapTest, CleanPGUpmaps) {
     {
       // STEP-2: apply cure
       OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
-      osdmap.maybe_remove_pg_upmaps(g_ceph_context, osdmap, &pending_inc);
+      OSDMap tmpmap;
+      tmpmap.deepish_copy_from(osdmap);
+      tmpmap.apply_incremental(pending_inc);
+      osdmap.maybe_remove_pg_upmaps(g_ceph_context, osdmap, tmpmap, &pending_inc);
       osdmap.apply_incremental(pending_inc);
       {
         // validate pg_upmap is gone (reverted)
@@ -704,6 +727,23 @@ TEST_F(OSDMapTest, CleanPGUpmaps) {
       up_after_out = new_up; // needed for verification..
     }
     {
+      // Make sure we can handle a negative pg_upmap_item
+      int victim = up[0];
+      int replaced_by = -823648512;
+      vector<pair<int32_t,int32_t>> new_pg_upmap_items;
+      new_pg_upmap_items.push_back(make_pair(victim, replaced_by));
+      // apply
+      OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+      pending_inc.new_pg_upmap_items[pgid] =
+        mempool::osdmap::vector<pair<int32_t,int32_t>>(
+        new_pg_upmap_items.begin(), new_pg_upmap_items.end());
+      osdmap.apply_incremental(pending_inc);
+      vector<int> new_up;
+      int new_up_primary;
+      // crucial call - _apply_upmap should ignore the negative value
+      osdmap.pg_to_raw_up(pgid, &new_up, &new_up_primary);
+    }
+    {
       // STEP-2: generating a new pg_upmap_items entry by
       // replacing up[0] with one coming from candidate_children
       int victim = up[0];
@@ -757,7 +797,11 @@ TEST_F(OSDMapTest, CleanPGUpmaps) {
     {
       // STEP-4: apply cure
       OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
-      osdmap.maybe_remove_pg_upmaps(g_ceph_context, osdmap, &pending_inc);
+      OSDMap tmpmap;
+      tmpmap.deepish_copy_from(osdmap);
+      tmpmap.apply_incremental(pending_inc);
+      osdmap.maybe_remove_pg_upmaps(g_ceph_context, osdmap, tmpmap,
+				    &pending_inc);
       osdmap.apply_incremental(pending_inc);
       {
         // validate pg_upmap_items is gone (reverted)

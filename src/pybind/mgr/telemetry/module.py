@@ -204,6 +204,19 @@ class Module(MgrModule):
 
         return metadata
 
+    def gather_crashinfo(self):
+        crashdict = dict()
+        errno, crashids, err = self.remote('crash', 'do_ls', '', '')
+        if errno:
+            return ''
+        for crashid in crashids.split():
+            cmd = {'id': crashid}
+            errno, crashinfo, err = self.remote('crash', 'do_info', cmd, '')
+            if errno:
+                continue
+            crashdict[crashid] = json.loads(crashinfo)
+        return crashdict
+
     def compile_report(self):
         report = {'leaderboard': False, 'report_version': 1}
 
@@ -269,6 +282,8 @@ class Module(MgrModule):
         report['services'] = defaultdict(int)
         for key, value in service_map['services'].items():
             report['services'][key] += 1
+
+        report['crashes'] = self.gather_crashinfo()
 
         return report
 

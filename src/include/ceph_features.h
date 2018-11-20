@@ -164,7 +164,7 @@ DEFINE_CEPH_FEATURE(59, 1, MSG_ADDR2) // overlap
 DEFINE_CEPH_FEATURE(60, 1, OSD_RECOVERY_DELETES) // *do not share this bit*
 DEFINE_CEPH_FEATURE(61, 1, CEPHX_V2)             // *do not share this bit*
 
-DEFINE_CEPH_FEATURE(62, 1, RESERVED)           // do not use; used as a sentinal
+DEFINE_CEPH_FEATURE(62, 1, RESERVED)           // do not use; used as a sentinel
 DEFINE_CEPH_FEATURE_DEPRECATED(63, 1, RESERVED_BROKEN, LUMINOUS) // client-facing
 
 

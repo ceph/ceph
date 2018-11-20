@@ -26,7 +26,6 @@
 
 #include "include/types.h"
 #include "common/Clock.h"
-#include "msg/Message.h"
 #include "include/health.h"
 
 #include "common/config.h"
@@ -279,7 +278,7 @@ public:
   mds_rank_t get_old_max_mds() const { return old_max_mds; }
 
   mds_rank_t get_standby_count_wanted(mds_rank_t standby_daemon_count) const {
-    assert(standby_daemon_count >= 0);
+    ceph_assert(standby_daemon_count >= 0);
     std::set<mds_rank_t> s;
     get_standby_replay_mds_set(s);
     mds_rank_t standbys_avail = (mds_rank_t)s.size()+standby_daemon_count;
@@ -314,7 +313,7 @@ public:
     return mds_info.at(gid);
   }
   const mds_info_t& get_mds_info(mds_rank_t m) const {
-    assert(up.count(m) && mds_info.count(up.at(m)));
+    ceph_assert(up.count(m) && mds_info.count(up.at(m)));
     return mds_info.at(up.at(m));
   }
   mds_gid_t find_mds_gid_by_name(std::string_view s) const {
@@ -392,7 +391,7 @@ public:
 	   ++p) {
 	std::map<mds_gid_t, mds_info_t>::const_iterator q =
 	  mds_info.find(p->second);
-	assert(q != mds_info.end());
+	ceph_assert(q != mds_info.end());
 	if (first) {
 	  cached_up_features = q->second.mds_features;
 	  first = false;
@@ -409,7 +408,7 @@ public:
    */
   void get_down_mds_set(std::set<mds_rank_t> *s) const
   {
-    assert(s != NULL);
+    ceph_assert(s != NULL);
     s->insert(failed.begin(), failed.end());
     s->insert(damaged.begin(), damaged.end());
   }
@@ -470,7 +469,7 @@ public:
    *
    * A STUCK_UNAVAILABLE result indicates that we can't see a way that
    * the cluster is about to recover on its own, so it'll probably require
-   * administrator intervention: clients should probaly not bother trying
+   * administrator intervention: clients should probably not bother trying
    * to mount.
    */
   availability_t is_cluster_available() const;
@@ -605,9 +604,8 @@ public:
    * Get the MDS daemon entity_inst_t for a rank
    * known to be up.
    */
-  entity_addrvec_t get_addrs(mds_rank_t m) {
-    assert(up.count(m));
-    return mds_info[up[m]].get_addrs();
+  entity_addrvec_t get_addrs(mds_rank_t m) const {
+    return mds_info.at(up.at(m)).get_addrs();
   }
 
   mds_rank_t get_rank_gid(mds_gid_t gid) const {
@@ -626,7 +624,7 @@ public:
   }
   void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::const_iterator& p);
-  void decode(bufferlist& bl) {
+  void decode(const bufferlist& bl) {
     auto p = bl.cbegin();
     decode(p);
   }

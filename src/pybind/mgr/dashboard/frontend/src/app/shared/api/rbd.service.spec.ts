@@ -127,11 +127,10 @@ describe('RbdService', () => {
     expect(req.request.method).toBe('DELETE');
   });
 
-  describe('Encode decorator', () => {
-    it('should encode the imageName', () => {
-      service.get('poolName', 'rbd/name').subscribe();
-      const req = httpTesting.expectOne('api/block/image/poolName/rbd%2Fname');
-      expect(req.request.method).toBe('GET');
-    });
+  it('should call moveTrash', () => {
+    service.moveTrash('poolName', 'rbdName', 1).subscribe();
+    const req = httpTesting.expectOne('api/block/image/poolName/rbdName/move_trash');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ delay: 1 });
   });
 });

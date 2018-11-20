@@ -259,10 +259,10 @@
 /* Defined if you have libzfs enabled */
 #cmakedefine HAVE_LIBZFS
 
-/* Define if the C complier supports __func__ */
+/* Define if the C compiler supports __func__ */
 #cmakedefine HAVE_FUNC
 
-/* Define if the C complier supports __PRETTY_FUNCTION__ */
+/* Define if the C compiler supports __PRETTY_FUNCTION__ */
 #cmakedefine HAVE_PRETTY_FUNC
 
 /* F_SETPIPE_SZ is supported */
@@ -332,6 +332,9 @@
 
 /* Defined if boost::context is available */
 #cmakedefine HAVE_BOOST_CONTEXT
+
+/* Defined if libradosstriper is enabled: */
+#cmakedefine WITH_LIBRADOSSTRIPER
 
 /* Defined if OpenSSL is available for the rgw beast frontend */
 #cmakedefine WITH_RADOSGW_BEAST_OPENSSL

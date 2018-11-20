@@ -42,7 +42,7 @@ void TrashWatcher<I>::notify_image_added(
 
   librados::AioCompletion *comp = create_rados_callback(on_finish);
   int r = io_ctx.aio_notify(RBD_TRASH, comp, bl, NOTIFY_TIMEOUT_MS, nullptr);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 
@@ -58,7 +58,7 @@ void TrashWatcher<I>::notify_image_removed(librados::IoCtx &io_ctx,
 
   librados::AioCompletion *comp = create_rados_callback(on_finish);
   int r = io_ctx.aio_notify(RBD_TRASH, comp, bl, NOTIFY_TIMEOUT_MS, nullptr);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 

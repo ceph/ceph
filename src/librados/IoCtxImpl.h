@@ -143,9 +143,6 @@ struct librados::IoCtxImpl {
   int cmpext(const object_t& oid, uint64_t off, bufferlist& cmp_bl);
 
   int tmap_update(const object_t& oid, bufferlist& cmdbl);
-  int tmap_put(const object_t& oid, bufferlist& bl);
-  int tmap_get(const object_t& oid, bufferlist& bl);
-  int tmap_to_omap(const object_t& oid, bool nullok=false);
 
   int exec(const object_t& oid, const char *cls, const char *method, bufferlist& inbl, bufferlist& outbl);
 
@@ -225,9 +222,6 @@ struct librados::IoCtxImpl {
   int aio_rmxattr(const object_t& oid, AioCompletionImpl *c,
 		  const char *name);
   int aio_cancel(AioCompletionImpl *c);
-
-  int pool_change_auid(unsigned long long auid);
-  int pool_change_auid_async(unsigned long long auid, PoolAsyncCompletionImpl *c);
 
   int hit_set_list(uint32_t hash, AioCompletionImpl *c,
 		   std::list< std::pair<time_t, time_t> > *pls);

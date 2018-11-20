@@ -334,7 +334,7 @@ int TestMemIoCtxImpl::remove(const std::string& oid, const SnapContext &snapc) {
 
   TestCluster::ObjectLocator locator(get_namespace(), oid);
   TestMemCluster::Files::iterator it = m_pool->files.find(locator);
-  assert(it != m_pool->files.end());
+  ceph_assert(it != m_pool->files.end());
 
   if (*it->second.rbegin() == file) {
     TestMemCluster::ObjectHandlers object_handlers;
@@ -757,8 +757,8 @@ void TestMemIoCtxImpl::ensure_minimum_length(size_t len, bufferlist *bl) {
 
 TestMemCluster::SharedFile TestMemIoCtxImpl::get_file(
     const std::string &oid, bool write, const SnapContext &snapc) {
-  assert(m_pool->file_lock.is_locked() || m_pool->file_lock.is_wlocked());
-  assert(!write || m_pool->file_lock.is_wlocked());
+  ceph_assert(m_pool->file_lock.is_locked() || m_pool->file_lock.is_wlocked());
+  ceph_assert(!write || m_pool->file_lock.is_wlocked());
 
   TestMemCluster::SharedFile file;
   TestMemCluster::Files::iterator it = m_pool->files.find(
@@ -806,7 +806,7 @@ TestMemCluster::SharedFile TestMemIoCtxImpl::get_file(
 
   if (get_snap_read() == CEPH_NOSNAP) {
     if (!file->exists) {
-      assert(it->second.size() > 1);
+      ceph_assert(it->second.size() > 1);
       return TestMemCluster::SharedFile();
     }
     return file;

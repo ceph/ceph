@@ -10,19 +10,17 @@ If you cannot start the gateway (i.e., there is no existing ``pid``),
 check to see if there is an existing ``.asok`` file from another 
 user. If an ``.asok`` file from another user exists and there is no
 running ``pid``, remove the ``.asok`` file and try to start the
-process again.
-
-This may occur when you start the process as a ``root`` user and 
+process again. This may occur when you start the process as a ``root`` user and 
 the startup script is trying to start the process as a 
 ``www-data`` or ``apache`` user and an existing ``.asok`` is 
 preventing the script from starting the daemon.
 
 The radosgw init script (/etc/init.d/radosgw) also has a verbose argument that
-can provide some insight as to what could be the issue:
+can provide some insight as to what could be the issue::
 
   /etc/init.d/radosgw start -v
 
-or
+or ::
 
   /etc/init.d radosgw start --verbose
 

@@ -63,12 +63,6 @@ int execute(const po::variables_map &vm,
   }
   opts.set(RBD_IMAGE_OPTION_FORMAT, static_cast<uint64_t>(2));
 
-  // TODO clones across namespaces not yet supported
-  if (namespace_name != dst_namespace_name) {
-    std::cerr << "rbd: clones across namespaces is not supported." << std::endl;
-    return -EINVAL;
-  }
-
   librados::Rados rados;
   librados::IoCtx io_ctx;
   r = utils::init(pool_name, namespace_name, &rados, &io_ctx);
@@ -85,7 +79,11 @@ int execute(const po::variables_map &vm,
   librbd::RBD rbd;
   r = do_clone(rbd, io_ctx, image_name.c_str(), snap_name.c_str(), dst_io_ctx,
                dst_image_name.c_str(), opts);
-  if (r < 0) {
+  if (r == -EXDEV) {
+    std::cerr << "rbd: clone v2 required for cross-namespace clones."
+              << std::endl;
+    return r;
+  } else if (r < 0) {
     std::cerr << "rbd: clone error: " << cpp_strerror(r) << std::endl;
     return r;
   }

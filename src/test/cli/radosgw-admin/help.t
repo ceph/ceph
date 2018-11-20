@@ -104,8 +104,8 @@
                                (NOTE: required to specify formatting of date
                                to "YYYY-MM-DD-hh")
     log rm                     remove log object
-    usage show                 show usage (by user, date range)
-    usage trim                 trim usage (by user, date range)
+    usage show                 show usage (by user, by bucket, date range)
+    usage trim                 trim usage (by user, by bucket, date range)
     usage clear                reset all the usage stats for the cluster
     gc list                    dump expired garbage collection objects (specify
                                --include-all to list all entries, including unexpired)
@@ -126,11 +126,6 @@
     datalog list               list data log
     datalog trim               trim data log
     datalog status             read data log status
-    opstate list               list stateful operations entries (use client_id,
-                               op_id, object)
-    opstate set                set state on an entry (use client_id, op_id, object, state)
-    opstate renew              renew state on an entry (use client_id, op_id, object)
-    opstate rm                 remove entry (use client_id, op_id, object)
     orphans find               init and run search for leaked rados objects (use job-id, pool)
     orphans finish             clean up search for leaked rados objects
     orphans list-jobs          list the current job-ids for orphans search
@@ -150,6 +145,12 @@
     reshard cancel             cancel resharding a bucket
     sync error list            list sync error
     sync error trim            trim sync error
+    mfa create                 create a new MFA TOTP token
+    mfa list                   list MFA TOTP tokens
+    mfa get                    show MFA TOTP token
+    mfa remove                 delete MFA TOTP token
+    mfa check                  check MFA TOTP token
+    mfa resync                 re-sync MFA TOTP token
   options:
      --tenant=<tenant>         tenant name
      --uid=<id>                user id
@@ -168,6 +169,7 @@
      --max-buckets             max number of buckets for a user
      --admin                   set the admin flag on the user
      --system                  set the system flag on the user
+     --op-mask                 set the op mask on the user
      --bucket=<bucket>         Specify the bucket name. Also used by the quota command.
      --pool=<pool>             Specify the pool name. Also used to scan for leaked rados objects.
      --object=<object>         object name
@@ -244,7 +246,6 @@
      --skip-zero-entries       log show only dumps entries that don't have zero value
                                in one of the numeric field
      --infile=<file>           specify a file to read in when setting data
-     --state=<state>           specify a state for the opstate set command
      --categories=<list>       comma separated list of categories, used in usage show
      --caps=<caps>             list of caps (e.g., "usage=read, write; user=read")
      --yes-i-really-mean-it    required for certain operations
@@ -284,6 +285,13 @@
      --policy-name             name of the policy document
      --policy-doc              permission policy document
      --path-prefix             path prefix for filtering roles
+  
+  MFA options:
+     --totp-serial             a string that represents the ID of a TOTP token
+     --totp-seed               the secret seed that is used to calculate the TOTP
+     --totp-seconds            the time resolution that is being used for TOTP generation
+     --totp-window             the number of TOTP tokens that are checked before and after the current token when validating token
+     --totp-pin                the valid value of a TOTP token at a certain time
   
     --conf/-c FILE    read configuration from the given configuration file
     --id ID           set ID portion of my name

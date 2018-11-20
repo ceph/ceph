@@ -16,6 +16,36 @@ class TestLsblkParser(object):
         assert result['SIZE'] == '10M'
 
 
+class TestBlkidParser(object):
+
+    def test_parses_whitespace_values(self):
+        output = '''/dev/sdb1: UUID="62416664-cbaf-40bd-9689-10bd337379c3" TYPE="xfs" PART_ENTRY_SCHEME="gpt" PART_ENTRY_NAME="ceph data" PART_ENTRY_UUID="b89c03bc-bf58-4338-a8f8-a2f484852b4f"'''  # noqa
+        result = disk._blkid_parser(output)
+        assert result['PARTLABEL'] == 'ceph data'
+
+    def test_ignores_unmapped(self):
+        output = '''/dev/sdb1: UUID="62416664-cbaf-40bd-9689-10bd337379c3" TYPE="xfs" PART_ENTRY_SCHEME="gpt" PART_ENTRY_NAME="ceph data" PART_ENTRY_UUID="b89c03bc-bf58-4338-a8f8-a2f484852b4f"'''  # noqa
+        result = disk._blkid_parser(output)
+        assert len(result.keys()) == 4
+
+    def test_translates_to_partuuid(self):
+        output = '''/dev/sdb1: UUID="62416664-cbaf-40bd-9689-10bd337379c3" TYPE="xfs" PART_ENTRY_SCHEME="gpt" PART_ENTRY_NAME="ceph data" PART_ENTRY_UUID="b89c03bc-bf58-4338-a8f8-a2f484852b4f"'''  # noqa
+        result = disk._blkid_parser(output)
+        assert result['PARTUUID'] == 'b89c03bc-bf58-4338-a8f8-a2f484852b4f'
+
+
+class TestBlkid(object):
+
+    def test_parses_translated(self, stub_call):
+        output = '''/dev/sdb1: UUID="62416664-cbaf-40bd-9689-10bd337379c3" TYPE="xfs" PART_ENTRY_SCHEME="gpt" PART_ENTRY_NAME="ceph data" PART_ENTRY_UUID="b89c03bc-bf58-4338-a8f8-a2f484852b4f"'''  # noqa
+        stub_call((output.split(), [], 0))
+        result = disk.blkid('/dev/sdb1')
+        assert result['PARTUUID'] == 'b89c03bc-bf58-4338-a8f8-a2f484852b4f'
+        assert result['PARTLABEL'] == 'ceph data'
+        assert result['UUID'] == '62416664-cbaf-40bd-9689-10bd337379c3'
+        assert result['TYPE'] == 'xfs'
+
+
 class TestDeviceFamily(object):
 
     def test_groups_multiple_devices(self, stub_call):
@@ -167,6 +197,15 @@ class TestGetDevices(object):
             _mapper_path=str(tmpdir))
         assert result == {}
 
+    def test_no_devices_are_found_errors(self, tmpdir):
+        block_path, dev_path, mapper_path = self.setup_paths(tmpdir)
+        os.makedirs(os.path.join(block_path, 'sda'))
+        result = disk.get_devices(
+            _sys_block_path=block_path, # has 1 device
+            _dev_path=str(tmpdir), # exists but no devices
+            _mapper_path='/does/not/exist/path') # does not exist
+        assert result == {}
+
     def test_sda_block_is_found(self, tmpfile, tmpdir):
         block_path, dev_path, mapper_path = self.setup_paths(tmpdir)
         dev_sda_path = os.path.join(dev_path, 'sda')
@@ -181,19 +220,6 @@ class TestGetDevices(object):
         assert result[dev_sda_path]['model'] == ''
         assert result[dev_sda_path]['partitions'] == {}
 
-    def test_sda_is_removable_gets_skipped(self, tmpfile, tmpdir):
-        block_path, dev_path, mapper_path = self.setup_paths(tmpdir)
-        dev_sda_path = os.path.join(dev_path, 'sda')
-        block_sda_path = os.path.join(block_path, 'sda')
-        os.makedirs(block_sda_path)
-        os.makedirs(dev_sda_path)
-
-        tmpfile('removable', contents='1', directory=block_sda_path)
-        result = disk.get_devices(
-            _sys_block_path=block_path,
-            _dev_path=dev_path,
-            _mapper_path=mapper_path)
-        assert result == {}
 
     def test_dm_device_is_not_used(self, monkeypatch, tmpdir):
         # the link to the mapper is used instead
@@ -380,11 +406,18 @@ class TestSizeOperations(object):
     def test_assignment_addition_with_size_objects(self):
         result = disk.Size(mb=256) + disk.Size(gb=1)
         assert result.gb == 1.25
+        assert result.gb.as_int() == 1
+        assert result.gb.as_float() == 1.25
 
     def test_self_addition_with_size_objects(self):
         base = disk.Size(mb=256)
-        base + disk.Size(gb=1)
+        base += disk.Size(gb=1)
         assert base.gb == 1.25
+
+    def test_self_addition_does_not_alter_state(self):
+        base = disk.Size(mb=256)
+        base + disk.Size(gb=1)
+        assert base.mb == 256
 
     def test_addition_with_non_size_objects(self):
         with pytest.raises(TypeError):
@@ -392,8 +425,13 @@ class TestSizeOperations(object):
 
     def test_assignment_subtraction_with_size_objects(self):
         base = disk.Size(gb=1)
-        base - disk.Size(mb=256)
+        base -= disk.Size(mb=256)
         assert base.mb == 768
+
+    def test_self_subtraction_does_not_alter_state(self):
+        base = disk.Size(gb=1)
+        base - disk.Size(mb=256)
+        assert base.gb == 1
 
     def test_subtraction_with_size_objects(self):
         result = disk.Size(gb=1) - disk.Size(mb=256)
@@ -409,17 +447,25 @@ class TestSizeOperations(object):
 
     def test_multiplication_with_non_size_objects(self):
         base = disk.Size(gb=1)
-        base * 2
-        assert base.gb == 2
+        result = base * 2
+        assert result.gb == 2
+        assert result.gb.as_int() == 2
 
     def test_division_with_size_objects(self):
-        with pytest.raises(TypeError):
-            disk.Size(gb=1) * disk.Size(mb=1)
+        result = disk.Size(gb=1) / disk.Size(mb=1)
+        assert int(result) == 1024
 
     def test_division_with_non_size_objects(self):
         base = disk.Size(gb=1)
+        result = base / 2
+        assert result.mb == 512
+        assert result.mb.as_int() == 512
+
+    def test_division_with_non_size_objects_without_state(self):
+        base = disk.Size(gb=1)
         base / 2
-        assert base.mb == 512
+        assert base.gb == 1
+        assert base.gb.as_int() == 1
 
 
 class TestSizeAttributes(object):

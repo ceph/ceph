@@ -289,7 +289,6 @@ struct request_redirect_t {
 private:
   object_locator_t redirect_locator; ///< this is authoritative
   string redirect_object; ///< If non-empty, the request goes to this object name
-  bufferlist osd_instructions; ///< a bufferlist for the OSDs, passed but not interpreted by clients
 
   friend ostream& operator<<(ostream& out, const request_redirect_t& redir);
 public:
@@ -302,9 +301,6 @@ public:
   explicit request_redirect_t(const object_locator_t& orig,
                               const string& robj) :
       redirect_locator(orig), redirect_object(robj) {}
-
-  void set_instructions(const bufferlist& bl) { osd_instructions = bl; }
-  const bufferlist& get_instructions() { return osd_instructions; }
 
   bool empty() const { return redirect_locator.empty() &&
 			      redirect_object.empty(); }
@@ -380,7 +376,7 @@ struct pg_t {
 
   old_pg_t get_old_pg() const {
     old_pg_t o;
-    assert(m_pool < 0xffffffffull);
+    ceph_assert(m_pool < 0xffffffffull);
     o.v.pool = m_pool;
     o.v.ps = m_seed;
     o.v.preferred = (__s16)-1;
@@ -412,6 +408,11 @@ struct pg_t {
 
   bool is_split(unsigned old_pg_num, unsigned new_pg_num, set<pg_t> *pchildren) const;
 
+  bool is_merge_source(unsigned old_pg_num, unsigned new_pg_num, pg_t *parent) const;
+  bool is_merge_target(unsigned old_pg_num, unsigned new_pg_num) const {
+    return ps() < new_pg_num && is_split(new_pg_num, old_pg_num, nullptr);
+  }
+
   /**
    * Returns b such that for all object o:
    *   ~((~0)<<b) & o.hash) == 0 iff o is in the pg for *this
@@ -419,10 +420,14 @@ struct pg_t {
   unsigned get_split_bits(unsigned pg_num) const;
 
   bool contains(int bits, const ghobject_t& oid) {
-    return oid.match(bits, ps());
+    return
+      (int64_t)m_pool == oid.hobj.get_logical_pool() &&
+      oid.match(bits, ps());
   }
   bool contains(int bits, const hobject_t& oid) {
-    return oid.match(bits, ps());
+    return
+      (int64_t)m_pool == oid.get_logical_pool() &&
+      oid.match(bits, ps());
   }
 
   hobject_t get_hobj_start() const;
@@ -539,6 +544,19 @@ struct spg_t {
     }
     return is_split;
   }
+  bool is_merge_target(unsigned old_pg_num, unsigned new_pg_num) const {
+    return pgid.is_merge_target(old_pg_num, new_pg_num);
+  }
+  bool is_merge_source(unsigned old_pg_num, unsigned new_pg_num,
+		       spg_t *parent) const {
+    spg_t out = *this;
+    bool r = pgid.is_merge_source(old_pg_num, new_pg_num, &out.pgid);
+    if (r && parent) {
+      *parent = out;
+    }
+    return r;
+  }
+
   bool is_no_shard() const {
     return shard == shard_id_t::NO_SHARD;
   }
@@ -564,7 +582,8 @@ struct spg_t {
     return ghobject_t(
       hobject_t(object_t(name), "", CEPH_NOSNAP,
 		pgid.ps(),
-		hobject_t::POOL_TEMP_START - pgid.pool(), ""),
+		hobject_t::get_temp_pool(pgid.pool()),
+		""),
       ghobject_t::NO_GEN,
       shard);
   }
@@ -711,7 +730,7 @@ public:
   // get a TEMP collection that corresponds to the current collection,
   // which we presume is a pg collection.
   coll_t get_temp() const {
-    assert(type == TYPE_PG);
+    ceph_assert(type == TYPE_PG);
     return coll_t(TYPE_PG_TEMP, pgid, 0);
   }
 
@@ -906,9 +925,15 @@ WRITE_CLASS_ENCODER_FEATURES(objectstore_perf_stat_t)
  * aggregate stats for an osd
  */
 struct osd_stat_t {
-  int64_t kb, kb_used, kb_avail;
+  int64_t kb = 0;            ///< total device size
+  int64_t kb_used = 0;       ///< total used
+  int64_t kb_used_data = 0;  ///< total used by object data
+  int64_t kb_used_omap = 0;  ///< total used by omap data
+  int64_t kb_used_meta = 0;  ///< total used by internal metadata
+  int64_t kb_avail = 0;      ///< total available/free
+
   vector<int> hb_peers;
-  int32_t snap_trim_queue_len, num_snap_trimming;
+  int32_t snap_trim_queue_len = 0, num_snap_trimming = 0;
 
   pow2_hist_t op_queue_age_hist;
 
@@ -919,12 +944,12 @@ struct osd_stat_t {
 
   uint32_t num_pgs = 0;
 
-  osd_stat_t() : kb(0), kb_used(0), kb_avail(0),
-		 snap_trim_queue_len(0), num_snap_trimming(0) {}
-
   void add(const osd_stat_t& o) {
     kb += o.kb;
     kb_used += o.kb_used;
+    kb_used_data += o.kb_used_data;
+    kb_used_omap += o.kb_used_omap;
+    kb_used_meta += o.kb_used_meta;
     kb_avail += o.kb_avail;
     snap_trim_queue_len += o.snap_trim_queue_len;
     num_snap_trimming += o.num_snap_trimming;
@@ -935,6 +960,9 @@ struct osd_stat_t {
   void sub(const osd_stat_t& o) {
     kb -= o.kb;
     kb_used -= o.kb_used;
+    kb_used_data -= o.kb_used_data;
+    kb_used_omap -= o.kb_used_omap;
+    kb_used_meta -= o.kb_used_meta;
     kb_avail -= o.kb_avail;
     snap_trim_queue_len -= o.snap_trim_queue_len;
     num_snap_trimming -= o.num_snap_trimming;
@@ -953,6 +981,9 @@ WRITE_CLASS_ENCODER_FEATURES(osd_stat_t)
 inline bool operator==(const osd_stat_t& l, const osd_stat_t& r) {
   return l.kb == r.kb &&
     l.kb_used == r.kb_used &&
+    l.kb_used_data == r.kb_used_data &&
+    l.kb_used_omap == r.kb_used_omap &&
+    l.kb_used_meta == r.kb_used_meta &&
     l.kb_avail == r.kb_avail &&
     l.snap_trim_queue_len == r.snap_trim_queue_len &&
     l.num_snap_trimming == r.num_snap_trimming &&
@@ -965,10 +996,12 @@ inline bool operator!=(const osd_stat_t& l, const osd_stat_t& r) {
   return !(l == r);
 }
 
-
-
 inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
-  return out << "osd_stat(" << byte_u_t(s.kb_used << 10) << " used, "
+  return out << "osd_stat("
+	     << byte_u_t(s.kb_used << 10) << " used ("
+	     << byte_u_t(s.kb_used_data << 10) << " data, "
+	     << byte_u_t(s.kb_used_omap << 10) << " omap, "
+	     << byte_u_t(s.kb_used_meta << 10) << " meta), "
 	     << byte_u_t(s.kb_avail << 10) << " avail, "
 	     << byte_u_t(s.kb << 10) << " total, "
 	     << "peers " << s.hb_peers
@@ -986,7 +1019,7 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 #define PG_STATE_DOWN               (1ULL << 4)  // a needed replica is down, PG offline
 #define PG_STATE_RECOVERY_UNFOUND   (1ULL << 5)  // recovery stopped due to unfound
 #define PG_STATE_BACKFILL_UNFOUND   (1ULL << 6)  // backfill stopped due to unfound
-//#define PG_STATE_SPLITTING        (1ULL << 7)  // i am splitting
+#define PG_STATE_PREMERGE           (1ULL << 7)  // i am prepare to merging
 #define PG_STATE_SCRUBBING          (1ULL << 8)  // scrubbing
 //#define PG_STATE_SCRUBQ           (1ULL << 9)  // queued for scrub
 #define PG_STATE_DEGRADED           (1ULL << 10) // pg contains objects with reduced redundancy
@@ -1062,6 +1095,7 @@ public:
     CSUM_TYPE,
     CSUM_MAX_BLOCK,
     CSUM_MIN_BLOCK,
+    FINGERPRINT_ALGORITHM,
   };
 
   enum type_t {
@@ -1165,6 +1199,7 @@ struct pg_pool_t {
     FLAG_BACKFILLFULL = 1<<12, // pool is backfillfull
     FLAG_SELFMANAGED_SNAPS = 1<<13, // pool uses selfmanaged snaps
     FLAG_POOL_SNAPS = 1<<14,        // pool has pool snaps
+    FLAG_CREATING = 1<<15,          // initial pool PGs are being created
   };
 
   static const char *get_flag_name(int f) {
@@ -1184,6 +1219,7 @@ struct pg_pool_t {
     case FLAG_BACKFILLFULL: return "backfillfull";
     case FLAG_SELFMANAGED_SNAPS: return "selfmanaged_snaps";
     case FLAG_POOL_SNAPS: return "pool_snaps";
+    case FLAG_CREATING: return "creating";
     default: return "???";
     }
   }
@@ -1232,6 +1268,8 @@ struct pg_pool_t {
       return FLAG_SELFMANAGED_SNAPS;
     if (name == "pool_snaps")
       return FLAG_POOL_SNAPS;
+    if (name == "creating")
+      return FLAG_CREATING;
     return 0;
   }
 
@@ -1291,7 +1329,7 @@ struct pg_pool_t {
     case CACHEMODE_READPROXY:
       return true;
     default:
-      assert(0 == "implement me");
+      ceph_abort_msg("implement me");
     }
   }
 
@@ -1302,16 +1340,27 @@ struct pg_pool_t {
   __u8 crush_rule;          ///< crush placement rule
   __u8 object_hash;         ///< hash mapping object name to ps
 private:
-  __u32 pg_num, pgp_num;    ///< number of pgs
-
+  __u32 pg_num = 0, pgp_num = 0;  ///< number of pgs
+  __u32 pg_num_pending = 0;       ///< pg_num we are about to merge down to
+  __u32 pg_num_target = 0;        ///< pg_num we should converge toward
+  __u32 pgp_num_target = 0;       ///< pgp_num we should converge toward
 
 public:
   map<string,string> properties;  ///< OBSOLETE
   string erasure_code_profile; ///< name of the erasure code profile in OSDMap
   epoch_t last_change;      ///< most recent epoch changed, exclusing snapshot changes
-  epoch_t last_force_op_resend; ///< last epoch that forced clients to resend
+
+  /// last epoch that forced clients to resend
+  epoch_t last_force_op_resend = 0;
+  /// last epoch that forced clients to resend (pre-nautilus clients only)
+  epoch_t last_force_op_resend_prenautilus = 0;
   /// last epoch that forced clients to resend (pre-luminous clients only)
-  epoch_t last_force_op_resend_preluminous;
+  epoch_t last_force_op_resend_preluminous = 0;
+
+  ///< last_epoch_started preceding pg_num decrement request
+  epoch_t pg_num_dec_last_epoch_started = 0;
+  ///< last_epoch_clean preceding pg_num decrement request
+  epoch_t pg_num_dec_last_epoch_clean = 0;
   snapid_t snap_seq;        ///< seq for per-pool snapshot
   epoch_t snap_epoch;       ///< osdmap epoch of last snap
   uint64_t auid;            ///< who owns the pg
@@ -1401,6 +1450,37 @@ public:
 
   pool_opts_t opts; ///< options
 
+  typedef enum {
+    TYPE_FINGERPRINT_NONE = 0,
+    TYPE_FINGERPRINT_SHA1 = 1,     
+  } fingerprint_t;
+  static fingerprint_t get_fingerprint_from_str(const string& s) {
+    if (s == "none")
+      return TYPE_FINGERPRINT_NONE;
+    if (s == "sha1")
+      return TYPE_FINGERPRINT_SHA1;
+    return (fingerprint_t)-1;
+  }
+  const fingerprint_t get_fingerprint_type() const {
+    string fp_str;
+    opts.get(pool_opts_t::FINGERPRINT_ALGORITHM, &fp_str);
+    return get_fingerprint_from_str(fp_str);
+  }
+  const char *get_fingerprint_name() const {
+    string fp_str;
+    fingerprint_t fp_t;
+    opts.get(pool_opts_t::FINGERPRINT_ALGORITHM, &fp_str);
+    fp_t = get_fingerprint_from_str(fp_str);
+    return get_fingerprint_name(fp_t);
+  }
+  static const char *get_fingerprint_name(fingerprint_t m) {
+    switch (m) {
+    case TYPE_FINGERPRINT_NONE: return "none";
+    case TYPE_FINGERPRINT_SHA1: return "sha1";
+    default: return "unknown";
+    }
+  }
+
   /// application -> key/value metadata
   map<string, std::map<string, string>> application_metadata;
 
@@ -1425,10 +1505,7 @@ public:
   pg_pool_t()
     : flags(0), type(0), size(0), min_size(0),
       crush_rule(0), object_hash(0),
-      pg_num(0), pgp_num(0),
       last_change(0),
-      last_force_op_resend(0),
-      last_force_op_resend_preluminous(0),
       snap_seq(0), snap_epoch(0),
       auid(0),
       quota_max_bytes(0), quota_max_objects(0),
@@ -1482,6 +1559,9 @@ public:
   }
   epoch_t get_last_change() const { return last_change; }
   epoch_t get_last_force_op_resend() const { return last_force_op_resend; }
+  epoch_t get_last_force_op_resend_prenautilus() const {
+    return last_force_op_resend_prenautilus;
+  }
   epoch_t get_last_force_op_resend_preluminous() const {
     return last_force_op_resend_preluminous;
   }
@@ -1518,12 +1598,15 @@ public:
     case TYPE_ERASURE:
       return false;
     default:
-      assert(0 == "unhandled pool type");
+      ceph_abort_msg("unhandled pool type");
     }
   }
 
   unsigned get_pg_num() const { return pg_num; }
   unsigned get_pgp_num() const { return pgp_num; }
+  unsigned get_pg_num_target() const { return pg_num_target; }
+  unsigned get_pgp_num_target() const { return pgp_num_target; }
+  unsigned get_pg_num_pending() const { return pg_num_pending; }
 
   unsigned get_pg_num_mask() const { return pg_num_mask; }
   unsigned get_pgp_num_mask() const { return pgp_num_mask; }
@@ -1533,12 +1616,39 @@ public:
   // pool size that it represents.
   unsigned get_pg_num_divisor(pg_t pgid) const;
 
+  epoch_t get_pg_num_dec_last_epoch_started() const {
+    return pg_num_dec_last_epoch_started;
+  }
+  epoch_t get_pg_num_dec_last_epoch_clean() const {
+    return pg_num_dec_last_epoch_clean;
+  }
+
+  bool is_pending_merge(pg_t pgid, bool *target) const;
+
   void set_pg_num(int p) {
     pg_num = p;
+    pg_num_pending = p;
     calc_pg_masks();
   }
   void set_pgp_num(int p) {
     pgp_num = p;
+    calc_pg_masks();
+  }
+  void set_pg_num_pending(int p) {
+    pg_num_pending = p;
+    calc_pg_masks();
+  }
+  void set_pg_num_target(int p) {
+    pg_num_target = p;
+  }
+  void set_pgp_num_target(int p) {
+    pgp_num_target = p;
+  }
+  void dec_pg_num(epoch_t last_epoch_started,
+		  epoch_t last_epoch_clean) {
+    --pg_num;
+    pg_num_dec_last_epoch_started = last_epoch_started;
+    pg_num_dec_last_epoch_clean = last_epoch_clean;
     calc_pg_masks();
   }
 
@@ -1558,6 +1668,7 @@ public:
 
   void set_last_force_op_resend(uint64_t t) {
     last_force_op_resend = t;
+    last_force_op_resend_prenautilus = t;
     last_force_op_resend_preluminous = t;
   }
 
@@ -2036,12 +2147,21 @@ struct pg_stat_t {
       snaptrimq_len = f;
   }
 
+  void add_sub_invalid_flags(const pg_stat_t& o) {
+    // adding (or subtracting!) invalid stats render our stats invalid too
+    stats_invalid |= o.stats_invalid;
+    dirty_stats_invalid |= o.dirty_stats_invalid;
+    hitset_stats_invalid |= o.hitset_stats_invalid;
+    pin_stats_invalid |= o.pin_stats_invalid;
+    manifest_stats_invalid |= o.manifest_stats_invalid;
+  }
   void add(const pg_stat_t& o) {
     stats.add(o.stats);
     log_size += o.log_size;
     ondisk_log_size += o.ondisk_log_size;
     snaptrimq_len = std::min((uint64_t)snaptrimq_len + o.snaptrimq_len,
                              (uint64_t)(1ull << 31));
+    add_sub_invalid_flags(o);
   }
   void sub(const pg_stat_t& o) {
     stats.sub(o.stats);
@@ -2052,6 +2172,7 @@ struct pg_stat_t {
     } else {
       snaptrimq_len = 0;
     }
+    add_sub_invalid_flags(o);
   }
 
   bool is_acting_osd(int32_t osd, bool primary) const;
@@ -2397,16 +2518,12 @@ struct pg_info_t {
   bool is_empty() const { return last_update.version == 0; }
   bool dne() const { return history.epoch_created == 0; }
 
+  bool has_missing() const { return last_complete != last_update; }
   bool is_incomplete() const { return !last_backfill.is_max(); }
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& p);
   void dump(Formatter *f) const;
-  bool overlaps_with(const pg_info_t &oinfo) const {
-    return last_update > oinfo.log_tail ?
-      oinfo.last_update >= log_tail :
-      last_update >= oinfo.log_tail;
-  }
   static void generate_test_instances(list<pg_info_t*>& o);
 };
 WRITE_CLASS_ENCODER(pg_info_t)
@@ -2600,7 +2717,7 @@ struct pg_notify_t {
     : query_epoch(query_epoch),
       epoch_sent(epoch_sent),
       info(info), to(to), from(from) {
-    assert(from == info.pgid.shard);
+    ceph_assert(from == info.pgid.shard);
   }
   void encode(bufferlist &bl) const;
   void decode(bufferlist::const_iterator &p);
@@ -2678,8 +2795,8 @@ public:
     virtual bool has_full_intervals() const { return false; }
     virtual void iterate_all_intervals(
       std::function<void(const pg_interval_t &)> &&f) const {
-      assert(!has_full_intervals());
-      assert(0 == "not valid for this implementation");
+      ceph_assert(!has_full_intervals());
+      ceph_abort_msg("not valid for this implementation");
     }
 
     virtual ~interval_rep() {}
@@ -2693,7 +2810,7 @@ private:
 
 public:
   void add_interval(bool ec_pool, const pg_interval_t &interval) {
-    assert(past_intervals);
+    ceph_assert(past_intervals);
     return past_intervals->add_interval(ec_pool, interval);
   }
 
@@ -2712,7 +2829,7 @@ public:
   void decode(bufferlist::const_iterator &bl);
 
   void dump(Formatter *f) const {
-    assert(past_intervals);
+    ceph_assert(past_intervals);
     past_intervals->dump(f);
   }
   static void generate_test_instances(list<PastIntervals *> & o);
@@ -2735,6 +2852,8 @@ public:
     int new_min_size,
     unsigned old_pg_num,
     unsigned new_pg_num,
+    unsigned old_pg_num_pending,
+    unsigned new_pg_num_pending,
     bool old_sort_bitwise,
     bool new_sort_bitwise,
     bool old_recovery_deletes,
@@ -2788,11 +2907,11 @@ public:
   void iterate_mayberw_back_to(
     epoch_t les,
     F &&f) const {
-    assert(past_intervals);
+    ceph_assert(past_intervals);
     past_intervals->iterate_mayberw_back_to(les, std::forward<F>(f));
   }
   void clear() {
-    assert(past_intervals);
+    ceph_assert(past_intervals);
     past_intervals->clear();
   }
 
@@ -2801,12 +2920,12 @@ public:
    * of state contained
    */
   size_t size() const {
-    assert(past_intervals);
+    ceph_assert(past_intervals);
     return past_intervals->size();
   }
 
   bool empty() const {
-    assert(past_intervals);
+    ceph_assert(past_intervals);
     return past_intervals->empty();
   }
 
@@ -2822,7 +2941,7 @@ public:
   set<pg_shard_t> get_might_have_unfound(
     pg_shard_t pg_whoami,
     bool ec_pool) const {
-    assert(past_intervals);
+    ceph_assert(past_intervals);
     auto ret = past_intervals->get_all_participants(ec_pool);
     ret.erase(pg_whoami);
     return ret;
@@ -2833,7 +2952,7 @@ public:
    */
   set<pg_shard_t> get_all_probe(
     bool ec_pool) const {
-    assert(past_intervals);
+    ceph_assert(past_intervals);
     return past_intervals->get_all_participants(ec_pool);
   }
 
@@ -2841,7 +2960,7 @@ public:
    * past_interval set.
    */
   pair<epoch_t, epoch_t> get_bounds() const {
-    assert(past_intervals);
+    ceph_assert(past_intervals);
     return past_intervals->get_bounds();
   }
 
@@ -3054,7 +3173,7 @@ PastIntervals::PriorSet::PriorSet(
 	// fixme: how do we identify a "clean" shutdown anyway?
 	ldpp_dout(dpp, 10) << "build_prior  possibly went active+rw,"
 			   << " insufficient up; including down osds" << dendl;
-	assert(!candidate_blocked_by.empty());
+	ceph_assert(!candidate_blocked_by.empty());
 	pg_down = true;
 	blocked_by.insert(
 	  candidate_blocked_by.begin(),
@@ -3110,7 +3229,7 @@ struct pg_query_t {
       history(h),
       epoch_sent(epoch_sent),
       to(to), from(from) {
-    assert(t != LOG);
+    ceph_assert(t != LOG);
   }
   pg_query_t(
     int t,
@@ -3121,7 +3240,7 @@ struct pg_query_t {
     epoch_t epoch_sent)
     : type(t), since(s), history(h),
       epoch_sent(epoch_sent), to(to), from(from) {
-    assert(t == LOG);
+    ceph_assert(t == LOG);
   }
   
   void encode(bufferlist &bl, uint64_t features) const;
@@ -3267,8 +3386,8 @@ public:
   }
   void rollback_extents(
     version_t gen, const vector<pair<uint64_t, uint64_t> > &extents) {
-    assert(can_local_rollback);
-    assert(!rollback_info_completed);
+    ceph_assert(can_local_rollback);
+    ceph_assert(!rollback_info_completed);
     if (max_required_version < 2)
       max_required_version = 2;
     ENCODE_START(2, 2, bl);
@@ -3362,6 +3481,10 @@ struct pg_log_entry_t {
   hobject_t  soid;
   osd_reqid_t reqid;  // caller+tid to uniquely identify request
   mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > extra_reqids;
+
+  ///< map extra_reqids by index to error return code (if any)
+  mempool::osd_pglog::map<uint32_t, int> extra_reqid_return_codes;
+
   eversion_t version, prior_version, reverting_to;
   version_t user_version; // the user version for this entry
   utime_t     mtime;  // this is the _user_ mtime, mind you
@@ -3588,7 +3711,7 @@ public:
     }
 
   mempool::osd_pglog::list<pg_log_entry_t> rewind_from_head(eversion_t newhead) {
-    assert(newhead >= tail);
+    ceph_assert(newhead >= tail);
 
     mempool::osd_pglog::list<pg_log_entry_t>::iterator p = log.end();
     mempool::osd_pglog::list<pg_log_entry_t> divergent;
@@ -3613,7 +3736,7 @@ public:
 	divergent.splice(divergent.begin(), log, p, log.end());
 	break;
       }
-      assert(p->version > newhead);
+      ceph_assert(p->version > newhead);
     }
     head = newhead;
 
@@ -3624,6 +3747,30 @@ public:
       rollback_info_trimmed_to = newhead;
 
     return divergent;
+  }
+
+  void merge_from(const vector<pg_log_t*>& slogs, eversion_t last_update) {
+    log.clear();
+
+    // sort and merge dups
+    multimap<eversion_t,pg_log_dup_t> sorted;
+    for (auto& d : dups) {
+      sorted.emplace(d.version, d);
+    }
+    for (auto l : slogs) {
+      for (auto& d : l->dups) {
+	sorted.emplace(d.version, d);
+      }
+    }
+    dups.clear();
+    for (auto& i : sorted) {
+      dups.push_back(i.second);
+    }
+
+    head = last_update;
+    tail = last_update;
+    can_rollback_to = last_update;
+    rollback_info_trimmed_to = last_update;
   }
 
   bool empty() const {
@@ -3883,7 +4030,7 @@ public:
       return eversion_t();
     }
     auto it = missing.find(rmissing.begin()->second);
-    assert(it != missing.end());
+    ceph_assert(it != missing.end());
     return it->second.need;
   }
 
@@ -3915,7 +4062,7 @@ public:
       missing_it->second.set_delete(e.is_delete());
     } else {
       // not missing, we must have prior_version (if any)
-      assert(!is_missing_divergent_item);
+      ceph_assert(!is_missing_divergent_item);
       missing[e.soid] = item(e.version, e.prior_version, e.is_delete());
     }
     rmissing[e.version.version] = e.soid;
@@ -3963,8 +4110,8 @@ public:
 
   void got(const hobject_t& oid, eversion_t v) {
     std::map<hobject_t, item>::iterator p = missing.find(oid);
-    assert(p != missing.end());
-    assert(p->second.need <= v || p->second.is_delete());
+    ceph_assert(p != missing.end());
+    ceph_assert(p->second.need <= v || p->second.is_delete());
     got(p);
   }
 
@@ -4243,7 +4390,7 @@ struct pg_ls_response_t {
     using ceph::decode;
     __u8 v;
     decode(v, bl);
-    assert(v == 1);
+    ceph_assert(v == 1);
     decode(handle, bl);
     decode(entries, bl);
   }
@@ -4336,6 +4483,9 @@ struct object_copy_data_t {
 
   ///< recent reqids on this object
   mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > reqids;
+
+  ///< map reqids by index to error return code (if any)
+  mempool::osd_pglog::map<uint32_t, int> reqid_return_codes;
 
   uint64_t truncate_seq;
   uint64_t truncate_size;
@@ -4563,17 +4713,18 @@ static inline ostream& operator<<(ostream& out, const notify_info_t& n) {
 }
 
 struct chunk_info_t {
-  enum {
+  typedef enum {
     FLAG_DIRTY = 1, 
     FLAG_MISSING = 2,
     FLAG_HAS_REFERENCE = 4,
-  };
+    FLAG_HAS_FINGERPRINT = 8,
+  } cflag_t;
   uint32_t offset;
   uint32_t length;
   hobject_t oid;
-  uint32_t flags;   // FLAG_*
+  cflag_t flags;   // FLAG_*
 
-  chunk_info_t() : offset(0), length(0), flags(0) { }
+  chunk_info_t() : offset(0), length(0), flags((cflag_t)0) { }
 
   static string get_flag_string(uint64_t flags) {
     string r;
@@ -4586,9 +4737,39 @@ struct chunk_info_t {
     if (flags & FLAG_HAS_REFERENCE) {
       r += "|has_reference";
     }
+    if (flags & FLAG_HAS_FINGERPRINT) {
+      r += "|has_fingerprint";
+    }
     if (r.length())
       return r.substr(1);
     return r;
+  }
+  bool test_flag(cflag_t f) const {
+    return (flags & f) == f;
+  }
+  void set_flag(cflag_t f) {
+    flags = (cflag_t)(flags | f);
+  }
+  void set_flags(cflag_t f) {
+    flags = f;
+  }
+  void clear_flag(cflag_t f) {
+    flags = (cflag_t)(flags & ~f);
+  }
+  void clear_flags() {
+    flags = (cflag_t)0;
+  }
+  bool is_dirty() const {
+    return test_flag(FLAG_DIRTY);
+  }
+  bool is_missing() const {
+    return test_flag(FLAG_MISSING);
+  }
+  bool has_reference() const {
+    return test_flag(FLAG_HAS_REFERENCE);
+  }
+  bool has_fingerprint() const {
+    return test_flag(FLAG_HAS_FINGERPRINT);
   }
   void encode(bufferlist &bl) const;
   void decode(bufferlist::const_iterator &bl);
@@ -5332,14 +5513,18 @@ struct PromoteCounter {
  */
 struct store_statfs_t
 {
-  uint64_t total = 0;                  // Total bytes
-  uint64_t available = 0;              // Free bytes available
+  uint64_t total = 0;                  ///< Total bytes
+  uint64_t available = 0;              ///< Free bytes available
 
-  int64_t allocated = 0;               // Bytes allocated by the store
-  int64_t stored = 0;                  // Bytes actually stored by the user
-  int64_t compressed = 0;              // Bytes stored after compression
-  int64_t compressed_allocated = 0;    // Bytes allocated for compressed data
-  int64_t compressed_original = 0;     // Bytes that were successfully compressed
+  int64_t allocated = 0;               ///< Bytes allocated by the store
+
+  int64_t data_stored = 0;                ///< Bytes actually stored by the user
+  int64_t data_compressed = 0;            ///< Bytes stored after compression
+  int64_t data_compressed_allocated = 0;  ///< Bytes allocated for compressed data
+  int64_t data_compressed_original = 0;   ///< Bytes that were compressed
+
+  int64_t omap_allocated = 0;         ///< approx usage of omap data
+  int64_t internal_metadata = 0;      ///< approx usage of internal metadata
 
   void reset() {
     *this = store_statfs_t();
@@ -5348,5 +5533,93 @@ struct store_statfs_t
   void dump(Formatter *f) const;
 };
 ostream &operator<<(ostream &lhs, const store_statfs_t &rhs);
+
+
+struct pool_pg_num_history_t {
+  /// last epoch updated
+  epoch_t epoch = 0;
+  /// poolid -> epoch -> pg_num
+  map<int64_t,map<epoch_t,uint32_t>> pg_nums;
+  /// pair(epoch, poolid)
+  set<pair<epoch_t,int64_t>> deleted_pools;
+
+  void log_pg_num_change(epoch_t epoch, int64_t pool, uint32_t pg_num) {
+    pg_nums[pool][epoch] = pg_num;
+  }
+  void log_pool_delete(epoch_t epoch, int64_t pool) {
+    deleted_pools.insert(make_pair(epoch, pool));
+  }
+
+  /// prune history based on oldest osdmap epoch in the cluster
+  void prune(epoch_t oldest_epoch) {
+    auto i = deleted_pools.begin();
+    while (i != deleted_pools.end()) {
+      if (i->first >= oldest_epoch) {
+	break;
+      }
+      pg_nums.erase(i->second);
+      i = deleted_pools.erase(i);
+    }
+    for (auto& j : pg_nums) {
+      auto k = j.second.lower_bound(oldest_epoch);
+      // keep this and the entry before it (just to be paranoid)
+      if (k != j.second.begin()) {
+	--k;
+	j.second.erase(j.second.begin(), k);
+      }
+    }
+  }
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(epoch, bl);
+    encode(pg_nums, bl);
+    encode(deleted_pools, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::const_iterator& p) {
+    DECODE_START(1, p);
+    decode(epoch, p);
+    decode(pg_nums, p);
+    decode(deleted_pools, p);
+    DECODE_FINISH(p);
+  }
+  void dump(Formatter *f) const {
+    f->dump_unsigned("epoch", epoch);
+    f->open_object_section("pools");
+    for (auto& i : pg_nums) {
+      f->open_object_section("pool");
+      f->dump_unsigned("pool_id", i.first);
+      f->open_array_section("changes");
+      for (auto& j : i.second) {
+	f->open_object_section("change");
+	f->dump_unsigned("epoch", j.first);
+	f->dump_unsigned("pg_num", j.second);
+	f->close_section();
+      }
+      f->close_section();
+      f->close_section();
+    }
+    f->close_section();
+    f->open_array_section("deleted_pools");
+    for (auto& i : deleted_pools) {
+      f->open_object_section("deletion");
+      f->dump_unsigned("pool_id", i.second);
+      f->dump_unsigned("epoch", i.first);
+      f->close_section();
+    }
+    f->close_section();
+  }
+  static void generate_test_instances(list<pool_pg_num_history_t*>& ls) {
+    ls.push_back(new pool_pg_num_history_t);
+  }
+  friend ostream& operator<<(ostream& out, const pool_pg_num_history_t& h) {
+    return out << "pg_num_history(e" << h.epoch
+	       << " pg_nums " << h.pg_nums
+	       << " deleted_pools " << h.deleted_pools
+	       << ")";
+  }
+};
+WRITE_CLASS_ENCODER(pool_pg_num_history_t)
 
 #endif
