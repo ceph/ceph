@@ -25,6 +25,7 @@
     </cd-table>
   </tab>
   <tab i18n-heading
+       *ngIf="permissions.grafana.read"
        heading="Overall Performance">
     <cd-grafana [grafanaPath]="'lxnjcTAmk/host-overview?'"
                 grafanaStyle="two">

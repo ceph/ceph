@@ -5,8 +5,10 @@ import * as _ from 'lodash';
 
 import { CephfsService } from '../../../shared/api/cephfs.service';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
+import { Permission } from '../../../shared/models/permissions';
 import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
 import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
+import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 
 @Component({
   selector: 'cd-cephfs-detail',
@@ -32,16 +34,20 @@ export class CephfsDetailComponent implements OnChanges, OnInit {
   clientCount: number;
   mdsCounters = {};
   grafanaId: any;
+  grafanaPermission: Permission;
 
   objectValues = Object.values;
   clientsSelect = false;
 
   constructor(
+    private authStorageService: AuthStorageService,
     private cephfsService: CephfsService,
     private dimlessBinary: DimlessBinaryPipe,
     private dimless: DimlessPipe,
     private i18n: I18n
-  ) {}
+  ) {
+    this.grafanaPermission = this.authStorageService.getPermissions().grafana;
+  }
 
   ngOnChanges() {
     if (this.selection.hasSelection) {
