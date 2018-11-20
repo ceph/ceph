@@ -64,11 +64,9 @@ export class RgwUserDetailsComponent implements OnChanges, OnInit {
       this.user.caps = _.sortBy(this.user.caps, 'type');
 
       // Load the user/bucket quota of the selected user.
-      if (this.user.tenant === '') {
-        this.rgwUserService.getQuota(this.user.user_id).subscribe((resp: object) => {
-          _.extend(this.user, resp);
-        });
-      }
+      this.rgwUserService.getQuota(this.user.uid).subscribe((resp: object) => {
+        _.extend(this.user, resp);
+      });
 
       // Process the keys.
       this.keys = [];

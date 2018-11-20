@@ -205,7 +205,7 @@ const routes: Routes = [
         children: [
           { path: '', component: RgwBucketListComponent },
           { path: 'add', component: RgwBucketFormComponent, data: { breadcrumbs: 'Add' } },
-          { path: 'edit/:bucket', component: RgwBucketFormComponent, data: { breadcrumbs: 'Edit' } }
+          { path: 'edit/:bid', component: RgwBucketFormComponent, data: { breadcrumbs: 'Edit' } }
         ]
       }
     ]

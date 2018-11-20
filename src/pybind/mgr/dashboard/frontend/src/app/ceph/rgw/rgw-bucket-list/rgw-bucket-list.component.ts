@@ -39,7 +39,7 @@ export class RgwBucketListComponent {
     this.columns = [
       {
         name: this.i18n('Name'),
-        prop: 'bucket',
+        prop: 'bid',
         flexGrow: 1
       },
       {
@@ -49,7 +49,7 @@ export class RgwBucketListComponent {
       }
     ];
     const getBucketUri = () =>
-      this.selection.first() && `${encodeURI(this.selection.first().bucket)}`;
+      this.selection.first() && `${encodeURIComponent(this.selection.first().bid)}`;
     const addAction: CdTableAction = {
       permission: 'create',
       icon: 'fa-plus',
@@ -97,7 +97,7 @@ export class RgwBucketListComponent {
             // Delete all selected data table rows.
             observableForkJoin(
               this.selection.selected.map((bucket: any) => {
-                return this.rgwBucketService.delete(bucket.bucket);
+                return this.rgwBucketService.delete(bucket.bid);
               })
             ).subscribe(
               null,
