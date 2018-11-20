@@ -27,7 +27,7 @@ extern "C" {
 
 #define LIBRGW_FILE_VER_MAJOR 1
 #define LIBRGW_FILE_VER_MINOR 1
-#define LIBRGW_FILE_VER_EXTRA 6
+#define LIBRGW_FILE_VER_EXTRA 7
 
 #define LIBRGW_FILE_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
 #define LIBRGW_FILE_VERSION_CODE LIBRGW_FILE_VERSION(LIBRGW_FILE_VER_MAJOR, LIBRGW_FILE_VER_MINOR, LIBRGW_FILE_VER_EXTRA)
@@ -39,6 +39,7 @@ enum rgw_fh_type {
   RGW_FS_TYPE_NIL = 0,
   RGW_FS_TYPE_FILE,
   RGW_FS_TYPE_DIRECTORY,
+  RGW_FS_TYPE_SYMBOLIC_LINK,
 };
 
 /*
@@ -179,6 +180,15 @@ int rgw_create(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
 	       uint32_t flags);
 
 /*
+  create a symbolic link
+ */
+#define RGW_CREATELINK_FLAG_NONE     0x0000
+int rgw_symlink(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
+               const char *name, const char *link_path, struct stat *st, 
+               uint32_t mask, struct rgw_file_handle **fh, uint32_t posix_flags,
+               uint32_t flags);
+
+/*
   create a new directory
 */
 #define RGW_MKDIR_FLAG_NONE      0x0000
@@ -289,6 +299,16 @@ int rgw_close(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
 #define RGW_READ_FLAG_NONE 0x0000
 
 int rgw_read(struct rgw_fs *rgw_fs,
+	     struct rgw_file_handle *fh, uint64_t offset,
+	     size_t length, size_t *bytes_read, void *buffer,
+	     uint32_t flags);
+
+/*
+   read symbolic link
+*/
+#define RGW_READLINK_FLAG_NONE 0x0000
+
+int rgw_readlink(struct rgw_fs *rgw_fs,
 	     struct rgw_file_handle *fh, uint64_t offset,
 	     size_t length, size_t *bytes_read, void *buffer,
 	     uint32_t flags);
