@@ -163,28 +163,30 @@ class RGWReadDataSyncRecoveringShardsCR : public RGWShardCollectCR {
 
   uint64_t max_entries;
   int num_shards;
-  int shard_id{0};;
+  int shard_id{0};
 
   string marker;
-  map<int, std::set<std::string>> &entries_map;
+  std::vector<RGWRadosGetOmapKeysCR::ResultPtr>& omapkeys;
 
  public:
   RGWReadDataSyncRecoveringShardsCR(RGWDataSyncEnv *env, uint64_t _max_entries, int _num_shards,
-      map<int, std::set<std::string>>& _entries_map)
+                                    std::vector<RGWRadosGetOmapKeysCR::ResultPtr>& omapkeys)
     : RGWShardCollectCR(env->cct, MAX_CONCURRENT_SHARDS), env(env),
-    max_entries(_max_entries), num_shards(_num_shards), entries_map(_entries_map)
+      max_entries(_max_entries), num_shards(_num_shards), omapkeys(omapkeys)
   {}
   bool spawn_next() override;
 };
 
 bool RGWReadDataSyncRecoveringShardsCR::spawn_next()
 {
-  if (shard_id > num_shards)
+  if (shard_id >= num_shards)
     return false;
  
   string error_oid = RGWDataSyncStatusManager::shard_obj_name(env->source_zone, shard_id) + ".retry";
+  auto& shard_keys = omapkeys[shard_id];
+  shard_keys = std::make_shared<RGWRadosGetOmapKeysCR::Result>();
   spawn(new RGWRadosGetOmapKeysCR(env->store, rgw_raw_obj(env->store->get_zone_params().log_pool, error_oid),
-                                  marker, &entries_map[shard_id], max_entries), false);
+                                  marker, max_entries, shard_keys), false);
 
   ++shard_id;
   return true;
@@ -722,15 +724,16 @@ int RGWRemoteDataLog::read_recovering_shards(const int num_shards, set<int>& rec
   }
   RGWDataSyncEnv sync_env_local = sync_env;
   sync_env_local.http_manager = &http_manager;
-  map<int, std::set<std::string>> entries_map;
+  std::vector<RGWRadosGetOmapKeysCR::ResultPtr> omapkeys;
+  omapkeys.resize(num_shards);
   uint64_t max_entries{1};
-  ret = crs.run(new RGWReadDataSyncRecoveringShardsCR(&sync_env_local, max_entries, num_shards, entries_map));
+  ret = crs.run(new RGWReadDataSyncRecoveringShardsCR(&sync_env_local, max_entries, num_shards, omapkeys));
   http_manager.stop();
 
   if (ret == 0) {
-    for (const auto& entry : entries_map) {
-      if (entry.second.size() != 0) {
-        recovering_shards.insert(entry.first);
+    for (int i = 0; i < num_shards; i++) {
+      if (omapkeys[i]->entries.size() != 0) {
+        recovering_shards.insert(i);
       }
     }
   }
@@ -1154,6 +1157,7 @@ class RGWDataSyncShardCR : public RGWCoroutine {
   uint32_t shard_id;
   rgw_data_sync_marker sync_marker;
 
+  RGWRadosGetOmapKeysCR::ResultPtr omapkeys;
   std::set<std::string> entries;
   std::set<std::string>::iterator iter;
 
@@ -1316,13 +1320,16 @@ public:
           drain_all();
           return set_cr_error(-ECANCELED);
         }
-        yield call(new RGWRadosGetOmapKeysCR(sync_env->store, rgw_raw_obj(pool, oid), sync_marker.marker, &entries, max_entries));
+        omapkeys = std::make_shared<RGWRadosGetOmapKeysCR::Result>();
+        yield call(new RGWRadosGetOmapKeysCR(sync_env->store, rgw_raw_obj(pool, oid),
+                                             sync_marker.marker, max_entries, omapkeys));
         if (retcode < 0) {
           tn->log(0, SSTR("ERROR: RGWRadosGetOmapKeysCR() returned ret=" << retcode));
           lease_cr->go_down();
           drain_all();
           return set_cr_error(retcode);
         }
+        entries = std::move(omapkeys->entries);
         if (entries.size() > 0) {
           tn->set_flag(RGW_SNS_FLAG_ACTIVE); /* actually have entries to sync */
         }
@@ -1350,7 +1357,8 @@ public:
             }
           }
         }
-      } while ((int)entries.size() == max_entries);
+      } while (omapkeys->more);
+      omapkeys.reset();
 
       drain_all_but_stack(lease_stack.get());
 
@@ -1427,9 +1435,10 @@ public:
 
         if (error_retry_time <= ceph::coarse_real_clock::now()) {
           /* process bucket shards that previously failed */
+          omapkeys = std::make_shared<RGWRadosGetOmapKeysCR::Result>();
           yield call(new RGWRadosGetOmapKeysCR(sync_env->store, rgw_raw_obj(pool, error_oid),
-                                               error_marker, &error_entries,
-                                               max_error_entries));
+                                               error_marker, max_error_entries, omapkeys));
+          error_entries = std::move(omapkeys->entries);
           tn->log(20, SSTR("read error repo, got " << error_entries.size() << " entries"));
           iter = error_entries.begin();
           for (; iter != error_entries.end(); ++iter) {
@@ -1437,7 +1446,7 @@ public:
             tn->log(20, SSTR("handle error entry: " << error_marker));
             spawn(new RGWDataSyncSingleEntryCR(sync_env, error_marker, error_marker, nullptr /* no marker tracker */, error_repo, true, tn), false);
           }
-          if ((int)error_entries.size() != max_error_entries) {
+          if (!omapkeys->more) {
             if (error_marker.empty() && error_entries.empty()) {
               /* the retry repo is empty, we back off a bit before calling it again */
               retry_backoff_secs *= 2;
@@ -1451,6 +1460,7 @@ public:
             error_marker.clear();
           }
         }
+        omapkeys.reset();
 
 #define INCREMENTAL_MAX_ENTRIES 100
 	tn->log(20, SSTR("shard_id=" << shard_id << " sync_marker=" << sync_marker.marker));
@@ -2120,6 +2130,7 @@ class RGWReadRecoveringBucketShardsCoroutine : public RGWCoroutine {
   string marker;
   string error_oid;
 
+  RGWRadosGetOmapKeysCR::ResultPtr omapkeys;
   set<string> error_entries;
   int max_omap_entries;
   int count;
@@ -2143,8 +2154,9 @@ int RGWReadRecoveringBucketShardsCoroutine::operate()
     //read recovering bucket shards
     count = 0;
     do {
+      omapkeys = std::make_shared<RGWRadosGetOmapKeysCR::Result>();
       yield call(new RGWRadosGetOmapKeysCR(store, rgw_raw_obj(store->get_zone_params().log_pool, error_oid), 
-            marker, &error_entries, max_omap_entries));
+            marker, max_omap_entries, omapkeys));
 
       if (retcode == -ENOENT) {
         break;
@@ -2156,6 +2168,7 @@ int RGWReadRecoveringBucketShardsCoroutine::operate()
         return set_cr_error(retcode);
       }
 
+      error_entries = std::move(omapkeys->entries);
       if (error_entries.empty()) {
         break;
       }
@@ -2164,7 +2177,7 @@ int RGWReadRecoveringBucketShardsCoroutine::operate()
       marker = *error_entries.rbegin();
       recovering_buckets.insert(std::make_move_iterator(error_entries.begin()),
                                 std::make_move_iterator(error_entries.end()));
-    }while((int)error_entries.size() == max_omap_entries && count < max_entries);
+    } while (omapkeys->more && count < max_entries);
   
     return set_cr_done();
   }
