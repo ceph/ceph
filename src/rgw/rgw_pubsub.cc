@@ -407,7 +407,7 @@ int RGWUserPubSub::Sub::list_events(const string& marker, int max_events,
 
   RGWBucketInfo bucket_info;
   string tenant;
-  RGWObjectCtx obj_ctx(store);
+  RGWSysObjectCtx obj_ctx(store->svc.sysobj->init_obj_ctx());
   ret = store->get_bucket_info(obj_ctx, tenant, sub_conf.dest.bucket_name, bucket_info, nullptr, nullptr);
   if (ret == -ENOENT) {
     result->is_truncated = false;
@@ -472,8 +472,8 @@ int RGWUserPubSub::Sub::remove_event(const string& event_id)
 
   RGWBucketInfo bucket_info;
   string tenant;
-  RGWObjectCtx obj_ctx(store);
-  ret = store->get_bucket_info(obj_ctx, tenant, sub_conf.dest.bucket_name, bucket_info, nullptr, nullptr);
+  RGWSysObjectCtx sysobj_ctx(store->svc.sysobj->init_obj_ctx());
+  ret = store->get_bucket_info(sysobj_ctx, tenant, sub_conf.dest.bucket_name, bucket_info, nullptr, nullptr);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: failed to read bucket info for events bucket: bucket=" << sub_conf.dest.bucket_name << " ret=" << ret << dendl;
     return ret;
@@ -481,9 +481,10 @@ int RGWUserPubSub::Sub::remove_event(const string& event_id)
 
   rgw_bucket& bucket = bucket_info.bucket;
 
+  RGWObjectCtx obj_ctx(store);
   rgw_obj obj(bucket, event_id);
 
-  obj_ctx.obj.set_atomic(obj);
+  obj_ctx.set_atomic(obj);
 
   RGWRados::Object del_target(store, bucket_info, obj_ctx, obj);
   RGWRados::Object::Delete del_op(&del_target);

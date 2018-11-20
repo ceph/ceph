@@ -650,9 +650,7 @@ public:
       return ret;
     }
 
-    RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
-
-    ret = store->get_bucket_info(obj_ctx, s->owner.get_id().tenant, bucket_name,
+    ret = store->get_bucket_info(*s->sysobj_ctx, s->owner.get_id().tenant, bucket_name,
                                  bucket_info, nullptr, nullptr);
     if (ret < 0) {
       return ret;
@@ -727,9 +725,7 @@ public:
       return ret;
     }
 
-    RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
-
-    ret = store->get_bucket_info(obj_ctx, s->owner.get_id().tenant, bucket_name,
+    ret = store->get_bucket_info(*s->sysobj_ctx, s->owner.get_id().tenant, bucket_name,
                                  bucket_info, nullptr, nullptr);
     if (ret < 0) {
       return ret;
@@ -800,9 +796,7 @@ public:
       return ret;
     }
 
-    RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
-
-    ret = store->get_bucket_info(obj_ctx, s->owner.get_id().tenant, bucket_name,
+    ret = store->get_bucket_info(*s->sysobj_ctx, s->owner.get_id().tenant, bucket_name,
                                  bucket_info, nullptr, nullptr);
     if (ret < 0) {
       return ret;

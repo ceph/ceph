@@ -937,7 +937,7 @@ bool RGWSI_Zone::is_syncing_bucket_meta(const rgw_bucket& bucket)
 }
 
 
-int RGWSI_Zone::select_new_bucket_location(RGWUserInfo& user_info, const string& zonegroup_id, const string& request_rule,
+int RGWSI_Zone::select_new_bucket_location(const RGWUserInfo& user_info, const string& zonegroup_id, const string& request_rule,
                                          string *pselected_rule_name, RGWZonePlacementInfo *rule_info)
 
 {
@@ -1035,7 +1035,7 @@ int RGWSI_Zone::select_bucket_location_by_rule(const string& location_rule, RGWZ
   return 0;
 }
 
-int RGWSI_Zone::select_bucket_placement(RGWUserInfo& user_info, const string& zonegroup_id, const string& placement_rule,
+int RGWSI_Zone::select_bucket_placement(const RGWUserInfo& user_info, const string& zonegroup_id, const string& placement_rule,
                                       string *pselected_rule_name, RGWZonePlacementInfo *rule_info)
 {
   if (!get_zone_params().placement_pools.empty()) {

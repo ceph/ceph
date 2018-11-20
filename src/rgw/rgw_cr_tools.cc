@@ -5,6 +5,7 @@
 #include "rgw_user.h"
 #include "rgw_op.h"
 #include "rgw_acl_s3.h"
+#include "rgw_zone.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -92,7 +93,7 @@ int RGWGetUserInfoCR::Request::_send_request()
 template<>
 int RGWGetBucketInfoCR::Request::_send_request()
 {
-  RGWObjectCtx obj_ctx(store);
+  RGWSysObjectCtx obj_ctx(store->svc.sysobj->init_obj_ctx());
   return store->get_bucket_info(obj_ctx, params.tenant, params.bucket_name,
                                 result->bucket_info, &result->mtime, &result->attrs);
 }
@@ -101,29 +102,31 @@ template<>
 int RGWBucketCreateLocalCR::Request::_send_request()
 {
   CephContext *cct = store->ctx();
+  auto& zone_svc = store->svc.zone;
+  auto& sysobj_svc = store->svc.sysobj;
 
   const auto& user_info = params.user_info.get();
   const auto& user = user_info->user_id;
   const auto& bucket_name = params.bucket_name;
   auto& placement_rule = params.placement_rule;
 
-  const auto& zonegroup = store->get_zonegroup();
+  const auto& zonegroup = zone_svc->get_zonegroup();
 
   if (!placement_rule.empty() &&
       !zonegroup.placement_targets.count(placement_rule)) {
     ldout(cct, 0) << "placement target (" << placement_rule << ")"
       << " doesn't exist in the placement targets of zonegroup"
-      << " (" << store->get_zonegroup().api_name << ")" << dendl;
+      << " (" << zone_svc->get_zonegroup().api_name << ")" << dendl;
     return -ERR_INVALID_LOCATION_CONSTRAINT;
   }
 
   /* we need to make sure we read bucket info, it's not read before for this
    * specific request */
-  RGWObjectCtx obj_ctx(store);
+  RGWSysObjectCtx sysobj_ctx(sysobj_svc->init_obj_ctx());
   RGWBucketInfo bucket_info;
   map<string, bufferlist> bucket_attrs;
 
-  int ret = store->get_bucket_info(obj_ctx, user.tenant, bucket_name,
+  int ret = store->get_bucket_info(sysobj_ctx, user.tenant, bucket_name,
 				  bucket_info, nullptr, &bucket_attrs);
   if (ret < 0 && ret != -ENOENT)
     return ret;
@@ -148,14 +151,14 @@ int RGWBucketCreateLocalCR::Request::_send_request()
   uint32_t *pmaster_num_shards = nullptr;
   real_time creation_time;
 
-  string zonegroup_id = store->get_zonegroup().get_id();
+  string zonegroup_id = zone_svc->get_zonegroup().get_id();
 
   if (bucket_exists) {
     string selected_placement_rule;
     rgw_bucket bucket;
     bucket.tenant = user.tenant;
     bucket.name = bucket_name;
-    ret = store->select_bucket_placement(*user_info, zonegroup_id,
+    ret = zone_svc->select_bucket_placement(*user_info, zonegroup_id,
                                          placement_rule,
                                          &selected_placement_rule, nullptr);
     if (selected_placement_rule != bucket_info.placement_rule) {
