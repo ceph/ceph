@@ -11,7 +11,7 @@ try:
 except ImportError:
     from itertools import zip_longest
 from itertools import combinations
-from cStringIO import StringIO
+from six import StringIO
 
 import boto
 import boto.s3.connection

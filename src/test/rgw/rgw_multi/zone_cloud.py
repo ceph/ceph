@@ -16,7 +16,7 @@ try:
 except ImportError:
     from itertools import zip_longest
 
-from urlparse import urlparse
+from six.moves.urllib.parse import urlparse
 
 from .multisite import *
 from .tools import *
