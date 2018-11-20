@@ -18,26 +18,26 @@
 
         <!-- Username -->
         <div class="form-group"
-             [ngClass]="{'has-error': userForm.showError('user_id', frm)}">
+             [ngClass]="{'has-error': userForm.showError('uid', frm)}">
           <label class="control-label col-sm-3"
-                 for="user_id">
+                 for="uid">
             <ng-container i18n>Username</ng-container>
             <span class="required"
                   *ngIf="!editing">
             </span>
           </label>
           <div class="col-sm-9">
-            <input id="user_id"
+            <input id="uid"
                    class="form-control"
                    type="text"
-                   formControlName="user_id"
+                   formControlName="uid"
                    [readonly]="editing"
                    autofocus>
             <span class="help-block"
-                  *ngIf="userForm.showError('user_id', frm, 'required')"
+                  *ngIf="userForm.showError('uid', frm, 'required')"
                   i18n>This field is required.</span>
             <span class="help-block"
-                  *ngIf="userForm.showError('user_id', frm, 'notUnique')"
+                  *ngIf="userForm.showError('uid', frm, 'notUnique')"
                   i18n>The chosen user ID is already in use.</span>
           </div>
         </div>
