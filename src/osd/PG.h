@@ -269,7 +269,7 @@ public:
     return ceph_subsys_osd;
   }
 
-  OSDMapRef get_osdmap() const {
+  const OSDMapRef& get_osdmap() const {
     ceph_assert(is_locked());
     ceph_assert(osdmap_ref);
     return osdmap_ref;
@@ -2890,7 +2890,7 @@ protected:
   eversion_t projected_last_update;
   eversion_t get_next_version() const {
     eversion_t at_version(
-      get_osdmap()->get_epoch(),
+      get_osdmap_epoch(),
       projected_last_update.version+1);
     ceph_assert(at_version > info.last_update);
     ceph_assert(at_version > pg_log.get_head());
