@@ -3,6 +3,7 @@ diskprediction with local predictor
 """
 import json
 import datetime
+import _strptime
 from threading import Event
 import time
 
@@ -34,8 +35,17 @@ class Module(MgrModule):
         for opt in self.OPTIONS:
             setattr(self, opt['name'], opt['default'])
         # other
-        self.run = True
-        self.event = Event()
+        self._run = True
+        self._event = Event()
+
+    def config_notify(self):
+        for opt in self.OPTIONS:
+            setattr(self,
+                    opt['name'],
+                    self.get_config(opt['name']) or opt['default'])
+            self.log.debug(' %s = %s', opt['name'], getattr(self, opt['name']))
+        if self.get_option('device_failure_prediction_mode') == 'local':
+            self._event.set()
 
     def refresh_config(self):
         for opt in self.OPTIONS:
@@ -55,6 +65,7 @@ class Module(MgrModule):
 
     def serve(self):
         self.log.info('Starting diskprediction local module')
+        self.config_notify()
         last_predicted = None
         ls = self.get_store('last_predicted')
         if ls:
@@ -64,7 +75,7 @@ class Module(MgrModule):
                 pass
         self.log.debug('Last predicted %s', last_predicted)
 
-        while self.run:
+        while self._run:
             self.refresh_config()
             mode = self.get_option('device_failure_prediction_mode')
             if mode == 'local':
@@ -91,13 +102,13 @@ class Module(MgrModule):
 
             sleep_interval = int(self.sleep_interval) or 60
             self.log.debug('Sleeping for %d seconds', sleep_interval)
-            self.event.wait(sleep_interval)
-            self.event.clear()
+            self._event.wait(sleep_interval)
+            self._event.clear()
 
     def shutdown(self):
         self.log.info('Stopping')
-        self.run = False
-        self.event.set()
+        self._run = False
+        self._event.set()
 
     @staticmethod
     def _convert_timestamp(predicted_timestamp, life_expectancy_day):
