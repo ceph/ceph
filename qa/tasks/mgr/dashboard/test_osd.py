@@ -102,12 +102,18 @@ class OsdTest(DashboardTestCase):
         unused_osd_id = max(map(lambda e: e['osd'], osd_dump['osds'])) + 10
         self._get('/api/osd/{}/safe_to_destroy'.format(unused_osd_id))
         self.assertStatus(200)
-        self.assertJsonBody({'safe-to-destroy': True})
+        self.assertJsonBody({
+            'is_safe_to_destroy': True,
+            'active': [],
+            'missing_stats': [],
+            'safe_to_destroy': [unused_osd_id],
+            'stored_pgs': [],
+        })
 
         def get_destroy_status():
             self._get('/api/osd/0/safe_to_destroy')
-            if 'safe-to-destroy' in self.jsonBody():
-                return self.jsonBody()['safe-to-destroy']
+            if 'is_safe_to_destroy' in self.jsonBody():
+                return self.jsonBody()['is_safe_to_destroy']
             return None
         self.wait_until_equal(get_destroy_status, False, 10)
         self.assertStatus(200)
