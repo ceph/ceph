@@ -46,7 +46,7 @@ TestIoCtxImpl *TestMemIoCtxImpl::clone() {
   return new TestMemIoCtxImpl(*this);
 }
 
-int TestMemIoCtxImpl::aio_remove(const std::string& oid, AioCompletionImpl *c) {
+int TestMemIoCtxImpl::aio_remove(const std::string& oid, AioCompletionImpl *c, int flags) {
   m_client->add_aio_operation(oid, true,
                               boost::bind(&TestMemIoCtxImpl::remove, this, oid,
                                           get_snap_context()),

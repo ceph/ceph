@@ -475,6 +475,11 @@ int IoCtx::aio_remove(const std::string& oid, AioCompletion *c) {
   return ctx->aio_remove(oid, c->pc);
 }
 
+int IoCtx::aio_remove(const std::string& oid, AioCompletion *c, int flags) {
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  return ctx->aio_remove(oid, c->pc, flags);
+}
+
 int IoCtx::aio_watch(const std::string& o, AioCompletion *c, uint64_t *handle,
                      librados::WatchCtx2 *watch_ctx) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);

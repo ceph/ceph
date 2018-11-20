@@ -90,7 +90,8 @@ public:
   virtual int aio_operate_read(const std::string& oid, TestObjectOperationImpl &ops,
                                AioCompletionImpl *c, int flags,
                                bufferlist *pbl);
-  virtual int aio_remove(const std::string& oid, AioCompletionImpl *c) = 0;
+  virtual int aio_remove(const std::string& oid, AioCompletionImpl *c,
+                         int flags = 0) = 0;
   virtual int aio_watch(const std::string& o, AioCompletionImpl *c,
                         uint64_t *handle, librados::WatchCtx2 *ctx);
   virtual int aio_unwatch(uint64_t handle, AioCompletionImpl *c);
