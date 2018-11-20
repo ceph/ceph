@@ -2890,13 +2890,8 @@ void Monitor::format_command_descriptions(const std::vector<MonCommand> &command
 
 bool Monitor::is_keyring_required()
 {
-  string auth_cluster_required = g_conf()->auth_supported.empty() ?
-    g_conf()->auth_cluster_required : g_conf()->auth_supported;
-  string auth_service_required = g_conf()->auth_supported.empty() ?
-    g_conf()->auth_service_required : g_conf()->auth_supported;
-
-  return auth_service_required == "cephx" ||
-    auth_cluster_required == "cephx";
+  return auth_cluster_required.is_supported_auth(CEPH_AUTH_CEPHX) ||
+    auth_service_required.is_supported_auth(CEPH_AUTH_CEPHX);
 }
 
 struct C_MgrProxyCommand : public Context {
