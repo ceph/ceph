@@ -314,7 +314,7 @@ public:
     GenContext<ThreadPool::TPHandle&> *c) override;
     
   void send_message(int to_osd, Message *m) override {
-    osd->send_message_osd_cluster(to_osd, m, get_osdmap()->get_epoch());
+    osd->send_message_osd_cluster(to_osd, m, get_osdmap_epoch());
   }
   void queue_transaction(ObjectStore::Transaction&& t,
 			 OpRequestRef op) override {
@@ -323,9 +323,6 @@ public:
   void queue_transactions(vector<ObjectStore::Transaction>& tls,
 			  OpRequestRef op) override {
     osd->store->queue_transactions(ch, tls, op, NULL);
-  }
-  epoch_t get_epoch() const override {
-    return get_osdmap()->get_epoch();
   }
   epoch_t get_interval_start_epoch() const override {
     return info.history.same_interval_since;
@@ -371,7 +368,7 @@ public:
   bool pgb_is_primary() const override {
     return is_primary();
   }
-  OSDMapRef pgb_get_osdmap() const override final {
+  const OSDMapRef& pgb_get_osdmap() const override final {
     return get_osdmap();
   }
   epoch_t pgb_get_osdmap_epoch() const override final {
@@ -1622,7 +1619,7 @@ private:
 	std::lock_guard l(pg->osd->sleep_lock);
 	wakeup = pg->osd->sleep_timer.add_event_after(
 	  pg->cct->_conf->osd_snap_trim_sleep,
-	  new OnTimer{pg, pg->get_osdmap()->get_epoch()});
+	  new OnTimer{pg, pg->get_osdmap_epoch()});
       } else {
 	post_event(SnapTrimTimerReady());
       }
