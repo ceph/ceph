@@ -38,6 +38,8 @@ public:
   int check_message_signature(Message *m) override ;
 
   int sign_bufferlist(bufferlist &in, bufferlist &out) override;
+  int encrypt_bufferlist(bufferlist &in, bufferlist &out) override;
+  int decrypt_bufferlist(bufferlist &in, bufferlist &out) override;
 
   // Cephx does not currently encrypt messages, so just return 0 if called.  PLR
 
