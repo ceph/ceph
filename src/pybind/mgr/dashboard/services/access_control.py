@@ -115,6 +115,7 @@ BLOCK_MGR_ROLE = Role('block-manager', 'Block Manager', {
 # RadosGW manager role provides all permissions for block related scopes
 RGW_MGR_ROLE = Role('rgw-manager', 'RGW Manager', {
     Scope.RGW: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+    Scope.CONFIG_OPT: [_P.READ],
 })
 
 
@@ -133,11 +134,13 @@ CLUSTER_MGR_ROLE = Role('cluster-manager', 'Cluster Manager', {
 # Pool manager role provides all permissions for pool related scopes
 POOL_MGR_ROLE = Role('pool-manager', 'Pool Manager', {
     Scope.POOL: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+    Scope.CONFIG_OPT: [_P.READ],
 })
 
 # Pool manager role provides all permissions for CephFS related scopes
 CEPHFS_MGR_ROLE = Role('cephfs-manager', 'CephFS Manager', {
     Scope.CEPHFS: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+    Scope.CONFIG_OPT: [_P.READ],
 })
 
 
