@@ -57,6 +57,9 @@ public:
   RGWSyncModule() {}
   virtual ~RGWSyncModule() {}
 
+  virtual bool supports_writes() {
+    return false;
+  }
   virtual bool supports_data_export() = 0;
   virtual int create_instance(CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) = 0;
 };
