@@ -67,4 +67,15 @@ seastar::future<bufferlist> Socket::read(size_t bytes)
     });
 }
 
+seastar::future<seastar::temporary_buffer<char>>
+Socket::read_exactly(size_t bytes) {
+  return in.read_exactly(bytes)
+    .then([this](auto buf) {
+      if (buf.empty()) {
+        throw std::system_error(make_error_code(error::read_eof));
+      }
+      return seastar::make_ready_future<tmp_buf>(std::move(buf));
+    });
+}
+
 } // namespace ceph::net
