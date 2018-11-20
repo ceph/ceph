@@ -14,6 +14,13 @@
 #
 # Please submit bugfixes or comments via http://tracker.ceph.com/
 #
+
+#################################################################################
+# conditional build section
+#
+# please read http://rpm.org/user_doc/conditional_builds.html for explanation of
+# bcond syntax!
+#################################################################################
 %bcond_without ocf
 %bcond_with make_check
 %ifarch s390 s390x
