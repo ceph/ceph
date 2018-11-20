@@ -346,7 +346,8 @@ struct es_index_config {
 };
 
 static bool is_sys_attr(const std::string& attr_name){
-  static constexpr std::initializer_list rgw_sys_attrs = {RGW_ATTR_PG_VER,
+  static constexpr std::initializer_list<const char*> rgw_sys_attrs =
+                                                         {RGW_ATTR_PG_VER,
                                                           RGW_ATTR_SOURCE_ZONE,
                                                           RGW_ATTR_ID_TAG,
                                                           RGW_ATTR_TEMPURL_KEY1,
