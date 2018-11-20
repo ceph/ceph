@@ -261,6 +261,29 @@ namespace rgw {
     return rc;
   }
 
+  int RGWLibFS::readlink(RGWFileHandle* rgw_fh, uint64_t offset, size_t length,
+                     size_t* bytes_read, void* buffer, uint32_t flags)
+  {
+    if (! rgw_fh->is_link())
+      return -EINVAL;
+
+    if (rgw_fh->deleted())
+      return -ESTALE;
+
+    RGWReadRequest req(get_context(), get_user(), rgw_fh, offset, length,
+                       buffer);
+
+    int rc = rgwlib.get_fe()->execute_req(&req);
+    if ((rc == 0) &&
+        (req.get_ret() == 0)) {
+      lock_guard(rgw_fh->mtx);
+      rgw_fh->set_atime(real_clock::to_timespec(real_clock::now()));
+      *bytes_read = req.nread;
+    }
+
+    return rc;
+  }
+
   int RGWLibFS::unlink(RGWFileHandle* rgw_fh, const char* name, uint32_t flags)
   {
     int rc = 0;
@@ -668,6 +691,103 @@ namespace rgw {
 
     return mkr;
   } /* RGWLibFS::create */
+
+  MkObjResult RGWLibFS::symlink(RGWFileHandle* parent, const char *name,
+            const char* link_path, struct stat *st, uint32_t mask, uint32_t flags)
+  {
+    int rc, rc2;
+
+    using std::get;
+
+    rgw_file_handle *lfh;
+    rc = rgw_lookup(get_fs(), parent->get_fh(), name, &lfh, 
+                    RGW_LOOKUP_FLAG_NONE);
+    if (! rc) {
+      /* conflict! */
+      rc = rgw_fh_rele(get_fs(), lfh, RGW_FH_RELE_FLAG_NONE);
+      return MkObjResult{nullptr, -EEXIST};
+    }
+
+    MkObjResult mkr{nullptr, -EINVAL};
+    LookupFHResult fhr;
+    RGWFileHandle* rgw_fh = nullptr;
+    buffer::list ux_key, ux_attrs;
+
+    fhr = lookup_fh(parent, name,
+      RGWFileHandle::FLAG_CREATE|
+      RGWFileHandle::FLAG_SYMBOLIC_LINK|
+      RGWFileHandle::FLAG_LOCK);
+    rgw_fh = get<0>(fhr);
+    if (rgw_fh) {
+      rgw_fh->create_stat(st, mask);
+      rgw_fh->set_times(real_clock::now());
+      /* save attrs */
+      rgw_fh->encode_attrs(ux_key, ux_attrs);
+      if (st)
+        rgw_fh->stat(st);
+      get<0>(mkr) = rgw_fh;
+    } else {
+      get<1>(mkr) = -EIO;
+      return mkr;
+    }
+
+    /* need valid S3 name (characters, length <= 1024, etc) */
+    rc = valid_fs_object_name(name);
+    if (rc != 0) {
+      rgw_fh->flags |= RGWFileHandle::FLAG_DELETED;
+      fh_cache.remove(rgw_fh->fh.fh_hk.object, rgw_fh,
+        RGWFileHandle::FHCache::FLAG_LOCK);
+      rgw_fh->mtx.unlock();
+      unref(rgw_fh);
+      get<0>(mkr) = nullptr;
+      get<1>(mkr) = rc;
+      return mkr;
+    }
+
+    string obj_name = std::string(name);
+    /* create an object representing the directory */
+    buffer::list bl;
+
+    /* XXXX */
+#if 0
+    bl.push_back(
+      buffer::create_static(len, static_cast<char*>(buffer)));
+#else
+
+    bl.push_back(
+      buffer::copy(link_path, strlen(link_path)));
+#endif
+
+    RGWPutObjRequest req(get_context(), get_user(), parent->bucket_name(),
+                         obj_name, bl);
+
+    /* save attrs */
+    req.emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
+    req.emplace_attr(RGW_ATTR_UNIX1, std::move(ux_attrs));
+
+    rc = rgwlib.get_fe()->execute_req(&req);
+    rc2 = req.get_ret();
+    if (! ((rc == 0) &&
+        (rc2 == 0))) {
+      /* op failed */
+      rgw_fh->flags |= RGWFileHandle::FLAG_DELETED;
+      rgw_fh->mtx.unlock(); /* !LOCKED */
+      unref(rgw_fh);
+      get<0>(mkr) = nullptr;
+      /* fixup rc */
+      if (!rc)
+        rc = rc2;
+    } else {
+      real_time t = real_clock::now();
+      parent->set_mtime(real_clock::to_timespec(t));
+      parent->set_ctime(real_clock::to_timespec(t));
+      rgw_fh->mtx.unlock(); /* !LOCKED */
+    }
+
+    get<1>(mkr) = rc;
+
+    return mkr;
+  } /* RGWLibFS::symlink */
 
   int RGWLibFS::getattr(RGWFileHandle* rgw_fh, struct stat* st)
   {
@@ -1665,6 +1785,35 @@ int rgw_create(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
 } /* rgw_create */
 
 /*
+  create a symbolic link
+ */
+int rgw_symlink(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
+        const char *name, const char *link_path, struct stat *st, uint32_t mask,
+        struct rgw_file_handle **fh, uint32_t posix_flags,
+        uint32_t flags)
+{
+  using std::get;
+
+  RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
+  RGWFileHandle* parent = get_rgwfh(parent_fh);
+
+  if ((! parent) ||
+      (parent->is_root()) ||
+      (parent->is_file())) {
+    /* bad parent */
+    return -EINVAL;
+  }
+
+  MkObjResult fhr = fs->symlink(parent, name, link_path, st, mask, flags);
+  RGWFileHandle *nfh = get<0>(fhr); // nullptr if !success
+
+  if (nfh)
+    *fh = nfh->get_fh();
+
+  return get<1>(fhr);
+} /* rgw_symlink */
+
+/*
   create a new directory
 */
 int rgw_mkdir(struct rgw_fs *rgw_fs,
@@ -1976,6 +2125,20 @@ int rgw_read(struct rgw_fs *rgw_fs,
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
 
   return fs->read(rgw_fh, offset, length, bytes_read, buffer, flags);
+}
+
+/*
+   read symbolic link
+*/
+int rgw_readlink(struct rgw_fs *rgw_fs,
+	     struct rgw_file_handle *fh, uint64_t offset,
+	     size_t length, size_t *bytes_read, void *buffer,
+	     uint32_t flags)
+{
+  RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
+  RGWFileHandle* rgw_fh = get_rgwfh(fh);
+
+  return fs->readlink(rgw_fh, offset, length, bytes_read, buffer, flags);
 }
 
 /*
