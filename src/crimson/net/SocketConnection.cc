@@ -808,7 +808,6 @@ SocketConnection::start_connect()
       return seastar::repeat([this] {
         return repeat_connect();
       });
-      // TODO: handle errors for state_t::connecting
     }).then_wrapped([this] (auto fut) {
       // satisfy the handshake's promise
       fut.forward_to(std::move(h.promise));
@@ -832,13 +831,11 @@ SocketConnection::connect(const entity_addr_t& _peer_addr,
           return seastar::with_gate(messenger.pending_dispatch, [this] {
             return dispatcher.ms_handle_connect(this);
           });
-        }).handle_exception([this] (std::exception_ptr eptr) {
-          // close the connection before returning errors
-          return seastar::make_exception_future<>(eptr)
-            .finally([this] { close(); });
-          // TODO: retry on fault
         }).then([this] {
           execute_open();
+        }).handle_exception([this] (std::exception_ptr eptr) {
+          // TODO: handle fault in the connecting state
+          close();
         });
     });
 }
@@ -868,7 +865,6 @@ SocketConnection::start_accept()
       return seastar::repeat([this] {
         return repeat_handle_connect();
       });
-      // TODO: handle errors for state_t::accepting
     }).then_wrapped([this] (auto fut) {
       // satisfy the handshake's promise
       fut.forward_to(std::move(h.promise));
@@ -892,12 +888,11 @@ SocketConnection::accept(seastar::connected_socket&& fd,
           return seastar::with_gate(messenger.pending_dispatch, [=] {
               return dispatcher.ms_handle_accept(this);
             });
-        }).handle_exception([this] (std::exception_ptr eptr) {
-          // close the connection before returning errors
-          return seastar::make_exception_future<>(eptr)
-            .finally([this] { close(); });
         }).then([this] {
           execute_open();
+        }).handle_exception([this] (std::exception_ptr eptr) {
+          // TODO: handle fault in the accepting state
+          close();
         });
     });
 }
