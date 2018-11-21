@@ -1741,6 +1741,7 @@ void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
       }
     }
   }
+  tmpmap.clean_pg_upmaps(cct, pending_inc);
 }
 
 int OSDMap::apply_incremental(const Incremental &inc)
@@ -3906,7 +3907,7 @@ int OSDMap::summarize_mapping_stats(
 
 int OSDMap::clean_pg_upmaps(
   CephContext *cct,
-  Incremental *pending_inc)
+  Incremental *pending_inc) const
 {
   ldout(cct, 10) << __func__ << dendl;
   int changed = 0;
