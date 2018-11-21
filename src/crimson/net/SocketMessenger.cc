@@ -56,7 +56,7 @@ seastar::future<> SocketMessenger::start(Dispatcher *disp)
             peer_addr.set_sockaddr(&paddr.as_posix_sockaddr());
             SocketConnectionRef conn = new SocketConnection(*this, get_myaddr(), *dispatcher);
             // don't wait before accepting another
-            conn->accept(std::move(socket), peer_addr);
+            conn->start_accept(std::move(socket), peer_addr);
           });
       }).handle_exception_type([this] (const std::system_error& e) {
         // stop gracefully on connection_aborted
@@ -76,7 +76,7 @@ SocketMessenger::connect(const entity_addr_t& peer_addr, const entity_type_t& pe
     return found;
   }
   SocketConnectionRef conn = new SocketConnection(*this, get_myaddr(), *dispatcher);
-  conn->connect(peer_addr, peer_type);
+  conn->start_connect(peer_addr, peer_type);
   return conn;
 }
 
