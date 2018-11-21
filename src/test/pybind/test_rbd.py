@@ -352,11 +352,11 @@ def test_pool_metadata():
     eq(len(metadata), 0)
 
     N = 65
-    for i in xrange(N):
+    for i in range(N):
         rbd.pool_metadata_set(ioctx, "key" + str(i), "X" * 1025)
     metadata = list(rbd.pool_metadata_list(ioctx))
     eq(len(metadata), N)
-    for i in xrange(N):
+    for i in range(N):
         rbd.pool_metadata_remove(ioctx, "key" + str(i))
         metadata = list(rbd.pool_metadata_list(ioctx))
         eq(len(metadata), N - i - 1)
@@ -1065,11 +1065,11 @@ class TestImage(object):
         eq(len(metadata), 0)
 
         N = 65
-        for i in xrange(N):
+        for i in range(N):
             self.image.metadata_set("key" + str(i), "X" * 1025)
         metadata = list(self.image.metadata_list())
         eq(len(metadata), N)
-        for i in xrange(N):
+        for i in range(N):
             self.image.metadata_remove("key" + str(i))
             metadata = list(self.image.metadata_list())
             eq(len(metadata), N - i - 1)
