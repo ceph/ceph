@@ -110,11 +110,10 @@ public:
     static void generate_test_instances(list<revoke_info*>& ls);
   };
 
-
   const static unsigned STATE_NEW		= (1<<1);
   const static unsigned STATE_IMPORTING		= (1<<2);
   const static unsigned STATE_NEEDSNAPFLUSH	= (1<<3);
-
+  const static unsigned STATE_CLIENTWRITEABLE	= (1<<4);
 
   Capability(CInode *i=nullptr, Session *s=nullptr, uint64_t id=0);
   Capability(const Capability& other) = delete;
@@ -235,6 +234,18 @@ public:
   bool need_snapflush() { return state & STATE_NEEDSNAPFLUSH; }
   void mark_needsnapflush() { state |= STATE_NEEDSNAPFLUSH; }
   void clear_needsnapflush() { state &= ~STATE_NEEDSNAPFLUSH; }
+
+  bool is_clientwriteable() const { return state & STATE_CLIENTWRITEABLE; }
+  void mark_clientwriteable() {
+    if (!is_clientwriteable()) {
+      state |= STATE_CLIENTWRITEABLE;
+    }
+  }
+  void clear_clientwriteable() {
+    if (is_clientwriteable()) {
+      state &= ~STATE_CLIENTWRITEABLE;
+    }
+  }
 
   CInode *get_inode() const { return inode; }
   Session *get_session() const { return session; }
