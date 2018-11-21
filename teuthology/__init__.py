@@ -100,10 +100,12 @@ def patch_gevent_hub_error_handler():
     Hub._origin_handle_error = Hub.handle_error
 
     def custom_handle_error(self, context, type, value, tb):
-        if not issubclass(type, Hub.SYSTEM_ERROR + Hub.NOT_ERROR):
+        if context is None or issubclass(type, Hub.SYSTEM_ERROR):
+            self.handle_system_error(type, value)
+        elif issubclass(type, Hub.NOT_ERROR):
+            pass
+        else:
             log.error("Uncaught exception (Hub)", exc_info=(type, value, tb))
-
-        self._origin_handle_error(context, type, value, tb)
 
     Hub.handle_error = custom_handle_error
 
