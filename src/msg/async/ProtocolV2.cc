@@ -75,6 +75,11 @@ void ProtocolV2::calc_signature(const char *in, uint32_t length, char *out) {
 
 const int ASYNC_COALESCE_THRESHOLD = 256;
 
+/* HMAC Block Size
+ * Currently we're using only SHA256 for computing the HMAC
+ */
+const int SIGNATURE_BLOCK_SIZE = CEPH_CRYPTO_HMACSHA256_DIGESTSIZE;
+
 #define WRITE(B, D, C) write(D, CONTINUATION(C), B)
 
 #define READ(L, C) read(CONTINUATION(C), L)
@@ -97,12 +102,6 @@ static void alloc_aligned_buffer(bufferlist &data, unsigned len, unsigned off) {
   if (head) ptr.set_offset(CEPH_PAGE_SIZE - head);
   data.push_back(std::move(ptr));
 }
-
-/* Auth Block Size
- * Defines the multiple of size that the frame payload should have
- * when signing or encryption is enabled.
- */
-#define AUTH_BLOCK_SIZE (1 << 6)
 
 /**
  * Protocol V2 Frame Structures
@@ -154,7 +153,6 @@ protected:
   template <typename T>
   inline void _encode_payload_each(T &t) {
     if constexpr (std::is_same<T, bufferlist const>()) {
-      encode((uint32_t)t.length(), this->payload, -1ll);
       this->payload.claim_append((bufferlist &)t);
     } else if constexpr (std::is_same<T, std::vector<uint32_t> const>()) {
       encode((uint32_t)t.size(), this->payload, -1ll);
@@ -175,10 +173,7 @@ protected:
   template <typename T>
   inline void _decode_payload_each(T &t, bufferlist::const_iterator &ti) const {
     if constexpr (std::is_same<T, bufferlist>()) {
-      uint32_t len;
-      decode(len, ti);
-      ceph_assert(len == ti.get_remaining());
-      if (len) {
+      if (ti.get_remaining()) {
         t.append(ti.get_current_ptr());
       }
     } else if constexpr (std::is_same<T, std::vector<uint32_t>>()) {
@@ -233,14 +228,15 @@ public:
 };
 
 struct AuthRequestFrame
-    : public PayloadFrame<AuthRequestFrame, uint32_t, bufferlist> {
+    : public PayloadFrame<AuthRequestFrame, uint32_t, uint32_t, bufferlist> {
   const ProtocolV2::Tag tag = ProtocolV2::Tag::AUTH_REQUEST;
   using PayloadFrame::PayloadFrame;
 
-  AuthRequestFrame(uint32_t method) : AuthRequestFrame(method, bufferlist()) {}
+  AuthRequestFrame(uint32_t method)
+      : AuthRequestFrame(method, 0, bufferlist()) {}
 
   inline uint32_t &method() { return get_val<0>(); }
-  inline bufferlist &auth_payload() { return get_val<1>(); }
+  inline bufferlist &auth_payload() { return get_val<2>(); }
 };
 
 struct AuthBadMethodFrame
@@ -261,20 +257,21 @@ struct AuthBadAuthFrame
   inline std::string &error_msg() { return get_val<1>(); }
 };
 
-struct AuthMoreFrame : public PayloadFrame<AuthMoreFrame, bufferlist> {
+struct AuthMoreFrame
+    : public PayloadFrame<AuthMoreFrame, uint32_t, bufferlist> {
   const ProtocolV2::Tag tag = ProtocolV2::Tag::AUTH_MORE;
   using PayloadFrame::PayloadFrame;
 
-  inline bufferlist &auth_payload() { return get_val<0>(); }
+  inline bufferlist &auth_payload() { return get_val<1>(); }
 };
 
 struct AuthDoneFrame
-    : public PayloadFrame<AuthDoneFrame, uint64_t, bufferlist> {
+    : public PayloadFrame<AuthDoneFrame, uint64_t, uint32_t, bufferlist> {
   const ProtocolV2::Tag tag = ProtocolV2::Tag::AUTH_DONE;
   using PayloadFrame::PayloadFrame;
 
   inline uint64_t &flags() { return get_val<0>(); }
-  inline bufferlist &auth_payload() { return get_val<1>(); }
+  inline bufferlist &auth_payload() { return get_val<2>(); }
 };
 
 template <class T, typename... Args>
@@ -838,6 +835,8 @@ ssize_t ProtocolV2::write_message(Message *m, bufferlist &bl, bool more) {
     flat_bl.claim_append(bl);
   }
 
+  sign_payload(flat_bl);
+  encrypt_payload(flat_bl);
   MessageFrame message(this, header2, flat_bl);
 
   ldout(cct, 20) << __func__ << " sending message type=" << header2.type
@@ -1013,9 +1012,11 @@ bool ProtocolV2::is_queued() {
 }
 
 void ProtocolV2::sign_payload(bufferlist &payload) {
-  if ((auth_flags & static_cast<uint64_t>(AuthFlag::SIGNED)) &&
-      session_security) {
-    uint32_t pad_len = AUTH_BLOCK_SIZE - (payload.length() % AUTH_BLOCK_SIZE);
+  ldout(cct, 21) << __func__ << " len=" << payload.length() << dendl;
+
+  if (sign_frames() && session_security) {
+    uint32_t pad_len;
+    calculate_payload_size(payload.length(), nullptr, &pad_len);
     auto padding = bufferptr(buffer::create(pad_len));
     cct->random()->get_bytes((char *)padding.raw_c_str(), pad_len);
     payload.push_back(padding);
@@ -1037,8 +1038,9 @@ void ProtocolV2::sign_payload(bufferlist &payload) {
 }
 
 void ProtocolV2::verify_signature(char *payload, uint32_t length) {
-  if ((auth_flags & static_cast<uint64_t>(AuthFlag::SIGNED)) &&
-      session_security) {
+  ldout(cct, 21) << __func__ << " len=" << length << dendl;
+
+  if (sign_frames() && session_security) {
     uint32_t payload_len = length - CEPH_CRYPTO_HMACSHA256_DIGESTSIZE;
     const char *p = payload + payload_len;
     char signature[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
@@ -1054,8 +1056,16 @@ void ProtocolV2::verify_signature(char *payload, uint32_t length) {
 }
 
 void ProtocolV2::encrypt_payload(bufferlist &payload) {
-  if ((auth_flags & static_cast<uint64_t>(AuthFlag::ENCRYPTED)) &&
-      session_security) {
+  ldout(cct, 21) << __func__ << " len=" << payload.length() << dendl;
+  if (encrypt_frames() && session_security) {
+    uint32_t pad_len;
+    calculate_payload_size(payload.length(), nullptr, nullptr, &pad_len);
+    if (pad_len) {
+      auto padding = bufferptr(buffer::create(pad_len));
+      cct->random()->get_bytes((char *)padding.raw_c_str(), pad_len);
+      payload.push_back(padding);
+    }
+
     bufferlist tmp;
     tmp.claim(payload);
     session_security->encrypt_bufferlist(tmp, payload);
@@ -1063,8 +1073,8 @@ void ProtocolV2::encrypt_payload(bufferlist &payload) {
 }
 
 void ProtocolV2::decrypt_payload(char *payload, uint32_t &length) {
-  if ((auth_flags & static_cast<uint64_t>(AuthFlag::ENCRYPTED)) &&
-      session_security) {
+  ldout(cct, 21) << __func__ << " len=" << length << dendl;
+  if (encrypt_frames() && session_security) {
     bufferlist in;
     in.push_back(buffer::create_static(length, payload));
     bufferlist out;
@@ -1075,6 +1085,49 @@ void ProtocolV2::decrypt_payload(char *payload, uint32_t &length) {
     memcpy(payload, out.c_str(), out.length());
     length = out.length();
   }
+}
+
+void ProtocolV2::calculate_payload_size(uint32_t length, uint32_t *total_len,
+                                        uint32_t *sig_pad_len,
+                                        uint32_t *enc_pad_len) {
+  bool is_signed = sign_frames();
+  bool is_encrypted = encrypt_frames();
+
+  uint32_t sig_pad_l = 0;
+  uint32_t enc_pad_l = 0;
+  uint32_t total_l = length;
+
+  if (is_signed && !is_encrypted) {
+    sig_pad_l = SIGNATURE_BLOCK_SIZE - (length % SIGNATURE_BLOCK_SIZE);
+    total_l += sig_pad_l + SIGNATURE_BLOCK_SIZE;
+  } else if (is_encrypted) {
+    if (is_signed) {
+      total_l += SIGNATURE_BLOCK_SIZE;
+    }
+    uint32_t block_size = session_security->get_key().get_max_outbuf_size(0);
+    uint32_t pad_len = block_size - (total_l % block_size);
+    if (is_signed) {
+      sig_pad_l = pad_len;
+    } else if (!is_signed) {
+      enc_pad_l = pad_len;
+    }
+    total_l =
+        session_security->get_key().get_max_outbuf_size(total_l + pad_len);
+  }
+
+  if (sig_pad_len) {
+    *sig_pad_len = sig_pad_l;
+  }
+  if (enc_pad_len) {
+    *enc_pad_len = enc_pad_l;
+  }
+  if (total_len) {
+    *total_len = total_l;
+  }
+
+  ldout(cct, 21) << __func__ << " length=" << length << " total_len=" << total_l
+                 << " sig_pad_len=" << sig_pad_l << " enc_pad_len=" << enc_pad_l
+                 << dendl;
 }
 
 CtPtr ProtocolV2::read(CONTINUATION_PARAM(next, ProtocolV2, char *, int),
@@ -1381,7 +1434,7 @@ CtPtr ProtocolV2::handle_auth_more(char *payload, uint32_t length) {
     if (auth_method == CEPH_AUTH_CEPHX) {
       ceph_assert(authorizer);
       authorizer->add_challenge(cct, auth_more.auth_payload());
-      AuthMoreFrame more_reply(authorizer->bl);
+      AuthMoreFrame more_reply(authorizer->bl.length(), authorizer->bl);
       return WRITE(more_reply.get_buffer(), "auth more", read_frame);
     } else {
       ceph_abort("Auth method %d not implemented", auth_method);
@@ -1438,21 +1491,9 @@ CtPtr ProtocolV2::handle_message() {
 
   ceph_assert(state == READY);
 
-  uint32_t header_len = sizeof(ceph_msg_header2);
-  if ((auth_flags & static_cast<uint64_t>(AuthFlag::SIGNED)) &&
-      session_security) {
-    uint32_t pad_len = AUTH_BLOCK_SIZE - (header_len % AUTH_BLOCK_SIZE);
-    header_len += pad_len + CEPH_CRYPTO_HMACSHA256_DIGESTSIZE;
-  }
-  if ((auth_flags & static_cast<uint64_t>(AuthFlag::ENCRYPTED)) &&
-      session_security) {
-    header_len = session_security->get_key().get_max_outbuf_size(header_len);
-  }
-
-  next_payload_len = header_len;
-
-  // reading 4 bytes more, which corresponds to the message payload size
-  return READ(header_len + sizeof(uint32_t), handle_message_header);
+  uint32_t header_len;
+  calculate_payload_size(sizeof(ceph_msg_header2), &header_len);
+  return READ(header_len, handle_message_header);
 }
 
 CtPtr ProtocolV2::handle_message_header(char *buffer, int r) {
@@ -1463,7 +1504,10 @@ CtPtr ProtocolV2::handle_message_header(char *buffer, int r) {
     return _fault();
   }
 
-  MessageHeaderFrame header_frame(this, buffer, next_payload_len);
+  uint32_t header_len;
+  calculate_payload_size(sizeof(ceph_msg_header2), &header_len);
+
+  MessageHeaderFrame header_frame(this, buffer, header_len);
   ceph_msg_header2 &header = header_frame.header();
 
   entity_name_t src(connection->peer_type, connection->peer_global_id);
@@ -1490,7 +1534,10 @@ CtPtr ProtocolV2::handle_message_header(char *buffer, int r) {
   front.clear();
   middle.clear();
   data.clear();
+  extra.clear();
   current_header = header;
+
+  next_payload_len -= header_len;
 
   state = THROTTLE_MESSAGE;
   return CONTINUE(throttle_message);
@@ -1613,6 +1660,8 @@ CtPtr ProtocolV2::handle_message_front(char *buffer, int r) {
 
   ldout(cct, 20) << __func__ << " got front " << front.length() << dendl;
 
+  next_payload_len -= current_header.front_len;
+
   return read_message_middle();
 }
 
@@ -1639,6 +1688,8 @@ CtPtr ProtocolV2::handle_message_middle(char *buffer, int r) {
   }
 
   ldout(cct, 20) << __func__ << " got middle " << middle.length() << dendl;
+
+  next_payload_len -= current_header.middle_len;
 
   return read_message_data_prepare();
 }
@@ -1685,6 +1736,17 @@ CtPtr ProtocolV2::read_message_data() {
     return READB(read_len, bp.c_str(), handle_message_data);
   }
 
+  next_payload_len -= current_header.data_len;
+  if (next_payload_len) {
+    // if we still have more bytes to read is because we signed or encrypted
+    // the message payload
+    ldout(cct, 1) << __func__ << " reading message payload extra bytes left="
+                  << next_payload_len << dendl;
+    ceph_assert(session_security && (sign_frames() || encrypt_frames()));
+    extra.push_back(buffer::create(next_payload_len));
+    return READB(next_payload_len, extra.c_str(), handle_message_extra_bytes);
+  }
+
   state = READ_MESSAGE_COMPLETE;
   return handle_message_complete();
 }
@@ -1705,6 +1767,18 @@ CtPtr ProtocolV2::handle_message_data(char *buffer, int r) {
   msg_left -= read_len;
 
   return CONTINUE(read_message_data);
+}
+
+CtPtr ProtocolV2::handle_message_extra_bytes(char *buffer, int r) {
+  ldout(cct, 20) << __func__ << " r=" << r << dendl;
+
+  if (r < 0) {
+    ldout(cct, 1) << __func__ << " read message extra bytes error " << dendl;
+    return _fault();
+  }
+
+  state = READ_MESSAGE_COMPLETE;
+  return handle_message_complete();
 }
 
 CtPtr ProtocolV2::handle_message_complete() {
@@ -1731,6 +1805,32 @@ CtPtr ProtocolV2::handle_message_complete() {
   ceph_msg_footer footer{current_header.front_crc, current_header.middle_crc,
                          current_header.data_crc, 0, current_header.flags};
 
+  if (sign_frames() || encrypt_frames()) {
+    bufferlist msg_payload;
+    msg_payload.claim_append(front);
+    msg_payload.claim_append(middle);
+    msg_payload.claim_append(data);
+    msg_payload.claim_append(extra);
+
+    uint32_t payload_len = msg_payload.length();
+    decrypt_payload(msg_payload.c_str(), payload_len);
+    verify_signature(msg_payload.c_str(), payload_len);
+
+    front.clear();
+    middle.clear();
+    data.clear();
+    extra.clear();
+
+    front.push_back(
+        bufferptr(msg_payload.front(), 0, current_header.front_len));
+    middle.push_back(bufferptr(msg_payload.front(), current_header.front_len,
+                               current_header.middle_len));
+    data.push_back(
+        bufferptr(msg_payload.front(),
+                  current_header.front_len + current_header.middle_len,
+                  current_header.data_len));
+  }
+
   Message *message = decode_message(cct, messenger->crcflags, header, footer,
                                     front, middle, data, connection);
   if (!message) {
@@ -1738,20 +1838,6 @@ CtPtr ProtocolV2::handle_message_complete() {
     return _fault();
   }
 
-  //
-  //  Check the signature if one should be present.  A zero return indicates
-  //  success. PLR
-  //
-
-  // if (session_security.get() == NULL) {
-  //   ldout(cct, 10) << __func__ << " no session security set" << dendl;
-  // } else {
-  //   if (session_security->check_message_signature(message)) {
-  //     ldout(cct, 0) << __func__ << " Signature check failed" << dendl;
-  //     message->put();
-  //     return _fault();
-  //   }
-  // }
   message->set_byte_throttler(connection->policy.throttler_bytes);
   message->set_message_throttler(connection->policy.throttler_messages);
 
@@ -1861,6 +1947,7 @@ CtPtr ProtocolV2::handle_message_complete() {
   front.clear();
   middle.clear();
   data.clear();
+  extra.clear();
 
   if (need_dispatch_writer && connection->is_connected()) {
     connection->center->dispatch_event_external(connection->write_handler);
@@ -1971,7 +2058,8 @@ CtPtr ProtocolV2::send_auth_request(std::vector<uint32_t> &allowed_methods) {
                  << " sending auth request len=" << authorizer->bl.length()
                  << dendl;
 
-  AuthRequestFrame authFrame(auth_method, authorizer->bl);
+  AuthRequestFrame authFrame(auth_method, authorizer->bl.length(),
+                             authorizer->bl);
   bufferlist &bl = authFrame.get_buffer();
   return WRITE(bl, "auth request", read_frame);
 }
@@ -2016,7 +2104,8 @@ CtPtr ProtocolV2::handle_auth_bad_auth(char *payload, uint32_t length) {
                  << " sending auth request len=" << authorizer->bl.length()
                  << dendl;
 
-  AuthRequestFrame authFrame(auth_method, authorizer->bl);
+  AuthRequestFrame authFrame(auth_method, authorizer->bl.length(),
+                             authorizer->bl);
   bufferlist &bl = authFrame.get_buffer();
   return WRITE(bl, "auth request", read_frame);
 }
@@ -2044,15 +2133,15 @@ CtPtr ProtocolV2::handle_auth_done(char *payload, uint32_t length) {
     session_security.reset(get_auth_session_handler(
         cct, authorizer->protocol, authorizer->session_key,
         CEPH_FEATURE_MSG_AUTH | CEPH_FEATURE_CEPHX_V2));
+    auth_flags = auth_done.flags();
   } else {
     // We have no authorizer, so we shouldn't be applying security to messages
     // in this connection.
     ldout(cct, 10) << __func__ << " no authorizer, clearing session_security"
                    << dendl;
     session_security.reset();
+    auth_flags = 0;
   }
-
-  auth_flags = auth_done.flags();
 
   if (!cookie) {
     ceph_assert(connect_seq == 0);
@@ -2262,7 +2351,7 @@ CtPtr ProtocolV2::handle_cephx_auth(bufferlist &auth_payload) {
     if (!had_challenge && authorizer_challenge) {
       ldout(cct, 10) << __func__ << " challenging authorizer" << dendl;
       ceph_assert(authorizer_reply.length());
-      AuthMoreFrame more(authorizer_reply);
+      AuthMoreFrame more(authorizer_reply.length(), authorizer_reply);
       return WRITE(more.get_buffer(), "auth more", read_frame);
     } else {
       ldout(cct, 0) << __func__ << " got bad authorizer, auth_reply_len="
@@ -2289,7 +2378,8 @@ CtPtr ProtocolV2::handle_cephx_auth(bufferlist &auth_payload) {
   ldout(cct, 1) << __func__ << " authentication done,"
                 << " flags=" << std::hex << auth_flags << std::dec << dendl;
 
-  AuthDoneFrame auth_done(auth_flags, authorizer_reply);
+  AuthDoneFrame auth_done(auth_flags, authorizer_reply.length(),
+                          authorizer_reply);
   return WRITE(auth_done.get_buffer(), "auth done", read_frame);
 }
 
@@ -2326,7 +2416,7 @@ CtPtr ProtocolV2::handle_auth_request(char *payload, uint32_t length) {
 
     session_security.reset();
     bufferlist empty_bl;
-    AuthDoneFrame auth_done(0, empty_bl);
+    AuthDoneFrame auth_done(0, 0, empty_bl);
     return WRITE(auth_done.get_buffer(), "auth done", read_frame);
   }
 

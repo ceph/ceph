@@ -106,13 +106,19 @@ private:
   unsigned msg_left;
   bufferlist data_buf;
   bufferlist::iterator data_blp;
-  bufferlist front, middle, data;
+  bufferlist front, middle, data, extra;
 
   bool keepalive;
 
   ostream &_conn_prefix(std::ostream *_dout);
   void run_continuation(Ct<ProtocolV2> *continuation);
   void calc_signature(const char *in, uint32_t length, char *out);
+  inline bool sign_frames() {
+    return auth_flags & static_cast<uint64_t>(AuthFlag::SIGNED);
+  }
+  inline bool encrypt_frames() {
+    return auth_flags & static_cast<uint64_t>(AuthFlag::ENCRYPTED);
+  }
 
   Ct<ProtocolV2> *read(CONTINUATION_PARAM(next, ProtocolV2, char *, int),
                        int len, char *buffer = nullptr);
@@ -152,6 +158,7 @@ private:
   READ_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_message_middle);
   CONTINUATION_DECL(ProtocolV2, read_message_data);
   READ_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_message_data);
+  READ_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_message_extra_bytes);
 
   Ct<ProtocolV2> *read_frame();
   Ct<ProtocolV2> *handle_read_frame_length_and_tag(char *buffer, int r);
@@ -173,6 +180,7 @@ private:
   Ct<ProtocolV2> *read_message_data_prepare();
   Ct<ProtocolV2> *read_message_data();
   Ct<ProtocolV2> *handle_message_data(char *buffer, int r);
+  Ct<ProtocolV2> *handle_message_extra_bytes(char *buffer, int r);
   Ct<ProtocolV2> *handle_message_complete();
 
   Ct<ProtocolV2> *handle_keepalive2(char *payload, uint32_t length);
@@ -200,6 +208,9 @@ public:
   void verify_signature(char *payload, uint32_t length);
   void encrypt_payload(bufferlist &payload);
   void decrypt_payload(char *payload, uint32_t &length);
+  void calculate_payload_size(uint32_t length, uint32_t *total_len,
+                              uint32_t *sig_pad_len = nullptr,
+                              uint32_t *enc_pad_len = nullptr);
 
 private:
   // Client Protocol
