@@ -3250,7 +3250,7 @@ int RGWPutObj::verify_permission()
     }
 
     auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,
-                                            *s->auth.identity,
+                                            boost::none,
                                             rgw::IAM::s3PutObject,
                                             rgw_obj(s->bucket, s->object));
     if (usr_policy_res == Effect::Deny)
@@ -3762,7 +3762,7 @@ void RGWPostObj::execute()
 
   if (s->iam_policy || ! s->iam_user_policies.empty()) {
     auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,
-                                            *s->auth.identity,
+                                            boost::none,
                                             rgw::IAM::s3PutObject,
                                             rgw_obj(s->bucket, s->object));
     if (usr_policy_res == Effect::Deny) {
@@ -4294,7 +4294,7 @@ int RGWDeleteObj::verify_permission()
 {
   if (s->iam_policy || ! s->iam_user_policies.empty()) {
     auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,
-                                              *s->auth.identity,
+                                              boost::none,
                                               s->object.instance.empty() ?
                                               rgw::IAM::s3DeleteObject :
                                               rgw::IAM::s3DeleteObjectVersion,
@@ -5309,7 +5309,7 @@ int RGWInitMultipart::verify_permission()
 {
   if (s->iam_policy || ! s->iam_user_policies.empty()) {
     auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,
-                                              *s->auth.identity,
+                                              boost::none,
                                               rgw::IAM::s3PutObject,
                                               rgw_obj(s->bucket, s->object));
     if (usr_policy_res == Effect::Deny) {
@@ -5442,7 +5442,7 @@ int RGWCompleteMultipart::verify_permission()
 {
   if (s->iam_policy || ! s->iam_user_policies.empty()) {
     auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,
-                                              *s->auth.identity,
+                                              boost::none,
                                               rgw::IAM::s3PutObject,
                                               rgw_obj(s->bucket, s->object));
     if (usr_policy_res == Effect::Deny) {
@@ -5775,7 +5775,7 @@ int RGWAbortMultipart::verify_permission()
 {
   if (s->iam_policy || ! s->iam_user_policies.empty()) {
     auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,
-                                              *s->auth.identity,
+                                              boost::none,
                                               rgw::IAM::s3AbortMultipartUpload,
                                               rgw_obj(s->bucket, s->object));
     if (usr_policy_res == Effect::Deny) {
@@ -6024,7 +6024,7 @@ void RGWDeleteMultiObj::execute()
     rgw_obj obj(bucket, *iter);
     if (s->iam_policy || ! s->iam_user_policies.empty()) {
       auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,
-                                              *s->auth.identity,
+                                              boost::none,
                                               iter->instance.empty() ?
                                               rgw::IAM::s3DeleteObject :
                                               rgw::IAM::s3DeleteObjectVersion,
@@ -6551,7 +6551,7 @@ bool RGWBulkUploadOp::handle_file_verify_permission(RGWBucketInfo& binfo,
   bucket_owner = bacl.get_owner();
   if (policy || ! s->iam_user_policies.empty()) {
     auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,
-                                              *s->auth.identity,
+                                              boost::none,
                                               rgw::IAM::s3PutObject, obj);
     if (usr_policy_res == Effect::Deny) {
       return false;
