@@ -1,1 +1,5 @@
-.qa/deepsea/stage4.yaml
+tasks:
+        - deepsea.create_pools:
+                cephfs:
+        - deepsea.orch:
+                stage: 4
