@@ -14,13 +14,33 @@ export class MgrSummaryPipe implements PipeTransform {
       return '';
     }
 
-    let result = 'active: ';
-    result += _.isUndefined(value.active_name) ? 'n/a' : value.active_name;
-
-    if (value.standbys.length) {
-      result += ', ' + value.standbys.length + ' ' + this.i18n('standbys');
+    let activeCount = this.i18n('n/a');
+    const titleText = _.isUndefined(value.active_name)
+      ? ''
+      : `${this.i18n('active daemon')}: ${value.active_name}`;
+    if (titleText.length > 0) {
+      activeCount = '1';
     }
+    const standbyCount = value.standbys.length;
+    const mgrSummary = [
+      {
+        content: `${activeCount} ${this.i18n('active')}`,
+        class: 'mgr-active-name',
+        titleText: titleText
+      }
+    ];
 
-    return result;
+    mgrSummary.push({
+      content: '',
+      class: 'card-text-line-break',
+      titleText: ''
+    });
+    mgrSummary.push({
+      content: `${standbyCount} ${this.i18n('standby')}`,
+      class: '',
+      titleText: ''
+    });
+
+    return mgrSummary;
   }
 }

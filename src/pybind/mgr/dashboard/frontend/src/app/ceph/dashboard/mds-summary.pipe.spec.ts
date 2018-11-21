@@ -19,32 +19,51 @@ describe('MdsSummaryPipe', () => {
   });
 
   it('transforms with 0 active and 2 standy', () => {
-    const value = {
+    const payload = {
       standbys: [0],
       filesystems: [{ mdsmap: { info: [{ state: 'up:standby-replay' }] } }]
     };
-    expect(pipe.transform(value)).toBe('0 active, 2 standby');
+    const expected = [
+      { class: '', content: '0 active' },
+      { class: 'card-text-line-break', content: '' },
+      { class: '', content: '2 standby' }
+    ];
+
+    expect(pipe.transform(payload)).toEqual(expected);
   });
 
   it('transforms with 1 active and 1 standy', () => {
-    const value = {
+    const payload = {
       standbys: [0],
       filesystems: [{ mdsmap: { info: [{ state: 'up:active' }] } }]
     };
-    expect(pipe.transform(value)).toBe('1 active, 1 standby');
+    const expected = [
+      { class: '', content: '1 active' },
+      { class: 'card-text-line-break', content: '' },
+      { class: '', content: '1 standby' }
+    ];
+    expect(pipe.transform(payload)).toEqual(expected);
   });
 
   it('transforms with 0 filesystems', () => {
-    const value = {
+    const payload = {
       standbys: [0],
       filesystems: []
     };
-    expect(pipe.transform(value)).toBe('no filesystems');
+    const expected = [{ class: '', content: 'no filesystems' }];
+
+    expect(pipe.transform(payload)).toEqual(expected);
   });
 
   it('transforms without filesystem', () => {
-    const value = { standbys: [0] };
-    expect(pipe.transform(value)).toBe('1, no filesystems');
+    const payload = { standbys: [0] };
+    const expected = [
+      { class: '', content: '1 up' },
+      { class: 'card-text-line-break', content: '' },
+      { class: '', content: 'no filesystems' }
+    ];
+
+    expect(pipe.transform(payload)).toEqual(expected);
   });
 
   it('transforms without value', () => {
