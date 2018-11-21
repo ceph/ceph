@@ -731,13 +731,15 @@ configure_file(
 add_custom_target(vstart-base DEPENDS
     ceph-osd
     ceph-mon
-    ceph-mgr
     ceph-authtool
     ceph-conf
     monmaptool
     crushtool
     rados
     cython${PY_BINDING_INFIX}_rados)
+if (WITH_MGR)
+  add_dependencies(vstart-base ceph-mgr)
+endif()
 
 add_custom_target(vstart DEPENDS vstart-base)
 if (WITH_RBD)
