@@ -19,8 +19,17 @@ class Scripts:
             ctx['scripts_copied'] = True
 
     def run(self, remote, script_name, args=[], as_root=True):
-        self.log.info('(scripts) running script {} on remote {}'
-                      .format(script_name, remote.hostname)
+        class_name = type(remote).__name__
+        self.log.debug(
+            '(scripts) run method was passed a remote object of class {}'
+            .format(class_name)
+            )
+        if class_name == 'Cluster':
+            remote_spec = 'the whole cluster'
+        else:
+            remote_spec = 'remote {}'.format(remote.hostname)
+        self.log.info('(scripts) running script {} with args {} on {}'
+                      .format(script_name, args, remote_spec)
                       )
         path = 'scripts/' + script_name
         cmd = 'bash {}'.format(path)
