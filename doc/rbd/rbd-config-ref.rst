@@ -185,3 +185,113 @@ RBD supports advanced features which can be specified via the command line when 
 :Description: Journaling support depends on exclusive lock support. Journaling records all modifications to an image in the order they occur. RBD mirroring utilizes the journal to replicate a crash consistent image to a remote cluster.
 :Internal value: 64
 :CLI value: journaling
+
+
+RBD QOS Settings
+================
+
+RBD supports limiting per image IO, controlled by the following
+settings.
+
+``rbd qos iops limit``
+
+:Description: The desired limit of IO operations per second.
+:Type: Unsigned Integer
+:Required: No
+:Default: ``0``
+
+
+``rbd qos bps limit``
+
+:Description: The desired limit of IO bytes per second.
+:Type: Unsigned Integer
+:Required: No
+:Default: ``0``
+
+
+``rbd qos read iops limit``
+
+:Description: The desired limit of read operations per second.
+:Type: Unsigned Integer
+:Required: No
+:Default: ``0``
+
+
+``rbd qos write iops limit``
+
+:Description: The desired limit of write operations per second.
+:Type: Unsigned Integer
+:Required: No
+:Default: ``0``
+
+
+``rbd qos read bps limit``
+
+:Description: The desired limit of read bytes per second.
+:Type: Unsigned Integer
+:Required: No
+:Default: ``0``
+
+
+``rbd qos write bps limit``
+
+:Description: The desired limit of write bytes per second.
+:Type: Unsigned Integer
+:Required: No
+:Default: ``0``
+
+
+``rbd qos iops burst``
+
+:Description: The desired burst limit of IO operations.
+:Type: Unsigned Integer
+:Required: No
+:Default: ``0``
+
+
+``rbd qos bps burst``
+
+:Description: The desired burst limit of IO bytes.
+:Type: Unsigned Integer
+:Required: No
+:Default: ``0``
+
+
+``rbd qos read iops burst``
+
+:Description: The desired burst limit of read operations.
+:Type: Unsigned Integer
+:Required: No
+:Default: ``0``
+
+
+``rbd qos write iops burst``
+
+:Description: The desired burst limit of write operations.
+:Type: Unsigned Integer
+:Required: No
+:Default: ``0``
+
+
+``rbd qos read bps burst``
+
+:Description: The desired burst limit of read bytes.
+:Type: Unsigned Integer
+:Required: No
+:Default: ``0``
+
+
+``rbd qos write bps burst``
+
+:Description: The desired burst limit of write bytes.
+:Type: Unsigned Integer
+:Required: No
+:Default: ``0``
+
+
+``rbd qos schedule tick min``
+
+:Description: The minimum schedule tick (in milliseconds) for QoS.
+:Type: Unsigned Integer
+:Required: No
+:Default: ``50``
