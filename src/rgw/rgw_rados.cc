@@ -5833,10 +5833,14 @@ int RGWRados::append_atomic_test(RGWObjectCtx *rctx,
   if (r < 0)
     return r;
 
-  RGWObjState *state = *pstate;
+  return append_atomic_test(*pstate, op);
+}
 
+int RGWRados::append_atomic_test(const RGWObjState* state,
+                                 librados::ObjectOperation& op)
+{
   if (!state->is_atomic) {
-    ldout(cct, 20) << "state for obj=" << obj << " is not atomic, not appending atomic test" << dendl;
+    ldout(cct, 20) << "state for obj=" << state->obj << " is not atomic, not appending atomic test" << dendl;
     return 0;
   }
 
