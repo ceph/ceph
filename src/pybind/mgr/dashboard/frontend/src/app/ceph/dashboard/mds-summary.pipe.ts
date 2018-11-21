@@ -14,6 +14,8 @@ export class MdsSummaryPipe implements PipeTransform {
       return '';
     }
 
+    let contentLine1 = '';
+    let contentLine2 = '';
     let standbys = 0;
     let active = 0;
     let standbyReplay = 0;
@@ -22,9 +24,10 @@ export class MdsSummaryPipe implements PipeTransform {
     });
 
     if (value.standbys && !value.filesystems) {
-      return standbys + ', ' + this.i18n('no filesystems');
+      contentLine1 = `${standbys} ${this.i18n('up')}`;
+      contentLine2 = this.i18n('no filesystems');
     } else if (value.filesystems.length === 0) {
-      return this.i18n('no filesystems');
+      contentLine1 = this.i18n('no filesystems');
     } else {
       _.each(value.filesystems, (fs, i) => {
         _.each(fs.mdsmap.info, (mds, j) => {
@@ -36,9 +39,28 @@ export class MdsSummaryPipe implements PipeTransform {
         });
       });
 
-      return `${active} ${this.i18n('active')}, ${standbys + standbyReplay} ${this.i18n(
-        'standby'
-      )}`;
+      contentLine1 = `${active} ${this.i18n('active')}`;
+      contentLine2 = `${standbys + standbyReplay} ${this.i18n('standby')}`;
     }
+
+    const mgrSummary = [
+      {
+        content: contentLine1,
+        class: ''
+      }
+    ];
+
+    if (contentLine2) {
+      mgrSummary.push({
+        content: '',
+        class: 'card-text-line-break'
+      });
+      mgrSummary.push({
+        content: contentLine2,
+        class: ''
+      });
+    }
+
+    return mgrSummary;
   }
 }
