@@ -595,9 +595,6 @@ RBD_MIRROR_MODE_DISABLED = _RBD_MIRROR_MODE_DISABLED
 RBD_MIRROR_MODE_IMAGE = _RBD_MIRROR_MODE_IMAGE
 RBD_MIRROR_MODE_POOL = _RBD_MIRROR_MODE_POOL
 
-RBD_MIRROR_PEER_ATTRIBUTE_NAME_MON_HOST = _RBD_MIRROR_PEER_ATTRIBUTE_NAME_MON_HOST
-RBD_MIRROR_PEER_ATTRIBUTE_NAME_KEY = _RBD_MIRROR_PEER_ATTRIBUTE_NAME_KEY
-
 RBD_MIRROR_IMAGE_DISABLING = _RBD_MIRROR_IMAGE_DISABLING
 RBD_MIRROR_IMAGE_ENABLED = _RBD_MIRROR_IMAGE_ENABLED
 RBD_MIRROR_IMAGE_DISABLED = _RBD_MIRROR_IMAGE_DISABLED
@@ -840,6 +837,9 @@ cdef void* realloc_chk(void* ptr, size_t size) except NULL:
     if ret == NULL:
         raise MemoryError("realloc failed")
     return ret
+
+RBD_MIRROR_PEER_ATTRIBUTE_NAME_MON_HOST = decode_cstr(_RBD_MIRROR_PEER_ATTRIBUTE_NAME_MON_HOST)
+RBD_MIRROR_PEER_ATTRIBUTE_NAME_KEY = decode_cstr(_RBD_MIRROR_PEER_ATTRIBUTE_NAME_KEY)
 
 cdef class Completion
 
@@ -1339,6 +1339,7 @@ class RBD(object):
         :raises: :class:`FunctionNotSupported`
         :raises: :class:`ArgumentOutOfRange`
         """
+        image_name = cstr(image_name, 'image_name')
         dest_image_name = cstr(dest_image_name, 'dest_image_name')
         cdef:
             rados_ioctx_t _ioctx = convert_ioctx(ioctx)
@@ -1680,8 +1681,8 @@ class RBD(object):
         :type attributes: dict
         """
         uuid = cstr(uuid, 'uuid')
-        keys_str = '\0'.join([cstr(x[0], 'key') for x in attributes.items()])
-        vals_str = '\0'.join([cstr(x[1], 'val') for x in attributes.items()])
+        keys_str = b'\0'.join([cstr(x[0], 'key') for x in attributes.items()])
+        vals_str = b'\0'.join([cstr(x[1], 'val') for x in attributes.items()])
         cdef:
             rados_ioctx_t _ioctx = convert_ioctx(ioctx)
             char *_uuid = uuid
@@ -2152,8 +2153,8 @@ cdef class MirrorImageStatusIterator(object):
         if ret < 0:
             raise make_ex(ret, 'error listing mirror images status')
         if self.size > 0:
+            last_read = cstr(self.image_ids[self.size - 1], 'last_read')
             free(self.last_read)
-            last_read = decode_cstr(self.image_ids[self.size - 1])
             self.last_read = strdup(last_read)
         else:
             free(self.last_read)
@@ -2219,8 +2220,8 @@ cdef class MirrorImageInstanceIdIterator(object):
         if ret < 0:
             raise make_ex(ret, 'error listing mirror images instance ids')
         if self.size > 0:
+            last_read = cstr(self.image_ids[self.size - 1], 'last_read')
             free(self.last_read)
-            last_read = decode_cstr(self.image_ids[self.size - 1])
             self.last_read = strdup(last_read)
         else:
             free(self.last_read)
@@ -2272,8 +2273,8 @@ cdef class PoolMetadataIterator(object):
                 c_vals = <char *>realloc_chk(c_vals, vals_size)
                 with nogil:
                     ret = rbd_pool_metadata_list(self.ioctx, self.last_read,
-                                                 self.max_read, c_keys, &keys_size,
-                                                 c_vals, &vals_size)
+                                                 self.max_read, c_keys,
+                                                 &keys_size, c_vals, &vals_size)
                 if ret >= 0:
                     break
                 elif ret != -errno.ERANGE:
@@ -2283,9 +2284,10 @@ cdef class PoolMetadataIterator(object):
             vals = [decode_cstr(val) for val in
                         c_vals[:vals_size].split(b'\0') if val]
             if len(keys) > 0:
+                last_read = cstr(keys[-1], 'last_read')
                 free(self.last_read)
-                self.last_read = strdup(keys[-1])
-            self.next_chunk = zip(keys, vals)
+                self.last_read = strdup(last_read)
+            self.next_chunk = list(zip(keys, vals))
         finally:
             free(c_keys)
             free(c_vals)
@@ -4360,9 +4362,10 @@ cdef class MetadataIterator(object):
             vals = [decode_cstr(val) for val in
                         c_vals[:vals_size].split(b'\0') if val]
             if len(keys) > 0:
+                last_read = cstr(keys[-1], 'last_read')
                 free(self.last_read)
-                self.last_read = strdup(keys[-1])
-            self.next_chunk = zip(keys, vals)
+                self.last_read = strdup(last_read)
+            self.next_chunk = list(zip(keys, vals))
         finally:
             free(c_keys)
             free(c_vals)
