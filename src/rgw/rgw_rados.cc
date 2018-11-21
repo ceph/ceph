@@ -6497,7 +6497,6 @@ static void _get_obj_aio_completion_cb(completion_t cb, void *arg);
 struct get_obj_data : public RefCountedObject {
   CephContext *cct;
   RGWRados *rados;
-  RGWObjectCtx *ctx;
   IoCtx io_ctx;
   map<off_t, get_obj_io> io_map;
   map<off_t, librados::AioCompletion *> completion_map;
@@ -6513,7 +6512,7 @@ struct get_obj_data : public RefCountedObject {
 
   explicit get_obj_data(CephContext *_cct)
     : cct(_cct),
-      rados(NULL), ctx(NULL),
+      rados(NULL),
       total_read(0), lock("get_obj_data"), data_lock("get_obj_data::data_lock"),
       client_cb(NULL),
       throttle(cct, "get_obj_data", cct->_conf->rgw_get_obj_window_size, false) {}
@@ -6663,11 +6662,14 @@ struct get_obj_data : public RefCountedObject {
   }
 };
 
-static int _get_obj_iterate_cb(const RGWBucketInfo& bucket_info, const rgw_obj& obj, const rgw_raw_obj& read_obj, off_t obj_ofs, off_t read_ofs, off_t len, bool is_head_obj, RGWObjState *astate, void *arg)
+static int _get_obj_iterate_cb(const rgw_raw_obj& read_obj, off_t obj_ofs,
+                               off_t read_ofs, off_t len, bool is_head_obj,
+                               RGWObjState *astate, void *arg)
 {
   struct get_obj_data *d = (struct get_obj_data *)arg;
 
-  return d->rados->get_obj_iterate_cb(d->ctx, astate, bucket_info, obj, read_obj, obj_ofs, read_ofs, len, is_head_obj, arg);
+  return d->rados->get_obj_iterate_cb(read_obj, obj_ofs, read_ofs, len,
+                                      is_head_obj, astate, arg);
 }
 
 static void _get_obj_aio_completion_cb(completion_t cb, void *arg)
@@ -6751,15 +6753,10 @@ int RGWRados::flush_read_list(struct get_obj_data *d)
   return r;
 }
 
-int RGWRados::get_obj_iterate_cb(RGWObjectCtx *ctx, RGWObjState *astate,
-                         const RGWBucketInfo& bucket_info,
-                         const rgw_obj& obj,
-		         const rgw_raw_obj& read_obj,
-			 off_t obj_ofs,
-                         off_t read_ofs, off_t len,
-                         bool is_head_obj, void *arg)
+int RGWRados::get_obj_iterate_cb(const rgw_raw_obj& read_obj, off_t obj_ofs,
+                                 off_t read_ofs, off_t len, bool is_head_obj,
+                                 RGWObjState *astate, void *arg)
 {
-  RGWObjectCtx *rctx = static_cast<RGWObjectCtx *>(ctx);
   ObjectReadOperation op;
   struct get_obj_data *d = (struct get_obj_data *)arg;
   string oid, key;
@@ -6770,7 +6767,7 @@ int RGWRados::get_obj_iterate_cb(RGWObjectCtx *ctx, RGWObjState *astate,
 
   if (is_head_obj) {
     /* only when reading from the head object do we need to do the atomic test */
-    r = append_atomic_test(rctx, bucket_info, obj, op, &astate);
+    r = append_atomic_test(astate, op);
     if (r < 0)
       return r;
 
@@ -6873,12 +6870,8 @@ done:
 
 int RGWRados::iterate_obj(RGWObjectCtx& obj_ctx,
                           const RGWBucketInfo& bucket_info, const rgw_obj& obj,
-                          off_t ofs, off_t end,
-			  uint64_t max_chunk_size,
-			  int (*iterate_obj_cb)(const RGWBucketInfo&, const rgw_obj& obj,
-                                                const rgw_raw_obj&, off_t, off_t, off_t, bool,
-                                                RGWObjState *, void *),
-	                  void *arg)
+                          off_t ofs, off_t end, uint64_t max_chunk_size,
+                          iterate_obj_cb cb, void *arg)
 {
   rgw_raw_obj head_obj;
   rgw_raw_obj read_obj;
@@ -6919,7 +6912,7 @@ int RGWRados::iterate_obj(RGWObjectCtx& obj_ctx,
         }
 
         reading_from_head = (read_obj == head_obj);
-        r = iterate_obj_cb(bucket_info, obj, read_obj, ofs, read_ofs, read_len, reading_from_head, astate, arg);
+        r = cb(read_obj, ofs, read_ofs, read_len, reading_from_head, astate, arg);
 	if (r < 0) {
 	  return r;
         }
@@ -6933,7 +6926,7 @@ int RGWRados::iterate_obj(RGWObjectCtx& obj_ctx,
       read_obj = head_obj;
       uint64_t read_len = std::min(len, max_chunk_size);
 
-      r = iterate_obj_cb(bucket_info, obj, read_obj, ofs, ofs, read_len, reading_from_head, astate, arg);
+      r = cb(read_obj, ofs, ofs, read_len, reading_from_head, astate, arg);
       if (r < 0) {
 	return r;
       }
