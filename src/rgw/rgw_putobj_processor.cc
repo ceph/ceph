@@ -605,13 +605,13 @@ int AppendObjectProcessor::complete(size_t accounted_size, const string &etag, c
   if (r < 0) {
     return r;
   }
-  obj_ctx.obj.set_atomic(head_obj);
+  obj_ctx.set_atomic(head_obj);
   RGWRados::Object op_target(store, bucket_info, obj_ctx, head_obj);
   //For Append obj, disable versioning
   op_target.set_versioning_disabled(true);
   RGWRados::Object::Write obj_op(&op_target);
   if (cur_manifest) {
-    cur_manifest->append(manifest, store);
+    cur_manifest->append(manifest, store->svc.zone);
     obj_op.meta.manifest = cur_manifest;
   } else {
     obj_op.meta.manifest = &manifest;
