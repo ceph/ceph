@@ -235,6 +235,33 @@ def task(ctx, config):
 
     assert ret == 200
 
+    # TESTCASE 'list-no-user','user','list','list user keys','user list object'
+    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'list'], {'max-entries' : 0})
+    assert ret == 200
+    assert out['count'] == 0
+    assert out['truncated'] == True
+    assert len(out['keys']) == 0
+    assert len(out['marker']) > 0
+
+    # TESTCASE 'list-user-without-marker','user','list','list user keys','user list object'
+    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'list'], {'max-entries' : 1})
+    assert ret == 200
+    assert out['count'] == 1
+    assert out['truncated'] == True
+    assert len(out['keys']) == 1
+    assert len(out['marker']) > 0
+    marker = out['marker']
+
+    # TESTCASE 'list-user-with-marker','user','list','list user keys','user list object'
+    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'list'], {'max-entries' : 1, 'marker': marker})
+    assert ret == 200
+    assert out['count'] == 1
+    assert out['truncated'] == False
+    assert len(out['keys']) == 1
+
+    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'list'], {'max-entries' : 1,
+        'marker': })
+
     # TESTCASE 'info-existing','user','info','existing user','returns correct info'
     (ret, out) = rgwadmin_rest(admin_conn, ['user', 'info'], {'uid' : user1})
 
