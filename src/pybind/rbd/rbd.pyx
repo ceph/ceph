@@ -559,6 +559,13 @@ cdef extern from "rbd/librbd.h" nogil:
     void rbd_config_image_list_cleanup(rbd_config_option_t *options,
                                        int max_options)
 
+    int rbd_namespace_create(rados_ioctx_t io, const char *namespace_name)
+    int rbd_namespace_remove(rados_ioctx_t io, const char *namespace_name)
+    int rbd_namespace_list(rados_ioctx_t io, char *namespace_names,
+                           size_t *size)
+    int rbd_namespace_exists(rados_ioctx_t io, const char *namespace_name,
+                             bint *exists)
+
     int rbd_pool_init(rados_ioctx_t, bint force)
 
     void rbd_pool_stats_create(rbd_pool_stats_t *stats)
@@ -1931,6 +1938,89 @@ class RBD(object):
             ret = rbd_group_rename(_ioctx, _src, _dest)
         if ret != 0:
             raise make_ex(ret, 'error renaming group')
+
+    def namespace_create(self, ioctx, name):
+        """
+        Create an RBD namespace within a pool
+
+        :param ioctx: determines which RADOS pool
+        :type ioctx: :class:`rados.Ioctx`
+        :param name: namespace name
+        :type name: str
+        """
+        name = cstr(name, 'name')
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            const char *_name = name
+        with nogil:
+            ret = rbd_namespace_create(_ioctx, _name)
+        if ret != 0:
+            raise make_ex(ret, 'error creating namespace')
+
+    def namespace_remove(self, ioctx, name):
+        """
+        Remove an RBD namespace from a pool
+
+        :param ioctx: determines which RADOS pool
+        :type ioctx: :class:`rados.Ioctx`
+        :param name: namespace name
+        :type name: str
+        """
+        name = cstr(name, 'name')
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            const char *_name = name
+        with nogil:
+            ret = rbd_namespace_remove(_ioctx, _name)
+        if ret != 0:
+            raise make_ex(ret, 'error removing namespace')
+
+    def namespace_exists(self, ioctx, name):
+        """
+        Verifies if a namespace exists within a pool
+
+        :param ioctx: determines which RADOS pool
+        :type ioctx: :class:`rados.Ioctx`
+        :param name: namespace name
+        :type name: str
+        :returns: bool - true if namespace exists
+        """
+        name = cstr(name, 'name')
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            const char *_name = name
+            bint _exists = False
+        with nogil:
+            ret = rbd_namespace_exists(_ioctx, _name, &_exists)
+        if ret != 0:
+            raise make_ex(ret, 'error verifying namespace')
+        return bool(_exists != 0)
+
+    def namespace_list(self, ioctx):
+        """
+        List all namespaces within a pool
+
+        :param ioctx: determines which RADOS pool
+        :type ioctx: :class:`rados.Ioctx`
+        :returns: list - collection of namespace names
+        """
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            char *_names = NULL
+            size_t _size = 512
+        try:
+            while True:
+                _names = <char *>realloc_chk(_names, _size)
+                with nogil:
+                    ret = rbd_namespace_list(_ioctx, _names, &_size)
+                if ret >= 0:
+                    break
+                elif ret != -errno.ERANGE:
+                    raise make_ex(ret, 'error listing namespaces')
+            return [decode_cstr(name) for name in _names[:_size].split(b'\0')
+                    if name]
+        finally:
+            free(_names)
 
     def pool_init(self, ioctx, force):
         """
