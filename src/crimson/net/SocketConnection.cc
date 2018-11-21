@@ -533,8 +533,6 @@ SocketConnection::send_connect_reply_ready(msgr_tag_t tag,
         return socket->flush();
       }
     }).then([this] {
-      messenger.register_conn(this);
-      messenger.unaccept_conn(this);
       return stop_t::yes;
     });
 }
@@ -889,6 +887,8 @@ SocketConnection::accept(seastar::connected_socket&& fd,
               return dispatcher.ms_handle_accept(this);
             });
         }).then([this] {
+          messenger.register_conn(this);
+          messenger.unaccept_conn(this);
           execute_open();
         }).handle_exception([this] (std::exception_ptr eptr) {
           // TODO: handle fault in the accepting state
