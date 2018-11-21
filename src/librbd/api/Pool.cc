@@ -294,7 +294,7 @@ int Pool<I>::get_stats(librados::IoCtx& io_ctx, StatOptions* stat_options) {
   if (image_count != nullptr || provisioned_bytes != nullptr ||
       max_provisioned_bytes != nullptr || snapshot_count != nullptr) {
     typename Image<I>::ImageNameToIds images;
-    int r = Image<I>::list_images(io_ctx, &images);
+    int r = Image<I>::list_images_v2(io_ctx, &images);
     if (r < 0) {
       return r;
     }
