@@ -46,15 +46,23 @@ int list_process_image(librados::Rados* rados, WorkerEntry* w, bool lflag, Forma
 {
   int r = 0;
   librbd::image_info_t info;
-  std::string pool, image, snap, parent;
+  std::string parent;
 
   // handle second-nth trips through loop
-  r = w->img.parent_info(&pool, &image, &snap);
-  if (r < 0 && r != -ENOENT)
+  librbd::linked_image_spec_t parent_image_spec;
+  librbd::snap_spec_t parent_snap_spec;
+  r = w->img.get_parent(&parent_image_spec, &parent_snap_spec);
+  if (r < 0 && r != -ENOENT) {
     return r;
+  }
+
   bool has_parent = false;
   if (r != -ENOENT) {
-    parent = pool + "/" + image + "@" + snap;
+    parent = parent_image_spec.pool_name + "/";
+    if (!parent_image_spec.pool_namespace.empty()) {
+      parent += parent_image_spec.pool_namespace + "/";
+    }
+    parent +=  parent_image_spec.image_name + "@" + parent_snap_spec.name;
     has_parent = true;
   }
 
@@ -81,9 +89,10 @@ int list_process_image(librados::Rados* rados, WorkerEntry* w, bool lflag, Forma
     f->dump_unsigned("size", info.size);
     if (has_parent) {
       f->open_object_section("parent");
-      f->dump_string("pool", pool);
-      f->dump_string("image", image);
-      f->dump_string("snapshot", snap);
+      f->dump_string("pool", parent_image_spec.pool_name);
+      f->dump_string("pool_namespace", parent_image_spec.pool_namespace);
+      f->dump_string("image", parent_image_spec.image_name);
+      f->dump_string("snapshot", parent_snap_spec.name);
       f->close_section();
     }
     f->dump_int("format", old_format ? 1 : 2);
@@ -115,8 +124,12 @@ int list_process_image(librados::Rados* rados, WorkerEntry* w, bool lflag, Forma
       r = w->img.snap_is_protected(s->name.c_str(), &is_protected);
       if (r < 0)
         return r;
-      if (w->img.parent_info(&pool, &image, &snap) >= 0) {
-        parent = pool + "/" + image + "@" + snap;
+      if (w->img.get_parent(&parent_image_spec, &parent_snap_spec) >= 0) {
+        parent = parent_image_spec.pool_name + "/";
+        if (!parent_image_spec.pool_namespace.empty()) {
+          parent += parent_image_spec.pool_namespace + "/";
+        }
+        parent +=  parent_image_spec.image_name + "@" + parent_snap_spec.name;
         has_parent = true;
       }
       if (f) {
@@ -126,9 +139,10 @@ int list_process_image(librados::Rados* rados, WorkerEntry* w, bool lflag, Forma
         f->dump_unsigned("size", s->size);
         if (has_parent) {
           f->open_object_section("parent");
-          f->dump_string("pool", pool);
-          f->dump_string("image", image);
-          f->dump_string("snapshot", snap);
+          f->dump_string("pool", parent_image_spec.pool_name);
+          f->dump_string("pool_namespace", parent_image_spec.pool_namespace);
+          f->dump_string("image", parent_image_spec.image_name);
+          f->dump_string("snapshot", parent_snap_spec.name);
           f->close_section();
         }
         f->dump_int("format", old_format ? 1 : 2);
@@ -152,7 +166,7 @@ int list_process_image(librados::Rados* rados, WorkerEntry* w, bool lflag, Forma
 int do_list(const std::string &pool_name, const std::string& namespace_name,
             bool lflag, int threads, Formatter *f) {
   std::vector<WorkerEntry*> workers;
-  std::vector<std::string> names;
+  std::vector<librbd::image_spec_t> images;
   librados::Rados rados;
   librbd::RBD rbd;
   librados::IoCtx ioctx;
@@ -171,19 +185,18 @@ int do_list(const std::string &pool_name, const std::string& namespace_name,
 
   utils::disable_cache();
 
-  r = rbd.list(ioctx, names);
+  r = rbd.list2(ioctx, &images);
   if (r < 0)
     return r;
 
   if (!lflag) {
     if (f)
       f->open_array_section("images");
-    for (std::vector<std::string>::const_iterator i = names.begin();
-       i != names.end(); ++i) {
+    for (auto& image : images) {
        if (f)
-	 f->dump_string("name", *i);
+	 f->dump_string("name", image.name);
        else
-	 std::cout << *i << std::endl;
+	 std::cout << image.name << std::endl;
     }
     if (f) {
       f->close_section();
@@ -205,11 +218,12 @@ int do_list(const std::string &pool_name, const std::string& namespace_name,
     tbl.define_column("LOCK", TextTable::LEFT, TextTable::LEFT);
   }
 
-  for (int left = 0; left < std::min(threads, (int)names.size()); left++) {
+  for (size_t left = 0; left < std::min<size_t>(threads, images.size());
+       left++) {
     workers.push_back(new WorkerEntry());
   }
 
-  auto i = names.begin();
+  auto i = images.begin();
   while (true) {
     size_t workers_idle = 0;
     for (auto comp : workers) {
@@ -221,13 +235,14 @@ int do_list(const std::string &pool_name, const std::string& namespace_name,
 	  comp->completion = nullptr;
 	  // we want it to fall through in this case
 	case STATE_IDLE:
-	  if (i == names.end()) {
+	  if (i == images.end()) {
 	    workers_idle++;
 	    continue;
 	  }
-	  comp->name = *i;
+	  comp->name = i->name;
 	  comp->completion = new librbd::RBD::AioCompletion(nullptr, nullptr);
-	  r = rbd.aio_open_read_only(ioctx, comp->img, i->c_str(), NULL, comp->completion);
+	  r = rbd.aio_open_read_only(ioctx, comp->img, i->name.c_str(), nullptr,
+                                     comp->completion);
 	  i++;
 	  comp->state = STATE_OPENED;
 	  break;
@@ -241,8 +256,8 @@ int do_list(const std::string &pool_name, const std::string& namespace_name,
 	  comp->completion->release();
 	  if (r < 0) {
 	    if (r != -ENOENT) {
-	      std::cerr << "rbd: error opening " << *i << ": " << cpp_strerror(r)
-			<< std::endl;
+	      std::cerr << "rbd: error opening " << i->name << ": "
+                        << cpp_strerror(r) << std::endl;
 	    }
 	    // in any event, continue to next image
 	    comp->state = STATE_IDLE;
@@ -250,8 +265,8 @@ int do_list(const std::string &pool_name, const std::string& namespace_name,
 	  }
 	  r = list_process_image(&rados, comp, lflag, f, tbl);
 	  if (r < 0) {
-	      std::cerr << "rbd: error processing image " << comp->name << ": " << cpp_strerror(r)
-			<< std::endl;
+	      std::cerr << "rbd: error processing image " << comp->name << ": "
+                        << cpp_strerror(r) << std::endl;
 	  }
 	  comp->completion = new librbd::RBD::AioCompletion(nullptr, nullptr);
 	  r = comp->img.aio_close(comp->completion);
@@ -267,7 +282,7 @@ int do_list(const std::string &pool_name, const std::string& namespace_name,
   if (f) {
     f->close_section();
     f->flush(std::cout);
-  } else if (!names.empty()) {
+  } else if (!images.empty()) {
     std::cout << tbl;
   }
 
