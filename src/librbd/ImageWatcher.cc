@@ -85,7 +85,8 @@ ImageWatcher<I>::ImageWatcher(I &image_ctx)
     m_task_finisher(new TaskFinisher<Task>(*m_image_ctx.cct)),
     m_async_request_lock(util::unique_lock_name("librbd::ImageWatcher::m_async_request_lock", this)),
     m_owner_client_id_lock(util::unique_lock_name("librbd::ImageWatcher::m_owner_client_id_lock", this)),
-    m_notifier(image_ctx)
+    m_notifier(image_ctx),
+    m_watch_error_count(0)
 {
 }
 
@@ -1014,9 +1015,11 @@ void ImageWatcher<I>::handle_error(uint64_t handle, int err) {
   }
 
   RWLock::WLocker l(m_watch_lock);
+  m_watch_error_count += 1;
+  lderr(m_image_ctx.cct) << this << " handle_error count= " << m_watch_error_count << dendl;
   if (m_watch_state == WATCH_STATE_REGISTERED) {
     m_watch_state = WATCH_STATE_ERROR;
-
+    lderr(m_image_ctx.cct) << this << " handle_error transition to STATE_ERROR, trigger rewatch " << dendl;
     FunctionContext *ctx = new FunctionContext(
       boost::bind(&ImageWatcher<I>::rewatch, this));
     m_task_finisher->queue(TASK_CODE_REREGISTER_WATCH, ctx);
@@ -1035,9 +1038,11 @@ void ImageWatcher<I>::rewatch() {
 
   RWLock::WLocker l(m_watch_lock);
   if (m_watch_state != WATCH_STATE_ERROR) {
+    ldout(m_image_ctx.cct, 10) << this << " rewatch: not in STATE_ERROR" << dendl;
     return;
   }
   m_watch_state = WATCH_STATE_REWATCHING;
+  ldout(m_image_ctx.cct, 10) << this << " rewatch: transition to STATE_REWATCHING" << dendl;
 
   Context *ctx = create_context_callback<
     ImageWatcher<I>, &ImageWatcher<I>::handle_rewatch>(this);
@@ -1050,29 +1055,56 @@ void ImageWatcher<I>::rewatch() {
 template <typename I>
 void ImageWatcher<I>::handle_rewatch(int r) {
   CephContext *cct = m_image_ctx.cct;
+  Context *unregister_watch_ctx = nullptr;
+
   ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
 
-  WatchState next_watch_state = WATCH_STATE_REGISTERED;
-  if (r < 0) {
-    // only EBLACKLISTED or ENOENT can be returned
-    assert(r == -EBLACKLISTED || r == -ENOENT);
-    next_watch_state = WATCH_STATE_UNREGISTERED;
-  }
-
-  Context *unregister_watch_ctx = nullptr;
-  {
+  { // scope to hold the lock
     RWLock::WLocker watch_locker(m_watch_lock);
-    assert(m_watch_state == WATCH_STATE_REWATCHING);
-    m_watch_state = next_watch_state;
 
-    std::swap(unregister_watch_ctx, m_unregister_watch_ctx);
+    ldout(m_image_ctx.cct, 10) << this << " handle_rewatch error_count=" << m_watch_error_count << dendl;
+    ldout(m_image_ctx.cct, 10) << this << " handle_rewatch unregister_watch_ctx=" << m_unregister_watch_ctx << dendl;
 
-    // image might have been updated while we didn't have active watch
-    handle_payload(HeaderUpdatePayload(), nullptr);
+    bool retry_rewatch = (m_watch_error_count > 1 &&
+                          m_unregister_watch_ctx == nullptr);
+
+    ldout(m_image_ctx.cct, 10) << this << " handle_rewatch retry=" << retry_rewatch << dendl;
+
+    if (retry_rewatch) {
+      // We have accumulated more errors while rewatching. Don't finalize this
+      // rewatch attempt and start another one.
+      m_watch_error_count = 1;
+      ldout(m_image_ctx.cct, 10) << this << " handle_rewatch transitioning to STATE_ERROR " << dendl;
+      m_watch_state = WATCH_STATE_ERROR;
+      FunctionContext *ctx = new FunctionContext(
+        boost::bind(&ImageWatcher<I>::rewatch, this));
+      m_task_finisher->queue(TASK_CODE_REREGISTER_WATCH, ctx);
+      return;
+    }
+
+    m_watch_error_count = 0;
+    ldout(m_image_ctx.cct, 10) << this << " handle_rewatch transitioning to STATE_REGISTERED " << dendl;
+    WatchState next_watch_state = WATCH_STATE_REGISTERED;
+    if (r < 0) {
+      // only EBLACKLISTED or ENOENT can be returned
+      assert(r == -EBLACKLISTED || r == -ENOENT);
+      next_watch_state = WATCH_STATE_UNREGISTERED;
+    }
+
+    {
+      assert(m_watch_state == WATCH_STATE_REWATCHING);
+      m_watch_state = next_watch_state;
+
+      std::swap(unregister_watch_ctx, m_unregister_watch_ctx);
+
+      // image might have been updated while we didn't have active watch
+      handle_payload(HeaderUpdatePayload(), nullptr);
+    }
   }
 
   // wake up pending unregister request
   if (unregister_watch_ctx != nullptr) {
+    ldout(m_image_ctx.cct, 10) << this << " handle_rewatch unregistering watch " << dendl;
     unregister_watch_ctx->complete(0);
   }
 }

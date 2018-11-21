@@ -227,6 +227,8 @@ private:
   WatchCtx m_watch_ctx;
   uint64_t m_watch_handle;
   WatchState m_watch_state;
+  uint64_t m_watch_error_count;
+
   Context *m_unregister_watch_ctx = nullptr;
 
   TaskFinisher<Task> *m_task_finisher;
