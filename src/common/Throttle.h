@@ -206,7 +206,7 @@ public:
    * set_params
    *
    * Sets params.  If the params are invalid, returns false
-   * and populates errstream (if non-null) with a user compreshensible
+   * and populates errstream (if non-null) with a user comprehensible
    * explanation.
    */
   bool set_params(
