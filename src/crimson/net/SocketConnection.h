@@ -153,7 +153,7 @@ class SocketConnection : public Connection {
 
   seastar::future<> fault();
 
-  void dispatch();
+  void execute_open();
 
   /// start a handshake from the client's perspective,
   /// only call when SocketConnection first construct
