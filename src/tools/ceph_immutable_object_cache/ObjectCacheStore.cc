@@ -29,7 +29,7 @@ ObjectCacheStore::ObjectCacheStore(CephContext *cct, ContextWQ* work_queue)
   m_cache_root_dir = cache_path + "/ceph_immutable_obj_cache/";
 
   //TODO(): allow to set cache level
-  m_policy = new SimplePolicy(m_cct, object_cache_entries, 0.8);
+  m_policy = new SimplePolicy(m_cct, object_cache_entries, 0.1);
 }
 
 ObjectCacheStore::~ObjectCacheStore() {
@@ -178,8 +178,10 @@ int ObjectCacheStore::handle_promote_callback(int ret, bufferlist* read_buf,
 
   delete read_buf;
   return ret;
+
+  evict_objects();
 }
- 
+
 int ObjectCacheStore::lookup_object(std::string pool_name,
     std::string vol_name, std::string object_name) {
   ldout(m_cct, 20) << "object name = " << object_name
@@ -190,7 +192,6 @@ int ObjectCacheStore::lookup_object(std::string pool_name,
 
   switch(ret) {
     case OBJ_CACHE_NONE: {
-      evict_objects();
       pret = do_promote(pool_name, vol_name, object_name);
       if (pret < 0) {
         lderr(m_cct) << "fail to start promote" << dendl;

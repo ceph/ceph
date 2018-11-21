@@ -169,7 +169,7 @@ void SimplePolicy::get_evict_list(std::list<std::string>* obj_list) {
   RWLock::WLocker locker(m_cache_map_lock);
   // check free ratio, pop entries from LRU
   if ((float)m_free_list.size() / m_entry_count < m_watermark) {
-    int evict_num = 10; //TODO(): make this configurable
+    int evict_num = m_entry_count * 0.1; //TODO(): make this configurable
     for (int i = 0; i < evict_num; i++) {
       Entry* entry = reinterpret_cast<Entry*>(m_promoted_lru.lru_expire());
       if (entry == nullptr) {
