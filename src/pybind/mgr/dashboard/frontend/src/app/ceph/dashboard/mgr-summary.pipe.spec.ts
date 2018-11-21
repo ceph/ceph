@@ -24,18 +24,30 @@ describe('MgrSummaryPipe', () => {
   });
 
   it('transforms with active_name undefined', () => {
-    const value = {
+    const payload = {
       active_name: undefined,
       standbys: []
     };
-    expect(pipe.transform(value)).toBe('active: n/a');
+    const expected = [
+      { class: 'mgr-active-name', content: 'n/a active', titleText: '' },
+      { class: 'card-text-line-break', content: '', titleText: '' },
+      { class: '', content: '0 standby', titleText: '' }
+    ];
+
+    expect(pipe.transform(payload)).toEqual(expected);
   });
 
   it('transforms with 1 active and 2 standbys', () => {
-    const value = {
+    const payload = {
       active_name: 'a',
       standbys: ['b', 'c']
     };
-    expect(pipe.transform(value)).toBe('active: a, 2 standbys');
+    const expected = [
+      { class: 'mgr-active-name', content: '1 active', titleText: 'active daemon: a' },
+      { class: 'card-text-line-break', content: '', titleText: '' },
+      { class: '', content: '2 standby', titleText: '' }
+    ];
+
+    expect(pipe.transform(payload)).toEqual(expected);
   });
 });
