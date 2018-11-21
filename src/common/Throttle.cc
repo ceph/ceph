@@ -423,7 +423,7 @@ ceph::timespan BackoffThrottle::get(uint64_t c)
   }
 
   // fast path
-  if (delay == ceph::make_timespan(0) &&
+  if (delay.count() == 0 &&
       waiters.empty() &&
       ((max == 0) || (current == 0) || ((current + c) <= max))) {
     current += c;
@@ -444,20 +444,26 @@ ceph::timespan BackoffThrottle::get(uint64_t c)
     waited = true;
   }
 
-  auto start = ceph::real_clock::now();
+  auto start = mono_clock::now();
   delay = _get_delay(c);
   while (true) {
-    if (!((max == 0) || (current == 0) || (current + c) <= max)) {
+    if (max != 0 && current != 0 && (current + c) > max) {
       (*ticket)->wait(l);
       waited = true;
-    } else if (delay > ceph::timespan(0)) {
+    } else if (delay.count() > 0) {
       (*ticket)->wait_for(l, delay);
       waited = true;
     } else {
       break;
     }
     ceph_assert(ticket == waiters.begin());
-    delay = _get_delay(c) - (ceph::real_clock::now() - start);
+    delay = _get_delay(c);
+    auto elapsed = mono_clock::now() - start;
+    if (delay <= elapsed) {
+      delay = timespan::zero();
+    } else {
+      delay -= elapsed;
+    }
   }
   waiters.pop_front();
   _kick_waiters();
@@ -471,7 +477,7 @@ ceph::timespan BackoffThrottle::get(uint64_t c)
     }
   }
 
-  return ceph::real_clock::now() - start;
+  return mono_clock::now() - start;
 }
 
 uint64_t BackoffThrottle::put(uint64_t c)
