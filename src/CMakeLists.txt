@@ -739,9 +739,10 @@ add_custom_target(vstart-base DEPENDS
     rados
     cython${PY_BINDING_INFIX}_rados)
 
-add_custom_target(vstart DEPENDS
-    vstart-base
-    cython${PY_BINDING_INFIX}_rbd)
+add_custom_target(vstart DEPENDS vstart-base)
+if (WITH_RBD)
+  add_dependencies(vstart cython${PY_BINDING_INFIX}_rbd)
+endif()
 if (WITH_CEPHFS)
   add_dependencies(vstart ceph-mds)
 endif()
