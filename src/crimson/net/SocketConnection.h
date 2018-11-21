@@ -153,7 +153,7 @@ class SocketConnection : public Connection {
 
   seastar::future<> fault();
 
-  seastar::future<> dispatch();
+  void dispatch();
 
   /// start a handshake from the client's perspective,
   /// only call when SocketConnection first construct
@@ -185,8 +185,8 @@ class SocketConnection : public Connection {
  public:
   void connect(const entity_addr_t& peer_addr,
                const entity_type_t& peer_type);
-  seastar::future<> accept(seastar::connected_socket&& socket,
-                           const entity_addr_t& peer_addr);
+  void accept(seastar::connected_socket&& socket,
+              const entity_addr_t& peer_addr);
 
   /// read a message from a connection that has completed its handshake
   seastar::future<MessageRef> read_message();

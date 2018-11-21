@@ -40,18 +40,6 @@ void SocketMessenger::bind(const entity_addr_t& addr)
   listener = seastar::listen(address, lo);
 }
 
-seastar::future<> SocketMessenger::accept(seastar::connected_socket socket,
-                                          seastar::socket_address paddr)
-{
-  // allocate the connection
-  entity_addr_t peer_addr;
-  peer_addr.set_type(entity_addr_t::TYPE_DEFAULT);
-  peer_addr.set_sockaddr(&paddr.as_posix_sockaddr());
-  SocketConnectionRef conn = new SocketConnection(*this, get_myaddr(), *dispatcher);
-  // initiate the handshake
-  return conn->accept(std::move(socket), peer_addr);
-}
-
 seastar::future<> SocketMessenger::start(Dispatcher *disp)
 {
   dispatcher = disp;
@@ -62,10 +50,13 @@ seastar::future<> SocketMessenger::start(Dispatcher *disp)
         return listener->accept()
           .then([this] (seastar::connected_socket socket,
                         seastar::socket_address paddr) {
-            // start processing the connection
-            accept(std::move(socket), paddr)
-              .handle_exception([] (std::exception_ptr eptr) {});
+            // allocate the connection
+            entity_addr_t peer_addr;
+            peer_addr.set_type(entity_addr_t::TYPE_DEFAULT);
+            peer_addr.set_sockaddr(&paddr.as_posix_sockaddr());
+            SocketConnectionRef conn = new SocketConnection(*this, get_myaddr(), *dispatcher);
             // don't wait before accepting another
+            conn->accept(std::move(socket), peer_addr);
           });
       }).handle_exception_type([this] (const std::system_error& e) {
         // stop gracefully on connection_aborted
