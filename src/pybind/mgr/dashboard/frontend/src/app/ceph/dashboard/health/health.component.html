@@ -15,7 +15,7 @@
     <cd-info-card cardTitle="Cluster Status"
                   i18n-cardTitle
                   class="col-sm-6 col-md-4 col-lg-3"
-                  [contentClass]="contentData.health?.checks?.length > 0 ? 'content-highlight content-row-size-1-5' : 'content-highlight'"
+                  [contentClass]="contentData.health?.checks?.length > 0 ? 'content-highlight text-area-size-2' : 'content-highlight'"
                   *ngIf="contentData.health?.status">
       <ng-container *ngIf="contentData.health?.checks?.length > 0">
         <ng-template #healthChecks>
@@ -59,9 +59,10 @@
                   i18n-cardTitle
                   link="/osd"
                   class="col-sm-6 col-md-4 col-lg-3"
-                  *ngIf="contentData.osd_map"
-                  contentClass="content-row-size-2 content-highlight">
-      <span *ngFor="let result of (contentData.osd_map | osdSummary)" [ngClass]="result.class">
+                  *ngIf="(contentData.osd_map | osdSummary) as transformedResult"
+                  [contentClass]="(transformedResult.length == 5 ? 'text-area-size-3' : 'text-area-size-2') + ' content-highlight'">
+      <span *ngFor="let result of transformedResult"
+            [ngClass]="result.class">
         {{ result.content }}
       </span>
     </cd-info-card>
@@ -69,9 +70,13 @@
     <cd-info-card cardTitle="Manager Daemons"
                   i18n-cardTitle
                   class="col-sm-6 col-md-4 col-lg-3"
-                  contentClass="content-highlight"
+                  contentClass="content-highlight text-area-size-2"
                   *ngIf="contentData.mgr_map">
-      {{ contentData.mgr_map | mgrSummary }}
+      <span *ngFor="let result of (contentData.mgr_map | mgrSummary)"
+            [ngClass]="result.class"
+            [title]="result.titleText != null ? result.titleText : ''">
+        {{ result.content }}
+      </span>
     </cd-info-card>
 
     <cd-info-card cardTitle="Hosts"
@@ -80,7 +85,7 @@
                   class="col-sm-6 col-md-4 col-lg-3"
                   contentClass="content-medium content-highlight"
                   *ngIf="contentData.hosts != null">
-      {{ contentData.hosts }}
+      {{ contentData.hosts }} total
     </cd-info-card>
 
     <cd-info-card cardTitle="Object Gateways"
@@ -89,14 +94,17 @@
                   class="col-sm-6 col-md-4 col-lg-3"
                   contentClass="content-medium content-highlight"
                   *ngIf="contentData.rgw != null">
-      {{ contentData.rgw }}
+      {{ contentData.rgw }} total
     </cd-info-card>
     <cd-info-card cardTitle="Metadata Servers"
                   i18n-cardTitle
                   class="col-sm-6 col-md-4 col-lg-3"
-                  contentClass="content-highlight"
-                  *ngIf="contentData.fs_map">
-      {{ contentData.fs_map | mdsSummary }}
+                  *ngIf="(contentData.fs_map | mdsSummary) as transformedResult"
+                  [contentClass]="(transformedResult.length > 1 ? 'text-area-size-2' : '') + ' content-highlight'">
+      <span *ngFor="let result of transformedResult"
+            [ngClass]="result.class">
+        {{ result.content }}
+      </span>
     </cd-info-card>
 
     <cd-info-card cardTitle="iSCSI Gateways"
@@ -105,7 +113,7 @@
                   class="col-sm-6 col-md-4 col-lg-3"
                   contentClass="content-medium content-highlight"
                   *ngIf="contentData.iscsi_daemons != null">
-      {{ contentData.iscsi_daemons }}
+      {{ contentData.iscsi_daemons }} total
     </cd-info-card>
   </cd-info-group>
 
