@@ -320,6 +320,10 @@ def test_list_empty():
 def test_list():
     eq([image_name], RBD().list(ioctx))
 
+    with Image(ioctx, image_name) as image:
+        image_id = image.id()
+    eq([{'id': image_id, 'name': image_name}], list(RBD().list2(ioctx)))
+
 @with_setup(create_image, remove_image)
 def test_rename():
     rbd = RBD()
@@ -1334,7 +1338,8 @@ class TestClone(object):
         self.image.set_snap('snap1')
         self.check_children([(pool_name, self.clone_name)])
         self.check_children2(
-            [{'pool': pool_name, 'image': self.clone_name, 'trash': False,
+            [{'pool': pool_name, 'pool_namespace': '',
+              'image': self.clone_name, 'trash': False,
               'id': self.get_image_id(ioctx, self.clone_name)}])
         self.clone.close()
         self.rbd.remove(ioctx, self.clone_name)
@@ -1349,7 +1354,8 @@ class TestClone(object):
                            clone_name + str(i), features)
             expected_children.append((pool_name, clone_name + str(i)))
             expected_children2.append(
-                {'pool': pool_name, 'image': clone_name + str(i), 'trash': False,
+                {'pool': pool_name, 'pool_namespace': '',
+                 'image': clone_name + str(i), 'trash': False,
                  'id': self.get_image_id(ioctx, clone_name + str(i))})
             self.check_children(expected_children)
             self.check_children2(expected_children2)
@@ -1386,7 +1392,8 @@ class TestClone(object):
                        features)
         self.check_children([(pool_name, self.clone_name)])
         self.check_children2(
-            [{'pool': pool_name, 'image': self.clone_name, 'trash': False,
+            [{'pool': pool_name, 'pool_namespace': '',
+              'image': self.clone_name, 'trash': False,
               'id': self.get_image_id(ioctx, self.clone_name)}])
         self.clone = Image(ioctx, self.clone_name)
 

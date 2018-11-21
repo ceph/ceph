@@ -4,6 +4,7 @@
 #ifndef LIBRBD_API_IMAGE_H
 #define LIBRBD_API_IMAGE_H
 
+#include "include/rbd/librbd.hpp"
 #include "librbd/Types.h"
 #include <map>
 #include <set>
@@ -22,19 +23,24 @@ namespace api {
 
 template <typename ImageCtxT = librbd::ImageCtx>
 struct Image {
-  typedef std::tuple<int64_t, std::string, std::string> PoolSpec;
-  typedef std::set<std::string> ImageIds;
-  typedef std::map<PoolSpec, ImageIds> PoolImageIds;
   typedef std::map<std::string, std::string> ImageNameToIds;
 
   static int get_op_features(ImageCtxT *ictx, uint64_t *op_features);
 
   static int list_images(librados::IoCtx& io_ctx,
-                         ImageNameToIds *images);
+                         std::vector<image_spec_t> *images);
+  static int list_images_v2(librados::IoCtx& io_ctx,
+                            ImageNameToIds *images);
+
+  static int get_parent(ImageCtxT *ictx,
+                        librbd::linked_image_spec_t *parent_image,
+                        librbd::snap_spec_t *parent_snap);
 
   static int list_children(ImageCtxT *ictx,
+                           std::vector<librbd::linked_image_spec_t> *images);
+  static int list_children(ImageCtxT *ictx,
                            const cls::rbd::ParentImageSpec &parent_spec,
-                           PoolImageIds *pool_image_ids);
+                           std::vector<librbd::linked_image_spec_t> *images);
 
   static int deep_copy(ImageCtxT *ictx, librados::IoCtx& dest_md_ctx,
                        const char *destname, ImageOptions& opts,

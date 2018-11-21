@@ -303,36 +303,44 @@ int Mirror<I>::image_disable(I *ictx, bool force) {
         cls::rbd::ParentImageSpec parent_spec{ictx->md_ctx.get_id(),
                                               ictx->md_ctx.get_namespace(),
                                               ictx->id, info.first};
-        map< tuple<int64_t, string, string>, set<string> > image_info;
-
-        r = Image<I>::list_children(ictx, parent_spec, &image_info);
+        std::vector<librbd::linked_image_spec_t> child_images;
+        r = Image<I>::list_children(ictx, parent_spec, &child_images);
         if (r < 0) {
           rollback = true;
           return r;
         }
-        if (image_info.empty())
-          continue;
 
-        for (auto &info: image_info) {
-          librados::IoCtx ioctx;
-          r = util::create_ioctx(ictx->md_ctx, "child image",
-                                 std::get<0>(info.first),
-                                 std::get<2>(info.first), &ioctx);
-          if (r < 0) {
-            rollback = true;
-            return r;
+        if (child_images.empty()) {
+          continue;
+        }
+
+        librados::IoCtx child_io_ctx;
+        int64_t child_pool_id = -1;
+        for (auto &child_image : child_images){
+          std::string pool = child_image.pool_name;
+          if (child_pool_id == -1 ||
+              child_pool_id != child_image.pool_id ||
+              child_io_ctx.get_namespace() != child_image.pool_namespace) {
+            r = util::create_ioctx(ictx->md_ctx, "child image",
+                                   child_image.pool_id,
+                                   child_image.pool_namespace,
+                                   &child_io_ctx);
+            if (r < 0) {
+              rollback = true;
+              return r;
+            }
+
+            child_pool_id = child_image.pool_id;
           }
 
-          for (auto &id_it : info.second) {
-            cls::rbd::MirrorImage mirror_image_internal;
-            r = cls_client::mirror_image_get(&ioctx, id_it,
-                                             &mirror_image_internal);
-            if (r != -ENOENT) {
-              rollback = true;
-              lderr(cct) << "mirroring is enabled on one or more children "
-                         << dendl;
-              return -EBUSY;
-            }
+          cls::rbd::MirrorImage mirror_image_internal;
+          r = cls_client::mirror_image_get(&child_io_ctx, child_image.image_id,
+                                           &mirror_image_internal);
+          if (r != -ENOENT) {
+            rollback = true;
+            lderr(cct) << "mirroring is enabled on one or more children "
+                       << dendl;
+            return -EBUSY;
           }
         }
       }
@@ -634,7 +642,7 @@ int Mirror<I>::mode_set(librados::IoCtx& io_ctx,
 
   if (next_mirror_mode == cls::rbd::MIRROR_MODE_POOL) {
     map<string, string> images;
-    r = Image<I>::list_images(io_ctx, &images);
+    r = Image<I>::list_images_v2(io_ctx, &images);
     if (r < 0) {
       lderr(cct) << "failed listing images: " << cpp_strerror(r) << dendl;
       return r;
@@ -984,7 +992,7 @@ int Mirror<I>::image_status_list(librados::IoCtx& io_ctx,
   map<string, string> id_to_name;
   {
     map<string, string> name_to_id;
-    r = Image<I>::list_images(io_ctx, &name_to_id);
+    r = Image<I>::list_images_v2(io_ctx, &name_to_id);
     if (r < 0) {
       return r;
     }
