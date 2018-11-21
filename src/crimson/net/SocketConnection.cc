@@ -843,8 +843,7 @@ SocketConnection::connect(const entity_addr_t& _peer_addr,
           // TODO: retry on fault
         }).then([this] {
           // dispatch replies on this connection
-          dispatch()
-            .handle_exception([] (std::exception_ptr eptr) {});
+          dispatch();
         });
     });
 }
@@ -885,7 +884,7 @@ SocketConnection::start_accept()
     });
 }
 
-seastar::future<>
+void
 SocketConnection::accept(seastar::connected_socket&& fd,
                          const entity_addr_t& _peer_addr)
 {
@@ -895,7 +894,7 @@ SocketConnection::accept(seastar::connected_socket&& fd,
   socket.emplace(std::move(fd));
   messenger.accept_conn(this);
   state = state_t::accepting;
-  return seastar::with_gate(pending_dispatch, [this] {
+  seastar::with_gate(pending_dispatch, [this] {
       return start_accept()
         .then([this] {
           // notify the dispatcher and allow them to reject the connection
@@ -909,15 +908,15 @@ SocketConnection::accept(seastar::connected_socket&& fd,
         }).then([this] {
           // dispatch messages until the connection closes or the dispatch
           // queue shuts down
-          return dispatch();
+          dispatch();
         });
     });
 }
 
-seastar::future<>
+void
 SocketConnection::dispatch()
 {
-  return seastar::with_gate(pending_dispatch, [this] {
+  seastar::with_gate(pending_dispatch, [this] {
       return seastar::keep_doing([=] {
           return read_message()
             .then([=] (MessageRef msg) {
@@ -942,6 +941,8 @@ SocketConnection::dispatch()
           } else {
             throw e;
           }
+        }).handle_exception([] (std::exception_ptr eptr) {
+          // TODO: handle fault in the open state
         });
     });
 }
