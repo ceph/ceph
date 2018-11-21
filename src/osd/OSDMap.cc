@@ -1637,12 +1637,12 @@ void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
     to_check.insert(p.first);
   }
   for (auto& pg : to_check) {
-    auto crush_rule = tmpmap.get_pg_pool_crush_rule(pg);
-    if (crush_rule < 0) {
-      lderr(cct) << __func__ << " unable to load crush-rule of pg "
-                 << pg << dendl;
+    if (!tmpmap.pg_exists(pg)) {
+      ldout(cct, 0) << __func__ << " pg " << pg << " is gone" << dendl;
+      to_cancel.insert(pg);
       continue;
     }
+    auto crush_rule = tmpmap.get_pg_pool_crush_rule(pg);
     map<int, float> weight_map;
     auto it = rule_weight_map.find(crush_rule);
     if (it == rule_weight_map.end()) {
