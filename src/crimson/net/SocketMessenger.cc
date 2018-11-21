@@ -95,9 +95,6 @@ seastar::future<> SocketMessenger::shutdown()
         });
     }).finally([this] {
       ceph_assert(connections.empty());
-      // closing connections will unblock any dispatchers that were waiting to
-      // send(). wait for any pending calls to finish
-      return pending_dispatch.close();
     });
 }
 
@@ -160,15 +157,11 @@ SocketMessenger::verify_authorizer(peer_type_t peer_type,
 				   auth_proto_t protocol,
 				   bufferlist& auth)
 {
-  return seastar::with_gate(pending_dispatch, [=, &auth] {
-      return dispatcher->ms_verify_authorizer(peer_type, protocol, auth);
-    });
+  return dispatcher->ms_verify_authorizer(peer_type, protocol, auth);
 }
 
 seastar::future<std::unique_ptr<AuthAuthorizer>>
 SocketMessenger::get_authorizer(peer_type_t peer_type, bool force_new)
 {
-  return seastar::with_gate(pending_dispatch, [=] {
-      return dispatcher->ms_get_authorizer(peer_type, force_new);
-    });
+  return dispatcher->ms_get_authorizer(peer_type, force_new);
 }
