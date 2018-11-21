@@ -404,9 +404,9 @@ Syntax
 
 
 Append Object
-----------
+-------------
 Append data to an object. You must have write permissions on the bucket to perform this operation.
-It is used to upload files in appending mode.The type of the objects created by the Append Object
+It is used to upload files in appending mode. The type of the objects created by the Append Object
 operation is Appendable Object, and the type of the objects uploaded with the Put Object operation is Normal Object.
 **Append Object can't be used if bucket versioning is enabled.**
 
