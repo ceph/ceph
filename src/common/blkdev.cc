@@ -380,6 +380,7 @@ std::string get_device_id(const std::string& devname)
   struct udev_device *dev;
   static struct udev *udev;
   const char *data;
+  std::string device_model;
   std::string device_id;
 
   udev = udev_new();
@@ -392,9 +393,14 @@ std::string get_device_id(const std::string& devname)
     return {};
   }
 
+  data = udev_device_get_property_value(dev, "ID_MODEL");
+  if (data) {
+    device_model = data;
+  }
+
   // "ID_SERIAL_SHORT" returns only the serial number;
-  // "ID_SERIAL" returns vendor model_serial.
-  data = udev_device_get_property_value(dev, "ID_SERIAL");
+  // "ID_SERIAL" returns vendor model_serial but can be unreliable and return.
+  data = udev_device_get_property_value(dev, "ID_SERIAL_SHORT");
   if (data) {
     device_id = data;
   }
@@ -402,9 +408,10 @@ std::string get_device_id(const std::string& devname)
   udev_device_unref(dev);
   udev_unref(udev);
 
-  if (!device_id.empty()) {
+  if (!device_id.empty() and !device_model.empty()) {
+    std::replace(device_model.begin(), device_model.end(), ' ', '_');
     std::replace(device_id.begin(), device_id.end(), ' ', '_');
-    return device_id;
+    return device_model + '_' + device_id;
   }
 
   // either udev_device_get_property_value() failed, or succeeded but
