@@ -155,13 +155,6 @@ class SocketConnection : public Connection {
 
   void execute_open();
 
-  /// start a handshake from the client's perspective,
-  /// only call when SocketConnection first construct
-  seastar::future<> start_connect();
-  /// start a handshake from the server's perspective,
-  /// only call when SocketConnection first construct
-  seastar::future<> start_accept();
-
  public:
   SocketConnection(SocketMessenger& messenger,
                    const entity_addr_t& my_addr,
@@ -183,10 +176,14 @@ class SocketConnection : public Connection {
   seastar::future<> close() override;
 
  public:
-  void connect(const entity_addr_t& peer_addr,
-               const entity_type_t& peer_type);
-  void accept(seastar::connected_socket&& socket,
-              const entity_addr_t& peer_addr);
+  /// start a handshake from the client's perspective,
+  /// only call when SocketConnection first construct
+  void start_connect(const entity_addr_t& peer_addr,
+                     const entity_type_t& peer_type);
+  /// start a handshake from the server's perspective,
+  /// only call when SocketConnection first construct
+  void start_accept(seastar::connected_socket&& socket,
+                    const entity_addr_t& peer_addr);
 
   /// read a message from a connection that has completed its handshake
   seastar::future<MessageRef> read_message();
