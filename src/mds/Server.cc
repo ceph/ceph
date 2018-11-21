@@ -3676,9 +3676,6 @@ void Server::handle_client_openc(MDRequestRef& mdr)
   }
 
   // create inode.
-  SnapRealm *realm = diri->find_snaprealm();   // use directory's realm; inode isn't attached yet.
-  snapid_t follows = realm->get_newest_seq();
-
   CInode *in = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino),
 				 req->head.args.open.mode | S_IFREG, &layout);
   assert(in);
@@ -3690,15 +3687,25 @@ void Server::handle_client_openc(MDRequestRef& mdr)
   if (layout.pool_id != mdcache->default_file_layout.pool_id)
     in->inode.add_old_pool(mdcache->default_file_layout.pool_id);
   in->inode.update_backtrace();
-  if (cmode & CEPH_FILE_MODE_WR) {
+  in->inode.rstat.rfiles = 1;
+
+  SnapRealm *realm = diri->find_snaprealm();
+  snapid_t follows = realm->get_newest_seq();
+
+  ceph_assert(dn->first == follows+1);
+  in->first = dn->first;
+
+  // do the open
+  Capability *cap = mds->locker->issue_new_caps(in, cmode, mdr->session, realm, req->is_replay());
+  in->authlock.set_state(LOCK_EXCL);
+  in->xattrlock.set_state(LOCK_EXCL);
+
+  if (cap && (cmode & CEPH_FILE_MODE_WR)) {
     in->inode.client_ranges[client].range.first = 0;
     in->inode.client_ranges[client].range.last = in->inode.get_layout_size_increment();
     in->inode.client_ranges[client].follows = follows;
+    cap->mark_clientwriteable();
   }
-  in->inode.rstat.rfiles = 1;
-
-  assert(dn->first == follows+1);
-  in->first = dn->first;
   
   // prepare finisher
   mdr->ls = mdlog->get_current_segment();
@@ -3708,11 +3715,6 @@ void Server::handle_client_openc(MDRequestRef& mdr)
   journal_allocated_inos(mdr, &le->metablob);
   mdcache->predirty_journal_parents(mdr, &le->metablob, in, dn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   le->metablob.add_primary_dentry(dn, in, true, true, true);
-
-  // do the open
-  mds->locker->issue_new_caps(in, cmode, mdr->session, realm, req->is_replay());
-  in->authlock.set_state(LOCK_EXCL);
-  in->xattrlock.set_state(LOCK_EXCL);
 
   // make sure this inode gets into the journal
   le->metablob.add_opened_ino(in->ino());
@@ -4278,7 +4280,7 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
     // adjust client's max_size?
     CInode::mempool_inode::client_range_map new_ranges;
     bool max_increased = false;
-    mds->locker->calc_new_client_ranges(cur, pi.inode.size, &new_ranges, &max_increased);
+    mds->locker->calc_new_client_ranges(cur, pi.inode.size, true, &new_ranges, &max_increased);
     if (pi.inode.client_ranges != new_ranges) {
       dout(10) << " client_ranges " << pi.inode.client_ranges << " -> " << new_ranges << dendl;
       pi.inode.client_ranges = new_ranges;
@@ -4316,7 +4318,7 @@ void Server::do_open_truncate(MDRequestRef& mdr, int cmode)
   dout(10) << "do_open_truncate " << *in << dendl;
 
   SnapRealm *realm = in->find_snaprealm();
-  mds->locker->issue_new_caps(in, cmode, mdr->session, realm, mdr->client_request->is_replay());
+  Capability *cap = mds->locker->issue_new_caps(in, cmode, mdr->session, realm, mdr->client_request->is_replay());
 
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "open_truncate");
@@ -4337,11 +4339,12 @@ void Server::do_open_truncate(MDRequestRef& mdr, int cmode)
   }
 
   bool changed_ranges = false;
-  if (cmode & CEPH_FILE_MODE_WR) {
+  if (cap && (cmode & CEPH_FILE_MODE_WR)) {
     pi.inode.client_ranges[client].range.first = 0;
     pi.inode.client_ranges[client].range.last = pi.inode.get_layout_size_increment();
     pi.inode.client_ranges[client].follows = in->find_snaprealm()->get_newest_seq();
     changed_ranges = true;
+    cap->mark_clientwriteable();
   }
   
   le->metablob.add_client_req(mdr->reqid, mdr->client_request->get_oldest_client_tid());
@@ -5223,11 +5226,6 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
   // if the client created a _regular_ file via MKNOD, it's highly likely they'll
   // want to write to it (e.g., if they are reexporting NFS)
   if (S_ISREG(newi->inode.mode)) {
-    dout(15) << " setting a client_range too, since this is a regular file" << dendl;
-    newi->inode.client_ranges[client].range.first = 0;
-    newi->inode.client_ranges[client].range.last = newi->inode.get_layout_size_increment();
-    newi->inode.client_ranges[client].follows = follows;
-
     // issue a cap on the file
     int cmode = CEPH_FILE_MODE_RDWR;
     Capability *cap = mds->locker->issue_new_caps(newi, cmode, mdr->session, realm, req->is_replay());
@@ -5238,6 +5236,12 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
       newi->filelock.set_state(LOCK_EXCL);
       newi->authlock.set_state(LOCK_EXCL);
       newi->xattrlock.set_state(LOCK_EXCL);
+
+      dout(15) << " setting a client_range too, since this is a regular file" << dendl;
+      newi->inode.client_ranges[client].range.first = 0;
+      newi->inode.client_ranges[client].range.last = newi->inode.get_layout_size_increment();
+      newi->inode.client_ranges[client].follows = follows;
+      cap->mark_clientwriteable();
     }
   }
 

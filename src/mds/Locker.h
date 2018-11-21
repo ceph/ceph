@@ -258,7 +258,7 @@ protected:
 private:
   uint64_t calc_new_max_size(CInode::mempool_inode *pi, uint64_t size);
 public:
-  void calc_new_client_ranges(CInode *in, uint64_t size,
+  void calc_new_client_ranges(CInode *in, uint64_t size, bool update,
 			      CInode::mempool_inode::client_range_map* new_ranges,
 			      bool *max_increased);
   bool check_inode_max_size(CInode *in, bool force_wrlock=false,

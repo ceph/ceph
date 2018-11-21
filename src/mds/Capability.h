@@ -110,10 +110,9 @@ public:
     static void generate_test_instances(list<revoke_info*>& ls);
   };
 
-
   const static unsigned STATE_NEW		= (1<<1);
   const static unsigned STATE_IMPORTING		= (1<<2);
-
+  const static unsigned STATE_CLIENTWRITEABLE	= (1<<4);
 
   Capability(CInode *i=nullptr, Session *s=nullptr, uint64_t id=0);
   Capability(const Capability& other);  // no copying
@@ -231,6 +230,18 @@ public:
   bool is_importing() { return state & STATE_IMPORTING; }
   void mark_importing() { state |= STATE_IMPORTING; }
   void clear_importing() { state &= ~STATE_IMPORTING; }
+
+  bool is_clientwriteable() const { return state & STATE_CLIENTWRITEABLE; }
+  void mark_clientwriteable() {
+    if (!is_clientwriteable()) {
+      state |= STATE_CLIENTWRITEABLE;
+    }
+  }
+  void clear_clientwriteable() {
+    if (is_clientwriteable()) {
+      state &= ~STATE_CLIENTWRITEABLE;
+    }
+  }
 
   CInode *get_inode() const { return inode; }
   Session *get_session() const { return session; }
