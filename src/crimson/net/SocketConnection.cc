@@ -821,9 +821,7 @@ SocketConnection::start_connect(const entity_addr_t& _peer_addr,
           fut.forward_to(std::move(h.promise));
         }).then([this] {
           // notify the dispatcher and allow them to reject the connection
-          return seastar::with_gate(messenger.pending_dispatch, [this] {
-            return dispatcher.ms_handle_connect(this);
-          });
+          return dispatcher.ms_handle_connect(this);
         }).then([this] {
           execute_open();
         }).handle_exception([this] (std::exception_ptr eptr) {
@@ -873,9 +871,7 @@ SocketConnection::start_accept(seastar::connected_socket&& fd,
           fut.forward_to(std::move(h.promise));
         }).then([this] {
           // notify the dispatcher and allow them to reject the connection
-          return seastar::with_gate(messenger.pending_dispatch, [=] {
-              return dispatcher.ms_handle_accept(this);
-            });
+          return dispatcher.ms_handle_accept(this);
         }).then([this] {
           messenger.register_conn(this);
           messenger.unaccept_conn(this);
@@ -898,7 +894,7 @@ SocketConnection::execute_open()
           return read_message()
             .then([this] (MessageRef msg) {
               // start dispatch, ignoring exceptions from the application layer
-              seastar::with_gate(messenger.pending_dispatch, [this, msg = std::move(msg)] {
+              seastar::with_gate(pending_dispatch, [this, msg = std::move(msg)] {
                   return dispatcher.ms_dispatch(this, std::move(msg))
                     .handle_exception([] (std::exception_ptr eptr) {});
                 });
@@ -908,13 +904,9 @@ SocketConnection::execute_open()
         }).handle_exception_type([this] (const std::system_error& e) {
           if (e.code() == error::connection_aborted ||
               e.code() == error::connection_reset) {
-            return seastar::with_gate(messenger.pending_dispatch, [this] {
-                return dispatcher.ms_handle_reset(this);
-              });
+            return dispatcher.ms_handle_reset(this);
           } else if (e.code() == error::read_eof) {
-            return seastar::with_gate(messenger.pending_dispatch, [this] {
-                return dispatcher.ms_handle_remote_reset(this);
-              });
+            return dispatcher.ms_handle_remote_reset(this);
           } else {
             throw e;
           }
