@@ -79,6 +79,7 @@ class Device(object):
         self._is_lvm_member = None
         self._parse()
         self.available, self.rejected_reasons = self._check_reject_reasons()
+        self.device_id = self._get_device_id()
 
     def __lt__(self, other):
         '''
@@ -171,6 +172,22 @@ class Device(object):
                   self.report_fields}
         output['lvs'] = [lv.report() for lv in self.lvs]
         return output
+
+    def _get_device_id(self):
+        props = ['ID_MODEL','ID_SERIAL_SHORT']
+        dev_id = disk.udevadm_property(self.abspath, props)
+        if all([prop in dev_id and dev_id[prop] for prop in props]):
+            values = [dev_id[prop].replace(' ', '_') for prop in props]
+            return '_'.join(values)
+        else:
+            # the else branch should fallback to using sysfs and ioctl to
+            # retrieve device_id on FreeBSD. Still figuring out if/how the
+            # python ioctl implementation does that on FreeBSD
+            return ''
+        return ''
+
+
+
 
     def _set_lvm_membership(self):
         if self._is_lvm_member is None:
