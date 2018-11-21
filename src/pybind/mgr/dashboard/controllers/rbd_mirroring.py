@@ -119,9 +119,11 @@ def get_daemons_and_pools():  # pylint: disable=R0915
 
             try:
                 mirror_mode = rbdctx.mirror_mode_get(ioctx)
+                peer_uuids = [x['uuid'] for x in rbdctx.mirror_peer_list(ioctx)]
             except:  # noqa pylint: disable=W0702
-                logger.exception("Failed to query mirror mode %s", pool_name)
+                logger.exception("Failed to query mirror settings %s", pool_name)
                 mirror_mode = None
+                peer_uuids = []
 
             stats = {}
             if mirror_mode == rbd.RBD_MIRROR_MODE_DISABLED:
@@ -138,7 +140,8 @@ def get_daemons_and_pools():  # pylint: disable=R0915
                 stats['health'] = "Warning"
 
             pool_stats[pool_name] = dict(stats, **{
-                'mirror_mode': mirror_mode
+                'mirror_mode': mirror_mode,
+                'peer_uuids': peer_uuids
             })
 
         for daemon in daemons:
