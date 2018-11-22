@@ -3560,9 +3560,8 @@ void Client::check_caps(Inode *in, unsigned flags)
     if (!revoking && unmounting && (cap_used == 0))
       goto ack;
 
-    if (wanted == cap.wanted &&         // mds knows what we want.
-	((cap.issued & ~retain) == 0) &&// and we don't have anything we wouldn't like
-	!in->dirty_caps)                 // and we have no dirty caps
+    if ((cap.issued & ~retain) == 0 && // and we don't have anything we wouldn't like
+	!in->dirty_caps)               // and we have no dirty caps
       continue;
 
     if (!(flags & CHECK_CAPS_NODELAY)) {
@@ -5120,6 +5119,7 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const M
 
   const int old_caps = cap->issued;
   const int new_caps = m->get_caps();
+  const bool was_stale = session->cap_gen > cap->gen;
   ldout(cct, 5) << __func__ << " on in " << m->get_ino() 
 		<< " mds." << mds << " seq " << m->get_seq()
 		<< " caps now " << ccap_string(new_caps)
@@ -5193,8 +5193,17 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const M
   }
 
   bool check = false;
-  if (m->get_op() == CEPH_CAP_OP_IMPORT && m->get_wanted() != wanted)
+  if ((was_stale || m->get_op() == CEPH_CAP_OP_IMPORT) &&
+      (wanted & ~(cap->wanted | new_caps))) {
+    // If mds is importing cap, prior cap messages that update 'wanted'
+    // may get dropped by mds (migrate seq mismatch).
+    //
+    // We don't send cap message to update 'wanted' if what we want are
+    // already issued. If mds revokes caps, cap message that releases caps
+    // also tells mds what we want. But if caps got revoked by mds forcedly
+    // (session stale). We may haven't told mds what we want.
     check = true;
+  }
 
   check_cap_issue(in, cap, new_caps);
 
