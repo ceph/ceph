@@ -71,11 +71,14 @@ int get_pool(const po::variables_map &vm, std::string *pool_name) {
   return 0;
 }
 
-int get_key(const po::variables_map &vm, std::string *key) {
-  *key = utils::get_positional_argument(vm, 1);
+int get_key(const po::variables_map &vm, size_t *arg_index,
+            std::string *key) {
+  *key = utils::get_positional_argument(vm, *arg_index);
   if (key->empty()) {
     std::cerr << "rbd: config key was not specified" << std::endl;
     return -EINVAL;
+  } else {
+    ++(*arg_index);
   }
 
   if (!boost::starts_with(*key, "rbd_")) {
@@ -203,7 +206,8 @@ int execute_global_get(const po::variables_map &vm,
   }
 
   std::string key;
-  r = get_key(vm, &key);
+  size_t arg_index = 1;
+  r = get_key(vm, &arg_index, &key);
   if (r < 0) {
     return r;
   }
@@ -248,7 +252,8 @@ int execute_global_set(const po::variables_map &vm,
   }
 
   std::string key;
-  r = get_key(vm, &key);
+  size_t arg_index = 1;
+  r = get_key(vm, &arg_index, &key);
   if (r < 0) {
     return r;
   }
@@ -294,7 +299,8 @@ int execute_global_remove(
   }
 
   std::string key;
-  r = get_key(vm, &key);
+  size_t arg_index = 1;
+  r = get_key(vm, &arg_index, &key);
   if (r < 0) {
     return r;
   }
@@ -406,7 +412,8 @@ int execute_pool_get(const po::variables_map &vm,
   }
 
   std::string key;
-  r = get_key(vm, &key);
+  size_t arg_index = 1;
+  r = get_key(vm, &arg_index, &key);
   if (r < 0) {
     return r;
   }
@@ -453,7 +460,8 @@ int execute_pool_set(const po::variables_map &vm,
   }
 
   std::string key;
-  r = get_key(vm, &key);
+  size_t arg_index = 1;
+  r = get_key(vm, &arg_index, &key);
   if (r < 0) {
     return r;
   }
@@ -493,7 +501,8 @@ int execute_pool_remove(const po::variables_map &vm,
   }
 
   std::string key;
-  r = get_key(vm, &key);
+  size_t arg_index = 1;
+  r = get_key(vm, &arg_index, &key);
   if (r < 0) {
     return r;
   }
@@ -607,7 +616,7 @@ int execute_image_get(const po::variables_map &vm,
   }
 
   std::string key;
-  r = get_key(vm, &key);
+  r = get_key(vm, &arg_index, &key);
   if (r < 0) {
     return r;
   }
@@ -662,7 +671,7 @@ int execute_image_set(const po::variables_map &vm,
   }
 
   std::string key;
-  r = get_key(vm, &key);
+  r = get_key(vm, &arg_index, &key);
   if (r < 0) {
     return r;
   }
@@ -711,7 +720,7 @@ int execute_image_remove(
   }
 
   std::string key;
-  r = get_key(vm, &key);
+  r = get_key(vm, &arg_index, &key);
   if (r < 0) {
     return r;
   }
