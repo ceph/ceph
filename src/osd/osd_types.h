@@ -2739,6 +2739,8 @@ struct pg_info_t {
   pg_history_t history;
   pg_hit_set_history_t hit_set;
 
+  bool have_missing;
+
   friend bool operator==(const pg_info_t& l, const pg_info_t& r) {
     return
       l.pgid == r.pgid &&
@@ -2753,7 +2755,8 @@ struct pg_info_t {
       l.purged_snaps == r.purged_snaps &&
       l.stats == r.stats &&
       l.history == r.history &&
-      l.hit_set == r.hit_set;
+      l.hit_set == r.hit_set &&
+      l.have_missing == r.have_missing; 
   }
 
   pg_info_t()
@@ -2761,7 +2764,8 @@ struct pg_info_t {
       last_interval_started(0),
       last_user_version(0),
       last_backfill(hobject_t::get_max()),
-      last_backfill_bitwise(false)
+      last_backfill_bitwise(false),
+      have_missing(false)
   { }
   // cppcheck-suppress noExplicitConstructor
   pg_info_t(spg_t p)
@@ -2770,7 +2774,8 @@ struct pg_info_t {
       last_interval_started(0),
       last_user_version(0),
       last_backfill(hobject_t::get_max()),
-      last_backfill_bitwise(false)
+      last_backfill_bitwise(false),
+      have_missing(false)
   { }
   
   void set_last_backfill(hobject_t pos) {
@@ -2781,7 +2786,7 @@ struct pg_info_t {
   bool is_empty() const { return last_update.version == 0; }
   bool dne() const { return history.epoch_created == 0; }
 
-  bool has_missing() const { return last_complete != last_update; }
+  bool has_missing() const { return (last_complete != last_update) | have_missing; }
   bool is_incomplete() const { return !last_backfill.is_max(); }
 
   void encode(ceph::buffer::list& bl) const;
@@ -2811,6 +2816,8 @@ inline std::ostream& operator<<(std::ostream& out, const pg_info_t& pgi)
   out << " local-lis/les=" << pgi.last_interval_started
       << "/" << pgi.last_epoch_started;
   out << " n=" << pgi.stats.stats.sum.num_objects;
+  if (pgi.have_missing)
+    out << " w/ m";
   out << " " << pgi.history
       << ")";
   return out;

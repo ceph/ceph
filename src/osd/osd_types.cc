@@ -3207,7 +3207,7 @@ void pg_history_t::generate_test_instances(list<pg_history_t*>& o)
 
 void pg_info_t::encode(ceph::buffer::list &bl) const
 {
-  ENCODE_START(32, 26, bl);
+  ENCODE_START(33, 26, bl);
   encode(pgid.pgid, bl);
   encode(last_update, bl);
   encode(last_complete, bl);
@@ -3227,12 +3227,13 @@ void pg_info_t::encode(ceph::buffer::list &bl) const
   encode(last_backfill, bl);
   encode(last_backfill_bitwise, bl);
   encode(last_interval_started, bl);
+  encode(have_missing, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_info_t::decode(ceph::buffer::list::const_iterator &bl)
 {
-  DECODE_START(32, bl);
+  DECODE_START(33, bl);
   decode(pgid.pgid, bl);
   decode(last_update, bl);
   decode(last_complete, bl);
@@ -3255,6 +3256,9 @@ void pg_info_t::decode(ceph::buffer::list::const_iterator &bl)
   } else {
     last_interval_started = last_epoch_started;
   }
+  if (struct_v >= 33) {
+    decode(have_missing, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -3269,6 +3273,7 @@ void pg_info_t::dump(Formatter *f) const
   f->dump_int("last_user_version", last_user_version);
   f->dump_stream("last_backfill") << last_backfill;
   f->dump_int("last_backfill_bitwise", (int)last_backfill_bitwise);
+  f->dump_bool("have_missing", have_missing);
   f->open_array_section("purged_snaps");
   for (interval_set<snapid_t>::const_iterator i=purged_snaps.begin();
        i != purged_snaps.end();
@@ -3310,6 +3315,7 @@ void pg_info_t::generate_test_instances(list<pg_info_t*>& o)
   o.back()->log_tail = eversion_t(7, 8);
   o.back()->last_backfill = hobject_t(object_t("objname"), "key", 123, 456, -1, "");
   o.back()->last_backfill_bitwise = true;
+  o.back()->have_missing = false;
   {
     list<pg_stat_t*> s;
     pg_stat_t::generate_test_instances(s);

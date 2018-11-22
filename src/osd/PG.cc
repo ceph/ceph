@@ -478,7 +478,9 @@ bool PG::proc_replica_info(
   pg_shard_t from, const pg_info_t &oinfo, epoch_t send_epoch)
 {
   map<pg_shard_t, pg_info_t>::iterator p = peer_info.find(from);
-  if (p != peer_info.end() && p->second.last_update == oinfo.last_update) {
+  if (p != peer_info.end() &&
+      p->second.last_update == oinfo.last_update &&
+      p->second.have_missing == oinfo.have_missing) {
     dout(10) << " got dup osd." << from << " info " << oinfo << ", identical to ours" << dendl;
     return false;
   }
@@ -6074,7 +6076,8 @@ void PG::fulfill_query(const MQuery& query, RecoveryCtx *rctx)
 	query.query_epoch,
 	get_osdmap_epoch(),
 	notify_info.second),
-      past_intervals);
+      past_intervals,
+      pg_log.get_missing().have_missing());
   } else {
     update_history(query.query.history);
     fulfill_log(query.from, query.query, query.query_epoch);
@@ -9552,7 +9555,8 @@ PG::RecoveryState::GetMissing::GetMissing(my_context ctx)
     }
 
     if (pi.last_update == pi.last_complete &&  // peer has no missing
-	pi.last_update == pg->info.last_update) {  // peer is up to date
+	pi.last_update == pg->info.last_update &&  // peer is up to date
+	!pi.have_missing) {
       // replica has no missing and identical log as us.  no need to
       // pull anything.
       // FIXME: we can do better here.  if last_update==last_complete we

@@ -1052,9 +1052,12 @@ public:
     }
 
     void send_notify(pg_shard_t to,
-		     const pg_notify_t &info, const PastIntervals &pi) {
+		     const pg_notify_t &info,
+		     const PastIntervals &pi,
+		     const bool has_missing) {
       ceph_assert(notify_list);
       (*notify_list)[to.osd].emplace_back(info, pi);
+      (*notify_list)[to.osd].back().first.info.have_missing = has_missing;
     }
   };
 protected:
@@ -2132,7 +2135,7 @@ protected:
       void send_notify(pg_shard_t to,
 		       const pg_notify_t &info, const PastIntervals &pi) {
 	ceph_assert(state->rctx);
-	state->rctx->send_notify(to, info, pi);
+	state->rctx->send_notify(to, info, pi, pg->pg_log.get_missing().have_missing());
       }
     };
     friend class RecoveryMachine;
