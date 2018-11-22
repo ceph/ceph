@@ -277,14 +277,20 @@ int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool long_flag,
     time_str = time_str.substr(0, time_str.length() - 1);
 
     bool has_parent = false;
-    std::string pool, image, snap, parent;
-    r = im.parent_info(&pool, &image, &snap);
+    std::string parent;
+    librbd::linked_image_spec_t parent_image;
+    librbd::snap_spec_t parent_snap;
+    r = im.get_parent(&parent_image, &parent_snap);
     if (r == -ENOENT) {
       r = 0;
     } else if (r < 0) {
       return r;
     } else {
-      parent = pool + "/" + image + "@" + snap;
+      parent = parent_image.pool_name + "/";
+      if (!parent_image.pool_namespace.empty()) {
+        parent += parent_image.pool_namespace + "/";
+      }
+      parent += parent_image.image_name + "@" + parent_snap.name;
       has_parent = true;
     }
 
@@ -298,9 +304,10 @@ int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool long_flag,
                      delete_status(entry.deferment_end_time));
       if (has_parent) {
         f->open_object_section("parent");
-        f->dump_string("pool", pool);
-        f->dump_string("image", image);
-        f->dump_string("snapshot", snap);
+        f->dump_string("pool", parent_image.pool_name);
+        f->dump_string("pool_namespace", parent_image.pool_namespace);
+        f->dump_string("image", parent_image.image_name);
+        f->dump_string("snapshot", parent_snap.name);
         f->close_section();
       }
       f->close_section();
