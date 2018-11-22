@@ -6479,7 +6479,7 @@ TEST_F(TestLibRBD, BreakLock)
   ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
   ASSERT_EQ(0, rbd_open(blacklist_ioctx, name.c_str(), &blacklist_image, NULL));
 
-  ASSERT_EQ(0, rbd_metadata_set(image, "rbd_blacklist_on_break_lock", "true"));
+  ASSERT_EQ(0, rbd_metadata_set(image, "conf_rbd_blacklist_on_break_lock", "true"));
   ASSERT_EQ(0, rbd_lock_acquire(blacklist_image, RBD_LOCK_MODE_EXCLUSIVE));
 
   rbd_lock_mode_t lock_mode;
