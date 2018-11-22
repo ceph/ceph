@@ -150,45 +150,24 @@ public:
 
   //clear all strong reference from the lru.
   void clear() {
-    while (true) {
-      VPtr val; // release any ref we have after we drop the lock
-      if (size == 0)
-        break;
-
-      val = lru.back().second;
+    while (size) {
       lru_remove(lru.back().first);
     }
   }
 
   void clear(const K& key) {
-    VPtr val; // release any ref we have after we drop the lock
-    {
-      typename map<K, pair<WeakVPtr, V*>, C>::iterator i = weak_refs.find(key);
-      if (i != weak_refs.end()) {
-	val = i->second.first.lock();
-      }
       lru_remove(key);
-    }
   }
 
   void purge(const K &key) {
-    VPtr val; // release any ref we have after we drop the lock
-    {
-      typename map<K, pair<WeakVPtr, V*>, C>::iterator i = weak_refs.find(key);
-      if (i != weak_refs.end()) {
-	val = i->second.first.lock();
-        weak_refs.erase(i);
-      }
-      lru_remove(key);
-    }
+    weak_refs.erase(key);
+    lru_remove(key);
   }
 
   void set_size(size_t new_size) {
     list<VPtr> to_release;
-    {
-      max_size = new_size;
-      trim_cache(&to_release);
-    }
+    max_size = new_size;
+    trim_cache(&to_release);
   }
 
   // Returns K key s.t. key <= k for all currently cached k,v
