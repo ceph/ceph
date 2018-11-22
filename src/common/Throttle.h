@@ -422,9 +422,9 @@ public:
   
   template <typename T, typename I, void(T::*MF)(int, I*, uint64_t)>
   bool get(uint64_t c, T *handler, I *item, uint64_t flag) {
-    if (0 == m_avg)
+    if (0 == c)
       return false;
-  
+
     bool wait = false;
     uint64_t got = 0;
     std::lock_guard<Mutex> lock(m_lock);
@@ -432,6 +432,9 @@ public:
       // Keep the order of requests, add item after previous blocked requests.
       wait = true;
     } else {
+      if (0 == m_throttle.max || 0 == m_avg)
+        return false;
+  
       got = m_throttle.get(c);
       if (got < c) {
         // Not enough tokens, add a blocker for it.
