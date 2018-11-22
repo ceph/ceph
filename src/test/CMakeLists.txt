@@ -38,7 +38,9 @@ if(WITH_RBD)
   add_subdirectory(librbd)
 endif(WITH_RBD)
 add_subdirectory(messenger)
-add_subdirectory(mds)
+if (WITH_CEPHFS)
+  add_subdirectory(mds)
+endif()
 add_subdirectory(mon)
 add_subdirectory(mgr)
 add_subdirectory(msgr)
@@ -485,7 +487,6 @@ add_dependencies(tests
   crushtool
   ceph-conf
   rados
-  ceph-mds
   monmaptool
   ceph-osd
   ceph-dencoder
@@ -500,6 +501,9 @@ add_dependencies(tests
   ceph_erasure_code_non_regression
   ceph_erasure_code
   cython${PY_BINDING_INFIX}_modules)
+if (WITH_CEPHFS)
+  add_dependencies(tests ceph-mds)
+endif()
 if(WITH_MGR)
   add_dependencies(tests ceph-mgr)
 endif()
