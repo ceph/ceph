@@ -7,10 +7,14 @@
 /usr/bin/ceph-fuse		--	gen_context(system_u:object_r:ceph_exec_t,s0)
 /usr/bin/ceph-osd		--	gen_context(system_u:object_r:ceph_exec_t,s0)
 /usr/bin/radosgw		--	gen_context(system_u:object_r:ceph_exec_t,s0)
+/usr/bin/rbd-target-gw		--	gen_context(system_u:object_r:ceph_exec_t,s0)
+/usr/bin/rbd-target-api		--	gen_context(system_u:object_r:ceph_exec_t,s0)
 
 /var/lib/ceph(/.*)?		gen_context(system_u:object_r:ceph_var_lib_t,s0)
 
 /var/log/ceph(/.*)?		gen_context(system_u:object_r:ceph_log_t,s0)
 /var/log/radosgw(/.*)?		gen_context(system_u:object_r:ceph_log_t,s0)
+/var/log/rbd-target-api(/.*)?	gen_context(system_u:object_r:ceph_log_t,s0)
+/var/log/rbd-target-gw(/.*)?	gen_context(system_u:object_r:ceph_log_t,s0)
 
 /var/run/ceph(/.*)?		gen_context(system_u:object_r:ceph_var_run_t,s0)
