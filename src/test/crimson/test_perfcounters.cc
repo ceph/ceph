@@ -36,6 +36,7 @@ static seastar::future<> test_perfcounters(){
           if (PERF_VAL != perf_counter_ref.perf_counters->get(PERFTEST_INDEX)) {
             throw std::runtime_error("perf counter does not match");
           }
+          (void)path;           // silence -Wunused-variable
         }
       });
     });
