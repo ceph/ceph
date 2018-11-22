@@ -512,13 +512,15 @@ set_target_properties(ceph-osd PROPERTIES
   POSITION_INDEPENDENT_CODE ${EXE_LINKER_USE_PIE})
 install(TARGETS ceph-osd DESTINATION bin)
 
-add_subdirectory(mds)
-set(ceph_mds_srcs
-  ceph_mds.cc)
-add_executable(ceph-mds ${ceph_mds_srcs})
-target_link_libraries(ceph-mds mds ${CMAKE_DL_LIBS} global-static ceph-common
-  Boost::thread)
-install(TARGETS ceph-mds DESTINATION bin)
+if (WITH_CEPHFS)
+  add_subdirectory(mds)
+  set(ceph_mds_srcs
+    ceph_mds.cc)
+  add_executable(ceph-mds ${ceph_mds_srcs})
+  target_link_libraries(ceph-mds mds ${CMAKE_DL_LIBS} global-static ceph-common
+    Boost::thread)
+  install(TARGETS ceph-mds DESTINATION bin)
+endif()
 
 add_subdirectory(erasure-code)
 
@@ -729,18 +731,23 @@ configure_file(
 add_custom_target(vstart-base DEPENDS
     ceph-osd
     ceph-mon
-    ceph-mgr
     ceph-authtool
     ceph-conf
     monmaptool
     crushtool
     rados
     cython${PY_BINDING_INFIX}_rados)
+if (WITH_MGR)
+  add_dependencies(vstart-base ceph-mgr)
+endif()
 
-add_custom_target(vstart DEPENDS
-    vstart-base
-    ceph-mds
-    cython${PY_BINDING_INFIX}_rbd)
+add_custom_target(vstart DEPENDS vstart-base)
+if (WITH_RBD)
+  add_dependencies(vstart cython${PY_BINDING_INFIX}_rbd)
+endif()
+if (WITH_CEPHFS)
+  add_dependencies(vstart ceph-mds)
+endif()
 if(WITH_RADOSGW)
   add_dependencies(vstart radosgw radosgw-admin)
 endif(WITH_RADOSGW)
