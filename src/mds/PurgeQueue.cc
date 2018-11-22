@@ -543,9 +543,7 @@ void PurgeQueue::_execute_item(
     // expire_pos doesn't fall too far behind our progress when consuming
     // a very long queue.
     if (in_flight.empty() || journaler.write_head_needed()) {
-      journaler.write_head(new FunctionContext([this](int r){
-            journaler.trim();
-            }));
+      journaler.write_head(nullptr);
     }
   }), &finisher));
 
