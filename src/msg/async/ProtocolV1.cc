@@ -54,14 +54,6 @@ static void alloc_aligned_buffer(bufferlist &data, unsigned len, unsigned off) {
   data.push_back(std::move(ptr));
 }
 
-Protocol::Protocol(int type, AsyncConnection *connection)
-  : proto_type(type),
-    connection(connection),
-    messenger(connection->async_msgr),
-    cct(connection->async_msgr->cct) {}
-
-Protocol::~Protocol() {}
-
 /**
  * Protocol V1
  **/
