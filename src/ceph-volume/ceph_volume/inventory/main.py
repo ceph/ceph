@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import argparse
-import pprint
+import json
 
 from ceph_volume.util.device import Devices, Device
 
@@ -39,8 +39,8 @@ class Inventory(object):
 
     def format_report(self, inventory):
         if self.args.format == 'json':
-            print(inventory.json_report())
+            print(json.dumps(inventory.json_report()))
         elif self.args.format == 'json-pretty':
-            pprint.pprint(inventory.json_report())
+            print(json.dumps(inventory.json_report(), indent=4, sort_keys=True))
         else:
             print(inventory.pretty_report())
