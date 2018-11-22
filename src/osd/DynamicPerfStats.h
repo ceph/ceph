@@ -61,6 +61,9 @@ public:
           ceph_assert(d.is_supported());
 
           switch(d.type) {
+          case PerformanceCounterType::OPS:
+            c->first++;
+            return;
           case PerformanceCounterType::WRITE_OPS:
             if (op.may_write() || op.may_cache()) {
               c->first++;
@@ -70,6 +73,10 @@ public:
             if (op.may_read()) {
               c->first++;
             }
+            return;
+          case PerformanceCounterType::BYTES:
+            c->first += inb + outb;
+            c->second++;
             return;
           case PerformanceCounterType::WRITE_BYTES:
             if (op.may_write() || op.may_cache()) {
@@ -82,6 +89,10 @@ public:
               c->first += outb;
               c->second++;
             }
+            return;
+          case PerformanceCounterType::LATENCY:
+            c->first += latency.to_nsec();
+            c->second++;
             return;
           case PerformanceCounterType::WRITE_LATENCY:
             if (op.may_write() || op.may_cache()) {

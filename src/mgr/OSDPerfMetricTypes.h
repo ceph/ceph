@@ -116,12 +116,15 @@ typedef std::pair<uint64_t,uint64_t> PerformanceCounter;
 typedef std::vector<PerformanceCounter> PerformanceCounters;
 
 enum class PerformanceCounterType : uint8_t {
-  WRITE_OPS = 0,
-  READ_OPS = 1,
-  WRITE_BYTES = 2,
-  READ_BYTES = 3,
-  WRITE_LATENCY = 4,
-  READ_LATENCY = 5,
+  OPS = 0,
+  WRITE_OPS = 1,
+  READ_OPS = 2,
+  BYTES = 3,
+  WRITE_BYTES = 4,
+  READ_BYTES = 5,
+  LATENCY = 6,
+  WRITE_LATENCY = 7,
+  READ_LATENCY = 8,
 };
 
 struct PerformanceCounterDescriptor {
@@ -129,10 +132,13 @@ struct PerformanceCounterDescriptor {
 
   bool is_supported() const {
     switch (type) {
+    case PerformanceCounterType::OPS:
     case PerformanceCounterType::WRITE_OPS:
     case PerformanceCounterType::READ_OPS:
+    case PerformanceCounterType::BYTES:
     case PerformanceCounterType::WRITE_BYTES:
     case PerformanceCounterType::READ_BYTES:
+    case PerformanceCounterType::LATENCY:
     case PerformanceCounterType::WRITE_LATENCY:
     case PerformanceCounterType::READ_LATENCY:
       return true;
