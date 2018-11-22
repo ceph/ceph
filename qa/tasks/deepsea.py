@@ -660,10 +660,14 @@ class DeepSea(Task):
         self.sm.sync_pillar_data(quiet=self.quiet_salt)
 
     def end(self):
-        # self.log.debug("beginning of end method")
+        self.log.debug("beginning of end method")
         super(DeepSea, self).end()
-        pass
-        # self.log.debug("end of end method")
+        success = self.ctx.summary.get('success', None)
+        if success is None:
+            self.log.warning("Problem with ctx summary key? ctx is {}".format(self.ctx))
+        if not success:
+            self.ctx.cluster.run(args="rpm -qa | sort")
+        self.log.debug("end of end method")
 
     def teardown(self):
         self.log.debug("beginning of teardown method")
@@ -821,6 +825,9 @@ class CephConf(DeepSea):
         self._list_ceph_conf_d()
         self._dump_customizations()
 
+    def end(self):
+        pass
+
     def teardown(self):
         pass
 
@@ -847,6 +854,9 @@ class CreatePools(DeepSea):
         args = list(set(args))
         self.scripts.create_all_pools_at_once(*args)
 
+    def end(self):
+        pass
+
     def teardown(self):
         pass
 
@@ -863,6 +873,9 @@ class Dummy(DeepSea):
         self.log.debug("beginning of begin method")
         self.log.info("deepsea_ctx == {}".format(deepsea_ctx))
         self.log.debug("end of begin method")
+
+    def end(self):
+        pass
 
     def teardown(self):
         pass
@@ -939,6 +952,9 @@ class HealthOK(DeepSea):
         if not isinstance(commands, list):
             raise ConfigError(self.err_prefix + "commands must be a list")
         self._maybe_run_commands(commands)
+
+    def end(self):
+        pass
 
     def teardown(self):
         pass
@@ -1279,6 +1295,9 @@ class Orch(DeepSea):
                 'unsupported stage ->{}<-'.format(self.stage)
                 )
 
+    def end(self):
+        pass
+
     def teardown(self):
         pass
 
@@ -1457,6 +1476,9 @@ class Policy(DeepSea):
             self._cat_policy_cfg()
             self._dump_profile_ymls()
 
+    def end(self):
+        pass
+
     def teardown(self):
         pass
 
@@ -1474,6 +1496,9 @@ class Reboot(DeepSea):
         log_spec = "all nodes reboot now"
         self.log.warning(anchored(log_spec))
         self.reboot_the_cluster_now(log_spec=log_spec)
+
+    def end(self):
+        pass
 
     def teardown(self):
         pass
@@ -1533,6 +1558,9 @@ class Script(DeepSea):
             if not isinstance(args, list):
                 raise ConfigError(self.err_prefix + 'script args must be a list')
         self._run_script(script, args=args)
+
+    def end(self):
+        pass
 
     def teardown(self):
         pass
@@ -2012,6 +2040,9 @@ class Validation(DeepSea):
             else:
                 raise ConfigError(self.err_prefix + "No such method ->{}<-"
                                   .format(method_spec))
+
+    def end(self):
+        pass
 
     def teardown(self):
         pass
