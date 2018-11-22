@@ -47,6 +47,7 @@ makedepends="
 	lvm2-dev
 	nss-dev
 	openldap-dev
+	krb5-dev
 	parted
 	procps
 	python-dev

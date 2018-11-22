@@ -14,6 +14,7 @@
 
 #include "AuthAuthorizeHandler.h"
 #include "cephx/CephxAuthorizeHandler.h"
+#include "krb/KrbAuthorizeHandler.hpp"
 #include "none/AuthNoneAuthorizeHandler.h"
 
 AuthAuthorizeHandler *AuthAuthorizeHandlerRegistry::get_handler(int protocol)
@@ -34,6 +35,10 @@ AuthAuthorizeHandler *AuthAuthorizeHandlerRegistry::get_handler(int protocol)
     
   case CEPH_AUTH_CEPHX:
     m_authorizers[protocol] = new CephxAuthorizeHandler();
+    return m_authorizers[protocol];
+
+  case CEPH_AUTH_GSS:
+    m_authorizers[protocol] = new KrbAuthorizeHandler();
     return m_authorizers[protocol];
   }
   return NULL;
