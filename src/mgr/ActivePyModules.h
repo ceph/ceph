@@ -94,6 +94,7 @@ public:
 
   OSDPerfMetricQueryID add_osd_perf_query(const OSDPerfMetricQuery &query);
   void remove_osd_perf_query(OSDPerfMetricQueryID query_id);
+  PyObject *get_osd_perf_counters(OSDPerfMetricQueryID query_id);
 
   bool get_store(const std::string &module_name,
       const std::string &key, std::string *val) const;
