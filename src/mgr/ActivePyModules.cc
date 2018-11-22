@@ -916,6 +916,48 @@ void ActivePyModules::remove_osd_perf_query(OSDPerfMetricQueryID query_id)
   }
 }
 
+PyObject *ActivePyModules::get_osd_perf_counters(OSDPerfMetricQueryID query_id)
+{
+  std::map<OSDPerfMetricKey, PerformanceCounters> counters;
+
+  int r = server.get_osd_perf_counters(query_id, &counters);
+  if (r < 0) {
+    dout(0) << "get_osd_perf_counters for query_id=" << query_id << " failed: "
+            << cpp_strerror(r) << dendl;
+    Py_RETURN_NONE;
+  }
+
+  PyFormatter f;
+
+  f.open_array_section("counters");
+  for (auto &it : counters) {
+    auto &key = it.first;
+    auto  &instance_counters = it.second;
+    f.open_object_section("i");
+    f.open_array_section("k");
+    for (auto &sub_key : key) {
+      f.open_array_section("s");
+      for (size_t i = 0; i < sub_key.size(); i++) {
+        f.dump_string(stringify(i).c_str(), sub_key[i]);
+      }
+      f.close_section(); // s
+    }
+    f.close_section(); // k
+    f.open_array_section("c");
+    for (auto &c : instance_counters) {
+      f.open_array_section("p");
+      f.dump_unsigned("0", c.first);
+      f.dump_unsigned("1", c.second);
+      f.close_section(); // p
+    }
+    f.close_section(); // c
+    f.close_section(); // i
+  }
+  f.close_section(); // counters
+
+  return f.get();
+}
+
 void ActivePyModules::cluster_log(const std::string &channel, clog_type prio,
   const std::string &message)
 {

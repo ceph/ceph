@@ -917,7 +917,25 @@ class MgrModule(ceph_module.BaseMgrModule):
 
     def add_osd_perf_query(self, query):
         """
-        Fetch the daemon metadata for a particular service.
+        Register an OSD perf query.  Argument is a
+        dict of the query parameters, in this form:
+
+        ::
+
+           {
+             'key_descriptor': [
+               {'type': subkey_type, 'regex': regex_pattern},
+               ...
+             ],
+             'performance_counter_descriptors': [
+               list, of, descriptor, types
+             ],
+           }
+
+        Valid subkey types: 'client_id', 'pool_id', 'object_name'
+        Valid performance counter types:
+           'write_ops', 'read_ops', 'write_bytes', 'read_bytes',
+           'write_latency', 'read_latency'
 
         :param object query: query
         :rtype: int (query id)
@@ -926,8 +944,16 @@ class MgrModule(ceph_module.BaseMgrModule):
 
     def remove_osd_perf_query(self, query_id):
         """
-        Fetch the daemon metadata for a particular service.
+        Unregister an OSD perf query.
 
         :param int query_id: query ID
         """
         return self._ceph_remove_osd_perf_query(query_id)
+
+    def get_osd_perf_counters(self, query_id):
+        """
+        Get stats collected for an OSD perf query.
+
+        :param int query_id: query ID
+        """
+        return self._ceph_get_osd_perf_counters(query_id)

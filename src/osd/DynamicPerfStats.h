@@ -4,7 +4,9 @@
 #ifndef DYNAMIC_PERF_STATS_H
 #define DYNAMIC_PERF_STATS_H
 
+#include "messages/MOSDOp.h"
 #include "mgr/OSDPerfMetricTypes.h"
+#include "osd/OpRequest.h"
 
 class DynamicPerfStats {
 public:
@@ -17,9 +19,29 @@ public:
     }
   }
 
+  void merge(const DynamicPerfStats &dps) {
+    for (auto &query_it : dps.data) {
+      auto &query = query_it.first;
+      for (auto &key_it : query_it.second) {
+        auto &key = key_it.first;
+        auto counter_it = key_it.second.begin();
+        auto update_counter_fnc =
+            [&counter_it](const PerformanceCounterDescriptor &d,
+                          PerformanceCounter *c) {
+              c->first  += counter_it->first;
+              c->second += counter_it->second;
+              counter_it++;
+            };
+
+        ceph_assert(key_it.second.size() >= data[query][key].size());
+        query.update_counters(update_counter_fnc, &data[query][key]);
+      }
+    }
+  }
+
   void set_queries(const std::list<OSDPerfMetricQuery> &queries) {
     std::map<OSDPerfMetricQuery,
-             std::map<std::string, PerformanceCounters>> new_data;
+             std::map<OSDPerfMetricKey, PerformanceCounters>> new_data;
     for (auto &query : queries) {
       std::swap(new_data[query], data[query]);
     }
@@ -31,12 +53,89 @@ public:
   }
 
   void add(const OpRequest& op, uint64_t inb, uint64_t outb,
-           const utime_t &now) {
+           const utime_t &latency) {
+
+    auto update_counter_fnc =
+        [&op, inb, outb, &latency](const PerformanceCounterDescriptor &d,
+                                   PerformanceCounter *c) {
+          ceph_assert(d.is_supported());
+
+          switch(d.type) {
+          case PerformanceCounterType::WRITE_OPS:
+            if (op.may_write() || op.may_cache()) {
+              c->first++;
+            }
+            return;
+          case PerformanceCounterType::READ_OPS:
+            if (op.may_read()) {
+              c->first++;
+            }
+            return;
+          case PerformanceCounterType::WRITE_BYTES:
+            if (op.may_write() || op.may_cache()) {
+              c->first += inb;
+              c->second++;
+            }
+            return;
+          case PerformanceCounterType::READ_BYTES:
+            if (op.may_read()) {
+              c->first += outb;
+              c->second++;
+            }
+            return;
+          case PerformanceCounterType::WRITE_LATENCY:
+            if (op.may_write() || op.may_cache()) {
+              c->first += latency.to_nsec();
+              c->second++;
+            }
+            return;
+          case PerformanceCounterType::READ_LATENCY:
+            if (op.may_read()) {
+              c->first += latency.to_nsec();
+              c->second++;
+            }
+            return;
+          default:
+            ceph_abort_msg("unknown counter type");
+          }
+        };
+
+    auto get_subkey_fnc =
+        [&op](const OSDPerfMetricSubKeyDescriptor &d,
+              OSDPerfMetricSubKey *sub_key) {
+          ceph_assert(d.is_supported());
+
+          auto m = static_cast<const MOSDOp*>(op.get_req());
+          std::string match_string;
+          switch(d.type) {
+          case OSDPerfMetricSubKeyType::CLIENT_ID:
+            match_string = stringify(m->get_reqid().name);
+            break;
+          case OSDPerfMetricSubKeyType::POOL_ID:
+            match_string = stringify(m->get_spg().pool());
+            break;
+          case OSDPerfMetricSubKeyType::OBJECT_NAME:
+            match_string = m->get_oid().name;
+            break;
+          default:
+            ceph_abort_msg("unknown counter type");
+          }
+
+          std::smatch match;
+          if (!std::regex_search(match_string, match, d.regex)) {
+            return false;
+          }
+          for (auto &sub_match : match) {
+            sub_key->push_back(sub_match.str());
+          }
+          return true;
+        };
+
     for (auto &it : data) {
       auto &query = it.first;
-      std::string key;
-      if (query.get_key(op, &key)) {
-        query.update_counters(op, inb, outb, now, &it.second[key]);
+      OSDPerfMetricKey key;
+      if (query.get_key(get_subkey_fnc, &key)) {
+        query.update_counters(update_counter_fnc, &it.second[key]);
       }
     }
   }
@@ -58,7 +157,8 @@ public:
   }
 
 private:
-  std::map<OSDPerfMetricQuery, std::map<std::string, PerformanceCounters>> data;
+  std::map<OSDPerfMetricQuery,
+           std::map<OSDPerfMetricKey, PerformanceCounters>> data;
 };
 
 #endif // DYNAMIC_PERF_STATS_H
