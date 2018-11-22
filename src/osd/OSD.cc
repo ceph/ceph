@@ -2046,6 +2046,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   tick_timer(cct, osd_lock),
   tick_timer_lock("OSD::tick_timer_lock"),
   tick_timer_without_osd_lock(cct, tick_timer_lock),
+  gss_ktfile_client(cct->_conf.get_val<std::string>("gss_ktab_client_file")),
   authorize_handler_cluster_registry(new AuthAuthorizeHandlerRegistry(cct,
 								      cct->_conf->auth_supported.empty() ?
 								      cct->_conf->auth_cluster_required :
@@ -2111,6 +2112,23 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
     &command_tp),
   service(this)
 {
+
+  if (!gss_ktfile_client.empty()) {
+    // Assert we can export environment variable 
+    /* 
+        The default client keytab is used, if it is present and readable,
+        to automatically obtain initial credentials for GSSAPI client
+        applications. The principal name of the first entry in the client
+        keytab is used by default when obtaining initial credentials.
+        1. The KRB5_CLIENT_KTNAME environment variable.
+        2. The default_client_keytab_name profile variable in [libdefaults].
+        3. The hardcoded default, DEFCKTNAME.
+    */
+    const int32_t set_result(setenv("KRB5_CLIENT_KTNAME", 
+                                    gss_ktfile_client.c_str(), 1));
+    ceph_assert(set_result == 0);
+  }
+
   monc->set_messenger(client_messenger);
   op_tracker.set_complaint_and_threshold(cct->_conf->osd_op_complaint_time,
                                          cct->_conf->osd_op_log_threshold);

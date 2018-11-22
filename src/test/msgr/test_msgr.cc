@@ -721,7 +721,6 @@ TEST_P(MessengerTest, AuthTest) {
   }
   ASSERT_TRUE(conn->is_connected());
   ASSERT_EQ(1U, static_cast<Session*>(conn->get_priv().get())->get_count());
-
   server_msgr->shutdown();
   client_msgr->shutdown();
   server_msgr->wait();

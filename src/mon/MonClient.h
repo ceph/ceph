@@ -165,6 +165,7 @@ private:
   bool initialized;
   bool stopping = false;
   bool no_keyring_disabled_cephx;
+  bool no_ktfile_disabled_krb;
 
   LogClient *log_client;
   bool more_log_pending;

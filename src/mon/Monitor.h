@@ -25,6 +25,7 @@
 
 #include <errno.h>
 #include <cmath>
+#include <string>
 
 #include "include/types.h"
 #include "include/health.h"
@@ -168,6 +169,7 @@ public:
   Messenger *mgr_messenger;
   MgrClient mgr_client;
   uint64_t mgr_proxy_bytes = 0;  // in-flight proxied mgr command message bytes
+  std::string gss_ktfile_client{};
 
 private:
   void new_tick();

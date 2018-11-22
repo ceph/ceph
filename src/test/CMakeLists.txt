@@ -1,6 +1,7 @@
 include(AddCephTest)
 
-set(UNITTEST_LIBS GMock::Main GMock::GMock GTest::GTest ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_DL_LIBS})
+set(UNITTEST_LIBS GMock::Main GMock::GMock GTest::GTest ${CMAKE_THREAD_LIBS_INIT} 
+    ${GSSAPI_LIBRARIES} ${OPENLDAP_LIBRARIES} ${CMAKE_DL_LIBS})
 
 add_library(unit-main OBJECT unit.cc)
 target_include_directories(unit-main PRIVATE
