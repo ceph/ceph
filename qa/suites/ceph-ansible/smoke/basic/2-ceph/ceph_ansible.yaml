@@ -3,8 +3,8 @@ meta:
 
 overrides:
    ceph_ansible:
+     branch: stable-3.2
      vars:
-        branch: stable-3.2
         ceph_conf_overrides:
           global:
             osd default pool size: 2
