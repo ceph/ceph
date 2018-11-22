@@ -3806,63 +3806,6 @@ int RGWRados::Object::Write::write_meta(uint64_t size, uint64_t accounted_size,
   return r;
 }
 
-/**
- * Write/overwrite an object to the bucket storage.
- * bucket: the bucket to store the object in
- * obj: the object name/key
- * data: the object contents/value
- * offset: the offet to write to in the object
- *         If this is -1, we will overwrite the whole object.
- * size: the amount of data to write (data must be this long)
- * attrs: all the given attrs are written to bucket storage for the given object
- * Returns: 0 on success, -ERR# otherwise.
- */
-
-int RGWRados::aio_put_obj_data(void *ctx, rgw_raw_obj& obj, bufferlist& bl,
-			       off_t ofs, bool exclusive,
-                               void **handle)
-{
-  rgw_rados_ref ref;
-  int r = get_raw_obj_ref(obj, &ref);
-  if (r < 0) {
-    return r;
-  }
-
-  AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
-  *handle = c;
-  
-  ObjectWriteOperation op;
-
-  if (exclusive)
-    op.create(true);
-
-  if (ofs == -1) {
-    op.write_full(bl);
-  } else {
-    op.write(ofs, bl);
-  }
-  r = ref.ioctx.aio_operate(ref.oid, c, &op);
-  if (r < 0)
-    return r;
-
-  return 0;
-}
-
-int RGWRados::aio_wait(void *handle)
-{
-  AioCompletion *c = (AioCompletion *)handle;
-  c->wait_for_safe();
-  int ret = c->get_return_value();
-  c->release();
-  return ret;
-}
-
-bool RGWRados::aio_completed(void *handle)
-{
-  AioCompletion *c = (AioCompletion *)handle;
-  return c->is_safe();
-}
-
 class RGWRadosPutObj : public RGWHTTPStreamRWRequest::ReceiveCB
 {
   CephContext* cct;
