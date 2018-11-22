@@ -152,6 +152,9 @@ Capability::Capability(CInode *i, Session *s, uint64_t id) :
   _pending(0), _issued(0), last_sent(0), last_issue(0), mseq(0),
   suppress(0), state(0)
 {
+  if (session) {
+    session->touch_cap_bottom(this);
+  }
 }
 
 client_t Capability::get_client() const
@@ -162,6 +165,36 @@ client_t Capability::get_client() const
 bool Capability::is_stale() const
 {
   return session ? session->is_stale() : false;
+}
+
+void Capability::mark_notable()
+{
+  state |= STATE_NOTABLE;
+  session->touch_cap(this);
+}
+
+void Capability::maybe_clear_notable()
+{
+  if ((_issued == _pending) &&
+      !is_clientwriteable() &&
+      !is_wanted_notable(_wanted)) {
+    ceph_assert(is_notable());
+    state &= ~STATE_NOTABLE;
+    session->touch_cap_bottom(this);
+  }
+}
+
+void Capability::set_wanted(int w) {
+  CInode *in = get_inode();
+  if (in) {
+    if (!is_wanted_notable(_wanted) && is_wanted_notable(w)) {
+      if (!is_notable())
+	mark_notable();
+    } else if (is_wanted_notable(_wanted) && !is_wanted_notable(w)) {
+      maybe_clear_notable();
+    }
+  }
+  _wanted = w;
 }
 
 void Capability::encode(bufferlist& bl) const
@@ -187,7 +220,7 @@ void Capability::decode(bufferlist::iterator &bl)
   ::decode(_revokes, bl);
   DECODE_FINISH(bl);
   
-  _calc_issued();
+  calc_issued();
 }
 
 void Capability::dump(Formatter *f) const

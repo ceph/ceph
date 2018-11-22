@@ -2816,7 +2816,6 @@ Capability *CInode::add_client_cap(client_t client, Session *session, SnapRealm 
   assert(client_caps.count(client) == 0);
   client_caps[client] = cap;
 
-  session->add_cap(cap);
   cap->client_follows = first-1;
   
   containing_realm->add_cap(client, cap);

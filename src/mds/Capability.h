@@ -110,6 +110,7 @@ public:
     static void generate_test_instances(list<revoke_info*>& ls);
   };
 
+  const static unsigned STATE_NOTABLE		= (1<<0);
   const static unsigned STATE_NEW		= (1<<1);
   const static unsigned STATE_IMPORTING		= (1<<2);
   const static unsigned STATE_CLIENTWRITEABLE	= (1<<4);
@@ -129,6 +130,8 @@ public:
       _revokes.emplace_back(_pending, last_sent, last_issue);
       _pending = c;
       _issued |= c;
+      if (!is_notable())
+	mark_notable();
     } else if (~_pending & c) {
       // adding bits only.  remove obsolete revocations?
       _pending |= c;
@@ -152,13 +155,8 @@ public:
     inc_last_seq();
     return last_sent;
   }
-  void _calc_issued() {
-    _issued = _pending;
-    for (const auto &r : _revokes) {
-      _issued |= r.before;
-    }
-  }
   void confirm_receipt(ceph_seq_t seq, unsigned caps) {
+    bool was_revoking = (_issued & ~_pending);
     if (seq == last_sent) {
       _revokes.clear();
       _issued = caps;
@@ -171,16 +169,17 @@ public:
       if (!_revokes.empty()) {
 	if (_revokes.front().seq == seq)
 	  _revokes.begin()->before = caps;
-	_calc_issued();
+	calc_issued();
       } else {
 	// seq < last_sent
 	_issued = caps | _pending;
       }
     }
 
-    if (_issued == _pending) {
+    if (was_revoking && _issued == _pending) {
       item_revoking_caps.remove_myself();
       item_client_revoking_caps.remove_myself();
+      maybe_clear_notable();
     }
     //check_rdcaps_list();
   }
@@ -193,10 +192,12 @@ public:
       changed = true;
     }
     if (changed) {
-      _calc_issued();
-      if (_issued == _pending) {
+      bool was_revoking = (_issued & ~_pending);
+      calc_issued();
+      if (was_revoking && _issued == _pending) {
 	item_revoking_caps.remove_myself();
 	item_client_revoking_caps.remove_myself();
+	maybe_clear_notable();
       }
     }
   }
@@ -223,6 +224,11 @@ public:
   void inc_suppress() { suppress++; }
   void dec_suppress() { suppress--; }
 
+  static bool is_wanted_notable(int wanted) {
+    return wanted & (CEPH_CAP_ANY_WR|CEPH_CAP_FILE_WR|CEPH_CAP_FILE_RD);
+  }
+  bool is_notable() const { return state & STATE_NOTABLE; }
+
   bool is_stale() const;
   bool is_new() const { return state & STATE_NEW; }
   void mark_new() { state |= STATE_NEW; }
@@ -235,11 +241,14 @@ public:
   void mark_clientwriteable() {
     if (!is_clientwriteable()) {
       state |= STATE_CLIENTWRITEABLE;
+      if (!is_notable())
+	mark_notable();
     }
   }
   void clear_clientwriteable() {
     if (is_clientwriteable()) {
       state &= ~STATE_CLIENTWRITEABLE;
+      maybe_clear_notable();
     }
   }
 
@@ -248,11 +257,8 @@ public:
   client_t get_client() const;
 
   // caps this client wants to hold
-  int wanted() { return _wanted; }
-  void set_wanted(int w) {
-    _wanted = w;
-    //check_rdcaps_list();
-  }
+  int wanted() const { return _wanted; }
+  void set_wanted(int w);
 
   void inc_last_seq() { last_sent++; }
   ceph_seq_t get_last_seq() { return last_sent; }
@@ -283,7 +289,7 @@ public:
     client_follows = other.client_follows;
 
     // wanted
-    _wanted = _wanted | other.wanted;
+    set_wanted(wanted() | other.wanted);
     if (auth_cap)
       mseq = other.mseq;
   }
@@ -300,7 +306,7 @@ public:
     }
 
     // wanted
-    _wanted = _wanted | otherwanted;
+    set_wanted(wanted() | otherwanted);
   }
 
   void revoke() {
@@ -350,6 +356,16 @@ private:
 
   int suppress;
   unsigned state;
+
+  void calc_issued() {
+    _issued = _pending;
+    for (const auto &r : _revokes) {
+      _issued |= r.before;
+    }
+  }
+
+  void mark_notable();
+  void maybe_clear_notable();
 };
 
 WRITE_CLASS_ENCODER(Capability::Export)

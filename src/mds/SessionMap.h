@@ -265,7 +265,10 @@ public:
     }
   }
 
-  void add_cap(Capability *cap) {
+  void touch_cap(Capability *cap) {
+    caps.push_front(&cap->item_session_caps);
+  }
+  void touch_cap_bottom(Capability *cap) {
     caps.push_back(&cap->item_session_caps);
   }
   void touch_lease(ClientLease *r) {
