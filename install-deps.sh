@@ -224,7 +224,6 @@ else
                 $SUDO rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-$VERSION_ID
                 $SUDO rm -f /etc/yum.repos.d/dl.fedoraproject.org*
                 if test $ID = centos -a $VERSION_ID = 7 ; then
-                    $SUDO yum-config-manager --enable cr
 		    case $(uname -m) in
 			x86_64)
 			    $SUDO yum -y install centos-release-scl
@@ -240,8 +239,6 @@ else
                 elif test $ID = rhel -a $MAJOR_VERSION = 7 ; then
                     $SUDO yum-config-manager --enable rhel-server-rhscl-7-rpms
                     dts_ver=7
-                elif test $ID = virtuozzo -a $MAJOR_VERSION = 7 ; then
-                    $SUDO yum-config-manager --enable cr
                 fi
                 ;;
         esac
