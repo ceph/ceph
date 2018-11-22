@@ -689,10 +689,13 @@ ceph_add_osd_perf_query(BaseMgrModule *self, PyObject *args)
     {"object_name", OSDPerfMetricSubKeyType::OBJECT_NAME},
   };
   static const std::map<std::string, PerformanceCounterType> counter_types = {
+    {"ops", PerformanceCounterType::OPS},
     {"write_ops", PerformanceCounterType::WRITE_OPS},
     {"read_ops", PerformanceCounterType::READ_OPS},
+    {"bytes", PerformanceCounterType::BYTES},
     {"write_bytes", PerformanceCounterType::WRITE_BYTES},
     {"read_bytes", PerformanceCounterType::READ_BYTES},
+    {"latency", PerformanceCounterType::LATENCY},
     {"write_latency", PerformanceCounterType::WRITE_LATENCY},
     {"read_latency", PerformanceCounterType::READ_LATENCY},
   };
