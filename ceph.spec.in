@@ -57,7 +57,7 @@
 %endif
 %endif
 %bcond_with seastar
-%if 0%{?fedora} >= 29 || 0%{?suse_version} >= 1500
+%if 0%{?fedora} >= 29 || 0%{?suse_version} >= 1500 || 0%{?rhel} >= 8
 # distros that need a py3 Ceph build
 %bcond_with python2
 %else
