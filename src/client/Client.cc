@@ -3464,13 +3464,6 @@ void Client::check_caps(Inode *in, unsigned flags)
   unsigned used = get_caps_used(in);
   unsigned cap_used;
 
-  if (in->is_dir() && (in->flags & I_COMPLETE)) {
-    // we do this here because we don't want to drop to Fs (and then
-    // drop the Fs if we do a create!) if that alone makes us send lookups
-    // to the MDS. Doing it in in->caps_wanted() has knock-on effects elsewhere
-    wanted |= CEPH_CAP_FILE_EXCL;
-  }
-
   int implemented;
   int issued = in->caps_issued(&implemented);
   int revoking = implemented & ~issued;
@@ -3479,11 +3472,25 @@ void Client::check_caps(Inode *in, unsigned flags)
   used = adjust_caps_used_for_lazyio(used, issued, implemented);
 
   int retain = wanted | used | CEPH_CAP_PIN;
-  if (!unmounting) {
-    if (wanted)
+  if (!unmounting && in->nlink > 0) {
+    if (wanted) {
       retain |= CEPH_CAP_ANY;
-    else
+    } else if (in->is_dir() &&
+	       (issued & CEPH_CAP_FILE_SHARED) &&
+	       (in->flags & I_COMPLETE)) {
+      // we do this here because we don't want to drop to Fs (and then
+      // drop the Fs if we do a create!) if that alone makes us send lookups
+      // to the MDS. Doing it in in->caps_wanted() has knock-on effects elsewhere
+      wanted = CEPH_CAP_ANY_SHARED | CEPH_CAP_FILE_EXCL;
+      retain |= wanted;
+    } else {
       retain |= CEPH_CAP_ANY_SHARED;
+      // keep RD only if we didn't have the file open RW,
+      // because then the mds would revoke it anyway to
+      // journal max_size=0.
+      if (in->max_size == 0)
+	retain |= CEPH_CAP_ANY_RD;
+    }
   }
 
   ldout(cct, 10) << __func__ << " on " << *in
