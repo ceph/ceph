@@ -121,6 +121,7 @@ Context *ResizeRequest<I>::send_append_op_event() {
 
   if (m_new_size < m_original_size && !m_allow_shrink) {
     ldout(cct, 1) << " shrinking the image is not permitted" << dendl;
+    image_ctx.io_work_queue->unblock_writes();
     this->async_complete(-EINVAL);
     return nullptr;
   }
