@@ -1833,12 +1833,6 @@ public:
     }; // class List
   }; // class Bucket
 
-  int aio_put_obj_data(void *ctx, rgw_raw_obj& obj, bufferlist& bl,
-                       off_t ofs, bool exclusive,
-                       void **handle);
-  int aio_wait(void *handle);
-  bool aio_completed(void *handle);
-
   int on_last_entry_in_listing(RGWBucketInfo& bucket_info,
                                const std::string& obj_prefix,
                                const std::string& obj_delim,
