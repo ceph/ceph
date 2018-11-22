@@ -3013,7 +3013,6 @@ Capability *CInode::add_client_cap(client_t client, Session *session, SnapRealm 
   ceph_assert(ret.second == true);
   Capability *cap = &ret.first->second;
 
-  session->add_cap(cap);
   cap->client_follows = first-1;
   containing_realm->add_cap(client, cap);
 
