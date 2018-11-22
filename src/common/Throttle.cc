@@ -741,7 +741,7 @@ void TokenBucketThrottle::add_tokens() {
     // check the m_blockers from head to tail, if blocker can get
     // enough tokens, let it go.
     while (!m_blockers.empty()) {
-      Blocker blocker = m_blockers.front();
+      Blocker &blocker = m_blockers.front();
       uint64_t got = m_throttle.get(blocker.tokens_requested);
       if (got == blocker.tokens_requested) {
 	// got enough tokens for front.
