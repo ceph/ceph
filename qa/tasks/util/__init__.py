@@ -38,6 +38,19 @@ def copy_directory_recursively(from_path, to_remote, to_path=None):
             from_path=from_path, host=to_remote.name, to_path=to_path))
 
 
+def remote_run_script_as_root(remote, path, data, args=None):
+    """
+    Wrapper around misc.write_file to simplify the design pattern:
+    1. use misc.write_file to create bash script on the remote
+    2. use Remote.run to run that bash script via "sudo bash $SCRIPT"
+    """
+    misc.write_file(remote, path, data)
+    cmd = 'sudo bash {}'.format(path)
+    if args:
+        cmd += ' ' + ' '.join(args)
+    remote.run(label=path, args=cmd)
+
+
 def sudo_append_to_file(remote, path, data):
     """
     Append data to a remote file. Standard 'cat >>' - creates file
