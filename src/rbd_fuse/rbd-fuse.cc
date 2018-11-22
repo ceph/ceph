@@ -59,8 +59,9 @@ struct rbd_image {
 	struct rbd_image *next;
 };
 struct rbd_image_data {
-    struct rbd_image *images;
-    void *buf;
+	struct rbd_image *images;
+	rbd_image_spec_t *image_specs;
+	size_t image_spec_count;
 };
 struct rbd_image_data rbd_image_data;
 
@@ -97,10 +98,7 @@ void
 enumerate_images(struct rbd_image_data *data)
 {
 	struct rbd_image **head = &data->images;
-	char *ibuf = NULL;
-	size_t ibuf_len = 0;
 	struct rbd_image *im, *next;
-	char *ip;
 	int ret;
 
 	if (*head != NULL) {
@@ -110,45 +108,40 @@ enumerate_images(struct rbd_image_data *data)
 			im = next;
 		}
 		*head = NULL;
-		free(data->buf);
-		data->buf = NULL;
+		rbd_image_spec_list_cleanup(data->image_specs,
+					    data->image_spec_count);
+		free(data->image_specs);
+		data->image_specs = NULL;
+		data->image_spec_count = 0;
 	}
 
-	ret = rbd_list(ioctx, ibuf, &ibuf_len);
-	if (ret == -ERANGE) {
-		ceph_assert(ibuf_len > 0);
-		ibuf = (char*) malloc(ibuf_len);
-		if (!ibuf) {
-			simple_err("Failed to get ibuf", -ENOMEM);
-			return;
+	while (true) {
+		ret = rbd_list2(ioctx, data->image_specs,
+				&data->image_spec_count);
+		if (ret == -ERANGE) {
+			data->image_specs = static_cast<rbd_image_spec_t *>(
+				realloc(data->image_specs,
+					sizeof(rbd_image_spec_t) * data->image_spec_count));
+		} else if (ret < 0) {
+			simple_err("Failed to list images", ret);
+		} else {
+			break;
 		}
-	} else if (ret < 0) {
-		simple_err("Failed to get ibuf_len", ret);
-		return;
 	}
-
-	ret = rbd_list(ioctx, ibuf, &ibuf_len);
-	if (ret < 0) {
-		simple_err("Failed to populate ibuf", ret);
-		free(ibuf);
-		return;
-	}
-	ceph_assert(ret == (int)ibuf_len);
 
 	fprintf(stderr, "pool %s: ", pool_name);
-	for (ip = ibuf; ip < &ibuf[ibuf_len]; ip += strlen(ip) + 1)  {
+	for (size_t idx = 0; idx < data->image_spec_count; ++idx) {
 		if ((mount_image_name == NULL) ||
 		    ((strlen(mount_image_name) > 0) &&
-		    (strcmp(ip, mount_image_name) == 0))) {
-			fprintf(stderr, "%s, ", ip);
+		    (strcmp(data->image_specs[idx].name, mount_image_name) == 0))) {
+			fprintf(stderr, "%s, ", data->image_specs[idx].name);
 			im = static_cast<rbd_image*>(malloc(sizeof(*im)));
-			im->image_name = ip;
+			im->image_name = data->image_specs[idx].name;
 			im->next = *head;
 			*head = im;
 		}
 	}
 	fprintf(stderr, "\n");
-	data->buf = ibuf;
 }
 
 int
@@ -866,6 +859,8 @@ connect_to_cluster(rados_t *pcluster)
 
 int main(int argc, const char *argv[])
 {
+	memset(&rbd_image_data, 0, sizeof(rbd_image_data));
+
 	// librados will filter out -f/-d options from command-line
 	std::map<std::string, bool> filter_args = {
 		{"-f", false},
