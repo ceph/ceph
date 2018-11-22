@@ -243,9 +243,9 @@ private:
 	update_action action;
 	f(extoff, extlen, ext, &action);
 	ceph_assert(!action.bl || action.bl->length() == extlen);
-	extent *final_extent = nullptr;
+	std::unique_ptr<extent> final_extent = nullptr;
 	if (action.action == update_action::NONE) {
-	  final_extent = ext;
+	  final_extent = std::unique_ptr<extent>(ext);
 	} else {
 	  pin_state *ps = ext->parent_pin_state;
 	  ext->unlink();
@@ -289,12 +289,12 @@ private:
 		*(ext->bl),
 		extoff - ext->offset,
 		extlen);
-	      final_extent = new ExtentCache::extent(
+	      final_extent = std::unique_ptr<extent>(new ExtentCache::extent(
 		extoff,
-		bl);
+		bl));
 	    } else {
-	      final_extent = new ExtentCache::extent(
-		extoff, extlen);
+	      final_extent = std::unique_ptr<extent>(new ExtentCache::extent(
+		extoff, extlen));
 	    }
 	    final_extent->link(*this, pin);
 	  }
