@@ -5,6 +5,28 @@ if test -e build; then
     exit 1
 fi
 
+PYBUILD="2"
+source /etc/os-release
+case "$ID" in
+    fedora)
+        if [ "$VERSION_ID" -ge "29" ] ; then
+            PYBUILD="3"
+        fi
+        ;;
+    rhel|centos)
+        MAJOR_VER=$(echo "$VERSION_ID" | sed -e 's/\..*$//')
+        if [ "$MAJOR_VER" -ge "8" ] ; then
+            PYBUILD="3"
+        fi
+        ;;
+    opensuse*|suse|sles)
+        PYBUILD="3"
+        ;;
+esac
+if [ "$PYBUILD" = "3" ] ; then
+    ARGS="$ARGS -DWITH_PYTHON2=OFF -DWITH_PYTHON3=ON -DMGR_PYTHON_VERSION=3"
+fi
+
 if type ccache > /dev/null 2>&1 ; then
     echo "enabling ccache"
     ARGS="$ARGS -DWITH_CCACHE=ON"
