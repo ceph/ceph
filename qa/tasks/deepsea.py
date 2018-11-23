@@ -98,6 +98,9 @@ class DeepSea(Task):
     This task understands the following config keys which apply to
     this task and all its subtasks:
 
+        allow_python2:  (default: True)
+                        whether to continue if Python 2 is installed anywhere
+                        in the test cluster
         alternative_defaults: (default: empty)
                         a dictionary of DeepSea alternative defaults
                         to be activated via the Salt Pillar
@@ -163,6 +166,7 @@ class DeepSea(Task):
             # self.log.debug("populating context (we are *not* in a subtask)")
             self._populate_deepsea_context()
             introspect_roles(self.ctx, self.log, quiet=False)
+        self.allow_python2 = deepsea_ctx['allow_python2']
         self.alternative_defaults = deepsea_ctx['alternative_defaults']
         self.dashboard_ssl = deepsea_ctx['dashboard_ssl']
         self.deepsea_cli = deepsea_ctx['cli']
@@ -364,6 +368,7 @@ class DeepSea(Task):
 
     def _populate_deepsea_context(self):
         global deepsea_ctx
+        deepsea_ctx['allow_python2'] = self.config.get('allow_python2', True)
         deepsea_ctx['alternative_defaults'] = self.config.get('alternative_defaults', {})
         if not isinstance(deepsea_ctx['alternative_defaults'], dict):
             raise ConfigError(self.err_prefix + "alternative_defaults must be a dict")
@@ -498,7 +503,15 @@ class DeepSea(Task):
         self.master_remote.run(
             args="sudo systemctl status --lines=0 chronyd.service"
             )
-        self._master_python_version(2)
+        if self.allow_python2:
+            self._master_python_version(2)
+        else:
+            self.log.info(
+                'allow_python2 is set to \'false\'. That means the '
+                'test will now fail if a python2 binary is found on '
+                'any of the test machines.'
+                )
+            self.ctx.cluster.run(args='if type python2 ; then false ; else true ; fi')
         if not self._master_python_version(3):
             raise ConfigError(self.err_prefix + "Python 3 not installed on master node")
         if 'deepsea_installed' not in deepsea_ctx:

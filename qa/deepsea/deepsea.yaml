@@ -1,5 +1,6 @@
 tasks:
         - deepsea:
+                allow_python2: false
                 storage_profile: default
         - deepsea.orch:
                 stage: prep
