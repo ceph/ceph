@@ -710,7 +710,7 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
       Capability *cap = session->caps.front();
       CInode *in = cap->get_inode();
       dout(20) << " killing capability " << ccap_string(cap->issued()) << " on " << *in << dendl;
-      mds->locker->remove_client_cap(in, session->get_client());
+      mds->locker->remove_client_cap(in, cap);
     }
     while (!session->leases.empty()) {
       ClientLease *r = session->leases.front();
