@@ -1629,16 +1629,21 @@ int RGWBucketAdminOp::info(RGWRados *store, RGWBucketAdminOpState& op_state,
       return ret;
     }
   } else {
-    RGWAccessHandle handle;
+    void *handle = nullptr;
+    bool truncated = true;
 
     formatter->open_array_section("buckets");
-    if (store->list_buckets_init(&handle) >= 0) {
-      rgw_bucket_dir_entry obj;
-      while (store->list_buckets_next(obj, &handle) >= 0) {
+    ret = store->meta_mgr->list_keys_init("bucket", &handle);
+    while (ret == 0 && truncated) {
+      std::list<std::string> buckets;
+      const int max_keys = 1000;
+      ret = store->meta_mgr->list_keys_next(handle, max_keys, buckets,
+                                            &truncated);
+      for (auto& bucket_name : buckets) {
         if (show_stats)
-          bucket_stats(store, user_id.tenant, obj.key.name, formatter);
+          bucket_stats(store, user_id.tenant, bucket_name, formatter);
         else
-          formatter->dump_string("bucket", obj.key.name);
+          formatter->dump_string("bucket", bucket_name);
       }
     }
 
