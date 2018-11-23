@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
-import logging
 
-from .helper import DashboardTestCase
+import logging
+import urllib
+import six
+
+from .helper import DashboardTestCase, JObj, JList, JLeaf
 
 
 logger = logging.getLogger(__name__)
@@ -124,6 +127,16 @@ class RgwBucketTest(RgwTestCase):
     def setUpClass(cls):
         cls.create_test_user = True
         super(RgwBucketTest, cls).setUpClass()
+        # Create a tenanted user.
+        cls._radosgw_admin_cmd([
+            'user', 'create', '--tenant', 'testx', '--uid', 'teuth-test-user',
+            '--display-name', 'tenanted teuth-test-user'
+        ])
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._radosgw_admin_cmd(['user', 'rm', '--tenant', 'testx', '--uid=teuth-test-user'])
+        super(RgwBucketTest, cls).tearDownClass()
 
     def test_all(self):
         # Create a new bucket.
@@ -135,14 +148,20 @@ class RgwBucketTest(RgwTestCase):
             })
         self.assertStatus(201)
         data = self.jsonBody()
-        self.assertIn('bucket_info', data)
-        data = data['bucket_info']
-        self.assertIn('bucket', data)
-        self.assertIn('quota', data)
-        self.assertIn('creation_time', data)
-        self.assertIn('name', data['bucket'])
-        self.assertIn('bucket_id', data['bucket'])
-        self.assertEqual(data['bucket']['name'], 'teuth-test-bucket')
+        self.assertSchema(data, JObj(sub_elems={
+            'bucket_info': JObj(sub_elems={
+                'bucket': JObj(allow_unknown=True, sub_elems={
+                    'name': JLeaf(str),
+                    'bucket_id': JLeaf(str),
+                    'tenant': JLeaf(str)
+                }),
+                'quota': JObj(sub_elems={}, allow_unknown=True),
+                'creation_time': JLeaf(str)
+            }, allow_unknown=True)
+        }, allow_unknown=True))
+        data = data['bucket_info']['bucket']
+        self.assertEqual(data['name'], 'teuth-test-bucket')
+        self.assertEqual(data['tenant'], '')
 
         # List all buckets.
         data = self._get('/api/rgw/bucket')
@@ -153,10 +172,14 @@ class RgwBucketTest(RgwTestCase):
         # Get the bucket.
         data = self._get('/api/rgw/bucket/teuth-test-bucket')
         self.assertStatus(200)
-        self.assertIn('id', data)
-        self.assertIn('bucket', data)
-        self.assertIn('bucket_quota', data)
-        self.assertIn('owner', data)
+        self.assertSchema(data, JObj(sub_elems={
+            'id': JLeaf(str),
+            'bid': JLeaf(str),
+            'tenant': JLeaf(str),
+            'bucket': JLeaf(str),
+            'bucket_quota': JObj(sub_elems={}, allow_unknown=True),
+            'owner': JLeaf(str)
+        }, allow_unknown=True))
         self.assertEqual(data['bucket'], 'teuth-test-bucket')
         self.assertEqual(data['owner'], 'admin')
 
@@ -170,10 +193,74 @@ class RgwBucketTest(RgwTestCase):
         self.assertStatus(200)
         data = self._get('/api/rgw/bucket/teuth-test-bucket')
         self.assertStatus(200)
+        self.assertSchema(data, JObj(sub_elems={
+            'owner': JLeaf(str),
+            'bid': JLeaf(str),
+            'tenant': JLeaf(str)
+        }, allow_unknown=True))
         self.assertEqual(data['owner'], 'teuth-test-user')
 
         # Delete the bucket.
         self._delete('/api/rgw/bucket/teuth-test-bucket')
+        self.assertStatus(204)
+        data = self._get('/api/rgw/bucket')
+        self.assertStatus(200)
+        self.assertEqual(len(data), 0)
+
+    def test_create_get_update_delete_w_tenant(self):
+        # Create a new bucket. The tenant of the user is used when
+        # the bucket is created.
+        self._post(
+            '/api/rgw/bucket',
+            params={
+                'bucket': 'teuth-test-bucket',
+                'uid': 'testx$teuth-test-user'
+            })
+        self.assertStatus(201)
+        # It's not possible to validate the result because there
+        # IS NO result object returned by the RGW Admin OPS API
+        # when a tenanted bucket is created.
+        data = self.jsonBody()
+        self.assertIsNone(data)
+
+        # List all buckets.
+        data = self._get('/api/rgw/bucket')
+        self.assertStatus(200)
+        self.assertEqual(len(data), 1)
+        self.assertIn('testx/teuth-test-bucket', data)
+
+        # Get the bucket.
+        data = self._get('/api/rgw/bucket/{}'.format(urllib.quote_plus(
+            'testx/teuth-test-bucket')))
+        self.assertStatus(200)
+        self.assertSchema(data, JObj(sub_elems={
+            'owner': JLeaf(str),
+            'bucket': JLeaf(str),
+            'tenant': JLeaf(str),
+            'bid': JLeaf(str)
+        }, allow_unknown=True))
+        self.assertEqual(data['owner'], 'testx$teuth-test-user')
+        self.assertEqual(data['bucket'], 'teuth-test-bucket')
+        self.assertEqual(data['tenant'], 'testx')
+        self.assertEqual(data['bid'], 'testx/teuth-test-bucket')
+
+        # Update the bucket.
+        self._put(
+            '/api/rgw/bucket/{}'.format(urllib.quote_plus('testx/teuth-test-bucket')),
+            params={
+                'bucket_id': data['id'],
+                'uid': 'admin'
+            })
+        self.assertStatus(200)
+        data = self._get('/api/rgw/bucket/{}'.format(urllib.quote_plus(
+            'testx/teuth-test-bucket')))
+        self.assertStatus(200)
+        self.assertIn('owner', data)
+        self.assertEqual(data['owner'], 'admin')
+
+        # Delete the bucket.
+        self._delete('/api/rgw/bucket/{}'.format(urllib.quote_plus(
+            'testx/teuth-test-bucket')))
         self.assertStatus(204)
         data = self._get('/api/rgw/bucket')
         self.assertStatus(200)
@@ -237,17 +324,20 @@ class RgwUserTest(RgwTestCase):
         super(RgwUserTest, cls).setUpClass()
 
     def _assert_user_data(self, data):
-        self.assertIn('caps', data)
-        self.assertIn('display_name', data)
-        self.assertIn('email', data)
-        self.assertIn('keys', data)
+        self.assertSchema(data, JObj(sub_elems={
+            'caps': JList(JObj(sub_elems={}, allow_unknown=True)),
+            'display_name': JLeaf(str),
+            'email': JLeaf(str),
+            'keys': JList(JObj(sub_elems={}, allow_unknown=True)),
+            'max_buckets': JLeaf(int),
+            'subusers': JList(JLeaf(str)),
+            'suspended': JLeaf(int),
+            'swift_keys': JList(JObj(sub_elems={}, allow_unknown=True)),
+            'tenant': JLeaf(str),
+            'user_id': JLeaf(str),
+            'uid': JLeaf(str)
+        }, allow_unknown=True))
         self.assertGreaterEqual(len(data['keys']), 1)
-        self.assertIn('max_buckets', data)
-        self.assertIn('subusers', data)
-        self.assertIn('suspended', data)
-        self.assertIn('swift_keys', data)
-        self.assertIn('tenant', data)
-        self.assertIn('user_id', data)
 
     def test_get(self):
         data = self.get_rgw_user('admin')
@@ -261,7 +351,7 @@ class RgwUserTest(RgwTestCase):
         self.assertGreaterEqual(len(data), 1)
         self.assertIn('admin', data)
 
-    def test_create_update_delete(self):
+    def test_create_get_update_delete(self):
         # Create a new user.
         self._post('/api/rgw/user', params={
             'uid': 'teuth-test-user',
@@ -277,7 +367,9 @@ class RgwUserTest(RgwTestCase):
         data = self.get_rgw_user('teuth-test-user')
         self.assertStatus(200)
         self._assert_user_data(data)
+        self.assertEqual(data['tenant'], '')
         self.assertEqual(data['user_id'], 'teuth-test-user')
+        self.assertEqual(data['uid'], 'teuth-test-user')
 
         # Update the user.
         self._put(
@@ -294,6 +386,49 @@ class RgwUserTest(RgwTestCase):
         self._delete('/api/rgw/user/teuth-test-user')
         self.assertStatus(204)
         self.get_rgw_user('teuth-test-user')
+        self.assertStatus(500)
+        resp = self.jsonBody()
+        self.assertIn('detail', resp)
+        self.assertIn('failed request with status code 404', resp['detail'])
+        self.assertIn('"Code":"NoSuchUser"', resp['detail'])
+        self.assertIn('"HostId"', resp['detail'])
+        self.assertIn('"RequestId"', resp['detail'])
+
+    def test_create_get_update_delete_w_tenant(self):
+        # Create a new user.
+        self._post('/api/rgw/user', params={
+            'uid': 'test01$teuth-test-user',
+            'display_name': 'display name'
+        })
+        self.assertStatus(201)
+        data = self.jsonBody()
+        self._assert_user_data(data)
+        self.assertEqual(data['user_id'], 'teuth-test-user')
+        self.assertEqual(data['display_name'], 'display name')
+
+        # Get the user.
+        data = self.get_rgw_user('test01$teuth-test-user')
+        self.assertStatus(200)
+        self._assert_user_data(data)
+        self.assertEqual(data['tenant'], 'test01')
+        self.assertEqual(data['user_id'], 'teuth-test-user')
+        self.assertEqual(data['uid'], 'test01$teuth-test-user')
+
+        # Update the user.
+        self._put(
+            '/api/rgw/user/test01$teuth-test-user',
+            params={
+                'display_name': 'new name'
+            })
+        self.assertStatus(200)
+        data = self.jsonBody()
+        self._assert_user_data(data)
+        self.assertEqual(data['display_name'], 'new name')
+
+        # Delete the user.
+        self._delete('/api/rgw/user/test01$teuth-test-user')
+        self.assertStatus(204)
+        self.get_rgw_user('test01$teuth-test-user')
         self.assertStatus(500)
         resp = self.jsonBody()
         self.assertIn('detail', resp)
