@@ -69,6 +69,7 @@ public:
 private:
   enum class AuthFlag : uint64_t { ENCRYPTED = 1, SIGNED = 2 };
 
+  entity_name_t peer_name;
   char *temp_buffer;
   State state;
   uint64_t peer_required_features;

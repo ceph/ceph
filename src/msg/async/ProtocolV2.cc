@@ -1510,10 +1510,8 @@ CtPtr ProtocolV2::handle_message_header(char *buffer, int r) {
   MessageHeaderFrame header_frame(this, buffer, header_len);
   ceph_msg_header2 &header = header_frame.header();
 
-  entity_name_t src(connection->peer_type, connection->peer_global_id);
-
   ldout(cct, 20) << __func__ << " got envelope type=" << header.type << " src "
-                 << src << " front=" << header.front_len
+                 << peer_name << " front=" << header.front_len
                  << " data=" << header.data_len << " off " << header.data_off
                  << dendl;
 
@@ -1788,20 +1786,19 @@ CtPtr ProtocolV2::handle_message_complete() {
                 << middle.length() << " + " << data.length() << " byte message"
                 << dendl;
 
-  ceph_msg_header header{
-      current_header.seq,
-      current_header.tid,
-      current_header.type,
-      current_header.priority,
-      current_header.version,
-      current_header.front_len,
-      current_header.middle_len,
-      current_header.data_len,
-      current_header.data_off,
-      entity_name_t(connection->peer_type, connection->peer_global_id),
-      current_header.compat_version,
-      current_header.reserved,
-      0};
+  ceph_msg_header header{current_header.seq,
+                         current_header.tid,
+                         current_header.type,
+                         current_header.priority,
+                         current_header.version,
+                         current_header.front_len,
+                         current_header.middle_len,
+                         current_header.data_len,
+                         current_header.data_off,
+                         peer_name,
+                         current_header.compat_version,
+                         current_header.reserved,
+                         0};
   ceph_msg_footer footer{current_header.front_crc, current_header.middle_crc,
                          current_header.data_crc, 0, current_header.flags};
 
@@ -2287,7 +2284,7 @@ CtPtr ProtocolV2::handle_server_ident(char *payload, uint32_t length) {
   cookie = server_ident.cookie();
 
   connection->set_peer_addrs(server_ident.addrs());
-  connection->peer_global_id = server_ident.gid();
+  peer_name = entity_name_t(connection->get_peer_type(), server_ident.gid());
   connection->set_features(server_ident.supported_features() &
                            connection->policy.features_supported);
   peer_global_seq = server_ident.global_seq();
@@ -2452,6 +2449,7 @@ CtPtr ProtocolV2::handle_client_ident(char *payload, uint32_t length) {
     connection->set_peer_addrs(client_ident.addrs());
     connection->target_addr = client_ident.addrs().msgr2_addr();
   }
+  peer_name = entity_name_t(connection->get_peer_type(), client_ident.gid());
 
   uint64_t feat_missing = connection->policy.features_required &
                           ~(uint64_t)client_ident.supported_features();
@@ -2696,6 +2694,7 @@ CtPtr ProtocolV2::reuse_connection(AsyncConnectionRef existing,
   }
   exproto->reset_recv_state();
   if (!reconnect) {
+    exproto->peer_name = peer_name;
     exproto->peer_global_seq = peer_global_seq;
     exproto->connection_features = connection_features;
   }
