@@ -32,11 +32,11 @@ private:
 
 public:
   uint32_t stats_period = 0;
-  
+
   // Default 0 means if unspecified will include all stats
   uint32_t stats_threshold = 0;
 
-  std::list<OSDPerfMetricQuery> osd_perf_metric_queries;
+  std::map<OSDPerfMetricQuery, OSDPerfMetricLimits> osd_perf_metric_queries;
 
   void decode_payload() override
   {

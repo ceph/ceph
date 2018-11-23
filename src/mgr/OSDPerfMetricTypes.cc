@@ -93,6 +93,11 @@ std::ostream& operator<<(std::ostream& os,
   }
 }
 
+std::ostream& operator<<(std::ostream& os, const OSDPerfMetricLimit &limit) {
+  return os << "{order_by=" << limit.order_by << ", max_count="
+            << limit.max_count << "}";
+}
+
 void OSDPerfMetricQuery::pack_counters(const PerformanceCounters &counters,
                                        bufferlist *bl) const {
   auto it = counters.begin();

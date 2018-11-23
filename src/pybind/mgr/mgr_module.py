@@ -967,6 +967,7 @@ class MgrModule(ceph_module.BaseMgrModule):
              'performance_counter_descriptors': [
                list, of, descriptor, types
              ],
+             'limit': {'order_by': performance_counter_type, 'max_count': n},
            }
 
         Valid subkey types: 'client_id', 'pool_id', 'object_name'

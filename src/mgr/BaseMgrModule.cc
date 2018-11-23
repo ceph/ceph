@@ -29,6 +29,8 @@
 #include "BaseMgrModule.h"
 #include "Gil.h"
 
+#include <algorithm>
+
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
 
@@ -681,8 +683,11 @@ ceph_add_osd_perf_query(BaseMgrModule *self, PyObject *args)
   static const std::string NAME_KEY_DESCRIPTOR = "key_descriptor";
   static const std::string NAME_COUNTERS_DESCRIPTORS =
       "performance_counter_descriptors";
+  static const std::string NAME_LIMIT = "limit";
   static const std::string NAME_SUB_KEY_TYPE = "type";
   static const std::string NAME_SUB_KEY_REGEX = "regex";
+  static const std::string NAME_LIMIT_ORDER_BY = "order_by";
+  static const std::string NAME_LIMIT_MAX_COUNT = "max_count";
   static const std::map<std::string, OSDPerfMetricSubKeyType> sub_key_types = {
     {"client_id", OSDPerfMetricSubKeyType::CLIENT_ID},
     {"pool_id", OSDPerfMetricSubKeyType::POOL_ID},
@@ -712,6 +717,7 @@ ceph_add_osd_perf_query(BaseMgrModule *self, PyObject *args)
 
   PyObject *query_params = PyDict_Items(py_query);
   OSDPerfMetricQuery query;
+  std::optional<OSDPerfMetricLimit> limit;
 
   // {
   //   'key_descriptor': [
@@ -721,6 +727,7 @@ ceph_add_osd_perf_query(BaseMgrModule *self, PyObject *args)
   //   'performance_counter_descriptors': [
   //     list, of, descriptor, types
   //   ],
+  //   'limit': {'order_by': performance_counter_type, 'max_count': n},
   // }
 
   for (int i = 0; i < PyList_Size(query_params); ++i) {
@@ -822,19 +829,80 @@ ceph_add_osd_perf_query(BaseMgrModule *self, PyObject *args)
         }
         query.performance_counter_descriptors.push_back(it->second);
       }
+    } else if (query_param_name == NAME_LIMIT) {
+      if (!PyDict_Check(query_param_val)) {
+        derr << __func__ << " query " << query_param_name << " not a dict"
+             << dendl;
+        Py_RETURN_NONE;
+      }
+
+      limit = OSDPerfMetricLimit();
+      PyObject *limit_params = PyDict_Items(query_param_val);
+
+      for (int j = 0; j < PyList_Size(limit_params); ++j) {
+        PyObject *kv = PyList_GET_ITEM(limit_params, j);
+        char *limit_param_name = nullptr;
+        PyObject *limit_param_val = nullptr;
+        if (!PyArg_ParseTuple(kv, "sO:pair", &limit_param_name,
+                              &limit_param_val)) {
+          derr << __func__ << " limit item " << j << " not a size 2 tuple"
+               << dendl;
+          Py_RETURN_NONE;
+        }
+
+        if (limit_param_name == NAME_LIMIT_ORDER_BY) {
+          if (!PyString_Check(limit_param_val)) {
+            derr << __func__ << " " << limit_param_name << " not a string"
+                 << dendl;
+            Py_RETURN_NONE;
+          }
+          auto order_by = PyString_AsString(limit_param_val);
+          auto it = counter_types.find(order_by);
+          if (it == counter_types.end()) {
+            derr << __func__ << " limit " << limit_param_name
+                 << " not a valid counter type" << dendl;
+            Py_RETURN_NONE;
+          }
+          limit->order_by = it->second;
+        } else if (limit_param_name == NAME_LIMIT_MAX_COUNT) {
+#if PY_MAJOR_VERSION <= 2
+          if (!PyInt_Check(limit_param_val) && !PyLong_Check(limit_param_val)) {
+#else
+          if (!PyLong_Check(limit_param_val)) {
+#endif
+            derr << __func__ << " " << limit_param_name << " not an int"
+                 << dendl;
+            Py_RETURN_NONE;
+          }
+          limit->max_count = PyLong_AsLong(limit_param_val);
+        } else {
+          derr << __func__ << " unknown limit param: " << limit_param_name
+               << dendl;
+          Py_RETURN_NONE;
+        }
+      }
     } else {
-      derr << "unknown query param: " << query_param_name << dendl;
+      derr << __func__ << " unknown query param: " << query_param_name << dendl;
       Py_RETURN_NONE;
     }
   }
 
   if (query.key_descriptor.empty() ||
       query.performance_counter_descriptors.empty()) {
-    derr << "invalid query" << dendl;
+    derr << __func__ << " invalid query" << dendl;
     Py_RETURN_NONE;
   }
 
-  auto query_id = self->py_modules->add_osd_perf_query(query);
+  if (limit) {
+    auto &ds = query.performance_counter_descriptors;
+    if (std::find(ds.begin(), ds.end(), limit->order_by) == ds.end()) {
+      derr << __func__ << " limit order_by " << limit->order_by
+           << " not in performance_counter_descriptors" << dendl;
+      Py_RETURN_NONE;
+    }
+  }
+
+  auto query_id = self->py_modules->add_osd_perf_query(query, limit);
   return PyLong_FromLong(query_id);
 }
 
