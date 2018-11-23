@@ -32,6 +32,22 @@ if [ $? -gt 0 ]; then
 Some errors might need a manual fix."
 fi
 
+# I18N
+npm run i18n
+i18n_modified=`git status -s src/locale/messages.xlf`
+if [[ ! -z $i18n_modified ]]; then
+  echo "Please run 'npm run i18n' and commit the modified 'messages.xlf' file."
+  failed=true
+fi
+
+i18n_lint=`grep -En "<source> |<source>$| </source>" src/locale/messages.xlf`
+if [[ ! -z $i18n_lint ]]; then
+  echo -e "The following source translations in 'messages.xlf' need to be \
+fixed, please check the I18N suggestions in 'HACKING.rst':\n"
+  echo "${i18n_lint}"
+  failed=true
+fi
+
 if [ `uname` != "FreeBSD" ]; then
   deactivate
 fi
