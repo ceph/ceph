@@ -1971,8 +1971,12 @@ class Validation(DeepSea):
         cmd_str = 'sudo rados --striper 2>&1 || true'
         output = self.master_remote.sh(cmd_str)
         os_type = self.ctx.config.get('os_type', 'unknown')
-        self.log.info("Checking for expected output on OS ->{}<-".format(os_type))
-        if os_type == 'sle':
+        os_version = float(self.ctx.config.get('os_version', 0))
+        self.log.info(
+            "Checking for expected output on OS ->{}<-"
+            .format(os_type + " " + str(os_version))
+            )
+        if os_type == 'sle' and os_version >= 15:
             assert 'unrecognized command --striper' in output, \
                 "ceph is compiled without libradosstriper"
         else:
