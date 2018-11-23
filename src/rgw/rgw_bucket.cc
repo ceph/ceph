@@ -888,7 +888,7 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
     auto sysobj = obj_ctx.get_obj(obj);
     r = sysobj.wop()
               .set_objv_tracker(&objv_tracker)
-              .write_attr(RGW_ATTR_ACL, aclbl);
+              .write_attr(RGW_ATTR_ACL, aclbl, null_yield);
     if (r < 0) {
       return r;
     }
@@ -903,7 +903,7 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
     auto inst_sysobj = obj_ctx.get_obj(obj_bucket_instance);
     r = inst_sysobj.wop()
                    .set_objv_tracker(&objv_tracker)
-                   .write_attr(RGW_ATTR_ACL, aclbl);
+                   .write_attr(RGW_ATTR_ACL, aclbl, null_yield);
     if (r < 0) {
       return r;
     }
