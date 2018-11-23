@@ -2411,6 +2411,26 @@ CtPtr ProtocolV2::handle_auth_request(char *payload, uint32_t length) {
   if (auth_method == CEPH_AUTH_NONE) {
     ldout(cct, 1) << __func__ << " proceeding without authentication" << dendl;
 
+    // even with CEPH_AUTH_NONE we still need to call verify_authorizer to
+    // make sure that peer caps are set correctly, and code up in the stack
+    // runs ms_handle_authentication.
+    connection->lock.unlock();
+    bufferlist authorizer_reply;
+    bool authorizer_valid;
+    messenger->ms_deliver_verify_authorizer(
+        connection, connection->peer_type, auth_method,
+        auth_request.auth_payload(), authorizer_reply, authorizer_valid,
+        session_key, nullptr);
+    connection->lock.lock();
+
+    if (!authorizer_valid) {
+      ldout(cct, 0) << __func__ << " got bad authorizer, auth_reply_len="
+                    << authorizer_reply.length() << dendl;
+      session_security.reset();
+      AuthBadAuthFrame bad_auth(EPERM, "Bad Authorizer");
+      return WRITE(bad_auth.get_buffer(), "bad auth", read_frame);
+    }
+
     session_security.reset();
     bufferlist empty_bl;
     AuthDoneFrame auth_done(0, 0, empty_bl);
@@ -2713,6 +2733,7 @@ CtPtr ProtocolV2::reuse_connection(AsyncConnectionRef existing,
   exproto->replacing = true;
   exproto->session_security = session_security;
   exproto->auth_method = auth_method;
+  exproto->auth_flags = auth_flags;
   exproto->session_key = session_key;
   exproto->authorizer_challenge = std::move(authorizer_challenge);
   existing->state_offset = 0;
