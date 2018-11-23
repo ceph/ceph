@@ -153,8 +153,10 @@ Capability::Capability(CInode *i, Session *s, uint64_t id) :
   _pending(0), _issued(0), last_sent(0), last_issue(0), mseq(0),
   suppress(0), state(0)
 {
-  if (session)
+  if (session) {
     session->touch_cap_bottom(this);
+    cap_gen = session->get_cap_gen();
+  }
 }
 
 client_t Capability::get_client() const
@@ -165,6 +167,29 @@ client_t Capability::get_client() const
 bool Capability::is_stale() const
 {
   return session ? session->is_stale() : false;
+}
+
+bool Capability::is_valid() const
+{
+  return !session || session->get_cap_gen() == cap_gen;
+}
+
+void Capability::revalidate()
+{
+  if (is_valid())
+    return;
+
+  if (_pending & ~CEPH_CAP_PIN)
+    inc_last_seq();
+
+  bool was_revoking = _issued & ~_pending;
+  _pending = _issued = CEPH_CAP_PIN;
+  _revokes.clear();
+
+  cap_gen = session->get_cap_gen();
+
+  if (was_revoking)
+    maybe_clear_notable();
 }
 
 void Capability::mark_notable()
