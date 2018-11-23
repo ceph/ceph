@@ -1946,6 +1946,14 @@ CtPtr ProtocolV2::handle_message_complete() {
   data.clear();
   extra.clear();
 
+  // we might have been reused by another connection
+  // let's check if that is the case
+  if (state != READY) {
+    // yes, that was the case, let's do nothing
+    return nullptr;
+  }
+
+
   if (need_dispatch_writer && connection->is_connected()) {
     connection->center->dispatch_event_external(connection->write_handler);
   }
