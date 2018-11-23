@@ -347,6 +347,13 @@ public:
   /// get current extents that we own for given block device
   int get_block_extents(unsigned id, interval_set<uint64_t> *extents);
 
+  // returns true if specified device is attached
+  bool is_device(unsigned id);
+  
+  // returns true if specified device is under full bluefs control
+  // and hence can be expanded
+  bool is_device_expandable(unsigned id);
+
   int open_for_write(
     const string& dir,
     const string& file,

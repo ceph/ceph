@@ -480,8 +480,18 @@ int main(int argc, char **argv)
     cout << "start:" << std::endl;
     fs->dump_block_extents(cout);
     for (int devid : { BlueFS::BDEV_WAL, BlueFS::BDEV_DB }) {
+      if (!fs->is_device(devid)) {
+        continue;
+      }
+      if (!fs->is_device_expandable(devid)) {
+	cout << devid
+	     << " : can't be expanded."
+	     << std::endl;
+	continue;
+      }
       interval_set<uint64_t> before;
       fs->get_block_extents(devid, &before);
+      assert(!before.empty());
       uint64_t end = before.range_end();
       uint64_t size = fs->get_block_device_size(devid);
       if (end < size) {
