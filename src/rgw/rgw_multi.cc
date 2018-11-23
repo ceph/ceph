@@ -136,9 +136,10 @@ int list_multipart_parts(RGWRados *store, RGWBucketInfo& bucket_info,
     snprintf(buf, sizeof(buf), "%08d", marker);
     p.append(buf);
 
-    ret = sysobj.omap().get_vals(p, num_parts + 1, &parts_map, nullptr);
+    ret = sysobj.omap().get_vals(p, num_parts + 1, &parts_map,
+                                 nullptr, null_yield);
   } else {
-    ret = sysobj.omap().get_all(&parts_map);
+    ret = sysobj.omap().get_all(&parts_map, null_yield);
   }
   if (ret < 0)
     return ret;
