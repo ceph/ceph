@@ -35,7 +35,8 @@ protected:
 
   int raw_stat(const rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *epoch,
                map<string, bufferlist> *attrs, bufferlist *first_chunk,
-               RGWObjVersionTracker *objv_tracker) override;
+               RGWObjVersionTracker *objv_tracker,
+               optional_yield y) override;
 
   int read(RGWSysObjectCtxBase& obj_ctx,
            GetObjState& read_state,
@@ -45,18 +46,22 @@ protected:
            map<string, bufferlist> *attrs,
 	   bool raw_attrs,
            rgw_cache_entry_info *cache_info,
-           boost::optional<obj_version>) override;
+           boost::optional<obj_version>,
+           optional_yield y) override;
 
-  int get_attr(const rgw_raw_obj& obj, const char *name, bufferlist *dest) override;
+  int get_attr(const rgw_raw_obj& obj, const char *name, bufferlist *dest,
+               optional_yield y) override;
 
   int set_attrs(const rgw_raw_obj& obj, 
                 map<string, bufferlist>& attrs,
                 map<string, bufferlist> *rmattrs,
-                RGWObjVersionTracker *objv_tracker);
+                RGWObjVersionTracker *objv_tracker,
+                optional_yield y);
 
   int remove(RGWSysObjectCtxBase& obj_ctx,
              RGWObjVersionTracker *objv_tracker,
-             const rgw_raw_obj& obj) override;
+             const rgw_raw_obj& obj,
+             optional_yield y) override;
 
   int write(const rgw_raw_obj& obj,
             real_time *pmtime,
@@ -64,14 +69,18 @@ protected:
             bool exclusive,
             const bufferlist& data,
             RGWObjVersionTracker *objv_tracker,
-            real_time set_mtime) override;
+            real_time set_mtime,
+            optional_yield y) override;
 
   int write_data(const rgw_raw_obj& obj,
                  const bufferlist& bl,
                  bool exclusive,
-                 RGWObjVersionTracker *objv_tracker);
+                 RGWObjVersionTracker *objv_tracker,
+                 optional_yield y);
 
-  int distribute_cache(const string& normal_name, const rgw_raw_obj& obj, ObjectCacheInfo& obj_info, int op);
+  int distribute_cache(const string& normal_name, const rgw_raw_obj& obj,
+                       ObjectCacheInfo& obj_info, int op,
+                       optional_yield y);
 
   int watch_cb(uint64_t notify_id,
                uint64_t cookie,
