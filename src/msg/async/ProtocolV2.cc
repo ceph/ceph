@@ -839,11 +839,11 @@ ssize_t ProtocolV2::write_message(Message *m, bufferlist &bl, bool more) {
   encrypt_payload(flat_bl);
   MessageFrame message(this, header2, flat_bl);
 
-  ldout(cct, 20) << __func__ << " sending message type=" << header2.type
-                 << " src " << entity_name_t(messenger->get_myname())
-                 << " front=" << header2.front_len
-                 << " data=" << header2.data_len << " off " << header2.data_off
-                 << dendl;
+  ldout(cct, 5) << __func__ << " sending message type=" << header2.type
+                << " src " << entity_name_t(messenger->get_myname())
+                << " front=" << header2.front_len
+                << " data=" << header2.data_len << " off " << header2.data_off
+                << dendl;
 
   bufferlist &msg_bl = message.get_buffer();
   connection->outcoming_bl.claim_append(msg_bl);
