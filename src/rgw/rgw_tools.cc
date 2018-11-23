@@ -47,7 +47,7 @@ int rgw_put_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string& o
                   .set_exclusive(exclusive)
                   .set_mtime(set_mtime)
                   .set_attrs(*pattrs)
-                  .write(data);
+                  .write(data, null_yield);
 
   if (ret == -ENOENT) {
     ret = rgwstore->create_pool(pool);
@@ -57,7 +57,7 @@ int rgw_put_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string& o
                   .set_exclusive(exclusive)
                   .set_mtime(set_mtime)
                   .set_attrs(*pattrs)
-                  .write(data);
+                  .write(data, null_yield);
     }
   }
 
@@ -84,13 +84,13 @@ int rgw_get_system_obj(RGWRados *rgwstore, RGWSysObjectCtx& obj_ctx, const rgw_p
     int ret = rop.set_attrs(pattrs)
                  .set_last_mod(pmtime)
                  .set_objv_tracker(objv_tracker)
-                 .stat();
+                 .stat(null_yield);
     if (ret < 0)
       return ret;
 
     ret = rop.set_cache_info(cache_info)
              .set_refresh_version(refresh_version)
-             .read(&bl);
+             .read(&bl, null_yield);
     if (ret == -ECANCELED) {
       /* raced, restart */
       if (!original_readv.empty()) {
@@ -123,7 +123,7 @@ int rgw_delete_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string
   rgw_raw_obj obj(pool, oid);
   return sysobj.wop()
                .set_objv_tracker(objv_tracker)
-               .remove();
+               .remove(null_yield);
 }
 
 thread_local bool is_asio_thread = false;
