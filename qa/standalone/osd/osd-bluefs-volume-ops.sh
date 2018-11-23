@@ -12,7 +12,7 @@ function run() {
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
-    CEPH_ARGS+="--bluestore_block_size=4294967296 "
+    CEPH_ARGS+="--bluestore_block_size=2147483648 "
     CEPH_ARGS+="--bluestore_block_db_create=true "
     CEPH_ARGS+="--bluestore_block_db_size=1073741824 "
     CEPH_ARGS+="--bluestore_block_wal_size=536870912 "
@@ -66,8 +66,26 @@ function TEST_bluestore() {
     while kill $osd_pid3; do sleep 1 ; done
     ceph osd down 3
 
+    # expand slow devices
+    ceph-bluestore-tool --path $dir/0 fsck || return 1
+    ceph-bluestore-tool --path $dir/1 fsck || return 1
+    ceph-bluestore-tool --path $dir/2 fsck || return 1
+    ceph-bluestore-tool --path $dir/3 fsck || return 1
+
+    truncate $dir/0/block -s 4294967296 # 4GB
+    ceph-bluestore-tool --path $dir/0 bluefs-bdev-expand || return 1
+    truncate $dir/1/block -s 4311744512 # 4GB + 16MB
+    ceph-bluestore-tool --path $dir/1 bluefs-bdev-expand || return 1
+    truncate $dir/2/block -s 4295099392 # 4GB + 129KB
+    ceph-bluestore-tool --path $dir/2 bluefs-bdev-expand || return 1
+    truncate $dir/3/block -s 4293918720 # 4GB - 1MB
+    ceph-bluestore-tool --path $dir/3 bluefs-bdev-expand || return 1
+
     # slow, DB, WAL -> slow, DB
     ceph-bluestore-tool --path $dir/0 fsck || return 1
+    ceph-bluestore-tool --path $dir/1 fsck || return 1
+    ceph-bluestore-tool --path $dir/2 fsck || return 1
+    ceph-bluestore-tool --path $dir/3 fsck || return 1
 
     ceph-bluestore-tool --path $dir/0 bluefs-bdev-sizes
 
