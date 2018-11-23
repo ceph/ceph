@@ -1421,14 +1421,6 @@ public:
   int register_to_service_map(const string& daemon_type, const map<string, string>& meta);
   int update_service_map(std::map<std::string, std::string>&& status);
 
-  /** set up a bucket listing. handle is filled in. */
-  int list_buckets_init(RGWAccessHandle *handle);
-  /** 
-   * get the next bucket in the listing. obj is filled in,
-   * handle is updated.
-   */
-  int list_buckets_next(rgw_bucket_dir_entry& obj, RGWAccessHandle *handle);
-
   /// list logs
   int log_list_init(const string& prefix, RGWAccessHandle *handle);
   int log_list_next(RGWAccessHandle handle, string *name);
