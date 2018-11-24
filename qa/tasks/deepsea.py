@@ -529,11 +529,11 @@ class DeepSea(Task):
     def teardown(self):
         self.log.debug("beginning of teardown method")
         super(DeepSea, self).teardown()
-        #
-        # the install task does "rm -r /var/lib/ceph" on every test node,
-        # and that fails when there are OSDs running
-        # FIXME - deprecated, remove after awhile
-        self._purge_osds()
+        # #
+        # # the install task does "rm -r /var/lib/ceph" on every test node,
+        # # and that fails when there are OSDs running
+        # # FIXME - deprecated, remove after awhile
+        # self._purge_osds()
         self.log.debug("end of teardown method")
 
 
