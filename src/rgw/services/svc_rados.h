@@ -79,9 +79,8 @@ public:
     int watch(uint64_t *handle, librados::WatchCtx2 *ctx);
     int aio_watch(librados::AioCompletion *c, uint64_t *handle, librados::WatchCtx2 *ctx);
     int unwatch(uint64_t handle);
-    int notify(bufferlist& bl,
-               uint64_t timeout_ms,
-               bufferlist *pbl);
+    int notify(bufferlist& bl, uint64_t timeout_ms,
+               bufferlist *pbl, optional_yield y);
     void notify_ack(uint64_t notify_id,
                     uint64_t cookie,
                     bufferlist& bl);
