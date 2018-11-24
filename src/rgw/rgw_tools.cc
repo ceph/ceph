@@ -171,6 +171,29 @@ int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
   return ioctx.operate(oid, op);
 }
 
+int rgw_rados_notify(librados::IoCtx& ioctx, const std::string& oid,
+                     bufferlist& bl, uint64_t timeout_ms, bufferlist* pbl,
+                     optional_yield y)
+{
+#ifdef HAVE_BOOST_CONTEXT
+  if (y) {
+    auto& context = y.get_io_context();
+    auto& yield = y.get_yield_context();
+    boost::system::error_code ec;
+    auto reply = librados::async_notify(context, ioctx, oid,
+                                        bl, timeout_ms, yield[ec]);
+    if (pbl) {
+      *pbl = std::move(reply);
+    }
+    return -ec.value();
+  }
+  if (is_asio_thread) {
+    dout(20) << "WARNING: blocking librados call" << dendl;
+  }
+#endif
+  return ioctx.notify2(oid, bl, timeout_ms, pbl);
+}
+
 void parse_mime_map_line(const char *start, const char *end)
 {
   char line[end - start + 1];
