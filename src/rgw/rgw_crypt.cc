@@ -747,7 +747,7 @@ static int request_key_from_barbican(CephContext *cct,
   secret_req.append_header("Accept", "application/octet-stream");
   secret_req.append_header("X-Auth-Token", barbican_token);
 
-  res = secret_req.process();
+  res = secret_req.process(null_yield);
   if (res < 0) {
     return res;
   }

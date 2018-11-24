@@ -282,7 +282,7 @@ int Service::issue_admin_token_request(CephContext* const cct,
 
   token_req.set_url(token_url);
 
-  const int ret = token_req.process();
+  const int ret = token_req.process(null_yield);
   if (ret < 0) {
     return ret;
   }
@@ -356,7 +356,7 @@ int Service::get_keystone_barbican_token(CephContext * const cct,
   token_req.set_url(token_url);
 
   ldout(cct, 20) << "Requesting secret from barbican url=" << token_url << dendl;
-  const int ret = token_req.process();
+  const int ret = token_req.process(null_yield);
   if (ret < 0) {
     ldout(cct, 20) << "Barbican process error:" << token_bl.c_str() << dendl;
     return ret;
@@ -583,7 +583,7 @@ int TokenCache::RevokeThread::check_revoked()
   req.set_url(url);
 
   req.set_send_length(0);
-  int ret = req.process();
+  int ret = req.process(null_yield);
   if (ret < 0) {
     return ret;
   }

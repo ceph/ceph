@@ -64,7 +64,7 @@ WebTokenEngine::get_from_idp(const DoutPrefixProvider* dpp, const std::string& t
     introspect_req.set_post_data(post_data);
     introspect_req.set_send_length(post_data.length());
 
-    int res = introspect_req.process();
+    int res = introspect_req.process(null_yield);
     if (res < 0) {
       ldpp_dout(dpp, 10) << "HTTP request res: " << res << dendl;
       throw -EINVAL;

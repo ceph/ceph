@@ -398,7 +398,7 @@ ExternalTokenEngine::authenticate(const DoutPrefixProvider* dpp,
 
   ldpp_dout(dpp, 10) << "rgw_swift_validate_token url=" << url_buf << dendl;
 
-  int ret = validator.process();
+  int ret = validator.process(null_yield);
   if (ret < 0) {
     throw ret;
   }
