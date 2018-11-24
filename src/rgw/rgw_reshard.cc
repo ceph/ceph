@@ -862,8 +862,6 @@ int RGWReshard::clear_bucket_resharding(const string& bucket_instance_oid, cls_r
   return 0;
 }
 
-static const std::chrono::seconds default_reshard_sleep_duration(5);
-
 int RGWReshardWait::wait(optional_yield y)
 {
   std::unique_lock lock(mutex);
@@ -881,7 +879,7 @@ int RGWReshardWait::wait(optional_yield y)
     waiters.push_back(waiter);
     lock.unlock();
 
-    waiter.timer.expires_after(default_reshard_sleep_duration);
+    waiter.timer.expires_after(duration);
 
     boost::system::error_code ec;
     waiter.timer.async_wait(yield[ec]);
@@ -892,7 +890,7 @@ int RGWReshardWait::wait(optional_yield y)
   }
 #endif
 
-  cond.wait_for(lock, default_reshard_sleep_duration);
+  cond.wait_for(lock, duration);
 
   if (going_down) {
     return -ECANCELED;
