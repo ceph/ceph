@@ -865,9 +865,33 @@ int RGWReshard::clear_bucket_resharding(const string& bucket_instance_oid, cls_r
 const int num_retries = 10;
 static const std::chrono::seconds default_reshard_sleep_duration(5);
 
-int RGWReshardWait::do_wait()
+int RGWReshardWait::do_wait(optional_yield y)
 {
   std::unique_lock lock(mutex);
+
+  if (going_down) {
+    return -ECANCELED;
+  }
+
+#ifdef HAVE_BOOST_CONTEXT
+  if (y) {
+    auto& context = y.get_io_context();
+    auto& yield = y.get_yield_context();
+
+    Waiter waiter(context);
+    waiters.push_back(waiter);
+    lock.unlock();
+
+    waiter.timer.expires_after(default_reshard_sleep_duration);
+
+    boost::system::error_code ec;
+    waiter.timer.async_wait(yield[ec]);
+
+    lock.lock();
+    waiters.erase(waiters.iterator_to(waiter));
+    return -ec.value();
+  }
+#endif
 
   cond.wait_for(lock, default_reshard_sleep_duration);
 
@@ -878,9 +902,21 @@ int RGWReshardWait::do_wait()
   return 0;
 }
 
+void RGWReshardWait::stop()
+{
+  std::scoped_lock lock(mutex);
+  going_down = true;
+  cond.notify_all();
+  for (auto& waiter : waiters) {
+    // unblock any waiters with ECANCELED
+    waiter.timer.cancel();
+  }
+}
+
 int RGWReshardWait::block_while_resharding(RGWRados::BucketShard *bs,
 					   string *new_bucket_id,
-					   const RGWBucketInfo& bucket_info)
+					   const RGWBucketInfo& bucket_info,
+                                           optional_yield y)
 {
   int ret = 0;
   cls_rgw_bucket_instance_entry entry;
@@ -939,7 +975,7 @@ int RGWReshardWait::block_while_resharding(RGWRados::BucketShard *bs,
       } // if taking of lock succeeded
     } // block to encapsulate recovery from incomplete reshard
 
-    ret = do_wait();
+    ret = do_wait(y);
     if (ret < 0) {
       ldout(store->ctx(), 0) << __func__ << " ERROR: bucket is still resharding, please retry" << dendl;
       return ret;

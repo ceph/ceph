@@ -6216,7 +6216,8 @@ int RGWRados::Bucket::UpdateIndex::guard_reshard(BucketShard **pbs, std::functio
     }
     ldout(store->ctx(), 0) << "NOTICE: resharding operation on bucket index detected, blocking" << dendl;
     string new_bucket_id;
-    r = store->block_while_resharding(bs, &new_bucket_id, target->bucket_info);
+    r = store->block_while_resharding(bs, &new_bucket_id,
+                                      target->bucket_info, null_yield);
     if (r == -ERR_BUSY_RESHARDING) {
       continue;
     }
@@ -7091,7 +7092,7 @@ int RGWRados::guard_reshard(BucketShard *bs,
     }
     ldout(cct, 0) << "NOTICE: resharding operation on bucket index detected, blocking" << dendl;
     string new_bucket_id;
-    r = block_while_resharding(bs, &new_bucket_id, bucket_info);
+    r = block_while_resharding(bs, &new_bucket_id, bucket_info, null_yield);
     if (r == -ERR_BUSY_RESHARDING) {
       continue;
     }
@@ -7115,11 +7116,12 @@ int RGWRados::guard_reshard(BucketShard *bs,
 
 int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
 				     string *new_bucket_id,
-				     const RGWBucketInfo& bucket_info)
+                                     const RGWBucketInfo& bucket_info,
+                                     optional_yield y)
 {
   std::shared_ptr<RGWReshardWait> waiter = reshard_wait;
 
-  return waiter->block_while_resharding(bs, new_bucket_id, bucket_info);
+  return waiter->block_while_resharding(bs, new_bucket_id, bucket_info, y);
 }
 
 int RGWRados::bucket_index_link_olh(const RGWBucketInfo& bucket_info, RGWObjState& olh_state, const rgw_obj& obj_instance,
