@@ -173,6 +173,7 @@ public:
 };
 
 class RGWReshardWait {
+  const ceph::timespan duration;
   ceph::mutex mutex = ceph::make_mutex("RGWReshardWait::lock");
   ceph::condition_variable cond;
 
@@ -186,7 +187,8 @@ class RGWReshardWait {
   bool going_down{false};
 
 public:
-  RGWReshardWait() = default;
+  RGWReshardWait(ceph::timespan duration = std::chrono::seconds(5))
+    : duration(duration) {}
   ~RGWReshardWait() {
     ceph_assert(going_down);
   }
