@@ -8,6 +8,7 @@ import logging
 
 from salt_manager import SaltManager
 from scripts import Scripts
+from util import introspect_roles
 
 from teuthology.exceptions import (
     ConfigError,
@@ -21,6 +22,7 @@ ses_qa_ctx = {}
 class SESQA(Task):
 
     def __init__(self, ctx, config):
+        global ses_qa_ctx
         super(SESQA, self).__init__(ctx, config)
         if ses_qa_ctx:
             self.log = ses_qa_ctx['logger_obj']
@@ -31,13 +33,16 @@ class SESQA(Task):
             self.log.debug("populating ses_qa_ctx (we are *not* in a subtask)")
             self._populate_ses_qa_context()
         self.master_remote = ses_qa_ctx['master_remote']
-        self.scripts = Scripts(self.master_remote, ses_qa_ctx['logger_obj'])
+        self.remotes = ses_qa_ctx['remotes']
+        self.scripts = Scripts(self.remotes)
         self.sm = ses_qa_ctx['salt_manager_instance']
 
     def _populate_ses_qa_context(self):
+        global ses_qa_ctx
         ses_qa_ctx['roles'] = self.ctx.config['roles']
         ses_qa_ctx['salt_manager_instance'] = SaltManager(self.ctx)
         ses_qa_ctx['master_remote'] = ses_qa_ctx['salt_manager_instance'].master_remote
+        introspect_roles(self.ctx, self.log, ses_qa_ctx, quiet=False)
 
     def os_type_and_version(self):
         os_type = self.ctx.config.get('os_type', 'unknown')
@@ -62,6 +67,7 @@ class Validation(SESQA):
     err_prefix = "(validation subtask) "
 
     def __init__(self, ctx, config):
+        global ses_qa_ctx
         ses_qa_ctx['logger_obj'] = log.getChild('validation')
         self.name = 'ses_qa.validation'
         super(Validation, self).__init__(ctx, config)
@@ -71,7 +77,10 @@ class Validation(SESQA):
         """
         Minimal/smoke test for the MGR dashboard plugin
         """
-        self.scripts.mgr_dashboard_module_smoke()
+        self.scripts.run(
+            self.master_remote,
+            'mgr_plugin_dashboard_smoke.sh',
+            )
 
     def mgr_plugin_influx(self, **kwargs):
         """
@@ -99,7 +108,10 @@ class Validation(SESQA):
             self.ctx.cluster.run(
                 args=zypper_cmd.format(' '.join(["python3-influxdb", "influxdb"]))
                 )
-            self.scripts.mgr_plugin_influx()
+            self.scripts.run(
+                self.master_remote,
+                'mgr_plugin_influx.sh',
+                )
         else:
             self.log.warning(
                 "mgr_plugin_influx test case not implemented for OS ->{}<-"

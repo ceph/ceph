@@ -1,3 +1,4 @@
 tasks:
         - deepsea.script:
-                remove_storage_only_node:
+                client.salt_master:
+                        remove_storage_only_node.sh:

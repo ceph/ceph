@@ -38,6 +38,149 @@ def copy_directory_recursively(from_path, to_remote, to_path=None):
             from_path=from_path, host=to_remote.name, to_path=to_path))
 
 
+def introspect_roles(teuthology_ctx, logger, test_ctx, quiet=True):
+    """
+    Creates the following keys in test_ctx:
+
+        nodes,
+        cluster_nodes,
+        gateway_nodes,
+        storage_nodes, and
+        client_only_nodes.
+
+    These are all simple lists of hostnames.
+
+    Also creates
+
+        remotes,
+
+    which is a dict of teuthology "remote" objects, which look like this:
+
+        { remote1_name: remote1_obj, ..., remoten_name: remoten_obj }
+
+    Also creates
+
+        role_types
+
+    which is just like the "roles" list, except it contains only unique
+    role types per node.
+
+    Finally, creates:
+
+        role_lookup_table
+
+    which will look something like this:
+
+        {
+            "osd": { "osd.0": osd0remname, ..., "osd.n": osdnremname },
+            "mon": { "mon.a": monaremname, ..., "mon.n": monnremname },
+            ...
+        }
+
+    and
+
+        remote_lookup_table
+
+    which looks like this:
+
+        {
+            remote0name: [ "osd.0", "client.0" ],
+            ...
+            remotenname: [ remotenrole0, ..., remotenrole99 ],
+        }
+
+    (In other words, remote_lookup_table is just like the roles
+    stanza, except the role lists are keyed by remote name.)
+    """
+    # initialization phase
+    cluster_roles = ['mon', 'mgr', 'osd', 'mds']
+    non_storage_cluster_roles = ['mon', 'mgr', 'mds']
+    gateway_roles = ['rgw', 'igw', 'ganesha']
+    roles = test_ctx['roles']
+    nodes = []
+    cluster_nodes = []
+    non_storage_cluster_nodes = []
+    gateway_nodes = []
+    storage_nodes = []
+    storage_only_nodes = []
+    client_only_nodes = []
+    remotes = {}
+    role_types = []
+    role_lookup_table = {}
+    remote_lookup_table = {}
+    # introspection phase
+    idx = 0
+    for node_roles_list in roles:
+        assert isinstance(node_roles_list, list), \
+            "node_roles_list is a list"
+        assert node_roles_list, "node_roles_list is not empty"
+        remote = get_remote_for_role(teuthology_ctx, node_roles_list[0])
+        role_types.append([])
+        if not quiet:
+            logger.debug("Considering remote name {}, hostname {}"
+                         .format(remote.name, remote.hostname))
+        nodes += [remote.hostname]
+        remotes[remote.hostname] = remote
+        remote_lookup_table[remote.hostname] = node_roles_list
+        # inner loop: roles (something like "osd.1" or "c2.mon.a")
+        for role in node_roles_list:
+            # FIXME: support multiple clusters as used in, e.g.,
+            # rgw/multisite suite
+            role_arr = role.split('.')
+            if len(role_arr) != 2:
+                raise ConfigError("Unsupported role ->{}<-"
+                                  .format(role))
+            (role_type, _) = role_arr
+            if role_type not in role_lookup_table:
+                role_lookup_table[role_type] = {}
+            role_lookup_table[role_type][role] = remote.hostname
+            if role_type in cluster_roles:
+                cluster_nodes += [remote.hostname]
+            if role_type in gateway_roles:
+                gateway_nodes += [remote.hostname]
+            if role_type in non_storage_cluster_roles:
+                non_storage_cluster_nodes += [remote.hostname]
+            if role_type == 'osd':
+                storage_nodes += [remote.hostname]
+            if role_type not in role_types[idx]:
+                role_types[idx] += [role_type]
+        idx += 1
+    cluster_nodes = list(set(cluster_nodes))
+    gateway_nodes = list(set(gateway_nodes))
+    storage_nodes = list(set(storage_nodes))
+    storage_only_nodes = []
+    for node in storage_nodes:
+        if node not in non_storage_cluster_nodes:
+            if node not in gateway_nodes:
+                storage_only_nodes += [node]
+    client_only_nodes = list(
+        set(nodes).difference(set(cluster_nodes).union(set(gateway_nodes)))
+        )
+    if not quiet:
+        logger.debug("client_only_nodes is ->{}<-".format(client_only_nodes))
+    assign_vars = [
+        'client_only_nodes',
+        'cluster_nodes',
+        'gateway_nodes',
+        'nodes',
+        'remote_lookup_table',
+        'remotes',
+        'role_lookup_table',
+        'role_types',
+        'storage_nodes',
+        'storage_only_nodes',
+        ]
+    for var in assign_vars:
+        exec("test_ctx['{var}'] = {var}".format(var=var))
+    test_ctx['dev_env'] = True if len(cluster_nodes) < 4 else False
+    if not quiet:
+        # report phase
+        logger.info("ROLE INTROSPECTION REPORT")
+        report_vars = ['roles'] + assign_vars + ['dev_env']
+        for var in report_vars:
+            logger.info("{} == {}".format(var, test_ctx[var]))
+
+
 def remote_run_script_as_root(remote, path, data, args=None):
     """
     Wrapper around misc.write_file to simplify the design pattern:
