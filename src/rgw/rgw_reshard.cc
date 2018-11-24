@@ -862,10 +862,9 @@ int RGWReshard::clear_bucket_resharding(const string& bucket_instance_oid, cls_r
   return 0;
 }
 
-const int num_retries = 10;
 static const std::chrono::seconds default_reshard_sleep_duration(5);
 
-int RGWReshardWait::do_wait(optional_yield y)
+int RGWReshardWait::wait(optional_yield y)
 {
   std::unique_lock lock(mutex);
 
@@ -911,78 +910,6 @@ void RGWReshardWait::stop()
     // unblock any waiters with ECANCELED
     waiter.timer.cancel();
   }
-}
-
-int RGWReshardWait::block_while_resharding(RGWRados::BucketShard *bs,
-					   string *new_bucket_id,
-					   const RGWBucketInfo& bucket_info,
-                                           optional_yield y)
-{
-  int ret = 0;
-  cls_rgw_bucket_instance_entry entry;
-
-  for (int i=0; i < num_retries; i++) {
-    ret = cls_rgw_get_bucket_resharding(bs->index_ctx, bs->bucket_obj, &entry);
-    if (ret < 0) {
-      ldout(store->ctx(), 0) << __func__ << " ERROR: failed to get bucket resharding :"  <<
-	cpp_strerror(-ret)<< dendl;
-      return ret;
-    }
-    if (!entry.resharding_in_progress()) {
-      *new_bucket_id = entry.new_bucket_instance_id;
-      return 0;
-    }
-    ldout(store->ctx(), 20) << "NOTICE: reshard still in progress; " << (i < num_retries - 1 ? "retrying" : "too many retries") << dendl;
-
-    if (i == num_retries - 1) {
-      break;
-    }
-
-    // If bucket is erroneously marked as resharding (e.g., crash or
-    // other error) then fix it. If we can take the bucket reshard
-    // lock then it means no other resharding should be taking place,
-    // and we're free to clear the flags.
-    {
-      // since we expect to do this rarely, we'll do our work in a
-      // block and erase our work after each try
-
-      RGWObjectCtx obj_ctx(bs->store);
-      const rgw_bucket& b = bs->bucket;
-      std::string bucket_id = b.get_key();
-      RGWBucketReshardLock reshard_lock(bs->store, bucket_info, true);
-      ret = reshard_lock.lock();
-      if (ret < 0) {
-	ldout(store->ctx(), 20) << __func__ <<
-	  " INFO: failed to take reshard lock for bucket " <<
-	  bucket_id << "; expected if resharding underway" << dendl;
-      } else {
-	ldout(store->ctx(), 10) << __func__ <<
-	  " INFO: was able to take reshard lock for bucket " <<
-	  bucket_id << dendl;
-	ret = RGWBucketReshard::clear_resharding(bs->store, bucket_info);
-	if (ret < 0) {
-	  reshard_lock.unlock();
-	  ldout(store->ctx(), 0) << __func__ <<
-	    " ERROR: failed to clear resharding flags for bucket " <<
-	    bucket_id << dendl;
-	} else {
-	  reshard_lock.unlock();
-	  ldout(store->ctx(), 5) << __func__ <<
-	    " INFO: apparently successfully cleared resharding flags for "
-	    "bucket " << bucket_id << dendl;
-	  continue; // if we apparently succeed immediately test again
-	} // if clear resharding succeeded
-      } // if taking of lock succeeded
-    } // block to encapsulate recovery from incomplete reshard
-
-    ret = do_wait(y);
-    if (ret < 0) {
-      ldout(store->ctx(), 0) << __func__ << " ERROR: bucket is still resharding, please retry" << dendl;
-      return ret;
-    }
-  }
-  ldout(store->ctx(), 0) << __func__ << " ERROR: bucket is still resharding, please retry" << dendl;
-  return -ERR_BUSY_RESHARDING;
 }
 
 int RGWReshard::process_single_logshard(int logshard_num)

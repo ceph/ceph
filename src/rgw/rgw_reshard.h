@@ -173,7 +173,6 @@ public:
 };
 
 class RGWReshardWait {
-  RGWRados *store;
   ceph::mutex mutex = ceph::make_mutex("RGWReshardWait::lock");
   ceph::condition_variable cond;
 
@@ -186,16 +185,12 @@ class RGWReshardWait {
 
   bool going_down{false};
 
-  int do_wait(optional_yield y);
 public:
-  explicit RGWReshardWait(RGWRados *_store) : store(_store) {}
+  RGWReshardWait() = default;
   ~RGWReshardWait() {
     ceph_assert(going_down);
   }
-  int block_while_resharding(RGWRados::BucketShard *bs,
-			     string *new_bucket_id,
-			     const RGWBucketInfo& bucket_info,
-                             optional_yield y);
+  int wait(optional_yield y);
   // unblock any threads waiting on reshard
   void stop();
 };
