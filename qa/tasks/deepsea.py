@@ -889,21 +889,13 @@ class Orch(DeepSea):
             )
 
     def __dump_lvm_status(self):
-        """
-        Run "pvs --all", "vgs --all", and "lvs --all" on all storage nodes.
-        """
         self.log.info("Dumping LVM status on storage nodes ->{}<-"
                       .format(self.storage_nodes))
-        lvm_status_script = ("set -ex\n"
-                             "pvs --all\n"
-                             "vgs --all\n"
-                             "lvs --all\n")
         for hostname in self.storage_nodes:
             remote = self.remotes[hostname]
-            remote_run_script_as_root(
+            self.scripts.run(
                 remote,
                 'lvm_status.sh',
-                lvm_status_script,
                 )
 
     def __is_stage_between_0_and_5(self):
