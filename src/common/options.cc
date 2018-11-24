@@ -1674,6 +1674,10 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description(""),
 
+    Option("osd_ignore_recover_bad_ec_objects", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description(""),
+
     Option("osd_agent_hist_halflife", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1000)
     .set_description(""),

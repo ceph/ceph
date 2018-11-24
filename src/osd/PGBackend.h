@@ -92,6 +92,10 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
        bool is_delete
        ) = 0;
 
+     virtual void missing_drop_replicas(
+       const hobject_t &oid
+       ) = 0;
+
      /**
       * Called when peer is recovered
       */

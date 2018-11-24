@@ -21,7 +21,8 @@ int ECUtil::decode(
   for (map<int, bufferlist>::iterator i = to_decode.begin();
        i != to_decode.end();
        ++i) {
-    assert(i->second.length() == total_data_size);
+    if (i->second.length() != total_data_size)
+      return -EIO;
   }
 
   if (total_data_size == 0)
@@ -56,7 +57,8 @@ int ECUtil::decode(
   for (map<int, bufferlist>::iterator i = to_decode.begin();
        i != to_decode.end();
        ++i) {
-    assert(i->second.length() == total_data_size);
+    if (i->second.length() != total_data_size)
+      return -EIO;
   }
 
   if (total_data_size == 0)

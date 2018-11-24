@@ -229,6 +229,18 @@ void ECBackend::_failed_push(const hobject_t &hoid,
   get_parent()->finish_degraded_object(hoid);
 }
 
+// Only called when CONFIG config option set
+void ECBackend::ignore_failed_push(const hobject_t &hoid)
+{
+    object_stat_sum_t stat;
+    stat.num_bytes_recovered = 0; // ??? op ... recovery_info.size; ?
+    stat.num_keys_recovered = 0; // ??? op ... omap_entries.size(); ?
+    stat.num_objects_recovered = 1;
+    get_parent()->on_global_recover(hoid, stat, false);
+    recovery_ops.erase(hoid);
+    get_parent()->missing_drop_replicas(hoid);
+}
+
 struct OnRecoveryReadComplete :
   public GenContext<pair<RecoveryMessages*, ECBackend::read_result_t& > &> {
   ECBackend *pg;
@@ -243,11 +255,16 @@ struct OnRecoveryReadComplete :
         return;
     }
     assert(res.returned.size() == 1);
-    pg->handle_recovery_read_complete(
+    int r = pg->handle_recovery_read_complete(
       hoid,
       res.returned.back(),
       res.attrs,
       in.first);
+    if (r) {
+      res.r = r;
+      pg->ignore_failed_push(hoid);
+      return;
+    }
   }
 };
 
@@ -386,7 +403,7 @@ void ECBackend::handle_recovery_push_reply(
   continue_recovery_op(rop, m);
 }
 
-void ECBackend::handle_recovery_read_complete(
+int ECBackend::handle_recovery_read_complete(
   const hobject_t &hoid,
   boost::tuple<uint64_t, uint64_t, map<pg_shard_t, bufferlist> > &to_read,
   boost::optional<map<string, bufferlist> > attrs,
@@ -415,6 +432,11 @@ void ECBackend::handle_recovery_read_complete(
   }
   dout(10) << __func__ << ": " << from << dendl;
   int r = ECUtil::decode(sinfo, ec_impl, from, target);
+  if (cct->_conf->osd_ignore_recover_bad_ec_objects && r != 0) {
+    get_parent()->clog_error() << "Decode error for " << hoid;
+    dout(0) << __func__ << " Ignoring decode error for " << hoid << dendl;
+    return r;
+  }
   assert(r == 0);
   if (attrs) {
     op.xattrs.swap(*attrs);
@@ -452,6 +474,7 @@ void ECBackend::handle_recovery_read_complete(
   assert(op.xattrs.size());
   assert(op.obc);
   continue_recovery_op(op, m);
+  return 0;
 }
 
 struct SendPushReplies : public Context {

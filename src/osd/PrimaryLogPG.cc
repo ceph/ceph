@@ -11856,6 +11856,24 @@ int PrimaryLogPG::prep_object_replica_pushes(
   return 1;
 }
 
+void PrimaryLogPG::missing_drop_replicas(const hobject_t &oid)
+{
+  assert(!actingbackfill.empty());
+  for (set<pg_shard_t>::iterator i = actingbackfill.begin();
+       i != actingbackfill.end();
+       ++i) {
+    if (*i == get_primary()) continue;
+    pg_shard_t peer = *i;
+    map<pg_shard_t, pg_missing_t>::iterator pm = peer_missing.find(peer);
+    assert(pm != peer_missing.end());
+
+    dout(20) << __func__ << " peer osd." << peer << " before missing " << pm->second.get_items() << dendl;
+    pm->second.rm(oid, eversion_t::max());
+    dout(20) << __func__ << " peer osd." << peer << " after missing " << pm->second.get_items() << dendl;
+  }
+  return;
+}
+
 uint64_t PrimaryLogPG::recover_replicas(uint64_t max, ThreadPool::TPHandle &handle)
 {
   dout(10) << __func__ << "(" << max << ")" << dendl;

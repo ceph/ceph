@@ -578,6 +578,9 @@ OPTION(osd_agent_delay_time, OPT_FLOAT)
 // osd ignore history.last_epoch_started in find_best_info
 OPTION(osd_find_best_info_ignore_history_les, OPT_BOOL)
 
+// osd log and ignore read errors of ec objects during recovery
+OPTION(osd_ignore_recover_bad_ec_objects, OPT_BOOL)
+
 // decay atime and hist histograms after how many objects go by
 OPTION(osd_agent_hist_halflife, OPT_INT)
 

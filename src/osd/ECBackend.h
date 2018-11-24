@@ -308,7 +308,7 @@ private:
     RecoveryMessages *m);
   void dispatch_recovery_messages(RecoveryMessages &m, int priority);
   friend struct OnRecoveryReadComplete;
-  void handle_recovery_read_complete(
+  int handle_recovery_read_complete(
     const hobject_t &hoid,
     boost::tuple<uint64_t, uint64_t, map<pg_shard_t, bufferlist> > &to_read,
     boost::optional<map<string, bufferlist> > attrs,
@@ -687,6 +687,7 @@ public:
   }
   void _failed_push(const hobject_t &hoid,
     pair<RecoveryMessages *, ECBackend::read_result_t &> &in);
+  void ignore_failed_push(const hobject_t &hoid);
 };
 ostream &operator<<(ostream &lhs, const ECBackend::pipeline_state_t &rhs);
 
