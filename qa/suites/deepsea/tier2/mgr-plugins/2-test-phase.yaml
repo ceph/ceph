@@ -3,6 +3,6 @@ tasks:
                 client.salt_master:
                         - 'ceph -s'
         - ses_qa:
-        - ses_qa.mgr_plugin:
+        - ses_qa.validation:
                 mgr_plugin_dashboard:
                 mgr_plugin_influx:

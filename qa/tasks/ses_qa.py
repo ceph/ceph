@@ -57,14 +57,14 @@ class SESQA(Task):
         super(SESQA, self).teardown()
 
 
-class MGRPlugin(SESQA):
+class Validation(SESQA):
 
-    err_prefix = "(mgr_plugin subtask) "
+    err_prefix = "(validation subtask) "
 
     def __init__(self, ctx, config):
-        ses_qa_ctx['logger_obj'] = log.getChild('mgr_plugin')
-        self.name = 'ses_qa.mgr_plugin'
-        super(MGRPlugin, self).__init__(ctx, config)
+        ses_qa_ctx['logger_obj'] = log.getChild('validation')
+        self.name = 'ses_qa.validation'
+        super(Validation, self).__init__(ctx, config)
         self.log.debug("munged config is {}".format(self.config))
 
     def mgr_plugin_dashboard(self, **kwargs):
@@ -125,4 +125,4 @@ class MGRPlugin(SESQA):
 
 
 task = SESQA
-mgr_plugin = MGRPlugin
+validation = Validation
