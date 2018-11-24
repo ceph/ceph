@@ -7,6 +7,8 @@
 #include <vector>
 #include <functional>
 
+#include <boost/intrusive/list.hpp>
+
 #include "include/rados/librados.hpp"
 #include "common/ceph_time.h"
 #include "cls/rgw/cls_rgw_types.h"
@@ -175,9 +177,16 @@ class RGWReshardWait {
   ceph::mutex mutex = ceph::make_mutex("RGWReshardWait::lock");
   ceph::condition_variable cond;
 
+  using Clock = ceph::coarse_real_clock;
+  struct Waiter : boost::intrusive::list_base_hook<> {
+    boost::asio::basic_waitable_timer<Clock> timer;
+    explicit Waiter(boost::asio::io_context& ioc) : timer(ioc) {}
+  };
+  boost::intrusive::list<Waiter> waiters;
+
   bool going_down{false};
 
-  int do_wait();
+  int do_wait(optional_yield y);
 public:
   explicit RGWReshardWait(RGWRados *_store) : store(_store) {}
   ~RGWReshardWait() {
@@ -185,13 +194,10 @@ public:
   }
   int block_while_resharding(RGWRados::BucketShard *bs,
 			     string *new_bucket_id,
-			     const RGWBucketInfo& bucket_info);
-
-  void stop() {
-    std::scoped_lock lock(mutex);
-    going_down = true;
-    cond.notify_all();
-  }
+			     const RGWBucketInfo& bucket_info,
+                             optional_yield y);
+  // unblock any threads waiting on reshard
+  void stop();
 };
 
 #endif
