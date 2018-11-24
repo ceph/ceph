@@ -1325,8 +1325,7 @@ class Policy(DeepSea):
             self.profile_ymls_to_dump.append(
                 "{}/{}".format(proposals_dir, ypp))
 
-    def __roll_out_custom_profile(self, fpath):
-        fpath = "/home/ubuntu/custom_profile"
+    def __roll_out_custom_profile(self, fpath="/home/ubuntu/custom_profile"):
         sudo_write_file(
             self.master_remote,
             fpath,
