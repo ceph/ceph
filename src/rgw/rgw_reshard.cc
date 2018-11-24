@@ -863,13 +863,13 @@ int RGWReshard::clear_bucket_resharding(const string& bucket_instance_oid, cls_r
 }
 
 const int num_retries = 10;
-const int default_reshard_sleep_duration = 5;
+static const std::chrono::seconds default_reshard_sleep_duration(5);
 
 int RGWReshardWait::do_wait()
 {
-  Mutex::Locker l(lock);
+  std::unique_lock lock(mutex);
 
-  cond.WaitInterval(lock, utime_t(default_reshard_sleep_duration, 0));
+  cond.wait_for(lock, default_reshard_sleep_duration);
 
   if (going_down) {
     return -ECANCELED;

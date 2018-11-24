@@ -170,11 +170,10 @@ public:
   void stop_processor();
 };
 
-
 class RGWReshardWait {
   RGWRados *store;
-  Mutex lock{"RGWReshardWait::lock"};
-  Cond cond;
+  ceph::mutex mutex = ceph::make_mutex("RGWReshardWait::lock");
+  ceph::condition_variable cond;
 
   bool going_down{false};
 
@@ -189,9 +188,9 @@ public:
 			     const RGWBucketInfo& bucket_info);
 
   void stop() {
-    Mutex::Locker l(lock);
+    std::scoped_lock lock(mutex);
     going_down = true;
-    cond.SignalAll();
+    cond.notify_all();
   }
 };
 
