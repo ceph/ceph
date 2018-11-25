@@ -164,16 +164,10 @@ class Module(MgrModule):
         report = defaultdict(lambda: 0)
         cutoff = datetime.datetime.utcnow() - datetime.timedelta(hours=hours)
         for _, meta in self.timestamp_filter(lambda ts: ts >= cutoff):
-            try:
-                etype = meta["entity_name"]
-                etype, _ = etype.split(".")
-                etype = "unknown" if not etype else etype
-            except KeyError:
-                etype = "unknown"
-            except (ValueError, AttributeError):
-                etype = str(etype)
-                pass
-            report[etype] += 1
+            pname = meta.get("process_name", "unknown")
+            if not pname:
+                pname = "unknown"
+            report[pname] += 1
 
         return 0, '', json.dumps(report)
 
