@@ -512,8 +512,9 @@ set_target_properties(ceph-osd PROPERTIES
   POSITION_INDEPENDENT_CODE ${EXE_LINKER_USE_PIE})
 install(TARGETS ceph-osd DESTINATION bin)
 
-if (WITH_CEPHFS)
-  add_subdirectory(mds)
+add_subdirectory(mds)
+
+if(WITH_MDS)
   set(ceph_mds_srcs
     ceph_mds.cc)
   add_executable(ceph-mds ${ceph_mds_srcs})

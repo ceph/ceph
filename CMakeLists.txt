@@ -294,9 +294,6 @@ if(WITH_QATZIP)
   set(HAVE_QATZIP ${QATZIP_FOUND})
 endif(WITH_QATZIP)
 
-# needs mds and? XXX
-option(WITH_LIBCEPHFS "libcephfs client library" ON)
-
 # key-value store
 option(WITH_KVS "Key value store is here" ON)
 
@@ -494,6 +491,12 @@ if(WITH_RADOSGW)
     message(WARNING "ssl not found: rgw civetweb may fail to dlopen libssl libcrypto")
   endif()  # OPENSSL_FOUND
 endif (WITH_RADOSGW)
+
+#option for ceph-mds
+option(WITH_MDS "build ceph-mds daemon" ON)
+
+# building libcephfs needed for client library
+option(WITH_LIBCEPHFS "build libcephfs client library" ON)
 
 #option for CephFS
 option(WITH_CEPHFS "CephFS is enabled" ON)
