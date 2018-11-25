@@ -56,7 +56,7 @@ function test_dedup_ratio_fixed()
   dd if=dedup_object_1k of=dedup_object_100k bs=1K count=100
 
   $RADOS_TOOL -p $POOL put $OBJ ./dedup_object_100k
-  RESULT=$($DEDUP_TOOL --op estimate --pool $POOL --chunk-size 1024  --chunk-algorithm fixed --fingerprint-algorithm sha1 | grep result | awk '{print$4}')
+  RESULT=$($DEDUP_TOOL --op estimate --pool $POOL --chunk-size 1024  --chunk-algorithm fixed --fingerprint-algorithm sha1 --debug | grep result | awk '{print$4}')
   if [ 1024 -ne $RESULT ];
   then
     die "Estimate failed expecting 1024 result $RESULT"
@@ -66,7 +66,7 @@ function test_dedup_ratio_fixed()
   dd if=/dev/zero of=dedup_object_10m bs=10M count=1
 
   $RADOS_TOOL -p $POOL put $OBJ ./dedup_object_10m
-  RESULT=$($DEDUP_TOOL --op estimate --pool $POOL --chunk-size 4096  --chunk-algorithm fixed --fingerprint-algorithm sha1 | grep result | awk '{print$4}')
+  RESULT=$($DEDUP_TOOL --op estimate --pool $POOL --chunk-size 4096  --chunk-algorithm fixed --fingerprint-algorithm sha1 --debug | grep result | awk '{print$4}')
   if [ 4096 -ne $RESULT ];
   then
     die "Estimate failed expecting 4096 result $RESULT"
@@ -79,8 +79,8 @@ function test_dedup_ratio_fixed()
     $RADOS_TOOL -p $POOL put dedup_object_$num ./dedup_object_$num
   done
 
-  RESULT=$($DEDUP_TOOL --op estimate --pool $POOL --chunk-size 4096  --chunk-algorithm fixed --fingerprint-algorithm sha1 --max-thread 4 | grep result | awk '{print$2}')
-  echo $RESULT
+  RESULT=$($DEDUP_TOOL --op estimate --pool $POOL --chunk-size 4096  --chunk-algorithm fixed --fingerprint-algorithm sha1 --max-thread 4 --debug | grep result | awk '{print$2}')
+
   if [ 10485760 -ne $RESULT ];
   then
     die "Estimate failed expecting 10485760 result $RESULT"
