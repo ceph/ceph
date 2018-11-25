@@ -104,6 +104,7 @@ function run() {
 	    $DRY_RUN source ./install-deps.sh || return 1
         trap clean_up_after_myself EXIT
     fi
+    return 1
 
     # Init defaults after deps are installed. get_processors() depends on coreutils nproc.
     DEFAULT_MAKEOPTS=${DEFAULT_MAKEOPTS:--j$(get_processors)}
