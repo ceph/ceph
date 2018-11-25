@@ -62,6 +62,7 @@ function TEST_scrub_erasure_decode_error() {
     local allow_overwrites=$2
     local poolname=ecpool
     local total_objs=100
+    local test_objs=50
     local allow_overwrites=true
     local OSDS=4
 
@@ -92,13 +93,13 @@ function TEST_scrub_erasure_decode_error() {
         rados --pool $poolname put $objname $dir/ORIGINAL || return 1
     done
 
-    local testobj=EOBJ1
+    testobj=EOBJ1
     local primary=$(get_primary $poolname $testobj)
     local corruptosd=$(ceph --format json osd map $poolname $testobj 2>/dev/null | jq ".acting | map(select (. != $primary)) | .[0]")
     local downosd=$(ceph --format json osd map $poolname $testobj 2>/dev/null | jq ".acting | map(select (. != $primary)) | .[1]")
 
     # Get hinfo_key for ORIGINAL data
-    objectstore_tool $dir $downosd $testobj dump
+    #objectstore_tool $dir $downosd $testobj dump
     objectstore_tool $dir $downosd $testobj get-attr _ > $dir/attr
     objectstore_tool $dir $downosd $testobj get-attr hinfo_key > $dir/hinfo
 
@@ -107,13 +108,25 @@ function TEST_scrub_erasure_decode_error() {
         objname=EOBJ${i}
         rados --pool $poolname put $objname $dir/OTHER || return 1
     done
-    objectstore_tool $dir $downosd $testobj dump
+    for id in $(seq 0 $(expr $OSDS - 1)) ; do
+      kill $(cat $dir/osd.${id}.pid)
+    done
+    sleep 5
+    for i in $(seq 1 $test_objs) ; do
+      testobj=EOBJ${i}
+      local osd_data=$dir/$corruptosd
 
-    objectstore_tool $dir $corruptosd $testobj set-bytes $dir/ORIGINAL || return 1
-    objectstore_tool $dir $corruptosd $testobj set-attr _ $dir/attr || return 1
-    objectstore_tool $dir $corruptosd $testobj set-attr hinfo_key $dir/hinfo || return 1
+      #ceph-objectstore-tool --data-path $dir/$downosd $testobj dump
+      ceph-objectstore-tool --data-path $osd_data $testobj set-bytes $dir/ORIGINAL || return 1
+      ceph-objectstore-tool --data-path $osd_data $testobj set-attr _ $dir/attr || return 1
+      ceph-objectstore-tool --data-path $osd_data $testobj set-attr hinfo_key $dir/hinfo || return 1
+      #ceph-objectstore-tool --data-path $osd_data $testobj dump
+    done
     rm -f $dir/hinfo $dir/attr
-    objectstore_tool $dir $corruptosd $testobj dump
+    for id in $(seq 0 $(expr $OSDS - 1)) ; do
+      activate_osd $dir $id
+    done
+    wait_for_clean || return 1
 
     ceph osd unset noout
     kill $(cat $dir/osd.${downosd}.pid)
@@ -128,7 +141,10 @@ function TEST_scrub_erasure_decode_error() {
     ceph pg dump pgs
     grep "Ignoring decode" $dir/osd.${primary}.log
 
-    rados -p $poolname rm EOBJ1
+    for i in $(seq 1 $test_objs) ; do
+      testobj=EOBJ${i}
+      rados -p $poolname rm $testobj
+    done
 
     activate_osd $dir $downosd
     ceph osd in osd.$downosd
