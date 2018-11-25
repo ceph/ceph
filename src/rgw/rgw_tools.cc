@@ -145,18 +145,12 @@ int rgw_get_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool,
 
   int ret = 0;
   do {
-    auto rop = sysobj.rop();
-
-    ret = rop.set_attrs(pattrs)
-             .set_last_mod(pmtime)
-             .set_objv_tracker(objv_tracker)
-             .stat(null_yield);
-    if (ret < 0)
-      return ret;
-
-    ret = rop.set_cache_info(cache_info)
-             .set_refresh_version(refresh_version)
-             .read(&bl, null_yield);
+    ret = sysobj.rop().set_attrs(pattrs)
+                      .set_last_mod(pmtime)
+                      .set_objv_tracker(objv_tracker)
+                      .set_cache_info(cache_info)
+                      .set_refresh_version(refresh_version)
+                      .read(&bl, null_yield);
     if (ret == -ECANCELED) {
       /* raced, restart */
       if (!original_readv.empty()) {
