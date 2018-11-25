@@ -120,6 +120,13 @@ function install_pkg_on_ubuntu {
 	$SUDO curl --silent --location $shaman_url --output /etc/apt/sources.list.d/$project.list
 	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get update -y -o Acquire::Languages=none -o Acquire::Translation=none || true
 	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get install --allow-unauthenticated -y $missing_pkgs
+    else
+	local shaman_url="https://shaman.ceph.com/api/repos/${project}/master/${sha1}/ubuntu/${codename}/repo"
+	$SUDO curl --silent --location $shaman_url --output /etc/apt/sources.list.d/$project.list
+	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get clean
+	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get update -y -o Acquire::Languages=none -o Acquire::Translation=none || true
+	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get install --allow-unauthenticated --reinstall -y ceph-libboost1.67-dev
+	ls /etc/ld.so.conf.d
     fi
 }
 
