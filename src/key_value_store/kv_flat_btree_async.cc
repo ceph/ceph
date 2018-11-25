@@ -15,11 +15,14 @@
 #include "key_value_store/kv_flat_btree_async.h"
 #include "key_value_store/kvs_arg_types.h"
 #include "include/rados/librados.hpp"
+#if defined(__linux__)
 #include "/usr/include/asm-generic/errno.h"
 #include "/usr/include/asm-generic/errno-base.h"
+#endif
 #include "common/ceph_context.h"
 #include "common/Clock.h"
 #include "include/types.h"
+#include "include/compat.h"
 
 
 #include <string>

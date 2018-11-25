@@ -33,6 +33,13 @@
 #define O_DSYNC O_SYNC
 #endif
 
+#ifndef EUCLEAN
+#define EUCLEAN         117	/* Structure needs cleaning */
+#endif
+#ifndef EKEYREJECTED
+#define EKEYREJECTED    129	/* Key was rejected by service */
+#endif
+
 /* And include the extra required include file */
 #include <pthread_np.h>
 
