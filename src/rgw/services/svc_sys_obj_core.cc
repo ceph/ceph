@@ -60,7 +60,7 @@ int RGWSI_SysObj_Core::get_system_obj_state_impl(RGWSysObjectCtxBase *rctx,
   }
 
   RGWSysObjState *s = rctx->get_state(obj);
-  ldout(cct, 20) << "get_system_obj_state: rctx=" << (void *)rctx << " obj=" << obj << " state=" << (void *)s << " s->prefetch_data=" << s->prefetch_data << dendl;
+  ldout(cct, 20) << "get_system_obj_state: rctx=" << (void *)rctx << " obj=" << obj << " state=" << (void *)s << dendl;
   *state = s;
   if (s->has_attrs) {
     return 0;
@@ -68,8 +68,8 @@ int RGWSI_SysObj_Core::get_system_obj_state_impl(RGWSysObjectCtxBase *rctx,
 
   s->obj = obj;
 
-  int r = raw_stat(obj, &s->size, &s->mtime, &s->epoch, &s->attrset,
-                   (s->prefetch_data ? &s->data : nullptr), objv_tracker, y);
+  int r = raw_stat(obj, &s->size, &s->mtime, &s->epoch,
+                   &s->attrset, objv_tracker, y);
   if (r == -ENOENT) {
     s->exists = false;
     s->has_attrs = true;
@@ -107,8 +107,9 @@ int RGWSI_SysObj_Core::get_system_obj_state(RGWSysObjectCtxBase *rctx,
   return ret;
 }
 
-int RGWSI_SysObj_Core::raw_stat(const rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *epoch,
-                                map<string, bufferlist> *attrs, bufferlist *first_chunk,
+int RGWSI_SysObj_Core::raw_stat(const rgw_raw_obj& obj, uint64_t *psize,
+                                real_time *pmtime, uint64_t *epoch,
+                                map<string, bufferlist> *attrs,
                                 RGWObjVersionTracker *objv_tracker,
                                 optional_yield y)
 {
@@ -128,9 +129,6 @@ int RGWSI_SysObj_Core::raw_stat(const rgw_raw_obj& obj, uint64_t *psize, real_ti
   op.getxattrs(attrs, nullptr);
   if (psize || pmtime) {
     op.stat2(&size, &mtime_ts, nullptr);
-  }
-  if (first_chunk) {
-    op.read(0, cct->_conf->rgw_max_chunk_size, first_chunk, nullptr);
   }
   bufferlist outbl;
   r = rados_obj.operate(&op, &outbl, y);

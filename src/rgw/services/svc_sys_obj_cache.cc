@@ -337,8 +337,9 @@ int RGWSI_SysObj_Cache::write_data(const rgw_raw_obj& obj,
   return ret;
 }
 
-int RGWSI_SysObj_Cache::raw_stat(const rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *pepoch,
-                                 map<string, bufferlist> *attrs, bufferlist *first_chunk,
+int RGWSI_SysObj_Cache::raw_stat(const rgw_raw_obj& obj, uint64_t *psize,
+                                 real_time *pmtime, uint64_t *pepoch,
+                                 map<string, bufferlist> *attrs,
                                  RGWObjVersionTracker *objv_tracker,
                                  optional_yield y)
 {
@@ -368,8 +369,8 @@ int RGWSI_SysObj_Cache::raw_stat(const rgw_raw_obj& obj, uint64_t *psize, real_t
       objv_tracker->read_version = info.version;
     goto done;
   }
-  r = RGWSI_SysObj_Core::raw_stat(obj, &size, &mtime, &epoch, &info.xattrs,
-                                  first_chunk, objv_tracker, y);
+  r = RGWSI_SysObj_Core::raw_stat(obj, &size, &mtime, &epoch,
+                                  &info.xattrs, objv_tracker, y);
   if (r < 0) {
     if (r == -ENOENT) {
       info.status = r;

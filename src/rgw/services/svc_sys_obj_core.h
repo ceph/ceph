@@ -20,34 +20,9 @@ struct RGWSysObjState {
   ceph::real_time mtime;
   uint64_t epoch{0};
   bufferlist obj_tag;
-  bool has_data{false};
-  bufferlist data;
-  bool prefetch_data{false};
   uint64_t pg_ver{0};
-
-  /* important! don't forget to update copy constructor */
-
   RGWObjVersionTracker objv_tracker;
-
   map<string, bufferlist> attrset;
-  RGWSysObjState() {}
-  RGWSysObjState(const RGWSysObjState& rhs) : obj (rhs.obj) {
-    has_attrs = rhs.has_attrs;
-    exists = rhs.exists;
-    size = rhs.size;
-    mtime = rhs.mtime;
-    epoch = rhs.epoch;
-    if (rhs.obj_tag.length()) {
-      obj_tag = rhs.obj_tag;
-    }
-    has_data = rhs.has_data;
-    if (rhs.data.length()) {
-      data = rhs.data;
-    }
-    prefetch_data = rhs.prefetch_data;
-    pg_ver = rhs.pg_ver;
-    objv_tracker = rhs.objv_tracker;
-  }
 };
 
 class RGWSysObjectCtxBase {
@@ -80,11 +55,6 @@ public:
     return result;
   }
 
-  void set_prefetch_data(rgw_raw_obj& obj) {
-    RWLock::WLocker wl(lock);
-    assert (!obj.empty());
-    objs_state[obj].prefetch_data = true;
-  }
   void invalidate(const rgw_raw_obj& obj) {
     RWLock::WLocker wl(lock);
     auto iter = objs_state.find(obj);
@@ -125,8 +95,9 @@ protected:
   }
   int get_rados_obj(RGWSI_Zone *zone_svc, const rgw_raw_obj& obj, RGWSI_RADOS::Obj *pobj);
 
-  virtual int raw_stat(const rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *epoch,
-                       map<string, bufferlist> *attrs, bufferlist *first_chunk,
+  virtual int raw_stat(const rgw_raw_obj& obj, uint64_t *psize,
+                       real_time *pmtime, uint64_t *epoch,
+                       map<string, bufferlist> *attrs,
                        RGWObjVersionTracker *objv_tracker,
                        optional_yield y);
 

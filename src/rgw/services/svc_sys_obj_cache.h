@@ -33,8 +33,8 @@ protected:
 
   int do_start() override;
 
-  int raw_stat(const rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *epoch,
-               map<string, bufferlist> *attrs, bufferlist *first_chunk,
+  int raw_stat(const rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime,
+               uint64_t *epoch, map<string, bufferlist> *attrs,
                RGWObjVersionTracker *objv_tracker,
                optional_yield y) override;
 
