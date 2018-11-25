@@ -596,11 +596,8 @@ template <class T>
 int RGWUserPubSub::read(const rgw_raw_obj& obj, T *result, RGWObjVersionTracker *objv_tracker)
 {
   bufferlist bl;
-  int ret = rgw_get_system_obj(store, obj_ctx,
-                               obj.pool, obj.oid,
-                               bl,
-                               objv_tracker,
-                               nullptr, nullptr, nullptr);
+  int ret = rgw_get_system_obj(obj_ctx, obj.pool, obj.oid, bl,
+                               objv_tracker, nullptr, nullptr, nullptr);
   if (ret < 0) {
     return ret;
   }

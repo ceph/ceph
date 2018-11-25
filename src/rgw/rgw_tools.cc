@@ -129,27 +129,28 @@ int rgw_put_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string& o
   return ret;
 }
 
-int rgw_get_system_obj(RGWRados *rgwstore, RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& key, bufferlist& bl,
-                       RGWObjVersionTracker *objv_tracker, real_time *pmtime, map<string, bufferlist> *pattrs,
-                       rgw_cache_entry_info *cache_info, boost::optional<obj_version> refresh_version)
+int rgw_get_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool,
+                       const string& key, bufferlist& bl,
+                       RGWObjVersionTracker *objv_tracker, real_time *pmtime,
+                       map<string, bufferlist> *pattrs,
+                       rgw_cache_entry_info *cache_info,
+                       boost::optional<obj_version> refresh_version)
 {
-  bufferlist::iterator iter;
-  int request_len = READ_CHUNK_LEN;
-  rgw_raw_obj obj(pool, key);
+  auto sysobj = obj_ctx.get_obj({pool, key});
 
   obj_version original_readv;
   if (objv_tracker && !objv_tracker->read_version.empty()) {
     original_readv = objv_tracker->read_version;
   }
 
+  int ret = 0;
   do {
-    auto sysobj = obj_ctx.get_obj(obj);
     auto rop = sysobj.rop();
 
-    int ret = rop.set_attrs(pattrs)
-                 .set_last_mod(pmtime)
-                 .set_objv_tracker(objv_tracker)
-                 .stat(null_yield);
+    ret = rop.set_attrs(pattrs)
+             .set_last_mod(pmtime)
+             .set_objv_tracker(objv_tracker)
+             .stat(null_yield);
     if (ret < 0)
       return ret;
 
@@ -166,18 +167,10 @@ int rgw_get_system_obj(RGWRados *rgwstore, RGWSysObjectCtx& obj_ctx, const rgw_p
         objv_tracker->read_version.clear();
       }
       sysobj.invalidate();
-      continue;
     }
-    if (ret < 0)
-      return ret;
+  } while (ret == -ECANCELED);
 
-    if (ret < request_len)
-      break;
-    bl.clear();
-    request_len *= 2;
-  } while (true);
-
-  return 0;
+  return ret;
 }
 
 int rgw_delete_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string& oid,
