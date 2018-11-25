@@ -194,6 +194,7 @@ int RGWSI_SysObj_Core::read(RGWSysObjectCtxBase& obj_ctx,
                             GetObjState& read_state,
                             RGWObjVersionTracker *objv_tracker,
                             const rgw_raw_obj& obj,
+                            uint64_t *psize, real_time *pmtime,
                             bufferlist *bl, off_t ofs, off_t end,
                             map<string, bufferlist> *attrs,
 			    bool raw_attrs,
@@ -217,6 +218,8 @@ int RGWSI_SysObj_Core::read(RGWSysObjectCtxBase& obj_ctx,
   op.read(ofs, len, bl, nullptr);
 
   map<string, bufferlist> unfiltered_attrset;
+  uint64_t size = 0;
+  struct timespec mtime_ts;
 
   if (attrs) {
     if (raw_attrs) {
@@ -224,6 +227,9 @@ int RGWSI_SysObj_Core::read(RGWSysObjectCtxBase& obj_ctx,
     } else {
       op.getxattrs(&unfiltered_attrset, nullptr);
     }
+  }
+  if (psize || pmtime) {
+    op.stat2(&size, &mtime_ts, nullptr);
   }
 
   RGWSI_RADOS::Obj rados_obj;
@@ -250,6 +256,10 @@ int RGWSI_SysObj_Core::read(RGWSysObjectCtxBase& obj_ctx,
   if (attrs && !raw_attrs) {
     rgw_filter_attrset(unfiltered_attrset, RGW_ATTR_PREFIX, attrs);
   }
+  if (psize)
+    *psize = size;
+  if (pmtime)
+    *pmtime = ceph::real_clock::from_timespec(mtime_ts);
 
   read_state.last_ver = op_ver;
 

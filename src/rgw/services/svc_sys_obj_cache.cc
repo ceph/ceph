@@ -93,6 +93,7 @@ int RGWSI_SysObj_Cache::read(RGWSysObjectCtxBase& obj_ctx,
                              GetObjState& read_state,
                              RGWObjVersionTracker *objv_tracker,
                              const rgw_raw_obj& obj,
+                             uint64_t *psize, real_time *pmtime,
                              bufferlist *obl, off_t ofs, off_t end,
                              map<string, bufferlist> *attrs,
 			     bool raw_attrs,
@@ -104,8 +105,9 @@ int RGWSI_SysObj_Cache::read(RGWSysObjectCtxBase& obj_ctx,
   string oid;
   if (ofs != 0) {
     return RGWSI_SysObj_Core::read(obj_ctx, read_state, objv_tracker,
-                                   obj, obl, ofs, end, attrs, raw_attrs,
-                                   cache_info, refresh_version, y);
+                                   obj, psize, pmtime, obl, ofs, end,
+                                   attrs, raw_attrs, cache_info,
+                                   refresh_version, y);
   }
 
   normalize_pool_and_obj(obj.pool, obj.oid, pool, oid);
@@ -116,6 +118,8 @@ int RGWSI_SysObj_Cache::read(RGWSysObjectCtxBase& obj_ctx,
   uint32_t flags = (end != 0 ? CACHE_FLAG_DATA : 0);
   if (objv_tracker)
     flags |= CACHE_FLAG_OBJV;
+  if (psize || pmtime)
+    flags |= CACHE_FLAG_META;
   if (attrs)
     flags |= CACHE_FLAG_XATTRS;
 
@@ -133,6 +137,10 @@ int RGWSI_SysObj_Cache::read(RGWSysObjectCtxBase& obj_ctx,
     i.copy_all(*obl);
     if (objv_tracker)
       objv_tracker->read_version = info.version;
+    if (psize)
+      *psize = info.meta.size;
+    if (pmtime)
+      *pmtime = info.meta.mtime;
     if (attrs) {
       if (raw_attrs) {
 	*attrs = info.xattrs;
@@ -143,13 +151,17 @@ int RGWSI_SysObj_Cache::read(RGWSysObjectCtxBase& obj_ctx,
     return obl->length();
   }
 
+  // fetch metadata even if it wasn't requested
+  flags |= CACHE_FLAG_META;
+
   map<string, bufferlist> unfiltered_attrset;
   int r = RGWSI_SysObj_Core::read(obj_ctx, read_state, objv_tracker,
-                         obj, obl, ofs, end,
+                                  obj, &info.meta.size, &info.meta.mtime,
+                                  obl, ofs, end,
 			 (attrs ? &unfiltered_attrset : nullptr),
 			 true, /* cache unfiltered attrs */
 			 cache_info,
-                         refresh_version, y);
+                                  refresh_version, y);
   if (r < 0) {
     if (r == -ENOENT) { // only update ENOENT, we'd rather retry other errors
       info.status = r;
@@ -174,6 +186,10 @@ int RGWSI_SysObj_Cache::read(RGWSysObjectCtxBase& obj_ctx,
   if (objv_tracker) {
     info.version = objv_tracker->read_version;
   }
+  if (psize)
+    *psize = info.meta.size;
+  if (pmtime)
+    *pmtime = info.meta.mtime;
   if (attrs) {
     info.xattrs = std::move(unfiltered_attrset);
     if (raw_attrs) {
