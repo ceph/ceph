@@ -212,16 +212,18 @@ if [ x$(uname)x = xFreeBSDx ]; then
         java/junit \
         lang/python \
         lang/python27 \
+        lang/python36 \
         devel/py-pip \
+        devel/py-flake8 \
         devel/py-argparse \
         devel/py-nose \
         devel/py-prettytable \
-	www/py-routes \
+        www/py-routes \
         www/py-flask \
-	www/node \
-	www/npm \
+        www/node \
+        www/npm \
         www/fcgi \
-	security/oath-toolkit \
+        security/oath-toolkit \
         sysutils/flock \
         sysutils/fusefs-libs \
 
