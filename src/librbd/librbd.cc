@@ -3116,6 +3116,7 @@ extern "C" int rbd_namespace_list(rados_ioctx_t io, char *names, size_t *size) {
     return -ERANGE;
   }
 
+  *size = expected_size;
   for (int i = 0; i < (int)cpp_names.size(); i++) {
     const char* name = cpp_names[i].c_str();
     strcpy(names, name);

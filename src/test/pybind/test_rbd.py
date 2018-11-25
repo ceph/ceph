@@ -380,6 +380,21 @@ def test_config_list():
     for option in rbd.config_list(ioctx):
         eq(option['source'], RBD_CONFIG_SOURCE_CONFIG)
 
+def test_namespaces():
+    rbd = RBD()
+
+    eq(False, rbd.namespace_exists(ioctx, 'ns1'))
+    eq([], rbd.namespace_list(ioctx))
+    assert_raises(ImageNotFound, rbd.namespace_remove, ioctx, 'ns1')
+
+    rbd.namespace_create(ioctx, 'ns1')
+    eq(True, rbd.namespace_exists(ioctx, 'ns1'))
+
+    assert_raises(ImageExists, rbd.namespace_create, ioctx, 'ns1')
+    eq(['ns1'], rbd.namespace_list(ioctx))
+    rbd.namespace_remove(ioctx, 'ns1')
+    eq([], rbd.namespace_list(ioctx))
+
 @require_new_format()
 def test_pool_stats():
     rbd = RBD()
