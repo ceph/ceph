@@ -15,6 +15,8 @@
 #ifndef CEPH_GLOBAL_CONTEXT_H
 #define CEPH_GLOBAL_CONTEXT_H
 
+#include <limits.h>
+
 #include "common/config_fwd.h"
 
 class CephContext;
@@ -29,5 +31,6 @@ extern const char *g_assert_condition;
 extern unsigned long long g_assert_thread;
 extern char g_assert_thread_name[4096];
 extern char g_assert_msg[8096];
+extern char g_process_name[NAME_MAX + 1];
 
 #endif
