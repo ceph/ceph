@@ -187,6 +187,7 @@ int main(int argc, const char **argv)
   bool generate = false;
   bool filter = false;
   map<string,entity_addr_t> add;
+  map<string,entity_addrvec_t> addv;
   list<string> rm;
   list<feature_op_t> features;
 
@@ -219,6 +220,19 @@ int main(int argc, const char **argv)
 	return -1;
       }
       add[name] = addr;
+      modified = true;
+      i = args.erase(i);
+    } else if (ceph_argparse_flag(args, i, "--addv", (char*)NULL)) {
+      string name = *i;
+      i = args.erase(i);
+      if (i == args.end())
+	usage();
+      entity_addrvec_t addrs;
+      if (!addrs.parse(*i)) {
+	cerr << me << ": invalid ip:port '" << *i << "'" << std::endl;
+	return -1;
+      }
+      addv[name] = addrs;
       modified = true;
       i = args.erase(i);
     } else if (ceph_argparse_witharg(args, i, &val, "--rm", (char*)NULL)) {
@@ -383,6 +397,17 @@ int main(int argc, const char **argv)
       usage();
     }
     monmap.add(p.first, addrs);
+  }
+  for (auto& p : addv) {
+    if (monmap.contains(p.first)) {
+      cerr << me << ": map already contains mon." << p.first << std::endl;
+      usage();
+    }
+    if (monmap.contains(p.second)) {
+      cerr << me << ": map already contains " << p.second << std::endl;
+      usage();
+    }
+    monmap.add(p.first, p.second);
   }
   for (auto& p : rm) {
     cout << me << ": removing " << p << std::endl;
