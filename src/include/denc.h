@@ -714,14 +714,33 @@ public:
     uint32_t len;
     denc(len, p);
     s.clear();
-    p.copy(len, s);
+    if constexpr (std::is_same_v<value_type, std::string>) {
+      p.copy(len, s);
+    } else {
+      s.append(len, 0);
+      p.copy(len, s.data());
+    }
+  }
+  template<class It>
+  static void decode_nohead(size_t len, value_type& s, It& p) {
+    s.clear();
+    if (len) {
+      s.append(p.get_pos_add(len), len);
+    }
   }
   template<class It>
   static std::enable_if_t<is_const_iterator_v<It>>
   decode_nohead(size_t len, value_type& s, It& p) {
-    s.clear();
     if (len) {
-      s.append(p.get_pos_add(len), len);
+      if constexpr (std::is_same_v<value_type, std::string>) {
+        s.clear();
+        p.copy(len, s);
+      } else {
+        s.resize(len, 0);
+        p.copy(len, s.data());
+      }
+    } else {
+      s.clear();
     }
   }
   template<class It>
