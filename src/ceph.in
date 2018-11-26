@@ -618,7 +618,17 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
                     print('Can not use \'tell\' in interactive mode.',
                           file=sys.stderr)
                     continue
-                do_command(parsed_args, target, cmdargs, sigdict, inbuf, verbose)
+                ret, outbuf, outs = do_command(parsed_args, target, cmdargs,
+                                               sigdict, inbuf, verbose)
+                if ret < 0:
+                    ret = -ret
+                    errstr = errno.errorcode.get(ret, 'Unknown')
+                    print(u'Error {0}: {1}'.format(errstr, outs), file=sys.stderr)
+                else:
+                    if outs:
+                        print(outs, file=sys.stderr)
+                    if outbuf:
+                        print(outbuf)
 
     return ret, outbuf, outs
 
