@@ -336,6 +336,10 @@ int main(int argc, const char *argv[])
     CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
 
+  ceph_assert((int)args.size() < argc);
+  for(size_t i=0; i<args.size(); i++)
+    argv[i+1] = args[i];
+  argc = args.size() + 1;
 
   if (args.size() < 3) {
     usage(argv[0]);
