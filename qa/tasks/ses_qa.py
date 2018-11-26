@@ -43,7 +43,7 @@ class SESQA(Task):
         self.roles = ses_qa_ctx['roles']
         self.role_lookup_table = self.ctx['role_lookup_table']
         self.role_types = self.ctx['role_types']
-        self.scripts = Scripts(self.remotes)
+        self.scripts = Scripts(self.ctx, self.log, self.remotes)
         self.sm = ses_qa_ctx['salt_manager_instance']
 
     def _populate_ses_qa_context(self):
