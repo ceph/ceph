@@ -8,7 +8,10 @@ import logging
 import os
 from textwrap import dedent
 import traceback
-from collections import namedtuple, defaultdict
+try:
+    from collections.abc import namedtuple, defaultdict
+except ImportError:
+    from collections import namedtuple, defaultdict
 
 from teuthology.orchestra.run import CommandFailedError
 from tasks.cephfs.cephfs_test_case import CephFSTestCase, for_teuthology
