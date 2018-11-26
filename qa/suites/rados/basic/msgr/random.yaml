@@ -3,3 +3,4 @@ overrides:
     conf:
       global:
         ms type: random
+        ms bind msgr2: false
