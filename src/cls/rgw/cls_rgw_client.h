@@ -8,6 +8,8 @@
 #include "common/RefCountedObj.h"
 #include "include/compat.h"
 #include "common/ceph_time.h"
+#include "common/Mutex.h"
+#include "common/Cond.h"
 
 // Forward declaration
 class BucketIndexAioManager;

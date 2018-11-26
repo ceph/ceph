@@ -1,8 +1,10 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #ifndef QUEUE_RING_H
 #define QUEUE_RING_H
 
-#include "common/Mutex.h"
-#include "common/Cond.h"
+#include "common/ceph_mutex.h"
 
 #include <list>
 #include <atomic>
@@ -11,33 +13,32 @@
 template <class T>
 class QueueRing {
   struct QueueBucket {
-    Mutex lock;
-    Cond cond;
+    ceph::mutex lock = ceph::make_mutex("QueueRing::QueueBucket::lock");
+    ceph::condition_variable cond;
     typename std::list<T> entries;
 
-    QueueBucket() : lock("QueueRing::QueueBucket::lock") {}
-    QueueBucket(const QueueBucket& rhs) : lock("QueueRing::QueueBucket::lock") {
+    QueueBucket() {}
+    QueueBucket(const QueueBucket& rhs) {
       entries = rhs.entries;
     }
 
     void enqueue(const T& entry) {
       lock.lock();
       if (entries.empty()) {
-        cond.Signal();
+        cond.notify_all();
       }
       entries.push_back(entry);
       lock.unlock();
     }
 
     void dequeue(T *entry) {
-      lock.lock();
-      if (entries.empty()) {
-        cond.Wait(lock);
+      std::unique_lock l(lock);
+      while (entries.empty()) {
+        cond.wait(l);
       };
       ceph_assert(!entries.empty());
       *entry = entries.front();
       entries.pop_front();
-      lock.unlock();
     };
   };
 

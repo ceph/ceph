@@ -5,6 +5,7 @@
 #include "include/rbd_types.h"
 #include "include/rados/librados.hpp"
 #include "common/errno.h"
+#include "common/Cond.h"
 #include "librbd/Utils.h"
 #include "librbd/watcher/Utils.h"
 

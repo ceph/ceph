@@ -9,6 +9,7 @@
 #include "test/rbd_mirror/test_fixture.h"
 #include "tools/rbd_mirror/LeaderWatcher.h"
 #include "tools/rbd_mirror/Threads.h"
+#include "common/Cond.h"
 
 #include "test/librados/test_cxx.h"
 #include "gtest/gtest.h"

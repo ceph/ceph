@@ -10,6 +10,7 @@
 #include "librbd/Utils.h"
 #include "InstanceReplayer.h"
 #include "ImageSyncThrottler.h"
+#include "common/Cond.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror

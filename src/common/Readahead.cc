@@ -1,23 +1,21 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "Readahead.h"
-
+#include "common/Readahead.h"
+#include "common/Cond.h"
 
 Readahead::Readahead()
   : m_trigger_requests(10),
     m_readahead_min_bytes(0),
     m_readahead_max_bytes(NO_LIMIT),
     m_alignments(),
-    m_lock("Readahead::m_lock"),
     m_nr_consec_read(0),
     m_consec_read_bytes(0),
     m_last_pos(0),
     m_readahead_pos(0),
     m_readahead_trigger_pos(0),
     m_readahead_size(0),
-    m_pending(0),
-    m_pending_lock("Readahead::m_pending_lock") {
+    m_pending(0) {
 }
 
 Readahead::~Readahead() {
@@ -168,12 +166,12 @@ void Readahead::set_trigger_requests(int trigger_requests) {
 }
 
 uint64_t Readahead::get_min_readahead_size(void) {
-  std::lock_guard<Mutex> lock(m_lock);
+  std::lock_guard lock(m_lock);
   return m_readahead_min_bytes;
 }
 
 uint64_t Readahead::get_max_readahead_size(void) {
-  std::lock_guard<Mutex> lock(m_lock);
+  std::lock_guard lock(m_lock);
   return m_readahead_max_bytes;
 }
 

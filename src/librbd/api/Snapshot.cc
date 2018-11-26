@@ -9,6 +9,8 @@
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
 #include <boost/variant.hpp>
+#include "include/Context.h"
+#include "common/Cond.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix

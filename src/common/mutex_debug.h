@@ -85,6 +85,16 @@ private:
     ceph_assert(r == 0);
   }
 
+  bool enable_lockdep(bool no_lockdep) const {
+    if (recursive) {
+      return false;
+    } else if (no_lockdep) {
+      return false;
+    } else {
+      return g_lockdep;
+    }
+  }
+
 public:
   static constexpr bool recursive = Recursive;
 
@@ -163,7 +173,7 @@ public:
   bool try_lock(bool no_lockdep = false) {
     bool locked = try_lock_impl();
     if (locked) {
-      if (g_lockdep && !no_lockdep)
+      if (enable_lockdep(no_lockdep))
 	_locked();
       _post_lock();
     }
@@ -171,21 +181,21 @@ public:
   }
 
   void lock(bool no_lockdep = false) {
-    if (g_lockdep && !no_lockdep)
+    if (enable_lockdep(no_lockdep))
       _will_lock(recursive);
 
     if (try_lock())
       return;
 
     lock_impl();
-    if (!no_lockdep && g_lockdep)
+    if (enable_lockdep(no_lockdep))
       _locked();
     _post_lock();
   }
 
   void unlock(bool no_lockdep = false) {
     _pre_unlock();
-    if (!no_lockdep && g_lockdep)
+    if (enable_lockdep(no_lockdep))
       _will_unlock();
     unlock_impl();
   }

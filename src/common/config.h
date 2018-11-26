@@ -19,7 +19,6 @@
 #include <boost/container/small_vector.hpp>
 #include "common/ConfUtils.h"
 #include "common/code_environment.h"
-#include "common/Mutex.h"
 #include "log/SubsystemMap.h"
 #include "common/options.h"
 #include "common/subsys_types.h"

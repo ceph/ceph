@@ -14,6 +14,7 @@
 #include "cls/lock/cls_lock_client.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "common/Cond.h"
 #include "common/WorkQueue.h"
 #include "librbd/Utils.h"
 

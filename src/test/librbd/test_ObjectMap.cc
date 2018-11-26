@@ -8,6 +8,7 @@
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
+#include "common/Cond.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include <list>
 

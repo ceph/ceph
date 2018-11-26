@@ -12,14 +12,16 @@
  * 
  */
 
+#include <poll.h>
+#include <sys/un.h>
+#include <unistd.h>
+
 #include "common/OutputDataSocket.h"
 #include "common/errno.h"
+#include "common/debug.h"
 #include "common/safe_io.h"
 #include "include/compat.h"
 #include "include/sock_compat.h"
-
-#include <poll.h>
-#include <sys/un.h>
 
 // re-include our assert to clobber the system one; fix dout:
 #include "include/ceph_assert.h"
@@ -91,8 +93,7 @@ OutputDataSocket::OutputDataSocket(CephContext *cct, uint64_t _backlog)
     m_shutdown_rd_fd(-1),
     m_shutdown_wr_fd(-1),
     going_down(false),
-    data_size(0),
-    m_lock("OutputDataSocket::m_lock")
+    data_size(0)
 {
 }
 
@@ -274,15 +275,15 @@ void OutputDataSocket::handle_connection(int fd)
     return;
 
   do {
-    m_lock.lock();
-    cond.Wait(m_lock);
-
-    if (going_down) {
-      m_lock.unlock();
-      break;
+    {
+      std::unique_lock l(m_lock);
+      if (!going_down) {
+	cond.wait(l);
+      }
+      if (going_down) {
+	break;
+      }
     }
-    m_lock.unlock();
-
     ret = dump_data(fd);
   } while (ret >= 0);
 }
@@ -354,7 +355,7 @@ void OutputDataSocket::shutdown()
 {
   m_lock.lock();
   going_down = true;
-  cond.Signal();
+  cond.notify_all();
   m_lock.unlock();
 
   if (m_shutdown_wr_fd < 0)
@@ -381,7 +382,7 @@ void OutputDataSocket::shutdown()
 
 void OutputDataSocket::append_output(bufferlist& bl)
 {
-  std::lock_guard<Mutex> l(m_lock);
+  std::lock_guard l(m_lock);
 
   if (data_size + bl.length() > data_max_backlog) {
     ldout(m_cct, 20) << "dropping data output, max backlog reached" << dendl;
@@ -390,5 +391,5 @@ void OutputDataSocket::append_output(bufferlist& bl)
 
   data_size += bl.length();
 
-  cond.Signal();
+  cond.notify_all();
 }
