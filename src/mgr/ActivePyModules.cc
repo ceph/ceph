@@ -99,13 +99,13 @@ PyObject *ActivePyModules::get_server_python(const std::string &hostname)
 PyObject *ActivePyModules::list_servers_python()
 {
   PyThreadState *tstate = PyEval_SaveThread();
-  Mutex::Locker l(lock);
-  PyEval_RestoreThread(tstate);
   dout(10) << " >" << dendl;
 
   PyFormatter f(false, true);
-  daemon_state.with_daemons_by_server([this, &f]
+  daemon_state.with_daemons_by_server([this, &f, &tstate]
       (const std::map<std::string, DaemonStateCollection> &all) {
+    PyEval_RestoreThread(tstate);
+
     for (const auto &i : all) {
       const auto &hostname = i.first;
 
@@ -158,26 +158,30 @@ PyObject *ActivePyModules::get_daemon_status_python(
 
 PyObject *ActivePyModules::get_python(const std::string &what)
 {
+  PyFormatter f;
+
+  // Drop the GIL, as most of the following blocks will block on
+  // a mutex -- they are all responsible for re-taking the GIL before
+  // touching the PyFormatter instance or returning from the function.
   PyThreadState *tstate = PyEval_SaveThread();
-  Mutex::Locker l(lock);
-  PyEval_RestoreThread(tstate);
 
   if (what == "fs_map") {
-    PyFormatter f;
-    cluster_state.with_fsmap([&f](const FSMap &fsmap) {
+    cluster_state.with_fsmap([&f, &tstate](const FSMap &fsmap) {
+      PyEval_RestoreThread(tstate);
       fsmap.dump(&f);
     });
     return f.get();
   } else if (what == "osdmap_crush_map_text") {
     bufferlist rdata;
-    cluster_state.with_osdmap([&rdata](const OSDMap &osd_map){
-	osd_map.crush->encode(rdata, CEPH_FEATURES_SUPPORTED_DEFAULT);
+    cluster_state.with_osdmap([&rdata, &tstate](const OSDMap &osd_map){
+      PyEval_RestoreThread(tstate);
+      osd_map.crush->encode(rdata, CEPH_FEATURES_SUPPORTED_DEFAULT);
     });
     std::string crush_text = rdata.to_str();
     return PyString_FromString(crush_text.c_str());
   } else if (what.substr(0, 7) == "osd_map") {
-    PyFormatter f;
-    cluster_state.with_osdmap([&f, &what](const OSDMap &osd_map){
+    cluster_state.with_osdmap([&f, &what, &tstate](const OSDMap &osd_map){
+      PyEval_RestoreThread(tstate);
       if (what == "osd_map") {
         osd_map.dump(&f);
       } else if (what == "osd_map_tree") {
@@ -188,7 +192,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     });
     return f.get();
   } else if (what.substr(0, 6) == "config") {
-    PyFormatter f;
+    PyEval_RestoreThread(tstate);
     if (what == "config_options") {
       g_conf->config_options(&f);  
     } else if (what == "config") {
@@ -196,24 +200,25 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     }
     return f.get();
   } else if (what == "mon_map") {
-    PyFormatter f;
     cluster_state.with_monmap(
-      [&f](const MonMap &monmap) {
+      [&f, &tstate](const MonMap &monmap) {
+        PyEval_RestoreThread(tstate);
         monmap.dump(&f);
       }
     );
     return f.get();
   } else if (what == "service_map") {
-    PyFormatter f;
     cluster_state.with_servicemap(
-      [&f](const ServiceMap &service_map) {
+      [&f, &tstate](const ServiceMap &service_map) {
+        PyEval_RestoreThread(tstate);
         service_map.dump(&f);
       }
     );
     return f.get();
   } else if (what == "osd_metadata") {
-    PyFormatter f;
     auto dmc = daemon_state.get_by_service("osd");
+    PyEval_RestoreThread(tstate);
+
     for (const auto &i : dmc) {
       Mutex::Locker l(i.second->lock);
       f.open_object_section(i.first.second.c_str());
@@ -225,9 +230,10 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     }
     return f.get();
   } else if (what == "pg_summary") {
-    PyFormatter f;
     cluster_state.with_pgmap(
-        [&f](const PGMap &pg_map) {
+        [&f, &tstate](const PGMap &pg_map) {
+          PyEval_RestoreThread(tstate);
+
           std::map<std::string, std::map<std::string, uint32_t> > osds;
           std::map<std::string, std::map<std::string, uint32_t> > pools;
           std::map<std::string, uint32_t> all;
@@ -271,41 +277,39 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     );
     return f.get();
   } else if (what == "pg_status") {
-    PyFormatter f;
     cluster_state.with_pgmap(
-        [&f](const PGMap &pg_map) {
+        [&f, &tstate](const PGMap &pg_map) {
+          PyEval_RestoreThread(tstate);
 	  pg_map.print_summary(&f, nullptr);
         }
     );
     return f.get();
   } else if (what == "pg_dump") {
-    PyFormatter f;
-        cluster_state.with_pgmap(
-        [&f](const PGMap &pg_map) {
+    cluster_state.with_pgmap(
+        [&f, &tstate](const PGMap &pg_map) {
+          PyEval_RestoreThread(tstate);
 	  pg_map.dump(&f);
         }
     );
     return f.get();
   } else if (what == "df") {
-    PyFormatter f;
-
-    cluster_state.with_pgmap([this, &f](const PGMap &pg_map) {
+    cluster_state.with_pgmap([this, &f, &tstate](const PGMap &pg_map) {
       cluster_state.with_osdmap(
-          [&pg_map, &f](const OSDMap &osd_map) {
+          [&pg_map, &f, &tstate](const OSDMap &osd_map) {
+        PyEval_RestoreThread(tstate);
         pg_map.dump_fs_stats(nullptr, &f, true);
         pg_map.dump_pool_stats_full(osd_map, nullptr, &f, true);
       });
     });
     return f.get();
   } else if (what == "osd_stats") {
-    PyFormatter f;
     cluster_state.with_pgmap(
-        [&f](const PGMap &pg_map) {
+        [&f, &tstate](const PGMap &pg_map) {
+      PyEval_RestoreThread(tstate);
       pg_map.dump_osd_stats(&f);
     });
     return f.get();
   } else if (what == "health" || what == "mon_status") {
-    PyFormatter f;
     bufferlist json;
     if (what == "health") {
       json = cluster_state.get_health();
@@ -314,16 +318,19 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     } else {
       assert(false);
     }
+
+    PyEval_RestoreThread(tstate);
     f.dump_string("json", json.to_str());
     return f.get();
   } else if (what == "mgr_map") {
-    PyFormatter f;
-    cluster_state.with_mgrmap([&f](const MgrMap &mgr_map) {
+    cluster_state.with_mgrmap([&f, &tstate](const MgrMap &mgr_map) {
+      PyEval_RestoreThread(tstate);
       mgr_map.dump(&f);
     });
     return f.get();
   } else {
     derr << "Python module requested unknown data '" << what << "'" << dendl;
+    PyEval_RestoreThread(tstate);
     Py_RETURN_NONE;
   }
 }
@@ -709,15 +716,16 @@ PyObject *construct_with_capsule(
 
 PyObject *ActivePyModules::get_osdmap()
 {
-  PyThreadState *tstate = PyEval_SaveThread();
-  Mutex::Locker l(lock);
-  PyEval_RestoreThread(tstate);
-
   OSDMap *newmap = new OSDMap;
 
-  cluster_state.with_osdmap([&](const OSDMap& o) {
-      newmap->deepish_copy_from(o);
-    });
+  PyThreadState *tstate = PyEval_SaveThread();
+  {
+    Mutex::Locker l(lock);
+    cluster_state.with_osdmap([&](const OSDMap& o) {
+        newmap->deepish_copy_from(o);
+      });
+  }
+  PyEval_RestoreThread(tstate);
 
   return construct_with_capsule("mgr_module", "OSDMap", (void*)newmap);
 }
