@@ -3,6 +3,7 @@ from __future__ import absolute_import
 import time
 from threading import Event, Thread
 
+from .agent.predictor import PredictAgent
 from .agent.metrics.ceph_cluster import CephClusterAgent
 from .agent.metrics.ceph_mon_osd import CephMonOsdAgent
 from .agent.metrics.ceph_pool import CephPoolAgent
@@ -21,7 +22,7 @@ class AgentRunner(Thread):
     interval_key = ''
     agents = []
 
-    def __init__(self, mgr_module, agent_timeout=60):
+    def __init__(self, mgr_module, agent_timeout=60, call_back=None):
         """
 
         :param mgr_module: parent ceph mgr module
@@ -33,7 +34,7 @@ class AgentRunner(Thread):
         self._log = mgr_module.log
         self._start_time = time.time()
         self._th = None
-
+        self._call_back = call_back
         self.exit = False
         self.event = Event()
         self.task_interval = \
@@ -51,6 +52,8 @@ class AgentRunner(Thread):
             % (self.task_name, self.task_interval))
         while not self.exit:
             self.run_agents()
+            if self._call_back:
+                self._call_back()
             if self.event:
                 self.event.wait(int(self.task_interval))
                 self.event.clear()
@@ -145,6 +148,13 @@ class MetricsRunner(AgentRunner):
     agents = [CephClusterAgent, CephMonOsdAgent, CephPoolAgent,
               SAICluserAgent, SAIDiskAgent, SAIHostAgent, DBRelayAgent,
               SAIAgent]
+
+
+class PredictRunner(AgentRunner):
+
+    task_name = 'Predictor Agent'
+    interval_key = 'diskprediction_retrieve_prediction_interval'
+    agents = [PredictAgent]
 
 
 class SmartRunner(AgentRunner):
