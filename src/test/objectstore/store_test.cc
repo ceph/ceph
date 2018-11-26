@@ -1048,6 +1048,7 @@ void StoreTest::doCompressionTest()
   //force fsck
   ch.reset();
   EXPECT_EQ(store->umount(), 0);
+  ASSERT_EQ(store->fsck(false), 0); // do fsck explicitly
   EXPECT_EQ(store->mount(), 0);
   ch = store->open_collection(cid);
   auto settingsBookmark = BookmarkSettings();
@@ -1069,6 +1070,7 @@ void StoreTest::doCompressionTest()
   //force fsck
   ch.reset();
   EXPECT_EQ(store->umount(), 0);
+  ASSERT_EQ(store->fsck(false), 0); // do fsck explicitly
   EXPECT_EQ(store->mount(), 0);
   ch = store->open_collection(cid);
   {
@@ -1362,6 +1364,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     //force fsck
     ch.reset();
     EXPECT_EQ(store->umount(), 0);
+    ASSERT_EQ(store->fsck(false), 0); // do fsck explicitly
     EXPECT_EQ(store->mount(), 0);
     ch = store->open_collection(cid);
   }
@@ -1385,6 +1388,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     //force fsck
     ch.reset();
     EXPECT_EQ(store->umount(), 0);
+    ASSERT_EQ(store->fsck(false), 0); // do fsck explicitly
     EXPECT_EQ(store->mount(), 0);
     ch = store->open_collection(cid);
   }
@@ -1409,6 +1413,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     //force fsck
     ch.reset();
     EXPECT_EQ(store->umount(), 0);
+    ASSERT_EQ(store->fsck(false), 0); // do fsck explicitly
     EXPECT_EQ(store->mount(), 0);
     ch = store->open_collection(cid);
   }
@@ -1431,6 +1436,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     //force fsck
     ch.reset();
     EXPECT_EQ(store->umount(), 0);
+    ASSERT_EQ(store->fsck(false), 0); // do fsck explicitly
     EXPECT_EQ(store->mount(), 0);
     ch = store->open_collection(cid);
   }
@@ -1456,6 +1462,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     //force fsck
     ch.reset();
     EXPECT_EQ(store->umount(), 0);
+    ASSERT_EQ(store->fsck(false), 0); // do fsck explicitly
     EXPECT_EQ(store->mount(), 0);
     ch = store->open_collection(cid);
   }
@@ -1482,6 +1489,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     //force fsck
     ch.reset();
     EXPECT_EQ(store->umount(), 0);
+    ASSERT_EQ(store->fsck(false), 0); // do fsck explicitly
     EXPECT_EQ(store->mount(), 0);
     ch = store->open_collection(cid);
   }
@@ -1502,6 +1510,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     //force fsck
     ch.reset();
     EXPECT_EQ(store->umount(), 0);
+    ASSERT_EQ(store->fsck(false), 0); // do fsck explicitly
     EXPECT_EQ(store->mount(), 0);
     ch = store->open_collection(cid);
   }
@@ -1528,6 +1537,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     //force fsck
     ch.reset();
     EXPECT_EQ(store->umount(), 0);
+    ASSERT_EQ(store->fsck(false), 0); // do fsck explicitly
     EXPECT_EQ(store->mount(), 0);
     ch = store->open_collection(cid);
   }
@@ -1654,6 +1664,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreFragmentedBlobTest) {
   //force fsck
   ch.reset();
   EXPECT_EQ(store->umount(), 0);
+  ASSERT_EQ(store->fsck(false), 0); // do fsck explicitly
   EXPECT_EQ(store->mount(), 0);
   ch = store->open_collection(cid);
 
@@ -1687,6 +1698,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreFragmentedBlobTest) {
   //force fsck
   ch.reset();
   EXPECT_EQ(store->umount(), 0);
+  ASSERT_EQ(store->fsck(false), 0); // do fsck explicitly
   EXPECT_EQ(store->mount(), 0);
   ch = store->open_collection(cid);
 
@@ -1752,6 +1764,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreFragmentedBlobTest) {
   //force fsck
   ch.reset();
   EXPECT_EQ(store->umount(), 0);
+  ASSERT_EQ(store->fsck(false), 0); // do fsck explicitly
   EXPECT_EQ(store->mount(), 0);
   ch = store->open_collection(cid);
 
