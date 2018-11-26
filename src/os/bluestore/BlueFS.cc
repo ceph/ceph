@@ -118,6 +118,12 @@ void BlueFS::_init_logger()
   b.add_u64_counter(l_bluefs_bytes_written_slow, "bytes_written_slow",
 		    "Bytes written to WAL/SSTs at slow device", NULL,
 		    PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
+  b.add_u64_counter(l_bluefs_max_bytes_wal, "max_bytes_wal",
+		    "Maximum bytes allocated from WAL");
+  b.add_u64_counter(l_bluefs_max_bytes_db, "max_bytes_db",
+		    "Maximum bytes allocated from DB");
+  b.add_u64_counter(l_bluefs_max_bytes_slow, "max_bytes_slow",
+		    "Maximum bytes allocated from SLOW");
   logger = b.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 }
@@ -2424,6 +2430,13 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
     if (alloc[id]) 
       alloc[id]->dump();    
     return -ENOSPC;
+  } else {
+    uint64_t total_allocated =
+      block_all[id].size() - alloc[id]->get_free();
+    if (max_bytes[id] < total_allocated) {
+      logger->set(max_bytes_pcounters[id], total_allocated);
+      max_bytes[id] = total_allocated;
+    }
   }
 
   for (auto& p : extents) {
