@@ -23,7 +23,10 @@ from libc.stdint cimport *
 from libc.stdlib cimport realloc, free
 from libc.string cimport strdup
 
-from collections import Iterable
+try:
+    from collections.abc import Iterable
+except ImportError:
+    from collections import Iterable
 from datetime import datetime
 from itertools import chain
 

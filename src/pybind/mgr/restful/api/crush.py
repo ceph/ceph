@@ -2,7 +2,10 @@ from pecan import expose
 from pecan.rest import RestController
 
 from restful import common, context
-from collections import defaultdict
+try:
+    from collections.abc import defaultdict
+except ImportError:
+    from collections import defaultdict
 
 from restful.decorators import auth
 

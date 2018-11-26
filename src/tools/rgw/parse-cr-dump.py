@@ -1,6 +1,9 @@
 #!/usr/bin/python
 from __future__ import print_function
-from collections import Counter
+try:
+    from collections.abc import Counter
+except ImportError:
+    from collections import Counter
 import argparse
 import json
 import re

@@ -1,4 +1,7 @@
-from collections import namedtuple
+try:
+    from collections.abc import namedtuple
+except ImportError:
+    from collections import namedtuple
 
 
 sys_info = namedtuple('sys_info', ['devices'])
