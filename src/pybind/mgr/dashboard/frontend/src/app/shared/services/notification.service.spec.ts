@@ -123,4 +123,44 @@ describe('NotificationService', () => {
     expect(notification.title).toBe(`Failed to create RBD 'somePool/someImage'`);
     expect(notification.message).toBe(`Name is already used by RBD 'somePool/someImage'.`);
   }));
+
+  describe('notification queue', () => {
+    const n1 = new CdNotificationConfig(NotificationType.success, 'Some success');
+    const n2 = new CdNotificationConfig(NotificationType.info, 'Some info');
+
+    beforeEach(() => {
+      spyOn(notificationService, 'show').and.stub();
+    });
+
+    it('filters out duplicated notifications on single call', fakeAsync(() => {
+      notificationService.queueNotifications([n1, n1, n2, n2]);
+      tick(500);
+      expect(notificationService.show).toHaveBeenCalledTimes(2);
+    }));
+
+    it('filters out duplicated notifications presented in different calls', fakeAsync(() => {
+      notificationService.queueNotifications([n1, n2]);
+      notificationService.queueNotifications([n1, n2]);
+      tick(500);
+      expect(notificationService.show).toHaveBeenCalledTimes(2);
+    }));
+
+    it('will reset the timeout on every call', fakeAsync(() => {
+      notificationService.queueNotifications([n1, n2]);
+      tick(400);
+      notificationService.queueNotifications([n1, n2]);
+      tick(100);
+      expect(notificationService.show).toHaveBeenCalledTimes(0);
+      tick(400);
+      expect(notificationService.show).toHaveBeenCalledTimes(2);
+    }));
+
+    it('wont filter out duplicated notifications if timeout was reached before', fakeAsync(() => {
+      notificationService.queueNotifications([n1, n2]);
+      tick(500);
+      notificationService.queueNotifications([n1, n2]);
+      tick(500);
+      expect(notificationService.show).toHaveBeenCalledTimes(4);
+    }));
+  });
 });

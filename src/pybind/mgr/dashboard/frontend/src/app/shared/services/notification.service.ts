@@ -16,10 +16,12 @@ import { TaskMessageService } from './task-message.service';
 export class NotificationService {
   // Observable sources
   private dataSource = new BehaviorSubject<CdNotification[]>([]);
+  private queuedNotifications: CdNotificationConfig[] = [];
 
   // Observable streams
   data$ = this.dataSource.asObservable();
 
+  private queueTimeoutId: number;
   KEY = 'cdNotifications';
 
   constructor(public toastr: ToastsManager, private taskMessageService: TaskMessageService) {
@@ -63,6 +65,21 @@ export class NotificationService {
     localStorage.setItem(this.KEY, JSON.stringify(recent));
   }
 
+  queueNotifications(notifications: CdNotificationConfig[]) {
+    this.queuedNotifications = this.queuedNotifications.concat(notifications);
+    this.cancel(this.queueTimeoutId);
+    this.queueTimeoutId = window.setTimeout(() => {
+      this.sendQueuedNotifications();
+    }, 500);
+  }
+
+  private sendQueuedNotifications() {
+    _.uniqWith(this.queuedNotifications, _.isEqual).forEach((notification) => {
+      this.show(notification);
+    });
+    this.queuedNotifications = [];
+  }
+
   /**
    * Method for showing a notification.
    * @param {NotificationType} type toastr type
@@ -86,7 +103,7 @@ export class NotificationService {
     } else {
       type = arg;
     }
-    return setTimeout(() => {
+    return window.setTimeout(() => {
       this.save(type, title, message);
       if (!message) {
         message = '';
@@ -127,6 +144,6 @@ export class NotificationService {
    * @param {number} timeoutId A number representing the ID of the timeout to be canceled.
    */
   cancel(timeoutId) {
-    clearTimeout(timeoutId);
+    window.clearTimeout(timeoutId);
   }
 }
