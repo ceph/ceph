@@ -155,13 +155,12 @@ class DeepSea(Task):
         super(DeepSea, self).__init__(ctx, config)
         if deepsea_ctx:
             self.log = deepsea_ctx['logger_obj']
-            self.log.debug(
-                "deepsea_ctx already populated (we are in a subtask)")
+            self.log.debug("deepsea_ctx already populated (we are in a subtask)")
         if not deepsea_ctx:
             deepsea_ctx['logger_obj'] = log
+            self.ctx['roles'] = self.ctx.config['roles']
             self.log = log
-            self.log.debug(
-                "populating deepsea_ctx (we are *not* in a subtask)")
+            self.log.debug("populating deepsea_ctx (we are *not* in a subtask)")
             self._populate_deepsea_context()
         self.alternative_defaults = deepsea_ctx['alternative_defaults']
         self.dashboard_ssl = deepsea_ctx['dashboard_ssl']
@@ -175,7 +174,7 @@ class DeepSea(Task):
         self.quiet_salt = deepsea_ctx['quiet_salt']
         self.remotes = self.ctx['remotes']
         self.rgw_ssl = deepsea_ctx['rgw_ssl']
-        self.roles = deepsea_ctx['roles']
+        self.roles = self.ctx['roles']
         self.role_types = self.ctx['role_types']
         self.role_lookup_table = self.ctx['role_lookup_table']
         self.scripts = Scripts(self.ctx, self.log, self.remotes)
@@ -364,7 +363,6 @@ class DeepSea(Task):
 
     def _populate_deepsea_context(self):
         global deepsea_ctx
-        deepsea_ctx['roles'] = self.ctx.config['roles']
         deepsea_ctx['alternative_defaults'] = self.config.get('alternative_defaults', {})
         if not isinstance(deepsea_ctx['alternative_defaults'], dict):
             raise ConfigError(self.err_prefix + "alternative_defaults must be a dict")

@@ -39,8 +39,8 @@ class SESQA(Task):
         self.nodes_storage = self.ctx['nodes_storage']
         self.nodes_storage_only = self.ctx['nodes_storage_only']
         self.remote_lookup_table = self.ctx['remote_lookup_table']
-        self.remotes = ses_qa_ctx['remotes']
-        self.roles = ses_qa_ctx['roles']
+        self.remotes = self.ctx['remotes']
+        self.roles = self.ctx['roles']
         self.role_lookup_table = self.ctx['role_lookup_table']
         self.role_types = self.ctx['role_types']
         self.scripts = Scripts(self.ctx, self.log, self.remotes)
@@ -48,7 +48,6 @@ class SESQA(Task):
 
     def _populate_ses_qa_context(self):
         global ses_qa_ctx
-        ses_qa_ctx['roles'] = self.ctx.config['roles']
         ses_qa_ctx['salt_manager_instance'] = SaltManager(self.ctx)
         ses_qa_ctx['master_remote'] = ses_qa_ctx['salt_manager_instance'].master_remote
 
