@@ -102,7 +102,7 @@ struct denc_traits<OSDPerfMetricKeyDescriptor> {
         return;
       }
       try {
-        d.regex = {d.regex_str.c_str()};
+        d.regex = d.regex_str.c_str();
       } catch (const std::regex_error& e) {
         v.clear();
         return;
