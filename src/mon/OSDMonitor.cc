@@ -4499,7 +4499,8 @@ namespace {
     RECOVERY_PRIORITY, RECOVERY_OP_PRIORITY, SCRUB_PRIORITY,
     COMPRESSION_MODE, COMPRESSION_ALGORITHM, COMPRESSION_REQUIRED_RATIO,
     COMPRESSION_MAX_BLOB_SIZE, COMPRESSION_MIN_BLOB_SIZE,
-    CSUM_TYPE, CSUM_MAX_BLOCK, CSUM_MIN_BLOCK, FINGERPRINT_ALGORITHM };
+    CSUM_TYPE, CSUM_MAX_BLOCK, CSUM_MIN_BLOCK, FINGERPRINT_ALGORITHM,
+    PG_AUTOSCALE_MODE, PG_NUM_MIN, TARGET_SIZE_BYTES, TARGET_SIZE_RATIO };
 
   std::set<osd_pool_get_choices>
     subtract_second_from_first(const std::set<osd_pool_get_choices>& first,
@@ -5107,6 +5108,10 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       {"csum_max_block", CSUM_MAX_BLOCK},
       {"csum_min_block", CSUM_MIN_BLOCK},
       {"fingerprint_algorithm", FINGERPRINT_ALGORITHM},
+      {"pg_autoscale_mode", PG_AUTOSCALE_MODE},
+      {"pg_num_min", PG_NUM_MIN},
+      {"target_size_bytes", TARGET_SIZE_BYTES},
+      {"target_size_ratio", TARGET_SIZE_RATIO},
     };
 
     typedef std::set<osd_pool_get_choices> choices_set_t;
@@ -5208,6 +5213,11 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case EC_OVERWRITES:
 	    f->dump_bool("allow_ec_overwrites",
                          p->has_flag(pg_pool_t::FLAG_EC_OVERWRITES));
+	    break;
+	  case PG_AUTOSCALE_MODE:
+	    f->dump_string("pg_autoscale_mode",
+			   pg_pool_t::get_pg_autoscale_mode_name(
+			     p->pg_autoscale_mode));
 	    break;
 	  case HASHPSPOOL:
 	  case NODELETE:
@@ -5314,6 +5324,9 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case CSUM_MAX_BLOCK:
 	  case CSUM_MIN_BLOCK:
 	  case FINGERPRINT_ALGORITHM:
+	  case PG_NUM_MIN:
+	  case TARGET_SIZE_BYTES:
+	  case TARGET_SIZE_RATIO:
             pool_opts_t::key_t key = pool_opts_t::get_opt_desc(i->first).key;
             if (p->opts.is_set(key)) {
               if(*it == CSUM_TYPE) {
@@ -5353,6 +5366,10 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	    } else {
 	      ss << "crush_rule: " << p->get_crush_rule() << "\n";
 	    }
+	    break;
+	  case PG_AUTOSCALE_MODE:
+	    ss << "pg_autoscale_mode: " << pg_pool_t::get_pg_autoscale_mode_name(
+	      p->pg_autoscale_mode);
 	    break;
 	  case HIT_SET_PERIOD:
 	    ss << "hit_set_period: " << p->hit_set_period << "\n";
@@ -5463,6 +5480,9 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case CSUM_MAX_BLOCK:
 	  case CSUM_MIN_BLOCK:
 	  case FINGERPRINT_ALGORITHM:
+	  case PG_NUM_MIN:
+	  case TARGET_SIZE_BYTES:
+	  case TARGET_SIZE_RATIO:
 	    for (i = ALL_CHOICES.begin(); i != ALL_CHOICES.end(); ++i) {
 	      if (i->second == *it)
 		break;
@@ -7080,6 +7100,13 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       return -EINVAL;
     }
     p.set_pgp_num_target(n);
+  } else if (var == "pg_autoscale_mode") {
+    n = pg_pool_t::get_pg_autoscale_mode_by_name(val);
+    if (n < 0) {
+      ss << "specified invalid mode " << val;
+      return -EINVAL;
+    }
+    p.pg_autoscale_mode = n;
   } else if (var == "crush_rule") {
     int id = osdmap.crush->get_rule_id(val);
     if (id == -ENOENT) {
@@ -7356,6 +7383,16 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
           ss << "unrecognized fingerprint_algorithm '" << val << "'";
 	  return -EINVAL;
         }
+      }
+    } else if (var == "pg_num_min") {
+      if (interr.length()) {
+        ss << "error parsing int value '" << val << "': " << interr;
+        return -EINVAL;
+      }
+      if (n > (int)p.get_pg_num_target()) {
+	ss << "specified pg_num_min " << n
+	   << " > pg_num " << p.get_pg_num_target();
+	return -EINVAL;
       }
     }
 
