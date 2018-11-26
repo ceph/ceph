@@ -19,41 +19,43 @@ namespace po = boost::program_options;
 int do_list_children(librados::IoCtx &io_ctx, librbd::Image &image,
                      bool all_flag, Formatter *f)
 {
-  std::vector<librbd::child_info_t> children;
+  std::vector<librbd::linked_image_spec_t> children;
   librbd::RBD rbd;
-  int r = image.list_children2(&children);
+  int r = image.list_children3(&children);
   if (r < 0)
     return r;
 
   if (f)
     f->open_array_section("children");
 
-  for (std::vector<librbd::child_info_t>::iterator it = children.begin();
-       it != children.end(); ++it) {
-    bool trash = it->trash;
+  for (auto& child : children) {
+    bool trash = child.trash;
     if (f) {
       if (all_flag) {
         f->open_object_section("child");
-        f->dump_string("pool", it->pool_name);
-        f->dump_string("image", it->image_name);
-        f->dump_string("id", it->image_id);
-        f->dump_bool("trash", it->trash);
+        f->dump_string("pool", child.pool_name);
+        f->dump_string("pool_namespace", child.pool_namespace);
+        f->dump_string("image", child.image_name);
+        f->dump_string("id", child.image_id);
+        f->dump_bool("trash", child.trash);
         f->close_section();
       } else if (!trash) {
         f->open_object_section("child");
-        f->dump_string("pool", it->pool_name);
-        f->dump_string("image", it->image_name);
+        f->dump_string("pool", child.pool_name);
+        f->dump_string("pool_namespace", child.pool_namespace);
+        f->dump_string("image", child.image_name);
         f->close_section();
       }
-    } else {
-      if (all_flag) {
-        std::cout << it->pool_name << "/" << it->image_name;
-        if (trash)
-          std::cout << " (trash " << it->image_id << ")";
-        std::cout << std::endl;
-      } else if (!trash) {
-        std::cout << it->pool_name << "/" << it->image_name << std::endl;
+    } else if (all_flag || !trash) {
+      std::cout << child.pool_name << "/";
+      if (!child.pool_namespace.empty()) {
+        std::cout << child.pool_namespace << "/";
       }
+      std::cout << child.image_name;
+      if (trash) {
+        std::cout << " (trash " << child.image_id << ")";
+      }
+      std::cout << std::endl;
     }
   }
 

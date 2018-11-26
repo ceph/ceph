@@ -625,14 +625,14 @@ public:
     // use the alphabetical list of image names for pool-level
     // mirror image operations
     librbd::RBD rbd;
-    int r = rbd.list(m_io_ctx, m_image_names);
+    int r = rbd.list2(m_io_ctx, &m_images);
     if (r < 0 && r != -ENOENT) {
       std::cerr << "rbd: failed to list images within pool" << std::endl;
       return r;
     }
 
-    for (auto &image_name : m_image_names) {
-      auto request = m_factory(image_name);
+    for (auto &image : m_images) {
+      auto request = m_factory(image.name);
       request->send();
     }
 
@@ -646,7 +646,7 @@ private:
 
   OrderedThrottle m_throttle;
 
-  std::vector<std::string> m_image_names;
+  std::vector<librbd::image_spec_t> m_images;
 
 };
 
