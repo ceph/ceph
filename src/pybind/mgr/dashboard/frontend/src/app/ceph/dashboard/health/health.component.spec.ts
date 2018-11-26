@@ -140,21 +140,4 @@ describe('HealthComponent', () => {
       expect(infoGroup.querySelectorAll('cd-info-card').length).toBe(1);
     });
   });
-
-  // @TODO: remove this test when logs are no longer in landing page
-  // See https://tracker.ceph.com/issues/24571 & https://github.com/ceph/ceph/pull/23834
-  it('should render Logs group & cards in addition to the other ones', () => {
-    const payload = _.cloneDeep(healthPayload);
-    payload['clog'] = [];
-    payload['audit_log'] = [];
-
-    getHealthSpy.and.returnValue(of(payload));
-    fixture.detectChanges();
-
-    const infoGroups = fixture.debugElement.nativeElement.querySelectorAll('cd-info-group');
-    expect(infoGroups.length).toBe(4);
-
-    const infoCards = fixture.debugElement.nativeElement.querySelectorAll('cd-info-card');
-    expect(infoCards.length).toBe(20);
-  });
 });
