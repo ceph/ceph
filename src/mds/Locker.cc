@@ -2163,7 +2163,6 @@ void Locker::revoke_stale_caps(Session *session)
 
   for (xlist<Capability*>::iterator p = session->caps.begin(); !p.end(); ++p) {
     Capability *cap = *p;
-    cap->mark_stale();
     revoke_stale_caps(cap);
   }
 }
@@ -2175,21 +2174,18 @@ void Locker::resume_stale_caps(Session *session)
   for (xlist<Capability*>::iterator p = session->caps.begin(); !p.end(); ++p) {
     Capability *cap = *p;
     CInode *in = cap->get_inode();
-    assert(in->is_head());
-    if (cap->is_stale()) {
-      dout(10) << " clearing stale flag on " << *in << dendl;
-      cap->clear_stale();
+    ceph_assert(in->is_head());
+    dout(10) << " clearing stale flag on " << *in << dendl;
 
-      if (in->state_test(CInode::STATE_EXPORTINGCAPS)) {
-	// if export succeeds, the cap will be removed. if export fails,
-	// we need to re-issue the cap if it's not stale.
-	in->state_set(CInode::STATE_EVALSTALECAPS);
-	continue;
-      }
-
-      if (!in->is_auth() || !eval(in, CEPH_CAP_LOCKS))
-	issue_caps(in, cap);
+    if (in->state_test(CInode::STATE_EXPORTINGCAPS)) {
+      // if export succeeds, the cap will be removed. if export fails,
+      // we need to re-issue the cap if it's not stale.
+      in->state_set(CInode::STATE_EVALSTALECAPS);
+      continue;
     }
+
+    if (!in->is_auth() || !eval(in, CEPH_CAP_LOCKS))
+      issue_caps(in, cap);
   }
 }
 
