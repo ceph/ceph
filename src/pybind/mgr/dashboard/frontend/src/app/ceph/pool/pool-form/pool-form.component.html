@@ -324,7 +324,7 @@
                 </select>
               </div>
             </div>
-            <div *ngIf="activatedCompression()">
+            <div *ngIf="hasCompressionEnabled()">
               <!-- Compression algorithm selection -->
               <div class="form-group"
                    [ngClass]="{'has-error': form.showError('algorithm', formDir)}">

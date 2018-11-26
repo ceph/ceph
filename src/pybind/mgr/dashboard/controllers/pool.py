@@ -19,8 +19,8 @@ def pool_task(name, metadata, wait_for=2.0):
 @ApiController('/pool', Scope.POOL)
 class Pool(RESTController):
 
-    @classmethod
-    def _serialize_pool(cls, pool, attrs):
+    @staticmethod
+    def _serialize_pool(pool, attrs):
         if not attrs or not isinstance(attrs, list):
             attrs = pool.keys()
 
@@ -65,9 +65,8 @@ class Pool(RESTController):
             raise cherrypy.NotFound('No such pool')
         return pool[0]
 
-    # '_get' will be wrapped into JSON through '_request_wrapper'
     def get(self, pool_name, attrs=None, stats=False):
-        # type: (str, str, bool) -> str
+        # type: (str, str, bool) -> dict
         return self._get(pool_name, attrs, stats)
 
     @pool_task('delete', ['{pool_name}'])
@@ -145,10 +144,10 @@ class Pool(RESTController):
                        for o in mgr.get('osd_metadata').values())
 
         def compression_enum(conf_name):
-            return [[v for v in o['enum_values'] if len(v) > 0] for o in config_options
+            return [[v for v in o['enum_values'] if len(v) > 0]
+                    for o in mgr.get('config_options')['options']
                     if o['name'] == conf_name][0]
 
-        config_options = mgr.get('config_options')['options']
         return {
             "pool_names": [p['pool_name'] for p in self._pool_list()],
             "crush_rules_replicated": rules(1),

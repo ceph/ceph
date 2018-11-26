@@ -1,4 +1,4 @@
-import { CrushRule } from '../../../shared/models/crush-rule';
+import { CrushRule } from './crush-rule';
 
 export class PoolFormInfo {
   pool_names: string[];

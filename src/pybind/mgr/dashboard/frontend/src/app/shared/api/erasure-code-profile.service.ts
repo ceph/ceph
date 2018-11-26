@@ -1,6 +1,8 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
+import { Observable } from 'rxjs';
+
 import { ErasureCodeProfile } from '../models/erasure-code-profile';
 import { ApiModule } from './api.module';
 
@@ -12,8 +14,8 @@ export class ErasureCodeProfileService {
 
   constructor(private http: HttpClient) {}
 
-  list() {
-    return this.http.get(this.apiPath);
+  list(): Observable<ErasureCodeProfile[]> {
+    return this.http.get<ErasureCodeProfile[]>(this.apiPath);
   }
 
   create(ecp: ErasureCodeProfile) {
