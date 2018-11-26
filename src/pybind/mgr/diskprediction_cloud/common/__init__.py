@@ -1,7 +1,6 @@
 from __future__ import absolute_import
 import errno
 from functools import wraps
-from six.moves.http_client import BAD_REQUEST
 import os
 import signal
 
@@ -17,10 +16,13 @@ class DummyResonse:
     def __init__(self):
         self.resp_json = dict()
         self.content = 'DummyResponse'
-        self.status_code = BAD_REQUEST
+        self.status_code = 404
 
     def json(self):
         return self.resp_json
+
+    def __str__(self):
+        return '{}'.format({'resp': self.resp_json, 'content': self.content, 'status_code': self.status_code})
 
 
 class TimeoutError(Exception):

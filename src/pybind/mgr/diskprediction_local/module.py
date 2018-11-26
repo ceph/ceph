@@ -171,7 +171,7 @@ class Module(MgrModule):
             predicted_result = obj_predictor.predict(predict_datas)
         return predicted_result
 
-    def predict_life_expentancy(self, devid):
+    def predict_life_expectancy(self, devid):
         result = self._predict_life_expentancy(devid)
         if result.lower() == 'good':
             return 0, '>6w', ''

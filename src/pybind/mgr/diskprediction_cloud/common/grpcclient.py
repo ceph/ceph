@@ -22,7 +22,7 @@ def gen_configuration(**kwargs):
     return configuration
 
 
-class GRPcClient:
+class GRPcClient(object):
 
     def __init__(self, configuration):
         self.auth = None
@@ -71,6 +71,7 @@ class GRPcClient:
         try:
             stub_accout = client_pb2_grpc.AccountStub(self._client)
             result = stub_accout.AccountHeartbeat(client_pb2.Empty())
+            self._logger.debug('text connection result: {}'.format(str(result)))
             if result and "is alive" in str(result.message):
                 return True
             else:
@@ -225,14 +226,17 @@ class GRPcClient:
                                 for name, value in zip(columns, item):
                                     # process prediction data
                                     resp.resp_json[name] = value
+                self._logger.debug("query {}:{} result:{}".format(host_domain_id, disk_domain_id, resp))
                 return resp
             else:
                 resp.status_code = 400
                 resp.content = ''
                 resp.resp_json = {'error': ';'.join(str(predicted).split('\n\t'))}
+                self._logger.debug("query {}:{} result:{}".format(host_domain_id, disk_domain_id, resp))
                 return resp
         except Exception as e:
             resp.status_code = 400
             resp.content = ';'.join(str(e).split('\n\t'))
             resp.resp_json = {'error': resp.content}
+            self._logger.debug("query {}:{} result:{}".format(host_domain_id, disk_domain_id, resp))
             return resp

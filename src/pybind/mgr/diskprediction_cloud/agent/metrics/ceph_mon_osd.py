@@ -117,8 +117,8 @@ class CephMonOsdAgent(MetricsAgent):
                 e_osd.fields['name'] = n
                 e_osd.tags['cluster_id'] = cluster_id
                 e_osd.fields['agenthost'] = socket.gethostname()
-                e_osd.tags['agenthost_domain_id'] = '%s_%s' % (cluster_id, socket.gethostname)
-                e_osd.tags['host_domain_id'] = '%s_%s' % (cluster_id, socket.gethostname)
+                e_osd.tags['agenthost_domain_id'] = '%s_%s' % (cluster_id, socket.gethostname())
+                e_osd.tags['host_domain_id'] = '%s_%s' % (cluster_id, socket.gethostname())
                 for k in n_value.keys():
                     e_osd.fields[k] = str(n_value[k])
                 self.data.append(e_osd)
@@ -131,8 +131,8 @@ class CephMonOsdAgent(MetricsAgent):
                 n_node = CephOsdTree()
                 n_node.tags['cluster_id'] = cluster_id
                 n_node.fields['agenthost'] = socket.gethostname()
-                n_node.tags['agenthost_domain_id'] = '%s_%s' % (cluster_id, socket.gethostname)
-                n_node.tags['host_domain_id'] = '%s_%s' % (cluster_id, socket.gethostname)
+                n_node.tags['agenthost_domain_id'] = '%s_%s' % (cluster_id, socket.gethostname())
+                n_node.tags['host_domain_id'] = '%s_%s' % (cluster_id, socket.gethostname())
                 n_node.fields['children'] = ','.join(str(x) for x in node.get('children', []))
                 n_node.fields['type_id'] = str(node.get('type_id', ''))
                 n_node.fields['id'] = str(node.get('id', ''))
