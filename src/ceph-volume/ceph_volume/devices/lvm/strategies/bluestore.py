@@ -3,44 +3,26 @@ import json
 from ceph_volume.util import disk, prepare
 from ceph_volume.api import lvm
 from . import validators
+from .strategies import Strategy
+from .strategies import MixedStrategy
 from ceph_volume.devices.lvm.create import Create
 from ceph_volume.devices.lvm.prepare import Prepare
 from ceph_volume.util import templates
 from ceph_volume.exceptions import SizeAllocationError
 
 
-class SingleType(object):
+class SingleType(Strategy):
     """
     Support for all SSDs, or all HDDS
     """
 
     def __init__(self, devices, args):
-        self.args = args
-        self.osds_per_device = args.osds_per_device
-        self.devices = devices
-        # TODO: add --fast-devices and --slow-devices so these can be customized
-        self.hdds = [device for device in devices if device.sys_api['rotational'] == '1']
-        self.ssds = [device for device in devices if device.sys_api['rotational'] == '0']
-        self.computed = {'osds': [], 'vgs': [], 'filtered_devices': args.filtered_devices}
-        if self.devices:
-            self.validate()
-            self.compute()
-        else:
-            self.computed["changed"] = False
+        super(SingleType, self).__init__(devices, args)
+        self.validate_compute()
 
     @staticmethod
     def type():
         return "bluestore.SingleType"
-
-    @property
-    def total_osds(self):
-        if self.hdds:
-            return len(self.hdds) * self.osds_per_device
-        else:
-            return len(self.ssds) * self.osds_per_device
-
-    def report_json(self):
-        print(json.dumps(self.computed, indent=4, sort_keys=True))
 
     def report_pretty(self):
         string = ""
@@ -141,31 +123,18 @@ class SingleType(object):
                     Create(command).main()
 
 
-class MixedType(object):
+class MixedType(MixedStrategy):
 
     def __init__(self, devices, args):
-        self.args = args
-        self.devices = devices
-        self.osds_per_device = args.osds_per_device
-        # TODO: add --fast-devices and --slow-devices so these can be customized
-        self.hdds = [device for device in devices if device.sys_api['rotational'] == '1']
-        self.ssds = [device for device in devices if device.sys_api['rotational'] == '0']
-        self.computed = {'osds': [], 'filtered_devices': args.filtered_devices}
+        super(MixedType, self).__init__(devices, args)
         self.block_db_size = self.get_block_size()
         self.system_vgs = lvm.VolumeGroups()
         self.dbs_needed = len(self.hdds) * self.osds_per_device
-        if self.devices:
-            self.validate()
-            self.compute()
-        else:
-            self.computed["changed"] = False
+        self.validate_compute()
 
     @staticmethod
     def type():
         return "bluestore.MixedType"
-
-    def report_json(self):
-        print(json.dumps(self.computed, indent=4, sort_keys=True))
 
     def get_block_size(self):
         if self.args.block_db_size:
@@ -318,17 +287,6 @@ class MixedType(object):
                 Prepare(command).main()
             else:
                 Create(command).main()
-
-    def get_common_vg(self):
-        # find all the vgs associated with the current device
-        for ssd in self.ssds:
-            for pv in ssd.pvs_api:
-                vg = self.system_vgs.get(vg_name=pv.vg_name)
-                if not vg:
-                    continue
-                # this should give us just one VG, it would've been caught by
-                # the validator otherwise
-                return vg
 
     def validate(self):
         """
