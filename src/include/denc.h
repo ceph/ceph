@@ -1585,12 +1585,16 @@ inline std::enable_if_t<traits::supported && !traits::featured> decode_nohead(
     return;
   if (p.end())
     throw buffer::end_of_buffer();
-  bufferptr tmp;
-  auto t = p;
-  t.copy_shallow(p.get_bl().length() - p.get_off(), tmp);
-  auto cp = std::cbegin(tmp);
-  traits::decode_nohead(num, o, cp);
-  p.advance(cp.get_offset());
+  if constexpr (traits::need_contiguous) {
+    bufferptr tmp;
+    auto t = p;
+    t.copy_shallow(p.get_bl().length() - p.get_off(), tmp);
+    auto cp = std::cbegin(tmp);
+    traits::decode_nohead(num, o, cp);
+    p.advance(cp.get_offset());
+  } else {
+    traits::decode_nohead(num, o, p);
+  }
 }
 }
 
