@@ -101,8 +101,8 @@ public:
     return config.get_val_from_conf_file(values,
 					 sections, key, out, emeta);
   }
-  unsigned get_osd_pool_default_min_size() const {
-    return config.get_osd_pool_default_min_size(values);
+  unsigned get_osd_pool_default_min_size(uint8_t size) const {
+    return config.get_osd_pool_default_min_size(values, size);
   }
   void early_expand_meta(std::string &val,
 			 std::ostream *oss) const {
