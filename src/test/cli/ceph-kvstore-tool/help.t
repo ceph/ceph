@@ -4,6 +4,7 @@
   Commands:
     list [prefix]
     list-crc [prefix]
+    dump [prefix]
     exists <prefix> [key]
     get <prefix> <key> [out <file>]
     crc <prefix> <key>
