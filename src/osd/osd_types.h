@@ -1007,6 +1007,9 @@ public:
     CSUM_MAX_BLOCK,
     CSUM_MIN_BLOCK,
     FINGERPRINT_ALGORITHM,
+    PG_NUM_MIN,         // min pg_num
+    TARGET_SIZE_BYTES,  // total bytes in pool
+    TARGET_SIZE_RATIO,  // fraction of total cluster
   };
 
   enum type_t {
@@ -1244,12 +1247,39 @@ struct pg_pool_t {
     }
   }
 
+  enum {
+    PG_AUTOSCALE_MODE_OFF = 0,
+    PG_AUTOSCALE_MODE_WARN = 1,
+    PG_AUTOSCALE_MODE_ON = 2,
+  };
+  static const char *get_pg_autoscale_mode_name(int m) {
+    switch (m) {
+    case PG_AUTOSCALE_MODE_OFF: return "off";
+    case PG_AUTOSCALE_MODE_ON: return "on";
+    case PG_AUTOSCALE_MODE_WARN: return "warn";
+    default: return "???";
+    }
+  }
+  static int get_pg_autoscale_mode_by_name(const string& m) {
+    if (m == "off") {
+      return PG_AUTOSCALE_MODE_OFF;
+    }
+    if (m == "warn") {
+      return PG_AUTOSCALE_MODE_WARN;
+    }
+    if (m == "on") {
+      return PG_AUTOSCALE_MODE_ON;
+    }
+    return -1;
+  }
+
   utime_t create_time;
   uint64_t flags;           ///< FLAG_*
   __u8 type;                ///< TYPE_*
   __u8 size, min_size;      ///< number of osds in each pg
   __u8 crush_rule;          ///< crush placement rule
   __u8 object_hash;         ///< hash mapping object name to ps
+  __u8 pg_autoscale_mode;   ///< PG_AUTOSCALE_MODE_
 private:
   __u32 pg_num = 0, pgp_num = 0;  ///< number of pgs
   __u32 pg_num_pending = 0;       ///< pg_num we are about to merge down to
