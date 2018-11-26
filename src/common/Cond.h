@@ -183,7 +183,7 @@ public:
 
   /// We overload complete in order to not delete the context
   void complete(int r) override {
-    std::lock_guard<Mutex> l(lock);
+    std::lock_guard l(lock);
     done = true;
     rval = r;
     cond.Signal();
@@ -191,7 +191,7 @@ public:
 
   /// Returns rval once the Context is called
   int wait() {
-    std::lock_guard<Mutex> l(lock);
+    std::lock_guard l(lock);
     while (!done)
       cond.Wait(lock);
     return rval;
@@ -201,7 +201,7 @@ public:
   int wait_for(double secs) {
     utime_t interval;
     interval.set_from_double(secs);
-    std::lock_guard<Mutex> l{lock};
+    std::lock_guard l{lock};
     if (done) {
       return rval;
     }

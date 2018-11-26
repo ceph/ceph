@@ -63,7 +63,7 @@ void OpHistory::on_shutdown()
 {
   opsvc.break_thread();
   opsvc.join();
-  std::lock_guard<Mutex> history_lock(ops_history_lock);
+  std::lock_guard history_lock(ops_history_lock);
   arrived.clear();
   duration.clear();
   slow_op.clear();
@@ -72,7 +72,7 @@ void OpHistory::on_shutdown()
 
 void OpHistory::_insert_delayed(const utime_t& now, TrackedOpRef op)
 {
-  std::lock_guard<Mutex> history_lock(ops_history_lock);
+  std::lock_guard history_lock(ops_history_lock);
   if (shutdown)
     return;
   double opduration = op->get_duration();
@@ -110,7 +110,7 @@ void OpHistory::cleanup(utime_t now)
 
 void OpHistory::dump_ops(utime_t now, Formatter *f, set<string> filters, bool by_duration)
 {
-  std::lock_guard<Mutex> history_lock(ops_history_lock);
+  std::lock_guard history_lock(ops_history_lock);
   cleanup(now);
   f->open_object_section("op_history");
   f->dump_int("size", history_size);
@@ -138,10 +138,10 @@ void OpHistory::dump_ops(utime_t now, Formatter *f, set<string> filters, bool by
 }
 
 struct ShardedTrackingData {
-  Mutex ops_in_flight_lock_sharded;
+  ceph::mutex ops_in_flight_lock_sharded;
   TrackedOp::tracked_op_list_t ops_in_flight_sharded;
-  explicit ShardedTrackingData(string lock_name):
-      ops_in_flight_lock_sharded(lock_name.c_str()) {}
+  explicit ShardedTrackingData(string lock_name)
+    : ops_in_flight_lock_sharded(ceph::make_mutex(lock_name)) {}
 };
 
 OpTracker::OpTracker(CephContext *cct_, bool tracking, uint32_t num_shards):
@@ -179,7 +179,7 @@ bool OpTracker::dump_historic_ops(Formatter *f, bool by_duration, set<string> fi
 
 void OpHistory::dump_slow_ops(utime_t now, Formatter *f, set<string> filters)
 {
-  std::lock_guard<Mutex> history_lock(ops_history_lock);
+  std::lock_guard history_lock(ops_history_lock);
   cleanup(now);
   f->open_object_section("OpHistory slow ops");
   f->dump_int("num to keep", history_slow_op_size);
@@ -225,7 +225,7 @@ bool OpTracker::dump_ops_in_flight(Formatter *f, bool print_only_blocked, set<st
   for (uint32_t i = 0; i < num_optracker_shards; i++) {
     ShardedTrackingData* sdata = sharded_in_flight_list[i];
     ceph_assert(NULL != sdata); 
-    std::lock_guard<Mutex> locker(sdata->ops_in_flight_lock_sharded);
+    std::lock_guard locker(sdata->ops_in_flight_lock_sharded);
     for (auto& op : sdata->ops_in_flight_sharded) {
       if (print_only_blocked && (now - op.get_initiated() <= complaint_time))
         break;
@@ -258,7 +258,7 @@ bool OpTracker::register_inflight_op(TrackedOp *i)
   ShardedTrackingData* sdata = sharded_in_flight_list[shard_index];
   ceph_assert(NULL != sdata);
   {
-    std::lock_guard<Mutex> locker(sdata->ops_in_flight_lock_sharded);
+    std::lock_guard locker(sdata->ops_in_flight_lock_sharded);
     sdata->ops_in_flight_sharded.push_back(*i);
     i->seq = current_seq;
   }
@@ -274,7 +274,7 @@ void OpTracker::unregister_inflight_op(TrackedOp* const i)
   ShardedTrackingData* sdata = sharded_in_flight_list[shard_index];
   ceph_assert(NULL != sdata);
   {
-    std::lock_guard<Mutex> locker(sdata->ops_in_flight_lock_sharded);
+    std::lock_guard locker(sdata->ops_in_flight_lock_sharded);
     auto p = sdata->ops_in_flight_sharded.iterator_to(*i);
     sdata->ops_in_flight_sharded.erase(p);
   }
@@ -299,7 +299,7 @@ bool OpTracker::visit_ops_in_flight(utime_t* oldest_secs,
   RWLock::RLocker l(lock);
   for (const auto sdata : sharded_in_flight_list) {
     ceph_assert(sdata);
-    std::lock_guard<Mutex> locker(sdata->ops_in_flight_lock_sharded);
+    std::lock_guard locker(sdata->ops_in_flight_lock_sharded);
     if (!sdata->ops_in_flight_sharded.empty()) {
       utime_t oldest_op_tmp =
 	sdata->ops_in_flight_sharded.front().get_initiated();
@@ -322,7 +322,7 @@ bool OpTracker::visit_ops_in_flight(utime_t* oldest_secs,
   for (uint32_t iter = 0; iter < num_optracker_shards; iter++) {
     ShardedTrackingData* sdata = sharded_in_flight_list[iter];
     ceph_assert(NULL != sdata);
-    std::lock_guard<Mutex> locker(sdata->ops_in_flight_lock_sharded);
+    std::lock_guard locker(sdata->ops_in_flight_lock_sharded);
     for (auto& op : sdata->ops_in_flight_sharded) {
       if (!visit(op))
 	break;
@@ -420,7 +420,7 @@ void OpTracker::get_age_ms_histogram(pow2_hist_t *h)
   for (uint32_t iter = 0; iter < num_optracker_shards; iter++) {
     ShardedTrackingData* sdata = sharded_in_flight_list[iter];
     ceph_assert(NULL != sdata);
-    std::lock_guard<Mutex> locker(sdata->ops_in_flight_lock_sharded);
+    std::lock_guard locker(sdata->ops_in_flight_lock_sharded);
 
     for (auto& i : sdata->ops_in_flight_sharded) {
       utime_t age = now - i.get_initiated();
@@ -440,7 +440,7 @@ void TrackedOp::mark_event_string(const string &event, utime_t stamp)
     return;
 
   {
-    std::lock_guard<Mutex> l(lock);
+    std::lock_guard l(lock);
     events.emplace_back(stamp, event);
     current = events.back().c_str();
   }
@@ -458,7 +458,7 @@ void TrackedOp::mark_event(const char *event, utime_t stamp)
     return;
 
   {
-    std::lock_guard<Mutex> l(lock);
+    std::lock_guard l(lock);
     events.emplace_back(stamp, event);
     current = event;
   }

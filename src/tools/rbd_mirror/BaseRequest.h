@@ -5,6 +5,7 @@
 #define CEPH_RBD_MIRROR_BASE_REQUEST_H
 
 #include "common/RefCountedObj.h"
+#include "include/Context.h"
 
 namespace rbd {
 namespace mirror {

@@ -20,6 +20,7 @@
 
 #include <boost/intrusive/list.hpp>
 
+#include "include/Context.h"
 #include "common/RefCountedObj.h"
 #include "common/ThrottleInterface.h"
 #include "common/config.h"

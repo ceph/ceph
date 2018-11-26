@@ -225,7 +225,7 @@ public:
   };
 
   void register_fork_watcher(ForkWatcher *w) {
-    std::lock_guard<ceph::spinlock> lg(_fork_watchers_lock);
+    std::lock_guard lg(_fork_watchers_lock);
     _fork_watchers.push_back(w);
   }
 

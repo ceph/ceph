@@ -6,7 +6,7 @@ namespace ceph
 {
 
 ContextCompletion::ContextCompletion(Context *ctx, bool ignore_enoent)
-  : m_lock("ceph::ContextCompletion::m_lock"), m_ctx(ctx),
+  : m_ctx(ctx),
     m_ignore_enoent(ignore_enoent), m_ret(0), m_building(true), m_current_ops(0)
 {
 }
@@ -14,7 +14,7 @@ ContextCompletion::ContextCompletion(Context *ctx, bool ignore_enoent)
 void ContextCompletion::finish_adding_requests() {
   bool complete;
   {
-    std::lock_guard<Mutex> l(m_lock);
+    std::lock_guard l(m_lock);
     m_building = false;
     complete = (m_current_ops == 0);
   }
@@ -25,14 +25,14 @@ void ContextCompletion::finish_adding_requests() {
 }
 
 void ContextCompletion::start_op() {
-  std::lock_guard<Mutex> l(m_lock);
+  std::lock_guard l(m_lock);
   ++m_current_ops;
 }
 
 void ContextCompletion::finish_op(int r) {
   bool complete;
   {
-    std::lock_guard<Mutex> l(m_lock);
+    std::lock_guard l(m_lock);
     if (r < 0 && m_ret == 0 && (!m_ignore_enoent || r != -ENOENT)) {
       m_ret = r;
     }
