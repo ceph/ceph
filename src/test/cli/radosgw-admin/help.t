@@ -33,6 +33,7 @@
     bi list                    list raw bucket index entries
     bi purge                   purge bucket index entries
     object rm                  remove object
+    object put                 put object
     object stat                stat an object for its metadata
     object unlink              unlink object from bucket index
     object rewrite             rewrite the specified object
