@@ -450,6 +450,8 @@ def cluster(ctx, config):
     cluster_name = config['cluster']
     data_dir = '{tdir}/{cluster}.data'.format(tdir=testdir, cluster=cluster_name)
     log.info('Creating ceph cluster %s...', cluster_name)
+    log.info('config %s', config)
+    log.info('ctx.config %s', ctx.config)
     run.wait(
         ctx.cluster.run(
             args=[
@@ -516,7 +518,11 @@ def cluster(ctx, config):
     roles = [role_list for (remote, role_list) in remotes_and_roles]
     ips = [host for (host, port) in
            (remote.ssh.get_transport().getpeername() for (remote, role_list) in remotes_and_roles)]
-    conf = teuthology.skeleton_config(ctx, roles=roles, ips=ips, cluster=cluster_name)
+    conf = teuthology.skeleton_config(
+        ctx, roles=roles, ips=ips, cluster=cluster_name,
+        mon_bind_msgr2=config.get('mon_bind_msgr2'),
+        mon_bind_addrvec=config.get('mon_bind_addrvec'),
+    )
     for remote, roles_to_journals in remote_to_roles_to_journals.iteritems():
         for role, journal in roles_to_journals.iteritems():
             name = teuthology.ceph_role(role)
@@ -585,6 +591,7 @@ def cluster(ctx, config):
         remote=mon0_remote,
         conf=conf,
         path=monmap_path,
+        mon_bind_addrvec=config.get('mon_bind_addrvec'),
     )
     if not 'global' in conf:
         conf['global'] = {}
@@ -1757,6 +1764,8 @@ def task(ctx, config):
             log_whitelist=config.get('log-whitelist', []),
             cpu_profile=set(config.get('cpu_profile', []),),
             cluster=config['cluster'],
+            mon_bind_msgr2=config.get('mon_bind_msgr2', True),
+            mon_bind_addrvec=config.get('mon_bind_addrvec', True),
         )),
         lambda: run_daemon(ctx=ctx, config=config, type_='mon'),
         lambda: run_daemon(ctx=ctx, config=config, type_='mgr'),
