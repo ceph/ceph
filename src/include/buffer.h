@@ -409,8 +409,8 @@ namespace buffer CEPH_BUFFER_API {
 					typename std::list<ptr>::iterator>::type list_iter_t;
       bl_t* bl;
       list_t* ls;  // meh.. just here to avoid an extra pointer dereference..
-      unsigned off; // in bl
       list_iter_t p;
+      unsigned off; // in bl
       unsigned p_off;   // in *p
       friend class iterator_impl<true>;
 
@@ -420,7 +420,7 @@ namespace buffer CEPH_BUFFER_API {
 	: bl(0), ls(0), off(0), p_off(0) {}
       iterator_impl(bl_t *l, unsigned o=0);
       iterator_impl(bl_t *l, unsigned o, list_iter_t ip, unsigned po)
-	: bl(l), ls(&bl->_buffers), off(o), p(ip), p_off(po) {}
+	: bl(l), ls(&bl->_buffers), p(ip), off(o), p_off(po) {}
       iterator_impl(const list::iterator& i);
 
       /// get current iterator offset in buffer::list
