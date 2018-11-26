@@ -3009,13 +3009,11 @@ Capability *CInode::add_client_cap(client_t client, Session *session, SnapRealm 
 
   uint64_t cap_id = ++mdcache->last_cap_id;
   auto ret = client_caps.emplace(std::piecewise_construct, std::forward_as_tuple(client),
-                                 std::forward_as_tuple(this, cap_id, client));
+                                 std::forward_as_tuple(this, session, cap_id));
   ceph_assert(ret.second == true);
   Capability *cap = &ret.first->second;
 
   session->add_cap(cap);
-  if (session->is_stale())
-    cap->mark_stale();
   cap->client_follows = first-1;
   containing_realm->add_cap(client, cap);
 
