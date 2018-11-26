@@ -1,6 +1,13 @@
 from ceph_volume.devices.lvm import batch
 
 
+class TestBatchSmoke(object):
+
+    def test_batch_instance(self, is_root):
+        b = batch.Batch([])
+        b.main()
+
+
 class TestFilterDevices(object):
 
     def test_filter_used_device(self, factory):
