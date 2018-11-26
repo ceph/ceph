@@ -30,6 +30,9 @@ which are as follows:
 :command:`list-crc [prefix]`
     Print CRC of all KV pairs stored with the URL encoded prefix.
 
+:command:`dump [prefix]`
+    Print key and value of all KV pairs stored with the URL encoded prefix.
+
 :command:`exists <prefix> [key]`
     Check if there is any KV pair stored with the URL encoded prefix. If key
     is also specified, check for the key with the prefix instead.
