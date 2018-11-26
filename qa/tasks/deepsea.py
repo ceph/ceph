@@ -164,26 +164,23 @@ class DeepSea(Task):
                 "populating deepsea_ctx (we are *not* in a subtask)")
             self._populate_deepsea_context()
         self.alternative_defaults = deepsea_ctx['alternative_defaults']
-        self.client_only_nodes = deepsea_ctx['client_only_nodes']
-        self.cluster_nodes = deepsea_ctx['cluster_nodes']
         self.dashboard_ssl = deepsea_ctx['dashboard_ssl']
         self.deepsea_cli = deepsea_ctx['cli']
-        self.dev_env = deepsea_ctx['dev_env']
-        self.gateway_nodes = deepsea_ctx['gateway_nodes']
+        self.dev_env = self.ctx['dev_env']
         self.log_anchor = deepsea_ctx['log_anchor']
         self.master_remote = deepsea_ctx['master_remote']
-        self.nodes = deepsea_ctx['nodes']
+        self.nodes = self.ctx['nodes']
+        self.nodes_storage = self.ctx['nodes_storage']
+        self.nodes_storage_only = self.ctx['nodes_storage_only']
         self.quiet_salt = deepsea_ctx['quiet_salt']
         self.rgw_ssl = deepsea_ctx['rgw_ssl']
         self.roles = deepsea_ctx['roles']
-        self.role_types = deepsea_ctx['role_types']
-        self.role_lookup_table = deepsea_ctx['role_lookup_table']
-        self.remotes = deepsea_ctx['remotes']
+        self.role_types = self.ctx['role_types']
+        self.role_lookup_table = self.ctx['role_lookup_table']
+        self.remotes = self.ctx['remotes']
         self.scripts = Scripts(self.remotes)
         self.sm = deepsea_ctx['salt_manager_instance']
         self.storage_profile = deepsea_ctx['storage_profile']
-        self.storage_nodes = deepsea_ctx['storage_nodes']
-        self.storage_only_nodes = deepsea_ctx['storage_only_nodes']
         # self.log.debug("ctx.config {}".format(ctx.config))
         # self.log.debug("deepsea context: {}".format(deepsea_ctx))
 
@@ -388,7 +385,7 @@ class DeepSea(Task):
                 deepsea_ctx['salt_manager_instance'].master_remote
                 )
         deepsea_ctx['rgw_ssl'] = self.config.get('rgw_ssl', False)
-        introspect_roles(self.ctx, self.log, deepsea_ctx, quiet=False)
+        introspect_roles(self.ctx, self.log, quiet=False)
         if 'install' in self.config:
             if self.config['install'] in ['package', 'pkg']:
                 deepsea_ctx['install_method'] = 'package'
@@ -427,8 +424,8 @@ class DeepSea(Task):
                 _remote.run(args=['sudo', 'sh', '-c', for_loop.format(pn=pn)])
 
     def first_storage_only_node(self):
-        if self.storage_only_nodes:
-            return self.storage_only_nodes[0]
+        if self.nodes_storage_only:
+            return self.nodes_storage_only[0]
         else:
             return None
 
@@ -652,7 +649,7 @@ class CephConf(DeepSea):
         """
         Apply necessary ceph.conf for small clusters
         """
-        storage_nodes = len(self.storage_nodes)
+        storage_nodes = len(self.nodes_storage)
         info_msg = (
             "adjusted ceph.conf for operation with {} storage node(s)"
             .format(storage_nodes)
@@ -891,8 +888,8 @@ class Orch(DeepSea):
 
     def __dump_lvm_status(self):
         self.log.info("Dumping LVM status on storage nodes ->{}<-"
-                      .format(self.storage_nodes))
-        for hostname in self.storage_nodes:
+                      .format(self.nodes_storage))
+        for hostname in self.nodes_storage:
             remote = self.remotes[hostname]
             self.scripts.run(
                 remote,
@@ -1189,15 +1186,15 @@ class Policy(DeepSea):
         self.munge_profile = self.config.get('munge_profile', {})
 
     def __build_profile_x(self, profile):
-        if not self.storage_nodes:
+        if not self.nodes_storage:
             raise ConfigError(self.err_prefix + "no osd roles configured, "
                               "but at least one of these is required.")
         self.log.debug("building storage profile ->{}<- for {} storage nodes"
-                       .format(profile, len(self.storage_nodes)))
+                       .format(profile, len(self.nodes_storage)))
         if profile == 'custom':
             self.__roll_out_custom_profile()
         self.profile_ymls_to_dump = []
-        for hostname in self.storage_nodes:
+        for hostname in self.nodes_storage:
             self.policy_cfg += ("# Storage profile - {node}\n"
                                 "profile-{profile}/cluster/{node}.sls\n"
                                 .format(node=hostname, profile=profile))

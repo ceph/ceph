@@ -8,7 +8,6 @@ import logging
 
 from salt_manager import SaltManager
 from scripts import Scripts
-from util import introspect_roles
 
 from teuthology.exceptions import (
     ConfigError,
@@ -33,7 +32,17 @@ class SESQA(Task):
             self.log.debug("populating ses_qa_ctx (we are *not* in a subtask)")
             self._populate_ses_qa_context()
         self.master_remote = ses_qa_ctx['master_remote']
+        self.nodes = self.ctx['nodes']
+        self.nodes_client_only = self.ctx['nodes_client_only']
+        self.nodes_cluster = self.ctx['nodes_cluster']
+        self.nodes_gateway = self.ctx['nodes_gateway']
+        self.nodes_storage = self.ctx['nodes_storage']
+        self.nodes_storage_only = self.ctx['nodes_storage_only']
+        self.remote_lookup_table = self.ctx['remote_lookup_table']
         self.remotes = ses_qa_ctx['remotes']
+        self.roles = ses_qa_ctx['roles']
+        self.role_lookup_table = self.ctx['role_lookup_table']
+        self.role_types = self.ctx['role_types']
         self.scripts = Scripts(self.remotes)
         self.sm = ses_qa_ctx['salt_manager_instance']
 
@@ -42,7 +51,6 @@ class SESQA(Task):
         ses_qa_ctx['roles'] = self.ctx.config['roles']
         ses_qa_ctx['salt_manager_instance'] = SaltManager(self.ctx)
         ses_qa_ctx['master_remote'] = ses_qa_ctx['salt_manager_instance'].master_remote
-        introspect_roles(self.ctx, self.log, ses_qa_ctx, quiet=False)
 
     def os_type_and_version(self):
         os_type = self.ctx.config.get('os_type', 'unknown')

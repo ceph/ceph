@@ -1,4 +1,5 @@
 from teuthology import misc
+from teuthology.exceptions import ConfigError
 
 
 def get_remote(ctx, cluster, service_type, service_id):
@@ -38,21 +39,22 @@ def copy_directory_recursively(from_path, to_remote, to_path=None):
             from_path=from_path, host=to_remote.name, to_path=to_path))
 
 
-def introspect_roles(teuthology_ctx, logger, test_ctx, quiet=True):
+def introspect_roles(ctx, logger, quiet=True):
     """
-    Creates the following keys in test_ctx:
+    Creates the following keys in ctx:
 
         nodes,
-        cluster_nodes,
-        gateway_nodes,
-        storage_nodes, and
-        client_only_nodes.
+        nodes_client_only,
+        nodes_cluster,
+        nodes_gateway,
+        nodes_storage, and
+        nodes_storage_only.
 
     These are all simple lists of hostnames.
 
     Also creates
 
-        remotes,
+        ctx['remotes'],
 
     which is a dict of teuthology "remote" objects, which look like this:
 
@@ -60,14 +62,14 @@ def introspect_roles(teuthology_ctx, logger, test_ctx, quiet=True):
 
     Also creates
 
-        role_types
+        ctx['role_types']
 
     which is just like the "roles" list, except it contains only unique
     role types per node.
 
     Finally, creates:
 
-        role_lookup_table
+        ctx['role_lookup_table']
 
     which will look something like this:
 
@@ -79,7 +81,7 @@ def introspect_roles(teuthology_ctx, logger, test_ctx, quiet=True):
 
     and
 
-        remote_lookup_table
+        ctx['remote_lookup_table']
 
     which looks like this:
 
@@ -96,14 +98,14 @@ def introspect_roles(teuthology_ctx, logger, test_ctx, quiet=True):
     cluster_roles = ['mon', 'mgr', 'osd', 'mds']
     non_storage_cluster_roles = ['mon', 'mgr', 'mds']
     gateway_roles = ['rgw', 'igw', 'ganesha']
-    roles = test_ctx['roles']
+    roles = ctx.config['roles']
     nodes = []
-    cluster_nodes = []
+    nodes_client_only = []
+    nodes_cluster = []
     non_storage_cluster_nodes = []
-    gateway_nodes = []
-    storage_nodes = []
-    storage_only_nodes = []
-    client_only_nodes = []
+    nodes_gateway = []
+    nodes_storage = []
+    nodes_storage_only = []
     remotes = {}
     role_types = []
     role_lookup_table = {}
@@ -114,7 +116,7 @@ def introspect_roles(teuthology_ctx, logger, test_ctx, quiet=True):
         assert isinstance(node_roles_list, list), \
             "node_roles_list is a list"
         assert node_roles_list, "node_roles_list is not empty"
-        remote = get_remote_for_role(teuthology_ctx, node_roles_list[0])
+        remote = get_remote_for_role(ctx, node_roles_list[0])
         role_types.append([])
         if not quiet:
             logger.debug("Considering remote name {}, hostname {}"
@@ -135,50 +137,50 @@ def introspect_roles(teuthology_ctx, logger, test_ctx, quiet=True):
                 role_lookup_table[role_type] = {}
             role_lookup_table[role_type][role] = remote.hostname
             if role_type in cluster_roles:
-                cluster_nodes += [remote.hostname]
+                nodes_cluster += [remote.hostname]
             if role_type in gateway_roles:
-                gateway_nodes += [remote.hostname]
+                nodes_gateway += [remote.hostname]
             if role_type in non_storage_cluster_roles:
                 non_storage_cluster_nodes += [remote.hostname]
             if role_type == 'osd':
-                storage_nodes += [remote.hostname]
+                nodes_storage += [remote.hostname]
             if role_type not in role_types[idx]:
                 role_types[idx] += [role_type]
         idx += 1
-    cluster_nodes = list(set(cluster_nodes))
-    gateway_nodes = list(set(gateway_nodes))
-    storage_nodes = list(set(storage_nodes))
-    storage_only_nodes = []
-    for node in storage_nodes:
+    nodes_cluster = list(set(nodes_cluster))
+    nodes_gateway = list(set(nodes_gateway))
+    nodes_storage = list(set(nodes_storage))
+    nodes_storage_only = []
+    for node in nodes_storage:
         if node not in non_storage_cluster_nodes:
-            if node not in gateway_nodes:
-                storage_only_nodes += [node]
-    client_only_nodes = list(
-        set(nodes).difference(set(cluster_nodes).union(set(gateway_nodes)))
+            if node not in nodes_gateway:
+                nodes_storage_only += [node]
+    nodes_client_only = list(
+        set(nodes).difference(set(nodes_cluster).union(set(nodes_gateway)))
         )
     if not quiet:
-        logger.debug("client_only_nodes is ->{}<-".format(client_only_nodes))
+        logger.debug("nodes_client_only is ->{}<-".format(nodes_client_only))
     assign_vars = [
-        'client_only_nodes',
-        'cluster_nodes',
-        'gateway_nodes',
         'nodes',
+        'nodes_client_only',
+        'nodes_cluster',
+        'nodes_gateway',
+        'nodes_storage',
+        'nodes_storage_only',
         'remote_lookup_table',
         'remotes',
         'role_lookup_table',
         'role_types',
-        'storage_nodes',
-        'storage_only_nodes',
         ]
     for var in assign_vars:
-        exec("test_ctx['{var}'] = {var}".format(var=var))
-    test_ctx['dev_env'] = True if len(cluster_nodes) < 4 else False
+        exec("ctx['{var}'] = {var}".format(var=var))
+    ctx['dev_env'] = True if len(nodes_cluster) < 4 else False
     if not quiet:
         # report phase
         logger.info("ROLE INTROSPECTION REPORT")
-        report_vars = ['roles'] + assign_vars + ['dev_env']
+        report_vars = assign_vars + ['dev_env']
         for var in report_vars:
-            logger.info("{} == {}".format(var, test_ctx[var]))
+            logger.info("{} == {}".format(var, ctx[var]))
 
 
 def remote_run_script_as_root(remote, path, data, args=None):
