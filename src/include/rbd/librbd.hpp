@@ -35,12 +35,32 @@ namespace librbd {
   typedef void (*callback_t)(completion_t cb, void *arg);
 
   typedef struct {
+    std::string id;
+    std::string name;
+  } image_spec_t;
+
+  typedef struct {
+    int64_t pool_id;
+    std::string pool_name;
+    std::string pool_namespace;
+    std::string image_id;
+    std::string image_name;
+    bool trash;
+  } linked_image_spec_t;
+
+  typedef rbd_snap_namespace_type_t snap_namespace_type_t;
+
+  typedef struct {
+    uint64_t id;
+    snap_namespace_type_t namespace_type;
+    std::string name;
+  } snap_spec_t;
+
+  typedef struct {
     uint64_t id;
     uint64_t size;
     std::string name;
   } snap_info_t;
-
-  typedef rbd_snap_namespace_type_t snap_namespace_type_t;
 
   typedef struct {
     int64_t group_pool;
@@ -190,7 +210,11 @@ public:
 			 const char *snapname, RBD::AioCompletion *c);
   int aio_open_by_id_read_only(IoCtx& io_ctx, Image& image, const char *id,
                                const char *snapname, RBD::AioCompletion *c);
-  int list(IoCtx& io_ctx, std::vector<std::string>& names);
+
+  int list(IoCtx& io_ctx, std::vector<std::string>& names)
+    __attribute__((deprecated));
+  int list2(IoCtx& io_ctx, std::vector<image_spec_t>* images);
+
   int create(IoCtx& io_ctx, const char *name, uint64_t size, int *order);
   int create2(IoCtx& io_ctx, const char *name, uint64_t size,
 	      uint64_t features, int *order);
@@ -383,9 +407,13 @@ public:
   std::string get_block_name_prefix();
   int64_t get_data_pool_id();
   int parent_info(std::string *parent_poolname, std::string *parent_name,
-		  std::string *parent_snapname);
+		  std::string *parent_snapname)
+      __attribute__((deprecated));
   int parent_info2(std::string *parent_poolname, std::string *parent_name,
-                   std::string *parent_id, std::string *parent_snapname);
+                   std::string *parent_id, std::string *parent_snapname)
+      __attribute__((deprecated));
+  int get_parent(linked_image_spec_t *parent_image, snap_spec_t *parent_snap);
+
   int old_format(uint8_t *old);
   int size(uint64_t *size);
   int get_group(group_info_t *group_info, size_t group_info_size);
@@ -442,12 +470,15 @@ public:
    * Returns a pair of poolname, imagename for each clone
    * of this image at the currently set snapshot.
    */
-  int list_children(std::set<std::pair<std::string, std::string> > *children);
+  int list_children(std::set<std::pair<std::string, std::string> > *children)
+      __attribute__((deprecated));
   /**
   * Returns a structure of poolname, imagename, imageid and trash flag
   * for each clone of this image at the currently set snapshot.
   */
-  int list_children2(std::vector<librbd::child_info_t> *children);
+  int list_children2(std::vector<librbd::child_info_t> *children)
+      __attribute__((deprecated));
+  int list_children3(std::vector<linked_image_spec_t> *images);
 
   /* advisory locking (see librbd.h for details) */
   int list_lockers(std::list<locker_t> *lockers,

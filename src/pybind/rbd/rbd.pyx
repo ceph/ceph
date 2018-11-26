@@ -114,11 +114,27 @@ cdef extern from "rbd/librbd.h" nogil:
         char *name
         int64_t pool
 
-    ctypedef struct rbd_child_info_t:
+    ctypedef struct rbd_image_spec_t:
+        char *id
+        char *name
+
+    ctypedef struct rbd_linked_image_spec_t:
+        int64_t pool_id
         char *pool_name
-        char *image_name
+        char *pool_namespace
         char *image_id
+        char *image_name
         bint trash
+
+    ctypedef enum rbd_snap_namespace_type_t:
+        _RBD_SNAP_NAMESPACE_TYPE_USER "RBD_SNAP_NAMESPACE_TYPE_USER"
+        _RBD_SNAP_NAMESPACE_TYPE_GROUP "RBD_SNAP_NAMESPACE_TYPE_GROUP"
+        _RBD_SNAP_NAMESPACE_TYPE_TRASH "RBD_SNAP_NAMESPACE_TYPE_TRASH"
+
+    ctypedef struct rbd_snap_spec_t:
+        uint64_t id
+        rbd_snap_namespace_type_t namespace_type
+        char *name
 
     ctypedef enum rbd_mirror_mode_t:
         _RBD_MIRROR_MODE_DISABLED "RBD_MIRROR_MODE_DISABLED"
@@ -159,11 +175,6 @@ cdef extern from "rbd/librbd.h" nogil:
         char *description
         time_t last_update
         bint up
-
-    ctypedef enum rbd_snap_namespace_type_t:
-        _RBD_SNAP_NAMESPACE_TYPE_USER "RBD_SNAP_NAMESPACE_TYPE_USER"
-        _RBD_SNAP_NAMESPACE_TYPE_GROUP "RBD_SNAP_NAMESPACE_TYPE_GROUP"
-        _RBD_SNAP_NAMESPACE_TYPE_TRASH "RBD_SNAP_NAMESPACE_TYPE_TRASH"
 
     ctypedef enum rbd_lock_mode_t:
         _RBD_LOCK_MODE_EXCLUSIVE "RBD_LOCK_MODE_EXCLUSIVE"
@@ -248,6 +259,12 @@ cdef extern from "rbd/librbd.h" nogil:
 
     void rbd_version(int *major, int *minor, int *extra)
 
+    void rbd_image_spec_list_cleanup(rbd_image_spec_t *image, size_t num_images)
+    void rbd_linked_image_spec_cleanup(rbd_linked_image_spec_t *image)
+    void rbd_linked_image_spec_list_cleanup(rbd_linked_image_spec_t *images,
+                                            size_t num_images)
+    void rbd_snap_spec_cleanup(rbd_snap_spec_t *snap)
+
     void rbd_image_options_create(rbd_image_options_t* opts)
     void rbd_image_options_destroy(rbd_image_options_t opts)
     int rbd_image_options_set_string(rbd_image_options_t opts, int optname,
@@ -263,6 +280,8 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_image_options_is_empty(rbd_image_options_t opts)
 
     int rbd_list(rados_ioctx_t io, char *names, size_t *size)
+    int rbd_list2(rados_ioctx_t io, rbd_image_spec_t *images,
+                  size_t *num_images)
     int rbd_create(rados_ioctx_t io, const char *name, uint64_t size,
                    int *order)
     int rbd_create4(rados_ioctx_t io, const char *name, uint64_t size,
@@ -379,11 +398,9 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_get_block_name_prefix(rbd_image_t image, char *prefix,
                                   size_t prefix_len)
     int64_t rbd_get_data_pool_id(rbd_image_t image)
-    int rbd_get_parent_info2(rbd_image_t image,
-                             char *parent_poolname, size_t ppoolnamelen,
-                             char *parent_name, size_t pnamelen,
-                             char *parent_id, size_t pidlen,
-                             char *parent_snapname, size_t psnapnamelen)
+    int rbd_get_parent(rbd_image_t image,
+                       rbd_linked_image_spec_t *parent_image,
+                       rbd_snap_spec_t *parent_snap)
     int rbd_get_flags(rbd_image_t image, uint64_t *flags)
     int rbd_get_group(rbd_image_t image, rbd_group_info_t *group_info,
                       size_t group_info_size)
@@ -428,16 +445,12 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_snap_get_trash_namespace(rbd_image_t image, uint64_t snap_id,
                                      char *original_name, size_t max_length)
 
-
     int rbd_flatten(rbd_image_t image)
     int rbd_rebuild_object_map(rbd_image_t image, librbd_progress_fn_t cb,
                                void *cbdata)
-    ssize_t rbd_list_children(rbd_image_t image, char *pools, size_t *pools_len,
-                              char *images, size_t *images_len)
-    int rbd_list_children2(rbd_image_t image, rbd_child_info_t *children,
-                           int *max_children)
-    void rbd_list_children_cleanup(rbd_child_info_t *children,
-                                   size_t num_children)
+    int rbd_list_children3(rbd_image_t image, rbd_linked_image_spec_t *children,
+                           size_t *max_children)
+
     ssize_t rbd_list_lockers(rbd_image_t image, int *exclusive,
                              char *tag, size_t *tag_len,
                              char *clients, size_t *clients_len,
@@ -601,9 +614,6 @@ RBD_FLAG_FAST_DIFF_INVALID = _RBD_FLAG_FAST_DIFF_INVALID
 RBD_MIRROR_MODE_DISABLED = _RBD_MIRROR_MODE_DISABLED
 RBD_MIRROR_MODE_IMAGE = _RBD_MIRROR_MODE_IMAGE
 RBD_MIRROR_MODE_POOL = _RBD_MIRROR_MODE_POOL
-
-RBD_MIRROR_PEER_ATTRIBUTE_NAME_MON_HOST = _RBD_MIRROR_PEER_ATTRIBUTE_NAME_MON_HOST
-RBD_MIRROR_PEER_ATTRIBUTE_NAME_KEY = _RBD_MIRROR_PEER_ATTRIBUTE_NAME_KEY
 
 RBD_MIRROR_IMAGE_DISABLING = _RBD_MIRROR_IMAGE_DISABLING
 RBD_MIRROR_IMAGE_ENABLED = _RBD_MIRROR_IMAGE_ENABLED
@@ -847,6 +857,9 @@ cdef void* realloc_chk(void* ptr, size_t size) except NULL:
     if ret == NULL:
         raise MemoryError("realloc failed")
     return ret
+
+RBD_MIRROR_PEER_ATTRIBUTE_NAME_MON_HOST = decode_cstr(_RBD_MIRROR_PEER_ATTRIBUTE_NAME_MON_HOST)
+RBD_MIRROR_PEER_ATTRIBUTE_NAME_KEY = decode_cstr(_RBD_MIRROR_PEER_ATTRIBUTE_NAME_KEY)
 
 cdef class Completion
 
@@ -1148,6 +1161,16 @@ class RBD(object):
         finally:
             free(c_names)
 
+    def list2(self, ioctx):
+        """
+        Iterate over the images in the pool.
+
+        :param ioctx: determines which RADOS pool the image is in
+        :type ioctx: :class:`rados.Ioctx`
+        :returns: :class:`ImageIterator`
+        """
+        return ImageIterator(ioctx)
+
     def remove(self, ioctx, name):
         """
         Delete an RBD image. This may take a long time, since it does
@@ -1346,6 +1369,7 @@ class RBD(object):
         :raises: :class:`FunctionNotSupported`
         :raises: :class:`ArgumentOutOfRange`
         """
+        image_name = cstr(image_name, 'image_name')
         dest_image_name = cstr(dest_image_name, 'dest_image_name')
         cdef:
             rados_ioctx_t _ioctx = convert_ioctx(ioctx)
@@ -1687,8 +1711,8 @@ class RBD(object):
         :type attributes: dict
         """
         uuid = cstr(uuid, 'uuid')
-        keys_str = '\0'.join([cstr(x[0], 'key') for x in attributes.items()])
-        vals_str = '\0'.join([cstr(x[1], 'val') for x in attributes.items()])
+        keys_str = b'\0'.join([cstr(x[0], 'key') for x in attributes.items()])
+        vals_str = b'\0'.join([cstr(x[1], 'val') for x in attributes.items()])
         cdef:
             rados_ioctx_t _ioctx = convert_ioctx(ioctx)
             char *_uuid = uuid
@@ -2242,8 +2266,8 @@ cdef class MirrorImageStatusIterator(object):
         if ret < 0:
             raise make_ex(ret, 'error listing mirror images status')
         if self.size > 0:
+            last_read = cstr(self.image_ids[self.size - 1], 'last_read')
             free(self.last_read)
-            last_read = decode_cstr(self.image_ids[self.size - 1])
             self.last_read = strdup(last_read)
         else:
             free(self.last_read)
@@ -2309,8 +2333,8 @@ cdef class MirrorImageInstanceIdIterator(object):
         if ret < 0:
             raise make_ex(ret, 'error listing mirror images instance ids')
         if self.size > 0:
+            last_read = cstr(self.image_ids[self.size - 1], 'last_read')
             free(self.last_read)
-            last_read = decode_cstr(self.image_ids[self.size - 1])
             self.last_read = strdup(last_read)
         else:
             free(self.last_read)
@@ -2362,8 +2386,8 @@ cdef class PoolMetadataIterator(object):
                 c_vals = <char *>realloc_chk(c_vals, vals_size)
                 with nogil:
                     ret = rbd_pool_metadata_list(self.ioctx, self.last_read,
-                                                 self.max_read, c_keys, &keys_size,
-                                                 c_vals, &vals_size)
+                                                 self.max_read, c_keys,
+                                                 &keys_size, c_vals, &vals_size)
                 if ret >= 0:
                     break
                 elif ret != -errno.ERANGE:
@@ -2373,9 +2397,10 @@ cdef class PoolMetadataIterator(object):
             vals = [decode_cstr(val) for val in
                         c_vals[:vals_size].split(b'\0') if val]
             if len(keys) > 0:
+                last_read = cstr(keys[-1], 'last_read')
                 free(self.last_read)
-                self.last_read = strdup(keys[-1])
-            self.next_chunk = zip(keys, vals)
+                self.last_read = strdup(last_read)
+            self.next_chunk = list(zip(keys, vals))
         finally:
             free(c_keys)
             free(c_vals)
@@ -2884,29 +2909,20 @@ cdef class Image(object):
         :raises: :class:`ImageNotFound` if the image doesn't have a parent
         """
         cdef:
-            int ret = -errno.ERANGE
-            size_t size = 8
-            char *pool = NULL
-            char *name = NULL
-            char *snapname = NULL
-        try:
-            while ret == -errno.ERANGE and size <= 4096:
-                pool = <char *>realloc_chk(pool, size)
-                name = <char *>realloc_chk(name, size)
-                snapname = <char *>realloc_chk(snapname, size)
-                with nogil:
-                    ret = rbd_get_parent_info2(self.image, pool, size, name,
-                                               size, NULL, 0, snapname, size)
-                if ret == -errno.ERANGE:
-                    size *= 2
+            rbd_linked_image_spec_t parent_spec
+            rbd_snap_spec_t snap_spec
+        with nogil:
+            ret = rbd_get_parent(self.image, &parent_spec, &snap_spec)
+        if ret != 0:
+            raise make_ex(ret, 'error getting parent info for image %s' % self.name)
 
-            if ret != 0:
-                raise make_ex(ret, 'error getting parent info for image %s' % self.name)
-            return (decode_cstr(pool), decode_cstr(name), decode_cstr(snapname))
-        finally:
-            free(pool)
-            free(name)
-            free(snapname)
+        result = (decode_cstr(parent_spec.pool_name),
+                  decode_cstr(parent_spec.image_name),
+                  decode_cstr(snap_spec.name))
+
+        rbd_linked_image_spec_cleanup(&parent_spec)
+        rbd_snap_spec_cleanup(&snap_spec)
+        return result
 
     def parent_id(self):
         """
@@ -2916,23 +2932,18 @@ cdef class Image(object):
         :raises: :class:`ImageNotFound` if the image doesn't have a parent
         """
         cdef:
-            int ret = -errno.ERANGE
-            size_t size = 32
-            char *parent_id = NULL
-        try:
-            while ret == -errno.ERANGE and size <= 4096:
-                parent_id = <char *>realloc_chk(parent_id, size)
-                with nogil:
-                    ret = rbd_get_parent_info2(self.image, NULL, 0, NULL, 0,
-                                               parent_id, size, NULL, 0)
-                if ret == -errno.ERANGE:
-                    size *= 2
+            rbd_linked_image_spec_t parent_spec
+            rbd_snap_spec_t snap_spec
+        with nogil:
+            ret = rbd_get_parent(self.image, &parent_spec, &snap_spec)
+        if ret != 0:
+            raise make_ex(ret, 'error getting parent info for image %s' % self.name)
 
-            if ret != 0:
-                raise make_ex(ret, 'error getting parent id for image %s' % self.name)
-            return decode_cstr(parent_id)
-        finally:
-            free(parent_id)
+        result = decode_cstr(parent_spec.image_id)
+
+        rbd_linked_image_spec_cleanup(&parent_spec)
+        rbd_snap_spec_cleanup(&snap_spec)
+        return result
 
     def old_format(self):
         """
@@ -3686,28 +3697,27 @@ written." % (self.name, ret, length))
         :returns: list - a list of (pool name, image name) tuples
         """
         cdef:
-            size_t pools_size = 512, images_size = 512
-            char *c_pools = NULL
-            char *c_images = NULL
+            rbd_linked_image_spec_t *children = NULL
+            size_t num_children = 10
+
         try:
             while True:
-                c_pools = <char *>realloc_chk(c_pools, pools_size)
-                c_images = <char *>realloc_chk(c_images, images_size)
+                children = <rbd_linked_image_spec_t*>realloc_chk(
+                    children, num_children * sizeof(rbd_linked_image_spec_t))
                 with nogil:
-                    ret = rbd_list_children(self.image, c_pools, &pools_size,
-                                            c_images, &images_size)
+                    ret = rbd_list_children3(self.image, children,
+                                             &num_children)
                 if ret >= 0:
                     break
                 elif ret != -errno.ERANGE:
-                    raise make_ex(ret, 'error listing images')
-            if ret == 0:
-                return []
-            pools = map(decode_cstr, c_pools[:pools_size - 1].split(b'\0'))
-            images = map(decode_cstr, c_images[:images_size - 1].split(b'\0'))
-            return list(zip(pools, images))
+                    raise make_ex(ret, 'error listing children.')
+
+            return [(decode_cstr(x.pool_name), decode_cstr(x.image_name)) for x
+                    in children[:num_children] if not x.trash]
         finally:
-            free(c_pools)
-            free(c_images)
+            if children:
+                rbd_linked_image_spec_list_cleanup(children, num_children)
+                free(children)
 
     def list_children2(self):
         """
@@ -4342,6 +4352,49 @@ written." % (self.name, ret, length))
             free(_name)
 
 
+cdef class ImageIterator(object):
+    """
+    Iterator over RBD images in a pool
+
+    Yields a dictionary containing information about the images
+
+    Keys are:
+
+    * ``id`` (str) - image id
+
+    * ``name`` (str) - image name
+    """
+    cdef rados_ioctx_t ioctx
+    cdef rbd_image_spec_t *images
+    cdef size_t num_images
+
+    def __init__(self, ioctx):
+        self.ioctx = convert_ioctx(ioctx)
+        self.images = NULL
+        self.num_images = 32
+        while True:
+            self.images = <rbd_image_spec_t*>realloc_chk(
+                self.images, self.num_images * sizeof(rbd_image_spec_t))
+            with nogil:
+                ret = rbd_list2(self.ioctx, self.images, &self.num_images)
+            if ret >= 0:
+                break
+            elif ret != -errno.ERANGE:
+                raise make_ex(ret, 'error listing images.')
+
+    def __iter__(self):
+        for i in range(self.num_images):
+            yield {
+                'id'   : decode_cstr(self.images[i].id),
+                'name' : decode_cstr(self.images[i].name)
+                }
+
+    def __dealloc__(self):
+        if self.images:
+            rbd_image_spec_list_cleanup(self.images, self.num_images)
+            free(self.images)
+
+
 cdef class LockOwnerIterator(object):
     """
     Iterator over managed lock owners for an image
@@ -4450,9 +4503,10 @@ cdef class MetadataIterator(object):
             vals = [decode_cstr(val) for val in
                         c_vals[:vals_size].split(b'\0') if val]
             if len(keys) > 0:
+                last_read = cstr(keys[-1], 'last_read')
                 free(self.last_read)
-                self.last_read = strdup(keys[-1])
-            self.next_chunk = zip(keys, vals)
+                self.last_read = strdup(last_read)
+            self.next_chunk = list(zip(keys, vals))
         finally:
             free(c_keys)
             free(c_vals)
@@ -4593,6 +4647,8 @@ cdef class ChildIterator(object):
 
     * ``pool`` (str) - name of the pool
 
+    * ``pool_namespace`` (str) - namespace of the pool
+
     * ``image`` (str) - name of the child
 
     * ``id`` (str) - id of the child
@@ -4600,8 +4656,8 @@ cdef class ChildIterator(object):
     * ``trash`` (bool) - True if child is in trash bin
     """
 
-    cdef rbd_child_info_t *children
-    cdef int num_children
+    cdef rbd_linked_image_spec_t *children
+    cdef size_t num_children
     cdef object image
 
     def __init__(self, Image image):
@@ -4609,13 +4665,11 @@ cdef class ChildIterator(object):
         self.children = NULL
         self.num_children = 10
         while True:
-            self.children = <rbd_child_info_t*>realloc_chk(self.children,
-                                                           self.num_children *
-                                                           sizeof(rbd_child_info_t))
+            self.children = <rbd_linked_image_spec_t*>realloc_chk(
+                self.children, self.num_children * sizeof(rbd_linked_image_spec_t))
             with nogil:
-                ret = rbd_list_children2(image.image, self.children, &self.num_children)
+                ret = rbd_list_children3(image.image, self.children, &self.num_children)
             if ret >= 0:
-                self.num_children = ret
                 break
             elif ret != -errno.ERANGE:
                 raise make_ex(ret, 'error listing children.')
@@ -4623,15 +4677,16 @@ cdef class ChildIterator(object):
     def __iter__(self):
         for i in range(self.num_children):
             yield {
-                'pool'  : decode_cstr(self.children[i].pool_name),
-                'image' : decode_cstr(self.children[i].image_name),
-                'id'    : decode_cstr(self.children[i].image_id),
-                'trash' : self.children[i].trash
+                'pool'           : decode_cstr(self.children[i].pool_name),
+                'pool_namespace' : decode_cstr(self.children[i].pool_namespace),
+                'image'          : decode_cstr(self.children[i].image_name),
+                'id'             : decode_cstr(self.children[i].image_id),
+                'trash'          : self.children[i].trash
                 }
 
     def __dealloc__(self):
         if self.children:
-            rbd_list_children_cleanup(self.children, self.num_children)
+            rbd_linked_image_spec_list_cleanup(self.children, self.num_children)
             free(self.children)
 
 cdef class WatcherIterator(object):

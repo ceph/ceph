@@ -88,8 +88,8 @@ static int compute_image_disk_usage(const std::string& name,
 static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
                          const char *imgname, const char *snapname,
                          const char *from_snapname, bool exact, Formatter *f) {
-  std::vector<std::string> names;
-  int r = rbd.list(io_ctx, names);
+  std::vector<librbd::image_spec_t> images;
+  int r = rbd.list2(io_ctx, &images);
   if (r == -ENOENT) {
     r = 0;
   } else if (r < 0) {
@@ -113,20 +113,18 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
   uint64_t snap_id = CEPH_NOSNAP;
   uint64_t from_id = CEPH_NOSNAP;
   bool found = false;
-  std::sort(names.begin(), names.end());
-  for (std::vector<string>::const_iterator name = names.begin();
-       name != names.end(); ++name) {
-    if (imgname != NULL && *name != imgname) {
+  for (auto& image_spec : images) {
+    if (imgname != NULL && image_spec.name != imgname) {
       continue;
     }
     found = true;
 
     librbd::Image image;
-    r = rbd.open_read_only(io_ctx, image, name->c_str(), NULL);
+    r = rbd.open_read_only(io_ctx, image, image_spec.name.c_str(), NULL);
     if (r < 0) {
       if (r != -ENOENT) {
-        std::cerr << "rbd: error opening " << *name << ": " << cpp_strerror(r)
-                  << std::endl;
+        std::cerr << "rbd: error opening " << image_spec.name << ": "
+                  << cpp_strerror(r) << std::endl;
       }
       continue;
     }
@@ -139,8 +137,9 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
       goto out;
     }
     if ((features & RBD_FEATURE_FAST_DIFF) == 0) {
-      std::cerr << "warning: fast-diff map is not enabled for " << *name << ". "
-                << "operation may be slow." << std::endl;
+      std::cerr << "warning: fast-diff map is not enabled for "
+                << image_spec.name << ". " << "operation may be slow."
+                << std::endl;
     }
 
     librbd::image_info_t info;
@@ -152,7 +151,7 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
     std::vector<librbd::snap_info_t> snap_list;
     r = image.snap_list(snap_list);
     if (r < 0) {
-      std::cerr << "rbd: error opening " << *name << " snapshots: "
+      std::cerr << "rbd: error opening " << image_spec.name << " snapshots: "
                 << cpp_strerror(r) << std::endl;
       continue;
     }
@@ -202,19 +201,19 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
     for (std::vector<librbd::snap_info_t>::const_iterator snap =
          snap_list.begin(); snap != snap_list.end(); ++snap) {
       librbd::Image snap_image;
-      r = rbd.open_read_only(io_ctx, snap_image, name->c_str(),
+      r = rbd.open_read_only(io_ctx, snap_image, image_spec.name.c_str(),
                              snap->name.c_str());
       if (r < 0) {
-        std::cerr << "rbd: error opening snapshot " << *name << "@"
+        std::cerr << "rbd: error opening snapshot " << image_spec.name << "@"
                   << snap->name << ": " << cpp_strerror(r) << std::endl;
         goto out;
       }
 
       if (imgname == nullptr || found_from_snap ||
          (found_from_snap && snapname != nullptr && snap->name == snapname)) {
-        r = compute_image_disk_usage(*name, snap->name, last_snap_name,
-                                     snap_image, snap->size, exact, tbl, f,
-                                     &used_size);
+        r = compute_image_disk_usage(image_spec.name, snap->name,
+                                     last_snap_name, snap_image, snap->size,
+                                     exact, tbl, f, &used_size);
         if (r < 0) {
           goto out;
         }
@@ -237,8 +236,8 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
     }
 
     if (snapname == NULL) {
-      r = compute_image_disk_usage(*name, "", last_snap_name, image, info.size,
-                                   exact, tbl, f, &used_size);
+      r = compute_image_disk_usage(image_spec.name, "", last_snap_name, image,
+                                   info.size, exact, tbl, f, &used_size);
       if (r < 0) {
         goto out;
       }
@@ -261,7 +260,7 @@ out:
     }
     f->close_section();
     f->flush(std::cout);
-  } else if (!names.empty()) {
+  } else if (!images.empty()) {
     if (count > 1) {
       tbl << "<TOTAL>"
           << stringify(byte_u_t(total_prov))

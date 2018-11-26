@@ -54,6 +54,10 @@
 #include <sys/eventfd.h>
 #endif
 
+#pragma GCC diagnostic ignored "-Wpragmas"
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
 using namespace std;
 
 using std::chrono::seconds;
@@ -6131,6 +6135,20 @@ TEST_F(TestLibRBD, ImagePollIO)
 
 namespace librbd {
 
+static bool operator==(const image_spec_t &lhs, const image_spec_t &rhs) {
+  return (lhs.id == rhs.id && lhs.name == rhs.name);
+}
+
+static bool operator==(const linked_image_spec_t &lhs,
+                       const linked_image_spec_t &rhs) {
+  return (lhs.pool_id == rhs.pool_id &&
+          lhs.pool_name == rhs.pool_name &&
+          lhs.pool_namespace == rhs.pool_namespace &&
+          lhs.image_id == rhs.image_id &&
+          lhs.image_name == rhs.image_name &&
+          lhs.trash == rhs.trash);
+}
+
 static bool operator==(const mirror_peer_t &lhs, const mirror_peer_t &rhs) {
   return (lhs.uuid == rhs.uuid &&
           lhs.cluster_name == rhs.cluster_name &&
@@ -7473,6 +7491,85 @@ TEST_F(TestLibRBD, PoolStatsPP)
   ASSERT_EQ(1U, trash_snap_count);
 }
 
+TEST_F(TestLibRBD, ImageSpec) {
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(create_pool(true).c_str(), ioctx));
+
+  librbd::RBD rbd;
+  librbd::Image parent_image;
+  std::string name = get_temp_image_name();
+
+  uint64_t size = 1;
+  int order = 0;
+
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+  ASSERT_EQ(0, rbd.open(ioctx, parent_image, name.c_str(), NULL));
+
+  std::string parent_id;
+  ASSERT_EQ(0, parent_image.get_id(&parent_id));
+
+  uint64_t features;
+  ASSERT_EQ(0, parent_image.features(&features));
+
+  ASSERT_EQ(0, parent_image.snap_create("snap"));
+  ASSERT_EQ(0, parent_image.snap_protect("snap"));
+
+  std::string clone_name = this->get_temp_image_name();
+  ASSERT_EQ(0, rbd.clone(ioctx, name.c_str(), "snap", ioctx, clone_name.c_str(),
+                         features, &order));
+
+  librbd::Image clone_image;
+  ASSERT_EQ(0, rbd.open(ioctx, clone_image, clone_name.c_str(), NULL));
+
+  std::string clone_id;
+  ASSERT_EQ(0, clone_image.get_id(&clone_id));
+
+  std::vector<librbd::image_spec_t> images;
+  ASSERT_EQ(0, rbd.list2(ioctx, &images));
+
+  std::vector<librbd::image_spec_t> expected_images{
+    {.id = parent_id, .name = name},
+    {.id = clone_id, .name = clone_name}
+  };
+  std::sort(expected_images.begin(), expected_images.end(),
+            [](const librbd::image_spec_t& lhs, const librbd::image_spec_t &rhs) {
+              return lhs.name < rhs.name;
+            });
+  ASSERT_EQ(expected_images, images);
+
+  librbd::linked_image_spec_t parent_image_spec;
+  librbd::snap_spec_t parent_snap_spec;
+  ASSERT_EQ(0, clone_image.get_parent(&parent_image_spec, &parent_snap_spec));
+
+  librbd::linked_image_spec_t expected_parent_image_spec{
+    .pool_id = ioctx.get_id(),
+    .pool_name = ioctx.get_pool_name(),
+    .pool_namespace = ioctx.get_namespace(),
+    .image_id = parent_id,
+    .image_name = name,
+    .trash = false
+  };
+  ASSERT_EQ(expected_parent_image_spec, parent_image_spec);
+  ASSERT_EQ(RBD_SNAP_NAMESPACE_TYPE_USER, parent_snap_spec.namespace_type);
+  ASSERT_EQ("snap", parent_snap_spec.name);
+
+  std::vector<librbd::linked_image_spec_t> children;
+  ASSERT_EQ(0, parent_image.list_children3(&children));
+
+  std::vector<librbd::linked_image_spec_t> expected_children{
+    {
+      .pool_id = ioctx.get_id(),
+      .pool_name = ioctx.get_pool_name(),
+      .pool_namespace = ioctx.get_namespace(),
+      .image_id = clone_id,
+      .image_name = clone_name,
+      .trash = false
+    }
+  };
+}
+
 // poorman's ceph_assert()
 namespace ceph {
   void __ceph_assert_fail(const char *assertion, const char *file, int line,
@@ -7480,3 +7577,6 @@ namespace ceph {
     ceph_abort();
   }
 }
+
+#pragma GCC diagnostic pop
+#pragma GCC diagnostic warning "-Wpragmas"

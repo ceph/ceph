@@ -749,16 +749,13 @@ librbd_compare_and_write(struct rbd_ctx *ctx, uint64_t off, size_t len,
 int
 librbd_get_size(struct rbd_ctx *ctx, uint64_t *size)
 {
-	rbd_image_info_t info;
 	int ret;
 
-	ret = rbd_stat(ctx->image, &info, sizeof(info));
+	ret = rbd_get_size(ctx->image, size);
 	if (ret < 0) {
-		prt("rbd_stat failed\n");
+		prt("rbd_get_size failed\n");
 		return ret;
 	}
-
-	*size = info.size;
 
 	return 0;
 }
@@ -1606,12 +1603,16 @@ const struct rbd_operations *ops = &librbd_operations;
 static bool rbd_image_has_parent(struct rbd_ctx *ctx)
 {
 	int ret;
+	rbd_linked_image_spec_t parent_image;
+	rbd_snap_spec_t parent_snap;
 
-	ret = rbd_get_parent_info(ctx->image, NULL, 0, NULL, 0, NULL, 0);
-	if (ret < 0 && ret != -ENOENT) {
+	ret = rbd_get_parent(ctx->image, &parent_image, &parent_snap);
+        if (ret < 0 && ret != -ENOENT) {
 		prterrcode("rbd_get_parent_info", ret);
 		exit(1);
 	}
+	rbd_linked_image_spec_cleanup(&parent_image);
+	rbd_snap_spec_cleanup(&parent_snap);
 
 	return !ret;
 }
