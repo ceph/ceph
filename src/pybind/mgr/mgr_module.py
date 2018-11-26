@@ -5,9 +5,9 @@ import logging
 import six
 import threading
 try:
-    from collections.abc import defaultdict
+    from collections.abc import defaultdict, namedtuple
 except ImportError:
-    from collections import defaultdict
+    from collections import defaultdict, namedtuple
 import rados
 
 PG_STATES = [
@@ -104,6 +104,17 @@ class CommandResult(object):
     def wait(self):
         self.ev.wait()
         return self.r, self.outb, self.outs
+
+
+class HandleCommandResult(namedtuple('HandleCommandResult', ['retval', 'stdout', 'stderr'])):
+    def __new__(cls, retval=0, odata="", rs=""):
+        """
+        Tuple containing the result of `handle_command()`
+        :param retval: return code. E.g. 0 or -errno.EINVAL
+        :param odata: data of this result.
+        :param rs: Typically used for error or status messages.
+        """
+        return super(HandleCommandResult, cls).__new__(cls, retval, odata, rs)
 
 
 class OSDMap(ceph_module.BasePyOSDMap):
@@ -622,10 +633,12 @@ class MgrModule(ceph_module.BaseMgrModule):
         output string.  The output buffer is for data results,
         the output string is for informative text.
 
-        :param string inbuf: content of any "-i <file>" supplied to ceph cli
-        :param dict cmd: from Ceph's cmdmap_t
+        :param inbuf: content of any "-i <file>" supplied to ceph cli
+        :type inbuf: str
+        :param cmd: from Ceph's cmdmap_t
+        :type cmd: dict
 
-        :return: 3-tuple of (int, str, str)
+        :return: HandleCommandResult or a 3-tuple of (int, str, str)
         """
 
         # Should never get called if they didn't declare
