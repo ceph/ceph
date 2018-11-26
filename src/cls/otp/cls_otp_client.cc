@@ -60,10 +60,9 @@ namespace rados {
         cls_otp_check_otp_op op;
         op.id = id;
         op.val = val;
-#define TOKEN_LEN 16
-        char buf[TOKEN_LEN + 1];
-        gen_rand_alphanumeric(cct, buf, sizeof(buf));;
-        op.token = buf;
+
+        constexpr size_t token_len = 16;
+        op.token = gen_rand_alphanumeric(cct, token_len);
         
         bufferlist in;
         bufferlist out;
@@ -74,7 +73,7 @@ namespace rados {
         }
 
         cls_otp_get_result_op op2;
-        op2.token = buf;
+        op2.token = op.token;
         bufferlist in2;
         bufferlist out2;
         encode(op2, in2);
