@@ -59,10 +59,7 @@ void RGWLoadGenProcess::run()
   }
 
   for (i = 0; i < num_objs; i++) {
-    char buf[16 + 1];
-    gen_rand_alphanumeric(cct, buf, sizeof(buf));
-    buf[16] = '\0';
-    objs[i] = buckets[i % num_buckets] + "/" + buf;
+    objs[i] = buckets[i % num_buckets] + "/" + gen_rand_alphanumeric(cct, 16);
   }
 
   for (i = 0; i < num_objs; i++) {
