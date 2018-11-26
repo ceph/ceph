@@ -61,6 +61,7 @@
  */
 
 class CInode;
+class Session;
 
 namespace ceph {
   class Formatter;
@@ -110,27 +111,12 @@ public:
   };
 
 
-  const static unsigned STATE_STALE		= (1<<0);
   const static unsigned STATE_NEW		= (1<<1);
   const static unsigned STATE_IMPORTING		= (1<<2);
   const static unsigned STATE_NEEDSNAPFLUSH	= (1<<3);
 
 
-  Capability(CInode *i = NULL, uint64_t id = 0, client_t c = 0) :
-    client_follows(0), client_xattr_version(0),
-    client_inline_version(0),
-    last_rbytes(0), last_rsize(0),
-    item_session_caps(this), item_snaprealm_caps(this),
-    item_revoking_caps(this), item_client_revoking_caps(this),
-    inode(i), client(c),
-    cap_id(id),
-    _wanted(0), num_revoke_warnings(0),
-    _pending(0), _issued(0),
-    last_sent(0),
-    last_issue(0),
-    mseq(0),
-    suppress(0), state(0) {
-  }
+  Capability(CInode *i=nullptr, Session *s=nullptr, uint64_t id=0);
   Capability(const Capability& other) = delete;
 
   const Capability& operator=(const Capability& other) = delete;
@@ -158,14 +144,14 @@ public:
       assert(_pending == c);
     }
     //last_issue = 
-    ++last_sent;
+    inc_last_seq();
     return last_sent;
   }
   ceph_seq_t issue_norevoke(unsigned c) {
     _pending |= c;
     _issued |= c;
     //check_rdcaps_list();
-    ++last_sent;
+    inc_last_seq();
     return last_sent;
   }
   void _calc_issued() {
@@ -239,10 +225,8 @@ public:
   void inc_suppress() { suppress++; }
   void dec_suppress() { suppress--; }
 
-  bool is_stale() { return state & STATE_STALE; }
-  void mark_stale() { state |= STATE_STALE; }
-  void clear_stale() { state &= ~STATE_STALE; }
-  bool is_new() { return state & STATE_NEW; }
+  bool is_stale() const;
+  bool is_new() const { return state & STATE_NEW; }
   void mark_new() { state |= STATE_NEW; }
   void clear_new() { state &= ~STATE_NEW; }
   bool is_importing() { return state & STATE_IMPORTING; }
@@ -252,11 +236,12 @@ public:
   void mark_needsnapflush() { state |= STATE_NEEDSNAPFLUSH; }
   void clear_needsnapflush() { state &= ~STATE_NEEDSNAPFLUSH; }
 
-  CInode *get_inode() { return inode; }
-  client_t get_client() const { return client; }
+  CInode *get_inode() const { return inode; }
+  Session *get_session() const { return session; }
+  client_t get_client() const;
 
   // caps this client wants to hold
-  int wanted() { return _wanted; }
+  int wanted() const { return _wanted; }
   void set_wanted(int w);
 
   void inc_last_seq() { last_sent++; }
@@ -333,7 +318,7 @@ public:
 
 private:
   CInode *inode;
-  client_t client;
+  Session *session;
 
   uint64_t cap_id;
 

@@ -3006,15 +3006,12 @@ Capability *CInode::add_client_cap(client_t client, Session *session, SnapRealm 
     if (parent)
       parent->dir->adjust_num_inodes_with_caps(1);
   }
-  
-  Capability *cap = new Capability(this, ++mdcache->last_cap_id, client);
+
+  Capability *cap = new Capability(this, session, ++mdcache->last_cap_id);
   assert(client_caps.count(client) == 0);
   client_caps[client] = cap;
 
   session->add_cap(cap);
-  if (session->is_stale())
-    cap->mark_stale();
-  
   cap->client_follows = first-1;
   
   containing_realm->add_cap(client, cap);
