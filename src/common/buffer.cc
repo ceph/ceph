@@ -824,7 +824,7 @@ using namespace ceph;
 
   template<bool is_const>
   buffer::list::iterator_impl<is_const>::iterator_impl(bl_t *l, unsigned o)
-    : bl(l), ls(&bl->_buffers), off(0), p(ls->begin()), p_off(0)
+    : bl(l), ls(&bl->_buffers), p(ls->begin()), off(0), p_off(0)
   {
     advance(o);
   }
