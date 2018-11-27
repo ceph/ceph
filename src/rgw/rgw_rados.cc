@@ -9321,6 +9321,7 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
   string etag;
   string content_type;
   ACLOwner owner;
+  string user_data;
 
   object.meta.size = astate->size;
   object.meta.accounted_size = astate->accounted_size;
@@ -9340,6 +9341,10 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
     if (r < 0) {
       dout(0) << "WARNING: could not decode policy for object: " << obj << dendl;
     }
+  }
+  iter = astate->attrset.find(RGW_ATTR_USER_DATA);
+  if (iter != astate->attrset.end()) {
+    user_data = iter->second.to_str();
   }
 
   if (astate->has_manifest) {
@@ -9364,6 +9369,7 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
   object.meta.content_type = content_type;
   object.meta.owner = owner.get_id().to_str();
   object.meta.owner_display_name = owner.get_display_name();
+  object.meta.user_data = user_data;
 
   // encode suggested updates
   list_state.ver.pool = io_ctx.get_id();
@@ -9378,6 +9384,7 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
     list_state.tag = astate->obj_tag.c_str();
   list_state.meta.owner = owner.get_id().to_str();
   list_state.meta.owner_display_name = owner.get_display_name();
+  list_state.meta.user_data = object.meta.user_data;
 
   list_state.exists = true;
   cls_rgw_encode_suggestion(CEPH_RGW_UPDATE | suggest_flag, list_state, suggested_updates);
