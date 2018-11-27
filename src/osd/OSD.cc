@@ -2987,10 +2987,19 @@ void OSD::final_init()
   r = admin_socket->register_command(
    "trigger_scrub",
    "trigger_scrub " \
-   "name=pgid,type=CephString ",
+   "name=pgid,type=CephString " \
+   "name=time,type=CephInt,req=false",
    test_ops_hook,
    "Trigger a scheduled scrub ");
   assert(r == 0);
+  r = admin_socket->register_command(
+   "trigger_deep_scrub",
+   "trigger_deep_scrub " \
+   "name=pgid,type=CephString " \
+   "name=time,type=CephInt,req=false",
+   test_ops_hook,
+   "Trigger a scheduled deep scrub ");
+  ceph_assert(r == 0);
   r = admin_socket->register_command(
    "injectfull",
    "injectfull " \
@@ -5613,8 +5622,9 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
        << "to " << service->cct->_conf->osd_recovery_delay_start;
     return;
   }
-  if (command ==  "trigger_scrub") {
+  if (command ==  "trigger_scrub" || command == "trigger_deep_scrub") {
     spg_t pgid;
+    bool deep = (command == "trigger_deep_scrub");
     OSDMapRef curmap = service->get_osdmap();
 
     string pgidstr;
@@ -5624,6 +5634,9 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       ss << "Invalid pgid specified";
       return;
     }
+
+    int64_t time;
+    cmd_getval(service->cct, cmdmap, "time", time, (int64_t)0);
 
     PG *pg = service->osd->_lookup_lock_pg(pgid);
     if (pg == nullptr) {
@@ -5635,16 +5648,31 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       pg->unreg_next_scrub();
       const pg_pool_t *p = curmap->get_pg_pool(pgid.pool());
       double pool_scrub_max_interval = 0;
-      p->opts.get(pool_opts_t::SCRUB_MAX_INTERVAL, &pool_scrub_max_interval);
-      double scrub_max_interval = pool_scrub_max_interval > 0 ?
-        pool_scrub_max_interval : g_conf->osd_scrub_max_interval;
+      double scrub_max_interval;
+      if (deep) {
+        p->opts.get(pool_opts_t::DEEP_SCRUB_INTERVAL, &pool_scrub_max_interval);
+        scrub_max_interval = pool_scrub_max_interval > 0 ?
+          pool_scrub_max_interval : g_conf->osd_deep_scrub_interval;
+      } else {
+        p->opts.get(pool_opts_t::SCRUB_MAX_INTERVAL, &pool_scrub_max_interval);
+        scrub_max_interval = pool_scrub_max_interval > 0 ?
+          pool_scrub_max_interval : g_conf->osd_scrub_max_interval;
+      }
       // Instead of marking must_scrub force a schedule scrub
       utime_t stamp = ceph_clock_now();
-      stamp -= scrub_max_interval;
-      stamp -=  100.0;  // push back last scrub more for good measure
-      pg->set_last_scrub_stamp(stamp);
+      if (time == 0)
+        stamp -= scrub_max_interval;
+      else
+        stamp -=  (float)time;
+      stamp -= 100.0;  // push back last scrub more for good measure
+      if (deep) {
+        pg->set_last_deep_scrub_stamp(stamp);
+      } else {
+        pg->set_last_scrub_stamp(stamp);
+      }
       pg->reg_next_scrub();
-      ss << "ok";
+      pg->publish_stats_to_osd();
+      ss << "ok - set" << (deep ? " deep" : "" ) << " stamp " << stamp;
     } else {
       ss << "Not primary";
     }
