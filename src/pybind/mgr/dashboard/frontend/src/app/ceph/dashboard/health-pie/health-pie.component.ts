@@ -40,7 +40,7 @@ export class HealthPieComponent implements OnChanges, OnInit {
   @Output()
   prepareFn = new EventEmitter();
 
-  chart: any = {
+  chartConfig: any = {
     dataset: [
       {
         label: null,
@@ -51,7 +51,10 @@ export class HealthPieComponent implements OnChanges, OnInit {
       legend: {
         display: false,
         position: 'right',
-        labels: { usePointStyle: true }
+        labels: { usePointStyle: true },
+        onClick: (event, legendItem) => {
+          this.onLegendClick(event, legendItem);
+        }
       },
       animation: { duration: 0 },
 
@@ -60,6 +63,7 @@ export class HealthPieComponent implements OnChanges, OnInit {
       }
     }
   };
+  private hiddenSlices = [];
 
   constructor(private dimlessBinary: DimlessBinaryPipe) {}
 
@@ -111,15 +115,15 @@ export class HealthPieComponent implements OnChanges, OnInit {
 
     chartTooltip.getBody = getBody;
 
-    this.chart.options.tooltips.custom = (tooltip) => {
+    this.chartConfig.options.tooltips.custom = (tooltip) => {
       chartTooltip.customTooltips(tooltip);
     };
 
     this.setChartType();
 
-    this.chart.options.legend.display = this.displayLegend;
+    this.chartConfig.options.legend.display = this.displayLegend;
 
-    this.chart.colors = [
+    this.chartConfig.colors = [
       {
         backgroundColor: [
           HealthPieColor.MEDIUM_LIGHT_SHADE_PINK_RED,
@@ -131,13 +135,13 @@ export class HealthPieComponent implements OnChanges, OnInit {
       }
     ];
 
-    this.prepareFn.emit([this.chart, this.data]);
+    this.prepareFn.emit([this.chartConfig, this.data]);
   }
 
   ngOnChanges() {
-    this.prepareFn.emit([this.chart, this.data]);
-
-    this.setChartSliceBorderWidth(this.chart.dataset[0]);
+    this.prepareFn.emit([this.chartConfig, this.data]);
+    this.hideSlices();
+    this.setChartSliceBorderWidth();
   }
 
   private getChartTooltipBody(body) {
@@ -155,22 +159,34 @@ export class HealthPieComponent implements OnChanges, OnInit {
     const selectedChartType = chartTypes.find((chartType) => chartType === this.chartType);
 
     if (selectedChartType !== undefined) {
-      this.chart.chartType = selectedChartType;
+      this.chartConfig.chartType = selectedChartType;
     } else {
-      this.chart.chartType = chartTypes[0];
+      this.chartConfig.chartType = chartTypes[0];
     }
   }
 
-  private setChartSliceBorderWidth(dataset) {
+  private setChartSliceBorderWidth() {
     let nonZeroValueSlices = 0;
-    _.forEach(dataset.data, function(slice) {
+    _.forEach(this.chartConfig.dataset[0].data, function(slice) {
       if (slice > 0) {
         nonZeroValueSlices += 1;
       }
     });
 
-    if (nonZeroValueSlices > 1) {
-      this.chart.dataset[0].borderWidth = 1;
-    }
+    this.chartConfig.dataset[0].borderWidth = nonZeroValueSlices > 1 ? 1 : 0;
+  }
+
+  private onLegendClick(event, legendItem) {
+    event.stopPropagation();
+    this.hiddenSlices[legendItem.index] = !legendItem.hidden;
+    this.ngOnChanges();
+  }
+
+  private hideSlices() {
+    _.forEach(this.chartConfig.dataset[0].data, (slice, sliceIndex) => {
+      if (this.hiddenSlices[sliceIndex]) {
+        this.chartConfig.dataset[0].data[sliceIndex] = undefined;
+      }
+    });
   }
 }
