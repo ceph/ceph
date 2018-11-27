@@ -83,12 +83,7 @@ class Module(MgrModule):
         """
         Helper for invoking `remote` on whichever orchestrator is enabled
         """
-        # TODO: orchestrator_cli has a setting for orchestrator backend,
-        # but we don't really want to start propagating that into
-        # other modules individually -- maybe mgrmap should have
-        # the setting?  or just a C++-level mgr config option?
-
-        return self.remote("rook",
+        return self.remote("orchestrator_cli", "_oremote",
                            *args, **kwargs)
 
     def serve(self):
