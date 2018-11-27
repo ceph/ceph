@@ -315,7 +315,13 @@ public:
   }
 
   void set_last_scrub_stamp(utime_t t) {
+    info.stats.last_scrub_stamp = t;
     info.history.last_scrub_stamp = t;
+  }
+
+  void set_last_deep_scrub_stamp(utime_t t) {
+    info.stats.last_deep_scrub_stamp = t;
+    info.history.last_deep_scrub_stamp = t;
   }
 
   bool is_deleting() const {
@@ -1389,6 +1395,7 @@ protected:
 
   void _update_calc_stats();
   void _update_blocked_by();
+  friend class TestOpsSocketHook;
   void publish_stats_to_osd();
   void clear_publish_stats();
 
