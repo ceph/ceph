@@ -157,15 +157,15 @@ struct ObjectCacheEntry {
 class ObjectCache {
   std::unordered_map<string, ObjectCacheEntry> cache_map;
   std::list<string> lru;
-  unsigned long lru_size;
-  unsigned long lru_counter;
+  CephContext *cct;
+  unsigned long lru_size = 0;
+  unsigned long lru_counter = 0;
   unsigned long lru_window;
   RWLock lock;
-  CephContext *cct;
 
   vector<RGWChainedCache *> chained_cache;
 
-  bool enabled;
+  bool enabled = false;
   ceph::timespan expiry;
 
   void touch_lru(const string& name, ObjectCacheEntry& entry,
@@ -176,7 +176,12 @@ class ObjectCache {
   void do_invalidate_all();
 
 public:
-  ObjectCache() : lru_size(0), lru_counter(0), lru_window(0), lock("ObjectCache"), cct(NULL), enabled(false) { }
+  ObjectCache(CephContext* cct)
+    : cct(cct), lru_window(cct->_conf->rgw_cache_lru_size / 2),
+      lock("ObjectCache"),
+      expiry(std::chrono::seconds(cct->_conf.get_val<uint64_t>(
+                  "rgw_cache_expiry_interval")))
+  {}
   ~ObjectCache();
   int get(const std::string& name, ObjectCacheInfo& bl, uint32_t mask, rgw_cache_entry_info *cache_info);
   std::optional<ObjectCacheInfo> get(const std::string& name) {
@@ -200,12 +205,6 @@ public:
 
   void put(const std::string& name, ObjectCacheInfo& bl, rgw_cache_entry_info *cache_info);
   bool remove(const std::string& name);
-  void set_ctx(CephContext *_cct) {
-    cct = _cct;
-    lru_window = cct->_conf->rgw_cache_lru_size / 2;
-    expiry = std::chrono::seconds(cct->_conf.get_val<uint64_t>(
-						"rgw_cache_expiry_interval"));
-  }
   bool chain_cache_entry(std::initializer_list<rgw_cache_entry_info*> cache_info_entries,
 			 RGWChainedCache::Entry *chained_entry);
 
