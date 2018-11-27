@@ -91,6 +91,7 @@ class Pool(RESTController):
         self._set_pool_values(pool, application_metadata, flags, False, kwargs)
 
     def _set_pool_values(self, pool, application_metadata, flags, update_existing, kwargs):
+        update_name = False
         if update_existing:
             current_pool = self._get(pool)
             self._handle_update_compression_args(current_pool.get('options'), kwargs)
@@ -116,9 +117,15 @@ class Pool(RESTController):
             CephService.send_command('mon', 'osd pool set', pool=pool, var=key, val=str(value))
 
         for key, value in kwargs.items():
-            set_key(key, value)
-            if key == 'pg_num':
-                set_key('pgp_num', value)
+            if key == 'pool':
+                update_name = True
+                destpool = value
+            else:
+                set_key(key, value)
+                if key == 'pg_num':
+                    set_key('pgp_num', value)
+        if update_name:
+            CephService.send_command('mon', 'osd pool rename', srcpool=pool, destpool=destpool)
 
     def _handle_update_compression_args(self, options, kwargs):
         if kwargs.get('compression_mode') == 'unset' and options is not None:

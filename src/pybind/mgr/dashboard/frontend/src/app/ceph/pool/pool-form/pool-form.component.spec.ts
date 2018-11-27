@@ -221,6 +221,7 @@ describe('PoolFormComponent', () => {
     });
 
     it('validates name', () => {
+      expect(component.editing).toBeFalsy();
       formHelper.expectError('name', 'required');
       formHelper.expectValidChange('name', 'some-name');
       component.info.pool_names.push('someExistingPoolName');
@@ -990,18 +991,19 @@ describe('PoolFormComponent', () => {
       });
 
       it('disabled inputs', () => {
-        const disabled = [
-          'name',
-          'poolType',
-          'crushRule',
-          'size',
-          'erasureProfile',
-          'ecOverwrites'
-        ];
+        const disabled = ['poolType', 'crushRule', 'size', 'erasureProfile', 'ecOverwrites'];
         disabled.forEach((controlName) => {
           return expect(form.get(controlName).disabled).toBeTruthy();
         });
-        const enabled = ['pgNum', 'mode', 'algorithm', 'minBlobSize', 'maxBlobSize', 'ratio'];
+        const enabled = [
+          'name',
+          'pgNum',
+          'mode',
+          'algorithm',
+          'minBlobSize',
+          'maxBlobSize',
+          'ratio'
+        ];
         enabled.forEach((controlName) => {
           return expect(form.get(controlName).enabled).toBeTruthy();
         });
