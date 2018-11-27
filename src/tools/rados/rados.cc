@@ -1865,7 +1865,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   std::string run_name;
   std::string prefix;
   bool forcefull = false;
-  Formatter *formatter = NULL;
+  unique_ptr<Formatter> formatter = nullptr;
   bool pretty_format = false;
   const char *output = NULL;
   bool omap_key_valid = false;
@@ -2034,7 +2034,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   i = opts.find("format");
   if (i != opts.end()) {
     const char *format = i->second.c_str();
-    formatter = Formatter::create(format);
+    formatter.reset(Formatter::create(format));
     if (!formatter) {
       cerr << "unrecognized format: " << format << std::endl;
       return -EINVAL;
@@ -2417,7 +2417,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	    formatter->open_object_section("object");
 	    formatter->dump_string("namespace", i->get_nspace());
 
-        detail::dump_name(formatter, i, use_striper);
+        detail::dump_name(formatter.get(), i, use_striper);
 
 	    if (i->get_locator().size())
 	      formatter->dump_string("locator", i->get_locator());
@@ -3115,7 +3115,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 
     ostream *outstream = NULL;
     if (formatter) {
-      bencher.set_formatter(formatter);
+      bencher.set_formatter(formatter.get());
       if (output)
         outstream = new ofstream(output);
       else
@@ -3418,17 +3418,17 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
   } else if (strcmp(nargs[0], "list-inconsistent-pg") == 0) {
     if (!formatter) {
-      formatter = new JSONFormatter(pretty_format);
+      formatter = std::make_unique<JSONFormatter>(pretty_format);
     }
     ret = do_get_inconsistent_pg_cmd(nargs, rados, *formatter);
   } else if (strcmp(nargs[0], "list-inconsistent-obj") == 0) {
     if (!formatter) {
-      formatter = new JSONFormatter(pretty_format);
+      formatter = std::make_unique<JSONFormatter>(pretty_format);
     }
     ret = do_get_inconsistent_cmd<inconsistent_obj_t>(nargs, rados, *formatter);
   } else if (strcmp(nargs[0], "list-inconsistent-snapset") == 0) {
     if (!formatter) {
-      formatter = new JSONFormatter(pretty_format);
+      formatter = std::make_unique<JSONFormatter>(pretty_format);
     }
     ret = do_get_inconsistent_cmd<inconsistent_snapset_t>(nargs, rados, *formatter);
   } else if (strcmp(nargs[0], "cache-flush") == 0) {
@@ -3753,8 +3753,6 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   if (ret < 0)
     cerr << "error " << (-ret) << ": " << cpp_strerror(ret) << std::endl;
 
-out:
-  delete formatter;
   return (ret < 0) ? 1 : 0;
 }
 
