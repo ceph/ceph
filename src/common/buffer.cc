@@ -1256,7 +1256,7 @@ using namespace ceph;
 
   bool buffer::list::is_contiguous() const
   {
-    return &(*_buffers.begin()) == &(*_buffers.rbegin());
+    return _buffers.size() <= 1;
   }
 
   bool buffer::list::is_n_page_sized() const
@@ -1326,7 +1326,7 @@ using namespace ceph;
   void buffer::list::rebuild()
   {
     if (_len == 0) {
-      _buffers.clear_and_dispose(ptr_node::disposer());
+      _buffers.clear_and_dispose();
       return;
     }
     if ((_len & ~CEPH_PAGE_MASK) == 0)
@@ -1344,7 +1344,7 @@ using namespace ceph;
       pos += node.length();
     }
     _memcopy_count += pos;
-    _buffers.clear_and_dispose(ptr_node::disposer());
+    _buffers.clear_and_dispose();
     if (likely(nb->length())) {
       _buffers.push_back(*nb.release());
     }
@@ -1764,7 +1764,7 @@ using namespace ceph;
       if (claim_by) 
 	claim_by->append( *curbuf, off, howmuch );
       _len -= (*curbuf).length();
-      curbuf = _buffers.erase_and_dispose( curbuf, ptr_node::disposer() );
+      curbuf = _buffers.erase_and_dispose(curbuf);
       len -= howmuch;
       off = 0;
     }

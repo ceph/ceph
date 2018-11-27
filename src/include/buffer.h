@@ -434,7 +434,69 @@ namespace buffer CEPH_BUFFER_API {
 
   class CEPH_BUFFER_API list {
   public:
-    typedef boost::intrusive::list<ptr_node> buffers_t;
+    class buffers_t : private boost::intrusive::list<ptr_node> {
+      typedef boost::intrusive::list<ptr_node> base_t;
+
+    public:
+      using base_t::const_reference;
+      using base_t::const_iterator;
+      using base_t::iterator;
+
+      using base_t::base_t;
+      using base_t::iterator_to;
+
+      using base_t::push_front;
+      using base_t::push_back;
+      using base_t::erase;
+      using base_t::insert;
+      using base_t::size;
+      using base_t::empty;
+
+      const_iterator begin() const {
+	return base_t::cbegin();
+      }
+      const_iterator end() const {
+	return base_t::cend();
+      }
+      iterator begin() {
+	return base_t::begin();
+      }
+      iterator end() {
+	return base_t::end();
+      }
+
+      reference front() {
+	return base_t::front();
+      }
+      reference back() {
+	return base_t::back();
+      }
+      const_reference front() const {
+	return base_t::front();
+      }
+      const_reference back() const {
+	return base_t::back();
+      }
+
+      void clone_from(const buffers_t& other) {
+	base_t::clone_from(other, ptr_node::cloner(), ptr_node::disposer());
+      }
+      void clear_and_dispose() {
+	base_t::clear_and_dispose(ptr_node::disposer());
+      }
+      auto erase_and_dispose(const_iterator it) {
+	return base_t::erase_and_dispose(it, ptr_node::disposer());
+      }
+
+      auto splice(const_iterator it, buffers_t& other) {
+	return base_t::splice(it, other);
+      }
+
+      void swap(buffers_t& other) {
+	base_t::swap(other);
+      }
+    };
+
     class iterator;
 
   private:
@@ -754,20 +816,18 @@ namespace buffer CEPH_BUFFER_API {
 
     list(const list& other) : _len(other._len),
 			      _memcopy_count(other._memcopy_count), last_p(this) {
-      _buffers.clone_from(other._buffers,
-			  ptr_node::cloner(), ptr_node::disposer());
+      _buffers.clone_from(other._buffers);
       make_shareable();
     }
     list(list&& other) noexcept;
 
     ~list() {
-      _buffers.clear_and_dispose(ptr_node::disposer());
+      _buffers.clear_and_dispose();
     }
 
     list& operator= (const list& other) {
       if (this != &other) {
-        _buffers.clone_from(other._buffers,
-			    ptr_node::cloner(), ptr_node::disposer());
+        _buffers.clone_from(other._buffers);
         _len = other._len;
 	make_shareable();
       }
@@ -831,7 +891,7 @@ namespace buffer CEPH_BUFFER_API {
 
     // modifiers
     void clear() noexcept {
-      _buffers.clear_and_dispose(ptr_node::disposer());
+      _buffers.clear_and_dispose();
       _len = 0;
       _memcopy_count = 0;
       last_p = begin();
