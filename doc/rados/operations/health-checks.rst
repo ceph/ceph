@@ -396,6 +396,25 @@ paired with *PG_DAMAGED* (see above).
 
 See :doc:`pg-repair` for more information.
 
+LARGE_OMAP_OBJECTS
+__________________
+
+One or more pools contain large omap objects as determined by
+``osd_deep_scrub_large_omap_object_key_threshold`` (threshold for number of keys
+to determine a large omap object) or
+``osd_deep_scrub_large_omap_object_value_sum_threshold`` (the threshold for
+summed size (bytes) of all key values to determine a large omap object) or both.
+More information on the object name, key count, and size in bytes can be found
+by searching the cluster log for 'Large omap object found'. Large omap objects
+can be caused by RGW bucket index objects that do not have automatic resharding
+enabled. Please see :ref:`RGW Dynamic Bucket Index Resharding
+<rgw_dynamic_bucket_index_resharding>` for more information on resharding.
+
+The thresholds can be adjusted with::
+
+  ceph config set osd osd_deep_scrub_large_omap_object_key_threshold <keys>
+  ceph config set osd osd_deep_scrub_large_omap_object_value_sum_threshold <bytes>
+
 CACHE_POOL_NEAR_FULL
 ____________________
 

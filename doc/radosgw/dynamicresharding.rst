@@ -1,3 +1,5 @@
+.. _rgw_dynamic_bucket_index_resharding:
+
 ===================================
 RGW Dynamic Bucket Index Resharding
 ===================================
