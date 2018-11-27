@@ -223,6 +223,10 @@ ostream& operator<<(ostream& out, const sockaddr *sa)
 
 bool entity_addrvec_t::parse(const char *s, const char **end)
 {
+  const char *static_end;
+  if (!end) {
+    end = &static_end;
+  }
   v.clear();
   while (*s) {
     entity_addr_t a;
