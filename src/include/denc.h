@@ -1592,7 +1592,14 @@ inline std::enable_if_t<traits::supported && !traits::featured> decode_nohead(
   if constexpr (traits::need_contiguous) {
     bufferptr tmp;
     auto t = p;
-    t.copy_shallow(p.get_bl().length() - p.get_off(), tmp);
+    if constexpr (denc_traits<typename T::value_type>::bounded) {
+      size_t element_size = 0;
+      typename T::value_type v;
+      denc_traits<typename T::value_type>::bound_encode(v, element_size);
+      t.copy_shallow(num * element_size, tmp);
+    } else {
+      t.copy_shallow(p.get_bl().length() - p.get_off(), tmp);
+    }
     auto cp = std::cbegin(tmp);
     traits::decode_nohead(num, o, cp);
     p.advance(cp.get_offset());
