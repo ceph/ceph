@@ -815,10 +815,8 @@ EOF
             local fs=0
             for name in a b c d e f g h i j k l m n o p
             do
-                ceph_adm osd pool create "cephfs_data_${name}" 8
-                ceph_adm osd pool create "cephfs_metadata_${name}" 8
-                ceph_adm fs new "cephfs_${name}" "cephfs_metadata_${name}" "cephfs_data_${name}"
-					 ceph_adm fs authorize "cephfs_${name}" "client.fs_${name}" / rwp
+		ceph_adm fs volume create ${name}
+		ceph_adm fs authorize ${name} "client.fs_${name}" / rwp
                 fs=$(($fs + 1))
                 [ $fs -eq $CEPH_NUM_FS ] && break
             done
