@@ -728,15 +728,14 @@ public:
       s.append(p.get_pos_add(len), len);
     }
   }
-  template<class It>
-  static std::enable_if_t<is_const_iterator_v<It>>
-  decode_nohead(size_t len, value_type& s, It& p) {
+  static void decode_nohead(size_t len, value_type& s,
+                            buffer::list::const_iterator& p) {
     if (len) {
       if constexpr (std::is_same_v<value_type, std::string>) {
         s.clear();
         p.copy(len, s);
       } else {
-        s.resize(len, 0);
+        s.resize(len);
         p.copy(len, s.data());
       }
     } else {
@@ -829,6 +828,11 @@ struct denc_traits<bufferlist> {
     if (len) {
       v.append(p.get_ptr(len));
     }
+  }
+  static void decode_nohead(size_t len, bufferlist& v,
+			    buffer::list::const_iterator& p) {
+    v.clear();
+    p.copy(len, v);
   }
 };
 
