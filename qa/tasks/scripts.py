@@ -5,9 +5,10 @@ from util import copy_directory_recursively
 
 class Scripts:
 
-    def __init__(self, ctx, logger, remotes):
+    def __init__(self, ctx, logger):
         self.log = logger
         copied = ctx.get('scripts_copied', False)
+        remotes = ctx['remotes']
         if copied:
             # self.log.info('(scripts ctor) scripts already copied to remotes')
             pass

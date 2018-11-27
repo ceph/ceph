@@ -177,7 +177,7 @@ class DeepSea(Task):
         self.roles = self.ctx['roles']
         self.role_types = self.ctx['role_types']
         self.role_lookup_table = self.ctx['role_lookup_table']
-        self.scripts = Scripts(self.ctx, self.log, self.remotes)
+        self.scripts = Scripts(self.ctx, self.log)
         self.sm = deepsea_ctx['salt_manager_instance']
         self.storage_profile = deepsea_ctx['storage_profile']
         # self.log.debug("ctx.config {}".format(ctx.config))
