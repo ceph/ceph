@@ -3,6 +3,20 @@
 
 #include "rgw_string.h"
 
+namespace detail {
+
+void gen_rand_buffer_mutate_in_place(CryptoRandom& cr, char *out, const size_t nchars, std::string_view tbl)
+{
+ cr.get_bytes(out, nchars);
+
+ for (size_t i = 0; nchars != i; ++i) {
+    auto pos = static_cast<unsigned>(out[i]);
+    out[i] = tbl[pos % tbl.size()];
+ }
+}
+
+} // namespace detail
+
 static bool char_eq(char c1, char c2)
 {
   return c1 == c2;

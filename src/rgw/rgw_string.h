@@ -4,12 +4,18 @@
 #ifndef CEPH_RGW_STRING_H
 #define CEPH_RGW_STRING_H
 
-#include <errno.h>
-#include <stdlib.h>
-#include <limits.h>
+#include <string>
+#include <cerrno>
+#include <cstdlib>
+#include <climits>
+#include <algorithm>
+#include <string_view>
 
 #include <boost/container/small_vector.hpp>
 #include <boost/utility/string_view.hpp>
+
+#include "auth/Crypto.h"
+#include "common/ceph_context.h"
 
 struct ltstr_nocase
 {
@@ -232,5 +238,182 @@ static constexpr uint32_t MATCH_CASE_INSENSITIVE = 0x01;
 extern bool match_wildcards(boost::string_view pattern,
                             boost::string_view input,
                             uint32_t flags = 0);
+
+inline void rgw_escape_str(const std::string& s, const char esc_char, const char special_char, std::string& dest)
+{
+  const char *src = s.c_str();
+
+  dest.resize(s.size() * 2);
+
+  char *destp = dest.data();
+
+  for (size_t i = 0; i < s.size(); i++) {
+    char c = src[i];
+    if (c == esc_char || c == special_char) {
+      *destp++ = esc_char;
+    }
+    *destp++ = c;
+  }
+}
+
+inline void rgw_escape_str(const std::string& s, const char esc_char, const char special_char, std::string *dest_ptr)
+{
+ return rgw_escape_str(s, esc_char, special_char, *dest_ptr);
+}
+
+inline std::string rgw_escape_str(const std::string& s, const char esc_char, const char special_char)
+{
+  std::string result;
+  rgw_escape_str(s, esc_char, special_char, result);
+  return result;
+}
+
+inline ssize_t rgw_unescape_str(const std::string& s, const ssize_t ofs,
+                       const char esc_char, const char special_char,
+                       std::string& dest)
+{
+  const char *src = s.c_str();
+
+  dest.resize(s.size());
+  char *destp = dest.data();
+
+  bool esc = false;
+
+  for (size_t i = ofs; i < s.size(); i++) {
+    char c = src[i];
+    if (!esc && c == esc_char) {
+      esc = true;
+      continue;
+    }
+    if (!esc && c == special_char) {
+      return static_cast<ssize_t>(1 + i);
+    }
+    *destp++ = c;
+    esc = false;
+  }
+
+  return string::npos;
+}
+
+inline ssize_t rgw_unescape_str(const std::string& s, const ssize_t ofs,
+                       const char esc_char, const char special_char,
+                       std::string *dest_ptr)
+{
+  return rgw_unescape_str(s, ofs, esc_char, special_char, *dest_ptr);
+}
+
+namespace detail {
+
+// Does NOT null-terminate, assumes output target is of sufficient size:
+void gen_rand_buffer_mutate_in_place(CryptoRandom& cr, char *out, const size_t nchars, std::string_view tbl);
+
+inline std::string gen_rand_string(CryptoRandom& cr, const size_t nchars, std::string_view tbl)
+{
+  std::string result;
+ 
+  result.resize(nchars);
+ 
+  gen_rand_buffer_mutate_in_place(cr, result.data(), result.size(), tbl);
+ 
+  return result;
+}
+
+// this is basically a modified base64 charset, url friendly
+static const char alphanum_table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+static const char alphanum_no_underscore_table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-.";
+static const char alphanum_plain_table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+static const char alphanum_upper_table[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+static const char alphanum_lower_table[] = "0123456789abcdefghijklmnopqrstuvwxyz";
+
+} // namespace detail
+
+// nchars is the length of the required string, sans NULL:
+inline std::string gen_rand_alphanumeric_upper(CryptoRandom& cr, const size_t nchars)
+{
+  return detail::gen_rand_string(cr, nchars, detail::alphanum_upper_table);
+}
+
+inline std::string gen_rand_alphanumeric_upper(CephContext *cct, const size_t nchars)
+{
+  return gen_rand_alphanumeric_upper(*cct->random(), nchars);
+}
+
+inline void gen_rand_alphanumeric_upper(CephContext *cct, std::string *dest, const size_t nchars) 
+{ 
+  *dest = gen_rand_alphanumeric_upper(*cct->random(), nchars);
+} 
+
+inline std::string gen_rand_alphanumeric_lower(CryptoRandom& cr, const size_t nchars)
+{
+  return detail::gen_rand_string(cr, nchars, detail::alphanum_lower_table);
+}
+
+inline void gen_rand_alphanumeric_lower(CephContext *cct, std::string *dest, const size_t nchars)
+{
+  *dest = gen_rand_alphanumeric_lower(*cct->random(), nchars);
+}
+
+inline std::string gen_rand_alphanumeric(CryptoRandom& cr, const size_t nchars) 
+{
+  return detail::gen_rand_string(cr, nchars, detail::alphanum_table);
+}
+
+inline std::string gen_rand_alphanumeric(CephContext *cct, const size_t size)
+{
+  return gen_rand_alphanumeric(*cct->random(), size);
+}
+
+inline void gen_rand_alphanumeric(CephContext *cct, std::string *dest, const size_t size) 
+{
+  *dest = gen_rand_alphanumeric(*cct->random(), size);
+}
+
+inline void gen_rand_alphanumeric(CryptoRandom& cr, char *out_buffer, const size_t out_buffer_size)
+{
+  detail::gen_rand_buffer_mutate_in_place(cr, out_buffer, out_buffer_size - 1, 
+                                          detail::alphanum_table);
+  out_buffer[out_buffer_size] = 0;
+}
+
+inline std::string gen_rand_alphanumeric_no_underscore(CryptoRandom& cr, const size_t nchars) 
+{
+  return detail::gen_rand_string(cr, nchars, 
+                                 detail::alphanum_no_underscore_table);
+}
+
+inline std::string gen_rand_alphanumeric_no_underscore(CephContext *cct, const size_t nchars) 
+{
+  return gen_rand_alphanumeric(*cct->random(), nchars);
+}
+
+inline void gen_rand_alphanumeric_no_underscore(CephContext *cct, std::string *dest, const size_t nchars) 
+{
+  *dest = gen_rand_alphanumeric_no_underscore(*cct->random(), nchars);
+}
+
+// nchars is the required string size sans NULL:
+inline std::string gen_rand_alphanumeric_plain(CryptoRandom& cr, const size_t nchars)
+{
+  return detail::gen_rand_string(cr, nchars, 
+                                 detail::alphanum_plain_table);
+}
+
+// nchars is the required string size sans NULL:
+inline std::string gen_rand_alphanumeric_plain(CephContext *cct, const size_t nchars)
+{
+  return gen_rand_alphanumeric_plain(*cct->random(), nchars);
+}
+
+// nchars is the required string size sans NULL:
+inline void gen_rand_alphanumeric_plain(CephContext *cct, std::string *dest, const size_t nchars)
+{
+  *dest = gen_rand_alphanumeric_plain(*cct->random(), nchars);
+}
+
+static inline void append_rand_alpha(CephContext *cct, const std::string& src, std::string& dest, const size_t len)
+{
+  dest.append("_");
+  dest.append(gen_rand_alphanumeric(*cct->random(), len));
+}
 
 #endif

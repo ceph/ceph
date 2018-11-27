@@ -36,7 +36,6 @@
 #include "cls/version/cls_version_types.h"
 #include "cls/user/cls_user_types.h"
 #include "cls/rgw/cls_rgw_types.h"
-#include "include/random.h"
 #include "include/rados/librados.hpp"
 
 namespace ceph {
@@ -2644,60 +2643,6 @@ string camelcase_dash_http_attr(const string s);
 
 void rgw_setup_saved_curl_handles();
 void rgw_release_all_curl_handles();
-
-<<<<<<< HEAD
-inline void rgw_escape_str(const std::string& s, const char esc_char, const char special_char, std::string& dest)
-{
- dest.reserve(s.size() * 2);
- 
- auto dest_iter = begin(dest);
- 
- for (const char c : s) {
-    if(esc_char == c || special_char == c) {
-        *dest_iter++ = esc_char;
-    }
-    
-    *dest_iter++ = c;
- }
-}
-
-inline void rgw_escape_str(const std::string& s, const char esc_char, const char special_char, std::string *dest_ptr)
-{
- return rgw_escape_str(s, esc_char, special_char, *dest_ptr);
-}
-
-inline std::string rgw_escape_str(const std::string& s, const char esc_char, const char special_char)
-{
- std::string result;
- rgw_escape_str(s, esc_char, special_char, result);
- return result;
-}
-
-inline ssize_t rgw_unescape_str(const string& src, const ssize_t ofs,
-                       const char esc_char, const char special_char,
-                       string& dest)
-{
-  dest.reserve(src.size());
-  auto destp = begin(dest);
-
-  bool esc = false;
-
-  for (size_t i = ofs; i < src.size(); i++) {
-    char c = src[i];
-    if (!esc && c == esc_char) {
-      esc = true;
-      continue;
-    }
-    if (!esc && c == special_char) {
-      dest.resize(i);
-      return dest.size();
-    }
-    *destp++ = c;
-    esc = false;
-  }
-
-  return string::npos;
-}
 
 static inline string rgw_bl_str(ceph::buffer::list& raw)
 {
