@@ -5239,7 +5239,7 @@ function TEST_periodic_scrub_replicated() {
     # Can't upgrade with this set
     ceph osd set nodeep-scrub
     # Let map change propagate to OSDs
-    flush pg_stats
+    flush_pg_stats
     sleep 5
 
     # Fake a schedule scrub
