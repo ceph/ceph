@@ -1418,7 +1418,7 @@ class Script(DeepSea):
             raise ConfigError(
                 self.err_prefix +
                 "config dictionary may contain only one key. "
-                "You provided ->{}<- keys ({}}".format(len(config_keys), config_keys)
+                "You provided ->{}<- keys ({})".format(len(config_keys), config_keys)
                 )
         role_spec, role_dict = self.config.items()[0]
         role_keys = len(role_dict)
@@ -1426,7 +1426,7 @@ class Script(DeepSea):
             raise ConfigError(
                 self.err_prefix +
                 "role dictionary may contain only one key. "
-                "You provided ->{}<- keys ({}}".format(len(role_keys), role_keys)
+                "You provided ->{}<- keys ({})".format(len(role_keys), role_keys)
                 )
         if role_spec == "all":
             remote = self.ctx.cluster
