@@ -3,6 +3,7 @@
 osd_perf_query module
 """
 
+from itertools import groupby
 from time import time
 import errno
 import prettytable
@@ -56,7 +57,8 @@ class OSDPerfQuery(MgrModule):
     RBD_IMAGE_ID_QUERY = {
         'key_descriptor': [
             {'type': 'pool_id', 'regex': '^(.+)$'},
-            {'type': 'object_name', 'regex': '^rbd_data\.([^.]+)\.'},
+            {'type': 'object_name',
+             'regex': '^(?:rbd|journal)_data\.(?:([0-9]+)\.)?([^.]+)\.'},
         ],
         'performance_counter_descriptors': [
             'bytes', 'write_ops', 'read_ops', 'write_bytes', 'read_bytes',
@@ -129,15 +131,43 @@ class OSDPerfQuery(MgrModule):
             table = prettytable.PrettyTable(tuple(column_names),
                                             hrules=prettytable.FRAME)
 
-            max_count = len(res['counters'])
+            if query == self.RBD_IMAGE_ID_QUERY:
+                # typical output:
+                #  {'k': [['3'], ['', '16fe5b5a8435e']],
+                #   'c': [[1024, 0], [1, 0], ...]}
+                # pool id fixup: if the object_name regex has matched pool id
+                # use it as the image pool id
+                for c in res['counters']:
+                    if c['k'][1][0]:
+                        c['k'][0][0] = c['k'][1][0]
+                # group by (pool_id, image_id)
+                processed = []
+                res['counters'].sort(key=lambda c: [c['k'][0][0], c['k'][1][1]])
+                for key, group in groupby(res['counters'],
+                                          lambda c: [c['k'][0][0], c['k'][1][1]]):
+                    counters = [[0, 0] for x in descriptors]
+                    for c in group:
+                        for i in range(len(counters)):
+                            counters[i][0] += c['c'][i][0]
+                            counters[i][1] += c['c'][i][1]
+                    processed.append({'k' : key, 'c' : counters})
+            else:
+                # typical output:
+                #  {'k': [['client.94348']], 'c': [[1024, 0], [1, 0], ...]}
+                processed = res['counters']
+
+            max_count = len(processed)
             if 'limit' in query:
                 if 'max_count' in query['limit']:
                     max_count = query['limit']['max_count']
                 if 'order_by' in query['limit']:
                     i = descriptors.index(query['limit']['order_by'])
-                    res['counters'].sort(key=lambda x: x['c'][i], reverse=True)
-            for c in res['counters'][:max_count]:
-                row = [sk[0] for sk in c['k']]
+                    processed.sort(key=lambda x: x['c'][i][0], reverse=True)
+            for c in processed[:max_count]:
+                if query == self.RBD_IMAGE_ID_QUERY:
+                    row = c['k']
+                else:
+                    row = [sk[0] for sk in c['k']]
                 counters = c['c']
                 for i in range(len(descriptors)):
                     if descriptors[i] in ['bytes']:
