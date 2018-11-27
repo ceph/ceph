@@ -5453,7 +5453,7 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
   dout(30) << __func__ << " op.extent.truncate_size: " << op.extent.truncate_size << dendl;
 
   // are we beyond truncate_size?
-  if ( (seq < op.extent.truncate_seq) &&
+  if ( seq && (seq < op.extent.truncate_seq) &&
        (op.extent.offset + op.extent.length > op.extent.truncate_size) &&
        (size > op.extent.truncate_size) )
     size = op.extent.truncate_size;
