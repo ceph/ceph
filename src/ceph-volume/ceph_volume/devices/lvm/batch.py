@@ -300,13 +300,15 @@ class Batch(object):
         if not self.args.bluestore and not self.args.filestore:
             self.args.bluestore = True
 
-        if not self.args.no_auto:
+        if (self.args.no_auto or self.args.db_devices or
+                                  self.args.journal_devices or
+                                  self.args.wal_devices):
+            self.get_explicit_strategy()
+        else:
             if self.args.report:
                 self.report()
             else:
                 self.execute()
-        else:
-            self.get_explicit_strategy()
 
     def get_explicit_strategy(self):
         raise NotImplementedError()
