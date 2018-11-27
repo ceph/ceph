@@ -10932,13 +10932,15 @@ void MDCache::adjust_dir_fragments(CInode *diri,
 
     // are my constituent bits subtrees?  if so, i will be too.
     // (it's all or none, actually.)
-    bool any_subtree = false;
+    bool any_subtree = false, any_non_subtree = false;
     for (CDir *dir : srcfrags) {
-      if (dir->is_subtree_root()) {
+      if (dir->is_subtree_root())
 	any_subtree = true;
-	break;
-      }
+      else
+	any_non_subtree = true;
     }
+    ceph_assert(!any_subtree || !any_non_subtree);
+
     set<CDir*> new_bounds;
     if (any_subtree)  {
       for (CDir *dir : srcfrags) {
@@ -11118,12 +11120,29 @@ void MDCache::merge_dir(CInode *diri, frag_t frag)
 
 void MDCache::fragment_freeze_dirs(list<CDir*>& dirs)
 {
-  for (list<CDir*>::iterator p = dirs.begin(); p != dirs.end(); ++p) {
-    CDir *dir = *p;
+  bool any_subtree = false, any_non_subtree = false;
+  for (CDir* dir : dirs) {
     dir->auth_pin(dir);  // until we mark and complete them
     dir->state_set(CDir::STATE_FRAGMENTING);
     dir->freeze_dir();
     ceph_assert(dir->is_freezing_dir());
+
+    if (dir->is_subtree_root())
+      any_subtree = true;
+    else
+      any_non_subtree = true;
+  }
+
+  if (any_subtree && any_non_subtree) {
+    // either all dirfrags are subtree roots or all are not.
+    for (CDir *dir : dirs) {
+      if (dir->is_subtree_root()) {
+	ceph_assert(dir->state_test(CDir::STATE_AUXSUBTREE));
+      } else {
+	dir->state_set(CDir::STATE_AUXSUBTREE);
+	adjust_subtree_auth(dir, mds->get_nodeid());
+      }
+    }
   }
 }
 

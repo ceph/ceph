@@ -1036,6 +1036,7 @@ void CDir::split(int bits, list<CDir*>& subs, MDSInternalContextBase::vec& waite
     subs.push_back(f);
 
     f->set_dir_auth(get_dir_auth());
+    f->freeze_tree_state = freeze_tree_state;
     f->prepare_new_fragment(replay);
     f->init_fragment_pins();
   }
@@ -1091,16 +1092,14 @@ void CDir::merge(list<CDir*>& subs, MDSInternalContextBase::vec& waiters, bool r
 {
   dout(10) << "merge " << subs << dendl;
 
-  mds_authority_t new_auth = CDIR_AUTH_DEFAULT;
+  set_dir_auth(subs.front()->get_dir_auth());
+  freeze_tree_state = subs.front()->freeze_tree_state;
+
   for (auto dir : subs) {
-    if (dir->get_dir_auth() != CDIR_AUTH_DEFAULT &&
-	dir->get_dir_auth() != new_auth) {
-      ceph_assert(new_auth == CDIR_AUTH_DEFAULT);
-      new_auth = dir->get_dir_auth();
-    }
+    ceph_assert(get_dir_auth() == dir->get_dir_auth());
+    ceph_assert(freeze_tree_state == dir->freeze_tree_state);
   }
 
-  set_dir_auth(new_auth);
   prepare_new_fragment(replay);
 
   nest_info_t rstatdiff;
@@ -2670,6 +2669,11 @@ void CDir::set_dir_auth(const mds_authority_t &a)
   if (!was_subtree && is_subtree_root()) {
     dout(10) << " new subtree root, adjusting auth_pins" << dendl;
 
+    if (freeze_tree_state) {
+      // only by CDir::_freeze_tree()
+      ceph_assert(is_freezing_tree_root());
+    }
+
     inode->num_subtree_roots++;   
     
     // unpin parent of frozen dir/tree?
@@ -2903,12 +2907,6 @@ void CDir::_freeze_tree()
   }
   freeze_tree_state->frozen = true;
 
-  // twiddle state
-  if (state_test(STATE_FREEZINGTREE)) {
-    state_clear(STATE_FREEZINGTREE);   // actually, this may get set again by next context?
-    --num_freezing_trees;
-  }
-
   if (is_auth()) {
     mds_authority_t auth;
     bool was_subtree = is_subtree_root();
@@ -2944,6 +2942,12 @@ void CDir::_freeze_tree()
 	return true;
       }
     );
+  }
+
+  // twiddle state
+  if (state_test(STATE_FREEZINGTREE)) {
+    state_clear(STATE_FREEZINGTREE);
+    --num_freezing_trees;
   }
 
   state_set(STATE_FROZENTREE);
