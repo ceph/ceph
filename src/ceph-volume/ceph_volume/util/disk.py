@@ -672,7 +672,7 @@ def get_partitions_facts(sys_block_path):
         folder_path = os.path.join(sys_block_path, folder)
         if os.path.exists(os.path.join(folder_path, 'partition')):
             contents = get_file_contents(os.path.join(folder_path, 'partition'))
-            if '1' in contents:
+            if contents:
                 part = {}
                 partname = folder
                 part_sys_block_path = os.path.join(sys_block_path, partname)
@@ -686,6 +686,9 @@ def get_partitions_facts(sys_block_path):
                     part['sectorsize'] = get_file_contents(
                         part_sys_block_path + "/queue/hw_sector_size", 512)
                 part['size'] = human_readable_size(float(part['sectors']) * 512)
+                part['holders'] = []
+                for holder in os.listdir(part_sys_block_path + '/holders'):
+                    part['holders'].append(holder)
 
                 partition_metadata[partname] = part
     return partition_metadata
