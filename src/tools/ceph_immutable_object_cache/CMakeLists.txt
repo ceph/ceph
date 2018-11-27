@@ -17,7 +17,7 @@ add_executable(ceph-immutable-object-cache
   SimplePolicy.cc
   main.cc)
 target_link_libraries(ceph-immutable-object-cache
-  librados
+  librados-cxx
   stdc++fs
   global)
 install(TARGETS ceph-immutable-object-cache DESTINATION bin)
