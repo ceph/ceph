@@ -749,6 +749,10 @@ public:
       opg_log->rebuilt_missing_with_deletes = true;
   }
 
+  void recover_rm(hobject_t oid) {
+    missing.rm(oid, eversion_t::max());
+  }
+
   void recover_got(hobject_t oid, eversion_t v, pg_info_t &info) {
     if (missing.is_missing(oid, v)) {
       missing.got(oid, v);

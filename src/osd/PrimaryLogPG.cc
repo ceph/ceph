@@ -11862,7 +11862,10 @@ void PrimaryLogPG::missing_drop_replicas(const hobject_t &oid)
   for (set<pg_shard_t>::iterator i = actingbackfill.begin();
        i != actingbackfill.end();
        ++i) {
-    if (*i == get_primary()) continue;
+    if (*i == get_primary()) {
+      pg_log.recover_rm(oid);
+      continue;
+    }
     pg_shard_t peer = *i;
     map<pg_shard_t, pg_missing_t>::iterator pm = peer_missing.find(peer);
     assert(pm != peer_missing.end());
