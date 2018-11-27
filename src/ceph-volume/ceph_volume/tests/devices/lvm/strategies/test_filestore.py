@@ -11,7 +11,7 @@ class TestSingleType(object):
         devices = [
             fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=12073740000))
         ]
-        computed_osd = filestore.SingleType(devices, args).computed['osds'][0]
+        computed_osd = filestore.SingleType.with_auto_devices(devices, args).computed['osds'][0]
         assert computed_osd['data']['percentage'] == 55
         assert computed_osd['data']['parts'] == 1
         assert computed_osd['data']['human_readable_size'] == '6.24 GB'
@@ -24,7 +24,7 @@ class TestSingleType(object):
             fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=6073740000))
         ]
         with pytest.raises(RuntimeError) as error:
-            filestore.SingleType(devices, args)
+            filestore.SingleType.with_auto_devices(devices, args)
         msg = "Unable to use device 5.66 GB /dev/sda, LVs would be smaller than 5GB"
         assert msg in str(error)
 
@@ -34,7 +34,7 @@ class TestSingleType(object):
         devices = [
             fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='0', size=12073740000))
         ]
-        computed_osd = filestore.SingleType(devices, args).computed['osds'][0]
+        computed_osd = filestore.SingleType.with_auto_devices(devices, args).computed['osds'][0]
         assert computed_osd['data']['percentage'] == 55
         assert computed_osd['data']['parts'] == 1
         assert computed_osd['data']['human_readable_size'] == '6.24 GB'
@@ -47,7 +47,7 @@ class TestSingleType(object):
             fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='0', size=6073740000))
         ]
         with pytest.raises(RuntimeError) as error:
-            filestore.SingleType(devices, args)
+            filestore.SingleType.with_auto_devices(devices, args)
         msg = "Unable to use device 5.66 GB /dev/sda, LVs would be smaller than 5GB"
         assert msg in str(error)
 
@@ -58,7 +58,7 @@ class TestSingleType(object):
             fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='0', size=16073740000))
         ]
         with pytest.raises(RuntimeError) as error:
-            filestore.SingleType(devices, args)
+            filestore.SingleType.with_auto_devices(devices, args)
         msg = "Unable to use device 14.97 GB /dev/sda, LVs would be smaller than 5GB"
         assert msg in str(error)
 
@@ -69,7 +69,7 @@ class TestSingleType(object):
             fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=16073740000))
         ]
         with pytest.raises(RuntimeError) as error:
-            filestore.SingleType(devices, args)
+            filestore.SingleType.with_auto_devices(devices, args)
         msg = "Unable to use device 14.97 GB /dev/sda, LVs would be smaller than 5GB"
         assert msg in str(error)
 
@@ -80,7 +80,7 @@ class TestSingleType(object):
             fakedevice(used_by_ceph=False, is_lvm_member=True, sys_api=dict(rotational='1', size=12073740000))
         ]
         with pytest.raises(RuntimeError) as error:
-            filestore.SingleType(devices, args)
+            filestore.SingleType.with_auto_devices(devices, args)
         assert 'Unable to use device, already a member of LVM' in str(error)
 
     def test_hdd_device_with_small_configured_journal(self, fakedevice, factory, conf_ceph):
@@ -90,7 +90,7 @@ class TestSingleType(object):
             fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=6073740000))
         ]
         with pytest.raises(RuntimeError) as error:
-            filestore.SingleType(devices, args)
+            filestore.SingleType.with_auto_devices(devices, args)
         msg = "journal sizes must be larger than 2GB, detected: 120.00 MB"
         assert msg in str(error)
 
@@ -101,7 +101,7 @@ class TestSingleType(object):
             fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='0', size=6073740000))
         ]
         with pytest.raises(RuntimeError) as error:
-            filestore.SingleType(devices, args)
+            filestore.SingleType.with_auto_devices(devices, args)
         msg = "journal sizes must be larger than 2GB, detected: 120.00 MB"
         assert msg in str(error)
 
@@ -116,7 +116,7 @@ class TestMixedType(object):
             fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=6073740000))
         ]
         with pytest.raises(RuntimeError) as error:
-            filestore.MixedType(devices, args)
+            filestore.MixedType.with_auto_devices(devices, args)
         msg = "journal sizes must be larger than 2GB, detected: 120.00 MB"
         assert msg in str(error)
 
@@ -128,7 +128,7 @@ class TestMixedType(object):
             fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=6073740000))
         ]
         with pytest.raises(RuntimeError) as error:
-            filestore.MixedType(devices, args)
+            filestore.MixedType.with_auto_devices(devices, args)
         msg = "Not enough space in fast devices (5.66 GB) to create 1 x 6.95 GB journal LV"
         assert msg in str(error)
 
@@ -140,7 +140,7 @@ class TestMixedType(object):
             fakedevice(used_by_ceph=False, is_lvm_member=True, sys_api=dict(rotational='1', size=6073740000))
         ]
         with pytest.raises(RuntimeError) as error:
-            filestore.MixedType(devices, args)
+            filestore.MixedType.with_auto_devices(devices, args)
         assert 'Unable to use device, already a member of LVM' in str(error)
 
     def test_ssd_is_lvm_member_doesnt_fail(self, volumes, stub_vgs, fakedevice, factory, conf_ceph):
@@ -161,7 +161,7 @@ class TestMixedType(object):
         conf_ceph(get_safe=lambda *a: '5120')
         args = factory(filtered_devices=[], osds_per_device=1, journal_size=None)
         devices = [ssd, hdd]
-        result = filestore.MixedType(devices, args).computed['osds'][0]
+        result = filestore.MixedType.with_auto_devices(devices, args).computed['osds'][0]
         assert result['journal']['path'] == 'vg: fast'
         assert result['journal']['percentage'] == 71
         assert result['journal']['human_readable_size'] == '5.00 GB'
@@ -193,7 +193,7 @@ class TestMixedType(object):
         args = factory(filtered_devices=[], osds_per_device=1, journal_size=None)
         devices = [ssd1, ssd2, hdd]
         with pytest.raises(RuntimeError) as error:
-            filestore.MixedType(devices, args)
+            filestore.MixedType.with_auto_devices(devices, args)
 
         assert 'Could not find a common VG between devices' in str(error)
 
@@ -205,6 +205,6 @@ class TestMixedType(object):
             fakedevice(is_lvm_member=False, sys_api=dict(rotational='1', size=16073740000))
         ]
         with pytest.raises(RuntimeError) as error:
-            filestore.MixedType(devices, args)
+            filestore.MixedType.with_auto_devices(devices, args)
         msg = "Not enough space in fast devices (14.97 GB) to create 2 x 14.77 GB journal LV"
         assert msg in str(error)
