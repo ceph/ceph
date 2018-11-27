@@ -459,9 +459,10 @@ MDSRank::MDSRank(
           // Purge Queue operates inside mds_lock when we're calling into
           // it, and outside when in background, so must handle both cases.
           if (mds_lock.is_locked_by_me()) {
-            damaged();
+            handle_write_error(r);
           } else {
-            damaged_unlocked();
+            std::lock_guard l(mds_lock);
+            handle_write_error(r);
           }
         }
       )
