@@ -1263,6 +1263,13 @@ bool Journaler::try_read_entry(bufferlist& bl)
 
   // prefetch?
   _prefetch();
+
+  // If bufferlist consists of discontiguous memory, decoding types whose
+  // denc_traits needs contiguous memory is inefficient. The bufferlist may
+  // get copied to temporary memory multiple times (copy_shallow() in
+  // src/include/denc.h actually does deep copy)
+  if (bl.get_num_buffers() > 1)
+    bl.rebuild();
   return true;
 }
 
