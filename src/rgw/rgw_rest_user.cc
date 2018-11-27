@@ -12,6 +12,34 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+class RGWOp_User_List : public RGWRESTOp {
+
+public:
+  RGWOp_User_List() {}
+
+  int check_caps(RGWUserCaps& caps) override {
+    return caps.check_cap("users", RGW_CAP_READ);
+  }
+
+  void execute() override;
+
+  const char* name() const override { return "list_user"; }
+};
+
+void RGWOp_User_List::execute()
+{
+  RGWUserAdminOpState op_state;
+
+  uint32_t max_entries;
+  std::string marker;
+  RESTArgs::get_uint32(s, "max-entries", 1000, &max_entries);
+  RESTArgs::get_string(s, "marker", marker, &marker);
+
+  op_state.max_entries = max_entries;
+  op_state.marker = marker;
+  http_ret = RGWUserAdminOp_User::list(store, op_state, flusher);
+}
+
 class RGWOp_User_Info : public RGWRESTOp {
 
 public:
@@ -922,6 +950,9 @@ RGWOp *RGWHandler_User::op_get()
 {
   if (s->info.args.sub_resource_exists("quota"))
     return new RGWOp_Quota_Info;
+
+  if (s->info.args.sub_resource_exists("list"))
+    return new RGWOp_User_List;
 
   return new RGWOp_User_Info;
 }
