@@ -4352,7 +4352,7 @@ int RGWDeleteObj::verify_permission()
     if (r == Effect::Allow)
       return true;
     else if (r == Effect::Deny)
-      return false;
+      return -EACCES;
   }
 
   if (!verify_bucket_permission_no_policy(s, RGW_PERM_WRITE)) {
