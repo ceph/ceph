@@ -155,13 +155,14 @@ class DeepSea(Task):
         super(DeepSea, self).__init__(ctx, config)
         if deepsea_ctx:
             self.log = deepsea_ctx['logger_obj']
-            self.log.debug("deepsea_ctx already populated (we are in a subtask)")
+            # self.log.debug("context already populated (we are in a subtask)")
         if not deepsea_ctx:
             deepsea_ctx['logger_obj'] = log
             self.ctx['roles'] = self.ctx.config['roles']
             self.log = log
-            self.log.debug("populating deepsea_ctx (we are *not* in a subtask)")
+            # self.log.debug("populating context (we are *not* in a subtask)")
             self._populate_deepsea_context()
+            introspect_roles(self.ctx, self.log, quiet=False)
         self.alternative_defaults = deepsea_ctx['alternative_defaults']
         self.dashboard_ssl = deepsea_ctx['dashboard_ssl']
         self.deepsea_cli = deepsea_ctx['cli']
@@ -383,7 +384,6 @@ class DeepSea(Task):
                 deepsea_ctx['salt_manager_instance'].master_remote
                 )
         deepsea_ctx['rgw_ssl'] = self.config.get('rgw_ssl', False)
-        introspect_roles(self.ctx, self.log, quiet=False)
         if 'install' in self.config:
             if self.config['install'] in ['package', 'pkg']:
                 deepsea_ctx['install_method'] = 'package'
