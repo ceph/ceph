@@ -1,6 +1,6 @@
 from __future__ import print_function
 import json
-from ceph_volume.util import disk, prepare
+from ceph_volume.util import disk, prepare, str_to_int
 from ceph_volume.api import lvm
 from . import validators
 from ceph_volume.devices.lvm.create import Create
@@ -154,6 +154,8 @@ class MixedType(object):
         self.block_db_size = self.get_block_size()
         self.system_vgs = lvm.VolumeGroups()
         self.dbs_needed = len(self.hdds) * self.osds_per_device
+        # use block.db lvs that are as large as possible
+        self.use_large_block_db = False
         if self.devices:
             self.validate()
             self.compute()
@@ -218,6 +220,7 @@ class MixedType(object):
         # as possible from looking at extents
         if self.block_db_size.b == 0:
             self.block_db_size = disk.Size(b=self.vg_extents['sizes'])
+            self.use_large_block_db = True
 
         if not self.common_vg:
             # there isn't a common vg, so a new one must be created with all
@@ -275,11 +278,6 @@ class MixedType(object):
         else:
             db_vg = self.common_vg
 
-        # since we are falling back to a block_db_size that might be "as large
-        # as possible" we can't fully rely on LV format coming from the helper
-        # function that looks up this value
-        block_db_size = "%sG" % self.block_db_size.gb.as_int()
-
         # create 1 vg per data device first, mapping them to the device path,
         # when the lv gets created later, it can create as many as needed (or
         # even just 1)
@@ -288,6 +286,13 @@ class MixedType(object):
             if not vg:
                 vg = lvm.create_vg(osd['data']['path'], name_prefix='ceph-block')
                 data_vgs[osd['data']['path']] = vg
+
+        if self.use_large_block_db:
+            # make the block.db lvs as large as possible
+            vg_free_count = str_to_int(db_vg.vg_free_count)
+            db_lv_extents = int(vg_free_count / self.dbs_needed)
+        else:
+            db_lv_extents = db_vg.sizing(size=self.block_db_size.gb.as_int())['extents']
 
         # create the data lvs, and create the OSD with an lv from the common
         # block.db vg from before
@@ -300,7 +305,7 @@ class MixedType(object):
                 'osd-block', data_vg.name, extents=data_lv_extents, uuid_name=True
             )
             db_lv = lvm.create_lv(
-                'osd-block-db', db_vg.name, size=block_db_size, uuid_name=True
+                'osd-block-db', db_vg.name, extents=db_lv_extents, uuid_name=True
             )
             command = [
                 '--bluestore',
