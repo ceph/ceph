@@ -226,6 +226,10 @@ struct RGWUserAdminOpState {
   RGWQuotaInfo bucket_quota;
   RGWQuotaInfo user_quota;
 
+  // req parameters for listing user
+  std::string marker;
+  uint32_t max_entries;
+
   void set_access_key(const std::string& access_key) {
     if (access_key.empty())
       return;
@@ -534,6 +538,8 @@ struct RGWUserAdminOpState {
     found_by_email = false;
     found_by_key = false;
     mfa_ids_specified = false;
+    max_entries = 1000;
+    marker = "";
   }
 };
 
@@ -699,6 +705,9 @@ public:
   /* info from an already populated RGWUser */
   int info (RGWUserInfo& fetched_info, std::string *err_msg = NULL);
 
+  /* list the existing users */
+  int list(RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
+
   friend class RGWAccessKeyPool;
   friend class RGWSubUserPool;
   friend class RGWUserCapPool;
@@ -709,6 +718,9 @@ public:
 class RGWUserAdminOp_User
 {
 public:
+  static int list(RGWRados *store,
+                  RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
+
   static int info(RGWRados *store,
                   RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
 
