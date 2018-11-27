@@ -43,6 +43,7 @@ const static std::map<uint32_t, std::set<std::string>> always_on_modules = {
     CEPH_RELEASE_NAUTILUS, {
       "crash",
       "status",
+      "progress",
       "balancer",
       "devicehealth",
       "volumes",
