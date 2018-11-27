@@ -5268,6 +5268,91 @@ function TEST_periodic_scrub_replicated() {
     rados list-inconsistent-obj $pg | jq '.' | grep -qv $objname || return 1
 }
 
+function TEST_scrub_warning() {
+    local dir=$1
+    local poolname=psr_pool
+    local objname=POBJ
+    local scrubs=5
+    local deep_scrubs=5
+    local i1_day=86400
+    local i7_days=$(calc $i1_day \* 7)
+    local i14_days=$(calc $i1_day \* 14)
+    local overdue=0.5
+    local conf_overdue_seconds=$(calc $i7_days + $i1_day + \( $i7_days \* $overdue \) )
+    local pool_overdue_seconds=$(calc $i14_days + $i1_day + \( $i14_days \* $overdue \) )
+
+    setup $dir || return 1
+    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mgr $dir x --mon_warn_pg_not_scrubbed_ratio=${overdue} --mon_warn_pg_not_deep_scrubbed_ratio=${overdue} || return 1
+    run_osd $dir 0 $ceph_osd_args --osd_scrub_backoff_ratio=0 || return 1
+
+    for i in $(seq 1 $(expr $scrubs + $deep_scrubs))
+    do
+      create_pool $poolname-$i 1 1 || return 1
+      wait_for_clean || return 1
+      if [ $i = "1" ];
+      then
+        ceph osd pool set $poolname-$i scrub_max_interval $i14_days
+      fi
+      if [ $i = $(expr $scrubs + 1) ];
+      then
+        ceph osd pool set $poolname-$i deep_scrub_interval $i14_days
+      fi
+    done
+
+    # Only 1 osd
+    local primary=0
+
+    ceph osd set noscrub || return 1
+    ceph osd set nodeep-scrub || return 1
+    ceph config set global osd_scrub_interval_randomize_ratio 0
+    ceph config set global osd_deep_scrub_randomize_ratio 0
+    ceph config set global osd_scrub_max_interval ${i7_days}
+    ceph config set global osd_deep_scrub_interval ${i7_days}
+
+    # Fake schedule scrubs
+    for i in $(seq 1 $scrubs)
+    do
+      if [ $i = "1" ];
+      then
+        overdue_seconds=$pool_overdue_seconds
+      else
+        overdue_seconds=$conf_overdue_seconds
+      fi
+      CEPH_ARGS='' ceph daemon $(get_asok_path osd.${primary}) \
+             trigger_scrub ${i}.0 $(expr ${overdue_seconds} + ${i}00) || return 1
+    done
+    # Fake schedule deep scrubs
+    for i in $(seq $(expr $scrubs + 1) $(expr $scrubs + $deep_scrubs))
+    do
+      if [ $i = "$(expr $scrubs + 1)" ];
+      then
+        overdue_seconds=$pool_overdue_seconds
+      else
+        overdue_seconds=$conf_overdue_seconds
+      fi
+      CEPH_ARGS='' ceph daemon $(get_asok_path osd.${primary}) \
+             trigger_deep_scrub ${i}.0 $(expr ${overdue_seconds} + ${i}00) || return 1
+    done
+    flush_pg_stats
+
+    ceph health
+    ceph health detail
+    ceph health | grep -q "$deep_scrubs pgs not deep-scrubbed in time" || return 1
+    ceph health | grep -q "$scrubs pgs not scrubbed in time" || return 1
+    COUNT=$(ceph health detail | grep "not scrubbed since" | wc -l)
+    if [ "$COUNT" != $scrubs ]; then
+      ceph health detail | grep "not scrubbed since"
+      return 1
+    fi
+    COUNT=$(ceph health detail | grep "not deep-scrubbed since" | wc -l)
+    if [ "$COUNT" != $deep_scrubs ]; then
+      ceph health detail | grep "not deep-scrubbed since"
+      return 1
+    fi
+    return 0
+}
+
 #
 # Corrupt snapset in replicated pool
 #
