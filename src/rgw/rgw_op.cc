@@ -4350,7 +4350,7 @@ int RGWDeleteObj::verify_permission()
 				 rgw::IAM::s3DeleteObjectVersion,
 				 ARN(s->bucket, s->object.name));
     if (r == Effect::Allow)
-      return true;
+      return 0;
     else if (r == Effect::Deny)
       return -EACCES;
   }
