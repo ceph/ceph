@@ -66,6 +66,9 @@
 * The `ceph` command line tool now accepts keyword arguments in
   the format "--arg=value" or "--arg value".
 
+* librados::IoCtx::nobjects_begin() and librados::NObjectIterator now communicate
+  errors by throwing a std::system_error exception instead of std::runtime_error.
+
 >=13.1.0
 --------
 
