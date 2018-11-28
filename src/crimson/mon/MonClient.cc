@@ -7,8 +7,6 @@
 #include <seastar/util/log.hh>
 
 #include "auth/AuthClientHandler.h"
-#include "auth/AuthMethodList.h"
-#include "auth/KeyRing.h"
 #include "auth/RotatingKeyRing.h"
 
 #include "crimson/auth/KeyRing.h"
@@ -248,10 +246,9 @@ AuthMethodList create_auth_methods(uint32_t entity_type)
 }
 }
 
-Client::Client(const EntityName& name,
-               ceph::net::Messenger& messenger)
-  : entity_name{name},
-    auth_methods{create_auth_methods(entity_name.get_type())},
+Client::Client(ceph::net::Messenger& messenger)
+  // currently, crimson is OSD-only
+  : auth_methods{create_auth_methods(CEPH_ENTITY_TYPE_OSD)},
     want_keys{CEPH_ENTITY_TYPE_MON |
               CEPH_ENTITY_TYPE_OSD |
               CEPH_ENTITY_TYPE_MGR},
@@ -261,6 +258,13 @@ Client::Client(const EntityName& name,
 
 Client::Client(Client&&) = default;
 Client::~Client() = default;
+
+void Client::set_name(const EntityName& name)
+{
+  entity_name = name;
+  // should always be OSD, though
+  auth_methods = create_auth_methods(name.get_type());
+}
 
 seastar::future<> Client::load_keyring()
 {

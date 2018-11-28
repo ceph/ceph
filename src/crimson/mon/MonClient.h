@@ -37,7 +37,7 @@ namespace ceph::mon {
 class Connection;
 
 class Client : public ceph::net::Dispatcher {
-  const EntityName entity_name;
+  EntityName entity_name;
   KeyRing keyring;
   AuthMethodList auth_methods;
   const uint32_t want_keys;
@@ -65,10 +65,11 @@ class Client : public ceph::net::Dispatcher {
   MonSub sub;
 
 public:
-  Client(const EntityName& name,
-	 ceph::net::Messenger& messenger);
+  Client(ceph::net::Messenger& messenger);
   Client(Client&&);
   ~Client();
+  void set_name(const EntityName& name);
+
   seastar::future<> load_keyring();
   seastar::future<> build_initial_map();
   seastar::future<> authenticate();
