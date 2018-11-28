@@ -2333,7 +2333,7 @@ bool PG::queue_scrub()
 unsigned PG::get_scrub_priority()
 {
   // a higher value -> a higher priority
-  int pool_scrub_priority = 0;
+  int64_t pool_scrub_priority = 0;
   pool.info.opts.get(pool_opts_t::SCRUB_PRIORITY, &pool_scrub_priority);
   return pool_scrub_priority > 0 ? pool_scrub_priority : cct->_conf->osd_scrub_priority;
 }
@@ -2441,7 +2441,7 @@ inline int PG::clamp_recovery_priority(int priority)
 unsigned PG::get_recovery_priority()
 {
   // a higher value -> a higher priority
-  int ret = 0;
+  int64_t ret = 0;
 
   if (state & PG_STATE_FORCED_RECOVERY) {
     ret = OSD_RECOVERY_PRIORITY_FORCED;
@@ -2475,7 +2475,7 @@ unsigned PG::get_backfill_priority()
     }
 
     // Adjust with pool's recovery priority
-    int pool_recovery_priority = 0;
+    int64_t pool_recovery_priority = 0;
     pool.info.opts.get(pool_opts_t::RECOVERY_PRIORITY, &pool_recovery_priority);
 
     ret = clamp_recovery_priority(pool_recovery_priority + ret);
