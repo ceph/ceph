@@ -345,8 +345,8 @@ int Image<I>::list_children(I *ictx,
         return r;
       }
 
-      for (auto& it : image_names_to_ids) {
-        child_image_id_to_info[it.second] = {it.first, false};
+      for (auto& [name, id] : image_names_to_ids) {
+        child_image_id_to_info.insert({id, {name, false}});
       }
 
       std::vector<librbd::trash_image_info_t> trash_images;
