@@ -656,6 +656,10 @@ void OrderedThrottle::complete_pending_ops(std::unique_lock<std::mutex>& l) {
   }
 }
 
+#undef dout_prefix
+#define dout_prefix *_dout << "TokenBucketThrottle(" << m_name << " " \
+                           << (void*)this << ") "
+
 uint64_t TokenBucketThrottle::Bucket::get(uint64_t c) {
   if (0 == max) {
     return 0;
@@ -700,13 +704,15 @@ void TokenBucketThrottle::Bucket::set_max(uint64_t m) {
 
 TokenBucketThrottle::TokenBucketThrottle(
     CephContext *cct,
+    const std::string &name,
     uint64_t capacity,
     uint64_t avg,
     SafeTimer *timer,
     Mutex *timer_lock)
-  : m_cct(cct), m_throttle(m_cct, "token_bucket_throttle", capacity),
+  : m_cct(cct), m_name(name),
+    m_throttle(m_cct, name + "_bucket", capacity),
     m_avg(avg), m_timer(timer), m_timer_lock(timer_lock),
-    m_lock("token_bucket_throttle_lock")
+    m_lock(name + "_lock")
 {}
 
 TokenBucketThrottle::~TokenBucketThrottle() {
