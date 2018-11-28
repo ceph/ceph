@@ -6148,7 +6148,7 @@ int OSDMonitor::prepare_new_pool(MonOpRequestRef op)
   string rule_name;
   int ret = 0;
   ret = prepare_new_pool(m->name, m->crush_rule, rule_name,
-			 0, 0, 0,
+			 0, 0, 0, 0,
 			 erasure_code_profile,
 			 pg_pool_t::TYPE_REPLICATED, 0, FAST_READ_OFF, &ss);
 
@@ -6670,6 +6670,7 @@ int OSDMonitor::prepare_new_pool(string& name,
 				 int crush_rule,
 				 const string &crush_rule_name,
                                  unsigned pg_num, unsigned pgp_num,
+				 unsigned pg_num_min,
                                  const uint64_t repl_size,
 				 const string &erasure_code_profile,
                                  const unsigned pool_type,
@@ -6802,6 +6803,7 @@ int OSDMonitor::prepare_new_pool(string& name,
   pi->crush_rule = crush_rule;
   pi->expected_num_objects = expected_num_objects;
   pi->object_hash = CEPH_STR_HASH_RJENKINS;
+
   {
     auto m = pg_pool_t::get_pg_autoscale_mode_by_name(
       g_conf().get_val<string>("osd_pool_default_pg_autoscale_mode"));
@@ -6815,14 +6817,20 @@ int OSDMonitor::prepare_new_pool(string& name,
   pi->set_pg_num_target(pg_num);
   pi->set_pgp_num(pi->get_pg_num());
   pi->set_pgp_num_target(pgp_num);
+  if (pg_num_min) {
+    pi->opts.set(pool_opts_t::PG_NUM_MIN, static_cast<int>(pg_num_min));
+  }
+
   pi->last_change = pending_inc.epoch;
   pi->auid = 0;
+
   if (pool_type == pg_pool_t::TYPE_ERASURE) {
       pi->erasure_code_profile = erasure_code_profile;
   } else {
       pi->erasure_code_profile = "";
   }
   pi->stripe_width = stripe_width;
+
   pi->cache_target_dirty_ratio_micro =
     g_conf()->osd_pool_default_cache_target_dirty_ratio * 1000000;
   pi->cache_target_dirty_high_ratio_micro =
@@ -6831,6 +6839,7 @@ int OSDMonitor::prepare_new_pool(string& name,
     g_conf()->osd_pool_default_cache_target_full_ratio * 1000000;
   pi->cache_min_flush_age = g_conf()->osd_pool_default_cache_min_flush_age;
   pi->cache_min_evict_age = g_conf()->osd_pool_default_cache_min_evict_age;
+
   pending_inc.new_pool_names[pool] = name;
   return 0;
 }
@@ -11485,10 +11494,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 					      get_last_committed() + 1));
     return true;
   } else if (prefix == "osd pool create") {
-    int64_t  pg_num;
+    int64_t pg_num, pg_num_min;
     int64_t pgp_num;
     cmd_getval(cct, cmdmap, "pg_num", pg_num, int64_t(0));
     cmd_getval(cct, cmdmap, "pgp_num", pgp_num, pg_num);
+    cmd_getval(cct, cmdmap, "pg_num_min", pg_num_min, int64_t(0));
 
     string pool_type_str;
     cmd_getval(cct, cmdmap, "pool_type", pool_type_str);
@@ -11632,7 +11642,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     err = prepare_new_pool(poolstr,
 			   -1, // default crush rule
 			   rule_name,
-			   pg_num, pgp_num,
+			   pg_num, pgp_num, pg_num_min,
                            repl_size,
 			   erasure_code_profile, pool_type,
                            (uint64_t)expected_num_objects,
