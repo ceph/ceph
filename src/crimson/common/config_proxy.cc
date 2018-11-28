@@ -4,13 +4,15 @@
 
 namespace ceph::common {
 
-ConfigProxy::ConfigProxy()
+ConfigProxy::ConfigProxy(const EntityName& name, std::string_view cluster)
 {
   if (seastar::engine().cpu_id() != 0) {
     return;
   }
   // set the initial value on CPU#0
   values.reset(seastar::make_lw_shared<ConfigValues>());
+  values.get()->name = name;
+  values.get()->cluster = cluster;
   // and the only copy of md_config_impl<> is allocated on CPU#0
   local_config.reset(new md_config_t{*values, obs_mgr, true});
 }
