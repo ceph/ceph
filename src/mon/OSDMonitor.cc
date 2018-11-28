@@ -6148,7 +6148,7 @@ int OSDMonitor::prepare_new_pool(MonOpRequestRef op)
   string rule_name;
   int ret = 0;
   ret = prepare_new_pool(m->name, m->crush_rule, rule_name,
-			 0, 0, 0, 0,
+			 0, 0, 0, 0, 0, 0.0,
 			 erasure_code_profile,
 			 pg_pool_t::TYPE_REPLICATED, 0, FAST_READ_OFF, &ss);
 
@@ -6672,6 +6672,8 @@ int OSDMonitor::prepare_new_pool(string& name,
                                  unsigned pg_num, unsigned pgp_num,
 				 unsigned pg_num_min,
                                  const uint64_t repl_size,
+				 const uint64_t target_size_bytes,
+				 const float target_size_ratio,
 				 const string &erasure_code_profile,
                                  const unsigned pool_type,
                                  const uint64_t expected_num_objects,
@@ -6817,7 +6819,8 @@ int OSDMonitor::prepare_new_pool(string& name,
   pi->set_pg_num_target(pg_num);
   pi->set_pgp_num(pi->get_pg_num());
   pi->set_pgp_num_target(pgp_num);
-  if (pg_num_min) {
+  if (osdmap.require_osd_release >= CEPH_RELEASE_NAUTILUS &&
+      pg_num_min) {
     pi->opts.set(pool_opts_t::PG_NUM_MIN, static_cast<int64_t>(pg_num_min));
   }
 
@@ -6830,6 +6833,16 @@ int OSDMonitor::prepare_new_pool(string& name,
       pi->erasure_code_profile = "";
   }
   pi->stripe_width = stripe_width;
+
+  if (osdmap.require_osd_release >= CEPH_RELEASE_NAUTILUS &&
+      target_size_bytes) {
+    // only store for nautilus+ because TARGET_SIZE_BYTES may be
+    // larger than int32_t max.
+    pi->opts.set(pool_opts_t::TARGET_SIZE_BYTES, static_cast<int64_t>(target_size_bytes));
+  }
+  if (target_size_ratio > 0.0) {
+    pi->opts.set(pool_opts_t::TARGET_SIZE_RATIO, target_size_ratio);
+  }
 
   pi->cache_target_dirty_ratio_micro =
     g_conf()->osd_pool_default_cache_target_dirty_ratio * 1000000;
@@ -11629,12 +11642,16 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     int64_t repl_size = 0;
     cmd_getval(cct, cmdmap, "size", repl_size);
+    int64_t target_size_bytes = 0;
+    double target_size_ratio = 0.0;
+    cmd_getval(cct, cmdmap, "target_size_bytes", target_size_bytes);
+    cmd_getval(cct, cmdmap, "target_size_ratio", target_size_ratio);
 
     err = prepare_new_pool(poolstr,
 			   -1, // default crush rule
 			   rule_name,
 			   pg_num, pgp_num, pg_num_min,
-                           repl_size,
+                           repl_size, target_size_bytes, target_size_ratio,
 			   erasure_code_profile, pool_type,
                            (uint64_t)expected_num_objects,
                            fast_read,
