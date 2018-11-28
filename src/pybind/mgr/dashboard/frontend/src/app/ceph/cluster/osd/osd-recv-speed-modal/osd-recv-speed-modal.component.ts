@@ -57,6 +57,12 @@ export class OsdRecvSpeedModalComponent implements OnInit {
         attr.name,
         new FormControl(null, { validators: [Validators.required] })
       );
+
+      this.configService.get(attr.name).subscribe((data: any) => {
+        if (data.desc !== '') {
+          attr['desc'] = data.desc;
+        }
+      });
     });
   }
 

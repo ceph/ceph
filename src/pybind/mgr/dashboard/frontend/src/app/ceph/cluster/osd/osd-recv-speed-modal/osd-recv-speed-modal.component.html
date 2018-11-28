@@ -51,6 +51,7 @@
              osdRecvSpeedForm.showError(attr.name, formDir)}">
           <label class="control-label col-sm-6"
                  [for]="attr.name">{{ attr.text }}
+            <cd-helper *ngIf="attr.desc">{{ attr.desc }}</cd-helper>
             <span class="required" *ngIf="osdRecvSpeedForm.getValue('customizePriority')"></span>
           </label>
           <div class="col-sm-6">
