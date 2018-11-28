@@ -32,6 +32,7 @@ TEST(Mutex, NormalAsserts) {
   Mutex* m = new Mutex("Normal",false);
   m->Lock();
   testing::GTEST_FLAG(death_test_style) = "threadsafe";
+  PrCtl unset_dumpable;
   EXPECT_DEATH(m->Lock(), ".*");
 }
 
