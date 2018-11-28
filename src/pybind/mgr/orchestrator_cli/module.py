@@ -1,6 +1,6 @@
 import errno
 import time
-from mgr_module import MgrModule
+from mgr_module import MgrModule, HandleCommandResult
 
 import orchestrator
 
@@ -147,7 +147,7 @@ class OrchestratorCli(MgrModule):
                     d.id, d.type, d.size)
             result += "\n"
 
-        return 0, result, ""
+        return HandleCommandResult(odata=result)
 
     def _list_services(self, cmd):
         hostname = cmd.get('host', None)
@@ -158,7 +158,7 @@ class OrchestratorCli(MgrModule):
         services = completion.result
 
         if len(services) == 0:
-            return 0, "", "No services reported"
+            return HandleCommandResult(rs="No services reported")
         else:
             # Sort the list for display
             services.sort(key = lambda s: (s.service_type, s.nodename, s.daemon_name))
@@ -170,7 +170,7 @@ class OrchestratorCli(MgrModule):
                     s.nodename,
                     s.container_id))
 
-            return 0, "\n".join(lines), ""
+            return HandleCommandResult(odata="\n".join(lines))
 
     def _service_status(self, cmd):
         svc_type = cmd['svc_type']
@@ -186,7 +186,7 @@ class OrchestratorCli(MgrModule):
         service_list = completion.result
 
         if len(service_list) == 0:
-            return 0, "", "No locations reported"
+            return HandleCommandResult(rs="No locations reported")
         else:
             lines = []
             for l in service_list:
@@ -196,7 +196,7 @@ class OrchestratorCli(MgrModule):
                     l.nodename,
                     l.container_id))
 
-            return 0, "\n".join(lines), ""
+            return HandleCommandResult(odata="\n".join(lines))
 
     def _service_add(self, cmd):
         svc_type = cmd['svc_type']
@@ -205,7 +205,8 @@ class OrchestratorCli(MgrModule):
             try:
                 node_name, block_device = device_spec.split(":")
             except TypeError:
-                return -errno.EINVAL, "", "Invalid device spec, should be <node>:<device>"
+                return HandleCommandResult(-errno.EINVAL,
+                                           rs="Invalid device spec, should be <node>:<device>")
 
             spec = orchestrator.OsdCreationSpec()
             spec.node = node_name
@@ -215,7 +216,7 @@ class OrchestratorCli(MgrModule):
             completion = self._oremote("create_osds", spec)
             self._wait([completion])
 
-            return 0, "", "Success."
+            return HandleCommandResult(rs="Success.")
 
         elif svc_type == "mds":
             fs_name = cmd['svc_arg']
@@ -230,7 +231,7 @@ class OrchestratorCli(MgrModule):
             )
             self._wait([completion])
 
-            return 0, "", "Success."
+            return HandleCommandResult(rs="Success.")
         elif svc_type == "rgw":
             store_name = cmd['svc_arg']
 
@@ -244,7 +245,7 @@ class OrchestratorCli(MgrModule):
             )
             self._wait([completion])
 
-            return 0, "", "Success."
+            return HandleCommandResult(rs="Success.")
         else:
             raise NotImplementedError(svc_type)
 
@@ -263,7 +264,7 @@ class OrchestratorCli(MgrModule):
 
         if module_name == "":
             self.set_config("orchestrator", None)
-            return 0, "", ""
+            return HandleCommandResult()
 
         for module in mgr_map['available_modules']:
             if module['name'] != module_name:
@@ -274,9 +275,8 @@ class OrchestratorCli(MgrModule):
 
             enabled = module['name'] in mgr_map['modules']
             if not enabled:
-                return -errno.EINVAL, "", "Module '{0}' is not enabled".format(
-                    module_name
-                )
+                return HandleCommandResult(-errno.EINVAL,
+                                           rs="Module '{0}' is not enabled".format(module_name))
 
             try:
                 is_orchestrator = self.remote(module_name,
@@ -285,45 +285,41 @@ class OrchestratorCli(MgrModule):
                 is_orchestrator = False
 
             if not is_orchestrator:
-                return -errno.EINVAL, "",\
-                       "'{0}' is not an orchestrator module".format(
-                           module_name)
+                return HandleCommandResult(-errno.EINVAL,
+                                           rs="'{0}' is not an orchestrator module".format(module_name))
 
             self.set_config("orchestrator", module_name)
 
-            return 0, "", ""
+            return HandleCommandResult()
 
-        return -errno.ENOENT, "", "Module '{0}' not found".format(
-            module_name
-        )
+        return HandleCommandResult(-errno.EINVAL, rs="Module '{0}' not found".format(module_name))
 
     def _status(self):
         try:
             avail, why = self._oremote("available")
         except NoOrchestrator:
-            return 0, "No orchestrator configured (try " \
-                      "`ceph orchestrator set backend`)", ""
+            return HandleCommandResult(odata="No orchestrator configured (try " \
+                                       "`ceph orchestrator set backend`)")
 
         if avail is None:
             # The module does not report its availability
-            return 0, "Backend: {0}".format(
-                self._select_orchestrator()), ""
+            return HandleCommandResult("Backend: {0}".format(self._select_orchestrator()))
         else:
-            return 0, "Backend: {0}\nAvailable: {1}{2}".format(
-                self._select_orchestrator(),
-                avail,
-                " ({0})".format(why) if not avail else ""
-            ), ""
+            return HandleCommandResult("Backend: {0}\nAvailable: {1}{2}".format(
+                                           self._select_orchestrator(),
+                                           avail,
+                                           " ({0})".format(why) if not avail else ""
+                                       ))
 
     def handle_command(self, inbuf, cmd):
         try:
             return self._handle_command(inbuf, cmd)
         except NoOrchestrator:
-            return -errno.ENODEV, "", "No orchestrator configured"
+            return HandleCommandResult(-errno.ENODEV, rs="No orchestrator configured")
         except ImportError as e:
-            return -errno.ENOENT, "", str(e)
+            return HandleCommandResult(-errno.ENOENT, rs=str(e))
         except NotImplementedError:
-            return -errno.EINVAL, "", "Command not found"
+            return HandleCommandResult(-errno.EINVAL, rs="Command not found")
 
     def _handle_command(self, _, cmd):
         if cmd['prefix'] == "orchestrator device ls":
