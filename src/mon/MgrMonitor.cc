@@ -44,7 +44,8 @@ const static std::map<uint32_t, std::set<std::string>> always_on_modules = {
       "crash",
       "status",
       "balancer",
-      "devicehealth"
+      "devicehealth",
+      "volumes",
     }
   }
 };
