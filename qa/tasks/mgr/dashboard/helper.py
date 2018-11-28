@@ -405,14 +405,16 @@ JList = namedtuple('JList', ['elem_typ'])
 JTuple = namedtuple('JList', ['elem_typs'])
 
 
-class JObj(namedtuple('JObj', ['sub_elems', 'allow_unknown', 'none'])):
-    def __new__(cls, sub_elems, allow_unknown=False, none=False):
+class JObj(namedtuple('JObj', ['sub_elems', 'allow_unknown', 'none', 'unknown_schema'])):
+    def __new__(cls, sub_elems, allow_unknown=False, none=False, unknown_schema=None):
         """
         :type sub_elems: dict[str, JAny | JLeaf | JList | JObj | type]
         :type allow_unknown: bool
+        :type none: bool
+        :type unknown_schema: int, str, JAny | JLeaf | JList | JObj
         :return:
         """
-        return super(JObj, cls).__new__(cls, sub_elems, allow_unknown, none)
+        return super(JObj, cls).__new__(cls, sub_elems, allow_unknown, none, unknown_schema)
 
 
 JAny = namedtuple('JAny', ['none'])
@@ -462,10 +464,16 @@ def _validate_json(val, schema, path=[]):
         unknown_keys = set(val.keys()).difference(set(schema.sub_elems.keys()))
         if not schema.allow_unknown and unknown_keys:
             raise _ValError('unknown keys: {}'.format(unknown_keys), path)
-        return all(
-            _validate_json(val[sub_elem_name], sub_elem, path + [sub_elem_name])
-            for sub_elem_name, sub_elem in schema.sub_elems.items()
+        result = all(
+            _validate_json(val[key], sub_schema, path + [key])
+            for key, sub_schema in schema.sub_elems.items()
         )
+        if unknown_keys and schema.allow_unknown and schema.unknown_schema:
+            result += all(
+                _validate_json(val[key], schema.unknown_schema, path + [key])
+                for key in unknown_keys
+            )
+        return result
     if schema in [str, int, float, bool, six.string_types]:
         return _validate_json(val, JLeaf(schema), path)
 

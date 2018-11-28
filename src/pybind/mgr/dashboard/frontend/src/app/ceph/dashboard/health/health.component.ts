@@ -3,7 +3,7 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 
-import { DashboardService } from '../../../shared/api/dashboard.service';
+import { HealthService } from '../../../shared/api/health.service';
 
 @Component({
   selector: 'cd-health',
@@ -11,15 +11,15 @@ import { DashboardService } from '../../../shared/api/dashboard.service';
   styleUrls: ['./health.component.scss']
 })
 export class HealthComponent implements OnInit, OnDestroy {
-  contentData: any;
+  healthData: any;
   interval: number;
 
-  constructor(private dashboardService: DashboardService, private i18n: I18n) {}
+  constructor(private healthService: HealthService, private i18n: I18n) {}
 
   ngOnInit() {
-    this.getInfo();
+    this.getHealth();
     this.interval = window.setInterval(() => {
-      this.getInfo();
+      this.getHealth();
     }, 5000);
   }
 
@@ -27,9 +27,9 @@ export class HealthComponent implements OnInit, OnDestroy {
     clearInterval(this.interval);
   }
 
-  getInfo() {
-    this.dashboardService.getHealth().subscribe((data: any) => {
-      this.contentData = data;
+  getHealth() {
+    this.healthService.getMinimalHealth().subscribe((data: any) => {
+      this.healthData = data;
     });
   }
 
@@ -38,9 +38,9 @@ export class HealthComponent implements OnInit, OnDestroy {
     const ratioData = [];
 
     ratioLabels.push(this.i18n('Writes'));
-    ratioData.push(this.contentData.client_perf.write_op_per_sec);
+    ratioData.push(this.healthData.client_perf.write_op_per_sec);
     ratioLabels.push(this.i18n('Reads'));
-    ratioData.push(this.contentData.client_perf.read_op_per_sec);
+    ratioData.push(this.healthData.client_perf.read_op_per_sec);
 
     chart.dataset[0].data = ratioData;
     chart.labels = ratioLabels;
