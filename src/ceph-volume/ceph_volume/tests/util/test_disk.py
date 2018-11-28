@@ -267,6 +267,28 @@ class TestGetDevices(object):
         assert len(result) == 1
         assert result == [ceph_data_path]
 
+    def test_sda1_partition(self, tmpfile, tmpdir):
+        block_path, dev_path, mapper_path = self.setup_paths(tmpdir)
+        block_sda_path = os.path.join(block_path, 'sda')
+        block_sda1_path = os.path.join(block_sda_path, 'sda1')
+        block_sda1_holders = os.path.join(block_sda1_path, 'holders')
+        dev_sda_path = os.path.join(dev_path, 'sda')
+        dev_sda1_path = os.path.join(dev_path, 'sda1')
+        os.makedirs(block_sda_path)
+        os.makedirs(block_sda1_path)
+        os.makedirs(dev_sda1_path)
+        os.makedirs(block_sda1_holders)
+        os.makedirs(dev_sda_path)
+        tmpfile('size', '1024', directory=block_sda_path)
+        tmpfile('partition', '1', directory=block_sda1_path)
+        result = disk.get_devices(
+            _sys_block_path=block_path,
+            _dev_path=dev_path,
+            _mapper_path=mapper_path)
+        assert dev_sda_path in list(result.keys())
+        assert '/dev/sda1' in list(result.keys())
+        assert result['/dev/sda1']['holders'] == []
+
     def test_sda_size(self, tmpfile, tmpdir):
         block_path, dev_path, mapper_path = self.setup_paths(tmpdir)
         block_sda_path = os.path.join(block_path, 'sda')
