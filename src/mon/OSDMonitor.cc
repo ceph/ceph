@@ -6802,6 +6802,11 @@ int OSDMonitor::prepare_new_pool(string& name,
   pi->crush_rule = crush_rule;
   pi->expected_num_objects = expected_num_objects;
   pi->object_hash = CEPH_STR_HASH_RJENKINS;
+  {
+    auto m = pg_pool_t::get_pg_autoscale_mode_by_name(
+      g_conf().get_val<string>("osd_pool_default_pg_autoscale_mode"));
+    pi->pg_autoscale_mode = m >= 0 ? m : 0;
+  }
   auto max = g_conf().get_val<int64_t>("mon_osd_max_initial_pgs");
   pi->set_pg_num(
     max > 0 ? std::min<uint64_t>(pg_num, std::max<int64_t>(1, max))

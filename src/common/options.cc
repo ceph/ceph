@@ -2485,6 +2485,11 @@ std::vector<Option> get_global_options() {
     .set_default(10)
     .set_description(""),
 
+    Option("osd_pool_default_pg_autoscale_mode", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("warn")
+    .set_enum_allowed({"off", "warn", "on"})
+    .set_description("Default PG autoscaling behavior for new pools"),
+
     Option("osd_hit_set_min_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1000)
     .set_description(""),
