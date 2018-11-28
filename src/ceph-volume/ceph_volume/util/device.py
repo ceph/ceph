@@ -212,6 +212,7 @@ class Device(object):
                 pvs.filter(pv_name=path)
                 has_vgs = [pv.vg_name for pv in pvs if pv.vg_name]
                 if has_vgs:
+                    self.vgs = list(set(has_vgs))
                     # a pv can only be in one vg, so this should be safe
                     self.vg_name = has_vgs[0]
                     self._is_lvm_member = True
