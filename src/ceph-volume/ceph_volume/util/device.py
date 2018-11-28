@@ -205,6 +205,8 @@ class Device(object):
                             lv = lvm.get_lv(vg_name=pv.vg_name, lv_uuid=pv.lv_uuid)
                             if lv:
                                 self.lvs.append(lv)
+                else:
+                    self.vgs = []
         return self._is_lvm_member
 
     def _get_pv_paths(self):
