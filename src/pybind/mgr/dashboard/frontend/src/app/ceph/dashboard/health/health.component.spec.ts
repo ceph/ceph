@@ -7,9 +7,8 @@ import { PopoverModule } from 'ngx-bootstrap/popover';
 import { of } from 'rxjs';
 
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
-import { DashboardService } from '../../../shared/api/dashboard.service';
+import { HealthService } from '../../../shared/api/health.service';
 import { SharedModule } from '../../../shared/shared.module';
-import { LogColorPipe } from '../log-color.pipe';
 import { MdsSummaryPipe } from '../mds-summary.pipe';
 import { MgrSummaryPipe } from '../mgr-summary.pipe';
 import { MonSummaryPipe } from '../mon-summary.pipe';
@@ -47,7 +46,6 @@ describe('HealthComponent', () => {
       MdsSummaryPipe,
       MgrSummaryPipe,
       PgStatusStylePipe,
-      LogColorPipe,
       PgStatusPipe
     ],
     schemas: [NO_ERRORS_SCHEMA],
@@ -57,7 +55,7 @@ describe('HealthComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(HealthComponent);
     component = fixture.componentInstance;
-    getHealthSpy = spyOn(TestBed.get(DashboardService), 'getHealth');
+    getHealthSpy = spyOn(TestBed.get(HealthService), 'getMinimalHealth');
   });
 
   it('should create', () => {

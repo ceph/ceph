@@ -47,7 +47,7 @@ class PoolTest(DashboardTestCase):
             log.exception("test_pool_create: pool=%s", pool)
             raise
 
-        health = self._get('/api/dashboard/health')['health']
+        health = self._get('/api/health/minimal')['health']
         self.assertEqual(health['status'], 'HEALTH_OK', msg='health={}'.format(health))
 
     def _get_pool(self, pool_name):
@@ -86,7 +86,7 @@ class PoolTest(DashboardTestCase):
         # Feel free to test it locally.
         prop = 'pg_num'
         pgp_prop = 'pg_placement_num'
-        health = lambda: self._get('/api/dashboard/health')['health']['status'] == 'HEALTH_OK'
+        health = lambda: self._get('/api/health/minimal')['health']['status'] == 'HEALTH_OK'
         t = 0;
         while (int(value) != pool[pgp_prop] or not health()) and t < 180:
             time.sleep(2)

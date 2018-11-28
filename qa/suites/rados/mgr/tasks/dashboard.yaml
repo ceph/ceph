@@ -30,8 +30,9 @@ tasks:
         - tasks.mgr.dashboard.test_auth
         - tasks.mgr.dashboard.test_cephfs
         - tasks.mgr.dashboard.test_cluster_configuration
-        - tasks.mgr.dashboard.test_dashboard
+        - tasks.mgr.dashboard.test_health
         - tasks.mgr.dashboard.test_host
+        - tasks.mgr.dashboard.test_logs
         - tasks.mgr.dashboard.test_monitor
         - tasks.mgr.dashboard.test_osd
         - tasks.mgr.dashboard.test_perf_counters
