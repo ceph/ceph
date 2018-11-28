@@ -51,6 +51,11 @@ class TestDevice(object):
         disk = device.Device("/dev/mapper/foo")
         assert disk.is_mapper
 
+    def test_dm_is_mapper_device(self, device_info):
+        device_info()
+        disk = device.Device("/dev/dm-4")
+        assert disk.is_mapper
+
     def test_is_not_mapper_device(self, device_info):
         device_info()
         disk = device.Device("/dev/sda")
