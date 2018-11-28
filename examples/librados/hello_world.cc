@@ -33,9 +33,8 @@ int main(int argc, const char **argv)
       std::cerr << "couldn't initialize rados! error " << ret << std::endl;
       ret = EXIT_FAILURE;
       goto out;
-    } else {
-      std::cout << "we just set up a rados cluster object" << std::endl;
     }
+    std::cout << "we just set up a rados cluster object" << std::endl;
   }
 
   /*
@@ -50,22 +49,22 @@ int main(int argc, const char **argv)
       std::cerr << "failed to parse config options! error " << ret << std::endl;
       ret = EXIT_FAILURE;
       goto out;
-    } else {
-      std::cout << "we just parsed our config options" << std::endl;
-      // We also want to apply the config file if the user specified
-      // one, and conf_parse_argv won't do that for us.
-      for (int i = 0; i < argc; ++i) {
-	if ((strcmp(argv[i], "-c") == 0) || (strcmp(argv[i], "--conf") == 0)) {
-	  ret = rados.conf_read_file(argv[i+1]);
-	  if (ret < 0) {
-	    // This could fail if the config file is malformed, but it'd be hard.
-	    std::cerr << "failed to parse config file " << argv[i+1]
-	              << "! error" << ret << std::endl;
-	    ret = EXIT_FAILURE;
-	    goto out;
-	  }
-	  break;
+    }
+
+    std::cout << "we just parsed our config options" << std::endl;
+    // We also want to apply the config file if the user specified
+    // one, and conf_parse_argv won't do that for us.
+    for (int i = 0; i < argc; ++i) {
+      if ((strcmp(argv[i], "-c") == 0) || (strcmp(argv[i], "--conf") == 0)) {
+        ret = rados.conf_read_file(argv[i+1]);
+        if (ret < 0) {
+          // This could fail if the config file is malformed, but it'd be hard.
+	  std::cerr << "failed to parse config file " << argv[i+1]
+	            << "! error" << ret << std::endl;
+	  ret = EXIT_FAILURE;
+	  goto out;
 	}
+	break;
       }
     }
   }
@@ -79,9 +78,8 @@ int main(int argc, const char **argv)
       std::cerr << "couldn't connect to cluster! error " << ret << std::endl;
       ret = EXIT_FAILURE;
       goto out;
-    } else {
-      std::cout << "we just connected to the rados cluster" << std::endl;
     }
+    std::cout << "we just connected to the rados cluster" << std::endl;
   }
 
   /*
@@ -95,9 +93,8 @@ int main(int argc, const char **argv)
     if (ret < 0) {
       std::cerr << "couldn't create pool! error " << ret << std::endl;
       return EXIT_FAILURE;
-    } else {
-      std::cout << "we just created a new pool named " << pool_name << std::endl;
     }
+    std::cout << "we just created a new pool named " << pool_name << std::endl;
   }
 
   /*
@@ -109,9 +106,8 @@ int main(int argc, const char **argv)
       std::cerr << "couldn't set up ioctx! error " << ret << std::endl;
       ret = EXIT_FAILURE;
       goto out;
-    } else {
-      std::cout << "we just created an ioctx for our pool" << std::endl;
     }
+    std::cout << "we just created an ioctx for our pool" << std::endl;
   }
 
   /*
@@ -139,10 +135,9 @@ int main(int argc, const char **argv)
       std::cerr << "couldn't write object! error " << ret << std::endl;
       ret = EXIT_FAILURE;
       goto out;
-    } else {
-      std::cout << "we just wrote new object " << object_name
-	        << ", with contents\n" << hello << std::endl;
     }
+    std::cout << "we just wrote new object " << object_name
+              << ", with contents\n" << hello << std::endl;
   }
 
   /*
@@ -170,13 +165,12 @@ int main(int argc, const char **argv)
       std::cerr << "couldn't read object! error " << ret << std::endl;
       ret = EXIT_FAILURE;
       goto out;
-    } else {
-      std::cout << "we read our object " << object_name
-	  << ", and got back " << ret << " bytes with contents\n";
-      std::string read_string;
-      read_buf.copy(0, ret, read_string);
-      std::cout << read_string << std::endl;
     }
+    std::cout << "we read our object " << object_name
+              << ", and got back " << ret << " bytes with contents\n";
+    std::string read_string;
+    read_buf.copy(0, ret, read_string);
+    std::cout << read_string << std::endl;
   }
 
   /*
@@ -191,9 +185,8 @@ int main(int argc, const char **argv)
 		<< ret << std::endl;
       ret = EXIT_FAILURE;
       goto out;
-    } else {
-      std::cout << "we set the xattr 'version' on our object!" << std::endl;
     }
+    std::cout << "we set the xattr 'version' on our object!" << std::endl;
   }
 
   /*
@@ -215,10 +208,9 @@ int main(int argc, const char **argv)
       std::cerr << "failed to do compound write! error " << ret << std::endl;
       ret = EXIT_FAILURE;
       goto out;
-    } else {
-      std::cout << "we overwrote our object " << object_name
-		<< " with contents\n" << bl.c_str() << std::endl;
     }
+    std::cout << "we overwrote our object " << object_name
+              << " with contents\n" << bl.c_str() << std::endl;
   }
 
   /*
@@ -272,11 +264,10 @@ int main(int argc, const char **argv)
 		<< std::endl;
       ret = EXIT_FAILURE;
       goto out;
-    } else {
-      std::cout << "we overwrote our object " << object_name
-	        << " following an xattr test with contents\n" << bl.c_str()
-	        << std::endl;
     }
+    std::cout << "we overwrote our object " << object_name
+              << " following an xattr test with contents\n" << bl.c_str()
+              << std::endl;
   }
 
   ret = EXIT_SUCCESS;
