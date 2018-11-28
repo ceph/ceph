@@ -1118,21 +1118,25 @@ static opt_mapping_t opt_mapping = boost::assign::map_list_of
            ("target_size_ratio", pool_opts_t::opt_desc_t(
 	     pool_opts_t::TARGET_SIZE_RATIO, pool_opts_t::DOUBLE));
 
-bool pool_opts_t::is_opt_name(const std::string& name) {
-    return opt_mapping.count(name);
+bool pool_opts_t::is_opt_name(const std::string& name)
+{
+  return opt_mapping.count(name);
 }
 
-pool_opts_t::opt_desc_t pool_opts_t::get_opt_desc(const std::string& name) {
-    opt_mapping_t::iterator i = opt_mapping.find(name);
-    ceph_assert(i != opt_mapping.end());
-    return i->second;
+pool_opts_t::opt_desc_t pool_opts_t::get_opt_desc(const std::string& name)
+{
+  opt_mapping_t::iterator i = opt_mapping.find(name);
+  ceph_assert(i != opt_mapping.end());
+  return i->second;
 }
 
-bool pool_opts_t::is_set(pool_opts_t::key_t key) const {
-    return opts.count(key);
+bool pool_opts_t::is_set(pool_opts_t::key_t key) const
+{
+  return opts.count(key);
 }
 
-const pool_opts_t::value_t& pool_opts_t::get(pool_opts_t::key_t key) const {
+const pool_opts_t::value_t& pool_opts_t::get(pool_opts_t::key_t key) const
+{
   opts_t::const_iterator i = opts.find(key);
   ceph_assert(i != opts.end());
   return i->second;
@@ -1142,8 +1146,7 @@ bool pool_opts_t::unset(pool_opts_t::key_t key) {
   return opts.erase(key) > 0;
 }
 
-class pool_opts_dumper_t : public boost::static_visitor<>
-{
+class pool_opts_dumper_t : public boost::static_visitor<> {
 public:
   pool_opts_dumper_t(const std::string& name_, Formatter* f_) :
     name(name_.c_str()), f(f_) {}
@@ -1187,8 +1190,7 @@ void pool_opts_t::dump(Formatter* f) const
   }
 }
 
-class pool_opts_encoder_t : public boost::static_visitor<>
-{
+class pool_opts_encoder_t : public boost::static_visitor<> {
 public:
   explicit pool_opts_encoder_t(bufferlist& bl_, uint64_t features) : bl(bl_) {}
 
