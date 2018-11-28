@@ -8,15 +8,22 @@ from ceph_volume.util.device import Device
 
 class ValidDevice(object):
 
-    def __init__(self, as_string=False):
+    def __init__(self, as_string=False, gpt_ok=False):
         self.as_string = as_string
+        self.gpt_ok = gpt_ok
 
     def __call__(self, string):
         device = Device(string)
         error = None
         if not device.exists:
             error = "Unable to proceed with non-existing device: %s" % string
-        elif device.has_gpt_headers:
+        # FIXME this is not a nice API, this validator was meant to catch any
+        # non-existing devices upfront, not check for gpt headers. Now this
+        # needs to optionally skip checking gpt headers which is beyond
+        # verifying if the device exists. The better solution would be to
+        # configure this with a list of checks that can be excluded/included on
+        # __init__
+        elif device.has_gpt_headers and not self.gpt_ok:
             error = "GPT headers found, they must be removed on: %s" % string
 
         if error:
