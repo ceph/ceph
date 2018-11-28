@@ -268,7 +268,10 @@ class Device(object):
     @property
     def is_device(self):
         if self.disk_api:
-            return self.disk_api['TYPE'] == 'device'
+            is_device = self.disk_api['TYPE'] == 'device'
+            is_disk = self.disk_api['TYPE'] == 'disk'
+            if is_device or is_disk:
+                return True
         return False
 
     @property
