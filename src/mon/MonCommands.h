@@ -940,7 +940,8 @@ COMMAND("osd pool create " \
 	"name=erasure_code_profile,type=CephString,req=false,goodchars=[A-Za-z0-9-_.] " \
 	"name=rule,type=CephString,req=false " \
         "name=expected_num_objects,type=CephInt,req=false " \
-        "name=size,type=CephInt,req=false", \
+        "name=size,type=CephInt,req=false " \
+	"name=pg_num_min,type=CephInt,range=0,req=false", \
 	"create pool", "osd", "rw")
 COMMAND_WITH_FLAG("osd pool delete " \
 	"name=pool,type=CephPoolname " \
