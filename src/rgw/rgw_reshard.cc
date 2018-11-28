@@ -723,7 +723,7 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
     lderr(store->ctx()) << "Error: " << __func__ <<
       " failed to clean old bucket info object \"" <<
       bucket_info.bucket.get_key() <<
-      "\"created after successufl resharding with error " << ret << dendl;
+      "\"created after successful resharding with error " << ret << dendl;
   }
 
   ldout(store->ctx(), 1) << __func__ <<
