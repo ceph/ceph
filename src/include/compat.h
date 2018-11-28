@@ -79,8 +79,14 @@
 /* get PATH_MAX */
 #include <limits.h>
 
+#ifndef EUCLEAN
+#define EUCLEAN 117
+#endif
 #ifndef EREMOTEIO
 #define EREMOTEIO 121
+#endif
+#ifndef EKEYREJECTED
+#define EKEYREJECTED 129
 #endif
 
 #ifndef HOST_NAME_MAX
