@@ -10,6 +10,16 @@ report_template = """
 {dev:<25} {size:<12} {rot!s:<7} {available!s:<9} {model}"""
 
 
+def encryption_status(abspath):
+    """
+    Helper function to run ``encryption.status()``. It is done here to avoid
+    a circular import issue (encryption module imports from this module) and to
+    ease testing by allowing monkeypatching of this function.
+    """
+    from ceph_volume.util import encryption
+    return encryption.status(abspath)
+
+
 class Devices(object):
     """
     A container for Device instances with reporting
@@ -277,6 +287,34 @@ class Device(object):
         if self.disk_api:
             return self.disk_api['TYPE'] == 'device'
         return False
+
+    @property
+    def is_encrypted(self):
+        """
+        Only correct for LVs, device mappers, and partitions. Will report a ``None``
+        for raw devices.
+        """
+        crypt_reports = [self.blkid_api.get('TYPE', ''), self.disk_api.get('FSTYPE', '')]
+        if self.is_lv:
+            # if disk APIs are reporting this is encrypted use that:
+            if 'crypto_LUKS' in crypt_reports:
+                return True
+            # if ceph-volume created this, then a tag would let us know
+            elif self.lv_api.encrypted:
+                return True
+            return False
+        elif self.is_partition:
+            return 'crypto_LUKS' in crypt_reports
+        elif self.is_mapper:
+            active_mapper = encryption_status(self.abspath)
+            if active_mapper:
+                # normalize a bit to ensure same values regardless of source
+                encryption_type = active_mapper['type'].lower().strip('12')  # turn LUKS1 or LUKS2 into luks
+                return True if encryption_type in ['plain', 'luks'] else False
+            else:
+                return False
+        else:
+            return None
 
     @property
     def used_by_ceph(self):
