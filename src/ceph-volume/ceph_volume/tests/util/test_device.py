@@ -36,12 +36,19 @@ class TestDevice(object):
         disk = device.Device("/dev/nvme0n1")
         assert len(disk.vgs) == 1
 
-    def test_is_device(self, device_info):
+    def test_device_is_device(self, device_info, pvolumes):
         data = {"/dev/sda": {"foo": "bar"}}
         lsblk = {"TYPE": "device"}
         device_info(devices=data, lsblk=lsblk)
         disk = device.Device("/dev/sda")
-        assert disk.is_device
+        assert disk.is_device is True
+
+    def test_disk_is_device(self, device_info, pvolumes):
+        data = {"/dev/sda": {"foo": "bar"}}
+        lsblk = {"TYPE": "disk"}
+        device_info(devices=data, lsblk=lsblk)
+        disk = device.Device("/dev/sda")
+        assert disk.is_device is True
 
     def test_is_partition(self, device_info, pvolumes):
         data = {"/dev/sda": {"foo": "bar"}}
