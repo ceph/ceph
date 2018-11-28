@@ -359,6 +359,8 @@ public:
   void check_overlapped_rules() const;
   int test();
   int test_with_fork(int timeout);
+
+  int compare(CrushWrapper& other);
 };
 
 #endif
