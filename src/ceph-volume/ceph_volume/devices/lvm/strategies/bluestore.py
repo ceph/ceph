@@ -15,23 +15,23 @@ class SingleType(Strategy):
     Support for all SSDs, or all HDDS
     """
 
-    def __init__(self, block_devs, db_devs, wal_devs, args):
-        super(SingleType, self).__init__(block_devs, db_devs, wal_devs, args)
+    def __init__(self, block_devs, args):
+        super(SingleType, self).__init__(block_devs, [], [], args)
         self.validate_compute()
 
     @classmethod
     def with_auto_devices(cls, devices, args):
-        block_devs, wal_devs = cls.split_devices_rotational(devices)
-        return cls(block_devs, wal_devs, [], args)
+        #SingleType only deploys standalone OSDs
+        return cls(devices, args)
 
     @staticmethod
     def type():
         return "bluestore.SingleType"
 
-    def report_pretty(self):
+    def report_pretty(self, filtered_devices):
         string = ""
-        if self.args.filtered_devices:
-            string += templates.filtered_devices(self.args.filtered_devices)
+        if filtered_devices:
+            string += templates.filtered_devices(filtered_devices)
         string += templates.total_osds.format(
             total_osds=self.total_osds,
         )
@@ -55,7 +55,7 @@ class SingleType(Strategy):
         """
         # validate minimum size for all devices
         validators.minimum_device_size(
-            self.devices, osds_per_device=self.osds_per_device
+            self.block_devs, osds_per_device=self.osds_per_device
         )
 
         # make sure that data devices do not have any LVs
@@ -68,20 +68,8 @@ class SingleType(Strategy):
         """
         osds = self.computed['osds']
         for device in self.block_devs:
-            for hdd in range(self.osds_per_device):
-                osd = {'data': {}, 'block.db': {}}
-                osd['data']['path'] = device.abspath
-                osd['data']['size'] = device.lvm_size.b / self.osds_per_device
-                osd['data']['parts'] = self.osds_per_device
-                osd['data']['percentage'] = 100 / self.osds_per_device
-                osd['data']['human_readable_size'] = str(
-                    disk.Size(b=device.lvm_size.b) / self.osds_per_device
-                )
-                osds.append(osd)
-
-        for device in self.wal_devs:
             extents = lvm.sizing(device.lvm_size.b, parts=self.osds_per_device)
-            for ssd in range(self.osds_per_device):
+            for _i in range(self.osds_per_device):
                 osd = {'data': {}, 'block.db': {}}
                 osd['data']['path'] = device.abspath
                 osd['data']['size'] = extents['sizes']
@@ -152,13 +140,13 @@ class MixedType(MixedStrategy):
         else:
             return prepare.get_block_db_size(lv_format=False) or disk.Size(b=0)
 
-    def report_pretty(self):
+    def report_pretty(self, filtered_devices):
         vg_extents = lvm.sizing(self.total_available_db_space.b, parts=self.dbs_needed)
         db_size = str(disk.Size(b=(vg_extents['sizes'])))
 
         string = ""
-        if self.args.filtered_devices:
-            string += templates.filtered_devices(self.args.filtered_devices)
+        if filtered_devices:
+            string += templates.filtered_devices(filtered_devices)
         string += templates.total_osds.format(
             total_osds=len(self.block_devs) * self.osds_per_device
         )
