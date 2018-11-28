@@ -1434,11 +1434,6 @@ std::vector<Option> get_global_options() {
     .add_service("mgr")
     .set_description("issue REQUEST_STUCK health error if OSD ops are slower than is age (seconds)"),
 
-    Option("mon_osd_max_split_count", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(32)
-    .add_service("mon")
-    .set_description(""),
-
     Option("mon_osd_prime_pg_temp", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(true)
     .add_service("mon")

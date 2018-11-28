@@ -7050,15 +7050,6 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
 	ss << "splits in cache pools must be followed by scrubs and leave sufficient free space to avoid overfilling.  use --yes-i-really-mean-it to force.";
 	return -EPERM;
       }
-      int expected_osds = std::min(p.get_pg_num(), osdmap.get_num_osds());
-      int64_t new_pgs = n - p.get_pg_num_target();
-      if (new_pgs > g_conf()->mon_osd_max_split_count * expected_osds) {
-	ss << "specified pg_num " << n << " is too large (creating "
-	   << new_pgs << " new PGs on ~" << expected_osds
-	   << " OSDs exceeds per-OSD max with mon_osd_max_split_count of "
-	   << g_conf()->mon_osd_max_split_count << ')';
-	return -E2BIG;
-      }
     } else {
       if (osdmap.require_osd_release < CEPH_RELEASE_NAUTILUS) {
 	ss << "nautilus OSDs are required to adjust pg_num_pending";
