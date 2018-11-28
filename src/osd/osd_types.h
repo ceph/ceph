@@ -1061,7 +1061,7 @@ public:
   void dump(const std::string& name, Formatter *f) const;
 
   void dump(Formatter *f) const;
-  void encode(bufferlist &bl) const;
+  void encode(bufferlist &bl, uint64_t features) const;
   void decode(bufferlist::const_iterator &bl);
 
 private:
@@ -1070,7 +1070,7 @@ private:
 
   friend ostream& operator<<(ostream& out, const pool_opts_t& opts);
 };
-WRITE_CLASS_ENCODER(pool_opts_t)
+WRITE_CLASS_ENCODER_FEATURES(pool_opts_t)
 
 /*
  * pg_pool

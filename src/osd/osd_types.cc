@@ -1190,7 +1190,7 @@ void pool_opts_t::dump(Formatter* f) const
 class pool_opts_encoder_t : public boost::static_visitor<>
 {
 public:
-  explicit pool_opts_encoder_t(bufferlist& bl_) : bl(bl_) {}
+  explicit pool_opts_encoder_t(bufferlist& bl_, uint64_t features) : bl(bl_) {}
 
   void operator()(const std::string &s) const {
     encode(static_cast<int32_t>(pool_opts_t::STR), bl);
@@ -1209,18 +1209,20 @@ private:
   bufferlist& bl;
 };
 
-void pool_opts_t::encode(bufferlist& bl) const {
+void pool_opts_t::encode(bufferlist& bl, uint64_t features) const
+{
   ENCODE_START(1, 1, bl);
   uint32_t n = static_cast<uint32_t>(opts.size());
   encode(n, bl);
   for (opts_t::const_iterator i = opts.begin(); i != opts.end(); ++i) {
     encode(static_cast<int32_t>(i->first), bl);
-    boost::apply_visitor(pool_opts_encoder_t(bl), i->second);
+    boost::apply_visitor(pool_opts_encoder_t(bl, features), i->second);
   }
   ENCODE_FINISH(bl);
 }
 
-void pool_opts_t::decode(bufferlist::const_iterator& bl) {
+void pool_opts_t::decode(bufferlist::const_iterator& bl)
+{
   DECODE_START(1, bl);
   __u32 n;
   decode(n, bl);
@@ -1776,7 +1778,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     encode(hit_set_search_last_n, bl);
   }
   if (v >= 24) {
-    encode(opts, bl);
+    encode(opts, bl, features);
   }
   if (v >= 25) {
     encode(last_force_op_resend_prenautilus, bl);
