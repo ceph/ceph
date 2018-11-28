@@ -256,7 +256,7 @@ class Device(object):
 
     @property
     def is_mapper(self):
-        return self.path.startswith('/dev/mapper')
+        return self.path.startswith(('/dev/mapper', '/dev/dm-'))
 
     @property
     def is_lv(self):
