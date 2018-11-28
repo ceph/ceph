@@ -2,6 +2,7 @@
 import ceph_module  # noqa
 
 import logging
+import json
 import six
 import threading
 try:
@@ -9,6 +10,7 @@ try:
 except ImportError:
     from collections import defaultdict, namedtuple
 import rados
+import time
 
 PG_STATES = [
         "active",
@@ -85,7 +87,7 @@ class CommandResult(object):
     """
     Use with MgrModule.send_command
     """
-    def __init__(self, tag):
+    def __init__(self, tag=None):
         self.ev = threading.Event()
         self.outs = ""
         self.outb = ""
@@ -93,7 +95,7 @@ class CommandResult(object):
 
         # This is just a convenience for notifications from
         # C++ land, to avoid passing addresses around in messages.
-        self.tag = tag
+        self.tag = tag if tag else ""
 
     def complete(self, r, outb, outs):
         self.r = r
@@ -576,6 +578,28 @@ class MgrModule(ceph_module.BaseMgrModule):
         :return: dict, or None if the service is not found
         """
         return self._ceph_get_daemon_status(svc_type, svc_id)
+
+    def mon_command(self, cmd_dict):
+        """
+        Helper for modules that do simple, synchronous mon command
+        execution.
+
+        See send_command for general case.
+
+        :return: status int, out std, err str
+        """
+
+        t1 = time.time()
+        result = CommandResult()
+        self.send_command(result, "mon", "", json.dumps(cmd_dict), "")
+        r = result.wait()
+        t2 = time.time()
+
+        self.log.debug("mon_command: '{0}' -> {1} in {2:.3f}s".format(
+            cmd_dict['prefix'], r[0], t2 - t1
+        ))
+
+        return r
 
     def send_command(self, *args, **kwargs):
         """
