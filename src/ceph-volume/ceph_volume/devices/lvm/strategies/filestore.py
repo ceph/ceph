@@ -28,24 +28,23 @@ class SingleType(Strategy):
     """
 
 
-    def __init__(self, block_devs, db_devs, args):
-        super(SingleType, self).__init__(block_devs, db_devs, [], args)
+    def __init__(self, block_devs, args):
+        super(SingleType, self).__init__(block_devs, [], [], args)
         self.journal_size = get_journal_size(args)
         self.validate_compute()
 
     @classmethod
     def with_auto_devices(cls, devices, args):
-        block_devs, wal_devs = cls.split_devices_rotational(devices)
-        return cls(block_devs, wal_devs, args)
+        return cls(devices, args)
 
     @staticmethod
     def type():
         return "filestore.SingleType"
 
-    def report_pretty(self):
+    def report_pretty(self, filtered_devices):
         string = ""
-        if self.args.filtered_devices:
-            string += templates.filtered_devices(self.args.filtered_devices)
+        if filtered_devices:
+            string += templates.filtered_devices(filtered_devices)
         string += templates.total_osds.format(
             total_osds=self.total_osds
         )
@@ -74,17 +73,12 @@ class SingleType(Strategy):
         met, raise an error if the provided devices would not work
         """
         # validate minimum size for all devices
-        validators.minimum_device_size(self.devices, osds_per_device=self.osds_per_device)
+        validators.minimum_device_size(self.block_devs, osds_per_device=self.osds_per_device)
 
         # validate collocation
-        if self.block_devs:
-            validators.minimum_device_collocated_size(
-                self.block_devs, self.journal_size, osds_per_device=self.osds_per_device
-            )
-        else:
-            validators.minimum_device_collocated_size(
-                self.wal_devs, self.journal_size, osds_per_device=self.osds_per_device
-            )
+        validators.minimum_device_collocated_size(
+            self.block_devs, self.journal_size, osds_per_device=self.osds_per_device
+        )
 
         # make sure that data devices do not have any LVs
         validators.no_lvm_membership(self.block_devs)
@@ -95,9 +89,8 @@ class SingleType(Strategy):
         a dictionary with the result
         """
         # chose whichever is the one group we have to compute against
-        devices = self.block_devs or self.wal_devs
         osds = self.computed['osds']
-        for device in devices:
+        for device in self.block_devs:
             for osd in range(self.osds_per_device):
                 device_size = disk.Size(b=device.lvm_size.b)
                 osd_size = device_size / self.osds_per_device
@@ -174,8 +167,8 @@ class MixedType(MixedStrategy):
     """
 
 
-    def __init__(self, block_devs, db_devs, args):
-        super(MixedType, self).__init__(block_devs, db_devs, [], args)
+    def __init__(self, block_devs, journal_devs, args):
+        super(MixedType, self).__init__(block_devs, journal_devs, [], args)
         self.blank_ssds = []
         self.journals_needed = len(self.block_devs) * self.osds_per_device
         self.journal_size = get_journal_size(args)
@@ -184,17 +177,17 @@ class MixedType(MixedStrategy):
 
     @classmethod
     def with_auto_devices(cls, devices, args):
-        block_devs, db_devs = cls.split_devices_rotational(devices)
-        return cls(block_devs, db_devs, args)
+        block_devs, journal_devs = cls.split_devices_rotational(devices)
+        return cls(block_devs, journal_devs, args)
 
     @staticmethod
     def type():
         return "filestore.MixedType"
 
-    def report_pretty(self):
+    def report_pretty(self, filtered_devices):
         string = ""
-        if self.args.filtered_devices:
-            string += templates.filtered_devices(self.args.filtered_devices)
+        if filtered_devices:
+            string += templates.filtered_devices(filtered_devices)
         string += templates.total_osds.format(
             total_osds=self.total_osds
         )
