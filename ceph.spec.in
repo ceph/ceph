@@ -482,7 +482,10 @@ Requires:	python%{python3_pkgversion}-prettytable
 Requires:	python%{python3_pkgversion}-PrettyTable
 %endif
 %if 0%{with libradosstriper}
-Requires:	libradosstriper1 = %{_epoch_prefix}%{version}-%{release}
+Requires:       libradosstriper1 = %{_epoch_prefix}%{version}-%{release}
+%else
+Provides:       libradosstriper1 = %{_epoch_prefix}%{version}-%{release}
+Obsoletes:      libradosstriper1 <= %{_epoch_prefix}%{version}-%{release}
 %endif
 %{?systemd_requires}
 %if 0%{?suse_version}
