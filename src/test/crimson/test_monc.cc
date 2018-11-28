@@ -32,8 +32,9 @@ static seastar::future<> test_monc()
       if (conf->ms_crc_header) {
         msgr.set_crc_header();
       }
-      return seastar::do_with(MonClient{conf->name, msgr},
+      return seastar::do_with(MonClient{msgr},
                               [&msgr](auto& monc) {
+        monc.set_name(ceph::common::local_conf()->name);
         return monc.build_initial_map().then([&monc] {
           return monc.load_keyring();
         }).then([&msgr, &monc] {
