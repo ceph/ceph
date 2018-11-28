@@ -8,7 +8,8 @@ class Strategy(object):
         self.devices = block_devs + wal_devs + db_devs
         self.block_devs = block_devs
         self.db_devs = db_devs
-        self.computed = {'osds': [], 'vgs': [], 'filtered_devices': args.filtered_devices}
+        self.wal_devs = wal_devs
+        self.computed = {'osds': [], 'vgs': []}
 
     @staticmethod
     def split_devices_rotational(devices):
@@ -24,15 +25,15 @@ class Strategy(object):
         else:
             self.computed["changed"] = False
 
-    def report_json(self):
+    def report_json(self, filtered_devices):
+        # add filtered devices to report
+        report = self.computed.copy()
+        report['filtered_devices'] = filtered_devices
         print(json.dumps(self.computed, indent=4, sort_keys=True))
 
     @property
     def total_osds(self):
-        if self.block_devs:
-            return len(self.block_devs) * self.osds_per_device
-        else:
-            return len(self.wal_devs) * self.osds_per_device
+        return len(self.block_devs) * self.osds_per_device
 
     # protect against base class instantiation and incomplete implementations.
     # We could also use the abc module and implement this as an

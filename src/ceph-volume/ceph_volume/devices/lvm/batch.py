@@ -98,10 +98,10 @@ def filter_devices(args):
     unused_devices = [device for device in args.devices if not device.used_by_ceph]
     # only data devices, journals can be reused
     used_devices = [device.abspath for device in args.devices if device.used_by_ceph]
-    args.filtered_devices = {}
+    filtered_devices = {}
     if used_devices:
         for device in used_devices:
-            args.filtered_devices[device] = {"reasons": ["Used by ceph as a data device already"]}
+            filtered_devices[device] = {"reasons": ["Used by ceph as a data device already"]}
         logger.info("Ignoring devices already used by ceph: %s" % ", ".join(used_devices))
     if len(unused_devices) == 1:
         last_device = unused_devices[0]
@@ -109,11 +109,11 @@ def filter_devices(args):
             reason = "Used by ceph as a %s already and there are no devices left for data/block" % (
                 last_device.lvs[0].tags.get("ceph.type"),
             )
-            args.filtered_devices[last_device.abspath] = {"reasons": [reason]}
+            filtered_devices[last_device.abspath] = {"reasons": [reason]}
             logger.info(reason + ": %s" % last_device.abspath)
             unused_devices = []
 
-    return unused_devices
+    return unused_devices, filtered_devices
 
 
 class Batch(object):
@@ -165,7 +165,7 @@ class Batch(object):
             help='Devices to provision OSDs wal volumes',
         )
         parser.add_argument(
-            '--db-devices',
+            '--journal-devices',
             nargs='*',
             type=arg_validators.ValidDevice(),
             default=[],
@@ -241,6 +241,7 @@ class Batch(object):
             help='Only prepare all OSDs, do not activate',
         )
         self.args = parser.parse_args(argv)
+        self.parser = parser
 
     def get_devices(self):
         # remove devices with partitions
@@ -255,29 +256,27 @@ class Batch(object):
         )
 
     def report(self):
-        strategy = self._get_strategy()
         if self.args.format == 'pretty':
-            strategy.report_pretty()
+            self.strategy.report_pretty(self.filtered_devices)
         elif self.args.format == 'json':
-            strategy.report_json()
+            self.strategy.report_json(self.filtered_devices)
         else:
             raise RuntimeError('report format must be "pretty" or "json"')
 
     def execute(self):
-        strategy = self._get_strategy()
         if not self.args.yes:
-            strategy.report_pretty()
+            self.strategy.report_pretty(self.filtered_devices)
             terminal.info('The above OSDs would be created if the operation continues')
             if not prompt_bool('do you want to proceed? (yes/no)'):
                 devices = ','.join([device.abspath for device in self.args.devices])
                 terminal.error('aborting OSD provisioning for %s' % devices)
                 raise SystemExit(0)
 
-        strategy.execute()
+        self.strategy.execute()
 
     def _get_strategy(self):
-        strategy = get_strategy(args, self.args.devices)
-        unused_devices = filter_devices(self.args)
+        strategy = get_strategy(self.args, self.args.devices)
+        unused_devices, self.filtered_devices = filter_devices(self.args)
         if not unused_devices and not self.args.format == 'json':
             # report nothing changed
             mlogger.info("All devices are already used by ceph. No OSDs will be created.")
@@ -288,12 +287,12 @@ class Batch(object):
                 mlogger.error("Aborting because strategy changed from %s to %s after filtering" % (strategy.type(), new_strategy.type()))
                 raise SystemExit(1)
 
-        return strategy(unused_devices, self.args)
+        self.strategy = strategy.with_auto_devices(unused_devices, self.args)
 
     @decorators.needs_root
     def main(self):
         if not self.args.devices:
-            return parser.print_help()
+            return self.parser.print_help()
 
         # Default to bluestore here since defaulting it in add_argument may
         # cause both to be True
@@ -303,12 +302,56 @@ class Batch(object):
         if (self.args.no_auto or self.args.db_devices or
                                   self.args.journal_devices or
                                   self.args.wal_devices):
-            self.get_explicit_strategy()
+            self._get_explicit_strategy()
         else:
-            if self.args.report:
-                self.report()
-            else:
-                self.execute()
+            self._get_strategy()
 
-    def get_explicit_strategy(self):
-        raise NotImplementedError()
+        if self.args.report:
+            self.report()
+        else:
+            self.execute()
+
+    def _get_explicit_strategy(self):
+        # TODO assert that none of the device lists overlap?
+        self._filter_devices()
+        if self.args.bluestore:
+            if self.db_usable:
+                self.strategy = strategies.bluestore.MixedType(
+                    self.usable,
+                    self.db_usable,
+                    [],
+                    self.args)
+            else:
+                self.strategy = strategies.bluestore.SingleType(
+                    self.usable,
+                    self.db_usable,
+                    [],
+                    self.args)
+        else:
+            if self.journal_usable:
+                self.strategy = strategies.filestore.MixedType(
+                    self.usable,
+                    self.journal_usable,
+                    self.args)
+            else:
+                self.strategy = strategies.filestore.SingleType(
+                    self.usable,
+                    self.journal_usable,
+                    self.args)
+
+
+    def _filter_devices(self):
+        # filter devices by their available property.
+        # TODO: Some devices are rejected in the argparser already. maybe it
+        # makes sense to unifiy this
+        used_reason = {"reasons": ["Used by ceph as a data device already"]}
+        self.filtered_devices = {}
+        for dev_list in ['', 'db_', 'wal_', 'journal_']:
+            dev_list_prop = '{}devices'.format(dev_list)
+            if hasattr(self.args, dev_list_prop):
+                usable_dev_list_prop = '{}usable'.format(dev_list)
+                usable = [d for d in getattr(self.args, dev_list_prop) if d.available]
+                setattr(self, usable_dev_list_prop, usable)
+                self.filtered_devices.update({d: used_reason for d in
+                                              getattr(self.args, dev_list_prop)
+                                              if d.used_by_ceph})
