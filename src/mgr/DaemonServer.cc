@@ -1630,12 +1630,16 @@ bool DaemonServer::_handle_command(
     key.first = who.substr(0, dot);
     key.second = who.substr(dot + 1);
     DaemonStatePtr daemon = daemon_state.get(key);
-    std::lock_guard l(daemon->lock);
     string name;
     if (!daemon) {
       ss << "no config state for daemon " << who;
-      r = -ENOENT;
-    } else if (cmd_getval(g_ceph_context, cmdctx->cmdmap, "key", name)) {
+      cmdctx->reply(-ENOENT, ss);
+      return true;
+    }
+
+    std::lock_guard l(daemon->lock);
+
+    if (cmd_getval(g_ceph_context, cmdctx->cmdmap, "key", name)) {
       auto p = daemon->config.find(name);
       if (p != daemon->config.end() &&
 	  !p->second.empty()) {
