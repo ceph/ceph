@@ -169,7 +169,7 @@ else:
 
 def raw_write(buf):
     sys.stdout.flush()
-    raw_stdout.write(buf)
+    raw_stdout.write(rados.cstr(buf, ''))
 
 
 def osdids():
