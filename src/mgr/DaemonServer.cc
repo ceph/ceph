@@ -1485,8 +1485,13 @@ bool DaemonServer::handle_command(MCommand *m)
     string name;
     if (!daemon) {
       ss << "no config state for daemon " << who;
-      r = -ENOENT;
-    } else if (cmd_getval(g_ceph_context, cmdctx->cmdmap, "key", name)) {
+      cmdctx->reply(-ENOENT, ss);
+      return true;
+    }
+
+    Mutex::Locker l(daemon->lock);
+
+    if (cmd_getval(g_ceph_context, cmdctx->cmdmap, "key", name)) {
       auto p = daemon->config.find(name);
       if (p != daemon->config.end() &&
 	  !p->second.empty()) {
