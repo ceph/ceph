@@ -3,6 +3,7 @@
 #include <numeric>
 #include <seastar/core/app-template.hh>
 #include <seastar/core/sharded.hh>
+#include "common/ceph_argparse.h"
 #include "common/config_obs.h"
 #include "crimson/common/config_proxy.h"
 
@@ -45,7 +46,19 @@ seastar::sharded<ConfigObs> sharded_cobs;
 
 static seastar::future<> test_config()
 {
-  return ceph::common::sharded_conf().start().then([] {
+  return ceph::common::sharded_conf().start(EntityName{}, string_view{"ceph"}).then([] {
+    std::vector<const char*> args;
+    std::string cluster;
+    std::string conf_file_list;
+    auto init_params = ceph_argparse_early_args(args,
+                                                CEPH_ENTITY_TYPE_CLIENT,
+                                                &cluster,
+                                                &conf_file_list);
+    auto& conf = ceph::common::local_conf();
+    conf->name = init_params.name;
+    conf->cluster = cluster;
+    return conf.parse_config_files(conf_file_list);
+  }).then([] {
     return ceph::common::sharded_conf().invoke_on(0, &Config::start);
   }).then([] {
     return sharded_cobs.start();
