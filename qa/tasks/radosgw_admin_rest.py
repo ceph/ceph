@@ -226,9 +226,6 @@ def task(ctx, config):
     assert out['truncated'] == False
     assert len(out['keys']) == 1
 
-    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'list'], {'max-entries' : 1,
-        'marker': })
-
     # TESTCASE 'info-existing','user','info','existing user','returns correct info'
     (ret, out) = rgwadmin_rest(admin_conn, ['user', 'info'], {'uid' : user1})
 
