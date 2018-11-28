@@ -1154,7 +1154,7 @@ public:
   void operator()(std::string s) const {
     f->dump_string(name, s);
   }
-  void operator()(int i) const {
+  void operator()(int64_t i) const {
     f->dump_int(name, i);
   }
   void operator()(double d) const {
@@ -1192,15 +1192,21 @@ void pool_opts_t::dump(Formatter* f) const
 
 class pool_opts_encoder_t : public boost::static_visitor<> {
 public:
-  explicit pool_opts_encoder_t(bufferlist& bl_, uint64_t features) : bl(bl_) {}
+  explicit pool_opts_encoder_t(bufferlist& bl_, uint64_t features)
+    : bl(bl_),
+      features(features) {}
 
   void operator()(const std::string &s) const {
     encode(static_cast<int32_t>(pool_opts_t::STR), bl);
     encode(s, bl);
   }
-  void operator()(int i) const {
+  void operator()(int64_t i) const {
     encode(static_cast<int32_t>(pool_opts_t::INT), bl);
-    encode(i, bl);
+    if (HAVE_FEATURE(features, SERVER_NAUTILUS)) {
+      encode(i, bl);
+    } else {
+      encode(static_cast<int32_t>(i), bl);
+    }
   }
   void operator()(double d) const {
     encode(static_cast<int32_t>(pool_opts_t::DOUBLE), bl);
@@ -1209,11 +1215,16 @@ public:
 
 private:
   bufferlist& bl;
+  uint64_t features;
 };
 
 void pool_opts_t::encode(bufferlist& bl, uint64_t features) const
 {
-  ENCODE_START(1, 1, bl);
+  unsigned v = 2;
+  if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
+    v = 1;
+  }
+  ENCODE_START(v, 1, bl);
   uint32_t n = static_cast<uint32_t>(opts.size());
   encode(n, bl);
   for (opts_t::const_iterator i = opts.begin(); i != opts.end(); ++i) {
@@ -1238,8 +1249,14 @@ void pool_opts_t::decode(bufferlist::const_iterator& bl)
       decode(s, bl);
       opts[static_cast<key_t>(k)] = s;
     } else if (t == INT) {
-      int i;
-      decode(i, bl);
+      int64_t i;
+      if (struct_v >= 2) {
+	decode(i, bl);
+      } else {
+	int ii;
+	decode(ii, bl);
+	i = ii;
+      }
       opts[static_cast<key_t>(k)] = i;
     } else if (t == DOUBLE) {
       double d;

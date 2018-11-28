@@ -5330,7 +5330,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
             pool_opts_t::key_t key = pool_opts_t::get_opt_desc(i->first).key;
             if (p->opts.is_set(key)) {
               if(*it == CSUM_TYPE) {
-                int val;
+                int64_t val;
                 p->opts.get(pool_opts_t::CSUM_TYPE, &val);
                 f->dump_string(i->first.c_str(), Checksummer::get_csum_type_string(val));
               } else {
@@ -5492,7 +5492,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	      pool_opts_t::key_t key = pool_opts_t::get_opt_desc(i->first).key;
 	      if (p->opts.is_set(key)) {
                 if(key == pool_opts_t::CSUM_TYPE) {
-                  int val;
+                  int64_t val;
                   p->opts.get(key, &val);
   		  ss << i->first << ": " << Checksummer::get_csum_type_string(val) << "\n";
                 } else {
@@ -6818,7 +6818,7 @@ int OSDMonitor::prepare_new_pool(string& name,
   pi->set_pgp_num(pi->get_pg_num());
   pi->set_pgp_num_target(pgp_num);
   if (pg_num_min) {
-    pi->opts.set(pool_opts_t::PG_NUM_MIN, static_cast<int>(pg_num_min));
+    pi->opts.set(pool_opts_t::PG_NUM_MIN, static_cast<int64_t>(pg_num_min));
   }
 
   pi->last_change = pending_inc.epoch;
@@ -7427,7 +7427,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       if (n == 0) {
 	p.opts.unset(desc.key);
       } else {
-	p.opts.set(desc.key, static_cast<int>(n));
+	p.opts.set(desc.key, static_cast<int64_t>(n));
       }
       break;
     case pool_opts_t::DOUBLE:
