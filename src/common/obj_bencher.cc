@@ -239,27 +239,31 @@ int ObjBencher::aio_bench(
   uint64_t op_size, uint64_t object_size,
   unsigned max_objects,
   bool cleanup, bool hints,
-  const std::string& run_name, bool no_verify) {
+  const std::string& run_name, bool reuse_bench, bool no_verify) {
 
   if (concurrentios <= 0)
     return -EINVAL;
 
   int num_objects = 0;
   int r = 0;
-  int prevPid = 0;
+  int prev_pid = 0;
   std::chrono::duration<double> timePassed;
 
   // default metadata object is used if user does not specify one
   const std::string run_name_meta = (run_name.empty() ? BENCH_LASTRUN_METADATA : run_name);
 
   //get data from previous write run, if available
-  if (operation != OP_WRITE) {
+  if (operation != OP_WRITE || reuse_bench) {
     uint64_t prev_op_size, prev_object_size;
     r = fetch_bench_metadata(run_name_meta, &prev_op_size, &prev_object_size,
-			     &num_objects, &prevPid);
+			     &num_objects, &prev_pid);
     if (r < 0) {
-      if (r == -ENOENT)
-        cerr << "Must write data before running a read benchmark!" << std::endl;
+      if (r == -ENOENT) {
+        if (reuse_bench)
+          cerr << "Must write data before using reuse_bench for a write benchmark!" << std::endl;
+        else
+          cerr << "Must write data before running a read benchmark!" << std::endl;
+      }
       return r;
     }
     object_size = prev_object_size;   
@@ -289,21 +293,21 @@ int ObjBencher::aio_bench(
     formatter->open_object_section("bench");
 
   if (OP_WRITE == operation) {
-    r = write_bench(secondsToRun, concurrentios, run_name_meta, max_objects);
+    r = write_bench(secondsToRun, concurrentios, run_name_meta, max_objects, prev_pid);
     if (r != 0) goto out;
   }
   else if (OP_SEQ_READ == operation) {
-    r = seq_read_bench(secondsToRun, num_objects, concurrentios, prevPid, no_verify);
+    r = seq_read_bench(secondsToRun, num_objects, concurrentios, prev_pid, no_verify);
     if (r != 0) goto out;
   }
   else if (OP_RAND_READ == operation) {
-    r = rand_read_bench(secondsToRun, num_objects, concurrentios, prevPid, no_verify);
+    r = rand_read_bench(secondsToRun, num_objects, concurrentios, prev_pid, no_verify);
     if (r != 0) goto out;
   }
 
   if (OP_WRITE == operation && cleanup) {
     r = fetch_bench_metadata(run_name_meta, &op_size, &object_size,
-			     &num_objects, &prevPid);
+                            &num_objects, &prev_pid);
     if (r < 0) {
       if (r == -ENOENT)
         cerr << "Should never happen: bench metadata missing for current run!" << std::endl;
@@ -313,7 +317,7 @@ int ObjBencher::aio_bench(
     data.start_time = mono_clock::now();
     out(cout) << "Cleaning up (deleting benchmark objects)" << std::endl;
 
-    r = clean_up(num_objects, prevPid, concurrentios);
+    r = clean_up(num_objects, prev_pid, concurrentios);
     if (r != 0) goto out;
 
     timePassed = mono_clock::now() - data.start_time;
@@ -377,7 +381,7 @@ int ObjBencher::fetch_bench_metadata(const std::string& metadata_file,
 
 int ObjBencher::write_bench(int secondsToRun,
 			    int concurrentios, const string& run_name_meta,
-			    unsigned max_objects) {
+			    unsigned max_objects, int prev_pid) {
   if (concurrentios <= 0) 
     return -EINVAL;
   
@@ -397,7 +401,7 @@ int ObjBencher::write_bench(int secondsToRun,
   }
   bufferlist* newContents = 0;
 
-  std::string prefix = generate_object_prefix();
+  std::string prefix = prev_pid ? generate_object_prefix(prev_pid) : generate_object_prefix();
   if (!formatter)
     out(cout) << "Object prefix: " << prefix << std::endl;
   else
@@ -627,7 +631,7 @@ int ObjBencher::write_bench(int secondsToRun,
   encode(data.object_size, b_write);
   num_objects = (data.finished + writes_per_object - 1) / writes_per_object;
   encode(num_objects, b_write);
-  encode(getpid(), b_write);
+  encode(prev_pid ? prev_pid : getpid(),  b_write);
   encode(data.op_size, b_write);
 
   // persist meta-data for further cleanup or read
