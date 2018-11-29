@@ -196,8 +196,7 @@ if(WITH_CURL_OPENSSL)
   target_link_libraries(rgw_a PRIVATE OpenSSL::Crypto)
 endif()
 
-if(WITH_RADOSGW_BEAST_FRONTEND)
-  target_compile_definitions(rgw_a PUBLIC BOOST_COROUTINES_NO_DEPRECATION_WARNING)
+if(WITH_BOOST_CONTEXT)
   target_link_libraries(rgw_a PRIVATE Boost::coroutine Boost::context)
 endif()
 
@@ -327,3 +326,6 @@ target_link_libraries(rgw_admin_user PRIVATE
 set_target_properties(rgw_admin_user PROPERTIES OUTPUT_NAME rgw_admin_user VERSION 1.0.0
   SOVERSION 0)
 install(TARGETS rgw_admin_user DESTINATION ${CMAKE_INSTALL_LIBDIR})
+if(WITH_BOOST_CONTEXT)
+  target_link_libraries(rgw_admin_user PRIVATE Boost::coroutine Boost::context)
+endif()
