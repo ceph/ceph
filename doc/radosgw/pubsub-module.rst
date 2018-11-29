@@ -4,7 +4,7 @@ PubSub Sync Module
 
 .. versionadded:: Nautilus
 
-This sync module provides publish and subscribe mechanism for the object store modification
+This sync module provides a publish and subscribe mechanism for the object store modification
 events. Events are published into defined topics. Topics can be subscribed to, and events
 can be pulled from them. Events need to be acked. Also, events will expire and disappear
 after a period of time. A basic push notification mechanism exists too, but it is not
@@ -21,7 +21,7 @@ There can be multiple notifications for any specific topic.
 A subscription to a topic can also be defined. There can be multiple subscriptions for any
 specific topic.
 
-New REST api was define to provide configuration and control interfaces for the pubsub
+A new REST api has been defined to provide configuration and control interfaces for the pubsub
 mechanisms.
 
 Events are stored as rgw objects in a special bucket, under a special user. Events cannot
