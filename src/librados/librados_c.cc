@@ -45,7 +45,6 @@ using std::map;
 using std::set;
 using std::vector;
 using std::list;
-using std::runtime_error;
 
 #define dout_subsys ceph_subsys_rados
 #undef dout_prefix

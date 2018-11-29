@@ -41,6 +41,7 @@
 #include <vector>
 #include <list>
 #include <stdexcept>
+#include <system_error>
 
 #ifdef WITH_LTTNG
 #define TRACEPOINT_DEFINE
@@ -57,7 +58,6 @@ using std::map;
 using std::set;
 using std::vector;
 using std::list;
-using std::runtime_error;
 
 #define dout_subsys ceph_subsys_rados
 #undef dout_prefix
@@ -761,9 +761,8 @@ void librados::NObjectIteratorImpl::get_next()
     return;
   }
   else if (ret) {
-    ostringstream oss;
-    oss << "rados returned " << cpp_strerror(ret);
-    throw std::runtime_error(oss.str());
+    throw std::system_error(-ret, std::system_category(),
+                            "rados_nobjects_list_next");
   }
 
   if (cur_obj.impl == NULL)
