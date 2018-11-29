@@ -1284,14 +1284,13 @@ class RadosThread(threading.Thread):
             self.exception = e
 
 
-# time in seconds between each call to t.join() for child thread
-POLL_TIME_INCR = 0.5
-
-
 def run_in_thread(func, *args, **kwargs):
     interrupt = False
     timeout = kwargs.pop('timeout', 0)
-    countdown = timeout
+    if timeout == 0:
+        # python threading module will just get blocked if timeout is `None`,
+        # otherwise it will keep polling until timeout or thread stops.
+        timeout = 2 ** 32
     t = RadosThread(func, *args, **kwargs)
 
     # allow the main thread to exit (presumably, avoid a join() on this
@@ -1300,30 +1299,19 @@ def run_in_thread(func, *args, **kwargs):
     t.daemon = True
 
     t.start()
-    try:
-        # poll for thread exit
-        while t.is_alive():
-            t.join(POLL_TIME_INCR)
-            if timeout and t.is_alive():
-                countdown = countdown - POLL_TIME_INCR
-                if countdown <= 0:
-                    raise KeyboardInterrupt
-
-        t.join()        # in case t exits before reaching the join() above
-    except KeyboardInterrupt:
-        # ..but allow SIGINT to terminate the waiting.  Note: this
-        # relies on the Linux kernel behavior of delivering the signal
-        # to the main thread in preference to any subthread (all that's
-        # strictly guaranteed is that *some* thread that has the signal
-        # unblocked will receive it).  But there doesn't seem to be
-        # any interface to create t with SIGINT blocked.
-        interrupt = True
-
-    if interrupt:
-        t.retval = -errno.EINTR, None, 'Interrupted!'
-    if t.exception:
+    t.join(timeout=timeout)
+    # ..but allow SIGINT to terminate the waiting.  Note: this
+    # relies on the Linux kernel behavior of delivering the signal
+    # to the main thread in preference to any subthread (all that's
+    # strictly guaranteed is that *some* thread that has the signal
+    # unblocked will receive it).  But there doesn't seem to be
+    # any interface to create a thread with SIGINT blocked.
+    if t.is_alive():
+        raise Exception("timed out")
+    elif t.exception:
         raise t.exception
-    return t.retval
+    else:
+        return t.retval
 
 
 def send_command_retry(*args, **kwargs):
