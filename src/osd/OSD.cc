@@ -5261,11 +5261,10 @@ void OSD::heartbeat()
 
 bool OSD::heartbeat_reset(Connection *con)
 {
+  Mutex::Locker l(heartbeat_lock);
   HeartbeatSession *s = static_cast<HeartbeatSession*>(con->get_priv());
   if (s) {
-    heartbeat_lock.Lock();
     if (is_stopping()) {
-      heartbeat_lock.Unlock();
       s->put();
       return true;
     }
@@ -5299,7 +5298,6 @@ bool OSD::heartbeat_reset(Connection *con)
     } else {
       dout(10) << "heartbeat_reset closing (old) failed hb con " << con << dendl;
     }
-    heartbeat_lock.Unlock();
     s->put();
   }
   return true;
