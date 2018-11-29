@@ -303,9 +303,9 @@ class OrchestratorCli(MgrModule):
 
         if avail is None:
             # The module does not report its availability
-            return HandleCommandResult("Backend: {0}".format(self._select_orchestrator()))
+            return HandleCommandResult(odata="Backend: {0}".format(self._select_orchestrator()))
         else:
-            return HandleCommandResult("Backend: {0}\nAvailable: {1}{2}".format(
+            return HandleCommandResult(odata="Backend: {0}\nAvailable: {1}{2}".format(
                                            self._select_orchestrator(),
                                            avail,
                                            " ({0})".format(why) if not avail else ""
