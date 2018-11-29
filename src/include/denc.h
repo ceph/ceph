@@ -713,15 +713,27 @@ public:
   {
     uint32_t len;
     denc(len, p);
-    s.clear();
-    p.copy(len, s);
+    decode_nohead(len, s, p);
   }
   template<class It>
-  static std::enable_if_t<is_const_iterator_v<It>>
-  decode_nohead(size_t len, value_type& s, It& p) {
+  static void decode_nohead(size_t len, value_type& s, It& p) {
     s.clear();
     if (len) {
       s.append(p.get_pos_add(len), len);
+    }
+  }
+  static void decode_nohead(size_t len, value_type& s,
+                            buffer::list::const_iterator& p) {
+    if (len) {
+      if constexpr (std::is_same_v<value_type, std::string>) {
+        s.clear();
+        p.copy(len, s);
+      } else {
+        s.resize(len);
+        p.copy(len, s.data());
+      }
+    } else {
+      s.clear();
     }
   }
   template<class It>
@@ -810,6 +822,11 @@ struct denc_traits<bufferlist> {
     if (len) {
       v.append(p.get_ptr(len));
     }
+  }
+  static void decode_nohead(size_t len, bufferlist& v,
+			    buffer::list::const_iterator& p) {
+    v.clear();
+    p.copy(len, v);
   }
 };
 
@@ -1566,12 +1583,23 @@ inline std::enable_if_t<traits::supported && !traits::featured> decode_nohead(
     return;
   if (p.end())
     throw buffer::end_of_buffer();
-  bufferptr tmp;
-  auto t = p;
-  t.copy_shallow(p.get_bl().length() - p.get_off(), tmp);
-  auto cp = std::cbegin(tmp);
-  traits::decode_nohead(num, o, cp);
-  p.advance(cp.get_offset());
+  if constexpr (traits::need_contiguous) {
+    bufferptr tmp;
+    auto t = p;
+    if constexpr (denc_traits<typename T::value_type>::bounded) {
+      size_t element_size = 0;
+      typename T::value_type v;
+      denc_traits<typename T::value_type>::bound_encode(v, element_size);
+      t.copy_shallow(num * element_size, tmp);
+    } else {
+      t.copy_shallow(p.get_bl().length() - p.get_off(), tmp);
+    }
+    auto cp = std::cbegin(tmp);
+    traits::decode_nohead(num, o, cp);
+    p.advance(cp.get_offset());
+  } else {
+    traits::decode_nohead(num, o, p);
+  }
 }
 }
 
