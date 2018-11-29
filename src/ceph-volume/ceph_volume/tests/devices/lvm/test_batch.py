@@ -1,11 +1,59 @@
 from ceph_volume.devices.lvm import batch
 
 
-class TestBatchSmoke(object):
+class TestBatch(object):
 
     def test_batch_instance(self, is_root):
         b = batch.Batch([])
         b.main()
+
+    def test_get_devices(self, monkeypatch):
+        return_value = {
+            '/dev/vdd': {
+                'removable': '0',
+                'vendor': '0x1af4',
+                'model': '',
+                'sas_address': '',
+                'sas_device_handle': '',
+                'sectors': 0,
+                'size': 21474836480.0,
+                'support_discard': '',
+                'partitions': {
+                    'vdd1': {
+                        'start': '2048',
+                        'sectors': '41940959',
+                        'sectorsize': 512,
+                        'size': '20.00 GB'
+                    }
+                },
+                'rotational': '1',
+                'scheduler_mode': 'mq-deadline',
+                'sectorsize': '512',
+                'human_readable_size': '20.00 GB',
+                'path': '/dev/vdd'
+            },
+            '/dev/vdf': {
+                'removable': '0',
+                'vendor': '0x1af4',
+                'model': '',
+                'sas_address': '',
+                'sas_device_handle': '',
+                'sectors': 0,
+                'size': 21474836480.0,
+                'support_discard': '',
+                'partitions': {},
+                'rotational': '1',
+                'scheduler_mode': 'mq-deadline',
+                'sectorsize': '512',
+                'human_readable_size': '20.00 GB',
+                'path': '/dev/vdf'
+            }
+        }
+        monkeypatch.setattr('ceph_volume.devices.lvm.batch.disk.get_devices',
+                            lambda: return_value)
+        b = batch.Batch([])
+        result = b.get_devices().strip()
+        assert result == '* /dev/vdf                  20.00 GB   rotational'
 
 
 class TestFilterDevices(object):
