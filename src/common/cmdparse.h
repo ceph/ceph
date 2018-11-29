@@ -54,7 +54,7 @@ cmd_getval(CephContext *cct, const cmdmap_t& cmdmap, const std::string& k, T& va
     try {
       val = boost::get<T>(cmdmap.find(k)->second);
       return true;
-    } catch (boost::bad_get) {
+    } catch (boost::bad_get&) {
       handle_bad_get(cct, k, typeid(T).name());
     }
   }

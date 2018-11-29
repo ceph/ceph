@@ -63,7 +63,7 @@
       out:					\
       complete_inject_failure();		\
       return r;					\
-    } catch (RetryException) {			\
+    } catch (RetryException&) {			\
       failed = true;				\
     } catch (...) {				\
       ceph_abort();				\
