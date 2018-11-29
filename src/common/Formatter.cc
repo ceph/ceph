@@ -254,6 +254,7 @@ void JSONFormatter::finish_pending_string()
   if (m_is_pending_string) {
     m_is_pending_string = false;
     add_value(m_pending_name.c_str(), m_pending_string.str(), true);
+    m_pending_string.str("");
   }
 }
 
