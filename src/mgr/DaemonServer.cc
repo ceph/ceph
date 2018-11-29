@@ -2050,9 +2050,11 @@ bool DaemonServer::_handle_command(
 
     if (f) {
       f->close_section();
-      f->flush(cmdctx->odata);
     }
     if (r != -EOPNOTSUPP) {
+      if (f) {
+	f->flush(cmdctx->odata);
+      }
       cmdctx->reply(r, ss);
       return true;
     }
