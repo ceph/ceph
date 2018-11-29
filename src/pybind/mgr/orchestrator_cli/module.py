@@ -107,17 +107,17 @@ class OrchestratorCli(MgrModule):
         now, it's not yet implemented:
         > :returns: Either JSON:
         >     [
-        >       {
-        >         "name": "sda",
-        >         "host": "foo",
-        >         ... lots of stuff from ceph-volume ...
-        >         "stamp": when this state was refreshed
-        >       },
+        >       {
+        >         "name": "sda",
+        >         "host": "foo",
+        >         ... lots of stuff from ceph-volume ...
+        >         "stamp": when this state was refreshed
+        >       },
         >     ]
         >
         > or human readable:
         >
-        >     HOST  DEV  SIZE  DEVID(vendor\_model\_serial)   IN-USE  TIMESTAMP
+        >     HOST  DEV  SIZE  DEVID(vendor\_model\_serial)   IN-USE  TIMESTAMP
         >
         > Note: needs ceph-volume on the host.
 
