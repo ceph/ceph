@@ -665,7 +665,8 @@ OPTION(osd_peering_wq_threads, OPT_INT)
 OPTION(osd_peering_wq_batch_size, OPT_U64)
 OPTION(osd_op_pq_max_tokens_per_priority, OPT_U64)
 OPTION(osd_op_pq_min_cost, OPT_U64)
-OPTION(osd_disk_threads, OPT_INT)
+OPTION(osd_remove_threads, OPT_INT)
+OPTION(osd_recovery_threads, OPT_INT)
 OPTION(osd_disk_thread_ioprio_class, OPT_STR) // rt realtime be best effort idle
 OPTION(osd_disk_thread_ioprio_priority, OPT_INT) // 0-7
 OPTION(osd_recover_clone_overlap, OPT_BOOL)   // preserve clone_overlap during recovery/migration
@@ -847,6 +848,7 @@ OPTION(osd_op_history_duration, OPT_U32) // Oldest completed op to track
 OPTION(osd_op_history_slow_op_size, OPT_U32)           // Max number of slow ops to track
 OPTION(osd_op_history_slow_op_threshold, OPT_DOUBLE) // track the op if over this threshold
 OPTION(osd_target_transaction_size, OPT_INT)     // to adjust various transactions that batch smaller items
+OPTION(osd_delete_sleep, OPT_FLOAT)         // seconds to sleep between removal transactions
 OPTION(osd_failsafe_full_ratio, OPT_FLOAT) // what % full makes an OSD "full" (failsafe)
 OPTION(osd_fast_fail_on_connection_refused, OPT_BOOL) // immediately mark OSDs as down once they refuse to accept connections
 

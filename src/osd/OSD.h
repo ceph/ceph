@@ -1393,7 +1393,8 @@ private:
 
   ThreadPool peering_tp;
   ShardedThreadPool osd_op_tp;
-  ThreadPool disk_tp;
+  ThreadPool remove_tp;
+  ThreadPool recovery_tp;
   ThreadPool command_tp;
 
   void set_disk_tp_priority();
