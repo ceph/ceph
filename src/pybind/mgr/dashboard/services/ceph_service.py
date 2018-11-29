@@ -2,12 +2,8 @@
 from __future__ import absolute_import
 
 import time
-try:
-    import collections.abc
-    from collections.abc import defaultdict
-except ImportError:
-    import collections
-    from collections import defaultdict
+import collections
+from collections import defaultdict
 import json
 
 import rados

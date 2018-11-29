@@ -5,10 +5,7 @@ import logging
 import json
 import six
 import threading
-try:
-    from collections.abc import defaultdict, namedtuple
-except ImportError:
-    from collections import defaultdict, namedtuple
+from collections import defaultdict, namedtuple
 import rados
 import time
 
