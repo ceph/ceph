@@ -1755,68 +1755,6 @@ int RGWRados::open_bucket_index_ctx(const RGWBucketInfo& bucket_info, librados::
   return 0;
 }
 
-/**
- * set up a bucket listing.
- * handle is filled in.
- * Returns 0 on success, -ERR# otherwise.
- */
-int RGWRados::list_buckets_init(RGWAccessHandle *handle)
-{
-  try {
-    auto iter = root_pool_ctx.nobjects_begin();
-    librados::NObjectIterator *state = new librados::NObjectIterator(iter);
-    *handle = (RGWAccessHandle)state;
-    return 0;
-  } catch (const std::system_error& e) {
-    int r = -e.code().value();
-    ldout(cct, 10) << "nobjects_begin threw " << e.what()
-       << ", returning " << r << dendl;
-    return r;
-  } catch (const std::exception& e) {
-    ldout(cct, 10) << "nobjects_begin threw " << e.what()
-       << ", returning -5" << dendl;
-    return -EIO;
-  }
-}
-
-/** 
- * get the next bucket in the listing.
- * obj is filled in,
- * handle is updated.
- * returns 0 on success, -ERR# otherwise.
- */
-int RGWRados::list_buckets_next(rgw_bucket_dir_entry& obj, RGWAccessHandle *handle)
-{
-  librados::NObjectIterator *state = (librados::NObjectIterator *)*handle;
-
-  do {
-    if (*state == root_pool_ctx.nobjects_end()) {
-      delete state;
-      return -ENOENT;
-    }
-
-    obj.key.name = (*state)->get_oid();
-    if (obj.key.name[0] == '_') {
-      obj.key.name = obj.key.name.substr(1);
-    }
-    try {
-      (*state)++;
-    } catch (const std::system_error& e) {
-      int r = -e.code().value();
-      ldout(cct, 10) << "nobjects_begin threw " << e.what()
-         << ", returning " << r << dendl;
-      return r;
-    } catch (const std::exception& e) {
-      ldout(cct, 10) << "nobjects_begin threw " << e.what()
-         << ", returning -5" << dendl;
-      return -EIO;
-    }
-  } while (obj.key.name[0] == '.'); /* skip all entries starting with '.' */
-
-  return 0;
-}
-
-
 /**** logs ****/
 
 struct log_list_state {
