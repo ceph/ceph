@@ -22,7 +22,7 @@ class CephPool(MetricsField):
         self.fields['wr_bytes'] = None
         self.fields['dirty'] = None
         self.fields['rd_bytes'] = None
-        self.fields['raw_bytes_used'] = None
+        self.fields['stored_raw'] = None
 
 
 class CephPoolAgent(MetricsAgent):
@@ -53,6 +53,6 @@ class CephPoolAgent(MetricsAgent):
                 pool.get('stats', {}).get('dirty', 0)
             d_pool.fields['rd_bytes'] = \
                 pool.get('stats', {}).get('rd_bytes', 0)
-            d_pool.fields['raw_bytes_used'] = \
-                pool.get('stats', {}).get('raw_bytes_used', 0)
+            d_pool.fields['stored_raw'] = \
+                pool.get('stats', {}).get('stored_raw', 0)
             self.data.append(d_pool)
