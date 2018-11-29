@@ -204,7 +204,7 @@ class Module(MgrModule):
                 "mds",
                 spec
             )
-            self._wait([completion])
+            self._orchestrator_wait([completion])
         except ImportError:
             return 0, "", "Volume created successfully (no MDS daemons created)"
         except Exception as e:
@@ -291,7 +291,7 @@ class Module(MgrModule):
                 "mds",
                 spec
             )
-            self._wait([completion])
+            self._orchestrator_wait([completion])
         except ImportError:
             self.log.warning("No orchestrator, not tearing down MDS daemons")
         except Exception as e:
