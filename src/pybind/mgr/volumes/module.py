@@ -31,7 +31,7 @@ class Module(MgrModule):
             'cmd': 'fs volume create '
                    'name=name,type=CephString '
                    'name=size,type=CephString,req=false ',
-            'desc': "Delete a CephFS volume",
+            'desc': "Create a CephFS volume",
             'perm': 'r'
         },
         {
