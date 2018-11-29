@@ -32,13 +32,13 @@ class Module(MgrModule):
                    'name=name,type=CephString '
                    'name=size,type=CephString,req=false ',
             'desc': "Create a CephFS volume",
-            'perm': 'r'
+            'perm': 'rw'
         },
         {
             'cmd': 'fs volume rm '
                    'name=vol_name,type=CephString',
             'desc': "Delete a CephFS volume",
-            'perm': 'r'
+            'perm': 'rw'
         },
         {
             'cmd': 'fs subvolume create '
@@ -46,14 +46,14 @@ class Module(MgrModule):
                    'name=sub_name,type=CephString '
                    'name=size,type=CephString,req=false ',
             'desc': "Create a CephFS subvolume within an existing volume",
-            'perm': 'r'
+            'perm': 'rw'
         },
         {
             'cmd': 'fs subvolume rm '
                    'name=vol_name,type=CephString '
                    'name=sub_name,type=CephString',
             'desc': "Delete a CephFS subvolume",
-            'perm': 'r'
+            'perm': 'rw'
         },
 
         # volume ls [recursive]
