@@ -116,7 +116,7 @@ if(WITH_BLUESTORE)
   add_executable(ceph-bluestore-tool
     bluestore/bluestore_tool.cc)
   target_link_libraries(ceph-bluestore-tool
-    os global)
+    os global fmt::fmt)
   install(TARGETS ceph-bluestore-tool
     DESTINATION bin)
 endif()

@@ -29,4 +29,10 @@ ostream &operator<<(ostream &lhs, const shard_id_t &rhs)
   return lhs << (unsigned)(uint8_t)rhs.id;
 }
 
+byte_u_t::operator std::string() {
+  stringstream out;
+  out << *this;
+  return out.str();
+}
+
 #endif

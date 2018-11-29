@@ -469,6 +469,7 @@ inline std::ostream& operator<<(std::ostream& out, const si_u_t& b)
 struct byte_u_t {
   uint64_t v;
   explicit byte_u_t(uint64_t _v) : v(_v) {};
+  operator std::string();
 };
 
 inline std::ostream& operator<<(std::ostream& out, const byte_u_t& b)

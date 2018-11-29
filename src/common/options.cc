@@ -603,6 +603,10 @@ std::vector<Option> get_global_options() {
                    "log_graylog_host",
                    "log_graylog_port"}),
 
+    Option("dispatchqueue_tracing", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description(""),
+
     Option("err_to_graylog", Option::TYPE_BOOL, Option::LEVEL_BASIC)
     .set_default(false)
     .set_description("send critical error log lines to remote graylog server")

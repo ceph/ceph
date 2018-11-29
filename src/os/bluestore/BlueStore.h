@@ -413,6 +413,7 @@ public:
 
     void dump(Formatter* f) const;
     friend ostream& operator<<(ostream& out, const SharedBlob& sb);
+    operator std::string() const;
 
     void get() {
       ++nref;
@@ -514,6 +515,11 @@ public:
 
   public:
 
+    operator std::string() {
+      stringstream out;
+      out << *this;
+      return out.str();
+    }
     friend void intrusive_ptr_add_ref(Blob *b) { b->get(); }
     friend void intrusive_ptr_release(Blob *b) { b->put(); }
 
@@ -730,6 +736,12 @@ public:
     // the given range [o, o + l].
     bool blob_escapes_range(uint32_t o, uint32_t l) const {
       return blob_start() < o || blob_end() > o + l;
+    }
+
+    operator std::string() {
+      std::stringstream out;
+      out << *this;
+      return out.str();
     }
   };
   typedef boost::intrusive::set<Extent> extent_map_t;
@@ -1070,6 +1082,7 @@ public:
     }
 
     void dump(Formatter* f) const;
+    operator std::string() const;
 
     void flush();
     void get() {
@@ -1738,6 +1751,16 @@ public:
     q_list_t q;  ///< transactions
 
     boost::intrusive::list_member_hook<> deferred_osr_queue_item;
+
+    friend ostream& operator<<(ostream& out, const OpSequencer& s) {
+      return out << "osr(" << s.cid << ")";
+    }
+
+    operator std::string() const {
+      std::stringstream out;
+      out << *this;
+      return out.str();
+    }
 
     DeferredBatch *deferred_running = nullptr;
     DeferredBatch *deferred_pending = nullptr;

@@ -464,6 +464,7 @@ public:
     (*this) = temp;
   }
 
+  operator std::string() const;
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void decode(json_spirit::Value& v);

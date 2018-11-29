@@ -43,6 +43,7 @@ struct bluestore_bdev_label_t {
   void decode(bufferlist::const_iterator& p);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<bluestore_bdev_label_t*>& o);
+  operator std::string();
 };
 WRITE_CLASS_ENCODER(bluestore_bdev_label_t)
 
@@ -61,6 +62,7 @@ struct bluestore_cnode_t {
   }
   void dump(Formatter *f) const;
   static void generate_test_instances(list<bluestore_cnode_t*>& o);
+  operator std::string() const;
 };
 WRITE_CLASS_DENC(bluestore_cnode_t)
 
@@ -103,6 +105,7 @@ struct bluestore_pextent_t : public bluestore_interval_t<uint64_t, uint32_t>
     denc_varint_lowz(v.length, p);
   }
 
+  operator std::string();
   void dump(Formatter *f) const;
   static void generate_test_instances(list<bluestore_pextent_t*>& ls);
 };
@@ -457,6 +460,8 @@ public:
   PExtentVector& dirty_extents() {
     return extents;
   }
+
+  operator std::string() const;
 
   DENC_HELPERS;
   void bound_encode(size_t& p, uint64_t struct_v) const {
@@ -882,6 +887,8 @@ struct bluestore_shared_blob_t {
   bool empty() const {
     return ref_map.empty();
   }
+
+  operator std::string() const;
 };
 WRITE_CLASS_DENC(bluestore_shared_blob_t)
 

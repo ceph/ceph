@@ -724,6 +724,13 @@ class interval_set {
     other = std::move(m);
   }
 
+public:
+  operator std::string() const {
+    std::stringstream out;
+    out << *this;
+    return out.str();
+  }
+
 private:
   // data
   uint64_t _size;

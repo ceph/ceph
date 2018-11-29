@@ -22,6 +22,25 @@
 
 #include <iostream>
 
+#ifdef WITH_LTTNG_LOGGING
+#define TRACEPOINT_DEFINE
+#define TRACEPOINT_PROBE_DYNAMIC_LINKAGE
+#include "tracing/bluestore.h"
+#include "tracing/bluestore_blob.h"
+#include "tracing/bluestore_gc.h"
+#include "tracing/bluestore_lru_cache.h"
+#include "tracing/bluestore_twoqcache.h"
+#include "tracing/bitmapallocator.h"
+#include "tracing/bmap_freelist_manager.h"
+#include "tracing/ceph_logging.h"
+#include "tracing/asyncconnection.h"
+#include "tracing/dispatchqueue.h"
+#undef TRACEPOINT_PROBE_DYNAMIC_LINKAGE
+#undef TRACEPOINT_DEFINE
+#else
+#define tracepoint(...)
+#endif
+
 #define MAX_LOG_BUF 65536
 
 namespace ceph {

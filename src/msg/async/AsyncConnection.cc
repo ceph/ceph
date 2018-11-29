@@ -47,6 +47,13 @@ ostream& AsyncConnection::_conn_prefix(std::ostream *_dout) {
                 << ").";
 }
 
+#ifdef WITH_LTTNG_LOGGING
+#include "include/tracing/asyncconnection_impl.h"
+#else
+#define trace(...)
+#define trace_error(...)
+#endif
+
 // Notes:
 // 1. Don't dispatch any event when closed! It may cause AsyncConnection alive even if AsyncMessenger dead
 
@@ -517,12 +524,20 @@ void AsyncConnection::accept(ConnectedSocket socket,
 int AsyncConnection::send_message(Message *m)
 {
   FUNCTRACE(async_msgr->cct);
-  lgeneric_subdout(async_msgr->cct, ms,
-		   1) << "-- " << async_msgr->get_myaddrs() << " --> "
-		      << get_peer_addrs() << " -- "
-		      << *m << " -- " << m << " con "
-		      << this
-		      << dendl;
+//  lgeneric_subdout(async_msgr->cct, ms,
+//		   1) << "-- " << async_msgr->get_myaddrs() << " --> "
+//		      << get_peer_addrs() << " -- "
+//		      << *m << " -- " << m << " con "
+//		      << this
+//		      << dendl;
+  trace_send_message(1, asyncconnection,
+    void*, cct, async_msgr->cct,
+    string, myaddrs, async_msgr->get_myaddrs(),
+    string, peer_addrs, get_peer_addrs(),
+    string, message, *m,
+    void*, m, m,
+    void*, this_, this,
+    "{} {} -- {} --> {} -- {} -- {} con {}");
 
   // optimistic think it's ok to encode(actually may broken now)
   if (!m->get_priority())

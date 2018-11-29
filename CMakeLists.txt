@@ -66,7 +66,8 @@ endif(WITH_MANPAGE)
 
 include_directories(
   ${PROJECT_BINARY_DIR}/src/include
-  ${PROJECT_SOURCE_DIR}/src)
+  ${PROJECT_SOURCE_DIR}/src
+  ${PROJECT_SOURCE_DIR}/build)
 
 if(OFED_PREFIX)
   include_directories(SYSTEM ${OFED_PREFIX}/include)

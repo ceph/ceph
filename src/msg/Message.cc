@@ -285,6 +285,12 @@ void Message::dump(Formatter *f) const
   f->dump_string("summary", ss.str());
 }
 
+Message::operator std::string() const {
+  std::stringstream out;
+  out << *this;
+  return out.str();
+}
+
 Message *decode_message(CephContext *cct, int crcflags,
 			ceph_msg_header& header,
 			ceph_msg_footer& footer,

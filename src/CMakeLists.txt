@@ -290,6 +290,7 @@ add_subdirectory(json_spirit)
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/xxHash")
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/rapidjson/include")
 
+add_subdirectory(fmt)
 if(WITH_SEASTAR)
   find_package(fmt 5.2.1 QUIET)
   if(NOT fmt_FOUND)
@@ -404,6 +405,8 @@ endif()
 
 add_library(common STATIC ${ceph_common_objs})
 target_link_libraries(common ${ceph_common_deps})
+
+#target_link_libraries(common dispatchqueue_tp)
 
 add_library(ceph-common SHARED ${ceph_common_objs})
 target_link_libraries(ceph-common ${ceph_common_deps})

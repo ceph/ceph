@@ -68,6 +68,9 @@ struct uuid_d {
 
   void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<uuid_d*>& o);
+  operator std::string() {
+    return to_string();
+  }
 };
 WRITE_CLASS_ENCODER(uuid_d)
 

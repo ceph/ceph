@@ -8,6 +8,13 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "fbmap_alloc " << this << " "
 
+#ifdef WITH_LTTNG_LOGGING
+#include "include/tracing/bitmapallocator_impl.h"
+#else
+#define trace(...)
+#define trace_error(...)
+#endif
+
 BitmapAllocator::BitmapAllocator(CephContext* _cct,
 					 int64_t capacity,
 					 int64_t alloc_unit) :
@@ -27,7 +34,12 @@ int64_t BitmapAllocator::allocate(
   ldout(cct, 10) << __func__ << std::hex << " 0x" << want_size
 		 << "/" << alloc_unit << "," << max_alloc_size << "," << hint
 		 << std::dec << dendl;
-    
+  trace_allocate_info(10, bitmapallocator,
+    uint64_t, want_size, want_size,
+    uint64_t, alloc_unit, alloc_unit,
+    uint64_t, max_alloc_size, max_alloc_size,
+    int64_t, hint, hint,
+    "0x{0:x}/{1:x},{2:x},{3:x}");
     
   _allocate_l2(want_size, alloc_unit, max_alloc_size, hint,
     &allocated, extents);
@@ -40,6 +52,13 @@ int64_t BitmapAllocator::allocate(
                    << " extent: 0x" << std::hex << e.offset << "~" << e.length
 		   << "/" << alloc_unit << "," << max_alloc_size << "," << hint
 		   << std::dec << dendl;
+    trace_allocate_extents(10, bitmapallocator,
+      uint64_t, offset, e.offset,
+      uint64_t, length, e.length,
+      uint64_t, alloc_unit, alloc_unit,
+      uint64_t, max_alloc_size, max_alloc_size,
+      int, hint, hint,
+      "0x{0:x}/{1:x},{2:x},{3:x},{4:x}");
   }
   return int64_t(allocated);
 }
@@ -48,11 +67,16 @@ void BitmapAllocator::release(
   const interval_set<uint64_t>& release_set)
 {
   for (auto r : release_set) {
-    ldout(cct, 10) << __func__ << " 0x" << std::hex << r.first << "~" << r.second
-		  << std::dec << dendl;
+//    ldout(cct, 10) << __func__ << " 0x" << std::hex << r.first << "~" << r.second
+//		  << std::dec << dendl;
+    trace_release_info(10, bitmapallocator,
+      uint64_t, first, r.first,
+      uint64_t, second, r.second,
+      "0x{0:x}~{1:x}");
   }
   _free_l2(release_set);
-  ldout(cct, 10) << __func__ << " done" << dendl;
+//  ldout(cct, 10) << __func__ << " done" << dendl;
+  trace_release_done(10, bitmapallocator, "done");
 }
 
 

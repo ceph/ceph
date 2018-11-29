@@ -355,7 +355,11 @@ int cmp(const hobject_t& l, const hobject_t& r)
   return 0;
 }
 
-
+ghobject_t::operator std::string() const {
+  std::stringstream out;
+  out << *this;
+  return out.str();
+}
 
 // This is compatible with decode for hobject_t prior to
 // version 5.

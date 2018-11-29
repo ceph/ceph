@@ -178,6 +178,9 @@
 /* Define if you want to use LTTng */
 #cmakedefine WITH_LTTNG
 
+/* Define if you want to use LTTng for logging instead of dout */
+#cmakedefine WITH_LTTNG_LOGGING
+
 /* Define if you want to OSD function instrumentation */
 #cmakedefine WITH_OSD_INSTRUMENT_FUNCTIONS
 

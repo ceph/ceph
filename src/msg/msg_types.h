@@ -701,6 +701,12 @@ struct entity_addrvec_t {
     }
   }
 
+  operator std::string() const {
+    std::stringstream out;
+    out << *this;
+    return out.str();
+  }
+
   friend bool operator==(const entity_addrvec_t& l, const entity_addrvec_t& r) {
     return l.v == r.v;
   }
@@ -737,6 +743,11 @@ struct entity_inst_t {
   // cppcheck-suppress noExplicitConstructor
   entity_inst_t(const ceph_entity_inst& i) : name(i.name), addr(i.addr) { }
   entity_inst_t(const ceph_entity_name& n, const ceph_entity_addr &a) : name(n), addr(a) {}
+  operator std::string() {
+    stringstream out;
+    out << this;
+    return out.str();
+  }
   operator ceph_entity_inst() {
     ceph_entity_inst i = {name, addr};
     return i;

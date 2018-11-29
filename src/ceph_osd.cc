@@ -55,6 +55,8 @@
 
 namespace {
 
+TracepointProvider::Traits dispatchqueue_tracepoint_traits("libdispatchqueue_tp.so", "dispatchqueue_tracing");
+
 TracepointProvider::Traits osd_tracepoint_traits("libosd_tp.so",
                                                  "osd_tracing");
 TracepointProvider::Traits os_tracepoint_traits("libos_tp.so",
@@ -653,6 +655,7 @@ flushjournal_out:
   init_async_signal_handler();
   register_async_signal_handler(SIGHUP, sighup_handler);
 
+  TracepointProvider::initialize<dispatchqueue_tracepoint_traits>(g_ceph_context);
   TracepointProvider::initialize<osd_tracepoint_traits>(g_ceph_context);
   TracepointProvider::initialize<os_tracepoint_traits>(g_ceph_context);
 #ifdef WITH_OSD_INSTRUMENT_FUNCTIONS

@@ -1,0 +1,55 @@
+#include "include/int_types.h"
+
+TRACEPOINT_EVENT(ceph_logging, log_critical,
+    TP_ARGS(
+        char *, text),
+    TP_FIELDS(
+        ctf_string(message, text)
+    )
+)
+TRACEPOINT_LOGLEVEL(ceph_logging, log_cirtical, TRACE_CRIT)
+
+TRACEPOINT_EVENT(ceph_logging, log_error,
+    TP_ARGS(
+        char *, text),
+    TP_FIELDS(
+        ctf_string(message, text)
+    )
+)
+TRACEPOINT_LOGLEVEL(ceph_logging, log_error, TRACE_ERR)
+
+TRACEPOINT_EVENT(ceph_logging, log_warning,
+    TP_ARGS(
+        char *, text),
+    TP_FIELDS(
+        ctf_string(message, text)
+    )
+)
+TRACEPOINT_LOGLEVEL(ceph_logging, log_warning, TRACE_WARNING)
+
+TRACEPOINT_EVENT(ceph_logging, log_info,
+    TP_ARGS(
+        char *, text),
+    TP_FIELDS(
+        ctf_string(message, text)
+    )
+)
+TRACEPOINT_LOGLEVEL(ceph_logging, log_info, TRACE_INFO)
+
+TRACEPOINT_EVENT(ceph_logging, log_debug,
+    TP_ARGS(
+        char *, text),
+    TP_FIELDS(
+        ctf_string(message, text)
+    )
+)
+TRACEPOINT_LOGLEVEL(ceph_logging, log_debug, TRACE_DEBUG_PROGRAM)
+
+TRACEPOINT_EVENT(ceph_logging, log_verbose,
+    TP_ARGS(
+        char *, text),
+    TP_FIELDS(
+        ctf_string(message, text)
+    )
+)
+TRACEPOINT_LOGLEVEL(ceph_logging, log_verbose, TRACE_DEBUG)

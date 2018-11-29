@@ -70,6 +70,12 @@ void bluestore_bdev_label_t::generate_test_instances(
   o.back()->meta["foo"] = "bar";
 }
 
+bluestore_bdev_label_t::operator std::string() {
+  std::stringstream out;
+  out << *this;
+  return out.str();
+}
+
 ostream& operator<<(ostream& out, const bluestore_bdev_label_t& l)
 {
   return out << "bdev(osd_uuid " << l.osd_uuid
@@ -92,6 +98,12 @@ void bluestore_cnode_t::generate_test_instances(list<bluestore_cnode_t*>& o)
   o.push_back(new bluestore_cnode_t());
   o.push_back(new bluestore_cnode_t(0));
   o.push_back(new bluestore_cnode_t(123));
+}
+
+bluestore_cnode_t::operator std::string() const {
+  std::stringstream out;
+  out << *this;
+  return out.str();
 }
 
 ostream& operator<<(ostream& out, const bluestore_cnode_t& l)
@@ -583,6 +595,12 @@ void bluestore_pextent_t::generate_test_instances(list<bluestore_pextent_t*>& ls
   ls.push_back(new bluestore_pextent_t(1, 2));
 }
 
+bluestore_pextent_t::operator std::string() {
+  std::stringstream out;
+  out << *this;
+  return out.str();
+}
+
 // bluestore_blob_t
 
 string bluestore_blob_t::get_flags_string(unsigned flags)
@@ -652,6 +670,12 @@ void bluestore_blob_t::generate_test_instances(list<bluestore_blob_t*>& ls)
   ls.back()->allocated_test(
     bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET, 0x1000));
   ls.back()->allocated_test(bluestore_pextent_t(0x40120000, 0x10000));
+}
+
+bluestore_blob_t::operator std::string() const {
+  std::stringstream out;
+  out << *this;
+  return out.str();
 }
 
 ostream& operator<<(ostream& out, const bluestore_blob_t& o)
@@ -1011,6 +1035,12 @@ void bluestore_shared_blob_t::generate_test_instances(
   list<bluestore_shared_blob_t*>& ls)
 {
   ls.push_back(new bluestore_shared_blob_t(1));
+}
+
+bluestore_shared_blob_t::operator std::string() const {
+  stringstream out;
+  out << *this;
+  return out.str();
 }
 
 ostream& operator<<(ostream& out, const bluestore_shared_blob_t& sb)

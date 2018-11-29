@@ -16,10 +16,20 @@
 #include "DispatchQueue.h"
 #include "Messenger.h"
 #include "common/ceph_context.h"
+#include "common/TracepointProvider.h"
 
 #define dout_subsys ceph_subsys_ms
 #include "common/debug.h"
 
+#ifdef WITH_LTTNG_LOGGING
+#include "include/tracing/dispatchqueue_impl.h"
+#else
+#define trace(...)
+#define trace_error(...)
+#endif
+
+
+//static TracepointProvider::Traits tracepoint_traits("libdispatchqueue_tp.so", "dispatchqueue_tracing");
 
 /*******************
  * DispatchQueue
@@ -38,18 +48,34 @@ double DispatchQueue::get_max_age(utime_t now) const {
 
 uint64_t DispatchQueue::pre_dispatch(const ref_t<Message>& m)
 {
-  ldout(cct,1) << "<== " << m->get_source_inst()
-	       << " " << m->get_seq()
-	       << " ==== " << *m
-	       << " ==== " << m->get_payload().length()
-	       << "+" << m->get_middle().length()
-	       << "+" << m->get_data().length()
-	       << " (" << ceph_con_mode_name(m->get_connection()->get_con_mode())
-	       << " " << m->get_footer().front_crc << " "
-	       << m->get_footer().middle_crc
-	       << " " << m->get_footer().data_crc << ")"
-	       << " " << m << " con " << m->get_connection()
-	       << dendl;
+//  ldout(cct,1) << "<== " << m->get_source_inst()
+//	       << " " << m->get_seq()
+//	       << " ==== " << *m
+//	       << " ==== " << m->get_payload().length()
+//	       << "+" << m->get_middle().length()
+//	       << "+" << m->get_data().length()
+//	       << " (" << ceph_con_mode_name(m->get_connection()->get_con_mode())
+//	       << " " << m->get_footer().front_crc << " "
+//	       << m->get_footer().middle_crc
+//	       << " " << m->get_footer().data_crc << ")"
+//	       << " " << m << " con " << m->get_connection()
+//	       << dendl;
+  stringstream str_m;
+  stringstream str_source_inst;
+  str_m << *m;
+  str_source_inst << m->get_source_inst();
+  trace_pre_dispatch_info(1, dispatchqueue,
+    string, str_source_inst, str_source_inst.str(),
+    uint64_t, seq, m->get_seq(),
+    string, str_m, str_m.str(),
+    uint32_t, payload_len, m->get_payload().length(),
+    uint32_t, middle_len, m->get_middle().length(),
+    uint32_t, data_len, m->get_data().length(),
+    string, con_mode, ceph_con_mode_name(m->get_connection()->get_con_mode()),
+    uint32_t, front_crc, m->get_footer().front_crc,
+    uint32_t, middle_crc, m->get_footer().middle_crc,
+    uint32_t, data_crc, m->get_footer().data_crc,
+    "<== {} {} === {} +++ {} + {} + {} ({} {} {} {})");
   uint64_t msize = m->get_dispatch_throttle_size();
   m->set_dispatch_throttle_size(0); // clear it out, in case we requeue this message.
   return msize;

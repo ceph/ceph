@@ -174,6 +174,8 @@ BuildRequires:	liboath-devel
 BuildRequires:	libtool
 BuildRequires:	libxml2-devel
 BuildRequires:	libuuid-devel
+BuildRequires:	lttng-tools-devel
+BuildRequires:	lttng-ust-devel
 BuildRequires:	make
 BuildRequires:	ncurses-devel
 BuildRequires:	parted
@@ -1175,6 +1177,7 @@ ${CMAKE} .. \
     -DWITH_MANPAGE=ON \
     -DWITH_PYTHON3=%{python3_version} \
     -DWITH_MGR_DASHBOARD_FRONTEND=OFF \
+    -DWITH_LTTNG_LOGGING=ON \
 %if %{with python2}
     -DWITH_PYTHON2=ON \
 %else
@@ -1330,6 +1333,8 @@ rm -rf %{buildroot}
 %{_libdir}/libos_tp.so*
 %{_libdir}/libosd_tp.so*
 %endif
+%{_libdir}/liblogging_tp.so*
+%{_libdir}/libceph_logging_tp.so*
 %config(noreplace) %{_sysconfdir}/logrotate.d/ceph
 %if 0%{?fedora} || 0%{?rhel}
 %config(noreplace) %{_sysconfdir}/sysconfig/ceph

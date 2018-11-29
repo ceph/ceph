@@ -12,6 +12,13 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "freelist "
 
+#ifdef WITH_LTTNG_LOGGING
+#include "include/tracing/bmap_freelist_manager_impl.h"
+#else
+#define trace(...)
+#define trace_error(...)
+#endif
+
 void make_offset_key(uint64_t offset, std::string *key)
 {
   key->reserve(10);
@@ -505,8 +512,12 @@ void BitmapFreelistManager::allocate(
   uint64_t offset, uint64_t length,
   KeyValueDB::Transaction txn)
 {
-  dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
-	   << std::dec << dendl;
+//  dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
+//	   << std::dec << dendl;
+  trace_allocate_info(10, bmap_freelist_manager,
+    uint64_t, offset, offset,
+    uint64_t, length, length,
+    "0x{0:x}~{1:x}");
   _xor(offset, length, txn);
 }
 
@@ -514,8 +525,12 @@ void BitmapFreelistManager::release(
   uint64_t offset, uint64_t length,
   KeyValueDB::Transaction txn)
 {
-  dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
-	   << std::dec << dendl;
+//  dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
+//	   << std::dec << dendl;
+  trace_release_info(10, bmap_freelist_manager,
+    uint64_t, offset, offset,
+    uint64_t, length, length,
+    "0x{0:x}~{1:x}");
   _xor(offset, length, txn);
 }
 
@@ -529,8 +544,12 @@ void BitmapFreelistManager::_xor(
 
   uint64_t first_key = offset & key_mask;
   uint64_t last_key = (offset + length - 1) & key_mask;
-  dout(20) << __func__ << " first_key 0x" << std::hex << first_key
-	   << " last_key 0x" << last_key << std::dec << dendl;
+//  dout(20) << __func__ << " first_key 0x" << std::hex << first_key
+//	   << " last_key 0x" << last_key << std::dec << dendl;
+  trace_xor_info(20, bmap_freelist_manager,
+    uint64_t, first_key, first_key,
+    uint64_t, last_key, last_key,
+    "first_key 0x{0:x} last_key 0x{1:x}");
 
   if (first_key == last_key) {
     bufferptr p(blocks_per_key >> 3);

@@ -35,7 +35,7 @@ install(PROGRAMS
 endif(WITH_TESTS)
 
 add_executable(ceph-osdomap-tool ceph_osdomap_tool.cc)
-target_link_libraries(ceph-osdomap-tool os global Boost::program_options)
+target_link_libraries(ceph-osdomap-tool os ceph_logging_tp global Boost::program_options)
 install(TARGETS ceph-osdomap-tool DESTINATION bin)
 
 add_executable(ceph-monstore-tool
@@ -65,7 +65,7 @@ endif(WITH_LIBCEPHFS)
 add_executable(ceph-kvstore-tool
   kvstore_tool.cc
   ceph_kvstore_tool.cc)
-target_link_libraries(ceph-kvstore-tool os global)
+target_link_libraries(ceph-kvstore-tool os ceph_logging_tp fmt::fmt global)
 install(TARGETS ceph-kvstore-tool DESTINATION bin)
 
 set(ceph_conf_srcs ceph_conf.cc)
