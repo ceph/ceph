@@ -4,10 +4,7 @@ Test CephFS scrub (distinct from OSD scrub) functionality
 import logging
 import os
 import traceback
-try:
-    from collections.abc import namedtuple
-except ImportError:
-    from collections import namedtuple
+from collections import namedtuple
 
 from teuthology.orchestra.run import CommandFailedError
 from tasks.cephfs.cephfs_test_case import CephFSTestCase, for_teuthology

@@ -4,10 +4,7 @@ from __future__ import absolute_import
 
 import json
 import logging
-try:
-    from collections.abc import namedtuple
-except ImportError:
-    from collections import namedtuple
+from collections import namedtuple
 import time
 
 import requests
