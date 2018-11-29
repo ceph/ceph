@@ -1364,7 +1364,7 @@ public:
 
   int clean_pg_upmaps(
     CephContext *cct,
-    Incremental *pending_inc);
+    Incremental *pending_inc) const;
 
   bool try_pg_upmap(
     CephContext *cct,

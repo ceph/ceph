@@ -1755,12 +1755,12 @@ void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
     to_check.insert(p.first);
   }
   for (auto& pg : to_check) {
-    auto crush_rule = nextmap.get_pg_pool_crush_rule(pg);
-    if (crush_rule < 0) {
-      lderr(cct) << __func__ << " unable to load crush-rule of pg "
-                 << pg << dendl;
+    if (!nextmap.pg_exists(pg)) {
+      ldout(cct, 0) << __func__ << " pg " << pg << " is gone" << dendl;
+      to_cancel.insert(pg);
       continue;
     }
+    auto crush_rule = nextmap.get_pg_pool_crush_rule(pg);
     map<int, float> weight_map;
     auto it = rule_weight_map.find(crush_rule);
     if (it == rule_weight_map.end()) {
@@ -1859,6 +1859,7 @@ void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
       }
     }
   }
+  nextmap.clean_pg_upmaps(cct, pending_inc);
 }
 
 int OSDMap::apply_incremental(const Incremental &inc)
@@ -4186,7 +4187,7 @@ int OSDMap::summarize_mapping_stats(
 
 int OSDMap::clean_pg_upmaps(
   CephContext *cct,
-  Incremental *pending_inc)
+  Incremental *pending_inc) const
 {
   ldout(cct, 10) << __func__ << dendl;
   int changed = 0;
