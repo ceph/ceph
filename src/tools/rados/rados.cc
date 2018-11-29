@@ -103,7 +103,7 @@ void usage(ostream& out)
 "   rollback <obj-name> <snap-name>  roll back object to snap <snap-name>\n"
 "\n"
 "   listsnaps <obj-name>             list the snapshots of this object\n"
-"   bench <seconds> write|seq|rand [-t concurrent_operations] [--no-cleanup] [--run-name run_name] [--no-hints]\n"
+"   bench <seconds> write|seq|rand [-t concurrent_operations] [--no-cleanup] [--run-name run_name] [--no-hints] [--reuse-bench]\n"
 "                                    default is 16 concurrent IOs and 4 MB ops\n"
 "                                    default is to clean up after write benchmark\n"
 "                                    default run-name is 'benchmark_last_metadata'\n"
@@ -1846,6 +1846,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   int bench_write_dest = 0;
   bool cleanup = true;
   bool hints = true; // for rados bench
+  bool reuse_bench = false;
   bool no_verify = false;
   bool use_striper = false;
   bool with_clones = false;
@@ -2032,6 +2033,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   i = opts.find("no-hints");
   if (i != opts.end()) {
     hints = false;
+  }
+  i = opts.find("reuse-bench");
+  if (i != opts.end()) {
+    reuse_bench = true;
   }
   i = opts.find("pretty-format");
   if (i != opts.end()) {
@@ -3184,7 +3189,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     cout << "hints = " << (int)hints << std::endl;
     ret = bencher.aio_bench(operation, seconds,
 			    concurrent_ios, op_size, object_size,
-			    max_objects, cleanup, hints, run_name, no_verify);
+			    max_objects, cleanup, hints, run_name, reuse_bench, no_verify);
     if (ret != 0)
       cerr << "error during benchmark: " << cpp_strerror(ret) << std::endl;
     if (formatter && output)
@@ -3907,6 +3912,8 @@ int main(int argc, const char **argv)
       opts["no-cleanup"] = "true";
     } else if (ceph_argparse_flag(args, i, "--no-hints", (char*)NULL)) {
       opts["no-hints"] = "true";
+    } else if (ceph_argparse_flag(args, i, "--reuse-bench", (char*)NULL)) {
+      opts["reuse-bench"] = "true";
     } else if (ceph_argparse_flag(args, i, "--no-verify", (char*)NULL)) {
       opts["no-verify"] = "true";
     } else if (ceph_argparse_witharg(args, i, &val, "--run-name", (char*)NULL)) {
