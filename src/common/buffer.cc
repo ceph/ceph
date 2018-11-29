@@ -1599,7 +1599,7 @@ using namespace ceph;
     append_buffer.set_length(append_buffer.length() + len);
     append(append_buffer, append_buffer.length() - len, len);
 
-    return { std::prev(std::end(_buffers))->end_c_str() - len };
+    return { _buffers.back().end_c_str() - len };
   }
 
   void buffer::list::prepend_zero(unsigned len)

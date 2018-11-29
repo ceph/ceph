@@ -50,8 +50,6 @@
 #include <exception>
 #include <type_traits>
 
-#include <boost/intrusive/list.hpp>
-
 #include "page.h"
 #include "crc32c.h"
 #include "buffer_fwd.h"
@@ -383,7 +381,16 @@ namespace buffer CEPH_BUFFER_API {
   };
 
 
-  class ptr_node : public ptr, public boost::intrusive::list_base_hook<> {
+  struct ptr_hook {
+    mutable ptr_hook* next;
+
+    ptr_hook() = default;
+    ptr_hook(ptr_hook* const next)
+      : next(next) {
+    }
+  };
+
+  class ptr_node : public ptr_hook, public ptr {
   public:
     struct cloner {
       ptr_node* operator()(const ptr_node& clone_this) {
@@ -434,66 +441,247 @@ namespace buffer CEPH_BUFFER_API {
 
   class CEPH_BUFFER_API list {
   public:
-    class buffers_t : private boost::intrusive::list<ptr_node> {
-      typedef boost::intrusive::list<ptr_node> base_t;
+    // this the very low-level implementation of singly linked list
+    // ceph::buffer::list is built on. We don't use intrusive slist
+    // of Boost (or any other 3rd party) to save extra dependencies
+    // in our public headers.
+    class buffers_t {
+      // _root.next can be thought as _head
+      ptr_hook _root;
+      ptr_hook* _tail;
+      std::size_t _size;
 
     public:
-      using base_t::const_reference;
-      using base_t::const_iterator;
-      using base_t::iterator;
+      template <class T>
+      class buffers_iterator {
+	typename std::conditional<
+	  std::is_const<T>::value, const ptr_hook*, ptr_hook*>::type cur;
+	template <class U> friend class buffers_iterator;
+      public:
+	using value_type = T;
+	using reference = typename std::add_lvalue_reference<T>::type;
+	using pointer = typename std::add_pointer<T>::type;
+	using difference_type = std::ptrdiff_t;
+	using iterator_category = std::forward_iterator_tag;
 
-      using base_t::base_t;
-      using base_t::iterator_to;
+	template <class U>
+	buffers_iterator(U* const p)
+	  : cur(p) {
+	}
+	template <class U>
+	buffers_iterator(const buffers_iterator<U>& other)
+	  : cur(other.cur) {
+	}
+	buffers_iterator() = default;
 
-      using base_t::push_front;
-      using base_t::push_back;
-      using base_t::erase;
-      using base_t::insert;
-      using base_t::size;
-      using base_t::empty;
+	T& operator*() const {
+	  return *reinterpret_cast<T*>(cur);
+	}
+	T* operator->() const {
+	  return reinterpret_cast<T*>(cur);
+	}
 
-      const_iterator begin() const {
-	return base_t::cbegin();
+	buffers_iterator& operator++() {
+	  cur = cur->next;
+	  return *this;
+	}
+	buffers_iterator operator++(int) {
+	  const auto temp(*this);
+	  ++*this;
+	  return temp;
+	}
+
+	template <class U>
+	buffers_iterator& operator=(buffers_iterator<U>& other) {
+	  cur = other.cur;
+	  return *this;
+	}
+
+	bool operator==(const buffers_iterator& rhs) const {
+	  return cur == rhs.cur;
+	}
+	bool operator!=(const buffers_iterator& rhs) const {
+	  return !(*this==rhs);
+	}
+
+	using citer_t = buffers_iterator<typename std::add_const<T>::type>;
+	operator citer_t() const {
+	  return citer_t(cur);
+	}
+      };
+
+      typedef buffers_iterator<const ptr_node> const_iterator;
+      typedef buffers_iterator<ptr_node> iterator;
+
+      typedef const ptr_node& const_reference;
+      typedef ptr_node& reference;
+
+      buffers_t()
+        : _root(&_root),
+	  _tail(&_root),
+	  _size(0) {
       }
-      const_iterator end() const {
-	return base_t::cend();
+      buffers_t(const buffers_t&) = delete;
+      buffers_t(buffers_t&& other)
+	: _root(other._root.next == &other._root ? &_root : other._root.next),
+	  _tail(other._tail == &other._root ? &_root : other._tail),
+	  _size(other._size) {
+	other._root.next = &other._root;
+	other._tail = &other._root;
+	other._size = 0;
+
+	_tail->next = &_root;
       }
-      iterator begin() {
-	return base_t::begin();
-      }
-      iterator end() {
-	return base_t::end();
+      buffers_t& operator=(buffers_t&& other) {
+	if (&other != this) {
+	  clear_and_dispose();
+	  swap(other);
+	}
+	return *this;
       }
 
-      reference front() {
-	return base_t::front();
-      }
-      reference back() {
-	return base_t::back();
-      }
-      const_reference front() const {
-	return base_t::front();
-      }
-      const_reference back() const {
-	return base_t::back();
+      void push_back(reference item) {
+	item.next = &_root;
+	// this updates _root.next when called on empty
+	_tail->next = &item;
+	_tail = &item;
+	_size++;
       }
 
-      void clone_from(const buffers_t& other) {
-	base_t::clone_from(other, ptr_node::cloner(), ptr_node::disposer());
+      void push_front(reference item) {
+	item.next = _root.next;
+	_root.next = &item;
+	_tail = _tail == &_root ? &item : _tail;
+	_size++;
       }
-      void clear_and_dispose() {
-	base_t::clear_and_dispose(ptr_node::disposer());
+
+      // *_after
+      iterator erase_after(const_iterator it) {
+	const auto* to_erase = it->next;
+
+	it->next = to_erase->next;
+	_root.next = _root.next == to_erase ? to_erase->next : _root.next;
+	_tail = _tail == to_erase ? (ptr_hook*)&*it : _tail;
+	_size--;
+	return it->next;
       }
-      auto erase_and_dispose(const_iterator it) {
-	return base_t::erase_and_dispose(it, ptr_node::disposer());
+
+      void insert_after(const_iterator it, reference item) {
+	item.next = it->next;
+	it->next = &item;
+	_root.next = it == end() ? &item : _root.next;
+	_tail = const_iterator(_tail) == it ? &item : _tail;
+	_size++;
+      }
+
+      void splice_after(const_iterator it, buffers_t& other) {
+	if (other._size == 0) {
+	  return;
+	}
+
+	other._tail->next = it->next;
+	it->next = other._root.next;
+
+	// the insert_after(end(), ...) case
+	_root.next = it == end() ? other._root.next : _root.next;
+
+	// push_back equivalent
+	_tail = const_iterator(_tail) == it ? other._tail : _tail;
+
+	_size += other._size;
+
+	other._root.next = &other._root;
+	other._tail = &other._root;
+	other._size = 0;
+      }
+
+      const const_iterator previous(const_iterator it) const {
+	for (auto prev = begin(); prev != end(); prev = prev->next) {
+	  if (const_iterator(prev->next) == it) {
+	    return prev;
+	  }
+	}
+	return end();
+      }
+
+      auto erase(const_iterator it) {
+	return erase_after(previous(it));
+      }
+
+      auto insert(const_iterator it, reference item) {
+	return insert_after(previous(it), item);
       }
 
       auto splice(const_iterator it, buffers_t& other) {
-	return base_t::splice(it, other);
+	return splice_after(previous(it), other);
+      }
+
+      std::size_t size() const { return _size; }
+      bool empty() const { return _tail == &_root; }
+
+      const_iterator begin() const {
+	return _root.next;
+      }
+      const_iterator end() const {
+	return &_root;
+      }
+      iterator begin() {
+	return _root.next;
+      }
+      iterator end() {
+	return &_root;
+      }
+
+      reference front() {
+	return reinterpret_cast<reference>(*_root.next);
+      }
+      reference back() {
+	return reinterpret_cast<reference>(*_tail);
+      }
+      const_reference front() const {
+	return reinterpret_cast<const_reference>(*_root.next);
+      }
+      const_reference back() const {
+	return reinterpret_cast<const_reference>(*_tail);
+      }
+
+      void clone_from(const buffers_t& other) {
+	clear_and_dispose();
+	for (auto& node : other) {
+	  ptr_node* clone = ptr_node::cloner()(node);
+	  push_back(*clone);
+	}
+      }
+      void clear_and_dispose() {
+	for (auto it = begin(); it != end(); /* nop */) {
+	  auto& node = *it;
+	  it = it->next;
+	  ptr_node::disposer()(&node);
+	}
+	_root.next = &_root;
+	_tail = &_root;
+	_size = 0;
+      }
+      auto erase_and_dispose(iterator it) {
+	auto ret = erase(it);
+	ptr_node::disposer()(&*it);
+	return ret;
       }
 
       void swap(buffers_t& other) {
-	base_t::swap(other);
+	const auto copy_root = _root;
+	_root.next = \
+	  other._root.next == &other._root ? &this->_root : other._root.next;
+	other._root.next = \
+	  copy_root.next == &_root ? &other._root : copy_root.next;
+
+	const auto copy_tail = _tail;
+	_tail = other._tail == &other._root ? &this->_root : other._tail;
+	other._tail = copy_tail == &_root ? &other._root : copy_tail;
+
+	_tail->next = &_root;
+	other._tail->next = &other._root;
+	std::swap(_size, other._size);
       }
     };
 
