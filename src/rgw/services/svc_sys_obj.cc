@@ -27,7 +27,8 @@ int RGWSI_SysObj::Obj::ROp::stat()
   RGWSI_SysObj_Core *svc = source.core_svc;
   rgw_raw_obj& obj = source.obj;
 
-  return svc->stat(source.get_ctx(), state, obj, attrs,
+  return svc->stat(source.get_ctx(), state, obj,
+		   attrs, raw_attrs,
                    lastmod, obj_size,
                    objv_tracker);
 }
@@ -41,6 +42,7 @@ int RGWSI_SysObj::Obj::ROp::read(int64_t ofs, int64_t end, bufferlist *bl)
                    objv_tracker,
                    obj, bl, ofs, end,
                    attrs,
+		   raw_attrs,
                    cache_info,
                    refresh_version);
 }

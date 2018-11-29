@@ -43,6 +43,7 @@ protected:
            const rgw_raw_obj& obj,
            bufferlist *bl, off_t ofs, off_t end,
            map<string, bufferlist> *attrs,
+	   bool raw_attrs,
            rgw_cache_entry_info *cache_info,
            boost::optional<obj_version>) override;
 
