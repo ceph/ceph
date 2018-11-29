@@ -150,7 +150,7 @@ List all topics that user defined.
 
 
 Notifications
-~~~~~~
+~~~~~~~~~~~~~
 
 Create a Notification
 ``````````````````````````
