@@ -209,8 +209,11 @@ class Module(MgrModule):
         # include stats, including space utilization performance counters.
         # adapted from dashboard api controller
         for s in self.get('osd_stats')['osd_stats']:
-            idx = osd_id_to_idx[s["osd"]]
-            osd_map["osds"][idx].update({'osd_stats': s})
+            try:
+                idx = osd_id_to_idx[s["osd"]]
+                osd_map["osds"][idx].update({'osd_stats': s})
+            except KeyError as e:
+                self.log.warning("inconsistent api state: {}".format(str(e)))
 
         for osd in osd_map["osds"]:
             osd['stats'] = {}
