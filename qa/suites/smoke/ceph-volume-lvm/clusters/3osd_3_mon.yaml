@@ -1,0 +1,13 @@
+roles:
+- [mon.a, mds.a, mgr.x, osd.0, osd.1, osd.2]
+- [mon.b, mon.c, mgr.y, osd.3, osd.4, osd.5]
+- [client.0]
+
+log-rotate:
+  ceph-mds: 10G
+  ceph-osd: 10G
+overrides:
+  ceph:
+    conf:
+      osd:
+        osd shutdown pgref assert: true
