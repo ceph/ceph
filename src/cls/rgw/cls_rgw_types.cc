@@ -247,6 +247,8 @@ bool rgw_cls_bi_entry::get_info(cls_rgw_obj_key *key, uint8_t *category, rgw_buc
   using ceph::decode;
   switch (type) {
     case PlainIdx:
+        account = true;
+        // NO BREAK; falls through to case InstanceIdx:
     case InstanceIdx:
       {
         rgw_bucket_dir_entry entry;
@@ -257,7 +259,6 @@ bool rgw_cls_bi_entry::get_info(cls_rgw_obj_key *key, uint8_t *category, rgw_buc
         accounted_stats->total_size += entry.meta.accounted_size;
         accounted_stats->total_size_rounded += cls_rgw_get_rounded_size(entry.meta.accounted_size);
         accounted_stats->actual_size += entry.meta.size;
-        account = true;
       }
       break;
     case OLHIdx:
