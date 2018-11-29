@@ -6238,7 +6238,7 @@ std::vector<Option> get_rgw_options() {
     .set_default(1000)
     .set_min_max(1, 100000)
     .add_service("rgw")
-    .set_description("Upper bound on results in listing operations, ListBucket max-keys"),
+    .set_description("Upper bound on results in listing operations, ListBucket max-keys")
     .set_long_description("This caps the maximum permitted value for listing-like operations in RGW S3. "
 			  "Affects ListBucket(max-keys), "
 			  "ListBucketVersions(max-keys), "
