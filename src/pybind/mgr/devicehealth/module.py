@@ -121,7 +121,7 @@ class Module(MgrModule):
         self.event = Event()
 
     def is_valid_daemon_name(self, who):
-        l = cmd.get('who', '').split('.')
+        l = who.split('.')
         if len(l) != 2:
             return False
         if l[0] not in ('osd', 'mon'):
