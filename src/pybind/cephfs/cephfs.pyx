@@ -9,10 +9,7 @@ from libc.stdlib cimport malloc, realloc, free
 
 cimport rados
 
-try:
-    from collections.abc import namedtuple
-except ImportError:
-    from collections import namedtuple
+from collections import namedtuple
 from datetime import datetime
 import errno
 import os

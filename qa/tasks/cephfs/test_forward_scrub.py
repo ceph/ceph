@@ -10,10 +10,7 @@ how the functionality responds to damaged metadata.
 import json
 
 import logging
-try:
-    from collections.abc import namedtuple
-except ImportError:
-    from collections import namedtuple
+from collections import namedtuple
 from textwrap import dedent
 
 from teuthology.orchestra.run import CommandFailedError
