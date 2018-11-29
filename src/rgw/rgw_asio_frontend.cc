@@ -6,6 +6,7 @@
 #include <vector>
 
 #include <boost/asio.hpp>
+#define BOOST_COROUTINES_NO_DEPRECATION_WARNING
 #include <boost/asio/spawn.hpp>
 #include <boost/intrusive/list.hpp>
 
@@ -557,6 +558,8 @@ int AsioFrontend::run()
 
   for (int i = 0; i < thread_count; i++) {
     threads.emplace_back([=] {
+      // request warnings on synchronous librados calls in this thread
+      is_asio_thread = true;
       boost::system::error_code ec;
       context.run(ec);
     });
