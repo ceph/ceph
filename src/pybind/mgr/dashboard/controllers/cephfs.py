@@ -1,10 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-try:
-    from collections.abc import defaultdict
-except ImportError:
-    from collections import defaultdict
+from collections import defaultdict
 
 import cherrypy
 

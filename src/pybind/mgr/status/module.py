@@ -3,10 +3,7 @@
 High level status display commands
 """
 
-try:
-    from collections.abc import defaultdict
-except ImportError:
-    from collections import defaultdict
+from collections import defaultdict
 from prettytable import PrettyTable
 import errno
 import fnmatch
