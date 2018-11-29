@@ -29,6 +29,7 @@ for configuring any sync plugin
 
    ElasticSearch Sync Module <elastic-sync-module>
    Cloud Sync Module <cloud-sync-module>
+   PubSub Module <pubsub-module>
 
 .. note ``rgw`` is the default sync plugin and there is no need to explicitly
    configure this
