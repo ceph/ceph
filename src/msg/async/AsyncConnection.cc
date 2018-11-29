@@ -642,7 +642,14 @@ void AsyncConnection::process()
               break;
             }
 
-            data_blp.advance(read);
+            const unsigned max_adv = std::numeric_limits<int>::max();
+            if (read <= max_adv) {
+              data_blp.advance(read);
+            } else {
+              data_blp.advance(max_adv);
+              data_blp.advance(read - max_adv);
+            }
+     
             data.append(bp, 0, read);
             msg_left -= read;
           }
