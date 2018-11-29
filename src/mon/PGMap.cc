@@ -340,15 +340,16 @@ void PGMapDigest::print_oneline_summary(Formatter *f, ostream *out) const
     *out << num_pg << " pgs: "
          << states << "; "
          << byte_u_t(pg_sum.stats.sum.num_bytes) << " data, "
-         << byte_u_t(osd_sum.statfs.get_used_raw()) << " used, "
+         << byte_u_t(osd_sum.statfs.get_used()) << " used, "
          << byte_u_t(osd_sum.statfs.available) << " / "
          << byte_u_t(osd_sum.statfs.total) << " avail";
   if (f) {
     f->dump_unsigned("num_pgs", num_pg);
     f->dump_unsigned("num_bytes", pg_sum.stats.sum.num_bytes);
-    f->dump_unsigned("raw_bytes_used", osd_sum.statfs.get_used_raw());
-    f->dump_unsigned("raw_bytes_avail", osd_sum.statfs.available);
-    f->dump_unsigned("raw_bytes", osd_sum.statfs.total);
+    f->dump_int("total_bytes", osd_sum.statfs.total);
+    f->dump_int("total_avail_bytes", osd_sum.statfs.available);
+    f->dump_int("total_used_bytes", osd_sum.statfs.get_used());
+    f->dump_int("total_used_raw_bytes", osd_sum.statfs.get_used_raw());
   }
 
   // make non-negative; we can get negative values if osds send

@@ -1,6 +1,15 @@
 14.0.1
 ------
 
+* ceph pg stat output has been modified in json
+  format to match ceph df output:
+  * "raw_bytes" field renamed to "total_bytes"
+  * "raw_bytes_avail" field renamed to "total_bytes_avail"
+  * "raw_bytes_avail" field renamed to "total_bytes_avail"
+  * "raw_bytes_used" field renamed to "total_bytes_raw_used"
+  * "total_bytes_used" field added to represent the space (accumulated over
+    all OSDs) allocated purely for data objects kept at block(slow) device
+  
 * ceph df [detail] output (GLOBAL section) has been modified in plain
   format:
   * new 'USED' column shows the space (accumulated over all OSDs) allocated
