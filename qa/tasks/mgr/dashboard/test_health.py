@@ -89,19 +89,22 @@ class HealthTest(DashboardTestCase):
             'df': JObj({
                 'pools': JList(JObj({
                     'stats': JObj({
-                        'wr': int,
-                        'quota_objects': int,
+                        'stored': int,
+                        'objects': int,
+                        'kb_used': int,
                         'bytes_used': int,
+                        'percent_used': float,
                         'max_avail': int,
+                        'quota_objects': int,
+                        'quota_bytes': int,
+                        'dirty': int,
                         'rd': int,
                         'rd_bytes': int,
-                        'objects': int,
-                        'percent_used': float,
-                        'kb_used': int,
-                        'quota_bytes': int,
-                        'raw_bytes_used': int,
+                        'wr': int,
                         'wr_bytes': int,
-                        'dirty': int
+                        'compress_bytes_used': int,
+                        'compress_under_bytes': int,
+                        'stored_raw': int
                     }),
                     'name': str,
                     'id': int
@@ -111,7 +114,8 @@ class HealthTest(DashboardTestCase):
                     'total_bytes': int,
                     'total_objects': int,
                     'total_percent_used': float,
-                    'total_used_bytes': int
+                    'total_used_bytes': int,
+                    'total_used_raw_bytes': int
                 })
             }),
             'fs_map': JObj({
