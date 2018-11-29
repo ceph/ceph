@@ -3,6 +3,7 @@
 #include "svc_notify.h"
 
 #include "rgw/rgw_zone.h"
+#include "rgw/rgw_tools.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -90,6 +91,7 @@ int RGWSI_SysObj_Cache::read(RGWSysObjectCtxBase& obj_ctx,
                              const rgw_raw_obj& obj,
                              bufferlist *obl, off_t ofs, off_t end,
                              map<string, bufferlist> *attrs,
+			     bool raw_attrs,
                              rgw_cache_entry_info *cache_info,
                              boost::optional<obj_version> refresh_version)
 {
@@ -97,7 +99,7 @@ int RGWSI_SysObj_Cache::read(RGWSysObjectCtxBase& obj_ctx,
   string oid;
   if (ofs != 0) {
     return RGWSI_SysObj_Core::read(obj_ctx, read_state, objv_tracker,
-                          obj, obl, ofs, end, attrs,
+                          obj, obl, ofs, end, attrs, raw_attrs,
                           cache_info, refresh_version);
   }
 
@@ -106,7 +108,7 @@ int RGWSI_SysObj_Cache::read(RGWSysObjectCtxBase& obj_ctx,
 
   ObjectCacheInfo info;
 
-  uint32_t flags = CACHE_FLAG_DATA;
+  uint32_t flags = (end != 0 ? CACHE_FLAG_DATA : 0);
   if (objv_tracker)
     flags |= CACHE_FLAG_OBJV;
   if (attrs)
@@ -126,13 +128,22 @@ int RGWSI_SysObj_Cache::read(RGWSysObjectCtxBase& obj_ctx,
     i.copy_all(*obl);
     if (objv_tracker)
       objv_tracker->read_version = info.version;
-    if (attrs)
-      *attrs = info.xattrs;
+    if (attrs) {
+      if (raw_attrs) {
+	*attrs = info.xattrs;
+      } else {
+	rgw_filter_attrset(info.xattrs, RGW_ATTR_PREFIX, attrs);
+      }
+    }
     return obl->length();
   }
+
+  map<string, bufferlist> unfiltered_attrset;
   int r = RGWSI_SysObj_Core::read(obj_ctx, read_state, objv_tracker,
                          obj, obl, ofs, end,
-                         attrs, cache_info,
+			 (attrs ? &unfiltered_attrset : nullptr),
+			 true, /* cache unfiltered attrs */
+			 cache_info,
                          refresh_version);
   if (r < 0) {
     if (r == -ENOENT) { // only update ENOENT, we'd rather retry other errors
@@ -144,21 +155,27 @@ int RGWSI_SysObj_Cache::read(RGWSysObjectCtxBase& obj_ctx,
 
   if (obl->length() == end + 1) {
     /* in this case, most likely object contains more data, we can't cache it */
-    return r;
+    flags &= ~CACHE_FLAG_DATA;
+  } else {
+    bufferptr p(r);
+    bufferlist& bl = info.data;
+    bl.clear();
+    bufferlist::iterator o = obl->begin();
+    o.copy_all(bl);
   }
 
-  bufferptr p(r);
-  bufferlist& bl = info.data;
-  bl.clear();
-  bufferlist::iterator o = obl->begin();
-  o.copy_all(bl);
   info.status = 0;
   info.flags = flags;
   if (objv_tracker) {
     info.version = objv_tracker->read_version;
   }
   if (attrs) {
-    info.xattrs = *attrs;
+    info.xattrs = std::move(unfiltered_attrset);
+    if (raw_attrs) {
+      *attrs = info.xattrs;
+    } else {
+      rgw_filter_attrset(info.xattrs, RGW_ATTR_PREFIX, attrs);
+    }
   }
   cache.put(name, info, cache_info);
   return r;
