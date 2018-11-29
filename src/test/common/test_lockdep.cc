@@ -8,6 +8,7 @@
 #include "global/global_context.h"
 #include "global/global_init.h"
 #include "common/lockdep.h"
+#include "include/coredumpctl.h"
 
 TEST(lockdep, abba)
 {
@@ -24,6 +25,7 @@ TEST(lockdep, abba)
   b.unlock();
 
   b.lock();
+  PrCtl unset_dumpable;
   EXPECT_DEATH(a.lock(), "");
   b.unlock();
 }
@@ -34,6 +36,7 @@ TEST(lockdep, recursive)
 
   ceph::mutex a(ceph::make_mutex("a"));
   a.lock();
+  PrCtl unset_dumpable;
   EXPECT_DEATH(a.lock(), "");
   a.unlock();
 
