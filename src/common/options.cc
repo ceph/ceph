@@ -3422,6 +3422,12 @@ std::vector<Option> get_global_options() {
     .set_description("Maximum block size to checksum")
     .add_see_also("bluestore_csum_min_block"),
 
+    Option("bluestore_retry_disk_reads", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(3)
+    .set_min_max(0, 255)
+    .set_description("Number of read retries on checksum validation error")
+    .set_long_description("Retries to read data from the disk this many times when checksum validation fails to handle spurious read errors gracefully."),
+
     Option("bluestore_min_alloc_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
     .add_tag("mkfs")
@@ -3790,6 +3796,10 @@ std::vector<Option> get_global_options() {
     Option("bluestore_debug_random_read_err", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0)
     .set_description(""),
+
+    Option("bluestore_debug_inject_csum_err_probability", Option::TYPE_FLOAT, Option::LEVEL_DEV)
+    .set_default(0.0)
+    .set_description("inject crc verification errors into bluestore device reads"),
 
     // -----------------------------------------
     // kstore
