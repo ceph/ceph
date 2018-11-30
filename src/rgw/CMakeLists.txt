@@ -1,3 +1,7 @@
+# local fmt library:
+include_directories(
+  ${PROJECT_SOURCE_DIR}/src/fmt)
+
 if(WITH_TESTS)
 add_executable(ceph_rgw_jsonparser
   rgw_jsonparser.cc)
@@ -138,7 +142,7 @@ add_library(rgw_common OBJECT ${librgw_common_srcs})
 
 target_include_directories(rgw_common SYSTEM PUBLIC "services")
 target_include_directories(rgw_common PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src")
-
+target_include_directories(rgw_common PUBLIC ${PROJECT_SRC_DIR}/src/fmt)
 
 if(WITH_LTTNG)
   # rgw/rgw_op.cc includes "tracing/rgw_op.h"
@@ -170,7 +174,8 @@ set(rgw_a_srcs
   rgw_usage.cc
   rgw_opa.cc
   rgw_sts.cc
-  rgw_rest_sts.cc)
+  rgw_rest_sts.cc
+  rgw_string.cc)
 
 gperf_generate(${CMAKE_SOURCE_DIR}/src/rgw/rgw_iam_policy_keywords.gperf
   rgw_iam_policy_keywords.frag.cc)
@@ -197,6 +202,7 @@ target_link_libraries(rgw_a
   librados-cxx cls_otp_client cls_lock_client cls_rgw_client cls_refcount_client
   cls_log_client cls_timeindex_client cls_version_client
   cls_user_client ceph-common common_utf8 global
+  fmt
   ${CURL_LIBRARIES}
   ${EXPAT_LIBRARIES}
   ${OPENLDAP_LIBRARIES} ${CRYPTO_LIBS}

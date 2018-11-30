@@ -274,14 +274,22 @@ list(APPEND mds_files
 add_subdirectory(json_spirit)
 
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/xxHash")
+include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/seastar/fmt/include")
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/rapidjson/include")
 
+find_package(fmt 4.0.0 QUIET)
+if(NOT fmt_FOUND)
+  message(STATUS "Could not find fmt, will build it")
+  add_subdirectory(seastar/fmt)
+elseif(fmt_VERSION VERSION_GREATER_EQUAL 5.0.0)
+  message(WARNING "Could NOT find fmt: "
+    "Found unsuitable version \"${fmt_VERSION}\", "
+    "but required is at most \"5.0.0\" (found ${fmt_INCLUDE_DIR}). "
+    "Will build it")
+  add_subdirectory(seastar/fmt)
+endif()
+
 if(WITH_SEASTAR)
-  find_package(fmt 5.2.1 QUIET)
-  if(NOT fmt_FOUND)
-    message(STATUS "Could not find fmt, will build it")
-    add_subdirectory(seastar/fmt)
-  endif()
   find_package(c-ares 1.13.0 QUIET)
   if(NOT c-ares_FOUND)
     message(STATUS "Could not find c-ares, will build it")
