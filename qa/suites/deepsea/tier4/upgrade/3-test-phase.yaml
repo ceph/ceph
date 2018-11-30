@@ -18,8 +18,10 @@ tasks:
         - exec:
                 all:
                         - 'zypper --non-interactive --no-gpg-checks rm gvfs-backends sle-sdk-release-POOL || true'
-        - deepsea.state:
-                state: ceph.updates.salt
+        - salt.command:
+                command: 'state.apply ceph.updates.salt'
+        - salt.command:
+                command: 'saltutil.sync_all'
         - deepsea.orch:
                 state_orch: ceph.maintenance.upgrade
         - exec:
