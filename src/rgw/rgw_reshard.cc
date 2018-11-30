@@ -725,10 +725,11 @@ RGWReshard::RGWReshard(RGWRados* _store, bool _verbose, ostream *_out,
   store(_store), instance_lock(bucket_instance_lock_name),
   verbose(_verbose), out(_out), formatter(_formatter)
 {
-  num_logshards = store->ctx()->_conf->rgw_reshard_num_logs;
+  num_logshards = store->ctx()->_conf.get_val<uint64_t>("rgw_reshard_num_logs");
 }
 
-string RGWReshard::get_logshard_key(const string& tenant, const string& bucket_name)
+string RGWReshard::get_logshard_key(const string& tenant,
+				    const string& bucket_name)
 {
   return tenant + ":" + bucket_name;
 }
