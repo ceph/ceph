@@ -137,7 +137,7 @@ def remove_partition(device):
     udev_info = udevadm_property(device.abspath)
     partition_number = udev_info.get('ID_PART_ENTRY_NUMBER')
     if not partition_number:
-        raise RuntimeError('Unable to detect the partition number for device: %s' % device_path)
+        raise RuntimeError('Unable to detect the partition number for device: %s' % device.abspath)
 
     process.run(
         ['parted', parent_device, '--script', '--', 'rm', partition_number]
