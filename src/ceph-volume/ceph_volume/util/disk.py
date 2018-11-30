@@ -170,6 +170,47 @@ def device_family(device):
     return devices
 
 
+def udevadm_property(device, properties=[]):
+    """
+    Query udevadm for information about device properties.
+    Optionally pass a list of properties to return. A requested property might
+    not be returned if not present.
+
+    Expected output format::
+        # udevadm info --query=property --name=/dev/sda                                  :(
+        DEVNAME=/dev/sda
+        DEVTYPE=disk
+        ID_ATA=1
+        ID_BUS=ata
+        ID_MODEL=SK_hynix_SC311_SATA_512GB
+        ID_PART_TABLE_TYPE=gpt
+        ID_PART_TABLE_UUID=c8f91d57-b26c-4de1-8884-0c9541da288c
+        ID_PATH=pci-0000:00:17.0-ata-3
+        ID_PATH_TAG=pci-0000_00_17_0-ata-3
+        ID_REVISION=70000P10
+        ID_SERIAL=SK_hynix_SC311_SATA_512GB_MS83N71801150416A
+        TAGS=:systemd:
+        USEC_INITIALIZED=16117769
+        ...
+    """
+    out = _udevadm_info(device)
+    ret = {}
+    for line in out:
+        p, v = line.split('=', 1)
+        if not properties or p in properties:
+            ret[p] = v
+    return ret
+
+
+def _udevadm_info(device):
+    """
+    Call udevadm and return the output
+    """
+    cmd = ['udevadm', 'info', '--query=property', device]
+    out, _err, _rc = process.call(cmd)
+    return out
+
+
 def lsblk(device, columns=None, abspath=False):
     """
     Create a dictionary of identifying values for a device using ``lsblk``.
