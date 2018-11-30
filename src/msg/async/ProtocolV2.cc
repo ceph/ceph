@@ -1365,26 +1365,24 @@ CtPtr ProtocolV2::handle_server_addrvec_and_identify(char *buffer, int r) {
     lderr(cct) << __func__ << " decode peer addr failed " << dendl;
     return _fault();
   }
-  ldout(cct, 20) << __func__ << " connect read peer addr " << peer_addr
+  ldout(cct, 20) << __func__ << " read peer addr " << peer_addr
 		 << " of " << paddrs
                  << " on socket " << connection->cs.fd() << dendl;
 
-  if (peer_addr != connection->peer_addrs.msgr2_addr()) {
-    ldout(cct, 10) << __func__ << " connect claims to be " << peer_addr
-		   << " not "
-                   << connection->peer_addrs.msgr2_addr() << dendl;
-    return _fault();
-  }
-  if (paddrs != connection->peer_addrs) {
-    ldout(cct, 10) << __func__ << " connect claims to be " << paddrs
-		   << " not "
+  // Be somewhat flexible with our identity check.  In particular, we
+  // may be trying to connect to a v2 addr, and the remote may
+  // identify themselves by several other addrs as well.  This happens
+  // with mon discovery.
+  if (!connection->peer_addrs.contains(peer_addr)) {
+    ldout(cct, 10) << __func__ << " server claims to be " << peer_addr
+		   << " (of " << paddrs << "), but we are trying to reach "
                    << connection->peer_addrs << dendl;
     return _fault();
   }
 
   connection->set_peer_addrs(paddrs);
 
-  ldout(cct, 20) << __func__ << " connect peer addr for me is "
+  ldout(cct, 20) << __func__ << " peer addr for me is "
                  << peer_addr_for_me << dendl;
   connection->lock.unlock();
   bool learned = messenger->learned_addr(peer_addr_for_me);
