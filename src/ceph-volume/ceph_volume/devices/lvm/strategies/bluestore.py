@@ -216,12 +216,6 @@ class MixedType(object):
     def compute(self):
         osds = self.computed['osds']
 
-        # unconfigured block db size will be 0, so set it back to using as much
-        # as possible from looking at extents
-        if self.block_db_size.b == 0:
-            self.block_db_size = disk.Size(b=self.vg_extents['sizes'])
-            self.use_large_block_db = True
-
         if not self.common_vg:
             # there isn't a common vg, so a new one must be created with all
             # the blank SSDs
@@ -396,6 +390,7 @@ class MixedType(object):
         # into the number of block.db LVs needed (i.e. "as large as possible")
         if self.block_db_size.b == 0:
             self.block_db_size = self.total_available_db_space / self.dbs_needed
+            self.use_large_block_db = True
 
         total_dbs_possible = self.total_available_db_space / self.block_db_size
 
