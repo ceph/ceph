@@ -17,6 +17,7 @@
 #include "common/RefCountedObj.h"
 
 #include "rgw_coroutine.h"
+#include "rgw_tools.h"
 
 #include <atomic>
 
@@ -75,6 +76,10 @@ struct rgw_http_req_data : public RefCountedObject {
       boost::system::error_code ec;
       async_wait(context, yield[ec]);
       return -ec.value();
+    }
+    // work on asio threads should be asynchronous, so warn when they block
+    if (is_asio_thread) {
+      dout(20) << "WARNING: blocking http request" << dendl;
     }
 #endif
     cond.Wait(lock);
