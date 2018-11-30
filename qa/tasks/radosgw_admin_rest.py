@@ -203,7 +203,7 @@ def task(ctx, config):
     assert ret == 200
 
     # TESTCASE 'list-no-user','user','list','list user keys','user list object'
-    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'list'], {'max-entries' : 0})
+    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'list'], {'list' : '', 'max-entries' : 0})
     assert ret == 200
     assert out['count'] == 0
     assert out['truncated'] == True
@@ -211,7 +211,7 @@ def task(ctx, config):
     assert len(out['marker']) > 0
 
     # TESTCASE 'list-user-without-marker','user','list','list user keys','user list object'
-    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'list'], {'max-entries' : 1})
+    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'list'], {'list' : '', 'max-entries' : 1})
     assert ret == 200
     assert out['count'] == 1
     assert out['truncated'] == True
@@ -220,7 +220,7 @@ def task(ctx, config):
     marker = out['marker']
 
     # TESTCASE 'list-user-with-marker','user','list','list user keys','user list object'
-    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'list'], {'max-entries' : 1, 'marker': marker})
+    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'list'], {'list' : '', 'max-entries' : 1, 'marker': marker})
     assert ret == 200
     assert out['count'] == 1
     assert out['truncated'] == False
