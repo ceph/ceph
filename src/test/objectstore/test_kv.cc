@@ -368,6 +368,55 @@ TEST_P(KVTest, RocksDBColumnFamilyTest) {
   fini();
 }
 
+TEST_P(KVTest, RocksDBWholeSpaceIteratorTest) {
+  if(string(GetParam()) != "rocksdb")
+    return;
+
+  std::vector<KeyValueDB::ColumnFamily> cfs;
+  cfs.push_back(KeyValueDB::ColumnFamily("cf1", ""));
+  ASSERT_EQ(0, db->init(g_conf()->bluestore_rocksdb_options));
+  cout << "creating one column family and opening it" << std::endl;
+  ASSERT_EQ(0, db->create_and_open(cout, cfs));
+  {
+    KeyValueDB::Transaction t = db->get_transaction();
+    bufferlist bl1;
+    bl1.append("hello");
+    bufferlist bl2;
+    bl2.append("world");
+    cout << "write some kv pairs into default and new CFs" << std::endl;
+    t->set("prefix", "key1", bl1);
+    t->set("prefix", "key2", bl2);
+    t->set("cf1", "key1", bl1);
+    t->set("cf1", "key2", bl2);
+    ASSERT_EQ(0, db->submit_transaction_sync(t));
+  }
+  {
+    cout << "iterating the default CF" << std::endl;
+    KeyValueDB::WholeSpaceIterator iter = db->get_wholespace_iterator();
+    iter->seek_to_first();
+    ASSERT_EQ(1, iter->valid());
+    ASSERT_EQ("key1", iter->key());
+    ASSERT_EQ("hello", _bl_to_str(iter->value()));
+    ASSERT_EQ(0, iter->next());
+    ASSERT_EQ(1, iter->valid());
+    ASSERT_EQ("key2", iter->key());
+    ASSERT_EQ("world", _bl_to_str(iter->value()));
+  }
+  {
+    cout << "iterating the new CF" << std::endl;
+    KeyValueDB::WholeSpaceIterator iter = db->get_wholespace_iterator("cf1");
+    iter->seek_to_first();
+    ASSERT_EQ(1, iter->valid());
+    ASSERT_EQ("key1", iter->key());
+    ASSERT_EQ("hello", _bl_to_str(iter->value()));
+    ASSERT_EQ(0, iter->next());
+    ASSERT_EQ(1, iter->valid());
+    ASSERT_EQ("key2", iter->key());
+    ASSERT_EQ("world", _bl_to_str(iter->value()));
+  }
+  fini();
+}
+
 TEST_P(KVTest, RocksDBIteratorTest) {
   if(string(GetParam()) != "rocksdb")
     return;

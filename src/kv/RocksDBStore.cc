@@ -1466,10 +1466,100 @@ string RocksDBStore::past_prefix(const string &prefix)
   return limit;
 }
 
-RocksDBStore::WholeSpaceIterator RocksDBStore::get_wholespace_iterator()
+
+class RocksDBPrefixWholeSpaceIteratorImpl :
+  public RocksDBStore::RocksDBWholeSpaceIteratorImpl {
+private:
+  std::string prefix;
+public:
+  explicit RocksDBPrefixWholeSpaceIteratorImpl(std::string prefix, rocksdb::Iterator *iter) :
+    RocksDBWholeSpaceIteratorImpl(iter), prefix(prefix) { }
+  ~RocksDBPrefixWholeSpaceIteratorImpl() { }
+
+  using RocksDBWholeSpaceIteratorImpl::seek_to_first;
+  int seek_to_first(const string &prefix) override
+  {
+    if (this->prefix <= prefix) {
+      return seek_to_first();
+    } else {
+      return seek_to_end();
+    }
+  }
+  using RocksDBWholeSpaceIteratorImpl::seek_to_last;
+  int seek_to_last(const string &prefix) override
+  {
+    if (prefix < this->prefix) {
+      return seek_to_first();
+    } else if (prefix == this->prefix) {
+      return seek_to_last();
+    } else {
+      return seek_to_end();
+    }
+  }
+  int upper_bound(const string &prefix, const string &after) override
+  {
+    if (prefix < this->prefix) {
+      return seek_to_first();
+    } else if (prefix == this->prefix) {
+      lower_bound(prefix, after);
+      if (dbiter->key() == after)
+        next();
+
+      return dbiter->status().ok() ? 0 : -1;
+    } else {
+      return seek_to_end();
+    }
+  }
+  int lower_bound(const string &prefix, const string &to) override {
+    if (prefix < this->prefix) {
+      return seek_to_first();
+    } else if (prefix == this->prefix) {
+      rocksdb::Slice slice_bound(to);
+      dbiter->Seek(slice_bound);
+      return dbiter->status().ok() ? 0 : -1;
+    } else {
+      return seek_to_end();
+    }
+  }
+  string key() override {
+    return dbiter->key().ToString();
+  }
+  pair<string, string> raw_key() override {
+    rocksdb::Slice k = dbiter->key();
+    return make_pair(prefix, std::string(k.data(), k.size()));
+  }
+  bool raw_key_is_prefixed(const string &prefix) override {
+    return valid() && (this->prefix == prefix);
+  }
+  size_t key_size() override {
+    return prefix.size() + 1 + dbiter->key().size();
+  }
+private:
+  /* makes iterator to go beyond last valid element in db */
+  int seek_to_end() {
+    dbiter->SeekToLast();
+    ceph_assert(!dbiter->status().IsIOError());
+    if (dbiter->status().ok())
+      dbiter->Next();
+    ceph_assert(!dbiter->status().ok());
+    return -1;
+  }
+};
+
+
+
+RocksDBStore::WholeSpaceIterator RocksDBStore::get_wholespace_iterator(const std::string &column_family)
 {
-  return std::make_shared<RocksDBWholeSpaceIteratorImpl>(
-    db->NewIterator(rocksdb::ReadOptions(), default_cf));
+  rocksdb::ColumnFamilyHandle *cf_handle =
+      static_cast<rocksdb::ColumnFamilyHandle*>(get_cf_handle(column_family));
+  if (cf_handle) {
+    return std::make_shared<RocksDBPrefixWholeSpaceIteratorImpl>(
+        column_family,
+        db->NewIterator(rocksdb::ReadOptions(), cf_handle));
+  } else {
+    return std::make_shared<RocksDBWholeSpaceIteratorImpl>(
+        db->NewIterator(rocksdb::ReadOptions(), default_cf));
+  }
 }
 
 class CFIteratorImpl : public KeyValueDB::IteratorImpl {

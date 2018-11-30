@@ -338,7 +338,7 @@ private:
   };
 public:
 
-  virtual WholeSpaceIterator get_wholespace_iterator() = 0;
+  virtual WholeSpaceIterator get_wholespace_iterator(const std::string &column_family = std::string()) = 0;
   virtual Iterator get_iterator(const std::string &prefix) {
     return std::make_shared<PrefixIteratorImpl>(
       prefix,
