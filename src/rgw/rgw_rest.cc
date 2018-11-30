@@ -1816,7 +1816,7 @@ int RGWHandler_REST::init_permissions(RGWOp* op)
 {
   if (op->get_type() == RGW_OP_CREATE_BUCKET) {
     // We don't need user policies in case of STS token returned by AssumeRole, hence the check for user type
-    if (! s->user->user_id.empty() && s->user->type != TYPE_NONE) {
+    if (! s->user->user_id.empty() && s->user->type != TYPE_ROLE) {
       try {
         map<string, bufferlist> uattrs;
         if (auto ret = rgw_get_user_attrs_by_uid(store, s->user->user_id, uattrs); ! ret) {

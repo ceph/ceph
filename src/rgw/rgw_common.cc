@@ -1134,8 +1134,11 @@ bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp, struct req_
                             RGWAccessControlPolicy * const user_acl,
                             const int perm)
 {
+  if (s->user->type == TYPE_ROLE)
+    return false;
+
   /* S3 doesn't support account ACLs. */
-  if ((s->user->type != TYPE_NONE || s->user->user_id == rgw_user(RGW_USER_ANON_ID)) && !user_acl)
+  if (!user_acl)
     return true;
 
   if ((perm & (int)s->perm_mask) != perm)
