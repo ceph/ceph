@@ -2398,6 +2398,8 @@ public:
   int migrate_to_new_bluefs_device(const set<int>& devs_source,
     int id,
     const string& path);
+  int expand_devices(ostream& out);
+  string get_device_path(unsigned id);
 
 public:
   int statfs(struct store_statfs_t *buf) override;

@@ -6098,6 +6098,113 @@ shutdown:
   return r;
 }
 
+string BlueStore::get_device_path(unsigned id)
+{
+  string res;
+  if (id < BlueFS::MAX_BDEV) {
+    switch (id) {
+    case BlueFS::BDEV_WAL:
+      res = path + "/block.wal";
+      break;
+    case BlueFS::BDEV_DB:
+      if (id == bluefs_shared_bdev) {
+	res = path + "/block";
+      } else {
+	res = path + "/block.db";
+      }
+      break;
+    case BlueFS::BDEV_SLOW:
+      res = path + "/block";
+      break;
+    }
+  }
+  return res;
+}
+
+int BlueStore::expand_devices(ostream& out)
+{
+  int r = _mount(false);
+  ceph_assert(r == 0);
+  bluefs->dump_block_extents(out);
+  out << "Expanding..." << std::endl;
+  for (auto devid : { BlueFS::BDEV_WAL, BlueFS::BDEV_DB}) {
+    if (devid == bluefs_shared_bdev ) {
+      continue;
+    }
+    interval_set<uint64_t> before;
+    bluefs->get_block_extents(devid, &before);
+    ceph_assert(!before.empty());
+    uint64_t end = before.range_end();
+    uint64_t size = bluefs->get_block_device_size(devid);
+    if (end < size) {
+      out << devid
+	  <<" : expanding " << " from 0x" << std::hex
+	  << end << " to 0x" << size << std::dec << std::endl;
+      bluefs->add_block_extent(devid, end, size-end);
+      string p = get_device_path(devid);
+      const char* path = p.c_str();
+      if (path == nullptr) {
+	derr << devid
+	      <<": can't find device path " << dendl;
+	continue;
+      }
+      bluestore_bdev_label_t label;
+      int r = _read_bdev_label(cct, path, &label);
+      if (r < 0) {
+	derr << "unable to read label for " << path << ": "
+	      << cpp_strerror(r) << dendl;
+	continue;
+      }
+      label.size = size;
+      r = _write_bdev_label(cct, path, label);
+      if (r < 0) {
+	derr << "unable to write label for " << path << ": "
+	      << cpp_strerror(r) << dendl;
+	continue;
+      }
+      out << devid
+	   <<" : size label updated to " << size
+	   << std::endl;
+    }
+  }
+  uint64_t size0 = fm->get_size();
+  uint64_t size = bdev->get_size();
+  if (size0 < size) {
+    out << bluefs_shared_bdev
+	<<" : expanding " << " from 0x" << std::hex
+	<< size0 << " to 0x" << size << std::dec << std::endl;
+    KeyValueDB::Transaction txn;
+    txn = db->get_transaction();
+    int r = fm->expand(size, txn);
+    ceph_assert(r == 0);
+    db->submit_transaction_sync(txn);
+
+     // always reference to slow device here
+    string p = get_device_path(BlueFS::BDEV_SLOW);
+    ceph_assert(!p.empty());
+    const char* path = p.c_str();
+    bluestore_bdev_label_t label;
+    r = _read_bdev_label(cct, path, &label);
+    if (r < 0) {
+      derr << "unable to read label for " << path << ": "
+	    << cpp_strerror(r) << dendl;
+    } else {
+      label.size = size;
+      r = _write_bdev_label(cct, path, label);
+      if (r < 0) {
+	derr << "unable to write label for " << path << ": "
+	      << cpp_strerror(r) << dendl;
+      } else {
+	out << bluefs_shared_bdev
+	      <<" : size label updated to " << size
+	      << std::endl;
+      }
+    }
+  }
+  umount();
+  return r;
+}
+
 void BlueStore::set_cache_shards(unsigned num)
 {
   dout(10) << __func__ << " " << num << dendl;
