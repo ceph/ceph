@@ -19,7 +19,9 @@ class TestZap(object):
         '/dev/mapper/foo',
         '/dev/dm-0',
     ])
-    def test_can_not_zap_mapper_device(self, capsys, is_root, device_name):
+    def test_can_not_zap_mapper_device(self, monkeypatch, device_info, capsys, is_root, device_name):
+        monkeypatch.setattr('os.path.exists', lambda x: True)
+        device_info()
         with pytest.raises(SystemExit):
             lvm.zap.Zap(argv=[device_name]).main()
         stdout, stderr = capsys.readouterr()
