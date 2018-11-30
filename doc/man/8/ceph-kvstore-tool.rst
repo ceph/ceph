@@ -9,7 +9,7 @@
 Synopsis
 ========
 
-| **ceph-kvstore-tool** <leveldb|rocksdb|bluestore-kv> <store path> *command* [args...]
+| **ceph-kvstore-tool** [--cf column_family] <leveldb|rocksdb|bluestore-kv> <store path> *command* [args...]
 
 
 Description
@@ -79,6 +79,13 @@ which are as follows:
     Make a (potentially destructive) effort to recover a corrupted database.
     Note that in the case of rocksdb this may corrupt an otherwise uncorrupted
     database--use this only as a last resort!
+
+Options
+=======
+
+.. option:: --cf *column_family*
+
+   Selects *column_family* as scope for operations. Only works for rocksdb database.
 
 Availability
 ============

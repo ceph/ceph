@@ -57,9 +57,10 @@ class StoreTool
 #endif
 
   string store_path;
-
+  string column_family;
   public:
-  StoreTool(string type, const string &path, bool need_open_db=true) : store_path(path) {
+  StoreTool(string type, const string &path, const string &column_family, bool need_open_db=true)
+    : store_path(path), column_family(column_family) {
     if (type == "bluestore-kv") {
 #ifdef WITH_BLUESTORE
       auto bluestore = new BlueStore(g_ceph_context, path, need_open_db);
@@ -91,7 +92,7 @@ class StoreTool
                     const bool do_crc,
                     const bool do_value_dump,
                     ostream *out) {
-    KeyValueDB::WholeSpaceIterator iter = db->get_wholespace_iterator();
+    KeyValueDB::WholeSpaceIterator iter = db->get_wholespace_iterator(column_family);
 
     if (prefix.empty())
       iter->seek_to_first();
@@ -140,7 +141,7 @@ class StoreTool
 
   bool exists(const string &prefix) {
     ceph_assert(!prefix.empty());
-    KeyValueDB::WholeSpaceIterator iter = db->get_wholespace_iterator();
+    KeyValueDB::WholeSpaceIterator iter = db->get_wholespace_iterator(column_family);
     iter->seek_to_first(prefix);
     return (iter->valid() && (iter->raw_key().first == prefix));
   }
@@ -233,7 +234,7 @@ class StoreTool
       return err;
     other.reset(other_ptr);
 
-    KeyValueDB::WholeSpaceIterator it = db->get_wholespace_iterator();
+    KeyValueDB::WholeSpaceIterator it = db->get_wholespace_iterator(column_family);
     it->seek_to_first();
     uint64_t total_keys = 0;
     uint64_t total_size = 0;
@@ -301,7 +302,7 @@ class StoreTool
 
 void usage(const char *pname)
 {
-  std::cout << "Usage: " << pname << " <leveldb|rocksdb|bluestore-kv> <store path> command [args...]\n"
+  std::cout << "Usage: " << pname << " [-cf column_family] <leveldb|rocksdb|bluestore-kv> <store path> command [args...]\n"
     << "\n"
     << "Commands:\n"
     << "  list [prefix]\n"
@@ -346,15 +347,21 @@ int main(int argc, const char *argv[])
     CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
 
-  ceph_assert((int)args.size() < argc);
-  for(size_t i=0; i<args.size(); i++)
-    argv[i+1] = args[i];
-  argc = args.size() + 1;
-
   if (args.size() < 3) {
     usage(argv[0]);
     return 1;
   }
+
+  string column_family;
+  if (strcmp(args[0], "--cf") == 0) {
+    column_family = args[1];
+    args.erase(args.begin(), args.begin() + 2);
+  }
+
+  ceph_assert((int)args.size() < argc);
+  for(size_t i=0; i<args.size(); i++)
+    argv[i+1] = args[i];
+  argc = args.size() + 1;
 
   string type(args[0]);
   string path(args[1]);
@@ -370,7 +377,7 @@ int main(int argc, const char *argv[])
   }
 
   bool need_open_db = (cmd != "destructive-repair");
-  StoreTool st(type, path, need_open_db);
+  StoreTool st(type, path, column_family, need_open_db);
 
   if (cmd == "destructive-repair") {
     int ret = st.destructive_repair();
