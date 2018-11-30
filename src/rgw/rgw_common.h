@@ -634,7 +634,8 @@ enum RGWUserSourceType
   TYPE_NONE=0,
   TYPE_RGW=1,
   TYPE_KEYSTONE=2,
-  TYPE_LDAP=3
+  TYPE_LDAP=3,
+  TYPE_ROLE=4
 };
 
 struct RGWUserInfo

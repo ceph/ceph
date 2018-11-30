@@ -572,7 +572,7 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
   }
   // We don't need user policies in case of STS token returned by AssumeRole,
   // hence the check for user type
-  if (! s->user->user_id.empty() && s->user->type != TYPE_NONE) {
+  if (! s->user->user_id.empty() && s->user->type != TYPE_ROLE) {
     try {
       map<string, bufferlist> uattrs;
       if (ret = rgw_get_user_attrs_by_uid(store, s->user->user_id, uattrs); ! ret) {
