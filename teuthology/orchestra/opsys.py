@@ -20,6 +20,7 @@ DISTRO_CODENAME_MAP = {
         "9": "stretch",
     },
     "rhel": {
+        "8": "ootpa",
         "7": "maipo",
         "6": "santiago",
     },
