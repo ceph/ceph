@@ -18,9 +18,8 @@ to use the :ref:`Orchestrator CLI <orchestrator-cli-module>` module.
 Requirements
 ------------
 
-- A salt-master node with a sufficiently recent version of DeepSea installed,
-  and the salt-api service running. (**TODO: update once
-  https://github.com/SUSE/DeepSea/pull/1455 is in a release**)
+- A salt-master node with DeepSea 0.9.9 or later installed, and the salt-api
+  service running.
 - Ideally, several salt-minion nodes against which at least DeepSea's stages 0
   through 2 have been run (this is the minimum required for the orchestrator's
   inventory and status functions to return interesting information).
