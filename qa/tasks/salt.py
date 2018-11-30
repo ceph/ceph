@@ -7,7 +7,15 @@ Linter:
 import logging
 
 from salt_manager import SaltManager
-from teuthology.misc import delete_file, move_file, sh, sudo_write_file
+from util import remote_exec
+from teuthology.exceptions import ConfigError
+from teuthology.misc import (
+    delete_file,
+    move_file,
+    sh,
+    sudo_write_file,
+    write_file,
+    )
 from teuthology.orchestra import run
 from teuthology.task import Task
 
@@ -42,6 +50,7 @@ class Salt(Task):
         log.debug("munged config is {}".format(self.config))
         self.remotes = self.cluster.remotes
         self.sm = SaltManager(self.ctx)
+        self.master_remote = self.sm.master_remote
         log.debug("end of constructor method")
 
     def _disable_autodiscovery(self):
@@ -221,4 +230,67 @@ class Salt(Task):
         # log.debug("end of teardown method")
 
 
+class Command(Salt):
+    """
+    Subtask for running an arbitrary salt command.
+
+    This subtask understands the following config keys:
+
+        command  the command to run (mandatory)
+                 For example:
+
+                     command: 'state.apply ceph.updates.salt'
+
+        target   target selection specifier (default: *)
+                 For details, see "man salt"
+
+    Note: "command: saltutil.sync_all" gets special handling.
+    """
+
+    err_prefix = "(command subtask) "
+
+    def __init__(self, ctx, config):
+        super(Command, self).__init__(ctx, config)
+        self.command = str(self.config.get("command", ''))
+        # targets all machines if omitted
+        self.target = str(self.config.get("target", '*'))
+        if not self.command:
+            raise ConfigError(
+                self.err_prefix + "nothing to do. Specify a non-empty value for 'command'")
+
+    def _run_command(self):
+        if '*' in self.target:
+            quoted_target = "\'{}\'".format(self.target)
+        else:
+            quoted_target = self.target
+        cmd_str = (
+            "set -ex\n"
+            "timeout 60m salt {} --no-color {} 2>/dev/null\n"
+            ).format(quoted_target, self.command)
+        write_file(self.master_remote, 'run_salt_command.sh', cmd_str)
+        remote_exec(
+            self.master_remote,
+            'sudo bash run_salt_command.sh',
+            log,
+            "salt command ->{}<-".format(self.command),
+            )
+
+    def setup(self):
+        pass
+
+    def begin(self):
+        self.log.info("running salt command ->{}<-".format(self.command))
+        if self.command == 'saltutil.sync_all':
+            self.sm.sync_pillar_data()
+        else:
+            self._run_command()
+
+    def end(self):
+        pass
+
+    def teardown(self):
+        pass
+
+
 task = Salt
+command = Command

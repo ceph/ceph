@@ -9,27 +9,22 @@ import yaml
 
 from salt_manager import SaltManager
 from scripts import Scripts
+from teuthology import misc
 from util import (
     copy_directory_recursively,
     get_remote_for_role,
     introspect_roles,
+    remote_exec,
     remote_run_script_as_root,
     sudo_append_to_file,
     )
 
 from teuthology.exceptions import (
     CommandFailedError,
-    ConnectionLostError,
     ConfigError,
-    )
-from teuthology.misc import (
-    sh,
-    sudo_write_file,
-    write_file,
     )
 from teuthology.orchestra import run
 from teuthology.task import Task
-from teuthology.contextutil import safe_while
 
 log = logging.getLogger(__name__)
 deepsea_ctx = {}
@@ -48,45 +43,6 @@ def dump_file_that_might_not_exist(remote, fpath):
         remote.run(args="cat {}".format(fpath))
     except CommandFailedError:
         pass
-
-
-def remote_exec(remote, cmd_str, log_spec, quiet=True, rerun=False, tries=0):
-    """
-    Execute cmd_str and catch CommandFailedError and ConnectionLostError (and
-    rerun cmd_str post-reboot if rerun flag is set) until one of the conditons
-    are fulfilled:
-    1) Execution succeeded
-    2) Attempts are exceeded
-    3) CommandFailedError is raised
-    """
-    cmd_str = "sudo bash -c '{}'".format(cmd_str)
-    # if quiet:
-    #     cmd_args += [run.Raw('2>'), "/dev/null"]
-    already_rebooted_at_least_once = False
-    if tries:
-        remote.run(args="uptime")
-        log.info("Running command ->{}<- on {}. "
-                 "This might cause the machine to reboot!"
-                 .format(cmd_str, remote.hostname))
-    with safe_while(sleep=60, tries=tries, action="wait for reconnect") as proceed:
-        while proceed():
-            try:
-                if already_rebooted_at_least_once:
-                    if not rerun:
-                        remote.run(args="echo Back from reboot ; uptime")
-                        break
-                remote.run(args=cmd_str)
-                break
-            except CommandFailedError:
-                log.error(anchored("{} failed. Here comes journalctl!"
-                                   .format(log_spec)))
-                remote.run(args="sudo journalctl --all")
-                raise
-            except ConnectionLostError:
-                already_rebooted_at_least_once = True
-                if tries < 1:
-                    raise
-                log.warning("No connection established yet..")
 
 
 class DeepSea(Task):
@@ -449,6 +405,7 @@ class DeepSea(Task):
         remote_exec(
             remote,
             cmd_str,
+            self.log,
             log_spec,
             rerun=False,
             quiet=True,
@@ -465,6 +422,7 @@ class DeepSea(Task):
         remote_exec(
             self.master_remote,
             cmd_str,
+            self.log,
             log_spec,
             rerun=False,
             quiet=True,
@@ -804,9 +762,9 @@ class HealthOK(DeepSea):
         global deepsea_ctx
         suite_path = self.ctx.config.get('suite_path')
         log.info("suite_path is ->{}<-".format(suite_path))
-        sh("ls -l {}".format(suite_path))
+        misc.sh("ls -l {}".format(suite_path))
         health_ok_path = suite_path + "/deepsea/health-ok"
-        sh("test -d " + health_ok_path)
+        misc.sh("test -d " + health_ok_path)
         copy_directory_recursively(
                 health_ok_path, self.master_remote, "health-ok")
         self.master_remote.run(args="pwd ; ls -lR health-ok")
@@ -880,7 +838,6 @@ class Orch(DeepSea):
         deepsea_ctx['logger_obj'] = log.getChild('orch')
         self.name = 'deepsea.orch'
         super(Orch, self).__init__(ctx, config)
-        # cast stage/state_orch value to str because it might be a number
         self.stage = str(self.config.get("stage", ''))
         self.state_orch = str(self.config.get("state_orch", ''))
         self.reboots_explicitly_forbidden = not self.config.get("allow_reboots", True)
@@ -1052,6 +1009,7 @@ class Orch(DeepSea):
         remote_exec(
             self.master_remote,
             cmd_str,
+            self.log,
             "orchestration {}".format(orch_spec),
             rerun=True,
             quiet=True,
@@ -1236,7 +1194,7 @@ class Policy(DeepSea):
                 "{}/{}".format(proposals_dir, ypp))
 
     def __roll_out_custom_profile(self, fpath="/home/ubuntu/custom_profile"):
-        sudo_write_file(
+        misc.sudo_write_file(
             self.master_remote,
             fpath,
             yaml.dump(self.storage_profile),
@@ -1337,7 +1295,7 @@ class Policy(DeepSea):
         """
         Write policy_cfg to master remote.
         """
-        sudo_write_file(
+        misc.sudo_write_file(
             self.master_remote,
             proposals_dir + "/policy.cfg",
             self.policy_cfg,
@@ -1625,61 +1583,6 @@ class Script(DeepSea):
         pass
 
 
-class State(DeepSea):
-    """
-    Runs an arbitrary Salt State on some minions.
-
-    This subtask understands the following config keys:
-
-        state    name of the state to run (mandatory)
-
-        target   target selection specifier (default: *)
-                 For details, see "man salt"
-    """
-
-    err_prefix = '(state subtask) '
-
-    def __init__(self, ctx, config):
-        deepsea_ctx['logger_obj'] = log.getChild('state')
-        super(State, self).__init__(ctx, config)
-        # cast stage/state_orch value to str because it might be a number
-        self.state = str(self.config.get("state", ''))
-        # targets all machines if omitted
-        self.target = str(self.config.get("target", '*'))
-        if not self.state:
-            raise ConfigError(
-                self.err_prefix + "nothing to do. Specify a non-empty value for 'state'")
-
-    def _run_state(self):
-        """Run a state. Dump journalctl on error."""
-        if '*' in self.target:
-            quoted_target = "\'{}\'".format(self.target)
-        else:
-            quoted_target = self.target
-        cmd_str = (
-            "set -ex\n"
-            "timeout 60m salt {} --no-color state.apply {}\n"
-            ).format(quoted_target, self.state)
-        if self.quiet_salt:
-            cmd_str += ' 2>/dev/null'
-        write_file(self.master_remote, 'run_salt_state.sh', cmd_str)
-        remote_exec(
-            self.master_remote,
-            'sudo bash run_salt_state.sh',
-            "state {}".format(self.state),
-            )
-
-    def begin(self):
-        self.log.info(anchored("running state {}".format(self.state)))
-        self._run_state()
-
-    def end(self):
-        pass
-
-    def teardown(self):
-        pass
-
-
 class Validation(DeepSea):
     """
     A container for "validation tests", which are understood to mean tests that
@@ -1849,5 +1752,4 @@ policy = Policy
 reboot = Reboot
 repository = Repository
 script = Script
-state = State
 validation = Validation

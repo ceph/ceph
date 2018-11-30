@@ -1,5 +1,10 @@
 from teuthology import misc
-from teuthology.exceptions import ConfigError
+from teuthology.contextutil import safe_while
+from teuthology.exceptions import (
+    CommandFailedError,
+    ConfigError,
+    ConnectionLostError,
+    )
 
 
 def get_remote(ctx, cluster, service_type, service_id):
@@ -181,6 +186,44 @@ def introspect_roles(ctx, logger, quiet=True):
         report_vars = assign_vars + ['dev_env']
         for var in report_vars:
             logger.info("{} == {}".format(var, ctx[var]))
+
+
+def remote_exec(remote, cmd_str, logger, log_spec, quiet=True, rerun=False, tries=0):
+    """
+    Execute cmd_str and catch CommandFailedError and ConnectionLostError (and
+    rerun cmd_str post-reboot if rerun flag is set) until one of the conditons
+    are fulfilled:
+    1) Execution succeeded
+    2) Attempts are exceeded
+    3) CommandFailedError is raised
+    """
+    cmd_str = "sudo bash -c '{}'".format(cmd_str)
+    # if quiet:
+    #     cmd_args += [run.Raw('2>'), "/dev/null"]
+    already_rebooted_at_least_once = False
+    if tries:
+        remote.run(args="uptime")
+        logger.info("Running command ->{}<- on {}. "
+                    "This might cause the machine to reboot!"
+                    .format(cmd_str, remote.hostname))
+    with safe_while(sleep=60, tries=tries, action="wait for reconnect") as proceed:
+        while proceed():
+            try:
+                if already_rebooted_at_least_once:
+                    if not rerun:
+                        remote.run(args="echo Back from reboot ; uptime")
+                        break
+                remote.run(args=cmd_str)
+                break
+            except CommandFailedError:
+                logger.error("{} failed. Here comes journalctl!".format(log_spec))
+                remote.run(args="sudo journalctl --all")
+                raise
+            except ConnectionLostError:
+                already_rebooted_at_least_once = True
+                if tries < 1:
+                    raise
+                logger.warning("No connection established yet..")
 
 
 def remote_run_script_as_root(remote, path, data, args=None):
