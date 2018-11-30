@@ -45,6 +45,34 @@ class TestBlkid(object):
         assert result['UUID'] == '62416664-cbaf-40bd-9689-10bd337379c3'
         assert result['TYPE'] == 'xfs'
 
+class TestUdevadmProperty(object):
+
+    def test_good_output(self, stub_call):
+        output = """ID_MODEL=SK_hynix_SC311_SATA_512GB
+ID_PART_TABLE_TYPE=gpt
+ID_SERIAL_SHORT=MS83N71801150416A""".split()
+        stub_call((output, [], 0))
+        result = disk.udevadm_property('dev/sda')
+        assert result['ID_MODEL'] == 'SK_hynix_SC311_SATA_512GB'
+        assert result['ID_PART_TABLE_TYPE'] == 'gpt'
+        assert result['ID_SERIAL_SHORT'] == 'MS83N71801150416A'
+
+    def test_property_filter(self, stub_call):
+        output = """ID_MODEL=SK_hynix_SC311_SATA_512GB
+ID_PART_TABLE_TYPE=gpt
+ID_SERIAL_SHORT=MS83N71801150416A""".split()
+        stub_call((output, [], 0))
+        result = disk.udevadm_property('dev/sda', ['ID_MODEL',
+                                                   'ID_SERIAL_SHORT'])
+        assert result['ID_MODEL'] == 'SK_hynix_SC311_SATA_512GB'
+        assert 'ID_PART_TABLE_TYPE' not in result
+
+    def test_fail_on_broken_output(self, stub_call):
+        output = ["ID_MODEL:SK_hynix_SC311_SATA_512GB"]
+        stub_call((output, [], 0))
+        with pytest.raises(ValueError):
+            disk.udevadm_property('dev/sda')
+
 
 class TestDeviceFamily(object):
 
