@@ -102,14 +102,14 @@ void RGWRealmReloader::reload()
 
   while (!store) {
     // recreate and initialize a new store
-    store = RGWStoreManager::get_storage(cct,
-                                         cct->_conf->rgw_enable_gc_threads,
-                                         cct->_conf->rgw_enable_lc_threads,
-                                         cct->_conf->rgw_enable_quota_threads,
-                                         cct->_conf->rgw_run_sync_thread,
-                                         cct->_conf->rgw_dynamic_resharding,
-					 cct->_conf->rgw_cache_enabled
-      );
+    store =
+      RGWStoreManager::get_storage(cct,
+				   cct->_conf->rgw_enable_gc_threads,
+				   cct->_conf->rgw_enable_lc_threads,
+				   cct->_conf->rgw_enable_quota_threads,
+				   cct->_conf->rgw_run_sync_thread,
+				   cct->_conf.get_val<bool>("rgw_dynamic_resharding"),
+				   cct->_conf->rgw_cache_enabled);
 
     ldout(cct, 1) << "Creating new store" << dendl;
 

@@ -9637,7 +9637,7 @@ int RGWRados::cls_user_remove_bucket(rgw_raw_obj& obj, const cls_user_bucket& bu
 int RGWRados::check_bucket_shards(const RGWBucketInfo& bucket_info, const rgw_bucket& bucket,
 				  RGWQuotaInfo& bucket_quota)
 {
-  if (!cct->_conf->rgw_dynamic_resharding) {
+  if (! cct->_conf.get_val<bool>("rgw_dynamic_resharding")) {
       return 0;
   }
 
@@ -9645,9 +9645,12 @@ int RGWRados::check_bucket_shards(const RGWBucketInfo& bucket_info, const rgw_bu
   int num_source_shards = (bucket_info.num_shards > 0 ? bucket_info.num_shards : 1);
   uint32_t suggested_num_shards;
 
-  int ret =  quota_handler->check_bucket_shards((uint64_t)cct->_conf->rgw_max_objs_per_shard,
-						num_source_shards,  bucket_info.owner, bucket, bucket_quota,
-						1, need_resharding, &suggested_num_shards);
+  const uint64_t max_objs_per_shard =
+    cct->_conf.get_val<uint64_t>("rgw_max_objs_per_shard");
+  int ret =
+    quota_handler->check_bucket_shards(max_objs_per_shard, num_source_shards,
+				       bucket_info.owner, bucket, bucket_quota,
+				       1, need_resharding, &suggested_num_shards);
   if (ret < 0) {
     return ret;
   }

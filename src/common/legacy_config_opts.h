@@ -1537,13 +1537,6 @@ OPTION(rgw_swift_custom_header, OPT_STR) // option to enable swift custom header
 
 OPTION(rgw_swift_need_stats, OPT_BOOL) // option to enable stats on bucket listing for swift
 
-/* resharding tunables */
-OPTION(rgw_reshard_num_logs, OPT_INT)
-OPTION(rgw_reshard_bucket_lock_duration, OPT_INT) // duration of lock on bucket obj during resharding
-OPTION(rgw_dynamic_resharding, OPT_BOOL)
-OPTION(rgw_max_objs_per_shard, OPT_INT)
-OPTION(rgw_reshard_thread_interval, OPT_U32) // maximum time between rounds of reshard thread processing
-
 OPTION(rgw_acl_grants_max_num, OPT_INT) // According to AWS S3(http://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html), An ACL can have up to 100 grants.
 OPTION(rgw_cors_rules_max_num, OPT_INT) // According to AWS S3(http://docs.aws.amazon.com/AmazonS3/latest/dev/cors.html), An cors can have up to 100 rules.
 OPTION(rgw_delete_multi_obj_max_num, OPT_INT) // According to AWS S3(https://docs.aws.amazon.com/AmazonS3/latest/dev/DeletingObjects.html), Amazon S3 also provides the Multi-Object Delete API that you can use to delete up to 1000 objects in a single HTTP request.
