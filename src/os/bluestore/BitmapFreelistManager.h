@@ -55,6 +55,10 @@ public:
   int create(uint64_t size, uint64_t granularity,
 	     KeyValueDB::Transaction txn) override;
 
+  int expand(uint64_t new_size,
+             KeyValueDB::Transaction txn) override;
+
+
   int init() override;
   void shutdown() override;
 
@@ -70,6 +74,9 @@ public:
     uint64_t offset, uint64_t length,
     KeyValueDB::Transaction txn) override;
 
+  inline uint64_t get_size() const override {
+    return size;
+  }
   inline uint64_t get_alloc_units() const override {
     return size / bytes_per_block;
   }
