@@ -182,20 +182,9 @@ void ProtocolV1::fault() {
 
   connection->write_lock.unlock();
 
-  if (state != START_CONNECT && state != CONNECTING && state != WAIT) {
-    // policy maybe empty when state is in accept
-    if (connection->policy.server) {
-      ldout(cct, 0) << __func__ << " server, going to standby" << dendl;
-      state = STANDBY;
-    } else {
-      ldout(cct, 0) << __func__ << " initiating reconnect" << dendl;
-      connect_seq++;
-      state = START_CONNECT;
-      connection->state = AsyncConnection::STATE_CONNECTING;
-    }
-    backoff = utime_t();
-    connection->center->dispatch_event_external(connection->read_handler);
-  } else {
+  if ((state >= START_CONNECT && state <= CONNECTING_SEND_CONNECT_MSG) ||
+      state == WAIT) {
+    // backoff!
     if (state == WAIT) {
       backoff.set_from_double(cct->_conf->ms_max_backoff);
     } else if (backoff == utime_t()) {
@@ -213,6 +202,19 @@ void ProtocolV1::fault() {
     connection->register_time_events.insert(
         connection->center->create_time_event(backoff.to_nsec() / 1000,
                                               connection->wakeup_handler));
+  } else {
+    // policy maybe empty when state is in accept
+    if (connection->policy.server) {
+      ldout(cct, 0) << __func__ << " server, going to standby" << dendl;
+      state = STANDBY;
+    } else {
+      ldout(cct, 0) << __func__ << " initiating reconnect" << dendl;
+      connect_seq++;
+      state = START_CONNECT;
+      connection->state = AsyncConnection::STATE_CONNECTING;
+    }
+    backoff = utime_t();
+    connection->center->dispatch_event_external(connection->read_handler);
   }
 }
 
