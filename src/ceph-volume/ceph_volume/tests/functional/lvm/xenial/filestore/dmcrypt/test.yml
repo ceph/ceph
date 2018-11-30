@@ -77,6 +77,16 @@
       environment:
         CEPH_VOLUME_DEBUG: 1
 
+    - name: re-create partition /dev/sdc1
+      parted:
+        device: /dev/sdc
+        number: 1
+        part_start: 0%
+        part_end: 50%
+        unit: '%'
+        state: present
+        label: gpt
+
     - name: prepare osd.0 again using test_group/data-lv1
       command: "ceph-volume --cluster {{ cluster }} lvm prepare --filestore --data test_group/data-lv1 --journal /dev/sdc1 --osd-id 0"
       environment:
