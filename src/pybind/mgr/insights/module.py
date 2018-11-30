@@ -200,6 +200,27 @@ class Module(MgrModule):
 
         return result, health_check_details
 
+    def _apply_osd_stats(self, osd_map):
+        # map from osd id to its index in the map structure
+        osd_id_to_idx = {}
+        for idx in range(len(osd_map["osds"])):
+            osd_id_to_idx[osd_map["osds"][idx]["osd"]] = idx
+
+        # include stats, including space utilization performance counters.
+        # adapted from dashboard api controller
+        for s in self.get('osd_stats')['osd_stats']:
+            try:
+                idx = osd_id_to_idx[s["osd"]]
+                osd_map["osds"][idx].update({'osd_stats': s})
+            except KeyError as e:
+                self.log.warning("inconsistent api state: {}".format(str(e)))
+
+        for osd in osd_map["osds"]:
+            osd['stats'] = {}
+            for s in ['osd.numpg', 'osd.stat_bytes', 'osd.stat_bytes_used']:
+                osd['stats'][s.split('.')[1]] = self.get_latest('osd', str(osd["osd"]), s)
+
+
     def _config_dump(self):
         """Report cluster configuration
 
@@ -241,6 +262,7 @@ class Module(MgrModule):
 
         osd_map = self.get("osd_map")
         del osd_map['pg_temp']
+        self._apply_osd_stats(osd_map)
         report["osd_dump"] = osd_map
 
         report["df"] = self.get("df")
