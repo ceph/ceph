@@ -382,11 +382,11 @@ struct rgw_bucket_dir_entry {
 };
 WRITE_CLASS_ENCODER(rgw_bucket_dir_entry)
 
-enum BIIndexType {
-  InvalidIdx    = 0,
-  PlainIdx      = 1,
-  InstanceIdx   = 2,
-  OLHIdx        = 3,
+enum class BIIndexType : uint8_t {
+  Invalid    = 0,
+  Plain      = 1,
+  Instance   = 2,
+  OLH        = 3,
 };
 
 struct rgw_bucket_category_stats;
@@ -396,11 +396,11 @@ struct rgw_cls_bi_entry {
   string idx;
   bufferlist data;
 
-  rgw_cls_bi_entry() : type(InvalidIdx) {}
+  rgw_cls_bi_entry() : type(BIIndexType::Invalid) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    encode((uint8_t)type, bl);
+    encode(type, bl);
     encode(idx, bl);
     encode(data, bl);
     ENCODE_FINISH(bl);
