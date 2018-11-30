@@ -18,6 +18,7 @@
     "lint": "npm run lint:tslint && npm run lint:prettier && npm run lint:html",
     "fix:prettier": "prettier --write \"{src,e2e}/**/*.{ts,scss}\"",
     "fix:tslint": "npm run lint:tslint -- --fix",
+    "fixmod": "prettier --write $(git rev-parse --show-toplevel)/$(git status --porcelain | grep -E '^(\\sM|\\?\\?|A)' | sed -e 's/^...//' | grep -E '^(src|e2e).*\\.(ts|scss)$') 1>/dev/null 2>&1 && echo 'done' || echo 'no changes found'",
     "fix": "npm run fix:tslint; npm run fix:prettier"
   },
   "private": true,
