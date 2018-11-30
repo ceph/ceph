@@ -1503,9 +1503,8 @@ void ImageReplayer<I>::reschedule_update_status_task(int new_interval) {
       m_update_status_interval = new_interval;
     }
 
-    bool restarting = (new_interval == 0 || canceled_task);
     if (new_interval >= 0 && is_running_() &&
-        start_mirror_image_status_update(false, restarting)) {
+        start_mirror_image_status_update(true, false)) {
       m_update_status_task = new FunctionContext(
         [this](int r) {
           assert(m_threads->timer_lock.is_locked());
@@ -1520,6 +1519,7 @@ void ImageReplayer<I>::reschedule_update_status_task(int new_interval) {
 
   if (canceled_task) {
     dout(20) << "canceled task" << dendl;
+    // decrement in-flight status update counter for canceled task
     finish_mirror_image_status_update();
   }
 }
