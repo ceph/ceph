@@ -4,9 +4,9 @@ ceph-mgr DeepSea orchestrator module
 """
 
 # We want orchestrator methods in this to be 1:1 mappings to DeepSea runners,
-# we don' want to aggregate mutliple salt invocations here, because that means
+# we don't want to aggregate multiple salt invocations here, because that means
 # this module would need to know too much about how DeepSea works internally.
-#Better to expose new runners from DeepSea to match what the orchestrator needs.
+# Better to expose new runners from DeepSea to match what the orchestrator needs.
 
 import json
 import errno
@@ -101,8 +101,8 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     def __init__(self, *args, **kwargs):
         super(DeepSeaOrchestrator, self).__init__(*args, **kwargs)
-        self.event = Event()
-        self.token = None
+        self._event = Event()
+        self._token = None
         self._event_reader = None
         self._reading_events = False
         self._last_failure_msg = None
@@ -121,6 +121,13 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
 
 
     def get_inventory(self, node_filter=None):
+        """
+        Note that this will raise an exception (e.g. if the salt-api is down,
+        or the username/password is incorret).  Same for other methods.
+        Callers should expect this and react appropriately.  The orchestrator
+        cli, for example, just prints the traceback in the console, so the
+        user at least sees the error.
+        """
 
         def process_result(raw_event):
             result = []
@@ -162,10 +169,6 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
 
             return c
 
-        # TODO: It's possible _do_request_with_login could throw an exception
-        # (e.g. salt-api down).  How to handle this?  (To test, try setting the
-        # wrong password, then run `ceph orchestrator device ls`)
-
 
     def describe_service(self, service_type, service_id, node_name):
 
@@ -204,9 +207,6 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
 
             return c
 
-        # TODO: It's possible _do_request_with_login could throw an exception
-        # (e.g. salt-api down).  How to handle this?
-
 
     def wait(self, completions):
         incomplete = False
@@ -219,9 +219,15 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
                     # TODO: the job is in the bus, it should reach us eventually
                     # unless something has gone wrong (e.g. salt-api died, etc.),
                     # in which case it's possible the job finished but we never
-                    # noticed the salt/run/$id/ret event.  Should probably add
-                    # the job ID to the completion object so we can query the
-                    # active jobs to see if incomplete jobs are still running.
+                    # noticed the salt/run/$id/ret event.  Need to add the job ID
+                    # (or possibly the full event tag) to the completion object.
+                    # That way, if we want to double check on a job that hasn't
+                    # been completed yet, we can make a synchronous request to
+                    # salt-api to invoke jobs.lookup_jid, and if it's complete we
+                    # should be able to pass its return value to _process_result()
+                    # Question: do we do this automatically after some timeout?
+                    # Or do we add a function so the admin can check and "unstick"
+                    # a stuck completion?
                     incomplete = True
 
         return not incomplete
@@ -237,7 +243,7 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
                         "Unknown configuration option '{0}'".format(cmd['key']))
 
             self.set_config(cmd['key'], cmd['value'])
-            self.event.set();
+            self._event.set();
             return 0, "Configuration option '{0}' updated".format(cmd['key']), ''
 
         return (-errno.EINVAL, '',
@@ -254,8 +260,8 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
                 # is that while setting the various parameters, this log warning
                 # will print once for each parameter set until the config is valid.
                 self.log.warn("Configuration invalid; try `ceph deepsea config-set [...]`")
-                self.event.wait(60)
-                self.event.clear()
+                self._event.wait(60)
+                self._event.clear()
                 continue
 
             if self._event_reader and not self._reading_events:
@@ -268,32 +274,40 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
                     # stream.  We can't do it in the serve thead, because reading
                     # from the response blocks, which would prevent the serve
                     # thread from handling anything else.
+                    #
+                    # TODO: figure out how to restart the _event_reader thread if
+                    # config changes, e.g.: a new username or password is set.
+                    # This will be difficult, because _read_sse() just blocks waiting
+                    # for response lines.  The closest I got was setting a read timeout
+                    # on the request, but in the general case (where not much is
+                    # happening most of the time), this will result in continual
+                    # timeouts and reconnects.  We really need an asynchronous read
+                    # to support this.
                     self._event_response = self._do_request_with_login("GET", "events", stream=True)
                     self._event_reader = Thread(target=self._read_sse)
                     self._reading_events = True
                     self._event_reader.start()
                 except Exception as ex:
                     self._set_last_failure_msg("Failure setting up event reader: " + str(ex))
-                    # gives an (arbitrary) 5 second retry if we can't attach to
-                    # the salt-api event bus for some reason
-                    # TODO: increase this and/or make it configurable
-                    self.event.wait(5)
-                    self.event.clear()
+                    # gives an (arbitrary) 60 second retry if we can't attach to
+                    # the salt-api event bus for some reason (e.g.: invalid username,
+                    # or password, which will be logged as "Request failed with status
+                    # code 401")
+                    self._event.wait(60)
+                    self._event.clear()
                     continue
 
             # Wait indefinitely for something interesting to happen (e.g.
             # config-set, or shutdown), or the event reader to fail, which
             # will happen if the salt-api server dies or restarts).
-            # TODO: figure out how to restart the _event_reader thread if
-            # config changes, e.g.: a new username or password is set.
-            self.event.wait()
-            self.event.clear()
+            self._event.wait()
+            self._event.clear()
 
 
     def shutdown(self):
         self.log.info('DeepSea module shutting down')
         self.run = False
-        self.event.set()
+        self._event.set()
 
 
     def _set_last_failure_msg(self, msg):
@@ -307,10 +321,6 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
     # Note: this is pretty braindead and doesn't implement the full eventsource
     # spec, but it *does* implement enough for us to listen to events from salt
     # and potentially do something with them.
-    # TODO: How are we going to deal with salt-api dying, or mgr failing over,
-    #       or other unforeseen glitches when we're waiting for particular jobs
-    #       to complete?  What's to stop things falling through the cracks?
-    #       Do completions we're waiting on need to be persisted somewhere?
     def _read_sse(self):
         event = {}
         try:
@@ -332,21 +342,21 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
                         # is a salt-api extension to SSE to avoid having to decode
                         # json data if you don't care about it.  To get to the
                         # interesting stuff, you want event['data'], which is json.
+                        # If you want to have some fun, try
+                        # `ceph daemon mgr.$(hostname) config set debug_mgr 20`
+                        # then `salt '*' test.ping` on the master
                         self.log.debug("Got event '{}'".format(str(event)))
 
                         # If we're actually interested in this event (i.e. it's
                         # in our completion dict), fire off that completion's
                         # _process_result() callback and remove it from our list.
                         if event['tag'] in self._all_completions:
-                            self.log.debug("Using {}".format(event['data']))
+                            self.log.info("Event {} complete".format(event['tag']))
                             self._all_completions[event['tag']]._process_result(event['data'])
                             # TODO: decide whether it's bad to delete the completion
                             # here -- would we ever need to resurrect it?
                             del self._all_completions[event['tag']]
 
-                        # If you want to have some fun, try
-                        # `ceph daemon mgr.$(hostname) config set debug_mgr 4/5`
-                        # then `salt '*' test.ping` on the master
                         event = {}
             self._set_last_failure_msg("SSE read terminated")
         except Exception as ex:
@@ -354,7 +364,7 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
             self._set_last_failure_msg("SSE read failed: {}".format(str(ex)))
 
         self._reading_events = False
-        self.event.set()
+        self._event.set()
 
 
     # _do_request(), _login() and _do_request_with_login() are an extremely
@@ -374,10 +384,10 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
         url = "{0}/{1}".format(self.get_config('salt_api_url'), path)
         try:
             if method.lower() == 'get':
-                resp = requests.get(url, headers = { "X-Auth-Token": self.token },
+                resp = requests.get(url, headers = { "X-Auth-Token": self._token },
                                     data=data, stream=stream)
             elif method.lower() == 'post':
-                resp = requests.post(url, headers = { "X-Auth-Token": self.token },
+                resp = requests.post(url, headers = { "X-Auth-Token": self._token },
                                      data=data)
 
             else:
@@ -385,9 +395,7 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
             if resp.ok:
                 return resp
             else:
-                # TODO: this results in a lot of junk in the logs for e.g.: 401 / not authorized
                 msg = "Request failed with status code {}".format(resp.status_code)
-                self.log.error(msg)
                 raise RequestException(msg, resp.status_code)
         except requests.exceptions.ConnectionError as ex:
             self.log.exception(str(ex))
@@ -403,7 +411,7 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
             "sharedsecret" if self.get_config('salt_api_eauth') == 'sharedsecret' else 'password': self.get_config('salt_api_password'),
             "username": self.get_config('salt_api_username')
         })
-        self.token = resp.json()['return'][0]['token']
+        self._token = resp.json()['return'][0]['token']
         self.log.info("Salt API login successful")
 
 
@@ -411,11 +419,11 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
         retries = 2
         while True:
             try:
-                if not self.token:
+                if not self._token:
                     self._login()
                 return self._do_request(method, path, data, stream)
             except RequestException as ex:
                 retries -= 1
                 if ex.status_code not in [401, 403] or retries == 0:
                     raise ex
-                self.token = None
+                self._token = None
