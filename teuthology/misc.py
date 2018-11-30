@@ -272,9 +272,11 @@ def feed_many_stdins_and_close(fp, processes):
         proc.stdin.close()
 
 
-def get_mons(roles, ips):
+def get_mons(roles, ips,
+             mon_bind_msgr2=False,
+             mon_bind_addrvec=False):
     """
-    Get monitors and their associated ports
+    Get monitors and their associated addresses
     """
     mons = {}
     mon_ports = {}
@@ -288,17 +290,33 @@ def get_mons(roles, ips):
                 mon_ports[ips[idx]] = 6789
             else:
                 mon_ports[ips[idx]] += 1
-            addr = '{ip}:{port}'.format(
-                ip=ips[idx],
-                port=mon_ports[ips[idx]],
-            )
+            if mon_bind_msgr2:
+                assert mon_bind_addrvec
+                addr = 'v2:{ip}:{port},v1:{ip}:{port2}'.format(
+                    ip=ips[idx],
+                    port=mon_ports[ips[idx]],
+                    port2=mon_ports[ips[idx]] + 1,
+                )
+                mon_ports[ips[idx]] += 1
+            elif mon_bind_addrvec:
+                addr = 'v1:{ip}:{port}'.format(
+                    ip=ips[idx],
+                    port=mon_ports[ips[idx]],
+                )
+            else:
+                addr = '{ip}:{port}'.format(
+                    ip=ips[idx],
+                    port=mon_ports[ips[idx]],
+                )
             mon_id += 1
             mons[role] = addr
     assert mons
     return mons
 
 
-def skeleton_config(ctx, roles, ips, cluster='ceph'):
+def skeleton_config(ctx, roles, ips, cluster='ceph',
+                    mon_bind_msgr2=False,
+                    mon_bind_addrvec=False):
     """
     Returns a ConfigObj that is prefilled with a skeleton config.
 
@@ -310,7 +328,9 @@ def skeleton_config(ctx, roles, ips, cluster='ceph'):
     t = open(path, 'r')
     skconf = t.read().format(testdir=get_testdir(ctx))
     conf = configobj.ConfigObj(StringIO(skconf), file_error=True)
-    mons = get_mons(roles=roles, ips=ips)
+    mons = get_mons(roles=roles, ips=ips,
+                    mon_bind_msgr2=mon_bind_msgr2,
+                    mon_bind_addrvec=mon_bind_addrvec)
     for role, addr in mons.iteritems():
         mon_cluster, _, _ = split_role(role)
         if mon_cluster != cluster:
@@ -440,7 +460,8 @@ def num_instances_of_type(cluster, type_, ceph_cluster='ceph'):
     return num
 
 
-def create_simple_monmap(ctx, remote, conf, path=None):
+def create_simple_monmap(ctx, remote, conf, path=None,
+                         mon_bind_addrvec=False):
     """
     Writes a simple monmap based on current ceph.conf into path, or
     <testdir>/monmap by default.
@@ -479,7 +500,10 @@ def create_simple_monmap(ctx, remote, conf, path=None):
         '--clobber',
     ]
     for (name, addr) in addresses:
-        args.extend(('--add', name, addr))
+        if mon_bind_addrvec:
+            args.extend(('--addv', name, addr))
+        else:
+            args.extend(('--add', name, addr))
     if not path:
         path = '{tdir}/monmap'.format(tdir=testdir)
     args.extend([
