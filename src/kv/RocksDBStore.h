@@ -496,7 +496,7 @@ err:
   int set_cache_capacity(int64_t capacity);
   int64_t get_cache_capacity();
 
-  WholeSpaceIterator get_wholespace_iterator() override;
+  WholeSpaceIterator get_wholespace_iterator(const std::string &column_family) override;
 };
 
 

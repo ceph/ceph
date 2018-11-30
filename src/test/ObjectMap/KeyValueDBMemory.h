@@ -186,5 +186,5 @@ private:
   friend class WholeSpaceMemIterator;
 
 public:
-  WholeSpaceIterator get_wholespace_iterator() override;
+  WholeSpaceIterator get_wholespace_iterator(const std::string &column_family) override;
 };
