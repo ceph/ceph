@@ -23,12 +23,9 @@ def get_task(name):
 
     # First look for the tasks's module inside teuthology
     module = _import('teuthology.task', module_name, task_name)
-    # If it is not found, try ceph-qa-suite (if it is in sys.path)
+    # If it is not found, try qa/ directory (if it is in sys.path)
     if not module:
-        module = _import('tasks', module_name, task_name)
-    # If it is still not found, fail
-    if not module:
-        raise ImportError("Could not find task '{}'".format(name))
+        module = _import('tasks', module_name, task_name, fail_on_import_error=True)
     try:
         # Attempt to locate the task object inside the module
         task = getattr(module, task_name)
@@ -44,7 +41,7 @@ def get_task(name):
     return task
 
 
-def _import(from_package, module_name, task_name):
+def _import(from_package, module_name, task_name, fail_on_import_error=False):
     full_module_name = '.'.join([from_package, module_name])
     try:
         module = __import__(
@@ -55,7 +52,10 @@ def _import(from_package, module_name, task_name):
             0,
         )
     except ImportError:
-        return None
+        if fail_on_import_error:
+            raise
+        else:
+            return None
     return module
 
 
