@@ -66,3 +66,28 @@ def format_dimless(n, width, colored=True):
 
 def format_bytes(n, width, colored=True):
     return format_units(n, width, colored, decimal=False)
+
+
+def differentiate(data1, data2):
+    """
+    # >>> times = [0, 2]
+    # >>> values = [100, 101]
+    # >>> differentiate(*zip(times, values))
+    0.5
+    """
+    try:
+        return (data2[1] - data1[1]) / float(data2[0] - data1[0])
+    except ZeroDivisionError:
+        return 0.0
+
+
+def latest_rate(data):
+    if data and len(data) > 1:
+        try:
+            last_two_items = data[-2:]
+        except TypeError:
+            # assert isinstance(data, collections.deque)
+            # but I'm happy if list() just works.
+            last_two_items = list(data)[-2:]
+        return differentiate(*last_two_items)
+    return 0.0

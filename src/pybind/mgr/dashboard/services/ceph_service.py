@@ -6,6 +6,7 @@ import json
 import rados
 
 from mgr_module import CommandResult
+from mgr_util import differentiate, latest_rate
 
 try:
     from more_itertools import pairwise
@@ -107,15 +108,10 @@ class CephService(object):
             stats = pool_stats[pool['pool']]
             s = {}
 
-            def get_rate(series):
-                if len(series) >= 2:
-                    return differentiate(*list(series)[-2:])
-                return 0
-
             for stat_name, stat_series in stats.items():
                 s[stat_name] = {
                     'latest': stat_series[0][1],
-                    'rate': get_rate(stat_series),
+                    'rate': latest_rate(stat_series),
                     'series': [i for i in stat_series]
                 }
             pool['stats'] = s
@@ -184,10 +180,7 @@ class CephService(object):
     def get_rate(cls, svc_type, svc_name, path):
         """returns most recent rate"""
         data = mgr.get_counter(svc_type, svc_name, path)[path]
-
-        if data and len(data) > 1:
-            return differentiate(*data[-2:])
-        return 0.0
+        return latest_rate(data)
 
     @classmethod
     def get_client_perf(cls):
@@ -249,13 +242,3 @@ class CephService(object):
             'statuses': pg_summary['all'],
             'pgs_per_osd': pgs_per_osd,
         }
-
-
-def differentiate(data1, data2):
-    """
-    >>> times = [0, 2]
-    >>> values = [100, 101]
-    >>> differentiate(*zip(times, values))
-    0.5
-    """
-    return (data2[1] - data1[1]) / float(data2[0] - data1[0])
