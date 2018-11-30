@@ -283,13 +283,11 @@ class Module(MgrModule):
 
         # Tear down MDS daemons
         # =====================
-        spec = orchestrator.StatelessServiceSpec()
-        spec.name = vol_name
         try:
             completion = self._oremote(
-                "rm_stateless_service",
+                "remove_stateless_service",
                 "mds",
-                spec
+                vol_name
             )
             self._orchestrator_wait([completion])
         except ImportError:
