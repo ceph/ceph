@@ -8,6 +8,8 @@ import json
 
 import rados
 
+import util
+
 from mgr_module import CommandResult
 
 try:
@@ -120,7 +122,7 @@ class CephService(object):
 
             def get_rate(series):
                 if len(series) >= 2:
-                    return differentiate(*series[0:1])
+                    return util.differentiate(*series[0:1])
                 return 0
 
             for stat_name, stat_series in stats.items():
@@ -189,7 +191,7 @@ class CephService(object):
             return [(0, 0.0)]
         elif len(data) == 1:
             return [(data[0][0], 0.0)]
-        return [(data2[0], differentiate(data1, data2)) for data1, data2 in pairwise(data)]
+        return [(data2[0], util.differentiate(data1, data2)) for data1, data2 in pairwise(data)]
 
     @classmethod
     def get_rate(cls, svc_type, svc_name, path):
@@ -197,7 +199,7 @@ class CephService(object):
         data = mgr.get_counter(svc_type, svc_name, path)[path]
 
         if data and len(data) > 1:
-            return differentiate(*data[-2:])
+            return util.differentiate(*data[-2:])
         return 0.0
 
     @classmethod
@@ -260,13 +262,3 @@ class CephService(object):
             'statuses': pg_summary['all'],
             'pgs_per_osd': pgs_per_osd,
         }
-
-
-def differentiate(data1, data2):
-    """
-    >>> times = [0, 2]
-    >>> values = [100, 101]
-    >>> differentiate(*zip(times, values))
-    0.5
-    """
-    return (data2[1] - data1[1]) / float(data2[0] - data1[0])

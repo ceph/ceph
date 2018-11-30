@@ -8,6 +8,8 @@ import json
 import rbd
 from mgr_module import CommandResult
 
+import util
+
 GB = 1024 * 1024 * 1024
 
 
@@ -22,16 +24,6 @@ RBD_FEATURES_NAME_MAPPING = {
     rbd.RBD_FEATURE_DATA_POOL: 'data-pool',
     rbd.RBD_FEATURE_OPERATIONS: 'operations',
 }
-
-
-def differentiate(data1, data2):
-    """
-    # >>> times = [0, 2]
-    # >>> values = [100, 101]
-    # >>> differentiate(*zip(times, values))
-    0.5
-    """
-    return (data2[1] - data1[1]) / float(data2[0] - data1[0])
 
 
 class ClusterAPI(object):
@@ -443,7 +435,7 @@ class ClusterAPI(object):
         data = self.module.get_counter(svc_type, svc_name, path)[path]
 
         if data and len(data) > 1:
-            return differentiate(*data[-2:])
+            return util.differentiate(*data[-2:])
         return 0.0
 
     def get_latest(self, daemon_type, daemon_name, counter):
