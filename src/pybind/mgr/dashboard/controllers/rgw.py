@@ -174,6 +174,16 @@ class RgwUser(RgwRESTController):
         result = self.proxy('GET', 'user', {'uid': uid})
         return self._append_uid(result)
 
+    @Endpoint()
+    @ReadPermission
+    def get_emails(self):
+        emails = []
+        for uid in json.loads(self.list()):
+            user = json.loads(self.get(uid))
+            if user["email"]:
+                emails.append(user["email"])
+        return emails
+
     def create(self, uid, display_name, email=None, max_buckets=None,
                suspended=None, generate_key=None, access_key=None,
                secret_key=None):
