@@ -1368,6 +1368,7 @@ using namespace ceph;
       align_size = round_up_to(round_up_to(_len, max_buffers) / max_buffers, align_size);
     }
     auto p = std::begin(_buffers);
+    auto p_prev = _buffers.before_begin();
     while (p != std::end(_buffers)) {
       // keep anything that's already align and sized aligned
       if (p->is_aligned(align_memory) && p->is_n_align_sized(align_size)) {
@@ -1376,7 +1377,7 @@ using namespace ceph;
   	     << " length " << p->length()
   	     << " " << (p->length() & (align - 1)) << " ok" << std::endl;
         */
-        ++p;
+        p_prev = p++;
         continue;
       }
       
@@ -1392,10 +1393,10 @@ using namespace ceph;
         */
         offset += p->length();
         // no need to reallocate, relinking is enough thankfully to bi::list.
-        auto after = _buffers.erase(p);
+        auto p_after = _buffers.erase_after(p_prev);
         unaligned._buffers.push_back(*p);
         unaligned._len += p->length();
-        p = after;
+        p = p_after;
       } while (p != std::end(_buffers) &&
   	     (!p->is_aligned(align_memory) ||
   	      !p->is_n_align_sized(align_size) ||
@@ -1406,7 +1407,8 @@ using namespace ceph;
             buffer::create_aligned(unaligned._len, align_memory)));
         _memcopy_count += unaligned._len;
       }
-      _buffers.insert(p, *ptr_node::create(unaligned._buffers.front()).release());
+      _buffers.insert_after(p_prev, *ptr_node::create(unaligned._buffers.front()).release());
+      ++p_prev;
     }
     last_p = begin();
 
@@ -1440,7 +1442,7 @@ using namespace ceph;
     _len += bl._len;
     if (!(flags & CLAIM_ALLOW_NONSHAREABLE))
       bl.make_shareable();
-    _buffers.splice(std::end(_buffers), bl._buffers);
+    _buffers.splice_back(bl._buffers);
     bl._len = 0;
     bl.last_p = bl.begin();
   }
@@ -1723,13 +1725,14 @@ using namespace ceph;
       
     // skip off
     auto curbuf = std::begin(_buffers);
+    auto curbuf_prev = _buffers.before_begin();
     while (off > 0) {
       ceph_assert(curbuf != std::end(_buffers));
       if (off >= (*curbuf).length()) {
 	// skip this buffer
 	//cout << "off = " << off << " skipping over " << *curbuf << std::endl;
 	off -= (*curbuf).length();
-	++curbuf;
+	curbuf_prev = curbuf++;
       } else {
 	// somewhere in this buffer!
 	//cout << "off = " << off << " somewhere in " << *curbuf << std::endl;
@@ -1741,8 +1744,10 @@ using namespace ceph;
       // add a reference to the front bit
       //  insert it before curbuf (which we'll hose)
       //cout << "keeping front " << off << " of " << *curbuf << std::endl;
-      _buffers.insert( curbuf, *ptr_node::create( *curbuf, 0, off ).release());
+      _buffers.insert_after(curbuf_prev,
+			    *ptr_node::create(*curbuf, 0, off).release());
       _len += off;
+      ++curbuf_prev;
     }
     
     while (len > 0) {
@@ -1764,7 +1769,7 @@ using namespace ceph;
       if (claim_by) 
 	claim_by->append( *curbuf, off, howmuch );
       _len -= (*curbuf).length();
-      curbuf = _buffers.erase_and_dispose(curbuf);
+      curbuf = _buffers.erase_after_and_dispose(curbuf_prev);
       len -= howmuch;
       off = 0;
     }

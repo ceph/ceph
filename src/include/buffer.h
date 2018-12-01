@@ -574,46 +574,20 @@ namespace buffer CEPH_BUFFER_API {
 	_size++;
       }
 
-      void splice_after(const_iterator it, buffers_t& other) {
+      void splice_back(buffers_t& other) {
 	if (other._size == 0) {
 	  return;
 	}
 
-	other._tail->next = it->next;
-	it->next = other._root.next;
-
-	// the insert_after(end(), ...) case
-	_root.next = it == end() ? other._root.next : _root.next;
-
-	// push_back equivalent
-	_tail = const_iterator(_tail) == it ? other._tail : _tail;
-
+	other._tail->next = &_root;
+	// will update root.next if empty() == true
+	_tail->next = other._root.next;
+	_tail = other._tail;
 	_size += other._size;
 
 	other._root.next = &other._root;
 	other._tail = &other._root;
 	other._size = 0;
-      }
-
-      const const_iterator previous(const_iterator it) const {
-	for (auto prev = begin(); prev != end(); prev = prev->next) {
-	  if (const_iterator(prev->next) == it) {
-	    return prev;
-	  }
-	}
-	return end();
-      }
-
-      auto erase(const_iterator it) {
-	return erase_after(previous(it));
-      }
-
-      auto insert(const_iterator it, reference item) {
-	return insert_after(previous(it), item);
-      }
-
-      auto splice(const_iterator it, buffers_t& other) {
-	return splice_after(previous(it), other);
       }
 
       std::size_t size() const { return _size; }
@@ -622,11 +596,17 @@ namespace buffer CEPH_BUFFER_API {
       const_iterator begin() const {
 	return _root.next;
       }
+      const_iterator before_begin() const {
+	return &_root;
+      }
       const_iterator end() const {
 	return &_root;
       }
       iterator begin() {
 	return _root.next;
+      }
+      iterator before_begin() {
+	return &_root;
       }
       iterator end() {
 	return &_root;
@@ -662,9 +642,10 @@ namespace buffer CEPH_BUFFER_API {
 	_tail = &_root;
 	_size = 0;
       }
-      auto erase_and_dispose(iterator it) {
-	auto ret = erase(it);
-	ptr_node::disposer()(&*it);
+      iterator erase_after_and_dispose(iterator it) {
+	auto* to_dispose = &*std::next(it);
+	auto ret = erase_after(it);
+	ptr_node::disposer()(to_dispose);
 	return ret;
       }
 
