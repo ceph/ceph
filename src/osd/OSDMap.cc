@@ -1672,6 +1672,9 @@ void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
     tmpmap.pg_to_raw_up(pg, &raw, &primary);
     set<int> parents;
     for (auto osd : raw) {
+      // skip non-existent/down osd for erasure-coded PGs
+      if (osd == CRUSH_ITEM_NONE)
+        continue;
       if (type > 0) {
         auto parent = tmpmap.crush->get_parent_of_type(osd, type, crush_rule);
         if (parent < 0) {
