@@ -1165,6 +1165,7 @@ public:
    * by anybody for data mapping purposes. Specify both pointers.
    */
   void pg_to_raw_up(pg_t pg, vector<int> *up, int *primary) const;
+  void pg_to_raw_upmap(pg_t pg, vector<int> *raw) const;
   /**
    * map a pg to its acting set as well as its up set. You must use
    * the acting set for data mapping purposes, but some users will

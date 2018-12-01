@@ -1786,8 +1786,7 @@ void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
                    << " failure-domain-type " << type
                    << dendl;
     vector<int> raw;
-    int primary;
-    nextmap.pg_to_raw_up(pg, &raw, &primary);
+    nextmap.pg_to_raw_upmap(pg, &raw);
     set<int> parents;
     for (auto osd : raw) {
       if (type > 0) {
@@ -2414,6 +2413,18 @@ void OSDMap::pg_to_raw_up(pg_t pg, vector<int> *up, int *primary) const
   _raw_to_up_osds(*pool, raw, up);
   *primary = _pick_primary(raw);
   _apply_primary_affinity(pps, *pool, up, primary);
+}
+
+void OSDMap::pg_to_raw_upmap(pg_t pg, vector<int> *raw) const
+{
+  const pg_pool_t *pool = get_pg_pool(pg.pool());
+  if (!pool) {
+    raw->clear();
+    return;
+  }
+  ps_t pps;
+  _pg_to_raw_osds(*pool, pg, raw, &pps);
+  _apply_upmap(*pool, pg, raw);
 }
 
 void OSDMap::_pg_to_up_acting_osds(
