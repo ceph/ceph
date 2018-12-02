@@ -63,6 +63,11 @@ class Summary(BaseController):
             result = self._has_permissions(Permission.DELETE, Scope.RBD_IMAGE)
         return result
 
+    def _get_host(self):
+        mgr_map = mgr.get('mgr_map')
+        services = mgr_map['services']
+        return services['dashboard']
+
     @Endpoint()
     def __call__(self):
         exe_t, fin_t = TaskManager.list_serializable()
@@ -72,6 +77,7 @@ class Summary(BaseController):
         result = {
             'health_status': self._health_status(),
             'mgr_id': mgr.get_mgr_id(),
+            'mgr_host': self._get_host(),
             'have_mon_connection': mgr.have_mon_connection(),
             'executing_tasks': executing_tasks,
             'finished_tasks': finished_tasks,
