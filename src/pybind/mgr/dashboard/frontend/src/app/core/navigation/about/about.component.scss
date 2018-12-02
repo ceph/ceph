@@ -14,9 +14,23 @@
 .modal-footer {
   border-top: none;
 }
-h1 {
-  font-size: 4em;
+h2 {
+  font-size: 3em;
 }
 .ceph-logo {
-  width: 25%;
+  width: 10%;
+}
+.list-unstyled li {
+  margin-top: 5px;
+}
+.modal-footer {
+  padding: 15px 80px 35px 80px;
+}
+.modal-body {
+  margin-top: 0;
+  padding-top: 0;
+
+  h2 {
+    margin-top: 0;
+  }
 }
