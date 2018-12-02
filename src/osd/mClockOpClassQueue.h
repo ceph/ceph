@@ -52,6 +52,10 @@ namespace ceph {
     const crimson::dmclock::ClientInfo*
     op_class_client_info_f(const osd_op_type_t& op_type);
 
+    inline unsigned get_size_slow() const {
+      return queue.get_size_slow();
+    }
+
     // Ops of this priority should be deleted immediately
     inline void remove_by_class(Client cl,
 				std::list<Request> *out) override final {
