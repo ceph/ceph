@@ -6,6 +6,7 @@
 
 #include "messages/MOSDOp.h"
 #include "mgr/OSDPerfMetricTypes.h"
+#include "osd/OSD.h"
 #include "osd/OpRequest.h"
 
 class DynamicPerfStats {
@@ -52,8 +53,8 @@ public:
     return !data.empty();
   }
 
-  void add(const OpRequest& op, uint64_t inb, uint64_t outb,
-           const utime_t &latency) {
+  void add(const OSDService *osd, const pg_info_t &pg_info, const OpRequest& op,
+           uint64_t inb, uint64_t outb, const utime_t &latency) {
 
     auto update_counter_fnc =
         [&op, inb, outb, &latency](const PerformanceCounterDescriptor &d,
@@ -101,8 +102,8 @@ public:
         };
 
     auto get_subkey_fnc =
-        [&op](const OSDPerfMetricSubKeyDescriptor &d,
-              OSDPerfMetricSubKey *sub_key) {
+        [&osd, &pg_info, &op](const OSDPerfMetricSubKeyDescriptor &d,
+                              OSDPerfMetricSubKey *sub_key) {
           ceph_assert(d.is_supported());
 
           auto m = static_cast<const MOSDOp*>(op.get_req());
@@ -111,11 +112,26 @@ public:
           case OSDPerfMetricSubKeyType::CLIENT_ID:
             match_string = stringify(m->get_reqid().name);
             break;
+          case OSDPerfMetricSubKeyType::CLIENT_ADDRESS:
+            match_string = stringify(m->get_connection()->get_peer_addr());
+            break;
           case OSDPerfMetricSubKeyType::POOL_ID:
             match_string = stringify(m->get_spg().pool());
             break;
+          case OSDPerfMetricSubKeyType::NAMESPACE:
+            match_string = m->get_hobj().nspace;
+            break;
+          case OSDPerfMetricSubKeyType::OSD_ID:
+            match_string = stringify(osd->get_nodeid());
+            break;
+          case OSDPerfMetricSubKeyType::PG_ID:
+            match_string = stringify(pg_info.pgid);
+            break;
           case OSDPerfMetricSubKeyType::OBJECT_NAME:
             match_string = m->get_oid().name;
+            break;
+          case OSDPerfMetricSubKeyType::SNAP_ID:
+            match_string = stringify(m->get_snapid());
             break;
           default:
             ceph_abort_msg("unknown counter type");

@@ -969,7 +969,9 @@ class MgrModule(ceph_module.BaseMgrModule):
              ],
            }
 
-        Valid subkey types: 'client_id', 'pool_id', 'object_name'
+        Valid subkey types:
+           'client_id', 'client_address', 'pool_id', 'namespace', 'osd_id',
+           'pg_id', 'object_name', 'snap_id'
         Valid performance counter types:
            'write_ops', 'read_ops', 'write_bytes', 'read_bytes',
            'write_latency', 'read_latency'

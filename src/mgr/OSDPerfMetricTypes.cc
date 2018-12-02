@@ -11,11 +11,26 @@ std::ostream& operator<<(std::ostream& os,
   case OSDPerfMetricSubKeyType::CLIENT_ID:
     os << "client_id";
     break;
+  case OSDPerfMetricSubKeyType::CLIENT_ADDRESS:
+    os << "client_address";
+    break;
   case OSDPerfMetricSubKeyType::POOL_ID:
     os << "pool_id";
     break;
+  case OSDPerfMetricSubKeyType::NAMESPACE:
+    os << "namespace";
+    break;
+  case OSDPerfMetricSubKeyType::OSD_ID:
+    os << "osd_id";
+    break;
+  case OSDPerfMetricSubKeyType::PG_ID:
+    os << "pg_id";
+    break;
   case OSDPerfMetricSubKeyType::OBJECT_NAME:
     os << "object_name";
+    break;
+  case OSDPerfMetricSubKeyType::SNAP_ID:
+    os << "snap_id";
     break;
   default:
     os << "unknown (" << static_cast<int>(d.type) << ")";
