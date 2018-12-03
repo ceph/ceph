@@ -2898,7 +2898,7 @@ int RGWRados::get_obj_head_ioctx(const RGWBucketInfo& bucket_info, const rgw_obj
 
 int RGWRados::get_obj_head_ref(const RGWBucketInfo& bucket_info, const rgw_obj& obj, rgw_rados_ref *ref)
 {
-  get_obj_bucket_and_oid_loc(obj, ref->oid, ref->key);
+  get_obj_bucket_and_oid_loc(obj, ref->obj.oid, ref->obj.loc);
 
   rgw_pool pool;
   if (!get_obj_data_pool(bucket_info.placement_rule, obj, &pool)) {
@@ -2911,29 +2911,26 @@ int RGWRados::get_obj_head_ref(const RGWBucketInfo& bucket_info, const rgw_obj& 
     return r;
   }
 
-  ref->ioctx.locator_set_key(ref->key);
+  ref->ioctx.locator_set_key(ref->obj.loc);
 
   return 0;
 }
 
 int RGWRados::get_raw_obj_ref(const rgw_raw_obj& obj, rgw_rados_ref *ref)
 {
-  ref->oid = obj.oid;
-  ref->key = obj.loc;
+  ref->obj = obj;
 
   int r;
 
-  if (ref->oid.empty()) {
-    ref->oid = obj.pool.to_str();
-    ref->pool = svc.zone->get_zone_params().domain_root;
-  } else {
-    ref->pool = obj.pool;
+  if (ref->obj.oid.empty()) {
+    ref->obj.oid = obj.pool.to_str();
+    ref->obj.pool = svc.zone->get_zone_params().domain_root;
   }
-  r = open_pool_ctx(ref->pool, ref->ioctx);
+  r = open_pool_ctx(ref->obj.pool, ref->ioctx);
   if (r < 0)
     return r;
 
-  ref->ioctx.locator_set_key(ref->key);
+  ref->ioctx.locator_set_key(ref->obj.loc);
 
   return 0;
 }
@@ -3631,7 +3628,7 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   }
 
   tracepoint(rgw_rados, operate_enter, req_id.c_str());
-  r = ref.ioctx.operate(ref.oid, &op);
+  r = ref.ioctx.operate(ref.obj.oid, &op);
   tracepoint(rgw_rados, operate_exit, req_id.c_str());
   if (r < 0) { /* we can expect to get -ECANCELED if object was replaced under,
                 or -ENOENT if was removed, or -EEXIST if it did not exist
@@ -5366,7 +5363,7 @@ int RGWRados::Object::Delete::delete_obj()
     return r;
 
   store->remove_rgw_head_obj(op);
-  r = ref.ioctx.operate(ref.oid, &op);
+  r = ref.ioctx.operate(ref.obj.oid, &op);
 
   /* raced with another operation, object state is indeterminate */
   const bool need_invalidate = (r == -ECANCELED);
@@ -5436,7 +5433,7 @@ int RGWRados::delete_raw_obj(const rgw_raw_obj& obj)
   ObjectWriteOperation op;
 
   op.remove();
-  r = ref.ioctx.operate(ref.oid, &op);
+  r = ref.ioctx.operate(ref.obj.oid, &op);
   if (r < 0)
     return r;
 
@@ -6048,7 +6045,7 @@ int RGWRados::set_attrs(void *ctx, const RGWBucketInfo& bucket_info, rgw_obj& ob
   real_time mtime = real_clock::now();
   struct timespec mtime_ts = real_clock::to_timespec(mtime);
   op.mtime2(&mtime_ts);
-  r = ref.ioctx.operate(ref.oid, &op);
+  r = ref.ioctx.operate(ref.obj.oid, &op);
   if (state) {
     if (r >= 0) {
       bufferlist acl_bl = attrs[RGW_ATTR_ACL];
@@ -6691,7 +6688,7 @@ int RGWRados::obj_operate(const RGWBucketInfo& bucket_info, const rgw_obj& obj, 
     return r;
   }
 
-  return ref.ioctx.operate(ref.oid, op);
+  return ref.ioctx.operate(ref.obj.oid, op);
 }
 
 int RGWRados::obj_operate(const RGWBucketInfo& bucket_info, const rgw_obj& obj, ObjectReadOperation *op)
@@ -6704,7 +6701,7 @@ int RGWRados::obj_operate(const RGWBucketInfo& bucket_info, const rgw_obj& obj, 
 
   bufferlist outbl;
 
-  return ref.ioctx.operate(ref.oid, op, &outbl);
+  return ref.ioctx.operate(ref.obj.oid, op, &outbl);
 }
 
 int RGWRados::olh_init_modification_impl(const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& olh_obj, string *op_tag)
@@ -7137,7 +7134,7 @@ int RGWRados::apply_olh_log(RGWObjectCtx& obj_ctx, RGWObjState& state, const RGW
   }
 
   /* update olh object */
-  r = ref.ioctx.operate(ref.oid, &op);
+  r = ref.ioctx.operate(ref.obj.oid, &op);
   if (r == -ECANCELED) {
     r = 0;
   }
@@ -7160,7 +7157,7 @@ int RGWRados::apply_olh_log(RGWObjectCtx& obj_ctx, RGWObjState& state, const RGW
     cls_obj_check_prefix_exist(rm_op, RGW_ATTR_OLH_PENDING_PREFIX, true); /* fail if found one of these, pending modification */
     rm_op.remove();
 
-    r = ref.ioctx.operate(ref.oid, &rm_op);
+    r = ref.ioctx.operate(ref.obj.oid, &rm_op);
     if (r == -ECANCELED) {
       return 0; /* someone else won this race */
     } else {
@@ -7417,7 +7414,7 @@ int RGWRados::remove_olh_pending_entries(const RGWBucketInfo& bucket_info, RGWOb
   }
 
   /* update olh object */
-  r = ref.ioctx.operate(ref.oid, &op);
+  r = ref.ioctx.operate(ref.obj.oid, &op);
   if (r == -ENOENT || r == -ECANCELED) {
     /* raced with some other change, shouldn't sweat about it */
     r = 0;
@@ -7502,7 +7499,7 @@ int RGWRados::raw_obj_stat(rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime,
     op.read(0, cct->_conf->rgw_max_chunk_size, first_chunk, NULL);
   }
   bufferlist outbl;
-  r = ref.ioctx.operate(ref.oid, &op, &outbl);
+  r = ref.ioctx.operate(ref.obj.oid, &op, &outbl);
 
   if (epoch) {
     *epoch = ref.ioctx.get_last_version();
@@ -8083,7 +8080,7 @@ int RGWRados::append_async(rgw_raw_obj& obj, size_t size, bufferlist& bl)
   librados::Rados *rad = get_rados_handle();
   librados::AioCompletion *completion = rad->aio_create_completion(NULL, NULL, NULL);
 
-  r = ref.ioctx.aio_append(ref.oid, completion, bl, size);
+  r = ref.ioctx.aio_append(ref.obj.oid, completion, bl, size);
   completion->release();
   return r;
 }
@@ -8919,7 +8916,7 @@ int RGWRados::cls_obj_usage_log_add(const string& oid,
   ObjectWriteOperation op;
   cls_rgw_usage_log_add(op, info);
 
-  r = ref.ioctx.operate(ref.oid, &op);
+  r = ref.ioctx.operate(ref.obj.oid, &op);
   return r;
 }
 
@@ -8938,7 +8935,7 @@ int RGWRados::cls_obj_usage_log_read(const string& oid, const string& user, cons
 
   *is_truncated = false;
 
-  r = cls_rgw_usage_log_read(ref.ioctx, ref.oid, user, bucket, start_epoch, end_epoch,
+  r = cls_rgw_usage_log_read(ref.ioctx, ref.obj.oid, user, bucket, start_epoch, end_epoch,
 			     max_entries, read_iter, usage, is_truncated);
 
   return r;
@@ -8955,7 +8952,7 @@ int RGWRados::cls_obj_usage_log_trim(const string& oid, const string& user, cons
     return r;
   }
 
-  r = cls_rgw_usage_log_trim(ref.ioctx, ref.oid, user, bucket, start_epoch, end_epoch);
+  r = cls_rgw_usage_log_trim(ref.ioctx, ref.obj.oid, user, bucket, start_epoch, end_epoch);
   return r;
 }
 
@@ -8970,7 +8967,7 @@ int RGWRados::cls_obj_usage_log_clear(string& oid)
   }
   librados::ObjectWriteOperation op;
   cls_rgw_usage_log_clear(op);
-  r = ref.ioctx.operate(ref.oid, &op);
+  r = ref.ioctx.operate(ref.obj.oid, &op);
   return r;
 }
 
@@ -9171,7 +9168,7 @@ int RGWRados::cls_user_get_header(const string& user_id, cls_user_header *header
   int rc;
   ::cls_user_get_header(op, header, &rc);
   bufferlist ibl;
-  r = ref.ioctx.operate(ref.oid, &op, &ibl);
+  r = ref.ioctx.operate(ref.obj.oid, &op, &ibl);
   if (r < 0)
     return r;
   if (rc < 0)
@@ -9194,7 +9191,7 @@ int RGWRados::cls_user_reset_stats(const string& user_id)
 
   librados::ObjectWriteOperation op;
   ::cls_user_reset_stats(op);
-  return ref.ioctx.operate(ref.oid, &op);
+  return ref.ioctx.operate(ref.obj.oid, &op);
 }
 
 int RGWRados::cls_user_get_header_async(const string& user_id, RGWGetUserHeader_CB *ctx)
@@ -9209,7 +9206,7 @@ int RGWRados::cls_user_get_header_async(const string& user_id, RGWGetUserHeader_
     return r;
   }
 
-  r = ::cls_user_get_header_async(ref.ioctx, ref.oid, ctx);
+  r = ::cls_user_get_header_async(ref.ioctx, ref.obj.oid, ctx);
   if (r < 0)
     return r;
 
@@ -9299,7 +9296,7 @@ int RGWRados::cls_user_list_buckets(rgw_raw_obj& obj,
 
   cls_user_bucket_list(op, in_marker, end_marker, max_entries, entries, out_marker, truncated, &rc);
   bufferlist ibl;
-  r = ref.ioctx.operate(ref.oid, &op, &ibl);
+  r = ref.ioctx.operate(ref.obj.oid, &op, &ibl);
   if (r < 0)
     return r;
   if (rc < 0)
@@ -9318,7 +9315,7 @@ int RGWRados::cls_user_update_buckets(rgw_raw_obj& obj, list<cls_user_bucket_ent
 
   librados::ObjectWriteOperation op;
   cls_user_set_buckets(op, entries, add);
-  r = ref.ioctx.operate(ref.oid, &op);
+  r = ref.ioctx.operate(ref.obj.oid, &op);
   if (r < 0)
     return r;
 
@@ -9343,7 +9340,7 @@ int RGWRados::cls_user_complete_stats_sync(rgw_raw_obj& obj)
 
   librados::ObjectWriteOperation op;
   ::cls_user_complete_stats_sync(op);
-  r = ref.ioctx.operate(ref.oid, &op);
+  r = ref.ioctx.operate(ref.obj.oid, &op);
   if (r < 0)
     return r;
 
@@ -9368,7 +9365,7 @@ int RGWRados::cls_user_remove_bucket(rgw_raw_obj& obj, const cls_user_bucket& bu
 
   librados::ObjectWriteOperation op;
   ::cls_user_remove_bucket(op, bucket);
-  r = ref.ioctx.operate(ref.oid, &op);
+  r = ref.ioctx.operate(ref.obj.oid, &op);
   if (r < 0)
     return r;
 
@@ -9647,7 +9644,7 @@ int RGWRados::delete_raw_obj_aio(const rgw_raw_obj& obj, list<librados::AioCompl
   cls_rgw_remove_obj(op, prefixes);
 
   AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
-  ret = ref.ioctx.aio_operate(ref.oid, c, &op);
+  ret = ref.ioctx.aio_operate(ref.obj.oid, c, &op);
   if (ret < 0) {
     lderr(cct) << "ERROR: AioOperate failed with ret=" << ret << dendl;
     c->release();
@@ -9686,7 +9683,7 @@ int RGWRados::delete_obj_aio(const rgw_obj& obj,
   cls_rgw_remove_obj(op, prefixes);
 
   AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
-  ret = ref.ioctx.aio_operate(ref.oid, c, &op);
+  ret = ref.ioctx.aio_operate(ref.obj.oid, c, &op);
   if (ret < 0) {
     lderr(cct) << "ERROR: AioOperate failed with ret=" << ret << dendl;
     c->release();
@@ -9831,7 +9828,7 @@ int RGWRados::check_mfa(const rgw_user& user, const string& otp_id, const string
 
   rados::cls::otp::otp_check_t result;
 
-  r = rados::cls::otp::OTP::check(cct, ref.ioctx, ref.oid, otp_id, pin, &result);
+  r = rados::cls::otp::OTP::check(cct, ref.ioctx, ref.obj.oid, otp_id, pin, &result);
   if (r < 0)
     return r;
 
@@ -9877,7 +9874,7 @@ int RGWRados::create_mfa(const rgw_user& user, const rados::cls::otp::otp_info_t
   librados::ObjectWriteOperation op;
   prepare_mfa_write(&op, objv_tracker, mtime);
   rados::cls::otp::OTP::create(&op, config);
-  r = ref.ioctx.operate(ref.oid, &op);
+  r = ref.ioctx.operate(ref.obj.oid, &op);
   if (r < 0) {
     ldout(cct, 20) << "OTP create, otp_id=" << config.id << " result=" << (int)r << dendl;
     return r;
@@ -9900,7 +9897,7 @@ int RGWRados::remove_mfa(const rgw_user& user, const string& id,
   librados::ObjectWriteOperation op;
   prepare_mfa_write(&op, objv_tracker, mtime);
   rados::cls::otp::OTP::remove(&op, id);
-  r = ref.ioctx.operate(ref.oid, &op);
+  r = ref.ioctx.operate(ref.obj.oid, &op);
   if (r < 0) {
     ldout(cct, 20) << "OTP remove, otp_id=" << id << " result=" << (int)r << dendl;
     return r;
@@ -9918,7 +9915,7 @@ int RGWRados::get_mfa(const rgw_user& user, const string& id, rados::cls::otp::o
     return r;
   }
 
-  r = rados::cls::otp::OTP::get(nullptr, ref.ioctx, ref.oid, id, result);
+  r = rados::cls::otp::OTP::get(nullptr, ref.ioctx, ref.obj.oid, id, result);
   if (r < 0) {
     return r;
   }
@@ -9935,7 +9932,7 @@ int RGWRados::list_mfa(const rgw_user& user, list<rados::cls::otp::otp_info_t> *
     return r;
   }
 
-  r = rados::cls::otp::OTP::get_all(nullptr, ref.ioctx, ref.oid, result);
+  r = rados::cls::otp::OTP::get_all(nullptr, ref.ioctx, ref.obj.oid, result);
   if (r < 0) {
     return r;
   }
@@ -9952,7 +9949,7 @@ int RGWRados::otp_get_current_time(const rgw_user& user, ceph::real_time *result
     return r;
   }
 
-  r = rados::cls::otp::OTP::get_current_time(ref.ioctx, ref.oid, result);
+  r = rados::cls::otp::OTP::get_current_time(ref.ioctx, ref.obj.oid, result);
   if (r < 0) {
     return r;
   }
@@ -9979,7 +9976,7 @@ int RGWRados::set_mfa(const string& oid, const list<rados::cls::otp::otp_info_t>
   }
   prepare_mfa_write(&op, objv_tracker, mtime);
   rados::cls::otp::OTP::set(&op, entries);
-  r = ref.ioctx.operate(ref.oid, &op);
+  r = ref.ioctx.operate(ref.obj.oid, &op);
   if (r < 0) {
     ldout(cct, 20) << "OTP set entries.size()=" << entries.size() << " result=" << (int)r << dendl;
     return r;
@@ -10003,7 +10000,7 @@ int RGWRados::list_mfa(const string& oid, list<rados::cls::otp::otp_info_t> *res
     op.stat2(nullptr, &mtime_ts, nullptr);
   }
   objv_tracker->prepare_op_for_read(&op);
-  r = rados::cls::otp::OTP::get_all(&op, ref.ioctx, ref.oid, result);
+  r = rados::cls::otp::OTP::get_all(&op, ref.ioctx, ref.obj.oid, result);
   if (r < 0) {
     return r;
   }
