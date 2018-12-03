@@ -157,7 +157,7 @@ public:
 
   virtual void compact() {}
 
-  typedef KeyValueDB::SimplestIteratorImpl ObjectMapIteratorImpl;
+  typedef KeyValueDB::ObjectMapIteratorImpl ObjectMapIteratorImpl;
   typedef std::shared_ptr<ObjectMapIteratorImpl> ObjectMapIterator;
   virtual ObjectMapIterator get_iterator(const ghobject_t &oid) {
     return ObjectMapIterator();
