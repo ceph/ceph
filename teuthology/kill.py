@@ -32,7 +32,7 @@ def main(args):
 
     if job:
         for job_id in job:
-            kill_job(run_name, job_id, archive_base, owner, machine_type)
+            kill_job(run_name, job_id, archive_base, owner)
     else:
         kill_run(run_name, archive_base, owner, machine_type,
                  preserve_queue=preserve_queue)
@@ -61,8 +61,7 @@ def kill_run(run_name, archive_base=None, owner=None, machine_type=None,
         nuke_targets(targets, owner)
 
 
-def kill_job(run_name, job_id, archive_base=None, owner=None,
-             machine_type=None):
+def kill_job(run_name, job_id, archive_base=None, owner=None):
     serializer = report.ResultsSerializer(archive_base)
     job_info = serializer.job_info(run_name, job_id)
     if not owner:
