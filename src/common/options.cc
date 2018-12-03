@@ -974,7 +974,7 @@ std::vector<Option> get_global_options() {
     .add_see_also("ms_bind_msgr2"),
 
     Option("ms_bind_msgr2", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(false)
+    .set_default(true)
     .set_description("Bind servers to msgr2 (nautilus+) protocol address(es)")
     .add_see_also("ms_bind_msgr1"),
 
