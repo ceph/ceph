@@ -202,6 +202,8 @@ public:
 
     ceph_assert(image_watcher == NULL);
     image_watcher = new ImageWatcher<>(*this);
+
+    cct->_conf.add_observer(this);
   }
 
   void ImageCtx::shutdown() {
@@ -210,6 +212,8 @@ public:
 
     delete asok_hook;
     asok_hook = nullptr;
+
+    cct->_conf.remove_observer(this);
   }
 
   void ImageCtx::init_layout()
@@ -917,5 +921,65 @@ public:
 	"librbd::journal::safe_timer", false, cct);
     *timer = safe_timer_singleton;
     *timer_lock = &safe_timer_singleton->lock;
+  }
+
+  const char** ImageCtx::get_tracked_conf_keys() const {
+    static const char* KEYS[] = {
+      "rbd_qos_bps_limit",
+      "rbd_qos_bps_burst",
+      "rbd_qos_iops_limit",
+      "rbd_qos_iops_burst",
+      "rbd_qos_read_bps_limit",
+      "rbd_qos_read_bps_burst",
+      "rbd_qos_read_iops_limit",
+      "rbd_qos_read_iops_burst",
+      "rbd_qos_write_bps_limit",
+      "rbd_qos_write_bps_burst",
+      "rbd_qos_write_iops_limit",
+      "rbd_qos_write_iops_burst",
+      NULL
+    };
+
+    return KEYS;
+  }
+
+  void ImageCtx::handle_conf_change(const ConfigProxy& conf,
+          const std::set <std::string> &changed) {
+    if (changed.count("rbd_qos_bps_limit") || changed.count("rbd_qos_bps_burst")) {
+      io_work_queue->apply_qos_limit(
+        RBD_QOS_BPS_THROTTLE,
+        cct->_conf.get_val<uint64_t>("rbd_qos_bps_limit"),
+        cct->_conf.get_val<uint64_t>("rbd_qos_bps_burst"));
+    } 
+    if (changed.count("rbd_qos_iops_limit") || changed.count("rbd_qos_iops_burst")) {
+      io_work_queue->apply_qos_limit(
+        RBD_QOS_IOPS_THROTTLE,
+        cct->_conf.get_val<uint64_t>("rbd_qos_iops_limit"),
+        cct->_conf.get_val<uint64_t>("rbd_qos_iops_burst"));
+    }
+    if (changed.count("rbd_qos_read_iops_limit") || changed.count("rbd_qos_read_iops_burst")) {
+      io_work_queue->apply_qos_limit(
+        RBD_QOS_READ_IOPS_THROTTLE,
+        cct->_conf.get_val<uint64_t>("rbd_qos_read_iops_limit"),
+        cct->_conf.get_val<uint64_t>("rbd_qos_read_iops_burst"));
+    }
+    if (changed.count("rbd_qos_write_iops_limit") || changed.count("rbd_qos_write_iops_burst")) {
+      io_work_queue->apply_qos_limit(
+        RBD_QOS_WRITE_IOPS_THROTTLE,
+        cct->_conf.get_val<uint64_t>("rbd_qos_write_iops_limit"),
+        cct->_conf.get_val<uint64_t>("rbd_qos_write_iops_burst"));
+    }
+    if (changed.count("rbd_qos_read_bps_limit") || changed.count("rbd_qos_read_bps_burst")) {
+      io_work_queue->apply_qos_limit(
+        RBD_QOS_READ_BPS_THROTTLE,
+        cct->_conf.get_val<uint64_t>("rbd_qos_read_bps_limit"),
+        cct->_conf.get_val<uint64_t>("rbd_qos_read_bps_burst"));
+    }
+    if (changed.count("rbd_qos_write_bps_limit") || changed.count("rbd_qos_write_bps_burst")) {
+      io_work_queue->apply_qos_limit(
+        RBD_QOS_WRITE_BPS_THROTTLE,
+        cct->_conf.get_val<uint64_t>("rbd_qos_write_bps_limit"),
+        cct->_conf.get_val<uint64_t>("rbd_qos_write_bps_burst"));
+    }
   }
 }
