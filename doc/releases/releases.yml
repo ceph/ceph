@@ -23,6 +23,10 @@ releases:
   
   luminous:
     releases:
+      - version: 12.2.10
+        released: 2018-11-27
+      - version: 12.2.9
+        released: 2018-11-01
       - version: 12.2.8
         released: 2018-09-01
       - version: 12.2.7

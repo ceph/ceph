@@ -18,6 +18,8 @@ Timeline
 .. _13.2.0: ../mimic#v13-2-0-mimic
 
 .. _Luminous: ../luminous#v12-2-0-luminous
+.. _12.2.10: ../luminous#v12-2-10-luminous
+.. _12.2.9: ../luminous#v12-2-9-luminous
 .. _12.2.8: ../luminous#v12-2-8-luminous
 .. _12.2.7: ../luminous#v12-2-7-luminous
 .. _12.2.6: ../luminous#v12-2-6-luminous
