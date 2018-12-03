@@ -44,3 +44,4 @@ sensible.
     Rook plugin <rook>
     DeepSea plugin <deepsea>
     Insights plugin <insights>
+    Ansible plugin <ansible>
