@@ -204,7 +204,7 @@ public:
     return get(prefix, string(key, keylen), value);
   }
 
-  class ForwardIterator {
+  class IteratorBase {
   public:
     virtual int seek_to_first() = 0;
     virtual bool valid() = 0;
@@ -224,45 +224,46 @@ public:
         ceph_abort();
       }
     }
+    virtual std::pair<std::string, std::string> raw_key() {
+      return std::make_pair(key(), value().c_str());
+    }
     virtual int status() = 0;
-    virtual ~ForwardIterator() {}
+    virtual int seek_to_last() { ceph_abort(); return 0; }
+    virtual int prev() { ceph_abort(); return 0; }
+    virtual ~IteratorBase() {}
   };
 
   // This superclass is used both by kv iterators *and* by the ObjectMap
   // omap iterator.  The class hierarchies are unfortunately tied together
   // by the legacy DBOjectMap implementation :(.
-  class SimplestIteratorImpl : public ForwardIterator {
+  class ObjectMapIteratorImpl : public IteratorBase {
   public:
     virtual int upper_bound(const std::string &after) = 0;
     virtual int lower_bound(const std::string &to) = 0;
-    virtual ~SimplestIteratorImpl() {}
+    virtual ~ObjectMapIteratorImpl() {}
   };
 
-  class BackwardIterator {
+
+  class IteratorImpl : public ObjectMapIteratorImpl {
   public:
-    virtual int seek_to_last() = 0;
-    virtual int prev() = 0;
-    virtual std::pair<std::string, std::string> raw_key() = 0;
-    virtual ~BackwardIterator() {}
-  };
-  class IteratorImpl : public SimplestIteratorImpl, public BackwardIterator {
-  public:
+    int seek_to_last() override = 0;
+    int prev() override = 0;
     virtual ~IteratorImpl() {}
   };
   typedef std::shared_ptr< IteratorImpl > Iterator;
 
   // This is the low-level iterator implemented by the underlying KV store.
-  class WholeSpaceIteratorImpl : public ForwardIterator, public BackwardIterator {
+  class WholeSpaceIteratorImpl : public IteratorBase {
   public:
-    using ForwardIterator::seek_to_first;
-    using BackwardIterator::seek_to_last;
-    using ForwardIterator::valid;
-    using ForwardIterator::next;
-    using BackwardIterator::prev;
-    using ForwardIterator::key;
-    using ForwardIterator::value;
-    using ForwardIterator::value_as_ptr;
-    using ForwardIterator::status;
+    using IteratorBase::seek_to_first;
+    int seek_to_last() override = 0;
+    using IteratorBase::valid;
+    using IteratorBase::next;
+    int prev() override = 0;
+    using IteratorBase::key;
+    using IteratorBase::value;
+    using IteratorBase::value_as_ptr;
+    using IteratorBase::status;
     virtual int seek_to_first(const std::string &prefix) = 0;
     virtual int seek_to_last(const std::string &prefix) = 0;
     virtual int upper_bound(const std::string &prefix, const std::string &after) = 0;
