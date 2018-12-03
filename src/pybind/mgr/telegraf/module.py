@@ -36,7 +36,7 @@ class Module(MgrModule):
         },
     ]
 
-    OPTIONS = [
+    MODULE_OPTIONS = [
         {
             'name': 'address',
             'default': 'unixgram:///tmp/telegraf.sock',
@@ -51,7 +51,7 @@ class Module(MgrModule):
 
     @property
     def config_keys(self):
-        return dict((o['name'], o.get('default', None)) for o in self.OPTIONS)
+        return dict((o['name'], o.get('default', None)) for o in self.MODULE_OPTIONS)
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)

@@ -36,7 +36,7 @@ def decode_string(value):
 
 class Module(MgrModule):
 
-    OPTIONS = [
+    MODULE_OPTIONS = [
         {
             'name': 'diskprediction_server',
             'default': ''
@@ -128,7 +128,7 @@ class Module(MgrModule):
         self._run = True
 
     def config_notify(self):
-        for opt in self.OPTIONS:
+        for opt in self.MODULE_OPTIONS:
             setattr(self,
                     opt['name'],
                     self.get_config(opt['name']) or opt['default'])
@@ -140,7 +140,7 @@ class Module(MgrModule):
 
     @property
     def config_keys(self):
-        return dict((o['name'], o.get('default', None)) for o in self.OPTIONS)
+        return dict((o['name'], o.get('default', None)) for o in self.MODULE_OPTIONS)
 
     def set_config_option(self, option, value):
         if option not in self.config_keys.keys():
@@ -232,7 +232,7 @@ class Module(MgrModule):
         return 0, msg, ''
 
     def refresh_config(self):
-        for opt in self.OPTIONS:
+        for opt in self.MODULE_OPTIONS:
             setattr(self,
                     opt['name'],
                     self.get_config(opt['name']) or opt['default'])

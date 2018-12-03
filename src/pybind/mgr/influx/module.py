@@ -20,7 +20,7 @@ except ImportError:
 
 
 class Module(MgrModule):
-    OPTIONS = [
+    MODULE_OPTIONS = [
             {
                 'name': 'hostname',
                 'default': None
@@ -66,7 +66,7 @@ class Module(MgrModule):
     @property
     def config_keys(self):
         return dict((o['name'], o.get('default', None))
-                for o in self.OPTIONS)
+                for o in self.MODULE_OPTIONS)
 
     COMMANDS = [
         {

@@ -201,7 +201,7 @@ class Eval:
         return r
 
 class Module(MgrModule):
-    OPTIONS = [
+    MODULE_OPTIONS = [
             {'name': 'active'},
             {'name': 'begin_time'},
             {'name': 'crush_compat_max_iterations'},

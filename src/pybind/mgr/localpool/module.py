@@ -4,7 +4,7 @@ import threading
 
 class Module(MgrModule):
 
-    OPTIONS = [
+    MODULE_OPTIONS = [
             {'name': 'failure_domain'},
             {'name': 'min_size'},
             {'name': 'num_rep'},

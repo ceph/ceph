@@ -269,7 +269,7 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
 
 class MgrModule(ceph_module.BaseMgrModule):
     COMMANDS = []
-    OPTIONS = []
+    MODULE_OPTIONS = []
 
     # Priority definitions for perf counters
     PRIO_CRITICAL = 10
@@ -684,8 +684,8 @@ class MgrModule(ceph_module.BaseMgrModule):
         access config options that they didn't declare
         in their schema.
         """
-        if key not in [o['name'] for o in self.OPTIONS]:
-            raise RuntimeError("Config option '{0}' is not in {1}.OPTIONS".\
+        if key not in [o['name'] for o in self.MODULE_OPTIONS]:
+            raise RuntimeError("Config option '{0}' is not in {1}.MODULE_OPTIONS".\
                     format(key, self.__class__.__name__))
 
     def _get_config(self, key, default):

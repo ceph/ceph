@@ -128,7 +128,7 @@ def deferred_read(f):
 
 
 class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
-    OPTIONS = [
+    MODULE_OPTIONS = [
         # TODO: configure k8s API addr instead of assuming local
     ]
 

@@ -10,7 +10,7 @@ class NoOrchestrator(Exception):
 
 
 class OrchestratorCli(MgrModule):
-    OPTIONS = [
+    MODULE_OPTIONS = [
         {'name': 'orchestrator'}
     ]
     COMMANDS = [

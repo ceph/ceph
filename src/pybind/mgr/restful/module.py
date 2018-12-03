@@ -199,7 +199,7 @@ class CommandsRequest(object):
 
 
 class Module(MgrModule):
-    OPTIONS = [
+    MODULE_OPTIONS = [
         {'name': 'server_addr'},
         {'name': 'server_port'},
         {'name': 'key_file'},

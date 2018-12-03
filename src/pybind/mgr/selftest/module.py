@@ -28,7 +28,7 @@ class Module(MgrModule):
 
     # The test code in qa/ relies on these options existing -- they
     # are of course not really used for anything in the module
-    OPTIONS = [
+    MODULE_OPTIONS = [
             {'name': 'testkey'},
             {'name': 'testlkey'},
             {'name': 'testnewline'}
