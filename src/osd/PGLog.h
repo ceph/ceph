@@ -1339,7 +1339,7 @@ public:
     list<pg_log_entry_t> entries;
     list<pg_log_dup_t> dups;
     if (p) {
-      for (p->seek_to_first(); p->valid() ; p->next(false)) {
+      for (p->seek_to_first(); p->valid() ; p->next()) {
 	// non-log pgmeta_oid keys are prefixed with _; skip those
 	if (p->key()[0] == '_')
 	  continue;
