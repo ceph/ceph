@@ -602,7 +602,7 @@ class RESTController(BaseController):
     # should be overridden by subclasses.
     # to specify a composite id (two parameters) use '/'. e.g., "param1/param2".
     # If subclasses don't override this property we try to infer the structure
-    # of the resourse ID.
+    # of the resource ID.
     RESOURCE_ID = None
 
     _permission_map = {
