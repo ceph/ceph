@@ -4,6 +4,7 @@ import errno
 import math
 import os
 import socket
+import rados
 import threading
 import time
 from mgr_module import MgrModule, MgrStandbyModule, CommandResult, PG_STATES
@@ -73,6 +74,8 @@ POOL_METADATA = ('pool_id', 'name')
 RGW_METADATA = ('ceph_daemon', 'hostname', 'ceph_version')
 
 DISK_OCCUPATION = ('ceph_daemon', 'device', 'db_device', 'wal_device', 'instance')
+
+PG_INCONSISTENT_INFO = ('pg_id', 'object', 'primary_osd', 'errors')
 
 NUM_OBJECTS = ['degraded', 'misplaced', 'unfound']
 
@@ -189,6 +192,7 @@ class Module(MgrModule):
             },
         }
         _global_instance['plugin'] = self
+        self._rados = None
 
     def _setup_static_metrics(self):
         metrics = {}
@@ -256,6 +260,13 @@ class Module(MgrModule):
             'gauge',
             'pg_total',
             'PG Total Count'
+        )
+
+        metrics['pg_inconsistent_info'] = Metric(
+            'untyped',
+            'pg_inconsistent_info',
+            'PG Inconsistent Info',
+            PG_INCONSISTENT_INFO
         )
 
         for flag in OSD_FLAGS:
@@ -701,6 +712,28 @@ class Module(MgrModule):
             del self.rbd_stats['query_id']
             del self.rbd_stats['query']
         self.rbd_stats['pools'].clear()
+    
+    def get_pg_inconsistent_info(self):
+        rados_ctx = self.rados()
+        inconsis = False
+
+        pg_info_list = self.get('pg_dump')['pg_stats']
+        for pg_info in pg_info_list:
+            if pg_info['stat_sum']['num_scrub_errors'] > 0:
+                inconsis = True
+                ret_str = rados_ctx.get_inconsistent_objs(str(pg_info['pgid']))
+
+                incons_info = json.loads(ret_str, encoding='utf-8')
+                for obj_info in incons_info['inconsistents']:
+                    for shard in obj_info['shards']:
+                        if shard['primary']:
+                            self.metrics['pg_inconsistent_info'].set(1,
+                                                (pg_info['pgid'],
+                                                 obj_info['obj_name'],
+                                                 shard['osd'],
+                                                 str(obj_info['errors'])))
+        if inconsis == False:
+            self.metrics['pg_inconsistent_info'].set(0, ('', '', '', ''))
 
     def collect(self):
         # Clear the metrics before scraping
@@ -715,6 +748,7 @@ class Module(MgrModule):
         self.get_metadata_and_osd_status()
         self.get_pg_status()
         self.get_num_objects()
+        self.get_pg_inconsistent_info()
 
         for daemon, counters in self.get_all_perf_counters().items():
             for path, counter_info in counters.items():
@@ -892,8 +926,23 @@ class Module(MgrModule):
         self.log.info('Engine stopped.')
         self.shutdown_rbd_stats()
 
+    def rados(self):
+        if self._rados:
+            return self._rados
+
+        ctx_capsule = self.get_context()
+        self._rados = rados.Rados(context=ctx_capsule)
+        self._rados.connect()
+
+        return self._rados
+
     def shutdown(self):
         self.log.info('Stopping engine...')
+        log.info("Stopping librados...")
+        if self._rados:
+            self._rados.shutdown()
+        log.info("Stopped librados.")
+
         self.shutdown_event.set()
 
 
