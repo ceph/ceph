@@ -369,14 +369,13 @@ public:
 	if (existed) {
 	  *existed = true;
 	}
-	return val;
+      } else {
+	if (existed) {
+	  *existed = false;
+	}
+	val = VPtr(value, Cleanup(this, key));
+	weak_refs.insert(actual, make_pair(key, make_pair(val, value)));
       }
-
-      if (existed)      
-        *existed = false;
-
-      val = VPtr(value, Cleanup(this, key));
-      weak_refs.insert(actual, make_pair(key, make_pair(val, value)));
       lru_add(key, val, &to_release);
     }
     return val;
