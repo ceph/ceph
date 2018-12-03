@@ -204,14 +204,9 @@ public:
     return get(prefix, string(key, keylen), value);
   }
 
-  // This superclass is used both by kv iterators *and* by the ObjectMap
-  // omap iterator.  The class hierarchies are unfortunately tied together
-  // by the legacy DBOjectMap implementation :(.
-  class SimplestIteratorImpl {
+  class ForwardIterator {
   public:
     virtual int seek_to_first() = 0;
-    virtual int upper_bound(const std::string &after) = 0;
-    virtual int lower_bound(const std::string &to) = 0;
     virtual bool valid() = 0;
     virtual int next() = 0;
     virtual std::string key() = 0;
@@ -219,59 +214,65 @@ public:
       return "";
     }
     virtual ceph::buffer::list value() = 0;
-    virtual int status() = 0;
-    virtual ~SimplestIteratorImpl() {}
-  };
-
-  class IteratorImpl : public SimplestIteratorImpl {
-  public:
-    virtual ~IteratorImpl() {}
-    virtual int seek_to_last() = 0;
-    virtual int prev() = 0;
-    virtual std::pair<std::string, std::string> raw_key() = 0;
-    virtual ceph::buffer::ptr value_as_ptr() {
-      ceph::buffer::list bl = value();
+    virtual bufferptr value_as_ptr() {
+      bufferlist bl = value();
       if (bl.length() == 1) {
         return *bl.buffers().begin();
       } else if (bl.length() == 0) {
         return ceph::buffer::ptr();
       } else {
-	ceph_abort();
+        ceph_abort();
       }
     }
+    virtual int status() = 0;
+    virtual ~ForwardIterator() {}
+  };
+
+  // This superclass is used both by kv iterators *and* by the ObjectMap
+  // omap iterator.  The class hierarchies are unfortunately tied together
+  // by the legacy DBOjectMap implementation :(.
+  class SimplestIteratorImpl : public ForwardIterator {
+  public:
+    virtual int upper_bound(const std::string &after) = 0;
+    virtual int lower_bound(const std::string &to) = 0;
+    virtual ~SimplestIteratorImpl() {}
+  };
+
+  class BackwardIterator {
+  public:
+    virtual int seek_to_last() = 0;
+    virtual int prev() = 0;
+    virtual std::pair<std::string, std::string> raw_key() = 0;
+    virtual ~BackwardIterator() {}
+  };
+  class IteratorImpl : public SimplestIteratorImpl, public BackwardIterator {
+  public:
+    virtual ~IteratorImpl() {}
   };
   typedef std::shared_ptr< IteratorImpl > Iterator;
 
   // This is the low-level iterator implemented by the underlying KV store.
-  class WholeSpaceIteratorImpl {
+  class WholeSpaceIteratorImpl : public ForwardIterator, public BackwardIterator {
   public:
-    virtual int seek_to_first() = 0;
+    using ForwardIterator::seek_to_first;
+    using BackwardIterator::seek_to_last;
+    using ForwardIterator::valid;
+    using ForwardIterator::next;
+    using BackwardIterator::prev;
+    using ForwardIterator::key;
+    using ForwardIterator::value;
+    using ForwardIterator::value_as_ptr;
+    using ForwardIterator::status;
     virtual int seek_to_first(const std::string &prefix) = 0;
-    virtual int seek_to_last() = 0;
     virtual int seek_to_last(const std::string &prefix) = 0;
     virtual int upper_bound(const std::string &prefix, const std::string &after) = 0;
     virtual int lower_bound(const std::string &prefix, const std::string &to) = 0;
-    virtual bool valid() = 0;
-    virtual int next() = 0;
-    virtual int prev() = 0;
-    virtual std::string key() = 0;
-    virtual std::pair<std::string,std::string> raw_key() = 0;
     virtual bool raw_key_is_prefixed(const std::string &prefix) = 0;
-    virtual ceph::buffer::list value() = 0;
-    virtual ceph::buffer::ptr value_as_ptr() {
-      ceph::buffer::list bl = value();
-      if (bl.length()) {
-        return *bl.buffers().begin();
-      } else {
-        return ceph::buffer::ptr();
-      }
-    }
-    virtual int status() = 0;
     virtual size_t key_size() {
-      return 0;
+      return key().size();
     }
     virtual size_t value_size() {
-      return 0;
+      return value().length();
     }
     virtual ~WholeSpaceIteratorImpl() { }
   };
