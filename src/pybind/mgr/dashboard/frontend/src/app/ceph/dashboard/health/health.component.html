@@ -19,8 +19,7 @@
                   *ngIf="healthData.health?.status">
       <ng-container *ngIf="healthData.health?.checks?.length > 0">
         <ng-template #healthChecks>
-          <p class="logs-link"
-             i18n>&rarr; See <a routerLink="/logs">Logs</a> for more details.</p>
+          <ng-container *ngTemplateOutlet="logsLink"></ng-container>
           <ul>
             <li *ngFor="let check of healthData.health.checks">
               <span [ngStyle]="check.severity | healthColor">{{ check.type }}</span>: {{ check.summary.message }}
@@ -39,7 +38,7 @@
           {{ healthData.health.status }}
         </div>
       </ng-container>
-      <ng-container *ngIf="healthData.health?.checks?.length == 0">
+      <ng-container *ngIf="!healthData.health?.checks?.length">
         <div [ngStyle]="healthData.health.status | healthColor">
           {{ healthData.health.status }}
         </div>
@@ -237,8 +236,7 @@
                     (click)="pgStatusTarget.toggle()"
                     *ngIf="healthData.pg_info">
         <ng-template #pgStatus>
-          <p class="logs-link"
-             i18n>&rarr; See <a routerLink="/logs">Logs</a> for more details.</p>
+          <ng-container *ngTemplateOutlet="logsLink"></ng-container>
           <ul>
             <li *ngFor="let pgStatesText of healthData.pg_info.statuses | keyvalue">
               {{ pgStatesText.key }}: {{ pgStatesText.value }}
@@ -260,4 +258,11 @@
       </cd-info-card>
     </div>
   </cd-info-group>
+
+  <ng-template #logsLink>
+    <ng-container *ngIf="permissions.log.read">
+      <p class="logs-link"
+         i18n><i class="fa fa-info-circle"></i> See <a routerLink="/logs">Logs</a> for more details.</p>
+    </ng-container>
+  </ng-template>
 </div>
