@@ -37,12 +37,11 @@ bool AioThrottle::waiter_ready() const
 }
 
 AioResultList AioThrottle::submit(RGWSI_RADOS::Obj& obj,
-                                  const rgw_raw_obj& raw_obj,
                                   librados::ObjectWriteOperation *op,
                                   uint64_t cost, uint64_t id)
 {
   auto p = std::make_unique<Pending>();
-  p->obj = raw_obj;
+  p->obj = obj;
   p->id = id;
   p->cost = cost;
 
@@ -61,12 +60,11 @@ AioResultList AioThrottle::submit(RGWSI_RADOS::Obj& obj,
 }
 
 AioResultList AioThrottle::submit(RGWSI_RADOS::Obj& obj,
-                                  const rgw_raw_obj& raw_obj,
                                   librados::ObjectReadOperation *op,
                                   uint64_t cost, uint64_t id)
 {
   auto p = std::make_unique<Pending>();
-  p->obj = raw_obj;
+  p->obj = obj;
   p->id = id;
   p->cost = cost;
 

@@ -80,7 +80,6 @@ class RadosWriter : public DataProcessor {
   const RGWBucketInfo& bucket_info;
   RGWObjectCtx& obj_ctx;
   const rgw_obj& head_obj;
-  rgw_raw_obj stripe_raw;
   RGWSI_RADOS::Obj stripe_obj; // current stripe object
   RawObjSet written; // set of written objects for deletion
 
@@ -93,7 +92,7 @@ class RadosWriter : public DataProcessor {
   ~RadosWriter();
 
   // change the current stripe object
-  int set_stripe_obj(rgw_raw_obj&& obj);
+  int set_stripe_obj(const rgw_raw_obj& obj);
 
   // write the data at the given offset of the current stripe object
   int process(bufferlist&& data, uint64_t stripe_offset) override;

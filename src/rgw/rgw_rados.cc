@@ -6582,7 +6582,7 @@ int RGWRados::get_obj_iterate_cb(const rgw_raw_obj& read_obj, off_t obj_ofs,
   const uint64_t cost = len;
   const uint64_t id = obj_ofs; // use logical object offset for sorting replies
 
-  auto completed = d->aio->submit(obj, read_obj, &op, cost, id);
+  auto completed = d->aio->submit(obj, &op, cost, id);
 
   return d->flush(std::move(completed));
 }
