@@ -223,7 +223,7 @@ public:
   // This superclass is used both by kv iterators *and* by the ObjectMap
   // omap iterator.  The class hierarchies are unfortunately tied together
   // by the legacy DBOjectMap implementation :(.
-  class SimplestIteratorImpl : public ForwardIterator {
+  class SimplestIteratorImpl : virtual public ForwardIterator {
   public:
     virtual int upper_bound(const std::string &after) = 0;
     virtual int lower_bound(const std::string &to) = 0;
@@ -237,14 +237,20 @@ public:
     virtual std::pair<std::string, std::string> raw_key() = 0;
     virtual ~BackwardIterator() {}
   };
-  class IteratorImpl : public SimplestIteratorImpl, public BackwardIterator {
+
+  class BidirIterator: public virtual ForwardIterator, public virtual BackwardIterator {
+  public:
+    virtual ~BidirIterator() {}
+  };
+
+  class IteratorImpl : virtual public SimplestIteratorImpl, virtual public BidirIterator {
   public:
     virtual ~IteratorImpl() {}
   };
   typedef std::shared_ptr< IteratorImpl > Iterator;
 
   // This is the low-level iterator implemented by the underlying KV store.
-  class WholeSpaceIteratorImpl : public ForwardIterator, public BackwardIterator {
+  class WholeSpaceIteratorImpl : public BidirIterator {
   public:
     using ForwardIterator::seek_to_first;
     using BackwardIterator::seek_to_last;
