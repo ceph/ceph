@@ -146,6 +146,7 @@ cdef extern from "rados/librados.h" nogil:
     int rados_pool_list(rados_t cluster, char *buf, size_t len)
     int rados_pool_delete(rados_t cluster, const char *pool_name)
     int rados_inconsistent_pg_list(rados_t cluster, int64_t pool, char *buf, size_t len)
+    int rados_inconsistent_obj_list(rados_t cluster, const char* pgid, char *buf, size_t len)
 
     int rados_cluster_stat(rados_t cluster, rados_cluster_stat_t *result)
     int rados_cluster_fsid(rados_t cluster, char *buf, size_t len)
@@ -1124,6 +1125,38 @@ Rados object in state %s." % self.state)
             return [pg for pg in decode_cstr(pgs[:ret]).split('\0') if pg]
         finally:
             free(pgs)
+
+    @requires(('pgid', str_type))
+    def get_inconsistent_objs(self, pgid):
+        """
+        List inconsistent objects in given pg
+
+        :param pgid: ID of the placement group
+        :type pgid: str
+        :returns string - inconsistent objects info
+        """
+        self.require_state("connected")
+        pgid = cstr(pgid, 'pgid')
+
+        cdef:
+            size_t size = 512
+            char* incons_info = NULL
+            char* _pgid = pgid
+        try:
+            while True:
+                incons_info = <char*> realloc_chk(incons_info, size)
+                with nogil:
+                    ret = rados_inconsistent_obj_list(self.cluster, <const char*>_pgid,
+                                incons_info, size)
+                if ret > <int>size:
+                    size = ret
+                elif ret >= 0:
+                    break
+                else:
+                    raise make_ex(ret, "error calling inconsistent_pg_list")
+            return decode_cstr(incons_info)
+        finally:
+            free(incons_info)
 
     def list_pools(self):
         """

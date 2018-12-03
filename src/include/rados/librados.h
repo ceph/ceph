@@ -720,6 +720,17 @@ CEPH_RADOS_API int rados_inconsistent_pg_list(rados_t cluster, int64_t pool,
 					      char *buf, size_t len);
 
 /**
+ * List inconsistent objects of the given placement group
+ * @param cluster cluster handle
+ * @param pg_str pg ID
+ * @param buf output buffer
+ * @param len output buffer length
+ * @returns length of the buffer we would need to list all inconsistent objects
+ */
+CEPH_RADOS_API int rados_inconsistent_obj_list(rados_t cluster, const char* pg_str,
+                                               char* buf, size_t len);
+
+/**
  * Get a configuration handle for a rados cluster handle
  *
  * This handle is valid only as long as the cluster handle is valid.
