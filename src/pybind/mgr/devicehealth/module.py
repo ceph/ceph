@@ -24,7 +24,7 @@ HEALTH_MESSAGES = {
 
 
 class Module(MgrModule):
-    OPTIONS = [
+    MODULE_OPTIONS = [
         {
             'name': 'enable_monitoring',
             'default': str(False),
@@ -113,7 +113,7 @@ class Module(MgrModule):
         super(Module, self).__init__(*args, **kwargs)
 
         # options
-        for opt in self.OPTIONS:
+        for opt in self.MODULE_OPTIONS:
             setattr(self, opt['name'], opt['default'])
 
         # other
@@ -189,7 +189,7 @@ class Module(MgrModule):
             assert before != after
 
     def config_notify(self):
-        for opt in self.OPTIONS:
+        for opt in self.MODULE_OPTIONS:
             setattr(self,
                     opt['name'],
                     self.get_config(opt['name']) or opt['default'])

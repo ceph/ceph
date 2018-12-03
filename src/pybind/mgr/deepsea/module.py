@@ -44,7 +44,7 @@ class DeepSeaReadCompletion(orchestrator.ReadCompletion):
 
 
 class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
-    OPTIONS = [
+    MODULE_OPTIONS = [
         {
             'name': 'salt_api_url',
             'default': None
@@ -81,7 +81,7 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     @property
     def config_keys(self):
-        return dict((o['name'], o.get('default', None)) for o in self.OPTIONS)
+        return dict((o['name'], o.get('default', None)) for o in self.MODULE_OPTIONS)
 
 
     def get_config(self, key, default=None):

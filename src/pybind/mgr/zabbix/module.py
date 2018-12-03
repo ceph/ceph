@@ -55,9 +55,9 @@ class Module(MgrModule):
     @property
     def config_keys(self):
         return dict((o['name'], o.get('default', None))
-                for o in self.OPTIONS)
+                for o in self.MODULE_OPTIONS)
 
-    OPTIONS = [
+    MODULE_OPTIONS = [
             {
                 'name': 'zabbix_sender',
                 'default': '/usr/bin/zabbix_sender'

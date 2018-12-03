@@ -239,7 +239,7 @@ class Module(MgrModule, CherryPyConfig):
     COMMANDS.extend(ACCESS_CONTROL_COMMANDS)
     COMMANDS.extend(SSO_COMMANDS)
 
-    OPTIONS = [
+    MODULE_OPTIONS = [
         {'name': 'server_addr'},
         {'name': 'server_port'},
         {'name': 'jwt_token_ttl'},
@@ -250,7 +250,7 @@ class Module(MgrModule, CherryPyConfig):
         {'name': 'crt_file'},
         {'name': 'ssl'}
     ]
-    OPTIONS.extend(options_schema_list())
+    MODULE_OPTIONS.extend(options_schema_list())
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)

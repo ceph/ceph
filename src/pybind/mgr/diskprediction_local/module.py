@@ -16,7 +16,7 @@ TIME_WEEK = TIME_DAYS * 7
 
 
 class Module(MgrModule):
-    OPTIONS = [
+    MODULE_OPTIONS = [
         {
             'name': 'sleep_interval',
             'default': str(600),
@@ -32,14 +32,14 @@ class Module(MgrModule):
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
         # options
-        for opt in self.OPTIONS:
+        for opt in self.MODULE_OPTIONS:
             setattr(self, opt['name'], opt['default'])
         # other
         self._run = True
         self._event = Event()
 
     def config_notify(self):
-        for opt in self.OPTIONS:
+        for opt in self.MODULE_OPTIONS:
             setattr(self,
                     opt['name'],
                     self.get_config(opt['name']) or opt['default'])
@@ -48,7 +48,7 @@ class Module(MgrModule):
             self._event.set()
 
     def refresh_config(self):
-        for opt in self.OPTIONS:
+        for opt in self.MODULE_OPTIONS:
             setattr(self,
                     opt['name'],
                     self.get_config(opt['name']) or opt['default'])
