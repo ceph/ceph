@@ -43,8 +43,10 @@ class SharedLRU {
   size_t max_size;
   ceph::condition_variable cond;
   unsigned size;
+#ifndef WITH_SEASTAR
 public:
   int waiting;
+#endif
 private:
   using C = std::less<K>;
   using H = std::hash<K>;
@@ -106,7 +108,11 @@ public:
     : cct(cct),
       lock{ceph::make_mutex("SharedLRU::lock")},
       max_size(max_size),
+#ifndef WITH_SEASTAR
       size(0), waiting(0) {
+#else
+      size(0) {
+#endif
     contents.rehash(max_size); 
   }
   
@@ -172,17 +178,21 @@ public:
   //clear all strong reference from the lru.
   void clear() {
     while (true) {
+#ifndef WITH_SEASTAR
       VPtr val; // release any ref we have after we drop the lock
+#endif
       std::lock_guard locker{lock};
       if (size == 0)
         break;
-
+#ifndef WITH_SEASTAR
       val = lru.back().second;
+#endif
       lru_remove(lru.back().first);
     }
   }
 
   void clear(const K& key) {
+#ifndef WITH_SEASTAR
     VPtr val; // release any ref we have after we drop the lock
     {
       std::lock_guard l{lock};
@@ -192,15 +202,22 @@ public:
       }
       lru_remove(key);
     }
+#else
+    lru_remove(key);
+#endif
   }
 
   void purge(const K &key) {
+#ifndef WITH_SEASTAR
     VPtr val; // release any ref we have after we drop the lock
+#endif
     {
       std::lock_guard l{lock};
       typename map<K, pair<WeakVPtr, V*>, C>::iterator i = weak_refs.find(key);
       if (i != weak_refs.end()) {
+#ifndef WITH_SEASTAR
 	val = i->second.first.lock();
+#endif
         weak_refs.erase(i);
       }
       lru_remove(key);
@@ -227,7 +244,9 @@ public:
     list<VPtr> to_release;
     {
       std::unique_lock l{lock};
+#ifndef WITH_SEASTAR
       ++waiting;
+#endif
       cond.wait(l, [this, &key, &val, &to_release] {
         if (weak_refs.empty()) {
           return true;
@@ -243,7 +262,9 @@ public:
           return false;
         }
       });
+#ifndef WITH_SEASTAR
       --waiting;
+#endif
     }
     return val;
   }
@@ -284,7 +305,9 @@ public:
     std::list<VPtr> to_release;
     {
       std::unique_lock l{lock};
+#ifndef WITH_SEASTAR
       ++waiting;
+#endif
       cond.wait(l, [this, &key, &val, &to_release] {
         if (auto i = weak_refs.find(key); i != weak_refs.end()) {
           if (val = i->second.first.lock(); val) {
@@ -297,7 +320,9 @@ public:
           return true;
         }
       });
+#ifndef WITH_SEASTAR
       --waiting;
+#endif
     }
     return val;
   }
