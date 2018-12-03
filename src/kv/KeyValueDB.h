@@ -199,7 +199,7 @@ public:
     return get(prefix, string(key, keylen), value);
   }
 
-  class ForwardIterator {
+  class IteratorBase {
   public:
     virtual int seek_to_first() = 0;
     virtual bool valid() = 0;
@@ -216,45 +216,59 @@ public:
         ceph_abort();
       }
     }
+    virtual std::pair<std::string, std::string> raw_key() {
+      return std::make_pair(key(), value().c_str());
+    }
     virtual int status() = 0;
-    virtual ~ForwardIterator() {}
+    virtual ~IteratorBase() {}
   };
 
   // This superclass is used both by kv iterators *and* by the ObjectMap
   // omap iterator.  The class hierarchies are unfortunately tied together
   // by the legacy DBOjectMap implementation :(.
-  class SimplestIteratorImpl : public ForwardIterator {
+  class ObjectMapIteratorImpl : public IteratorBase {
   public:
     virtual int upper_bound(const std::string &after) = 0;
     virtual int lower_bound(const std::string &to) = 0;
-    virtual ~SimplestIteratorImpl() {}
+    virtual ~ObjectMapIteratorImpl() {}
   };
 
   class BackwardIterator {
   public:
     virtual int seek_to_last() = 0;
     virtual int prev() = 0;
-    virtual std::pair<std::string, std::string> raw_key() = 0;
     virtual ~BackwardIterator() {}
   };
-  class IteratorImpl : public SimplestIteratorImpl, public BackwardIterator {
+
+  class IteratorImpl : public ObjectMapIteratorImpl, public BackwardIterator {
   public:
+    using IteratorBase::seek_to_first;
+    using IteratorBase::valid;
+    using IteratorBase::next;
+    using IteratorBase::key;
+    using IteratorBase::value;
+    using IteratorBase::value_as_ptr;
+    using IteratorBase::raw_key;
+    using ObjectMapIteratorImpl::upper_bound;
+    using ObjectMapIteratorImpl::lower_bound;
+    using BackwardIterator::prev;
+    using BackwardIterator::seek_to_last;
     virtual ~IteratorImpl() {}
   };
   typedef std::shared_ptr< IteratorImpl > Iterator;
 
   // This is the low-level iterator implemented by the underlying KV store.
-  class WholeSpaceIteratorImpl : public ForwardIterator, public BackwardIterator {
+  class WholeSpaceIteratorImpl : public IteratorBase, public BackwardIterator {
   public:
-    using ForwardIterator::seek_to_first;
+    using IteratorBase::seek_to_first;
+    using IteratorBase::valid;
+    using IteratorBase::next;
+    using IteratorBase::key;
+    using IteratorBase::value;
+    using IteratorBase::value_as_ptr;
+    using IteratorBase::status;
     using BackwardIterator::seek_to_last;
-    using ForwardIterator::valid;
-    using ForwardIterator::next;
     using BackwardIterator::prev;
-    using ForwardIterator::key;
-    using ForwardIterator::value;
-    using ForwardIterator::value_as_ptr;
-    using ForwardIterator::status;
     virtual int seek_to_first(const std::string &prefix) = 0;
     virtual int seek_to_last(const std::string &prefix) = 0;
     virtual int upper_bound(const std::string &prefix, const std::string &after) = 0;
