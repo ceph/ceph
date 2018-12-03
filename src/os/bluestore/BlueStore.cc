@@ -12527,7 +12527,7 @@ size_t BlueStoreRepairer::StoreSpaceTracker::filter_out(
     if (e.second == 0) {
       continue;
     }
-    size_t pos = max(e.first / granularity, prev_pos);
+    size_t pos = std::max<size_t>(e.first / granularity, prev_pos);
     size_t end_pos = 1 + (e.first + e.second - 1) / granularity;
     while (pos != npos && pos < end_pos)  {
         ceph_assert( collections_bfs[pos].element_count() ==

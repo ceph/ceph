@@ -1630,7 +1630,7 @@ void PrimaryLogPG::calc_trim_to()
       pg_log.get_log().approx_size() > target) {
     dout(10) << __func__ << " approx pg log length =  "
              << pg_log.get_log().approx_size() << dendl;
-    size_t num_to_trim = std::min(pg_log.get_log().approx_size() - target,
+    size_t num_to_trim = std::min<size_t>(pg_log.get_log().approx_size() - target,
 				  cct->_conf->osd_pg_log_trim_max);
     dout(10) << __func__ << " num_to_trim =  " << num_to_trim << dendl;
     if (num_to_trim < cct->_conf->osd_pg_log_trim_min &&
