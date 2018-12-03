@@ -3493,6 +3493,7 @@ extern "C" int rbd_snap_list(rbd_image_t image, rbd_snap_info_t *snaps,
     tracepoint(librbd, snap_list_exit, -EINVAL, 0);
     return -EINVAL;
   }
+  memset(snaps, 0, sizeof(*snaps) * *max_snaps);
 
   int r = librbd::snap_list(ictx, cpp_snaps);
   if (r == -ENOENT) {
