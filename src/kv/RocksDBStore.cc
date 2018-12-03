@@ -1504,13 +1504,13 @@ public:
     dbiter->Seek(slice_bound);
     return dbiter->status().ok() ? 0 : -1;
   }
-  int next(bool validate=true) override {
+  int next() override {
     if (valid()) {
       dbiter->Next();
     }
     return dbiter->status().ok() ? 0 : -1;
   }
-  int prev(bool validate=true) override {
+  int prev() override {
     if (valid()) {
       dbiter->Prev();
     }

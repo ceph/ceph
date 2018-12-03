@@ -208,7 +208,7 @@ public:
     virtual int upper_bound(const std::string &after) = 0;
     virtual int lower_bound(const std::string &to) = 0;
     virtual bool valid() = 0;
-    virtual int next(bool validate=true) = 0;
+    virtual int next() = 0;
     virtual std::string key() = 0;
     virtual bufferlist value() = 0;
     virtual int status() = 0;
@@ -219,7 +219,7 @@ public:
   public:
     virtual ~IteratorImpl() {}
     virtual int seek_to_last() = 0;
-    virtual int prev(bool validate=true) = 0;
+    virtual int prev() = 0;
     virtual std::pair<std::string, std::string> raw_key() = 0;
     virtual bufferptr value_as_ptr() {
       bufferlist bl = value();
@@ -299,26 +299,11 @@ private:
 	return false;
       return generic_iter->raw_key_is_prefixed(prefix);
     }
-    // Note that next() and prev() shouldn't validate iters,
-    // it's responsibility of caller to ensure they're valid.
-    int next(bool validate=true) override {
-      if (validate) {
-        if (valid())
-          return generic_iter->next();
-        return status();
-      } else {
-        return generic_iter->next();  
-      }      
+    int next() override {
+      return generic_iter->next();
     }
-    
-    int prev(bool validate=true) override {
-      if (validate) {
-        if (valid())
-          return generic_iter->prev();
-        return status();
-      } else {
-        return generic_iter->prev();  
-      }      
+    int prev() override {
+      return generic_iter->prev();
     }
     std::string key() override {
       return generic_iter->key();
