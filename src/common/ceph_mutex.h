@@ -13,6 +13,11 @@
 
 #ifdef WITH_SEASTAR
 
+#include <chrono>
+#include <mutex>
+
+#include "include/ceph_assert.h"
+
 namespace ceph {
   // an empty class satisfying the mutex concept
   struct dummy_mutex {
@@ -40,6 +45,25 @@ namespace ceph {
 
   #define ceph_mutex_is_locked(m) true
   #define ceph_mutex_is_locked_by_me(m) true
+
+  struct dummy_condition_variable {
+    void wait(std::unique_lock<mutex>& lock) {}
+    template<class Predicate>
+    void wait(std::unique_lock<mutex>& lock, Predicate pred) {
+      bool result = pred();
+      ceph_assert(result);
+    }
+    template<class Clock, class Duration>
+    void wait_until(std::unique_lock<mutex>& lock,
+	  const std::chrono::time_point<Clock, Duration>& when) {}
+    template<class Rep, class Period>
+    void wait_for(std::unique_lock<mutex>& lock,
+	  const std::chrono::duration<Rep, Period>& awhile) {}
+    void notify_one() {}
+    void notify_all(bool sloppy = false) {}
+  };
+
+  using condition_variable = dummy_condition_variable;
 }
 
 #else  // WITH_SEASTAR

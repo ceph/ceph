@@ -117,7 +117,11 @@ public:
       lderr(cct) << "leaked refs:\n";
       dump_weak_refs(*_dout);
       *_dout << dendl;
+#ifndef WITH_SEASTAR
       if (cct->_conf.get_val<bool>("debug_asserts_on_shutdown")) {
+#else
+      if (ceph::common::local_conf().get_val<bool>("debug_assserts_on_shutdown")) {
+#endif
 	ceph_assert(weak_refs.empty());
       }
     }
