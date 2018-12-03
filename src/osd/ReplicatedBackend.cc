@@ -2182,9 +2182,11 @@ void ReplicatedBackend::_failed_pull(pg_shard_t from, const hobject_t &soid)
 {
   dout(20) << __func__ << ": " << soid << " from " << from << dendl;
   list<pg_shard_t> fl = { from };
-  get_parent()->failed_push(fl, soid);
+  auto it = pulling.find(soid);
+  assert(it != pulling.end());
+  get_parent()->failed_push(fl, soid, it->second.recovery_info.version);
 
-  clear_pull(pulling.find(soid));
+  clear_pull(it);
 }
 
 void ReplicatedBackend::clear_pull_from(
