@@ -92,9 +92,8 @@ public:
 
     uint64_t get_last_version();
 
-    rgw_rados_ref& get_ref() {
-      return ref;
-    }
+    rgw_rados_ref& get_ref() { return ref; }
+    const rgw_rados_ref& get_ref() const { return ref; }
   };
 
   class Pool {
