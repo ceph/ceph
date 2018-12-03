@@ -151,7 +151,9 @@ class Run(object):
         repo_name = self.ceph_repo_name
 
         if self.args.ceph_sha1:
-            ceph_hash = util.git_validate_sha1(repo_name, self.args.ceph_sha1)
+            ceph_hash = self.args.ceph_sha1
+            if self.args.validate_sha1:
+                ceph_hash = util.git_validate_sha1(repo_name, ceph_hash)
             if not ceph_hash:
                 exc = CommitNotFoundError(
                     self.args.ceph_sha1,
