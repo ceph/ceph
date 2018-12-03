@@ -6,6 +6,7 @@ See doc/mgr/hello.rst for more info.
 """
 
 from mgr_module import MgrModule
+from threading import Event
 
 
 class Hello(MgrModule):
@@ -17,6 +18,13 @@ class Hello(MgrModule):
             "perm": "r"
         },
     ]
+
+    def __init__(self, *args, **kwargs):
+        super(Hello, self).__init__(*args, **kwargs)
+
+        # set up some members to enable the serve() method and shutdown
+        self.run = True
+        self.event = Event()
 
     def handle_command(self, inbuf, cmd):
         self.log.info("hello_world_info")
@@ -32,3 +40,24 @@ class Hello(MgrModule):
             message = "hello, " + cmd['person_name'] + "!"
 
         return status_code, output_buffer, message + "\n" + output_string
+
+    def serve(self):
+        """
+        This method is called by the mgr when the module starts and can be
+        used for any background activity.
+        """
+        self.log.info("Starting")
+        while self.run:
+            sleep_interval = 5
+            self.log.debug('Sleeping for %d seconds', sleep_interval)
+            ret = self.event.wait(sleep_interval)
+            self.event.clear()
+
+    def shutdown(self):
+        """
+        This method is called by the mgr when the module needs to shut
+        down (i.e., when the serve() function needs to exit.
+        """
+        self.log.info('Stopping')
+        self.run = False
+        self.event.set()
