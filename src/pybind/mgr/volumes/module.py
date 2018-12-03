@@ -1,7 +1,10 @@
 from threading import Event
 import errno
 import json
-import Queue
+try:
+    import queue as Queue
+except ImportError:
+    import Queue
 
 from mgr_module import MgrModule
 import orchestrator
