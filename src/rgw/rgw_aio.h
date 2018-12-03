@@ -26,7 +26,7 @@ class ObjectWriteOperation;
 namespace rgw {
 
 struct AioResult {
-  rgw_raw_obj obj;
+  RGWSI_RADOS::Obj obj;
   uint64_t id = 0; // id allows caller to associate a result with its request
   bufferlist data; // result buffer for reads
   int result = 0;
@@ -63,12 +63,10 @@ class Aio {
   virtual ~Aio() {}
 
   virtual AioResultList submit(RGWSI_RADOS::Obj& obj,
-                               const rgw_raw_obj& raw_obj,
                                librados::ObjectReadOperation *op,
                                uint64_t cost, uint64_t id) = 0;
 
   virtual AioResultList submit(RGWSI_RADOS::Obj& obj,
-                               const rgw_raw_obj& raw_obj,
                                librados::ObjectWriteOperation *op,
                                uint64_t cost, uint64_t id) = 0;
 

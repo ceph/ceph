@@ -67,11 +67,11 @@ class AioThrottle : public Aio {
     ceph_assert(completed.empty());
   }
 
-  AioResultList submit(RGWSI_RADOS::Obj& obj, const rgw_raw_obj& raw_obj,
+  AioResultList submit(RGWSI_RADOS::Obj& obj,
                        librados::ObjectReadOperation *op,
                        uint64_t cost, uint64_t id) override;
 
-  AioResultList submit(RGWSI_RADOS::Obj& obj, const rgw_raw_obj& raw_obj,
+  AioResultList submit(RGWSI_RADOS::Obj& obj,
                        librados::ObjectWriteOperation *op,
                        uint64_t cost, uint64_t id) override;
 
