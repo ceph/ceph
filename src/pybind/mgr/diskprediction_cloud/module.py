@@ -133,9 +133,9 @@ class Module(MgrModule):
                     opt['name'],
                     self.get_module_option(opt['name']) or opt['default'])
             self.log.debug(' %s = %s', opt['name'], getattr(self, opt['name']))
-        if not self._activated_cloud and self.get_option('device_failure_prediction_mode') == 'cloud':
+        if not self._activated_cloud and self.get_ceph_option('device_failure_prediction_mode') == 'cloud':
             self._event.set()
-        if self._activated_cloud and self.get_option('device_failure_prediction_mode') != 'cloud':
+        if self._activated_cloud and self.get_ceph_option('device_failure_prediction_mode') != 'cloud':
             self._event.set()
 
     @property
@@ -370,7 +370,7 @@ class Module(MgrModule):
 
         while self._run:
             self.refresh_config()
-            mode = self.get_option('device_failure_prediction_mode')
+            mode = self.get_ceph_option('device_failure_prediction_mode')
             if mode == 'cloud':
                 if not self._activated_cloud:
                     self.start_cloud_disk_prediction()

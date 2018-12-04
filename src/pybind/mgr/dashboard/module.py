@@ -180,7 +180,7 @@ class CherryPyConfig(object):
         cherrypy.config.update(config)
 
         self._url_prefix = prepare_url_prefix(self.get_module_option('url_prefix',
-                                                              default=''))
+                                                                     default=''))
 
         uri = "{0}://{1}:{2}{3}/".format(
             'https' if ssl else 'http',

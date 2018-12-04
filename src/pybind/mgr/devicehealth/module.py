@@ -577,7 +577,7 @@ class Module(MgrModule):
 
     def predict_lift_expectancy(self, devid):
         plugin_name = ''
-        model = self.get_option('device_failure_prediction_mode')
+        model = self.get_ceph_option('device_failure_prediction_mode')
         if model and model.lower() == 'cloud':
             plugin_name = 'diskprediction_cloud'
         elif model and model.lower() == 'local':
@@ -593,7 +593,7 @@ class Module(MgrModule):
 
     def predict_all_devices(self):
         plugin_name = ''
-        model = self.get_option('device_failure_prediction_mode')
+        model = self.get_ceph_option('device_failure_prediction_mode')
         if model and model.lower() == 'cloud':
             plugin_name = 'diskprediction_cloud'
         elif model and model.lower() == 'local':
