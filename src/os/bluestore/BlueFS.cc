@@ -433,6 +433,9 @@ void BlueFS::_stop_alloc()
     }
   }
   alloc.clear();
+  for (auto& i : pending_release) {
+    i.clear();
+  }
 }
 
 int BlueFS::mount()
