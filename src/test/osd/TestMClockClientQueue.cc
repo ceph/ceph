@@ -64,7 +64,7 @@ public:
 
 TEST_F(MClockClientQueueTest, TestSize) {
   ASSERT_TRUE(q.empty());
-  ASSERT_EQ(0u, q.length());
+  ASSERT_EQ(0u, q.get_size_slow());
 
   q.enqueue(client1, 12, 1u, create_snaptrim(100, client1));
   q.enqueue_strict(client2, 12, create_snaptrim(101, client2));
@@ -73,7 +73,7 @@ TEST_F(MClockClientQueueTest, TestSize) {
   q.enqueue(client1, 12, 1u, create_snaptrim(104, client1));
 
   ASSERT_FALSE(q.empty());
-  ASSERT_EQ(5u, q.length());
+  ASSERT_EQ(5u, q.get_size_slow());
 
   std::list<Request> reqs;
 
@@ -82,7 +82,7 @@ TEST_F(MClockClientQueueTest, TestSize) {
   reqs.push_back(q.dequeue());
 
   ASSERT_FALSE(q.empty());
-  ASSERT_EQ(2u, q.length());
+  ASSERT_EQ(2u, q.get_size_slow());
 
   q.enqueue_front(client2, 12, 1u, std::move(reqs.back()));
   reqs.pop_back();
@@ -94,14 +94,14 @@ TEST_F(MClockClientQueueTest, TestSize) {
   reqs.pop_back();
 
   ASSERT_FALSE(q.empty());
-  ASSERT_EQ(5u, q.length());
+  ASSERT_EQ(5u, q.get_size_slow());
 
   for (int i = 0; i < 5; ++i) {
     (void) q.dequeue();
   }
 
   ASSERT_TRUE(q.empty());
-  ASSERT_EQ(0u, q.length());
+  ASSERT_EQ(0u, q.get_size_slow());
 }
 
 
@@ -172,7 +172,7 @@ TEST_F(MClockClientQueueTest, TestRemoveByClass) {
     filtered_out.pop_front();
   }
 
-  ASSERT_EQ(3u, q.length());
+  ASSERT_EQ(3u, q.get_size_slow());
   Request r = q.dequeue();
   ASSERT_EQ(103u, r.get_map_epoch());
 
