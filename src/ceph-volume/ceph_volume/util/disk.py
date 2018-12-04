@@ -815,9 +815,5 @@ def get_devices(_sys_block_path='/sys/block', _dev_path='/dev', _mapper_path='/d
         metadata['path'] = diskname
         metadata['locked'] = is_locked_raw_device(metadata['path'])
 
-        for part_name, part_metadata in metadata['partitions'].items():
-            part_abspath = '/dev/%s' % part_name
-            device_facts[part_abspath] = part_metadata
-
         device_facts[diskname] = metadata
     return device_facts
