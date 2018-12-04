@@ -576,7 +576,8 @@ public:
   void dump(Formatter *f) const;
   static void generate_test_instances(list<RGWObjManifest*>& o);
 
-  int append(RGWObjManifest& m, RGWZoneGroup& zonegroup, RGWZoneParams& zone_params);
+  int append(RGWObjManifest& m, const RGWZoneGroup& zonegroup,
+             const RGWZoneParams& zone_params);
   int append(RGWObjManifest& m, RGWSI_Zone *zone_svc);
 
   bool get_rule(uint64_t ofs, RGWObjManifestRule *rule);
@@ -2260,8 +2261,8 @@ public:
                        const string& from_marker = std::string(),
                        const string& to_marker   = std::string());
 
-  int lock_exclusive(rgw_pool& pool, const string& oid, ceph::timespan& duration, string& zone_id, string& owner_id);
-  int unlock(rgw_pool& pool, const string& oid, string& zone_id, string& owner_id);
+  int lock_exclusive(const rgw_pool& pool, const string& oid, ceph::timespan& duration, string& zone_id, string& owner_id);
+  int unlock(const rgw_pool& pool, const string& oid, string& zone_id, string& owner_id);
 
   void update_gc_chain(rgw_obj& head_obj, RGWObjManifest& manifest, cls_rgw_obj_chain *chain);
   int send_chain_to_gc(cls_rgw_obj_chain& chain, const string& tag, bool sync);

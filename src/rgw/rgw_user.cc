@@ -261,7 +261,7 @@ static RGWChainedCacheImpl<user_info_entry> uinfo_cache;
 
 int rgw_get_user_info_from_index(RGWRados * const store,
                                  const string& key,
-                                 rgw_pool& pool,
+                                 const rgw_pool& pool,
                                  RGWUserInfo& info,
                                  RGWObjVersionTracker * const objv_tracker,
                                  real_time * const pmtime)
