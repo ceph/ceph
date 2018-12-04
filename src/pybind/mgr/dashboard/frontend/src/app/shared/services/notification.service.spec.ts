@@ -5,6 +5,7 @@ import { ToastsManager } from 'ng2-toastr';
 
 import { configureTestBed, i18nProviders } from '../../../testing/unit-test-helper';
 import { NotificationType } from '../enum/notification-type.enum';
+import { CdNotificationConfig } from '../models/cd-notification';
 import { FinishedTask } from '../models/finished-task';
 import { NotificationService } from './notification.service';
 import { TaskMessageService } from './task-message.service';
@@ -57,7 +58,7 @@ describe('NotificationService', () => {
   }));
 
   it('should create a success notification and save it', fakeAsync(() => {
-    notificationService.show(NotificationType.success, 'Simple test');
+    notificationService.show(new CdNotificationConfig(NotificationType.success, 'Simple test'));
     tick(100);
     expect(notificationService['dataSource'].getValue().length).toBe(1);
     expect(notificationService['dataSource'].getValue()[0].type).toBe(NotificationType.success);
@@ -71,7 +72,7 @@ describe('NotificationService', () => {
   }));
 
   it('should create an info notification and save it', fakeAsync(() => {
-    notificationService.show(NotificationType.info, 'Simple test');
+    notificationService.show(new CdNotificationConfig(NotificationType.info, 'Simple test'));
     tick(100);
     expect(notificationService['dataSource'].getValue().length).toBe(1);
     const notification = notificationService['dataSource'].getValue()[0];
