@@ -58,13 +58,13 @@ class SettingsMeta(type):
 
     def __setattr__(cls, attr, value):
         if not attr.startswith('_') and hasattr(Options, attr):
-            mgr.set_config(attr, str(value))
+            mgr.set_module_option(attr, str(value))
         else:
             setattr(SettingsMeta, attr, value)
 
     def __delattr__(self, attr):
         if not attr.startswith('_') and hasattr(Options, attr):
-            mgr.set_config(attr, None)
+            mgr.set_module_option(attr, None)
 
 
 # pylint: disable=no-init

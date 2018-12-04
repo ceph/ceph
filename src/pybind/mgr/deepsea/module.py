@@ -240,7 +240,7 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
                 return (-errno.EINVAL, '',
                         "Unknown configuration option '{0}'".format(cmd['key']))
 
-            self.set_config(cmd['key'], cmd['value'])
+            self.set_module_option(cmd['key'], cmd['value'])
             self._event.set();
             return 0, "Configuration option '{0}' updated".format(cmd['key']), ''
 

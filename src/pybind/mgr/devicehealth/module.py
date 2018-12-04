@@ -158,11 +158,11 @@ class Module(MgrModule):
         elif cmd['prefix'] == 'device check-health':
             return self.check_health()
         elif cmd['prefix'] == 'device monitoring on':
-            self.set_config('enable_monitoring', 'true')
+            self.set_module_option('enable_monitoring', 'true')
             self.event.set()
             return 0, '', ''
         elif cmd['prefix'] == 'device monitoring off':
-            self.set_config('enable_monitoring', 'false')
+            self.set_module_option('enable_monitoring', 'false')
             self.set_health_checks({})  # avoid stuck health alerts
             return 0, '', ''
         elif cmd['prefix'] == 'device predict-life-expectancy':

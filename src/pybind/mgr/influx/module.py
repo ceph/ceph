@@ -444,7 +444,7 @@ class Module(MgrModule):
 
             self.log.debug('Setting configuration option %s to %s', key, value)
             self.set_config_option(key, value)
-            self.set_config(key, value)
+            self.set_module_option(key, value)
             return 0, 'Configuration option {0} updated'.format(key), ''
         elif cmd['prefix'] == 'influx send':
             self.send_to_influx()

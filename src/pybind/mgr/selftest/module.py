@@ -254,10 +254,10 @@ class Module(MgrModule):
         # This is not a strong test (can't tell if values really
         # persisted), it's just for the python interface bit.
 
-        self.set_config("testkey", "testvalue")
+        self.set_module_option("testkey", "testvalue")
         assert self.get_module_option("testkey") == "testvalue"
 
-        self.set_localized_config("testkey", "testvalue")
+        self.set_localized_module_option("testkey", "testvalue")
         assert self.get_localized_module_option("testkey") == "testvalue"
 
     def _self_test_store(self):
