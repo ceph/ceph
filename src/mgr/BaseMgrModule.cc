@@ -380,16 +380,16 @@ ceph_option_get(BaseMgrModule *self, PyObject *args)
     dout(10) << "ceph_option_get " << what << " found: " << value << dendl;
     return PyString_FromString(value.c_str());
   } else {
-    dout(4) << "ceph_config_get " << what << " not found " << dendl;
+    dout(4) << "ceph_option_get " << what << " not found " << dendl;
     Py_RETURN_NONE;
   }
 }
 
 static PyObject*
-ceph_config_get(BaseMgrModule *self, PyObject *args)
+ceph_get_module_option(BaseMgrModule *self, PyObject *args)
 {
   char *what = nullptr;
-  if (!PyArg_ParseTuple(args, "s:ceph_config_get", &what)) {
+  if (!PyArg_ParseTuple(args, "s:ceph_get_module_option", &what)) {
     derr << "Invalid args!" << dendl;
     return nullptr;
   }
@@ -398,10 +398,10 @@ ceph_config_get(BaseMgrModule *self, PyObject *args)
   bool found = self->py_modules->get_config(self->this_module->get_name(),
       what, &value);
   if (found) {
-    dout(10) << "ceph_config_get " << what << " found: " << value.c_str() << dendl;
+    dout(10) << __func__ << " " << what << " found: " << value.c_str() << dendl;
     return PyString_FromString(value.c_str());
   } else {
-    dout(4) << "ceph_config_get " << what << " not found " << dendl;
+    dout(4) << __func__ << " " << what << " not found " << dendl;
     Py_RETURN_NONE;
   }
 }
@@ -959,10 +959,10 @@ PyMethodDef BaseMgrModule_methods[] = {
    "Get the name of the Mgr daemon where we are running"},
 
   {"_ceph_get_option", (PyCFunction)ceph_option_get, METH_VARARGS,
-   "Get a configuration option value"},
+   "Get a native configuration option value"},
 
-  {"_ceph_get_config", (PyCFunction)ceph_config_get, METH_VARARGS,
-   "Get a configuration value"},
+  {"_ceph_get_module_option", (PyCFunction)ceph_get_module_option, METH_VARARGS,
+   "Get a module configuration option value"},
 
   {"_ceph_get_store_prefix", (PyCFunction)ceph_store_get_prefix, METH_VARARGS,
    "Get all KV store values with a given prefix"},

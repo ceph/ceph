@@ -240,7 +240,7 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
         :param default: the default value of the config if it is not found
         :return: str
         """
-        r = self._ceph_get_config(key)
+        r = self._ceph_get_module_option(key)
         if r is None:
             return default
         else:
@@ -678,7 +678,7 @@ class MgrModule(ceph_module.BaseMgrModule):
     def get_option(self, key):
         return self._ceph_get_option(key)
 
-    def _validate_option(self, key):
+    def _validate_module_option(self, key):
         """
         Helper: don't allow get/set config callers to 
         access config options that they didn't declare
@@ -688,8 +688,8 @@ class MgrModule(ceph_module.BaseMgrModule):
             raise RuntimeError("Config option '{0}' is not in {1}.MODULE_OPTIONS".\
                     format(key, self.__class__.__name__))
 
-    def _get_config(self, key, default):
-        r = self._ceph_get_config(key)
+    def _get_module_option(self, key, default):
+        r = self._ceph_get_module_option(key)
         if r is None:
             return default
         else:
@@ -702,8 +702,8 @@ class MgrModule(ceph_module.BaseMgrModule):
         :param str key:
         :return: str
         """
-        self._validate_option(key)
-        return self._get_config(key, default)
+        self._validate_module_option(key)
+        return self._get_module_option(key, default)
 
     def get_store_prefix(self, key_prefix):
         """
@@ -732,8 +732,8 @@ class MgrModule(ceph_module.BaseMgrModule):
         :param str default:
         :return: str
         """
-        self._validate_option(key)
-        return self._get_localized(key, default, self._get_config)
+        self._validate_module_option(key)
+        return self._get_localized(key, default, self._get_module_option)
 
     def _set_config(self, key, val):
         return self._ceph_set_config(key, val)
@@ -745,7 +745,7 @@ class MgrModule(ceph_module.BaseMgrModule):
         :param str key:
         :param str val:
         """
-        self._validate_option(key)
+        self._validate_module_option(key)
         return self._set_config(key, val)
 
     def set_localized_config(self, key, val):
@@ -755,7 +755,7 @@ class MgrModule(ceph_module.BaseMgrModule):
         :param str default:
         :return: str
         """
-        self._validate_option(key)
+        self._validate_module_option(key)
         return self._set_localized(key, val, self._set_config)
 
     def set_store(self, key, val):
