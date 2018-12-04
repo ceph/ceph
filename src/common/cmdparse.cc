@@ -93,6 +93,7 @@ dump_cmd_to_json(Formatter *f, uint64_t features, const string& cmd)
     f->open_object_section(string(desckv["name"]).c_str());
 
     // Compatibility for pre-nautilus clients that don't know about CephBool
+    std::string val;
     if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
       auto i = desckv.find("type");
       if (i != desckv.end() && i->second == "CephBool") {
@@ -100,7 +101,7 @@ dump_cmd_to_json(Formatter *f, uint64_t features, const string& cmd)
         // of a 'true'/'false' value
         std::ostringstream oss;
         oss << std::string("--") << desckv["name"];
-        std::string val = oss.str();
+        val = oss.str();
         std::replace(val.begin(), val.end(), '_', '-');
 
         desckv["type"] = "CephChoices";
