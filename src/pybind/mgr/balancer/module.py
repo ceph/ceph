@@ -301,17 +301,17 @@ class Module(MgrModule):
             }
             return (0, json.dumps(s, indent=4), '')
         elif command['prefix'] == 'balancer mode':
-            self.set_config('mode', command['mode'])
+            self.set_module_option('mode', command['mode'])
             return (0, '', '')
         elif command['prefix'] == 'balancer on':
             if not self.active:
-                self.set_config('active', '1')
+                self.set_module_option('active', '1')
                 self.active = True
             self.event.set()
             return (0, '', '')
         elif command['prefix'] == 'balancer off':
             if self.active:
-                self.set_config('active', '')
+                self.set_module_option('active', '')
                 self.active = False
             self.event.set()
             return (0, '', '')

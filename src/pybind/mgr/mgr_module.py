@@ -735,10 +735,10 @@ class MgrModule(ceph_module.BaseMgrModule):
         self._validate_module_option(key)
         return self._get_localized(key, default, self._get_module_option)
 
-    def _set_config(self, key, val):
+    def _set_module_option(self, key, val):
         return self._ceph_set_config(key, val)
 
-    def set_config(self, key, val):
+    def set_module_option(self, key, val):
         """
         Set the value of a persistent configuration setting
 
@@ -746,9 +746,9 @@ class MgrModule(ceph_module.BaseMgrModule):
         :param str val:
         """
         self._validate_module_option(key)
-        return self._set_config(key, val)
+        return self._set_module_option(key, val)
 
-    def set_localized_config(self, key, val):
+    def set_localized_module_option(self, key, val):
         """
         Set localized configuration for this ceph-mgr instance
         :param str key:
@@ -756,7 +756,7 @@ class MgrModule(ceph_module.BaseMgrModule):
         :return: str
         """
         self._validate_module_option(key)
-        return self._set_localized(key, val, self._set_config)
+        return self._set_localized(key, val, self._set_module_option)
 
     def set_store(self, key, val):
         """

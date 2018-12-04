@@ -339,7 +339,7 @@ class Module(MgrModule, CherryPyConfig):
         if res[0] != -errno.ENOSYS:
             return res
         elif cmd['prefix'] == 'dashboard set-jwt-token-ttl':
-            self.set_config('jwt_token_ttl', str(cmd['seconds']))
+            self.set_module_option('jwt_token_ttl', str(cmd['seconds']))
             return 0, 'JWT token TTL updated', ''
         elif cmd['prefix'] == 'dashboard get-jwt-token-ttl':
             ttl = self.get_module_option('jwt_token_ttl', JwtManager.JWT_TOKEN_TTL)
