@@ -2044,7 +2044,7 @@ int CrushWrapper::get_new_bucket_id()
       crush->buckets,
       sizeof(crush->buckets[0]) * crush->max_buckets);
     for (auto& i : choose_args) {
-      assert(i.second.size == crush->max_buckets - 1);
+      assert(i.second.size == (__u32)crush->max_buckets - 1);
       ++i.second.size;
       i.second.args = (struct crush_choose_arg*)realloc(
 	i.second.args,
