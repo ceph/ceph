@@ -134,7 +134,7 @@ PyMethodDef BaseMgrStandbyModule_methods[] = {
    "Get the name of the Mgr daemon where we are running"},
 
   {"_ceph_get_module_option", (PyCFunction)ceph_get_module_option, METH_VARARGS,
-   "Get a configuration value"},
+   "Get a module configuration option value"},
 
   {"_ceph_get_store", (PyCFunction)ceph_store_get, METH_VARARGS,
    "Get a KV store value"},
