@@ -1524,6 +1524,18 @@ inline std::enable_if_t<traits::supported && !traits::featured> encode(
 }
 
 template<typename T, typename traits=denc_traits<T>>
+inline std::enable_if_t<traits::supported && !traits::featured> encode(
+  T&& o,
+  bufferlist& bl,
+  uint64_t features_unused=0)
+{
+  size_t len = 0;
+  traits::bound_encode(o, len);
+  auto a = bl.get_contiguous_appender(len);
+  traits::encode(std::move(o), a);
+}
+
+template<typename T, typename traits=denc_traits<T>>
 inline std::enable_if_t<traits::supported && traits::featured> encode(
   const T& o, bufferlist& bl,
   uint64_t features)
@@ -1532,6 +1544,17 @@ inline std::enable_if_t<traits::supported && traits::featured> encode(
   traits::bound_encode(o, len, features);
   auto a = bl.get_contiguous_appender(len);
   traits::encode(o, a, features);
+}
+
+template<typename T, typename traits=denc_traits<T>>
+inline std::enable_if_t<traits::supported && traits::featured> encode(
+  T&& o, bufferlist& bl,
+  uint64_t features)
+{
+  size_t len = 0;
+  traits::bound_encode(o, len, features);
+  auto a = bl.get_contiguous_appender(len);
+  traits::encode(std::move(o), a, features);
 }
 
 template<typename T,
@@ -1593,6 +1616,18 @@ inline std::enable_if_t<traits::supported &&
   traits::bound_encode(o, len);
   auto a = bl.get_contiguous_appender(len);
   traits::encode_nohead(o, a);
+}
+
+template<typename T, typename traits=denc_traits<T>>
+inline std::enable_if_t<traits::supported &&
+			!traits::featured> encode_nohead(
+  T&& o,
+  bufferlist& bl)
+{
+  size_t len = 0;
+  traits::bound_encode(o, len);
+  auto a = bl.get_contiguous_appender(len);
+  traits::encode_nohead(std::move(o), a);
 }
 
 template<typename T, typename traits=denc_traits<T>>
