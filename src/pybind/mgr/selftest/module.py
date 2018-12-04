@@ -124,9 +124,9 @@ class Module(MgrModule):
             else:
                 return 0, '', 'No background workload was running'
         elif command['prefix'] == 'mgr self-test config get':
-            return 0, str(self.get_config(command['key'])), ''
+            return 0, str(self.get_module_option(command['key'])), ''
         elif command['prefix'] == 'mgr self-test config get_localized':
-            return 0, str(self.get_localized_config(command['key'])), ''
+            return 0, str(self.get_localized_module_option(command['key'])), ''
         elif command['prefix'] == 'mgr self-test remote':
             self._test_remote_calls()
             return 0, '', 'Successfully called'
@@ -255,10 +255,10 @@ class Module(MgrModule):
         # persisted), it's just for the python interface bit.
 
         self.set_config("testkey", "testvalue")
-        assert self.get_config("testkey") == "testvalue"
+        assert self.get_module_option("testkey") == "testvalue"
 
         self.set_localized_config("testkey", "testvalue")
-        assert self.get_localized_config("testkey") == "testvalue"
+        assert self.get_localized_module_option("testkey") == "testvalue"
 
     def _self_test_store(self):
         existing_keys = set(self.get_store_prefix("test").keys())

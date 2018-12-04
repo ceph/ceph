@@ -41,7 +41,7 @@ class JwtManager(object):
     def gen_token(cls, username):
         if not cls._secret:
             cls.init()
-        ttl = mgr.get_config('jwt_token_ttl', cls.JWT_TOKEN_TTL)
+        ttl = mgr.get_module_option('jwt_token_ttl', cls.JWT_TOKEN_TTL)
         ttl = int(ttl)
         now = int(time.mktime(time.gmtime()))
         payload = {

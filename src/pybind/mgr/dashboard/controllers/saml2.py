@@ -77,7 +77,7 @@ class Saml2(BaseController):
             JwtManager.set_user(JwtManager.decode_token(token))
             token = token.decode('utf-8')
             logger.debug("JWT Token: %s", token)
-            url_prefix = prepare_url_prefix(mgr.get_config('url_prefix', default=''))
+            url_prefix = prepare_url_prefix(mgr.get_module_option('url_prefix', default=''))
             raise cherrypy.HTTPRedirect("{}/#/login?access_token={}".format(url_prefix, token))
         else:
             return {
@@ -111,5 +111,5 @@ class Saml2(BaseController):
         # pylint: disable=unused-argument
         Saml2._check_python_saml()
         JwtManager.reset_user()
-        url_prefix = prepare_url_prefix(mgr.get_config('url_prefix', default=''))
+        url_prefix = prepare_url_prefix(mgr.get_module_option('url_prefix', default=''))
         raise cherrypy.HTTPRedirect("{}/#/login".format(url_prefix))

@@ -84,17 +84,17 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
         return dict((o['name'], o.get('default', None)) for o in self.MODULE_OPTIONS)
 
 
-    def get_config(self, key, default=None):
+    def get_module_option(self, key, default=None):
         """
-        Overrides the default MgrModule get_config() method to pull in defaults
+        Overrides the default MgrModule get_module_option() method to pull in defaults
         specific to this module
         """
-        return super(DeepSeaOrchestrator, self).get_config(key, default=self.config_keys[key])
+        return super(DeepSeaOrchestrator, self).get_module_option(key, default=self.config_keys[key])
 
 
     def _config_valid(self):
         for key in self.config_keys.keys():
-            if not self.get_config(key, self.config_keys[key]):
+            if not self.get_module_option(key, self.config_keys[key]):
                 return False
         return True
 
@@ -233,7 +233,7 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     def handle_command(self, inbuf, cmd):
         if cmd['prefix'] == 'deepsea config-show':
-            return 0, json.dumps(dict([(key, self.get_config(key)) for key in self.config_keys.keys()])), ''
+            return 0, json.dumps(dict([(key, self.get_module_option(key)) for key in self.config_keys.keys()])), ''
 
         elif cmd['prefix'] == 'deepsea config-set':
             if cmd['key'] not in self.config_keys.keys():
@@ -414,7 +414,7 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
         """
         returns the response, which the caller then has to read
         """
-        url = "{0}/{1}".format(self.get_config('salt_api_url'), path)
+        url = "{0}/{1}".format(self.get_module_option('salt_api_url'), path)
         try:
             if method.lower() == 'get':
                 resp = requests.get(url, headers = { "X-Auth-Token": self._token },
@@ -440,9 +440,9 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     def _login(self):
         resp = self._do_request('POST', 'login', data = {
-            "eauth": self.get_config('salt_api_eauth'),
-            "sharedsecret" if self.get_config('salt_api_eauth') == 'sharedsecret' else 'password': self.get_config('salt_api_password'),
-            "username": self.get_config('salt_api_username')
+            "eauth": self.get_module_option('salt_api_eauth'),
+            "sharedsecret" if self.get_module_option('salt_api_eauth') == 'sharedsecret' else 'password': self.get_module_option('salt_api_password'),
+            "username": self.get_module_option('salt_api_username')
         })
         self._token = resp.json()['return'][0]['token']
         self.log.info("Salt API login successful")

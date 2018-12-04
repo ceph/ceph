@@ -62,7 +62,7 @@ class OrchestratorCli(MgrModule):
     ]
 
     def _select_orchestrator(self):
-        o = self.get_config("orchestrator")
+        o = self.get_module_option("orchestrator")
         if o is None:
             raise NoOrchestrator()
 
