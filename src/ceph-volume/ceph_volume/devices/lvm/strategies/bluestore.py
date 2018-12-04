@@ -292,9 +292,8 @@ class MixedType(object):
         # block.db vg from before
         for osd in self.computed['osds']:
             data_path = osd['data']['path']
-            data_lv_size = disk.Size(b=osd['data']['size']).gb.as_int()
             data_vg = data_vgs[data_path]
-            data_lv_extents = data_vg.sizing(size=data_lv_size)['extents']
+            data_lv_extents = data_vg.sizing(parts=1)['extents']
             data_lv = lvm.create_lv(
                 'osd-block', data_vg.name, extents=data_lv_extents, uuid_name=True
             )
