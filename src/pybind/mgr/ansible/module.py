@@ -218,7 +218,7 @@ class Module(MgrModule, orchestrator.Orchestrator):
            incomplete.
 
            @param completions: list of Completion instances
-           @Returns          : List with completions operations pending
+           @Returns          : true if everything is done.
         """
 
         # Check progress and update status in each operation
@@ -229,9 +229,10 @@ class Module(MgrModule, orchestrator.Orchestrator):
 
         completions = filter(lambda x: not x.is_complete, completions)
 
-        self.log.info("Operations pending: %s", len(completions))
+        ops_pending = len(completions)
+        self.log.info("Operations pending: %s", ops_pending)
 
-        return completions
+        return ops_pending == 0
 
     def serve(self):
         """ Mandatory for standby modules
