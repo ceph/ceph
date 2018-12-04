@@ -463,8 +463,6 @@ def wrap(s, width, indent):
 
             yield result
 
-    raise StopIteration
-
 
 def format_help(cmddict, partial=None):
     """
