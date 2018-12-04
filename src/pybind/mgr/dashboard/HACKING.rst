@@ -725,6 +725,44 @@ same applies to other request types:
 | DELETE       | Yes        | delete         | 204         |
 +--------------+------------+----------------+-------------+
 
+How to use a custom API endpoint in a RESTController?
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+If you don't have any access restriction you can use ``@Endpoint``. If you
+have set a permission scope to restrict access to your endpoints,
+``@Endpoint`` will fail, as it doesn't know which permission property should be
+used. To use a custom endpoint inside a restricted ``RESTController`` use
+``@RESTController.Collection`` instead. You can also choose
+``@RESTController.Resource`` if you have set a ``RESOURCE_ID`` in your
+``RESTController`` class.
+
+.. code-block:: python
+
+  import cherrypy
+  from ..tools import ApiController, RESTController
+
+  @ApiController('ping', Scope.Ping)
+  class Ping(RESTController):
+    RESOURCE_ID = 'ping'
+
+    @RESTController.Resource('GET')
+    def some_get_endpoint(self):
+      return {"msg": "Hello"}
+
+    @RESTController.Collection('POST')
+    def some_post_endpoint(self, **data):
+      return {"msg": data}
+
+Both decorators also support four parameters to customize the
+endpoint:
+
+* ``method="GET"``: the HTTP method allowed to access this endpoint.
+* ``path="/<method_name>"``: the URL path of the endpoint, excluding the
+  controller URL path prefix.
+* ``status=200``: set the HTTP status response code
+* ``query_params=[]``: list of method parameter names that correspond to URL
+  query parameters.
+
 How to restrict access to a controller?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
