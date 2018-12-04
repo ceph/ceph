@@ -5,7 +5,7 @@ import { ToastsManager } from 'ng2-toastr';
 import { BehaviorSubject } from 'rxjs';
 
 import { NotificationType } from '../enum/notification-type.enum';
-import { CdNotification } from '../models/cd-notification';
+import { CdNotification, CdNotificationConfig } from '../models/cd-notification';
 import { FinishedTask } from '../models/finished-task';
 import { ServicesModule } from './services.module';
 import { TaskMessageService } from './task-message.service';
@@ -70,10 +70,22 @@ export class NotificationService {
    * @param {string} [message] The message to be displayed. Note, use this field
    *   for error notifications only.
    * @param {*} [options] toastr compatible options, used when creating a toastr
-   * @memberof NotificationService
    * @returns The timeout ID that is set to be able to cancel the notification.
    */
-  show(type: NotificationType, title: string, message?: string, options?: any) {
+  show(type: NotificationType, title: string, message?: string, options?: any): number;
+  show(config: CdNotificationConfig): number;
+  show(
+    arg: NotificationType | CdNotificationConfig,
+    title?: string,
+    message?: string,
+    options?: any
+  ): number {
+    let type;
+    if (_.isObject(arg)) {
+      ({ message, type, title, options } = <CdNotificationConfig>arg);
+    } else {
+      type = arg;
+    }
     return setTimeout(() => {
       this.save(type, title, message);
       if (!message) {
@@ -94,15 +106,20 @@ export class NotificationService {
   }
 
   notifyTask(finishedTask: FinishedTask, success: boolean = true) {
+    let notification: CdNotificationConfig;
     if (finishedTask.success && success) {
-      this.show(NotificationType.success, this.taskMessageService.getSuccessTitle(finishedTask));
+      notification = new CdNotificationConfig(
+        NotificationType.success,
+        this.taskMessageService.getSuccessTitle(finishedTask)
+      );
     } else {
-      this.show(
+      notification = new CdNotificationConfig(
         NotificationType.error,
         this.taskMessageService.getErrorTitle(finishedTask),
         this.taskMessageService.getErrorMessage(finishedTask)
       );
     }
+    this.show(notification);
   }
 
   /**
