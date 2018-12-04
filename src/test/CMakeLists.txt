@@ -678,6 +678,28 @@ add_executable(unittest_bufferlist
 add_ceph_unittest(unittest_bufferlist)
 target_link_libraries(unittest_bufferlist global)
 
+# compiletest_cxx11_client
+add_executable(compiletest_cxx11_client
+  cxx11_client.cc
+  )
+if(CMAKE_VERSION VERSION_LESS "3.8")
+  # this is ugly as we'll end with -std=c++11 overriding the previous -std=c++17
+  # I would love to have a better way for old Cmakes
+  set_target_properties(compiletest_cxx11_client
+    PROPERTIES COMPILE_FLAGS "-std=c++11 -Werror -pedantic"
+    )
+else()
+  set_target_properties(compiletest_cxx11_client
+    PROPERTIES COMPILE_FLAGS "-Werror -pedantic"
+    CMAKE_CXX_STANDARD 11
+    CXX_STANDARD_REQUIRED ON
+    )
+endif()
+add_ceph_test(compiletest_cxx11_client
+  "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/compiletest_cxx11_client"
+  )
+target_link_libraries(compiletest_cxx11_client global)
+
 # unittest_xlist
 add_executable(unittest_xlist
   test_xlist.cc
