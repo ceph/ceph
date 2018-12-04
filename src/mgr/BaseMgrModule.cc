@@ -420,11 +420,11 @@ ceph_store_get_prefix(BaseMgrModule *self, PyObject *args)
 }
 
 static PyObject*
-ceph_config_set(BaseMgrModule *self, PyObject *args)
+ceph_set_module_option(BaseMgrModule *self, PyObject *args)
 {
   char *key = nullptr;
   char *value = nullptr;
-  if (!PyArg_ParseTuple(args, "sz:ceph_config_set", &key, &value)) {
+  if (!PyArg_ParseTuple(args, "sz:ceph_set_module_option", &key, &value)) {
     return nullptr;
   }
   boost::optional<string> val;
@@ -967,8 +967,8 @@ PyMethodDef BaseMgrModule_methods[] = {
   {"_ceph_get_store_prefix", (PyCFunction)ceph_store_get_prefix, METH_VARARGS,
    "Get all KV store values with a given prefix"},
 
-  {"_ceph_set_config", (PyCFunction)ceph_config_set, METH_VARARGS,
-   "Set a configuration value"},
+  {"_ceph_set_module_option", (PyCFunction)ceph_set_module_option, METH_VARARGS,
+   "Set a module configuration option value"},
 
   {"_ceph_get_store", (PyCFunction)ceph_store_get, METH_VARARGS,
    "Get a stored field"},
