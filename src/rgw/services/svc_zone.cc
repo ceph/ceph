@@ -1013,16 +1013,9 @@ int RGWSI_Zone::select_bucket_location_by_rule(const string& location_rule, RGWZ
   map<string, RGWZonePlacementInfo>::iterator piter = get_zone_params().placement_pools.find(location_rule);
   if (piter == get_zone_params().placement_pools.end()) {
     /* couldn't find, means we cannot really place data for this bucket in this zone */
-    if (get_zonegroup().equals(zonegroup->get_id())) {
-      /* that's a configuration error, zone should have that rule, as we're within the requested
-       * zonegroup */
-      ldout(cct, 0) << "ERROR: This zone does not contain placement rule"
-                    << location_rule << " present in the zonegroup!" << dendl;
-      return -EINVAL;
-    } else {
-      /* oh, well, data is not going to be placed here, bucket object is just a placeholder */
-      return 0;
-    }
+    ldout(cct, 0) << "ERROR: This zone does not contain placement rule "
+                  << location_rule << " present in the zonegroup!" << dendl;
+    return -EINVAL;
   }
 
   RGWZonePlacementInfo& placement_info = piter->second;
