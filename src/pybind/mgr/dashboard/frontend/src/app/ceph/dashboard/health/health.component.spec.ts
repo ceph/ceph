@@ -1,6 +1,7 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 
 import * as _ from 'lodash';
 import { PopoverModule } from 'ngx-bootstrap/popover';
@@ -8,6 +9,8 @@ import { of } from 'rxjs';
 
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { HealthService } from '../../../shared/api/health.service';
+import { Permissions } from '../../../shared/models/permissions';
+import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { SharedModule } from '../../../shared/shared.module';
 import { MdsSummaryPipe } from '../mds-summary.pipe';
 import { MgrSummaryPipe } from '../mgr-summary.pipe';
@@ -36,6 +39,11 @@ describe('HealthComponent', () => {
     df: { stats: { total_objects: 0 } },
     pg_info: {}
   };
+  const fakeAuthStorageService = {
+    getPermissions: () => {
+      return new Permissions({ log: ['read'] });
+    }
+  };
 
   configureTestBed({
     imports: [SharedModule, HttpClientTestingModule, PopoverModule.forRoot()],
@@ -49,7 +57,7 @@ describe('HealthComponent', () => {
       PgStatusPipe
     ],
     schemas: [NO_ERRORS_SCHEMA],
-    providers: i18nProviders
+    providers: [i18nProviders, { provide: AuthStorageService, useValue: fakeAuthStorageService }]
   });
 
   beforeEach(() => {
@@ -137,5 +145,36 @@ describe('HealthComponent', () => {
     _.each(infoGroups, (infoGroup) => {
       expect(infoGroup.querySelectorAll('cd-info-card').length).toBe(1);
     });
+  });
+
+  it('should render "Cluster Status" card text that is not clickable', () => {
+    getHealthSpy.and.returnValue(of(healthPayload));
+    fixture.detectChanges();
+
+    const clusterStatusCard = fixture.debugElement.query(
+      By.css('cd-info-card[cardTitle="Cluster Status"]')
+    );
+    const clickableContent = clusterStatusCard.query(By.css('.info-card-content-clickable'));
+    expect(clickableContent).toBeNull();
+    expect(clusterStatusCard.nativeElement.textContent).toEqual(` ${healthPayload.health.status} `);
+  });
+
+  it('should render "Cluster Status" card text that is clickable (popover)', () => {
+    const payload = _.cloneDeep(healthPayload);
+    payload.health['status'] = 'HEALTH_WARN';
+    payload.health['checks'] = [
+      { severity: 'HEALTH_WARN', type: 'WRN', summary: { message: 'fake warning' } }
+    ];
+
+    getHealthSpy.and.returnValue(of(payload));
+    fixture.detectChanges();
+
+    expect(component.permissions.log.read).toBeTruthy();
+
+    const clusterStatusCard = fixture.debugElement.query(
+      By.css('cd-info-card[cardTitle="Cluster Status"]')
+    );
+    const clickableContent = clusterStatusCard.query(By.css('.info-card-content-clickable'));
+    expect(clickableContent.nativeElement.textContent).toEqual(` ${payload.health.status} `);
   });
 });

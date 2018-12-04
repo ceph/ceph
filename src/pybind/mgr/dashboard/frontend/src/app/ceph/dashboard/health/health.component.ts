@@ -4,6 +4,8 @@ import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 
 import { HealthService } from '../../../shared/api/health.service';
+import { Permissions } from '../../../shared/models/permissions';
+import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 
 @Component({
   selector: 'cd-health',
@@ -13,8 +15,15 @@ import { HealthService } from '../../../shared/api/health.service';
 export class HealthComponent implements OnInit, OnDestroy {
   healthData: any;
   interval: number;
+  permissions: Permissions;
 
-  constructor(private healthService: HealthService, private i18n: I18n) {}
+  constructor(
+    private healthService: HealthService,
+    private i18n: I18n,
+    private authStorageService: AuthStorageService
+  ) {
+    this.permissions = this.authStorageService.getPermissions();
+  }
 
   ngOnInit() {
     this.getHealth();
