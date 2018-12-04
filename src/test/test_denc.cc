@@ -508,6 +508,56 @@ TEST(denc, bufferptr_shallow_and_deep) {
   }
 }
 
+TEST(denc, bufferlist_encode_rval)
+{
+  std::string value = "foo";
+  bufferlist bl;
+  {
+    bufferlist b1 = bufferlist::static_from_string(value);
+    ASSERT_EQ(value, std::string_view(b1.c_str(), b1.length()));
+
+    auto a = bl.get_contiguous_appender(100);
+    denc(std::move(b1), a);
+
+    EXPECT_EQ(0u, b1.length());
+    EXPECT_EQ(0u, b1.buffers().size());
+  }
+  bl.rebuild();
+  cout << "bl is " << bl << std::endl;
+  bl.hexdump(cout);
+  {
+    auto p = bl.front().begin();
+    bufferptr op;
+    denc(op, p);
+    ASSERT_EQ(value, std::string_view(op.c_str(), op.length()));
+  }
+}
+
+TEST(denc, bufferptr_encode_rval)
+{
+  std::string value = "foo";
+  bufferlist bl;
+  {
+    bufferptr p1 = buffer::create_static(value.size(), value.data());
+    ASSERT_EQ(value, std::string_view(p1.c_str(), p1.length()));
+
+    auto a = bl.get_contiguous_appender(100);
+    denc(std::move(p1), a);
+
+    EXPECT_FALSE(p1.have_raw());
+    EXPECT_EQ(0u, p1.length());
+  }
+  bl.rebuild();
+  cout << "bl is " << bl << std::endl;
+  bl.hexdump(cout);
+  {
+    auto p = bl.front().begin();
+    bufferptr op;
+    denc(op, p);
+    ASSERT_EQ(value, std::string_view(op.c_str(), op.length()));
+  }
+}
+
 TEST(denc, array)
 {
   {
