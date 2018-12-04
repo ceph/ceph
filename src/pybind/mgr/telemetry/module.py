@@ -159,7 +159,7 @@ class Module(MgrModule):
 
     def init_module_config(self):
         for key, default in self.config_keys.items():
-            self.set_config_option(key, self.get_config(key, default))
+            self.set_config_option(key, self.get_module_option(key, default))
 
         self.last_upload = self.get_store('last_upload', None)
         if self.last_upload is not None:

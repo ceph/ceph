@@ -131,7 +131,7 @@ class Module(MgrModule):
         for opt in self.MODULE_OPTIONS:
             setattr(self,
                     opt['name'],
-                    self.get_config(opt['name']) or opt['default'])
+                    self.get_module_option(opt['name']) or opt['default'])
             self.log.debug(' %s = %s', opt['name'], getattr(self, opt['name']))
         if not self._activated_cloud and self.get_option('device_failure_prediction_mode') == 'cloud':
             self._event.set()
@@ -163,7 +163,7 @@ class Module(MgrModule):
         return True
 
     def get_configuration(self, key):
-        return self.get_config(key, self.config_keys[key])
+        return self.get_module_option(key, self.config_keys[key])
 
     @staticmethod
     def _convert_timestamp(predicted_timestamp, life_expectancy_day):
@@ -235,7 +235,7 @@ class Module(MgrModule):
         for opt in self.MODULE_OPTIONS:
             setattr(self,
                     opt['name'],
-                    self.get_config(opt['name']) or opt['default'])
+                    self.get_module_option(opt['name']) or opt['default'])
             self.log.debug(' %s = %s', opt['name'], getattr(self, opt['name']))
 
     def _status(self,  cmd):
@@ -361,7 +361,7 @@ class Module(MgrModule):
 
     def show_module_config(self):
         for key, default in self.config_keys.items():
-            self.set_config_option(key, self.get_config(key, default))
+            self.set_config_option(key, self.get_module_option(key, default))
 
     def serve(self):
         self.log.info('Starting diskprediction module')

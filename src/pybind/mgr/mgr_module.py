@@ -232,7 +232,7 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
     def get_mgr_id(self):
         return self._ceph_get_mgr_id()
 
-    def get_config(self, key, default=None):
+    def get_module_option(self, key, default=None):
         """
         Retrieve the value of a persistent configuration setting
 
@@ -258,10 +258,10 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
     def get_active_uri(self):
         return self._ceph_get_active_uri()
 
-    def get_localized_config(self, key, default=None):
-        r = self.get_config(self.get_mgr_id() + '/' + key)
+    def get_localized_module_option(self, key, default=None):
+        r = self.get_module_option(self.get_mgr_id() + '/' + key)
         if r is None:
-            r = self.get_config(key)
+            r = self.get_module_option(key)
 
         if r is None:
             r = default
@@ -695,7 +695,7 @@ class MgrModule(ceph_module.BaseMgrModule):
         else:
             return r
 
-    def get_config(self, key, default=None):
+    def get_module_option(self, key, default=None):
         """
         Retrieve the value of a persistent configuration setting
 
@@ -725,7 +725,7 @@ class MgrModule(ceph_module.BaseMgrModule):
     def _set_localized(self, key, val, setter):
         return setter(self.get_mgr_id() + '/' + key, val)
 
-    def get_localized_config(self, key, default=None):
+    def get_localized_module_option(self, key, default=None):
         """
         Retrieve localized configuration for this ceph-mgr instance
         :param str key:

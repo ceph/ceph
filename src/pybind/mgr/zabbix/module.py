@@ -108,7 +108,7 @@ class Module(MgrModule):
         self.log.debug('Found Ceph fsid %s', self.fsid)
 
         for key, default in self.config_keys.items():
-            self.set_config_option(key, self.get_config(key, default))
+            self.set_config_option(key, self.get_module_option(key, default))
 
     def set_config_option(self, option, value):
         if option not in self.config_keys.keys():

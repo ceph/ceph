@@ -218,9 +218,9 @@ class Module(MgrModule):
 
     def init_module_config(self):
         self.config['address'] = \
-            self.get_config("address", default=self.config_keys['address'])
+            self.get_module_option("address", default=self.config_keys['address'])
         self.config['interval'] = \
-            int(self.get_config("interval",
+            int(self.get_module_option("interval",
                                 default=self.config_keys['interval']))
 
     def now(self):
