@@ -756,11 +756,11 @@ struct denc_traits<bufferptr> {
   static void bound_encode(const bufferptr& v, size_t& p, uint64_t f=0) {
     p += sizeof(uint32_t) + v.length();
   }
-  template <class It>
+  template <class T, class It> // match T=bufferptr& and bufferptr&&
   static std::enable_if_t<!is_const_iterator_v<It>>
-  encode(const bufferptr& v, It& p, uint64_t f=0) {
+  encode(T&& v, It& p, uint64_t f=0) {
     denc((uint32_t)v.length(), p);
-    p.append(v);
+    p.append(std::forward<T>(v));
   }
   template <class It>
   static std::enable_if_t<is_const_iterator_v<It>>
@@ -800,6 +800,11 @@ struct denc_traits<bufferlist> {
     denc((uint32_t)v.length(), p);
     p.append(v);
   }
+  static void encode(bufferlist&& v, buffer::list::contiguous_appender& p,
+	      uint64_t f=0) {
+    denc((uint32_t)v.length(), p);
+    p.append(std::move(v));
+  }
   static void decode(bufferlist& v, buffer::ptr::const_iterator& p, uint64_t f=0) {
     uint32_t len;
     denc(len, p);
@@ -815,6 +820,10 @@ struct denc_traits<bufferlist> {
   static void encode_nohead(const bufferlist& v,
 			    buffer::list::contiguous_appender& p) {
     p.append(v);
+  }
+  static void encode_nohead(bufferlist&& v,
+			    buffer::list::contiguous_appender& p) {
+    p.append(std::move(v));
   }
   static void decode_nohead(size_t len, bufferlist& v,
 			    buffer::ptr::const_iterator& p) {
