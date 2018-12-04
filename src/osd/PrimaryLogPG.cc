@@ -10146,7 +10146,8 @@ int PrimaryLogPG::try_flush_mark_clean(FlushOpRef fop)
   }
 
   // successfully flushed, can we evict this object?
-  if (!obc->obs.oi.has_manifest() && !fop->op && agent_state->evict_mode != TierAgentState::EVICT_MODE_IDLE &&
+  if (!obc->obs.oi.has_manifest() && !fop->op &&
+      agent_state && agent_state->evict_mode != TierAgentState::EVICT_MODE_IDLE &&
       agent_maybe_evict(obc, true)) {
     osd->logger->inc(l_osd_tier_clean);
     if (fop->on_flush) {
