@@ -861,6 +861,20 @@ namespace buffer CEPH_BUFFER_API {
 	  out_of_band_offset += p.length();
 	}
       }
+      void append(bufferptr&& p) {
+	if (!p.length()) {
+	  return;
+	}
+	if (deep) {
+	  append(p.c_str(), p.length());
+          p = bufferptr{}; // drop ref
+	} else {
+	  flush_and_continue();
+	  out_of_band_offset += p.length();
+	  pbl->push_back(std::move(p));
+	}
+      }
+
       void append(const bufferlist& l) {
 	if (!l.length()) {
 	  return;
@@ -873,6 +887,21 @@ namespace buffer CEPH_BUFFER_API {
 	  flush_and_continue();
 	  pbl->append(l);
 	  out_of_band_offset += l.length();
+	}
+      }
+      void append(bufferlist&& l) {
+	if (!l.length()) {
+	  return;
+	}
+	if (deep) {
+	  for (const auto &p : l._buffers) {
+	    append(p.c_str(), p.length());
+	  }
+	  l.clear();
+	} else {
+	  flush_and_continue();
+	  out_of_band_offset += l.length();
+	  pbl->claim_append(l);
 	}
       }
 
