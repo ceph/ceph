@@ -44,7 +44,7 @@ class Module(MgrModule):
                     opt['name'],
                     self.get_module_option(opt['name']) or opt['default'])
             self.log.debug(' %s = %s', opt['name'], getattr(self, opt['name']))
-        if self.get_option('device_failure_prediction_mode') == 'local':
+        if self.get_ceph_option('device_failure_prediction_mode') == 'local':
             self._event.set()
 
     def refresh_config(self):
@@ -77,7 +77,7 @@ class Module(MgrModule):
 
         while self._run:
             self.refresh_config()
-            mode = self.get_option('device_failure_prediction_mode')
+            mode = self.get_ceph_option('device_failure_prediction_mode')
             if mode == 'local':
                 now = datetime.datetime.utcnow()
                 if not last_predicted:

@@ -678,7 +678,7 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
         return self._ceph_get_mgr_id()
 
-    def get_option(self, key):
+    def get_ceph_option(self, key):
         return self._ceph_get_option(key)
 
     def _validate_module_option(self, key):
