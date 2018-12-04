@@ -5051,7 +5051,7 @@ struct ToSparseReadResult : public Context {
     bufferlist outdata;
     map<uint64_t, uint64_t> extents = {{data_offset, r}};
     encode(extents, outdata);
-    ::encode_destructively(*data_bl, outdata);
+    encode(std::move(*data_bl), outdata);
     data_bl->swap(outdata);
   }
 };
@@ -5665,7 +5665,7 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
     op.extent.length = total_read;
 
     encode(m, osd_op.outdata); // re-encode since it might be modified
-    ::encode_destructively(data_bl, osd_op.outdata);
+    encode(std::move(data_bl), osd_op.outdata);
 
     dout(10) << " sparse_read got " << total_read << " bytes from object "
 	     << soid << dendl;

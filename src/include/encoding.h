@@ -222,12 +222,19 @@ inline void encode(const char *s, bufferlist& bl)
 // buffers
 
 // bufferptr (encapsulated)
-inline void encode(const buffer::ptr& bp, bufferlist& bl) 
+inline void encode(const buffer::ptr& bp, bufferlist& bl)
 {
   __u32 len = bp.length();
   encode(len, bl);
   if (len)
     bl.append(bp);
+}
+inline void encode(buffer::ptr&& bp, bufferlist& bl)
+{
+  __u32 len = bp.length();
+  encode(len, bl);
+  if (len)
+    bl.append(std::move(bp));
 }
 inline void decode(buffer::ptr& bp, bufferlist::const_iterator& p)
 {
@@ -246,13 +253,13 @@ inline void decode(buffer::ptr& bp, bufferlist::const_iterator& p)
 }
 
 // bufferlist (encapsulated)
-inline void encode(const bufferlist& s, bufferlist& bl) 
+inline void encode(const bufferlist& s, bufferlist& bl)
 {
   __u32 len = s.length();
   encode(len, bl);
   bl.append(s);
 }
-inline void encode_destructively(bufferlist& s, bufferlist& bl) 
+inline void encode(bufferlist&& s, bufferlist& bl)
 {
   __u32 len = s.length();
   encode(len, bl);
@@ -266,9 +273,13 @@ inline void decode(bufferlist& s, bufferlist::const_iterator& p)
   p.copy(len, s);
 }
 
-inline void encode_nohead(const bufferlist& s, bufferlist& bl) 
+inline void encode_nohead(const bufferlist& s, bufferlist& bl)
 {
   bl.append(s);
+}
+inline void encode_nohead(bufferlist&& s, bufferlist& bl)
+{
+  bl.claim_append(s);
 }
 inline void decode_nohead(int len, bufferlist& s, bufferlist::const_iterator& p)
 {
