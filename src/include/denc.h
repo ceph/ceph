@@ -629,6 +629,19 @@ denc(const T& o,
 }
 
 template<typename T, class It, typename traits=denc_traits<T>>
+inline std::enable_if_t<traits::supported && !is_const_iterator_v<It>>
+denc(T&& o,
+     It& p,
+     uint64_t features=0)
+{
+  if constexpr (traits::featured) {
+    traits::encode(std::move(o), p, features);
+  } else {
+    traits::encode(std::move(o), p);
+  }
+}
+
+template<typename T, class It, typename traits=denc_traits<T>>
 inline std::enable_if_t<traits::supported && is_const_iterator_v<It>>
 denc(T& o,
      It& p,
