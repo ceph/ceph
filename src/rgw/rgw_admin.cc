@@ -2253,9 +2253,9 @@ static void tab_dump(const string& header, int width, const list<string>& entrie
 
 static void sync_status(Formatter *formatter)
 {
-  RGWRealm& realm = store->svc.zone->get_realm();
-  RGWZoneGroup& zonegroup = store->svc.zone->get_zonegroup();
-  RGWZone& zone = store->svc.zone->get_zone();
+  const RGWRealm& realm = store->svc.zone->get_realm();
+  const RGWZoneGroup& zonegroup = store->svc.zone->get_zonegroup();
+  const RGWZone& zone = store->svc.zone->get_zone();
 
   int width = 15;
 
@@ -2399,9 +2399,9 @@ static int bucket_sync_status(RGWRados *store, const RGWBucketInfo& info,
                               const std::string& source_zone_id,
                               std::ostream& out)
 {
-  RGWRealm& realm = store->svc.zone->get_realm();
-  RGWZoneGroup& zonegroup = store->svc.zone->get_zonegroup();
-  RGWZone& zone = store->svc.zone->get_zone();
+  const RGWRealm& realm = store->svc.zone->get_realm();
+  const RGWZoneGroup& zonegroup = store->svc.zone->get_zonegroup();
+  const RGWZone& zone = store->svc.zone->get_zone();
   constexpr int width = 15;
 
   out << indented{width, "realm"} << realm.get_id() << " (" << realm.get_name() << ")\n";

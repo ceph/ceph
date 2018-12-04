@@ -13,7 +13,7 @@
 #define dout_prefix (*_dout << "rgw realm watcher: ")
 
 
-RGWRealmWatcher::RGWRealmWatcher(CephContext* cct, RGWRealm& realm)
+RGWRealmWatcher::RGWRealmWatcher(CephContext* cct, const RGWRealm& realm)
   : cct(cct)
 {
   // no default realm, nothing to watch
@@ -80,7 +80,7 @@ void RGWRealmWatcher::handle_error(uint64_t cookie, int err)
   }
 }
 
-int RGWRealmWatcher::watch_start(RGWRealm& realm)
+int RGWRealmWatcher::watch_start(const RGWRealm& realm)
 {
   // initialize a Rados client
   int r = rados.init_with_context(cct);
