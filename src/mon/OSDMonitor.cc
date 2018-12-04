@@ -3326,7 +3326,6 @@ bool OSDMonitor::prepare_pg_ready_to_merge(MonOpRequestRef op)
   } else {
     wait_for_finished_proposal(op, new C_ReplyMap(this, op, m->version));
   }
-  mon->no_reply(op);
   return true;
 }
 
