@@ -81,6 +81,26 @@ ceph_get_module_option(BaseMgrStandbyModule *self, PyObject *args)
 }
 
 static PyObject*
+ceph_option_get(BaseMgrStandbyModule *self, PyObject *args)
+{
+  char *what = nullptr;
+  if (!PyArg_ParseTuple(args, "s:ceph_option_get", &what)) {
+    derr << "Invalid args!" << dendl;
+    return nullptr;
+  }
+
+  std::string value;
+  int r = g_conf().get_val(string(what), &value);
+  if (r >= 0) {
+    dout(10) << "ceph_option_get " << what << " found: " << value << dendl;
+    return PyString_FromString(value.c_str());
+  } else {
+    dout(4) << "ceph_option_get " << what << " not found " << dendl;
+    Py_RETURN_NONE;
+  }
+}
+
+static PyObject*
 ceph_store_get(BaseMgrStandbyModule *self, PyObject *args)
 {
   char *what = nullptr;
@@ -135,6 +155,9 @@ PyMethodDef BaseMgrStandbyModule_methods[] = {
 
   {"_ceph_get_module_option", (PyCFunction)ceph_get_module_option, METH_VARARGS,
    "Get a module configuration option value"},
+
+  {"_ceph_get_option", (PyCFunction)ceph_option_get, METH_VARARGS,
+   "Get a native configuration option value"},
 
   {"_ceph_get_store", (PyCFunction)ceph_store_get, METH_VARARGS,
    "Get a KV store value"},

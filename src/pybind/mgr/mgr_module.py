@@ -246,6 +246,9 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
         else:
             return r
 
+    def get_ceph_option(self, key):
+        return self._ceph_get_option(key)
+
     def get_store(self, key):
         """
         Retrieve the value of a persistent KV store entry
