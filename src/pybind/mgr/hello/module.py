@@ -5,7 +5,7 @@ A hello world module
 See doc/mgr/hello.rst for more info.
 """
 
-from mgr_module import MgrModule
+from mgr_module import MgrModule, HandleCommandResult
 from threading import Event
 
 
@@ -39,7 +39,9 @@ class Hello(MgrModule):
         if 'person_name' in cmd:
             message = "hello, " + cmd['person_name'] + "!"
 
-        return status_code, output_buffer, message + "\n" + output_string
+        return HandleCommandResult(retval=status_code, stdout=output_buffer,
+                                   stderr=message + "\n" + output_string)
+
 
     def serve(self):
         """

@@ -106,14 +106,25 @@ class CommandResult(object):
 
 
 class HandleCommandResult(namedtuple('HandleCommandResult', ['retval', 'stdout', 'stderr'])):
-    def __new__(cls, retval=0, odata="", rs=""):
+    def __new__(cls, retval=0, stdout="", stderr=""):
         """
         Tuple containing the result of `handle_command()`
+
+        Only write to stderr if there is an error, or in extraordinary circumstances
+
+        Avoid having `ceph foo bar` commands say "did foo bar" on success unless there
+        is critical information to include there.
+
+        Everything programmatically consumable should be put on stdout
+
         :param retval: return code. E.g. 0 or -errno.EINVAL
-        :param odata: data of this result.
-        :param rs: Typically used for error or status messages.
+        :type retval: int
+        :param stdout: data of this result.
+        :type stdout: str
+        :param stderr: Typically used for error messages.
+        :type stderr: str
         """
-        return super(HandleCommandResult, cls).__new__(cls, retval, odata, rs)
+        return super(HandleCommandResult, cls).__new__(cls, retval, stdout, stderr)
 
 
 class OSDMap(ceph_module.BasePyOSDMap):
