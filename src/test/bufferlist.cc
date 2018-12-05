@@ -1294,7 +1294,7 @@ void bench_bufferlist_alloc(int size, int num, int per)
   for (int i=0; i<num; ++i) {
     bufferlist bl;
     for (int j=0; j<per; ++j)
-      bl.append(buffer::create(size));
+      bl.push_back(buffer::ptr_node::create(buffer::create(size)));
   }
   utime_t end = ceph_clock_now();
   cout << num << " alloc of size " << size
