@@ -50,6 +50,7 @@ private:
   CephContext* cct;
   float m_watermark;
   uint64_t m_entry_count;
+  std::atomic<uint8_t> inflight_ops;
 
   std::unordered_map<std::string, Entry*> m_cache_map;
   RWLock m_cache_map_lock;
@@ -58,7 +59,6 @@ private:
   Mutex m_free_list_lock;
 
   LRU m_promoted_lru;
-
 };
 
 } // namespace immutable_obj_cache

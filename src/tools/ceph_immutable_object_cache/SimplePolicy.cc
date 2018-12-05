@@ -17,7 +17,7 @@ namespace ceph {
 namespace immutable_obj_cache {
 
 SimplePolicy::SimplePolicy(CephContext *cct, uint64_t block_num, float watermark)
-  : cct(cct), m_watermark(watermark), m_entry_count(block_num),
+  : cct(cct), m_watermark(watermark), m_entry_count(block_num), inflight_ops(0),
     m_cache_map_lock("rbd::cache::SimplePolicy::m_cache_map_lock"),
     m_free_list_lock("rbd::cache::SimplePolicy::m_free_list_lock") {
   ldout(cct, 20) << dendl;
@@ -45,7 +45,8 @@ cache_status_t SimplePolicy::alloc_entry(std::string file_name) {
 
   m_free_list_lock.lock();
 
-  if (m_free_list.size()) {
+  //TODO(): make the max inflight ops configurable
+  if (m_free_list.size() && (inflight_ops < 128)) {
     Entry* entry = m_free_list.front();
     ceph_assert(entry != nullptr);
     m_free_list.pop_front();
@@ -104,6 +105,7 @@ void SimplePolicy::update_status(std::string file_name, cache_status_t new_statu
   if (entry->status == OBJ_CACHE_NONE && new_status== OBJ_CACHE_SKIP) {
     entry->status = new_status;
     entry->file_name = file_name;
+    inflight_ops++;
     return;
   }
 
@@ -111,6 +113,7 @@ void SimplePolicy::update_status(std::string file_name, cache_status_t new_statu
   if (entry->status == OBJ_CACHE_SKIP && new_status== OBJ_CACHE_PROMOTED) {
     m_promoted_lru.lru_insert_top(entry);
     entry->status = new_status;
+    inflight_ops--;
     return;
   }
 
@@ -124,6 +127,7 @@ void SimplePolicy::update_status(std::string file_name, cache_status_t new_statu
       m_free_list.push_back(entry);
     }
     m_cache_map.erase(entry_it);
+    inflight_ops--;
     return;
   }
 
