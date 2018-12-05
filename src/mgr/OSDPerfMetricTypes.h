@@ -14,8 +14,13 @@ typedef std::vector<OSDPerfMetricSubKey> OSDPerfMetricKey;
 
 enum class OSDPerfMetricSubKeyType : uint8_t {
   CLIENT_ID = 0,
-  POOL_ID = 1,
-  OBJECT_NAME = 2,
+  CLIENT_ADDRESS = 1,
+  POOL_ID = 2,
+  NAMESPACE = 3,
+  OSD_ID = 4,
+  PG_ID = 5,
+  OBJECT_NAME = 6,
+  SNAP_ID = 7,
 };
 
 struct OSDPerfMetricSubKeyDescriptor {
@@ -26,8 +31,13 @@ struct OSDPerfMetricSubKeyDescriptor {
   bool is_supported() const {
     switch (type) {
     case OSDPerfMetricSubKeyType::CLIENT_ID:
+    case OSDPerfMetricSubKeyType::CLIENT_ADDRESS:
     case OSDPerfMetricSubKeyType::POOL_ID:
+    case OSDPerfMetricSubKeyType::NAMESPACE:
+    case OSDPerfMetricSubKeyType::OSD_ID:
+    case OSDPerfMetricSubKeyType::PG_ID:
     case OSDPerfMetricSubKeyType::OBJECT_NAME:
+    case OSDPerfMetricSubKeyType::SNAP_ID:
       return true;
     default:
       return false;

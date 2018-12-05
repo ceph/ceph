@@ -690,8 +690,13 @@ ceph_add_osd_perf_query(BaseMgrModule *self, PyObject *args)
   static const std::string NAME_LIMIT_MAX_COUNT = "max_count";
   static const std::map<std::string, OSDPerfMetricSubKeyType> sub_key_types = {
     {"client_id", OSDPerfMetricSubKeyType::CLIENT_ID},
+    {"client_address", OSDPerfMetricSubKeyType::CLIENT_ADDRESS},
     {"pool_id", OSDPerfMetricSubKeyType::POOL_ID},
+    {"namespace", OSDPerfMetricSubKeyType::NAMESPACE},
+    {"osd_id", OSDPerfMetricSubKeyType::OSD_ID},
+    {"pg_id", OSDPerfMetricSubKeyType::PG_ID},
     {"object_name", OSDPerfMetricSubKeyType::OBJECT_NAME},
+    {"snap_id", OSDPerfMetricSubKeyType::SNAP_ID},
   };
   static const std::map<std::string, PerformanceCounterType> counter_types = {
     {"ops", PerformanceCounterType::OPS},

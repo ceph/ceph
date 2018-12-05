@@ -970,7 +970,9 @@ class MgrModule(ceph_module.BaseMgrModule):
              'limit': {'order_by': performance_counter_type, 'max_count': n},
            }
 
-        Valid subkey types: 'client_id', 'pool_id', 'object_name'
+        Valid subkey types:
+           'client_id', 'client_address', 'pool_id', 'namespace', 'osd_id',
+           'pg_id', 'object_name', 'snap_id'
         Valid performance counter types:
            'ops', 'write_ops', 'read_ops', 'bytes', 'write_bytes', 'read_bytes',
            'latency', 'write_latency', 'read_latency'
