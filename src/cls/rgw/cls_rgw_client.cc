@@ -153,8 +153,9 @@ int CLSRGWIssueSetTagTimeout::issue_op(int shard_id, const string& oid)
   return issue_bucket_set_tag_timeout_op(io_ctx, oid, tag_timeout, &manager);
 }
 
-void cls_rgw_bucket_update_stats(librados::ObjectWriteOperation& o, bool absolute,
-                                 const map<uint8_t, rgw_bucket_category_stats>& stats)
+void cls_rgw_bucket_update_stats(librados::ObjectWriteOperation& o,
+				 bool absolute,
+                                 const map<RGWObjCategory, rgw_bucket_category_stats>& stats)
 {
   struct rgw_cls_bucket_update_stats_op call;
   call.absolute = absolute;

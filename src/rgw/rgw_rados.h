@@ -1599,7 +1599,7 @@ public:
         bool completeMultipart;
 
         MetaParams() : mtime(NULL), rmattrs(NULL), data(NULL), manifest(NULL), ptag(NULL),
-                 remove_objs(NULL), category(RGW_OBJ_CATEGORY_MAIN), flags(0),
+                 remove_objs(NULL), category(RGWObjCategory::Main), flags(0),
                  if_match(NULL), if_nomatch(NULL), canceled(false), user_data(nullptr), zones_trace(nullptr),
                  modify_tail(false),  completeMultipart(false) {}
       } meta;

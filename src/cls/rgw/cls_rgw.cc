@@ -484,7 +484,9 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return 0;
 }
 
-static int check_index(cls_method_context_t hctx, struct rgw_bucket_dir_header *existing_header, struct rgw_bucket_dir_header *calc_header)
+static int check_index(cls_method_context_t hctx,
+		       rgw_bucket_dir_header *existing_header,
+		       rgw_bucket_dir_header *calc_header)
 {
   int rc = read_bucket_header(hctx, existing_header);
   if (rc < 0) {
@@ -515,7 +517,7 @@ static int check_index(cls_method_context_t hctx, struct rgw_bucket_dir_header *
         break;
       }
 
-      struct rgw_bucket_dir_entry entry;
+      rgw_bucket_dir_entry entry;
       auto eiter = kiter->second.cbegin();
       try {
         decode(entry, eiter);
@@ -523,7 +525,7 @@ static int check_index(cls_method_context_t hctx, struct rgw_bucket_dir_header *
         CLS_LOG(1, "ERROR: rgw_bucket_list(): failed to decode entry, key=%s\n", kiter->first.c_str());
         return -EIO;
       }
-      struct rgw_bucket_category_stats& stats = calc_header->stats[entry.meta.category];
+      rgw_bucket_category_stats& stats = calc_header->stats[entry.meta.category];
       stats.num_entries++;
       stats.total_size += entry.meta.accounted_size;
       stats.total_size_rounded += cls_rgw_get_rounded_size(entry.meta.accounted_size);
@@ -955,8 +957,11 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
             remove_key.name.c_str(), remove_key.instance.c_str(), ret);
       continue;
     }
-    CLS_LOG(0, "rgw_bucket_complete_op(): entry.name=%s entry.instance=%s entry.meta.category=%d\n",
-            remove_entry.key.name.c_str(), remove_entry.key.instance.c_str(), remove_entry.meta.category);
+    CLS_LOG(0,
+	    "rgw_bucket_complete_op(): entry.name=%s entry.instance=%s entry.meta.category=%d\n",
+            remove_entry.key.name.c_str(),
+	    remove_entry.key.instance.c_str(),
+	    int(remove_entry.meta.category));
     unaccount_entry(header, remove_entry);
 
     if (op.log_op && !header.syncstopped) {
@@ -2237,7 +2242,8 @@ static int rgw_bi_get_op(cls_method_context_t hctx, bufferlist *in, bufferlist *
       encode_olh_data_key(op.key, &idx);
       break;
     default:
-      CLS_LOG(10, "%s(): invalid key type encoding: %d", __func__, op.type);
+      CLS_LOG(10, "%s(): invalid key type encoding: %d",
+	      __func__, int(op.type));
       return -EINVAL;
   }
 

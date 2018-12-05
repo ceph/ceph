@@ -4673,7 +4673,7 @@ void RGWCopyObj::execute()
 			   if_nomatch,
 			   attrs_mod,
                            copy_if_newer,
-			   attrs, RGW_OBJ_CATEGORY_MAIN,
+			   attrs, RGWObjCategory::Main,
 			   olh_epoch,
 			   (delete_at ? *delete_at : real_time()),
 			   (version_id.empty() ? NULL : &version_id),
@@ -5358,7 +5358,7 @@ void RGWInitMultipart::execute()
     RGWRados::Object::Write obj_op(&op_target);
 
     obj_op.meta.owner = s->owner.get_id();
-    obj_op.meta.category = RGW_OBJ_CATEGORY_MULTIMETA;
+    obj_op.meta.category = RGWObjCategory::MultiMeta;
     obj_op.meta.flags = PUT_OBJ_CREATE_EXCL;
 
     op_ret = obj_op.write_meta(0, 0, attrs);
