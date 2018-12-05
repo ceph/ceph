@@ -23,7 +23,8 @@ class OSDPerfQuery(MgrModule):
     COMMANDS = [
         {
             "cmd": "osd perf query add "
-                   "name=query,type=CephChoices,strings=client_id|rbd_image_id",
+                   "name=query,type=CephChoices,"
+                   "strings=client_id|rbd_image_id|all_subkeys",
             "desc": "add osd perf query",
             "perm": "w"
         },
@@ -64,14 +65,32 @@ class OSDPerfQuery(MgrModule):
         'limit': {'order_by': 'bytes', 'max_count': 10},
     }
 
+    ALL_SUBKEYS_QUERY = {
+        'key_descriptor': [
+            {'type': 'client_id', 'regex': '^.*$'},
+            {'type': 'client_address', 'regex': '^.*$'},
+            {'type': 'pool_id', 'regex': '^.*$'},
+            {'type': 'namespace', 'regex': '^.*$'},
+            {'type': 'osd_id', 'regex': '^.*$'},
+            {'type': 'pg_id', 'regex': '^.*$'},
+            {'type': 'object_name', 'regex': '^.*$'},
+            {'type': 'snap_id', 'regex': '^.*$'},
+        ],
+        'performance_counter_descriptors': [
+            'write_ops', 'read_ops',
+        ],
+    }
+
     queries = {}
 
     def handle_command(self, inbuf, cmd):
         if cmd['prefix'] == "osd perf query add":
             if cmd['query'] == 'rbd_image_id':
                 query = self.RBD_IMAGE_ID_QUERY
-            else:
+            elif cmd['query'] == 'rbd_image_id':
                 query = self.CLIENT_ID_QUERY
+            else:
+                query = self.ALL_SUBKEYS_QUERY
             query_id = self.add_osd_perf_query(query)
             if query_id is None:
                 return -errno.EINVAL, "", "Invalid query"
@@ -96,7 +115,7 @@ class OSDPerfQuery(MgrModule):
             if query == self.RBD_IMAGE_ID_QUERY:
                 column_names = ["pool_id", "rbd image_id"]
             else:
-                column_names = ["client_id"]
+                column_names = [sk['type'] for sk in query['key_descriptor']]
             for d in descriptors:
                 desc = d
                 if d in ['bytes']:
@@ -121,7 +140,7 @@ class OSDPerfQuery(MgrModule):
                 if query == self.RBD_IMAGE_ID_QUERY:
                     row = [c['k'][0][0], c['k'][1][1]]
                 else:
-                    row = [c['k'][0][0]]
+                    row = [sk[0] for sk in c['k']]
                 counters = c['c']
                 for i in range(len(descriptors)):
                     if descriptors[i] in ['bytes']:
