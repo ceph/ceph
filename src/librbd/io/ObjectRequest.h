@@ -244,6 +244,9 @@ private:
   bool m_object_may_exist = false;
   bool m_copyup_enabled = true;
   bool m_copyup_in_progress = false;
+  bool m_guarding_migration_write = false;
+
+  void compute_parent_info();
 
   void pre_write_object_map_update();
   void handle_pre_write_object_map_update(int r);
