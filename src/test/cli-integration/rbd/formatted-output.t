@@ -496,10 +496,13 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "op_features": [], 
       "order": 22, 
       "parent": {
+          "id": "*",  (glob)
           "image": "bar", 
           "overlap": 536870912, 
           "pool": "rbd", 
-          "snapshot": "snap"
+          "pool_namespace": "", 
+          "snapshot": "snap", 
+          "trash": false
       }, 
       "protected": "false", 
       "size": 536870912, 
@@ -530,8 +533,11 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <protected>false</protected>
     <parent>
       <pool>rbd</pool>
+      <pool_namespace></pool_namespace>
       <image>bar</image>
+      <id>*</id> (glob)
       <snapshot>snap</snapshot>
+      <trash>false</trash>
       <overlap>536870912</overlap>
     </parent>
   </image>
@@ -828,6 +834,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
           "parent": {
               "image": "bar", 
               "pool": "rbd", 
+              "pool_namespace": "", 
               "snapshot": "snap"
           }, 
           "protected": "false", 
@@ -860,6 +867,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <size>536870912</size>
       <parent>
         <pool>rbd</pool>
+        <pool_namespace></pool_namespace>
         <image>bar</image>
         <snapshot>snap</snapshot>
       </parent>
