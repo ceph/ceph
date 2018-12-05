@@ -1,2 +1,4 @@
 tasks:
 - dump_ctx: 'Welcome to dummy!'
+- install:
+        repos_only: true
