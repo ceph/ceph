@@ -666,9 +666,9 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
   sanitize_object_contents(&data, data.op_size); //clean it up once; subsequent
   //changes will be safe because string length should remain the same
 
-  unsigned writes_per_object = 1;
+  unsigned reads_per_object = 1;
   if (data.op_size)
-    writes_per_object = data.object_size / data.op_size;
+    reads_per_object = data.object_size / data.op_size;
 
   r = completions_init(concurrentios);
   if (r < 0)
@@ -676,7 +676,7 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
 
   //set up initial reads
   for (int i = 0; i < concurrentios; ++i) {
-    name[i] = generate_object_name_fast(i / writes_per_object, pid);
+    name[i] = generate_object_name_fast(i / reads_per_object, pid);
     contents[i] = std::make_unique<bufferlist>();
   }
 
@@ -696,7 +696,7 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
     start_times[i] = mono_clock::now();
     create_completion(i, _aio_cb, (void *)&lc);
     r = aio_read(name[i], i, contents[i].get(), data.op_size,
-		 data.op_size * (i % writes_per_object));
+		 data.op_size * (i % reads_per_object));
     if (r < 0) {
       cerr << "r = " << r << std::endl;
       goto ERR;
@@ -752,7 +752,7 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
       }
     }
 
-    newName = generate_object_name_fast(data.started / writes_per_object, pid);
+    newName = generate_object_name_fast(data.started / reads_per_object, pid);
     index[slot] = data.started;
     lock.unlock();
     completion_wait(slot);
@@ -778,7 +778,7 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
     start_times[slot] = mono_clock::now();
     create_completion(slot, _aio_cb, (void *)&lc);
     r = aio_read(newName, slot, contents[slot].get(), data.op_size,
-		 data.op_size * (data.started % writes_per_object));
+		 data.op_size * (data.started % reads_per_object));
     if (r < 0) {
       goto ERR;
     }
@@ -901,9 +901,9 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
   sanitize_object_contents(&data, data.op_size); //clean it up once; subsequent
   //changes will be safe because string length should remain the same
 
-  unsigned writes_per_object = 1;
+  unsigned reads_per_object = 1;
   if (data.op_size)
-    writes_per_object = data.object_size / data.op_size;
+    reads_per_object = data.object_size / data.op_size;
 
   srand (time(NULL));
 
@@ -913,7 +913,7 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
 
   //set up initial reads
   for (int i = 0; i < concurrentios; ++i) {
-    name[i] = generate_object_name_fast(i / writes_per_object, pid);
+    name[i] = generate_object_name_fast(i / reads_per_object, pid);
     contents[i] = std::make_unique<bufferlist>();
   }
 
@@ -933,7 +933,7 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
     start_times[i] = mono_clock::now();
     create_completion(i, _aio_cb, (void *)&lc);
     r = aio_read(name[i], i, contents[i].get(), data.op_size,
-		 data.op_size * (i % writes_per_object));
+		 data.op_size * (i % reads_per_object));
     if (r < 0) {
       cerr << "r = " << r << std::endl;
       goto ERR;
@@ -1007,7 +1007,7 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
     } 
 
     rand_id = rand() % num_objects;
-    newName = generate_object_name_fast(rand_id / writes_per_object, pid);
+    newName = generate_object_name_fast(rand_id / reads_per_object, pid);
     index[slot] = rand_id;
     release_completion(slot);
 
@@ -1018,7 +1018,7 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
     start_times[slot] = mono_clock::now();
     create_completion(slot, _aio_cb, (void *)&lc);
     r = aio_read(newName, slot, contents[slot].get(), data.op_size,
-		 data.op_size * (rand_id % writes_per_object));
+		 data.op_size * (rand_id % reads_per_object));
     if (r < 0) {
       goto ERR;
     }
