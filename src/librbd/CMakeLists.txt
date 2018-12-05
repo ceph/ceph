@@ -161,7 +161,7 @@ target_link_libraries(librbd PRIVATE
   ceph-common
   pthread
   ${CMAKE_DL_LIBS}
-  ${EXTRALIBS})
+  ${EXTRALIBS} ${GSSAPI_LIBRARIES})
 if(HAVE_UDEV)
   target_link_libraries(librbd PRIVATE
     udev)

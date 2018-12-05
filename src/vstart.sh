@@ -121,6 +121,7 @@ ec=0
 hitset=""
 overwrite_conf=1
 cephx=1 #turn cephx on by default
+gssapi_authx=0
 cache=""
 if [ `uname` = FreeBSD ]; then
     objectstore="filestore"
@@ -169,6 +170,8 @@ usage=$usage"\t-m ip:port\t\tspecify monitor address\n"
 usage=$usage"\t-k keep old configuration files\n"
 usage=$usage"\t-x enable cephx (on by default)\n"
 usage=$usage"\t-X disable cephx\n"
+usage=$usage"\t-g --gssapi enable Kerberos/GSSApi authentication\n"
+usage=$usage"\t-G disable Kerberos/GSSApi authentication\n"
 usage=$usage"\t--hitset <pool> <hit_set_type>: enable hitset tracking\n"
 usage=$usage"\t-e : create an erasure pool\n";
 usage=$usage"\t-o config\t\t add extra config parameters to all sections\n"
@@ -290,6 +293,14 @@ case $1 in
     -X )
 	    cephx=0
 	    ;;
+    
+    -g | --gssapi)
+	    gssapi_authx=1 
+	    ;;
+    -G)
+	    gssapi_authx=0 
+	    ;;
+
     -k )
 	    if [ ! -r $conf_fn ]; then
 	        echo "cannot use old configuration: $conf_fn not readable." >&2
@@ -483,7 +494,20 @@ EOF
         lockdep = true
 EOF
 	fi
-	if [ "$cephx" -ne 1 ] ; then
+	if [ "$cephx" -eq 1 ] ; then
+		wconf <<EOF
+	auth cluster required = cephx
+	auth service required = cephx
+	auth client required = cephx
+EOF
+	elif [ "$gssapi_authx" -eq 1 ] ; then
+		wconf <<EOF
+	auth cluster required = gss
+	auth service required = gss
+	auth client required = gss
+	gss ktab client file = $CEPH_DEV_DIR/gss_\$name.keytab
+EOF
+	else 
 		wconf <<EOF
 	auth cluster required = none
 	auth service required = none

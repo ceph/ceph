@@ -232,6 +232,12 @@ if(WITH_OPENLDAP)
   set(HAVE_OPENLDAP ${OPENLDAP_FOUND})
 endif()
 
+option(WITH_GSSAPI "GSSAPI/KRB5 is here" ON)
+if(WITH_GSSAPI)
+  find_package(GSSApi REQUIRED)
+  set(HAVE_GSSAPI ${GSSApi_FOUND})
+endif()
+
 option(WITH_FUSE "Fuse is here" ON)
 if(WITH_FUSE)
   find_package(fuse)
