@@ -172,7 +172,7 @@ int ManifestObjectProcessor::next(uint64_t offset, uint64_t *pstripe_size)
     return r;
   }
 
-  rgw_raw_obj stripe_obj = manifest_gen.get_cur_obj(store);
+  rgw_raw_obj stripe_obj = manifest_gen.get_cur_obj(store->svc.zone);
 
   uint64_t chunk_size = 0;
   r = store->get_max_chunk_size(stripe_obj.pool, &chunk_size);
@@ -216,7 +216,7 @@ int AtomicObjectProcessor::prepare()
     return r;
   }
 
-  rgw_raw_obj stripe_obj = manifest_gen.get_cur_obj(store);
+  rgw_raw_obj stripe_obj = manifest_gen.get_cur_obj(store->svc.zone);
 
   uint64_t chunk_size = 0;
   r = store->get_max_chunk_size(stripe_obj.pool, &chunk_size);
@@ -335,7 +335,7 @@ int MultipartObjectProcessor::prepare_head()
     return r;
   }
 
-  rgw_raw_obj stripe_obj = manifest_gen.get_cur_obj(store);
+  rgw_raw_obj stripe_obj = manifest_gen.get_cur_obj(store->svc.zone);
   rgw_raw_obj_to_obj(head_obj.bucket, stripe_obj, &head_obj);
   head_obj.index_hash_source = target_obj.key.name;
 

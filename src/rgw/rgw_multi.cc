@@ -220,7 +220,7 @@ int abort_multipart_upload(RGWRados *store, CephContext *cct, RGWObjectCtx *obj_
         RGWObjManifest::obj_iterator oiter = obj_part.manifest.obj_begin();
         if (oiter != obj_part.manifest.obj_end()) {
           rgw_obj head;
-          rgw_raw_obj raw_head = oiter.get_location().get_raw_obj(store);
+          rgw_raw_obj raw_head = oiter.get_location().get_raw_obj(store->svc.zone);
           rgw_raw_obj_to_obj(bucket_info.bucket, raw_head, &head);
 
           rgw_obj_index_key key;

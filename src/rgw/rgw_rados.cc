@@ -125,14 +125,9 @@ rgw_raw_obj rgw_obj_select::get_raw_obj(const RGWZoneGroup& zonegroup, const RGW
   return raw_obj;
 }
 
-rgw_raw_obj rgw_obj_select::get_raw_obj(RGWRados *store) const
+rgw_raw_obj rgw_obj_select::get_raw_obj(RGWSI_Zone* zone_svc) const
 {
-  if (!is_raw) {
-    rgw_raw_obj r;
-    store->obj_to_raw(placement_rule, obj, &r);
-    return r;
-  }
-  return raw_obj;
+  return get_raw_obj(zone_svc->get_zonegroup(), zone_svc->get_zone_params());
 }
 
 int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool, IoCtx& ioctx, bool create)
@@ -2869,7 +2864,9 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
 
 bool RGWRados::get_obj_data_pool(const string& placement_rule, const rgw_obj& obj, rgw_pool *pool)
 {
-  return rgw_get_obj_data_pool(svc.zone->get_zonegroup(), svc.zone->get_zone_params(), placement_rule, obj, pool);
+  return rgw_get_obj_data_pool(svc.zone->get_zonegroup(),
+                               svc.zone->get_zone_params(),
+                               placement_rule, obj, pool);
 }
 
 bool RGWRados::obj_to_raw(const string& placement_rule, const rgw_obj& obj, rgw_raw_obj *raw_obj)
@@ -3129,7 +3126,7 @@ int RGWRados::fix_tail_obj_locator(const RGWBucketInfo& bucket_info, rgw_obj_key
     RGWObjManifest::obj_iterator miter;
     RGWObjManifest& manifest = astate->manifest;
     for (miter = manifest.obj_begin(); miter != manifest.obj_end(); ++miter) {
-      rgw_raw_obj raw_loc = miter.get_location().get_raw_obj(this);
+      rgw_raw_obj raw_loc = miter.get_location().get_raw_obj(svc.zone);
       rgw_obj loc;
       string oid;
       string locator;
@@ -4607,7 +4604,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   }
 
   rgw_rados_ref ref;
-  ret = get_raw_obj_ref(miter.get_location().get_raw_obj(this), &ref);
+  ret = get_raw_obj_ref(miter.get_location().get_raw_obj(svc.zone), &ref);
   if (ret < 0) {
     return ret;
   }
@@ -4643,7 +4640,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
       ObjectWriteOperation op;
       ref_tag = tag + '\0';
       cls_refcount_get(op, ref_tag, true);
-      const rgw_raw_obj& loc = miter.get_location().get_raw_obj(this);
+      const rgw_raw_obj& loc = miter.get_location().get_raw_obj(svc.zone);
       ref.ioctx.locator_set_key(loc.loc);
 
       ret = ref.ioctx.operate(loc.oid, &op);
@@ -4962,7 +4959,7 @@ void RGWRados::update_gc_chain(rgw_obj& head_obj, RGWObjManifest& manifest, cls_
   rgw_raw_obj raw_head;
   obj_to_raw(manifest.get_head_placement_rule(), head_obj, &raw_head);
   for (iter = manifest.obj_begin(); iter != manifest.obj_end(); ++iter) {
-    const rgw_raw_obj& mobj = iter.get_location().get_raw_obj(this);
+    const rgw_raw_obj& mobj = iter.get_location().get_raw_obj(svc.zone);
     if (mobj == raw_head)
       continue;
     cls_rgw_obj_key key(mobj.oid);
@@ -5475,7 +5472,7 @@ static void generate_fake_tag(RGWRados *store, map<string, bufferlist>& attrset,
   if (mi != manifest.obj_end()) {
     if (manifest.has_tail()) // first object usually points at the head, let's skip to a more unique part
       ++mi;
-    tag = mi.get_location().get_raw_obj(store).oid;
+    tag = mi.get_location().get_raw_obj(store->svc.zone).oid;
     tag.append("_");
   }
 
@@ -5640,7 +5637,7 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, const RGWBucketInfo& bucket
 	s->manifest.has_explicit_objs()) {
       RGWObjManifest::obj_iterator mi;
       for (mi = s->manifest.obj_begin(); mi != s->manifest.obj_end(); ++mi) {
-        ldout(cct, 20) << "manifest: ofs=" << mi.get_ofs() << " loc=" << mi.get_location().get_raw_obj(this) << dendl;
+        ldout(cct, 20) << "manifest: ofs=" << mi.get_ofs() << " loc=" << mi.get_location().get_raw_obj(svc.zone) << dendl;
       }
     }
 
@@ -6416,7 +6413,7 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl)
     RGWObjManifest::obj_iterator iter = astate->manifest.obj_find(ofs);
 
     uint64_t stripe_ofs = iter.get_stripe_ofs();
-    read_obj = iter.get_location().get_raw_obj(store);
+    read_obj = iter.get_location().get_raw_obj(store->svc.zone);
     len = std::min(len, iter.get_stripe_size() - (ofs - stripe_ofs));
     read_ofs = iter.location_ofs() + (ofs - stripe_ofs);
     reading_from_head = (read_obj == state.head_obj);
@@ -6649,7 +6646,7 @@ int RGWRados::iterate_obj(RGWObjectCtx& obj_ctx,
       off_t next_stripe_ofs = stripe_ofs + iter.get_stripe_size();
 
       while (ofs < next_stripe_ofs && ofs <= end) {
-        read_obj = iter.get_location().get_raw_obj(this);
+        read_obj = iter.get_location().get_raw_obj(svc.zone);
         uint64_t read_len = std::min(len, iter.get_stripe_size() - (ofs - stripe_ofs));
         read_ofs = iter.location_ofs() + (ofs - stripe_ofs);
 
@@ -9135,7 +9132,7 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
     RGWObjManifest::obj_iterator miter;
     RGWObjManifest& manifest = astate->manifest;
     for (miter = manifest.obj_begin(); miter != manifest.obj_end(); ++miter) {
-      const rgw_raw_obj& raw_loc = miter.get_location().get_raw_obj(this);
+      const rgw_raw_obj& raw_loc = miter.get_location().get_raw_obj(svc.zone);
       rgw_obj loc;
       rgw_raw_obj_to_obj(manifest.get_obj().bucket, raw_loc, &loc);
 
