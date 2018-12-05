@@ -673,7 +673,7 @@ public:
   int get_full_from_pinned_map(version_t ver, bufferlist& bl);
 
   epoch_t blacklist(const entity_addrvec_t& av, utime_t until);
-  epoch_t blacklist(const entity_addr_t& a, utime_t until);
+  epoch_t blacklist(entity_addr_t a, utime_t until);
 
   void dump_info(Formatter *f);
   int dump_osd_metadata(int osd, Formatter *f, ostream *err);
