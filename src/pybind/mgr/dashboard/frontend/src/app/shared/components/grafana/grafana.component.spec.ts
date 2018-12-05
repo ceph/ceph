@@ -51,10 +51,17 @@ describe('GrafanaComponent', () => {
       expect(component.grafanaExist).toBe(true);
       expect(component.baseUrl).toBe('http:localhost:3000/d/');
       expect(component.loading).toBe(false);
-      expect(component.url).toBe('http:localhost:3000/d/somePath&refresh=2s&kiosk');
+      component.uid = 'uid';
+      component.getFrame();
+      expect(component.url).toBe('http:localhost:3000/d/uid/somePath&refresh=2s&kiosk');
       expect(component.grafanaSrc).toEqual({
-        changingThisBreaksApplicationSecurity: 'http:localhost:3000/d/somePath&refresh=2s&kiosk'
+        changingThisBreaksApplicationSecurity: 'http:localhost:3000/d/uid/somePath&refresh=2s&kiosk'
       });
+    });
+
+    it('should have Dashboard', () => {
+      TestBed.get(SettingsService).validateGrafanaDashboardUrl = { uid: 200 };
+      expect(component.dashboardExist).toBe(true);
     });
   });
 });
