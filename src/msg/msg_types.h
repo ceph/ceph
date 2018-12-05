@@ -232,7 +232,7 @@ struct entity_addr_t {
     TYPE_NONE = 0,
     TYPE_LEGACY = 1,  ///< legacy msgr1 protocol (ceph jewel and older)
     TYPE_MSGR2 = 2,   ///< msgr2 protocol (new in ceph kraken)
-    TYPE_V1ORV2 = 3,  ///< ambiguous
+    TYPE_ANY = 3,  ///< ambiguous
   } type_t;
   static const type_t TYPE_DEFAULT = TYPE_MSGR2;
   static const char *get_type_name(int t) {
@@ -240,6 +240,7 @@ struct entity_addr_t {
     case TYPE_NONE: return "none";
     case TYPE_LEGACY: return "v1";
     case TYPE_MSGR2: return "v2";
+    case TYPE_ANY: return "any";
     default: return "???";
     }
   };

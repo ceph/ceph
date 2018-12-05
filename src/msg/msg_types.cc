@@ -75,6 +75,9 @@ bool entity_addr_t::parse(const char *s, const char **end, int default_type)
   } else if (strncmp("v2:", s, 3) == 0) {
     start += 3;
     newtype = TYPE_MSGR2;
+  } else if (strncmp("any:", s, 4) == 0) {
+    start += 4;
+    newtype = TYPE_ANY;
   } else if (*s == '-') {
     newtype = TYPE_NONE;
     if (end) {

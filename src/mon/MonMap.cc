@@ -347,11 +347,11 @@ void MonMap::_add_ambiguous_addr(const string& name,
 				 entity_addr_t addr,
 				 int priority)
 {
-  if (addr.get_type() != entity_addr_t::TYPE_V1ORV2) {
+  if (addr.get_type() != entity_addr_t::TYPE_ANY) {
     // a v1: or v2: prefix was specified
     if (addr.get_port() == 0) {
       // use default port
-      if (addr.get_type() == entity_addr_t::TYPE_MSGR2) {
+      if (addr.get_type() == entity_addr_t::TYPE_ANY) {
 	addr.set_port(CEPH_MON_PORT_IANA);
       } else if (addr.get_type() == entity_addr_t::TYPE_LEGACY) {
 	addr.set_port(CEPH_MON_PORT_LEGACY);
@@ -401,7 +401,7 @@ int MonMap::init_with_ips(const std::string& ips,
 			  const std::string &prefix)
 {
   vector<entity_addr_t> addrs;
-  if (!parse_ip_port_vec(ips.c_str(), addrs, entity_addr_t::TYPE_V1ORV2)) {
+  if (!parse_ip_port_vec(ips.c_str(), addrs, entity_addr_t::TYPE_ANY)) {
     return -EINVAL;
   }
   if (addrs.empty())
@@ -426,7 +426,7 @@ int MonMap::init_with_hosts(const std::string& hostlist,
     return -EINVAL;
 
   vector<entity_addr_t> addrs;
-  bool success = parse_ip_port_vec(hosts, addrs, entity_addr_t::TYPE_V1ORV2);
+  bool success = parse_ip_port_vec(hosts, addrs, entity_addr_t::TYPE_ANY);
   free(hosts);
   if (!success)
     return -EINVAL;
