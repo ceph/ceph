@@ -1,20 +1,4 @@
-<nav aria-label="breadcrumb">
-  <ol class="breadcrumb">
-    <li class="breadcrumb-item">Cluster</li>
-    <li class="breadcrumb-item">
-      <a [routerLink]="fromLink">
-        <span *ngIf="fromLink === '/monitor'">Monitors</span>
-        <span *ngIf="fromLink === '/hosts'">Hosts</span>
-      </a>
-    </li>
-    <li class="breadcrumb-item active"
-        i18n>Performance Counters</li>
-  </ol>
-</nav>
-
-<fieldset>
-  <legend>{{ serviceType }}.{{ serviceId }}</legend>
-  <cd-table-performance-counter [serviceType]="serviceType"
-                                [serviceId]="serviceId">
-  </cd-table-performance-counter>
-</fieldset>
+<legend>{{ serviceType }}.{{ serviceId }}</legend>
+<cd-table-performance-counter [serviceType]="serviceType"
+                              [serviceId]="serviceId">
+</cd-table-performance-counter>

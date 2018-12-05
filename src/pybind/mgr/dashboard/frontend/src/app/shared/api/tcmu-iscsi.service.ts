@@ -7,13 +7,9 @@ import { ApiModule } from './api.module';
   providedIn: ApiModule
 })
 export class TcmuIscsiService {
-
-  constructor(private http: HttpClient) {
-  }
+  constructor(private http: HttpClient) {}
 
   tcmuiscsi() {
-    return this.http.get('api/tcmuiscsi').toPromise().then((resp: any) => {
-      return resp;
-    });
+    return this.http.get('api/tcmuiscsi');
   }
 }

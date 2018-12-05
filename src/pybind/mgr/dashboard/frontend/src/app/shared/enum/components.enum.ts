@@ -3,5 +3,7 @@ export enum Components {
   cephfs = 'CephFS',
   rbd = 'RBD',
   pool = 'Pool',
-  osd = 'OSD'
+  osd = 'OSD',
+  role = 'Role',
+  user = 'User'
 }

@@ -9,7 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "common/debug.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rados
@@ -57,7 +57,7 @@ void TestClassHandler::open_class(const std::string& name,
 }
 
 void TestClassHandler::open_all_classes() {
-  assert(m_class_handles.empty());
+  ceph_assert(m_class_handles.empty());
 
   const char* env = getenv("CEPH_LIB");
   std::string CEPH_LIB(env ? env : "lib");

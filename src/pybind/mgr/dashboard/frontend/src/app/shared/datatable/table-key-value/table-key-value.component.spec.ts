@@ -4,8 +4,8 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgxDatatableModule } from '@swimlane/ngx-datatable';
 
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { ComponentsModule } from '../../components/components.module';
-import { configureTestBed } from '../../unit-test-helper';
 import { TableComponent } from '../table/table.component';
 import { TableKeyValueComponent } from './table-key-value.component';
 
@@ -25,11 +25,6 @@ describe('TableKeyValueComponent', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
-    expect(component._convertValue).toBeTruthy();
-    expect(component._makePairs).toBeTruthy();
-    expect(component._makePairsFromObject).toBeTruthy();
-    expect(component._makePairsFromArray).toBeTruthy();
-    expect(component._insertFlattenObjects).toBeTruthy();
   });
 
   it('should make key value object pairs out of arrays with length two', () => {
@@ -90,9 +85,46 @@ describe('TableKeyValueComponent', () => {
     component.data = [['someKey', 0, 3]];
     expect(() => component.ngOnInit()).toThrowError('Wrong array format: [string, any][]');
     component.data = [{ somekey: 939, somethingElse: 'test' }];
-    expect(() => component.ngOnInit()).toThrowError(
-      'Wrong object array format: {key: string, value: any}[]'
-    );
+  });
+
+  describe('Class objects equal plain objects', () => {
+    class Example {
+      sth = 'something';
+      deep?: Example;
+      constructor(deep: boolean) {
+        if (deep) {
+          this.deep = new Example(false);
+        }
+      }
+    }
+
+    const classExample = new Example(true);
+    const objectExample = {
+      sth: 'something',
+      deep: {
+        sth: 'something'
+      }
+    };
+
+    const getTableData = (data) => {
+      component.data = data;
+      expect(() => component.ngOnInit()).not.toThrow();
+      return component.tableData;
+    };
+
+    const doesClassEqualsObject = (classData, objectData, dataLength) => {
+      const classTableData = getTableData(classData);
+      expect(classTableData).toEqual(getTableData(objectData));
+      expect(classTableData.length).toBe(dataLength);
+    };
+
+    it('should convert class objects the same way as plain objects', () => {
+      doesClassEqualsObject(classExample, objectExample, 1);
+      doesClassEqualsObject([classExample], [objectExample], 1);
+      component.renderObjects = true;
+      doesClassEqualsObject(classExample, objectExample, 2);
+      doesClassEqualsObject([classExample], [objectExample], 2);
+    });
   });
 
   it('tests _makePairs', () => {
@@ -121,13 +153,30 @@ describe('TableKeyValueComponent', () => {
     ]);
   });
 
-  it('tests _convertValue', () => {
+  describe('tests _convertValue', () => {
     const v = (value) => ({ key: 'sth', value: value });
-    expect(component._convertValue(v('something'))).toEqual(v('something'));
-    expect(component._convertValue(v([1, 2, 3]))).toEqual(v('1, 2, 3'));
-    expect(component._convertValue(v({ sth: 'something' }))).toBe(undefined);
-    component.renderObjects = true;
-    expect(component._convertValue(v({ sth: 'something' }))).toEqual(v({ sth: 'something' }));
+    const testConvertValue = (value, result) =>
+      expect(component._convertValue(v(value)).value).toBe(result);
+
+    it('should leave a string as it is', () => {
+      testConvertValue('something', 'something');
+    });
+
+    it('should leave an int as it is', () => {
+      testConvertValue(29, 29);
+    });
+
+    it('should convert arrays with any type to string', () => {
+      testConvertValue([1, 2, 3], '1, 2, 3');
+      testConvertValue([{ sth: 'something' }], '{"sth":"something"}');
+      testConvertValue([1, 'two', { 3: 'three' }], '1, two, {"3":"three"}');
+    });
+
+    it('should convert only allow objects if renderObjects is set to true', () => {
+      expect(component._convertValue(v({ sth: 'something' }))).toBe(undefined);
+      component.renderObjects = true;
+      expect(component._convertValue(v({ sth: 'something' }))).toEqual(v({ sth: 'something' }));
+    });
   });
 
   it('tests _insertFlattenObjects', () => {
@@ -196,6 +245,24 @@ describe('TableKeyValueComponent', () => {
         { key: 'sub3', value: 56 },
         { key: 'someKey', value: 0 }
       ]);
+    });
+  });
+
+  describe('subscribe fetchData', () => {
+    it('should not subscribe fetchData of table', () => {
+      component.ngOnInit();
+      expect(component.table.fetchData.observers.length).toBe(0);
+    });
+
+    it('should call fetchData', () => {
+      let called = false;
+      component.fetchData.subscribe(() => {
+        called = true;
+      });
+      component.ngOnInit();
+      expect(component.table.fetchData.observers.length).toBe(1);
+      component.table.fetchData.emit();
+      expect(called).toBeTruthy();
     });
   });
 });

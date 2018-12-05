@@ -11,6 +11,7 @@ import inspect
 import tempfile
 import threading
 import traceback
+import six
 import socket
 
 from . import common
@@ -20,16 +21,11 @@ from uuid import uuid4
 from pecan import jsonify, make_app
 from OpenSSL import crypto
 from pecan.rest import RestController
+from six import iteritems
 from werkzeug.serving import make_server, make_ssl_devcert
 
 from .hooks import ErrorHook
 from mgr_module import MgrModule, CommandResult
-
-
-try:
-    iteritems = dict.iteritems
-except:
-    iteritems = dict.items
 
 
 class CannotServe(Exception):
@@ -84,7 +80,7 @@ class CommandsRequest(object):
         # Gather the results (in parallel)
         results = []
         for index in range(len(commands)):
-            tag = '%s:%d' % (str(self.id), index)
+            tag = '%s:%s:%d' % (__name__, self.id, index)
 
             # Store the result
             result = CommandResult(tag)
@@ -223,7 +219,7 @@ class Module(MgrModule):
         {
             "cmd": "restful list-keys",
             "desc": "List all API keys",
-            "perm": "rw"
+            "perm": "r"
         },
         {
             "cmd": "restful create-self-signed-cert",
@@ -270,7 +266,7 @@ class Module(MgrModule):
     def refresh_keys(self):
         self.keys = {}
         rawkeys = self.get_store_prefix('keys/') or {}
-        for k, v in iteritems(rawkeys):
+        for k, v in six.iteritems(rawkeys):
             self.keys[k[5:]] = v  # strip of keys/ prefix
 
     def _serve(self):
@@ -365,22 +361,21 @@ class Module(MgrModule):
 
 
     def _notify(self, notify_type, tag):
-        if notify_type == "command":
-            # we can safely skip all the sequential commands
-            if tag == 'seq':
-                return
-
-            request = [x for x in self.requests if x.is_running(tag)]
-            if len(request) != 1:
-                self.log.warn("Unknown request '%s'" % str(tag))
-                return
-
-            request = request[0]
+        if notify_type != "command":
+            self.log.debug("Unhandled notification type '%s'", notify_type)
+            return
+        # we can safely skip all the sequential commands
+        if tag == 'seq':
+            return
+        try:
+            with self.requests_lock:
+                request = next(x for x in self.requests if x.is_running(tag))
             request.finish(tag)
             if request.is_ready():
                 request.next()
-        else:
-            self.log.debug("Unhandled notification type '%s'" % notify_type)
+        except StopIteration:
+            # the command was not issued by me
+            pass
 
 
     def create_self_signed_cert(self):
@@ -405,7 +400,7 @@ class Module(MgrModule):
         )
 
 
-    def handle_command(self, command):
+    def handle_command(self, inbuf, command):
         self.log.warn("Handling command: '%s'" % str(command))
         if command['prefix'] == "restful create-key":
             if command['key_name'] in self.keys:
@@ -589,8 +584,8 @@ class Module(MgrModule):
 
 
     def submit_request(self, _request, **kwargs):
-        request = CommandsRequest(_request)
         with self.requests_lock:
+            request = CommandsRequest(_request)
             self.requests.append(request)
         if kwargs.get('wait', 0):
             while not request.is_finished():
@@ -599,7 +594,7 @@ class Module(MgrModule):
 
 
     def run_command(self, command):
-        # tag with 'seq' so that we can ingore these in notify function
+        # tag with 'seq' so that we can ignore these in notify function
         result = CommandResult('seq')
 
         self.send_command(result, 'mon', '', json.dumps(command), 'seq')

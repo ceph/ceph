@@ -300,24 +300,26 @@ You can override these locations, but it is not recommended.
 Signatures
 ----------
 
-In Ceph Bobtail and subsequent versions, we prefer that Ceph authenticate all
-ongoing messages between the entities using the session key set up for that
-initial authentication. However, Argonaut and earlier Ceph daemons do not know
-how to perform ongoing message authentication. To maintain backward
-compatibility (e.g., running both Botbail and Argonaut daemons in the same
-cluster), message signing is **off** by default. If you are running Bobtail or
-later daemons exclusively, configure Ceph to require signatures.
+Ceph performs a signature check that provides some limited protection
+against messages being tampered with in flight (e.g., by a "man in the
+middle" attack).
 
 Like other parts of Ceph authentication, Ceph provides fine-grained control so
 you can enable/disable signatures for service messages between the client and
 Ceph, and you can enable/disable signatures for messages between Ceph daemons.
 
+Note that even with signatures enabled data is not encrypted in
+flight.
 
 ``cephx require signatures``
 
 :Description: If set to ``true``, Ceph requires signatures on all message
               traffic between the Ceph Client and the Ceph Storage Cluster, and
               between daemons comprising the Ceph Storage Cluster.
+
+	      Ceph Argonaut and Linux kernel versions prior to 3.19 do
+	      not support signatures; if such clients are in use this
+	      option can be turned off to allow them to connect.
 
 :Type: Boolean
 :Required: No
@@ -347,7 +349,7 @@ Ceph, and you can enable/disable signatures for messages between Ceph daemons.
 ``cephx sign messages``
 
 :Description: If the Ceph version supports message signing, Ceph will sign
-              all messages so they cannot be spoofed.
+              all messages so they are more difficult to spoof.
 
 :Type: Boolean
 :Default: ``true``
@@ -366,75 +368,10 @@ Time to Live
 :Default: ``60*60``
 
 
-Backward Compatibility
-======================
-
-For Cuttlefish and earlier releases, see `Cephx`_.
-
-In Ceph Argonaut v0.48 and earlier versions, if you enable ``cephx``
-authentication, Ceph only authenticates the initial communication between the
-client and daemon; Ceph does not authenticate the subsequent messages they send
-to each other, which has security implications. In Ceph Bobtail and subsequent
-versions, Ceph authenticates all ongoing messages between the entities using the
-session key set up for that initial authentication.
-
-We identified a backward compatibility issue between Argonaut v0.48 (and prior
-versions) and Bobtail (and subsequent versions). During testing, if you
-attempted  to use Argonaut (and earlier) daemons with Bobtail (and later)
-daemons, the Argonaut daemons did not know how to perform ongoing message
-authentication, while the Bobtail versions of the daemons insist on
-authenticating message traffic subsequent to the initial
-request/response--making it impossible for Argonaut (and prior) daemons to
-interoperate with Bobtail (and subsequent) daemons.
-
-We have addressed this potential problem by providing a means for Argonaut (and
-prior) systems to interact with Bobtail (and subsequent) systems. Here's how it
-works: by default, the newer systems will not insist on seeing signatures from
-older systems that do not know how to perform them, but will simply accept such
-messages without authenticating them. This new default behavior provides the
-advantage of allowing two different releases to interact. **We do not recommend
-this as a long term solution**. Allowing newer daemons to forgo ongoing
-authentication has the unfortunate security effect that an attacker with control
-of some of your machines or some access to your network can disable session
-security simply by claiming to be unable to sign messages.
-
-.. note:: Even if you don't actually run any old versions of Ceph,
-   the attacker may be able to force some messages to be accepted unsigned in the
-   default scenario. While running Cephx with the default scenario, Ceph still
-   authenticates the initial communication, but you lose desirable session security.
-
-If you know that you are not running older versions of Ceph, or you are willing
-to accept that old servers and new servers will not be able to interoperate, you
-can eliminate this security risk.  If you do so, any Ceph system that is new
-enough to support session authentication and that has Cephx enabled will reject
-unsigned messages.  To preclude new servers from interacting with old servers,
-include the following in the ``[global]`` section of your `Ceph
-configuration`_ file directly below the line that specifies the use of Cephx
-for authentication::
-
-	cephx require signatures = true    ; everywhere possible
-
-You can also selectively require signatures for cluster internal
-communications only, separate from client-facing service::
-
-	cephx cluster require signatures = true    ; for cluster-internal communication
-	cephx service require signatures = true    ; for client-facing service
-
-An option to make a client require signatures from the cluster is not
-yet implemented.
-
-**We recommend migrating all daemons to the newer versions and enabling the
-foregoing flag** at the nearest practical time so that you may avail yourself
-of the enhanced authentication.
-
-.. note:: Ceph kernel modules do not support signatures yet.
-
-
 .. _Storage Cluster Quick Start: ../../../start/quick-ceph-deploy/
 .. _Monitor Bootstrapping: ../../../install/manual-deployment#monitor-bootstrapping
 .. _Operating a Cluster: ../../operations/operating
 .. _Manual Deployment: ../../../install/manual-deployment
-.. _Cephx: http://docs.ceph.com/docs/cuttlefish/rados/configuration/auth-config-ref/
 .. _Ceph configuration: ../ceph-conf
 .. _Create an Admin Host: ../../deployment/ceph-deploy-admin
 .. _Architecture - High Availability Authentication: ../../../architecture#high-availability-authentication

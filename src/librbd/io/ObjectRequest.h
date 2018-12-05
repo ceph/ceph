@@ -74,7 +74,7 @@ public:
   virtual const char *get_op_type() const = 0;
 
 protected:
-  bool compute_parent_extents(Extents *parent_extents);
+  bool compute_parent_extents(Extents *parent_extents, bool read_request);
 
   ImageCtxT *m_ictx;
   std::string m_oid;
@@ -244,6 +244,9 @@ private:
   bool m_object_may_exist = false;
   bool m_copyup_enabled = true;
   bool m_copyup_in_progress = false;
+  bool m_guarding_migration_write = false;
+
+  void compute_parent_info();
 
   void pre_write_object_map_update();
   void handle_pre_write_object_map_update(int r);
@@ -327,7 +330,7 @@ public:
     case DISCARD_ACTION_ZERO:
       return "zero";
     }
-    assert(false);
+    ceph_abort();
     return nullptr;
   }
 
@@ -371,7 +374,7 @@ protected:
       wr->zero(this->m_object_off, this->m_object_len);
       break;
     default:
-      assert(false);
+      ceph_abort();
       break;
     }
   }

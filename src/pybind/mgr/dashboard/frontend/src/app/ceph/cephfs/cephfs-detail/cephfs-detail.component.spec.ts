@@ -1,54 +1,43 @@
+import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { Component, Input } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ChartsModule } from 'ng2-charts/ng2-charts';
-import { BsDropdownModule, ProgressbarModule, TabsModule } from 'ngx-bootstrap';
-import { Observable } from 'rxjs';
+import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
+import { ProgressbarModule } from 'ngx-bootstrap/progressbar';
+import { TabsModule } from 'ngx-bootstrap/tabs';
 
-import { CephfsService } from '../../../shared/api/cephfs.service';
+import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../shared/shared.module';
-import { configureTestBed } from '../../../shared/unit-test-helper';
 import { CephfsDetailComponent } from './cephfs-detail.component';
 
 @Component({ selector: 'cd-cephfs-chart', template: '' })
 class CephfsChartStubComponent {
-  @Input() mdsCounter: any;
+  @Input()
+  mdsCounter: any;
 }
 
 @Component({ selector: 'cd-cephfs-clients', template: '' })
 class CephfsClientsStubComponent {
-  @Input() mdsCounter: any;
+  @Input()
+  mdsCounter: any;
 }
 
 describe('CephfsDetailComponent', () => {
   let component: CephfsDetailComponent;
   let fixture: ComponentFixture<CephfsDetailComponent>;
 
-  const fakeFilesystemService = {
-    getCephfs: (id) => {
-      return Observable.create((observer) => {
-        return () => console.log('disposed');
-      });
-    },
-    getMdsCounters: (id) => {
-      return Observable.create((observer) => {
-        return () => console.log('disposed');
-      });
-    }
-  };
-
   configureTestBed({
     imports: [
       SharedModule,
-      ChartsModule,
       RouterTestingModule,
       BsDropdownModule.forRoot(),
       ProgressbarModule.forRoot(),
-      TabsModule.forRoot()
+      TabsModule.forRoot(),
+      HttpClientTestingModule
     ],
     declarations: [CephfsDetailComponent, CephfsChartStubComponent, CephfsClientsStubComponent],
-    providers: [{ provide: CephfsService, useValue: fakeFilesystemService }]
+    providers: i18nProviders
   });
 
   beforeEach(() => {

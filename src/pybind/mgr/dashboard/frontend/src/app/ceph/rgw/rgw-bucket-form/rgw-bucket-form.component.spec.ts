@@ -5,10 +5,9 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { of as observableOf } from 'rxjs';
 
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { RgwBucketService } from '../../../shared/api/rgw-bucket.service';
-import { RgwUserService } from '../../../shared/api/rgw-user.service';
 import { SharedModule } from '../../../shared/shared.module';
-import { configureTestBed } from '../../../shared/unit-test-helper';
 import { RgwBucketFormComponent } from './rgw-bucket-form.component';
 
 describe('RgwBucketFormComponent', () => {
@@ -25,7 +24,7 @@ describe('RgwBucketFormComponent', () => {
   configureTestBed({
     declarations: [RgwBucketFormComponent],
     imports: [HttpClientTestingModule, ReactiveFormsModule, RouterTestingModule, SharedModule],
-    providers: [RgwUserService, { provide: RgwBucketService, useClass: MockRgwBucketService }]
+    providers: [{ provide: RgwBucketService, useClass: MockRgwBucketService }]
   });
 
   beforeEach(() => {

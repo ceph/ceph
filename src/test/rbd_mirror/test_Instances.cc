@@ -7,6 +7,7 @@
 #include "tools/rbd_mirror/InstanceWatcher.h"
 #include "tools/rbd_mirror/Instances.h"
 #include "tools/rbd_mirror/Threads.h"
+#include "common/Cond.h"
 
 #include "test/librados/test.h"
 #include "gtest/gtest.h"
@@ -35,7 +36,7 @@ public:
     void handle(const InstanceIds& instance_ids, Instance* instance) {
       std::unique_lock<std::mutex> locker(lock);
       for (auto& instance_id : instance_ids) {
-        assert(instance->count > 0);
+        ceph_assert(instance->count > 0);
         --instance->count;
 
         instance->ids.insert(instance_id);

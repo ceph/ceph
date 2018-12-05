@@ -49,6 +49,8 @@
 #include "rgw_auth_s3.h"
 #include "rgw_lib.h"
 #include "rgw_lib_frontend.h"
+#include "rgw_http_client.h"
+#include "rgw_http_client_curl.h"
 
 #include <errno.h>
 #include <thread>
@@ -253,7 +255,7 @@ namespace rgw {
     /* XXX authorize does less here then in the REST path, e.g.,
      * the user's info is cached, but still incomplete */
     ldpp_dout(s, 2) << "authorizing" << dendl;
-    ret = req->authorize();
+    ret = req->authorize(op);
     if (ret < 0) {
       dout(10) << "failed to authorize request" << dendl;
       abort_req(s, op, ret);
@@ -368,7 +370,7 @@ namespace rgw {
     /* XXX authorize does less here then in the REST path, e.g.,
      * the user's info is cached, but still incomplete */
     ldpp_dout(s, 2) << "authorizing" << dendl;
-    ret = req->authorize();
+    ret = req->authorize(op);
     if (ret < 0) {
       dout(10) << "failed to authorize request" << dendl;
       abort_req(s, op, ret);
@@ -451,7 +453,7 @@ namespace rgw {
   int RGWLibFrontend::init()
   {
     pprocess = new RGWLibProcess(g_ceph_context, &env,
-				 g_conf->rgw_thread_pool_size, conf);
+				 g_conf()->rgw_thread_pool_size, conf);
     return 0;
   }
 
@@ -481,7 +483,7 @@ namespace rgw {
     SafeTimer init_timer(g_ceph_context, mutex);
     init_timer.init();
     mutex.Lock();
-    init_timer.add_event_after(g_conf->rgw_init_timeout, new C_InitTimeout);
+    init_timer.add_event_after(g_conf()->rgw_init_timeout, new C_InitTimeout);
     mutex.Unlock();
 
     common_init_finish(g_ceph_context);
@@ -489,13 +491,15 @@ namespace rgw {
     rgw_tools_init(g_ceph_context);
 
     rgw_init_resolver();
+    rgw::curl::setup_curl(boost::none);
+    rgw_http_client_init(g_ceph_context);
 
     store = RGWStoreManager::get_storage(g_ceph_context,
-					 g_conf->rgw_enable_gc_threads,
-					 g_conf->rgw_enable_lc_threads,
-					 g_conf->rgw_enable_quota_threads,
-					 g_conf->rgw_run_sync_thread,
-					 g_conf->rgw_dynamic_resharding);
+					 g_conf()->rgw_enable_gc_threads,
+					 g_conf()->rgw_enable_lc_threads,
+					 g_conf()->rgw_enable_quota_threads,
+					 g_conf()->rgw_run_sync_thread,
+					 g_conf()->rgw_dynamic_resharding);
 
     if (!store) {
       mutex.Lock();
@@ -509,7 +513,7 @@ namespace rgw {
 
     r = rgw_perf_start(g_ceph_context);
 
-    rgw_rest_init(g_ceph_context, store, store->get_zonegroup());
+    rgw_rest_init(g_ceph_context, store, store->svc.zone->get_zonegroup());
 
     mutex.Lock();
     init_timer.cancel_all_events();
@@ -538,9 +542,9 @@ namespace rgw {
 
     // XXX ex-RGWRESTMgr_lib, mgr->set_logging(true)
 
-    if (!g_conf->rgw_ops_log_socket_path.empty()) {
-      olog = new OpsLogSocket(g_ceph_context, g_conf->rgw_ops_log_data_backlog);
-      olog->init(g_conf->rgw_ops_log_socket_path);
+    if (!g_conf()->rgw_ops_log_socket_path.empty()) {
+      olog = new OpsLogSocket(g_ceph_context, g_conf()->rgw_ops_log_data_backlog);
+      olog->init(g_conf()->rgw_ops_log_socket_path);
     }
 
     int port = 80;
@@ -598,6 +602,8 @@ namespace rgw {
 
     rgw_tools_cleanup();
     rgw_shutdown_resolver();
+    rgw_http_client_cleanup();
+    rgw::curl::cleanup_curl();
 
     rgw_perf_stop(g_ceph_context);
 
@@ -645,7 +651,7 @@ namespace rgw {
     return ret;
   } /* RGWLibRequest::read_permissions */
 
-  int RGWHandler_Lib::authorize()
+  int RGWHandler_Lib::authorize(const DoutPrefixProvider *dpp)
   {
     /* TODO: handle
      *  1. subusers

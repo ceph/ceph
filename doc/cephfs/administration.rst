@@ -1,3 +1,4 @@
+.. _cephfs-administration:
 
 CephFS Administrative commands
 ==============================
@@ -129,7 +130,7 @@ of three forms:
     <fs_id>:<rank>
     <rank>
 
-Comamnds to manipulate MDS daemons:
+Commands to manipulate MDS daemons:
 
 ::
 

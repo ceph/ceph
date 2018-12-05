@@ -70,21 +70,23 @@ add_library(cls_lock_client STATIC ${cls_lock_client_srcs})
 
 
 # cls_otp
-set(cls_otp_srcs otp/cls_otp.cc)
-add_library(cls_otp SHARED ${cls_otp_srcs})
-target_link_libraries(cls_otp OATH::OATH)
-set_target_properties(cls_otp PROPERTIES
-  VERSION "1.0.0"
-  SOVERSION "1"
-  INSTALL_RPATH ""
-  CXX_VISIBILITY_PRESET hidden)
-install(TARGETS cls_otp DESTINATION ${cls_dir})
+if (WITH_RADOSGW)
+  set(cls_otp_srcs otp/cls_otp.cc)
+  add_library(cls_otp SHARED ${cls_otp_srcs})
+  target_link_libraries(cls_otp OATH::OATH)
+  set_target_properties(cls_otp PROPERTIES
+    VERSION "1.0.0"
+    SOVERSION "1"
+    INSTALL_RPATH ""
+    CXX_VISIBILITY_PRESET hidden)
+  install(TARGETS cls_otp DESTINATION ${cls_dir})
 
-set(cls_otp_client_srcs
-  otp/cls_otp_client.cc
-  otp/cls_otp_types.cc
-  )
-add_library(cls_otp_client STATIC ${cls_otp_client_srcs})
+  set(cls_otp_client_srcs
+    otp/cls_otp_client.cc
+    otp/cls_otp_types.cc
+    )
+  add_library(cls_otp_client STATIC ${cls_otp_client_srcs})
+endif (WITH_RADOSGW)
 
 # cls_refcount
 set(cls_refcount_srcs
@@ -134,20 +136,6 @@ install(TARGETS cls_log DESTINATION ${cls_dir})
 
 set(cls_log_client_srcs log/cls_log_client.cc)
 add_library(cls_log_client STATIC ${cls_log_client_srcs})
-
-
-# cls_statelog
-set(cls_statelog_srcs statelog/cls_statelog.cc)
-add_library(cls_statelog SHARED ${cls_statelog_srcs})
-set_target_properties(cls_statelog PROPERTIES
-  VERSION "1.0.0"
-  SOVERSION "1"
-  INSTALL_RPATH ""
-  CXX_VISIBILITY_PRESET hidden)
-install(TARGETS cls_statelog DESTINATION ${cls_dir})
-
-set(cls_statelog_client_srcs statelog/cls_statelog_client.cc)
-add_library(cls_statelog_client STATIC ${cls_statelog_client_srcs})
 
 
 # cls_timeindex
@@ -260,3 +248,17 @@ set(cls_lua_client_srcs
     lua/cls_lua_client.cc)
 add_library(cls_lua_client STATIC ${cls_lua_client_srcs})
 
+# cls_cas
+set(cls_cas_srcs 
+  cas/cls_cas.cc)
+add_library(cls_cas SHARED ${cls_cas_srcs})
+set_target_properties(cls_cas PROPERTIES
+  VERSION "1.0.0"
+  SOVERSION "1"
+  INSTALL_RPATH ""
+  CXX_VISIBILITY_PRESET hidden)
+install(TARGETS cls_cas DESTINATION ${cls_dir})
+
+set(cls_cas_client_srcs
+  cas/cls_cas_client.cc)
+add_library(cls_cas_client STATIC ${cls_cas_client_srcs})

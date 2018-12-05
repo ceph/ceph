@@ -37,6 +37,8 @@ class JournalTool : public MDSUtility
     // Bit hacky, use this `rank` member to control behaviour of the
     // various main_ functions.
     mds_rank_t rank;
+    // when set, generate per rank dump file path
+    bool all_ranks = false;
    
     std::string type;
 
@@ -50,7 +52,7 @@ class JournalTool : public MDSUtility
 
     // Journal operations
     int journal_inspect();
-    int journal_export(std::string const &path, bool import);
+    int journal_export(std::string const &path, bool import, bool force);
     int journal_reset(bool hard);
 
     // Header operations
@@ -82,6 +84,14 @@ class JournalTool : public MDSUtility
 
     //validate type
     int validate_type(const std::string &type);
+
+    // generate output file path for dump/export
+    std::string gen_dump_file_path(const std::string &prefix);
+
+    // check if an operation (mode, command) is safe to be
+    // executed on all ranks.
+    bool can_execute_for_all_ranks(const std::string &mode,
+                                   const std::string &command);
   public:
     static void usage();
     JournalTool() :

@@ -121,6 +121,7 @@ ec=0
 hitset=""
 overwrite_conf=1
 cephx=1 #turn cephx on by default
+gssapi_authx=0
 cache=""
 if [ `uname` = FreeBSD ]; then
     objectstore="filestore"
@@ -130,9 +131,12 @@ fi
 rgw_frontend="civetweb"
 rgw_compression=""
 lockdep=${LOCKDEP:-1}
+spdk_enabled=0 #disable SPDK by default
+pci_id=""
 
 with_mgr_dashboard=true
-if [[ "$(get_cmake_variable WITH_MGR_DASHBOARD_FRONTEND)" != "ON" ]]; then
+if [[ "$(get_cmake_variable WITH_MGR_DASHBOARD_FRONTEND)" != "ON" ]] ||
+   [[ "$(get_cmake_variable WITH_RBD)" != "ON" ]]; then
   echo "ceph-mgr dashboard not built - disabling."
   with_mgr_dashboard=false
 fi
@@ -166,6 +170,8 @@ usage=$usage"\t-m ip:port\t\tspecify monitor address\n"
 usage=$usage"\t-k keep old configuration files\n"
 usage=$usage"\t-x enable cephx (on by default)\n"
 usage=$usage"\t-X disable cephx\n"
+usage=$usage"\t-g --gssapi enable Kerberos/GSSApi authentication\n"
+usage=$usage"\t-G disable Kerberos/GSSApi authentication\n"
 usage=$usage"\t--hitset <pool> <hit_set_type>: enable hitset tracking\n"
 usage=$usage"\t-e : create an erasure pool\n";
 usage=$usage"\t-o config\t\t add extra config parameters to all sections\n"
@@ -181,6 +187,7 @@ usage=$usage"\t--short: short object names only; necessary for ext4 dev\n"
 usage=$usage"\t--nolockdep disable lockdep\n"
 usage=$usage"\t--multimds <count> allow multimds with maximum active count\n"
 usage=$usage"\t--without-dashboard: do not run using mgr dashboard\n"
+usage=$usage"\t--bluestore-spdk <vendor>:<device>: enable SPDK and specify the PCI-ID of the NVME device\n"
 
 usage_exit() {
 	printf "$usage"
@@ -286,6 +293,14 @@ case $1 in
     -X )
 	    cephx=0
 	    ;;
+    
+    -g | --gssapi)
+	    gssapi_authx=1 
+	    ;;
+    -G)
+	    gssapi_authx=0 
+	    ;;
+
     -k )
 	    if [ ! -r $conf_fn ]; then
 	        echo "cannot use old configuration: $conf_fn not readable." >&2
@@ -332,6 +347,12 @@ case $1 in
         ;;
     --without-dashboard)
         with_mgr_dashboard=false
+        ;;
+    --bluestore-spdk )
+        [ -z "$2" ] && usage_exit
+        pci_id="$2"
+        spdk_enabled=1
+        shift
         ;;
     * )
 	    usage_exit
@@ -425,6 +446,10 @@ wconf() {
 	fi
 }
 
+get_pci_selector() {
+    lspci -mm -n -D -d $pci_id | cut -d' ' -f1
+}
+
 prepare_conf() {
     local DAEMONOPTS="
         log file = $CEPH_OUT_DIR/\$name.log
@@ -434,7 +459,7 @@ prepare_conf() {
         heartbeat file = $CEPH_OUT_DIR/\$name.heartbeat
 "
 
-    local mgr_modules="restful status balancer iostat"
+    local mgr_modules="restful iostat"
     if $with_mgr_dashboard; then
       mgr_modules="dashboard $mgr_modules"
     fi
@@ -458,8 +483,10 @@ prepare_conf() {
         plugin dir = $CEPH_LIB
         filestore fd cache size = 32
         run dir = $CEPH_OUT_DIR
+	crash dir = $CEPH_OUT_DIR
         enable experimental unrecoverable data corrupting features = *
 	osd_crush_chooseleaf_type = 0
+	debug asok assert abort = true
 $extra_conf
 EOF
 	if [ "$lockdep" -eq 1 ] ; then
@@ -467,7 +494,20 @@ EOF
         lockdep = true
 EOF
 	fi
-	if [ "$cephx" -ne 1 ] ; then
+	if [ "$cephx" -eq 1 ] ; then
+		wconf <<EOF
+	auth cluster required = cephx
+	auth service required = cephx
+	auth client required = cephx
+EOF
+	elif [ "$gssapi_authx" -eq 1 ] ; then
+		wconf <<EOF
+	auth cluster required = gss
+	auth service required = gss
+	auth client required = gss
+	gss ktab client file = $CEPH_DEV_DIR/gss_\$name.keytab
+EOF
+	else 
 		wconf <<EOF
 	auth cluster required = none
 	auth service required = none
@@ -478,6 +518,29 @@ EOF
 		COSDSHORT="        osd max object name len = 460
         osd max object namespace len = 64"
 	fi
+        if [ "$objectstore" == "bluestore" ]; then
+            if [ "$spdk_enabled" -eq 1 ]; then
+                if [ "$(get_pci_selector)" == "" ]; then
+                    echo "Not find the specified NVME device, please check."
+                    exit
+                fi
+                BLUESTORE_OPTS="        bluestore_block_db_path = \"\"
+        bluestore_block_db_size = 0
+        bluestore_block_db_create = false
+        bluestore_block_wal_path = \"\"
+        bluestore_block_wal_size = 0
+        bluestore_block_wal_create = false
+        bluestore_spdk_mem = 2048
+        bluestore_block_path = spdk:$(get_pci_selector)"
+            else
+                BLUESTORE_OPTS="        bluestore block db path = $CEPH_DEV_DIR/osd\$id/block.db.file
+        bluestore block db size = 67108864
+        bluestore block db create = true
+        bluestore block wal path = $CEPH_DEV_DIR/osd\$id/block.wal.file
+        bluestore block wal size = 1048576000
+        bluestore block wal create = true"
+            fi
+        fi
 	wconf <<EOF
 [client]
         keyring = $keyring_fn
@@ -486,6 +549,7 @@ EOF
 $extra_conf
 [client.rgw]
         rgw frontends = $rgw_frontend port=$CEPH_RGW_PORT
+        admin socket = ${CEPH_OUT_DIR}/radosgw.${CEPH_RGW_PORT}.asok
         ; needed for s3tests
         rgw crypt s3 kms encryption keys = testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
         rgw crypt require ssl = false
@@ -521,12 +585,7 @@ $DAEMONOPTS
         filestore wbthrottle btrfs inodes hard limit = 30
         bluestore fsck on mount = true
         bluestore block create = true
-	bluestore block db path = $CEPH_DEV_DIR/osd\$id/block.db.file
-        bluestore block db size = 67108864
-        bluestore block db create = true
-	bluestore block wal path = $CEPH_DEV_DIR/osd\$id/block.wal.file
-        bluestore block wal size = 1048576000
-        bluestore block wal create = true
+$BLUESTORE_OPTS
 
         ; kstore
         kstore fsck on mount = true
@@ -569,14 +628,14 @@ start_mon() {
 		fi
 
 		prun $SUDO "$CEPH_BIN/ceph-authtool" --create-keyring --gen-key --name=mon. "$keyring_fn" --cap mon 'allow *'
-		prun $SUDO "$CEPH_BIN/ceph-authtool" --gen-key --name=client.admin --set-uid=0 \
+		prun $SUDO "$CEPH_BIN/ceph-authtool" --gen-key --name=client.admin \
 			--cap mon 'allow *' \
 			--cap osd 'allow *' \
 			--cap mds 'allow *' \
 			--cap mgr 'allow *' \
 			"$keyring_fn"
 
-		prun $SUDO "$CEPH_BIN/ceph-authtool" --gen-key --name=client.fs --set-uid=0 \
+		prun $SUDO "$CEPH_BIN/ceph-authtool" --gen-key --name=client.fs\
 		   --cap mon 'allow r' \
 			--cap osd 'allow rw tag cephfs data=*' \
 			--cap mds 'allow rwp' \
@@ -676,30 +735,30 @@ start_mgr() {
             key_fn=$CEPH_DEV_DIR/mgr.$name/keyring
             $SUDO $CEPH_BIN/ceph-authtool --create-keyring --gen-key --name=mgr.$name $key_fn
             ceph_adm -i $key_fn auth add mgr.$name mon 'allow profile mgr' mds 'allow *' osd 'allow *'
-        fi
 
-        wconf <<EOF
+            wconf <<EOF
 [mgr.$name]
         host = $HOSTNAME
 EOF
 
-        if $with_mgr_dashboard ; then
-            ceph_adm config set mgr mgr/dashboard/$name/server_port $MGR_PORT
-            if [ $mgr -eq 1 ]; then
-                DASH_URLS="https://$IP:$MGR_PORT"
-            else
-                DASH_URLS+=", https://$IP:$MGR_PORT"
+            if $with_mgr_dashboard ; then
+                ceph_adm config set mgr mgr/dashboard/$name/server_port $MGR_PORT
+                if [ $mgr -eq 1 ]; then
+                    DASH_URLS="https://$IP:$MGR_PORT"
+                else
+                    DASH_URLS+=", https://$IP:$MGR_PORT"
+                fi
             fi
-        fi
-	MGR_PORT=$(($MGR_PORT + 1000))
+	    MGR_PORT=$(($MGR_PORT + 1000))
 
-	ceph_adm config set mgr mgr/restful/$name/server_port $MGR_PORT
-        if [ $mgr -eq 1 ]; then
-            RESTFUL_URLS="https://$IP:$MGR_PORT"
-        else
-            RESTFUL_URLS+=", https://$IP:$MGR_PORT"
+	    ceph_adm config set mgr mgr/restful/$name/server_port $MGR_PORT
+            if [ $mgr -eq 1 ]; then
+                RESTFUL_URLS="https://$IP:$MGR_PORT"
+            else
+                RESTFUL_URLS+=", https://$IP:$MGR_PORT"
+            fi
+	    MGR_PORT=$(($MGR_PORT + 1000))
         fi
-	MGR_PORT=$(($MGR_PORT + 1000))
 
         echo "Starting mgr.${name}"
         run 'mgr' $CEPH_BIN/ceph-mgr -i $name $ARGS
@@ -707,22 +766,23 @@ EOF
 
     # use tell mgr here because the first mgr might not have activated yet
     # to register the python module commands.
-
-    # setting login credentials for dashboard
-    if $with_mgr_dashboard; then
-        ceph_adm tell mgr dashboard set-login-credentials admin admin
-        if ! ceph_adm tell mgr dashboard create-self-signed-cert;  then
-            echo dashboard module not working correctly!
+    if [ "$new" -eq 1 ]; then
+        # setting login credentials for dashboard
+        if $with_mgr_dashboard; then
+            ceph_adm tell mgr dashboard ac-user-create admin admin administrator
+            if ! ceph_adm tell mgr dashboard create-self-signed-cert;  then
+                echo dashboard module not working correctly!
+            fi
         fi
-    fi
 
-    if ceph_adm tell mgr restful create-self-signed-cert; then
-        SF=`mktemp`
-        ceph_adm restful create-key admin -o $SF
-        RESTFUL_SECRET=`cat $SF`
-        rm $SF
-    else 
-        echo MGR Restful is not working, perhaps the package is not installed?
+        if ceph_adm tell mgr restful create-self-signed-cert; then
+            SF=`mktemp`
+            ceph_adm restful create-key admin -o $SF
+            RESTFUL_SECRET=`cat $SF`
+            rm $SF
+        else
+            echo MGR Restful is not working, perhaps the package is not installed?
+        fi
     fi
 }
 
@@ -779,10 +839,8 @@ EOF
             local fs=0
             for name in a b c d e f g h i j k l m n o p
             do
-                ceph_adm osd pool create "cephfs_data_${name}" 8
-                ceph_adm osd pool create "cephfs_metadata_${name}" 8
-                ceph_adm fs new "cephfs_${name}" "cephfs_metadata_${name}" "cephfs_data_${name}"
-					 ceph_adm fs authorize "cephfs_${name}" "client.fs_${name}" / rwp
+		ceph_adm fs volume create ${name}
+		ceph_adm fs authorize ${name} "client.fs_${name}" / rwp
                 fs=$(($fs + 1))
                 [ $fs -eq $CEPH_NUM_FS ] && break
             done
@@ -1099,13 +1157,15 @@ fi
 echo "started.  stop.sh to stop.  see out/* (e.g. 'tail -f out/????') for debug output."
 
 echo ""
-if $with_mgr_dashboard; then
-    echo "dashboard urls: $DASH_URLS"
-    echo "  w/ user/pass: admin / admin"
+if [ "$new" -eq 1 ]; then
+    if $with_mgr_dashboard; then
+        echo "dashboard urls: $DASH_URLS"
+        echo "  w/ user/pass: admin / admin"
+    fi
+    echo "restful urls: $RESTFUL_URLS"
+    echo "  w/ user/pass: admin / $RESTFUL_SECRET"
+    echo ""
 fi
-echo "restful urls: $RESTFUL_URLS"
-echo "  w/ user/pass: admin / $RESTFUL_SECRET"
-echo ""
 echo ""
 echo "export PYTHONPATH=./pybind:$PYTHONPATH"
 echo "export LD_LIBRARY_PATH=$CEPH_LIB"

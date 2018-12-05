@@ -51,7 +51,7 @@ protected:
   typedef std::map<std::string, std::set<std::string> > InstanceToImageMap;
 
   bool is_dead_instance(const std::string instance_id) {
-    assert(m_map_lock.is_locked());
+    ceph_assert(m_map_lock.is_locked());
     return m_dead_instances.find(instance_id) != m_dead_instances.end();
   }
 
@@ -65,7 +65,6 @@ protected:
   // shuffle images when instances are added/removed
   virtual void do_shuffle_add_instances(
       const InstanceToImageMap& map, size_t image_count,
-      const std::vector<std::string> &instance_ids,
       std::set<std::string> *remap_global_image_ids) = 0;
 
 private:

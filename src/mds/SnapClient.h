@@ -19,8 +19,8 @@
 
 #include "MDSTableClient.h"
 #include "snap.h"
+#include "MDSContext.h"
 
-class MDSInternalContextBase;
 class MDSRank;
 class LogSegment;
 
@@ -33,7 +33,7 @@ class SnapClient : public MDSTableClient {
 
   set<version_t> committing_tids;
 
-  map<version_t, std::list<MDSInternalContextBase*> > waiting_for_version;
+  map<version_t, MDSInternalContextBase::vec > waiting_for_version;
 
   uint64_t sync_reqid;
   bool synced;
@@ -45,8 +45,8 @@ public:
     sync_reqid(0), synced(false) {}
 
   void resend_queries() override;
-  void handle_query_result(MMDSTableRequest *m) override;
-  void handle_notify_prep(MMDSTableRequest *m) override;
+  void handle_query_result(const MMDSTableRequest::const_ref &m) override;
+  void handle_notify_prep(const MMDSTableRequest::const_ref &m) override;
   void notify_commit(version_t tid) override;
 
   void prepare_create(inodeno_t dirino, std::string_view name, utime_t stamp,
@@ -96,7 +96,7 @@ public:
 
   bool is_synced() const { return synced; }
   void wait_for_sync(MDSInternalContextBase *c) {
-    assert(!synced);
+    ceph_assert(!synced);
     waiting_for_version[std::max<version_t>(cached_version, 1)].push_back(c);
   }
 

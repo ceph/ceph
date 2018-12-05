@@ -28,7 +28,7 @@ struct Journal<librbd::MockTestImageCtx> {
   static Journal *s_instance;
   static void is_tag_owner(librbd::MockTestImageCtx *, bool *is_primary,
                            Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->is_tag_owner(is_primary, on_finish);
   }
 
@@ -49,7 +49,7 @@ struct MirroringWatcher<librbd::MockTestImageCtx> {
                                    const std::string &image_id,
                                    const std::string &global_image_id,
                                    Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->notify_image_updated(mirror_image_state, image_id,
                                      global_image_id, on_finish);
   }
@@ -74,7 +74,7 @@ struct PromoteRequest<librbd::MockTestImageCtx> {
   static PromoteRequest *s_instance;
   static PromoteRequest *create(librbd::MockTestImageCtx *, bool force,
                                 Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -195,7 +195,7 @@ public:
 
   void expect_snap_remove(MockTestImageCtx &mock_image_ctx,
                           const std::string &snap_name, int r) {
-    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_remove(_, StrEq(snap_name), _))
+    EXPECT_CALL(*mock_image_ctx.operations, snap_remove(_, StrEq(snap_name), _))
       .WillOnce(WithArg<2>(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue)));
   }
 

@@ -8,7 +8,6 @@
 #include "librbd/deep_copy/Utils.h"
 #include "librbd/image/CloseRequest.h"
 #include "librbd/image/OpenRequest.h"
-#include "librbd/image/SetSnapRequest.h"
 #include "osdc/Striper.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -49,7 +48,7 @@ void ImageCopyRequest<I>::send() {
     return;
   }
 
-  send_open_parent();
+  send_object_copies();
 }
 
 template <typename I>
@@ -58,90 +57,6 @@ void ImageCopyRequest<I>::cancel() {
 
   ldout(m_cct, 20) << dendl;
   m_canceled = true;
-}
-
-template <typename I>
-void ImageCopyRequest<I>::send_open_parent() {
-  {
-    RWLock::RLocker snap_locker(m_src_image_ctx->snap_lock);
-    RWLock::RLocker parent_locker(m_src_image_ctx->parent_lock);
-
-    auto snap_id = m_snap_map.begin()->first;
-    auto parent_info = m_src_image_ctx->get_parent_info(snap_id);
-    if (parent_info == nullptr) {
-        ldout(m_cct, 20) << "could not find parent info for snap id " << snap_id
-                         << dendl;
-    } else {
-      m_parent_spec = parent_info->spec;
-    }
-  }
-
-  if (m_parent_spec.pool_id == -1) {
-    send_object_copies();
-    return;
-  }
-
-  ldout(m_cct, 20) << "pool_id=" << m_parent_spec.pool_id << ", image_id="
-                   << m_parent_spec.image_id << ", snap_id="
-                   << m_parent_spec.snap_id << dendl;
-
-  librados::Rados rados(m_src_image_ctx->md_ctx);
-  librados::IoCtx parent_io_ctx;
-  int r = rados.ioctx_create2(m_parent_spec.pool_id, parent_io_ctx);
-  if (r < 0) {
-    lderr(m_cct) << "failed to access parent pool (id=" << m_parent_spec.pool_id
-                 << "): " << cpp_strerror(r) << dendl;
-    finish(r);
-    return;
-  }
-
-  m_src_parent_image_ctx = I::create("", m_parent_spec.image_id, nullptr, parent_io_ctx, true);
-
-  auto ctx = create_context_callback<
-    ImageCopyRequest<I>, &ImageCopyRequest<I>::handle_open_parent>(this);
-
-  auto req = image::OpenRequest<I>::create(m_src_parent_image_ctx, false, ctx);
-  req->send();
-}
-
-template <typename I>
-void ImageCopyRequest<I>::handle_open_parent(int r) {
-  ldout(m_cct, 20) << "r=" << r << dendl;
-
-  if (r < 0) {
-    lderr(m_cct) << "failed to open parent: " << cpp_strerror(r) << dendl;
-    m_src_parent_image_ctx->destroy();
-    m_src_parent_image_ctx = nullptr;
-    finish(r);
-    return;
-  }
-
-  send_set_parent_snap();
-}
-
-template <typename I>
-void ImageCopyRequest<I>::send_set_parent_snap() {
-  ldout(m_cct, 20) << dendl;
-
-  auto ctx = create_context_callback<
-    ImageCopyRequest<I>, &ImageCopyRequest<I>::handle_set_parent_snap>(this);
-  auto req = image::SetSnapRequest<I>::create(*m_src_parent_image_ctx,
-                                              m_parent_spec.snap_id, ctx);
-  req->send();
-}
-
-template <typename I>
-void ImageCopyRequest<I>::handle_set_parent_snap(int r) {
-  ldout(m_cct, 20) << "r=" << r << dendl;
-
-  if (r < 0) {
-    lderr(m_cct) << "failed to set parent snap: " << cpp_strerror(r) << dendl;
-    m_ret_val = r;
-    send_close_parent();
-    return;
-  }
-
-  send_object_copies();
 }
 
 template <typename I>
@@ -167,8 +82,8 @@ void ImageCopyRequest<I>::send_object_copies() {
   bool complete;
   {
     Mutex::Locker locker(m_lock);
-    for (int i = 0;
-         i < m_cct->_conf->get_val<int64_t>("rbd_concurrent_management_ops");
+    for (uint64_t i = 0;
+         i < m_src_image_ctx->config.template get_val<uint64_t>("rbd_concurrent_management_ops");
          ++i) {
       send_next_object_copy();
       if (m_ret_val < 0 && m_current_ops == 0) {
@@ -179,13 +94,13 @@ void ImageCopyRequest<I>::send_object_copies() {
   }
 
   if (complete) {
-    send_close_parent();
+    finish(m_ret_val);
   }
 }
 
 template <typename I>
 void ImageCopyRequest<I>::send_next_object_copy() {
-  assert(m_lock.is_locked());
+  ceph_assert(m_lock.is_locked());
 
   if (m_canceled && m_ret_val == 0) {
     ldout(m_cct, 10) << "image copy canceled" << dendl;
@@ -207,8 +122,7 @@ void ImageCopyRequest<I>::send_next_object_copy() {
       handle_object_copy(ono, r);
     });
   ObjectCopyRequest<I> *req = ObjectCopyRequest<I>::create(
-      m_src_image_ctx, m_src_parent_image_ctx, m_dst_image_ctx, m_snap_map, ono,
-      m_flatten, ctx);
+      m_src_image_ctx, m_dst_image_ctx, m_snap_map, ono, m_flatten, ctx);
   req->send();
 }
 
@@ -219,10 +133,10 @@ void ImageCopyRequest<I>::handle_object_copy(uint64_t object_no, int r) {
   bool complete;
   {
     Mutex::Locker locker(m_lock);
-    assert(m_current_ops > 0);
+    ceph_assert(m_current_ops > 0);
     --m_current_ops;
 
-    if (r < 0) {
+    if (r < 0 && r != -ENOENT) {
       lderr(m_cct) << "object copy failed: " << cpp_strerror(r) << dendl;
       if (m_ret_val == 0) {
         m_ret_val = r;
@@ -238,7 +152,7 @@ void ImageCopyRequest<I>::handle_object_copy(uint64_t object_no, int r) {
         m_lock.Unlock();
         m_prog_ctx->update_progress(progress_object_no, m_end_object_no);
         m_lock.Lock();
-        assert(m_updating_progress);
+        ceph_assert(m_updating_progress);
         m_updating_progress = false;
       }
     }
@@ -248,40 +162,8 @@ void ImageCopyRequest<I>::handle_object_copy(uint64_t object_no, int r) {
   }
 
   if (complete) {
-    send_close_parent();
-  }
-}
-
-template <typename I>
-void ImageCopyRequest<I>::send_close_parent() {
-  if (m_src_parent_image_ctx == nullptr) {
     finish(m_ret_val);
-    return;
   }
-
-  ldout(m_cct, 20) << dendl;
-
-  auto ctx = create_context_callback<
-    ImageCopyRequest<I>, &ImageCopyRequest<I>::handle_close_parent>(this);
-  auto req = image::CloseRequest<I>::create(m_src_parent_image_ctx, ctx);
-  req->send();
-}
-
-template <typename I>
-void ImageCopyRequest<I>::handle_close_parent(int r) {
-  ldout(m_cct, 20) << "r=" << r << dendl;
-
-  if (r < 0) {
-    lderr(m_cct) << "failed to close parent: " << cpp_strerror(r) << dendl;
-    if (m_ret_val == 0) {
-      m_ret_val = r;
-    }
-  }
-
-  m_src_parent_image_ctx->destroy();
-  m_src_parent_image_ctx = nullptr;
-
-  finish(m_ret_val);
 }
 
 template <typename I>

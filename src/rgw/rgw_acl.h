@@ -303,7 +303,8 @@ public:
 
   virtual ~RGWAccessControlList() {}
 
-  uint32_t get_perm(const rgw::auth::Identity& auth_identity,
+  uint32_t get_perm(const DoutPrefixProvider* dpp,
+                    const rgw::auth::Identity& auth_identity,
                     uint32_t perm_mask);
   uint32_t get_group_perm(ACLGroupTypeEnum group, uint32_t perm_mask);
   uint32_t get_referer_perm(uint32_t current_perm,
@@ -413,11 +414,13 @@ public:
     acl.set_ctx(ctx);
   }
 
-  uint32_t get_perm(const rgw::auth::Identity& auth_identity,
+  uint32_t get_perm(const DoutPrefixProvider* dpp,
+                    const rgw::auth::Identity& auth_identity,
                     uint32_t perm_mask,
                     const char * http_referer);
   uint32_t get_group_perm(ACLGroupTypeEnum group, uint32_t perm_mask);
-  bool verify_permission(const rgw::auth::Identity& auth_identity,
+  bool verify_permission(const DoutPrefixProvider* dpp,
+                         const rgw::auth::Identity& auth_identity,
                          uint32_t user_perm_mask,
                          uint32_t perm,
                          const char * http_referer = nullptr);

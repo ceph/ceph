@@ -4,13 +4,16 @@
 #include "msg/Message.h"
 
 
-class MGatherCaps : public Message {
- public:
+class MGatherCaps : public MessageInstance<MGatherCaps> {
+public:
+  friend factory;
+
+
   inodeno_t ino;
 
+protected:
   MGatherCaps() :
-    Message(MSG_MDS_GATHERCAPS) {}
-private:
+    MessageInstance(MSG_MDS_GATHERCAPS) {}
   ~MGatherCaps() override {}
 
 public:

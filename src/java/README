@@ -39,7 +39,7 @@ Ant is used to run the unit test (apt-get install ant). For example:
 1. The tests depend on the compiled wrappers. If the wrappers are installed as
 part of a package (e.g. Debian package) then this should 'just work'. Ant will
 also look in the current directory for 'libcephfs.jar' and 'libcephfs-test.jar';
-and in ../.libs for the
+and in ../build/lib for the
 JNI library.  If all else fails, set the environment variables CEPHFS_JAR, and
 CEPHFS_JNI_LIB accordingly.
 

@@ -1,27 +1,18 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { BsDropdownModule, TabsModule } from 'ngx-bootstrap';
+import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { ProgressbarModule } from 'ngx-bootstrap/progressbar';
-import { Observable } from 'rxjs';
+import { TabsModule } from 'ngx-bootstrap/tabs';
 
-import { RbdMirroringService } from '../../../shared/api/rbd-mirroring.service';
+import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../shared/shared.module';
-import { configureTestBed } from '../../../shared/unit-test-helper';
 import { MirrorHealthColorPipe } from '../mirror-health-color.pipe';
 import { MirroringComponent } from './mirroring.component';
 
 describe('MirroringComponent', () => {
   let component: MirroringComponent;
   let fixture: ComponentFixture<MirroringComponent>;
-
-  const fakeService = {
-    get: (service_type: string, service_id: string) => {
-      return Observable.create((observer) => {
-        return () => console.log('disposed');
-      });
-    }
-  };
 
   configureTestBed({
     declarations: [MirroringComponent, MirrorHealthColorPipe],
@@ -32,7 +23,7 @@ describe('MirroringComponent', () => {
       ProgressbarModule.forRoot(),
       HttpClientTestingModule
     ],
-    providers: [{ provide: RbdMirroringService, useValue: fakeService }]
+    providers: i18nProviders
   });
 
   beforeEach(() => {

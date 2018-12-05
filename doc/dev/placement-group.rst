@@ -100,9 +100,6 @@ User-visible PG States
 *replay*
   the PG is waiting for clients to replay operations after an OSD crashed
 
-*splitting*
-  the PG is being split into multiple PGs (not functional as of 2012-02)
-
 *scrubbing*
   the PG is being checked for inconsistencies
 
@@ -149,3 +146,9 @@ User-visible PG States
 *remapped*
   the PG is temporarily mapped to a different set of OSDs from what
   CRUSH specified
+
+*premerge*
+  the PG is in a quiesced-IO state due to an impending PG merge.  That
+  happens when pg_num_pending < pg_num, and applies to the PGs with
+  pg_num_pending <= ps < pg_num as well as the corresponding peer PG
+  that it is merging with.

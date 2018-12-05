@@ -256,6 +256,7 @@ bool rgw_cls_bi_entry::get_info(cls_rgw_obj_key *key, uint8_t *category, rgw_buc
         accounted_stats->num_entries++;
         accounted_stats->total_size += entry.meta.accounted_size;
         accounted_stats->total_size_rounded += cls_rgw_get_rounded_size(entry.meta.accounted_size);
+        accounted_stats->actual_size += entry.meta.size;
         account = true;
       }
       break;
@@ -578,6 +579,54 @@ void rgw_bucket_dir::dump(Formatter *f) const
   f->close_section();
 }
 
+void rgw_usage_log_entry::dump(Formatter *f) const
+{
+  f->dump_string("owner", owner.to_str());
+  f->dump_string("payer", payer.to_str());
+  f->dump_string("bucket", bucket);
+  f->dump_unsigned("epoch", epoch);
+
+  f->open_object_section("total_usage");
+  f->dump_unsigned("bytes_sent", total_usage.bytes_sent);
+  f->dump_unsigned("bytes_received", total_usage.bytes_received);
+  f->dump_unsigned("ops", total_usage.ops);
+  f->dump_unsigned("successful_ops", total_usage.successful_ops);
+  f->close_section();
+
+  f->open_array_section("categories");
+  if (usage_map.size() > 0) {
+    map<string, rgw_usage_data>::const_iterator it;
+    for (it = usage_map.begin(); it != usage_map.end(); it++) {
+      const rgw_usage_data& total_usage = it->second;
+      f->open_object_section("entry");
+      f->dump_string("category", it->first.c_str());
+      f->dump_unsigned("bytes_sent", total_usage.bytes_sent);
+      f->dump_unsigned("bytes_received", total_usage.bytes_received);
+      f->dump_unsigned("ops", total_usage.ops);
+      f->dump_unsigned("successful_ops", total_usage.successful_ops);
+      f->close_section();
+    }
+  }
+  f->close_section();
+}
+
+void rgw_usage_log_entry::generate_test_instances(list<rgw_usage_log_entry *> &o)
+{
+  rgw_usage_log_entry *entry = new rgw_usage_log_entry;
+  rgw_usage_data usage_data{1024, 2048};
+  entry->owner = rgw_user("owner");
+  entry->payer = rgw_user("payer");
+  entry->bucket = "bucket";
+  entry->epoch = 1234;
+  entry->total_usage.bytes_sent = usage_data.bytes_sent;
+  entry->total_usage.bytes_received = usage_data.bytes_received;
+  entry->total_usage.ops = usage_data.ops;
+  entry->total_usage.successful_ops = usage_data.successful_ops;
+  entry->usage_map["get_obj"] = usage_data;
+  o.push_back(entry);
+  o.push_back(new rgw_usage_log_entry);
+}
+
 void cls_rgw_reshard_entry::generate_key(const string& tenant, const string& bucket_name, string *key)
 {
   *key = tenant + ":" + bucket_name;
@@ -616,7 +665,21 @@ void cls_rgw_reshard_entry::generate_test_instances(list<cls_rgw_reshard_entry*>
 
 void cls_rgw_bucket_instance_entry::dump(Formatter *f) const
 {
-  encode_json("reshard_status", (int)reshard_status, f);
+  string status_str;
+  switch(reshard_status) {
+    case CLS_RGW_RESHARD_NONE:
+      status_str= "none";
+      break;
+    case CLS_RGW_RESHARD_IN_PROGRESS:
+      status_str = "in-progress";
+      break;
+    case CLS_RGW_RESHARD_DONE:
+      status_str = "done";
+      break;
+    default:
+      status_str = "invalid";
+  }
+  encode_json("reshard_status", status_str, f);
   encode_json("new_bucket_instance_id", new_bucket_instance_id, f);
   encode_json("num_shards", num_shards, f);
 

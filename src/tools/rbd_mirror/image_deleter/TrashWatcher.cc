@@ -48,7 +48,7 @@ void TrashWatcher<I>::init(Context *on_finish) {
     Mutex::Locker locker(m_lock);
     m_on_init_finish = on_finish;
 
-    assert(!m_trash_list_in_progress);
+    ceph_assert(!m_trash_list_in_progress);
     m_trash_list_in_progress = true;
   }
 
@@ -63,7 +63,7 @@ void TrashWatcher<I>::shut_down(Context *on_finish) {
     Mutex::Locker timer_locker(m_threads->timer_lock);
     Mutex::Locker locker(m_lock);
 
-    assert(!m_shutting_down);
+    ceph_assert(!m_shutting_down);
     m_shutting_down = true;
     if (m_timer_ctx != nullptr) {
       m_threads->timer->cancel_event(m_timer_ctx);
@@ -112,7 +112,7 @@ void TrashWatcher<I>::create_trash() {
   dout(20) << dendl;
   {
     Mutex::Locker locker(m_lock);
-    assert(m_trash_list_in_progress);
+    ceph_assert(m_trash_list_in_progress);
   }
 
   librados::ObjectWriteOperation op;
@@ -122,7 +122,7 @@ void TrashWatcher<I>::create_trash() {
   auto aio_comp = create_rados_callback<
     TrashWatcher<I>, &TrashWatcher<I>::handle_create_trash>(this);
   int r = m_io_ctx.aio_operate(RBD_TRASH, aio_comp, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   aio_comp->release();
 }
 
@@ -131,7 +131,7 @@ void TrashWatcher<I>::handle_create_trash(int r) {
   dout(20) << "r=" << r << dendl;
   {
     Mutex::Locker locker(m_lock);
-    assert(m_trash_list_in_progress);
+    ceph_assert(m_trash_list_in_progress);
   }
 
   if (r < 0 && r != -EEXIST) {
@@ -153,7 +153,7 @@ template <typename I>
 void TrashWatcher<I>::register_watcher() {
   {
     Mutex::Locker locker(m_lock);
-    assert(m_trash_list_in_progress);
+    ceph_assert(m_trash_list_in_progress);
   }
 
   // if the watch registration is in-flight, let the watcher
@@ -178,7 +178,7 @@ void TrashWatcher<I>::handle_register_watcher(int r) {
 
   {
     Mutex::Locker locker(m_lock);
-    assert(m_trash_list_in_progress);
+    ceph_assert(m_trash_list_in_progress);
     if (r < 0) {
       m_trash_list_in_progress = false;
     }
@@ -237,7 +237,7 @@ void TrashWatcher<I>::trash_list(bool initial_request) {
 
   {
     Mutex::Locker locker(m_lock);
-    assert(m_trash_list_in_progress);
+    ceph_assert(m_trash_list_in_progress);
   }
 
   librados::ObjectReadOperation op;
@@ -247,7 +247,7 @@ void TrashWatcher<I>::trash_list(bool initial_request) {
     TrashWatcher<I>, &TrashWatcher<I>::handle_trash_list>(this);
   m_out_bl.clear();
   int r = m_io_ctx.aio_operate(RBD_TRASH, aio_comp, &op, &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   aio_comp->release();
 }
 
@@ -264,7 +264,7 @@ void TrashWatcher<I>::handle_trash_list(int r) {
   Context *on_init_finish = nullptr;
   {
     Mutex::Locker locker(m_lock);
-    assert(m_trash_list_in_progress);
+    ceph_assert(m_trash_list_in_progress);
     if (r >= 0) {
       for (auto& image : images) {
         add_image(image.first, image.second);
@@ -324,13 +324,13 @@ template <typename I>
 void TrashWatcher<I>::process_trash_list() {
   dout(5) << dendl;
 
-  assert(m_threads->timer_lock.is_locked());
-  assert(m_timer_ctx != nullptr);
+  ceph_assert(m_threads->timer_lock.is_locked());
+  ceph_assert(m_timer_ctx != nullptr);
   m_timer_ctx = nullptr;
 
   {
     Mutex::Locker locker(m_lock);
-    assert(!m_trash_list_in_progress);
+    ceph_assert(!m_trash_list_in_progress);
     m_trash_list_in_progress = true;
   }
 
@@ -350,7 +350,7 @@ void TrashWatcher<I>::add_image(const std::string& image_id,
     return;
   }
 
-  assert(m_lock.is_locked());
+  ceph_assert(m_lock.is_locked());
   auto& deferment_end_time = spec.deferment_end_time;
   dout(10) << "image_id=" << image_id << ", "
            << "deferment_end_time=" << deferment_end_time << dendl;

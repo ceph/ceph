@@ -70,7 +70,10 @@ size_t mempool::pool_t::allocated_bytes() const
   for (size_t i = 0; i < num_shards; ++i) {
     result += shard[i].bytes;
   }
-  assert(result >= 0);
+  if (result < 0) {
+    // we raced with some unbalanced allocations/deallocations
+    result = 0;
+  }
   return (size_t) result;
 }
 
@@ -80,7 +83,10 @@ size_t mempool::pool_t::allocated_items() const
   for (size_t i = 0; i < num_shards; ++i) {
     result += shard[i].items;
   }
-  assert(result >= 0);
+  if (result < 0) {
+    // we raced with some unbalanced allocations/deallocations
+    result = 0;
+  }
   return (size_t) result;
 }
 
@@ -100,7 +106,7 @@ void mempool::pool_t::get_stats(
     total->bytes += shard[i].bytes;
   }
   if (debug_mode) {
-    std::lock_guard<std::mutex> shard_lock(lock);
+    std::lock_guard shard_lock(lock);
     for (auto &p : type_map) {
       std::string n = ceph_demangle(p.second.type_name);
       stats_t &s = (*by_type)[n];

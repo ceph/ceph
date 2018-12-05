@@ -4,25 +4,19 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastModule } from 'ng2-toastr';
 
+import { configureTestBed } from '../testing/unit-test-helper';
 import { AppComponent } from './app.component';
 import { AuthStorageService } from './shared/services/auth-storage.service';
-import { configureTestBed } from './shared/unit-test-helper';
 
 describe('AppComponent', () => {
   let component: AppComponent;
   let fixture: ComponentFixture<AppComponent>;
 
-  const fakeService = {
-    isLoggedIn: () => {
-      return true;
-    }
-  };
-
   configureTestBed({
     imports: [RouterTestingModule, ToastModule.forRoot()],
     declarations: [AppComponent],
     schemas: [NO_ERRORS_SCHEMA],
-    providers: [{ provide: AuthStorageService, useValue: fakeService }]
+    providers: [AuthStorageService]
   });
 
   beforeEach(() => {

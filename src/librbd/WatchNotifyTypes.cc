@@ -3,7 +3,7 @@
 
 #include "cls/rbd/cls_rbd_types.h"
 #include "common/Formatter.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/stringify.h"
 #include "librbd/WatchNotifyTypes.h"
 #include "librbd/watcher/Utils.h"
@@ -368,6 +368,9 @@ void NotifyMessage::decode(bufferlist::const_iterator& iter) {
   case NOTIFY_OP_UPDATE_FEATURES:
     payload = UpdateFeaturesPayload();
     break;
+  case NOTIFY_OP_MIGRATE:
+    payload = MigratePayload();
+    break;
   default:
     payload = UnknownPayload();
     break;
@@ -402,6 +405,7 @@ void NotifyMessage::generate_test_instances(std::list<NotifyMessage *> &o) {
   o.push_back(new NotifyMessage(RebuildObjectMapPayload(AsyncRequestId(ClientId(0, 1), 2))));
   o.push_back(new NotifyMessage(RenamePayload("foo")));
   o.push_back(new NotifyMessage(UpdateFeaturesPayload(1, true)));
+  o.push_back(new NotifyMessage(MigratePayload(AsyncRequestId(ClientId(0, 1), 2))));
 }
 
 void ResponseMessage::encode(bufferlist& bl) const {
@@ -476,6 +480,9 @@ std::ostream &operator<<(std::ostream &out,
     break;
   case NOTIFY_OP_UPDATE_FEATURES:
     out << "UpdateFeatures";
+    break;
+  case NOTIFY_OP_MIGRATE:
+    out << "Migrate";
     break;
   default:
     out << "Unknown (" << static_cast<uint32_t>(op) << ")";

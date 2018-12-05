@@ -5,8 +5,9 @@ import cherrypy
 import requests
 from six.moves.urllib.parse import urlparse  # pylint: disable=import-error
 
-from . import ApiController, BaseController, AuthRequired, Proxy, Endpoint
+from . import ApiController, BaseController, Proxy, Endpoint, ReadPermission
 from .. import logger
+from ..security import Scope
 from ..settings import Settings
 
 
@@ -32,7 +33,6 @@ class GrafanaRestClient(object):
         :type password: str
         """
         self._raise_for_validation(url, username, password)
-
         self._url = url.rstrip('/')
         self._user = username
         self._password = password
@@ -84,25 +84,21 @@ class GrafanaRestClient(object):
         return True, ''
 
 
-@ApiController('/grafana')
-@AuthRequired()
+@ApiController('/grafana', Scope.GRAFANA)
 class Grafana(BaseController):
 
     @Endpoint()
-    def status(self):
-        grafana = GrafanaRestClient.instance()
-        available, msg = grafana.is_service_online()
-        response = {'available': available}
-        if msg:
-            response['message'] = msg
+    @ReadPermission
+    def url(self):
+        response = {'instance': Settings.GRAFANA_API_URL}
 
         return response
 
 
-@ApiController('/grafana/proxy')
-@AuthRequired()
+@ApiController('/grafana/proxy', Scope.GRAFANA)
 class GrafanaProxy(BaseController):
     @Proxy()
+    @ReadPermission
     def __call__(self, path, **params):
         grafana = GrafanaRestClient.instance()
         method = cherrypy.request.method

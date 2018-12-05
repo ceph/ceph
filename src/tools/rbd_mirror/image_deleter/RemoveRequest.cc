@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "tools/rbd_mirror/image_deleter/RemoveRequest.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/WorkQueue.h"
@@ -46,7 +46,7 @@ void RemoveRequest<I>::get_snap_context() {
     RemoveRequest<I>, &RemoveRequest<I>::handle_get_snap_context>(this);
   m_out_bl.clear();
   int r = m_io_ctx.aio_operate(header_oid, aio_comp, &op, &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   aio_comp->release();
 }
 

@@ -1,20 +1,21 @@
-<nav aria-label="breadcrumb">
-  <ol class="breadcrumb">
-    <li i18n
-        class="breadcrumb-item">Object Gateway</li>
-    <li i18n
-        class="breadcrumb-item active"
-        aria-current="page">Daemons</li>
-  </ol>
-</nav>
+<tabset>
+  <tab i18n-heading heading="Daemons List">
+    <cd-table [data]="daemons"
+              [columns]="columns"
+              columnMode="flex"
+              selectionType="single"
+              (updateSelection)="updateSelection($event)"
+              (fetchData)="getDaemonList($event)">
+      <cd-rgw-daemon-details cdTableDetail [selection]="selection">
+      </cd-rgw-daemon-details>
+    </cd-table>
+  </tab>
 
-<cd-table [data]="daemons"
-          [columns]="columns"
-          columnMode="flex"
-          selectionType="single"
-          (updateSelection)="updateSelection($event)"
-          (fetchData)="getDaemonList()">
-  <cd-rgw-daemon-details cdTableDetail
-                         [selection]="selection">
-  </cd-rgw-daemon-details>
-</cd-table>
+  <tab i18n-heading
+       *ngIf="grafanaPermission.read"
+       heading="Overall Performance">
+    <cd-grafana [grafanaPath]="'WAkugZpiz/rgw-overview?'"
+                grafanaStyle="two">
+    </cd-grafana>
+  </tab>
+</tabset>

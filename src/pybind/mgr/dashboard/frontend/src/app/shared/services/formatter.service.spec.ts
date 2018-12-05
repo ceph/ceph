@@ -1,6 +1,6 @@
+import { configureTestBed } from '../../../testing/unit-test-helper';
 import { DimlessBinaryPipe } from '../pipes/dimless-binary.pipe';
 import { DimlessPipe } from '../pipes/dimless.pipe';
-import { configureTestBed } from '../unit-test-helper';
 import { FormatterService } from './formatter.service';
 
 describe('FormatterService', () => {
@@ -63,6 +63,10 @@ describe('FormatterService', () => {
       expect(service.toBytes('1.1  kib')).toBeNull();
       expect(service.toBytes('1.kib')).toBeNull();
       expect(service.toBytes('1 ki')).toBeNull();
+      expect(service.toBytes()).toBeNull();
+      expect(service.toBytes('')).toBeNull();
+      expect(service.toBytes('-')).toBeNull();
+      expect(service.toBytes(null)).toBeNull();
     });
 
     it('should convert values to bytes', () => {

@@ -61,14 +61,14 @@ void StoreTestFixture::SetUp()
   // we keep this stuff 'unsafe' out of test case scope to be able to update ANY
   // config settings. Hence setting it to 'safe' here to proceed with the test
   // case
-  g_conf->set_safe_to_start_threads();
+  g_conf().set_safe_to_start_threads();
 }
 
 void StoreTestFixture::TearDown()
 {
   // we keep this stuff 'unsafe' out of test case scope to be able to update ANY
   // config settings. Hence setting it to 'unsafe' here as test case is closing.
-  g_conf->_clear_safe_to_start_threads();
+  g_conf()._clear_safe_to_start_threads();
   PopSettings(0);
   if (store) {
     int r = store->umount();
@@ -77,10 +77,10 @@ void StoreTestFixture::TearDown()
   }
 }
 
-void StoreTestFixture::SetVal(md_config_t* _conf, const char* key, const char* val)
+void StoreTestFixture::SetVal(ConfigProxy& _conf, const char* key, const char* val)
 {
-  assert(!conf || conf == _conf);
-  conf = _conf;
+  ceph_assert(!conf || conf == &_conf);
+  conf = &_conf;
   std::string skey(key);
   std::string prev_val;
   conf->get_val(skey, &prev_val);
@@ -91,7 +91,7 @@ void StoreTestFixture::SetVal(md_config_t* _conf, const char* key, const char* v
 void StoreTestFixture::PopSettings(size_t pos)
 {
   if (conf) {
-    assert(pos == 0 || pos <= saved_settings.size()); // for sanity
+    ceph_assert(pos == 0 || pos <= saved_settings.size()); // for sanity
     while(pos < saved_settings.size())
     {
       auto& e = saved_settings.top();

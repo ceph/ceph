@@ -17,6 +17,12 @@
 
 #include <string_view>
 
+#include "messages/MCommand.h"
+#include "messages/MCommandReply.h"
+#include "messages/MGenericMessage.h"
+#include "messages/MMDSMap.h"
+#include "messages/MMonCommand.h"
+
 #include "common/LogClient.h"
 #include "common/Mutex.h"
 #include "common/Timer.h"
@@ -29,10 +35,9 @@
 #include "MDSMap.h"
 #include "MDSRank.h"
 
-#define CEPH_MDS_PROTOCOL    33 /* cluster internal */
+#define CEPH_MDS_PROTOCOL    34 /* cluster internal */
 
 class AuthAuthorizeHandlerRegistry;
-class Message;
 class Messenger;
 class MonClient;
 
@@ -46,7 +51,7 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
   bool         stopping;
 
   SafeTimer    timer;
-
+  std::string gss_ktfile_client{};
 
   mono_time get_starttime() const {
     return starttime;
@@ -67,7 +72,7 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
   Messenger    *messenger;
   MonClient    *monc;
   MgrClient     mgrc;
-  MDSMap       *mdsmap;
+  std::unique_ptr<MDSMap> mdsmap;
   LogClient    log_client;
   LogChannelRef clog;
 
@@ -94,8 +99,8 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
 
   // config observer bits
   const char** get_tracked_conf_keys() const override;
-  void handle_conf_change(const struct md_config_t *conf,
-				  const std::set <std::string> &changed) override;
+  void handle_conf_change(const ConfigProxy& conf,
+			  const std::set <std::string> &changed) override;
  protected:
   // tick and other timer fun
   Context *tick_event = nullptr;
@@ -104,11 +109,10 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
   void wait_for_omap_osds();
 
  private:
-  bool ms_dispatch(Message *m) override;
+  bool ms_dispatch2(const Message::ref &m) override;
   bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new) override;
-  bool ms_verify_authorizer(Connection *con, int peer_type,
-			       int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
-			       bool& isvalid, CryptoKey& session_key) override;
+  int ms_handle_authentication(Connection *con) override;
+  KeyStore *ms_get_auth1_authorizer_keystore() override;
   void ms_handle_accept(Connection *con) override;
   void ms_handle_connect(Connection *con) override;
   bool ms_handle_reset(Connection *con) override;
@@ -143,30 +147,38 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
 
   void tick();
   
-  // messages
-  bool _dispatch(Message *m, bool new_msg);
-
 protected:
-  bool handle_core_message(Message *m);
+  bool handle_core_message(const Message::const_ref &m);
   
   // special message types
   friend class C_MDS_Send_Command_Reply;
-  static void send_command_reply(MCommand *m, MDSRank* mds_rank, int r,
+  static void send_command_reply(const MCommand::const_ref &m, MDSRank* mds_rank, int r,
 				 bufferlist outbl, std::string_view outs);
   int _handle_command(
       const cmdmap_t &cmdmap,
-      MCommand *m,
+      const MCommand::const_ref &m,
       bufferlist *outbl,
       std::string *outs,
       Context **run_later,
       bool *need_reply);
-  void handle_command(class MCommand *m);
-  void handle_mds_map(class MMDSMap *m);
-  void _handle_mds_map(MDSMap *oldmap);
+  void handle_command(const MCommand::const_ref &m);
+  void handle_mds_map(const MMDSMap::const_ref &m);
+  void _handle_mds_map(const MDSMap &oldmap);
 
 private:
-    mono_time starttime = mono_clock::zero();
-};
+  struct MDSCommand {
+    MDSCommand(std::string_view signature, std::string_view help)
+        : cmdstring(signature), helpstring(help)
+    {}
 
+    std::string cmdstring;
+    std::string helpstring;
+    std::string module = "mds";
+  };
+
+  static const std::vector<MDSCommand>& get_commands();
+
+  mono_time starttime = mono_clock::zero();
+};
 
 #endif

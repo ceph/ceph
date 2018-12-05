@@ -46,7 +46,7 @@
 #include <atomic>
 #include <map>
 #include <memory>
-#include "include/memory.h"
+#include <string>
 
 #include "include/unordered_map.h"
 
@@ -122,6 +122,7 @@ enum {
   l_osd_push_outb,
 
   l_osd_rop,
+  l_osd_rbytes,
 
   l_osd_loadavg,
   l_osd_buf,
@@ -235,6 +236,7 @@ class FuseStore;
 class OSDMap;
 class MLog;
 class Objecter;
+class KeyStore;
 
 class Watch;
 class PrimaryLogPG;
@@ -276,18 +278,18 @@ public:
   MonClient   *&monc;
   ClassHandler  *&class_handler;
 
-  md_config_cacher_t<uint64_t> osd_max_object_size;
+  md_config_cacher_t<Option::size_t> osd_max_object_size;
   md_config_cacher_t<bool> osd_skip_data_digest;
 
   void enqueue_back(OpQueueItem&& qi);
   void enqueue_front(OpQueueItem&& qi);
 
   void maybe_inject_dispatch_delay() {
-    if (g_conf->osd_debug_inject_dispatch_delay_probability > 0) {
+    if (g_conf()->osd_debug_inject_dispatch_delay_probability > 0) {
       if (rand() % 10000 <
-	  g_conf->osd_debug_inject_dispatch_delay_probability * 10000) {
+	  g_conf()->osd_debug_inject_dispatch_delay_probability * 10000) {
 	utime_t t;
-	t.set_from_double(g_conf->osd_debug_inject_dispatch_delay_duration);
+	t.set_from_double(g_conf()->osd_debug_inject_dispatch_delay_duration);
 	t.sleep();
       }
     }
@@ -295,16 +297,16 @@ public:
 
 private:
   // -- superblock --
-  Mutex publish_lock, pre_publish_lock; // pre-publish orders before publish
+  ceph::mutex publish_lock, pre_publish_lock; // pre-publish orders before publish
   OSDSuperblock superblock;
 
 public:
   OSDSuperblock get_superblock() {
-    Mutex::Locker l(publish_lock);
+    std::lock_guard l(publish_lock);
     return superblock;
   }
   void publish_superblock(const OSDSuperblock &block) {
-    Mutex::Locker l(publish_lock);
+    std::lock_guard l(publish_lock);
     superblock = block;
   }
 
@@ -316,15 +318,15 @@ private:
 
 public:
   OSDMapRef get_osdmap() {
-    Mutex::Locker l(publish_lock);
+    std::lock_guard l(publish_lock);
     return osdmap;
   }
   epoch_t get_osdmap_epoch() {
-    Mutex::Locker l(publish_lock);
+    std::lock_guard l(publish_lock);
     return osdmap ? osdmap->get_epoch() : 0;
   }
   void publish_map(OSDMapRef map) {
-    Mutex::Locker l(publish_lock);
+    std::lock_guard l(publish_lock);
     osdmap = map;
   }
 
@@ -344,11 +346,11 @@ public:
    */
 private:
   OSDMapRef next_osdmap;
-  Cond pre_publish_cond;
+  ceph::condition_variable pre_publish_cond;
 
 public:
   void pre_publish_map(OSDMapRef map) {
-    Mutex::Locker l(pre_publish_lock);
+    std::lock_guard l(pre_publish_lock);
     next_osdmap = std::move(map);
   }
 
@@ -358,7 +360,7 @@ public:
 
   /// gets ref to next_osdmap and registers the epoch as reserved
   OSDMapRef get_nextmap_reserved() {
-    Mutex::Locker l(pre_publish_lock);
+    std::lock_guard l(pre_publish_lock);
     if (!next_osdmap)
       return OSDMapRef();
     epoch_t e = next_osdmap->get_epoch();
@@ -369,31 +371,28 @@ public:
   }
   /// releases reservation on map
   void release_map(OSDMapRef osdmap) {
-    Mutex::Locker l(pre_publish_lock);
+    std::lock_guard l(pre_publish_lock);
     map<epoch_t, unsigned>::iterator i =
       map_reservations.find(osdmap->get_epoch());
-    assert(i != map_reservations.end());
-    assert(i->second > 0);
+    ceph_assert(i != map_reservations.end());
+    ceph_assert(i->second > 0);
     if (--(i->second) == 0) {
       map_reservations.erase(i);
     }
-    pre_publish_cond.Signal();
+    pre_publish_cond.notify_all();
   }
   /// blocks until there are no reserved maps prior to next_osdmap
   void await_reserved_maps() {
-    Mutex::Locker l(pre_publish_lock);
-    assert(next_osdmap);
-    while (true) {
-      map<epoch_t, unsigned>::const_iterator i = map_reservations.cbegin();
-      if (i == map_reservations.cend() || i->first >= next_osdmap->get_epoch()) {
-	break;
-      } else {
-	pre_publish_cond.Wait(pre_publish_lock);
-      }
-    }
+    std::unique_lock l{pre_publish_lock};
+    ceph_assert(next_osdmap);
+    pre_publish_cond.wait(l, [this] {
+      auto i = map_reservations.cbegin();
+      return (i == map_reservations.cend() ||
+	      i->first >= next_osdmap->get_epoch());
+    });
   }
   OSDMapRef get_next_osdmap() {
-    Mutex::Locker l(pre_publish_lock);
+    std::lock_guard l(pre_publish_lock);
     if (!next_osdmap)
       return OSDMapRef();
     return next_osdmap;
@@ -466,17 +465,17 @@ public:
 		       double pool_scrub_max_interval, bool must) {
     ScrubJob scrub(cct, pgid, t, pool_scrub_min_interval, pool_scrub_max_interval,
 		   must);
-    Mutex::Locker l(sched_scrub_lock);
+    std::lock_guard l(sched_scrub_lock);
     sched_scrub_pg.insert(scrub);
     return scrub.sched_time;
   }
   void unreg_pg_scrub(spg_t pgid, utime_t t) {
-    Mutex::Locker l(sched_scrub_lock);
+    std::lock_guard l(sched_scrub_lock);
     size_t removed = sched_scrub_pg.erase(ScrubJob(cct, pgid, t));
-    assert(removed);
+    ceph_assert(removed);
   }
   bool first_scrub_stamp(ScrubJob *out) {
-    Mutex::Locker l(sched_scrub_lock);
+    std::lock_guard l(sched_scrub_lock);
     if (sched_scrub_pg.empty())
       return false;
     set<ScrubJob>::iterator iter = sched_scrub_pg.begin();
@@ -485,7 +484,7 @@ public:
   }
   bool next_scrub_stamp(const ScrubJob& next,
 			ScrubJob *out) {
-    Mutex::Locker l(sched_scrub_lock);
+    std::lock_guard l(sched_scrub_lock);
     if (sched_scrub_pg.empty())
       return false;
     set<ScrubJob>::const_iterator iter = sched_scrub_pg.lower_bound(next);
@@ -499,8 +498,8 @@ public:
   }
 
   void dumps_scrub(Formatter *f) {
-    assert(f != nullptr);
-    Mutex::Locker l(sched_scrub_lock);
+    ceph_assert(f != nullptr);
+    std::lock_guard l(sched_scrub_lock);
 
     f->open_array_section("scrubs");
     for (const auto &i: sched_scrub_pg) {
@@ -565,7 +564,7 @@ public:
   void _dequeue(PG *pg, uint64_t old_priority) {
     set<PGRef>& oq = agent_queue[old_priority];
     set<PGRef>::iterator p = oq.find(pg);
-    assert(p != oq.end());
+    ceph_assert(p != oq.end());
     if (p == agent_queue_pos)
       ++agent_queue_pos;
     oq.erase(p);
@@ -578,75 +577,75 @@ public:
 
   /// enable agent for a pg
   void agent_enable_pg(PG *pg, uint64_t priority) {
-    Mutex::Locker l(agent_lock);
+    std::lock_guard l(agent_lock);
     _enqueue(pg, priority);
   }
 
   /// adjust priority for an enagled pg
   void agent_adjust_pg(PG *pg, uint64_t old_priority, uint64_t new_priority) {
-    Mutex::Locker l(agent_lock);
-    assert(new_priority != old_priority);
+    std::lock_guard l(agent_lock);
+    ceph_assert(new_priority != old_priority);
     _enqueue(pg, new_priority);
     _dequeue(pg, old_priority);
   }
 
   /// disable agent for a pg
   void agent_disable_pg(PG *pg, uint64_t old_priority) {
-    Mutex::Locker l(agent_lock);
+    std::lock_guard l(agent_lock);
     _dequeue(pg, old_priority);
   }
 
   /// note start of an async (evict) op
   void agent_start_evict_op() {
-    Mutex::Locker l(agent_lock);
+    std::lock_guard l(agent_lock);
     ++agent_ops;
   }
 
   /// note finish or cancellation of an async (evict) op
   void agent_finish_evict_op() {
-    Mutex::Locker l(agent_lock);
-    assert(agent_ops > 0);
+    std::lock_guard l(agent_lock);
+    ceph_assert(agent_ops > 0);
     --agent_ops;
     agent_cond.Signal();
   }
 
   /// note start of an async (flush) op
   void agent_start_op(const hobject_t& oid) {
-    Mutex::Locker l(agent_lock);
+    std::lock_guard l(agent_lock);
     ++agent_ops;
-    assert(agent_oids.count(oid) == 0);
+    ceph_assert(agent_oids.count(oid) == 0);
     agent_oids.insert(oid);
   }
 
   /// note finish or cancellation of an async (flush) op
   void agent_finish_op(const hobject_t& oid) {
-    Mutex::Locker l(agent_lock);
-    assert(agent_ops > 0);
+    std::lock_guard l(agent_lock);
+    ceph_assert(agent_ops > 0);
     --agent_ops;
-    assert(agent_oids.count(oid) == 1);
+    ceph_assert(agent_oids.count(oid) == 1);
     agent_oids.erase(oid);
     agent_cond.Signal();
   }
 
   /// check if we are operating on an object
   bool agent_is_active_oid(const hobject_t& oid) {
-    Mutex::Locker l(agent_lock);
+    std::lock_guard l(agent_lock);
     return agent_oids.count(oid);
   }
 
   /// get count of active agent ops
   int agent_get_num_ops() {
-    Mutex::Locker l(agent_lock);
+    std::lock_guard l(agent_lock);
     return agent_ops;
   }
 
   void agent_inc_high_count() {
-    Mutex::Locker l(agent_lock);
+    std::lock_guard l(agent_lock);
     flush_mode_high_count ++;
   }
 
   void agent_dec_high_count() {
-    Mutex::Locker l(agent_lock);
+    std::lock_guard l(agent_lock);
     flush_mode_high_count --;
   }
 
@@ -686,7 +685,7 @@ public:
   SafeTimer watch_timer;
   uint64_t next_notif_id;
   uint64_t get_next_id(epoch_t cur_epoch) {
-    Mutex::Locker l(watch_lock);
+    std::lock_guard l(watch_lock);
     return (((uint64_t)cur_epoch) << 32) | ((uint64_t)(next_notif_id++));
   }
 
@@ -714,6 +713,26 @@ public:
   AsyncReserver<spg_t> local_reserver;
   AsyncReserver<spg_t> remote_reserver;
 
+  // -- pg merge --
+  Mutex merge_lock = {"OSD::merge_lock"};
+  set<pg_t> ready_to_merge_source;
+  map<pg_t,pair<epoch_t,epoch_t>> ready_to_merge_target;  // pg -> (les,lec)
+  set<pg_t> not_ready_to_merge_source;
+  map<pg_t,pg_t> not_ready_to_merge_target;
+  set<pg_t> sent_ready_to_merge_source;
+
+  void set_ready_to_merge_source(PG *pg);
+  void set_ready_to_merge_target(PG *pg,
+				 epoch_t last_epoch_started,
+				 epoch_t last_epoch_clean);
+  void set_not_ready_to_merge_source(pg_t source);
+  void set_not_ready_to_merge_target(pg_t target, pg_t source);
+  void clear_ready_to_merge(PG *pg);
+  void send_ready_to_merge();
+  void _send_ready_to_merge();
+  void clear_sent_ready_to_merge();
+  void prune_sent_ready_to_merge(OSDMapRef& osdmap);
+
   // -- pg_temp --
 private:
   Mutex pg_temp_lock;
@@ -739,7 +758,7 @@ public:
   void queue_for_snap_trim(PG *pg);
   void queue_for_scrub(PG *pg, bool with_high_priority);
   void queue_for_pg_delete(spg_t pgid, epoch_t e);
-  void finish_pg_delete(PG *pg, unsigned old_pg_num);
+  bool try_finish_pg_delete(PG *pg, unsigned old_pg_num);
 
 private:
   // -- pg recovery and associated throttling --
@@ -767,24 +786,24 @@ public:
     defer_recovery_until += defer_for;
   }
   void pause_recovery() {
-    Mutex::Locker l(recovery_lock);
+    std::lock_guard l(recovery_lock);
     recovery_paused = true;
   }
   bool recovery_is_paused() {
-    Mutex::Locker l(recovery_lock);
+    std::lock_guard l(recovery_lock);
     return recovery_paused;
   }
   void unpause_recovery() {
-    Mutex::Locker l(recovery_lock);
+    std::lock_guard l(recovery_lock);
     recovery_paused = false;
     _maybe_queue_recovery();
   }
   void kick_recovery_queue() {
-    Mutex::Locker l(recovery_lock);
+    std::lock_guard l(recovery_lock);
     _maybe_queue_recovery();
   }
   void clear_queued_recovery(PG *pg) {
-    Mutex::Locker l(recovery_lock);
+    std::lock_guard l(recovery_lock);
     awaiting_throttle.remove_if(
       [pg](decltype(awaiting_throttle)::const_reference awaiting ) {
 	return awaiting.second.get() == pg;
@@ -792,7 +811,7 @@ public:
   }
   // delayed pg activation
   void queue_for_recovery(PG *pg) {
-    Mutex::Locker l(recovery_lock);
+    std::lock_guard l(recovery_lock);
 
     if (pg->is_forced_recovery_or_backfill()) {
       awaiting_throttle.push_front(make_pair(pg->get_osdmap()->get_epoch(), pg));
@@ -802,7 +821,7 @@ public:
     _maybe_queue_recovery();
   }
   void queue_recovery_after_sleep(PG *pg, epoch_t queued, uint64_t reserved_pushes) {
-    Mutex::Locker l(recovery_lock);
+    std::lock_guard l(recovery_lock);
     _queue_for_recovery(make_pair(queued, pg), reserved_pushes);
   }
 
@@ -818,28 +837,28 @@ public:
   OSDMapRef try_get_map(epoch_t e);
   OSDMapRef get_map(epoch_t e) {
     OSDMapRef ret(try_get_map(e));
-    assert(ret);
+    ceph_assert(ret);
     return ret;
   }
   OSDMapRef add_map(OSDMap *o) {
-    Mutex::Locker l(map_cache_lock);
+    std::lock_guard l(map_cache_lock);
     return _add_map(o);
   }
   OSDMapRef _add_map(OSDMap *o);
 
   void add_map_bl(epoch_t e, bufferlist& bl) {
-    Mutex::Locker l(map_cache_lock);
+    std::lock_guard l(map_cache_lock);
     return _add_map_bl(e, bl);
   }
   void _add_map_bl(epoch_t e, bufferlist& bl);
   bool get_map_bl(epoch_t e, bufferlist& bl) {
-    Mutex::Locker l(map_cache_lock);
+    std::lock_guard l(map_cache_lock);
     return _get_map_bl(e, bl);
   }
   bool _get_map_bl(epoch_t e, bufferlist& bl);
 
   void add_map_inc_bl(epoch_t e, bufferlist& bl) {
-    Mutex::Locker l(map_cache_lock);
+    std::lock_guard l(map_cache_lock);
     return _add_map_inc_bl(e, bl);
   }
   void _add_map_inc_bl(epoch_t e, bufferlist& bl);
@@ -849,7 +868,7 @@ public:
   int get_deleted_pool_pg_num(int64_t pool);
 
   void store_deleted_pool_pg_num(int64_t pool, int pg_num) {
-    Mutex::Locker l(map_cache_lock);
+    std::lock_guard l(map_cache_lock);
     deleted_pool_pg_nums[pool] = pg_num;
   }
 
@@ -863,11 +882,12 @@ public:
   }
 
   /// identify split child pgids over a osdmap interval
-  void identify_split_children(
+  void identify_splits_and_merges(
     OSDMapRef old_map,
     OSDMapRef new_map,
     spg_t pgid,
-    set<spg_t> *new_children);
+    set<pair<spg_t,epoch_t>> *new_children,
+    set<pair<spg_t,epoch_t>> *merge_pgs);
 
   void need_heartbeat_peer_update();
 
@@ -882,19 +902,17 @@ public:
   osd_stat_t osd_stat;
   uint32_t seq = 0;
 
-  void update_osd_stat(vector<int>& hb_peers);
-  osd_stat_t set_osd_stat(const struct store_statfs_t &stbuf,
-                          vector<int>& hb_peers,
-			  int num_pgs);
+  void set_statfs(const struct store_statfs_t &stbuf);
+  osd_stat_t set_osd_stat(vector<int>& hb_peers, int num_pgs);
   osd_stat_t get_osd_stat() {
-    Mutex::Locker l(stat_lock);
+    std::lock_guard l(stat_lock);
     ++seq;
     osd_stat.up_from = up_epoch;
     osd_stat.seq = ((uint64_t)osd_stat.up_from << 32) + seq;
     return osd_stat;
   }
   uint64_t get_osd_stat_seq() {
-    Mutex::Locker l(stat_lock);
+    std::lock_guard l(stat_lock);
     return osd_stat.seq;
   }
 
@@ -931,9 +949,9 @@ private:
   mutable int64_t injectfull = 0;
   s_names injectfull_state = NONE;
   float get_failsafe_full_ratio();
-  void check_full_status(float ratio);
   bool _check_full(DoutPrefixProvider *dpp, s_names type) const;
 public:
+  void check_full_status(float ratio);
   bool check_failsafe_full(DoutPrefixProvider *dpp) const;
   bool check_full(DoutPrefixProvider *dpp) const;
   bool check_backfill_full(DoutPrefixProvider *dpp) const;
@@ -1093,11 +1111,14 @@ struct OSDShardPGSlot {
   /// should bail out (their op has been requeued)
   uint64_t requeue_seq = 0;
 
-  /// waiting for split child to materialize
-  bool waiting_for_split = false;
+  /// waiting for split child to materialize in these epoch(s)
+  set<epoch_t> waiting_for_split;
 
   epoch_t epoch = 0;
   boost::intrusive::set_member_hook<> pg_epoch_item;
+
+  /// waiting for a merge (source or target) by this epoch
+  epoch_t waiting_for_merge_epoch = 0;
 };
 
 struct OSDShard {
@@ -1108,20 +1129,20 @@ struct OSDShard {
   string shard_name;
 
   string sdata_wait_lock_name;
-  Mutex sdata_wait_lock;
-  Cond sdata_cond;
+  ceph::mutex sdata_wait_lock;
+  ceph::condition_variable sdata_cond;
 
   string osdmap_lock_name;
-  Mutex osdmap_lock;  ///< protect shard_osdmap updates vs users w/o shard_lock
+  ceph::mutex osdmap_lock;  ///< protect shard_osdmap updates vs users w/o shard_lock
   OSDMapRef shard_osdmap;
 
   OSDMapRef get_osdmap() {
-    Mutex::Locker l(osdmap_lock);
+    std::lock_guard l(osdmap_lock);
     return shard_osdmap;
   }
 
   string shard_lock_name;
-  Mutex shard_lock;   ///< protects remaining members below
+  ceph::mutex shard_lock;   ///< protects remaining members below
 
   /// map of slots for each spg_t.  maintains ordering of items dequeued
   /// from pqueue while _process thread drops shard lock to acquire the
@@ -1142,13 +1163,15 @@ struct OSDShard {
       boost::intrusive::set_member_hook<>,
       &OSDShardPGSlot::pg_epoch_item>,
     boost::intrusive::compare<pg_slot_compare_by_epoch>> pg_slots_by_epoch;
-  bool waiting_for_min_pg_epoch = false;
-  Cond min_pg_epoch_cond;
+  int waiting_for_min_pg_epoch = 0;
+  ceph::condition_variable min_pg_epoch_cond;
 
   /// priority queue
   std::unique_ptr<OpQueue<OpQueueItem, uint64_t>> pqueue;
 
   bool stop_waiting = false;
+
+  ContextQueue context_queue;
 
   void _enqueue_front(OpQueueItem&& item, unsigned cutoff) {
     unsigned priority = item.get_priority();
@@ -1180,9 +1203,15 @@ struct OSDShard {
 
   void _wake_pg_slot(spg_t pgid, OSDShardPGSlot *slot);
 
-  void identify_splits(const OSDMapRef& as_of_osdmap, set<spg_t> *pgids);
-  void _prime_splits(set<spg_t> *pgids);
-  void prime_splits(const OSDMapRef& as_of_osdmap, set<spg_t> *pgids);
+  void identify_splits_and_merges(
+    const OSDMapRef& as_of_osdmap,
+    set<pair<spg_t,epoch_t>> *split_children,
+    set<pair<spg_t,epoch_t>> *merge_pgs);
+  void _prime_splits(set<pair<spg_t,epoch_t>> *pgids);
+  void prime_splits(const OSDMapRef& as_of_osdmap,
+		    set<pair<spg_t,epoch_t>> *pgids);
+  void prime_merges(const OSDMapRef& as_of_osdmap,
+		    set<pair<spg_t,epoch_t>> *merge_pgs);
   void register_and_wake_split_child(PG *pg);
   void unprime_split_children(spg_t parent, unsigned old_pg_num);
 
@@ -1197,12 +1226,12 @@ struct OSDShard {
       osd(osd),
       shard_name(string("OSDShard.") + stringify(id)),
       sdata_wait_lock_name(shard_name + "::sdata_wait_lock"),
-      sdata_wait_lock(sdata_wait_lock_name.c_str(), false, true, false, cct),
+      sdata_wait_lock{make_mutex(sdata_wait_lock_name)},
       osdmap_lock_name(shard_name + "::osdmap_lock"),
-      osdmap_lock(osdmap_lock_name.c_str(), false, false),
+      osdmap_lock{make_mutex(osdmap_lock_name)},
       shard_lock_name(shard_name + "::shard_lock"),
-      shard_lock(shard_lock_name.c_str(), false, true,
-			     false, cct) {
+      shard_lock{make_mutex(shard_lock_name)},
+      context_queue(sdata_wait_lock, sdata_cond) {
     if (opqueue == io_queue::weightedpriority) {
       pqueue = std::make_unique<
 	WeightedPriorityQueue<OpQueueItem,uint64_t>>(
@@ -1222,23 +1251,26 @@ struct OSDShard {
 class OSD : public Dispatcher,
 	    public md_config_obs_t {
   /** OSD **/
-  Mutex osd_lock;			// global lock
+  Mutex osd_lock;          // global lock
   SafeTimer tick_timer;    // safe timer (osd_lock)
 
   // Tick timer for those stuff that do not need osd_lock
   Mutex tick_timer_lock;
   SafeTimer tick_timer_without_osd_lock;
+  std::string gss_ktfile_client{};
+
 public:
   // config observer bits
   const char** get_tracked_conf_keys() const override;
-  void handle_conf_change(const struct md_config_t *conf,
+  void handle_conf_change(const ConfigProxy& conf,
                           const std::set <std::string> &changed) override;
   void update_log_config();
   void check_config();
 
 protected:
 
-  static const double OSD_TICK_INTERVAL; // tick interval for tick_timer and tick_timer_without_osd_lock
+  const double OSD_TICK_INTERVAL = { 1.0 };
+  double get_tick_interval() const;
 
   AuthAuthorizeHandlerRegistry *authorize_handler_cluster_registry;
   AuthAuthorizeHandlerRegistry *authorize_handler_service_registry;
@@ -1327,6 +1359,10 @@ public:
 	sobject_t(
 	  object_t(string("final_pool_") + stringify(pool)),
 	  CEPH_NOSNAP)));
+  }
+
+  static ghobject_t make_pg_num_history_oid() {
+    return ghobject_t(hobject_t(sobject_t("pg_num_history", CEPH_NOSNAP)));
   }
 
   static void recursive_remove_collection(CephContext* cct,
@@ -1441,15 +1477,15 @@ private:
 
   /// Caller assumes refs for included Sessions
   void get_sessions_waiting_for_map(set<SessionRef> *out) {
-    Mutex::Locker l(session_waiting_lock);
+    std::lock_guard l(session_waiting_lock);
     out->swap(session_waiting_for_map);
   }
   void register_session_waiting_on_map(SessionRef session) {
-    Mutex::Locker l(session_waiting_lock);
+    std::lock_guard l(session_waiting_lock);
     session_waiting_for_map.insert(session);
   }
   void clear_session_waiting_on_map(SessionRef session) {
-    Mutex::Locker l(session_waiting_lock);
+    std::lock_guard l(session_waiting_lock);
     session_waiting_for_map.erase(session);
   }
   void dispatch_sessions_waiting_on_map() {
@@ -1458,13 +1494,13 @@ private:
     for (auto i = sessions_to_check.begin();
 	 i != sessions_to_check.end();
 	 sessions_to_check.erase(i++)) {
-      Mutex::Locker l{(*i)->session_dispatch_lock};
+      std::lock_guard l{(*i)->session_dispatch_lock};
       SessionRef session = *i;
       dispatch_session_waiting(session, osdmap);
     }
   }
   void session_handle_reset(SessionRef session) {
-    Mutex::Locker l(session->session_dispatch_lock);
+    std::lock_guard l(session->session_dispatch_lock);
     clear_session_waiting_on_map(session);
 
     session->clear_backoffs();
@@ -1509,20 +1545,31 @@ private:
     utime_t last_rx_front;  ///< last time we got a ping reply on the front side
     utime_t last_rx_back;   ///< last time we got a ping reply on the back side
     epoch_t epoch;      ///< most recent epoch we wanted this peer
+    /// number of connections we send and receive heartbeat pings/replies
+    static constexpr int HEARTBEAT_MAX_CONN = 2;
+    /// history of inflight pings, arranging by timestamp we sent
+    /// send time -> deadline -> remaining replies
+    map<utime_t, pair<utime_t, int>> ping_history;
 
-    bool is_unhealthy(utime_t cutoff) const {
-      return
-	! ((last_rx_front > cutoff ||
-	    (last_rx_front == utime_t() && (last_tx == utime_t() ||
-					    first_tx > cutoff))) &&
-	   (last_rx_back > cutoff ||
-	    (last_rx_back == utime_t() && (last_tx == utime_t() ||
-					   first_tx > cutoff))));
-    }
-    bool is_healthy(utime_t cutoff) const {
-      return last_rx_front > cutoff && last_rx_back > cutoff;
+    bool is_unhealthy(utime_t now) {
+      if (ping_history.empty()) {
+        /// we haven't sent a ping yet or we have got all replies,
+        /// in either way we are safe and healthy for now
+        return false;
+      }
+
+      utime_t oldest_deadline = ping_history.begin()->second.first;
+      return now > oldest_deadline;
     }
 
+    bool is_healthy(utime_t now) {
+      if (last_rx_front == utime_t() || last_rx_back == utime_t()) {
+        // only declare to be healthy until we have received the first
+        // replies from both front/back connections
+        return false;
+      }
+      return !is_unhealthy(now);
+    }
   };
   /// state attached to outgoing heartbeat connections
   struct HeartbeatSession : public RefCountedObject {
@@ -1563,7 +1610,7 @@ private:
   void need_heartbeat_peer_update();
 
   void heartbeat_kick() {
-    Mutex::Locker l(heartbeat_lock);
+    std::lock_guard l(heartbeat_lock);
     heartbeat_cond.Signal();
   }
 
@@ -1586,12 +1633,12 @@ public:
     bool ms_can_fast_dispatch_any() const override { return true; }
     bool ms_can_fast_dispatch(const Message *m) const override {
       switch (m->get_type()) {
-	case CEPH_MSG_PING:
-	case MSG_OSD_PING:
-          return true;
-	default:
-          return false;
-	}
+      case CEPH_MSG_PING:
+      case MSG_OSD_PING:
+	return true;
+      default:
+	return false;
+      }
     }
     void ms_fast_dispatch(Message *m) override {
       osd->heartbeat_dispatch(m);
@@ -1606,11 +1653,21 @@ public:
     bool ms_handle_refused(Connection *con) override {
       return osd->ms_handle_refused(con);
     }
-    bool ms_verify_authorizer(Connection *con, int peer_type,
-			      int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
-			      bool& isvalid, CryptoKey& session_key) override {
-      isvalid = true;
+    int ms_handle_authentication(Connection *con) override {
       return true;
+    }
+    bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer,
+			   bool force_new) override {
+      // some pre-nautilus OSDs get confused if you include an
+      // authorizer but they are not expecting it.  do not try to authorize
+      // heartbeat connections until all OSDs are nautilus.
+      if (osd->get_osdmap()->require_osd_release >= CEPH_RELEASE_NAUTILUS) {
+	return osd->ms_get_authorizer(dest_type, authorizer, force_new);
+      }
+      return false;
+    }
+    KeyStore *ms_get_auth1_authorizer_keystore() override {
+      return osd->ms_get_auth1_authorizer_keystore();
     }
   } heartbeat_dispatcher;
 
@@ -1619,7 +1676,7 @@ private:
   list<OpRequestRef> finished;
   
   void take_waiters(list<OpRequestRef>& ls) {
-    assert(osd_lock.is_locked());
+    ceph_assert(osd_lock.is_locked());
     finished.splice(finished.end(), ls);
   }
   void do_waiters();
@@ -1696,11 +1753,10 @@ protected:
     void return_waiting_threads() override {
       for(uint32_t i = 0; i < osd->num_shards; i++) {
 	OSDShard* sdata = osd->shards[i];
-	assert (NULL != sdata); 
-	sdata->sdata_wait_lock.Lock();
+	assert (NULL != sdata);
+	std::scoped_lock l{sdata->sdata_wait_lock};
 	sdata->stop_waiting = true;
-	sdata->sdata_cond.Signal();
-	sdata->sdata_wait_lock.Unlock();
+	sdata->sdata_cond.notify_all();
       }
     }
 
@@ -1708,9 +1764,8 @@ protected:
       for(uint32_t i = 0; i < osd->num_shards; i++) {
 	OSDShard* sdata = osd->shards[i];
 	assert (NULL != sdata);
-	sdata->sdata_wait_lock.Lock();
+	std::scoped_lock l{sdata->sdata_wait_lock};
 	sdata->stop_waiting = false;
-	sdata->sdata_wait_lock.Unlock();
       }
     }
 
@@ -1720,27 +1775,36 @@ protected:
 
 	char queue_name[32] = {0};
 	snprintf(queue_name, sizeof(queue_name), "%s%" PRIu32, "OSD:ShardedOpWQ:", i);
-	assert(NULL != sdata);
+	ceph_assert(NULL != sdata);
 
-	sdata->shard_lock.Lock();
+	std::scoped_lock l{sdata->shard_lock};
 	f->open_object_section(queue_name);
 	sdata->pqueue->dump(f);
 	f->close_section();
-	sdata->shard_lock.Unlock();
       }
     }
 
     bool is_shard_empty(uint32_t thread_index) override {
       uint32_t shard_index = thread_index % osd->num_shards;
       auto &&sdata = osd->shards[shard_index];
-      assert(sdata);
-      Mutex::Locker l(sdata->shard_lock);
-      return sdata->pqueue->empty();
+      ceph_assert(sdata);
+      std::lock_guard l(sdata->shard_lock);
+      if (thread_index < osd->num_shards) {
+	return sdata->pqueue->empty() && sdata->context_queue.empty();
+      } else {
+	return sdata->pqueue->empty();
+      }
+    }
+
+    void handle_oncommits(list<Context*>& oncommits) {
+      for (auto p : oncommits) {
+	p->complete(0);
+      }
     }
   } op_shardedwq;
 
 
-  void enqueue_op(spg_t pg, OpRequestRef& op, epoch_t epoch);
+  void enqueue_op(spg_t pg, OpRequestRef&& op, epoch_t epoch);
   void dequeue_op(
     PGRef pg, OpRequestRef op,
     ThreadPool::TPHandle &handle);
@@ -1764,6 +1828,7 @@ protected:
     ThreadPool::TPHandle& handle);
 
   friend class PG;
+  friend class OSDShard;
   friend class PrimaryLogPG;
 
 
@@ -1777,6 +1842,8 @@ protected:
   epoch_t get_osdmap_epoch() const {
     return osdmap ? osdmap->get_epoch() : 0;
   }
+
+  pool_pg_num_history_t pg_num_history;
 
   utime_t         had_map_since;
   RWLock          map_lock;
@@ -1793,8 +1860,9 @@ protected:
   void note_up_osd(int osd);
   friend class C_OnMapCommit;
 
-  void advance_pg(
-    epoch_t advance_to, PG *pg,
+  bool advance_pg(
+    epoch_t advance_to,
+    PG *pg,
     ThreadPool::TPHandle &handle,
     PG::RecoveryCtx *rctx);
   void consume_map();
@@ -1828,8 +1896,18 @@ public:
   void dec_num_pgs() {
     --num_pgs;
   }
+  int get_num_pgs() const {
+    return num_pgs;
+  }
 
 protected:
+  Mutex merge_lock = {"OSD::merge_lock"};
+  /// merge epoch -> target pgid -> source pgid -> pg
+  map<epoch_t,map<spg_t,map<spg_t,PGRef>>> merge_waiters;
+
+  bool add_merge_waiter(OSDMapRef nextmap, spg_t target, PGRef source,
+			unsigned need);
+
   // -- placement groups --
   std::atomic<size_t> num_pgs = {0};
 
@@ -1843,7 +1921,7 @@ protected:
   PGRef _lookup_pg(spg_t pgid);
   PGRef _lookup_lock_pg(spg_t pgid);
   void register_pg(PGRef pg);
-  void unregister_pg(PG *pg);
+  bool try_finish_pg_delete(PG *pg, unsigned old_pg_num);
 
   void _get_pgs(vector<PGRef> *v, bool clear_too=false);
   void _get_pgids(vector<spg_t> *v);
@@ -1870,15 +1948,6 @@ protected:
     pg_history_t *h,
     PastIntervals *pi);
 
-  /// project pg history from from to now
-  bool project_pg_history(
-    spg_t pgid, pg_history_t& h, epoch_t from,
-    const vector<int>& lastup,
-    int lastupprimary,
-    const vector<int>& lastacting,
-    int lastactingprimary
-    ); ///< @return false if there was a map gap between from and now
-
   epoch_t last_pg_create_epoch;
 
   void handle_pg_create(OpRequestRef op);
@@ -1894,6 +1963,7 @@ protected:
   // == monitor interaction ==
   Mutex mon_report_lock;
   utime_t last_mon_report;
+  Finisher boot_finisher;
 
   // -- boot --
   void start_boot();
@@ -1935,6 +2005,7 @@ protected:
   void requeue_failures();
   void send_failures();
   void send_still_alive(epoch_t epoch, int osd, const entity_addrvec_t &addrs);
+  void cancel_pending_failures();
 
   ceph::coarse_mono_clock::time_point last_sent_beacon;
   Mutex min_last_epoch_clean_lock{"OSD::min_last_epoch_clean_lock"};
@@ -1991,7 +2062,10 @@ protected:
   void handle_fast_pg_info(MOSDPGInfo *m);
   void handle_fast_pg_remove(MOSDPGRemove *m);
 
+public:
+  // used by OSDShard
   PGRef handle_pg_create_info(const OSDMapRef& osdmap, const PGCreateInfo *info);
+protected:
 
   void handle_fast_force_recovery(MOSDForceRecovery *m);
 
@@ -2029,14 +2103,14 @@ protected:
       return c;
     }
     void _process(Command *c, ThreadPool::TPHandle &) override {
-      osd->osd_lock.Lock();
+      osd->osd_lock.lock();
       if (osd->is_stopping()) {
-	osd->osd_lock.Unlock();
+	osd->osd_lock.unlock();
 	delete c;
 	return;
       }
       osd->do_command(c->con.get(), c->tid, c->cmd, c->indata);
-      osd->osd_lock.Unlock();
+      osd->osd_lock.unlock();
       delete c;
     }
     void _clear() override {
@@ -2051,6 +2125,10 @@ protected:
   void handle_command(class MMonCommand *m);
   void handle_command(class MCommand *m);
   void do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, bufferlist& data);
+  int _do_command(
+    Connection *con, cmdmap_t& cmdmap, ceph_tid_t tid, bufferlist& data,
+    bufferlist& odata, stringstream& ss, stringstream& ds);
+
 
   // -- pg recovery --
   void do_recovery(PG *pg, epoch_t epoch_queued, uint64_t pushes_reserved,
@@ -2066,6 +2144,7 @@ protected:
   // -- status reporting --
   MPGStats *collect_pg_stats();
   std::vector<DaemonHealthMetric> get_health_metrics();
+
 
 private:
   bool ms_can_fast_dispatch_any() const override { return true; }
@@ -2114,12 +2193,11 @@ private:
   void ms_fast_preprocess(Message *m) override;
   bool ms_dispatch(Message *m) override;
   bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new) override;
-  bool ms_verify_authorizer(Connection *con, int peer_type,
-			    int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
-			    bool& isvalid, CryptoKey& session_key) override;
   void ms_handle_connect(Connection *con) override;
   void ms_handle_fast_connect(Connection *con) override;
   void ms_handle_fast_accept(Connection *con) override;
+  int ms_handle_authentication(Connection *con) override;
+  KeyStore *ms_get_auth1_authorizer_keystore() override;
   bool ms_handle_reset(Connection *con) override;
   void ms_handle_remote_reset(Connection *con) override {}
   bool ms_handle_refused(Connection *con) override;
@@ -2174,9 +2252,8 @@ private:
   ~OSD() override;
 
   // static bits
-  static int mkfs(CephContext *cct, ObjectStore *store,
-		  const string& dev,
-		  uuid_d fsid, int whoami);
+  static int mkfs(CephContext *cct, ObjectStore *store, uuid_d fsid, int whoami);
+
   /* remove any non-user xattrs from a map of them */
   void filter_xattrs(map<string, bufferptr>& attrs) {
     for (map<string, bufferptr>::iterator iter = attrs.begin();
@@ -2207,9 +2284,9 @@ private:
   int get_num_op_threads();
 
   float get_osd_recovery_sleep();
+  float get_osd_delete_sleep();
 
-  void probe_smart(ostream& ss);
-  int probe_smart_device(const char *device, int timeout, std::string *result);
+  void probe_smart(const string& devid, ostream& ss);
 
 public:
   static int peek_meta(ObjectStore *store, string& magic,
@@ -2234,6 +2311,16 @@ public:
 public:
   OSDService service;
   friend class OSDService;
+
+private:
+  void set_perf_queries(
+      const std::map<OSDPerfMetricQuery, OSDPerfMetricLimits> &queries);
+  void get_perf_reports(
+      std::map<OSDPerfMetricQuery, OSDPerfMetricReport> *reports);
+
+  Mutex m_perf_queries_lock = {"OSD::m_perf_queries_lock"};
+  std::list<OSDPerfMetricQuery> m_perf_queries;
+  std::map<OSDPerfMetricQuery, OSDPerfMetricLimits> m_perf_limits;
 };
 
 

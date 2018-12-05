@@ -19,8 +19,6 @@
 #include "common/Mutex.h"
 
 #include "include/buffer.h"
-#include "include/rados/librados.h"
-#include "include/rados/librados.hpp"
 #include "include/xlist.h"
 #include "osd/osd_types.h"
 
@@ -131,13 +129,13 @@ struct librados::AioCompletionImpl {
     lock.Unlock();
   }
   void _get() {
-    assert(lock.is_locked());
-    assert(ref > 0);
+    ceph_assert(lock.is_locked());
+    ceph_assert(ref > 0);
     ++ref;
   }
   void release() {
     lock.Lock();
-    assert(!released);
+    ceph_assert(!released);
     released = true;
     put_unlock();
   }
@@ -146,7 +144,7 @@ struct librados::AioCompletionImpl {
     put_unlock();
   }
   void put_unlock() {
-    assert(ref > 0);
+    ceph_assert(ref > 0);
     int n = --ref;
     lock.Unlock();
     if (!n)

@@ -104,11 +104,11 @@ void osbench_worker(ObjectStore *os, const Config &cfg,
   dout(0) << "Writing " << cfg.size
       << " in blocks of " << cfg.block_size << dendl;
 
-  assert(starting_offset < cfg.size);
-  assert(starting_offset % cfg.block_size == 0);
+  ceph_assert(starting_offset < cfg.size);
+  ceph_assert(starting_offset % cfg.block_size == 0);
 
   ObjectStore::CollectionHandle ch = os->open_collection(cid);
-  assert(ch);
+  ceph_assert(ch);
 
   for (int i = 0; i < cfg.repeats; ++i) {
     uint64_t offset = starting_offset;
@@ -199,9 +199,9 @@ int main(int argc, const char *argv[])
   common_init_finish(g_ceph_context);
 
   // create object store
-  dout(0) << "objectstore " << g_conf->osd_objectstore << dendl;
-  dout(0) << "data " << g_conf->osd_data << dendl;
-  dout(0) << "journal " << g_conf->osd_journal << dendl;
+  dout(0) << "objectstore " << g_conf()->osd_objectstore << dendl;
+  dout(0) << "data " << g_conf()->osd_data << dendl;
+  dout(0) << "journal " << g_conf()->osd_journal << dendl;
   dout(0) << "size " << cfg.size << dendl;
   dout(0) << "block-size " << cfg.block_size << dendl;
   dout(0) << "repeats " << cfg.repeats << dendl;
@@ -209,15 +209,15 @@ int main(int argc, const char *argv[])
 
   auto os = std::unique_ptr<ObjectStore>(
       ObjectStore::create(g_ceph_context,
-                          g_conf->osd_objectstore,
-                          g_conf->osd_data,
-                          g_conf->osd_journal));
+                          g_conf()->osd_objectstore,
+                          g_conf()->osd_data,
+                          g_conf()->osd_journal));
 
   //Checking data folder: create if needed or error if it's not empty
-  DIR *dir = ::opendir(g_conf->osd_data.c_str());
+  DIR *dir = ::opendir(g_conf()->osd_data.c_str());
   if (!dir) {
     std::string cmd("mkdir -p ");
-    cmd+=g_conf->osd_data;
+    cmd+=g_conf()->osd_data;
     int r = ::system( cmd.c_str() );
     if( r<0 ){
       derr << "Failed to create data directory, ret = " << r << dendl;
@@ -227,14 +227,14 @@ int main(int argc, const char *argv[])
   else {
      bool non_empty = readdir(dir) != NULL && readdir(dir) != NULL && readdir(dir) != NULL;
      if( non_empty ){
-       derr << "Data directory '"<<g_conf->osd_data<<"' isn't empty, please clean it first."<< dendl;
+       derr << "Data directory '"<<g_conf()->osd_data<<"' isn't empty, please clean it first."<< dendl;
        return 1;
      }
   }
   ::closedir(dir);
 
   //Create folders for journal if needed
-  string journal_base = g_conf->osd_journal.substr(0, g_conf->osd_journal.rfind('/'));
+  string journal_base = g_conf()->osd_journal.substr(0, g_conf()->osd_journal.rfind('/'));
   struct stat sb;
   if (stat(journal_base.c_str(), &sb) != 0 ){
     std::string cmd("mkdir -p ");
@@ -247,7 +247,7 @@ int main(int argc, const char *argv[])
   }
 
   if (!os) {
-    derr << "bad objectstore type " << g_conf->osd_objectstore << dendl;
+    derr << "bad objectstore type " << g_conf()->osd_objectstore << dendl;
     return 1;
   }
   if (os->mkfs() < 0) {
@@ -283,7 +283,7 @@ int main(int argc, const char *argv[])
       ObjectStore::Transaction t;
       t.touch(cid, oids[i]);
       int r = os->queue_transaction(ch, std::move(t));
-      assert(r == 0);
+      ceph_assert(r == 0);
     }
   } else {
     oids.emplace_back(hobject_t(sobject_t("osbench", CEPH_NOSNAP)));
@@ -291,7 +291,7 @@ int main(int argc, const char *argv[])
     ObjectStore::Transaction t;
     t.touch(cid, oids.back());
     int r = os->queue_transaction(ch, std::move(t));
-    assert(r == 0);
+    ceph_assert(r == 0);
   }
 
   // run the worker threads

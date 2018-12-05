@@ -201,7 +201,7 @@ public:
 class PGOpItem : public PGOpQueueable {
   OpRequestRef op;
 public:
-  PGOpItem(spg_t pg, OpRequestRef op) : PGOpQueueable(pg), op(op) {}
+  PGOpItem(spg_t pg, OpRequestRef op) : PGOpQueueable(pg), op(std::move(op)) {}
   op_type_t get_op_type() const override final {
     return op_type_t::client_op;
   }

@@ -3,42 +3,38 @@ import os
 from ceph_volume import terminal
 from ceph_volume import decorators
 from ceph_volume.util import disk
+from ceph_volume.util.device import Device
 
 
-class LVPath(object):
-    """
-    A simple validator to ensure that a logical volume is specified like::
+class ValidDevice(object):
 
-        <vg name>/<lv name>
-
-    Or a full path to a device, like ``/dev/sda``
-
-    Because for LVM it is better to be specific on what group does an lv
-    belongs to.
-    """
+    def __init__(self, as_string=False, gpt_ok=False):
+        self.as_string = as_string
+        self.gpt_ok = gpt_ok
 
     def __call__(self, string):
+        device = Device(string)
         error = None
-        if string.startswith('/'):
-            if not os.path.exists(string):
-                error = "Argument (device) does not exist: %s" % string
-                raise argparse.ArgumentError(None, error)
-            else:
-                return string
-        try:
-            vg, lv = string.split('/')
-        except ValueError:
-            error = "Logical volume must be specified as 'volume_group/logical_volume' but got: %s" % string
-            raise argparse.ArgumentError(None, error)
-
-        if not vg:
-            error = "Didn't specify a volume group like 'volume_group/logical_volume', got: %s" % string
-        if not lv:
-            error = "Didn't specify a logical volume like 'volume_group/logical_volume', got: %s" % string
+        if not device.exists:
+            error = "Unable to proceed with non-existing device: %s" % string
+        # FIXME this is not a nice API, this validator was meant to catch any
+        # non-existing devices upfront, not check for gpt headers. Now this
+        # needs to optionally skip checking gpt headers which is beyond
+        # verifying if the device exists. The better solution would be to
+        # configure this with a list of checks that can be excluded/included on
+        # __init__
+        elif device.has_gpt_headers and not self.gpt_ok:
+            error = "GPT headers found, they must be removed on: %s" % string
 
         if error:
             raise argparse.ArgumentError(None, error)
-        return string
+
+        if self.as_string:
+            if device.is_lv:
+                # all codepaths expect an lv path to be returned in this format
+                return "{}/{}".format(device.vg_name, device.lv_name)
+            return string
+        return device
 
 
 class OSDPath(object):

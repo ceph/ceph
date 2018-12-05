@@ -22,6 +22,14 @@ from ceph_argparse import json_command
 import cephfs
 import rados
 
+def to_bytes(param):
+    '''
+    Helper method that returns byte representation of the given parameter.
+    '''
+    if isinstance(param, str):
+        return param.encode()
+    else:
+        return str(param).encode()
 
 class RadosError(Exception):
     """
@@ -33,7 +41,6 @@ class RadosError(Exception):
 RADOS_TIMEOUT = 10
 
 log = logging.getLogger(__name__)
-
 
 # Reserved volume group name which we use in paths for volumes
 # that are not assigned to a group (i.e. created with group=None)
@@ -205,6 +212,7 @@ CEPHFSVOLUMECLIENT_VERSION_HISTORY = """
     * 1 - Initial version
     * 2 - Added get_object, put_object, delete_object methods to CephFSVolumeClient
     * 3 - Allow volumes to be created without RADOS namespace isolation
+    * 4 - Added get_object_and_version, put_object_versioned method to CephFSVolumeClient
 """
 
 
@@ -228,27 +236,43 @@ class CephFSVolumeClient(object):
     """
 
     # Current version
-    version = 3
+    version = 4
 
     # Where shall we create our volumes?
     POOL_PREFIX = "fsvolume_"
     DEFAULT_VOL_PREFIX = "/volumes"
     DEFAULT_NS_PREFIX = "fsvolumens_"
 
-    def __init__(self, auth_id, conf_path, cluster_name, volume_prefix=None, pool_ns_prefix=None):
+    def __init__(self, auth_id=None, conf_path=None, cluster_name=None,
+                 volume_prefix=None, pool_ns_prefix=None, rados=None):
+        """
+        Either set all three of ``auth_id``, ``conf_path`` and
+        ``cluster_name`` (rados constructed on connect), or
+        set ``rados`` (existing rados instance).
+        """
         self.fs = None
-        self.rados = None
         self.connected = False
+
         self.conf_path = conf_path
         self.cluster_name = cluster_name
         self.auth_id = auth_id
+
+        self.rados = rados
+        if self.rados:
+            # Using an externally owned rados, so we won't tear it down
+            # on disconnect
+            self.own_rados = False
+        else:
+            # self.rados will be constructed in connect
+            self.own_rados = True
+
         self.volume_prefix = volume_prefix if volume_prefix else self.DEFAULT_VOL_PREFIX
         self.pool_ns_prefix = pool_ns_prefix if pool_ns_prefix else self.DEFAULT_NS_PREFIX
         # For flock'ing in cephfs, I want a unique ID to distinguish me
         # from any other manila-share services that are loading this module.
         # We could use pid, but that's unnecessary weak: generate a
         # UUID
-        self._id = struct.unpack(">Q", uuid.uuid1().get_bytes()[0:8])[0]
+        self._id = struct.unpack(">Q", uuid.uuid1().bytes[0:8])[0]
 
         # TODO: version the on-disk structures
 
@@ -440,25 +464,7 @@ class CephFSVolumeClient(object):
             group_id
         )
 
-    def connect(self, premount_evict = None):
-        """
-
-        :param premount_evict: Optional auth_id to evict before mounting the filesystem: callers
-                               may want to use this to specify their own auth ID if they expect
-                               to be a unique instance and don't want to wait for caps to time
-                               out after failure of another instance of themselves.
-        """
-        log.debug("Connecting to RADOS with config {0}...".format(self.conf_path))
-        self.rados = rados.Rados(
-            name="client.{0}".format(self.auth_id),
-            clustername=self.cluster_name,
-            conffile=self.conf_path,
-            conf={}
-        )
-        self.rados.connect()
-
-        log.debug("Connection to RADOS complete")
-
+    def _connect(self, premount_evict):
         log.debug("Connecting to cephfs...")
         self.fs = cephfs.LibCephFS(rados_inst=self.rados)
         log.debug("CephFS initializing...")
@@ -474,6 +480,28 @@ class CephFSVolumeClient(object):
         # Recover from partial auth updates due to a previous
         # crash.
         self.recover()
+
+    def connect(self, premount_evict = None):
+        """
+
+        :param premount_evict: Optional auth_id to evict before mounting the filesystem: callers
+                               may want to use this to specify their own auth ID if they expect
+                               to be a unique instance and don't want to wait for caps to time
+                               out after failure of another instance of themselves.
+        """
+        if self.own_rados:
+            log.debug("Configuring to RADOS with config {0}...".format(self.conf_path))
+            self.rados = rados.Rados(
+                name="client.{0}".format(self.auth_id),
+                clustername=self.cluster_name,
+                conffile=self.conf_path,
+                conf={}
+            )
+            if self.rados.state != "connected":
+                log.debug("Connecting to RADOS...")
+                self.rados.connect()
+                log.debug("Connection to RADOS complete")
+        self._connect(premount_evict)
 
     def get_mon_addrs(self):
         log.info("get_mon_addrs")
@@ -493,11 +521,18 @@ class CephFSVolumeClient(object):
             self.fs = None
             log.debug("Disconnecting cephfs complete")
 
-        if self.rados:
+        if self.rados and self.own_rados:
             log.debug("Disconnecting rados...")
             self.rados.shutdown()
             self.rados = None
             log.debug("Disconnecting rados complete")
+
+    def __enter__(self):
+        self.connect()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.disconnect()
 
     def __del__(self):
         self.disconnect()
@@ -541,14 +576,14 @@ class CephFSVolumeClient(object):
         # of PGs already created by non-manila pools, then divide by ten.  That'll
         # give you a reasonable result on a system where you have "a few" manila
         # shares.
-        pg_num = ((pg_warn_max_per_osd * osd_count) - other_pgs) / 10
+        pg_num = ((pg_warn_max_per_osd * osd_count) - other_pgs) // 10
         # TODO Alternatively, respect an override set by the user.
 
         self._rados_command(
             'osd pool create',
             {
                 'pool': pool_name,
-                'pg_num': pg_num
+                'pg_num': int(pg_num),
             }
         )
 
@@ -565,14 +600,14 @@ class CephFSVolumeClient(object):
         else:
             return pool_id
 
-    def create_group(self, group_id):
+    def create_group(self, group_id, mode=0o755):
         # Prevent craftily-named volume groups from colliding with the meta
         # files.
         if group_id.endswith(META_FILE_EXT):
             raise ValueError("group ID cannot end with '{0}'.".format(
                 META_FILE_EXT))
         path = self._get_group_path(group_id)
-        self._mkdir_p(path)
+        self._mkdir_p(path, mode)
 
     def destroy_group(self, group_id):
         path = self._get_group_path(group_id)
@@ -583,7 +618,7 @@ class CephFSVolumeClient(object):
         else:
             self.fs.rmdir(path)
 
-    def _mkdir_p(self, path):
+    def _mkdir_p(self, path, mode=0o755):
         try:
             self.fs.stat(path)
         except cephfs.ObjectNotFound:
@@ -598,9 +633,10 @@ class CephFSVolumeClient(object):
             try:
                 self.fs.stat(subpath)
             except cephfs.ObjectNotFound:
-                self.fs.mkdir(subpath, 0o755)
+                self.fs.mkdir(subpath, mode)
 
-    def create_volume(self, volume_path, size=None, data_isolated=False, namespace_isolated=True):
+    def create_volume(self, volume_path, size=None, data_isolated=False, namespace_isolated=True,
+                      mode=0o755):
         """
         Set up metadata, pools and auth for a volume.
 
@@ -616,10 +652,10 @@ class CephFSVolumeClient(object):
         path = self._get_path(volume_path)
         log.info("create_volume: {0}".format(path))
 
-        self._mkdir_p(path)
+        self._mkdir_p(path, mode)
 
         if size is not None:
-            self.fs.setxattr(path, 'ceph.quota.max_bytes', size.__str__(), 0)
+            self.fs.setxattr(path, 'ceph.quota.max_bytes', to_bytes(size), 0)
 
         # data_isolated means create a separate pool for this volume
         if data_isolated:
@@ -632,19 +668,22 @@ class CephFSVolumeClient(object):
                     'fs_name': mds_map['fs_name'],
                     'pool': pool_name
                 })
-            self.fs.setxattr(path, 'ceph.dir.layout.pool', pool_name, 0)
+            time.sleep(5) # time for MDSMap to be distributed
+            self.fs.setxattr(path, 'ceph.dir.layout.pool', to_bytes(pool_name), 0)
 
         # enforce security isolation, use separate namespace for this volume
         if namespace_isolated:
             namespace = "{0}{1}".format(self.pool_ns_prefix, volume_path.volume_id)
             log.info("create_volume: {0}, using rados namespace {1} to isolate data.".format(volume_path, namespace))
-            self.fs.setxattr(path, 'ceph.dir.layout.pool_namespace', namespace, 0)
+            self.fs.setxattr(path, 'ceph.dir.layout.pool_namespace',
+                             to_bytes(namespace), 0)
         else:
             # If volume's namespace layout is not set, then the volume's pool
             # layout remains unset and will undesirably change with ancestor's
             # pool layout changes.
             pool_name = self._get_ancestor_xattr(path, "ceph.dir.layout.pool")
-            self.fs.setxattr(path, 'ceph.dir.layout.pool', pool_name, 0)
+            self.fs.setxattr(path, 'ceph.dir.layout.pool',
+                             to_bytes(pool_name), 0)
 
         # Create a volume meta file, if it does not already exist, to store
         # data about auth ids having access to the volume
@@ -744,7 +783,7 @@ class CephFSVolumeClient(object):
                                 {
                                     "pool": pool_name,
                                     "pool2": pool_name,
-                                    "sure": "--yes-i-really-really-mean-it"
+                                    "yes_i_really_really_mean_it": True
                                 })
 
     def _get_ancestor_xattr(self, path, attr):
@@ -753,7 +792,7 @@ class CephFSVolumeClient(object):
         on the requested path, keep checking parents until we find it.
         """
         try:
-            result = self.fs.getxattr(path, attr)
+            result = self.fs.getxattr(path, attr).decode()
             if result == "":
                 # Annoying!  cephfs gives us empty instead of an error when attr not found
                 raise cephfs.NoData()
@@ -783,7 +822,7 @@ class CephFSVolumeClient(object):
         read_bytes = self.fs.read(fd, 0, 4096 * 1024)
         self.fs.close(fd)
         if read_bytes:
-            return json.loads(read_bytes)
+            return json.loads(read_bytes.decode())
         else:
             return None
 
@@ -791,7 +830,7 @@ class CephFSVolumeClient(object):
         serialized = json.dumps(data)
         fd = self.fs.open(path, "w")
         try:
-            self.fs.write(fd, serialized, 0)
+            self.fs.write(fd, to_bytes(serialized), 0)
             self.fs.fsync(fd, 0)
         finally:
             self.fs.close(fd)
@@ -1035,7 +1074,8 @@ class CephFSVolumeClient(object):
         pool_name = self._get_ancestor_xattr(path, "ceph.dir.layout.pool")
 
         try:
-            namespace = self.fs.getxattr(path, "ceph.dir.layout.pool_namespace")
+            namespace = self.fs.getxattr(path, "ceph.dir.layout.pool_"
+                                         "namespace").decode()
         except cephfs.NoData:
             namespace = None
 
@@ -1219,7 +1259,8 @@ class CephFSVolumeClient(object):
         path = self._get_path(volume_path)
         pool_name = self._get_ancestor_xattr(path, "ceph.dir.layout.pool")
         try:
-            namespace = self.fs.getxattr(path, "ceph.dir.layout.pool_namespace")
+            namespace = self.fs.getxattr(path, "ceph.dir.layout.pool_"
+                                         "namespace").decode()
         except cephfs.NoData:
             namespace = None
 
@@ -1332,7 +1373,7 @@ class CephFSVolumeClient(object):
             if decode:
                 if outbuf:
                     try:
-                        return json.loads(outbuf)
+                        return json.loads(outbuf.decode())
                     except (ValueError, TypeError):
                         raise RadosError("Invalid JSON output for command {0}".format(argdict))
                 else:
@@ -1341,21 +1382,21 @@ class CephFSVolumeClient(object):
                 return outbuf
 
     def get_used_bytes(self, volume_path):
-        return int(self.fs.getxattr(self._get_path(volume_path), "ceph.dir.rbytes"))
+        return int(self.fs.getxattr(self._get_path(volume_path), "ceph.dir."
+                                    "rbytes").decode())
 
     def set_max_bytes(self, volume_path, max_bytes):
         self.fs.setxattr(self._get_path(volume_path), 'ceph.quota.max_bytes',
-                         max_bytes.__str__() if max_bytes is not None else "0",
-                         0)
+                         to_bytes(max_bytes if max_bytes else 0), 0)
 
     def _snapshot_path(self, dir_path, snapshot_name):
         return os.path.join(
             dir_path, self.rados.conf_get('client_snapdir'), snapshot_name
         )
 
-    def _snapshot_create(self, dir_path, snapshot_name):
+    def _snapshot_create(self, dir_path, snapshot_name, mode=0o755):
         # TODO: raise intelligible exception for clusters where snaps are disabled
-        self.fs.mkdir(self._snapshot_path(dir_path, snapshot_name), 0o755)
+        self.fs.mkdir(self._snapshot_path(dir_path, snapshot_name), mode)
 
     def _snapshot_destroy(self, dir_path, snapshot_name):
         """
@@ -1366,17 +1407,18 @@ class CephFSVolumeClient(object):
         except cephfs.ObjectNotFound:
             log.warn("Snapshot was already gone: {0}".format(snapshot_name))
 
-    def create_snapshot_volume(self, volume_path, snapshot_name):
-        self._snapshot_create(self._get_path(volume_path), snapshot_name)
+    def create_snapshot_volume(self, volume_path, snapshot_name, mode=0o755):
+        self._snapshot_create(self._get_path(volume_path), snapshot_name, mode)
 
     def destroy_snapshot_volume(self, volume_path, snapshot_name):
         self._snapshot_destroy(self._get_path(volume_path), snapshot_name)
 
-    def create_snapshot_group(self, group_id, snapshot_name):
+    def create_snapshot_group(self, group_id, snapshot_name, mode=0o755):
         if group_id is None:
             raise RuntimeError("Group ID may not be None")
 
-        return self._snapshot_create(self._get_group_path(group_id), snapshot_name)
+        return self._snapshot_create(self._get_group_path(group_id), snapshot_name,
+                                     mode)
 
     def destroy_snapshot_group(self, group_id, snapshot_name):
         if group_id is None:
@@ -1407,15 +1449,40 @@ class CephFSVolumeClient(object):
         :param data: data to write
         :type data: bytes
         """
+        return self.put_object_versioned(pool_name, object_name, data)
+
+    def put_object_versioned(self, pool_name, object_name, data, version=None):
+        """
+        Synchronously write data to an object only if version of the object
+        version matches the expected version.
+
+        :param pool_name: name of the pool
+        :type pool_name: str
+        :param object_name: name of the object
+        :type object_name: str
+        :param data: data to write
+        :type data: bytes
+        :param version: expected version of the object to write
+        :type version: int
+        """
         ioctx = self.rados.open_ioctx(pool_name)
+
         max_size = int(self.rados.conf_get('osd_max_write_size')) * 1024 * 1024
         if len(data) > max_size:
             msg = ("Data to be written to object '{0}' exceeds "
                    "{1} bytes".format(object_name, max_size))
             log.error(msg)
             raise CephFSVolumeClientError(msg)
+
         try:
-            ioctx.write_full(object_name, data)
+            with rados.WriteOpCtx(ioctx) as wop:
+                if version is not None:
+                    wop.assert_version(version)
+                wop.write_full(data)
+                ioctx.operate_write_op(wop, object_name)
+        except rados.OSError as e:
+            log.error(e)
+            raise e
         finally:
             ioctx.close()
 
@@ -1430,6 +1497,19 @@ class CephFSVolumeClient(object):
 
         :returns: bytes - data read from object
         """
+        return self.get_object_and_version(pool_name, object_name)[0]
+
+    def get_object_and_version(self, pool_name, object_name):
+        """
+        Synchronously read data from object and get its version.
+
+        :param pool_name: name of the pool
+        :type pool_name: str
+        :param object_name: name of the object
+        :type object_name: str
+
+        :returns: tuple of object data and version
+        """
         ioctx = self.rados.open_ioctx(pool_name)
         max_size = int(self.rados.conf_get('osd_max_write_size')) * 1024 * 1024
         try:
@@ -1438,9 +1518,10 @@ class CephFSVolumeClient(object):
                     (ioctx.read(object_name, 1, offset=max_size))):
                 log.warning("Size of object {0} exceeds '{1}' bytes "
                             "read".format(object_name, max_size))
+            obj_version = ioctx.get_last_version()
         finally:
             ioctx.close()
-        return bytes_read
+        return (bytes_read, obj_version)
 
     def delete_object(self, pool_name, object_name):
         ioctx = self.rados.open_ioctx(pool_name)

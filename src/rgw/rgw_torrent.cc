@@ -7,6 +7,8 @@
 #include "include/str_list.h"
 #include "include/rados/librados.hpp"
 
+#include "services/svc_sys_obj.h"
+
 #define dout_subsys ceph_subsys_rgw
 
 using ceph::crypto::MD5;
@@ -169,12 +171,12 @@ void seed::sha1(SHA1 *h, bufferlist &bl, off_t bl_len)
 int seed::get_params()
 {
   is_torrent = true;
-  info.piece_length = g_conf->rgw_torrent_sha_unit;
-  create_by = g_conf->rgw_torrent_createby;
-  encoding = g_conf->rgw_torrent_encoding;
-  origin = g_conf->rgw_torrent_origin;
-  comment = g_conf->rgw_torrent_comment;
-  announce = g_conf->rgw_torrent_tracker;
+  info.piece_length = g_conf()->rgw_torrent_sha_unit;
+  create_by = g_conf()->rgw_torrent_createby;
+  encoding = g_conf()->rgw_torrent_encoding;
+  origin = g_conf()->rgw_torrent_origin;
+  comment = g_conf()->rgw_torrent_comment;
+  announce = g_conf()->rgw_torrent_tracker;
 
   /* tracker and tracker list is empty, set announce to origin */
   if (announce.empty() && !origin.empty())
@@ -242,7 +244,10 @@ int seed::save_torrent_file()
   rgw_raw_obj raw_obj;
   store->obj_to_raw(s->bucket_info.placement_rule, obj, &raw_obj);
 
-  op_ret = store->omap_set(raw_obj, key, bl);
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
+  auto sysobj = obj_ctx.get_obj(raw_obj);
+
+  op_ret = sysobj.omap().set(key, bl);
   if (op_ret < 0)
   {
     ldout(s->cct, 0) << "ERROR: failed to omap_set() op_ret = " << op_ret << dendl;

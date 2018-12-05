@@ -227,9 +227,6 @@ TEST_P(AllocTest, test_alloc_non_aligned_len)
 
 TEST_P(AllocTest, test_alloc_fragmentation)
 {
-  if (GetParam() == std::string("bitmap")) {
-    return;
-  }
   uint64_t capacity = 4 * 1024 * 1024;
   uint64_t alloc_unit = 4096;
   uint64_t want_size = alloc_unit;
@@ -237,14 +234,22 @@ TEST_P(AllocTest, test_alloc_fragmentation)
   
   init_alloc(capacity, alloc_unit);
   alloc->init_add_free(0, capacity);
+  bool bitmap_alloc = GetParam() == std::string("bitmap");
   
   EXPECT_EQ(0.0, alloc->get_fragmentation(alloc_unit));
+
   for (size_t i = 0; i < capacity / alloc_unit; ++i)
   {
     tmp.clear();
-    EXPECT_EQ(want_size, alloc->allocate(want_size, alloc_unit, 0, 0, &tmp));
+    EXPECT_EQ(static_cast<int64_t>(want_size),
+	      alloc->allocate(want_size, alloc_unit, 0, 0, &tmp));
     allocated.insert(allocated.end(), tmp.begin(), tmp.end());
-    EXPECT_EQ(0.0, alloc->get_fragmentation(alloc_unit));
+
+    // bitmap fragmentation calculation doesn't provide such constant
+    // estimate
+    if (!bitmap_alloc) {
+      EXPECT_EQ(0.0, alloc->get_fragmentation(alloc_unit));
+    }
   }
   EXPECT_EQ(-ENOSPC, alloc->allocate(want_size, alloc_unit, 0, 0, &tmp));
 
@@ -261,8 +266,13 @@ TEST_P(AllocTest, test_alloc_fragmentation)
     release_set.insert(allocated[i].offset, allocated[i].length);
     alloc->release(release_set);
   }
-  // fragmentation approx = 257 intervals / 768 max intervals
-  EXPECT_EQ(33, uint64_t(alloc->get_fragmentation(alloc_unit) * 100));
+  if (bitmap_alloc) {
+    // fragmentation = one l1 slot is free + one l1 slot is partial
+    EXPECT_EQ(50U, uint64_t(alloc->get_fragmentation(alloc_unit) * 100));
+  } else {
+    // fragmentation approx = 257 intervals / 768 max intervals
+    EXPECT_EQ(33u, uint64_t(alloc->get_fragmentation(alloc_unit) * 100));
+  }
 
   for (size_t i = allocated.size() / 2 + 1; i < allocated.size(); i += 2)
   {
@@ -274,7 +284,38 @@ TEST_P(AllocTest, test_alloc_fragmentation)
   // extents that causes some minor fragmentation (minor bug or by-design behavior?).
   // Hence leaving just two 
   // digits after decimal point due to this.
-  EXPECT_EQ(0, uint64_t(alloc->get_fragmentation(alloc_unit) * 100));
+  EXPECT_EQ(0u, uint64_t(alloc->get_fragmentation(alloc_unit) * 100));
+}
+
+TEST_P(AllocTest, test_alloc_bug_24598)
+{
+  if (string(GetParam()) != "bitmap")
+    return;
+  
+  uint64_t capacity = 0x2625a0000ull;
+  uint64_t alloc_unit = 0x4000;
+  uint64_t want_size = 0x200000;
+  PExtentVector allocated, tmp;
+
+  init_alloc(capacity, alloc_unit);
+
+  alloc->init_add_free(0x4800000, 0x100000);
+  alloc->init_add_free(0x4a00000, 0x100000);
+
+  alloc->init_rm_free(0x4800000, 0x100000);
+  alloc->init_rm_free(0x4a00000, 0x100000);
+
+  alloc->init_add_free(0x3f00000, 0x500000);
+  alloc->init_add_free(0x4500000, 0x100000);
+  alloc->init_add_free(0x4700000, 0x100000);
+  alloc->init_add_free(0x4900000, 0x100000);
+  alloc->init_add_free(0x4b00000, 0x200000);
+
+  EXPECT_EQ(static_cast<int64_t>(want_size),
+	    alloc->allocate(want_size, 0x100000, 0, 0, &tmp));
+  EXPECT_EQ(0x4b00000u, tmp[0].offset);
+  EXPECT_EQ(0x200000u, tmp[0].length);
+  EXPECT_EQ(1u, tmp.size());
 }
 
 INSTANTIATE_TEST_CASE_P(

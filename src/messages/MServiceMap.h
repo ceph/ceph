@@ -6,13 +6,15 @@
 #include "msg/Message.h"
 #include "mgr/ServiceMap.h"
 
-class MServiceMap : public Message {
+class MServiceMap : public MessageInstance<MServiceMap> {
 public:
+  friend factory;
+
   ServiceMap service_map;
 
-  MServiceMap() : Message(MSG_SERVICE_MAP) { }
+  MServiceMap() : MessageInstance(MSG_SERVICE_MAP) { }
   explicit MServiceMap(const ServiceMap& sm)
-    : Message(MSG_SERVICE_MAP),
+    : MessageInstance(MSG_SERVICE_MAP),
       service_map(sm) {
   }
 private:

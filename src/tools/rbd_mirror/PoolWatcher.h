@@ -13,10 +13,10 @@
 #include "common/ceph_context.h"
 #include "common/Mutex.h"
 #include "include/rados/librados.hpp"
-#include "types.h"
+#include "tools/rbd_mirror/Types.h"
 #include <boost/functional/hash.hpp>
 #include <boost/optional.hpp>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "tools/rbd_mirror/pool_watcher/Types.h"
 
 namespace librbd { struct ImageCtx; }

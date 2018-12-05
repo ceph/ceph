@@ -77,8 +77,8 @@ int main(int argc, char **argv) {
 
   char mb[10];
   sprintf(mb, "%u", size_mb);
-  g_ceph_context->_conf->set_val("osd_journal_size", mb);
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.set_val("osd_journal_size", mb);
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   finisher = new Finisher(g_ceph_context);
   
@@ -114,9 +114,9 @@ int main(int argc, char **argv) {
 }
 
 TEST(TestFileJournal, Create) {
-  g_ceph_context->_conf->set_val("journal_ignore_corruption", "false");
-  g_ceph_context->_conf->set_val("journal_write_header_frequency", "0");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.set_val("journal_ignore_corruption", "false");
+  g_ceph_context->_conf.set_val("journal_write_header_frequency", "0");
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
@@ -128,9 +128,9 @@ TEST(TestFileJournal, Create) {
 }
 
 TEST(TestFileJournal, WriteSmall) {
-  g_ceph_context->_conf->set_val("journal_ignore_corruption", "false");
-  g_ceph_context->_conf->set_val("journal_write_header_frequency", "0");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.set_val("journal_ignore_corruption", "false");
+  g_ceph_context->_conf.set_val("journal_write_header_frequency", "0");
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
@@ -153,9 +153,9 @@ TEST(TestFileJournal, WriteSmall) {
 }
 
 TEST(TestFileJournal, WriteBig) {
-  g_ceph_context->_conf->set_val("journal_ignore_corruption", "false");
-  g_ceph_context->_conf->set_val("journal_write_header_frequency", "0");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.set_val("journal_ignore_corruption", "false");
+  g_ceph_context->_conf.set_val("journal_write_header_frequency", "0");
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
@@ -181,9 +181,9 @@ TEST(TestFileJournal, WriteBig) {
 }
 
 TEST(TestFileJournal, WriteMany) {
-  g_ceph_context->_conf->set_val("journal_ignore_corruption", "false");
-  g_ceph_context->_conf->set_val("journal_write_header_frequency", "0");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.set_val("journal_ignore_corruption", "false");
+  g_ceph_context->_conf.set_val("journal_write_header_frequency", "0");
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
@@ -214,9 +214,9 @@ TEST(TestFileJournal, WriteMany) {
 }
 
 TEST(TestFileJournal, WriteManyVecs) {
-  g_ceph_context->_conf->set_val("journal_ignore_corruption", "false");
-  g_ceph_context->_conf->set_val("journal_write_header_frequency", "0");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.set_val("journal_ignore_corruption", "false");
+  g_ceph_context->_conf.set_val("journal_write_header_frequency", "0");
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
@@ -264,9 +264,9 @@ TEST(TestFileJournal, WriteManyVecs) {
 }
 
 TEST(TestFileJournal, ReplaySmall) {
-  g_ceph_context->_conf->set_val("journal_ignore_corruption", "false");
-  g_ceph_context->_conf->set_val("journal_write_header_frequency", "0");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.set_val("journal_ignore_corruption", "false");
+  g_ceph_context->_conf.set_val("journal_write_header_frequency", "0");
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   vector<ObjectStore::Transaction> tls;
 
@@ -325,9 +325,9 @@ TEST(TestFileJournal, ReplaySmall) {
 }
 
 TEST(TestFileJournal, ReplayCorrupt) {
-  g_ceph_context->_conf->set_val("journal_ignore_corruption", "true");
-  g_ceph_context->_conf->set_val("journal_write_header_frequency", "0");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.set_val("journal_ignore_corruption", "true");
+  g_ceph_context->_conf.set_val("journal_write_header_frequency", "0");
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   vector<ObjectStore::Transaction> tls;
   for (unsigned i = 0 ; i < 3; ++i) {
@@ -411,9 +411,9 @@ TEST(TestFileJournal, ReplayCorrupt) {
 }
 
 TEST(TestFileJournal, WriteTrim) {
-  g_ceph_context->_conf->set_val("journal_ignore_corruption", "false");
-  g_ceph_context->_conf->set_val("journal_write_header_frequency", "0");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.set_val("journal_ignore_corruption", "false");
+  g_ceph_context->_conf.set_val("journal_write_header_frequency", "0");
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
@@ -462,9 +462,9 @@ TEST(TestFileJournal, WriteTrim) {
 }
 
 TEST(TestFileJournal, WriteTrimSmall) {
-  g_ceph_context->_conf->set_val("journal_ignore_corruption", "false");
-  g_ceph_context->_conf->set_val("journal_write_header_frequency", "0");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.set_val("journal_ignore_corruption", "false");
+  g_ceph_context->_conf.set_val("journal_write_header_frequency", "0");
+  g_ceph_context->_conf.apply_changes(nullptr);
   vector<ObjectStore::Transaction> tls;
 
   for (unsigned i = 0 ; i < 3; ++i) {
@@ -512,9 +512,9 @@ TEST(TestFileJournal, WriteTrimSmall) {
 }
 
 TEST(TestFileJournal, ReplayDetectCorruptFooterMagic) {
-  g_ceph_context->_conf->set_val("journal_ignore_corruption", "true");
-  g_ceph_context->_conf->set_val("journal_write_header_frequency", "1");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.set_val("journal_ignore_corruption", "true");
+  g_ceph_context->_conf.set_val("journal_write_header_frequency", "1");
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   vector<ObjectStore::Transaction> tls;
   for (unsigned i = 0 ; i < 3; ++i) {
@@ -571,9 +571,9 @@ TEST(TestFileJournal, ReplayDetectCorruptFooterMagic) {
 }
 
 TEST(TestFileJournal, ReplayDetectCorruptPayload) {
-  g_ceph_context->_conf->set_val("journal_ignore_corruption", "true");
-  g_ceph_context->_conf->set_val("journal_write_header_frequency", "1");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.set_val("journal_ignore_corruption", "true");
+  g_ceph_context->_conf.set_val("journal_write_header_frequency", "1");
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   vector<ObjectStore::Transaction> tls;
   for (unsigned i = 0 ; i < 3; ++i) {
@@ -630,9 +630,9 @@ TEST(TestFileJournal, ReplayDetectCorruptPayload) {
 }
 
 TEST(TestFileJournal, ReplayDetectCorruptHeader) {
-  g_ceph_context->_conf->set_val("journal_ignore_corruption", "true");
-  g_ceph_context->_conf->set_val("journal_write_header_frequency", "1");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.set_val("journal_ignore_corruption", "true");
+  g_ceph_context->_conf.set_val("journal_write_header_frequency", "1");
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   vector<ObjectStore::Transaction> tls;
   for (unsigned i = 0 ; i < 3; ++i) {

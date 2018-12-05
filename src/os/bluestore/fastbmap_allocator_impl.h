@@ -31,10 +31,11 @@ struct interval_t
 typedef std::vector<interval_t> interval_vector_t;
 typedef std::vector<slot_t> slot_vector_t;
 #else
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "common/likely.h"
 #include "os/bluestore/bluestore_types.h"
 #include "include/mempool.h"
+#include "common/ceph_mutex.h"
 
 typedef bluestore_pextent_t interval_t;
 typedef PExtentVector interval_vector_t;
@@ -96,6 +97,18 @@ protected:
   uint64_t l0_granularity = 0; // space per entry
   uint64_t l1_granularity = 0; // space per entry
 
+  size_t partial_l1_count = 0;
+  size_t unalloc_l1_count = 0;
+
+  double get_fragmentation() const {
+    double res = 0.0;
+    auto total = unalloc_l1_count + partial_l1_count;
+    if (total) {
+      res = double(partial_l1_count) / double(total);
+    }
+    return res;
+  }
+
   uint64_t _level_granularity() const override
   {
     return l1_granularity;
@@ -122,6 +135,7 @@ class AllocatorLevel01Loose : public AllocatorLevel01
     L1_ENTRY_MASK = (1 << L1_ENTRY_WIDTH) - 1,
     L1_ENTRY_FULL = 0x00,
     L1_ENTRY_PARTIAL = 0x01,
+    L1_ENTRY_NOT_USED = 0x02,
     L1_ENTRY_FREE = 0x03,
     CHILD_PER_SLOT = bits_per_slot / L1_ENTRY_WIDTH, // 32
     CHILD_PER_SLOT_L0 = bits_per_slot, // 64
@@ -179,11 +193,11 @@ class AllocatorLevel01Loose : public AllocatorLevel01
 
     ++l0_dives;
 
-    assert(l0_pos0 < l0_pos1);
-    assert(length > *allocated);
-    assert(0 == (l0_pos0 % (slotset_width * d0)));
-    assert(0 == (l0_pos1 % (slotset_width * d0)));
-    assert(((length - *allocated) % l0_granularity) == 0);
+    ceph_assert(l0_pos0 < l0_pos1);
+    ceph_assert(length > *allocated);
+    ceph_assert(0 == (l0_pos0 % (slotset_width * d0)));
+    ceph_assert(0 == (l0_pos1 % (slotset_width * d0)));
+    ceph_assert(((length - *allocated) % l0_granularity) == 0);
 
     uint64_t need_entries = (length - *allocated) / l0_granularity;
 
@@ -212,7 +226,7 @@ class AllocatorLevel01Loose : public AllocatorLevel01
       }
 
       auto free_pos = find_next_set_bit(slot_val, 0);
-      assert(free_pos < bits_per_slot);
+      ceph_assert(free_pos < bits_per_slot);
       auto next_pos = free_pos + 1;
       while (next_pos < bits_per_slot &&
         (next_pos - free_pos) < need_entries) {
@@ -265,11 +279,13 @@ protected:
     l1.resize(slot_count, mark_as_free ? all_slot_set : all_slot_clear);
 
     // l0 slot count
-    slot_count = aligned_capacity / _alloc_unit / bits_per_slot;
+    size_t slot_count_l0 = aligned_capacity / _alloc_unit / bits_per_slot;
     // we use set bit(s) as a marker for (partially) free entry
-    l0.resize(slot_count, mark_as_free ? all_slot_set : all_slot_clear);
+    l0.resize(slot_count_l0, mark_as_free ? all_slot_set : all_slot_clear);
 
+    partial_l1_count = unalloc_l1_count = 0;
     if (mark_as_free) {
+      unalloc_l1_count = slot_count * _children_per_slot();
       auto l0_pos_no_use = p2roundup((int64_t)capacity, (int64_t)l0_granularity) / l0_granularity;
       _mark_alloc_l1_l0(l0_pos_no_use, aligned_capacity / l0_granularity);
     }
@@ -353,8 +369,8 @@ protected:
   {
     bool no_free = true;
     uint64_t d = slotset_width * CHILD_PER_SLOT_L0;
-    assert(0 == (l0_pos % d));
-    assert(0 == (l0_pos_end % d));
+    ceph_assert(0 == (l0_pos % d));
+    ceph_assert(0 == (l0_pos_end % d));
 
     auto idx = l0_pos / CHILD_PER_SLOT_L0;
     auto idx_end = l0_pos_end / CHILD_PER_SLOT_L0;
@@ -368,8 +384,8 @@ protected:
   {
     bool no_free = true;
     uint64_t d = slotset_width * _children_per_slot();
-    assert(0 == (l1_pos % d));
-    assert(0 == (l1_pos_end % d));
+    ceph_assert(0 == (l1_pos % d));
+    ceph_assert(0 == (l1_pos_end % d));
 
     auto idx = l1_pos / CHILD_PER_SLOT;
     auto idx_end = l1_pos_end / CHILD_PER_SLOT;
@@ -390,10 +406,10 @@ protected:
     uint64_t* allocated,
     interval_vector_t* res);
 
-  uint64_t _mark_alloc_l1(const interval_t& r)
+  uint64_t _mark_alloc_l1(uint64_t offset, uint64_t length)
   {
-    uint64_t l0_pos_start = r.offset / l0_granularity;
-    uint64_t l0_pos_end = p2roundup(r.offset + r.length, l0_granularity) / l0_granularity;
+    uint64_t l0_pos_start = offset / l0_granularity;
+    uint64_t l0_pos_end = p2roundup(offset + length, l0_granularity) / l0_granularity;
     _mark_alloc_l1_l0(l0_pos_start, l0_pos_end);
     return l0_granularity * (l0_pos_end - l0_pos_start);
   }
@@ -418,8 +434,8 @@ public:
 
   uint64_t debug_get_free(uint64_t l1_pos0 = 0, uint64_t l1_pos1 = 0)
   {
-    assert(0 == (l1_pos0 % CHILD_PER_SLOT));
-    assert(0 == (l1_pos1 % CHILD_PER_SLOT));
+    ceph_assert(0 == (l1_pos0 % CHILD_PER_SLOT));
+    ceph_assert(0 == (l1_pos1 % CHILD_PER_SLOT));
 
     auto idx0 = l1_pos0 * slotset_width;
     auto idx1 = l1_pos1 * slotset_width;
@@ -466,20 +482,20 @@ class AllocatorLevel02 : public AllocatorLevel
 public:
   uint64_t debug_get_free(uint64_t pos0 = 0, uint64_t pos1 = 0)
   {
-    std::lock_guard<std::mutex> l(lock);
+    std::lock_guard l(lock);
     return l1.debug_get_free(pos0 * l1._children_per_slot() * bits_per_slot,
       pos1 * l1._children_per_slot() * bits_per_slot);
   }
   uint64_t debug_get_allocated(uint64_t pos0 = 0, uint64_t pos1 = 0)
   {
-    std::lock_guard<std::mutex> l(lock);
+    std::lock_guard l(lock);
     return l1.debug_get_allocated(pos0 * l1._children_per_slot() * bits_per_slot,
       pos1 * l1._children_per_slot() * bits_per_slot);
   }
 
   uint64_t get_available()
   {
-    std::lock_guard<std::mutex> l(lock);
+    std::lock_guard l(lock);
     return available;
   }
   inline uint64_t get_min_alloc_size() const
@@ -488,7 +504,7 @@ public:
   }
 
 protected:
-  std::mutex lock;
+  ceph::mutex lock = ceph::make_mutex("AllocatorLevel02::lock");
   L1 l1;
   slot_vector_t l2;
   uint64_t l2_granularity = 0; // space per entry
@@ -510,7 +526,7 @@ protected:
 
   void _init(uint64_t capacity, uint64_t _alloc_unit, bool mark_as_free = true)
   {
-    assert(isp2(_alloc_unit));
+    ceph_assert(isp2(_alloc_unit));
     l1._init(capacity, _alloc_unit, mark_as_free);
 
     l2_granularity =
@@ -537,8 +553,8 @@ protected:
   void _mark_l2_allocated(int64_t l2_pos, int64_t l2_pos_end)
   {
     auto d = CHILD_PER_SLOT;
-    assert(0 <= l2_pos_end);
-    assert((int64_t)l2.size() >= (l2_pos_end / d));
+    ceph_assert(0 <= l2_pos_end);
+    ceph_assert((int64_t)l2.size() >= (l2_pos_end / d));
 
     while (l2_pos < l2_pos_end) {
       l2[l2_pos / d] &= ~(slot_t(1) << (l2_pos % d));
@@ -549,8 +565,8 @@ protected:
   void _mark_l2_free(int64_t l2_pos, int64_t l2_pos_end)
   {
     auto d = CHILD_PER_SLOT;
-    assert(0 <= l2_pos_end);
-    assert((int64_t)l2.size() >= (l2_pos_end / d));
+    ceph_assert(0 <= l2_pos_end);
+    ceph_assert((int64_t)l2.size() >= (l2_pos_end / d));
 
     while (l2_pos < l2_pos_end) {
         l2[l2_pos / d] |= (slot_t(1) << (l2_pos % d));
@@ -561,8 +577,8 @@ protected:
   void _mark_l2_on_l1(int64_t l2_pos, int64_t l2_pos_end)
   {
     auto d = CHILD_PER_SLOT;
-    assert(0 <= l2_pos_end);
-    assert((int64_t)l2.size() >= (l2_pos_end / d));
+    ceph_assert(0 <= l2_pos_end);
+    ceph_assert((int64_t)l2.size() >= (l2_pos_end / d));
 
     auto idx = l2_pos * slotset_width;
     auto idx_end = l2_pos_end * slotset_width;
@@ -598,16 +614,16 @@ protected:
   {
     uint64_t prev_allocated = *allocated;
     uint64_t d = CHILD_PER_SLOT;
-    assert(isp2(min_length));
-    assert(min_length <= l2_granularity);
-    assert(max_length == 0 || max_length >= min_length);
-    assert(max_length == 0 || (max_length % min_length) == 0);
-    assert(length >= min_length);
-    assert((length % min_length) == 0);
+    ceph_assert(isp2(min_length));
+    ceph_assert(min_length <= l2_granularity);
+    ceph_assert(max_length == 0 || max_length >= min_length);
+    ceph_assert(max_length == 0 || (max_length % min_length) == 0);
+    ceph_assert(length >= min_length);
+    ceph_assert((length % min_length) == 0);
 
     uint64_t l1_w = slotset_width * l1._children_per_slot();
 
-    std::lock_guard<std::mutex> l(lock);
+    std::lock_guard l(lock);
 
     if (available < min_length) {
       return;
@@ -636,10 +652,10 @@ protected:
 	  all_set = true;
 	} else {
 	  free_pos = find_next_set_bit(slot_val, 0);
-	  assert(free_pos < bits_per_slot);
+	  ceph_assert(free_pos < bits_per_slot);
 	}
 	do {
-	  assert(length > *allocated);
+	  ceph_assert(length > *allocated);
 	  bool empty = l1._allocate_l1(length,
 	    min_length,
 	    max_length,
@@ -668,7 +684,7 @@ protected:
 
     ++l2_allocs;
     auto allocated_here = *allocated - prev_allocated;
-    assert(available >= allocated_here);
+    ceph_assert(available >= allocated_here);
     available -= allocated_here;
   }
 
@@ -677,7 +693,7 @@ protected:
   void _free_l2(const interval_set<uint64_t> & rr)
   {
     uint64_t released = 0;
-    std::lock_guard<std::mutex> l(lock);
+    std::lock_guard l(lock);
     for (auto r : rr) {
       released += l1._free_l1(r.first, r.second);
       uint64_t l2_pos = r.first / l2_granularity;
@@ -693,7 +709,7 @@ protected:
   void _free_l2(const T& rr)
   {
     uint64_t released = 0;
-    std::lock_guard<std::mutex> l(lock);
+    std::lock_guard l(lock);
     for (auto r : rr) {
       released += l1._free_l1(r.offset, r.length);
       uint64_t l2_pos = r.offset / l2_granularity;
@@ -709,9 +725,9 @@ protected:
     uint64_t l2_pos = o / l2_granularity;
     uint64_t l2_pos_end = p2roundup(int64_t(o + len), int64_t(l2_granularity)) / l2_granularity;
 
-    std::lock_guard<std::mutex> l(lock);
-    auto allocated = l1._mark_alloc_l1(interval_t(o, len));
-    assert(available >= allocated);
+    std::lock_guard l(lock);
+    auto allocated = l1._mark_alloc_l1(o, len);
+    ceph_assert(available >= allocated);
     available -= allocated;
     _mark_l2_on_l1(l2_pos, l2_pos_end);
   }
@@ -721,13 +737,17 @@ protected:
     uint64_t l2_pos = o / l2_granularity;
     uint64_t l2_pos_end = p2roundup(int64_t(o + len), int64_t(l2_granularity)) / l2_granularity;
 
-    std::lock_guard<std::mutex> l(lock);
+    std::lock_guard l(lock);
     available += l1._free_l1(o, len);
     _mark_l2_free(l2_pos, l2_pos_end);
   }
   void _shutdown()
   {
     last_pos = 0;
+  }
+  double _get_fragmentation() {
+    std::lock_guard l(lock);
+    return l1.get_fragmentation();
   }
 };
 

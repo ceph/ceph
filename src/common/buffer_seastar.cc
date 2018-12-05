@@ -12,7 +12,7 @@
  *
  */
 
-#include <core/sharded.hh>
+#include <seastar/core/sharded.hh>
 
 #include "include/buffer_raw.h"
 #include "buffer_seastar.h"

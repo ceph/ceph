@@ -25,19 +25,17 @@ template <typename ImageCtxT = librbd::ImageCtx>
 class ObjectCopyRequest {
 public:
   static ObjectCopyRequest* create(ImageCtxT *src_image_ctx,
-                                   ImageCtxT *src_parent_image_ctx,
                                    ImageCtxT *dst_image_ctx,
                                    const SnapMap &snap_map,
                                    uint64_t object_number, bool flatten,
                                    Context *on_finish) {
-    return new ObjectCopyRequest(src_image_ctx, src_parent_image_ctx,
-                                 dst_image_ctx, snap_map, object_number,
-                                 flatten, on_finish);
+    return new ObjectCopyRequest(src_image_ctx, dst_image_ctx, snap_map,
+                                 object_number, flatten, on_finish);
   }
 
-  ObjectCopyRequest(ImageCtxT *src_image_ctx, ImageCtxT *src_parent_image_ctx,
-                    ImageCtxT *dst_image_ctx, const SnapMap &snap_map,
-                    uint64_t object_number, bool flatten, Context *on_finish);
+  ObjectCopyRequest(ImageCtxT *src_image_ctx, ImageCtxT *dst_image_ctx,
+                    const SnapMap &snap_map, uint64_t object_number,
+                    bool flatten, Context *on_finish);
 
   void send();
 
@@ -133,10 +131,9 @@ private:
   typedef std::map<librados::snap_t, std::map<uint64_t, uint64_t>> SnapObjectSizes;
 
   ImageCtxT *m_src_image_ctx;
-  ImageCtxT *m_src_parent_image_ctx;
   ImageCtxT *m_dst_image_ctx;
   CephContext *m_cct;
-  const SnapMap &m_snap_map;
+  SnapMap m_snap_map;
   uint64_t m_dst_object_number;
   bool m_flatten;
   Context *m_on_finish;
@@ -161,6 +158,7 @@ private:
   std::map<librados::snap_t, interval_set<uint64_t>> m_zero_interval;
   std::map<librados::snap_t, interval_set<uint64_t>> m_dst_zero_interval;
   std::map<librados::snap_t, uint8_t> m_dst_object_state;
+  std::map<librados::snap_t, bool> m_dst_object_may_exist;
   bufferlist m_read_from_parent_data;
 
   void send_list_snaps();
@@ -178,7 +176,7 @@ private:
   void send_update_object_map();
   void handle_update_object_map(int r);
 
-  Context *start_lock_op(RWLock &owner_lock);
+  Context *start_lock_op(RWLock &owner_lock, int* r);
 
   uint64_t src_to_dst_object_offset(uint64_t objectno, uint64_t offset);
 
@@ -187,6 +185,8 @@ private:
   void compute_read_from_parent_ops(io::Extents *image_extents);
   void merge_write_ops();
   void compute_zero_ops();
+
+  void compute_dst_object_may_exist();
 
   void finish(int r);
 };

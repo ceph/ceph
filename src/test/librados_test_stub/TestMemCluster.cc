@@ -38,7 +38,7 @@ TestRadosClient *TestMemCluster::create_rados_client(CephContext *cct) {
 }
 
 int TestMemCluster::register_object_handler(int64_t pool_id,
-                                            const std::string& o,
+                                            const ObjectLocator& locator,
                                             ObjectHandler* object_handler) {
   Mutex::Locker locker(m_lock);
   auto pool = get_pool(m_lock, pool_id);
@@ -47,21 +47,21 @@ int TestMemCluster::register_object_handler(int64_t pool_id,
   }
 
   RWLock::WLocker pool_locker(pool->file_lock);
-  auto file_it = pool->files.find(o);
+  auto file_it = pool->files.find(locator);
   if (file_it == pool->files.end()) {
     return -ENOENT;
   }
 
-  auto& object_handlers = pool->file_handlers[o];
+  auto& object_handlers = pool->file_handlers[locator];
   auto it = object_handlers.find(object_handler);
-  assert(it == object_handlers.end());
+  ceph_assert(it == object_handlers.end());
 
   object_handlers.insert(object_handler);
   return 0;
 }
 
 void TestMemCluster::unregister_object_handler(int64_t pool_id,
-                                               const std::string& o,
+                                               const ObjectLocator& locator,
                                                ObjectHandler* object_handler) {
   Mutex::Locker locker(m_lock);
   auto pool = get_pool(m_lock, pool_id);
@@ -70,7 +70,7 @@ void TestMemCluster::unregister_object_handler(int64_t pool_id,
   }
 
   RWLock::WLocker pool_locker(pool->file_lock);
-  auto handlers_it = pool->file_handlers.find(o);
+  auto handlers_it = pool->file_handlers.find(locator);
   if (handlers_it == pool->file_handlers.end()) {
     return;
   }
@@ -183,20 +183,19 @@ void TestMemCluster::blacklist(uint32_t nonce) {
   m_blacklist.insert(nonce);
 }
 
-void TestMemCluster::transaction_start(const std::string &oid) {
+void TestMemCluster::transaction_start(const ObjectLocator& locator) {
   Mutex::Locker locker(m_lock);
-  while (m_transactions.count(oid)) {
+  while (m_transactions.count(locator)) {
     m_transaction_cond.Wait(m_lock);
   }
-  std::pair<std::set<std::string>::iterator, bool> result =
-    m_transactions.insert(oid);
-  assert(result.second);
+  auto result = m_transactions.insert(locator);
+  ceph_assert(result.second);
 }
 
-void TestMemCluster::transaction_finish(const std::string &oid) {
+void TestMemCluster::transaction_finish(const ObjectLocator& locator) {
   Mutex::Locker locker(m_lock);
-  size_t count = m_transactions.erase(oid);
-  assert(count == 1);
+  size_t count = m_transactions.erase(locator);
+  ceph_assert(count == 1);
   m_transaction_cond.Signal();
 }
 

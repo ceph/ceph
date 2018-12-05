@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-from .helper import DashboardTestCase, authenticate
+from .helper import DashboardTestCase, JObj
 
 
 class PerfCountersControllerTest(DashboardTestCase):
 
-    @authenticate
     def test_perf_counters_list(self):
         data = self._get('/api/perf_counters')
         self.assertStatus(200)
@@ -33,32 +32,42 @@ class PerfCountersControllerTest(DashboardTestCase):
             self.assertIn('unit', counter)
             self.assertIn('value', counter)
 
-
-    @authenticate
     def test_perf_counters_mon_get(self):
         mon = self.mons()[0]
         data = self._get('/api/perf_counters/mon/{}'.format(mon))
         self.assertStatus(200)
         self._validate_perf(mon, 'mon', data, allow_empty=False)
 
-    @authenticate
     def test_perf_counters_mgr_get(self):
         mgr = self.mgr_cluster.mgr_ids[0]
         data = self._get('/api/perf_counters/mgr/{}'.format(mgr))
         self.assertStatus(200)
         self._validate_perf(mgr, 'mgr', data, allow_empty=False)
 
-    @authenticate
     def test_perf_counters_mds_get(self):
         for mds in self.mds_cluster.mds_ids:
             data = self._get('/api/perf_counters/mds/{}'.format(mds))
             self.assertStatus(200)
             self._validate_perf(mds, 'mds', data, allow_empty=True)
 
-    @authenticate
     def test_perf_counters_osd_get(self):
         for osd in self.ceph_cluster.mon_manager.get_osd_dump():
             osd = osd['osd']
             data = self._get('/api/perf_counters/osd/{}'.format(osd))
             self.assertStatus(200)
             self._validate_perf(osd, 'osd', data, allow_empty=False)
+
+    def test_perf_counters_not_found(self):
+        osds = self.ceph_cluster.mon_manager.get_osd_dump()
+        unused_id = int(list(map(lambda o: o['osd'], osds)).pop()) + 1
+
+        self._get('/api/perf_counters/osd/{}'.format(unused_id))
+        self.assertStatus(404)
+        schema = JObj(sub_elems={
+            'status': str,
+            'version': str,
+            'detail': str,
+            'traceback': str,
+        })
+        self.assertEqual(self._resp.json()['detail'], "'osd.{}' not found".format(unused_id))
+        self.assertSchemaBody(schema)

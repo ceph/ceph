@@ -35,14 +35,14 @@ class ZstdCompressor : public Compressor {
     size_t left = src.length();
 
     size_t const out_max = ZSTD_compressBound(left);
-    bufferptr outptr = buffer::create_page_aligned(out_max);
+    bufferptr outptr = buffer::create_small_page_aligned(out_max);
     ZSTD_outBuffer_s outbuf;
     outbuf.dst = outptr.c_str();
     outbuf.size = outptr.length();
     outbuf.pos = 0;
 
     while (left) {
-      assert(!p.end());
+      ceph_assert(!p.end());
       struct ZSTD_inBuffer_s inbuf;
       inbuf.pos = 0;
       inbuf.size = p.get_ptr_and_advance(left, (const char**)&inbuf.src);
@@ -53,7 +53,7 @@ class ZstdCompressor : public Compressor {
 	return -EINVAL;
       }
     }
-    assert(p.end());
+    ceph_assert(p.end());
 
     ZSTD_freeCStream(s);
 

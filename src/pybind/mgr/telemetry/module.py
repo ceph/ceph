@@ -88,11 +88,6 @@ class Module(MgrModule):
             "desc": "Show last report or report to be sent",
             "perm": "r"
         },
-        {
-            "cmd": "telemetry self-test",
-            "desc": "Perform a self-test",
-            "perm": "r"
-        }
     ]
 
     @property
@@ -209,6 +204,19 @@ class Module(MgrModule):
 
         return metadata
 
+    def gather_crashinfo(self):
+        crashdict = dict()
+        errno, crashids, err = self.remote('crash', 'do_ls', '', '')
+        if errno:
+            return ''
+        for crashid in crashids.split():
+            cmd = {'id': crashid}
+            errno, crashinfo, err = self.remote('crash', 'do_info', cmd, '')
+            if errno:
+                continue
+            crashdict[crashid] = json.loads(crashinfo)
+        return crashdict
+
     def compile_report(self):
         report = {'leaderboard': False, 'report_version': 1}
 
@@ -275,6 +283,8 @@ class Module(MgrModule):
         for key, value in service_map['services'].items():
             report['services'][key] += 1
 
+        report['crashes'] = self.gather_crashinfo()
+
         return report
 
     def send(self, report):
@@ -287,7 +297,7 @@ class Module(MgrModule):
 
         requests.put(url=self.config['url'], json=report, proxies=proxies)
 
-    def handle_command(self, command):
+    def handle_command(self, inbuf, command):
         if command['prefix'] == 'telemetry config-show':
             return 0, json.dumps(self.config), ''
         elif command['prefix'] == 'telemetry config-set':
@@ -309,9 +319,6 @@ class Module(MgrModule):
             if not report:
                 report = self.compile_report()
             return 0, json.dumps(report), ''
-        elif command['prefix'] == 'telemetry self-test':
-            self.self_test()
-            return 0, 'Self-test succeeded', ''
         else:
             return (-errno.EINVAL, '',
                     "Command not found '{0}'".format(command['prefix']))

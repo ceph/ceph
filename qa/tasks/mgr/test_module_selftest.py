@@ -26,10 +26,12 @@ class TestModuleSelftest(MgrTestCase):
         self.setup_mgrs()
 
     def _selftest_plugin(self, module_name):
+        self._load_module("selftest")
         self._load_module(module_name)
 
-        # Execute the module's self-test routine
-        self.mgr_cluster.mon_manager.raw_cluster_cmd(module_name, "self-test")
+        # Execute the module's self_test() method
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                "mgr", "self-test", "module", module_name)
 
     def test_zabbix(self):
         # Set these mandatory config fields so that the zabbix module
@@ -45,11 +47,27 @@ class TestModuleSelftest(MgrTestCase):
     def test_influx(self):
         self._selftest_plugin("influx")
 
+    def test_diskprediction_local(self):
+        self._selftest_plugin("diskprediction_local")
+
+    def test_diskprediction_cloud(self):
+        self._selftest_plugin("diskprediction_cloud")
+
     def test_telegraf(self):
         self._selftest_plugin("telegraf")
 
     def test_iostat(self):
         self._selftest_plugin("iostat")
+
+    def test_devicehealth(self):
+        self._selftest_plugin("devicehealth")
+        # Clean up the pool that the module creates, because otherwise
+        # it's low PG count causes test failures.
+        pool_name = "device_health_metrics"
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                "osd", "pool", "delete", pool_name, pool_name,
+                "--yes-i-really-really-mean-it")
+
 
     def test_selftest_run(self):
         self._load_module("selftest")
@@ -57,6 +75,9 @@ class TestModuleSelftest(MgrTestCase):
 
     def test_telemetry(self):
         self._selftest_plugin("telemetry")
+
+    def test_crash(self):
+        self._selftest_plugin("crash")
 
     def test_selftest_config_update(self):
         """
@@ -216,15 +237,14 @@ class TestModuleSelftest(MgrTestCase):
         disabled/failed/recently-enabled modules.
         """
 
-        self._load_module("selftest")
-
         # Calling a command on a disabled module should return the proper
         # error code.
+        self._load_module("selftest")
         self.mgr_cluster.mon_manager.raw_cluster_cmd(
-            "mgr", "module", "disable", "status")
+            "mgr", "module", "disable", "selftest")
         with self.assertRaises(CommandFailedError) as exc_raised:
             self.mgr_cluster.mon_manager.raw_cluster_cmd(
-                "osd", "status")
+                "mgr", "self-test", "run")
 
         self.assertEqual(exc_raised.exception.exitstatus, errno.EOPNOTSUPP)
 
@@ -237,9 +257,9 @@ class TestModuleSelftest(MgrTestCase):
 
         # Enabling a module and then immediately using ones of its commands
         # should work (#21683)
+        self._load_module("selftest")
         self.mgr_cluster.mon_manager.raw_cluster_cmd(
-            "mgr", "module", "enable", "status")
-        self.mgr_cluster.mon_manager.raw_cluster_cmd("osd", "status")
+            "mgr", "self-test", "config", "get", "testkey")
 
         # Calling a command for a failed module should return the proper
         # error code.
@@ -261,3 +281,53 @@ class TestModuleSelftest(MgrTestCase):
             "mgr", "module", "disable", "selftest")
 
         self.wait_for_health_clear(timeout=30)
+
+    def test_module_remote(self):
+        """
+        Use the selftest module to exercise inter-module communication
+        """
+        self._load_module("selftest")
+        # The "self-test remote" operation just happens to call into
+        # influx.
+        self._load_module("influx")
+
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            "mgr", "self-test", "remote")
+
+    def test_selftest_cluster_log(self):
+        """
+        Use the selftest module to test the cluster/audit log interface.
+        """
+        priority_map = {
+            "info": "INF",
+            "security": "SEC",
+            "warning": "WRN",
+            "error": "ERR"
+        }
+        self._load_module("selftest")
+        for priority in priority_map.keys():
+            message = "foo bar {}".format(priority)
+            log_message = "[{}] {}".format(priority_map[priority], message)
+            # Check for cluster/audit logs:
+            # 2018-09-24 09:37:10.977858 mgr.x [INF] foo bar info
+            # 2018-09-24 09:37:10.977860 mgr.x [SEC] foo bar security
+            # 2018-09-24 09:37:10.977863 mgr.x [WRN] foo bar warning
+            # 2018-09-24 09:37:10.977866 mgr.x [ERR] foo bar error
+            with self.assert_cluster_log(log_message):
+                self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                    "mgr", "self-test", "cluster-log", "cluster",
+                    priority, message)
+            with self.assert_cluster_log(log_message, watch_channel="audit"):
+                self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                    "mgr", "self-test", "cluster-log", "audit",
+                    priority, message)
+
+    def test_selftest_cluster_log_unknown_channel(self):
+        """
+        Use the selftest module to test the cluster/audit log interface.
+        """
+        with self.assertRaises(CommandFailedError) as exc_raised:
+            self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                "mgr", "self-test", "cluster-log", "xyz",
+                "ERR", "The channel does not exist")
+        self.assertEqual(exc_raised.exception.exitstatus, errno.EOPNOTSUPP)

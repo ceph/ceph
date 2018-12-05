@@ -23,10 +23,12 @@
  * PGNotify - notify primary of my PGs and versions.
  */
 
-class MOSDPGNotify : public Message {
-
-  static const int HEAD_VERSION = 6;
-  static const int COMPAT_VERSION = 6;
+class MOSDPGNotify : public MessageInstance<MOSDPGNotify> {
+public:
+  friend factory;
+private:
+  static constexpr int HEAD_VERSION = 6;
+  static constexpr int COMPAT_VERSION = 6;
 
   epoch_t epoch = 0;
   /// query_epoch is the epoch of the query being responded to, or
@@ -42,11 +44,11 @@ class MOSDPGNotify : public Message {
   }
 
   MOSDPGNotify()
-    : Message(MSG_OSD_PG_NOTIFY, HEAD_VERSION, COMPAT_VERSION) { 
+    : MessageInstance(MSG_OSD_PG_NOTIFY, HEAD_VERSION, COMPAT_VERSION) { 
     set_priority(CEPH_MSG_PRIO_HIGH);
   }
   MOSDPGNotify(epoch_t e, vector<pair<pg_notify_t,PastIntervals> >& l)
-    : Message(MSG_OSD_PG_NOTIFY, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_PG_NOTIFY, HEAD_VERSION, COMPAT_VERSION),
       epoch(e) {
     pg_list.swap(l);
     set_priority(CEPH_MSG_PRIO_HIGH);

@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
-#include "test/librados/test.h"
+#include "test/librados/test_cxx.h"
 
 #include <semaphore.h>
 #include <errno.h>
@@ -55,10 +55,10 @@ test_loop(Rados &cluster, std::string pool_name, std::string obj_name)
     uint64_t handle;
     WatchNotifyTestCtx ctx;
     ret = ioctx.watch(obj_name, 0, &handle, &ctx);
-    assert(!ret);
+    ceph_assert(!ret);
     bufferlist bl2;
     ret = ioctx.notify(obj_name, 0, bl2);
-    assert(!ret);
+    ceph_assert(!ret);
     TestAlarm alarm;
     sem_wait(&sem);
     ioctx.unwatch(obj_name, handle);

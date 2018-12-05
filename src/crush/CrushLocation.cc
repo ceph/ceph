@@ -4,9 +4,11 @@
 #include "include/compat.h"
 #include "CrushLocation.h"
 #include "CrushWrapper.h"
+#include "common/ceph_context.h"
 #include "common/config.h"
 #include "include/str_list.h"
 #include "common/debug.h"
+#include "common/errno.h"
 #include "include/compat.h"
 
 #include "common/SubProcess.h"

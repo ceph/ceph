@@ -24,7 +24,7 @@ struct MockTestImageCtx : public MockImageCtx {
 struct MockManagedLock {
   static MockManagedLock *s_instance;
   static MockManagedLock &get_instance() {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     return *s_instance;
   }
 
@@ -127,7 +127,7 @@ struct ManagedLock<MockTestImageCtx> {
     m_work_queue->queue(pre_release_ctx, 0);
   }
 
-  void reacquire_lock() {
+  void reacquire_lock(Context* on_finish) {
     MockManagedLock::get_instance().reacquire_lock();
   }
 
@@ -191,17 +191,17 @@ struct MirrorStatusWatcher<librbd::MockTestImageCtx> {
 
   static MirrorStatusWatcher *create(librados::IoCtx &io_ctx,
                                      ContextWQ *work_queue) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     return s_instance;
   }
 
   MirrorStatusWatcher() {
-    assert(s_instance == nullptr);
+    ceph_assert(s_instance == nullptr);
     s_instance = this;
   }
 
   ~MirrorStatusWatcher() {
-    assert(s_instance == this);
+    ceph_assert(s_instance == this);
     s_instance = nullptr;
   }
 
@@ -220,17 +220,17 @@ struct Instances<librbd::MockTestImageCtx> {
                            librados::IoCtx &ioctx,
                            const std::string& instance_id,
                            instances::Listener&) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     return s_instance;
   }
 
   Instances() {
-    assert(s_instance == nullptr);
+    ceph_assert(s_instance == nullptr);
     s_instance = this;
   }
 
   ~Instances() {
-    assert(s_instance == this);
+    ceph_assert(s_instance == this);
     s_instance = nullptr;
   }
 
@@ -266,12 +266,12 @@ struct MockListener : public leader_watcher::Listener {
   static MockListener* s_instance;
 
   MockListener() {
-    assert(s_instance == nullptr);
+    ceph_assert(s_instance == nullptr);
     s_instance = this;
   }
 
   ~MockListener() override {
-    assert(s_instance == this);
+    ceph_assert(s_instance == this);
     s_instance = nullptr;
   }
 
@@ -626,7 +626,7 @@ TEST_F(TestMockLeaderWatcher, Break) {
   EXPECT_EQ(0, _rados->conf_set("rbd_mirror_leader_max_missed_heartbeats",
                                 "1"));
   CephContext *cct = reinterpret_cast<CephContext *>(m_local_io_ctx.cct());
-  int max_acquire_attempts = cct->_conf->get_val<int64_t>(
+  int max_acquire_attempts = cct->_conf.get_val<uint64_t>(
     "rbd_mirror_leader_max_acquire_attempts_before_break");
 
   MockManagedLock mock_managed_lock;

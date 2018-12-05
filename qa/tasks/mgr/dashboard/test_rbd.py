@@ -3,15 +3,13 @@
 
 from __future__ import absolute_import
 
+import time
+
 from .helper import DashboardTestCase, JObj, JLeaf, JList
 
 
 class RbdTest(DashboardTestCase):
-
-    @classmethod
-    def authenticate(cls):
-        cls._ceph_cmd(['dashboard', 'set-login-credentials', 'admin', 'admin'])
-        cls._post('/api/auth', {'username': 'admin', 'password': 'admin'})
+    AUTH_ROLES = ['pool-manager', 'block-manager']
 
     @classmethod
     def create_pool(cls, name, pg_num, pool_type, application='rbd'):
@@ -19,11 +17,47 @@ class RbdTest(DashboardTestCase):
             'pool': name,
             'pg_num': pg_num,
             'pool_type': pool_type,
-            'application_metadata': application
+            'application_metadata': [application]
         }
         if pool_type == 'erasure':
             data['flags'] = ['ec_overwrites']
-        cls._post("/api/pool", data)
+        cls._task_post("/api/pool", data)
+
+    @DashboardTestCase.RunAs('test', 'test', [{'rbd-image': ['create', 'update', 'delete']}])
+    def test_read_access_permissions(self):
+        self._get('/api/block/image')
+        self.assertStatus(403)
+        self._get('/api/block/image/pool/image')
+        self.assertStatus(403)
+
+    @DashboardTestCase.RunAs('test', 'test', [{'rbd-image': ['read', 'update', 'delete']}])
+    def test_create_access_permissions(self):
+        self.create_image('pool', 'name', 0)
+        self.assertStatus(403)
+        self.create_snapshot('pool', 'image', 'snapshot')
+        self.assertStatus(403)
+        self.copy_image('src_pool', 'src_image', 'dest_pool', 'dest_image')
+        self.assertStatus(403)
+        self.clone_image('parent_pool', 'parent_image', 'parent_snap', 'pool', 'name')
+        self.assertStatus(403)
+
+    @DashboardTestCase.RunAs('test', 'test', [{'rbd-image': ['read', 'create', 'delete']}])
+    def test_update_access_permissions(self):
+        self.edit_image('pool', 'image')
+        self.assertStatus(403)
+        self.update_snapshot('pool', 'image', 'snapshot', None, None)
+        self.assertStatus(403)
+        self._task_post('/api/block/image/rbd/rollback_img/snap/snap1/rollback')
+        self.assertStatus(403)
+        self.flatten_image('pool', 'image')
+        self.assertStatus(403)
+
+    @DashboardTestCase.RunAs('test', 'test', [{'rbd-image': ['read', 'create', 'update']}])
+    def test_delete_access_permissions(self):
+        self.remove_image('pool', 'image')
+        self.assertStatus(403)
+        self.remove_snapshot('pool', 'image', 'snapshot')
+        self.assertStatus(403)
 
     @classmethod
     def create_image(cls, pool, name, size, **kwargs):
@@ -80,7 +114,6 @@ class RbdTest(DashboardTestCase):
     @classmethod
     def setUpClass(cls):
         super(RbdTest, cls).setUpClass()
-        cls.authenticate()
         cls.create_pool('rbd', 10, 'replicated')
         cls.create_pool('rbd_iscsi', 10, 'replicated')
 
@@ -104,6 +137,31 @@ class RbdTest(DashboardTestCase):
                        '--yes-i-really-really-mean-it'])
         cls._ceph_cmd(['osd', 'pool', 'delete', 'rbd_data', 'rbd_data',
                        '--yes-i-really-really-mean-it'])
+
+    @classmethod
+    def create_image_in_trash(cls, pool, name, delay=0, **kwargs):
+        cls.create_image(pool, name, 10240)
+        img = cls._get('/api/block/image/{}/{}'.format(pool, name))
+
+        cls._task_post("/api/block/image/{}/{}/move_trash".format(pool, name),
+                        {'delay': delay})
+
+        return img['id']
+
+    @classmethod
+    def remove_trash(cls, pool, image_id, image_name, force=False):
+        return cls._task_delete('/api/block/image/trash/{}/{}/?image_name={}&force={}'.format('rbd', image_id, image_name, force))
+
+    @classmethod
+    def get_trash(cls, pool, image_id):
+        trash = cls._get('/api/block/image/trash/?pool_name={}'.format(pool))
+        if isinstance(trash, list):
+            for pool in trash:
+                for image in pool['value']:
+                    if image['id'] == image_id:
+                        return image
+
+        return None
 
     def _validate_image(self, img, **kwargs):
         """
@@ -549,3 +607,104 @@ class RbdTest(DashboardTestCase):
         self.assertEqual(default_features, ['deep-flatten', 'exclusive-lock',
                                              'fast-diff', 'layering',
                                              'object-map'])
+
+    def test_image_with_special_name(self):
+        rbd_name = 'test/rbd'
+        rbd_name_encoded = 'test%2Frbd'
+
+        self.create_image('rbd', rbd_name, 10240)
+        self.assertStatus(201)
+
+        img = self._get("/api/block/image/rbd/" + rbd_name_encoded)
+        self.assertStatus(200)
+
+        self._validate_image(img, name=rbd_name, size=10240,
+                             num_objs=1, obj_size=4194304,
+                             features_name=['deep-flatten',
+                                            'exclusive-lock',
+                                            'fast-diff', 'layering',
+                                            'object-map'])
+
+        self.remove_image('rbd', rbd_name_encoded)
+
+    def test_move_image_to_trash(self):
+        id = self.create_image_in_trash('rbd', 'test_rbd')
+        self.assertStatus(200)
+
+        self._get('/api/block/image/rbd/test_rbd')
+        self.assertStatus(404)
+
+        time.sleep(1)
+
+        image = self.get_trash('rbd', id)
+        self.assertIsNotNone(image)
+
+        self.remove_trash('rbd', id, 'test_rbd')
+
+    def test_list_trash(self):
+        id = self.create_image_in_trash('rbd', 'test_rbd', 0)
+        data = self._get('/api/block/image/trash/?pool_name={}'.format('rbd'))
+        self.assertStatus(200)
+        self.assertIsInstance(data, list)
+        self.assertIsNotNone(data)
+
+        self.remove_trash('rbd', id, 'test_rbd')
+        self.assertStatus(204)
+
+    def test_restore_trash(self):
+        id = self.create_image_in_trash('rbd', 'test_rbd')
+
+        self._task_post('/api/block/image/trash/{}/{}/restore'.format('rbd', id), {'new_image_name': 'test_rbd'})
+
+        self._get('/api/block/image/rbd/test_rbd')
+        self.assertStatus(200)
+
+        image = self.get_trash('rbd', id)
+        self.assertIsNone(image)
+
+        self.remove_image('rbd', 'test_rbd')
+
+    def test_remove_expired_trash(self):
+        id = self.create_image_in_trash('rbd', 'test_rbd', 0)
+        self.remove_trash('rbd', id, 'test_rbd', False)
+        self.assertStatus(204)
+
+        image = self.get_trash('rbd', id)
+        self.assertIsNone(image)
+
+    def test_remove_not_expired_trash(self):
+        id = self.create_image_in_trash('rbd', 'test_rbd', 9999)
+        self.remove_trash('rbd', id, 'test_rbd', False)
+        self.assertStatus(400)
+
+        time.sleep(1)
+
+        image = self.get_trash('rbd', id)
+        self.assertIsNotNone(image)
+
+        self.remove_trash('rbd', id, 'test_rbd', True)
+
+    def test_remove_not_expired_trash_with_force(self):
+        id = self.create_image_in_trash('rbd', 'test_rbd', 9999)
+        self.remove_trash('rbd', id, 'test_rbd', True)
+        self.assertStatus(204)
+
+        image = self.get_trash('rbd', id)
+        self.assertIsNone(image)
+
+    def test_purge_trash(self):
+        id_expired = self.create_image_in_trash('rbd', 'test_rbd_expired', 0)
+        id_not_expired = self.create_image_in_trash('rbd', 'test_rbd', 9999)
+
+        time.sleep(1)
+
+        self._task_post('/api/block/image/trash/purge?pool_name={}'.format('rbd'))
+        self.assertStatus(200)
+
+        time.sleep(1)
+
+        trash_not_expired = self.get_trash('rbd', id_not_expired)
+        self.assertIsNotNone(trash_not_expired)
+
+        trash_expired = self.get_trash('rbd', id_expired)
+        self.assertIsNone(trash_expired)

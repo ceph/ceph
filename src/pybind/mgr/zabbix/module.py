@@ -97,11 +97,6 @@ class Module(MgrModule):
             "desc": "Force sending data to Zabbix",
             "perm": "rw"
         },
-        {
-            "cmd": "zabbix self-test",
-            "desc": "Run a self-test on the Zabbix module",
-            "perm": "r"
-        }
     ]
 
     def __init__(self, *args, **kwargs):
@@ -134,6 +129,30 @@ class Module(MgrModule):
                        value)
         self.config[option] = value
         return True
+
+    def get_pg_stats(self):
+        stats = dict()
+
+        pg_states = ['active', 'peering', 'clean', 'scrubbing', 'undersized',
+                     'backfilling', 'recovering', 'degraded', 'inconsistent',
+                     'remapped', 'backfill_toofull', 'wait_backfill',
+                     'recovery_wait']
+
+        for state in pg_states:
+            stats['num_pg_{0}'.format(state)] = 0
+
+        pg_status = self.get('pg_status')
+
+        stats['num_pg'] = pg_status['num_pgs']
+
+        for state in pg_status['pgs_by_state']:
+            states = state['state_name'].split('+')
+            for s in pg_states:
+                key = 'num_pg_{0}'.format(s)
+                if s in states:
+                    stats[key] += state['count']
+
+        return stats
 
     def get_data(self):
         data = dict()
@@ -226,12 +245,7 @@ class Module(MgrModule):
         except ValueError:
             pass
 
-        pg_summary = self.get('pg_summary')
-        num_pg = 0
-        for state, num in pg_summary['all'].items():
-            num_pg += num
-
-        data['num_pg'] = num_pg
+        data.update(self.get_pg_stats())
 
         return data
 
@@ -279,7 +293,7 @@ class Module(MgrModule):
 
         return False
 
-    def handle_command(self, command):
+    def handle_command(self, inbuf, command):
         if command['prefix'] == 'zabbix config-show':
             return 0, json.dumps(self.config), ''
         elif command['prefix'] == 'zabbix config-set':
@@ -301,9 +315,6 @@ class Module(MgrModule):
                 return 0, 'Sending data to Zabbix', ''
 
             return 1, 'Failed to send data to Zabbix', ''
-        elif command['prefix'] == 'zabbix self-test':
-            self.self_test()
-            return 0, 'Self-test succeeded', ''
         else:
             return (-errno.EINVAL, '',
                     "Command not found '{0}'".format(command['prefix']))

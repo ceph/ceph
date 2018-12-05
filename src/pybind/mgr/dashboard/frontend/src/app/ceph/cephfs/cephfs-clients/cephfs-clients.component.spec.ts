@@ -1,35 +1,26 @@
+import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { BsDropdownModule } from 'ngx-bootstrap';
-import { Observable } from 'rxjs';
+import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 
-import { CephfsService } from '../../../shared/api/cephfs.service';
+import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../shared/shared.module';
-import { configureTestBed } from '../../../shared/unit-test-helper';
 import { CephfsClientsComponent } from './cephfs-clients.component';
 
 describe('CephfsClientsComponent', () => {
   let component: CephfsClientsComponent;
   let fixture: ComponentFixture<CephfsClientsComponent>;
 
-  const fakeFilesystemService = {
-    getCephfs: (id) => {
-      return Observable.create((observer) => {
-        return () => console.log('disposed');
-      });
-    },
-    getClients: (id) => {
-      return Observable.create((observer) => {
-        return () => console.log('disposed');
-      });
-    }
-  };
-
   configureTestBed({
-    imports: [RouterTestingModule, BsDropdownModule.forRoot(), SharedModule],
+    imports: [
+      RouterTestingModule,
+      BsDropdownModule.forRoot(),
+      SharedModule,
+      HttpClientTestingModule
+    ],
     declarations: [CephfsClientsComponent],
-    providers: [{ provide: CephfsService, useValue: fakeFilesystemService }]
+    providers: i18nProviders
   });
 
   beforeEach(() => {

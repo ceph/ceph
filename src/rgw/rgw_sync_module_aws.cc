@@ -9,6 +9,9 @@
 #include "rgw_rest_conn.h"
 #include "rgw_cr_rest.h"
 #include "rgw_acl.h"
+#include "rgw_zone.h"
+
+#include "services/svc_zone.h"
 
 #include <boost/asio/yield.hpp>
 
@@ -557,11 +560,11 @@ struct AWSSyncConfig {
   void expand_target(RGWDataSyncEnv *sync_env, const string& sid, const string& path, string *dest) {
       apply_meta_param(path, "sid", sid, dest);
 
-      RGWZoneGroup& zg = sync_env->store->get_zonegroup();
+      RGWZoneGroup& zg = sync_env->store->svc.zone->get_zonegroup();
       apply_meta_param(path, "zonegroup", zg.get_name(), dest);
       apply_meta_param(path, "zonegroup_id", zg.get_id(), dest);
 
-      RGWZone& zone = sync_env->store->get_zone();
+      RGWZone& zone = sync_env->store->svc.zone->get_zone();
       apply_meta_param(path, "zone", zone.name, dest);
       apply_meta_param(path, "zone_id", zone.id, dest);
   }
@@ -636,7 +639,7 @@ struct AWSSyncConfig {
     auto& root_conf = root_profile->conn_conf;
 
     root_profile->conn.reset(new S3RESTConn(sync_env->cct,
-                                           sync_env->store,
+                                           sync_env->store->svc.zone,
                                            id,
                                            { root_conf->endpoint },
                                            root_conf->key,
@@ -646,7 +649,7 @@ struct AWSSyncConfig {
       auto& c = i.second;
 
       c->conn.reset(new S3RESTConn(sync_env->cct,
-                                   sync_env->store,
+                                   sync_env->store->svc.zone,
                                    id,
                                    { c->conn_conf->endpoint },
                                    c->conn_conf->key,
@@ -672,7 +675,7 @@ struct AWSSyncInstanceEnv {
 
   void get_profile(const rgw_bucket& bucket, std::shared_ptr<AWSSyncConfig_Profile> *ptarget) {
     conf.find_profile(bucket, ptarget);
-    assert(ptarget);
+    ceph_assert(ptarget);
   }
 };
 
@@ -949,7 +952,7 @@ public:
   }
 
   void send_ready(const rgw_rest_obj& rest_obj) override {
-    RGWRESTStreamS3PutObj *r = (RGWRESTStreamS3PutObj *)req;
+    RGWRESTStreamS3PutObj *r = static_cast<RGWRESTStreamS3PutObj *>(req);
 
     map<string, string> new_attrs;
     if (!multipart.is_multipart) {
@@ -1088,7 +1091,7 @@ public:
         return set_cr_error(retcode);
       }
 
-      if (!((RGWAWSStreamPutCRF *)out_crf.get())->get_etag(petag)) {
+      if (!(static_cast<RGWAWSStreamPutCRF *>(out_crf.get()))->get_etag(petag)) {
         ldout(sync_env->cct, 0) << "ERROR: failed to get etag from PUT request" << dendl;
         return set_cr_error(-EIO);
       }
@@ -1420,14 +1423,14 @@ public:
                                                    obj_size(_obj_size),
                                                    src_properties(_src_properties),
                                                    rest_obj(_rest_obj),
-                                                   status_obj(sync_env->store->get_zone_params().log_pool,
+                                                   status_obj(sync_env->store->svc.zone->get_zone_params().log_pool,
                                                               RGWBucketSyncStatusManager::obj_status_oid(sync_env->source_zone, src_obj)) {
   }
 
 
   int operate() override {
     reenter(this) {
-      yield call(new RGWSimpleRadosReadCR<rgw_sync_aws_multipart_upload_info>(sync_env->async_rados, sync_env->store,
+      yield call(new RGWSimpleRadosReadCR<rgw_sync_aws_multipart_upload_info>(sync_env->async_rados, sync_env->store->svc.sysobj,
                                                                  status_obj, &status, false));
 
       if (retcode < 0 && retcode != -ENOENT) {
@@ -1490,7 +1493,7 @@ public:
           return set_cr_error(ret_err);
         }
 
-        yield call(new RGWSimpleRadosWriteCR<rgw_sync_aws_multipart_upload_info>(sync_env->async_rados, sync_env->store, status_obj, status));
+        yield call(new RGWSimpleRadosWriteCR<rgw_sync_aws_multipart_upload_info>(sync_env->async_rados, sync_env->store->svc.sysobj, status_obj, status));
         if (retcode < 0) {
           ldout(sync_env->cct, 0) << "ERROR: failed to store multipart upload state, retcode=" << retcode << dendl;
           /* continue with upload anyway */
@@ -1599,7 +1602,7 @@ public:
                               << " attrs=" << attrs
                               << dendl;
 
-      source_conn = sync_env->store->get_zone_conn_by_id(sync_env->source_zone);
+      source_conn = sync_env->store->svc.zone->get_zone_conn_by_id(sync_env->source_zone);
       if (!source_conn) {
         ldout(sync_env->cct, 0) << "ERROR: cannot find http connection to zone " << sync_env->source_zone << dendl;
         return set_cr_error(-EINVAL);
@@ -1759,10 +1762,11 @@ public:
 
   ~RGWAWSDataSyncModule() {}
 
-  RGWCoroutine *sync_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, uint64_t versioned_epoch,
+  RGWCoroutine *sync_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key,
+                            std::optional<uint64_t> versioned_epoch,
                             rgw_zone_set *zones_trace) override {
-    ldout(sync_env->cct, 0) << instance.id << ": sync_object: b=" << bucket_info.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch << dendl;
-    return new RGWAWSHandleRemoteObjCR(sync_env, bucket_info, key, instance, versioned_epoch);
+    ldout(sync_env->cct, 0) << instance.id << ": sync_object: b=" << bucket_info.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch.value_or(0) << dendl;
+    return new RGWAWSHandleRemoteObjCR(sync_env, bucket_info, key, instance, versioned_epoch.value_or(0));
   }
   RGWCoroutine *remove_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, real_time& mtime, bool versioned, uint64_t versioned_epoch,
                               rgw_zone_set *zones_trace) override {

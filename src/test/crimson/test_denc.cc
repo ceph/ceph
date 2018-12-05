@@ -1,5 +1,5 @@
 #include <string>
-#include <core/temporary_buffer.hh>
+#include <seastar/core/temporary_buffer.hh>
 #include <gtest/gtest.h>
 #include "include/denc.h"
 #include "common/buffer_seastar.h"

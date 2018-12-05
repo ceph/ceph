@@ -19,6 +19,7 @@
 #include "msg/Messenger.h"
 
 #include "MonMap.h"
+#include "MonSub.h"
 
 #include "common/Timer.h"
 #include "common/Finisher.h"
@@ -67,7 +68,7 @@ struct MonClientPinger : public Dispatcher {
   }
 
   bool ms_dispatch(Message *m) override {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     if (m->get_type() != CEPH_MSG_PING)
       return false;
 
@@ -82,7 +83,7 @@ struct MonClientPinger : public Dispatcher {
     return true;
   }
   bool ms_handle_reset(Connection *con) override {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     done = true;
     ping_recvd_cond.SignalAll();
     return true;
@@ -162,7 +163,9 @@ private:
   Finisher finisher;
 
   bool initialized;
+  bool stopping = false;
   bool no_keyring_disabled_cephx;
+  bool no_ktfile_disabled_krb;
 
   LogClient *log_client;
   bool more_log_pending;
@@ -245,95 +248,32 @@ public:
    */
   void flush_log();
 
-  // mon subscriptions
 private:
-  map<string,ceph_mon_subscribe_item> sub_sent; // my subs, and current versions
-  map<string,ceph_mon_subscribe_item> sub_new;  // unsent new subs
-  utime_t sub_renew_sent, sub_renew_after;
-
+  // mon subscriptions
+  MonSub sub;
   void _renew_subs();
   void handle_subscribe_ack(MMonSubscribeAck* m);
 
-  bool _sub_want(const string &what, version_t start, unsigned flags) {
-    auto sub = sub_new.find(what);
-    if (sub != sub_new.end() &&
-        sub->second.start == start &&
-        sub->second.flags == flags) {
-      return false;
-    } else {
-      sub = sub_sent.find(what);
-      if (sub != sub_sent.end() &&
-	  sub->second.start == start &&
-	  sub->second.flags == flags)
-	return false;
-    }
-
-    sub_new[what].start = start;
-    sub_new[what].flags = flags;
-    return true;
-  }
-  void _sub_got(const string &what, version_t got) {
-    if (sub_new.count(what)) {
-      if (sub_new[what].start <= got) {
-	if (sub_new[what].flags & CEPH_SUBSCRIBE_ONETIME)
-	  sub_new.erase(what);
-	else
-	  sub_new[what].start = got + 1;
-      }
-    } else if (sub_sent.count(what)) {
-      if (sub_sent[what].start <= got) {
-	if (sub_sent[what].flags & CEPH_SUBSCRIBE_ONETIME)
-	  sub_sent.erase(what);
-	else
-	  sub_sent[what].start = got + 1;
-      }
-    }
-  }
-  void _sub_unwant(const string &what) {
-    sub_sent.erase(what);
-    sub_new.erase(what);
-  }
-
 public:
   void renew_subs() {
-    Mutex::Locker l(monc_lock);
+    std::lock_guard l(monc_lock);
     _renew_subs();
   }
   bool sub_want(string what, version_t start, unsigned flags) {
-    Mutex::Locker l(monc_lock);
-    return _sub_want(what, start, flags);
+    std::lock_guard l(monc_lock);
+    return sub.want(what, start, flags);
   }
   void sub_got(string what, version_t have) {
-    Mutex::Locker l(monc_lock);
-    _sub_got(what, have);
+    std::lock_guard l(monc_lock);
+    sub.got(what, have);
   }
   void sub_unwant(string what) {
-    Mutex::Locker l(monc_lock);
-    _sub_unwant(what);
+    std::lock_guard l(monc_lock);
+    sub.unwant(what);
   }
-  /**
-   * Increase the requested subscription start point. If you do increase
-   * the value, apply the passed-in flags as well; otherwise do nothing.
-   */
   bool sub_want_increment(string what, version_t start, unsigned flags) {
-    Mutex::Locker l(monc_lock);
-    map<string,ceph_mon_subscribe_item>::iterator i = sub_new.find(what);
-    if (i != sub_new.end()) {
-      if (i->second.start >= start)
-	return false;
-      i->second.start = start;
-      i->second.flags = flags;
-      return true;
-    }
-
-    i = sub_sent.find(what);
-    if (i == sub_sent.end() || i->second.start < start) {
-      ceph_mon_subscribe_item& item = sub_new[what];
-      item.start = start;
-      item.flags = flags;
-      return true;
-    }
-    return false;
+    std::lock_guard l(monc_lock);
+    return sub.inc_want(what, start, flags);
   }
   
   std::unique_ptr<KeyRing> keyring;
@@ -363,11 +303,11 @@ public:
    * putting the message reference!
    */
   void set_passthrough_monmap() {
-    Mutex::Locker l(monc_lock);
+    std::lock_guard l(monc_lock);
     passthrough_monmap = true;
   }
   void unset_passthrough_monmap() {
-    Mutex::Locker l(monc_lock);
+    std::lock_guard l(monc_lock);
     passthrough_monmap = false;
   }
   /**
@@ -383,7 +323,7 @@ public:
   int ping_monitor(const string &mon_id, string *result_reply);
 
   void send_mon_message(Message *m) {
-    Mutex::Locker l(monc_lock);
+    std::lock_guard l(monc_lock);
     _send_mon_message(m);
   }
   /**
@@ -394,7 +334,7 @@ public:
    * to reconnect to another monitor.
    */
   void reopen_session(Context *cb=NULL) {
-    Mutex::Locker l(monc_lock);
+    std::lock_guard l(monc_lock);
     if (cb) {
       session_established_context.reset(cb);
     }
@@ -409,30 +349,25 @@ public:
     return monmap.fsid;
   }
 
-  entity_addr_t get_mon_addr(unsigned i) const {
-    Mutex::Locker l(monc_lock);
+  entity_addrvec_t get_mon_addrs(unsigned i) const {
+    std::lock_guard l(monc_lock);
     if (i < monmap.size())
-      return monmap.get_addr(i);
-    return entity_addr_t();
-  }
-  entity_inst_t get_mon_inst(unsigned i) const {
-    Mutex::Locker l(monc_lock);
-    if (i < monmap.size())
-      return monmap.get_inst(i);
-    return entity_inst_t();
+      return monmap.get_addrs(i);
+    return entity_addrvec_t();
   }
   int get_num_mon() const {
-    Mutex::Locker l(monc_lock);
+    std::lock_guard l(monc_lock);
     return monmap.size();
   }
 
   uint64_t get_global_id() const {
-    Mutex::Locker l(monc_lock);
+    std::lock_guard l(monc_lock);
     return global_id;
   }
 
   void set_messenger(Messenger *m) { messenger = m; }
   entity_addr_t get_myaddr() const { return messenger->get_myaddr(); }
+  entity_addrvec_t get_myaddrs() const { return messenger->get_myaddrs(); }
   AuthAuthorizer* build_authorizer(int service_id) const;
 
   void set_want_keys(uint32_t want) {
@@ -501,11 +436,14 @@ public:
   template<typename Callback, typename...Args>
   auto with_monmap(Callback&& cb, Args&&...args) const ->
     decltype(cb(monmap, std::forward<Args>(args)...)) {
-    Mutex::Locker l(monc_lock);
+    std::lock_guard l(monc_lock);
     return std::forward<Callback>(cb)(monmap, std::forward<Args>(args)...);
   }
 
   void register_config_callback(md_config_t::config_callback fn);
+  void register_config_notify_callback(std::function<void(void)> f) {
+    config_notify_cb = f;
+  }
   md_config_t::config_callback get_config_callback();
 
 private:
@@ -520,6 +458,7 @@ private:
   void handle_get_version_reply(MMonGetVersionReply* m);
 
   md_config_t::config_callback config_cb;
+  std::function<void(void)> config_notify_cb;
 };
 
 #endif

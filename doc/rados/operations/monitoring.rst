@@ -128,7 +128,7 @@ log.
 Monitoring Health Checks
 ========================
 
-Ceph continously runs various *health checks* against its own status.  When
+Ceph continuously runs various *health checks* against its own status.  When
 a health check fails, this is reflected in the output of ``ceph status`` (or
 ``ceph health``).  In addition, messages are sent to the cluster log to
 indicate when a check fails, and when the cluster recovers.
@@ -206,7 +206,7 @@ on the number of replicas, clones and snapshots.
 - **OBJECTS:** The notional number of objects stored per pool.
 
 .. note:: The numbers in the **POOLS** section are notional. They are not 
-   inclusive of the number of replicas, shapshots or clones. As a result, 
+   inclusive of the number of replicas, snapshots or clones. As a result, 
    the sum of the **USED** and **%USED** amounts will not add up to the 
    **RAW USED** and **%RAW USED** amounts in the **GLOBAL** section of the 
    output.
@@ -311,7 +311,7 @@ three monitors may return the following:
 Checking MDS Status
 ===================
 
-Metadata servers provide metadata services for  Ceph FS. Metadata servers have
+Metadata servers provide metadata services for  CephFS. Metadata servers have
 two sets of states: ``up | down`` and ``active | inactive``. To ensure your
 metadata servers are ``up`` and ``active``,  execute the following:: 
 

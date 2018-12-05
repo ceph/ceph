@@ -157,7 +157,7 @@ public:
       return string();
     char buf[20];
     int r = snprintf(buf, sizeof(buf), ".%x", (int)shard);
-    assert(r < (int)sizeof(buf));
+    ceph_assert(r < (int)sizeof(buf));
     return string(buf, r) + '_';
   }
   uint32_t mask_bits;
@@ -180,11 +180,10 @@ public:
   }
 
   set<string> prefixes;
-  /// Update bits in case of pg split
+  /// Update bits in case of pg split or merge
   void update_bits(
     uint32_t new_bits  ///< [in] new split bits
     ) {
-    assert(new_bits >= mask_bits);
     mask_bits = new_bits;
     set<string> _prefixes = hobject_t::get_prefixes(
       mask_bits,

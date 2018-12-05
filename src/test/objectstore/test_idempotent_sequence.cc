@@ -25,7 +25,7 @@
 #include "FileStoreDiff.h"
 
 #include "common/config.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_
@@ -33,7 +33,7 @@
 #define dout_prefix *_dout << "test_idempotent_sequence "
 
 void usage(const char *name, std::string command = "") {
-  assert(name != NULL);
+  ceph_assert(name != NULL);
 
   std::string more = "cmd <args...>";
   std::string diff = "diff <filestoreA> <journalA> <filestoreB> <journalB>";
@@ -218,7 +218,7 @@ int main(int argc, const char *argv[])
 			 CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   std::string command;
   std::vector<std::string> command_args;

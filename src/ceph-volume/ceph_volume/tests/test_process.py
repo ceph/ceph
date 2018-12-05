@@ -66,3 +66,21 @@ class TestCall(object):
         assert 'ls' in log_lines
         assert 'stderr' in log_lines
         assert out == ''
+
+
+class TestFunctionalCall(object):
+
+    def test_stdin(self):
+        process.call(['xargs', 'ls'], stdin="echo '/'")
+
+    def test_unicode_encoding(self):
+        process.call(['echo', u'\xd0'])
+
+    def test_unicode_encoding_stdin(self):
+        process.call(['echo'], stdin=u'\xd0'.encode('utf-8'))
+
+
+class TestFunctionalRun(object):
+
+    def test_log_descriptors(self):
+        process.run(['ls', '-l'])

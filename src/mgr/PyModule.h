@@ -13,13 +13,15 @@
 
 #pragma once
 
+#include <map>
+#include <memory>
+#include <string>
+#include <vector>
+#include <boost/optional.hpp>
+#include "common/Mutex.h"
 #include "Python.h"
 #include "Gil.h"
 
-#include <string>
-#include "common/Mutex.h"
-#include <memory>
-#include <boost/optional.hpp>
 
 class MonClient;
 
@@ -60,6 +62,9 @@ private:
 
   // Did the MgrMap identify this module as one that should run?
   bool enabled = false;
+
+  // Did the MgrMap flag this module as always on?
+  bool always_on = false;
 
   // Did we successfully import this python module and look up symbols?
   // (i.e. is it possible to instantiate a MgrModule subclass instance?)
@@ -117,13 +122,17 @@ public:
     enabled = enabled_;
   }
 
+  void set_always_on(const bool always_on_) {
+    always_on = always_on_;
+  }
+
   /**
    * Extend `out` with the contents of `this->commands`
    */
   void get_commands(std::vector<ModuleCommand> *out) const
   {
-    Mutex::Locker l(lock);
-    assert(out != nullptr);
+    std::lock_guard l(lock);
+    ceph_assert(out != nullptr);
     out->insert(out->end(), commands.begin(), commands.end());
   }
 
@@ -134,23 +143,28 @@ public:
    */
   void fail(const std::string &reason)
   {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     failed = true;
     error_string = reason;
   }
 
-  bool is_enabled() const { Mutex::Locker l(lock) ; return enabled; }
-  bool is_failed() const { Mutex::Locker l(lock) ; return failed; }
-  bool is_loaded() const { Mutex::Locker l(lock) ; return loaded; }
+  bool is_enabled() const {
+    std::lock_guard l(lock);
+    return enabled || always_on;
+  }
+
+  bool is_failed() const { std::lock_guard l(lock) ; return failed; }
+  bool is_loaded() const { std::lock_guard l(lock) ; return loaded; }
+  bool is_always_on() const { std::lock_guard l(lock) ; return always_on; }
 
   const std::string &get_name() const {
-    Mutex::Locker l(lock) ; return module_name;
+    std::lock_guard l(lock) ; return module_name;
   }
   const std::string &get_error_string() const {
-    Mutex::Locker l(lock) ; return error_string;
+    std::lock_guard l(lock) ; return error_string;
   }
   bool get_can_run() const {
-    Mutex::Locker l(lock) ; return can_run;
+    std::lock_guard l(lock) ; return can_run;
   }
 };
 

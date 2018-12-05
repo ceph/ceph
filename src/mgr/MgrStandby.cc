@@ -41,7 +41,7 @@ MgrStandby::MgrStandby(int argc, const char **argv) :
   monc{g_ceph_context},
   client_messenger(Messenger::create(
 		     g_ceph_context,
-		     cct->_conf->get_val<std::string>("ms_type"),
+		     cct->_conf.get_val<std::string>("ms_type"),
 		     entity_name_t::MGR(),
 		     "mgr",
 		     getpid(),
@@ -84,7 +84,7 @@ const char** MgrStandby::get_tracked_conf_keys() const
 }
 
 void MgrStandby::handle_conf_change(
-  const struct md_config_t *conf,
+  const ConfigProxy& conf,
   const std::set <std::string> &changed)
 {
   if (changed.count("clog_to_monitors") ||
@@ -105,7 +105,7 @@ int MgrStandby::init()
   init_async_signal_handler();
   register_async_signal_handler(SIGHUP, sighup_handler);
 
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
 
   // Initialize Messenger
   client_messenger->add_dispatcher_tail(this);
@@ -137,6 +137,9 @@ int MgrStandby::init()
 	return true;
       }
       return false;
+    });
+  monc.register_config_notify_callback([this]() {
+      py_module_registry.handle_config_notify();
     });
   dout(4) << "Registered monc callback" << dendl;
 
@@ -179,8 +182,8 @@ int MgrStandby::init()
 
 void MgrStandby::send_beacon()
 {
-  assert(lock.is_locked_by_me());
-  dout(1) << state_str() << dendl;
+  ceph_assert(lock.is_locked_by_me());
+  dout(4) << state_str() << dendl;
 
   std::list<PyModuleRef> modules = py_module_registry.get_modules();
 
@@ -208,7 +211,7 @@ void MgrStandby::send_beacon()
 
   MMgrBeacon *m = new MMgrBeacon(monc.get_fsid(),
 				 monc.get_global_id(),
-                                 g_conf->name.get_id(),
+                                 g_conf()->name.get_id(),
                                  addrs,
                                  available,
 				 std::move(module_info),
@@ -238,12 +241,8 @@ void MgrStandby::tick()
   dout(10) << __func__ << dendl;
   send_beacon();
 
-  if (active_mgr && active_mgr->is_initialized()) {
-    active_mgr->tick();
-  }
-
   timer.add_event_after(
-      g_conf->get_val<std::chrono::seconds>("mgr_tick_period").count(),
+      g_conf().get_val<std::chrono::seconds>("mgr_tick_period").count(),
       new FunctionContext([this](int r){
           tick();
       }
@@ -252,8 +251,8 @@ void MgrStandby::tick()
 
 void MgrStandby::handle_signal(int signum)
 {
-  Mutex::Locker l(lock);
-  assert(signum == SIGINT || signum == SIGTERM);
+  std::lock_guard l(lock);
+  ceph_assert(signum == SIGINT || signum == SIGTERM);
   derr << "*** Got signal " << sig_str(signum) << " ***" << dendl;
   shutdown();
 }
@@ -261,7 +260,7 @@ void MgrStandby::handle_signal(int signum)
 void MgrStandby::shutdown()
 {
   // Expect already to be locked as we're called from signal handler
-  assert(lock.is_locked_by_me());
+  ceph_assert(lock.is_locked_by_me());
 
   dout(4) << "Shutting down" << dendl;
 
@@ -304,7 +303,7 @@ void MgrStandby::respawn()
     /* Print CWD for the user's interest */
     char buf[PATH_MAX];
     char *cwd = getcwd(buf, sizeof(buf));
-    assert(cwd);
+    ceph_assert(cwd);
     dout(1) << " cwd " << cwd << dendl;
 
     /* Fall back to a best-effort: just running in our CWD */
@@ -376,7 +375,7 @@ void MgrStandby::handle_mgr_map(MMgrMap* mmap)
             [this](int r){
               // Advertise our active-ness ASAP instead of waiting for
               // next tick.
-              Mutex::Locker l(lock);
+              std::lock_guard l(lock);
               send_beacon();
             }));
       dout(1) << "I am now activating" << dendl;
@@ -396,7 +395,7 @@ void MgrStandby::handle_mgr_map(MMgrMap* mmap)
     derr << "I was active but no longer am" << dendl;
     respawn();
   } else {
-    if (map.active_gid != 0 && map.active_name != g_conf->name.get_id()) {
+    if (map.active_gid != 0 && map.active_name != g_conf()->name.get_id()) {
       // I am the standby and someone else is active, start modules
       // in standby mode to do redirects if needed
       if (!py_module_registry.is_standby_running()) {
@@ -408,7 +407,7 @@ void MgrStandby::handle_mgr_map(MMgrMap* mmap)
 
 bool MgrStandby::ms_dispatch(Message *m)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   dout(4) << state_str() << " " << *m << dendl;
 
   if (m->get_type() == MSG_MGR_MAP) {

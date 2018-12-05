@@ -27,15 +27,15 @@ struct OpRequest : public TrackedOp {
   // rmw flags
   int rmw_flags;
 
-  bool check_rmw(int flag);
-  bool may_read();
-  bool may_write();
-  bool may_cache();
-  bool rwordered_forced();
-  bool rwordered();
+  bool check_rmw(int flag) const ;
+  bool may_read() const;
+  bool may_write() const;
+  bool may_cache() const;
+  bool rwordered_forced() const;
+  bool rwordered() const;
   bool includes_pg_op();
-  bool need_read_cap();
-  bool need_write_cap();
+  bool need_read_cap() const;
+  bool need_write_cap() const;
   bool need_promote();
   bool need_skip_handle_cache();
   bool need_skip_promote();

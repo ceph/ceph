@@ -1,18 +1,13 @@
 import { Component, OnInit } from '@angular/core';
-import {
-  AbstractControl,
-  AsyncValidatorFn,
-  FormBuilder,
-  FormGroup,
-  ValidationErrors,
-  Validators
-} from '@angular/forms';
+import { AbstractControl, AsyncValidatorFn, ValidationErrors, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
 import * as _ from 'lodash';
 
 import { RgwBucketService } from '../../../shared/api/rgw-bucket.service';
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
+import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
+import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 
 @Component({
   selector: 'cd-rgw-bucket-form',
@@ -20,16 +15,16 @@ import { RgwUserService } from '../../../shared/api/rgw-user.service';
   styleUrls: ['./rgw-bucket-form.component.scss']
 })
 export class RgwBucketFormComponent implements OnInit {
-  bucketForm: FormGroup;
+  bucketForm: CdFormGroup;
   editing = false;
   error = false;
   loading = false;
   owners = null;
 
   constructor(
-    private formBuilder: FormBuilder,
     private route: ActivatedRoute,
     private router: Router,
+    private formBuilder: CdFormBuilder,
     private rgwBucketService: RgwBucketService,
     private rgwUserService: RgwUserService
   ) {
@@ -39,7 +34,7 @@ export class RgwBucketFormComponent implements OnInit {
   createForm() {
     this.bucketForm = this.formBuilder.group({
       id: [null],
-      bucket: [null, [Validators.required], [this.bucketNameValidator()]],
+      bid: [null, [Validators.required], [this.bucketNameValidator()]],
       owner: [null, [Validators.required]]
     });
   }
@@ -52,14 +47,15 @@ export class RgwBucketFormComponent implements OnInit {
 
     // Process route parameters.
     this.route.params.subscribe(
-      (params: { bucket: string }) => {
-        if (!params.hasOwnProperty('bucket')) {
+      (params: { bid: string }) => {
+        if (!params.hasOwnProperty('bid')) {
           return;
         }
+        const bid = decodeURIComponent(params.bid);
         this.loading = true;
         // Load the bucket data in 'edit' mode.
         this.editing = true;
-        this.rgwBucketService.get(params.bucket).subscribe((resp: object) => {
+        this.rgwBucketService.get(bid).subscribe((resp: object) => {
           this.loading = false;
           // Get the default values.
           const defaults = _.clone(this.bucketForm.value);
@@ -86,12 +82,12 @@ export class RgwBucketFormComponent implements OnInit {
     if (this.bucketForm.pristine) {
       this.goToListView();
     }
-    const bucketCtl = this.bucketForm.get('bucket');
+    const bidCtl = this.bucketForm.get('bid');
     const ownerCtl = this.bucketForm.get('owner');
     if (this.editing) {
       // Edit
       const idCtl = this.bucketForm.get('id');
-      this.rgwBucketService.update(idCtl.value, bucketCtl.value, ownerCtl.value).subscribe(
+      this.rgwBucketService.update(bidCtl.value, idCtl.value, ownerCtl.value).subscribe(
         () => {
           this.goToListView();
         },
@@ -102,7 +98,7 @@ export class RgwBucketFormComponent implements OnInit {
       );
     } else {
       // Add
-      this.rgwBucketService.create(bucketCtl.value, ownerCtl.value).subscribe(
+      this.rgwBucketService.create(bidCtl.value, ownerCtl.value).subscribe(
         () => {
           this.goToListView();
         },

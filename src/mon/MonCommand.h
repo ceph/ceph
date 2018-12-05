@@ -21,7 +21,6 @@ struct MonCommand {
   std::string helpstring;
   std::string module;
   std::string req_perms;
-  std::string availability;
   uint64_t flags;
 
   // MonCommand flags
@@ -31,6 +30,7 @@ struct MonCommand {
   static const uint64_t FLAG_DEPRECATED = 1 << 2;
   static const uint64_t FLAG_MGR        = 1 << 3;
   static const uint64_t FLAG_POLL       = 1 << 4;
+  static const uint64_t FLAG_HIDDEN     = 1 << 5;
 
   bool has_flag(uint64_t flag) const { return (flags & flag) != 0; }
   void set_flag(uint64_t flag) { flags |= flag; }
@@ -59,6 +59,7 @@ struct MonCommand {
     encode(helpstring, bl);
     encode(module, bl);
     encode(req_perms, bl);
+    std::string availability;  // Removed field, for backward compat
     encode(availability, bl);
   }
   void decode_bare(bufferlist::const_iterator &bl) {
@@ -67,12 +68,12 @@ struct MonCommand {
     decode(helpstring, bl);
     decode(module, bl);
     decode(req_perms, bl);
+    std::string availability;  // Removed field, for backward compat
     decode(availability, bl);
   }
   bool is_compat(const MonCommand* o) const {
     return cmdstring == o->cmdstring &&
-	module == o->module && req_perms == o->req_perms &&
-	availability == o->availability;
+	module == o->module && req_perms == o->req_perms;
   }
 
   bool is_noforward() const {
@@ -89,6 +90,10 @@ struct MonCommand {
 
   bool is_mgr() const {
     return has_flag(MonCommand::FLAG_MGR);
+  }
+
+  bool is_hidden() const {
+    return has_flag(MonCommand::FLAG_HIDDEN);
   }
 
   static void encode_array(const MonCommand *cmds, int size, bufferlist &bl) {

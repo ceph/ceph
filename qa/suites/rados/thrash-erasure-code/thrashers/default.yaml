@@ -5,7 +5,7 @@ overrides:
     - objects unfound and apparently lost
     conf:
       osd:
-        osd debug reject backfill probability: .3
+        osd debug reject backfill probability: .1
         osd scrub min interval: 60
         osd scrub max interval: 120
         osd max backfills: 2
@@ -13,5 +13,6 @@ tasks:
 - thrashosds:
     timeout: 1200
     chance_pgnum_grow: 1
+    chance_pgnum_shrink: 1
     chance_pgpnum_fix: 1
     min_in: 4

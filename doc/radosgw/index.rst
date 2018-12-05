@@ -1,3 +1,5 @@
+.. _object-gateway:
+
 =====================
  Ceph Object Gateway
 =====================
@@ -49,6 +51,7 @@ you may write data with one API and retrieve it with the other.
    Export over NFS <nfs>
    OpenStack Keystone Integration <keystone>
    OpenStack Barbican Integration <barbican>
+   Open Policy Agent Integration <opa>
    Multi-tenancy <multitenancy>
    Compression <compression>
    LDAP Authentication <ldap-auth>
@@ -58,6 +61,7 @@ you may write data with one API and retrieve it with the other.
    Multi factor authentication <mfa>
    Sync Modules <sync-modules>
    Data Layout in RADOS <layout>
+   STS Lite <STSLite>
    troubleshooting
    Manpage radosgw <../../man/8/radosgw>
    Manpage radosgw-admin <../../man/8/radosgw-admin>

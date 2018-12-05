@@ -44,8 +44,8 @@ interval_t AllocatorLevel01Loose::_get_longest_from_l0(uint64_t pos0,
 
   interval_t res_candidate;
   if (tail->length != 0) {
-    assert((tail->offset % l0_granularity) == 0);
-    assert((tail->length % l0_granularity) == 0);
+    ceph_assert((tail->offset % l0_granularity) == 0);
+    ceph_assert((tail->length % l0_granularity) == 0);
     res_candidate.offset = tail->offset / l0_granularity;
     res_candidate.length = tail->length / l0_granularity;
   }
@@ -85,8 +85,8 @@ interval_t AllocatorLevel01Loose::_get_longest_from_l0(uint64_t pos0,
 	      res_candidate.length, min_granules);
 	    if (res.length < res_candidate.length) {
 	      res = res_candidate;
-	      res_candidate = interval_t();
 	    }
+	    res_candidate = interval_t();
 	    pos += d;
 	    end_loop = pos >= pos1;
 	    continue;
@@ -131,8 +131,8 @@ void AllocatorLevel01Loose::_analyze_partials(uint64_t pos_start,
   search_ctx_t* ctx)
 {
   auto d = CHILD_PER_SLOT;
-  assert((pos_start % d) == 0);
-  assert((pos_end % d) == 0);
+  ceph_assert((pos_start % d) == 0);
+  ceph_assert((pos_end % d) == 0);
 
   uint64_t l0_w = slotset_width * CHILD_PER_SLOT_L0;
 
@@ -213,56 +213,68 @@ void AllocatorLevel01Loose::_mark_l1_on_l0(int64_t l0_pos, int64_t l0_pos_end)
   auto d0 = bits_per_slotset;
   uint64_t l1_w = CHILD_PER_SLOT;
   // this should be aligned with slotset boundaries
-  assert(0 == (l0_pos % d0));
-  assert(0 == (l0_pos_end % d0));
+  ceph_assert(0 == (l0_pos % d0));
+  ceph_assert(0 == (l0_pos_end % d0));
 
   int64_t idx = l0_pos / bits_per_slot;
   int64_t idx_end = l0_pos_end / bits_per_slot;
-  bool was_all_free = true;
-  bool was_all_allocated = true;
+  slot_t mask_to_apply = L1_ENTRY_NOT_USED;
 
   auto l1_pos = l0_pos / d0;
 
   while (idx < idx_end) {
     if (l0[idx] == all_slot_clear) {
-      was_all_free = false;
-
       // if not all prev slots are allocated then no need to check the
       // current slot set, it's partial
       ++idx;
-      idx =
-        was_all_allocated ? idx : p2roundup(idx, int64_t(slotset_width));
+      if (mask_to_apply == L1_ENTRY_NOT_USED) {
+	mask_to_apply = L1_ENTRY_FULL;
+      } else if (mask_to_apply != L1_ENTRY_FULL) {
+	idx = p2roundup(idx, int64_t(slotset_width));
+        mask_to_apply = L1_ENTRY_PARTIAL;
+      }
     } else if (l0[idx] == all_slot_set) {
-      // all free
-      was_all_allocated = false;
       // if not all prev slots are free then no need to check the
       // current slot set, it's partial
       ++idx;
-      idx = was_all_free ? idx : p2roundup(idx, int64_t(slotset_width));
+      if (mask_to_apply == L1_ENTRY_NOT_USED) {
+	mask_to_apply = L1_ENTRY_FREE;
+      } else if (mask_to_apply != L1_ENTRY_FREE) {
+	idx = p2roundup(idx, int64_t(slotset_width));
+        mask_to_apply = L1_ENTRY_PARTIAL;
+      }
     } else {
       // no need to check the current slot set, it's partial
-      was_all_free = false;
-      was_all_allocated = false;
+      mask_to_apply = L1_ENTRY_PARTIAL;
       ++idx;
       idx = p2roundup(idx, int64_t(slotset_width));
     }
     if ((idx % slotset_width) == 0) {
-
+      ceph_assert(mask_to_apply != L1_ENTRY_NOT_USED);
       uint64_t shift = (l1_pos % l1_w) * L1_ENTRY_WIDTH;
       slot_t& slot_val = l1[l1_pos / l1_w];
-        slot_val &= ~(uint64_t(L1_ENTRY_MASK) << shift);
+      auto mask = slot_t(L1_ENTRY_MASK) << shift;
 
-      if (was_all_allocated) {
-        assert(!was_all_free);
-        slot_val |= uint64_t(L1_ENTRY_FULL) << shift;
-      } else if (was_all_free) {
-        assert(!was_all_allocated);
-        slot_val |= uint64_t(L1_ENTRY_FREE) << shift;
-      } else {
-        slot_val |= uint64_t(L1_ENTRY_PARTIAL) << shift;
+      slot_t old_mask = (slot_val & mask) >> shift;
+      switch(old_mask) {
+      case L1_ENTRY_FREE:
+	unalloc_l1_count--;
+	break;
+      case L1_ENTRY_PARTIAL:
+	partial_l1_count--;
+	break;
       }
-      was_all_free = true;
-      was_all_allocated = true;
+      slot_val &= ~mask;
+      slot_val |= slot_t(mask_to_apply) << shift;
+      switch(mask_to_apply) {
+      case L1_ENTRY_FREE:
+	unalloc_l1_count++;
+	break;
+      case L1_ENTRY_PARTIAL:
+	partial_l1_count++;
+	break;
+      }
+      mask_to_apply = L1_ENTRY_NOT_USED;
       ++l1_pos;
     }
   }
@@ -310,7 +322,7 @@ interval_t AllocatorLevel01Loose::_allocate_l1_contiguous(uint64_t length,
     // full length match required.
     if (ctx.affordable_len) {
       // allocate as specified
-      assert(ctx.affordable_len >= length);
+      ceph_assert(ctx.affordable_len >= length);
       auto pos = ctx.affordable_offs / l0_granularity;
       _mark_alloc_l1_l0(pos, pos + 1);
       res = interval_t(ctx.affordable_offs, length);
@@ -320,7 +332,7 @@ interval_t AllocatorLevel01Loose::_allocate_l1_contiguous(uint64_t length,
     // allocate from free slot sets
     if (ctx.free_count) {
       auto l = std::min(length, ctx.free_count * l1_granularity);
-      assert((l % l0_granularity) == 0);
+      ceph_assert((l % l0_granularity) == 0);
       auto pos_end = ctx.free_l1_pos * l0_w + l / l0_granularity;
 
       _mark_alloc_l1_l0(ctx.free_l1_pos * l0_w, pos_end);
@@ -335,7 +347,7 @@ interval_t AllocatorLevel01Loose::_allocate_l1_contiguous(uint64_t length,
     if (ctx.free_count) {
 
       auto l = std::min(length, ctx.free_count * l1_granularity);
-      assert((l % l0_granularity) == 0);
+      ceph_assert((l % l0_granularity) == 0);
       auto pos_end = ctx.free_l1_pos * l0_w + l / l0_granularity;
 
       _mark_alloc_l1_l0(ctx.free_l1_pos * l0_w, pos_end);
@@ -345,13 +357,13 @@ interval_t AllocatorLevel01Loose::_allocate_l1_contiguous(uint64_t length,
     }
 
     // we can terminate earlier on free entry only
-    assert(ctx.fully_processed);
+    ceph_assert(ctx.fully_processed);
 
     // check partially free slot sets first (including neighboring),
     // full length match required.
     if (ctx.affordable_len) {
-      assert(ctx.affordable_len >= length);
-      assert((length % l0_granularity) == 0);
+      ceph_assert(ctx.affordable_len >= length);
+      ceph_assert((length % l0_granularity) == 0);
       auto pos_start = ctx.affordable_offs + length / l0_granularity;
       auto pos_end = (ctx.affordable_offs + length) / l0_granularity;
       _mark_alloc_l1_l0(pos_start, pos_end);
@@ -367,12 +379,12 @@ interval_t AllocatorLevel01Loose::_allocate_l1_contiguous(uint64_t length,
   } else {
     search_ctx_t ctx;
     _analyze_partials(pos_start, pos_end, length, min_length, NO_STOP, &ctx);
-    assert(ctx.fully_processed);
+    ceph_assert(ctx.fully_processed);
     // check partially free slot sets first (including neighboring),
     // full length match required.
     if (ctx.affordable_len) {
-      assert(ctx.affordable_len >= length);
-      assert((length % l0_granularity) == 0);
+      ceph_assert(ctx.affordable_len >= length);
+      ceph_assert((length % l0_granularity) == 0);
       auto pos_start = ctx.affordable_offs / l0_granularity;
       auto pos_end = (ctx.affordable_offs + length) / l0_granularity;
       _mark_alloc_l1_l0(pos_start, pos_end);
@@ -388,8 +400,8 @@ interval_t AllocatorLevel01Loose::_allocate_l1_contiguous(uint64_t length,
       if (aligned_extent.length > 0) {
 	aligned_extent.length = std::min(length,
 	  uint64_t(aligned_extent.length));
-	assert((aligned_extent.offset % l0_granularity) == 0);
-	assert((aligned_extent.length % l0_granularity) == 0);
+	ceph_assert((aligned_extent.offset % l0_granularity) == 0);
+	ceph_assert((aligned_extent.length % l0_granularity) == 0);
 
 	auto pos_start = aligned_extent.offset / l0_granularity;
 	auto pos_end = (aligned_extent.offset + aligned_extent.length) / l0_granularity;
@@ -417,8 +429,8 @@ bool AllocatorLevel01Loose::_allocate_l1(uint64_t length,
   uint64_t d0 = CHILD_PER_SLOT_L0;
   uint64_t d1 = CHILD_PER_SLOT;
 
-  assert(0 == (l1_pos_start % (slotset_width * d1)));
-  assert(0 == (l1_pos_end % (slotset_width * d1)));
+  ceph_assert(0 == (l1_pos_start % (slotset_width * d1)));
+  ceph_assert(0 == (l1_pos_end % (slotset_width * d1)));
   if (min_length != l0_granularity) {
     // probably not the most effecient way but
     // don't care much about that at the moment
@@ -455,9 +467,9 @@ bool AllocatorLevel01Loose::_allocate_l1(uint64_t length,
         continue;
       }
       auto free_pos = find_next_set_bit(slot_val, 0);
-      assert(free_pos < bits_per_slot);
+      ceph_assert(free_pos < bits_per_slot);
       do {
-        assert(length > *allocated);
+        ceph_assert(length > *allocated);
 
         bool empty;
         empty = _allocate_l0(length, max_length,
@@ -465,7 +477,19 @@ bool AllocatorLevel01Loose::_allocate_l1(uint64_t length,
           (idx * d1 + free_pos / L1_ENTRY_WIDTH + 1) * l0_w,
           allocated,
           res);
-        slot_val &= (~slot_t(L1_ENTRY_MASK)) << free_pos;
+
+	auto mask = slot_t(L1_ENTRY_MASK) << free_pos;
+
+	slot_t old_mask = (slot_val & mask) >> free_pos;
+	switch(old_mask) {
+	case L1_ENTRY_FREE:
+	  unalloc_l1_count--;
+	  break;
+	case L1_ENTRY_PARTIAL:
+	  partial_l1_count--;
+	  break;
+	}
+        slot_val &= ~mask;
         if (empty) {
           // the next line is no op with the current L1_ENTRY_FULL but left
           // as-is for the sake of uniformity and to avoid potential errors
@@ -473,6 +497,7 @@ bool AllocatorLevel01Loose::_allocate_l1(uint64_t length,
           slot_val |= slot_t(L1_ENTRY_FULL) << free_pos;
         } else {
           slot_val |= slot_t(L1_ENTRY_PARTIAL) << free_pos;
+	  partial_l1_count++;
         }
         if (length <= *allocated || slot_val == all_slot_clear) {
           break;

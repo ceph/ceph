@@ -22,10 +22,12 @@
  * OSD sub op - for internal ops on pobjects between primary and replicas(/stripes/whatever)
  */
 
-class MOSDRepOp : public MOSDFastDispatchOp {
-
-  static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 1;
+class MOSDRepOp : public MessageInstance<MOSDRepOp, MOSDFastDispatchOp> {
+public:
+  friend factory;
+private:
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 1;
 
 public:
   epoch_t map_epoch, min_epoch;
@@ -36,7 +38,7 @@ public:
   spg_t pgid;
 
   bufferlist::const_iterator p;
-  // Decoding flags. Decoding is only needed for messages catched by pipe reader.
+  // Decoding flags. Decoding is only needed for messages caught by pipe reader.
   bool final_decode_needed;
 
   // subop
@@ -79,7 +81,7 @@ public:
 
   void decode_payload() override {
     p = payload.cbegin();
-    // splitted to partial and final
+    // split to partial and final
     decode(map_epoch, p);
     if (header.version >= 2) {
       decode(min_epoch, p);
@@ -139,13 +141,13 @@ public:
   }
 
   MOSDRepOp()
-    : MOSDFastDispatchOp(MSG_OSD_REPOP, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_REPOP, HEAD_VERSION, COMPAT_VERSION),
       map_epoch(0),
       final_decode_needed(true), acks_wanted (0) {}
   MOSDRepOp(osd_reqid_t r, pg_shard_t from,
 	    spg_t p, const hobject_t& po, int aw,
 	    epoch_t mape, epoch_t min_epoch, ceph_tid_t rtid, eversion_t v)
-    : MOSDFastDispatchOp(MSG_OSD_REPOP, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_REPOP, HEAD_VERSION, COMPAT_VERSION),
       map_epoch(mape),
       min_epoch(min_epoch),
       reqid(r),

@@ -24,25 +24,13 @@
 #include "librbd/io/ObjectDispatcher.h"
 #include "librbd/io/ReadResult.h"
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
 #define dout_prefix *_dout << "librbdwriteback: "
 
 namespace librbd {
-
-  /**
-   * callback to finish a rados completion as a Context
-   *
-   * @param c completion
-   * @param arg Context* recast as void*
-   */
-  void context_cb(rados_completion_t c, void *arg)
-  {
-    Context *con = reinterpret_cast<Context *>(arg);
-    con->complete(rados_aio_get_return_value(c));
-  }
 
   /**
    * context to wrap another context in a Mutex
@@ -80,7 +68,7 @@ namespace librbd {
       ldout(m_cct, 20) << "C_OrderedWrite completing " << m_result << dendl;
       {
 	Mutex::Locker l(m_wb_handler->m_lock);
-	assert(!m_result->done);
+	ceph_assert(!m_result->done);
 	m_result->done = true;
 	m_result->ret = r;
 	m_wb_handler->complete_writes(m_result->oid);
@@ -109,7 +97,7 @@ namespace librbd {
 
     void finish(int r) override {
       // all IO operations are flushed prior to closing the journal
-      assert(image_ctx->journal != nullptr);
+      ceph_assert(image_ctx->journal != nullptr);
 
       image_ctx->journal->commit_io_event_extent(journal_tid, offset, length,
                                                  r);
@@ -231,7 +219,7 @@ namespace librbd {
     uint64_t object_no = oid_to_object_no(oid.name, m_ictx->object_prefix);
 
     // all IO operations are flushed prior to closing the journal
-    assert(original_journal_tid != 0 && m_ictx->journal != NULL);
+    ceph_assert(original_journal_tid != 0 && m_ictx->journal != NULL);
 
     Extents file_extents;
     Striper::extent_to_file(m_ictx->cct, &m_ictx->layout, object_no, off,
@@ -254,7 +242,7 @@ namespace librbd {
 
   void LibrbdWriteback::complete_writes(const std::string& oid)
   {
-    assert(m_lock.is_locked());
+    ceph_assert(m_lock.is_locked());
     std::queue<write_result_d*>& results = m_writes[oid];
     ldout(m_ictx->cct, 20) << "complete_writes() oid " << oid << dendl;
     std::list<write_result_d*> finished;

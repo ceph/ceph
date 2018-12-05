@@ -19,7 +19,7 @@
 #include <errno.h>
 #include "common/errno.h"
 #include "common/dout.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "common/Formatter.h"
 #include "common/Cond.h"
 #include "common/ceph_context.h"
@@ -191,6 +191,8 @@ public:
   {
     return logger;
   }
+
+  int64_t estimate_prefix_size(const string& prefix) override;
 
   struct  RocksWBHandler: public rocksdb::WriteBatch::Handler {
     std::string seen ;
@@ -492,7 +494,6 @@ err:
   }
 
   int set_cache_capacity(int64_t capacity);
-  int set_cache_high_pri_pool_ratio(double ratio);
   int64_t get_cache_capacity();
 
   WholeSpaceIterator get_wholespace_iterator() override;

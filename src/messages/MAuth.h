@@ -17,14 +17,17 @@
 
 #include "messages/PaxosServiceMessage.h"
 
-struct MAuth : public PaxosServiceMessage {
+class MAuth : public MessageInstance<MAuth, PaxosServiceMessage> {
+public:
+  friend factory;
+
   __u32 protocol;
   bufferlist auth_payload;
   epoch_t monmap_epoch;
 
   /* if protocol == 0, then auth_payload is a set<__u32> listing protocols the client supports */
 
-  MAuth() : PaxosServiceMessage(CEPH_MSG_AUTH, 0), protocol(0), monmap_epoch(0) { }
+  MAuth() : MessageInstance(CEPH_MSG_AUTH, 0), protocol(0), monmap_epoch(0) { }
 private:
   ~MAuth() override {}
 

@@ -17,16 +17,21 @@
 
 #include "AuthClientHandler.h"
 #include "cephx/CephxClientHandler.h"
+#include "krb/KrbClientHandler.hpp"
 #include "none/AuthNoneClientHandler.h"
 
-AuthClientHandler *get_auth_client_handler(CephContext *cct, int proto,
-					   RotatingKeyRing *rkeys)
+
+AuthClientHandler*
+AuthClientHandler::create(CephContext* cct, int proto,
+			  RotatingKeyRing* rkeys)
 {
   switch (proto) {
   case CEPH_AUTH_CEPHX:
     return new CephxClientHandler(cct, rkeys);
   case CEPH_AUTH_NONE:
-    return new AuthNoneClientHandler(cct, rkeys);
+    return new AuthNoneClientHandler{cct};
+  case CEPH_AUTH_GSS: 
+    return new KrbClientHandler(cct);
   default:
     return NULL;
   }

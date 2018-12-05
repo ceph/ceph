@@ -14,7 +14,7 @@
 
 #include "common/ConfUtils.h"
 #include "common/ceph_argparse.h"
-#include "common/config.h"
+#include "common/config_proxy.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
 
@@ -40,8 +40,6 @@ void usage()
        << "  --import-keyring FILE         will import the content of a given keyring\n"
        << "                                into the keyringfile\n"
        << "  -n NAME, --name NAME          specify entityname to operate on\n"
-       << "  -u AUID, --set-uid AUID       sets the auid (authenticated user id) for the\n"
-       << "                                specified entityname\n"
        << "  -a BASE64, --add-key BASE64   will add an encoded key to the keyring\n"
        << "  --cap SUBSYSTEM CAPABILITY    will set the capability for given subsystem\n"
        << "  --caps CAPSFILE               will set all of capabilities associated with a\n"
@@ -60,7 +58,6 @@ int main(int argc, const char **argv)
   std::string add_key;
   std::string caps_fn;
   std::string import_keyring;
-  uint64_t auid = CEPH_AUTH_UID_DEFAULT;
   map<string,bufferlist> caps;
   std::string fn;
 
@@ -82,7 +79,6 @@ int main(int argc, const char **argv)
   bool list = false;
   bool print_key = false;
   bool create_keyring = false;
-  bool set_auid = false;
   int mode = 0600; // keyring file mode
   std::vector<const char*>::iterator i;
 
@@ -122,14 +118,6 @@ int main(int argc, const char **argv)
       create_keyring = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--import-keyring", (char*)NULL)) {
       import_keyring = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "-u", "--set-uid", (char*)NULL)) {
-      std::string err;
-      auid = strict_strtoll(val.c_str(), 10, &err);
-      if (!err.empty()) {
-	cerr << "error parsing UID: " << err << std::endl;
-	exit(1);
-      }
-      set_auid = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--mode", (char*)NULL)) {
       std::string err;
       mode = strict_strtoll(val.c_str(), 8, &err);
@@ -155,7 +143,6 @@ int main(int argc, const char **argv)
 	list ||
 	!caps_fn.empty() ||
 	!caps.empty() ||
-	set_auid ||
 	print_key ||
 	create_keyring ||
 	!import_keyring.empty())) {
@@ -168,7 +155,7 @@ int main(int argc, const char **argv)
   }
 
   common_init_finish(g_ceph_context);
-  EntityName ename(g_conf->name);
+  EntityName ename(g_conf()->name);
 
   // Enforce the use of gen-key or add-key when creating to avoid ending up
   // with an "empty" key (key = AAAAAAAAAAAAAAAA)
@@ -186,6 +173,7 @@ int main(int argc, const char **argv)
 
   // keyring --------
   bool modified = false;
+  bool added_entity = false;
   KeyRing keyring;
 
   bufferlist bl;
@@ -261,7 +249,8 @@ int main(int argc, const char **argv)
     }
     keyring.add(ename, eauth);
     modified = true;
-    cout << "added entity " << ename << " auth " << eauth << std::endl;
+    cout << "added entity " << ename << " " << eauth << std::endl;
+    added_entity = true;
   }
   if (!caps_fn.empty()) {
     ConfFile cf;
@@ -289,9 +278,8 @@ int main(int argc, const char **argv)
     keyring.set_caps(ename, caps);
     modified = true;
   }
-  if (set_auid) {
-    keyring.set_uid(ename, auid);
-    modified = true;
+  if (added_entity && caps.size() > 0) {
+    cout << "added " << caps.size() << " caps to entity " << ename << std::endl;
   }
 
   // read commands

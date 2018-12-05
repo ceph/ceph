@@ -12,7 +12,7 @@
 #include "librbd/image/RefreshRequest.h"
 #include "librbd/image/SetSnapRequest.h"
 #include <boost/algorithm/string/predicate.hpp>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -25,15 +25,26 @@ using util::create_context_callback;
 using util::create_rados_callback;
 
 template <typename I>
-OpenRequest<I>::OpenRequest(I *image_ctx, bool skip_open_parent,
+OpenRequest<I>::OpenRequest(I *image_ctx, uint64_t flags,
                             Context *on_finish)
-  : m_image_ctx(image_ctx), m_skip_open_parent_image(skip_open_parent),
+  : m_image_ctx(image_ctx),
+    m_skip_open_parent_image(flags & OPEN_FLAG_SKIP_OPEN_PARENT),
     m_on_finish(on_finish), m_error_result(0) {
+  if ((flags & OPEN_FLAG_OLD_FORMAT) != 0) {
+    m_image_ctx->old_format = true;
+  }
+  if ((flags & OPEN_FLAG_IGNORE_MIGRATING) != 0) {
+    m_image_ctx->ignore_migrating = true;
+  }
 }
 
 template <typename I>
 void OpenRequest<I>::send() {
-  send_v2_detect_header();
+  if (m_image_ctx->old_format) {
+    send_v1_detect_header();
+  } else {
+    send_v2_detect_header();
+  }
 }
 
 template <typename I>
@@ -244,7 +255,9 @@ void OpenRequest<I>::send_v2_get_initial_metadata() {
   m_image_ctx->header_oid = util::header_name(m_image_ctx->id);
 
   librados::ObjectReadOperation op;
-  cls_client::get_initial_metadata_start(&op);
+  cls_client::get_size_start(&op, CEPH_NOSNAP);
+  cls_client::get_object_prefix_start(&op);
+  cls_client::get_features_start(&op, true);
 
   using klass = OpenRequest<I>;
   librados::AioCompletion *comp = create_rados_callback<
@@ -260,11 +273,23 @@ Context *OpenRequest<I>::handle_v2_get_initial_metadata(int *result) {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << __func__ << ": r=" << *result << dendl;
 
-  if (*result == 0) {
-    auto it = m_out_bl.cbegin();
-    *result = cls_client::get_initial_metadata_finish(
-      &it, &m_image_ctx->object_prefix, &m_image_ctx->order, &m_image_ctx->features);
+  auto it = m_out_bl.cbegin();
+  if (*result >= 0) {
+    uint64_t size;
+    *result = cls_client::get_size_finish(&it, &size, &m_image_ctx->order);
   }
+
+  if (*result >= 0) {
+    *result = cls_client::get_object_prefix_finish(&it,
+                                                   &m_image_ctx->object_prefix);
+  }
+
+  if (*result >= 0) {
+    uint64_t incompatible_features;
+    *result = cls_client::get_features_finish(&it, &m_image_ctx->features,
+                                              &incompatible_features);
+  }
+
   if (*result < 0) {
     lderr(cct) << "failed to retrieve initial metadata: "
                << cpp_strerror(*result) << dendl;
@@ -359,6 +384,50 @@ Context *OpenRequest<I>::handle_v2_get_create_timestamp(int *result) {
     return nullptr;
   }
 
+  send_v2_get_access_modify_timestamp();
+  return nullptr;
+}
+
+template <typename I>
+void OpenRequest<I>::send_v2_get_access_modify_timestamp() {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << this << " " << __func__ << dendl;
+
+  librados::ObjectReadOperation op;
+  cls_client::get_access_timestamp_start(&op);
+  cls_client::get_modify_timestamp_start(&op);
+  //TODO: merge w/ create timestamp query after luminous EOLed
+
+  using klass = OpenRequest<I>;
+  librados::AioCompletion *comp = create_rados_callback<
+    klass, &klass::handle_v2_get_access_modify_timestamp>(this);
+  m_out_bl.clear();
+  m_image_ctx->md_ctx.aio_operate(m_image_ctx->header_oid, comp, &op,
+                                  &m_out_bl);
+  comp->release();
+}
+
+template <typename I>
+Context *OpenRequest<I>::handle_v2_get_access_modify_timestamp(int *result) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
+
+  if (*result == 0) {
+    auto it = m_out_bl.cbegin();
+    *result = cls_client::get_access_timestamp_finish(&it,
+        &m_image_ctx->access_timestamp);
+    if (*result == 0) 
+      *result = cls_client::get_modify_timestamp_finish(&it,
+        &m_image_ctx->modify_timestamp);
+  }
+  if (*result < 0 && *result != -EOPNOTSUPP) {
+    lderr(cct) << "failed to retrieve access/modify_timestamp: "
+               << cpp_strerror(*result)
+               << dendl;
+    send_close_image(*result);
+    return nullptr;
+  }
+
   send_v2_get_data_pool();
   return nullptr;
 }
@@ -401,14 +470,13 @@ Context *OpenRequest<I>::handle_v2_get_data_pool(int *result) {
   }
 
   if (data_pool_id != -1) {
-    librados::Rados rados(m_image_ctx->md_ctx);
-    *result = rados.ioctx_create2(data_pool_id, m_image_ctx->data_ctx);
+    *result = util::create_ioctx(m_image_ctx->md_ctx, "data pool", data_pool_id,
+                                 {}, &m_image_ctx->data_ctx);
     if (*result < 0) {
-      lderr(cct) << "failed to initialize data pool IO context: "
-                 << cpp_strerror(*result) << dendl;
       send_close_image(*result);
       return nullptr;
     }
+    m_image_ctx->data_ctx.set_namespace(m_image_ctx->md_ctx.get_namespace());
   }
 
   m_image_ctx->init_layout();
@@ -460,9 +528,9 @@ Context *OpenRequest<I>::send_init_cache(int *result) {
 
   // readahead requires the cache
   m_image_ctx->readahead.set_trigger_requests(
-    m_image_ctx->readahead_trigger_requests);
+    m_image_ctx->config.template get_val<uint64_t>("rbd_readahead_trigger_requests"));
   m_image_ctx->readahead.set_max_readahead_size(
-    m_image_ctx->readahead_max_bytes);
+    m_image_ctx->config.template get_val<Option::size_t>("rbd_readahead_max_bytes"));
 
   return send_register_watch(result);
 }
@@ -488,7 +556,11 @@ Context *OpenRequest<I>::handle_register_watch(int *result) {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
 
-  if (*result < 0) {
+  if (*result == -EPERM) {
+    ldout(cct, 5) << "user does not have write permission" << dendl;
+    send_close_image(*result);
+    return nullptr;
+  } else if (*result < 0) {
     lderr(cct) << "failed to register watch: " << cpp_strerror(*result)
                << dendl;
     send_close_image(*result);
@@ -500,7 +572,8 @@ Context *OpenRequest<I>::handle_register_watch(int *result) {
 
 template <typename I>
 Context *OpenRequest<I>::send_set_snap(int *result) {
-  if (m_image_ctx->snap_name.empty()) {
+  if (m_image_ctx->snap_name.empty() &&
+      m_image_ctx->open_snap_id == CEPH_NOSNAP) {
     *result = 0;
     return m_on_finish;
   }
@@ -509,14 +582,16 @@ Context *OpenRequest<I>::send_set_snap(int *result) {
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
   uint64_t snap_id = CEPH_NOSNAP;
-  {
+  std::swap(m_image_ctx->open_snap_id, snap_id);
+  if (snap_id == CEPH_NOSNAP) {
     RWLock::RLocker snap_locker(m_image_ctx->snap_lock);
     snap_id = m_image_ctx->get_snap_id(m_image_ctx->snap_namespace,
                                        m_image_ctx->snap_name);
   }
   if (snap_id == CEPH_NOSNAP) {
-    *result = -ENOENT;
-    return m_on_finish;
+    lderr(cct) << "failed to find snapshot " << m_image_ctx->snap_name << dendl;
+    send_close_image(-ENOENT);
+    return nullptr;
   }
 
   using klass = OpenRequest<I>;

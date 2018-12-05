@@ -24,6 +24,24 @@ namespace rbd {
 static const uint32_t MAX_OBJECT_MAP_OBJECT_COUNT = 256000000;
 static const string RBD_GROUP_IMAGE_KEY_PREFIX = "image_";
 
+enum DirectoryState {
+  DIRECTORY_STATE_READY         = 0,
+  DIRECTORY_STATE_ADD_DISABLED  = 1
+};
+
+inline void encode(DirectoryState state, bufferlist& bl,
+		   uint64_t features=0)
+{
+  ceph::encode(static_cast<uint8_t>(state), bl);
+}
+
+inline void decode(DirectoryState &state, bufferlist::const_iterator& it)
+{
+  uint8_t int_state;
+  ceph::decode(int_state, it);
+  state = static_cast<DirectoryState>(int_state);
+}
+
 enum MirrorMode {
   MIRROR_MODE_DISABLED = 0,
   MIRROR_MODE_IMAGE    = 1,
@@ -163,13 +181,53 @@ std::ostream& operator<<(std::ostream& os, const MirrorImageStatusState& state);
 
 WRITE_CLASS_ENCODER(MirrorImageStatus);
 
+struct ParentImageSpec {
+  int64_t pool_id = -1;
+  std::string pool_namespace;
+  std::string image_id;
+  snapid_t snap_id = CEPH_NOSNAP;
+
+  ParentImageSpec() {
+  }
+  ParentImageSpec(int64_t pool_id, const std::string& pool_namespace,
+                  const std::string& image_id, snapid_t snap_id)
+    : pool_id(pool_id), pool_namespace(pool_namespace), image_id(image_id),
+      snap_id(snap_id) {
+  }
+
+  bool exists() const {
+    return (pool_id >= 0 && !image_id.empty() && snap_id != CEPH_NOSNAP);
+  }
+
+  bool operator==(const ParentImageSpec& rhs) const {
+    return ((pool_id == rhs.pool_id) &&
+            (pool_namespace == rhs.pool_namespace) &&
+            (image_id == rhs.image_id) &&
+            (snap_id == rhs.snap_id));
+  }
+
+  bool operator!=(const ParentImageSpec& rhs) const {
+    return !(*this == rhs);
+  }
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::const_iterator &it);
+  void dump(Formatter *f) const;
+
+  static void generate_test_instances(std::list<ParentImageSpec*> &o);
+};
+
+WRITE_CLASS_ENCODER(ParentImageSpec);
+
 struct ChildImageSpec {
   int64_t pool_id = -1;
+  std::string pool_namespace;
   std::string image_id;
 
   ChildImageSpec() {}
-  ChildImageSpec(int64_t pool_id, const std::string& image_id)
-    : pool_id(pool_id), image_id(image_id) {
+  ChildImageSpec(int64_t pool_id, const std::string& pool_namespace,
+                 const std::string& image_id)
+    : pool_id(pool_id), pool_namespace(pool_namespace), image_id(image_id) {
   }
 
   void encode(bufferlist &bl) const;
@@ -180,11 +238,15 @@ struct ChildImageSpec {
 
   inline bool operator==(const ChildImageSpec& rhs) const {
     return (pool_id == rhs.pool_id &&
+            pool_namespace == rhs.pool_namespace &&
             image_id == rhs.image_id);
   }
   inline bool operator<(const ChildImageSpec& rhs) const {
     if (pool_id != rhs.pool_id) {
       return pool_id < rhs.pool_id;
+    }
+    if (pool_namespace != rhs.pool_namespace) {
+      return pool_namespace < rhs.pool_namespace;
     }
     return image_id < rhs.image_id;
   }
@@ -495,8 +557,28 @@ struct GroupSnapshot {
 WRITE_CLASS_ENCODER(GroupSnapshot);
 enum TrashImageSource {
   TRASH_IMAGE_SOURCE_USER = 0,
-  TRASH_IMAGE_SOURCE_MIRRORING = 1
+  TRASH_IMAGE_SOURCE_MIRRORING = 1,
+  TRASH_IMAGE_SOURCE_MIGRATION = 2,
 };
+
+inline std::ostream& operator<<(std::ostream& os,
+                                const TrashImageSource& source) {
+  switch (source) {
+  case TRASH_IMAGE_SOURCE_USER:
+    os << "user";
+    break;
+  case TRASH_IMAGE_SOURCE_MIRRORING:
+    os << "mirroring";
+    break;
+  case TRASH_IMAGE_SOURCE_MIGRATION:
+    os << "migration";
+    break;
+  default:
+    os << "unknown (" << static_cast<uint32_t>(source) << ")";
+    break;
+  }
+  return os;
+}
 
 inline void encode(const TrashImageSource &source, bufferlist& bl,
 		   uint64_t features=0)
@@ -513,11 +595,33 @@ inline void decode(TrashImageSource &source, bufferlist::const_iterator& it)
   source = static_cast<TrashImageSource>(int_source);
 }
 
+enum TrashImageState {
+  TRASH_IMAGE_STATE_NORMAL    = 0,
+  TRASH_IMAGE_STATE_MOVING    = 1,
+  TRASH_IMAGE_STATE_REMOVING  = 2,
+  TRASH_IMAGE_STATE_RESTORING = 3
+};
+
+inline void encode(const TrashImageState &state, bufferlist &bl)
+{
+  using ceph::encode;
+  encode(static_cast<uint8_t>(state), bl);
+}
+
+inline void decode(TrashImageState &state, bufferlist::const_iterator &it)
+{
+  uint8_t int_state;
+  using ceph::decode;
+  decode(int_state, it);
+  state = static_cast<TrashImageState>(int_state);
+}
+
 struct TrashImageSpec {
   TrashImageSource source = TRASH_IMAGE_SOURCE_USER;
   std::string name;
   utime_t deletion_time; // time of deletion
   utime_t deferment_end_time;
+  TrashImageState state = TRASH_IMAGE_STATE_NORMAL;
 
   TrashImageSpec() {}
   TrashImageSpec(TrashImageSource source, const std::string &name,
@@ -568,6 +672,113 @@ struct MirrorImageMap {
 std::ostream& operator<<(std::ostream& os, const MirrorImageMap &image_map);
 
 WRITE_CLASS_ENCODER(MirrorImageMap);
+
+enum MigrationHeaderType {
+  MIGRATION_HEADER_TYPE_SRC = 1,
+  MIGRATION_HEADER_TYPE_DST = 2,
+};
+
+inline void encode(const MigrationHeaderType &type, bufferlist& bl) {
+  using ceph::encode;
+  encode(static_cast<uint8_t>(type), bl);
+}
+
+inline void decode(MigrationHeaderType &type, bufferlist::const_iterator& it) {
+  uint8_t int_type;
+  using ceph::decode;
+  decode(int_type, it);
+  type = static_cast<MigrationHeaderType>(int_type);
+}
+
+enum MigrationState {
+  MIGRATION_STATE_ERROR = 0,
+  MIGRATION_STATE_PREPARING = 1,
+  MIGRATION_STATE_PREPARED = 2,
+  MIGRATION_STATE_EXECUTING = 3,
+  MIGRATION_STATE_EXECUTED = 4,
+};
+
+inline void encode(const MigrationState &state, bufferlist& bl) {
+  using ceph::encode;
+  encode(static_cast<uint8_t>(state), bl);
+}
+
+inline void decode(MigrationState &state, bufferlist::const_iterator& it) {
+  uint8_t int_state;
+  using ceph::decode;
+  decode(int_state, it);
+  state = static_cast<MigrationState>(int_state);
+}
+
+std::ostream& operator<<(std::ostream& os,
+                         const MigrationState& migration_state);
+
+struct MigrationSpec {
+  MigrationHeaderType header_type = MIGRATION_HEADER_TYPE_SRC;
+  int64_t pool_id = -1;
+  std::string pool_namespace;
+  std::string image_name;
+  std::string image_id;
+  std::map<uint64_t, uint64_t> snap_seqs;
+  uint64_t overlap = 0;
+  bool flatten = false;
+  bool mirroring = false;
+  MigrationState state = MIGRATION_STATE_ERROR;
+  std::string state_description;
+
+  MigrationSpec() {
+  }
+  MigrationSpec(MigrationHeaderType header_type, int64_t pool_id,
+                const std::string& pool_namespace,
+                const std::string &image_name, const std::string &image_id,
+                const std::map<uint64_t, uint64_t> &snap_seqs, uint64_t overlap,
+                bool mirroring, bool flatten, MigrationState state,
+                const std::string &state_description)
+    : header_type(header_type), pool_id(pool_id),
+      pool_namespace(pool_namespace), image_name(image_name),
+      image_id(image_id), snap_seqs(snap_seqs), overlap(overlap),
+      flatten(flatten), mirroring(mirroring), state(state),
+      state_description(state_description) {
+  }
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::const_iterator& it);
+  void dump(Formatter *f) const;
+
+  static void generate_test_instances(std::list<MigrationSpec*> &o);
+
+  inline bool operator==(const MigrationSpec& ms) const {
+    return header_type == ms.header_type && pool_id == ms.pool_id &&
+      pool_namespace == ms.pool_namespace && image_name == ms.image_name &&
+      image_id == ms.image_id && snap_seqs == ms.snap_seqs &&
+      overlap == ms.overlap && flatten == ms.flatten &&
+      mirroring == ms.mirroring && state == ms.state &&
+      state_description == ms.state_description;
+  }
+};
+
+std::ostream& operator<<(std::ostream& os, const MigrationSpec& migration_spec);
+
+WRITE_CLASS_ENCODER(MigrationSpec);
+
+enum AssertSnapcSeqState {
+  ASSERT_SNAPC_SEQ_GT_SNAPSET_SEQ = 0,
+  ASSERT_SNAPC_SEQ_LE_SNAPSET_SEQ = 1,
+};
+
+inline void encode(const AssertSnapcSeqState &state, bufferlist& bl) {
+  using ceph::encode;
+  encode(static_cast<uint8_t>(state), bl);
+}
+
+inline void decode(AssertSnapcSeqState &state, bufferlist::const_iterator& it) {
+  uint8_t int_state;
+  using ceph::decode;
+  decode(int_state, it);
+  state = static_cast<AssertSnapcSeqState>(int_state);
+}
+
+std::ostream& operator<<(std::ostream& os, const AssertSnapcSeqState& state);
 
 } // namespace rbd
 } // namespace cls

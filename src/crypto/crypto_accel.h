@@ -18,7 +18,7 @@
 #include "include/Context.h"
 
 class CryptoAccel;
-typedef ceph::shared_ptr<CryptoAccel> CryptoAccelRef;
+typedef std::shared_ptr<CryptoAccel> CryptoAccelRef;
 
 class CryptoAccel {
  public:

@@ -12,14 +12,21 @@ target_link_libraries(get_command_descriptions
   ${CMAKE_DL_LIBS}
   )
 
-if(HAVE_BLKID)
+# Though FreeBSD has blkdev support, the unittests' mocks only work in Linux
+if(HAVE_BLKID AND LINUX)
   # unittest_blkdev
   add_executable(unittest_blkdev
-    test_blkdev.cc
-    )
-  add_ceph_unittest(unittest_blkdev)
-  target_link_libraries(unittest_blkdev ceph-common ${BLKID_LIBRARIES})
+    test_blkdev.cc)
+  add_ceph_unittest(unittest_blkdev ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_blkdev)
+  target_link_libraries(unittest_blkdev global ${BLKID_LIBRARIES})
 endif()
+
+# unittest_lockdep
+add_executable(unittest_lockdep
+  test_lockdep.cc
+  )
+add_ceph_unittest(unittest_lockdep)
+target_link_libraries(unittest_lockdep ceph-common global)
 
 # unittest_bloom_filter
 add_executable(unittest_bloom_filter
@@ -39,6 +46,7 @@ target_link_libraries(unittest_histogram ceph-common)
 add_executable(unittest_prioritized_queue
   test_prioritized_queue.cc
   )
+target_link_libraries(unittest_prioritized_queue ceph-common)
 add_ceph_unittest(unittest_prioritized_queue)
 
 # unittest_mclock_priority_queue
@@ -46,7 +54,9 @@ add_executable(unittest_mclock_priority_queue
   test_mclock_priority_queue.cc
   )
 add_ceph_unittest(unittest_mclock_priority_queue)
-target_link_libraries(unittest_mclock_priority_queue ceph-common dmclock)
+target_link_libraries(unittest_mclock_priority_queue
+  ceph-common
+  dmclock::dmclock)
 
 # unittest_str_map
 add_executable(unittest_str_map
@@ -113,7 +123,7 @@ add_executable(unittest_throttle
   Throttle.cc
   $<TARGET_OBJECTS:unit-main>
   )
-add_ceph_unittest(unittest_throttle)
+add_ceph_unittest(unittest_throttle parallel)
 target_link_libraries(unittest_throttle global) 
 
 # unittest_lru
@@ -122,13 +132,6 @@ add_executable(unittest_lru
   )
 add_ceph_unittest(unittest_lru)
 target_link_libraries(unittest_lru ceph-common)
-
-# unittest_io_priority
-add_executable(unittest_io_priority
-  test_io_priority.cc
-  )
-add_ceph_unittest(unittest_io_priority)
-target_link_libraries(unittest_io_priority ceph-common)
 
 # unittest_crc32c
 add_executable(unittest_crc32c
@@ -211,6 +214,7 @@ target_link_libraries(unittest_interval_set ceph-common)
 add_executable(unittest_weighted_priority_queue
   test_weighted_priority_queue.cc
   )
+target_link_libraries(unittest_weighted_priority_queue ceph-common)
 add_ceph_unittest(unittest_weighted_priority_queue)
 
 # unittest_mutex_debug
@@ -294,3 +298,7 @@ add_ceph_unittest(unittest_hobject)
 add_executable(unittest_async_completion test_async_completion.cc)
 add_ceph_unittest(unittest_async_completion)
 target_link_libraries(unittest_async_completion Boost::system)
+
+add_executable(unittest_async_shared_mutex test_async_shared_mutex.cc)
+add_ceph_unittest(unittest_async_shared_mutex)
+target_link_libraries(unittest_async_shared_mutex ceph-common Boost::system)

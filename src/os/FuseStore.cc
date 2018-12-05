@@ -1012,12 +1012,10 @@ static int os_unlink(const char *path)
       keys.insert(key);
       t.omap_rmkeys(cid, oid, keys);
     }
-    ch = fs->store->open_collection(cid);
     break;
 
   case FN_OBJECT_ATTR_VAL:
     t.rmattr(cid, oid, key.c_str());
-    ch = fs->store->open_collection(cid);
     break;
 
   case FN_OBJECT_OMAP_HEADER:
@@ -1025,12 +1023,10 @@ static int os_unlink(const char *path)
       bufferlist empty;
       t.omap_setheader(cid, oid, empty);
     }
-    ch = fs->store->open_collection(cid);
     break;
 
   case FN_OBJECT:
     t.remove(cid, oid);
-    ch = fs->store->open_collection(cid);
     break;
 
   case FN_COLLECTION:
@@ -1043,12 +1039,10 @@ static int os_unlink(const char *path)
         return -ENOTEMPTY;
       t.remove_collection(cid);
     }
-    ch = fs->store->open_collection(coll_t::meta());
     break;
 
   case FN_OBJECT_DATA:
     t.truncate(cid, oid, 0);
-    ch = fs->store->open_collection(cid);
     break;
 
   default:
@@ -1168,7 +1162,7 @@ int FuseStore::main()
     "-d", // debug
   };
   int c = 3;
-  auto fuse_debug = store->cct->_conf->get_val<bool>("fuse_debug");
+  auto fuse_debug = store->cct->_conf.get_val<bool>("fuse_debug");
   if (fuse_debug)
     ++c;
   return fuse_main(c, (char**)v, &fs_oper, (void*)this);
@@ -1186,7 +1180,7 @@ int FuseStore::start()
     "-d", // debug
   };
   int c = 3;
-  auto fuse_debug = store->cct->_conf->get_val<bool>("fuse_debug");
+  auto fuse_debug = store->cct->_conf.get_val<bool>("fuse_debug");
   if (fuse_debug)
     ++c;
   fuse_args a = FUSE_ARGS_INIT(c, (char**)v);

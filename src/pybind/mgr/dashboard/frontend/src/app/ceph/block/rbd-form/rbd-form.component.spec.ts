@@ -1,58 +1,73 @@
-import { NO_ERRORS_SCHEMA } from '@angular/core';
+import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { of as observableOf } from 'rxjs';
+import { ToastModule } from 'ng2-toastr';
 
-import { PoolService } from '../../../shared/api/pool.service';
+import { ActivatedRouteStub } from '../../../../testing/activated-route-stub';
+import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { RbdService } from '../../../shared/api/rbd.service';
-import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
-import { FormatterService } from '../../../shared/services/formatter.service';
-import { NotificationService } from '../../../shared/services/notification.service';
-import { TaskManagerMessageService } from '../../../shared/services/task-manager-message.service';
-import { TaskManagerService } from '../../../shared/services/task-manager.service';
-import { configureTestBed } from '../../../shared/unit-test-helper';
+import { SharedModule } from '../../../shared/shared.module';
+import { RbdFormMode } from './rbd-form-mode.enum';
 import { RbdFormComponent } from './rbd-form.component';
 
 describe('RbdFormComponent', () => {
   let component: RbdFormComponent;
   let fixture: ComponentFixture<RbdFormComponent>;
-
-  const fakeService = {
-    subscribe: (name, metadata, onTaskFinished: (finishedTask: any) => any) => {
-      return null;
-    },
-    defaultFeatures: () => observableOf([]),
-    list: (attrs = []) => {
-      return new Promise(function(resolve, reject) {
-        return;
-      });
-    }
-  };
+  let activatedRoute: ActivatedRouteStub;
 
   configureTestBed({
-    imports: [ReactiveFormsModule, RouterTestingModule],
+    imports: [
+      HttpClientTestingModule,
+      ReactiveFormsModule,
+      RouterTestingModule,
+      ToastModule.forRoot(),
+      SharedModule
+    ],
     declarations: [RbdFormComponent],
-    schemas: [NO_ERRORS_SCHEMA],
     providers: [
-      DimlessBinaryPipe,
-      FormatterService,
-      TaskManagerMessageService,
-      { provide: NotificationService, useValue: fakeService },
-      { provide: PoolService, useValue: fakeService },
-      { provide: RbdService, useValue: fakeService },
-      { provide: TaskManagerService, useValue: fakeService }
+      {
+        provide: ActivatedRoute,
+        useValue: new ActivatedRouteStub({ pool: 'foo', name: 'bar', snap: undefined })
+      },
+      i18nProviders
     ]
   });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(RbdFormComponent);
     component = fixture.componentInstance;
-    fixture.detectChanges();
+    activatedRoute = TestBed.get(ActivatedRoute);
   });
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  describe('should test decodeURIComponent of params', () => {
+    let rbdService: RbdService;
+
+    beforeEach(() => {
+      rbdService = TestBed.get(RbdService);
+      component.mode = RbdFormMode.editing;
+      fixture.detectChanges();
+      spyOn(rbdService, 'get').and.callThrough();
+    });
+
+    it('without snapName', () => {
+      activatedRoute.setParams({ pool: 'foo%2Ffoo', name: 'bar%2Fbar', snap: undefined });
+
+      expect(rbdService.get).toHaveBeenCalledWith('foo/foo', 'bar/bar');
+      expect(component.snapName).toBeUndefined();
+    });
+
+    it('with snapName', () => {
+      activatedRoute.setParams({ pool: 'foo%2Ffoo', name: 'bar%2Fbar', snap: 'baz%2Fbaz' });
+
+      expect(rbdService.get).toHaveBeenCalledWith('foo/foo', 'bar/bar');
+      expect(component.snapName).toBe('baz/baz');
+    });
   });
 });

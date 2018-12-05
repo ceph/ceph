@@ -63,7 +63,7 @@ struct ceph_statx {
 #define CEPH_STATX_ALL_STATS	0x00001fffU     /* All supported stats */
 
 /*
- * Compatability macros until these defines make their way into glibc
+ * Compatibility macros until these defines make their way into glibc
  */
 #ifndef AT_NO_ATTR_SYNC
 #define AT_NO_ATTR_SYNC		0x4000 /* Don't sync attributes with the server */

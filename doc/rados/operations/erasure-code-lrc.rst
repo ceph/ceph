@@ -98,7 +98,7 @@ Where:
 ``crush-root={root}``
 
 :Description: The name of the crush bucket used for the first step of
-              the CRUSH rule. For intance **step take default**.
+              the CRUSH rule. For instance **step take default**.
 
 :Type: String
 :Required: No.
@@ -159,7 +159,7 @@ Low level plugin configuration
 
 The sum of **k** and **m** must be a multiple of the **l** parameter.
 The low level configuration parameters do not impose such a
-restriction and it may be more convienient to use it for specific
+restriction and it may be more convenient to use it for specific
 purposes. It is for instance possible to define two groups, one with 4
 chunks and another with 3 chunks. It is also possible to recursively
 define locality sets, for instance datacenters and racks into
@@ -280,7 +280,7 @@ The steps found in the layers description::
    step 3      ____cDDD
 
 are applied in order. For instance, if a 4K object is encoded, it will
-first go thru *step 1* and be divided in four 1K chunks (the four
+first go through *step 1* and be divided in four 1K chunks (the four
 uppercase D). They are stored in the chunks 2, 3, 6 and 7, in
 order. From these, two coding chunks are calculated (the two lowercase
 c). The coding chunks are stored in the chunks 1 and 5, respectively.

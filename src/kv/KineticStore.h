@@ -9,13 +9,12 @@
 #include <set>
 #include <map>
 #include <string>
-#include "include/memory.h"
 #include <kinetic/kinetic.h>
 
 #include <errno.h>
 #include "common/errno.h"
 #include "common/dout.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "common/Formatter.h"
 
 #include "common/ceph_context.h"

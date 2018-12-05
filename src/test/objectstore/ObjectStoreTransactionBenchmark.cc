@@ -250,7 +250,7 @@ int main(int argc, char **argv)
 			 CODE_ENVIRONMENT_UTILITY,
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.apply_changes(nullptr);
   Cycles::init();
 
   cerr << "args: " << args << std::endl;

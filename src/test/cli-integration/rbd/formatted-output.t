@@ -133,8 +133,11 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \top_features:  (esc)
   \tflags:  (esc)
   \tcreate_timestamp:* (glob)
+  \taccess_timestamp:* (glob)
+  \tmodify_timestamp:* (glob)
   $ rbd info bar --format json | python -mjson.tool | sed 's/,$/, /'
   {
+      "access_timestamp": "*",  (glob)
       "block_name_prefix": "rbd_data.*",  (glob)
       "create_timestamp": "*",  (glob)
       "features": [
@@ -147,6 +150,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "flags": [], 
       "format": 2, 
       "id": "*",  (glob)
+      "modify_timestamp": "*",  (glob)
       "name": "bar", 
       "object_size": 4194304, 
       "objects": 256, 
@@ -176,6 +180,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <op_features></op_features>
     <flags></flags>
     <create_timestamp>*</create_timestamp> (glob)
+    <access_timestamp>*</access_timestamp> (glob)
+    <modify_timestamp>*</modify_timestamp> (glob)
   </image>
   $ rbd info bar@snap
   rbd image 'bar':
@@ -189,9 +195,12 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \top_features:  (esc)
   \tflags:  (esc)
   \tcreate_timestamp:* (glob)
+  \taccess_timestamp:* (glob)
+  \tmodify_timestamp:* (glob)
   \tprotected: True (esc)
   $ rbd info bar@snap --format json | python -mjson.tool | sed 's/,$/, /'
   {
+      "access_timestamp": "*",  (glob)
       "block_name_prefix": "rbd_data.*",  (glob)
       "create_timestamp": "*",  (glob)
       "features": [
@@ -204,6 +213,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "flags": [], 
       "format": 2, 
       "id": "*",  (glob)
+      "modify_timestamp": "*",  (glob)
       "name": "bar", 
       "object_size": 4194304, 
       "objects": 128, 
@@ -234,6 +244,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <op_features></op_features>
     <flags></flags>
     <create_timestamp>*</create_timestamp> (glob)
+    <access_timestamp>*</access_timestamp> (glob)
+    <modify_timestamp>*</modify_timestamp> (glob)
     <protected>true</protected>
   </image>
   $ rbd info bar@snap2
@@ -248,9 +260,12 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \top_features:  (esc)
   \tflags:  (esc)
   \tcreate_timestamp:* (glob)
+  \taccess_timestamp:* (glob)
+  \tmodify_timestamp:* (glob)
   \tprotected: False (esc)
   $ rbd info bar@snap2 --format json | python -mjson.tool | sed 's/,$/, /'
   {
+      "access_timestamp": "*",  (glob)
       "block_name_prefix": "rbd_data.*",  (glob)
       "create_timestamp": "*",  (glob)
       "features": [
@@ -263,6 +278,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "flags": [], 
       "format": 2, 
       "id": "*",  (glob)
+      "modify_timestamp": "*",  (glob)
       "name": "bar", 
       "object_size": 4194304, 
       "objects": 256, 
@@ -293,6 +309,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <op_features></op_features>
     <flags></flags>
     <create_timestamp>*</create_timestamp> (glob)
+    <access_timestamp>*</access_timestamp> (glob)
+    <modify_timestamp>*</modify_timestamp> (glob)
     <protected>false</protected>
   </image>
   $ rbd info baz
@@ -307,8 +325,11 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \top_features:  (esc)
   \tflags:  (esc)
   \tcreate_timestamp:* (glob)
+  \taccess_timestamp:* (glob)
+  \tmodify_timestamp:* (glob)
   $ rbd info baz --format json | python -mjson.tool | sed 's/,$/, /'
   {
+      "access_timestamp": "*",  (glob)
       "block_name_prefix": "rbd_data.*",  (glob)
       "create_timestamp": "*",  (glob)
       "features": [
@@ -317,6 +338,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "flags": [], 
       "format": 2, 
       "id": "*",  (glob)
+      "modify_timestamp": "*",  (glob)
       "name": "baz", 
       "object_size": 4194304, 
       "objects": 512, 
@@ -342,6 +364,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <op_features></op_features>
     <flags></flags>
     <create_timestamp>*</create_timestamp> (glob)
+    <access_timestamp>*</access_timestamp> (glob)
+    <modify_timestamp>*</modify_timestamp> (glob)
   </image>
   $ rbd info quux
   rbd image 'quux':
@@ -386,8 +410,11 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \top_features:  (esc)
   \tflags:  (esc)
   \tcreate_timestamp:* (glob)
+  \taccess_timestamp:* (glob)
+  \tmodify_timestamp:* (glob)
   $ rbd info rbd_other/child --format json | python -mjson.tool | sed 's/,$/, /'
   {
+      "access_timestamp": "*",  (glob)
       "block_name_prefix": "rbd_data.*",  (glob)
       "create_timestamp": "*",  (glob)
       "features": [
@@ -399,6 +426,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "flags": [], 
       "format": 2, 
       "id": "*",  (glob)
+      "modify_timestamp": "*",  (glob)
       "name": "child", 
       "object_size": 4194304, 
       "objects": 128, 
@@ -427,6 +455,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <op_features></op_features>
     <flags></flags>
     <create_timestamp>*</create_timestamp> (glob)
+    <access_timestamp>*</access_timestamp> (glob)
+    <modify_timestamp>*</modify_timestamp> (glob)
   </image>
   $ rbd info rbd_other/child@snap
   rbd image 'child':
@@ -440,11 +470,14 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \top_features:  (esc)
   \tflags:  (esc)
   \tcreate_timestamp:* (glob)
+  \taccess_timestamp:* (glob)
+  \tmodify_timestamp:* (glob)
   \tprotected: False (esc)
   \tparent: rbd/bar@snap (esc)
   \toverlap: 512 MiB (esc)
   $ rbd info rbd_other/child@snap --format json | python -mjson.tool | sed 's/,$/, /'
   {
+      "access_timestamp": "*",  (glob)
       "block_name_prefix": "rbd_data.*",  (glob)
       "create_timestamp": "*",  (glob)
       "features": [
@@ -456,6 +489,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "flags": [], 
       "format": 2, 
       "id": "*",  (glob)
+      "modify_timestamp": "*",  (glob)
       "name": "child", 
       "object_size": 4194304, 
       "objects": 128, 
@@ -491,6 +525,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <op_features></op_features>
     <flags></flags>
     <create_timestamp>*</create_timestamp> (glob)
+    <access_timestamp>*</access_timestamp> (glob)
+    <modify_timestamp>*</modify_timestamp> (glob)
     <protected>false</protected>
     <parent>
       <pool>rbd</pool>
@@ -511,8 +547,11 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \top_features:  (esc)
   \tflags:  (esc)
   \tcreate_timestamp:* (glob)
+  \taccess_timestamp:* (glob)
+  \tmodify_timestamp:* (glob)
   $ rbd info rbd_other/deep-flatten-child --format json | python -mjson.tool | sed 's/,$/, /'
   {
+      "access_timestamp": "*",  (glob)
       "block_name_prefix": "rbd_data.*",  (glob)
       "create_timestamp": "*",  (glob)
       "features": [
@@ -525,6 +564,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "flags": [], 
       "format": 2, 
       "id": "*",  (glob)
+      "modify_timestamp": "*",  (glob)
       "name": "deep-flatten-child", 
       "object_size": 4194304, 
       "objects": 128, 
@@ -554,6 +594,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <op_features></op_features>
     <flags></flags>
     <create_timestamp>*</create_timestamp> (glob)
+    <access_timestamp>*</access_timestamp> (glob)
+    <modify_timestamp>*</modify_timestamp> (glob)
   </image>
   $ rbd info rbd_other/deep-flatten-child@snap
   rbd image 'deep-flatten-child':
@@ -567,9 +609,12 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \top_features:  (esc)
   \tflags:  (esc)
   \tcreate_timestamp:* (glob)
+  \taccess_timestamp:* (glob)
+  \tmodify_timestamp:* (glob)
   \tprotected: False (esc)
   $ rbd info rbd_other/deep-flatten-child@snap --format json | python -mjson.tool | sed 's/,$/, /'
   {
+      "access_timestamp": "*",  (glob)
       "block_name_prefix": "rbd_data.*",  (glob)
       "create_timestamp": "*",  (glob)
       "features": [
@@ -582,6 +627,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "flags": [], 
       "format": 2, 
       "id": "*",  (glob)
+      "modify_timestamp": "*",  (glob)
       "name": "deep-flatten-child", 
       "object_size": 4194304, 
       "objects": 128, 
@@ -612,6 +658,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <op_features></op_features>
     <flags></flags>
     <create_timestamp>*</create_timestamp> (glob)
+    <access_timestamp>*</access_timestamp> (glob)
+    <modify_timestamp>*</modify_timestamp> (glob)
     <protected>false</protected>
   </image>
   $ rbd list
@@ -637,7 +685,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <name>quuy</name>
   </images>
   $ rbd list -l
-  NAME         SIZE PARENT FMT PROT LOCK 
+  NAME      SIZE    PARENT FMT PROT LOCK 
   foo         1 GiB          1           
   foo@snap    1 GiB          1           
   quux        1 MiB          1      excl 
@@ -762,7 +810,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <name>deep-flatten-child</name>
   </images>
   $ rbd list rbd_other -l
-  NAME                       SIZE PARENT       FMT PROT LOCK 
+  NAME                    SIZE    PARENT       FMT PROT LOCK 
   child                   512 MiB                2           
   child@snap              512 MiB rbd/bar@snap   2           
   deep-flatten-child      512 MiB                2           
@@ -900,13 +948,14 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     </lock>
   </locks>
   $ rbd snap list foo
-  SNAPID NAME  SIZE TIMESTAMP 
+  SNAPID*NAME*SIZE*PROTECTED*TIMESTAMP* (glob)
   *snap*1 GiB* (glob)
   $ rbd snap list foo --format json | python -mjson.tool | sed 's/,$/, /'
   [
       {
           "id": *,  (glob)
           "name": "snap", 
+          "protected": "false", 
           "size": 1073741824, 
           "timestamp": ""
       }
@@ -917,24 +966,27 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <id>*</id> (glob)
       <name>snap</name>
       <size>1073741824</size>
+      <protected>false</protected>
       <timestamp></timestamp>
     </snapshot>
   </snapshots>
   $ rbd snap list bar
-  SNAPID NAME     SIZE TIMESTAMP                
-  *snap*512 MiB* (glob)
+  SNAPID*NAME*SIZE*PROTECTED*TIMESTAMP* (glob)
+  *snap*512 MiB*yes* (glob)
   *snap2*1 GiB* (glob)
   $ rbd snap list bar --format json | python -mjson.tool | sed 's/,$/, /'
   [
       {
           "id": *,  (glob)
           "name": "snap", 
+          "protected": "true", 
           "size": 536870912, 
           "timestamp": * (glob)
       }, 
       {
           "id": *,  (glob)
           "name": "snap2", 
+          "protected": "false", 
           "size": 1073741824, 
           "timestamp": * (glob)
       }
@@ -945,12 +997,14 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <id>*</id> (glob)
       <name>snap</name>
       <size>536870912</size>
+      <protected>true</protected>
       <timestamp>*</timestamp> (glob)
     </snapshot>
     <snapshot>
       <id>*</id> (glob)
       <name>snap2</name>
       <size>1073741824</size>
+      <protected>false</protected>
       <timestamp>*</timestamp> (glob)
     </snapshot>
   </snapshots>
@@ -960,13 +1014,14 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   $ rbd snap list baz --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
   <snapshots></snapshots>
   $ rbd snap list rbd_other/child
-  SNAPID NAME    SIZE TIMESTAMP                
+  SNAPID*NAME*SIZE*PROTECTED*TIMESTAMP* (glob)
   *snap*512 MiB* (glob)
   $ rbd snap list rbd_other/child --format json | python -mjson.tool | sed 's/,$/, /'
   [
       {
           "id": *,  (glob)
           "name": "snap", 
+          "protected": "false", 
           "size": 536870912, 
           "timestamp": * (glob)
       }
@@ -977,11 +1032,12 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <id>*</id> (glob)
       <name>snap</name>
       <size>536870912</size>
+      <protected>false</protected>
       <timestamp>*</timestamp> (glob)
     </snapshot>
   </snapshots>
   $ rbd disk-usage --pool rbd_other 2>/dev/null
-  NAME                    PROVISIONED  USED 
+  NAME                    PROVISIONED USED  
   child@snap                  512 MiB   0 B 
   child                       512 MiB 4 MiB 
   deep-flatten-child@snap     512 MiB   0 B 

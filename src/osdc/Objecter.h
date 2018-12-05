@@ -25,7 +25,7 @@
 
 #include <boost/thread/shared_mutex.hpp>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/buffer.h"
 #include "include/types.h"
 #include "include/rados/rados_types.hpp"
@@ -33,9 +33,11 @@
 #include "common/admin_socket.h"
 #include "common/ceph_time.h"
 #include "common/ceph_timer.h"
-#include "common/Finisher.h"
+#include "common/config_obs.h"
 #include "common/shunique_lock.h"
 #include "common/zipkin_trace.h"
+#include "common/Finisher.h"
+#include "common/Throttle.h"
 
 #include "messages/MOSDOp.h"
 #include "msg/Dispatcher.h"
@@ -82,7 +84,7 @@ struct ObjectOperation {
   }
 
   void set_last_op_flags(int flags) {
-    assert(!ops.empty());
+    ceph_assert(!ops.empty());
     ops.rbegin()->op.flags = flags;
   }
 
@@ -624,23 +626,6 @@ struct ObjectOperation {
   void tmap_update(bufferlist& bl) {
     add_data(CEPH_OSD_OP_TMAPUP, 0, 0, bl);
   }
-  void tmap_put(bufferlist& bl) {
-    add_data(CEPH_OSD_OP_TMAPPUT, 0, bl.length(), bl);
-  }
-  void tmap_get(bufferlist *pbl, int *prval) {
-    add_op(CEPH_OSD_OP_TMAPGET);
-    unsigned p = ops.size() - 1;
-    out_bl[p] = pbl;
-    out_rval[p] = prval;
-  }
-  void tmap_get() {
-    add_op(CEPH_OSD_OP_TMAPGET);
-  }
-  void tmap_to_omap(bool nullok=false) {
-     OSDOp& osd_op = add_op(CEPH_OSD_OP_TMAP2OMAP);
-     if (nullok)
-       osd_op.op.tmap2omap.flags = CEPH_OSD_TMAP2OMAP_NULLOK;
-  }
 
   // objectmap
   void omap_get_keys(const string &start_after,
@@ -735,6 +720,7 @@ struct ObjectOperation {
     uint32_t *out_data_digest;
     uint32_t *out_omap_digest;
     mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > *out_reqids;
+    mempool::osd_pglog::map<uint32_t, int> *out_reqid_return_codes;
     uint64_t *out_truncate_seq;
     uint64_t *out_truncate_size;
     int *prval;
@@ -750,6 +736,7 @@ struct ObjectOperation {
 			      uint32_t *dd,
 			      uint32_t *od,
 			      mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > *oreqids,
+			      mempool::osd_pglog::map<uint32_t, int> *oreqid_return_codes,
 			      uint64_t *otseq,
 			      uint64_t *otsize,
 			      int *r)
@@ -759,6 +746,7 @@ struct ObjectOperation {
 	out_omap_data(o), out_snaps(osnaps), out_snap_seq(osnap_seq),
 	out_flags(flags), out_data_digest(dd), out_omap_digest(od),
 	out_reqids(oreqids),
+	out_reqid_return_codes(oreqid_return_codes),
 	out_truncate_seq(otseq),
 	out_truncate_size(otsize),
 	prval(r) {}
@@ -799,6 +787,8 @@ struct ObjectOperation {
 	  *out_omap_digest = copy_reply.omap_digest;
 	if (out_reqids)
 	  *out_reqids = copy_reply.reqids;
+	if (out_reqid_return_codes)
+	  *out_reqid_return_codes = copy_reply.reqid_return_codes;
 	if (out_truncate_seq)
 	  *out_truncate_seq = copy_reply.truncate_seq;
 	if (out_truncate_size)
@@ -825,6 +815,7 @@ struct ObjectOperation {
 		uint32_t *out_data_digest,
 		uint32_t *out_omap_digest,
 		mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > *out_reqids,
+		mempool::osd_pglog::map<uint32_t, int> *out_reqid_return_codes,
 		uint64_t *truncate_seq,
 		uint64_t *truncate_size,
 		int *prval) {
@@ -839,7 +830,8 @@ struct ObjectOperation {
 				    out_attrs, out_data, out_omap_header,
 				    out_omap_data, out_snaps, out_snap_seq,
 				    out_flags, out_data_digest,
-				    out_omap_digest, out_reqids, truncate_seq,
+				    out_omap_digest, out_reqids,
+				    out_reqid_return_codes, truncate_seq,
 				    truncate_size, prval);
     out_bl[p] = &h->bl;
     out_handler[p] = h;
@@ -1205,7 +1197,7 @@ class Objecter : public md_config_obs_t, public Dispatcher {
 public:
   // config observer bits
   const char** get_tracked_conf_keys() const override;
-  void handle_conf_change(const struct md_config_t *conf,
+  void handle_conf_change(const ConfigProxy& conf,
                           const std::set <std::string> &changed) override;
 
 public:
@@ -1296,6 +1288,7 @@ public:
     spg_t actual_pgid; ///< last (actual) spg_t we mapped to
     unsigned pg_num = 0; ///< last pg_num we mapped to
     unsigned pg_num_mask = 0; ///< last pg_num_mask we mapped to
+    unsigned pg_num_pending = 0; ///< last pg_num we mapped to
     vector<int> up; ///< set of up osds for last pg we mapped to
     vector<int> acting; ///< set of acting osds for last pg we mapped to
     int up_primary = -1; ///< last up_primary we mapped to
@@ -1595,14 +1588,13 @@ public:
     Context *onfinish;
     uint64_t ontimeout;
     int pool_op;
-    uint64_t auid;
     int16_t crush_rule;
     snapid_t snapid;
     bufferlist *blp;
 
     ceph::coarse_mono_time last_submit;
     PoolOp() : tid(0), pool(0), onfinish(NULL), ontimeout(0), pool_op(0),
-	       auid(0), crush_rule(0), snapid(0), blp(NULL) {}
+	       crush_rule(0), snapid(0), blp(NULL) {}
   };
 
   // -- osd commands --
@@ -1733,7 +1725,7 @@ public:
     }
     void finished_async() {
       unique_lock l(watch_lock);
-      assert(!watch_pending_async.empty());
+      ceph_assert(!watch_pending_async.empty());
       watch_pending_async.pop_front();
     }
 
@@ -1997,7 +1989,7 @@ private:
   int calc_op_budget(const vector<OSDOp>& ops);
   void _throttle_op(Op *op, shunique_lock& sul, int op_size = 0);
   int _take_op_budget(Op *op, shunique_lock& sul) {
-    assert(sul && sul.mutex() == &rwlock);
+    ceph_assert(sul && sul.mutex() == &rwlock);
     int op_budget = calc_op_budget(op->ops);
     if (keep_balanced_budget) {
       _throttle_op(op, sul, op_budget);
@@ -2011,7 +2003,7 @@ private:
   int take_linger_budget(LingerOp *info);
   friend class WatchContext; // to invoke put_up_budget_bytes
   void put_op_budget_bytes(int op_budget) {
-    assert(op_budget >= 0);
+    ceph_assert(op_budget >= 0);
     op_throttle_bytes.put(op_budget);
     op_throttle_ops.put(1);
   }
@@ -2223,7 +2215,7 @@ public:
   void osd_command(int osd, const std::vector<string>& cmd,
 		  const bufferlist& inbl, ceph_tid_t *ptid,
 		  bufferlist *poutbl, string *prs, Context *onfinish) {
-    assert(osd >= 0);
+    ceph_assert(osd >= 0);
     CommandOp *c = new CommandOp(
       osd,
       cmd,
@@ -2932,11 +2924,10 @@ public:
   int delete_pool_snap(int64_t pool, string& snapName, Context *onfinish);
   int delete_selfmanaged_snap(int64_t pool, snapid_t snap, Context *onfinish);
 
-  int create_pool(string& name, Context *onfinish, uint64_t auid=0,
+  int create_pool(string& name, Context *onfinish,
 		  int crush_rule=-1);
   int delete_pool(int64_t pool, Context *onfinish);
   int delete_pool(const string& name, Context *onfinish);
-  int change_pool_auid(int64_t pool, Context *onfinish, uint64_t auid);
 
   void handle_pool_op_reply(MPoolOpReply *m);
   int pool_op_cancel(ceph_tid_t tid, int r);
@@ -3036,7 +3027,7 @@ public:
 	     bit != p->buffer_extents.end();
 	     ++bit)
 	  bl.copy(bit->first, bit->second, cur);
-	assert(cur.length() == p->length);
+	ceph_assert(cur.length() == p->length);
 	write_trunc(p->oid, p->oloc, p->offset, p->length,
 	      snapc, cur, mtime, flags, p->truncate_size, trunc_seq,
 	      oncommit ? gcom.new_sub():0,

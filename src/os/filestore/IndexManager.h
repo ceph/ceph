@@ -14,7 +14,6 @@
 #ifndef OS_INDEXMANAGER_H
 #define OS_INDEXMANAGER_H
 
-#include "include/memory.h"
 #include "include/unordered_map.h"
 
 #include "common/Mutex.h"
@@ -42,7 +41,7 @@ struct Index {
  * Encapsulates mutual exclusion for CollectionIndexes.
  *
  * Allowing a modification (removal or addition of an object) to occur
- * while a read is occuring (lookup of an object's path and use of
+ * while a read is occurring (lookup of an object's path and use of
  * that path) may result in the path becoming invalid.  Thus, during
  * the lifetime of a CollectionIndex object and any paths returned
  * by it, no other concurrent accesses may be allowed.

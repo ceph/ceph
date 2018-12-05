@@ -15,11 +15,24 @@
 #ifndef CEPH_MONMAP_H
 #define CEPH_MONMAP_H
 
-#include "include/err.h"
+#ifdef WITH_SEASTAR
+#include <seastar/core/future.hh>
+#endif
 
-#include "msg/Message.h"
+#include "common/config_fwd.h"
+
+#include "include/err.h"
 #include "include/types.h"
+
 #include "mon/mon_types.h"
+#include "msg/Message.h"
+
+
+#ifdef WITH_SEASTAR
+namespace ceph::common {
+  class ConfigProxy;
+}
+#endif
 
 namespace ceph {
   class Formatter;
@@ -154,13 +167,13 @@ public:
    * @param m monitor info of the new monitor
    */
   void add(const mon_info_t& m) {
-    assert(mon_info.count(m.name) == 0);
-    assert(addr_mons.count(m.public_addr) == 0);
+    ceph_assert(mon_info.count(m.name) == 0);
+    ceph_assert(addr_mons.count(m.public_addr) == 0);
     mon_info[m.name] = m;
     if (get_required_features().contains_all(
 	  ceph::features::mon::FEATURE_NAUTILUS)) {
       ranks.push_back(m.name);
-      assert(ranks.size() == mon_info.size());
+      ceph_assert(ranks.size() == mon_info.size());
     } else {
       calc_legacy_ranks();
     }
@@ -183,13 +196,13 @@ public:
    * @param name Monitor name (i.e., 'foo' in 'mon.foo')
    */
   void remove(const string &name) {
-    assert(mon_info.count(name));
+    ceph_assert(mon_info.count(name));
     mon_info.erase(name);
-    assert(mon_info.count(name) == 0);
+    ceph_assert(mon_info.count(name) == 0);
     if (get_required_features().contains_all(
 	  ceph::features::mon::FEATURE_NAUTILUS)) {
       ranks.erase(std::find(ranks.begin(), ranks.end(), name));
-      assert(ranks.size() == mon_info.size());
+      ceph_assert(ranks.size() == mon_info.size());
     } else {
       calc_legacy_ranks();
     }
@@ -203,15 +216,15 @@ public:
    * @param newname monitor's new name (i.e., 'bar' in 'mon.bar')
    */
   void rename(string oldname, string newname) {
-    assert(contains(oldname));
-    assert(!contains(newname));
+    ceph_assert(contains(oldname));
+    ceph_assert(!contains(newname));
     mon_info[newname] = mon_info[oldname];
     mon_info.erase(oldname);
     mon_info[newname].name = newname;
     if (get_required_features().contains_all(
 	  ceph::features::mon::FEATURE_NAUTILUS)) {
       *std::find(ranks.begin(), ranks.end(), oldname) = newname;
-      assert(ranks.size() == mon_info.size());
+      ceph_assert(ranks.size() == mon_info.size());
     } else {
       calc_legacy_ranks();
     }
@@ -257,7 +270,7 @@ public:
   }
 
   string get_name(unsigned n) const {
-    assert(n < ranks.size());
+    ceph_assert(n < ranks.size());
     return ranks[n];
   }
   string get_name(const entity_addr_t& a) const {
@@ -268,21 +281,20 @@ public:
       return p->second;
   }
 
-  int get_rank(const string& n) {
-    for (unsigned i = 0; i < ranks.size(); i++)
-      if (ranks[i] == n)
-	return i;
-    return -1;
+  int get_rank(const string& n) const {
+    if (auto found = std::find(ranks.begin(), ranks.end(), n);
+	found != ranks.end()) {
+      return std::distance(ranks.begin(), found);
+    } else {
+      return -1;
+    }
   }
-  int get_rank(const entity_addr_t& a) {
+  int get_rank(const entity_addr_t& a) const {
     string n = get_name(a);
     if (n.empty())
       return -1;
 
-    for (unsigned i = 0; i < ranks.size(); i++)
-      if (ranks[i] == n)
-	return i;
-    return -1;
+    return get_rank(n);
   }
   bool get_addr_name(const entity_addr_t& a, string& name) {
     if (addr_mons.count(a) == 0)
@@ -291,31 +303,25 @@ public:
     return true;
   }
 
+  entity_addrvec_t get_addrs(const string& n) const {
+    return entity_addrvec_t(get_addr(n));
+  }
+  entity_addrvec_t get_addrs(unsigned m) const {
+    return entity_addrvec_t(get_addr(m));
+  }
+
   const entity_addr_t& get_addr(const string& n) const {
-    assert(mon_info.count(n));
+    ceph_assert(mon_info.count(n));
     map<string,mon_info_t>::const_iterator p = mon_info.find(n);
     return p->second.public_addr;
   }
   const entity_addr_t& get_addr(unsigned m) const {
-    assert(m < ranks.size());
+    ceph_assert(m < ranks.size());
     return get_addr(ranks[m]);
   }
   void set_addr(const string& n, const entity_addr_t& a) {
-    assert(mon_info.count(n));
+    ceph_assert(mon_info.count(n));
     mon_info[n].public_addr = a;
-  }
-  entity_inst_t get_inst(const string& n) {
-    assert(mon_info.count(n));
-    int m = get_rank(n);
-    assert(m >= 0); // vector can't take negative indicies
-    return get_inst(m);
-  }
-  entity_inst_t get_inst(unsigned m) const {
-    assert(m < ranks.size());
-    entity_inst_t i;
-    i.addr = get_addr(m);
-    i.name = entity_name_t::MON(m);
-    return i;
   }
 
   void encode(bufferlist& blist, uint64_t con_features) const;
@@ -346,19 +352,11 @@ public:
    * @param cct context (and associated config)
    * @param errout ostream to send error messages too
    */
+#ifdef WITH_SEASTAR
+  seastar::future<> build_initial(const ceph::common::ConfigProxy& conf);
+#else
   int build_initial(CephContext *cct, ostream& errout);
-
-  /**
-   * build a monmap from a list of hosts or ips
-   *
-   * Resolve dns as needed.  Give mons dummy names.
-   *
-   * @param hosts  list of hosts, space or comma separated
-   * @param prefix prefix to prepend to generated mon names
-   * @return 0 for success, -errno on error
-   */
-  int build_from_host_list(std::string hosts, const std::string &prefix);
-
+#endif
   /**
    * filter monmap given a set of initial members.
    *
@@ -382,6 +380,43 @@ public:
   void dump(ceph::Formatter *f) const;
 
   static void generate_test_instances(list<MonMap*>& o);
+protected:
+  /**
+   * build a monmap from a list of ips
+   *
+   * Give mons dummy names.
+   *
+   * @param hosts  list of ips, space or comma separated
+   * @param prefix prefix to prepend to generated mon names
+   * @return 0 for success, -errno on error
+   */
+  int init_with_ips(const std::string& ips,
+			 const std::string &prefix);
+  /**
+   * build a monmap from a list of hostnames
+   *
+   * Give mons dummy names.
+   *
+   * @param hosts  list of ips, space or comma separated
+   * @param prefix prefix to prepend to generated mon names
+   * @return 0 for success, -errno on error
+   */
+  int init_with_hosts(const std::string& hostlist,
+			 const std::string& prefix);
+  int init_with_config_file(const ConfigProxy& conf, std::ostream& errout);
+#if WITH_SEASTAR
+  seastar::future<> read_monmap(const std::string& monmap);
+  /// try to build monmap with different settings, like
+  /// mon_host, mon* sections, and mon_dns_srv_name
+  seastar::future<> build_monmap(const ceph::common::ConfigProxy& conf);
+  /// initialize monmap by resolving given service name
+  seastar::future<> init_with_dns_srv(const std::string& name);
+#else
+  /// read from encoded monmap file
+  int init_with_monmap(const std::string& monmap, std::ostream& errout);
+  int init_with_dns_srv(CephContext* cct, std::string srv_name,
+			std::ostream& errout);
+#endif
 };
 WRITE_CLASS_ENCODER_FEATURES(MonMap)
 

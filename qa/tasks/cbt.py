@@ -102,7 +102,7 @@ class CBT(Task):
 
         if benchmark_type == 'cosbench':
             # install cosbench
-            self.log.info('install dependecies for cosbench')
+            self.log.info('install dependencies for cosbench')
             if system_type == 'rpm':
                 cosbench_depends = ['wget', 'unzip', 'java-1.7.0-openjdk', 'curl']
             else:
@@ -119,7 +119,7 @@ class CBT(Task):
                     args=['sudo', 'apt-get', '-y', 'purge', 'openjdk-11*'])
                 # use our own version of cosbench
                 cosbench_version = 'cosbench-0.4.2.c3.1'
-                # contains additonal parameter "-N" to nc
+                # contains additional parameter "-N" to nc
                 cosbench_location = 'http://drop.ceph.com/qa/cosbench-0.4.2.c3.1.zip'
                 cosbench_dir = os.path.join(testdir, cosbench_version)
                 self.ctx.cluster.run(args=['mkdir', '-p', '-m0755', '--', cosbench_dir])

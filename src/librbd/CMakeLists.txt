@@ -24,11 +24,17 @@ set(librbd_internal_srcs
   TrashWatcher.cc
   Utils.cc
   Watcher.cc
+  api/Config.cc
   api/DiffIterate.cc
   api/Group.cc
   api/Image.cc
+  api/Migration.cc
   api/Mirror.cc
+  api/Namespace.cc
+  api/Pool.cc
+  api/PoolMetadata.cc
   api/Snapshot.cc
+  api/Trash.cc
   cache/ImageWriteback.cc
   cache/ObjectCacherObjectDispatch.cc
   cache/PassthroughImageCache.cc
@@ -44,10 +50,13 @@ set(librbd_internal_srcs
   exclusive_lock/PostAcquireRequest.cc
   exclusive_lock/PreReleaseRequest.cc
   exclusive_lock/StandardPolicy.cc
+  image/AttachParentRequest.cc
   image/CloneRequest.cc
   image/CloseRequest.cc
   image/CreateRequest.cc
   image/DetachChildRequest.cc
+  image/DetachParentRequest.cc
+  image/ListWatchersRequest.cc
   image/OpenRequest.cc
   image/RefreshParentRequest.cc
   image/RefreshRequest.cc
@@ -106,6 +115,7 @@ set(librbd_internal_srcs
   operation/FlattenRequest.cc
   operation/MetadataRemoveRequest.cc
   operation/MetadataSetRequest.cc
+  operation/MigrateRequest.cc
   operation/ObjectMapIterate.cc
   operation/RebuildObjectMapRequest.cc
   operation/RenameRequest.cc
@@ -144,21 +154,17 @@ target_link_libraries(librbd PRIVATE
   rbd_internal
   rbd_types
   journal
-  librados 
+  librados-cxx
   cls_rbd_client 
   cls_lock_client 
   cls_journal_client 
   ceph-common
   pthread
   ${CMAKE_DL_LIBS}
-  ${EXTRALIBS})
+  ${EXTRALIBS} ${GSSAPI_LIBRARIES})
 if(HAVE_UDEV)
   target_link_libraries(librbd PRIVATE
     udev)
-endif()
-if(WITH_STATIC_LIBSTDCXX)
-  target_link_libraries(librbd INTERFACE
-    "-static-libstdc++ -static-libgcc")
 endif()
 if(ENABLE_SHARED)
   set_target_properties(librbd PROPERTIES

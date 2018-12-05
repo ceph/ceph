@@ -62,15 +62,15 @@ public:
     scrub_kick(mdc, this),
     mdcache(mdc) {}
   ~ScrubStack() {
-    assert(inode_stack.empty());
-    assert(!scrubs_in_progress);
+    ceph_assert(inode_stack.empty());
+    ceph_assert(!scrubs_in_progress);
   }
   /**
    * Put a inode on the top of the scrub stack, so it is the highest priority.
    * If there are other scrubs in progress, they will not continue scrubbing new
    * entries until this one is completed.
    * @param in The inodey to scrub
-   * @param header The ScrubHeader propagated from whereever this scrub
+   * @param header The ScrubHeader propagated from wherever this scrub
    *               was initiated
    */
   void enqueue_inode_top(CInode *in, ScrubHeaderRef& header,

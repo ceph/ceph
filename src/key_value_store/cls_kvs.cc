@@ -5,6 +5,7 @@
  *      Author: Eleanor Cawthon
  */
 
+#include "include/compat.h"
 #include "objclass/objclass.h"
 #include <errno.h>
 #include "key_value_store/kvs_arg_types.h"

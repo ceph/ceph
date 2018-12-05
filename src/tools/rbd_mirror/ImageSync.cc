@@ -60,15 +60,15 @@ ImageSync<I>::ImageSync(I *local_image_ctx, I *remote_image_ctx,
     m_work_queue(work_queue), m_instance_watcher(instance_watcher),
     m_progress_ctx(progress_ctx),
     m_lock(unique_lock_name("ImageSync::m_lock", this)),
-    m_update_sync_point_interval(m_local_image_ctx->cct->_conf->template get_val<double>(
+    m_update_sync_point_interval(m_local_image_ctx->cct->_conf.template get_val<double>(
         "rbd_mirror_sync_point_update_age")), m_client_meta_copy(*client_meta) {
 }
 
 template <typename I>
 ImageSync<I>::~ImageSync() {
-  assert(m_image_copy_request == nullptr);
-  assert(m_image_copy_prog_ctx == nullptr);
-  assert(m_update_sync_ctx == nullptr);
+  ceph_assert(m_image_copy_request == nullptr);
+  ceph_assert(m_image_copy_prog_ctx == nullptr);
+  ceph_assert(m_update_sync_ctx == nullptr);
 }
 
 template <typename I>
@@ -208,7 +208,7 @@ void ImageSync<I>::send_copy_image() {
   int r = 0;
   {
     RWLock::RLocker snap_locker(m_remote_image_ctx->snap_lock);
-    assert(!m_client_meta->sync_points.empty());
+    ceph_assert(!m_client_meta->sync_points.empty());
     auto &sync_point = m_client_meta->sync_points.front();
     snap_id_end = m_remote_image_ctx->get_snap_id(
 	cls::rbd::UserSnapshotNamespace(), sync_point.snap_name);
@@ -311,7 +311,7 @@ void ImageSync<I>::handle_copy_image_update_progress(uint64_t object_no,
 
 template <typename I>
 void ImageSync<I>::send_update_sync_point() {
-  assert(m_lock.is_locked());
+  ceph_assert(m_lock.is_locked());
 
   m_update_sync_ctx = nullptr;
 

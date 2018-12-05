@@ -5,6 +5,8 @@
 
 #include "common/errno.h"
 #include "common/safe_io.h"
+#include "librados/librados_asio.h"
+#include "common/async/yield_context.h"
 
 #include "include/types.h"
 
@@ -12,33 +14,50 @@
 #include "rgw_rados.h"
 #include "rgw_tools.h"
 
+#include "services/svc_sys_obj.h"
+
 #define dout_subsys ceph_subsys_rgw
+#define dout_context g_ceph_context
 
 #define READ_CHUNK_LEN (512 * 1024)
 
 static std::map<std::string, std::string>* ext_mime_map;
 
-int rgw_put_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string& oid, const bufferlist& data, bool exclusive,
+int rgw_put_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
                        RGWObjVersionTracker *objv_tracker, real_time set_mtime, map<string, bufferlist> *pattrs)
 {
   map<string,bufferlist> no_attrs;
-  if (!pattrs)
+  if (!pattrs) {
     pattrs = &no_attrs;
+  }
 
   rgw_raw_obj obj(pool, oid);
 
-  int ret = rgwstore->put_system_obj(NULL, obj, data, exclusive, NULL, *pattrs, objv_tracker, set_mtime);
+  auto obj_ctx = rgwstore->svc.sysobj->init_obj_ctx();
+  auto sysobj = obj_ctx.get_obj(obj);
+  int ret = sysobj.wop()
+                  .set_objv_tracker(objv_tracker)
+                  .set_exclusive(exclusive)
+                  .set_mtime(set_mtime)
+                  .set_attrs(*pattrs)
+                  .write(data);
 
   if (ret == -ENOENT) {
     ret = rgwstore->create_pool(pool);
-    if (ret >= 0)
-      ret = rgwstore->put_system_obj(NULL, obj, data, exclusive, NULL, *pattrs, objv_tracker, set_mtime);
+    if (ret >= 0) {
+      ret = sysobj.wop()
+                  .set_objv_tracker(objv_tracker)
+                  .set_exclusive(exclusive)
+                  .set_mtime(set_mtime)
+                  .set_attrs(*pattrs)
+                  .write(data);
+    }
   }
 
   return ret;
 }
 
-int rgw_get_system_obj(RGWRados *rgwstore, RGWObjectCtx& obj_ctx, const rgw_pool& pool, const string& key, bufferlist& bl,
+int rgw_get_system_obj(RGWRados *rgwstore, RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& key, bufferlist& bl,
                        RGWObjVersionTracker *objv_tracker, real_time *pmtime, map<string, bufferlist> *pattrs,
                        rgw_cache_entry_info *cache_info, boost::optional<obj_version> refresh_version)
 {
@@ -52,19 +71,19 @@ int rgw_get_system_obj(RGWRados *rgwstore, RGWObjectCtx& obj_ctx, const rgw_pool
   }
 
   do {
-    RGWRados::SystemObject source(rgwstore, obj_ctx, obj);
-    RGWRados::SystemObject::Read rop(&source);
+    auto sysobj = obj_ctx.get_obj(obj);
+    auto rop = sysobj.rop();
 
-    rop.stat_params.attrs = pattrs;
-    rop.stat_params.lastmod = pmtime;
-
-    int ret = rop.stat(objv_tracker);
+    int ret = rop.set_attrs(pattrs)
+                 .set_last_mod(pmtime)
+                 .set_objv_tracker(objv_tracker)
+                 .stat();
     if (ret < 0)
       return ret;
 
-    rop.read_params.cache_info = cache_info;
-
-    ret = rop.read(0, request_len - 1, bl, objv_tracker, refresh_version);
+    ret = rop.set_cache_info(cache_info)
+             .set_refresh_version(refresh_version)
+             .read(&bl);
     if (ret == -ECANCELED) {
       /* raced, restart */
       if (!original_readv.empty()) {
@@ -74,7 +93,7 @@ int rgw_get_system_obj(RGWRados *rgwstore, RGWObjectCtx& obj_ctx, const rgw_pool
       if (objv_tracker) {
         objv_tracker->read_version.clear();
       }
-      source.invalidate_state();
+      sysobj.invalidate();
       continue;
     }
     if (ret < 0)
@@ -92,8 +111,57 @@ int rgw_get_system_obj(RGWRados *rgwstore, RGWObjectCtx& obj_ctx, const rgw_pool
 int rgw_delete_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string& oid,
                           RGWObjVersionTracker *objv_tracker)
 {
+  auto obj_ctx = rgwstore->svc.sysobj->init_obj_ctx();
+  auto sysobj = obj_ctx.get_obj(rgw_raw_obj{pool, oid});
   rgw_raw_obj obj(pool, oid);
-  return rgwstore->delete_system_obj(obj, objv_tracker);
+  return sysobj.wop()
+               .set_objv_tracker(objv_tracker)
+               .remove();
+}
+
+thread_local bool is_asio_thread = false;
+
+int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
+                      librados::ObjectReadOperation *op, bufferlist* pbl,
+                      optional_yield y)
+{
+#ifdef HAVE_BOOST_CONTEXT
+  // given a yield_context, call async_operate() to yield the coroutine instead
+  // of blocking
+  if (y) {
+    auto& context = y.get_io_context();
+    auto& yield = y.get_yield_context();
+    boost::system::error_code ec;
+    auto bl = librados::async_operate(context, ioctx, oid, op, 0, yield[ec]);
+    if (pbl) {
+      *pbl = std::move(bl);
+    }
+    return -ec.value();
+  }
+  // work on asio threads should be asynchronous, so warn when they block
+  if (is_asio_thread) {
+    dout(20) << "WARNING: blocking librados call" << dendl;
+  }
+#endif
+  return ioctx.operate(oid, op, nullptr);
+}
+
+int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
+                      librados::ObjectWriteOperation *op, optional_yield y)
+{
+#ifdef HAVE_BOOST_CONTEXT
+  if (y) {
+    auto& context = y.get_io_context();
+    auto& yield = y.get_yield_context();
+    boost::system::error_code ec;
+    librados::async_operate(context, ioctx, oid, op, 0, yield[ec]);
+    return -ec.value();
+  }
+  if (is_asio_thread) {
+    dout(20) << "WARNING: blocking librados call" << dendl;
+  }
+#endif
+  return ioctx.operate(oid, op);
 }
 
 void parse_mime_map_line(const char *start, const char *end)
@@ -187,6 +255,19 @@ const char *rgw_find_mime_by_ext(string& ext)
     return NULL;
 
   return iter->second.c_str();
+}
+
+void rgw_filter_attrset(map<string, bufferlist>& unfiltered_attrset, const string& check_prefix,
+                        map<string, bufferlist> *attrset)
+{
+  attrset->clear();
+  map<string, bufferlist>::iterator iter;
+  for (iter = unfiltered_attrset.lower_bound(check_prefix);
+       iter != unfiltered_attrset.end(); ++iter) {
+    if (!boost::algorithm::starts_with(iter->first, check_prefix))
+      break;
+    (*attrset)[iter->first] = iter->second;
+  }
 }
 
 int rgw_tools_init(CephContext *cct)

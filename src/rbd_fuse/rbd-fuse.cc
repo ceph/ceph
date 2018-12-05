@@ -28,6 +28,13 @@
 
 #include "include/compat.h"
 #include "include/rbd/librbd.h"
+#include "include/ceph_assert.h"
+
+#include "common/ceph_argparse.h"
+#include "common/ceph_context.h"
+
+#include "global/global_init.h"
+#include "global/global_context.h"
 
 static int gotrados = 0;
 char *pool_name;
@@ -43,7 +50,6 @@ struct rbd_stat {
 };
 
 struct rbd_options {
-	char *ceph_config;
 	char *pool_name;
 	char *image_name;
 };
@@ -53,8 +59,9 @@ struct rbd_image {
 	struct rbd_image *next;
 };
 struct rbd_image_data {
-    struct rbd_image *images;
-    void *buf;
+	struct rbd_image *images;
+	rbd_image_spec_t *image_specs;
+	size_t image_spec_count;
 };
 struct rbd_image_data rbd_image_data;
 
@@ -66,8 +73,7 @@ struct rbd_openimage {
 #define MAX_RBD_IMAGES		128
 struct rbd_openimage opentbl[MAX_RBD_IMAGES];
 
-struct rbd_options rbd_options = {(char*) "/etc/ceph/ceph.conf", (char*) "rbd",
-				  NULL};
+struct rbd_options rbd_options = {(char*) "rbd", NULL};
 
 #define rbdsize(fd)	opentbl[fd].rbd_stat.rbd_info.size
 #define rbdblksize(fd)	opentbl[fd].rbd_stat.rbd_info.obj_size
@@ -92,10 +98,7 @@ void
 enumerate_images(struct rbd_image_data *data)
 {
 	struct rbd_image **head = &data->images;
-	char *ibuf = NULL;
-	size_t ibuf_len = 0;
 	struct rbd_image *im, *next;
-	char *ip;
 	int ret;
 
 	if (*head != NULL) {
@@ -105,45 +108,40 @@ enumerate_images(struct rbd_image_data *data)
 			im = next;
 		}
 		*head = NULL;
-		free(data->buf);
-		data->buf = NULL;
+		rbd_image_spec_list_cleanup(data->image_specs,
+					    data->image_spec_count);
+		free(data->image_specs);
+		data->image_specs = NULL;
+		data->image_spec_count = 0;
 	}
 
-	ret = rbd_list(ioctx, ibuf, &ibuf_len);
-	if (ret == -ERANGE) {
-		assert(ibuf_len > 0);
-		ibuf = (char*) malloc(ibuf_len);
-		if (!ibuf) {
-			simple_err("Failed to get ibuf", -ENOMEM);
-			return;
+	while (true) {
+		ret = rbd_list2(ioctx, data->image_specs,
+				&data->image_spec_count);
+		if (ret == -ERANGE) {
+			data->image_specs = static_cast<rbd_image_spec_t *>(
+				realloc(data->image_specs,
+					sizeof(rbd_image_spec_t) * data->image_spec_count));
+		} else if (ret < 0) {
+			simple_err("Failed to list images", ret);
+		} else {
+			break;
 		}
-	} else if (ret < 0) {
-		simple_err("Failed to get ibuf_len", ret);
-		return;
 	}
-
-	ret = rbd_list(ioctx, ibuf, &ibuf_len);
-	if (ret < 0) {
-		simple_err("Failed to populate ibuf", ret);
-		free(ibuf);
-		return;
-	}
-	assert(ret == (int)ibuf_len);
 
 	fprintf(stderr, "pool %s: ", pool_name);
-	for (ip = ibuf; ip < &ibuf[ibuf_len]; ip += strlen(ip) + 1)  {
+	for (size_t idx = 0; idx < data->image_spec_count; ++idx) {
 		if ((mount_image_name == NULL) ||
 		    ((strlen(mount_image_name) > 0) &&
-		    (strcmp(ip, mount_image_name) == 0))) {
-			fprintf(stderr, "%s, ", ip);
+		    (strcmp(data->image_specs[idx].name, mount_image_name) == 0))) {
+			fprintf(stderr, "%s, ", data->image_specs[idx].name);
 			im = static_cast<rbd_image*>(malloc(sizeof(*im)));
-			im->image_name = ip;
+			im->image_name = data->image_specs[idx].name;
 			im->next = *head;
 			*head = im;
 		}
 	}
 	fprintf(stderr, "\n");
-	data->buf = ibuf;
 }
 
 int
@@ -757,8 +755,6 @@ const static struct fuse_operations rbdfs_oper = {
 enum {
 	KEY_HELP,
 	KEY_VERSION,
-	KEY_CEPH_CONFIG,
-	KEY_CEPH_CONFIG_LONG,
 	KEY_RADOS_POOLNAME,
 	KEY_RADOS_POOLNAME_LONG,
 	KEY_RBD_IMAGENAME,
@@ -770,15 +766,13 @@ static struct fuse_opt rbdfs_opts[] = {
 	FUSE_OPT_KEY("--help", KEY_HELP),
 	FUSE_OPT_KEY("-V", KEY_VERSION),
 	FUSE_OPT_KEY("--version", KEY_VERSION),
-	{"-c %s", offsetof(struct rbd_options, ceph_config), KEY_CEPH_CONFIG},
-	{"--configfile=%s", offsetof(struct rbd_options, ceph_config),
-	 KEY_CEPH_CONFIG_LONG},
 	{"-p %s", offsetof(struct rbd_options, pool_name), KEY_RADOS_POOLNAME},
 	{"--poolname=%s", offsetof(struct rbd_options, pool_name),
 	 KEY_RADOS_POOLNAME_LONG},
 	{"-r %s", offsetof(struct rbd_options, image_name), KEY_RBD_IMAGENAME},
 	{"--image=%s", offsetof(struct rbd_options, image_name),
 	KEY_RBD_IMAGENAME_LONG},
+	FUSE_OPT_END
 };
 
 static void usage(const char *progname)
@@ -789,7 +783,7 @@ static void usage(const char *progname)
 "General options:\n"
 "    -h   --help            print help\n"
 "    -V   --version         print version\n"
-"    -c   --configfile      ceph configuration file [/etc/ceph/ceph.conf]\n"
+"    -c   --conf            ceph configuration file [/etc/ceph/ceph.conf]\n"
 "    -p   --poolname        rados pool name [rbd]\n"
 "    -r   --image           RBD image name\n"
 "\n", progname);
@@ -809,15 +803,6 @@ static int rbdfs_opt_proc(void *data, const char *arg, int key,
 		fuse_opt_add_arg(outargs, "--version");
 		fuse_main(outargs->argc, outargs->argv, &rbdfs_oper, NULL);
 		exit(0);
-	}
-
-	if (key == KEY_CEPH_CONFIG) {
-		if (rbd_options.ceph_config != NULL) {
-			free(rbd_options.ceph_config);
-			rbd_options.ceph_config = NULL;
-		}
-		rbd_options.ceph_config = strdup(arg+2);
-		return 0;
 	}
 
 	if (key == KEY_RADOS_POOLNAME) {
@@ -852,36 +837,65 @@ int
 connect_to_cluster(rados_t *pcluster)
 {
 	int r;
+	global_init_postfork_start(g_ceph_context);
+	common_init_finish(g_ceph_context);
+	global_init_postfork_finish(g_ceph_context);
 
-	r = rados_create(pcluster, NULL);
+	r = rados_create_with_context(pcluster, g_ceph_context);
 	if (r < 0) {
 		simple_err("Could not create cluster handle", r);
 		return r;
 	}
-	rados_conf_parse_env(*pcluster, NULL);
-	r = rados_conf_read_file(*pcluster, rbd_options.ceph_config);
-	if (r < 0) {
-		simple_err("Error reading Ceph config file", r);
-		goto failed_shutdown;
-	}
+
 	r = rados_connect(*pcluster);
 	if (r < 0) {
 		simple_err("Error connecting to cluster", r);
-		goto failed_shutdown;
+		rados_shutdown(*pcluster);
+		return r;
 	}
 
 	return 0;
-
-failed_shutdown:
-	rados_shutdown(*pcluster);
-	return r;
 }
 
-int main(int argc, char *argv[])
+int main(int argc, const char *argv[])
 {
-	struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
+	memset(&rbd_image_data, 0, sizeof(rbd_image_data));
 
-	if (fuse_opt_parse(&args, &rbd_options, rbdfs_opts, rbdfs_opt_proc) == -1) {
+	// librados will filter out -f/-d options from command-line
+	std::map<std::string, bool> filter_args = {
+		{"-f", false},
+		{"-d", false}};
+
+	std::vector<const char*> arg_vector;
+	for (auto idx = 0; idx < argc; ++idx) {
+		auto it = filter_args.find(argv[idx]);
+		if (it != filter_args.end()) {
+			it->second = true;
+		}
+		arg_vector.push_back(argv[idx]);
+	}
+
+	auto cct = global_init(NULL, arg_vector, CEPH_ENTITY_TYPE_CLIENT,
+			       CODE_ENVIRONMENT_DAEMON,
+			       CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
+	g_ceph_context->_conf.set_val_or_die("pid_file", "");
+	g_ceph_context->_conf.set_val_or_die("daemonize", "true");
+
+	if (global_init_prefork(g_ceph_context) < 0) {
+		fprintf(stderr, "Failed to initialize librados\n");
+		exit(1);
+	}
+
+	for (auto& it : filter_args) {
+		if (it.second) {
+			arg_vector.push_back(it.first.c_str());
+		}
+	}
+
+	struct fuse_args args = FUSE_ARGS_INIT((int)arg_vector.size(),
+					       (char**)&arg_vector.front());
+	if (fuse_opt_parse(&args, &rbd_options, rbdfs_opts,
+			   rbdfs_opt_proc) == -1) {
 		exit(1);
 	}
 

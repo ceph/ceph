@@ -13,7 +13,7 @@
  */
 
 #include "rbd_loc.hpp"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 
 using namespace std;
@@ -41,7 +41,7 @@ bool rbd_loc::parse(string name_string) {
       if (read_slash || read_at) {
 	return false;
       }
-      assert(field == 0);
+      ceph_assert(field == 0);
       field++;
       read_slash = true;
       break;
@@ -49,7 +49,7 @@ bool rbd_loc::parse(string name_string) {
       if (read_at) {
 	return false;
       }
-      assert(field < 2);
+      ceph_assert(field < 2);
       field++;
       read_at = true;
       break;

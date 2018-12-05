@@ -19,7 +19,6 @@
 #include "msg/Message.h"
 
 #include "MOSDOp.h"
-#include "os/ObjectStore.h"
 #include "common/errno.h"
 
 /*
@@ -30,10 +29,12 @@
  *
  */
 
-class MOSDOpReply : public Message {
-
-  static const int HEAD_VERSION = 8;
-  static const int COMPAT_VERSION = 2;
+class MOSDOpReply : public MessageInstance<MOSDOpReply> {
+public:
+  friend factory;
+private:
+  static constexpr int HEAD_VERSION = 8;
+  static constexpr int COMPAT_VERSION = 2;
 
   object_t oid;
   pg_t pgid;
@@ -98,7 +99,7 @@ public:
   void add_flags(int f) { flags |= f; }
 
   void claim_op_out_data(vector<OSDOp>& o) {
-    assert(ops.size() == o.size());
+    ceph_assert(ops.size() == o.size());
     for (unsigned i = 0; i < o.size(); i++) {
       ops[i].outdata.claim(o[i].outdata);
     }
@@ -127,13 +128,13 @@ public:
 
 public:
   MOSDOpReply()
-    : Message(CEPH_MSG_OSD_OPREPLY, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(CEPH_MSG_OSD_OPREPLY, HEAD_VERSION, COMPAT_VERSION),
     bdata_encode(false) {
     do_redirect = false;
   }
   MOSDOpReply(const MOSDOp *req, int r, epoch_t e, int acktype,
 	      bool ignore_out_data)
-    : Message(CEPH_MSG_OSD_OPREPLY, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(CEPH_MSG_OSD_OPREPLY, HEAD_VERSION, COMPAT_VERSION),
       oid(req->hobj.oid), pgid(req->pgid.pgid), ops(req->ops),
       bdata_encode(false) {
 

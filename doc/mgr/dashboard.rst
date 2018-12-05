@@ -1,51 +1,46 @@
-Dashboard Plugin
-================
+.. _mgr-dashboard:
 
-.. _mgr-dashboard-overview:
+Ceph Manager Dashboard
+======================
 
 Overview
 --------
 
-The original Ceph manager dashboard that was shipped with Ceph "Luminous"
-started out as a simple read-only view into various run-time information and
-performance data of a Ceph cluster. It used a very simple architecture to
-achieve the original goal.
+The original Ceph Manager Dashboard that was shipped with Ceph Luminous started
+out as a simple read-only view into various run-time information and performance
+data of a Ceph cluster. It used a very simple architecture to achieve the
+original goal. However, there was a growing demand for adding more web-based
+management capabilities, to make it easier to administer Ceph for users that
+prefer a WebUI over using the command line.
 
-However, there was a growing demand for adding more web-based management
-capabilities, to make it easier to administer Ceph for users that prefer a WebUI
-over using the command line.
-
-This new dashboard module is a replacement of the previous one and an ongoing
-project to add a native web based monitoring and administration application to
-Ceph Manager.
-
-The architecture and functionality of this module are derived from and inspired
-by the `openATTIC Ceph management and monitoring tool
+The new :term:`Ceph Manager Dashboard` plugin is a replacement of the previous
+one and adds a built-in web based monitoring and administration application to
+the Ceph Manager. The architecture and functionality of this new plugin is
+derived from and inspired by the `openATTIC Ceph management and monitoring tool
 <https://openattic.org/>`_. The development is actively driven by the team
-behind openATTIC at SUSE.
+behind openATTIC at `SUSE <https://www.suse.com/>`_.
 
 The intention is to reuse as much of the existing openATTIC functionality as
-possible, while adapting it to the different environment. While openATTIC is
-based on Django and the Django REST Framework, the dashboard module's backend
-code uses the CherryPy framework and a custom REST API implementation.
-
-The WebUI implementation is based on Angular/TypeScript, merging both
-functionality from the original dashboard as well as adding new functionality
-originally developed for the standalone version of openATTIC.
-
-The dashboard plugin is implemented as a web application that visualizes
-information and statistics about the Ceph cluster using a web server hosted by
-``ceph-mgr``.
+possible, while adapting it to the different environment. openATTIC is based on
+Django and the Django REST Framework, whereas the dashboard plugin's backend
+code uses the CherryPy framework and a custom REST API implementation. The WebUI
+implementation is based on Angular/TypeScript, merging both functionality from
+the original dashboard as well as adding new functionality originally developed
+for the standalone version of openATTIC. The Ceph Manager Dashboard plugin is
+implemented as a web application that visualizes information and statistics about
+the Ceph cluster using a web server hosted by ``ceph-mgr``.
 
 The dashboard currently provides the following features to monitor and manage
 various aspects of your Ceph cluster:
 
-* **Username/password protection**: The dashboard can only be accessed by
-  providing a configurable username and password.
+* **Multi-User and Role Management**: The dashboard supports multiple user
+  accounts with different permissions (roles). The user accounts and roles
+  can be modified on both the command line and via the WebUI.
+  See :ref:`dashboard-user-role-management` for details.
 * **SSL/TLS support**: All HTTP communication between the web browser and the
   dashboard is secured via SSL. A self-signed certificate can be created with
   a built-in command, but it's also possible to import custom certificates
-  signed and issued by a CA.
+  signed and issued by a CA. See :ref:`dashboard-ssl-tls-support` for details.
 * **Overall cluster health**: Displays the overall cluster status, storage
   utilization (e.g. number of objects, raw capacity, usage per pool), a list of
   pools and their status and usage statistics.
@@ -76,34 +71,24 @@ various aspects of your Ceph cluster:
 * **Object Gateway**: Lists all active object gateways and their performance
   counters. Display and manage (add/edit/delete) object gateway users and their
   details (e.g. quotas) as well as the users' buckets and their details (e.g.
-  owner, quotas). 
+  owner, quotas).
 
 Enabling
 --------
 
-Within a running Ceph cluster, the *dashboard* manager module is enabled with::
+Within a running Ceph cluster, the Ceph Manager Dashboard is enabled with::
 
   $ ceph mgr module enable dashboard
-
-This can be automated (e.g. during deployment) by adding the following to
-``ceph.conf``::
-
-  [mon]
-          mgr initial modules = dashboard
-
-Note that ``mgr initial modules`` takes a space-separated list of modules, so
-if you wanted to include other modules in addition to dashboard, just make it
-a list like so::
-
-          mgr initial modules = balancer dashboard
 
 Configuration
 -------------
 
+.. _dashboard-ssl-tls-support:
+
 SSL/TLS Support
 ^^^^^^^^^^^^^^^
 
-All HTTP connections to the dashboard are secured with SSL/TLS. 
+All HTTP connections to the dashboard are secured with SSL/TLS by default.
 
 To get the dashboard up and running quickly, you can generate and install a
 self-signed certificate using the following built-in command::
@@ -136,6 +121,20 @@ of the ``ceph-mgr`` instance, usually the hostname)::
   $ ceph config-key set mgr/dashboard/$name/crt -i dashboard.crt
   $ ceph config-key set mgr/dashboard/$name/key -i dashboard.key
 
+SSL can also be disabled by setting this configuration value::
+
+  $ ceph config set mgr mgr/dashboard/ssl false
+
+This might be useful if the dashboard will be running behind a proxy which does
+not support SSL for its upstream servers or other situations where SSL is not
+wanted or required.
+
+.. warning::
+
+  Use caution when disabling SSL as usernames and passwords will be sent to the
+  dashboard unencrypted.
+
+
 .. note::
 
   You need to restart the Ceph manager processes manually after changing the SSL
@@ -152,9 +151,10 @@ Host name and port
 Like most web applications, dashboard binds to a TCP/IP address and TCP port.
 
 By default, the ``ceph-mgr`` daemon hosting the dashboard (i.e., the currently
-active manager) will bind to TCP port 8443. If no specific address has been
-configured, the web app will bind to ``::``, which corresponds to all available
-IPv4 and IPv6 addresses.
+active manager) will bind to TCP port 8443 or 8080 when SSL is disabled.
+
+If no specific address has been configured, the web app will bind to ``::``,
+which corresponds to all available IPv4 and IPv6 addresses.
 
 These defaults can be changed via the configuration key facility on a
 cluster-wide level (so they apply to all manager instances) as follows::
@@ -175,22 +175,25 @@ app.
 .. note::
 
   The command ``ceph mgr services`` will show you all endpoints that are
-  currently configured. Look for the "dashboard" key to obtain the URL for
+  currently configured. Look for the ``dashboard`` key to obtain the URL for
   accessing the dashboard.
 
 Username and password
 ^^^^^^^^^^^^^^^^^^^^^
 
-In order to be able to log in, you need to define a username and password, which
-will be stored in the MON's configuration database::
+In order to be able to log in, you need to create a user account and associate
+it with at least one role. We provide a set of predefined *system roles* that
+you can use. For more details please refer to the `User and Role Management`_
+section.
 
-  $ ceph dashboard set-login-credentials <username> <password>
+To create a user with the administrator role you can use the following
+commands::
 
-The password will be stored in the configuration database in encrypted form
-using ``bcrypt``. This is a global setting that applies to all dashboard instances.
+  $ ceph dashboard ac-user-create <username> <password> administrator
+
 
 Enabling the Object Gateway management frontend
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 To use the Object Gateway management functionality of the dashboard, you will
 need to provide the login credentials of a user with the ``system`` flag
@@ -210,7 +213,7 @@ The credentials of an existing user can also be obtained by using
 
   $ radosgw-admin user info --uid=<user_id>
 
-Finally, provide the credentials to the dashboard module::
+Finally, provide the credentials to the dashboard::
 
   $ ceph dashboard set-rgw-api-access-key <access_key>
   $ ceph dashboard set-rgw-api-secret-key <secret_key>
@@ -232,24 +235,37 @@ exist and you may find yourself in the situation that you have to use them::
   $ ceph dashboard set-rgw-api-admin-resource <admin_resource>
   $ ceph dashboard set-rgw-api-user-id <user_id>
 
+If you are using a self-signed certificate in your Object Gateway setup, then
+you should disable certificate verification in the dashboard to avoid refused
+connections, e.g. caused by certificates signed by unknown CA or not matching
+the host name::
+
+  $ ceph dashboard set-rgw-api-ssl-verify False
+
+If the Object Gateway takes too long to process requests and the dashboard runs
+into timeouts, then you can set the timeout value to your needs::
+
+  $ ceph dashboard set-rest-requests-timeout <seconds>
+
+The default value is 45 seconds.
+
 Enabling the Embedding of Grafana Dashboards
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Grafana and Prometheus are likely going to be bundled and installed by some
 orchestration tools along Ceph in the near future, but currently, you will have
 to install and configure both manually. After you have installed Prometheus and
-Grafana on your preferred hosts, proceed with the following steps::
+Grafana on your preferred hosts, proceed with the following steps.
 
- 1. Enable the Ceph Exporter which comes as Ceph Manager module by running::
+#. Enable the Ceph Exporter which comes as Ceph Manager module by running::
 
     $ ceph mgr module enable prometheus
 
-    More details can be found on the `documentation
-    <http://docs.ceph.com/docs/master/mgr/prometheus/>`_ of the prometheus
-    module.
+More details can be found on the `documentation <http://docs.ceph.com/docs/master/
+mgr/prometheus/>`_ of the prometheus module.
 
- 2. Add the corresponding scrape configuration to Prometheus. This may look
-    like::
+#. Add the corresponding scrape configuration to Prometheus. This may look
+   like::
 
         global:
           scrape_interval: 5s
@@ -265,26 +281,90 @@ Grafana on your preferred hosts, proceed with the following steps::
             static_configs:
               - targets: ['localhost:9100']
 
- 3. Add Prometheus as data source to Grafana
+#. Add Prometheus as data source to Grafana
 
- 4. Install the `vonage-status-panel` plugin using::
+#. Install the `vonage-status-panel and grafana-piechart-panel` plugins using::
 
         grafana-cli plugins install vonage-status-panel
+        grafana-cli plugins install grafana-piechart-panel
 
- 4. Add the Dashboards to Grafana by importing them
+#. Add the Dashboards to Grafana:
 
- 5. Configure Grafana in `/etc/grafana/grafana.ini` to adapt the URLs to the
-    Ceph Dashboard properly::
+   Dashboards can be added to Grafana by importing dashboard jsons. 
+   Following command can be used for downloading json files::
+	
+	wget https://raw.githubusercontent.com/ceph/ceph/master/monitoring/grafana/dashboards/<Dashboard-name>.json
 
-        root_url = http://localhost:3000/api/grafana/proxy
+   You can find all the dashboard jsons `here <https://github.com/ceph/ceph/tree/
+   master/monitoring/grafana/dashboards>`_ .
 
-After you have configured Grafana and Prometheus, you will need to tell the
-Ceph Manager Dashboard where it can access Grafana and what the credentials are
-to do so. This can be done by using the following commands::
+   For Example, for ceph-cluster overview you can use::
+	
+        wget https://raw.githubusercontent.com/ceph/ceph/master/monitoring/grafana/dashboards/ceph-cluster.json
 
-  $ ceph dashboard set-grafana-api-url <url>  # default: 'http://localhost:3000'
-  $ ceph dashboard set-grafana-api-username <username> # default: 'admin'
-  $ ceph dashboard set-grafana-api-password <password> # default: 'admin'
+#. Configure Grafana in `/etc/grafana/grafana.ini` to adapt anonymous mode::
+
+        [auth.anonymous]
+        enabled = true
+        org_name = Main Org.
+        org_role = Viewer
+
+After you have set up Grafana and Prometheus, you will need to configure the
+connection information that the Ceph Manager Dashboard will use to access Grafana.
+
+You need to tell the dashboard on which url Grafana instance is running/deployed::
+
+  $ ceph dashboard set-grafana-api-url <grafana-server-url>  # default: ''
+
+The format of url is : `<protocol>:<IP-address>:<port>`
+You can directly access Grafana Instance as well to monitor your cluster.
+
+Enabling Single Sign-On (SSO)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The Ceph Manager Dashboard supports external authentication of users via the
+`SAML 2.0 <https://en.wikipedia.org/wiki/SAML_2.0>`_ protocol. You need to create
+the user accounts and associate them with the desired roles first, as authorization
+is still performed by the Dashboard. However, the authentication process can be
+performed by an existing Identity Provider (IdP).
+
+.. note::
+  Ceph Dashboard SSO support relies on onelogin's
+  `python-saml <https://pypi.org/project/python-saml/>`_ library.
+  Please ensure that this library is installed on your system, either by using
+  your distribution's package management or via Python's `pip` installer.
+
+To configure SSO on Ceph Dashboard, you should use the following command::
+
+  $ ceph dashboard sso setup saml2 <ceph_dashboard_base_url> <idp_metadata> {<idp_username_attribute>} {<idp_entity_id>} {<sp_x_509_cert>} {<sp_private_key>}
+
+Parameters:
+
+- **<ceph_dashboard_base_url>**: Base URL where Ceph Dashboard is accessible (e.g., `https://cephdashboard.local`)
+- **<idp_metadata>**: URL, file path or content of the IdP metadata XML (e.g., `https://myidp/metadata`)
+- **<idp_username_attribute>** *(optional)*: Attribute that should be used to get the username from the authentication response. Defaults to `uid`.
+- **<idp_entity_id>** *(optional)*: Use this when more than one entity id exists on the IdP metadata.
+- **<sp_x_509_cert> / <sp_private_key>** *(optional)*: File path or content of the certificate that should be used by Ceph Dashboard (Service Provider) for signing and encryption.
+
+
+To display the current SAML 2.0 configuration, use the following command::
+
+  $ ceph dashboard sso show saml2
+
+.. note::
+  For more information about `onelogin_settings`, please check the `onelogin documentation <https://github.com/onelogin/python-saml>`_.
+
+To disable SSO::
+
+  $ ceph dashboard sso disable
+
+To check if SSO is enabled::
+
+  $ ceph dashboard sso status
+
+To enable SSO::
+
+  $ ceph dashboard sso enable saml2
 
 Accessing the dashboard
 ^^^^^^^^^^^^^^^^^^^^^^^
@@ -297,6 +377,176 @@ You should then be greeted by the dashboard login page, requesting your
 previously defined username and password. Select the **Keep me logged in**
 checkbox if you want to skip the username/password request when accessing the
 dashboard in the future.
+
+.. _dashboard-user-role-management:
+
+User and Role Management
+------------------------
+
+User Accounts
+^^^^^^^^^^^^^
+
+Ceph Dashboard supports managing multiple user accounts. Each user account
+consists of a username, a password (stored in encrypted form using ``bcrypt``),
+an optional name, and an optional email address.
+
+User accounts are stored in MON's configuration database, and are globally
+shared across all ceph-mgr instances.
+
+We provide a set of CLI commands to manage user accounts:
+
+- *Show User(s)*::
+
+  $ ceph dashboard ac-user-show [<username>]
+
+- *Create User*::
+
+  $ ceph dashboard ac-user-create <username> [<password>] [<rolename>] [<name>] [<email>]
+
+- *Delete User*::
+
+  $ ceph dashboard ac-user-delete <username>
+
+- *Change Password*::
+
+  $ ceph dashboard ac-user-set-password <username> <password>
+
+- *Modify User (name, and email)*::
+
+  $ ceph dashboard ac-user-set-info <username> <name> <email>
+
+
+User Roles and Permissions
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+User accounts are also associated with a set of roles that define which
+dashboard functionality can be accessed by the user.
+
+The Dashboard functionality/modules are grouped within a *security scope*.
+Security scopes are predefined and static. The current available security
+scopes are:
+
+- **hosts**: includes all features related to the ``Hosts`` menu
+  entry.
+- **config-opt**: includes all features related to management of Ceph
+  configuration options.
+- **pool**: includes all features related to pool management.
+- **osd**: includes all features related to OSD management.
+- **monitor**: includes all features related to Monitor management.
+- **rbd-image**: includes all features related to RBD image
+  management.
+- **rbd-mirroring**: includes all features related to RBD-Mirroring
+  management.
+- **iscsi**: includes all features related to iSCSI management.
+- **rgw**: includes all features related to Rados Gateway management.
+- **cephfs**: includes all features related to CephFS management.
+- **manager**: include all features related to Ceph Manager
+  management.
+- **log**: include all features related to Ceph logs management.
+- **grafana**: include all features related to Grafana proxy.
+- **dashboard-settings**: allows to change dashboard settings.
+
+A *role* specifies a set of mappings between a *security scope* and a set of
+*permissions*. There are four types of permissions:
+
+- **read**
+- **create**
+- **update**
+- **delete**
+
+See below for an example of a role specification based on a Python dictionary::
+
+  # example of a role
+  {
+    'role': 'my_new_role',
+    'description': 'My new role',
+    'scopes_permissions': {
+      'pool': ['read', 'create'],
+      'rbd-image': ['read', 'create', 'update', 'delete']
+    }
+  }
+
+The above role dictates that a user has *read* and *create* permissions for
+features related to pool management, and has full permissions for
+features related to RBD image management.
+
+The Dashboard already provides a set of predefined roles that we call
+*system roles*, and can be used right away in a fresh Ceph Dashboard
+installation.
+
+The list of system roles are:
+
+- **administrator**: provides full permissions for all security scopes.
+- **read-only**: provides *read* permission for all security scopes except
+  the dashboard settings.
+- **block-manager**: provides full permissions for *rbd-image*,
+  *rbd-mirroring*, and *iscsi* scopes.
+- **rgw-manager**: provides full permissions for the *rgw* scope
+- **cluster-manager**: provides full permissions for the *hosts*, *osd*,
+  *monitor*, *manager*, and *config-opt* scopes.
+- **pool-manager**: provides full permissions for the *pool* scope.
+- **cephfs-manager**: provides full permissions for the *cephfs* scope.
+
+The list of currently available roles can be retrieved by the following
+command::
+
+  $ ceph dashboard ac-role-show [<rolename>]
+
+It is also possible to create new roles using CLI commands. The available
+commands to manage roles are the following:
+
+- *Create Role*::
+
+  $ ceph dashboard ac-role-create <rolename> [<description>]
+
+- *Delete Role*::
+
+  $ ceph dashboard ac-role-delete <rolename>
+
+- *Add Scope Permissions to Role*::
+
+  $ ceph dashboard ac-role-add-scope-perms <rolename> <scopename> <permission> [<permission>...]
+
+- *Delete Scope Permission from Role*::
+
+  $ ceph dashboard ac-role-del-perms <rolename> <scopename>
+
+To associate roles to users, the following CLI commands are available:
+
+- *Set User Roles*::
+
+  $ ceph dashboard ac-user-set-roles <username> <rolename> [<rolename>...]
+
+- *Add Roles To User*::
+
+  $ ceph dashboard ac-user-add-roles <username> <rolename> [<rolename>...]
+
+- *Delete Roles from User*::
+
+  $ ceph dashboard ac-user-del-roles <username> <rolename> [<rolename>...]
+
+
+Example of user and custom role creation
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+In this section we show a full example of the commands that need to be used
+in order to create a user account, that should be able to manage RBD images,
+view and create Ceph pools, and have read-only access to any other scopes.
+
+1. *Create the user*::
+
+   $ ceph dashboard ac-user-create bob mypassword
+
+2. *Create role and specify scope permissions*::
+
+   $ ceph dashboard ac-role-create rbd/pool-manager
+   $ ceph dashboard ac-role-add-scope-perms rbd/pool-manager rbd-image read create update delete
+   $ ceph dashboard ac-role-add-scope-perms rbd/pool-manager pool read create
+
+3. *Associate roles to user*::
+
+   $ ceph dashboard ac-user-set-roles bob rbd/pool-manager read-only
+
 
 Reverse proxies
 ---------------
@@ -311,3 +561,29 @@ to use hyperlinks that include your prefix, you can set the
   ceph config set mgr mgr/dashboard/url_prefix $PREFIX
 
 so you can access the dashboard at ``http://$IP:$PORT/$PREFIX/``.
+
+
+Auditing
+--------
+
+The REST API is capable of logging PUT, POST and DELETE requests to the Ceph
+audit log. This feature is disabled by default, but can be enabled with the
+following command::
+
+  $ ceph dashboard set-audit-api-enabled <true|false>
+
+If enabled, the following parameters are logged per each request:
+
+* from - The origin of the request, e.g. https://[::1]:44410
+* path - The REST API path, e.g. /api/auth
+* method - e.g. PUT, POST or DELETE
+* user - The name of the user, otherwise 'None'
+
+The logging of the request payload (the arguments and their values) is enabled
+by default. Execute the following command to disable this behaviour::
+
+  $ ceph dashboard set-audit-api-log-payload <true|false>
+
+A log entry may look like this::
+
+  2018-10-22 15:27:01.302514 mgr.x [INF] [DASHBOARD] from='https://[::ffff:127.0.0.1]:37022' path='/api/rgw/user/klaus' method='PUT' user='admin' params='{"max_buckets": "1000", "display_name": "Klaus Mustermann", "uid": "klaus", "suspended": "0", "email": "klaus.mustermann@ceph.com"}'

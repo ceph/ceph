@@ -24,4 +24,4 @@ import { RgwModule } from './rgw/rgw.module';
   ],
   declarations: []
 })
-export class CephModule { }
+export class CephModule {}

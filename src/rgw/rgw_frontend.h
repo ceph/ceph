@@ -163,7 +163,7 @@ public:
   }
 
   int run() override {
-    assert(pprocess); /* should have initialized by init() */
+    ceph_assert(pprocess); /* should have initialized by init() */
     thread = new RGWProcessControlThread(pprocess);
     thread->create("rgw_frontend");
     return 0;
@@ -194,7 +194,7 @@ public:
 
   int init() override {
     pprocess = new RGWFCGXProcess(g_ceph_context, &env,
-				  g_conf->rgw_thread_pool_size, conf);
+				  g_conf()->rgw_thread_pool_size, conf);
     return 0;
   }
 }; /* RGWFCGXFrontend */
@@ -206,7 +206,7 @@ public:
 
   int init() override {
     int num_threads;
-    conf->get_val("num_threads", g_conf->rgw_thread_pool_size, &num_threads);
+    conf->get_val("num_threads", g_conf()->rgw_thread_pool_size, &num_threads);
     RGWLoadGenProcess *pp = new RGWLoadGenProcess(g_ceph_context, &env,
 						  num_threads, conf);
 

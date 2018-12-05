@@ -53,7 +53,7 @@ int RadosDump::get_header(header *h)
 
 int RadosDump::get_footer(footer *f)
 {
-  assert(f != NULL);
+  ceph_assert(f != NULL);
 
   bufferlist ebl;
   auto ebliter = ebl.cbegin();
@@ -161,6 +161,6 @@ void RadosDump::write_super()
   superbl.clear();
 
   sh.encode(superbl);
-  assert(super_header::FIXED_LENGTH == superbl.length());
+  ceph_assert(super_header::FIXED_LENGTH == superbl.length());
   superbl.write_fd(file_fd);
 }

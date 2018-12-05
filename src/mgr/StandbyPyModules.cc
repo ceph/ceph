@@ -14,13 +14,14 @@
 #include "StandbyPyModules.h"
 
 #include "common/debug.h"
+#include "common/errno.h"
 
 #include "mgr/MgrContext.h"
 #include "mgr/Gil.h"
 
 
 #include <boost/python.hpp>
-#include "include/assert.h"  // boost clobbers this
+#include "include/ceph_assert.h"  // boost clobbers this
 
 // For ::config_prefix
 #include "PyModuleRegistry.h"
@@ -45,7 +46,7 @@ StandbyPyModules::StandbyPyModules(
 // FIXME: completely identical to ActivePyModules
 void StandbyPyModules::shutdown()
 {
-  Mutex::Locker locker(lock);
+  std::lock_guard locker(lock);
 
   // Signal modules to drop out of serve() and/or tear down resources
   for (auto &i : modules) {
@@ -73,10 +74,10 @@ void StandbyPyModules::shutdown()
 
 int StandbyPyModules::start_one(PyModuleRef py_module)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   const std::string &module_name = py_module->get_name();
 
-  assert(modules.count(module_name) == 0);
+  ceph_assert(modules.count(module_name) == 0);
 
   modules[module_name].reset(new StandbyPyModule(
       state,
@@ -103,9 +104,9 @@ int StandbyPyModule::load()
   // We tell the module how we name it, so that it can be consistent
   // with us in logging etc.
   auto pThisPtr = PyCapsule_New(this, nullptr, nullptr);
-  assert(pThisPtr != nullptr);
+  ceph_assert(pThisPtr != nullptr);
   auto pModuleName = PyString_FromString(get_name().c_str());
-  assert(pModuleName != nullptr);
+  ceph_assert(pModuleName != nullptr);
   auto pArgs = PyTuple_Pack(2, pModuleName, pThisPtr);
   Py_DECREF(pThisPtr);
   Py_DECREF(pModuleName);

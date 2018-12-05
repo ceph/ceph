@@ -157,7 +157,7 @@ Sections may also specify an individual daemon or client name.  For example,
 ``mon.foo``, ``osd.123``, and ``client.smith`` are all valid section names.
 
 
-Any given daemon will draw it's settings from the global section, the
+Any given daemon will draw its settings from the global section, the
 daemon or client type section, and the section sharing its name.
 Settings in the most-specific section take precedence, so for example
 if the same option is specified in both ``global``, ``mon``, and
@@ -343,7 +343,7 @@ The following CLI commands are used to configure the cluster:
   of the output.
 
 * ``ceph config assimilate-conf -i <input file> -o <output file>``
-  will injest a configuration file from *input file* and move any
+  will ingest a configuration file from *input file* and move any
   valid options into the monitors' configuration database.  Any
   settings that are unrecognized, invalid, or cannot be controlled by
   the monitor will be returned in an abbreviated config file stored in

@@ -37,7 +37,10 @@ void OptionPrinter::print_short(std::ostream &os, size_t initial_offset) {
     }
     indent_stream << " ";
   }
-  indent_stream << std::endl;
+
+  if (m_optional.options().size() > 0 || m_positional.options().size() == 0) {
+    indent_stream << std::endl;
+  }
 
   if (m_positional.options().size() > 0) {
     indent_stream.set_delimiter(" ");

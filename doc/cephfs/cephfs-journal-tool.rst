@@ -24,7 +24,7 @@ Syntax
 
     cephfs-journal-tool journal <inspect|import|export|reset>
     cephfs-journal-tool header <get|set>
-    cephfs-journal-tool event <get|splice|apply> [filter] <list|json|summary>
+    cephfs-journal-tool event <get|splice|apply> [filter] <list|json|summary|binary>
 
 
 The tool operates in three modes: ``journal``, ``header`` and ``event``,
@@ -139,7 +139,7 @@ Filtering:
 
 * ``--range <int begin>..[int end]`` only include events within the range begin (inclusive) to end (exclusive)
 * ``--path <path substring>`` only include events referring to metadata containing the specified string
-* ``--inode <int>`` only include events referring to metadata containing the specified string
+* ``--inode <int>`` only include events referring to metadata containing the specified inode
 * ``--type <type string>`` only include events of this type
 * ``--frag <ino>[.frag id]`` only include events referring to this directory fragment
 * ``--dname <string>`` only include events referring to this named dentry within a directory
@@ -197,7 +197,7 @@ Example: event mode
     0x404032 UPDATE:  (openc)
       dirbravo/.filebravo1.swpx
 
-    # cephfs-journal-tool event get --path /filebravo1 list
+    # cephfs-journal-tool event get --path filebravo1 list
     0x40785a UPDATE:  (openc)
       dirbravo/filebravo1
     0x4103ee UPDATE:  (cap update)

@@ -65,7 +65,7 @@ ceph_os_fsetxattr(int fd, const char *name, const void *value,
 #elif defined(__linux__)
 	error = fsetxattr(fd, name, value, size, 0);
 #elif defined(__APPLE__)
-	error = fsetxattr(fd, name, value, size, 0, 0 /* no options should be indentical to Linux */ );
+	error = fsetxattr(fd, name, value, size, 0, 0 /* no options should be identical to Linux */ );
 #endif
 
 	return (error);

@@ -5,6 +5,7 @@
 #include "test/librbd/test_support.h"
 #include "include/rbd_types.h"
 #include "librbd/MirroringWatcher.h"
+#include "common/Cond.h"
 #include "gtest/gtest.h"
 #include "gmock/gmock.h"
 #include <list>

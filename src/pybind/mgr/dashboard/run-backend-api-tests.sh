@@ -1,18 +1,21 @@
 #!/usr/bin/env bash
 
+if [[ "$1" = "-h" || "$1" = "--help" ]]; then
+	echo "Usage (run from ./):"
+	echo -e "\t./run-backend-api-tests.sh"
+	echo -e "\t./run-backend-api-tests.sh [tests]..."
+	echo
+	echo "Example:"
+	echo -e "\t./run-backend-api-tests.sh tasks.mgr.dashboard.test_pool.DashboardTest"
+	echo
+	echo "Or source this script. This allows to re-run tests faster:"
+	echo -e "\tsource run-backend-api-tests.sh"
+	echo -e "\trun_teuthology_tests [tests]..."
+	echo -e "\tcleanup_teuthology"
+	echo
 
-
-# Usage (run from ./):
-# ./run-backend-api-tests.sh
-# ./run-backend-api-tests.sh [tests]...
-#
-# Example:
-# ./run-backend-api-tests.sh tasks.mgr.dashboard.test_pool.DashboardTest
-#
-# Or source this script. Allows to re-run tests faster:
-# $ source run-backend-api-tests.sh
-# $ run_teuthology_tests [tests]...
-# $ cleanup_teuthology
+	exit 0
+fi
 
 # creating temp directory to store virtualenv and teuthology
 
@@ -71,7 +74,7 @@ EOF
     pip install -r $CURR_DIR/requirements.txt
     deactivate
 
-    git clone https://github.com/ceph/teuthology.git
+    git clone --depth 1 https://github.com/ceph/teuthology.git
 
     cd $BUILD_DIR
 
@@ -86,8 +89,8 @@ EOF
         fi
     fi
 
-    export COVERAGE_ENABLED=true
-    export COVERAGE_FILE=.coverage.mgr.dashboard
+#    export COVERAGE_ENABLED=true
+#    export COVERAGE_FILE=.coverage.mgr.dashboard
 
     MGR=2 RGW=1 ../src/vstart.sh -n -d
     sleep 10
@@ -96,6 +99,7 @@ EOF
 
 run_teuthology_tests() {
     cd "$BUILD_DIR"
+    find ../src/pybind/mgr/dashboard/ -name '*.pyc' -exec rm -f {} \;
     source $TEMP_DIR/venv/bin/activate
 
 
@@ -111,7 +115,7 @@ run_teuthology_tests() {
 
     export PATH=$BUILD_DIR/bin:$PATH
     export LD_LIBRARY_PATH=$BUILD_DIR/lib/cython_modules/lib.${CEPH_PY_VERSION_MAJOR}/:$BUILD_DIR/lib
-    export PYTHONPATH=$TEMP_DIR/teuthology:$BUILD_DIR/../qa:$BUILD_DIR/lib/cython_modules/lib.${CEPH_PY_VERSION_MAJOR}/
+    export PYTHONPATH=$TEMP_DIR/teuthology:$BUILD_DIR/../qa:$BUILD_DIR/lib/cython_modules/lib.${CEPH_PY_VERSION_MAJOR}/:$BUILD_DIR/../src/pybind
     eval python ../qa/tasks/vstart_runner.py $TEST_CASES
 
     deactivate

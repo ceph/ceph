@@ -18,10 +18,11 @@
 #include "mdstypes.h"
 #include "Anchor.h"
 
+#include "MDSContext.h"
+
 class CDir;
 class CInode;
 class MDSRank;
-class MDSInternalContextBase;
 
 class OpenFileTable
 {
@@ -44,7 +45,7 @@ public:
   void load(MDSInternalContextBase *c);
   bool is_loaded() const { return load_done; }
   void wait_for_load(MDSInternalContextBase *c) {
-    assert(!load_done);
+    ceph_assert(!load_done);
     waiting_for_load.push_back(c);
   }
 
@@ -54,7 +55,7 @@ public:
   bool prefetch_inodes();
   bool is_prefetched() const { return prefetch_state == DONE; }
   void wait_for_prefetch(MDSInternalContextBase *c) {
-    assert(!is_prefetched());
+    ceph_assert(!is_prefetched());
     waiting_for_prefetch.push_back(c);
   }
 
@@ -67,6 +68,9 @@ protected:
   MDSRank *mds;
 
   version_t omap_version = 0;
+
+  static const unsigned MAX_ITEMS_PER_OBJ = 1024 * 1024;
+  static const unsigned MAX_OBJECTS = 1024; // billion items at most
   unsigned omap_num_objs = 0;
   std::vector<unsigned> omap_num_items;
 
@@ -101,7 +105,7 @@ protected:
   std::vector<std::map<std::string, bufferlist> > loaded_journals;
   map<inodeno_t, RecoveredAnchor> loaded_anchor_map;
   set<dirfrag_t> loaded_dirfrags;
-  list<MDSInternalContextBase*> waiting_for_load;
+  MDSInternalContextBase::vec waiting_for_load;
   bool load_done = false;
 
   void _reset_states() {
@@ -126,7 +130,7 @@ protected:
   };
   unsigned prefetch_state = 0;
   unsigned num_opening_inodes = 0;
-  list<MDSInternalContextBase*> waiting_for_prefetch;
+  MDSInternalContextBase::vec waiting_for_prefetch;
   void _open_ino_finish(inodeno_t ino, int r);
   void _prefetch_inodes();
   void _prefetch_dirfrags();

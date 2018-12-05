@@ -20,14 +20,12 @@ extern "C" {
 #include "builder.h"
 }
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/err.h"
 #include "include/encoding.h"
 #include "include/mempool.h"
 
 #include "common/Mutex.h"
-
-#define BUG_ON(x) assert(!(x))
 
 namespace ceph {
   class Formatter;
@@ -115,7 +113,7 @@ public:
       crush_destroy(crush);
     crush = crush_create();
     choose_args_clear();
-    assert(crush);
+    ceph_assert(crush);
     have_rmaps = false;
 
     set_tunables_default();
@@ -518,7 +516,7 @@ public:
     return c;
   }
   void get_devices_by_class(const string &name, set<int> *devices) const {
-    assert(devices);
+    ceph_assert(devices);
     devices->clear();
     if (!class_exists(name)) {
       return;
@@ -726,7 +724,7 @@ public:
 
   /**
    * returns (type_id, type) of all parent buckets between id and
-   * default, can be used to check for anomolous CRUSH maps
+   * default, can be used to check for anomalous CRUSH maps
    */
   map<int, string> get_parent_hierarchy(int id) const;
 
@@ -739,8 +737,12 @@ public:
   int get_children(int id, list<int> *children) const;
   void get_children_of_type(int id,
                             int type,
-			    set<int> *children,
+			    vector<int> *children,
 			    bool exclude_shadow = true) const;
+  /**
+   * enumerate all subtrees by type
+   */
+  void get_subtree_of_type(int type, vector<int> *subtrees);
 
   /**
     * get failure-domain type of a specific crush rule
@@ -961,6 +963,9 @@ public:
     return adjust_item_weight_in_loc(cct, id, (int)(weight * (float)0x10000), loc);
   }
   void reweight(CephContext *cct);
+  void reweight_bucket(crush_bucket *b,
+		       crush_choose_arg_map& arg_map,
+		       vector<uint32_t> *weightv);
 
   int adjust_subtree_weight(CephContext *cct, int id, int weight);
   int adjust_subtree_weightf(CephContext *cct, int id, float weight) {
@@ -1097,7 +1102,7 @@ public:
   int add_rule(int ruleno, int len, int type, int minsize, int maxsize) {
     if (!crush) return -ENOENT;
     crush_rule *n = crush_make_rule(len, ruleno, type, minsize, maxsize);
-    assert(n);
+    ceph_assert(n);
     ruleno = crush_add_rule(crush, n, ruleno);
     return ruleno;
   }
@@ -1199,6 +1204,8 @@ private:
    **/
   int detach_bucket(CephContext *cct, int item);
 
+  int get_new_bucket_id();
+
 public:
   int get_max_buckets() const {
     if (!crush) return -EINVAL;
@@ -1270,7 +1277,7 @@ public:
   int bucket_adjust_item_weight(CephContext *cct, struct crush_bucket *bucket, int item, int weight);
 
   void finalize() {
-    assert(crush);
+    ceph_assert(crush);
     crush_finalize(crush);
     if (!name_map.empty() &&
 	name_map.rbegin()->first >= crush->max_devices) {
@@ -1288,6 +1295,7 @@ public:
     const std::set<int32_t>& used_ids,
     int *clone,
     map<int,map<int,vector<int>>> *cmap_item_weight);
+  bool class_is_in_use(int class_id, ostream *ss = nullptr);
   int rename_class(const string& srcname, const string& dstname);
   int populate_classes(
     const std::map<int32_t, map<int32_t, int32_t>>& old_class_bucket);
@@ -1298,6 +1306,15 @@ public:
   int rebuild_roots_with_classes();
   /* remove unused roots generated for class devices */
   int trim_roots_with_class();
+
+  int reclassify(
+    CephContext *cct,
+    ostream& out,
+    const map<string,string>& classify_root,
+    const map<string,pair<string,string>>& classify_bucket
+    );
+
+  int set_subtree_class(const string& name, const string& class_name);
 
   void start_choose_profile() {
     free(crush->choose_tries);
@@ -1419,7 +1436,7 @@ public:
   bool create_choose_args(int64_t id, int positions) {
     if (choose_args.count(id))
       return false;
-    assert(positions);
+    ceph_assert(positions);
     auto &cmap = choose_args[id];
     cmap.args = static_cast<crush_choose_arg*>(calloc(sizeof(crush_choose_arg),
 					  crush->max_buckets));
@@ -1541,7 +1558,7 @@ public:
     vector<int> *out) const;
 
   bool check_crush_rule(int ruleset, int type, int size,  ostream& ss) {
-    assert(crush);
+    ceph_assert(crush);
 
     __u32 i;
     for (i = 0; i < crush->max_rules; i++) {

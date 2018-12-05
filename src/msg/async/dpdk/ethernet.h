@@ -26,18 +26,18 @@
 #include <array>
 #include <sstream>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "byteorder.h"
 
 struct ethernet_address {
   ethernet_address() {}
 
-  explicit ethernet_address(const uint8_t *eaddr) {
+  ethernet_address(const uint8_t *eaddr) {
     std::copy(eaddr, eaddr + 6, mac.begin());
   }
 
-  explicit ethernet_address(std::initializer_list<uint8_t> eaddr) {
-    assert(eaddr.size() == mac.size());
+  ethernet_address(std::initializer_list<uint8_t> eaddr) {
+    ceph_assert(eaddr.size() == mac.size());
     std::copy(eaddr.begin(), eaddr.end(), mac.begin());
   }
 
@@ -58,7 +58,7 @@ std::ostream& operator<<(std::ostream& os, const ethernet_address& ea);
 struct ethernet {
   using address = ethernet_address;
   static address broadcast_address() {
-      return  {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+      return {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
   }
   static constexpr uint16_t arp_hardware_type() { return 1; }
 };

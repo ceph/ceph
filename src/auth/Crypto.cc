@@ -15,14 +15,17 @@
 #include <sstream>
 #include <limits>
 
+#include <fcntl.h>
+
 #include "Crypto.h"
 #ifdef USE_OPENSSL
 # include <openssl/aes.h>
 #endif
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "common/Clock.h"
 #include "common/armor.h"
+#include "common/ceph_context.h"
 #include "common/ceph_crypto.h"
 #include "common/hex.h"
 #include "common/safe_io.h"
@@ -53,7 +56,7 @@ void CryptoRandom::get_bytes(char *buf, int len)
 
 // open /dev/urandom once on construction and reuse the fd for all reads
 CryptoRandom::CryptoRandom()
-  : fd(TEMP_FAILURE_RETRY(::open("/dev/urandom", O_RDONLY)))
+  : fd(TEMP_FAILURE_RETRY(::open("/dev/urandom", O_CLOEXEC|O_RDONLY)))
 {
   if (fd < 0) {
     throw std::system_error(errno, std::system_category());

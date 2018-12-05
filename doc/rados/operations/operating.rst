@@ -97,21 +97,6 @@ For example::
 
 
 
-Running Ceph with Upstart
-=========================
-
-When deploying Ceph with ``ceph-deploy`` on Ubuntu Trusty, you may start and
-stop Ceph daemons on a :term:`Ceph Node` using the event-based `Upstart`_.
-Upstart does not require you to define daemon instances in the Ceph
-configuration file.
-
-To list the Ceph Upstart jobs and instances on a node, execute:: 
-
-	sudo initctl list | grep ceph
-
-See `initctl`_ for additional details.
-
-
 Starting all Daemons
 --------------------
 
@@ -247,5 +232,4 @@ include:
 
 
 .. _Valgrind: http://www.valgrind.org/
-.. _Upstart: http://upstart.ubuntu.com/index.html
 .. _initctl: http://manpages.ubuntu.com/manpages/raring/en/man8/initctl.8.html

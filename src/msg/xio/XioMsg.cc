@@ -32,7 +32,7 @@ int XioDispatchHook::release_msgs()
   /* merge with portal traffic */
   xcon->portal->enqueue(xcon, xcmp);
 
-  assert(r);
+  ceph_assert(r);
   return r;
 }
 
@@ -41,7 +41,7 @@ int XioDispatchHook::release_msgs()
   ceph_msg_footer _ceph_msg_footer;
   XioMsgHdr hdr (_ceph_msg_header, _ceph_msg_footer, 0 /* features */);
   const std::list<buffer::ptr>& hdr_buffers = hdr.get_bl().buffers();
-  assert(hdr_buffers.size() == 1); /* accelio header is small without scatter gather */
+  ceph_assert(hdr_buffers.size() == 1); /* accelio header is small without scatter gather */
   return hdr_buffers.begin()->length();
 }
 

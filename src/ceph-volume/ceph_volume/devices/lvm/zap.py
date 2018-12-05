@@ -1,11 +1,13 @@
 import argparse
+import os
 import logging
 
 from textwrap import dedent
 
 from ceph_volume import decorators, terminal, process
 from ceph_volume.api import lvm as api
-from ceph_volume.util import system, encryption, disk
+from ceph_volume.util import system, encryption, disk, arg_validators
+from ceph_volume.util.device import Device
 
 logger = logging.getLogger(__name__)
 mlogger = terminal.MultiLogger(__name__)
@@ -46,71 +48,130 @@ class Zap(object):
     def __init__(self, argv):
         self.argv = argv
 
-    @decorators.needs_root
-    def zap(self, args):
-        device = args.device
-        lv = api.get_lv_from_argument(device)
-        if lv:
-            # we are zapping a logical volume
-            path = lv.lv_path
+    def unmount_lv(self, lv):
+        if lv.tags.get('ceph.cluster_name') and lv.tags.get('ceph.osd_id'):
+            lv_path = "/var/lib/ceph/osd/{}-{}".format(lv.tags['ceph.cluster_name'], lv.tags['ceph.osd_id'])
         else:
-            # we are zapping a partition
-            #TODO: ensure device is a partition
-            path = device
-
-        mlogger.info("Zapping: %s", path)
-
-        # check if there was a pv created with the
-        # name of device
-        pv = api.get_pv(pv_name=device)
-        if pv:
-            vg_name = pv.vg_name
-            lv = api.get_lv(vg_name=vg_name)
-
-        dmcrypt = False
-        dmcrypt_uuid = None
-        if lv:
-            osd_path = "/var/lib/ceph/osd/{}-{}".format(lv.tags['ceph.cluster_name'], lv.tags['ceph.osd_id'])
-            dmcrypt_uuid = lv.lv_uuid
-            dmcrypt = lv.encrypted
-            if system.path_is_mounted(osd_path):
-                mlogger.info("Unmounting %s", osd_path)
-                system.unmount(osd_path)
-        else:
-            # we're most likely dealing with a partition here, check to
-            # see if it was encrypted
-            partuuid = disk.get_partuuid(device)
-            if encryption.status("/dev/mapper/{}".format(partuuid)):
-                dmcrypt_uuid = partuuid
-                dmcrypt = True
-
+            lv_path = lv.lv_path
+        dmcrypt_uuid = lv.lv_uuid
+        dmcrypt = lv.encrypted
+        if system.path_is_mounted(lv_path):
+            mlogger.info("Unmounting %s", lv_path)
+            system.unmount(lv_path)
         if dmcrypt and dmcrypt_uuid:
-            dmcrypt_path = "/dev/mapper/{}".format(dmcrypt_uuid)
-            mlogger.info("Closing encrypted path %s", dmcrypt_path)
-            encryption.dmcrypt_close(dmcrypt_path)
+            self.dmcrypt_close(dmcrypt_uuid)
 
-        if args.destroy and pv:
-            logger.info("Found a physical volume created from %s, will destroy all it's vgs and lvs", device)
-            vg_name = pv.vg_name
-            mlogger.info("Destroying volume group %s because --destroy was given", vg_name)
-            api.remove_vg(vg_name)
-            mlogger.info("Destroying physical volume %s because --destroy was given", device)
-            api.remove_pv(device)
-        elif args.destroy and not pv:
-            mlogger.info("Skipping --destroy because no associated physical volumes are found for %s", device)
+    def zap_lv(self, device):
+        """
+        Device examples: vg-name/lv-name, /dev/vg-name/lv-name
+        Requirements: Must be a logical volume (LV)
+        """
+        lv = api.get_lv(lv_name=device.lv_name, vg_name=device.vg_name)
+        self.unmount_lv(lv)
 
-        wipefs(path)
-        zap_data(path)
+        wipefs(device.abspath)
+        zap_data(device.abspath)
 
-        if lv and not pv:
-            # remove all lvm metadata
+        if self.args.destroy:
+            lvs = api.Volumes()
+            lvs.filter(vg_name=device.vg_name)
+            if len(lvs) <= 1:
+                mlogger.info('Only 1 LV left in VG, will proceed to destroy volume group %s', device.vg_name)
+                api.remove_vg(device.vg_name)
+            else:
+                mlogger.info('More than 1 LV left in VG, will proceed to destroy LV only')
+                mlogger.info('Removing LV because --destroy was given: %s', device.abspath)
+                api.remove_lv(device.abspath)
+        elif lv:
+            # just remove all lvm metadata, leaving the LV around
             lv.clear_tags()
 
-        terminal.success("Zapping successful for: %s" % path)
+    def zap_partition(self, device):
+        """
+        Device example: /dev/sda1
+        Requirements: Must be a partition
+        """
+        if device.is_encrypted:
+            # find the holder
+            holders = [
+                '/dev/%s' % holder for holder in device.sys_api.get('holders', [])
+            ]
+            for mapper_uuid in os.listdir('/dev/mapper'):
+                mapper_path = os.path.join('/dev/mapper', mapper_uuid)
+                if os.path.realpath(mapper_path) in holders:
+                    self.dmcrypt_close(mapper_uuid)
+
+        if system.device_is_mounted(device.abspath):
+            mlogger.info("Unmounting %s", device.abspath)
+            system.unmount(device.abspath)
+
+        wipefs(device.abspath)
+        zap_data(device.abspath)
+
+        if self.args.destroy:
+            mlogger.info("Destroying partition since --destroy was used: %s" % device.abspath)
+            disk.remove_partition(device)
+
+    def zap_lvm_member(self, device):
+        """
+        An LVM member may have more than one LV and or VG, for example if it is
+        a raw device with multiple partitions each belonging to a different LV
+
+        Device example: /dev/sda
+        Requirements: An LV or VG present in the device, making it an LVM member
+        """
+        for lv in device.lvs:
+            self.zap_lv(Device(lv.lv_path))
+
+
+    def zap_raw_device(self, device):
+        """
+        Any whole (raw) device passed in as input will be processed here,
+        checking for LVM membership and partitions (if any).
+
+        Device example: /dev/sda
+        Requirements: None
+        """
+        if not self.args.destroy:
+            # the use of dd on a raw device causes the partition table to be
+            # destroyed
+            mlogger.warning(
+                '--destroy was not specified, but zapping a whole device will remove the partition table'
+            )
+
+        # look for partitions and zap those
+        for part_name in device.sys_api.get('partitions', {}).keys():
+            self.zap_partition(Device('/dev/%s' % part_name))
+
+        wipefs(device.abspath)
+        zap_data(device.abspath)
+
+    @decorators.needs_root
+    def zap(self):
+        for device in self.args.devices:
+            mlogger.info("Zapping: %s", device.abspath)
+            if device.is_mapper:
+                terminal.error("Refusing to zap the mapper device: {}".format(device))
+                raise SystemExit(1)
+            if device.is_lvm_member:
+                self.zap_lvm_member(device)
+            if device.is_lv:
+                self.zap_lv(device)
+            if device.is_partition:
+                self.zap_partition(device)
+            if device.is_device:
+                self.zap_raw_device(device)
+
+        terminal.success("Zapping successful for: %s" % ", ".join([str(d) for d in self.args.devices]))
+
+    def dmcrypt_close(self, dmcrypt_uuid):
+        dmcrypt_path = "/dev/mapper/{}".format(dmcrypt_uuid)
+        mlogger.info("Closing encrypted path %s", dmcrypt_path)
+        encryption.dmcrypt_close(dmcrypt_path)
 
     def main(self):
         sub_command_help = dedent("""
-        Zaps the given logical volume, raw device or partition for reuse by ceph-volume.
+        Zaps the given logical volume(s), raw device(s) or partition(s) for reuse by ceph-volume.
         If given a path to a logical volume it must be in the format of vg/lv. Any
         filesystems present on the given device, vg/lv, or partition will be removed and
         all data will be purged.
@@ -129,6 +190,10 @@ class Zap(object):
           Zapping a partition:
 
               ceph-volume lvm zap /dev/sdc1
+
+          Zapping many raw devices:
+
+              ceph-volume lvm zap /dev/sda /dev/sdb /db/sdc
 
         If the --destroy flag is given and you are zapping a raw device or partition
         then all vgs and lvs that exist on that raw device or partition will be destroyed.
@@ -151,10 +216,12 @@ class Zap(object):
         )
 
         parser.add_argument(
-            'device',
-            metavar='DEVICE',
-            nargs='?',
-            help='Path to an lv (as vg/lv), partition (as /dev/sda1) or device (as /dev/sda)'
+            'devices',
+            metavar='DEVICES',
+            nargs='*',
+            type=arg_validators.ValidDevice(gpt_ok=True),
+            default=[],
+            help='Path to one or many lv (as vg/lv), partition (as /dev/sda1) or device (as /dev/sda)'
         )
         parser.add_argument(
             '--destroy',
@@ -165,5 +232,5 @@ class Zap(object):
         if len(self.argv) == 0:
             print(sub_command_help)
             return
-        args = parser.parse_args(self.argv)
-        self.zap(args)
+        self.args = parser.parse_args(self.argv)
+        self.zap()

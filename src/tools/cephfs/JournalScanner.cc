@@ -152,7 +152,7 @@ int JournalScanner::scan_header()
 
 int JournalScanner::scan_events()
 {
-  uint64_t object_size = g_conf->mds_log_segment_size;
+  uint64_t object_size = g_conf()->mds_log_segment_size;
   if (object_size == 0) {
     // Default layout object size
     object_size = file_layout_t::get_default().object_size;
@@ -301,10 +301,15 @@ int JournalScanner::scan_events()
             valid_entry = false;
           }
         } else if (type == "purge_queue"){
-           PurgeItem pi;
+           PurgeItem* pi = new PurgeItem();
            try {
              auto q = le_bl.cbegin();
-             ::decode(pi, q);
+             pi->decode(q);
+	     if (filter.apply(read_offset, *pi)) {
+	       events[read_offset] = EventRecord(pi, consumed);
+	     } else {
+	       delete pi;
+	     }
            } catch (const buffer::error &err) {
              valid_entry = false;
            }
@@ -347,7 +352,10 @@ JournalScanner::~JournalScanner()
   }
   dout(4) << events.size() << " events" << dendl;
   for (EventMap::iterator i = events.begin(); i != events.end(); ++i) {
-    delete i->second.log_event;
+    if (i->second.log_event)
+      delete i->second.log_event;
+    else if (i->second.pi)
+      delete i->second.pi;
   }
   events.clear();
 }

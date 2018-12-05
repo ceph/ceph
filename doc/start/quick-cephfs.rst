@@ -1,8 +1,8 @@
-=====================
- Ceph FS Quick Start
-=====================
+===================
+ CephFS Quick Start
+===================
 
-To use the :term:`Ceph FS` Quick Start guide, you must have executed the
+To use the :term:`CephFS` Quick Start guide, you must have executed the
 procedures in the `Storage Cluster Quick Start`_ guide first. Execute this quick
 start on the Admin Host.
 
@@ -53,7 +53,7 @@ following procedure:
 
 	cat ceph.client.admin.keyring
 
-#. Copy the key of the user who will be using the mounted Ceph FS filesystem.
+#. Copy the key of the user who will be using the mounted CephFS filesystem.
    It should look something like this:: 
 	
 	[client.admin]
@@ -75,7 +75,7 @@ following procedure:
 Kernel Driver
 =============
 
-Mount Ceph FS as a kernel driver. :: 
+Mount CephFS as a kernel driver. ::
 
 	sudo mkdir /mnt/mycephfs
 	sudo mount -t ceph {ip-address-of-monitor}:6789:/ /mnt/mycephfs
@@ -87,14 +87,14 @@ example::
 	sudo mount -t ceph 192.168.0.1:6789:/ /mnt/mycephfs -o name=admin,secretfile=admin.secret
 
 
-.. note:: Mount the Ceph FS filesystem on the admin node,
+.. note:: Mount the CephFS filesystem on the admin node,
    not the server node. See `FAQ`_ for details.
 
 
 Filesystem in User Space (FUSE)
 ===============================
 
-Mount Ceph FS as a Filesystem in User Space (FUSE). ::
+Mount CephFS as a Filesystem in User Space (FUSE). ::
 
 	sudo mkdir ~/mycephfs
 	sudo ceph-fuse -m {ip-address-of-monitor}:6789 ~/mycephfs
@@ -108,12 +108,12 @@ is not in the default location (i.e., ``/etc/ceph``)::
 Additional Information
 ======================
 
-See `Ceph FS`_ for additional information. Ceph FS is not quite as stable
+See `CephFS`_ for additional information. CephFS is not quite as stable
 as the Ceph Block Device and Ceph Object Storage. See `Troubleshooting`_
 if you encounter trouble. 
 
 .. _Storage Cluster Quick Start: ../quick-ceph-deploy
-.. _Ceph FS: ../../cephfs/
+.. _CephFS: ../../cephfs/
 .. _FAQ: http://wiki.ceph.com/How_Can_I_Give_Ceph_a_Try
 .. _Troubleshooting: ../../cephfs/troubleshooting
 .. _OS Recommendations: ../os-recommendations

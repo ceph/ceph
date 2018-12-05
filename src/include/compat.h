@@ -51,7 +51,7 @@
 // are included before this file. Redefinition might not help in this
 // case since already parsed code has evaluated to the wrong value.
 // This would warrrant for d definition that would actually be evaluated
-// at the location of usage and report a possible confict.
+// at the location of usage and report a possible conflict.
 // This is left up to a future improvement
 #elif (ENODATA != 87)
 // #warning ENODATA already defined to a value different from 87 (ENOATRR), refining to fix
@@ -79,8 +79,14 @@
 /* get PATH_MAX */
 #include <limits.h>
 
+#ifndef EUCLEAN
+#define EUCLEAN 117
+#endif
 #ifndef EREMOTEIO
 #define EREMOTEIO 121
+#endif
+#ifndef EKEYREJECTED
+#define EKEYREJECTED 129
 #endif
 
 #ifndef HOST_NAME_MAX
@@ -159,6 +165,10 @@
 
 #if defined(HAVE_PTHREAD_GETNAME_NP)
   #define ceph_pthread_getname pthread_getname_np
+#elif defined(HAVE_PTHREAD_GET_NAME_NP)
+  #define ceph_pthread_getname(thread, name, len) ({ \
+    pthread_get_name_np(thread, name, len);          \
+    0; })
 #else
   /* compiler warning free success noop */
   #define ceph_pthread_getname(thread, name, len) ({ \
@@ -168,5 +178,7 @@
 #endif
 
 int ceph_posix_fallocate(int fd, off_t offset, off_t len);
+
+int pipe_cloexec(int pipefd[2]);
 
 #endif /* !CEPH_COMPAT_H */

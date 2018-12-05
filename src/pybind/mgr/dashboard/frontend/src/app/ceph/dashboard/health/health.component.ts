@@ -1,8 +1,11 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 
+import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 
-import { DashboardService } from '../../../shared/api/dashboard.service';
+import { HealthService } from '../../../shared/api/health.service';
+import { Permissions } from '../../../shared/models/permissions';
+import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 
 @Component({
   selector: 'cd-health',
@@ -10,15 +13,22 @@ import { DashboardService } from '../../../shared/api/dashboard.service';
   styleUrls: ['./health.component.scss']
 })
 export class HealthComponent implements OnInit, OnDestroy {
-  contentData: any;
+  healthData: any;
   interval: number;
+  permissions: Permissions;
 
-  constructor(private dashboardService: DashboardService) {}
+  constructor(
+    private healthService: HealthService,
+    private i18n: I18n,
+    private authStorageService: AuthStorageService
+  ) {
+    this.permissions = this.authStorageService.getPermissions();
+  }
 
   ngOnInit() {
-    this.getInfo();
+    this.getHealth();
     this.interval = window.setInterval(() => {
-      this.getInfo();
+      this.getHealth();
     }, 5000);
   }
 
@@ -26,74 +36,105 @@ export class HealthComponent implements OnInit, OnDestroy {
     clearInterval(this.interval);
   }
 
-  getInfo() {
-    this.dashboardService.getHealth().subscribe((data: any) => {
-      this.contentData = data;
+  getHealth() {
+    this.healthService.getMinimalHealth().subscribe((data: any) => {
+      this.healthData = data;
     });
+  }
+
+  prepareReadWriteRatio(chart, data) {
+    const ratioLabels = [];
+    const ratioData = [];
+
+    ratioLabels.push(this.i18n('Writes'));
+    ratioData.push(this.healthData.client_perf.write_op_per_sec);
+    ratioLabels.push(this.i18n('Reads'));
+    ratioData.push(this.healthData.client_perf.read_op_per_sec);
+
+    chart.dataset[0].data = ratioData;
+    chart.labels = ratioLabels;
   }
 
   prepareRawUsage(chart, data) {
-    let rawUsageChartColor;
+    const percentAvailable = Math.round(
+      100 *
+        ((data.df.stats.total_bytes - data.df.stats.total_used_bytes) / data.df.stats.total_bytes)
+    );
 
-    const rawUsageText =
-      Math.round(100 * (data.df.stats.total_used_bytes / data.df.stats.total_bytes)) + '%';
-
-    if (data.df.stats.total_used_bytes / data.df.stats.total_bytes >= data.osd_map.full_ratio) {
-      rawUsageChartColor = '#ff0000';
-    } else if (
-      data.df.stats.total_used_bytes / data.df.stats.total_bytes >=
-      data.osd_map.backfillfull_ratio
-    ) {
-      rawUsageChartColor = '#ff6600';
-    } else if (
-      data.df.stats.total_used_bytes / data.df.stats.total_bytes >=
-      data.osd_map.nearfull_ratio
-    ) {
-      rawUsageChartColor = '#ffc200';
-    } else {
-      rawUsageChartColor = '#00bb00';
-    }
+    const percentUsed = Math.round(
+      100 * (data.df.stats.total_used_bytes / data.df.stats.total_bytes)
+    );
 
     chart.dataset[0].data = [data.df.stats.total_used_bytes, data.df.stats.total_avail_bytes];
-    chart.options.center_text = rawUsageText;
-    chart.colors = [{ backgroundColor: [rawUsageChartColor, '#424d52'] }];
-    chart.labels = ['Raw Used', 'Raw Available'];
+    if (chart === 'doughnut') {
+      chart.options.cutoutPercentage = 65;
+    }
+    chart.labels = [
+      `${this.i18n('Used')} (${percentUsed}%)`,
+      `${this.i18n('Avail.')} (${percentAvailable}%)`
+    ];
   }
 
-  preparePoolUsage(chart, data) {
-    const colors = [
-      '#3366CC',
-      '#109618',
-      '#990099',
-      '#3B3EAC',
-      '#0099C6',
-      '#DD4477',
-      '#66AA00',
-      '#B82E2E',
-      '#316395',
-      '#994499',
-      '#22AA99',
-      '#AAAA11',
-      '#6633CC',
-      '#E67300',
-      '#8B0707',
-      '#329262',
-      '#5574A6',
-      '#FF9900',
-      '#DC3912',
-      '#3B3EAC'
+  preparePgStatus(chart, data) {
+    const pgCategoryClean = this.i18n('Clean');
+    const pgCategoryCleanStates = ['active', 'clean'];
+    const pgCategoryWarning = this.i18n('Warning');
+    const pgCategoryWarningStates = [
+      'backfill_toofull',
+      'backfill_unfound',
+      'down',
+      'incomplete',
+      'inconsistent',
+      'recovery_toofull',
+      'recovery_unfound',
+      'remapped',
+      'snaptrim_error',
+      'stale',
+      'undersized'
     ];
+    const pgCategoryUnknown = this.i18n('Unknown');
+    const pgCategoryWorking = this.i18n('Working');
+    const pgCategoryWorkingStates = [
+      'activating',
+      'backfill_wait',
+      'backfilling',
+      'creating',
+      'deep',
+      'degraded',
+      'forced_backfill',
+      'forced_recovery',
+      'peering',
+      'peered',
+      'recovering',
+      'recovery_wait',
+      'repair',
+      'scrubbing',
+      'snaptrim',
+      'snaptrim_wait'
+    ];
+    let totalPgClean = 0;
+    let totalPgWarning = 0;
+    let totalPgUnknown = 0;
+    let totalPgWorking = 0;
 
-    const poolLabels = [];
-    const poolData = [];
+    _.forEach(data.pg_info.statuses, (pgAmount, pgStatesText) => {
+      const pgStates = pgStatesText.split('+');
+      const isWarning = _.intersection(pgCategoryWarningStates, pgStates).length > 0;
+      const pgWorkingStates = _.intersection(pgCategoryWorkingStates, pgStates);
+      const pgCleanStates = _.intersection(pgCategoryCleanStates, pgStates);
 
-    _.each(data.df.pools, (pool, i) => {
-      poolLabels.push(pool['name']);
-      poolData.push(pool['stats']['bytes_used']);
+      if (isWarning) {
+        totalPgWarning += pgAmount;
+      } else if (pgStates.length > pgCleanStates.length + pgWorkingStates.length) {
+        totalPgUnknown += pgAmount;
+      } else if (pgWorkingStates.length > 0) {
+        totalPgWorking = pgAmount;
+      } else {
+        totalPgClean += pgAmount;
+      }
     });
 
-    chart.dataset[0].data = poolData;
-    chart.colors = [{ backgroundColor: colors }];
-    chart.labels = poolLabels;
+    chart.labels = [pgCategoryWarning, pgCategoryClean, pgCategoryUnknown, pgCategoryWorking];
+    chart.dataset[0].data = [totalPgWarning, totalPgClean, totalPgUnknown, totalPgWorking];
   }
 }

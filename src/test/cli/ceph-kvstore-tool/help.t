@@ -4,6 +4,7 @@
   Commands:
     list [prefix]
     list-crc [prefix]
+    dump [prefix]
     exists <prefix> [key]
     get <prefix> <key> [out <file>]
     crc <prefix> <key>
@@ -16,5 +17,5 @@
     compact
     compact-prefix <prefix>
     compact-range <prefix> <start> <end>
-    repair
+    destructive-repair  (use only as last resort! may corrupt healthy data)
   

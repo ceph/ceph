@@ -8,6 +8,7 @@ import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 
 import { ComponentsModule } from '../components/components.module';
 import { PipesModule } from '../pipes/pipes.module';
+import { TableActionsComponent } from './table-actions/table-actions.component';
 import { TableKeyValueComponent } from './table-key-value/table-key-value.component';
 import { TableComponent } from './table/table.component';
 
@@ -21,14 +22,7 @@ import { TableComponent } from './table/table.component';
     ComponentsModule,
     RouterModule
   ],
-  declarations: [
-    TableComponent,
-    TableKeyValueComponent
-  ],
-  exports: [
-    TableComponent,
-    NgxDatatableModule,
-    TableKeyValueComponent
-  ]
+  declarations: [TableComponent, TableKeyValueComponent, TableActionsComponent],
+  exports: [TableComponent, NgxDatatableModule, TableKeyValueComponent, TableActionsComponent]
 })
-export class DataTableModule { }
+export class DataTableModule {}

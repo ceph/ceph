@@ -336,7 +336,7 @@ public:
 };
 WRITE_CLASS_ENCODER(RGWLifecycleConfiguration)
 
-class RGWLC {
+class RGWLC : public DoutPrefixProvider {
   CephContext *cct;
   RGWRados *store;
   int max_objs{0};
@@ -345,13 +345,14 @@ class RGWLC {
   string cookie;
 
   class LCWorker : public Thread {
+    const DoutPrefixProvider *dpp;
     CephContext *cct;
     RGWLC *lc;
     Mutex lock;
     Cond cond;
 
   public:
-    LCWorker(CephContext *_cct, RGWLC *_lc) : cct(_cct), lc(_lc), lock("LCWorker") {}
+    LCWorker(const DoutPrefixProvider* _dpp, CephContext *_cct, RGWLC *_lc) : dpp(_dpp), cct(_cct), lc(_lc), lock("LCWorker") {}
     void *entry() override;
     void stop();
     bool should_work(utime_t& now);
@@ -380,8 +381,12 @@ class RGWLC {
   void start_processor();
   void stop_processor();
 
+  CephContext *get_cct() const override { return store->ctx(); }
+  unsigned get_subsys() const;
+  std::ostream& gen_prefix(std::ostream& out) const;
+
   private:
-  int remove_expired_obj(RGWBucketInfo& bucket_info, rgw_obj_key obj_key, bool remove_indeed = true);
+  int remove_expired_obj(RGWBucketInfo& bucket_info, rgw_obj_key obj_key, const string& owner, const string& owner_display_name, bool remove_indeed = true);
   bool obj_has_expired(ceph::real_time mtime, int days);
   int handle_multipart_expiration(RGWRados::Bucket *target, const map<string, lc_op>& prefix_map);
 };

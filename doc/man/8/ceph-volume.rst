@@ -1,8 +1,8 @@
 :orphan:
 
-========================================
- ceph-volume -- Ceph OSD deployment tool
-========================================
+=======================================================
+ ceph-volume -- Ceph OSD deployment and inspection tool
+=======================================================
 
 .. program:: ceph-volume
 
@@ -12,8 +12,10 @@ Synopsis
 | **ceph-volume** [-h] [--cluster CLUSTER] [--log-level LOG_LEVEL]
 |                 [--log-path LOG_PATH]
 
+| **ceph-volume** **inventory**
+
 | **ceph-volume** **lvm** [ *trigger* | *create* | *activate* | *prepare*
-| *zap* | *list*]
+| *zap* | *list* | *batch*]
 
 | **ceph-volume** **simple** [ *trigger* | *scan* | *activate* ]
 
@@ -34,6 +36,27 @@ them.
 Commands
 ========
 
+inventory
+---------
+
+This subcommand provides information about a host's physical disc inventory and
+reports metadata about these discs. Among this metadata one can find disc
+specific data items (like model, size, rotational or solid state) as well as
+data items specific to ceph using a device, such as if it is available for
+use with ceph or if logical volumes are present.
+
+Examples::
+
+    ceph-volume inventory
+    ceph-volume inventory /dev/sda
+    ceph-volume inventory --format json-pretty
+
+Optional arguments:
+
+* [-h, --help]          show the help message and exit
+* [--format]            report format, valid values are ``plain`` (default),
+                        ``json`` and ``json-pretty``
+
 lvm
 ---
 
@@ -42,6 +65,39 @@ re-discover and query devices associated with OSDs so that they can later
 activated.
 
 Subcommands:
+
+**batch**
+Creates OSDs from a list of devices using a ``filestore``
+or ``bluestore`` (default) setup. It will create all necessary volume groups
+and logical volumes required to have a working OSD.
+
+Example usage with three devices::
+
+    ceph-volume lvm batch --bluestore /dev/sda /dev/sdb /dev/sdc
+
+Optional arguments:
+
+* [-h, --help]          show the help message and exit
+* [--bluestore]         Use the bluestore objectstore (default)
+* [--filestore]         Use the filestore objectstore
+* [--yes]               Skip the report and prompt to continue provisioning
+* [--prepare]           Only prepare OSDs, do not activate
+* [--dmcrypt]           Enable encryption for the underlying OSD devices
+* [--crush-device-class] Define a CRUSH device class to assign the OSD to
+* [--no-systemd]         Do not enable or create any systemd units
+* [--report]         Report what the potential outcome would be for the
+                     current input (requires devices to be passed in)
+* [--format]         Output format when reporting (used along with
+                     --report), can be one of 'pretty' (default) or 'json'
+* [--block-db-size]     Set (or override) the "bluestore_block_db_size" value,
+                        in bytes
+* [--journal-size]      Override the "osd_journal_size" value, in megabytes
+
+Required positional arguments:
+
+* <DEVICE>    Full path to a raw device, like ``/dev/sda``. Multiple
+              ``<DEVICE>`` paths can be passed in.
+
 
 **activate**
 Enables a systemd unit that persists the OSD ID and its UUID (also called
@@ -55,7 +111,7 @@ Usage::
 Optional Arguments:
 
 * [-h, --help]  show the help message and exit
-* [--auto-detect-objectstore] Automatically detect the objecstore by inspecting
+* [--auto-detect-objectstore] Automatically detect the objectstore by inspecting
   the OSD
 * [--bluestore] bluestore objectstore (default)
 * [--filestore] filestore objectstore
@@ -264,4 +320,3 @@ See also
 ========
 
 :doc:`ceph-osd <ceph-osd>`\(8),
-:doc:`ceph-disk <ceph-disk>`\(8),

@@ -24,6 +24,7 @@ using namespace std;
 
 #include "common/ceph_argparse.h"
 #include "common/debug.h"
+#include "common/WorkQueue.h"
 #include "global/global_init.h"
 #include "msg/Messenger.h"
 #include "messages/MOSDOp.h"
@@ -64,7 +65,7 @@ class ServerDispatcher : public Dispatcher {
     }
     void _process_finish(Message *m) override { }
     void _clear() override {
-      assert(messages.empty());
+      ceph_assert(messages.empty());
     }
   } op_wq;
 
@@ -98,11 +99,8 @@ class ServerDispatcher : public Dispatcher {
     //cerr << __func__ << " reply message=" << m << std::endl;
     op_wq.queue(m);
   }
-  bool ms_verify_authorizer(Connection *con, int peer_type, int protocol,
-                            bufferlist& authorizer, bufferlist& authorizer_reply,
-                            bool& isvalid, CryptoKey& session_key) override {
-    isvalid = true;
-    return true;
+  int ms_handle_authentication(Connection *con) override {
+    return 1;
   }
 };
 
@@ -148,7 +146,7 @@ int main(int argc, char **argv)
 			 CODE_ENVIRONMENT_UTILITY,
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   if (args.size() < 3) {
     usage(argv[0]);
@@ -157,7 +155,7 @@ int main(int argc, char **argv)
 
   int worker_threads = atoi(args[1]);
   int think_time = atoi(args[2]);
-  std::string public_msgr_type = g_ceph_context->_conf->ms_public_type.empty() ? g_ceph_context->_conf->get_val<std::string>("ms_type") : g_ceph_context->_conf->ms_public_type;
+  std::string public_msgr_type = g_ceph_context->_conf->ms_public_type.empty() ? g_ceph_context->_conf.get_val<std::string>("ms_type") : g_ceph_context->_conf->ms_public_type;
 
   cerr << " This tool won't handle connection error alike things, " << std::endl;
   cerr << "please ensure the proper network environment to test." << std::endl;

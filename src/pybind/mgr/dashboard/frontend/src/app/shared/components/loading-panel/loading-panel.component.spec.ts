@@ -1,8 +1,8 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { AlertModule } from 'ngx-bootstrap';
+import { AlertModule } from 'ngx-bootstrap/alert';
 
-import { configureTestBed } from '../../unit-test-helper';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { LoadingPanelComponent } from './loading-panel.component';
 
 describe('LoadingPanelComponent', () => {

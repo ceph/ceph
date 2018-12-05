@@ -1,4 +1,7 @@
 import { Component, OnInit } from '@angular/core';
+
+import { Permissions } from '../../../shared/models/permissions';
+import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { SummaryService } from '../../../shared/services/summary.service';
 
 @Component({
@@ -7,13 +10,22 @@ import { SummaryService } from '../../../shared/services/summary.service';
   styleUrls: ['./navigation.component.scss']
 })
 export class NavigationComponent implements OnInit {
+  permissions: Permissions;
   summaryData: any;
   isCollapsed = true;
 
-  constructor(private summaryService: SummaryService) {}
+  constructor(
+    private authStorageService: AuthStorageService,
+    private summaryService: SummaryService
+  ) {
+    this.permissions = this.authStorageService.getPermissions();
+  }
 
   ngOnInit() {
-    this.summaryService.summaryData$.subscribe((data: any) => {
+    this.summaryService.subscribe((data: any) => {
+      if (!data) {
+        return;
+      }
       this.summaryData = data;
     });
   }

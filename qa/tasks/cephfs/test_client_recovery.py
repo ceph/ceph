@@ -519,3 +519,30 @@ class TestClientRecovery(CephFSTestCase):
         self.mount_b.client_remote.run(args=["sudo", "kill", "-CONT", mount_b_pid])
         # Is the new file visible from mount_b? (caps become invalid after session stale)
         self.mount_b.run_shell(["ls", "testdir/file2"])
+
+    def test_abort_conn(self):
+        """
+        Check that abort_conn() skips closing mds sessions.
+        """
+        if not isinstance(self.mount_a, FuseMount):
+            raise SkipTest("Testing libcephfs function")
+
+        session_timeout = self.fs.get_var("session_timeout")
+
+        self.mount_a.umount_wait()
+        self.mount_b.umount_wait()
+
+        gid_str = self.mount_a.run_python(dedent("""
+            import cephfs as libcephfs
+            cephfs = libcephfs.LibCephFS(conffile='')
+            cephfs.mount()
+            client_id = cephfs.get_instance_id()
+            cephfs.abort_conn()
+            print client_id
+            """)
+        )
+        gid = int(gid_str);
+
+        self.assert_session_state(gid, "open")
+        time.sleep(session_timeout * 1.5)  # Long enough for MDS to consider session stale
+        self.assert_session_state(gid, "stale")

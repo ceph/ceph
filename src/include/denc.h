@@ -38,10 +38,9 @@
 #include <boost/intrusive/set.hpp>
 #include <boost/optional.hpp>
 
-#include "include/assert.h"	// boost clobbers this
+#include "include/ceph_assert.h"	// boost clobbers this
 #include "include/intarith.h"
 #include "include/int_types.h"
-#include "include/memory.h"
 
 #include "buffer.h"
 #include "byteorder.h"
@@ -98,7 +97,7 @@ inline constexpr bool denc_supported = denc_traits<T>::supported;
     snprintf(fn, sizeof(fn),						\
 	     ENCODE_STRINGIFY(ENCODE_DUMP_PATH) "/%s__%d.%x", #Type,		\
 	     getpid(), i++);						\
-    int fd = ::open(fn, O_WRONLY|O_TRUNC|O_CREAT, 0644);		\
+    int fd = ::open(fn, O_WRONLY|O_TRUNC|O_CREAT|O_CLOEXEC, 0644);		\
     if (fd >= 0) {							\
       size_t len = p.get_pos() - __denc_dump_pre;			\
       int r = ::write(fd, __denc_dump_pre, len);			\
@@ -309,8 +308,8 @@ struct denc_traits<
 // otype == external type, i.e., the type on the wire
 
 // NOTE: the overload resolution ensures that the legacy encode/decode methods
-// defined for int types is prefered to the ones  defined using the specialized
-// template, and hence get selected. This machinary prevents these these from
+// defined for int types is preferred to the ones  defined using the specialized
+// template, and hence get selected. This machinery prevents these these from
 // getting glued into the legacy encode/decode methods; the overhead of setting
 // up a contiguous_appender etc is likely to be slower.
 namespace _denc {
@@ -714,15 +713,27 @@ public:
   {
     uint32_t len;
     denc(len, p);
-    s.clear();
-    p.copy(len, s);
+    decode_nohead(len, s, p);
   }
   template<class It>
-  static std::enable_if_t<is_const_iterator_v<It>>
-  decode_nohead(size_t len, value_type& s, It& p) {
+  static void decode_nohead(size_t len, value_type& s, It& p) {
     s.clear();
     if (len) {
       s.append(p.get_pos_add(len), len);
+    }
+  }
+  static void decode_nohead(size_t len, value_type& s,
+                            buffer::list::const_iterator& p) {
+    if (len) {
+      if constexpr (std::is_same_v<value_type, std::string>) {
+        s.clear();
+        p.copy(len, s);
+      } else {
+        s.resize(len);
+        p.copy(len, s.data());
+      }
+    } else {
+      s.clear();
     }
   }
   template<class It>
@@ -811,6 +822,11 @@ struct denc_traits<bufferlist> {
     if (len) {
       v.append(p.get_ptr(len));
     }
+  }
+  static void decode_nohead(size_t len, bufferlist& v,
+			    buffer::list::const_iterator& p) {
+    v.clear();
+    p.copy(len, v);
   }
 };
 
@@ -1094,8 +1110,8 @@ public:
   static void bound_encode(const container& s, size_t& p, uint64_t f = 0) {
     if constexpr (traits::bounded) {
       if constexpr (traits::featured) {
-        size_t elem_size = 0;
         if (!s.empty()) {
+          size_t elem_size = 0;
           denc(*s.begin(), elem_size, f);
           p += elem_size * s.size();
         }
@@ -1520,7 +1536,7 @@ inline std::enable_if_t<traits::supported && !traits::need_contiguous> decode(
     t.copy_shallow(remaining, tmp);
     auto cp = std::cbegin(tmp);
     traits::decode(o, cp);
-    p.advance((ssize_t)cp.get_offset());
+    p.advance(cp.get_offset());
   }
 }
 
@@ -1541,7 +1557,7 @@ inline std::enable_if_t<traits::supported && traits::need_contiguous> decode(
   t.copy_shallow(p.get_bl().length() - p.get_off(), tmp);
   auto cp = std::cbegin(tmp);
   traits::decode(o, cp);
-  p.advance((ssize_t)cp.get_offset());
+  p.advance(cp.get_offset());
 }
 
 // nohead variants
@@ -1567,12 +1583,23 @@ inline std::enable_if_t<traits::supported && !traits::featured> decode_nohead(
     return;
   if (p.end())
     throw buffer::end_of_buffer();
-  bufferptr tmp;
-  auto t = p;
-  t.copy_shallow(p.get_bl().length() - p.get_off(), tmp);
-  auto cp = std::cbegin(tmp);
-  traits::decode_nohead(num, o, cp);
-  p.advance((ssize_t)cp.get_offset());
+  if constexpr (traits::need_contiguous) {
+    bufferptr tmp;
+    auto t = p;
+    if constexpr (denc_traits<typename T::value_type>::bounded) {
+      size_t element_size = 0;
+      typename T::value_type v;
+      denc_traits<typename T::value_type>::bound_encode(v, element_size);
+      t.copy_shallow(num * element_size, tmp);
+    } else {
+      t.copy_shallow(p.get_bl().length() - p.get_off(), tmp);
+    }
+    auto cp = std::cbegin(tmp);
+    traits::decode_nohead(num, o, cp);
+    p.advance(cp.get_offset());
+  } else {
+    traits::decode_nohead(num, o, p);
+  }
 }
 }
 
@@ -1632,7 +1659,7 @@ inline std::enable_if_t<traits::supported && !traits::featured> decode_nohead(
 			   uint32_t *struct_len) {			\
     const char *pos = p.get_pos();					\
     char *end = *start_pos + *struct_len;				\
-    assert(pos <= end);							\
+    ceph_assert(pos <= end);							\
     if (pos < end) {							\
       p.advance(end - pos);						\
     }									\

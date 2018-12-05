@@ -178,8 +178,8 @@ int main(int argc, char **argv) {
 						     store_dev));
 
   std::cerr << "mkfs starting" << std::endl;
-  assert(!store->mkfs());
-  assert(!store->mount());
+  ceph_assert(!store->mkfs());
+  ceph_assert(!store->mount());
   std::cerr << "mounted" << std::endl;
 
   std::cerr << "attrsize\tnumattrs\ttranssize\tops\ttime" << std::endl;

@@ -9,14 +9,15 @@
 #include <string>
 #include <mutex>
 
+#include "common/ceph_mutex.h"
 #include "include/buffer.h"
 #include "kv/KeyValueDB.h"
 
 class BitmapFreelistManager : public FreelistManager {
   std::string meta_prefix, bitmap_prefix;
   KeyValueDB *kvdb;
-  ceph::shared_ptr<KeyValueDB::MergeOperator> merge_op;
-  std::mutex lock;
+  std::shared_ptr<KeyValueDB::MergeOperator> merge_op;
+  ceph::mutex lock = ceph::make_mutex("BitmapFreelistManager::lock");
 
   uint64_t size;            ///< size of device (bytes)
   uint64_t bytes_per_block; ///< bytes per block (bdev_block_size)
@@ -54,6 +55,10 @@ public:
   int create(uint64_t size, uint64_t granularity,
 	     KeyValueDB::Transaction txn) override;
 
+  int expand(uint64_t new_size,
+             KeyValueDB::Transaction txn) override;
+
+
   int init() override;
   void shutdown() override;
 
@@ -69,6 +74,9 @@ public:
     uint64_t offset, uint64_t length,
     KeyValueDB::Transaction txn) override;
 
+  inline uint64_t get_size() const override {
+    return size;
+  }
   inline uint64_t get_alloc_units() const override {
     return size / bytes_per_block;
   }

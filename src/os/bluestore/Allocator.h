@@ -13,7 +13,7 @@
 #define CEPH_OS_BLUESTORE_ALLOCATOR_H
 
 #include <ostream>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "os/bluestore/bluestore_types.h"
 
 class Allocator {

@@ -655,7 +655,7 @@ bufferlist Legacy::encode_n(unsigned n, const vector<unsigned>& segments) {
   auto p = bl.begin();
 
   auto sum = std::accumulate(segments.begin(), segments.end(), 0u);
-  assert(sum != 0u);
+  ceph_assert(sum != 0u);
   for (auto i : segments) {
     buffer::ptr seg;
     p.copy_deep(bl.length() * i / sum, seg);

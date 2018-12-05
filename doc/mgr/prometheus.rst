@@ -129,16 +129,20 @@ Configuring Prometheus server
 honor_labels
 ------------
 
-To enable Ceph to output properly-labelled data relating to any host,
+To enable Ceph to output properly-labeled data relating to any host,
 use the ``honor_labels`` setting when adding the ceph-mgr endpoints
 to your prometheus configuration.
 
 This allows Ceph to export the proper ``instance`` label without prometheus
 overwriting it. Without this setting, Prometheus applies an ``instance`` label
-that includes the hostname and port of the endpoint that the series game from.
+that includes the hostname and port of the endpoint that the series came from.
 Because Ceph clusters have multiple manager daemons, this results in an
 ``instance`` label that changes spuriously when the active manager daemon
 changes.
+
+If this is undesirable a custom ``instance`` label can be set in the
+Prometheus target configuration: you might wish to set it to the hostname
+of your first mgr daemon, or something completely arbitrary like "ceph_cluster".
 
 node_exporter hostname labels
 -----------------------------

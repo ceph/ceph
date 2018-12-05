@@ -83,7 +83,9 @@ TEST(AsyncCompletion, MoveOnly)
   {
     // move-only handler
     using Completion = Completion<void(error_code)>;
-    auto c = Completion::create(ex1, [&ec2, m=move_only{}] (error_code ec) { ec2 = ec; });
+    auto c = Completion::create(ex1, [&ec2, m=move_only{}] (error_code ec) {
+				       static_cast<void>(m);
+				       ec2 = ec; });
     Completion::post(std::move(c), boost::asio::error::operation_aborted);
     EXPECT_FALSE(ec2);
   }
@@ -221,7 +223,9 @@ TEST(AsyncCompletion, ThrowOnCtor)
     using Completion = Completion<void(int&)>;
 
     // throw on Handler move construction
-    EXPECT_THROW(Completion::create(ex1, [t=throws_on_move{}] (int& i) { ++i; }),
+    EXPECT_THROW(Completion::create(ex1, [t=throws_on_move{}] (int& i) {
+					   static_cast<void>(t);
+					   ++i; }),
                  std::runtime_error);
   }
   {

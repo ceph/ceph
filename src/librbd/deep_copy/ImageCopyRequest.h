@@ -55,20 +55,10 @@ private:
    * @verbatim
    *
    * <start>
-   *    |
-   *    v
-   * OPEN_PARENT (skip if not needed)
-   *    |
-   *    v
-   * SET_PARENT_SNAP (skip if not needed)
-   *    |
    *    |      . . . . .
    *    |      .       .  (parallel execution of
    *    v      v       .   multiple objects at once)
    * COPY_OBJECT . . . .
-   *    |
-   *    v
-   * CLOSE_PARENT (skip if not needed)
    *    |
    *    v
    * <finish>
@@ -98,21 +88,10 @@ private:
   bool m_updating_progress = false;
   SnapMap m_snap_map;
   int m_ret_val = 0;
-  ParentSpec m_parent_spec;
-  ImageCtxT *m_src_parent_image_ctx = nullptr;
-
-  void send_open_parent();
-  void handle_open_parent(int r);
-
-  void send_set_parent_snap();
-  void handle_set_parent_snap(int r);
 
   void send_object_copies();
   void send_next_object_copy();
   void handle_object_copy(uint64_t object_no, int r);
-
-  void send_close_parent();
-  void handle_close_parent(int r);
 
   void finish(int r);
 };

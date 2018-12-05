@@ -85,8 +85,8 @@ static int set_if_greater(cls_method_context_t hctx,
 static int accumulate_inode_metadata(cls_method_context_t hctx,
     bufferlist *in, bufferlist *out)
 {
-  assert(in != NULL);
-  assert(out != NULL);
+  ceph_assert(in != NULL);
+  ceph_assert(out != NULL);
 
   int r = 0;
 

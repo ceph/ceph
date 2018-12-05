@@ -22,8 +22,7 @@
 #include "include/xlist.h"
 #include "include/elist.h"
 #include "common/snap_types.h"
-
-class MDSInternalContextBase;
+#include "MDSContext.h"
 
 struct SnapRealm {
 protected:

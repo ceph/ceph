@@ -92,6 +92,7 @@ private:
   ZTracer::Trace m_trace;
 
   State m_state;
+  bool m_flatten;
   ceph::bufferlist m_copyup_data;
   std::vector<AbstractObjectWriteRequest<ImageCtxT> *> m_pending_requests;
   std::atomic<unsigned> m_pending_copyups { 0 };
@@ -105,14 +106,17 @@ private:
 
   void complete_requests(int r);
 
-  bool should_complete(int r);
+  bool should_complete(int *r);
 
   void remove_from_list();
+  void remove_from_list(Mutex &lock);
 
   bool send_object_map_head();
   bool send_object_map();
   bool send_copyup();
   bool is_copyup_required();
+  bool is_update_object_map_required(int r);
+  bool is_deep_copy() const;
 };
 
 } // namespace io

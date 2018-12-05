@@ -1,323 +1,335 @@
-import { Component, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
+import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
-import { BsModalRef, BsModalService } from 'ngx-bootstrap';
+import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 
 import { RbdService } from '../../../shared/api/rbd.service';
-import {
-  DeletionModalComponent
-} from '../../../shared/components/deletion-modal/deletion-modal.component';
+import { ConfirmationModalComponent } from '../../../shared/components/confirmation-modal/confirmation-modal.component';
+import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { TableComponent } from '../../../shared/datatable/table/table.component';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
-import { NotificationType } from '../../../shared/enum/notification-type.enum';
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
+import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
-import { ExecutingTask } from '../../../shared/models/executing-task';
 import { FinishedTask } from '../../../shared/models/finished-task';
+import { Permission } from '../../../shared/models/permissions';
 import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
 import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
-import {
-  NotificationService
-} from '../../../shared/services/notification.service';
-import { SummaryService } from '../../../shared/services/summary.service';
-import { TaskManagerMessageService } from '../../../shared/services/task-manager-message.service';
-import { TaskManagerService } from '../../../shared/services/task-manager.service';
-import {
-  FlattenConfirmationModalComponent
-} from '../flatten-confirmation-modal/flatten-confimation-modal.component';
+import { AuthStorageService } from '../../../shared/services/auth-storage.service';
+import { TaskListService } from '../../../shared/services/task-list.service';
+import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
 import { RbdParentModel } from '../rbd-form/rbd-parent.model';
+import { RbdTrashMoveModalComponent } from '../rbd-trash-move-modal/rbd-trash-move-modal.component';
 import { RbdModel } from './rbd-model';
 
 @Component({
   selector: 'cd-rbd-list',
   templateUrl: './rbd-list.component.html',
-  styleUrls: ['./rbd-list.component.scss']
+  styleUrls: ['./rbd-list.component.scss'],
+  providers: [TaskListService]
 })
-export class RbdListComponent implements OnInit, OnDestroy {
+export class RbdListComponent implements OnInit {
+  @ViewChild(TableComponent)
+  table: TableComponent;
+  @ViewChild('usageTpl')
+  usageTpl: TemplateRef<any>;
+  @ViewChild('parentTpl')
+  parentTpl: TemplateRef<any>;
+  @ViewChild('nameTpl')
+  nameTpl: TemplateRef<any>;
+  @ViewChild('flattenTpl')
+  flattenTpl: TemplateRef<any>;
 
-  @ViewChild('usageTpl') usageTpl: TemplateRef<any>;
-  @ViewChild('parentTpl') parentTpl: TemplateRef<any>;
-  @ViewChild('nameTpl') nameTpl: TemplateRef<any>;
-
+  permission: Permission;
+  tableActions: CdTableAction[];
   images: any;
-  executingTasks: ExecutingTask[] = [];
   columns: CdTableColumn[];
   retries: number;
   viewCacheStatusList: any[];
   selection = new CdTableSelection();
 
-  summaryDataSubscription = null;
-
   modalRef: BsModalRef;
 
-  constructor(private rbdService: RbdService,
-              private dimlessBinaryPipe: DimlessBinaryPipe,
-              private dimlessPipe: DimlessPipe,
-              private summaryService: SummaryService,
-              private modalService: BsModalService,
-              private notificationService: NotificationService,
-              private taskManagerMessageService: TaskManagerMessageService,
-              private taskManagerService: TaskManagerService) {
+  builders = {
+    'rbd/create': (metadata) =>
+      this.createRbdFromTask(metadata['pool_name'], metadata['image_name']),
+    'rbd/clone': (metadata) =>
+      this.createRbdFromTask(metadata['child_pool_name'], metadata['child_image_name']),
+    'rbd/copy': (metadata) =>
+      this.createRbdFromTask(metadata['dest_pool_name'], metadata['dest_image_name'])
+  };
+
+  private createRbdFromTask(pool: string, name: string): RbdModel {
+    const model = new RbdModel();
+    model.id = '-1';
+    model.name = name;
+    model.pool_name = pool;
+    return model;
+  }
+
+  constructor(
+    private authStorageService: AuthStorageService,
+    private rbdService: RbdService,
+    private dimlessBinaryPipe: DimlessBinaryPipe,
+    private dimlessPipe: DimlessPipe,
+    private modalService: BsModalService,
+    private taskWrapper: TaskWrapperService,
+    private taskListService: TaskListService,
+    private i18n: I18n
+  ) {
+    this.permission = this.authStorageService.getPermissions().rbdImage;
+    const getImageUri = () =>
+      this.selection.first() &&
+      `${encodeURI(this.selection.first().pool_name)}/${encodeURI(this.selection.first().name)}`;
+    const addAction: CdTableAction = {
+      permission: 'create',
+      icon: 'fa-plus',
+      routerLink: () => '/block/rbd/add',
+      canBePrimary: (selection: CdTableSelection) => !selection.hasSingleSelection,
+      name: this.i18n('Add')
+    };
+    const editAction: CdTableAction = {
+      permission: 'update',
+      icon: 'fa-pencil',
+      routerLink: () => `/block/rbd/edit/${getImageUri()}`,
+      name: this.i18n('Edit')
+    };
+    const deleteAction: CdTableAction = {
+      permission: 'delete',
+      icon: 'fa-times',
+      click: () => this.deleteRbdModal(),
+      name: this.i18n('Delete')
+    };
+    const copyAction: CdTableAction = {
+      permission: 'create',
+      canBePrimary: (selection: CdTableSelection) => selection.hasSingleSelection,
+      disable: (selection: CdTableSelection) =>
+        !selection.hasSingleSelection || selection.first().cdExecuting,
+      icon: 'fa-copy',
+      routerLink: () => `/block/rbd/copy/${getImageUri()}`,
+      name: this.i18n('Copy')
+    };
+    const flattenAction: CdTableAction = {
+      permission: 'update',
+      disable: (selection: CdTableSelection) =>
+        !selection.hasSingleSelection || selection.first().cdExecuting || !selection.first().parent,
+      icon: 'fa-chain-broken',
+      click: () => this.flattenRbdModal(),
+      name: this.i18n('Flatten')
+    };
+    const moveAction: CdTableAction = {
+      permission: 'delete',
+      icon: 'fa-trash-o',
+      click: () => this.trashRbdModal(),
+      name: this.i18n('Move to Trash')
+    };
+    this.tableActions = [
+      addAction,
+      editAction,
+      copyAction,
+      flattenAction,
+      deleteAction,
+      moveAction
+    ];
   }
 
   ngOnInit() {
     this.columns = [
       {
-        name: 'Name',
+        name: this.i18n('Name'),
         prop: 'name',
         flexGrow: 2,
         cellTransformation: CellTemplate.executing
       },
       {
-        name: 'Pool',
+        name: this.i18n('Pool'),
         prop: 'pool_name',
         flexGrow: 2
       },
       {
-        name: 'Size',
+        name: this.i18n('Size'),
         prop: 'size',
         flexGrow: 1,
         cellClass: 'text-right',
         pipe: this.dimlessBinaryPipe
       },
       {
-        name: 'Objects',
+        name: this.i18n('Objects'),
         prop: 'num_objs',
         flexGrow: 1,
         cellClass: 'text-right',
         pipe: this.dimlessPipe
       },
       {
-        name: 'Object size',
+        name: this.i18n('Object size'),
         prop: 'obj_size',
         flexGrow: 1,
         cellClass: 'text-right',
         pipe: this.dimlessBinaryPipe
       },
       {
-        name: 'Provisioned',
+        name: this.i18n('Provisioned'),
         prop: 'disk_usage',
         cellClass: 'text-center',
         flexGrow: 1,
         pipe: this.dimlessBinaryPipe
       },
       {
-        name: 'Total provisioned',
+        name: this.i18n('Total provisioned'),
         prop: 'total_disk_usage',
         cellClass: 'text-center',
         flexGrow: 1,
         pipe: this.dimlessBinaryPipe
       },
       {
-        name: 'Parent',
+        name: this.i18n('Parent'),
         prop: 'parent',
         flexGrow: 2,
         cellTemplate: this.parentTpl
       }
     ];
 
-    this.summaryService.get().subscribe((resp: any) => {
-      this.loadImages(resp.executing_tasks);
-      this.summaryDataSubscription = this.summaryService.summaryData$.subscribe((data: any) => {
-        this.loadImages(data.executing_tasks);
-      });
-    });
-
-  }
-
-  ngOnDestroy() {
-    if (this.summaryDataSubscription) {
-      this.summaryDataSubscription.unsubscribe();
-    }
-  }
-
-  loadImages(executingTasks) {
-    if (executingTasks === null) {
-      executingTasks = this.executingTasks;
-    }
-    this.rbdService.list()
-      .subscribe(
-      (resp: any[]) => {
-        let images = [];
-        const viewCacheStatusMap = {};
-        resp.forEach(pool => {
-          if (_.isUndefined(viewCacheStatusMap[pool.status])) {
-            viewCacheStatusMap[pool.status] = [];
-          }
-          viewCacheStatusMap[pool.status].push(pool.pool_name);
-          images = images.concat(pool.value);
-        });
-        const viewCacheStatusList = [];
-        _.forEach(viewCacheStatusMap, (value, key) => {
-          viewCacheStatusList.push({
-            status: parseInt(key, 10),
-            statusFor: (value.length > 1 ? 'pools ' : 'pool ') +
-            '<strong>' + value.join('</strong>, <strong>') + '</strong>'
-          });
-        });
-        this.viewCacheStatusList = viewCacheStatusList;
-        images.forEach(image => {
-          image.executingTasks = this._getExecutingTasks(executingTasks,
-            image.pool_name, image.name);
-        });
-        this.images = this.merge(images, executingTasks);
-        this.executingTasks = executingTasks;
-      },
-      () => {
-        this.viewCacheStatusList = [{status: ViewCacheStatus.ValueException}];
-      }
+    this.taskListService.init(
+      () => this.rbdService.list(),
+      (resp) => this.prepareResponse(resp),
+      (images) => (this.images = images),
+      () => this.onFetchError(),
+      this.taskFilter,
+      this.itemFilter,
+      this.builders
     );
   }
 
-  _getExecutingTasks(executingTasks: ExecutingTask[], poolName, imageName): ExecutingTask[] {
-    const result: ExecutingTask[] = [];
-    executingTasks.forEach(executingTask => {
-      if (executingTask.name === 'rbd/snap/create' ||
-        executingTask.name === 'rbd/snap/delete' ||
-        executingTask.name === 'rbd/snap/edit' ||
-        executingTask.name === 'rbd/snap/rollback') {
-        if (poolName === executingTask.metadata['pool_name'] &&
-          imageName === executingTask.metadata['image_name']) {
-          result.push(executingTask);
-        }
-      }
-    });
-    return result;
+  onFetchError() {
+    this.table.reset(); // Disable loading indicator.
+    this.viewCacheStatusList = [{ status: ViewCacheStatus.ValueException }];
   }
 
-  private merge(rbds: RbdModel[], executingTasks: ExecutingTask[] = []) {
-    const resultRBDs = _.clone(rbds);
-    executingTasks.forEach((executingTask) => {
-      const rbdExecuting = resultRBDs.find((rbd) => {
-        return rbd.pool_name === executingTask.metadata['pool_name'] &&
-          rbd.name === executingTask.metadata['image_name'];
+  prepareResponse(resp: any[]): any[] {
+    let images = [];
+    const viewCacheStatusMap = {};
+    resp.forEach((pool) => {
+      if (_.isUndefined(viewCacheStatusMap[pool.status])) {
+        viewCacheStatusMap[pool.status] = [];
+      }
+      viewCacheStatusMap[pool.status].push(pool.pool_name);
+      images = images.concat(pool.value);
+    });
+    const viewCacheStatusList = [];
+    _.forEach(viewCacheStatusMap, (value: any, key) => {
+      viewCacheStatusList.push({
+        status: parseInt(key, 10),
+        statusFor:
+          (value.length > 1 ? 'pools ' : 'pool ') +
+          '<strong>' +
+          value.join('</strong>, <strong>') +
+          '</strong>'
       });
-      if (rbdExecuting) {
-        if (executingTask.name === 'rbd/delete') {
-          rbdExecuting.cdExecuting = 'deleting';
-
-        } else if (executingTask.name === 'rbd/edit') {
-          rbdExecuting.cdExecuting = 'updating';
-
-        } else if (executingTask.name === 'rbd/flatten') {
-          rbdExecuting.cdExecuting = 'flattening';
-        }
-
-      } else if (executingTask.name === 'rbd/create') {
-        const rbdModel = new RbdModel();
-        rbdModel.name = executingTask.metadata['image_name'];
-        rbdModel.pool_name = executingTask.metadata['pool_name'];
-        rbdModel.cdExecuting = 'creating';
-        this.pushIfNotExists(resultRBDs, rbdModel);
-
-      } else if (executingTask.name === 'rbd/clone') {
-        const rbdModel = new RbdModel();
-        rbdModel.name = executingTask.metadata['child_image_name'];
-        rbdModel.pool_name = executingTask.metadata['child_pool_name'];
-        rbdModel.cdExecuting = 'cloning';
-        this.pushIfNotExists(resultRBDs, rbdModel);
-
-      } else if (executingTask.name === 'rbd/copy') {
-        const rbdModel = new RbdModel();
-        rbdModel.name = executingTask.metadata['dest_image_name'];
-        rbdModel.pool_name = executingTask.metadata['dest_pool_name'];
-        rbdModel.cdExecuting = 'copying';
-        this.pushIfNotExists(resultRBDs, rbdModel);
-      }
     });
-    return resultRBDs;
+    this.viewCacheStatusList = viewCacheStatusList;
+    return images;
   }
 
-  private pushIfNotExists(resultRBDs: RbdModel[], rbdModel: RbdModel) {
-    const exists = resultRBDs.some((resultRBD) => {
-      return resultRBD.name === rbdModel.name && resultRBD.pool_name === rbdModel.pool_name;
-    });
-    if (!exists) {
-      resultRBDs.push(rbdModel);
+  itemFilter(entry, task) {
+    let pool_name_k: string;
+    let image_name_k: string;
+    switch (task.name) {
+      case 'rbd/copy':
+        pool_name_k = 'dest_pool_name';
+        image_name_k = 'dest_image_name';
+        break;
+      case 'rbd/clone':
+        pool_name_k = 'child_pool_name';
+        image_name_k = 'child_image_name';
+        break;
+      default:
+        pool_name_k = 'pool_name';
+        image_name_k = 'image_name';
+        break;
     }
+    return (
+      entry.pool_name === task.metadata[pool_name_k] && entry.name === task.metadata[image_name_k]
+    );
+  }
+
+  taskFilter(task) {
+    return [
+      'rbd/clone',
+      'rbd/copy',
+      'rbd/create',
+      'rbd/delete',
+      'rbd/edit',
+      'rbd/flatten',
+      'rbd/trash/move'
+    ].includes(task.name);
   }
 
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
   }
 
-  deleteRbd(poolName: string, imageName: string) {
-    const finishedTask = new FinishedTask();
-    finishedTask.name = 'rbd/delete';
-    finishedTask.metadata = {'pool_name': poolName, 'image_name': imageName};
-    this.rbdService.delete(poolName, imageName)
-      .toPromise().then((resp) => {
-        if (resp.status === 202) {
-          this.notificationService.show(NotificationType.info,
-            `RBD deletion in progress...`,
-            this.taskManagerMessageService.getDescription(finishedTask));
-          const executingTask = new ExecutingTask();
-          executingTask.name = finishedTask.name;
-          executingTask.metadata = finishedTask.metadata;
-          this.executingTasks.push(executingTask);
-          this.taskManagerService.subscribe(executingTask.name, executingTask.metadata,
-            (asyncFinishedTask: FinishedTask) => {
-              this.notificationService.notifyTask(asyncFinishedTask);
-            });
-        } else {
-          finishedTask.success = true;
-          this.notificationService.notifyTask(finishedTask);
-        }
-        this.modalRef.hide();
-        this.loadImages(null);
-      }).catch((resp) => {
-        this.modalRef.content.stopLoadingSpinner();
-      });
-  }
-
   deleteRbdModal() {
     const poolName = this.selection.first().pool_name;
     const imageName = this.selection.first().name;
-    this.modalRef = this.modalService.show(DeletionModalComponent);
-    this.modalRef.content.setUp({
-      metaType: 'RBD',
-      pattern: `${poolName}/${imageName}`,
-      deletionMethod: () => this.deleteRbd(poolName, imageName),
-      modalRef: this.modalRef
+
+    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+      initialState: {
+        itemDescription: 'RBD',
+        submitActionObservable: () =>
+          this.taskWrapper.wrapTaskAroundCall({
+            task: new FinishedTask('rbd/delete', {
+              pool_name: poolName,
+              image_name: imageName
+            }),
+            call: this.rbdService.delete(poolName, imageName)
+          })
+      }
     });
   }
 
+  trashRbdModal() {
+    const initialState = {
+      metaType: 'RBD',
+      poolName: this.selection.first().pool_name,
+      imageName: this.selection.first().name
+    };
+    this.modalRef = this.modalService.show(RbdTrashMoveModalComponent, { initialState });
+  }
+
   flattenRbd(poolName, imageName) {
-    const finishedTask = new FinishedTask();
-    finishedTask.name = 'rbd/flatten';
-    finishedTask.metadata = {'pool_name': poolName, 'image_name': imageName};
-    this.rbdService.flatten(poolName, imageName)
-      .toPromise().then((resp) => {
-        if (resp.status === 202) {
-          this.notificationService.show(NotificationType.info,
-            `RBD flatten in progress...`,
-            this.taskManagerMessageService.getDescription(finishedTask));
-          const executingTask = new ExecutingTask();
-          executingTask.name = finishedTask.name;
-          executingTask.metadata = finishedTask.metadata;
-          this.executingTasks.push(executingTask);
-          this.taskManagerService.subscribe(executingTask.name, executingTask.metadata,
-            (asyncFinishedTask: FinishedTask) => {
-              this.notificationService.notifyTask(asyncFinishedTask);
-            });
-        } else {
-          finishedTask.success = true;
-          this.notificationService.notifyTask(finishedTask);
-        }
+    this.taskWrapper
+      .wrapTaskAroundCall({
+        task: new FinishedTask('rbd/flatten', {
+          pool_name: poolName,
+          image_name: imageName
+        }),
+        call: this.rbdService.flatten(poolName, imageName)
+      })
+      .subscribe(undefined, undefined, () => {
         this.modalRef.hide();
-        this.loadImages(null);
       });
   }
 
   flattenRbdModal() {
     const poolName = this.selection.first().pool_name;
     const imageName = this.selection.first().name;
-    this.modalRef = this.modalService.show(FlattenConfirmationModalComponent);
     const parent: RbdParentModel = this.selection.first().parent;
-    this.modalRef.content.parent = `${parent.pool_name}/${parent.image_name}@${parent.snap_name}`;
-    this.modalRef.content.child = `${poolName}/${imageName}`;
-    this.modalRef.content.onSubmit.subscribe(() => {
-      this.flattenRbd(poolName, imageName);
-    });
+
+    const initialState = {
+      titleText: 'RBD flatten',
+      buttonText: 'Flatten',
+      bodyTpl: this.flattenTpl,
+      bodyData: {
+        parent: `${parent.pool_name}/${parent.image_name}@${parent.snap_name}`,
+        child: `${poolName}/${imageName}`
+      },
+      onSubmit: () => {
+        this.flattenRbd(poolName, imageName);
+      }
+    };
+
+    this.modalRef = this.modalService.show(ConfirmationModalComponent, { initialState });
   }
 }

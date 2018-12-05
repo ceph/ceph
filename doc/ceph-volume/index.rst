@@ -11,16 +11,22 @@ follow a predictable, and robust way of preparing, activating, and starting OSDs
 
 
 **Command Line Subcommands**
+
 There is currently support for ``lvm``, and plain disks (with GPT partitions)
 that may have been deployed with ``ceph-disk``.
 
 * :ref:`ceph-volume-lvm`
 * :ref:`ceph-volume-simple`
 
+**Node inventory**
+
+The :ref:`ceph-volume-inventory` subcommand provides information and metadata
+about a nodes physical disk inventory.
+
 
 Migrating
 ---------
-Starting on Ceph version 12.2.2, ``ceph-disk`` is deprecated. Deprecation
+Starting on Ceph version 13.0.0, ``ceph-disk`` is deprecated. Deprecation
 warnings will show up that will link to this page. It is strongly suggested
 that users start consuming ``ceph-volume``. There are two paths for migrating:
 
@@ -29,6 +35,10 @@ that users start consuming ``ceph-volume``. There are two paths for migrating:
    triggers.
 #. Redeploy existing OSDs with ``ceph-volume``: This is covered in depth on
    :ref:`rados-replacing-an-osd`
+
+For details on why ``ceph-disk`` was removed please see the :ref:`Why was
+ceph-disk replaced? <ceph-disk-replaced>` section.
+
 
 New deployments
 ^^^^^^^^^^^^^^^
@@ -51,8 +61,10 @@ and ``ceph-disk`` is fully disabled. Encryption is fully supported.
 
    intro
    systemd
+   inventory
    lvm/index
    lvm/activate
+   lvm/batch
    lvm/encryption
    lvm/prepare
    lvm/create

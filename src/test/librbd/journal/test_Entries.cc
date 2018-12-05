@@ -164,7 +164,7 @@ TEST_F(TestJournalEntries, AioDiscard) {
   REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
 
   CephContext* cct = reinterpret_cast<CephContext*>(_rados.cct());
-  REQUIRE(!cct->_conf->get_val<bool>("rbd_skip_partial_discard"));
+  REQUIRE(!cct->_conf.get_val<bool>("rbd_skip_partial_discard"));
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));

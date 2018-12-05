@@ -65,7 +65,7 @@ int QatAccel::compress(const bufferlist &in, bufferlist &out) {
     unsigned int len = i.length();
     unsigned int out_len = qzMaxCompressedLength(len);
 
-    bufferptr ptr = buffer::create_page_aligned(out_len);
+    bufferptr ptr = buffer::create_small_page_aligned(out_len);
     int rc = qzCompress(&session, c_in, &len, (unsigned char *)ptr.c_str(), &out_len, 1);
     if (rc != QZ_OK)
       return -1;
@@ -76,11 +76,11 @@ int QatAccel::compress(const bufferlist &in, bufferlist &out) {
 }
 
 int QatAccel::decompress(const bufferlist &in, bufferlist &out) {
-  bufferlist::iterator i = const_cast<bufferlist&>(in).begin();
+  auto i = in.begin();
   return decompress(i, in.length(), out);
 }
 
-int QatAccel::decompress(bufferlist::iterator &p,
+int QatAccel::decompress(bufferlist::const_iterator &p,
 		 size_t compressed_len,
 		 bufferlist &dst) {
   unsigned int ratio_idx = 0;
@@ -103,7 +103,7 @@ int QatAccel::decompress(bufferlist::iterator &p,
       len = tmp.length();
     }
     unsigned int out_len = len * expansion_ratio[ratio_idx];
-    bufferptr ptr = buffer::create_page_aligned(out_len);
+    bufferptr ptr = buffer::create_small_page_aligned(out_len);
 
     if (joint)
       rc = qzDecompress(&session, (const unsigned char*)tmp.c_str(), &len, (unsigned char*)ptr.c_str(), &out_len);

@@ -30,7 +30,7 @@ recover dist request state on rejoin:
   - locked: prevents dn read
   - on auth
 
--> grab _all_ path pins at onces; hold none while waiting.
+-> grab _all_ path pins at once; hold none while waiting.
 -> grab xlocks in order.
 
 --- auth_pin = pin to authority, on *dir, *in
@@ -41,7 +41,7 @@ recover dist request state on rejoin:
 -> blocking on auth_pins is dangerous.  _never_ block if we are holding other auth_pins on the same node (subtree?).
 -> grab _all_ auth pins at once; hold none while waiting.
 
---- hard/file_wrlock = exlusive lock on inode content
+--- hard/file_wrlock = exclusive lock on inode content
   - prevents inode read
   - on auth
 
@@ -54,7 +54,7 @@ ORDERING
 - order inodes on (ino);
 - need to order both read and write locks, esp with dentries.  so, if we need to lock /usr/bin/foo with read on usr and bin and xwrite on foo, we need to acquire all of those locks using the same ordering.
   - on same host, we can be 'nice' and check lockability of all items, then lock all, and drop everything while waiting.  (actually, is there any use to this?)
-  - on mutiple hosts, we need to use full ordering (at least as things separate across host boundaries).  and if needed lock set changes (such that the order of already acquired locks changes), we need to drop those locks and start over.
+  - on multiple hosts, we need to use full ordering (at least as things separate across host boundaries).  and if needed lock set changes (such that the order of already acquired locks changes), we need to drop those locks and start over.
 
 - how do auth pins fit into all this?
   - auth pin on xlocks only.  no need on read locks.

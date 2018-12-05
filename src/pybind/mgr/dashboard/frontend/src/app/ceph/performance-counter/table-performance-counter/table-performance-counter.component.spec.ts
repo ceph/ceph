@@ -1,37 +1,59 @@
-import { NO_ERRORS_SCHEMA } from '@angular/core';
+import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { PerformanceCounterService } from '../../../shared/api/performance-counter.service';
-import { TableComponent } from '../../../shared/datatable/table/table.component';
-import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
-import { FormatterService } from '../../../shared/services/formatter.service';
-import { configureTestBed } from '../../../shared/unit-test-helper';
+import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import { AppModule } from '../../../app.module';
+import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
 import { TablePerformanceCounterComponent } from './table-performance-counter.component';
 
 describe('TablePerformanceCounterComponent', () => {
   let component: TablePerformanceCounterComponent;
   let fixture: ComponentFixture<TablePerformanceCounterComponent>;
-
-  const fakeService = {};
+  let httpTesting: HttpTestingController;
 
   configureTestBed({
-    declarations: [TablePerformanceCounterComponent, TableComponent, DimlessPipe],
-    imports: [],
-    schemas: [NO_ERRORS_SCHEMA],
-    providers: [
-      { provide: PerformanceCounterService, useValue: fakeService },
-      DimlessPipe,
-      FormatterService
-    ]
+    imports: [AppModule, HttpClientTestingModule],
+    providers: i18nProviders
   });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(TablePerformanceCounterComponent);
     component = fixture.componentInstance;
+    httpTesting = TestBed.get(HttpTestingController);
     fixture.detectChanges();
   });
 
   it('should create', () => {
     expect(component).toBeTruthy();
+    expect(component.counters).toEqual([]);
+  });
+
+  describe('Error handling', () => {
+    const context = new CdTableFetchDataContext(() => {});
+
+    beforeEach(() => {
+      spyOn(context, 'error');
+      component.serviceType = 'osd';
+      component.serviceId = '3';
+      component.getCounters(context);
+    });
+
+    it('should display 404 warning', () => {
+      httpTesting
+        .expectOne('api/perf_counters/osd/3')
+        .error(new ErrorEvent('osd.3 not found'), { status: 404 });
+      httpTesting.verify();
+      expect(component.counters).toBeNull();
+      expect(context.error).not.toHaveBeenCalled();
+    });
+
+    it('should call error function of context', () => {
+      httpTesting
+        .expectOne('api/perf_counters/osd/3')
+        .error(new ErrorEvent('Unknown error'), { status: 500 });
+      httpTesting.verify();
+      expect(component.counters).toEqual([]);
+      expect(context.error).toHaveBeenCalled();
+    });
   });
 });

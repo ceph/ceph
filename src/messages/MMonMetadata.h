@@ -18,20 +18,22 @@
 #include "mon/mon_types.h"
 #include "msg/Message.h"
 
-class MMonMetadata : public Message {
+class MMonMetadata : public MessageInstance<MMonMetadata> {
 public:
+  friend factory;
+
   Metadata data;
 
 private:
-  static const int HEAD_VERSION = 1;
+  static constexpr int HEAD_VERSION = 1;
   ~MMonMetadata() override {}
 
 public:
   MMonMetadata() :
-    Message(CEPH_MSG_MON_METADATA)
+    MessageInstance(CEPH_MSG_MON_METADATA)
   {}
   MMonMetadata(const Metadata& metadata) :
-    Message(CEPH_MSG_MON_METADATA, HEAD_VERSION),
+    MessageInstance(CEPH_MSG_MON_METADATA, HEAD_VERSION),
     data(metadata)
   {}
 

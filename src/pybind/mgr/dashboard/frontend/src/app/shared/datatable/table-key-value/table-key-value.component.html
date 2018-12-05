@@ -1,4 +1,5 @@
-<cd-table [data]="tableData"
+<cd-table #table
+          [data]="tableData"
           [columns]="columns"
           columnMode="flex"
           [toolHeader]="false"
@@ -6,6 +7,5 @@
           [autoSave]="false"
           [header]="false"
           [footer]="false"
-          [limit]="0"
-          (fetchData)="reloadData()">
+          [limit]="0">
 </cd-table>

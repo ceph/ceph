@@ -4,11 +4,10 @@
 #ifndef CEPH_TRACEPOINT_PROVIDER_H
 #define CEPH_TRACEPOINT_PROVIDER_H
 
+#include "common/ceph_context.h"
 #include "common/config_obs.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include <dlfcn.h>
-
-struct md_config_t;
 
 class TracepointProvider : public md_config_obs_t {
 public:
@@ -66,18 +65,18 @@ protected:
   const char** get_tracked_conf_keys() const override {
     return m_config_keys;
   }
-  void handle_conf_change(const struct md_config_t *conf,
-                                  const std::set <std::string> &changed) override;
+  void handle_conf_change(const ConfigProxy& conf,
+			  const std::set <std::string> &changed) override;
 
 private:
   CephContext *m_cct;
   std::string m_library;
   mutable const char* m_config_keys[2];
 
-  Mutex m_lock;
+  ceph::mutex m_lock = ceph::make_mutex("TracepointProvider::m_lock");
   void* m_handle = nullptr;
 
-  void verify_config(const struct md_config_t *conf);
+  void verify_config(const ConfigProxy& conf);
 };
 
 #endif // CEPH_TRACEPOINT_PROVIDER_H

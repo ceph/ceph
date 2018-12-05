@@ -5,10 +5,13 @@
 
 #include "msg/Message.h"
 
-class MMgrClose : public Message
-{
-  static const int HEAD_VERSION = 1;
-  static const int COMPAT_VERSION = 1;
+class MMgrClose : public MessageInstance<MMgrClose> {
+public:
+  friend factory;
+private:
+
+  static constexpr int HEAD_VERSION = 1;
+  static constexpr int COMPAT_VERSION = 1;
 
 public:
   std::string daemon_name;
@@ -40,6 +43,6 @@ public:
   }
 
   MMgrClose()
-    : Message(MSG_MGR_CLOSE, HEAD_VERSION, COMPAT_VERSION)
+    : MessageInstance(MSG_MGR_CLOSE, HEAD_VERSION, COMPAT_VERSION)
   {}
 };

@@ -84,7 +84,7 @@ public:
   /**
    * keep track of sum deltas, per-pool, taking into account any previous
    * deltas existing in @p per_pool_sum_deltas.  The utime_t as second member
-   * of the pair is the timestamp refering to the last update (i.e., the first
+   * of the pair is the timestamp referring to the last update (i.e., the first
    * member of the pair) for a given pool.
    */
   mempool::pgmap::unordered_map<uint64_t, pair<pool_stat_t,utime_t> > per_pool_sum_delta;
@@ -92,6 +92,11 @@ public:
   pool_stat_t pg_sum_delta;
   utime_t stamp_delta;
 
+  void get_recovery_stats(
+    double *misplaced_ratio,
+    double *degraded_ratio,
+    double *inactive_ratio,
+    double *unknown_pgs_ratio) const;
 
   void print_summary(Formatter *f, ostream *out) const;
   void print_oneline_summary(Formatter *f, ostream *out) const;
@@ -281,6 +286,7 @@ public:
   mempool::pgmap::unordered_map<int,set<pg_t> > pg_by_osd;
   mempool::pgmap::unordered_map<int,int> blocked_by_sum;
   mempool::pgmap::list< pair<pool_stat_t, utime_t> > pg_sum_deltas;
+  mempool::pgmap::unordered_map<int64_t,mempool::pgmap::unordered_map<uint64_t,int32_t>> num_pg_by_pool_state;
 
   utime_t stamp;
 

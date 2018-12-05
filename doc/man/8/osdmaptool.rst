@@ -1,5 +1,7 @@
 :orphan:
 
+.. _osdmaptool:
+
 ======================================================
  osdmaptool -- ceph osd cluster map manipulation tool
 ======================================================
@@ -29,6 +31,11 @@ Options
    will simply make the tool print a plaintext dump of the map, after
    any modifications are made.
 
+.. option:: --dump <format>
+
+   displays the map in plain text when <format> is 'plain', 'json' if specified
+   format is not supported. This is an alternative to the print option.
+
 .. option:: --clobber
 
    will allow osdmaptool to overwrite mapfilename if changes are made.
@@ -42,22 +49,75 @@ Options
    will extract the CRUSH map from the OSD map and write it to
    mapfile.
 
-.. option:: --createsimple numosd [--pgbits bitsperosd]
+.. option:: --createsimple numosd [--pg-bits bitsperosd] [--pgp-bits bits]
 
    will create a relatively generic OSD map with the numosd devices.
-   If --pgbits is specified, the initial placement group counts will
+   If --pg-bits is specified, the initial placement group counts will
    be set with bitsperosd bits per OSD. That is, the pg_num map
    attribute will be set to numosd shifted by bitsperosd.
+   If --pgp-bits is specified, then the pgp_num map attribute will
+   be set to numosd shifted by bits. 
 
-.. option:: --test-map-pgs [--pool poolid]
+.. option:: --create-from-conf
+
+   creates an osd map with default configurations.
+
+.. option:: --test-map-pgs [--pool poolid] [--range-first <first> --range-last <last>]
 
    will print out the mappings from placement groups to OSDs.
+   If range is specified, then it iterates from first to last in the directory 
+   specified by argument to osdmaptool.
+   Eg: **osdmaptool --test-map-pgs --range-first 0 --range-last 2 osdmap_dir**.
+   This will iterate through the files named 0,1,2 in osdmap_dir.
 
-.. option:: --test-map-pgs-dump [--pool poolid]
+.. option:: --test-map-pgs-dump [--pool poolid] [--range-first <first> --range-last <last>]
+
+   will print out the summary of all placement groups and the mappings from them to the mapped OSDs.
+   If range is specified, then it iterates from first to last in the directory
+   specified by argument to osdmaptool.
+   Eg: **osdmaptool --test-map-pgs-dump --range-first 0 --range-last 2 osdmap_dir**.
+   This will iterate through the files named 0,1,2 in osdmap_dir.
+
+.. option:: --test-map-pgs-dump-all [--pool poolid] [--range-first <first> --range-last <last>]
 
    will print out the summary of all placement groups and the mappings
-   from them to the mapped OSDs.
+   from them to all the OSDs.
+   If range is specified, then it iterates from first to last in the directory
+   specified by argument to osdmaptool.
+   Eg: **osdmaptool --test-map-pgs-dump-all --range-first 0 --range-last 2 osdmap_dir**.
+   This will iterate through the files named 0,1,2 in osdmap_dir.
 
+.. option:: --test-random
+
+   does a random mapping of placement groups to the OSDs.
+
+.. option:: --test-map-pg <pgid>
+
+   map a particular placement group(specified by pgid) to the OSDs.
+
+.. option:: --test-map-object <objectname> [--pool <poolid>]
+
+   map a particular placement group(specified by objectname) to the OSDs.
+
+.. option:: --test-crush [--range-first <first> --range-last <last>]
+
+   map placement groups to acting OSDs.
+   If range is specified, then it iterates from first to last in the directory
+   specified by argument to osdmaptool.
+   Eg: **osdmaptool --test-crush --range-first 0 --range-last 2 osdmap_dir**.
+   This will iterate through the files named 0,1,2 in osdmap_dir.
+
+.. option:: --mark-up-in
+
+   mark osds up and in (but do not persist).
+
+.. option:: --tree
+
+   Displays a hierarchical tree of the map.
+
+.. option:: --clear-temp
+
+   clears pg_temp and primary_temp variables.
 
 Example
 =======

@@ -1,3 +1,5 @@
+.. _infernalis-release-notes:
+
 v9.2.1 Infernalis
 =================
 
@@ -100,7 +102,7 @@ Major Changes from Hammer
   * There have been many improvements to low-level repair tooling
     (ceph-objectstore-tool).
   * The internal ObjectStore API has been significantly cleaned up in order
-    to faciliate new storage backends like NewStore.
+    to facilitate new storage backends like NewStore.
 
 - *RGW*:
 
@@ -803,7 +805,7 @@ Major Changes from Hammer
   * There have been many improvements to low-level repair tooling
     (ceph-objectstore-tool).
   * The internal ObjectStore API has been significantly cleaned up in order
-    to faciliate new storage backends like NewStore.
+    to facilitate new storage backends like NewStore.
 
 - *RGW*:
 

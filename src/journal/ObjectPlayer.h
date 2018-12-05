@@ -16,7 +16,7 @@
 #include <boost/intrusive_ptr.hpp>
 #include <boost/noncopyable.hpp>
 #include <boost/unordered_map.hpp>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 class SafeTimer;
 

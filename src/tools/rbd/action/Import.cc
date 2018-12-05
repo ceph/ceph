@@ -17,7 +17,7 @@
 #include <iostream>
 #include <boost/program_options.hpp>
 #include <boost/scoped_ptr.hpp>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd
@@ -37,7 +37,7 @@ struct ImportDiffContext {
   ImportDiffContext(librbd::Image *image, int fd, size_t size, bool no_progress)
     : image(image), fd(fd), size(size), pc("Importing image diff", no_progress),
       throttle((fd == STDIN_FILENO) ? 1 :
-                  g_conf->get_val<int64_t>("rbd_concurrent_management_ops"),
+                  g_conf().get_val<uint64_t>("rbd_concurrent_management_ops"),
                false),
       last_offset(0) {
   }
@@ -265,13 +265,13 @@ static int do_image_io(ImportDiffContext *idiffctx, bool discard, size_t sparse_
       bool zeroed = false;
       utils::calc_sparse_extent(bp, sparse_size, buffer_offset, buffer_length,
 				&write_length, &zeroed);
-      assert(write_length > 0);
+      ceph_assert(write_length > 0);
 
       bufferlist write_bl;
       if (!zeroed) {
 	bufferptr write_ptr(bp, buffer_offset, write_length);
 	write_bl.push_back(write_ptr);
-	assert(write_bl.length() == write_length);
+	ceph_assert(write_bl.length() == write_length);
       }
 
       C_ImportDiff *ctx = new C_ImportDiff(idiffctx, write_bl,
@@ -489,11 +489,13 @@ int execute_diff(const po::variables_map &vm,
   }
 
   std::string pool_name;
+  std::string namespace_name;
   std::string image_name;
   std::string snap_name;
   r = utils::get_pool_image_snapshot_names(
-    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_NONE);
+    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &namespace_name,
+    &image_name, &snap_name, true, utils::SNAPSHOT_PRESENCE_NONE,
+    utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
@@ -506,8 +508,8 @@ int execute_diff(const po::variables_map &vm,
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", false,
-                                 &rados, &io_ctx, &image);
+  r = utils::init_and_open_image(pool_name, namespace_name, image_name, "", "",
+                                 false, &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
   }
@@ -639,16 +641,12 @@ static int decode_imagemeta(int fd, uint64_t length, std::map<std::string, std::
   return 0;
 }
 
-static int do_import_header(int fd, int import_format, uint64_t &size, librbd::ImageOptions& opts,
+static int do_import_header(int fd, int import_format, librbd::ImageOptions& opts,
                             std::map<std::string, std::string>* imagemetas)
 {
   // There is no header in v1 image.
   if (import_format == 1) {
     return 0;
-  }
-
-  if (fd == STDIN_FILENO || size < utils::RBD_IMAGE_BANNER_V2.size()) {
-    return -EINVAL;
   }
 
   int r;
@@ -742,7 +740,7 @@ static int do_import_v1(int fd, librbd::Image &image, uint64_t size,
     throttle.reset(new SimpleThrottle(1, false));
   } else {
     throttle.reset(new SimpleThrottle(
-      g_conf->get_val<int64_t>("rbd_concurrent_management_ops"), false));
+      g_conf().get_val<uint64_t>("rbd_concurrent_management_ops"), false));
   }
 
   reqlen = min<uint64_t>(reqlen, size);
@@ -785,7 +783,7 @@ static int do_import_v1(int fd, librbd::Image &image, uint64_t size,
 	bufferlist write_bl;
 	bufferptr write_ptr(blkptr, buffer_offset, write_length);
 	write_bl.push_back(write_ptr);
-	assert(write_bl.length() == write_length);
+	ceph_assert(write_bl.length() == write_length);
 
 	C_Import *ctx = new C_Import(*throttle, image, write_bl,
 				     image_pos + buffer_offset);
@@ -832,11 +830,11 @@ static int do_import(librados::Rados &rados, librbd::RBD &rbd,
   utils::ProgressContext pc("Importing image", no_progress);
   std::map<std::string, std::string> imagemetas;
 
-  assert(imgname);
+  ceph_assert(imgname);
 
   uint64_t order;
   if (opts.get(RBD_IMAGE_OPTION_ORDER, &order) != 0) {
-    order = g_conf->get_val<int64_t>("rbd_default_order");
+    order = g_conf().get_val<uint64_t>("rbd_default_order");
   }
 
   // try to fill whole imgblklen blocks for sparsification
@@ -870,13 +868,14 @@ static int do_import(librados::Rados &rados, librbd::RBD &rbd,
 
     if (!size) {
       int64_t bdev_size = 0;
-      r = get_block_device_size(fd, &bdev_size);
+      BlkDev blkdev(fd);
+      r = blkdev.get_size(&bdev_size);
       if (r < 0) {
         std::cerr << "rbd: unable to get size of file/block device"
                   << std::endl;
         goto done;
       }
-      assert(bdev_size >= 0);
+      ceph_assert(bdev_size >= 0);
       size = (uint64_t) bdev_size;
     }
 #ifdef HAVE_POSIX_FADVISE
@@ -884,7 +883,7 @@ static int do_import(librados::Rados &rados, librbd::RBD &rbd,
 #endif
   }
 
-  r = do_import_header(fd, import_format, size, opts, &imagemetas);
+  r = do_import_header(fd, import_format, opts, &imagemetas);
   if (r < 0) {
     std::cerr << "rbd: import header failed." << std::endl;
     goto done;
@@ -978,8 +977,8 @@ int execute(const po::variables_map &vm,
 
   std::string deprecated_snap_name;
   r = utils::extract_spec(deprecated_image_name, &deprecated_pool_name,
-                          &deprecated_image_name, &deprecated_snap_name,
-                          utils::SPEC_VALIDATION_FULL);
+                          nullptr, &deprecated_image_name,
+                          &deprecated_snap_name, utils::SPEC_VALIDATION_FULL);
   if (r < 0) {
     return r;
   }
@@ -990,12 +989,13 @@ int execute(const po::variables_map &vm,
   }
 
   std::string pool_name = deprecated_pool_name;
+  std::string namespace_name;
   std::string image_name;
   std::string snap_name = deprecated_snap_name;
   r = utils::get_pool_image_snapshot_names(
-    vm, at::ARGUMENT_MODIFIER_DEST, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_FULL,
-    false);
+    vm, at::ARGUMENT_MODIFIER_DEST, &arg_index, &pool_name, &namespace_name,
+    &image_name, &snap_name, false, utils::SNAPSHOT_PRESENCE_NONE,
+    utils::SPEC_VALIDATION_FULL);
   if (r < 0) {
     return r;
   }
@@ -1012,7 +1012,7 @@ int execute(const po::variables_map &vm,
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  r = utils::init(pool_name, &rados, &io_ctx);
+  r = utils::init(pool_name, namespace_name, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }

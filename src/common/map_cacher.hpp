@@ -15,6 +15,7 @@
 #ifndef MAPCACHER_H
 #define MAPCACHER_H
 
+#include "include/Context.h"
 #include "common/sharedptr_registry.hpp"
 
 namespace MapCacher {

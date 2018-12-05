@@ -33,14 +33,14 @@
 #include "DPDKStack.h"
 
 #include "common/dout.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_subsys ceph_subsys_dpdk
 #undef dout_prefix
 #define dout_prefix *_dout << "net "
 
-interface::interface(CephContext *c, std::shared_ptr<DPDKDevice> dev, EventCenter *center)
-    : cct(c), _dev(dev),
+interface::interface(CephContext *cct, std::shared_ptr<DPDKDevice> dev, EventCenter *center)
+    : cct(cct), _dev(dev),
       _rx(_dev->receive(
           center->get_id(),
           [center, this] (Packet p) {
@@ -64,7 +64,7 @@ interface::interface(CephContext *c, std::shared_ptr<DPDKDevice> dev, EventCente
         eh->src_mac = _hw_address;
         eh->eth_proto = uint16_t(l3pv.proto_num);
         *eh = eh->hton();
-        ldout(cct, 10) << "=== tx === proto " << std::hex << uint16_t(l3pv.proto_num)
+        ldout(this->cct, 10) << "=== tx === proto " << std::hex << uint16_t(l3pv.proto_num)
                        << " " << _hw_address << " -> " << l3pv.to
                        << " length " << std::dec << l3pv.p.len() << dendl;
         p = std::move(l3pv.p);
@@ -81,7 +81,7 @@ subscription<Packet, ethernet_address> interface::register_l3(
     std::function<bool (forward_hash&, Packet& p, size_t)> forward)
 {
   auto i = _proto_map.emplace(std::piecewise_construct, std::make_tuple(uint16_t(proto_num)), std::forward_as_tuple(std::move(forward)));
-  assert(i.second);
+  ceph_assert(i.second);
   l3_rx_stream& l3_rx = i.first->second;
   return l3_rx.packet_stream.listen(std::move(next));
 }

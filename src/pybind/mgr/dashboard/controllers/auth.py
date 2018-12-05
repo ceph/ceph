@@ -1,92 +1,84 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-import time
-
-import bcrypt
 import cherrypy
+import jwt
 
 from . import ApiController, RESTController
-from .. import logger, mgr
+from .. import logger
 from ..exceptions import DashboardException
-from ..tools import Session
+from ..services.auth import AuthManager, JwtManager
+from ..services.access_control import UserDoesNotExist
+from ..services.sso import SSO_DB
 
 
-@ApiController('/auth')
+@ApiController('/auth', secure=False)
 class Auth(RESTController):
     """
-    Provide login and logout actions.
-
-    Supported config-keys:
-
-      | KEY             | DEFAULT | DESCR                                     |
-      ------------------------------------------------------------------------|
-      | username        | None    | Username                                  |
-      | password        | None    | Password encrypted using bcrypt           |
-      | session-expire  | 1200    | Session will expire after <expires>       |
-      |                           | seconds without activity                  |
+    Provide authenticates and returns JWT token.
     """
 
-    def create(self, username, password, stay_signed_in=False):
-        now = time.time()
-        config_username = mgr.get_config('username', None)
-        config_password = mgr.get_config('password', None)
-        hash_password = Auth.password_hash(password,
-                                           config_password)
-        if username == config_username and hash_password == config_password:
-            cherrypy.session.regenerate()
-            cherrypy.session[Session.USERNAME] = username
-            cherrypy.session[Session.TS] = now
-            cherrypy.session[Session.EXPIRE_AT_BROWSER_CLOSE] = not stay_signed_in
+    def create(self, username, password):
+        user_perms = AuthManager.authenticate(username, password)
+        if user_perms is not None:
             logger.debug('Login successful')
-            return {'username': username}
+            token = JwtManager.gen_token(username)
+            token = token.decode('utf-8')
+            logger.debug("JWT Token: %s", token)
+            cherrypy.response.headers['Authorization'] = "Bearer: {}".format(token)
+            return {
+                'token': token,
+                'username': username,
+                'permissions': user_perms
+            }
 
-        if config_username is None:
-            logger.warning('No Credentials configured. Need to call `ceph dashboard '
-                           'set-login-credentials <username> <password>` first.')
-        else:
-            logger.debug('Login failed')
+        logger.debug('Login failed')
         raise DashboardException(msg='Invalid credentials',
                                  code='invalid_credentials',
                                  component='auth')
 
-    def bulk_delete(self):
+    @RESTController.Collection('POST')
+    def logout(self):
         logger.debug('Logout successful')
-        cherrypy.session[Session.USERNAME] = None
-        cherrypy.session[Session.TS] = None
+        token = JwtManager.get_token_from_header()
+        JwtManager.blacklist_token(token)
+        redirect_url = '#/login'
+        if SSO_DB.protocol == 'saml2':
+            redirect_url = 'auth/saml2/slo'
+        return {
+            'redirect_url': redirect_url
+        }
 
-    @staticmethod
-    def password_hash(password, salt_password=None):
-        if not salt_password:
-            salt_password = bcrypt.gensalt()
-        else:
-            salt_password = salt_password.encode('utf8')
-        return bcrypt.hashpw(password.encode('utf8'), salt_password).decode('utf8')
+    def _get_login_url(self):
+        if SSO_DB.protocol == 'saml2':
+            return 'auth/saml2/login'
+        return '#/login'
 
-    @staticmethod
-    def check_auth():
-        username = cherrypy.session.get(Session.USERNAME)
-        if not username:
-            logger.debug('Unauthorized access to %s',
-                         cherrypy.url(relative='server'))
-            raise cherrypy.HTTPError(401, 'You are not authorized to access '
-                                          'that resource')
-        now = time.time()
-        expires = float(mgr.get_config(
-            'session-expire', Session.DEFAULT_EXPIRE))
-        if expires > 0:
-            username_ts = cherrypy.session.get(Session.TS, None)
-            if username_ts and float(username_ts) < (now - expires):
-                cherrypy.session[Session.USERNAME] = None
-                cherrypy.session[Session.TS] = None
-                logger.debug('Session expired')
-                raise cherrypy.HTTPError(401,
-                                         'Session expired. You are not '
-                                         'authorized to access that resource')
-        cherrypy.session[Session.TS] = now
+    @RESTController.Collection('POST')
+    def check(self, token):
+        if token:
+            try:
+                token = JwtManager.decode_token(token)
+                if not JwtManager.is_blacklisted(token['jti']):
+                    user = AuthManager.get_user(token['username'])
+                    if user.lastUpdate <= token['iat']:
+                        return {
+                            'username': user.username,
+                            'permissions': user.permissions_dict(),
+                        }
 
-    @staticmethod
-    def set_login_credentials(username, password):
-        mgr.set_config('username', username)
-        hashed_passwd = Auth.password_hash(password)
-        mgr.set_config('password', hashed_passwd)
+                    logger.debug("AMT: user info changed after token was"
+                                 " issued, iat=%s lastUpdate=%s",
+                                 token['iat'], user.lastUpdate)
+                else:
+                    logger.debug('AMT: Token is black-listed')
+            except jwt.exceptions.ExpiredSignatureError:
+                logger.debug("AMT: Token has expired")
+            except jwt.exceptions.InvalidTokenError:
+                logger.debug("AMT: Failed to decode token")
+            except UserDoesNotExist:
+                logger.debug("AMT: Invalid token: user %s does not exist",
+                             token['username'])
+        return {
+            'login_url': self._get_login_url()
+        }

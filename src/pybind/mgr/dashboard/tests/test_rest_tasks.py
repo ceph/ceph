@@ -9,7 +9,7 @@ from ..controllers.task import Task as TaskController
 from ..tools import NotificationQueue, TaskManager
 
 
-@Controller('test/task')
+@Controller('/test/task', secure=False)
 class TaskTest(RESTController):
     sleep_time = 0.0
 
@@ -37,6 +37,11 @@ class TaskTest(RESTController):
     @RESTController.Resource('PUT')
     def bar(self, key, param=None):
         return {'my_param': param, 'key': key}
+
+    @Task('task/query', ['{param}'])
+    @RESTController.Collection('POST', query_params=['param'])
+    def query(self, param=None):
+        return {'my_param': param}
 
 
 class TaskControllerTest(ControllerTestCase):
@@ -75,3 +80,7 @@ class TaskControllerTest(ControllerTestCase):
     def test_bar_task(self):
         self._task_put('/test/task/3/bar', {'param': 'hello'})
         self.assertJsonBody({'my_param': 'hello', 'key': '3'})
+
+    def test_query_param(self):
+        self._task_post('/test/task/query')
+        self.assertJsonBody({'my_param': None})

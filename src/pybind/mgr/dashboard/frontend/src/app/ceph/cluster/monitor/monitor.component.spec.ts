@@ -1,8 +1,8 @@
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
+import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { MonitorService } from '../../../shared/api/monitor.service';
-import { configureTestBed } from '../../../shared/unit-test-helper';
 import { MonitorComponent } from './monitor.component';
 
 describe('MonitorComponent', () => {
@@ -14,7 +14,7 @@ describe('MonitorComponent', () => {
   configureTestBed({
     declarations: [MonitorComponent],
     schemas: [NO_ERRORS_SCHEMA],
-    providers: [{ provide: MonitorService, useValue: fakeService }]
+    providers: [{ provide: MonitorService, useValue: fakeService }, i18nProviders]
   });
 
   beforeEach(() => {
