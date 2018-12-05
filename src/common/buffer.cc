@@ -467,7 +467,7 @@ static ceph::spinlock debug_lock;
     _raw->nref++;
     bdout << "ptr " << this << " get " << _raw << bendl;
   }
-  buffer::ptr::ptr(const ptr& p, std::unique_ptr<raw> r)
+  buffer::ptr::ptr(const ptr& p, ceph::unique_leakable_ptr<raw> r)
     : _raw(r.release()),
       _off(p._off),
       _len(p._len)
@@ -508,7 +508,7 @@ static ceph::spinlock debug_lock;
     return *this;
   }
 
-  std::unique_ptr<buffer::raw> buffer::ptr::clone()
+  ceph::unique_leakable_ptr<buffer::raw> buffer::ptr::clone()
   {
     return _raw->clone();
   }

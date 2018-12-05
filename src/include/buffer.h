@@ -87,6 +87,26 @@ using sha1_digest_t = sha_digest_t<20>;
 
 namespace ceph {
 
+template <class T>
+struct nop_delete {
+  void operator()(T*) {}
+};
+
+// This is not unique_ptr-like smart pointer! It just signalizes ownership
+// but DOES NOT manage the resource. It WILL LEAK if not manually deleted.
+// It's rather a replacement for raw pointer than any other smart one.
+//
+// Considered options:
+//  * unique_ptr with custom deleter implemented in .cc (would provide
+//    the non-zero-cost resource management),
+//  * GSL's owner<T*> (pretty neat but would impose an extra depedency),
+//  * unique_ptr with nop deleter,
+//  * raw pointer (doesn't embed ownership enforcement - std::move).
+template <class T>
+struct unique_leakable_ptr : public std::unique_ptr<T, ceph::nop_delete<T>> {
+  using std::unique_ptr<T, ceph::nop_delete<T>>::unique_ptr;
+};
+
 namespace buffer CEPH_BUFFER_API {
   /*
    * exceptions
@@ -255,7 +275,7 @@ namespace buffer CEPH_BUFFER_API {
     ptr(const ptr& p);
     ptr(ptr&& p) noexcept;
     ptr(const ptr& p, unsigned o, unsigned l);
-    ptr(const ptr& p, std::unique_ptr<raw> r);
+    ptr(const ptr& p, ceph::unique_leakable_ptr<raw> r);
     ptr& operator= (const ptr& p);
     ptr& operator= (ptr&& p) noexcept;
     ~ptr() {
@@ -266,7 +286,7 @@ namespace buffer CEPH_BUFFER_API {
 
     bool have_raw() const { return _raw ? true:false; }
 
-    std::unique_ptr<raw> clone();
+    ceph::unique_leakable_ptr<raw> clone();
     void swap(ptr& other) noexcept;
 
     iterator begin(size_t offset=0) {
@@ -1068,7 +1088,7 @@ namespace buffer CEPH_BUFFER_API {
       _carriage = &_buffers.back();
       _len += _buffers.back().length();
     }
-    void push_back(std::unique_ptr<raw> r) {
+    void push_back(ceph::unique_leakable_ptr<raw> r) {
       push_back(r.release());
     }
 
