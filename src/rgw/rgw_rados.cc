@@ -100,7 +100,7 @@ static string default_bucket_index_pool_suffix = "rgw.buckets.index";
 static string default_storage_extra_pool_suffix = "rgw.buckets.non-ec";
 
 static string log_lock_name = "rgw_log_lock";
-static RGWObjCategory main_category = RGW_OBJ_CATEGORY_MAIN;
+static RGWObjCategory main_category = RGWObjCategory::Main;
 #define RGW_USAGE_OBJ_PREFIX "usage."
 
 
@@ -3381,7 +3381,7 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
                RGWRados::ATTRSMOD_NONE,
                true, /* bool copy_if_newer */
                state->attrset,
-               RGW_OBJ_CATEGORY_MAIN,
+               RGWObjCategory::Main,
                0, /* uint64_t olh_epoch */
                real_time(), /* time_t delete_at */
                NULL, /* string *version_id */
@@ -3467,7 +3467,7 @@ int RGWRados::swift_versioning_restore(RGWSysObjectCtx& sysobj_ctx,
                        RGWRados::ATTRSMOD_NONE,
                        true,          /* bool copy_if_newer */
                        no_attrs,
-                       RGW_OBJ_CATEGORY_MAIN,
+                       RGWObjCategory::Main,
                        0,             /* uint64_t olh_epoch */
                        real_time(),   /* time_t delete_at */
                        nullptr,       /* string *version_id */
@@ -6079,7 +6079,7 @@ int RGWRados::set_attrs(void *ctx, const RGWBucketInfo& bucket_info, rgw_obj& ob
       int64_t poolid = ref.ioctx.get_id();
       r = index_op.complete(poolid, epoch, state->size, state->accounted_size,
                             mtime, etag, content_type, &acl_bl,
-                            RGW_OBJ_CATEGORY_MAIN, NULL);
+                            RGWObjCategory::Main, NULL);
     } else {
       int ret = index_op.cancel();
       if (ret < 0) {
@@ -8075,7 +8075,7 @@ int RGWRados::update_containers_stats(map<string, RGWBucketEnt>& m)
     auto hiter = headers.begin();
     for (; hiter != headers.end(); ++hiter) {
       RGWObjCategory category = main_category;
-      map<uint8_t, struct rgw_bucket_category_stats>::iterator iter = (hiter->stats).find((uint8_t)category);
+      auto iter = (hiter->stats).find(category);
       if (iter != hiter->stats.end()) {
         struct rgw_bucket_category_stats& stats = iter->second;
         ent.count += stats.num_entries;
@@ -8649,14 +8649,19 @@ int RGWRados::cls_obj_complete_del(BucketShard& bs, string& tag,
   rgw_bucket_dir_entry ent;
   ent.meta.mtime = removed_mtime;
   obj.key.get_index_key(&ent.key);
-  return cls_obj_complete_op(bs, obj, CLS_RGW_OP_DEL, tag, pool, epoch, ent, RGW_OBJ_CATEGORY_NONE, remove_objs, bilog_flags, zones_trace);
+  return cls_obj_complete_op(bs, obj, CLS_RGW_OP_DEL, tag, pool, epoch,
+			     ent, RGWObjCategory::None, remove_objs,
+			     bilog_flags, zones_trace);
 }
 
 int RGWRados::cls_obj_complete_cancel(BucketShard& bs, string& tag, rgw_obj& obj, uint16_t bilog_flags, rgw_zone_set *zones_trace)
 {
   rgw_bucket_dir_entry ent;
   obj.key.get_index_key(&ent.key);
-  return cls_obj_complete_op(bs, obj, CLS_RGW_OP_CANCEL, tag, -1 /* pool id */, 0, ent, RGW_OBJ_CATEGORY_NONE, NULL, bilog_flags, zones_trace);
+  return cls_obj_complete_op(bs, obj, CLS_RGW_OP_CANCEL, tag,
+			     -1 /* pool id */, 0, ent,
+			     RGWObjCategory::None, NULL, bilog_flags,
+			     zones_trace);
 }
 
 int RGWRados::cls_obj_set_bucket_tag_timeout(RGWBucketInfo& bucket_info, uint64_t timeout)
@@ -9244,8 +9249,8 @@ int RGWRados::cls_user_sync_bucket_stats(rgw_raw_obj& user_obj,
 
   for (const auto& hiter : headers) {
     for (const auto& iter : hiter.stats) {
-      if (uint8_t(RGW_OBJ_CATEGORY_MAIN) == iter.first ||
-	  uint8_t(RGW_OBJ_CATEGORY_MULTIMETA) == iter.first) {
+      if (RGWObjCategory::Main == iter.first ||
+	  RGWObjCategory::MultiMeta == iter.first) {
 	const struct rgw_bucket_category_stats& header_stats = iter.second;
 	entry.size += header_stats.total_size;
 	entry.size_rounded += header_stats.total_size_rounded;

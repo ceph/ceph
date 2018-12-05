@@ -463,7 +463,7 @@ WRITE_CLASS_ENCODER(rgw_cls_check_index_ret)
 struct rgw_cls_bucket_update_stats_op
 {
   bool absolute{false};
-  map<uint8_t, rgw_bucket_category_stats> stats;
+  map<RGWObjCategory, rgw_bucket_category_stats> stats;
 
   rgw_cls_bucket_update_stats_op() {}
 

@@ -286,13 +286,6 @@ enum RGWIntentEvent {
   DEL_DIR = 1,
 };
 
-enum RGWObjCategory {
-  RGW_OBJ_CATEGORY_NONE      = 0,
-  RGW_OBJ_CATEGORY_MAIN      = 1,
-  RGW_OBJ_CATEGORY_SHADOW    = 2,
-  RGW_OBJ_CATEGORY_MULTIMETA = 3,
-};
-
 enum HostStyle {
   PathStyle = 0,
   VirtualStyle = 1,
@@ -1472,7 +1465,7 @@ struct RGWStorageStats
   uint64_t num_objects;
 
   RGWStorageStats()
-    : category(RGW_OBJ_CATEGORY_NONE),
+    : category(RGWObjCategory::None),
       size(0),
       size_rounded(0),
       num_objects(0) {}
@@ -2257,13 +2250,13 @@ static inline void append_rand_alpha(CephContext *cct, const string& src, string
 static inline const char *rgw_obj_category_name(RGWObjCategory category)
 {
   switch (category) {
-  case RGW_OBJ_CATEGORY_NONE:
+  case RGWObjCategory::None:
     return "rgw.none";
-  case RGW_OBJ_CATEGORY_MAIN:
+  case RGWObjCategory::Main:
     return "rgw.main";
-  case RGW_OBJ_CATEGORY_SHADOW:
+  case RGWObjCategory::Shadow:
     return "rgw.shadow";
-  case RGW_OBJ_CATEGORY_MULTIMETA:
+  case RGWObjCategory::MultiMeta:
     return "rgw.multimeta";
   }
 
