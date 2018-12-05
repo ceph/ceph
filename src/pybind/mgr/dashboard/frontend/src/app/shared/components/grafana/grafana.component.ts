@@ -17,7 +17,6 @@ export class GrafanaComponent implements OnInit, OnChanges {
   url: string;
   protocol: string;
   host: string;
-  dashboardPath: string;
   port: number;
   baseUrl: any;
   panelStyle: any;
@@ -27,11 +26,15 @@ export class GrafanaComponent implements OnInit, OnChanges {
   modeText = 'Change time selection';
   loading = true;
   styles = {};
+  dashboardExist = true;
 
   @Input()
   grafanaPath: string;
   @Input()
   grafanaStyle: string;
+  @Input()
+  uid: string;
+
   docsUrl: string;
 
   constructor(
@@ -73,7 +76,10 @@ export class GrafanaComponent implements OnInit, OnChanges {
   }
 
   getFrame() {
-    this.url = this.baseUrl + this.grafanaPath + '&refresh=2s' + this.mode;
+    this.settingsService
+      .validateGrafanaDashboardUrl(this.uid)
+      .subscribe((data: any) => (this.dashboardExist = data === 200));
+    this.url = this.baseUrl + this.uid + '/' + this.grafanaPath + '&refresh=2s' + this.mode;
     this.grafanaSrc = this.sanitizer.bypassSecurityTrustResourceUrl(this.url);
   }
 
