@@ -547,15 +547,19 @@ TEST(CommonIPAddr, ambiguous)
   entity_addr_t a;
   bool ok;
 
-  ok = a.parse("1.2.3.4", nullptr, entity_addr_t::TYPE_V1ORV2);
+  ok = a.parse("1.2.3.4", nullptr, entity_addr_t::TYPE_ANY);
   ASSERT_TRUE(ok);
-  ASSERT_EQ(entity_addr_t::TYPE_V1ORV2, a.get_type());
+  ASSERT_EQ(entity_addr_t::TYPE_ANY, a.get_type());
 
-  ok = a.parse("v1:1.2.3.4", nullptr, entity_addr_t::TYPE_V1ORV2);
+  ok = a.parse("any:1.2.3.4", nullptr, entity_addr_t::TYPE_ANY);
+  ASSERT_TRUE(ok);
+  ASSERT_EQ(entity_addr_t::TYPE_ANY, a.get_type());
+
+  ok = a.parse("v1:1.2.3.4", nullptr, entity_addr_t::TYPE_ANY);
   ASSERT_TRUE(ok);
   ASSERT_EQ(entity_addr_t::TYPE_LEGACY, a.get_type());
 
-  ok = a.parse("v2:1.2.3.4", nullptr, entity_addr_t::TYPE_V1ORV2);
+  ok = a.parse("v2:1.2.3.4", nullptr, entity_addr_t::TYPE_ANY);
   ASSERT_TRUE(ok);
   ASSERT_EQ(entity_addr_t::TYPE_MSGR2, a.get_type());
 }
