@@ -983,4 +983,9 @@ public:
 };
 WRITE_CLASS_ENCODER(RGWPeriod)
 
+bool rgw_get_obj_data_pool(const RGWZoneGroup& zonegroup,
+                           const RGWZoneParams& zone,
+                           const std::string& placement_id,
+                           const rgw_obj& obj, rgw_pool *pool);
+
 #endif

@@ -1925,3 +1925,23 @@ void RGWZoneGroupMap::decode(bufferlist::const_iterator& bl) {
 }
 
 
+bool rgw_get_obj_data_pool(const RGWZoneGroup& zonegroup,
+                           const RGWZoneParams& zone,
+                           const std::string& placement_id,
+                           const rgw_obj& obj, rgw_pool *pool)
+{
+  if (!zone.get_head_data_pool(placement_id, obj, pool)) {
+    RGWZonePlacementInfo placement;
+    if (!zone.get_placement(zonegroup.default_placement, &placement)) {
+      return false;
+    }
+
+    if (!obj.in_extra_data) {
+      *pool = placement.data_pool;
+    } else {
+      *pool = placement.get_data_extra_pool();
+    }
+  }
+
+  return true;
+}

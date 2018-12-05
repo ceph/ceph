@@ -107,25 +107,6 @@ static RGWObjCategory main_category = RGW_OBJ_CATEGORY_MAIN;
 #define dout_subsys ceph_subsys_rgw
 
 
-static bool rgw_get_obj_data_pool(const RGWZoneGroup& zonegroup, const RGWZoneParams& zone_params,
-                                  const string& placement_id, const rgw_obj& obj, rgw_pool *pool)
-{
-  if (!zone_params.get_head_data_pool(placement_id, obj, pool)) {
-    RGWZonePlacementInfo placement;
-    if (!zone_params.get_placement(zonegroup.default_placement, &placement)) {
-      return false;
-    }
-
-    if (!obj.in_extra_data) {
-      *pool = placement.data_pool;
-    } else {
-      *pool = placement.get_data_extra_pool();
-    }
-  }
-
-  return true;
-}
-
 static bool rgw_obj_to_raw(const RGWZoneGroup& zonegroup, const RGWZoneParams& zone_params,
                            const string& placement_id, const rgw_obj& obj, rgw_raw_obj *raw_obj)
 {
