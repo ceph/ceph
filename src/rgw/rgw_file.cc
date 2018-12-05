@@ -2186,7 +2186,7 @@ public:
 
   struct rgw_vio* get_vio() { return vio; }
 
-  const std::list<buffer::ptr>& buffers() { return bl.buffers(); }
+  const auto& buffers() { return bl.buffers(); }
 
   unsigned /* XXX */ length() { return bl.length(); }
 
