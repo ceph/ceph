@@ -74,6 +74,7 @@ struct Config {
   bool set_max_part = false;
 
   std::string poolname;
+  std::string nsname;
   std::string imgname;
   std::string snapname;
   std::string devpath;
@@ -715,6 +716,8 @@ static int do_map(int argc, const char *argv[], Config *cfg)
   if (r < 0)
     goto close_fd;
 
+  io_ctx.set_namespace(cfg->nsname);
+
   r = rbd.open(io_ctx, image, cfg->imgname.c_str());
   if (r < 0)
     goto close_fd;
@@ -928,7 +931,7 @@ static int do_unmap(const std::string &devpath)
 
 static int parse_imgpath(const std::string &imgpath, Config *cfg,
                          std::ostream *err_msg) {
-  std::regex pattern("^(?:([^/@]+)/)?([^/@]+)(?:@([^/@]+))?$");
+  std::regex pattern("^(?:([^/]+)/(?:([^/@]+)/)?)?([^@]+)(?:@([^/@]+))?$");
   std::smatch match;
   if (!std::regex_match(imgpath, match, pattern)) {
     std::cerr << "rbd-nbd: invalid spec '" << imgpath << "'" << std::endl;
@@ -939,10 +942,14 @@ static int parse_imgpath(const std::string &imgpath, Config *cfg,
     cfg->poolname = match[1];
   }
 
-  cfg->imgname = match[2];
+  if (match[2].matched) {
+    cfg->nsname = match[2];
+  }
 
-  if (match[3].matched)
-    cfg->snapname = match[3];
+  cfg->imgname = match[3];
+
+  if (match[4].matched)
+    cfg->snapname = match[4];
 
   return 0;
 }
@@ -967,6 +974,7 @@ static int do_list_mapped_devices(const std::string &format, bool pretty_format)
   } else {
     tbl.define_column("id", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("pool", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("namespace", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("image", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("snap", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("device", TextTable::LEFT, TextTable::LEFT);
@@ -980,6 +988,7 @@ static int do_list_mapped_devices(const std::string &format, bool pretty_format)
       f->open_object_section("device");
       f->dump_int("id", pid);
       f->dump_string("pool", cfg.poolname);
+      f->dump_string("namespace", cfg.nsname);
       f->dump_string("image", cfg.imgname);
       f->dump_string("snap", cfg.snapname);
       f->dump_string("device", cfg.devpath);
@@ -989,8 +998,8 @@ static int do_list_mapped_devices(const std::string &format, bool pretty_format)
       if (cfg.snapname.empty()) {
         cfg.snapname = "-";
       }
-      tbl << pid << cfg.poolname << cfg.imgname << cfg.snapname << cfg.devpath
-          << TextTable::endrow;
+      tbl << pid << cfg.poolname << cfg.nsname << cfg.imgname << cfg.snapname
+          << cfg.devpath << TextTable::endrow;
     }
   }
 
