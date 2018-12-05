@@ -51,7 +51,7 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
   bool         stopping;
 
   SafeTimer    timer;
-
+  std::string gss_ktfile_client{};
 
   mono_time get_starttime() const {
     return starttime;

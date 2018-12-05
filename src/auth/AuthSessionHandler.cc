@@ -15,6 +15,7 @@
 #include "common/debug.h"
 #include "AuthSessionHandler.h"
 #include "cephx/CephxSessionHandler.h"
+#include "krb/KrbSessionHandler.hpp"
 #include "none/AuthNoneSessionHandler.h"
 #include "unknown/AuthUnknownSessionHandler.h"
 
@@ -39,6 +40,8 @@ AuthSessionHandler *get_auth_session_handler(CephContext *cct, int protocol, Cry
     return new AuthNoneSessionHandler(cct, key);
   case CEPH_AUTH_UNKNOWN:
     return new AuthUnknownSessionHandler(cct, key);
+  case CEPH_AUTH_GSS: 
+    return new KrbSessionHandler(cct, key);
   }
   return NULL;
 }

@@ -41,7 +41,8 @@ endif()
 target_link_libraries(librados PRIVATE
   rados_cxx librados_impl
   osdc ceph-common cls_lock_client
-  ${BLKID_LIBRARIES} ${CRYPTO_LIBS} ${EXTRALIBS})
+  ${BLKID_LIBRARIES} ${CRYPTO_LIBS} ${EXTRALIBS} ${GSSAPI_LIBRARIES})
+target_link_libraries(librados ${rados_libs})
 install(TARGETS librados DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 # C++ API
