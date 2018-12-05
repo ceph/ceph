@@ -1204,6 +1204,13 @@ namespace rgw {
 
     RGWUserInfo* get_user() { return &user; }
 
+    void update_user() {
+      RGWUserInfo _user = user;
+      int ret = rgw_get_user_info_by_access_key(rgwlib.get_store(), key.id, user);
+      if (ret != 0)
+        user = _user;
+    }
+
     void close();
     void gc();
   }; /* RGWLibFS */
