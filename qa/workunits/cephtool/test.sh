@@ -1381,7 +1381,7 @@ function test_mon_osd()
   ceph osd blacklist ls | grep $bl
   ceph osd blacklist ls --format=json-pretty  | sed 's/\\\//\//' | grep $bl
   ceph osd dump --format=json-pretty | grep $bl
-  ceph osd dump | grep "^blacklist $bl"
+  ceph osd dump | grep $bl
   ceph osd blacklist rm $bl
   ceph osd blacklist ls | expect_false grep $bl
 
@@ -1390,7 +1390,7 @@ function test_mon_osd()
   ceph osd blacklist add $bl
   ceph osd blacklist ls | grep $bl
   ceph osd blacklist rm $bl
-  ceph osd blacklist ls | expect_false grep $expect_false bl
+  ceph osd blacklist ls | expect_false grep $bl
   expect_false "ceph osd blacklist $bl/-1"
   expect_false "ceph osd blacklist $bl/foo"
 
