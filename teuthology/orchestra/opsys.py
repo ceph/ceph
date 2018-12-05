@@ -50,6 +50,7 @@ DISTRO_CODENAME_MAP = {
         "12.2": "sle",
         "12.3": "sle",
         "15.0": "sle",
+        "15.1": "sle",
     },
 }
 
