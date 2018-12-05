@@ -2807,7 +2807,7 @@ int OSD::init()
 
   mgrc.set_pgstats_cb([this](){ return collect_pg_stats(); });
   mgrc.set_perf_metric_query_cb(
-      [this](const std::list<OSDPerfMetricQuery> &queries) {
+    [this](const std::map<OSDPerfMetricQuery, OSDPerfMetricLimits> &queries) {
         set_perf_queries(queries);
       },
       [this](std::map<OSDPerfMetricQuery, OSDPerfMetricReport> *reports) {
@@ -9800,15 +9800,17 @@ int OSD::init_op_flags(OpRequestRef& op)
   return 0;
 }
 
-void OSD::set_perf_queries(const std::list<OSDPerfMetricQuery> &queries) {
+void OSD::set_perf_queries(
+    const std::map<OSDPerfMetricQuery, OSDPerfMetricLimits> &queries) {
   dout(10) << "setting " << queries.size() << " queries" << dendl;
 
   std::list<OSDPerfMetricQuery> supported_queries;
-  std::copy_if(queries.begin(), queries.end(),
-               std::back_inserter(supported_queries),
-               [](const OSDPerfMetricQuery &query) {
-                 return !query.key_descriptor.empty();
-               });
+  for (auto &it : queries) {
+    auto &query = it.first;
+    if (!query.key_descriptor.empty()) {
+      supported_queries.push_back(query);
+    }
+  }
   if (supported_queries.size() < queries.size()) {
     dout(1) << queries.size() - supported_queries.size()
             << " unsupported queries" << dendl;
@@ -9817,6 +9819,7 @@ void OSD::set_perf_queries(const std::list<OSDPerfMetricQuery> &queries) {
   {
     Mutex::Locker locker(m_perf_queries_lock);
     m_perf_queries = supported_queries;
+    m_perf_limits = queries;
   }
 
   std::vector<PGRef> pgs;
@@ -9848,7 +9851,7 @@ void OSD::get_perf_reports(
       dps.merge(pg_dps);
     }
   }
-  dps.add_to_reports(reports);
+  dps.add_to_reports(m_perf_limits, reports);
   dout(20) << "reports for " << reports->size() << " queries" << dendl;
 }
 

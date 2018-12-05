@@ -2684,9 +2684,10 @@ void DaemonServer::_send_configure(ConnectionRef c)
 }
 
 OSDPerfMetricQueryID DaemonServer::add_osd_perf_query(
-  const OSDPerfMetricQuery &query)
+    const OSDPerfMetricQuery &query,
+    const std::optional<OSDPerfMetricLimit> &limit)
 {
-  return osd_perf_metric_collector.add_query(query);
+  return osd_perf_metric_collector.add_query(query, limit);
 }
 
 int DaemonServer::remove_osd_perf_query(OSDPerfMetricQueryID query_id)

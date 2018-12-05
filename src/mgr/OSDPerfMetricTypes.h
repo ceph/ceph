@@ -116,12 +116,15 @@ typedef std::pair<uint64_t,uint64_t> PerformanceCounter;
 typedef std::vector<PerformanceCounter> PerformanceCounters;
 
 enum class PerformanceCounterType : uint8_t {
-  WRITE_OPS = 0,
-  READ_OPS = 1,
-  WRITE_BYTES = 2,
-  READ_BYTES = 3,
-  WRITE_LATENCY = 4,
-  READ_LATENCY = 5,
+  OPS = 0,
+  WRITE_OPS = 1,
+  READ_OPS = 2,
+  BYTES = 3,
+  WRITE_BYTES = 4,
+  READ_BYTES = 5,
+  LATENCY = 6,
+  WRITE_LATENCY = 7,
+  READ_LATENCY = 8,
 };
 
 struct PerformanceCounterDescriptor {
@@ -129,10 +132,13 @@ struct PerformanceCounterDescriptor {
 
   bool is_supported() const {
     switch (type) {
+    case PerformanceCounterType::OPS:
     case PerformanceCounterType::WRITE_OPS:
     case PerformanceCounterType::READ_OPS:
+    case PerformanceCounterType::BYTES:
     case PerformanceCounterType::WRITE_BYTES:
     case PerformanceCounterType::READ_BYTES:
+    case PerformanceCounterType::LATENCY:
     case PerformanceCounterType::WRITE_LATENCY:
     case PerformanceCounterType::READ_LATENCY:
       return true;
@@ -149,6 +155,14 @@ struct PerformanceCounterDescriptor {
 
   bool operator<(const PerformanceCounterDescriptor &other) const {
     return type < other.type;
+  }
+
+  bool operator==(const PerformanceCounterDescriptor &other) const {
+    return type == other.type;
+  }
+
+  bool operator!=(const PerformanceCounterDescriptor &other) const {
+    return type != other.type;
   }
 
   DENC(PerformanceCounterDescriptor, v, p) {
@@ -205,6 +219,38 @@ struct denc_traits<PerformanceCounterDescriptors> {
     }
   }
 };
+
+struct OSDPerfMetricLimit {
+  PerformanceCounterDescriptor order_by;
+  uint64_t max_count = 0;
+
+  OSDPerfMetricLimit() {
+  }
+
+  OSDPerfMetricLimit(const PerformanceCounterDescriptor &order_by,
+                     uint64_t max_count)
+    : order_by(order_by), max_count(max_count) {
+  }
+
+  bool operator<(const OSDPerfMetricLimit &other) const {
+    if (order_by != other.order_by) {
+      return order_by < other.order_by;
+    }
+    return max_count < other.max_count;
+  }
+
+  DENC(OSDPerfMetricLimit, v, p) {
+    DENC_START(1, 1, p);
+    denc(v.order_by, p);
+    denc(v.max_count, p);
+    DENC_FINISH(p);
+  }
+};
+WRITE_CLASS_DENC(OSDPerfMetricLimit)
+
+std::ostream& operator<<(std::ostream& os, const OSDPerfMetricLimit &limit);
+
+typedef std::set<OSDPerfMetricLimit> OSDPerfMetricLimits;
 
 typedef int OSDPerfMetricQueryID;
 

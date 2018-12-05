@@ -79,7 +79,8 @@ protected:
   // If provided, use this to compose an MPGStats to send with
   // our reports (hook for use by OSD)
   std::function<MPGStats*()> pgstats_cb;
-  std::function<void(const std::list<OSDPerfMetricQuery> &)> set_perf_queries_cb;
+  std::function<void(const std::map<OSDPerfMetricQuery,
+                                    OSDPerfMetricLimits> &)> set_perf_queries_cb;
   std::function<void(std::map<OSDPerfMetricQuery,
                               OSDPerfMetricReport> *)> get_perf_report_cb;
 
@@ -119,7 +120,8 @@ public:
   bool handle_command_reply(MCommandReply *m);
 
   void set_perf_metric_query_cb(
-          std::function<void(const std::list<OSDPerfMetricQuery> &)> cb_set,
+    std::function<void(const std::map<OSDPerfMetricQuery,
+                                      OSDPerfMetricLimits> &)> cb_set,
           std::function<void(std::map<OSDPerfMetricQuery,
                                       OSDPerfMetricReport> *)> cb_get)
   {

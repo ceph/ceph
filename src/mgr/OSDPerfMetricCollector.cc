@@ -11,22 +11,46 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr.osd_perf_metric_collector " << __func__ << " "
 
+namespace {
+
+bool is_limited(const std::map<OSDPerfMetricQueryID,
+                                std::optional<OSDPerfMetricLimit>> &limits) {
+  for (auto &it : limits) {
+    if (!it.second) {
+      return false;
+    }
+  }
+  return true;
+}
+
+} // anonymous namespace
+
 OSDPerfMetricCollector::OSDPerfMetricCollector(Listener &listener)
   : listener(listener), lock("OSDPerfMetricCollector::lock") {
 }
 
-std::list<OSDPerfMetricQuery> OSDPerfMetricCollector::get_queries() {
+std::map<OSDPerfMetricQuery, OSDPerfMetricLimits>
+OSDPerfMetricCollector::get_queries() const {
   std::lock_guard locker(lock);
 
-  std::list<OSDPerfMetricQuery> query_list;
+  std::map<OSDPerfMetricQuery, OSDPerfMetricLimits> result;
   for (auto &it : queries) {
-    query_list.push_back(it.first);
+    auto &query = it.first;
+    auto &limits = it.second;
+    auto result_it = result.insert({query, {}}).first;
+    if (is_limited(limits)) {
+      for (auto &iter : limits) {
+        result_it->second.insert(*iter.second);
+      }
+    }
   }
 
-  return query_list;
+  return result;
 }
 
-int OSDPerfMetricCollector::add_query(const OSDPerfMetricQuery& query) {
+OSDPerfMetricQueryID OSDPerfMetricCollector::add_query(
+    const OSDPerfMetricQuery& query,
+    const std::optional<OSDPerfMetricLimit> &limit) {
   uint64_t query_id;
   bool notify = false;
 
@@ -38,12 +62,15 @@ int OSDPerfMetricCollector::add_query(const OSDPerfMetricQuery& query) {
     if (it == queries.end()) {
       it = queries.insert({query, {}}).first;
       notify = true;
+    } else if (is_limited(it->second)) {
+      notify = true;
     }
-    it->second.insert(query_id);
+    it->second.insert({query_id, limit});
     counters[query_id];
   }
 
-  dout(10) << query << " query_id=" << query_id << dendl;
+  dout(10) << query << " " << (limit ? stringify(*limit) : "unlimited")
+           << " query_id=" << query_id << dendl;
 
   if (notify) {
     listener.handle_query_updated();
@@ -60,16 +87,20 @@ int OSDPerfMetricCollector::remove_query(int query_id) {
     std::lock_guard locker(lock);
 
     for (auto it = queries.begin() ; it != queries.end(); it++) {
-      auto &ids = it->second;
-
-      if (ids.erase(query_id) > 0) {
-        if (ids.empty()) {
-          queries.erase(it);
-          notify = true;
-        }
-        found = true;
-        break;
+      auto iter = it->second.find(query_id);
+      if (iter == it->second.end()) {
+        continue;
       }
+
+      it->second.erase(iter);
+      if (it->second.empty()) {
+        queries.erase(it);
+        notify = true;
+      } else if (is_limited(it->second)) {
+        notify = true;
+      }
+      found = true;
+      break;
     }
     counters.erase(query_id);
   }
@@ -142,7 +173,8 @@ void OSDPerfMetricCollector::process_reports(
       auto &key = it.first;
       auto bl_it = it.second.cbegin();
 
-      for (auto query_id : queries[query]) {
+      for (auto &queries_it : queries[query]) {
+        auto query_id = queries_it.first;
         auto &key_counters = counters[query_id][key];
         if (key_counters.empty()) {
           key_counters.resize(query.performance_counter_descriptors.size(),
@@ -155,14 +187,15 @@ void OSDPerfMetricCollector::process_reports(
         if (desc_it == report.performance_counter_descriptors.end()) {
           break;
         }
-        if (desc_it->type != query.performance_counter_descriptors[i].type) {
+        if (*desc_it != query.performance_counter_descriptors[i]) {
           continue;
         }
         PerformanceCounter c;
         desc_it->unpack_counter(bl_it, &c);
         dout(20) << "counter " << key << " " << *desc_it << ": " << c << dendl;
 
-        for (auto query_id : queries[query]) {
+        for (auto &queries_it : queries[query]) {
+          auto query_id = queries_it.first;
           auto &key_counters = counters[query_id][key];
           key_counters[i].first += c.first;
           key_counters[i].second += c.second;
