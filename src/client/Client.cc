@@ -2087,9 +2087,11 @@ void Client::handle_client_session(MClientSession *m)
 
   case CEPH_SESSION_RENEWCAPS:
     if (session->cap_renew_seq == m->get_seq()) {
+      bool was_stale = ceph_clock_now() >= session->cap_ttl;
       session->cap_ttl =
 	session->last_cap_renew_request + mdsmap->get_session_timeout();
-      wake_up_session_caps(session, false);
+      if (was_stale)
+	wake_up_session_caps(session, false);
     }
     break;
 
