@@ -2089,7 +2089,7 @@ void Client::handle_client_session(MClientSession *m)
     if (session->cap_renew_seq == m->get_seq()) {
       session->cap_ttl =
 	session->last_cap_renew_request + mdsmap->get_session_timeout();
-      wake_inode_waiters(session);
+      wake_up_session_caps(session, false);
     }
     break;
 
@@ -2703,8 +2703,7 @@ void Client::handle_mds_map(MMDSMap* m)
 	kick_requests(session);
 	kick_flushing_caps(session);
 	signal_context_list(session->waiting_for_open);
-	kick_maxsize_requests(session);
-	wake_inode_waiters(session);
+	wake_up_session_caps(session, true);
       }
       connect_mds_targets(mds);
     } else if (newstate == MDSMap::STATE_NULL &&
@@ -3749,12 +3748,17 @@ void Client::signal_context_list(list<Context*>& ls)
   }
 }
 
-void Client::wake_inode_waiters(MetaSession *s)
+void Client::wake_up_session_caps(MetaSession *s, bool reconnect)
 {
   xlist<Cap*>::iterator iter = s->caps.begin();
   while (!iter.end()){
-    signal_cond_list((*iter)->inode->waitfor_caps);
+    auto in = (*iter)->inode;
     ++iter;
+    if (reconnect) {
+      in->requested_max_size = 0;
+      in->wanted_max_size = 0;
+    }
+    signal_cond_list(in->waitfor_caps);
   }
 }
 
@@ -4428,17 +4432,6 @@ void Client::early_kick_flushing_caps(MetaSession *session)
     if (in->flushing_caps)
       flush_caps(in, session);
 
-  }
-}
-
-void Client::kick_maxsize_requests(MetaSession *session)
-{
-  xlist<Cap*>::iterator iter = session->caps.begin();
-  while (!iter.end()){
-    (*iter)->inode->requested_max_size = 0;
-    (*iter)->inode->wanted_max_size = 0;
-    signal_cond_list((*iter)->inode->waitfor_caps);
-    ++iter;
   }
 }
 
