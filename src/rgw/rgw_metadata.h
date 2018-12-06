@@ -359,7 +359,9 @@ public:
 
   int put_entry(RGWMetadataHandler *handler, const string& key, bufferlist& bl, bool exclusive,
                 RGWObjVersionTracker *objv_tracker, real_time mtime, map<string, bufferlist> *pattrs = NULL);
-  int remove_entry(RGWMetadataHandler *handler, string& key, RGWObjVersionTracker *objv_tracker);
+  int remove_entry(RGWMetadataHandler *handler,
+		   const string& key,
+		   RGWObjVersionTracker *objv_tracker);
   int get(string& metadata_key, Formatter *f);
   int put(string& metadata_key, bufferlist& bl,
           RGWMetadataHandler::sync_type_t sync_mode,
