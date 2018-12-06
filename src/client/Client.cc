@@ -2125,7 +2125,7 @@ void Client::handle_client_session(const MConstRef<MClientSession>& m)
     if (session->cap_renew_seq == m->get_seq()) {
       session->cap_ttl =
 	session->last_cap_renew_request + mdsmap->get_session_timeout();
-      wake_inode_waiters(session);
+      wake_up_session_caps(session, false);
     }
     break;
 
@@ -2741,8 +2741,7 @@ void Client::handle_mds_map(const MConstRef<MMDSMap>& m)
 	kick_requests(session);
 	kick_flushing_caps(session);
 	signal_context_list(session->waiting_for_open);
-	kick_maxsize_requests(session);
-	wake_inode_waiters(session);
+	wake_up_session_caps(session, true);
       }
       connect_mds_targets(mds);
     } else if (newstate == MDSMap::STATE_NULL &&
@@ -3788,10 +3787,15 @@ void Client::signal_context_list(list<Context*>& ls)
   }
 }
 
-void Client::wake_inode_waiters(MetaSession *s)
+void Client::wake_up_session_caps(MetaSession *s, bool reconnect)
 {
   for (const auto &cap : s->caps) {
-    signal_cond_list(cap->inode.waitfor_caps);
+    auto &in = cap->inode;
+    if (reconnect) {
+      in.requested_max_size = 0;
+      in.wanted_max_size = 0;
+    }
+    signal_cond_list(in.waitfor_caps);
   }
 }
 
@@ -4456,16 +4460,6 @@ void Client::early_kick_flushing_caps(MetaSession *session)
     if (in->flushing_caps)
       flush_caps(in, session);
 
-  }
-}
-
-void Client::kick_maxsize_requests(MetaSession *session)
-{
-  for (const auto &cap : session->caps) {
-    auto &in = cap->inode;
-    in.requested_max_size = 0;
-    in.wanted_max_size = 0;
-    signal_cond_list(in.waitfor_caps);
   }
 }
 
