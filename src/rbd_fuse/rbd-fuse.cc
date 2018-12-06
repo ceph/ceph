@@ -38,6 +38,7 @@
 
 static int gotrados = 0;
 char *pool_name;
+char *nspace_name;
 char *mount_image_name;
 rados_t cluster;
 rados_ioctx_t ioctx;
@@ -51,6 +52,7 @@ struct rbd_stat {
 
 struct rbd_options {
 	char *pool_name;
+	char *nspace_name;
 	char *image_name;
 };
 
@@ -73,7 +75,7 @@ struct rbd_openimage {
 #define MAX_RBD_IMAGES		128
 struct rbd_openimage opentbl[MAX_RBD_IMAGES];
 
-struct rbd_options rbd_options = {(char*) "rbd", NULL};
+struct rbd_options rbd_options = {(char*) "rbd", (char*) "", NULL};
 
 #define rbdsize(fd)	opentbl[fd].rbd_stat.rbd_info.size
 #define rbdblksize(fd)	opentbl[fd].rbd_stat.rbd_info.obj_size
@@ -129,7 +131,11 @@ enumerate_images(struct rbd_image_data *data)
 		}
 	}
 
-	fprintf(stderr, "pool %s: ", pool_name);
+	if (*nspace_name != '\0') {
+	    fprintf(stderr, "pool/namespace %s/%s: ", pool_name, nspace_name);
+	} else {
+	    fprintf(stderr, "pool %s: ", pool_name);
+	}
 	for (size_t idx = 0; idx < data->image_spec_count; ++idx) {
 		if ((mount_image_name == NULL) ||
 		    ((strlen(mount_image_name) > 0) &&
@@ -494,6 +500,7 @@ rbdfs_init(struct fuse_conn_info *conn)
 		exit(90);
 
 	pool_name = rbd_options.pool_name;
+	nspace_name = rbd_options.nspace_name;
 	mount_image_name = rbd_options.image_name;
 	ret = rados_ioctx_create(cluster, pool_name, &ioctx);
 	if (ret < 0)
@@ -501,6 +508,7 @@ rbdfs_init(struct fuse_conn_info *conn)
 #if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 8)
 	conn->want |= FUSE_CAP_BIG_WRITES;
 #endif
+	rados_ioctx_set_namespace(ioctx, nspace_name);
 	gotrados = 1;
 
 	// init's return value shows up in fuse_context.private_data,
@@ -757,6 +765,8 @@ enum {
 	KEY_VERSION,
 	KEY_RADOS_POOLNAME,
 	KEY_RADOS_POOLNAME_LONG,
+	KEY_RADOS_NSPACENAME,
+	KEY_RADOS_NSPACENAME_LONG,
 	KEY_RBD_IMAGENAME,
 	KEY_RBD_IMAGENAME_LONG
 };
@@ -769,6 +779,9 @@ static struct fuse_opt rbdfs_opts[] = {
 	{"-p %s", offsetof(struct rbd_options, pool_name), KEY_RADOS_POOLNAME},
 	{"--poolname=%s", offsetof(struct rbd_options, pool_name),
 	 KEY_RADOS_POOLNAME_LONG},
+	{"-s %s", offsetof(struct rbd_options, nspace_name), KEY_RADOS_NSPACENAME},
+	{"--namespace=%s", offsetof(struct rbd_options, nspace_name),
+	 KEY_RADOS_NSPACENAME_LONG},
 	{"-r %s", offsetof(struct rbd_options, image_name), KEY_RBD_IMAGENAME},
 	{"--image=%s", offsetof(struct rbd_options, image_name),
 	KEY_RBD_IMAGENAME_LONG},
@@ -785,6 +798,7 @@ static void usage(const char *progname)
 "    -V   --version         print version\n"
 "    -c   --conf            ceph configuration file [/etc/ceph/ceph.conf]\n"
 "    -p   --poolname        rados pool name [rbd]\n"
+"    -s   --namespace       rados namespace name []\n"
 "    -r   --image           RBD image name\n"
 "\n", progname);
 }
@@ -811,6 +825,15 @@ static int rbdfs_opt_proc(void *data, const char *arg, int key,
 			rbd_options.pool_name = NULL;
 		}
 		rbd_options.pool_name = strdup(arg+2);
+		return 0;
+	}
+
+	if (key == KEY_RADOS_NSPACENAME) {
+		if (rbd_options.nspace_name != NULL) {
+			free(rbd_options.nspace_name);
+			rbd_options.nspace_name = NULL;
+		}
+		rbd_options.nspace_name = strdup(arg+2);
 		return 0;
 	}
 
