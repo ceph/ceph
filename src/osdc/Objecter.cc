@@ -3269,7 +3269,7 @@ void Objecter::_send_op(Op *op)
     ldout(cct, 20) << " posting rx buffer for " << op->tid << " on " << con
 		   << dendl;
     op->con = con;
-    op->con->post_rx_buffer(op->tid, *op->outbl);
+    op->con->post_rx_buffer(op->tid, std::move(*op->outbl));
   }
 
   op->incarnation = op->session->incarnation;
