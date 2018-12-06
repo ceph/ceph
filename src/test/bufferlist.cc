@@ -464,20 +464,6 @@ TEST(BufferPtr, have_raw) {
   }
 }
 
-TEST(BufferPtr, at_buffer_head) {
-  bufferptr ptr(2);
-  EXPECT_TRUE(ptr.at_buffer_head());
-  ptr.set_offset(1);
-  EXPECT_FALSE(ptr.at_buffer_head());
-}
-
-TEST(BufferPtr, at_buffer_tail) {
-  bufferptr ptr(2);
-  EXPECT_TRUE(ptr.at_buffer_tail());
-  ptr.set_length(1);
-  EXPECT_FALSE(ptr.at_buffer_tail());
-}
-
 TEST(BufferPtr, is_n_page_sized) {
   {
     bufferptr ptr(CEPH_PAGE_SIZE);

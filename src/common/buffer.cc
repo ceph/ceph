@@ -654,8 +654,6 @@ using namespace ceph;
     }
   }
 
-  bool buffer::ptr::at_buffer_tail() const { return _off + _len == _raw->len; }
-
   int buffer::ptr::get_mempool() const {
     if (_raw) {
       return _raw->mempool;

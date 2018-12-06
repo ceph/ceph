@@ -296,9 +296,6 @@ namespace buffer CEPH_BUFFER_API {
     }
 
     // misc
-    bool at_buffer_head() const { return _off == 0; }
-    bool at_buffer_tail() const;
-
     bool is_aligned(unsigned align) const {
       return ((long)c_str() & (align-1)) == 0;
     }
