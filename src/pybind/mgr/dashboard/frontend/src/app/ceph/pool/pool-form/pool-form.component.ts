@@ -100,7 +100,7 @@ export class PoolFormComponent implements OnInit {
     this.form = new CdFormGroup(
       {
         name: new FormControl('', {
-          validators: [Validators.pattern('[A-Za-z0-9_-]+'), Validators.required]
+          validators: [Validators.pattern('[\\.A-Za-z0-9_-]+'), Validators.required]
         }),
         poolType: new FormControl('', {
           validators: [Validators.required]
