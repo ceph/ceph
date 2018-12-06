@@ -274,6 +274,7 @@ BuildRequires:	python%{_python_buildid}-jwt
 BuildRequires:	python%{_python_buildid}-routes
 BuildRequires:	python%{_python_buildid}-werkzeug
 BuildRequires:	python%{_python_buildid}-bcrypt
+BuildRequires:  xmlsec1
 %endif
 %if 0%{?suse_version}
 BuildRequires:	python%{_python_buildid}-CherryPy
@@ -282,6 +283,7 @@ BuildRequires:	python%{_python_buildid}-Routes
 BuildRequires:	python%{_python_buildid}-Werkzeug
 BuildRequires:	python%{_python_buildid}-numpy-devel
 BuildRequires:	python%{_python_buildid}-bcrypt
+BuildRequires:  libxmlsec1-1
 %endif
 %endif
 # lttng and babeltrace for rbd-replay-prep
