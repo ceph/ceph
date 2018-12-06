@@ -1539,13 +1539,11 @@ using namespace ceph;
 
   void buffer::list::append(const ptr& bp)
   {
-    if (bp.length())
       push_back(bp);
   }
 
   void buffer::list::append(ptr&& bp)
   {
-    if (bp.length())
       push_back(std::move(bp));
   }
 
