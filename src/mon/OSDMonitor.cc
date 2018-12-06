@@ -4765,6 +4765,23 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     f->open_object_section("osd_location");
     f->dump_int("osd", osd);
     f->dump_object("addrs", osdmap.get_addrs(osd));
+
+    // try to identify host, pod/container name, etc.
+    map<string,string> m;
+    load_metadata(osd, m, nullptr);
+    if (auto p = m.find("hostname"); p != m.end()) {
+      f->dump_string("host", p->second);
+    }
+    for (auto& k : {
+	"pod_name", "pod_namespace", // set by rook
+	"container_name"             // set by ceph-ansible
+	}) {
+      if (auto p = m.find(k); p != m.end()) {
+	f->dump_string(k, p->second);
+      }
+    }
+
+    // crush is helpful too
     f->open_object_section("crush_location");
     map<string,string> loc = osdmap.crush->get_full_location(osd);
     for (map<string,string>::iterator p = loc.begin(); p != loc.end(); ++p)
