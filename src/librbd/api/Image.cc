@@ -690,10 +690,49 @@ int Image<I>::remove(IoCtx& io_ctx, const std::string &image_name,
     ConfigProxy config(cct->_conf);
     Config<I>::apply_pool_overrides(io_ctx, &config);
 
-    if (config.get_val<bool>("rbd_move_to_trash_on_remove")) {
-      return Trash<I>::move(
-        io_ctx, RBD_TRASH_IMAGE_SOURCE_USER, image_name,
-        config.get_val<uint64_t>("rbd_move_to_trash_on_remove_expire_seconds"));
+    std::string image_id;
+    int r = cls_client::dir_get_id(&io_ctx, RBD_DIRECTORY, image_name,
+                                   &image_id);
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << "failed to retrieve image id: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    if(r == 0) {
+      auto expire_seconds = config.get_val<uint64_t>(
+        "rbd_move_to_trash_on_remove_expire_seconds");
+
+      if (config.get_val<bool>("rbd_move_to_trash_on_remove")) {
+        return Trash<I>::move_by_id(
+          io_ctx, RBD_TRASH_IMAGE_SOURCE_USER, image_id, image_name,
+          expire_seconds, true);
+      } else {
+        r = Trash<I>::move_by_id(
+          io_ctx, RBD_TRASH_IMAGE_SOURCE_REMOVE, image_id, image_name,
+          expire_seconds, true);
+
+        if (r == -ENOENT) {
+          // check if it already exists in trash from an aborted
+          // remove attempt
+          std::vector<trash_image_info_t> trash_entries;
+          r = Trash<I>::list(io_ctx, trash_entries);
+          if (r < 0) {
+            return r;
+          }
+
+          for (auto& entry : trash_entries) {
+            if (entry.name == image_name &&
+                entry.source == RBD_TRASH_IMAGE_SOURCE_REMOVE) {
+              return Trash<I>::remove(io_ctx, image_id, force, prog_ctx);
+            }
+          }
+          return -ENOENT;
+        } else if (r < 0) {
+          return r;
+        }
+
+        return Trash<I>::remove(io_ctx, image_id, force, prog_ctx);
+      }
     }
   }
 

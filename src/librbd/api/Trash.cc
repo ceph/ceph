@@ -20,6 +20,8 @@
 #include "librbd/mirror/EnableRequest.h"
 #include "librbd/trash/MoveRequest.h"
 #include <json_spirit/json_spirit.h>
+#include "librbd/journal/DisabledPolicy.h"
+#include "librbd/image/ListWatchersRequest.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -116,27 +118,18 @@ int enable_mirroring(IoCtx &io_ctx, const std::string &image_id) {
 } // anonymous namespace
 
 template <typename I>
-int Trash<I>::move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
-                   const std::string &image_name, uint64_t delay) {
+int Trash<I>::move_by_id(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
+                   const std::string &image_id, const std::string &image_name,
+                   uint64_t delay, bool check_for_watchers) {
   CephContext *cct((CephContext *)io_ctx.cct());
-  ldout(cct, 20) << "trash_move " << &io_ctx << " " << image_name
+  ldout(cct, 20) << &io_ctx << " " << (image_id.empty() ? image_name : image_id)
                  << dendl;
-
-  // try to get image id from the directory
-  std::string image_id;
-  int r = cls_client::dir_get_id(&io_ctx, RBD_DIRECTORY, image_name,
-                                 &image_id);
-  if (r < 0 && r != -ENOENT) {
-    lderr(cct) << "failed to retrieve image id: " << cpp_strerror(r) << dendl;
-    return r;
-  }
 
   ImageCtx *ictx = new ImageCtx((image_id.empty() ? image_name : ""),
                                 image_id, nullptr, io_ctx, false);
-  r = ictx->state->open(OPEN_FLAG_SKIP_OPEN_PARENT);
-  if (r == -ENOENT) {
-    return r;
-  } else if (r < 0) {
+  int r = ictx->state->open(OPEN_FLAG_SKIP_OPEN_PARENT);
+
+  if (r < 0 && r != -ENOENT) {
     lderr(cct) << "failed to open image: " << cpp_strerror(r) << dendl;
     return r;
   } else if (ictx->old_format) {
@@ -145,49 +138,84 @@ int Trash<I>::move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
     return -EOPNOTSUPP;
   }
 
-  image_id = ictx->id;
-  ictx->owner_lock.get_read();
-  if (ictx->exclusive_lock != nullptr) {
-    ictx->exclusive_lock->block_requests(0);
+  std::string id = ictx->id;
 
-    r = ictx->operations->prepare_image_update(false);
-    if (r < 0) {
-      lderr(cct) << "cannot obtain exclusive lock - not removing" << dendl;
-      ictx->owner_lock.put_read();
-      ictx->state->close();
-      return -EBUSY;
-    }
-  }
-  ictx->owner_lock.put_read();
-
-  if (!ictx->migration_info.empty()) {
-    lderr(cct) << "cannot move migrating image to trash" << dendl;
-    ictx->state->close();
-    return -EINVAL;
-  }
-
-  r = disable_mirroring<I>(ictx);
-  if (r < 0) {
+  if (id.empty()) {
     return r;
+  }
+
+  if (r == 0) {
+    if (ictx->test_features(RBD_FEATURE_JOURNALING)) {
+      RWLock::WLocker snap_locker(ictx->snap_lock);
+      ictx->set_journal_policy(new journal::DisabledPolicy());
+    }
+
+    ictx->owner_lock.get_read();
+    if (ictx->exclusive_lock != nullptr) {
+      ictx->exclusive_lock->block_requests(0);
+
+      r = ictx->operations->prepare_image_update(false);
+      if (r < 0) {
+        lderr(cct) << "cannot obtain exclusive lock - not removing" << dendl;
+        ictx->owner_lock.put_read();
+        ictx->state->close();
+        return -EBUSY;
+      }
+    }
+    ictx->owner_lock.put_read();
+
+    if (!ictx->migration_info.empty()) {
+      lderr(cct) << "cannot move migrating image to trash" << dendl;
+      ictx->state->close();
+      return -EINVAL;
+    }
+
+    r = disable_mirroring<I>(ictx);
+    if (r < 0) {
+      ictx->state->close();
+      return r;
+    }
+
+    if (check_for_watchers) {
+      std::list<obj_watch_t> t_watchers;
+      int flags = librbd::image::LIST_WATCHERS_FILTER_OUT_MY_INSTANCE |
+                  librbd::image::LIST_WATCHERS_FILTER_OUT_MIRROR_INSTANCES;
+      C_SaferCond t_on_list_watchers;
+      auto list_req = librbd::image::ListWatchersRequest<I>::create(
+          *ictx, flags, &t_watchers, &t_on_list_watchers);
+      list_req->send();
+      r = t_on_list_watchers.wait();
+      if (r < 0) {
+        lderr(cct) << "failed listing watchers:" << cpp_strerror(r) << dendl;
+        ictx->state->close();
+        return r;
+      }
+      if (!t_watchers.empty()) {
+        lderr(cct) << "image has watchers - not moving" << dendl;
+        ictx->state->close();
+        return -EBUSY;
+      }
+    }
+
+    ictx->state->close();
   }
 
   utime_t delete_time{ceph_clock_now()};
   utime_t deferment_end_time{delete_time};
   deferment_end_time += delay;
   cls::rbd::TrashImageSpec trash_image_spec{
-    static_cast<cls::rbd::TrashImageSource>(source), ictx->name,
+    static_cast<cls::rbd::TrashImageSource>(source), image_name,
     delete_time, deferment_end_time};
 
   trash_image_spec.state = cls::rbd::TRASH_IMAGE_STATE_MOVING;
   C_SaferCond ctx;
-  auto req = trash::MoveRequest<I>::create(io_ctx, ictx->id, trash_image_spec,
+  auto req = trash::MoveRequest<I>::create(io_ctx, id, trash_image_spec,
                                            &ctx);
   req->send();
 
   r = ctx.wait();
-  ictx->state->close();
   trash_image_spec.state = cls::rbd::TRASH_IMAGE_STATE_NORMAL;
-  int ret = cls_client::trash_state_set(&io_ctx, image_id,
+  int ret = cls_client::trash_state_set(&io_ctx, id,
                                         trash_image_spec.state,
                                         cls::rbd::TRASH_IMAGE_STATE_MOVING);
   if (ret < 0 && ret != -EOPNOTSUPP) {
@@ -200,7 +228,7 @@ int Trash<I>::move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
   }
 
   C_SaferCond notify_ctx;
-  TrashWatcher<I>::notify_image_added(io_ctx, image_id, trash_image_spec,
+  TrashWatcher<I>::notify_image_added(io_ctx, id, trash_image_spec,
                                       &notify_ctx);
   r = notify_ctx.wait();
   if (r < 0) {
@@ -209,6 +237,27 @@ int Trash<I>::move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
   }
 
   return 0;
+}
+
+template <typename I>
+int Trash<I>::move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
+                   const std::string &image_name, uint64_t delay,
+                   bool check_for_watchers) {
+  CephContext *cct((CephContext *)io_ctx.cct());
+  ldout(cct, 20) << &io_ctx << " " << image_name
+                 << dendl;
+
+  // try to get image id from the directory
+  std::string image_id;
+  int r = cls_client::dir_get_id(&io_ctx, RBD_DIRECTORY, image_name,
+                                 &image_id);
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "failed to retrieve image id: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  return Trash<I>::move_by_id(io_ctx, source, image_id, image_name, delay,
+                              check_for_watchers);
 }
 
 template <typename I>

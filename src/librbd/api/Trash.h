@@ -21,8 +21,12 @@ namespace api {
 template <typename ImageCtxT = librbd::ImageCtx>
 struct Trash {
 
+  static int move_by_id(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
+                  const std::string &image_id, const std::string &image_name,
+                  uint64_t delay, bool check_for_watchers=false);
   static int move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
-                  const std::string &image_name, uint64_t delay);
+                  const std::string &image_name, uint64_t delay,
+                  bool check_for_watchers=false);
   static int get(librados::IoCtx &io_ctx, const std::string &id,
                  trash_image_info_t *info);
   static int list(librados::IoCtx &io_ctx,
