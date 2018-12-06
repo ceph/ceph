@@ -662,7 +662,6 @@ public:
   void flush_caps(Inode *in, MetaSession *session, bool sync=false);
   void kick_flushing_caps(MetaSession *session);
   void early_kick_flushing_caps(MetaSession *session);
-  void kick_maxsize_requests(MetaSession *session);
   int get_caps(Inode *in, int need, int want, int *have, loff_t endoff);
   int get_caps_used(Inode *in);
 
@@ -865,7 +864,7 @@ protected:
   }
 
   // helpers
-  void wake_inode_waiters(MetaSession *s);
+  void wake_up_session_caps(MetaSession *s, bool reconnect);
 
   void wait_on_context_list(list<Context*>& ls);
   void signal_context_list(list<Context*>& ls);
