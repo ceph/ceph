@@ -107,41 +107,6 @@ using namespace ceph;
     return buffer_missed_crc;
   }
 
-#ifdef CEPH_HAVE_SETPIPE_SZ
-  static std::atomic<unsigned> buffer_max_pipe_size { 0 };
-  int update_max_pipe_size() {
-    char buf[32];
-    int r;
-    std::string err;
-    struct stat stat_result;
-    if (::stat(PROCPREFIX "/proc/sys/fs/pipe-max-size", &stat_result) == -1)
-      return -errno;
-    r = safe_read_file(PROCPREFIX "/proc/sys/fs/", "pipe-max-size",
-		       buf, sizeof(buf) - 1);
-    if (r < 0)
-      return r;
-    buf[r] = '\0';
-    size_t size = strict_strtol(buf, 10, &err);
-    if (!err.empty())
-      return -EIO;
-    buffer_max_pipe_size = size;
-    return 0;
-  }
-
-  size_t get_max_pipe_size() {
-    size_t size = buffer_max_pipe_size;
-    if (size)
-      return size;
-    if (update_max_pipe_size() == 0)
-      return buffer_max_pipe_size;
-    // this is the max size hardcoded in linux before 2.6.35
-    return 65536;
-  }
-#else
-  size_t get_max_pipe_size() { return 65536; }
-#endif
-
-
   const char * buffer::error::what() const throw () {
     return "buffer::exception";
   }
