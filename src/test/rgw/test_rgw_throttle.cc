@@ -12,7 +12,7 @@
  *
  */
 
-#include "rgw/rgw_putobj_throttle.h"
+#include "rgw/rgw_aio_throttle.h"
 #include "rgw/rgw_rados.h"
 
 #include "include/rados/librados.hpp"
@@ -44,44 +44,33 @@ auto *const rados_env = ::testing::AddGlobalTestEnvironment(new RadosEnv);
 // test fixture for global setup/teardown
 class RadosFixture : public ::testing::Test {
  protected:
-  rgw_raw_obj make_raw_obj(const std::string& oid) {
-    return {{RadosEnv::poolname}, oid};
-  }
-  RGWSI_RADOS::Obj make_obj(const rgw_raw_obj& raw) {
-    auto obj = RadosEnv::rados->obj(raw);
+  RGWSI_RADOS::Obj make_obj(const std::string& oid) {
+    auto obj = RadosEnv::rados->obj({{RadosEnv::poolname}, oid});
     ceph_assert_always(0 == obj.open());
     return obj;
   }
 };
 
-using PutObj_Throttle = RadosFixture;
+using Aio_Throttle = RadosFixture;
 
-namespace rgw::putobj {
+namespace rgw {
 
-inline bool operator==(const Result& lhs, const Result& rhs) {
-  return lhs.obj == rhs.obj && lhs.result == rhs.result;
-}
-std::ostream& operator<<(std::ostream& out, const Result& r) {
-  return out << "{r=" << r.result << " obj='" << r.obj << "'";
-}
-
-TEST_F(PutObj_Throttle, NoThrottleUpToMax)
+TEST_F(Aio_Throttle, NoThrottleUpToMax)
 {
   AioThrottle throttle(4);
-  auto raw = make_raw_obj(__PRETTY_FUNCTION__);
-  auto obj = make_obj(raw);
+  auto obj = make_obj(__PRETTY_FUNCTION__);
   {
     librados::ObjectWriteOperation op1;
-    auto c1 = throttle.submit(obj, raw, &op1, 1);
+    auto c1 = throttle.submit(obj, &op1, 1, 0);
     EXPECT_TRUE(c1.empty());
     librados::ObjectWriteOperation op2;
-    auto c2 = throttle.submit(obj, raw, &op2, 1);
+    auto c2 = throttle.submit(obj, &op2, 1, 0);
     EXPECT_TRUE(c2.empty());
     librados::ObjectWriteOperation op3;
-    auto c3 = throttle.submit(obj, raw, &op3, 1);
+    auto c3 = throttle.submit(obj, &op3, 1, 0);
     EXPECT_TRUE(c3.empty());
     librados::ObjectWriteOperation op4;
-    auto c4 = throttle.submit(obj, raw, &op4, 1);
+    auto c4 = throttle.submit(obj, &op4, 1, 0);
     EXPECT_TRUE(c4.empty());
     // no completions because no ops had to wait
     auto c5 = throttle.poll();
@@ -89,29 +78,27 @@ TEST_F(PutObj_Throttle, NoThrottleUpToMax)
   auto completions = throttle.drain();
   ASSERT_EQ(4u, completions.size());
   for (auto& c : completions) {
-    EXPECT_EQ(Result({raw, -EINVAL}), c);
+    EXPECT_EQ(-EINVAL, c.result);
   }
 }
 
-TEST_F(PutObj_Throttle, CostOverWindow)
+TEST_F(Aio_Throttle, CostOverWindow)
 {
   AioThrottle throttle(4);
-  auto raw = make_raw_obj(__PRETTY_FUNCTION__);
-  auto obj = make_obj(raw);
+  auto obj = make_obj(__PRETTY_FUNCTION__);
 
   librados::ObjectWriteOperation op;
-  auto c = throttle.submit(obj, raw, &op, 8);
+  auto c = throttle.submit(obj, &op, 8, 0);
   ASSERT_EQ(1u, c.size());
-  EXPECT_EQ(Result({raw, -EDEADLK}), c.front());
+  EXPECT_EQ(-EDEADLK, c.front().result);
 }
 
-TEST_F(PutObj_Throttle, AioThrottleOverMax)
+TEST_F(Aio_Throttle, ThrottleOverMax)
 {
   constexpr uint64_t window = 4;
   AioThrottle throttle(window);
 
-  auto raw = make_raw_obj(__PRETTY_FUNCTION__);
-  auto obj = make_obj(raw);
+  auto obj = make_obj(__PRETTY_FUNCTION__);
 
   // issue 32 writes, and verify that max_outstanding <= window
   constexpr uint64_t total = 32;
@@ -120,7 +107,7 @@ TEST_F(PutObj_Throttle, AioThrottleOverMax)
 
   for (uint64_t i = 0; i < total; i++) {
     librados::ObjectWriteOperation op;
-    auto c = throttle.submit(obj, raw, &op, 1);
+    auto c = throttle.submit(obj, &op, 1, 0);
     outstanding++;
     outstanding -= c.size();
     if (max_outstanding < outstanding) {
@@ -133,4 +120,4 @@ TEST_F(PutObj_Throttle, AioThrottleOverMax)
   EXPECT_EQ(window, max_outstanding);
 }
 
-} // namespace rgw::putobj
+} // namespace rgw

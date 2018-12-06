@@ -23,9 +23,7 @@ struct RGWAccessListFilterPrefix : public RGWAccessListFilter {
 };
 
 struct rgw_rados_ref {
-  rgw_pool pool;
-  string oid;
-  string key;
+  rgw_raw_obj obj;
   librados::IoCtx ioctx;
 };
 
@@ -94,9 +92,8 @@ public:
 
     uint64_t get_last_version();
 
-    rgw_rados_ref& get_ref() {
-      return ref;
-    }
+    rgw_rados_ref& get_ref() { return ref; }
+    const rgw_rados_ref& get_ref() const { return ref; }
   };
 
   class Pool {

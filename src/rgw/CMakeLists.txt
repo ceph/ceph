@@ -53,6 +53,7 @@ set(librgw_common_srcs
   rgw_acl.cc
   rgw_acl_s3.cc
   rgw_acl_swift.cc
+  rgw_aio_throttle.cc
   rgw_auth.cc
   rgw_auth_s3.cc
   rgw_basic_types.cc
@@ -97,7 +98,6 @@ set(librgw_common_srcs
   rgw_policy_s3.cc
   rgw_putobj.cc
   rgw_putobj_processor.cc
-  rgw_putobj_throttle.cc
   rgw_quota.cc
   rgw_rados.cc
   rgw_resolve.cc

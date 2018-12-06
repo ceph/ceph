@@ -30,6 +30,7 @@
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h"
 #include "rgw_acl_swift.h"
+#include "rgw_aio_throttle.h"
 #include "rgw_user.h"
 #include "rgw_bucket.h"
 #include "rgw_log.h"
@@ -45,7 +46,6 @@
 #include "rgw_role.h"
 #include "rgw_tag_s3.h"
 #include "rgw_putobj_processor.h"
-#include "rgw_putobj_throttle.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_quota.h"
@@ -3468,8 +3468,8 @@ void RGWPutObj::execute()
   }
 
   // create the object processor
+  rgw::AioThrottle aio(store->ctx()->_conf->rgw_put_obj_min_window_size);
   using namespace rgw::putobj;
-  AioThrottle aio(store->ctx()->_conf->rgw_put_obj_min_window_size);
   constexpr auto max_processor_size = std::max(sizeof(MultipartObjectProcessor),
                                                sizeof(AtomicObjectProcessor));
   ceph::static_ptr<ObjectProcessor, max_processor_size> processor;
@@ -3806,8 +3806,8 @@ void RGWPostObj::execute()
       store->gen_rand_obj_instance_name(&obj);
     }
 
+    rgw::AioThrottle aio(s->cct->_conf->rgw_put_obj_min_window_size);
     using namespace rgw::putobj;
-    AioThrottle aio(s->cct->_conf->rgw_put_obj_min_window_size);
     AtomicObjectProcessor processor(&aio, store, s->bucket_info,
                                     s->bucket_owner.get_id(),
                                     *static_cast<RGWObjectCtx*>(s->obj_ctx),
@@ -6579,8 +6579,8 @@ int RGWBulkUploadOp::handle_file(const boost::string_ref path,
     store->gen_rand_obj_instance_name(&obj);
   }
 
+  rgw::AioThrottle aio(store->ctx()->_conf->rgw_put_obj_min_window_size);
   using namespace rgw::putobj;
-  AioThrottle aio(store->ctx()->_conf->rgw_put_obj_min_window_size);
 
   AtomicObjectProcessor processor(&aio, store, binfo, bowner.get_id(),
                                   obj_ctx, obj, 0, s->req_id);
