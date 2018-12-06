@@ -226,6 +226,17 @@ Usage, for logical partitions::
 
       ceph-volume lvm zap /dev/sdc1
 
+For full removal of the device use the ``--destroy`` flag (allowed for all
+device types)::
+
+      ceph-volume lvm zap --destroy /dev/sdc1
+
+Multiple devices can be removed by specifying the OSD ID and/or the OSD FSID::
+
+      ceph-volume lvm zap --destroy --osd-id 1
+      ceph-volume lvm zap --destroy --osd-id 1 --osd-fsid C9605912-8395-4D76-AFC0-7DFDAC315D59
+
+
 Positional arguments:
 
 * <DEVICE>  Either in the form of ``vg/lv`` for logical volumes,
