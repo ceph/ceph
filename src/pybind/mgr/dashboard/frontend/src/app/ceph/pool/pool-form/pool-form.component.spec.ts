@@ -229,6 +229,10 @@ describe('PoolFormComponent', () => {
       formHelper.expectErrorChange('name', 'wrong format with spaces', 'pattern');
     });
 
+    it('should validate with dots in pool name', () => {
+      formHelper.expectValidChange('name', 'pool.default.bar', true);
+    });
+
     it('validates poolType', () => {
       formHelper.expectError('poolType', 'required');
       formHelper.expectValidChange('poolType', 'erasure');
