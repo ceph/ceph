@@ -909,9 +909,9 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
     return in;   // as with readdir returning indoes in different snaprealms (no caps!)
 
   if (in->snapid == CEPH_NOSNAP) {
-    add_update_cap(in, session, st->cap.cap_id, st->cap.caps, st->cap.seq,
-		   st->cap.mseq, inodeno_t(st->cap.realm), st->cap.flags,
-		   request_perms);
+    add_update_cap(in, session, st->cap.cap_id, st->cap.caps, st->cap.wanted,
+		   st->cap.seq, st->cap.mseq, inodeno_t(st->cap.realm),
+		   st->cap.flags, request_perms);
     if (in->auth_cap && in->auth_cap->session == session) {
       in->max_size = st->max_size;
       in->rstat = st->rstat;
@@ -3922,8 +3922,8 @@ void Client::check_cap_issue(Inode *in, Cap *cap, unsigned issued)
 }
 
 void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id,
-			    unsigned issued, unsigned seq, unsigned mseq, inodeno_t realm,
-			    int flags, const UserPerm& cap_perms)
+			    unsigned issued, unsigned wanted, unsigned seq, unsigned mseq,
+			    inodeno_t realm, int flags, const UserPerm& cap_perms)
 {
   Cap *cap = 0;
   mds_rank_t mds = mds_session->mds_num;
@@ -3981,15 +3981,17 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
   cap->cap_id = cap_id;
   cap->issued = issued;
   cap->implemented |= issued;
+  if (ceph_seq_cmp(mseq, cap->mseq) > 0)
+    cap->wanted = wanted;
+  else
+    cap->wanted |= wanted;
   cap->seq = seq;
   cap->issue_seq = seq;
   cap->mseq = mseq;
   cap->gen = mds_session->cap_gen;
   cap->latest_perms = cap_perms;
   ldout(cct, 10) << "add_update_cap issued " << ccap_string(old_caps) << " -> " << ccap_string(cap->issued)
-	   << " from mds." << mds
-	   << " on " << *in
-	   << dendl;
+		 << " from mds." << mds << " on " << *in << dendl;
 
   if ((issued & ~old_caps) && in->auth_cap == cap) {
     // non-auth MDS is revoking the newly grant caps ?
@@ -4839,8 +4841,8 @@ void Client::handle_cap_import(MetaSession *session, Inode *in, MClientCaps *m)
   update_snap_trace(m->snapbl, &realm);
 
   add_update_cap(in, session, m->get_cap_id(),
-		 m->get_caps(), m->get_seq(), m->get_mseq(), m->get_realm(),
-		 CEPH_CAP_FLAG_AUTH, cap_perms);
+		 m->get_caps(), m->get_wanted(), m->get_seq(), m->get_mseq(),
+		 m->get_realm(), CEPH_CAP_FLAG_AUTH, cap_perms);
   
   if (cap && cap->cap_id == m->peer.cap_id) {
       remove_cap(cap, (m->peer.flags & CEPH_CAP_FLAG_RELEASE));
@@ -4889,7 +4891,7 @@ void Client::handle_cap_export(MetaSession *session, Inode *in, MClientCaps *m)
 	    adjust_session_flushing_caps(in, session, tsession);
 	}
       } else {
-	add_update_cap(in, tsession, m->peer.cap_id, cap->issued,
+	add_update_cap(in, tsession, m->peer.cap_id, cap->issued, 0,
 		       m->peer.seq - 1, m->peer.mseq, (uint64_t)-1,
 		       cap == in->auth_cap ? CEPH_CAP_FLAG_AUTH : 0,
 		       cap->latest_perms);
