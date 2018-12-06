@@ -265,9 +265,6 @@
 /* Define if the C compiler supports __PRETTY_FUNCTION__ */
 #cmakedefine HAVE_PRETTY_FUNC
 
-/* F_SETPIPE_SZ is supported */
-#cmakedefine CEPH_HAVE_SETPIPE_SZ
-
 /* Have eventfd extension. */
 #cmakedefine HAVE_EVENTFD
 
