@@ -165,7 +165,7 @@ void DetachChildRequest<I>::clone_v2_open_parent() {
   auto ctx = create_context_callback<
     DetachChildRequest<I>,
     &DetachChildRequest<I>::handle_clone_v2_open_parent>(this);
-  m_parent_image_ctx->state->open(true, ctx);
+  m_parent_image_ctx->state->open(OPEN_FLAG_SKIP_OPEN_PARENT, ctx);
 }
 
 template<typename I>
