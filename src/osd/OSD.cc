@@ -10260,6 +10260,7 @@ void OSDShard::unprime_split_children(spg_t parent, unsigned old_pg_num)
 	i.first.get_ancestor(old_pg_num) == parent) {
       dout(10) << __func__ << " parent " << parent << " clearing " << i.first
 	       << dendl;
+      _wake_pg_slot(i.first, i.second.get());
       to_delete.push_back(i.first);
     }
   }
