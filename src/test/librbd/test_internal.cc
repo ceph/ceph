@@ -139,7 +139,7 @@ TEST_F(TestInternal, OpenByID) {
    close_image(ictx);
 
    ictx = new librbd::ImageCtx("", id, nullptr, m_ioctx, true);
-   ASSERT_EQ(0, ictx->state->open(false));
+   ASSERT_EQ(0, ictx->state->open(0));
    ASSERT_EQ(ictx->name, m_image_name);
    close_image(ictx);
 }
@@ -149,7 +149,7 @@ TEST_F(TestInternal, OpenSnapDNE) {
    ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
    ictx = new librbd::ImageCtx(m_image_name, "", "unknown_snap", m_ioctx, true);
-   ASSERT_EQ(-ENOENT, ictx->state->open(true));
+   ASSERT_EQ(-ENOENT, ictx->state->open(librbd::OPEN_FLAG_SKIP_OPEN_PARENT));
 }
 
 TEST_F(TestInternal, IsExclusiveLockOwner) {
