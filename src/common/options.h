@@ -13,16 +13,16 @@
 
 struct Option {
   enum type_t {
-    TYPE_UINT,
-    TYPE_INT,
-    TYPE_STR,
-    TYPE_FLOAT,
-    TYPE_BOOL,
-    TYPE_ADDR,
-    TYPE_ADDRVEC,
-    TYPE_UUID,
-    TYPE_SIZE,
-    TYPE_SECS,
+    TYPE_UINT = 0,
+    TYPE_INT = 1,
+    TYPE_STR = 2,
+    TYPE_FLOAT = 3,
+    TYPE_BOOL = 4,
+    TYPE_ADDR = 5,
+    TYPE_ADDRVEC = 6,
+    TYPE_UUID = 7,
+    TYPE_SIZE = 8,
+    TYPE_SECS = 9,
   };
 
   const char *type_to_str(type_t t) const {
@@ -47,10 +47,10 @@ struct Option {
    * Development: not for users.  May be dangerous, may not be documented.
    */
   enum level_t {
-    LEVEL_BASIC,
-    LEVEL_ADVANCED,
-    LEVEL_DEV,
-    LEVEL_UNKNOWN,
+    LEVEL_BASIC = 0,
+    LEVEL_ADVANCED = 1,
+    LEVEL_DEV = 2,
+    LEVEL_UNKNOWN = 3,
   };
 
   static const char *level_to_str(level_t l) {
