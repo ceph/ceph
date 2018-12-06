@@ -24,7 +24,7 @@ def _get_next_port(ctx, ip, cluster):
     used = []
     for name in teuthology.get_mon_names(ctx, cluster):
         addr = ctx.ceph[cluster].conf[name]['mon addr']
-        mon_ip, mon_port = addr.split(':')
+        addr_type, mon_ip, mon_port = addr.split(':')
         if mon_ip != ip:
             continue
         used.append(int(mon_port))
