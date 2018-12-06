@@ -188,6 +188,9 @@ class Device(object):
             dev_id = '_'.join(p['ID_MODEL'], p['ID_SERIAL_SHORT'])
         elif 'ID_SERIAL' in p:
             dev_id = p['ID_SERIAL']
+            if dev_id.startswith('MTFD'):
+                # Micron NVMes hide the vendor
+                dev_id = 'Micron_' + dev_id
         else:
             # the else branch should fallback to using sysfs and ioctl to
             # retrieve device_id on FreeBSD. Still figuring out if/how the
