@@ -447,7 +447,7 @@ int ObjBencher::write_bench(int secondsToRun,
       goto ERR;
     r = aio_write(name[i], i, *contents[i], data.op_size,
 		  data.op_size * (i % writes_per_object));
-    if (r < 0) { //naughty, doesn't clean up heap
+    if (r < 0) {
       goto ERR;
     }
     lock.lock();
@@ -519,7 +519,7 @@ int ObjBencher::write_bench(int secondsToRun,
       goto ERR;
     r = aio_write(newName, slot, *newContents, data.op_size,
 		  data.op_size * (data.started % writes_per_object));
-    if (r < 0) {//naughty; doesn't clean up heap space.
+    if (r < 0) {
       goto ERR;
     }
     name[slot] = newName;
@@ -697,7 +697,7 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
     create_completion(i, _aio_cb, (void *)&lc);
     r = aio_read(name[i], i, contents[i].get(), data.op_size,
 		 data.op_size * (i % writes_per_object));
-    if (r < 0) { //naughty, doesn't clean up heap -- oh, or handle the print thread!
+    if (r < 0) {
       cerr << "r = " << r << std::endl;
       goto ERR;
     }
@@ -934,7 +934,7 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
     create_completion(i, _aio_cb, (void *)&lc);
     r = aio_read(name[i], i, contents[i].get(), data.op_size,
 		 data.op_size * (i % writes_per_object));
-    if (r < 0) { //naughty, doesn't clean up heap -- oh, or handle the print thread!
+    if (r < 0) {
       cerr << "r = " << r << std::endl;
       goto ERR;
     }
