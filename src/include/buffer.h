@@ -113,18 +113,6 @@ namespace buffer CEPH_BUFFER_API {
   };
 
 
-  /// total bytes allocated
-  int get_total_alloc();
-
-  /// history total bytes allocated
-  uint64_t get_history_alloc_bytes();
-
-  /// total num allocated
-  uint64_t get_history_alloc_num();
-
-  /// enable/disable alloc tracking
-  void track_alloc(bool b);
-
   /// count of cached crc hits (matching input)
   int get_cached_crc();
   /// count of cached crc hits (mismatching input, required adjustment)
