@@ -41,15 +41,43 @@ class Summary(BaseController):
                 warnings += 1
         return {'warnings': warnings, 'errors': errors}
 
+    def _task_permissions(self, name):
+        result = True
+        if name == 'pool/create':
+            result = self._has_permissions(Permission.CREATE, Scope.POOL)
+        elif name == 'pool/edit':
+            result = self._has_permissions(Permission.UPDATE, Scope.POOL)
+        elif name == 'pool/delete':
+            result = self._has_permissions(Permission.DELETE, Scope.POOL)
+        elif name in [
+                'rbd/create', 'rbd/copy', 'rbd/flatten',
+                'rbd/snap/create', 'rbd/clone', 'rbd/snap/rollback',
+                'rbd/trash/move', 'rbd/trash/restore', 'rbd/trash/purge']:
+            result = self._has_permissions(Permission.CREATE, Scope.RBD_IMAGE)
+        elif name in ['rbd/edit', 'rbd/snap/edit']:
+            result = self._has_permissions(Permission.UPDATE, Scope.RBD_IMAGE)
+        elif name in ['rbd/delete', 'rbd/snap/delete', 'rbd/trash/remove']:
+            result = self._has_permissions(Permission.DELETE, Scope.RBD_IMAGE)
+        return result
+
     @Endpoint()
     def __call__(self):
         executing_t, finished_t = TaskManager.list_serializable()
+        executing_tasks = []
+        for task in executing_t:
+            if self._task_permissions(task['name']):
+                executing_tasks.append(task)
+        finished_tasks = []
+        for task in finished_t:
+            if self._task_permissions(task['name']):
+                executing_tasks.append(task)
+
         result = {
             'health_status': self._health_status(),
             'mgr_id': mgr.get_mgr_id(),
             'have_mon_connection': mgr.have_mon_connection(),
-            'executing_tasks': executing_t,
-            'finished_tasks': finished_t,
+            'executing_tasks': executing_tasks,
+            'finished_tasks': finished_tasks,
             'version': mgr.version
         }
         if self._has_permissions(Permission.READ, Scope.RBD_MIRRORING):
