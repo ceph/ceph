@@ -1940,6 +1940,7 @@ function test_mon_osd_pool_set()
   TEST_POOL_GETSET=pool_getset
   ceph osd pool create $TEST_POOL_GETSET 1
   ceph osd pool application enable $TEST_POOL_GETSET rados
+  ceph osd pool set $TEST_POOL_GETSET pg_autoscale_mode off
   wait_for_clean
   ceph osd pool get $TEST_POOL_GETSET all
 
