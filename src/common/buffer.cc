@@ -52,41 +52,6 @@ using namespace ceph;
 # define bendl std::endl; }
 #endif
 
-  static std::atomic<uint64_t> buffer_total_alloc { 0 };
-  static std::atomic<uint64_t> buffer_history_alloc_bytes { 0 };
-  static std::atomic<uint64_t> buffer_history_alloc_num { 0 };
-
-  const bool buffer_track_alloc = get_env_bool("CEPH_BUFFER_TRACK");
-
-  namespace {
-  void inc_total_alloc(unsigned len) {
-    if (buffer_track_alloc)
-      buffer_total_alloc += len;
-  }
-
-  void dec_total_alloc(unsigned len) {
-    if (buffer_track_alloc)
-      buffer_total_alloc -= len;
-  }
-
-  void inc_history_alloc(uint64_t len) {
-    if (buffer_track_alloc) {
-      buffer_history_alloc_bytes += len;
-      buffer_history_alloc_num++;
-    }
-  }
-  } // namespace
-
-  int buffer::get_total_alloc() {
-    return buffer_total_alloc;
-  }
-  uint64_t buffer::get_history_alloc_bytes() {
-    return buffer_history_alloc_bytes;
-  }
-  uint64_t buffer::get_history_alloc_num() {
-    return buffer_history_alloc_num;
-  }
-
   static std::atomic<unsigned> buffer_cached_crc { 0 };
   static std::atomic<unsigned> buffer_cached_crc_adjusted { 0 };
   static std::atomic<unsigned> buffer_missed_crc { 0 };
@@ -180,11 +145,6 @@ using namespace ceph;
 		 int mempool)
       : raw(dataptr, l, mempool),
 	alignment(align) {
-      inc_total_alloc(len);
-      inc_history_alloc(len);
-    }
-    ~raw_combined() override {
-      dec_total_alloc(len);
     }
     raw* clone_empty() override {
       return create(len, alignment);
@@ -233,18 +193,14 @@ using namespace ceph;
       } else {
 	data = 0;
       }
-      inc_total_alloc(len);
-      inc_history_alloc(len);
-      bdout << "raw_malloc " << this << " alloc " << (void *)data << " " << l << " " << buffer::get_total_alloc() << bendl;
+      bdout << "raw_malloc " << this << " alloc " << (void *)data << " " << l << bendl;
     }
     raw_malloc(unsigned l, char *b) : raw(b, l) {
-      inc_total_alloc(len);
-      bdout << "raw_malloc " << this << " alloc " << (void *)data << " " << l << " " << buffer::get_total_alloc() << bendl;
+      bdout << "raw_malloc " << this << " alloc " << (void *)data << " " << l << bendl;
     }
     ~raw_malloc() override {
       free(data);
-      dec_total_alloc(len);
-      bdout << "raw_malloc " << this << " free " << (void *)data << " " << buffer::get_total_alloc() << bendl;
+      bdout << "raw_malloc " << this << " free " << (void *)data << " " << bendl;
     }
     raw* clone_empty() override {
       return new raw_malloc(len);
@@ -269,14 +225,12 @@ using namespace ceph;
 #endif /* DARWIN */
       if (!data)
 	throw bad_alloc();
-      inc_total_alloc(len);
-      inc_history_alloc(len);
-      bdout << "raw_posix_aligned " << this << " alloc " << (void *)data << " l=" << l << ", align=" << align << " total_alloc=" << buffer::get_total_alloc() << bendl;
+      bdout << "raw_posix_aligned " << this << " alloc " << (void *)data
+	    << " l=" << l << ", align=" << align << bendl;
     }
     ~raw_posix_aligned() override {
       ::free(data);
-      dec_total_alloc(len);
-      bdout << "raw_posix_aligned " << this << " free " << (void *)data << " " << buffer::get_total_alloc() << bendl;
+      bdout << "raw_posix_aligned " << this << " free " << (void *)data << bendl;
     }
     raw* clone_empty() override {
       return new raw_posix_aligned(len, align);
@@ -297,8 +251,6 @@ using namespace ceph;
 	data = realdata + align - off;
       else
 	data = realdata;
-      inc_total_alloc(len+align-1);
-      inc_history_alloc(len+align-1);
       //cout << "hack aligned " << (unsigned)data
       //<< " in raw " << (unsigned)realdata
       //<< " off " << off << std::endl;
@@ -306,7 +258,6 @@ using namespace ceph;
     }
     ~raw_hack_aligned() {
       delete[] realdata;
-      dec_total_alloc(len+align-1);
     }
     raw* clone_empty() {
       return new raw_hack_aligned(len, align);
@@ -326,18 +277,14 @@ using namespace ceph;
 	data = new char[len];
       else
 	data = 0;
-      inc_total_alloc(len);
-      inc_history_alloc(len);
-      bdout << "raw_char " << this << " alloc " << (void *)data << " " << l << " " << buffer::get_total_alloc() << bendl;
+      bdout << "raw_char " << this << " alloc " << (void *)data << " " << l << bendl;
     }
     raw_char(unsigned l, char *b) : raw(b, l) {
-      inc_total_alloc(len);
-      bdout << "raw_char " << this << " alloc " << (void *)data << " " << l << " " << buffer::get_total_alloc() << bendl;
+      bdout << "raw_char " << this << " alloc " << (void *)data << " " << l << bendl;
     }
     ~raw_char() override {
       delete[] data;
-      dec_total_alloc(len);
-      bdout << "raw_char " << this << " free " << (void *)data << " " << buffer::get_total_alloc() << bendl;
+      bdout << "raw_char " << this << " free " << (void *)data << bendl;
     }
     raw* clone_empty() override {
       return new raw_char(len);
@@ -349,14 +296,12 @@ using namespace ceph;
     MEMPOOL_CLASS_HELPERS();
 
     explicit raw_claimed_char(unsigned l, char *b) : raw(b, l) {
-      inc_total_alloc(len);
       bdout << "raw_claimed_char " << this << " alloc " << (void *)data
-	    << " " << l << " " << buffer::get_total_alloc() << bendl;
+	    << " " << l << bendl;
     }
     ~raw_claimed_char() override {
-      dec_total_alloc(len);
       bdout << "raw_claimed_char " << this << " free " << (void *)data
-	    << " " << buffer::get_total_alloc() << bendl;
+	    << bendl;
     }
     raw* clone_empty() override {
       return new raw_char(len);
