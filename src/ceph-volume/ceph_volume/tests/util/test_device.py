@@ -12,6 +12,20 @@ class TestDevice(object):
         assert disk.sys_api
         assert "foo" in disk.sys_api
 
+    def test_lvm_size(self, device_info):
+        # 5GB in size
+        data = {"/dev/sda": {"size": "5368709120"}}
+        device_info(devices=data)
+        disk = device.Device("/dev/sda")
+        assert disk.lvm_size.gb == 4
+
+    def test_lvm_size_rounds_down(self, device_info):
+        # 5.5GB in size
+        data = {"/dev/sda": {"size": "5905580032"}}
+        device_info(devices=data)
+        disk = device.Device("/dev/sda")
+        assert disk.lvm_size.gb == 4
+
     def test_is_lv(self, device_info):
         data = {"lv_path": "vg/lv", "vg_name": "vg", "name": "lv"}
         device_info(lv=data)
