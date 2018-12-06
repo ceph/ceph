@@ -29,6 +29,7 @@ int RGWLoadGenRequestEnv::sign(RGWAccessKey& access_key)
                                  content_type.c_str(),
                                  date_str.c_str(),
                                  meta_map,
+				 map<string, string>{},
                                  uri.c_str(),
                                  sub_resources,
                                  canonical_header);
