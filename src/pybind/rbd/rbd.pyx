@@ -1695,8 +1695,8 @@ class RBD(object):
                     break
                 elif ret != -errno.ERANGE:
                     raise make_ex(ret, 'error getting mirror peer attributes')
-            keys = [decode_cstr(x) for x in _keys[:_keys_size].split(b'\0') if x]
-            vals = [decode_cstr(x) for x in _vals[:_vals_size].split(b'\0') if x]
+            keys = [decode_cstr(x) for x in _keys[:_keys_size].split(b'\0')[:-1]]
+            vals = [decode_cstr(x) for x in _vals[:_vals_size].split(b'\0')[:-1]]
             return dict(zip(keys, vals))
         finally:
             free(_keys)
