@@ -383,7 +383,8 @@ def check_all_filestore(mon, num_osds):
     LOG.info(out)
 
     dout = json.loads(out)
-    fcount = dout['filestore']
+    if 'filestore' in dout:
+        fcount = dout['filestore']
 
     if fcount != num_osds:
         LOG.warning("Looks like not all osds are on filestore \

@@ -1,7 +1,6 @@
 tasks:
 - ssh-keys:
 - ceph_ansible:
-    rhbuild: '3.1'
     vars:
       ceph_conf_overrides:
         global:
