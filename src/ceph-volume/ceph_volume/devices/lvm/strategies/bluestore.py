@@ -85,16 +85,16 @@ class SingleType(object):
             for hdd in range(self.osds_per_device):
                 osd = {'data': {}, 'block.db': {}}
                 osd['data']['path'] = device.abspath
-                osd['data']['size'] = device.sys_api['size'] / self.osds_per_device
+                osd['data']['size'] = device.lvm_size.b / self.osds_per_device
                 osd['data']['parts'] = self.osds_per_device
                 osd['data']['percentage'] = 100 / self.osds_per_device
                 osd['data']['human_readable_size'] = str(
-                    disk.Size(b=device.sys_api['size']) / self.osds_per_device
+                    disk.Size(b=device.lvm_size.b) / self.osds_per_device
                 )
                 osds.append(osd)
 
         for device in self.ssds:
-            extents = lvm.sizing(device.sys_api['size'], parts=self.osds_per_device)
+            extents = lvm.sizing(device.lvm_size.b, parts=self.osds_per_device)
             for ssd in range(self.osds_per_device):
                 osd = {'data': {}, 'block.db': {}}
                 osd['data']['path'] = device.abspath
@@ -236,10 +236,10 @@ class MixedType(object):
             for hdd in range(self.osds_per_device):
                 osd = {'data': {}, 'block.db': {}}
                 osd['data']['path'] = device.abspath
-                osd['data']['size'] = device.sys_api['size'] / self.osds_per_device
+                osd['data']['size'] = device.lvm_size.b / self.osds_per_device
                 osd['data']['percentage'] = 100 / self.osds_per_device
                 osd['data']['human_readable_size'] = str(
-                    disk.Size(b=(device.sys_api['size'])) / self.osds_per_device
+                    disk.Size(b=device.lvm_size.b) / self.osds_per_device
                 )
                 osd['block.db']['path'] = 'vg: %s' % vg_name
                 osd['block.db']['size'] = int(self.block_db_size.b)
@@ -357,7 +357,7 @@ class MixedType(object):
         self.blank_ssds = set(self.ssds).difference(self.vg_ssds)
         self.total_blank_ssd_size = disk.Size(b=0)
         for blank_ssd in self.blank_ssds:
-            self.total_blank_ssd_size += disk.Size(b=blank_ssd.sys_api['size'])
+            self.total_blank_ssd_size += disk.Size(b=blank_ssd.lvm_size.b)
 
         self.total_available_db_space = self.total_blank_ssd_size + common_vg_size
 
