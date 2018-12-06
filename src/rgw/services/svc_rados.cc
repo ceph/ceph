@@ -133,21 +133,20 @@ int RGWSI_RADOS::pool_iterate(librados::IoCtx& io_ctx,
 
   return objs.size();
 }
+
 void RGWSI_RADOS::Obj::init(const rgw_raw_obj& obj)
 {
-  ref.oid = obj.oid;
-  ref.key = obj.loc;
-  ref.pool = obj.pool;
+  ref.obj = obj;
 }
 
 int RGWSI_RADOS::Obj::open()
 {
-  int r = rados_svc->open_pool_ctx(ref.pool, ref.ioctx, rados_handle);
+  int r = rados_svc->open_pool_ctx(ref.obj.pool, ref.ioctx, rados_handle);
   if (r < 0) {
     return r;
   }
 
-  ref.ioctx.locator_set_key(ref.key);
+  ref.ioctx.locator_set_key(ref.obj.loc);
 
   return 0;
 }
@@ -155,34 +154,34 @@ int RGWSI_RADOS::Obj::open()
 int RGWSI_RADOS::Obj::operate(librados::ObjectWriteOperation *op,
                               optional_yield y)
 {
-  return rgw_rados_operate(ref.ioctx, ref.oid, op, y);
+  return rgw_rados_operate(ref.ioctx, ref.obj.oid, op, y);
 }
 
 int RGWSI_RADOS::Obj::operate(librados::ObjectReadOperation *op, bufferlist *pbl,
                               optional_yield y)
 {
-  return rgw_rados_operate(ref.ioctx, ref.oid, op, pbl, y);
+  return rgw_rados_operate(ref.ioctx, ref.obj.oid, op, pbl, y);
 }
 
 int RGWSI_RADOS::Obj::aio_operate(librados::AioCompletion *c, librados::ObjectWriteOperation *op)
 {
-  return ref.ioctx.aio_operate(ref.oid, c, op);
+  return ref.ioctx.aio_operate(ref.obj.oid, c, op);
 }
 
 int RGWSI_RADOS::Obj::aio_operate(librados::AioCompletion *c, librados::ObjectReadOperation *op,
                                   bufferlist *pbl)
 {
-  return ref.ioctx.aio_operate(ref.oid, c, op, pbl);
+  return ref.ioctx.aio_operate(ref.obj.oid, c, op, pbl);
 }
 
 int RGWSI_RADOS::Obj::watch(uint64_t *handle, librados::WatchCtx2 *ctx)
 {
-  return ref.ioctx.watch2(ref.oid, handle, ctx);
+  return ref.ioctx.watch2(ref.obj.oid, handle, ctx);
 }
 
 int RGWSI_RADOS::Obj::aio_watch(librados::AioCompletion *c, uint64_t *handle, librados::WatchCtx2 *ctx)
 {
-  return ref.ioctx.aio_watch(ref.oid, c, handle, ctx);
+  return ref.ioctx.aio_watch(ref.obj.oid, c, handle, ctx);
 }
 
 int RGWSI_RADOS::Obj::unwatch(uint64_t handle)
@@ -194,14 +193,14 @@ int RGWSI_RADOS::Obj::notify(bufferlist& bl,
                              uint64_t timeout_ms,
                              bufferlist *pbl)
 {
-  return ref.ioctx.notify2(ref.oid, bl, timeout_ms, pbl);
+  return ref.ioctx.notify2(ref.obj.oid, bl, timeout_ms, pbl);
 }
 
 void RGWSI_RADOS::Obj::notify_ack(uint64_t notify_id,
                                  uint64_t cookie,
                                  bufferlist& bl)
 {
-  ref.ioctx.notify_ack(ref.oid, notify_id, cookie, bl);
+  ref.ioctx.notify_ack(ref.obj.oid, notify_id, cookie, bl);
 }
 
 uint64_t RGWSI_RADOS::Obj::get_last_version()

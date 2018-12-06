@@ -261,34 +261,34 @@ class BucketTrimWatcher : public librados::WatchCtx2 {
     }
 
     // register a watch on the realm's control object
-    r = ref.ioctx.watch2(ref.oid, &handle, this);
+    r = ref.ioctx.watch2(ref.obj.oid, &handle, this);
     if (r == -ENOENT) {
       constexpr bool exclusive = true;
-      r = ref.ioctx.create(ref.oid, exclusive);
+      r = ref.ioctx.create(ref.obj.oid, exclusive);
       if (r == -EEXIST || r == 0) {
-        r = ref.ioctx.watch2(ref.oid, &handle, this);
+        r = ref.ioctx.watch2(ref.obj.oid, &handle, this);
       }
     }
     if (r < 0) {
-      lderr(store->ctx()) << "Failed to watch " << ref.oid
+      lderr(store->ctx()) << "Failed to watch " << ref.obj
           << " with " << cpp_strerror(-r) << dendl;
       ref.ioctx.close();
       return r;
     }
 
-    ldout(store->ctx(), 10) << "Watching " << ref.oid << dendl;
+    ldout(store->ctx(), 10) << "Watching " << ref.obj.oid << dendl;
     return 0;
   }
 
   int restart() {
     int r = ref.ioctx.unwatch2(handle);
     if (r < 0) {
-      lderr(store->ctx()) << "Failed to unwatch on " << ref.oid
+      lderr(store->ctx()) << "Failed to unwatch on " << ref.obj
           << " with " << cpp_strerror(-r) << dendl;
     }
-    r = ref.ioctx.watch2(ref.oid, &handle, this);
+    r = ref.ioctx.watch2(ref.obj.oid, &handle, this);
     if (r < 0) {
-      lderr(store->ctx()) << "Failed to restart watch on " << ref.oid
+      lderr(store->ctx()) << "Failed to restart watch on " << ref.obj
           << " with " << cpp_strerror(-r) << dendl;
       ref.ioctx.close();
     }
@@ -323,7 +323,7 @@ class BucketTrimWatcher : public librados::WatchCtx2 {
     } catch (const buffer::error& e) {
       lderr(store->ctx()) << "Failed to decode notification: " << e.what() << dendl;
     }
-    ref.ioctx.notify_ack(ref.oid, notify_id, cookie, reply);
+    ref.ioctx.notify_ack(ref.obj.oid, notify_id, cookie, reply);
   }
 
   /// reestablish the watch if it gets disconnected
@@ -332,7 +332,7 @@ class BucketTrimWatcher : public librados::WatchCtx2 {
       return;
     }
     if (err == -ENOTCONN) {
-      ldout(store->ctx(), 4) << "Disconnected watch on " << ref.oid << dendl;
+      ldout(store->ctx(), 4) << "Disconnected watch on " << ref.obj << dendl;
       restart();
     }
   }

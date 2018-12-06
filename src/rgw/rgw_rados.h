@@ -1255,6 +1255,7 @@ class RGWRados : public AdminSocketHook
                          bool follow_olh, bool assume_noent = false);
   int append_atomic_test(RGWObjectCtx *rctx, const RGWBucketInfo& bucket_info, const rgw_obj& obj,
                          librados::ObjectOperation& op, RGWObjState **state);
+  int append_atomic_test(const RGWObjState* astate, librados::ObjectOperation& op);
 
   int update_placement_map();
   int store_bucket_info(RGWBucketInfo& info, map<string, bufferlist> *pattrs, RGWObjVersionTracker *objv_tracker, bool exclusive);
@@ -2010,20 +2011,18 @@ public:
     return get_obj_state(rctx, bucket_info, obj, state, true);
   }
 
-  int iterate_obj(RGWObjectCtx& ctx,
-                  const RGWBucketInfo& bucket_info, const rgw_obj& obj,
-                  off_t ofs, off_t end,
-                  uint64_t max_chunk_size,
-                  int (*iterate_obj_cb)(const RGWBucketInfo& bucket_info, const rgw_obj& obj, const rgw_raw_obj&, off_t, off_t, off_t, bool, RGWObjState *, void *),
-                  void *arg);
+  using iterate_obj_cb = int (*)(const rgw_raw_obj&, off_t, off_t,
+                                 off_t, bool, RGWObjState*, void*);
+
+  int iterate_obj(RGWObjectCtx& ctx, const RGWBucketInfo& bucket_info,
+                  const rgw_obj& obj, off_t ofs, off_t end,
+                  uint64_t max_chunk_size, iterate_obj_cb cb, void *arg);
 
   int flush_read_list(struct get_obj_data *d);
 
-  int get_obj_iterate_cb(RGWObjectCtx *ctx, RGWObjState *astate,
-                         const RGWBucketInfo& bucket_info, const rgw_obj& obj,
-                         const rgw_raw_obj& read_obj,
-                         off_t obj_ofs, off_t read_ofs, off_t len,
-                         bool is_head_obj, void *arg);
+  int get_obj_iterate_cb(const rgw_raw_obj& read_obj, off_t obj_ofs,
+                         off_t read_ofs, off_t len, bool is_head_obj,
+                         RGWObjState *astate, void *arg);
 
   void get_obj_aio_completion_cb(librados::completion_t cb, void *arg);
 

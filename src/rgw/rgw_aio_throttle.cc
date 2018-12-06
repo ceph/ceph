@@ -14,10 +14,10 @@
 
 #include "include/rados/librados.hpp"
 
-#include "rgw_putobj_throttle.h"
+#include "rgw_aio_throttle.h"
 #include "rgw_rados.h"
 
-namespace rgw::putobj {
+namespace rgw {
 
 void AioThrottle::aio_cb(void *cb, void *arg)
 {
@@ -36,13 +36,13 @@ bool AioThrottle::waiter_ready() const
   }
 }
 
-ResultList AioThrottle::submit(RGWSI_RADOS::Obj& obj,
-                               const rgw_raw_obj& raw_obj,
-                               librados::ObjectWriteOperation *op,
-                               uint64_t cost)
+AioResultList AioThrottle::submit(RGWSI_RADOS::Obj& obj,
+                                  librados::ObjectWriteOperation *op,
+                                  uint64_t cost, uint64_t id)
 {
   auto p = std::make_unique<Pending>();
-  p->obj = raw_obj;
+  p->obj = obj;
+  p->id = id;
   p->cost = cost;
 
   if (cost > window) {
@@ -59,13 +59,13 @@ ResultList AioThrottle::submit(RGWSI_RADOS::Obj& obj,
   return std::move(completed);
 }
 
-ResultList AioThrottle::submit(RGWSI_RADOS::Obj& obj,
-                               const rgw_raw_obj& raw_obj,
-                               librados::ObjectReadOperation *op,
-                               bufferlist *data, uint64_t cost)
+AioResultList AioThrottle::submit(RGWSI_RADOS::Obj& obj,
+                                  librados::ObjectReadOperation *op,
+                                  uint64_t cost, uint64_t id)
 {
   auto p = std::make_unique<Pending>();
-  p->obj = raw_obj;
+  p->obj = obj;
+  p->id = id;
   p->cost = cost;
 
   if (cost > window) {
@@ -73,7 +73,7 @@ ResultList AioThrottle::submit(RGWSI_RADOS::Obj& obj,
     completed.push_back(*p);
   } else {
     get(*p);
-    p->result = obj.aio_operate(p->completion, op, data);
+    p->result = obj.aio_operate(p->completion, op, &p->data);
     if (p->result < 0) {
       put(*p);
     }
@@ -119,13 +119,13 @@ void AioThrottle::put(Pending& p)
   }
 }
 
-ResultList AioThrottle::poll()
+AioResultList AioThrottle::poll()
 {
   std::unique_lock lock{mutex};
   return std::move(completed);
 }
 
-ResultList AioThrottle::wait()
+AioResultList AioThrottle::wait()
 {
   std::unique_lock lock{mutex};
   if (completed.empty() && !pending.empty()) {
@@ -137,7 +137,7 @@ ResultList AioThrottle::wait()
   return std::move(completed);
 }
 
-ResultList AioThrottle::drain()
+AioResultList AioThrottle::drain()
 {
   std::unique_lock lock{mutex};
   if (!pending.empty()) {
@@ -149,4 +149,4 @@ ResultList AioThrottle::drain()
   return std::move(completed);
 }
 
-} // namespace rgw::putobj
+} // namespace rgw

@@ -17,13 +17,13 @@
 #include <memory>
 #include "common/ceph_mutex.h"
 #include "services/svc_rados.h"
-#include "rgw_putobj_aio.h"
+#include "rgw_aio.h"
 
 namespace librados {
 class AioCompletion;
 }
 
-namespace rgw::putobj {
+namespace rgw {
 
 // a throttle for aio operations that enforces a maximum window on outstanding
 // bytes. only supports a single waiter, so all public functions must be called
@@ -37,13 +37,13 @@ class AioThrottle : public Aio {
   bool has_completion() const { return !completed.empty(); }
   bool is_drained() const { return pending.empty(); }
 
-  struct Pending : ResultEntry {
+  struct Pending : AioResultEntry {
     AioThrottle *parent = nullptr;
     uint64_t cost = 0;
     librados::AioCompletion *completion = nullptr;
   };
   OwningList<Pending> pending;
-  ResultList completed;
+  AioResultList completed;
 
   enum class Wait { None, Available, Completion, Drained };
   Wait waiter = Wait::None;
@@ -67,19 +67,19 @@ class AioThrottle : public Aio {
     ceph_assert(completed.empty());
   }
 
-  ResultList submit(RGWSI_RADOS::Obj& obj, const rgw_raw_obj& raw_obj,
-                    librados::ObjectReadOperation *op,
-                    bufferlist *data, uint64_t cost) override;
+  AioResultList submit(RGWSI_RADOS::Obj& obj,
+                       librados::ObjectReadOperation *op,
+                       uint64_t cost, uint64_t id) override;
 
-  ResultList submit(RGWSI_RADOS::Obj& obj, const rgw_raw_obj& raw_obj,
-                    librados::ObjectWriteOperation *op,
-                    uint64_t cost) override;
+  AioResultList submit(RGWSI_RADOS::Obj& obj,
+                       librados::ObjectWriteOperation *op,
+                       uint64_t cost, uint64_t id) override;
 
-  ResultList poll() override;
+  AioResultList poll() override;
 
-  ResultList wait() override;
+  AioResultList wait() override;
 
-  ResultList drain() override;
+  AioResultList drain() override;
 };
 
-} // namespace rgw::putobj
+} // namespace rgw
