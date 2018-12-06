@@ -174,17 +174,27 @@ class Device(object):
         return output
 
     def _get_device_id(self):
-        props = ['ID_MODEL','ID_SERIAL_SHORT']
-        dev_id = disk.udevadm_property(self.abspath, props)
-        if all([prop in dev_id and dev_id[prop] for prop in props]):
-            values = [dev_id[prop].replace(' ', '_') for prop in props]
-            return '_'.join(values)
+        """
+        Please keep this implementation in sync with get_device_id() in
+        src/common/blkdev.cc
+        """
+        props = ['ID_VENDOR','ID_MODEL','ID_SERIAL_SHORT', 'ID_SERIAL',
+                 'ID_SCSI_SERIAL']
+        p = disk.udevadm_property(self.abspath, props)
+        if 'ID_VENDOR' in p and 'ID_MODEL' in p and 'ID_SCSI_SERIAL' in p:
+            dev_id = '_'.join(p['ID_VENDOR'], p['ID_MODEL'],
+                              p['ID_SCSI_SERIAL'])
+        elif 'ID_MODEL' in p and 'ID_SERIAL_SHORT' in p:
+            dev_id = '_'.join(p['ID_MODEL'], p['ID_SERIAL_SHORT'])
+        elif 'ID_SERIAL' in p:
+            dev_id = p['ID_SERIAL']
         else:
             # the else branch should fallback to using sysfs and ioctl to
             # retrieve device_id on FreeBSD. Still figuring out if/how the
             # python ioctl implementation does that on FreeBSD
-            return ''
-        return ''
+            dev_id = ''
+        dev_id.replace(' ', '_')
+        return dev_id
 
 
 
