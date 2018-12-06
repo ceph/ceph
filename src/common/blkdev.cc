@@ -448,6 +448,10 @@ std::string get_device_id(const std::string& devname)
     device_id = id_model + '_' + id_serial_short;
   } else if (id_serial.size()) {
     device_id = id_serial;
+    if (device_id.substr(0, 4) == "MTFD") {
+      // Micron NVMes hide the vendor
+      device_id = "Micron_" + device_id;
+    }
   }
   if (device_id.size()) {
     std::replace(device_id.begin(), device_id.end(), ' ', '_');
