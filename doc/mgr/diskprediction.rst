@@ -241,7 +241,7 @@ Osd:
 +----------------------+-----------------------------------------+
 |rd_bytes              |Number of bytes read in the pool         |
 +----------------------+-----------------------------------------+
-|raw_bytes_used        |Bytes used in pool including copies made |
+|stored_raw            |Bytes used in pool including copies made |
 +----------------------+-----------------------------------------+
 
 - Ceph physical device metadata

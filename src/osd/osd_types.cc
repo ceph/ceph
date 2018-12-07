@@ -344,12 +344,19 @@ void osd_stat_t::dump(Formatter *f) const
   f->dump_unsigned("up_from", up_from);
   f->dump_unsigned("seq", seq);
   f->dump_unsigned("num_pgs", num_pgs);
-  f->dump_unsigned("kb", kb);
-  f->dump_unsigned("kb_used", kb_used);
-  f->dump_unsigned("kb_used_data", kb_used_data);
-  f->dump_unsigned("kb_used_omap", kb_used_omap);
-  f->dump_unsigned("kb_used_meta", kb_used_meta);
-  f->dump_unsigned("kb_avail", kb_avail);
+
+  /// dump legacy stats fields to ensure backward compatibility.
+  f->dump_unsigned("kb", statfs.kb());
+  f->dump_unsigned("kb_used", statfs.kb_used_raw());
+  f->dump_unsigned("kb_used_data", statfs.kb_used_data());
+  f->dump_unsigned("kb_used_omap", statfs.kb_used_omap());
+  f->dump_unsigned("kb_used_meta", statfs.kb_used_internal_metadata());
+  f->dump_unsigned("kb_avail", statfs.kb_avail());
+  ////////////////////
+
+  f->open_object_section("statfs");
+  statfs.dump(f);
+  f->close_section();
   f->open_array_section("hb_peers");
   for (auto p : hb_peers)
     f->dump_int("osd", p);
@@ -366,10 +373,17 @@ void osd_stat_t::dump(Formatter *f) const
 
 void osd_stat_t::encode(bufferlist &bl, uint64_t features) const
 {
-  ENCODE_START(8, 2, bl);
+  ENCODE_START(9, 2, bl);
+
+  //////// for compatibility ////////
+  int64_t kb = statfs.kb();
+  int64_t kb_used = statfs.kb_used_raw();
+  int64_t kb_avail = statfs.kb_avail();
   encode(kb, bl);
   encode(kb_used, bl);
   encode(kb_avail, bl);
+  ///////////////////////////////////
+
   encode(snap_trim_queue_len, bl);
   encode(num_snap_trimming, bl);
   encode(hb_peers, bl);
@@ -379,15 +393,25 @@ void osd_stat_t::encode(bufferlist &bl, uint64_t features) const
   encode(up_from, bl);
   encode(seq, bl);
   encode(num_pgs, bl);
+
+  //////// for compatibility ////////
+  int64_t kb_used_data = statfs.kb_used_data();
+  int64_t kb_used_omap = statfs.kb_used_omap();
+  int64_t kb_used_meta = statfs.kb_used_internal_metadata();
   encode(kb_used_data, bl);
   encode(kb_used_omap, bl);
   encode(kb_used_meta, bl);
+  encode(statfs, bl);
+  ///////////////////////////////////
+
   ENCODE_FINISH(bl);
 }
 
 void osd_stat_t::decode(bufferlist::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(8, 2, 2, bl);
+  int64_t kb, kb_used,kb_avail;
+  int64_t kb_used_data, kb_used_omap, kb_used_meta;
+  DECODE_START_LEGACY_COMPAT_LEN(9, 2, 2, bl);
   decode(kb, bl);
   decode(kb_used, bl);
   decode(kb_avail, bl);
@@ -416,6 +440,27 @@ void osd_stat_t::decode(bufferlist::const_iterator &bl)
     kb_used_omap = 0;
     kb_used_meta = 0;
   }
+  if (struct_v >= 9) {
+    decode(statfs, bl);
+  } else {
+    statfs.reset();
+    statfs.total = kb << 10;
+    statfs.available = kb_avail << 10;
+    // actually it's totally unexpected to have ststfs.total < statfs.available
+    // here but unfortunately legacy generate_test_instances produced such a
+    // case hence inserting some handling rather than assert
+    statfs.internally_reserved =
+      statfs.total > statfs.available ? statfs.total - statfs.available : 0;
+    kb_used <<= 10;
+    if ((int64_t)statfs.internally_reserved > kb_used) {
+      statfs.internally_reserved -= kb_used;
+    } else {
+      statfs.internally_reserved = 0;
+    }
+    statfs.allocated = kb_used_data << 10;
+    statfs.omap_allocated = kb_used_omap << 10;
+    statfs.internal_metadata = kb_used_meta << 10;
+  }
   DECODE_FINISH(bl);
 }
 
@@ -424,12 +469,9 @@ void osd_stat_t::generate_test_instances(std::list<osd_stat_t*>& o)
   o.push_back(new osd_stat_t);
 
   o.push_back(new osd_stat_t);
-  o.back()->kb = 9;
-  o.back()->kb_used = 6;
-  o.back()->kb_used_data = 3;
-  o.back()->kb_used_omap = 2;
-  o.back()->kb_used_meta = 1;
-  o.back()->kb_avail = 3;
+  list<store_statfs_t*> ll;
+  store_statfs_t::generate_test_instances(ll);
+  o.back()->statfs = *ll.back();
   o.back()->hb_peers.push_back(7);
   o.back()->snap_trim_queue_len = 8;
   o.back()->num_snap_trimming = 99;
@@ -2744,15 +2786,84 @@ bool operator==(const pg_stat_t& l, const pg_stat_t& r)
     l.snaptrimq_len == r.snaptrimq_len;
 }
 
+// -- store_statfs_t --
+
+bool store_statfs_t::operator==(const store_statfs_t& other) const
+{
+  return total == other.total
+    && available == other.available
+    && allocated == other.allocated
+    && internally_reserved == other.internally_reserved
+    && data_stored == other.data_stored
+    && data_compressed == other.data_compressed
+    && data_compressed_allocated == other.data_compressed_allocated
+    && data_compressed_original == other.data_compressed_original
+    && omap_allocated == other.omap_allocated
+    && internal_metadata == other.internal_metadata;
+}
+
+void store_statfs_t::dump(Formatter *f) const
+{
+  f->dump_int("total", total);
+  f->dump_int("available", available);
+  f->dump_int("internally_reserved", internally_reserved);
+  f->dump_int("allocated", allocated);
+  f->dump_int("data_stored", data_stored);
+  f->dump_int("data_compressed", data_compressed);
+  f->dump_int("data_compressed_allocated", data_compressed_allocated);
+  f->dump_int("data_compressed_original", data_compressed_original);
+  f->dump_int("omap_allocated", omap_allocated);
+  f->dump_int("internal_metadata", internal_metadata);
+}
+
+ostream& operator<<(ostream& out, const store_statfs_t &s)
+{
+  out << std::hex
+      << "store_statfs(0x" << s.available
+      << "/0x"  << s.internally_reserved
+      << "/0x"  << s.total
+      << ", data 0x" << s.data_stored
+      << "/0x"  << s.allocated
+      << ", compress 0x" << s.data_compressed
+      << "/0x"  << s.data_compressed_allocated
+      << "/0x"  << s.data_compressed_original
+      << ", omap 0x" << s.omap_allocated
+      << ", meta 0x" << s.internal_metadata
+      << std::dec
+      << ")";
+  return out;
+}
+
+void store_statfs_t::generate_test_instances(list<store_statfs_t*>& o)
+{
+  store_statfs_t a;
+  o.push_back(new store_statfs_t(a));
+  a.total = 234;
+  a.available = 123;
+  a.internally_reserved = 33;
+  a.allocated = 32;
+  a.data_stored = 44;
+  a.data_compressed = 21;
+  a.data_compressed_allocated = 12;
+  a.data_compressed_original = 13;
+  a.omap_allocated = 14;
+  a.internal_metadata = 15;
+  o.push_back(new store_statfs_t(a));
+}
+
 // -- pool_stat_t --
 
 void pool_stat_t::dump(Formatter *f) const
 {
   stats.dump(f);
+  f->open_object_section("store_stats");
+  store_stats.dump(f);
+  f->close_section();
   f->dump_int("log_size", log_size);
   f->dump_int("ondisk_log_size", ondisk_log_size);
   f->dump_int("up", up);
   f->dump_int("acting", acting);
+  f->dump_int("num_store_stats", acting);
 }
 
 void pool_stat_t::encode(bufferlist &bl, uint64_t features) const
@@ -2767,18 +2878,20 @@ void pool_stat_t::encode(bufferlist &bl, uint64_t features) const
     return;
   }
 
-  ENCODE_START(6, 5, bl);
+  ENCODE_START(7, 5, bl);
   encode(stats, bl);
   encode(log_size, bl);
   encode(ondisk_log_size, bl);
   encode(up, bl);
   encode(acting, bl);
+  encode(store_stats, bl);
+  encode(num_store_stats, bl);
   ENCODE_FINISH(bl);
 }
 
 void pool_stat_t::decode(bufferlist::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(6, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(7, 5, 5, bl);
   if (struct_v >= 4) {
     decode(stats, bl);
     decode(log_size, bl);
@@ -2790,6 +2903,14 @@ void pool_stat_t::decode(bufferlist::const_iterator &bl)
       up = 0;
       acting = 0;
     }
+    if (struct_v >= 7) {
+      decode(store_stats, bl);
+      decode(num_store_stats, bl);
+    } else {
+      store_stats.reset();
+      num_store_stats = 0;
+    }
+
   } else {
     decode(stats.sum.num_bytes, bl);
     uint64_t num_kb;
@@ -2821,11 +2942,15 @@ void pool_stat_t::generate_test_instances(list<pool_stat_t*>& o)
 
   list<object_stat_collection_t*> l;
   object_stat_collection_t::generate_test_instances(l);
+  list<store_statfs_t*> ll;
+  store_statfs_t::generate_test_instances(ll);
   a.stats = *l.back();
+  a.store_stats = *ll.back();
   a.log_size = 123;
   a.ondisk_log_size = 456;
   a.acting = 3;
   a.up = 4;
+  a.num_store_stats = 1;
   o.push_back(new pool_stat_t(a));
 }
 
@@ -6134,49 +6259,6 @@ void OSDOp::merge_osd_op_vector_out_data(vector<OSDOp>& ops, bufferlist& out)
       out.append(ops[i].outdata);
     }
   }
-}
-
-bool store_statfs_t::operator==(const store_statfs_t& other) const
-{
-  return total == other.total
-    && available == other.available
-    && allocated == other.allocated
-    && data_stored == other.data_stored
-    && data_compressed == other.data_compressed
-    && data_compressed_allocated == other.data_compressed_allocated
-    && data_compressed_original == other.data_compressed_original
-    && omap_allocated == other.omap_allocated
-    && internal_metadata == other.internal_metadata;
-}
-
-void store_statfs_t::dump(Formatter *f) const
-{
-  f->dump_int("total", total);
-  f->dump_int("available", available);
-  f->dump_int("allocated", allocated);
-  f->dump_int("data_stored", data_stored);
-  f->dump_int("data_compressed", data_compressed);
-  f->dump_int("data_compressed_allocated", data_compressed_allocated);
-  f->dump_int("data_compressed_original", data_compressed_original);
-  f->dump_int("omap_allocated", omap_allocated);
-  f->dump_int("internal_metadata", internal_metadata);
-}
-
-ostream& operator<<(ostream& out, const store_statfs_t &s)
-{
-  out << std::hex
-      << "store_statfs(0x" << s.available
-      << "/0x"  << s.total
-      << ", data 0x" << s.data_stored
-      << "/0x"  << s.allocated
-      << ", compress 0x" << s.data_compressed
-      << "/0x"  << s.data_compressed_allocated
-      << "/0x"  << s.data_compressed_original
-      << ", omap 0x" << s.omap_allocated
-      << ", meta 0x" << s.internal_metadata
-      << std::dec
-      << ")";
-  return out;
 }
 
 void OSDOp::clear_data(vector<OSDOp>& ops)

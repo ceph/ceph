@@ -4617,12 +4617,13 @@ protected:
 			   int64_t* kb_avail) const {
     const osd_stat_t *p = pgmap.get_osd_stat(id);
     if (!p) return false;
-    *kb = p->kb;
-    *kb_used = p->kb_used;
-    *kb_used_data = p->kb_used_data;
-    *kb_used_omap = p->kb_used_omap;
-    *kb_used_meta = p->kb_used_meta;
-    *kb_avail = p->kb_avail;
+    *kb = p->statfs.kb();
+    *kb_used = p->statfs.kb_used_raw();
+    *kb_used_data = p->statfs.kb_used_data();
+    *kb_used_omap = p->statfs.kb_used_omap();
+    *kb_used_meta = p->statfs.kb_used_internal_metadata();
+    *kb_avail = p->statfs.kb_avail();
+    
     return *kb > 0;
   }
 
@@ -4696,7 +4697,7 @@ public:
     tbl->define_column("WEIGHT", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("REWEIGHT", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("SIZE", TextTable::LEFT, TextTable::RIGHT);
-    tbl->define_column("USE", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("RAW USE", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("DATA", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("OMAP", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("META", TextTable::LEFT, TextTable::RIGHT);
@@ -4715,12 +4716,12 @@ public:
     *tbl << ""
 	 << ""
 	 << "" << "TOTAL"
-	 << byte_u_t(pgmap.get_osd_sum().kb << 10)
-	 << byte_u_t(pgmap.get_osd_sum().kb_used << 10)
-	 << byte_u_t(pgmap.get_osd_sum().kb_used_data << 10)
-	 << byte_u_t(pgmap.get_osd_sum().kb_used_omap << 10)
-	 << byte_u_t(pgmap.get_osd_sum().kb_used_meta << 10)
-	 << byte_u_t(pgmap.get_osd_sum().kb_avail << 10)
+	 << byte_u_t(pgmap.get_osd_sum().statfs.total)
+	 << byte_u_t(pgmap.get_osd_sum().statfs.get_used_raw())
+	 << byte_u_t(pgmap.get_osd_sum().statfs.allocated)
+	 << byte_u_t(pgmap.get_osd_sum().statfs.omap_allocated)
+	 << byte_u_t(pgmap.get_osd_sum().statfs.internal_metadata)
+	 << byte_u_t(pgmap.get_osd_sum().statfs.available)
 	 << lowprecision_t(average_util)
 	 << ""
 	 << TextTable::endrow;
@@ -4876,13 +4877,14 @@ protected:
 public:
   void summary(Formatter *f) {
     f->open_object_section("summary");
-    auto& s = pgmap.get_osd_sum();
-    f->dump_int("total_kb", s.kb);
-    f->dump_int("total_kb_used", s.kb_used);
-    f->dump_int("total_kb_used_data", s.kb_used_data);
-    f->dump_int("total_kb_used_omap", s.kb_used_omap);
-    f->dump_int("total_kb_used_meta", s.kb_used_meta);
-    f->dump_int("total_kb_avail", s.kb_avail);
+    auto& s = pgmap.get_osd_sum().statfs;
+
+    f->dump_int("total_kb", s.kb());
+    f->dump_int("total_kb_used", s.kb_used_raw());
+    f->dump_int("total_kb_used_data", s.kb_used_data());
+    f->dump_int("total_kb_used_omap", s.kb_used_omap());
+    f->dump_int("total_kb_used_meta", s.kb_used_internal_metadata());
+    f->dump_int("total_kb_avail", s.kb_avail());
     f->dump_float("average_utilization", average_util);
     f->dump_float("min_var", min_var);
     f->dump_float("max_var", max_var);

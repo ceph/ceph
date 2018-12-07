@@ -769,6 +769,7 @@ int FileStore::statfs(struct store_statfs_t *buf0)
   // Adjust for writes pending in the journal
   if (journal) {
     uint64_t estimate = journal->get_journal_size_estimate();
+    buf0->internally_reserved = estimate;
     if (buf0->available > estimate)
       buf0->available -= estimate;
     else
@@ -778,6 +779,10 @@ int FileStore::statfs(struct store_statfs_t *buf0)
   return 0;
 }
 
+int FileStore::pool_statfs(uint64_t pool_id, struct store_statfs_t *buf)
+{
+  return -ENOTSUP;
+}
 
 void FileStore::new_journal()
 {
