@@ -382,7 +382,7 @@ int rgw_bucket_parse_bucket_key(CephContext *cct, const string& key,
 
   // split tenant/name
   auto pos = name.find('/');
-  if (pos != boost::string_ref::npos) {
+  if (pos != string::npos) {
     auto tenant = name.substr(0, pos);
     bucket->tenant.assign(tenant.begin(), tenant.end());
     name = name.substr(pos + 1);
@@ -390,7 +390,7 @@ int rgw_bucket_parse_bucket_key(CephContext *cct, const string& key,
 
   // split name:instance
   pos = name.find(':');
-  if (pos != boost::string_ref::npos) {
+  if (pos != string::npos) {
     instance = name.substr(pos + 1);
     name = name.substr(0, pos);
   }
@@ -398,7 +398,7 @@ int rgw_bucket_parse_bucket_key(CephContext *cct, const string& key,
 
   // split instance:shard
   pos = instance.find(':');
-  if (pos == boost::string_ref::npos) {
+  if (pos == string::npos) {
     bucket->bucket_id.assign(instance.begin(), instance.end());
     *shard_id = -1;
     return 0;
@@ -816,7 +816,7 @@ int RGWBucket::init(RGWRados *storage, RGWBucketAdminOpState& op_state,
 
   // split possible tenant/name
   auto pos = bucket_name.find('/');
-  if (pos != boost::string_ref::npos) {
+  if (pos != string::npos) {
     bucket_tenant = bucket_name.substr(0, pos);
     bucket_name = bucket_name.substr(pos + 1);
   }
@@ -869,7 +869,7 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state,
   bucket.tenant = tenant;
   if (!op_state.new_bucket_name.empty()) {
     auto pos = op_state.new_bucket_name.find('/');
-    if (pos != boost::string_ref::npos) {
+    if (pos != string::npos) {
       bucket.tenant = op_state.new_bucket_name.substr(0, pos);
       bucket.name = op_state.new_bucket_name.substr(pos + 1);
     } else {
@@ -882,9 +882,12 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state,
 
   map<string, bufferlist>::iterator aiter = attrs.find(RGW_ATTR_ACL);
   if (aiter == attrs.end()) {
-    // XXX why isn't this an error?  mdw 20180825
-    ldout(store->ctx(), 0) << "WARNING: bucket link will do nothing because no acl on bucket=" << old_bucket.name << dendl;
-    return 0;
+	// should never happen; only pre-argonaut buckets lacked this.
+    ldout(store->ctx(), 0) << "WARNING: can't bucket link because no acl on bucket=" << old_bucket.name << dendl;
+    set_err_msg(err_msg,
+	"While crossing the Anavros you have displeased the goddess Hera."
+	"  You must sacrifice your ancient bucket " + bucket.bucket_id);
+    return -EINVAL;
   }
   bufferlist aclbl = aiter->second;
   RGWAccessControlPolicy policy;
@@ -924,9 +927,16 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state,
       return r;
     }
 
-    rgw_raw_obj obj_bucket_instance;
-    store->get_bucket_instance_obj(bucket, obj_bucket_instance);
+    const rgw_pool& root_pool = store->svc.zone->get_zone_params().domain_root;
+    std::string bucket_entry;
+    rgw_make_bucket_entry_name(tenant, bucket_name, bucket_entry);
+    rgw_raw_obj obj(root_pool, bucket_entry);
+    auto obj_ctx = store->svc.sysobj->init_obj_ctx();
     auto sysobj = obj_ctx.get_obj(obj);
+    rgw_raw_obj obj_bucket_instance;
+
+    store->get_bucket_instance_obj(bucket, obj_bucket_instance);
+    auto inst_sysobj = obj_ctx.get_obj(obj_bucket_instance);
     r = sysobj.wop()
               .set_objv_tracker(&objv_tracker)
               .write_attr(RGW_ATTR_ACL, aclbl, null_yield);
@@ -952,12 +962,6 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state,
   ep.creation_time = bucket_info.creation_time;
   ep.linked = true;
   map<string, bufferlist> ep_attrs;
-  // XXX I am not convinced this is at all necessary; but previous
-  //	versions would have found and copied VERSION_ATTR so I will
-  //	do likewise for now...  mdw 20180825
-  auto version_iter = attrs.find(VERSION_ATTR);
-  if (version_iter != attrs.end())
-    ep_attrs[VERSION_ATTR] = version_iter->second;
   rgw_ep_info ep_data{ep, ep_attrs};
 
   r = rgw_link_bucket(store, user_info.user_id, bucket_info.bucket,
