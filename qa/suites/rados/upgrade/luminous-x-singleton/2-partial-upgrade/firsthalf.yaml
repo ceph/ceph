@@ -8,7 +8,7 @@ tasks:
     osd.0:
 - print: "**** done install.upgrade osd.0"
 - ceph.restart:
-    daemons: [mon.a, mon.b, mon.c]
+    daemons: [mon.a, mon.c]
     wait-for-healthy: false
     mon-health-to-clog: false
 - ceph.restart:
