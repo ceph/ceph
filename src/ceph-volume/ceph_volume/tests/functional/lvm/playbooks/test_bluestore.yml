@@ -98,6 +98,11 @@
       environment:
         CEPH_VOLUME_DEBUG: 1
 
+    - name: node inventory
+      command: "ceph-volume inventory"
+      environment:
+        CEPH_VOLUME_DEBUG: 1
+
     - name: list all OSDs
       command: "ceph-volume lvm list"
       environment:
