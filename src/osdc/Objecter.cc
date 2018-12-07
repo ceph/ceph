@@ -4430,7 +4430,10 @@ bool Objecter::ms_handle_reset(Connection *con)
     if (session) {
       ldout(cct, 1) << "ms_handle_reset " << con << " session " << session
 		    << " osd." << session->osd << dendl;
-      if (!initialized) {
+      // the session maybe had been closed if new osdmap just handled
+      // says the osd down
+      if (!(initialized && osdmap->is_up(session->osd))) {
+	ldout(cct, 1) << "ms_handle_reset aborted,initialized=" << initialized << dendl;
 	wl.unlock();
 	return false;
       }
