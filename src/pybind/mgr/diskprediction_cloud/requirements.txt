@@ -1,8 +1,6 @@
-google==2.0.1
 google-api-python-client==1.7.3
 google-auth==1.5.0
 google-auth-httplib2==0.0.3
-google-gax==0.12.5
 googleapis-common-protos==1.5.3
 grpc==0.3.post19
 grpc-google-logging-v2==0.8.1
