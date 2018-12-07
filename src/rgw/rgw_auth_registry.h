@@ -64,7 +64,8 @@ public:
                    RGWRados* const store)
     : s3_main_strategy(cct, implicit_tenant_context, store),
       s3_post_strategy(cct, implicit_tenant_context, store),
-      swift_strategy(cct, implicit_tenant_context, store) {
+      swift_strategy(cct, implicit_tenant_context, store),
+      sts_strategy(cct, implicit_tenant_context, store) {
   }
 
   const s3_main_strategy_t& get_s3_main() const {
