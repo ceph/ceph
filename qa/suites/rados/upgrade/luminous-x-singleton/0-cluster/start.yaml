@@ -13,7 +13,6 @@ overrides:
         ms dump corrupt message level: 0
 roles:
 - - mon.a
-  - mon.b
   - mon.c
   - mgr.x
   - mgr.y
@@ -21,7 +20,8 @@ roles:
   - osd.0
   - osd.1
   - osd.2
-- - osd.3
+- - mon.b
+  - osd.3
   - osd.4
   - osd.5
 - - client.0
