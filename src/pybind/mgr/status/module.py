@@ -240,7 +240,7 @@ class Module(MgrModule):
         output += "\n" + standby_table.get_string() + "\n"
 
         if len(mds_versions) == 1:
-            output += "MDS version: {0}".format(mds_versions.keys()[0])
+            output += "MDS version: {0}".format(list(mds_versions)[0])
         else:
             version_table = PrettyTable(["version", "daemons"])
             for version, daemons in six.iteritems(mds_versions):
