@@ -1,21 +1,18 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 
 import * as _ from 'lodash';
 import { ToastModule } from 'ng2-toastr';
 import { BsModalRef, ModalModule } from 'ngx-bootstrap/modal';
-import { of } from 'rxjs';
 
 import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
-import { ConfigurationService } from '../../../../shared/api/configuration.service';
 import { SharedModule } from '../../../../shared/shared.module';
 import { OsdRecvSpeedModalComponent } from './osd-recv-speed-modal.component';
 
 describe('OsdRecvSpeedModalComponent', () => {
   let component: OsdRecvSpeedModalComponent;
   let fixture: ComponentFixture<OsdRecvSpeedModalComponent>;
-  let configService: ConfigurationService;
 
   configureTestBed({
     imports: [
@@ -32,7 +29,6 @@ describe('OsdRecvSpeedModalComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(OsdRecvSpeedModalComponent);
     component = fixture.componentInstance;
-    configService = TestBed.get(ConfigurationService);
     fixture.detectChanges();
   });
 
@@ -95,270 +91,105 @@ describe('OsdRecvSpeedModalComponent', () => {
   });
 
   describe('getStoredPriority', () => {
-    const configOptionsLow = [
-      {
-        name: 'osd_max_backfills',
-        value: [
-          {
-            section: 'osd',
-            value: '1'
-          }
-        ]
-      },
-      {
-        name: 'osd_recovery_max_active',
-        value: [
-          {
-            section: 'osd',
-            value: '1'
-          }
-        ]
-      },
-      {
-        name: 'osd_recovery_max_single_start',
-        value: [
-          {
-            section: 'osd',
-            value: '1'
-          }
-        ]
-      },
-      {
-        name: 'osd_recovery_sleep',
-        value: [
-          {
-            section: 'osd',
-            value: '0.5'
-          }
-        ]
-      }
-    ];
+    const configOptionsLow = {
+      osd_max_backfills: 1,
+      osd_recovery_max_active: 1,
+      osd_recovery_max_single_start: 1,
+      osd_recovery_sleep: 0.5
+    };
 
-    const configOptionsDefault = [
-      {
-        name: 'osd_max_backfills',
-        value: [
-          {
-            section: 'osd',
-            value: '1'
-          }
-        ]
-      },
-      {
-        name: 'osd_recovery_max_active',
-        value: [
-          {
-            section: 'osd',
-            value: '3'
-          }
-        ]
-      },
-      {
-        name: 'osd_recovery_max_single_start',
-        value: [
-          {
-            section: 'osd',
-            value: '1'
-          }
-        ]
-      },
-      {
-        name: 'osd_recovery_sleep',
-        value: [
-          {
-            section: 'osd',
-            value: '0'
-          }
-        ]
-      }
-    ];
+    const configOptionsDefault = {
+      osd_max_backfills: 1,
+      osd_recovery_max_active: 3,
+      osd_recovery_max_single_start: 1,
+      osd_recovery_sleep: 0
+    };
 
-    const configOptionsHigh = [
-      {
-        name: 'osd_max_backfills',
-        value: [
-          {
-            section: 'osd',
-            value: '4'
-          }
-        ]
-      },
-      {
-        name: 'osd_recovery_max_active',
-        value: [
-          {
-            section: 'osd',
-            value: '4'
-          }
-        ]
-      },
-      {
-        name: 'osd_recovery_max_single_start',
-        value: [
-          {
-            section: 'osd',
-            value: '4'
-          }
-        ]
-      },
-      {
-        name: 'osd_recovery_sleep',
-        value: [
-          {
-            section: 'osd',
-            value: '0'
-          }
-        ]
-      }
-    ];
+    const configOptionsHigh = {
+      osd_max_backfills: 4,
+      osd_recovery_max_active: 4,
+      osd_recovery_max_single_start: 4,
+      osd_recovery_sleep: 0
+    };
 
-    const configOptionsCustom = [
-      {
-        name: 'osd_max_backfills',
-        value: [
-          {
-            section: 'osd',
-            value: '1'
-          }
-        ]
-      },
-      {
-        name: 'osd_recovery_max_active',
-        value: [
-          {
-            section: 'osd',
-            value: '2'
-          }
-        ]
-      },
-      {
-        name: 'osd_recovery_max_single_start',
-        value: [
-          {
-            section: 'osd',
-            value: '1'
-          }
-        ]
-      },
-      {
-        name: 'osd_recovery_sleep',
-        value: [
-          {
-            section: 'osd',
-            value: '0'
-          }
-        ]
-      }
-    ];
+    const configOptionsCustom = {
+      osd_max_backfills: 1,
+      osd_recovery_max_active: 2,
+      osd_recovery_max_single_start: 1,
+      osd_recovery_sleep: 0
+    };
 
-    const configOptionsIncomplete = [
-      {
-        name: 'osd_max_backfills',
-        value: [
-          {
-            section: 'osd',
-            value: '1'
-          }
-        ]
-      },
-      {
-        name: 'osd_recovery_max_single_start',
-        value: [
-          {
-            section: 'osd',
-            value: '1'
-          }
-        ]
-      },
-      {
-        name: 'osd_recovery_sleep',
-        value: [
-          {
-            section: 'osd',
-            value: '0'
-          }
-        ]
-      }
-    ];
+    const configOptionsIncomplete = {
+      osd_max_backfills: 1,
+      osd_recovery_max_single_start: 1,
+      osd_recovery_sleep: 0
+    };
 
-    it('should return priority "low" if the config option values have been set accordingly', fakeAsync(() => {
-      spyOn(configService, 'get').and.callFake((configOptionName: string) => {
-        const result = _.find(configOptionsLow, (configOption) => {
-          return configOption.name === configOptionName;
-        });
-        return of(result);
-      });
-
-      component.getStoredPriority((priority) => {
+    it('should return priority "low" if the config option values have been set accordingly', () => {
+      component.getStoredPriority(configOptionsLow, (priority) => {
         expect(priority.name).toBe('low');
       });
-      tick();
-
       expect(component.osdRecvSpeedForm.getValue('customizePriority')).toBeFalsy();
-    }));
+    });
 
-    it('should return priority "default" if the config option values have been set accordingly', fakeAsync(() => {
-      spyOn(configService, 'get').and.callFake((configOptionName: string) => {
-        const result = _.find(configOptionsDefault, (configOption) => {
-          return configOption.name === configOptionName;
-        });
-        return of(result);
-      });
-
-      component.getStoredPriority((priority) => {
+    it('should return priority "default" if the config option values have been set accordingly', () => {
+      component.getStoredPriority(configOptionsDefault, (priority) => {
         expect(priority.name).toBe('default');
       });
-      tick();
-
       expect(component.osdRecvSpeedForm.getValue('customizePriority')).toBeFalsy();
-    }));
+    });
 
-    it('should return priority "high" if the config option values have been set accordingly', fakeAsync(() => {
-      spyOn(configService, 'get').and.callFake((configOptionName: string) => {
-        const result = _.find(configOptionsHigh, (configOption) => {
-          return configOption.name === configOptionName;
-        });
-        return of(result);
-      });
-
-      component.getStoredPriority((priority) => {
+    it('should return priority "high" if the config option values have been set accordingly', () => {
+      component.getStoredPriority(configOptionsHigh, (priority) => {
         expect(priority.name).toBe('high');
       });
-      tick();
-
       expect(component.osdRecvSpeedForm.getValue('customizePriority')).toBeFalsy();
-    }));
+    });
 
-    it('should return priority "custom" if the config option values do not match any priority', fakeAsync(() => {
-      spyOn(configService, 'get').and.callFake((configOptionName: string) => {
-        const result = _.find(configOptionsCustom, (configOption) => {
-          return configOption.name === configOptionName;
-        });
-        return of(result);
-      });
-
-      component.getStoredPriority((priority) => {
+    it('should return priority "custom" if the config option values do not match any priority', () => {
+      component.getStoredPriority(configOptionsCustom, (priority) => {
         expect(priority.name).toBe('custom');
       });
-      tick();
-
       expect(component.osdRecvSpeedForm.getValue('customizePriority')).toBeTruthy();
-    }));
+    });
 
-    it('should return no priority if the config option values are incomplete', fakeAsync(() => {
-      spyOn(configService, 'get').and.callFake((configOptionName: string) => {
-        const result = _.find(configOptionsIncomplete, (configOption) => {
-          return configOption.name === configOptionName;
-        });
-        return of(result);
-      });
-
-      component.getStoredPriority((priority) => {
+    it('should return no priority if the config option values are incomplete', () => {
+      component.getStoredPriority(configOptionsIncomplete, (priority) => {
         expect(priority.name).toBeNull();
       });
-      tick();
-
       expect(component.osdRecvSpeedForm.getValue('customizePriority')).toBeFalsy();
-    }));
+    });
+  });
+
+  describe('setDescription', () => {
+    const configOptions = [
+      {
+        name: 'osd_max_backfills',
+        desc: ''
+      },
+      {
+        name: 'osd_recovery_max_active',
+        desc: ''
+      },
+      {
+        name: 'osd_recovery_max_single_start',
+        desc: ''
+      },
+      {
+        name: 'osd_recovery_sleep',
+        desc: 'Time in seconds to sleep before next recovery or backfill op'
+      }
+    ];
+
+    it('should set the description if one is given', () => {
+      component.setDescription(configOptions);
+      component.priorityAttrs.forEach((p) => {
+        if (p.name === 'osd_recovery_sleep') {
+          expect(p.desc).toBe('Time in seconds to sleep before next recovery or backfill op');
+        } else {
+          expect(p.desc).toBe('');
+        }
+      });
+    });
   });
 });
