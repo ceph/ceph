@@ -3,9 +3,6 @@ tasks:
                 client.salt_master:
                         - 'ceph --version'
                         - 'ceph -s'
-        - deepsea.validation:
-                deepsea_install_method:
-                        package:
         - deepsea.repository:
                 client.salt_master:
         - exec:
@@ -13,6 +10,12 @@ tasks:
                         - 'zypper --non-interactive --no-gpg-checks dist-upgrade --auto-agree-with-licenses --replacefiles'
         - deepsea.reboot:
                 client.salt_master:
+        - deepsea:
+                upgrade_install: package
+        - exec:
+                client.salt_master:
+                        - 'deepsea --version || true'
+                        - 'salt-run deepsea.version || true'
         - deepsea.repository:
                 all:
         - exec:

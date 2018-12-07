@@ -88,11 +88,19 @@ class DeepSea(Task):
     This task also understands the following config keys that affect
     the behavior of just this one task (no effect on subtasks):
 
-        repo: (DeepSea git repo, e.g. https://github.com/SUSE/DeepSea.git)
-        branch: (DeepSea git branch, e.g. master)
+        repo: (git repo for initial DeepSea install, e.g.
+              "https://github.com/SUSE/DeepSea.git")
+        branch: (git branch for initial deepsea install, e.g. "master")
         install:
             package|pkg deepsea will be installed via package system
             source|src  deepsea will be installed via 'make install' (default)
+        upgrade_install:
+            package|pkg post-upgrade deepsea will be installed via package system
+            source|src  post-upgrade deepsea will be installed via 'make install' (default)
+        upgrade_repo: (git repo for DeepSea re-install/upgrade - used by second
+                      invocation of deepsea task only)
+        upgrade_branch: (git branch for DeepSea re-install/upgrade - used by
+                        second invocation of deepsea task only)
 
     Example:
 
@@ -114,13 +122,40 @@ class DeepSea(Task):
         global deepsea_ctx
         super(DeepSea, self).__init__(ctx, config)
         if deepsea_ctx:
+            # context already populated (we are in a subtask, or a
+            # re-invocation of the deepsea task)
             self.log = deepsea_ctx['logger_obj']
-            # self.log.debug("context already populated (we are in a subtask)")
+            if type(self).__name__ == 'DeepSea':
+                # The only valid reason for a second invocation of the deepsea
+                # task is to upgrade DeepSea (actually reinstall it)
+                deepsea_ctx['reinstall_deepsea'] = True
+                # deepsea_ctx['install_method'] is the _initial_ install method from the
+                # first invocation. If initial install was from package, the
+                # package must be removed for reinstall from source to work.
+                # If reinstall method is 'package', removing the package here
+                # will not hurt anything.
+                if deepsea_ctx['install_method'] == 'package':
+                    deepsea_ctx['master_remote'].run(args=[
+                        'sudo',
+                        'zypper',
+                        '--non-interactive',
+                        '--no-gpg-checks',
+                        'remove',
+                        'deepsea',
+                        'deepsea-qa',
+                        run.Raw('||'),
+                        'true'
+                        ])
+                install_key = 'install'
+                upgrade_install = self.config.get('upgrade_install', '')
+                if upgrade_install:
+                    install_key = 'upgrade_install'
+                self.__populate_install_method_basic(install_key)
         if not deepsea_ctx:
+            # populating context (we are *not* in a subtask)
             deepsea_ctx['logger_obj'] = log
             self.ctx['roles'] = self.ctx.config['roles']
             self.log = log
-            # self.log.debug("populating context (we are *not* in a subtask)")
             self._populate_deepsea_context()
             introspect_roles(self.ctx, self.log, quiet=False)
         self.allow_python2 = deepsea_ctx['allow_python2']
@@ -136,6 +171,7 @@ class DeepSea(Task):
         self.nodes_storage_only = self.ctx['nodes_storage_only']
         self.quiet_salt = deepsea_ctx['quiet_salt']
         self.remotes = self.ctx['remotes']
+        self.reinstall_deepsea = deepsea_ctx.get('reinstall_deepsea', False)
         self.repositories = deepsea_ctx['repositories']
         self.rgw_ssl = deepsea_ctx['rgw_ssl']
         self.roles = self.ctx['roles']
@@ -148,17 +184,31 @@ class DeepSea(Task):
         # self.log.debug("deepsea context: {}".format(deepsea_ctx))
 
     def __install_deepsea_from_source(self):
-        self.log.info(anchored("installing deepsea from source"))
+        info_msg_prefix = 'Reinstalling' if self.reinstall_deepsea else 'Installing'
+        info_msg = info_msg_prefix + ' deepsea from source'
+        self.log.info(anchored(info_msg))
         if self.sm.master_rpm_q('deepsea'):
             self.log.info("DeepSea already installed from RPM")
             return None
+        upgrade_repo = self.config.get('upgrade_repo', '')
+        upgrade_branch = self.config.get('upgrade_branch', '')
         repo = self.config.get('repo', 'https://github.com/SUSE/DeepSea.git')
         branch = self.config.get('branch', 'master')
+        if self.reinstall_deepsea:
+            if upgrade_repo:
+                repo = upgrade_repo
+            if upgrade_branch:
+                branch = upgrade_branch
         self.log.info(
-            "Installing DeepSea from source - repo: {}, branch: {}"
-            .format(repo, branch)
+            "{} - repo: {}, branch: {}"
+            .format(info_msg, repo, branch)
             )
         self.master_remote.run(args=[
+            'sudo',
+            'rm',
+            '-rf',
+            'DeepSea',
+            run.Raw(';'),
             'git',
             '--version',
             run.Raw(';'),
@@ -208,7 +258,9 @@ class DeepSea(Task):
             ])
 
     def __install_deepsea_using_zypper(self):
-        self.log.info(anchored("installing DeepSea using zypper"))
+        info_msg_prefix = 'Reinstalling' if self.reinstall_deepsea else 'Installing'
+        info_msg = info_msg_prefix + ' deepsea using zypper'
+        self.log.info(anchored(info_msg))
         self.master_remote.run(args=[
             'sudo',
             'zypper',
@@ -349,14 +401,20 @@ class DeepSea(Task):
                 )
         deepsea_ctx['repositories'] = self.config.get("repositories", None)
         deepsea_ctx['rgw_ssl'] = self.config.get('rgw_ssl', False)
-        if 'install' in self.config:
-            if self.config['install'] in ['package', 'pkg']:
-                deepsea_ctx['install_method'] = 'package'
-            elif self.config['install'] in ['source', 'src']:
-                deepsea_ctx['install_method'] = 'source'
-            else:
-                raise ConfigError(self.err_prefix + "Unrecognized install config "
-                                  "value ->{}<-".format(self.config['install']))
+        self.__populate_install_method('install')
+
+    def __populate_install_method_basic(self, key):
+        if self.config[key] in ['package', 'pkg']:
+            deepsea_ctx['install_method'] = 'package'
+        elif self.config[key] in ['source', 'src']:
+            deepsea_ctx['install_method'] = 'source'
+        else:
+            raise ConfigError(self.err_prefix + "Unrecognized {} config "
+                              "value ->{}<-".format(key, self.config[key]))
+
+    def __populate_install_method(self, key):
+        if key in self.config:
+            self.__populate_install_method_basic(key)
         else:
             if 'repo' in self.config or 'branch' in self.config:
                 deepsea_ctx['install_method'] = 'source'
@@ -467,6 +525,9 @@ class DeepSea(Task):
     def begin(self):
         global deepsea_ctx
         super(DeepSea, self).begin()
+        if self.reinstall_deepsea:
+            self._install_deepsea()
+            return None
         self.sm.master_rpm_q('ceph')
         self.sm.master_rpm_q('ceph-test')
         self.sm.master_rpm_q('salt-master')
@@ -1637,31 +1698,6 @@ class Validation(DeepSea):
             self.master_remote,
             'ceph_version_sanity.sh',
             )
-
-    def deepsea_install_method(self, **kwargs):
-        """
-        Takes a single kwargs key, which is mandatory and can be
-        either "package" or "source".
-        """
-        config_err = (
-            self.err_prefix +
-            "deepsea_install_method takes a single config key, "
-            "which must be either \"package\" or \"source\""
-            )
-        if len(kwargs) != 1:
-            raise ConfigError(config_err)
-        desired_install_method = kwargs.keys()[0]
-        state_msg = (
-            "Actual DeepSea install method ->{}<- and desired "
-            "install method ->{}<- "
-            .format(self.install_method, desired_install_method)
-            )
-        if desired_install_method != self.install_method:
-            raise ConfigError(
-                self.err_prefix + state_msg +
-                "different! This test requires that they be the same."
-                )
-        self.log.info(state_msg + "the same")
 
     def rados_striper(self, **kwargs):
         """
