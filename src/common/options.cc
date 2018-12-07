@@ -4257,6 +4257,10 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description("Run deep fsck after mkfs"),
 
+    Option("bluestore_fsck_error_on_legacy_stats", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_description("Popup errors on legacy (store-wide only) stats detection"),
+
     Option("bluestore_sync_submit_transaction", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description("Try to submit metadata transaction to rocksdb in queuing thread context"),
@@ -4384,6 +4388,10 @@ std::vector<Option> get_global_options() {
     Option("bluestore_debug_inject_csum_err_probability", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0.0)
     .set_description("inject crc verification errors into bluestore device reads"),
+
+    Option("bluestore_debug_no_per_pool_stats", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_description(""),
 
     // -----------------------------------------
     // kstore

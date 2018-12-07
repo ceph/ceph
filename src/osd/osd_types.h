@@ -921,95 +921,6 @@ struct objectstore_perf_stat_t {
 };
 WRITE_CLASS_ENCODER_FEATURES(objectstore_perf_stat_t)
 
-/** osd_stat
- * aggregate stats for an osd
- */
-struct osd_stat_t {
-  int64_t kb = 0;            ///< total device size
-  int64_t kb_used = 0;       ///< total used
-  int64_t kb_used_data = 0;  ///< total used by object data
-  int64_t kb_used_omap = 0;  ///< total used by omap data
-  int64_t kb_used_meta = 0;  ///< total used by internal metadata
-  int64_t kb_avail = 0;      ///< total available/free
-
-  vector<int> hb_peers;
-  int32_t snap_trim_queue_len = 0, num_snap_trimming = 0;
-
-  pow2_hist_t op_queue_age_hist;
-
-  objectstore_perf_stat_t os_perf_stat;
-
-  epoch_t up_from = 0;
-  uint64_t seq = 0;
-
-  uint32_t num_pgs = 0;
-
-  void add(const osd_stat_t& o) {
-    kb += o.kb;
-    kb_used += o.kb_used;
-    kb_used_data += o.kb_used_data;
-    kb_used_omap += o.kb_used_omap;
-    kb_used_meta += o.kb_used_meta;
-    kb_avail += o.kb_avail;
-    snap_trim_queue_len += o.snap_trim_queue_len;
-    num_snap_trimming += o.num_snap_trimming;
-    op_queue_age_hist.add(o.op_queue_age_hist);
-    os_perf_stat.add(o.os_perf_stat);
-    num_pgs += o.num_pgs;
-  }
-  void sub(const osd_stat_t& o) {
-    kb -= o.kb;
-    kb_used -= o.kb_used;
-    kb_used_data -= o.kb_used_data;
-    kb_used_omap -= o.kb_used_omap;
-    kb_used_meta -= o.kb_used_meta;
-    kb_avail -= o.kb_avail;
-    snap_trim_queue_len -= o.snap_trim_queue_len;
-    num_snap_trimming -= o.num_snap_trimming;
-    op_queue_age_hist.sub(o.op_queue_age_hist);
-    os_perf_stat.sub(o.os_perf_stat);
-    num_pgs -= o.num_pgs;
-  }
-
-  void dump(Formatter *f) const;
-  void encode(bufferlist &bl, uint64_t features) const;
-  void decode(bufferlist::const_iterator &bl);
-  static void generate_test_instances(std::list<osd_stat_t*>& o);
-};
-WRITE_CLASS_ENCODER_FEATURES(osd_stat_t)
-
-inline bool operator==(const osd_stat_t& l, const osd_stat_t& r) {
-  return l.kb == r.kb &&
-    l.kb_used == r.kb_used &&
-    l.kb_used_data == r.kb_used_data &&
-    l.kb_used_omap == r.kb_used_omap &&
-    l.kb_used_meta == r.kb_used_meta &&
-    l.kb_avail == r.kb_avail &&
-    l.snap_trim_queue_len == r.snap_trim_queue_len &&
-    l.num_snap_trimming == r.num_snap_trimming &&
-    l.hb_peers == r.hb_peers &&
-    l.op_queue_age_hist == r.op_queue_age_hist &&
-    l.os_perf_stat == r.os_perf_stat &&
-    l.num_pgs == r.num_pgs;
-}
-inline bool operator!=(const osd_stat_t& l, const osd_stat_t& r) {
-  return !(l == r);
-}
-
-inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
-  return out << "osd_stat("
-	     << byte_u_t(s.kb_used << 10) << " used ("
-	     << byte_u_t(s.kb_used_data << 10) << " data, "
-	     << byte_u_t(s.kb_used_omap << 10) << " omap, "
-	     << byte_u_t(s.kb_used_meta << 10) << " meta), "
-	     << byte_u_t(s.kb_avail << 10) << " avail, "
-	     << byte_u_t(s.kb << 10) << " total, "
-	     << "peers " << s.hb_peers
-	     << " op hist " << s.op_queue_age_hist.h
-	     << ")";
-}
-
-
 /*
  * pg states
  */
@@ -2186,21 +2097,207 @@ WRITE_CLASS_ENCODER(pg_stat_t)
 
 bool operator==(const pg_stat_t& l, const pg_stat_t& r);
 
+/** store_statfs_t
+ * ObjectStore full statfs information
+ */
+struct store_statfs_t
+{
+  uint64_t total = 0;                  ///< Total bytes
+  uint64_t available = 0;              ///< Free bytes available
+  uint64_t internally_reserved = 0;    ///< Bytes reserved for internal purposes
+
+  int64_t allocated = 0;               ///< Bytes allocated by the store
+
+  int64_t data_stored = 0;                ///< Bytes actually stored by the user
+  int64_t data_compressed = 0;            ///< Bytes stored after compression
+  int64_t data_compressed_allocated = 0;  ///< Bytes allocated for compressed data
+  int64_t data_compressed_original = 0;   ///< Bytes that were compressed
+
+  int64_t omap_allocated = 0;         ///< approx usage of omap data
+  int64_t internal_metadata = 0;      ///< approx usage of internal metadata
+
+  void reset() {
+    *this = store_statfs_t();
+  }
+  void floor(int64_t f) {
+#define FLOOR(x) if (int64_t(x) < f) x = f
+    FLOOR(total);
+    FLOOR(available);
+    FLOOR(internally_reserved);
+    FLOOR(allocated);
+    FLOOR(data_stored);
+    FLOOR(data_compressed);
+    FLOOR(data_compressed_allocated);
+    FLOOR(data_compressed_original);
+
+    FLOOR(omap_allocated);
+    FLOOR(internal_metadata);
+#undef FLOOR
+  }
+
+  bool operator ==(const store_statfs_t& other) const;
+  bool is_zero() const {
+    return *this == store_statfs_t();
+  }
+
+  uint64_t get_used() const {
+    return total - available - internally_reserved;
+  }
+
+  // this accumulates both actually used and statfs's internally_reserved
+  uint64_t get_used_raw() const {
+    return total - available;
+  }
+
+  // helpers to ease legacy code porting
+  uint64_t kb_avail() const {
+    return available >> 10;
+  }
+  uint64_t kb() const {
+    return total >> 10;
+  }
+  uint64_t kb_used_raw() const {
+    return get_used_raw() >> 10;
+  }
+
+  uint64_t kb_used_data() const {
+    return allocated >> 10;
+  }
+  uint64_t kb_used_omap() const {
+    return omap_allocated >> 10;
+  }
+
+  uint64_t kb_used_internal_metadata() const {
+    return internal_metadata >> 10;
+  }
+
+  void add(const store_statfs_t& o) {
+    total += o.total;
+    available += o.available;
+    internally_reserved += o.internally_reserved;
+    allocated += o.allocated;
+    data_stored += o.data_stored;
+    data_compressed += o.data_compressed;
+    data_compressed_allocated += o.data_compressed_allocated;
+    data_compressed_original += o.data_compressed_original;
+    omap_allocated += o.omap_allocated;
+    internal_metadata += o.internal_metadata;
+  }
+  void sub(const store_statfs_t& o) {
+    total -= o.total;
+    available -= o.available;
+    internally_reserved -= o.internally_reserved;
+    allocated -= o.allocated;
+    data_stored -= o.data_stored;
+    data_compressed -= o.data_compressed;
+    data_compressed_allocated -= o.data_compressed_allocated;
+    data_compressed_original -= o.data_compressed_original;
+    omap_allocated -= o.omap_allocated;
+    internal_metadata -= o.internal_metadata;
+  }
+  void dump(Formatter *f) const;
+  DENC(store_statfs_t, v, p) {
+    DENC_START(1, 1, p);
+    denc(v.total, p);
+    denc(v.available, p);
+    denc(v.internally_reserved, p);
+    denc(v.allocated, p);
+    denc(v.data_stored, p);
+    denc(v.data_compressed, p);
+    denc(v.data_compressed_allocated, p);
+    denc(v.data_compressed_original, p);
+    denc(v.omap_allocated, p);
+    denc(v.internal_metadata, p);
+    DENC_FINISH(p);
+  }
+  static void generate_test_instances(list<store_statfs_t*>& o);
+};
+WRITE_CLASS_DENC(store_statfs_t)
+
+ostream &operator<<(ostream &lhs, const store_statfs_t &rhs);
+
+/** osd_stat
+ * aggregate stats for an osd
+ */
+struct osd_stat_t {
+  store_statfs_t statfs;
+  vector<int> hb_peers;
+  int32_t snap_trim_queue_len, num_snap_trimming;
+
+  pow2_hist_t op_queue_age_hist;
+
+  objectstore_perf_stat_t os_perf_stat;
+
+  epoch_t up_from = 0;
+  uint64_t seq = 0;
+
+  uint32_t num_pgs = 0;
+
+  osd_stat_t() : snap_trim_queue_len(0), num_snap_trimming(0) {}
+
+  void add(const osd_stat_t& o) {
+    statfs.add(o.statfs);
+    snap_trim_queue_len += o.snap_trim_queue_len;
+    num_snap_trimming += o.num_snap_trimming;
+    op_queue_age_hist.add(o.op_queue_age_hist);
+    os_perf_stat.add(o.os_perf_stat);
+    num_pgs += o.num_pgs;
+  }
+  void sub(const osd_stat_t& o) {
+    statfs.sub(o.statfs);
+    snap_trim_queue_len -= o.snap_trim_queue_len;
+    num_snap_trimming -= o.num_snap_trimming;
+    op_queue_age_hist.sub(o.op_queue_age_hist);
+    os_perf_stat.sub(o.os_perf_stat);
+    num_pgs -= o.num_pgs;
+  }
+
+  void dump(Formatter *f) const;
+  void encode(bufferlist &bl, uint64_t features) const;
+  void decode(bufferlist::const_iterator &bl);
+  static void generate_test_instances(std::list<osd_stat_t*>& o);
+};
+WRITE_CLASS_ENCODER_FEATURES(osd_stat_t)
+
+inline bool operator==(const osd_stat_t& l, const osd_stat_t& r) {
+  return l.statfs == r.statfs &&
+    l.snap_trim_queue_len == r.snap_trim_queue_len &&
+    l.num_snap_trimming == r.num_snap_trimming &&
+    l.hb_peers == r.hb_peers &&
+    l.op_queue_age_hist == r.op_queue_age_hist &&
+    l.os_perf_stat == r.os_perf_stat &&
+    l.num_pgs == r.num_pgs;
+}
+inline bool operator!=(const osd_stat_t& l, const osd_stat_t& r) {
+  return !(l == r);
+}
+
+inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
+  return out << "osd_stat(" << s.statfs << ", "
+	     << "peers " << s.hb_peers
+	     << " op hist " << s.op_queue_age_hist.h
+	     << ")";
+}
+
 /*
  * summation over an entire pool
  */
 struct pool_stat_t {
   object_stat_collection_t stats;
+  store_statfs_t store_stats;
   int64_t log_size;
   int64_t ondisk_log_size;    // >= active_log_size
   int32_t up;       ///< number of up replicas or shards
   int32_t acting;   ///< number of acting replicas or shards
+  int32_t num_store_stats; ///< amount of store_stats accumulated
 
-  pool_stat_t() : log_size(0), ondisk_log_size(0), up(0), acting(0)
+  pool_stat_t() : log_size(0), ondisk_log_size(0), up(0), acting(0),
+    num_store_stats(0)
   { }
 
   void floor(int64_t f) {
     stats.floor(f);
+    store_stats.floor(f);
     if (log_size < f)
       log_size = f;
     if (ondisk_log_size < f)
@@ -2209,6 +2306,17 @@ struct pool_stat_t {
       up = f;
     if (acting < f)
       acting = f;
+    if (num_store_stats < f)
+      num_store_stats = f;
+  }
+
+  void add(const store_statfs_t& o) {
+    store_stats.add(o);
+    ++num_store_stats;
+  }
+  void sub(const store_statfs_t& o) {
+    store_stats.sub(o);
+    --num_store_stats;
   }
 
   void add(const pg_stat_t& o) {
@@ -2228,10 +2336,39 @@ struct pool_stat_t {
 
   bool is_zero() const {
     return (stats.is_zero() &&
+            store_stats.is_zero() &&
 	    log_size == 0 &&
 	    ondisk_log_size == 0 &&
 	    up == 0 &&
-	    acting == 0);
+	    acting == 0 &&
+	    num_store_stats == 0);
+  }
+
+  // helper accessors to retrieve used/netto bytes depending on the
+  // collection method: new per-pool objectstore report or legacy PG
+  // summation at OSD.
+  // In legacy mode used and netto values are the same. But for new per-pool
+  // collection 'used' provides amount of space ALLOCATED at all related OSDs 
+  // and 'netto' is amount of stored user data.
+  uint64_t get_allocated_bytes() const {
+    uint64_t allocated_bytes;
+    if (num_store_stats) {
+      allocated_bytes = store_stats.allocated;
+    } else {
+      // legacy mode, use numbers from 'stats'
+      allocated_bytes = stats.sum.num_bytes;
+    }
+    return allocated_bytes;
+  }
+  uint64_t get_user_bytes(float raw_used_rate) const {
+    uint64_t user_bytes;
+    if (num_store_stats) {
+      user_bytes = raw_used_rate ? store_stats.data_stored / raw_used_rate : 0;
+    } else {
+      // legacy mode, use numbers from 'stats'
+       user_bytes = stats.sum.num_bytes;
+    }
+    return user_bytes;
   }
 
   void dump(Formatter *f) const;
@@ -5507,33 +5644,6 @@ struct PromoteCounter {
     bytes = *b / 2;
   }
 };
-
-/** store_statfs_t
- * ObjectStore full statfs information
- */
-struct store_statfs_t
-{
-  uint64_t total = 0;                  ///< Total bytes
-  uint64_t available = 0;              ///< Free bytes available
-
-  int64_t allocated = 0;               ///< Bytes allocated by the store
-
-  int64_t data_stored = 0;                ///< Bytes actually stored by the user
-  int64_t data_compressed = 0;            ///< Bytes stored after compression
-  int64_t data_compressed_allocated = 0;  ///< Bytes allocated for compressed data
-  int64_t data_compressed_original = 0;   ///< Bytes that were compressed
-
-  int64_t omap_allocated = 0;         ///< approx usage of omap data
-  int64_t internal_metadata = 0;      ///< approx usage of internal metadata
-
-  void reset() {
-    *this = store_statfs_t();
-  }
-  bool operator ==(const store_statfs_t& other) const;
-  void dump(Formatter *f) const;
-};
-ostream &operator<<(ostream &lhs, const store_statfs_t &rhs);
-
 
 struct pool_pg_num_history_t {
   /// last epoch updated

@@ -1551,6 +1551,7 @@ public:
   }
 
   virtual int statfs(struct store_statfs_t *buf) = 0;
+  virtual int pool_statfs(uint64_t pool_id, struct store_statfs_t *buf) = 0;
 
   virtual void collect_metadata(map<string,string> *pm) { }
 

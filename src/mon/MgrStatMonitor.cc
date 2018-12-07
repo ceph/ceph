@@ -65,11 +65,11 @@ void MgrStatMonitor::update_logger()
 {
   dout(20) << __func__ << dendl;
 
-  mon->cluster_logger->set(l_cluster_osd_bytes, digest.osd_sum.kb * 1024ull);
+  mon->cluster_logger->set(l_cluster_osd_bytes, digest.osd_sum.statfs.total);
   mon->cluster_logger->set(l_cluster_osd_bytes_used,
-                           digest.osd_sum.kb_used * 1024ull);
+                           digest.osd_sum.statfs.get_used_raw());
   mon->cluster_logger->set(l_cluster_osd_bytes_avail,
-                           digest.osd_sum.kb_avail * 1024ull);
+                           digest.osd_sum.statfs.available);
 
   mon->cluster_logger->set(l_cluster_num_pool, digest.pg_pool_sum.size());
   uint64_t num_pg = 0;

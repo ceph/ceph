@@ -46,7 +46,7 @@ def health_status_to_number(status):
 
 DF_CLUSTER = ['total_bytes', 'total_used_bytes', 'total_objects']
 
-DF_POOL = ['max_avail', 'bytes_used', 'raw_bytes_used', 'objects', 'dirty',
+DF_POOL = ['max_avail', 'stored', 'stored_raw', 'objects', 'dirty',
            'quota_bytes', 'quota_objects', 'rd', 'rd_bytes', 'wr', 'wr_bytes']
 
 OSD_FLAGS = ('noup', 'nodown', 'noout', 'noin', 'nobackfill', 'norebalance',

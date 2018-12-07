@@ -518,6 +518,7 @@ public:
   int get_devices(set<string> *ls) override;
 
   int statfs(struct store_statfs_t *buf) override;
+  int pool_statfs(uint64_t pool_id, struct store_statfs_t *buf) override;
 
   int _do_transactions(
     vector<Transaction> &tls, uint64_t op_seq,

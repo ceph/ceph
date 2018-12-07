@@ -858,20 +858,15 @@ void OSDService::set_injectfull(s_names type, int64_t count)
 void OSDService::set_statfs(const struct store_statfs_t &stbuf)
 {
   uint64_t bytes = stbuf.total;
-  uint64_t used = bytes - stbuf.available;
   uint64_t avail = stbuf.available;
+  uint64_t used = stbuf.get_used_raw();
 
   osd->logger->set(l_osd_stat_bytes, bytes);
   osd->logger->set(l_osd_stat_bytes_used, used);
   osd->logger->set(l_osd_stat_bytes_avail, avail);
 
   std::lock_guard l(stat_lock);
-  osd_stat.kb = bytes >> 10;
-  osd_stat.kb_used = used >> 10;
-  osd_stat.kb_avail = avail >> 10;
-  osd_stat.kb_used_data = stbuf.allocated >> 10;
-  osd_stat.kb_used_omap = stbuf.omap_allocated >> 10;
-  osd_stat.kb_used_meta = stbuf.internal_metadata >> 10;
+  osd_stat.statfs = stbuf;
 }
 
 osd_stat_t OSDService::set_osd_stat(vector<int>& hb_peers,
@@ -4949,9 +4944,10 @@ void OSD::heartbeat()
 
   auto new_stat = service.set_osd_stat(hb_peers, get_num_pgs());
   dout(5) << __func__ << " " << new_stat << dendl;
-  ceph_assert(new_stat.kb);
+  ceph_assert(new_stat.statfs.total);
 
-  float ratio = ((float)new_stat.kb_used) / ((float)new_stat.kb);
+  float ratio =
+   ((float)new_stat.statfs.get_used()) / ((float)new_stat.statfs.total);
   service.check_full_status(ratio);
 
   utime_t now = ceph_clock_now();
@@ -7299,9 +7295,13 @@ MPGStats* OSD::collect_pg_stats()
   std::lock_guard lec{min_last_epoch_clean_lock};
   min_last_epoch_clean = osdmap->get_epoch();
   min_last_epoch_clean_pgs.clear();
+
+  std::set<int64_t> pool_set;
   vector<PGRef> pgs;
   _get_pgs(&pgs);
   for (auto& pg : pgs) {
+    auto pool = pg->pg_id.pgid.pool();
+    pool_set.emplace((int64_t)pool);
     if (!pg->is_primary()) {
       continue;
     }
@@ -7310,6 +7310,16 @@ MPGStats* OSD::collect_pg_stats()
 	min_last_epoch_clean = min(min_last_epoch_clean, lec);
 	min_last_epoch_clean_pgs.push_back(pg->pg_id.pgid);
       });
+  }
+  store_statfs_t st;
+  for (auto p : pool_set) {
+    int r = store->pool_statfs(p, &st);
+    if (r == -ENOTSUP) {
+      break;
+    } else {
+      assert(r >= 0);
+      m->pool_stat[p] = st;
+    }
   }
 
   return m;
