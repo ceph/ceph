@@ -3659,7 +3659,7 @@ int metadata_set(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   for (map<string, bufferlist>::iterator it = data.begin();
        it != data.end(); ++it) {
-    CLS_LOG(20, "metdata_set key=%s value=%.*s", it->first.c_str(),
+    CLS_LOG(20, "metadata_set key=%s value=%.*s", it->first.c_str(),
 	    it->second.length(), it->second.c_str());
     raw_data[metadata_key_for_name(it->first)].swap(it->second);
   }
@@ -3690,11 +3690,11 @@ int metadata_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return -EINVAL;
   }
 
-  CLS_LOG(20, "metdata_remove key=%s", key.c_str());
+  CLS_LOG(20, "metadata_remove key=%s", key.c_str());
 
   int r = cls_cxx_map_remove_key(hctx, metadata_key_for_name(key));
   if (r < 0) {
-    CLS_ERR("error remove metadata: %s", cpp_strerror(r).c_str());
+    CLS_ERR("error removing metadata: %s", cpp_strerror(r).c_str());
     return r;
   }
 
@@ -3721,11 +3721,12 @@ int metadata_get(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return -EINVAL;
   }
 
-  CLS_LOG(20, "metdata_get key=%s", key.c_str());
+  CLS_LOG(20, "metadata_get key=%s", key.c_str());
 
   int r = cls_cxx_map_get_val(hctx, metadata_key_for_name(key), &value);
   if (r < 0) {
-    CLS_ERR("error get metadata: %s", cpp_strerror(r).c_str());
+    if (r != -ENOENT)
+      CLS_ERR("error getting metadata: %s", cpp_strerror(r).c_str());
     return r;
   }
 
