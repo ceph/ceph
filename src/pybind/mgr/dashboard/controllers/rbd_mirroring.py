@@ -185,156 +185,153 @@ def get_daemons_and_pools():  # pylint: disable=R0915
     }
 
 
+@ViewCache()
+def _get_pool_datum(pool_name):
+    data = {}
+    logger.debug("Constructing IOCtx %s", pool_name)
+    try:
+        ioctx = mgr.rados.open_ioctx(pool_name)
+    except TypeError:
+        logger.exception("Failed to open pool %s", pool_name)
+        return None
+
+    mirror_state = {
+        'down': {
+            'health': 'issue',
+            'state_color': 'warning',
+            'state': 'Unknown',
+            'description': None
+        },
+        rbd.MIRROR_IMAGE_STATUS_STATE_UNKNOWN: {
+            'health': 'issue',
+            'state_color': 'warning',
+            'state': 'Unknown'
+        },
+        rbd.MIRROR_IMAGE_STATUS_STATE_ERROR: {
+            'health': 'issue',
+            'state_color': 'error',
+            'state': 'Error'
+        },
+        rbd.MIRROR_IMAGE_STATUS_STATE_SYNCING: {
+            'health': 'syncing'
+        },
+        rbd.MIRROR_IMAGE_STATUS_STATE_STARTING_REPLAY: {
+            'health': 'ok',
+            'state_color': 'success',
+            'state': 'Starting'
+        },
+        rbd.MIRROR_IMAGE_STATUS_STATE_REPLAYING: {
+            'health': 'ok',
+            'state_color': 'success',
+            'state': 'Replaying'
+        },
+        rbd.MIRROR_IMAGE_STATUS_STATE_STOPPING_REPLAY: {
+            'health': 'ok',
+            'state_color': 'success',
+            'state': 'Stopping'
+        },
+        rbd.MIRROR_IMAGE_STATUS_STATE_STOPPED: {
+            'health': 'ok',
+            'state_color': 'info',
+            'state': 'Primary'
+        }
+    }
+
+    rbdctx = rbd.RBD()
+    try:
+        mirror_image_status = rbdctx.mirror_image_status_list(ioctx)
+        data['mirror_images'] = sorted([
+            dict({
+                'name': image['name'],
+                'description': image['description']
+            }, **mirror_state['down' if not image['up'] else image['state']])
+            for image in mirror_image_status
+        ], key=lambda k: k['name'])
+    except rbd.ImageNotFound:
+        pass
+    except:  # noqa pylint: disable=W0702
+        logger.exception("Failed to list mirror image status %s", pool_name)
+        raise
+
+    return data
+
+
+@ViewCache()
+def _get_content_data():  # pylint: disable=R0914
+    pool_names = [pool['pool_name'] for pool in CephService.get_pool_list('rbd')]
+    _, data = get_daemons_and_pools()
+    daemons = data.get('daemons', [])
+    pool_stats = data.get('pools', {})
+
+    pools = []
+    image_error = []
+    image_syncing = []
+    image_ready = []
+    for pool_name in pool_names:
+        _, pool = _get_pool_datum(pool_name)
+        if not pool:
+            pool = {}
+
+        stats = pool_stats.get(pool_name, {})
+        if stats.get('mirror_mode', None) is None:
+            continue
+
+        mirror_images = pool.get('mirror_images', [])
+        for mirror_image in mirror_images:
+            image = {
+                'pool_name': pool_name,
+                'name': mirror_image['name']
+            }
+
+            if mirror_image['health'] == 'ok':
+                image.update({
+                    'state_color': mirror_image['state_color'],
+                    'state': mirror_image['state'],
+                    'description': mirror_image['description']
+                })
+                image_ready.append(image)
+            elif mirror_image['health'] == 'syncing':
+                p = re.compile("bootstrapping, IMAGE_COPY/COPY_OBJECT (.*)%")
+                image.update({
+                    'progress': (p.findall(mirror_image['description']) or [0])[0]
+                })
+                image_syncing.append(image)
+            else:
+                image.update({
+                    'state_color': mirror_image['state_color'],
+                    'state': mirror_image['state'],
+                    'description': mirror_image['description']
+                })
+                image_error.append(image)
+
+        pools.append(dict({
+            'name': pool_name
+        }, **stats))
+
+    return {
+        'daemons': daemons,
+        'pools': pools,
+        'image_error': image_error,
+        'image_syncing': image_syncing,
+        'image_ready': image_ready
+    }
+
+
+def _reset_view_cache():
+    get_daemons_and_pools.reset()
+    _get_pool_datum.reset()
+    _get_content_data.reset()
+
+
 @ApiController('/block/mirroring/summary', Scope.RBD_MIRRORING)
 class RbdMirroringSummary(BaseController):
-
-    def __init__(self):
-        super(RbdMirroringSummary, self).__init__()
-        self.pool_data = {}
 
     @Endpoint()
     @handle_rbd_mirror_error()
     @ReadPermission
     def __call__(self):
-        status, content_data = self._get_content_data()
+        status, content_data = _get_content_data()
         return {'status': status, 'content_data': content_data}
-
-    @ViewCache()
-    def _get_pool_datum(self, pool_name):
-        data = {}
-        logger.debug("Constructing IOCtx %s", pool_name)
-        try:
-            ioctx = mgr.rados.open_ioctx(pool_name)
-        except TypeError:
-            logger.exception("Failed to open pool %s", pool_name)
-            return None
-
-        mirror_state = {
-            'down': {
-                'health': 'issue',
-                'state_color': 'warning',
-                'state': 'Unknown',
-                'description': None
-            },
-            rbd.MIRROR_IMAGE_STATUS_STATE_UNKNOWN: {
-                'health': 'issue',
-                'state_color': 'warning',
-                'state': 'Unknown'
-            },
-            rbd.MIRROR_IMAGE_STATUS_STATE_ERROR: {
-                'health': 'issue',
-                'state_color': 'error',
-                'state': 'Error'
-            },
-            rbd.MIRROR_IMAGE_STATUS_STATE_SYNCING: {
-                'health': 'syncing'
-            },
-            rbd.MIRROR_IMAGE_STATUS_STATE_STARTING_REPLAY: {
-                'health': 'ok',
-                'state_color': 'success',
-                'state': 'Starting'
-            },
-            rbd.MIRROR_IMAGE_STATUS_STATE_REPLAYING: {
-                'health': 'ok',
-                'state_color': 'success',
-                'state': 'Replaying'
-            },
-            rbd.MIRROR_IMAGE_STATUS_STATE_STOPPING_REPLAY: {
-                'health': 'ok',
-                'state_color': 'success',
-                'state': 'Stopping'
-            },
-            rbd.MIRROR_IMAGE_STATUS_STATE_STOPPED: {
-                'health': 'ok',
-                'state_color': 'info',
-                'state': 'Primary'
-            }
-        }
-
-        rbdctx = rbd.RBD()
-        try:
-            mirror_image_status = rbdctx.mirror_image_status_list(ioctx)
-            data['mirror_images'] = sorted([
-                dict({
-                    'name': image['name'],
-                    'description': image['description']
-                }, **mirror_state['down' if not image['up'] else image['state']])
-                for image in mirror_image_status
-            ], key=lambda k: k['name'])
-        except rbd.ImageNotFound:
-            pass
-        except:  # noqa pylint: disable=W0702
-            logger.exception("Failed to list mirror image status %s", pool_name)
-            raise
-
-        return data
-
-    @ViewCache()
-    def _get_content_data(self):  # pylint: disable=R0914
-
-        def get_pool_datum(pool_name):
-            pool_datum = self.pool_data.get(pool_name, None)
-            if pool_datum is None:
-                pool_datum = partial(self._get_pool_datum, pool_name)
-                self.pool_data[pool_name] = pool_datum
-
-            _, value = pool_datum()
-            return value
-
-        pool_names = [pool['pool_name'] for pool in CephService.get_pool_list('rbd')]
-        _, data = get_daemons_and_pools()
-        daemons = data.get('daemons', [])
-        pool_stats = data.get('pools', {})
-
-        pools = []
-        image_error = []
-        image_syncing = []
-        image_ready = []
-        for pool_name in pool_names:
-            pool = get_pool_datum(pool_name) or {}
-            stats = pool_stats.get(pool_name, {})
-            if stats.get('mirror_mode', None) is None:
-                continue
-
-            mirror_images = pool.get('mirror_images', [])
-            for mirror_image in mirror_images:
-                image = {
-                    'pool_name': pool_name,
-                    'name': mirror_image['name']
-                }
-
-                if mirror_image['health'] == 'ok':
-                    image.update({
-                        'state_color': mirror_image['state_color'],
-                        'state': mirror_image['state'],
-                        'description': mirror_image['description']
-                    })
-                    image_ready.append(image)
-                elif mirror_image['health'] == 'syncing':
-                    p = re.compile("bootstrapping, IMAGE_COPY/COPY_OBJECT (.*)%")
-                    image.update({
-                        'progress': (p.findall(mirror_image['description']) or [0])[0]
-                    })
-                    image_syncing.append(image)
-                else:
-                    image.update({
-                        'state_color': mirror_image['state_color'],
-                        'state': mirror_image['state'],
-                        'description': mirror_image['description']
-                    })
-                    image_error.append(image)
-
-            pools.append(dict({
-                'name': pool_name
-            }, **stats))
-
-        return {
-            'daemons': daemons,
-            'pools': pools,
-            'image_error': image_error,
-            'image_syncing': image_syncing,
-            'image_ready': image_ready
-        }
 
 
 @ApiController('/block/mirroring/pool', Scope.RBD_MIRRORING)
@@ -368,6 +365,7 @@ class RbdMirroringPoolMode(RESTController):
                 current_mode_enum = rbd.RBD().mirror_mode_get(ioctx)
                 if mode_enum != current_mode_enum:
                     rbd.RBD().mirror_mode_set(ioctx, mode_enum)
+                _reset_view_cache()
 
         return _rbd_call(pool_name, _edit, mirror_mode)
 
@@ -401,6 +399,8 @@ class RbdMirroringPoolPeer(RESTController):
             attributes[rbd.RBD_MIRROR_PEER_ATTRIBUTE_NAME_KEY] = key
         if attributes:
             rbd.RBD().mirror_peer_set_attributes(ioctx, uuid, attributes)
+
+        _reset_view_cache()
         return {'uuid': uuid}
 
     @handle_rbd_mirror_error()
@@ -428,6 +428,7 @@ class RbdMirroringPoolPeer(RESTController):
     def delete(self, pool_name, peer_uuid):
         ioctx = mgr.rados.open_ioctx(pool_name)
         rbd.RBD().mirror_peer_remove(ioctx, peer_uuid)
+        _reset_view_cache()
 
     @handle_rbd_mirror_error()
     def set(self, pool_name, peer_uuid, cluster_name=None, client_id=None,
@@ -450,3 +451,5 @@ class RbdMirroringPoolPeer(RESTController):
             if key is not None:
                 attributes[rbd.RBD_MIRROR_PEER_ATTRIBUTE_NAME_KEY] = key
             rbd.RBD().mirror_peer_set_attributes(ioctx, peer_uuid, attributes)
+
+        _reset_view_cache()
