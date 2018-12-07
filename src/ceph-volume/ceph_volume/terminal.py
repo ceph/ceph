@@ -94,7 +94,12 @@ class _Write(object):
         self.write(string)
 
     def write(self, line):
-        self._writer.write(self.prefix + line + self.suffix)
+        # Ensure compatibility of str with encoding of _writer
+        full_line = self.prefix + line + self.suffix
+        full_line = full_line.encode(encoding=self._writer.encoding,
+                                     errors="replace")
+        full_line = full_line.decode(encoding=self._writer.encoding)
+        self._writer.write(full_line)
         if self.flush:
             self._writer.flush()
 
