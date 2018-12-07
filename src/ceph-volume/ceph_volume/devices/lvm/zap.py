@@ -69,7 +69,7 @@ def ensure_associated_lvs(lvs):
     are LVs or partitions, so that they can be accurately reported.
     """
     # look for many LVs for each backing type, because it is possible to
-    # recieve a filtering for osd.1, and have multiple failed deployments
+    # receive a filtering for osd.1, and have multiple failed deployments
     # leaving many journals with osd.1 - usually, only a single LV will be
     # returned
     journal_lvs = lvs._filter(lv_tags={'ceph.type': 'journal'})
@@ -238,7 +238,14 @@ class Zap(object):
             if device.is_device:
                 self.zap_raw_device(device)
 
-        terminal.success("Zapping successful for: %s" % ", ".join([str(d) for d in self.args.devices]))
+        if self.args.devices:
+            terminal.success(
+                "Zapping successful for: %s" % ", ".join([str(d) for d in self.args.devices])
+            )
+        else:
+            terminal.success(
+                "Zapping successful for OSD: %s" % self.args.osd_id or self.args.osd_fsid
+            )
 
     @decorators.needs_root
     def zap_osd(self):
