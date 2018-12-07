@@ -43,9 +43,7 @@ class RDMADispatcher {
   Infiniband::CompletionQueue* tx_cq = nullptr;
   Infiniband::CompletionQueue* rx_cq = nullptr;
   Infiniband::CompletionChannel *tx_cc = nullptr, *rx_cc = nullptr;
-  EventCallbackRef async_handler;
   bool done = false;
-  std::atomic<uint64_t> num_dead_queue_pair = {0};
   std::atomic<uint64_t> num_qp_conn = {0};
   // protect `qp_conns`, `dead_queue_pairs`
   ceph::mutex lock = ceph::make_mutex("RDMADispatcher::lock");
@@ -56,9 +54,9 @@ class RDMADispatcher {
   /**
    * 1. Connection call mark_down
    * 2. Move the Queue Pair into the Error state(QueuePair::to_dead)
-   * 3. Wait for the affiliated event IBV_EVENT_QP_LAST_WQE_REACHED(handle_async_event)
-   * 4. Wait for CQ to be empty(handle_tx_event)
-   * 5. Destroy the QP by calling ibv_destroy_qp()(handle_tx_event)
+   * 3. Post a beacon
+   * 4. Wait for beacon which indicates queues are drained
+   * 5. Destroy the QP by calling ibv_destroy_qp()
    *
    * @param qp The qp needed to dead
    */
@@ -79,22 +77,13 @@ class RDMADispatcher {
   std::list<RDMAWorker*> pending_workers;
   RDMAStack* stack;
 
-  class C_handle_cq_async : public EventCallback {
-    RDMADispatcher *dispatcher;
-   public:
-    explicit C_handle_cq_async(RDMADispatcher *w): dispatcher(w) {}
-    void do_request(uint64_t fd) {
-      // worker->handle_tx_event();
-      dispatcher->handle_async_event();
-    }
-  };
+  void enqueue_dead_qp(uint32_t qp);
 
  public:
   PerfCounters *perf_logger;
 
   explicit RDMADispatcher(CephContext* c, RDMAStack* s);
   virtual ~RDMADispatcher();
-  void handle_async_event();
 
   void polling_start();
   void polling_stop();
@@ -111,8 +100,7 @@ class RDMADispatcher {
   RDMAStack* get_stack() { return stack; }
   RDMAConnectedSocketImpl* get_conn_lockless(uint32_t qp);
   QueuePair* get_qp(uint32_t qp);
-  void erase_qpn_lockless(uint32_t qpn);
-  void erase_qpn(uint32_t qpn);
+  void schedule_qp_destroy(uint32_t qp);
   Infiniband::CompletionQueue* get_tx_cq() const { return tx_cq; }
   Infiniband::CompletionQueue* get_rx_cq() const { return rx_cq; }
   void notify_pending_workers();

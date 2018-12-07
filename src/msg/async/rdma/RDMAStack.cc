@@ -38,14 +38,11 @@ RDMADispatcher::~RDMADispatcher()
   ceph_assert(qp_conns.empty());
   ceph_assert(num_qp_conn == 0);
   ceph_assert(dead_queue_pairs.empty());
-  ceph_assert(num_dead_queue_pair == 0);
-
-  delete async_handler;
 }
 
 RDMADispatcher::RDMADispatcher(CephContext* c, RDMAStack* s)
-  : cct(c), async_handler(new C_handle_cq_async(this)),
-  stack(s)
+  : cct(c),
+    stack(s)
 {
   PerfCountersBuilder plb(cct, "AsyncMessenger::RDMADispatcher", l_msgr_rdma_dispatcher_first, l_msgr_rdma_dispatcher_last);
 
@@ -62,9 +59,6 @@ RDMADispatcher::RDMADispatcher(CephContext* c, RDMAStack* s)
   plb.add_u64_counter(l_msgr_rdma_rx_total_wc, "rx_total_wc", "The number of total rx work completion");
   plb.add_u64_counter(l_msgr_rdma_rx_total_wc_errors, "rx_total_wc_errors", "The number of total rx error work completion");
   plb.add_u64_counter(l_msgr_rdma_rx_fin, "rx_fin", "The number of rx finish work request");
-
-  plb.add_u64_counter(l_msgr_rdma_total_async_events, "total_async_events", "The number of async events");
-  plb.add_u64_counter(l_msgr_rdma_async_last_wqe_events, "async_last_wqe_events", "The number of last wqe events");
 
   plb.add_u64_counter(l_msgr_rdma_handshake_errors, "handshake_errors", "The number of handshake errors");
 
@@ -118,44 +112,6 @@ void RDMADispatcher::polling_stop()
   delete rx_cq;
   delete tx_cc;
   delete rx_cc;
-}
-
-void RDMADispatcher::handle_async_event()
-{
-  ldout(cct, 30) << __func__ << dendl;
-  while (1) {
-    ibv_async_event async_event;
-    if (ibv_get_async_event(get_stack()->get_infiniband().get_device()->ctxt, &async_event)) {
-      if (errno != EAGAIN)
-       lderr(cct) << __func__ << " ibv_get_async_event failed. (errno=" << errno
-                  << " " << cpp_strerror(errno) << ")" << dendl;
-      return;
-    }
-    perf_logger->inc(l_msgr_rdma_total_async_events);
-    // FIXME: Currently we must ensure no other factor make QP in ERROR state,
-    // otherwise this qp can't be deleted in current cleanup flow.
-    if (async_event.event_type == IBV_EVENT_QP_LAST_WQE_REACHED) {
-      perf_logger->inc(l_msgr_rdma_async_last_wqe_events);
-      uint64_t qpn = async_event.element.qp->qp_num;
-      ldout(cct, 10) << __func__ << " event associated qp=" << async_event.element.qp
-                     << " evt: " << ibv_event_type_str(async_event.event_type) << dendl;
-      std::lock_guard l{lock};
-      RDMAConnectedSocketImpl *conn = get_conn_lockless(qpn);
-      if (!conn) {
-        ldout(cct, 1) << __func__ << " missing qp_num=" << qpn << " discard event" << dendl;
-      } else {
-        ldout(cct, 1) << __func__ << " it's not forwardly stopped by us, reenable=" << conn << dendl;
-        conn->fault();
-        if (!cct->_conf->ms_async_rdma_cm)
-          erase_qpn_lockless(qpn);
-      }
-    } else {
-      ldout(cct, 1) << __func__ << " ibv_get_async_event: dev=" << get_stack()->get_infiniband().get_device()->ctxt
-                    << " evt: " << ibv_event_type_str(async_event.event_type)
-                    << dendl;
-    }
-    ibv_ack_async_event(&async_event);
-  }
 }
 
 void RDMADispatcher::post_chunk_to_pool(Chunk* chunk)
@@ -236,28 +192,27 @@ void RDMADispatcher::polling()
     }
 
     if (!tx_ret && !rx_ret) {
-      // NOTE: Has TX just transitioned to idle? We should do it when idle!
-      // It's now safe to delete queue pairs (see comment by declaration
-      // for dead_queue_pairs).
-      // Additionally, don't delete qp while outstanding_buffers isn't empty,
-      // because we need to check qp's state before sending
       perf_logger->set(l_msgr_rdma_inflight_tx_chunks, inflight);
-      if (num_dead_queue_pair) {
-	std::lock_guard l{lock}; // FIXME reuse dead qp because creating one qp costs 1 ms
-        auto it = dead_queue_pairs.begin();
-        while (it != dead_queue_pairs.end()) {
-          auto i = *it;
-          // Bypass QPs that do not collect all Tx completions yet.
-          if (i->get_tx_wr()) {
-            ldout(cct, 20) << __func__ << " bypass qp=" << i << " tx_wr=" << i->get_tx_wr() << dendl;
-            ++it;
-          } else {
-            ldout(cct, 10) << __func__ << " finally delete qp=" << i << dendl;
-            delete i;
-            it = dead_queue_pairs.erase(it);
-            perf_logger->dec(l_msgr_rdma_active_queue_pair);
-            --num_dead_queue_pair;
-          }
+      //
+      // Clean up dead QPs when rx/tx CQs are in idle.  The thing is that
+      // we can destroy QPs even earlier, just when beacon has been received,
+      // but now we have two rx and tx CQs, thus beacon WC can be popped
+      // from tx CQ before other WCs are fullly consumed from rx CQ, so be
+      // on the safe side, wait for beacon and then "no-events" from CQs.
+      //
+      // Calling size() on vector without locks is totally fine, since we
+      // use it as a hint.
+      //
+      if (!dead_queue_pairs.empty()) {
+        decltype(dead_queue_pairs) dead_qps;
+        {
+          std::lock_guard l{lock};
+          dead_queue_pairs.swap(dead_qps);
+        }
+        for (auto& qp : dead_qps) {
+          perf_logger->dec(l_msgr_rdma_active_queue_pair);
+          ldout(cct, 10) << __func__ << " finally delete qp=" << qp << dendl;
+          delete qp;
         }
       }
       if (!num_qp_conn && done && dead_queue_pairs.empty())
@@ -265,7 +220,6 @@ void RDMADispatcher::polling()
 
       uint64_t now = Cycles::rdtsc();
       if (Cycles::to_microseconds(now - last_inactive) > cct->_conf->ms_async_rdma_polling_us) {
-        handle_async_event();
         if (!rearmed) {
           // Clean up cq events after rearm notify ensure no new incoming event
           // arrived between polling and rearm
@@ -354,21 +308,45 @@ Infiniband::QueuePair* RDMADispatcher::get_qp(uint32_t qp)
   return nullptr;
 }
 
-void RDMADispatcher::erase_qpn_lockless(uint32_t qpn)
+void RDMADispatcher::enqueue_dead_qp(uint32_t qpn)
 {
+  std::lock_guard l{lock};
   auto it = qp_conns.find(qpn);
-  if (it == qp_conns.end())
-    return ;
-  ++num_dead_queue_pair;
-  dead_queue_pairs.push_back(it->second.first);
+  if (it == qp_conns.end()) {
+    lderr(cct) << "QP [" << qpn << "] is not registered." << dendl;
+    return;
+  }
+  QueuePair *qp = it->second.first;
+  dead_queue_pairs.push_back(qp);
   qp_conns.erase(it);
   --num_qp_conn;
 }
 
-void RDMADispatcher::erase_qpn(uint32_t qpn)
+void RDMADispatcher::schedule_qp_destroy(uint32_t qpn)
 {
   std::lock_guard l{lock};
-  erase_qpn_lockless(qpn);
+  auto it = qp_conns.find(qpn);
+  if (it == qp_conns.end()) {
+    lderr(cct) << "QP [" << qpn << "] is not registered." << dendl;
+    return;
+  }
+  QueuePair *qp = it->second.first;
+  if (qp->to_dead()) {
+    //
+    // Failed to switch to dead.  This is abnormal, but we can't
+    // do anything, so just destroy QP.
+    //
+    dead_queue_pairs.push_back(qp);
+    qp_conns.erase(it);
+    --num_qp_conn;
+  } else {
+    //
+    // Successfully switched to dead, thus keep entry in the map,
+    // but zero out socket pointer in order to return null from
+    // get_conn_lockless().
+    //
+    it->second.second = nullptr;
+  }
 }
 
 void RDMADispatcher::handle_tx_event(ibv_wc *cqe, int n)
@@ -377,14 +355,20 @@ void RDMADispatcher::handle_tx_event(ibv_wc *cqe, int n)
 
   for (int i = 0; i < n; ++i) {
     ibv_wc* response = &cqe[i];
+
+    if (response->wr_id == BEACON_WRID) {
+      //
+      // Beacon received, all WQE are consumed, now is safe to enqueue
+      // the QP for later destroy.
+      //
+      enqueue_dead_qp(response->qp_num);
+      continue;
+    }
+
     Chunk* chunk = reinterpret_cast<Chunk *>(response->wr_id);
     ldout(cct, 25) << __func__ << " QP: " << response->qp_num
                    << " len: " << response->byte_len << " , addr:" << chunk
                    << " " << get_stack()->get_infiniband().wc_status_to_string(response->status) << dendl;
-
-    QueuePair *qp = get_qp(response->qp_num);
-    if (qp)
-      qp->dec_tx_wr(1);
 
     if (response->status != IBV_WC_SUCCESS) {
       perf_logger->inc(l_msgr_rdma_tx_total_wc_errors);

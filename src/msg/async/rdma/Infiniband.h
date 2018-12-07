@@ -41,6 +41,8 @@
 #define ALIGN_TO_PAGE_SIZE(x) \
   (((x) + HUGE_PAGE_SIZE -1) / HUGE_PAGE_SIZE * HUGE_PAGE_SIZE)
 
+#define BEACON_WRID 0xDEAD
+
 struct IBSYNMsg {
   uint16_t lid;
   uint32_t qpn;
@@ -149,9 +151,6 @@ enum {
   l_msgr_rdma_rx_fin,
 
   l_msgr_rdma_handshake_errors,
-
-  l_msgr_rdma_total_async_events,
-  l_msgr_rdma_async_last_wqe_events,
 
   l_msgr_rdma_created_queue_pair,
   l_msgr_rdma_active_queue_pair,
@@ -468,9 +467,6 @@ class Infiniband {
      * Return true if the queue pair is in an error state, false otherwise.
      */
     bool is_error() const;
-    void add_tx_wr(uint32_t amt) { tx_wr_inflight += amt; }
-    void dec_tx_wr(uint32_t amt) { tx_wr_inflight -= amt; }
-    uint32_t get_tx_wr() const { return tx_wr_inflight; }
     ibv_qp* get_qp() const { return qp; }
     Infiniband::CompletionQueue* get_tx_cq() const { return txcq; }
     Infiniband::CompletionQueue* get_rx_cq() const { return rxcq; }
