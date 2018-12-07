@@ -1,0 +1,15 @@
+tasks:
+- print: "About to install DeepSea from source (SES5)"
+- deepsea:
+    install: source
+    branch: SES5
+- exec:
+    client.salt_master:
+      - 'salt-run deepsea.version'
+- print: "About to re-install DeepSea from source (wip-rebuild)"
+- deepsea:
+    install: source
+    branch: wip-rebuild
+- exec:
+    client.salt_master:
+      - 'salt-run deepsea.version'
