@@ -761,8 +761,8 @@ void PGMapDigest::dump_pool_stats_full(
   if (f) {
     f->open_array_section("pools");
   } else {
-    tbl.define_column("NAME", TextTable::LEFT, TextTable::LEFT);
-    tbl.define_column("ID", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("POOL", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("ID", TextTable::LEFT, TextTable::RIGHT);
     tbl.define_column("STORED", TextTable::LEFT, TextTable::RIGHT);
     tbl.define_column("OBJECTS", TextTable::LEFT, TextTable::RIGHT);
     tbl.define_column("USED", TextTable::LEFT, TextTable::RIGHT);
