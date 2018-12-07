@@ -103,9 +103,22 @@ class TestExports(CephFSTestCase):
         self.mount_a.run_shell(["mkdir", "-p", "a/b", "aa/bb"])
         self.mount_a.setfattr("a", "ceph.dir.pin", "1")
         self.mount_a.setfattr("aa/bb", "ceph.dir.pin", "0")
-        self._wait_subtrees(status, 0, [('/1', 0), ('/1/4/5', 1), ('/1/2/3', 2), ('/a', 1), ('/aa/bb', 0)])
+        if (len(self.fs.get_active_names()) > 2):
+            self._wait_subtrees(status, 0, [('/1', 0), ('/1/4/5', 1), ('/1/2/3', 2), ('/a', 1), ('/aa/bb', 0)])
+        else:
+            self._wait_subtrees(status, 0, [('/1', 0), ('/1/4/5', 1), ('/a', 1), ('/aa/bb', 0)])
         self.mount_a.run_shell(["mv", "aa", "a/b/"])
-        self._wait_subtrees(status, 0, [('/1', 0), ('/1/4/5', 1), ('/1/2/3', 2), ('/a', 1), ('/a/b/aa/bb', 0)])
+        if (len(self.fs.get_active_names()) > 2):
+            self._wait_subtrees(status, 0, [('/1', 0), ('/1/4/5', 1), ('/1/2/3', 2), ('/a', 1), ('/a/b/aa/bb', 0)])
+        else:
+            self._wait_subtrees(status, 0, [('/1', 0), ('/1/4/5', 1), ('/a', 1), ('/a/b/aa/bb', 0)])
+
+        # Test getfattr
+        self.assertTrue(self.mount_a.getfattr("1", "ceph.dir.pin") == "0")
+        self.assertTrue(self.mount_a.getfattr("1/4", "ceph.dir.pin") == "-1")
+        self.assertTrue(self.mount_a.getfattr("1/4/5", "ceph.dir.pin") == "1")
+        if (len(self.fs.get_active_names()) > 2):
+            self.assertTrue(self.mount_a.getfattr("1/2/3", "ceph.dir.pin") == "2")
 
     def test_session_race(self):
         """
