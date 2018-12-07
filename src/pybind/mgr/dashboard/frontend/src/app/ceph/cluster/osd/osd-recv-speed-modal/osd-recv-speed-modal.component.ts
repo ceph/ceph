@@ -38,19 +38,23 @@ export class OsdRecvSpeedModalComponent implements OnInit {
     this.priorityAttrs = [
       {
         name: 'osd_max_backfills',
-        text: this.i18n('Max Backfills')
+        text: this.i18n('Max Backfills'),
+        desc: ''
       },
       {
         name: 'osd_recovery_max_active',
-        text: this.i18n('Recovery Max Active')
+        text: this.i18n('Recovery Max Active'),
+        desc: ''
       },
       {
         name: 'osd_recovery_max_single_start',
-        text: this.i18n('Recovery Max Single Start')
+        text: this.i18n('Recovery Max Single Start'),
+        desc: ''
       },
       {
         name: 'osd_recovery_sleep',
-        text: this.i18n('Recovery Sleep')
+        text: this.i18n('Recovery Sleep'),
+        desc: ''
       }
     ];
 
@@ -59,18 +63,50 @@ export class OsdRecvSpeedModalComponent implements OnInit {
         attr.name,
         new FormControl(null, { validators: [Validators.required] })
       );
-
-      this.configService.get(attr.name).subscribe((data: any) => {
-        if (data.desc !== '') {
-          attr['desc'] = data.desc;
-        }
-      });
     });
   }
 
   ngOnInit() {
-    this.getStoredPriority((priority) => {
-      this.setPriority(priority);
+    const observables = [];
+    this.priorityAttrs.forEach((configName) => {
+      observables.push(this.configService.get(configName.name));
+    });
+
+    observableForkJoin(observables)
+      .pipe(
+        mergeMap((configOptions) => {
+          const result = { values: {}, configOptions: [] };
+          configOptions.forEach((configOption) => {
+            result.configOptions.push(configOption);
+
+            if (configOption && 'value' in configOption) {
+              configOption.value.forEach((value) => {
+                if (value['section'] === 'osd') {
+                  result.values[configOption.name] = Number(value.value);
+                }
+              });
+            }
+          });
+          return of(result);
+        })
+      )
+      .subscribe((resp) => {
+        this.getStoredPriority(resp.values, (priority) => {
+          this.setPriority(priority);
+        });
+        this.setDescription(resp.configOptions);
+      });
+  }
+
+  setDescription(configOptions: Array<any>) {
+    configOptions.forEach((configOption) => {
+      if (configOption.desc !== '') {
+        this.priorityAttrs.forEach((p) => {
+          if (p.name === configOption.name) {
+            p['desc'] = configOption.desc;
+          }
+        });
+      }
     });
   }
 
@@ -112,46 +148,25 @@ export class OsdRecvSpeedModalComponent implements OnInit {
     }
   }
 
-  getStoredPriority(callbackFn: Function) {
-    const observables = [];
-    this.priorityAttrs.forEach((configName) => {
-      observables.push(this.configService.get(configName.name));
+  getStoredPriority(configOptionValues: any, callbackFn: Function) {
+    const priority = _.find(this.priorities, (p) => {
+      return _.isEqual(p.values, configOptionValues);
     });
 
-    observableForkJoin(observables)
-      .pipe(
-        mergeMap((configOptions) => {
-          const result = {};
-          configOptions.forEach((configOption) => {
-            if (configOption && 'value' in configOption) {
-              configOption.value.forEach((value) => {
-                if (value['section'] === 'osd') {
-                  result[configOption.name] = Number(value.value);
-                }
-              });
-            }
-          });
-          return of(result);
-        })
-      )
-      .subscribe((resp) => {
-        const priority = _.find(this.priorities, (p) => {
-          return _.isEqual(p.values, resp);
-        });
+    this.osdRecvSpeedForm.controls.customizePriority.setValue(false);
 
-        this.osdRecvSpeedForm.controls.customizePriority.setValue(false);
+    if (priority) {
+      return callbackFn(priority);
+    }
 
-        if (priority) {
-          return callbackFn(priority);
-        }
+    if (Object.entries(configOptionValues).length === 4) {
+      this.osdRecvSpeedForm.controls.customizePriority.setValue(true);
+      return callbackFn(
+        Object({ name: 'custom', text: this.i18n('Custom'), values: configOptionValues })
+      );
+    }
 
-        if (Object.entries(resp).length === 4) {
-          this.osdRecvSpeedForm.controls.customizePriority.setValue(true);
-          return callbackFn(Object({ name: 'custom', text: this.i18n('Custom'), values: resp }));
-        }
-
-        return callbackFn(this.priorities[0]);
-      });
+    return callbackFn(this.priorities[0]);
   }
 
   onPriorityChange(selectedPriorityName) {
