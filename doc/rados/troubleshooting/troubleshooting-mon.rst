@@ -402,8 +402,8 @@ or::
 Recovery using healthy monitor(s)
 ---------------------------------
 
-If there is any survivors, we can always `replace`_ the corrupted one with a
-new one. And after booting up, the new joiner will sync up with a healthy
+If there are any survivors, we can always :ref:`replace <adding-and-removing-monitors>` the corrupted one with a
+new one. After booting up, the new joiner will sync up with a healthy
 peer, and once it is fully sync'ed, it will be able to serve the clients.
 
 Recovery using OSDs
@@ -568,5 +568,4 @@ based on that.
 Finally, you should reach out to us on the mailing lists, on IRC or file
 a new issue on the `tracker`_.
 
-.. _replace: ../operation/add-or-rm-mons
 .. _tracker: http://tracker.ceph.com/projects/ceph/issues/new
