@@ -126,3 +126,10 @@ bool is_librados_test_stub(librados::Rados &rados) {
   return fsid == "00000000-1111-2222-3333-444444444444";
 }
 
+bool is_move_to_trash_on_remove(librados::Rados &rados) {
+  std::string value;
+  EXPECT_EQ(0, rados.conf_get("rbd_move_to_trash_on_remove", value));
+  return value == "true";
+}
+
+

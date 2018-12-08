@@ -25,6 +25,7 @@ int get_image_id(librbd::Image &image, std::string *image_id);
 int create_image_data_pool(librados::Rados &rados, std::string &data_pool, bool *created);
 
 bool is_librados_test_stub(librados::Rados &rados);
+bool is_move_to_trash_on_remove(librados::Rados &rados);
 
 #define REQUIRE(x) {			  \
   if (!(x)) {				  \

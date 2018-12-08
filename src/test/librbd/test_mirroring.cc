@@ -51,6 +51,32 @@ public:
 
   std::string image_name = "mirrorimg1";
 
+  void close_and_remove_image(librbd::Image &image) {
+    std::string image_name;
+    ASSERT_EQ(0, image.get_name(&image_name));
+    std::string image_id;
+    ASSERT_EQ(0, image.get_id(&image_id));
+    librbd::mirror_image_info_t info;
+    ASSERT_EQ(0, image.mirror_image_get_info(&info, sizeof(info)));
+    
+    ASSERT_EQ(0, image.close());    
+    ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
+
+    if (!is_move_to_trash_on_remove(_rados)) {
+      return;
+    }
+
+    rbd_mirror_mode_t mirror_mode;
+    ASSERT_EQ(0, m_rbd.mirror_mode_get(m_ioctx, &mirror_mode));
+
+    if (mirror_mode == RBD_MIRROR_MODE_IMAGE &&
+        info.state == RBD_MIRROR_IMAGE_ENABLED) {
+      ASSERT_EQ(-EINVAL, m_rbd.mirror_mode_set(m_ioctx,
+                                               RBD_MIRROR_MODE_DISABLED));
+    }    
+    ASSERT_EQ(0, m_rbd.trash_remove(m_ioctx, image_id.c_str(), false));
+  }
+
   void check_mirror_image_enable(rbd_mirror_mode_t mirror_mode,
                                  uint64_t features,
                                  int expected_r,
@@ -79,8 +105,7 @@ public:
     ASSERT_EQ(mirror_state == RBD_MIRROR_IMAGE_ENABLED ? -ENOENT : -EINVAL,
               image.mirror_image_get_instance_id(&instance_id));
 
-    ASSERT_EQ(0, image.close());
-    ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
+    close_and_remove_image(image);
     ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_DISABLED));
   }
 
@@ -112,8 +137,7 @@ public:
     ASSERT_EQ(mirror_state == RBD_MIRROR_IMAGE_ENABLED ? -ENOENT : -EINVAL,
               image.mirror_image_get_instance_id(&instance_id));
 
-    ASSERT_EQ(0, image.close());
-    ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
+    close_and_remove_image(image);
     ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_DISABLED));
   }
 
@@ -168,8 +192,7 @@ public:
       ASSERT_EQ(mirror_images_new_count, mirror_images_count);
     }
 
-    ASSERT_EQ(0, image.close());
-    ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
+    close_and_remove_image(image);
     ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_DISABLED));
 
     check_mirroring_status(&mirror_images_new_count);
@@ -203,8 +226,7 @@ public:
     ASSERT_EQ(0, image.mirror_image_get_status(&status, sizeof(status)));
     ASSERT_EQ(MIRROR_IMAGE_STATUS_STATE_UNKNOWN, status.state);
 
-    ASSERT_EQ(0, image.close());
-    ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
+    close_and_remove_image(image);
     ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_DISABLED));
   }
 
@@ -246,8 +268,7 @@ public:
       ASSERT_EQ(0, image.mirror_image_get_status(&status, sizeof(status)));
       ASSERT_EQ(MIRROR_IMAGE_STATUS_STATE_UNKNOWN, status.state);
 
-      ASSERT_EQ(0, image.close());
-      ASSERT_EQ(0, m_rbd.remove(m_ioctx, img_name_str.c_str()));
+      close_and_remove_image(image);
     }
   }
 
@@ -271,8 +292,7 @@ public:
       ASSERT_EQ(0, image.mirror_image_disable(true));
     }
 
-    image.close();
-    ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
+    close_and_remove_image(image);
     ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_DISABLED));
   }
 
@@ -387,8 +407,7 @@ TEST_F(TestMirroring, DisableImageMirrorWithPeer) {
   ASSERT_EQ(0, image.mirror_image_get_status(&status, sizeof(status)));
   ASSERT_EQ(MIRROR_IMAGE_STATUS_STATE_UNKNOWN, status.state);
 
-  ASSERT_EQ(0, image.close());
-  ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
+  close_and_remove_image(image);
   ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_DISABLED));
 }
 
@@ -422,8 +441,7 @@ TEST_F(TestMirroring, DisableJournalingWithPeer) {
   ASSERT_EQ(0, image.mirror_image_get_status(&status, sizeof(status)));
   ASSERT_EQ(MIRROR_IMAGE_STATUS_STATE_UNKNOWN, status.state);
 
-  ASSERT_EQ(0, image.close());
-  ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
+  close_and_remove_image(image);
   ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_DISABLED));
 }
 
@@ -668,7 +686,11 @@ TEST_F(TestMirroring, RemoveBootstrapped)
                              &order));
   librbd::Image image;
   ASSERT_EQ(0, m_rbd.open(m_ioctx, image, image_name.c_str()));
-  ASSERT_EQ(-EBUSY, m_rbd.remove(m_ioctx, image_name.c_str()));
+  if (!is_move_to_trash_on_remove(_rados)) {
+    ASSERT_EQ(-EBUSY, m_rbd.remove(m_ioctx, image_name.c_str()));
+  } else {
+    ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
+  }
 
   // simulate the image is open by rbd-mirror bootstrap
   uint64_t handle;
@@ -689,7 +711,13 @@ TEST_F(TestMirroring, RemoveBootstrapped)
   ASSERT_EQ(0, m_ioctx.create(RBD_MIRRORING, false));
   ASSERT_EQ(0, m_ioctx.watch2(RBD_MIRRORING, &handle, &watcher));
   // now remove should succeed
-  ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
+  if (!is_move_to_trash_on_remove(_rados)) {
+    ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
+  } else {
+    std::string image_id;
+    ASSERT_EQ(0, image.get_id(&image_id));
+    ASSERT_EQ(0, m_rbd.trash_remove(m_ioctx, image_id.c_str(), false));
+  }
   ASSERT_EQ(0, m_ioctx.unwatch2(handle));
   ASSERT_TRUE(watcher.m_notified);
   ASSERT_EQ(0, image.close());

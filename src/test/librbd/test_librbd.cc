@@ -254,6 +254,17 @@ public:
       _unique_pool_names.push_back(pool_name);
     } else if (m_pool_number < _pool_names.size()) {
       pool_name = _pool_names[m_pool_number];
+      if (is_move_to_trash_on_remove(_rados)) {
+        // clean the trash before reusing the pool
+        librados::IoCtx ioctx;
+        EXPECT_EQ(0, _rados.ioctx_create(pool_name.c_str(), ioctx));
+        librbd::RBD rbd;
+        std::vector<librbd::trash_image_info_t> entries;
+        EXPECT_EQ(0, rbd.trash_list(ioctx, entries));
+        for (auto &entry : entries) {
+          EXPECT_EQ(0, rbd.trash_remove(ioctx, entry.id.c_str(), false));
+        }
+      }
     } else {
       pool_name = get_temp_pool_name("test-librbd-");
       EXPECT_EQ("", create_one_pool_pp(pool_name, rados));
@@ -3045,14 +3056,21 @@ TEST_F(TestLibRBD, TestClone)
 	 (unsigned long long)pinfo.parent_pool);
   ASSERT_EQ(pinfo.size, 4UL<<20);
   printf("sized up clone, changed size but not overlap or parent's size\n");
-  
+
   ASSERT_PASSED(validate_object_map, child);
+  char child_id[4096];
+  ASSERT_EQ(0, rbd_get_id(child, child_id, sizeof(child_id)));
   ASSERT_EQ(0, rbd_close(child));
 
   ASSERT_PASSED(validate_object_map, parent);
   ASSERT_EQ(-EBUSY, rbd_snap_remove(parent, "parent_snap"));
   printf("can't remove parent while child still exists\n");
   ASSERT_EQ(0, rbd_remove(ioctx, child_name.c_str()));
+  if (is_move_to_trash_on_remove(_rados)) {
+    ASSERT_EQ(-EBUSY, rbd_snap_unprotect(parent, "parent_snap"));
+    printf("can't unprotect parent snap while child in trash\n");
+    ASSERT_EQ(0, rbd_trash_remove(ioctx, child_id, false));
+  }
   ASSERT_EQ(-EBUSY, rbd_snap_remove(parent, "parent_snap"));
   printf("can't remove parent while still protected\n");
   ASSERT_EQ(0, rbd_snap_unprotect(parent, "parent_snap"));
@@ -3300,6 +3318,8 @@ TEST_F(TestLibRBD, ListChildren)
 {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
 
+  bool move_to_trash_on_remove = is_move_to_trash_on_remove(_rados);
+
   librbd::RBD rbd;
   rados_ioctx_t ioctx1, ioctx2;
   string pool_name1 = create_pool(true);
@@ -3411,6 +3431,14 @@ TEST_F(TestLibRBD, ListChildren)
 
   ASSERT_EQ(0, rbd_close(image1));
   ASSERT_EQ(0, rbd_remove(ioctx2, child_name1.c_str()));
+  if (move_to_trash_on_remove) {
+    test_list_children2(parent, 4,
+                        child_id1, pool_name2.c_str(), child_name1.c_str(), true,
+                        child_id2, pool_name1.c_str(), child_name2.c_str(), false,
+                        child_id3, pool_name2.c_str(), child_name3.c_str(), false,
+                        child_id4, pool_name2.c_str(), child_name4.c_str(), false);
+    ASSERT_EQ(0, rbd_trash_remove(ioctx2, child_id1, false));
+  }
   test_list_children(parent, 3,
 		     pool_name1.c_str(), child_name2.c_str(),
 		     pool_name2.c_str(), child_name3.c_str(),
@@ -3422,6 +3450,9 @@ TEST_F(TestLibRBD, ListChildren)
 
   ASSERT_EQ(0, rbd_close(image3));
   ASSERT_EQ(0, rbd_remove(ioctx2, child_name3.c_str()));
+  if (move_to_trash_on_remove) {
+    ASSERT_EQ(0, rbd_trash_remove(ioctx2, child_id3, false));
+  }
   test_list_children(parent, 2,
 		     pool_name1.c_str(), child_name2.c_str(),
 		     pool_name2.c_str(), child_name4.c_str());
@@ -3431,14 +3462,19 @@ TEST_F(TestLibRBD, ListChildren)
 
   ASSERT_EQ(0, rbd_close(image4));
   ASSERT_EQ(0, rbd_remove(ioctx2, child_name4.c_str()));
+  if (move_to_trash_on_remove) {
+    ASSERT_EQ(0, rbd_trash_remove(ioctx2, child_id4, false));
+  }
   test_list_children(parent, 1,
 		     pool_name1.c_str(), child_name2.c_str());
   test_list_children2(parent, 1,
                       child_id2, pool_name1.c_str(), child_name2.c_str(), false);
-  
 
   ASSERT_EQ(0, rbd_close(image2));
   ASSERT_EQ(0, rbd_remove(ioctx1, child_name2.c_str()));
+  if (move_to_trash_on_remove) {
+    ASSERT_EQ(0, rbd_trash_remove(ioctx1, child_id2, false));
+  }
   test_list_children(parent, 0);
   test_list_children2(parent, 0);
 
@@ -3453,6 +3489,8 @@ TEST_F(TestLibRBD, ListChildren)
 TEST_F(TestLibRBD, ListChildrenTiered)
 {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  bool move_to_trash_on_remove = is_move_to_trash_on_remove(_rados);
 
   librbd::RBD rbd;
   string pool_name1 = create_pool(true);
@@ -3596,6 +3634,14 @@ TEST_F(TestLibRBD, ListChildrenTiered)
 
   ASSERT_EQ(0, rbd_close(image1));
   ASSERT_EQ(0, rbd_remove(ioctx2, child_name1.c_str()));
+  if (move_to_trash_on_remove) {
+    test_list_children2(parent, 4,
+                        child_id1, pool_name2.c_str(), child_name1.c_str(), true,
+                        child_id2, pool_name1.c_str(), child_name2.c_str(), false,
+                        child_id3, pool_name2.c_str(), child_name3.c_str(), false,
+                        child_id4, pool_name2.c_str(), child_name4.c_str(), false);
+    ASSERT_EQ(0, rbd_trash_remove(ioctx2, child_id1, false));
+  }
   test_list_children(parent, 3,
 		     pool_name1.c_str(), child_name2.c_str(),
 		     pool_name2.c_str(), child_name3.c_str(),
@@ -3607,6 +3653,9 @@ TEST_F(TestLibRBD, ListChildrenTiered)
 
   ASSERT_EQ(0, rbd_close(image3));
   ASSERT_EQ(0, rbd_remove(ioctx2, child_name3.c_str()));
+  if (move_to_trash_on_remove) {
+    ASSERT_EQ(0, rbd_trash_remove(ioctx2, child_id3, false));
+  }
   test_list_children(parent, 2,
 		     pool_name1.c_str(), child_name2.c_str(),
 		     pool_name2.c_str(), child_name4.c_str());
@@ -3616,6 +3665,9 @@ TEST_F(TestLibRBD, ListChildrenTiered)
 
   ASSERT_EQ(0, rbd_close(image4));
   ASSERT_EQ(0, rbd_remove(ioctx2, child_name4.c_str()));
+  if (move_to_trash_on_remove) {
+    ASSERT_EQ(0, rbd_trash_remove(ioctx2, child_id4, false));
+  }
   test_list_children(parent, 1,
 		     pool_name1.c_str(), child_name2.c_str());
   test_list_children2(parent, 1,
@@ -3623,6 +3675,9 @@ TEST_F(TestLibRBD, ListChildrenTiered)
 
   ASSERT_EQ(0, rbd_close(image2));
   ASSERT_EQ(0, rbd_remove(ioctx1, child_name2.c_str()));
+  if (move_to_trash_on_remove) {
+    ASSERT_EQ(0, rbd_trash_remove(ioctx1, child_id2, false));
+  }
   test_list_children(parent, 0);
   test_list_children2(parent, 0);
 
