@@ -602,9 +602,14 @@ int Image<I>::remove(IoCtx& io_ctx, const std::string &image_name,
     Config<I>::apply_pool_overrides(io_ctx, &config);
 
     if (config.get_val<bool>("rbd_move_to_trash_on_remove")) {
-      return Trash<I>::move(
+      int r = Trash<I>::move(
         io_ctx, RBD_TRASH_IMAGE_SOURCE_USER, image_name,
         config.get_val<uint64_t>("rbd_move_to_trash_on_remove_expire_seconds"));
+      if (r == -EOPNOTSUPP) {
+        // Old format image, remove it.
+      } else {
+        return r;
+      }
     }
   }
 
