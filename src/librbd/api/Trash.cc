@@ -72,7 +72,7 @@ int Trash<I>::move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
   if (!ictx->migration_info.empty()) {
     lderr(cct) << "cannot move migrating image to trash" << dendl;
     ictx->state->close();
-    return -EINVAL;
+    return -EBUSY;
   }
 
   utime_t delete_time{ceph_clock_now()};
