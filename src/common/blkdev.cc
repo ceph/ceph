@@ -397,8 +397,6 @@ std::string get_device_id(const std::string& devname)
   struct udev_device *dev;
   static struct udev *udev;
   const char *data;
-  std::string device_model;
-  std::string device_id;
 
   udev = udev_new();
   if (!udev) {
@@ -410,25 +408,54 @@ std::string get_device_id(const std::string& devname)
     return {};
   }
 
+  // ****
+  //   NOTE: please keep this implementation in sync with _get_device_id() in
+  //   src/ceph-volume/ceph_volume/util/device.py
+  // ****
+
+  std::string id_vendor, id_model, id_serial, id_serial_short, id_scsi_serial;
+  data = udev_device_get_property_value(dev, "ID_VENDOR");
+  if (data) {
+    id_vendor = data;
+  }
   data = udev_device_get_property_value(dev, "ID_MODEL");
   if (data) {
-    device_model = data;
+    id_model = data;
   }
-
-  // "ID_SERIAL_SHORT" returns only the serial number;
-  // "ID_SERIAL" returns vendor model_serial but can be unreliable and return.
   data = udev_device_get_property_value(dev, "ID_SERIAL_SHORT");
   if (data) {
-    device_id = data;
+    id_serial_short = data;
   }
-
+  data = udev_device_get_property_value(dev, "ID_SCSI_SERIAL");
+  if (data) {
+    id_scsi_serial = data;
+  }
+  data = udev_device_get_property_value(dev, "ID_SERIAL");
+  if (data) {
+    id_serial = data;
+  }
   udev_device_unref(dev);
   udev_unref(udev);
 
-  if (!device_id.empty() and !device_model.empty()) {
-    std::replace(device_model.begin(), device_model.end(), ' ', '_');
+  // ID_SERIAL is usually $vendor_$model_$serial, but not always
+  // ID_SERIAL_SHORT is mostly always just the serial
+  // ID_MODEL is sometimes $vendor_$model, but
+  // ID_VENDOR is sometimes $vendor and ID_MODEL just $model and ID_SCSI_SERIAL the real serial number, with ID_SERIAL and ID_SERIAL_SHORT gibberish (ick)
+  std::string device_id;
+  if (id_vendor.size() && id_model.size() && id_scsi_serial.size()) {
+    device_id = id_vendor + '_' + id_model + '_' + id_scsi_serial;
+  } else if (id_model.size() && id_serial_short.size()) {
+    device_id = id_model + '_' + id_serial_short;
+  } else if (id_serial.size()) {
+    device_id = id_serial;
+    if (device_id.substr(0, 4) == "MTFD") {
+      // Micron NVMes hide the vendor
+      device_id = "Micron_" + device_id;
+    }
+  }
+  if (device_id.size()) {
     std::replace(device_id.begin(), device_id.end(), ' ', '_');
-    return device_model + '_' + device_id;
+    return device_id;
   }
 
   // either udev_device_get_property_value() failed, or succeeded but
