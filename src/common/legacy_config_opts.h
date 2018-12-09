@@ -229,7 +229,6 @@ OPTION(mon_osd_max_split_count, OPT_INT) // largest number of PGs per "involved"
 OPTION(mon_osd_prime_pg_temp, OPT_BOOL)  // prime osdmap with pg mapping changes
 OPTION(mon_osd_prime_pg_temp_max_time, OPT_FLOAT)  // max time to spend priming
 OPTION(mon_osd_prime_pg_temp_max_estimate, OPT_FLOAT) // max estimate of pg total before we do all pgs in parallel
-OPTION(mon_osd_pool_ec_fast_read, OPT_BOOL) // whether turn on fast read on the pool or not
 OPTION(mon_election_timeout, OPT_FLOAT)  // on election proposer, max waiting time for all ACKs
 OPTION(mon_lease, OPT_FLOAT)       // lease interval
 OPTION(mon_lease_renew_interval_factor, OPT_FLOAT) // on leader, to renew the lease
@@ -585,6 +584,7 @@ OPTION(osd_erasure_code_plugins, OPT_STR) // list of erasure code plugins
 // Allows the "peered" state for recovery and backfill below min_size
 OPTION(osd_allow_recovery_below_min_size, OPT_BOOL)
 
+OPTION(osd_pool_default_ec_fast_read, OPT_BOOL) // whether turn on fast read on the pool or not
 OPTION(osd_pool_default_flags, OPT_INT)   // default flags for new pools
 OPTION(osd_pool_default_flag_hashpspool, OPT_BOOL)   // use new pg hashing to prevent pool/pg overlap
 OPTION(osd_pool_default_flag_nodelete, OPT_BOOL) // pool can't be deleted

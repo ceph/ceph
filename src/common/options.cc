@@ -1398,10 +1398,6 @@ std::vector<Option> get_global_options() {
     .set_default(.25)
     .set_description("Calculate all PG mappings if estimated fraction of PGs that change is above this amount"),
 
-    Option("mon_osd_pool_ec_fast_read", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(false)
-    .set_description(""),
-
     Option("mon_stat_smooth_intervals", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(6)
     .set_min(1)
@@ -2191,6 +2187,10 @@ std::vector<Option> get_global_options() {
 
     Option("osd_crush_initial_weight", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(-1)
+    .set_description(""),
+
+    Option("osd_pool_default_ec_fast_read", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
     .set_description(""),
 
     Option("osd_pool_default_crush_rule", Option::TYPE_INT, Option::LEVEL_ADVANCED)

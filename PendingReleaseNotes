@@ -240,6 +240,12 @@
   this behavior should instead make use of the ``ceph auth export
   <entity-name>`` command for whichever key(s) they need.
 
+* The ``mon_osd_pool_ec_fast_read`` option has been renamed
+  ``osd_pool_default_ec_fast_read`` to be more consistent with other
+  ``osd_pool_default_*`` options that affect default values for newly
+  created RADOS pools.
+
+
 Upgrading from Luminous
 -----------------------
 
