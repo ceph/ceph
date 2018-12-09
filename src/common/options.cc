@@ -669,77 +669,88 @@ std::vector<Option> get_global_options() {
     // unmodified
     Option("clog_to_monitors", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("default=true")
-    .set_description(""),
+    .set_description("Make daemons send cluster log messages to monitors"),
 
     Option("clog_to_syslog", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("false")
-    .set_description(""),
+    .set_description("Make daemons send cluster log messages to syslog"),
 
     Option("clog_to_syslog_level", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("info")
-    .set_description(""),
+    .set_description("Syslog level for cluster log messages")
+    .add_see_also("clog_to_syslog"),
 
     Option("clog_to_syslog_facility", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("default=daemon audit=local0")
-    .set_description(""),
+    .set_description("Syslog facility for cluster log messages")
+    .add_see_also("clog_to_syslog"),
 
     Option("clog_to_graylog", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("false")
-    .set_description(""),
+    .set_description("Make daemons send cluster log to graylog"),
 
     Option("clog_to_graylog_host", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("127.0.0.1")
-    .set_description(""),
+    .set_description("Graylog host to cluster log messages")
+    .add_see_also("clog_to_graylog"),
 
     Option("clog_to_graylog_port", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("12201")
-    .set_description(""),
+    .set_description("Graylog port number for cluster log messages")
+    .add_see_also("clog_to_graylog"),
 
     Option("mon_cluster_log_to_stderr", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description("Send cluster log messages to stderr (prefixed by channel)")
+    .set_description("Make monitor send cluster log messages to stderr (prefixed by channel)")
     .add_see_also("log_stderr_prefix"),
 
     Option("mon_cluster_log_to_syslog", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("default=false")
-    .set_description(""),
+    .set_description("Make monitor send cluster log messages to syslog"),
 
     Option("mon_cluster_log_to_syslog_level", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("info")
-    .set_description(""),
+    .set_description("Syslog level for cluster log messages")
+    .add_see_also("mon_cluster_log_to_syslog"),
 
     Option("mon_cluster_log_to_syslog_facility", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("daemon")
-    .set_description(""),
+    .set_description("Syslog facility for cluster log messages")
+    .add_see_also("mon_cluster_log_to_syslog"),
 
     Option("mon_cluster_log_file", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("default=/var/log/ceph/$cluster.$channel.log cluster=/var/log/ceph/$cluster.log")
-    .set_description(""),
+    .set_description("File(s) to write cluster log to")
+    .set_long_description("This can either be a simple file name to receive all messages, or a list of key/value pairs where the key is the log channel and the value is the filename, which may include $cluster and $channel metavariables"),
 
     Option("mon_cluster_log_file_level", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("info")
-    .set_description(""),
+    .set_description("Lowest level to include is cluster log file")
+    .add_see_also("mon_cluster_log_file"),
 
     Option("mon_cluster_log_to_graylog", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("false")
-    .set_description(""),
+    .set_description("Make monitor send cluster log to graylog"),
 
     Option("mon_cluster_log_to_graylog_host", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("127.0.0.1")
-    .set_description(""),
+    .set_description("Graylog host for cluster log messages")
+    .add_see_also("mon_cluster_log_to_graylog"),
 
     Option("mon_cluster_log_to_graylog_port", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("12201")
-    .set_description(""),
+    .set_description("Graylog port for cluster log messages")
+    .add_see_also("mon_cluster_log_to_graylog"),
 
     Option("enable_experimental_unrecoverable_data_corrupting_features", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
-    .set_description(""),
+    .set_description("Enable named (or all with '*') experimental features that may be untested, dangerous, and/or cause permanent data loss"),
 
     Option("plugin_dir", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default(CEPH_PKGLIBDIR)
-    .set_description(""),
+    .set_description("Base directory for dynamically loaded plugins"),
 
+    // XIO
     Option("xio_trace_mempool", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .set_description(""),
@@ -796,6 +807,7 @@ std::vector<Option> get_global_options() {
     .set_default(512)
     .set_description(""),
 
+    // Compressor
     Option("compressor_zlib_isal", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .set_description(""),
@@ -1812,6 +1824,8 @@ std::vector<Option> get_global_options() {
     .set_description("Timeout (in seconds) for smarctl to run, default is set to 5"),
 
 
+    // PAXOS
+
     Option("paxos_stash_full_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(25)
     .set_description(""),
@@ -1851,6 +1865,9 @@ std::vector<Option> get_global_options() {
     Option("paxos_kill_at", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(0)
     .set_description(""),
+
+
+    // AUTH
 
     Option("auth_cluster_required", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("cephx")
