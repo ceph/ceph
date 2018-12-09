@@ -239,7 +239,6 @@ OPTION(mon_clock_drift_allowed, OPT_FLOAT) // allowed clock drift between monito
 OPTION(mon_clock_drift_warn_backoff, OPT_FLOAT) // exponential backoff for clock drift warnings
 OPTION(mon_timecheck_interval, OPT_FLOAT) // on leader, timecheck (clock drift check) interval (seconds)
 OPTION(mon_timecheck_skew_interval, OPT_FLOAT) // on leader, timecheck (clock drift check) interval when in presence of a skew (seconds)
-OPTION(mon_pg_min_inactive, OPT_U64) // the number of PGs which have to be inactive longer than 'mon_pg_stuck_threshold' before health goes into ERR. 0 means disabled, never go into ERR.
 OPTION(mon_pg_check_down_all_threshold, OPT_FLOAT) // threshold of down osds after which we check all pgs
 OPTION(mon_cache_target_full_warn_ratio, OPT_FLOAT) // position between pool cache_target_full and max where we start warning
 OPTION(mon_osd_full_ratio, OPT_FLOAT) // what % full makes an OSD "full"
