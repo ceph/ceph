@@ -6731,7 +6731,7 @@ int OSDMonitor::prepare_new_pool(string& name,
         fread = true;
         break;
       case FAST_READ_DEFAULT:
-        fread = g_conf()->mon_osd_pool_ec_fast_read;
+        fread = g_conf()->osd_pool_default_ec_fast_read;
         break;
       default:
         *ss << "invalid fast_read setting: " << fast_read;
