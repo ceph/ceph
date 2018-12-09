@@ -1566,11 +1566,7 @@ std::vector<Option> get_global_options() {
 
     Option("mon_min_osdmap_epochs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(500)
-    .set_description(""),
-
-    Option("mon_max_pgmap_epochs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(500)
-    .set_description(""),
+    .set_description("min number of OSDMaps to store"),
 
     Option("mon_max_log_epochs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(500)

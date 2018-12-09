@@ -257,7 +257,6 @@ OPTION(mon_warn_on_osd_down_out_interval_zero, OPT_BOOL) // warn if 'mon_osd_dow
 OPTION(mon_warn_on_cache_pools_without_hit_sets, OPT_BOOL)
 OPTION(mon_warn_on_misplaced, OPT_BOOL)
 OPTION(mon_min_osdmap_epochs, OPT_INT)
-OPTION(mon_max_pgmap_epochs, OPT_INT)
 OPTION(mon_max_log_epochs, OPT_INT)
 OPTION(mon_max_mdsmap_epochs, OPT_INT)
 OPTION(mon_max_osd, OPT_INT)
