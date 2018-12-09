@@ -1189,8 +1189,9 @@ std::vector<Option> get_global_options() {
 
     Option("inject_early_sigterm", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
-    .set_description(""),
+    .set_description("Send ourselves a SIGTERM early during startup"),
 
+    // MON
     Option("mon_enable_op_tracker", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description("enable/disable MON op tracking"),
@@ -1275,15 +1276,15 @@ std::vector<Option> get_global_options() {
 
     Option("mon_osd_cache_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(500)
-    .set_description(""),
+    .set_description("Maximum number of OSDMaps to cache in memory"),
 
     Option("mon_cpu_threads", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(4)
-    .set_description(""),
+    .set_description("Worker threads for CPU intensive background work"),
 
-    Option("mon_osd_mapping_pgs_per_chunk", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("mon_osd_mapping_pgs_per_chunk", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(4096)
-    .set_description(""),
+    .set_description("Granularity of PG placement calculation background work"),
 
     Option("mon_osd_max_creating_pgs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1024)
@@ -1296,95 +1297,106 @@ std::vector<Option> get_global_options() {
 
     Option("mon_tick_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(5)
-    .set_description(""),
+    .set_description("Interval for internal mon background checks"),
 
     Option("mon_session_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(300)
-    .set_description(""),
+    .set_description("Close inactive mon client connections after this many seconds"),
 
-    Option("mon_subscribe_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    Option("mon_subscribe_interval", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(1_day)
-    .set_description(""),
+    .set_description("Subscribe interval for pre-jewel clients"),
 
     Option("mon_delta_reset_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(10)
-    .set_description(""),
+    .set_description("Window duration for rate calculations in 'ceph status'"),
 
     Option("mon_osd_laggy_halflife", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1_hr)
-    .set_description(""),
+    .set_description("Halflife of OSD 'lagginess' factor"),
 
     Option("mon_osd_laggy_weight", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.3)
-    .set_description(""),
+      .set_min_max(0.0, 1.0)
+    .set_description("How heavily to weight OSD marking itself back up in overall laggy_probability")
+    .set_long_description("1.0 means that an OSD marking itself back up (because it was marked down but not actually dead) means a 100% laggy_probability; 0.0 effectively disables tracking of laggy_probability."),
 
     Option("mon_osd_laggy_max_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(300)
-    .set_description(""),
+    .set_description("Cap value for period for OSD to be marked for laggy_interval calculation"),
 
     Option("mon_osd_adjust_heartbeat_grace", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("Increase OSD heartbeat grace if peers appear to be laggy")
+    .set_long_description("If an OSD is marked down but then marks itself back up, it implies it wasn't actually down but was unable to respond to heartbeats.  If this option is true, we can use the laggy_probability and laggy_interval values calculated to model this situation to increase the heartbeat grace period for this OSD so that it isn't marked down again.  laggy_probability is an estimated probability that the given OSD is down because it is laggy (not actually down), and laggy_interval is an estiate on how long it stays down when it is laggy.")
+    .add_see_also("mon_osd_laggy_halflife")
+    .add_see_also("mon_osd_laggy_weight")
+    .add_see_also("mon_osd_laggy_max_interval"),
 
     Option("mon_osd_adjust_down_out_interval", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("Increase the mon_osd_down_out_interval if an OSD appears to be laggy")
+    .add_see_also("mon_osd_adjust_heartbeat_grace"),
 
     Option("mon_osd_auto_mark_in", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("Mark any OSD that comes up 'in'"),
 
     Option("mon_osd_auto_mark_auto_out_in", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("Mark any OSD that comes up that was automatically marked 'out' back 'in'")
+    .add_see_also("mon_osd_down_out_interval"),
 
     Option("mon_osd_auto_mark_new_in", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("Mark any new OSD that comes up 'in'"),
 
     Option("mon_osd_destroyed_out_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(600)
-    .set_description(""),
+    .set_description("Mark any OSD 'out' that has been 'destroy'ed for this long (seconds)"),
 
     Option("mon_osd_down_out_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(600)
-    .set_description(""),
+    .set_description("Mark any OSD 'out' that has been 'down' for this long (seconds)"),
 
     Option("mon_osd_down_out_subtree_limit", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("rack")
-    .set_description(""),
+    .set_description("Do not automatically mark OSDs 'out' if an entire subtree of this size is down")
+    .add_see_also("mon_osd_down_out_interval"),
 
     Option("mon_osd_min_up_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.3)
-    .set_description(""),
+    .set_description("Do not automatically mark OSDs 'out' if fewer than this many OSDs are 'up'")
+    .add_see_also("mon_osd_down_out_interval"),
 
     Option("mon_osd_min_in_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.75)
-    .set_description(""),
+    .set_description("Do not automatically mark OSDs 'out' if fewer than this many OSDs are 'in'")
+    .add_see_also("mon_osd_down_out_interval"),
 
     Option("mon_osd_warn_op_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(32)
-    .set_description(""),
+    .set_description("Issue health warning if OSD ops are slower than this age (seconds)"),
 
     Option("mon_osd_err_op_age_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(128)
-    .set_description(""),
+    .set_description("Issue health error if OSD ops are slower than is age (seconds)"),
 
     Option("mon_osd_max_split_count", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(32)
     .set_description(""),
 
-    Option("mon_osd_prime_pg_temp", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("mon_osd_prime_pg_temp", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(true)
-    .set_description(""),
+    .set_description("Minimize peering work by priming pg_temp values after a map change"),
 
-    Option("mon_osd_prime_pg_temp_max_time", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    Option("mon_osd_prime_pg_temp_max_time", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(.5)
-    .set_description(""),
+    .set_description("Maximum time to spend precalculating PG mappings on map change (seconds)"),
 
     Option("mon_osd_prime_pg_temp_max_estimate", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.25)
-    .set_description(""),
+    .set_description("Calculate all PG mappings if estimated fraction of PGs that change is above this amount"),
 
     Option("mon_osd_pool_ec_fast_read", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
