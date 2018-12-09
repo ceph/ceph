@@ -824,7 +824,7 @@ std::vector<Option> get_global_options() {
     .set_default("crypto_isal")
     .set_description("Crypto accelerator library to use"),
 
-    Option("mempool_debug", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("mempool_debug", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_flag(Option::FLAG_NO_MON_UPDATE)
     .set_description(""),
@@ -862,11 +862,12 @@ std::vector<Option> get_global_options() {
 
     Option("heartbeat_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(5)
-    .set_description(""),
+    .set_description("Frequency of internal heartbeat checks (seconds)"),
 
     Option("heartbeat_file", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("")
-    .set_description(""),
+    .set_default("File to touch on successful internal heartbeat")
+    .set_description("If set, this file will be touched every time an internal heartbeat check succeeds")
+    .add_see_also("heartbeat_interval"),
 
     Option("heartbeat_inject_failure", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(0)
@@ -874,7 +875,8 @@ std::vector<Option> get_global_options() {
 
     Option("perf", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("Enable internal performance metrics")
+    .set_long_description("If enabled, collect and expose internal health metrics"),
 
     Option("ms_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("async+posix")
