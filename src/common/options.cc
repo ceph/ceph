@@ -1446,10 +1446,6 @@ std::vector<Option> get_global_options() {
     .set_long_description("see doc/control.rst under dump_stuck for more info")
     .add_service("mgr"),
 
-    Option("mon_pg_min_inactive", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(1)
-    .set_description(""),
-
     Option("mon_pg_warn_min_per_osd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(30)
     .set_description("minimal number PGs per (in) osd before we warn the admin"),
