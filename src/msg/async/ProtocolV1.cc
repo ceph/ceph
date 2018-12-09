@@ -1862,6 +1862,8 @@ CtPtr ProtocolV1::handle_connect_message_2() {
                  << " policy.server=" << connection->policy.server
                  << " policy.standby=" << connection->policy.standby
                  << " policy.resetcheck=" << connection->policy.resetcheck
+		 << " features 0x" << std::hex << (uint64_t)connect_msg.features
+		 << std::dec
                  << dendl;
 
   ceph_msg_connect_reply reply;
@@ -2144,6 +2146,14 @@ CtPtr ProtocolV1::send_connect_message_reply(char tag,
   reply.authorizer_len = authorizer_reply.length();
   reply_bl.append((char *)&reply, sizeof(reply));
 
+  ldout(cct, 10) << __func__ << " reply features 0x" << std::hex
+		 << reply.features << " = (policy sup 0x"
+		 << connection->policy.features_supported
+		 << " & connect 0x" << (uint64_t)connect_msg.features
+		 << ") | policy req 0x"
+		 << connection->policy.features_required
+		 << dendl;
+
   if (reply.authorizer_len) {
     reply_bl.append(authorizer_reply.c_str(), authorizer_reply.length());
     authorizer_reply.clear();
@@ -2196,6 +2206,8 @@ CtPtr ProtocolV1::replace(AsyncConnectionRef existing,
       ceph_assert(!connection->delay_state);
     }
     exproto->reset_recv_state();
+
+    exproto->connect_msg.features = connect_msg.features;
 
     auto temp_cs = std::move(connection->cs);
     EventCenter *new_center = connection->center;
