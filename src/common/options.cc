@@ -810,19 +810,19 @@ std::vector<Option> get_global_options() {
     // Compressor
     Option("compressor_zlib_isal", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("Use Intel ISA-L accelerated zlib implementation if available"),
 
     Option("compressor_zlib_level", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(5)
-    .set_description(""),
+    .set_description("Zlib compression level to use"),
 
     Option("qat_compressor_enabled", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description("enable qat acceleration support for compression"),
+    .set_description("Enable Intel QAT acceleration support for compression if available"),
 
     Option("plugin_crypto_accelerator", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("crypto_isal")
-    .set_description(""),
+    .set_description("Crypto accelerator library to use"),
 
     Option("mempool_debug", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
