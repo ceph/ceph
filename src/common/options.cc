@@ -880,72 +880,77 @@ std::vector<Option> get_global_options() {
 
     Option("ms_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("async+posix")
-    .set_description(""),
+    .set_description("Messenger implementation to use for network communication"),
 
     Option("ms_public_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
-    .set_description(""),
+    .set_description("Messenger implementation to use for the public network")
+    .set_long_description("If not specified, use ms_type")
+    .add_see_also("ms_type"),
 
     Option("ms_cluster_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
-    .set_description(""),
+    .set_description("Messenger implementation to use for the internal cluster network")
+    .set_long_description("If not specified, use ms_type")
+    .add_see_also("ms_type"),
 
     Option("ms_tcp_nodelay", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("Disable Nagle's algorithm and send queued network traffic immediately"),
 
     Option("ms_tcp_rcvbuf", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_description(""),
+    .set_description("Size of TCP socket receive buffer"),
 
     Option("ms_tcp_prefetch_max_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(4_K)
-    .set_description(""),
+    .set_description("Maximum amount of data to prefetch out of the socket receive buffer"),
 
     Option("ms_initial_backoff", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.2)
-    .set_description(""),
+    .set_description("Initial backoff after a network error is detected (seconds)"),
 
     Option("ms_max_backoff", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(15.0)
-    .set_description(""),
+    .set_description("Maximum backoff after a network error before retrying (seconds)")
+    .add_see_also("ms_initial_backoff"),
 
-    Option("ms_crc_data", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("ms_crc_data", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(true)
-    .set_description(""),
+    .set_description("Set and/or verify crc32c checksum on data payload sent over network"),
 
-    Option("ms_crc_header", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("ms_crc_header", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(true)
-    .set_description(""),
+    .set_description("Set and/or verify crc32c checksum on header payload sent over network"),
 
-    Option("ms_die_on_bad_msg", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("ms_die_on_bad_msg", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
-    .set_description(""),
+    .set_description("Induce a daemon crash/exit when a bad network message is received"),
 
-    Option("ms_die_on_unhandled_msg", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("ms_die_on_unhandled_msg", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
-    .set_description(""),
+    .set_description("Induce a daemon crash/exit when an unrecognized message is received"),
 
-    Option("ms_die_on_old_message", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("ms_die_on_old_message", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
-    .set_description(""),
+    .set_description("Induce a daemon crash/exit when a old, undecodable message is received"),
 
-    Option("ms_die_on_skipped_message", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("ms_die_on_skipped_message", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
-    .set_description(""),
+    .set_description("Induce a daemon crash/exit if sender skips a message sequence number"),
 
     Option("ms_dispatch_throttle_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(100_M)
-    .set_description(""),
+    .set_description("Limit messages that are read off the network but still being processed"),
 
     Option("ms_bind_ipv4", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description("Bind servers to IPV4 address(es)")
+    .set_description("Bind servers to IPv4 address(es)")
     .add_see_also("ms_bind_ipv6"),
 
     Option("ms_bind_ipv6", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description("Bind servers to IPV6 address(es)")
+    .set_description("Bind servers to IPv6 address(es)")
     .add_see_also("ms_bind_ipv4"),
 
     Option("ms_bind_prefer_ipv4", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -964,11 +969,11 @@ std::vector<Option> get_global_options() {
 
     Option("ms_bind_port_min", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(6800)
-    .set_description(""),
+    .set_description("Lowest port number to bind daemon(s) to"),
 
     Option("ms_bind_port_max", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(7300)
-    .set_description(""),
+    .set_description("Highest port number to bind daemon(s) to"),
 
     Option("ms_bind_retry_count", Option::TYPE_INT, Option::LEVEL_ADVANCED)
   #if !defined(__FreeBSD__)
@@ -977,7 +982,7 @@ std::vector<Option> get_global_options() {
     // FreeBSD does not use SO_REAUSEADDR so allow for a bit more time per default
     .set_default(6)
   #endif
-    .set_description(""),
+    .set_description("Number of attempts to make while bind(2)ing to a port"),
 
     Option("ms_bind_retry_delay", Option::TYPE_INT, Option::LEVEL_ADVANCED)
   #if !defined(__FreeBSD__)
@@ -986,48 +991,48 @@ std::vector<Option> get_global_options() {
     // FreeBSD does not use SO_REAUSEADDR so allow for a bit more time per default
     .set_default(6)
   #endif
-    .set_description(""),
+    .set_description("Delay between bind(2) attempts (seconds)"),
 
     Option("ms_bind_before_connect", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("Call bind(2) on client sockets"),
 
     Option("ms_tcp_listen_backlog", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(512)
-    .set_description(""),
+    .set_description("Size of queue of incoming connections for accept(2)"),
 
     Option("ms_rwthread_stack_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(1_M)
-    .set_description(""),
+    .set_description("Size of stack for SimpleMessenger read/write threads"),
 
     Option("ms_tcp_read_timeout", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(900)
-    .set_description(""),
+    .set_description("Time before an idle TCP connection is closed (seconds)"),
 
-    Option("ms_pq_max_tokens_per_priority", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("ms_pq_max_tokens_per_priority", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(16777216)
     .set_description(""),
 
-    Option("ms_pq_min_cost", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
+    Option("ms_pq_min_cost", Option::TYPE_SIZE, Option::LEVEL_DEV)
     .set_default(65536)
     .set_description(""),
 
     Option("ms_inject_socket_failures", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(0)
-    .set_description(""),
+    .set_description("Inject a socket failure every Nth socket operation"),
 
     Option("ms_inject_delay_type", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("")
-    .set_description("")
+    .set_description("Entity type to inject delays for")
     .set_flag(Option::FLAG_RUNTIME),
 
     Option("ms_inject_delay_msg_type", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("")
-    .set_description(""),
+    .set_description("Message type to inject delays for"),
 
     Option("ms_inject_delay_max", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(1)
-    .set_description(""),
+    .set_description("Max delay to inject"),
 
     Option("ms_inject_delay_probability", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0)
@@ -1035,32 +1040,34 @@ std::vector<Option> get_global_options() {
 
     Option("ms_inject_internal_delays", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0)
-    .set_description(""),
+    .set_description("Inject various internal delays to induce races (seconds)"),
 
     Option("ms_dump_on_send", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("Hexdump message to debug log on message send"),
 
     Option("ms_dump_corrupt_message_level", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1)
-    .set_description(""),
+    .set_description("Log level at which to hexdump corrupt messages we receive"),
 
     Option("ms_async_op_threads", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(3)
     .set_min_max(1, 24)
-    .set_description(""),
+    .set_description("Threadpool size for AsyncMessenger (ms_type=async)"),
 
     Option("ms_async_max_op_threads", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(5)
-    .set_description(""),
+    .set_description("Maximum threadpool size of AsyncMessenger")
+    .add_see_also("ms_async_op_threads"),
 
     Option("ms_async_set_affinity", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("Set CPU affinity for AsyncMessenger worker threads"),
 
     Option("ms_async_affinity_cores", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
-    .set_description(""),
+    .set_description("List of cores to set worker thread affinity")
+    .add_see_also("ms_async_set_affinity"),
 
     Option("ms_async_rdma_device_name", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
