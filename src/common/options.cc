@@ -701,44 +701,53 @@ std::vector<Option> get_global_options() {
 
     Option("mon_cluster_log_to_stderr", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
+    .add_service("mon")
     .set_description("Make monitor send cluster log messages to stderr (prefixed by channel)")
     .add_see_also("log_stderr_prefix"),
 
     Option("mon_cluster_log_to_syslog", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("default=false")
+    .add_service("mon")
     .set_description("Make monitor send cluster log messages to syslog"),
 
     Option("mon_cluster_log_to_syslog_level", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("info")
+    .add_service("mon")
     .set_description("Syslog level for cluster log messages")
     .add_see_also("mon_cluster_log_to_syslog"),
 
     Option("mon_cluster_log_to_syslog_facility", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("daemon")
+    .add_service("mon")
     .set_description("Syslog facility for cluster log messages")
     .add_see_also("mon_cluster_log_to_syslog"),
 
     Option("mon_cluster_log_file", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("default=/var/log/ceph/$cluster.$channel.log cluster=/var/log/ceph/$cluster.log")
+    .add_service("mon")
     .set_description("File(s) to write cluster log to")
     .set_long_description("This can either be a simple file name to receive all messages, or a list of key/value pairs where the key is the log channel and the value is the filename, which may include $cluster and $channel metavariables"),
 
     Option("mon_cluster_log_file_level", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("info")
+    .add_service("mon")
     .set_description("Lowest level to include is cluster log file")
     .add_see_also("mon_cluster_log_file"),
 
     Option("mon_cluster_log_to_graylog", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("false")
+    .add_service("mon")
     .set_description("Make monitor send cluster log to graylog"),
 
     Option("mon_cluster_log_to_graylog_host", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("127.0.0.1")
+    .add_service("mon")
     .set_description("Graylog host for cluster log messages")
     .add_see_also("mon_cluster_log_to_graylog"),
 
     Option("mon_cluster_log_to_graylog_port", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("12201")
+    .add_service("mon")
     .set_description("Graylog port for cluster log messages")
     .add_see_also("mon_cluster_log_to_graylog"),
 
@@ -748,6 +757,7 @@ std::vector<Option> get_global_options() {
 
     Option("plugin_dir", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default(CEPH_PKGLIBDIR)
+    .add_service({"mon", "osd"})
     .set_description("Base directory for dynamically loaded plugins"),
 
     // XIO
@@ -1194,59 +1204,72 @@ std::vector<Option> get_global_options() {
     // MON
     Option("mon_enable_op_tracker", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
+    .add_service("mon")
     .set_description("enable/disable MON op tracking"),
 
     Option("mon_op_complaint_time", Option::TYPE_SECS, Option::LEVEL_ADVANCED)
     .set_default(30)
+    .add_service("mon")
     .set_description("time after which to consider a monitor operation blocked "
                      "after no updates"),
 
     Option("mon_op_log_threshold", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(5)
+    .add_service("mon")
     .set_description("max number of slow ops to display"),
 
     Option("mon_op_history_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(20)
+    .add_service("mon")
     .set_description("max number of completed ops to track"),
 
     Option("mon_op_history_duration", Option::TYPE_SECS, Option::LEVEL_ADVANCED)
     .set_default(600)
+    .add_service("mon")
     .set_description("expiration time in seconds of historical MON OPS"),
 
     Option("mon_op_history_slow_op_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(20)
+    .add_service("mon")
     .set_description("max number of slow historical MON OPS to keep"),
 
     Option("mon_op_history_slow_op_threshold", Option::TYPE_SECS, Option::LEVEL_ADVANCED)
     .set_default(10)
+    .add_service("mon")
     .set_description("duration of an op to be considered as a historical slow op"),
 
     Option("mon_data", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_flag(Option::FLAG_NO_MON_UPDATE)
     .set_default("/var/lib/ceph/mon/$cluster-$id")
+    .add_service("mon")
     .set_description("path to mon database"),
 
     Option("mon_initial_members", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
+    .add_service("mon")
     .set_flag(Option::FLAG_NO_MON_UPDATE)
     .set_flag(Option::FLAG_CLUSTER_CREATE)
     .set_description(""),
 
     Option("mon_compact_on_start", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
+    .add_service("mon")
     .set_description(""),
 
     Option("mon_compact_on_bootstrap", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
+    .add_service("mon")
     .set_description(""),
 
     Option("mon_compact_on_trim", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
+    .add_service("mon")
     .set_description(""),
 
     /* -- mon: osdmap prune (begin) -- */
     Option("mon_osdmap_full_prune_enabled", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
+    .add_service("mon")
     .set_description("enables pruning full osdmap versions when we go over a given number of maps")
     .add_see_also("mon_osdmap_full_prune_min")
     .add_see_also("mon_osdmap_full_prune_interval")
@@ -1254,6 +1277,7 @@ std::vector<Option> get_global_options() {
 
     Option("mon_osdmap_full_prune_min", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(10000)
+    .add_service("mon")
     .set_description("minimum number of versions in the store to trigger full map pruning")
     .add_see_also("mon_osdmap_full_prune_enabled")
     .add_see_also("mon_osdmap_full_prune_interval")
@@ -1261,6 +1285,7 @@ std::vector<Option> get_global_options() {
 
     Option("mon_osdmap_full_prune_interval", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(10)
+    .add_service("mon")
     .set_description("interval between maps that will not be pruned; maps in the middle will be pruned.")
     .add_see_also("mon_osdmap_full_prune_enabled")
     .add_see_also("mon_osdmap_full_prune_interval")
@@ -1268,6 +1293,7 @@ std::vector<Option> get_global_options() {
 
     Option("mon_osdmap_full_prune_txsize", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(100)
+    .add_service("mon")
     .set_description("number of maps we will prune per iteration")
     .add_see_also("mon_osdmap_full_prune_enabled")
     .add_see_also("mon_osdmap_full_prune_interval")
@@ -1276,57 +1302,71 @@ std::vector<Option> get_global_options() {
 
     Option("mon_osd_cache_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(500)
+    .add_service("mon")
     .set_description("maximum number of OSDMaps to cache in memory"),
 
     Option("mon_cpu_threads", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(4)
+    .add_service("mon")
     .set_description("worker threads for CPU intensive background work"),
 
     Option("mon_osd_mapping_pgs_per_chunk", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(4096)
+    .add_service("mon")
     .set_description("granularity of PG placement calculation background work"),
 
     Option("mon_osd_max_creating_pgs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1024)
+    .add_service("mon")
     .set_description("maximum number of PGs the mon will create at once"),
 
     Option("mon_osd_max_initial_pgs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1024)
+    .add_service("mon")
     .set_description("maximum number of PGs a pool will created with")
     .set_long_description("If the user specifies more PGs than this, the cluster will subsequently split PGs after the pool is created in order to reach the target."),
 
     Option("mon_tick_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(5)
+    .add_service("mon")
     .set_description("interval for internal mon background checks"),
 
     Option("mon_session_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(300)
+    .add_service("mon")
     .set_description("close inactive mon client connections after this many seconds"),
 
     Option("mon_subscribe_interval", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(1_day)
+    .add_service("mon")
     .set_description("subscribe interval for pre-jewel clients"),
 
     Option("mon_delta_reset_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(10)
+    .add_service("mon")
+    .add_service("mon")
     .set_description("window duration for rate calculations in 'ceph status'"),
 
     Option("mon_osd_laggy_halflife", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1_hr)
+    .add_service("mon")
     .set_description("halflife of OSD 'lagginess' factor"),
 
     Option("mon_osd_laggy_weight", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.3)
     .set_min_max(0.0, 1.0)
+    .add_service("mon")
     .set_description("how heavily to weight OSD marking itself back up in overall laggy_probability")
     .set_long_description("1.0 means that an OSD marking itself back up (because it was marked down but not actually dead) means a 100% laggy_probability; 0.0 effectively disables tracking of laggy_probability."),
 
     Option("mon_osd_laggy_max_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(300)
+    .add_service("mon")
     .set_description("cap value for period for OSD to be marked for laggy_interval calculation"),
 
     Option("mon_osd_adjust_heartbeat_grace", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
+    .add_service("mon")
     .set_description("increase OSD heartbeat grace if peers appear to be laggy")
     .set_long_description("If an OSD is marked down but then marks itself back up, it implies it wasn't actually down but was unable to respond to heartbeats.  If this option is true, we can use the laggy_probability and laggy_interval values calculated to model this situation to increase the heartbeat grace period for this OSD so that it isn't marked down again.  laggy_probability is an estimated probability that the given OSD is down because it is laggy (not actually down), and laggy_interval is an estiate on how long it stays down when it is laggy.")
     .add_see_also("mon_osd_laggy_halflife")
@@ -1335,67 +1375,82 @@ std::vector<Option> get_global_options() {
 
     Option("mon_osd_adjust_down_out_interval", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
+    .add_service("mon")
     .set_description("increase the mon_osd_down_out_interval if an OSD appears to be laggy")
     .add_see_also("mon_osd_adjust_heartbeat_grace"),
 
     Option("mon_osd_auto_mark_in", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
+    .add_service("mon")
     .set_description("mark any OSD that comes up 'in'"),
 
     Option("mon_osd_auto_mark_auto_out_in", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
+    .add_service("mon")
     .set_description("mark any OSD that comes up that was automatically marked 'out' back 'in'")
     .add_see_also("mon_osd_down_out_interval"),
 
     Option("mon_osd_auto_mark_new_in", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
+    .add_service("mon")
     .set_description("mark any new OSD that comes up 'in'"),
 
     Option("mon_osd_destroyed_out_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(600)
+    .add_service("mon")
     .set_description("mark any OSD 'out' that has been 'destroy'ed for this long (seconds)"),
 
     Option("mon_osd_down_out_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(600)
+    .add_service("mon")
     .set_description("mark any OSD 'out' that has been 'down' for this long (seconds)"),
 
     Option("mon_osd_down_out_subtree_limit", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("rack")
+    .add_service("mon")
     .set_description("do not automatically mark OSDs 'out' if an entire subtree of this size is down")
     .add_see_also("mon_osd_down_out_interval"),
 
     Option("mon_osd_min_up_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.3)
+    .add_service("mon")
     .set_description("do not automatically mark OSDs 'out' if fewer than this many OSDs are 'up'")
     .add_see_also("mon_osd_down_out_interval"),
 
     Option("mon_osd_min_in_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.75)
+    .add_service("mon")
     .set_description("do not automatically mark OSDs 'out' if fewer than this many OSDs are 'in'")
     .add_see_also("mon_osd_down_out_interval"),
 
     Option("mon_osd_warn_op_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(32)
+    .add_service("mgr")
     .set_description("issue REQUEST_SLOW health warning if OSD ops are slower than this age (seconds)"),
 
     Option("mon_osd_err_op_age_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(128)
+    .add_service("mgr")
     .set_description("issue REQUEST_STUCK health error if OSD ops are slower than is age (seconds)"),
 
     Option("mon_osd_max_split_count", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(32)
+    .add_service("mon")
     .set_description(""),
 
     Option("mon_osd_prime_pg_temp", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(true)
+    .add_service("mon")
     .set_description("minimize peering work by priming pg_temp values after a map change"),
 
     Option("mon_osd_prime_pg_temp_max_time", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(.5)
+    .add_service("mon")
     .set_description("maximum time to spend precalculating PG mappings on map change (seconds)"),
 
     Option("mon_osd_prime_pg_temp_max_estimate", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.25)
+    .add_service("mon")
     .set_description("calculate all PG mappings if estimated fraction of PGs that change is above this amount"),
 
     Option("mon_stat_smooth_intervals", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
@@ -1406,16 +1461,19 @@ std::vector<Option> get_global_options() {
 
     Option("mon_election_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(5)
+    .add_service("mon")
     .set_description("maximum time for a mon election (seconds)"),
 
     Option("mon_lease", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(5)
+    .add_service("mon")
     .set_description("lease interval between quorum monitors (seconds)")
     .set_long_description("This setting controls how sensitive your mon quorum is to intermittent network issues or other failures."),
 
     Option("mon_lease_renew_interval_factor", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.6)
     .set_min_max((double)0.0, (double).9999999)
+    .add_service("mon")
     .set_description("multiple of mon_lease for the lease renewal interval")
     .set_long_description("Leases must be renewed before they time out.  A smaller value means frequent renewals, while a value close to 1 makes a lease expiration more likely.")
     .add_see_also("mon_lease"),
@@ -1423,28 +1481,34 @@ std::vector<Option> get_global_options() {
     Option("mon_lease_ack_timeout_factor", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(2.0)
     .set_min_max(1.0001, 100.0)
+    .add_service("mon")
     .set_description("multiple of mon_lease for the lease ack interval before calling new election")
     .add_see_also("mon_lease"),
 
     Option("mon_accept_timeout_factor", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(2.0)
+    .add_service("mon")
     .set_description("multiple of mon_lease for follower mons to accept proposed state changes before calling a new election")
     .add_see_also("mon_lease"),
 
     Option("mon_clock_drift_allowed", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.050)
+    .add_service("mon")
     .set_description("allowed clock drift (in seconds) between mons before issuing a health warning"),
 
     Option("mon_clock_drift_warn_backoff", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(5)
+    .add_service("mon")
     .set_description("exponential backoff factor for logging clock drift warnings in the cluster log"),
 
     Option("mon_timecheck_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(300.0)
+    .add_service("mon")
     .set_description("frequency of clock synchronization checks between monitors (seconds)"),
 
     Option("mon_timecheck_skew_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(30.0)
+    .add_service("mon")
     .set_description("frequency of clock synchronization (re)checks between monitors while clocks are believed to be skewed (seconds)")
     .add_see_also("mon_timecheck_interval"),
 
@@ -1456,10 +1520,12 @@ std::vector<Option> get_global_options() {
 
     Option("mon_pg_warn_min_per_osd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(30)
+    .add_service("mgr")
     .set_description("minimal number PGs per (in) osd before we warn the admin"),
 
     Option("mon_max_pg_per_osd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(250)
+    .add_service("mgr")
     .set_description("Max number of PGs per OSD the cluster will allow"),
 
     Option("mon_pg_warn_max_object_skew", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
@@ -1484,6 +1550,7 @@ std::vector<Option> get_global_options() {
 
     Option("mon_cache_target_full_warn_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.66)
+    .add_service("mgr")
     .set_flag(Option::FLAG_NO_MON_UPDATE)
     .set_flag(Option::FLAG_CLUSTER_CREATE)
     .set_description("issue CACHE_POOL_NEAR_FULL health warning when cache pool utilization exceeds this ratio of usable space"),
@@ -1514,206 +1581,254 @@ std::vector<Option> get_global_options() {
 
     Option("mon_allow_pool_delete", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
+    .add_service("mon")
     .set_description("allow pool deletions"),
 
     Option("mon_fake_pool_delete", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
+    .add_service("mon")
     .set_description("fake pool deletions by renaming the rados pool"),
 
     Option("mon_globalid_prealloc", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(10000)
+    .add_service("mon")
     .set_description("number of globalid values to preallocate")
     .set_long_description("This setting caps how many new clients can authenticate with the cluster before the monitors have to perform a write to preallocate more.  Large values burn through the 64-bit ID space more quickly."),
 
     Option("mon_osd_report_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(900)
+    .add_service("mon")
     .set_description("time before OSDs who do not report to the mons are marked down (seconds)"),
 
     Option("mon_force_standby_active", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
+    .add_service("mon")
     .set_description("allow use of MDS daemons in standby-replay as replacements"),
 
     Option("mon_warn_on_legacy_crush_tunables", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
+    .add_service("mgr")
     .set_description("issue OLD_CRUSH_TUNABLES health warning if CRUSH tunables are older than mon_crush_min_required_version")
     .add_see_also("mon_crush_min_required_version"),
 
     Option("mon_crush_min_required_version", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("firefly")
+    .add_service("mgr")
     .set_description("minimum ceph release to use for mon_warn_on_legacy_crush_tunables")
     .add_see_also("mon_warn_on_legacy_crush_tunables"),
 
     Option("mon_warn_on_crush_straw_calc_version_zero", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
+    .add_service("mgr")
     .set_description("issue OLD_CRUSH_STRAW_CALC_VERSION health warning if the CRUSH map's straw_calc_version is zero"),
 
     Option("mon_warn_on_osd_down_out_interval_zero", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
+    .add_service("mgr")
     .set_description("issue OSD_NO_DOWN_OUT_INTERVAL health warning if mon_osd_down_out_interval is zero")
     .set_long_description("Having mon_osd_down_out_interval set to 0 means that down OSDs are not marked out automatically and the cluster does not heal itself without administrator intervention.")
     .add_see_also("mon_osd_down_out_interval"),
 
     Option("mon_warn_on_cache_pools_without_hit_sets", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
+    .add_service("mgr")
     .set_description("issue CACHE_POOL_NO_HIT_SET health warning for cache pools that do not have hit sets configured"),
 
     Option("mon_warn_on_pool_no_app", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(true)
+    .add_service("mgr")
     .set_description("issue POOL_APP_NOT_ENABLED health warning if pool has not application enabled"),
 
     Option("mon_warn_on_misplaced", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
+    .add_service("mgr")
     .set_description("Issue a health warning if there are misplaced objects"),
 
     Option("mon_max_snap_prune_per_epoch", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(100)
+    .add_service("mon")
     .set_description("max number of pruned snaps we will process in a single OSDMap epoch"),
 
     Option("mon_min_osdmap_epochs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(500)
+    .add_service("mon")
     .set_description("min number of OSDMaps to store"),
 
     Option("mon_max_log_epochs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(500)
+    .add_service("mon")
     .set_description("max number of past cluster log epochs to store"),
 
     Option("mon_max_mdsmap_epochs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(500)
+    .add_service("mon")
     .set_description("max number of FSMaps/MDSMaps to store"),
 
     Option("mon_max_mgrmap_epochs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(500)
+    .add_service("mon")
     .set_description("max number of MgrMaps to store"),
 
     Option("mon_max_osd", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(10000)
+    .add_service("mon")
     .set_description("max number of OSDs in a cluster"),
 
     Option("mon_probe_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(2.0)
+    .add_service("mon")
     .set_description("timeout for querying other mons during bootstrap pre-election phase (seconds)"),
 
     Option("mon_client_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(100ul << 20)
+    .add_service("mon")
     .set_description("max bytes of outstanding client messages mon will read off the network"),
 
     Option("mon_daemon_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(400ul << 20)
+    .add_service("mon")
     .set_description("max bytes of outstanding mon messages mon will read off the network"),
 
     Option("mon_mgr_proxy_client_bytes_ratio", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(.3)
+    .add_service("mon")
     .set_description("ratio of mon_client_bytes that can be consumed by "
                      "proxied mgr commands before we error out to client"),
 
     Option("mon_log_max_summary", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(50)
+    .add_service("mon")
     .set_description("number of recent cluster log messages to retain"),
 
     Option("mon_max_log_entries_per_event", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(4096)
+    .add_service("mon")
     .set_description("max cluster log entries per paxos event"),
 
     Option("mon_reweight_min_pgs_per_osd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(10)
+    .add_service("mgr")
     .set_description(""),
 
     Option("mon_reweight_min_bytes_per_osd", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(100_M)
+    .add_service("mgr")
     .set_description(""),
 
     Option("mon_reweight_max_osds", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(4)
+    .add_service("mgr")
     .set_description(""),
 
     Option("mon_reweight_max_change", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0.05)
+    .add_service("mgr")
     .set_description(""),
 
     Option("mon_health_to_clog", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
+    .add_service("mon")
     .set_description("log monitor health to cluster log"),
 
     Option("mon_health_to_clog_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1_hr)
+    .add_service("mon")
     .set_description("frequency to log monitor health to cluster log")
     .add_see_also("mon_health_to_clog"),
 
     Option("mon_health_to_clog_tick_interval", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(60.0)
+    .add_service("mon")
     .set_description(""),
 
     Option("mon_health_max_detail", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(50)
+    .add_service("mon")
     .set_description("max detailed pgs to report in health detail"),
 
     Option("mon_health_log_update_period", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(5)
+    .add_service("mon")
     .set_description("minimum time in seconds between log messages about "
                      "each health check")
     .set_min(0),
 
     Option("mon_data_avail_crit", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(5)
+    .add_service("mon")
     .set_description("issue MON_DISK_CRIT health error when mon available space below this percentage"),
 
     Option("mon_data_avail_warn", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(30)
+    .add_service("mon")
     .set_description("isue MON_DISK_LOW health warning when mon available space below this percentage"),
 
     Option("mon_data_size_warn", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(15_G)
+    .add_service("mon")
     .set_description("issue MON_DISK_BIG health warning when mon database is above this size"),
 
     Option("mon_warn_not_scrubbed", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
+    .add_service("mon")
     .set_description("if non-zero, issue PG_NOT_SCRUBBED when PG(s) have not been scrubbed for more than this long beyond the configured mon_scrub_interval (seconds)")
     .add_see_also("osd_scrub_min_interval"),
 
     Option("mon_warn_not_deep_scrubbed", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
+    .add_service("mon")
     .set_description("if non-zero, issue PG_NOT_DEEP_SCRUBBED when PG(s) have not been scrubbed for more than this long beyond the configured mon_scrub_interval (seconds)")
     .add_see_also("osd_deep_scrub_interval"),
 
     Option("mon_scrub_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1_day)
+    .add_service("mon")
     .set_description("frequency for scrubbing mon database"),
 
     Option("mon_scrub_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(5_min)
+    .add_service("mon")
     .set_description("timeout to restart scrub of mon quorum participant does not respond for the latest chunk"),
 
     Option("mon_scrub_max_keys", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(100)
+    .add_service("mon")
     .set_description("max keys per on scrub chunk/step"),
 
     Option("mon_scrub_inject_crc_mismatch", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0.0)
+    .add_service("mon")
     .set_description("probability for injecting crc mismatches into mon scrub"),
 
     Option("mon_scrub_inject_missing_keys", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0.0)
+    .add_service("mon")
     .set_description("probability for injecting missing keys into mon scrub"),
 
     Option("mon_config_key_max_entry_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(64_K)
+    .add_service("mon")
     .set_description("Defines the number of bytes allowed to be held in a "
 		     "single config-key entry"),
 
     Option("mon_sync_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(60.0)
+    .add_service("mon")
     .set_description("timeout before canceling sync if syncing mon does not respond"),
 
     Option("mon_sync_max_payload_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(1_M)
+    .add_service("mon")
     .set_description("target max message payload for mon sync"),
 
     Option("mon_sync_debug", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
+    .add_service("mon")
     .set_description("enable extra debugging during mon sync"),
 
     Option("mon_inject_sync_get_chunk_delay", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0)
+    .add_service("mon")
     .set_description("inject delay during sync (seconds)"),
 
     Option("mon_osd_min_down_reporters", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
@@ -1730,23 +1845,28 @@ std::vector<Option> get_global_options() {
 
     Option("mon_osd_snap_trim_queue_warn_on", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(32768)
+    .add_service("mon")
     .set_description("Warn when snap trim queue is that large (or larger).")
     .set_long_description("Warn when snap trim queue length for at least one PG crosses this value, as this is indicator of snap trimmer not keeping up, wasting disk space"),
 
     Option("mon_osd_force_trim_to", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(0)
+    .add_service("mon")
     .set_description("force mons to trim osdmaps through this epoch"),
 
     Option("mon_mds_force_trim_to", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(0)
+    .add_service("mon")
     .set_description("force mons to trim mdsmaps/fsmaps through this epoch"),
 
     Option("mon_mds_skip_sanity", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
+    .add_service("mon")
     .set_description("skip sanity checks on fsmap/mdsmap"),
 
     Option("mon_debug_extra_checks", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
+    .add_service("mon")
     .set_description("Enable some additional monitor checks")
     .set_long_description(
         "Enable some additional monitor checks that would be too expensive "
@@ -1755,6 +1875,7 @@ std::vector<Option> get_global_options() {
 
     Option("mon_debug_block_osdmap_trim", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
+    .add_service("mon")
     .set_description("Block OSDMap trimming while the option is enabled.")
     .set_long_description(
         "Blocking OSDMap trimming may be quite helpful to easily reproduce "
@@ -1763,93 +1884,113 @@ std::vector<Option> get_global_options() {
 
     Option("mon_debug_deprecated_as_obsolete", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
+    .add_service("mon")
     .set_description("treat deprecated mon commands as obsolete"),
 
     Option("mon_debug_dump_transactions", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
+    .add_service("mon")
     .set_description("dump paxos transactions to log")
     .add_see_also("mon_debug_dump_location"),
 
     Option("mon_debug_dump_json", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
+    .add_service("mon")
     .set_description("dump paxos transasctions to log as json")
     .add_see_also("mon_debug_dump_transactions"),
 
     Option("mon_debug_dump_location", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("/var/log/ceph/$cluster-$name.tdump")
+    .add_service("mon")
     .set_description("file to dump paxos transactions to")
     .add_see_also("mon_debug_dump_transactions"),
 
     Option("mon_debug_no_require_mimic", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
+    .add_service("mon")
     .set_flag(Option::FLAG_CLUSTER_CREATE)
     .set_description("do not set mimic feature for new mon clusters"),
 
     Option("mon_debug_no_require_nautilus", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
+    .add_service("mon")
     .set_flag(Option::FLAG_CLUSTER_CREATE)
     .set_description("do not set nautilus feature for new mon clusters"),
 
     Option("mon_debug_no_require_bluestore_for_ec_overwrites", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
+    .add_service("mon")
     .set_description("do not require bluestore OSDs to enable EC overwrites on a rados pool"),
 
     Option("mon_debug_no_initial_persistent_features", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
+    .add_service("mon")
     .set_flag(Option::FLAG_CLUSTER_CREATE)
     .set_description("do not set any monmap features for new mon clusters"),
 
     Option("mon_inject_transaction_delay_max", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(10.0)
+    .add_service("mon")
     .set_description("max duration of injected delay in paxos"),
 
     Option("mon_inject_transaction_delay_probability", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0)
+    .add_service("mon")
     .set_description("probability of injecting a delay in paxos"),
 
     Option("mon_inject_pg_merge_bounce_probability", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0)
+    .add_service("mon")
     .set_description("probability of failing and reverting a pg_num decrement"),
 
     Option("mon_sync_provider_kill_at", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(0)
+    .add_service("mon")
     .set_description("kill mon sync requester at specific point"),
 
     Option("mon_sync_requester_kill_at", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(0)
+    .add_service("mon")
     .set_description("kill mon sync requestor at specific point"),
 
     Option("mon_force_quorum_join", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
+    .add_service("mon")
     .set_description("force mon to rejoin quorum even though it was just removed"),
 
     Option("mon_keyvaluedb", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("rocksdb")
     .set_enum_allowed({"leveldb", "rocksdb"})
     .set_flag(Option::FLAG_CREATE)
+    .add_service("mon")
     .set_description("database backend to use for the mon database"),
 
     Option("mon_debug_unsafe_allow_tier_with_nonempty_snaps", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
+    .add_service("mon")
     .set_description(""),
 
     Option("mon_osd_blacklist_default_expire", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(1_hr)
+    .add_service("mon")
     .set_description("Duration in seconds that blacklist entries for clients "
                      "remain in the OSD map"),
 
     Option("mon_mds_blacklist_interval", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(1_day)
     .set_min(1_hr)
+    .add_service("mon")
     .set_description("Duration in seconds that blacklist entries for MDS "
                      "daemons remain in the OSD map"),
 
     Option("mon_osd_crush_smoke_test", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
+    .add_service("mon")
     .set_description("perform a smoke test on any new CRUSH map before accepting changes"),
 
     Option("mon_smart_report_timeout", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(5)
+    .add_service("mon")
     .set_description("Timeout (in seconds) for smarctl to run, default is set to 5"),
 
 
@@ -1857,42 +1998,52 @@ std::vector<Option> get_global_options() {
 
     Option("paxos_stash_full_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(25)
+    .add_service("mon")
     .set_description(""),
 
     Option("paxos_max_join_drift", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(10)
+    .add_service("mon")
     .set_description(""),
 
     Option("paxos_propose_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(1.0)
+    .add_service("mon")
     .set_description(""),
 
     Option("paxos_min_wait", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0.05)
+    .add_service("mon")
     .set_description(""),
 
     Option("paxos_min", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(500)
+    .add_service("mon")
     .set_description(""),
 
     Option("paxos_trim_min", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(250)
+    .add_service("mon")
     .set_description(""),
 
     Option("paxos_trim_max", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(500)
+    .add_service("mon")
     .set_description(""),
 
     Option("paxos_service_trim_min", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(250)
+    .add_service("mon")
     .set_description(""),
 
     Option("paxos_service_trim_max", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(500)
+    .add_service("mon")
     .set_description(""),
 
     Option("paxos_kill_at", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(0)
+    .add_service("mon")
     .set_description(""),
 
 
