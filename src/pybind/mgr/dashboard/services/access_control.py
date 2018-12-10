@@ -146,6 +146,13 @@ CEPHFS_MGR_ROLE = Role('cephfs-manager', 'CephFS Manager', {
     Scope.CONFIG_OPT: [_P.READ],
 })
 
+GANESHA_MGR_ROLE = Role('ganesha-manager', 'NFS Ganesha Manager', {
+    Scope.NFS_GANESHA: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+    Scope.CEPHFS: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+    Scope.RGW: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+    Scope.CONFIG_OPT: [_P.READ],
+})
+
 
 SYSTEM_ROLES = {
     ADMIN_ROLE.name: ADMIN_ROLE,
@@ -155,6 +162,7 @@ SYSTEM_ROLES = {
     CLUSTER_MGR_ROLE.name: CLUSTER_MGR_ROLE,
     POOL_MGR_ROLE.name: POOL_MGR_ROLE,
     CEPHFS_MGR_ROLE.name: CEPHFS_MGR_ROLE,
+    GANESHA_MGR_ROLE.name: GANESHA_MGR_ROLE,
 }
 
 
