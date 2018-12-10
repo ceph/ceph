@@ -111,7 +111,7 @@ class SingleType(object):
         osds = self.computed['osds']
         for device in devices:
             for osd in range(self.osds_per_device):
-                device_size = disk.Size(b=device.sys_api['size'])
+                device_size = disk.Size(b=device.lvm_size.b)
                 osd_size = device_size / self.osds_per_device
                 journal_size = self.journal_size
                 data_size = osd_size - journal_size
@@ -291,7 +291,7 @@ class MixedType(object):
         self.blank_ssds = set(self.ssds).difference(self.vg_ssds)
         self.total_blank_ssd_size = disk.Size(b=0)
         for blank_ssd in self.blank_ssds:
-            self.total_blank_ssd_size += disk.Size(b=blank_ssd.sys_api['size'])
+            self.total_blank_ssd_size += disk.Size(b=blank_ssd.lvm_size.b)
 
         self.total_available_journal_space = self.total_blank_ssd_size + common_vg_size
 
@@ -340,7 +340,7 @@ class MixedType(object):
 
         for device in self.hdds:
             for osd in range(self.osds_per_device):
-                device_size = disk.Size(b=device.sys_api['size'])
+                device_size = disk.Size(b=device.lvm_size.b)
                 data_size = device_size / self.osds_per_device
                 osd = {'data': {}, 'journal': {}}
                 osd['data']['path'] = device.path
@@ -386,9 +386,8 @@ class MixedType(object):
 
         for osd in self.computed['osds']:
             data_path = osd['data']['path']
-            data_lv_size = disk.Size(b=osd['data']['size']).gb.as_int()
             data_vg = data_vgs[data_path]
-            data_lv_extents = data_vg.sizing(size=data_lv_size)['extents']
+            data_lv_extents = data_vg.sizing(parts=1)['extents']
             data_lv = lvm.create_lv(
                 'osd-data', data_vg.name, extents=data_lv_extents, uuid_name=True
             )

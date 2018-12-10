@@ -428,6 +428,8 @@ def create_vg(devices, name=None, name_prefix=None):
         name = "ceph-%s" % str(uuid.uuid4())
     process.run([
         'vgcreate',
+        '-s',
+        '1G',
         '--force',
         '--yes',
         name] + devices

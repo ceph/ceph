@@ -1,5 +1,6 @@
 import os
 import pytest
+from ceph_volume.util import disk
 from ceph_volume.api import lvm as lvm_api
 from ceph_volume import conf, configuration
 
@@ -66,6 +67,7 @@ def fakedevice(factory):
             is_lvm_member=True,
         )
         params.update(dict(kw))
+        params['lvm_size'] = disk.Size(b=params['sys_api'].get("size", 0))
         return factory(**params)
     return apply
 
