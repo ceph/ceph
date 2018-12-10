@@ -107,17 +107,6 @@ using namespace ceph;
     return buffer_missed_crc;
   }
 
-  static std::atomic<unsigned> buffer_c_str_accesses { 0 };
-
-  static bool buffer_track_c_str = get_env_bool("CEPH_BUFFER_TRACK");
-
-  void buffer::track_c_str(bool b) {
-    buffer_track_c_str = b;
-  }
-  int buffer::get_c_str_accesses() {
-    return buffer_c_str_accesses;
-  }
-
 #ifdef CEPH_HAVE_SETPIPE_SZ
   static std::atomic<unsigned> buffer_max_pipe_size { 0 };
   int update_max_pipe_size() {
@@ -676,26 +665,18 @@ using namespace ceph;
 
   const char *buffer::ptr::c_str() const {
     ceph_assert(_raw);
-    if (buffer_track_c_str)
-      buffer_c_str_accesses++;
     return _raw->get_data() + _off;
   }
   char *buffer::ptr::c_str() {
     ceph_assert(_raw);
-    if (buffer_track_c_str)
-      buffer_c_str_accesses++;
     return _raw->get_data() + _off;
   }
   const char *buffer::ptr::end_c_str() const {
     ceph_assert(_raw);
-    if (buffer_track_c_str)
-      buffer_c_str_accesses++;
     return _raw->get_data() + _off + _len;
   }
   char *buffer::ptr::end_c_str() {
     ceph_assert(_raw);
-    if (buffer_track_c_str)
-      buffer_c_str_accesses++;
     return _raw->get_data() + _off + _len;
   }
 
