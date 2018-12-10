@@ -111,8 +111,8 @@ For example, a key pair can be generated with a command similar to::
 The ``dashboard.crt`` file should then be signed by a CA. Once that is done, you
 can enable it for all Ceph manager instances by running the following commands::
 
-  $ ceph config-key set mgr mgr/dashboard/crt -i dashboard.crt
-  $ ceph config-key set mgr mgr/dashboard/key -i dashboard.key
+  $ ceph config-key set mgr/dashboard/crt -i dashboard.crt
+  $ ceph config-key set mgr/dashboard/key -i dashboard.key
 
 If different certificates are desired for each manager instance for some reason,
 the name of the instance can be included as follows (where ``$name`` is the name
