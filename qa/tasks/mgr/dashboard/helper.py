@@ -319,9 +319,16 @@ class DashboardTestCase(MgrTestCase):
     def reset_session(cls):
         cls._session = requests.Session()
 
+    def assertSubset(self, data, biggerData):
+        for key, value in data.items():
+            self.assertEqual(biggerData[key], value)
+
     def assertJsonBody(self, data):
         body = self._resp.json()
         self.assertEqual(body, data)
+
+    def assertJsonSubset(self, data):
+        self.assertSubset(data, self._resp.json())
 
     def assertSchema(self, data, schema):
         try:
