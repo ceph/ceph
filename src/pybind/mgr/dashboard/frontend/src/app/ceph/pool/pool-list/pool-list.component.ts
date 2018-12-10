@@ -131,10 +131,6 @@ export class PoolListComponent implements OnInit {
   }
 
   updateSelection(selection: CdTableSelection) {
-    if (selection.hasSingleSelection && Object.keys(selection.first()).length === 3) {
-      selection.selected = [];
-      selection.update();
-    }
     this.selection = selection;
   }
 
