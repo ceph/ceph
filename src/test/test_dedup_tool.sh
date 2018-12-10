@@ -81,9 +81,9 @@ function test_dedup_ratio_fixed()
 
   RESULT=$($DEDUP_TOOL --op estimate --pool $POOL --chunk-size 4096  --chunk-algorithm fixed --fingerprint-algorithm sha1 --max-thread 4 --debug | grep result | awk '{print$2}')
 
-  if [ 10485760 -ne $RESULT ];
+  if [ 98566144 -ne $RESULT ];
   then
-    die "Estimate failed expecting 10485760 result $RESULT"
+    die "Estimate failed expecting 98566144 result $RESULT"
   fi
 
   rm -rf ./dedup_object_1k ./dedup_object_100k ./dedup_object_10m

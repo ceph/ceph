@@ -97,7 +97,6 @@ class EstimateThread : public Thread
   int32_t timeout;
   bool m_stop = false;
   uint64_t total_bytes = 0;
-  uint64_t deduped_bytes = 0;
   uint64_t examined_objects = 0;
   uint64_t total_objects = 0;
 #define COND_WAIT_INTERVAL 10
@@ -115,7 +114,6 @@ public:
   uint64_t get_examined_objects() { return examined_objects; }
   uint64_t get_total_bytes() { return total_bytes; }
   uint64_t get_total_objects() { return total_objects; }
-  uint64_t get_deduped_bytes() { return deduped_bytes; }
   friend class EstimateDedupRatio;
   friend class ChunkScrub;
 };
@@ -140,20 +138,18 @@ public:
   void estimate_dedup_ratio();
   void print_status(Formatter *f, ostream &out);
   map< string, pair <uint64_t, uint64_t> > &get_chunk_statistics() { return local_chunk_statistics; }
+  uint64_t fixed_chunk(string oid, uint64_t offset);
 };
 
 class ChunkScrub: public EstimateThread
 {
   IoCtx chunk_io_ctx;
-  uint64_t examined_objects = 0;
-  uint64_t total_objects = 0;
 
 public:
   ChunkScrub(IoCtx& io_ctx, int n, int m, ObjectCursor begin, ObjectCursor end, 
 	     IoCtx& chunk_io_ctx, int32_t timeout):
     EstimateThread(io_ctx, n, m, begin, end, timeout), chunk_io_ctx(chunk_io_ctx)
     { }
-
   void* entry() {
     chunk_scrub_common();
     return NULL;
@@ -170,27 +166,39 @@ static void print_dedup_estimate(bool debug = false)
   uint64_t dedup_size = 0;
   uint64_t examined_objects = 0;
   EstimateDedupRatio *ratio = NULL;
-  if (debug) {
-    for (auto &et : estimate_threads) {
-      Mutex::Locker l(glock);
-      ratio = dynamic_cast<EstimateDedupRatio*>(et.get());
-      chunk_statistics.insert(ratio->get_chunk_statistics().begin(),
-			      ratio->get_chunk_statistics().end());
+  for (auto &et : estimate_threads) {
+    Mutex::Locker l(glock);
+    ratio = dynamic_cast<EstimateDedupRatio*>(et.get());
+    assert(ratio);
+    for (auto p : ratio->get_chunk_statistics()) {
+      auto c = chunk_statistics.find(p.first);
+      if (c != chunk_statistics.end()) {
+	c->second.first += p.second.first;
+      }	else {
+	chunk_statistics.insert(p);
+      }
     }
+  }
 
+  if (debug) {
     for (auto p : chunk_statistics) {
       cout << " -- " << std::endl;
       cout << " key: " << p.first << std::endl;
       cout << " count: " << p.second.first << std::endl;
       cout << " chunk_size: " << p.second.second << std::endl;
+      dedup_size += p.second.second;
       cout << " -- " << std::endl;
     }
+  } else {
+    for (auto p : chunk_statistics) {
+      dedup_size += p.second.second;
+    }
+
   }
 
   for (auto &et : estimate_threads) {
     total_size += et->get_total_bytes();
     examined_objects += et->get_examined_objects();
-    dedup_size += et->get_deduped_bytes();
   }
 
   cout << " result: " << total_size << " / " << dedup_size << " (total size / dedup size) " << std::endl;
@@ -220,7 +228,6 @@ void EstimateDedupRatio::print_status(Formatter *f, ostream &out)
     f->close_section();
     f->open_object_section("Status");
     f->dump_string("Total bytes", stringify(total_bytes));
-    f->dump_string("Deduped bytes", stringify(deduped_bytes));
     f->dump_string("Examined objectes", stringify(examined_objects));
     f->close_section();
     f->flush(out);
@@ -232,8 +239,6 @@ void EstimateDedupRatio::estimate_dedup_ratio()
 {
   ObjectCursor shard_start;
   ObjectCursor shard_end;
-  unsigned op_size = default_op_size;
-  int ret;
   utime_t cur_time = ceph_clock_now();
 
   io_ctx.object_list_slice(
@@ -265,51 +270,19 @@ void EstimateDedupRatio::estimate_dedup_ratio()
 	  delete formatter;
 	  return;
 	}
-	bufferlist outdata;
-	ret = io_ctx.read(oid, outdata, op_size, offset);
-	if (ret <= 0) {
-	  break;
-	}
 
+	uint64_t next_offset;
 	if (chunk_algo == "fixed") {
-	  if (fp_algo == "sha1") {
-	    uint64_t c_offset = 0;
-	    while (c_offset < outdata.length()) {
-	      bufferlist chunk;
-	      if (outdata.length() - c_offset > chunk_size) {
-		bufferptr bptr(chunk_size);
-		chunk.push_back(std::move(bptr));
-		chunk.copy_in(0, chunk_size, outdata.c_str());	  
-	      } else {
-		bufferptr bptr(outdata.length() - c_offset);
-		chunk.push_back(std::move(bptr));
-		chunk.copy_in(0, outdata.length() - c_offset, outdata.c_str());	  
-	      }
-	      sha1_digest_t sha1_val = chunk.sha1();
-	      string fp = sha1_val.to_str();
-	      auto p = local_chunk_statistics.find(fp);
-	      if (p != local_chunk_statistics.end()) {
-		uint64_t count = p->second.first;
-		count++;
-		local_chunk_statistics[fp] = make_pair(count, chunk.length());
-	      } else {
-		local_chunk_statistics[fp] = make_pair(1, chunk.length());
-		deduped_bytes += chunk.length();
-	      }
-	      total_bytes += chunk.length();
-	      c_offset = c_offset + chunk_size;
-	    }
-	  } else {
-	    ceph_assert(0 == "no support fingerprint algorithm"); 
-	  }
+	  next_offset = fixed_chunk(oid, offset);
 	} else {
+	  // CDC ..
 	  ceph_assert(0 == "no support chunk algorithm"); 
 	}
 	
-	if (outdata.length() < op_size) {
+	if (!next_offset) {
 	  break;
 	}
-	offset += outdata.length();
+	offset += next_offset;
 	m_cond.WaitInterval(m_lock,utime_t(0, COND_WAIT_INTERVAL));
 	if (cur_time + utime_t(timeout, 0) < ceph_clock_now()) {
 	  Formatter *formatter = Formatter::create("json-pretty");
@@ -322,6 +295,52 @@ void EstimateDedupRatio::estimate_dedup_ratio()
     }
     total_objects++;
   }
+}
+
+uint64_t EstimateDedupRatio::fixed_chunk(string oid, uint64_t offset)
+{
+  unsigned op_size = default_op_size;
+  int ret;
+  bufferlist outdata;
+  ret = io_ctx.read(oid, outdata, op_size, offset);
+  if (ret <= 0) {
+    return 0;
+  }
+
+  if (fp_algo == "sha1") {
+    uint64_t c_offset = 0;
+    while (c_offset < outdata.length()) {
+      bufferlist chunk;
+      if (outdata.length() - c_offset > chunk_size) {
+	bufferptr bptr(chunk_size);
+	chunk.push_back(std::move(bptr));
+	chunk.copy_in(0, chunk_size, outdata.c_str());	  
+      } else {
+	bufferptr bptr(outdata.length() - c_offset);
+	chunk.push_back(std::move(bptr));
+	chunk.copy_in(0, outdata.length() - c_offset, outdata.c_str());	  
+      }
+      sha1_digest_t sha1_val = chunk.sha1();
+      string fp = sha1_val.to_str();
+      auto p = local_chunk_statistics.find(fp);
+      if (p != local_chunk_statistics.end()) {
+	uint64_t count = p->second.first;
+	count++;
+	local_chunk_statistics[fp] = make_pair(count, chunk.length());
+      } else {
+	local_chunk_statistics[fp] = make_pair(1, chunk.length());
+      }
+      total_bytes += chunk.length();
+      c_offset = c_offset + chunk_size;
+    }
+  } else {
+    ceph_assert(0 == "no support fingerperint algorithm"); 
+  }
+
+  if (outdata.length() < op_size) {
+    return 0;
+  }
+  return outdata.length();
 }
 
 void ChunkScrub::chunk_scrub_common()
@@ -391,8 +410,6 @@ void ChunkScrub::chunk_scrub_common()
     }
     total_objects++;
   }
-  cout << " Total object : " << total_objects << std::endl;
-  cout << " Completed object : " << examined_objects << std::endl;
 }
 
 void ChunkScrub::print_status(Formatter *f, ostream &out)
@@ -534,7 +551,7 @@ static void print_chunk_scrub()
   }
 
   cout << " Total object : " << total_objects << std::endl;
-  cout << " Completed object : " << examined_objects << std::endl;
+  cout << " Examined object : " << examined_objects << std::endl;
 }
 
 int chunk_scrub_common(const std::map < std::string, std::string > &opts,
