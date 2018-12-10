@@ -478,7 +478,7 @@ void RGWUserInfo::dump(Formatter *f) const
   encode_json("temp_url_keys", temp_url_keys, f);
 
   string user_source_type;
-  switch ((RGWUserSourceType)type) {
+  switch ((RGWIdentityType)type) {
   case TYPE_RGW:
     user_source_type = "rgw";
     break;

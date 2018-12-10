@@ -629,7 +629,9 @@ void encode_json(const char *name, const RGWUserCaps& val, Formatter *f);
 
 void decode_json_obj(obj_version& v, JSONObj *obj);
 
-enum RGWUserSourceType
+
+
+enum RGWIdentityType
 {
   TYPE_NONE=0,
   TYPE_RGW=1,
