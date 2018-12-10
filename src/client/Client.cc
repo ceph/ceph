@@ -3256,10 +3256,8 @@ int Client::get_caps(Inode *in, int need, int want, int *phave, loff_t endoff)
 	  return ret;
 	continue;
       }
-      if ((mds_wanted & file_wanted) ==
-	  (file_wanted & (CEPH_CAP_FILE_RD | CEPH_CAP_FILE_WR))) {
+      if (!(file_wanted & ~mds_wanted))
 	in->flags &= ~I_CAP_DROPPED;
-      }
     }
 
     if (waitfor_caps)
@@ -3754,11 +3752,20 @@ void Client::wake_up_session_caps(MetaSession *s, bool reconnect)
 {
   xlist<Cap*>::iterator iter = s->caps.begin();
   while (!iter.end()){
-    auto in = (*iter)->inode;
+    auto cap = *iter;
+    auto in = cap->inode;
     ++iter;
     if (reconnect) {
       in->requested_max_size = 0;
       in->wanted_max_size = 0;
+    } else {
+      if (cap->gen < s->cap_gen) {
+	// mds did not re-issue stale cap.
+	cap->issued = cap->implemented = CEPH_CAP_PIN;
+	// make sure mds knows what we want.
+	if (in->caps_file_wanted() & ~cap->wanted)
+	  in->flags |= I_CAP_DROPPED;
+      }
     }
     signal_cond_list(in->waitfor_caps);
   }
@@ -3929,8 +3936,11 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
 {
   Cap *cap = 0;
   mds_rank_t mds = mds_session->mds_num;
-  if (in->caps.count(mds)) {
-    cap = in->caps[mds];
+  auto it = in->caps.find(mds);
+  if (it != in->caps.end()) {
+    cap = it->second;
+    if (cap->gen < mds_session->cap_gen)
+      cap->issued = cap->implemented = CEPH_CAP_PIN;
 
     /*
      * auth mds of the inode changed. we received the cap export
@@ -4069,10 +4079,10 @@ void Client::remove_session_caps(MetaSession *s)
       dirty_caps = in->dirty_caps | in->flushing_caps;
       in->wanted_max_size = 0;
       in->requested_max_size = 0;
-      in->flags |= I_CAP_DROPPED;
     }
+    if (cap->wanted | cap->issued)
+      in->flags |= I_CAP_DROPPED;
     remove_cap(cap, false);
-    signal_cond_list(in->waitfor_caps);
     if (cap_snaps) {
       InodeRef tmp_ref(in);
       in->cap_snaps.clear();
@@ -4087,6 +4097,7 @@ void Client::remove_session_caps(MetaSession *s)
       in->mark_caps_clean();
       put_inode(in);
     }
+    signal_cond_list(in->waitfor_caps);
   }
   s->flushing_caps_tids.clear();
   sync_cond.Signal();
@@ -4873,10 +4884,9 @@ void Client::handle_cap_export(MetaSession *session, Inode *in, MClientCaps *m)
   if (in->caps.count(mds))
     cap = in->caps[mds];
 
-  const mds_rank_t peer_mds = mds_rank_t(m->peer.mds);
-
   if (cap && cap->cap_id == m->get_cap_id()) {
     if (m->peer.cap_id) {
+      const mds_rank_t peer_mds = mds_rank_t(m->peer.mds);
       MetaSession *tsession = _get_or_open_mds_session(peer_mds);
       if (in->caps.count(peer_mds)) {
 	Cap *tcap = in->caps[peer_mds];
@@ -4899,7 +4909,7 @@ void Client::handle_cap_export(MetaSession *session, Inode *in, MClientCaps *m)
 		       cap->latest_perms);
       }
     } else {
-      if (cap == in->auth_cap)
+      if (cap->wanted | cap->issued)
 	in->flags |= I_CAP_DROPPED;
     }
 
@@ -5109,15 +5119,20 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
   int used = get_caps_used(in);
   int wanted = in->caps_wanted();
 
-  const int old_caps = cap->issued;
-  const int new_caps = m->get_caps();
+  const unsigned new_caps = m->get_caps();
   const bool was_stale = session->cap_gen > cap->gen;
   ldout(cct, 5) << "handle_cap_grant on in " << m->get_ino() 
 		<< " mds." << mds << " seq " << m->get_seq()
 		<< " caps now " << ccap_string(new_caps)
-		<< " was " << ccap_string(old_caps) << dendl;
+		<< " was " << ccap_string(cap->issued)
+		<< (was_stale ? "" : " (stale)") << dendl;
+
+  if (was_stale)
+      cap->issued = cap->implemented = CEPH_CAP_PIN;
   cap->seq = m->get_seq();
   cap->gen = session->cap_gen;
+
+  check_cap_issue(in, cap, new_caps);
 
   // update inode
   int issued;
@@ -5197,10 +5212,9 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
     check = true;
   }
 
-  check_cap_issue(in, cap, new_caps);
 
   // update caps
-  int revoked = old_caps & ~new_caps;
+  auto revoked = cap->issued & ~new_caps;
   if (revoked) {
     ldout(cct, 10) << "  revocation of " << ccap_string(revoked) << dendl;
     cap->issued = new_caps;
@@ -5222,10 +5236,10 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
       cap->wanted = 0; // don't let check_caps skip sending a response to MDS
       check = true;
     }
-  } else if (old_caps == new_caps) {
-    ldout(cct, 10) << "  caps unchanged at " << ccap_string(old_caps) << dendl;
+  } else if (cap->issued == new_caps) {
+    ldout(cct, 10) << "  caps unchanged at " << ccap_string(cap->issued) << dendl;
   } else {
-    ldout(cct, 10) << "  grant, new caps are " << ccap_string(new_caps & ~old_caps) << dendl;
+    ldout(cct, 10) << "  grant, new caps are " << ccap_string(new_caps & ~cap->issued) << dendl;
     cap->issued = new_caps;
     cap->implemented |= new_caps;
 
