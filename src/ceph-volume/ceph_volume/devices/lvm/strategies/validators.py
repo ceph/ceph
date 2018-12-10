@@ -9,7 +9,7 @@ def minimum_device_size(devices, osds_per_device=1):
     """
     msg = 'Unable to use device %s %s, LVs would be smaller than 5GB'
     for device in devices:
-        device_size = disk.Size(b=device.sys_api['size'])
+        device_size = disk.Size(b=device.lvm_size.b)
         lv_size = device_size / osds_per_device
         if lv_size < disk.Size(gb=5):
             raise RuntimeError(msg % (device_size, device.path))
@@ -22,7 +22,7 @@ def minimum_device_collocated_size(devices, journal_size, osds_per_device=1):
     """
     msg = 'Unable to use device %s %s, LVs would be smaller than 5GB'
     for device in devices:
-        device_size = disk.Size(b=device.sys_api['size'])
+        device_size = disk.Size(b=device.lvm_size.b)
         lv_size = (device_size / osds_per_device) - journal_size
         if lv_size < disk.Size(gb=5):
             raise RuntimeError(msg % (device_size, device.path))

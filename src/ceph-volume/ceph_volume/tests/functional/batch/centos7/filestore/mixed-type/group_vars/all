@@ -15,6 +15,7 @@ devices:
   - /dev/sdb
   - /dev/sdc
   - /dev/nvme0n1
+  - /dev/nvme1n1
 os_tuning_params:
   - { name: kernel.pid_max, value: 4194303 }
   - { name: fs.file-max, value: 26234859 }
