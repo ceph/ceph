@@ -535,7 +535,39 @@ void rgw::auth::LocalApplier::load_acct_info(const DoutPrefixProvider* dpp, RGWU
   user_info = this->user_info;
 }
 
-void rgw::auth::LocalApplier::modify_request_state(const DoutPrefixProvider *dpp, req_state* s) const
+void rgw::auth::RoleApplier::to_str(std::ostream& out) const {
+  out << "rgw::auth::LocalApplier(role name =" << role_name;
+  for (auto policy : role_policies) {
+    out << ", role policy =" << policy;
+  }
+  out << ")";
+}
+
+bool rgw::auth::RoleApplier::is_identity(const idset_t& ids) const {
+  for (auto& p : ids) {
+    string name;
+    string tenant = p.get_tenant();
+    if (tenant.empty()) {
+      name = p.get_id();
+    } else {
+      name = tenant + "$" + p.get_id();
+    }
+    if (p.is_wildcard()) {
+      return true;
+    } else if (p.is_role() && name == role_name) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void rgw::auth::RoleApplier::load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const /* out */
+{
+  /* Load the user id */
+  user_info.user_id = this->user_id;
+}
+
+void rgw::auth::RoleApplier::modify_request_state(const DoutPrefixProvider *dpp, req_state* s) const
 {
   for (auto it : role_policies) {
     try {
@@ -562,7 +594,7 @@ rgw::auth::AnonymousEngine::authenticate(const DoutPrefixProvider* dpp, const re
     auto apl = \
       apl_factory->create_apl_local(cct, s, user_info,
                                     rgw::auth::LocalApplier::NO_SUBUSER,
-                                    boost::none, boost::none);
+                                    boost::none);
     return result_t::grant(std::move(apl));
   }
 }
