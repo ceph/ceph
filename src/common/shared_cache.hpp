@@ -19,6 +19,7 @@
 #include <list>
 #ifdef WITH_SEASTAR
 #include <boost/smart_ptr/local_shared_ptr.hpp>
+#include <boost/smart_ptr/make_local_shared.hpp>
 #else
 #include <memory>
 #endif
@@ -39,6 +40,65 @@ class SharedLRU {
   using VPtr = std::shared_ptr<V>;
   using WeakVPtr = std::weak_ptr<V>;
 #endif
+
+  class Cleanup {
+    SharedLRU<K, V>* cache;
+    K key;
+    static_assert(std::is_trivially_destructible_v<decltype(cache)>);
+
+  public:
+    Cleanup(SharedLRU<K, V>* const cache, K key)
+      : cache(cache),
+	key(key) {
+    }
+    void operator()(V* const ptr) {
+      cache->remove(key, ptr);
+      delete ptr;
+    }
+  };
+
+  // https://stackoverflow.com/questions/32113594/weak-ptr-make-shared-and-memory-deallocation
+  template <class T>
+  class VCleaningAlloc {
+  public:
+    SharedLRU<K, V>* cache;
+    K key;
+
+    typedef T value_type;
+
+    VCleaningAlloc(SharedLRU<K, V>* const cache, K key)
+      : cache(cache),
+	key(key) {
+    }
+
+    template<typename U>
+    VCleaningAlloc(const VCleaningAlloc<U>& other)
+      : cache(other.cache),
+	key(other.key) {
+    }
+
+    T* allocate(const std::size_t n) {
+      if (auto ptr = std::malloc(n * sizeof(T))) {
+        return static_cast<T*>(ptr);
+      }
+      throw std::bad_alloc();
+    }
+
+    void destroy(T* ptr) {
+      cache->remove(key, ptr);
+    }
+    void deallocate(T* ptr, std::size_t n) {
+      std::free(ptr);
+    }
+
+    bool operator==(const VCleaningAlloc<T>& rhs) const {
+      return std::addressof(rhs) == this;
+    }
+    bool operator!=(const VCleaningAlloc<T>& rhs) const {
+      return std::addressof(rhs) != this;
+    }
+  };
+
   ceph::mutex lock;
   size_t max_size;
   ceph::condition_variable cond;
@@ -102,17 +162,6 @@ private:
     }
     cond.notify_all();
   }
-
-  class Cleanup {
-  public:
-    SharedLRU<K, V> *cache;
-    K key;
-    Cleanup(SharedLRU<K, V> *cache, K key) : cache(cache), key(key) {}
-    void operator()(V *ptr) {
-      cache->remove(key, ptr);
-      delete ptr;
-    }
-  };
 
 public:
   SharedLRU(CephContext *cct = NULL, size_t max_size = 20)
@@ -346,7 +395,11 @@ public:
         }
       });
       if (!val) {
-        val = VPtr{new V{}, Cleanup{this, key}};
+#ifdef WITH_SEASTAR
+        val = boost::allocate_local_shared<V>(VCleaningAlloc<V>{this, key});
+#else
+        val = std::allocate_shared<V>(VCleaningAlloc<V>{this, key});
+#endif
         weak_refs.insert(make_pair(key, make_pair(val, val.get())));
       }
       lru_add(key, val, &to_release);
