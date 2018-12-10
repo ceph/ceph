@@ -48,3 +48,11 @@ notes (?))
   'damaged' state when upgrading Ceph cluster from previous version.
   The bug is fixed in v13.2.3. For ceph v13.2.2 installation, upgrading
   to v13.2.3 does not requires special action.
+
+* The bluestore_cache_* options are no longer needed. They are replaced
+  by osd_memory_target, defaulting to 4GB. BlueStore will expand
+  and contract its cache to attempt to stay within this
+  limit. Users upgrading should note this is a higher default
+  than the previous bluestore_cache_size of 1GB, so OSDs using
+  BlueStore will use more memory by default.
+  For more details, see `BlueStore docs <http://docs.ceph.com/docs/mimic/rados/configuration/bluestore-config-ref/#automatic-cache-sizing>_`
