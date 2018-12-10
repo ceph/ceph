@@ -151,7 +151,10 @@ def activate_bluestore(lvs, no_systemd=False):
     db_device_path = get_osd_device_path(osd_lv, lvs, 'db', dmcrypt_secret=dmcrypt_secret)
     wal_device_path = get_osd_device_path(osd_lv, lvs, 'wal', dmcrypt_secret=dmcrypt_secret)
 
-    # Once symlinks are removed, the osd dir can be 'primed again.
+    # Once symlinks are removed, the osd dir can be 'primed again. chown first,
+    # regardless of what currently exists so that ``prime-osd-dir`` can succeed
+    # even if permissions are somehow messed up
+    system.chown(osd_path)
     prime_command = [
         'ceph-bluestore-tool', '--cluster=%s' % conf.cluster,
         'prime-osd-dir', '--dev', osd_lv_path,
