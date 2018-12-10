@@ -11,7 +11,7 @@ class ECPTest(DashboardTestCase):
 
     AUTH_ROLES = ['pool-manager']
 
-    @DashboardTestCase.RunAs('test', 'test', ['block-manager'])
+    @DashboardTestCase.RunAs('test', 'test', ['rgw-manager'])
     def test_read_access_permissions(self):
         self._get('/api/erasure_code_profile')
         self.assertStatus(403)
