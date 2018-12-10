@@ -2170,8 +2170,13 @@ void Locker::resume_stale_caps(Session *session)
 {
   dout(10) << "resume_stale_caps for " << session->info.inst.name << dendl;
 
-  for (xlist<Capability*>::iterator p = session->caps.begin(); !p.end(); ++p) {
+  bool lazy = session->info.has_feature(CEPHFS_FEATURE_LAZY_CAP_WANTED);
+  for (xlist<Capability*>::iterator p = session->caps.begin(); !p.end(); ) {
     Capability *cap = *p;
+    ++p;
+    if (lazy && !cap->is_notable())
+      break; // see revoke_stale_caps()
+
     CInode *in = cap->get_inode();
     ceph_assert(in->is_head());
     dout(10) << " clearing stale flag on " << *in << dendl;
