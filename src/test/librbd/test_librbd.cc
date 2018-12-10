@@ -6359,7 +6359,6 @@ TEST_F(TestLibRBD, ExclusiveLock)
                                          &max_lock_owners));
   ASSERT_EQ(1U, max_lock_owners);
 
-  max_lock_owners = 2;
   ASSERT_EQ(0, rbd_lock_get_owners(image1, &lock_mode, lock_owners,
                                    &max_lock_owners));
   ASSERT_EQ(RBD_LOCK_MODE_EXCLUSIVE, lock_mode);
