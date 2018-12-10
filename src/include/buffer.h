@@ -134,11 +134,6 @@ namespace buffer CEPH_BUFFER_API {
   /// enable/disable tracking of cached crcs
   void track_cached_crc(bool b);
 
-  /// count of calls to buffer::ptr::c_str()
-  int get_c_str_accesses();
-  /// enable/disable tracking of buffer::ptr::c_str() calls
-  void track_c_str(bool b);
-
   /*
    * an abstract raw buffer.  with a reference count.
    */
