@@ -3983,6 +3983,7 @@ PG* OSD::_make_pg(
 void OSD::_get_pgs(vector<PGRef> *v, bool clear_too)
 {
   v->clear();
+  v->reserve(get_num_pgs());
   for (auto& s : shards) {
     std::lock_guard l(s->shard_lock);
     for (auto& j : s->pg_slots) {
@@ -4000,6 +4001,7 @@ void OSD::_get_pgs(vector<PGRef> *v, bool clear_too)
 void OSD::_get_pgids(vector<spg_t> *v)
 {
   v->clear();
+  v->reserve(get_num_pgs());
   for (auto& s : shards) {
     std::lock_guard l(s->shard_lock);
     for (auto& j : s->pg_slots) {
