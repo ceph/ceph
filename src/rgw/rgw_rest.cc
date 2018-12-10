@@ -1660,8 +1660,8 @@ int RGWListMultipart_ObjStore::get_params()
   
   string str = s->info.args.get("max-parts");
   op_ret = parse_value_and_bound(str, max_parts, 0,
-			g_conf().get_val<uint64_t>("rgw_max_listing_results"),
-			max_parts);
+                                 g_conf->get_val<uint64_t>("rgw_max_listing_results"),
+                                 max_parts);
 
   return op_ret;
 }
@@ -1672,7 +1672,7 @@ int RGWListBucketMultiparts_ObjStore::get_params()
   prefix = s->info.args.get("prefix");
   string str = s->info.args.get("max-uploads");
   op_ret = parse_value_and_bound(str, max_uploads, 0,
-			g_conf().get_val<uint64_t>("rgw_max_listing_results"),
+			g_conf->get_val<uint64_t>("rgw_max_listing_results"),
 			default_max);
   if (op_ret < 0) {
     return op_ret;

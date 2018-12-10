@@ -2284,7 +2284,7 @@ int RGWListBucket::parse_max_keys()
   // Some S3 clients explicitly send max-keys=0 to detect if the bucket is
   // empty without listing any items.
   return parse_value_and_bound(max_keys, max, 0,
-			g_conf().get_val<uint64_t>("rgw_max_listing_results"),
+			s->cct->_conf->get_val<uint64_t>("rgw_max_listing_results"),
 			default_max);
 }
 
