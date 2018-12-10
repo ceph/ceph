@@ -659,7 +659,8 @@ get_v4_canon_req_hash(CephContext* cct,
 
   const auto canonical_req_hash = calc_hash_sha256(canonical_req);
 
-  ldout(cct, 10) << "canonical request = " << canonical_req << dendl;
+  using sanitize = rgw::crypt_sanitize::log_content;
+  ldout(cct, 10) << "canonical request = " << sanitize{canonical_req} << dendl;
   ldout(cct, 10) << "canonical request hash = "
                  << buf_to_hex(canonical_req_hash).data() << dendl;
 
