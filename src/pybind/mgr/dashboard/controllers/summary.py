@@ -50,27 +50,24 @@ class Summary(BaseController):
         elif name == 'pool/delete':
             result = self._has_permissions(Permission.DELETE, Scope.POOL)
         elif name in [
-                'rbd/create', 'rbd/copy', 'rbd/flatten',
-                'rbd/snap/create', 'rbd/clone', 'rbd/snap/rollback',
-                'rbd/trash/move', 'rbd/trash/restore', 'rbd/trash/purge']:
+                'rbd/create', 'rbd/copy', 'rbd/snap/create',
+                'rbd/clone', 'rbd/trash/restore']:
             result = self._has_permissions(Permission.CREATE, Scope.RBD_IMAGE)
-        elif name in ['rbd/edit', 'rbd/snap/edit']:
+        elif name in [
+                'rbd/edit', 'rbd/snap/edit', 'rbd/flatten',
+                'rbd/snap/rollback']:
             result = self._has_permissions(Permission.UPDATE, Scope.RBD_IMAGE)
-        elif name in ['rbd/delete', 'rbd/snap/delete', 'rbd/trash/remove']:
+        elif name in [
+                'rbd/delete', 'rbd/snap/delete', 'rbd/trash/move',
+                'rbd/trash/remove', 'rbd/trash/purge']:
             result = self._has_permissions(Permission.DELETE, Scope.RBD_IMAGE)
         return result
 
     @Endpoint()
     def __call__(self):
-        executing_t, finished_t = TaskManager.list_serializable()
-        executing_tasks = []
-        for task in executing_t:
-            if self._task_permissions(task['name']):
-                executing_tasks.append(task)
-        finished_tasks = []
-        for task in finished_t:
-            if self._task_permissions(task['name']):
-                executing_tasks.append(task)
+        exe_t, fin_t = TaskManager.list_serializable()
+        executing_tasks = [task for task in exe_t if self._task_permissions(task['name'])]
+        finished_tasks = [task for task in fin_t if self._task_permissions(task['name'])]
 
         result = {
             'health_status': self._health_status(),
