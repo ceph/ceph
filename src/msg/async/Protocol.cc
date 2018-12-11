@@ -454,6 +454,11 @@ CtPtr ProtocolV1::ready() {
   connection->last_tick_id = connection->center->create_time_event(
       connection->inactive_timeout_us, connection->tick_handler);
 
+  if (connection->last_timeout_id) {
+    connection->center->delete_time_event(connection->last_timeout_id);
+    connection->last_timeout_id = 0;
+  }
+
   connection->write_lock.lock();
   can_write = WriteStatus::CANWRITE;
   if (is_queued()) {

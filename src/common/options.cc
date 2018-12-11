@@ -990,6 +990,10 @@ std::vector<Option> get_global_options() {
     .set_default(900)
     .set_description(""),
 
+    Option("ms_tcp_connect_timeout", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(180)
+    .set_description(""),
+
     Option("ms_pq_max_tokens_per_priority", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(16777216)
     .set_description(""),

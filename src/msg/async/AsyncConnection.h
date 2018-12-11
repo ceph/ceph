@@ -177,6 +177,7 @@ class AsyncConnection : public Connection {
   EventCallbackRef write_callback_handler;
   EventCallbackRef wakeup_handler;
   EventCallbackRef tick_handler;
+  EventCallbackRef timeout_handler;
   char *recv_buf;
   uint32_t recv_max_prefetch;
   uint32_t recv_start;
@@ -186,6 +187,8 @@ class AsyncConnection : public Connection {
   ceph::mono_clock::time_point recv_start_time;
   uint64_t last_tick_id = 0;
   const uint64_t inactive_timeout_us;
+  uint64_t last_timeout_id = 0;
+  const uint64_t connect_timeout_us;
 
   // Tis section are temp variables used by state transition
 
@@ -213,6 +216,7 @@ class AsyncConnection : public Connection {
   void process();
   void wakeup_from(uint64_t id);
   void tick(uint64_t id);
+  void timeout(uint64_t id);
   void local_deliver();
   void stop(bool queue_reset);
   void cleanup();

@@ -107,6 +107,15 @@ class C_tick_wakeup : public EventCallback {
   }
 };
 
+class C_connect_timeout : public EventCallback {
+  AsyncConnectionRef conn;
+
+ public:
+  explicit C_connect_timeout(AsyncConnectionRef c): conn(c) {}
+  void do_request(uint64_t fd_or_id) override {
+    conn->timeout(fd_or_id);
+  }
+};
 
 AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQueue *q,
                                  Worker *w, bool m2, bool local)
@@ -118,6 +127,7 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQu
     recv_start(0), recv_end(0),
     last_active(ceph::coarse_mono_clock::now()),
     inactive_timeout_us(cct->_conf->ms_tcp_read_timeout*1000*1000),
+    connect_timeout_us(cct->_conf->ms_tcp_connect_timeout*1000*1000),
     msgr2(m2), state_offset(0),
     worker(w), center(&w->center),read_buffer(nullptr)
 {
@@ -126,6 +136,7 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQu
   write_callback_handler = new C_handle_write_callback(this);
   wakeup_handler = new C_time_wakeup(this);
   tick_handler = new C_tick_wakeup(this);
+  timeout_handler = new C_connect_timeout(this);
   // double recv_max_prefetch see "read_until"
   recv_buf = new char[2*recv_max_prefetch];
   if (local) {
@@ -405,6 +416,12 @@ void AsyncConnection::process() {
       ldout(async_msgr->cct, 10)
           << __func__ << " connect successfully, ready to send banner" << dendl;
       state = STATE_CONNECTION_ESTABLISHED;
+
+      if (last_timeout_id) {
+        center->delete_time_event(last_timeout_id);
+      }
+      last_timeout_id = center->create_time_event(connect_timeout_us, timeout_handler);
+
       break;
     }
 
@@ -561,6 +578,10 @@ void AsyncConnection::shutdown_socket() {
     center->delete_time_event(last_tick_id);
     last_tick_id = 0;
   }
+  if (last_timeout_id) {
+    center->delete_time_event(last_timeout_id);
+    last_timeout_id = 0;
+  }
   if (cs) {
     center->delete_file_event(cs.fd(), EVENT_READABLE | EVENT_WRITABLE);
     cs.shutdown();
@@ -677,6 +698,7 @@ void AsyncConnection::cleanup() {
   delete write_callback_handler;
   delete wakeup_handler;
   delete tick_handler;
+  delete timeout_handler;
   if (delay_state) {
     delete delay_state;
     delay_state = NULL;
@@ -706,5 +728,19 @@ void AsyncConnection::tick(uint64_t id)
     protocol->fault();
   } else if (is_connected()) {
     last_tick_id = center->create_time_event(inactive_timeout_us, tick_handler);
+  }
+}
+
+void AsyncConnection::timeout(uint64_t id)
+{
+  ldout(async_msgr->cct, 20) << __func__ << " last_id=" << last_timeout_id << dendl;
+  std::lock_guard<std::mutex> l(lock);
+  last_timeout_id = 0;
+
+  if (is_connected()) {
+    ldout(async_msgr->cct, 1) << __func__ << " idle more than "
+                              << connect_timeout_us
+                              << " us, mark self fault." << dendl;
+    protocol->fault();
   }
 }
