@@ -242,6 +242,10 @@ To show a pool's utilization statistics, execute::
 
 	rados df
 
+Additionally, to obtain I/O information for a specific or all pools, execute::
+
+        ceph osd pool stats [{pool-name}]
+
 
 Make a Snapshot of a Pool
 =========================
