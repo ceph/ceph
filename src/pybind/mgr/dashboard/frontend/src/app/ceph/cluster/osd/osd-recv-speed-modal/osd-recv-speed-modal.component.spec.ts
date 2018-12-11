@@ -183,11 +183,13 @@ describe('OsdRecvSpeedModalComponent', () => {
 
     it('should set the description if one is given', () => {
       component.setDescription(configOptions);
-      component.priorityAttrs.forEach((p) => {
-        if (p.name === 'osd_recovery_sleep') {
-          expect(p.desc).toBe('Time in seconds to sleep before next recovery or backfill op');
+      Object.keys(component.priorityAttrs).forEach((configOptionName) => {
+        if (configOptionName === 'osd_recovery_sleep') {
+          expect(component.priorityAttrs[configOptionName].desc).toBe(
+            'Time in seconds to sleep before next recovery or backfill op'
+          );
         } else {
-          expect(p.desc).toBe('');
+          expect(component.priorityAttrs[configOptionName].desc).toBe('');
         }
       });
     });

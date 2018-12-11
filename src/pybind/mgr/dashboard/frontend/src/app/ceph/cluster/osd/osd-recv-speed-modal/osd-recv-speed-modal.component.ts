@@ -21,7 +21,7 @@ import { NotificationService } from '../../../../shared/services/notification.se
 export class OsdRecvSpeedModalComponent implements OnInit {
   osdRecvSpeedForm: CdFormGroup;
   priorities = [];
-  priorityAttrs = [];
+  priorityAttrs = {};
 
   constructor(
     public bsModalRef: BsModalRef,
@@ -35,32 +35,28 @@ export class OsdRecvSpeedModalComponent implements OnInit {
       priority: new FormControl(null, { validators: [Validators.required] }),
       customizePriority: new FormControl(false)
     });
-    this.priorityAttrs = [
-      {
-        name: 'osd_max_backfills',
+    this.priorityAttrs = {
+      osd_max_backfills: {
         text: this.i18n('Max Backfills'),
         desc: ''
       },
-      {
-        name: 'osd_recovery_max_active',
+      osd_recovery_max_active: {
         text: this.i18n('Recovery Max Active'),
         desc: ''
       },
-      {
-        name: 'osd_recovery_max_single_start',
+      osd_recovery_max_single_start: {
         text: this.i18n('Recovery Max Single Start'),
         desc: ''
       },
-      {
-        name: 'osd_recovery_sleep',
+      osd_recovery_sleep: {
         text: this.i18n('Recovery Sleep'),
         desc: ''
       }
-    ];
+    };
 
-    this.priorityAttrs.forEach((attr) => {
+    Object.keys(this.priorityAttrs).forEach((configOptionName) => {
       this.osdRecvSpeedForm.addControl(
-        attr.name,
+        configOptionName,
         new FormControl(null, { validators: [Validators.required] })
       );
     });
@@ -68,8 +64,8 @@ export class OsdRecvSpeedModalComponent implements OnInit {
 
   ngOnInit() {
     const observables = [];
-    this.priorityAttrs.forEach((configName) => {
-      observables.push(this.configService.get(configName.name));
+    Object.keys(this.priorityAttrs).forEach((configOptionName) => {
+      observables.push(this.configService.get(configOptionName));
     });
 
     observableForkJoin(observables)
@@ -101,11 +97,7 @@ export class OsdRecvSpeedModalComponent implements OnInit {
   setDescription(configOptions: Array<any>) {
     configOptions.forEach((configOption) => {
       if (configOption.desc !== '') {
-        this.priorityAttrs.forEach((p) => {
-          if (p.name === configOption.name) {
-            p['desc'] = configOption.desc;
-          }
-        });
+        this.priorityAttrs[configOption.name].desc = configOption.desc;
       }
     });
   }
@@ -134,8 +126,8 @@ export class OsdRecvSpeedModalComponent implements OnInit {
   onCustomizePriorityChange() {
     if (this.osdRecvSpeedForm.getValue('customizePriority')) {
       const values = {};
-      this.priorityAttrs.forEach((attr) => {
-        values[attr.name] = this.osdRecvSpeedForm.getValue(attr.name);
+      Object.keys(this.priorityAttrs).forEach((configOptionName) => {
+        values[configOptionName] = this.osdRecvSpeedForm.getValue(configOptionName);
       });
       const customPriority = {
         name: 'custom',
@@ -180,8 +172,11 @@ export class OsdRecvSpeedModalComponent implements OnInit {
 
   submitAction() {
     const options = {};
-    this.priorityAttrs.forEach((attr) => {
-      options[attr.name] = { section: 'osd', value: this.osdRecvSpeedForm.getValue(attr.name) };
+    Object.keys(this.priorityAttrs).forEach((configOptionName) => {
+      options[configOptionName] = {
+        section: 'osd',
+        value: this.osdRecvSpeedForm.getValue(configOptionName)
+      };
     });
 
     this.configService.bulkCreate({ options: options }).subscribe(
