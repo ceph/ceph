@@ -46,23 +46,23 @@
           </div>
         </div>
         <!-- Priority values -->
-        <div class="form-group" *ngFor="let attr of priorityAttrs"
+        <div class="form-group" *ngFor="let attr of priorityAttrs | keyvalue"
              [ngClass]="{'has-error': osdRecvSpeedForm.getValue('customizePriority') &&
-             osdRecvSpeedForm.showError(attr.name, formDir)}">
+             osdRecvSpeedForm.showError(attr.key, formDir)}">
           <label class="control-label col-sm-6"
-                 [for]="attr.name">{{ attr.text }}
-            <cd-helper *ngIf="attr.desc">{{ attr.desc }}</cd-helper>
+                 [for]="attr.key">{{ attr.value.text }}
+            <cd-helper *ngIf="attr.value.desc">{{ attr.value.desc }}</cd-helper>
             <span class="required" *ngIf="osdRecvSpeedForm.getValue('customizePriority')"></span>
           </label>
           <div class="col-sm-6">
             <input class="form-control"
                    type="number"
-                   [id]="attr.name"
-                   [formControlName]="attr.name"
+                   [id]="attr.key"
+                   [formControlName]="attr.key"
                    [readonly]="!osdRecvSpeedForm.getValue('customizePriority')">
             <span class="help-block"
                   *ngIf="osdRecvSpeedForm.getValue('customizePriority') &&
-                  osdRecvSpeedForm.showError(attr.name, formDir, 'required')"
+                  osdRecvSpeedForm.showError(attr.key, formDir, 'required')"
                   i18n>This field is required!</span>
           </div>
         </div>
