@@ -227,8 +227,6 @@ def install(ctx, config):
     :param config: the config dict
     """
 
-    project = config.get('project', 'ceph')
-
     package_list = get_package_list(ctx, config)
     debs = package_list['deb']
     rpms = package_list['rpm']
@@ -261,7 +259,7 @@ def install(ctx, config):
     finally:
         remove_packages(ctx, config, package_list)
         remove_sources(ctx, config)
-        if project == 'ceph':
+        if config.get('project', 'ceph') == 'ceph':
             purge_data(ctx)
 
 
