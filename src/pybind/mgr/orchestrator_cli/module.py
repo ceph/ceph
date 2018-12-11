@@ -82,34 +82,19 @@ class OrchestratorCli(MgrModule):
 
         Waits for writes to be *persistent* but not *effective*.
         """
-        done = False
 
-        while done is False:
-            done = self._oremote("wait", completions) == []
+        while not self._oremote("wait", completions):
 
-            if not done:
-                any_nonpersistent = False
-                for c in completions:
-                    if c.is_read:
-                        if not c.is_complete:
-                            any_nonpersistent = True
-                            break
-                    else:
-                        if not c.is_persistent:
-                            any_nonpersistent = True
-                            break
-
-                if any_nonpersistent:
-                    time.sleep(5)
-                else:
-                    done = True
+            if any(c.should_wait for c in completions):
+                time.sleep(5)
+            else:
+                break
 
         if all(hasattr(c, 'error') and getattr(c, 'error')for c in completions):
             raise Exception([getattr(c, 'error') for c in completions])
 
     def _list_devices(self, cmd):
         """
-
         This (all lines starting with ">") is how it is supposed to work. As of
         now, it's not yet implemented:
         > :returns: Either JSON:
@@ -124,7 +109,7 @@ class OrchestratorCli(MgrModule):
         >
         > or human readable:
         >
-        >     HOST  DEV  SIZE  DEVID(vendor\_model\_serial)   IN-USE  TIMESTAMP
+        >     HOST  DEV  SIZE  DEVID(vendor\\_model\\_serial)   IN-USE  TIMESTAMP
         >
         > Note: needs ceph-volume on the host.
 
