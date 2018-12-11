@@ -382,9 +382,9 @@ public:
    * @param errout ostream to send error messages too
    */
 #ifdef WITH_SEASTAR
-  seastar::future<> build_initial(const ceph::common::ConfigProxy& conf);
+  seastar::future<> build_initial(const ceph::common::ConfigProxy& conf, bool for_mkfs);
 #else
-  int build_initial(CephContext *cct, ostream& errout);
+  int build_initial(CephContext *cct, bool for_mkfs, ostream& errout);
 #endif
   /**
    * filter monmap given a set of initial members.
@@ -421,7 +421,8 @@ protected:
    * @return 0 for success, -errno on error
    */
   int init_with_ips(const std::string& ips,
-			 const std::string &prefix);
+		    bool for_mkfs,
+		    const std::string &prefix);
   /**
    * build a monmap from a list of hostnames
    *
@@ -432,19 +433,20 @@ protected:
    * @return 0 for success, -errno on error
    */
   int init_with_hosts(const std::string& hostlist,
-			 const std::string& prefix);
+		      bool for_mkfs,
+		      const std::string& prefix);
   int init_with_config_file(const ConfigProxy& conf, std::ostream& errout);
 #if WITH_SEASTAR
   seastar::future<> read_monmap(const std::string& monmap);
   /// try to build monmap with different settings, like
   /// mon_host, mon* sections, and mon_dns_srv_name
-  seastar::future<> build_monmap(const ceph::common::ConfigProxy& conf);
+  seastar::future<> build_monmap(const ceph::common::ConfigProxy& conf, bool for_mkfs);
   /// initialize monmap by resolving given service name
-  seastar::future<> init_with_dns_srv(const std::string& name);
+  seastar::future<> init_with_dns_srv(bool for_mkfs, const std::string& name);
 #else
   /// read from encoded monmap file
   int init_with_monmap(const std::string& monmap, std::ostream& errout);
-  int init_with_dns_srv(CephContext* cct, std::string srv_name,
+  int init_with_dns_srv(CephContext* cct, std::string srv_name, bool for_mkfs,
 			std::ostream& errout);
 #endif
 };

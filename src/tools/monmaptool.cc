@@ -335,7 +335,7 @@ int main(int argc, const char **argv)
   }
 
   if (generate) {
-    int r = monmap.build_initial(g_ceph_context, cerr);
+    int r = monmap.build_initial(g_ceph_context, true, cerr);
     if (r < 0)
       return r;
   }

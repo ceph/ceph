@@ -499,7 +499,7 @@ static int update_auth(MonitorDBStore& st, const string& keyring_path)
 static int update_mkfs(MonitorDBStore& st)
 {
   MonMap monmap;
-  int r = monmap.build_initial(g_ceph_context, cerr);
+  int r = monmap.build_initial(g_ceph_context, true, cerr);
   if (r) {
     cerr << "no initial monitors" << std::endl;
     return -EINVAL;
