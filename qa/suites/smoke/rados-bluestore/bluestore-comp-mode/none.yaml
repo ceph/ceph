@@ -1,0 +1,22 @@
+overrides:
+  ceph_ansible:
+    vars:
+      ceph_conf_overrides:
+          global:
+            osd default pool size: 2
+            osd pool default pg num: 64
+            osd pool default pgp num: 64
+            mon max pg per osd: 1024
+          osd:
+            bluestore compression mode: none 
+      dmcrypt_journal_collocation: true
+      ceph_stable_release: luminous
+      ceph_origin: distro
+      ceph_stable: true
+      ceph_stable_rh_storage: true
+      ceph_test: true
+      journal_size: 1024
+      osd_auto_discovery: false
+      osd_scenario: collocated
+      osd_objectstore: bluestore
+
