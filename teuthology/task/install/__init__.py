@@ -547,6 +547,17 @@ def task(ctx, config):
     When passed 'rhbuild' as a key, it will attempt to install an rh ceph build
     using ceph-deploy
 
+    Normally, the package management system will try to install or upgrade
+    specified packages as instructed. But if newer versions of these packages
+    to be installed have been installed on test node, we will have to uninstall
+    or downgrade them. To downgrade multiple packages in a single shot:
+
+    tasks:
+    - install:
+        project: ceph
+        branch: hammer
+        downgrade_packages: ['librados2', 'librbd1']
+
     Reminder regarding teuthology-suite side effects:
 
     The teuthology-suite command always adds the following:
