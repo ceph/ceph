@@ -553,8 +553,9 @@ $extra_conf
         ; needed for s3tests
         rgw crypt s3 kms encryption keys = testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
         rgw crypt require ssl = false
-        rgw lc debug interval = 10
-
+        ; uncomment the following to set LC days as the value in seconds;
+        ; needed for passing lc time based s3-tests (can be verbose)
+        ; rgw lc debug interval = 10
 [mds]
 $DAEMONOPTS
         mds data = $CEPH_DEV_DIR/mds.\$id
