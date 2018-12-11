@@ -3339,7 +3339,7 @@ int RGWHandler_REST_S3::init(RGWRados *store, struct req_state *s,
       (! s->info.env->get("HTTP_X_AMZ_COPY_SOURCE_RANGE")) &&
       (! s->info.args.exists("uploadId"))) {
 
-    ret = RGWCopyObj::parse_copy_location(url_decode(copy_source),
+    ret = RGWCopyObj::parse_copy_location(copy_source,
                                           s->init_state.src_bucket,
                                           s->src_object);
     if (!ret) {
