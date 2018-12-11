@@ -23,7 +23,7 @@ class PurgeJob(object):
         self.subvolume_path = subvolume_path
 
 
-class Module(MgrModule):
+class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     COMMANDS = [
         {
             'cmd': 'fs volume ls',
@@ -82,13 +82,6 @@ class Module(MgrModule):
 
         self._background_jobs = Queue.Queue()
 
-    def _oremote(self, *args, **kwargs):
-        """
-        Helper for invoking `remote` on whichever orchestrator is enabled
-        """
-        return self.remote("orchestrator_cli", "_oremote",
-                           *args, **kwargs)
-
     def serve(self):
         # TODO: discover any subvolumes pending purge, and enqueue
         # them in background_jobs at startup
@@ -113,35 +106,6 @@ class Module(MgrModule):
             return -errno.EINVAL, "", "Unknown command"
 
         return handler(inbuf, cmd)
-
-    def _orchestrator_wait(self, completions):
-        """
-        Helper to wait for completions to complete (reads) or
-        become persistent (writes).
-
-        Waits for writes to be *persistent* but not *effective*.
-        """
-        done = False
-
-        while done is False:
-            done = self._oremote("wait", completions)
-
-            if not done:
-                any_nonpersistent = False
-                for c in completions:
-                    if c.is_read:
-                        if not c.is_complete:
-                            any_nonpersistent = True
-                            break
-                    else:
-                        if not c.is_persistent:
-                            any_nonpersistent = True
-                            break
-
-                if any_nonpersistent:
-                    time.sleep(5)
-                else:
-                    done = True
 
     def _pool_base_name(self, volume_name):
         """
@@ -202,11 +166,7 @@ class Module(MgrModule):
         spec = orchestrator.StatelessServiceSpec()
         spec.name = vol_id
         try:
-            completion = self._oremote(
-                "add_stateless_service",
-                "mds",
-                spec
-            )
+            completion = self.add_stateless_service("mds", spec)
             self._orchestrator_wait([completion])
         except ImportError:
             return 0, "", "Volume created successfully (no MDS daemons created)"
@@ -265,7 +225,7 @@ class Module(MgrModule):
 
         fs = self._volume_get_fs(vol_name)
         if fs is None:
-            return 0, "", "Volume '{0}' already deleted".forma(vol_name)
+            return 0, "", "Volume '{0}' already deleted".format(vol_name)
 
         vol_fscid = fs['id']
 
@@ -287,11 +247,7 @@ class Module(MgrModule):
         # Tear down MDS daemons
         # =====================
         try:
-            completion = self._oremote(
-                "remove_stateless_service",
-                "mds",
-                vol_name
-            )
+            completion = self.remove_stateless_service("mds", vol_name)
             self._orchestrator_wait([completion])
         except ImportError:
             self.log.warning("No orchestrator, not tearing down MDS daemons")

@@ -861,7 +861,7 @@ class MgrModule(ceph_module.BaseMgrModule):
         Set the value of a persistent configuration setting
 
         :param str key:
-        :param str val:
+        :type val: str | None
         """
         self._validate_module_option(key)
         return self._set_module_option(key, val)
