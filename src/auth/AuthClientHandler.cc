@@ -17,7 +17,9 @@
 
 #include "AuthClientHandler.h"
 #include "cephx/CephxClientHandler.h"
+#ifdef HAVE_GSSAPI
 #include "krb/KrbClientHandler.hpp"
+#endif
 #include "none/AuthNoneClientHandler.h"
 
 
@@ -30,8 +32,10 @@ AuthClientHandler::create(CephContext* cct, int proto,
     return new CephxClientHandler(cct, rkeys);
   case CEPH_AUTH_NONE:
     return new AuthNoneClientHandler{cct};
+#ifdef HAVE_GSSAPI
   case CEPH_AUTH_GSS: 
     return new KrbClientHandler(cct);
+#endif
   default:
     return NULL;
   }

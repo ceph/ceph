@@ -142,6 +142,9 @@
 /* define if cephfs enabled */
 #cmakedefine WITH_CEPHFS
 
+/*define if GSSAPI/KRB5 enabled */
+#cmakedefine HAVE_GSSAPI
+
 /* define if rbd enabled */
 #cmakedefine WITH_RBD
 
