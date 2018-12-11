@@ -5107,6 +5107,9 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
     }
 
     r = _open_bluefs(create);
+    if (r < 0) {
+      return r;
+    }
 
     if (cct->_conf->bluestore_bluefs_env_mirror) {
       rocksdb::Env *a = new BlueRocksEnv(bluefs);
