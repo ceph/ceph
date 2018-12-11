@@ -906,7 +906,7 @@ Summary:        RADOS object class development kit
 %if 0%{?suse_version}
 Group:		Development/Libraries/C and C++
 %endif
-Requires:       libradospp1-devel = %{_epoch_prefix}%{version}-%{release}
+Requires:       libradospp-devel = %{_epoch_prefix}%{version}-%{release}
 %description -n rados-objclass-devel
 This package contains libraries and headers needed to develop RADOS object
 class plugins.
