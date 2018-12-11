@@ -234,8 +234,8 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
 
         completion = self.create_osds(spec, all_hosts)
         self._orchestrator_wait([completion])
-
-        return HandleCommandResult()
+        #return result
+        return HandleCommandResult(stdout=completion.result)
 
     def _add_stateless_svc(self, svc_type, spec):
         completion = self.add_stateless_service(svc_type, spec)
@@ -408,4 +408,3 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
             return self._status()
         else:
             raise NotImplementedError()
-
