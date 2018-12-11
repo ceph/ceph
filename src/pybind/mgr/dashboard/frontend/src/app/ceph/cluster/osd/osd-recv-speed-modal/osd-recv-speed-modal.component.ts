@@ -94,6 +94,27 @@ export class OsdRecvSpeedModalComponent implements OnInit {
       });
   }
 
+  getStoredPriority(configOptionValues: any, callbackFn: Function) {
+    const priority = _.find(this.priorities, (p) => {
+      return _.isEqual(p.values, configOptionValues);
+    });
+
+    this.osdRecvSpeedForm.controls.customizePriority.setValue(false);
+
+    if (priority) {
+      return callbackFn(priority);
+    }
+
+    if (Object.entries(configOptionValues).length === 4) {
+      this.osdRecvSpeedForm.controls.customizePriority.setValue(true);
+      return callbackFn(
+        Object({ name: 'custom', text: this.i18n('Custom'), values: configOptionValues })
+      );
+    }
+
+    return callbackFn(this.priorities[0]);
+  }
+
   setDescription(configOptions: Array<any>) {
     configOptions.forEach((configOption) => {
       if (configOption.desc !== '') {
@@ -136,29 +157,11 @@ export class OsdRecvSpeedModalComponent implements OnInit {
       };
       this.setPriority(customPriority);
     } else {
+      Object.keys(this.priorityAttrs).forEach((configOptionName) => {
+        this.osdRecvSpeedForm.get(configOptionName).reset();
+      });
       this.setPriority(this.priorities[0]);
     }
-  }
-
-  getStoredPriority(configOptionValues: any, callbackFn: Function) {
-    const priority = _.find(this.priorities, (p) => {
-      return _.isEqual(p.values, configOptionValues);
-    });
-
-    this.osdRecvSpeedForm.controls.customizePriority.setValue(false);
-
-    if (priority) {
-      return callbackFn(priority);
-    }
-
-    if (Object.entries(configOptionValues).length === 4) {
-      this.osdRecvSpeedForm.controls.customizePriority.setValue(true);
-      return callbackFn(
-        Object({ name: 'custom', text: this.i18n('Custom'), values: configOptionValues })
-      );
-    }
-
-    return callbackFn(this.priorities[0]);
   }
 
   onPriorityChange(selectedPriorityName) {
@@ -166,7 +169,6 @@ export class OsdRecvSpeedModalComponent implements OnInit {
       _.find(this.priorities, (p) => {
         return p.name === selectedPriorityName;
       }) || this.priorities[0];
-
     this.setPriority(selectedPriority);
   }
 
