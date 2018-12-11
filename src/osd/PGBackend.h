@@ -607,10 +607,10 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      ScrubMap &map,
      ScrubMapBuilder &pos,
      ScrubMap::object &o) = 0;
-   void be_large_omap_check(
+   void be_omap_checks(
      const map<pg_shard_t,ScrubMap*> &maps,
      const set<hobject_t> &master_set,
-     int& large_omap_objects,
+     omap_stat_t& omap_stats,
      ostream &warnstream) const;
 
    static PGBackend *build_pg_backend(

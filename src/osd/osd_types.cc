@@ -2220,11 +2220,13 @@ void object_stat_sum_t::dump(Formatter *f) const
   f->dump_int("num_legacy_snapsets", num_legacy_snapsets);
   f->dump_int("num_large_omap_objects", num_large_omap_objects);
   f->dump_int("num_objects_manifest", num_objects_manifest);
+  f->dump_int("num_omap_bytes", num_omap_bytes);
+  f->dump_int("num_omap_keys", num_omap_keys);
 }
 
 void object_stat_sum_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(18, 14, bl);
+  ENCODE_START(19, 14, bl);
 #if defined(CEPH_LITTLE_ENDIAN)
   bl.append((char *)(&num_bytes), sizeof(object_stat_sum_t));
 #else
@@ -2265,6 +2267,8 @@ void object_stat_sum_t::encode(bufferlist& bl) const
   encode(num_legacy_snapsets, bl);
   encode(num_large_omap_objects, bl);
   encode(num_objects_manifest, bl);
+  encode(num_omap_bytes, bl);
+  encode(num_omap_keys, bl);
 #endif
   ENCODE_FINISH(bl);
 }
@@ -2272,9 +2276,9 @@ void object_stat_sum_t::encode(bufferlist& bl) const
 void object_stat_sum_t::decode(bufferlist::const_iterator& bl)
 {
   bool decode_finish = false;
-  DECODE_START(18, bl);  // make sure to also update fast decode below
+  DECODE_START(19, bl);  // make sure to also update fast decode below
 #if defined(CEPH_LITTLE_ENDIAN)
-  if (struct_v >= 18) {  // this must match newest decode version
+  if (struct_v >= 19) {  // this must match newest decode version
     bl.copy(sizeof(object_stat_sum_t), (char*)(&num_bytes));
     decode_finish = true;
   }
@@ -2325,6 +2329,10 @@ void object_stat_sum_t::decode(bufferlist::const_iterator& bl)
     if (struct_v >= 18) {
       decode(num_objects_manifest, bl);
     }
+    if (struct_v >= 19) {
+      decode(num_omap_bytes, bl);
+      decode(num_omap_keys, bl);
+    }
   }
   DECODE_FINISH(bl);
 }
@@ -2366,6 +2374,8 @@ void object_stat_sum_t::generate_test_instances(list<object_stat_sum_t*>& o)
   a.num_objects_pinned = 20;
   a.num_large_omap_objects = 5;
   a.num_objects_manifest = 2;
+  a.num_omap_bytes = 20000;
+  a.num_omap_keys = 200;
   o.push_back(new object_stat_sum_t(a));
 }
 
@@ -2408,6 +2418,8 @@ void object_stat_sum_t::add(const object_stat_sum_t& o)
   num_legacy_snapsets += o.num_legacy_snapsets;
   num_large_omap_objects += o.num_large_omap_objects;
   num_objects_manifest += o.num_objects_manifest;
+  num_omap_bytes += o.num_omap_bytes;
+  num_omap_keys += o.num_omap_keys;
 }
 
 void object_stat_sum_t::sub(const object_stat_sum_t& o)
@@ -2449,6 +2461,8 @@ void object_stat_sum_t::sub(const object_stat_sum_t& o)
   num_legacy_snapsets -= o.num_legacy_snapsets;
   num_large_omap_objects -= o.num_large_omap_objects;
   num_objects_manifest -= o.num_objects_manifest;
+  num_omap_bytes -= o.num_omap_bytes;
+  num_omap_keys -= o.num_omap_keys;
 }
 
 bool operator==(const object_stat_sum_t& l, const object_stat_sum_t& r)
@@ -2490,7 +2504,9 @@ bool operator==(const object_stat_sum_t& l, const object_stat_sum_t& r)
     l.num_objects_pinned == r.num_objects_pinned &&
     l.num_legacy_snapsets == r.num_legacy_snapsets &&
     l.num_large_omap_objects == r.num_large_omap_objects &&
-    l.num_objects_manifest == r.num_objects_manifest;
+    l.num_objects_manifest == r.num_objects_manifest &&
+    l.num_omap_bytes == r.num_omap_bytes &&
+    l.num_omap_keys == r.num_omap_keys;
 }
 
 // -- object_stat_collection_t --
@@ -6102,7 +6118,7 @@ void ScrubMap::generate_test_instances(list<ScrubMap*>& o)
 void ScrubMap::object::encode(bufferlist& bl) const
 {
   bool compat_read_error = read_error || ec_hash_mismatch || ec_size_mismatch;
-  ENCODE_START(9, 7, bl);
+  ENCODE_START(10, 7, bl);
   encode(size, bl);
   encode(negative, bl);
   encode(attrs, bl);
@@ -6120,12 +6136,14 @@ void ScrubMap::object::encode(bufferlist& bl) const
   encode(large_omap_object_found, bl);
   encode(large_omap_object_key_count, bl);
   encode(large_omap_object_value_size, bl);
+  encode(object_omap_bytes, bl);
+  encode(object_omap_keys, bl);
   ENCODE_FINISH(bl);
 }
 
 void ScrubMap::object::decode(bufferlist::const_iterator& bl)
 {
-  DECODE_START(9, bl);
+  DECODE_START(10, bl);
   decode(size, bl);
   bool tmp, compat_read_error = false;
   decode(tmp, bl);
@@ -6162,6 +6180,10 @@ void ScrubMap::object::decode(bufferlist::const_iterator& bl)
     large_omap_object_found = tmp;
     decode(large_omap_object_key_count, bl);
     decode(large_omap_object_value_size, bl);
+  }
+  if (struct_v >= 10) {
+    decode(object_omap_bytes, bl);
+    decode(object_omap_keys, bl);
   }
   DECODE_FINISH(bl);
 }
