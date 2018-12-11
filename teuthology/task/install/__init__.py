@@ -201,7 +201,7 @@ def get_package_list(ctx, config):
         rpms = filter(lambda p: not p.endswith('-debuginfo'), rpms)
 
     def exclude(pkgs, exclude_list):
-        return list(set(pkgs).difference(set(exclude_list)))
+        return list(pkg for pkg in pkgs if pkg not in exclude_list)
 
     excluded_packages = config.get('exclude_packages', [])
     if isinstance(excluded_packages, dict):
