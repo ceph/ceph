@@ -45,6 +45,13 @@ class ReadCompletion(_Completion):
     def is_read(self):
         return True
 
+    @property
+    def should_wait(self):
+        """Could the external operation be deemed as complete,
+        or should we wait?
+        We must wait for a read operation only if it is not complete.
+        """
+        return not self.is_complete
 
 class WriteCompletion(_Completion):
     """
@@ -83,6 +90,14 @@ class WriteCompletion(_Completion):
     def is_read(self):
         return False
 
+    @property
+    def should_wait(self):
+        """Could the external operation be deemed as complete,
+        or should we wait?
+        We must wait for a write operation only if we know
+        it is not persistent yet.
+        """
+        return not self.is_persistent
 
 class Orchestrator(object):
     """
