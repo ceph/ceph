@@ -489,7 +489,7 @@ class Module(MgrModule):
 
         # OSD might be marked 'out' (which means it has no
         # data), however PGs are still attached to it.
-        for _id in osds_out.iterkeys():
+        for _id in osds_out:
             num_pgs = self.get_osd_num_pgs(_id)
             if num_pgs > 0:
                 health_warnings[DEVICE_HEALTH_IN_USE].append(
