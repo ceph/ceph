@@ -372,7 +372,7 @@ int main(int argc, const char **argv)
       }      
     } else {
       ostringstream oss;
-      int err = monmap.build_initial(g_ceph_context, oss);
+      int err = monmap.build_initial(g_ceph_context, true, oss);
       if (oss.tellp())
         derr << oss.str() << dendl;
       if (err < 0) {
@@ -673,7 +673,7 @@ int main(int argc, const char **argv)
     } else {
       MonMap tmpmap;
       ostringstream oss;
-      int err = tmpmap.build_initial(g_ceph_context, oss);
+      int err = tmpmap.build_initial(g_ceph_context, true, oss);
       if (oss.tellp())
         derr << oss.str() << dendl;
       if (err < 0) {

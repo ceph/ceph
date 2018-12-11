@@ -408,10 +408,13 @@ void MonMap::_add_ambiguous_addr(const string& name,
 }
 
 int MonMap::init_with_ips(const std::string& ips,
+			  bool for_mkfs,
 			  const std::string &prefix)
 {
   vector<entity_addr_t> addrs;
-  if (!parse_ip_port_vec(ips.c_str(), addrs, entity_addr_t::TYPE_ANY)) {
+  if (!parse_ip_port_vec(
+	ips.c_str(), addrs,
+	for_mkfs ? entity_addr_t::TYPE_MSGR2 : entity_addr_t::TYPE_ANY)) {
     return -EINVAL;
   }
   if (addrs.empty())
@@ -428,6 +431,7 @@ int MonMap::init_with_ips(const std::string& ips,
 }
 
 int MonMap::init_with_hosts(const std::string& hostlist,
+			    bool for_mkfs,
 			    const std::string& prefix)
 {
   // maybe they passed us a DNS-resolvable name
@@ -436,7 +440,9 @@ int MonMap::init_with_hosts(const std::string& hostlist,
     return -EINVAL;
 
   vector<entity_addr_t> addrs;
-  bool success = parse_ip_port_vec(hosts, addrs, entity_addr_t::TYPE_ANY);
+  bool success = parse_ip_port_vec(
+    hosts, addrs,
+    for_mkfs ? entity_addr_t::TYPE_MSGR2 : entity_addr_t::TYPE_ANY);
   free(hosts);
   if (!success)
     return -EINVAL;
@@ -593,7 +599,7 @@ future<> MonMap::read_monmap(const std::string& monmap)
   });
 }
 
-future<> MonMap::init_with_dns_srv(const std::string& name)
+future<> MonMap::init_with_dns_srv(bool for_mkfs, const std::string& name)
 {
   string domain;
   string service = name;
@@ -612,7 +618,7 @@ future<> MonMap::init_with_dns_srv(const std::string& name)
 	// the resolved address does not contain ceph specific info like nonce
 	// nonce or msgr proto (legacy, msgr2), so set entity_addr_t manually
 	entity_addr_t addr;
-	addr.set_type(entity_addr_t::TYPE_LEGACY);
+	addr.set_type(entity_addr_t::TYPE_ANY);
 	addr.set_family(int(a.in_family()));
 	addr.set_port(record.port);
 	switch (a.in_family()) {
@@ -623,7 +629,7 @@ future<> MonMap::init_with_dns_srv(const std::string& name)
 	  addr.in6_addr().sin6_addr = a;
 	  break;
 	}
-	add(mon_info_t{record.target, addr, record.priority});
+	_add_ambiguous_addr(record.target, addr, record.priority);
       });
     });
   }).handle_exception_type([](const std::system_error& e) {
@@ -632,7 +638,8 @@ future<> MonMap::init_with_dns_srv(const std::string& name)
   });
 }
 
-seastar::future<> MonMap::build_monmap(const ceph::common::ConfigProxy& conf)
+seastar::future<> MonMap::build_monmap(const ceph::common::ConfigProxy& conf,
+				       bool for_mkfs)
 {
   // -m foo?
   if (const auto mon_host = conf.get_val<std::string>("mon_host");
@@ -665,7 +672,7 @@ seastar::future<> MonMap::build_monmap(const ceph::common::ConfigProxy& conf)
   });
 }
 
-future<> MonMap::build_initial(const ceph::common::ConfigProxy& conf)
+future<> MonMap::build_initial(const ceph::common::ConfigProxy& conf, bool for_mkfs)
 {
   // file?
   if (const auto monmap = conf.get_val<std::string>("monmap");
@@ -677,7 +684,7 @@ future<> MonMap::build_initial(const ceph::common::ConfigProxy& conf)
         !new_fsid.is_zero()) {
       fsid = new_fsid;
     }
-    return build_monmap(conf).then([this] {
+    return build_monmap(conf, for_mkfs).then([this] {
       created = ceph_clock_now();
       last_changed = created;
       calc_legacy_ranks();
@@ -704,6 +711,7 @@ int MonMap::init_with_monmap(const std::string& monmap, std::ostream& errout)
 
 int MonMap::init_with_dns_srv(CephContext* cct,
                               std::string srv_name,
+			      bool for_mkfs,
                               std::ostream& errout)
 {
   string domain;
@@ -722,7 +730,8 @@ int MonMap::init_with_dns_srv(CephContext* cct,
            << "ceph-mon" << std::endl;
     return -1;
   } else {
-    for (const auto& record : records) {
+    for (auto& record : records) {
+      record.second.addr.set_type(entity_addr_t::TYPE_ANY);
       _add_ambiguous_addr(record.first, record.second.addr,
 			  record.second.priority);
     }
@@ -730,7 +739,7 @@ int MonMap::init_with_dns_srv(CephContext* cct,
   }
 }
 
-int MonMap::build_initial(CephContext *cct, ostream& errout)
+int MonMap::build_initial(CephContext *cct, bool for_mkfs, ostream& errout)
 {
   const auto& conf = cct->_conf;
   // file?
@@ -747,9 +756,9 @@ int MonMap::build_initial(CephContext *cct, ostream& errout)
   // -m foo?
   if (const auto mon_host = conf.get_val<std::string>("mon_host");
       !mon_host.empty()) {
-    auto ret = init_with_ips(mon_host, "noname-");
+    auto ret = init_with_ips(mon_host, for_mkfs, "noname-");
     if (ret == -EINVAL) {
-      ret = init_with_hosts(mon_host, "noname-");
+      ret = init_with_hosts(mon_host, for_mkfs, "noname-");
     }
     if (ret < 0) {
       errout << "unable to parse addrs in '" << mon_host << "'"
@@ -766,7 +775,7 @@ int MonMap::build_initial(CephContext *cct, ostream& errout)
   if (size() == 0) {
     // no info found from conf options lets try use DNS SRV records
     string srv_name = conf.get_val<std::string>("mon_dns_srv_name");
-    if (auto ret = init_with_dns_srv(cct, srv_name, errout); ret < 0) {
+    if (auto ret = init_with_dns_srv(cct, srv_name, for_mkfs, errout); ret < 0) {
       return -ENOENT;
     }
   }

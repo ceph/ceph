@@ -463,7 +463,7 @@ std::vector<unsigned> Client::get_random_mons(unsigned n) const
 
 seastar::future<> Client::build_initial_map()
 {
-  return monmap.build_initial(ceph::common::local_conf());
+  return monmap.build_initial(ceph::common::local_conf(), false);
 }
 
 seastar::future<> Client::authenticate()
