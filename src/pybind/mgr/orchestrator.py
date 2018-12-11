@@ -4,6 +4,7 @@ ceph-mgr orchestrator interface
 
 Please see the ceph-mgr module developer's guide for more information.
 """
+import time
 
 
 class _Completion(object):
@@ -158,6 +159,8 @@ class Orchestrator(object):
 
         For fast operations (e.g. reading from a database), implementations
         may choose to do blocking IO in this call.
+
+        :rtype: bool
         """
         raise NotImplementedError()
 
@@ -506,3 +509,46 @@ class InventoryNode(object):
 
     def to_json(self):
        return {'name': self.name, 'devices': [d.to_json() for d in self.devices]}
+
+
+def _mk_orch_methods(cls):
+    # Needs to be defined outside of for.
+    # Otherwise meth is always bound to last key
+    def shim(method_name):
+        def inner(self, *args, **kwargs):
+            return self._oremote(method_name, args, kwargs)
+        return inner
+
+    for meth in Orchestrator.__dict__:
+        if not meth.startswith('_') and meth not in ['is_orchestrator_module', 'available']:
+            setattr(cls, meth, shim(meth))
+    return cls
+
+
+@_mk_orch_methods
+class OrchestratorClientMixin(Orchestrator):
+    def _oremote(self, meth, args, kwargs):
+        """
+        Helper for invoking `remote` on whichever orchestrator is enabled
+        """
+        try:
+            o = self._select_orchestrator()
+        except AttributeError:
+            o = self.remote('orchestrator_cli', '_select_orchestrator')
+        return self.remote(o, meth, *args, **kwargs)
+
+    def _orchestrator_wait(self, completions):
+        """
+        Helper to wait for completions to complete (reads) or
+        become persistent (writes).
+
+        Waits for writes to be *persistent* but not *effective*.
+        """
+        while not self.wait(completions):
+            if any(c.should_wait for c in completions):
+                time.sleep(5)
+            else:
+                break
+
+        if all(hasattr(c, 'error') and getattr(c, 'error') for c in completions):
+            raise Exception([getattr(c, 'error') for c in completions])
