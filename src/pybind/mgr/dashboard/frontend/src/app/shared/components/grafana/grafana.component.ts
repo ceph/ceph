@@ -3,9 +3,9 @@ import { Component, Input, OnChanges, OnInit } from '@angular/core';
 import { DomSanitizer } from '@angular/platform-browser';
 import { SafeUrl } from '@angular/platform-browser';
 
-import { GrafanaService } from '../../../shared/api/grafana.service';
 import { CephReleaseNamePipe } from '../../../shared/pipes/ceph-release-name.pipe';
 import { SummaryService } from '../../../shared/services/summary.service';
+import { SettingsService } from '../../api/settings.service';
 
 @Component({
   selector: 'cd-grafana',
@@ -32,13 +32,12 @@ export class GrafanaComponent implements OnInit, OnChanges {
   grafanaPath: string;
   @Input()
   grafanaStyle: string;
-  grafanaUrl: any;
   docsUrl: string;
 
   constructor(
     private summaryService: SummaryService,
     private sanitizer: DomSanitizer,
-    private grafanaService: GrafanaService,
+    private settingsService: SettingsService,
     private cephReleaseNamePipe: CephReleaseNamePipe
   ) {}
 
@@ -64,22 +63,16 @@ export class GrafanaComponent implements OnInit, OnChanges {
       }, 0);
     });
 
-    this.grafanaService.getGrafanaApiUrl().subscribe((data: any) => {
-      this.grafanaUrl = data.instance;
-      if (this.grafanaUrl === '') {
-        this.grafanaExist = false;
-        return;
-      } else {
-        this.getFrame();
-      }
+    this.settingsService.ifSettingConfigured('api/grafana/url', (url) => {
+      this.grafanaExist = true;
+      this.loading = false;
+      this.baseUrl = url + '/d/';
+      this.getFrame();
     });
     this.panelStyle = this.styles[this.grafanaStyle];
   }
 
   getFrame() {
-    this.baseUrl = this.grafanaUrl + '/d/';
-    this.grafanaExist = true;
-    this.loading = false;
     this.url = this.baseUrl + this.grafanaPath + '&refresh=2s' + this.mode;
     this.grafanaSrc = this.sanitizer.bypassSecurityTrustResourceUrl(this.url);
   }
