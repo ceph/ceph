@@ -41,18 +41,26 @@ class SharedLRU {
   using WeakVPtr = std::weak_ptr<V>;
 #endif
 
+  struct weak_ref_t {
+    WeakVPtr ptr;
+    bool invalid = false;
+  };
+  typedef std::map<K, weak_ref_t, std::less<K>> weak_refs_t;
+
   class Cleanup {
     SharedLRU<K, V>* cache;
-    K key;
+    typename weak_refs_t::iterator iter;
     static_assert(std::is_trivially_destructible_v<decltype(cache)>);
+    static_assert(std::is_trivially_destructible_v<decltype(iter)>);
 
   public:
-    Cleanup(SharedLRU<K, V>* const cache, K key)
+    Cleanup(SharedLRU<K, V>* const cache,
+	    typename weak_refs_t::iterator iter)
       : cache(cache),
-	key(key) {
+	iter(iter) {
     }
     void operator()(V* const ptr) {
-      cache->remove(key, ptr);
+      cache->remove(iter);
       delete ptr;
     }
   };
@@ -62,19 +70,22 @@ class SharedLRU {
   class VCleaningAlloc {
   public:
     SharedLRU<K, V>* cache;
-    K key;
+    typename weak_refs_t::iterator iter;
+    static_assert(std::is_trivially_destructible_v<decltype(cache)>);
+    static_assert(std::is_trivially_destructible_v<decltype(iter)>);
 
     typedef T value_type;
 
-    VCleaningAlloc(SharedLRU<K, V>* const cache, K key)
+    VCleaningAlloc(SharedLRU<K, V>* const cache,
+		   typename weak_refs_t::iterator iter)
       : cache(cache),
-	key(key) {
+	iter(iter) {
     }
 
     template<typename U>
     VCleaningAlloc(const VCleaningAlloc<U>& other)
       : cache(other.cache),
-	key(other.key) {
+	iter(other.iter) {
     }
 
     T* allocate(const std::size_t n) {
@@ -85,7 +96,7 @@ class SharedLRU {
     }
 
     void destroy(T* ptr) {
-      cache->remove(key, ptr);
+      cache->remove(iter);
     }
     void deallocate(T* ptr, std::size_t n) {
       std::free(ptr);
@@ -108,7 +119,6 @@ public:
   int waiting;
 #endif
 private:
-  using C = std::less<K>;
   using H = std::hash<K>;
   ceph::unordered_map<K, typename std::list<std::pair<K, VPtr> >::iterator, H> contents;
   std::list<std::pair<K, VPtr> > lru;
@@ -116,7 +126,7 @@ private:
   // it seems that PrimaryLogPG::object_contexts doesn't really have
   // strict ordering requirements. Useful info as find() on std::map
   // with hobjects is costly.
-  std::map<K, std::pair<WeakVPtr, V*>, C> weak_refs;
+  weak_refs_t weak_refs;
 
   void trim_cache(std::list<VPtr> *to_release) {
     while (size > max_size) {
@@ -154,10 +164,9 @@ private:
     }
   }
 
-  void remove(const K& key, V *valptr) {
+  void remove(typename weak_refs_t::iterator i) {
     std::lock_guard l{lock};
-    auto i = weak_refs.find(key);
-    if (i != weak_refs.end() && i->second.second == valptr) {
+    if (!weak_refs.empty() && i != std::end(weak_refs)) {
       weak_refs.erase(i);
     }
     cond.notify_all();
@@ -211,8 +220,7 @@ public:
   void dump_weak_refs(std::ostream& out) {
     for (const auto& [key, ref] : weak_refs) {
       out << __func__ << " " << this << " weak_refs: "
-	  << key << " = " << ref.second
-	  << " with " << ref.first.use_count() << " refs"
+	  << key << " with " << ref.ptr.use_count() << " refs"
 	  << std::endl;
     }
   }
@@ -238,9 +246,8 @@ public:
     VPtr val; // release any ref we have after we drop the lock
     {
       std::lock_guard l{lock};
-      typename map<K, pair<WeakVPtr, V*>, C>::iterator i = weak_refs.find(key);
-      if (i != weak_refs.end()) {
-	val = i->second.first.lock();
+      if (auto i = weak_refs.find(key); i != std::end(weak_refs)) {
+	val = i->second.ptr.lock();
       }
       lru_remove(key);
     }
@@ -255,12 +262,12 @@ public:
 #endif
     {
       std::lock_guard l{lock};
-      typename map<K, pair<WeakVPtr, V*>, C>::iterator i = weak_refs.find(key);
-      if (i != weak_refs.end()) {
+      if (auto i = weak_refs.find(key); i != std::end(weak_refs)) {
 #ifndef WITH_SEASTAR
-	val = i->second.first.lock();
+	val = i->second.ptr.lock();
 #endif
-        weak_refs.erase(i);
+	// TODO, FIXME: implement ALL invalidation checks
+        i->second.invalid = true;
       }
       lru_remove(key);
     }
@@ -297,7 +304,7 @@ public:
         if (i == weak_refs.end()) {
           --i;
         }
-        if (val = i->second.first.lock(); val) {
+        if (val = i->second.ptr.lock(); val) {
           lru_add(i->first, val, &to_release);
           return true;
         } else {
@@ -315,10 +322,10 @@ public:
     {
       std::lock_guard l{lock};
       VPtr next_val;
-      typename std::map<K, std::pair<WeakVPtr, V*>, C>::iterator i = weak_refs.upper_bound(key);
+      typename weak_refs_t::iterator i = weak_refs.upper_bound(key);
 
       while (i != weak_refs.end() &&
-	     !(next_val = i->second.first.lock()))
+	     !(next_val = i->second.ptr.lock()))
 	++i;
 
       if (i == weak_refs.end())
@@ -356,8 +363,10 @@ public:
       ++waiting;
 #endif
       cond.wait(l, [this, &key, &val, &to_release] {
-        if (auto i = weak_refs.find(key); i != weak_refs.end()) {
-          if (val = i->second.first.lock(); val) {
+        if (auto i = weak_refs.find(key); i != std::end(weak_refs)) {
+	  if (unlikely(i->second.invalid)) {
+	    return true;
+	  } else if (val = i->second.ptr.lock(); val) {
             lru_add(key, val, &to_release);
             return true;
           } else {
@@ -384,8 +393,10 @@ public:
 	return val;
       }
       cond.wait(l, [this, &key, &val] {
-        if (auto i = weak_refs.find(key); i != weak_refs.end()) {
-          if (val = i->second.first.lock(); val) {
+        if (auto i = weak_refs.find(key); i != std::end(weak_refs)) {
+	  if (unlikely(i->second.invalid)) {
+	    return true;
+	  } else if (val = i->second.ptr.lock(); val) {
             return true;
           } else {
             return false;
@@ -395,12 +406,22 @@ public:
         }
       });
       if (!val) {
+	auto [ iter, inserted ] = \
+	  weak_refs.insert(std::make_pair(key, weak_ref_t()));
+	if (likely(inserted)) {
 #ifdef WITH_SEASTAR
-        val = boost::allocate_local_shared<V>(VCleaningAlloc<V>{this, key});
+	  val = boost::allocate_local_shared<V>(VCleaningAlloc<V>{this, iter});
 #else
-        val = std::allocate_shared<V>(VCleaningAlloc<V>{this, key});
+	  val = std::allocate_shared<V>(VCleaningAlloc<V>{this, iter});
 #endif
-        weak_refs.insert(make_pair(key, make_pair(val, val.get())));
+	  iter->second.ptr = val;
+	} else {
+#ifdef WITH_SEASTAR
+	  val = boost::allocate_local_shared<V>(VCleaningAlloc<V>{this, std::end(weak_refs)});
+#else
+	  val = std::allocate_shared<V>(VCleaningAlloc<V>{this, std::end(weak_refs)});
+#endif
+	}
       }
       lru_add(key, val, &to_release);
     }
@@ -434,12 +455,12 @@ public:
     VPtr val;
     list<VPtr> to_release;
     {
-      typename map<K, pair<WeakVPtr, V*>, C>::iterator actual;
+      typename weak_refs_t::iterator actual;
       std::unique_lock l{lock};
       cond.wait(l, [this, &key, &actual, &val] {
 	  actual = weak_refs.lower_bound(key);
-	  if (actual != weak_refs.end() && actual->first == key) {
-	    val = actual->second.first.lock();
+	  if (actual != weak_refs.end() && actual->first == key && !actual->second.invalid) {
+	    val = actual->second.ptr.lock();
 	    if (val) {
 	      return true;
 	    } else {
@@ -460,8 +481,15 @@ public:
       if (existed)      
         *existed = false;
 
-      val = VPtr(value, Cleanup(this, key));
-      weak_refs.insert(actual, make_pair(key, make_pair(val, value)));
+      auto [ iter, inserted ] = \
+	weak_refs.insert(std::make_pair(key, weak_ref_t()));
+      if (likely(inserted)) {
+	val = VPtr(value, Cleanup(this, iter));
+	iter->second.ptr = val;
+      } else {
+	// FIXME: no need for cleaning weak_refs up
+	val = VPtr(value, Cleanup(this, std::end(weak_refs)));
+      }
       lru_add(key, val, &to_release);
     }
     return val;

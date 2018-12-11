@@ -30,7 +30,7 @@ class SharedLRUTest : public SharedLRU<unsigned int, int> {
 public:
   auto& get_lock() { return lock; }
   auto& get_cond() { return cond; }
-  map<unsigned int, pair< std::weak_ptr<int>, int* > > &get_weak_refs() {
+  weak_refs_t& get_weak_refs() {
     return weak_refs;
   }
 };
@@ -170,9 +170,9 @@ TEST_F(SharedLRU_all, wait_lookup) {
 
   {
     std::shared_ptr<int> ptr(new int);
-    cache.get_weak_refs()[key] = make_pair(ptr, &*ptr);
+    cache.get_weak_refs()[key].ptr = ptr;
   }
-  EXPECT_FALSE(cache.get_weak_refs()[key].first.lock());
+  EXPECT_FALSE(cache.get_weak_refs()[key].ptr.lock());
 
   Thread_wait t(cache, key, value, Thread_wait::LOOKUP);
   t.create("wait_lookup_1");
@@ -196,9 +196,9 @@ TEST_F(SharedLRU_all, wait_lookup_or_create) {
 
   {
     std::shared_ptr<int> ptr(new int);
-    cache.get_weak_refs()[key] = make_pair(ptr, &*ptr);
+    cache.get_weak_refs()[key].ptr = ptr;
   }
-  EXPECT_FALSE(cache.get_weak_refs()[key].first.lock());
+  EXPECT_FALSE(cache.get_weak_refs()[key].ptr.lock());
 
   Thread_wait t(cache, key, value, Thread_wait::LOOKUP);
   t.create("wait_lookup_2");
@@ -241,9 +241,9 @@ TEST_F(SharedLRU_all, wait_lower_bound) {
 
   {
     std::shared_ptr<int> ptr(new int);
-    cache.get_weak_refs()[key] = make_pair(ptr, &*ptr);
+    cache.get_weak_refs()[key].ptr = ptr;
   }
-  EXPECT_FALSE(cache.get_weak_refs()[key].first.lock());
+  EXPECT_FALSE(cache.get_weak_refs()[key].ptr.lock());
 
   Thread_wait t(cache, key, value, Thread_wait::LOWER_BOUND);
   t.create("wait_lower_bnd");
@@ -277,7 +277,7 @@ TEST_F(SharedLRU_all, get_next) {
 
     // entries with expired pointers are silently ignored
     const unsigned int key_gone = 222;
-    cache.get_weak_refs()[key_gone] = make_pair(std::shared_ptr<int>(), (int*)0);
+    cache.get_weak_refs()[key_gone].ptr = std::shared_ptr<int>();
 
     const unsigned int key1 = 111;
     std::shared_ptr<int> ptr1 = cache.lookup_or_create(key1);
