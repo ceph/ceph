@@ -1,5 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -11,6 +12,7 @@
  * Foundation.  See file COPYING.
  *
  */
+
 #ifndef RGW_HTTP_CLIENT_CURL_H
 #define RGW_HTTP_CLIENT_CURL_H
 
