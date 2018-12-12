@@ -2229,6 +2229,7 @@ class RGWRados : public AdminSocketHook
   friend class RGWReplicaLogger;
   friend class RGWReshard;
   friend class RGWBucketReshard;
+  friend class RGWBucketReshardLock;
   friend class BucketIndexLockGuard;
   friend class RGWCompleteMultipart;
 
@@ -2611,6 +2612,7 @@ public:
   int create_pool(const rgw_pool& pool);
 
   int init_bucket_index(RGWBucketInfo& bucket_info, int num_shards);
+  int clean_bucket_index(RGWBucketInfo& bucket_info, int num_shards);
   int select_bucket_placement(RGWUserInfo& user_info, const string& zonegroup_id, const string& rule,
                               string *pselected_rule_name, RGWZonePlacementInfo *rule_info);
   int select_legacy_bucket_placement(RGWZonePlacementInfo *rule_info);
@@ -2706,8 +2708,8 @@ public:
     string bucket_obj;
 
     explicit BucketShard(RGWRados *_store) : store(_store), shard_id(-1) {}
-    int init(const rgw_bucket& _bucket, const rgw_obj& obj);
-    int init(const rgw_bucket& _bucket, int sid);
+    int init(const rgw_bucket& _bucket, const rgw_obj& obj, RGWBucketInfo* out);
+    int init(const rgw_bucket& _bucket, int sid, RGWBucketInfo* out);
     int init(const RGWBucketInfo& bucket_info, int sid);
   };
 
@@ -2747,7 +2749,8 @@ public:
 
     int get_bucket_shard(BucketShard **pbs) {
       if (!bs_initialized) {
-        int r = bs.init(bucket_info.bucket, obj);
+        int r =
+	  bs.init(bucket_info.bucket, obj, nullptr /* no RGWBucketInfo */);
         if (r < 0) {
           return r;
         }
@@ -2943,7 +2946,8 @@ public:
       rgw_zone_set *zones_trace{nullptr};
 
       int init_bs() {
-        int r = bs.init(target->get_bucket(), obj);
+        int r =
+	  bs.init(target->get_bucket(), obj, nullptr /* no RGWBucketInfo */);
         if (r < 0) {
           return r;
         }
@@ -3350,8 +3354,13 @@ public:
   int obj_operate(const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::ObjectWriteOperation *op);
   int obj_operate(const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::ObjectReadOperation *op);
 
-  int guard_reshard(BucketShard *bs, const rgw_obj& obj_instance, std::function<int(BucketShard *)> call);
-  int block_while_resharding(RGWRados::BucketShard *bs, string *new_bucket_id);
+  int guard_reshard(BucketShard *bs,
+		    const rgw_obj& obj_instance,
+		    const RGWBucketInfo& bucket_info,
+		    std::function<int(BucketShard *)> call);
+  int block_while_resharding(RGWRados::BucketShard *bs,
+			     string *new_bucket_id,
+			     const RGWBucketInfo& bucket_info);
 
   void bucket_index_guard_olh_op(RGWObjState& olh_state, librados::ObjectOperation& op);
   int olh_init_modification(const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& olh_obj, string *op_tag);
@@ -3511,7 +3520,6 @@ public:
   int put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, ceph::real_time mtime, obj_version *pep_objv,
 			     map<string, bufferlist> *pattrs, bool create_entry_point);
 
-  int cls_rgw_init_index(librados::IoCtx& io_ctx, librados::ObjectWriteOperation& op, string& oid);
   int cls_obj_prepare_op(BucketShard& bs, RGWModifyOp op, string& tag, rgw_obj& obj, uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr);
   int cls_obj_complete_op(BucketShard& bs, const rgw_obj& obj, RGWModifyOp op, string& tag, int64_t pool, uint64_t epoch,
                           rgw_bucket_dir_entry& ent, RGWObjCategory category, list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr);
@@ -3623,7 +3631,7 @@ public:
                          map<RGWObjCategory, RGWStorageStats> *existing_stats,
                          map<RGWObjCategory, RGWStorageStats> *calculated_stats);
   int bucket_rebuild_index(RGWBucketInfo& bucket_info);
-  int bucket_set_reshard(RGWBucketInfo& bucket_info, const cls_rgw_bucket_instance_entry& entry);
+  int bucket_set_reshard(const RGWBucketInfo& bucket_info, const cls_rgw_bucket_instance_entry& entry);
   int remove_objs_from_index(RGWBucketInfo& bucket_info, list<rgw_obj_index_key>& oid_list);
   int move_rados_obj(librados::IoCtx& src_ioctx,
 		     const string& src_oid, const string& src_locator,

@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #ifndef CEPH_CLS_LOCK_TYPES_H
 #define CEPH_CLS_LOCK_TYPES_H
 
@@ -7,12 +10,14 @@
 #include "msg/msg_types.h"
 
 /* lock flags */
-#define LOCK_FLAG_RENEW 0x1        /* idempotent lock acquire */
+#define LOCK_FLAG_MAY_RENEW 0x1    /* idempotent lock acquire */
+#define LOCK_FLAG_MUST_RENEW 0x2   /* lock must already be acquired */
 
 enum ClsLockType {
-  LOCK_NONE      = 0,
-  LOCK_EXCLUSIVE = 1,
-  LOCK_SHARED    = 2,
+  LOCK_NONE                = 0,
+  LOCK_EXCLUSIVE           = 1,
+  LOCK_SHARED              = 2,
+  LOCK_EXCLUSIVE_EPHEMERAL = 3, /* lock object is removed @ unlock */
 };
 
 static inline const char *cls_lock_type_str(ClsLockType type)
@@ -24,9 +29,25 @@ static inline const char *cls_lock_type_str(ClsLockType type)
 	return "exclusive";
       case LOCK_SHARED:
 	return "shared";
+      case LOCK_EXCLUSIVE_EPHEMERAL:
+	return "exclusive-ephemeral";
       default:
 	return "<unknown>";
     }
+}
+
+inline bool cls_lock_is_exclusive(ClsLockType type) {
+  return LOCK_EXCLUSIVE == type || LOCK_EXCLUSIVE_EPHEMERAL == type;
+}
+
+inline bool cls_lock_is_ephemeral(ClsLockType type) {
+  return LOCK_EXCLUSIVE_EPHEMERAL == type;
+}
+
+inline bool cls_lock_is_valid(ClsLockType type) {
+  return LOCK_SHARED == type ||
+    LOCK_EXCLUSIVE == type ||
+    LOCK_EXCLUSIVE_EPHEMERAL == type;
 }
 
 namespace rados {

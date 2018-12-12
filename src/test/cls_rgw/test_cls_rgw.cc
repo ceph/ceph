@@ -116,7 +116,7 @@ TEST(cls_rgw, index_basic)
   OpMgr mgr;
 
   ObjectWriteOperation *op = mgr.write_op();
-  cls_rgw_bucket_init(*op);
+  cls_rgw_bucket_init_index(*op);
   ASSERT_EQ(0, ioctx.operate(bucket_oid, op));
 
   uint64_t epoch = 1;
@@ -150,7 +150,7 @@ TEST(cls_rgw, index_multiple_obj_writers)
   OpMgr mgr;
 
   ObjectWriteOperation *op = mgr.write_op();
-  cls_rgw_bucket_init(*op);
+  cls_rgw_bucket_init_index(*op);
   ASSERT_EQ(0, ioctx.operate(bucket_oid, op));
 
   uint64_t obj_size = 1024;
@@ -187,7 +187,7 @@ TEST(cls_rgw, index_remove_object)
   OpMgr mgr;
 
   ObjectWriteOperation *op = mgr.write_op();
-  cls_rgw_bucket_init(*op);
+  cls_rgw_bucket_init_index(*op);
   ASSERT_EQ(0, ioctx.operate(bucket_oid, op));
 
   uint64_t obj_size = 1024;
@@ -279,7 +279,7 @@ TEST(cls_rgw, index_suggest)
   OpMgr mgr;
 
   ObjectWriteOperation *op = mgr.write_op();
-  cls_rgw_bucket_init(*op);
+  cls_rgw_bucket_init_index(*op);
   ASSERT_EQ(0, ioctx.operate(bucket_oid, op));
 
   uint64_t total_size = 0;
@@ -390,7 +390,7 @@ TEST(cls_rgw, index_list)
   OpMgr mgr;
 
   ObjectWriteOperation *op = mgr.write_op();
-  cls_rgw_bucket_init(*op);
+  cls_rgw_bucket_init_index(*op);
   ASSERT_EQ(0, ioctx.operate(bucket_oid, op));
 
   uint64_t epoch = 1;
@@ -452,7 +452,7 @@ TEST(cls_rgw, bi_list)
   OpMgr mgr;
 
   ObjectWriteOperation *op = mgr.write_op();
-  cls_rgw_bucket_init(*op);
+  cls_rgw_bucket_init_index(*op);
   ASSERT_EQ(0, ioctx.operate(bucket_oid, op));
 
   string name;
