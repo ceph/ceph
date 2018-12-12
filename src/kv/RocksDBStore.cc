@@ -1301,7 +1301,6 @@ int64_t RocksDBStore::request_cache_bytes(PriorityCache::Priority pri, uint64_t 
   default:
     break;
   }
-  request = PriorityCache::get_chunk(usage, chunk_bytes);
   request = (request > assigned) ? request - assigned : 0;
   dout(10) << __func__ << " Priority: " << static_cast<uint32_t>(pri) 
            << " Usage: " << usage << " Request: " << request << dendl;
@@ -1313,28 +1312,26 @@ int64_t RocksDBStore::get_cache_usage() const
   return static_cast<int64_t>(bbt_opts.block_cache->GetUsage());
 }
 
-int64_t RocksDBStore::commit_cache_size()
+int64_t RocksDBStore::commit_cache_size(uint64_t total_bytes)
 {
   size_t old_bytes = bbt_opts.block_cache->GetCapacity();
-  int64_t total_bytes = get_cache_bytes();
+  int64_t new_bytes = PriorityCache::get_chunk(
+      get_cache_bytes(), total_bytes);
   dout(10) << __func__ << " old: " << old_bytes
-           << " new: " << total_bytes << dendl;
-  bbt_opts.block_cache->SetCapacity((size_t) total_bytes);
+           << " new: " << new_bytes << dendl;
+  bbt_opts.block_cache->SetCapacity((size_t) new_bytes);
 
   // Set the high priority pool ratio is this is the binned LRU cache.
   if (g_conf()->rocksdb_cache_type == "binned_lru") {
     auto binned_cache =
         std::static_pointer_cast<rocksdb_cache::BinnedLRUCache>(bbt_opts.block_cache);
-    int64_t high_pri_bytes = get_cache_bytes(PriorityCache::Priority::PRI0);
-    double ratio = (double) high_pri_bytes / total_bytes;
+    int64_t high_pri_bytes = PriorityCache::get_chunk(
+        binned_cache->GetHighPriPoolUsage()+1, total_bytes);
+    double ratio = (double) high_pri_bytes / new_bytes;
     dout(10) << __func__ << " High Pri Pool Ratio set to " << ratio << dendl;
     binned_cache->SetHighPriPoolRatio(ratio);
   }
-  return total_bytes;
-}
-
-int64_t RocksDBStore::get_cache_capacity() {
-  return bbt_opts.block_cache->GetCapacity();
+  return new_bytes;
 }
 
 RocksDBStore::RocksDBWholeSpaceIteratorImpl::~RocksDBWholeSpaceIteratorImpl()

@@ -390,7 +390,11 @@ public:
     cache_bytes[pri] += bytes;
   }
 
-  virtual int64_t commit_cache_size() {
+  virtual int64_t commit_cache_size(uint64_t total_cache) {
+    return -EOPNOTSUPP;
+  }
+
+  virtual int64_t get_committed_size() const {
     return -EOPNOTSUPP;
   }
 
