@@ -727,6 +727,11 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
       "\"created after successful resharding with error " << ret << dendl;
   }
 
+  ldout(store->ctx(), 1) << __func__ <<
+    " INFO: reshard of bucket \"" << bucket_info.bucket.name << "\" from \"" <<
+    bucket_info.bucket.get_key() << "\" to \"" <<
+    new_bucket_info.bucket.get_key() << "\" completed successfully" << dendl;
+
   return 0;
 
 error_out:
