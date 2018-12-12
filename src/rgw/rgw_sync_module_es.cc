@@ -1,3 +1,7 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
+#include "rgw_b64.h"
 #include "rgw_common.h"
 #include "rgw_coroutine.h"
 #include "rgw_sync_module.h"
@@ -165,6 +169,7 @@ struct ElasticConfig {
   ItemList allow_owners;
   uint32_t num_shards{0};
   uint32_t num_replicas{0};
+  std::map <string,string> default_headers = {{ "Content-Type", "application/json" }};
 
   void init(CephContext *cct, const map<string, string, ltstr_nocase>& config) {
     string elastic_endpoint = rgw_conf_get(config, "endpoint", "");
@@ -179,6 +184,12 @@ struct ElasticConfig {
       num_shards = ES_NUM_SHARDS_MIN;
     }
     num_replicas = rgw_conf_get_int(config, "num_replicas", ES_NUM_REPLICAS_DEFAULT);
+    string user = rgw_conf_get(config, "username", "");
+    string pw = rgw_conf_get(config, "password", "");
+    if (!user.empty() && !pw.empty()) {
+      auto auth_string = user + ":" + pw;
+      default_headers.emplace("AUTHORIZATION", "Basic " + rgw::to_base64(auth_string));
+    }
   }
 
   void init_instance(RGWRealm& realm, uint64_t instance_id) {
@@ -551,15 +562,12 @@ public:
   int operate() override {
     reenter(this) {
       ldout(sync_env->cct, 0) << ": init elasticsearch config zone=" << sync_env->source_zone << dendl;
-      yield {
-        auto hdrs = make_param_list(&conf->default_headers);
-        call(new RGWReadRESTResourceCR<ESInfo> (sync_env->cct,
-                                                conf->conn.get(),
-                                                sync_env->http_manager,
-                                                "/", nullptr /*params*/,
-                                                &hdrs,
-                                                &es_info));
-      }
+      yield call(new RGWReadRESTResourceCR<ESInfo> (sync_env->cct,
+                                                    conf->conn.get(),
+                                                    sync_env->http_manager,
+                                                    "/", nullptr /*params*/,
+                                                    &(conf->default_headers),
+                                                    &es_info));
       if (retcode < 0) {
         return set_cr_error(retcode);
       }
@@ -576,12 +584,11 @@ public:
         }
 
         es_index_config index_conf(settings, mappings);
-        std::map <string, string> hdrs = {{ "Content-Type", "application/json" }};
         call(new RGWPutRESTResourceCR<es_index_config, int> (sync_env->cct,
                                                              conf->conn.get(),
                                                              sync_env->http_manager,
                                                              path, nullptr /*params*/,
-                                                             &hdrs,
+                                                             &(conf->default_headers),
                                                              index_conf, nullptr));
       }
       if (retcode < 0) {
@@ -611,11 +618,10 @@ public:
         string path = conf->get_obj_path(bucket_info, key);
         es_obj_metadata doc(sync_env->cct, conf, bucket_info, key, mtime, size, attrs, versioned_epoch);
 
-        std::map <string, string> hdrs = {{ "Content-Type", "application/json" }};
         call(new RGWPutRESTResourceCR<es_obj_metadata, int>(sync_env->cct, conf->conn.get(),
                                                             sync_env->http_manager,
                                                             path, nullptr /* params */,
-                                                            &hdrs,
+                                                            &(conf->default_headers),
                                                             doc, nullptr /* result */));
 
       }
