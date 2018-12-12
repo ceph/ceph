@@ -110,6 +110,14 @@ class Device(object):
         if not sys_info.devices:
             sys_info.devices = disk.get_devices()
         self.sys_api = sys_info.devices.get(self.abspath, {})
+        if not self.sys_api:
+            # if no device was found check if we are a partition
+            partname = self.abspath.split('/')[-1]
+            for device, info in sys_info.devices.items():
+                part = info['partitions'].get(partname, {})
+                if part:
+                    self.sys_api = part
+                    break
 
         # start with lvm since it can use an absolute or relative path
         lv = lvm.get_lv_from_argument(self.path)
