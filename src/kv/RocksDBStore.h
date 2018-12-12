@@ -480,7 +480,10 @@ err:
 
   virtual int64_t request_cache_bytes(
       PriorityCache::Priority pri, uint64_t cache_bytes) const override;
-  virtual int64_t commit_cache_size() override;
+  virtual int64_t commit_cache_size(uint64_t total_cache) override;
+  virtual int64_t get_committed_size() const override {
+    return bbt_opts.block_cache->GetCapacity();
+  }
   virtual std::string get_cache_name() const override {
     return "RocksDB Block Cache";
   }

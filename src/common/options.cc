@@ -4185,11 +4185,6 @@ std::vector<Option> get_global_options() {
     .add_see_also("bluestore_cache_meta_ratio")
     .set_description("Automatically tune the ratio of caches while respecting min values."),
 
-    Option("bluestore_cache_autotune_chunk_size", Option::TYPE_SIZE, Option::LEVEL_DEV)
-    .set_default(33554432)
-    .add_see_also("bluestore_cache_autotune")
-    .set_description("The chunk size in bytes to allocate to caches when cache autotune is enabled."),
-
     Option("bluestore_cache_autotune_interval", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(5)
     .add_see_also("bluestore_cache_autotune")
