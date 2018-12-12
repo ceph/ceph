@@ -89,9 +89,9 @@ class RocksDBStore : public KeyValueDB {
 
   int submit_common(rocksdb::WriteOptions& woptions, KeyValueDB::Transaction t);
   int install_cf_mergeop(const string &cf_name, rocksdb::ColumnFamilyOptions *cf_opt);
+
   int create_db_dir();
-  int do_open(ostream &out, bool create_if_missing, bool open_readonly,
-	      const vector<ColumnFamily>* cfs = nullptr);
+  int do_open(ostream &out, bool create_if_missing, const vector<ColumnFamily>* cfs = nullptr);
   int load_rocksdb_options(bool create_if_missing, rocksdb::Options& opt);
 
   // manage async compactions
@@ -171,26 +171,151 @@ public:
 
   static bool check_omap_dir(string &omap_dir);
   /// Opens underlying db
-  int open(ostream &out, const vector<ColumnFamily>& cfs = {}) override {
-    return do_open(out, false, false, &cfs);
-  }
+  int open(ostream &out, const std::vector<ColumnFamily>& options = {}) override;
   /// Creates underlying db if missing and opens it
-  int create_and_open(ostream &out,
-		      const vector<ColumnFamily>& cfs = {}) override;
+  int create_and_open(ostream &out, const std::vector<ColumnFamily>& new_cfs = {}) override;
 
   int open_read_only(ostream &out, const vector<ColumnFamily>& cfs = {}) override {
     return do_open(out, false, true, &cfs);
   }
 
   void close() override;
+  /*
+   * @defgroup column_family Column Families
+   * There are 3 categories of column families.
+   *
+   * 1) mono column family
+   * Tightly bound to single prefix (P) value.
+   * Name of column family is P.
+   * Only keys with prefix P are all allowed.
+   * Merge operator (if exists) must be named P.
+   *
+   * 2) regular column family
+   * Can contain keys with any prefix.
+   * Name of column family may not be exact to any registered merge operators.
+   * Merge operator must encompass all available prefix merge operators, and so must its name.
+   *
+   * 3) default column family
+   * Can contain keys with any prefix except those handled by mono column families.
+   * Merge operator must encompass all prefixes, except those handled by mono column families.
+   * Merge operator name must not include prefixes handled by mono column families.
+   */
 
-  rocksdb::ColumnFamilyHandle *get_cf_handle(const std::string& cf_name) {
-    auto iter = cf_handles.find(cf_name);
-    if (iter == cf_handles.end())
+  /*
+   * @ingroup column_family
+   * List existing column families
+   *
+   * Queries database for names of all defined column families.
+   * When invoked before \ref open it queries stored database.
+   * When invoked after \ref open or \ref create_and_open it just reports current state.
+   * Invoking on non-existent database must return empty \ref cf_names.
+   *
+   * Params:
+   * - cf_names vector to fill with known column family names
+   * Result:
+   *   0 - success, <0 error code
+   */
+  int column_family_list(vector<std::string>& cf_names) override;
+
+  /*
+   * @ingroup column_family
+   * Create new column family
+   *
+   * Create additional column family in running database.
+   * This may be invoked only on opened database.
+   *
+   * Params:
+   * - name name of column family
+   * - options extra options to apply for column family
+   * Result:
+   *   0 - success, <0 error code
+   */
+  int column_family_create(const std::string& name, const std::string& options) override;
+
+  /*
+   * @ingroup column_family
+   * Delete column family
+   *
+   * Removes column family from running database.
+   * This may be invoked only on opened database.
+   *
+   * Params:
+   * - name name of column family
+   * - options extra options to apply for column family
+   * Result:
+   *   0 - success, <0 error code
+   */
+  int column_family_delete(const std::string& name) override { return -1; }
+
+  //virtual std::string cf_get_options(const std::string& cf_name);
+  /* returns merge operator for column family that contains only `prefix` keys */
+  virtual std::shared_ptr<rocksdb::MergeOperator>
+    cf_get_merge_operator(const std::string& prefix);
+
+private:
+  /*
+   * Returns handle to mono column family.
+   * Does not return handles for regular column family, even if name matches
+   */
+  rocksdb::ColumnFamilyHandle *cf_mono_get_handle(const std::string& cf_name) {
+    auto iter = cf_mono_handles.find(cf_name);
+    if (iter == cf_mono_handles.end())
       return nullptr;
     else
       return static_cast<rocksdb::ColumnFamilyHandle*>(iter->second);
   }
+
+  /// Determines if prefix points to mono column family.
+  /// Sets handle to proper column family.
+  bool check_mode(rocksdb::ColumnFamilyHandle* &cf, const string &prefix) {
+    if (cf != nullptr) {
+      return false;
+    }
+    cf = get_cf_handle(prefix);
+    if (cf != nullptr)
+      return true;
+    cf = default_cf;
+    return false;
+  }
+
+private:
+  rocksdb::Options rocksdb_options;
+  int open_existing(rocksdb::Options& rocksdb_options);
+
+  int read_column_families();
+  typedef std::string ColumnFamilyName;
+  struct ColumnFamilyData {
+      //string name;      //< name of this individual column family
+      string options;    //< specific configure option string for this CF
+      void* handle;
+      ColumnFamilyData(const string &options, void* handle = nullptr)
+        : options(options), handle(handle) {}
+      ColumnFamilyData() : handle(nullptr) {}
+    };
+  std::map<ColumnFamilyName, ColumnFamilyData> column_families;
+//  std::vector<ColumnFamily> column_families;
+  //std::vector<rocksdb::ColumnFamilyDescriptor> column_family_descriptors;
+
+  void perf_counters_register();
+
+public:
+  rocksdb::ColumnFamilyHandle *get_cf_handle(const std::string& cf_name) {
+    auto iter = cf_mono_handles.find(cf_name);
+    if (iter == cf_mono_handles.end())
+      return nullptr;
+    else
+      return static_cast<rocksdb::ColumnFamilyHandle*>(iter->second);
+  }
+
+  rocksdb::ColumnFamilyHandle *get_cf_handle_nonmono(const std::string& cf_name) {
+    auto iter = column_families.find(cf_name);
+    if (iter == column_families.end())
+      return default_cf;
+    else
+      return static_cast<rocksdb::ColumnFamilyHandle*>(iter->second.handle);
+  }
+
+
   int repair(std::ostream &out) override;
   void split_stats(const std::string &s, char delim, std::vector<std::string> &elems);
   void get_statistics(Formatter *f) override;
@@ -305,6 +430,8 @@ public:
 
     explicit RocksDBTransactionImpl(RocksDBStore *_db);
   private:
+    rocksdb::ColumnFamilyHandle *cf_handle;
+
     void put_bat(
       rocksdb::WriteBatch& bat,
       rocksdb::ColumnFamilyHandle *cf,
@@ -341,6 +468,8 @@ public:
       const string& prefix,
       const string& k,
       const bufferlist &bl) override;
+    void select(
+      void* column_family_handle) override;
   };
 
   KeyValueDB::Transaction get_transaction() override {
@@ -364,7 +493,17 @@ public:
     const char *key,
     size_t keylen,
     bufferlist *out) override;
-
+  int get(
+    void* cf_handle,
+    const std::string &prefix,
+    const std::set<std::string> &keys,
+    std::map<std::string, bufferlist> *out) override;
+  int get(
+    void* cf_handle,
+    const string &prefix,
+    const string &key,
+    bufferlist *out
+    ) override;
 
   class RocksDBWholeSpaceIteratorImpl :
     public KeyValueDB::WholeSpaceIteratorImpl {

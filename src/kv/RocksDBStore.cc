@@ -74,7 +74,10 @@ public:
     for (auto& p : store.merge_ops) {
       names[p.first] = p.second->name();
     }
-    for (auto& p : store.cf_handles) {
+    //TODO: name of merge operator excludes prefixes for mono tables
+    //TODO: this makes it difficult to merge data back to main table
+    //TODO: regardless of cranky name, this should handle all prefixes?
+    for (auto& p : store.cf_mono_handles) {
       names.erase(p.first);
     }
     for (auto& p : names) {
@@ -153,7 +156,7 @@ int RocksDBStore::set_merge_operator(
 {
   // If you fail here, it's because you can't do this on an open database
   ceph_assert(db == nullptr);
-  merge_ops.push_back(std::make_pair(prefix,mop));
+  merge_ops.emplace(prefix, mop);
   return 0;
 }
 
@@ -309,31 +312,124 @@ int RocksDBStore::create_db_dir()
   return 0;
 }
 
-int RocksDBStore::install_cf_mergeop(
-  const string &cf_name,
-  rocksdb::ColumnFamilyOptions *cf_opt)
+int RocksDBStore::open(ostream &out, const std::vector<ColumnFamily>& options)
 {
-  ceph_assert(cf_opt != nullptr);
-  cf_opt->merge_operator.reset();
-  for (auto& i : merge_ops) {
-    if (i.first == cf_name) {
-      cf_opt->merge_operator.reset(new MergeOperatorLinker(i.second));
+  int r = create_db_dir();
+  if (r < 0)
+    return r;
+  r = load_rocksdb_options(false, rocksdb_options);
+  if (r) {
+    dout(1) << __func__ << " load rocksdb options failed" << dendl;
+    return r;
+  }
+
+  rocksdb::Status status;
+  std::vector<string> existing_cfs;
+  status = rocksdb::DB::ListColumnFamilies(
+    rocksdb::DBOptions(rocksdb_options), path, &existing_cfs);
+  dout(1) << __func__ << " existing column families: " << existing_cfs << dendl;
+  if (existing_cfs.empty()) {
+    // no column families
+    status = rocksdb::DB::Open(rocksdb_options, path, &db);
+    if (!status.ok()) {
+      derr << status.ToString() << dendl;
+      return -EINVAL;
     }
+    default_cf = db->DefaultColumnFamily();
+  } else {
+    // we cannot change column families for a created database.  so, map
+    // what options we are given to whatever cf's already exist.
+    std::vector<rocksdb::ColumnFamilyDescriptor> column_family_descriptors;
+    for (auto& cf_name : existing_cfs) {
+      // copy default CF settings, block cache, merge operators as
+      // the base for new CF
+      rocksdb::ColumnFamilyOptions cf_opt(rocksdb_options);
+      std::string cf_specific_options;
+      for (auto& i : options) {
+        if (i.name == cf_name) {
+          cf_specific_options = i.option;
+          break;
+        }
+      }
+      //mark existence of new column_family
+      column_families.emplace(cf_name, ColumnFamilyData(cf_specific_options, nullptr));
+      status = rocksdb::GetColumnFamilyOptionsFromString(
+          cf_opt, cf_specific_options, &cf_opt);
+      if (!status.ok()) {
+        derr << __func__ << " invalid db column family options for CF '"
+            << cf_name << "': " << cf_specific_options << dendl;
+        return -EINVAL;
+      }
+      //find proper merge operator for column family
+      std::shared_ptr<rocksdb::MergeOperator> mo = cf_get_merge_operator(cf_name);
+      cf_opt.merge_operator = mo;
+      column_family_descriptors.push_back(
+          rocksdb::ColumnFamilyDescriptor(cf_name, cf_opt));
+    }
+    std::vector<rocksdb::ColumnFamilyHandle*> handles;
+    status = rocksdb::DB::Open(rocksdb::DBOptions(rocksdb_options),
+                               path, column_family_descriptors, &handles, &db);
+
+    if (!status.ok()) {
+      derr << status.ToString() << dendl;
+      return -EINVAL;
+    }
+
+    for (size_t i = 0; i < existing_cfs.size(); ++i) {
+      if (existing_cfs[i] == rocksdb::kDefaultColumnFamilyName) {
+        default_cf = handles[i];
+        must_close_default_cf = true;
+      } else {
+        // add_column_family(existing_cfs[i], static_cast<void*>(handles[i]));
+        // store the new CF handle
+        auto it = merge_ops.find(existing_cfs[i]);
+        if (it != merge_ops.end()) {
+          //this is creation of mono column family
+          cf_mono_handles.emplace(existing_cfs[i], static_cast<void*>(handles[i]));
+        }
+        //column_families.emplace(cf_name, ColumnFamilyData(cf_options, static_cast<void*>(cf_handle)));
+
+        //todo fix add_column_family
+        column_families[existing_cfs[i]].handle = static_cast<void*>(handles[i]);
+      }
+    }
+  }
+  ceph_assert(default_cf != nullptr);
+  perf_counters_register();
+  if (compact_on_mount) {
+    derr << "Compacting rocksdb store..." << dendl;
+    compact();
+    derr << "Finished compacting rocksdb store" << dendl;
   }
   return 0;
 }
 
 int RocksDBStore::create_and_open(ostream &out,
-				  const vector<ColumnFamily>& cfs)
+				  const vector<ColumnFamily>& to_create)
 {
   int r = create_db_dir();
   if (r < 0)
     return r;
-  if (cfs.empty()) {
-    return do_open(out, true, false, nullptr);
-  } else {
-    return do_open(out, true, false, &cfs);
+  r = load_rocksdb_options(true, rocksdb_options);
+  if (r < 0)
+    return r;
+  rocksdb::Status status;
+  status = rocksdb::DB::Open(rocksdb_options, path, &db);
+  if (!status.ok()) {
+    derr << status.ToString() << dendl;
+    return -EINVAL;
   }
+  default_cf = db->DefaultColumnFamily();
+  ceph_assert(default_cf != nullptr);
+  r=0;
+  for (size_t i=0; r==0 && i < to_create.size(); i++) {
+    r = column_family_create(to_create[i].name, to_create[i].option);
+    if (r < 0)
+      return r;
+  }
+  perf_counters_register();
+
+  return r;
 }
 
 int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options& opt)
@@ -478,128 +574,8 @@ int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options&
   return 0;
 }
 
-int RocksDBStore::do_open(ostream &out,
-			  bool create_if_missing,
-			  bool open_readonly,
-			  const vector<ColumnFamily>* cfs)
+void RocksDBStore::perf_counters_register()
 {
-  ceph_assert(!(create_if_missing && open_readonly));
-  rocksdb::Options opt;
-  int r = load_rocksdb_options(create_if_missing, opt);
-  if (r) {
-    dout(1) << __func__ << " load rocksdb options failed" << dendl;
-    return r;
-  }
-  rocksdb::Status status;
-  if (create_if_missing) {
-    status = rocksdb::DB::Open(opt, path, &db);
-    if (!status.ok()) {
-      derr << status.ToString() << dendl;
-      return -EINVAL;
-    }
-    // create and open column families
-    if (cfs) {
-      for (auto& p : *cfs) {
-	// copy default CF settings, block cache, merge operators as
-	// the base for new CF
-	rocksdb::ColumnFamilyOptions cf_opt(opt);
-	// user input options will override the base options
-	status = rocksdb::GetColumnFamilyOptionsFromString(
-	  cf_opt, p.option, &cf_opt);
-	if (!status.ok()) {
-	  derr << __func__ << " invalid db column family option string for CF: "
-	       << p.name << dendl;
-	  return -EINVAL;
-	}
-	install_cf_mergeop(p.name, &cf_opt);
-	rocksdb::ColumnFamilyHandle *cf;
-	status = db->CreateColumnFamily(cf_opt, p.name, &cf);
-	if (!status.ok()) {
-	  derr << __func__ << " Failed to create rocksdb column family: "
-	       << p.name << dendl;
-	  return -EINVAL;
-	}
-	// store the new CF handle
-	add_column_family(p.name, static_cast<void*>(cf));
-      }
-    }
-    default_cf = db->DefaultColumnFamily();
-  } else {
-    std::vector<string> existing_cfs;
-    status = rocksdb::DB::ListColumnFamilies(
-      rocksdb::DBOptions(opt),
-      path,
-      &existing_cfs);
-    dout(1) << __func__ << " column families: " << existing_cfs << dendl;
-    if (existing_cfs.empty()) {
-      // no column families
-      if (open_readonly) {
-	status = rocksdb::DB::Open(opt, path, &db);
-      } else {
-	status = rocksdb::DB::OpenForReadOnly(opt, path, &db);
-      }
-      if (!status.ok()) {
-	derr << status.ToString() << dendl;
-	return -EINVAL;
-      }
-      default_cf = db->DefaultColumnFamily();
-    } else {
-      // we cannot change column families for a created database.  so, map
-      // what options we are given to whatever cf's already exist.
-      std::vector<rocksdb::ColumnFamilyDescriptor> column_families;
-      for (auto& n : existing_cfs) {
-	// copy default CF settings, block cache, merge operators as
-	// the base for new CF
-	rocksdb::ColumnFamilyOptions cf_opt(opt);
-	bool found = false;
-	if (cfs) {
-	  for (auto& i : *cfs) {
-	    if (i.name == n) {
-	      found = true;
-	      status = rocksdb::GetColumnFamilyOptionsFromString(
-		cf_opt, i.option, &cf_opt);
-	      if (!status.ok()) {
-		derr << __func__ << " invalid db column family options for CF '"
-		     << i.name << "': " << i.option << dendl;
-		return -EINVAL;
-	      }
-	    }
-	  }
-	}
-	if (n != rocksdb::kDefaultColumnFamilyName) {
-	  install_cf_mergeop(n, &cf_opt);
-	}
-	column_families.push_back(rocksdb::ColumnFamilyDescriptor(n, cf_opt));
-	if (!found && n != rocksdb::kDefaultColumnFamilyName) {
-	  dout(1) << __func__ << " column family '" << n
-		  << "' exists but not expected" << dendl;
-	}
-      }
-      std::vector<rocksdb::ColumnFamilyHandle*> handles;
-      if (open_readonly) {
-        status = rocksdb::DB::OpenForReadOnly(rocksdb::DBOptions(opt),
-				              path, column_families,
-					      &handles, &db);
-      } else {
-        status = rocksdb::DB::Open(rocksdb::DBOptions(opt),
-				   path, column_families, &handles, &db);
-      }
-      if (!status.ok()) {
-	derr << status.ToString() << dendl;
-	return -EINVAL;
-      }
-      for (unsigned i = 0; i < existing_cfs.size(); ++i) {
-	if (existing_cfs[i] == rocksdb::kDefaultColumnFamilyName) {
-	  default_cf = handles[i];
-	  must_close_default_cf = true;
-	} else {
-	  add_column_family(existing_cfs[i], static_cast<void*>(handles[i]));
-	}
-      }
-    }
-  }
-  ceph_assert(default_cf != nullptr);
-  
   PerfCountersBuilder plb(g_ceph_context, "rocksdb", l_rocksdb_first, l_rocksdb_last);
   plb.add_u64_counter(l_rocksdb_gets, "get", "Gets");
   plb.add_u64_counter(l_rocksdb_txns, "submit_transaction", "Submit transactions");
@@ -614,17 +590,72 @@ int RocksDBStore::do_open(ostream &out,
   plb.add_time_avg(l_rocksdb_write_wal_time, "rocksdb_write_wal_time", "Rocksdb write wal time");
   plb.add_time_avg(l_rocksdb_write_memtable_time, "rocksdb_write_memtable_time", "Rocksdb write memtable time");
   plb.add_time_avg(l_rocksdb_write_delay_time, "rocksdb_write_delay_time", "Rocksdb write delay time");
-  plb.add_time_avg(l_rocksdb_write_pre_and_post_process_time, 
+  plb.add_time_avg(l_rocksdb_write_pre_and_post_process_time,
       "rocksdb_write_pre_and_post_time", "total time spent on writing a record, excluding write process");
   logger = plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
+}
 
-  if (compact_on_mount) {
-    derr << "Compacting rocksdb store..." << dendl;
-    compact();
-    derr << "Finished compacting rocksdb store" << dendl;
+int RocksDBStore::column_family_list(vector<std::string>& cf_names)
+{
+  cf_names.clear();
+  rocksdb::Status status;
+  std::vector<string> existing_cfs;
+  status = rocksdb::DB::ListColumnFamilies(
+    rocksdb::DBOptions(rocksdb_options), path, &existing_cfs);
+  if (!status.ok()) {
+    derr << status.ToString() << dendl;
+    return -EINVAL;
   }
+  cf_names = existing_cfs;
   return 0;
+}
+
+int RocksDBStore::column_family_create(const std::string& cf_name, const std::string& cf_options)
+{
+  rocksdb::Status status;
+  // copy default CF settings, block cache, merge operators as
+  // the base for new CF
+  rocksdb::ColumnFamilyOptions cf_opt(rocksdb_options);
+  // user input options will override the base options
+  status = rocksdb::GetColumnFamilyOptionsFromString(
+      cf_opt, cf_options, &cf_opt);
+  if (!status.ok()) {
+    derr << __func__ << " invalid db column family option string for CF: "
+        << cf_name << dendl;
+    return -EINVAL;
+  }
+  // find proper merge operator for column family
+  std::shared_ptr<rocksdb::MergeOperator> mo = cf_get_merge_operator(cf_name);
+  cf_opt.merge_operator = mo;
+
+  rocksdb::ColumnFamilyHandle *cf_handle;
+  status = db->CreateColumnFamily(cf_opt, cf_name, &cf_handle);
+  if (!status.ok()) {
+    derr << __func__ << " Failed to create rocksdb column family: "
+        << cf_name << dendl;
+    return -EINVAL;
+  }
+  // store the new CF handle
+  auto i = merge_ops.find(cf_name);
+  if (i != merge_ops.end()) {
+    //this is creation of mono column family
+    cf_mono_handles.emplace(cf_name, static_cast<void*>(cf_handle));
+  }
+  column_families.emplace(cf_name, ColumnFamilyData(cf_options, static_cast<void*>(cf_handle)));
+  return 0;
+}
+
+std::shared_ptr<rocksdb::MergeOperator>
+RocksDBStore::cf_get_merge_operator(const std::string& cf_name)
+{
+  auto i = merge_ops.find(cf_name);
+  if (i != merge_ops.end()) {
+    return std::shared_ptr<rocksdb::MergeOperator>(new MergeOperatorLinker(i->second));
+  }
+  //Column family name is not exact to any defined merge operators.
+  //Use all-prefix merge operator.
+  return std::shared_ptr<rocksdb::MergeOperator>(new MergeOperatorRouter(*this));
 }
 
 int RocksDBStore::_test_init(const string& dir)
@@ -644,10 +675,9 @@ RocksDBStore::~RocksDBStore()
   delete logger;
 
   // Ensure db is destroyed before dependent db_cache and filterpolicy
-  for (auto& p : cf_handles) {
+  for (auto& p : column_families) {
     db->DestroyColumnFamilyHandle(
-      static_cast<rocksdb::ColumnFamilyHandle*>(p.second));
-    p.second = nullptr;
+      static_cast<rocksdb::ColumnFamilyHandle*>(p.second.handle));
   }
   if (must_close_default_cf) {
     db->DestroyColumnFamilyHandle(default_cf);
@@ -874,9 +904,7 @@ int RocksDBStore::submit_transaction_sync(KeyValueDB::Transaction t)
 }
 
 RocksDBStore::RocksDBTransactionImpl::RocksDBTransactionImpl(RocksDBStore *_db)
-{
-  db = _db;
-}
+: db(_db), cf_handle(nullptr) {}
 
 void RocksDBStore::RocksDBTransactionImpl::put_bat(
   rocksdb::WriteBatch& bat,
@@ -904,12 +932,12 @@ void RocksDBStore::RocksDBTransactionImpl::set(
   const string &k,
   const bufferlist &to_set_bl)
 {
-  auto cf = db->get_cf_handle(prefix);
-  if (cf) {
+  rocksdb::ColumnFamilyHandle* cf = cf_handle;
+  if (db->check_mode(cf, prefix)) {
     put_bat(bat, cf, k, to_set_bl);
   } else {
     string key = combine_strings(prefix, k);
-    put_bat(bat, db->default_cf, key, to_set_bl);
+    put_bat(bat, cf, key, to_set_bl);
   }
 }
 
@@ -918,8 +946,8 @@ void RocksDBStore::RocksDBTransactionImpl::set(
   const char *k, size_t keylen,
   const bufferlist &to_set_bl)
 {
-  auto cf = db->get_cf_handle(prefix);
-  if (cf) {
+  rocksdb::ColumnFamilyHandle* cf = cf_handle;
+  if (db->check_mode(cf, prefix)) {
     string key(k, keylen);  // fixme?
     put_bat(bat, cf, key, to_set_bl);
   } else {
@@ -932,11 +960,11 @@ void RocksDBStore::RocksDBTransactionImpl::set(
 void RocksDBStore::RocksDBTransactionImpl::rmkey(const string &prefix,
 					         const string &k)
 {
-  auto cf = db->get_cf_handle(prefix);
-  if (cf) {
+  rocksdb::ColumnFamilyHandle* cf = cf_handle;
+  if (db->check_mode(cf, prefix)) {
     bat.Delete(cf, rocksdb::Slice(k));
   } else {
-    bat.Delete(db->default_cf, combine_strings(prefix, k));
+    bat.Delete(cf, combine_strings(prefix, k));
   }
 }
 
@@ -944,52 +972,53 @@ void RocksDBStore::RocksDBTransactionImpl::rmkey(const string &prefix,
 					         const char *k,
 						 size_t keylen)
 {
-  auto cf = db->get_cf_handle(prefix);
-  if (cf) {
+  rocksdb::ColumnFamilyHandle* cf = cf_handle;
+  if (db->check_mode(cf, prefix)) {
     bat.Delete(cf, rocksdb::Slice(k, keylen));
   } else {
     string key;
     combine_strings(prefix, k, keylen, &key);
-    bat.Delete(db->default_cf, rocksdb::Slice(key));
+    bat.Delete(cf, rocksdb::Slice(key));
   }
 }
 
 void RocksDBStore::RocksDBTransactionImpl::rm_single_key(const string &prefix,
 					                 const string &k)
 {
-  auto cf = db->get_cf_handle(prefix);
-  if (cf) {
+  rocksdb::ColumnFamilyHandle* cf = cf_handle;
+  if (db->check_mode(cf, prefix)) {
     bat.SingleDelete(cf, k);
   } else {
-    bat.SingleDelete(db->default_cf, combine_strings(prefix, k));
+    bat.SingleDelete(cf, combine_strings(prefix, k));
   }
 }
 
 void RocksDBStore::RocksDBTransactionImpl::rmkeys_by_prefix(const string &prefix)
 {
-  auto cf = db->get_cf_handle(prefix);
+  rocksdb::ColumnFamilyHandle* cf = cf_handle;
+  bool is_mono = db->check_mode(cf, prefix);
   uint64_t cnt = db->delete_range_threshold;
   bat.SetSavePoint();
   auto it = db->get_iterator(prefix);
   for (it->seek_to_first(); it->valid(); it->next()) {
     if (!cnt) {
       bat.RollbackToSavePoint();
-      if (cf) {
+      if (is_mono) {
         string endprefix = "\xff\xff\xff\xff";  // FIXME: this is cheating...
         bat.DeleteRange(cf, string(), endprefix);
       } else {
         string endprefix = prefix;
         endprefix.push_back('\x01');
-	bat.DeleteRange(db->default_cf,
+	bat.DeleteRange(cf,
                         combine_strings(prefix, string()),
                         combine_strings(endprefix, string()));
       }
       return;
     }
-    if (cf) {
+    if (is_mono) {
       bat.Delete(cf, rocksdb::Slice(it->key()));
     } else {
-      bat.Delete(db->default_cf, combine_strings(prefix, it->key()));
+      bat.Delete(cf, combine_strings(prefix, it->key()));
     }
     --cnt;
   }
@@ -1000,8 +1029,8 @@ void RocksDBStore::RocksDBTransactionImpl::rm_range_keys(const string &prefix,
                                                          const string &start,
                                                          const string &end)
 {
-  auto cf = db->get_cf_handle(prefix);
-
+  rocksdb::ColumnFamilyHandle* cf = cf_handle;
+  bool is_mono = db->check_mode(cf, prefix);
   uint64_t cnt = db->delete_range_threshold;
   auto it = db->get_iterator(prefix);
   bat.SetSavePoint();
@@ -1012,10 +1041,10 @@ void RocksDBStore::RocksDBTransactionImpl::rm_range_keys(const string &prefix,
     }
     if (!cnt) {
       bat.RollbackToSavePoint();
-      if (cf) {
+      if (is_mono) {
         bat.DeleteRange(cf, rocksdb::Slice(start), rocksdb::Slice(end));
       } else {
-        bat.DeleteRange(db->default_cf,
+        bat.DeleteRange(cf,
                         rocksdb::Slice(combine_strings(prefix, start)),
                         rocksdb::Slice(combine_strings(prefix, end)));
       }
@@ -1024,7 +1053,7 @@ void RocksDBStore::RocksDBTransactionImpl::rm_range_keys(const string &prefix,
     if (cf) {
       bat.Delete(cf, rocksdb::Slice(it->key()));
     } else {
-      bat.Delete(db->default_cf, combine_strings(prefix, it->key()));
+      bat.Delete(cf, combine_strings(prefix, it->key()));
     }
     it->next();
     --cnt;
@@ -1037,39 +1066,50 @@ void RocksDBStore::RocksDBTransactionImpl::merge(
   const string &k,
   const bufferlist &to_set_bl)
 {
-  auto cf = db->get_cf_handle(prefix);
-  if (cf) {
+  rocksdb::ColumnFamilyHandle* cf = cf_handle;
+  if (db->check_mode(cf, prefix)) {
+    // special mono column family case
     // bufferlist::c_str() is non-constant, so we can't call c_str()
     if (to_set_bl.is_contiguous() && to_set_bl.length() > 0) {
       bat.Merge(
-	cf,
-	rocksdb::Slice(k),
-	rocksdb::Slice(to_set_bl.buffers().front().c_str(), to_set_bl.length()));
+       cf,
+       rocksdb::Slice(k),
+       rocksdb::Slice(to_set_bl.buffers().front().c_str(), to_set_bl.length()));
     } else {
       // make a copy
       rocksdb::Slice key_slice(k);
       vector<rocksdb::Slice> value_slices(to_set_bl.buffers().size());
       bat.Merge(cf, rocksdb::SliceParts(&key_slice, 1),
-		prepare_sliceparts(to_set_bl, &value_slices));
+                prepare_sliceparts(to_set_bl, &value_slices));
     }
+    return;
   } else {
     string key = combine_strings(prefix, k);
     // bufferlist::c_str() is non-constant, so we can't call c_str()
     if (to_set_bl.is_contiguous() && to_set_bl.length() > 0) {
       bat.Merge(
-	db->default_cf,
-	rocksdb::Slice(key),
-	rocksdb::Slice(to_set_bl.buffers().front().c_str(), to_set_bl.length()));
+       cf,
+       rocksdb::Slice(key),
+       rocksdb::Slice(to_set_bl.buffers().front().c_str(), to_set_bl.length()));
     } else {
       // make a copy
       rocksdb::Slice key_slice(key);
       vector<rocksdb::Slice> value_slices(to_set_bl.buffers().size());
       bat.Merge(
-	db->default_cf,
-	rocksdb::SliceParts(&key_slice, 1),
-	prepare_sliceparts(to_set_bl, &value_slices));
+       cf,
+       rocksdb::SliceParts(&key_slice, 1),
+       prepare_sliceparts(to_set_bl, &value_slices));
     }
   }
+}
+
+void RocksDBStore::RocksDBTransactionImpl::select(
+      void* column_family_handle)
+{
+  if (column_family_handle != nullptr)
+    cf_handle = static_cast<rocksdb::ColumnFamilyHandle *>(column_family_handle);
+  else
+    cf_handle = nullptr;
 }
 
 int RocksDBStore::get(
@@ -1187,6 +1227,84 @@ int RocksDBStore::get(
   return r;
 }
 
+int RocksDBStore::get(
+    void* cf_handle,
+    const std::string &prefix,
+    const std::set<std::string> &keys,
+    std::map<std::string, bufferlist> *out) {
+  utime_t start = ceph_clock_now();
+  auto cf = static_cast<rocksdb::ColumnFamilyHandle*>(cf_handle);
+  if (check_mode(cf, prefix)) {
+    for (auto& key : keys) {
+      std::string value;
+      auto status = db->Get(rocksdb::ReadOptions(),
+                            cf,
+                            rocksdb::Slice(key),
+                            &value);
+      if (status.ok()) {
+        (*out)[key].append(value);
+      } else if (status.IsIOError()) {
+        ceph_abort_msg(status.getState());
+      }
+    }
+  } else {
+    for (auto& key : keys) {
+      std::string value;
+      string k = combine_strings(prefix, key);
+      auto status = db->Get(rocksdb::ReadOptions(),
+                            cf,
+                            rocksdb::Slice(k),
+                            &value);
+      if (status.ok()) {
+        (*out)[key].append(value);
+      } else if (status.IsIOError()) {
+        ceph_abort_msg(status.getState());
+      }
+    }
+  }
+  utime_t lat = ceph_clock_now() - start;
+  logger->inc(l_rocksdb_gets);
+  logger->tinc(l_rocksdb_get_latency, lat);
+  return 0;
+}
+
+int RocksDBStore::get(
+    void* cf_handle,
+    const string &prefix,
+    const string &key,
+    bufferlist *out)
+{
+  ceph_assert(out && (out->length() == 0));
+  utime_t start = ceph_clock_now();
+  int r = 0;
+  string value;
+  rocksdb::Status s;
+  auto cf = static_cast<rocksdb::ColumnFamilyHandle*>(cf_handle);
+  if (check_mode(cf, prefix)) {
+    s = db->Get(rocksdb::ReadOptions(),
+                cf,
+                rocksdb::Slice(key),
+                &value);
+  } else {
+    string k = combine_strings(prefix, key);
+    s = db->Get(rocksdb::ReadOptions(),
+                cf,
+                rocksdb::Slice(k),
+                &value);
+  }
+  if (s.ok()) {
+    out->append(value);
+  } else if (s.IsNotFound()) {
+    r = -ENOENT;
+  } else {
+    ceph_abort_msg(s.getState());
+  }
+  utime_t lat = ceph_clock_now() - start;
+  logger->inc(l_rocksdb_gets);
+  logger->tinc(l_rocksdb_get_latency, lat);
+  return r;
+}
+
 int RocksDBStore::split_key(rocksdb::Slice in, string *prefix, string *key)
 {
   size_t prefix_len = 0;
@@ -1212,7 +1330,7 @@ void RocksDBStore::compact()
   logger->inc(l_rocksdb_compact);
   rocksdb::CompactRangeOptions options;
   db->CompactRange(options, default_cf, nullptr, nullptr);
-  for (auto cf : cf_handles) {
+  for (auto cf : cf_mono_handles) {
     db->CompactRange(
       options,
       static_cast<rocksdb::ColumnFamilyHandle*>(cf.second),

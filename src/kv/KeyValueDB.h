@@ -144,6 +144,15 @@ public:
       const ceph::buffer::list  &value     ///< [in] value to be merged into key
     ) { ceph_abort_msg("Not implemented"); }
 
+    /// Select column family space to execute operations on.
+    /// Selection persists for all subsequent calls.
+    /// Initially default column family is selected.
+    /// Handlers must be obtained by \ref column_family_handle.
+    /// It is legal to construct transaction that spans multiple column families.
+    virtual void select(
+      void* column_family_handle ///< [in] column family handler, or nullptr for default column family
+    ) { ceph_abort_msg("Not implemented"); }
+
     virtual ~TransactionImpl() {}
   };
   typedef std::shared_ptr< TransactionImpl > Transaction;
@@ -157,10 +166,38 @@ public:
   /// test whether we can successfully initialize; may have side effects (e.g., create)
   static int test_init(const std::string& type, const std::string& dir);
   virtual int init(string option_str="") = 0;
-  virtual int open(std::ostream &out, const std::vector<ColumnFamily>& cfs = {}) = 0;
-  // std::vector cfs contains column families to be created when db is created.
-  virtual int create_and_open(std::ostream &out,
-			      const std::vector<ColumnFamily>& cfs = {}) = 0;
+  /*
+   * Opens existing database
+   *
+   * Makes transition to state that allows to fetch/store data into database.
+   * It enables operation on main DB and all column family defined within the database.
+   * If opening a column family requires additional options, they can be specified via _options_ parameter.
+   * Before calling this all merge operators for DB must be registered see \ref set_merge_operator.
+   *
+   * Note 1: Not mentioning column family in _options_ means that column is handled with default options.
+   * Note 2: Set of merge operators \ref set_merge_operator must be exact as when DB was created \ref create_and_open.
+   *
+   * Params:
+   *   out - textual representation of error
+   *   options - column families specific options
+   * Result:
+   *   0 - success, <0 error code
+   */
+  virtual int open(std::ostream &out, const std::vector<ColumnFamily>& options = {}) = 0;
+  /*
+   * Creates new database
+   *
+   * Enables access to newly created database. This database is empty, with exception that
+   * additional column families may be created, according to _new_cfs_ parameter.
+   * The _new_cfs_ is optional, and column families can be created later, using \ref create_column_family.
+   *
+   * Params:
+   *   out - textual representation of error
+   *   new_cfs - column families to be created
+   * Result:
+   *   0 - success, <0 error code
+   */
+  virtual int create_and_open(std::ostream &out, const std::vector<ColumnFamily>& new_cfs = {}) = 0;
 
   virtual int open_read_only(std::ostream &out, const std::vector<ColumnFamily>& cfs = {}) {
     return -ENOTSUP;
@@ -168,6 +205,22 @@ public:
 
   virtual void close() { }
 
+  /*
+   * Lists column families
+   *
+   * Lists column families present in database.
+   * This can be invoked before open() to query existing column families.
+   * Also it allows to query ability of database to support multiple column families.
+   *
+    Params:
+   *   [out] cf_names - names of all existing column families
+   * Result:
+   *   0 - success, <0 - db does not support column families
+   */
+  virtual int column_family_list(vector<std::string>& cf_names) { cf_names.clear(); return -1; }
+  virtual int column_family_create(const std::string& cf_name, const std::string& cf_options) { ceph_abort_msg("Not implemented"); return -1; }
+  virtual int column_family_delete(const std::string& cf_name) { ceph_abort_msg("Not implemented"); return -1; }
+  virtual void* column_family_handle(const std::string& cf_name) { ceph_abort_msg("Not implemented"); return nullptr; }
   /// Try to repair K/V database. leveldb and rocksdb require that database must be not opened.
   virtual int repair(std::ostream &out) { return 0; }
 
@@ -202,6 +255,30 @@ public:
 		  const char *key, size_t keylen,
 		  ceph::buffer::list *value) {
     return get(prefix, string(key, keylen), value);
+  }
+
+  virtual int get(void* cf_handle,                         ///< [in] Column family handle
+                  const std::string &prefix,               ///< [in] Prefix/CF for key
+                  const std::set<std::string> &keys,       ///< [in] Keys to retrieve
+                  std::map<std::string, bufferlist> *out) {///< [out] Key values retrieved
+    ceph_abort_msg("Not implemented"); return -1;
+  };
+
+  virtual int get(void* cf_handle,           ///< [in] Column family handle
+                  const std::string &prefix, ///< [in] prefix or CF name
+                  const std::string &key,    ///< [in] key
+                  bufferlist *value) {       ///< [out] value
+    std::set<std::string> ks;
+    ks.insert(key);
+    std::map<std::string,bufferlist> om;
+    int r = get(cf_handle, prefix, ks, &om);
+    if (om.find(key) != om.end()) {
+      *value = std::move(om[key]);
+    } else {
+      *value = bufferlist();
+      r = -ENOENT;
+    }
+    return r;
   }
 
   class IteratorBase {
@@ -338,11 +415,11 @@ public:
   }
 
   void add_column_family(const std::string& cf_name, void *handle) {
-    cf_handles.insert(std::make_pair(cf_name, handle));
+    cf_mono_handles.insert(std::make_pair(cf_name, handle));
   }
 
   bool is_column_family(const std::string& prefix) {
-    return cf_handles.count(prefix);
+    return cf_mono_handles.count(prefix);
   }
 
   virtual uint64_t get_estimated_size(std::map<std::string,uint64_t> &extra) = 0;
@@ -408,7 +485,20 @@ public:
     virtual ~MergeOperator() {}
   };
 
-  /// Setup one or more operators, this needs to be done BEFORE the DB is opened.
+  /*
+   * Register merge operator
+   *
+   * Registers merge operator to invoke on values with specific \ref prefix.
+   * Value \ref prefix must be equal to whole prefix; substrings will not match.
+   * Merge operators may be registered only before DB is opened, i.e.
+   * before \ref open or \ref create_and_open calls.
+   *
+   * Params:
+   * - prefix for which merge is registered
+   * - mop actual merge operation handler
+   * Return:
+   *   0 - success, <0 DB in incorrect state
+   */
   virtual int set_merge_operator(const std::string& prefix,
 				 std::shared_ptr<MergeOperator> mop) {
     return -EOPNOTSUPP;
@@ -439,11 +529,10 @@ public:
   }
 protected:
   /// List of matching prefixes/ColumnFamilies and merge operators
-  std::vector<std::pair<std::string,
-			std::shared_ptr<MergeOperator> > > merge_ops;
+  std::map<std::string, std::shared_ptr<MergeOperator> > merge_ops;
 
   /// column families in use, name->handle
-  std::unordered_map<std::string, void *> cf_handles;
+  std::unordered_map<std::string, void *> cf_mono_handles;
 };
 
 #endif

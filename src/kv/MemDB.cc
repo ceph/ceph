@@ -165,7 +165,7 @@ int MemDB::set_merge_operator(
   const string& prefix,
   std::shared_ptr<KeyValueDB::MergeOperator> mop)
 {
-  merge_ops.push_back(std::make_pair(prefix, mop));
+  merge_ops.emplace(prefix, mop);
   return 0;
 }
 
@@ -338,10 +338,9 @@ int MemDB::_rmkey(ms_op_t &op)
 
 std::shared_ptr<KeyValueDB::MergeOperator> MemDB::_find_merge_op(const std::string &prefix)
 {
-  for (const auto& i : merge_ops) {
-    if (i.first == prefix) {
-      return i.second;
-    }
+  auto i = merge_ops.find(prefix);
+  if (i != merge_ops.end()) {
+    return i->second;
   }
 
   dtrace << __func__ << " No merge op for " << prefix << dendl;
