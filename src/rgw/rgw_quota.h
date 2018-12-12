@@ -114,4 +114,8 @@ public:
   static void free_handler(RGWQuotaHandler *handler);
 };
 
+// apply default quotas from configuration
+void rgw_apply_default_bucket_quota(RGWQuotaInfo& quota, const CephContext* cct);
+void rgw_apply_default_user_quota(RGWQuotaInfo& quota, const CephContext* cct);
+
 #endif
