@@ -22,17 +22,17 @@ class SettingsTest(unittest.TestCase):
         settings._OPTIONS_COMMAND_MAP = settings._options_command_map()
 
     @classmethod
-    def mock_set_config(cls, attr, val):
+    def mock_set_module_option(cls, attr, val):
         cls.CONFIG_KEY_DICT[attr] = val
 
     @classmethod
-    def mock_get_config(cls, attr, default):
+    def mock_get_module_option(cls, attr, default):
         return cls.CONFIG_KEY_DICT.get(attr, default)
 
     def setUp(self):
         self.CONFIG_KEY_DICT.clear()
-        mgr.set_config.side_effect = self.mock_set_config
-        mgr.get_config.side_effect = self.mock_get_config
+        mgr.set_module_option.side_effect = self.mock_set_module_option
+        mgr.get_module_option.side_effect = self.mock_get_module_option
         if Settings.GRAFANA_API_HOST != 'localhost':
             Settings.GRAFANA_API_HOST = 'localhost'
         if Settings.GRAFANA_API_PORT != 3000:
@@ -119,17 +119,17 @@ class SettingsControllerTest(ControllerTestCase):
         cls.setup_controllers([SettingsController])
 
     @classmethod
-    def mock_set_config(cls, attr, val):
+    def mock_set_module_option(cls, attr, val):
         cls.config_values[attr] = val
 
     @classmethod
-    def mock_get_config(cls, attr, default):
+    def mock_get_module_option(cls, attr, default):
         return cls.config_values.get(attr, default)
 
     def setUp(self):
         self.config_values.clear()
-        mgr.set_config.side_effect = self.mock_set_config
-        mgr.get_config.side_effect = self.mock_get_config
+        mgr.set_module_option.side_effect = self.mock_set_module_option
+        mgr.get_module_option.side_effect = self.mock_get_module_option
 
     def test_settings_list(self):
         self._get('/api/settings')

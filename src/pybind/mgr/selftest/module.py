@@ -28,7 +28,7 @@ class Module(MgrModule):
 
     # The test code in qa/ relies on these options existing -- they
     # are of course not really used for anything in the module
-    OPTIONS = [
+    MODULE_OPTIONS = [
             {'name': 'testkey'},
             {'name': 'testlkey'},
             {'name': 'testnewline'}
@@ -124,9 +124,9 @@ class Module(MgrModule):
             else:
                 return 0, '', 'No background workload was running'
         elif command['prefix'] == 'mgr self-test config get':
-            return 0, str(self.get_config(command['key'])), ''
+            return 0, str(self.get_module_option(command['key'])), ''
         elif command['prefix'] == 'mgr self-test config get_localized':
-            return 0, str(self.get_localized_config(command['key'])), ''
+            return 0, str(self.get_localized_module_option(command['key'])), ''
         elif command['prefix'] == 'mgr self-test remote':
             self._test_remote_calls()
             return 0, '', 'Successfully called'
@@ -254,11 +254,11 @@ class Module(MgrModule):
         # This is not a strong test (can't tell if values really
         # persisted), it's just for the python interface bit.
 
-        self.set_config("testkey", "testvalue")
-        assert self.get_config("testkey") == "testvalue"
+        self.set_module_option("testkey", "testvalue")
+        assert self.get_module_option("testkey") == "testvalue"
 
-        self.set_localized_config("testkey", "testvalue")
-        assert self.get_localized_config("testkey") == "testvalue"
+        self.set_localized_module_option("testkey", "testvalue")
+        assert self.get_localized_module_option("testkey") == "testvalue"
 
     def _self_test_store(self):
         existing_keys = set(self.get_store_prefix("test").keys())

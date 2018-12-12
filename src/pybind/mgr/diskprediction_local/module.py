@@ -16,7 +16,7 @@ TIME_WEEK = TIME_DAYS * 7
 
 
 class Module(MgrModule):
-    OPTIONS = [
+    MODULE_OPTIONS = [
         {
             'name': 'sleep_interval',
             'default': str(600),
@@ -32,26 +32,26 @@ class Module(MgrModule):
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
         # options
-        for opt in self.OPTIONS:
+        for opt in self.MODULE_OPTIONS:
             setattr(self, opt['name'], opt['default'])
         # other
         self._run = True
         self._event = Event()
 
     def config_notify(self):
-        for opt in self.OPTIONS:
+        for opt in self.MODULE_OPTIONS:
             setattr(self,
                     opt['name'],
-                    self.get_config(opt['name']) or opt['default'])
+                    self.get_module_option(opt['name']) or opt['default'])
             self.log.debug(' %s = %s', opt['name'], getattr(self, opt['name']))
-        if self.get_option('device_failure_prediction_mode') == 'local':
+        if self.get_ceph_option('device_failure_prediction_mode') == 'local':
             self._event.set()
 
     def refresh_config(self):
-        for opt in self.OPTIONS:
+        for opt in self.MODULE_OPTIONS:
             setattr(self,
                     opt['name'],
-                    self.get_config(opt['name']) or opt['default'])
+                    self.get_module_option(opt['name']) or opt['default'])
             self.log.debug(' %s = %s', opt['name'], getattr(self, opt['name']))
 
     def handle_command(self, _, cmd):
@@ -77,7 +77,7 @@ class Module(MgrModule):
 
         while self._run:
             self.refresh_config()
-            mode = self.get_option('device_failure_prediction_mode')
+            mode = self.get_ceph_option('device_failure_prediction_mode')
             if mode == 'local':
                 now = datetime.datetime.utcnow()
                 if not last_predicted:

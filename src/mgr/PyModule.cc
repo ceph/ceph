@@ -372,9 +372,9 @@ int PyModule::load(PyThreadState *pMainThreadState)
 
     r = load_options();
     if (r != 0) {
-      derr << "Missing or invalid OPTIONS attribute in module '"
+      derr << "Missing or invalid MODULE_OPTIONS attribute in module '"
           << module_name << "'" << dendl;
-      error_string = "Missing or invalid OPTIONS attribute";
+      error_string = "Missing or invalid MODULE_OPTIONS attribute";
       return r;
     }
 
@@ -514,13 +514,13 @@ int PyModule::load_commands()
 
 int PyModule::load_options()
 {
-  int r = walk_dict_list("OPTIONS", [this](PyObject *pOption) -> int {
+  int r = walk_dict_list("MODULE_OPTIONS", [this](PyObject *pOption) -> int {
     PyObject *pName = PyDict_GetItemString(pOption, "name");
     ceph_assert(pName != nullptr);
 
     ModuleOption option;
     option.name = PyString_AsString(pName);
-    dout(20) << "loaded option " << option.name << dendl;
+    dout(20) << "loaded module option " << option.name << dendl;
 
     options[option.name] = std::move(option);
 

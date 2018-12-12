@@ -314,8 +314,8 @@ class AccessControlDB(object):
         logger.debug("AC: Checking for previews DB versions")
         if self.VERSION == 1:  # current version
             # check if there is username/password from previous version
-            username = mgr.get_config('username', None)
-            password = mgr.get_config('password', None)
+            username = mgr.get_module_option('username', None)
+            password = mgr.get_module_option('password', None)
             if username and password:
                 logger.debug("AC: Found single user credentials: user=%s",
                              username)
