@@ -154,7 +154,7 @@ class Module(MgrModule):
         },
     ]
 
-    OPTIONS = [
+    MODULE_OPTIONS = [
             {'name': 'server_addr'},
             {'name': 'server_port'},
             {'name': 'scrape_interval'},
@@ -860,10 +860,10 @@ class Module(MgrModule):
                     raise cherrypy.HTTPError(503, 'No MON connection')
 
         # Make the cache timeout for collecting configurable
-        self.collect_timeout = self.get_localized_config('scrape_interval', 5.0)
+        self.collect_timeout = self.get_localized_module_option('scrape_interval', 5.0)
 
-        server_addr = self.get_localized_config('server_addr', DEFAULT_ADDR)
-        server_port = self.get_localized_config('server_port', DEFAULT_PORT)
+        server_addr = self.get_localized_module_option('server_addr', DEFAULT_ADDR)
+        server_port = self.get_localized_module_option('server_port', DEFAULT_PORT)
         self.log.info(
             "server_addr: %s server_port: %s" %
             (server_addr, server_port)
@@ -903,8 +903,8 @@ class StandbyModule(MgrStandbyModule):
         self.shutdown_event = threading.Event()
 
     def serve(self):
-        server_addr = self.get_localized_config('server_addr', '::')
-        server_port = self.get_localized_config('server_port', DEFAULT_PORT)
+        server_addr = self.get_localized_module_option('server_addr', '::')
+        server_port = self.get_localized_module_option('server_port', DEFAULT_PORT)
         self.log.info("server_addr: %s server_port: %s" % (server_addr, server_port))
         cherrypy.config.update({
             'server.socket_host': server_addr,

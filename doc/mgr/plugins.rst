@@ -96,38 +96,38 @@ Configuration options
 ---------------------
 
 Modules can load and store configuration options using the
-``set_config`` and ``get_config`` methods.
+``set_module_option`` and ``get_module_option`` methods.
 
-.. note:: Use ``set_config`` and ``get_config`` to manage user-visible
-   configuration options that are not blobs (like certificates). If you want to
-   persist module-internal data or binary configuration data consider using
-   the `KV store`_.
+.. note:: Use ``set_module_option`` and ``get_module_option`` to
+   manage user-visible configuration options that are not blobs (like
+   certificates). If you want to persist module-internal data or
+   binary configuration data consider using the `KV store`_.
 
 You must declare your available configuration options in the
-``OPTIONS`` class attribute, like this:
+``MODULE_OPTIONS`` class attribute, like this:
 
 ::
 
-    OPTIONS = [
+    MODULE_OPTIONS = [
         {
             "name": "my_option"
         }
     ]
 
-If you try to use set_config or get_config on options not declared
-in ``OPTIONS``, an exception will be raised.
+If you try to use set_module_option or get_module_option on options not declared
+in ``MODULE_OPTIONS``, an exception will be raised.
 
 You may choose to provide setter commands in your module to perform
 high level validation.  Users can also modify configuration using
 the normal `ceph config set` command, where the configuration options
 for a mgr module are named like `mgr/<module name>/<option>`.
 
-If a configuration option is different depending on which node
-the mgr is running on, then use *localized* configuration (
-``get_localized_config``, ``set_localized_config``).  This may be necessary
-for options such as what address to listen on.  Localized options may
-also be set externally with ``ceph config set``, where they key name
-is like ``mgr/<module name>/<mgr id>/<option>``
+If a configuration option is different depending on which node the mgr
+is running on, then use *localized* configuration (
+``get_localized_module_option``, ``set_localized_module_option``).
+This may be necessary for options such as what address to listen on.
+Localized options may also be set externally with ``ceph config set``,
+where they key name is like ``mgr/<module name>/<mgr id>/<option>``
 
 If you need to load and store data (e.g. something larger, binary, or multiline),
 use the KV store instead of configuration options (see next section).
@@ -135,21 +135,21 @@ use the KV store instead of configuration options (see next section).
 Hints for using config options:
 
 * Reads are fast: ceph-mgr keeps a local in-memory copy, so in many cases
-  you can just do a get_config every time you use a option, rather than
+  you can just do a get_module_option every time you use a option, rather than
   copying it out into a variable.
 * Writes block until the value is persisted (i.e. round trip to the monitor),
   but reads from another thread will see the new value immediately.
 * If a user has used `config set` from the command line, then the new
-  value will become visible to `get_config` immediately, although the
+  value will become visible to `get_module_option` immediately, although the
   mon->mgr update is asynchronous, so `config set` will return a fraction
   of a second before the new value is visible on the mgr.
 * To delete a config value (i.e. revert to default), just pass ``None`` to
-  set_config.
+  set_module_option.
 
-.. automethod:: MgrModule.get_config
-.. automethod:: MgrModule.set_config
-.. automethod:: MgrModule.get_localized_config
-.. automethod:: MgrModule.set_localized_config
+.. automethod:: MgrModule.get_module_option
+.. automethod:: MgrModule.set_module_option
+.. automethod:: MgrModule.get_localized_module_option
+.. automethod:: MgrModule.set_localized_module_option
 
 KV store
 --------
@@ -373,7 +373,7 @@ Limitations
 -----------
 
 It is not possible to call back into C++ code from a module's
-``__init__()`` method.  For example calling ``self.get_config()`` at
+``__init__()`` method.  For example calling ``self.get_module_option()`` at
 this point will result in an assertion failure in ceph-mgr.  For modules
 that implement the ``serve()`` method, it usually makes sense to do most
 initialization inside that method instead.

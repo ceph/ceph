@@ -106,13 +106,13 @@ class CherryPyConfig(object):
 
         :returns our URI
         """
-        server_addr = self.get_localized_config('server_addr', '::')
-        ssl = strtobool(self.get_localized_config('ssl', 'True'))
+        server_addr = self.get_localized_module_option('server_addr', '::')
+        ssl = strtobool(self.get_localized_module_option('ssl', 'True'))
         def_server_port = 8443
         if not ssl:
             def_server_port = 8080
 
-        server_port = self.get_localized_config('server_port', def_server_port)
+        server_port = self.get_localized_module_option('server_port', def_server_port)
         if server_addr is None:
             raise ServerConfigException(
                 'no server_addr configured; '
@@ -155,7 +155,7 @@ class CherryPyConfig(object):
                 self.cert_tmp.flush()  # cert_tmp must not be gc'ed
                 cert_fname = self.cert_tmp.name
             else:
-                cert_fname = self.get_localized_config('crt_file')
+                cert_fname = self.get_localized_module_option('crt_file')
 
             pkey = self.get_store("key")
             if pkey is not None:
@@ -164,7 +164,7 @@ class CherryPyConfig(object):
                 self.pkey_tmp.flush()  # pkey_tmp must not be gc'ed
                 pkey_fname = self.pkey_tmp.name
             else:
-                pkey_fname = self.get_localized_config('key_file')
+                pkey_fname = self.get_localized_module_option('key_file')
 
             if not cert_fname or not pkey_fname:
                 raise ServerConfigException('no certificate configured')
@@ -179,8 +179,8 @@ class CherryPyConfig(object):
 
         cherrypy.config.update(config)
 
-        self._url_prefix = prepare_url_prefix(self.get_config('url_prefix',
-                                                              default=''))
+        self._url_prefix = prepare_url_prefix(self.get_module_option('url_prefix',
+                                                                     default=''))
 
         uri = "{0}://{1}:{2}{3}/".format(
             'https' if ssl else 'http',
@@ -239,7 +239,7 @@ class Module(MgrModule, CherryPyConfig):
     COMMANDS.extend(ACCESS_CONTROL_COMMANDS)
     COMMANDS.extend(SSO_COMMANDS)
 
-    OPTIONS = [
+    MODULE_OPTIONS = [
         {'name': 'server_addr'},
         {'name': 'server_port'},
         {'name': 'jwt_token_ttl'},
@@ -250,7 +250,7 @@ class Module(MgrModule, CherryPyConfig):
         {'name': 'crt_file'},
         {'name': 'ssl'}
     ]
-    OPTIONS.extend(options_schema_list())
+    MODULE_OPTIONS.extend(options_schema_list())
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
@@ -339,10 +339,10 @@ class Module(MgrModule, CherryPyConfig):
         if res[0] != -errno.ENOSYS:
             return res
         elif cmd['prefix'] == 'dashboard set-jwt-token-ttl':
-            self.set_config('jwt_token_ttl', str(cmd['seconds']))
+            self.set_module_option('jwt_token_ttl', str(cmd['seconds']))
             return 0, 'JWT token TTL updated', ''
         elif cmd['prefix'] == 'dashboard get-jwt-token-ttl':
-            ttl = self.get_config('jwt_token_ttl', JwtManager.JWT_TOKEN_TTL)
+            ttl = self.get_module_option('jwt_token_ttl', JwtManager.JWT_TOKEN_TTL)
             return 0, str(ttl), ''
         elif cmd['prefix'] == 'dashboard create-self-signed-cert':
             self.create_self_signed_cert()

@@ -10,7 +10,7 @@ class NoOrchestrator(Exception):
 
 
 class OrchestratorCli(MgrModule):
-    OPTIONS = [
+    MODULE_OPTIONS = [
         {'name': 'orchestrator'}
     ]
     COMMANDS = [
@@ -62,7 +62,7 @@ class OrchestratorCli(MgrModule):
     ]
 
     def _select_orchestrator(self):
-        o = self.get_config("orchestrator")
+        o = self.get_module_option("orchestrator")
         if o is None:
             raise NoOrchestrator()
 
@@ -263,7 +263,7 @@ class OrchestratorCli(MgrModule):
         module_name = cmd['module']
 
         if module_name == "":
-            self.set_config("orchestrator", None)
+            self.set_module_option("orchestrator", None)
             return HandleCommandResult()
 
         for module in mgr_map['available_modules']:
@@ -288,7 +288,7 @@ class OrchestratorCli(MgrModule):
                 return HandleCommandResult(-errno.EINVAL,
                                            rs="'{0}' is not an orchestrator module".format(module_name))
 
-            self.set_config("orchestrator", module_name)
+            self.set_module_option("orchestrator", module_name)
 
             return HandleCommandResult()
 

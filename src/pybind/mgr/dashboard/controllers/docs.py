@@ -180,7 +180,7 @@ class Docs(BaseController):
             baseUrl = "/"
 
         scheme = 'https'
-        ssl = strtobool(mgr.get_localized_config('ssl', 'True'))
+        ssl = strtobool(mgr.get_localized_module_option('ssl', 'True'))
         if not ssl:
             scheme = 'http'
 

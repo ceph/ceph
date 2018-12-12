@@ -36,7 +36,7 @@ def decode_string(value):
 
 class Module(MgrModule):
 
-    OPTIONS = [
+    MODULE_OPTIONS = [
         {
             'name': 'diskprediction_server',
             'default': ''
@@ -128,19 +128,19 @@ class Module(MgrModule):
         self._run = True
 
     def config_notify(self):
-        for opt in self.OPTIONS:
+        for opt in self.MODULE_OPTIONS:
             setattr(self,
                     opt['name'],
-                    self.get_config(opt['name']) or opt['default'])
+                    self.get_module_option(opt['name']) or opt['default'])
             self.log.debug(' %s = %s', opt['name'], getattr(self, opt['name']))
-        if not self._activated_cloud and self.get_option('device_failure_prediction_mode') == 'cloud':
+        if not self._activated_cloud and self.get_ceph_option('device_failure_prediction_mode') == 'cloud':
             self._event.set()
-        if self._activated_cloud and self.get_option('device_failure_prediction_mode') != 'cloud':
+        if self._activated_cloud and self.get_ceph_option('device_failure_prediction_mode') != 'cloud':
             self._event.set()
 
     @property
     def config_keys(self):
-        return dict((o['name'], o.get('default', None)) for o in self.OPTIONS)
+        return dict((o['name'], o.get('default', None)) for o in self.MODULE_OPTIONS)
 
     def set_config_option(self, option, value):
         if option not in self.config_keys.keys():
@@ -157,13 +157,13 @@ class Module(MgrModule):
 
         self.log.debug('Setting in-memory config option %s to: %s', option,
                        value)
-        self.set_config(option, value)
+        self.set_module_option(option, value)
         self.config[option] = value
 
         return True
 
     def get_configuration(self, key):
-        return self.get_config(key, self.config_keys[key])
+        return self.get_module_option(key, self.config_keys[key])
 
     @staticmethod
     def _convert_timestamp(predicted_timestamp, life_expectancy_day):
@@ -183,7 +183,7 @@ class Module(MgrModule):
     def _set_ssl_target_name(self, cmd):
         str_ssl_target = cmd.get('ssl_target_name', '')
         try:
-            self.set_config('diskprediction_ssl_target_name_override', str_ssl_target)
+            self.set_module_option('diskprediction_ssl_target_name_override', str_ssl_target)
             return (0,
                     'success to config ssl target name', 0)
         except Exception as e:
@@ -192,7 +192,7 @@ class Module(MgrModule):
     def _set_ssl_default_authority(self, cmd):
         str_ssl_authority = cmd.get('ssl_authority', '')
         try:
-            self.set_config('diskprediction_default_authority', str_ssl_authority)
+            self.set_module_option('diskprediction_default_authority', str_ssl_authority)
             return 0, 'success to config ssl default authority', 0
         except Exception as e:
             return -errno.EINVAL, '', str(e)
@@ -206,11 +206,11 @@ class Module(MgrModule):
                 'diskprediction_cert_context', trusted_certs)
             for _agent in self._agents:
                 _agent.event.set()
-            self.set_config('diskprediction_server', cmd['server'])
-            self.set_config('diskprediction_user', cmd['user'])
-            self.set_config('diskprediction_password', encode_string(cmd['password']))
+            self.set_module_option('diskprediction_server', cmd['server'])
+            self.set_module_option('diskprediction_user', cmd['user'])
+            self.set_module_option('diskprediction_password', encode_string(cmd['password']))
             if cmd.get('port'):
-                self.set_config('diskprediction_port', cmd['port'])
+                self.set_module_option('diskprediction_port', cmd['port'])
             return 0, 'succeed to config cloud mode connection', ''
         else:
             return -errno.EINVAL, '', 'certification file not existed'
@@ -232,10 +232,10 @@ class Module(MgrModule):
         return 0, msg, ''
 
     def refresh_config(self):
-        for opt in self.OPTIONS:
+        for opt in self.MODULE_OPTIONS:
             setattr(self,
                     opt['name'],
-                    self.get_config(opt['name']) or opt['default'])
+                    self.get_module_option(opt['name']) or opt['default'])
             self.log.debug(' %s = %s', opt['name'], getattr(self, opt['name']))
 
     def _status(self,  cmd):
@@ -361,7 +361,7 @@ class Module(MgrModule):
 
     def show_module_config(self):
         for key, default in self.config_keys.items():
-            self.set_config_option(key, self.get_config(key, default))
+            self.set_config_option(key, self.get_module_option(key, default))
 
     def serve(self):
         self.log.info('Starting diskprediction module')
@@ -370,7 +370,7 @@ class Module(MgrModule):
 
         while self._run:
             self.refresh_config()
-            mode = self.get_option('device_failure_prediction_mode')
+            mode = self.get_ceph_option('device_failure_prediction_mode')
             if mode == 'cloud':
                 if not self._activated_cloud:
                     self.start_cloud_disk_prediction()

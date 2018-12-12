@@ -232,7 +232,7 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
     def get_mgr_id(self):
         return self._ceph_get_mgr_id()
 
-    def get_config(self, key, default=None):
+    def get_module_option(self, key, default=None):
         """
         Retrieve the value of a persistent configuration setting
 
@@ -240,11 +240,14 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
         :param default: the default value of the config if it is not found
         :return: str
         """
-        r = self._ceph_get_config(key)
+        r = self._ceph_get_module_option(key)
         if r is None:
             return default
         else:
             return r
+
+    def get_ceph_option(self, key):
+        return self._ceph_get_option(key)
 
     def get_store(self, key):
         """
@@ -258,10 +261,10 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
     def get_active_uri(self):
         return self._ceph_get_active_uri()
 
-    def get_localized_config(self, key, default=None):
-        r = self.get_config(self.get_mgr_id() + '/' + key)
+    def get_localized_module_option(self, key, default=None):
+        r = self.get_module_option(self.get_mgr_id() + '/' + key)
         if r is None:
-            r = self.get_config(key)
+            r = self.get_module_option(key)
 
         if r is None:
             r = default
@@ -269,7 +272,7 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
 
 class MgrModule(ceph_module.BaseMgrModule):
     COMMANDS = []
-    OPTIONS = []
+    MODULE_OPTIONS = []
 
     # Priority definitions for perf counters
     PRIO_CRITICAL = 10
@@ -675,35 +678,35 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
         return self._ceph_get_mgr_id()
 
-    def get_option(self, key):
+    def get_ceph_option(self, key):
         return self._ceph_get_option(key)
 
-    def _validate_option(self, key):
+    def _validate_module_option(self, key):
         """
         Helper: don't allow get/set config callers to 
         access config options that they didn't declare
         in their schema.
         """
-        if key not in [o['name'] for o in self.OPTIONS]:
-            raise RuntimeError("Config option '{0}' is not in {1}.OPTIONS".\
+        if key not in [o['name'] for o in self.MODULE_OPTIONS]:
+            raise RuntimeError("Config option '{0}' is not in {1}.MODULE_OPTIONS".\
                     format(key, self.__class__.__name__))
 
-    def _get_config(self, key, default):
-        r = self._ceph_get_config(key)
+    def _get_module_option(self, key, default):
+        r = self._ceph_get_module_option(key)
         if r is None:
             return default
         else:
             return r
 
-    def get_config(self, key, default=None):
+    def get_module_option(self, key, default=None):
         """
         Retrieve the value of a persistent configuration setting
 
         :param str key:
         :return: str
         """
-        self._validate_option(key)
-        return self._get_config(key, default)
+        self._validate_module_option(key)
+        return self._get_module_option(key, default)
 
     def get_store_prefix(self, key_prefix):
         """
@@ -725,38 +728,38 @@ class MgrModule(ceph_module.BaseMgrModule):
     def _set_localized(self, key, val, setter):
         return setter(self.get_mgr_id() + '/' + key, val)
 
-    def get_localized_config(self, key, default=None):
+    def get_localized_module_option(self, key, default=None):
         """
         Retrieve localized configuration for this ceph-mgr instance
         :param str key:
         :param str default:
         :return: str
         """
-        self._validate_option(key)
-        return self._get_localized(key, default, self._get_config)
+        self._validate_module_option(key)
+        return self._get_localized(key, default, self._get_module_option)
 
-    def _set_config(self, key, val):
-        return self._ceph_set_config(key, val)
+    def _set_module_option(self, key, val):
+        return self._ceph_set_module_option(key, val)
 
-    def set_config(self, key, val):
+    def set_module_option(self, key, val):
         """
         Set the value of a persistent configuration setting
 
         :param str key:
         :param str val:
         """
-        self._validate_option(key)
-        return self._set_config(key, val)
+        self._validate_module_option(key)
+        return self._set_module_option(key, val)
 
-    def set_localized_config(self, key, val):
+    def set_localized_module_option(self, key, val):
         """
         Set localized configuration for this ceph-mgr instance
         :param str key:
         :param str default:
         :return: str
         """
-        self._validate_option(key)
-        return self._set_localized(key, val, self._set_config)
+        self._validate_module_option(key)
+        return self._set_localized(key, val, self._set_module_option)
 
     def set_store(self, key, val):
         """

@@ -11,7 +11,7 @@ from ..rest_client import RequestException, RestClient
 class RestClientTest(unittest.TestCase):
     def setUp(self):
         settings = {'REST_REQUESTS_TIMEOUT': 45}
-        mgr.get_config.side_effect = settings.get
+        mgr.get_module_option.side_effect = settings.get
 
     def test_timeout_auto_set(self):
         with patch('requests.Session.request') as mock_request:

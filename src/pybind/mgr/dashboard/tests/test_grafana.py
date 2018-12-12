@@ -35,7 +35,7 @@ class GrafanaControllerTestCase(ControllerTestCase):
             'GRAFANA_API_USERNAME': 'admin',
             'GRAFANA_API_PASSWORD': 'admin'
         }
-        mgr.get_config.side_effect = settings.get
+        mgr.get_module_option.side_effect = settings.get
         GrafanaProxy._cp_config['tools.authenticate.on'] = False  # pylint: disable=protected-access
 
         cls.setup_controllers([GrafanaProxy, GrafanaMockInstance])

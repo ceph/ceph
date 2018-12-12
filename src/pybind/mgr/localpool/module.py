@@ -4,7 +4,7 @@ import threading
 
 class Module(MgrModule):
 
-    OPTIONS = [
+    MODULE_OPTIONS = [
             {'name': 'failure_domain'},
             {'name': 'min_size'},
             {'name': 'num_rep'},
@@ -25,12 +25,12 @@ class Module(MgrModule):
         """
         Check pools on each OSDMap change
         """
-        subtree_type = self.get_config('subtree') or 'rack'
-        failure_domain = self.get_config('failure_domain') or 'host'
-        pg_num = self.get_config('pg_num') or '128'
-        num_rep = self.get_config('num_rep') or '3'
-        min_size = self.get_config('min_size')
-        prefix = self.get_config('prefix') or 'by-' + subtree_type + '-'
+        subtree_type = self.get_module_option('subtree') or 'rack'
+        failure_domain = self.get_module_option('failure_domain') or 'host'
+        pg_num = self.get_module_option('pg_num') or '128'
+        num_rep = self.get_module_option('num_rep') or '3'
+        min_size = self.get_module_option('min_size')
+        prefix = self.get_module_option('prefix') or 'by-' + subtree_type + '-'
 
         osdmap = self.get("osd_map")
         lpools = []
