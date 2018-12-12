@@ -382,7 +382,7 @@ Summary:	Ceph daemon for mirroring RBD images
 %if 0%{?suse_version}
 Group:		System/Filesystems
 %endif
-Requires:	ceph-common = %{_epoch_prefix}%{version}-%{release}
+Requires:	ceph-base = %{_epoch_prefix}%{version}-%{release}
 Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
 %description -n rbd-mirror
 Daemon for mirroring RBD images between Ceph clusters, streaming
@@ -403,7 +403,7 @@ Summary:	Rados REST gateway
 %if 0%{?suse_version}
 Group:		System/Filesystems
 %endif
-Requires:	ceph-common = %{_epoch_prefix}%{version}-%{release}
+Requires:	ceph-base = %{_epoch_prefix}%{version}-%{release}
 %if 0%{with selinux}
 Requires:	ceph-selinux = %{_epoch_prefix}%{version}-%{release}
 %endif
