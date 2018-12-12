@@ -1156,7 +1156,7 @@ void Server::reconnect_clients(MDSInternalContext *reconnect_done_)
 
   // clients will get the mdsmap and discover we're reconnecting via the monitor.
   
-  reconnect_start = ceph_clock_now();
+  reconnect_start = now;
   dout(1) << "reconnect_clients -- " << client_reconnect_gather.size() << " sessions" << dendl;
   mds->sessionmap.dump();
 }
@@ -1174,8 +1174,7 @@ void Server::handle_client_reconnect(const MClientReconnect::const_ref &m)
     return;
   }
 
-  utime_t delay = ceph_clock_now();
-  delay -= reconnect_start;
+  auto delay = std::chrono::duration<double>(clock::now() - reconnect_start).count();
   dout(10) << " reconnect_start " << reconnect_start << " delay " << delay << dendl;
 
   bool deny = false;
@@ -1391,9 +1390,8 @@ void Server::reconnect_tick()
     return;
   }
 
-  utime_t reconnect_end = reconnect_start;
-  reconnect_end += g_conf()->mds_reconnect_timeout;
-  if (ceph_clock_now() >= reconnect_end &&
+  auto elapse = std::chrono::duration<double>(clock::now() - reconnect_start).count();
+  if (elapse >= g_conf()->mds_reconnect_timeout &&
       !client_reconnect_gather.empty()) {
     dout(10) << "reconnect timed out" << dendl;
 
