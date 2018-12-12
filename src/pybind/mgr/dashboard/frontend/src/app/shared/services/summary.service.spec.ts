@@ -47,21 +47,25 @@ describe('SummaryService', () => {
   });
 
   it('should call refresh', fakeAsync(() => {
-    authStorageService.set('foobar');
-    let result = false;
-    summaryService.refresh();
-    summaryService.subscribe(() => {
-      result = true;
+    authStorageService.set('foobar', undefined, undefined);
+    const calledWith = [];
+    summaryService.subscribe((data) => {
+      calledWith.push(data);
     });
-    tick(5000);
+    expect(calledWith).toEqual([summary]);
+    summaryService.refresh();
+    expect(calledWith).toEqual([summary, summary]);
+    tick(10000);
+    expect(calledWith.length).toEqual(4);
+    // In order to not trigger setTimeout again,
+    // which would raise 'Error: 1 timer(s) still in the queue.'
     spyOn(summaryService, 'refresh').and.callFake(() => true);
     tick(5000);
-    expect(result).toEqual(true);
   }));
 
   describe('Should test methods after first refresh', () => {
     beforeEach(() => {
-      authStorageService.set('foobar');
+      authStorageService.set('foobar', undefined, undefined);
       summaryService.refresh();
     });
 
