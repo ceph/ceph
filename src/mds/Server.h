@@ -89,6 +89,8 @@ private:
   int failed_reconnects;
   bool reconnect_evicting;  // true if I am waiting for evictions to complete
                             // before proceeding to reconnect_gather_finish
+  time reconnect_start = time::min();
+  set<client_t> client_reconnect_gather;  // clients i need a reconnect msg from.
 
   double cap_revoke_eviction_timeout = 0;
 
@@ -114,8 +116,6 @@ public:
   void handle_osd_map();
 
   // -- sessions and recovery --
-  utime_t  reconnect_start;
-  set<client_t> client_reconnect_gather;  // clients i need a reconnect msg from.
   bool waiting_for_reconnect(client_t c) const;
   void dump_reconnect_status(Formatter *f) const;
 
