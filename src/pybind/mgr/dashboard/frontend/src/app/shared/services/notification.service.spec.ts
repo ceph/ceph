@@ -5,6 +5,7 @@ import { ToastsManager } from 'ng2-toastr';
 
 import { configureTestBed, i18nProviders } from '../../../testing/unit-test-helper';
 import { NotificationType } from '../enum/notification-type.enum';
+import { CdNotificationConfig } from '../models/cd-notification';
 import { FinishedTask } from '../models/finished-task';
 import { NotificationService } from './notification.service';
 import { TaskMessageService } from './task-message.service';
@@ -57,7 +58,7 @@ describe('NotificationService', () => {
   }));
 
   it('should create a success notification and save it', fakeAsync(() => {
-    notificationService.show(NotificationType.success, 'Simple test');
+    notificationService.show(new CdNotificationConfig(NotificationType.success, 'Simple test'));
     tick(100);
     expect(notificationService['dataSource'].getValue().length).toBe(1);
     expect(notificationService['dataSource'].getValue()[0].type).toBe(NotificationType.success);
@@ -71,7 +72,7 @@ describe('NotificationService', () => {
   }));
 
   it('should create an info notification and save it', fakeAsync(() => {
-    notificationService.show(NotificationType.info, 'Simple test');
+    notificationService.show(new CdNotificationConfig(NotificationType.info, 'Simple test'));
     tick(100);
     expect(notificationService['dataSource'].getValue().length).toBe(1);
     const notification = notificationService['dataSource'].getValue()[0];
@@ -122,4 +123,44 @@ describe('NotificationService', () => {
     expect(notification.title).toBe(`Failed to create RBD 'somePool/someImage'`);
     expect(notification.message).toBe(`Name is already used by RBD 'somePool/someImage'.`);
   }));
+
+  describe('notification queue', () => {
+    const n1 = new CdNotificationConfig(NotificationType.success, 'Some success');
+    const n2 = new CdNotificationConfig(NotificationType.info, 'Some info');
+
+    beforeEach(() => {
+      spyOn(notificationService, 'show').and.stub();
+    });
+
+    it('filters out duplicated notifications on single call', fakeAsync(() => {
+      notificationService.queueNotifications([n1, n1, n2, n2]);
+      tick(500);
+      expect(notificationService.show).toHaveBeenCalledTimes(2);
+    }));
+
+    it('filters out duplicated notifications presented in different calls', fakeAsync(() => {
+      notificationService.queueNotifications([n1, n2]);
+      notificationService.queueNotifications([n1, n2]);
+      tick(500);
+      expect(notificationService.show).toHaveBeenCalledTimes(2);
+    }));
+
+    it('will reset the timeout on every call', fakeAsync(() => {
+      notificationService.queueNotifications([n1, n2]);
+      tick(400);
+      notificationService.queueNotifications([n1, n2]);
+      tick(100);
+      expect(notificationService.show).toHaveBeenCalledTimes(0);
+      tick(400);
+      expect(notificationService.show).toHaveBeenCalledTimes(2);
+    }));
+
+    it('wont filter out duplicated notifications if timeout was reached before', fakeAsync(() => {
+      notificationService.queueNotifications([n1, n2]);
+      tick(500);
+      notificationService.queueNotifications([n1, n2]);
+      tick(500);
+      expect(notificationService.show).toHaveBeenCalledTimes(4);
+    }));
+  });
 });
