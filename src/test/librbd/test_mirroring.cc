@@ -276,6 +276,45 @@ public:
     ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_DISABLED));
   }
 
+  void check_trash_move_restore(rbd_mirror_mode_t mirror_mode,
+                                bool enable_mirroring) {
+
+    ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, mirror_mode));
+
+    int order = 20;
+    uint64_t features = RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_JOURNALING;
+    ASSERT_EQ(0, m_rbd.create2(m_ioctx, image_name.c_str(), 4096, features,
+                               &order));
+    librbd::Image image;
+    ASSERT_EQ(0, m_rbd.open(m_ioctx, image, image_name.c_str()));
+
+    if (enable_mirroring) {
+      ASSERT_EQ(0, image.mirror_image_enable());
+    }
+
+    std::string image_id;
+    ASSERT_EQ(0, image.get_id(&image_id));
+
+    ASSERT_EQ(0, m_rbd.trash_move(m_ioctx, image_name.c_str(), 100));
+
+    librbd::mirror_image_info_t mirror_image;
+    ASSERT_EQ(0, image.mirror_image_get_info(&mirror_image, sizeof(mirror_image)));
+    ASSERT_EQ(mirror_image.state, RBD_MIRROR_IMAGE_DISABLED);
+
+    ASSERT_EQ(0, m_rbd.trash_restore(m_ioctx, image_id.c_str(), ""));
+
+    ASSERT_EQ(0, image.mirror_image_get_info(&mirror_image, sizeof(mirror_image)));
+    if (mirror_mode == RBD_MIRROR_MODE_POOL) {
+      ASSERT_EQ(mirror_image.state, RBD_MIRROR_IMAGE_ENABLED);
+    } else {
+      ASSERT_EQ(mirror_image.state, RBD_MIRROR_IMAGE_DISABLED);
+    }
+
+    image.close();
+    ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
+    ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_DISABLED));
+  }
+
   void setup_mirror_peer(librados::IoCtx &io_ctx, librbd::Image &image) {
     ASSERT_EQ(0, image.snap_create("sync-point-snap"));
 
@@ -630,6 +669,18 @@ TEST_F(TestMirroring, RemoveImage_With_MirrorImageDemoted) {
   check_remove_image(RBD_MIRROR_MODE_IMAGE,
                      RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_JOURNALING,
                      true, true);
+}
+
+TEST_F(TestMirroring, TrashMoveRestore_PoolMode) {
+  check_trash_move_restore(RBD_MIRROR_MODE_POOL, false);
+}
+
+TEST_F(TestMirroring, TrashMoveRestore_ImageMode_MirroringDisabled) {
+  check_trash_move_restore(RBD_MIRROR_MODE_IMAGE, false);
+}
+
+TEST_F(TestMirroring, TrashMoveRestore_ImageMode_MirroringEnabled) {
+  check_trash_move_restore(RBD_MIRROR_MODE_IMAGE, true);
 }
 
 TEST_F(TestMirroring, MirrorStatusList) {
