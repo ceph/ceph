@@ -42,6 +42,7 @@ export class PoolListComponent implements OnInit {
   permissions: Permissions;
   tableActions: CdTableAction[];
   viewCacheStatusList: any[];
+  selectionCacheTiers: any[] = [];
 
   constructor(
     private poolService: PoolService,
@@ -169,6 +170,7 @@ export class PoolListComponent implements OnInit {
 
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
+    this.getSelectionTiers();
   }
 
   deletePoolModal() {
@@ -224,5 +226,10 @@ export class PoolListComponent implements OnInit {
 
   getPoolDetails(pool: object) {
     return _.omit(pool, ['cdExecuting', 'cdIsBinary']);
+  }
+
+  getSelectionTiers() {
+    const cacheTierIds = this.selection.hasSingleSelection ? this.selection.first()['tiers'] : [];
+    this.selectionCacheTiers = this.pools.filter((pool) => cacheTierIds.includes(pool.pool));
   }
 }
