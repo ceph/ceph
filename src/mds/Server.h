@@ -90,6 +90,7 @@ private:
   bool reconnect_evicting;  // true if I am waiting for evictions to complete
                             // before proceeding to reconnect_gather_finish
   time reconnect_start = time::min();
+  time reconnect_last_seen = time::min();
   set<client_t> client_reconnect_gather;  // clients i need a reconnect msg from.
 
   feature_bitset_t supported_features;
