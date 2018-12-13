@@ -12,7 +12,7 @@ tasks:
 - install.upgrade:
     osd.3:
 - ceph.restart:
-    daemons: [mon.b]
+    daemons: [mon.b, mgr.x, mgr.y]
     wait-for-up: true
     wait-for-healthy: false
 - ceph.restart:
