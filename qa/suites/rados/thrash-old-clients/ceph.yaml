@@ -1,2 +1,3 @@
 tasks:
 - ceph:
+    mon_bind_addrvec: false
