@@ -49,6 +49,18 @@ struct ServiceMap {
       std::ostringstream ss;
       ss << daemons.size() << (daemons.size() > 1 ? " daemons" : " daemon")
 	 << " active";
+
+      if (!daemons.empty()) {
+	ss << " (";
+	for (auto p = daemons.begin(); p != daemons.end(); ++p) {
+	  if (p != daemons.begin()) {
+	    ss << ", ";
+	  }
+	  ss << p->first;
+	}
+	ss << ")";
+      }
+
       return ss.str();
     }
 
