@@ -279,8 +279,6 @@ void DaemonPerfCounters::update(MMgrReport *report)
   for (const auto &t : report->declare_types) {
     types.insert(std::make_pair(t.path, t));
     session->declared_types.insert(t.path);
-    instances.insert(std::pair<std::string, PerfCounterInstance>(
-                     t.path, PerfCounterInstance(t.type)));
   }
   // Remove any old types
   for (const auto &t : report->undeclare_types) {
@@ -294,6 +292,13 @@ void DaemonPerfCounters::update(MMgrReport *report)
   DECODE_START(1, p);
   for (const auto &t_path : session->declared_types) {
     const auto &t = types.at(t_path);
+    auto instances_it = instances.find(t_path);
+    // Always check the instance exists, as we don't prevent yet
+    // multiple sessions from daemons with the same name, and one
+    // session clearing stats created by another on open.
+    if (instances_it == instances.end()) {
+      instances_it = instances.insert({t_path, t.type}).first;
+    }
     uint64_t val = 0;
     uint64_t avgcount = 0;
     uint64_t avgcount2 = 0;
@@ -302,9 +307,9 @@ void DaemonPerfCounters::update(MMgrReport *report)
     if (t.type & PERFCOUNTER_LONGRUNAVG) {
       decode(avgcount, p);
       decode(avgcount2, p);
-      instances.at(t_path).push_avg(now, val, avgcount);
+      instances_it->second.push_avg(now, val, avgcount);
     } else {
-      instances.at(t_path).push(now, val);
+      instances_it->second.push(now, val);
     }
   }
   DECODE_FINISH(p);
