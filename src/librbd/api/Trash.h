@@ -29,7 +29,8 @@ struct Trash {
                   std::vector<trash_image_info_t> &entries);
   static int remove(librados::IoCtx &io_ctx, const std::string &image_id,
                     bool force, ProgressContext& prog_ctx);
-  static int restore(librados::IoCtx &io_ctx, const std::string &image_id,
+  static int restore(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
+                     const std::string &image_id,
                      const std::string &image_new_name);
 
 };
