@@ -57,7 +57,11 @@ export class RgwUserFormComponent implements OnInit {
         [CdValidators.unique(this.rgwUserService.exists, this.rgwUserService)]
       ],
       display_name: [null, [Validators.required]],
-      email: [null, [CdValidators.email]],
+      email: [
+        null,
+        [CdValidators.email],
+        [CdValidators.unique(this.rgwUserService.emailExists, this.rgwUserService)]
+      ],
       max_buckets: [1000, [Validators.required, Validators.min(0)]],
       suspended: [false],
       // S3 key
