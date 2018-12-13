@@ -326,8 +326,8 @@ struct rgw_bucket_dir_entry {
   rgw_bucket_entry_ver ver;
   std::string locator;
   bool exists;
-  struct rgw_bucket_dir_entry_meta meta;
-  multimap<string, struct rgw_bucket_pending_info> pending_map;
+  rgw_bucket_dir_entry_meta meta;
+  multimap<string, rgw_bucket_pending_info> pending_map;
   uint64_t index_ver;
   string tag;
   uint16_t flags;
@@ -760,8 +760,8 @@ struct rgw_bucket_dir_header {
 WRITE_CLASS_ENCODER(rgw_bucket_dir_header)
 
 struct rgw_bucket_dir {
-  struct rgw_bucket_dir_header header;
-  std::map<string, struct rgw_bucket_dir_entry> m;
+  rgw_bucket_dir_header header;
+  std::map<string, rgw_bucket_dir_entry> m;
 
   void encode(bufferlist &bl) const {
     ENCODE_START(2, 2, bl);
