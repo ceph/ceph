@@ -15,8 +15,8 @@ class SingleType(Strategy):
     Support for all SSDs, or all HDDS
     """
 
-    def __init__(self, block_devs, args):
-        super(SingleType, self).__init__(block_devs, [], [], args)
+    def __init__(self, data_devs, args):
+        super(SingleType, self).__init__(data_devs, [], [], args)
         self.validate_compute()
 
     @classmethod
@@ -55,11 +55,11 @@ class SingleType(Strategy):
         """
         # validate minimum size for all devices
         validators.minimum_device_size(
-            self.block_devs, osds_per_device=self.osds_per_device
+            self.data_devs, osds_per_device=self.osds_per_device
         )
 
         # make sure that data devices do not have any LVs
-        validators.no_lvm_membership(self.block_devs)
+        validators.no_lvm_membership(self.data_devs)
 
     def compute(self):
         """
@@ -67,7 +67,7 @@ class SingleType(Strategy):
         a dictionary with the result
         """
         osds = self.computed['osds']
-        for device in self.block_devs:
+        for device in self.data_devs:
             extents = lvm.sizing(device.lvm_size.b, parts=self.osds_per_device)
             for _i in range(self.osds_per_device):
                 osd = {'data': {}, 'block.db': {}}
@@ -117,18 +117,18 @@ class SingleType(Strategy):
 
 class MixedType(MixedStrategy):
 
-    def __init__(self, block_devs, db_devs, wal_devs, args):
-        super(MixedType, self).__init__(block_devs, db_devs, wal_devs, args)
+    def __init__(self, data_devs, db_devs, wal_devs, args):
+        super(MixedType, self).__init__(data_devs, db_devs, wal_devs, args)
         self.block_db_size = self.get_block_size()
         self.system_vgs = lvm.VolumeGroups()
-        self.dbs_needed = len(self.block_devs) * self.osds_per_device
+        self.dbs_needed = len(self.data_devs) * self.osds_per_device
         self.use_large_block_db = False
         self.validate_compute()
 
     @classmethod
     def with_auto_devices(cls, devices, args):
-        block_devs, db_devs = cls.split_devices_rotational(devices)
-        return cls(block_devs, db_devs, [], args)
+        data_devs, db_devs = cls.split_devices_rotational(devices)
+        return cls(data_devs, db_devs, [], args)
 
     @staticmethod
     def type():
@@ -148,7 +148,7 @@ class MixedType(MixedStrategy):
         if filtered_devices:
             string += templates.filtered_devices(filtered_devices)
         string += templates.total_osds.format(
-            total_osds=len(self.block_devs) * self.osds_per_device
+            total_osds=len(self.data_devs) * self.osds_per_device
         )
 
         string += templates.ssd_volume_group.format(
@@ -158,7 +158,7 @@ class MixedType(MixedStrategy):
             block_lv_size=db_size,
             block_db_devices=', '.join([ssd.abspath for ssd in self.db_devs]),
             lv_size=self.block_db_size or str(disk.Size(b=(vg_extents['sizes']))),
-            total_osds=len(self.block_devs)
+            total_osds=len(self.data_devs)
         )
 
         string += templates.osd_component_titles
@@ -197,7 +197,7 @@ class MixedType(MixedStrategy):
         else:
             vg_name = self.common_vg.name
 
-        for device in self.block_devs:
+        for device in self.data_devs:
             for hdd in range(self.osds_per_device):
                 osd = {'data': {}, 'block.db': {}}
                 osd['data']['path'] = device.abspath
@@ -292,7 +292,7 @@ class MixedType(MixedStrategy):
         validators.minimum_device_size(self.devices, osds_per_device=self.osds_per_device)
 
         # make sure that data devices do not have any LVs
-        validators.no_lvm_membership(self.block_devs)
+        validators.no_lvm_membership(self.data_devs)
 
         # do not allow non-common VG to continue
         validators.has_common_vg(self.db_devs)

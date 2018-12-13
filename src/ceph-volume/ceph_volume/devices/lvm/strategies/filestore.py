@@ -28,8 +28,8 @@ class SingleType(Strategy):
     """
 
 
-    def __init__(self, block_devs, args):
-        super(SingleType, self).__init__(block_devs, [], [], args)
+    def __init__(self, data_devs, args):
+        super(SingleType, self).__init__(data_devs, [], [], args)
         self.journal_size = get_journal_size(args)
         self.validate_compute()
 
@@ -73,15 +73,15 @@ class SingleType(Strategy):
         met, raise an error if the provided devices would not work
         """
         # validate minimum size for all devices
-        validators.minimum_device_size(self.block_devs, osds_per_device=self.osds_per_device)
+        validators.minimum_device_size(self.data_devs, osds_per_device=self.osds_per_device)
 
         # validate collocation
         validators.minimum_device_collocated_size(
-            self.block_devs, self.journal_size, osds_per_device=self.osds_per_device
+            self.data_devs, self.journal_size, osds_per_device=self.osds_per_device
         )
 
         # make sure that data devices do not have any LVs
-        validators.no_lvm_membership(self.block_devs)
+        validators.no_lvm_membership(self.data_devs)
 
     def compute(self):
         """
@@ -90,7 +90,7 @@ class SingleType(Strategy):
         """
         # chose whichever is the one group we have to compute against
         osds = self.computed['osds']
-        for device in self.block_devs:
+        for device in self.data_devs:
             for osd in range(self.osds_per_device):
                 device_size = disk.Size(b=device.lvm_size.b)
                 osd_size = device_size / self.osds_per_device
@@ -167,18 +167,18 @@ class MixedType(MixedStrategy):
     """
 
 
-    def __init__(self, block_devs, journal_devs, args):
-        super(MixedType, self).__init__(block_devs, journal_devs, [], args)
+    def __init__(self, data_devs, journal_devs, args):
+        super(MixedType, self).__init__(data_devs, journal_devs, [], args)
         self.blank_ssds = []
-        self.journals_needed = len(self.block_devs) * self.osds_per_device
+        self.journals_needed = len(self.data_devs) * self.osds_per_device
         self.journal_size = get_journal_size(args)
         self.system_vgs = lvm.VolumeGroups()
         self.validate_compute()
 
     @classmethod
     def with_auto_devices(cls, devices, args):
-        block_devs, journal_devs = cls.split_devices_rotational(devices)
-        return cls(block_devs, journal_devs, args)
+        data_devs, journal_devs = cls.split_devices_rotational(devices)
+        return cls(data_devs, journal_devs, args)
 
     @staticmethod
     def type():
@@ -229,7 +229,7 @@ class MixedType(MixedStrategy):
         validators.minimum_device_size(self.devices, osds_per_device=self.osds_per_device)
 
         # make sure that data devices do not have any LVs
-        validators.no_lvm_membership(self.block_devs)
+        validators.no_lvm_membership(self.data_devs)
 
         # do not allow non-common VG to continue
         validators.has_common_vg(self.db_devs)
@@ -295,7 +295,7 @@ class MixedType(MixedStrategy):
         else:
             vg_name = self.common_vg.name
 
-        for device in self.block_devs:
+        for device in self.data_devs:
             for osd in range(self.osds_per_device):
                 device_size = disk.Size(b=device.lvm_size.b)
                 data_size = device_size / self.osds_per_device

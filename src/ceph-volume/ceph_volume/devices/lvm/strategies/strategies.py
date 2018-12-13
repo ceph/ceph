@@ -2,20 +2,20 @@ import json
 
 class Strategy(object):
 
-    def __init__(self, block_devs, db_devs, wal_devs, args):
+    def __init__(self, data_devs, db_devs, wal_devs, args):
         self.args = args
         self.osds_per_device = args.osds_per_device
-        self.devices = block_devs + wal_devs + db_devs
-        self.block_devs = block_devs
+        self.devices = data_devs + wal_devs + db_devs
+        self.data_devs = data_devs
         self.db_devs = db_devs
         self.wal_devs = wal_devs
         self.computed = {'osds': [], 'vgs': []}
 
     @staticmethod
     def split_devices_rotational(devices):
-        block_devs = [device for device in devices if device.sys_api['rotational'] == '1']
+        data_devs = [device for device in devices if device.sys_api['rotational'] == '1']
         db_devs = [device for device in devices if device.sys_api['rotational'] == '0']
-        return block_devs, db_devs
+        return data_devs, db_devs
 
 
     def validate_compute(self):
@@ -33,7 +33,7 @@ class Strategy(object):
 
     @property
     def total_osds(self):
-        return len(self.block_devs) * self.osds_per_device
+        return len(self.data_devs) * self.osds_per_device
 
     # protect against base class instantiation and incomplete implementations.
     # We could also use the abc module and implement this as an
