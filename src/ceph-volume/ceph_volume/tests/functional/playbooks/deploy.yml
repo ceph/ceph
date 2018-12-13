@@ -74,12 +74,27 @@
   gather_facts: false
   become: True
   any_errors_fatal: true
-  roles:
-    - role: ceph-defaults
-      tags: ['ceph_update_config']
-    - role: ceph-handler
-    - role: ceph-common
   tasks:
+    - name: run ceph-defaults role
+      import_role:
+        name: ceph-defaults
+
+    # mimic and luminous are tested with the ceph-ansible branch
+    # stable-3.2 and this role is not available there
+    - name: run ceph-facts role
+      import_role:
+        name: ceph-facts
+      when:
+        - ceph_dev_branch not in ["mimic", "lumious"]
+
+    - name: run ceph-handler role
+      import_role:
+        name: ceph-handler
+
+    - name: run ceph-common role
+      import_role:
+        name: ceph-common
+
     - name: rsync ceph-volume to test nodes on centos
       synchronize:
         src: "{{ toxinidir}}/../../../../ceph_volume"
