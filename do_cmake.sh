@@ -48,3 +48,11 @@ erasure code dir = lib
 EOF
 
 echo done.
+cat <<EOF
+
+****
+WARNING: do_cmake.sh now creates debug builds by default. Performance
+may be severely affected. Please use -DCMAKE_BUILD_TYPE=RelWithDebInfo
+if a performance sensitive build is required.
+****
+EOF
