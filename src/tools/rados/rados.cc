@@ -1791,8 +1791,6 @@ static int do_get_inconsistent_cmd(const std::vector<const char*> &nargs,
         cerr << "interval#" << interval << " expired." << std::endl;
       else if (ret == -ENOENT)
         cerr << "No scrub information available for pg " << pg << std::endl;
-      else
-        cerr << "Unknown error " << cpp_strerror(ret) << std::endl;
       break;
     }
     // It must be the same interval every time.  EAGAIN would
