@@ -303,6 +303,7 @@ void JSONFormatter::dump_string(const char *name, std::string_view s)
 
 std::ostream& JSONFormatter::dump_stream(const char *name)
 {
+  finish_pending_string();
   m_pending_name = name;
   m_is_pending_string = true;
   return m_pending_string;
