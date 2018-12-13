@@ -350,13 +350,8 @@ class AccessControlDB(object):
         return cls(db['version'], users, roles)
 
 
-ACCESS_CTRL_DB = None
-
-
 def load_access_control_db():
-    # pylint: disable=W0603
-    global ACCESS_CTRL_DB
-    ACCESS_CTRL_DB = AccessControlDB.load()
+    mgr.ACCESS_CTRL_DB = AccessControlDB.load()
 
 
 # CLI dashboard access control scope commands
@@ -367,13 +362,13 @@ def load_access_control_db():
                  'Set the login credentials')
 def set_login_credentials_cmd(_, username, password):
     try:
-        user = ACCESS_CTRL_DB.get_user(username)
+        user = mgr.ACCESS_CTRL_DB.get_user(username)
         user.set_password(password)
     except UserDoesNotExist:
-        user = ACCESS_CTRL_DB.create_user(username, password, None, None)
+        user = mgr.ACCESS_CTRL_DB.create_user(username, password, None, None)
         user.set_roles([ADMIN_ROLE])
 
-    ACCESS_CTRL_DB.save()
+    mgr.ACCESS_CTRL_DB.save()
 
     return 0, '''\
 ******************************************************************
@@ -388,12 +383,12 @@ Username and password updated''', ''
                 'Show role info')
 def ac_role_show_cmd(_, rolename=None):
     if not rolename:
-        roles = dict(ACCESS_CTRL_DB.roles)
+        roles = dict(mgr.ACCESS_CTRL_DB.roles)
         roles.update(SYSTEM_ROLES)
         roles_list = [name for name, _ in roles.items()]
         return 0, json.dumps(roles_list), ''
     try:
-        role = ACCESS_CTRL_DB.get_role(rolename)
+        role = mgr.ACCESS_CTRL_DB.get_role(rolename)
     except RoleDoesNotExist as ex:
         if rolename not in SYSTEM_ROLES:
             return -errno.ENOENT, '', str(ex)
@@ -407,8 +402,8 @@ def ac_role_show_cmd(_, rolename=None):
                  'Create a new access control role')
 def ac_role_create_cmd(_, rolename, description=None):
     try:
-        role = ACCESS_CTRL_DB.create_role(rolename, description)
-        ACCESS_CTRL_DB.save()
+        role = mgr.ACCESS_CTRL_DB.create_role(rolename, description)
+        mgr.ACCESS_CTRL_DB.save()
         return 0, json.dumps(role.to_dict()), ''
     except RoleAlreadyExists as ex:
         return -errno.EEXIST, '', str(ex)
@@ -419,8 +414,8 @@ def ac_role_create_cmd(_, rolename, description=None):
                  'Delete an access control role')
 def ac_role_delete_cmd(_, rolename):
     try:
-        ACCESS_CTRL_DB.delete_role(rolename)
-        ACCESS_CTRL_DB.save()
+        mgr.ACCESS_CTRL_DB.delete_role(rolename)
+        mgr.ACCESS_CTRL_DB.save()
         return 0, "Role '{}' deleted".format(rolename), ""
     except RoleDoesNotExist as ex:
         if rolename in SYSTEM_ROLES:
@@ -438,11 +433,11 @@ def ac_role_delete_cmd(_, rolename):
                  'Add the scope permissions for a role')
 def ac_role_add_scope_perms_cmd(_, rolename, scopename, permissions):
     try:
-        role = ACCESS_CTRL_DB.get_role(rolename)
+        role = mgr.ACCESS_CTRL_DB.get_role(rolename)
         perms_array = [perm.strip() for perm in permissions]
         role.set_scope_permissions(scopename, perms_array)
-        ACCESS_CTRL_DB.update_users_with_roles(role)
-        ACCESS_CTRL_DB.save()
+        mgr.ACCESS_CTRL_DB.update_users_with_roles(role)
+        mgr.ACCESS_CTRL_DB.save()
         return 0, json.dumps(role.to_dict()), ''
     except RoleDoesNotExist as ex:
         if rolename in SYSTEM_ROLES:
@@ -464,10 +459,10 @@ def ac_role_add_scope_perms_cmd(_, rolename, scopename, permissions):
                  'Delete the scope permissions for a role')
 def ac_role_del_scope_perms_cmd(_, rolename, scopename):
     try:
-        role = ACCESS_CTRL_DB.get_role(rolename)
+        role = mgr.ACCESS_CTRL_DB.get_role(rolename)
         role.del_scope_permissions(scopename)
-        ACCESS_CTRL_DB.update_users_with_roles(role)
-        ACCESS_CTRL_DB.save()
+        mgr.ACCESS_CTRL_DB.update_users_with_roles(role)
+        mgr.ACCESS_CTRL_DB.save()
         return 0, json.dumps(role.to_dict()), ''
     except RoleDoesNotExist as ex:
         if rolename in SYSTEM_ROLES:
@@ -483,11 +478,11 @@ def ac_role_del_scope_perms_cmd(_, rolename, scopename):
                 'Show user info')
 def ac_user_show_cmd(_, username=None):
     if not username:
-        users = ACCESS_CTRL_DB.users
+        users = mgr.ACCESS_CTRL_DB.users
         users_list = [name for name, _ in users.items()]
         return 0, json.dumps(users_list), ''
     try:
-        user = ACCESS_CTRL_DB.get_user(username)
+        user = mgr.ACCESS_CTRL_DB.get_user(username)
         return 0, json.dumps(user.to_dict()), ''
     except UserDoesNotExist as ex:
         return -errno.ENOENT, '', str(ex)
@@ -503,20 +498,20 @@ def ac_user_show_cmd(_, username=None):
 def ac_user_create_cmd(_, username, password=None, rolename=None, name=None,
                        email=None):
     try:
-        role = ACCESS_CTRL_DB.get_role(rolename) if rolename else None
+        role = mgr.ACCESS_CTRL_DB.get_role(rolename) if rolename else None
     except RoleDoesNotExist as ex:
         if rolename not in SYSTEM_ROLES:
             return -errno.ENOENT, '', str(ex)
         role = SYSTEM_ROLES[rolename]
 
     try:
-        user = ACCESS_CTRL_DB.create_user(username, password, name, email)
+        user = mgr.ACCESS_CTRL_DB.create_user(username, password, name, email)
     except UserAlreadyExists as ex:
         return -errno.EEXIST, '', str(ex)
 
     if role:
         user.set_roles([role])
-    ACCESS_CTRL_DB.save()
+    mgr.ACCESS_CTRL_DB.save()
     return 0, json.dumps(user.to_dict()), ''
 
 
@@ -525,8 +520,8 @@ def ac_user_create_cmd(_, username, password=None, rolename=None, name=None,
                  'Delete user')
 def ac_user_delete_cmd(_, username):
     try:
-        ACCESS_CTRL_DB.delete_user(username)
-        ACCESS_CTRL_DB.save()
+        mgr.ACCESS_CTRL_DB.delete_user(username)
+        mgr.ACCESS_CTRL_DB.save()
         return 0, "User '{}' deleted".format(username), ""
     except UserDoesNotExist as ex:
         return -errno.ENOENT, '', str(ex)
@@ -541,15 +536,15 @@ def ac_user_set_roles_cmd(_, username, roles):
     roles = []
     for rolename in rolesname:
         try:
-            roles.append(ACCESS_CTRL_DB.get_role(rolename))
+            roles.append(mgr.ACCESS_CTRL_DB.get_role(rolename))
         except RoleDoesNotExist as ex:
             if rolename not in SYSTEM_ROLES:
                 return -errno.ENOENT, '', str(ex)
             roles.append(SYSTEM_ROLES[rolename])
     try:
-        user = ACCESS_CTRL_DB.get_user(username)
+        user = mgr.ACCESS_CTRL_DB.get_user(username)
         user.set_roles(roles)
-        ACCESS_CTRL_DB.save()
+        mgr.ACCESS_CTRL_DB.save()
         return 0, json.dumps(user.to_dict()), ''
     except UserDoesNotExist as ex:
         return -errno.ENOENT, '', str(ex)
@@ -564,15 +559,15 @@ def ac_user_add_roles_cmd(_, username, roles):
     roles = []
     for rolename in rolesname:
         try:
-            roles.append(ACCESS_CTRL_DB.get_role(rolename))
+            roles.append(mgr.ACCESS_CTRL_DB.get_role(rolename))
         except RoleDoesNotExist as ex:
             if rolename not in SYSTEM_ROLES:
                 return -errno.ENOENT, '', str(ex)
             roles.append(SYSTEM_ROLES[rolename])
     try:
-        user = ACCESS_CTRL_DB.get_user(username)
+        user = mgr.ACCESS_CTRL_DB.get_user(username)
         user.add_roles(roles)
-        ACCESS_CTRL_DB.save()
+        mgr.ACCESS_CTRL_DB.save()
         return 0, json.dumps(user.to_dict()), ''
     except UserDoesNotExist as ex:
         return -errno.ENOENT, '', str(ex)
@@ -587,15 +582,15 @@ def ac_user_del_roles_cmd(_, username, roles):
     roles = []
     for rolename in rolesname:
         try:
-            roles.append(ACCESS_CTRL_DB.get_role(rolename))
+            roles.append(mgr.ACCESS_CTRL_DB.get_role(rolename))
         except RoleDoesNotExist as ex:
             if rolename not in SYSTEM_ROLES:
                 return -errno.ENOENT, '', str(ex)
             roles.append(SYSTEM_ROLES[rolename])
     try:
-        user = ACCESS_CTRL_DB.get_user(username)
+        user = mgr.ACCESS_CTRL_DB.get_user(username)
         user.del_roles(roles)
-        ACCESS_CTRL_DB.save()
+        mgr.ACCESS_CTRL_DB.save()
         return 0, json.dumps(user.to_dict()), ''
     except UserDoesNotExist as ex:
         return -errno.ENOENT, '', str(ex)
@@ -609,10 +604,10 @@ def ac_user_del_roles_cmd(_, username, roles):
                  'Set user password')
 def ac_user_set_password(_, username, password):
     try:
-        user = ACCESS_CTRL_DB.get_user(username)
+        user = mgr.ACCESS_CTRL_DB.get_user(username)
         user.set_password(password)
 
-        ACCESS_CTRL_DB.save()
+        mgr.ACCESS_CTRL_DB.save()
         return 0, json.dumps(user.to_dict()), ''
     except UserDoesNotExist as ex:
         return -errno.ENOENT, '', str(ex)
@@ -625,12 +620,12 @@ def ac_user_set_password(_, username, password):
                  'Set user info')
 def ac_user_set_info(_, username, name, email):
     try:
-        user = ACCESS_CTRL_DB.get_user(username)
+        user = mgr.ACCESS_CTRL_DB.get_user(username)
         if name:
             user.name = name
         if email:
             user.email = email
-        ACCESS_CTRL_DB.save()
+        mgr.ACCESS_CTRL_DB.save()
         return 0, json.dumps(user.to_dict()), ''
     except UserDoesNotExist as ex:
         return -errno.ENOENT, '', str(ex)
@@ -641,11 +636,11 @@ class LocalAuthenticator(object):
         load_access_control_db()
 
     def get_user(self, username):
-        return ACCESS_CTRL_DB.get_user(username)
+        return mgr.ACCESS_CTRL_DB.get_user(username)
 
     def authenticate(self, username, password):
         try:
-            user = ACCESS_CTRL_DB.get_user(username)
+            user = mgr.ACCESS_CTRL_DB.get_user(username)
             if user.password:
                 pass_hash = password_hash(password, user.password)
                 if pass_hash == user.password:
@@ -655,5 +650,5 @@ class LocalAuthenticator(object):
         return None
 
     def authorize(self, username, scope, permissions):
-        user = ACCESS_CTRL_DB.get_user(username)
+        user = mgr.ACCESS_CTRL_DB.get_user(username)
         return user.authorize(scope, permissions)

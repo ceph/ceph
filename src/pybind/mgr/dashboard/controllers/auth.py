@@ -5,11 +5,10 @@ import cherrypy
 import jwt
 
 from . import ApiController, RESTController
-from .. import logger
+from .. import logger, mgr
 from ..exceptions import DashboardException
 from ..services.auth import AuthManager, JwtManager
 from ..services.access_control import UserDoesNotExist
-from ..services.sso import SSO_DB
 
 
 @ApiController('/auth', secure=False)
@@ -43,14 +42,14 @@ class Auth(RESTController):
         token = JwtManager.get_token_from_header()
         JwtManager.blacklist_token(token)
         redirect_url = '#/login'
-        if SSO_DB.protocol == 'saml2':
+        if mgr.SSO_DB.protocol == 'saml2':
             redirect_url = 'auth/saml2/slo'
         return {
             'redirect_url': redirect_url
         }
 
     def _get_login_url(self):
-        if SSO_DB.protocol == 'saml2':
+        if mgr.SSO_DB.protocol == 'saml2':
             return 'auth/saml2/login'
         return '#/login'
 
