@@ -10194,6 +10194,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     if (rel == CEPH_RELEASE_MIMIC) {
+      if (!mon->monmap->get_required_features().contains_all(
+	    ceph::features::mon::FEATURE_MIMIC)) {
+	ss << "not all mons are mimic";
+	err = -EPERM;
+	goto reply;
+      }
       if ((!HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_MIMIC))
            && !sure) {
 	ss << "not all up OSDs have CEPH_FEATURE_SERVER_MIMIC feature";
