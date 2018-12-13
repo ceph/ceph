@@ -104,6 +104,16 @@
       with_items:
         - "{{ osd_paths.files }}"
 
+    - name: stop ceph-osd@2 daemon
+      service:
+        name: ceph-osd@2
+        state: stopped
+
+    - name: stop ceph-osd@1 daemon
+      service:
+        name: ceph-osd@0
+        state: stopped
+
     - name: activate all to start the previously prepared osd.0
       command: "ceph-volume lvm activate --filestore --all"
       environment:
