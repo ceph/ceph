@@ -60,8 +60,6 @@ from .controllers import generate_routes, json_error_page
 from .tools import NotificationQueue, RequestLoggingTool, TaskManager, \
                    prepare_url_prefix
 from .services.auth import AuthManager, AuthManagerTool, JwtManager
-from .services.access_control import ACCESS_CONTROL_COMMANDS, \
-                                     handle_access_control_command
 from .services.sso import SSO_COMMANDS, \
                           handle_sso_command
 from .services.exception import dashboard_exception_handler
@@ -238,7 +236,6 @@ class Module(MgrModule, CherryPyConfig):
         },
     ]
     COMMANDS.extend(options_command_list())
-    COMMANDS.extend(ACCESS_CONTROL_COMMANDS)
     COMMANDS.extend(SSO_COMMANDS)
 
     MODULE_OPTIONS = [
@@ -335,9 +332,6 @@ class Module(MgrModule, CherryPyConfig):
     def handle_command(self, inbuf, cmd):
         # pylint: disable=too-many-return-statements
         res = handle_option_command(cmd)
-        if res[0] != -errno.ENOSYS:
-            return res
-        res = handle_access_control_command(cmd)
         if res[0] != -errno.ENOSYS:
             return res
         res = handle_sso_command(cmd)
