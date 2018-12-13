@@ -4,10 +4,11 @@ from __future__ import absolute_import
 import cherrypy
 
 from . import ApiController, RESTController, UiApiController
+from .. import mgr
 from ..exceptions import RoleDoesNotExist, DashboardException,\
     RoleIsAssociatedWithUser, RoleAlreadyExists
 from ..security import Scope as SecurityScope, Permission
-from ..services.access_control import ACCESS_CTRL_DB, SYSTEM_ROLES
+from ..services.access_control import SYSTEM_ROLES
 
 
 @ApiController('/role', SecurityScope.USER)
@@ -41,7 +42,7 @@ class Role(RESTController):
                     role.set_scope_permissions(scope, permissions)
 
     def list(self):
-        roles = dict(ACCESS_CTRL_DB.roles)
+        roles = dict(mgr.ACCESS_CTRL_DB.roles)
         roles.update(SYSTEM_ROLES)
         roles = sorted(roles.values(), key=lambda role: role.name)
         return [Role._role_to_dict(r) for r in roles]
@@ -50,7 +51,7 @@ class Role(RESTController):
         role = SYSTEM_ROLES.get(name)
         if not role:
             try:
-                role = ACCESS_CTRL_DB.get_role(name)
+                role = mgr.ACCESS_CTRL_DB.get_role(name)
             except RoleDoesNotExist:
                 raise cherrypy.HTTPError(404)
         return Role._role_to_dict(role)
@@ -62,18 +63,18 @@ class Role(RESTController):
                                      component='role')
         Role._validate_permissions(scopes_permissions)
         try:
-            role = ACCESS_CTRL_DB.create_role(name, description)
+            role = mgr.ACCESS_CTRL_DB.create_role(name, description)
         except RoleAlreadyExists:
             raise DashboardException(msg='Role already exists',
                                      code='role_already_exists',
                                      component='role')
         Role._set_permissions(role, scopes_permissions)
-        ACCESS_CTRL_DB.save()
+        mgr.ACCESS_CTRL_DB.save()
         return Role._role_to_dict(role)
 
     def set(self, name, description=None, scopes_permissions=None):
         try:
-            role = ACCESS_CTRL_DB.get_role(name)
+            role = mgr.ACCESS_CTRL_DB.get_role(name)
         except RoleDoesNotExist:
             if name in SYSTEM_ROLES:
                 raise DashboardException(msg='Cannot update system role',
@@ -83,13 +84,13 @@ class Role(RESTController):
         Role._validate_permissions(scopes_permissions)
         Role._set_permissions(role, scopes_permissions)
         role.description = description
-        ACCESS_CTRL_DB.update_users_with_roles(role)
-        ACCESS_CTRL_DB.save()
+        mgr.ACCESS_CTRL_DB.update_users_with_roles(role)
+        mgr.ACCESS_CTRL_DB.save()
         return Role._role_to_dict(role)
 
     def delete(self, name):
         try:
-            ACCESS_CTRL_DB.delete_role(name)
+            mgr.ACCESS_CTRL_DB.delete_role(name)
         except RoleDoesNotExist:
             if name in SYSTEM_ROLES:
                 raise DashboardException(msg='Cannot delete system role',
@@ -100,7 +101,7 @@ class Role(RESTController):
             raise DashboardException(msg='Role is associated with user',
                                      code='role_is_associated_with_user',
                                      component='role')
-        ACCESS_CTRL_DB.save()
+        mgr.ACCESS_CTRL_DB.save()
 
 
 @UiApiController('/scope', SecurityScope.USER)
