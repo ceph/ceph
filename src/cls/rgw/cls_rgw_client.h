@@ -375,14 +375,14 @@ int cls_rgw_bi_list(librados::IoCtx& io_ctx, const string oid,
 
 int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, librados::ObjectWriteOperation& op,
                             const string& oid, const cls_rgw_obj_key& key, bufferlist& olh_tag,
-                            bool delete_marker, const string& op_tag, struct rgw_bucket_dir_entry_meta *meta,
+                            bool delete_marker, const string& op_tag, rgw_bucket_dir_entry_meta *meta,
                             uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time, bool log_op, rgw_zone_set& zones_trace);
 int cls_rgw_bucket_unlink_instance(librados::IoCtx& io_ctx, librados::ObjectWriteOperation& op,
                                    const string& oid, const cls_rgw_obj_key& key, const string& op_tag,
                                    const string& olh_tag, uint64_t olh_epoch, bool log_op, rgw_zone_set& zones_trace);
 int cls_rgw_get_olh_log(librados::IoCtx& io_ctx, string& oid, librados::ObjectReadOperation& op, const cls_rgw_obj_key& olh, uint64_t ver_marker,
                         const string& olh_tag,
-                        map<uint64_t, vector<struct rgw_bucket_olh_log_entry> > *log, bool *is_truncated);
+                        map<uint64_t, vector<rgw_bucket_olh_log_entry> > *log, bool *is_truncated);
 void cls_rgw_trim_olh_log(librados::ObjectWriteOperation& op, const cls_rgw_obj_key& olh, uint64_t ver, const string& olh_tag);
 int cls_rgw_clear_olh(librados::IoCtx& io_ctx, librados::ObjectWriteOperation& op, string& oid, const cls_rgw_obj_key& olh, const string& olh_tag);
 
@@ -416,14 +416,14 @@ public:
                         const string& _filter_prefix, uint32_t _num_entries,
                         bool _list_versions,
                         map<int, string>& oids,
-                        map<int, struct rgw_cls_list_ret>& list_results,
+                        map<int, rgw_cls_list_ret>& list_results,
                         uint32_t max_aio) :
   CLSRGWConcurrentIO(io_ctx, oids, max_aio),
   start_obj(_start_obj), filter_prefix(_filter_prefix), num_entries(_num_entries), list_versions(_list_versions), result(list_results) {}
 };
 
 class CLSRGWIssueBILogList : public CLSRGWConcurrentIO {
-  map<int, struct cls_rgw_bi_log_list_ret>& result;
+  map<int, cls_rgw_bi_log_list_ret>& result;
   BucketIndexShardsManager& marker_mgr;
   uint32_t max;
 protected:
@@ -431,7 +431,7 @@ protected:
 public:
   CLSRGWIssueBILogList(librados::IoCtx& io_ctx, BucketIndexShardsManager& _marker_mgr, uint32_t _max,
                        map<int, string>& oids,
-                       map<int, struct cls_rgw_bi_log_list_ret>& bi_log_lists, uint32_t max_aio) :
+                       map<int, cls_rgw_bi_log_list_ret>& bi_log_lists, uint32_t max_aio) :
     CLSRGWConcurrentIO(io_ctx, oids, max_aio), result(bi_log_lists),
     marker_mgr(_marker_mgr), max(_max) {}
 };
@@ -466,13 +466,14 @@ public:
  *
  * Return 0 on success, a failure code otherwise.
  */
-class CLSRGWIssueBucketCheck : public CLSRGWConcurrentIO /*<map<string, struct rgw_cls_check_index_ret> >*/ {
-  map<int, struct rgw_cls_check_index_ret>& result;
+class CLSRGWIssueBucketCheck : public CLSRGWConcurrentIO /*<map<string, rgw_cls_check_index_ret> >*/ {
+  map<int, rgw_cls_check_index_ret>& result;
 protected:
   int issue_op(int shard_id, const string& oid) override;
 public:
-  CLSRGWIssueBucketCheck(librados::IoCtx& ioc, map<int, string>& oids, map<int, struct rgw_cls_check_index_ret>& bucket_objs_ret,
-                     uint32_t _max_aio) :
+  CLSRGWIssueBucketCheck(librados::IoCtx& ioc, map<int, string>& oids,
+			 map<int, rgw_cls_check_index_ret>& bucket_objs_ret,
+			 uint32_t _max_aio) :
     CLSRGWConcurrentIO(ioc, oids, _max_aio), result(bucket_objs_ret) {}
 };
 
