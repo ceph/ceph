@@ -74,16 +74,15 @@ void shard_info_wrapper::encode(bufferlist& bl) const
   ENCODE_START(3, 3, bl);
   encode(errors, bl);
   encode(primary, bl);
-  if (has_shard_missing()) {
-    return;
+  if (!has_shard_missing()) {
+    encode(attrs, bl);
+    encode(size, bl);
+    encode(omap_digest_present, bl);
+    encode(omap_digest, bl);
+    encode(data_digest_present, bl);
+    encode(data_digest, bl);
+    encode(selected_oi, bl);
   }
-  encode(attrs, bl);
-  encode(size, bl);
-  encode(omap_digest_present, bl);
-  encode(omap_digest, bl);
-  encode(data_digest_present, bl);
-  encode(data_digest, bl);
-  encode(selected_oi, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -92,16 +91,15 @@ void shard_info_wrapper::decode(bufferlist::const_iterator& bp)
   DECODE_START(3, bp);
   decode(errors, bp);
   decode(primary, bp);
-  if (has_shard_missing()) {
-    return;
+  if (!has_shard_missing()) {
+    decode(attrs, bp);
+    decode(size, bp);
+    decode(omap_digest_present, bp);
+    decode(omap_digest, bp);
+    decode(data_digest_present, bp);
+    decode(data_digest, bp);
+    decode(selected_oi, bp);
   }
-  decode(attrs, bp);
-  decode(size, bp);
-  decode(omap_digest_present, bp);
-  decode(omap_digest, bp);
-  decode(data_digest_present, bp);
-  decode(data_digest, bp);
-  decode(selected_oi, bp);
   DECODE_FINISH(bp);
 }
 
