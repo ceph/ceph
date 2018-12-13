@@ -1,6 +1,8 @@
 import logging
 import os.path
 
+from distutils.version import LooseVersion
+
 from teuthology.config import config as teuth_config
 from teuthology.orchestra import run
 from teuthology import packaging
@@ -99,6 +101,38 @@ def _zypper_removerepo(remote, repo_list):
             'sudo', 'zypper', '-n', 'removerepo', repo['name'],
         ])
 
+
+def _downgrade_packages(ctx, remote, pkgs, pkg_version, config):
+    """
+    Downgrade packages listed by 'downgrade_packages'
+
+    Downgrade specified packages to given version. The list of packages
+    downgrade is provided by 'downgrade_packages' as a property of "install"
+    task.
+
+    :param ctx: the argparse.Namespace object
+    :param remote: the teuthology.orchestra.remote.Remote object
+    :param pkgs: list of package names to install
+    :param pkg_version: the version to which all packages will be downgraded
+    :param config: the config dict
+    :return: list of package names from 'pkgs' which are not yet
+             installed/downgraded
+    """
+    downgrade_pkgs = config.get('downgrade_packages', [])
+    if not downgrade_pkgs:
+        return pkgs
+    # assuming we are going to downgrade packages with the same version
+    first_pkg = downgrade_pkgs[0]
+    installed_version = packaging.get_package_version(remote, first_pkg)
+    assert installed_version, "failed to get version of {}".format(first_pkg)
+    assert LooseVersion(installed_version) < LooseVersion(pkg_version)
+    # to compose package name like "librados2-0.94.10-87.g116a558.el7"
+    pkgs_opt = ['-'.join([pkg, pkg_version]) for pkg in downgrade_pkgs]
+    downgrade_cmd = 'sudo yum -y downgrade {}'.format(' '.join(pkgs_opt))
+    remote.run(args=downgrade_cmd.format(pkgs=pkgs_opt))
+    return [pkg for pkg in pkgs if pkg not in downgrade_pkgs]
+
+
 def _update_package_list_and_install(ctx, remote, rpm, config):
     """
     Installs the repository for the relevant branch, then installs
@@ -159,6 +193,9 @@ def _update_package_list_and_install(ctx, remote, rpm, config):
     else:
         remove_cmd = 'sudo yum -y remove'
         install_cmd = 'sudo yum -y install'
+        # to compose version string like "0.94.10-87.g116a558.el7"
+        pkg_version = '.'.join([builder.version, builder.dist_release])
+        rpm = _downgrade_packages(ctx, remote, rpm, pkg_version, config)
 
     for cpack in rpm:
         if ldir:

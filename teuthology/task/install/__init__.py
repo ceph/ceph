@@ -227,8 +227,6 @@ def install(ctx, config):
     :param config: the config dict
     """
 
-    project = config.get('project', 'ceph')
-
     package_list = get_package_list(ctx, config)
     debs = package_list['deb']
     rpms = package_list['rpm']
@@ -261,7 +259,7 @@ def install(ctx, config):
     finally:
         remove_packages(ctx, config, package_list)
         remove_sources(ctx, config)
-        if project == 'ceph':
+        if config.get('project', 'ceph') == 'ceph':
             purge_data(ctx)
 
 
@@ -548,6 +546,17 @@ def task(ctx, config):
 
     When passed 'rhbuild' as a key, it will attempt to install an rh ceph build
     using ceph-deploy
+
+    Normally, the package management system will try to install or upgrade
+    specified packages as instructed. But if newer versions of these packages
+    to be installed have been installed on test node, we will have to uninstall
+    or downgrade them. To downgrade multiple packages in a single shot:
+
+    tasks:
+    - install:
+        project: ceph
+        branch: hammer
+        downgrade_packages: ['librados2', 'librbd1']
 
     Reminder regarding teuthology-suite side effects:
 
