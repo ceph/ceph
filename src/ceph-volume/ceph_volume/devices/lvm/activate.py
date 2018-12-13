@@ -63,6 +63,9 @@ def activate_filestore(lvs, no_systemd=False):
     if not system.device_is_mounted(source, destination=destination):
         prepare_utils.mount_osd(source, osd_id, is_vdo=is_vdo)
 
+    # ensure that the OSD destination is always chowned properly
+    system.chown(destination)
+
     # always re-do the symlink regardless if it exists, so that the journal
     # device path that may have changed can be mapped correctly every time
     destination = '/var/lib/ceph/osd/%s-%s/journal' % (conf.cluster, osd_id)
@@ -151,7 +154,10 @@ def activate_bluestore(lvs, no_systemd=False):
     db_device_path = get_osd_device_path(osd_lv, lvs, 'db', dmcrypt_secret=dmcrypt_secret)
     wal_device_path = get_osd_device_path(osd_lv, lvs, 'wal', dmcrypt_secret=dmcrypt_secret)
 
-    # Once symlinks are removed, the osd dir can be 'primed again.
+    # Once symlinks are removed, the osd dir can be 'primed again. chown first,
+    # regardless of what currently exists so that ``prime-osd-dir`` can succeed
+    # even if permissions are somehow messed up
+    system.chown(osd_path)
     prime_command = [
         'ceph-bluestore-tool', '--cluster=%s' % conf.cluster,
         'prime-osd-dir', '--dev', osd_lv_path,

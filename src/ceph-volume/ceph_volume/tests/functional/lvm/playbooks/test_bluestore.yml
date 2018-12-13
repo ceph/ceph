@@ -62,6 +62,37 @@
       environment:
         CEPH_VOLUME_DEBUG: 1
 
+    - name: find all OSD directories
+      find:
+        paths: /var/lib/ceph/osd
+        recurse: no
+        file_type: directory
+      register: osd_directories
+
+    - name: find all OSD symlinks
+      find:
+        paths: /var/lib/ceph/osd
+        recurse: yes
+        depth: 2
+        file_type: link
+      register: osd_symlinks
+
+    # set the OSD dir and the block/block.db links to root:root permissions, to
+    # ensure that the OSD will be able to activate regardless
+    - file:
+        path: "{{ item.path }}"
+        owner: root
+        group: root
+      with_items:
+        - "{{ osd_directories.files }}"
+
+    - file:
+        path: "{{ item.path }}"
+        owner: root
+        group: root
+      with_items:
+        - "{{ osd_symlinks.files }}"
+
     - name: activate all to start the previously prepared osd.0
       command: "ceph-volume lvm activate --all"
       environment:
