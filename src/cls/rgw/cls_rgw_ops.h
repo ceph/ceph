@@ -597,7 +597,7 @@ struct rgw_cls_bi_get_op {
   cls_rgw_obj_key key;
   BIIndexType type; /* namespace: plain, instance, olh */
 
-  rgw_cls_bi_get_op() : type(PlainIdx) {}
+  rgw_cls_bi_get_op() : type(BIIndexType::Plain) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
