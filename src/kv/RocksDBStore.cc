@@ -352,7 +352,7 @@ int RocksDBStore::open(ostream &out, const std::vector<ColumnFamily>& options)
         }
       }
       //mark existence of new column_family
-      column_families.emplace(cf_name, ColumnFamilyData(cf_specific_options, nullptr));
+      column_families.emplace(cf_name, ColumnFamilyData(cf_specific_options, {nullptr}));
       status = rocksdb::GetColumnFamilyOptionsFromString(
           cf_opt, cf_specific_options, &cf_opt);
       if (!status.ok()) {
@@ -385,12 +385,13 @@ int RocksDBStore::open(ostream &out, const std::vector<ColumnFamily>& options)
         auto it = merge_ops.find(existing_cfs[i]);
         if (it != merge_ops.end()) {
           //this is creation of mono column family
-          cf_mono_handles.emplace(existing_cfs[i], static_cast<void*>(handles[i]));
+          cf_mono_handles.emplace(existing_cfs[i], KeyValueDB::ColumnFamilyHandle{static_cast<void*>(handles[i]) } );
         }
         //column_families.emplace(cf_name, ColumnFamilyData(cf_options, static_cast<void*>(cf_handle)));
 
         //todo fix add_column_family
-        column_families[existing_cfs[i]].handle = static_cast<void*>(handles[i]);
+        column_families[existing_cfs[i]].handle =
+            KeyValueDB::ColumnFamilyHandle{static_cast<void*>(handles[i])};
       }
     }
   }
@@ -640,10 +641,24 @@ int RocksDBStore::column_family_create(const std::string& cf_name, const std::st
   auto i = merge_ops.find(cf_name);
   if (i != merge_ops.end()) {
     //this is creation of mono column family
-    cf_mono_handles.emplace(cf_name, static_cast<void*>(cf_handle));
+    cf_mono_handles.emplace(cf_name, KeyValueDB::ColumnFamilyHandle{static_cast<void*>(cf_handle)} );
   }
-  column_families.emplace(cf_name, ColumnFamilyData(cf_options, static_cast<void*>(cf_handle)));
+  column_families.emplace(cf_name, ColumnFamilyData(cf_options,
+    KeyValueDB::ColumnFamilyHandle{ static_cast<void*>(cf_handle) } ));
   return 0;
+}
+
+int RocksDBStore::column_family_delete(const std::string& cf_name)
+{
+  return -1;
+}
+
+KeyValueDB::ColumnFamilyHandle RocksDBStore::column_family_handle(const std::string& cf_name)
+{
+  auto it = column_families.find(cf_name);
+  if (it == column_families.end())
+    return {nullptr};
+ return it->second.handle;
 }
 
 std::shared_ptr<rocksdb::MergeOperator>
@@ -677,7 +692,7 @@ RocksDBStore::~RocksDBStore()
   // Ensure db is destroyed before dependent db_cache and filterpolicy
   for (auto& p : column_families) {
     db->DestroyColumnFamilyHandle(
-      static_cast<rocksdb::ColumnFamilyHandle*>(p.second.handle));
+      static_cast<rocksdb::ColumnFamilyHandle*>(p.second.handle.priv));
   }
   if (must_close_default_cf) {
     db->DestroyColumnFamilyHandle(default_cf);
@@ -1104,10 +1119,10 @@ void RocksDBStore::RocksDBTransactionImpl::merge(
 }
 
 void RocksDBStore::RocksDBTransactionImpl::select(
-      void* column_family_handle)
+    KeyValueDB::ColumnFamilyHandle column_family_handle)
 {
-  if (column_family_handle != nullptr)
-    cf_handle = static_cast<rocksdb::ColumnFamilyHandle *>(column_family_handle);
+  if (column_family_handle.priv != nullptr)
+    cf_handle = static_cast<rocksdb::ColumnFamilyHandle *>(column_family_handle.priv);
   else
     cf_handle = nullptr;
 }
@@ -1228,12 +1243,12 @@ int RocksDBStore::get(
 }
 
 int RocksDBStore::get(
-    void* cf_handle,
+    KeyValueDB::ColumnFamilyHandle cf_handle,
     const std::string &prefix,
     const std::set<std::string> &keys,
     std::map<std::string, bufferlist> *out) {
   utime_t start = ceph_clock_now();
-  auto cf = static_cast<rocksdb::ColumnFamilyHandle*>(cf_handle);
+  auto cf = static_cast<rocksdb::ColumnFamilyHandle*>(cf_handle.priv);
   if (check_mode(cf, prefix)) {
     for (auto& key : keys) {
       std::string value;
@@ -1269,7 +1284,7 @@ int RocksDBStore::get(
 }
 
 int RocksDBStore::get(
-    void* cf_handle,
+    KeyValueDB::ColumnFamilyHandle cf_handle,
     const string &prefix,
     const string &key,
     bufferlist *out)
@@ -1279,7 +1294,7 @@ int RocksDBStore::get(
   int r = 0;
   string value;
   rocksdb::Status s;
-  auto cf = static_cast<rocksdb::ColumnFamilyHandle*>(cf_handle);
+  auto cf = static_cast<rocksdb::ColumnFamilyHandle*>(cf_handle.priv);
   if (check_mode(cf, prefix)) {
     s = db->Get(rocksdb::ReadOptions(),
                 cf,
@@ -1330,10 +1345,10 @@ void RocksDBStore::compact()
   logger->inc(l_rocksdb_compact);
   rocksdb::CompactRangeOptions options;
   db->CompactRange(options, default_cf, nullptr, nullptr);
-  for (auto cf : cf_mono_handles) {
+  for (auto cf : column_families) {
     db->CompactRange(
       options,
-      static_cast<rocksdb::ColumnFamilyHandle*>(cf.second),
+      static_cast<rocksdb::ColumnFamilyHandle*>(cf.second.handle.priv),
       nullptr, nullptr);
   }
 }
@@ -1559,6 +1574,16 @@ RocksDBStore::WholeSpaceIterator RocksDBStore::get_wholespace_iterator()
     db->NewIterator(rocksdb::ReadOptions(), default_cf));
 }
 
+RocksDBStore::WholeSpaceIterator RocksDBStore::get_wholespace_iterator_cf(ColumnFamilyHandle cfh)
+{
+  rocksdb::ColumnFamilyHandle *cf_handle =
+      static_cast<rocksdb::ColumnFamilyHandle*>(cfh.priv);
+  if (cfh.priv == nullptr)
+      cf_handle = default_cf;
+  return std::make_shared<RocksDBWholeSpaceIteratorImpl>(
+    db->NewIterator(rocksdb::ReadOptions(), cf_handle));
+}
+
 class CFIteratorImpl : public KeyValueDB::IteratorImpl {
 protected:
   string prefix;
@@ -1635,4 +1660,15 @@ KeyValueDB::Iterator RocksDBStore::get_iterator(const std::string& prefix)
   } else {
     return KeyValueDB::get_iterator(prefix);
   }
+}
+
+KeyValueDB::Iterator RocksDBStore::get_iterator_cf(ColumnFamilyHandle cfh, const std::string& prefix)
+{
+  rocksdb::ColumnFamilyHandle *cf_handle =
+    static_cast<rocksdb::ColumnFamilyHandle*>(cfh.priv);
+  if (cfh.priv == nullptr)
+    cf_handle = default_cf;
+  return std::make_shared<CFIteratorImpl>(
+    prefix,
+    db->NewIterator(rocksdb::ReadOptions(), cf_handle));
 }

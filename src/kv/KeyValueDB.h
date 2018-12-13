@@ -35,6 +35,14 @@ public:
       : name(name), option(option) {}
   };
 
+  struct ColumnFamilyHandle {
+    void* priv = nullptr;
+    bool operator==(struct ColumnFamilyHandle rhs) const {return rhs.priv == priv;}
+    bool operator!=(struct ColumnFamilyHandle rhs) const {return rhs.priv != priv;}
+    bool operator==(void* rhs) const {return rhs == priv;}
+    bool operator!=(void* rhs) const {return rhs != priv;}
+  };
+
   class TransactionImpl {
   public:
     /// Set Keys
@@ -150,7 +158,7 @@ public:
     /// Handlers must be obtained by \ref column_family_handle.
     /// It is legal to construct transaction that spans multiple column families.
     virtual void select(
-      void* column_family_handle ///< [in] column family handler, or nullptr for default column family
+        KeyValueDB::ColumnFamilyHandle column_family_handle ///< [in] column family handler, or nullptr for default column family
     ) { ceph_abort_msg("Not implemented"); }
 
     virtual ~TransactionImpl() {}
@@ -206,9 +214,34 @@ public:
   virtual void close() { }
 
   /*
-   * Lists column families
+   * @defgroup column_family Column Families
+   * There are 3 categories of column families.
    *
-   * Lists column families present in database.
+   * 1) mono column family
+   * Tightly bound to single prefix (P) value.
+   * Name of column family is P.
+   * Only keys with prefix P are all allowed.
+   * Merge operator (if exists) must be named P.
+   *
+   * 2) regular column family
+   * Can contain keys with any prefix.
+   * Name of column family may not be exact to any registered merge operators.
+   * Merge operator must encompass all available prefix merge operators, and so must its name.
+   *
+   * 3) default column family
+   * Can contain keys with any prefix except those handled by mono column families.
+   * Merge operator must encompass all prefixes, except those handled by mono column families.
+   * Merge operator name must not include prefixes handled by mono column families.
+   */
+
+  /*
+   * @ingroup column_family
+   * List column families
+   *
+   * Queries database for names of all defined column families.
+   * When invoked before \ref open it queries stored database.
+   * When invoked after \ref open or \ref create_and_open it just reports current state.
+   * Invoking on non-existent database must return empty \ref cf_names.
    * This can be invoked before open() to query existing column families.
    * Also it allows to query ability of database to support multiple column families.
    *
@@ -217,10 +250,56 @@ public:
    * Result:
    *   0 - success, <0 - db does not support column families
    */
-  virtual int column_family_list(vector<std::string>& cf_names) { cf_names.clear(); return -1; }
-  virtual int column_family_create(const std::string& cf_name, const std::string& cf_options) { ceph_abort_msg("Not implemented"); return -1; }
-  virtual int column_family_delete(const std::string& cf_name) { ceph_abort_msg("Not implemented"); return -1; }
-  virtual void* column_family_handle(const std::string& cf_name) { ceph_abort_msg("Not implemented"); return nullptr; }
+  virtual int column_family_list(vector<std::string>& cf_names)
+  { cf_names.clear(); return -1; }
+
+  /*
+   * @ingroup column_family
+   * Create new column family
+   *
+   * Create additional column family in running database.
+   * This may be invoked only on opened database.
+   *
+   * Params:
+   * - name name of column family
+   * - options extra options to apply for column family
+   * Result:
+   *   0 - success, <0 error code
+   */
+  virtual int column_family_create(const std::string& cf_name, const std::string& cf_options)
+  { ceph_abort_msg("Not implemented"); return -1; }
+
+  /*
+   * @ingroup column_family
+   * Delete column family
+   *
+   * Removes column family from running database.
+   * This may be invoked only on opened database.
+   *
+   * Params:
+   * - name name of column family
+   * - options extra options to apply for column family
+   * Result:
+   *   0 - success, <0 error code
+   */
+  virtual int column_family_delete(const std::string& cf_name)
+  { ceph_abort_msg("Not implemented"); return -1; }
+
+  /*
+   * @ingroup column_family
+   * Get handle to column family
+   *
+   * This works properly only if column family names cf_name exists.
+   * Note: If requested for handle to
+   *
+   * Params:
+   * - cf_name name of column family
+   * Result:
+   *   handle to column family, or nullptr when cf_name does not exist
+   */
+  virtual ColumnFamilyHandle column_family_handle(const std::string& cf_name)
+  { ceph_abort_msg("Not implemented"); return {nullptr}; }
+
   /// Try to repair K/V database. leveldb and rocksdb require that database must be not opened.
   virtual int repair(std::ostream &out) { return 0; }
 
@@ -257,17 +336,17 @@ public:
     return get(prefix, string(key, keylen), value);
   }
 
-  virtual int get(void* cf_handle,                         ///< [in] Column family handle
+  virtual int get(ColumnFamilyHandle cf_handle,           ///< [in] Column family handle
                   const std::string &prefix,               ///< [in] Prefix/CF for key
                   const std::set<std::string> &keys,       ///< [in] Keys to retrieve
                   std::map<std::string, bufferlist> *out) {///< [out] Key values retrieved
     ceph_abort_msg("Not implemented"); return -1;
   };
 
-  virtual int get(void* cf_handle,           ///< [in] Column family handle
-                  const std::string &prefix, ///< [in] prefix or CF name
-                  const std::string &key,    ///< [in] key
-                  bufferlist *value) {       ///< [out] value
+  virtual int get(ColumnFamilyHandle cf_handle,///< [in] Column family handle
+                  const std::string &prefix,    ///< [in] prefix or CF name
+                  const std::string &key,       ///< [in] key
+                  bufferlist *value) {          ///< [out] value
     std::set<std::string> ks;
     ks.insert(key);
     std::map<std::string,bufferlist> om;
@@ -281,7 +360,7 @@ public:
     return r;
   }
 
-  class IteratorBase {
+  class IteratorBaseImpl {
   public:
     virtual int seek_to_first() = 0;
     virtual bool valid() = 0;
@@ -307,19 +386,19 @@ public:
     virtual int status() = 0;
     virtual int seek_to_last() { ceph_abort(); return 0; }
     virtual int prev() { ceph_abort(); return 0; }
-    virtual ~IteratorBase() {}
+    virtual ~IteratorBaseImpl() {}
   };
+  typedef std::shared_ptr< IteratorBaseImpl > IteratorBase;
 
   // This superclass is used both by kv iterators *and* by the ObjectMap
   // omap iterator.  The class hierarchies are unfortunately tied together
   // by the legacy DBOjectMap implementation :(.
-  class ObjectMapIteratorImpl : public IteratorBase {
+  class ObjectMapIteratorImpl : public IteratorBaseImpl {
   public:
     virtual int upper_bound(const std::string &after) = 0;
     virtual int lower_bound(const std::string &to) = 0;
     virtual ~ObjectMapIteratorImpl() {}
   };
-
 
   class IteratorImpl : public ObjectMapIteratorImpl {
   public:
@@ -330,17 +409,17 @@ public:
   typedef std::shared_ptr< IteratorImpl > Iterator;
 
   // This is the low-level iterator implemented by the underlying KV store.
-  class WholeSpaceIteratorImpl : public IteratorBase {
+  class WholeSpaceIteratorImpl : public IteratorBaseImpl {
   public:
-    using IteratorBase::seek_to_first;
+    using IteratorBaseImpl::seek_to_first;
     int seek_to_last() override = 0;
-    using IteratorBase::valid;
-    using IteratorBase::next;
+    using IteratorBaseImpl::valid;
+    using IteratorBaseImpl::next;
     int prev() override = 0;
-    using IteratorBase::key;
-    using IteratorBase::value;
-    using IteratorBase::value_as_ptr;
-    using IteratorBase::status;
+    using IteratorBaseImpl::key;
+    using IteratorBaseImpl::value;
+    using IteratorBaseImpl::value_as_ptr;
+    using IteratorBaseImpl::status;
     virtual int seek_to_first(const std::string &prefix) = 0;
     virtual int seek_to_last(const std::string &prefix) = 0;
     virtual int upper_bound(const std::string &prefix, const std::string &after) = 0;
@@ -413,13 +492,11 @@ public:
       prefix,
       get_wholespace_iterator());
   }
-
-  void add_column_family(const std::string& cf_name, void *handle) {
-    cf_mono_handles.insert(std::make_pair(cf_name, handle));
+  virtual WholeSpaceIterator get_wholespace_iterator_cf(ColumnFamilyHandle cfh) {
+    ceph_abort_msg("Not implemented"); return {};
   }
-
-  bool is_column_family(const std::string& prefix) {
-    return cf_mono_handles.count(prefix);
+  virtual Iterator get_iterator_cf(ColumnFamilyHandle cfh, const std::string &prefix) {
+    ceph_abort_msg("Not implemented"); return {};
   }
 
   virtual uint64_t get_estimated_size(std::map<std::string,uint64_t> &extra) = 0;
@@ -530,9 +607,6 @@ public:
 protected:
   /// List of matching prefixes/ColumnFamilies and merge operators
   std::map<std::string, std::shared_ptr<MergeOperator> > merge_ops;
-
-  /// column families in use, name->handle
-  std::unordered_map<std::string, void *> cf_mono_handles;
 };
 
 #endif
