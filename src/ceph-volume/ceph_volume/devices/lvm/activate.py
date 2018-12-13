@@ -63,6 +63,9 @@ def activate_filestore(lvs, no_systemd=False):
     if not system.device_is_mounted(source, destination=destination):
         prepare_utils.mount_osd(source, osd_id, is_vdo=is_vdo)
 
+    # ensure that the OSD destination is always chowned properly
+    system.chown(destination)
+
     # always re-do the symlink regardless if it exists, so that the journal
     # device path that may have changed can be mapped correctly every time
     destination = '/var/lib/ceph/osd/%s-%s/journal' % (conf.cluster, osd_id)
