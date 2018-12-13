@@ -5,6 +5,7 @@ import yaml
 from teuthology import misc
 from teuthology.orchestra import run
 from teuthology.task import Task
+from time import sleep
 
 log = logging.getLogger(__name__)
 
@@ -216,6 +217,8 @@ class CBT(Task):
                 '{cbtdir}/cbt_config.yaml'.format(cbtdir=self.cbt_dir),
             ],
         )
+        log.info("Waiting for debug")
+        sleep(28800)
         preserve_file = os.path.join(self.ctx.archive, '.preserve')
         open(preserve_file, 'a').close()
 
