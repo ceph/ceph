@@ -1299,6 +1299,8 @@ void Server::handle_client_reconnect(const MClientReconnect::const_ref &m)
   }
   mdcache->rejoin_recovered_client(session->get_client(), session->info.inst);
 
+  reconnect_last_seen = clock::now();
+
   // remove from gather set
   client_reconnect_gather.erase(from);
   if (client_reconnect_gather.empty())
@@ -1395,62 +1397,81 @@ void Server::reconnect_gather_finish()
 void Server::reconnect_tick()
 {
   if (reconnect_evicting) {
-    dout(4) << "reconnect_tick: waiting for evictions" << dendl;
+    dout(7) << "reconnect_tick: waiting for evictions" << dendl;
     return;
   }
 
-  auto elapse = std::chrono::duration<double>(clock::now() - reconnect_start).count();
-  if (elapse >= g_conf()->mds_reconnect_timeout &&
-      !client_reconnect_gather.empty()) {
-    dout(10) << "reconnect timed out" << dendl;
+  if (client_reconnect_gather.empty())
+    return;
 
-    // If we're doing blacklist evictions, use this to wait for them before
-    // proceeding to reconnect_gather_finish
-    MDSGatherBuilder gather(g_ceph_context);
+  auto now = clock::now();
+  auto elapse1 = std::chrono::duration<double>(now - reconnect_start).count();
+  if (elapse1 < g_conf()->mds_reconnect_timeout)
+    return;
 
-    for (set<client_t>::iterator p = client_reconnect_gather.begin();
-	 p != client_reconnect_gather.end();
-	 ++p) {
-      Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(p->v));
-      ceph_assert(session);
+  vector<Session*> remaining_sessions;
+  remaining_sessions.reserve(client_reconnect_gather.size());
+  for (auto c : client_reconnect_gather) {
+    Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(c.v));
+    ceph_assert(session);
+    remaining_sessions.push_back(session);
+    // client re-sends cap flush messages before the reconnect message
+    if (session->last_seen > reconnect_last_seen)
+      reconnect_last_seen = session->last_seen;
+  }
 
-      // Keep sessions that have specified timeout. These sessions will prevent
-      // mds from going to active. MDS goes to active after they all have been
-      // killed or reclaimed.
-      if (session->info.client_metadata.find("timeout") !=
-	  session->info.client_metadata.end()) {
-	dout(1) << "reconnect keeps " << session->info.inst << ", need to be reclaimed" << dendl;
-	client_reclaim_gather.insert(session->get_client());
-	continue;
-      }
+  auto elapse2 = std::chrono::duration<double>(now - reconnect_last_seen).count();
+  if (elapse2 < g_conf()->mds_reconnect_timeout / 2) {
+    dout(7) << "reconnect_tick: last seen " << elapse2
+            << " seconds ago, extending reconnect interval" << dendl;
+    return;
+  }
 
-      dout(1) << "reconnect gives up on " << session->info.inst << dendl;
+  dout(7) << "reconnect timed out, " << remaining_sessions.size()
+	  << " clients have not reconnected in time" << dendl;
 
-      mds->clog->warn() << "evicting unresponsive client " << *session
-                        << ", after waiting " << g_conf()->mds_reconnect_timeout
-                        << " seconds during MDS startup";
+  // If we're doing blacklist evictions, use this to wait for them before
+  // proceeding to reconnect_gather_finish
+  MDSGatherBuilder gather(g_ceph_context);
 
-      if (g_conf()->mds_session_blacklist_on_timeout) {
-        std::stringstream ss;
-        mds->evict_client(session->get_client().v, false, true, ss,
-                          gather.new_sub());
-      } else {
-        kill_session(session, NULL);
-      }
-
-      failed_reconnects++;
+  for (auto session : remaining_sessions) {
+    // Keep sessions that have specified timeout. These sessions will prevent
+    // mds from going to active. MDS goes to active after they all have been
+    // killed or reclaimed.
+    if (session->info.client_metadata.find("timeout") !=
+	session->info.client_metadata.end()) {
+      dout(1) << "reconnect keeps " << session->info.inst
+	      << ", need to be reclaimed" << dendl;
+      client_reclaim_gather.insert(session->get_client());
+      continue;
     }
-    client_reconnect_gather.clear();
 
-    if (gather.has_subs()) {
-      dout(1) << "reconnect will complete once clients are evicted" << dendl;
-      gather.set_finisher(new MDSInternalContextWrapper(mds, new FunctionContext(
-            [this](int r){reconnect_gather_finish();})));
-      gather.activate();
-      reconnect_evicting = true;
+    dout(1) << "reconnect gives up on " << session->info.inst << dendl;
+
+    mds->clog->warn() << "evicting unresponsive client " << *session
+		      << ", after waiting " << elapse1
+		      << " seconds during MDS startup";
+
+    if (g_conf()->mds_session_blacklist_on_timeout) {
+      std::stringstream ss;
+      mds->evict_client(session->get_client().v, false, true, ss,
+			gather.new_sub());
     } else {
-      reconnect_gather_finish();
+      kill_session(session, NULL);
     }
+
+    failed_reconnects++;
+  }
+  client_reconnect_gather.clear();
+
+  if (gather.has_subs()) {
+    dout(1) << "reconnect will complete once clients are evicted" << dendl;
+    gather.set_finisher(new MDSInternalContextWrapper(mds, new FunctionContext(
+	    [this](int r){reconnect_gather_finish();})));
+    gather.activate();
+    reconnect_evicting = true;
+  } else {
+    reconnect_gather_finish();
   }
 }
 
