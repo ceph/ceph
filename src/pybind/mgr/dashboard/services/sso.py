@@ -85,13 +85,8 @@ class SsoDB(object):
         return cls(db['version'], db.get('protocol'), Saml2.from_dict(db.get('saml2')))
 
 
-SSO_DB = None
-
-
 def load_sso_db():
-    # pylint: disable=W0603
-    global SSO_DB
-    SSO_DB = SsoDB.load()
+    mgr.SSO_DB = SsoDB.load()
 
 
 SSO_COMMANDS = [
@@ -150,27 +145,27 @@ def handle_sso_command(cmd):
 
     if cmd['prefix'] == 'dashboard sso enable saml2':
         try:
-            OneLogin_Saml2_Settings(SSO_DB.saml2.onelogin_settings)
+            OneLogin_Saml2_Settings(mgr.SSO_DB.saml2.onelogin_settings)
         except OneLogin_Saml2_Error:
             return -errno.EPERM, '', 'Single Sign-On is not configured: ' \
                           'use `ceph dashboard sso setup saml2`'
-        SSO_DB.protocol = 'saml2'
-        SSO_DB.save()
+        mgr.SSO_DB.protocol = 'saml2'
+        mgr.SSO_DB.save()
         return 0, 'SSO is "enabled" with "SAML2" protocol.', ''
 
     if cmd['prefix'] == 'dashboard sso disable':
-        SSO_DB.protocol = ''
-        SSO_DB.save()
+        mgr.SSO_DB.protocol = ''
+        mgr.SSO_DB.save()
         return 0, 'SSO is "disabled".', ''
 
     if cmd['prefix'] == 'dashboard sso status':
-        if SSO_DB.protocol == 'saml2':
+        if mgr.SSO_DB.protocol == 'saml2':
             return 0, 'SSO is "enabled" with "SAML2" protocol.', ''
 
         return 0, 'SSO is "disabled".', ''
 
     if cmd['prefix'] == 'dashboard sso show saml2':
-        return 0, json.dumps(SSO_DB.saml2.to_dict()), ''
+        return 0, json.dumps(mgr.SSO_DB.saml2.to_dict()), ''
 
     if cmd['prefix'] == 'dashboard sso setup saml2':
         ceph_dashboard_base_url = cmd['ceph_dashboard_base_url']
@@ -261,9 +256,9 @@ def handle_sso_command(cmd):
             }
         }
         settings = OneLogin_Saml2_IdPMetadataParser.merge_settings(settings, idp_settings)
-        SSO_DB.saml2.onelogin_settings = settings
-        SSO_DB.protocol = 'saml2'
-        SSO_DB.save()
-        return 0, json.dumps(SSO_DB.saml2.onelogin_settings), ''
+        mgr.SSO_DB.saml2.onelogin_settings = settings
+        mgr.SSO_DB.protocol = 'saml2'
+        mgr.SSO_DB.save()
+        return 0, json.dumps(mgr.SSO_DB.saml2.onelogin_settings), ''
 
     return -errno.ENOSYS, '', ''
