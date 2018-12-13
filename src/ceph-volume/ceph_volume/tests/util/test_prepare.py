@@ -10,12 +10,12 @@ from ceph_volume.tests.conftest import Factory
 class TestOSDIDAvailable(object):
 
     def test_false_if_id_is_none(self):
-        assert not prepare.osd_id_available(None)
+        assert not prepare.osd_id_available('somekeyring', None)
 
     def test_returncode_is_not_zero(self, monkeypatch):
         monkeypatch.setattr('ceph_volume.process.call', lambda *a, **kw: ('', '', 1))
         with pytest.raises(RuntimeError):
-            prepare.osd_id_available(1)
+            prepare.osd_id_available('somekeyring', 1)
 
     def test_id_does_exist_but_not_available(self, monkeypatch):
         stdout = dict(nodes=[
@@ -23,7 +23,7 @@ class TestOSDIDAvailable(object):
         ])
         stdout = ['', json.dumps(stdout)]
         monkeypatch.setattr('ceph_volume.process.call', lambda *a, **kw: (stdout, '', 0))
-        result = prepare.osd_id_available(0)
+        result = prepare.osd_id_available('somekeyring', 0)
         assert not result
 
     def test_id_does_not_exist(self, monkeypatch):
@@ -32,7 +32,7 @@ class TestOSDIDAvailable(object):
         ])
         stdout = ['', json.dumps(stdout)]
         monkeypatch.setattr('ceph_volume.process.call', lambda *a, **kw: (stdout, '', 0))
-        result = prepare.osd_id_available(1)
+        result = prepare.osd_id_available('somekeyring', 1)
         assert not result
 
     def test_invalid_osd_id(self, monkeypatch):
@@ -41,7 +41,7 @@ class TestOSDIDAvailable(object):
         ])
         stdout = ['', json.dumps(stdout)]
         monkeypatch.setattr('ceph_volume.process.call', lambda *a, **kw: (stdout, '', 0))
-        result = prepare.osd_id_available("foo")
+        result = prepare.osd_id_available('somekeyring', "foo")
         assert not result
 
     def test_returns_true_when_id_is_destroyed(self, monkeypatch):
@@ -50,7 +50,7 @@ class TestOSDIDAvailable(object):
         ])
         stdout = ['', json.dumps(stdout)]
         monkeypatch.setattr('ceph_volume.process.call', lambda *a, **kw: (stdout, '', 0))
-        result = prepare.osd_id_available(0)
+        result = prepare.osd_id_available('somekeyring', 0)
         assert result
 
 

@@ -105,7 +105,7 @@ def get_block_db_size(lv_format=True):
     return db_size
 
 
-def create_id(fsid, json_secrets, osd_id=None):
+def create_id(fsid, json_secrets, keyring, osd_id=None):
     """
     :param fsid: The osd fsid to create, always required
     :param json_secrets: a json-ready object with whatever secrets are wanted
@@ -113,17 +113,16 @@ def create_id(fsid, json_secrets, osd_id=None):
     :param osd_id: Reuse an existing ID from an OSD that's been destroyed, if the
                    id does not exist in the cluster a new ID will be created
     """
-    bootstrap_keyring = '/var/lib/ceph/bootstrap-osd/%s.keyring' % conf.cluster
     cmd = [
         'ceph',
         '--cluster', conf.cluster,
         '--name', 'client.bootstrap-osd',
-        '--keyring', bootstrap_keyring,
+        '--keyring', keyring,
         '-i', '-',
         'osd', 'new', fsid
     ]
     if osd_id is not None:
-        if osd_id_available(osd_id):
+        if osd_id_available(keyring, osd_id):
             cmd.append(osd_id)
         else:
             raise RuntimeError("The osd ID {} is already in use or does not exist.".format(osd_id))
@@ -137,7 +136,7 @@ def create_id(fsid, json_secrets, osd_id=None):
     return ' '.join(stdout).strip()
 
 
-def osd_id_available(osd_id):
+def osd_id_available(keyring, osd_id):
     """
     Checks to see if an osd ID exists and if it's available for
     reuse. Returns True if it is, False if it isn't.
@@ -146,13 +145,12 @@ def osd_id_available(osd_id):
     """
     if osd_id is None:
         return False
-    bootstrap_keyring = '/var/lib/ceph/bootstrap-osd/%s.keyring' % conf.cluster
     stdout, stderr, returncode = process.call(
         [
             'ceph',
             '--cluster', conf.cluster,
             '--name', 'client.bootstrap-osd',
-            '--keyring', bootstrap_keyring,
+            '--keyring', keyring,
             'osd',
             'tree',
             '-f', 'json',
@@ -317,7 +315,7 @@ def link_db(db_device, osd_id):
     _link_device(db_device, 'block.db', osd_id)
 
 
-def get_monmap(osd_id):
+def get_monmap(keyring, osd_id):
     """
     Before creating the OSD files, a monmap needs to be retrieved so that it
     can be used to tell the monitor(s) about the new OSD. A call will look like::
@@ -327,14 +325,13 @@ def get_monmap(osd_id):
              mon getmap -o /var/lib/ceph/osd/ceph-0/activate.monmap
     """
     path = '/var/lib/ceph/osd/%s-%s/' % (conf.cluster, osd_id)
-    bootstrap_keyring = '/var/lib/ceph/bootstrap-osd/%s.keyring' % conf.cluster
     monmap_destination = os.path.join(path, 'activate.monmap')
 
     process.run([
         'ceph',
         '--cluster', conf.cluster,
         '--name', 'client.bootstrap-osd',
-        '--keyring', bootstrap_keyring,
+        '--keyring', keyring,
         'mon', 'getmap', '-o', monmap_destination
     ])
 

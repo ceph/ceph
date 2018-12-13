@@ -37,7 +37,7 @@ def prepare_dmcrypt(key, device, device_type, tags):
     return '/dev/mapper/%s' % uuid
 
 
-def prepare_filestore(device, journal, secrets, tags, osd_id, fsid):
+def prepare_filestore(device, journal, secrets, tags, osd_id, fsid, bstrap_keyring):
     """
     :param device: The name of the logical volume to work with
     :param journal: similar to device but can also be a regular/plain disk
@@ -66,7 +66,7 @@ def prepare_filestore(device, journal, secrets, tags, osd_id, fsid):
     # symlink the journal
     prepare_utils.link_journal(journal, osd_id)
     # get the latest monmap
-    prepare_utils.get_monmap(osd_id)
+    prepare_utils.get_monmap(bstrap_keyring, osd_id)
     # prepare the osd filesystem
     prepare_utils.osd_mkfs_filestore(osd_id, fsid, cephx_secret)
     # write the OSD keyring if it doesn't exist already
@@ -81,7 +81,7 @@ def prepare_filestore(device, journal, secrets, tags, osd_id, fsid):
         )
 
 
-def prepare_bluestore(block, wal, db, secrets, tags, osd_id, fsid):
+def prepare_bluestore(block, wal, db, secrets, tags, osd_id, fsid, bstrap_keyring):
     """
     :param block: The name of the logical volume for the bluestore data
     :param wal: a regular/plain disk or logical volume, to be used for block.wal
@@ -108,7 +108,7 @@ def prepare_bluestore(block, wal, db, secrets, tags, osd_id, fsid):
     # symlink the block
     prepare_utils.link_block(block, osd_id)
     # get the latest monmap
-    prepare_utils.get_monmap(osd_id)
+    prepare_utils.get_monmap(bstrap_keyring, osd_id)
     # write the OSD keyring if it doesn't exist already
     prepare_utils.write_keyring(osd_id, cephx_secret)
     # prepare the osd filesystem
@@ -215,6 +215,10 @@ class Prepare(object):
         """
         if args is not None:
             self.args = args
+            if "%s" in args.bootstrap_keyring:
+                self.bstrap_keyring = args.bootstrap_keyring % conf.cluster
+            else:
+                self.bstrap_keyring = args.bootstrap_keyring
         try:
             self.prepare()
         except Exception:
@@ -256,7 +260,7 @@ class Prepare(object):
         if crush_device_class:
             secrets['crush_device_class'] = crush_device_class
         # reuse a given ID if it exists, otherwise create a new ID
-        self.osd_id = prepare_utils.create_id(osd_fsid, json.dumps(secrets), osd_id=self.args.osd_id)
+        self.osd_id = prepare_utils.create_id(osd_fsid, json.dumps(secrets), self.bstrap_keyring, osd_id=self.args.osd_id)
         tags = {
             'ceph.osd_fsid': osd_fsid,
             'ceph.osd_id': self.osd_id,
@@ -292,6 +296,7 @@ class Prepare(object):
                 tags,
                 self.osd_id,
                 osd_fsid,
+                self.bstrap_keyring
             )
         elif self.args.bluestore:
             block_lv = self.get_lv(self.args.data)
@@ -318,6 +323,7 @@ class Prepare(object):
                 tags,
                 self.osd_id,
                 osd_fsid,
+                self.bstrap_keyring,
             )
 
     def main(self):
