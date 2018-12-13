@@ -799,6 +799,34 @@ BlueStore::Cache *BlueStore::Cache::create(CephContext* cct, string type,
   return c;
 }
 
+uint64_t BlueStore::Cache::sum_onode_bins(uint32_t start, uint32_t end) const
+{
+  auto size = onode_age_bins.size();
+  if (size < start) {
+    return 0;
+  }
+  uint64_t onodes = 0;
+  end = (size < end) ? size : end;
+  for (auto i = start; i < end; i++) {
+    onodes += *(onode_age_bins[i]);
+  }
+  return onodes;
+}
+
+uint64_t BlueStore::Cache::sum_buffer_bins(uint32_t start, uint32_t end) const
+{
+  auto size = buffer_age_bins.size();
+  if (size < start) {
+    return 0;
+  }
+  uint64_t bytes = 0;
+  end = (size < end) ? size : end;
+  for (auto i = start; i < end; i++) {
+    bytes += *(buffer_age_bins[i]);
+  }
+  return bytes;
+}
+
 void BlueStore::Cache::trim(uint64_t onode_max, uint64_t buffer_max)
 {
   std::lock_guard l(lock);
@@ -820,6 +848,9 @@ void BlueStore::LRUCache::_touch_onode(OnodeRef& o)
   auto p = onode_lru.iterator_to(*o);
   onode_lru.erase(p);
   onode_lru.push_front(*o);
+  *(o->cache_age_bin) -= 1;
+  o->cache_age_bin = onode_age_bins.front();
+  *(o->cache_age_bin) += 1;
 }
 
 void BlueStore::LRUCache::_trim(uint64_t onode_max, uint64_t buffer_max)
@@ -882,6 +913,7 @@ void BlueStore::LRUCache::_trim(uint64_t onode_max, uint64_t buffer_max)
       onode_lru.erase(p);
       ceph_assert(num == 1);
     }
+    *(o->cache_age_bin) -= 1;
     o->get();  // paranoia
     o->c->onode_map.remove(o->oid);
     o->put();
@@ -920,6 +952,9 @@ void BlueStore::TwoQCache::_touch_onode(OnodeRef& o)
   auto p = onode_lru.iterator_to(*o);
   onode_lru.erase(p);
   onode_lru.push_front(*o);
+  *(o->cache_age_bin) -= 1;
+  o->cache_age_bin = onode_age_bins.front();
+  *(o->cache_age_bin) += 1;
 }
 
 void BlueStore::TwoQCache::_add_buffer(Buffer *b, int level, Buffer *near)
@@ -971,20 +1006,24 @@ void BlueStore::TwoQCache::_add_buffer(Buffer *b, int level, Buffer *near)
       ceph_abort_msg("bad cache_private");
     }
   }
+  b->cache_age_bin = buffer_age_bins.front();
   if (!b->is_empty()) {
     buffer_bytes += b->length;
     buffer_list_bytes[b->cache_private] += b->length;
+    *(b->cache_age_bin) += b->length;
   }
 }
 
 void BlueStore::TwoQCache::_rm_buffer(Buffer *b)
 {
   dout(20) << __func__ << " " << *b << dendl;
- if (!b->is_empty()) {
+  if (!b->is_empty()) {
     ceph_assert(buffer_bytes >= b->length);
     buffer_bytes -= b->length;
     ceph_assert(buffer_list_bytes[b->cache_private] >= b->length);
     buffer_list_bytes[b->cache_private] -= b->length;
+    assert(*(b->cache_age_bin) >= b->length);
+    *(b->cache_age_bin) -= b->length; 
   }
   switch (b->cache_private) {
   case BUFFER_WARM_IN:
@@ -1026,6 +1065,7 @@ void BlueStore::TwoQCache::_move_buffer(Cache *srcc, Buffer *b)
   if (!b->is_empty()) {
     buffer_bytes += b->length;
     buffer_list_bytes[b->cache_private] += b->length;
+    *(b->cache_age_bin) += b->length; 
   }
 }
 
@@ -1037,6 +1077,8 @@ void BlueStore::TwoQCache::_adjust_buffer_size(Buffer *b, int64_t delta)
     buffer_bytes += delta;
     ceph_assert((int64_t)buffer_list_bytes[b->cache_private] + delta >= 0);
     buffer_list_bytes[b->cache_private] += delta;
+    assert(*(b->cache_age_bin) + delta >= 0);
+    *(b->cache_age_bin) += delta;
   }
 }
 
@@ -1090,6 +1132,8 @@ void BlueStore::TwoQCache::_trim(uint64_t onode_max, uint64_t buffer_max)
       buffer_bytes -= b->length;
       ceph_assert(buffer_list_bytes[BUFFER_WARM_IN] >= b->length);
       buffer_list_bytes[BUFFER_WARM_IN] -= b->length;
+      assert(*(b->cache_age_bin) >= b->length);
+      *(b->cache_age_bin) -= b->length;
       to_evict_bytes -= b->length;
       evicted += b->length;
       b->state = Buffer::STATE_EMPTY;
@@ -1180,6 +1224,7 @@ void BlueStore::TwoQCache::_trim(uint64_t onode_max, uint64_t buffer_max)
       onode_lru.erase(p);
       ceph_assert(num == 1);
     }
+    *(o->cache_age_bin) -= 1; 
     o->get();  // paranoia
     o->c->onode_map.remove(o->oid);
     o->put();
@@ -3460,39 +3505,45 @@ void *BlueStore::MempoolThread::entry()
 {
   std::unique_lock l(lock);
 
-  std::list<PriorityCache::PriCache *> caches;
-  caches.push_back(store->db);
-  caches.push_back(&meta_cache);
-  caches.push_back(&data_cache);
-  autotune_cache_size = store->osd_memory_cache_min;
+  uint64_t base = store->osd_memory_base;
+  double fragmentation = store->osd_memory_expected_fragmentation;
+  uint64_t target = store->osd_memory_target;
+  uint64_t min = store->osd_memory_cache_min;
+  uint64_t max = ((1.0 - fragmentation) * target) - base;
+
+  binned_kv_cache = store->db->get_priority_cache();
+  if (store->cache_autotune && binned_kv_cache != nullptr) {
+    pcm = std::make_shared<PriorityCache::Manager>(
+        store->cct, min, max, target);
+    pcm->insert("kv", binned_kv_cache);
+    pcm->insert("meta", meta_cache);
+    pcm->insert("data", data_cache);
+  }
 
   utime_t next_balance = ceph_clock_now();
   utime_t next_resize = ceph_clock_now();
 
   bool interval_stats_trim = false;
-  bool interval_stats_resize = false; 
   while (!stop) {
-    _adjust_cache_settings();
 
     // Before we trim, check and see if it's time to rebalance/resize.
     double autotune_interval = store->cache_autotune_interval;
     double resize_interval = store->osd_memory_cache_resize_interval;
 
     if (autotune_interval > 0 && next_balance < ceph_clock_now()) {
-      // Log events at 5 instead of 20 when balance happens.
-      interval_stats_resize = true; 
-      interval_stats_trim = true;
-      if (store->cache_autotune) {
-        _balance_cache(caches);
-      }
+      _adjust_cache_settings();
 
+      // Log events at 5 instead of 20 when balance happens.
+      interval_stats_trim = true;
+    if (pcm != nullptr) {
+      pcm->balance();
+    }
       next_balance = ceph_clock_now();
       next_balance += autotune_interval;
     }
     if (resize_interval > 0 && next_resize < ceph_clock_now()) {
-      if (ceph_using_tcmalloc() && store->cache_autotune) {
-        _tune_cache_size(interval_stats_resize);
-        interval_stats_resize = false;
+      if (ceph_using_tcmalloc() && pcm != nullptr) {
+        pcm->tune_memory();
       }
       next_resize = ceph_clock_now();
       next_resize += resize_interval;
@@ -3513,9 +3564,14 @@ void *BlueStore::MempoolThread::entry()
 
 void BlueStore::MempoolThread::_adjust_cache_settings()
 {
-  store->db->set_cache_ratio(store->cache_kv_ratio);
-  meta_cache.set_cache_ratio(store->cache_meta_ratio);
-  data_cache.set_cache_ratio(store->cache_data_ratio);
+  if (binned_kv_cache != nullptr) {
+    binned_kv_cache->set_cache_ratio(store->cache_kv_ratio);
+    binned_kv_cache->import_intervals(store->kv_intervals); 
+  }
+  meta_cache->set_cache_ratio(store->cache_meta_ratio);
+  meta_cache->import_intervals(store->meta_intervals); 
+  data_cache->set_cache_ratio(store->cache_data_ratio);
+  data_cache->import_intervals(store->data_intervals); 
 }
 
 void BlueStore::MempoolThread::_trim_shards(bool interval_stats)
@@ -3524,23 +3580,22 @@ void BlueStore::MempoolThread::_trim_shards(bool interval_stats)
   size_t num_shards = store->cache_shards.size();
 
   int64_t kv_used = store->db->get_cache_usage();
-  int64_t meta_used = meta_cache._get_used_bytes();
-  int64_t data_used = data_cache._get_used_bytes();
+  int64_t meta_used = meta_cache->_get_used_bytes();
+  int64_t data_used = data_cache->_get_used_bytes();
 
   uint64_t cache_size = store->cache_size;
   int64_t kv_alloc =
-     static_cast<int64_t>(store->db->get_cache_ratio() * cache_size); 
+     static_cast<int64_t>(store->cache_kv_ratio * cache_size); 
   int64_t meta_alloc =
-     static_cast<int64_t>(meta_cache.get_cache_ratio() * cache_size);
+     static_cast<int64_t>(store->cache_meta_ratio * cache_size);
   int64_t data_alloc =
-     static_cast<int64_t>(data_cache.get_cache_ratio() * cache_size);
+     static_cast<int64_t>(store->cache_data_ratio * cache_size);
 
-  if (store->cache_autotune) {
-    cache_size = autotune_cache_size;
-
-    kv_alloc = store->db->get_cache_bytes();
-    meta_alloc = meta_cache.get_cache_bytes();
-    data_alloc = data_cache.get_cache_bytes();
+  if (pcm != nullptr && binned_kv_cache != nullptr) {
+    cache_size = pcm->get_tuned_mem();
+    kv_alloc = binned_kv_cache->get_committed_size();
+    meta_alloc = meta_cache->get_committed_size();
+    data_alloc = data_cache->get_committed_size();
   }
   
   if (interval_stats) {
@@ -3562,7 +3617,7 @@ void BlueStore::MempoolThread::_trim_shards(bool interval_stats)
   }
 
   uint64_t max_shard_onodes = static_cast<uint64_t>(
-      (meta_alloc / (double) num_shards) / meta_cache.get_bytes_per_onode());
+      (meta_alloc / (double) num_shards) / meta_cache->get_bytes_per_onode());
   uint64_t max_shard_buffer = static_cast<uint64_t>(data_alloc / num_shards);
 
   ldout(cct, 30) << __func__ << " max_shard_onodes: " << max_shard_onodes
@@ -3573,154 +3628,74 @@ void BlueStore::MempoolThread::_trim_shards(bool interval_stats)
   }
 }
 
-void BlueStore::MempoolThread::_tune_cache_size(bool interval_stats)
-{
-  auto cct = store->cct;
-  uint64_t target = store->osd_memory_target;
-  uint64_t base = store->osd_memory_base;
-  double fragmentation = store->osd_memory_expected_fragmentation;
-  uint64_t cache_max = ((1.0 - fragmentation) * target) - base;
-  uint64_t cache_min = store->osd_memory_cache_min;
-
-  size_t heap_size = 0;
-  size_t unmapped = 0;
-  uint64_t mapped = 0;
-
-  ceph_heap_release_free_memory();
-  ceph_heap_get_numeric_property("generic.heap_size", &heap_size);
-  ceph_heap_get_numeric_property("tcmalloc.pageheap_unmapped_bytes", &unmapped);
-  mapped = heap_size - unmapped;
-
-  uint64_t new_size = autotune_cache_size;
-  new_size = (new_size < cache_max) ? new_size : cache_max;
-  new_size = (new_size > cache_min) ? new_size : cache_min;
-
-  // Approach the min/max slowly, but bounce away quickly.
-  if ((uint64_t) mapped < target) {
-    double ratio = 1 - ((double) mapped / target);
-    new_size += ratio * (cache_max - new_size); 
-  } else {
-    double ratio = 1 - ((double) target / mapped);
-    new_size -= ratio * (new_size - cache_min);
-  }
-
-  if (interval_stats) {
-    ldout(cct, 5) << __func__
-                  << " target: " << target
-                  << " heap: " << heap_size
-                  << " unmapped: " << unmapped
-                  << " mapped: " << mapped 
-                  << " old cache_size: " << autotune_cache_size
-                  << " new cache size: " << new_size << dendl;
-  } else {
-    ldout(cct, 20) << __func__
-                   << " target: " << target
-                   << " heap: " << heap_size
-                   << " unmapped: " << unmapped
-                   << " mapped: " << mapped        
-                   << " old cache_size: " << autotune_cache_size
-                   << " new cache size: " << new_size << dendl;
-  }
-  autotune_cache_size = new_size;
-}
-
-void BlueStore::MempoolThread::_balance_cache(
-    const std::list<PriorityCache::PriCache *>& caches)
-{
-  int64_t mem_avail = autotune_cache_size;
-
-  // Assign memory for each priority level
-  for (int i = 0; i < PriorityCache::Priority::LAST + 1; i++) {
-    ldout(store->cct, 10) << __func__ << " assigning cache bytes for PRI: " << i << dendl;
-    PriorityCache::Priority pri = static_cast<PriorityCache::Priority>(i);
-    _balance_cache_pri(&mem_avail, caches, pri);
-  }
-  // Assign any leftover memory based on the default ratios.
-  if (mem_avail > 0) {
-    for (auto it = caches.begin(); it != caches.end(); it++) {
-      int64_t fair_share =
-          static_cast<int64_t>((*it)->get_cache_ratio() * mem_avail);
-      if (fair_share > 0) {
-        (*it)->add_cache_bytes(PriorityCache::Priority::LAST, fair_share);
+int64_t BlueStore::MempoolThread::MetaCache::request_cache_bytes(
+    PriorityCache::Priority pri, uint64_t total_cache) const {
+  int64_t assigned = get_cache_bytes(pri);
+  uint64_t onodes = 0;
+  
+  for (auto i : store->cache_shards) {
+    switch(pri) {
+    case PriorityCache::Priority::PRI0:
+      {
+        break;
+      }
+    case PriorityCache::Priority::LAST:
+      {
+        uint32_t max = _get_bin_count();
+        onodes += i->_get_num_onodes() - i->sum_onode_bins(0, max);
+        break;
+      }
+    default:
+      {
+        assert(pri > 0 && pri < PriorityCache::Priority::LAST);
+        auto prev_pri = static_cast<PriorityCache::Priority>(pri - 1);
+        uint64_t start = get_intervals(prev_pri);
+        uint64_t end = get_intervals(pri);
+        onodes += i->sum_onode_bins(start, end);
+        break;
       }
     }
   }
-  // assert if we assigned more memory than is available.
-  ceph_assert(mem_avail >= 0);
-
-  // Finally commit the new cache sizes
-  for (auto it = caches.begin(); it != caches.end(); it++) {
-    (*it)->commit_cache_size();
-  }
+  int64_t request = onodes*get_bytes_per_onode();
+  request = (request > assigned) ? request - assigned : 0;
+  ldout(store->cct, 10) << __func__
+                        << " Priority: " << static_cast<uint32_t>(pri)
+                        << " Request: " << request << dendl;
+  return request;
 }
 
-void BlueStore::MempoolThread::_balance_cache_pri(int64_t *mem_avail,
-    const std::list<PriorityCache::PriCache *>& caches, PriorityCache::Priority pri) 
-{
-  std::list<PriorityCache::PriCache *> tmp_caches = caches;
-  double cur_ratios = 0;
-  double new_ratios = 0;
-
-  // Zero this priority's bytes, sum the initial ratios.
-  for (auto it = tmp_caches.begin(); it != tmp_caches.end(); it++) {
-    (*it)->set_cache_bytes(pri, 0);
-    cur_ratios += (*it)->get_cache_ratio();
-  }
-
-  // For this priority, loop until caches are satisified or we run out of memory.
-  // Since we can't allocate fractional bytes, stop if we have fewer bytes left
-  // than the number of participating caches.
-  while (!tmp_caches.empty() && *mem_avail > static_cast<int64_t>(tmp_caches.size())) {
-    uint64_t total_assigned = 0;
-
-    for (auto it = tmp_caches.begin(); it != tmp_caches.end(); ) {
-      int64_t cache_wants = (*it)->request_cache_bytes(pri, store->cache_autotune_chunk_size);
-
-      // Usually the ratio should be set to the fraction of the current caches'
-      // assigned ratio compared to the total ratio of all caches that still
-      // want memory.  There is a special case where the only caches left are
-      // all assigned 0% ratios but still want memory.  In that case, give 
-      // them an equal shot at the remaining memory for this priority.
-      double ratio = 1.0 / tmp_caches.size();
-      if (cur_ratios > 0) {
-        ratio = (*it)->get_cache_ratio() / cur_ratios;
+int64_t BlueStore::MempoolThread::DataCache::request_cache_bytes(
+    PriorityCache::Priority pri, uint64_t total_cache) const {
+  int64_t assigned = get_cache_bytes(pri);
+  int64_t request = 0;
+  for (auto i : store->cache_shards) {
+    switch(pri) {
+    case PriorityCache::Priority::PRI0:
+      {
+        break;
       }
-      int64_t fair_share = static_cast<int64_t>(*mem_avail * ratio);
-
-      if (cache_wants > fair_share) {
-        // If we want too much, take what we can get but stick around for more
-        (*it)->add_cache_bytes(pri, fair_share);
-        total_assigned += fair_share;
-
-        new_ratios += (*it)->get_cache_ratio();
-        ldout(store->cct, 20) << __func__ << " " << (*it)->get_cache_name() 
-                              << " wanted: " << cache_wants << " fair_share: " << fair_share
-                              << " mem_avail: " << *mem_avail
-                              << " staying in list.  Size: " << tmp_caches.size()
-                              << dendl;
-        ++it;
-      } else {
-        // Otherwise assign only what we want
-        if (cache_wants > 0) { 
-          (*it)->add_cache_bytes(pri, cache_wants);
-          total_assigned += cache_wants;
-
-          ldout(store->cct, 20) << __func__ << " " << (*it)->get_cache_name()
-                                << " wanted: " << cache_wants << " fair_share: " << fair_share
-                                << " mem_avail: " << *mem_avail
-                                << " removing from list.  New size: " << tmp_caches.size() - 1
-                                << dendl;
-
-        }
-        // Either the cache didn't want anything or got what it wanted, so remove it from the tmp list. 
-        it = tmp_caches.erase(it);
+    case PriorityCache::Priority::LAST:
+      {
+        uint32_t max = _get_bin_count();
+        request += i->_get_buffer_bytes() - i->sum_buffer_bins(0, max);
+        break;
+      }
+    default:
+      { 
+        assert(pri > 0 && pri < PriorityCache::Priority::LAST);
+        auto prev_pri = static_cast<PriorityCache::Priority>(pri - 1);
+        uint64_t start = get_intervals(prev_pri);
+        uint64_t end = get_intervals(pri);
+        request += i->sum_buffer_bins(start, end);
+        break;
       }
     }
-    // Reset the ratios 
-    *mem_avail -= total_assigned;
-    cur_ratios = new_ratios;
-    new_ratios = 0;
   }
+  request = (request > assigned) ? request - assigned : 0;
+  ldout(store->cct, 10) << __func__ 
+                        << " Priority: " << static_cast<uint32_t>(pri)
+                        << " Request: " << request << dendl;
+  return request;
 }
 
 // =======================================================
@@ -4099,10 +4074,31 @@ int BlueStore::_set_cache_sizes()
 {
   ceph_assert(bdev);
   cache_autotune = cct->_conf.get_val<bool>("bluestore_cache_autotune");
-  cache_autotune_chunk_size = 
-      cct->_conf.get_val<Option::size_t>("bluestore_cache_autotune_chunk_size");
   cache_autotune_interval =
       cct->_conf.get_val<double>("bluestore_cache_autotune_interval");
+
+  std::string kv_intervals_str = cct->_conf.get_val<std::string>(
+      "bluestore_cache_autotune_kv_intervals");
+  std::istringstream kv_stream(kv_intervals_str);
+  std::copy(
+      std::istream_iterator<uint64_t>(kv_stream), 
+      std::istream_iterator<uint64_t>(), 
+      std::back_inserter(kv_intervals));
+  std::string meta_intervals_str = cct->_conf.get_val<std::string>(
+      "bluestore_cache_autotune_meta_intervals");
+  std::istringstream meta_stream(meta_intervals_str);
+  std::copy(
+      std::istream_iterator<uint64_t>(meta_stream), 
+      std::istream_iterator<uint64_t>(), 
+      std::back_inserter(meta_intervals));
+  std::string data_intervals_str = cct->_conf.get_val<std::string>(
+      "bluestore_cache_autotune_data_intervals");
+  std::istringstream data_stream(data_intervals_str);
+  std::copy(
+      std::istream_iterator<uint64_t>(data_stream), 
+      std::istream_iterator<uint64_t>(), 
+      std::back_inserter(data_intervals));
+
   osd_memory_target = cct->_conf.get_val<uint64_t>("osd_memory_target");
   osd_memory_base = cct->_conf.get_val<uint64_t>("osd_memory_base");
   osd_memory_expected_fragmentation =

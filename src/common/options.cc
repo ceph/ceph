@@ -3570,7 +3570,7 @@ std::vector<Option> get_global_options() {
     .set_long_description("A downside of setting rocksdb_cache_index_and_filter_blocks to true is that regular data can push indices and filters out of memory.  Setting this option to true means they are cached with higher priority than other data and should typically stay in the block cache."),
 
     Option("rocksdb_pin_l0_filter_and_index_blocks_in_cache", Option::TYPE_BOOL, Option::LEVEL_DEV)
-    .set_default(true)
+    .set_default(false)
     .set_description("Whether to pin Level 0 indices and bloom filters in the block cache")
     .set_long_description("A downside of setting rocksdb_cache_index_and_filter_blocks to true is that regular data can push indices and filters out of memory.  Setting this option to true means that level 0 SST files will always have their indices and filters pinned in the block cache."),
 
@@ -4185,15 +4185,23 @@ std::vector<Option> get_global_options() {
     .add_see_also("bluestore_cache_meta_ratio")
     .set_description("Automatically tune the ratio of caches while respecting min values."),
 
-    Option("bluestore_cache_autotune_chunk_size", Option::TYPE_SIZE, Option::LEVEL_DEV)
-    .set_default(33554432)
-    .add_see_also("bluestore_cache_autotune")
-    .set_description("The chunk size in bytes to allocate to caches when cache autotune is enabled."),
-
     Option("bluestore_cache_autotune_interval", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(5)
     .add_see_also("bluestore_cache_autotune")
     .set_description("The number of seconds to wait between rebalances when cache autotune is enabled."),
+
+    Option("bluestore_cache_autotune_kv_intervals", Option::TYPE_STR, Option::LEVEL_DEV)
+    .set_default("1 2 6 24 120 720 0 0 0 0")
+    .add_see_also("bluestore_cache_autotune_interval")
+    .set_description("A 10 element, space separated list of cache age intervals grouped by priority such that PRI1=[0,n), PRI2=[n,n+1), PRI3=[n+1,n+2) ... PRI10=[n+8,n+9)"),
+    Option("bluestore_cache_autotune_meta_intervals", Option::TYPE_STR, Option::LEVEL_DEV)
+    .set_default("0 0 1 2 6 24 120 720 0 0")
+    .add_see_also("bluestore_cache_autotune_interval")
+    .set_description("A 10 element, space separated list of cache age intervals grouped by priority such that PRI1=[0,n), PRI2=[n,n+1), PRI3=[n+1,n+2) ... PRI10=[n+8,n+9)"),
+    Option("bluestore_cache_autotune_data_intervals", Option::TYPE_STR, Option::LEVEL_DEV)
+    .set_default("0 0 0 0 1 2 6 24 120 720")
+    .add_see_also("bluestore_cache_autotune_interval")
+    .set_description("A 10 element, space separated list of cache age intervals grouped by priority such that PRI1=[0,n), PRI2=[n,n+1), PRI3=[n+1,n+2) ... PRI10=[n+8,n+9)"),
 
     Option("bluestore_kvbackend", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("rocksdb")

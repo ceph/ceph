@@ -17,28 +17,58 @@
 
 #include <stdint.h>
 #include <string>
+#include <memory>
+#include <vector>
+#include <unordered_map>
+#include "common/perf_counters.h"
+#include "include/assert.h"
 
 namespace PriorityCache {
-  enum Priority {
-    PRI0,  // Reserved for special items
-    PRI1,  // High priority cache items
-    PRI2,  // Medium priority cache items
-    PRI3,  // Low priority cache items
-    LAST = PRI3,
+  // Reserve 16384 slots for PriorityCache perf counters
+  const int PERF_COUNTER_LOWER_BOUND = 1073741824;
+  const int PERF_COUNTER_MAX_BOUND = 1073758208;
+
+  enum MallocStats {
+    M_FIRST = PERF_COUNTER_LOWER_BOUND,
+    M_TARGET_BYTES,
+    M_MAPPED_BYTES,
+    M_UNMAPPED_BYTES,
+    M_HEAP_BYTES,
+    M_CACHE_BYTES,
+    M_LAST,
   };
 
-  int64_t get_chunk(uint64_t usage, uint64_t chunk_bytes);
+  enum Priority {
+    PRI0,
+    PRI1,
+    PRI2,
+    PRI3,
+    PRI4,
+    PRI5,
+    PRI6,
+    PRI7,
+    PRI8,
+    PRI9,
+    PRI10,
+    PRI11,
+    LAST = PRI11,
+  };
+
+  enum Extra {
+    E_RESERVED = Priority::LAST+1,
+    E_COMMITTED,
+    E_LAST = E_COMMITTED,
+  };
+
+  int64_t get_chunk(uint64_t usage, uint64_t total_bytes);
 
   struct PriCache {
     virtual ~PriCache();
 
-    /* Ask the cache to request memory for the given priority rounded up to
-     * the nearst chunk_bytes.  This for example, may return the size of all
-     * items associated with this priority plus some additional space for
-     * future growth.  Note that the cache may ultimately be allocated less 
-     * memory than it requests here.
+    /* Ask the cache to request memory for the given priority. Note that the 
+     * cache may ultimately be allocated less memory than it requests here.
      */
-    virtual int64_t request_cache_bytes(PriorityCache::Priority pri, uint64_t chunk_bytes) const = 0;
+    virtual int64_t request_cache_bytes(PriorityCache::Priority pri, uint64_t total_cache) const = 0;
 
     // Get the number of bytes currently allocated to the given priority.
     virtual int64_t get_cache_bytes(PriorityCache::Priority pri) const = 0;
@@ -52,8 +82,15 @@ namespace PriorityCache {
     // Allocate additional bytes for a given priority.
     virtual void add_cache_bytes(PriorityCache::Priority pri, int64_t bytes) = 0;
 
-    // Commit the current number of bytes allocated to the cache.
-    virtual int64_t commit_cache_size() = 0;
+    /* Commit the current number of bytes allocated to the cache.  Space is 
+     * allocated in chunks based on the allocation size and current total size
+     * of memory available for caches. */
+    virtual int64_t commit_cache_size(uint64_t total_cache) = 0;
+
+    /* Get the current number of bytes allocated to the cache. this may be
+     * larger than the value returned by get_cache_bytes as it includes extra
+     * space for future growth. */
+    virtual int64_t get_committed_size() const = 0;
 
     // Get the ratio of available memory this cache should target.
     virtual double get_cache_ratio() const = 0;
@@ -63,6 +100,54 @@ namespace PriorityCache {
 
     // Get the name of this cache.
     virtual std::string get_cache_name() const = 0;
+
+    // Rotate the bins
+    virtual void rotate_bins() = 0;
+
+    // Import user intervals (from PRI1 to LAST-1)
+    virtual void import_intervals(const std::vector<uint64_t> &intervals) = 0;
+
+    // Set intervals (PRI0 and LAST should be ignored)
+    virtual void set_intervals(PriorityCache::Priority pri, uint64_t end_interval) = 0;
+
+    // Get intervals
+    virtual uint64_t get_intervals(PriorityCache::Priority pri) const = 0;
+  };
+
+  struct Manager {
+    CephContext* cct = nullptr;
+    PerfCounters* logger;
+    std::unordered_map<std::string, PerfCounters*> loggers;
+    std::unordered_map<std::string, std::vector<int>> indexes;
+    std::unordered_map<std::string, std::shared_ptr<PriCache>> caches;
+
+    // Start perf counter slots after the malloc stats.
+    int cur_index = MallocStats::M_LAST;
+
+    uint64_t min_mem = 0;
+    uint64_t max_mem = 0;
+    uint64_t target_mem = 0;
+    uint64_t tuned_mem = 0;
+
+    Manager(CephContext *c, uint64_t min, uint64_t max, uint64_t target);
+    ~Manager();
+    void set_min_memory(uint64_t min) {
+      min_mem = min;
+    }
+    void set_max_memory(uint64_t max) {
+      max_mem = max;
+    }
+    void set_target_memory(uint64_t target) {
+      target_mem = target;
+    }
+    uint64_t get_tuned_mem() const {
+      return tuned_mem;
+    }
+    void insert(std::string name, std::shared_ptr<PriCache> c);
+    void erase(std::string name);
+    void tune_memory();
+    void balance();
+    void balance_priority(int64_t *mem_avail, Priority pri);
   };
 }
 
