@@ -491,8 +491,9 @@ public:
   int operate() override {
     reenter(this) {
       ldout(sync_env->cct, 10) << ": stat of remote obj: z=" << sync_env->source_zone
-                               << " b=" << bucket_info.bucket << " k=" << key << " size=" << size << " mtime=" << mtime
-                               << " attrs=" << attrs << dendl;
+                               << " b=" << bucket_info.bucket << " k=" << key
+                               << " size=" << size << " mtime=" << mtime << dendl;
+
       yield {
         string path = conf->get_obj_path(bucket_info, key);
         es_obj_metadata doc(sync_env->cct, conf, bucket_info, key, mtime, size, attrs, versioned_epoch);
