@@ -1082,7 +1082,7 @@ static void show_reshard_status(
     formatter->dump_string("reshard_status", to_string(entry.reshard_status));
     formatter->dump_string("new_bucket_instance_id",
 			   entry.new_bucket_instance_id);
-    formatter->dump_unsigned("num_shards", entry.num_shards);
+    formatter->dump_int("num_shards", entry.num_shards);
     formatter->close_section();
   }
   formatter->close_section();
