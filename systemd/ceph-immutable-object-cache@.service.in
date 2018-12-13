@@ -1,0 +1,24 @@
+[Unit]
+Description=Ceph immutable object cache daemon
+After=network-online.target local-fs.target
+Wants=network-online.target local-fs.target
+PartOf=ceph-immutable-object-cache.target
+
+[Service]
+LimitNOFILE=1048576
+LimitNPROC=1048576
+EnvironmentFile=-@SYSTEMD_ENV_FILE@
+Environment=CLUSTER=ceph
+ExecStart=/usr/bin/ceph-immutable-object-cache -f --cluster ${CLUSTER} --id %i --setuser ceph --setgroup ceph
+ExecReload=/bin/kill -HUP $MAINPID
+PrivateDevices=yes
+ProtectHome=true
+ProtectSystem=full
+PrivateTmp=true
+Restart=on-failure
+StartLimitInterval=30min
+StartLimitBurst=3
+TasksMax=infinity
+
+[Install]
+WantedBy=ceph-immutable-object-cache.target
