@@ -58,7 +58,7 @@ void RGWDefaultZoneGroupInfo::decode_json(JSONObj *obj) {
   }
 }
 
-rgw_pool RGWZoneGroup::get_pool(CephContext *cct_)
+rgw_pool RGWZoneGroup::get_pool(CephContext *cct_) const
 {
   if (cct_->_conf->rgw_zonegroup_root_pool.empty()) {
     return rgw_pool(RGW_DEFAULT_ZONEGROUP_ROOT_POOL);
@@ -131,7 +131,7 @@ int RGWZoneGroup::create_default(bool old_format)
   return 0;
 }
 
-const string RGWZoneGroup::get_default_oid(bool old_region_format)
+const string RGWZoneGroup::get_default_oid(bool old_region_format) const
 {
   if (old_region_format) {
     if (cct->_conf->rgw_default_region_info_oid.empty()) {
@@ -151,7 +151,7 @@ const string RGWZoneGroup::get_default_oid(bool old_region_format)
   return default_oid;
 }
 
-const string& RGWZoneGroup::get_info_oid_prefix(bool old_region_format)
+const string& RGWZoneGroup::get_info_oid_prefix(bool old_region_format) const
 {
   if (old_region_format) {
     return region_info_oid_prefix;
@@ -159,12 +159,12 @@ const string& RGWZoneGroup::get_info_oid_prefix(bool old_region_format)
   return zone_group_info_oid_prefix;
 }
 
-const string& RGWZoneGroup::get_names_oid_prefix()
+const string& RGWZoneGroup::get_names_oid_prefix() const
 {
   return zonegroup_names_oid_prefix;
 }
 
-const string& RGWZoneGroup::get_predefined_name(CephContext *cct) {
+const string& RGWZoneGroup::get_predefined_name(CephContext *cct) const {
   return cct->_conf->rgw_zonegroup;
 }
 
@@ -684,7 +684,7 @@ int RGWSystemMetaObj::write(bool exclusive)
 }
 
 
-const string& RGWRealm::get_predefined_name(CephContext *cct) {
+const string& RGWRealm::get_predefined_name(CephContext *cct) const {
   return cct->_conf->rgw_realm;
 }
 
@@ -766,7 +766,7 @@ int RGWRealm::delete_control()
   return sysobj.wop().remove();
 }
 
-rgw_pool RGWRealm::get_pool(CephContext *cct)
+rgw_pool RGWRealm::get_pool(CephContext *cct) const
 {
   if (cct->_conf->rgw_realm_root_pool.empty()) {
     return rgw_pool(RGW_DEFAULT_REALM_ROOT_POOL);
@@ -774,7 +774,7 @@ rgw_pool RGWRealm::get_pool(CephContext *cct)
   return rgw_pool(cct->_conf->rgw_realm_root_pool);
 }
 
-const string RGWRealm::get_default_oid(bool old_format)
+const string RGWRealm::get_default_oid(bool old_format) const
 {
   if (cct->_conf->rgw_default_realm_info_oid.empty()) {
     return default_realm_info_oid;
@@ -782,12 +782,12 @@ const string RGWRealm::get_default_oid(bool old_format)
   return cct->_conf->rgw_default_realm_info_oid;
 }
 
-const string& RGWRealm::get_names_oid_prefix()
+const string& RGWRealm::get_names_oid_prefix() const
 {
   return realm_names_oid_prefix;
 }
 
-const string& RGWRealm::get_info_oid_prefix(bool old_format)
+const string& RGWRealm::get_info_oid_prefix(bool old_format) const
 {
   return realm_info_oid_prefix;
 }
@@ -825,7 +825,7 @@ int RGWRealm::set_current_period(RGWPeriod& period)
   return 0;
 }
 
-string RGWRealm::get_control_oid()
+string RGWRealm::get_control_oid() const
 {
   return get_info_oid_prefix() + id + ".control";
 }
@@ -957,7 +957,9 @@ int RGWPeriod::init(CephContext *_cct, RGWSI_SysObj *_sysobj_svc, bool setup_obj
 }
 
 
-int RGWPeriod::get_zonegroup(RGWZoneGroup& zonegroup, const string& zonegroup_id) {
+int RGWPeriod::get_zonegroup(RGWZoneGroup& zonegroup,
+                             const string& zonegroup_id) const
+{
   map<string, RGWZoneGroup>::const_iterator iter;
   if (!zonegroup_id.empty()) {
     iter = period_map.zonegroups.find(zonegroup_id);
@@ -972,7 +974,7 @@ int RGWPeriod::get_zonegroup(RGWZoneGroup& zonegroup, const string& zonegroup_id
   return -ENOENT;
 }
 
-const string& RGWPeriod::get_latest_epoch_oid()
+const string& RGWPeriod::get_latest_epoch_oid() const
 {
   if (cct->_conf->rgw_period_latest_epoch_info_oid.empty()) {
     return period_latest_epoch_info_oid;
@@ -980,17 +982,17 @@ const string& RGWPeriod::get_latest_epoch_oid()
   return cct->_conf->rgw_period_latest_epoch_info_oid;
 }
 
-const string& RGWPeriod::get_info_oid_prefix()
+const string& RGWPeriod::get_info_oid_prefix() const
 {
   return period_info_oid_prefix;
 }
 
-const string RGWPeriod::get_period_oid_prefix()
+const string RGWPeriod::get_period_oid_prefix() const
 {
   return get_info_oid_prefix() + id;
 }
 
-const string RGWPeriod::get_period_oid()
+const string RGWPeriod::get_period_oid() const
 {
   std::ostringstream oss;
   oss << get_period_oid_prefix();
@@ -1219,7 +1221,7 @@ int RGWPeriod::store_info(bool exclusive)
                .write(bl);
 }
 
-rgw_pool RGWPeriod::get_pool(CephContext *cct)
+rgw_pool RGWPeriod::get_pool(CephContext *cct) const
 {
   if (cct->_conf->rgw_period_root_pool.empty()) {
     return rgw_pool(RGW_DEFAULT_PERIOD_ROOT_POOL);
@@ -1666,7 +1668,7 @@ int RGWZoneParams::create(bool exclusive)
   return 0;
 }
 
-rgw_pool RGWZoneParams::get_pool(CephContext *cct)
+rgw_pool RGWZoneParams::get_pool(CephContext *cct) const
 {
   if (cct->_conf->rgw_zone_root_pool.empty()) {
     return rgw_pool(RGW_DEFAULT_ZONE_ROOT_POOL);
@@ -1675,7 +1677,7 @@ rgw_pool RGWZoneParams::get_pool(CephContext *cct)
   return rgw_pool(cct->_conf->rgw_zone_root_pool);
 }
 
-const string RGWZoneParams::get_default_oid(bool old_format)
+const string RGWZoneParams::get_default_oid(bool old_format) const
 {
   if (old_format) {
     return cct->_conf->rgw_default_zone_info_oid;
@@ -1684,17 +1686,17 @@ const string RGWZoneParams::get_default_oid(bool old_format)
   return cct->_conf->rgw_default_zone_info_oid + "." + realm_id;
 }
 
-const string& RGWZoneParams::get_names_oid_prefix()
+const string& RGWZoneParams::get_names_oid_prefix() const
 {
   return zone_names_oid_prefix;
 }
 
-const string& RGWZoneParams::get_info_oid_prefix(bool old_format)
+const string& RGWZoneParams::get_info_oid_prefix(bool old_format) const
 {
   return zone_info_oid_prefix;
 }
 
-const string& RGWZoneParams::get_predefined_name(CephContext *cct) {
+const string& RGWZoneParams::get_predefined_name(CephContext *cct) const {
   return cct->_conf->rgw_zone;
 }
 

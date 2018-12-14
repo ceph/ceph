@@ -1902,7 +1902,7 @@ void RGWInfo_ObjStore_SWIFT::list_swift_data(Formatter& formatter,
   }
 
   formatter.open_array_section("policies");
-  RGWZoneGroup& zonegroup = store.svc.zone->get_zonegroup();
+  const RGWZoneGroup& zonegroup = store.svc.zone->get_zonegroup();
 
   for (const auto& placement_targets : zonegroup.placement_targets) {
     formatter.open_object_section("policy");
