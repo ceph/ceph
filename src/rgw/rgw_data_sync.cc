@@ -1471,7 +1471,7 @@ class RGWDataSyncShardControlCR : public RGWBackoffControlCR {
 
   RGWSyncTraceNodeRef tn;
 public:
-  RGWDataSyncShardControlCR(RGWDataSyncEnv *_sync_env, rgw_pool& _pool,
+  RGWDataSyncShardControlCR(RGWDataSyncEnv *_sync_env, const rgw_pool& _pool,
 		     uint32_t _shard_id, rgw_data_sync_marker& _marker,
                      RGWSyncTraceNodeRef& _tn_parent) : RGWBackoffControlCR(_sync_env->cct, false),
                                                       sync_env(_sync_env),
@@ -1764,7 +1764,7 @@ int RGWDataSyncStatusManager::init()
     return -ENOTSUP;
   }
 
-  RGWZoneParams& zone_params = store->svc.zone->get_zone_params();
+  const RGWZoneParams& zone_params = store->svc.zone->get_zone_params();
 
   if (sync_module == nullptr) { 
     sync_module = store->get_sync_module();

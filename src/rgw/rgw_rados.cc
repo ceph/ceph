@@ -403,7 +403,8 @@ RGWObjManifest::obj_iterator RGWObjManifest::obj_find(uint64_t ofs)
   return iter;
 }
 
-int RGWObjManifest::append(RGWObjManifest& m, RGWZoneGroup& zonegroup, RGWZoneParams& zone_params)
+int RGWObjManifest::append(RGWObjManifest& m, const RGWZoneGroup& zonegroup,
+                           const RGWZoneParams& zone_params)
 {
   if (explicit_objs || m.explicit_objs) {
     return append_explicit(m, zonegroup, zone_params);
@@ -2305,7 +2306,7 @@ int RGWRados::objexp_hint_trim(const string& oid,
   return 0;
 }
 
-int RGWRados::lock_exclusive(rgw_pool& pool, const string& oid, timespan& duration, 
+int RGWRados::lock_exclusive(const rgw_pool& pool, const string& oid, timespan& duration,
                              string& zone_id, string& owner_id) {
   librados::IoCtx io_ctx;
 
@@ -2325,7 +2326,7 @@ int RGWRados::lock_exclusive(rgw_pool& pool, const string& oid, timespan& durati
   return l.lock_exclusive(&io_ctx, oid);
 }
 
-int RGWRados::unlock(rgw_pool& pool, const string& oid, string& zone_id, string& owner_id) {
+int RGWRados::unlock(const rgw_pool& pool, const string& oid, string& zone_id, string& owner_id) {
   librados::IoCtx io_ctx;
 
   int r = rgw_init_ioctx(get_rados_handle(), pool, io_ctx);
