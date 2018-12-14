@@ -156,7 +156,7 @@ class Activate(object):
             self.dmcrypt_secret = base64.b64decode(raw_dmcrypt_secret)
 
         cluster_name = osd_metadata.get('cluster_name', 'ceph')
-        osd_dir = '/var/lib/ceph/osd/%s-%s' % (cluster_name, osd_id)
+        osd_dir = os.path.join(conf.osd_root, '%s-%s' % (cluster_name, osd_id))
 
         # XXX there is no support for LVM here
         data_device = self.get_device(data_uuid)

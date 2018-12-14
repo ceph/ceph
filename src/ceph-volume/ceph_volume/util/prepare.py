@@ -36,7 +36,8 @@ def write_keyring(osd_id, secret, keyring_name='keyring', name=None):
     :param keyring_name: Alternative keyring name, for supporting other
                          types of keys like for lockbox
     """
-    osd_keyring = '/var/lib/ceph/osd/%s-%s/%s' % (conf.cluster, osd_id, keyring_name)
+    osd_keyring = os.path.join(conf.osd_root,
+                               '%s-%s/%s' % (conf.cluster, osd_id, keyring_name))
     name = name or 'osd.%s' % str(osd_id)
     process.run(
         [
@@ -181,8 +182,9 @@ def mount_tmpfs(path):
 
 
 def create_osd_path(osd_id, tmpfs=False):
-    path = '/var/lib/ceph/osd/%s-%s' % (conf.cluster, osd_id)
-    system.mkdir_p('/var/lib/ceph/osd/%s-%s' % (conf.cluster, osd_id))
+    path = os.path.join(conf.osd_root,'%s-%s' % (conf.cluster, osd_id))
+    system.mkdir_p(os.path.join(conf.osd_root,
+                                '%s-%s' % (conf.cluster, osd_id)))
     if tmpfs:
         mount_tmpfs(path)
 
@@ -263,7 +265,7 @@ def mount_osd(device, osd_id, **kw):
     is_vdo = kw.get('is_vdo', '0')
     if is_vdo == '1':
         extras = ['discard']
-    destination = '/var/lib/ceph/osd/%s-%s' % (conf.cluster, osd_id)
+    destination = os.path.join(conf.osd_root,'%s-%s' % (conf.cluster, osd_id))
     command = ['mount', '-t', 'xfs', '-o']
     flags = conf.ceph.get_list(
         'osd',
@@ -288,11 +290,11 @@ def _link_device(device, device_type, osd_id):
     source, with an absolute path and ``device_type`` will be the destination
     name, like 'journal', or 'block'
     """
-    device_path = '/var/lib/ceph/osd/%s-%s/%s' % (
+    device_path = os.path.join(conf.osd_root,'%s-%s/%s' % (
         conf.cluster,
         osd_id,
         device_type
-    )
+    ))
     command = ['ln', '-s', device, device_path]
     system.chown(device)
 
@@ -324,7 +326,7 @@ def get_monmap(keyring, osd_id):
              --keyring /var/lib/ceph/bootstrap-osd/ceph.keyring \
              mon getmap -o /var/lib/ceph/osd/ceph-0/activate.monmap
     """
-    path = '/var/lib/ceph/osd/%s-%s/' % (conf.cluster, osd_id)
+    path = os.path.join(conf.osd_root, '%s-%s/' % (conf.cluster, osd_id))
     monmap_destination = os.path.join(path, 'activate.monmap')
 
     process.run([
@@ -350,7 +352,7 @@ def osd_mkfs_bluestore(osd_id, fsid, keyring=None, wal=False, db=False):
     In some cases it is required to use the keyring, when it is passed in as
     a keyword argument it is used as part of the ceph-osd command
     """
-    path = '/var/lib/ceph/osd/%s-%s/' % (conf.cluster, osd_id)
+    path = os.path.join(conf.osd_root,'%s-%s/' % (conf.cluster, osd_id))
     monmap = os.path.join(path, 'activate.monmap')
 
     system.chown(path)
@@ -406,7 +408,7 @@ def osd_mkfs_filestore(osd_id, fsid, keyring):
                    --setuser ceph --setgroup ceph
 
     """
-    path = '/var/lib/ceph/osd/%s-%s/' % (conf.cluster, osd_id)
+    path = os.path.join(conf.osd_root, '%s-%s/' % (conf.cluster, osd_id))
     monmap = os.path.join(path, 'activate.monmap')
     journal = os.path.join(path, 'journal')
 

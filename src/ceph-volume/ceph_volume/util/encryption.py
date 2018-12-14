@@ -116,7 +116,8 @@ def get_dmcrypt_key(osd_id, osd_fsid, lockbox_keyring=None):
     (e.g. inside a lockbox partition mounted in a temporary location)
     """
     if lockbox_keyring is None:
-        lockbox_keyring = '/var/lib/ceph/osd/%s-%s/lockbox.keyring' % (conf.cluster, osd_id)
+        lockbox_keyring = os.path.join(conf.osd_root,
+                                       '%s-%s/lockbox.keyring' % (conf.cluster, osd_id))
     name = 'client.osd-lockbox.%s' % osd_fsid
     config_key = 'dm-crypt/osd/%s/luks' % osd_fsid
 
@@ -151,7 +152,7 @@ def write_lockbox_keyring(osd_id, osd_fsid, secret):
     then the data device is mounted on that directory, making the keyring
     "disappear".
     """
-    if os.path.exists('/var/lib/ceph/osd/%s-%s/lockbox.keyring' % (conf.cluster, osd_id)):
+    if os.path.exists(os.path.join(conf.osd_root,'%s-%s/lockbox.keyring' % (conf.cluster, osd_id))):
         return
 
     name = 'client.osd-lockbox.%s' % osd_fsid

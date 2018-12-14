@@ -4,7 +4,7 @@ import logging
 
 from textwrap import dedent
 
-from ceph_volume import decorators, terminal, process
+from ceph_volume import decorators, terminal, process, conf
 from ceph_volume.api import lvm as api
 from ceph_volume.util import system, encryption, disk, arg_validators
 from ceph_volume.util.device import Device
@@ -124,7 +124,8 @@ class Zap(object):
 
     def unmount_lv(self, lv):
         if lv.tags.get('ceph.cluster_name') and lv.tags.get('ceph.osd_id'):
-            lv_path = "/var/lib/ceph/osd/{}-{}".format(lv.tags['ceph.cluster_name'], lv.tags['ceph.osd_id'])
+            lv_path = os.path.join(conf.osd_root, "{}-{}").format(
+              lv.tags['ceph.cluster_name'], lv.tags['ceph.osd_id'])
         else:
             lv_path = lv.lv_path
         dmcrypt_uuid = lv.lv_uuid
