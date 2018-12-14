@@ -259,7 +259,7 @@ struct PSConfig {
     ldout(cct, 5) << "pubsub: module config (parsed representation):\n" << json_str("config", *this, true) << dendl;
   }
 
-  void init_instance(RGWRealm& realm, uint64_t instance_id) {
+  void init_instance(const RGWRealm& realm, uint64_t instance_id) {
     sync_instance = instance_id;
   }
 
@@ -426,7 +426,7 @@ struct PSEnv {
     conf->init(cct, config);
   }
 
-  void init_instance(RGWRealm& realm, uint64_t instance_id, PSManagerRef& mgr);
+  void init_instance(const RGWRealm& realm, uint64_t instance_id, PSManagerRef& mgr);
 };
 
 using PSEnvRef = std::shared_ptr<PSEnv>;
@@ -1009,7 +1009,7 @@ public:
   friend class GetSubCR;
 };
 
-void PSEnv::init_instance(RGWRealm& realm, uint64_t instance_id, PSManagerRef& mgr) {
+void PSEnv::init_instance(const RGWRealm& realm, uint64_t instance_id, PSManagerRef& mgr) {
   manager = mgr;
   conf->init_instance(realm, instance_id);
 }
