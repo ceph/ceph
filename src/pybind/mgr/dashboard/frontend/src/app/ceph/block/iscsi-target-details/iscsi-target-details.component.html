@@ -1,0 +1,20 @@
+<div class="col-sm-6 col-lg-6">
+  <legend i18n>Hierarchy Tree</legend>
+  <tree [tree]="tree"
+        (nodeSelected)="onNodeSelected($event)">
+    <ng-template let-node>
+      <span class="node-name"
+            [innerHTML]="node.value"></span>
+      <span>&nbsp;</span>
+      <span class="label"
+            [ngClass]="{'label-success': ['in', 'up'].includes(node.status), 'label-danger': ['down', 'out'].includes(node.status)}">{{
+        node.status }}</span>
+    </ng-template>
+  </tree>
+</div>
+<div class="col-sm-6 col-lg-6 metadata">
+  <legend i18n>Info: {{ title }}</legend>
+  <cd-table-key-value *ngIf="data"
+                      [data]="data">
+  </cd-table-key-value>
+</div>
