@@ -62,32 +62,31 @@ static rocksdb::SliceParts prepare_sliceparts(const bufferlist &bl,
 class RocksDBStore::MergeOperatorRouter
   : public rocksdb::AssociativeMergeOperator
 {
+protected:
   RocksDBStore& store;
+  mutable std::string name;
 public:
   const char *Name() const override {
     // Construct a name that rocksDB will validate against. We want to
     // do this in a way that doesn't constrain the ordering of calls
     // to set_merge_operator, so sort the merge operators and then
     // construct a name from all of those parts.
-    store.assoc_name.clear();
+    name.clear();
     map<std::string,std::string> names;
 
     for (auto& p : store.merge_ops) {
       names[p.first] = p.second->name();
     }
-    //TODO: name of merge operator excludes prefixes for mono tables
-    //TODO: this makes it difficult to merge data back to main table
-    //TODO: regardless of cranky name, this should handle all prefixes?
     for (auto& p : store.cf_mono_handles) {
       names.erase(p.first);
     }
     for (auto& p : names) {
-      store.assoc_name += '.';
-      store.assoc_name += p.first;
-      store.assoc_name += ':';
-      store.assoc_name += p.second;
+      name += '.';
+      name += p.first;
+      name += ':';
+      name += p.second;
     }
-    return store.assoc_name.c_str();
+    return name.c_str();
   }
 
   explicit MergeOperatorRouter(RocksDBStore &_store) : store(_store) {}
@@ -149,6 +148,26 @@ public:
     }
     return true;
   }
+};
+
+//
+// Merge operator that encompasses all prefixes.
+//
+class RocksDBStore::MergeOperatorAll : public RocksDBStore::MergeOperatorRouter
+{
+public:
+  const char *Name() const override {
+    name.clear();
+    for (auto& p : store.merge_ops) {
+      name += '.';
+      name += p.first;
+      name += ':';
+      name += p.second->name();
+    }
+    return name.c_str();
+  }
+
+  explicit MergeOperatorAll(RocksDBStore &store) : MergeOperatorRouter(store) {}
 };
 
 int RocksDBStore::set_merge_operator(
@@ -655,7 +674,7 @@ RocksDBStore::cf_get_merge_operator(const std::string& cf_name)
   }
   //Column family name is not exact to any defined merge operators.
   //Use all-prefix merge operator.
-  return std::shared_ptr<rocksdb::MergeOperator>(new MergeOperatorRouter(*this));
+  return std::shared_ptr<rocksdb::MergeOperator>(new RocksDBStore::MergeOperatorAll(*this));
 }
 
 int RocksDBStore::_test_init(const string& dir)

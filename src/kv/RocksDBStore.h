@@ -180,12 +180,13 @@ public:
   int column_family_create(const std::string& name, const std::string& options) override;
   int column_family_delete(const std::string& name) override;
   KeyValueDB::ColumnFamilyHandle column_family_handle(const std::string& cf_name) override;
-  //virtual std::string cf_get_options(const std::string& cf_name);
-  /* returns merge operator for column family that contains only `prefix` keys */
-  virtual std::shared_ptr<rocksdb::MergeOperator>
-    cf_get_merge_operator(const std::string& prefix);
 
 private:
+  /*
+   * Get merge operator for column family.
+   */
+  std::shared_ptr<rocksdb::MergeOperator> cf_get_merge_operator(const std::string& prefix);
+
   /*
    * Returns handle to mono column family.
    * Does not return handles for regular column family, even if name matches
