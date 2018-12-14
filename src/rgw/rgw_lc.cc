@@ -45,6 +45,16 @@ bool LCRule::valid()
   return true;
 }
 
+void LCRule::init_simple_days_rule(std::string_view _id, std::string_view _prefix, int num_days)
+{
+  id = _id;
+  prefix = _prefix;
+  char buf[32];
+  snprintf(buf, sizeof(buf), "%d", num_days);
+  expiration.set_days(buf);
+  set_enabled(true);
+}
+
 void RGWLifecycleConfiguration::add_rule(LCRule *rule)
 {
   string id;
@@ -55,9 +65,7 @@ void RGWLifecycleConfiguration::add_rule(LCRule *rule)
 bool RGWLifecycleConfiguration::_add_rule(LCRule *rule)
 {
   lc_op op;
-  if (rule->get_status().compare("Enabled") == 0) {
-    op.status = true;
-  }
+  op.status = rule->is_enabled();
   if (rule->get_expiration().has_days()) {
     op.expiration = rule->get_expiration().get_days();
   }
@@ -865,5 +873,106 @@ int RGWLC::LCWorker::schedule_next_start_time(utime_t &start, utime_t& now)
 void RGWLifecycleConfiguration::generate_test_instances(list<RGWLifecycleConfiguration*>& o)
 {
   o.push_back(new RGWLifecycleConfiguration);
+}
+
+static void get_lc_oid(CephContext *cct, const string& shard_id, string *oid)
+{
+  int max_objs = (cct->_conf->rgw_lc_max_objs > HASH_PRIME ? HASH_PRIME : cct->_conf->rgw_lc_max_objs);
+  int index = ceph_str_hash_linux(shard_id.c_str(), shard_id.size()) % HASH_PRIME % max_objs;
+  *oid = lc_oid_prefix;
+  char buf[32];
+  snprintf(buf, 32, ".%d", index);
+  oid->append(buf);
+  return;
+}
+
+template<typename F>
+static int guard_lc_modify(RGWRados* store, const rgw_bucket& bucket, const string& cookie, const F& f) {
+  CephContext *cct = store->ctx();
+
+  string shard_id = bucket.tenant + ':' + bucket.name + ':' + bucket.bucket_id;  
+
+  string oid; 
+  get_lc_oid(cct, shard_id, &oid);
+
+  pair<string, int> entry(shard_id, lc_uninitial);
+  int max_lock_secs = cct->_conf->rgw_lc_lock_max_time;
+
+  rados::cls::lock::Lock l(lc_index_lock_name); 
+  utime_t time(max_lock_secs, 0);
+  l.set_duration(time);
+  l.set_cookie(cookie);
+
+  librados::IoCtx *ctx = store->get_lc_pool_ctx();
+  int ret;
+
+  do {
+    ret = l.lock_exclusive(ctx, oid);
+    if (ret == -EBUSY) {
+      ldout(cct, 0) << "RGWLC::RGWPutLC() failed to acquire lock on "
+          << oid << ", sleep 5, try again" << dendl;
+      sleep(5); // XXX: return retryable error
+      continue;
+    }
+    if (ret < 0) {
+      ldout(cct, 0) << "RGWLC::RGWPutLC() failed to acquire lock on "
+          << oid << ", ret=" << ret << dendl;
+      break;
+    }
+    ret = f(ctx, oid, entry);
+    if (ret < 0) {
+      ldout(cct, 0) << "RGWLC::RGWPutLC() failed to set entry on "
+          << oid << ", ret=" << ret << dendl;
+    }
+    break;
+  } while(true);
+  l.unlock(ctx, oid);
+  return ret;
+}
+
+int RGWLC::set_bucket_config(RGWBucketInfo& bucket_info,
+                         const map<string, bufferlist>& bucket_attrs,
+                         RGWLifecycleConfiguration *config)
+{
+  map<string, bufferlist> attrs = bucket_attrs;
+  config->encode(attrs[RGW_ATTR_LC]);
+  int ret = rgw_bucket_set_attrs(store, bucket_info, attrs, &bucket_info.objv_tracker);
+  if (ret < 0)
+    return ret;
+
+  rgw_bucket& bucket = bucket_info.bucket;
+
+
+  ret = guard_lc_modify(store, bucket, cookie, [&](librados::IoCtx *ctx, const string& oid,
+                                                   const pair<string, int>& entry) {
+    return cls_rgw_lc_set_entry(*ctx, oid, entry);
+  });
+
+  return ret;
+}
+
+int RGWLC::remove_bucket_config(RGWBucketInfo& bucket_info,
+                                const map<string, bufferlist>& bucket_attrs)
+{
+  map<string, bufferlist> attrs = bucket_attrs;
+  attrs.erase(RGW_ATTR_LC);
+  int ret = rgw_bucket_set_attrs(store, bucket_info, attrs,
+				&bucket_info.objv_tracker);
+
+  rgw_bucket& bucket = bucket_info.bucket;
+
+  if (ret < 0) {
+    ldout(cct, 0) << "RGWLC::RGWDeleteLC() failed to set attrs on bucket="
+        << bucket.name << " returned err=" << ret << dendl;
+    return ret;
+  }
+
+
+  ret = guard_lc_modify(store, bucket, cookie, [&](librados::IoCtx *ctx, const string& oid,
+                                                   const pair<string, int>& entry) {
+    return cls_rgw_lc_rm_entry(*ctx, oid, entry);
+  });
+
+  return ret;
 }
 

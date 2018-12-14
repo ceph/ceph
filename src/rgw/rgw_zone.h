@@ -491,7 +491,7 @@ struct RGWZoneGroupPlacementTarget {
   std::string name;
   set<std::string> tags;
 
-  bool user_permitted(list<std::string>& user_tags) const {
+  bool user_permitted(const list<std::string>& user_tags) const {
     if (tags.empty()) {
       return true;
     }

@@ -25,6 +25,9 @@ public:
     return nullptr;
   }
 
+  virtual RGWCoroutine *start_sync(RGWDataSyncEnv *sync_env) {
+    return nullptr;
+  }
   virtual RGWCoroutine *sync_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, rgw_zone_set *zones_trace) = 0;
   virtual RGWCoroutine *remove_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, real_time& mtime,
                                       bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) = 0;
@@ -42,6 +45,9 @@ public:
   virtual RGWRESTMgr *get_rest_filter(int dialect, RGWRESTMgr *orig) {
     return orig;
   }
+  virtual bool supports_user_writes() {
+    return false;
+  }
 };
 
 typedef std::shared_ptr<RGWSyncModuleInstance> RGWSyncModuleInstanceRef;
@@ -54,6 +60,9 @@ public:
   RGWSyncModule() {}
   virtual ~RGWSyncModule() {}
 
+  virtual bool supports_writes() {
+    return false;
+  }
   virtual bool supports_data_export() = 0;
   virtual int create_instance(CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) = 0;
 };

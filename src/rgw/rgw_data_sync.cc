@@ -1594,6 +1594,8 @@ public:
         *reset_backoff = true;
       }
 
+      yield call(data_sync_module->start_sync(sync_env));
+
       yield {
         if  ((rgw_data_sync_info::SyncState)sync_status.sync_info.state == rgw_data_sync_info::StateSync) {
           tn->log(10, SSTR("spawning " << num_shards << " shards sync"));
@@ -1649,6 +1651,9 @@ public:
   RGWDefaultSyncModuleInstance() {}
   RGWDataSyncModule *get_data_handler() override {
     return &data_handler;
+  }
+  bool supports_user_writes() override {
+    return true;
   }
 };
 

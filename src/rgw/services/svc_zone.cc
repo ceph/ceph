@@ -151,7 +151,13 @@ int RGWSI_Zone::do_start()
 
   zone_short_id = current_period->get_map().get_zone_short_id(zone_params->get_id());
 
-  writeable_zone = (zone_public_config->tier_type.empty() || zone_public_config->tier_type == "rgw");
+  RGWSyncModuleRef sm;
+  if (!sync_modules_svc->get_manager()->get_module(zone_public_config->tier_type, &sm)) {
+    lderr(cct) << "ERROR: tier type not found: " << zone_public_config->tier_type << dendl;
+    return -EINVAL;
+  }
+
+  writeable_zone = sm->supports_writes();
 
   /* first build all zones index */
   for (auto ziter : zonegroup->zones) {
@@ -936,7 +942,7 @@ bool RGWSI_Zone::is_syncing_bucket_meta(const rgw_bucket& bucket)
 }
 
 
-int RGWSI_Zone::select_new_bucket_location(RGWUserInfo& user_info, const string& zonegroup_id, const string& request_rule,
+int RGWSI_Zone::select_new_bucket_location(const RGWUserInfo& user_info, const string& zonegroup_id, const string& request_rule,
                                          string *pselected_rule_name, RGWZonePlacementInfo *rule_info)
 
 {
@@ -1027,7 +1033,7 @@ int RGWSI_Zone::select_bucket_location_by_rule(const string& location_rule, RGWZ
   return 0;
 }
 
-int RGWSI_Zone::select_bucket_placement(RGWUserInfo& user_info, const string& zonegroup_id, const string& placement_rule,
+int RGWSI_Zone::select_bucket_placement(const RGWUserInfo& user_info, const string& zonegroup_id, const string& placement_rule,
                                       string *pselected_rule_name, RGWZonePlacementInfo *rule_info)
 {
   if (!zone_params->placement_pools.empty()) {
