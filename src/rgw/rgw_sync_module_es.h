@@ -26,6 +26,9 @@ public:
   RGWRESTMgr *get_rest_filter(int dialect, RGWRESTMgr *orig) override;
   RGWRESTConn *get_rest_conn();
   std::string get_index_path();
+  bool supports_user_writes() override {
+    return true;
+  }
 };
 
 #endif

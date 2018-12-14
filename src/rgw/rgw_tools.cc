@@ -13,8 +13,15 @@
 #include "rgw_common.h"
 #include "rgw_rados.h"
 #include "rgw_tools.h"
+#include "rgw_acl_s3.h"
+#include "rgw_op.h"
+#include "rgw_putobj_processor.h"
+#include "rgw_aio_throttle.h"
+#include "rgw_compression.h"
+#include "rgw_zone.h"
 
 #include "services/svc_sys_obj.h"
+#include "services/svc_zone_utils.h"
 
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context
@@ -268,6 +275,175 @@ void rgw_filter_attrset(map<string, bufferlist>& unfiltered_attrset, const strin
       break;
     (*attrset)[iter->first] = iter->second;
   }
+}
+
+RGWDataAccess::RGWDataAccess(RGWRados *_store) : store(_store)
+{
+  sysobj_ctx = std::make_unique<RGWSysObjectCtx>(store->svc.sysobj->init_obj_ctx());
+}
+
+
+int RGWDataAccess::Bucket::finish_init()
+{
+  auto iter = attrs.find(RGW_ATTR_ACL);
+  if (iter == attrs.end()) {
+    return 0;
+  }
+
+  bufferlist::const_iterator bliter = iter->second.begin();
+  try {
+    policy.decode(bliter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+
+  return 0;
+}
+
+int RGWDataAccess::Bucket::init()
+{
+  int ret = sd->store->get_bucket_info(*sd->sysobj_ctx,
+				       tenant, name,
+				       bucket_info,
+				       &mtime,
+				       &attrs);
+  if (ret < 0) {
+    return ret;
+  }
+
+  return finish_init();
+}
+
+int RGWDataAccess::Bucket::init(const RGWBucketInfo& _bucket_info,
+				const map<string, bufferlist>& _attrs)
+{
+  bucket_info = _bucket_info;
+  attrs = _attrs;
+
+  return finish_init();
+}
+
+int RGWDataAccess::Bucket::get_object(const rgw_obj_key& key,
+				      ObjectRef *obj) {
+  obj->reset(new Object(sd, shared_from_this(), key));
+  return 0;
+}
+
+int RGWDataAccess::Object::put(bufferlist& data,
+			       map<string, bufferlist>& attrs)
+{
+  RGWRados *store = sd->store;
+  CephContext *cct = store->ctx();
+
+  string tag;
+  append_rand_alpha(cct, tag, tag, 32);
+
+  RGWBucketInfo& bucket_info = bucket->bucket_info;
+
+  using namespace rgw::putobj;
+  rgw::AioThrottle aio(store->ctx()->_conf->rgw_put_obj_min_window_size);
+
+  RGWObjectCtx obj_ctx(store);
+  rgw_obj obj(bucket_info.bucket, key);
+
+  auto& owner = bucket->policy.get_owner();
+
+  string req_id = store->svc.zone_utils->unique_id(store->get_new_req_id());
+
+  AtomicObjectProcessor processor(&aio, store, bucket_info,
+                                  owner.get_id(),
+                                  obj_ctx, obj, olh_epoch, req_id);
+
+  int ret = processor.prepare();
+  if (ret < 0)
+    return ret;
+
+  using namespace rgw::putobj;
+
+  DataProcessor *filter = &processor;
+
+  CompressorRef plugin;
+  boost::optional<RGWPutObj_Compress> compressor;
+
+  const auto& compression_type = store->svc.zone->get_zone_params().get_compression_type(bucket_info.placement_rule);
+  if (compression_type != "none") {
+    plugin = Compressor::create(store->ctx(), compression_type);
+    if (!plugin) {
+      ldout(store->ctx(), 1) << "Cannot load plugin for compression type "
+        << compression_type << dendl;
+    } else {
+      compressor.emplace(store->ctx(), plugin, filter);
+      filter = &*compressor;
+    }
+  }
+
+  off_t ofs = 0;
+  auto obj_size = data.length();
+
+  RGWMD5Etag etag_calc;
+
+  do {
+    size_t read_len = std::min(data.length(), (unsigned int)cct->_conf->rgw_max_chunk_size);
+
+    bufferlist bl;
+
+    data.splice(0, read_len, &bl);
+    etag_calc.update(bl);
+
+    ret = filter->process(std::move(bl), ofs);
+    if (ret < 0)
+      return ret;
+
+    ofs += read_len;
+  } while (data.length() > 0);
+
+  ret = filter->process({}, ofs);
+  if (ret < 0) {
+    return ret;
+  }
+  bool has_etag_attr = false;
+  auto iter = attrs.find(RGW_ATTR_ETAG);
+  if (iter != attrs.end()) {
+    bufferlist& bl = iter->second;
+    etag = bl.to_str();
+    has_etag_attr = true;
+  }
+
+  if (!aclbl) {
+    RGWAccessControlPolicy_S3 policy(cct);
+
+    policy.create_canned(bucket->policy.get_owner(), bucket->policy.get_owner(), string()); /* default private policy */
+
+    policy.encode(aclbl.emplace());
+  }
+
+  if (etag.empty()) {
+    etag_calc.finish(&etag);
+  }
+
+  if (!has_etag_attr) {
+    bufferlist etagbl;
+    etagbl.append(etag);
+    attrs[RGW_ATTR_ETAG] = etagbl;
+  }
+  attrs[RGW_ATTR_ACL] = *aclbl;
+
+  string *puser_data = nullptr;
+  if (user_data) {
+    puser_data = &(*user_data);
+  }
+
+  return processor.complete(obj_size, etag,
+			    &mtime, mtime,
+			    attrs, delete_at,
+                            nullptr, nullptr,
+                            puser_data,
+                            nullptr, nullptr);
+}
+
+void RGWDataAccess::Object::set_policy(const RGWAccessControlPolicy& policy)
+{
+  policy.encode(aclbl.emplace());
 }
 
 int rgw_tools_init(CephContext *cct)
