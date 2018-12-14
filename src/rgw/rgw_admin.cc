@@ -2690,10 +2690,6 @@ static int trim_sync_error_log(int shard_id, const ceph::real_time& start_time,
   // unreachable
 }
 
-JSONFormattable& get_tier_config(RGWRados *store) {
-  return store->svc.zone->get_zone_params().tier_config;
-}
-
 const string& get_tier_type(RGWRados *store) {
   return store->svc.zone->get_zone().tier_type;
 }
