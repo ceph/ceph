@@ -785,6 +785,22 @@ remove_image_retry()
     return 1
 }
 
+trash_move() {
+    local cluster=$1
+    local pool=$2
+    local image=$3
+
+    rbd --cluster=${cluster} -p ${pool} trash move ${image}
+}
+
+trash_restore() {
+    local cluster=$1
+    local pool=$2
+    local image_id=$3
+
+    rbd --cluster=${cluster} -p ${pool} trash restore ${image_id}
+}
+
 clone_image()
 {
     local cluster=$1
