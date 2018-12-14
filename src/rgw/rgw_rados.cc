@@ -1632,7 +1632,7 @@ int RGWRados::init_complete()
     obj_tombstone_cache = new tombstone_cache_t(cct->_conf->rgw_obj_tombstone_cache_size);
   }
 
-  reshard_wait = std::make_shared<RGWReshardWait>(this);
+  reshard_wait = std::make_shared<RGWReshardWait>();
 
   reshard = new RGWReshard(this);
 
@@ -6240,7 +6240,8 @@ int RGWRados::Bucket::UpdateIndex::guard_reshard(BucketShard **pbs, std::functio
     }
     ldout(store->ctx(), 0) << "NOTICE: resharding operation on bucket index detected, blocking" << dendl;
     string new_bucket_id;
-    r = store->block_while_resharding(bs, &new_bucket_id, target->bucket_info);
+    r = store->block_while_resharding(bs, &new_bucket_id,
+                                      target->bucket_info, null_yield);
     if (r == -ERR_BUSY_RESHARDING) {
       continue;
     }
@@ -6852,7 +6853,7 @@ int RGWRados::guard_reshard(BucketShard *bs,
     }
     ldout(cct, 0) << "NOTICE: resharding operation on bucket index detected, blocking" << dendl;
     string new_bucket_id;
-    r = block_while_resharding(bs, &new_bucket_id, bucket_info);
+    r = block_while_resharding(bs, &new_bucket_id, bucket_info, null_yield);
     if (r == -ERR_BUSY_RESHARDING) {
       continue;
     }
@@ -6876,11 +6877,75 @@ int RGWRados::guard_reshard(BucketShard *bs,
 
 int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
 				     string *new_bucket_id,
-				     const RGWBucketInfo& bucket_info)
+                                     const RGWBucketInfo& bucket_info,
+                                     optional_yield y)
 {
-  std::shared_ptr<RGWReshardWait> waiter = reshard_wait;
+  int ret = 0;
+  cls_rgw_bucket_instance_entry entry;
 
-  return waiter->block_while_resharding(bs, new_bucket_id, bucket_info);
+  const int num_retries = 10;
+  for (int i=0; i < num_retries; i++) {
+    ret = cls_rgw_get_bucket_resharding(bs->index_ctx, bs->bucket_obj, &entry);
+    if (ret < 0) {
+      ldout(cct, 0) << __func__ << " ERROR: failed to get bucket resharding :"  <<
+	cpp_strerror(-ret)<< dendl;
+      return ret;
+    }
+    if (!entry.resharding_in_progress()) {
+      *new_bucket_id = entry.new_bucket_instance_id;
+      return 0;
+    }
+    ldout(cct, 20) << "NOTICE: reshard still in progress; " << (i < num_retries - 1 ? "retrying" : "too many retries") << dendl;
+
+    if (i == num_retries - 1) {
+      break;
+    }
+
+    // If bucket is erroneously marked as resharding (e.g., crash or
+    // other error) then fix it. If we can take the bucket reshard
+    // lock then it means no other resharding should be taking place,
+    // and we're free to clear the flags.
+    {
+      // since we expect to do this rarely, we'll do our work in a
+      // block and erase our work after each try
+
+      RGWObjectCtx obj_ctx(this);
+      const rgw_bucket& b = bs->bucket;
+      std::string bucket_id = b.get_key();
+      RGWBucketReshardLock reshard_lock(this, bucket_info, true);
+      ret = reshard_lock.lock();
+      if (ret < 0) {
+	ldout(cct, 20) << __func__ <<
+	  " INFO: failed to take reshard lock for bucket " <<
+	  bucket_id << "; expected if resharding underway" << dendl;
+      } else {
+	ldout(cct, 10) << __func__ <<
+	  " INFO: was able to take reshard lock for bucket " <<
+	  bucket_id << dendl;
+	ret = RGWBucketReshard::clear_resharding(this, bucket_info);
+	if (ret < 0) {
+	  reshard_lock.unlock();
+	  ldout(cct, 0) << __func__ <<
+	    " ERROR: failed to clear resharding flags for bucket " <<
+	    bucket_id << dendl;
+	} else {
+	  reshard_lock.unlock();
+	  ldout(cct, 5) << __func__ <<
+	    " INFO: apparently successfully cleared resharding flags for "
+	    "bucket " << bucket_id << dendl;
+	  continue; // if we apparently succeed immediately test again
+	} // if clear resharding succeeded
+      } // if taking of lock succeeded
+    } // block to encapsulate recovery from incomplete reshard
+
+    ret = reshard_wait->wait(y);
+    if (ret < 0) {
+      ldout(cct, 0) << __func__ << " ERROR: bucket is still resharding, please retry" << dendl;
+      return ret;
+    }
+  }
+  ldout(cct, 0) << __func__ << " ERROR: bucket is still resharding, please retry" << dendl;
+  return -ERR_BUSY_RESHARDING;
 }
 
 int RGWRados::bucket_index_link_olh(const RGWBucketInfo& bucket_info, RGWObjState& olh_state, const rgw_obj& obj_instance,
