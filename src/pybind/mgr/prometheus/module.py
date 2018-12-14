@@ -572,7 +572,7 @@ class Module(MgrModule):
 
         pool_ids = list(self.rbd_stats['pools'])
         pool_ids.sort()
-        pool_id_regex = '|'.join(['^%s$' % x for x in pool_ids])
+        pool_id_regex = '^(' + '|'.join([str(x) for x in pool_ids]) + ')$'
 
         if 'query' in self.rbd_stats and \
            pool_id_regex != self.rbd_stats['query']['key_descriptor'][0]['regex']:
@@ -605,8 +605,8 @@ class Module(MgrModule):
         for c in res['counters']:
             # if the pool id is not found in the object name use id of the
             # pool where the object is located
-            if c['k'][1][1]:
-                pool_id = int(c['k'][1][1])
+            if c['k'][1][0]:
+                pool_id = int(c['k'][1][0])
             else:
                 pool_id = int(c['k'][0][0])
             if pool_id not in self.rbd_stats['pools'] and not pools_refreshed:
@@ -614,7 +614,7 @@ class Module(MgrModule):
                 pools_refreshed = True
             if pool_id not in self.rbd_stats['pools']:
                 continue
-            image_id = c['k'][1][2]
+            image_id = c['k'][1][1]
             pool = self.rbd_stats['pools'][pool_id]
             if image_id not in pool['images'] and not pools_refreshed:
                 self.refresh_rbd_stats_pools(pools)

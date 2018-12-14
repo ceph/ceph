@@ -44,7 +44,7 @@ class OSDPerfQuery(MgrModule):
 
     CLIENT_ID_QUERY = {
         'key_descriptor': [
-            {'type': 'client_id', 'regex': '^.+$'},
+            {'type': 'client_id', 'regex': '^(.+)$'},
         ],
         'performance_counter_descriptors': [
             'bytes', 'write_ops', 'read_ops', 'write_bytes', 'read_bytes',
@@ -55,7 +55,7 @@ class OSDPerfQuery(MgrModule):
 
     RBD_IMAGE_ID_QUERY = {
         'key_descriptor': [
-            {'type': 'pool_id', 'regex': '^.+$'},
+            {'type': 'pool_id', 'regex': '^(.+)$'},
             {'type': 'object_name', 'regex': '^rbd_data\.([^.]+)\.'},
         ],
         'performance_counter_descriptors': [
@@ -67,14 +67,14 @@ class OSDPerfQuery(MgrModule):
 
     ALL_SUBKEYS_QUERY = {
         'key_descriptor': [
-            {'type': 'client_id', 'regex': '^.*$'},
-            {'type': 'client_address', 'regex': '^.*$'},
-            {'type': 'pool_id', 'regex': '^.*$'},
-            {'type': 'namespace', 'regex': '^.*$'},
-            {'type': 'osd_id', 'regex': '^.*$'},
-            {'type': 'pg_id', 'regex': '^.*$'},
-            {'type': 'object_name', 'regex': '^.*$'},
-            {'type': 'snap_id', 'regex': '^.*$'},
+            {'type': 'client_id', 'regex': '^(.*)$'},
+            {'type': 'client_address', 'regex': '^(.*)$'},
+            {'type': 'pool_id', 'regex': '^(.*)$'},
+            {'type': 'namespace', 'regex': '^(.*)$'},
+            {'type': 'osd_id', 'regex': '^(.*)$'},
+            {'type': 'pg_id', 'regex': '^(.*)$'},
+            {'type': 'object_name', 'regex': '^(.*)$'},
+            {'type': 'snap_id', 'regex': '^(.*)$'},
         ],
         'performance_counter_descriptors': [
             'write_ops', 'read_ops',
@@ -137,10 +137,7 @@ class OSDPerfQuery(MgrModule):
                     i = descriptors.index(query['limit']['order_by'])
                     res['counters'].sort(key=lambda x: x['c'][i], reverse=True)
             for c in res['counters'][:max_count]:
-                if query == self.RBD_IMAGE_ID_QUERY:
-                    row = [c['k'][0][0], c['k'][1][1]]
-                else:
-                    row = [sk[0] for sk in c['k']]
+                row = [sk[0] for sk in c['k']]
                 counters = c['c']
                 for i in range(len(descriptors)):
                     if descriptors[i] in ['bytes']:

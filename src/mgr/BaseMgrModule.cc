@@ -799,6 +799,12 @@ ceph_add_osd_perf_query(BaseMgrModule *self, PyObject *args)
                    << " contains invalid regex " << d.regex_str << dendl;
               Py_RETURN_NONE;
             }
+            if (d.regex.mark_count() == 0) {
+              derr << __func__ << " query " << query_param_name << " item " << j
+                   << " regex " << d.regex_str << ": no capturing groups"
+                   << dendl;
+              Py_RETURN_NONE;
+            }
           } else {
             derr << __func__ << " query " << query_param_name << " item " << j
                  << " contains invalid param " << param_name << dendl;
