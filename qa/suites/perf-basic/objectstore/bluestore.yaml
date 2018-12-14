@@ -13,7 +13,7 @@ overrides:
       ceph_conf_overrides:
         global:
           osd objectstore: bluestore
-          bluestore block size: 96636764160
+          mon allow pool delete: true
       ceph_mgr_modules:
          - status
          - restful
