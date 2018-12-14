@@ -13,6 +13,7 @@ overrides:
       ceph_conf_overrides:
         global:
            osd objectstore: filestore
+           mon allow pool delete: true
            osd sloppy crc: true
       ceph_mgr_modules:
          - status
