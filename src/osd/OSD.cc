@@ -6692,10 +6692,10 @@ bool OSD::ms_dispatch(Message *m)
 
 void OSD::maybe_share_map(
   Session *session,
-  OpRequestRef op,
+  OpRequest& op,
   OSDMapRef osdmap)
 {
-  if (!op->check_send_map) {
+  if (!op.check_send_map) {
     return;
   }
   epoch_t last_sent_epoch = 0;
@@ -6704,11 +6704,11 @@ void OSD::maybe_share_map(
   last_sent_epoch = session->last_sent_epoch;
   session->sent_epoch_lock.unlock();
 
-  const Message *m = op->get_req();
+  const Message *m = op.get_req();
   service.share_map(
     m->get_source(),
     m->get_connection().get(),
-    op->sent_epoch,
+    op.sent_epoch,
     osdmap,
     session ? &last_sent_epoch : NULL);
 
@@ -6718,7 +6718,7 @@ void OSD::maybe_share_map(
   }
   session->sent_epoch_lock.unlock();
 
-  op->check_send_map = false;
+  op.check_send_map = false;
 }
 
 void OSD::dispatch_session_waiting(SessionRef session, OSDMapRef osdmap)
@@ -9370,7 +9370,7 @@ void OSD::dequeue_op(
 
   auto priv = op->get_req()->get_connection()->get_priv();
   if (auto session = static_cast<Session *>(priv.get()); session) {
-    maybe_share_map(session, op, pg->get_osdmap());
+    maybe_share_map(session, *op, pg->get_osdmap());
   }
 
   if (pg->is_deleting())
@@ -10490,8 +10490,8 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
 	       << " no pg, shouldn't exist e" << osdmap->get_epoch()
 	       << ", dropping " << qi << dendl;
       // share map with client?
-      if (boost::optional<OpRequestRef> _op = qi.maybe_get_op()) {
-	auto priv = (*_op)->get_req()->get_connection()->get_priv();
+      if (OpRequest* const _op = qi.maybe_get_op()) {
+	auto priv = _op->get_req()->get_connection()->get_priv();
 	if (auto session = static_cast<Session *>(priv.get()); session) {
 	  osd->maybe_share_map(session, *_op, sdata->shard_osdmap);
 	}
@@ -10532,8 +10532,8 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
   {
 #ifdef WITH_LTTNG
     osd_reqid_t reqid;
-    if (boost::optional<OpRequestRef> _op = qi.maybe_get_op()) {
-      reqid = (*_op)->get_reqid();
+    if (OpRequest* const _op = qi.maybe_get_op()) {
+      reqid = _op->get_reqid();
     }
 #endif
     tracepoint(osd, opwq_process_start, reqid.name._type,
@@ -10554,8 +10554,8 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
   {
 #ifdef WITH_LTTNG
     osd_reqid_t reqid;
-    if (boost::optional<OpRequestRef> _op = qi.maybe_get_op()) {
-      reqid = (*_op)->get_reqid();
+    if (OpRequest* const _op = qi.maybe_get_op()) {
+      reqid = _op->get_reqid();
     }
 #endif
     tracepoint(osd, opwq_process_finish, reqid.name._type,

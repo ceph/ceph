@@ -88,9 +88,9 @@ namespace ceph {
 	// get_header returns ceph_msg_header type, ceph_msg_header
 	// stores type as unsigned little endian, so be sure to
 	// convert to CPU byte ordering
-	boost::optional<OpRequestRef> op_ref_maybe = op.maybe_get_op();
+	OpRequest* const op_ref_maybe = op.maybe_get_op();
 	ceph_assert(op_ref_maybe);
-	__le16 mtype_le = (*op_ref_maybe)->get_req()->get_header().type;
+	__le16 mtype_le = op_ref_maybe->get_req()->get_header().type;
 	__u16 mtype = le16_to_cpu(mtype_le);
 	if (rep_op_msg_bitset.test(mtype)) {
 	  return osd_op_type_t::osd_rep_op;

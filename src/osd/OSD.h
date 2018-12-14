@@ -1467,7 +1467,7 @@ private:
   // -- sessions --
 private:
   void dispatch_session_waiting(SessionRef session, OSDMapRef osdmap);
-  void maybe_share_map(Session *session, OpRequestRef op, OSDMapRef osdmap);
+  void maybe_share_map(Session *session, OpRequest& op, OSDMapRef osdmap);
 
   Mutex session_waiting_lock;
   set<SessionRef> session_waiting_for_map;
