@@ -431,7 +431,6 @@ void Server::handle_client_reclaim(const MClientReclaim::const_ref &m)
   m->put();
 }
 
-/* This function DOES put the passed message before returning*/
 void Server::handle_client_session(const MClientSession::const_ref &m)
 {
   version_t pv;
@@ -2467,7 +2466,6 @@ void Server::handle_slave_request_reply(const MMDSSlaveRequest::const_ref &m)
   }
 }
 
-/* This function DOES put the mdr->slave_request before returning*/
 void Server::dispatch_slave_request(MDRequestRef& mdr)
 {
   dout(7) << "dispatch_slave_request " << *mdr << " " << *mdr->slave_request << dendl;
@@ -2595,7 +2593,6 @@ void Server::dispatch_slave_request(MDRequestRef& mdr)
   }
 }
 
-/* This function DOES put the mdr->slave_request before returning*/
 void Server::handle_slave_auth_pin(MDRequestRef& mdr)
 {
   dout(10) << "handle_slave_auth_pin " << *mdr << dendl;
@@ -3464,7 +3461,6 @@ struct C_MDS_LookupIno2 : public ServerContext {
   }
 };
 
-/* This function DOES clean up the mdr before returning*/
 /*
  * filepath:  ino
  */
@@ -6093,7 +6089,6 @@ public:
   }
 };
 
-/* This function DOES put the mdr->slave_request before returning*/
 void Server::handle_slave_link_prep(MDRequestRef& mdr)
 {
   dout(10) << "handle_slave_link_prep " << *mdr 
@@ -8371,7 +8366,6 @@ public:
   }
 };
 
-/* This function DOES put the mdr->slave_request before returning*/
 void Server::handle_slave_rename_prep(MDRequestRef& mdr)
 {
   dout(10) << "handle_slave_rename_prep " << *mdr 
