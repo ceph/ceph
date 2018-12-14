@@ -570,7 +570,6 @@ AsyncConnectionRef AsyncMessenger::create_connect(
   const entity_addrvec_t& addrs, int type)
 {
   ceph_assert(lock.is_locked());
-  ceph_assert(addrs != *my_addrs);
 
   ldout(cct, 10) << __func__ << " " << addrs
       << ", creating connection and registering" << dendl;
@@ -603,7 +602,9 @@ AsyncConnectionRef AsyncMessenger::create_connect(
 ConnectionRef AsyncMessenger::connect_to(int type, const entity_addrvec_t& addrs)
 {
   Mutex::Locker l(lock);
-  if (*my_addrs == addrs) {
+  if (*my_addrs == addrs ||
+      (addrs.v.size() == 1 &&
+       my_addrs->contains(addrs.front()))) {
     // local
     return local_connection;
   }
@@ -673,7 +674,9 @@ void AsyncMessenger::submit_message(Message *m, AsyncConnectionRef con,
   }
 
   // local?
-  if (*my_addrs == dest_addrs) {
+  if (*my_addrs == dest_addrs ||
+      (dest_addrs.v.size() == 1 &&
+       my_addrs->contains(dest_addrs.front()))) {
     // local
     local_connection->send_message(m);
     return ;
