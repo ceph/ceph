@@ -1,0 +1,9 @@
+::ng-deep tabset.tabset > ul {
+  border-bottom: 1px solid #ddd;
+  float: left;
+  display: block;
+  margin-right: 20px;
+  border-bottom: 0;
+  border-right: 1px solid #ddd;
+  padding-right: 15px;
+}

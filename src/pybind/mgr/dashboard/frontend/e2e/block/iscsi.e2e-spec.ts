@@ -14,6 +14,6 @@ describe('Iscsi Page', () => {
 
   it('should open and show breadcrumb', () => {
     page.navigateTo();
-    expect(Helper.getBreadcrumbText()).toEqual('iSCSI');
+    expect(Helper.getBreadcrumbText()).toEqual('Overview');
   });
 });

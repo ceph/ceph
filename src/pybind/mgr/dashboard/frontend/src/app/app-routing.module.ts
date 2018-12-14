@@ -1,6 +1,7 @@
 import { NgModule } from '@angular/core';
 import { ActivatedRouteSnapshot, RouterModule, Routes } from '@angular/router';
 
+import { IscsiTargetListComponent } from './ceph/block/iscsi-target-list/iscsi-target-list.component';
 import { IscsiComponent } from './ceph/block/iscsi/iscsi.component';
 import { OverviewComponent as RbdMirroringComponent } from './ceph/block/mirroring/overview/overview.component';
 import { RbdFormComponent } from './ceph/block/rbd-form/rbd-form.component';
@@ -173,7 +174,30 @@ const routes: Routes = [
         component: RbdMirroringComponent,
         data: { breadcrumbs: 'Mirroring' }
       },
-      { path: 'iscsi', component: IscsiComponent, data: { breadcrumbs: 'iSCSI' } }
+      // iSCSI
+      {
+        path: 'iscsi',
+        data: { breadcrumbs: 'iSCSI' },
+        children: [
+          {
+            path: '',
+            redirectTo: 'overview',
+            pathMatch: 'full'
+          },
+          {
+            path: 'overview',
+            data: { breadcrumbs: 'Overview' },
+            children: [{ path: '', component: IscsiComponent }]
+          },
+          {
+            path: 'targets',
+            data: { breadcrumbs: 'Targets' },
+            children: [
+              { path: '', component: IscsiTargetListComponent }
+            ]
+          }
+        ]
+      }
     ]
   },
   // Filesystems
