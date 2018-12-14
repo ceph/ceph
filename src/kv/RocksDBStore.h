@@ -88,10 +88,8 @@ class RocksDBStore : public KeyValueDB {
   rocksdb::ColumnFamilyHandle *default_cf = nullptr;
 
   int submit_common(rocksdb::WriteOptions& woptions, KeyValueDB::Transaction t);
-  int install_cf_mergeop(const string &cf_name, rocksdb::ColumnFamilyOptions *cf_opt);
 
   int create_db_dir();
-  int do_open(ostream &out, bool create_if_missing, const vector<ColumnFamily>* cfs = nullptr);
   int load_rocksdb_options(bool create_if_missing, rocksdb::Options& opt);
 
   // manage async compactions
@@ -170,7 +168,6 @@ public:
   ~RocksDBStore() override;
 
   static bool check_omap_dir(string &omap_dir);
-  /// Opens underlying db
   int open(ostream &out, const std::vector<ColumnFamily>& options = {}) override;
   /// Creates underlying db if missing and opens it
   int create_and_open(ostream &out, const std::vector<ColumnFamily>& new_cfs = {}) override;
@@ -185,12 +182,13 @@ public:
   int column_family_create(const std::string& name, const std::string& options) override;
   int column_family_delete(const std::string& name) override;
   KeyValueDB::ColumnFamilyHandle column_family_handle(const std::string& cf_name) override;
-  //virtual std::string cf_get_options(const std::string& cf_name);
-  /* returns merge operator for column family that contains only `prefix` keys */
-  virtual std::shared_ptr<rocksdb::MergeOperator>
-    cf_get_merge_operator(const std::string& prefix);
 
 private:
+  /*
+   * Get merge operator for column family.
+   */
+  std::shared_ptr<rocksdb::MergeOperator> cf_get_merge_operator(const std::string& prefix);
+
   /*
    * Returns handle to mono column family.
    * Does not return handles for regular column family, even if name matches
@@ -203,9 +201,19 @@ private:
       return static_cast<rocksdb::ColumnFamilyHandle*>(iter->second.priv);
   }
 
-  /// Determines if prefix points to mono column family.
-  /// Sets handle to proper column family.
-  bool check_mode(rocksdb::ColumnFamilyHandle* &cf, const string &prefix) {
+  /*
+   * Determines how 'prefix' should be handled.
+   * It is a convenience function that allow to better structuralize conditions
+   * in functions that operate on both mono column families and regular column families.
+   *
+   * Param:
+   *  - cf [in] column family handle as requested by client
+   *       [out] fixed column family handle after redirection
+   *  - prefix [in] as requested by client
+   * Result:
+   *  true - we operate on mono column family, false - we operate on normal column family
+   */
+  bool cf_check_mode(rocksdb::ColumnFamilyHandle* &cf, const string &prefix) {
     if (cf != nullptr) {
       return false;
     }
@@ -258,97 +266,6 @@ public:
 
   int64_t estimate_prefix_size(const string& prefix,
 			       const string& key_prefix) override;
-
-  struct  RocksWBHandler: public rocksdb::WriteBatch::Handler {
-    std::string seen ;
-    int num_seen = 0;
-    static string pretty_binary_string(const string& in) {
-      char buf[10];
-      string out;
-      out.reserve(in.length() * 3);
-      enum { NONE, HEX, STRING } mode = NONE;
-      unsigned from = 0, i;
-      for (i=0; i < in.length(); ++i) {
-        if ((in[i] < 32 || (unsigned char)in[i] > 126) ||
-          (mode == HEX && in.length() - i >= 4 &&
-          ((in[i] < 32 || (unsigned char)in[i] > 126) ||
-          (in[i+1] < 32 || (unsigned char)in[i+1] > 126) ||
-          (in[i+2] < 32 || (unsigned char)in[i+2] > 126) ||
-          (in[i+3] < 32 || (unsigned char)in[i+3] > 126)))) {
-
-          if (mode == STRING) {
-            out.append(in.substr(from, i - from));
-            out.push_back('\'');
-          }
-          if (mode != HEX) {
-            out.append("0x");
-            mode = HEX;
-          }
-          if (in.length() - i >= 4) {
-            // print a whole u32 at once
-            snprintf(buf, sizeof(buf), "%08x",
-                  (uint32_t)(((unsigned char)in[i] << 24) |
-                            ((unsigned char)in[i+1] << 16) |
-                            ((unsigned char)in[i+2] << 8) |
-                            ((unsigned char)in[i+3] << 0)));
-            i += 3;
-          } else {
-            snprintf(buf, sizeof(buf), "%02x", (int)(unsigned char)in[i]);
-          }
-          out.append(buf);
-        } else {
-          if (mode != STRING) {
-            out.push_back('\'');
-            mode = STRING;
-            from = i;
-          }
-        }
-      }
-      if (mode == STRING) {
-        out.append(in.substr(from, i - from));
-        out.push_back('\'');
-      }
-      return out;
-    }
-    void Put(const rocksdb::Slice& key,
-                    const rocksdb::Slice& value) override {
-      string prefix ((key.ToString()).substr(0,1));
-      string key_to_decode ((key.ToString()).substr(2,string::npos));
-      uint64_t size = (value.ToString()).size();
-      seen += "\nPut( Prefix = " + prefix + " key = " 
-            + pretty_binary_string(key_to_decode) 
-            + " Value size = " + std::to_string(size) + ")";
-      num_seen++;
-    }
-    void SingleDelete(const rocksdb::Slice& key) override {
-      string prefix ((key.ToString()).substr(0,1));
-      string key_to_decode ((key.ToString()).substr(2,string::npos));
-      seen += "\nSingleDelete(Prefix = "+ prefix + " Key = " 
-            + pretty_binary_string(key_to_decode) + ")";
-      num_seen++;
-    }
-    void Delete(const rocksdb::Slice& key) override {
-      string prefix ((key.ToString()).substr(0,1));
-      string key_to_decode ((key.ToString()).substr(2,string::npos));
-      seen += "\nDelete( Prefix = " + prefix + " key = " 
-            + pretty_binary_string(key_to_decode) + ")";
-
-      num_seen++;
-    }
-    void Merge(const rocksdb::Slice& key,
-                      const rocksdb::Slice& value) override {
-      string prefix ((key.ToString()).substr(0,1));
-      string key_to_decode ((key.ToString()).substr(2,string::npos));
-      uint64_t size = (value.ToString()).size();
-      seen += "\nMerge( Prefix = " + prefix + " key = " 
-            + pretty_binary_string(key_to_decode) + " Value size = " 
-            + std::to_string(size) + ")";
-
-      num_seen++;
-    }
-    bool Continue() override { return num_seen < 50; }
-
-  };
 
   class RocksDBTransactionImpl : public KeyValueDB::TransactionImpl {
   public:
@@ -486,88 +403,28 @@ public:
 
   class MergeOperatorRouter;
   class MergeOperatorLinker;
+  class MergeOperatorAll;
+
   friend class MergeOperatorRouter;
   int set_merge_operator(
     const std::string& prefix,
     std::shared_ptr<KeyValueDB::MergeOperator> mop) override;
-  string assoc_name; ///< Name of associative operator
-
-  uint64_t get_estimated_size(map<string,uint64_t> &extra) override {
-    DIR *store_dir = opendir(path.c_str());
-    if (!store_dir) {
-      lderr(cct) << __func__ << " something happened opening the store: "
-                 << cpp_strerror(errno) << dendl;
-      return 0;
-    }
-
-    uint64_t total_size = 0;
-    uint64_t sst_size = 0;
-    uint64_t log_size = 0;
-    uint64_t misc_size = 0;
-
-    struct dirent *entry = NULL;
-    while ((entry = readdir(store_dir)) != NULL) {
-      string n(entry->d_name);
-
-      if (n == "." || n == "..")
-        continue;
-
-      string fpath = path + '/' + n;
-      struct stat s;
-      int err = stat(fpath.c_str(), &s);
-      if (err < 0)
-	err = -errno;
-      // we may race against rocksdb while reading files; this should only
-      // happen when those files are being updated, data is being shuffled
-      // and files get removed, in which case there's not much of a problem
-      // as we'll get to them next time around.
-      if (err == -ENOENT) {
-	continue;
-      }
-      if (err < 0) {
-        lderr(cct) << __func__ << " error obtaining stats for " << fpath
-                   << ": " << cpp_strerror(err) << dendl;
-        goto err;
-      }
-
-      size_t pos = n.find_last_of('.');
-      if (pos == string::npos) {
-        misc_size += s.st_size;
-        continue;
-      }
-
-      string ext = n.substr(pos+1);
-      if (ext == "sst") {
-        sst_size += s.st_size;
-      } else if (ext == "log") {
-        log_size += s.st_size;
-      } else {
-        misc_size += s.st_size;
-      }
-    }
-
-    total_size = sst_size + log_size + misc_size;
-
-    extra["sst"] = sst_size;
-    extra["log"] = log_size;
-    extra["misc"] = misc_size;
-    extra["total"] = total_size;
-
-err:
-    closedir(store_dir);
-    return total_size;
-  }
 
   virtual int64_t get_cache_usage() const override {
     return static_cast<int64_t>(bbt_opts.block_cache->GetUsage());
   }
-
+  uint64_t get_estimated_size(map<string,uint64_t> &extra) override;
+  virtual int64_t request_cache_bytes(
+      PriorityCache::Priority pri, uint64_t cache_bytes) const override;
+  virtual int64_t commit_cache_size() override;
+  virtual std::string get_cache_name() const override {
+    return "RocksDB Block Cache";
+  }
   int set_cache_size(uint64_t s) override {
     cache_size = s;
     set_cache_flag = true;
     return 0;
   }
-
   int set_cache_capacity(int64_t capacity);
   int64_t get_cache_capacity();
 
@@ -580,7 +437,5 @@ err:
   WholeSpaceIterator get_wholespace_iterator() override;
   WholeSpaceIterator get_wholespace_iterator_cf(ColumnFamilyHandle cfh) override;
 };
-
-
 
 #endif

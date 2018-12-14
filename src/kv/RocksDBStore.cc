@@ -61,32 +61,31 @@ static rocksdb::SliceParts prepare_sliceparts(const bufferlist &bl,
 class RocksDBStore::MergeOperatorRouter
   : public rocksdb::AssociativeMergeOperator
 {
+protected:
   RocksDBStore& store;
+  mutable std::string name;
 public:
   const char *Name() const override {
     // Construct a name that rocksDB will validate against. We want to
     // do this in a way that doesn't constrain the ordering of calls
     // to set_merge_operator, so sort the merge operators and then
     // construct a name from all of those parts.
-    store.assoc_name.clear();
+    name.clear();
     map<std::string,std::string> names;
 
     for (auto& p : store.merge_ops) {
       names[p.first] = p.second->name();
     }
-    //TODO: name of merge operator excludes prefixes for mono tables
-    //TODO: this makes it difficult to merge data back to main table
-    //TODO: regardless of cranky name, this should handle all prefixes?
     for (auto& p : store.cf_mono_handles) {
       names.erase(p.first);
     }
     for (auto& p : names) {
-      store.assoc_name += '.';
-      store.assoc_name += p.first;
-      store.assoc_name += ':';
-      store.assoc_name += p.second;
+      name += '.';
+      name += p.first;
+      name += ':';
+      name += p.second;
     }
-    return store.assoc_name.c_str();
+    return name.c_str();
   }
 
   explicit MergeOperatorRouter(RocksDBStore &_store) : store(_store) {}
@@ -150,6 +149,116 @@ public:
   }
 };
 
+//
+// Merge operator that encompasses all prefixes.
+//
+class RocksDBStore::MergeOperatorAll : public RocksDBStore::MergeOperatorRouter
+{
+public:
+  const char *Name() const override {
+    name.clear();
+    for (auto& p : store.merge_ops) {
+      name += '.';
+      name += p.first;
+      name += ':';
+      name += p.second->name();
+    }
+    return name.c_str();
+  }
+
+  explicit MergeOperatorAll(RocksDBStore &store) : MergeOperatorRouter(store) {}
+};
+
+struct RocksWBHandler: public rocksdb::WriteBatch::Handler {
+  std::string seen ;
+  int num_seen = 0;
+  static string pretty_binary_string(const string& in) {
+    char buf[10];
+    string out;
+    out.reserve(in.length() * 3);
+    enum { NONE, HEX, STRING } mode = NONE;
+    unsigned from = 0, i;
+    for (i=0; i < in.length(); ++i) {
+      if ((in[i] < 32 || (unsigned char)in[i] > 126) ||
+        (mode == HEX && in.length() - i >= 4 &&
+        ((in[i] < 32 || (unsigned char)in[i] > 126) ||
+        (in[i+1] < 32 || (unsigned char)in[i+1] > 126) ||
+        (in[i+2] < 32 || (unsigned char)in[i+2] > 126) ||
+        (in[i+3] < 32 || (unsigned char)in[i+3] > 126)))) {
+
+        if (mode == STRING) {
+          out.append(in.substr(from, i - from));
+          out.push_back('\'');
+        }
+        if (mode != HEX) {
+          out.append("0x");
+          mode = HEX;
+        }
+        if (in.length() - i >= 4) {
+          // print a whole u32 at once
+          snprintf(buf, sizeof(buf), "%08x",
+                (uint32_t)(((unsigned char)in[i] << 24) |
+                          ((unsigned char)in[i+1] << 16) |
+                          ((unsigned char)in[i+2] << 8) |
+                          ((unsigned char)in[i+3] << 0)));
+          i += 3;
+        } else {
+          snprintf(buf, sizeof(buf), "%02x", (int)(unsigned char)in[i]);
+        }
+        out.append(buf);
+      } else {
+        if (mode != STRING) {
+          out.push_back('\'');
+          mode = STRING;
+          from = i;
+        }
+      }
+    }
+    if (mode == STRING) {
+      out.append(in.substr(from, i - from));
+      out.push_back('\'');
+    }
+    return out;
+  }
+  void Put(const rocksdb::Slice& key,
+                  const rocksdb::Slice& value) override {
+    string prefix ((key.ToString()).substr(0,1));
+    string key_to_decode ((key.ToString()).substr(2,string::npos));
+    uint64_t size = (value.ToString()).size();
+    seen += "\nPut( Prefix = " + prefix + " key = "
+          + pretty_binary_string(key_to_decode)
+          + " Value size = " + std::to_string(size) + ")";
+    num_seen++;
+  }
+  void SingleDelete(const rocksdb::Slice& key) override {
+    string prefix ((key.ToString()).substr(0,1));
+    string key_to_decode ((key.ToString()).substr(2,string::npos));
+    seen += "\nSingleDelete(Prefix = "+ prefix + " Key = "
+          + pretty_binary_string(key_to_decode) + ")";
+    num_seen++;
+  }
+  void Delete(const rocksdb::Slice& key) override {
+    string prefix ((key.ToString()).substr(0,1));
+    string key_to_decode ((key.ToString()).substr(2,string::npos));
+    seen += "\nDelete( Prefix = " + prefix + " key = "
+          + pretty_binary_string(key_to_decode) + ")";
+
+    num_seen++;
+  }
+  void Merge(const rocksdb::Slice& key,
+                    const rocksdb::Slice& value) override {
+    string prefix ((key.ToString()).substr(0,1));
+    string key_to_decode ((key.ToString()).substr(2,string::npos));
+    uint64_t size = (value.ToString()).size();
+    seen += "\nMerge( Prefix = " + prefix + " key = "
+          + pretty_binary_string(key_to_decode) + " Value size = "
+          + std::to_string(size) + ")";
+
+    num_seen++;
+  }
+  bool Continue() override { return num_seen < 50; }
+};
+
 int RocksDBStore::set_merge_operator(
   const string& prefix,
   std::shared_ptr<KeyValueDB::MergeOperator> mop)
@@ -158,6 +267,72 @@ int RocksDBStore::set_merge_operator(
   ceph_assert(db == nullptr);
   merge_ops.emplace(prefix, mop);
   return 0;
+}
+
+uint64_t RocksDBStore::get_estimated_size(map<string,uint64_t> &extra) {
+  DIR *store_dir = opendir(path.c_str());
+  if (!store_dir) {
+    lderr(cct) << __func__ << " something happened opening the store: "
+        << cpp_strerror(errno) << dendl;
+    return 0;
+  }
+
+  uint64_t total_size = 0;
+  uint64_t sst_size = 0;
+  uint64_t log_size = 0;
+  uint64_t misc_size = 0;
+
+  struct dirent *entry = NULL;
+  while ((entry = readdir(store_dir)) != NULL) {
+    string n(entry->d_name);
+
+    if (n == "." || n == "..")
+      continue;
+
+    string fpath = path + '/' + n;
+    struct stat s;
+    int err = stat(fpath.c_str(), &s);
+    if (err < 0)
+      err = -errno;
+    // we may race against rocksdb while reading files; this should only
+    // happen when those files are being updated, data is being shuffled
+    // and files get removed, in which case there's not much of a problem
+    // as we'll get to them next time around.
+    if (err == -ENOENT) {
+      continue;
+    }
+    if (err < 0) {
+      lderr(cct) << __func__ << " error obtaining stats for " << fpath
+          << ": " << cpp_strerror(err) << dendl;
+      goto err;
+    }
+
+    size_t pos = n.find_last_of('.');
+    if (pos == string::npos) {
+      misc_size += s.st_size;
+      continue;
+    }
+
+    string ext = n.substr(pos+1);
+    if (ext == "sst") {
+      sst_size += s.st_size;
+    } else if (ext == "log") {
+      log_size += s.st_size;
+    } else {
+      misc_size += s.st_size;
+    }
+  }
+
+  total_size = sst_size + log_size + misc_size;
+
+  extra["sst"] = sst_size;
+  extra["log"] = log_size;
+  extra["misc"] = misc_size;
+  extra["total"] = total_size;
+
+  err:
+  closedir(store_dir);
+  return total_size;
 }
 
 class CephRocksdbLogger : public rocksdb::Logger {
@@ -670,7 +845,7 @@ RocksDBStore::cf_get_merge_operator(const std::string& cf_name)
   }
   //Column family name is not exact to any defined merge operators.
   //Use all-prefix merge operator.
-  return std::shared_ptr<rocksdb::MergeOperator>(new MergeOperatorRouter(*this));
+  return std::shared_ptr<rocksdb::MergeOperator>(new RocksDBStore::MergeOperatorAll(*this));
 }
 
 int RocksDBStore::_test_init(const string& dir)
@@ -948,7 +1123,7 @@ void RocksDBStore::RocksDBTransactionImpl::set(
   const bufferlist &to_set_bl)
 {
   rocksdb::ColumnFamilyHandle* cf = cf_handle;
-  if (db->check_mode(cf, prefix)) {
+  if (db->cf_check_mode(cf, prefix)) {
     put_bat(bat, cf, k, to_set_bl);
   } else {
     string key = combine_strings(prefix, k);
@@ -962,7 +1137,7 @@ void RocksDBStore::RocksDBTransactionImpl::set(
   const bufferlist &to_set_bl)
 {
   rocksdb::ColumnFamilyHandle* cf = cf_handle;
-  if (db->check_mode(cf, prefix)) {
+  if (db->cf_check_mode(cf, prefix)) {
     string key(k, keylen);  // fixme?
     put_bat(bat, cf, key, to_set_bl);
   } else {
@@ -976,7 +1151,7 @@ void RocksDBStore::RocksDBTransactionImpl::rmkey(const string &prefix,
 					         const string &k)
 {
   rocksdb::ColumnFamilyHandle* cf = cf_handle;
-  if (db->check_mode(cf, prefix)) {
+  if (db->cf_check_mode(cf, prefix)) {
     bat.Delete(cf, rocksdb::Slice(k));
   } else {
     bat.Delete(cf, combine_strings(prefix, k));
@@ -988,7 +1163,7 @@ void RocksDBStore::RocksDBTransactionImpl::rmkey(const string &prefix,
 						 size_t keylen)
 {
   rocksdb::ColumnFamilyHandle* cf = cf_handle;
-  if (db->check_mode(cf, prefix)) {
+  if (db->cf_check_mode(cf, prefix)) {
     bat.Delete(cf, rocksdb::Slice(k, keylen));
   } else {
     string key;
@@ -1001,7 +1176,7 @@ void RocksDBStore::RocksDBTransactionImpl::rm_single_key(const string &prefix,
 					                 const string &k)
 {
   rocksdb::ColumnFamilyHandle* cf = cf_handle;
-  if (db->check_mode(cf, prefix)) {
+  if (db->cf_check_mode(cf, prefix)) {
     bat.SingleDelete(cf, k);
   } else {
     bat.SingleDelete(cf, combine_strings(prefix, k));
@@ -1011,7 +1186,7 @@ void RocksDBStore::RocksDBTransactionImpl::rm_single_key(const string &prefix,
 void RocksDBStore::RocksDBTransactionImpl::rmkeys_by_prefix(const string &prefix)
 {
   rocksdb::ColumnFamilyHandle* cf = cf_handle;
-  bool is_mono = db->check_mode(cf, prefix);
+  bool is_mono = db->cf_check_mode(cf, prefix);
   uint64_t cnt = db->delete_range_threshold;
   bat.SetSavePoint();
   auto it = db->get_iterator(prefix);
@@ -1045,7 +1220,7 @@ void RocksDBStore::RocksDBTransactionImpl::rm_range_keys(const string &prefix,
                                                          const string &end)
 {
   rocksdb::ColumnFamilyHandle* cf = cf_handle;
-  bool is_mono = db->check_mode(cf, prefix);
+  bool is_mono = db->cf_check_mode(cf, prefix);
   uint64_t cnt = db->delete_range_threshold;
   auto it = db->get_iterator(prefix);
   bat.SetSavePoint();
@@ -1065,7 +1240,7 @@ void RocksDBStore::RocksDBTransactionImpl::rm_range_keys(const string &prefix,
       }
       return;
     }
-    if (cf) {
+    if (is_mono) {
       bat.Delete(cf, rocksdb::Slice(it->key()));
     } else {
       bat.Delete(cf, combine_strings(prefix, it->key()));
@@ -1082,7 +1257,7 @@ void RocksDBStore::RocksDBTransactionImpl::merge(
   const bufferlist &to_set_bl)
 {
   rocksdb::ColumnFamilyHandle* cf = cf_handle;
-  if (db->check_mode(cf, prefix)) {
+  if (db->cf_check_mode(cf, prefix)) {
     // special mono column family case
     // bufferlist::c_str() is non-constant, so we can't call c_str()
     if (to_set_bl.is_contiguous() && to_set_bl.length() > 0) {
@@ -1249,7 +1424,7 @@ int RocksDBStore::get(
     std::map<std::string, bufferlist> *out) {
   utime_t start = ceph_clock_now();
   auto cf = static_cast<rocksdb::ColumnFamilyHandle*>(cf_handle.priv);
-  if (check_mode(cf, prefix)) {
+  if (cf_check_mode(cf, prefix)) {
     for (auto& key : keys) {
       std::string value;
       auto status = db->Get(rocksdb::ReadOptions(),
@@ -1295,7 +1470,7 @@ int RocksDBStore::get(
   string value;
   rocksdb::Status s;
   auto cf = static_cast<rocksdb::ColumnFamilyHandle*>(cf_handle.priv);
-  if (check_mode(cf, prefix)) {
+  if (cf_check_mode(cf, prefix)) {
     s = db->Get(rocksdb::ReadOptions(),
                 cf,
                 rocksdb::Slice(key),
