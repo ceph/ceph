@@ -1104,7 +1104,6 @@ void MDSRank::update_mlogger()
     mlogger->set(l_mdm_dns, CDentry::decrements());
     mlogger->set(l_mdm_capa, Capability::increments());
     mlogger->set(l_mdm_caps, Capability::decrements());
-    mlogger->set(l_mdm_buf, buffer::get_total_alloc());
   }
 }
 
@@ -3110,7 +3109,6 @@ void MDSRank::create_logger()
     mdm_plb.add_u64_counter(l_mdm_capa, "cap+", "Capabilities added");
     mdm_plb.add_u64_counter(l_mdm_caps, "cap-", "Capabilities removed");
     mdm_plb.add_u64(l_mdm_heap, "heap", "Heap size");
-    mdm_plb.add_u64(l_mdm_buf, "buf", "Buffer size");
 
     mdm_plb.set_prio_default(PerfCountersBuilder::PRIO_DEBUGONLY);
     mdm_plb.add_u64(l_mdm_rss, "rss", "RSS");

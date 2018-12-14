@@ -7530,7 +7530,6 @@ void MDCache::check_memory_usage()
 	   << ", rss " << last.get_rss()
 	   << ", heap " << last.get_heap()
 	   << ", baseline " << baseline.get_heap()
-	   << ", buffers " << (buffer::get_total_alloc() >> 10)
 	   << ", " << num_inodes_with_caps << " / " << CInode::count() << " inodes have caps"
 	   << ", " << Capability::count() << " caps, " << caps_per_inode << " caps per inode"
 	   << dendl;
