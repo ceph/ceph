@@ -172,6 +172,10 @@ int Image<I>::get_parent(I *ictx,
     return -ENOENT;
   }
 
+  if ((ictx->features & RBD_FEATURE_MIGRATING) != 0) {
+    return -ENOENT;
+  }
+
   cls::rbd::ParentImageSpec parent_spec;
   if (ictx->snap_id == CEPH_NOSNAP) {
     parent_spec = ictx->parent_md.spec;
