@@ -2026,6 +2026,14 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     return;
   }
 
+  // pool blacklisted?
+  string pool_name = get_osdmap()->get_pool_name(get_pgid().pool());
+  if (get_osdmap()->is_pool_blacklisted(pool_name, m->get_source_addr())) {
+    dout(10) << "do_op " << pool_name << " " << m->get_source_addr() << " is blacklisted" << dendl;
+    osd->reply_op_error(op, -EBLACKLISTED);
+    return;
+  }
+
   // order this op as a write?
   bool write_ordered = op->rwordered();
 

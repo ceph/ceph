@@ -453,7 +453,7 @@ void OSDMap::Incremental::encode_classic(bufferlist& bl, uint64_t features) cons
   encode(new_pg_temp, bl);
 
   // extended
-  __u16 ev = 10;
+  __u16 ev = 11;
   encode(ev, bl);
   encode(new_hb_back_up, bl, features);
   encode(new_up_thru, bl);
@@ -466,6 +466,18 @@ void OSDMap::Incremental::encode_classic(bufferlist& bl, uint64_t features) cons
   encode(new_uuid, bl);
   encode(new_xinfo, bl);
   encode(new_hb_front_up, bl, features);
+  {
+    // we don't have an encode overloading for the type of old_pool_blacklist, need to encode here
+    int32_t pool_size = old_pool_blacklist.size();
+    encode(pool_size, bl, features);
+    for (const auto &pool : old_pool_blacklist) {
+      encode(pool.first, bl, features);
+      int32_t addr_size = pool.second.size();
+      encode(addr_size, bl, features);
+      for (const auto &addr : pool.second)
+        addr.encode(bl, features);
+    }
+  }
 }
 
 template<class T>
@@ -618,6 +630,19 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
       encode(new_require_min_compat_client, bl);
       encode(new_require_osd_release, bl);
     }
+    if (target_v >= 7) {
+      encode(new_pool_blacklist, bl, features);
+      // we don't have an encode overloading for the type of old_pool_blacklist, need to encode here 
+      int32_t pool_size = old_pool_blacklist.size();
+      encode(pool_size, bl, features);
+      for (const auto &pool : old_pool_blacklist) {
+        encode(pool.first, bl, features);
+        int32_t addr_size = pool.second.size();
+        encode(addr_size, bl, features);
+        for (const auto &addr : pool.second)
+          addr.encode(bl, features);
+      }
+    }
     ENCODE_FINISH(bl); // osd-only data
   }
 
@@ -740,6 +765,25 @@ void OSDMap::Incremental::decode_classic(bufferlist::const_iterator &p)
     decode(new_xinfo, p);
   if (ev >= 10)
     decode(new_hb_front_up, p);
+  if (ev >= 11) {
+    decode(new_pool_blacklist, p);
+    // we don't have an decode overloading for the type of old_pool_blacklist, need to decode here
+    int32_t pool_size;
+    decode(pool_size, p);
+    for (int i = 0; i < pool_size; i++) {
+      string pool_name;
+      decode(pool_name, p);
+      int32_t addr_size;
+      decode(addr_size, p);
+      mempool::osdmap::set<entity_addr_t> addr_set;
+      for (int j = 0; j < addr_size; j++) {
+        entity_addr_t a;
+        a.decode(p);
+        addr_set.insert(a);
+      }
+      old_pool_blacklist.insert(make_pair(pool_name, addr_set));
+    }
+  }
 }
 
 void OSDMap::Incremental::decode(bufferlist::const_iterator& bl)
@@ -872,6 +916,25 @@ void OSDMap::Incremental::decode(bufferlist::const_iterator& bl)
 	new_require_osd_release = CEPH_RELEASE_JEWEL;
       } else {
 	new_require_osd_release = -1;
+      }
+    }
+    if (struct_v >= 7) {
+      decode(new_pool_blacklist, bl);
+      // we don't have an decode overloading for the type of old_pool_blacklist, need to decode here
+      int32_t pool_size;
+      decode(pool_size, bl);
+      for (int i = 0; i < pool_size; i++) {
+        string pool_name;
+        decode(pool_name, bl);
+        int32_t addr_size;
+        decode(addr_size, bl);
+        mempool::osdmap::set<entity_addr_t> addr_set;
+        for (int j = 0; j < addr_size; j++) {
+          entity_addr_t a;
+          a.decode(bl);
+          addr_set.insert(a);
+        }
+        old_pool_blacklist.insert(make_pair(pool_name, addr_set));
       }
     }
     DECODE_FINISH(bl); // osd-only data
@@ -1120,6 +1183,23 @@ void OSDMap::Incremental::dump(Formatter *f) const
     f->dump_stream("addr") << blist;
   f->close_section();
 
+  f->open_array_section("new_pool_blacklist");
+  for (const auto &pool_blist : new_pool_blacklist) {
+    stringstream ss;
+    ss << pool_blist.first;
+    for (const auto &blist : pool_blist.second)
+      f->dump_stream(ss.str().c_str()) << blist.first << blist.second;
+  }
+  f->close_section();
+  f->open_array_section("old_pool_blacklist");
+  for (const auto &pool_blist : old_pool_blacklist) {
+    stringstream ss;
+    ss << pool_blist.first;
+    for (const auto &blist : pool_blist.second)
+      f->dump_stream(ss.str().c_str()) << blist;
+  }
+  f->close_section();
+
   f->open_array_section("new_xinfo");
   for (const auto &xinfo : new_xinfo) {
     f->open_object_section("xinfo");
@@ -1237,6 +1317,32 @@ bool OSDMap::is_blacklisted(const entity_addrvec_t& av) const
       }
     }
   }
+}
+
+bool OSDMap::is_pool_blacklisted(string pool_name, const entity_addr_t& a) const
+{
+  if (pool_blacklist.empty())
+    return false;
+
+  // is this pool name in blacklist?
+  auto item = pool_blacklist.find(pool_name);
+  if (item != pool_blacklist.end()) {
+    // this specific instance?
+    if (item->second.count(a)) {
+      return true;
+    } else {
+      // is entire ip blacklisted for this pool?
+      if (a.is_ip()) {
+        entity_addr_t b = a;
+        b.set_port(0);
+        b.set_nonce(0);
+        if (item->second.count(b))
+          return true;
+        else
+          return false;
+      }
+    }
+  }
 
   return false;
 }
@@ -1250,6 +1356,16 @@ void OSDMap::get_blacklist(std::set<entity_addr_t> *bl) const
 {
   for (const auto &i : blacklist) {
     bl->insert(i.first);
+  }
+}
+
+void OSDMap::get_pool_blacklist(map<string, set<entity_addr_t>> *bl) const
+{
+  for (const auto &pool : pool_blacklist) {
+    set<entity_addr_t> addr_set;
+    for (const auto &addr : pool.second)
+      addr_set.insert(addr.first);
+    bl->insert(make_pair(pool.first, addr_set));
   }
 }
 
@@ -2077,6 +2193,28 @@ int OSDMap::apply_incremental(const Incremental &inc)
   for (const auto &addr : inc.old_blacklist)
     blacklist.erase(addr);
 
+  // pool blacklist
+  if (!inc.new_pool_blacklist.empty()) {
+    for (const auto &pool : inc.new_pool_blacklist) {
+      auto pool_exist = pool_blacklist.find(pool.first);
+      if (pool_exist != pool_blacklist.end())
+        pool_exist->second.insert(pool.second.begin(), pool.second.end());
+      else
+        pool_blacklist.insert(pool);
+    }
+    new_blacklist_entries = true;
+  }
+  for (const auto &pool : inc.old_pool_blacklist) {
+    auto pool_exist = pool_blacklist.find(pool.first);
+    if (pool_exist != pool_blacklist.end()) {
+      for (const auto &addr : pool.second)
+        pool_exist->second.erase(addr);
+
+      if (pool_exist->second.empty())
+        pool_blacklist.erase(pool.first);
+    }
+  }
+
   // cluster snapshot?
   if (inc.cluster_snapshot.length()) {
     cluster_snapshot = inc.cluster_snapshot;
@@ -2627,7 +2765,7 @@ void OSDMap::encode_classic(bufferlist& bl, uint64_t features) const
   encode(cbl, bl);
 
   // extended
-  __u16 ev = 10;
+  __u16 ev = 11;
   encode(ev, bl);
   encode(osd_addrs->hb_back_addrs, bl, features);
   encode(osd_info, bl);
@@ -2638,6 +2776,7 @@ void OSDMap::encode_classic(bufferlist& bl, uint64_t features) const
   encode(*osd_uuid, bl);
   encode(osd_xinfo, bl);
   encode(osd_addrs->hb_front_addrs, bl, features);
+  encode(pool_blacklist, bl, features);
 }
 
 void OSDMap::encode(bufferlist& bl, uint64_t features) const
@@ -2754,7 +2893,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
   {
     // NOTE: any new encoding dependencies must be reflected by
     // SIGNIFICANT_FEATURES
-    uint8_t target_v = 7;
+    uint8_t target_v = 8;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       target_v = 1;
     } else if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
@@ -2803,6 +2942,12 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
     }
     if (target_v >= 6) {
       encode(removed_snaps_queue, bl);
+    }
+    if (target_v >= 8) {
+      map<string,mempool::osdmap::unordered_map<entity_addr_t,utime_t>> pool_blacklist_map;
+      for (const auto &pool : pool_blacklist)
+	pool_blacklist_map.insert(make_pair(pool.first, pool.second));
+      encode(pool_blacklist_map, bl, features);
     }
     ENCODE_FINISH(bl); // osd-only data
   }
@@ -2949,6 +3094,9 @@ void OSDMap::decode_classic(bufferlist::const_iterator& p)
     decode(osd_addrs->hb_front_addrs, p);
   else
     osd_addrs->hb_front_addrs.resize(osd_addrs->hb_back_addrs.size());
+
+  if (ev >= 11)
+    decode(pool_blacklist, p);
 
   osd_primary_affinity.reset();
 
@@ -3100,6 +3248,9 @@ void OSDMap::decode(bufferlist::const_iterator& bl)
     }
     if (struct_v >= 6) {
       decode(removed_snaps_queue, bl);
+    }
+    if (struct_v >= 8) {
+      decode(pool_blacklist, bl);
     }
     DECODE_FINISH(bl); // osd-only data
   }
@@ -3290,6 +3441,14 @@ void OSDMap::dump(Formatter *f) const
     stringstream ss;
     ss << addr.first;
     f->dump_stream(ss.str().c_str()) << addr.second;
+  }
+  f->close_section();
+  f->open_object_section("pool_blacklist");
+  for (const auto &pool : pool_blacklist) {
+    stringstream ss;
+    ss << pool.first;
+    for (const auto &addr : pool.second)
+      f->dump_stream(ss.str().c_str()) << addr.first << addr.second;
   }
   f->close_section();
 
@@ -3501,6 +3660,13 @@ void OSDMap::print(ostream& out) const
 
   for (const auto &addr : blacklist)
     out << "blacklist " << addr.first << " expires " << addr.second << "\n";
+
+  for (const auto &pool : pool_blacklist) {
+    out << "pool_blacklist " << pool.first << "\n";
+    for (const auto &addr : pool.second)
+      out << " addr " << addr.first << " expires " << addr.second << "\n";
+  }
+
 }
 
 class OSDTreePlainDumper : public CrushTreeDumper::Dumper<TextTable> {

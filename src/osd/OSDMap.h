@@ -390,6 +390,10 @@ public:
 
     mempool::osdmap::map<entity_addr_t,utime_t> new_blacklist;
     mempool::osdmap::vector<entity_addr_t> old_blacklist;
+
+    mempool::osdmap::map<string,mempool::osdmap::unordered_map<entity_addr_t,utime_t>> new_pool_blacklist;
+    mempool::osdmap::map<string,mempool::osdmap::set<entity_addr_t>> old_pool_blacklist;
+
     mempool::osdmap::map<int32_t, entity_addrvec_t> new_hb_back_up;
     mempool::osdmap::map<int32_t, entity_addrvec_t> new_hb_front_up;
 
@@ -559,6 +563,7 @@ private:
   mempool::osdmap::vector<osd_xinfo_t> osd_xinfo;
 
   mempool::osdmap::unordered_map<entity_addr_t,utime_t> blacklist;
+  mempool::osdmap::unordered_map<string,mempool::osdmap::unordered_map<entity_addr_t,utime_t>> pool_blacklist;
 
   /// queue of snaps to remove
   mempool::osdmap::map<int64_t, snap_interval_set_t> removed_snaps_queue;
@@ -664,8 +669,10 @@ public:
 
   bool is_blacklisted(const entity_addr_t& a) const;
   bool is_blacklisted(const entity_addrvec_t& a) const;
+  bool is_pool_blacklisted(string pool_name, const entity_addr_t& a) const;
   void get_blacklist(list<pair<entity_addr_t,utime_t > > *bl) const;
   void get_blacklist(std::set<entity_addr_t> *bl) const;
+  void get_pool_blacklist(map<string,set<entity_addr_t>> *bl) const;
 
   string get_cluster_snapshot() const {
     if (cluster_snapshot_epoch == epoch)

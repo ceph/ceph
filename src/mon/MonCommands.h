@@ -921,6 +921,15 @@ COMMAND("osd blacklist " \
 	"osd", "rw")
 COMMAND("osd blacklist ls", "show blacklisted clients", "osd", "r")
 COMMAND("osd blacklist clear", "clear all blacklisted clients", "osd", "rw")
+COMMAND("osd blacklist pool " \
+	"name=pool,type=CephPoolname " \
+	"name=blacklistop,type=CephChoices,strings=add|rm " \
+	"name=addr,type=CephEntityAddr " \
+	"name=expire,type=CephFloat,range=0.0,req=false", \
+	"<pool name> add (optionally until <expire> seconds from now) or remove <addr> from blacklist", \
+	"osd", "rw")
+COMMAND("osd blacklist pool ls", "show blacklisted pools for clients", "osd", "r")
+COMMAND("osd blacklist pool clear", "clear all blacklisted pools for clients", "osd", "rw")
 COMMAND("osd pool mksnap " \
 	"name=pool,type=CephPoolname " \
 	"name=snap,type=CephString", \

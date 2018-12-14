@@ -4399,6 +4399,25 @@ void OSDMonitor::tick()
     }
   }
 
+  // expire pool-blacklisted items?
+  for (const auto &pool : osdmap.pool_blacklist) {
+    for (const auto &addr : pool.second) {
+      if (addr.second < now) {
+        dout(10) << "expiring pool blacklist item " << pool.first
+                 << " addr " << addr.first << " expired " << addr.second << " < now " << now << dendl;
+        auto item = pending_inc.old_pool_blacklist.find(pool.first);
+        if (item != pending_inc.old_pool_blacklist.end()) {
+          item->second.insert(addr.first);
+        } else {
+          mempool::osdmap::set<entity_addr_t> addr_set;
+          addr_set.insert(addr.first);
+          pending_inc.old_pool_blacklist.insert(make_pair(pool.first, addr_set));
+        }
+        do_propose = true;
+      }
+    }
+  }
+
   if (try_prune_purged_snaps()) {
     do_propose = true;
   }
@@ -4980,6 +4999,35 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     }
     ss << "listed " << osdmap.blacklist.size() << " entries";
 
+  } else if (prefix == "osd blacklist pool ls") {
+    if (f)
+      f->open_array_section("pool_blacklist");
+
+    int64_t entries = 0;
+    for (const auto &pool : osdmap.pool_blacklist) {
+      for (const auto &addr : pool.second) {
+        entries++;
+        if (f) {
+          f->open_object_section("entry");
+          f->dump_stream("pool") << pool.first;
+          f->dump_stream("addr") << addr.first;
+          f->dump_stream("until") << addr.second;
+          f->close_section();
+        } else {
+          stringstream ss;
+          string s;
+          ss << pool.first << " " << addr.first << " " << addr.second;
+          getline(ss, s);
+          s += "\n";
+          rdata.append(s);
+        }
+      }
+    }
+    if (f) {
+      f->close_section();
+      f->flush(rdata);
+    }
+    ss << "listed " << entries << " entries";
   } else if (prefix == "osd pool ls") {
     string detail;
     cmd_getval(cct, cmdmap, "detail", detail);
@@ -11281,6 +11329,21 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
                                               get_last_committed() + 1));
     return true;
+  } else if (prefix == "osd blacklist pool clear") {
+    pending_inc.new_pool_blacklist.clear();
+    map<string,set<entity_addr_t>> pool_blacklist;
+    osdmap.get_pool_blacklist(&pool_blacklist);
+    for (const auto &pool : pool_blacklist) {
+      mempool::osdmap::set<entity_addr_t> addr_set;
+      for (const auto &addr : pool.second)
+        addr_set.insert(addr);
+      pending_inc.old_pool_blacklist.insert(make_pair(pool.first, addr_set));
+    }
+    ss << " removed all pool blacklist entries";
+    getline(ss, rs);
+    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+                                              get_last_committed() + 1));
+    return true;
   } else if (prefix == "osd blacklist") {
     string addrstr;
     cmd_getval(cct, cmdmap, "addr", addrstr);
@@ -11331,6 +11394,93 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	  return true;
 	}
 	ss << addr << " isn't blacklisted";
+	err = 0;
+	goto reply;
+      }
+    }
+  } else if (prefix == "osd blacklist pool") {
+    string pool_name, addrstr;
+    cmd_getval(g_ceph_context, cmdmap, "pool", pool_name);
+    cmd_getval(g_ceph_context, cmdmap, "addr", addrstr);
+
+    entity_addr_t addr;
+    if (osdmap.lookup_pg_pool_name(pool_name) == -ENOENT) {
+      ss << "can not find pool " << pool_name;
+      err = -ENOENT;
+      goto reply;
+    } else if (!addr.parse(addrstr.c_str(), 0)) {
+      ss << "unable to parse address " << addrstr;
+      err = -EINVAL;
+      goto reply;
+    } else {
+      string blacklistop;
+      cmd_getval(g_ceph_context, cmdmap, "blacklistop", blacklistop);
+      if (blacklistop == "add") {
+	utime_t expires = ceph_clock_now();
+	double d;
+	// default one hour
+	cmd_getval(g_ceph_context, cmdmap, "expire", d,
+          g_conf()->mon_osd_blacklist_default_expire);
+	expires += d;
+
+        auto pool_exist = pending_inc.new_pool_blacklist.find(pool_name);
+        if (pool_exist != pending_inc.new_pool_blacklist.end()) {
+          pool_exist->second[addr] = expires;
+        } else {
+          mempool::osdmap::unordered_map<entity_addr_t,utime_t> addr_expires;
+          addr_expires[addr] = expires;
+	  pending_inc.new_pool_blacklist[pool_name] = addr_expires;
+        }
+
+        {
+          // cancel any pending un-blacklisting request too
+          auto pool_exist = pending_inc.old_pool_blacklist.find(pool_name);
+          if (pool_exist != pending_inc.old_pool_blacklist.end()) {
+            pool_exist->second.erase(addr);
+            // remove this entry if there is no address associated with this pool
+            if (pool_exist->second.size() == 0)
+              pending_inc.old_pool_blacklist.erase(pool_name);
+          }
+        }
+
+	ss << "blacklisting " << pool_name << " address " << addr << " until " << expires << " (" << d << " sec)";
+	getline(ss, rs);
+	wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+						  get_last_committed() + 1));
+	return true;
+      } else if (blacklistop == "rm") {
+	if (osdmap.is_pool_blacklisted(pool_name, addr)) {
+          auto pool_exist = pending_inc.old_pool_blacklist.find(pool_name);
+          if (pool_exist != pending_inc.old_pool_blacklist.end()) {
+            pool_exist->second.insert(addr);
+          } else {
+            mempool::osdmap::set<entity_addr_t> addr_set;
+            addr_set.insert(addr);
+            pending_inc.old_pool_blacklist[pool_name] = addr_set;
+          }
+	  ss << "un-blacklisting " << pool_name << " addr "<< addr;
+	  getline(ss, rs);
+	  wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+						    get_last_committed() + 1));
+          return true;
+        }
+
+        auto pool_exist = pending_inc.new_pool_blacklist.find(pool_name);
+        if ( pool_exist != pending_inc.new_pool_blacklist.end()) {
+          auto addr_expire = pool_exist->second.find(addr);
+          if (addr_expire != pool_exist->second.end()) {
+            pool_exist->second.erase(addr);
+            if (pool_exist->second.empty())
+              pending_inc.new_pool_blacklist.erase(pool_name);
+	    ss << "un-blacklisting " << pool_name << " address "<< addr;
+	    getline(ss, rs);
+	    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+                                        get_last_committed() + 1));
+            return true;
+          }
+        }
+
+	ss << pool_name << " " << addr << " isn't blacklisted";
 	err = 0;
 	goto reply;
       }
