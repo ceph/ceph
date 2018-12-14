@@ -110,4 +110,11 @@ export class HealthComponent implements OnInit, OnDestroy {
       .getAllTypes()
       .map((categoryType) => categoryPgAmount[categoryType]);
   }
+
+  isClientReadWriteChartShowable() {
+    const readOps = this.healthData.client_perf.read_op_per_sec || 0;
+    const writeOps = this.healthData.client_perf.write_op_per_sec || 0;
+
+    return readOps + writeOps > 0;
+  }
 }
