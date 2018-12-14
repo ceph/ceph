@@ -2045,7 +2045,8 @@ public:
 		    std::function<int(BucketShard *)> call);
   int block_while_resharding(RGWRados::BucketShard *bs,
 			     string *new_bucket_id,
-			     const RGWBucketInfo& bucket_info);
+			     const RGWBucketInfo& bucket_info,
+                             optional_yield y);
 
   void bucket_index_guard_olh_op(RGWObjState& olh_state, librados::ObjectOperation& op);
   int olh_init_modification(const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& olh_obj, string *op_tag);

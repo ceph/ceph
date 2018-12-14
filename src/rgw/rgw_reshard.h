@@ -7,6 +7,8 @@
 #include <vector>
 #include <functional>
 
+#include <boost/intrusive/list.hpp>
+
 #include "include/rados/librados.hpp"
 #include "common/ceph_time.h"
 #include "cls/rgw/cls_rgw_types.h"
@@ -170,29 +172,29 @@ public:
   void stop_processor();
 };
 
-
 class RGWReshardWait {
-  RGWRados *store;
-  Mutex lock{"RGWReshardWait::lock"};
-  Cond cond;
+  const ceph::timespan duration;
+  ceph::mutex mutex = ceph::make_mutex("RGWReshardWait::lock");
+  ceph::condition_variable cond;
+
+  using Clock = ceph::coarse_real_clock;
+  struct Waiter : boost::intrusive::list_base_hook<> {
+    boost::asio::basic_waitable_timer<Clock> timer;
+    explicit Waiter(boost::asio::io_context& ioc) : timer(ioc) {}
+  };
+  boost::intrusive::list<Waiter> waiters;
 
   bool going_down{false};
 
-  int do_wait();
 public:
-  explicit RGWReshardWait(RGWRados *_store) : store(_store) {}
+  RGWReshardWait(ceph::timespan duration = std::chrono::seconds(5))
+    : duration(duration) {}
   ~RGWReshardWait() {
     ceph_assert(going_down);
   }
-  int block_while_resharding(RGWRados::BucketShard *bs,
-			     string *new_bucket_id,
-			     const RGWBucketInfo& bucket_info);
-
-  void stop() {
-    Mutex::Locker l(lock);
-    going_down = true;
-    cond.SignalAll();
-  }
+  int wait(optional_yield y);
+  // unblock any threads waiting on reshard
+  void stop();
 };
 
 #endif
