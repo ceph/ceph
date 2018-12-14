@@ -87,7 +87,7 @@ class OSDPerfQuery(MgrModule):
         if cmd['prefix'] == "osd perf query add":
             if cmd['query'] == 'rbd_image_id':
                 query = self.RBD_IMAGE_ID_QUERY
-            elif cmd['query'] == 'rbd_image_id':
+            elif cmd['query'] == 'client_id':
                 query = self.CLIENT_ID_QUERY
             else:
                 query = self.ALL_SUBKEYS_QUERY
