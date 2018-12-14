@@ -3970,6 +3970,13 @@
           <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
+      <trans-unit id="0054f5460090d6dde385e8f099d598df5d28cf54" datatype="html">
+        <source>Working</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/dashboard/health/health.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
       <trans-unit id="a8059e31694578c1b0344a76a345357dd60e8f01" datatype="html">
         <source>Warning</source>
         <context-group purpose="location">
@@ -3979,13 +3986,6 @@
       </trans-unit>
       <trans-unit id="e5d8bb389c702588877f039d72178f219453a72d" datatype="html">
         <source>Unknown</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/ceph/dashboard/health/health.component.ts</context>
-          <context context-type="linenumber">1</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="0054f5460090d6dde385e8f099d598df5d28cf54" datatype="html">
-        <source>Working</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/dashboard/health/health.component.ts</context>
           <context context-type="linenumber">1</context>
@@ -4116,13 +4116,6 @@
         <source>erasure code profile</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/pool/pool-form/pool-form.component.ts</context>
-          <context context-type="linenumber">1</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="1d1174ec0fd282599b9feb00fc7a770e12ee7294" datatype="html">
-        <source>Placement Groups</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/ceph/pool/pool-list/pool-list.component.ts</context>
           <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>

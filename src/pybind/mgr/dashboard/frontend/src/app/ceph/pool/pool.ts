@@ -60,6 +60,7 @@ export class Pool {
   last_change: string;
   min_write_recency_for_promote: number;
   read_tier: number;
+  pg_status: string;
 
   constructor(name) {
     this.pool_name = name;

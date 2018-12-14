@@ -54,7 +54,7 @@ class Pool(RESTController):
 
         return [self._serialize_pool(pool, attrs) for pool in pools]
 
-    def list(self, attrs=None, stats=False):
+    def list(self, attrs=None, stats=True):
         return self._pool_list(attrs, stats)
 
     def _get(self, pool_name, attrs=None, stats=False):
