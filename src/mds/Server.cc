@@ -1230,13 +1230,6 @@ void Server::handle_client_reconnect(const MClientReconnect::const_ref &m)
     return;
   }
 
-  // opening snaprealm past parents needs to use snaptable
-  if (!mds->snapclient->is_synced()) {
-    dout(10) << " snaptable isn't synced, waiting" << dendl;
-    mds->snapclient->wait_for_sync(new C_MDS_RetryMessage(mds, m));
-    return;
-  }
-
   // notify client of success with an OPEN
   auto reply = MClientSession::create(CEPH_SESSION_OPEN);
   if (session->info.has_feature(CEPHFS_FEATURE_MIMIC))
