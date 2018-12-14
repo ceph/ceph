@@ -15,7 +15,7 @@ tasks:
         pool_profile: 'replicated'
         run_monitoring_list:
         - collectl
-        time: 300
+        time: 1800
         write_only: true
     cluster:
       user: 'ubuntu'

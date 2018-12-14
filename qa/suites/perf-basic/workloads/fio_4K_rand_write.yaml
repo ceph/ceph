@@ -8,7 +8,7 @@ tasks:
     benchmarks:
       librbdfio:
         op_size: [4096]
-        time: 300
+        time: 1800
         mode: ['randwrite']
         norandommap: True
         vol_size: 4096

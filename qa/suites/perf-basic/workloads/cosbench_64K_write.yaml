@@ -19,7 +19,7 @@ tasks:
         mode: [write]
         template: [default]
         rampup: 30
-        runtime: 300
+        runtime: 1800
         rampdown: 30
         containers: ["u(1,100)"]
         objects: ["u(1,100)"]
