@@ -35,10 +35,10 @@ class ESession : public LogEvent {
  public:
   ESession() : LogEvent(EVENT_SESSION), open(false) { }
   ESession(const entity_inst_t& inst, bool o, version_t v,
-	   client_metadata_t &&cm) :
+	   const client_metadata_t& cm) :
     LogEvent(EVENT_SESSION),
     client_inst(inst), open(o), cmapv(v), inotablev(0),
-    client_metadata(std::move(cm)) { }
+    client_metadata(cm) { }
   ESession(const entity_inst_t& inst, bool o, version_t v,
 	   const interval_set<inodeno_t>& i, version_t iv) :
     LogEvent(EVENT_SESSION),
