@@ -564,7 +564,6 @@ class PSSubscription {
     string path;
   } push;
 
-  class InitCR;
   InitCR *init_cr{nullptr};
 
   class InitBucketLifecycleCR : public RGWCoroutine {
