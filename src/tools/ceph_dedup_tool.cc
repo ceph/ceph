@@ -111,6 +111,7 @@ public:
     m_cond.Signal();
   }
   virtual void print_status(Formatter *f, ostream &out) = 0;
+  uint64_t count_objects(IoCtx &ioctx, ObjectCursor &begin, ObjectCursor &end);
   uint64_t get_examined_objects() { return examined_objects; }
   uint64_t get_total_bytes() { return total_bytes; }
   uint64_t get_total_objects() { return total_objects; }
@@ -132,6 +133,7 @@ public:
     chunk_size(chunk_size) { }
 
   void* entry() {
+    count_objects(io_ctx, begin, end);
     estimate_dedup_ratio();
     return NULL;
   }
@@ -144,6 +146,7 @@ public:
 class ChunkScrub: public EstimateThread
 {
   IoCtx chunk_io_ctx;
+  int fixed_objects = 0;
 
 public:
   ChunkScrub(IoCtx& io_ctx, int n, int m, ObjectCursor begin, ObjectCursor end, 
@@ -151,20 +154,52 @@ public:
     EstimateThread(io_ctx, n, m, begin, end, timeout), chunk_io_ctx(chunk_io_ctx)
     { }
   void* entry() {
+    count_objects(chunk_io_ctx, begin, end);
     chunk_scrub_common();
     return NULL;
   }
   void chunk_scrub_common();
+  int get_fixed_objects() { return fixed_objects; }
   void print_status(Formatter *f, ostream &out);
 };
 
 vector<std::unique_ptr<EstimateThread>> estimate_threads;
+
+uint64_t EstimateThread::count_objects(IoCtx &ioctx, ObjectCursor &begin, ObjectCursor &end) 
+{
+  ObjectCursor shard_start;
+  ObjectCursor shard_end;
+  uint64_t count = 0;
+
+  ioctx.object_list_slice(
+    begin,
+    end,
+    n,
+    m,
+    &shard_start,
+    &shard_end);
+
+  ObjectCursor c(shard_start);
+  while(c < shard_end)
+  {
+    std::vector<ObjectItem> result;
+    int r = ioctx.object_list(c, shard_end, 12, {}, &result, &c);
+    if (r < 0 ) {
+      cerr << "error object_list : " << cpp_strerror(r) << std::endl;
+      return 0;
+    }
+    count += result.size();
+    total_objects += result.size();
+  }
+  return count;
+}
 
 static void print_dedup_estimate(bool debug = false)
 {
   uint64_t total_size = 0;
   uint64_t dedup_size = 0;
   uint64_t examined_objects = 0;
+  uint64_t total_objects = 0;
   EstimateDedupRatio *ratio = NULL;
   for (auto &et : estimate_threads) {
     Mutex::Locker l(glock);
@@ -199,11 +234,13 @@ static void print_dedup_estimate(bool debug = false)
   for (auto &et : estimate_threads) {
     total_size += et->get_total_bytes();
     examined_objects += et->get_examined_objects();
+    total_objects += et->get_total_objects();
   }
 
-  cout << " result: " << total_size << " / " << dedup_size << " (total size / dedup size) " << std::endl;
-  cout << " dedup ratio: " << dedup_size/total_size << std::endl;
-  cout << " examined objects: " << examined_objects << std::endl;
+  cout << " result: " << total_size << " | " << dedup_size << " (total size | deduped size) " << std::endl;
+  cout << " Dedup ratio: " << (100 - (double)(dedup_size)/total_size*100) << " % " << std::endl;
+  cout << " Examined objects: " << examined_objects << std::endl;
+  cout << " Total objects: " << total_objects << std::endl;
 }
 
 static void handle_signal(int signum) 
@@ -293,7 +330,6 @@ void EstimateDedupRatio::estimate_dedup_ratio()
       }
       examined_objects++;
     }
-    total_objects++;
   }
 }
 
@@ -398,6 +434,7 @@ void ChunkScrub::chunk_scrub_common()
 	if (ret < 0) {
 	  continue;
 	}
+	fixed_objects++;
       }
       examined_objects++;
       m_cond.WaitInterval(m_lock,utime_t(0, COND_WAIT_INTERVAL));
@@ -408,7 +445,6 @@ void ChunkScrub::chunk_scrub_common()
 	cur_time = ceph_clock_now();
       }
     }
-    total_objects++;
   }
 }
 
@@ -420,6 +456,7 @@ void ChunkScrub::print_status(Formatter *f, ostream &out)
     f->open_object_section("Status");
     f->dump_string("Total object", stringify(total_objects));
     f->dump_string("Examined objectes", stringify(examined_objects));
+    f->dump_string("Fixed objectes", stringify(fixed_objects));
     f->close_section();
     f->flush(out);
     cout << std::endl;
@@ -440,6 +477,8 @@ int estimate_dedup_ratio(const std::map < std::string, std::string > &opts,
   int ret;
   std::map<std::string, std::string>::const_iterator i;
   bool debug = false;
+  ObjectCursor begin;
+  ObjectCursor end;
 
   i = opts.find("pool");
   if (i != opts.end()) {
@@ -519,9 +558,9 @@ int estimate_dedup_ratio(const std::map < std::string, std::string > &opts,
   }
 
   glock.Lock();
+  begin = io_ctx.object_list_begin();
+  end = io_ctx.object_list_end();
   for (unsigned i = 0; i < max_thread; i++) {
-    ObjectCursor begin = io_ctx.object_list_begin();
-    ObjectCursor end = io_ctx.object_list_end();
     std::unique_ptr<EstimateThread> ptr (new EstimateDedupRatio(io_ctx, i, max_thread, begin, end,
 							    chunk_algo, fp_algo, chunk_size, 
 							    report_period));
@@ -544,14 +583,18 @@ static void print_chunk_scrub()
 {
   uint64_t total_objects = 0;
   uint64_t examined_objects = 0;
+  int fixed_objects = 0;
 
   for (auto &et : estimate_threads) {
     total_objects += et->get_total_objects();
     examined_objects += et->get_examined_objects();
+    ChunkScrub *ptr = static_cast<ChunkScrub*>(et.get());
+    fixed_objects += ptr->get_fixed_objects();
   }
 
   cout << " Total object : " << total_objects << std::endl;
   cout << " Examined object : " << examined_objects << std::endl;
+  cout << " Fixed object : " << fixed_objects << std::endl;
 }
 
 int chunk_scrub_common(const std::map < std::string, std::string > &opts,
@@ -565,6 +608,8 @@ int chunk_scrub_common(const std::map < std::string, std::string > &opts,
   unsigned max_thread = default_max_thread;
   std::map<std::string, std::string>::const_iterator i;
   uint32_t report_period = default_report_period;
+  ObjectCursor begin;
+  ObjectCursor end;
 
   i = opts.find("pool");
   if (i != opts.end()) {
@@ -690,9 +735,9 @@ int chunk_scrub_common(const std::map < std::string, std::string > &opts,
   }
   
   glock.Lock();
+  begin = io_ctx.object_list_begin();
+  end = io_ctx.object_list_end();
   for (unsigned i = 0; i < max_thread; i++) {
-    ObjectCursor begin = io_ctx.object_list_begin();
-    ObjectCursor end = io_ctx.object_list_end();
     std::unique_ptr<EstimateThread> ptr (new ChunkScrub(io_ctx, i, max_thread, begin, end, chunk_io_ctx,
 							report_period));
     ptr->create("estimate_thread");
