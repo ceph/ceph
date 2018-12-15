@@ -3278,11 +3278,11 @@ int Objecter::calc_op_budget(const vector<OSDOp>& ops)
     if (i->op.op & CEPH_OSD_OP_MODE_WR) {
       op_budget += i->indata.length();
     } else if (ceph_osd_op_mode_read(i->op.op)) {
-      if (ceph_osd_op_type_data(i->op.op)) {
-	if ((int64_t)i->op.extent.length > 0)
-	  op_budget += (int64_t)i->op.extent.length;
+      if (ceph_osd_op_uses_extent(i->op.op)) {
+        if ((int64_t)i->op.extent.length > 0)
+          op_budget += (int64_t)i->op.extent.length;
       } else if (ceph_osd_op_type_attr(i->op.op)) {
-	op_budget += i->op.xattr.name_len + i->op.xattr.value_len;
+        op_budget += i->op.xattr.name_len + i->op.xattr.value_len;
       }
     }
   }
