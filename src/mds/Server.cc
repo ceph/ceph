@@ -354,8 +354,7 @@ void Server::handle_client_session(MClientSession *m)
       m->put();
       return;
     }
-    assert(session->is_closed() ||
-	   session->is_closing());
+    assert(session->is_closed() || session->is_closing());
 
     if (mds->is_stopping()) {
       dout(10) << "mds is stopping, dropping open req" << dendl;
@@ -368,50 +367,86 @@ void Server::handle_client_session(MClientSession *m)
           return osd_map.is_blacklisted(session->info.inst.addr);
         });
 
-    if (blacklisted) {
-      dout(10) << "rejecting blacklisted client " << session->info.inst.addr << dendl;
-      mds->send_message_client(new MClientSession(CEPH_SESSION_REJECT), session);
-      m->put();
-      return;
-    }
+    {
+      auto& addr = session->info.inst.addr;
+      session->set_client_metadata(m->client_meta);
+      auto& client_metadata = session->info.client_metadata;
 
-    session->set_client_metadata(m->client_meta);
-    dout(20) << __func__ << " CEPH_SESSION_REQUEST_OPEN "
-      << session->info.client_metadata.size() << " metadata entries:" << dendl;
-    for (map<string, string>::iterator i = session->info.client_metadata.begin();
-        i != session->info.client_metadata.end(); ++i) {
-      dout(20) << "  " << i->first << ": " << i->second << dendl;
-    }
+      auto log_session_status = [this, m, session](boost::string_view status, boost::string_view err) {
+        auto now = ceph_clock_now();
+        auto throttle_elapsed = m->get_recv_complete_stamp() - m->get_throttle_stamp();
+        auto elapsed = now - m->get_recv_stamp();
+        std::stringstream ss;
+        ss << "New client session:"
+             << " addr=\"" <<  session->info.inst.addr << "\""
+             << ",elapsed=" << elapsed
+             << ",throttled=" << throttle_elapsed
+             << ",status=\"" << status << "\"";
+        if (!err.empty()) {
+          ss << ",error=\"" << err << "\"";
+        }
+        const auto& metadata = session->info.client_metadata;
+        auto it = metadata.find("root");
+        if (it != metadata.end()) {
+          ss << ",root=\"" << it->second << "\"";
+        }
+        dout(2) << ss.str() << dendl;
+      };
 
-    // Special case for the 'root' metadata path; validate that the claimed
-    // root is actually within the caps of the session
-    if (session->info.client_metadata.count("root")) {
-      const auto claimed_root = session->info.client_metadata.at("root");
-      // claimed_root has a leading "/" which we strip before passing
-      // into caps check
-      if (claimed_root.empty() || claimed_root[0] != '/' ||
-          !session->auth_caps.path_capable(claimed_root.substr(1))) {
-        derr << __func__ << " forbidden path claimed as mount root: "
-             << claimed_root << " by " << m->get_source() << dendl;
-        // Tell the client we're rejecting their open
+      if (blacklisted) {
+        dout(10) << "rejecting blacklisted client " << addr << dendl;
+        log_session_status("REJECTED", "blacklisted");
         mds->send_message_client(new MClientSession(CEPH_SESSION_REJECT), session);
-        mds->clog->warn() << "client session with invalid root '" <<
-          claimed_root << "' denied (" << session->info.inst << ")";
-        session->clear();
-        // Drop out; don't record this session in SessionMap or journal it.
-        break;
+        m->put();
+        return;
       }
+
+      dout(20) << __func__ << " CEPH_SESSION_REQUEST_OPEN "
+        << session->info.client_metadata.size() << " metadata entries:" << dendl;
+      for (map<string, string>::iterator i = session->info.client_metadata.begin();
+          i != session->info.client_metadata.end(); ++i) {
+        dout(20) << "  " << i->first << ": " << i->second << dendl;
+      }
+
+      // Special case for the 'root' metadata path; validate that the claimed
+      // root is actually within the caps of the session
+      if (session->info.client_metadata.count("root")) {
+        const auto claimed_root = session->info.client_metadata.at("root");
+        // claimed_root has a leading "/" which we strip before passing
+        // into caps check
+        if (claimed_root.empty() || claimed_root[0] != '/' ||
+            !session->auth_caps.path_capable(claimed_root.substr(1))) {
+          derr << __func__ << " forbidden path claimed as mount root: "
+               << claimed_root << " by " << m->get_source() << dendl;
+          // Tell the client we're rejecting their open
+          log_session_status("REJECTED", "invalid root");
+          mds->send_message_client(new MClientSession(CEPH_SESSION_REJECT), session);
+          mds->clog->warn() << "client session with invalid root '" <<
+            claimed_root << "' denied (" << session->info.inst << ")";
+          session->clear();
+          // Drop out; don't record this session in SessionMap or journal it.
+          break;
+        }
+      }
+
+      if (session->is_closed())
+        mds->sessionmap.add_session(session);
+
+      pv = mds->sessionmap.mark_projected(session);
+      sseq = mds->sessionmap.set_state(session, Session::STATE_OPENING);
+      mds->sessionmap.touch_session(session);
+      auto fin = new FunctionContext([log_session_status = std::move(log_session_status)](int r){
+        if (r == 0) {
+          log_session_status("ACCEPTED", "");
+        } else {
+          std::stringstream ss;
+          ss << "(internal) r = " << r;
+          log_session_status("REJECTED", ss.str());
+        }
+      });
+      mdlog->start_submit_entry(new ESession(m->get_source_inst(), true, pv, client_metadata),
+				new C_MDS_session_finish(this, session, sseq, true, pv, fin));
     }
-
-    if (session->is_closed())
-      mds->sessionmap.add_session(session);
-
-    pv = mds->sessionmap.mark_projected(session);
-    sseq = mds->sessionmap.set_state(session, Session::STATE_OPENING);
-    mds->sessionmap.touch_session(session);
-    mdlog->start_submit_entry(new ESession(m->get_source_inst(), true, pv, m->client_meta),
-			      new C_MDS_session_finish(this, session, sseq, true, pv));
-    mdlog->flush();
     break;
 
   case CEPH_SESSION_REQUEST_RENEWCAPS:
