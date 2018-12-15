@@ -144,7 +144,13 @@ public:
     }
   }
   void decode(bufferlist::const_iterator &p);
-  void set_client_metadata(const client_metadata_t& meta);
+  template<typename T>
+  void set_client_metadata(T&& meta)
+  {
+    info.client_metadata = std::forward<T>(meta);
+    _update_human_name();
+  }
+
   const std::string& get_human_name() const {return human_name;}
 
   // Ephemeral state for tracking progress of capability recalls
