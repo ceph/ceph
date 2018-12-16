@@ -121,9 +121,9 @@ struct aio_queue_t {
 #elif defined(HAVE_POSIXAIO)
     ctx = kqueue();
     if (ctx < 0)
-      return (-errno);
+      return -errno;
     else
-      return (0);
+      return 0;
 #endif
   }
   void shutdown() {
