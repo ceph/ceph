@@ -4,6 +4,7 @@
 #ifndef DYNAMIC_PERF_STATS_H
 #define DYNAMIC_PERF_STATS_H
 
+#include "include/random.h"
 #include "messages/MOSDOp.h"
 #include "mgr/OSDPerfMetricTypes.h"
 #include "osd/OSD.h"
@@ -204,30 +205,38 @@ public:
           continue;
         }
 
+        // Weighted Random Sampling (Algorithm A-Chao):
+        // Select the first [0, max_count) samples, randomly replace
+        // with samples from [max_count, end) using weighted
+        // probability, and return [0, max_count) as the result.
+
+        ceph_assert(limit.max_count < counters.size());
         typedef std::map<OSDPerfMetricKey, PerformanceCounters>::iterator
             Iterator;
         std::vector<Iterator> counter_iterators;
-        counter_iterators.reserve(counters.size());
-        for (Iterator it_counters = counters.begin();
-             it_counters != counters.end(); it_counters++) {
-          counter_iterators.push_back(it_counters);
-        }
-        std::sort(counter_iterators.begin(), counter_iterators.end(),
-                  [index](const Iterator &a, const Iterator &b) -> bool {
-                    return a->second[index].first > b->second[index].first;
-                  });
+        counter_iterators.reserve(limit.max_count);
 
-        uint64_t count = 0;
-        for (auto it_counters : counter_iterators) {
-          if (count == limit.max_count) {
-            break;
+        Iterator it_counters = counters.begin();
+        uint64_t wsum = 0;
+        for (size_t i = 0; i < limit.max_count; i++) {
+          wsum += it_counters->second[index].first;
+          counter_iterators.push_back(it_counters++);
+        }
+        for (; it_counters != counters.end(); it_counters++) {
+          wsum += it_counters->second[index].first;
+          if (ceph::util::generate_random_number(0, wsum) <=
+              it_counters->second[index].first) {
+            auto i = ceph::util::generate_random_number(0, limit.max_count - 1);
+            counter_iterators[i] = it_counters;
           }
+        }
+
+        for (auto it_counters : counter_iterators) {
           auto &bl =
               report.group_packed_performance_counters[it_counters->first];
           if (bl.length() == 0) {
             query.pack_counters(it_counters->second, &bl);
           }
-          count++;
         }
       }
     }
