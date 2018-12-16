@@ -131,6 +131,13 @@ wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${new_name} 'up+replaying'
 rename_image ${CLUSTER2} ${POOL} ${new_name} ${image}
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 
+testlog "TEST: test trash move restore"
+image_id=$(get_image_id ${CLUSTER2} ${POOL} ${image})
+trash_move ${CLUSTER2} ${POOL} ${image}
+wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted'
+trash_restore ${CLUSTER2} ${POOL} ${image_id}
+wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
+
 testlog "TEST: failover and failback"
 start_mirrors ${CLUSTER2}
 
