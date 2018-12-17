@@ -344,6 +344,12 @@ class ServiceDescription(object):
         # the URL.
         self.service_url = None
 
+        # Service status: -1 error, 0 stopped, 1 running
+        self.status = None
+
+        # Service status description when status == -1.
+        self.status_desc = None
+
 
 class DriveGroupSpec(object):
     """
