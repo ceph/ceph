@@ -7521,12 +7521,6 @@ void OSD::handle_osd_map(MOSDMap *m)
   }
 
   ceph_assert(osd_lock.is_locked());
-  // Keep a ref in the list until we get the newly received map written
-  // onto disk. This is important because as long as the refs are alive,
-  // the OSDMaps will be pinned in the cache and we won't try to read it
-  // off of disk. Otherwise these maps will probably not stay in the cache,
-  // and reading those OSDMaps before they are actually written can result
-  // in a crash. 
   map<epoch_t,OSDMapRef> added_maps;
   map<epoch_t,bufferlist> added_maps_bl;
   if (m->fsid != monc->get_fsid()) {
