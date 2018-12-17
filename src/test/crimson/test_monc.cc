@@ -23,7 +23,7 @@ static seastar::future<> test_monc()
     conf->cluster = cluster;
     return conf.parse_config_files(conf_file_list);
   }).then([] {
-    return seastar::do_with(ceph::net::SocketMessenger{entity_name_t::OSD(0), "monc"},
+    return seastar::do_with(ceph::net::SocketMessenger{entity_name_t::OSD(0), "monc", 0},
                             [](ceph::net::Messenger& msgr) {
       auto& conf = ceph::common::local_conf();
       if (conf->ms_crc_data) {
