@@ -21,6 +21,7 @@
 #include "common/Mutex.h"
 #include "Python.h"
 #include "Gil.h"
+#include "mon/MgrMap.h"
 
 
 class MonClient;
@@ -41,15 +42,6 @@ public:
 
   // Call the ActivePyModule of this name to handle the command
   std::string module_name;
-};
-
-
-/**
- * An option declared by the python module in its configuration schema
- */
-class ModuleOption {
-  public:
-  std::string name;
 };
 
 class PyModule
@@ -90,7 +82,7 @@ private:
   std::vector<ModuleCommand> commands;
 
   int load_options();
-  std::map<std::string, ModuleOption> options;
+  std::map<std::string, MgrMap::ModuleOption> options;
 
 public:
   static std::string config_prefix;
@@ -107,6 +99,9 @@ public:
   ~PyModule();
 
   bool is_option(const std::string &option_name);
+  const std::map<std::string,MgrMap::ModuleOption>& get_options() const {
+    return options;
+  }
 
   int load(PyThreadState *pMainThreadState);
 #if PY_MAJOR_VERSION >= 3
