@@ -588,7 +588,7 @@ public:
     std::lock_guard<std::mutex> lock(o->omap_mutex);
     return it != o->omap.end();
   }
-  int next(bool validate=true) override {
+  int next() override {
     std::lock_guard<std::mutex> lock(o->omap_mutex);
     ++it;
     return 0;

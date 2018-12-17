@@ -534,7 +534,7 @@ int do_trim_pg_log(ObjectStore *store, const coll_t &coll,
     ObjectMap::ObjectMapIterator p = store->get_omap_iterator(ch, oid);
     if (!p)
       break;
-    for (p->seek_to_first(); p->valid(); p->next(false)) {
+    for (p->seek_to_first(); p->valid(); p->next()) {
       if (p->key()[0] == '_')
 	continue;
       if (p->key() == "can_rollback_to")
