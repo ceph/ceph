@@ -1,5 +1,4 @@
 from __future__ import print_function
-import json
 from ceph_volume.util import disk, prepare
 from ceph_volume.api import lvm
 from . import validators
