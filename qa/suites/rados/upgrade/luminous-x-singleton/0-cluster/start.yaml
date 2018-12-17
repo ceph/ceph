@@ -11,6 +11,9 @@ overrides:
     conf:
       global:
         ms dump corrupt message level: 0
+      mds:
+        debug ms: 1
+        debug mds: 20
 roles:
 - - mon.a
   - mon.c
