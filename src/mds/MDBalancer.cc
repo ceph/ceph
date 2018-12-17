@@ -813,7 +813,7 @@ int MDBalancer::mantle_prep_rebalance()
   /* execute the balancer */
   Mantle mantle;
   int ret = mantle.balance(bal_code, mds->get_nodeid(), metrics, state.targets);
-  dout(2) << " mantle decided that new targets=" << state.targets << dendl;
+  dout(5) << " mantle decided that new targets=" << state.targets << dendl;
 
   /* mantle doesn't know about cluster size, so check target len here */
   if ((int) state.targets.size() != cluster_size)
