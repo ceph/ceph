@@ -25,7 +25,7 @@ struct Option {
     TYPE_SECS = 9,
   };
 
-  const char *type_to_str(type_t t) const {
+  static const char *type_to_c_type_str(type_t t) {
     switch (t) {
     case TYPE_UINT: return "uint64_t";
     case TYPE_INT: return "int64_t";
@@ -39,6 +39,54 @@ struct Option {
     case TYPE_SECS: return "secs";
     default: return "unknown";
     }
+  }
+  static const char *type_to_str(type_t t) {
+    switch (t) {
+    case TYPE_UINT: return "uint";
+    case TYPE_INT: return "int";
+    case TYPE_STR: return "str";
+    case TYPE_FLOAT: return "float";
+    case TYPE_BOOL: return "bool";
+    case TYPE_ADDR: return "addr";
+    case TYPE_ADDRVEC: return "addrvec";
+    case TYPE_UUID: return "uuid";
+    case TYPE_SIZE: return "size";
+    case TYPE_SECS: return "secs";
+    default: return "unknown";
+    }
+  }
+  static int str_to_type(const std::string& s) {
+    if (s == "uint") {
+      return TYPE_UINT;
+    }
+    if (s == "int") {
+      return TYPE_INT;
+    }
+    if (s == "str") {
+      return TYPE_STR;
+    }
+    if (s == "float") {
+      return TYPE_FLOAT;
+    }
+    if (s == "bool") {
+      return TYPE_BOOL;
+    }
+    if (s == "addr") {
+      return TYPE_ADDR;
+    }
+    if (s == "addrvec") {
+      return TYPE_ADDRVEC;
+    }
+    if (s == "uuid") {
+      return TYPE_UUID;
+    }
+    if (s == "size") {
+      return TYPE_SIZE;
+    }
+    if (s == "secs") {
+      return TYPE_SECS;
+    }
+    return -1;
   }
 
   /**
