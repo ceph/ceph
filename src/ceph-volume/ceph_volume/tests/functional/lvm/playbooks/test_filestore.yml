@@ -111,7 +111,7 @@
 
     - name: stop ceph-osd@1 daemon
       service:
-        name: ceph-osd@0
+        name: ceph-osd@1
         state: stopped
 
     - name: activate all to start the previously prepared osd.0
