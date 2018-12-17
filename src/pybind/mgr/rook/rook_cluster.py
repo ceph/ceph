@@ -7,7 +7,7 @@ call methods.
 This module is runnable outside of ceph-mgr, useful for testing.
 """
 
-import urlparse
+from six.moves.urllib.parse import urljoin  # pylint: disable=import-error
 import logging
 import json
 
@@ -19,7 +19,7 @@ except ImportError:
     ApiException = None
 
 ROOK_SYSTEM_NS = "rook-ceph-system"
-ROOK_API_VERSION = "v1alpha1"
+ROOK_API_VERSION = "v1"
 ROOK_API_NAME = "ceph.rook.io/%s" % ROOK_API_VERSION
 
 log = logging.getLogger('rook')
@@ -58,7 +58,7 @@ class RookCluster(object):
 
         cluster_crd = {
             "apiVersion": ROOK_API_NAME,
-            "kind": "Cluster",
+            "kind": "CephCluster",
             "metadata": {
                 "name": self.cluster_name,
                 "namespace": self.cluster_name
@@ -69,12 +69,12 @@ class RookCluster(object):
             }
         }
 
-        self.rook_api_post("clusters", body=cluster_crd)
+        self.rook_api_post("cephclusters", body=cluster_crd)
 
     def rook_url(self, path):
         prefix = "/apis/ceph.rook.io/%s/namespaces/%s/" % (
             ROOK_API_VERSION, self.rook_namespace)
-        return urlparse.urljoin(prefix, path)
+        return urljoin(prefix, path)
 
     def rook_api_call(self, verb, path, **kwargs):
         full_path = self.rook_url(path)
@@ -91,6 +91,9 @@ class RookCluster(object):
 
     def rook_api_get(self, path, **kwargs):
         return self.rook_api_call("GET", path, **kwargs)
+
+    def rook_api_delete(self, path):
+        return self.rook_api_call("DELETE", path)
 
     def rook_api_patch(self, path, **kwargs):
         return self.rook_api_call("PATCH", path,
@@ -115,7 +118,7 @@ class RookCluster(object):
                 ROOK_SYSTEM_NS,
                 label_selector=label_selector)
         except ApiException as e:
-            log.warn("Failed to fetch device metadata: {0}".format(e))
+            log.warning("Failed to fetch device metadata: {0}".format(e))
             raise
 
         nodename_to_devices = {}
@@ -125,7 +128,7 @@ class RookCluster(object):
 
         return nodename_to_devices
 
-    def describe_pods(self, service_type, service_id):
+    def describe_pods(self, service_type, service_id, nodename):
         # Go query the k8s API about deployment, containers related to this
         # filesystem
 
@@ -143,26 +146,32 @@ class RookCluster(object):
         # Label filter is rook_cluster=<cluster name>
         #                 rook_file_system=<self.fs_name>
 
-        label_filter = "rook_cluster={0},app=rook-ceph-{1}".format(
-            self.cluster_name, service_type)
-        if service_type == "mds":
-            label_filter += ",rook_file_system={0}".format(service_id)
-        elif service_type == "osd":
-            # Label added in https://github.com/rook/rook/pull/1698
-            label_filter += ",ceph-osd-id={0}".format(service_id)
-        elif service_type == "mon":
-            # label like mon=rook-ceph-mon0
-            label_filter += ",mon={0}".format(service_id)
-        elif service_type == "mgr":
-            # TODO: get Rook to label mgr pods
-            pass
-        elif service_type == "rgw":
-            # TODO: rgw
-            pass
+        label_filter = "rook_cluster={0}".format(self.cluster_name)
+        if service_type != None:
+            label_filter += ",app=rook-ceph-{0}".format(service_type)
+            if service_id != None:
+                if service_type == "mds":
+                    label_filter += ",rook_file_system={0}".format(service_id)
+                elif service_type == "osd":
+                    # Label added in https://github.com/rook/rook/pull/1698
+                    label_filter += ",ceph-osd-id={0}".format(service_id)
+                elif service_type == "mon":
+                    # label like mon=rook-ceph-mon0
+                    label_filter += ",mon={0}".format(service_id)
+                elif service_type == "mgr":
+                    label_filter += ",mgr={0}".format(service_id)
+                elif service_type == "rgw":
+                    # TODO: rgw
+                    pass
+
+        field_filter = ""
+        if nodename != None:
+            field_filter = "spec.nodeName={0}".format(nodename);
 
         pods = self.k8s.list_namespaced_pod(
             self.rook_namespace,
-            label_selector=label_filter)
+            label_selector=label_filter,
+            field_selector=field_filter)
 
         # import json
         # print json.dumps(pods.items[0])
@@ -190,14 +199,13 @@ class RookCluster(object):
 
         rook_fs = {
             "apiVersion": ROOK_API_NAME,
-            "kind": "Filesystem",
+            "kind": "CephFilesystem",
             "metadata": {
                 "name": spec.name,
                 "namespace": self.rook_namespace
             },
             "spec": {
-                "preservePoolsOnRemove": True,
-                "skipPoolCreation": True,
+                "onlyManageDaemons": True,
                 "metadataServer": {
                     "activeCount": spec.max_size,
                     "activeStandby": True
@@ -208,19 +216,81 @@ class RookCluster(object):
 
         try:
             self.rook_api_post(
-                "filesystems/",
+                "cephfilesystems/",
                 body=rook_fs
             )
         except ApiException as e:
             if e.status == 409:
-                log.info("Filesystem '{0}' already exists".format(spec.name))
+                log.info("CephFilesystem '{0}' already exists".format(spec.name))
+                # Idempotent, succeed.
+            else:
+                raise
+
+    def add_objectstore(self, spec):
+  
+        rook_os = {
+            "apiVersion": ROOK_API_NAME,
+            "kind": "CephObjectStore",
+            "metadata": {
+                "name": spec.name,
+                "namespace": self.rook_namespace
+            },
+            "spec": {
+                "metaDataPool": {
+                    "failureDomain": "host",
+                    "replicated": {
+                        "size": 1
+                    }
+                },
+                "dataPool": {
+                    "failureDomain": "osd",
+                    "replicated": {
+                        "size": 1
+                    }
+                },
+                "gateway": {
+                    "type": "s3",
+                    "port": 80,
+                    "instances": 1,
+                    "allNodes": False
+                }
+            }
+        }
+        
+        try:
+            self.rook_api_post(
+                "cephobjectstores/",
+                body=rook_os
+            )
+        except ApiException as e:
+            if e.status == 409:
+                log.info("CephObjectStore '{0}' already exists".format(spec.name))
+                # Idempotent, succeed.                                                                                                                                                                     
+            else:
+                raise
+
+    def rm_service(self, service_type, service_id):
+        assert service_type in ("mds", "rgw")
+
+        if service_type == "mds":
+            rooktype = "cephfilesystems"
+        elif service_type == "rgw":
+            rooktype = "cephobjectstores"
+
+        objpath = "{0}/{1}".format(rooktype, service_id)
+
+        try:
+            self.rook_api_delete(objpath)
+        except ApiException as e:
+            if e.status == 404:
+                log.info("{0} service '{1}' does not exist".format(service_type, service_id))
                 # Idempotent, succeed.
             else:
                 raise
 
     def can_create_osd(self):
         current_cluster = self.rook_api_get(
-            "clusters/{0}".format(self.cluster_name))
+            "cephclusters/{0}".format(self.cluster_name))
         use_all_nodes = current_cluster['spec'].get('useAllNodes', False)
 
         # If useAllNodes is set, then Rook will not be paying attention
@@ -258,7 +328,7 @@ class RookCluster(object):
         #           storeType: bluestore
 
         current_cluster = self.rook_api_get(
-            "clusters/{0}".format(self.cluster_name))
+            "cephclusters/{0}".format(self.cluster_name))
 
         patch = []
 
@@ -311,10 +381,10 @@ class RookCluster(object):
 
         try:
             self.rook_api_patch(
-                "clusters/{0}".format(self.cluster_name),
+                "cephclusters/{0}".format(self.cluster_name),
                 body=patch)
         except ApiException as e:
-            log.exception("API exception: {0}".format(e.message))
+            log.exception("API exception: {0}".format(e))
             raise ApplyException(
                 "Failed to create OSD entries in Cluster CRD: {0}".format(
-                    e.message))
+                    e))

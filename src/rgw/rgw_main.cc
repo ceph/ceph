@@ -1,5 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
 #include "global/signal_handler.h"
@@ -25,9 +26,9 @@
 #include "rgw_rest_bucket.h"
 #include "rgw_rest_metadata.h"
 #include "rgw_rest_log.h"
-#include "rgw_rest_opstate.h"
 #include "rgw_rest_config.h"
 #include "rgw_rest_realm.h"
+#include "rgw_rest_sts.h"
 #include "rgw_swift_auth.h"
 #include "rgw_log.h"
 #include "rgw_tools.h"
@@ -39,6 +40,8 @@
 #if defined(WITH_RADOSGW_BEAST_FRONTEND)
 #include "rgw_asio_frontend.h"
 #endif /* WITH_RADOSGW_BEAST_FRONTEND */
+
+#include "services/svc_zone.h"
 
 #ifdef HAVE_SYS_PRCTL_H
 #include <sys/prctl.h>
@@ -176,7 +179,8 @@ int main(int argc, const char **argv)
   /* alternative default for module */
   map<string,string> defaults = {
     { "debug_rgw", "1/5" },
-    { "keyring", "$rgw_data/keyring" }
+    { "keyring", "$rgw_data/keyring" },
+    { "objecter_inflight_ops", "24576" }
   };
 
   vector<const char*> args;
@@ -207,16 +211,16 @@ int main(int argc, const char **argv)
   for (list<string>::iterator iter = frontends.begin(); iter != frontends.end(); ++iter) {
     string& f = *iter;
 
-    if (f.find("civetweb") != string::npos) {
-      // If civetweb is configured as a frontend, prevent global_init() from
+    if (f.find("civetweb") != string::npos || f.find("beast") != string::npos) {
+      // If civetweb or beast is configured as a frontend, prevent global_init() from
       // dropping permissions by setting the appropriate flag.
       flags |= CINIT_FLAG_DEFER_DROP_PRIVILEGES;
       if (f.find("port") != string::npos) {
         // check for the most common ws problems
         if ((f.find("port=") == string::npos) ||
             (f.find("port= ") != string::npos)) {
-          derr << "WARNING: civetweb frontend config found unexpected spacing around 'port' "
-               << "(ensure civetweb port parameter has the form 'port=80' with no spaces "
+          derr << "WARNING: radosgw frontend config found unexpected spacing around 'port' "
+               << "(ensure frontend port parameter has the form 'port=80' with no spaces "
                << "before or after '=')" << dendl;
         }
       }
@@ -273,9 +277,6 @@ int main(int argc, const char **argv)
   init_timer.add_event_after(g_conf()->rgw_init_timeout, new C_InitTimeout);
   mutex.Unlock();
 
-  // Enable the perf counter before starting the service thread
-  g_ceph_context->enable_perf_counter();
-
   common_init_finish(g_ceph_context);
 
   init_async_signal_handler();
@@ -298,9 +299,14 @@ int main(int argc, const char **argv)
   FCGX_Init();
 #endif
 
-  RGWRados *store = RGWStoreManager::get_storage(g_ceph_context,
-      g_conf()->rgw_enable_gc_threads, g_conf()->rgw_enable_lc_threads, g_conf()->rgw_enable_quota_threads,
-      g_conf()->rgw_run_sync_thread, g_conf()->rgw_dynamic_resharding, g_conf()->rgw_cache_enabled);
+  RGWRados *store =
+    RGWStoreManager::get_storage(g_ceph_context,
+				 g_conf()->rgw_enable_gc_threads,
+				 g_conf()->rgw_enable_lc_threads,
+				 g_conf()->rgw_enable_quota_threads,
+				 g_conf()->rgw_run_sync_thread,
+				 g_conf().get_val<bool>("rgw_dynamic_resharding"),
+				 g_conf()->rgw_cache_enabled);
   if (!store) {
     mutex.Lock();
     init_timer.cancel_all_events();
@@ -316,7 +322,7 @@ int main(int argc, const char **argv)
     return -r;
   }
 
-  rgw_rest_init(g_ceph_context, store, store->get_zonegroup());
+  rgw_rest_init(g_ceph_context, store, store->svc.zone->get_zonegroup());
 
   mutex.Lock();
   init_timer.cancel_all_events();
@@ -339,14 +345,21 @@ int main(int argc, const char **argv)
     apis_map[*li] = true;
   }
 
+  /* warn about insecure keystone secret config options */
+  if (!(g_ceph_context->_conf->rgw_keystone_admin_token.empty() ||
+	g_ceph_context->_conf->rgw_keystone_admin_password.empty())) {
+    dout(0) << "WARNING: rgw_keystone_admin_token and rgw_keystone_admin_password should be avoided as they can expose secrets.  Prefer the new rgw_keystone_admin_token_path and rgw_keystone_admin_password_path options, which read their secrets from files." << dendl;
+  }
+
   // S3 website mode is a specialization of S3
   const bool s3website_enabled = apis_map.count("s3website") > 0;
+  const bool sts_enabled = apis_map.count("sts") > 0;
   // Swift API entrypoint could placed in the root instead of S3
   const bool swift_at_root = g_conf()->rgw_swift_url_prefix == "/";
   if (apis_map.count("s3") > 0 || s3website_enabled) {
     if (! swift_at_root) {
       rest.register_default_mgr(set_logging(rest_filter(store, RGW_REST_S3,
-                                                        new RGWRESTMgr_S3(s3website_enabled))));
+                                                        new RGWRESTMgr_S3(s3website_enabled, sts_enabled))));
     } else {
       derr << "Cannot have the S3 or S3 Website enabled together with "
            << "Swift API placed in the root of hierarchy" << dendl;
@@ -373,7 +386,7 @@ int main(int argc, const char **argv)
                           set_logging(rest_filter(store, RGW_REST_SWIFT,
                                                   swift_resource)));
     } else {
-      if (store->get_zonegroup().zones.size() > 1) {
+      if (store->svc.zone->get_zonegroup().zones.size() > 1) {
         derr << "Placing Swift API in the root of URL hierarchy while running"
              << " multi-site configuration requires another instance of RadosGW"
              << " with S3 API enabled!" << dendl;
@@ -397,7 +410,6 @@ int main(int argc, const char **argv)
     /*Registering resource for /admin/metadata */
     admin_resource->register_resource("metadata", new RGWRESTMgr_Metadata);
     admin_resource->register_resource("log", new RGWRESTMgr_Log);
-    admin_resource->register_resource("opstate", new RGWRESTMgr_Opstate);
     admin_resource->register_resource("config", new RGWRESTMgr_Config);
     admin_resource->register_resource("realm", new RGWRESTMgr_Realm);
     rest.register_resource(g_conf()->rgw_admin_entry, admin_resource);
@@ -518,7 +530,7 @@ int main(int argc, const char **argv)
   RGWFrontendPauser pauser(fes, &pusher);
   RGWRealmReloader reloader(store, service_map_meta, &pauser);
 
-  RGWRealmWatcher realm_watcher(g_ceph_context, store->realm);
+  RGWRealmWatcher realm_watcher(g_ceph_context, store->svc.zone->get_realm());
   realm_watcher.add_watcher(RGWRealmNotify::Reload, reloader);
   realm_watcher.add_watcher(RGWRealmNotify::ZonesNeedPeriod, pusher);
 

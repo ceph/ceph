@@ -365,13 +365,13 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
     scrub_infop->children_scrubbed = true;
   }
   void scrub_set_finisher(MDSInternalContextBase *c) {
-    assert(!scrub_infop->on_finish);
+    ceph_assert(!scrub_infop->on_finish);
     scrub_infop->on_finish = c;
   }
 
 private:
   /**
-   * Create a scrub_info_t struct for the scrub_infop poitner.
+   * Create a scrub_info_t struct for the scrub_infop pointer.
    */
   void scrub_info_create() const;
   /**
@@ -470,7 +470,7 @@ public:
       return &projected_nodes.back().inode;
   }
   mempool_inode *get_previous_projected_inode() {
-    assert(!projected_nodes.empty());
+    ceph_assert(!projected_nodes.empty());
     auto it = projected_nodes.rbegin();
     ++it;
     if (it != projected_nodes.rend())
@@ -559,9 +559,38 @@ public:
   }
   bool get_dirfrags_under(frag_t fg, std::list<CDir*>& ls);
   CDir* get_approx_dirfrag(frag_t fg);
-  void get_dirfrags(std::list<CDir*>& ls) const;
-  void get_nested_dirfrags(std::list<CDir*>& ls);
-  void get_subtree_dirfrags(std::list<CDir*>& ls);
+
+  template<typename Container>
+  void get_dirfrags(Container& ls) const {
+    // all dirfrags
+    if constexpr (std::is_same_v<Container, std::vector<CDir*>>)
+      ls.reserve(ls.size() + dirfrags.size());
+    for (const auto &p : dirfrags)
+      ls.push_back(p.second);
+  }
+  template<typename Container>
+  void get_nested_dirfrags(Container& ls) const {
+    // dirfrags in same subtree
+    if constexpr (std::is_same_v<Container, std::vector<CDir*>>)
+      ls.reserve(ls.size() + dirfrags.size() - num_subtree_roots);
+    for (const auto &p : dirfrags) {
+      typename Container::value_type dir = p.second;
+      if (!dir->is_subtree_root())
+        ls.push_back(dir);
+    }
+  }
+  template<typename Container>
+  void get_subtree_dirfrags(Container& ls) {
+    // dirfrags that are roots of new subtrees
+    if constexpr (std::is_same_v<Container, std::vector<CDir*>>)
+      ls.reserve(ls.size() + num_subtree_roots);
+    for (const auto &p : dirfrags) {
+      typename Container::value_type dir = p.second;
+      if (dir->is_subtree_root())
+        ls.push_back(dir);
+    }
+  }
+
   CDir *get_or_open_dirfrag(MDCache *mdcache, frag_t fg);
   CDir *add_dirfrag(CDir *dir);
   void close_dirfrag(frag_t fg);
@@ -692,11 +721,11 @@ public:
     close_dirfrags();
     close_snaprealm();
     clear_file_locks();
-    assert(num_projected_xattrs == 0);
-    assert(num_projected_srnodes == 0);
-    assert(num_caps_wanted == 0);
-    assert(num_subtree_roots == 0);
-    assert(num_exporting_dirs == 0);
+    ceph_assert(num_projected_xattrs == 0);
+    ceph_assert(num_projected_srnodes == 0);
+    ceph_assert(num_caps_wanted == 0);
+    ceph_assert(num_subtree_roots == 0);
+    ceph_assert(num_exporting_dirs == 0);
   }
   
 
@@ -729,6 +758,7 @@ public:
   int d_type() const { return IFTODT(inode.mode); }
 
   mempool_inode& get_inode() { return inode; }
+  const mempool_inode& get_inode() const { return inode; }
   CDentry* get_parent_dn() { return parent; }
   const CDentry* get_parent_dn() const { return parent; }
   CDentry* get_projected_parent_dn() { return !projected_parent.empty() ? projected_parent.back() : parent; }
@@ -804,7 +834,7 @@ public:
   void decode_store(bufferlist::const_iterator& bl);
 
   void encode_replica(mds_rank_t rep, bufferlist& bl, uint64_t features, bool need_recover) {
-    assert(is_auth());
+    ceph_assert(is_auth());
     
     // relax locks?
     if (!is_replicated())
@@ -855,7 +885,7 @@ public:
   void finish_export();
   void abort_export() {
     put(PIN_TEMPEXPORTING);
-    assert(state_test(STATE_EXPORTINGCAPS));
+    ceph_assert(state_test(STATE_EXPORTINGCAPS));
     state_clear(STATE_EXPORTINGCAPS);
     put(PIN_EXPORTINGCAPS);
   }
@@ -1031,7 +1061,6 @@ public:
   mds_authority_t authority() const override;
 
   // -- auth pins --
-  void adjust_nested_auth_pins(int a, void *by);
   bool can_auth_pin(int *err_ret=nullptr) const override;
   void auth_pin(void *by) override;
   void auth_unpin(void *by) override;
@@ -1061,9 +1090,9 @@ public:
 #endif
 		    << dendl;
 #ifdef MDS_REF_SET
-    assert(ref_map[by] > 0);
+    ceph_assert(ref_map[by] > 0);
 #endif
-    assert(ref > 0);
+    ceph_assert(ref > 0);
   }
   void bad_get(int by) override {
     generic_dout(0) << " bad get " << *this << " by " << by << " " << pin_name(by) << " was " << ref
@@ -1072,7 +1101,7 @@ public:
 #endif
 		    << dendl;
 #ifdef MDS_REF_SET
-    assert(ref_map[by] >= 0);
+    ceph_assert(ref_map[by] >= 0);
 #endif
   }
   void first_get() override;
@@ -1083,12 +1112,12 @@ public:
   // -- hierarchy stuff --
 public:
   void set_primary_parent(CDentry *p) {
-    assert(parent == 0 ||
+    ceph_assert(parent == 0 ||
 	   g_conf().get_val<bool>("mds_hack_allow_loading_invalid_metadata"));
     parent = p;
   }
   void remove_primary_parent(CDentry *dn) {
-    assert(dn == parent);
+    ceph_assert(dn == parent);
     parent = 0;
   }
   void add_remote_parent(CDentry *p);
@@ -1101,7 +1130,7 @@ public:
     projected_parent.push_back(dn);
   }
   void pop_projected_parent() {
-    assert(projected_parent.size());
+    ceph_assert(projected_parent.size());
     parent = projected_parent.front();
     projected_parent.pop_front();
   }

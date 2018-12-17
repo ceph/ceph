@@ -319,7 +319,8 @@ TEST_F(TestImageSync, SnapshotStress) {
       local_size = m_local_image_ctx->get_image_size(
         m_local_image_ctx->snap_id);
       bool flags_set;
-      ASSERT_EQ(0, m_local_image_ctx->test_flags(RBD_FLAG_OBJECT_MAP_INVALID,
+      ASSERT_EQ(0, m_local_image_ctx->test_flags(m_local_image_ctx->snap_id,
+                                                 RBD_FLAG_OBJECT_MAP_INVALID,
                                                  m_local_image_ctx->snap_lock,
                                                  &flags_set));
       ASSERT_FALSE(flags_set);

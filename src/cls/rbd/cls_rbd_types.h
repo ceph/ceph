@@ -181,13 +181,53 @@ std::ostream& operator<<(std::ostream& os, const MirrorImageStatusState& state);
 
 WRITE_CLASS_ENCODER(MirrorImageStatus);
 
+struct ParentImageSpec {
+  int64_t pool_id = -1;
+  std::string pool_namespace;
+  std::string image_id;
+  snapid_t snap_id = CEPH_NOSNAP;
+
+  ParentImageSpec() {
+  }
+  ParentImageSpec(int64_t pool_id, const std::string& pool_namespace,
+                  const std::string& image_id, snapid_t snap_id)
+    : pool_id(pool_id), pool_namespace(pool_namespace), image_id(image_id),
+      snap_id(snap_id) {
+  }
+
+  bool exists() const {
+    return (pool_id >= 0 && !image_id.empty() && snap_id != CEPH_NOSNAP);
+  }
+
+  bool operator==(const ParentImageSpec& rhs) const {
+    return ((pool_id == rhs.pool_id) &&
+            (pool_namespace == rhs.pool_namespace) &&
+            (image_id == rhs.image_id) &&
+            (snap_id == rhs.snap_id));
+  }
+
+  bool operator!=(const ParentImageSpec& rhs) const {
+    return !(*this == rhs);
+  }
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::const_iterator &it);
+  void dump(Formatter *f) const;
+
+  static void generate_test_instances(std::list<ParentImageSpec*> &o);
+};
+
+WRITE_CLASS_ENCODER(ParentImageSpec);
+
 struct ChildImageSpec {
   int64_t pool_id = -1;
+  std::string pool_namespace;
   std::string image_id;
 
   ChildImageSpec() {}
-  ChildImageSpec(int64_t pool_id, const std::string& image_id)
-    : pool_id(pool_id), image_id(image_id) {
+  ChildImageSpec(int64_t pool_id, const std::string& pool_namespace,
+                 const std::string& image_id)
+    : pool_id(pool_id), pool_namespace(pool_namespace), image_id(image_id) {
   }
 
   void encode(bufferlist &bl) const;
@@ -198,11 +238,15 @@ struct ChildImageSpec {
 
   inline bool operator==(const ChildImageSpec& rhs) const {
     return (pool_id == rhs.pool_id &&
+            pool_namespace == rhs.pool_namespace &&
             image_id == rhs.image_id);
   }
   inline bool operator<(const ChildImageSpec& rhs) const {
     if (pool_id != rhs.pool_id) {
       return pool_id < rhs.pool_id;
+    }
+    if (pool_namespace != rhs.pool_namespace) {
+      return pool_namespace < rhs.pool_namespace;
     }
     return image_id < rhs.image_id;
   }
@@ -551,11 +595,33 @@ inline void decode(TrashImageSource &source, bufferlist::const_iterator& it)
   source = static_cast<TrashImageSource>(int_source);
 }
 
+enum TrashImageState {
+  TRASH_IMAGE_STATE_NORMAL    = 0,
+  TRASH_IMAGE_STATE_MOVING    = 1,
+  TRASH_IMAGE_STATE_REMOVING  = 2,
+  TRASH_IMAGE_STATE_RESTORING = 3
+};
+
+inline void encode(const TrashImageState &state, bufferlist &bl)
+{
+  using ceph::encode;
+  encode(static_cast<uint8_t>(state), bl);
+}
+
+inline void decode(TrashImageState &state, bufferlist::const_iterator &it)
+{
+  uint8_t int_state;
+  using ceph::decode;
+  decode(int_state, it);
+  state = static_cast<TrashImageState>(int_state);
+}
+
 struct TrashImageSpec {
   TrashImageSource source = TRASH_IMAGE_SOURCE_USER;
   std::string name;
   utime_t deletion_time; // time of deletion
   utime_t deferment_end_time;
+  TrashImageState state = TRASH_IMAGE_STATE_NORMAL;
 
   TrashImageSpec() {}
   TrashImageSpec(TrashImageSource source, const std::string &name,
@@ -650,6 +716,7 @@ std::ostream& operator<<(std::ostream& os,
 struct MigrationSpec {
   MigrationHeaderType header_type = MIGRATION_HEADER_TYPE_SRC;
   int64_t pool_id = -1;
+  std::string pool_namespace;
   std::string image_name;
   std::string image_id;
   std::map<uint64_t, uint64_t> snap_seqs;
@@ -662,11 +729,13 @@ struct MigrationSpec {
   MigrationSpec() {
   }
   MigrationSpec(MigrationHeaderType header_type, int64_t pool_id,
+                const std::string& pool_namespace,
                 const std::string &image_name, const std::string &image_id,
                 const std::map<uint64_t, uint64_t> &snap_seqs, uint64_t overlap,
                 bool mirroring, bool flatten, MigrationState state,
                 const std::string &state_description)
-    : header_type(header_type), pool_id(pool_id), image_name(image_name),
+    : header_type(header_type), pool_id(pool_id),
+      pool_namespace(pool_namespace), image_name(image_name),
       image_id(image_id), snap_seqs(snap_seqs), overlap(overlap),
       flatten(flatten), mirroring(mirroring), state(state),
       state_description(state_description) {
@@ -680,9 +749,10 @@ struct MigrationSpec {
 
   inline bool operator==(const MigrationSpec& ms) const {
     return header_type == ms.header_type && pool_id == ms.pool_id &&
-      image_name == ms.image_name && image_id == ms.image_id &&
-      snap_seqs == ms.snap_seqs && overlap == ms.overlap &&
-      flatten == ms.flatten && mirroring == ms.mirroring && state == ms.state &&
+      pool_namespace == ms.pool_namespace && image_name == ms.image_name &&
+      image_id == ms.image_id && snap_seqs == ms.snap_seqs &&
+      overlap == ms.overlap && flatten == ms.flatten &&
+      mirroring == ms.mirroring && state == ms.state &&
       state_description == ms.state_description;
   }
 };

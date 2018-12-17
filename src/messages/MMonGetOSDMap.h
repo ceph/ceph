@@ -39,12 +39,12 @@ private:
 
 public:
   void request_full(epoch_t first, epoch_t last) {
-    assert(last >= first);
+    ceph_assert(last >= first);
     full_first = first;
     full_last = last;
   }
   void request_inc(epoch_t first, epoch_t last) {
-    assert(last >= first);
+    ceph_assert(last >= first);
     inc_first = first;
     inc_last = last;
   }

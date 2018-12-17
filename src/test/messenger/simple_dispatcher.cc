@@ -53,7 +53,7 @@ bool SimpleDispatcher::ms_dispatch(Message *m)
   }
     break;
   default:
-    abort();
+    ceph_abort();
   }
 
   if (unlikely(msgr->get_magic() & MSG_MAGIC_TRACE_CTR)) {

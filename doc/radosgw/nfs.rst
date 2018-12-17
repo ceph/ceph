@@ -121,7 +121,7 @@ Other config variables are optional, front-end-specific and front-end
 selection variables (e.g., ``rgw data`` and ``rgw frontends``) are
 optional and in some cases ignored.
 
-A small number of config variables (e.g., ``rgw_namespace_expire_secs``)
+A small number of config variables (e.g., ``rgw_nfs_namespace_expire_secs``)
 are unique to RGW NFS.
 
 ganesha.conf

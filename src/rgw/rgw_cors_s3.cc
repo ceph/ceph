@@ -1,5 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -11,6 +12,7 @@
  * Foundation. See file COPYING.
  *
  */
+
 #include <string.h>
 #include <limits.h>
 
@@ -127,6 +129,10 @@ bool RGWCORSRule_S3::xml_end(const char *el) {
     char *end = NULL;
 
     unsigned long long ull = strtoull(obj->get_data().c_str(), &end, 10);
+    if (*end != '\0') {
+      dout(0) << "RGWCORSRule's MaxAgeSeconds " << obj->get_data() << " is an invalid integer" << dendl;
+      return false;
+    }
     if (ull >= 0x100000000ull) {
       max_age = CORS_MAX_AGE_INVALID;
     } else  {

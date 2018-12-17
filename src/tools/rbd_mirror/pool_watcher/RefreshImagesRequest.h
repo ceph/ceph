@@ -6,7 +6,7 @@
 
 #include "include/buffer.h"
 #include "include/rados/librados.hpp"
-#include "tools/rbd_mirror/types.h"
+#include "tools/rbd_mirror/Types.h"
 #include <string>
 
 struct Context;

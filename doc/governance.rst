@@ -51,16 +51,17 @@ Current CLT members are:
  * Ahbishek Lekshmanan <abhishek@suse.com>
  * Alfredo Deza <adeza@redhat.com>
  * Gregory Farnum <gfarnum@redhat.com>
+ * Haomai Wang <haomai@xsky.com>
  * Jason Dillaman <dillaman@redhat.com>
  * Josh Durgin <jdurgin@redhat.com>
  * Joao Eduardo Luis <joao@suse.de>
- * John Spray <john.spray@redhat.com>
+ * Ken Dreyer <kdreyer@redhat.com>
+ * Lenz Grimmer <lgrimmer@suse.com>
  * Matt Benjamin <mbenjami@redhat.com>
  * Myoungwon Oh <omwmw@sk.com>
- * Ken Dreyer <kdreyer@redhat.com>
- * Haomai Wang <haomai@xsky.com>
- * Lenz Grimmer <lgrimmer@suse.com>
+ * Neha Ojha <nojha@redhat.com>
  * Sage Weil <sage@redhat.com>
+ * Sebastian Wagner <swagner@suse.com>
  * Xie Xingguo <xie.xingguo@zte.com.cn>
  * Yehuda Sadeh <yehuda@redhat.com>
  * Zack Cerza <zcerza@redhat.com>
@@ -85,24 +86,15 @@ report progress and status updates to the rest of the leadership team
 and to help facilitate any cross-component coordination of
 development.
 
-
-User Committee
---------------
-
-The user committee is intended to represent the needs and interests of
-the Ceph user community.  It is currently led by Wido den Hollander
-<wido@42on.com>.  The function of this body is not currently
-well-defined.
-
-
-Ceph Advisory Board
+The Ceph Foundation
 -------------------
 
-The Ceph Advisory Board is a collection of industry representatives
-that advise the project on strategy, direction, and resource
-allocation, and coordinate industry activities to support the Ceph
-project and community.
+The Ceph Foundation is organized as a directed fund under the Linux
+Foundation and is tasked with supporting the Ceph project community
+and ecosystem.  It has no direct control over the technical direction
+of the Ceph open source project beyond offering feedback and input
+into the collaborative development process.
 
-Currently the advisory board includes representatives from Ceph vendors
-(Red Hat, SUSE, Canonical), academia (CERN), industry partners
-(Fujitsu, Intel, WD), and a user committee representative.
+For more information, see `https://ceph.com/foundation
+<https://ceph.com/foundation>`_.
+

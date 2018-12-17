@@ -2,7 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
 import * as _ from 'lodash';
-import { forkJoin as observableForkJoin, of as observableOf } from 'rxjs';
+import { forkJoin as observableForkJoin, Observable, of as observableOf } from 'rxjs';
 import { mergeMap } from 'rxjs/operators';
 
 import { cdEncode } from '../decorators/cd-encode';
@@ -42,6 +42,10 @@ export class RgwUserService {
    */
   enumerate() {
     return this.http.get(this.url);
+  }
+
+  enumerateEmail() {
+    return this.http.get(`${this.url}/get_emails`);
   }
 
   get(uid: string) {
@@ -127,10 +131,24 @@ export class RgwUserService {
    * @param {string} uid The user ID to check.
    * @return {Observable<boolean>}
    */
-  exists(uid: string) {
+  exists(uid: string): Observable<boolean> {
     return this.enumerate().pipe(
       mergeMap((resp: string[]) => {
         const index = _.indexOf(resp, uid);
+        return observableOf(-1 !== index);
+      })
+    );
+  }
+
+  // Using @cdEncodeNot would be the preferred way here, but this
+  // causes an error: https://tracker.ceph.com/issues/37505
+  // Use decodeURIComponent as workaround.
+  // emailExists(@cdEncodeNot email: string): Observable<boolean> {
+  emailExists(email: string): Observable<boolean> {
+    email = decodeURIComponent(email);
+    return this.enumerateEmail().pipe(
+      mergeMap((resp: any[]) => {
+        const index = _.indexOf(resp, email);
         return observableOf(-1 !== index);
       })
     );

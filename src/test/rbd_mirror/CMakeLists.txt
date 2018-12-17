@@ -12,6 +12,7 @@ set(rbd_mirror_test_srcs
   )
 add_library(rbd_mirror_test STATIC ${rbd_mirror_test_srcs})
 target_link_libraries(rbd_mirror_test
+  rbd_test_support
   GTest::GTest)
 
 add_executable(unittest_rbd_mirror
@@ -24,6 +25,7 @@ add_executable(unittest_rbd_mirror
   test_mock_InstanceReplayer.cc
   test_mock_InstanceWatcher.cc
   test_mock_LeaderWatcher.cc
+  test_mock_PoolReplayer.cc
   test_mock_PoolWatcher.cc
   image_deleter/test_mock_RemoveRequest.cc
   image_deleter/test_mock_SnapshotPurgeRequest.cc
@@ -59,10 +61,10 @@ target_link_libraries(unittest_rbd_mirror
   cls_lock_client
   cls_journal_client
   rbd_types
-  librados
+  librados-cxx
   osdc
   global
-  radostest
+  radostest-cxx
   )
 
 add_executable(ceph_test_rbd_mirror
@@ -79,15 +81,15 @@ target_link_libraries(ceph_test_rbd_mirror
   cls_rbd_client
   cls_journal_client
   rbd_types
-  librados
-  radostest
+  librados-cxx
+  radostest-cxx
   ${UNITTEST_LIBS}
   )
 
 add_executable(ceph_test_rbd_mirror_random_write
   random_write.cc)
 target_link_libraries(ceph_test_rbd_mirror_random_write
-  librbd librados global)
+  librbd librados-cxx global)
 
 install(TARGETS
   ceph_test_rbd_mirror

@@ -56,7 +56,6 @@
  */
 class DBObjectMap : public ObjectMap {
 public:
-  boost::scoped_ptr<KeyValueDB> db;
 
   KeyValueDB *get_db() override { return db.get(); }
 
@@ -93,12 +92,12 @@ public:
     }
 
     const ghobject_t &get_locked() const {
-      assert(locked);
+      ceph_assert(locked);
       return *locked;
     }
 
     void swap(MapHeaderLock &o) {
-      assert(db == o.db);
+      ceph_assert(db == o.db);
 
       // centos6's boost optional doesn't seem to have swap :(
       boost::optional<ghobject_t> _locked = o.locked;
@@ -109,7 +108,7 @@ public:
     ~MapHeaderLock() {
       if (locked) {
 	Mutex::Locker l(db->header_lock);
-	assert(db->map_header_in_use.count(*locked));
+	ceph_assert(db->map_header_in_use.count(*locked));
 	db->map_header_cond.Signal();
 	db->map_header_in_use.erase(*locked);
       }
@@ -117,7 +116,7 @@ public:
   };
 
   DBObjectMap(CephContext* cct, KeyValueDB *db)
-    : ObjectMap(cct), db(db), header_lock("DBOBjectMap"),
+    : ObjectMap(cct, db), header_lock("DBOBjectMap"),
       cache_lock("DBObjectMap::CacheLock"),
       caches(cct->_conf->filestore_omap_header_cache_size)
     {}
@@ -236,7 +235,7 @@ public:
   int sync(const ghobject_t *oid=0, const SequencerPosition *spos=0) override;
 
   void compact() override {
-    assert(db);
+    ceph_assert(db);
     db->compact();
   }
 
@@ -497,7 +496,7 @@ private:
   /**
    * Generate new header for c oid with new seq number
    *
-   * Has the side effect of syncronously saving the new DBObjectMap state
+   * Has the side effect of synchronously saving the new DBObjectMap state
    */
   Header _generate_new_header(const ghobject_t &oid, Header parent);
   Header generate_new_header(const ghobject_t &oid, Header parent) {
@@ -566,7 +565,7 @@ private:
       db(db) {}
     void operator() (_Header *header) {
       Mutex::Locker l(db->header_lock);
-      assert(db->in_use.count(header->seq));
+      ceph_assert(db->in_use.count(header->seq));
       db->in_use.erase(header->seq);
       db->header_cond.Signal();
       delete header;

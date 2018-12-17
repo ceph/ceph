@@ -77,7 +77,7 @@ object keys. Perhaps some modeling here can help resolve this
 issue. The data of the temporary object wants to be located as close
 to the data of the base object as possible. This may be best performed
 by adding a new ObjectStore creation primitive that takes the base
-object as an addtional parameter that is a hint to the allocator.
+object as an additional parameter that is a hint to the allocator.
 
 Sam: I think that the short lived thing may be a red herring.  We'll
 be updating the donor and primary objects atomically, so it seems like
@@ -224,7 +224,7 @@ code necessarily has designated parity shards which see every write
 might be desirable to rotate the shards based on object hash).  Even
 if you chose to designate a shard as witnessing all writes, the pg
 might be degraded with that particular shard missing.  This is a bit
-tricky, currently reads and writes implicitely return the most recent
+tricky, currently reads and writes implicitly return the most recent
 version of the object written.  On reads, we'd have to read K shards
 to answer that question.  We can get around that by adding a "don't
 tell me the current version" flag.  Writes are more problematic: we
@@ -254,7 +254,7 @@ user version assert on ec for now (I think?  Only user is rgw bucket
 indices iirc, and those will always be on replicated because they use
 omap).
 
-We can avoid (1) by maintaining the missing set explicitely.  It's
+We can avoid (1) by maintaining the missing set explicitly.  It's
 already possible for there to be a missing object without a
 corresponding log entry (Consider the case where the most recent write
 is to an object which has not been updated in weeks.  If that write
@@ -263,7 +263,7 @@ on the prior_version which is not in the log.)  THe PGLog already has
 a way of handling those edge cases (see divergent_priors).  We'd
 simply expand that to contain the entire missing set and maintain it
 atomically with the log and the objects.  This isn't really an
-unreasonable option, the addiitonal keys would be fewer than the
+unreasonable option, the additional keys would be fewer than the
 existing log keys + divergent_priors and aren't updated in the fast
 write path anyway.
 
@@ -355,7 +355,7 @@ though.  It's a bit silly since all "shards" see all writes, but it
 would still let us implement and partially test the augmented backfill
 code as well as the extra pg log entry fields -- this depends on the
 explicit pg log entry branch having already merged.  It's not entirely
-clear to me that this one is worth doing seperately.  It's enough code
+clear to me that this one is worth doing separately.  It's enough code
 that I'd really prefer to get it done independently, but it's also a
 fair amount of scaffolding that will be later discarded.
 

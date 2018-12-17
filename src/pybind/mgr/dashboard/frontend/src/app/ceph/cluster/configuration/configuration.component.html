@@ -3,7 +3,12 @@
           [columns]="columns"
           selectionType="single"
           (updateSelection)="updateSelection($event)">
-  <div class="table-actions form-inline">
+  <cd-table-actions class="table-actions"
+                    [permission]="permission"
+                    [selection]="selection"
+                    [tableActions]="tableActions">
+  </cd-table-actions>
+  <div class="table-filters">
     <div class="form-group filter"
          *ngFor="let filter of filters">
       <label>{{ filter.label }}: </label>
@@ -14,27 +19,15 @@
       </select>
     </div>
   </div>
-  <tabset cdTableDetail *ngIf="selection.hasSingleSelection">
-    <tab i18n-heading
-         heading="Details">
-      <cd-table-key-value [data]="selection.first()" [autoReload]="false">
-      </cd-table-key-value>
-    </tab>
-  </tabset>
-  <ng-template #confValTpl let-value="value">
-    <span *ngIf="value">
-      <span *ngFor="let conf of value; last as isLast">
-        {{ conf.section }}: {{ conf.value }}{{ !isLast ? "," : "" }}<br/>
-      </span>
-    </span>
-  </ng-template>
-  <ng-template #confFlagTpl let-value="value">
-    <span *ngIf="value !== ''">
-      <span *ngFor="let flag of value; last as isLast">
-        <span title="{{ flags[flag] }}">
-          {{ flag | uppercase }}{{ !isLast ? "," : "" }}<br/>
-        </span>
-      </span>
-    </span>
-  </ng-template>
+  <cd-configuration-details cdTableDetail
+                            [selection]="selection">
+  </cd-configuration-details>
 </cd-table>
+
+<ng-template #confValTpl let-value="value">
+  <span *ngIf="value">
+    <span *ngFor="let conf of value; last as isLast">
+      {{ conf.section }}: {{ conf.value }}{{ !isLast ? "," : "" }}<br/>
+    </span>
+  </span>
+</ng-template>

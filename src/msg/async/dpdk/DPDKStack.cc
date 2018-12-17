@@ -41,13 +41,14 @@
 #include <tuple>
 
 #include "common/ceph_argparse.h"
+#include "dpdk_rte.h"
 #include "DPDKStack.h"
 #include "DPDK.h"
 #include "IP.h"
 #include "TCP-Stack.h"
 
 #include "common/dout.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "common/Cond.h"
 
 #define dout_subsys ceph_subsys_dpdk
@@ -94,7 +95,7 @@ void DPDKWorker::initialize()
     while (create_stage <= WAIT_DEVICE_STAGE)
       cond.Wait(lock);
   }
-  assert(sdev);
+  ceph_assert(sdev);
   if (i < sdev->hw_queues_count()) {
     auto qp = sdev->init_local_queue(cct, &center, cct->_conf->ms_dpdk_hugepages, i);
     std::map<unsigned, float> cpu_weights;
@@ -197,11 +198,16 @@ DPDKWorker::Impl::Impl(CephContext *cct, unsigned i, EventCenter *c, std::shared
   _inet.set_netmask_address(ipv4_address(std::get<2>(tuples[0])));
 }
 
+DPDKWorker::Impl::~Impl()
+{
+  _dev->unset_local_queue(id);
+}
+
 int DPDKWorker::listen(entity_addr_t &sa, const SocketOptions &opt,
                        ServerSocket *sock)
 {
-  assert(sa.get_family() == AF_INET);
-  assert(sock);
+  ceph_assert(sa.get_family() == AF_INET);
+  ceph_assert(sock);
 
   ldout(cct, 10) << __func__ << " addr " << sa << dendl;
   // vector<AvailableIPAddress> tuples;
@@ -231,7 +237,7 @@ int DPDKWorker::listen(entity_addr_t &sa, const SocketOptions &opt,
 
 int DPDKWorker::connect(const entity_addr_t &addr, const SocketOptions &opts, ConnectedSocket *socket)
 {
-  // assert(addr.get_family() == AF_INET);
+  // ceph_assert(addr.get_family() == AF_INET);
   int r =  tcpv4_connect(_impl->_inet.get_tcp(), addr, socket);
   ldout(cct, 10) << __func__ << " addr " << addr << dendl;
   return r;
@@ -250,18 +256,26 @@ void DPDKStack::spawn_worker(unsigned i, std::function<void ()> &&func)
   }
   // if dpdk::eal::init already called by NVMEDevice, we will select 1..n
   // cores
-  assert(rte_lcore_count() >= i + 1);
+  ceph_assert(rte_lcore_count() >= i + 1);
   unsigned core_id;
+  int j = i;
   RTE_LCORE_FOREACH_SLAVE(core_id) {
     if (i-- == 0) {
       break;
     }
   }
   dpdk::eal::execute_on_master([&]() {
-    r = rte_eal_remote_launch(dpdk_thread_adaptor, static_cast<void*>(&funcs[i]), core_id);
+    r = rte_eal_remote_launch(dpdk_thread_adaptor, static_cast<void*>(&funcs[j]), core_id);
     if (r < 0) {
       lderr(cct) << __func__ << " remote launch failed, r=" << r << dendl;
       ceph_abort();
     }
+  });
+}
+
+void DPDKStack::join_worker(unsigned i)
+{
+  dpdk::eal::execute_on_master([&]() {
+    rte_eal_wait_lcore(i+1);
   });
 }

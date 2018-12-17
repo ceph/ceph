@@ -22,6 +22,7 @@
 #include "common/config_proxy.h"
 #include "common/errno.h"
 #include "gtest/gtest.h"
+#include "common/hostname.h"
 
 extern std::string exec(const char* cmd); // defined in test_hostname.cc
 
@@ -60,7 +61,7 @@ public:
       std::string after = " AFTER ";
       std::string val(before + "$host${host}" + after);
       early_expand_meta(val, &oss);
-      std::string hostname = exec("hostname -s");
+      std::string hostname = ceph_get_short_hostname();
       EXPECT_EQ(before + hostname + hostname + after, val);
       EXPECT_EQ("", oss.str());
     }

@@ -30,7 +30,6 @@ public:
   __u32 pool = 0;
   string name;
   __u32 op = 0;
-  uint64_t auid = 0;
   snapid_t snapid;
   __s16 crush_rule = 0;
 
@@ -39,14 +38,7 @@ public:
   MPoolOp(const uuid_d& f, ceph_tid_t t, int p, string& n, int o, version_t v)
     : MessageInstance(CEPH_MSG_POOLOP, v, HEAD_VERSION, COMPAT_VERSION),
       fsid(f), pool(p), name(n), op(o),
-      auid(0), snapid(0), crush_rule(0) {
-    set_tid(t);
-  }
-  MPoolOp(const uuid_d& f, ceph_tid_t t, int p, string& n,
-	  int o, uint64_t uid, version_t v)
-    : MessageInstance(CEPH_MSG_POOLOP, v, HEAD_VERSION, COMPAT_VERSION),
-      fsid(f), pool(p), name(n), op(o),
-      auid(uid), snapid(0), crush_rule(0) {
+      snapid(0), crush_rule(0) {
     set_tid(t);
   }
 
@@ -57,7 +49,6 @@ public:
   const char *get_type_name() const override { return "poolop"; }
   void print(ostream& out) const override {
     out << "pool_op(" << ceph_pool_op_name(op) << " pool " << pool
-	<< " auid " << auid
 	<< " tid " << get_tid()
 	<< " name " << name
 	<< " v" << version << ")";
@@ -69,7 +60,7 @@ public:
     encode(fsid, payload);
     encode(pool, payload);
     encode(op, payload);
-    encode(auid, payload);
+    encode((uint64_t)0, payload);
     encode(snapid, payload);
     encode(name, payload);
     __u8 pad = 0;
@@ -84,7 +75,8 @@ public:
     if (header.version < 2)
       decode(name, p);
     decode(op, p);
-    decode(auid, p);
+    uint64_t old_auid;
+    decode(old_auid, p);
     decode(snapid, p);
     if (header.version >= 2)
       decode(name, p);

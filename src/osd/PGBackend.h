@@ -154,7 +154,6 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
        vector<ObjectStore::Transaction>& tls,
        OpRequestRef op = OpRequestRef()
        ) = 0;
-     virtual epoch_t get_epoch() const = 0;
      virtual epoch_t get_interval_start_epoch() const = 0;
      virtual epoch_t get_last_peering_reset_epoch() const = 0;
 
@@ -187,7 +186,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      }
      virtual const pg_missing_const_i &get_shard_missing(pg_shard_t peer) const {
        auto m = maybe_get_shard_missing(peer);
-       assert(m);
+       ceph_assert(m);
        return *m;
      }
 
@@ -198,14 +197,15 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
        } else {
 	 map<pg_shard_t, pg_info_t>::const_iterator i =
 	   get_shard_info().find(peer);
-	 assert(i != get_shard_info().end());
+	 ceph_assert(i != get_shard_info().end());
 	 return i->second;
        }
      }
 
      virtual const PGLog &get_log() const = 0;
      virtual bool pgb_is_primary() const = 0;
-     virtual OSDMapRef pgb_get_osdmap() const = 0;
+     virtual const OSDMapRef& pgb_get_osdmap() const = 0;
+     virtual epoch_t pgb_get_osdmap_epoch() const = 0;
      virtual const pg_info_t &get_info() const = 0;
      virtual const pg_pool_t &get_pool() const = 0;
 
@@ -308,7 +308,8 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      ch(ch),
      parent(l) {}
    bool is_primary() const { return get_parent()->pgb_is_primary(); }
-   OSDMapRef get_osdmap() const { return get_parent()->pgb_get_osdmap(); }
+   const OSDMapRef& get_osdmap() const { return get_parent()->pgb_get_osdmap(); }
+   epoch_t get_osdmap_epoch() const { return get_parent()->pgb_get_osdmap_epoch(); }
    const pg_info_t &get_info() { return get_parent()->get_info(); }
 
    std::ostream& gen_prefix(std::ostream& out) const {
@@ -570,14 +571,16 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      const ScrubMap::object &candidate,
      shard_info_wrapper& shard_error,
      inconsistent_obj_wrapper &result,
-     ostream &errorstream);
+     ostream &errorstream,
+     bool has_snapset);
    map<pg_shard_t, ScrubMap *>::const_iterator be_select_auth_object(
      const hobject_t &obj,
      const map<pg_shard_t,ScrubMap*> &maps,
      object_info_t *auth_oi,
      map<pg_shard_t, shard_info_wrapper> &shard_map,
-     inconsistent_obj_wrapper &object_error,
-     bool &digest_match);
+     bool &digest_match,
+     spg_t pgid,
+     ostream &errorstream);
    void be_compare_scrubmaps(
      const map<pg_shard_t,ScrubMap*> &maps,
      const set<hobject_t> &master_set,

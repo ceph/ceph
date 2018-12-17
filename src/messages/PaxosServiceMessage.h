@@ -50,19 +50,6 @@ public:
     paxos_decode(p);
   }
 
-  /** 
-   * These messages are only used by the monitors and clients,
-   * and the client doesn't care, so we're creating a monitor-specific
-   * function here. Note that this function explicitly exists to bypass
-   * the normal ref-counting, so don't expect the returned pointer to be
-   * very long-lived -- it will still only last as long as the Session would
-   * normally.
-   */
-  MonSession *get_session() {
-    auto priv = get_connection()->get_priv();
-    return static_cast<MonSession*>(priv.get());
-  }
-  
   const char *get_type_name() const override { return "PaxosServiceMessage"; }
 };
 

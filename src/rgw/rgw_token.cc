@@ -1,5 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -21,7 +22,7 @@
 #include "common/ceph_argparse.h"
 #include "common/debug.h"
 #include "global/global_init.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/str_list.h"
 
 #include "rgw_token.h"

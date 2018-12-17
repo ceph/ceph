@@ -29,7 +29,7 @@ template <typename I>
 CloseRequest<I>::CloseRequest(I *image_ctx, Context *on_finish)
   : m_image_ctx(image_ctx), m_on_finish(on_finish), m_error_result(0),
     m_exclusive_lock(nullptr) {
-  assert(image_ctx != nullptr);
+  ceph_assert(image_ctx != nullptr);
 }
 
 template <typename I>
@@ -137,12 +137,12 @@ void CloseRequest<I>::handle_shut_down_exclusive_lock(int r) {
 
   {
     RWLock::RLocker owner_locker(m_image_ctx->owner_lock);
-    assert(m_image_ctx->exclusive_lock == nullptr);
+    ceph_assert(m_image_ctx->exclusive_lock == nullptr);
 
     // object map and journal closed during exclusive lock shutdown
     RWLock::RLocker snap_locker(m_image_ctx->snap_lock);
-    assert(m_image_ctx->journal == nullptr);
-    assert(m_image_ctx->object_map == nullptr);
+    ceph_assert(m_image_ctx->journal == nullptr);
+    ceph_assert(m_image_ctx->object_map == nullptr);
   }
 
   delete m_exclusive_lock;
@@ -266,36 +266,6 @@ template <typename I>
 void CloseRequest<I>::handle_flush_op_work_queue(int r) {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
-  send_close_migration_parent();
-}
-
-template <typename I>
-void CloseRequest<I>::send_close_migration_parent() {
-  if (m_image_ctx->migration_parent == nullptr) {
-    send_close_parent();
-    return;
-  }
-
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << dendl;
-
-  m_image_ctx->migration_parent->state->close(create_async_context_callback(
-    *m_image_ctx, create_context_callback<
-      CloseRequest<I>, &CloseRequest<I>::handle_close_migration_parent>(this)));
-}
-
-template <typename I>
-void CloseRequest<I>::handle_close_migration_parent(int r) {
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
-
-  delete m_image_ctx->migration_parent;
-  m_image_ctx->migration_parent = nullptr;
-  save_result(r);
-  if (r < 0) {
-    lderr(cct) << "error closing migration parent image: " << cpp_strerror(r)
-               << dendl;
-  }
   send_close_parent();
 }
 

@@ -33,7 +33,7 @@
 
 #include "msg/SimplePolicyMessenger.h"
 #include "msg/Message.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #include "msg/DispatchQueue.h"
 #include "Pipe.h"
@@ -111,7 +111,7 @@ public:
    * @{
    */
   void set_cluster_protocol(int p) override {
-    assert(!started && !did_bind);
+    ceph_assert(!started && !did_bind);
     cluster_protocol = p;
   }
 
@@ -305,7 +305,7 @@ private:
    */
   ceph::unordered_map<entity_addr_t, Pipe*> rank_pipe;
   /**
-   * list of pipes are in teh process of accepting
+   * list of pipes are in the process of accepting
    *
    * These are not yet in the rank_pipe map.
    */
@@ -351,17 +351,6 @@ public:
    * @{
    */
 
-  /**
-   * This wraps ms_deliver_get_authorizer. We use it for Pipe.
-   */
-  AuthAuthorizer *get_authorizer(int peer_type, bool force_new);
-  /**
-   * This wraps ms_deliver_verify_authorizer; we use it for Pipe.
-   */
-  bool verify_authorizer(Connection *con, int peer_type, int protocol, bufferlist& auth,
-			 bufferlist& auth_reply,
-                         bool& isvalid,CryptoKey& session_key,
-			 std::unique_ptr<AuthAuthorizerChallenge> *challenge);
   /**
    * Increment the global sequence for this SimpleMessenger and return it.
    * This is for the connect protocol, although it doesn't hurt if somebody

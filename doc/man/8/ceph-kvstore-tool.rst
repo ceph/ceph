@@ -30,6 +30,9 @@ which are as follows:
 :command:`list-crc [prefix]`
     Print CRC of all KV pairs stored with the URL encoded prefix.
 
+:command:`dump [prefix]`
+    Print key and value of all KV pairs stored with the URL encoded prefix.
+
 :command:`exists <prefix> [key]`
     Check if there is any KV pair stored with the URL encoded prefix. If key
     is also specified, check for the key with the prefix instead.
@@ -72,8 +75,10 @@ which are as follows:
 :command:`compact-range <prefix> <start> <end>`
     Compact some entries specified by the URL encoded prefix and range.
 
-:command:`repair`
-    Try to repair the kvstore.
+:command:`destructive-repair`
+    Make a (potentially destructive) effort to recover a corrupted database.
+    Note that in the case of rocksdb this may corrupt an otherwise uncorrupted
+    database--use this only as a last resort!
 
 Availability
 ============

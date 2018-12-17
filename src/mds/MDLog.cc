@@ -29,7 +29,7 @@
 
 #include "common/config.h"
 #include "common/errno.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
@@ -64,7 +64,8 @@ void MDLog::create_logger()
   plb.add_u64(l_mdl_evexd, "evexd", "Current expired events");
   plb.add_u64(l_mdl_segexg, "segexg", "Expiring segments");
   plb.add_u64(l_mdl_segexd, "segexd", "Current expired segments");
-  plb.add_u64_counter(l_mdl_replayed, "replayed", "Events replayed");
+  plb.add_u64_counter(l_mdl_replayed, "replayed", "Events replayed",
+		      "repl", PerfCountersBuilder::PRIO_INTERESTING);
   plb.add_time_avg(l_mdl_jlat, "jlat", "Journaler flush latency");
   plb.add_u64_counter(l_mdl_evex, "evex", "Total expired events");
   plb.add_u64_counter(l_mdl_evtrm, "evtrm", "Trimmed events");
@@ -159,11 +160,11 @@ void MDLog::create(MDSInternalContextBase *c)
   ino = MDS_INO_LOG_OFFSET + mds->get_nodeid();
 
   // Instantiate Journaler and start async write to RADOS
-  assert(journaler == NULL);
+  ceph_assert(journaler == NULL);
   journaler = new Journaler("mdlog", ino, mds->mdsmap->get_metadata_pool(),
                             CEPH_FS_ONDISK_MAGIC, mds->objecter, logger,
                             l_mdl_jlat, mds->finisher);
-  assert(journaler->is_readonly());
+  ceph_assert(journaler->is_readonly());
   journaler->set_write_error_handler(new C_MDL_WriteError(this));
   journaler->set_writeable();
   journaler->create(&mds->mdcache->default_log_layout, g_conf()->mds_journal_format);
@@ -187,7 +188,7 @@ void MDLog::open(MDSInternalContextBase *c)
 {
   dout(5) << "open discovering log bounds" << dendl;
 
-  assert(!recovery_thread.is_started());
+  ceph_assert(!recovery_thread.is_started());
   recovery_thread.set_completion(c);
   recovery_thread.create("md_recov_open");
 
@@ -221,8 +222,8 @@ void MDLog::reopen(MDSInternalContextBase *c)
 
   // Because we will call append() at the completion of this, check that we have already
   // read the whole journal.
-  assert(journaler != NULL);
-  assert(journaler->get_read_pos() == journaler->get_write_pos());
+  ceph_assert(journaler != NULL);
+  ceph_assert(journaler->get_read_pos() == journaler->get_write_pos());
 
   delete journaler;
   journaler = NULL;
@@ -253,9 +254,9 @@ void MDLog::append()
 
 void MDLog::_start_entry(LogEvent *e)
 {
-  assert(submit_mutex.is_locked_by_me());
+  ceph_assert(submit_mutex.is_locked_by_me());
 
-  assert(cur_event == NULL);
+  ceph_assert(cur_event == NULL);
   cur_event = e;
 
   event_seq++;
@@ -269,22 +270,22 @@ void MDLog::_start_entry(LogEvent *e)
 
 void MDLog::cancel_entry(LogEvent *le)
 {
-  assert(le == cur_event);
+  ceph_assert(le == cur_event);
   cur_event = NULL;
   delete le;
 }
 
 void MDLog::_submit_entry(LogEvent *le, MDSLogContextBase *c)
 {
-  assert(submit_mutex.is_locked_by_me());
-  assert(!mds->is_any_replay());
-  assert(!capped);
+  ceph_assert(submit_mutex.is_locked_by_me());
+  ceph_assert(!mds->is_any_replay());
+  ceph_assert(!capped);
 
-  assert(le == cur_event);
+  ceph_assert(le == cur_event);
   cur_event = NULL;
 
   // let the event register itself in the segment
-  assert(!segments.empty());
+  ceph_assert(!segments.empty());
   LogSegment *ls = segments.rbegin()->second;
   ls->num_events++;
 
@@ -401,7 +402,7 @@ void MDLog::_submit_thread()
       MDSLogContextBase *fin;
       if (data.fin) {
 	fin = dynamic_cast<MDSLogContextBase*>(data.fin);
-	assert(fin);
+	ceph_assert(fin);
 	fin->set_write_pos(new_write_pos);
       } else {
 	fin = new C_MDL_Flushed(this, new_write_pos);
@@ -420,7 +421,7 @@ void MDLog::_submit_thread()
       if (data.fin) {
 	MDSInternalContextBase* fin =
 		dynamic_cast<MDSInternalContextBase*>(data.fin);
-	assert(fin);
+	ceph_assert(fin);
 	C_MDL_Flushed *fin2 = new C_MDL_Flushed(this, fin);
 	fin2->set_write_pos(journaler->get_write_pos());
 	journaler->wait_for_flush(fin2);
@@ -476,7 +477,7 @@ void MDLog::flush()
 
 void MDLog::kick_submitter()
 {
-  Mutex::Locker l(submit_mutex);
+  std::lock_guard l(submit_mutex);
   submit_cond.Signal();
 }
 
@@ -488,11 +489,11 @@ void MDLog::cap()
 
 void MDLog::shutdown()
 {
-  assert(mds->mds_lock.is_locked_by_me());
+  ceph_assert(mds->mds_lock.is_locked_by_me());
 
   dout(5) << "shutdown" << dendl;
   if (submit_thread.is_started()) {
-    assert(mds->is_daemon_stopping());
+    ceph_assert(mds->is_daemon_stopping());
 
     if (submit_thread.am_self()) {
       // Called suicide from the thread: trust it to do no work after
@@ -544,7 +545,7 @@ void MDLog::_start_new_segment()
 
 void MDLog::_prepare_new_segment()
 {
-  assert(submit_mutex.is_locked_by_me());
+  ceph_assert(submit_mutex.is_locked_by_me());
 
   uint64_t seq = event_seq + 1;
   dout(7) << __func__ << " seq " << seq << dendl;
@@ -562,7 +563,7 @@ void MDLog::_prepare_new_segment()
 
 void MDLog::_journal_segment_subtree_map(MDSInternalContextBase *onsync)
 {
-  assert(submit_mutex.is_locked_by_me());
+  ceph_assert(submit_mutex.is_locked_by_me());
 
   dout(7) << __func__ << dendl;
   ESubtreeMap *sle = mds->mdcache->create_subtree_map();
@@ -643,7 +644,7 @@ void MDLog::trim(int m)
 
     // look at first segment
     LogSegment *ls = p->second;
-    assert(ls);
+    ceph_assert(ls);
     ++p;
     
     if (pending_events.count(ls->seq) ||
@@ -660,7 +661,7 @@ void MDLog::trim(int m)
       dout(5) << "trim already expired segment " << ls->seq << "/" << ls->offset
 	      << ", " << ls->num_events << " events" << dendl;
     } else {
-      assert(expiring_segments.count(ls) == 0);
+      ceph_assert(expiring_segments.count(ls) == 0);
       new_expiring_segments++;
       expiring_segments.insert(ls);
       expiring_events += ls->num_events;
@@ -720,7 +721,8 @@ int MDLog::trim_all()
   uint64_t last_seq = 0;
   if (!segments.empty()) {
     last_seq = get_last_segment_seq();
-    if (!mds->mdcache->open_file_table.is_any_committing() &&
+    if (!capped &&
+	!mds->mdcache->open_file_table.is_any_committing() &&
 	last_seq > mds->mdcache->open_file_table.get_committing_log_seq()) {
       submit_mutex.Unlock();
       mds->mdcache->open_file_table.commit(new C_OFT_Committed(this, last_seq),
@@ -731,7 +733,8 @@ int MDLog::trim_all()
 
   map<uint64_t,LogSegment*>::iterator p = segments.begin();
   while (p != segments.end() &&
-	 p->first < last_seq && p->second->end <= safe_pos) {
+	 p->first < last_seq &&
+	 p->second->end < safe_pos) { // next segment should have been started
     LogSegment *ls = p->second;
     ++p;
 
@@ -749,7 +752,7 @@ int MDLog::trim_all()
       dout(5) << "trim already expired segment " << ls->seq << "/" << ls->offset
 	      << ", " << ls->num_events << " events" << dendl;
     } else {
-      assert(expiring_segments.count(ls) == 0);
+      ceph_assert(expiring_segments.count(ls) == 0);
       expiring_segments.insert(ls);
       expiring_events += ls->num_events;
       submit_mutex.Unlock();
@@ -780,7 +783,7 @@ void MDLog::try_expire(LogSegment *ls, int op_prio)
   } else {
     dout(10) << "try_expire expired segment " << ls->seq << "/" << ls->offset << dendl;
     submit_mutex.Lock();
-    assert(expiring_segments.count(ls));
+    ceph_assert(expiring_segments.count(ls));
     expiring_segments.erase(ls);
     expiring_events -= ls->num_events;
     _expired(ls);
@@ -805,7 +808,7 @@ void MDLog::_maybe_expired(LogSegment *ls, int op_prio)
 
 void MDLog::_trim_expired_segments()
 {
-  assert(submit_mutex.is_locked_by_me());
+  ceph_assert(submit_mutex.is_locked_by_me());
 
   uint64_t oft_committed_seq = mds->mdcache->open_file_table.get_committed_log_seq();
 
@@ -861,7 +864,7 @@ void MDLog::trim_expired_segments()
 
 void MDLog::_expired(LogSegment *ls)
 {
-  assert(submit_mutex.is_locked_by_me());
+  ceph_assert(submit_mutex.is_locked_by_me());
 
   dout(5) << "_expired segment " << ls->seq << "/" << ls->offset
 	  << ", " << ls->num_events << " events" << dendl;
@@ -891,13 +894,15 @@ void MDLog::_expired(LogSegment *ls)
 
 void MDLog::replay(MDSInternalContextBase *c)
 {
-  assert(journaler->is_active());
-  assert(journaler->is_readonly());
+  ceph_assert(journaler->is_active());
+  ceph_assert(journaler->is_readonly());
 
   // empty?
   if (journaler->get_read_pos() == journaler->get_write_pos()) {
     dout(10) << "replay - journal empty, done." << dendl;
     mds->mdcache->trim();
+    if (mds->is_standby_replay())
+      mds->update_mlogger();
     if (c) {
       c->complete(0);
     }
@@ -912,7 +917,7 @@ void MDLog::replay(MDSInternalContextBase *c)
   dout(10) << "replay start, from " << journaler->get_read_pos()
 	   << " to " << journaler->get_write_pos() << dendl;
 
-  assert(num_events == 0 || already_replayed);
+  ceph_assert(num_events == 0 || already_replayed);
   if (already_replayed) {
     // Ensure previous instance of ReplayThread is joined before
     // we create another one
@@ -938,7 +943,7 @@ void MDLog::replay(MDSInternalContextBase *c)
  */
 void MDLog::_recovery_thread(MDSInternalContextBase *completion)
 {
-  assert(journaler == NULL);
+  ceph_assert(journaler == NULL);
   if (g_conf()->mds_journal_format > JOURNAL_FORMAT_MAX) {
       dout(0) << "Configuration value for mds_journal_format is out of bounds, max is "
               << JOURNAL_FORMAT_MAX << dendl;
@@ -959,7 +964,7 @@ void MDLog::_recovery_thread(MDSInternalContextBase *completion)
     jp.front = default_log_ino;
     int write_result = jp.save(mds->objecter);
     // Nothing graceful we can do for this
-    assert(write_result >= 0);
+    ceph_assert(write_result >= 0);
   } else if (read_result == -EBLACKLISTED) {
     derr << "Blacklisted during JournalPointer read!  Respawning..." << dendl;
     mds->respawn();
@@ -978,7 +983,7 @@ void MDLog::_recovery_thread(MDSInternalContextBase *completion)
     if (mds->is_standby_replay()) {
       dout(1) << "Journal " << jp.front << " is being rewritten, "
         << "cannot replay in standby until an active MDS completes rewrite" << dendl;
-      Mutex::Locker l(mds->mds_lock);
+      std::lock_guard l(mds->mds_lock);
       if (mds->is_daemon_stopping()) {
         return;
       }
@@ -1005,7 +1010,7 @@ void MDLog::_recovery_thread(MDSInternalContextBase *completion)
       mds->clog->error() << "Error recovering journal " << jp.front << ": "
         << cpp_strerror(recovery_result);
       mds->damaged_unlocked();
-      assert(recovery_result == 0); // Unreachable because damaged() calls respawn()
+      ceph_assert(recovery_result == 0); // Unreachable because damaged() calls respawn()
     }
 
     // We could read journal, so we can erase it.
@@ -1021,7 +1026,7 @@ void MDLog::_recovery_thread(MDSInternalContextBase *completion)
       jp.back = 0;
       int write_result = jp.save(mds->objecter);
       // Nothing graceful we can do for this
-      assert(write_result >= 0);
+      ceph_assert(write_result >= 0);
     }
   }
 
@@ -1033,7 +1038,7 @@ void MDLog::_recovery_thread(MDSInternalContextBase *completion)
   // Assign to ::journaler so that we can be aborted by ::shutdown while
   // waiting for journaler recovery
   {
-    Mutex::Locker l(mds->mds_lock);
+    std::lock_guard l(mds->mds_lock);
     journaler = front_journal;
   }
 
@@ -1051,7 +1056,7 @@ void MDLog::_recovery_thread(MDSInternalContextBase *completion)
     mds->clog->error() << "Error recovering journal " << jp.front << ": "
       << cpp_strerror(recovery_result);
     mds->damaged_unlocked();
-    assert(recovery_result == 0); // Unreachable because damaged() calls respawn()
+    ceph_assert(recovery_result == 0); // Unreachable because damaged() calls respawn()
   }
 
   /* Check whether the front journal format is acceptable or needs re-write */
@@ -1059,7 +1064,7 @@ void MDLog::_recovery_thread(MDSInternalContextBase *completion)
     dout(0) << "Journal " << jp.front << " is in unknown format " << front_journal->get_stream_format()
             << ", does this MDS daemon require upgrade?" << dendl;
     {
-      Mutex::Locker l(mds->mds_lock);
+      std::lock_guard l(mds->mds_lock);
       if (mds->is_daemon_stopping()) {
         journaler = NULL;
         delete front_journal;
@@ -1074,7 +1079,7 @@ void MDLog::_recovery_thread(MDSInternalContextBase *completion)
     dout(4) << "Recovered journal " << jp.front << " in format " << front_journal->get_stream_format() << dendl;
     journaler->set_write_error_handler(new C_MDL_WriteError(this));
     {
-      Mutex::Locker l(mds->mds_lock);
+      std::lock_guard l(mds->mds_lock);
       if (mds->is_daemon_stopping()) {
         return;
       }
@@ -1099,9 +1104,9 @@ void MDLog::_recovery_thread(MDSInternalContextBase *completion)
  */
 void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journal, MDSInternalContextBase *completion)
 {
-  assert(!jp_in.is_null());
-  assert(completion != NULL);
-  assert(old_journal != NULL);
+  ceph_assert(!jp_in.is_null());
+  ceph_assert(completion != NULL);
+  ceph_assert(old_journal != NULL);
 
   JournalPointer jp = jp_in;
 
@@ -1110,7 +1115,7 @@ void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journa
   inodeno_t secondary_ino = MDS_INO_LOG_BACKUP_OFFSET + mds->get_nodeid();
   jp.back = (jp.front == primary_ino ? secondary_ino : primary_ino);
   int write_result = jp.save(mds->objecter);
-  assert(write_result == 0);
+  ceph_assert(write_result == 0);
 
   /* Create the new Journaler file */
   Journaler *new_journal = new Journaler("mdlog", jp.back,
@@ -1163,13 +1168,13 @@ void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journa
       break;
 
     // Read one serialized LogEvent
-    assert(old_journal->is_readable());
+    ceph_assert(old_journal->is_readable());
     bufferlist bl;
     uint64_t le_pos = old_journal->get_read_pos();
     bool r = old_journal->try_read_entry(bl);
     if (!r && old_journal->get_error())
       continue;
-    assert(r);
+    ceph_assert(r);
 
     // Update segment_pos_rewrite
     LogEvent *le = LogEvent::decode(bl);
@@ -1203,7 +1208,7 @@ void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journa
       if (le->get_type() == EVENT_SUBTREEMAP
           || le->get_type() == EVENT_SUBTREEMAP_TEST) {
         ESubtreeMap *sle = dynamic_cast<ESubtreeMap*>(le);
-        assert(sle != NULL);
+        ceph_assert(sle != NULL);
         dout(20) << __func__ << " zeroing expire_pos in subtreemap event at "
           << le_pos << " seq=" << sle->event_seq << dendl;
         sle->expire_pos = 0;
@@ -1236,28 +1241,28 @@ void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journa
 
   // If failed to rewrite journal, leave the part written journal
   // as garbage to be cleaned up next startup.
-  assert(r == 0);
+  ceph_assert(r == 0);
 
   /* Now that the new journal is safe, we can flip the pointers */
   inodeno_t const tmp = jp.front;
   jp.front = jp.back;
   jp.back = tmp;
   write_result = jp.save(mds->objecter);
-  assert(write_result == 0);
+  ceph_assert(write_result == 0);
 
   /* Delete the old journal to free space */
   dout(1) << "New journal flushed, erasing old journal" << dendl;
   C_SaferCond erase_waiter;
   old_journal->erase(&erase_waiter);
   int erase_result = erase_waiter.wait();
-  assert(erase_result == 0);
+  ceph_assert(erase_result == 0);
   {
-    Mutex::Locker l(mds->mds_lock);
+    std::lock_guard l(mds->mds_lock);
     if (mds->is_daemon_stopping()) {
       delete new_journal;
       return;
     }
-    assert(journaler == old_journal);
+    ceph_assert(journaler == old_journal);
     journaler = NULL;
     delete old_journal;
   }
@@ -1265,12 +1270,12 @@ void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journa
   /* Update the pointer to reflect we're back in clean single journal state. */
   jp.back = 0;
   write_result = jp.save(mds->objecter);
-  assert(write_result == 0);
+  ceph_assert(write_result == 0);
 
   /* Reset the Journaler object to its default state */
   dout(1) << "Journal rewrite complete, continuing with normal startup" << dendl;
   {
-    Mutex::Locker l(mds->mds_lock);
+    std::lock_guard l(mds->mds_lock);
     if (mds->is_daemon_stopping()) {
       delete new_journal;
       return;
@@ -1282,7 +1287,7 @@ void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journa
 
   /* Trigger completion */
   {
-    Mutex::Locker l(mds->mds_lock);
+    std::lock_guard l(mds->mds_lock);
     if (mds->is_daemon_stopping()) {
       return;
     }
@@ -1369,7 +1374,7 @@ void MDLog::_replay_thread()
 	journaler->get_read_pos() == journaler->get_write_pos())
       break;
     
-    assert(journaler->is_readable() || mds->is_daemon_stopping());
+    ceph_assert(journaler->is_readable() || mds->is_daemon_stopping());
     
     // read it
     uint64_t pos = journaler->get_read_pos();
@@ -1377,7 +1382,7 @@ void MDLog::_replay_thread()
     bool r = journaler->try_read_entry(bl);
     if (!r && journaler->get_error())
       continue;
-    assert(r);
+    ceph_assert(r);
     
     // unpack event
     LogEvent *le = LogEvent::decode(bl);
@@ -1429,7 +1434,7 @@ void MDLog::_replay_thread()
       num_events++;
 
       {
-        Mutex::Locker l(mds->mds_lock);
+        std::lock_guard l(mds->mds_lock);
         if (mds->is_daemon_stopping()) {
           return;
         }
@@ -1444,7 +1449,7 @@ void MDLog::_replay_thread()
 
   // done!
   if (r == 0) {
-    assert(journaler->get_read_pos() == journaler->get_write_pos());
+    ceph_assert(journaler->get_read_pos() == journaler->get_write_pos());
     dout(10) << "_replay - complete, " << num_events
 	     << " events" << dendl;
 
@@ -1455,7 +1460,7 @@ void MDLog::_replay_thread()
 
   dout(10) << "_replay_thread kicking waiters" << dendl;
   {
-    Mutex::Locker l(mds->mds_lock);
+    std::lock_guard l(mds->mds_lock);
     if (mds->is_daemon_stopping()) {
       return;
     }

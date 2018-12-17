@@ -92,6 +92,7 @@
 #include "messages/MOSDPGBackfillRemove.h"
 #include "messages/MOSDPGRecoveryDelete.h"
 #include "messages/MOSDPGRecoveryDeleteReply.h"
+#include "messages/MOSDPGReadyToMerge.h"
 
 #include "messages/MRemoveSnaps.h"
 
@@ -113,6 +114,8 @@
 #include "messages/MClientRequest.h"
 #include "messages/MClientRequestForward.h"
 #include "messages/MClientReply.h"
+#include "messages/MClientReclaim.h"
+#include "messages/MClientReclaimReply.h"
 #include "messages/MClientCaps.h"
 #include "messages/MClientCapRelease.h"
 #include "messages/MClientLease.h"
@@ -140,6 +143,7 @@
 #include "messages/MDiscoverReply.h"
 
 #include "messages/MMDSFragmentNotify.h"
+#include "messages/MMDSFragmentNotifyAck.h"
 
 #include "messages/MExportDirDiscover.h"
 #include "messages/MExportDirDiscoverAck.h"
@@ -206,7 +210,7 @@ void Message::encode(uint64_t features, int crcflags)
 {
   // encode and copy out of *m
   if (empty_payload()) {
-    assert(middle.length() == 0);
+    ceph_assert(middle.length() == 0);
     encode_payload(features);
 
     if (byte_throttler) {
@@ -263,7 +267,7 @@ void Message::encode(uint64_t features, int crcflags)
       snprintf(fn, sizeof(fn), ENCODE_STRINGIFY(ENCODE_DUMP) "/%s__%d.%x",
 	       abi::__cxa_demangle(typeid(*this).name(), 0, 0, &status),
 	       getpid(), i++);
-      int fd = ::open(fn, O_WRONLY|O_TRUNC|O_CREAT, 0644);
+      int fd = ::open(fn, O_WRONLY|O_TRUNC|O_CREAT|O_CLOEXEC, 0644);
       if (fd >= 0) {
 	bl.write_fd(fd);
 	::close(fd);
@@ -567,6 +571,9 @@ Message *decode_message(CephContext *cct, int crcflags,
   case MSG_OSD_PG_RECOVERY_DELETE_REPLY:
     m = MOSDPGRecoveryDeleteReply::create();
     break;
+  case MSG_OSD_PG_READY_TO_MERGE:
+    m = MOSDPGReadyToMerge::create();
+    break;
   case MSG_OSD_EC_WRITE:
     m = MOSDECSubOpWrite::create();
     break;
@@ -612,6 +619,12 @@ Message *decode_message(CephContext *cct, int crcflags,
     break;
   case CEPH_MSG_CLIENT_REPLY:
     m = MClientReply::create();
+    break;
+  case CEPH_MSG_CLIENT_RECLAIM:
+    m = MClientReclaim::create();
+    break;
+  case CEPH_MSG_CLIENT_RECLAIM_REPLY:
+    m = MClientReclaimReply::create();
     break;
   case CEPH_MSG_CLIENT_CAPS:
     m = MClientCaps::create();
@@ -690,6 +703,10 @@ Message *decode_message(CephContext *cct, int crcflags,
 
   case MSG_MDS_FRAGMENTNOTIFY:
     m = MMDSFragmentNotify::create();
+    break;
+
+  case MSG_MDS_FRAGMENTNOTIFYACK:
+    m = MMDSFragmentNotifyAck::create();
     break;
 
   case MSG_MDS_EXPORTDIRDISCOVER:

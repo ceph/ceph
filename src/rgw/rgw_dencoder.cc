@@ -3,6 +3,7 @@
 
 #include "rgw_common.h"
 #include "rgw_rados.h"
+#include "rgw_zone.h"
 #include "rgw_log.h"
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h"
@@ -404,7 +405,6 @@ void RGWSubUser::generate_test_instances(list<RGWSubUser*>& o)
 void RGWUserInfo::generate_test_instances(list<RGWUserInfo*>& o)
 {
   RGWUserInfo *i = new RGWUserInfo;
-  i->auid = 1;
   i->user_id = "user_id";
   i->display_name =  "display_name";
   i->user_email = "user@email";
@@ -454,6 +454,20 @@ void RGWZone::generate_test_instances(list<RGWZone*> &o)
   RGWZone *z = new RGWZone;
   o.push_back(z);
   o.push_back(new RGWZone);
+}
+
+void RGWRealm::generate_test_instances(list<RGWRealm*> &o)
+{
+  RGWRealm *z = new RGWRealm;
+  o.push_back(z);
+  o.push_back(new RGWRealm);
+}
+
+void RGWPeriod::generate_test_instances(list<RGWPeriod*> &o)
+{
+  RGWPeriod *z = new RGWPeriod;
+  o.push_back(z);
+  o.push_back(new RGWPeriod);
 }
 
 void RGWZoneParams::generate_test_instances(list<RGWZoneParams*> &o)

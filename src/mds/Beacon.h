@@ -16,11 +16,12 @@
 #ifndef BEACON_STATE_H
 #define BEACON_STATE_H
 
+#include <mutex>
 #include <string_view>
+#include <thread>
 
 #include "include/types.h"
 #include "include/Context.h"
-#include "common/Mutex.h"
 #include "msg/Dispatcher.h"
 
 #include "messages/MMDSBeacon.h"
@@ -44,8 +45,8 @@ public:
   using clock = ceph::coarse_mono_clock;
   using time = ceph::coarse_mono_time;
 
-  Beacon(CephContext *cct_, MonClient *monc_, std::string_view name);
-  ~Beacon() override {};
+  Beacon(CephContext *cct, MonClient *monc, std::string_view name);
+  ~Beacon() override;
 
   void init(const MDSMap &mdsmap);
   void shutdown();
@@ -77,18 +78,21 @@ public:
 
   bool is_laggy();
   double last_cleared_laggy() const {
-    Mutex::Locker l(lock);
+    std::unique_lock lock(mutex);
     return std::chrono::duration<double>(clock::now()-last_laggy).count();
   }
 
 private:
   void _notify_mdsmap(const MDSMap &mdsmap);
-  void _send();
+  bool _send();
 
-  //CephContext *cct;
-  mutable Mutex lock;
+  mutable std::mutex mutex;
+  std::thread sender;
+  std::condition_variable cvar;
+  time last_send = clock::zero();
+  double beacon_interval = 5.0;
+  bool finished = false;
   MonClient*    monc;
-  SafeTimer     timer;
 
   // Items we duplicate from the MDS to have access under our own lock
   std::string name;
@@ -104,19 +108,11 @@ private:
   version_t last_seq = 0; // last seq sent to monitor
   std::map<version_t,time>  seq_stamp;    // seq # -> time sent
   time last_acked_stamp = clock::zero();  // last time we sent a beacon that got acked
-  time last_mon_reconnect = clock::zero();
   bool laggy = false;
   time last_laggy = clock::zero();
 
   // Health status to be copied into each beacon message
   MDSHealth health;
-
-  // Ticker
-  Context *sender = nullptr;
-
-  version_t awaiting_seq = -1;
-  Cond waiting_cond;
 };
 
 #endif // BEACON_STATE_H
-

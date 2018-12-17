@@ -15,6 +15,9 @@
 #include "common/debug.h"
 #include "AuthSessionHandler.h"
 #include "cephx/CephxSessionHandler.h"
+#ifdef HAVE_GSSAPI
+#include "krb/KrbSessionHandler.hpp"
+#endif
 #include "none/AuthNoneSessionHandler.h"
 #include "unknown/AuthUnknownSessionHandler.h"
 
@@ -30,11 +33,20 @@ AuthSessionHandler *get_auth_session_handler(CephContext *cct, int protocol, Cry
  
   switch (protocol) {
   case CEPH_AUTH_CEPHX:
+    // if there is no session key, there is no session handler.
+    if (key.get_type() == CEPH_CRYPTO_NONE) {
+      return nullptr;
+    }
     return new CephxSessionHandler(cct, key, features);
   case CEPH_AUTH_NONE:
     return new AuthNoneSessionHandler(cct, key);
   case CEPH_AUTH_UNKNOWN:
     return new AuthUnknownSessionHandler(cct, key);
+#ifdef HAVE_GSSAPI
+  case CEPH_AUTH_GSS: 
+    return new KrbSessionHandler(cct, key);
+#endif
+  default:
+    return nullptr;
   }
-  return NULL;
 }

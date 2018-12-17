@@ -1,10 +1,13 @@
-import { HttpClientModule } from '@angular/common/http';
+import { HttpClientTestingModule } from '@angular/common/http/testing';
+import { DebugElement } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { TabsModule } from 'ngx-bootstrap';
+import { of } from 'rxjs';
+
+import { TabsModule } from 'ngx-bootstrap/tabs';
 
 import { configureTestBed } from '../../../../../testing/unit-test-helper';
-import { DataTableModule } from '../../../../shared/datatable/datatable.module';
+import { OsdService } from '../../../../shared/api/osd.service';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
 import { SharedModule } from '../../../../shared/shared.module';
 import { PerformanceCounterModule } from '../../../performance-counter/performance-counter.module';
@@ -14,13 +17,15 @@ import { OsdDetailsComponent } from './osd-details.component';
 describe('OsdDetailsComponent', () => {
   let component: OsdDetailsComponent;
   let fixture: ComponentFixture<OsdDetailsComponent>;
+  let debugElement: DebugElement;
+  let osdService: OsdService;
+  let getDetailsSpy;
 
   configureTestBed({
     imports: [
-      HttpClientModule,
+      HttpClientTestingModule,
       TabsModule.forRoot(),
       PerformanceCounterModule,
-      DataTableModule,
       SharedModule
     ],
     declarations: [OsdDetailsComponent, OsdPerformanceHistogramComponent]
@@ -31,11 +36,41 @@ describe('OsdDetailsComponent', () => {
     component = fixture.componentInstance;
 
     component.selection = new CdTableSelection();
+    debugElement = fixture.debugElement;
+    osdService = debugElement.injector.get(OsdService);
+
+    getDetailsSpy = spyOn(osdService, 'getDetails');
 
     fixture.detectChanges();
   });
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  it('should fail creating a histogram', () => {
+    const detailDataWithoutHistogram = {
+      osd_map: {},
+      osd_metadata: {},
+      histogram: 'osd down'
+    };
+    getDetailsSpy.and.returnValue(of(detailDataWithoutHistogram));
+    component.osd = { tree: { id: 0 } };
+    component.refresh();
+    expect(getDetailsSpy).toHaveBeenCalled();
+    expect(component.osd.histogram_failed).toBe('osd down');
+  });
+
+  it('should succeed creating a histogram', () => {
+    const detailDataWithHistogram = {
+      osd_map: {},
+      osd_metdata: {},
+      histogram: {}
+    };
+    getDetailsSpy.and.returnValue(of(detailDataWithHistogram));
+    component.osd = { tree: { id: 0 } };
+    component.refresh();
+    expect(getDetailsSpy).toHaveBeenCalled();
+    expect(component.osd.histogram_failed).toBe('');
   });
 });

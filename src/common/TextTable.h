@@ -17,7 +17,7 @@
 
 #include <vector>
 #include <sstream>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 /**
  * TextTable:
@@ -108,7 +108,7 @@ public:
     }
 
     // inserting more items than defined columns is a coding error
-    assert(curcol + 1 <= col.size());
+    ceph_assert(curcol + 1 <= col.size());
 
     // get rendered width of item alone
     std::ostringstream oss;
@@ -134,7 +134,7 @@ public:
    */
 
   struct endrow_t {};
-  static endrow_t endrow;
+  static constexpr endrow_t endrow{};
 
   /**
    * Implements TextTable::endrow

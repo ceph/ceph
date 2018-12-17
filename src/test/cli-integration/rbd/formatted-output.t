@@ -496,10 +496,13 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "op_features": [], 
       "order": 22, 
       "parent": {
+          "id": "*",  (glob)
           "image": "bar", 
           "overlap": 536870912, 
           "pool": "rbd", 
-          "snapshot": "snap"
+          "pool_namespace": "", 
+          "snapshot": "snap", 
+          "trash": false
       }, 
       "protected": "false", 
       "size": 536870912, 
@@ -530,8 +533,11 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <protected>false</protected>
     <parent>
       <pool>rbd</pool>
+      <pool_namespace></pool_namespace>
       <image>bar</image>
+      <id>*</id> (glob)
       <snapshot>snap</snapshot>
+      <trash>false</trash>
       <overlap>536870912</overlap>
     </parent>
   </image>
@@ -828,6 +834,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
           "parent": {
               "image": "bar", 
               "pool": "rbd", 
+              "pool_namespace": "", 
               "snapshot": "snap"
           }, 
           "protected": "false", 
@@ -860,6 +867,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <size>536870912</size>
       <parent>
         <pool>rbd</pool>
+        <pool_namespace></pool_namespace>
         <image>bar</image>
         <snapshot>snap</snapshot>
       </parent>
@@ -948,13 +956,14 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     </lock>
   </locks>
   $ rbd snap list foo
-  SNAPID*NAME*SIZE*TIMESTAMP* (glob)
+  SNAPID*NAME*SIZE*PROTECTED*TIMESTAMP* (glob)
   *snap*1 GiB* (glob)
   $ rbd snap list foo --format json | python -mjson.tool | sed 's/,$/, /'
   [
       {
           "id": *,  (glob)
           "name": "snap", 
+          "protected": "false", 
           "size": 1073741824, 
           "timestamp": ""
       }
@@ -965,24 +974,27 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <id>*</id> (glob)
       <name>snap</name>
       <size>1073741824</size>
+      <protected>false</protected>
       <timestamp></timestamp>
     </snapshot>
   </snapshots>
   $ rbd snap list bar
-  SNAPID*NAME*SIZE*TIMESTAMP* (glob)
-  *snap*512 MiB* (glob)
+  SNAPID*NAME*SIZE*PROTECTED*TIMESTAMP* (glob)
+  *snap*512 MiB*yes* (glob)
   *snap2*1 GiB* (glob)
   $ rbd snap list bar --format json | python -mjson.tool | sed 's/,$/, /'
   [
       {
           "id": *,  (glob)
           "name": "snap", 
+          "protected": "true", 
           "size": 536870912, 
           "timestamp": * (glob)
       }, 
       {
           "id": *,  (glob)
           "name": "snap2", 
+          "protected": "false", 
           "size": 1073741824, 
           "timestamp": * (glob)
       }
@@ -993,12 +1005,14 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <id>*</id> (glob)
       <name>snap</name>
       <size>536870912</size>
+      <protected>true</protected>
       <timestamp>*</timestamp> (glob)
     </snapshot>
     <snapshot>
       <id>*</id> (glob)
       <name>snap2</name>
       <size>1073741824</size>
+      <protected>false</protected>
       <timestamp>*</timestamp> (glob)
     </snapshot>
   </snapshots>
@@ -1008,13 +1022,14 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   $ rbd snap list baz --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
   <snapshots></snapshots>
   $ rbd snap list rbd_other/child
-  SNAPID*NAME*SIZE*TIMESTAMP* (glob)
+  SNAPID*NAME*SIZE*PROTECTED*TIMESTAMP* (glob)
   *snap*512 MiB* (glob)
   $ rbd snap list rbd_other/child --format json | python -mjson.tool | sed 's/,$/, /'
   [
       {
           "id": *,  (glob)
           "name": "snap", 
+          "protected": "false", 
           "size": 536870912, 
           "timestamp": * (glob)
       }
@@ -1025,6 +1040,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <id>*</id> (glob)
       <name>snap</name>
       <size>536870912</size>
+      <protected>false</protected>
       <timestamp>*</timestamp> (glob)
     </snapshot>
   </snapshots>

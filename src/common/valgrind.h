@@ -6,7 +6,7 @@
 
 #include "acconfig.h"
 
-#ifdef HAVE_VALGRIND_HELGRIND_H
+#if defined(HAVE_VALGRIND_HELGRIND_H) && !defined(NDEBUG)
   #include <valgrind/helgrind.h>
 #else
   #define ANNOTATE_HAPPENS_AFTER(x)             (void)0

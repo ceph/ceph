@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #ifndef CEPH_RGW_SYNC_MODULE_ES_H
 #define CEPH_RGW_SYNC_MODULE_ES_H
 
@@ -23,6 +26,9 @@ public:
   RGWRESTMgr *get_rest_filter(int dialect, RGWRESTMgr *orig) override;
   RGWRESTConn *get_rest_conn();
   std::string get_index_path();
+  bool supports_user_writes() override {
+    return true;
+  }
 };
 
 #endif

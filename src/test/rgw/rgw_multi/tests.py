@@ -4,13 +4,14 @@ import string
 import sys
 import time
 import logging
+import errno
 
 try:
     from itertools import izip_longest as zip_longest
 except ImportError:
     from itertools import zip_longest
 from itertools import combinations
-from cStringIO import StringIO
+from six import StringIO
 
 import boto
 import boto.s3.connection
@@ -21,7 +22,7 @@ from nose.tools import eq_ as eq
 from nose.plugins.attrib import attr
 from nose.plugins.skip import SkipTest
 
-from .multisite import Zone
+from .multisite import Zone, ZoneGroup, Credentials
 
 from .conn import get_gateway_connection
 from .tools import assert_raises
@@ -894,9 +895,13 @@ def test_zonegroup_remove():
     z1, z2 = zonegroup.zones[0:2]
     c1, c2 = (z1.cluster, z2.cluster)
 
+    # get admin credentials out of existing zone
+    system_key = z1.data['system_key']
+    admin_creds = Credentials(system_key['access_key'], system_key['secret_key'])
+
     # create a new zone in zonegroup on c2 and commit
     zone = Zone('remove', zonegroup, c2)
-    zone.create(c2)
+    zone.create(c2, admin_creds.credential_args())
     zonegroup.zones.append(zone)
     zonegroup.period.update(zone, commit=True)
 
@@ -911,6 +916,34 @@ def test_zonegroup_remove():
 
     # validate the resulting period
     zonegroup.period.update(z1, commit=True)
+
+
+def test_zg_master_zone_delete():
+
+    master_zg = realm.master_zonegroup()
+    master_zone = master_zg.master_zone
+
+    assert(len(master_zg.zones) >= 1)
+    master_cluster = master_zg.zones[0].cluster
+
+    rm_zg = ZoneGroup('remove_zg')
+    rm_zg.create(master_cluster)
+
+    rm_zone = Zone('remove', rm_zg, master_cluster)
+    rm_zone.create(master_cluster)
+    master_zg.period.update(master_zone, commit=True)
+
+
+    rm_zone.delete(master_cluster)
+    # Period update: This should now fail as the zone will be the master zone
+    # in that zg
+    _, retcode = master_zg.period.update(master_zone, check_retcode=False)
+    assert(retcode == errno.EINVAL)
+
+    # Proceed to delete the zonegroup as well, previous period now does not
+    # contain a dangling master_zone, this must succeed
+    rm_zg.delete(master_cluster)
+    master_zg.period.update(master_zone, commit=True)
 
 def test_set_bucket_website():
     buckets, zone_bucket = create_bucket_per_zone_in_realm()

@@ -122,7 +122,7 @@ cluster.  Devices are identified by an id (a non-negative integer) and
 a name, normally ``osd.N`` where ``N`` is the device id.
 
 Devices may also have a *device class* associated with them (e.g.,
-``hdd`` or ``ssd``), allowing them to be conveniently targetted by a
+``hdd`` or ``ssd``), allowing them to be conveniently targeted by a
 crush rule.
 
 Types and Buckets
@@ -248,6 +248,11 @@ old Ceph clients.  You can view the CRUSH hierarchy with shadow items
 with::
 
   ceph osd crush tree --show-shadow
+
+For older clusters created before Luminous that relied on manually
+crafted CRUSH maps to maintain per-device-type hierarchies, there is a
+*reclassify* tool available to help transition to device classes
+without triggering data movement (see :ref:`crush-reclassify`).
 
 
 Weights sets

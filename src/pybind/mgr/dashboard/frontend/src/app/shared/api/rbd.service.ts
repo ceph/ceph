@@ -95,4 +95,37 @@ export class RbdService {
       observe: 'response'
     });
   }
+
+  listTrash() {
+    return this.http.get(`api/block/image/trash/`);
+  }
+
+  moveTrash(poolName, rbdName, delay) {
+    return this.http.post(
+      `api/block/image/${poolName}/${rbdName}/move_trash`,
+      { delay: delay },
+      { observe: 'response' }
+    );
+  }
+
+  purgeTrash(poolName) {
+    return this.http.post(`api/block/image/trash/purge/?pool_name=${poolName}`, null, {
+      observe: 'response'
+    });
+  }
+
+  restoreTrash(poolName, imageId, newImageName) {
+    return this.http.post(
+      `api/block/image/trash/${poolName}/${imageId}/restore`,
+      { new_image_name: newImageName },
+      { observe: 'response' }
+    );
+  }
+
+  removeTrash(poolName, imageId, imageName, force = false) {
+    return this.http.delete(
+      `api/block/image/trash/${poolName}/${imageId}/?image_name=${imageName}&force=${force}`,
+      { observe: 'response' }
+    );
+  }
 }

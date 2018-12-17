@@ -66,7 +66,7 @@ TEST(mClockPriorityQueue, Sizes)
   ceph::mClockQueue<Request,Client> q(&client_info_func);
 
   ASSERT_TRUE(q.empty());
-  ASSERT_EQ(0u, q.length());
+  ASSERT_EQ(0u, q.get_size_slow());
 
   Client c1(1);
   Client c2(2);
@@ -74,12 +74,12 @@ TEST(mClockPriorityQueue, Sizes)
   q.enqueue_strict(c1, 1, Request(1));
   q.enqueue_strict(c2, 2, Request(2));
   q.enqueue_strict(c1, 2, Request(3));
-  q.enqueue(c2, 1, 0, Request(4));
-  q.enqueue(c1, 2, 0, Request(5));
+  q.enqueue(c2, 1, 1u, Request(4));
+  q.enqueue(c1, 2, 1u, Request(5));
   q.enqueue_strict(c2, 1, Request(6));
 
   ASSERT_FALSE(q.empty());
-  ASSERT_EQ(6u, q.length());
+  ASSERT_EQ(6u, q.get_size_slow());
 
 
   for (int i = 0; i < 6; ++i) {
@@ -87,7 +87,7 @@ TEST(mClockPriorityQueue, Sizes)
   }
 
   ASSERT_TRUE(q.empty());
-  ASSERT_EQ(0u, q.length());
+  ASSERT_EQ(0u, q.get_size_slow());
 }
 
 
@@ -150,10 +150,10 @@ TEST(mClockPriorityQueue, JustNotStrict)
 
   // non-strict queue ignores priorites, but will divide between
   // clients evenly and maintain orders between clients
-  q.enqueue(c1, 1, 0, Request(1));
-  q.enqueue(c1, 2, 0, Request(2));
-  q.enqueue(c2, 3, 0, Request(3));
-  q.enqueue(c2, 4, 0, Request(4));
+  q.enqueue(c1, 1, 1u, Request(1));
+  q.enqueue(c1, 2, 1u, Request(2));
+  q.enqueue(c2, 3, 1u, Request(3));
+  q.enqueue(c2, 4, 1u, Request(4));
 
   Request r1, r2;
 
@@ -184,10 +184,10 @@ TEST(mClockPriorityQueue, EnqueuFront)
 
   // non-strict queue ignores priorites, but will divide between
   // clients evenly and maintain orders between clients
-  q.enqueue(c1, 1, 0, Request(1));
-  q.enqueue(c1, 2, 0, Request(2));
-  q.enqueue(c2, 3, 0, Request(3));
-  q.enqueue(c2, 4, 0, Request(4));
+  q.enqueue(c1, 1, 1u, Request(1));
+  q.enqueue(c1, 2, 1u, Request(2));
+  q.enqueue(c2, 3, 1u, Request(3));
+  q.enqueue(c2, 4, 1u, Request(4));
   q.enqueue_strict(c2, 6, Request(6));
   q.enqueue_strict(c1, 7, Request(7));
 
@@ -237,15 +237,15 @@ TEST(mClockPriorityQueue, RemoveByClass)
   Client c2(2);
   Client c3(3);
 
-  q.enqueue(c1, 1, 0, Request(1));
-  q.enqueue(c2, 1, 0, Request(2));
-  q.enqueue(c3, 1, 0, Request(4));
+  q.enqueue(c1, 1, 1u, Request(1));
+  q.enqueue(c2, 1, 1u, Request(2));
+  q.enqueue(c3, 1, 1u, Request(4));
   q.enqueue_strict(c1, 2, Request(8));
   q.enqueue_strict(c2, 1, Request(16));
   q.enqueue_strict(c3, 3, Request(32));
-  q.enqueue(c3, 1, 0, Request(64));
-  q.enqueue(c2, 1, 0, Request(128));
-  q.enqueue(c1, 1, 0, Request(256));
+  q.enqueue(c3, 1, 1u, Request(64));
+  q.enqueue(c2, 1, 1u, Request(128));
+  q.enqueue(c1, 1, 1u, Request(256));
 
   int out_mask = 2 | 16 | 128;
   int in_mask = 1 | 8 | 256;
@@ -260,11 +260,11 @@ TEST(mClockPriorityQueue, RemoveByClass)
     out.pop_front();
   }
 
-  ASSERT_EQ(6u, q.length()) << "after removal of three from client c2";
+  ASSERT_EQ(6u, q.get_size_slow()) << "after removal of three from client c2";
 
   q.remove_by_class(c3);
 
-  ASSERT_EQ(3u, q.length()) << "after removal of three from client c3";
+  ASSERT_EQ(3u, q.get_size_slow()) << "after removal of three from client c3";
   while (!q.empty()) {
     Request r = q.dequeue();
     ASSERT_TRUE((r.value & in_mask) > 0) <<
@@ -281,15 +281,15 @@ TEST(mClockPriorityQueue, RemoveByFilter)
   Client c2(2);
   Client c3(3);
 
-  q.enqueue(c1, 1, 0, Request(1));
-  q.enqueue(c2, 1, 0, Request(2));
-  q.enqueue(c3, 1, 0, Request(3));
+  q.enqueue(c1, 1, 1u, Request(1));
+  q.enqueue(c2, 1, 1u, Request(2));
+  q.enqueue(c3, 1, 1u, Request(3));
   q.enqueue_strict(c1, 2, Request(4));
   q.enqueue_strict(c2, 1, Request(5));
   q.enqueue_strict(c3, 3, Request(6));
-  q.enqueue(c3, 1, 0, Request(7));
-  q.enqueue(c2, 1, 0, Request(8));
-  q.enqueue(c1, 1, 0, Request(9));
+  q.enqueue(c3, 1, 1u, Request(7));
+  q.enqueue(c2, 1, 1u, Request(8));
+  q.enqueue(c1, 1, 1u, Request(9));
 
   std::list<Request> filtered;
 
@@ -310,7 +310,7 @@ TEST(mClockPriorityQueue, RemoveByFilter)
     filtered.pop_front();
   }
 
-  ASSERT_EQ(5u, q.length()) <<
+  ASSERT_EQ(5u, q.get_size_slow()) <<
     "filter should have left five remaining elements";
   while (!q.empty()) {
     Request r = q.dequeue();

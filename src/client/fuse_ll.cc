@@ -32,7 +32,7 @@
 #include "Fh.h"
 #include "ioctl.h"
 #include "common/config.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/cephfs/ceph_statx.h"
 
 #include "fuse_ll.h"
@@ -105,7 +105,7 @@ public:
 static int getgroups(fuse_req_t req, gid_t **sgids)
 {
 #if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 8)
-  assert(sgids);
+  ceph_assert(sgids);
   int c = fuse_req_getgroups(req, 0, NULL);
   if (c < 0) {
     return c;
@@ -418,7 +418,7 @@ static void fuse_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
   if (cfuse->fino_snap(parent) == CEPH_SNAPDIR &&
       fuse_multithreaded && fuse_syncfs_on_mksnap) {
     int err = 0;
-    int fd = ::open(cfuse->mountpoint, O_RDONLY | O_DIRECTORY);
+    int fd = ::open(cfuse->mountpoint, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
     if (fd < 0) {
       err = errno;
     } else {
@@ -1148,7 +1148,7 @@ int CephFuse::Handle::init(int argc, const char *argv[])
     return EINVAL;
   }
 
-  assert(args.allocated);  // Checking fuse has realloc'd args so we can free newargv
+  ceph_assert(args.allocated);  // Checking fuse has realloc'd args so we can free newargv
   free(newargv);
   return 0;
 }
@@ -1215,9 +1215,9 @@ uint64_t CephFuse::Handle::fino_snap(uint64_t fino)
     vinodeno_t vino  = client->map_faked_ino(fino);
     return vino.snapid;
   } else {
-    Mutex::Locker l(stag_lock);
+    std::lock_guard l(stag_lock);
     uint64_t stag = FINO_STAG(fino);
-    assert(stag_snap_map.count(stag));
+    ceph_assert(stag_snap_map.count(stag));
     return stag_snap_map[stag];
   }
 }
@@ -1252,7 +1252,7 @@ uint64_t CephFuse::Handle::make_fake_ino(inodeno_t ino, snapid_t snapid)
     if (snapid == CEPH_NOSNAP && ino == client->get_root_ino())
       return FUSE_ROOT_ID;
 
-    Mutex::Locker l(stag_lock);
+    std::lock_guard l(stag_lock);
     auto p = snap_stag_map.find(snapid);
     if (p != snap_stag_map.end()) {
       inodeno_t fino = MAKE_FINO(ino, p->second);
@@ -1280,7 +1280,7 @@ uint64_t CephFuse::Handle::make_fake_ino(inodeno_t ino, snapid_t snapid)
       }
     }
     if (stag == first)
-      assert(0 == "run out of stag");
+      ceph_abort_msg("run out of stag");
 
     inodeno_t fino = MAKE_FINO(ino, stag);
     //cout << "make_fake_ino " << ino << "." << snapid << " -> " << fino << std::endl;

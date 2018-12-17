@@ -20,6 +20,11 @@ add_executable(unittest_http_manager test_http_manager.cc)
 add_ceph_unittest(unittest_http_manager)
 target_link_libraries(unittest_http_manager rgw_a)
 
+# unitttest_rgw_reshard_wait
+add_executable(unittest_rgw_reshard_wait test_rgw_reshard_wait.cc)
+add_ceph_unittest(unittest_rgw_reshard_wait)
+target_link_libraries(unittest_rgw_reshard_wait rgw_a)
+
 set(test_rgw_a_src
   test_rgw_common.cc)
 add_library(test_rgw_a STATIC ${test_rgw_a_src})
@@ -36,7 +41,6 @@ target_link_libraries(ceph_test_rgw_manifest
   cls_lock_client
   cls_refcount_client
   cls_log_client
-  cls_statelog_client
   cls_timeindex_client
   cls_version_client
   cls_user_client
@@ -60,7 +64,6 @@ target_link_libraries(ceph_test_rgw_obj
   cls_lock_client
   cls_refcount_client
   cls_log_client
-  cls_statelog_client
   cls_version_client
   cls_user_client
   librados
@@ -83,7 +86,6 @@ target_link_libraries(unittest_rgw_crypto
   cls_lock_client
   cls_refcount_client
   cls_log_client
-  cls_statelog_client
   cls_version_client
   cls_user_client
   librados
@@ -95,6 +97,16 @@ target_link_libraries(unittest_rgw_crypto
   ${CRYPTO_LIBS}
   )
 
+add_executable(unittest_rgw_putobj test_rgw_putobj.cc)
+add_ceph_unittest(unittest_rgw_putobj)
+target_link_libraries(unittest_rgw_putobj rgw_a ${UNITTEST_LIBS})
+
+add_executable(ceph_test_rgw_throttle
+  test_rgw_throttle.cc
+  $<TARGET_OBJECTS:unit-main>)
+target_link_libraries(ceph_test_rgw_throttle rgw_a
+  librados global ${UNITTEST_LIBS})
+
 add_executable(unittest_rgw_iam_policy test_rgw_iam_policy.cc)
 add_ceph_unittest(unittest_rgw_iam_policy)
 target_link_libraries(unittest_rgw_iam_policy
@@ -103,7 +115,6 @@ target_link_libraries(unittest_rgw_iam_policy
   cls_lock_client
   cls_refcount_client
   cls_log_client
-  cls_statelog_client
   cls_version_client
   cls_user_client
   librados

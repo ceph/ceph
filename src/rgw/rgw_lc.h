@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #ifndef CEPH_RGW_LC_H
 #define CEPH_RGW_LC_H
 
@@ -175,6 +178,14 @@ public:
       return status;
   }
 
+  bool is_enabled() {
+    return status == "Enabled";
+  }
+
+  void set_enabled(bool flag) {
+    status = (flag ? "Enabled" : "Disabled");
+  }
+
   string& get_prefix() {
       return prefix;
   }
@@ -199,28 +210,28 @@ public:
     return dm_expiration;
   }
 
-  void set_id(string*_id) {
-    id = *_id;
+  void set_id(const string& _id) {
+    id = _id;
   }
 
-  void set_prefix(string*_prefix) {
-    prefix = *_prefix;
+  void set_prefix(const string& _prefix) {
+    prefix = _prefix;
   }
 
-  void set_status(string*_status) {
-    status = *_status;
+  void set_status(const string& _status) {
+    status = _status;
   }
 
-  void set_expiration(LCExpiration*_expiration) {
-    expiration = *_expiration;
+  void set_expiration(const LCExpiration& _expiration) {
+    expiration = _expiration;
   }
 
-  void set_noncur_expiration(LCExpiration*_noncur_expiration) {
-    noncur_expiration = *_noncur_expiration;
+  void set_noncur_expiration(const LCExpiration& _noncur_expiration) {
+    noncur_expiration = _noncur_expiration;
   }
 
-  void set_mp_expiration(LCExpiration* _mp_expiration) {
-    mp_expiration = *_mp_expiration;
+  void set_mp_expiration(const LCExpiration& _mp_expiration) {
+    mp_expiration = _mp_expiration;
   }
 
   void set_dm_expiration(bool _dm_expiration) {
@@ -263,19 +274,19 @@ public:
    }
   void dump(Formatter *f) const;
 
+  void init_simple_days_rule(std::string_view _id, std::string_view _prefix, int num_days);
 };
 WRITE_CLASS_ENCODER(LCRule)
 
 struct lc_op
 {
-  bool status;
-  bool dm_expiration;
-  int expiration;
-  int noncur_expiration;
-  int mp_expiration;
+  bool status{false};
+  bool dm_expiration{false};
+  int expiration{0};
+  int noncur_expiration{0};
+  int mp_expiration{0};
   boost::optional<ceph::real_time> expiration_date;
   boost::optional<RGWObjTags> obj_tags;
-  lc_op() : status(false), dm_expiration(false), expiration(0), noncur_expiration(0), mp_expiration(0) {}
   
   void dump(Formatter *f) const;
 };
@@ -336,7 +347,7 @@ public:
 };
 WRITE_CLASS_ENCODER(RGWLifecycleConfiguration)
 
-class RGWLC {
+class RGWLC : public DoutPrefixProvider {
   CephContext *cct;
   RGWRados *store;
   int max_objs{0};
@@ -345,13 +356,14 @@ class RGWLC {
   string cookie;
 
   class LCWorker : public Thread {
+    const DoutPrefixProvider *dpp;
     CephContext *cct;
     RGWLC *lc;
     Mutex lock;
     Cond cond;
 
   public:
-    LCWorker(CephContext *_cct, RGWLC *_lc) : cct(_cct), lc(_lc), lock("LCWorker") {}
+    LCWorker(const DoutPrefixProvider* _dpp, CephContext *_cct, RGWLC *_lc) : dpp(_dpp), cct(_cct), lc(_lc), lock("LCWorker") {}
     void *entry() override;
     void stop();
     bool should_work(utime_t& now);
@@ -379,6 +391,15 @@ class RGWLC {
   bool going_down();
   void start_processor();
   void stop_processor();
+  int set_bucket_config(RGWBucketInfo& bucket_info,
+                        const map<string, bufferlist>& bucket_attrs,
+                        RGWLifecycleConfiguration *config);
+  int remove_bucket_config(RGWBucketInfo& bucket_info,
+                           const map<string, bufferlist>& bucket_attrs);
+
+  CephContext *get_cct() const override { return store->ctx(); }
+  unsigned get_subsys() const;
+  std::ostream& gen_prefix(std::ostream& out) const;
 
   private:
   int remove_expired_obj(RGWBucketInfo& bucket_info, rgw_obj_key obj_key, const string& owner, const string& owner_display_name, bool remove_indeed = true);

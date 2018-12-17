@@ -5,7 +5,6 @@ from __future__ import absolute_import
 import json
 import logging
 from collections import namedtuple
-import threading
 import time
 
 import requests
@@ -25,8 +24,9 @@ class DashboardTestCase(MgrTestCase):
     CLIENTS_REQUIRED = 1
     CEPHFS = False
 
-    _session = None
-    _resp = None
+    _session = None  # type: requests.sessions.Session
+    _token = None
+    _resp = None  # type: requests.models.Response
     _loggedin = False
     _base_uri = None
 
@@ -71,12 +71,14 @@ class DashboardTestCase(MgrTestCase):
         if cls._loggedin:
             cls.logout()
         cls._post('/api/auth', {'username': username, 'password': password})
+        cls._token = cls.jsonBody()['token']
         cls._loggedin = True
 
     @classmethod
     def logout(cls):
         if cls._loggedin:
-            cls._delete('/api/auth')
+            cls._post('/api/auth/logout')
+            cls._token = None
             cls._loggedin = False
 
     @classmethod
@@ -100,6 +102,10 @@ class DashboardTestCase(MgrTestCase):
                 return res
             return execute
         return wrapper
+
+    @classmethod
+    def set_jwt_token(cls, token):
+        cls._token = token
 
     @classmethod
     def setUpClass(cls):
@@ -134,6 +140,7 @@ class DashboardTestCase(MgrTestCase):
             # wait for mds restart to complete...
             cls.fs.wait_for_daemons()
 
+        cls._token = None
         cls._session = requests.Session()
         cls._resp = None
 
@@ -144,6 +151,7 @@ class DashboardTestCase(MgrTestCase):
     def setUp(self):
         if not self._loggedin and self.AUTO_AUTHENTICATE:
             self.login('admin', 'admin')
+        self.wait_for_health_clear(20)
 
     @classmethod
     def tearDownClass(cls):
@@ -153,22 +161,31 @@ class DashboardTestCase(MgrTestCase):
     @classmethod
     def _request(cls, url, method, data=None, params=None):
         url = "{}{}".format(cls._base_uri, url)
-        log.info("request %s to %s", method, url)
+        log.info("Request %s to %s", method, url)
+        headers = {}
+        if cls._token:
+            headers['Authorization'] = "Bearer {}".format(cls._token)
+
         if method == 'GET':
-            cls._resp = cls._session.get(url, params=params, verify=False)
+            cls._resp = cls._session.get(url, params=params, verify=False,
+                                         headers=headers)
         elif method == 'POST':
             cls._resp = cls._session.post(url, json=data, params=params,
-                                          verify=False)
+                                          verify=False, headers=headers)
         elif method == 'DELETE':
             cls._resp = cls._session.delete(url, json=data, params=params,
-                                            verify=False)
+                                            verify=False, headers=headers)
         elif method == 'PUT':
             cls._resp = cls._session.put(url, json=data, params=params,
-                                         verify=False)
+                                         verify=False, headers=headers)
         else:
             assert False
         try:
-            if cls._resp.text and cls._resp.text != "":
+            if not cls._resp.ok:
+                # Output response for easier debugging.
+                log.error("Request response: %s", cls._resp.text)
+            content_type = cls._resp.headers['content-type']
+            if content_type == 'application/json' and cls._resp.text and cls._resp.text != "":
                 return cls._resp.json()
             return cls._resp.text
         except ValueError as ex:
@@ -302,9 +319,16 @@ class DashboardTestCase(MgrTestCase):
     def reset_session(cls):
         cls._session = requests.Session()
 
+    def assertSubset(self, data, biggerData):
+        for key, value in data.items():
+            self.assertEqual(biggerData[key], value)
+
     def assertJsonBody(self, data):
         body = self._resp.json()
         self.assertEqual(body, data)
+
+    def assertJsonSubset(self, data):
+        self.assertSubset(data, self._resp.json())
 
     def assertSchema(self, data, schema):
         try:
@@ -323,6 +347,11 @@ class DashboardTestCase(MgrTestCase):
             self.assertIn(self._resp.status_code, status)
         else:
             self.assertEqual(self._resp.status_code, status)
+
+    def assertHeaders(self, headers):
+        for name, value in headers.items():
+            self.assertIn(name, self._resp.headers)
+            self.assertEqual(self._resp.headers[name], value)
 
     def assertError(self, code=None, component=None, detail=None):
         body = self._resp.json()
@@ -380,14 +409,16 @@ JList = namedtuple('JList', ['elem_typ'])
 JTuple = namedtuple('JList', ['elem_typs'])
 
 
-class JObj(namedtuple('JObj', ['sub_elems', 'allow_unknown', 'none'])):
-    def __new__(cls, sub_elems, allow_unknown=False, none=False):
+class JObj(namedtuple('JObj', ['sub_elems', 'allow_unknown', 'none', 'unknown_schema'])):
+    def __new__(cls, sub_elems, allow_unknown=False, none=False, unknown_schema=None):
         """
-        :type sub_elems: dict[str, JAny | JLeaf | JList | JObj]
+        :type sub_elems: dict[str, JAny | JLeaf | JList | JObj | type]
         :type allow_unknown: bool
+        :type none: bool
+        :type unknown_schema: int, str, JAny | JLeaf | JList | JObj
         :return:
         """
-        return super(JObj, cls).__new__(cls, sub_elems, allow_unknown, none)
+        return super(JObj, cls).__new__(cls, sub_elems, allow_unknown, none, unknown_schema)
 
 
 JAny = namedtuple('JAny', ['none'])
@@ -437,10 +468,16 @@ def _validate_json(val, schema, path=[]):
         unknown_keys = set(val.keys()).difference(set(schema.sub_elems.keys()))
         if not schema.allow_unknown and unknown_keys:
             raise _ValError('unknown keys: {}'.format(unknown_keys), path)
-        return all(
-            _validate_json(val[sub_elem_name], sub_elem, path + [sub_elem_name])
-            for sub_elem_name, sub_elem in schema.sub_elems.items()
+        result = all(
+            _validate_json(val[key], sub_schema, path + [key])
+            for key, sub_schema in schema.sub_elems.items()
         )
+        if unknown_keys and schema.allow_unknown and schema.unknown_schema:
+            result += all(
+                _validate_json(val[key], schema.unknown_schema, path + [key])
+                for key in unknown_keys
+            )
+        return result
     if schema in [str, int, float, bool, six.string_types]:
         return _validate_json(val, JLeaf(schema), path)
 

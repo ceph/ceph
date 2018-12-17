@@ -163,7 +163,7 @@ public:
   }
 
   int run() override {
-    assert(pprocess); /* should have initialized by init() */
+    ceph_assert(pprocess); /* should have initialized by init() */
     thread = new RGWProcessControlThread(pprocess);
     thread->create("rgw_frontend");
     return 0;

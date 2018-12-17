@@ -3,11 +3,11 @@ import { Component, Input } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ChartsModule } from 'ng2-charts/ng2-charts';
-import { BsDropdownModule, ProgressbarModule, TabsModule } from 'ngx-bootstrap';
+import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
+import { ProgressbarModule } from 'ngx-bootstrap/progressbar';
+import { TabsModule } from 'ngx-bootstrap/tabs';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
-import { CephfsService } from '../../../shared/api/cephfs.service';
+import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../shared/shared.module';
 import { CephfsDetailComponent } from './cephfs-detail.component';
 
@@ -30,7 +30,6 @@ describe('CephfsDetailComponent', () => {
   configureTestBed({
     imports: [
       SharedModule,
-      ChartsModule,
       RouterTestingModule,
       BsDropdownModule.forRoot(),
       ProgressbarModule.forRoot(),
@@ -38,7 +37,7 @@ describe('CephfsDetailComponent', () => {
       HttpClientTestingModule
     ],
     declarations: [CephfsDetailComponent, CephfsChartStubComponent, CephfsClientsStubComponent],
-    providers: [CephfsService]
+    providers: i18nProviders
   });
 
   beforeEach(() => {

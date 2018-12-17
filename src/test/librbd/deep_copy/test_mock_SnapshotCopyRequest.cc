@@ -35,9 +35,9 @@ public:
 
   static SetHeadRequest* create(librbd::MockTestImageCtx *image_ctx,
                                 uint64_t size,
-                                const librbd::ParentSpec &parent_spec,
+                                const cls::rbd::ParentImageSpec &parent_spec,
                                 uint64_t parent_overlap, Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -56,10 +56,10 @@ struct SnapshotCreateRequest<librbd::MockTestImageCtx> {
                                        const std::string &snap_name,
                                        const cls::rbd::SnapshotNamespace &snap_namespace,
                                        uint64_t size,
-                                       const librbd::ParentSpec &parent_spec,
+                                       const cls::rbd::ParentImageSpec &parent_spec,
                                        uint64_t parent_overlap,
                                        Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -148,7 +148,7 @@ public:
     if ((m_src_image_ctx->features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0) {
       return;
     }
-    EXPECT_CALL(mock_exclusive_lock, start_op()).WillOnce(
+    EXPECT_CALL(mock_exclusive_lock, start_op(_)).WillOnce(
       ReturnNew<FunctionContext>([](int) {}));
   }
 

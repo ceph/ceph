@@ -13,6 +13,7 @@
  */
 #include "rgw/rgw_period_history.h"
 #include "rgw/rgw_rados.h"
+#include "rgw/rgw_zone.h"
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
 #include <boost/lexical_cast.hpp>

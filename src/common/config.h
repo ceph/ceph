@@ -19,11 +19,9 @@
 #include <boost/container/small_vector.hpp>
 #include "common/ConfUtils.h"
 #include "common/code_environment.h"
-#include "common/Mutex.h"
 #include "log/SubsystemMap.h"
 #include "common/options.h"
 #include "common/subsys_types.h"
-#include "common/config_fwd.h"
 #include "common/config_tracker.h"
 #include "common/config_values.h"
 
@@ -55,7 +53,7 @@ extern const char *ceph_conf_level_name(int level);
  * There are 3 ways to read the ceph context-- the old way and two new ways.
  * In the old way, code would simply read the public variables of the
  * configuration, without taking a lock. In the new way #1, code registers a
- * configuration obserever which receives callbacks when a value changes. These
+ * configuration observer which receives callbacks when a value changes. These
  * callbacks take place under the md_config_t lock. Alternatively one can use
  * get_val(const char *name) method to safely get a copy of the value.
  *

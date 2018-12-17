@@ -3,7 +3,7 @@
 
 #include "cls/rbd/cls_rbd_types.h"
 #include "common/Formatter.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/stringify.h"
 #include "librbd/WatchNotifyTypes.h"
 #include "librbd/watcher/Utils.h"

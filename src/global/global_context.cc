@@ -20,7 +20,11 @@
  */
 CephContext *g_ceph_context = NULL;
 ConfigProxy& g_conf() {
+#ifdef WITH_SEASTAR
+  return ceph::common::local_conf();
+#else
   return g_ceph_context->_conf;
+#endif
 }
 
 const char *g_assert_file = 0;
@@ -29,3 +33,5 @@ const char *g_assert_func = 0;
 const char *g_assert_condition = 0;
 unsigned long long g_assert_thread = 0;
 char g_assert_thread_name[4096];
+char g_assert_msg[8096];
+char g_process_name[NAME_MAX + 1];

@@ -23,7 +23,8 @@
 #include <set>
 #include <memory>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
+#include "common/Mutex.h"
 
 #define mydout(cct, v) lgeneric_subdout(cct, context, v)
 
@@ -276,7 +277,7 @@ private:
   void sub_finish(ContextType* sub, int r) {
     lock.Lock();
 #ifdef DEBUG_GATHER
-    assert(waitfor.count(sub));
+    ceph_assert(waitfor.count(sub));
     waitfor.erase(sub);
 #endif
     --sub_existing_count;
@@ -338,12 +339,12 @@ public:
   }
   void set_finisher(ContextType *onfinish_) {
     Mutex::Locker l(lock);
-    assert(!onfinish);
+    ceph_assert(!onfinish);
     onfinish = onfinish_;
   }
   void activate() {
     lock.Lock();
-    assert(activated == false);
+    ceph_assert(activated == false);
     activated = true;
     if (sub_existing_count != 0) {
       lock.Unlock();
@@ -354,7 +355,7 @@ public:
   }
   ContextType *new_sub() {
     Mutex::Locker l(lock);
-    assert(activated == false);
+    ceph_assert(activated == false);
     sub_created_count++;
     sub_existing_count++;
     ContextType *s = new C_GatherSub(this);
@@ -425,7 +426,7 @@ public:
   }
   ~C_GatherBuilderBase() {
     if (c_gather) {
-      assert(activated); // Don't forget to activate your C_Gather!
+      ceph_assert(activated); // Don't forget to activate your C_Gather!
     }
     else {
       delete finisher;
@@ -440,7 +441,7 @@ public:
   void activate() {
     if (!c_gather)
       return;
-    assert(finisher != NULL);
+    ceph_assert(finisher != NULL);
     activated = true;
     c_gather->activate();
   }
@@ -456,13 +457,13 @@ public:
     return (c_gather != NULL);
   }
   int num_subs_created() {
-    assert(!activated);
+    ceph_assert(!activated);
     if (c_gather == NULL)
       return 0;
     return c_gather->get_sub_created_count();
   }
   int num_subs_remaining() {
-    assert(!activated);
+    ceph_assert(!activated);
     if (c_gather == NULL)
       return 0;
     return c_gather->get_sub_existing_count();

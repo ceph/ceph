@@ -13,6 +13,8 @@
  *
  */
 
+#include "common/ceph_context.h"
+
 #include <mutex>
 #include <iostream>
 
@@ -22,9 +24,9 @@
 
 #include "include/mempool.h"
 #include "common/admin_socket.h"
-#include "common/perf_counters.h"
 #include "common/code_environment.h"
-#include "common/Cond.h"
+#include "common/ceph_mutex.h"
+#include "common/debug.h"
 #include "common/config.h"
 #include "common/ceph_crypto.h"
 #include "common/HeartbeatMap.h"
@@ -44,6 +46,47 @@
 using ceph::bufferlist;
 using ceph::HeartbeatMap;
 
+// for CINIT_FLAGS
+#include "common/common_init.h"
+
+#include <iostream>
+#include <pthread.h>
+
+#ifdef WITH_SEASTAR
+CephContext::CephContext()
+  : _conf{ceph::common::local_conf()},
+    _perf_counters_collection{ceph::common::local_perf_coll()},
+    _crypto_random{std::make_unique<CryptoRandom>()}
+{}
+
+// define the dtor in .cc as CryptoRandom is an incomplete type in the header
+CephContext::~CephContext()
+{}
+
+CryptoRandom* CephContext::random() const
+{
+  return _crypto_random.get();
+}
+
+CephContext* CephContext::get()
+{
+  ++nref;
+  return this;
+}
+
+void CephContext::put()
+{
+  if (--nref == 0) {
+    delete this;
+  }
+}
+
+PerfCountersCollectionImpl* CephContext::get_perfcounters_collection()
+{
+  return _perf_counters_collection.get_perf_collection();
+}
+
+#else  // WITH_SEASTAR
 namespace {
 
 class LockdepObs : public md_config_obs_t {
@@ -88,7 +131,7 @@ public:
       "dump_mempools",
       this,
       "get mempool stats");
-    assert(r == 0);
+    ceph_assert(r == 0);
   }
   ~MempoolObs() override {
     cct->_conf.remove_observer(this);
@@ -132,8 +175,7 @@ class CephContextServiceThread : public Thread
 {
 public:
   explicit CephContextServiceThread(CephContext *cct)
-    : _lock("CephContextServiceThread::_lock"),
-      _reopen_logs(false), _exit_thread(false), _cct(cct)
+    : _reopen_logs(false), _exit_thread(false), _cct(cct)
   {
   }
 
@@ -142,13 +184,13 @@ public:
   void *entry() override
   {
     while (1) {
-      Mutex::Locker l(_lock);
+      std::unique_lock l(_lock);
 
       if (_cct->_conf->heartbeat_interval) {
-        utime_t interval(_cct->_conf->heartbeat_interval, 0);
-        _cond.WaitInterval(_lock, interval);
+        auto interval = ceph::make_timespan(_cct->_conf->heartbeat_interval);
+        _cond.wait_for(l, interval);
       } else
-        _cond.Wait(_lock);
+        _cond.wait(l);
 
       if (_exit_thread) {
         break;
@@ -161,28 +203,28 @@ public:
       _cct->_heartbeat_map->check_touch_file();
 
       // refresh the perf coutners
-      _cct->refresh_perf_values();
+      _cct->_refresh_perf_values();
     }
     return NULL;
   }
 
   void reopen_logs()
   {
-    Mutex::Locker l(_lock);
+    std::lock_guard l(_lock);
     _reopen_logs = true;
-    _cond.Signal();
+    _cond.notify_all();
   }
 
   void exit_thread()
   {
-    Mutex::Locker l(_lock);
+    std::lock_guard l(_lock);
     _exit_thread = true;
-    _cond.Signal();
+    _cond.notify_all();
   }
 
 private:
-  Mutex _lock;
-  Cond _cond;
+  ceph::mutex _lock = ceph::make_mutex("CephContextServiceThread::_lock");
+  ceph::condition_variable _cond;
   bool _reopen_logs;
   bool _exit_thread;
   CephContext *_cct;
@@ -309,7 +351,7 @@ public:
                           const std::set <std::string> &changed) override {
     if (changed.count(
 	  "enable_experimental_unrecoverable_data_corrupting_features")) {
-      std::lock_guard<ceph::spinlock> lg(cct->_feature_lock);
+      std::lock_guard lg(cct->_feature_lock);
       get_str_set(
 	conf->enable_experimental_unrecoverable_data_corrupting_features,
 	cct->_experimental_features);
@@ -376,7 +418,11 @@ public:
 
   bool call(std::string_view command, const cmdmap_t& cmdmap,
 	    std::string_view format, bufferlist& out) override {
-    m_cct->do_command(command, cmdmap, format, &out);
+    try {
+      m_cct->do_command(command, cmdmap, format, &out);
+    } catch (const bad_cmd_get& e) {
+      return false;
+    }
     return true;
   }
 };
@@ -393,11 +439,9 @@ void CephContext::do_command(std::string_view command, const cmdmap_t& cmdmap,
   }
   lgeneric_dout(this, 1) << "do_command '" << command << "' '"
 			 << ss.str() << dendl;
-  if (command == "assert" && _conf->debug_asok_assert_abort) {
-    assert(0 == "assert");
-  }
+  ceph_assert_always(!(command == "assert" && _conf->debug_asok_assert_abort));
   if (command == "abort" && _conf->debug_asok_assert_abort) {
-    abort();
+   ceph_abort();
   }
   if (command == "perfcounters_dump" || command == "1" ||
       command == "perf dump") {
@@ -534,7 +578,7 @@ void CephContext::do_command(std::string_view command, const cmdmap_t& cmdmap,
       _log->reopen_log_file();
     }
     else {
-      assert(0 == "registered under wrong command?");    
+      ceph_abort_msg("registered under wrong command?");    
     }
     f->close_section();
   }
@@ -567,8 +611,7 @@ CephContext::CephContext(uint32_t module_type_,
     _crypto_aes(NULL),
     _plugin_registry(NULL),
     _lockdep_obs(NULL),
-    crush_location(this),
-    _cct_perf(NULL)
+    crush_location(this)
 {
   _log = new ceph::logging::Log(&_conf->subsys);
   _log->start();
@@ -667,7 +710,7 @@ CephContext::~CephContext()
   delete _crypto_none;
   delete _crypto_aes;
   if (_crypto_inited > 0) {
-    assert(_crypto_inited == 1);  // or else someone explicitly did
+    ceph_assert(_crypto_inited == 1);  // or else someone explicitly did
 				  // init but not shutdown
     shutdown_crypto();
   }
@@ -700,13 +743,16 @@ void CephContext::shutdown_crypto()
 void CephContext::start_service_thread()
 {
   {
-    std::lock_guard<ceph::spinlock> lg(_service_thread_lock);
+    std::lock_guard lg(_service_thread_lock);
     if (_service_thread) {
       return;
     }
     _service_thread = new CephContextServiceThread(this);
     _service_thread->create("service");
   }
+
+  if (!(get_init_flags() & CINIT_FLAG_NO_CCT_PERF_COUNTERS))
+    _enable_perf_counter();
 
   // make logs flush on_exit()
   if (_conf->log_flush_on_exit)
@@ -724,7 +770,7 @@ void CephContext::start_service_thread()
 
 void CephContext::reopen_logs()
 {
-  std::lock_guard<ceph::spinlock> lg(_service_thread_lock);
+  std::lock_guard lg(_service_thread_lock);
   if (_service_thread)
     _service_thread->reopen_logs();
 }
@@ -744,6 +790,9 @@ void CephContext::join_service_thread()
   thread->exit_thread();
   thread->join();
   delete thread;
+
+  if (!(get_init_flags() & CINIT_FLAG_NO_CCT_PERF_COUNTERS))
+    _disable_perf_counter();
 }
 
 uint32_t CephContext::get_module_type() const
@@ -766,37 +815,69 @@ PerfCountersCollection *CephContext::get_perfcounters_collection()
   return _perf_counters_collection;
 }
 
-void CephContext::enable_perf_counter()
+void CephContext::_enable_perf_counter()
 {
+  assert(!_cct_perf);
   PerfCountersBuilder plb(this, "cct", l_cct_first, l_cct_last);
   plb.add_u64(l_cct_total_workers, "total_workers", "Total workers");
   plb.add_u64(l_cct_unhealthy_workers, "unhealthy_workers", "Unhealthy workers");
-  PerfCounters *perf_tmp = plb.create_perf_counters();
-
-  std::unique_lock<ceph::spinlock> lg(_cct_perf_lock);
-  assert(_cct_perf == NULL);
-  _cct_perf = perf_tmp;
-  lg.unlock();
-
+  _cct_perf = plb.create_perf_counters();
   _perf_counters_collection->add(_cct_perf);
+
+  assert(_mempool_perf_names.empty());
+  assert(_mempool_perf_descriptions.empty());
+  _mempool_perf_names.reserve(mempool::num_pools * 2);
+  _mempool_perf_descriptions.reserve(mempool::num_pools * 2);
+  for (unsigned i = 0; i < mempool::num_pools; ++i) {
+    string n = mempool::get_pool_name(mempool::pool_index_t(i));
+    _mempool_perf_names.push_back(n + "_bytes");
+    _mempool_perf_descriptions.push_back(
+      string("mempool ") + n + " total bytes");
+    _mempool_perf_names.push_back(n + "_items");
+    _mempool_perf_descriptions.push_back(
+      string("mempool ") + n + " total items");
+  }
+
+  PerfCountersBuilder plb2(this, "mempool", l_mempool_first,
+			  l_mempool_first + 1 + 2*mempool::num_pools);
+  unsigned l = l_mempool_first + 1;
+  for (unsigned i = 0; i < mempool::num_pools; ++i) {
+    plb2.add_u64(l++, _mempool_perf_names[i*2].c_str(),
+		 _mempool_perf_descriptions[i*2].c_str());
+    plb2.add_u64(l++, _mempool_perf_names[i*2+1].c_str(),
+		 _mempool_perf_descriptions[i*2+1].c_str());
+  }
+  _mempool_perf = plb2.create_perf_counters();
+  _perf_counters_collection->add(_mempool_perf);
 }
 
-void CephContext::disable_perf_counter()
+void CephContext::_disable_perf_counter()
 {
+  if (!_cct_perf) {
+    return;
+  }
   _perf_counters_collection->remove(_cct_perf);
-
-  std::lock_guard<ceph::spinlock> lg(_cct_perf_lock);
   delete _cct_perf;
-  _cct_perf = NULL;
+  _cct_perf = nullptr;
+
+  _perf_counters_collection->remove(_mempool_perf);
+  delete _mempool_perf;
+  _mempool_perf = nullptr;
+  _mempool_perf_names.clear();
+  _mempool_perf_descriptions.clear();
 }
 
-void CephContext::refresh_perf_values()
+void CephContext::_refresh_perf_values()
 {
-  std::lock_guard<ceph::spinlock> lg(_cct_perf_lock);
-
   if (_cct_perf) {
     _cct_perf->set(l_cct_total_workers, _heartbeat_map->get_total_workers());
     _cct_perf->set(l_cct_unhealthy_workers, _heartbeat_map->get_unhealthy_workers());
+  }
+  unsigned l = l_mempool_first + 1;
+  for (unsigned i = 0; i < mempool::num_pools; ++i) {
+    mempool::pool_t& p = mempool::get_pool(mempool::pool_index_t(i));
+    _mempool_perf->set(l++, p.allocated_bytes());
+    _mempool_perf->set(l++, p.allocated_items());
   }
 }
 
@@ -820,7 +901,7 @@ CryptoHandler *CephContext::get_crypto_handler(int type)
 void CephContext::notify_pre_fork()
 {
   {
-    std::lock_guard<ceph::spinlock> lg(_fork_watchers_lock);
+    std::lock_guard lg(_fork_watchers_lock);
     for (auto &&t : _fork_watchers) {
       t->handle_pre_fork();
     }
@@ -846,3 +927,4 @@ void CephContext::notify_post_fork()
   for (auto &&t : _fork_watchers)
     t->handle_post_fork();
 }
+#endif	// WITH_SEASTAR

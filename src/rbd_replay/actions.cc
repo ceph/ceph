@@ -109,7 +109,7 @@ void StopThreadAction::perform(ActionCtx &ctx) {
 void AioReadAction::perform(ActionCtx &worker) {
   dout(ACTION_LEVEL) << "Performing " << *this << dendl;
   librbd::Image *image = worker.get_image(m_action.imagectx_id);
-  assert(image);
+  ceph_assert(image);
   PendingIO::ptr io(new PendingIO(pending_io_id(), worker));
   worker.add_pending(io);
   int r = image->aio_read(m_action.offset, m_action.length, io->bufferlist(), &io->completion());

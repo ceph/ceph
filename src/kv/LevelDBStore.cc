@@ -13,7 +13,7 @@ using std::string;
 #include "common/perf_counters.h"
 
 // re-include our assert to clobber the system one; fix dout:
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_leveldb
@@ -61,14 +61,14 @@ int LevelDBStore::init(string option_str)
 
 int LevelDBStore::open(ostream &out, const vector<ColumnFamily>& cfs)  {
   if (!cfs.empty()) {
-    assert(0 == "Not implemented");
+    ceph_abort_msg("Not implemented");
   }
   return do_open(out, false);
 }
 
 int LevelDBStore::create_and_open(ostream &out, const vector<ColumnFamily>& cfs) {
   if (!cfs.empty()) {
-    assert(0 == "Not implemented");
+    ceph_abort_msg("Not implemented");
   }
   return do_open(out, true);
 }
@@ -93,7 +93,7 @@ int LevelDBStore::load_leveldb_options(bool create_if_missing, leveldb::Options 
     filterpolicy.reset(_filterpolicy);
     ldoptions.filter_policy = filterpolicy.get();
 #else
-    assert(0 == "bloom size set but installed leveldb doesn't support bloom filters");
+    ceph_abort_msg(0 == "bloom size set but installed leveldb doesn't support bloom filters");
 #endif
   }
   if (options.compression_enabled)
@@ -255,10 +255,9 @@ void LevelDBStore::LevelDBTransactionImpl::set(
     // make sure the buffer isn't too large or we might crash here...    
     char* slicebuf = (char*) alloca(bllen);
     leveldb::Slice newslice(slicebuf, bllen);
-    std::list<buffer::ptr>::const_iterator pb;
-    for (pb = to_set_bl.buffers().begin(); pb != to_set_bl.buffers().end(); ++pb) {
-      size_t ptrlen = (*pb).length();
-      memcpy((void*)slicebuf, (*pb).c_str(), ptrlen);
+    for (const auto& node : to_set_bl.buffers()) {
+      const size_t ptrlen = node.length();
+      memcpy(static_cast<void*>(slicebuf), node.c_str(), ptrlen);
       slicebuf += ptrlen;
     } 
     bat.Put(leveldb::Slice(key), newslice);
@@ -323,7 +322,7 @@ int LevelDBStore::get(const string &prefix,
       const string &key,
       bufferlist *out)
 {
-  assert(out && (out->length() == 0));
+  ceph_assert(out && (out->length() == 0));
   utime_t start = ceph_clock_now();
   int r = 0;
   string value, k;
@@ -409,7 +408,7 @@ void LevelDBStore::compact_thread_entry()
 
 void LevelDBStore::compact_range_async(const string& start, const string& end)
 {
-  Mutex::Locker l(compact_queue_lock);
+  std::lock_guard l(compact_queue_lock);
 
   // try to merge adjacent ranges.  this is O(n), but the queue should
   // be short.  note that we do not cover all overlap cases and merge

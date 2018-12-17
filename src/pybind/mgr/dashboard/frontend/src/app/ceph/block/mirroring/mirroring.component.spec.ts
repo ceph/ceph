@@ -1,10 +1,11 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { BsDropdownModule, TabsModule } from 'ngx-bootstrap';
+import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { ProgressbarModule } from 'ngx-bootstrap/progressbar';
+import { TabsModule } from 'ngx-bootstrap/tabs';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
+import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../shared/shared.module';
 import { MirrorHealthColorPipe } from '../mirror-health-color.pipe';
 import { MirroringComponent } from './mirroring.component';
@@ -21,7 +22,8 @@ describe('MirroringComponent', () => {
       TabsModule.forRoot(),
       ProgressbarModule.forRoot(),
       HttpClientTestingModule
-    ]
+    ],
+    providers: i18nProviders
   });
 
   beforeEach(() => {

@@ -20,12 +20,13 @@
 
 #include <boost/intrusive/list.hpp>
 
+#include "include/Context.h"
 #include "common/RefCountedObj.h"
 #include "common/ThrottleInterface.h"
 #include "common/config.h"
 #include "common/debug.h"
 #include "common/zipkin_trace.h"
-#include "include/assert.h" // Because intrusive_ptr clobbers our assert...
+#include "include/ceph_assert.h" // Because intrusive_ptr clobbers our assert...
 #include "include/buffer.h"
 #include "include/types.h"
 #include "msg/Connection.h"
@@ -125,6 +126,7 @@
 #define MSG_OSD_PG_CREATE2      120
 #define MSG_OSD_SCRUB2          121
 
+#define MSG_OSD_PG_READY_TO_MERGE 122
 
 // *** MDS ***
 
@@ -151,6 +153,7 @@
 #define MSG_MDS_OPENINO            0x20f
 #define MSG_MDS_OPENINOREPLY       0x210
 #define MSG_MDS_SNAPUPDATE         0x211
+#define MSG_MDS_FRAGMENTNOTIFYACK  0x212
 #define MSG_MDS_LOCK               0x300
 #define MSG_MDS_INODEFILECAPS      0x301
 

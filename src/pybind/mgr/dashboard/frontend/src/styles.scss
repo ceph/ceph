@@ -4,6 +4,7 @@
 $fa-font-path: '../node_modules/fork-awesome/fonts';
 @import '../node_modules/fork-awesome/scss/fork-awesome';
 $font_family_1: 'ForkAwesome';
+@import 'app/ceph/dashboard/info-card/info-card-popover.scss';
 
 /* Basics */
 html {
@@ -285,6 +286,10 @@ uib-accordion .panel-title,
   font-size: 6px;
   padding-left: 4px;
   vertical-align: text-top;
+}
+/* Panel */
+.panel-footer button.btn:not(:first-child) {
+  margin-left: 5px;
 }
 /* Modal dialog */
 .modal-footer button.btn:not(:first-child) {

@@ -47,7 +47,7 @@ static int nss_aes_operation(CK_ATTRIBUTE_TYPE op,
 
   PK11Context *ectx;
   ectx = PK11_CreateContextBySymKey(mechanism, op, key, param);
-  assert(ectx);
+  ceph_assert(ectx);
 
   incopy = in;  // it's a shallow copy!
   in_buf = (unsigned char*)incopy.c_str();

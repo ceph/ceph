@@ -60,7 +60,7 @@ struct LoadRequest<librbd::MockTestImageCtx> {
   static LoadRequest *create(librados::IoCtx &ioctx,
                              std::map<std::string, cls::rbd::MirrorImageMap> *image_map,
                              Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->image_map = image_map;
     s_instance->on_finish = on_finish;
     return s_instance;
@@ -81,7 +81,7 @@ struct UpdateRequest<librbd::MockTestImageCtx> {
                                std::map<std::string, cls::rbd::MirrorImageMap> &&update_mapping,
                                std::set<std::string> &&global_image_ids,
                                Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -293,8 +293,9 @@ public:
     for (auto& global_image_id : global_image_ids) {
       auto it = peer_ack_ctxs->find(global_image_id);
       ASSERT_TRUE(it != peer_ack_ctxs->end());
-      it->second->complete(ret);
+      auto ack_ctx = it->second;
       peer_ack_ctxs->erase(it);
+      ack_ctx->complete(ret);
       wait_for_scheduled_task();
     }
   }
@@ -306,8 +307,9 @@ public:
     for (auto& global_image_id : global_image_ids) {
       auto it = peer_ack_ctxs->find(global_image_id);
       ASSERT_TRUE(it != peer_ack_ctxs->end());
-      it->second->complete(ret);
+      auto ack_ctx = it->second;
       peer_ack_ctxs->erase(it);
+      ack_ctx->complete(ret);
       wait_for_scheduled_task();
       ASSERT_TRUE(wait_for_map_update(1));
     }
@@ -320,8 +322,9 @@ public:
     for (auto& global_image_id : global_image_ids) {
       auto it = peer_ack_ctxs->find(global_image_id);
       ASSERT_TRUE(it != peer_ack_ctxs->end());
-      it->second->complete(ret);
+      auto ack_ctx = it->second;
       peer_ack_ctxs->erase(it);
+      ack_ctx->complete(ret);
       ASSERT_TRUE(wait_for_map_update(1));
       ASSERT_TRUE(wait_for_listener_notify(1));
     }

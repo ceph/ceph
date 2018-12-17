@@ -12,11 +12,11 @@ public:
 
   int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override
   {
-    auto bl_buffers = bl.buffers();
+    auto& bl_buffers = bl.buffers();
     auto i = bl_buffers.begin();
     while (bl_len > 0)
     {
-      assert(i != bl_buffers.end());
+      ceph_assert(i != bl_buffers.end());
       off_t len = std::min<off_t>(bl_len, i->length());
       sink.append(*i, 0, len);
       bl_len -= len;
@@ -48,20 +48,13 @@ public:
   }
 };
 
-class ut_put_sink: public RGWPutObjDataProcessor
+class ut_put_sink: public rgw::putobj::DataProcessor
 {
   bufferlist sink;
 public:
-  ut_put_sink(){}
-  virtual ~ut_put_sink(){}
-  int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_raw_obj *pobj, bool *again) override
+  int process(bufferlist&& bl, uint64_t ofs) override
   {
-    sink.append(bl);
-    *again = false;
-    return 0;
-  }
-  int throttle_data(void *handle, const rgw_raw_obj& obj, uint64_t size, bool need_to_wait) override
-  {
+    sink.claim_append(bl);
     return 0;
   }
   bufferlist&  get_sink()
@@ -128,16 +121,10 @@ TEST(Compress, LimitedChunkSize)
     bufferlist bl;
     bl.append(bp);
 
-    void* handle;
-    rgw_raw_obj obj;
-    bool again = false;
-
     ut_put_sink c_sink;
     RGWPutObj_Compress compressor(g_ceph_context, plugin, &c_sink);
-    compressor.handle_data(bl, 0, &handle, &obj, &again);
-
-    bufferlist empty;
-    compressor.handle_data(empty, s, &handle, &obj, &again);
+    compressor.process(std::move(bl), 0);
+    compressor.process({}, s); // flush
 
     RGWCompressionInfo cs_info;
     cs_info.compression_type = plugin->get_type_name();
@@ -152,6 +139,7 @@ TEST(Compress, LimitedChunkSize)
     decompress.fixup_range(f_begin, f_end);
 
     decompress.handle_data(c_sink.get_sink(), 0, c_sink.get_sink().length());
+    bufferlist empty;
     decompress.handle_data(empty, 0, 0);
 
     ASSERT_LE(d_sink.get_size(), (size_t)g_ceph_context->_conf->rgw_max_chunk_size);
@@ -172,15 +160,9 @@ TEST(Compress, BillionZeros)
   bufferlist bl;
   bl.append(bp);
 
-  void* handle;
-  rgw_raw_obj obj;
-  bool again = false;
-
   for (int i=0; i<1000;i++)
-    compressor.handle_data(bl, size*i, &handle, &obj, &again);
-
-  bufferlist empty;
-  compressor.handle_data(empty, size*1000, &handle, &obj, &again);
+    compressor.process(bufferlist{bl}, size*i);
+  compressor.process({}, size*1000); // flush
 
   RGWCompressionInfo cs_info;
   cs_info.compression_type = plugin->get_type_name();
@@ -195,6 +177,7 @@ TEST(Compress, BillionZeros)
   decompress.fixup_range(f_begin, f_end);
 
   decompress.handle_data(c_sink.get_sink(), 0, c_sink.get_sink().length());
+  bufferlist empty;
   decompress.handle_data(empty, 0, 0);
 
   ASSERT_EQ(d_sink.get_sink().length() , size*1000);

@@ -63,9 +63,9 @@ ImageMap<I>::ImageMap(librados::IoCtx &ioctx, Threads<I> *threads,
 
 template <typename I>
 ImageMap<I>::~ImageMap() {
-  assert(m_async_op_tracker.empty());
-  assert(m_timer_task == nullptr);
-  assert(m_rebalance_task == nullptr);
+  ceph_assert(m_async_op_tracker.empty());
+  ceph_assert(m_timer_task == nullptr);
+  ceph_assert(m_rebalance_task == nullptr);
 }
 
 template <typename I>
@@ -148,8 +148,8 @@ template <typename I>
 void ImageMap<I>::process_updates() {
   dout(20) << dendl;
 
-  assert(m_threads->timer_lock.is_locked());
-  assert(m_timer_task == nullptr);
+  ceph_assert(m_threads->timer_lock.is_locked());
+  ceph_assert(m_timer_task == nullptr);
 
   Updates map_updates;
   std::set<std::string> map_removals;
@@ -170,7 +170,7 @@ void ImageMap<I>::process_updates() {
     case image_map::ACTION_TYPE_NONE:
       continue;
     case image_map::ACTION_TYPE_MAP_UPDATE:
-      assert(info.instance_id != image_map::UNMAPPED_INSTANCE_ID);
+      ceph_assert(info.instance_id != image_map::UNMAPPED_INSTANCE_ID);
       map_updates.emplace_back(global_image_id, info.instance_id,
                                info.mapped_time);
       break;
@@ -178,11 +178,11 @@ void ImageMap<I>::process_updates() {
       map_removals.emplace(global_image_id);
       break;
     case image_map::ACTION_TYPE_ACQUIRE:
-      assert(info.instance_id != image_map::UNMAPPED_INSTANCE_ID);
+      ceph_assert(info.instance_id != image_map::UNMAPPED_INSTANCE_ID);
       acquire_updates.emplace_back(global_image_id, info.instance_id);
       break;
     case image_map::ACTION_TYPE_RELEASE:
-      assert(info.instance_id != image_map::UNMAPPED_INSTANCE_ID);
+      ceph_assert(info.instance_id != image_map::UNMAPPED_INSTANCE_ID);
       release_updates.emplace_back(global_image_id, info.instance_id);
       break;
     }
@@ -205,7 +205,7 @@ void ImageMap<I>::schedule_update_task() {
 
 template <typename I>
 void ImageMap<I>::schedule_update_task(const Mutex &timer_lock) {
-  assert(m_threads->timer_lock.is_locked());
+  ceph_assert(m_threads->timer_lock.is_locked());
 
   schedule_rebalance_task();
 
@@ -221,7 +221,7 @@ void ImageMap<I>::schedule_update_task(const Mutex &timer_lock) {
   }
 
   m_timer_task = new FunctionContext([this](int r) {
-      assert(m_threads->timer_lock.is_locked());
+      ceph_assert(m_threads->timer_lock.is_locked());
       m_timer_task = nullptr;
 
       process_updates();
@@ -237,7 +237,7 @@ void ImageMap<I>::schedule_update_task(const Mutex &timer_lock) {
 
 template <typename I>
 void ImageMap<I>::rebalance() {
-  assert(m_rebalance_task == nullptr);
+  ceph_assert(m_rebalance_task == nullptr);
 
   {
     Mutex::Locker locker(m_lock);
@@ -258,7 +258,7 @@ void ImageMap<I>::rebalance() {
 
 template <typename I>
 void ImageMap<I>::schedule_rebalance_task() {
-  assert(m_threads->timer_lock.is_locked());
+  ceph_assert(m_threads->timer_lock.is_locked());
 
   CephContext *cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
 
@@ -275,7 +275,7 @@ void ImageMap<I>::schedule_rebalance_task() {
   }
 
   m_rebalance_task = new FunctionContext([this](int _) {
-      assert(m_threads->timer_lock.is_locked());
+      ceph_assert(m_threads->timer_lock.is_locked());
       m_rebalance_task = nullptr;
 
       rebalance();
@@ -289,7 +289,7 @@ void ImageMap<I>::schedule_rebalance_task() {
 template <typename I>
 void ImageMap<I>::schedule_action(const std::string &global_image_id) {
   dout(20) << "global_image_id=" << global_image_id << dendl;
-  assert(m_lock.is_locked());
+  ceph_assert(m_lock.is_locked());
 
   m_global_image_ids.emplace(global_image_id);
 }
@@ -376,7 +376,7 @@ void ImageMap<I>::update_images_added(
     const std::set<std::string> &global_image_ids) {
   dout(5) << "peer_uuid=" << peer_uuid << ", "
           << "global_image_ids=[" << global_image_ids << "]" << dendl;
-  assert(m_lock.is_locked());
+  ceph_assert(m_lock.is_locked());
 
   for (auto const &global_image_id : global_image_ids) {
     auto result = m_peer_map[global_image_id].insert(peer_uuid);
@@ -394,7 +394,7 @@ void ImageMap<I>::update_images_removed(
     const std::set<std::string> &global_image_ids) {
   dout(5) << "peer_uuid=" << peer_uuid << ", "
           << "global_image_ids=[" << global_image_ids << "]" << dendl;
-  assert(m_lock.is_locked());
+  ceph_assert(m_lock.is_locked());
 
   Updates to_remove;
   for (auto const &global_image_id : global_image_ids) {
@@ -529,7 +529,7 @@ void ImageMap<I>::init(Context *on_finish) {
   if (policy_type == "none" || policy_type == "simple") {
     m_policy.reset(image_map::SimplePolicy::create(m_ioctx));
   } else {
-    assert(false); // not really needed as such, but catch it.
+    ceph_abort(); // not really needed as such, but catch it.
   }
 
   dout(20) << "mapping policy=" << policy_type << dendl;
@@ -550,7 +550,7 @@ void ImageMap<I>::shut_down(Context *on_finish) {
 
     {
       Mutex::Locker locker(m_lock);
-      assert(!m_shutting_down);
+      ceph_assert(!m_shutting_down);
 
       m_shutting_down = true;
       m_policy.reset();

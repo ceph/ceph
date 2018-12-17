@@ -1,9 +1,12 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #include "rgw_cr_rest.h"
 
 #include "rgw_coroutine.h"
 
 // re-include our assert to clobber the system one; fix dout:
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #include <boost/asio/yield.hpp>
 

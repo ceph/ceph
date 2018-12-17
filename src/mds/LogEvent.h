@@ -70,7 +70,9 @@ public:
 
   explicit LogEvent(int t)
     : _type(t), _start_off(0), _segment(0) { }
+  LogEvent(const LogEvent&) = delete;
   virtual ~LogEvent() { }
+  LogEvent& operator=(const LogEvent&) = delete;
 
   string get_type_str() const;
   static EventType str_to_type(std::string_view str);

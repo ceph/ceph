@@ -179,12 +179,12 @@ class ObjectCacher {
 
     // reference counting
     int get() {
-      assert(ref >= 0);
+      ceph_assert(ref >= 0);
       if (ref == 0) lru_pin();
       return ++ref;
     }
     int put() {
-      assert(ref > 0);
+      ceph_assert(ref > 0);
       if (ref == 1) lru_unpin();
       --ref;
       return ref;
@@ -247,7 +247,7 @@ class ObjectCacher {
     map<loff_t, BufferHead*>     data;
 
     ceph_tid_t last_write_tid;  // version of bh (if non-zero)
-    ceph_tid_t last_commit_tid; // last update commited.
+    ceph_tid_t last_commit_tid; // last update committed.
 
     int dirty_or_tx;
 
@@ -271,9 +271,9 @@ class ObjectCacher {
     }
     ~Object() {
       reads.clear();
-      assert(ref == 0);
-      assert(data.empty());
-      assert(dirty_or_tx == 0);
+      ceph_assert(ref == 0);
+      ceph_assert(data.empty());
+      ceph_assert(dirty_or_tx == 0);
       set_item.remove_myself();
     }
 
@@ -289,8 +289,8 @@ class ObjectCacher {
 
     bool can_close() const {
       if (lru_is_expireable()) {
-	assert(data.empty());
-	assert(waitfor_commit.empty());
+	ceph_assert(data.empty());
+	ceph_assert(waitfor_commit.empty());
 	return true;
       }
       return false;
@@ -326,11 +326,11 @@ class ObjectCacher {
     void add_bh(BufferHead *bh) {
       if (data.empty())
 	get();
-      assert(data.count(bh->start()) == 0);
+      ceph_assert(data.count(bh->start()) == 0);
       data[bh->start()] = bh;
     }
     void remove_bh(BufferHead *bh) {
-      assert(data.count(bh->start()));
+      ceph_assert(data.count(bh->start()));
       data.erase(bh->start());
       if (data.empty())
 	put();
@@ -343,6 +343,7 @@ class ObjectCacher {
     void merge_left(BufferHead *left, BufferHead *right);
     bool can_merge_bh(BufferHead *left, BufferHead *right);
     void try_merge_bh(BufferHead *bh);
+    void maybe_rebuild_buffer(BufferHead *bh);
 
     bool is_cached(loff_t off, loff_t len) const;
     bool include_all_cached_data(loff_t off, loff_t len);
@@ -359,12 +360,12 @@ class ObjectCacher {
 
     // reference counting
     int get() {
-      assert(ref >= 0);
+      ceph_assert(ref >= 0);
       if (ref == 0) lru_pin();
       return ++ref;
     }
     int put() {
-      assert(ref > 0);
+      ceph_assert(ref > 0);
       if (ref == 1) lru_unpin();
       --ref;
       return ref;
@@ -588,7 +589,7 @@ class ObjectCacher {
     flusher_thread.create("flusher");
   }
   void stop() {
-    assert(flusher_thread.is_started());
+    ceph_assert(flusher_thread.is_started());
     lock.Lock();  // hmm.. watch out for deadlock!
     flusher_stop = true;
     flusher_cond.Signal();

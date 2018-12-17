@@ -36,6 +36,20 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon,
 		<< ").mgr e" << mgrmap.get_epoch() << " ";
 }
 
+// the system treats always_on_modules as if they provide built-in functionality
+// by ensuring that they are always enabled.
+const static std::map<uint32_t, std::set<std::string>> always_on_modules = {
+  {
+    CEPH_RELEASE_NAUTILUS, {
+      "crash",
+      "status",
+      "balancer",
+      "devicehealth",
+      "volumes",
+    }
+  }
+};
+
 // Prefix for mon store of active mgr's command descriptions
 const static std::string command_descs_prefix = "mgr_command_descs";
 
@@ -57,9 +71,11 @@ void MgrMonitor::create_initial()
   for (auto& m : tok) {
     pending_map.modules.insert(m);
   }
+  pending_map.always_on_modules = always_on_modules;
   pending_command_descs = mgr_commands;
   dout(10) << __func__ << " initial modules " << pending_map.modules
-	   << ", " << pending_command_descs.size() << " commands"
+	   << ", always on modules " << pending_map.get_always_on_modules()
+           << ", " << pending_command_descs.size() << " commands"
 	   << dendl;
 }
 
@@ -78,7 +94,7 @@ void MgrMonitor::update_from_paxos(bool *need_bootstrap)
 
     bufferlist bl;
     int err = get_version(version, bl);
-    assert(err == 0);
+    ceph_assert(err == 0);
 
     bool old_available = map.get_available();
     uint64_t old_gid = map.get_active_gid();
@@ -158,7 +174,7 @@ void MgrMonitor::post_paxos_update()
       prev_health_checks.resize(mon->paxos_service.size());
       send = true;
     }
-    assert(prev_health_checks.size() == mon->paxos_service.size());
+    ceph_assert(prev_health_checks.size() == mon->paxos_service.size());
     for (auto i = 0u; i < prev_health_checks.size(); i++) {
       const auto& curr = mon->paxos_service[i]->get_health_checks();
       if (!send && curr != prev_health_checks[i]) {
@@ -252,8 +268,7 @@ bool MgrMonitor::preprocess_query(MonOpRequestRef op)
     case MSG_MON_COMMAND:
       try {
 	return preprocess_command(op);
-      }
-      catch (const bad_cmd_get& e) {
+      } catch (const bad_cmd_get& e) {
       bufferlist bl;
       mon->reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
       return true;
@@ -276,8 +291,7 @@ bool MgrMonitor::prepare_update(MonOpRequestRef op)
     case MSG_MON_COMMAND:
       try {
 	return prepare_command(op);
-      }
-      catch (const bad_cmd_get& e) {
+      } catch (const bad_cmd_get& e) {
 	bufferlist bl;
 	mon->reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
 	return true;
@@ -411,6 +425,7 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
 	    << pending_map.active_name << ")" << dendl;
     pending_map.active_gid = m->get_gid();
     pending_map.active_name = m->get_name();
+    pending_map.active_change = ceph_clock_now();
     pending_map.available_modules = m->get_available_modules();
     encode(m->get_metadata(), pending_metadata[m->get_name()]);
     pending_metadata_rm.erase(m->get_name());
@@ -478,7 +493,7 @@ void MgrMonitor::check_sub(Subscription *sub)
       }
     }
   } else {
-    assert(sub->type == "mgrdigest");
+    ceph_assert(sub->type == "mgrdigest");
     if (sub->next == 0) {
       // new registration; cancel previous timer
       cancel_timer();
@@ -547,6 +562,13 @@ void MgrMonitor::on_active()
 {
   if (mon->is_leader()) {
     mon->clog->debug() << "mgrmap e" << map.epoch << ": " << map;
+
+    if (pending_map.always_on_modules != always_on_modules) {
+      pending_map.always_on_modules = always_on_modules;
+      dout(4) << "always on modules changed "
+        << pending_map.get_always_on_modules() << dendl;
+      propose_pending();
+    }
   }
 }
 
@@ -660,7 +682,7 @@ void MgrMonitor::on_restart()
 
 bool MgrMonitor::promote_standby()
 {
-  assert(pending_map.active_gid == 0);
+  ceph_assert(pending_map.active_gid == 0);
   if (pending_map.standbys.size()) {
     // Promote a replacement (arbitrary choice of standby)
     auto replacement_gid = pending_map.standbys.begin()->first;
@@ -668,6 +690,7 @@ bool MgrMonitor::promote_standby()
     pending_map.active_name = pending_map.standbys.at(replacement_gid).name;
     pending_map.available = false;
     pending_map.active_addrs = entity_addrvec_t();
+    pending_map.active_change = ceph_clock_now();
 
     drop_standby(replacement_gid, false);
 
@@ -687,6 +710,7 @@ void MgrMonitor::drop_active()
   pending_metadata.erase(pending_map.active_name);
   pending_map.active_name = "";
   pending_map.active_gid = 0;
+  pending_map.active_change = ceph_clock_now();
   pending_map.available = false;
   pending_map.active_addrs = entity_addrvec_t();
   pending_map.services.clear();
@@ -721,7 +745,7 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
     return true;
   }
 
-  MonSession *session = m->get_session();
+  MonSession *session = op->get_session();
   if (!session) {
     mon->reply_command(op, -EACCES, "access denied", rdata,
 		       get_last_committed());
@@ -729,16 +753,16 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
   }
 
   string format;
-  cmd_getval_throws(g_ceph_context, cmdmap, "format", format, string("json-pretty"));
+  cmd_getval(g_ceph_context, cmdmap, "format", format, string("json-pretty"));
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   string prefix;
-  cmd_getval_throws(g_ceph_context, cmdmap, "prefix", prefix);
+  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
   int r = 0;
 
   if (prefix == "mgr dump") {
     int64_t epoch = 0;
-    cmd_getval_throws(g_ceph_context, cmdmap, "epoch", epoch, (int64_t)map.get_epoch());
+    cmd_getval(g_ceph_context, cmdmap, "epoch", epoch, (int64_t)map.get_epoch());
     if (epoch == (int64_t)map.get_epoch()) {
       f->dump_object("mgrmap", map);
     } else {
@@ -760,6 +784,8 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
     {
       f->open_array_section("enabled_modules");
       for (auto& p : map.modules) {
+        if (map.get_always_on_modules().count(p) > 0)
+          continue;
         // We only show the name for enabled modules.  The any errors
         // etc will show up as a health checks.
         f->dump_string("module", p);
@@ -767,7 +793,8 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
       f->close_section();
       f->open_array_section("disabled_modules");
       for (auto& p : map.available_modules) {
-        if (map.modules.count(p.name) == 0) {
+        if (map.modules.count(p.name) == 0 &&
+            map.get_always_on_modules().count(p.name) == 0) {
           // For disabled modules, we show the full info, to
           // give a hint about whether enabling it will work
           p.dump(f.get());
@@ -786,14 +813,14 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
     f->flush(rdata);
   } else if (prefix == "mgr metadata") {
     string name;
-    cmd_getval_throws(g_ceph_context, cmdmap, "who", name);
+    cmd_getval(g_ceph_context, cmdmap, "who", name);
     if (name.size() > 0 && !map.have_name(name)) {
       ss << "mgr." << name << " does not exist";
       r = -ENOENT;
       goto reply;
     }
     string format;
-    cmd_getval_throws(g_ceph_context, cmdmap, "format", format);
+    cmd_getval(g_ceph_context, cmdmap, "format", format);
     boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty", "json-pretty"));
     if (name.size()) {
       f->open_object_section("mgr_metadata");
@@ -832,7 +859,7 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
     if (!f)
       f.reset(Formatter::create("json-pretty"));
     string field;
-    cmd_getval_throws(g_ceph_context, cmdmap, "property", field);
+    cmd_getval(g_ceph_context, cmdmap, "property", field);
     count_metadata(field, f.get());
     f->flush(rdata);
     r = 0;
@@ -861,24 +888,24 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
     return true;
   }
 
-  MonSession *session = m->get_session();
+  MonSession *session = op->get_session();
   if (!session) {
     mon->reply_command(op, -EACCES, "access denied", rdata, get_last_committed());
     return true;
   }
 
   string format;
-  cmd_getval_throws(g_ceph_context, cmdmap, "format", format, string("plain"));
+  cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   string prefix;
-  cmd_getval_throws(g_ceph_context, cmdmap, "prefix", prefix);
+  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
 
   int r = 0;
 
   if (prefix == "mgr fail") {
     string who;
-    cmd_getval_throws(g_ceph_context, cmdmap, "who", who);
+    cmd_getval(g_ceph_context, cmdmap, "who", who);
 
     std::string err;
     uint64_t gid = strict_strtol(who.c_str(), 10, &err);
@@ -920,13 +947,17 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
     }
   } else if (prefix == "mgr module enable") {
     string module;
-    cmd_getval_throws(g_ceph_context, cmdmap, "module", module);
+    cmd_getval(g_ceph_context, cmdmap, "module", module);
     if (module.empty()) {
       r = -EINVAL;
       goto out;
     }
+    if (pending_map.get_always_on_modules().count(module) > 0) {
+      ss << "module '" << module << "' is already enabled (always-on)";
+      goto out;
+    }
     string force;
-    cmd_getval_throws(g_ceph_context, cmdmap, "force", force);
+    cmd_getval(g_ceph_context, cmdmap, "force", force);
     if (!pending_map.all_support_module(module) &&
 	force != "--force") {
       ss << "all mgr daemons do not support module '" << module << "', pass "
@@ -952,8 +983,13 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
     pending_map.modules.insert(module);
   } else if (prefix == "mgr module disable") {
     string module;
-    cmd_getval_throws(g_ceph_context, cmdmap, "module", module);
+    cmd_getval(g_ceph_context, cmdmap, "module", module);
     if (module.empty()) {
+      r = -EINVAL;
+      goto out;
+    }
+    if (pending_map.get_always_on_modules().count(module) > 0) {
+      ss << "module '" << module << "' cannot be disabled (always-on)";
       r = -EINVAL;
       goto out;
     }
@@ -1059,7 +1095,7 @@ int MgrMonitor::dump_metadata(const string& name, Formatter *f, ostream *err)
 
 void MgrMonitor::print_nodes(Formatter *f) const
 {
-  assert(f);
+  ceph_assert(f);
 
   std::map<string, list<string> > mgrs; // hostname => mgr
   auto ls = map.get_all_names();

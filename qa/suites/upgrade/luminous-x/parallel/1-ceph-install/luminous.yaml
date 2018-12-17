@@ -6,6 +6,7 @@ meta:
 tasks:
 - install:
     branch: luminous
+    exclude_packages: ['librados3']
 - print: "**** done installing luminous"
 - ceph:
     log-whitelist:

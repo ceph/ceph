@@ -34,10 +34,10 @@ RDMADispatcher::~RDMADispatcher()
   ldout(cct, 20) << __func__ << " destructing rdma dispatcher" << dendl;
   polling_stop();
 
-  assert(qp_conns.empty());
-  assert(num_qp_conn == 0);
-  assert(dead_queue_pairs.empty());
-  assert(num_dead_queue_pair == 0);
+  ceph_assert(qp_conns.empty());
+  ceph_assert(num_qp_conn == 0);
+  ceph_assert(dead_queue_pairs.empty());
+  ceph_assert(num_dead_queue_pair == 0);
 
   delete async_handler;
 }
@@ -87,13 +87,13 @@ void RDMADispatcher::polling_start()
   get_stack()->get_infiniband().get_memory_manager()->set_rx_stat_logger(perf_logger);
 
   tx_cc = get_stack()->get_infiniband().create_comp_channel(cct);
-  assert(tx_cc);
+  ceph_assert(tx_cc);
   rx_cc = get_stack()->get_infiniband().create_comp_channel(cct);
-  assert(rx_cc);
+  ceph_assert(rx_cc);
   tx_cq = get_stack()->get_infiniband().create_comp_queue(cct, tx_cc);
-  assert(tx_cq);
+  ceph_assert(tx_cq);
   rx_cq = get_stack()->get_infiniband().create_comp_queue(cct, rx_cc);
-  assert(rx_cq);
+  ceph_assert(rx_cq);
 
   t = std::thread(&RDMADispatcher::polling, this);
   ceph_pthread_setname(t.native_handle(), "rdma-polling");
@@ -205,7 +205,7 @@ void RDMADispatcher::polling()
         Chunk* chunk = reinterpret_cast<Chunk *>(response->wr_id);
 
         if (response->status == IBV_WC_SUCCESS) {
-          assert(wc[i].opcode == IBV_WC_RECV);
+          ceph_assert(wc[i].opcode == IBV_WC_RECV);
           conn = get_conn_lockless(response->qp_num);
           if (!conn) {
             ldout(cct, 1) << __func__ << " csi with qpn " << response->qp_num << " may be dead. chunk " << chunk << " will be back ? " << r << dendl;
@@ -322,7 +322,7 @@ void RDMADispatcher::notify_pending_workers() {
 void RDMADispatcher::register_qp(QueuePair *qp, RDMAConnectedSocketImpl* csi)
 {
   Mutex::Locker l(lock);
-  assert(!qp_conns.count(qp->get_local_qp_number()));
+  ceph_assert(!qp_conns.count(qp->get_local_qp_number()));
   qp_conns[qp->get_local_qp_number()] = std::make_pair(qp, csi);
   ++num_qp_conn;
 }
@@ -528,9 +528,9 @@ int RDMAWorker::connect(const entity_addr_t &addr, const SocketOptions &opts, Co
 
 int RDMAWorker::get_reged_mem(RDMAConnectedSocketImpl *o, std::vector<Chunk*> &c, size_t bytes)
 {
-  assert(center.in_thread());
+  ceph_assert(center.in_thread());
   int r = get_stack()->get_infiniband().get_tx_buffers(c, bytes);
-  assert(r >= 0);
+  ceph_assert(r >= 0);
   size_t got = get_stack()->get_infiniband().get_memory_manager()->get_tx_buffer_size() * r;
   ldout(cct, 30) << __func__ << " need " << bytes << " bytes, reserve " << got << " registered  bytes, inflight " << dispatcher->inflight << dendl;
   stack->get_dispatcher().inflight += r;
@@ -599,6 +599,6 @@ void RDMAStack::spawn_worker(unsigned i, std::function<void ()> &&func)
 
 void RDMAStack::join_worker(unsigned i)
 {
-  assert(threads.size() > i && threads[i].joinable());
+  ceph_assert(threads.size() > i && threads[i].joinable());
   threads[i].join();
 }

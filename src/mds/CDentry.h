@@ -209,7 +209,7 @@ public:
   bool can_auth_pin(int *err_ret=nullptr) const override;
   void auth_pin(void *by) override;
   void auth_unpin(void *by) override;
-  void adjust_nested_auth_pins(int adjustment, int diradj, void *by);
+  void adjust_nested_auth_pins(int diradj, void *by);
   bool is_frozen() const override;
   bool is_freezing() const override;
   int get_num_dir_auth_pins() const;
@@ -303,7 +303,7 @@ public:
 
   // -- locking --
   SimpleLock* get_lock(int type) override {
-    assert(type == CEPH_LOCK_DN);
+    ceph_assert(type == CEPH_LOCK_DN);
     return &lock;
   }
   void set_object_info(MDSCacheObjectInfo &info) override;

@@ -18,6 +18,7 @@
 #include <sstream>
 #include <algorithm>
 #include "auth/KeyRing.h"
+#include "common/ceph_context.h"
 #include "common/config.h"
 #include "common/debug.h"
 #include "common/errno.h"
@@ -86,7 +87,10 @@ KeyRing *KeyRing::create_empty()
   return new KeyRing();
 }
 
-int KeyRing::set_modifier(const char *type, const char *val, EntityName& name, map<string, bufferlist>& caps)
+int KeyRing::set_modifier(const char *type,
+			  const char *val,
+			  EntityName& name,
+			  map<string, bufferlist>& caps)
 {
   if (!val)
     return -EINVAL;
@@ -110,8 +114,7 @@ int KeyRing::set_modifier(const char *type, const char *val, EntityName& name, m
     caps[caps_entity] = bl;
     set_caps(name, caps);
   } else if (strcmp(type, "auid") == 0) {
-    uint64_t auid = strtoull(val, NULL, 0);
-    set_uid(name, auid);
+    // just ignore it so we can still decode "old" keyrings that have an auid
   } else
     return -EINVAL;
 
@@ -138,8 +141,6 @@ void KeyRing::encode_formatted(string label, Formatter *f, bufferlist& bl)
     std::ostringstream keyss;
     keyss << p->second.key;
     f->dump_string("key", keyss.str());
-    if (p->second.auid != CEPH_AUTH_UID_DEFAULT)
-      f->dump_int("auid", p->second.auid);
     f->open_object_section("caps");
     for (map<string, bufferlist>::iterator q = p->second.caps.begin();
 	 q != p->second.caps.end();
@@ -246,8 +247,6 @@ void KeyRing::print(ostream& out)
        ++p) {
     out << "[" << p->first << "]" << std::endl;
     out << "\tkey = " << p->second.key << std::endl;
-    if (p->second.auid != CEPH_AUTH_UID_DEFAULT)
-      out << "\tauid = " << p->second.auid << std::endl;
 
     for (map<string, bufferlist>::iterator q = p->second.caps.begin();
 	 q != p->second.caps.end();

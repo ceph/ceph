@@ -44,4 +44,7 @@ public:
 				    const std::set<int>& changed) { }
 };
 }
+
+using md_config_obs_t = ceph::md_config_obs_impl<ConfigProxy>;
+
 #endif

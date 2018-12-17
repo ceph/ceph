@@ -23,7 +23,7 @@
 namespace librados {
 
   /**
-   * iterator object used in implementation of the extrenal
+   * iterator object used in implementation of the external
    * attributes part of the C interface of librados
    */
   struct RadosXattrsIter {

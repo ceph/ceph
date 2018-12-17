@@ -470,6 +470,7 @@ enum {
 	CEPH_OSD_OP_FLAG_FADVISE_DONTNEED   = 0x20,/* data will not be accessed in the near future */
 	CEPH_OSD_OP_FLAG_FADVISE_NOCACHE   = 0x40, /* data will be accessed only once by this client */
 	CEPH_OSD_OP_FLAG_WITH_REFERENCE   = 0x80, /* need reference couting */
+	CEPH_OSD_OP_FLAG_BYPASS_CLEAN_CACHE = 0x100, /* bypass ObjectStore cache, mainly for deep-scrub */
 };
 
 #define EOLDSNAPC    85  /* ORDERSNAP flag set; writer has old snapc*/
@@ -600,10 +601,11 @@ struct ceph_osd_op {
 		struct {
 			__le64 snapid;
 			__le64 src_version;
-			__u8 flags;
+			__u8 flags; /* CEPH_OSD_COPY_FROM_FLAG_* */
 			/*
-			 * __le32 flags: CEPH_OSD_OP_FLAG_FADVISE_: mean the fadvise flags for dest object
-			 * src_fadvise_flags mean the fadvise flags for src object
+			 * CEPH_OSD_OP_FLAG_FADVISE_*: fadvise flags
+			 * for src object, flags for dest object are in
+			 * ceph_osd_op::flags.
 			 */
 			__le32 src_fadvise_flags;
 		} __attribute__ ((packed)) copy_from;

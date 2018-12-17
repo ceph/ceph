@@ -30,6 +30,7 @@
 #include "common/strtol.h"
 #include "common/dout.h"
 #include "msg/Messenger.h"
+#include "include/compat.h"
 #include "include/sock_compat.h"
 
 #define dout_subsys ceph_subsys_ms
@@ -111,8 +112,8 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
 
   ssize_t send(bufferlist &bl, bool more) override {
     size_t sent_bytes = 0;
-    std::list<bufferptr>::const_iterator pb = bl.buffers().begin();
-    uint64_t left_pbrs = bl.buffers().size();
+    auto pb = std::cbegin(bl.buffers());
+    uint64_t left_pbrs = std::size(bl.buffers());
     while (left_pbrs) {
       struct msghdr msg;
       struct iovec msgvec[IOV_MAX];
@@ -182,15 +183,14 @@ class PosixServerSocketImpl : public ServerSocketImpl {
 };
 
 int PosixServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &opt, entity_addr_t *out, Worker *w) {
-  assert(sock);
+  ceph_assert(sock);
   sockaddr_storage ss;
   socklen_t slen = sizeof(ss);
-  int sd = ::accept(_fd, (sockaddr*)&ss, &slen);
+  int sd = accept_cloexec(_fd, (sockaddr*)&ss, &slen);
   if (sd < 0) {
     return -errno;
   }
 
-  handler.set_close_on_exec(sd);
   int r = handler.set_nonblock(sd);
   if (r < 0) {
     ::close(sd);
@@ -203,7 +203,7 @@ int PosixServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &op
     return -errno;
   }
 
-  assert(NULL != out); //out should not be NULL in accept connection
+  ceph_assert(NULL != out); //out should not be NULL in accept connection
 
   out->set_type(addr_type);
   out->set_sockaddr((sockaddr*)&ss);
@@ -232,7 +232,6 @@ int PosixWorker::listen(entity_addr_t &sa, const SocketOptions &opt,
     return -errno;
   }
 
-  net.set_close_on_exec(listen_sd);
   r = net.set_socket_options(listen_sd, opt.nodelay, opt.rcbuf_size);
   if (r < 0) {
     ::close(listen_sd);

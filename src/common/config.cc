@@ -75,7 +75,7 @@ int ceph_resolve_file_search(const std::string& filename_list,
   int ret = -ENOENT;
   list<string>::iterator iter;
   for (iter = ls.begin(); iter != ls.end(); ++iter) {
-    int fd = ::open(iter->c_str(), O_RDONLY);
+    int fd = ::open(iter->c_str(), O_RDONLY|O_CLOEXEC);
     if (fd < 0) {
       ret = -errno;
       continue;
@@ -256,10 +256,10 @@ void md_config_t::set_val_default(ConfigValues& values,
 				  const string& name, const std::string& val)
 {
   const Option *o = find_option(name);
-  assert(o);
+  ceph_assert(o);
   string err;
   int r = _set_val(values, tracker, val, *o, CONF_DEFAULT, &err);
-  assert(r >= 0);
+  ceph_assert(r >= 0);
 }
 
 int md_config_t::set_mon_vals(CephContext *cct,
@@ -275,10 +275,11 @@ int md_config_t::set_mon_vals(CephContext *cct,
   }
 
   for (auto& i : kv) {
-    if (config_cb && config_cb(i.first, i.second)) {
-      ldout(cct, 4) << __func__ << " callback consumed " << i.first << dendl;
-      continue;
-    } else {
+    if (config_cb) {
+      if (config_cb(i.first, i.second)) {
+	ldout(cct, 4) << __func__ << " callback consumed " << i.first << dendl;
+	continue;
+      }
       ldout(cct, 4) << __func__ << " callback ignored " << i.first << dendl;
     }
     const Option *o = find_option(i.first);
@@ -469,7 +470,7 @@ void md_config_t::parse_env(ConfigValues& values,
     for (auto name : { "erasure_code_dir", "plugin_dir", "osd_class_dir" }) {
     std::string err;
       const Option *o = find_option(name);
-      assert(o);
+      ceph_assert(o);
       _set_val(values, tracker, dir, *o, CONF_ENV, &err);
     }
   }
@@ -694,7 +695,7 @@ int md_config_t::parse_option(ConfigValues& values,
   }
 
   if (ret < 0 || !error_message.empty()) {
-    assert(!option_name.empty());
+    ceph_assert(!option_name.empty());
     if (oss) {
       *oss << "Parse error setting " << option_name << " to '"
            << val << "' using injectargs";
@@ -786,7 +787,7 @@ void md_config_t::set_val_or_die(ConfigValues& values,
   if (ret != 0) {
     std::cerr << "set_val_or_die(" << key << "): " << err.str();
   }
-  assert(ret == 0);
+  ceph_assert(ret == 0);
 }
 
 int md_config_t::set_val(ConfigValues& values,
@@ -1044,7 +1045,7 @@ Option::value_t md_config_t::_expand_meta(
   string out;
   decltype(pos) last_pos = 0;
   while (pos != std::string::npos) {
-    assert((*str)[pos] == '$');
+    ceph_assert((*str)[pos] == '$');
     if (pos > last_pos) {
       out += str->substr(last_pos, pos - last_pos);
     }

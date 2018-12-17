@@ -2,12 +2,11 @@
 
 #pragma once
 
-#include "lock_policy.h"
-
-namespace ceph {
-template<class ConfigProxy> class md_config_obs_impl;
+#ifdef WITH_SEASTAR
+namespace ceph::common {
+  class ConfigProxy;
 }
-
-struct md_config_t;
+using ConfigProxy = ceph::common::ConfigProxy;
+#else
 class ConfigProxy;
-using md_config_obs_t = ceph::md_config_obs_impl<ConfigProxy>;
+#endif

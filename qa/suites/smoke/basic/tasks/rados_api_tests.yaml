@@ -20,6 +20,7 @@ tasks:
         mon warn on pool no app: false
 - thrashosds:
     chance_pgnum_grow: 2
+    chance_pgnum_shrink: 2
     chance_pgpnum_fix: 1
     timeout: 1200
 - workunit:

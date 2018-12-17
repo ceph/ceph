@@ -68,7 +68,7 @@ def main():
     postdir = os.path.join(args.path, 'posted')
 
     while not os.path.isdir(postdir):
-        log.error("%s does not exist; please create" % postdir)
+        log.error("directory %s does not exist; please create" % postdir)
         time.sleep(30)
 
     log.info("monitoring path %s, delay %ds" % (args.path, args.delay * 60.0))

@@ -244,7 +244,7 @@ template <typename I>
 void OpenLocalImageRequest<I>::handle_close_image(int r) {
   dout(20) << dendl;
 
-  assert(r == 0);
+  ceph_assert(r == 0);
   finish(m_ret_val);
 }
 

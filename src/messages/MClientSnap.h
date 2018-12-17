@@ -62,7 +62,7 @@ public:
     decode_nohead(head.num_split_inos, split_inos, p);
     decode_nohead(head.num_split_realms, split_realms, p);
     decode_nohead(head.trace_len, bl, p);
-    assert(p.end());
+    ceph_assert(p.end());
   }
 
 };

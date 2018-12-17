@@ -19,7 +19,7 @@ template <typename ImageCtxT = ImageCtx>
 class RefreshParentRequest {
 public:
   static RefreshParentRequest *create(ImageCtxT &child_image_ctx,
-                                      const ParentInfo &parent_md,
+                                      const ParentImageInfo &parent_md,
                                       const MigrationInfo &migration_info,
                                       Context *on_finish) {
     return new RefreshParentRequest(child_image_ctx, parent_md, migration_info,
@@ -27,7 +27,7 @@ public:
   }
 
   static bool is_refresh_required(ImageCtxT &child_image_ctx,
-                                  const ParentInfo &parent_md,
+                                  const ParentImageInfo &parent_md,
                                   const MigrationInfo &migration_info);
 
   void send();
@@ -41,61 +41,49 @@ private:
    * <start>
    *    |
    *    | (open required)
-   *    |----------------> OPEN_PARENT * * * * * * * * * * * * * * * * * * * * *
-   *    |                     |                                                *
-   *    |                     v                                                *
-   *    |                  OPEN_MIGRATION_PARENT * * * * * * * * * * * * * *   *
-   *    |                     |             (skip if not                   *   *
-   *    |                     v              needed)                       *   *
-   *    \----------------> <apply>                                         *   *
-   *                          |                              (skip if not  *   *
-   *                          | (close required)              needed)      *   *
-   *                          |-----------------> CLOSE_MIGRATION_PARENT   *   *
-   *                          |                      |                     *   *
-   *                          |                      v                     *   *
-   *                          |                   CLOSE_PARENT  <* * * * * *   *
-   *                          |                      |              (on error) *
-   *                          |                      v                         *
-   *                          |                   RESET_EXISTENCE              *
-   *                          |                      |                         *
-   *                          |                      v                         *
-   *                          \-----------------> <finish> < * * * * * * * * * *
+   *    |----------------> OPEN_PARENT * * * * * * * * * * * * * * *
+   *    |                     |                                    *
+   *    |                     v                        (on error)  *
+   *    \----------------> <apply>                                 *
+   *                          |                                    *
+   *                          | (close required)                   *
+   *                          |-----------------> CLOSE_PARENT     *
+   *                          |                      |             *
+   *                          |                      v             *
+   *                          |                   RESET_EXISTENCE  *
+   *                          |                      |             *
+   *                          |                      v             *
+   *                          \-----------------> <finish> < * * * *
    *
    * @endverbatim
    */
 
-  RefreshParentRequest(ImageCtxT &child_image_ctx, const ParentInfo &parent_md,
+  RefreshParentRequest(ImageCtxT &child_image_ctx,
+                       const ParentImageInfo &parent_md,
                        const MigrationInfo &migration_info, Context *on_finish);
 
   ImageCtxT &m_child_image_ctx;
-  ParentInfo m_parent_md;
+  ParentImageInfo m_parent_md;
   MigrationInfo m_migration_info;
   Context *m_on_finish;
 
   ImageCtxT *m_parent_image_ctx;
-  ImageCtxT *m_migration_parent_image_ctx = nullptr;
   uint64_t m_parent_snap_id;
 
   int m_error_result;
 
   static bool is_close_required(ImageCtxT &child_image_ctx,
-                                const ParentInfo &parent_md,
+                                const ParentImageInfo &parent_md,
                                 const MigrationInfo &migration_info);
   static bool is_open_required(ImageCtxT &child_image_ctx,
-                               const ParentInfo &parent_md,
+                               const ParentImageInfo &parent_md,
                                const MigrationInfo &migration_info);
   static bool does_parent_exist(ImageCtxT &child_image_ctx,
-                                const ParentInfo &parent_md,
+                                const ParentImageInfo &parent_md,
                                 const MigrationInfo &migration_info);
 
   void send_open_parent();
   Context *handle_open_parent(int *result);
-
-  void send_open_migration_parent();
-  Context *handle_open_migration_parent(int *result);
-
-  void send_close_migration_parent();
-  Context *handle_close_migration_parent(int *result);
 
   void send_close_parent();
   Context *handle_close_parent(int *result);

@@ -7,6 +7,7 @@ import socket
 import threading
 import time
 from mgr_module import MgrModule, MgrStandbyModule, CommandResult, PG_STATES
+from rbd import RBD
 
 # Defaults for the Prometheus HTTP server.  Can also set in config-key
 # see https://github.com/prometheus/prometheus/wiki/Default-port-allocations
@@ -46,7 +47,7 @@ def health_status_to_number(status):
 
 DF_CLUSTER = ['total_bytes', 'total_used_bytes', 'total_objects']
 
-DF_POOL = ['max_avail', 'bytes_used', 'raw_bytes_used', 'objects', 'dirty',
+DF_POOL = ['max_avail', 'stored', 'stored_raw', 'objects', 'dirty',
            'quota_bytes', 'quota_objects', 'rd', 'rd_bytes', 'wr', 'wr_bytes']
 
 OSD_FLAGS = ('noup', 'nodown', 'noout', 'noin', 'nobackfill', 'norebalance',
@@ -59,8 +60,9 @@ MDS_METADATA = ('ceph_daemon', 'fs_id', 'hostname', 'public_addr', 'rank',
 
 MON_METADATA = ('ceph_daemon', 'hostname', 'public_addr', 'rank', 'ceph_version')
 
-OSD_METADATA = ('ceph_daemon', 'cluster_addr', 'device_class', 'hostname',
-                'public_addr', 'ceph_version')
+OSD_METADATA = ('back_iface', 'ceph_daemon', 'cluster_addr', 'device_class',
+                'front_iface', 'hostname', 'objectstore', 'public_addr',
+                'ceph_version')
 
 OSD_STATUS = ['weight', 'up', 'in']
 
@@ -70,7 +72,7 @@ POOL_METADATA = ('pool_id', 'name')
 
 RGW_METADATA = ('ceph_daemon', 'hostname', 'ceph_version')
 
-DISK_OCCUPATION = ( 'ceph_daemon', 'device','instance')
+DISK_OCCUPATION = ('ceph_daemon', 'device', 'db_device', 'wal_device', 'instance')
 
 NUM_OBJECTS = ['degraded', 'misplaced', 'unfound']
 
@@ -152,10 +154,12 @@ class Module(MgrModule):
         },
     ]
 
-    OPTIONS = [
+    MODULE_OPTIONS = [
             {'name': 'server_addr'},
             {'name': 'server_port'},
             {'name': 'scrape_interval'},
+            {'name': 'rbd_stats_pools'},
+            {'name': 'rbd_stats_pools_refresh_interval'},
     ]
 
     def __init__(self, *args, **kwargs):
@@ -166,6 +170,24 @@ class Module(MgrModule):
         self.collect_time = 0
         self.collect_timeout = 5.0
         self.collect_cache = None
+        self.rbd_stats = {
+            'pools' : {},
+            'pools_refresh_time' : 0,
+            'counters_info' : {
+                'write_ops' : {'type' : self.PERFCOUNTER_COUNTER,
+                               'desc' : 'RBD image writes count'},
+                'read_ops' : {'type' : self.PERFCOUNTER_COUNTER,
+                              'desc' : 'RBD image reads count'},
+                'write_bytes' : {'type' : self.PERFCOUNTER_LONGRUNAVG,
+                                 'desc' : 'RBD image bytes written'},
+                'read_bytes' : {'type' : self.PERFCOUNTER_LONGRUNAVG,
+                                'desc' : 'RBD image bytes read'},
+                'write_latency' : {'type' : self.PERFCOUNTER_LONGRUNAVG,
+                                   'desc' : 'RBD image writes latency (msec)'},
+                'read_latency' : {'type' : self.PERFCOUNTER_LONGRUNAVG,
+                                  'desc' : 'RBD image reads latency (msec)'},
+            },
+        }
         _global_instance['plugin'] = self
 
     def _setup_static_metrics(self):
@@ -432,12 +454,25 @@ class Module(MgrModule):
 
             host_version = servers.get((str(id_), 'osd'), ('',''))
 
+            # collect disk occupation metadata
+            osd_metadata = self.get_metadata("osd", str(id_))
+            if osd_metadata is None:
+                continue
+
+            obj_store = osd_metadata.get('osd_objectstore', '')
+            f_iface = osd_metadata.get('front_iface', '')
+            b_iface = osd_metadata.get('back_iface', '')
+
             self.metrics['osd_metadata'].set(1, (
+                b_iface,
                 'osd.{}'.format(id_),
                 c_addr,
                 dev_class,
+                f_iface,
                 host_version[0],
-                p_addr, host_version[1]
+                obj_store,
+                p_addr,
+                host_version[1]
             ))
 
             # collect osd status
@@ -447,17 +482,23 @@ class Module(MgrModule):
                     'osd.{}'.format(id_),
                 ))
 
-            # collect disk occupation metadata
-            osd_metadata = self.get_metadata("osd", str(id_))
-            if osd_metadata is None:
-                continue
-            dev_keys = ("backend_filestore_dev_node", "bluestore_bdev_dev_node")
-            osd_dev_node = None
-            for dev_key in dev_keys:
-                val = osd_metadata.get(dev_key, None)
-                if val and val != "unknown":
-                    osd_dev_node = val
-                    break
+            osd_objectstore = osd_metadata.get('osd_objectstore', None)
+            if osd_objectstore == "filestore":
+            # collect filestore backend device
+                osd_dev_node = osd_metadata.get('backend_filestore_dev_node', None)
+            # collect filestore journal device
+                osd_wal_dev_node = osd_metadata.get('osd_journal', '')
+                osd_db_dev_node = ''
+            elif osd_objectstore == "bluestore":
+            # collect bluestore backend device
+                osd_dev_node = osd_metadata.get('bluestore_bdev_dev_node', None)
+            # collect bluestore wal backend
+                osd_wal_dev_node = osd_metadata.get('bluefs_wal_dev_node', '')
+            # collect bluestore db backend
+                osd_db_dev_node = osd_metadata.get('bluefs_db_dev_node', '')
+            if osd_dev_node and osd_dev_node == "unknown":
+                osd_dev_node = None
+
             osd_hostname = osd_metadata.get('hostname', None)
             if osd_dev_node and osd_hostname:
                 self.log.debug("Got dev for osd {0}: {1}/{2}".format(
@@ -465,6 +506,8 @@ class Module(MgrModule):
                 self.metrics['disk_occupation'].set(1, (
                     "osd.{0}".format(id_),
                     osd_dev_node,
+                    osd_db_dev_node,
+                    osd_wal_dev_node,
                     osd_hostname
                 ))
             else:
@@ -491,6 +534,173 @@ class Module(MgrModule):
         for obj in NUM_OBJECTS:
             stat = 'num_objects_{}'.format(obj)
             self.metrics[stat].set(pg_sum[stat])
+
+    def get_rbd_stats(self):
+        # Per RBD image stats is collected by registering a dynamic osd perf
+        # stats query that tells OSDs to group stats for requests associated
+        # with RBD objects by pool and image id, which are extracted from the
+        # request object names or other attributes.
+        # The RBD object names have the following prefixes:
+        #   - rbd_data.{image_id}. (data stored in the same pool as metadata)
+        #   - rbd_data.{pool_id}.{image_id}. (data stored in a dedicated data pool)
+        #   - journal_data.{pool_id}.{image_id}. (journal if journaling is enabled)
+        # The pool_id in the object name is the id of the pool with the image
+        # metdata, and should be used in the image spec. If there is no pool_id
+        # in the object name, the image pool is the pool where the object is
+        # located.
+
+        pools = self.get_localized_module_option('rbd_stats_pools', '').split()
+        pools.sort()
+
+        rbd_stats_pools = []
+        for pool_id in list(self.rbd_stats['pools']):
+            name = self.rbd_stats['pools'][pool_id]['name']
+            if name not in pools:
+                del self.rbd_stats['pools'][pool_id]
+            else:
+                rbd_stats_pools.append(name)
+
+        pools_refreshed = False
+        if pools:
+            next_refresh = self.rbd_stats['pools_refresh_time'] + \
+                self.get_localized_module_option(
+                    'rbd_stats_pools_refresh_interval', 300)
+            rbd_stats_pools.sort()
+            if rbd_stats_pools != pools or time.time() >= next_refresh:
+                self.refresh_rbd_stats_pools(pools)
+                pools_refreshed = True
+
+        pool_ids = list(self.rbd_stats['pools'])
+        pool_ids.sort()
+        pool_id_regex = '^(' + '|'.join([str(x) for x in pool_ids]) + ')$'
+
+        if 'query' in self.rbd_stats and \
+           pool_id_regex != self.rbd_stats['query']['key_descriptor'][0]['regex']:
+            self.remove_osd_perf_query(self.rbd_stats['query_id'])
+            del self.rbd_stats['query_id']
+            del self.rbd_stats['query']
+
+        if not self.rbd_stats['pools']:
+            return
+
+        counters_info = self.rbd_stats['counters_info']
+
+        if 'query_id' not in self.rbd_stats:
+            query = {
+                'key_descriptor': [
+                    {'type': 'pool_id', 'regex': pool_id_regex},
+                    {'type': 'object_name',
+                     'regex': '^(?:rbd|journal)_data\.(?:([0-9]+)\.)?([^.]+)\.'},
+                ],
+                'performance_counter_descriptors': list(counters_info),
+            }
+            query_id = self.add_osd_perf_query(query)
+            if query_id is None:
+                self.log.error('failed to add query %s' % query)
+                return
+            self.rbd_stats['query'] = query
+            self.rbd_stats['query_id'] = query_id
+
+        res = self.get_osd_perf_counters(self.rbd_stats['query_id'])
+        for c in res['counters']:
+            # if the pool id is not found in the object name use id of the
+            # pool where the object is located
+            if c['k'][1][0]:
+                pool_id = int(c['k'][1][0])
+            else:
+                pool_id = int(c['k'][0][0])
+            if pool_id not in self.rbd_stats['pools'] and not pools_refreshed:
+                self.refresh_rbd_stats_pools(pools)
+                pools_refreshed = True
+            if pool_id not in self.rbd_stats['pools']:
+                continue
+            image_id = c['k'][1][1]
+            pool = self.rbd_stats['pools'][pool_id]
+            if image_id not in pool['images'] and not pools_refreshed:
+                self.refresh_rbd_stats_pools(pools)
+                pools_refreshed = True
+            if image_id not in pool['images']:
+                continue
+            counters = pool['images'][image_id]['c']
+            for i in range(len(c['c'])):
+                counters[i][0] += c['c'][i][0]
+                counters[i][1] += c['c'][i][1]
+
+        for pool_id, pool in self.rbd_stats['pools'].items():
+            pool_name = pool['name']
+            for image_id in pool['images']:
+                image_name = pool['images'][image_id]['n']
+                counters = pool['images'][image_id]['c']
+                i = 0
+                for key in counters_info:
+                    counter_info = counters_info[key]
+                    stattype = self._stattype_to_str(counter_info['type'])
+                    if counter_info['type'] == self.PERFCOUNTER_COUNTER:
+                        path = 'rbd_' + key
+                        if path not in self.metrics:
+                            self.metrics[path] = Metric(
+                                stattype,
+                                path,
+                                counter_info['desc'],
+                                ("pool", "image",),
+                            )
+                        self.metrics[path].set(counters[i][0],
+                                               (pool_name, image_name,))
+                    elif counter_info['type'] == self.PERFCOUNTER_LONGRUNAVG:
+                        path = 'rbd_' + key + '_sum'
+                        if path not in self.metrics:
+                            self.metrics[path] = Metric(
+                                stattype,
+                                path,
+                                counter_info['desc'] + ' Total',
+                                ("pool", "image",),
+                            )
+                        self.metrics[path].set(counters[i][0],
+                                               (pool_name, image_name,))
+                        path = 'rbd_' + key + '_count'
+                        if path not in self.metrics:
+                            self.metrics[path] = Metric(
+                                'counter',
+                                path,
+                                counter_info['desc'] + ' Count',
+                                ("pool", "image",),
+                            )
+                        self.metrics[path].set(counters[i][1],
+                                               (pool_name, image_name,))
+                    i += 1;
+
+    def refresh_rbd_stats_pools(self, pools):
+        self.log.debug('refreshing rbd pools %s' % (pools))
+
+        counters_info = self.rbd_stats['counters_info']
+        for pool_name in pools:
+            try:
+                pool_id = self.rados.pool_lookup(pool_name)
+                with self.rados.open_ioctx(pool_name) as ioctx:
+                    if pool_id not in self.rbd_stats['pools']:
+                        self.rbd_stats['pools'][pool_id] = {'images' : {}}
+                    pool = self.rbd_stats['pools'][pool_id]
+                    pool['name'] = pool_name
+                    images = {}
+                    for image_meta in RBD().list2(ioctx):
+                        image = {'n' : image_meta['name']}
+                        image_id = image_meta['id']
+                        if image_id in pool['images']:
+                            image['c'] = pool['images'][image_id]['c']
+                        else:
+                            image['c'] = [[0, 0] for x in counters_info]
+                        images[image_id] = image
+                    pool['images'] = images
+            except Exception as e:
+                self.log.error('failed listing pool %s: %s' % (pool_name, e))
+        self.rbd_stats['pools_refresh_time'] = time.time()
+
+    def shutdown_rbd_stats(self):
+        if 'query_id' in self.rbd_stats:
+            self.remove_osd_perf_query(self.rbd_stats['query_id'])
+            del self.rbd_stats['query_id']
+            del self.rbd_stats['query']
+        self.rbd_stats['pools'].clear()
 
     def collect(self):
         # Clear the metrics before scraping
@@ -547,6 +757,8 @@ class Module(MgrModule):
                             ("ceph_daemon",),
                         )
                     self.metrics[path].set(value, (daemon,))
+
+        self.get_rbd_stats();
 
         # Return formatted metrics and clear no longer used data
         _metrics = [m.str_expfmt() for m in self.metrics.values()]
@@ -648,10 +860,10 @@ class Module(MgrModule):
                     raise cherrypy.HTTPError(503, 'No MON connection')
 
         # Make the cache timeout for collecting configurable
-        self.collect_timeout = self.get_localized_config('scrape_interval', 5.0)
+        self.collect_timeout = self.get_localized_module_option('scrape_interval', 5.0)
 
-        server_addr = self.get_localized_config('server_addr', DEFAULT_ADDR)
-        server_port = self.get_localized_config('server_port', DEFAULT_PORT)
+        server_addr = self.get_localized_module_option('server_addr', DEFAULT_ADDR)
+        server_port = self.get_localized_module_option('server_port', DEFAULT_PORT)
         self.log.info(
             "server_addr: %s server_port: %s" %
             (server_addr, server_port)
@@ -678,6 +890,7 @@ class Module(MgrModule):
         self.shutdown_event.clear()
         cherrypy.engine.stop()
         self.log.info('Engine stopped.')
+        self.shutdown_rbd_stats()
 
     def shutdown(self):
         self.log.info('Stopping engine...')
@@ -690,8 +903,8 @@ class StandbyModule(MgrStandbyModule):
         self.shutdown_event = threading.Event()
 
     def serve(self):
-        server_addr = self.get_localized_config('server_addr', '::')
-        server_port = self.get_localized_config('server_port', DEFAULT_PORT)
+        server_addr = self.get_localized_module_option('server_addr', '::')
+        server_port = self.get_localized_module_option('server_port', DEFAULT_PORT)
         self.log.info("server_addr: %s server_port: %s" % (server_addr, server_port))
         cherrypy.config.update({
             'server.socket_host': server_addr,

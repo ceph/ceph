@@ -19,9 +19,9 @@
 #include "common/Mutex.h"
 #include "tools/rbd_mirror/PoolWatcher.h"
 #include "tools/rbd_mirror/Threads.h"
-#include "tools/rbd_mirror/types.h"
+#include "tools/rbd_mirror/Types.h"
 #include "tools/rbd_mirror/pool_watcher/Types.h"
-#include "test/librados/test.h"
+#include "test/librados/test_cxx.h"
 #include "gtest/gtest.h"
 #include <boost/scope_exit.hpp>
 #include <iostream>
@@ -33,7 +33,7 @@
 using rbd::mirror::ImageId;
 using rbd::mirror::ImageIds;
 using rbd::mirror::PoolWatcher;
-using rbd::mirror::peer_t;
+using rbd::mirror::PeerSpec;
 using rbd::mirror::RadosRef;
 using std::map;
 using std::set;
@@ -88,7 +88,7 @@ public:
     }
   };
 
-  void create_pool(bool enable_mirroring, const peer_t &peer, string *name=nullptr) {
+  void create_pool(bool enable_mirroring, const PeerSpec &peer, string *name=nullptr) {
     string pool_name = get_temp_pool_name("test-rbd-mirror-");
     ASSERT_EQ(0, m_cluster->pool_create(pool_name.c_str()));
 
@@ -169,7 +169,7 @@ public:
     {
       librbd::ImageCtx *ictx = new librbd::ImageCtx(parent_image_name.c_str(),
 						    "", "", pioctx, false);
-      ictx->state->open(false);
+      ictx->state->open(0);
       EXPECT_EQ(0, ictx->operations->snap_create(cls::rbd::UserSnapshotNamespace(),
 						 snap_name.c_str()));
       EXPECT_EQ(0, ictx->operations->snap_protect(cls::rbd::UserSnapshotNamespace(),
@@ -229,14 +229,14 @@ public:
 
 TEST_F(TestPoolWatcher, EmptyPool) {
   string uuid1 = "00000000-0000-0000-0000-000000000001";
-  peer_t site1(uuid1, "site1", "mirror1");
+  PeerSpec site1(uuid1, "site1", "mirror1");
   create_pool(true, site1);
   check_images();
 }
 
 TEST_F(TestPoolWatcher, ReplicatedPools) {
   string uuid1 = "00000000-0000-0000-0000-000000000001";
-  peer_t site1(uuid1, "site1", "mirror1");
+  PeerSpec site1(uuid1, "site1", "mirror1");
   string first_pool, local_pool, last_pool;
   create_pool(true, site1, &first_pool);
   check_images();

@@ -21,7 +21,6 @@ struct MonCommand {
   std::string helpstring;
   std::string module;
   std::string req_perms;
-  std::string availability;
   uint64_t flags;
 
   // MonCommand flags
@@ -60,6 +59,7 @@ struct MonCommand {
     encode(helpstring, bl);
     encode(module, bl);
     encode(req_perms, bl);
+    std::string availability;  // Removed field, for backward compat
     encode(availability, bl);
   }
   void decode_bare(bufferlist::const_iterator &bl) {
@@ -68,12 +68,12 @@ struct MonCommand {
     decode(helpstring, bl);
     decode(module, bl);
     decode(req_perms, bl);
+    std::string availability;  // Removed field, for backward compat
     decode(availability, bl);
   }
   bool is_compat(const MonCommand* o) const {
     return cmdstring == o->cmdstring &&
-	module == o->module && req_perms == o->req_perms &&
-	availability == o->availability;
+	module == o->module && req_perms == o->req_perms;
   }
 
   bool is_noforward() const {

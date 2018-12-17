@@ -152,6 +152,28 @@ void collect_sys_info(map<string, string> *m, CephContext *cct)
     (*m)["hostname"] = u.nodename;
     (*m)["arch"] = u.machine;
   }
+
+  // but wait, am i in a container?
+  bool in_container = false;
+
+  if (const char *pod_name = getenv("POD_NAME")) {
+    (*m)["pod_name"] = pod_name;
+    in_container = true;
+  }
+  if (const char *container_name = getenv("CONTAINER_NAME")) {
+    (*m)["container_name"] = container_name;
+    in_container = true;
+  }
+  if (in_container) {
+    if (const char *node_name = getenv("NODE_NAME")) {
+      (*m)["container_hostname"] = u.nodename;
+      (*m)["hostname"] = node_name;
+    }
+    if (const char *ns = getenv("POD_NAMESPACE")) {
+      (*m)["pod_namespace"] = ns;
+    }
+  }
+
 #ifdef __APPLE__
   // memory
   {
@@ -232,7 +254,7 @@ void collect_sys_info(map<string, string> *m, CephContext *cct)
 
 void dump_services(Formatter* f, const map<string, list<int> >& services, const char* type)
 {
-  assert(f);
+  ceph_assert(f);
 
   f->open_object_section(type);
   for (map<string, list<int> >::const_iterator host = services.begin();
@@ -250,7 +272,7 @@ void dump_services(Formatter* f, const map<string, list<int> >& services, const 
 
 void dump_services(Formatter* f, const map<string, list<string> >& services, const char* type)
 {
-  assert(f);
+  ceph_assert(f);
 
   f->open_object_section(type);
   for (const auto& host : services) {

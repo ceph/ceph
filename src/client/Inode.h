@@ -6,7 +6,7 @@
 
 #include <numeric>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/types.h"
 #include "include/xlist.h"
 
@@ -174,7 +174,7 @@ struct Inode {
     int which = dir_layout.dl_dir_hash;
     if (!which)
       which = CEPH_STR_HASH_LINUX;
-    assert(ceph_str_hash_valid(which));
+    ceph_assert(ceph_str_hash_valid(which));
     return ceph_str_hash(which, dn.data(), dn.length());
   }
 
@@ -231,7 +231,7 @@ struct Inode {
   list<Cond*>	    waitfor_deleg;
 
   Dentry *get_first_parent() {
-    assert(!dentries.empty());
+    ceph_assert(!dentries.empty());
     return *dentries.begin();
   }
 
@@ -249,7 +249,7 @@ struct Inode {
     ll_ref++;
   }
   void ll_put(int n=1) {
-    assert(ll_ref >= n);
+    ceph_assert(ll_ref >= n);
     ll_ref -= n;
   }
 
@@ -262,6 +262,8 @@ struct Inode {
   xlist<MetaRequest*> unsafe_ops;
 
   std::set<Fh*> fhs;
+
+  mds_rank_t dir_pin;
 
   Inode(Client *c, vinodeno_t vino, file_layout_t *newlayout)
     : client(c), ino(vino.ino), snapid(vino.snapid), faked_ino(0),
@@ -278,7 +280,7 @@ struct Inode {
       snaprealm(0), snaprealm_item(this),
       oset((void *)this, newlayout->pool_id, this->ino),
       reported_size(0), wanted_max_size(0), requested_max_size(0),
-      _ref(0), ll_ref(0)
+      _ref(0), ll_ref(0), dir_pin(MDS_RANK_NONE)
   {
     memset(&dir_layout, 0, sizeof(dir_layout));
   }

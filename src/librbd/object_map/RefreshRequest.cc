@@ -55,7 +55,7 @@ void RefreshRequest<I>::apply() {
     num_objs = Striper::get_num_objects(
       m_image_ctx.layout, m_image_ctx.get_image_size(m_snap_id));
   }
-  assert(m_on_disk_object_map.size() >= num_objs);
+  ceph_assert(m_on_disk_object_map.size() >= num_objs);
 
   *m_object_map = m_on_disk_object_map;
 }
@@ -87,7 +87,7 @@ Context *RefreshRequest<I>::handle_lock(int *ret_val) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
-  assert(*ret_val == 0);
+  ceph_assert(*ret_val == 0);
   send_load();
   return nullptr;
 }
@@ -106,7 +106,7 @@ void RefreshRequest<I>::send_load() {
   librados::AioCompletion *rados_completion =
     create_rados_callback<klass, &klass::handle_load>(this);
   int r = m_image_ctx.md_ctx.aio_operate(oid, rados_completion, &op, &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   rados_completion->release();
 }
 
@@ -181,7 +181,11 @@ Context *RefreshRequest<I>::handle_invalidate(int *ret_val) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << *ret_val << dendl;
 
-  assert(*ret_val == 0);
+  if (*ret_val < 0) {
+    lderr(cct) << "failed to invalidate object map: " << cpp_strerror(*ret_val)
+               << dendl;
+  }
+
   apply();
   return m_on_finish;
 }
@@ -211,7 +215,13 @@ Context *RefreshRequest<I>::handle_resize_invalidate(int *ret_val) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << *ret_val << dendl;
 
-  assert(*ret_val == 0);
+  if (*ret_val < 0) {
+    lderr(cct) << "failed to invalidate object map: " << cpp_strerror(*ret_val)
+               << dendl;
+    apply();
+    return m_on_finish;
+  }
+
   send_resize();
   return nullptr;
 }
@@ -235,7 +245,7 @@ void RefreshRequest<I>::send_resize() {
   librados::AioCompletion *rados_completion =
     create_rados_callback<klass, &klass::handle_resize>(this);
   int r = m_image_ctx.md_ctx.aio_operate(oid, rados_completion, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   rados_completion->release();
 }
 
@@ -249,6 +259,7 @@ Context *RefreshRequest<I>::handle_resize(int *ret_val) {
                << dendl;
     *ret_val = 0;
   }
+
   apply();
   return m_on_finish;
 }
@@ -275,9 +286,13 @@ Context *RefreshRequest<I>::handle_invalidate_and_close(int *ret_val) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << *ret_val << dendl;
 
-  assert(*ret_val == 0);
+  if (*ret_val < 0) {
+    lderr(cct) << "failed to invalidate object map: " << cpp_strerror(*ret_val)
+               << dendl;
+  } else {
+    *ret_val = -EFBIG;
+  }
 
-  *ret_val = -EFBIG;
   m_object_map->clear();
   return m_on_finish;
 }

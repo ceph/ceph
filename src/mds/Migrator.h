@@ -103,37 +103,49 @@ public:
   }
 
   // -- cons --
-  Migrator(MDSRank *m, MDCache *c) : mds(m), cache(c) {
-    inject_session_race = g_conf().get_val<bool>("mds_inject_migrator_session_race");
-  }
+  Migrator(MDSRank *m, MDCache *c);
 
   void handle_conf_change(const ConfigProxy& conf,
                           const std::set <std::string> &changed,
                           const MDSMap &mds_map);
 
 protected:
+  struct export_base_t {
+    dirfrag_t dirfrag;
+    mds_rank_t dest;
+    unsigned pending_children;
+    uint64_t export_queue_gen;
+    bool restart = false;
+    export_base_t(dirfrag_t df, mds_rank_t d, unsigned c, uint64_t g) :
+      dirfrag(df), dest(d), pending_children(c), export_queue_gen(g) {}
+  };
+
   // export fun
   struct export_state_t {
-    int state;
-    mds_rank_t peer;
-    uint64_t tid;
+    int state = 0;
+    mds_rank_t peer = MDS_RANK_NONE;
+    uint64_t tid = 0;
     set<mds_rank_t> warning_ack_waiting;
     set<mds_rank_t> notify_ack_waiting;
     map<inodeno_t,map<client_t,Capability::Import> > peer_imported;
-    set<CDir*> residual_dirs;
-
     MutationRef mut;
+    size_t approx_size = 0;
     // for freeze tree deadlock detection
     utime_t last_cum_auth_pins_change;
-    int last_cum_auth_pins;
-    int num_remote_waiters; // number of remote authpin waiters
-    export_state_t() : state(0), peer(0), tid(0), mut(),
-		       last_cum_auth_pins(0), num_remote_waiters(0) {}
-  };
+    int last_cum_auth_pins = 0;
+    int num_remote_waiters = 0; // number of remote authpin waiters
+    export_state_t() {}
 
+    std::shared_ptr<export_base_t> parent;
+  };
   map<CDir*, export_state_t>  export_state;
+  typedef map<CDir*, export_state_t>::iterator export_state_iterator;
+
+  uint64_t total_exporting_size = 0;
+  unsigned num_locking_exports = 0; // exports in locking state (approx_size == 0)
 
   list<pair<dirfrag_t,mds_rank_t> >  export_queue;
+  uint64_t export_queue_gen = 1;
 
   // import fun
   struct import_state_t {
@@ -153,13 +165,12 @@ protected:
 
   void handle_export_discover_ack(const MExportDirDiscoverAck::const_ref &m);
   void export_frozen(CDir *dir, uint64_t tid);
-  void check_export_size(CDir *dir, export_state_t& stat, set<client_t> &client_set);
   void handle_export_prep_ack(const MExportDirPrepAck::const_ref &m);
   void export_sessions_flushed(CDir *dir, uint64_t tid);
   void export_go(CDir *dir);
   void export_go_synced(CDir *dir, uint64_t tid);
   void export_try_cancel(CDir *dir, bool notify_peer=true);
-  void export_cancel_finish(CDir *dir);
+  void export_cancel_finish(export_state_iterator& it);
   void export_reverse(CDir *dir, export_state_t& stat);
   void export_notify_abort(CDir *dir, export_state_t& stat, set<CDir*>& bounds);
   void handle_export_ack(const MExportDirAck::const_ref &m);
@@ -248,18 +259,18 @@ public:
 
   int get_import_state(dirfrag_t df) const {
     map<dirfrag_t, import_state_t>::const_iterator it = import_state.find(df);
-    assert(it != import_state.end());
+    ceph_assert(it != import_state.end());
     return it->second.state;
   }
   int get_import_peer(dirfrag_t df) const {
     map<dirfrag_t, import_state_t>::const_iterator it = import_state.find(df);
-    assert(it != import_state.end());
+    ceph_assert(it != import_state.end());
     return it->second.peer;
   }
 
   int get_export_state(CDir *dir) const {
     map<CDir*, export_state_t>::const_iterator it = export_state.find(dir);
-    assert(it != export_state.end());
+    ceph_assert(it != export_state.end());
     return it->second.state;
   }
   // this returns true if we are export @dir,
@@ -268,21 +279,21 @@ public:
   // only returns meaningful results during EXPORT_WARNING state.
   bool export_has_warned(CDir *dir, mds_rank_t who) {
     map<CDir*, export_state_t>::iterator it = export_state.find(dir);
-    assert(it != export_state.end());
-    assert(it->second.state == EXPORT_WARNING);
+    ceph_assert(it != export_state.end());
+    ceph_assert(it->second.state == EXPORT_WARNING);
     return (it->second.warning_ack_waiting.count(who) == 0);
   }
 
   bool export_has_notified(CDir *dir, mds_rank_t who) const {
     map<CDir*, export_state_t>::const_iterator it = export_state.find(dir);
-    assert(it != export_state.end());
-    assert(it->second.state == EXPORT_NOTIFYING);
+    ceph_assert(it != export_state.end());
+    ceph_assert(it->second.state == EXPORT_NOTIFYING);
     return (it->second.notify_ack_waiting.count(who) == 0);
   }
 
   void export_freeze_inc_num_waiters(CDir *dir) {
     map<CDir*, export_state_t>::iterator it = export_state.find(dir);
-    assert(it != export_state.end());
+    ceph_assert(it != export_state.end());
     it->second.num_remote_waiters++;
   }
   void find_stale_export_freeze();
@@ -302,9 +313,15 @@ public:
   void maybe_do_queued_export();
   void clear_export_queue() {
     export_queue.clear();
+    export_queue_gen++;
   }
   
-  void get_export_lock_set(CDir *dir, set<SimpleLock*>& locks);
+  void maybe_split_export(CDir* dir, uint64_t max_size, bool null_okay,
+			  vector<pair<CDir*, size_t> >& results);
+  void child_export_finish(std::shared_ptr<export_base_t>& parent, bool success);
+
+  void get_export_lock_set(CDir *dir, MutationImpl::LockOpVec& lov);
+  void get_export_client_set(CDir *dir, set<client_t> &client_set);
   void get_export_client_set(CInode *in, set<client_t> &client_set);
 
   void encode_export_inode(CInode *in, bufferlist& bl, 
@@ -357,6 +374,7 @@ public:
 private:
   MDSRank *mds;
   MDCache *cache;
+  uint64_t max_export_size = 0;
   bool inject_session_race = false;
 };
 

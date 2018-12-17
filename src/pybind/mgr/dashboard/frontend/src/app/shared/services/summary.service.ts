@@ -40,34 +40,23 @@ export class SummaryService {
 
   /**
    * Returns the current value of summaryData
-   *
-   * @returns {object}
-   * @memberof SummaryService
    */
-  getCurrentSummary() {
+  getCurrentSummary(): { [key: string]: any; executing_tasks: object[] } {
     return this.summaryDataSource.getValue();
   }
 
   /**
    * Subscribes to the summaryData,
    * which is updated once every 5 seconds or when a new task is created.
-   *
-   * @param {(summary: any) => void} call
-   * @param {(error: any) => void} error
-   * @returns {Subscription}
-   * @memberof SummaryService
    */
-  subscribe(call: (summary: any) => void, error?: (error: any) => void): Subscription {
-    return this.summaryData$.subscribe(call, error);
+  subscribe(next: (summary: any) => void, error?: (error: any) => void): Subscription {
+    return this.summaryData$.subscribe(next, error);
   }
 
   /**
    * Inserts a newly created task to the local list of executing tasks.
    * After that, it will automatically push that new information
    * to all subscribers.
-   *
-   * @param {ExecutingTask} task
-   * @memberof SummaryService
    */
   addRunningTask(task: ExecutingTask) {
     const current = this.summaryDataSource.getValue();
@@ -76,7 +65,12 @@ export class SummaryService {
     }
 
     if (_.isArray(current.executing_tasks)) {
-      current.executing_tasks.push(task);
+      const exists = current.executing_tasks.find((element) => {
+        return element.name === task.name && _.isEqual(element.metadata, task.metadata);
+      });
+      if (!exists) {
+        current.executing_tasks.push(task);
+      }
     } else {
       current.executing_tasks = [task];
     }

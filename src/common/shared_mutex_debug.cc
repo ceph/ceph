@@ -11,8 +11,7 @@ shared_mutex_debug::shared_mutex_debug(const std::string& n,
                                        bool track_lock,
                                        bool enable_lock_dep,
                                        bool prioritize_write)
-  : mutex_debugging_base{n, false /* backtrace */,
-                         nullptr /* cct for perf counter*/},
+  : mutex_debugging_base{n, false /* backtrace */},
     track(track_lock),
     lockdep(enable_lock_dep)
 {
@@ -130,10 +129,10 @@ void shared_mutex_debug::unlock_shared()
 void shared_mutex_debug::_pre_unlock()
 {
   if (track) {
-    assert(nlock > 0);
+    ceph_assert(nlock > 0);
     --nlock;
-    assert(locked_by == std::this_thread::get_id());
-    assert(nlock == 0);
+    ceph_assert(locked_by == std::this_thread::get_id());
+    ceph_assert(nlock == 0);
     locked_by = std::thread::id();
   }
 }
@@ -141,7 +140,7 @@ void shared_mutex_debug::_pre_unlock()
 void shared_mutex_debug::_post_lock()
 {
   if (track) {
-    assert(nlock == 0);
+    ceph_assert(nlock == 0);
     locked_by = std::this_thread::get_id();
     ++nlock;
   }
@@ -151,7 +150,7 @@ void shared_mutex_debug::_post_lock()
 void shared_mutex_debug::_pre_unlock_shared()
 {
   if (track) {
-    assert(nrlock > 0);
+    ceph_assert(nrlock > 0);
     nrlock--;
   }
 }

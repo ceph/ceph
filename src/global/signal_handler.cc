@@ -17,6 +17,7 @@
 #include "include/compat.h"
 #include "pthread.h"
 
+#include "common/ceph_mutex.h"
 #include "common/BackTrace.h"
 #include "common/debug.h"
 #include "common/safe_io.h"
@@ -189,12 +190,13 @@ static void handle_fatal_signal(int signum)
     if (r >= 0) {
       char fn[PATH_MAX*2];
       snprintf(fn, sizeof(fn)-1, "%s/meta", base);
-      int fd = ::open(fn, O_CREAT|O_WRONLY, 0600);
+      int fd = ::open(fn, O_CREAT|O_WRONLY|O_CLOEXEC, 0600);
       if (fd >= 0) {
 	JSONFormatter jf(true);
 	jf.open_object_section("crash");
 	jf.dump_string("crash_id", id);
 	now.gmtime(jf.dump_stream("timestamp"));
+	jf.dump_string("process_name", g_process_name);
 	jf.dump_string("entity_name", g_ceph_context->_conf->name.to_str());
 	jf.dump_string("ceph_version", ceph_version_to_str());
 
@@ -209,7 +211,7 @@ static void handle_fatal_signal(int signum)
 	}
 #if defined(__linux__)
 	// os-release
-	int in = ::open("/etc/os-release", O_RDONLY);
+	int in = ::open("/etc/os-release", O_RDONLY|O_CLOEXEC);
 	if (in >= 0) {
 	  char buf[4096];
 	  r = safe_read(in, buf, sizeof(buf)-1);
@@ -244,10 +246,13 @@ static void handle_fatal_signal(int signum)
 	  jf.dump_string("assert_file", g_assert_file);
 	}
 	if (g_assert_line) {
-	  jf.dump_unsigned("assert_file", g_assert_line);
+	  jf.dump_unsigned("assert_line", g_assert_line);
 	}
 	if (g_assert_thread_name[0]) {
 	  jf.dump_string("assert_thread_name", g_assert_thread_name);
+	}
+	if (g_assert_msg[0]) {
+	  jf.dump_string("assert_msg", g_assert_msg);
 	}
 
 	// backtrace
@@ -380,7 +385,7 @@ struct SignalHandler : public Thread {
   int pipefd[2];  // write to [1], read from [0]
 
   /// to signal shutdown
-  bool stop;
+  bool stop = false;
 
   /// for an individual signal
   struct safe_handler {
@@ -400,16 +405,14 @@ struct SignalHandler : public Thread {
   safe_handler *handlers[32] = {nullptr};
 
   /// to protect the handlers array
-  Mutex lock;
+  ceph::mutex lock = ceph::make_mutex("SignalHandler::lock");
 
-  SignalHandler()
-    : stop(false), lock("SignalHandler::lock")
-  {
+  SignalHandler() {
     // create signal pipe
-    int r = pipe(pipefd);
-    assert(r == 0);
+    int r = pipe_cloexec(pipefd);
+    ceph_assert(r == 0);
     r = fcntl(pipefd[0], F_SETFL, O_NONBLOCK);
-    assert(r == 0);
+    ceph_assert(r == 0);
 
     // create thread
     create("signal_handler");
@@ -421,7 +424,7 @@ struct SignalHandler : public Thread {
 
   void signal_thread() {
     int r = write(pipefd[1], "\0", 1);
-    assert(r == 1);
+    ceph_assert(r == 1);
   }
 
   void shutdown() {
@@ -436,7 +439,7 @@ struct SignalHandler : public Thread {
       // build fd list
       struct pollfd fds[33];
 
-      lock.Lock();
+      lock.lock();
       int num_fds = 0;
       fds[num_fds].fd = pipefd[0];
       fds[num_fds].events = POLLIN | POLLERR;
@@ -450,7 +453,7 @@ struct SignalHandler : public Thread {
 	  ++num_fds;
 	}
       }
-      lock.Unlock();
+      lock.unlock();
 
       // wait for data on any of those pipes
       int r = poll(fds, num_fds, -1);
@@ -462,7 +465,7 @@ struct SignalHandler : public Thread {
 	// consume byte from signal socket, if any.
 	TEMP_FAILURE_RETRY(read(pipefd[0], &v, 1));
 
-	lock.Lock();
+	lock.lock();
 	for (unsigned signum=0; signum<32; signum++) {
 	  if (handlers[signum]) {
 	    r = read(handlers[signum]->pipefd[0], &v, 1);
@@ -498,7 +501,7 @@ struct SignalHandler : public Thread {
 	    }
 	  }
 	}
-	lock.Unlock();
+	lock.unlock();
       } 
     }
     return NULL;
@@ -509,9 +512,9 @@ struct SignalHandler : public Thread {
     // defined.  We can do this without the lock because we will never
     // have the signal handler defined without the handlers entry also
     // being filled in.
-    assert(handlers[signum]);
+    ceph_assert(handlers[signum]);
     int r = write(handlers[signum]->pipefd[1], " ", 1);
-    assert(r == 1);
+    ceph_assert(r == 1);
   }
 
   void queue_signal_info(int signum, siginfo_t *siginfo, void * content) {
@@ -519,10 +522,10 @@ struct SignalHandler : public Thread {
     // defined.  We can do this without the lock because we will never
     // have the signal handler defined without the handlers entry also
     // being filled in.
-    assert(handlers[signum]);
+    ceph_assert(handlers[signum]);
     memcpy(&handlers[signum]->info_t, siginfo, sizeof(siginfo_t));
     int r = write(handlers[signum]->pipefd[1], " ", 1);
-    assert(r == 1);
+    ceph_assert(r == 1);
   }
 
   void register_handler(int signum, signal_handler_t handler, bool oneshot);
@@ -539,19 +542,19 @@ void SignalHandler::register_handler(int signum, signal_handler_t handler, bool 
 {
   int r;
 
-  assert(signum >= 0 && signum < 32);
+  ceph_assert(signum >= 0 && signum < 32);
 
   safe_handler *h = new safe_handler;
 
-  r = pipe(h->pipefd);
-  assert(r == 0);
+  r = pipe_cloexec(h->pipefd);
+  ceph_assert(r == 0);
   r = fcntl(h->pipefd[0], F_SETFL, O_NONBLOCK);
-  assert(r == 0);
+  ceph_assert(r == 0);
 
   h->handler = handler;
-  lock.Lock();
+  lock.lock();
   handlers[signum] = h;
-  lock.Unlock();
+  lock.unlock();
 
   // signal thread so that it sees our new handler
   signal_thread();
@@ -565,23 +568,23 @@ void SignalHandler::register_handler(int signum, signal_handler_t handler, bool 
   sigfillset(&act.sa_mask);  // mask all signals in the handler
   act.sa_flags = SA_SIGINFO | (oneshot ? SA_RESETHAND : 0);
   int ret = sigaction(signum, &act, &oldact);
-  assert(ret == 0);
+  ceph_assert(ret == 0);
 }
 
 void SignalHandler::unregister_handler(int signum, signal_handler_t handler)
 {
-  assert(signum >= 0 && signum < 32);
+  ceph_assert(signum >= 0 && signum < 32);
   safe_handler *h = handlers[signum];
-  assert(h);
-  assert(h->handler == handler);
+  ceph_assert(h);
+  ceph_assert(h->handler == handler);
 
   // restore to default
   signal(signum, SIG_DFL);
 
   // _then_ remove our handlers entry
-  lock.Lock();
+  lock.lock();
   handlers[signum] = NULL;
-  lock.Unlock();
+  lock.unlock();
 
   // this will wake up select() so that worker thread sees our handler is gone
   close(h->pipefd[0]);
@@ -594,38 +597,38 @@ void SignalHandler::unregister_handler(int signum, signal_handler_t handler)
 
 void init_async_signal_handler()
 {
-  assert(!g_signal_handler);
+  ceph_assert(!g_signal_handler);
   g_signal_handler = new SignalHandler;
 }
 
 void shutdown_async_signal_handler()
 {
-  assert(g_signal_handler);
+  ceph_assert(g_signal_handler);
   delete g_signal_handler;
   g_signal_handler = NULL;
 }
 
 void queue_async_signal(int signum)
 {
-  assert(g_signal_handler);
+  ceph_assert(g_signal_handler);
   g_signal_handler->queue_signal(signum);
 }
 
 void register_async_signal_handler(int signum, signal_handler_t handler)
 {
-  assert(g_signal_handler);
+  ceph_assert(g_signal_handler);
   g_signal_handler->register_handler(signum, handler, false);
 }
 
 void register_async_signal_handler_oneshot(int signum, signal_handler_t handler)
 {
-  assert(g_signal_handler);
+  ceph_assert(g_signal_handler);
   g_signal_handler->register_handler(signum, handler, true);
 }
 
 void unregister_async_signal_handler(int signum, signal_handler_t handler)
 {
-  assert(g_signal_handler);
+  ceph_assert(g_signal_handler);
   g_signal_handler->unregister_handler(signum, handler);
 }
 

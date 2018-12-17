@@ -7,7 +7,8 @@ Please see the ceph-mgr module developer's guide for more information.
 
 
 class _Completion(object):
-    def get_result(self):
+    @property
+    def result(self):
         """
         Return the result of the operation that we were waited
         for.  Only valid after calling Orchestrator.wait() on this
@@ -44,6 +45,13 @@ class ReadCompletion(_Completion):
     def is_read(self):
         return True
 
+    @property
+    def should_wait(self):
+        """Could the external operation be deemed as complete,
+        or should we wait?
+        We must wait for a read operation only if it is not complete.
+        """
+        return not self.is_complete
 
 class WriteCompletion(_Completion):
     """
@@ -82,6 +90,14 @@ class WriteCompletion(_Completion):
     def is_read(self):
         return False
 
+    @property
+    def should_wait(self):
+        """Could the external operation be deemed as complete,
+        or should we wait?
+        We must wait for a write operation only if we know
+        it is not persistent yet.
+        """
+        return not self.is_persistent
 
 class Orchestrator(object):
     """
@@ -153,7 +169,7 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def describe_service(self, service_type, service_id):
+    def describe_service(self, service_type=None, service_id=None, node_name=None):
         """
         Describe a service (of any kind) that is already configured in
         the orchestrator.  For example, when viewing an OSD in the dashboard
@@ -162,6 +178,8 @@ class Orchestrator(object):
 
         When viewing a CephFS filesystem in the dashboard, we would use this
         to display the pods being currently run for MDS daemons.
+
+        Returns a list of ServiceDescription objects.
         """
         raise NotImplementedError()
 
@@ -301,9 +319,17 @@ class PlacementSpec(object):
         self.label = None
 
 
-class ServiceLocation(object):
+class ServiceDescription(object):
     """
-    See ServiceDescription
+    For responding to queries about the status of a particular service,
+    stateful or stateless.
+
+    This is not about health or performance monitoring of services: it's
+    about letting the orchestrator tell Ceph whether and where a
+    service is scheduled in the cluster.  When an orchestrator tells
+    Ceph "it's running on node123", that's not a promise that the process
+    is literally up this second, it's a description of where the orchestrator
+    has decided the service should run.
     """
     def __init__(self):
         # Node is at the same granularity as InventoryNode
@@ -319,22 +345,8 @@ class ServiceLocation(object):
         # in the FSMap/ServiceMap.
         self.daemon_name = None
 
-
-class ServiceDescription(object):
-    """
-    For responding to queries about the status of a particular service,
-    stateful or stateless.
-
-    This is not about health or performance monitoring of services: it's
-    about letting the orchestrator tell Ceph whether and where a 
-    service is scheduled in the cluster.  When an orchestrator tells
-    Ceph "it's running on node123", that's not a promise that the process
-    is literally up this second, it's a description of where the orchestrator
-    has decided the service should run.
-    """
-
-    def __init__(self):
-        self.locations = []
+        # The type of service (osd, mon, mgr, etc.)
+        self.service_type = None
 
 
 class DriveGroupSpec(object):

@@ -152,7 +152,7 @@ public:
 
   uint64_t allocate_op_tid() {
     uint64_t op_tid = ++m_op_tid;
-    assert(op_tid != 0);
+    ceph_assert(op_tid != 0);
     return op_tid;
   }
 

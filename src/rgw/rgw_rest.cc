@@ -12,6 +12,7 @@
 #include "include/str_list.h"
 #include "rgw_common.h"
 #include "rgw_rados.h"
+#include "rgw_zone.h"
 #include "rgw_formats.h"
 #include "rgw_op.h"
 #include "rgw_rest.h"
@@ -169,10 +170,8 @@ string uppercase_underscore_http_attr(const string& orig)
 static set<string> hostnames_set;
 static set<string> hostnames_s3website_set;
 
-void rgw_rest_init(CephContext *cct, RGWRados *store, RGWZoneGroup& zone_group)
+void rgw_rest_init(CephContext *cct, RGWRados *store, const RGWZoneGroup& zone_group)
 {
-  store->init_host_id();
-
   for (const auto& rgw2http : base_rgw_to_http_attrs)  {
     rgw_to_http_attrs[rgw2http.rgw_attr] = rgw2http.http_attr;
   }
@@ -1450,35 +1449,37 @@ int RGWPostObj_ObjStore::get_params()
 int RGWPutACLs_ObjStore::get_params()
 {
   const auto max_size = s->cct->_conf->rgw_max_put_param_size;
-  op_ret = rgw_rest_read_all_input(s, &data, &len, max_size, false);
+  std::tie(op_ret, data) = rgw_rest_read_all_input(s, max_size, false);
+  ldout(s->cct, 0) << "RGWPutACLs_ObjStore::get_params read data is: " << data.c_str() << dendl;
   return op_ret;
 }
 
 int RGWPutLC_ObjStore::get_params()
 {
   const auto max_size = s->cct->_conf->rgw_max_put_param_size;
-  op_ret = rgw_rest_read_all_input(s, &data, &len, max_size, false);
+  std::tie(op_ret, data) = rgw_rest_read_all_input(s, max_size, false);
   return op_ret;
 }
 
-static int read_all_chunked_input(req_state *s, char **pdata, int *plen, const uint64_t max_read)
+static std::tuple<int, bufferlist> read_all_chunked_input(req_state *s, const uint64_t max_read)
 {
 #define READ_CHUNK 4096
 #define MAX_READ_CHUNK (128 * 1024)
   int need_to_read = READ_CHUNK;
   int total = need_to_read;
-  char *data = (char *)malloc(total + 1);
-  if (!data)
-    return -ENOMEM;
+  bufferlist bl;
 
   int read_len = 0, len = 0;
   do {
-    read_len = recv_body(s, data + len, need_to_read);
+    bufferptr bp(need_to_read + 1);
+    read_len = recv_body(s, bp.c_str(), need_to_read);
     if (read_len < 0) {
-      free(data);
-      return read_len;
+      return std::make_tuple(read_len, std::move(bl));
     }
 
+    bp.c_str()[read_len] = '\0';
+    bp.set_length(read_len);
+    bl.append(bp);
     len += read_len;
 
     if (read_len == need_to_read) {
@@ -1486,70 +1487,58 @@ static int read_all_chunked_input(req_state *s, char **pdata, int *plen, const u
 	need_to_read *= 2;
 
       if ((unsigned)total > max_read) {
-	free(data);
-	return -ERANGE;
+	return std::make_tuple(-ERANGE, std::move(bl));
       }
       total += need_to_read;
-
-      void *p = realloc(data, total + 1);
-      if (!p) {
-	free(data);
-	return -ENOMEM;
-      }
-      data = (char *)p;
     } else {
       break;
     }
-
   } while (true);
-  data[len] = '\0';
 
-  *pdata = data;
-  *plen = len;
-
-  return 0;
+  return std::make_tuple(0, std::move(bl));
 }
 
-int rgw_rest_read_all_input(struct req_state *s, char **pdata, int *plen,
-			    const uint64_t max_len, const bool allow_chunked)
+std::tuple<int, bufferlist > rgw_rest_read_all_input(struct req_state *s,
+                                        const uint64_t max_len,
+                                        const bool allow_chunked)
 {
   size_t cl = 0;
   int len = 0;
-  char *data = NULL;
+  bufferlist bl;
 
   if (s->length)
     cl = atoll(s->length);
   else if (!allow_chunked)
-    return -ERR_LENGTH_REQUIRED;
+    return std::make_tuple(-ERR_LENGTH_REQUIRED, std::move(bl));
 
   if (cl) {
     if (cl > (size_t)max_len) {
-      return -ERANGE;
+      return std::make_tuple(-ERANGE, std::move(bl));
     }
-    data = (char *)malloc(cl + 1);
-    if (!data) {
-      return -ENOMEM;
-    }
-    len = recv_body(s, data, cl);
+
+    bufferptr bp(cl + 1);
+  
+    len = recv_body(s, bp.c_str(), cl);
     if (len < 0) {
-      free(data);
-      return len;
+      return std::make_tuple(len, std::move(bl));
     }
-    data[len] = '\0';
+
+    bp.c_str()[len] = '\0';
+    bp.set_length(len);
+    bl.append(bp);
+
   } else if (allow_chunked && !s->length) {
     const char *encoding = s->info.env->get("HTTP_TRANSFER_ENCODING");
     if (!encoding || strcmp(encoding, "chunked") != 0)
-      return -ERR_LENGTH_REQUIRED;
+      return std::make_tuple(-ERR_LENGTH_REQUIRED, std::move(bl));
 
-    int ret = read_all_chunked_input(s, &data, &len, max_len);
+    int ret = 0;
+    std::tie(ret, bl) = read_all_chunked_input(s, max_len);
     if (ret < 0)
-      return ret;
+      return std::make_tuple(ret, std::move(bl));
   }
 
-  *plen = len;
-  *pdata = data;
-
-  return 0;
+  return std::make_tuple(0, std::move(bl));
 }
 
 int RGWCompleteMultipart_ObjStore::get_params()
@@ -1562,7 +1551,7 @@ int RGWCompleteMultipart_ObjStore::get_params()
   }
 
 #define COMPLETE_MULTIPART_MAX_LEN (1024 * 1024) /* api defines max 10,000 parts, this should be enough */
-  op_ret = rgw_rest_read_all_input(s, &data, &len, COMPLETE_MULTIPART_MAX_LEN);
+  std::tie(op_ret, data) = rgw_rest_read_all_input(s, COMPLETE_MULTIPART_MAX_LEN);
   if (op_ret < 0)
     return op_ret;
 
@@ -1625,7 +1614,7 @@ int RGWDeleteMultiObj_ObjStore::get_params()
   bucket = s->bucket;
 
   const auto max_size = s->cct->_conf->rgw_max_put_param_size;
-  op_ret = rgw_rest_read_all_input(s, &data, &len, max_size, false);
+  std::tie(op_ret, data) = rgw_rest_read_all_input(s, max_size, false);
   return op_ret;
 }
 

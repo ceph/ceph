@@ -17,7 +17,7 @@ except ImportError:
     client = None
     config = None
 
-from rook_cluster import RookCluster, ApplyException
+from .rook_cluster import RookCluster
 
 
 all_completions = []
@@ -33,7 +33,7 @@ class RookReadCompletion(orchestrator.ReadCompletion):
     def __init__(self, cb):
         super(RookReadCompletion, self).__init__()
         self.cb = cb
-        self.result = None
+        self._result = None
         self._complete = False
 
         self.message = "<read op>"
@@ -43,11 +43,15 @@ class RookReadCompletion(orchestrator.ReadCompletion):
         all_completions.append(self)
 
     @property
+    def result(self):
+        return self._result
+
+    @property
     def is_complete(self):
         return self._complete
 
     def execute(self):
-        self.result = self.cb()
+        self._result = self.cb()
         self._complete = True
 
 
@@ -124,7 +128,7 @@ def deferred_read(f):
 
 
 class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
-    OPTIONS = [
+    MODULE_OPTIONS = [
         # TODO: configure k8s API addr instead of assuming local
     ]
 
@@ -164,6 +168,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                     c.message
                 ))
                 c.error = e
+                c._complete = True
                 if not c.is_read:
                     self._progress("complete", c.id)
             else:
@@ -181,18 +186,18 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         if kubernetes_imported:
             return True, ""
         else:
-            return False, "Kubernetes module not found"
+            return False, "`kubernetes` python module not found"
 
     def available(self):
         if not kubernetes_imported:
-            return False, "Kubernetes module not found"
-        elif not self._in_cluster():
+            return False, "`kubernetes` python module not found"
+        elif not self._in_cluster_name:
             return False, "ceph-mgr not running in Rook cluster"
 
         try:
             self.k8s.list_namespaced_pod(self.rook_cluster.cluster_name)
-        except ApiException:
-            return False, "Cannot reach Kubernetes API"
+        except ApiException as e:
+            return False, "Cannot reach Kubernetes API: {}".format(e)
         else:
             return True, ""
 
@@ -218,23 +223,27 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         self._initialized.wait()
         return self._rook_cluster
 
-    def _in_cluster(self):
+    @property
+    def _in_cluster_name(self):
         """
         Check if we appear to be running inside a Kubernetes/Rook
         cluster
 
-        :return: bool
+        :return: str
         """
-        return 'ROOK_CLUSTER_NAME' in os.environ
+        if 'POD_NAMESPACE' in os.environ:
+            return os.environ['POD_NAMESPACE']
+        if 'ROOK_CLUSTER_NAME' in os.environ:
+            return os.environ['ROOK_CLUSTER_NAME']
 
     def serve(self):
         # For deployed clusters, we should always be running inside
         # a Rook cluster.  For development convenience, also support
         # running outside (reading ~/.kube config)
 
-        if self._in_cluster():
+        if self._in_cluster_name:
             config.load_incluster_config()
-            cluster_name = os.environ['ROOK_CLUSTER_NAME']
+            cluster_name = self._in_cluster_name
         else:
             self.log.warning("DEVELOPMENT ONLY: Reading kube config from ~")
             config.load_kube_config()
@@ -247,15 +256,20 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         self._k8s = client.CoreV1Api()
 
-        # XXX mystery hack -- I need to do an API call from
-        # this context, or subsequent API usage from handle_command
-        # fails with SSLError('bad handshake').  Suspect some kind of
-        # thread context setup in SSL lib?
-        self._k8s.list_namespaced_pod(cluster_name)
+        try:
+            # XXX mystery hack -- I need to do an API call from
+            # this context, or subsequent API usage from handle_command
+            # fails with SSLError('bad handshake').  Suspect some kind of
+            # thread context setup in SSL lib?
+            self._k8s.list_namespaced_pod(cluster_name)
+        except ApiException:
+            # Ignore here to make self.available() fail with a proper error message
+            pass
 
         self._rook_cluster = RookCluster(
             self._k8s,
             cluster_name)
+
 
         # In case Rook isn't already clued in to this ceph
         # cluster's existence, initialize it.
@@ -270,8 +284,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
             global all_completions
             self.wait(all_completions)
-            all_completions = filter(lambda x: not x.is_complete,
-                                     all_completions)
+            all_completions = [c for c in all_completions if not c.is_complete]
 
             self._shutdown.wait(5)
 
@@ -319,36 +332,32 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         return result
 
     @deferred_read
-    def describe_service(self, service_type, service_id):
-        assert service_type in ("mds", "osd", "mon", "rgw")
+    def describe_service(self, service_type, service_id, nodename):
 
-        pods = self.rook_cluster.describe_pods(service_type, service_id)
+        assert service_type in ("mds", "osd", "mgr", "mon", None), service_type + " unsupported"
 
-        result = orchestrator.ServiceDescription()
+        pods = self.rook_cluster.describe_pods(service_type, service_id, nodename)
+
+        result = []
         for p in pods:
-            sl = orchestrator.ServiceLocation()
-            sl.nodename = p['nodename']
-            sl.container_id = p['name']
+            sd = orchestrator.ServiceDescription()
+            sd.nodename = p['nodename']
+            sd.container_id = p['name']
+            sd.service_type = p['labels']['app'].replace('rook-ceph-', '')
 
-            if service_type == "osd":
-                sl.daemon_name = "%s" % p['labels']["ceph-osd-id"]
-            elif service_type == "mds":
-                # MDS daemon names are the tail of the pod name with
-                # an 'm' prefix.
-                # TODO: Would be nice to get this out a label though.
-                sl.daemon_name = "m" + sl.container_id.split("-")[-1]
-            elif service_type == "mon":
-                sl.daemon_name = p['labels']["mon"]
-            elif service_type == "mgr":
-                # FIXME: put a label on the pod to consume
-                # from here
-                raise NotImplementedError("mgr")
-            elif service_type == "rgw":
-                # FIXME: put a label on the pod to consume
-                # from here
-                raise NotImplementedError("rgw")
+            if sd.service_type == "osd":
+                sd.daemon_name = "%s" % p['labels']["ceph-osd-id"]
+            elif sd.service_type == "mds":
+                sd.daemon_name = p['labels']["rook_file_system"]
+            elif sd.service_type == "mon":
+                sd.daemon_name = p['labels']["mon"]
+            elif sd.service_type == "mgr":
+                sd.daemon_name = p['labels']["mgr"]
+            else:
+                # Unknown type -- skip it
+                continue
 
-            result.locations.append(sl)
+            result.append(sd)
 
         return result
 
@@ -359,9 +368,18 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             return RookWriteCompletion(
                 lambda: self.rook_cluster.add_filesystem(spec), None,
                 "Creating Filesystem services for {0}".format(spec.name))
+        elif service_type == "rgw" :
+            return RookWriteCompletion(
+                lambda: self.rook_cluster.add_objectstore(spec), None,
+                "Creating RGW services for {0}".format(spec.name))
         else:
             # TODO: RGW, NFS
             raise NotImplementedError(service_type)
+
+    def remove_stateless_service(self, service_type, service_id):
+        return RookWriteCompletion(
+            lambda: self.rook_cluster.rm_service(service_type, service_id), None,
+            "Removing {0} services for {1}".format(service_type, service_id))
 
     def create_osds(self, spec):
         # Validate spec.node

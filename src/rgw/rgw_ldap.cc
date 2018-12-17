@@ -9,7 +9,7 @@
 #include "common/safe_io.h"
 #include <boost/algorithm/string.hpp>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_subsys ceph_subsys_rgw
 

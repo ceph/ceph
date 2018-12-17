@@ -8,5 +8,7 @@ overrides:
         rgw crypt require ssl: false
         rgw sync log trim interval: 0
         rgw curl low speed time: 300
+        rgw md log max shards: 4
+        rgw data log num shards: 4
   rgw:
     compression type: random

@@ -22,7 +22,7 @@
 #include "common/config.h"
 #include "common/errno.h"
 #include "common/DecayCounter.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/stringify.h"
 
 #define dout_context g_ceph_context
@@ -38,7 +38,7 @@ class SessionMapIOContext : public MDSIOContextBase
     MDSRank *get_mds() override {return sessionmap->mds;}
   public:
     explicit SessionMapIOContext(SessionMap *sessionmap_) : sessionmap(sessionmap_) {
-      assert(sessionmap != NULL);
+      ceph_assert(sessionmap != NULL);
     }
 };
 };
@@ -62,6 +62,9 @@ void SessionMap::register_perfcounters()
               "Sessions currently stale");
   plb.add_u64(l_mdssm_total_load, "total_load", "Total Load");
   plb.add_u64(l_mdssm_avg_load, "average_load", "Average Load");
+  plb.add_u64(l_mdssm_avg_session_uptime, "avg_session_uptime",
+               "Average session uptime");
+
   logger = plb.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(logger);
 }
@@ -324,7 +327,7 @@ void SessionMap::_load_legacy_finish(int r, bufferlist &bl)
   auto blp = bl.cbegin();
   if (r < 0) {
     derr << "_load_finish got " << cpp_strerror(r) << dendl;
-    assert(0 == "failed to load sessionmap");
+    ceph_abort_msg("failed to load sessionmap");
   }
   dump();
   decode_legacy(blp);  // note: this sets last_cap_renew = now()
@@ -375,7 +378,7 @@ void SessionMap::save(MDSInternalContextBase *onsave, version_t needv)
   dout(10) << __func__ << ": needv " << needv << ", v " << version << dendl;
  
   if (needv && committing >= needv) {
-    assert(committing > committed);
+    ceph_assert(committing > committed);
     commit_waiters[committing].push_back(onsave);
     return;
   }
@@ -518,7 +521,7 @@ void SessionMapStore::decode_legacy(bufferlist::const_iterator& p)
   decode(pre, p);
   if (pre == (uint64_t)-1) {
     DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, p);
-    assert(struct_v >= 2);
+    ceph_assert(struct_v >= 2);
     
     decode(version, p);
     
@@ -619,13 +622,15 @@ void SessionMap::add_session(Session *s)
 {
   dout(10) << __func__ << " s=" << s << " name=" << s->info.inst.name << dendl;
 
-  assert(session_map.count(s->info.inst.name) == 0);
+  ceph_assert(session_map.count(s->info.inst.name) == 0);
   session_map[s->info.inst.name] = s;
   auto by_state_entry = by_state.find(s->state);
   if (by_state_entry == by_state.end())
     by_state_entry = by_state.emplace(s->state, new xlist<Session*>).first;
   by_state_entry->second->push_back(&s->item_session_list);
   s->get();
+
+  update_average_birth_time(*s);
 
   logger->set(l_mdssm_session_count, session_map.size());
   logger->inc(l_mdssm_session_add);
@@ -634,6 +639,8 @@ void SessionMap::add_session(Session *s)
 void SessionMap::remove_session(Session *s)
 {
   dout(10) << __func__ << " s=" << s << " name=" << s->info.inst.name << dendl;
+
+  update_average_birth_time(*s, false);
 
   s->trim_completed_requests(0);
   s->item_session_list.remove_myself();
@@ -652,7 +659,7 @@ void SessionMap::touch_session(Session *session)
 
   // Move to the back of the session list for this state (should
   // already be on a list courtesy of add_session and set_state)
-  assert(session->item_session_list.is_on_list());
+  ceph_assert(session->item_session_list.is_on_list());
   auto by_state_entry = by_state.find(session->state);
   if (by_state_entry == by_state.end())
     by_state_entry = by_state.emplace(session->state,
@@ -736,7 +743,7 @@ public:
 void SessionMap::save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
                                MDSGatherBuilder *gather_bld)
 {
-  assert(gather_bld != NULL);
+  ceph_assert(gather_bld != NULL);
 
   std::vector<entity_name_t> write_sessions;
 
@@ -968,7 +975,7 @@ int Session::check_access(CInode *in, unsigned mask,
 void SessionMap::hit_session(Session *session) {
   uint64_t sessions = get_session_count_in_state(Session::STATE_OPEN) +
                       get_session_count_in_state(Session::STATE_STALE);
-  assert(sessions != 0);
+  ceph_assert(sessions != 0);
 
   double total_load = total_load_avg.hit();
   double avg_load = total_load / sessions;
@@ -1002,11 +1009,20 @@ void SessionMap::handle_conf_change(const ConfigProxy &conf,
   }
 }
 
+void SessionMap::update_average_session_age() {
+  if (!session_map.size()) {
+    return;
+  }
+
+  double avg_uptime = std::chrono::duration<double>(clock::now()-avg_birth_time).count();
+  logger->set(l_mdssm_avg_session_uptime, (uint64_t)avg_uptime);
+}
+
 int SessionFilter::parse(
     const std::vector<std::string> &args,
     std::stringstream *ss)
 {
-  assert(ss != NULL);
+  ceph_assert(ss != NULL);
 
   for (const auto &s : args) {
     dout(20) << __func__ << " parsing filter '" << s << "'" << dendl;
@@ -1052,7 +1068,7 @@ int SessionFilter::parse(
        */
       auto is_true = [](std::string_view bstr, bool *out) -> bool
       {
-        assert(out != nullptr);
+        ceph_assert(out != nullptr);
 
         if (bstr == "true" || bstr == "1") {
           *out = true;

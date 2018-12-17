@@ -26,7 +26,7 @@ public:
   static DetachChildRequest *s_instance;
   static DetachChildRequest *create(MockImageCtx &image_ctx,
                                     Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -129,7 +129,7 @@ public:
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {
-      ParentSpec &parent_spec = mock_image_ctx.snap_info.rbegin()->second.parent.spec;
+      auto &parent_spec = mock_image_ctx.snap_info.rbegin()->second.parent.spec;
       expect.WillOnce(DoAll(SetArgPointee<1>(parent_spec),
                             Return(0)));
     }

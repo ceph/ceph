@@ -34,6 +34,7 @@
 #include "MDLog.h"
 #include "MDSContext.h"
 #include "PurgeQueue.h"
+#include "Server.h"
 #include "osdc/Journaler.h"
 
 // Full .h import instead of forward declaration for PerfCounter, for the
@@ -96,7 +97,6 @@ enum {
   l_mdm_caps,
   l_mdm_rss,
   l_mdm_heap,
-  l_mdm_buf,
   l_mdm_last,
 };
 
@@ -104,7 +104,6 @@ namespace ceph {
   struct heartbeat_handle_d;
 }
 
-class Server;
 class Locker;
 class MDCache;
 class MDLog;
@@ -119,6 +118,7 @@ class Objecter;
 class MonClient;
 class Finisher;
 class ScrubStack;
+class C_MDS_Send_Command_Reply;
 
 /**
  * The public part of this class's interface is what's exposed to all
@@ -134,6 +134,10 @@ class MDSRank {
     int incarnation;
 
   public:
+
+    friend class C_Flush_Journal;
+    friend class C_Drop_Cache;
+
     mds_rank_t get_nodeid() const { return whoami; }
     int64_t get_metadata_pool();
 
@@ -226,6 +230,7 @@ class MDSRank {
                             const std::set <std::string> &changed)
     {
       sessionmap.handle_conf_change(conf, changed);
+      server->handle_conf_change(conf, changed);
       mdcache->handle_conf_change(conf, changed, *mdsmap);
       purge_queue.handle_conf_change(conf, changed, *mdsmap);
     }
@@ -386,7 +391,7 @@ class MDSRank {
       waiting_for_active_peer[who].push_back(c);
     }
     void wait_for_cluster_recovered(MDSInternalContextBase *c) {
-      assert(cluster_degraded);
+      ceph_assert(cluster_degraded);
       waiting_for_active_peer[MDS_RANK_NONE].push_back(c);
     }
 
@@ -416,6 +421,7 @@ class MDSRank {
     }
 
     bool queue_one_replay();
+    void maybe_clientreplay_done();
 
     void set_osd_epoch_barrier(epoch_t e);
     epoch_t get_osd_epoch_barrier() const {return osd_epoch_barrier;}
@@ -465,13 +471,15 @@ class MDSRank {
         std::ostream &ss,
         Formatter *f);
     int _command_export_dir(std::string_view path, mds_rank_t dest);
-    int _command_flush_journal(std::ostream& ss);
     CDir *_command_dirfrag_get(
         const cmdmap_t &cmdmap,
         std::ostream &ss);
     void command_openfiles_ls(Formatter *f);
     void command_dump_tree(const cmdmap_t &cmdmap, std::ostream &ss, Formatter *f);
     void command_dump_inode(Formatter *f, const cmdmap_t &cmdmap, std::ostream &ss);
+
+    void cache_drop_send_reply(Formatter *f, C_MDS_Send_Command_Reply *reply, int r);
+    void command_cache_drop(uint64_t timeout, Formatter *f, Context *on_finish);
 
   protected:
     Messenger    *messenger;
@@ -600,6 +608,7 @@ public:
     int *r,
     std::stringstream *ds,
     std::stringstream *ss,
+    Context **run_later,
     bool *need_reply);
 
   void dump_sessions(const SessionFilter &filter, Formatter *f) const;

@@ -93,9 +93,9 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   // e.g. 'single' or 'multi'.
   @Input()
   selectionType: string = undefined;
-  // If `true` selected item details will be updated on table refresh
+  // By default selected item details will be updated on table refresh, if data has changed
   @Input()
-  updateSelectionOnRefresh = true;
+  updateSelectionOnRefresh: 'always' | 'never' | 'onChange' = 'onChange';
 
   @Input()
   autoSave = true;
@@ -367,9 +367,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
       this.updateFilter(true);
     }
     this.reset();
-    if (this.updateSelectionOnRefresh) {
-      this.updateSelected();
-    }
+    this.updateSelected();
   }
 
   /**
@@ -388,6 +386,9 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
    * or some selected items may have been removed.
    */
   updateSelected() {
+    if (this.updateSelectionOnRefresh === 'never') {
+      return;
+    }
     const newSelected = [];
     this.selection.selected.forEach((selectedItem) => {
       for (const row of this.data) {
@@ -396,6 +397,12 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
         }
       }
     });
+    if (
+      this.updateSelectionOnRefresh === 'onChange' &&
+      _.isEqual(this.selection.selected, newSelected)
+    ) {
+      return;
+    }
     this.selection.selected = newSelected;
     this.onSelect();
   }

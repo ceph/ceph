@@ -39,7 +39,7 @@
 typedef boost::mt11213b gen_type;
 
 #include "common/dout.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_subsys ceph_subsys_ms
 #undef dout_prefix
@@ -101,7 +101,10 @@ class FakeDispatcher : public Dispatcher {
 
   explicit FakeDispatcher(bool s): Dispatcher(g_ceph_context), lock("FakeDispatcher::lock"),
                           is_server(s), got_new(false), got_remote_reset(false),
-                          got_connect(false), loopback(false) {}
+                          got_connect(false), loopback(false) {
+    // don't need authorizers
+    ms_set_require_authorizer(false);
+  }
   bool ms_can_fast_dispatch_any() const override { return true; }
   bool ms_can_fast_dispatch(const Message *m) const override {
     switch (m->get_type()) {
@@ -186,11 +189,11 @@ class FakeDispatcher : public Dispatcher {
     lderr(g_ceph_context) << __func__ << " conn: " << m->get_connection() << " session " << s << " count: " << s->count << dendl;
     if (is_server) {
       if (loopback)
-        assert(m->get_source().is_osd());
+        ceph_assert(m->get_source().is_osd());
       else
         reply_message(m);
     } else if (loopback) {
-      assert(m->get_source().is_client());
+      ceph_assert(m->get_source().is_client());
     }
     m->put();
     Mutex::Locker l(lock);
@@ -198,12 +201,8 @@ class FakeDispatcher : public Dispatcher {
     cond.Signal();
   }
 
-  bool ms_verify_authorizer(Connection *con, int peer_type, int protocol,
-                            bufferlist& authorizer, bufferlist& authorizer_reply,
-                            bool& isvalid, CryptoKey& session_key,
-			    std::unique_ptr<AuthAuthorizerChallenge> *challenge) override {
-    isvalid = true;
-    return true;
+  int ms_handle_authentication(Connection *con) override {
+    return 1;
   }
 
   void reply_message(Message *m) {
@@ -237,7 +236,7 @@ TEST_P(MessengerTest, SimpleTest) {
     cli_dispatcher.got_new = false;
   }
   ASSERT_TRUE(conn->is_connected());
-  ASSERT_EQ(1, static_cast<Session*>(conn->get_priv().get())->get_count());
+  ASSERT_EQ(1u, static_cast<Session*>(conn->get_priv().get())->get_count());
   ASSERT_TRUE(conn->peer_is_osd());
 
   // 2. test rebind port
@@ -321,9 +320,9 @@ TEST_P(MessengerTest, NameAddrTest) {
   ASSERT_TRUE(conn->get_peer_addrs() == server_msgr->get_myaddrs());
   ConnectionRef server_conn = server_msgr->connect_to(
     client_msgr->get_mytype(), client_msgr->get_myaddrs());
-  // Make should server_conn is the one we already accepted from client,
-  // so it means client_msgr has the same addr when server connection has
-  ASSERT_EQ(1U, static_cast<Session*>(conn->get_priv().get())->get_count());
+  // Verify that server_conn is the one we already accepted from client,
+  // so it means the session counter in server_conn is also incremented.
+  ASSERT_EQ(1U, static_cast<Session*>(server_conn->get_priv().get())->get_count());
   server_msgr->shutdown();
   client_msgr->shutdown();
   server_msgr->wait();
@@ -722,7 +721,6 @@ TEST_P(MessengerTest, AuthTest) {
   }
   ASSERT_TRUE(conn->is_connected());
   ASSERT_EQ(1U, static_cast<Session*>(conn->get_priv().get())->get_count());
-
   server_msgr->shutdown();
   client_msgr->shutdown();
   server_msgr->wait();
@@ -838,7 +836,10 @@ class SyntheticDispatcher : public Dispatcher {
 
   SyntheticDispatcher(bool s, SyntheticWorkload *wl):
       Dispatcher(g_ceph_context), lock("SyntheticDispatcher::lock"), is_server(s), got_new(false),
-      got_remote_reset(false), got_connect(false), index(0), workload(wl) {}
+      got_remote_reset(false), got_connect(false), index(0), workload(wl) {
+    // don't need authorizers
+    ms_set_require_authorizer(false);
+  }
   bool ms_can_fast_dispatch_any() const override { return true; }
   bool ms_can_fast_dispatch(const Message *m) const override {
     switch (m->get_type()) {
@@ -917,12 +918,8 @@ class SyntheticDispatcher : public Dispatcher {
     }
   }
 
-  bool ms_verify_authorizer(Connection *con, int peer_type, int protocol,
-                            bufferlist& authorizer, bufferlist& authorizer_reply,
-                            bool& isvalid, CryptoKey& session_key,
-			    std::unique_ptr<AuthAuthorizerChallenge> *challenge) override {
-    isvalid = true;
-    return true;
+  int ms_handle_authentication(Connection *con) override {
+    return 1;
   }
 
   void reply_message(const Message *m, Payload& pl) {
@@ -1004,7 +1001,7 @@ class SyntheticWorkload {
       msgr->bind(bind_addr);
       msgr->add_dispatcher_head(&dispatcher);
 
-      assert(msgr);
+      ceph_assert(msgr);
       msgr->set_default_policy(srv_policy);
       available_servers.insert(msgr);
       msgr->start();
@@ -1020,7 +1017,7 @@ class SyntheticWorkload {
       }
       msgr->add_dispatcher_head(&dispatcher);
 
-      assert(msgr);
+      ceph_assert(msgr);
       msgr->set_default_policy(cli_policy);
       available_clients.insert(msgr);
       msgr->start();
@@ -1048,7 +1045,7 @@ class SyntheticWorkload {
       usleep(500);
       lock.Lock();
     }
-    assert(lock.is_locked());
+    ceph_assert(lock.is_locked());
     boost::uniform_int<> choose(0, available_connections.size() - 1);
     int index = choose(rng);
     map<ConnectionRef, pair<Messenger*, Messenger*> >::iterator i = available_connections.begin();
@@ -1159,7 +1156,7 @@ class SyntheticWorkload {
       if (i++ % 50 == 0)
         print_internal_state(true);
       if (timeout_us < 0)
-        assert(0 == " loop time exceed 5 mins, it looks we stuck into some problems!");
+        ceph_abort_msg(" loop time exceed 5 mins, it looks we stuck into some problems!");
     }
     for (set<Messenger*>::iterator it = available_servers.begin();
          it != available_servers.end(); ++it) {
@@ -1402,7 +1399,10 @@ class MarkdownDispatcher : public Dispatcher {
  public:
   std::atomic<uint64_t> count = { 0 };
   explicit MarkdownDispatcher(bool s): Dispatcher(g_ceph_context), lock("MarkdownDispatcher::lock"),
-                              last_mark(false) {}
+                              last_mark(false) {
+    // don't need authorizers
+    ms_set_require_authorizer(false);
+  }
   bool ms_can_fast_dispatch_any() const override { return false; }
   bool ms_can_fast_dispatch(const Message *m) const override {
     switch (m->get_type()) {
@@ -1464,12 +1464,8 @@ class MarkdownDispatcher : public Dispatcher {
   void ms_fast_dispatch(Message *m) override {
     ceph_abort();
   }
-  bool ms_verify_authorizer(Connection *con, int peer_type, int protocol,
-                            bufferlist& authorizer, bufferlist& authorizer_reply,
-                            bool& isvalid, CryptoKey& session_key,
-			    std::unique_ptr<AuthAuthorizerChallenge> *challenge) override {
-    isvalid = true;
-    return true;
+  int ms_handle_authentication(Connection *con) override {
+    return 1;
   }
 };
 

@@ -11,7 +11,7 @@
 #include "messages/MStatfsReply.h"
 #include "messages/MServiceMap.h"
 
-#include "include/assert.h"	// re-clobber assert
+#include "include/ceph_assert.h"	// re-clobber assert
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
@@ -45,7 +45,7 @@ void MgrStatMonitor::update_from_paxos(bool *need_bootstrap)
   bufferlist bl;
   get_version(version, bl);
   if (version) {
-    assert(bl.length());
+    ceph_assert(bl.length());
     try {
       auto p = bl.cbegin();
       decode(digest, p);
@@ -65,11 +65,11 @@ void MgrStatMonitor::update_logger()
 {
   dout(20) << __func__ << dendl;
 
-  mon->cluster_logger->set(l_cluster_osd_bytes, digest.osd_sum.kb * 1024ull);
+  mon->cluster_logger->set(l_cluster_osd_bytes, digest.osd_sum.statfs.total);
   mon->cluster_logger->set(l_cluster_osd_bytes_used,
-                           digest.osd_sum.kb_used * 1024ull);
+                           digest.osd_sum.statfs.get_used_raw());
   mon->cluster_logger->set(l_cluster_osd_bytes_avail,
-                           digest.osd_sum.kb_avail * 1024ull);
+                           digest.osd_sum.statfs.available);
 
   mon->cluster_logger->set(l_cluster_num_pool, digest.pg_pool_sum.size());
   uint64_t num_pg = 0;
@@ -117,7 +117,7 @@ void MgrStatMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   dout(10) << " " << version << dendl;
   bufferlist bl;
   encode(pending_digest, bl, mon->get_quorum_con_features());
-  assert(pending_service_map_bl.length());
+  ceph_assert(pending_service_map_bl.length());
   bl.append(pending_service_map_bl);
   put_version(t, version, bl);
   put_last_committed(t, version);
@@ -212,7 +212,7 @@ bool MgrStatMonitor::preprocess_getpoolstats(MonOpRequestRef op)
 {
   op->mark_pgmon_event(__func__);
   auto m = static_cast<MGetPoolStats*>(op->get_req());
-  auto session = m->get_session();
+  auto session = op->get_session();
   if (!session)
     return true;
   if (!session->is_capable("pg", MON_CAP_R)) {
@@ -244,7 +244,7 @@ bool MgrStatMonitor::preprocess_statfs(MonOpRequestRef op)
 {
   op->mark_pgmon_event(__func__);
   auto statfs = static_cast<MStatfs*>(op->get_req());
-  auto session = statfs->get_session();
+  auto session = op->get_session();
 
   if (!session)
     return true;

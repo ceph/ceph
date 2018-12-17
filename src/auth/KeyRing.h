@@ -90,9 +90,6 @@ public:
   void set_caps(EntityName& name, map<string, bufferlist>& caps) {
     keys[name].caps = caps;
   }
-  void set_uid(EntityName& ename, uint64_t auid) {
-    keys[ename].auid = auid;
-  }
   void set_key(EntityName& ename, CryptoKey& key) {
     keys[ename].key = key;
   }

@@ -12,7 +12,7 @@ describe('OSDs page', () => {
     Helper.checkConsole();
   });
 
-  it('should open and show breadcrumnb', () => {
+  it('should open and show breadcrumb', () => {
     page.navigateTo();
     expect(Helper.getBreadcrumbText()).toEqual('OSDs');
   });

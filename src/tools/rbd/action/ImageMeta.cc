@@ -24,11 +24,14 @@ void add_key_option(po::options_description *positional) {
     ("key", "image meta key");
 }
 
-int get_key(const po::variables_map &vm, std::string *key) {
-  *key = utils::get_positional_argument(vm, 1);
+int get_key(const po::variables_map &vm, size_t *arg_index,
+            std::string *key) {
+  *key = utils::get_positional_argument(vm, *arg_index);
   if (key->empty()) {
     std::cerr << "rbd: metadata key was not specified" << std::endl;
     return -EINVAL;
+  } else {
+    ++(*arg_index);
   }
   return 0;
 }
@@ -201,7 +204,7 @@ int execute_get(const po::variables_map &vm,
   }
 
   std::string key;
-  r = get_key(vm, &key);
+  r = get_key(vm, &arg_index, &key);
   if (r < 0) {
     return r;
   }
@@ -248,7 +251,7 @@ int execute_set(const po::variables_map &vm,
   }
 
   std::string key;
-  r = get_key(vm, &key);
+  r = get_key(vm, &arg_index, &key);
   if (r < 0) {
     return r;
   }
@@ -299,7 +302,7 @@ int execute_remove(const po::variables_map &vm,
   }
 
   std::string key;
-  r = get_key(vm, &key);
+  r = get_key(vm, &arg_index, &key);
   if (r < 0) {
     return r;
   }

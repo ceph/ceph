@@ -511,7 +511,7 @@ int XioMessenger::session_event(struct xio_session *session,
 
     xcon->conn = conn;
     xcon->portal = static_cast<XioPortal*>(xctxa.user_context);
-    assert(xcon->portal);
+    ceph_assert(xcon->portal);
 
     xcona.user_context = xcon;
     (void) xio_modify_connection(conn, &xcona, XIO_CONNECTION_ATTR_USER_CTX);
@@ -769,7 +769,7 @@ static inline XioMsg* pool_alloc_xio_msg(Message *m, XioConnection *xcon,
   if (!!e)
     return NULL;
   XioMsg *xmsg = reinterpret_cast<XioMsg*>(mp_mem.addr);
-  assert(!!xmsg);
+  ceph_assert(!!xmsg);
   new (xmsg) XioMsg(m, xcon, mp_mem, ex_cnt, CEPH_FEATURES_ALL);
   return xmsg;
 }
@@ -781,7 +781,7 @@ XioCommand* pool_alloc_xio_command(XioConnection *xcon)
   if (!!e)
     return NULL;
   XioCommand *xcmd = reinterpret_cast<XioCommand*>(mp_mem.addr);
-  assert(!!xcmd);
+  ceph_assert(!!xcmd);
   new (xcmd) XioCommand(xcon, mp_mem);
   return xcmd;
 }
@@ -912,7 +912,7 @@ int XioMessenger::_send_message_impl(Message* m, XioConnection* xcon)
   req = xmsg->get_xio_msg();
 
   const std::list<buffer::ptr>& header = xmsg->hdr.get_bl().buffers();
-  assert(header.size() == 1); /* XXX */
+  ceph_assert(header.size() == 1); /* XXX */
   list<bufferptr>::const_iterator pb = header.begin();
   req->out.header.iov_base = (char*) pb->c_str();
   req->out.header.iov_len = pb->length();

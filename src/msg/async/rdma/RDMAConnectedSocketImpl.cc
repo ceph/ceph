@@ -178,7 +178,6 @@ int RDMAConnectedSocketImpl::try_connect(const entity_addr_t& peer_addr, const S
   if (tcp_fd < 0) {
     return -errno;
   }
-  net.set_close_on_exec(tcp_fd);
 
   int r = net.set_socket_options(tcp_fd, opts.nodelay, opts.rcbuf_size);
   if (r < 0) {
@@ -222,7 +221,7 @@ void RDMAConnectedSocketImpl::handle_connection() {
                    <<  ", " << peer_msg.lid << ", " << peer_msg.peer_qpn << "> " << dendl;
     if (!connected) {
       r = activate();
-      assert(!r);
+      ceph_assert(!r);
     }
     notify();
     r = infiniband->send_msg(cct, tcp_fd, my_msg);
@@ -238,7 +237,7 @@ void RDMAConnectedSocketImpl::handle_connection() {
         return ;
       }
       r = activate();
-      assert(!r);
+      ceph_assert(!r);
       r = infiniband->send_msg(cct, tcp_fd, my_msg);
       if (r < 0) {
         ldout(cct, 1) << __func__ << " server ack failed." << dendl;
@@ -294,7 +293,7 @@ ssize_t RDMAConnectedSocketImpl::read(char* buf, size_t len)
   ldout(cct, 20) << __func__ << " poll queue got " << cqe.size() << " responses. QP: " << my_msg.qpn << dendl;
   for (size_t i = 0; i < cqe.size(); ++i) {
     ibv_wc* response = &cqe[i];
-    assert(response->status == IBV_WC_SUCCESS);
+    ceph_assert(response->status == IBV_WC_SUCCESS);
     Chunk* chunk = reinterpret_cast<Chunk *>(response->wr_id);
     ldout(cct, 25) << __func__ << " chunk length: " << response->byte_len << " bytes." << chunk << dendl;
     chunk->prepare_read(response->byte_len);
@@ -447,10 +446,11 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more)
   if (!bytes)
     return 0;
 
-  auto fill_tx_via_copy = [this](std::vector<Chunk*> &tx_buffers, unsigned bytes,
-                                 std::list<bufferptr>::const_iterator &start,
-                                 std::list<bufferptr>::const_iterator &end) -> unsigned {
-    assert(start != end);
+  auto fill_tx_via_copy = [this](std::vector<Chunk*> &tx_buffers,
+                                 unsigned bytes,
+                                 auto& start,
+                                 const auto& end) -> unsigned {
+    ceph_assert(start != end);
     auto chunk_idx = tx_buffers.size();
     int ret = worker->get_reged_mem(this, tx_buffers, bytes);
     if (ret == 0) {
@@ -477,13 +477,13 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more)
       }
       ++start;
     }
-    assert(bytes == 0);
+    ceph_assert(bytes == 0);
     return total_copied;
   };
 
   std::vector<Chunk*> tx_buffers;
-  std::list<bufferptr>::const_iterator it = pending_bl.buffers().begin();
-  std::list<bufferptr>::const_iterator copy_it = it;
+  auto it = std::cbegin(pending_bl.buffers());
+  auto copy_it = it;
   unsigned total = 0;
   unsigned need_reserve_bytes = 0;
   while (it != pending_bl.buffers().end()) {
@@ -495,7 +495,7 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more)
           goto sending;
         need_reserve_bytes = 0;
       }
-      assert(copy_it == it);
+      ceph_assert(copy_it == it);
       tx_buffers.push_back(infiniband->get_tx_chunk_by_buffer(it->raw_c_str()));
       total += it->length();
       ++copy_it;
@@ -510,7 +510,7 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more)
  sending:
   if (total == 0)
     return -EAGAIN;
-  assert(total <= pending_bl.length());
+  ceph_assert(total <= pending_bl.length());
   bufferlist swapped;
   if (total < pending_bl.length()) {
     worker->perf_logger->inc(l_msgr_rdma_tx_parital_mem);
@@ -622,7 +622,7 @@ void RDMAConnectedSocketImpl::notify()
   // write argument must be a 64bit integer
   uint64_t i = 1;
 
-  assert(sizeof(i) == write(notify_fd, &i, sizeof(i)));
+  ceph_assert(sizeof(i) == write(notify_fd, &i, sizeof(i)));
 }
 
 void RDMAConnectedSocketImpl::shutdown()

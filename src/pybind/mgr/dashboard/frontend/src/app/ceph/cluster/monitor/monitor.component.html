@@ -44,19 +44,17 @@
   </div>
 
   <div class="col-md-8">
-    <fieldset>
-      <legend i18n
-              class="in-quorum">In Quorum</legend>
-      <cd-table [data]="inQuorum.data"
-                [columns]="inQuorum.columns">
-      </cd-table>
+    <legend i18n
+            class="in-quorum">In Quorum</legend>
+    <cd-table [data]="inQuorum.data"
+              [columns]="inQuorum.columns">
+    </cd-table>
 
-      <legend i18n
-              class="in-quorum">Not In Quorum</legend>
-      <cd-table [data]="notInQuorum.data"
-                (fetchData)="refresh()"
-                [columns]="notInQuorum.columns">
-      </cd-table>
-    </fieldset>
+    <legend i18n
+            class="in-quorum">Not In Quorum</legend>
+    <cd-table [data]="notInQuorum.data"
+              (fetchData)="refresh()"
+              [columns]="notInQuorum.columns">
+    </cd-table>
   </div>
 </div>

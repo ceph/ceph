@@ -29,7 +29,7 @@
 #include "include/str_list.h"
 #include "messages/MMonMap.h"
 #include "msg/Messenger.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "mds/MDSMap.h"
 
 #include "include/cephfs/libcephfs.h"
@@ -127,6 +127,21 @@ public:
     return ret;
   }
 
+  int select_filesystem(const std::string &fs_name_)
+  {
+    if (mounted) {
+      return -EISCONN;
+    }
+
+    fs_name = fs_name_;
+    return 0;
+  }
+
+  const std::string& get_filesystem(void)
+  {
+    return fs_name;
+  }
+
   int mount(const std::string &mount_root, const UserPerm& perms)
   {
     int ret;
@@ -141,7 +156,7 @@ public:
       }
     }
 
-    ret = client->mount(mount_root, perms);
+    ret = client->mount(mount_root, perms, false, fs_name);
     if (ret) {
       shutdown();
       return ret;
@@ -283,6 +298,7 @@ private:
   Messenger *messenger;
   CephContext *cct;
   std::string cwd;
+  std::string fs_name;
 };
 
 static mode_t umask_cb(void *handle)
@@ -494,6 +510,16 @@ extern "C" int ceph_init(struct ceph_mount_info *cmount)
   return cmount->init();
 }
 
+extern "C" int ceph_select_filesystem(struct ceph_mount_info *cmount,
+                                      const char *fs_name)
+{
+  if (fs_name == nullptr) {
+    return -EINVAL;
+  }
+
+  return cmount->select_filesystem(fs_name);
+}
+
 extern "C" int ceph_mount(struct ceph_mount_info *cmount, const char *root)
 {
   std::string mount_root;
@@ -510,6 +536,13 @@ extern "C" int ceph_is_mounted(struct ceph_mount_info *cmount)
 extern "C" struct UserPerm *ceph_mount_perms(struct ceph_mount_info *cmount)
 {
   return &cmount->default_perms;
+}
+
+extern "C" int64_t ceph_get_fs_cid(struct ceph_mount_info *cmount)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  return cmount->get_client()->get_fs_cid();
 }
 
 extern "C" int ceph_mount_perms_set(struct ceph_mount_info *cmount,
@@ -1890,4 +1923,31 @@ extern "C" int ceph_set_deleg_timeout(class ceph_mount_info *cmount, uint32_t ti
   if (!cmount->is_mounted())
     return -ENOTCONN;
   return cmount->get_client()->set_deleg_timeout(timeout);
+}
+
+extern "C" void ceph_set_session_timeout(class ceph_mount_info *cmount, unsigned timeout)
+{
+  cmount->get_client()->set_session_timeout(timeout);
+}
+
+extern "C" void ceph_set_uuid(class ceph_mount_info *cmount, const char *uuid)
+{
+  cmount->get_client()->set_uuid(std::string(uuid));
+}
+
+extern "C" int ceph_start_reclaim(class ceph_mount_info *cmount,
+				  const char *uuid, unsigned flags)
+{
+  if (!cmount->is_initialized()) {
+    int ret = cmount->init();
+    if (ret != 0)
+      return ret;
+  }
+  return cmount->get_client()->start_reclaim(std::string(uuid), flags,
+					     cmount->get_filesystem());
+}
+
+extern "C" void ceph_finish_reclaim(class ceph_mount_info *cmount)
+{
+  cmount->get_client()->finish_reclaim();
 }

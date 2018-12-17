@@ -6,7 +6,7 @@
 #include <boost/optional.hpp>
 #include <boost/utility/in_place_factory.hpp>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "ceph_ver.h"
 
 #include "common/Formatter.h"
@@ -24,6 +24,10 @@
 
 #include "rgw_request.h"
 #include "rgw_process.h"
+
+#include "rgw_zone.h"
+
+#include "services/svc_zone.h"
 
 #include <array>
 #include <sstream>
@@ -703,7 +707,7 @@ int RGWCreateBucket_ObjStore_SWIFT::get_params()
     policy.create_default(s->user->user_id, s->user->display_name);
   }
 
-  location_constraint = store->get_zonegroup().api_name;
+  location_constraint = store->svc.zone->get_zonegroup().api_name;
   get_rmattrs_from_headers(s, CONT_PUT_ATTR_PREFIX,
                            CONT_REMOVE_ATTR_PREFIX, rmattr_names);
   placement_rule = s->info.env->get("HTTP_X_STORAGE_POLICY", "");
@@ -841,7 +845,7 @@ int RGWPutObj_ObjStore_SWIFT::update_slo_segment_size(rgw_slo_entry& entry) {
   if (bucket_name.compare(s->bucket.name) != 0) {
     RGWBucketInfo bucket_info;
     map<string, bufferlist> bucket_attrs;
-    RGWObjectCtx obj_ctx(store);
+    auto obj_ctx = store->svc.sysobj->init_obj_ctx();
     r = store->get_bucket_info(obj_ctx, s->user->user_id.tenant,
 			       bucket_name, bucket_info, nullptr,
 			       &bucket_attrs);
@@ -861,7 +865,7 @@ int RGWPutObj_ObjStore_SWIFT::update_slo_segment_size(rgw_slo_entry& entry) {
 
   /* no prefetch */
   RGWObjectCtx obj_ctx(store);
-  obj_ctx.obj.set_atomic(slo_seg);
+  obj_ctx.set_atomic(slo_seg);
 
   RGWRados::Object op_target(store, s->bucket_info, obj_ctx, slo_seg);
   RGWRados::Object::Read read_op(&op_target);
@@ -965,7 +969,8 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
     
     slo_info = new RGWSLOInfo;
     
-    int r = rgw_rest_get_json_input_keep_data(s->cct, s, slo_info->entries, max_len, &slo_info->raw_data, &slo_info->raw_data_len);
+    int r = 0;
+    std::tie(r, slo_info->raw_data) = rgw_rest_get_json_input_keep_data(s->cct, s, slo_info->entries, max_len);
     if (r < 0) {
       ldout(s->cct, 5) << "failed to read input for slo r=" << r << dendl;
       return r;
@@ -1003,7 +1008,7 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
     complete_etag(etag_sum, &lo_etag);
     slo_info->total_size = total_size;
 
-    ofs = slo_info->raw_data_len;
+    ofs = slo_info->raw_data.length();
   }
 
   return RGWPutObj_ObjStore::get_params();
@@ -1897,7 +1902,7 @@ void RGWInfo_ObjStore_SWIFT::list_swift_data(Formatter& formatter,
   }
 
   formatter.open_array_section("policies");
-  RGWZoneGroup& zonegroup = store.get_zonegroup();
+  const RGWZoneGroup& zonegroup = store.svc.zone->get_zonegroup();
 
   for (const auto& placement_targets : zonegroup.placement_targets) {
     formatter.open_object_section("policy");
@@ -2097,7 +2102,7 @@ void RGWFormPost::get_owner_info(const req_state* const s,
 
   /* Need to get user info of bucket owner. */
   RGWBucketInfo bucket_info;
-  int ret = store->get_bucket_info(*static_cast<RGWObjectCtx *>(s->obj_ctx),
+  int ret = store->get_bucket_info(*s->sysobj_ctx,
                                    bucket_tenant, bucket_name,
                                    bucket_info, nullptr);
   if (ret < 0) {
@@ -2543,8 +2548,8 @@ bool RGWSwiftWebsiteHandler::is_web_dir() const
 
   /* First, get attrset of the object we'll try to retrieve. */
   RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
-  obj_ctx.obj.set_atomic(obj);
-  obj_ctx.obj.set_prefetch_data(obj);
+  obj_ctx.set_atomic(obj);
+  obj_ctx.set_prefetch_data(obj);
 
   RGWObjState* state = nullptr;
   if (store->get_obj_state(&obj_ctx, s->bucket_info, obj, &state, false) < 0) {
@@ -2573,8 +2578,8 @@ bool RGWSwiftWebsiteHandler::is_index_present(const std::string& index)
   rgw_obj obj(s->bucket, index);
 
   RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
-  obj_ctx.obj.set_atomic(obj);
-  obj_ctx.obj.set_prefetch_data(obj);
+  obj_ctx.set_atomic(obj);
+  obj_ctx.set_prefetch_data(obj);
 
   RGWObjState* state = nullptr;
   if (store->get_obj_state(&obj_ctx, s->bucket_info, obj, &state, false) < 0) {
@@ -2772,9 +2777,9 @@ RGWOp *RGWHandler_REST_Obj_SWIFT::op_options()
 }
 
 
-int RGWHandler_REST_SWIFT::authorize()
+int RGWHandler_REST_SWIFT::authorize(const DoutPrefixProvider *dpp)
 {
-  return rgw::auth::Strategy::apply(auth_strategy, s);
+  return rgw::auth::Strategy::apply(dpp, auth_strategy, s);
 }
 
 int RGWHandler_REST_SWIFT::postauth_init()

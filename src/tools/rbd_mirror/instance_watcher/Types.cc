@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "Types.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/stringify.h"
 #include "common/Formatter.h"
 

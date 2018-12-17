@@ -58,8 +58,9 @@ class MClientRequest;
 class MClientSession;
 class MClientRequest;
 class MClientRequestForward;
-struct MClientLease;
+class MClientLease;
 class MClientCaps;
+class MClientReclaimReply;
 
 struct DirStat;
 struct LeaseStat;
@@ -180,7 +181,7 @@ struct dir_result_t {
     if (hash)
       v |= HASH;
     else
-      assert((v & HASH) != HASH);
+      ceph_assert((v & HASH) != HASH);
     return v;
   }
   static unsigned fpos_high(uint64_t p) {
@@ -292,9 +293,19 @@ public:
   }
 
   int mount(const std::string &mount_root, const UserPerm& perms,
-	    bool require_mds=false);
+	    bool require_mds=false, const std::string &fs_name="");
   void unmount();
   void abort_conn();
+
+  void set_uuid(const std::string& uuid);
+  void set_session_timeout(unsigned timeout);
+  int start_reclaim(const std::string& uuid, unsigned flags,
+		    const std::string& fs_name);
+  void finish_reclaim();
+
+  fs_cluster_id_t get_fs_cid() {
+    return fscid;
+  }
 
   int mds_command(
     const std::string &mds_spec,
@@ -302,7 +313,7 @@ public:
     const bufferlist& inbl,
     bufferlist *poutbl, std::string *prs, Context *onfinish);
 
-  // these shoud (more or less) mirror the actual system calls.
+  // these should (more or less) mirror the actual system calls.
   int statfs(const char *path, struct statvfs *stbuf, const UserPerm& perms);
 
   // crap
@@ -485,7 +496,7 @@ public:
 
   snapid_t ll_get_snapid(Inode *in);
   vinodeno_t ll_get_vino(Inode *in) {
-    Mutex::Locker lock(client_lock);
+    std::lock_guard lock(client_lock);
     return _get_vino(in);
   }
   // get inode from faked ino
@@ -815,6 +826,7 @@ protected:
 
   // fake inode number for 32-bits ino_t
   void _assign_faked_ino(Inode *in);
+  void _assign_faked_root(Inode *in);
   void _release_faked_ino(Inode *in);
   void _reset_faked_inos();
   vinodeno_t _map_faked_ino(ino_t ino);
@@ -862,7 +874,10 @@ protected:
   void put_inode(Inode *in, int n=1);
   void close_dir(Dir *dir);
 
+  int subscribe_mdsmap(const std::string &fs_name="");
+
   void _abort_mds_sessions(int err);
+
   // same as unmount() but for when the client_lock is already held
   void _unmount(bool abort);
 
@@ -927,6 +942,8 @@ protected:
   bool is_quota_bytes_approaching(Inode *in, const UserPerm& perms);
 
   int check_pool_perm(Inode *in, int need);
+
+  void handle_client_reclaim_reply(MClientReclaimReply *reply);
 
   /**
    * Call this when an OSDMap is seen with a full flag (global or per pool)
@@ -1034,7 +1051,7 @@ private:
   int _release_fh(Fh *fh);
   void _put_fh(Fh *fh);
 
-  int _do_remount(void);
+  int _do_remount(bool retry_on_error);
 
   int _read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl, bool *checkeof);
   int _read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl);
@@ -1150,6 +1167,10 @@ private:
   size_t _vxattrcb_dir_rsubdirs(Inode *in, char *val, size_t size);
   size_t _vxattrcb_dir_rbytes(Inode *in, char *val, size_t size);
   size_t _vxattrcb_dir_rctime(Inode *in, char *val, size_t size);
+
+  bool _vxattrcb_dir_pin_exists(Inode *in);
+  size_t _vxattrcb_dir_pin(Inode *in, char *val, size_t size);
+
   size_t _vxattrs_calcu_name_size(const VXattr *vxattrs);
 
   static const VXattr *_get_vxattrs(Inode *in);
@@ -1226,6 +1247,9 @@ private:
 
   bool _use_faked_inos;
 
+  // Cluster fsid
+  fs_cluster_id_t fscid;
+
   // file handles, etc.
   interval_set<int> free_fd_set;  // unused fds
   ceph::unordered_map<int, Fh*> fd_map;
@@ -1241,6 +1265,7 @@ private:
   ceph::unordered_map<ino_t, vinodeno_t> faked_ino_map;
   interval_set<ino_t> free_faked_inos;
   ino_t last_used_faked_ino;
+  ino_t last_used_faked_root;
 
   // When an MDS has sent us a REJECT, remember that and don't
   // contact it again.  Remember which inst rejected us, so that
@@ -1274,6 +1299,14 @@ private:
 
   std::map<std::pair<int64_t,std::string>, int> pool_perms;
   list<Cond*> waiting_for_pool_perm;
+
+  uint64_t retries_on_invalidate = 0;
+
+  // state reclaim
+  list<Cond*> waiting_for_reclaim;
+  int reclaim_errno = 0;
+  epoch_t reclaim_osd_epoch = 0;
+  entity_addrvec_t reclaim_target_addrs;
 };
 
 /**

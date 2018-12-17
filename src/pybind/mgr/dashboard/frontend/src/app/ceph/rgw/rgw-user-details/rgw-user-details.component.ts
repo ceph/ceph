@@ -1,7 +1,8 @@
 import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
+import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
-import { BsModalService } from 'ngx-bootstrap';
+import { BsModalService } from 'ngx-bootstrap/modal';
 
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
@@ -33,17 +34,21 @@ export class RgwUserDetailsComponent implements OnChanges, OnInit {
   keysColumns: CdTableColumn[] = [];
   keysSelection: CdTableSelection = new CdTableSelection();
 
-  constructor(private rgwUserService: RgwUserService, private bsModalService: BsModalService) {}
+  constructor(
+    private rgwUserService: RgwUserService,
+    private bsModalService: BsModalService,
+    private i18n: I18n
+  ) {}
 
   ngOnInit() {
     this.keysColumns = [
       {
-        name: 'Username',
+        name: this.i18n('Username'),
         prop: 'username',
         flexGrow: 1
       },
       {
-        name: 'Type',
+        name: this.i18n('Type'),
         prop: 'type',
         flexGrow: 1
       }
@@ -59,11 +64,9 @@ export class RgwUserDetailsComponent implements OnChanges, OnInit {
       this.user.caps = _.sortBy(this.user.caps, 'type');
 
       // Load the user/bucket quota of the selected user.
-      if (this.user.tenant === '') {
-        this.rgwUserService.getQuota(this.user.user_id).subscribe((resp: object) => {
-          _.extend(this.user, resp);
-        });
-      }
+      this.rgwUserService.getQuota(this.user.uid).subscribe((resp: object) => {
+        _.extend(this.user, resp);
+      });
 
       // Process the keys.
       this.keys = [];

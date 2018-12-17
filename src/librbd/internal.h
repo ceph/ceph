@@ -60,9 +60,6 @@ namespace librbd {
   void image_options_clear(rbd_image_options_t opts);
   bool image_options_is_empty(rbd_image_options_t opts);
 
-  int list(librados::IoCtx& io_ctx, std::vector<std::string>& names);
-  int list_children(ImageCtx *ictx,
-                    std::vector<child_info_t> *names);
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
 	     int *order);
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
@@ -88,9 +85,6 @@ namespace librbd {
   int get_size(ImageCtx *ictx, uint64_t *size);
   int get_features(ImageCtx *ictx, uint64_t *features);
   int get_overlap(ImageCtx *ictx, uint64_t *overlap);
-  int get_parent_info(ImageCtx *ictx, std::string *parent_pool_name,
-                      std::string *parent_name, std::string *parent_id,
-                      std::string *parent_snap_name);
   int get_flags(ImageCtx *ictx, uint64_t *flags);
   int set_image_notification(ImageCtx *ictx, int fd, int type);
   int is_exclusive_lock_owner(ImageCtx *ictx, bool *is_owner);
@@ -100,20 +94,6 @@ namespace librbd {
                       std::list<std::string> *lock_owners);
   int lock_break(ImageCtx *ictx, rbd_lock_mode_t lock_mode,
                  const std::string &lock_owner);
-
-  int remove(librados::IoCtx& io_ctx, const std::string &image_name,
-             const std::string &image_id, ProgressContext& prog_ctx,
-             bool force=false, bool from_trash_remove=false);
-
-  int trash_move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
-                 const std::string &image_name, uint64_t delay);
-  int trash_get(IoCtx &io_ctx, const std::string &id, trash_image_info_t *info);
-  int trash_list(librados::IoCtx &io_ctx,
-                 std::vector<trash_image_info_t> &entries);
-  int trash_remove(librados::IoCtx &io_ctx, const std::string &image_id,
-                   bool force, ProgressContext& prog_ctx);
-  int trash_restore(librados::IoCtx &io_ctx, const std::string &image_id,
-                    const std::string &image_new_name);
 
   int snap_list(ImageCtx *ictx, std::vector<snap_info_t>& snaps);
   int snap_exists(ImageCtx *ictx, const cls::rbd::SnapshotNamespace& snap_namespace,

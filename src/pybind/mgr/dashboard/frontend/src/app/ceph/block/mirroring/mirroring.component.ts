@@ -1,5 +1,7 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
+import { I18n } from '@ngx-translate/i18n-polyfill';
+
 import { RbdMirroringService } from '../../../shared/api/rbd-mirroring.service';
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
 import { CephShortVersionPipe } from '../../../shared/pipes/ceph-short-version.pipe';
@@ -45,78 +47,79 @@ export class MirroringComponent implements OnInit {
 
   constructor(
     private rbdMirroringService: RbdMirroringService,
-    private cephShortVersionPipe: CephShortVersionPipe
+    private cephShortVersionPipe: CephShortVersionPipe,
+    private i18n: I18n
   ) {}
 
   ngOnInit() {
     this.daemons.columns = [
-      { prop: 'instance_id', name: 'Instance', flexGrow: 2 },
-      { prop: 'id', name: 'ID', flexGrow: 2 },
-      { prop: 'server_hostname', name: 'Hostname', flexGrow: 2 },
+      { prop: 'instance_id', name: this.i18n('Instance'), flexGrow: 2 },
+      { prop: 'id', name: this.i18n('ID'), flexGrow: 2 },
+      { prop: 'server_hostname', name: this.i18n('Hostname'), flexGrow: 2 },
       {
         prop: 'version',
-        name: 'Version',
+        name: this.i18n('Version'),
         pipe: this.cephShortVersionPipe,
         flexGrow: 2
       },
       {
         prop: 'health',
-        name: 'Health',
+        name: this.i18n('Health'),
         cellTemplate: this.healthTmpl,
         flexGrow: 1
       }
     ];
 
     this.pools.columns = [
-      { prop: 'name', name: 'Name', flexGrow: 2 },
-      { prop: 'mirror_mode', name: 'Mode', flexGrow: 2 },
-      { prop: 'leader_id', name: 'Leader', flexGrow: 2 },
-      { prop: 'image_local_count', name: '# Local', flexGrow: 2 },
-      { prop: 'image_remote_count', name: '# Remote', flexGrow: 2 },
+      { prop: 'name', name: this.i18n('Name'), flexGrow: 2 },
+      { prop: 'mirror_mode', name: this.i18n('Mode'), flexGrow: 2 },
+      { prop: 'leader_id', name: this.i18n('Leader'), flexGrow: 2 },
+      { prop: 'image_local_count', name: this.i18n('# Local'), flexGrow: 2 },
+      { prop: 'image_remote_count', name: this.i18n('# Remote'), flexGrow: 2 },
       {
         prop: 'health',
-        name: 'Health',
+        name: this.i18n('Health'),
         cellTemplate: this.healthTmpl,
         flexGrow: 1
       }
     ];
 
     this.image_error.columns = [
-      { prop: 'pool_name', name: 'Pool', flexGrow: 2 },
-      { prop: 'name', name: 'Image', flexGrow: 2 },
-      { prop: 'description', name: 'Issue', flexGrow: 4 },
+      { prop: 'pool_name', name: this.i18n('Pool'), flexGrow: 2 },
+      { prop: 'name', name: this.i18n('Image'), flexGrow: 2 },
+      { prop: 'description', name: this.i18n('Issue'), flexGrow: 4 },
       {
         prop: 'state',
-        name: 'State',
+        name: this.i18n('State'),
         cellTemplate: this.stateTmpl,
         flexGrow: 1
       }
     ];
 
     this.image_syncing.columns = [
-      { prop: 'pool_name', name: 'Pool', flexGrow: 2 },
-      { prop: 'name', name: 'Image', flexGrow: 2 },
+      { prop: 'pool_name', name: this.i18n('Pool'), flexGrow: 2 },
+      { prop: 'name', name: this.i18n('Image'), flexGrow: 2 },
       {
         prop: 'progress',
-        name: 'Progress',
+        name: this.i18n('Progress'),
         cellTemplate: this.progressTmpl,
         flexGrow: 2
       },
       {
         prop: 'state',
-        name: 'State',
+        name: this.i18n('State'),
         cellTemplate: this.syncTmpl,
         flexGrow: 1
       }
     ];
 
     this.image_ready.columns = [
-      { prop: 'pool_name', name: 'Pool', flexGrow: 2 },
-      { prop: 'name', name: 'Image', flexGrow: 2 },
-      { prop: 'description', name: 'Description', flexGrow: 4 },
+      { prop: 'pool_name', name: this.i18n('Pool'), flexGrow: 2 },
+      { prop: 'name', name: this.i18n('Image'), flexGrow: 2 },
+      { prop: 'description', name: this.i18n('Description'), flexGrow: 4 },
       {
         prop: 'state',
-        name: 'State',
+        name: this.i18n('State'),
         cellTemplate: this.stateTmpl,
         flexGrow: 1
       }

@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
   desc.add_options()
     ("help", "produce help message")
     ("omap-path", po::value<string>(&store_path),
-     "path to mon directory, mandatory (current/omap usually)")
+     "path to omap directory, mandatory (current/omap usually)")
     ("paranoid", "use paranoid checking")
     ("debug", "Additional debug output from DBObjectMap")
     ("oid", po::value<string>(&oid), "Restrict to this object id when dumping objects")

@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -35,7 +35,7 @@
 #include "AsyncConnection.h"
 #include "Event.h"
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 class AsyncMessenger;
 
@@ -111,7 +111,7 @@ public:
    * @{
    */
   void set_cluster_protocol(int p) override {
-    assert(!started && !did_bind);
+    ceph_assert(!started && !did_bind);
     cluster_protocol = p;
   }
 
@@ -278,7 +278,7 @@ private:
   ceph::unordered_map<entity_addrvec_t, AsyncConnectionRef> conns;
 
   /**
-   * list of connection are in teh process of accepting
+   * list of connection are in the process of accepting
    *
    * These are not yet in the conns map.
    */
@@ -307,7 +307,7 @@ private:
   bool stopped;
 
   AsyncConnectionRef _lookup_conn(const entity_addrvec_t& k) {
-    assert(lock.is_locked());
+    ceph_assert(lock.is_locked());
     auto p = conns.find(k);
     if (p == conns.end())
       return NULL;
@@ -324,7 +324,7 @@ private:
   }
 
   void _init_local_connection() {
-    assert(lock.is_locked());
+    ceph_assert(lock.is_locked());
     local_connection->peer_addrs = *my_addrs;
     local_connection->peer_type = my_name.type();
     local_connection->set_features(CEPH_FEATURES_ALL);
@@ -336,7 +336,7 @@ private:
 public:
 
   /// con used for sending messages to ourselves
-  ConnectionRef local_connection;
+  AsyncConnectionRef local_connection;
 
   /**
    * @defgroup AsyncMessenger internals
@@ -378,22 +378,6 @@ public:
     return stack;
   }
 
-  /**
-   * This wraps ms_deliver_get_authorizer. We use it for AsyncConnection.
-   */
-  AuthAuthorizer *get_authorizer(int peer_type, bool force_new) {
-    return ms_deliver_get_authorizer(peer_type, force_new);
-  }
-
-  /**
-   * This wraps ms_deliver_verify_authorizer; we use it for AsyncConnection.
-   */
-  bool verify_authorizer(Connection *con, int peer_type, int protocol, bufferlist& auth, bufferlist& auth_reply,
-                         bool& isvalid, CryptoKey& session_key,
-			 std::unique_ptr<AuthAuthorizerChallenge> *challenge) {
-    return ms_deliver_verify_authorizer(con, peer_type, protocol, auth,
-                                        auth_reply, isvalid, session_key, challenge);
-  }
   /**
    * Increment the global sequence for this AsyncMessenger and return it.
    * This is for the connect protocol, although it doesn't hurt if somebody

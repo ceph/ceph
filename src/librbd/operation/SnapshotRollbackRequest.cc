@@ -50,8 +50,8 @@ public:
       RWLock::RLocker snap_locker(image_ctx.snap_lock);
       if (m_object_num < m_head_num_objects &&
           m_snap_object_map != nullptr &&
-          !m_snap_object_map->object_may_exist(m_object_num) &&
-          !image_ctx.object_map->object_may_exist(m_object_num)) {
+          !image_ctx.object_map->object_may_exist(m_object_num) &&
+          !m_snap_object_map->object_may_exist(m_object_num)) {
         return 1;
       }
     }
@@ -222,7 +222,13 @@ Context *SnapshotRollbackRequest<I>::handle_get_snap_object_map(int *result) {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
 
-  assert(*result == 0);
+  if (*result < 0) {
+    lderr(cct) << this << " " << __func__ << ": failed to open object map: "
+               << cpp_strerror(*result) << dendl;
+    delete m_snap_object_map;
+    m_snap_object_map = nullptr;
+  }
+
   send_rollback_object_map();
   return nullptr;
 }
@@ -256,7 +262,15 @@ Context *SnapshotRollbackRequest<I>::handle_rollback_object_map(int *result) {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
 
-  assert(*result == 0);
+  if (*result < 0) {
+    lderr(cct) << this << " " << __func__ << ": failed to roll back object "
+               << "map: " << cpp_strerror(*result) << dendl;
+
+    ceph_assert(m_object_map == nullptr);
+    apply();
+    return this->create_context_finisher(*result);
+  }
+
   send_rollback_objects();
   return nullptr;
 }
@@ -284,7 +298,8 @@ void SnapshotRollbackRequest<I>::send_rollback_objects() {
       m_head_num_objects, m_snap_object_map));
   AsyncObjectThrottle<I> *throttle = new AsyncObjectThrottle<I>(
     this, image_ctx, context_factory, ctx, &m_prog_ctx, 0, num_objects);
-  throttle->start_ops(image_ctx.concurrent_management_ops);
+  throttle->start_ops(
+    image_ctx.config.template get_val<uint64_t>("rbd_concurrent_management_ops"));
 }
 
 template <typename I>
@@ -337,7 +352,16 @@ Context *SnapshotRollbackRequest<I>::handle_refresh_object_map(int *result) {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
 
-  assert(*result == 0);
+  if (*result < 0) {
+    lderr(cct) << this << " " << __func__ << ": failed to open object map: "
+               << cpp_strerror(*result) << dendl;
+    delete m_object_map;
+    m_object_map = nullptr;
+    apply();
+
+    return this->create_context_finisher(*result);
+  }
+
   return send_invalidate_cache();
 }
 

@@ -19,7 +19,7 @@
 #include <boost/utility/string_view.hpp>
 
 /* Returns the length of a buffer that would be needed to escape 'buf'
- * as an XML attrribute
+ * as an XML attribute
  */
 size_t escape_xml_attr_len(const char *buf);
 
@@ -30,7 +30,7 @@ size_t escape_xml_attr_len(const char *buf);
 void escape_xml_attr(const char *buf, char *out);
 
 /* Returns the length of a buffer that would be needed to escape 'buf'
- * as an JSON attrribute
+ * as an JSON attribute
  */
 size_t escape_json_attr_len(const char *buf, size_t src_len);
 

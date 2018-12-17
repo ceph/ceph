@@ -1,9 +1,11 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 
 #include "common/ceph_json.h"
 #include "rgw_coroutine.h"
 
 // re-include our assert to clobber the system one; fix dout:
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #include <boost/asio/yield.hpp>
 
@@ -110,7 +112,7 @@ void RGWCompletionManager::go_down()
 void RGWCompletionManager::wait_interval(void *opaque, const utime_t& interval, void *user_info)
 {
   Mutex::Locker l(lock);
-  assert(waiters.find(opaque) == waiters.end());
+  ceph_assert(waiters.find(opaque) == waiters.end());
   waiters[opaque] = user_info;
   timer.add_event_after(interval, new WaitContext(this, opaque));
 }
@@ -222,7 +224,7 @@ int RGWCoroutinesStack::operate(RGWCoroutinesEnv *_env)
   RGWCoroutine *op = *pos;
   op->stack = this;
   ldout(cct, 20) << *op << ": operate()" << dendl;
-  int r = op->operate();
+  int r = op->operate_wrapper();
   if (r < 0) {
     ldout(cct, 20) << *op << ": operate() returned r=" << r << dendl;
   }
@@ -242,7 +244,7 @@ int RGWCoroutinesStack::operate(RGWCoroutinesEnv *_env)
   }
 
   /* should r ever be negative at this point? */
-  assert(r >= 0);
+  ceph_assert(r >= 0);
 
   return 0;
 }
@@ -530,7 +532,7 @@ bool RGWCoroutinesStack::consume_io_finish(const rgw_io_id& io_id)
 void RGWCoroutinesManager::handle_unblocked_stack(set<RGWCoroutinesStack *>& context_stacks, list<RGWCoroutinesStack *>& scheduled_stacks,
                                                   RGWCompletionManager::io_completion& io, int *blocked_count)
 {
-  assert(lock.is_wlocked());
+  ceph_assert(lock.is_wlocked());
   RGWCoroutinesStack *stack = static_cast<RGWCoroutinesStack *>(io.user_info);
   if (context_stacks.find(stack) == context_stacks.end()) {
     return;
@@ -562,7 +564,7 @@ void RGWCoroutinesManager::schedule(RGWCoroutinesEnv *env, RGWCoroutinesStack *s
 
 void RGWCoroutinesManager::_schedule(RGWCoroutinesEnv *env, RGWCoroutinesStack *stack)
 {
-  assert(lock.is_wlocked());
+  ceph_assert(lock.is_wlocked());
   if (!stack->is_scheduled) {
     env->scheduled_stacks->push_back(stack);
     stack->set_is_scheduled(true);
@@ -732,7 +734,7 @@ next:
     lderr(cct) << __func__ << "(): ERROR: deadlock detected, dumping remaining coroutines:\n";
     formatter.flush(*_dout);
     *_dout << dendl;
-    assert(context_stacks.empty() || going_down); // assert on deadlock
+    ceph_assert(context_stacks.empty() || going_down); // assert on deadlock
   }
 
   for (auto stack : context_stacks) {
@@ -923,7 +925,7 @@ ostream& operator<<(ostream& out, const RGWCoroutine& cr)
 bool RGWCoroutine::drain_children(int num_cr_left, RGWCoroutinesStack *skip_stack)
 {
   bool done = false;
-  assert(num_cr_left >= 0);
+  ceph_assert(num_cr_left >= 0);
   if (num_cr_left == 0 && skip_stack) {
     num_cr_left = 1;
   }

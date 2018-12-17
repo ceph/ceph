@@ -54,18 +54,80 @@ public:
   // -- my pins and locks --
   // cache pins (so things don't expire)
   set< MDSCacheObject* > pins;
-  set<CInode*> stickydirs;
+  CInode* stickydiri = nullptr;
 
   // auth pins
   map<MDSCacheObject*, mds_rank_t> remote_auth_pins;
-  set< MDSCacheObject* > auth_pins;
+  set<MDSCacheObject*> auth_pins;
   
   // held locks
-  set< SimpleLock* > rdlocks;  // always local.
-  set< SimpleLock* > wrlocks;  // always local.
-  map< SimpleLock*, mds_rank_t > remote_wrlocks;
-  set< SimpleLock* > xlocks;   // local or remote.
-  set< SimpleLock*, SimpleLock::ptr_lt > locks;  // full ordering
+  struct LockOp {
+    enum {
+      RDLOCK		= 1,
+      WRLOCK		= 2,
+      XLOCK		= 4,
+      REMOTE_WRLOCK	= 8,
+    };
+    SimpleLock* lock;
+    mutable unsigned flags;
+    mutable mds_rank_t wrlock_target;
+    operator SimpleLock*() const {
+      return lock;
+    }
+    LockOp(SimpleLock *l, unsigned f=0, mds_rank_t t=MDS_RANK_NONE) :
+      lock(l), flags(f), wrlock_target(t) {}
+    bool is_rdlock() const { return !!(flags & RDLOCK); }
+    bool is_xlock() const { return !!(flags & XLOCK); }
+    bool is_wrlock() const { return !!(flags & WRLOCK); }
+    void clear_wrlock() const { flags &= ~WRLOCK; }
+    bool is_remote_wrlock() const { return !!(flags & REMOTE_WRLOCK); }
+    void clear_remote_wrlock() const {
+      flags &= ~REMOTE_WRLOCK;
+      wrlock_target = MDS_RANK_NONE;
+    }
+  };
+
+  struct LockOpVec : public vector<LockOp> {
+    void add_rdlock(SimpleLock *lock) {
+      emplace_back(lock, LockOp::RDLOCK);
+    }
+    void erase_rdlock(SimpleLock *lock);
+    void add_xlock(SimpleLock *lock) {
+      emplace_back(lock, LockOp::XLOCK);
+    }
+    void add_wrlock(SimpleLock *lock) {
+      emplace_back(lock, LockOp::WRLOCK);
+    }
+    void add_remote_wrlock(SimpleLock *lock, mds_rank_t rank) {
+      ceph_assert(rank != MDS_RANK_NONE);
+      emplace_back(lock, LockOp::REMOTE_WRLOCK, rank);
+    }
+    void sort_and_merge();
+
+    LockOpVec() {
+      reserve(32);
+    }
+  };
+  typedef set<LockOp, SimpleLock::ptr_lt> lock_set;
+  typedef lock_set::iterator lock_iterator;
+  lock_set locks;  // full ordering
+
+  bool is_rdlocked(SimpleLock *lock) const {
+    auto it = locks.find(lock);
+    return it != locks.end() && it->is_rdlock();
+  }
+  bool is_xlocked(SimpleLock *lock) const {
+    auto it = locks.find(lock);
+    return it != locks.end() && it->is_xlock();
+  }
+  bool is_wrlocked(SimpleLock *lock) const {
+    auto it = locks.find(lock);
+    return it != locks.end() && it->is_wrlock();
+  }
+  bool is_remote_wrlocked(SimpleLock *lock) const {
+    auto it = locks.find(lock);
+    return it != locks.end() && it->is_remote_wrlock();
+  }
 
   // lock we are currently trying to acquire.  if we give up for some reason,
   // be sure to eval() this.
@@ -95,13 +157,9 @@ public:
       reqid(ri), attempt(att),
       slave_to_mds(slave_to) { }
   ~MutationImpl() override {
-    assert(locking == NULL);
-    assert(pins.empty());
-    assert(auth_pins.empty());
-    assert(xlocks.empty());
-    assert(rdlocks.empty());
-    assert(wrlocks.empty());
-    assert(remote_wrlocks.empty());
+    ceph_assert(locking == NULL);
+    ceph_assert(pins.empty());
+    ceph_assert(auth_pins.empty());
   }
 
   bool is_master() const { return slave_to_mds == MDS_RANK_NONE; }
@@ -132,6 +190,7 @@ public:
   void pin(MDSCacheObject *o);
   void unpin(MDSCacheObject *o);
   void set_stickydirs(CInode *in);
+  void put_stickydirs();
   void drop_pins();
 
   void start_locking(SimpleLock *lock, int target=-1);
@@ -223,7 +282,7 @@ struct MDRequestImpl : public MutationImpl {
   // break rarely-used fields into a separately allocated structure 
   // to save memory for most ops
   struct More {
-    int slave_error;
+    int slave_error = 0;
     set<mds_rank_t> slaves;           // mds nodes that have slave requests to me (implies client_request)
     set<mds_rank_t> waiting_on_slave; // peers i'm waiting for slavereq replies from. 
 
@@ -231,58 +290,49 @@ struct MDRequestImpl : public MutationImpl {
     set<mds_rank_t> witnessed;       // nodes who have journaled a RenamePrepare
     map<MDSCacheObject*,version_t> pvmap;
 
-    bool has_journaled_slaves;
-    bool slave_update_journaled;
-    bool slave_rolling_back;
+    bool has_journaled_slaves = false;
+    bool slave_update_journaled = false;
+    bool slave_rolling_back = false;
     
     // for rename
     set<mds_rank_t> extra_witnesses; // replica list from srcdn auth (rename)
-    mds_rank_t srcdn_auth_mds;
+    mds_rank_t srcdn_auth_mds = MDS_RANK_NONE;
     bufferlist inode_import;
-    version_t inode_import_v;
-    CInode* rename_inode;
-    bool is_freeze_authpin;
-    bool is_ambiguous_auth;
-    bool is_remote_frozen_authpin;
-    bool is_inode_exporter;
+    version_t inode_import_v = 0;
+    CInode* rename_inode = nullptr;
+    bool is_freeze_authpin = false;
+    bool is_ambiguous_auth = false;
+    bool is_remote_frozen_authpin = false;
+    bool is_inode_exporter = false;
 
     map<client_t, pair<Session*, uint64_t> > imported_session_map;
     map<CInode*, map<client_t,Capability::Export> > cap_imports;
     
     // for lock/flock
-    bool flock_was_waiting;
+    bool flock_was_waiting = false;
 
     // for snaps
-    version_t stid;
+    version_t stid = 0;
     bufferlist snapidbl;
 
-    sr_t *srci_srnode;
-    sr_t *desti_srnode;
+    sr_t *srci_srnode = nullptr;
+    sr_t *desti_srnode = nullptr;
 
     // called when slave commits or aborts
-    Context *slave_commit;
+    Context *slave_commit = nullptr;
     bufferlist rollback_bl;
 
     MDSInternalContextBase::vec waiting_for_finish;
 
     // export & fragment
-    CDir* export_dir;
+    CDir* export_dir = nullptr;
     dirfrag_t fragment_base;
 
     // for internal ops doing lookup
     filepath filepath1;
     filepath filepath2;
 
-    More() : 
-      slave_error(0),
-      has_journaled_slaves(false), slave_update_journaled(false),
-      slave_rolling_back(false),
-      srcdn_auth_mds(-1), inode_import_v(0), rename_inode(0),
-      is_freeze_authpin(false), is_ambiguous_auth(false),
-      is_remote_frozen_authpin(false), is_inode_exporter(false),
-      flock_was_waiting(false),
-      stid(0), srci_srnode(NULL), desti_srnode(NULL),
-      slave_commit(0), export_dir(NULL)  { }
+    More() {}
   } *_more;
 
 

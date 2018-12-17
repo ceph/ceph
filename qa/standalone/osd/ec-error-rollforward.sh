@@ -40,13 +40,18 @@ function TEST_ec_error_rollforward() {
     kill -STOP `cat $dir/osd.2.pid`
 
     rados -p ec rm foo &
+    pids="$!"
     sleep 1
     rados -p ec rm a &
+    pids+=" $!"
     rados -p ec rm b &
+    pids+=" $!"
     rados -p ec rm c &
+    pids+=" $!"
     sleep 1
     kill -9 `cat $dir/osd.?.pid`
-    kill %1 %2 %3 %4
+    kill $pids
+    wait
 
     run_osd $dir 0 || return 1
     run_osd $dir 1 || return 1

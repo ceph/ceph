@@ -20,6 +20,10 @@
 #include <map>
 #include <deque>
 
+#include <errno.h>
+#include <sstream>
+#include <memory>
+
 #include "Message.h"
 #include "Dispatcher.h"
 #include "Policy.h"
@@ -31,6 +35,8 @@
 #include "include/ceph_features.h"
 #include "auth/Crypto.h"
 #include "common/item_history.h"
+#include "auth/AuthAuthorizeHandler.h"
+#include "include/ceph_assert.h"
 
 #include <errno.h>
 #include <sstream>
@@ -39,6 +45,8 @@
 #define SOCKET_PRIORITY_MIN_DELAY 6
 
 class Timer;
+
+class AuthAuthorizerHandlerRegistry;
 
 class Messenger {
 private:
@@ -80,6 +88,13 @@ public:
   int crcflags;
 
   using Policy = ceph::net::Policy<Throttle>;
+
+protected:
+  // for authentication
+  std::unique_ptr<AuthAuthorizeHandlerRegistry> auth_ah_service_registry;
+  std::unique_ptr<AuthAuthorizeHandlerRegistry> auth_ah_cluster_registry;
+
+public:
   /**
    * Messenger constructor. Call this from your implementation.
    * Messenger users should construct full implementations directly,
@@ -288,7 +303,7 @@ public:
    * @param p The cluster protocol to use. Defined externally.
    */
   void set_default_send_priority(int p) {
-    assert(!started);
+    ceph_assert(!started);
     default_send_priority = p;
   }
   /**
@@ -566,16 +581,16 @@ public:
       } else {
 	blocked = true;
 	int r = pthread_sigmask(SIG_BLOCK, &pipe_mask, &existing_mask);
-	assert(r == 0);
+	ceph_assert(r == 0);
       }
     }
     ~sigpipe_stopper() {
       if (blocked) {
 	struct timespec nowait{0};
 	int r = sigtimedwait(&pipe_mask, 0, &nowait);
-	assert(r == EAGAIN || r == 0);
+	ceph_assert(r == EAGAIN || r == 0);
 	r = pthread_sigmask(SIG_SETMASK, &existing_mask, 0);
-	assert(r == 0);
+	ceph_assert(r == 0);
       }
     }
   };
@@ -632,7 +647,7 @@ public:
   /**
    *  Deliver a single Message. Send it to each Dispatcher
    *  in sequence until one of them handles it.
-   *  If none of our Dispatchers can handle it, assert(0).
+   *  If none of our Dispatchers can handle it, ceph_abort().
    *
    *  @param m The Message to deliver.
    */
@@ -644,7 +659,7 @@ public:
     }
     lsubdout(cct, ms, 0) << "ms_deliver_dispatch: unhandled message " << m << " " << *m << " from "
 			 << m->get_source_inst() << dendl;
-    assert(!cct->_conf->ms_die_on_unhandled_msg);
+    ceph_assert(!cct->_conf->ms_die_on_unhandled_msg);
   }
   void ms_deliver_dispatch(Message *m) {
     return ms_deliver_dispatch(Message::ref(m, false)); /* consume ref */
@@ -676,7 +691,7 @@ public:
   }
 
   /**
-   * Notify each Dispatcher of a new incomming Connection. Call
+   * Notify each Dispatcher of a new incoming Connection. Call
    * this function whenever a new Connection is accepted.
    *
    * @param con Pointer to the new Connection.
@@ -769,17 +784,11 @@ public:
    * @return True if we were able to prove or disprove correctness of
    * authorizer, false otherwise.
    */
-  bool ms_deliver_verify_authorizer(Connection *con, int peer_type,
-				    int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
-				    bool& isvalid, CryptoKey& session_key,
-				    std::unique_ptr<AuthAuthorizerChallenge> *challenge) {
-    for (const auto& dispatcher : dispatchers) {
-      if (dispatcher->ms_verify_authorizer(con, peer_type, protocol, authorizer, authorizer_reply,
-                                           isvalid, session_key, challenge))
-	return true;
-    }
-    return false;
-  }
+  bool ms_deliver_verify_authorizer(
+    Connection *con, int peer_type,
+    int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
+    bool& isvalid, CryptoKey& session_key,
+    std::unique_ptr<AuthAuthorizerChallenge> *challenge);
 
   /**
    * @} // Dispatcher Interfacing

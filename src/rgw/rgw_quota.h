@@ -1,5 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -16,6 +17,7 @@
 #define CEPH_RGW_QUOTA_H
 
 #include "include/utime.h"
+#include "common/config_fwd.h"
 #include "common/lru_map.h"
 
 #include <atomic>
@@ -113,5 +115,9 @@ public:
   static RGWQuotaHandler *generate_handler(RGWRados *store, bool quota_threads);
   static void free_handler(RGWQuotaHandler *handler);
 };
+
+// apply default quotas from configuration
+void rgw_apply_default_bucket_quota(RGWQuotaInfo& quota, const ConfigProxy& conf);
+void rgw_apply_default_user_quota(RGWQuotaInfo& quota, const ConfigProxy& conf);
 
 #endif

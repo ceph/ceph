@@ -121,6 +121,7 @@ ec=0
 hitset=""
 overwrite_conf=1
 cephx=1 #turn cephx on by default
+gssapi_authx=0
 cache=""
 if [ `uname` = FreeBSD ]; then
     objectstore="filestore"
@@ -169,6 +170,8 @@ usage=$usage"\t-m ip:port\t\tspecify monitor address\n"
 usage=$usage"\t-k keep old configuration files\n"
 usage=$usage"\t-x enable cephx (on by default)\n"
 usage=$usage"\t-X disable cephx\n"
+usage=$usage"\t-g --gssapi enable Kerberos/GSSApi authentication\n"
+usage=$usage"\t-G disable Kerberos/GSSApi authentication\n"
 usage=$usage"\t--hitset <pool> <hit_set_type>: enable hitset tracking\n"
 usage=$usage"\t-e : create an erasure pool\n";
 usage=$usage"\t-o config\t\t add extra config parameters to all sections\n"
@@ -290,6 +293,14 @@ case $1 in
     -X )
 	    cephx=0
 	    ;;
+    
+    -g | --gssapi)
+	    gssapi_authx=1 
+	    ;;
+    -G)
+	    gssapi_authx=0 
+	    ;;
+
     -k )
 	    if [ ! -r $conf_fn ]; then
 	        echo "cannot use old configuration: $conf_fn not readable." >&2
@@ -435,8 +446,8 @@ wconf() {
 	fi
 }
 
-get_nvme_serial_number() {
-    sudo lspci -vvv -d $pci_id | grep 'Device Serial Number' | awk '{print $NF}' | sed 's/-//g'
+get_pci_selector() {
+    lspci -mm -n -D -d $pci_id | cut -d' ' -f1
 }
 
 prepare_conf() {
@@ -448,7 +459,7 @@ prepare_conf() {
         heartbeat file = $CEPH_OUT_DIR/\$name.heartbeat
 "
 
-    local mgr_modules="restful status balancer iostat devicehealth"
+    local mgr_modules="restful iostat"
     if $with_mgr_dashboard; then
       mgr_modules="dashboard $mgr_modules"
     fi
@@ -483,7 +494,20 @@ EOF
         lockdep = true
 EOF
 	fi
-	if [ "$cephx" -ne 1 ] ; then
+	if [ "$cephx" -eq 1 ] ; then
+		wconf <<EOF
+	auth cluster required = cephx
+	auth service required = cephx
+	auth client required = cephx
+EOF
+	elif [ "$gssapi_authx" -eq 1 ] ; then
+		wconf <<EOF
+	auth cluster required = gss
+	auth service required = gss
+	auth client required = gss
+	gss ktab client file = $CEPH_DEV_DIR/gss_\$name.keytab
+EOF
+	else 
 		wconf <<EOF
 	auth cluster required = none
 	auth service required = none
@@ -496,7 +520,7 @@ EOF
 	fi
         if [ "$objectstore" == "bluestore" ]; then
             if [ "$spdk_enabled" -eq 1 ]; then
-                if [ "$(get_nvme_serial_number)" == "" ]; then
+                if [ "$(get_pci_selector)" == "" ]; then
                     echo "Not find the specified NVME device, please check."
                     exit
                 fi
@@ -507,7 +531,7 @@ EOF
         bluestore_block_wal_size = 0
         bluestore_block_wal_create = false
         bluestore_spdk_mem = 2048
-        bluestore_block_path = spdk:$(get_nvme_serial_number)"
+        bluestore_block_path = spdk:$(get_pci_selector)"
             else
                 BLUESTORE_OPTS="        bluestore block db path = $CEPH_DEV_DIR/osd\$id/block.db.file
         bluestore block db size = 67108864
@@ -525,11 +549,13 @@ EOF
 $extra_conf
 [client.rgw]
         rgw frontends = $rgw_frontend port=$CEPH_RGW_PORT
+        admin socket = ${CEPH_OUT_DIR}/radosgw.${CEPH_RGW_PORT}.asok
         ; needed for s3tests
         rgw crypt s3 kms encryption keys = testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
         rgw crypt require ssl = false
-        rgw lc debug interval = 10
-
+        ; uncomment the following to set LC days as the value in seconds;
+        ; needed for passing lc time based s3-tests (can be verbose)
+        ; rgw lc debug interval = 10
 [mds]
 $DAEMONOPTS
         mds data = $CEPH_DEV_DIR/mds.\$id
@@ -603,14 +629,14 @@ start_mon() {
 		fi
 
 		prun $SUDO "$CEPH_BIN/ceph-authtool" --create-keyring --gen-key --name=mon. "$keyring_fn" --cap mon 'allow *'
-		prun $SUDO "$CEPH_BIN/ceph-authtool" --gen-key --name=client.admin --set-uid=0 \
+		prun $SUDO "$CEPH_BIN/ceph-authtool" --gen-key --name=client.admin \
 			--cap mon 'allow *' \
 			--cap osd 'allow *' \
 			--cap mds 'allow *' \
 			--cap mgr 'allow *' \
 			"$keyring_fn"
 
-		prun $SUDO "$CEPH_BIN/ceph-authtool" --gen-key --name=client.fs --set-uid=0 \
+		prun $SUDO "$CEPH_BIN/ceph-authtool" --gen-key --name=client.fs\
 		   --cap mon 'allow r' \
 			--cap osd 'allow rw tag cephfs data=*' \
 			--cap mds 'allow rwp' \
@@ -814,10 +840,8 @@ EOF
             local fs=0
             for name in a b c d e f g h i j k l m n o p
             do
-                ceph_adm osd pool create "cephfs_data_${name}" 8
-                ceph_adm osd pool create "cephfs_metadata_${name}" 8
-                ceph_adm fs new "cephfs_${name}" "cephfs_metadata_${name}" "cephfs_data_${name}"
-					 ceph_adm fs authorize "cephfs_${name}" "client.fs_${name}" / rwp
+		ceph_adm fs volume create ${name}
+		ceph_adm fs authorize ${name} "client.fs_${name}" / rwp
                 fs=$(($fs + 1))
                 [ $fs -eq $CEPH_NUM_FS ] && break
             done

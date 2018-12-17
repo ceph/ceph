@@ -342,3 +342,66 @@ TEST(MonCap, ProfileBootstrapRBD) {
                               }, true, true, true,
 			      entity_addr_t()));
 }
+
+TEST(MonCap, ProfileBootstrapRBDMirror) {
+  MonCap cap;
+  ASSERT_FALSE(cap.is_allow_all());
+  ASSERT_TRUE(cap.parse("profile bootstrap-rbd-mirror", NULL));
+
+  EntityName name;
+  name.from_str("mon.a");
+  ASSERT_TRUE(cap.is_capable(nullptr, CEPH_ENTITY_TYPE_MON, name, "",
+                             "auth get-or-create", {
+                               {"entity", "client.rbd"},
+                               {"caps_mon", "profile rbd-mirror"},
+                               {"caps_osd", "profile rbd pool=foo, profile rbd-read-only"},
+                             }, true, true, true,
+			     entity_addr_t()));
+  ASSERT_FALSE(cap.is_capable(nullptr, CEPH_ENTITY_TYPE_MON, name, "",
+                              "auth get-or-create", {
+                                {"entity", "client.rbd"},
+                                {"caps_mon", "profile rbd"},
+                                {"caps_osd", "profile rbd pool=foo, profile rbd-read-only"},
+                              }, true, true, true,
+			      entity_addr_t()));
+  ASSERT_FALSE(cap.is_capable(nullptr, CEPH_ENTITY_TYPE_MON, name, "",
+                              "auth get-or-create", {
+                                {"entity", "client.rbd"},
+                                {"caps_mon", "allow *"},
+                                {"caps_osd", "profile rbd"},
+                              }, true, true, true,
+			      entity_addr_t()));
+  ASSERT_FALSE(cap.is_capable(nullptr, CEPH_ENTITY_TYPE_MON, name, "",
+                              "auth get-or-create", {
+                                {"entity", "client.rbd"},
+                                {"caps_mon", "profile rbd-mirror"},
+                                {"caps_osd", "profile rbd pool=foo, allow *, profile rbd-read-only"},
+                              }, true, true, true,
+			      entity_addr_t()));
+}
+
+TEST(MonCap, ProfileRBD) {
+  MonCap cap;
+  ASSERT_FALSE(cap.is_allow_all());
+  ASSERT_TRUE(cap.parse("profile rbd", NULL));
+
+  EntityName name;
+  name.from_str("mon.a");
+  ASSERT_FALSE(cap.is_capable(nullptr, CEPH_ENTITY_TYPE_MON, name, "config-key",
+                              "config-key get", {
+                                {"key", "rbd/mirror/peer/1/1234"},
+                              }, true, false, false, entity_addr_t()));
+}
+
+TEST(MonCap, ProfileRBDMirror) {
+  MonCap cap;
+  ASSERT_FALSE(cap.is_allow_all());
+  ASSERT_TRUE(cap.parse("profile rbd-mirror", NULL));
+
+  EntityName name;
+  name.from_str("mon.a");
+  ASSERT_TRUE(cap.is_capable(nullptr, CEPH_ENTITY_TYPE_MON, name, "config-key",
+                             "config-key get", {
+                               {"key", "rbd/mirror/peer/1/1234"},
+                             }, true, false, false, entity_addr_t()));
+}

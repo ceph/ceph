@@ -2,9 +2,9 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { PopoverModule } from 'ngx-bootstrap';
+import { PopoverModule } from 'ngx-bootstrap/popover';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
+import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { ExecutingTask } from '../../../shared/models/executing-task';
 import { FinishedTask } from '../../../shared/models/finished-task';
 import { SharedModule } from '../../../shared/shared.module';
@@ -20,7 +20,8 @@ describe('TaskManagerComponent', () => {
 
   configureTestBed({
     imports: [SharedModule, PopoverModule.forRoot(), HttpClientTestingModule, RouterTestingModule],
-    declarations: [TaskManagerComponent]
+    declarations: [TaskManagerComponent],
+    providers: [i18nProviders]
   });
 
   beforeEach(() => {

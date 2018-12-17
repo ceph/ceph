@@ -1,5 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+
 #ifndef RGW_LIB_H
 #define RGW_LIB_H
 
@@ -14,7 +15,8 @@
 #include "rgw_process.h"
 #include "rgw_rest_s3.h" // RGW_Auth_S3
 #include "rgw_ldap.h"
-#include "include/assert.h"
+#include "services/svc_zone_utils.h"
+#include "include/ceph_assert.h"
 
 class OpsLogSocket;
 
@@ -115,7 +117,7 @@ namespace rgw {
     friend class RGWRESTMgr_Lib;
   public:
 
-    int authorize() override;
+    int authorize(const DoutPrefixProvider *dpp) override;
 
     RGWHandler_Lib() {}
     ~RGWHandler_Lib() override {}
@@ -155,11 +157,11 @@ namespace rgw {
 	     RGWLibIO* io, struct req_state* _s) {
 
       RGWRequest::init_state(_s);
-      RGWHandler::init(rados_ctx->store, _s, io);
+      RGWHandler::init(rados_ctx->get_store(), _s, io);
 
       get_state()->obj_ctx = rados_ctx;
-      get_state()->req_id = store->unique_id(id);
-      get_state()->trans_id = store->unique_trans_id(id);
+      get_state()->req_id = store->svc.zone_utils->unique_id(id);
+      get_state()->trans_id = store->svc.zone_utils->unique_trans_id(id);
 
       ldpp_dout(_s, 2) << "initializing for trans_id = "
 	  << get_state()->trans_id.c_str() << dendl;
@@ -191,11 +193,11 @@ namespace rgw {
 	io_ctx.init(_cct);
 
 	RGWRequest::init_state(&rstate);
-	RGWHandler::init(rados_ctx.store, &rstate, &io_ctx);
+	RGWHandler::init(rados_ctx.get_store(), &rstate, &io_ctx);
 
 	get_state()->obj_ctx = &rados_ctx;
-	get_state()->req_id = store->unique_id(id);
-	get_state()->trans_id = store->unique_trans_id(id);
+	get_state()->req_id = store->svc.zone_utils->unique_id(id);
+	get_state()->trans_id = store->svc.zone_utils->unique_trans_id(id);
 
 	ldpp_dout(get_state(), 2) << "initializing for trans_id = "
 	    << get_state()->trans_id.c_str() << dendl;
@@ -203,7 +205,7 @@ namespace rgw {
 
     inline RGWRados* get_store() { return store; }
 
-    virtual int execute() final { abort(); }
+    virtual int execute() final { ceph_abort(); }
     virtual int exec_start() = 0;
     virtual int exec_continue() = 0;
     virtual int exec_finish() = 0;

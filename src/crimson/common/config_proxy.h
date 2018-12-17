@@ -111,10 +111,37 @@ public:
     return get_config().template get_val<T>(*values, key);
   }
 
+  int get_all_sections(std::vector<std::string>& sections) const {
+    return get_config().get_all_sections(sections);
+  }
+
+  int get_val_from_conf_file(const std::vector<std::string>& sections,
+			     const std::string& key, std::string& out,
+			     bool expand_meta) const {
+    return get_config().get_val_from_conf_file(*values, sections, key,
+					       out, expand_meta);
+  }
+
+  unsigned get_osd_pool_default_min_size() const {
+    return get_config().get_osd_pool_default_min_size(*values);
+  }
+
   seastar::future<> set_mon_vals(const std::map<std::string,std::string>& kv) {
     return do_change([kv, this](ConfigValues& values) {
       get_config().set_mon_vals(nullptr, values, obs_mgr, kv, nullptr);
     });
+  }
+
+  seastar::future<> parse_config_files(const std::string& conf_files) {
+    return do_change([this, conf_files](ConfigValues& values) {
+      const char* conf_file_paths =
+	conf_files.empty() ? nullptr : conf_files.c_str();
+      get_config().parse_config_files(values,
+				      obs_mgr,
+				      conf_file_paths,
+				      &std::cerr,
+				      CODE_ENVIRONMENT_DAEMON);
+      });
   }
 
   using ShardedConfig = seastar::sharded<ConfigProxy>;

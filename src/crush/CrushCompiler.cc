@@ -45,7 +45,7 @@ static void print_bucket_class_ids(ostream& out, int t, CrushWrapper &crush)
     int c = i.first;
     int cid = i.second;
     const char* class_name = crush.get_class_name(c);
-    assert(class_name);
+    ceph_assert(class_name);
     out << "\tid " << cid << " class " << class_name << "\t\t# do not change unnecessarily\n";
   }
 }
@@ -161,7 +161,7 @@ int CrushCompiler::decompile_bucket(int cur,
     std::map<int, dcb_state_t>::value_type val(cur, DCB_STATE_IN_PROGRESS);
     std::pair <std::map<int, dcb_state_t>::iterator, bool> rval
       (dcb_states.insert(val));
-    assert(rval.second);
+    ceph_assert(rval.second);
     c = rval.first;
   }
   else if (c->second == DCB_STATE_DONE) {
@@ -741,7 +741,7 @@ int CrushCompiler::parse_bucket(iter_t const& i)
   item_id[name] = id;
   item_weight[id] = bucketweight;
   
-  assert(id != 0);
+  ceph_assert(id != 0);
   int idout;
   int r = crush.add_bucket(id, alg, hash, type, size,
                            &items[0], &weights[0], &idout);
@@ -925,7 +925,7 @@ int CrushCompiler::parse_rule(iter_t const& i)
       return -1;
     }
   }
-  assert(step == steps);
+  ceph_assert(step == steps);
   return 0;
 }
 
@@ -1053,9 +1053,13 @@ void CrushCompiler::find_used_bucket_ids(iter_t const& i)
 {
   for (iter_t p = i->children.begin(); p != i->children.end(); p++) {
     if ((int)p->value.id().to_long() == crush_grammar::_bucket) {
-      iter_t firstline = p->children.begin() + 3;
-      string tag = string_node(firstline->children[0]);
-      if (tag == "id") {
+      for (iter_t firstline = p->children.begin() + 3;
+	   firstline != p->children.end();
+	   ++firstline) {
+	string tag = string_node(firstline->children[0]);
+	if (tag != "id") {
+	  break;
+	}
 	int id = int_node(firstline->children[1]);
 	//err << "saw bucket id " << id << std::endl;
 	id_item[id] = string();
@@ -1251,7 +1255,7 @@ int CrushCompiler::compile(istream& in, const char *infn)
     int cpos = info.stop - start;
     //out << "cpos " << cpos << std::endl;
     //out << " linemap " << line_pos << std::endl;
-    assert(!line_pos.empty());
+    ceph_assert(!line_pos.empty());
     map<int,int>::iterator p = line_pos.upper_bound(cpos);
     if (p != line_pos.begin())
       --p;

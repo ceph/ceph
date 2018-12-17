@@ -22,6 +22,8 @@
 #include "messages/MClientRequest.h"
 #include "messages/MClientSession.h"
 #include "messages/MClientSnap.h"
+#include "messages/MClientReclaim.h"
+#include "messages/MClientReclaimReply.h"
 #include "messages/MLock.h"
 
 #include "MDSRank.h"
@@ -33,8 +35,8 @@ class PerfCounters;
 class LogEvent;
 class EMetaBlob;
 class EUpdate;
-struct SnapInfo;
 class MDLog;
+struct SnapInfo;
 
 enum {
   l_mdss_first = 1000,
@@ -71,6 +73,7 @@ enum {
   l_mdss_req_setxattr_latency,
   l_mdss_req_symlink_latency,
   l_mdss_req_unlink_latency,
+  l_mdss_cap_revoke_eviction,
   l_mdss_last,
 };
 
@@ -98,6 +101,8 @@ private:
 
   feature_bitset_t supported_features;
   feature_bitset_t required_client_features;
+
+  double cap_revoke_eviction_timeout = 0;
 
   friend class MDSContinuation;
   friend class ServerContext;
@@ -139,6 +144,14 @@ public:
   void kill_session(Session *session, Context *on_safe);
   size_t apply_blacklist(const std::set<entity_addr_t> &blacklist);
   void journal_close_session(Session *session, int state, Context *on_safe);
+
+  set<client_t> client_reclaim_gather;
+  size_t get_num_pending_reclaim() const { return client_reclaim_gather.size(); }
+  Session *find_session_by_uuid(std::string_view uuid);
+  void reclaim_session(Session *session, const MClientReclaim::const_ref &m);
+  void finish_reclaim_session(Session *session, const MClientReclaimReply::ref &reply=nullptr);
+  void handle_client_reclaim(const MClientReclaim::const_ref &m);
+
   void reconnect_clients(MDSInternalContext *reconnect_done_);
   void handle_client_reconnect(const MClientReconnect::const_ref &m);
   void infer_supported_features(Session *session, client_metadata_t& client_metadata);
@@ -149,7 +162,8 @@ public:
   void reconnect_tick();
   void recover_filelocks(CInode *in, bufferlist locks, int64_t client);
 
-  void recall_client_state(void);
+  void recall_client_state(double ratio, bool flush_client_session,
+                           MDSGatherBuilder *gather);
   void force_clients_readonly();
 
   // -- requests --
@@ -188,16 +202,14 @@ public:
   void journal_allocated_inos(MDRequestRef& mdr, EMetaBlob *blob);
   void apply_allocated_inos(MDRequestRef& mdr, Session *session);
 
-  CInode* rdlock_path_pin_ref(MDRequestRef& mdr, int n, set<SimpleLock*>& rdlocks, bool want_auth,
-			      bool no_want_auth=false,
-			      file_layout_t **layout=NULL,
+  CInode* rdlock_path_pin_ref(MDRequestRef& mdr, int n, MutationImpl::LockOpVec& lov,
+			      bool want_auth, bool no_want_auth=false,
+			      file_layout_t **layout=nullptr,
 			      bool no_lookup=false);
   CDentry* rdlock_path_xlock_dentry(MDRequestRef& mdr, int n,
-                                    set<SimpleLock*>& rdlocks,
-                                    set<SimpleLock*>& wrlocks,
-				    set<SimpleLock*>& xlocks, bool okexist,
-				    bool mustexist, bool alwaysxlock,
-				    file_layout_t **layout=NULL);
+				    MutationImpl::LockOpVec& lov,
+				    bool okexist, bool mustexist, bool alwaysxlock,
+				    file_layout_t **layout=nullptr);
 
   CDir* try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequestRef& mdr);
 
@@ -226,14 +238,10 @@ public:
                           file_layout_t *layout);
   void handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
 			 file_layout_t *dir_layout,
-			 set<SimpleLock*> rdlocks,
-			 set<SimpleLock*> wrlocks,
-			 set<SimpleLock*> xlocks);
+			 MutationImpl::LockOpVec& lov);
   void handle_remove_vxattr(MDRequestRef& mdr, CInode *cur,
 			    file_layout_t *dir_layout,
-			    set<SimpleLock*> rdlocks,
-			    set<SimpleLock*> wrlocks,
-			    set<SimpleLock*> xlocks);
+			    MutationImpl::LockOpVec& lov);
   void handle_client_setxattr(MDRequestRef& mdr);
   void handle_client_removexattr(MDRequestRef& mdr);
 
@@ -323,8 +331,13 @@ public:
 			       CDentry *destdn, CDentry *staydn, map<client_t,MClientSnap::ref> splits[2],
 			       bool finish_mdr);
 
+  void evict_cap_revoke_non_responders();
+  void handle_conf_change(const ConfigProxy& conf,
+                          const std::set <std::string> &changed);
+
 private:
   void reply_client_request(MDRequestRef& mdr, const MClientReply::ref &reply);
+  void flush_session(Session *session, MDSGatherBuilder *gather);
 };
 
 #endif

@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #ifndef CEPH_CLS_RGW_TYPES_H
 #define CEPH_CLS_RGW_TYPES_H
 
@@ -379,11 +382,11 @@ struct rgw_bucket_dir_entry {
 };
 WRITE_CLASS_ENCODER(rgw_bucket_dir_entry)
 
-enum BIIndexType {
-  InvalidIdx    = 0,
-  PlainIdx      = 1,
-  InstanceIdx   = 2,
-  OLHIdx        = 3,
+enum class BIIndexType : uint8_t {
+  Invalid    = 0,
+  Plain      = 1,
+  Instance   = 2,
+  OLH        = 3,
 };
 
 struct rgw_bucket_category_stats;
@@ -393,11 +396,11 @@ struct rgw_cls_bi_entry {
   string idx;
   bufferlist data;
 
-  rgw_cls_bi_entry() : type(InvalidIdx) {}
+  rgw_cls_bi_entry() : type(BIIndexType::Invalid) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    encode((uint8_t)type, bl);
+    encode(type, bl);
     encode(idx, bl);
     encode(data, bl);
     ENCODE_FINISH(bl);
@@ -611,6 +614,24 @@ enum cls_rgw_reshard_status {
   CLS_RGW_RESHARD_IN_PROGRESS = 1,
   CLS_RGW_RESHARD_DONE        = 2,
 };
+
+static inline std::string to_string(const enum cls_rgw_reshard_status status)
+{
+  switch (status) {
+  case CLS_RGW_RESHARD_NONE:
+    return "CLS_RGW_RESHARD_NONE";
+    break;
+  case CLS_RGW_RESHARD_IN_PROGRESS:
+    return "CLS_RGW_RESHARD_IN_PROGRESS";
+    break;
+  case CLS_RGW_RESHARD_DONE:
+    return "CLS_RGW_RESHARD_DONE";
+    break;
+  default:
+    break;
+  };
+  return "Unknown reshard status";
+}
 
 struct cls_rgw_bucket_instance_entry {
   cls_rgw_reshard_status reshard_status{CLS_RGW_RESHARD_NONE};

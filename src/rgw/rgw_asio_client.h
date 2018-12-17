@@ -1,12 +1,13 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+
 #ifndef RGW_ASIO_CLIENT_H
 #define RGW_ASIO_CLIENT_H
 
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #include "rgw_client_io.h"
 

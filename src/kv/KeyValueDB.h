@@ -142,7 +142,7 @@ public:
       const std::string &prefix,   ///< [in] Prefix/CF ==> MUST match some established merge operator
       const std::string &key,      ///< [in] Key to be merged
       const bufferlist  &value     ///< [in] value to be merged into key
-    ) { assert(0 == "Not implemented"); }
+    ) { ceph_abort_msg("Not implemented"); }
 
     virtual ~TransactionImpl() {}
   };
@@ -186,7 +186,7 @@ public:
     std::map<std::string,bufferlist> om;
     int r = get(prefix, ks, &om);
     if (om.find(key) != om.end()) {
-      *value = om[key];
+      *value = std::move(om[key]);
     } else {
       *value = bufferlist();
       r = -ENOENT;
@@ -200,7 +200,7 @@ public:
   }
 
   // This superclass is used both by kv iterators *and* by the ObjectMap
-  // omap iterator.  The class hiearchies are unfortunatley tied together
+  // omap iterator.  The class hierarchies are unfortunately tied together
   // by the legacy DBOjectMap implementation :(.
   class SimplestIteratorImpl {
   public:

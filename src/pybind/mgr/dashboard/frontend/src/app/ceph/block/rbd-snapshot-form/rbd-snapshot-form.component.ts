@@ -1,7 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 
-import { BsModalRef } from 'ngx-bootstrap';
+import { BsModalRef } from 'ngx-bootstrap/modal';
 import { Subject } from 'rxjs';
 
 import { RbdService } from '../../../shared/api/rbd.service';
@@ -50,7 +50,15 @@ export class RbdSnapshotFormComponent implements OnInit {
   setSnapName(snapName) {
     this.snapName = snapName;
     this.snapshotForm.get('snapshotName').setValue(snapName);
-    this.editing = true;
+  }
+
+  /**
+   * Set the 'editing' flag. If set to TRUE, the modal dialog is in
+   * 'Edit' mode, otherwise in 'Create' mode.
+   * @param {boolean} editing
+   */
+  setEditing(editing: boolean = true) {
+    this.editing = editing;
   }
 
   editAction() {

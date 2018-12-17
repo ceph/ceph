@@ -1,9 +1,12 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #ifndef CEPH_RGW_CR_REST_H
 #define CEPH_RGW_CR_REST_H
 
 #include <boost/intrusive_ptr.hpp>
 #include <mutex>
-#include "include/assert.h" // boost header clobbers our assert.h
+#include "include/ceph_assert.h" // boost header clobbers our assert.h
 
 #include "rgw_coroutine.h"
 #include "rgw_rest_conn.h"

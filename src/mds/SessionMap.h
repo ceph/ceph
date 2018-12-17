@@ -46,6 +46,7 @@ enum {
   l_mdssm_session_stale,
   l_mdssm_total_load,
   l_mdssm_avg_load,
+  l_mdssm_avg_session_uptime,
   l_mdssm_last,
 };
 
@@ -112,18 +113,25 @@ private:
   // request load average for this session
   DecayCounter load_avg;
 
+  // session start time -- used to track average session time
+  // note that this is initialized in the constructor rather
+  // than at the time of adding a session to the sessionmap
+  // as journal replay of sessionmap will not call add_session().
+  time birth_time;
+
 public:
+  Session *reclaiming_from = nullptr;
 
   void push_pv(version_t pv)
   {
-    assert(projected.empty() || projected.back() != pv);
+    ceph_assert(projected.empty() || projected.back() != pv);
     projected.push_back(pv);
   }
 
   void pop_pv(version_t v)
   {
-    assert(!projected.empty());
-    assert(projected.front() == v);
+    ceph_assert(!projected.empty());
+    ceph_assert(projected.front() == v);
     projected.pop_front();
   }
 
@@ -172,7 +180,7 @@ public:
     return info.prealloc_inos.range_start();
   }
   inodeno_t take_ino(inodeno_t ino = 0) {
-    assert(!info.prealloc_inos.empty());
+    ceph_assert(!info.prealloc_inos.empty());
 
     if (ino) {
       if (info.prealloc_inos.contains(ino))
@@ -208,13 +216,13 @@ public:
     ++importing_count;
   }
   void dec_importing() {
-    assert(importing_count > 0);
+    ceph_assert(importing_count > 0);
     --importing_count;
   }
   bool is_importing() const { return importing_count > 0; }
 
   void set_load_avg_decay_rate(double rate) {
-    assert(is_open() || is_stale());
+    ceph_assert(is_open() || is_stale());
     load_avg = DecayCounter(rate);
   }
   uint64_t get_load_avg() const {
@@ -222,6 +230,15 @@ public:
   }
   void hit_session() {
     load_avg.adjust();
+  }
+
+  double get_session_uptime() const {
+    chrono::duration<double> uptime = clock::now() - birth_time;
+    return uptime.count();
+  }
+
+  time get_birth_time() const {
+    return birth_time;
   }
 
   // -- caps --
@@ -348,8 +365,8 @@ public:
 
   Session(Connection *con) :
     state(STATE_CLOSED), state_seq(0), importing_count(0),
-    recall_count(0), recall_release_count(0),
-    auth_caps(g_ceph_context),
+    birth_time(clock::now()), recall_count(0),
+    recall_release_count(0), auth_caps(g_ceph_context),
     connection(NULL), item_session_list(this),
     requests(0),  // member_offset passed to front() manually
     cap_push_seq(0),
@@ -365,7 +382,7 @@ public:
     if (state == STATE_CLOSED) {
       item_session_list.remove_myself();
     } else {
-      assert(!item_session_list.is_on_list());
+      ceph_assert(!item_session_list.is_on_list());
     }
     preopen_out_queue.clear();
   }
@@ -497,6 +514,7 @@ public:
   map<int,xlist<Session*>* > by_state;
   uint64_t set_state(Session *session, int state);
   map<version_t, MDSInternalContextBase::vec > commit_waiters;
+  void update_average_session_age();
 
   explicit SessionMap(MDSRank *m) : mds(m),
 		       projected(0), committing(0), committed(0),
@@ -620,11 +638,8 @@ public:
 
   // helpers
   entity_inst_t& get_inst(entity_name_t w) {
-    assert(session_map.count(w));
+    ceph_assert(session_map.count(w));
     return session_map[w]->info.inst;
-  }
-  version_t inc_push_seq(client_t client) {
-    return get_session(entity_name_t::CLIENT(client.v))->inc_push_seq();
   }
   version_t get_push_seq(client_t client) {
     return get_session(entity_name_t::CLIENT(client.v))->get_push_seq();
@@ -635,7 +650,7 @@ public:
   }
   void trim_completed_requests(entity_name_t c, ceph_tid_t tid) {
     Session *session = get_session(c);
-    assert(session);
+    ceph_assert(session);
     session->trim_completed_requests(tid);
   }
 
@@ -717,8 +732,30 @@ public:
                      MDSGatherBuilder *gather_bld);
 
 private:
+  time avg_birth_time = clock::zero();
+
   uint64_t get_session_count_in_state(int state) {
     return !is_any_state(state) ? 0 : by_state[state]->size();
+  }
+
+  void update_average_birth_time(const Session &s, bool added=true) {
+    uint32_t sessions = session_map.size();
+    time birth_time = s.get_birth_time();
+
+    if (sessions == 1) {
+      avg_birth_time = added ? birth_time : clock::zero();
+      return;
+    }
+
+    if (added) {
+      avg_birth_time = clock::time_point(
+        ((avg_birth_time - clock::zero()) / sessions) * (sessions - 1) +
+        (birth_time - clock::zero()) / sessions);
+    } else {
+      avg_birth_time = clock::time_point(
+        ((avg_birth_time - clock::zero()) / (sessions - 1)) * sessions -
+        (birth_time - clock::zero()) / (sessions - 1));
+    }
   }
 
 public:

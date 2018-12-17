@@ -50,6 +50,17 @@ function get_processors() {
     fi
 }
 
+function detect_ceph_dev_pkgs() {
+    local cmake_opts
+    local boost_root=/opt/ceph
+    if test -f $boost_root/include/boost/config.hpp; then
+        cmake_opts+=" -DWITH_SYSTEM_BOOST=ON -DBOOST_ROOT=$boost_root"
+    else
+        cmake_opts+=" -DBOOST_J=$(get_processors)"
+    fi
+    echo "$cmake_opts"
+}
+
 function run() {
     local install_cmd
     local which_pkg="which"
@@ -100,9 +111,7 @@ function run() {
     test "$BUILD_MAKEOPTS" && echo "make will run with option(s) $BUILD_MAKEOPTS"
     CHECK_MAKEOPTS=${CHECK_MAKEOPTS:-$DEFAULT_MAKEOPTS}
     CMAKE_BUILD_OPTS="-DWITH_GTEST_PARALLEL=ON -DWITH_FIO=ON -DWITH_SEASTAR=ON"
-    if ! type python2 > /dev/null 2>&1 ; then
-        CMAKE_BUILD_OPTS+=" -DWITH_PYTHON2=OFF -DWITH_PYTHON3=ON -DMGR_PYTHON_VERSION=3"
-    fi
+    CMAKE_BUILD_OPTS+=$(detect_ceph_dev_pkgs)
     cat <<EOM
 Note that the binaries produced by this script do not contain correct time
 and git version information, which may make them unsuitable for debugging
@@ -137,7 +146,11 @@ EOM
         echo "***ulimit -n too small, better bigger than 1024 for test***"
         return 1
     fi
- 
+
+    # increase the aio-max-nr, which is by default 65536. we could reach this
+    # limit while running seastar tests and bluestore tests.
+    $DRY_RUN sudo sysctl -q -w fs.aio-max-nr=$((65536 * 16))
+
     if ! $DRY_RUN ctest $CHECK_MAKEOPTS --output-on-failure; then
         rm -fr ${TMPDIR:-/tmp}/ceph-asok.*
         return 1

@@ -196,9 +196,12 @@ class Module(MgrModule):
                 dns = self.get_latest("mds", daemon_info['name'], "mds_mem.dn")
 
                 activity = "Evts: " + self.format_dimless(
-                    self.get_rate("mds", daemon_info['name'], "mds_log.replay"),
+                    self.get_rate("mds", daemon_info['name'], "mds_log.replayed"),
                     5
                 ) + "/s"
+
+                metadata = self.get_metadata('mds', daemon_info['name'])
+                mds_versions[metadata.get('ceph_version', "unknown")].append(daemon_info['name'])
 
                 rank_table.add_row([
                     "{0}-s".format(daemon_info['rank']), "standby-replay",
@@ -230,6 +233,9 @@ class Module(MgrModule):
             output += rank_table.get_string()
             output += "\n" + pools_table.get_string() + "\n"
 
+        if not output and fs_filter is not None:
+            return errno.EINVAL, "", "Invalid filesystem: " + fs_filter
+
         standby_table = PrettyTable(["Standby MDS"])
         for standby in fsmap['standbys']:
             metadata = self.get_metadata('mds', standby['name'])
@@ -240,7 +246,7 @@ class Module(MgrModule):
         output += "\n" + standby_table.get_string() + "\n"
 
         if len(mds_versions) == 1:
-            output += "MDS version: {0}".format(mds_versions.keys()[0])
+            output += "MDS version: {0}".format(list(mds_versions)[0])
         else:
             version_table = PrettyTable(["version", "daemons"])
             for version, daemons in six.iteritems(mds_versions):

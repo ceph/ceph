@@ -142,8 +142,8 @@ protected:
 
   void set_safe_pos(uint64_t pos)
   {
-    Mutex::Locker l(submit_mutex);
-    assert(pos >= safe_pos);
+    std::lock_guard l(submit_mutex);
+    ceph_assert(pos >= safe_pos);
     safe_pos = pos;
   }
   friend class MDSLogContextBase;
@@ -172,7 +172,7 @@ protected:
   friend class MDCache;
 
   uint64_t get_last_segment_seq() const {
-    assert(!segments.empty());
+    ceph_assert(!segments.empty());
     return segments.rbegin()->first;
   }
   LogSegment *get_oldest_segment() {
@@ -218,11 +218,11 @@ private:
   void _journal_segment_subtree_map(MDSInternalContextBase *onsync);
 public:
   void start_new_segment() {
-    Mutex::Locker l(submit_mutex);
+    std::lock_guard l(submit_mutex);
     _start_new_segment();
   }
   void prepare_new_segment() {
-    Mutex::Locker l(submit_mutex);
+    std::lock_guard l(submit_mutex);
     _prepare_new_segment();
   }
   void journal_segment_subtree_map(MDSInternalContextBase *onsync=NULL) {
@@ -238,7 +238,7 @@ public:
   }
 
   LogSegment *get_current_segment() { 
-    assert(!segments.empty());
+    ceph_assert(!segments.empty());
     return segments.rbegin()->second;
   }
 
@@ -275,18 +275,18 @@ private:
 public:
   void _start_entry(LogEvent *e);
   void start_entry(LogEvent *e) {
-    Mutex::Locker l(submit_mutex);
+    std::lock_guard l(submit_mutex);
     _start_entry(e);
   }
   void cancel_entry(LogEvent *e);
   void _submit_entry(LogEvent *e, MDSLogContextBase *c);
   void submit_entry(LogEvent *e, MDSLogContextBase *c = 0) {
-    Mutex::Locker l(submit_mutex);
+    std::lock_guard l(submit_mutex);
     _submit_entry(e, c);
     submit_cond.Signal();
   }
   void start_submit_entry(LogEvent *e, MDSLogContextBase *c = 0) {
-    Mutex::Locker l(submit_mutex);
+    std::lock_guard l(submit_mutex);
     _start_entry(e);
     _submit_entry(e, c);
     submit_cond.Signal();

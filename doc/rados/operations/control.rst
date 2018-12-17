@@ -257,8 +257,6 @@ Valid fields are:
 
 	* ``pg_num``: The placement group number.
 	* ``pgp_num``: Effective number of placement groups when calculating placement.
-	* ``lpg_num``: The number of local placement groups.
-	* ``lpgp_num``: The number used for placing the local placement groups.
 
 
 Sends a scrub command to OSD ``{osd-num}``. To send the command to all OSDs, use ``*``. ::
@@ -278,6 +276,13 @@ concurrently accessing the OSD. ::
 
 	ceph tell osd.N bench [TOTAL_DATA_BYTES] [BYTES_PER_WRITE]
 
+To clear an OSD's caches between benchmark runs, use the 'cache drop' command ::
+
+	ceph tell osd.N cache drop
+
+To get the cache statistics of an OSD, use the 'cache status' command ::
+
+	ceph tell osd.N cache status
 
 MDS Subsystem
 =============

@@ -10,6 +10,7 @@
 #include "librbd/api/Image.h"
 #include "librbd/api/Migration.h"
 #include "librbd/api/Mirror.h"
+#include "librbd/api/Namespace.h"
 #include "librbd/internal.h"
 #include "librbd/io/ImageRequestWQ.h"
 #include "librbd/io/ReadResult.h"
@@ -18,8 +19,24 @@ void register_test_migration() {
 }
 
 struct TestMigration : public TestFixture {
+  static void SetUpTestCase() {
+    TestFixture::SetUpTestCase();
+
+    _other_pool_name = get_temp_pool_name("test-librbd-");
+    ASSERT_EQ(0, _rados.pool_create(_other_pool_name.c_str()));
+  }
+
+  static void TearDownTestCase() {
+    ASSERT_EQ(0, _rados.pool_delete(_other_pool_name.c_str()));
+
+    TestFixture::TearDownTestCase();
+  }
+
   void SetUp() override {
     TestFixture::SetUp();
+
+    ASSERT_EQ(0, _rados.ioctx_create(_other_pool_name.c_str(),
+                                     _other_pool_ioctx));
 
     open_image(m_ioctx, m_image_name, &m_ictx);
     m_image_id = m_ictx->id;
@@ -40,22 +57,9 @@ struct TestMigration : public TestFixture {
       close_image(m_ictx);
     }
 
-    m_other_pool_ioctx.close();
+    _other_pool_ioctx.close();
 
     TestFixture::TearDown();
-  }
-
-  void require_other_pool() {
-    std::string pool_name = get_temp_pool_name("test-librbd-");
-    ASSERT_EQ("", create_one_pool_pp(pool_name, m_other_pool_rados));
-    ASSERT_EQ(0, m_other_pool_rados.ioctx_create(pool_name.c_str(),
-                                                 m_other_pool_ioctx));
-  }
-
-  bool is_librados_test_stub() {
-    std::string fsid;
-    EXPECT_EQ(0, _rados.cluster_fsid(&fsid));
-    return fsid == "00000000-1111-2222-3333-444444444444";
   }
 
   void compare(const std::string &description = "") {
@@ -101,8 +105,10 @@ struct TestMigration : public TestFixture {
 
     if (dst_ictx->test_features(RBD_FEATURE_LAYERING)) {
       bool flags_set;
-      EXPECT_EQ(0, dst_ictx->test_flags(RBD_FLAG_OBJECT_MAP_INVALID,
-                                        &flags_set));
+      RWLock::RLocker dst_locker(dst_ictx->snap_lock);
+      EXPECT_EQ(0, dst_ictx->test_flags(dst_ictx->snap_id,
+                                        RBD_FLAG_OBJECT_MAP_INVALID,
+                                        dst_ictx->snap_lock, &flags_set));
       EXPECT_FALSE(flags_set);
     }
 
@@ -208,9 +214,11 @@ struct TestMigration : public TestFixture {
     EXPECT_EQ(0, librbd::api::Migration<>::status(m_ioctx, m_image_name,
                                                   &status));
     EXPECT_EQ(status.source_pool_id, m_ioctx.get_id());
+    EXPECT_EQ(status.source_pool_namespace, m_ioctx.get_namespace());
     EXPECT_EQ(status.source_image_name, m_image_name);
     EXPECT_EQ(status.source_image_id, m_image_id);
     EXPECT_EQ(status.dest_pool_id, m_ictx->md_ctx.get_id());
+    EXPECT_EQ(status.dest_pool_namespace, m_ictx->md_ctx.get_namespace());
     EXPECT_EQ(status.dest_image_name, m_ictx->name);
     EXPECT_EQ(status.dest_image_id, m_ictx->id);
     EXPECT_EQ(status.state, state);
@@ -454,14 +462,18 @@ struct TestMigration : public TestFixture {
     migration_commit(m_ioctx, m_image_name);
   }
 
+  static std::string _other_pool_name;
+  static librados::IoCtx _other_pool_ioctx;
+
   std::string m_image_id;
   librbd::ImageCtx *m_ictx = nullptr;
   librados::IoCtx m_ref_ioctx;
   librbd::ImageCtx *m_ref_ictx = nullptr;
   librbd::ImageOptions m_opts;
-  librados::Rados m_other_pool_rados;
-  librados::IoCtx m_other_pool_ioctx;
 };
+
+std::string TestMigration::_other_pool_name;
+librados::IoCtx TestMigration::_other_pool_ioctx;
 
 TEST_F(TestMigration, Empty)
 {
@@ -484,23 +496,31 @@ TEST_F(TestMigration, OtherName)
 
 TEST_F(TestMigration, OtherPool)
 {
-  require_other_pool();
+  migrate(_other_pool_ioctx, m_image_name);
 
-  migrate(m_other_pool_ioctx, m_image_name);
+  ASSERT_EQ(_other_pool_ioctx.get_id(), m_ictx->md_ctx.get_id());
+}
 
-  ASSERT_EQ(m_other_pool_ioctx.get_id(), m_ictx->md_ctx.get_id());
+TEST_F(TestMigration, OtherNamespace)
+{
+  ASSERT_EQ(0, librbd::api::Namespace<>::create(_other_pool_ioctx, "ns1"));
+  _other_pool_ioctx.set_namespace("ns1");
+
+  migrate(_other_pool_ioctx, m_image_name);
+
+  ASSERT_EQ(_other_pool_ioctx.get_id(), m_ictx->md_ctx.get_id());
+  ASSERT_EQ(_other_pool_ioctx.get_namespace(), m_ictx->md_ctx.get_namespace());
+  _other_pool_ioctx.set_namespace("");
 }
 
 TEST_F(TestMigration, DataPool)
 {
-  require_other_pool();
-
   ASSERT_EQ(0, m_opts.set(RBD_IMAGE_OPTION_DATA_POOL,
-                          m_other_pool_ioctx.get_pool_name().c_str()));
+                          _other_pool_ioctx.get_pool_name().c_str()));
 
   migrate(m_ioctx, m_image_name);
 
-  ASSERT_EQ(m_other_pool_ioctx.get_id(), m_ictx->data_ctx.get_id());
+  ASSERT_EQ(_other_pool_ioctx.get_id(), m_ictx->data_ctx.get_id());
 }
 
 TEST_F(TestMigration, AbortAfterPrepare)
@@ -530,13 +550,26 @@ TEST_F(TestMigration, AbortAfterExecute)
 
 TEST_F(TestMigration, OtherPoolAbortAfterExecute)
 {
-  require_other_pool();
-
-  migration_prepare(m_other_pool_ioctx, m_image_name);
+  migration_prepare(_other_pool_ioctx, m_image_name);
   migration_status(RBD_IMAGE_MIGRATION_STATE_PREPARED);
-  migration_execute(m_other_pool_ioctx, m_image_name);
+  migration_execute(_other_pool_ioctx, m_image_name);
   migration_status(RBD_IMAGE_MIGRATION_STATE_EXECUTED);
-  migration_abort(m_other_pool_ioctx, m_image_name);
+  migration_abort(_other_pool_ioctx, m_image_name);
+}
+
+TEST_F(TestMigration, OtherNamespaceAbortAfterExecute)
+{
+  ASSERT_EQ(0, librbd::api::Namespace<>::create(_other_pool_ioctx, "ns2"));
+  _other_pool_ioctx.set_namespace("ns2");
+
+  migration_prepare(_other_pool_ioctx, m_image_name);
+  migration_status(RBD_IMAGE_MIGRATION_STATE_PREPARED);
+  migration_execute(_other_pool_ioctx, m_image_name);
+  migration_status(RBD_IMAGE_MIGRATION_STATE_EXECUTED);
+  migration_abort(_other_pool_ioctx, m_image_name);
+
+  _other_pool_ioctx.set_namespace("");
+  ASSERT_EQ(0, librbd::api::Namespace<>::remove(_other_pool_ioctx, "ns2"));
 }
 
 TEST_F(TestMigration, MirroringSamePool)
@@ -582,8 +615,6 @@ TEST_F(TestMigration, MirroringOtherPoolDisabled)
 {
   REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
 
-  require_other_pool();
-
   ASSERT_EQ(0, librbd::api::Mirror<>::mode_set(m_ioctx, RBD_MIRROR_MODE_IMAGE));
 
   ASSERT_EQ(0, librbd::api::Mirror<>::image_enable(m_ictx, false));
@@ -591,7 +622,7 @@ TEST_F(TestMigration, MirroringOtherPoolDisabled)
   ASSERT_EQ(0, librbd::api::Mirror<>::image_get_info(m_ictx, &info));
   ASSERT_EQ(RBD_MIRROR_IMAGE_ENABLED, info.state);
 
-  migrate(m_other_pool_ioctx, m_image_name);
+  migrate(_other_pool_ioctx, m_image_name);
 
   ASSERT_EQ(0, librbd::api::Mirror<>::image_get_info(m_ictx, &info));
   ASSERT_EQ(RBD_MIRROR_IMAGE_DISABLED, info.state);
@@ -601,10 +632,8 @@ TEST_F(TestMigration, MirroringOtherPoolEnabled)
 {
   REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
 
-  require_other_pool();
-
   ASSERT_EQ(0, librbd::api::Mirror<>::mode_set(m_ioctx, RBD_MIRROR_MODE_IMAGE));
-  ASSERT_EQ(0, librbd::api::Mirror<>::mode_set(m_other_pool_ioctx,
+  ASSERT_EQ(0, librbd::api::Mirror<>::mode_set(_other_pool_ioctx,
                                                RBD_MIRROR_MODE_IMAGE));
 
   ASSERT_EQ(0, librbd::api::Mirror<>::image_enable(m_ictx, false));
@@ -612,7 +641,7 @@ TEST_F(TestMigration, MirroringOtherPoolEnabled)
   ASSERT_EQ(0, librbd::api::Mirror<>::image_get_info(m_ictx, &info));
   ASSERT_EQ(RBD_MIRROR_IMAGE_ENABLED, info.state);
 
-  migrate(m_other_pool_ioctx, m_image_name);
+  migrate(_other_pool_ioctx, m_image_name);
 
   ASSERT_EQ(0, librbd::api::Mirror<>::image_get_info(m_ictx, &info));
   ASSERT_EQ(RBD_MIRROR_IMAGE_ENABLED, info.state);
@@ -622,15 +651,13 @@ TEST_F(TestMigration, MirroringPool)
 {
   REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
 
-  require_other_pool();
-
-  ASSERT_EQ(0, librbd::api::Mirror<>::mode_set(m_other_pool_ioctx,
+  ASSERT_EQ(0, librbd::api::Mirror<>::mode_set(_other_pool_ioctx,
                                                RBD_MIRROR_MODE_POOL));
   librbd::mirror_image_info_t info;
   ASSERT_EQ(0, librbd::api::Mirror<>::image_get_info(m_ictx, &info));
   ASSERT_EQ(RBD_MIRROR_IMAGE_DISABLED, info.state);
 
-  migrate(m_other_pool_ioctx, m_image_name);
+  migrate(_other_pool_ioctx, m_image_name);
 
   ASSERT_EQ(0, librbd::api::Mirror<>::image_get_info(m_ictx, &info));
   ASSERT_EQ(RBD_MIRROR_IMAGE_ENABLED, info.state);
@@ -696,23 +723,19 @@ TEST_F(TestMigration, NoSnapsOtherPool)
 {
   test_no_snaps();
 
-  require_other_pool();
-
   test_no_snaps();
-  migrate(m_other_pool_ioctx, m_image_name);
+  migrate(_other_pool_ioctx, m_image_name);
 }
 
 TEST_F(TestMigration, NoSnapsDataPool)
 {
   test_no_snaps();
 
-  require_other_pool();
-
   ASSERT_EQ(0, m_opts.set(RBD_IMAGE_OPTION_DATA_POOL,
-                          m_other_pool_ioctx.get_pool_name().c_str()));
+                          _other_pool_ioctx.get_pool_name().c_str()));
   migrate(m_ioctx, m_image_name);
 
-  EXPECT_EQ(m_other_pool_ioctx.get_id(), m_ictx->data_ctx.get_id());
+  EXPECT_EQ(_other_pool_ioctx.get_id(), m_ictx->data_ctx.get_id());
 }
 
 TEST_F(TestMigration, NoSnapsShrinkAfterPrepare)
@@ -791,25 +814,21 @@ TEST_F(TestMigration, SnapsOtherPool)
 {
   test_snaps();
 
-  require_other_pool();
-
   test_no_snaps();
-  migrate(m_other_pool_ioctx, m_image_name);
+  migrate(_other_pool_ioctx, m_image_name);
 
-  EXPECT_EQ(m_other_pool_ioctx.get_id(), m_ictx->md_ctx.get_id());
+  EXPECT_EQ(_other_pool_ioctx.get_id(), m_ictx->md_ctx.get_id());
 }
 
 TEST_F(TestMigration, SnapsDataPool)
 {
   test_snaps();
 
-  require_other_pool();
-
   ASSERT_EQ(0, m_opts.set(RBD_IMAGE_OPTION_DATA_POOL,
-                          m_other_pool_ioctx.get_pool_name().c_str()));
+                          _other_pool_ioctx.get_pool_name().c_str()));
   migrate(m_ioctx, m_image_name);
 
-  EXPECT_EQ(m_other_pool_ioctx.get_id(), m_ictx->data_ctx.get_id());
+  EXPECT_EQ(_other_pool_ioctx.get_id(), m_ictx->data_ctx.get_id());
 }
 
 TEST_F(TestMigration, SnapsShrinkAfterPrepare)

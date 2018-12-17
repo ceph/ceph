@@ -17,7 +17,7 @@ is_leader()
     test -n "${pool}" || pool=${POOL}
 
     admin_daemon "${CLUSTER1}:${instance}" \
-		 rbd mirror status ${pool} ${CLUSTER2} |
+		 rbd mirror status ${pool} ${CLUSTER2}${PEER_CLUSTER_SUFFIX} |
 	grep '"leader": true'
 }
 
@@ -71,7 +71,8 @@ test_replay()
 	wait_for_replay_complete ${CLUSTER1}:${LEADER} ${CLUSTER2} ${POOL} \
 				 ${image}
 	wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' \
-				    'master_position'
+                                    'master_position' \
+                                    "${MIRROR_USER_ID_PREFIX}${LEADER} on $(hostname -s)"
 	if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
 	    wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} \
 					'down+unknown'

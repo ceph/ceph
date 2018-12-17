@@ -18,8 +18,6 @@
 
 #include "MOSDFastDispatchOp.h"
 
-#include "os/ObjectStore.h"
-
 /*
  * OSD Client Subop reply
  *
@@ -50,7 +48,7 @@ public:
   eversion_t last_complete_ondisk;
 
   bufferlist::const_iterator p;
-  // Decoding flags. Decoding is only needed for messages catched by pipe reader.
+  // Decoding flags. Decoding is only needed for messages caught by pipe reader.
   bool final_decode_needed;
 
   epoch_t get_map_epoch() const override {

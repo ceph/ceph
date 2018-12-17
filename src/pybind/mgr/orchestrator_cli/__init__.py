@@ -1,2 +1,2 @@
 
-from module import OrchestratorCli
+from .module import OrchestratorCli

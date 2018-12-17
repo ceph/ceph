@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgxDatatableModule } from '@swimlane/ngx-datatable';
+import * as _ from 'lodash';
 
 import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { ComponentsModule } from '../../components/components.module';
@@ -285,6 +286,42 @@ describe('TableComponent', () => {
         expect(component.updating).toBeFalsy();
       });
       component.reloadData();
+    });
+
+    it('should update selection on refresh - "onChange"', () => {
+      spyOn(component, 'onSelect').and.callThrough();
+      component.data = createFakeData(10);
+      component.selection.selected = [_.clone(component.data[1])];
+      component.updateSelectionOnRefresh = 'onChange';
+      component.updateSelected();
+      expect(component.onSelect).toHaveBeenCalledTimes(0);
+      component.data[1].d = !component.data[1].d;
+      component.updateSelected();
+      expect(component.onSelect).toHaveBeenCalled();
+    });
+
+    it('should update selection on refresh - "always"', () => {
+      spyOn(component, 'onSelect').and.callThrough();
+      component.data = createFakeData(10);
+      component.selection.selected = [_.clone(component.data[1])];
+      component.updateSelectionOnRefresh = 'always';
+      component.updateSelected();
+      expect(component.onSelect).toHaveBeenCalled();
+      component.data[1].d = !component.data[1].d;
+      component.updateSelected();
+      expect(component.onSelect).toHaveBeenCalled();
+    });
+
+    it('should update selection on refresh - "never"', () => {
+      spyOn(component, 'onSelect').and.callThrough();
+      component.data = createFakeData(10);
+      component.selection.selected = [_.clone(component.data[1])];
+      component.updateSelectionOnRefresh = 'never';
+      component.updateSelected();
+      expect(component.onSelect).toHaveBeenCalledTimes(0);
+      component.data[1].d = !component.data[1].d;
+      component.updateSelected();
+      expect(component.onSelect).toHaveBeenCalledTimes(0);
     });
 
     afterEach(() => {

@@ -348,8 +348,8 @@ by setting it in the ``[mon]`` section of the configuration file.
 ``mon warn on cache pools without hit sets``
 
 :Description: Issue a ``HEALTH_WARN`` in cluster log if a cache pool does not
-              have the hitset type set set.
-              See `hit set type <../operations/pools#hit-set-type>`_ for more
+              have the ``hit_set_type`` value configured.
+              See :ref:`hit_set_type <hit_set_type>` for more
               details.
 :Type: Boolean
 :Default: True
@@ -359,7 +359,7 @@ by setting it in the ``[mon]`` section of the configuration file.
 
 :Description: Issue a ``HEALTH_WARN`` in cluster log if the CRUSH's
               ``straw_calc_version`` is zero. See
-              `CRUSH map tunables <../operations/crush-map#tunables>`_ for
+              :ref:`CRUSH map tunables <crush-map-tunables>` for
               details.
 :Type: Boolean
 :Default: True
@@ -377,7 +377,7 @@ by setting it in the ``[mon]`` section of the configuration file.
 
 :Description: The minimum tunable profile version required by the cluster.
               See
-              `CRUSH map tunables <../operations/crush-map#tunables>`_ for
+              :ref:`CRUSH map tunables <crush-map-tunables>` for
               details.
 :Type: String
 :Default: ``firefly``
@@ -388,7 +388,7 @@ by setting it in the ``[mon]`` section of the configuration file.
 :Description: Issue a ``HEALTH_WARN`` in cluster log if
               ``mon osd down out interval`` is zero. Having this option set to
               zero on the leader acts much like the ``noout`` flag. It's hard
-              to figure out what's going wrong with clusters witout the
+              to figure out what's going wrong with clusters without the
               ``noout`` flag set but acting like that just the same, so we
               report a warning in this case.
 :Type: Boolean
@@ -1197,7 +1197,7 @@ Miscellaneous
 
 :Description: Largest number of PGs per "involved" OSD to let split create.
               When we increase the ``pg_num`` of a pool, the placement groups
-              will be splitted on all OSDs serving that pool. We want to avoid
+              will be split on all OSDs serving that pool. We want to avoid
               extreme multipliers on PG splits.
 :Type: Integer
 :Default: 300

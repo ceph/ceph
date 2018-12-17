@@ -2,11 +2,14 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "rgw_rados.h"
+#include "rgw_zone.h"
 #include "rgw_rest_conn.h"
+
+#include "services/svc_zone.h"
 
 #define dout_subsys ceph_subsys_rgw
 
-RGWRESTConn::RGWRESTConn(CephContext *_cct, RGWRados *store,
+RGWRESTConn::RGWRESTConn(CephContext *_cct, RGWSI_Zone *zone_svc,
                          const string& _remote_id,
                          const list<string>& remote_endpoints,
                          HostStyle _host_style)
@@ -14,13 +17,13 @@ RGWRESTConn::RGWRESTConn(CephContext *_cct, RGWRados *store,
     endpoints(remote_endpoints.begin(), remote_endpoints.end()),
     remote_id(_remote_id), host_style(_host_style)
 {
-  if (store) {
-    key = store->get_zone_params().system_key;
-    self_zone_group = store->get_zonegroup().get_id();
+  if (zone_svc) {
+    key = zone_svc->get_zone_params().system_key;
+    self_zone_group = zone_svc->get_zonegroup().get_id();
   }
 }
 
-RGWRESTConn::RGWRESTConn(CephContext *_cct, RGWRados *store,
+RGWRESTConn::RGWRESTConn(CephContext *_cct, RGWSI_Zone *zone_svc,
                          const string& _remote_id,
                          const list<string>& remote_endpoints,
                          RGWAccessKey _cred,
@@ -30,8 +33,8 @@ RGWRESTConn::RGWRESTConn(CephContext *_cct, RGWRados *store,
     key(std::move(_cred)),
     remote_id(_remote_id), host_style(_host_style)
 {
-  if (store) {
-    self_zone_group = store->get_zonegroup().get_id();
+  if (zone_svc) {
+    self_zone_group = zone_svc->get_zonegroup().get_id();
   }
 }
 

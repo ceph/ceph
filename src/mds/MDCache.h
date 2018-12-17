@@ -40,6 +40,7 @@
 #include "messages/MMDSFindIno.h"
 #include "messages/MMDSFindInoReply.h"
 #include "messages/MMDSFragmentNotify.h"
+#include "messages/MMDSFragmentNotifyAck.h"
 #include "messages/MMDSOpenIno.h"
 #include "messages/MMDSOpenInoReply.h"
 #include "messages/MMDSResolve.h"
@@ -193,7 +194,7 @@ public:
    * on to StrayManager (i.e. this is a stray you've just created)
    */
   void notify_stray(CDentry *dn) {
-    assert(dn->get_dir()->get_inode()->is_stray());
+    ceph_assert(dn->get_dir()->get_inode()->is_stray());
     stray_manager.eval_stray(dn);
   }
 
@@ -334,7 +335,7 @@ public:
   CDir *get_subtree_root(CDir *dir);
   CDir *get_projected_subtree_root(CDir *dir);
   bool is_leaf_subtree(CDir *dir) {
-    assert(subtrees.count(dir));
+    ceph_assert(subtrees.count(dir));
     return subtrees[dir].empty();
   }
   void remove_subtree(CDir *dir);
@@ -501,7 +502,7 @@ public:
   void remove_ambiguous_slave_update(metareqid_t reqid, mds_rank_t master) {
     auto p = ambiguous_slave_updates.find(master);
     auto q = p->second.find(reqid);
-    assert(q != p->second.end());
+    ceph_assert(q != p->second.end());
     p->second.erase(q);
     if (p->second.empty())
       ambiguous_slave_updates.erase(p);
@@ -519,7 +520,7 @@ public:
     return my_ambiguous_imports.count(base);
   }
   void get_ambiguous_import_bounds(dirfrag_t base, vector<dirfrag_t>& bounds) {
-    assert(my_ambiguous_imports.count(base));
+    ceph_assert(my_ambiguous_imports.count(base));
     bounds = my_ambiguous_imports[base];
   }
   void cancel_ambiguous_import(CDir *);
@@ -623,8 +624,8 @@ public:
     return NULL;
   }
   void remove_replay_cap_reconnect(inodeno_t ino, client_t client) {
-    assert(cap_imports[ino].size() == 1);
-    assert(cap_imports[ino][client].size() == 1);
+    ceph_assert(cap_imports[ino].size() == 1);
+    ceph_assert(cap_imports[ino][client].size() == 1);
     cap_imports.erase(ino);
   }
   void wait_replay_cap_reconnect(inodeno_t ino, MDSInternalContextBase *c) {
@@ -775,13 +776,18 @@ public:
 
   // shutdown
 private:
-  set<inodeno_t> shutdown_exported_strays;
+  set<inodeno_t> shutdown_exporting_strays;
+  pair<dirfrag_t, string> shutdown_export_next;
 public:
   void shutdown_start();
   void shutdown_check();
   bool shutdown_pass();
-  bool shutdown_export_strays();
   bool shutdown();                    // clear cache (ie at shutodwn)
+  bool shutdown_export_strays();
+  void shutdown_export_stray_finish(inodeno_t ino) {
+    if (shutdown_exporting_strays.erase(ino))
+      shutdown_export_strays();
+  }
 
   bool did_shutdown_log_cap;
 
@@ -1120,15 +1126,20 @@ private:
     list<CDir*> dirs;
     list<CDir*> resultfrags;
     MDRequestRef mdr;
+    set<mds_rank_t> notify_ack_waiting;
+    bool finishing = false;
+
     // for deadlock detection
-    bool all_frozen;
+    bool all_frozen = false;
     utime_t last_cum_auth_pins_change;
-    int last_cum_auth_pins;
-    int num_remote_waiters;	// number of remote authpin waiters
-    fragment_info_t() : bits(0), all_frozen(false), last_cum_auth_pins(0), num_remote_waiters(0) {}
+    int last_cum_auth_pins = 0;
+    int num_remote_waiters = 0;	// number of remote authpin waiters
+    fragment_info_t() {}
     bool is_fragmenting() { return !resultfrags.empty(); }
+    uint64_t get_tid() { return mdr ? mdr->reqid.tid : 0; }
   };
   map<dirfrag_t,fragment_info_t> fragments;
+  typedef map<dirfrag_t,fragment_info_t>::iterator fragment_info_iterator;
 
   void adjust_dir_fragments(CInode *diri, frag_t basefrag, int bits,
 			    list<CDir*>& frags, MDSInternalContextBase::vec& waiters, bool replay);
@@ -1146,11 +1157,13 @@ private:
   void fragment_mark_and_complete(MDRequestRef& mdr);
   void fragment_frozen(MDRequestRef& mdr, int r);
   void fragment_unmark_unfreeze_dirs(list<CDir*>& dirs);
+  void fragment_drop_locks(fragment_info_t &info);
+  void fragment_maybe_finish(const fragment_info_iterator& it);
   void dispatch_fragment_dir(MDRequestRef& mdr);
   void _fragment_logged(MDRequestRef& mdr);
   void _fragment_stored(MDRequestRef& mdr);
-  void _fragment_committed(dirfrag_t f, list<CDir*>& resultfrags);
-  void _fragment_finish(dirfrag_t f, list<CDir*>& resultfrags);
+  void _fragment_committed(dirfrag_t f, const MDRequestRef& mdr);
+  void _fragment_old_purged(dirfrag_t f, int bits, const MDRequestRef& mdr);
 
   friend class EFragment;
   friend class C_MDC_FragmentFrozen;
@@ -1158,9 +1171,10 @@ private:
   friend class C_MDC_FragmentPrep;
   friend class C_MDC_FragmentStore;
   friend class C_MDC_FragmentCommit;
-  friend class C_IO_MDC_FragmentFinish;
+  friend class C_IO_MDC_FragmentPurgeOld;
 
   void handle_fragment_notify(const MMDSFragmentNotify::const_ref &m);
+  void handle_fragment_notify_ack(const MMDSFragmentNotifyAck::const_ref &m);
 
   void add_uncommitted_fragment(dirfrag_t basedirfrag, int bits, list<frag_t>& old_frag,
 				LogSegment *ls, bufferlist *rollback=NULL);
@@ -1168,7 +1182,7 @@ private:
   void rollback_uncommitted_fragment(dirfrag_t basedirfrag, list<frag_t>& old_frags);
 public:
   void wait_for_uncommitted_fragment(dirfrag_t dirfrag, MDSInternalContextBase *c) {
-    assert(uncommitted_fragments.count(dirfrag));
+    ceph_assert(uncommitted_fragments.count(dirfrag));
     uncommitted_fragments[dirfrag].waiters.push_back(c);
   }
   void split_dir(CDir *dir, int byn);
@@ -1202,7 +1216,7 @@ public:
   int dump_cache(Formatter *f);
   void dump_tree(CInode *in, const int cur_depth, const int max_depth, Formatter *f);
 
-  int cache_status(Formatter *f);
+  void cache_status(Formatter *f);
 
   void dump_resolve_status(Formatter *f) const;
   void dump_rejoin_status(Formatter *f) const;
@@ -1213,7 +1227,7 @@ public:
   void show_subtrees(int dbl=10);
 
   CInode *hack_pick_random_inode() {
-    assert(!inode_map.empty());
+    ceph_assert(!inode_map.empty());
     int n = rand() % inode_map.size();
     auto p = inode_map.begin();
     while (n--) ++p;

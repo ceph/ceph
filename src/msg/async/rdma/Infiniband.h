@@ -19,7 +19,7 @@
 
 #include <boost/pool/pool.hpp>
 // need this because boost messes with ceph log/assert definitions
-#include <include/assert.h>
+#include "include/ceph_assert.h"
 
 #include <infiniband/verbs.h>
 #include <rdma/rdma_cma.h>
@@ -27,8 +27,6 @@
 #include <atomic>
 #include <string>
 #include <vector>
-
-#include <infiniband/verbs.h>
 
 #include "include/int_types.h"
 #include "include/page.h"
@@ -81,7 +79,7 @@ class Device {
   ~Device() {
     if (active_port) {
       delete active_port;
-      assert(ibv_close_device(ctxt) == 0);
+      ceph_assert(ibv_close_device(ctxt) == 0);
     }
   }
   const char* get_name() { return name;}
@@ -122,7 +120,7 @@ class DeviceList {
   }
 
   Device* get_device(const char* device_name) {
-    assert(devices);
+    ceph_assert(devices);
     for (int i = 0; i < num; ++i) {
       if (!strlen(device_name) || !strcmp(device_name, devices[i]->get_name())) {
         return devices[i];

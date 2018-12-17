@@ -52,7 +52,7 @@ public:
 
     librados::AioCompletion *comp = librbd::util::create_rados_callback(this);
     int r = m_image_ctx->md_ctx.aio_operate(m_image_ctx->header_oid, comp, &op);
-    assert(r == 0);
+    ceph_assert(r == 0);
     comp->release();
   }
 
@@ -135,8 +135,8 @@ void ImageRequest<I>::aio_compare_and_write(I *ictx, AioCompletion *c,
 template <typename I>
 void ImageRequest<I>::send() {
   I &image_ctx = this->m_image_ctx;
-  assert(m_aio_comp->is_initialized(get_aio_type()));
-  assert(m_aio_comp->is_started() ^ (get_aio_type() == AIO_TYPE_FLUSH));
+  ceph_assert(m_aio_comp->is_initialized(get_aio_type()));
+  ceph_assert(m_aio_comp->is_started() ^ (get_aio_type() == AIO_TYPE_FLUSH));
 
   CephContext *cct = image_ctx.cct;
   AioCompletion *aio_comp = this->m_aio_comp;
@@ -288,7 +288,7 @@ void ImageReadRequest<I>::send_request() {
 template <typename I>
 void ImageReadRequest<I>::send_image_cache_request() {
   I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.image_cache != nullptr);
+  ceph_assert(image_ctx.image_cache != nullptr);
 
   AioCompletion *aio_comp = this->m_aio_comp;
   aio_comp->set_request_count(1);
@@ -370,7 +370,7 @@ void AbstractImageWriteRequest<I>::send_request() {
     
     if (journaling) {
       // in-flight ops are flushed prior to closing the journal
-      assert(image_ctx.journal != NULL);
+      ceph_assert(image_ctx.journal != NULL);
       journal_tid = append_journal_event(m_synchronous);
     }
 
@@ -423,7 +423,7 @@ uint64_t ImageWriteRequest<I>::append_journal_event(bool synchronous) {
 
   uint64_t tid = 0;
   uint64_t buffer_offset = 0;
-  assert(!this->m_image_extents.empty());
+  ceph_assert(!this->m_image_extents.empty());
   for (auto &extent : this->m_image_extents) {
     bufferlist sub_bl;
     sub_bl.substr_of(m_bl, buffer_offset, extent.second);
@@ -439,7 +439,7 @@ uint64_t ImageWriteRequest<I>::append_journal_event(bool synchronous) {
 template <typename I>
 void ImageWriteRequest<I>::send_image_cache_request() {
   I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.image_cache != nullptr);
+  ceph_assert(image_ctx.image_cache != nullptr);
 
   AioCompletion *aio_comp = this->m_aio_comp;
   aio_comp->set_request_count(1);
@@ -475,7 +475,7 @@ uint64_t ImageDiscardRequest<I>::append_journal_event(bool synchronous) {
   I &image_ctx = this->m_image_ctx;
 
   uint64_t tid = 0;
-  assert(!this->m_image_extents.empty());
+  ceph_assert(!this->m_image_extents.empty());
   for (auto &extent : this->m_image_extents) {
     journal::EventEntry event_entry(
       journal::AioDiscardEvent(extent.first,
@@ -492,7 +492,7 @@ uint64_t ImageDiscardRequest<I>::append_journal_event(bool synchronous) {
 template <typename I>
 void ImageDiscardRequest<I>::send_image_cache_request() {
   I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.image_cache != nullptr);
+  ceph_assert(image_ctx.image_cache != nullptr);
 
   AioCompletion *aio_comp = this->m_aio_comp;
   aio_comp->set_request_count(this->m_image_extents.size());
@@ -584,7 +584,7 @@ void ImageFlushRequest<I>::send_request() {
 template <typename I>
 void ImageFlushRequest<I>::send_image_cache_request() {
   I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.image_cache != nullptr);
+  ceph_assert(image_ctx.image_cache != nullptr);
 
   AioCompletion *aio_comp = this->m_aio_comp;
   aio_comp->set_request_count(1);
@@ -597,7 +597,7 @@ uint64_t ImageWriteSameRequest<I>::append_journal_event(bool synchronous) {
   I &image_ctx = this->m_image_ctx;
 
   uint64_t tid = 0;
-  assert(!this->m_image_extents.empty());
+  ceph_assert(!this->m_image_extents.empty());
   for (auto &extent : this->m_image_extents) {
     journal::EventEntry event_entry(journal::AioWriteSameEvent(extent.first,
                                                                extent.second,
@@ -613,7 +613,7 @@ uint64_t ImageWriteSameRequest<I>::append_journal_event(bool synchronous) {
 template <typename I>
 void ImageWriteSameRequest<I>::send_image_cache_request() {
   I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.image_cache != nullptr);
+  ceph_assert(image_ctx.image_cache != nullptr);
 
   AioCompletion *aio_comp = this->m_aio_comp;
   aio_comp->set_request_count(this->m_image_extents.size());
@@ -664,7 +664,7 @@ uint64_t ImageCompareAndWriteRequest<I>::append_journal_event(
   I &image_ctx = this->m_image_ctx;
 
   uint64_t tid = 0;
-  assert(this->m_image_extents.size() == 1);
+  ceph_assert(this->m_image_extents.size() == 1);
   auto &extent = this->m_image_extents.front();
   journal::EventEntry event_entry(
     journal::AioCompareAndWriteEvent(extent.first, extent.second, m_cmp_bl,
@@ -690,7 +690,7 @@ void ImageCompareAndWriteRequest<I>::assemble_extent(
 template <typename I>
 void ImageCompareAndWriteRequest<I>::send_image_cache_request() {
   I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.image_cache != nullptr);
+  ceph_assert(image_ctx.image_cache != nullptr);
 
   AioCompletion *aio_comp = this->m_aio_comp;
   aio_comp->set_request_count(1);

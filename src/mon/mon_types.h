@@ -73,9 +73,9 @@ struct FeatureMap {
       return;
     }
     auto p = m.find(type);
-    assert(p != m.end());
+    ceph_assert(p != m.end());
     auto q = p->second.find(features);
-    assert(q != p->second.end());
+    ceph_assert(q != p->second.end());
     if (--q->second == 0) {
       p->second.erase(q);
       if (p->second.empty()) {
@@ -148,7 +148,7 @@ struct LevelDBStoreStats {
   {}
 
   void dump(Formatter *f) const {
-    assert(f != NULL);
+    ceph_assert(f != NULL);
     f->dump_int("bytes_total", bytes_total);
     f->dump_int("bytes_sst", bytes_sst);
     f->dump_int("bytes_log", bytes_log);
@@ -197,7 +197,7 @@ struct DataStats {
   LevelDBStoreStats store_stats;
 
   void dump(Formatter *f) const {
-    assert(f != NULL);
+    ceph_assert(f != NULL);
     f->dump_int("kb_total", (fs_stats.byte_total/1024));
     f->dump_int("kb_used", (fs_stats.byte_used/1024));
     f->dump_int("kb_avail", (fs_stats.byte_avail/1024));

@@ -31,7 +31,7 @@ public:
     caps.allow_all = true;
     return CEPH_AUTH_NONE;
   }
-  int handle_request(bufferlist::const_iterator& indata, bufferlist& result_bl, uint64_t& global_id, AuthCapsInfo& caps, uint64_t *auid = NULL) override {
+  int handle_request(bufferlist::const_iterator& indata, bufferlist& result_bl, uint64_t& global_id, AuthCapsInfo& caps) override {
     return 0;
   }
   void build_cephx_response_header(int request_type, int status, bufferlist& bl) { }

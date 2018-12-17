@@ -197,6 +197,42 @@ Commands
   The parent snapshot must be protected (see `rbd snap protect`).
   This requires image format 2.
 
+:command:`config global get` *config-entity* *key*
+  Get a global-level configuration override.
+
+:command:`config global list` [--format plain | json | xml] [--pretty-format] *config-entity*
+  List global-level configuration overrides.
+
+:command:`config global set` *config-entity* *key* *value*
+  Set a global-level configuration override.
+
+:command:`config global remove` *config-entity* *key*
+  Remove a global-level configuration override.
+
+:command:`config image get` *image-spec* *key*
+  Get an image-level configuration override.
+
+:command:`config image list` [--format plain | json | xml] [--pretty-format] *image-spec*
+  List image-level configuration overrides.
+
+:command:`config image set` *image-spec* *key* *value*
+  Set an image-level configuration override.
+
+:command:`config image remove` *image-spec* *key*
+  Remove an image-level configuration override.
+
+:command:`config pool get` *pool-name* *key*
+  Get a pool-level configuration override.
+
+:command:`config pool list` [--format plain | json | xml] [--pretty-format] *pool-name*
+  List pool-level configuration overrides.
+
+:command:`config pool set` *pool-name* *key* *value*
+  Set a pool-level configuration override.
+
+:command:`config pool remove` *pool-name* *key*
+  Remove a pool-level configuration override.
+
 :command:`cp` (*src-image-spec* | *src-snap-spec*) *dest-image-spec*
   Copy the content of a src-image into the newly created dest-image.
   dest-image will have the same size, object size, and image format as src-image.
@@ -307,6 +343,9 @@ Commands
 :command:`group snap rename` *group-snap-spec* *snap-name*
   Rename group's snapshot.
 
+:command:`group snap rollback` *group-snap-spec*
+  Rollback group to snapshot.
+
 :command:`image-meta get` *image-spec* *key*
   Get metadata value with the key.
 
@@ -347,7 +386,7 @@ Commands
   Flag image journal client as disconnected.
 
 :command:`journal export` [--verbose] [--no-error] *src-journal-spec* *path-name*
-  Export image journal to path (use - for stdout). It can be make a bakcup
+  Export image journal to path (use - for stdout). It can be make a backup
   of the image journal especially before attempting dangerous operations.
 
   Note that this command may not always work if the journal is badly corrupted.

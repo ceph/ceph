@@ -114,7 +114,7 @@ Options
 
 :command:`rbytes`
   Report the recursive size of the directory contents for st_size on
-  directories.  Default: on
+  directories.  Default: off
 
 :command:`norbytes`
   Do not report the recursive size of the directory contents for

@@ -16,6 +16,7 @@
 #include "ShardedCache.h"
 
 #include "common/autovector.h"
+#include "include/ceph_assert.h"
 
 namespace rocksdb_cache {
 
@@ -114,7 +115,7 @@ struct BinnedLRUHandle {
   void SetHit() { flags |= 8; }
 
   void Free() {
-    assert((refs == 1 && InCache()) || (refs == 0 && !InCache()));
+    ceph_assert((refs == 1 && InCache()) || (refs == 0 && !InCache()));
     if (deleter) {
       (*deleter)(key(), value);
     }
@@ -142,7 +143,7 @@ class BinnedLRUHandleTable {
       BinnedLRUHandle* h = list_[i];
       while (h != nullptr) {
         auto n = h->next_hash;
-        assert(h->InCache());
+        ceph_assert(h->InCache());
         func(h);
         h = n;
       }
@@ -214,10 +215,10 @@ class alignas(CACHE_LINE_SIZE) BinnedLRUCacheShard : public CacheShard {
   //  not threadsafe
   size_t TEST_GetLRUSize();
 
-  //  Retrives high pri pool ratio
+  //  Retrieves high pri pool ratio
   double GetHighPriPoolRatio() const;
 
-  // Retrives high pri pool usage
+  // Retrieves high pri pool usage
   size_t GetHighPriPoolUsage() const;
 
  private:
@@ -304,7 +305,7 @@ class BinnedLRUCache : public ShardedCache {
   size_t TEST_GetLRUSize();
   // Sets the high pri pool ratio
   void SetHighPriPoolRatio(double high_pri_pool_ratio);
-  //  Retrives high pri pool ratio
+  //  Retrieves high pri pool ratio
   double GetHighPriPoolRatio() const;
   // Retrieves high pri pool usage
   size_t GetHighPriPoolUsage() const;

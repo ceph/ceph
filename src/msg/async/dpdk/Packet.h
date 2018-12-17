@@ -139,7 +139,7 @@ class Packet {
       return copy(old.get(), std::max<size_t>(old->_nr_frags + extra_frags, 2 * old->_nr_frags));
     }
     void* operator new(size_t size, size_t nr_frags = default_nr_frags) {
-      assert(nr_frags == uint16_t(nr_frags));
+      ceph_assert(nr_frags == uint16_t(nr_frags));
       return ::operator new(size + nr_frags * sizeof(fragment));
     }
     // Matching the operator new above
@@ -295,7 +295,7 @@ inline Packet::impl::impl(size_t nr_frags)
 
 inline Packet::impl::impl(fragment frag, size_t nr_frags)
     : _len(frag.size), _allocated_frags(nr_frags) {
-    assert(_allocated_frags > _nr_frags);
+    ceph_assert(_allocated_frags > _nr_frags);
   if (frag.size <= internal_data_size) {
     headroom -= frag.size;
     frags[0] = { data + headroom, frag.size };
@@ -458,7 +458,7 @@ inline Header* Packet::get_header(size_t offset) {
 }
 
 inline void Packet::trim_front(size_t how_much) {
-  assert(how_much <= _impl->_len);
+  ceph_assert(how_much <= _impl->_len);
   _impl->_len -= how_much;
   size_t i = 0;
   while (how_much && how_much >= _impl->frags[i].size) {
@@ -479,7 +479,7 @@ inline void Packet::trim_front(size_t how_much) {
 }
 
 inline void Packet::trim_back(size_t how_much) {
-  assert(how_much <= _impl->_len);
+  ceph_assert(how_much <= _impl->_len);
   _impl->_len -= how_much;
   size_t i = _impl->_nr_frags - 1;
   while (how_much && how_much >= _impl->frags[i].size) {
@@ -542,7 +542,7 @@ inline Packet Packet::share(size_t offset, size_t len) {
     offset = 0;
   }
   n._impl->_offload_info = _impl->_offload_info;
-  assert(!n._impl->_deleter);
+  ceph_assert(!n._impl->_deleter);
   n._impl->_deleter = _impl->_deleter.share();
   return n;
 }

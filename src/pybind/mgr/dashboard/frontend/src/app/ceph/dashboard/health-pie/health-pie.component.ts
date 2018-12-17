@@ -10,9 +10,11 @@ import {
 } from '@angular/core';
 
 import * as Chart from 'chart.js';
+import * as _ from 'lodash';
 
 import { ChartTooltip } from '../../../shared/models/chart-tooltip';
 import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
+import { HealthPieColor } from './health-pie-color.enum';
 
 @Component({
   selector: 'cd-health-pie',
@@ -28,12 +30,17 @@ export class HealthPieComponent implements OnChanges, OnInit {
   @Input()
   data: any;
   @Input()
+  chartType: string;
+  @Input()
+  isBytesData = false;
+  @Input()
+  displayLegend = false;
+  @Input()
   tooltipFn: any;
   @Output()
   prepareFn = new EventEmitter();
 
-  chart: any = {
-    chartType: 'doughnut',
+  chartConfig: any = {
     dataset: [
       {
         label: null,
@@ -41,20 +48,22 @@ export class HealthPieComponent implements OnChanges, OnInit {
       }
     ],
     options: {
-      responsive: true,
-      legend: { display: false },
+      legend: {
+        display: false,
+        position: 'right',
+        labels: { usePointStyle: true },
+        onClick: (event, legendItem) => {
+          this.onLegendClick(event, legendItem);
+        }
+      },
       animation: { duration: 0 },
 
       tooltips: {
         enabled: false
       }
-    },
-    colors: [
-      {
-        borderColor: 'transparent'
-      }
-    ]
+    }
   };
+  private hiddenSlices = [];
 
   constructor(private dimlessBinary: DimlessBinaryPipe) {}
 
@@ -93,28 +102,91 @@ export class HealthPieComponent implements OnChanges, OnInit {
       return positionX + tooltip.caretX + 'px';
     };
 
-    const getBody = (body) => {
-      const bodySplit = body[0].split(': ');
-      bodySplit[1] = this.dimlessBinary.transform(bodySplit[1]);
-      return bodySplit.join(': ');
-    };
-
     const chartTooltip = new ChartTooltip(
       this.chartCanvasRef,
       this.chartTooltipRef,
       getStyleLeft,
       getStyleTop
     );
+
+    const getBody = (body) => {
+      return this.getChartTooltipBody(body);
+    };
+
     chartTooltip.getBody = getBody;
 
-    this.chart.options.tooltips.custom = (tooltip) => {
+    this.chartConfig.options.tooltips.custom = (tooltip) => {
       chartTooltip.customTooltips(tooltip);
     };
 
-    this.prepareFn.emit([this.chart, this.data]);
+    this.setChartType();
+
+    this.chartConfig.options.legend.display = this.displayLegend;
+
+    this.chartConfig.colors = [
+      {
+        backgroundColor: [
+          HealthPieColor.MEDIUM_LIGHT_SHADE_PINK_RED,
+          HealthPieColor.MEDIUM_DARK_SHADE_CYAN_BLUE,
+          HealthPieColor.LIGHT_SHADE_BROWN,
+          HealthPieColor.SHADE_GREEN_CYAN,
+          HealthPieColor.MEDIUM_DARK_SHADE_BLUE_MAGENTA
+        ]
+      }
+    ];
+
+    this.prepareFn.emit([this.chartConfig, this.data]);
   }
 
   ngOnChanges() {
-    this.prepareFn.emit([this.chart, this.data]);
+    this.prepareFn.emit([this.chartConfig, this.data]);
+    this.hideSlices();
+    this.setChartSliceBorderWidth();
+  }
+
+  private getChartTooltipBody(body) {
+    const bodySplit = body[0].split(': ');
+
+    if (this.isBytesData) {
+      bodySplit[1] = this.dimlessBinary.transform(bodySplit[1]);
+    }
+
+    return bodySplit.join(': ');
+  }
+
+  private setChartType() {
+    const chartTypes = ['doughnut', 'pie'];
+    const selectedChartType = chartTypes.find((chartType) => chartType === this.chartType);
+
+    if (selectedChartType !== undefined) {
+      this.chartConfig.chartType = selectedChartType;
+    } else {
+      this.chartConfig.chartType = chartTypes[0];
+    }
+  }
+
+  private setChartSliceBorderWidth() {
+    let nonZeroValueSlices = 0;
+    _.forEach(this.chartConfig.dataset[0].data, function(slice) {
+      if (slice > 0) {
+        nonZeroValueSlices += 1;
+      }
+    });
+
+    this.chartConfig.dataset[0].borderWidth = nonZeroValueSlices > 1 ? 1 : 0;
+  }
+
+  private onLegendClick(event, legendItem) {
+    event.stopPropagation();
+    this.hiddenSlices[legendItem.index] = !legendItem.hidden;
+    this.ngOnChanges();
+  }
+
+  private hideSlices() {
+    _.forEach(this.chartConfig.dataset[0].data, (slice, sliceIndex) => {
+      if (this.hiddenSlices[sliceIndex]) {
+        this.chartConfig.dataset[0].data[sliceIndex] = undefined;
+      }
+    });
   }
 }

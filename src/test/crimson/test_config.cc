@@ -10,7 +10,7 @@ using Config = ceph::common::ConfigProxy;
 const std::string test_uint_option = "osd_max_pgls";
 const uint64_t INVALID_VALUE = (uint64_t)(-1);
 
-class ConfigObs : public ceph::internal::md_config_obs_impl<Config> {
+class ConfigObs : public ceph::md_config_obs_impl<Config> {
   uint64_t last_change = INVALID_VALUE;
   uint64_t num_changes = 0;
 

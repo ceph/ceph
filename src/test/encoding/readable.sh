@@ -231,5 +231,11 @@ if [ $failed -gt 0 ]; then
   echo "FAILED $failed / $numtests tests."
   exit 1
 fi
+
+if [ $numtests -eq 0 ]; then
+  echo "FAILED: no tests found to run!"
+  exit 1
+fi
+
 echo "passed $numtests tests."
 

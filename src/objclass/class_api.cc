@@ -692,6 +692,12 @@ uint64_t cls_get_client_features(cls_method_context_t hctx)
   return ctx->op->get_req()->get_connection()->get_features();
 }
 
+int8_t cls_get_required_osd_release(cls_method_context_t hctx)
+{
+  PrimaryLogPG::OpContext *ctx = *(PrimaryLogPG::OpContext **)hctx;
+  return ctx->pg->get_osdmap()->require_osd_release;
+}
+
 void cls_cxx_subop_version(cls_method_context_t hctx, string *s)
 {
   if (!s)
@@ -730,4 +736,30 @@ int cls_log(int level, const char *format, ...)
      }
      size *= 2;
    }
+}
+
+int cls_cxx_chunk_write_and_set(cls_method_context_t hctx, int ofs, int len,
+                   bufferlist *write_inbl, uint32_t op_flags, bufferlist *set_inbl,
+		   int set_len)
+{
+  PrimaryLogPG::OpContext **pctx = (PrimaryLogPG::OpContext **)hctx;
+  char cname[] = "cas";
+  char method[] = "chunk_set";
+
+  vector<OSDOp> ops(2);
+  ops[0].op.op = CEPH_OSD_OP_WRITE;
+  ops[0].op.extent.offset = ofs;
+  ops[0].op.extent.length = len;
+  ops[0].op.flags = op_flags;
+  ops[0].indata = *write_inbl;
+
+  ops[1].op.op = CEPH_OSD_OP_CALL;
+  ops[1].op.cls.class_len = strlen(cname);
+  ops[1].op.cls.method_len = strlen(method);
+  ops[1].op.cls.indata_len = set_len;
+  ops[1].indata.append(cname, ops[1].op.cls.class_len);
+  ops[1].indata.append(method, ops[1].op.cls.method_len);
+  ops[1].indata.append(*set_inbl);
+
+  return (*pctx)->pg->do_osd_ops(*pctx, ops);
 }
