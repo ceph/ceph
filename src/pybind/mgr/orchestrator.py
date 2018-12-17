@@ -348,6 +348,23 @@ class ServiceDescription(object):
         # The type of service (osd, mon, mgr, etc.)
         self.service_type = None
 
+        # Service version that was deployed
+        self.version = None
+
+        # Location of the service configuration when stored in rados
+        # object. Format: "rados://<pool>/[<namespace/>]<object>"
+        self.rados_config_location = None
+
+        # If the service exposes REST-like API, this attribute should hold
+        # the URL.
+        self.service_url = None
+
+        # Service status: -1 error, 0 stopped, 1 running
+        self.status = None
+
+        # Service status description when status == -1.
+        self.status_desc = None
+
 
 class DriveGroupSpec(object):
     """
