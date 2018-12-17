@@ -515,15 +515,78 @@ int PyModule::load_commands()
 int PyModule::load_options()
 {
   int r = walk_dict_list("MODULE_OPTIONS", [this](PyObject *pOption) -> int {
-    PyObject *pName = PyDict_GetItemString(pOption, "name");
-    ceph_assert(pName != nullptr);
-
-    ModuleOption option;
-    option.name = PyString_AsString(pName);
+    MgrMap::ModuleOption option;
+    PyObject *p;
+    p = PyDict_GetItemString(pOption, "name");
+    ceph_assert(p != nullptr);
+    option.name = PyString_AsString(p);
+    option.type = Option::TYPE_STR;
+    p = PyDict_GetItemString(pOption, "type");
+    if (p && PyObject_TypeCheck(p, &PyString_Type)) {
+      std::string s = PyString_AsString(p);
+      int t = Option::str_to_type(s);
+      if (t >= 0) {
+	option.type = t;
+      }
+    }
+    p = PyDict_GetItemString(pOption, "desc");
+    if (p && PyObject_TypeCheck(p, &PyString_Type)) {
+      option.desc = PyString_AsString(p);
+    }
+    p = PyDict_GetItemString(pOption, "long_desc");
+    if (p && PyObject_TypeCheck(p, &PyString_Type)) {
+      option.long_desc = PyString_AsString(p);
+    }
+    p = PyDict_GetItemString(pOption, "default");
+    if (p && PyObject_TypeCheck(p, &PyString_Type)) {
+      option.default_value = PyString_AsString(p);
+    }
+    p = PyDict_GetItemString(pOption, "min");
+    if (p && PyObject_TypeCheck(p, &PyString_Type)) {
+      option.min = PyString_AsString(p);
+    }
+    p = PyDict_GetItemString(pOption, "max");
+    if (p && PyObject_TypeCheck(p, &PyString_Type)) {
+      option.max = PyString_AsString(p);
+    }
+    p = PyDict_GetItemString(pOption, "enum_allowed");
+    if (p && PyObject_TypeCheck(p, &PyList_Type)) {
+      for (unsigned i = 0; i < PyList_Size(p); ++i) {
+	auto q = PyList_GetItem(p, i);
+	if (q && PyObject_TypeCheck(q, &PyString_Type)) {
+	  option.enum_allowed.insert(PyString_AsString(q));
+	}
+      }
+    }
+    p = PyDict_GetItemString(pOption, "see_also");
+    if (p && PyObject_TypeCheck(p, &PyList_Type)) {
+      for (unsigned i = 0; i < PyList_Size(p); ++i) {
+	auto q = PyList_GetItem(p, i);
+	if (q && PyObject_TypeCheck(q, &PyString_Type)) {
+	  option.see_also.insert(PyString_AsString(q));
+	}
+      }
+    }
+    p = PyDict_GetItemString(pOption, "tags");
+    if (p && PyObject_TypeCheck(p, &PyList_Type)) {
+      for (unsigned i = 0; i < PyList_Size(p); ++i) {
+	auto q = PyList_GetItem(p, i);
+	if (q && PyObject_TypeCheck(q, &PyString_Type)) {
+	  option.tags.insert(PyString_AsString(q));
+	}
+      }
+    }
+    p = PyDict_GetItemString(pOption, "runtime");
+    if (p && PyObject_TypeCheck(p, &PyBool_Type)) {
+      if (p == Py_True) {
+	option.flags |= Option::FLAG_RUNTIME;
+      }
+      if (p == Py_False) {
+	option.flags &= ~Option::FLAG_RUNTIME;
+      }
+    }
     dout(20) << "loaded module option " << option.name << dendl;
-
     options[option.name] = std::move(option);
-
     return 0;
   });
 
