@@ -65,6 +65,18 @@
                   *ngIf="osdRecvSpeedForm.getValue('customizePriority') &&
                   osdRecvSpeedForm.showError(attr.key, formDir, 'required')"
                   i18n>This field is required!</span>
+            <span class="help-block"
+                  *ngIf="osdRecvSpeedForm.getValue('customizePriority') &&
+                  osdRecvSpeedForm.showError(attr.key, formDir, 'pattern')"
+                  i18n>{{ attr.value.patternHelpText }}</span>
+            <span class="help-block"
+                  *ngIf="osdRecvSpeedForm.getValue('customizePriority') &&
+                  osdRecvSpeedForm.showError(attr.key, formDir, 'max')"
+                  i18n>The entered value is too high! It must not be greater than {{ attr.value.maxValue }}.</span>
+            <span class="help-block"
+                  *ngIf="osdRecvSpeedForm.getValue('customizePriority') &&
+                  osdRecvSpeedForm.showError(attr.key, formDir, 'min')"
+                  i18n>The entered value is too low! It must not be lower than {{ attr.value.minValue }}.</span>
           </div>
         </div>
       </div>

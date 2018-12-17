@@ -875,7 +875,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/cluster/osd/osd-recv-speed-modal/osd-recv-speed-modal.component.html</context>
-          <context context-type="linenumber">79</context>
+          <context context-type="linenumber">91</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/cluster/osd/osd-reweight-modal/osd-reweight-modal.component.html</context>
@@ -931,7 +931,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/cluster/osd/osd-recv-speed-modal/osd-recv-speed-modal.component.html</context>
-          <context context-type="linenumber">75</context>
+          <context context-type="linenumber">87</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/cluster/osd/osd-scrub-modal/osd-scrub-modal.component.html</context>
@@ -996,6 +996,24 @@
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
           <context context-type="linenumber">95</context>
+        </context-group>
+      </trans-unit><trans-unit id="b699e94bf376491bd50b70a98531071c737eaf40" datatype="html">
+        <source><x id="INTERPOLATION" equiv-text="{{ attr.value.patternHelpText }}"/></source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/cluster/osd/osd-recv-speed-modal/osd-recv-speed-modal.component.html</context>
+          <context context-type="linenumber">71</context>
+        </context-group>
+      </trans-unit><trans-unit id="98fe13e7ad6c2b80375d204b47858ded83f80e15" datatype="html">
+        <source>The entered value is too high! It must not be greater than <x id="INTERPOLATION" equiv-text="{{ attr.value.maxValue }}"/>.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/cluster/osd/osd-recv-speed-modal/osd-recv-speed-modal.component.html</context>
+          <context context-type="linenumber">75</context>
+        </context-group>
+      </trans-unit><trans-unit id="5423a3c111be47fc5a1bfe46ceb58c81c84db691" datatype="html">
+        <source>The entered value is too low! It must not be lower than <x id="INTERPOLATION" equiv-text="{{ attr.value.minValue }}"/>.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/cluster/osd/osd-recv-speed-modal/osd-recv-speed-modal.component.html</context>
+          <context context-type="linenumber">79</context>
         </context-group>
       </trans-unit><trans-unit id="272696ff8acdbed0af6dc13f09729e70be435b82" datatype="html">
         <source>Reweight OSD</source>
