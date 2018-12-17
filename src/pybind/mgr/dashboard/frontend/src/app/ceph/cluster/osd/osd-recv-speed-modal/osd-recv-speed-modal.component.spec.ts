@@ -194,4 +194,55 @@ describe('OsdRecvSpeedModalComponent', () => {
       });
     });
   });
+
+  describe('setValidators', () => {
+    const configOptions = [
+      {
+        name: 'osd_max_backfills',
+        type: 'uint'
+      },
+      {
+        name: 'osd_recovery_max_active',
+        type: 'uint'
+      },
+      {
+        name: 'osd_recovery_max_single_start',
+        type: 'uint'
+      },
+      {
+        name: 'osd_recovery_sleep',
+        type: 'float'
+      }
+    ];
+
+    it('should set needed validators for config option', () => {
+      component.setValidators(configOptions);
+      configOptions.forEach((configOption) => {
+        const control = component.osdRecvSpeedForm.controls[configOption.name];
+
+        if (configOption.type === 'float') {
+          expect(component.priorityAttrs[configOption.name].patternHelpText).toBe(
+            'The entered value needs to be a number or decimal.'
+          );
+        } else {
+          expect(component.priorityAttrs[configOption.name].minValue).toBe(0);
+          expect(component.priorityAttrs[configOption.name].patternHelpText).toBe(
+            'The entered value needs to be an unsigned number.'
+          );
+
+          control.setValue(-1);
+          expect(control.hasError('min')).toBeTruthy();
+        }
+
+        control.setValue(null);
+        expect(control.hasError('required')).toBeTruthy();
+        control.setValue('E');
+        expect(control.hasError('pattern')).toBeTruthy();
+        control.setValue(3);
+        expect(control.hasError('required')).toBeFalsy();
+        expect(control.hasError('min')).toBeFalsy();
+        expect(control.hasError('pattern')).toBeFalsy();
+      });
+    });
+  });
 });
