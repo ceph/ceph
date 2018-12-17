@@ -4906,7 +4906,12 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
     }
     if (r >= 0)
       op.extent.length = r;
-    else {
+    else if (r == -EAGAIN) {
+      // EAGAIN should not change the length of extent or count the read op.
+      dout(10) << " read got " << r << " / " << op.extent.length
+              << " bytes from obj " << soid << ". try again." << dendl;
+      return -EAGAIN;
+    } else {
       result = r;
       op.extent.length = 0;
     }
