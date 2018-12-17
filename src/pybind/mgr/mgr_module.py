@@ -242,7 +242,8 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
         """
         r = self._ceph_get_module_option(key)
         if r is None:
-            return default
+            final_key = key.split('/')[-1]
+            return str(self.MODULE_OPTION_DEFAULTS.get(final_key, default))
         else:
             return r
 
@@ -273,6 +274,7 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
 class MgrModule(ceph_module.BaseMgrModule):
     COMMANDS = []
     MODULE_OPTIONS = []
+    MODULE_OPTION_DEFAULTS = {}
 
     # Priority definitions for perf counters
     PRIO_CRITICAL = 10
@@ -318,6 +320,10 @@ class MgrModule(ceph_module.BaseMgrModule):
 
         # Keep a librados instance for those that need it.
         self._rados = None
+
+        for o in self.MODULE_OPTIONS:
+            if 'default' in o:
+                self.MODULE_OPTION_DEFAULTS[o['name']] = o['default']
 
     def __del__(self):
         unconfigure_logger(self, self.module_name)
@@ -694,7 +700,8 @@ class MgrModule(ceph_module.BaseMgrModule):
     def _get_module_option(self, key, default):
         r = self._ceph_get_module_option(key)
         if r is None:
-            return default
+            final_key = key.split('/')[-1]
+            return str(self.MODULE_OPTION_DEFAULTS.get(final_key, default))
         else:
             return r
 

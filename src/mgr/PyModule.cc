@@ -538,23 +538,31 @@ int PyModule::load_options()
       option.long_desc = PyString_AsString(p);
     }
     p = PyDict_GetItemString(pOption, "default");
-    if (p && PyObject_TypeCheck(p, &PyString_Type)) {
-      option.default_value = PyString_AsString(p);
+    if (p) {
+      auto q = PyObject_Str(p);
+      option.default_value = PyString_AsString(q);
+      Py_DECREF(q);
     }
     p = PyDict_GetItemString(pOption, "min");
-    if (p && PyObject_TypeCheck(p, &PyString_Type)) {
-      option.min = PyString_AsString(p);
+    if (p) {
+      auto q = PyObject_Str(p);
+      option.min = PyString_AsString(q);
+      Py_DECREF(q);
     }
     p = PyDict_GetItemString(pOption, "max");
-    if (p && PyObject_TypeCheck(p, &PyString_Type)) {
-      option.max = PyString_AsString(p);
+    if (p) {
+      auto q = PyObject_Str(p);
+      option.max = PyString_AsString(q);
+      Py_DECREF(q);
     }
     p = PyDict_GetItemString(pOption, "enum_allowed");
     if (p && PyObject_TypeCheck(p, &PyList_Type)) {
       for (unsigned i = 0; i < PyList_Size(p); ++i) {
 	auto q = PyList_GetItem(p, i);
-	if (q && PyObject_TypeCheck(q, &PyString_Type)) {
-	  option.enum_allowed.insert(PyString_AsString(q));
+	if (q) {
+	  auto r = PyObject_Str(q);
+	  option.enum_allowed.insert(PyString_AsString(r));
+	  Py_DECREF(r);
 	}
       }
     }
