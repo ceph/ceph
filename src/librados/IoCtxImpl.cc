@@ -1283,7 +1283,7 @@ int librados::IoCtxImpl::get_inconsistent_objects(const pg_t& pg,
   c->io = this;
 
   ::ObjectOperation op;
-  op.scrub_ls(start_after, max_to_get, objects, interval, nullptr);
+  op.scrub_ls(start_after, max_to_get, objects, interval, &c->rval);
   object_locator_t oloc{poolid, pg.ps()};
   Objecter::Op *o = objecter->prepare_pg_read_op(
     oloc.hash, oloc, op, nullptr, CEPH_OSD_FLAG_PGOP, oncomplete,
@@ -1304,7 +1304,7 @@ int librados::IoCtxImpl::get_inconsistent_snapsets(const pg_t& pg,
   c->io = this;
 
   ::ObjectOperation op;
-  op.scrub_ls(start_after, max_to_get, snapsets, interval, nullptr);
+  op.scrub_ls(start_after, max_to_get, snapsets, interval, &c->rval);
   object_locator_t oloc{poolid, pg.ps()};
   Objecter::Op *o = objecter->prepare_pg_read_op(
     oloc.hash, oloc, op, nullptr, CEPH_OSD_FLAG_PGOP, oncomplete,
@@ -1962,7 +1962,9 @@ librados::IoCtxImpl::C_aio_Complete::C_aio_Complete(AioCompletionImpl *_c)
 void librados::IoCtxImpl::C_aio_Complete::finish(int r)
 {
   c->lock.Lock();
-  c->rval = r;
+  // Leave an existing rval unless r != 0
+  if (r)
+    c->rval = r; // This clears the error set in C_ObjectOperation_scrub_ls::finish()
   c->complete = true;
   c->cond.Signal();
 
