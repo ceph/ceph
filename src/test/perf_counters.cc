@@ -42,6 +42,7 @@
 #include <sys/un.h>
 #include <time.h>
 #include <unistd.h>
+#include <thread>
 
 #include "common/common_init.h"
 
@@ -206,4 +207,49 @@ TEST(PerfCounters, ResetPerfCounters) {
   coll->clear();
   ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf reset\", \"var\": \"test_perfcounter_1\", \"format\": \"json\" }", &msg));
   ASSERT_EQ(sd("{\"error\":\"Not find: test_perfcounter_1\"}"), msg);
+}
+
+enum {
+  TEST_PERFCOUNTERS3_ELEMENT_FIRST = 400,
+  TEST_PERFCOUNTERS3_ELEMENT_READ,
+  TEST_PERFCOUNTERS3_ELEMENT_LAST,
+};
+
+static std::shared_ptr<PerfCounters> setup_test_perfcounter3(CephContext* cct) {
+  PerfCountersBuilder bld(cct, "test_percounter_3",
+      TEST_PERFCOUNTERS3_ELEMENT_FIRST, TEST_PERFCOUNTERS3_ELEMENT_LAST);
+  bld.add_time_avg(TEST_PERFCOUNTERS3_ELEMENT_READ, "read_avg");
+  std::shared_ptr<PerfCounters> p(bld.create_perf_counters());
+  return p;
+}
+
+static void counters_inc_test(std::shared_ptr<PerfCounters> fake_pf) {
+  int i = 100000;
+  utime_t t;
+
+  // set to 1 nsec
+  t.set_from_double(0.000000001);
+  while (i--) {
+    // increase by one, make sure data.u64 equal to data.avgcount
+    fake_pf->tinc(TEST_PERFCOUNTERS3_ELEMENT_READ, t);
+  }
+}
+
+static void counters_readavg_test(std::shared_ptr<PerfCounters> fake_pf) {
+  int i = 100000;
+
+  while (i--) {
+    std::pair<uint64_t, uint64_t> dat = fake_pf->get_tavg_ns(TEST_PERFCOUNTERS3_ELEMENT_READ);
+    // sum and count should be identical as we increment TEST_PERCOUNTERS_ELEMENT_READ by 1 nsec eveytime
+    ASSERT_EQ(dat.first, dat.second);
+  }
+}
+
+TEST(PerfCounters, read_avg) {
+  std::shared_ptr<PerfCounters> fake_pf = setup_test_perfcounter3(g_ceph_context);
+
+  std::thread t1(counters_inc_test, fake_pf);
+  std::thread t2(counters_readavg_test, fake_pf);
+  t2.join();
+  t1.join();
 }
