@@ -1,5 +1,6 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { FormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { AlertModule } from 'ngx-bootstrap/alert';
@@ -18,7 +19,7 @@ describe('GrafanaComponent', () => {
 
   configureTestBed({
     declarations: [GrafanaComponent, InfoPanelComponent, LoadingPanelComponent],
-    imports: [AlertModule.forRoot(), HttpClientTestingModule, RouterTestingModule],
+    imports: [AlertModule.forRoot(), HttpClientTestingModule, RouterTestingModule, FormsModule],
     providers: [CephReleaseNamePipe, SettingsService, SummaryService, i18nProviders]
   });
 
@@ -26,6 +27,7 @@ describe('GrafanaComponent', () => {
     fixture = TestBed.createComponent(GrafanaComponent);
     component = fixture.componentInstance;
     component.grafanaPath = 'somePath';
+    component.uid = 'foo';
   });
 
   it('should create', () => {
@@ -47,15 +49,29 @@ describe('GrafanaComponent', () => {
       fixture.detectChanges();
     });
 
-    it('should have found out that grafana exists', () => {
+    it('should have found out that grafana exists and dashboard exists', () => {
+      expect(component.time).toBe('from=now-1h&to=now');
       expect(component.grafanaExist).toBe(true);
       expect(component.baseUrl).toBe('http:localhost:3000/d/');
       expect(component.loading).toBe(false);
-      component.uid = 'uid';
-      component.getFrame();
-      expect(component.url).toBe('http:localhost:3000/d/uid/somePath&refresh=2s&kiosk');
+      expect(component.url).toBe(
+        'http:localhost:3000/d/foo/somePath&refresh=2s&kiosk&from=now-1h&to=now'
+      );
       expect(component.grafanaSrc).toEqual({
-        changingThisBreaksApplicationSecurity: 'http:localhost:3000/d/uid/somePath&refresh=2s&kiosk'
+        changingThisBreaksApplicationSecurity:
+          'http:localhost:3000/d/foo/somePath&refresh=2s&kiosk&from=now-1h&to=now'
+      });
+    });
+
+    it('should reset the values', () => {
+      component.reset();
+      expect(component.time).toBe('from=now-1h&to=now');
+      expect(component.url).toBe(
+        'http:localhost:3000/d/foo/somePath&refresh=2s&kiosk&from=now-1h&to=now'
+      );
+      expect(component.grafanaSrc).toEqual({
+        changingThisBreaksApplicationSecurity:
+          'http:localhost:3000/d/foo/somePath&refresh=2s&kiosk&from=now-1h&to=now'
       });
     });
 
