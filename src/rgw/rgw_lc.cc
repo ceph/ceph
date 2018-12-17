@@ -415,6 +415,48 @@ static int read_obj_tags(RGWRados *store, RGWBucketInfo& bucket_info, rgw_obj& o
   return read_op.get_attr(RGW_ATTR_TAGS, tags_bl);
 }
 
+int RGWLC::check_tags(RGWRados *store, RGWObjectCtx& rctx, RGWBucketInfo& bucket_info, rgw_obj& obj, lc_op& op, bool *skip)
+{
+  if (op.obj_tags != boost::none) {
+    *skip = true;
+
+    bufferlist tags_bl;
+    int ret = read_obj_tags(store, bucket_info, obj, rctx, tags_bl);
+    if (ret < 0) {
+      if (ret != -ENODATA) {
+        ldpp_dout(this, 5) << "ERROR: read_obj_tags returned r=" << ret << dendl;
+      }
+      return 0;
+    }
+    RGWObjTags dest_obj_tags;
+    try {
+      auto iter = tags_bl.cbegin();
+      dest_obj_tags.decode(iter);
+    } catch (buffer::error& err) {
+      ldpp_dout(this,0) << "ERROR: caught buffer::error, couldn't decode TagSet" << dendl;
+      return -EIO;
+    }
+
+    if (!includes(dest_obj_tags.get_tags().begin(),
+                  dest_obj_tags.get_tags().end(),
+                  op.obj_tags->get_tags().begin(),
+                  op.obj_tags->get_tags().end())){
+      ldpp_dout(this, 20) << __func__ << "() skipping obj " << obj << " as tags do not match" << dendl;
+      return 0;
+    }
+  }
+  *skip = false;
+  return 0;
+}
+
+static bool is_valid_op(const lc_op& op)
+{
+      return (op.status &&
+              (op.expiration > 0 
+               || op.expiration_date != boost::none
+               || op.noncur_expiration > 0
+               || op.dm_expiration));
+}
 
 int RGWLC::bucket_lc_process(string& shard_id)
 {
@@ -493,40 +535,26 @@ int RGWLC::bucket_lc_process(string& shard_id)
           RGWObjState *state;
           rgw_obj obj(bucket_info.bucket, key);
           RGWObjectCtx rctx(store);
-          if (prefix_iter->second.obj_tags != boost::none) {
-            bufferlist tags_bl;
-            int ret = read_obj_tags(store, bucket_info, obj, rctx, tags_bl);
-            if (ret < 0) {
-              if (ret != -ENODATA)
-                ldpp_dout(this, 5) << "ERROR: read_obj_tags returned r=" << ret << dendl;
-              continue;
-            }
-            RGWObjTags dest_obj_tags;
-            try {
-              auto iter = tags_bl.cbegin();
-              dest_obj_tags.decode(iter);
-            } catch (buffer::error& err) {
-               ldpp_dout(this,0) << "ERROR: caught buffer::error, couldn't decode TagSet" << dendl;
-              return -EIO;
-            }
-
-            if (!includes(dest_obj_tags.get_tags().begin(),
-                          dest_obj_tags.get_tags().end(),
-                          prefix_iter->second.obj_tags->get_tags().begin(),
-                          prefix_iter->second.obj_tags->get_tags().end())){
-              ldpp_dout(this, 20) << __func__ << "() skipping obj " << key << " as tags do not match" << dendl;
-              continue;
-            }
-          }
+          bool skip;
+          auto& op = prefix_iter->second;
 
           if (!key.ns.empty()) {
             continue;
           }
-          if (prefix_iter->second.expiration_date != boost::none) {
+
+          int ret = check_tags(store, rctx, bucket_info, obj, op, &skip);
+          if (ret < 0) {
+            return ret;
+          }
+          if (skip) {
+            continue;
+          }
+
+          if (op.expiration_date != boost::none) {
             //we have checked it before
             is_expired = true;
           } else {
-            is_expired = obj_has_expired(obj_iter->meta.mtime, prefix_iter->second.expiration);
+            is_expired = obj_has_expired(obj_iter->meta.mtime, op.expiration);
           }
           if (is_expired) {
             int ret = store->get_obj_state(&rctx, bucket_info, obj, &state, false);
@@ -555,17 +583,17 @@ int RGWLC::bucket_lc_process(string& shard_id)
   } else {
   //bucket versioning is enabled or suspended
     rgw_obj_key pre_marker;
+    rgw_obj_key next_marker;
     for(auto prefix_iter = prefix_map.begin(); prefix_iter != prefix_map.end(); ++prefix_iter) {
-      if (!prefix_iter->second.status || (prefix_iter->second.expiration <= 0 
-        && prefix_iter->second.expiration_date == boost::none
-        && prefix_iter->second.noncur_expiration <= 0 && !prefix_iter->second.dm_expiration)) {
+      auto& op = prefix_iter->second;
+      if (!is_valid_op(op)) {
         continue;
       }
       if (prefix_iter != prefix_map.begin() && 
           (prefix_iter->first.compare(0, prev(prefix_iter)->first.length(), prev(prefix_iter)->first) == 0)) {
-	list_op.get_next_marker() = pre_marker;
+	next_marker = pre_marker;
       } else {
-	pre_marker = list_op.get_next_marker();
+	pre_marker = next_marker;
       }
       list_op.params.prefix = prefix_iter->first;
       rgw_bucket_dir_entry pre_obj;
@@ -574,7 +602,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
           pre_obj = objs.back();
         }
         objs.clear();
-        list_op.params.marker = list_op.get_next_marker();
+        list_op.params.marker = next_marker;
         ret = list_op.list_objects(1000, &objs, NULL, &is_truncated);
 
         if (ret < 0) {
@@ -584,13 +612,15 @@ int RGWLC::bucket_lc_process(string& shard_id)
           return ret;
         }
 
+        next_marker = list_op.get_next_marker();
+
         ceph::real_time mtime;
         bool remove_indeed = true;
         int expiration;
-        bool skip_expiration;
+        bool skip_expiration_check;
         bool is_expired;
         for (auto obj_iter = objs.begin(); obj_iter != objs.end(); ++obj_iter) {
-          skip_expiration = false;
+          skip_expiration_check = false;
           is_expired = false;
           if (obj_iter->is_current()) {
             if (prefix_iter->second.expiration <= 0 && prefix_iter->second.expiration_date == boost::none
@@ -601,26 +631,27 @@ int RGWLC::bucket_lc_process(string& shard_id)
               if ((obj_iter + 1)==objs.end()) {
                 if (is_truncated) {
                   //deal with it in next round because we can't judge whether this marker is the only version
-                  list_op.get_next_marker() = obj_iter->key;
+                  next_marker = obj_iter->key;
                   break;
                 }
               } else if (obj_iter->key.name.compare((obj_iter + 1)->key.name) == 0) {   //*obj_iter is delete marker and isn't the only version, do nothing.
                 continue;
               }
-              skip_expiration = prefix_iter->second.dm_expiration;
+              skip_expiration_check = prefix_iter->second.dm_expiration;
               remove_indeed = true;   //we should remove the delete marker if it's the only version
             } else {
               remove_indeed = false;
             }
             mtime = obj_iter->meta.mtime;
             expiration = prefix_iter->second.expiration;
-            if (!skip_expiration && expiration <= 0 && prefix_iter->second.expiration_date == boost::none) {
-              continue;
-            } else if (!skip_expiration) {
-              if (expiration > 0) {
-                is_expired = obj_has_expired(mtime, expiration);
-              } else {
+            if (!skip_expiration_check) {
+              if (expiration <= 0) {
+                if (prefix_iter->second.expiration_date == boost::none) {
+                  continue;
+                }
                 is_expired = ceph_clock_now() >= ceph::real_clock::to_time_t(*prefix_iter->second.expiration_date);
+              } else {
+                is_expired = obj_has_expired(mtime, expiration);
               }
             }
           } else {
@@ -632,7 +663,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
             expiration = prefix_iter->second.noncur_expiration;
             is_expired = obj_has_expired(mtime, expiration);
           }
-          if (skip_expiration || is_expired) {
+          if (skip_expiration_check || is_expired) {
             if (obj_iter->is_visible()) {
               RGWObjectCtx rctx(store);
               rgw_obj obj(bucket_info.bucket, obj_iter->key);
