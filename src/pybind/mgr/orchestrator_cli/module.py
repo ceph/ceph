@@ -156,11 +156,13 @@ class OrchestratorCli(MgrModule):
             services.sort(key = lambda s: (s.service_type, s.nodename, s.daemon_name))
             lines = []
             for s in services:
-                lines.append("{0}.{1} {2} {3}".format(
+                lines.append("{0}.{1} {2} {3} {4} {5}".format(
                     s.service_type,
                     s.daemon_name,
                     s.nodename,
-                    s.container_id))
+                    s.container_id,
+                    s.version,
+                    s.config_location))
 
             return HandleCommandResult(odata="\n".join(lines))
 
