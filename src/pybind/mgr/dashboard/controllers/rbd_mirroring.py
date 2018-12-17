@@ -106,7 +106,8 @@ def get_daemons_and_pools():  # pylint: disable=R0915
         return health
 
     def get_pools(daemons):  # pylint: disable=R0912, R0915
-        pool_names = [pool['pool_name'] for pool in CephService.get_pool_list('rbd')]
+        pool_names = [pool['pool_name'] for pool in CephService.get_pool_list('rbd')
+                      if pool.get('type', 1) == 1]
         pool_stats = {}
         rbdctx = rbd.RBD()
         for pool_name in pool_names:
@@ -261,7 +262,8 @@ def _get_pool_datum(pool_name):
 
 @ViewCache()
 def _get_content_data():  # pylint: disable=R0914
-    pool_names = [pool['pool_name'] for pool in CephService.get_pool_list('rbd')]
+    pool_names = [pool['pool_name'] for pool in CephService.get_pool_list('rbd')
+                  if pool.get('type', 1) == 1]
     _, data = get_daemons_and_pools()
     daemons = data.get('daemons', [])
     pool_stats = data.get('pools', {})
