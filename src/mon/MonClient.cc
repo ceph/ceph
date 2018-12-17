@@ -577,6 +577,10 @@ void MonClient::handle_auth(MAuthReply *m)
     send_log(true);
     if (active_con) {
       std::swap(auth, active_con->get_auth());
+      if (global_id && global_id != active_con->get_global_id()) {
+	lderr(cct) << __func__ << " global_id changed from " << global_id
+		   << " to " << active_con->get_global_id() << dendl;
+      }
       global_id = active_con->get_global_id();
     }
   }
