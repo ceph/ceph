@@ -286,6 +286,13 @@ class Module(MgrModule):
             'long_desc': 'If the ratio between the fullest and least-full OSD is below this value then we stop trying to optimize placement.',
             'runtime': True,
         },
+        {
+            'name': 'pool_ids',
+            'type': 'str',
+            'default': '',
+            'desc': 'pools which the automatic balancing will be limited to',
+            'runtime': True,
+        },
     ]
 
     COMMANDS = [
@@ -307,6 +314,23 @@ class Module(MgrModule):
         {
             "cmd": "balancer off",
             "desc": "Disable automatic balancing",
+            "perm": "rw",
+        },
+        {
+            "cmd": "balancer pool ls",
+            "desc": "List automatic balancing pools. "
+                    "Note that empty list means all existing pools will be automatic balancing targets, "
+                    "which is the default behaviour of balancer.",
+            "perm": "r",
+        },
+        {
+            "cmd": "balancer pool add name=pools,type=CephString,n=N",
+            "desc": "Enable automatic balancing for specific pools",
+            "perm": "rw",
+        },
+        {
+            "cmd": "balancer pool rm name=pools,type=CephString,n=N",
+            "desc": "Disable automatic balancing for specific pools",
             "perm": "rw",
         },
         {
@@ -387,6 +411,53 @@ class Module(MgrModule):
                 self.set_module_option('active', 'false')
                 self.active = False
             self.event.set()
+            return (0, '', '')
+        elif command['prefix'] == 'balancer pool ls':
+            pool_ids = self.get_module_option('pool_ids')
+            if pool_ids is '':
+                return (0, '', '')
+            pool_ids = pool_ids.split(',')
+            pool_ids = [int(p) for p in pool_ids]
+            pool_name_by_id = dict((p['pool'], p['pool_name']) for p in self.get_osdmap().dump().get('pools', []))
+            should_prune = False
+            final_ids = []
+            final_names = []
+            for p in pool_ids:
+                if p in pool_name_by_id:
+                    final_ids.append(p)
+                    final_names.append(pool_name_by_id[p])
+                else:
+                    should_prune = True
+            if should_prune: # some pools were gone, prune
+                self.set_module_option('pool_ids', ','.join(final_ids))
+            return (0, json.dumps(final_names, indent=4), '')
+        elif command['prefix'] == 'balancer pool add':
+            raw_names = command['pools']
+            pool_id_by_name = dict((p['pool_name'], p['pool']) for p in self.get_osdmap().dump().get('pools', []))
+            invalid_names = [p for p in raw_names if p not in pool_id_by_name]
+            if invalid_names:
+                return (-errno.EINVAL, '', 'pool(s) %s not found' % invalid_names)
+            to_add = [str(pool_id_by_name[p]) for p in raw_names if p in pool_id_by_name]
+            existing = self.get_module_option('pool_ids')
+            final = to_add
+            if existing is not '':
+                existing = existing.split(',')
+                final = set(to_add) | set(existing)
+            self.set_module_option('pool_ids', ','.join(final))
+            return (0, '', '')
+        elif command['prefix'] == 'balancer pool rm':
+            raw_names = command['pools']
+            existing = self.get_module_option('pool_ids')
+            if existing is '': # for idempotence
+                return (0, '', '')
+            existing = existing.split(',')
+            osdmap = self.get_osdmap()
+            pool_ids = [str(p['pool']) for p in osdmap.dump().get('pools', [])]
+            pool_id_by_name = dict((p['pool_name'], p['pool']) for p in osdmap.dump().get('pools', []))
+            final = [p for p in existing if p in pool_ids]
+            to_delete = [str(pool_id_by_name[p]) for p in raw_names if p in pool_id_by_name]
+            final = set(final) - set(to_delete)
+            self.set_module_option('pool_ids', ','.join(final))
             return (0, '', '')
         elif command['prefix'] == 'balancer eval' or command['prefix'] == 'balancer eval-verbose':
             verbose = command['prefix'] == 'balancer eval-verbose'
@@ -483,7 +554,19 @@ class Module(MgrModule):
             if self.active and self.time_in_interval(timeofday, begin_time, end_time):
                 self.log.debug('Running')
                 name = 'auto_%s' % time.strftime(TIME_FORMAT, time.gmtime())
-                plan = self.plan_create(name, self.get_osdmap(), [])
+                osdmap = self.get_osdmap()
+                allow = self.get_module_option('pool_ids')
+                final = []
+                if allow is not '':
+                    allow = allow.split(',')
+                    valid = [str(p['pool']) for p in osdmap.dump().get('pools', [])]
+                    final = set(allow) & set(valid)
+                    if set(allow) - set(valid): # some pools were gone, prune
+                        self.set_module_option('pool_ids', ','.join(final))
+                    pool_name_by_id = dict((p['pool'], p['pool_name']) for p in osdmap.dump().get('pools', []))
+                    final = [int(p) for p in final]
+                    final = [pool_name_by_id[p] for p in final if p in pool_name_by_id]
+                plan = self.plan_create(name, osdmap, final)
                 r, detail = self.optimize(plan)
                 if r == 0:
                     self.execute(plan)
