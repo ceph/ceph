@@ -6797,8 +6797,9 @@ int BlueStore::_fsck(bool deep, bool repair)
   actual_statfs.omap_allocated = 0;
 
   // switch to per-pool stats if not explicitly prohibited
-  if (!per_pool_stat_collection &&
-        !cct->_conf->bluestore_debug_no_per_pool_stats) {
+  if (repair &&
+      !per_pool_stat_collection &&
+      !cct->_conf->bluestore_debug_no_per_pool_stats) {
     per_pool_stat_collection = true;
   }
 
