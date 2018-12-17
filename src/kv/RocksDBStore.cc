@@ -170,7 +170,9 @@ public:
 };
 
 struct RocksWBHandler: public rocksdb::WriteBatch::Handler {
-  std::string seen ;
+  RocksWBHandler(const RocksDBStore& db) : db(db) {}
+  const RocksDBStore& db;
+  std::stringstream seen ;
   int num_seen = 0;
   static string pretty_binary_string(const string& in) {
     char buf[10];
@@ -220,42 +222,69 @@ struct RocksWBHandler: public rocksdb::WriteBatch::Handler {
     }
     return out;
   }
+  void dump(const char* op_name,
+            uint32_t column_family_id,
+            const rocksdb::Slice& key,
+            const rocksdb::Slice* value = nullptr) {
+    string prefix;
+    string key_to_decode;
+    ssize_t size = value ? value->size() : -1;
+    seen << std::endl << op_name << "(";
+
+    bool mono = false;
+    if (column_family_id != 0) {
+      auto cf = db.get_cf_by_rocksdb_ID(column_family_id);
+      seen << " column family = " << cf.first;
+      if (db.get_cf_handle(cf.first) != nullptr) {
+        prefix = cf.first;
+        key_to_decode = key.ToString();
+        mono = true;
+      }
+    }
+    if (!mono) {
+      db.split_key(key, &prefix, &key_to_decode);
+    }
+    seen << " prefix = " << prefix;
+    seen << " key = " << pretty_binary_string(key_to_decode);
+    if (size != -1)
+      seen << " value size = " << std::to_string(size);
+    seen << ")";
+    num_seen++;
+  }
   void Put(const rocksdb::Slice& key,
                   const rocksdb::Slice& value) override {
-    string prefix ((key.ToString()).substr(0,1));
-    string key_to_decode ((key.ToString()).substr(2,string::npos));
-    uint64_t size = (value.ToString()).size();
-    seen += "\nPut( Prefix = " + prefix + " key = "
-          + pretty_binary_string(key_to_decode)
-          + " Value size = " + std::to_string(size) + ")";
-    num_seen++;
+    dump("Put", 0, key, &value);
+  }
+  rocksdb::Status PutCF(uint32_t column_family_id, const rocksdb::Slice& key,
+                           const rocksdb::Slice& value) override {
+    dump("PutCF", column_family_id, key, &value);
+    return rocksdb::Status::OK();
   }
   void SingleDelete(const rocksdb::Slice& key) override {
-    string prefix ((key.ToString()).substr(0,1));
-    string key_to_decode ((key.ToString()).substr(2,string::npos));
-    seen += "\nSingleDelete(Prefix = "+ prefix + " Key = "
-          + pretty_binary_string(key_to_decode) + ")";
-    num_seen++;
+    dump("SingleDelete", 0, key);
+  }
+  rocksdb::Status SingleDeleteCF(uint32_t column_family_id, const rocksdb::Slice& key) override {
+    dump("SingleDeleteCF", column_family_id, key);
+    return rocksdb::Status::OK();
   }
   void Delete(const rocksdb::Slice& key) override {
-    string prefix ((key.ToString()).substr(0,1));
-    string key_to_decode ((key.ToString()).substr(2,string::npos));
-    seen += "\nDelete( Prefix = " + prefix + " key = "
-          + pretty_binary_string(key_to_decode) + ")";
-
-    num_seen++;
+    dump("Delete", 0, key);
   }
+  rocksdb::Status DeleteCF(uint32_t column_family_id, const rocksdb::Slice& key) override {
+    dump("DeleteCF", column_family_id, key);
+    return rocksdb::Status::OK();
+  }
+
   void Merge(const rocksdb::Slice& key,
                     const rocksdb::Slice& value) override {
-    string prefix ((key.ToString()).substr(0,1));
-    string key_to_decode ((key.ToString()).substr(2,string::npos));
-    uint64_t size = (value.ToString()).size();
-    seen += "\nMerge( Prefix = " + prefix + " key = "
-          + pretty_binary_string(key_to_decode) + " Value size = "
-          + std::to_string(size) + ")";
-
-    num_seen++;
+    dump("Merge", 0, key, &value);
   }
+  rocksdb::Status MergeCF(uint32_t column_family_id, const rocksdb::Slice& key,
+                         const rocksdb::Slice& value) override {
+    dump("MergeCF", column_family_id, key, &value);
+    return rocksdb::Status::OK();
+  }
+
   bool Continue() override { return num_seen < 50; }
 };
 
@@ -848,6 +877,17 @@ RocksDBStore::cf_get_merge_operator(const std::string& cf_name)
   return std::shared_ptr<rocksdb::MergeOperator>(new RocksDBStore::MergeOperatorAll(*this));
 }
 
+std::pair<std::string, RocksDBStore::ColumnFamilyHandle>
+RocksDBStore::get_cf_by_rocksdb_ID(uint32_t ID) const {
+  for (auto& i : column_families) {
+    rocksdb::ColumnFamilyHandle* cfh =
+      static_cast<rocksdb::ColumnFamilyHandle*>(i.second.handle.priv);
+    if (cfh->GetID() == ID)
+      return std::make_pair(cfh->GetName(), i.second.handle);
+  }
+  return std::make_pair(std::string(), ColumnFamilyHandle{nullptr});
+}
+
 int RocksDBStore::_test_init(const string& dir)
 {
   rocksdb::Options options;
@@ -1028,16 +1068,16 @@ int RocksDBStore::submit_common(rocksdb::WriteOptions& woptions, KeyValueDB::Tra
     static_cast<RocksDBTransactionImpl *>(t.get());
   woptions.disableWAL = disableWAL;
   lgeneric_subdout(cct, rocksdb, 30) << __func__;
-  RocksWBHandler bat_txc;
+  RocksWBHandler bat_txc(*this);
   _t->bat.Iterate(&bat_txc);
-  *_dout << " Rocksdb transaction: " << bat_txc.seen << dendl;
+  *_dout << " Rocksdb transaction: " << bat_txc.seen.str() << dendl;
   
   rocksdb::Status s = db->Write(woptions, &_t->bat);
   if (!s.ok()) {
-    RocksWBHandler rocks_txc;
+    RocksWBHandler rocks_txc(*this);
     _t->bat.Iterate(&rocks_txc);
     derr << __func__ << " error: " << s.ToString() << " code = " << s.code()
-         << " Rocksdb transaction: " << rocks_txc.seen << dendl;
+         << " Rocksdb transaction: " << rocks_txc.seen.str() << dendl;
   }
 
   if (g_conf()->rocksdb_perf) {

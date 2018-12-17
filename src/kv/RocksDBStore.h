@@ -242,8 +242,10 @@ private:
 
   void perf_counters_register();
 
+  std::pair<std::string, ColumnFamilyHandle> get_cf_by_rocksdb_ID(uint32_t ID) const;
+  friend class RocksWBHandler;
 public:
-  rocksdb::ColumnFamilyHandle *get_cf_handle(const std::string& cf_name) {
+  rocksdb::ColumnFamilyHandle *get_cf_handle(const std::string& cf_name) const {
     auto iter = cf_mono_handles.find(cf_name);
     if (iter == cf_mono_handles.end())
       return nullptr;
