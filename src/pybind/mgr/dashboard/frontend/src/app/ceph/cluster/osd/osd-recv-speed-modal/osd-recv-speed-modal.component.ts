@@ -12,6 +12,7 @@ import { OsdService } from '../../../../shared/api/osd.service';
 import { NotificationType } from '../../../../shared/enum/notification-type.enum';
 import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
 import { NotificationService } from '../../../../shared/services/notification.service';
+import { ConfigOptionTypes } from '../../configuration/configuration-form/configuration-form.types';
 
 @Component({
   selector: 'cd-osd-recv-speed-modal',
@@ -38,19 +39,31 @@ export class OsdRecvSpeedModalComponent implements OnInit {
     this.priorityAttrs = {
       osd_max_backfills: {
         text: this.i18n('Max Backfills'),
-        desc: ''
+        desc: '',
+        patternHelpText: '',
+        maxValue: undefined,
+        minValue: undefined
       },
       osd_recovery_max_active: {
         text: this.i18n('Recovery Max Active'),
-        desc: ''
+        desc: '',
+        patternHelpText: '',
+        maxValue: undefined,
+        minValue: undefined
       },
       osd_recovery_max_single_start: {
         text: this.i18n('Recovery Max Single Start'),
-        desc: ''
+        desc: '',
+        patternHelpText: '',
+        maxValue: undefined,
+        minValue: undefined
       },
       osd_recovery_sleep: {
         text: this.i18n('Recovery Sleep'),
-        desc: ''
+        desc: '',
+        patternHelpText: '',
+        maxValue: undefined,
+        minValue: undefined
       }
     };
 
@@ -91,6 +104,7 @@ export class OsdRecvSpeedModalComponent implements OnInit {
           this.setPriority(priority);
         });
         this.setDescription(resp.configOptions);
+        this.setValidators(resp.configOptions);
       });
   }
 
@@ -144,6 +158,28 @@ export class OsdRecvSpeedModalComponent implements OnInit {
     });
   }
 
+  setValidators(configOptions: Array<any>) {
+    configOptions.forEach((configOption) => {
+      const typeValidators = ConfigOptionTypes.getTypeValidators(configOption);
+      if (typeValidators) {
+        typeValidators.validators.push(Validators.required);
+
+        if ('max' in typeValidators && typeValidators.max !== '') {
+          this.priorityAttrs[configOption.name].maxValue = typeValidators.max;
+        }
+
+        if ('min' in typeValidators && typeValidators.min !== '') {
+          this.priorityAttrs[configOption.name].minValue = typeValidators.min;
+        }
+
+        this.priorityAttrs[configOption.name].patternHelpText = typeValidators.patternHelpText;
+        this.osdRecvSpeedForm.controls[configOption.name].setValidators(typeValidators.validators);
+      } else {
+        this.osdRecvSpeedForm.controls[configOption.name].setValidators(Validators.required);
+      }
+    });
+  }
+
   onCustomizePriorityChange() {
     if (this.osdRecvSpeedForm.getValue('customizePriority')) {
       const values = {};
@@ -169,6 +205,9 @@ export class OsdRecvSpeedModalComponent implements OnInit {
       _.find(this.priorities, (p) => {
         return p.name === selectedPriorityName;
       }) || this.priorities[0];
+    // Uncheck the 'Customize priority values' checkbox.
+    this.osdRecvSpeedForm.get('customizePriority').setValue(false);
+    // Set the priority profile values.
     this.setPriority(selectedPriority);
   }
 
