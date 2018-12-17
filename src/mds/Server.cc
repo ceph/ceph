@@ -733,7 +733,7 @@ class C_MDS_TerminatedSessions : public ServerContext {
 
 void Server::terminate_sessions()
 {
-  dout(2) << "terminate_sessions" << dendl;
+  dout(5) << "terminating all sessions..." << dendl;
 
   terminating_sessions = true;
 

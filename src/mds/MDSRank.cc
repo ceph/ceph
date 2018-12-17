@@ -1474,27 +1474,27 @@ void MDSRank::boot_start(BootStep step, int r)
 
         MDSGatherBuilder gather(g_ceph_context,
             new C_MDS_BootStart(this, MDS_BOOT_OPEN_ROOT));
-        dout(2) << "boot_start " << step << ": opening inotable" << dendl;
+        dout(2) << "Booting: " << step << ": opening inotable" << dendl;
         inotable->set_rank(whoami);
         inotable->load(gather.new_sub());
 
-        dout(2) << "boot_start " << step << ": opening sessionmap" << dendl;
+        dout(2) << "Booting: " << step << ": opening sessionmap" << dendl;
         sessionmap.set_rank(whoami);
         sessionmap.load(gather.new_sub());
 
-        dout(2) << "boot_start " << step << ": opening mds log" << dendl;
+        dout(2) << "Booting: " << step << ": opening mds log" << dendl;
         mdlog->open(gather.new_sub());
 
 	if (is_starting()) {
-	  dout(2) << "boot_start " << step << ": opening purge queue" << dendl;
+	  dout(2) << "Booting: " << step << ": opening purge queue" << dendl;
 	  purge_queue.open(new C_IO_Wrapper(this, gather.new_sub()));
 	} else if (!standby_replaying) {
-	  dout(2) << "boot_start " << step << ": opening purge queue (async)" << dendl;
+	  dout(2) << "Booting: " << step << ": opening purge queue (async)" << dendl;
 	  purge_queue.open(NULL);
 	}
 
         if (mdsmap->get_tableserver() == whoami) {
-          dout(2) << "boot_start " << step << ": opening snap table" << dendl;
+          dout(2) << "Booting: " << step << ": opening snap table" << dendl;
           snapserver->set_rank(whoami);
           snapserver->load(gather.new_sub());
         }
@@ -1504,7 +1504,7 @@ void MDSRank::boot_start(BootStep step, int r)
       break;
     case MDS_BOOT_OPEN_ROOT:
       {
-        dout(2) << "boot_start " << step << ": loading/discovering base inodes" << dendl;
+        dout(2) << "Booting: " << step << ": loading/discovering base inodes" << dendl;
 
         MDSGatherBuilder gather(g_ceph_context,
             new C_MDS_BootStart(this, MDS_BOOT_PREPARE_LOG));
@@ -1527,19 +1527,19 @@ void MDSRank::boot_start(BootStep step, int r)
       break;
     case MDS_BOOT_PREPARE_LOG:
       if (is_any_replay()) {
-	dout(2) << "boot_start " << step << ": replaying mds log" << dendl;
+	dout(2) << "Booting: " << step << ": replaying mds log" << dendl;
 	MDSGatherBuilder gather(g_ceph_context,
 	    new C_MDS_BootStart(this, MDS_BOOT_REPLAY_DONE));
 
 	if (!standby_replaying) {
-	  dout(2) << "boot_start " << step << ": waiting for purge queue recovered" << dendl;
+	  dout(2) << "Booting: " << step << ": waiting for purge queue recovered" << dendl;
 	  purge_queue.wait_for_recovery(new C_IO_Wrapper(this, gather.new_sub()));
 	}
 
 	mdlog->replay(gather.new_sub());
 	gather.activate();
       } else {
-        dout(2) << "boot_start " << step << ": positioning at end of old mds log" << dendl;
+        dout(2) << "Booting: " << step << ": positioning at end of old mds log" << dendl;
         mdlog->append();
         starting_done();
       }
@@ -1984,7 +1984,7 @@ void MDSRank::boot_create()
 
 void MDSRank::stopping_start()
 {
-  dout(2) << "stopping_start" << dendl;
+  dout(2) << "Stopping..." << dendl;
 
   if (mdsmap->get_num_in_mds() == 1 && !sessionmap.empty()) {
     // we're the only mds up!
@@ -1997,7 +1997,7 @@ void MDSRank::stopping_start()
 
 void MDSRank::stopping_done()
 {
-  dout(2) << "stopping_done" << dendl;
+  dout(2) << "Finished stopping..." << dendl;
 
   // tell monitor we shut down cleanly.
   request_state(MDSMap::STATE_STOPPED);
