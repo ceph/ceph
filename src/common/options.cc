@@ -6673,6 +6673,10 @@ std::vector<Option> get_mds_options() {
     .set_default(15)
     .set_description("tolerance in seconds for missed beacons from monitors"),
 
+    Option("mds_heartbeat_grace", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(15)
+    .set_description("tolerance in seconds for MDS internal heartbeat"),
+
     Option("mds_enforce_unique_name", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description("require MDS name is unique in the cluster"),
