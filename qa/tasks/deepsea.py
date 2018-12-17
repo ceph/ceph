@@ -557,6 +557,7 @@ class CephConf(DeepSea):
 
     targets = {
         "mon_allow_pool_delete": True,
+        "osd_memory_target": True,
         "small_cluster": True,
         "rbd": False,
         }
@@ -617,6 +618,16 @@ class CephConf(DeepSea):
         sudo_append_to_file(
             self.master_remote,
             self.__ceph_conf_d_full_path("mon"),
+            data,
+            )
+        self.log.info(info_msg)
+
+    def osd_memory_target(self):
+        info_msg = "lowered osd_memory_target to 1GiB to facilitate testing in OpenStack"
+        data = "osd memory target = 1105322466"  # https://tracker.ceph.com/issues/37507#note-4
+        sudo_append_to_file(
+            self.master_remote,
+            self.__ceph_conf_d_full_path("osd"),
             data,
             )
         self.log.info(info_msg)
