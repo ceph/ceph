@@ -36,7 +36,7 @@ class Messenger {
 
   const entity_name_t& get_myname() const { return my_name; }
   const entity_addr_t& get_myaddr() const { return my_addr; }
-  void set_myaddr(const entity_addr_t& addr) {
+  virtual void set_myaddr(const entity_addr_t& addr) {
     my_addr = addr;
   }
 

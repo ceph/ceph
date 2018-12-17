@@ -44,10 +44,8 @@ namespace {
 }
 
 SocketConnection::SocketConnection(SocketMessenger& messenger,
-                                   const entity_addr_t& my_addr,
                                    Dispatcher& dispatcher)
-  : Connection(my_addr),
-    messenger(messenger),
+  : messenger(messenger),
     dispatcher(dispatcher),
     send_ready(h.promise.get_future())
 {
@@ -587,7 +585,7 @@ SocketConnection::handle_connect_with_existing(SocketConnectionRef existing, buf
 	h.reply.connect_seq = existing->connect_seq() + 1;
 	return send_connect_reply(CEPH_MSGR_TAG_RETRY_SESSION);
       }
-    } else if (peer_addr < my_addr ||
+    } else if (peer_addr < messenger.get_myaddr() ||
 	       existing->is_server_side()) {
       // incoming wins
       return replace_existing(existing, std::move(authorizer_reply));
@@ -801,15 +799,14 @@ SocketConnection::start_connect(const entity_addr_t& _peer_addr,
           ceph_assert(p.end());
           validate_peer_addr(saddr, peer_addr);
 
-          if (my_addr != caddr) {
-            // take peer's address for me, but preserve my nonce
-            caddr.nonce = my_addr.nonce;
-            my_addr = caddr;
-          }
+          side = side_t::connector;
+          socket_port = caddr.get_port();
+          messenger.learned_addr(caddr);
+
           // encode/send client's handshake header
           bufferlist bl;
           bl.append(buffer::create_static(banner_size, banner));
-          ::encode(my_addr, bl, 0);
+          ::encode(messenger.get_myaddr(), bl, 0);
           h.global_seq = messenger.get_global_seq();
           return socket->write_flush(std::move(bl));
         }).then([=] {
@@ -840,17 +837,20 @@ SocketConnection::start_accept(seastar::connected_socket&& fd,
 {
   ceph_assert(state == state_t::none);
   ceph_assert(!socket);
-  peer_addr = _peer_addr;
+  peer_addr.u = _peer_addr.u;
+  peer_addr.set_port(0);
+  side = side_t::acceptor;
+  socket_port = _peer_addr.get_port();
   socket.emplace(std::move(fd));
   messenger.accept_conn(this);
   logger().debug("{} trigger accepting, was {}", *this, static_cast<int>(state));
   state = state_t::accepting;
-  seastar::with_gate(pending_dispatch, [this] {
+  seastar::with_gate(pending_dispatch, [this, _peer_addr] {
       // encode/send server's handshake header
       bufferlist bl;
       bl.append(buffer::create_static(banner_size, banner));
-      ::encode(my_addr, bl, 0);
-      ::encode(peer_addr, bl, 0);
+      ::encode(messenger.get_myaddr(), bl, 0);
+      ::encode(_peer_addr, bl, 0);
       return socket->write_flush(std::move(bl))
         .then([this] {
           // read client's handshake header and connect request
@@ -861,9 +861,9 @@ SocketConnection::start_accept(seastar::connected_socket&& fd,
           entity_addr_t addr;
           ::decode(addr, p);
           ceph_assert(p.end());
-          if (!addr.is_blank_ip()) {
-            peer_addr = addr;
-          }
+          peer_addr.set_type(addr.get_type());
+          peer_addr.set_port(addr.get_port());
+          peer_addr.set_nonce(addr.get_nonce());
         }).then([this] {
           return seastar::repeat([this] {
             return repeat_handle_connect();
@@ -941,5 +941,13 @@ seastar::future<> SocketConnection::fault()
 
 void SocketConnection::print(ostream& out) const {
     messenger.print(out);
-    out << " >> " << peer_addr;
+    if (side == side_t::none) {
+      out << " >> " << peer_addr;
+    } else if (side == side_t::acceptor) {
+      out << " >> " << peer_addr
+          << "@" << socket_port;
+    } else { // side == side_t::connector
+      out << "@" << socket_port
+          << " >> " << peer_addr;
+    }
 }

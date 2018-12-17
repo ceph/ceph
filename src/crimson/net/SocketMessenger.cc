@@ -23,9 +23,18 @@
 using namespace ceph::net;
 
 SocketMessenger::SocketMessenger(const entity_name_t& myname,
-                                 const std::string& logic_name)
-  : Messenger{myname}, logic_name{logic_name}
+                                 const std::string& logic_name,
+                                 uint32_t nonce)
+  : Messenger{myname}, logic_name{logic_name}, nonce{nonce}
 {}
+
+void SocketMessenger::set_myaddr(const entity_addr_t& addr)
+{
+  entity_addr_t my_addr = addr;
+  my_addr.nonce = nonce;
+  // TODO: propagate to all the cores of the Messenger
+  Messenger::set_myaddr(my_addr);
+}
 
 void SocketMessenger::bind(const entity_addr_t& addr)
 {
@@ -53,9 +62,8 @@ seastar::future<> SocketMessenger::start(Dispatcher *disp)
                         seastar::socket_address paddr) {
             // allocate the connection
             entity_addr_t peer_addr;
-            peer_addr.set_type(entity_addr_t::TYPE_DEFAULT);
             peer_addr.set_sockaddr(&paddr.as_posix_sockaddr());
-            SocketConnectionRef conn = new SocketConnection(*this, get_myaddr(), *dispatcher);
+            SocketConnectionRef conn = new SocketConnection(*this, *dispatcher);
             // don't wait before accepting another
             conn->start_accept(std::move(socket), peer_addr);
           });
@@ -76,7 +84,7 @@ SocketMessenger::connect(const entity_addr_t& peer_addr, const entity_type_t& pe
   if (auto found = lookup_conn(peer_addr); found) {
     return found;
   }
-  SocketConnectionRef conn = new SocketConnection(*this, get_myaddr(), *dispatcher);
+  SocketConnectionRef conn = new SocketConnection(*this, *dispatcher);
   conn->start_connect(peer_addr, peer_type);
   return conn;
 }
@@ -97,6 +105,21 @@ seastar::future<> SocketMessenger::shutdown()
     }).finally([this] {
       ceph_assert(connections.empty());
     });
+}
+
+void SocketMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
+{
+  if (!get_myaddr().is_blank_ip()) {
+    // already learned or binded
+    return;
+  }
+
+  // Only learn IP address if blank.
+  entity_addr_t addr = get_myaddr();
+  addr.u = peer_addr_for_me.u;
+  addr.set_type(peer_addr_for_me.get_type());
+  addr.set_port(get_myaddr().get_port());
+  set_myaddr(addr);
 }
 
 void SocketMessenger::set_default_policy(const SocketPolicy& p)
