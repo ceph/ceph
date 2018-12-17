@@ -498,6 +498,8 @@ class RGWLC : public DoutPrefixProvider {
   std::ostream& gen_prefix(std::ostream& out) const;
 
   private:
+
+  int check_tags(RGWRados *store, RGWObjectCtx& rctx, RGWBucketInfo& bucket_info, rgw_obj& obj, lc_op& op, bool *skip);
   int remove_expired_obj(RGWBucketInfo& bucket_info, rgw_obj_key obj_key, const string& owner, const string& owner_display_name, bool remove_indeed = true);
   bool obj_has_expired(ceph::real_time mtime, int days);
   int handle_multipart_expiration(RGWRados::Bucket *target, const map<string, lc_op>& prefix_map);
