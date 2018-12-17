@@ -559,8 +559,10 @@ class Filesystem(MDSCluster):
     def _df(self):
         return json.loads(self.mon_manager.raw_cluster_cmd("df", "--format=json-pretty"))
 
-    def get_mds_map(self):
-        return self.status().get_fsmap(self.id)['mdsmap']
+    def get_mds_map(self, status=None):
+        if status is None:
+            status = self.status()
+        return status.get_fsmap(self.id)['mdsmap']
 
     def get_var(self, var):
         return self.status().get_fsmap(self.id)['mdsmap'][var]
