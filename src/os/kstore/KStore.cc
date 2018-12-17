@@ -1640,7 +1640,7 @@ bool KStore::OmapIteratorImpl::valid()
   }
 }
 
-int KStore::OmapIteratorImpl::next(bool validate)
+int KStore::OmapIteratorImpl::next()
 {
   RWLock::RLocker l(c->lock);
   if (o->onode.omap_head) {

@@ -3800,7 +3800,7 @@ bool BlueStore::OmapIteratorImpl::valid()
   return r;
 }
 
-int BlueStore::OmapIteratorImpl::next(bool validate)
+int BlueStore::OmapIteratorImpl::next()
 {
   RWLock::RLocker l(c->lock);
   if (o->onode.has_omap()) {

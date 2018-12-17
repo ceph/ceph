@@ -1876,7 +1876,7 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
     ceph_assert(iter);
     for (iter->lower_bound(progress.omap_recovered_to);
 	 iter->valid();
-	 iter->next(false)) {
+	 iter->next()) {
       if (!out_op->omap_entries.empty() &&
 	  ((cct->_conf->osd_recovery_max_omap_entries_per_chunk > 0 &&
 	    out_op->omap_entries.size() >= cct->_conf->osd_recovery_max_omap_entries_per_chunk) ||
