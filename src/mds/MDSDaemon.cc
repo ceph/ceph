@@ -926,10 +926,12 @@ void MDSDaemon::handle_mds_map(const MMDSMap::const_ref &m)
   }
 
   // see who i am
-  addrs = messenger->get_myaddrs();
-  dout(10) << "map says I am " << addrs
-	   << " mds." << whoami << "." << incarnation
+  dout(10) << "my gid is " << monc->get_global_id() << dendl;
+  dout(10) << "map says I am mds." << whoami << "." << incarnation
 	   << " state " << ceph_mds_state_name(new_state) << dendl;
+
+  addrs = messenger->get_myaddrs();
+  dout(10) << "msgr says i am " << addrs << dendl;
 
   if (whoami == MDS_RANK_NONE) {
     if (mds_rank != NULL) {
