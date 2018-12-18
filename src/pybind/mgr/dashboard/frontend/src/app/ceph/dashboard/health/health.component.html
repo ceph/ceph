@@ -144,16 +144,16 @@
                     i18n-cardTitle
                     class="cd-col-5"
                     cardClass="card-medium"
-                    [contentClass]="(healthData.client_perf.read_op_per_sec + healthData.client_perf.write_op_per_sec) <= 0 ? 'content-medium content-highlight' : 'content-chart'"
+                    [contentClass]="isClientReadWriteChartShowable() ? 'content-chart': 'content-medium content-highlight'"
                     *ngIf="healthData.client_perf">
-        <cd-health-pie *ngIf="(healthData.client_perf.read_op_per_sec + healthData.client_perf.write_op_per_sec) > 0"
+        <cd-health-pie *ngIf="isClientReadWriteChartShowable()"
                        [data]="healthData"
                        [isBytesData]="false"
                        chartType="pie"
                        [displayLegend]="true"
                        (prepareFn)="prepareReadWriteRatio($event[0], $event[1])">
         </cd-health-pie>
-        <span *ngIf="(healthData.client_perf.read_op_per_sec + healthData.client_perf.write_op_per_sec) <= 0">
+        <span *ngIf="!isClientReadWriteChartShowable()">
           N/A
         </span>
       </cd-info-card>
