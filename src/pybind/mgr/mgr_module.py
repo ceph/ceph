@@ -746,7 +746,7 @@ class MgrModule(ceph_module.BaseMgrModule):
         return self._get_localized(key, default, self._get_module_option)
 
     def _set_module_option(self, key, val):
-        return self._ceph_set_module_option(key, val)
+        return self._ceph_set_module_option(key, str(val))
 
     def set_module_option(self, key, val):
         """
