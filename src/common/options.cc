@@ -4459,10 +4459,6 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description("Run deep fsck after mkfs"),
 
-    Option("bluestore_fsck_error_on_legacy_stats", Option::TYPE_BOOL, Option::LEVEL_DEV)
-    .set_default(false)
-    .set_description("Popup errors on legacy (store-wide only) stats detection"),
-
     Option("bluestore_sync_submit_transaction", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description("Try to submit metadata transaction to rocksdb in queuing thread context"),
@@ -4591,10 +4587,15 @@ std::vector<Option> get_global_options() {
     .set_default(0.0)
     .set_description("inject crc verification errors into bluestore device reads"),
 
-    Option("bluestore_debug_no_per_pool_stats", Option::TYPE_BOOL, Option::LEVEL_DEV)
-    .set_default(false)
-    .set_description(""),
-
+    Option("bluestore_no_per_pool_stats_tolerance", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("until_repair")
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_enum_allowed({"enforce", "until_repair", "until_fsck"})
+    .set_description("Specified how to treat lack of per-pool stats, e.g. caused by an upgrade")
+    .set_long_description(
+      "'until_fsck' will tolerate the case for regular ops and fail on fsck or repair, the latter will fix the issue, "
+      "'until_repair' will tolerate for regular ops and fsck. Repair indicates and fixes the issue, "
+      "'enforce' will unconditionally use global stats mode."),
     // -----------------------------------------
     // kstore
 
