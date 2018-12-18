@@ -26,9 +26,6 @@
 #include <list>
 #include <set>
 #include <string_view>
-using std::map;
-using std::list;
-using std::set;
 
 class MDSRank;
 class Session;
@@ -69,7 +66,7 @@ protected:
   void send_lock_message(SimpleLock *lock, int msg, const bufferlist &data);
 
   // -- locks --
-  void _drop_locks(MutationImpl *mut, set<CInode*> *pneed_issue, bool drop_rdlocks);
+  void _drop_locks(MutationImpl *mut, std::set<CInode*> *pneed_issue, bool drop_rdlocks);
 public:
   void include_snap_rdlocks(CInode *in, MutationImpl::LockOpVec& lov);
   void include_snap_rdlocks_wlayout(CInode *in, MutationImpl::LockOpVec& lov,
@@ -81,10 +78,10 @@ public:
 		     bool auth_pin_nonblock=false);
 
   void notify_freeze_waiter(MDSCacheObject *o);
-  void cancel_locking(MutationImpl *mut, set<CInode*> *pneed_issue);
-  void drop_locks(MutationImpl *mut, set<CInode*> *pneed_issue=0);
+  void cancel_locking(MutationImpl *mut, std::set<CInode*> *pneed_issue);
+  void drop_locks(MutationImpl *mut, std::set<CInode*> *pneed_issue=0);
   void set_xlocks_done(MutationImpl *mut, bool skip_dentry=false);
-  void drop_non_rdlocks(MutationImpl *mut, set<CInode*> *pneed_issue=0);
+  void drop_non_rdlocks(MutationImpl *mut, std::set<CInode*> *pneed_issue=0);
   void drop_rdlocks_for_early_reply(MutationImpl *mut);
   void drop_locks_for_fragment_unfreeze(MutationImpl *mut);
 
@@ -99,7 +96,7 @@ public:
 
   void eval_scatter_gathers(CInode *in);
 
-  void eval_cap_gather(CInode *in, set<CInode*> *issue_set=0);
+  void eval_cap_gather(CInode *in, std::set<CInode*> *issue_set=0);
 
   bool eval(CInode *in, int mask, bool caps_imported=false);
   void try_eval(MDSCacheObject *p, int mask);
@@ -244,7 +241,7 @@ public:
   version_t issue_file_data_version(CInode *in);
   Capability* issue_new_caps(CInode *in, int mode, Session *session, SnapRealm *conrealm, bool is_replay);
   bool issue_caps(CInode *in, Capability *only_cap=0);
-  void issue_caps_set(set<CInode*>& inset);
+  void issue_caps_set(std::set<CInode*>& inset);
   void issue_truncate(CInode *in);
   void revoke_stale_caps(Session *session);
   void revoke_stale_caps(Capability *cap);
