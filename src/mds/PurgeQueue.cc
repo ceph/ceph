@@ -671,7 +671,7 @@ bool PurgeQueue::drain(
   return false;
 }
 
-std::string PurgeItem::get_type_str() const
+std::string_view PurgeItem::get_type_str() const
 {
   switch(action) {
   case PurgeItem::NONE: return "NONE";
