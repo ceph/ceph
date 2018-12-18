@@ -1122,7 +1122,7 @@ private:
     bool committed;
     LogSegment *ls;
     MDSInternalContextBase::vec waiters;
-    list<frag_t> old_frags;
+    frag_vec_t old_frags;
     bufferlist rollback;
     ufragment() : bits(0), committed(false), ls(NULL) {}
   };
@@ -1183,10 +1183,10 @@ private:
   void handle_fragment_notify(const MMDSFragmentNotify::const_ref &m);
   void handle_fragment_notify_ack(const MMDSFragmentNotifyAck::const_ref &m);
 
-  void add_uncommitted_fragment(dirfrag_t basedirfrag, int bits, list<frag_t>& old_frag,
+  void add_uncommitted_fragment(dirfrag_t basedirfrag, int bits, const frag_vec_t& old_frag,
 				LogSegment *ls, bufferlist *rollback=NULL);
   void finish_uncommitted_fragment(dirfrag_t basedirfrag, int op);
-  void rollback_uncommitted_fragment(dirfrag_t basedirfrag, list<frag_t>& old_frags);
+  void rollback_uncommitted_fragment(dirfrag_t basedirfrag, frag_vec_t&& old_frags);
 public:
   void wait_for_uncommitted_fragment(dirfrag_t dirfrag, MDSInternalContextBase *c) {
     ceph_assert(uncommitted_fragments.count(dirfrag));

@@ -1372,10 +1372,10 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
       if (olddir->authority() != CDIR_AUTH_UNDEF &&
 	  renamed_diri->authority() == CDIR_AUTH_UNDEF) {
 	ceph_assert(slaveup); // auth to non-auth, must be slave prepare
-	list<frag_t> leaves;
+        frag_vec_t leaves;
 	renamed_diri->dirfragtree.get_leaves(leaves);
-	for (list<frag_t>::iterator p = leaves.begin(); p != leaves.end(); ++p) {
-	  CDir *dir = renamed_diri->get_dirfrag(*p);
+	for (const auto& leaf : leaves) {
+	  CDir *dir = renamed_diri->get_dirfrag(leaf);
 	  ceph_assert(dir);
 	  if (dir->get_dir_auth() == CDIR_AUTH_UNDEF)
 	    // preserve subtree bound until slave commit
@@ -2672,7 +2672,6 @@ void EFragment::replay(MDSRank *mds)
 
   list<CDir*> resultfrags;
   MDSInternalContextBase::vec waiters;
-  list<frag_t> old_frags;
 
   // in may be NULL if it wasn't in our cache yet.  if it's a prepare
   // it will be once we replay the metablob , but first we need to
@@ -2687,19 +2686,21 @@ void EFragment::replay(MDSRank *mds)
       mds->mdcache->adjust_dir_fragments(in, basefrag, bits, resultfrags, waiters, true);
     break;
 
-  case OP_ROLLBACK:
+  case OP_ROLLBACK: {
+    frag_vec_t old_frags;
     if (in) {
       in->dirfragtree.get_leaves_under(basefrag, old_frags);
       if (orig_frags.empty()) {
 	// old format EFragment
 	mds->mdcache->adjust_dir_fragments(in, basefrag, -bits, resultfrags, waiters, true);
       } else {
-	for (list<frag_t>::iterator p = orig_frags.begin(); p != orig_frags.end(); ++p)
-	  mds->mdcache->force_dir_fragment(in, *p);
+	for (const auto& fg : orig_frags)
+	  mds->mdcache->force_dir_fragment(in, fg);
       }
     }
-    mds->mdcache->rollback_uncommitted_fragment(dirfrag_t(ino, basefrag), old_frags);
+    mds->mdcache->rollback_uncommitted_fragment(dirfrag_t(ino, basefrag), std::move(old_frags));
     break;
+  }
 
   case OP_COMMIT:
   case OP_FINISH:

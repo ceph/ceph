@@ -7494,15 +7494,13 @@ void Server::handle_client_rename(MDRequestRef& mdr)
     dout(10) << "srci is remote dir, setting stickydirs and opening all frags" << dendl;
     mdr->set_stickydirs(srci);
 
-    list<frag_t> frags;
-    srci->dirfragtree.get_leaves(frags);
-    for (list<frag_t>::iterator p = frags.begin();
-	 p != frags.end();
-	 ++p) {
-      CDir *dir = srci->get_dirfrag(*p);
+    frag_vec_t leaves;
+    srci->dirfragtree.get_leaves(leaves);
+    for (const auto& leaf : leaves) {
+      CDir *dir = srci->get_dirfrag(leaf);
       if (!dir) {
-	dout(10) << " opening " << *p << " under " << *srci << dendl;
-	mdcache->open_remote_dirfrag(srci, *p, new C_MDS_RetryRequest(mdcache, mdr));
+	dout(10) << " opening " << leaf << " under " << *srci << dendl;
+	mdcache->open_remote_dirfrag(srci, leaf, new C_MDS_RetryRequest(mdcache, mdr));
 	return;
       }
     }
