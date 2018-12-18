@@ -134,6 +134,9 @@ public:
   const sss& get_stream() const {
     return *osp;
   }
+  std::string_view strv() const {
+    return osp->strv();
+  }
 
 private:
   static constexpr std::size_t max_elems = 8;
