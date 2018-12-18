@@ -2332,7 +2332,8 @@ void DaemonServer::adjust_pgs()
 		       << " has upmap" << dendl;
 	      upmaps_to_clear.insert(merge_target);
 	      ok = false;
-	    } else if (osdmap.have_pg_upmaps(merge_source)) {
+	    }
+            if (osdmap.have_pg_upmaps(merge_source)) {
 	      dout(10) << "pool " << i.first
 		       << " pg_num_target " << p.get_pg_num_target()
 		       << " pg_num " << p.get_pg_num()
