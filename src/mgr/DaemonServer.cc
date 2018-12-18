@@ -2343,7 +2343,6 @@ void DaemonServer::adjust_pgs()
 	      ok = false;
 	    }
 
-	    auto q = pg_map.pg_stat.find(merge_source);
 	    if (p.get_pg_num() != p.get_pg_num_pending()) {
 	      dout(10) << "pool " << i.first
 		       << " pg_num_target " << p.get_pg_num_target()
@@ -2359,58 +2358,39 @@ void DaemonServer::adjust_pgs()
 		       << p.get_pgp_num()
 		       << dendl;
 	      ok = false;
-	    } else if (q == pg_map.pg_stat.end()) {
-	      dout(10) << "pool " << i.first
-		       << " pg_num_target " << p.get_pg_num_target()
-		       << " pg_num " << p.get_pg_num()
-		       << " - no state for " << merge_source
-		       << " (merge source)"
-		       << dendl;
-	      ok = false;
-	    } else if (!(q->second.state & (PG_STATE_ACTIVE |
-					    PG_STATE_CLEAN))) {
-	      dout(10) << "pool " << i.first
-		       << " pg_num_target " << p.get_pg_num_target()
-		       << " pg_num " << p.get_pg_num()
-		       << " - merge source " << merge_source
-		       << " not clean (" << pg_state_string(q->second.state)
-		       << ")" << dendl;
-	      ok = false;
-	    } else if (q->second.state & PG_STATE_REMAPPED) {
-	      dout(10) << "pool " << i.first
-		       << " pg_num_target " << p.get_pg_num_target()
-		       << " pg_num " << p.get_pg_num()
-		       << " - merge source " << merge_source
-		       << " remapped" << dendl;
-	      ok = false;
 	    }
+            for (auto &merge_participant : {merge_source, merge_target}) {
+              bool is_merge_source = merge_participant == merge_source;
+              auto q = pg_map.pg_stat.find(merge_participant);
+              if (q == pg_map.pg_stat.end()) {
+	        dout(10) << "pool " << i.first
+		         << " pg_num_target " << p.get_pg_num_target()
+		         << " pg_num " << p.get_pg_num()
+		         << " - no state for " << merge_participant
+		         << (is_merge_source ? " (merge source)" : " (merge target)")
+		         << dendl;
+	        ok = false;
+	      } else if (!(q->second.state & (PG_STATE_ACTIVE |
+					      PG_STATE_CLEAN))) {
+	        dout(10) << "pool " << i.first
+		         << " pg_num_target " << p.get_pg_num_target()
+		         << " pg_num " << p.get_pg_num()
+		         << (is_merge_source ? " - merge source " : " - merge target ")
+                         << merge_participant
+		         << " not clean (" << pg_state_string(q->second.state)
+		         << ")" << dendl;
+	        ok = false;
+	      } else if (q->second.state & PG_STATE_REMAPPED) {
+	        dout(10) << "pool " << i.first
+		         << " pg_num_target " << p.get_pg_num_target()
+		         << " pg_num " << p.get_pg_num()
+                         << (is_merge_source ? " - merge source " : " - merge target ")
+                         << merge_participant
+		         << " remapped" << dendl;
+	        ok = false;
+	      }
+            }
 
-	    q = pg_map.pg_stat.find(merge_target);
-	    if (q == pg_map.pg_stat.end()) {
-	      dout(10) << "pool " << i.first
-		       << " pg_num_target " << p.get_pg_num_target()
-		       << " pg_num " << p.get_pg_num()
-		       << " - no state for " << merge_target
-		       << " (merge target)"
-		       << dendl;
-	      ok = false;
-	    } else if (!(q->second.state & (PG_STATE_ACTIVE |
-					    PG_STATE_CLEAN))) {
-	      dout(10) << "pool " << i.first
-		       << " pg_num_target " << p.get_pg_num_target()
-		       << " pg_num " << p.get_pg_num()
-		       << " - merge target " << merge_target
-		       << " not clean (" << pg_state_string(q->second.state)
-		       << ")" << dendl;
-	      ok = false;
-	    } else if (q->second.state & PG_STATE_REMAPPED) {
-	      dout(10) << "pool " << i.first
-		       << " pg_num_target " << p.get_pg_num_target()
-		       << " pg_num " << p.get_pg_num()
-		       << " - merge target " << merge_target
-		       << " remapped" << dendl;
-	      ok = false;
-	    }
 	    if (ok) {
 	      unsigned target = p.get_pg_num() - 1;
 	      dout(10) << "pool " << i.first
