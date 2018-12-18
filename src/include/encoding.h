@@ -21,6 +21,7 @@
 #include <string>
 #include <string_view>
 #include <tuple>
+#include <boost/container/small_vector.hpp>
 #include <boost/optional/optional_io.hpp>
 #include <boost/tuple/tuple.hpp>
 
@@ -425,6 +426,23 @@ inline void encode(const std::vector<std::shared_ptr<T>,Alloc>& v,
 template<class T, class Alloc>
 inline void decode(std::vector<std::shared_ptr<T>,Alloc>& v,
 		   bufferlist::const_iterator& p);
+// small_vector
+template<class T, std::size_t N, class Alloc, typename traits=denc_traits<T>>
+inline std::enable_if_t<!traits::supported>
+encode(const boost::container::small_vector<T,N,Alloc>& v, bufferlist& bl, uint64_t features);
+template<class T, std::size_t N, class Alloc, typename traits=denc_traits<T>>
+inline std::enable_if_t<!traits::supported>
+encode(const boost::container::small_vector<T,N,Alloc>& v, bufferlist& bl);
+template<class T, std::size_t N, class Alloc, typename traits=denc_traits<T>>
+inline std::enable_if_t<!traits::supported>
+decode(boost::container::small_vector<T,N,Alloc>& v, bufferlist::const_iterator& p);
+template<class T, std::size_t N, class Alloc, typename traits=denc_traits<T>>
+inline std::enable_if_t<!traits::supported>
+encode_nohead(const boost::container::small_vector<T,N,Alloc>& v, bufferlist& bl);
+template<class T, std::size_t N, class Alloc, typename traits=denc_traits<T>>
+inline std::enable_if_t<!traits::supported>
+decode_nohead(int len, boost::container::small_vector<T,N,Alloc>& v, bufferlist::const_iterator& p);
+// std::map
 template<class T, class U, class Comp, class Alloc,
 	 typename t_traits=denc_traits<T>, typename u_traits=denc_traits<U>>
 inline std::enable_if_t<!t_traits::supported ||
@@ -843,6 +861,53 @@ inline std::enable_if_t<!traits::supported>
   for (__u32 i=0; i<v.size(); i++) 
     decode(v[i], p);
 }
+
+// small vector
+template<class T, std::size_t N, class Alloc, typename traits>
+inline std::enable_if_t<!traits::supported>
+  encode(const boost::container::small_vector<T,N,Alloc>& v, bufferlist& bl, uint64_t features)
+{
+  __u32 n = (__u32)(v.size());
+  encode(n, bl);
+  for (const auto& i : v)
+    encode(i, bl, features);
+}
+template<class T, std::size_t N, class Alloc, typename traits>
+inline std::enable_if_t<!traits::supported>
+  encode(const boost::container::small_vector<T,N,Alloc>& v, bufferlist& bl)
+{
+  __u32 n = (__u32)(v.size());
+  encode(n, bl);
+  for (const auto& i : v)
+    encode(i, bl);
+}
+template<class T, std::size_t N, class Alloc, typename traits>
+inline std::enable_if_t<!traits::supported>
+  decode(boost::container::small_vector<T,N,Alloc>& v, bufferlist::const_iterator& p)
+{
+  __u32 n;
+  decode(n, p);
+  v.resize(n);
+  for (auto& i : v)
+    decode(i, p);
+}
+
+template<class T, std::size_t N, class Alloc, typename traits>
+inline std::enable_if_t<!traits::supported>
+  encode_nohead(const boost::container::small_vector<T,N,Alloc>& v, bufferlist& bl)
+{
+  for (const auto& i : v)
+    encode(i, bl);
+}
+template<class T, std::size_t N, class Alloc, typename traits>
+inline std::enable_if_t<!traits::supported>
+  decode_nohead(int len, boost::container::small_vector<T,N,Alloc>& v, bufferlist::const_iterator& p)
+{
+  v.resize(len);
+  for (auto& i : v)
+    decode(i, p);
+}
+
 
 // vector (shared_ptr)
 template<class T,class Alloc>
