@@ -389,7 +389,7 @@ class PgAutoscaler(MgrModule):
                                    .format(p['pool_name'],
                                            p['pg_num_final'], r))
 
-        if len(too_few):
+        if too_few:
             summary = "{0} pools have too few placement groups".format(
                 len(too_few))
             health_checks['POOL_TOO_FEW_PGS'] = {
@@ -397,7 +397,7 @@ class PgAutoscaler(MgrModule):
                 'summary': summary,
                 'detail': too_few
             }
-        if len(too_many):
+        if too_many:
             summary = "{0} pools have too many placement groups".format(
                 len(too_many))
             health_checks['POOL_TOO_MANY_PGS'] = {
@@ -426,7 +426,7 @@ class PgAutoscaler(MgrModule):
                         total_target
                     )
                 )
-        if len(too_much_target_ratio):
+        if too_much_target_ratio:
             health_checks['POOL_TARGET_SIZE_RATIO_OVERCOMMITTED'] = {
                 'severity': 'warning',
                 'summary': "%d subtrees have overcommitted pool target_size_ratio" % len(too_much_target_ratio),
@@ -455,7 +455,7 @@ class PgAutoscaler(MgrModule):
                         mgr_util.format_bytes(total_target, 5, colored=False),
                     )
                 )
-        if len(too_much_target_bytes):
+        if too_much_target_bytes:
             health_checks['POOL_TARGET_SIZE_BYTES_OVERCOMMITTED'] = {
                 'severity': 'warning',
                 'summary': "%d subtrees have overcommitted pool target_size_bytes" % len(too_much_target_bytes),
