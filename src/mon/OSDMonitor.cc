@@ -3037,7 +3037,8 @@ void OSDMonitor::_booted(MonOpRequestRef op, bool logit)
 	  << " w " << m->sb.weight << " from " << m->sb.current_epoch << dendl;
 
   if (logit) {
-    mon->clog->info() << m->get_orig_source_inst() << " boot";
+    mon->clog->info() << m->get_source() << " " << m->get_orig_source_addrs()
+		      << " boot";
   }
 
   send_latest(op, m->sb.current_epoch+1);
