@@ -59,7 +59,7 @@ struct MonCommand {
     encode(helpstring, bl);
     encode(module, bl);
     encode(req_perms, bl);
-    std::string availability;  // Removed field, for backward compat
+    std::string availability = "cli,rest";  // Removed field, for backward compat
     encode(availability, bl);
   }
   void decode_bare(bufferlist::const_iterator &bl) {

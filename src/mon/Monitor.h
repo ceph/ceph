@@ -166,6 +166,9 @@ public:
   vector<MonCommand> local_mon_commands;  // commands i support
   bufferlist local_mon_commands_bl;       // encoded version of above
 
+  vector<MonCommand> prenautilus_local_mon_commands;
+  bufferlist prenautilus_local_mon_commands_bl;
+
   Messenger *mgr_messenger;
   MgrClient mgr_client;
   uint64_t mgr_proxy_bytes = 0;  // in-flight proxied mgr command message bytes
@@ -969,10 +972,18 @@ public:
 					  bufferlist *rdata);
 
   const std::vector<MonCommand> &get_local_commands(mon_feature_t f) {
-    return local_mon_commands;
+    if (f.contains_all(ceph::features::mon::FEATURE_NAUTILUS)) {
+      return local_mon_commands;
+    } else {
+      return prenautilus_local_mon_commands;
+    }
   }
   const bufferlist& get_local_commands_bl(mon_feature_t f) {
-    return local_mon_commands_bl;
+    if (f.contains_all(ceph::features::mon::FEATURE_NAUTILUS)) {
+      return local_mon_commands_bl;
+    } else {
+      return prenautilus_local_mon_commands_bl;
+    }
   }
   void set_leader_commands(const std::vector<MonCommand>& cmds) {
     leader_mon_commands = cmds;
