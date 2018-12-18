@@ -127,7 +127,8 @@ class PoolTest(DashboardTestCase):
         self.assertEqual(len(cluster_pools), len(data))
         self.assertSchemaBody(JList(self.pool_schema))
         for pool in data:
-            self.assertNotIn('stats', pool)
+            self.assertIn('pg_status', pool)
+            self.assertIn('stats', pool)
             self.assertIn(pool['pool_name'], cluster_pools)
 
     def test_pool_list_attrs(self):
@@ -141,11 +142,12 @@ class PoolTest(DashboardTestCase):
             self.assertIn('type', pool)
             self.assertIn('flags', pool)
             self.assertNotIn('flags_names', pool)
+            self.assertNotIn('pg_status', pool)
             self.assertNotIn('stats', pool)
             self.assertIn(pool['pool_name'], cluster_pools)
 
-    def test_pool_list_stats(self):
-        data = self._get("/api/pool?stats=true")
+    def test_pool_list_without_stats(self):
+        data = self._get("/api/pool?stats=false")
         self.assertStatus(200)
 
         cluster_pools = self.ceph_cluster.mon_manager.list_pools()
@@ -155,7 +157,8 @@ class PoolTest(DashboardTestCase):
             self.assertIn('type', pool)
             self.assertIn('application_metadata', pool)
             self.assertIn('flags', pool)
-            self.assertIn('stats', pool)
+            self.assertNotIn('pg_status', pool)
+            self.assertNotIn('stats', pool)
             self.assertIn('flags_names', pool)
             self.assertIn(pool['pool_name'], cluster_pools)
 
@@ -166,6 +169,7 @@ class PoolTest(DashboardTestCase):
         self.assertEqual(pool['pool_name'], cluster_pools[0])
         self.assertIn('type', pool)
         self.assertIn('flags', pool)
+        self.assertNotIn('pg_status', pool)
         self.assertIn('stats', pool)
         self.assertNotIn('flags_names', pool)
 
