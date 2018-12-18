@@ -1076,8 +1076,8 @@ void Server::kill_session(Session *session, Context *on_safe)
 size_t Server::apply_blacklist(const std::set<entity_addr_t> &blacklist)
 {
   std::list<Session*> victims;
-  const auto sessions = mds->sessionmap.get_sessions();
-  for (const auto p : sessions)  {
+  const auto& sessions = mds->sessionmap.get_sessions();
+  for (const auto& p : sessions)  {
     if (!p.first.is_client()) {
       // Do not apply OSDMap blacklist to MDS daemons, we find out
       // about their death via MDSMap.
