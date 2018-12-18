@@ -287,7 +287,7 @@ void PurgeQueue::push(const PurgeItem &pi, Context *completion)
   if (!could_consume) {
     // Usually, it is not necessary to explicitly flush here, because the reader
     // will get flushes generated inside Journaler::is_readable.  However,
-    // if we remain in a can_consume()==false state for a long period then
+    // if we remain in a _can_consume()==false state for a long period then
     // we should flush in order to allow MDCache to drop its strays rather
     // than having them wait for purgequeue to progress.
     if (!delayed_flush) {
@@ -333,7 +333,7 @@ uint32_t PurgeQueue::_calculate_ops(const PurgeItem &item) const
   return ops_required;
 }
 
-bool PurgeQueue::can_consume()
+bool PurgeQueue::_can_consume()
 {
   dout(20) << ops_in_flight << "/" << max_purge_ops << " ops, "
            << in_flight.size() << "/" << g_conf()->mds_max_purge_files
@@ -367,7 +367,7 @@ bool PurgeQueue::_consume()
   ceph_assert(lock.is_locked_by_me());
 
   bool could_consume = false;
-  while(can_consume()) {
+  while(_can_consume()) {
 
     if (delayed_flush) {
       // We are now going to read from the journal, so any proactive
@@ -637,6 +637,8 @@ bool PurgeQueue::drain(
     size_t *in_flight_count
     )
 {
+  std::lock_guard l(lock);
+
   ceph_assert(progress != nullptr);
   ceph_assert(progress_total != nullptr);
   ceph_assert(in_flight_count != nullptr);
