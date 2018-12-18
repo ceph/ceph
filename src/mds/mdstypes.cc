@@ -822,7 +822,7 @@ void cap_reconnect_t::encode_old(bufferlist& bl) const {
 }
 
 void cap_reconnect_t::decode(bufferlist::const_iterator& bl) {
-  DECODE_START(1, bl);
+  DECODE_START(2, bl);
   decode_old(bl); // extract out when something changes
   if (struct_v >= 2)
     decode(snap_follows, bl);
@@ -853,6 +853,47 @@ void cap_reconnect_t::generate_test_instances(list<cap_reconnect_t*>& ls)
   ls.back()->path = "/test/path";
   ls.back()->capinfo.cap_id = 1;
 }
+
+/*
+ * snaprealm_reconnect_t
+ */
+void snaprealm_reconnect_t::encode(bufferlist& bl) const {
+  ENCODE_START(1, 1, bl);
+  encode_old(bl); // extract out when something changes
+  ENCODE_FINISH(bl);
+}
+
+void snaprealm_reconnect_t::encode_old(bufferlist& bl) const {
+  using ceph::encode;
+  encode(realm, bl);
+}
+
+void snaprealm_reconnect_t::decode(bufferlist::const_iterator& bl) {
+  DECODE_START(1, bl);
+  decode_old(bl); // extract out when something changes
+  DECODE_FINISH(bl);
+}
+
+void snaprealm_reconnect_t::decode_old(bufferlist::const_iterator& bl) {
+  using ceph::decode;
+  decode(realm, bl);
+}
+
+void snaprealm_reconnect_t::dump(Formatter *f) const
+{
+  f->dump_int("ino", realm.ino);
+  f->dump_int("seq", realm.seq);
+  f->dump_int("parent", realm.parent);
+}
+
+void snaprealm_reconnect_t::generate_test_instances(list<snaprealm_reconnect_t*>& ls)
+{
+  ls.push_back(new snaprealm_reconnect_t);
+  ls.back()->realm.ino = 0x10000000001ULL;
+  ls.back()->realm.seq = 2;
+  ls.back()->realm.parent = 1;
+}
+
 
 ostream& operator<<(ostream &out, const mds_role_t &role)
 {

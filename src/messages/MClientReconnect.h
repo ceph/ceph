@@ -24,13 +24,15 @@ class MClientReconnect : public MessageInstance<MClientReconnect> {
 public:
   friend factory;
 private:
-  static constexpr int HEAD_VERSION = 3;
+  static constexpr int HEAD_VERSION = 4;
+  static constexpr int COMPAT_VERSION = 4;
 
 public:
   map<inodeno_t, cap_reconnect_t>  caps;   // only head inodes
-  vector<ceph_mds_snaprealm_reconnect> realms;
+  vector<snaprealm_reconnect_t> realms;
 
-  MClientReconnect() : MessageInstance(CEPH_MSG_CLIENT_RECONNECT, HEAD_VERSION) { }
+  MClientReconnect() :
+    MessageInstance(CEPH_MSG_CLIENT_RECONNECT, HEAD_VERSION, COMPAT_VERSION) { }
 private:
   ~MClientReconnect() override {}
 
@@ -41,70 +43,94 @@ public:
 	<< caps.size() << " caps)";
   }
 
+  // Force to use old encoding.
+  // Use connection's features to choose encoding if version is set to 0.
+  void set_encoding_version(int v) {
+    header.version = v;
+    if (v <= 3)
+      header.compat_version = 0;
+  }
+
   void add_cap(inodeno_t ino, uint64_t cap_id, inodeno_t pathbase, const string& path,
 	       int wanted, int issued, inodeno_t sr, snapid_t sf, bufferlist& lb)
   {
     caps[ino] = cap_reconnect_t(cap_id, pathbase, path, wanted, issued, sr, sf, lb);
   }
   void add_snaprealm(inodeno_t ino, snapid_t seq, inodeno_t parent) {
-    ceph_mds_snaprealm_reconnect r;
-    r.ino = ino;
-    r.seq = seq;
-    r.parent = parent;
+    snaprealm_reconnect_t r;
+    r.realm.ino = ino;
+    r.realm.seq = seq;
+    r.realm.parent = parent;
     realms.push_back(r);
   }
 
   void encode_payload(uint64_t features) override {
+    if (header.version == 0) {
+      if (features & CEPH_FEATURE_MDSENC)
+	header.version = 3;
+      else if (features & CEPH_FEATURE_FLOCK)
+	header.version = 2;
+      else
+	header.version = 1;
+    }
+
     using ceph::encode;
     data.clear();
-    if (features & CEPH_FEATURE_MDSENC) {
-      encode(caps, data);
-      header.version = HEAD_VERSION;
-    } else if (features & CEPH_FEATURE_FLOCK) {
-      // encode with old cap_reconnect_t encoding
-      __u32 n = caps.size();
-      encode(n, data);
-      for (map<inodeno_t,cap_reconnect_t>::iterator p = caps.begin(); p != caps.end(); ++p) {
-	encode(p->first, data);
-	p->second.encode_old(data);
-      }
-      header.version = 2;
+
+    if (header.version >= 4) {
+	encode(caps, data);
+	encode(realms, data);
     } else {
       // compat crap
-      header.version = 1;
-      map<inodeno_t, old_cap_reconnect_t> ocaps;
-      for (map<inodeno_t,cap_reconnect_t>::iterator p = caps.begin(); p != caps.end(); p++)
-	ocaps[p->first] = p->second;
-      encode(ocaps, data);
+      if (header.version == 3) {
+	encode(caps, data);
+      } else if (header.version == 2) {
+	__u32 n = caps.size();
+	encode(n, data);
+	for (auto& p : caps) {
+	  encode(p.first, data);
+	  p.second.encode_old(data);
+	}
+      } else {
+	map<inodeno_t, old_cap_reconnect_t> ocaps;
+	for (auto& p : caps) {
+	  ocaps[p.first] = p.second;
+	encode(ocaps, data);
+      }
+      for (auto& r : realms)
+	r.encode_old(data);
+      }
     }
-    encode_nohead(realms, data);
   }
   void decode_payload() override {
     auto p = data.cbegin();
-    if (header.version >= 3) {
-      // new protocol
+    if (header.version >= 4) {
       decode(caps, p);
-    } else if (header.version == 2) {
-      __u32 n;
-      decode(n, p);
-      inodeno_t ino;
-      while (n--) {
-	decode(ino, p);
-	caps[ino].decode_old(p);
-      }
+      decode(realms, p);
     } else {
       // compat crap
-      map<inodeno_t, old_cap_reconnect_t> ocaps;
-      decode(ocaps, p);
-      for (map<inodeno_t,old_cap_reconnect_t>::iterator q = ocaps.begin(); q != ocaps.end(); q++)
-	caps[q->first] = q->second;
-    }
-    while (!p.end()) {
-      realms.push_back(ceph_mds_snaprealm_reconnect());
-      decode(realms.back(), p);
+      if (header.version == 3) {
+	decode(caps, p);
+      } else if (header.version == 2) {
+	__u32 n;
+	decode(n, p);
+	inodeno_t ino;
+	while (n--) {
+	  decode(ino, p);
+	  caps[ino].decode_old(p);
+	}
+      } else {
+	map<inodeno_t, old_cap_reconnect_t> ocaps;
+	decode(ocaps, p);
+	for (auto &q : ocaps)
+	  caps[q.first] = q.second;
+      }
+      while (!p.end()) {
+	realms.push_back(snaprealm_reconnect_t());
+	realms.back().decode_old(p);
+      }
     }
   }
-
 };
 
 

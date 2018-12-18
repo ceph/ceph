@@ -2836,6 +2836,7 @@ void Client::send_reconnect(MetaSession *session)
 
   early_kick_flushing_caps(session);
 
+  m->set_encoding_version(0); // use connection features to choose encoding
   session->con->send_message2(std::move(m));
 
   mount_cond.Signal();
