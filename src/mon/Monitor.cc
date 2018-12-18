@@ -3314,9 +3314,10 @@ void Monitor::handle_command(MonOpRequestRef op)
       if (f)
         f->open_object_section("stats");
 
-      mgrstatmon()->dump_fs_stats(&ds, f.get(), verbose);
-      if (!f)
-        ds << '\n';
+      mgrstatmon()->dump_cluster_stats(&ds, f.get(), verbose);
+      if (!f) {
+	ds << "\n \n";
+      }
       mgrstatmon()->dump_pool_stats(osdmon()->osdmap, &ds, f.get(), verbose);
 
       if (f) {

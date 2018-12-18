@@ -721,7 +721,7 @@ function test_mon_misc()
 
   # df
   ceph df > $TMPFILE
-  grep GLOBAL $TMPFILE
+  grep RAW $TMPFILE
   grep -v DIRTY $TMPFILE
   ceph df detail > $TMPFILE
   grep DIRTY $TMPFILE
