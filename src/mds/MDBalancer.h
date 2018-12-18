@@ -19,8 +19,6 @@
 
 #include <list>
 #include <map>
-using std::list;
-using std::map;
 
 #include "include/types.h"
 #include "common/Clock.h"
@@ -104,7 +102,7 @@ private:
   void handle_heartbeat(const MHeartbeat::const_ref &m);
   void find_exports(CDir *dir,
                     double amount,
-                    list<CDir*>& exports,
+                    std::list<CDir*>& exports,
                     double& have,
                     set<CDir*>& already_exporting);
 
@@ -151,10 +149,10 @@ private:
   set<dirfrag_t>   split_pending, merge_pending;
 
   // per-epoch scatter/gathered info
-  map<mds_rank_t, mds_load_t>  mds_load;
-  map<mds_rank_t, double>       mds_meta_load;
-  map<mds_rank_t, map<mds_rank_t, float> > mds_import_map;
-  map<mds_rank_t, int> mds_last_epoch_under_map;
+  std::map<mds_rank_t, mds_load_t>  mds_load;
+  std::map<mds_rank_t, double>       mds_meta_load;
+  std::map<mds_rank_t, map<mds_rank_t, float> > mds_import_map;
+  std::map<mds_rank_t, int> mds_last_epoch_under_map;
 
   // per-epoch state
   double my_load = 0;
