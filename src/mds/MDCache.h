@@ -314,7 +314,14 @@ protected:
   //  join/split subtrees as appropriate
 public:
   bool is_subtrees() { return !subtrees.empty(); }
-  void list_subtrees(list<CDir*>& ls);
+  template<typename T>
+  void get_subtrees(T& c) {
+    if constexpr (std::is_same_v<T, std::vector<CDir*>>)
+      c.reserve(c.size() + subtrees.size());
+    for (const auto& p : subtrees) {
+      c.push_back(p.first);
+    }
+  }
   void adjust_subtree_auth(CDir *root, mds_authority_t auth, bool adjust_pop=true);
   void adjust_subtree_auth(CDir *root, mds_rank_t a, mds_rank_t b=CDIR_AUTH_UNKNOWN) {
     adjust_subtree_auth(root, mds_authority_t(a,b));

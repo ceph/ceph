@@ -2724,13 +2724,11 @@ void MDSRank::command_get_subtrees(Formatter *f)
   ceph_assert(f != NULL);
   std::lock_guard l(mds_lock);
 
-  std::list<CDir*> subtrees;
-  mdcache->list_subtrees(subtrees);
+  std::vector<CDir*> subtrees;
+  mdcache->get_subtrees(subtrees);
 
   f->open_array_section("subtrees");
-  for (std::list<CDir*>::iterator i = subtrees.begin(); i != subtrees.end(); ++i) {
-    const CDir *dir = *i;
-
+  for (const auto& dir : subtrees) {
     f->open_object_section("subtree");
     {
       f->dump_bool("is_auth", dir->is_auth());

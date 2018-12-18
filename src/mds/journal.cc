@@ -2612,10 +2612,9 @@ void ESubtreeMap::replay(MDSRank *mds)
       }
     }
     
-    list<CDir*> subs;
-    mds->mdcache->list_subtrees(subs);
-    for (list<CDir*>::iterator p = subs.begin(); p != subs.end(); ++p) {
-      CDir *dir = *p;
+    std::vector<CDir*> dirs;
+    mds->mdcache->get_subtrees(dirs);
+    for (const auto& dir : dirs) {
       if (dir->get_dir_auth().first != mds->get_nodeid())
 	continue;
       if (subtrees.count(dir->dirfrag()) == 0) {
