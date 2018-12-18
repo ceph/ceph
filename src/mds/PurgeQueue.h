@@ -76,7 +76,7 @@ public:
     f->close_section();
   }
 
-  std::string get_type_str() const;
+  std::string_view get_type_str() const;
 private:
   static const std::map<std::string, PurgeItem::Action> actions;
 };
