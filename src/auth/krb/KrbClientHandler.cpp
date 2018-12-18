@@ -116,12 +116,11 @@ int KrbClientHandler::handle_response(int ret,
   using ceph::decode;
   decode(krb_response, buff_list);
   if (m_gss_credentials == GSS_C_NO_CREDENTIAL) {
-    gss_buffer_desc krb_client_name_buff = {0, nullptr};
     gss_OID krb_client_type = GSS_C_NT_USER_NAME;
     std::string krb_client_name(cct->_conf->name.to_str());
 
-    krb_client_name_buff.length = krb_client_name.length();
-    krb_client_name_buff.value  = (const_cast<char*>(krb_client_name.c_str()));
+    gss_buffer_in.length = krb_client_name.length();
+    gss_buffer_in.value  = (const_cast<char*>(krb_client_name.c_str()));
 
     if (cct->_conf->name.get_type() == CEPH_ENTITY_TYPE_CLIENT) {
       gss_major_status = gss_import_name(&gss_minor_status, 
