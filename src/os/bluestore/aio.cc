@@ -74,7 +74,7 @@ int aio_queue_t::submit_batch(aio_iter begin, aio_iter end,
 int aio_queue_t::get_next_completed(int timeout_ms, aio_t **paio, int max)
 {
 #if defined(HAVE_LIBAIO)
-  io_event event[max];
+  io_event events[max];
 #elif defined(HAVE_POSIXAIO)
   struct kevent events[max];
 #endif
@@ -86,7 +86,7 @@ int aio_queue_t::get_next_completed(int timeout_ms, aio_t **paio, int max)
   int r = 0;
   do {
 #if defined(HAVE_LIBAIO)
-    r = io_getevents(ctx, 1, max, event, &t);
+    r = io_getevents(ctx, 1, max, events, &t);
 #elif defined(HAVE_POSIXAIO)
     r = kevent(ctx, NULL, 0, events, max, &t);
     if (r < 0)
@@ -96,8 +96,8 @@ int aio_queue_t::get_next_completed(int timeout_ms, aio_t **paio, int max)
 
   for (int i=0; i<r; ++i) {
 #if defined(HAVE_LIBAIO)
-    paio[i] = (aio_t *)event[i].obj;
-    paio[i]->rval = event[i].res;
+    paio[i] = (aio_t *)events[i].obj;
+    paio[i]->rval = events[i].res;
 #else
     paio[i] = (aio_t*)events[i].udata;
     if (paio[i]->n_aiocb == 1) {
