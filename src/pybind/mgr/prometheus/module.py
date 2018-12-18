@@ -45,7 +45,7 @@ def health_status_to_number(status):
     elif status == 'HEALTH_ERR':
         return 2
 
-DF_CLUSTER = ['total_bytes', 'total_used_bytes', 'total_objects']
+DF_CLUSTER = ['total_bytes', 'total_used_bytes', 'total_used_raw_bytes']
 
 DF_POOL = ['max_avail', 'stored', 'stored_raw', 'objects', 'dirty',
            'quota_bytes', 'quota_objects', 'rd', 'rd_bytes', 'wr', 'wr_bytes']

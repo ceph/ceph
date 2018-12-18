@@ -2149,6 +2149,14 @@ struct store_statfs_t
     return total - available;
   }
 
+  float get_used_raw_ratio() const {
+    if (total) {
+      return (float)get_used_raw() / (float)total;
+    } else {
+      return 0.0;
+    }
+  }
+
   // helpers to ease legacy code porting
   uint64_t kb_avail() const {
     return available >> 10;

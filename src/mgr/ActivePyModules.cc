@@ -320,7 +320,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     cluster_state.with_pgmap([this, &f](const PGMap &pg_map) {
       cluster_state.with_osdmap(
           [&pg_map, &f](const OSDMap &osd_map) {
-        pg_map.dump_fs_stats(nullptr, &f, true);
+        pg_map.dump_cluster_stats(nullptr, &f, true);
         pg_map.dump_pool_stats_full(osd_map, nullptr, &f, true);
       });
     });

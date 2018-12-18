@@ -89,10 +89,10 @@ public:
     digest.dump(f);
     f->dump_object("servicemap", get_service_map());
   }
-  void dump_fs_stats(stringstream *ss,
+  void dump_cluster_stats(stringstream *ss,
 		     Formatter *f,
 		     bool verbose) const {
-    digest.dump_fs_stats(ss, f, verbose);
+    digest.dump_cluster_stats(ss, f, verbose);
   }
   void dump_pool_stats(const OSDMap& osdm, stringstream *ss, Formatter *f,
 		       bool verbose) const {
