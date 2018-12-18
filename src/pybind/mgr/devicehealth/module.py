@@ -27,35 +27,59 @@ class Module(MgrModule):
     MODULE_OPTIONS = [
         {
             'name': 'enable_monitoring',
-            'default': str(False),
+            'default': False,
+            'type': 'bool',
+            'desc': 'monitor device health metrics',
+            'runtime': True,
         },
         {
             'name': 'scrape_frequency',
-            'default': str(86400),
+            'default': 86400,
+            'type': 'secs',
+            'desc': 'how frequently to scrape device health metrics',
+            'runtime': True,
         },
         {
             'name': 'pool_name',
             'default': 'device_health_metrics',
+            'type': 'str',
+            'desc': 'name of pool in which to store device health metrics',
+            'runtime': True,
         },
         {
             'name': 'retention_period',
-            'default': str(86400 * 14),
+            'default': (86400 * 180),
+            'type': 'secs',
+            'desc': 'how long to retain device health metrics',
+            'runtime': True,
         },
         {
             'name': 'mark_out_threshold',
-            'default': str(86400 * 14 * 2),
+            'default': (86400 * 14 * 2),
+            'type': 'secs',
+            'desc': 'automatically mark OSD if it may fail before this long',
+            'runtime': True,
         },
         {
             'name': 'warn_threshold',
-            'default': str(86400 * 14 * 6),
+            'default': (86400 * 14 * 6),
+            'type': 'secs',
+            'desc': 'raise health warning if OSD may fail before this long',
+            'runtime': True,
         },
         {
             'name': 'self_heal',
-            'default': str(True),
+            'default': True,
+            'type': 'bool',
+            'desc': 'preemptively heal cluster around devices that may fail',
+            'runtime': True,
         },
         {
             'name': 'sleep_interval',
-            'default': str(600),
+            'default': 600,
+            'type': 'secs',
+            'desc': 'how frequently to wake up and check device health',
+            'runtime': True,
         },
     ]
 
@@ -112,7 +136,7 @@ class Module(MgrModule):
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
 
-        # options
+        # populate options (just until serve() runs)
         for opt in self.MODULE_OPTIONS:
             setattr(self, opt['name'], opt['default'])
 
@@ -158,11 +182,11 @@ class Module(MgrModule):
         elif cmd['prefix'] == 'device check-health':
             return self.check_health()
         elif cmd['prefix'] == 'device monitoring on':
-            self.set_module_option('enable_monitoring', 'true')
+            self.set_module_option('enable_monitoring', True)
             self.event.set()
             return 0, '', ''
         elif cmd['prefix'] == 'device monitoring off':
-            self.set_module_option('enable_monitoring', 'false')
+            self.set_module_option('enable_monitoring', False)
             self.set_health_checks({})  # avoid stuck health alerts
             return 0, '', ''
         elif cmd['prefix'] == 'device predict-life-expectancy':
@@ -192,7 +216,7 @@ class Module(MgrModule):
         for opt in self.MODULE_OPTIONS:
             setattr(self,
                     opt['name'],
-                    self.get_module_option(opt['name']) or opt['default'])
+                    self.get_module_option(opt['name']))
             self.log.debug(' %s = %s', opt['name'], getattr(self, opt['name']))
 
     def serve(self):
@@ -209,7 +233,7 @@ class Module(MgrModule):
         self.log.debug('Last scrape %s', last_scrape)
 
         while self.run:
-            if self.enable_monitoring == 'true' or self.enable_monitoring == 'True':
+            if self.enable_monitoring:
                 self.log.debug('Running')
                 self.check_health()
 
