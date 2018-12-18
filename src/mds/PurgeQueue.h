@@ -134,7 +134,7 @@ protected:
 
   uint32_t _calculate_ops(const PurgeItem &item) const;
 
-  bool can_consume();
+  bool _can_consume();
 
   // How many bytes were remaining when drain() was first called,
   // used for indicating progress.
