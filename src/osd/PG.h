@@ -2508,6 +2508,10 @@ protected:
     return !(get_osdmap()->test_flag(CEPH_OSDMAP_RECOVERY_DELETES));
   }
 
+  bool hard_limit_pglog() const {
+    return (get_osdmap()->test_flag(CEPH_OSDMAP_PGLOG_HARDLIMIT));
+  }
+
   void init_primary_up_acting(
     const vector<int> &newup,
     const vector<int> &newacting,
