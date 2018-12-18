@@ -3975,7 +3975,10 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
   assert(op->may_write() || op->may_cache());
 
   // trim log?
-  calc_trim_to();
+  if (hard_limit_pglog())
+    calc_trim_to_aggressive();
+  else
+    calc_trim_to();
 
   // verify that we are doing this in order?
   if (cct->_conf->osd_debug_op_order && m->get_source().is_client() &&
@@ -10500,7 +10503,10 @@ void PrimaryLogPG::simple_opc_submit(OpContextUPtr ctx)
   dout(20) << __func__ << " " << repop << dendl;
   issue_repop(repop, ctx.get());
   eval_repop(repop);
-  calc_trim_to();
+  if (hard_limit_pglog())
+    calc_trim_to_aggressive();
+  else
+    calc_trim_to();
   repop->put();
 }
 
@@ -10614,7 +10620,10 @@ void PrimaryLogPG::submit_log_entries(
       op_applied(info.last_update);
     });
 
-  calc_trim_to();
+  if (hard_limit_pglog())
+    calc_trim_to_aggressive();
+  else
+    calc_trim_to();
 }
 
 void PrimaryLogPG::cancel_log_updates()
