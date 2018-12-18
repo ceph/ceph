@@ -1267,7 +1267,7 @@ void Server::handle_client_reconnect(const MClientReconnect::const_ref &m)
   
   // snaprealms
   for (const auto &r : m->realms) {
-    CInode *in = mdcache->get_inode(inodeno_t(r.ino));
+    CInode *in = mdcache->get_inode(inodeno_t(r.realm.ino));
     if (in && in->state_test(CInode::STATE_PURGING))
       continue;
     if (in) {
@@ -1277,11 +1277,11 @@ void Server::handle_client_reconnect(const MClientReconnect::const_ref &m)
 	// this can happen if we are non-auth or we rollback snaprealm
 	dout(15) << "open snaprealm (null snaprealm) on " << *in << dendl;
       }
-      mdcache->add_reconnected_snaprealm(from, inodeno_t(r.ino), snapid_t(r.seq));
+      mdcache->add_reconnected_snaprealm(from, inodeno_t(r.realm.ino), snapid_t(r.realm.seq));
     } else {
-      dout(15) << "open snaprealm (w/o inode) on " << inodeno_t(r.ino)
-	       << " seq " << r.seq << dendl;
-      mdcache->add_reconnected_snaprealm(from, inodeno_t(r.ino), snapid_t(r.seq));
+      dout(15) << "open snaprealm (w/o inode) on " << inodeno_t(r.realm.ino)
+	       << " seq " << r.realm.seq << dendl;
+      mdcache->add_reconnected_snaprealm(from, inodeno_t(r.realm.ino), snapid_t(r.realm.seq));
     }
   }
 
