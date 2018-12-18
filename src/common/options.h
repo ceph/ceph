@@ -333,9 +333,9 @@ struct Option {
     return *this;
   }
 
-  Option& set_enum_allowed(const std::initializer_list<const char*>& allowed)
+  Option& set_enum_allowed(const std::vector<const char*>& allowed)
   {
-    enum_allowed.insert(enum_allowed.end(), allowed);
+    enum_allowed = allowed;
     return *this;
   }
 

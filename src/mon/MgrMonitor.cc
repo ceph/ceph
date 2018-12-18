@@ -21,6 +21,7 @@
 #include "mgr/MgrContext.h"
 #include "mgr/mgr_commands.h"
 #include "OSDMonitor.h"
+#include "ConfigMonitor.h"
 
 #include "MgrMonitor.h"
 
@@ -133,6 +134,56 @@ void MgrMonitor::update_from_paxos(bool *need_bootstrap)
       }
     }
   }
+
+  // populate module options
+  mgr_module_options.clear();
+  misc_option_strings.clear();
+  for (auto& i : map.available_modules) {
+    for (auto& j : i.module_options) {
+      string name = string("mgr/") + i.name + "/" + j.second.name;
+      auto p = mgr_module_options.emplace(
+	name,
+	Option(name, static_cast<Option::type_t>(j.second.type),
+	       static_cast<Option::level_t>(j.second.level)));
+      Option& opt = p.first->second;
+      opt.set_flags(static_cast<Option::flag_t>(j.second.flags));
+      opt.set_description(j.second.desc.c_str());
+      opt.set_long_description(j.second.long_desc.c_str());
+      for (auto& k : j.second.tags) {
+	opt.add_tag(k.c_str());
+      }
+      for (auto& k : j.second.see_also) {
+	if (i.module_options.count(k)) {
+	  // another module option
+	  misc_option_strings.push_back(string("mgr/") + i.name + "/" + k);
+	  opt.add_see_also(misc_option_strings.back().c_str());
+	} else {
+	  // ceph option
+	  opt.add_see_also(k.c_str());
+	}
+      }
+      Option::value_t v, v2;
+      std::string err;
+      if (j.second.default_value.size() &&
+	  !opt.parse_value(j.second.default_value, &v, &err)) {
+	opt.set_default(v);
+      }
+      if (j.second.min.size() &&
+	  j.second.max.size() &&
+	  !opt.parse_value(j.second.min, &v, &err) &&
+	  !opt.parse_value(j.second.max, &v2, &err)) {
+	opt.set_min_max(v, v2);
+      }
+      std::vector<const char *> enum_allowed;
+      for (auto& k : j.second.enum_allowed) {
+	enum_allowed.push_back(k.c_str());
+      }
+      opt.set_enum_allowed(enum_allowed);
+    }
+  }
+  // force ConfigMonitor to refresh, since it uses const Option *
+  // pointers into our mgr_module_options (which we just rebuilt).
+  mon->configmon()->load_config();
 
   // feed our pet MgrClient
   mon->mgr_client.ms_dispatch(new MMgrMap(map));
