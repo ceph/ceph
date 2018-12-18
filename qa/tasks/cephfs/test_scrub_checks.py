@@ -11,6 +11,98 @@ from tasks.cephfs.cephfs_test_case import CephFSTestCase
 
 log = logging.getLogger(__name__)
 
+class TestScrubControls(CephFSTestCase):
+    """
+    Test basic scrub control operations such as abort, pause and resume.
+    """
+
+    MDSS_REQUIRED = 1
+    CLIENTS_REQUIRED = 1
+
+    def _abort_scrub(self, expected):
+        res = self.fs.rank_tell(["scrub", "abort"])
+        self.assertEqual(res['return_code'], expected)
+    def _pause_scrub(self, expected):
+        res = self.fs.rank_tell(["scrub", "pause"])
+        self.assertEqual(res['return_code'], expected)
+    def _resume_scrub(self, expected):
+        res = self.fs.rank_tell(["scrub", "resume"])
+        self.assertEqual(res['return_code'], expected)
+    def _get_scrub_status(self):
+        return self.fs.rank_tell(["scrub", "status"])
+
+    def test_scrub_abort(self):
+        test_dir = "scrub_control_test_path"
+        abs_test_path = "/{0}".format(test_dir)
+
+        log.info("mountpoint: {0}".format(self.mount_a.mountpoint))
+        client_path = os.path.join(self.mount_a.mountpoint, test_dir)
+        log.info("client_path: {0}".format(client_path))
+
+        log.info("Cloning repo into place")
+        repo_path = TestScrubChecks.clone_repo(self.mount_a, client_path)
+
+        out_json = self.fs.rank_tell(["scrub", "start", abs_test_path, "recursive"])
+        self.assertNotEqual(out_json, None)
+
+        # abort and verify
+        self._abort_scrub(0)
+        out_json = self._get_scrub_status()
+        self.assertTrue("no active" in out_json['status'])
+
+    def test_scrub_pause_and_resume(self):
+        test_dir = "scrub_control_test_path"
+        abs_test_path = "/{0}".format(test_dir)
+
+        log.info("mountpoint: {0}".format(self.mount_a.mountpoint))
+        client_path = os.path.join(self.mount_a.mountpoint, test_dir)
+        log.info("client_path: {0}".format(client_path))
+
+        log.info("Cloning repo into place")
+        repo_path = TestScrubChecks.clone_repo(self.mount_a, client_path)
+
+        out_json = self.fs.rank_tell(["scrub", "start", abs_test_path, "recursive"])
+        self.assertNotEqual(out_json, None)
+
+        # pause and verify
+        self._pause_scrub(0)
+        out_json = self._get_scrub_status()
+        self.assertTrue("PAUSED" in out_json['status'])
+
+        # resume and verify
+        self._resume_scrub(0)
+        out_json = self._get_scrub_status()
+        self.assertFalse("PAUSED" in out_json['status'])
+
+    def test_scrub_pause_and_resume_with_abort(self):
+        test_dir = "scrub_control_test_path"
+        abs_test_path = "/{0}".format(test_dir)
+
+        log.info("mountpoint: {0}".format(self.mount_a.mountpoint))
+        client_path = os.path.join(self.mount_a.mountpoint, test_dir)
+        log.info("client_path: {0}".format(client_path))
+
+        log.info("Cloning repo into place")
+        repo_path = TestScrubChecks.clone_repo(self.mount_a, client_path)
+
+        out_json = self.fs.rank_tell(["scrub", "start", abs_test_path, "recursive"])
+        self.assertNotEqual(out_json, None)
+
+        # pause and verify
+        self._pause_scrub(0)
+        out_json = self._get_scrub_status()
+        self.assertTrue("PAUSED" in out_json['status'])
+
+        # abort and verify
+        self._abort_scrub(0)
+        out_json = self._get_scrub_status()
+        self.assertTrue("PAUSED" in out_json['status'])
+        self.assertTrue("0 inodes" in out_json['status'])
+
+        # resume and verify
+        self._resume_scrub(0)
+        out_json = self._get_scrub_status()
+        self.assertTrue("no active" in out_json['status'])
 
 class TestScrubChecks(CephFSTestCase):
     """
@@ -50,7 +142,7 @@ class TestScrubChecks(CephFSTestCase):
         log.info("client_path: {0}".format(client_path))
 
         log.info("Cloning repo into place")
-        repo_path = self.clone_repo(self.mount_a, client_path)
+        repo_path = TestScrubChecks.clone_repo(self.mount_a, client_path)
 
         log.info("Initiating mds_scrub_checks on mds.{id_}, " +
                  "test_path {path}, run_seq {seq}".format(
@@ -223,7 +315,8 @@ class TestScrubChecks(CephFSTestCase):
 
         return jout
 
-    def clone_repo(self, client_mount, path):
+    @staticmethod
+    def clone_repo(client_mount, path):
         repo = "ceph-qa-suite"
         repo_path = os.path.join(path, repo)
         client_mount.run_shell(["mkdir", "-p", path])
