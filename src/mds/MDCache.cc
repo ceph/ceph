@@ -806,14 +806,6 @@ MDSCacheObject *MDCache::get_object(const MDSCacheObjectInfo &info)
 // ====================================================================
 // subtree management
 
-void MDCache::list_subtrees(list<CDir*>& ls)
-{
-  for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
-       p != subtrees.end();
-       ++p)
-    ls.push_back(p->first);
-}
-
 /*
  * adjust the dir_auth of a subtree.
  * merge with parent and/or child subtrees, if is it appropriate.
