@@ -710,8 +710,8 @@ class PSSubscription {
     }
   };
 
-  // Async execution of RGWPostHTTPData via coroutine
-  class RGWPostHTTPDataCR : public RGWPostHTTPData, public RGWCoroutine {
+  // async execution of RGWPostHTTPData via coroutine
+  class RGWPostHTTPDataCR : public RGWPostHTTPData, public RGWSimpleCoroutine {
     private:
       RGWDataSyncEnv *sync_env;
       bufferlist read_bl;
@@ -720,31 +720,28 @@ class PSSubscription {
       RGWPostHTTPDataCR(const std::string& _post_data,
                     RGWDataSyncEnv* _sync_env,
                     const string& method,
-                    const string& url,
-                    const bool verify_ssl,
-                    const header_spec_t intercept_headers = {}) :
-      RGWPostHTTPData(_sync_env->cct, method, url, &read_bl, verify_ssl, intercept_headers),
-      RGWCoroutine(_sync_env->cct), sync_env(_sync_env)
+                    const string& url) :
+      RGWPostHTTPData(_sync_env->cct, method, url, &read_bl, false),
+      RGWSimpleCoroutine(_sync_env->cct), sync_env(_sync_env)
       {
+        // ctor also set the data to send
         set_post_data(_post_data);
         set_send_length(_post_data.length());
       }
 
-    int operate() override {
-      reenter(this) {
-        // send message to endpoint and wait for answer
-        auto rc = sync_env->http_manager->add_request(this);
-        if (rc >= 0) {
-          // wait for answer
-          rc = RGWPostHTTPData::wait();
-          // TODO: check answer to retry?
-        }
-        if (rc < 0) {
-            return set_cr_error(retcode);
-        }
+      // send message to endpoint
+      int send_request() override {
+        init_new_io(this);
+        const auto rc = sync_env->http_manager->add_request(this);
+        if (rc < 0) return rc;
+        return io_block(0, get_io_id(RGWHTTPClient::HTTPCLIENT_IO_READ | RGWHTTPClient::HTTPCLIENT_IO_CONTROL));
       }
-      return set_cr_done();
-    }
+
+      // wait for reply
+      int request_complete() override {
+        // TODO: check result and return accordingly
+        return 0;
+      }
   };
 
   class StoreEventCR : public RGWCoroutine {
@@ -800,7 +797,7 @@ class PSSubscription {
             pse.format(&bl);
             const std::string post_data(bl.c_str(), bl.length());
 
-            call(new RGWPostHTTPDataCR(post_data, sync_env, "POST", sub_conf->push_endpoint, false));
+            call(new RGWPostHTTPDataCR(post_data, sync_env, "POST", sub_conf->push_endpoint));
           };
           
           if (retcode < 0) {
