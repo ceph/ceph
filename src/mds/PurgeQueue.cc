@@ -93,6 +93,7 @@ PurgeQueue::~PurgeQueue()
   if (logger) {
     g_ceph_context->get_perfcounters_collection()->remove(logger.get());
   }
+  delete on_error;
 }
 
 void PurgeQueue::create_logger()
