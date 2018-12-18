@@ -21,7 +21,7 @@
 
 #include "os/fs/FS.h"
 #include "include/interval_set.h"
-#include "aio.h"
+#include "ceph_aio.h"
 #include "BlockDevice.h"
 
 class PMEMDevice : public BlockDevice {

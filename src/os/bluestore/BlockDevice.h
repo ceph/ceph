@@ -30,7 +30,7 @@
 #include "common/ceph_mutex.h"
 
 #ifdef HAVE_LIBAIO
-#include "aio.h"
+#include "ceph_aio.h"
 #endif
 #include "include/ceph_assert.h"
 #include "include/buffer.h"
