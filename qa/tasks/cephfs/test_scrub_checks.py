@@ -63,7 +63,7 @@ class TestScrubChecks(CephFSTestCase):
         nep = "{test_path}/i/dont/exist".format(test_path=abs_test_path)
         self.asok_command(mds_rank, "flush_path {nep}".format(nep=nep),
                           lambda j, r: self.json_validator(j, r, "return_code", -errno.ENOENT))
-        self.asok_command(mds_rank, "scrub_path {nep}".format(nep=nep),
+        self.tell_command(mds_rank, "scrub start {nep}".format(nep=nep),
                           lambda j, r: self.json_validator(j, r, "return_code", -errno.ENOENT))
 
         test_repo_path = "{test_path}/ceph-qa-suite".format(test_path=abs_test_path)
@@ -73,8 +73,8 @@ class TestScrubChecks(CephFSTestCase):
             log.info("First run: flushing {dirpath}".format(dirpath=dirpath))
             command = "flush_path {dirpath}".format(dirpath=dirpath)
             self.asok_command(mds_rank, command, success_validator)
-        command = "scrub_path {dirpath}".format(dirpath=dirpath)
-        self.asok_command(mds_rank, command, success_validator)
+        command = "scrub start {dirpath}".format(dirpath=dirpath)
+        self.tell_command(mds_rank, command, success_validator)
 
         filepath = "{repo_path}/suites/fs/verify/validater/valgrind.yaml".format(
             repo_path=test_repo_path)
@@ -82,13 +82,13 @@ class TestScrubChecks(CephFSTestCase):
             log.info("First run: flushing {filepath}".format(filepath=filepath))
             command = "flush_path {filepath}".format(filepath=filepath)
             self.asok_command(mds_rank, command, success_validator)
-        command = "scrub_path {filepath}".format(filepath=filepath)
-        self.asok_command(mds_rank, command, success_validator)
+        command = "scrub start {filepath}".format(filepath=filepath)
+        self.tell_command(mds_rank, command, success_validator)
 
         filepath = "{repo_path}/suites/fs/basic/clusters/fixed-3-cephfs.yaml". \
             format(repo_path=test_repo_path)
-        command = "scrub_path {filepath}".format(filepath=filepath)
-        self.asok_command(mds_rank, command,
+        command = "scrub start {filepath}".format(filepath=filepath)
+        self.tell_command(mds_rank, command,
                           lambda j, r: self.json_validator(j, r, "performed_validation",
                                                            False))
 
@@ -96,8 +96,8 @@ class TestScrubChecks(CephFSTestCase):
             log.info("First run: flushing base dir /")
             command = "flush_path /"
             self.asok_command(mds_rank, command, success_validator)
-        command = "scrub_path /"
-        self.asok_command(mds_rank, command, success_validator)
+        command = "scrub start /"
+        self.tell_command(mds_rank, command, success_validator)
 
         new_dir = "{repo_path}/new_dir_{i}".format(repo_path=repo_path, i=run_seq)
         test_new_dir = "{repo_path}/new_dir_{i}".format(repo_path=test_repo_path,
@@ -118,16 +118,16 @@ class TestScrubChecks(CephFSTestCase):
         # check that scrub fails on errors
         ino = self.mount_a.path_to_ino(new_file)
         rados_obj_name = "{ino:x}.00000000".format(ino=ino)
-        command = "scrub_path {file}".format(file=test_new_file)
+        command = "scrub start {file}".format(file=test_new_file)
 
         # Missing parent xattr -> ENODATA
         self.fs.rados(["rmxattr", rados_obj_name, "parent"], pool=self.fs.get_data_pool_name())
-        self.asok_command(mds_rank, command,
+        self.tell_command(mds_rank, command,
                           lambda j, r: self.json_validator(j, r, "return_code", -errno.ENODATA))
 
         # Missing object -> ENOENT
         self.fs.rados(["rm", rados_obj_name], pool=self.fs.get_data_pool_name())
-        self.asok_command(mds_rank, command,
+        self.tell_command(mds_rank, command,
                           lambda j, r: self.json_validator(j, r, "return_code", -errno.ENOENT))
 
         command = "flush_path /"
@@ -162,7 +162,7 @@ class TestScrubChecks(CephFSTestCase):
             self.mount_a.run_shell(["sudo", "rmdir", test_dir])
         self.assertEqual(ar.exception.exitstatus, 1)
 
-        self.asok_command(mds_rank, "scrub_path /{0} repair".format(test_dir),
+        self.tell_command(mds_rank, "scrub start /{0} repair".format(test_dir),
                           lambda j, r: self.json_validator(j, r, "return_code", 0))
 
 	# wait a few second for background repair
@@ -180,6 +180,20 @@ class TestScrubChecks(CephFSTestCase):
             return False, "unexpectedly got {jv} instead of {ev}!".format(
                 jv=element_value, ev=expected_value)
         return True, "Succeeded"
+
+    def tell_command(self, mds_rank, command, validator):
+        log.info("Running command '{command}'".format(command=command))
+
+        command_list = command.split()
+        jout = self.fs.rank_tell(command_list, mds_rank)
+
+        log.info("command '{command}' returned '{jout}'".format(
+                     command=command, jout=jout))
+
+        success, errstring = validator(jout, 0)
+        if not success:
+            raise AsokCommandFailedError(command, rout, jout, errstring)
+        return jout
 
     def asok_command(self, mds_rank, command, validator):
         log.info("Running command '{command}'".format(command=command))
