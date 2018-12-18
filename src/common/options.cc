@@ -875,8 +875,9 @@ std::vector<Option> get_global_options() {
     .set_description("Frequency of internal heartbeat checks (seconds)"),
 
     Option("heartbeat_file", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("File to touch on successful internal heartbeat")
-    .set_description("If set, this file will be touched every time an internal heartbeat check succeeds")
+    .set_default("")
+    .set_description("File to touch on successful internal heartbeat")
+    .set_long_description("If set, this file will be touched every time an internal heartbeat check succeeds.")
     .add_see_also("heartbeat_interval"),
 
     Option("heartbeat_inject_failure", Option::TYPE_INT, Option::LEVEL_DEV)
