@@ -2370,8 +2370,8 @@ void DaemonServer::adjust_pgs()
 		         << (is_merge_source ? " (merge source)" : " (merge target)")
 		         << dendl;
 	        ok = false;
-	      } else if (!(q->second.state & (PG_STATE_ACTIVE |
-					      PG_STATE_CLEAN))) {
+	      } else if ((q->second.state & (PG_STATE_ACTIVE | PG_STATE_CLEAN)) !=
+                                            (PG_STATE_ACTIVE | PG_STATE_CLEAN)) {
 	        dout(10) << "pool " << i.first
 		         << " pg_num_target " << p.get_pg_num_target()
 		         << " pg_num " << p.get_pg_num()
@@ -2379,14 +2379,6 @@ void DaemonServer::adjust_pgs()
                          << merge_participant
 		         << " not clean (" << pg_state_string(q->second.state)
 		         << ")" << dendl;
-	        ok = false;
-	      } else if (q->second.state & PG_STATE_REMAPPED) {
-	        dout(10) << "pool " << i.first
-		         << " pg_num_target " << p.get_pg_num_target()
-		         << " pg_num " << p.get_pg_num()
-                         << (is_merge_source ? " - merge source " : " - merge target ")
-                         << merge_participant
-		         << " remapped" << dendl;
 	        ok = false;
 	      }
             }
