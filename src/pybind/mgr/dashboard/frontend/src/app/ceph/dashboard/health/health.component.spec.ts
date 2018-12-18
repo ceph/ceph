@@ -246,4 +246,34 @@ describe('HealthComponent', () => {
       expect(chart).toEqual(expectedChart([1, 2, 3, 4]));
     });
   });
+
+  describe('isClientReadWriteChartShowable', () => {
+    beforeEach(() => {
+      component.healthData = healthPayload;
+    });
+
+    it('returns false', () => {
+      component.healthData['client_perf'] = {};
+
+      expect(component.isClientReadWriteChartShowable()).toBeFalsy();
+    });
+
+    it('returns false', () => {
+      component.healthData['client_perf'] = { read_op_per_sec: undefined, write_op_per_sec: 0 };
+
+      expect(component.isClientReadWriteChartShowable()).toBeFalsy();
+    });
+
+    it('returns true', () => {
+      component.healthData['client_perf'] = { read_op_per_sec: 1, write_op_per_sec: undefined };
+
+      expect(component.isClientReadWriteChartShowable()).toBeTruthy();
+    });
+
+    it('returns true', () => {
+      component.healthData['client_perf'] = { read_op_per_sec: 2, write_op_per_sec: 3 };
+
+      expect(component.isClientReadWriteChartShowable()).toBeTruthy();
+    });
+  });
 });
