@@ -243,7 +243,7 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
         r = self._ceph_get_module_option(key)
         if r is None:
             final_key = key.split('/')[-1]
-            return str(self.MODULE_OPTION_DEFAULTS.get(final_key, default))
+            return self.MODULE_OPTION_DEFAULTS.get(final_key, default)
         else:
             return r
 
@@ -701,7 +701,7 @@ class MgrModule(ceph_module.BaseMgrModule):
         r = self._ceph_get_module_option(key)
         if r is None:
             final_key = key.split('/')[-1]
-            return str(self.MODULE_OPTION_DEFAULTS.get(final_key, default))
+            return self.MODULE_OPTION_DEFAULTS.get(final_key, default)
         else:
             return r
 

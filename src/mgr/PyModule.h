@@ -103,6 +103,10 @@ public:
     return options;
   }
 
+  PyObject *get_typed_option_value(
+    const std::string& option,
+    const std::string& value);
+
   int load(PyThreadState *pMainThreadState);
 #if PY_MAJOR_VERSION >= 3
   static PyObject* init_ceph_logger();

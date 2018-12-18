@@ -609,6 +609,38 @@ bool PyModule::is_option(const std::string &option_name)
   return options.count(option_name) > 0;
 }
 
+PyObject *PyModule::get_typed_option_value(const std::string& name,
+					   const std::string& value)
+{
+  auto p = options.find(name);
+  if (p != options.end()) {
+    switch (p->second.type) {
+    case Option::TYPE_INT:
+    case Option::TYPE_UINT:
+    case Option::TYPE_SIZE:
+      return PyInt_FromString((char *)value.c_str(), nullptr, 0);
+    case Option::TYPE_SECS:
+    case Option::TYPE_FLOAT:
+      {
+	PyObject *s = PyString_FromString(value.c_str());
+	PyObject *f = PyFloat_FromString(s, nullptr);
+	Py_DECREF(s);
+	return f;
+      }
+    case Option::TYPE_BOOL:
+      if (value == "1" || value == "true" || value == "True" ||
+	  value == "on" || value == "yes") {
+	Py_INCREF(Py_True);
+	return Py_True;
+      } else {
+	Py_INCREF(Py_False);
+	return Py_False;
+      }
+    }
+  }
+  return PyString_FromString(value.c_str());
+}
+
 int PyModule::load_subclass_of(const char* base_class, PyObject** py_class)
 {
   // load the base class
