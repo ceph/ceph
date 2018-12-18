@@ -343,7 +343,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
    * been returned from scrub_dirfrag_next but not sent back
    * via scrub_dirfrag_finished.
    */
-  void scrub_dirfrags_scrubbing(list<frag_t> *out_dirfrags);
+  void scrub_dirfrags_scrubbing(frag_vec_t *out_dirfrags);
   /**
    * Report to the CInode that a dirfrag it owns has been scrubbed. Call
    * this for every frag_t returned from scrub_dirfrag_next().

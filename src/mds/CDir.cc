@@ -992,7 +992,7 @@ void CDir::split(int bits, list<CDir*>& subs, MDSInternalContextBase::vec& waite
 
   ceph_assert(replay || is_complete() || !is_auth());
 
-  list<frag_t> frags;
+  frag_vec_t frags;
   frag.split(bits, frags);
 
   vector<CDir*> subfrags(1 << bits);
@@ -1015,8 +1015,8 @@ void CDir::split(int bits, list<CDir*>& subs, MDSInternalContextBase::vec& waite
 
   // create subfrag dirs
   int n = 0;
-  for (list<frag_t>::iterator p = frags.begin(); p != frags.end(); ++p) {
-    CDir *f = new CDir(inode, *p, cache, is_auth());
+  for (const auto& fg : frags) {
+    CDir *f = new CDir(inode, fg, cache, is_auth());
     f->state_set(state & (MASK_STATE_FRAGMENT_KEPT | STATE_COMPLETE));
     f->get_replicas() = get_replicas();
     f->set_version(get_version());
@@ -1031,7 +1031,7 @@ void CDir::split(int bits, list<CDir*>& subs, MDSInternalContextBase::vec& waite
     f->pop_auth_subtree_nested = pop_auth_subtree_nested;
     f->pop_auth_subtree_nested.scale(fac);
 
-    dout(10) << " subfrag " << *p << " " << *f << dendl;
+    dout(10) << " subfrag " << fg << " " << *f << dendl;
     subfrags[n++] = f;
     subs.push_back(f);
 

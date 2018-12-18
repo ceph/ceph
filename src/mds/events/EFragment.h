@@ -33,7 +33,7 @@ public:
   inodeno_t ino;
   frag_t basefrag;
   __s32 bits{0};         // positive for split (from basefrag), negative for merge (to basefrag)
-  list<frag_t> orig_frags;
+  frag_vec_t orig_frags;
   bufferlist rollback;
 
   EFragment() : LogEvent(EVENT_FRAGMENT) { }

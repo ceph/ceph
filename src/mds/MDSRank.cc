@@ -2929,18 +2929,17 @@ bool MDSRank::command_dirfrag_ls(
   }
 
   f->open_array_section("frags");
-  std::list<frag_t> frags;
+  frag_vec_t leaves;
   // NB using get_leaves_under instead of get_dirfrags to give
   // you the list of what dirfrags may exist, not which are in cache
-  in->dirfragtree.get_leaves_under(frag_t(), frags);
-  for (std::list<frag_t>::iterator i = frags.begin();
-       i != frags.end(); ++i) {
+  in->dirfragtree.get_leaves_under(frag_t(), leaves);
+  for (const auto& leaf : leaves) {
     f->open_object_section("frag");
-    f->dump_int("value", i->value());
-    f->dump_int("bits", i->bits());
-    std::ostringstream frag_str;
-    frag_str << std::hex << i->value() << "/" << std::dec << i->bits();
-    f->dump_string("str", frag_str.str());
+    f->dump_int("value", leaf.value());
+    f->dump_int("bits", leaf.bits());
+    CachedStackStringStream ss;
+    ss.get_stream() << std::hex << leaf.value() << "/" << std::dec << leaf.bits();
+    f->dump_string("str", ss.strv());
     f->close_section();
   }
   f->close_section();
