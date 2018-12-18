@@ -1566,8 +1566,7 @@ void MDSRank::validate_sessions()
   // Identify any sessions which have state inconsistent with other,
   // after they have been loaded from rados during startup.
   // Mitigate bugs like: http://tracker.ceph.com/issues/16842
-  const auto &sessions = sessionmap.get_sessions();
-  for (const auto &i : sessions) {
+  for (const auto &i : sessionmap.get_sessions()) {
     Session *session = i.second;
     interval_set<inodeno_t> badones;
     if (inotable->intersects_free(session->info.prealloc_inos, &badones)) {
@@ -2017,8 +2016,8 @@ void MDSRank::stopping_start()
 
   if (mdsmap->get_num_in_mds() == 1 && !sessionmap.empty()) {
     std::vector<Session*> victims;
-    const auto sessions = sessionmap.get_sessions();
-    for (const auto p : sessions)  {
+    const auto& sessions = sessionmap.get_sessions();
+    for (const auto& p : sessions)  {
       if (!p.first.is_client()) {
         continue;
       }
@@ -2583,9 +2582,9 @@ void MDSRankDispatcher::evict_clients(const SessionFilter &filter, const MComman
     return;
   }
 
-  std::list<Session*> victims;
-  const auto sessions = sessionmap.get_sessions();
-  for (const auto p : sessions)  {
+  std::vector<Session*> victims;
+  const auto& sessions = sessionmap.get_sessions();
+  for (const auto& p : sessions)  {
     if (!p.first.is_client()) {
       continue;
     }
