@@ -711,7 +711,12 @@ class Module(MgrModule):
         inc = plan.inc
         total_did = 0
         left = max_iterations
+        pools_with_pg_merge = [p['pool_name'] for p in self.get_osdmap().dump().get('pools', [])
+                               if p['pg_num'] > p['pg_num_target']]
         for pool in pools:
+            if pool in pools_with_pg_merge:
+                self.log.info('pool %s has pending PG(s) for merging, skipping for now' % pool)
+                continue
             did = ms.osdmap.calc_pg_upmaps(inc, max_deviation, left, [pool])
             total_did += did
             left -= did
@@ -719,7 +724,8 @@ class Module(MgrModule):
                 break
         self.log.info('prepared %d/%d changes' % (total_did, max_iterations))
         if total_did == 0:
-            return -errno.EALREADY, 'Unable to find further optimization,' \
+            return -errno.EALREADY, 'Unable to find further optimization, ' \
+                                    'or pool(s)\' pg_num is decreasing, ' \
                                     'or distribution is already perfect'
         return 0, ''
 
