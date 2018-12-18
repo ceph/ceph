@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <algorithm>
-#include "aio.h"
+#include "ceph_aio.h"
 
 std::ostream& operator<<(std::ostream& os, const aio_t& aio)
 {
