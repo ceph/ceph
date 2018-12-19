@@ -53,10 +53,11 @@ static void alloc_aligned_buffer(bufferlist &data, unsigned len, unsigned off) {
   data.push_back(std::move(ptr));
 }
 
-Protocol::Protocol(AsyncConnection *connection)
-    : connection(connection),
-      messenger(connection->async_msgr),
-      cct(connection->async_msgr->cct) {}
+Protocol::Protocol(int type, AsyncConnection *connection)
+  : proto_type(type),
+    connection(connection),
+    messenger(connection->async_msgr),
+    cct(connection->async_msgr->cct) {}
 
 Protocol::~Protocol() {}
 
@@ -65,7 +66,7 @@ Protocol::~Protocol() {}
  **/
 
 ProtocolV1::ProtocolV1(AsyncConnection *connection)
-    : Protocol(connection),
+    : Protocol(1, connection),
       temp_buffer(nullptr),
       can_write(WriteStatus::NOWRITE),
       keepalive(false),
@@ -1976,6 +1977,7 @@ CtPtr ProtocolV1::handle_connect_message_2() {
                             // AsyncConnection here)
 
     ProtocolV1 *exproto = dynamic_cast<ProtocolV1 *>(existing->protocol.get());
+    assert(exproto->proto_type == 1);
 
     if (!exproto) {
       ldout(cct, 1) << __func__ << " existing=" << existing << dendl;

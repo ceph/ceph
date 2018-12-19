@@ -73,12 +73,13 @@ class AsyncMessenger;
 
 class Protocol {
 protected:
+  int proto_type;
   AsyncConnection *connection;
   AsyncMessenger *messenger;
   CephContext *cct;
 
 public:
-  Protocol(AsyncConnection *connection);
+  Protocol(int type, AsyncConnection *connection);
   virtual ~Protocol();
 
   // prepare protocol for connecting to peer
