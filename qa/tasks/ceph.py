@@ -528,7 +528,7 @@ def create_simple_monmap(ctx, remote, conf, mons,
     ]
     for (name, addr) in addresses:
         n = name[4:]
-        if mon_bind_addrvec:
+        if mon_bind_addrvec and (',' in addr or 'v' in addr or ':' in addr):
             args.extend(('--addv', n, addr))
         else:
             args.extend(('--add', n, addr))
