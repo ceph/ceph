@@ -376,9 +376,10 @@ struct Option {
   {
     return
       (has_flag(FLAG_RUNTIME)
-       || type == TYPE_BOOL || type == TYPE_INT
-       || type == TYPE_UINT || type == TYPE_FLOAT
-       || type == TYPE_SIZE || type == TYPE_SECS)
+       || (!has_flag(FLAG_MGR)
+	   && (type == TYPE_BOOL || type == TYPE_INT
+	       || type == TYPE_UINT || type == TYPE_FLOAT
+	       || type == TYPE_SIZE || type == TYPE_SECS)))
       && !has_flag(FLAG_STARTUP)
       && !has_flag(FLAG_CLUSTER_CREATE)
       && !has_flag(FLAG_CREATE);
