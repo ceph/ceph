@@ -2876,13 +2876,12 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
     force_resend = true;
   }
 
-  bool unpaused = !target_should_be_paused(t);
-  if (t->paused && unpaused) {
-    t->paused = false;
-  } else {
-    t->paused = !unpaused;
-    unpaused = false;
+  bool unpaused = false;
+  bool should_be_paused = target_should_be_paused(t);
+  if (t->paused && !should_be_paused) {
+    unpaused = true;
   }
+  t->paused = should_be_paused;
 
   bool legacy_change =
     t->pgid != pgid ||
