@@ -27,7 +27,8 @@ from ..services.auth import AuthManager, JwtManager
 
 
 class Controller(object):
-    def __init__(self, path, base_url=None, security_scope=None, secure=True):
+    def __init__(self, path, base_url=None, security_scope=None, secure=True,
+                 feature_enable_option=None):
         if security_scope and not Scope.valid_scope(security_scope):
             logger.debug("Invalid security scope name: %s\n Possible values: "
                          "%s", security_scope, Scope.all_scopes())
@@ -36,6 +37,7 @@ class Controller(object):
         self.base_url = base_url
         self.security_scope = security_scope
         self.secure = secure
+        self.feature_enable_option = feature_enable_option
 
         if self.path and self.path[0] != "/":
             self.path = "/" + self.path
@@ -52,10 +54,12 @@ class Controller(object):
         cls._cp_controller_ = True
         cls._cp_path_ = "{}{}".format(self.base_url, self.path)
         cls._security_scope = self.security_scope
+        cls._feature_enable_option = self.feature_enable_option
 
         config = {
             'tools.dashboard_exception_handler.on': True,
             'tools.authenticate.on': self.secure,
+            'tools.feature_toggle.on': True,
         }
         if not hasattr(cls, '_cp_config'):
             cls._cp_config = {}
@@ -64,10 +68,11 @@ class Controller(object):
 
 
 class ApiController(Controller):
-    def __init__(self, path, security_scope=None, secure=True):
+    def __init__(self, path, security_scope=None, secure=True, feature_enable_option=None):
         super(ApiController, self).__init__(path, base_url="/api",
                                             security_scope=security_scope,
-                                            secure=secure)
+                                            secure=secure,
+                                            feature_enable_option=feature_enable_option)
 
     def __call__(self, cls):
         cls = super(ApiController, self).__call__(cls)

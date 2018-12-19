@@ -58,6 +58,7 @@ from .controllers import generate_routes, json_error_page
 from .tools import NotificationQueue, RequestLoggingTool, TaskManager, \
                    prepare_url_prefix
 from .services.auth import AuthManager, AuthManagerTool, JwtManager
+from .services.feature_toggle import FeatureToggleTool
 from .services.access_control import ACCESS_CONTROL_COMMANDS, \
                                      handle_access_control_command
 from .services.sso import SSO_COMMANDS, \
@@ -122,6 +123,7 @@ class CherryPyConfig(object):
                       server_port)
 
         # Initialize custom handlers.
+        cherrypy.tools.feature_toggle = FeatureToggleTool()
         cherrypy.tools.authenticate = AuthManagerTool()
         cherrypy.tools.request_logging = RequestLoggingTool()
         cherrypy.tools.dashboard_exception_handler = HandlerWrapperTool(dashboard_exception_handler,
@@ -143,7 +145,7 @@ class CherryPyConfig(object):
                 'application/javascript',
             ],
             'tools.json_in.on': True,
-            'tools.json_in.force': False
+            'tools.json_in.force': False,
         }
 
         if ssl:

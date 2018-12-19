@@ -13,6 +13,7 @@ from cherrypy.test import helper
 from .. import logger
 from ..controllers import json_error_page, generate_controller_routes
 from ..services.auth import AuthManagerTool
+from ..services.feature_toggle import FeatureToggleTool
 from ..services.exception import dashboard_exception_handler
 
 
@@ -38,6 +39,7 @@ class ControllerTestCase(helper.CPWebCase):
 
     def __init__(self, *args, **kwargs):
         cherrypy.tools.authenticate = AuthManagerTool()
+        cherrypy.tools.feature_toggle = FeatureToggleTool()
         cherrypy.tools.dashboard_exception_handler = HandlerWrapperTool(dashboard_exception_handler,
                                                                         priority=31)
         cherrypy.config.update({
