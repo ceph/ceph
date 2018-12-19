@@ -34,6 +34,11 @@ instances or all radosgw-admin commands can be put into the ``[global]`` or the
 ``rgw enable apis``
 
 :Description: Enables the specified APIs.
+
+              .. note:: Enabling the ``s3`` API is a requirement for
+                        any radosgw instance that is meant to
+                        participate in a `multi-site <../multisite>`_
+                        configuration.
 :Type: String
 :Default: ``s3, swift, swift_auth, admin`` All APIs.
 
@@ -534,14 +539,29 @@ Swift Settings
 
 ``rgw swift url prefix``
 
-:Description: The URL prefix for the Swift StorageURL that goes in front of
-              the "/v1" part. This allows to run several Gateway instances
-              on the same host. For compatibility, setting this configuration
-              variable to empty causes the default "/swift" to be used.
-              Use explicit prefix "/" to start StorageURL at the root.
-              WARNING: setting this option to "/" will NOT work if S3 API is
-              enabled. From the other side disabling S3 will make impossible
-              to deploy RadosGW in the multi-site configuration!
+:Description: The URL prefix for the Swift API, to distinguish it from
+              the S3 API endpoint. The default is ``swift``, which
+              makes the Swift API available at the URL
+              ``http://host:port/swift/v1`` (or
+              ``http://host:port/swift/v1/AUTH_%(tenant_id)s`` if
+              ``rgw swift account in url`` is enabled).
+
+              For compatibility, setting this configuration variable
+              to the empty string causes the default ``swift`` to be
+              used; if you do want an empty prefix, set this option to
+              ``/``.
+
+              .. warning:: If you set this option to ``/``, you must
+                           disable the S3 API by modifying ``rgw
+                           enable apis`` to exclude ``s3``. It is not
+                           possible to operate radosgw with ``rgw
+                           swift url prefix = /`` and simultaneously
+                           support both the S3 and Swift APIs. If you
+                           do need to support both APIs without
+                           prefixes, deploy multiple radosgw instances
+                           to listen on different hosts (or ports)
+                           instead, enabling some for S3 and some for
+                           Swift.
 :Default: ``swift``
 :Example: "/swift-testing"
 
@@ -562,6 +582,35 @@ Swift Settings
 :Default: ``auth``
 
 
+``rgw swift account in url``
+
+:Description: Whether or not the Swift account name should be included
+              in the Swift API URL.
+
+              If set to ``false`` (the default), then the Swift API
+              will listen on a URL formed like
+              ``http://host:port/<rgw_swift_url_prefix>/v1``, and the
+              account name (commonly a Keystone project UUID if
+              radosgw is configured with `Keystone integration
+              <../keystone>`_) will be inferred from request
+              headers.
+
+              If set to ``true``, the Swift API URL will be
+              ``http://host:port/<rgw_swift_url_prefix>/v1/AUTH_<account_name>``
+              (or
+              ``http://host:port/<rgw_swift_url_prefix>/v1/AUTH_<keystone_project_id>``)
+              instead, and the Keystone ``object-store`` endpoint must
+              accordingly be configured to include the
+              ``AUTH_%(tenant_id)s`` suffix.
+
+              You **must** set this option to ``true`` (and update the
+              Keystone service catalog) if you want radosgw to support
+              publicly-readable containers and `temporary URLs
+              <../swift/tempurl>`_.
+:Type: Boolean
+:Default: ``false``
+
+
 ``rgw swift versioning enabled``
 
 :Description: Enables the Object Versioning of OpenStack Object Storage API.
@@ -572,6 +621,13 @@ Swift Settings
               control verification - ACLs are NOT taken into consideration.
               Those containers cannot be versioned by the S3 object versioning
               mechanism.
+
+	      The ``X-History-Location`` attribute, also understood by
+	      OpenStack Swift for handling ``DELETE`` operations
+	      `slightly differently
+	      <https://docs.openstack.org/swift/latest/overview_object_versioning.html>`_
+	      from ``X-Versions-Location``, is currently not
+	      supported.
 :Type: Boolean
 :Default: ``false``
 

@@ -19,7 +19,6 @@ The following configuration options are available for Keystone integration::
 	rgw keystone token cache size = {number of tokens to cache}
 	rgw keystone revocation interval = {number of seconds before checking revoked tickets}
 	rgw keystone implicit tenants = {true for private tenant for each new user}
-	rgw s3 auth use keystone = true
 	nss db path = {path to nss db}
 
 It is also possible to configure a Keystone service tenant, user & password for
@@ -113,6 +112,10 @@ object-storage endpoint::
   | service_type | object-store                             |
   +--------------+------------------------------------------+
 
+.. note:: If your radosgw ``ceph.conf`` sets the configuration option
+	  ``rgw swift account in url = true``, your ``object-store``
+	  endpoint URLs must be set to include the suffix
+	  ``/v1/AUTH_%(tenant_id)s`` (instead of just ``/v1``).
 
 The keystone URL is the Keystone admin RESTful API URL. The admin token is the
 token that is configured internally in Keystone for admin requests.
@@ -145,3 +148,12 @@ configurable ``rgw keystone verify ssl`` to false.
 
 
 .. _Openstack keystone documentation: http://docs.openstack.org/developer/keystone/configuringservices.html#setting-up-projects-users-and-roles
+
+
+Keystone integration with the S3 API
+------------------------------------
+
+It is possible to use Keystone for authentication even when using the
+S3 API (with AWS-like access and secret keys), if the ``rgw s3 auth
+use keystone`` option is set. For details, see
+:doc:`s3/authentication`.
