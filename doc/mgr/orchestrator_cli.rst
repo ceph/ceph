@@ -117,15 +117,16 @@ Create OSDs on a group of devices on a single host::
 See :ref:`ceph-volume-invocation… <ceph-volume-overview>` for details. E.g.
 ``ceph orchestrator osd create host1 lvm create …``
 
-..
-    Decommission an OSD
-    ^^^^^^^^^^^^^^^^^^^
-    ::
+The output of ``osd create`` is not specified and may vary between orchestrator backends.
 
-        ceph orchestrator osd rm <osd-id>
+Decommission an OSD
+^^^^^^^^^^^^^^^^^^^
+::
 
-    Removes an OSD from the cluster and the host, if the OSD is marked as
-    ``destroyed``.
+    ceph orchestrator osd rm <osd-id>
+
+Removes an OSD from the cluster and the host, if the OSD is marked as
+``destroyed``.
 
 ..
     Blink Device Lights
@@ -137,10 +138,14 @@ See :ref:`ceph-volume-invocation… <ceph-volume-overview>` for details. E.g.
         ceph orchestrator device fault-on <host> <devname>
         ceph orchestrator device fault-off <host> <devname>
 
-        ceph orchestrator osd ident-on {primary,journal,db,all} <osd-id>
-        ceph orchestrator osd ident-off {primary,journal,db,all} <osd-id>
-        ceph orchestrator osd fault-on {primary,journal,db,all} <osd-id>
-        ceph orchestrator osd fault-off {primary,journal,db,all} <osd-id>
+        ceph orchestrator osd ident-on {primary,journal,db,wal,all} <osd-id>
+        ceph orchestrator osd ident-off {primary,journal,db,wal,all} <osd-id>
+        ceph orchestrator osd fault-on {primary,journal,db,wal,all} <osd-id>
+        ceph orchestrator osd fault-off {primary,journal,db,wal,all} <osd-id>
+
+    Where ``journal`` is the filestore journal, ``wal`` is the write ahead log of
+    bluestore and ``all`` stands for all devices associated with the osd
+
 
 ..
     Monitor and manager management
@@ -208,9 +213,6 @@ Creating/growing/shrinking services::
     ceph orchestrator service add <type> <what>
 
 e.g., ``ceph orchestrator service update mds myfs 3 host1 host2 host3``
-
-Note: as with mon creation, the host list is optional, depending on the
-orchestrator backend in use.
 
 Start/stop/reload::
 
