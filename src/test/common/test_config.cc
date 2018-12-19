@@ -167,6 +167,14 @@ TEST(md_config_t, set_val)
     EXPECT_EQ(-EINVAL, conf.set_val("mgr_tick_period", "21 centuries", nullptr));
     EXPECT_EQ(expected.count(), conf.get_val<seconds>("mgr_tick_period").count());
   }
+
+  for (int i = 0; i < 100; ++i) {
+    std::chrono::seconds j = std::chrono::seconds(rand());
+    string s = exact_timespan_str(j);
+    std::chrono::seconds k = parse_timespan(s);
+    cout << "rt: " << j.count() << " -> " << s << " -> " << k.count() << std::endl;
+    EXPECT_EQ(j.count(), k.count());
+  }
 }
 
 TEST(Option, validation)
