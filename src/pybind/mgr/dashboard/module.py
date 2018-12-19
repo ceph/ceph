@@ -54,6 +54,7 @@ if 'COVERAGE_ENABLED' in os.environ:
 
 # pylint: disable=wrong-import-position
 from . import logger, mgr
+from .settings import Settings
 from .controllers import generate_routes, json_error_page
 from .tools import NotificationQueue, RequestLoggingTool, TaskManager, \
                    prepare_url_prefix
@@ -131,7 +132,7 @@ class CherryPyConfig(object):
 
         # Apply the 'global' CherryPy configuration.
         config = {
-            'engine.autoreload.on': False,
+            'environment': 'production' if not Settings.DEBUG_MODE else 'test_suite',
             'server.socket_host': server_addr,
             'server.socket_port': int(server_port),
             'error_page.default': json_error_page,

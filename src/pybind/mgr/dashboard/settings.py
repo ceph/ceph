@@ -18,6 +18,7 @@ class Options(object):
         GRAFANA_API_HOST = ('localhost', str)
         GRAFANA_API_PORT = (3000, int)
     """
+    DEBUG_MODE = (False, bool)
     ENABLE_BROWSABLE_API = (True, bool)
     REST_REQUESTS_TIMEOUT = (45, int)
 
