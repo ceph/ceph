@@ -526,6 +526,8 @@ def create_simple_monmap(ctx, remote, conf, mons,
         '--create',
         '--clobber',
     ]
+    if mon_bind_addrvec:
+        args.extend(['--enable-all-features'])
     for (name, addr) in addresses:
         n = name[4:]
         if mon_bind_addrvec and (',' in addr or 'v' in addr or ':' in addr):
