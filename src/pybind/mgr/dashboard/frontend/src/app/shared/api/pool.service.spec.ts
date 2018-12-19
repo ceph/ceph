@@ -29,7 +29,7 @@ describe('PoolService', () => {
 
   it('should call getList', () => {
     service.getList().subscribe();
-    const req = httpTesting.expectOne(apiPath);
+    const req = httpTesting.expectOne(`${apiPath}?stats=true`);
     expect(req.request.method).toBe('GET');
   });
 

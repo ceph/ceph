@@ -41,7 +41,7 @@ export class PoolService {
   }
 
   getList() {
-    return this.http.get(this.apiPath);
+    return this.http.get(`${this.apiPath}?stats=true`);
   }
 
   getInfo(): Observable<PoolFormInfo> {
