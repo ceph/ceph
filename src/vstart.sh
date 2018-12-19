@@ -682,6 +682,7 @@ start_mon() {
 		# build a fresh fs monmap, mon fs
 		local str=""
 		local count=0
+		local mon_host=""
 		for f in $MONS
 		do
 		    if [ $msgr -eq 1 ]; then
@@ -694,14 +695,18 @@ start_mon() {
 			A="v2:$IP:$(($CEPH_PORT+$count)),v1:$IP:$(($CEPH_PORT+$count+1))"
 		    fi
 		    str="$str --addv $f $A"
+		    mon_host="$mon_host $A"
 		    wconf <<EOF
 [mon.$f]
         host = $HOSTNAME
         mon data = $CEPH_DEV_DIR/mon.$f
-        mon addr = $A
 EOF
 		    count=$(($count + 2))
 		done
+		wconf <<EOF
+[global]
+        mon host = $mon_host
+EOF
 		prun "$CEPH_BIN/monmaptool" --create --clobber $str --print "$monmap_fn"
 
 		for f in $MONS
