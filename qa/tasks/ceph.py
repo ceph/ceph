@@ -677,6 +677,7 @@ def cluster(ctx, config):
         ctx.ceph = {}
     ctx.ceph[cluster_name] = argparse.Namespace()
     ctx.ceph[cluster_name].conf = conf
+    ctx.ceph[cluster_name].mons = mons
 
     default_keyring = '/etc/ceph/{cluster}.keyring'.format(cluster=cluster_name)
     keyring_path = config.get('keyring_path', default_keyring)
