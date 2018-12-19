@@ -60,7 +60,7 @@ static void alloc_aligned_buffer(bufferlist &data, unsigned len, unsigned off) {
  **/
 
 ProtocolV2::ProtocolV2(AsyncConnection *connection)
-    : Protocol(connection),
+    : Protocol(2, connection),
       temp_buffer(nullptr),
       peer_addr_count(0),
       can_write(WriteStatus::NOWRITE),
@@ -2017,6 +2017,7 @@ CtPtr ProtocolV2::handle_connect_message_2() {
                             // AsyncConnection here)
 
     ProtocolV2 *exproto = dynamic_cast<ProtocolV2 *>(existing->protocol.get());
+    assert(exproto->proto_type == 2);
 
     if (!exproto) {
       ldout(cct, 1) << __func__ << " existing=" << existing << dendl;
