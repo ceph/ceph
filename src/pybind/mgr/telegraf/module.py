@@ -43,6 +43,7 @@ class Module(MgrModule):
         },
         {
             'name': 'interval',
+            'type': 'secs',
             'default': 15
         }
     ]
