@@ -326,7 +326,8 @@ void OSDMonitor::create_initial()
 
   newmap.flags |=
     CEPH_OSDMAP_RECOVERY_DELETES |
-    CEPH_OSDMAP_PURGED_SNAPDIRS;
+    CEPH_OSDMAP_PURGED_SNAPDIRS |
+    CEPH_OSDMAP_PGLOG_HARDLIMIT;
   newmap.full_ratio = g_conf()->mon_osd_full_ratio;
   if (newmap.full_ratio > 1.0) newmap.full_ratio /= 100;
   newmap.backfillfull_ratio = g_conf()->mon_osd_backfillfull_ratio;
