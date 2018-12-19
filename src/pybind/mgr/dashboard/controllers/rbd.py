@@ -114,7 +114,8 @@ def _sort_features(features, enable=True):
     features.sort(key=key_func, reverse=not enable)
 
 
-@ApiController('/block/image', Scope.RBD_IMAGE)
+@ApiController('/block/image', Scope.RBD_IMAGE,
+               feature_enable_option='ENABLE_RBD_IMAGES')
 class Rbd(RESTController):
 
     RESOURCE_ID = "pool_name/image_name"
@@ -386,7 +387,8 @@ class Rbd(RESTController):
         return _rbd_call(pool_name, rbd_inst.trash_move, image_name, delay)
 
 
-@ApiController('/block/image/{pool_name}/{image_name}/snap', Scope.RBD_IMAGE)
+@ApiController('/block/image/{pool_name}/{image_name}/snap', Scope.RBD_IMAGE,
+               feature_enable_option='ENABLE_RBD_IMAGES')
 class RbdSnapshot(RESTController):
 
     RESOURCE_ID = "snapshot_name"
@@ -466,7 +468,8 @@ class RbdSnapshot(RESTController):
         return _rbd_call(pool_name, _parent_clone)
 
 
-@ApiController('/block/image/trash', Scope.RBD_IMAGE)
+@ApiController('/block/image/trash', Scope.RBD_IMAGE,
+               feature_enable_option='ENABLE_RBD_IMAGES')
 class RbdTrash(RESTController):
     RESOURCE_ID = "pool_name/image_id"
     rbd_inst = rbd.RBD()

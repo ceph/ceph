@@ -6,7 +6,8 @@ from ..security import Scope
 from ..services.tcmu_service import TcmuService
 
 
-@ApiController('/tcmuiscsi', Scope.ISCSI)
+@ApiController('/tcmuiscsi', Scope.ISCSI,
+               feature_enable_option='ENABLE_RBD_ISCSI')
 class TcmuIscsi(RESTController):
 
     def list(self):

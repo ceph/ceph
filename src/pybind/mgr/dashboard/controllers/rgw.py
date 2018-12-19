@@ -14,7 +14,7 @@ from ..rest_client import RequestException
 from ..exceptions import DashboardException
 
 
-@ApiController('/rgw', Scope.RGW)
+@ApiController('/rgw', Scope.RGW, feature_enable_option='ENABLE_RGW')
 class Rgw(BaseController):
 
     @Endpoint()
@@ -43,7 +43,7 @@ class Rgw(BaseController):
         return status
 
 
-@ApiController('/rgw/daemon', Scope.RGW)
+@ApiController('/rgw/daemon', Scope.RGW, feature_enable_option='ENABLE_RGW')
 class RgwDaemon(RESTController):
 
     def list(self):
@@ -102,7 +102,7 @@ class RgwRESTController(RESTController):
             raise DashboardException(e, http_status_code=500, component='rgw')
 
 
-@ApiController('/rgw/bucket', Scope.RGW)
+@ApiController('/rgw/bucket', Scope.RGW, feature_enable_option='ENABLE_RGW')
 class RgwBucket(RgwRESTController):
 
     def _append_bid(self, bucket):
@@ -149,7 +149,7 @@ class RgwBucket(RgwRESTController):
         }, json_response=False)
 
 
-@ApiController('/rgw/user', Scope.RGW)
+@ApiController('/rgw/user', Scope.RGW, feature_enable_option='ENABLE_RGW')
 class RgwUser(RgwRESTController):
 
     def _append_uid(self, user):

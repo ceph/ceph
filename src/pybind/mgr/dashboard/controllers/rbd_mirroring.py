@@ -328,7 +328,7 @@ def _reset_view_cache():
     _get_content_data.reset()
 
 
-@ApiController('/block/mirroring/summary', Scope.RBD_MIRRORING)
+@ApiController('/block/mirroring/summary', Scope.RBD_MIRRORING, feature_enable_option='ENABLE_RBD_MIRRORING')
 class RbdMirroringSummary(BaseController):
 
     @Endpoint()
@@ -339,7 +339,7 @@ class RbdMirroringSummary(BaseController):
         return {'status': status, 'content_data': content_data}
 
 
-@ApiController('/block/mirroring/pool', Scope.RBD_MIRRORING)
+@ApiController('/block/mirroring/pool', Scope.RBD_MIRRORING, feature_enable_option='ENABLE_RBD_MIRRORING')
 class RbdMirroringPoolMode(RESTController):
 
     RESOURCE_ID = "pool_name"
@@ -375,7 +375,7 @@ class RbdMirroringPoolMode(RESTController):
         return _rbd_call(pool_name, _edit, mirror_mode)
 
 
-@ApiController('/block/mirroring/pool/{pool_name}/peer', Scope.RBD_MIRRORING)
+@ApiController('/block/mirroring/pool/{pool_name}/peer', Scope.RBD_MIRRORING, feature_enable_option='ENABLE_RBD_MIRRORING')
 class RbdMirroringPoolPeer(RESTController):
 
     RESOURCE_ID = "peer_uuid"

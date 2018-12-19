@@ -13,7 +13,8 @@ from ..services.ceph_service import CephService
 from ..tools import ViewCache
 
 
-@ApiController('/cephfs', Scope.CEPHFS)
+@ApiController('/cephfs', Scope.CEPHFS,
+               feature_enable_option='ENABLE_CEPHFS')
 class CephFS(RESTController):
     def __init__(self):
         super(CephFS, self).__init__()
