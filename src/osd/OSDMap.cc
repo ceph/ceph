@@ -4419,7 +4419,10 @@ int OSDMap::calc_pg_upmaps(
 	      ldout(cct, 10) << "  dropping pg_upmap_items " << pg
 			     << " " << p->second << dendl;
               for (auto i : p->second) {
-                pgs_by_osd[i.second].erase(pg);
+                auto it = pgs_by_osd.find(i.second);
+                if (it != pgs_by_osd.end()) {
+                  pgs_by_osd.erase(it);
+                }
                 pgs_by_osd[i.first].insert(pg);
               }
 	      tmp.pg_upmap_items.erase(p);
