@@ -79,6 +79,8 @@ enum {
   l_c_reply,
   l_c_lat,
   l_c_wrlat,
+  l_c_read,
+  l_c_fsync,
   l_c_last,
 };
 
