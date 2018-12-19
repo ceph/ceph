@@ -6840,7 +6840,9 @@ int OSDMonitor::prepare_new_pool(string& name,
     // larger than int32_t max.
     pi->opts.set(pool_opts_t::TARGET_SIZE_BYTES, static_cast<int64_t>(target_size_bytes));
   }
-  if (target_size_ratio > 0.0) {
+  if (target_size_ratio > 0.0 &&
+    osdmap.require_osd_release >= CEPH_RELEASE_NAUTILUS) {
+    // only store for nautilus+, just to be consistent and tidy.
     pi->opts.set(pool_opts_t::TARGET_SIZE_RATIO, target_size_ratio);
   }
 
