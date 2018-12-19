@@ -593,6 +593,8 @@ AsyncConnectionRef AsyncMessenger::create_connect(
 						target.is_msgr2(), false);
   conn->connect(addrs, type, target);
   ceph_assert(!conns.count(addrs));
+  ldout(cct, 10) << __func__ << " " << conn << " " << addrs << " "
+		 << conn->peer_addrs << dendl;
   conns[addrs] = conn;
   w->get_perf_counter()->inc(l_msgr_active_connections);
 
@@ -810,6 +812,31 @@ int AsyncMessenger::get_proto_version(int peer_type, bool connect) const
   }
   return 0;
 }
+
+int AsyncMessenger::accept_conn(AsyncConnectionRef conn)
+{
+  Mutex::Locker l(lock);
+  auto it = conns.find(conn->peer_addrs);
+  if (it != conns.end()) {
+    AsyncConnectionRef existing = it->second;
+
+    // lazy delete, see "deleted_conns"
+    // If conn already in, we will return 0
+    Mutex::Locker l(deleted_lock);
+    if (deleted_conns.erase(existing)) {
+      existing->get_perf_counter()->dec(l_msgr_active_connections);
+      conns.erase(it);
+    } else if (conn != existing) {
+      return -1;
+    }
+  }
+  ldout(cct, 10) << __func__ << " " << conn << " " << conn->peer_addrs << dendl;
+  conns[conn->peer_addrs] = conn;
+  conn->get_perf_counter()->inc(l_msgr_active_connections);
+  accepting_conns.erase(conn);
+  return 0;
+}
+
 
 bool AsyncMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
 {
