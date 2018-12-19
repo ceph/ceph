@@ -10,6 +10,7 @@ This module is runnable outside of ceph-mgr, useful for testing.
 from six.moves.urllib.parse import urljoin  # pylint: disable=import-error
 import logging
 import json
+from contextlib import contextmanager
 
 # Optional kubernetes imports to enable MgrModule.can_run
 # to behave cleanly.
@@ -191,6 +192,17 @@ class RookCluster(object):
 
         return pods_summary
 
+    @contextmanager
+    def ignore_409(self, what):
+        try:
+            yield
+        except ApiException as e:
+            if e.status == 409:
+                # Idempotent, succeed.
+                log.info("{} already exists".format(what))
+            else:
+                raise
+
     def add_filesystem(self, spec):
         # TODO use spec.placement
         # TODO use spec.min_size (and use max_size meaningfully)
@@ -214,17 +226,8 @@ class RookCluster(object):
             }
         }
 
-        try:
-            self.rook_api_post(
-                "cephfilesystems/",
-                body=rook_fs
-            )
-        except ApiException as e:
-            if e.status == 409:
-                log.info("CephFilesystem '{0}' already exists".format(spec.name))
-                # Idempotent, succeed.
-            else:
-                raise
+        with self.ignore_409("CephFilesystem '{0}' already exists".format(spec.name)):
+            self.rook_api_post("cephfilesystems/", body=rook_fs)
 
     def add_objectstore(self, spec):
   
@@ -257,17 +260,8 @@ class RookCluster(object):
             }
         }
         
-        try:
-            self.rook_api_post(
-                "cephobjectstores/",
-                body=rook_os
-            )
-        except ApiException as e:
-            if e.status == 409:
-                log.info("CephObjectStore '{0}' already exists".format(spec.name))
-                # Idempotent, succeed.                                                                                                                                                                     
-            else:
-                raise
+        with self.ignore_409("CephObjectStore '{0}' already exists".format(spec.name)):
+            self.rook_api_post("cephobjectstores/", body=rook_os)
 
     def rm_service(self, service_type, service_id):
         assert service_type in ("mds", "rgw")
