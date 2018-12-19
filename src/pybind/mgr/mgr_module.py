@@ -323,7 +323,15 @@ class MgrModule(ceph_module.BaseMgrModule):
 
         for o in self.MODULE_OPTIONS:
             if 'default' in o:
-                self.MODULE_OPTION_DEFAULTS[o['name']] = o['default']
+                if 'type' in o:
+                    # we'll assume the declared type matches the
+                    # supplied default value's type.
+                    self.MODULE_OPTION_DEFAULTS[o['name']] = o['default']
+                else:
+                    # module not declaring it's type, so normalize the
+                    # default value to be a string for consistent behavior
+                    # with default and user-supplied option values.
+                    self.MODULE_OPTION_DEFAULTS[o['name']] = str(o['default'])
 
     def __del__(self):
         unconfigure_logger(self, self.module_name)
