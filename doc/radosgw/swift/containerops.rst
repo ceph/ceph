@@ -201,6 +201,15 @@ settings, which effectively enables all users to either read from or write
 to the container. Setting ``*`` makes the container public. That is it 
 enables anonymous users to either read from or write to the container.
 
+.. note:: If you are planning to expose public read ACL functionality
+	  for the Swift API, it is strongly recommended to include the
+	  Swift account name in the endpoint definition, so as to most
+	  closely emulate the behavior of native OpenStack Swift. To
+	  do so, set the ``ceph.conf`` configuration option ``rgw
+	  swift account in url = true``, and update your Keystone
+	  endpoint to the URL suffix ``/v1/AUTH_%(tenant_id)s``
+	  (instead of just ``/v1``).
+
 
 Syntax
 ~~~~~~
@@ -256,6 +265,52 @@ Request Headers
 :Type: String
 :Required: No
 
+
+Enable Object Versioning for a Container
+========================================
+
+To enable object versioning a container, make a ``POST`` request with
+the API version, account, and container name. You must have write
+permissions on the container to add or update metadata.
+
+.. note:: Object versioning support is not enabled in radosgw by
+	  default; you must set ``rgw swift versioning enabled =
+	  true`` in ``ceph.conf`` to enable this feature.
+
+Syntax
+~~~~~~
+
+::
+
+   POST /{api version}/{account}/{container} HTTP/1.1
+   Host: {fqdn}
+	X-Auth-Token: {auth-token}
+	X-Versions-Location: {archive-container}
+
+Request Headers
+~~~~~~~~~~~~~~~
+
+``X-Versions-Location``
+
+:Description: The name of a container (the "archive container") that
+	      will be used to store versions of the objects in the
+	      container that the ``POST`` request is made on (the
+	      "current container"). The archive container need not
+	      exist at the time it is being referenced, but once
+	      ``X-Versions-Location`` is set on the current container,
+	      and object versioning is thus enabled, the archive
+	      container must exist before any further objects are
+	      updated or deleted in the current container.
+
+	      .. note:: ``X-Versions-Location`` is the only
+                        versioning-related header that radosgw
+                        interprets. ``X-History-Location``, supported
+                        by native OpenStack Swift, is currently not
+                        supported by radosgw.
+:Type: String
+:Required: No (if this header is passed with an empty value, object
+	   versioning on the current container is disabled, but the
+	   archive container continues to exist.)
 
 
 Delete a Container
