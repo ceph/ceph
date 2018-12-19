@@ -40,6 +40,15 @@ class Options(object):
     GRAFANA_API_USERNAME = ('admin', str)
     GRAFANA_API_PASSWORD = ('admin', str)
 
+    # Feature Toggles
+    ENABLE_RBD_IMAGES = (True, bool)
+    ENABLE_RBD_MIRRORING = (True, bool)
+    ENABLE_RBD_ISCSI = (True, bool)
+
+    ENABLE_CEPHFS = (True, bool)
+
+    ENABLE_RGW = (True, bool)
+
     @staticmethod
     def has_default_value(name):
         return getattr(Settings, name, None) is None or \
