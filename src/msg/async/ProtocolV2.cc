@@ -1412,8 +1412,17 @@ CtPtr ProtocolV2::handle_server_addrvec_and_identify(char *buffer, int r) {
   }
 
   bufferlist myaddrbl;
-  ldout(cct, 20) << "encoding myaddrs: " << messenger->get_myaddrs() << dendl;
-  encode(messenger->get_myaddrs(), myaddrbl, -1ll);
+  if (messenger->get_myaddrs().front().is_msgr2()) {
+    ldout(cct, 20) << "encoding myaddrs: " << messenger->get_myaddrs() << dendl;
+    encode(messenger->get_myaddrs(), myaddrbl, -1ll);
+  } else {
+    entity_addr_t a = messenger->get_myaddrs().front();
+    a.set_type(entity_addr_t::TYPE_MSGR2);
+    ldout(cct, 20) << "encoding addr " << a
+		   << " instead of non-v2 myaddrs " << messenger->get_myaddrs()
+		   << dendl;
+    encode(a, myaddrbl, -1ll);
+  }
   bufferlist conbl;
   encode(myaddrbl, conbl);
   return WRITE(conbl, handle_my_addrs_write);
