@@ -1990,7 +1990,8 @@ CtPtr ProtocolV2::handle_connect_message_2() {
 
   // existing?
   AsyncConnectionRef existing = messenger->lookup_conn(connection->peer_addrs);
-
+  ldout(cct, 10) << __func__ << " existing " << existing
+		 << " on " << connection->peer_addrs << dendl;
   connection->inject_delay();
 
   connection->lock.lock();
