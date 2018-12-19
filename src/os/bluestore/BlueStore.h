@@ -2474,7 +2474,8 @@ public:
   string get_device_path(unsigned id);
 
 public:
-  int statfs(struct store_statfs_t *buf) override;
+  int statfs(struct store_statfs_t *buf,
+             osd_alert_list_t* alerts = nullptr) override;
   int pool_statfs(uint64_t pool_id, struct store_statfs_t *buf) override;
 
   void collect_metadata(map<string,string> *pm) override;
@@ -2676,7 +2677,6 @@ private:
       debug_mdata_error_objects.erase(o);
     }
   }
-
 private:
 
   // --------------------------------------------------------
