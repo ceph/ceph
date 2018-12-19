@@ -162,7 +162,7 @@ class OrchestratorCli(MgrModule):
                     s.nodename,
                     s.container_id,
                     s.version,
-                    s.config_location))
+                    s.rados_config_location))
 
             return HandleCommandResult(odata="\n".join(lines))
 
