@@ -220,9 +220,12 @@ int MemStore::mkfs()
   return 0;
 }
 
-int MemStore::statfs(struct store_statfs_t *st)
+int MemStore::statfs(struct store_statfs_t *st, osd_alert_list_t* alerts)
 {
-   dout(10) << __func__ << dendl;
+  dout(10) << __func__ << dendl;
+  if (alerts) {
+    alerts->clear(); // returns nothing for now
+  }
   st->reset();
   st->total = cct->_conf->memstore_device_bytes;
   st->available = std::max<int64_t>(st->total - used_bytes, 0);

@@ -290,7 +290,8 @@ public:
     return 0;
   }
 
-  int statfs(struct store_statfs_t *buf) override;
+  int statfs(struct store_statfs_t *buf,
+             osd_alert_list_t* alerts = nullptr) override;
   int pool_statfs(uint64_t pool_id, struct store_statfs_t *buf) override;
 
   bool exists(CollectionHandle &c, const ghobject_t& oid) override;

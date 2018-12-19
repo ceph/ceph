@@ -4361,7 +4361,6 @@ void BlueStore::_init_logger()
 int BlueStore::_reload_logger()
 {
   struct store_statfs_t store_statfs;
-
   int r = statfs(&store_statfs);
   if (r >= 0) {
     logger->set(l_bluestore_allocated, store_statfs.allocated);
@@ -7987,8 +7986,12 @@ void BlueStore::_get_statfs_overall(struct store_statfs_t *buf)
   buf->available = bfree;
 }
 
-int BlueStore::statfs(struct store_statfs_t *buf)
+int BlueStore::statfs(struct store_statfs_t *buf,
+		      osd_alert_list_t* alerts)
 {
+  if (alerts) {
+    alerts->clear();
+  }
   _get_statfs_overall(buf);
   {
     std::lock_guard l(vstatfs_lock);

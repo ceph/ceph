@@ -112,6 +112,7 @@ string ceph_osd_op_flag_string(unsigned flags);
 /// conver CEPH_OSD_ALLOC_HINT_FLAG_* op flags to a string
 string ceph_osd_alloc_hint_flag_string(unsigned flags);
 
+typedef map<string,string> osd_alert_list_t;
 
 /**
  * osd request identifier
