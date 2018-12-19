@@ -81,13 +81,7 @@ public:
 
   const MgrMap &get_map() const { return map; }
 
-  const Option *find_module_option(const string& name) {
-    auto p = mgr_module_options.find(name);
-    if (p != mgr_module_options.end()) {
-      return &p->second;
-    }
-    return nullptr;
-  }
+  const Option *find_module_option(const string& name);
 
   bool in_use() const { return map.epoch > 0; }
 
