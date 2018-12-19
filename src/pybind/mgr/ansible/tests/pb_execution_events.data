@@ -1,0 +1,183 @@
+{
+    "status": "OK",
+    "msg": "",
+    "data": {
+        "events": {
+            "2-6edf768f-2923-44e1-b884-f0227b811cfc": {
+                "event": "playbook_on_start"
+            },
+            "3-2016b900-e38f-7dcd-a2e7-000000000008": {
+                "event": "playbook_on_play_start"
+            },
+            "4-2016b900-e38f-7dcd-a2e7-000000000012": {
+                "event": "playbook_on_task_start",
+                "task": "Gathering Facts"
+            },
+            "5-19ae1e5e-aa2d-479e-845a-ef0253cc1f99": {
+                "event": "runner_on_ok",
+                "host": "192.168.121.245",
+                "task": "Gathering Facts"
+            },
+            "6-aad3acc4-06a3-4c97-82ff-31e9e484b1f5": {
+                "event": "runner_on_ok",
+                "host": "192.168.121.61",
+                "task": "Gathering Facts"
+            },
+            "7-55298017-3e7d-4734-b316-bbe13ce1da5e": {
+                "event": "runner_on_ok",
+                "host": "192.168.121.254",
+                "task": "Gathering Facts"
+            },
+            "8-2016b900-e38f-7dcd-a2e7-00000000000a": {
+                "event": "playbook_on_task_start",
+                "task": "setup"
+            },
+            "9-2085ccb6-e337-4b9f-bc38-1d8bbf9b973f": {
+                "event": "runner_on_ok",
+                "host": "192.168.121.254",
+                "task": "setup"
+            },
+            "10-e14cdbbc-4883-436c-a41c-a8194ec69075": {
+                "event": "runner_on_ok",
+                "host": "192.168.121.245",
+                "task": "setup"
+            },
+            "11-6d815a26-df53-4240-b8b6-2484e88e4f48": {
+                "event": "runner_on_ok",
+                "host": "192.168.121.61",
+                "task": "setup"
+            },
+            "12-2016b900-e38f-7dcd-a2e7-00000000000b": {
+                "event": "playbook_on_task_start",
+                "task": "Get a list of block devices (excludes loop and child devices)"
+            },
+            "13-799b0119-ccab-4eca-b30b-a37b0bafa02c": {
+                "event": "runner_on_ok",
+                "host": "192.168.121.245",
+                "task": "Get a list of block devices (excludes loop and child devices)"
+            },
+            "14-6beb6958-4bfd-4a9c-bd2c-d20d00248605": {
+                "event": "runner_on_ok",
+                "host": "192.168.121.61",
+                "task": "Get a list of block devices (excludes loop and child devices)"
+            },
+            "15-3ca99cc8-98ea-4967-8f2d-115426d00b6a": {
+                "event": "runner_on_ok",
+                "host": "192.168.121.254",
+                "task": "Get a list of block devices (excludes loop and child devices)"
+            },
+            "16-2016b900-e38f-7dcd-a2e7-00000000000c": {
+                "event": "playbook_on_task_start",
+                "task": "check if disk {{ item }} is free"
+            },
+            "17-8c88141a-08d1-411f-a855-9f7702a49c4e": {
+                "event": "runner_item_on_failed",
+                "host": "192.168.121.245",
+                "task": "check if disk vda is free"
+            },
+            "18-4457db98-6f18-4f63-bfaa-584db5eea05b": {
+                "event": "runner_on_failed",
+                "host": "192.168.121.245",
+                "task": "check if disk {{ item }} is free"
+            },
+            "19-ac3c72cd-1fbb-495a-be69-53fa6029f356": {
+                "event": "runner_item_on_failed",
+                "host": "192.168.121.61",
+                "task": "check if disk vda is free"
+            },
+            "20-d161cb70-ba2e-4571-b029-c6428a566fef": {
+                "event": "runner_on_failed",
+                "host": "192.168.121.61",
+                "task": "check if disk {{ item }} is free"
+            },
+            "21-65f1ce5c-2d86-4cc3-8e10-cff6bf6cbd82": {
+                "event": "runner_item_on_failed",
+                "host": "192.168.121.254",
+                "task": "check if disk sda is free"
+            },
+            "22-7f86dcd4-4ef7-4f5a-9db3-c3780b67cc4b": {
+                "event": "runner_item_on_failed",
+                "host": "192.168.121.254",
+                "task": "check if disk sdb is free"
+            },
+            "23-837bf4f6-a912-46a8-b94b-55aa66a935c4": {
+                "event": "runner_item_on_ok",
+                "host": "192.168.121.254",
+                "task": "check if disk sdc is free"
+            },
+            "24-adf6238d-723f-4783-9226-8475419d466e": {
+                "event": "runner_item_on_failed",
+                "host": "192.168.121.254",
+                "task": "check if disk vda is free"
+            },
+            "25-554661d8-bc34-4885-a589-4960d6b8a487": {
+                "event": "runner_on_failed",
+                "host": "192.168.121.254",
+                "task": "check if disk {{ item }} is free"
+            },
+            "26-2016b900-e38f-7dcd-a2e7-00000000000d": {
+                "event": "playbook_on_task_start",
+                "task": "Update hosts freedisk list"
+            },
+            "27-52df484c-30a0-4e3b-9057-02ca345c5790": {
+                "event": "runner_item_on_skipped",
+                "host": "192.168.121.254",
+                "task": "Update hosts freedisk list"
+            },
+            "28-083616ad-3c1f-4fb8-a06c-5d64e670e362": {
+                "event": "runner_item_on_skipped",
+                "host": "192.168.121.254",
+                "task": "Update hosts freedisk list"
+            },
+            "29-bffc68d3-5448-491f-8780-07858285f5cd": {
+                "event": "runner_item_on_skipped",
+                "host": "192.168.121.245",
+                "task": "Update hosts freedisk list"
+            },
+            "30-cca2dfd9-16e9-4fcb-8bf7-c4da7dab5668": {
+                "event": "runner_on_skipped",
+                "host": "192.168.121.245",
+                "task": "Update hosts freedisk list"
+            },
+            "31-158a98ac-7e8d-4ebb-8c53-4467351a2d3a": {
+                "event": "runner_item_on_ok",
+                "host": "192.168.121.254",
+                "task": "Update hosts freedisk list"
+            },
+            "32-06a7e809-8d82-41df-b01d-45d94e519cb7": {
+                "event": "runner_item_on_skipped",
+                "host": "192.168.121.254",
+                "task": "Update hosts freedisk list"
+            },
+            "33-d5cdbb58-728a-4be5-abf1-4a051146e727": {
+                "event": "runner_item_on_skipped",
+                "host": "192.168.121.61",
+                "task": "Update hosts freedisk list"
+            },
+            "34-9b3c570b-22d8-4539-8c94-d0c1cbed8633": {
+                "event": "runner_on_ok",
+                "host": "192.168.121.254",
+                "task": "Update hosts freedisk list"
+            },
+            "35-93336830-03cd-43ff-be87-a7e063ca7547": {
+                "event": "runner_on_skipped",
+                "host": "192.168.121.61",
+                "task": "Update hosts freedisk list"
+            },
+            "36-2016b900-e38f-7dcd-a2e7-00000000000e": {
+                "event": "playbook_on_task_start",
+                "task": "RESULTS"
+            },
+            "37-100564f1-9fed-48c2-bd62-4ae8636dfcdb": {
+                "event": "runner_on_ok",
+                "host": "192.168.121.254",
+                "task": "RESULTS"
+            },
+            "38-20a64160-30a1-481f-a3ee-36e491bc7869": {
+                "event": "playbook_on_stats"
+            }
+        },
+        "total_events": 37
+    }
+}
+

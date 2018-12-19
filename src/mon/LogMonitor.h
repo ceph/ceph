@@ -17,11 +17,11 @@
 
 #include <map>
 #include <set>
-using namespace std;
 
 #include "include/types.h"
 #include "PaxosService.h"
 
+#include "common/config_fwd.h"
 #include "common/LogEntry.h"
 #include "include/str_map.h"
 
@@ -156,7 +156,6 @@ private:
   bool preprocess_command(MonOpRequestRef op);
   bool prepare_command(MonOpRequestRef op);
 
-  bool _create_sub_summary(MLog *mlog, int level);
   void _create_sub_incremental(MLog *mlog, int level, version_t sv);
 
  public:
@@ -165,7 +164,7 @@ private:
 
   void init() override {
     generic_dout(10) << "LogMonitor::init" << dendl;
-    g_conf->add_observer(this);
+    g_conf().add_observer(this);
     update_log_channels();
   }
   
@@ -183,7 +182,7 @@ private:
   int sub_name_to_id(const string& n);
 
   void on_shutdown() override {
-    g_conf->remove_observer(this);
+    g_conf().remove_observer(this);
   }
 
   const char **get_tracked_conf_keys() const override {
@@ -200,7 +199,7 @@ private:
     };
     return KEYS;
   }
-  void handle_conf_change(const struct md_config_t *conf,
+  void handle_conf_change(const ConfigProxy& conf,
                           const std::set<std::string> &changed) override;
 };
 #endif

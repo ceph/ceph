@@ -15,9 +15,9 @@
 #ifndef OS_KEYVALUESTORE_H
 #define OS_KEYVALUESTORE_H
 
+#include <memory>
 #include <string>
 #include <vector>
-#include "include/memory.h"
 #include "kv/KeyValueDB.h"
 #include "common/hobject.h"
 
@@ -31,6 +31,7 @@ class SequencerPosition;
 class ObjectMap {
 public:
   CephContext* cct;
+  boost::scoped_ptr<KeyValueDB> db;
   /// Set keys and values from specified map
   virtual int set_keys(
     const ghobject_t &oid,              ///< [in] object containing map
@@ -157,13 +158,14 @@ public:
   virtual void compact() {}
 
   typedef KeyValueDB::SimplestIteratorImpl ObjectMapIteratorImpl;
-  typedef ceph::shared_ptr<ObjectMapIteratorImpl> ObjectMapIterator;
+  typedef std::shared_ptr<ObjectMapIteratorImpl> ObjectMapIterator;
   virtual ObjectMapIterator get_iterator(const ghobject_t &oid) {
     return ObjectMapIterator();
   }
 
+  virtual KeyValueDB *get_db() { return nullptr; }
 
-  ObjectMap(CephContext* cct) : cct(cct) {}
+  ObjectMap(CephContext* cct, KeyValueDB *db) : cct(cct), db(db) {}
   virtual ~ObjectMap() {}
 };
 

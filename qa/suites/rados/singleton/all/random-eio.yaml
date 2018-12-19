@@ -18,8 +18,10 @@ tasks:
     log-whitelist:
     - missing primary copy of
     - objects unfound and apparently lost
+    - had a read error
     - overall HEALTH_
-    - (POOL_APP_NOT_ENABLED)
+    - \(POOL_APP_NOT_ENABLED\)
+    - \(PG_DEGRADED\)
 - full_sequential:
   - exec:
       client.0:

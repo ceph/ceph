@@ -21,7 +21,7 @@ public:
 
   TestIoCtxImpl *clone() override;
 
-  int aio_remove(const std::string& oid, AioCompletionImpl *c) override;
+  int aio_remove(const std::string& oid, AioCompletionImpl *c, int flags = 0) override;
 
   int append(const std::string& oid, const bufferlist &bl,
              const SnapContext &snapc) override;
@@ -52,6 +52,9 @@ public:
   int selfmanaged_snap_remove(uint64_t snapid) override;
   int selfmanaged_snap_rollback(const std::string& oid,
                                 uint64_t snapid) override;
+  int set_alloc_hint(const std::string& oid, uint64_t expected_object_size,
+                     uint64_t expected_write_size,
+                     const SnapContext &snapc) override;
   int sparse_read(const std::string& oid, uint64_t off, uint64_t len,
                   std::map<uint64_t,uint64_t> *m, bufferlist *data_bl) override;
   int stat(const std::string& oid, uint64_t *psize, time_t *pmtime) override;

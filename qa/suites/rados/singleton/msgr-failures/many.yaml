@@ -2,7 +2,8 @@ overrides:
   ceph:
     conf:
       global:
-        ms inject socket failures: 500
+        ms inject socket failures: 1000
+        mon mgr beacon grace: 90
+        mon client hunt interval max multiple: 2
       mgr:
         debug monc: 10
-        mon client hunt interval max multiple: 2

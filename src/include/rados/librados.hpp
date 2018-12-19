@@ -1,14 +1,13 @@
 #ifndef __LIBRADOS_HPP
 #define __LIBRADOS_HPP
 
-#include <stdbool.h>
 #include <string>
 #include <list>
 #include <map>
+#include <memory>
 #include <set>
 #include <vector>
 #include <utility>
-#include "memory.h"
 #include "buffer.h"
 
 #include "librados.h"
@@ -110,18 +109,19 @@ namespace librados
     bool operator!=(const NObjectIterator& rhs) const;
     const ListObject& operator*() const;
     const ListObject* operator->() const;
-    NObjectIterator &operator++(); // Preincrement
-    NObjectIterator operator++(int); // Postincrement
+    NObjectIterator &operator++(); //< Preincrement; errors are thrown as exceptions
+    NObjectIterator operator++(int); //< Postincrement; errors are thrown as exceptions
     friend class IoCtx;
     friend class NObjectIteratorImpl;
 
     /// get current hash position of the iterator, rounded to the current pg
     uint32_t get_pg_hash_position() const;
 
-    /// move the iterator to a given hash position.  this may (will!) be rounded to the nearest pg.
+    /// move the iterator to a given hash position. this may (will!) be rounded
+    /// to the nearest pg. errors are thrown as exceptions
     uint32_t seek(uint32_t pos);
 
-    /// move the iterator to a given cursor position
+    /// move the iterator to a given cursor position. errors are thrown as exceptions
     uint32_t seek(const ObjectCursor& cursor);
 
     /// get current cursor position
@@ -268,6 +268,7 @@ namespace librados
     //mainly for delete
     OPERATION_FULL_FORCE	 = LIBRADOS_OPERATION_FULL_FORCE,
     OPERATION_IGNORE_REDIRECT	 = LIBRADOS_OPERATION_IGNORE_REDIRECT,
+    OPERATION_ORDERSNAP          = LIBRADOS_OPERATION_ORDERSNAP,
   };
 
   /*
@@ -316,7 +317,7 @@ namespace librados
     void assert_version(uint64_t ver);
 
     /**
-     * Guard operatation with a check that the object already exists
+     * Guard operation with a check that the object already exists
      */
     void assert_exists();
 
@@ -380,6 +381,7 @@ namespace librados
     void zero(uint64_t off, uint64_t len);
     void rmxattr(const char *name);
     void setxattr(const char *name, const bufferlist& bl);
+    void setxattr(const char *name, const bufferlist&& bl);
     void tmap_update(const bufferlist& cmdbl);
     void tmap_put(const bufferlist& bl);
     void selfmanaged_snap_rollback(uint64_t snapid);
@@ -432,9 +434,7 @@ namespace librados
      * @param src_fadvise_flags the fadvise flags for source object
      */
     void copy_from(const std::string& src, const IoCtx& src_ioctx,
-		   uint64_t src_version);
-    void copy_from2(const std::string& src, const IoCtx& src_ioctx,
-                    uint64_t src_version, uint32_t src_fadvise_flags);
+		   uint64_t src_version, uint32_t src_fadvise_flags);
 
     /**
      * undirty an object
@@ -470,7 +470,12 @@ namespace librados
      * Set redirect target
      */
     void set_redirect(const std::string& tgt_obj, const IoCtx& tgt_ioctx,
-		      uint64_t tgt_version);
+		      uint64_t tgt_version, int flag = 0);
+    void set_chunk(uint64_t src_offset, uint64_t src_length, const IoCtx& tgt_ioctx,
+                   std::string tgt_oid, uint64_t tgt_offset, int flag = 0);
+    void tier_promote();
+    void unset_manifest();
+
 
     friend class IoCtx;
   };
@@ -500,7 +505,6 @@ namespace librados
      */
     void sparse_read(uint64_t off, uint64_t len, std::map<uint64_t,uint64_t> *m,
                     bufferlist *data_bl, int *prval);
-    void tmap_get(bufferlist *pbl, int *prval);
 
     /**
      * omap_get_vals: keys and values from the object omap
@@ -705,6 +709,8 @@ namespace librados
     static void from_rados_ioctx_t(rados_ioctx_t p, IoCtx &pool);
     IoCtx(const IoCtx& rhs);
     IoCtx& operator=(const IoCtx& rhs);
+    IoCtx(IoCtx&& rhs) noexcept;
+    IoCtx& operator=(IoCtx&& rhs) noexcept;
 
     ~IoCtx();
 
@@ -715,20 +721,23 @@ namespace librados
     void dup(const IoCtx& rhs);
 
     // set pool auid
-    int set_auid(uint64_t auid_);
+    int set_auid(uint64_t auid_)
+      __attribute__ ((deprecated));
 
     // set pool auid
-    int set_auid_async(uint64_t auid_, PoolAsyncCompletion *c);
+    int set_auid_async(uint64_t auid_, PoolAsyncCompletion *c)
+      __attribute__ ((deprecated));
 
     // get pool auid
-    int get_auid(uint64_t *auid_);
+    int get_auid(uint64_t *auid_)
+      __attribute__ ((deprecated));
 
     uint64_t get_instance_id() const;
 
     std::string get_pool_name();
 
     bool pool_requires_alignment();
-    int pool_requires_alignment2(bool * requires);
+    int pool_requires_alignment2(bool * req);
     uint64_t pool_required_alignment();
     int pool_required_alignment2(uint64_t * alignment);
 
@@ -781,14 +790,6 @@ namespace librados
      * NOTE: this call steals the contents of @param bl
      */
     int tmap_update(const std::string& oid, bufferlist& cmdbl);
-    /**
-     * replace object contents with provided encoded tmap data
-     *
-     * NOTE: this call steals the contents of @param bl
-     */
-    int tmap_put(const std::string& oid, bufferlist& bl);
-    int tmap_get(const std::string& oid, bufferlist& bl);
-    int tmap_to_omap(const std::string& oid, bool nullok=false);
 
     int omap_get_vals(const std::string& oid,
                       const std::string& start_after,
@@ -890,17 +891,16 @@ namespace librados
 		     std::list<librados::locker_t> *lockers);
 
 
-    /// Start enumerating objects for a pool
-    NObjectIterator nobjects_begin();
-    NObjectIterator nobjects_begin(const bufferlist &filter);
-    /// Start enumerating objects for a pool starting from a hash position
-    NObjectIterator nobjects_begin(uint32_t start_hash_position);
+    /// Start enumerating objects for a pool. Errors are thrown as exceptions.
+    NObjectIterator nobjects_begin(const bufferlist &filter=bufferlist());
+    /// Start enumerating objects for a pool starting from a hash position.
+    /// Errors are thrown as exceptions.
     NObjectIterator nobjects_begin(uint32_t start_hash_position,
-                                   const bufferlist &filter);
-    /// Start enumerating objects for a pool starting from cursor
-    NObjectIterator nobjects_begin(const librados::ObjectCursor& cursor);
+                                   const bufferlist &filter=bufferlist());
+    /// Start enumerating objects for a pool starting from cursor. Errors are
+    /// thrown as exceptions.
     NObjectIterator nobjects_begin(const librados::ObjectCursor& cursor,
-                                   const bufferlist &filter);
+                                   const bufferlist &filter=bufferlist());
     /// Iterator indicating the end of a pool
     const NObjectIterator& nobjects_end() const;
 
@@ -1025,7 +1025,7 @@ namespace librados
 		      size_t write_len, uint64_t off);
 
     /**
-     * Asychronously remove an object
+     * Asynchronously remove an object
      *
      * Queues the remove and returns.
      *
@@ -1107,6 +1107,10 @@ namespace librados
         std::vector<snap_t>& snaps,
         const blkin_trace_info *trace_info);
     int aio_operate(const std::string& oid, AioCompletion *c,
+        ObjectWriteOperation *op, snap_t seq,
+        std::vector<snap_t>& snaps, int flags,
+        const blkin_trace_info *trace_info);
+    int aio_operate(const std::string& oid, AioCompletion *c,
 		    ObjectReadOperation *op, bufferlist *pbl);
 
     int aio_operate(const std::string& oid, AioCompletion *c,
@@ -1133,7 +1137,7 @@ namespace librados
     int unwatch2(uint64_t handle);
     int aio_unwatch(uint64_t handle, AioCompletion *c);
     /**
-     * Send a notify event ot watchers
+     * Send a notify event to watchers
      *
      * Upon completion the pbl bufferlist reply payload will be
      * encoded like so:
@@ -1181,8 +1185,8 @@ namespace librados
      * a known error, return it.
      *
      * If there is an error, the watch is no longer valid, and should
-     * be destroyed with unwatch().  The the user is still interested
-     * in the object, a new watch should be created with watch().
+     * be destroyed with unwatch().  The user is still interested in
+     * the object, a new watch should be created with watch().
      *
      * @param cookie watch handle
      * @returns ms since last confirmed valid, or error
@@ -1233,6 +1237,7 @@ namespace librados
 
     void locator_set_key(const std::string& key);
     void set_namespace(const std::string& nspace);
+    std::string get_namespace() const;
 
     int64_t get_id();
 
@@ -1321,11 +1326,17 @@ namespace librados
       std::map<std::string,std::string>&& status);
 
     int pool_create(const char *name);
-    int pool_create(const char *name, uint64_t auid);
-    int pool_create(const char *name, uint64_t auid, uint8_t crush_rule);
+    int pool_create(const char *name, uint64_t auid)
+      __attribute__ ((deprecated));
+    int pool_create(const char *name, uint64_t auid, uint8_t crush_rule)
+      __attribute__ ((deprecated));
+    int pool_create_with_rule(const char *name, uint8_t crush_rule);
     int pool_create_async(const char *name, PoolAsyncCompletion *c);
-    int pool_create_async(const char *name, uint64_t auid, PoolAsyncCompletion *c);
-    int pool_create_async(const char *name, uint64_t auid, uint8_t crush_rule, PoolAsyncCompletion *c);
+    int pool_create_async(const char *name, uint64_t auid, PoolAsyncCompletion *c)
+      __attribute__ ((deprecated));
+    int pool_create_async(const char *name, uint64_t auid, uint8_t crush_rule, PoolAsyncCompletion *c)
+      __attribute__ ((deprecated));
+    int pool_create_with_rule_async(const char *name, uint8_t crush_rule, PoolAsyncCompletion *c);
     int pool_get_base_tier(int64_t pool, int64_t* base_tier);
     int pool_delete(const char *name);
     int pool_delete_async(const char *name, PoolAsyncCompletion *c);
@@ -1333,6 +1344,10 @@ namespace librados
     int pool_reverse_lookup(int64_t id, std::string *name);
 
     uint64_t get_instance_id();
+
+    int get_min_compatible_osd(int8_t* require_osd_release);
+    int get_min_compatible_client(int8_t* min_compat_client,
+                                  int8_t* require_min_compat_client);
 
     int mon_command(std::string cmd, const bufferlist& inbl,
 		    bufferlist *outbl, std::string *outs);

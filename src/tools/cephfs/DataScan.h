@@ -316,7 +316,7 @@ class DataScan : public MDSUtility, public MetadataTool
         std::function<int(std::string, uint64_t, uint64_t)> handler);
 
   public:
-    void usage();
+    static void usage();
     int main(const std::vector<const char *> &args);
 
     DataScan()

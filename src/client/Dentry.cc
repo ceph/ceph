@@ -26,3 +26,8 @@ void Dentry::dump(Formatter *f) const
   }
   f->dump_int("cap_shared_gen", cap_shared_gen);
 }
+
+std::ostream &operator<<(std::ostream &oss, const Dentry &dn)
+{
+  return oss << dn.dir->parent_inode->vino() << "[\"" << dn.name << "\"]";
+}

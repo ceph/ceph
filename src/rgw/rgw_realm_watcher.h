@@ -5,7 +5,7 @@
 #define RGW_REALM_WATCHER_H
 
 #include "include/rados/librados.hpp"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "common/Timer.h"
 #include "common/Cond.h"
 
@@ -33,10 +33,10 @@ class RGWRealmWatcher : public librados::WatchCtx2 {
     virtual ~Watcher() = default;
 
     virtual void handle_notify(RGWRealmNotify type,
-                               bufferlist::iterator& p) = 0;
+                               bufferlist::const_iterator& p) = 0;
   };
 
-  RGWRealmWatcher(CephContext* cct, RGWRealm& realm);
+  RGWRealmWatcher(CephContext* cct, const RGWRealm& realm);
   ~RGWRealmWatcher() override;
 
   /// register a watcher for the given notification type
@@ -59,7 +59,7 @@ class RGWRealmWatcher : public librados::WatchCtx2 {
   uint64_t watch_handle = 0;
   std::string watch_oid;
 
-  int watch_start(RGWRealm& realm);
+  int watch_start(const RGWRealm& realm);
   int watch_restart();
   void watch_stop();
 

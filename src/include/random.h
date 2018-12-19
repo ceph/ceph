@@ -17,24 +17,72 @@
 
 #include <mutex>
 #include <random>
-
-#include "boost/optional.hpp"
-
-#include "common/backport14.h"
+#include <type_traits>
+#include <boost/optional.hpp>
 
 // Basic random number facility, adapted from N3551:
-namespace ceph {
-namespace util {
+namespace ceph::util {
 
-inline namespace version_1_0 {
+inline namespace version_1_0_2 {
+
+namespace detail {
+
+template <typename T0, typename T1>
+using larger_of = typename std::conditional<
+                    sizeof(T0) >= sizeof(T1), 
+                    T0, T1>
+                  ::type;
+
+// avoid mixing floating point and integers:
+template <typename NumberT0, typename NumberT1>
+using has_compatible_numeric_types =
+            std::disjunction<
+                std::conjunction<
+                    std::is_floating_point<NumberT0>, std::is_floating_point<NumberT1>
+                >,
+                std::conjunction<
+                    std::is_integral<NumberT0>, std::is_integral<NumberT1>
+                >
+            >;
+
+
+// Select the larger of type compatible numeric types:
+template <typename NumberT0, typename NumberT1>
+using select_number_t = std::enable_if_t<detail::has_compatible_numeric_types<NumberT0, NumberT1>::value,
+                                         detail::larger_of<NumberT0, NumberT1>>;
+
+} // namespace detail
+
+namespace detail {
+
+// Choose default distribution for appropriate types:
+template <typename NumberT, 
+          bool IsIntegral>
+struct select_distribution
+{
+ using type = std::uniform_int_distribution<NumberT>;
+};
+
+template <typename NumberT>
+struct select_distribution<NumberT, false>
+{
+ using type = std::uniform_real_distribution<NumberT>;
+};
+
+template <typename NumberT>
+using default_distribution = typename
+    select_distribution<NumberT, std::is_integral<NumberT>::value>::type;
+
+} // namespace detail
 
 namespace detail {
 
 template <typename EngineT>
 EngineT& engine();
 
-template <typename MutexT, typename EngineT>
-void randomize_rng(const int seed, MutexT& m, EngineT& e)
+template <typename MutexT, typename EngineT, 
+          typename SeedT = typename EngineT::result_type>
+void randomize_rng(const SeedT seed, MutexT& m, EngineT& e)
 {
   std::lock_guard<MutexT> lg(m);
   e.seed(seed);
@@ -43,14 +91,15 @@ void randomize_rng(const int seed, MutexT& m, EngineT& e)
 template <typename MutexT, typename EngineT>
 void randomize_rng(MutexT& m, EngineT& e)
 {
-  thread_local std::random_device rd;
+  std::random_device rd;
  
   std::lock_guard<MutexT> lg(m);
   e.seed(rd());
 }
 
-template <typename EngineT = std::default_random_engine>
-void randomize_rng(const int n)
+template <typename EngineT = std::default_random_engine,
+          typename SeedT = typename EngineT::result_type>
+void randomize_rng(const SeedT n)
 {
   detail::engine<EngineT>().seed(n);
 }
@@ -58,7 +107,7 @@ void randomize_rng(const int n)
 template <typename EngineT = std::default_random_engine>
 void randomize_rng()
 {
-  thread_local std::random_device rd;
+  std::random_device rd;
   detail::engine<EngineT>().seed(rd());
 }
 
@@ -80,12 +129,12 @@ EngineT& engine()
 namespace detail {
 
 template <typename NumberT,
-          typename DistributionT,
+          typename DistributionT = detail::default_distribution<NumberT>,
           typename EngineT>
 NumberT generate_random_number(const NumberT min, const NumberT max,
                                EngineT& e)
 {
-  thread_local DistributionT d { min, max };
+  DistributionT d { min, max };
 
   using param_type = typename DistributionT::param_type;
   return d(e, param_type { min, max });
@@ -93,12 +142,12 @@ NumberT generate_random_number(const NumberT min, const NumberT max,
 
 template <typename NumberT,
           typename MutexT,
-          typename DistributionT,
+          typename DistributionT = detail::default_distribution<NumberT>,
           typename EngineT>
 NumberT generate_random_number(const NumberT min, const NumberT max,
                                MutexT& m, EngineT& e)
 {
-  thread_local DistributionT d { min, max };
+  DistributionT d { min, max };
  
   using param_type = typename DistributionT::param_type;
  
@@ -107,7 +156,7 @@ NumberT generate_random_number(const NumberT min, const NumberT max,
 }
 
 template <typename NumberT,
-          typename DistributionT,
+          typename DistributionT = detail::default_distribution<NumberT>,
           typename EngineT>
 NumberT generate_random_number(const NumberT min, const NumberT max)
 {
@@ -115,14 +164,20 @@ NumberT generate_random_number(const NumberT min, const NumberT max)
           (min, max, detail::engine<EngineT>());
 }
 
-template <typename MutexT, typename EngineT,
-          int min = 0,
-          int max = std::numeric_limits<int>::max(), 
-          typename DistributionT = std::uniform_int_distribution<int>>
-int generate_random_number(MutexT& m, EngineT& e)
+template <typename MutexT, 
+          typename EngineT,
+          typename NumberT = int,
+          typename DistributionT = detail::default_distribution<NumberT>>
+NumberT generate_random_number(MutexT& m, EngineT& e)
 {
-  return detail::generate_random_number<int, MutexT, DistributionT, EngineT>
-          (min, max, m, e);
+  return detail::generate_random_number<NumberT, MutexT, DistributionT, EngineT>
+          (0, std::numeric_limits<NumberT>::max(), m, e);
+}
+
+template <typename NumberT, typename MutexT, typename EngineT>
+NumberT generate_random_number(const NumberT max, MutexT& m, EngineT& e)
+{
+  return generate_random_number<NumberT>(0, max, m, e);
 }
 
 } // namespace detail
@@ -133,105 +188,43 @@ void randomize_rng()
   detail::randomize_rng<EngineT>();
 }
 
-template <typename IntegerT = int,
-          typename DistributionT = std::uniform_int_distribution<IntegerT>,
+template <typename NumberT = int,
+          typename DistributionT = detail::default_distribution<NumberT>,
           typename EngineT = std::default_random_engine>
-IntegerT generate_random_number()
+NumberT generate_random_number()
 {
-  using limits = std::numeric_limits<IntegerT>;
-  return detail::generate_random_number<IntegerT, DistributionT, EngineT>
-          (limits::min(), limits::max());
+  return detail::generate_random_number<NumberT, DistributionT, EngineT>
+          (0, std::numeric_limits<NumberT>::max());
 }
 
-template <typename IntegerT>
-IntegerT generate_random_number(const IntegerT min, const IntegerT max,
-                                ceph::enable_if_t<std::is_integral<IntegerT>::value>* = nullptr)
+template <typename NumberT0, typename NumberT1,
+          typename NumberT = detail::select_number_t<NumberT0, NumberT1>
+         >
+NumberT generate_random_number(const NumberT0 min, const NumberT1 max)
 {
-  return detail::generate_random_number<IntegerT,
-                                        std::uniform_int_distribution<IntegerT>,
+  return detail::generate_random_number<NumberT,
+                                        detail::default_distribution<NumberT>,
                                         std::default_random_engine>
-                                       (min, max); 
+                                       (static_cast<NumberT>(min), static_cast<NumberT>(max)); 
 }
 
-namespace detail {
-
-template <typename IntegerT, typename MutexT, typename EngineT>
-int generate_random_number(const IntegerT min, const IntegerT max,
-                           MutexT& m, EngineT& e,
-                           ceph::enable_if_t<std::is_integral<IntegerT>::value>* = nullptr)
+template <typename NumberT0, typename NumberT1,
+          typename DistributionT,
+          typename EngineT,
+          typename NumberT = detail::select_number_t<NumberT0, NumberT1>
+		 >
+NumberT generate_random_number(const NumberT min, const NumberT max,
+                               EngineT& e)
 {
-  return detail::generate_random_number<IntegerT, MutexT,
-                                        std::uniform_int_distribution<IntegerT>,
-                                        EngineT>
-                                       (min, max, m, e);
+ return detail::generate_random_number<NumberT,
+                       DistributionT,
+                       EngineT>(static_cast<NumberT>(min), static_cast<NumberT>(max), e);
 }
 
-template <typename IntegerT, typename MutexT, typename EngineT>
-int generate_random_number(const IntegerT max,
-                           MutexT& m, EngineT& e,
-                           ceph::enable_if_t<std::is_integral<IntegerT>::value>* = nullptr)
+template <typename NumberT>
+NumberT generate_random_number(const NumberT max)
 {
-  constexpr IntegerT zero = 0;
-  return generate_random_number(zero, max, m, e);
-}
-
-} // namespace detail
-
-template <typename IntegerT>
-int generate_random_number(const IntegerT max,
-                           ceph::enable_if_t<std::is_integral<IntegerT>::value>* = nullptr)
-{
-  constexpr IntegerT zero = 0;   
-  return generate_random_number(zero, max);
-}
-
-template <typename RealT>
-RealT generate_random_number(const RealT min, const RealT max, 
-                             ceph::enable_if_t<std::is_floating_point<RealT>::value>* = nullptr)
-{
-  return detail::generate_random_number<RealT,
-                                        std::uniform_real_distribution<RealT>, 
-                                        std::default_random_engine>
-                                       (min, max);
-} 
-
-namespace detail {
-
-template <typename RealT, typename MutexT>
-RealT generate_random_number(const RealT max, MutexT& m,
-                             ceph::enable_if_t<std::is_floating_point<RealT>::value>* = nullptr)
-{
-  constexpr RealT zero = 0.0;
-  return generate_random_number(zero, max, m);
-}
-
-template <typename RealT, typename MutexT, typename EngineT>
-RealT generate_random_number(const RealT min, const RealT max, MutexT& m, EngineT& e,
-                             ceph::enable_if_t<std::is_floating_point<RealT>::value>* = nullptr)
-{
-  return detail::generate_random_number<RealT, MutexT, 
-                                        std::uniform_real_distribution<RealT>,
-                                        EngineT>
-                                       (min, max, m, e);
-}
-
-
-template <typename RealT, typename MutexT, typename EngineT>
-RealT generate_random_number(const RealT max, MutexT& m, EngineT& e,
-                             ceph::enable_if_t<std::is_floating_point<RealT>::value>* = nullptr)
-{
-  constexpr RealT zero = 0.0;
-  return generate_random_number(zero, max, m, e);
-}
-
-} // namespace detail
-
-template <typename RealT>
-RealT generate_random_number(const RealT max,
-                             ceph::enable_if_t<std::is_floating_point<RealT>::value>* = nullptr)
-{
-  constexpr RealT zero = 0.0;
-  return generate_random_number(zero, max);
+ return generate_random_number<NumberT>(0, max);
 }
 
 // Function object:
@@ -241,16 +234,24 @@ class random_number_generator final
   std::mutex l;
   std::random_device rd;
   std::default_random_engine e;
+
+  using seed_type = typename decltype(e)::result_type;
  
   public:
-  using number_type = NumberT;
+  using number_type         = NumberT;
+  using random_engine_type  = decltype(e);
+  using random_device_type  = decltype(rd);
+
+  public:
+  random_device_type& random_device() noexcept { return rd; } 
+  random_engine_type& random_engine() noexcept { return e; }
  
   public:
   random_number_generator() {
     detail::randomize_rng(l, e);
   }
  
-  explicit random_number_generator(const int seed) {
+  explicit random_number_generator(const seed_type seed) {
     detail::randomize_rng(seed, l, e);
   }
 
@@ -268,21 +269,21 @@ class random_number_generator final
   }
  
   NumberT operator()(const NumberT max) { 
-    return detail::generate_random_number(max, l, e); 
+    return detail::generate_random_number<NumberT>(max, l, e); 
   }
  
   NumberT operator()(const NumberT min, const NumberT max) { 
-    return detail::generate_random_number(min, max, l, e); 
+    return detail::generate_random_number<NumberT>(min, max, l, e); 
   }
  
   public:
-  void seed(const int n) { 
+  void seed(const seed_type n) { 
     detail::randomize_rng(n, l, e); 
   }
 };
 
-} // inline namespace version_1_0
+} // inline namespace version_*
 
-}} // namespace ceph::util
+} // namespace ceph::util
 
 #endif

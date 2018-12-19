@@ -182,12 +182,9 @@ tcp and through unix domain socket:
 
 		</VirtualHost>
 
-   The latest version of Ubuntu i.e, 14.04 ships with ``Apache 2.4.7`` that
-   does not have Unix Domain Socket support in it and as such it has to be
-   configured with localhost tcp. The Unix Domain Socket support is available in
-   ``Apache 2.4.9`` and later versions. A bug has been filed to backport the UDS
-   support to ``Apache 2.4.7`` for ``Ubuntu 14.04``.
-   See: https://bugs.launchpad.net/ubuntu/+source/apache2/+bug/1411030
+   Please note, ``Apache 2.4.7`` does not have Unix Domain Socket support in
+   it and as such it has to be configured with localhost tcp. The Unix Domain
+   Socket support is available in ``Apache 2.4.9`` and later versions.
 
 #. Generate a key for radosgw to use for authentication with the cluster. ::
 

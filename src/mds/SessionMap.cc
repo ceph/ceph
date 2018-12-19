@@ -21,7 +21,8 @@
 
 #include "common/config.h"
 #include "common/errno.h"
-#include "include/assert.h"
+#include "common/DecayCounter.h"
+#include "include/ceph_assert.h"
 #include "include/stringify.h"
 
 #define dout_context g_ceph_context
@@ -37,7 +38,7 @@ class SessionMapIOContext : public MDSIOContextBase
     MDSRank *get_mds() override {return sessionmap->mds;}
   public:
     explicit SessionMapIOContext(SessionMap *sessionmap_) : sessionmap(sessionmap_) {
-      assert(sessionmap != NULL);
+      ceph_assert(sessionmap != NULL);
     }
 };
 };
@@ -46,12 +47,24 @@ void SessionMap::register_perfcounters()
 {
   PerfCountersBuilder plb(g_ceph_context, "mds_sessions",
       l_mdssm_first, l_mdssm_last);
+
   plb.add_u64(l_mdssm_session_count, "session_count",
-      "Session count", "sess", PerfCountersBuilder::PRIO_USEFUL);
+      "Session count", "sess", PerfCountersBuilder::PRIO_INTERESTING);
+
+  plb.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
   plb.add_u64_counter(l_mdssm_session_add, "session_add",
       "Sessions added");
   plb.add_u64_counter(l_mdssm_session_remove, "session_remove",
       "Sessions removed");
+  plb.add_u64(l_mdssm_session_open, "sessions_open",
+              "Sessions currently open");
+  plb.add_u64(l_mdssm_session_stale, "sessions_stale",
+              "Sessions currently stale");
+  plb.add_u64(l_mdssm_total_load, "total_load", "Total Load");
+  plb.add_u64(l_mdssm_avg_load, "average_load", "Average Load");
+  plb.add_u64(l_mdssm_avg_session_uptime, "avg_session_uptime",
+               "Average session uptime");
+
   logger = plb.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(logger);
 }
@@ -99,6 +112,9 @@ public:
     sessionmap->_load_finish(r, header_r, values_r, first, header_bl, session_vals,
       more_session_vals);
   }
+  void print(ostream& out) const override {
+    out << "session_load";
+  }
 };
 }
 
@@ -109,9 +125,9 @@ public:
 void SessionMapStore::decode_header(
       bufferlist &header_bl)
 {
-  bufferlist::iterator q = header_bl.begin();
+  auto q = header_bl.cbegin();
   DECODE_START(1, q)
-  ::decode(version, q);
+  decode(version, q);
   DECODE_FINISH(q);
 }
 
@@ -119,7 +135,7 @@ void SessionMapStore::encode_header(
     bufferlist *header_bl)
 {
   ENCODE_START(1, 1, *header_bl);
-  ::encode(version, *header_bl);
+  encode(version, *header_bl);
   ENCODE_FINISH(*header_bl);
 }
 
@@ -141,9 +157,11 @@ void SessionMapStore::decode_values(std::map<std::string, bufferlist> &session_v
     }
 
     Session *s = get_or_add_session(inst);
-    if (s->is_closed())
+    if (s->is_closed()) {
       s->set_state(Session::STATE_OPEN);
-    bufferlist::iterator q = i->second.begin();
+      s->set_load_avg_decay_rate(decay_rate);
+    }
+    auto q = i->second.cbegin();
     s->decode(q);
   }
 }
@@ -222,7 +240,7 @@ void SessionMap::_load_finish(
     object_locator_t oloc(mds->mdsmap->get_metadata_pool());
     C_IO_SM_Load *c = new C_IO_SM_Load(this, false);
     ObjectOperation op;
-    op.omap_get_vals(last_key, "", g_conf->mds_sessionmap_keys_per_op,
+    op.omap_get_vals(last_key, "", g_conf()->mds_sessionmap_keys_per_op,
 		     &c->session_vals, &c->more_session_vals, &c->values_r);
     mds->objecter->read(oid, oloc, op, CEPH_NOSNAP, NULL, 0,
         new C_OnFinisher(c, mds->finisher));
@@ -265,7 +283,7 @@ void SessionMap::load(MDSInternalContextBase *onload)
 
   ObjectOperation op;
   op.omap_get_header(&c->header_bl, &c->header_r);
-  op.omap_get_vals("", "", g_conf->mds_sessionmap_keys_per_op,
+  op.omap_get_vals("", "", g_conf()->mds_sessionmap_keys_per_op,
 		   &c->session_vals, &c->more_session_vals, &c->values_r);
 
   mds->objecter->read(oid, oloc, op, CEPH_NOSNAP, NULL, 0, new C_OnFinisher(c, mds->finisher));
@@ -278,6 +296,9 @@ public:
   explicit C_IO_SM_LoadLegacy(SessionMap *cm) : SessionMapIOContext(cm) {}
   void finish(int r) override {
     sessionmap->_load_legacy_finish(r, bl);
+  }
+  void print(ostream& out) const override {
+    out << "session_load_legacy";
   }
 };
 }
@@ -303,10 +324,10 @@ void SessionMap::load_legacy()
 
 void SessionMap::_load_legacy_finish(int r, bufferlist &bl)
 { 
-  bufferlist::iterator blp = bl.begin();
+  auto blp = bl.cbegin();
   if (r < 0) {
     derr << "_load_finish got " << cpp_strerror(r) << dendl;
-    assert(0 == "failed to load sessionmap");
+    ceph_abort_msg("failed to load sessionmap");
   }
   dump();
   decode_legacy(blp);  // note: this sets last_cap_renew = now()
@@ -346,6 +367,9 @@ public:
       sessionmap->_save_finish(version);
     }
   }
+  void print(ostream& out) const override {
+    out << "session_save";
+  }
 };
 }
 
@@ -354,7 +378,7 @@ void SessionMap::save(MDSInternalContextBase *onsave, version_t needv)
   dout(10) << __func__ << ": needv " << needv << ", v " << version << dendl;
  
   if (needv && committing >= needv) {
-    assert(committing > committed);
+    ceph_assert(committing > committed);
     commit_waiters[committing].push_back(onsave);
     return;
   }
@@ -450,7 +474,7 @@ void SessionMap::_save_finish(version_t v)
 /**
  * Deserialize sessions, and update by_state index
  */
-void SessionMap::decode_legacy(bufferlist::iterator &p)
+void SessionMap::decode_legacy(bufferlist::const_iterator &p)
 {
   // Populate `sessions`
   SessionMapStore::decode_legacy(p);
@@ -474,27 +498,41 @@ uint64_t SessionMap::set_state(Session *session, int s) {
     if (by_state_entry == by_state.end())
       by_state_entry = by_state.emplace(s, new xlist<Session*>).first;
     by_state_entry->second->push_back(&session->item_session_list);
+
+    if (session->is_open() || session->is_stale()) {
+      session->set_load_avg_decay_rate(decay_rate);
+    }
+
+    // refresh number of sessions for states which have perf
+    // couters associated
+    logger->set(l_mdssm_session_open,
+                get_session_count_in_state(Session::STATE_OPEN));
+    logger->set(l_mdssm_session_stale,
+                get_session_count_in_state(Session::STATE_STALE));
   }
+
   return session->get_state_seq();
 }
 
-void SessionMapStore::decode_legacy(bufferlist::iterator& p)
+void SessionMapStore::decode_legacy(bufferlist::const_iterator& p)
 {
-  utime_t now = ceph_clock_now();
+  auto now = clock::now();
   uint64_t pre;
-  ::decode(pre, p);
+  decode(pre, p);
   if (pre == (uint64_t)-1) {
     DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, p);
-    assert(struct_v >= 2);
+    ceph_assert(struct_v >= 2);
     
-    ::decode(version, p);
+    decode(version, p);
     
     while (!p.end()) {
       entity_inst_t inst;
-      ::decode(inst.name, p);
+      decode(inst.name, p);
       Session *s = get_or_add_session(inst);
-      if (s->is_closed())
+      if (s->is_closed()) {
         s->set_state(Session::STATE_OPEN);
+        s->set_load_avg_decay_rate(decay_rate);
+      }
       s->decode(p);
     }
 
@@ -505,11 +543,11 @@ void SessionMapStore::decode_legacy(bufferlist::iterator& p)
 
     // this is a meaningless upper bound.  can be ignored.
     __u32 n;
-    ::decode(n, p);
+    decode(n, p);
     
     while (n-- && !p.end()) {
-      bufferlist::iterator p2 = p;
-      Session *s = new Session;
+      auto p2 = p;
+      Session *s = new Session(nullptr);
       s->info.decode(p);
       if (session_map.count(s->info.inst.name)) {
 	// eager client connected too fast!  aie.
@@ -523,6 +561,7 @@ void SessionMapStore::decode_legacy(bufferlist::iterator& p)
 	session_map[s->info.inst.name] = s;
       }
       s->set_state(Session::STATE_OPEN);
+      s->set_load_avg_decay_rate(decay_rate);
       s->last_cap_renew = now;
     }
   }
@@ -583,13 +622,15 @@ void SessionMap::add_session(Session *s)
 {
   dout(10) << __func__ << " s=" << s << " name=" << s->info.inst.name << dendl;
 
-  assert(session_map.count(s->info.inst.name) == 0);
+  ceph_assert(session_map.count(s->info.inst.name) == 0);
   session_map[s->info.inst.name] = s;
   auto by_state_entry = by_state.find(s->state);
   if (by_state_entry == by_state.end())
     by_state_entry = by_state.emplace(s->state, new xlist<Session*>).first;
   by_state_entry->second->push_back(&s->item_session_list);
   s->get();
+
+  update_average_birth_time(*s);
 
   logger->set(l_mdssm_session_count, session_map.size());
   logger->inc(l_mdssm_session_add);
@@ -598,6 +639,8 @@ void SessionMap::add_session(Session *s)
 void SessionMap::remove_session(Session *s)
 {
   dout(10) << __func__ << " s=" << s << " name=" << s->info.inst.name << dendl;
+
+  update_average_birth_time(*s, false);
 
   s->trim_completed_requests(0);
   s->item_session_list.remove_myself();
@@ -616,14 +659,14 @@ void SessionMap::touch_session(Session *session)
 
   // Move to the back of the session list for this state (should
   // already be on a list courtesy of add_session and set_state)
-  assert(session->item_session_list.is_on_list());
+  ceph_assert(session->item_session_list.is_on_list());
   auto by_state_entry = by_state.find(session->state);
   if (by_state_entry == by_state.end())
     by_state_entry = by_state.emplace(session->state,
 				      new xlist<Session*>).first;
   by_state_entry->second->push_back(&session->item_session_list);
 
-  session->last_cap_renew = ceph_clock_now();
+  session->last_cap_renew = clock::now();
 }
 
 void SessionMap::_mark_dirty(Session *s)
@@ -631,7 +674,7 @@ void SessionMap::_mark_dirty(Session *s)
   if (dirty_sessions.count(s->info.inst.name))
     return;
 
-  if (dirty_sessions.size() >= g_conf->mds_sessionmap_keys_per_op) {
+  if (dirty_sessions.size() >= g_conf()->mds_sessionmap_keys_per_op) {
     // Pre-empt the usual save() call from journal segment trim, in
     // order to avoid building up an oversized OMAP update operation
     // from too many sessions modified at once
@@ -690,6 +733,9 @@ public:
       on_safe->complete(r);
     }
   }
+  void print(ostream& out) const override {
+    out << "session_save_one";
+  }
 };
 }
 
@@ -697,7 +743,7 @@ public:
 void SessionMap::save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
                                MDSGatherBuilder *gather_bld)
 {
-  assert(gather_bld != NULL);
+  ceph_assert(gather_bld != NULL);
 
   std::vector<entity_name_t> write_sessions;
 
@@ -736,14 +782,9 @@ void SessionMap::save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
   dout(4) << __func__ << ": writing " << write_sessions.size() << dendl;
 
   // Batch writes into mds_sessionmap_keys_per_op
-  const uint32_t kpo = g_conf->mds_sessionmap_keys_per_op;
+  const uint32_t kpo = g_conf()->mds_sessionmap_keys_per_op;
   map<string, bufferlist> to_set;
   for (uint32_t i = 0; i < write_sessions.size(); ++i) {
-    // Start a new write transaction?
-    if (i % g_conf->mds_sessionmap_keys_per_op == 0) {
-      to_set.clear();
-    }
-
     const entity_name_t &session_id = write_sessions[i];
     Session *session = session_map[session_id];
     session->clear_dirty_completed_requests();
@@ -764,14 +805,15 @@ void SessionMap::save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
         || i % kpo == kpo - 1) {
       ObjectOperation op;
       op.omap_set(to_set);
+      to_set.clear(); // clear to start a new transaction      
 
       SnapContext snapc;
       object_t oid = get_object_name();
       object_locator_t oloc(mds->mdsmap->get_metadata_pool());
       MDSInternalContextBase *on_safe = gather_bld->new_sub();
       mds->objecter->mutate(oid, oloc, op, snapc,
-			    ceph::real_clock::now(),
-			    0, new C_OnFinisher(
+			    ceph::real_clock::now(), 0,
+			    new C_OnFinisher(
 			      new C_IO_SM_Save_One(this, on_safe),
 			      mds->finisher));
     }
@@ -813,7 +855,7 @@ size_t Session::get_request_count()
  */
 void Session::notify_cap_release(size_t n_caps)
 {
-  if (!recalled_at.is_zero()) {
+  if (recalled_at != clock::zero()) {
     recall_release_count += n_caps;
     if (recall_release_count >= recall_count)
       clear_recalled_at();
@@ -828,26 +870,26 @@ void Session::notify_cap_release(size_t n_caps)
  */
 void Session::notify_recall_sent(const size_t new_limit)
 {
-  if (recalled_at.is_zero()) {
+  if (recalled_at == clock::zero()) {
     // Entering recall phase, set up counters so we can later
     // judge whether the client has respected the recall request
-    recalled_at = last_recall_sent = ceph_clock_now();
+    recalled_at = last_recall_sent = clock::now();
     assert (new_limit < caps.size());  // Behaviour of Server::recall_client_state
     recall_count = caps.size() - new_limit;
     recall_release_count = 0;
   } else {
-    last_recall_sent = ceph_clock_now();
+    last_recall_sent = clock::now();
   }
 }
 
 void Session::clear_recalled_at()
 {
-  recalled_at = last_recall_sent = utime_t();
+  recalled_at = last_recall_sent = clock::zero();
   recall_count = 0;
   recall_release_count = 0;
 }
 
-void Session::set_client_metadata(map<string, string> const &meta)
+void Session::set_client_metadata(const client_metadata_t& meta)
 {
   info.client_metadata = meta;
 
@@ -886,7 +928,7 @@ void Session::_update_human_name()
   }
 }
 
-void Session::decode(bufferlist::iterator &p)
+void Session::decode(bufferlist::const_iterator &p)
 {
   info.decode(p);
 
@@ -922,17 +964,65 @@ int Session::check_access(CInode *in, unsigned mask,
 
   if (!auth_caps.is_capable(path, in->inode.uid, in->inode.gid, in->inode.mode,
 			    caller_uid, caller_gid, caller_gid_list, mask,
-			    new_uid, new_gid)) {
+			    new_uid, new_gid,
+			    socket_addr)) {
     return -EACCES;
   }
   return 0;
+}
+
+// track total and per session load
+void SessionMap::hit_session(Session *session) {
+  uint64_t sessions = get_session_count_in_state(Session::STATE_OPEN) +
+                      get_session_count_in_state(Session::STATE_STALE);
+  ceph_assert(sessions != 0);
+
+  double total_load = total_load_avg.hit();
+  double avg_load = total_load / sessions;
+
+  logger->set(l_mdssm_total_load, (uint64_t)total_load);
+  logger->set(l_mdssm_avg_load, (uint64_t)avg_load);
+
+  session->hit_session();
+}
+
+void SessionMap::handle_conf_change(const ConfigProxy &conf,
+                                    const std::set <std::string> &changed) {
+  if (changed.count("mds_request_load_average_decay_rate")) {
+    decay_rate = g_conf().get_val<double>("mds_request_load_average_decay_rate");
+    dout(20) << __func__ << " decay rate changed to " << decay_rate << dendl;
+
+    total_load_avg = DecayCounter(decay_rate);
+
+    auto p = by_state.find(Session::STATE_OPEN);
+    if (p != by_state.end()) {
+      for (const auto &session : *(p->second)) {
+        session->set_load_avg_decay_rate(decay_rate);
+      }
+    }
+    p = by_state.find(Session::STATE_STALE);
+    if (p != by_state.end()) {
+      for (const auto &session : *(p->second)) {
+        session->set_load_avg_decay_rate(decay_rate);
+      }
+    }
+  }
+}
+
+void SessionMap::update_average_session_age() {
+  if (!session_map.size()) {
+    return;
+  }
+
+  double avg_uptime = std::chrono::duration<double>(clock::now()-avg_birth_time).count();
+  logger->set(l_mdssm_avg_session_uptime, (uint64_t)avg_uptime);
 }
 
 int SessionFilter::parse(
     const std::vector<std::string> &args,
     std::stringstream *ss)
 {
-  assert(ss != NULL);
+  ceph_assert(ss != NULL);
 
   for (const auto &s : args) {
     dout(20) << __func__ << " parsing filter '" << s << "'" << dendl;
@@ -976,9 +1066,9 @@ int SessionFilter::parse(
        * Strict boolean parser.  Allow true/false/0/1.
        * Anything else is -EINVAL.
        */
-      auto is_true = [](const std::string &bstr, bool *out) -> bool
+      auto is_true = [](std::string_view bstr, bool *out) -> bool
       {
-        assert(out != nullptr);
+        ceph_assert(out != nullptr);
 
         if (bstr == "true" || bstr == "1") {
           *out = true;
@@ -1015,10 +1105,11 @@ bool SessionFilter::match(
   for (const auto &m : metadata) {
     const auto &k = m.first;
     const auto &v = m.second;
-    if (session.info.client_metadata.count(k) == 0) {
+    auto it = session.info.client_metadata.find(k);
+    if (it == session.info.client_metadata.end()) {
       return false;
     }
-    if (session.info.client_metadata.at(k) != v) {
+    if (it->second != v) {
       return false;
     }
   }
@@ -1047,10 +1138,10 @@ bool SessionFilter::match(
 
 std::ostream& operator<<(std::ostream &out, const Session &s)
 {
- if (s.get_human_name() == stringify(s.info.inst.name.num())) {
+ if (s.get_human_name() == stringify(s.get_client())) {
    out << s.get_human_name();
  } else {
-   out << s.get_human_name() << " (" << std::dec << s.info.inst.name.num() << ")";
+   out << s.get_human_name() << " (" << std::dec << s.get_client() << ")";
  }
  return out;
 }

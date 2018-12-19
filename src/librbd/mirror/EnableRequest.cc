@@ -33,14 +33,70 @@ EnableRequest<I>::EnableRequest(librados::IoCtx &io_ctx,
 
 template <typename I>
 void EnableRequest<I>::send() {
+  send_get_mirror_image();
+}
+
+template <typename I>
+void EnableRequest<I>::send_get_mirror_image() {
+  ldout(m_cct, 10) << this << " " << __func__ << dendl;
+
+  librados::ObjectReadOperation op;
+  cls_client::mirror_image_get_start(&op, m_image_id);
+
+  using klass = EnableRequest<I>;
+  librados::AioCompletion *comp =
+    create_rados_callback<klass, &klass::handle_get_mirror_image>(this);
+  m_out_bl.clear();
+  int r = m_io_ctx.aio_operate(RBD_MIRRORING, comp, &op, &m_out_bl);
+  ceph_assert(r == 0);
+  comp->release();
+}
+
+template <typename I>
+Context *EnableRequest<I>::handle_get_mirror_image(int *result) {
+  ldout(m_cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
+
+  if (*result == 0) {
+    auto iter = m_out_bl.cbegin();
+    *result = cls_client::mirror_image_get_finish(&iter, &m_mirror_image);
+  }
+
+  if (*result == 0) {
+    if (m_mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
+      ldout(m_cct, 10) << this << " " << __func__
+                       << ": mirroring is already enabled" << dendl;
+    } else {
+      lderr(m_cct) << "currently disabling" << dendl;
+      *result = -EINVAL;
+    }
+    return m_on_finish;
+  }
+
+  if (*result != -ENOENT) {
+    lderr(m_cct) << "failed to retrieve mirror image: " << cpp_strerror(*result)
+                 << dendl;
+    return m_on_finish;
+  }
+
+  *result = 0;
+  m_mirror_image.state = cls::rbd::MIRROR_IMAGE_STATE_ENABLED;
+  if (m_non_primary_global_image_id.empty()) {
+    uuid_d uuid_gen;
+    uuid_gen.generate_random();
+    m_mirror_image.global_image_id = uuid_gen.to_string();
+  } else {
+    m_mirror_image.global_image_id = m_non_primary_global_image_id;
+  }
+
   send_get_tag_owner();
+  return nullptr;
 }
 
 template <typename I>
 void EnableRequest<I>::send_get_tag_owner() {
   if (!m_non_primary_global_image_id.empty()) {
-    return
-    send_get_mirror_image();
+    send_set_mirror_image();
+    return;
   }
   ldout(m_cct, 10) << this << " " << __func__ << dendl;
 
@@ -67,62 +123,6 @@ Context *EnableRequest<I>::handle_get_tag_owner(int *result) {
     return m_on_finish;
   }
 
-  send_get_mirror_image();
-  return nullptr;
-}
-
-template <typename I>
-void EnableRequest<I>::send_get_mirror_image() {
-  ldout(m_cct, 10) << this << " " << __func__ << dendl;
-
-  librados::ObjectReadOperation op;
-  cls_client::mirror_image_get_start(&op, m_image_id);
-
-  using klass = EnableRequest<I>;
-  librados::AioCompletion *comp =
-    create_rados_callback<klass, &klass::handle_get_mirror_image>(this);
-  m_out_bl.clear();
-  int r = m_io_ctx.aio_operate(RBD_MIRRORING, comp, &op, &m_out_bl);
-  assert(r == 0);
-  comp->release();
-}
-
-template <typename I>
-Context *EnableRequest<I>::handle_get_mirror_image(int *result) {
-  ldout(m_cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
-
-  if (*result == 0) {
-    bufferlist::iterator iter = m_out_bl.begin();
-    *result = cls_client::mirror_image_get_finish(&iter, &m_mirror_image);
-  }
-
-  if (*result == 0) {
-    if (m_mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
-      ldout(m_cct, 10) << this << " " << __func__
-                       << ": mirroring is already enabled" << dendl;
-    } else {
-      lderr(m_cct) << "currently disabling" << dendl;
-      *result = -EINVAL;
-    }
-    return m_on_finish;
-  }
-
-  if (*result != -ENOENT) {
-    lderr(m_cct) << "failed to retreive mirror image: " << cpp_strerror(*result)
-                 << dendl;
-    return m_on_finish;
-  }
-
-  *result = 0;
-  m_mirror_image.state = cls::rbd::MIRROR_IMAGE_STATE_ENABLED;
-  if (m_non_primary_global_image_id.empty()) {
-    uuid_d uuid_gen;
-    uuid_gen.generate_random();
-    m_mirror_image.global_image_id = uuid_gen.to_string();
-  } else {
-    m_mirror_image.global_image_id = m_non_primary_global_image_id;
-  }
-
   send_set_mirror_image();
   return nullptr;
 }
@@ -139,7 +139,7 @@ void EnableRequest<I>::send_set_mirror_image() {
     create_rados_callback<klass, &klass::handle_set_mirror_image>(this);
   m_out_bl.clear();
   int r = m_io_ctx.aio_operate(RBD_MIRRORING, comp, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 

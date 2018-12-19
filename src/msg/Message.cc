@@ -7,7 +7,6 @@
 #endif
 
 #include <iostream>
-using namespace std;
 
 #include "include/types.h"
 
@@ -35,6 +34,8 @@ using namespace std;
 #include "messages/MMonCommand.h"
 #include "messages/MMonCommandAck.h"
 #include "messages/MMonPaxos.h"
+#include "messages/MConfig.h"
+#include "messages/MGetConfig.h"
 
 #include "messages/MMonProbe.h"
 #include "messages/MMonJoin.h"
@@ -77,8 +78,10 @@ using namespace std;
 #include "messages/MOSDPGRemove.h"
 #include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGCreate.h"
+#include "messages/MOSDPGCreate2.h"
 #include "messages/MOSDPGTrim.h"
 #include "messages/MOSDScrub.h"
+#include "messages/MOSDScrub2.h"
 #include "messages/MOSDScrubReserve.h"
 #include "messages/MOSDRepScrub.h"
 #include "messages/MOSDRepScrubMap.h"
@@ -89,6 +92,7 @@ using namespace std;
 #include "messages/MOSDPGBackfillRemove.h"
 #include "messages/MOSDPGRecoveryDelete.h"
 #include "messages/MOSDPGRecoveryDeleteReply.h"
+#include "messages/MOSDPGReadyToMerge.h"
 
 #include "messages/MRemoveSnaps.h"
 
@@ -96,6 +100,7 @@ using namespace std;
 #include "messages/MMonGetMap.h"
 #include "messages/MMonGetVersion.h"
 #include "messages/MMonGetVersionReply.h"
+#include "messages/MMonHealth.h"
 #include "messages/MMonHealthChecks.h"
 #include "messages/MMonMetadata.h"
 #include "messages/MDataPing.h"
@@ -109,6 +114,8 @@ using namespace std;
 #include "messages/MClientRequest.h"
 #include "messages/MClientRequestForward.h"
 #include "messages/MClientReply.h"
+#include "messages/MClientReclaim.h"
+#include "messages/MClientReclaimReply.h"
 #include "messages/MClientCaps.h"
 #include "messages/MClientCapRelease.h"
 #include "messages/MClientLease.h"
@@ -129,12 +136,14 @@ using namespace std;
 #include "messages/MMDSFindInoReply.h"
 #include "messages/MMDSOpenIno.h"
 #include "messages/MMDSOpenInoReply.h"
+#include "messages/MMDSSnapUpdate.h"
 
 #include "messages/MDirUpdate.h"
 #include "messages/MDiscover.h"
 #include "messages/MDiscoverReply.h"
 
 #include "messages/MMDSFragmentNotify.h"
+#include "messages/MMDSFragmentNotifyAck.h"
 
 #include "messages/MExportDirDiscover.h"
 #include "messages/MExportDirDiscoverAck.h"
@@ -168,6 +177,7 @@ using namespace std;
 #include "messages/MMgrDigest.h"
 #include "messages/MMgrReport.h"
 #include "messages/MMgrOpen.h"
+#include "messages/MMgrClose.h"
 #include "messages/MMgrConfigure.h"
 #include "messages/MMonMgrReport.h"
 #include "messages/MServiceMap.h"
@@ -176,6 +186,7 @@ using namespace std;
 
 #include "messages/MWatchNotify.h"
 #include "messages/MTimeCheck.h"
+#include "messages/MTimeCheck2.h"
 
 #include "common/config.h"
 
@@ -199,7 +210,7 @@ void Message::encode(uint64_t features, int crcflags)
 {
   // encode and copy out of *m
   if (empty_payload()) {
-    assert(middle.length() == 0);
+    ceph_assert(middle.length() == 0);
     encode_payload(features);
 
     if (byte_throttler) {
@@ -228,7 +239,7 @@ void Message::encode(uint64_t features, int crcflags)
 
 #ifdef ENCODE_DUMP
     bufferlist bl;
-    ::encode(get_header(), bl);
+    encode(get_header(), bl);
 
     // dump the old footer format
     ceph_msg_footer_old old_footer;
@@ -236,11 +247,11 @@ void Message::encode(uint64_t features, int crcflags)
     old_footer.middle_crc = footer.middle_crc;
     old_footer.data_crc = footer.data_crc;
     old_footer.flags = footer.flags;
-    ::encode(old_footer, bl);
+    encode(old_footer, bl);
 
-    ::encode(get_payload(), bl);
-    ::encode(get_middle(), bl);
-    ::encode(get_data(), bl);
+    encode(get_payload(), bl);
+    encode(get_middle(), bl);
+    encode(get_data(), bl);
 
     // this is almost an exponential backoff, except because we count
     // bits we tend to sample things we encode later, which should be
@@ -256,7 +267,7 @@ void Message::encode(uint64_t features, int crcflags)
       snprintf(fn, sizeof(fn), ENCODE_STRINGIFY(ENCODE_DUMP) "/%s__%d.%x",
 	       abi::__cxa_demangle(typeid(*this).name(), 0, 0, &status),
 	       getpid(), i++);
-      int fd = ::open(fn, O_WRONLY|O_TRUNC|O_CREAT, 0644);
+      int fd = ::open(fn, O_WRONLY|O_TRUNC|O_CREAT|O_CLOEXEC, 0644);
       if (fd >= 0) {
 	bl.write_fd(fd);
 	::close(fd);
@@ -321,482 +332,522 @@ Message *decode_message(CephContext *cct, int crcflags,
   }
 
   // make message
-  Message *m = 0;
+  Message::ref m;
   int type = header.type;
   switch (type) {
 
     // -- with payload --
 
   case MSG_PGSTATS:
-    m = new MPGStats;
+    m = MPGStats::create();
     break;
   case MSG_PGSTATSACK:
-    m = new MPGStatsAck;
+    m = MPGStatsAck::create();
     break;
 
   case CEPH_MSG_STATFS:
-    m = new MStatfs;
+    m = MStatfs::create();
     break;
   case CEPH_MSG_STATFS_REPLY:
-    m = new MStatfsReply;
+    m = MStatfsReply::create();
     break;
   case MSG_GETPOOLSTATS:
-    m = new MGetPoolStats;
+    m = MGetPoolStats::create();
     break;
   case MSG_GETPOOLSTATSREPLY:
-    m = new MGetPoolStatsReply;
+    m = MGetPoolStatsReply::create();
     break;
   case CEPH_MSG_POOLOP:
-    m = new MPoolOp;
+    m = MPoolOp::create();
     break;
   case CEPH_MSG_POOLOP_REPLY:
-    m = new MPoolOpReply;
+    m = MPoolOpReply::create();
     break;
   case MSG_MON_COMMAND:
-    m = new MMonCommand;
+    m = MMonCommand::create();
     break;
   case MSG_MON_COMMAND_ACK:
-    m = new MMonCommandAck;
+    m = MMonCommandAck::create();
     break;
   case MSG_MON_PAXOS:
-    m = new MMonPaxos;
+    m = MMonPaxos::create();
+    break;
+  case MSG_CONFIG:
+    m = MConfig::create();
+    break;
+  case MSG_GET_CONFIG:
+    m = MGetConfig::create();
     break;
 
   case MSG_MON_PROBE:
-    m = new MMonProbe;
+    m = MMonProbe::create();
     break;
   case MSG_MON_JOIN:
-    m = new MMonJoin;
+    m = MMonJoin::create();
     break;
   case MSG_MON_ELECTION:
-    m = new MMonElection;
+    m = MMonElection::create();
     break;
   case MSG_MON_SYNC:
-    m = new MMonSync;
+    m = MMonSync::create();
     break;
   case MSG_MON_SCRUB:
-    m = new MMonScrub;
+    m = MMonScrub::create();
     break;
 
   case MSG_LOG:
-    m = new MLog;
+    m = MLog::create();
     break;
   case MSG_LOGACK:
-    m = new MLogAck;
+    m = MLogAck::create();
     break;
 
   case CEPH_MSG_PING:
-    m = new MPing();
+    m = MPing::create();
     break;
   case MSG_COMMAND:
-    m = new MCommand;
+    m = MCommand::create();
     break;
   case MSG_COMMAND_REPLY:
-    m = new MCommandReply;
+    m = MCommandReply::create();
     break;
   case MSG_OSD_BACKFILL_RESERVE:
-    m = new MBackfillReserve;
+    m = MBackfillReserve::create();
     break;
   case MSG_OSD_RECOVERY_RESERVE:
-    m = new MRecoveryReserve;
+    m = MRecoveryReserve::create();
     break;
   case MSG_OSD_FORCE_RECOVERY:
-    m = new MOSDForceRecovery;
+    m = MOSDForceRecovery::create();
     break;
 
   case MSG_ROUTE:
-    m = new MRoute;
+    m = MRoute::create();
     break;
   case MSG_FORWARD:
-    m = new MForward;
+    m = MForward::create();
     break;
     
   case CEPH_MSG_MON_MAP:
-    m = new MMonMap;
+    m = MMonMap::create();
     break;
   case CEPH_MSG_MON_GET_MAP:
-    m = new MMonGetMap;
+    m = MMonGetMap::create();
     break;
   case CEPH_MSG_MON_GET_OSDMAP:
-    m = new MMonGetOSDMap;
+    m = MMonGetOSDMap::create();
     break;
   case CEPH_MSG_MON_GET_VERSION:
-    m = new MMonGetVersion();
+    m = MMonGetVersion::create();
     break;
   case CEPH_MSG_MON_GET_VERSION_REPLY:
-    m = new MMonGetVersionReply();
+    m = MMonGetVersionReply::create();
     break;
   case CEPH_MSG_MON_METADATA:
-    m = new MMonMetadata();
+    m = MMonMetadata::create();
     break;
 
   case MSG_OSD_BOOT:
-    m = new MOSDBoot();
+    m = MOSDBoot::create();
     break;
   case MSG_OSD_ALIVE:
-    m = new MOSDAlive();
+    m = MOSDAlive::create();
     break;
   case MSG_OSD_BEACON:
-    m = new MOSDBeacon();
+    m = MOSDBeacon::create();
     break;
   case MSG_OSD_PGTEMP:
-    m = new MOSDPGTemp;
+    m = MOSDPGTemp::create();
     break;
   case MSG_OSD_FAILURE:
-    m = new MOSDFailure();
+    m = MOSDFailure::create();
     break;
   case MSG_OSD_MARK_ME_DOWN:
-    m = new MOSDMarkMeDown();
+    m = MOSDMarkMeDown::create();
     break;
   case MSG_OSD_FULL:
-    m = new MOSDFull();
+    m = MOSDFull::create();
     break;
   case MSG_OSD_PING:
-    m = new MOSDPing();
+    m = MOSDPing::create();
     break;
   case CEPH_MSG_OSD_OP:
-    m = new MOSDOp();
+    m = MOSDOp::create();
     break;
   case CEPH_MSG_OSD_OPREPLY:
-    m = new MOSDOpReply();
+    m = MOSDOpReply::create();
     break;
   case MSG_OSD_REPOP:
-    m = new MOSDRepOp();
+    m = MOSDRepOp::create();
     break;
   case MSG_OSD_REPOPREPLY:
-    m = new MOSDRepOpReply();
+    m = MOSDRepOpReply::create();
     break;
   case MSG_OSD_PG_CREATED:
-    m = new MOSDPGCreated();
+    m = MOSDPGCreated::create();
     break;
   case MSG_OSD_PG_UPDATE_LOG_MISSING:
-    m = new MOSDPGUpdateLogMissing();
+    m = MOSDPGUpdateLogMissing::create();
     break;
   case MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY:
-    m = new MOSDPGUpdateLogMissingReply();
+    m = MOSDPGUpdateLogMissingReply::create();
     break;
   case CEPH_MSG_OSD_BACKOFF:
-    m = new MOSDBackoff;
+    m = MOSDBackoff::create();
     break;
 
   case CEPH_MSG_OSD_MAP:
-    m = new MOSDMap;
+    m = MOSDMap::create();
     break;
 
   case CEPH_MSG_WATCH_NOTIFY:
-    m = new MWatchNotify;
+    m = MWatchNotify::create();
     break;
 
   case MSG_OSD_PG_NOTIFY:
-    m = new MOSDPGNotify;
+    m = MOSDPGNotify::create();
     break;
   case MSG_OSD_PG_QUERY:
-    m = new MOSDPGQuery;
+    m = MOSDPGQuery::create();
     break;
   case MSG_OSD_PG_LOG:
-    m = new MOSDPGLog;
+    m = MOSDPGLog::create();
     break;
   case MSG_OSD_PG_REMOVE:
-    m = new MOSDPGRemove;
+    m = MOSDPGRemove::create();
     break;
   case MSG_OSD_PG_INFO:
-    m = new MOSDPGInfo;
+    m = MOSDPGInfo::create();
     break;
   case MSG_OSD_PG_CREATE:
-    m = new MOSDPGCreate;
+    m = MOSDPGCreate::create();
+    break;
+  case MSG_OSD_PG_CREATE2:
+    m = MOSDPGCreate2::create();
     break;
   case MSG_OSD_PG_TRIM:
-    m = new MOSDPGTrim;
+    m = MOSDPGTrim::create();
     break;
 
   case MSG_OSD_SCRUB:
-    m = new MOSDScrub;
+    m = MOSDScrub::create();
+    break;
+  case MSG_OSD_SCRUB2:
+    m = MOSDScrub2::create();
     break;
   case MSG_OSD_SCRUB_RESERVE:
-    m = new MOSDScrubReserve;
+    m = MOSDScrubReserve::create();
     break;
   case MSG_REMOVE_SNAPS:
-    m = new MRemoveSnaps;
+    m = MRemoveSnaps::create();
     break;
   case MSG_OSD_REP_SCRUB:
-    m = new MOSDRepScrub;
+    m = MOSDRepScrub::create();
     break;
   case MSG_OSD_REP_SCRUBMAP:
-    m = new MOSDRepScrubMap;
+    m = MOSDRepScrubMap::create();
     break;
   case MSG_OSD_PG_SCAN:
-    m = new MOSDPGScan;
+    m = MOSDPGScan::create();
     break;
   case MSG_OSD_PG_BACKFILL:
-    m = new MOSDPGBackfill;
+    m = MOSDPGBackfill::create();
     break;
   case MSG_OSD_PG_BACKFILL_REMOVE:
-    m = new MOSDPGBackfillRemove;
+    m = MOSDPGBackfillRemove::create();
     break;
   case MSG_OSD_PG_PUSH:
-    m = new MOSDPGPush;
+    m = MOSDPGPush::create();
     break;
   case MSG_OSD_PG_PULL:
-    m = new MOSDPGPull;
+    m = MOSDPGPull::create();
     break;
   case MSG_OSD_PG_PUSH_REPLY:
-    m = new MOSDPGPushReply;
+    m = MOSDPGPushReply::create();
     break;
   case MSG_OSD_PG_RECOVERY_DELETE:
-    m = new MOSDPGRecoveryDelete;
+    m = MOSDPGRecoveryDelete::create();
     break;
   case MSG_OSD_PG_RECOVERY_DELETE_REPLY:
-    m = new MOSDPGRecoveryDeleteReply;
+    m = MOSDPGRecoveryDeleteReply::create();
+    break;
+  case MSG_OSD_PG_READY_TO_MERGE:
+    m = MOSDPGReadyToMerge::create();
     break;
   case MSG_OSD_EC_WRITE:
-    m = new MOSDECSubOpWrite;
+    m = MOSDECSubOpWrite::create();
     break;
   case MSG_OSD_EC_WRITE_REPLY:
-    m = new MOSDECSubOpWriteReply;
+    m = MOSDECSubOpWriteReply::create();
     break;
   case MSG_OSD_EC_READ:
-    m = new MOSDECSubOpRead;
+    m = MOSDECSubOpRead::create();
     break;
   case MSG_OSD_EC_READ_REPLY:
-    m = new MOSDECSubOpReadReply;
+    m = MOSDECSubOpReadReply::create();
     break;
    // auth
   case CEPH_MSG_AUTH:
-    m = new MAuth;
+    m = MAuth::create();
     break;
   case CEPH_MSG_AUTH_REPLY:
-    m = new MAuthReply;
+    m = MAuthReply::create();
     break;
 
   case MSG_MON_GLOBAL_ID:
-    m = new MMonGlobalID;
+    m = MMonGlobalID::create();
     break; 
 
     // clients
   case CEPH_MSG_MON_SUBSCRIBE:
-    m = new MMonSubscribe;
+    m = MMonSubscribe::create();
     break;
   case CEPH_MSG_MON_SUBSCRIBE_ACK:
-    m = new MMonSubscribeAck;
+    m = MMonSubscribeAck::create();
     break;
   case CEPH_MSG_CLIENT_SESSION:
-    m = new MClientSession;
+    m = MClientSession::create();
     break;
   case CEPH_MSG_CLIENT_RECONNECT:
-    m = new MClientReconnect;
+    m = MClientReconnect::create();
     break;
   case CEPH_MSG_CLIENT_REQUEST:
-    m = new MClientRequest;
+    m = MClientRequest::create();
     break;
   case CEPH_MSG_CLIENT_REQUEST_FORWARD:
-    m = new MClientRequestForward;
+    m = MClientRequestForward::create();
     break;
   case CEPH_MSG_CLIENT_REPLY:
-    m = new MClientReply;
+    m = MClientReply::create();
+    break;
+  case CEPH_MSG_CLIENT_RECLAIM:
+    m = MClientReclaim::create();
+    break;
+  case CEPH_MSG_CLIENT_RECLAIM_REPLY:
+    m = MClientReclaimReply::create();
     break;
   case CEPH_MSG_CLIENT_CAPS:
-    m = new MClientCaps;
+    m = MClientCaps::create();
     break;
   case CEPH_MSG_CLIENT_CAPRELEASE:
-    m = new MClientCapRelease;
+    m = MClientCapRelease::create();
     break;
   case CEPH_MSG_CLIENT_LEASE:
-    m = new MClientLease;
+    m = MClientLease::create();
     break;
   case CEPH_MSG_CLIENT_SNAP:
-    m = new MClientSnap;
+    m = MClientSnap::create();
     break;
   case CEPH_MSG_CLIENT_QUOTA:
-    m = new MClientQuota;
+    m = MClientQuota::create();
     break;
 
     // mds
   case MSG_MDS_SLAVE_REQUEST:
-    m = new MMDSSlaveRequest;
+    m = MMDSSlaveRequest::create();
     break;
 
   case CEPH_MSG_MDS_MAP:
-    m = new MMDSMap;
+    m = MMDSMap::create();
     break;
   case CEPH_MSG_FS_MAP:
-    m = new MFSMap;
+    m = MFSMap::create();
     break;
   case CEPH_MSG_FS_MAP_USER:
-    m = new MFSMapUser;
+    m = MFSMapUser::create();
     break;
   case MSG_MDS_BEACON:
-    m = new MMDSBeacon;
+    m = MMDSBeacon::create();
     break;
   case MSG_MDS_OFFLOAD_TARGETS:
-    m = new MMDSLoadTargets;
+    m = MMDSLoadTargets::create();
     break;
   case MSG_MDS_RESOLVE:
-    m = new MMDSResolve;
+    m = MMDSResolve::create();
     break;
   case MSG_MDS_RESOLVEACK:
-    m = new MMDSResolveAck;
+    m = MMDSResolveAck::create();
     break;
   case MSG_MDS_CACHEREJOIN:
-    m = new MMDSCacheRejoin;
+    m = MMDSCacheRejoin::create();
 	break;
   
   case MSG_MDS_DIRUPDATE:
-    m = new MDirUpdate();
+    m = MDirUpdate::create();
     break;
 
   case MSG_MDS_DISCOVER:
-    m = new MDiscover();
+    m = MDiscover::create();
     break;
   case MSG_MDS_DISCOVERREPLY:
-    m = new MDiscoverReply();
+    m = MDiscoverReply::create();
     break;
 
   case MSG_MDS_FINDINO:
-    m = new MMDSFindIno;
+    m = MMDSFindIno::create();
     break;
   case MSG_MDS_FINDINOREPLY:
-    m = new MMDSFindInoReply;
+    m = MMDSFindInoReply::create();
     break;
 
   case MSG_MDS_OPENINO:
-    m = new MMDSOpenIno;
+    m = MMDSOpenIno::create();
     break;
   case MSG_MDS_OPENINOREPLY:
-    m = new MMDSOpenInoReply;
+    m = MMDSOpenInoReply::create();
+    break;
+
+  case MSG_MDS_SNAPUPDATE:
+    m = MMDSSnapUpdate::create();
     break;
 
   case MSG_MDS_FRAGMENTNOTIFY:
-    m = new MMDSFragmentNotify;
+    m = MMDSFragmentNotify::create();
+    break;
+
+  case MSG_MDS_FRAGMENTNOTIFYACK:
+    m = MMDSFragmentNotifyAck::create();
     break;
 
   case MSG_MDS_EXPORTDIRDISCOVER:
-    m = new MExportDirDiscover();
+    m = MExportDirDiscover::create();
     break;
   case MSG_MDS_EXPORTDIRDISCOVERACK:
-    m = new MExportDirDiscoverAck();
+    m = MExportDirDiscoverAck::create();
     break;
   case MSG_MDS_EXPORTDIRCANCEL:
-    m = new MExportDirCancel();
+    m = MExportDirCancel::create();
     break;
 
   case MSG_MDS_EXPORTDIR:
-    m = new MExportDir;
+    m = MExportDir::create();
     break;
   case MSG_MDS_EXPORTDIRACK:
-    m = new MExportDirAck;
+    m = MExportDirAck::create();
     break;
   case MSG_MDS_EXPORTDIRFINISH:
-    m = new MExportDirFinish;
+    m = MExportDirFinish::create();
     break;
 
   case MSG_MDS_EXPORTDIRNOTIFY:
-    m = new MExportDirNotify();
+    m = MExportDirNotify::create();
     break;
 
   case MSG_MDS_EXPORTDIRNOTIFYACK:
-    m = new MExportDirNotifyAck();
+    m = MExportDirNotifyAck::create();
     break;
 
   case MSG_MDS_EXPORTDIRPREP:
-    m = new MExportDirPrep();
+    m = MExportDirPrep::create();
     break;
 
   case MSG_MDS_EXPORTDIRPREPACK:
-    m = new MExportDirPrepAck();
+    m = MExportDirPrepAck::create();
     break;
 
   case MSG_MDS_EXPORTCAPS:
-    m = new MExportCaps;
+    m = MExportCaps::create();
     break;
   case MSG_MDS_EXPORTCAPSACK:
-    m = new MExportCapsAck;
+    m = MExportCapsAck::create();
     break;
   case MSG_MDS_GATHERCAPS:
-    m = new MGatherCaps;
+    m = MGatherCaps::create();
     break;
 
 
   case MSG_MDS_DENTRYUNLINK:
-    m = new MDentryUnlink;
+    m = MDentryUnlink::create();
     break;
   case MSG_MDS_DENTRYLINK:
-    m = new MDentryLink;
+    m = MDentryLink::create();
     break;
 
   case MSG_MDS_HEARTBEAT:
-    m = new MHeartbeat();
+    m = MHeartbeat::create();
     break;
 
   case MSG_MDS_CACHEEXPIRE:
-    m = new MCacheExpire();
+    m = MCacheExpire::create();
     break;
 
   case MSG_MDS_TABLE_REQUEST:
-    m = new MMDSTableRequest;
+    m = MMDSTableRequest::create();
     break;
 
 	/*  case MSG_MDS_INODEUPDATE:
-    m = new MInodeUpdate();
+    m = MInodeUpdate::create();
     break;
 	*/
 
   case MSG_MDS_INODEFILECAPS:
-    m = new MInodeFileCaps();
+    m = MInodeFileCaps::create();
     break;
 
   case MSG_MDS_LOCK:
-    m = new MLock();
+    m = MLock::create();
     break;
 
   case MSG_MGR_BEACON:
-    m = new MMgrBeacon();
+    m = MMgrBeacon::create();
     break;
 
   case MSG_MON_MGR_REPORT:
-    m = new MMonMgrReport();
+    m = MMonMgrReport::create();
     break;
 
   case MSG_SERVICE_MAP:
-    m = new MServiceMap();
+    m = MServiceMap::create();
     break;
 
   case MSG_MGR_MAP:
-    m = new MMgrMap();
+    m = MMgrMap::create();
     break;
 
   case MSG_MGR_DIGEST:
-    m = new MMgrDigest();
+    m = MMgrDigest::create();
     break;
 
   case MSG_MGR_OPEN:
-    m = new MMgrOpen();
+    m = MMgrOpen::create();
+    break;
+
+  case MSG_MGR_CLOSE:
+    m = MMgrClose::create();
     break;
 
   case MSG_MGR_REPORT:
-    m = new MMgrReport();
+    m = MMgrReport::create();
     break;
 
   case MSG_MGR_CONFIGURE:
-    m = new MMgrConfigure();
+    m = MMgrConfigure::create();
     break;
 
   case MSG_TIMECHECK:
-    m = new MTimeCheck();
+    m = MTimeCheck::create();
+    break;
+  case MSG_TIMECHECK2:
+    m = MTimeCheck2::create();
+    break;
+
+  case MSG_MON_HEALTH:
+    m = MMonHealth::create();
     break;
 
   case MSG_MON_HEALTH_CHECKS:
-    m = new MMonHealthChecks();
+    m = MMonHealthChecks::create();
     break;
 
 #if defined(HAVE_XIO)
   case MSG_DATA_PING:
-    m = new MDataPing();
+    m = MDataPing::create();
     break;
 #endif
     // -- simple messages without payload --
 
   case CEPH_MSG_SHUTDOWN:
-    m = new MGenericMessage(type);
+    m = MGenericMessage::create(type);
     break;
 
   default:
@@ -823,7 +874,6 @@ Message *decode_message(CephContext *cct, int crcflags,
       if (cct->_conf->ms_die_on_bad_msg)
 	ceph_abort();
     }
-    m->put();
     return 0;
   }
 
@@ -842,34 +892,35 @@ Message *decode_message(CephContext *cct, int crcflags,
       lderr(cct) << "failed to decode message of type " << type
 		 << " v" << header.version
 		 << ": " << e.what() << dendl;
-      ldout(cct, cct->_conf->ms_dump_corrupt_message_level) << "dump: \n";
+      ldout(cct, ceph::dout::need_dynamic(
+	cct->_conf->ms_dump_corrupt_message_level)) << "dump: \n";
       m->get_payload().hexdump(*_dout);
       *_dout << dendl;
       if (cct->_conf->ms_die_on_bad_msg)
 	ceph_abort();
     }
-    m->put();
     return 0;
   }
 
   // done!
-  return m;
+  return m.detach();
 }
 
 void Message::encode_trace(bufferlist &bl, uint64_t features) const
 {
+  using ceph::encode;
   auto p = trace.get_info();
   static const blkin_trace_info empty = { 0, 0, 0 };
   if (!p) {
     p = &empty;
   }
-  ::encode(*p, bl);
+  encode(*p, bl);
 }
 
-void Message::decode_trace(bufferlist::iterator &p, bool create)
+void Message::decode_trace(bufferlist::const_iterator &p, bool create)
 {
   blkin_trace_info info = {};
-  ::decode(info, p);
+  decode(info, p);
 
 #ifdef WITH_BLKIN
   if (!connection)
@@ -905,7 +956,7 @@ void encode_message(Message *msg, uint64_t features, bufferlist& payload)
   ceph_msg_footer_old old_footer;
   ceph_msg_footer footer;
   msg->encode(features, MSG_CRC_ALL);
-  ::encode(msg->get_header(), payload);
+  encode(msg->get_header(), payload);
 
   // Here's where we switch to the old footer format.  PLR
 
@@ -914,11 +965,11 @@ void encode_message(Message *msg, uint64_t features, bufferlist& payload)
   old_footer.middle_crc = footer.middle_crc;   
   old_footer.data_crc = footer.data_crc;   
   old_footer.flags = footer.flags;   
-  ::encode(old_footer, payload);
+  encode(old_footer, payload);
 
-  ::encode(msg->get_payload(), payload);
-  ::encode(msg->get_middle(), payload);
-  ::encode(msg->get_data(), payload);
+  encode(msg->get_payload(), payload);
+  encode(msg->get_middle(), payload);
+  encode(msg->get_data(), payload);
 }
 
 // See above for somewhat bogus use of the old message footer.  We switch to the current footer
@@ -926,22 +977,21 @@ void encode_message(Message *msg, uint64_t features, bufferlist& payload)
 // We've slipped in a 0 signature at this point, so any signature checking after this will
 // fail.  PLR
 
-Message *decode_message(CephContext *cct, int crcflags, bufferlist::iterator& p)
+Message *decode_message(CephContext *cct, int crcflags, bufferlist::const_iterator& p)
 {
   ceph_msg_header h;
   ceph_msg_footer_old fo;
   ceph_msg_footer f;
   bufferlist fr, mi, da;
-  ::decode(h, p);
-  ::decode(fo, p);
+  decode(h, p);
+  decode(fo, p);
   f.front_crc = fo.front_crc;
   f.middle_crc = fo.middle_crc;
   f.data_crc = fo.data_crc;
   f.flags = fo.flags;
   f.sig = 0;
-  ::decode(fr, p);
-  ::decode(mi, p);
-  ::decode(da, p);
+  decode(fr, p);
+  decode(mi, p);
+  decode(da, p);
   return decode_message(cct, crcflags, h, f, fr, mi, da, nullptr);
 }
-

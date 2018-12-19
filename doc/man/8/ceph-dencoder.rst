@@ -68,7 +68,7 @@ Commands
 
 .. option:: count_tests
 
-   Print the number of built-in test instances of the previosly
+   Print the number of built-in test instances of the previously
    selected type that **ceph-dencoder** is able to generate.
 
 .. option:: select_test <n>

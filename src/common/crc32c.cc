@@ -27,9 +27,11 @@ ceph_crc32c_func_t ceph_choose_crc32(void)
     return ceph_crc32c_intel_fast;
   }
 #elif defined(__arm__) || defined(__aarch64__)
+# if defined(HAVE_ARMV8_CRC)
   if (ceph_arch_aarch64_crc32){
     return ceph_crc32c_aarch64;
   }
+# endif
 #elif defined(__powerpc__) || defined(__ppc__)
   if (ceph_arch_ppc_crc32) {
     return ceph_crc32c_ppc;
@@ -218,8 +220,8 @@ uint32_t ceph_crc32c_zeros(uint32_t crc, unsigned len)
   len = len >> 4;
   range = 4;
   while (len != 0) {
-    uint32_t crc1 = 0;
     if ((len & 1) == 1) {
+      uint32_t crc1 = 0;
       uint32_t* ptr = crc_turbo_table/*.val*/[range];
       while (crc != 0) {
         uint32_t mask = ~((crc & 1) - 1);

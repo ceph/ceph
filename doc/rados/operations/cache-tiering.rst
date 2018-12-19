@@ -88,7 +88,7 @@ extreme caution before using this feature.
 
 * *librados object enumeration*: The librados-level object enumeration
   API is not meant to be coherent in the presence of the case.  If
-  your applicatoin is using librados directly and relies on object
+  your application is using librados directly and relies on object
   enumeration, cache tiering will probably not work as expected.
   (This is not a problem for RGW, RBD, or CephFS.)
 
@@ -149,15 +149,15 @@ Setting up a backing storage pool typically involves one of two scenarios:
 - **Erasure Coding:** In this scenario, the pool uses erasure coding to 
   store data much more efficiently with a small performance tradeoff.
 
-In the standard storage scenario, you can setup a CRUSH ruleset to establish 
+In the standard storage scenario, you can setup a CRUSH rule to establish 
 the failure domain (e.g., osd, host, chassis, rack, row, etc.). Ceph OSD 
-Daemons perform optimally when all storage drives in the ruleset are of the 
+Daemons perform optimally when all storage drives in the rule are of the 
 same size, speed (both RPMs and throughput) and type. See `CRUSH Maps`_ 
-for details on creating a ruleset. Once you have created a ruleset, create 
+for details on creating a rule. Once you have created a rule, create 
 a backing storage pool. 
 
 In the erasure coding scenario, the pool creation arguments will generate the
-appropriate ruleset automatically. See `Create a Pool`_ for details.
+appropriate rule automatically. See `Create a Pool`_ for details.
 
 In subsequent examples, we will refer to the backing storage pool 
 as ``cold-storage``.
@@ -169,8 +169,8 @@ Setting Up a Cache Pool
 Setting up a cache pool follows the same procedure as the standard storage
 scenario, but with this difference: the drives for the cache tier are typically
 high performance drives that reside in their own servers and have their own
-ruleset.  When setting up a ruleset, it should take account of the hosts that
-have the high performance drives while omitting the hosts that don't. See
+CRUSH rule.  When setting up such a rule, it should take account of the hosts
+that have the high performance drives while omitting the hosts that don't. See
 `Placing Different Pools on Different OSDs`_ for details.
 
 
@@ -235,8 +235,8 @@ For example::
 
 	ceph osd pool set hot-storage hit_set_type bloom
 
-The ``hit_set_count`` and ``hit_set_period`` define how much time each HitSet
-should cover, and how many such HitSets to store. ::
+The ``hit_set_count`` and ``hit_set_period`` define how many such HitSets to
+store, and how much time each HitSet should cover. ::
 
 	ceph osd pool set {cachepool} hit_set_count 12
 	ceph osd pool set {cachepool} hit_set_period 14400
@@ -415,14 +415,14 @@ that you do not lose any recent changes to objects in the cache before you
 disable and remove it.
 
 
-#. Change the cache mode to ``forward`` so that new and modified objects will 
+#. Change the cache mode to ``proxy`` so that new and modified objects will 
    flush to the backing storage pool. ::
 
-	ceph osd tier cache-mode {cachepool} forward
+	ceph osd tier cache-mode {cachepool} proxy
 
    For example:: 
 
-	ceph osd tier cache-mode hot-storage forward
+	ceph osd tier cache-mode hot-storage proxy
 
 
 #. Ensure that the cache pool has been flushed. This may take a few minutes::

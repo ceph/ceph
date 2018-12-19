@@ -45,7 +45,7 @@ void cls_lock_lock_op::generate_test_instances(list<cls_lock_lock_op*>& o)
   i->tag = "tag";
   i->description = "description";
   i->duration = utime_t(5, 0);
-  i->flags = LOCK_FLAG_RENEW;
+  i->flags = LOCK_FLAG_MAY_RENEW;
   o.push_back(i);
   o.push_back(new cls_lock_lock_op);
 }

@@ -38,73 +38,6 @@
 
 #include <stdio.h>
 
-int64_t unit_to_bytesize(string val, ostream *pss)
-{
-  if (val.empty()) {
-    if (pss)
-      *pss << "value is empty!";
-    return -EINVAL;
-  }
-
-  char c = val[val.length()-1];
-  int modifier = 0;
-  if (!::isdigit(c)) {
-    if (val.length() < 2) {
-      if (pss)
-        *pss << "invalid value: " << val;
-      return -EINVAL;
-    }
-    val = val.substr(0,val.length()-1);
-    switch (c) {
-    case 'B':
-      break;
-    case 'k':
-    case 'K':
-      modifier = 10;
-      break;
-    case 'M':
-      modifier = 20;
-      break;
-    case 'G':
-      modifier = 30;
-      break;
-    case 'T':
-      modifier = 40;
-      break;
-    case 'P':
-      modifier = 50;
-      break;
-    case 'E':
-      modifier = 60;
-      break;
-    default:
-      if (pss)
-        *pss << "unrecognized modifier '" << c << "'" << std::endl;
-      return -EINVAL;
-    }
-  }
-
-  if (val[0] == '+' || val[0] == '-') {
-    if (pss)
-      *pss << "expected numerical value, got: " << val;
-    return -EINVAL;
-  }
-
-  string err;
-  int64_t r = strict_strtoll(val.c_str(), 10, &err);
-  if ((r == 0) && !err.empty()) {
-    if (pss)
-      *pss << err;
-    return -1;
-  }
-  if (r < 0) {
-    if (pss)
-      *pss << "unable to parse positive integer '" << val << "'";
-    return -1;
-  }
-  return (r * (1LL << modifier));
-}
-
 int get_fs_stats(ceph_data_stats_t &stats, const char *path)
 {
   if (!path)
@@ -160,6 +93,7 @@ static void file_values_parse(const map<string, string>& kvm, FILE *fp, map<stri
 
 static bool os_release_parse(map<string, string> *m, CephContext *cct)
 {
+#if defined(__linux__)
   static const map<string, string> kvm = {
     { "distro", "ID=" },
     { "distro_description", "PRETTY_NAME=" },
@@ -176,6 +110,15 @@ static bool os_release_parse(map<string, string> *m, CephContext *cct)
   file_values_parse(kvm, fp, m, cct);
 
   fclose(fp);
+#elif defined(__FreeBSD__)
+  struct utsname u;
+  int r = uname(&u);
+  if (!r) {
+     m->insert(std::make_pair("distro", u.sysname));
+     m->insert(std::make_pair("distro_description", u.version));
+     m->insert(std::make_pair("distro_version", u.release));
+  }
+#endif
 
   return true;
 }
@@ -196,6 +139,8 @@ void collect_sys_info(map<string, string> *m, CephContext *cct)
 {
   // version
   (*m)["ceph_version"] = pretty_version_to_str();
+  (*m)["ceph_version_short"] = ceph_version_to_str();
+  (*m)["ceph_release"] = ceph_release_to_str();
 
   // kernel info
   struct utsname u;
@@ -207,6 +152,28 @@ void collect_sys_info(map<string, string> *m, CephContext *cct)
     (*m)["hostname"] = u.nodename;
     (*m)["arch"] = u.machine;
   }
+
+  // but wait, am i in a container?
+  bool in_container = false;
+
+  if (const char *pod_name = getenv("POD_NAME")) {
+    (*m)["pod_name"] = pod_name;
+    in_container = true;
+  }
+  if (const char *container_name = getenv("CONTAINER_NAME")) {
+    (*m)["container_name"] = container_name;
+    in_container = true;
+  }
+  if (in_container) {
+    if (const char *node_name = getenv("NODE_NAME")) {
+      (*m)["container_hostname"] = u.nodename;
+      (*m)["hostname"] = node_name;
+    }
+    if (const char *ns = getenv("POD_NAMESPACE")) {
+      (*m)["pod_namespace"] = ns;
+    }
+  }
+
 #ifdef __APPLE__
   // memory
   {
@@ -287,7 +254,7 @@ void collect_sys_info(map<string, string> *m, CephContext *cct)
 
 void dump_services(Formatter* f, const map<string, list<int> >& services, const char* type)
 {
-  assert(f);
+  ceph_assert(f);
 
   f->open_object_section(type);
   for (map<string, list<int> >::const_iterator host = services.begin();
@@ -303,6 +270,21 @@ void dump_services(Formatter* f, const map<string, list<int> >& services, const 
   f->close_section();
 }
 
+void dump_services(Formatter* f, const map<string, list<string> >& services, const char* type)
+{
+  ceph_assert(f);
+
+  f->open_object_section(type);
+  for (const auto& host : services) {
+    f->open_array_section(host.first.c_str());
+    const auto& hosted = host.second;
+    for (const auto& s : hosted) {
+      f->dump_string(type, s);
+    }
+    f->close_section();
+  }
+  f->close_section();
+}
 
 // If non-printable characters found then convert bufferlist to
 // base64 encoded string indicating whether it did.

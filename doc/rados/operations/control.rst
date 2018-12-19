@@ -96,11 +96,9 @@ Query OSD subsystem status. ::
 	ceph osd stat
 
 Write a copy of the most recent OSD map to a file. See
-`osdmaptool`_. ::
+:ref:`osdmaptool <osdmaptool>`. ::
 
 	ceph osd getmap -o file
-
-.. _osdmaptool: ../../man/8/osdmaptool
 
 Write a copy of the crush map from the most recent OSD map to
 file. ::
@@ -249,7 +247,7 @@ Valid fields are:
 	* ``size``: Sets the number of copies of data in the pool.
 	* ``pg_num``: The placement group number.
 	* ``pgp_num``: Effective number when calculating pg placement.
-	* ``crush_ruleset``: rule number for mapping placement.
+	* ``crush_rule``: rule number for mapping placement.
 
 Get the value of a pool setting. ::
 
@@ -259,8 +257,6 @@ Valid fields are:
 
 	* ``pg_num``: The placement group number.
 	* ``pgp_num``: Effective number of placement groups when calculating placement.
-	* ``lpg_num``: The number of local placement groups.
-	* ``lpgp_num``: The number used for placing the local placement groups.
 
 
 Sends a scrub command to OSD ``{osd-num}``. To send the command to all OSDs, use ``*``. ::
@@ -280,17 +276,24 @@ concurrently accessing the OSD. ::
 
 	ceph tell osd.N bench [TOTAL_DATA_BYTES] [BYTES_PER_WRITE]
 
+To clear an OSD's caches between benchmark runs, use the 'cache drop' command ::
+
+	ceph tell osd.N cache drop
+
+To get the cache statistics of an OSD, use the 'cache status' command ::
+
+	ceph tell osd.N cache status
 
 MDS Subsystem
 =============
 
 Change configuration parameters on a running mds. ::
 
-	ceph tell mds.{mds-id} injectargs --{switch} {value} [--{switch} {value}]
+	ceph tell mds.{mds-id} config set {setting} {value}
 
 Example::
 
-	ceph tell mds.0 injectargs --debug_ms 1 --debug_mds 10
+	ceph tell mds.0 config set debug_ms 1
 
 Enables debug messages. ::
 

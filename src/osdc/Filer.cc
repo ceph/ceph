@@ -46,7 +46,7 @@ public:
   void finish(int r) override {
     if (r == -ENOENT) {
       r = 0;
-      assert(size == 0);
+      ceph_assert(size == 0);
     }
 
     bool probe_complete;
@@ -57,7 +57,7 @@ public:
       }
 
       probe_complete = filer->_probed(probe, oid, size, mtime, pl);
-      assert(!pl.owns_lock());
+      ceph_assert(!pl.owns_lock());
     }
     if (probe_complete) {
       probe->onfinish->complete(probe->err);
@@ -81,7 +81,7 @@ int Filer::probe(inodeno_t ino,
 	   << " starting from " << start_from
 	   << dendl;
 
-  assert(snapid);  // (until there is a non-NOSNAP write)
+  ceph_assert(snapid);  // (until there is a non-NOSNAP write)
 
   Probe *probe = new Probe(ino, *layout, snapid, start_from, end, pmtime,
 			   flags, fwd, onfinish);
@@ -104,7 +104,7 @@ int Filer::probe(inodeno_t ino,
 	   << " starting from " << start_from
 	   << dendl;
 
-  assert(snapid);  // (until there is a non-NOSNAP write)
+  ceph_assert(snapid);  // (until there is a non-NOSNAP write)
 
   Probe *probe = new Probe(ino, *layout, snapid, start_from, end, pmtime,
 			   flags, fwd, onfinish);
@@ -123,7 +123,7 @@ int Filer::probe_impl(Probe* probe, file_layout_t *layout,
     if (start_from % period)
       probe->probing_len += period - (start_from % period);
   } else {
-    assert(start_from > *end);
+    ceph_assert(start_from > *end);
     if (start_from % period)
       probe->probing_len -= period - (start_from % period);
     probe->probing_off -= probe->probing_len;
@@ -131,7 +131,7 @@ int Filer::probe_impl(Probe* probe, file_layout_t *layout,
 
   Probe::unique_lock pl(probe->lock);
   _probe(probe, pl);
-  assert(!pl.owns_lock());
+  ceph_assert(!pl.owns_lock());
 
   return 0;
 }
@@ -143,7 +143,7 @@ int Filer::probe_impl(Probe* probe, file_layout_t *layout,
  */
 void Filer::_probe(Probe *probe, Probe::unique_lock& pl)
 {
-  assert(pl.owns_lock() && pl.mutex() == &probe->lock);
+  ceph_assert(pl.owns_lock() && pl.mutex() == &probe->lock);
 
   ldout(cct, 10) << "_probe " << hex << probe->ino << dec
 		 << " " << probe->probing_off << "~" << probe->probing_len
@@ -182,7 +182,7 @@ void Filer::_probe(Probe *probe, Probe::unique_lock& pl)
 bool Filer::_probed(Probe *probe, const object_t& oid, uint64_t size,
 		    ceph::real_time mtime, Probe::unique_lock& pl)
 {
-  assert(pl.owns_lock() && pl.mutex() == &probe->lock);
+  ceph_assert(pl.owns_lock() && pl.mutex() == &probe->lock);
 
   ldout(cct, 10) << "_probed " << probe->ino << " object " << oid
 	   << " has size " << size << " mtime " << mtime << dendl;
@@ -191,7 +191,7 @@ bool Filer::_probed(Probe *probe, const object_t& oid, uint64_t size,
   if (mtime > probe->max_mtime)
     probe->max_mtime = mtime;
 
-  assert(probe->ops.count(oid));
+  ceph_assert(probe->ops.count(oid));
   probe->ops.erase(oid);
 
   if (!probe->ops.empty()) {
@@ -221,7 +221,7 @@ bool Filer::_probed(Probe *probe, const object_t& oid, uint64_t size,
 		   << dendl;
 
     if (!probe->found_size) {
-      assert(probe->known_size[p->oid] <= shouldbe);
+      ceph_assert(probe->known_size[p->oid] <= shouldbe);
 
       if ((probe->fwd && probe->known_size[p->oid] == shouldbe) ||
 	  (!probe->fwd && probe->known_size[p->oid] == 0 &&
@@ -264,16 +264,16 @@ bool Filer::_probed(Probe *probe, const object_t& oid, uint64_t size,
     uint64_t period = probe->layout.get_period();
     if (probe->fwd) {
       probe->probing_off += probe->probing_len;
-      assert(probe->probing_off % period == 0);
+      ceph_assert(probe->probing_off % period == 0);
       probe->probing_len = period;
     } else {
       // previous period.
-      assert(probe->probing_off % period == 0);
+      ceph_assert(probe->probing_off % period == 0);
       probe->probing_len = period;
       probe->probing_off -= period;
     }
     _probe(probe, pl);
-    assert(!pl.owns_lock());
+    ceph_assert(!pl.owns_lock());
     return false;
   } else if (probe->pmtime) {
     ldout(cct, 10) << "_probed found mtime " << probe->max_mtime << dendl;
@@ -317,7 +317,7 @@ int Filer::purge_range(inodeno_t ino,
 		       int flags,
 		       Context *oncommit)
 {
-  assert(num_obj > 0);
+  ceph_assert(num_obj > 0);
 
   // single object?  easy!
   if (num_obj == 1) {

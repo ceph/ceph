@@ -4,16 +4,17 @@
 #include "test/librbd/test_mock_fixture.h"
 #include "test/librbd/test_support.h"
 #include "test/librbd/mock/MockImageCtx.h"
+#include "test/librbd/mock/io/MockObjectDispatch.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "common/bit_vector.hpp"
 #include "librbd/AsyncRequest.h"
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
-#include "librbd/io/ObjectRequest.h"
 #include "librbd/operation/TrimRequest.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
+#include <boost/variant.hpp>
 
 namespace librbd {
 namespace {
@@ -66,47 +67,19 @@ struct AsyncRequest<librbd::MockTestImageCtx> {
 
 namespace io {
 
-template <>
-struct ObjectRequest<librbd::MockTestImageCtx> : public ObjectRequestHandle {
-  static ObjectRequest* s_instance;
-  Context *on_finish = nullptr;
-
-  static ObjectRequest* create_truncate(librbd::MockTestImageCtx *ictx,
-                                        const std::string &oid,
-                                        uint64_t object_no,
-                                        uint64_t object_off,
-                                        const ::SnapContext &snapc,
-                                        const ZTracer::Trace &parent_trace,
-                                        Context *completion) {
-    assert(s_instance != nullptr);
-    s_instance->on_finish = completion;
-    s_instance->construct_truncate();
-    return s_instance;
+struct DiscardVisitor
+  : public boost::static_visitor<ObjectDispatchSpec::DiscardRequest*> {
+  ObjectDispatchSpec::DiscardRequest*
+  operator()(ObjectDispatchSpec::DiscardRequest& discard) const {
+    return &discard;
   }
 
-  static ObjectRequest* create_trim(librbd::MockTestImageCtx *ictx,
-                                    const std::string &oid,
-                                    uint64_t object_no,
-                                    const ::SnapContext &snapc,
-                                    bool post_object_map_update,
-                                    Context *completion) {
-    assert(s_instance != nullptr);
-    s_instance->on_finish = completion;
-    s_instance->construct_trim();
-    return s_instance;
+  template <typename T>
+  ObjectDispatchSpec::DiscardRequest*
+  operator()(T& t) const {
+    return nullptr;
   }
-
-  ObjectRequest() {
-    s_instance = this;
-  }
-
-  MOCK_METHOD0(construct_truncate, void());
-  MOCK_METHOD0(construct_trim, void());
-  MOCK_METHOD0(send, void());
-  MOCK_METHOD1(complete, void(int));
 };
-
-ObjectRequest<librbd::MockTestImageCtx>* ObjectRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
 
 } // namespace io
 } // namespace librbd
@@ -129,7 +102,6 @@ using ::testing::WithArg;
 class TestMockOperationTrimRequest : public TestMockFixture {
 public:
   typedef TrimRequest<MockTestImageCtx> MockTrimRequest;
-  typedef librbd::io::ObjectRequest<MockTestImageCtx> MockObjectRequest;
 
   int create_snapshot(const char *snap_name) {
     librbd::ImageCtx *ictx;
@@ -165,8 +137,8 @@ public:
     if (mock_image_ctx.object_map != nullptr) {
       EXPECT_CALL(*mock_image_ctx.object_map,
                   aio_update(CEPH_NOSNAP, start_object, end_object, state,
-                             boost::optional<uint8_t>(current_state), _, _))
-        .WillOnce(WithArg<6>(Invoke([&mock_image_ctx, updated, ret_val](Context *ctx) {
+                             boost::optional<uint8_t>(current_state), _, false, _))
+        .WillOnce(WithArg<7>(Invoke([&mock_image_ctx, updated, ret_val](Context *ctx) {
                                if (updated) {
                                  mock_image_ctx.op_work_queue->queue(ctx, ret_val);
                                }
@@ -204,23 +176,26 @@ public:
       .WillOnce(Return(ret_val));
   }
 
-  void expect_object_trim(MockImageCtx &mock_image_ctx,
-                          MockObjectRequest &mock_object_request, int ret_val) {
-    EXPECT_CALL(mock_object_request, construct_trim());
-    EXPECT_CALL(mock_object_request, send())
-      .WillOnce(Invoke([&mock_image_ctx, &mock_object_request, ret_val]() {
-                         mock_image_ctx.op_work_queue->queue(mock_object_request.on_finish, ret_val);
-                       }));
-  }
+  void expect_object_discard(MockImageCtx &mock_image_ctx,
+                             io::MockObjectDispatch& mock_io_object_dispatch,
+                             uint64_t offset, uint64_t length,
+                             bool update_object_map, int r) {
+    EXPECT_CALL(*mock_image_ctx.io_object_dispatcher, send(_))
+      .WillOnce(Invoke([&mock_image_ctx, offset, length, update_object_map, r]
+                       (io::ObjectDispatchSpec* spec) {
+                  auto discard = boost::apply_visitor(io::DiscardVisitor{}, spec->request);
+                  ASSERT_TRUE(discard != nullptr);
+                  ASSERT_EQ(offset, discard->object_off);
+                  ASSERT_EQ(length, discard->object_len);
+                  int flags = 0;
+                  if (!update_object_map) {
+                    flags = io::OBJECT_DISCARD_FLAG_DISABLE_OBJECT_MAP_UPDATE;
+                  }
+                  ASSERT_EQ(flags, discard->discard_flags);
 
-  void expect_object_truncate(MockImageCtx &mock_image_ctx,
-                              MockObjectRequest &mock_object_request,
-                              int ret_val) {
-    EXPECT_CALL(mock_object_request, construct_truncate());
-    EXPECT_CALL(mock_object_request, send())
-      .WillOnce(Invoke([&mock_image_ctx, &mock_object_request, ret_val]() {
-                         mock_image_ctx.op_work_queue->queue(mock_object_request.on_finish, ret_val);
-                       }));
+                  spec->dispatch_result = io::DISPATCH_RESULT_COMPLETE;
+                  mock_image_ctx.op_work_queue->queue(&spec->dispatcher_ctx, r);
+                }));
   }
 };
 
@@ -301,11 +276,11 @@ TEST_F(TestMockOperationTrimRequest, SuccessCopyUp) {
                            true, 0);
 
   // copy-up
+  io::MockObjectDispatch mock_io_object_dispatch;
   expect_get_parent_overlap(mock_image_ctx, ictx->get_object_size());
   expect_get_object_name(mock_image_ctx, 0, "object0");
-
-  MockObjectRequest mock_object_request;
-  expect_object_trim(mock_image_ctx, mock_object_request, 0);
+  expect_object_discard(mock_image_ctx, mock_io_object_dispatch, 0,
+                        ictx->get_object_size(), false, 0);
 
   // remove
   expect_object_may_exist(mock_image_ctx, 1, true);
@@ -345,8 +320,9 @@ TEST_F(TestMockOperationTrimRequest, SuccessBoundary) {
   EXPECT_CALL(mock_image_ctx, get_stripe_count()).WillOnce(Return(ictx->get_stripe_count()));
 
   // boundary
-  MockObjectRequest mock_object_request;
-  expect_object_truncate(mock_image_ctx, mock_object_request, 0);
+  io::MockObjectDispatch mock_io_object_dispatch;
+  expect_object_discard(mock_image_ctx, mock_io_object_dispatch, 1,
+                        ictx->get_object_size() - 1, true, 0);
 
   C_SaferCond cond_ctx;
   librbd::NoOpProgressContext progress_ctx;
@@ -444,11 +420,11 @@ TEST_F(TestMockOperationTrimRequest, CopyUpError) {
                            false, 0);
 
   // copy-up
+  io::MockObjectDispatch mock_io_object_dispatch;
   expect_get_parent_overlap(mock_image_ctx, ictx->get_object_size());
   expect_get_object_name(mock_image_ctx, 0, "object0");
-
-  MockObjectRequest mock_object_request;
-  expect_object_trim(mock_image_ctx, mock_object_request, -EINVAL);
+  expect_object_discard(mock_image_ctx, mock_io_object_dispatch, 0,
+                        ictx->get_object_size(), false, -EINVAL);
 
   C_SaferCond cond_ctx;
   librbd::NoOpProgressContext progress_ctx;
@@ -479,8 +455,9 @@ TEST_F(TestMockOperationTrimRequest, BoundaryError) {
   EXPECT_CALL(mock_image_ctx, get_stripe_count()).WillOnce(Return(ictx->get_stripe_count()));
 
   // boundary
-  MockObjectRequest mock_object_request;
-  expect_object_truncate(mock_image_ctx, mock_object_request, -EINVAL);
+  io::MockObjectDispatch mock_io_object_dispatch;
+  expect_object_discard(mock_image_ctx, mock_io_object_dispatch, 1,
+                        ictx->get_object_size() - 1, true, -EINVAL);
 
   C_SaferCond cond_ctx;
   librbd::NoOpProgressContext progress_ctx;

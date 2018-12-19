@@ -30,6 +30,7 @@
 #include "common/strtol.h"
 #include "common/dout.h"
 #include "msg/Messenger.h"
+#include "include/compat.h"
 #include "include/sock_compat.h"
 
 #define dout_subsys ceph_subsys_ms
@@ -73,7 +74,7 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
   }
 
   // return the sent length
-  // < 0 means error occured
+  // < 0 means error occurred
   static ssize_t do_sendmsg(int fd, struct msghdr &msg, unsigned len, bool more)
   {
     size_t sent = 0;
@@ -111,12 +112,12 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
 
   ssize_t send(bufferlist &bl, bool more) override {
     size_t sent_bytes = 0;
-    std::list<bufferptr>::const_iterator pb = bl.buffers().begin();
-    uint64_t left_pbrs = bl.buffers().size();
+    auto pb = std::cbegin(bl.buffers());
+    uint64_t left_pbrs = std::size(bl.buffers());
     while (left_pbrs) {
       struct msghdr msg;
       struct iovec msgvec[IOV_MAX];
-      uint64_t size = MIN(left_pbrs, IOV_MAX);
+      uint64_t size = std::min<uint64_t>(left_pbrs, IOV_MAX);
       left_pbrs -= size;
       memset(&msg, 0, sizeof(msg));
       msg.msg_iovlen = size;
@@ -169,7 +170,9 @@ class PosixServerSocketImpl : public ServerSocketImpl {
   int _fd;
 
  public:
-  explicit PosixServerSocketImpl(NetHandler &h, int f): handler(h), _fd(f) {}
+  explicit PosixServerSocketImpl(NetHandler &h, int f, int type)
+    : ServerSocketImpl(type),
+      handler(h), _fd(f) {}
   int accept(ConnectedSocket *sock, const SocketOptions &opts, entity_addr_t *out, Worker *w) override;
   void abort_accept() override {
     ::close(_fd);
@@ -180,15 +183,14 @@ class PosixServerSocketImpl : public ServerSocketImpl {
 };
 
 int PosixServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &opt, entity_addr_t *out, Worker *w) {
-  assert(sock);
+  ceph_assert(sock);
   sockaddr_storage ss;
   socklen_t slen = sizeof(ss);
-  int sd = ::accept(_fd, (sockaddr*)&ss, &slen);
+  int sd = accept_cloexec(_fd, (sockaddr*)&ss, &slen);
   if (sd < 0) {
     return -errno;
   }
 
-  handler.set_close_on_exec(sd);
   int r = handler.set_nonblock(sd);
   if (r < 0) {
     ::close(sd);
@@ -201,8 +203,9 @@ int PosixServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &op
     return -errno;
   }
 
-  assert(NULL != out); //out should not be NULL in accept connection
+  ceph_assert(NULL != out); //out should not be NULL in accept connection
 
+  out->set_type(addr_type);
   out->set_sockaddr((sockaddr*)&ss);
   handler.set_priority(sd, opt.priority, out->get_family());
 
@@ -229,7 +232,6 @@ int PosixWorker::listen(entity_addr_t &sa, const SocketOptions &opt,
     return -errno;
   }
 
-  net.set_close_on_exec(listen_sd);
   r = net.set_socket_options(listen_sd, opt.nodelay, opt.rcbuf_size);
   if (r < 0) {
     ::close(listen_sd);
@@ -255,7 +257,7 @@ int PosixWorker::listen(entity_addr_t &sa, const SocketOptions &opt,
 
   *sock = ServerSocket(
           std::unique_ptr<PosixServerSocketImpl>(
-              new PosixServerSocketImpl(net, listen_sd)));
+	    new PosixServerSocketImpl(net, listen_sd, sa.get_type())));
   return 0;
 }
 

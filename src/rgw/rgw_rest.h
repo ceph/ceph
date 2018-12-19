@@ -10,17 +10,14 @@
 #include <boost/container/flat_set.hpp>
 #include "common/sstring.hh"
 #include "common/ceph_json.h"
-#include "include/assert.h" /* needed because of common/ceph_json.h */
+#include "include/ceph_assert.h" /* needed because of common/ceph_json.h */
 #include "rgw_op.h"
 #include "rgw_formats.h"
 #include "rgw_client_io.h"
 
 extern std::map<std::string, std::string> rgw_to_http_attrs;
 
-extern string camelcase_dash_http_attr(const string& orig);
-extern string lowercase_dash_http_attr(const string& orig);
-
-extern void rgw_rest_init(CephContext *cct, RGWRados *store, RGWZoneGroup& zone_group);
+extern void rgw_rest_init(CephContext *cct, RGWRados *store, const RGWZoneGroup& zone_group);
 
 extern void rgw_flush_formatter_and_reset(struct req_state *s,
 					 ceph::Formatter *formatter);
@@ -28,24 +25,25 @@ extern void rgw_flush_formatter_and_reset(struct req_state *s,
 extern void rgw_flush_formatter(struct req_state *s,
 				ceph::Formatter *formatter);
 
-extern int rgw_rest_read_all_input(struct req_state *s, char **data, int *plen,
-				   uint64_t max_len, bool allow_chunked=true);
+std::tuple<int, bufferlist > rgw_rest_read_all_input(struct req_state *s,
+                                        const uint64_t max_len,
+                                        const bool allow_chunked=true);
 
 template <class T>
 int rgw_rest_get_json_input(CephContext *cct, req_state *s, T& out,
 			    uint64_t max_len, bool *empty)
 {
-  int rv, data_len;
-  char *data;
-
   if (empty)
     *empty = false;
 
-  if ((rv = rgw_rest_read_all_input(s, &data, &data_len, max_len)) < 0) {
+  int rv = 0;
+  bufferlist data;
+  std::tie(rv, data) = rgw_rest_read_all_input(s, max_len);
+  if (rv < 0) {
     return rv;
   }
 
-  if (!data_len) {
+  if (!data.length()) {
     if (empty) {
       *empty = true;
     }
@@ -55,12 +53,9 @@ int rgw_rest_get_json_input(CephContext *cct, req_state *s, T& out,
 
   JSONParser parser;
 
-  if (!parser.parse(data, data_len)) {
-    free(data);
+  if (!parser.parse(data.c_str(), data.length())) {
     return -EINVAL;
   }
-
-  free(data);
 
   try {
       decode_json_obj(out, &parser);
@@ -72,37 +67,32 @@ int rgw_rest_get_json_input(CephContext *cct, req_state *s, T& out,
 }
 
 template <class T>
-int rgw_rest_get_json_input_keep_data(CephContext *cct, req_state *s, T& out, uint64_t max_len, char **pdata, int *len)
+std::tuple<int, bufferlist > rgw_rest_get_json_input_keep_data(CephContext *cct, req_state *s, T& out, uint64_t max_len)
 {
-  int rv, data_len;
-  char *data;
-
-  if ((rv = rgw_rest_read_all_input(s, &data, &data_len, max_len)) < 0) {
-    return rv;
+  int rv = 0;
+  bufferlist data;
+  std::tie(rv, data) = rgw_rest_read_all_input(s, max_len);
+  if (rv < 0) {
+    return std::make_tuple(rv, std::move(data));
   }
 
-  if (!data_len) {
-    return -EINVAL;
+  if (!data.length()) {
+    return std::make_tuple(-EINVAL, std::move(data));
   }
-
-  *len = data_len;
 
   JSONParser parser;
 
-  if (!parser.parse(data, data_len)) {
-    free(data);
-    return -EINVAL;
+  if (!parser.parse(data.c_str(), data.length())) {
+    return std::make_tuple(-EINVAL, std::move(data));
   }
 
   try {
     decode_json_obj(out, &parser);
   } catch (JSONDecoder::err& e) {
-    free(data);
-    return -EINVAL;
+    return std::make_tuple(-EINVAL, std::move(data));
   }
 
-  *pdata = data;
-  return 0;
+  return std::make_tuple(0, std::move(data));
 }
 
 class RESTArgs {
@@ -716,13 +706,26 @@ static inline void dump_header_if_nonempty(struct req_state* s,
   }
 }
 
+static inline std::string compute_domain_uri(const struct req_state *s) {
+  std::string uri = (!s->info.domain.empty()) ? s->info.domain :
+    [&s]() -> std::string {
+    auto env = *(s->info.env);
+    std::string uri =
+    env.get("SERVER_PORT_SECURE") ? "https://" : "http://";
+    if (env.exists("SERVER_NAME")) {
+      uri.append(env.get("SERVER_NAME", "<SERVER_NAME>"));
+    } else {
+      uri.append(env.get("HTTP_HOST", "<HTTP_HOST>"));
+    }
+    return uri;
+  }();
+  return uri;
+}
+
 extern void dump_content_length(struct req_state *s, uint64_t len);
 extern int64_t parse_content_length(const char *content_length);
 extern void dump_etag(struct req_state *s,
                       const boost::string_ref& etag,
-                      bool quoted = false);
-extern void dump_etag(struct req_state *s,
-                      ceph::buffer::list& bl_etag,
                       bool quoted = false);
 extern void dump_epoch_header(struct req_state *s, const char *name, real_time t);
 extern void dump_time_header(struct req_state *s, const char *name, real_time t);
@@ -736,7 +739,6 @@ extern void list_all_buckets_end(struct req_state *s);
 extern void dump_time(struct req_state *s, const char *name, real_time *t);
 extern std::string dump_time_to_str(const real_time& t);
 extern void dump_bucket_from_state(struct req_state *s);
-extern void dump_uri_from_state(struct req_state *s);
 extern void dump_redirect(struct req_state *s, const string& redirect);
 extern bool is_valid_url(const char *url);
 extern void dump_access_control(struct req_state *s, const char *origin,
@@ -748,7 +750,6 @@ extern void dump_access_control(req_state *s, RGWOp *op);
 extern int dump_body(struct req_state* s, const char* buf, size_t len);
 extern int dump_body(struct req_state* s, /* const */ ceph::buffer::list& bl);
 extern int dump_body(struct req_state* s, const std::string& str);
-
 extern int recv_body(struct req_state* s, char* buf, size_t max);
 
 #endif /* CEPH_RGW_REST_H */

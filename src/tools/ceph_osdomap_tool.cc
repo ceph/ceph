@@ -23,7 +23,6 @@
 #include "kv/KeyValueDB.h"
 
 namespace po = boost::program_options;
-using namespace std;
 
 int main(int argc, char **argv) {
   po::options_description desc("Allowed options");
@@ -32,7 +31,7 @@ int main(int argc, char **argv) {
   desc.add_options()
     ("help", "produce help message")
     ("omap-path", po::value<string>(&store_path),
-     "path to mon directory, mandatory (current/omap usually)")
+     "path to omap directory, mandatory (current/omap usually)")
     ("paranoid", "use paranoid checking")
     ("debug", "Additional debug output from DBObjectMap")
     ("oid", po::value<string>(&oid), "Restrict to this object id when dumping objects")
@@ -61,7 +60,7 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  vector<const char *> ceph_options, def_args;
+  vector<const char *> ceph_options;
   ceph_options.reserve(ceph_option_strings.size());
   for (vector<string>::iterator i = ceph_option_strings.begin();
        i != ceph_option_strings.end();
@@ -71,22 +70,21 @@ int main(int argc, char **argv) {
 
   if (vm.count("debug")) debug = true;
 
-  auto cct = global_init(
-    &def_args, ceph_options, CEPH_ENTITY_TYPE_OSD,
-    CODE_ENVIRONMENT_UTILITY_NODOUT, 0);
-  common_init_finish(g_ceph_context);
-  g_ceph_context->_conf->apply_changes(NULL);
-  g_conf = g_ceph_context->_conf;
-  if (debug) {
-    g_conf->set_val_or_die("log_to_stderr", "true");
-    g_conf->set_val_or_die("err_to_stderr", "true");
-  }
-  g_conf->apply_changes(NULL);
-
   if (vm.count("help")) {
     std::cerr << desc << std::endl;
     return 1;
   }
+
+  auto cct = global_init(
+    NULL, ceph_options, CEPH_ENTITY_TYPE_OSD,
+    CODE_ENVIRONMENT_UTILITY_NODOUT, 0);
+  common_init_finish(g_ceph_context);
+  cct->_conf.apply_changes(nullptr);
+  if (debug) {
+    g_conf().set_val_or_die("log_to_stderr", "true");
+    g_conf().set_val_or_die("err_to_stderr", "true");
+  }
+  g_conf().apply_changes(nullptr);
 
   if (vm.count("omap-path") == 0) {
     std::cerr << "Required argument --omap-path" << std::endl;

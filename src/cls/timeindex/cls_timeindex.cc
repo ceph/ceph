@@ -56,11 +56,11 @@ static int cls_timeindex_add(cls_method_context_t hctx,
                              bufferlist * const in,
                              bufferlist * const out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_timeindex_add_op op;
   try {
-    ::decode(op, in_iter);
+    decode(op, in_iter);
   } catch (buffer::error& err) {
     CLS_LOG(1, "ERROR: cls_timeindex_add_op(): failed to decode op");
     return -EINVAL;
@@ -89,11 +89,11 @@ static int cls_timeindex_list(cls_method_context_t hctx,
                               bufferlist * const in,
                               bufferlist * const out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_timeindex_list_op op;
   try {
-    ::decode(op, in_iter);
+    decode(op, in_iter);
   } catch (buffer::error& err) {
     CLS_LOG(1, "ERROR: cls_timeindex_list_op(): failed to decode op");
     return -EINVAL;
@@ -137,7 +137,6 @@ static int cls_timeindex_list(cls_method_context_t hctx,
     const string& index = iter->first;
     bufferlist& bl = iter->second;
 
-    marker = index;
     if (use_time_boundary && index.compare(0, to_index.size(), to_index) >= 0) {
       CLS_LOG(20, "DEBUG: cls_timeindex_list: finishing on to_index=%s",
               to_index.c_str());
@@ -156,11 +155,12 @@ static int cls_timeindex_list(cls_method_context_t hctx,
       e.value = bl;
       entries.push_back(e);
     }
+    marker = index;
   }
 
   ret.marker = marker;
 
-  ::encode(ret, *out);
+  encode(ret, *out);
 
   return 0;
 }
@@ -170,11 +170,11 @@ static int cls_timeindex_trim(cls_method_context_t hctx,
                               bufferlist * const in,
                               bufferlist * const out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_timeindex_trim_op op;
   try {
-    ::decode(op, in_iter);
+    decode(op, in_iter);
   } catch (buffer::error& err) {
     CLS_LOG(1, "ERROR: cls_timeindex_trim: failed to decode entry");
     return -EINVAL;

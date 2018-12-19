@@ -19,7 +19,9 @@ Synopsis
 | **ceph-bluestore-tool** show-label --dev *device* ...
 | **ceph-bluestore-tool** prime-osd-dir --dev *device* --path *osd path*
 | **ceph-bluestore-tool** bluefs-export --path *osd path* --out-dir *dir*
-| **ceph-bluestore-tool** bluefs-export --path *osd path* --out-dir *dir*
+| **ceph-bluestore-tool** bluefs-bdev-new-wal --path *osd path* --dev-target *new-device*
+| **ceph-bluestore-tool** bluefs-bdev-new-db --path *osd path* --dev-target *new-device*
+| **ceph-bluestore-tool** bluefs-bdev-migrate --path *osd path* --dev-target *new-device* --devs-source *device1* [--devs-source *device2*]
 
 
 Description
@@ -31,31 +33,51 @@ operations on a BlueStore instance.
 Commands
 ========
 
-.. option:: help
+:command:`help`
 
    show help
 
-.. option:: fsck
+:command:`fsck` [ --deep ]
 
    run consistency check on BlueStore metadata.  If *--deep* is specified, also read all object data and verify checksums.
 
-.. option:: repair
+:command:`repair`
 
    Run a consistency check *and* repair any errors we can.
 
-.. option:: bluefs-export
+:command:`bluefs-export`
 
    Export the contents of BlueFS (i.e., rocksdb files) to an output directory.
 
-.. option:: bluefs-bdev-sizes --path *osd path*
+:command:`bluefs-bdev-sizes` --path *osd path*
 
    Print the device sizes, as understood by BlueFS, to stdout.
 
-.. option:: bluefs-bdev-expand --path *osd path*
+:command:`bluefs-bdev-expand` --path *osd path*
 
    Instruct BlueFS to check the size of its block devices and, if they have expanded, make use of the additional space.
 
-.. option:: show-label --dev *device* [...]
+:command:`bluefs-bdev-new-wal` --path *osd path* --dev-target *new-device*
+
+   Adds WAL device to BlueFS, fails if WAL device already exists.
+
+:command:`bluefs-bdev-new-db` --path *osd path* --dev-target *new-device*
+
+   Adds DB device to BlueFS, fails if DB device already exists.
+   
+:command:`bluefs-bdev-migrate` --dev-target *new-device* --devs-source *device1* [--devs-source *device2*]
+
+   Moves BlueFS data from source device(s) to the target one, source devices
+   (except the main one) are removed on success. Target device can be both
+   already attached or new device. In the latter case it's added to OSD
+   replacing one of the source devices. Following replacement rules apply
+   (in the order of precedence, stop on the first match):
+
+      - if source list has DB volume - target device replaces it.
+      - if source list has WAL volume - target device replace it.
+      - if source list has slow volume only - operation isn't permitted, requires explicit allocation via new-db/new-wal command.
+
+:command:`show-label` --dev *device* [...]
 
    Show device label(s).	   
 
@@ -65,6 +87,14 @@ Options
 .. option:: --dev *device*
 
    Add *device* to the list of devices to consider
+
+.. option:: --devs-source *device*
+
+   Add *device* to the list of devices to consider as sources for migrate operation
+
+.. option:: --dev-target *device*
+
+   Specify target *device* migrate operation or device to add for adding new DB/WAL.
 
 .. option:: --path *osd path*
 
@@ -97,7 +127,7 @@ device.  You can dump the contents of the label with::
 
 The main device will have a lot of metadata, including information
 that used to be stored in small files in the OSD data directory.  The
-auxilliary devices (db and wal) will only have the minimum required
+auxiliary devices (db and wal) will only have the minimum required
 fields (OSD UUID, size, device type, birth time).
 
 OSD directory priming

@@ -76,7 +76,7 @@ void BreakRequest<I>::send_get_watchers() {
     create_rados_callback<klass, &klass::handle_get_watchers>(this);
   m_out_bl.clear();
   int r = m_ioctx.aio_operate(m_oid, rados_completion, &op, &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   rados_completion->release();
 }
 
@@ -204,7 +204,7 @@ void BreakRequest<I>::send_break_lock() {
   librados::AioCompletion *rados_completion =
     create_rados_callback<klass, &klass::handle_break_lock>(this);
   int r = m_ioctx.aio_operate(m_oid, rados_completion, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   rados_completion->release();
 }
 

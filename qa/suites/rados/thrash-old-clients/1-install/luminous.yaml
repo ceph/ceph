@@ -1,0 +1,8 @@
+tasks:
+- install:
+    branch: luminous
+    exclude_packages: ['librados3']
+    extra_packages: ['librados2']
+- install.upgrade:
+    mon.a:
+    mon.b:

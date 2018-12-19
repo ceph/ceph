@@ -41,7 +41,7 @@ void UnlockRequest<I>::send_unlock() {
   librados::AioCompletion *rados_completion =
     create_rados_callback<klass, &klass::handle_unlock>(this);
   int r = m_image_ctx.md_ctx.aio_operate(oid, rados_completion, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   rados_completion->release();
 }
 

@@ -5,8 +5,11 @@
 #include "rgw_rest_realm.h"
 #include "rgw_rest_s3.h"
 #include "rgw_rest_config.h"
+#include "rgw_zone.h"
 
-#include "include/assert.h"
+#include "services/svc_zone.h"
+
+#include "include/ceph_assert.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -47,7 +50,13 @@ void RGWOp_Period_Base::send_response()
 class RGWOp_Period_Get : public RGWOp_Period_Base {
  public:
   void execute() override;
-  const string name() override { return "get_period"; }
+  int check_caps(RGWUserCaps& caps) override {
+    return caps.check_cap("zone", RGW_CAP_READ);
+  }
+  int verify_permission() override {
+    return check_caps(s->user->caps);
+  }
+  const char* name() const override { return "get_period"; }
 };
 
 void RGWOp_Period_Get::execute()
@@ -62,7 +71,7 @@ void RGWOp_Period_Get::execute()
   period.set_id(period_id);
   period.set_epoch(epoch);
 
-  http_ret = period.init(store->ctx(), store, realm_id, realm_name);
+  http_ret = period.init(store->ctx(), store->svc.sysobj, realm_id, realm_name);
   if (http_ret < 0)
     ldout(store->ctx(), 5) << "failed to read period" << dendl;
 }
@@ -71,7 +80,13 @@ void RGWOp_Period_Get::execute()
 class RGWOp_Period_Post : public RGWOp_Period_Base {
  public:
   void execute() override;
-  const string name() override { return "post_period"; }
+  int check_caps(RGWUserCaps& caps) override {
+    return caps.check_cap("zone", RGW_CAP_WRITE);
+  }
+  int verify_permission() override {
+    return check_caps(s->user->caps);
+  }
+  const char* name() const override { return "post_period"; }
 };
 
 void RGWOp_Period_Post::execute()
@@ -79,7 +94,7 @@ void RGWOp_Period_Post::execute()
   auto cct = store->ctx();
 
   // initialize the period without reading from rados
-  period.init(cct, store, false);
+  period.init(cct, store->svc.sysobj, false);
 
   // decode the period from input
   const auto max_size = cct->_conf->rgw_max_put_param_size;
@@ -91,9 +106,9 @@ void RGWOp_Period_Post::execute()
   }
 
   // require period.realm_id to match our realm
-  if (period.get_realm() != store->realm.get_id()) {
+  if (period.get_realm() != store->svc.zone->get_realm().get_id()) {
     error_stream << "period with realm id " << period.get_realm()
-        << " doesn't match current realm " << store->realm.get_id() << std::endl;
+        << " doesn't match current realm " << store->svc.zone->get_realm().get_id() << std::endl;
     http_ret = -EINVAL;
     return;
   }
@@ -102,7 +117,7 @@ void RGWOp_Period_Post::execute()
   // period that we haven't restarted with yet. we also don't want to modify
   // the objects in use by RGWRados
   RGWRealm realm(period.get_realm());
-  http_ret = realm.init(cct, store);
+  http_ret = realm.init(cct, store->svc.sysobj);
   if (http_ret < 0) {
     lderr(cct) << "failed to read current realm: "
         << cpp_strerror(-http_ret) << dendl;
@@ -110,7 +125,7 @@ void RGWOp_Period_Post::execute()
   }
 
   RGWPeriod current_period;
-  http_ret = current_period.init(cct, store, realm.get_id());
+  http_ret = current_period.init(cct, store->svc.sysobj, realm.get_id());
   if (http_ret < 0) {
     lderr(cct) << "failed to read current period: "
         << cpp_strerror(-http_ret) << dendl;
@@ -119,7 +134,7 @@ void RGWOp_Period_Post::execute()
 
   // if period id is empty, handle as 'period commit'
   if (period.get_id().empty()) {
-    http_ret = period.commit(realm, current_period, error_stream);
+    http_ret = period.commit(store, realm, current_period, error_stream);
     if (http_ret < 0) {
       lderr(cct) << "master zone failed to commit period" << dendl;
     }
@@ -127,7 +142,7 @@ void RGWOp_Period_Post::execute()
   }
 
   // if it's not period commit, nobody is allowed to push to the master zone
-  if (period.get_master_zone() == store->get_zone_params().get_id()) {
+  if (period.get_master_zone() == store->svc.zone->get_zone_params().get_id()) {
     ldout(cct, 10) << "master zone rejecting period id="
         << period.get_id() << " epoch=" << period.get_epoch() << dendl;
     http_ret = -EINVAL; // XXX: error code
@@ -240,10 +255,15 @@ class RGWRESTMgr_Period : public RGWRESTMgr {
 class RGWOp_Realm_Get : public RGWRESTOp {
   std::unique_ptr<RGWRealm> realm;
 public:
-  int verify_permission() override { return 0; }
+  int check_caps(RGWUserCaps& caps) override {
+    return caps.check_cap("zone", RGW_CAP_READ);
+  }
+  int verify_permission() override {
+    return check_caps(s->user->caps);
+  }
   void execute() override;
   void send_response() override;
-  const string name() override { return "get_realm"; }
+  const char* name() const override { return "get_realm"; }
 };
 
 void RGWOp_Realm_Get::execute()
@@ -255,7 +275,7 @@ void RGWOp_Realm_Get::execute()
 
   // read realm
   realm.reset(new RGWRealm(id, name));
-  http_ret = realm->init(g_ceph_context, store);
+  http_ret = realm->init(g_ceph_context, store->svc.sysobj);
   if (http_ret < 0)
     lderr(store->ctx()) << "failed to read realm id=" << id
         << " name=" << name << dendl;

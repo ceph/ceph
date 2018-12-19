@@ -436,7 +436,8 @@ If successful, the response contains the user information.
 :Type: Container
 
 ``tenant``
-:Description: The tenant which user is a part of
+
+:Description: The tenant which user is a part of.
 :Type: String
 :Parent: ``user``
 
@@ -1220,7 +1221,7 @@ Get Bucket Info
 ===============
 
 Get information about a subset of the existing buckets. If ``uid`` is specified
-without ``bucket`` then all buckets beloning to the user will be returned. If
+without ``bucket`` then all buckets belonging to the user will be returned. If
 ``bucket`` alone is specified, information for that particular bucket will be
 retrieved.
 
@@ -1861,7 +1862,8 @@ Valid parameters for quotas include:
   the maximum number of objects. A negative value disables this setting.
 
 - **Maximum Size:** The ``max-size`` option allows you to specify a quota
-  for the maximum number of bytes. A negative value disables this setting.
+  for the maximum number of bytes. The ``max-size-kb`` option allows you
+  to specify it in KiB. A negative value disables this setting.
 
 - **Quota Type:** The ``quota-type`` option sets the scope for the quota.
   The options are ``bucket`` and ``user``.
@@ -1912,6 +1914,17 @@ The content must include a JSON representation of the quota settings
 as encoded in the corresponding read operation.
 
 
+Set Quota for an Individual Bucket
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+To set a quota, the user must have ``buckets`` capability set with ``write``
+permission. ::
+
+	PUT /admin/bucket?quota&uid=<uid>&bucket=<bucket-name>&quota
+
+The content must include a JSON representation of the quota settings
+as mentioned in Set Bucket Quota section above.
+
 
 
 Standard Error Responses
@@ -1944,6 +1957,30 @@ Standard Error Responses
 
 
 
+
+Binding libraries
+========================
+
+``Golang``
+
+ - `QuentinPerez/go-radosgw`_
+
+``Java``
+ 
+ - `twonote/radosgw-admin4j`_
+
+``Python``
+
+ - `UMIACS/rgwadmin`_
+ - `valerytschopp/python-radosgw-admin`_
+
+
+
 .. _Admin Guide: ../admin
 .. _Quota Management: ../admin#quota-management
 .. _Multitenancy: ./multitenancy
+.. _QuentinPerez/go-radosgw: https://github.com/QuentinPerez/go-radosgw
+.. _twonote/radosgw-admin4j: https://github.com/twonote/radosgw-admin4j
+.. _UMIACS/rgwadmin: https://github.com/UMIACS/rgwadmin
+.. _valerytschopp/python-radosgw-admin: https://github.com/valerytschopp/python-radosgw-admin
+

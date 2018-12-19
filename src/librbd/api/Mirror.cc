@@ -3,6 +3,8 @@
 
 #include "librbd/api/Mirror.h"
 #include "include/rados/librados.hpp"
+#include "include/stringify.h"
+#include "common/ceph_json.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "cls/rbd/cls_rbd_client.h"
@@ -30,6 +32,31 @@ namespace librbd {
 namespace api {
 
 namespace {
+
+std::string get_peer_config_key_name(int64_t pool_id,
+                                     const std::string& peer_uuid) {
+  return RBD_MIRROR_PEER_CONFIG_KEY_PREFIX + stringify(pool_id) + "/" +
+           peer_uuid;
+}
+
+int remove_peer_config_key(librados::IoCtx& io_ctx,
+                           const std::string& peer_uuid) {
+  int64_t pool_id = io_ctx.get_id();
+  std::string cmd =
+    "{"
+      "\"prefix\": \"config-key rm\", "
+      "\"key\": \"" + get_peer_config_key_name(pool_id, peer_uuid) + "\""
+    "}";
+
+  bufferlist in_bl;
+  bufferlist out_bl;
+  librados::Rados rados(io_ctx);
+  int r = rados.mon_command(cmd, in_bl, &out_bl, nullptr);
+  if (r < 0 && r != -ENOENT && r != -EPERM) {
+    return r;
+  }
+  return 0;
+}
 
 template <typename I>
 int validate_mirroring_enabled(I *ictx) {
@@ -139,6 +166,12 @@ template <typename I>
 int Mirror<I>::image_enable(I *ictx, bool relax_same_pool_parent_check) {
   CephContext *cct = ictx->cct;
   ldout(cct, 20) << "ictx=" << ictx << dendl;
+
+  // TODO
+  if (!ictx->md_ctx.get_namespace().empty()) {
+    lderr(cct) << "namespaces are not supported" << dendl;
+    return -EINVAL;
+  }
 
   int r = ictx->state->refresh_if_required();
   if (r < 0) {
@@ -267,37 +300,47 @@ int Mirror<I>::image_disable(I *ictx, bool force) {
       RWLock::RLocker l(ictx->snap_lock);
       map<librados::snap_t, SnapInfo> snap_info = ictx->snap_info;
       for (auto &info : snap_info) {
-        ParentSpec parent_spec(ictx->md_ctx.get_id(), ictx->id, info.first);
-        map< pair<int64_t, string>, set<string> > image_info;
-
-        r = Image<I>::list_children(ictx, parent_spec, &image_info);
+        cls::rbd::ParentImageSpec parent_spec{ictx->md_ctx.get_id(),
+                                              ictx->md_ctx.get_namespace(),
+                                              ictx->id, info.first};
+        std::vector<librbd::linked_image_spec_t> child_images;
+        r = Image<I>::list_children(ictx, parent_spec, &child_images);
         if (r < 0) {
           rollback = true;
           return r;
         }
-        if (image_info.empty())
-          continue;
 
-        librados::Rados rados(ictx->md_ctx);
-        for (auto &info: image_info) {
-          librados::IoCtx ioctx;
-          r = rados.ioctx_create2(info.first.first, ioctx);
-          if (r < 0) {
-            rollback = true;
-            lderr(cct) << "error accessing child image pool "
-                       << info.first.second  << dendl;
-            return r;
-          }
-          for (auto &id_it : info.second) {
-            cls::rbd::MirrorImage mirror_image_internal;
-            r = cls_client::mirror_image_get(&ioctx, id_it,
-                                             &mirror_image_internal);
-            if (r != -ENOENT) {
+        if (child_images.empty()) {
+          continue;
+        }
+
+        librados::IoCtx child_io_ctx;
+        int64_t child_pool_id = -1;
+        for (auto &child_image : child_images){
+          std::string pool = child_image.pool_name;
+          if (child_pool_id == -1 ||
+              child_pool_id != child_image.pool_id ||
+              child_io_ctx.get_namespace() != child_image.pool_namespace) {
+            r = util::create_ioctx(ictx->md_ctx, "child image",
+                                   child_image.pool_id,
+                                   child_image.pool_namespace,
+                                   &child_io_ctx);
+            if (r < 0) {
               rollback = true;
-              lderr(cct) << "mirroring is enabled on one or more children "
-                         << dendl;
-              return -EBUSY;
+              return r;
             }
+
+            child_pool_id = child_image.pool_id;
+          }
+
+          cls::rbd::MirrorImage mirror_image_internal;
+          r = cls_client::mirror_image_get(&child_io_ctx, child_image.image_id,
+                                           &mirror_image_internal);
+          if (r != -ENOENT) {
+            rollback = true;
+            lderr(cct) << "mirroring is enabled on one or more children "
+                       << dendl;
+            return -EBUSY;
           }
         }
       }
@@ -408,13 +451,9 @@ int Mirror<I>::image_resync(I *ictx) {
 
 template <typename I>
 void Mirror<I>::image_get_info(I *ictx, mirror_image_info_t *mirror_image_info,
-                               size_t info_size, Context *on_finish) {
+                               Context *on_finish) {
   CephContext *cct = ictx->cct;
   ldout(cct, 20) << "ictx=" << ictx << dendl;
-  if (info_size < sizeof(mirror_image_info_t)) {
-    on_finish->complete(-ERANGE);
-    return;
-  }
 
   auto ctx = new C_ImageGetInfo(mirror_image_info, on_finish);
   auto req = mirror::GetInfoRequest<I>::create(*ictx, &ctx->mirror_image,
@@ -424,10 +463,9 @@ void Mirror<I>::image_get_info(I *ictx, mirror_image_info_t *mirror_image_info,
 }
 
 template <typename I>
-int Mirror<I>::image_get_info(I *ictx, mirror_image_info_t *mirror_image_info,
-                              size_t info_size) {
+int Mirror<I>::image_get_info(I *ictx, mirror_image_info_t *mirror_image_info) {
   C_SaferCond ctx;
-  image_get_info(ictx, mirror_image_info, info_size, &ctx);
+  image_get_info(ictx, mirror_image_info, &ctx);
 
   int r = ctx.wait();
   if (r < 0) {
@@ -438,13 +476,9 @@ int Mirror<I>::image_get_info(I *ictx, mirror_image_info_t *mirror_image_info,
 
 template <typename I>
 void Mirror<I>::image_get_status(I *ictx, mirror_image_status_t *status,
-                                 size_t status_size, Context *on_finish) {
+                                 Context *on_finish) {
   CephContext *cct = ictx->cct;
   ldout(cct, 20) << "ictx=" << ictx << dendl;
-  if (status_size < sizeof(mirror_image_status_t)) {
-    on_finish->complete(-ERANGE);
-    return;
-  }
 
   auto ctx = new C_ImageGetStatus(ictx->name, status, on_finish);
   auto req = mirror::GetStatusRequest<I>::create(
@@ -454,15 +488,46 @@ void Mirror<I>::image_get_status(I *ictx, mirror_image_status_t *status,
 }
 
 template <typename I>
-int Mirror<I>::image_get_status(I *ictx, mirror_image_status_t *status,
-      		                size_t status_size) {
+int Mirror<I>::image_get_status(I *ictx, mirror_image_status_t *status) {
   C_SaferCond ctx;
-  image_get_status(ictx, status, status_size, &ctx);
+  image_get_status(ictx, status, &ctx);
 
   int r = ctx.wait();
   if (r < 0) {
     return r;
   }
+  return 0;
+}
+
+template <typename I>
+int Mirror<I>::image_get_instance_id(I *ictx, std::string *instance_id) {
+  CephContext *cct = ictx->cct;
+  ldout(cct, 20) << "ictx=" << ictx << dendl;
+
+  cls::rbd::MirrorImage mirror_image;
+  int r = cls_client::mirror_image_get(&ictx->md_ctx, ictx->id, &mirror_image);
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "failed to retrieve mirroring state: " << cpp_strerror(r)
+               << dendl;
+    return r;
+  } else if (mirror_image.state != cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
+    lderr(cct) << "mirroring is not currently enabled" << dendl;
+    return -EINVAL;
+  }
+
+  entity_inst_t instance;
+  r = cls_client::mirror_image_instance_get(&ictx->md_ctx,
+                                            mirror_image.global_image_id,
+                                            &instance);
+  if (r < 0) {
+    if (r != -ENOENT && r != -ESTALE) {
+      lderr(cct) << "failed to get mirror image instance: " << cpp_strerror(r)
+                 << dendl;
+    }
+    return r;
+  }
+
+  *instance_id = stringify(instance.name.num());
   return 0;
 }
 
@@ -500,6 +565,12 @@ int Mirror<I>::mode_set(librados::IoCtx& io_ctx,
                         rbd_mirror_mode_t mirror_mode) {
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 20) << dendl;
+
+  // TODO
+  if (!io_ctx.get_namespace().empty()) {
+    lderr(cct) << "namespaces are not supported" << dendl;
+    return -EINVAL;
+  }
 
   cls::rbd::MirrorMode next_mirror_mode;
   switch (mirror_mode) {
@@ -571,7 +642,7 @@ int Mirror<I>::mode_set(librados::IoCtx& io_ctx,
 
   if (next_mirror_mode == cls::rbd::MIRROR_MODE_POOL) {
     map<string, string> images;
-    r = Image<I>::list_images(io_ctx, &images);
+    r = Image<I>::list_images_v2(io_ctx, &images);
     if (r < 0) {
       lderr(cct) << "failed listing images: " << cpp_strerror(r) << dendl;
       return r;
@@ -579,9 +650,9 @@ int Mirror<I>::mode_set(librados::IoCtx& io_ctx,
 
     for (const auto& img_pair : images) {
       uint64_t features;
-      r = cls_client::get_features(&io_ctx,
-                                   util::header_name(img_pair.second),
-                                   CEPH_NOSNAP, &features);
+      uint64_t incompatible_features;
+      r = cls_client::get_features(&io_ctx, util::header_name(img_pair.second),
+                                   true, &features, &incompatible_features);
       if (r < 0) {
         lderr(cct) << "error getting features for image " << img_pair.first
                    << ": " << cpp_strerror(r) << dendl;
@@ -590,7 +661,7 @@ int Mirror<I>::mode_set(librados::IoCtx& io_ctx,
 
       if ((features & RBD_FEATURE_JOURNALING) != 0) {
         I *img_ctx = I::create("", img_pair.second, nullptr, io_ctx, false);
-        r = img_ctx->state->open(false);
+        r = img_ctx->state->open(0);
         if (r < 0) {
           lderr(cct) << "error opening image "<< img_pair.first << ": "
                      << cpp_strerror(r) << dendl;
@@ -611,47 +682,66 @@ int Mirror<I>::mode_set(librados::IoCtx& io_ctx,
       }
     }
   } else if (next_mirror_mode == cls::rbd::MIRROR_MODE_DISABLED) {
-    std::set<std::string> image_ids;
-    r = list_mirror_images(io_ctx, image_ids);
-    if (r < 0) {
-      lderr(cct) << "failed listing images: " << cpp_strerror(r) << dendl;
-      return r;
-    }
+    while (true) {
+      bool retry_busy = false;
+      bool pending_busy = false;
 
-    for (const auto& img_id : image_ids) {
-      if (current_mirror_mode == cls::rbd::MIRROR_MODE_IMAGE) {
-        cls::rbd::MirrorImage mirror_image;
-        r = cls_client::mirror_image_get(&io_ctx, img_id, &mirror_image);
-        if (r < 0 && r != -ENOENT) {
-          lderr(cct) << "failed to retrieve mirroring state for image id "
-                     << img_id << ": " << cpp_strerror(r) << dendl;
-          return r;
-        }
-        if (mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
-          lderr(cct) << "failed to disable mirror mode: there are still "
-                     << "images with mirroring enabled" << dendl;
-          return -EINVAL;
-        }
-      } else {
-        I *img_ctx = I::create("", img_id, nullptr, io_ctx, false);
-        r = img_ctx->state->open(false);
-        if (r < 0) {
-          lderr(cct) << "error opening image id "<< img_id << ": "
-                     << cpp_strerror(r) << dendl;
-          return r;
-        }
+      std::set<std::string> image_ids;
+      r = list_mirror_images(io_ctx, image_ids);
+      if (r < 0) {
+        lderr(cct) << "failed listing images: " << cpp_strerror(r) << dendl;
+        return r;
+      }
 
-        r = image_disable(img_ctx, false);
-        int close_r = img_ctx->state->close();
-        if (r < 0) {
-          lderr(cct) << "error disabling mirroring for image id " << img_id
-                     << cpp_strerror(r) << dendl;
-          return r;
-        } else if (close_r < 0) {
-          lderr(cct) << "failed to close image id " << img_id << ": "
-                     << cpp_strerror(close_r) << dendl;
-          return close_r;
+      for (const auto& img_id : image_ids) {
+        if (current_mirror_mode == cls::rbd::MIRROR_MODE_IMAGE) {
+          cls::rbd::MirrorImage mirror_image;
+          r = cls_client::mirror_image_get(&io_ctx, img_id, &mirror_image);
+          if (r < 0 && r != -ENOENT) {
+            lderr(cct) << "failed to retrieve mirroring state for image id "
+                       << img_id << ": " << cpp_strerror(r) << dendl;
+            return r;
+          }
+          if (mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
+            lderr(cct) << "failed to disable mirror mode: there are still "
+                       << "images with mirroring enabled" << dendl;
+            return -EINVAL;
+          }
+        } else {
+          I *img_ctx = I::create("", img_id, nullptr, io_ctx, false);
+          r = img_ctx->state->open(0);
+          if (r < 0) {
+            lderr(cct) << "error opening image id "<< img_id << ": "
+                       << cpp_strerror(r) << dendl;
+            return r;
+          }
+
+          r = image_disable(img_ctx, false);
+          int close_r = img_ctx->state->close();
+          if (r == -EBUSY) {
+            pending_busy = true;
+          } else if (r < 0) {
+            lderr(cct) << "error disabling mirroring for image id " << img_id
+                       << cpp_strerror(r) << dendl;
+            return r;
+          } else if (close_r < 0) {
+            lderr(cct) << "failed to close image id " << img_id << ": "
+                       << cpp_strerror(close_r) << dendl;
+            return close_r;
+          } else if (pending_busy) {
+            // at least one mirrored image was successfully disabled, so we can
+            // retry any failures caused by busy parent/child relationships
+            retry_busy = true;
+          }
         }
+      }
+
+      if (!retry_busy && pending_busy) {
+        lderr(cct) << "error disabling mirroring for one or more images"
+                   << dendl;
+        return -EBUSY;
+      } else if (!retry_busy) {
+        break;
       }
     }
   }
@@ -677,6 +767,12 @@ int Mirror<I>::peer_add(librados::IoCtx& io_ctx, std::string *uuid,
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 20) << "name=" << cluster_name << ", "
                  << "client=" << client_name << dendl;
+
+  // TODO
+  if (!io_ctx.get_namespace().empty()) {
+    lderr(cct) << "namespaces are not supported" << dendl;
+    return -EINVAL;
+  }
 
   if (cct->_conf->cluster == cluster_name) {
     lderr(cct) << "cannot add self as remote peer" << dendl;
@@ -707,7 +803,14 @@ int Mirror<I>::peer_remove(librados::IoCtx& io_ctx, const std::string &uuid) {
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 20) << "uuid=" << uuid << dendl;
 
-  int r = cls_client::mirror_peer_remove(&io_ctx, uuid);
+  int r = remove_peer_config_key(io_ctx, uuid);
+  if (r < 0) {
+    lderr(cct) << "failed to remove peer attributes '" << uuid << "': "
+               << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  r = cls_client::mirror_peer_remove(&io_ctx, uuid);
   if (r < 0 && r != -ENOENT) {
     lderr(cct) << "failed to remove peer '" << uuid << "': "
                << cpp_strerror(r) << dendl;
@@ -780,6 +883,106 @@ int Mirror<I>::peer_set_cluster(librados::IoCtx& io_ctx,
 }
 
 template <typename I>
+int Mirror<I>::peer_get_attributes(librados::IoCtx& io_ctx,
+                                   const std::string &uuid,
+                                   Attributes* attributes) {
+  CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
+  ldout(cct, 20) << "uuid=" << uuid << dendl;
+
+  attributes->clear();
+  std::string cmd =
+    "{"
+      "\"prefix\": \"config-key get\", "
+      "\"key\": \"" + get_peer_config_key_name(io_ctx.get_id(), uuid) + "\""
+    "}";
+
+  bufferlist in_bl;
+  bufferlist out_bl;
+
+  librados::Rados rados(io_ctx);
+  int r = rados.mon_command(cmd, in_bl, &out_bl, nullptr);
+  if (r == -ENOENT || out_bl.length() == 0) {
+    return -ENOENT;
+  } else if (r < 0) {
+    lderr(cct) << "failed to retrieve peer attributes: " << cpp_strerror(r)
+               << dendl;
+    return r;
+  }
+
+  bool json_valid = false;
+  json_spirit::mValue json_root;
+  if(json_spirit::read(out_bl.to_str(), json_root)) {
+    try {
+      auto& json_obj = json_root.get_obj();
+      for (auto& pairs : json_obj) {
+        (*attributes)[pairs.first] = pairs.second.get_str();
+      }
+      json_valid = true;
+    } catch (std::runtime_error&) {
+    }
+  }
+
+  if (!json_valid) {
+    lderr(cct) << "invalid peer attributes JSON received" << dendl;
+    return -EINVAL;
+  }
+  return 0;
+}
+
+template <typename I>
+int Mirror<I>::peer_set_attributes(librados::IoCtx& io_ctx,
+                                   const std::string &uuid,
+                                   const Attributes& attributes) {
+  CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
+  ldout(cct, 20) << "uuid=" << uuid << ", "
+                 << "attributes=" << attributes << dendl;
+
+  std::vector<mirror_peer_t> mirror_peers;
+  int r = peer_list(io_ctx, &mirror_peers);
+  if (r < 0) {
+    return r;
+  }
+
+  if (std::find_if(mirror_peers.begin(), mirror_peers.end(),
+                   [&uuid](const librbd::mirror_peer_t& peer) {
+                     return uuid == peer.uuid;
+                   }) == mirror_peers.end()) {
+    ldout(cct, 5) << "mirror peer uuid " << uuid << " does not exist" << dendl;
+    return -ENOENT;
+  }
+
+  std::stringstream ss;
+  ss << "{";
+  for (auto& pair : attributes) {
+    ss << "\\\"" << pair.first << "\\\": "
+       << "\\\"" << pair.second << "\\\"";
+    if (&pair != &(*attributes.rbegin())) {
+      ss << ", ";
+    }
+  }
+  ss << "}";
+
+  std::string cmd =
+    "{"
+      "\"prefix\": \"config-key set\", "
+      "\"key\": \"" + get_peer_config_key_name(io_ctx.get_id(), uuid) + "\", "
+      "\"val\": \"" + ss.str() + "\""
+    "}";
+  bufferlist in_bl;
+  bufferlist out_bl;
+
+  librados::Rados rados(io_ctx);
+  r = rados.mon_command(cmd, in_bl, &out_bl, nullptr);
+  if (r < 0) {
+    lderr(cct) << "failed to update peer attributes: " << cpp_strerror(r)
+               << dendl;
+    return r;
+  }
+
+  return 0;
+}
+
+template <typename I>
 int Mirror<I>::image_status_list(librados::IoCtx& io_ctx,
                                   const std::string &start_id, size_t max,
                                   IdToMirrorImageStatus *images) {
@@ -789,7 +992,7 @@ int Mirror<I>::image_status_list(librados::IoCtx& io_ctx,
   map<string, string> id_to_name;
   {
     map<string, string> name_to_id;
-    r = Image<I>::list_images(io_ctx, &name_to_id);
+    r = Image<I>::list_images_v2(io_ctx, &name_to_id);
     if (r < 0) {
       return r;
     }
@@ -857,6 +1060,28 @@ int Mirror<I>::image_status_summary(librados::IoCtx& io_ctx,
   for (auto &s : states_) {
     (*states)[static_cast<mirror_image_status_state_t>(s.first)] = s.second;
   }
+  return 0;
+}
+
+template <typename I>
+int Mirror<I>::image_instance_id_list(
+    librados::IoCtx& io_ctx, const std::string &start_image_id, size_t max,
+    std::map<std::string, std::string> *instance_ids) {
+  CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
+  std::map<std::string, entity_inst_t> instances;
+
+  int r = librbd::cls_client::mirror_image_instance_list(
+      &io_ctx, start_image_id, max, &instances);
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "failed to list mirror image instances: " << cpp_strerror(r)
+               << dendl;
+    return r;
+  }
+
+  for (auto it : instances) {
+    (*instance_ids)[it.first] = stringify(it.second.name.num());
+  }
+
   return 0;
 }
 

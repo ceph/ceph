@@ -61,13 +61,13 @@ void block_signals(const int *siglist, sigset_t *old_sigset)
     }
   }
   int ret = pthread_sigmask(SIG_BLOCK, &sigset, old_sigset);
-  assert(ret == 0);
+  ceph_assert(ret == 0);
 }
 
 void restore_sigset(const sigset_t *old_sigset)
 {
   int ret = pthread_sigmask(SIG_SETMASK, old_sigset, NULL);
-  assert(ret == 0);
+  ceph_assert(ret == 0);
 }
 
 void unblock_all_signals(sigset_t *old_sigset)
@@ -76,5 +76,5 @@ void unblock_all_signals(sigset_t *old_sigset)
   sigfillset(&sigset);
   sigdelset(&sigset, SIGKILL);
   int ret = pthread_sigmask(SIG_UNBLOCK, &sigset, old_sigset);
-  assert(ret == 0);
+  ceph_assert(ret == 0);
 }

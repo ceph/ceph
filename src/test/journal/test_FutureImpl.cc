@@ -17,7 +17,7 @@ public:
       ++refs;
     }
     void put() override {
-      assert(refs > 0);
+      ceph_assert(refs > 0);
       --refs;
     }
     void flush(const journal::FutureImplPtr &future) override {

@@ -3,6 +3,6 @@ overrides:
     conf:
       global:
         ms inject socket failures: 2500
-        mds inject delay type: osd mds
+        ms inject delay type: osd mds
         ms inject delay probability: .005
         ms inject delay max: 1

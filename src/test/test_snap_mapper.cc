@@ -1,5 +1,4 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-#include "include/memory.h"
 #include <map>
 #include <set>
 #include <boost/scoped_ptr.hpp>
@@ -9,6 +8,7 @@
 #include "include/buffer.h"
 #include "common/map_cacher.hpp"
 #include "osd/SnapMapper.h"
+#include "common/Cond.h"
 
 #include "gtest/gtest.h"
 
@@ -40,7 +40,7 @@ class PausyAsyncMap : public MapCacher::StoreDriver<string, bufferlist> {
     virtual void operate(map<string, bufferlist> *store) = 0;
     virtual ~_Op() {}
   };
-  typedef ceph::shared_ptr<_Op> Op;
+  typedef std::shared_ptr<_Op> Op;
   struct Remove : public _Op {
     set<string> to_remove;
     explicit Remove(const set<string> &to_remove) : to_remove(to_remove) {}
@@ -115,12 +115,12 @@ private:
 	    cond.Signal();
 	    return 0;
 	  }
-	  assert(!queue.empty());
-	  assert(!paused);
+	  ceph_assert(!queue.empty());
+	  ceph_assert(!paused);
 	  ops.swap(queue);
 	  cond.Signal();
 	}
-	assert(!ops.empty());
+	ceph_assert(!ops.empty());
 
 	for (list<Op>::iterator i = ops.begin();
 	     i != ops.end();
@@ -389,7 +389,7 @@ TEST_F(MapCacherTest, Simple)
   set<string> truth_keys;
   string blah("asdf");
   bufferlist bl;
-  ::encode(blah, bl);
+  encode(blah, bl);
   truth[string("asdf")] = bl;
   truth_keys.insert(truth.begin()->first);
   {
@@ -465,8 +465,8 @@ public:
   }
 
   void choose_random_snaps(int num, set<snapid_t> *snaps) {
-    assert(snaps);
-    assert(!snap_to_hobject.empty());
+    ceph_assert(snaps);
+    ceph_assert(!snap_to_hobject.empty());
     for (int i = 0; i < num || snaps->empty(); ++i) {
       snaps->insert(rand_choose(snap_to_hobject)->first);
     }
@@ -492,7 +492,7 @@ public:
 	 i != snaps.end();
 	 ++i) {
       map<snapid_t, set<hobject_t> >::iterator j = snap_to_hobject.find(*i);
-      assert(j != snap_to_hobject.end());
+      ceph_assert(j != snap_to_hobject.end());
       j->second.insert(obj);
     }
     {
@@ -514,13 +514,13 @@ public:
     while (mapper->get_next_objects_to_trim(
 	     snap->first, rand() % 5 + 1, &hoids) == 0) {
       for (auto &&hoid: hoids) {
-	assert(!hoid.is_max());
-	assert(hobjects.count(hoid));
+	ceph_assert(!hoid.is_max());
+	ceph_assert(hobjects.count(hoid));
 	hobjects.erase(hoid);
 
 	map<hobject_t, set<snapid_t>>::iterator j =
 	  hobject_to_snap.find(hoid);
-	assert(j->second.count(snap->first));
+	ceph_assert(j->second.count(snap->first));
 	set<snapid_t> old_snaps(j->second);
 	j->second.erase(snap->first);
 
@@ -540,7 +540,7 @@ public:
       }
       hoids.clear();
     }
-    assert(hobjects.empty());
+    ceph_assert(hobjects.empty());
     snap_to_hobject.erase(snap);
   }
 
@@ -555,7 +555,7 @@ public:
 	 ++i) {
       map<snapid_t, set<hobject_t> >::iterator j =
 	snap_to_hobject.find(*i);
-      assert(j->second.count(obj->first));
+      ceph_assert(j->second.count(obj->first));
       j->second.erase(obj->first);
     }
     {
@@ -576,7 +576,7 @@ public:
       rand_choose(hobject_to_snap);
     set<snapid_t> snaps;
     int r = mapper->get_snaps(obj->first, &snaps);
-    assert(r == 0);
+    ceph_assert(r == 0);
     ASSERT_EQ(snaps, obj->second);
   }
 };
@@ -584,7 +584,7 @@ public:
 class SnapMapperTest : public ::testing::Test {
 protected:
   boost::scoped_ptr< PausyAsyncMap > driver;
-  map<pg_t, ceph::shared_ptr<MapperVerifier> > mappers;
+  map<pg_t, std::shared_ptr<MapperVerifier> > mappers;
   uint32_t pgnum;
 
   void SetUp() override {
@@ -606,7 +606,7 @@ protected:
   void init(uint32_t to_set) {
     pgnum = to_set;
     for (uint32_t i = 0; i < pgnum; ++i) {
-      pg_t pgid(i, 0, -1);
+      pg_t pgid(i, 0);
       mappers[pgid].reset(
 	new MapperVerifier(
 	  driver.get(),

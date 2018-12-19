@@ -77,7 +77,7 @@ static char *mount_resolve_src(const char *orig_str)
 }
 
 /*
- * this one is partialy based on parse_options() from cifs.mount.c
+ * this one is partially based on parse_options() from cifs.mount.c
  */
 static char *parse_options(const char *data, int *filesys_flags)
 {

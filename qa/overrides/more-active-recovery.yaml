@@ -1,0 +1,6 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        osd_recovery_max_active: 10
+        osd_recovery_max_single_start: 10

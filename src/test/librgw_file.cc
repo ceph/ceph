@@ -61,8 +61,6 @@ TEST(LibRGW, MOUNT) {
 
 TEST(LibRGW, GETATTR_ROOT) {
   if (do_getattr) {
-    using std::get;
-
     if (! fs)
       return;
 
@@ -275,7 +273,7 @@ int main(int argc, char *argv[])
     }
   }
 
-  /* dont accidentally run as anonymous */
+  /* don't accidentally run as anonymous */
   if ((access_key == "") ||
       (secret_key == "")) {
     std::cout << argv[0] << " no AWS credentials, exiting" << std::endl;

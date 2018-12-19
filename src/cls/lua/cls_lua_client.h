@@ -2,7 +2,7 @@
 #define CLS_LUA_CLIENT_HPP
 #include <string>
 
-#include "include/buffer_fwd.h"  // for bufferlist
+#include "include/rados/librados.hpp"
 
 namespace librados {
   class IoCtx;

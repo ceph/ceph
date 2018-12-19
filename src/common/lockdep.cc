@@ -12,20 +12,9 @@
  *
  */
 #include "lockdep.h"
+#include "common/ceph_context.h"
 #include "common/dout.h"
 #include "common/valgrind.h"
-
-#if defined(__FreeBSD__) && defined(__LP64__)	// On FreeBSD pthread_t is a pointer.
-namespace std {
-  template<>
-    struct hash<pthread_t>
-    {
-      size_t
-      operator()(pthread_t __x) const
-      { return (uintptr_t)__x; }
-    };
-} // namespace std
-#endif
 
 /******* Constants **********/
 #define lockdep_dout(v) lsubdout(g_lockdep_ceph_ctx, lockdep, v)
@@ -280,7 +269,8 @@ static bool does_follow(int a, int b)
   return false;
 }
 
-int lockdep_will_lock(const char *name, int id, bool force_backtrace)
+int lockdep_will_lock(const char *name, int id, bool force_backtrace,
+		      bool recursive)
 {
   pthread_t p = pthread_self();
 
@@ -301,17 +291,19 @@ int lockdep_will_lock(const char *name, int id, bool force_backtrace)
        p != m.end();
        ++p) {
     if (p->first == id) {
-      lockdep_dout(0) << "\n";
-      *_dout << "recursive lock of " << name << " (" << id << ")\n";
-      BackTrace *bt = new BackTrace(BACKTRACE_SKIP);
-      bt->print(*_dout);
-      if (p->second) {
-	*_dout << "\npreviously locked at\n";
-	p->second->print(*_dout);
+      if (!recursive) {
+	lockdep_dout(0) << "\n";
+	*_dout << "recursive lock of " << name << " (" << id << ")\n";
+	BackTrace *bt = new BackTrace(BACKTRACE_SKIP);
+	bt->print(*_dout);
+	if (p->second) {
+	  *_dout << "\npreviously locked at\n";
+	  p->second->print(*_dout);
+	}
+	delete bt;
+	*_dout << dendl;
+	ceph_abort();
       }
-      delete bt;
-      *_dout << dendl;
-      ceph_abort();
     }
     else if (!(follows[p->first][id/8] & (1 << (id % 8)))) {
       // new dependency
@@ -385,7 +377,7 @@ int lockdep_will_unlock(const char *name, int id)
 
   if (id < 0) {
     //id = lockdep_register(name);
-    assert(id == -1);
+    ceph_assert(id == -1);
     return id;
   }
 

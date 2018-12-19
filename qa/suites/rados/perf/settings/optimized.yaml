@@ -1,6 +1,15 @@
 overrides:
   ceph:
     conf:
+      mon:
+        debug mon: "0/0"
+        debug ms: "0/0"
+        debug paxos: "0/0"
+      osd:
+        debug filestore: "0/0"
+        debug journal: "0/0"
+        debug ms: "0/0"
+        debug osd: "0/0"
       global:
         auth client required: none
         auth cluster required: none

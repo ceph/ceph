@@ -1,4 +1,3 @@
-
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
@@ -8,20 +7,17 @@
 
 //------------RGWPutObj_Compress---------------
 
-int RGWPutObj_Compress::handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_raw_obj *pobj, bool *again)
+int RGWPutObj_Compress::process(bufferlist&& in, uint64_t logical_offset)
 {
-  bufferlist in_bl;
-  if (*again) {
-    return next->handle_data(in_bl, ofs, phandle, pobj, again);
-  }
-  if (bl.length() > 0) {
+  bufferlist out;
+  if (in.length() > 0) {
     // compression stuff
-    if ((ofs > 0 && compressed) ||                                // if previous part was compressed
-        (ofs == 0)) {                                             // or it's the first part
-      ldout(cct, 10) << "Compression for rgw is enabled, compress part " << bl.length() << dendl;
-      int cr = compressor->compress(bl, in_bl);
+    if ((logical_offset > 0 && compressed) || // if previous part was compressed
+        (logical_offset == 0)) {              // or it's the first part
+      ldout(cct, 10) << "Compression for rgw is enabled, compress part " << in.length() << dendl;
+      int cr = compressor->compress(in, out);
       if (cr < 0) {
-        if (ofs > 0) {
+        if (logical_offset > 0) {
           lderr(cct) << "Compression failed with exit code " << cr
               << " for next part, compression process failed" << dendl;
           return -EIO;
@@ -29,31 +25,31 @@ int RGWPutObj_Compress::handle_data(bufferlist& bl, off_t ofs, void **phandle, r
         compressed = false;
         ldout(cct, 5) << "Compression failed with exit code " << cr
             << " for first part, storing uncompressed" << dendl;
-        in_bl.claim(bl);
+        out.claim(in);
       } else {
         compressed = true;
     
         compression_block newbl;
         size_t bs = blocks.size();
-        newbl.old_ofs = ofs;
+        newbl.old_ofs = logical_offset;
         newbl.new_ofs = bs > 0 ? blocks[bs-1].len + blocks[bs-1].new_ofs : 0;
-        newbl.len = in_bl.length();
+        newbl.len = out.length();
         blocks.push_back(newbl);
       }
     } else {
       compressed = false;
-      in_bl.claim(bl);
+      out.claim(in);
     }
     // end of compression stuff
   }
-  return next->handle_data(in_bl, ofs, phandle, pobj, again);
+  return Pipe::process(std::move(out), logical_offset);
 }
 
 //----------------RGWGetObj_Decompress---------------------
 RGWGetObj_Decompress::RGWGetObj_Decompress(CephContext* cct_, 
                                            RGWCompressionInfo* cs_info_, 
                                            bool partial_content_,
-                                           RGWGetDataCB* next): RGWGetObj_Filter(next),
+                                           RGWGetObj_Filter* next): RGWGetObj_Filter(next),
                                                                 cct(cct_),
                                                                 cs_info(cs_info_),
                                                                 partial_content(partial_content_),
@@ -79,7 +75,7 @@ int RGWGetObj_Decompress::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len
   bufferlist out_bl, in_bl, temp_in_bl;
   bl.copy(bl_ofs, bl_len, temp_in_bl); 
   bl_ofs = 0;
-  int r;
+  int r = 0;
   if (waiting.length() != 0) {
     in_bl.append(waiting);
     in_bl.append(temp_in_bl);        
@@ -121,15 +117,17 @@ int RGWGetObj_Decompress::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len
   }
 
   cur_ofs += bl_len;
-
   off_t ch_len = std::min<off_t>(out_bl.length() - q_ofs, q_len);
-  r = next->handle_data(out_bl, q_ofs, ch_len);
-  if (r < 0) {
-    lderr(cct) << "handle_data failed with exit code " << r << dendl;
-    return r;
+  if (ch_len > 0) {
+    r = next->handle_data(out_bl, q_ofs, ch_len);
+    if (r < 0) {
+      lderr(cct) << "handle_data failed with exit code " << r << dendl;
+      return r;
+    }
+    out_bl.splice(0, q_ofs + ch_len);
+    q_len -= ch_len;
+    q_ofs = 0;
   }
-  q_len -= ch_len;
-  q_ofs = 0;
   return r;
 }
 

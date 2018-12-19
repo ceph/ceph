@@ -1,5 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -25,6 +26,8 @@
 #include "rgw_quota.h"
 #include "rgw_bucket.h"
 #include "rgw_user.h"
+
+#include "services/svc_sys_obj.h"
 
 #include <atomic>
 
@@ -291,7 +294,7 @@ int BucketAsyncRefreshHandler::init_fetch()
 {
   RGWBucketInfo bucket_info;
 
-  RGWObjectCtx obj_ctx(store);
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
 
   int r = store->get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, NULL);
   if (r < 0) {
@@ -362,7 +365,7 @@ int RGWBucketStatsCache::fetch_stats_from_storage(const rgw_user& user, const rg
 {
   RGWBucketInfo bucket_info;
 
-  RGWObjectCtx obj_ctx(store);
+  RGWSysObjectCtx obj_ctx = store->svc.sysobj->init_obj_ctx();
 
   int r = store->get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, NULL);
   if (r < 0) {
@@ -625,7 +628,7 @@ int RGWUserStatsCache::sync_bucket(const rgw_user& user, rgw_bucket& bucket)
 {
   RGWBucketInfo bucket_info;
 
-  RGWObjectCtx obj_ctx(store);
+  RGWSysObjectCtx obj_ctx = store->svc.sysobj->init_obj_ctx();
 
   int r = store->get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, NULL);
   if (r < 0) {
@@ -969,7 +972,7 @@ public:
 
   int check_bucket_shards(uint64_t max_objs_per_shard, uint64_t num_shards,
 			  const rgw_user& user, const rgw_bucket& bucket, RGWQuotaInfo& bucket_quota,
-			  uint64_t num_objs, bool& need_resharding, uint32_t *suggested_num_shards)
+			  uint64_t num_objs, bool& need_resharding, uint32_t *suggested_num_shards) override
   {
     RGWStorageStats bucket_stats;
     int ret = bucket_stats_cache.get_stats(user, bucket, bucket_stats,
@@ -1006,3 +1009,26 @@ void RGWQuotaHandler::free_handler(RGWQuotaHandler *handler)
 }
 
 
+void rgw_apply_default_bucket_quota(RGWQuotaInfo& quota, const ConfigProxy& conf)
+{
+  if (conf->rgw_bucket_default_quota_max_objects >= 0) {
+    quota.max_objects = conf->rgw_bucket_default_quota_max_objects;
+    quota.enabled = true;
+  }
+  if (conf->rgw_bucket_default_quota_max_size >= 0) {
+    quota.max_size = conf->rgw_bucket_default_quota_max_size;
+    quota.enabled = true;
+  }
+}
+
+void rgw_apply_default_user_quota(RGWQuotaInfo& quota, const ConfigProxy& conf)
+{
+  if (conf->rgw_user_default_quota_max_objects >= 0) {
+    quota.max_objects = conf->rgw_user_default_quota_max_objects;
+    quota.enabled = true;
+  }
+  if (conf->rgw_user_default_quota_max_size >= 0) {
+    quota.max_size = conf->rgw_user_default_quota_max_size;
+    quota.enabled = true;
+  }
+}

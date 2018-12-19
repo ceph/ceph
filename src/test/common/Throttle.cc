@@ -29,12 +29,10 @@
 #include <thread>
 
 #include "gtest/gtest.h"
-#include "common/backport14.h"
 #include "common/Mutex.h"
 #include "common/Thread.h"
 #include "common/Throttle.h"
 #include "common/ceph_argparse.h"
-#include "common/backport14.h"
 
 class ThrottleTest : public ::testing::Test {
 protected:
@@ -246,7 +244,7 @@ std::pair<double, std::chrono::duration<double> > test_backoff(
     max_multiple,
     max,
     0);
-  assert(valid);
+  ceph_assert(valid);
 
   auto getter = [&]() {
     std::random_device rd;
@@ -282,7 +280,7 @@ std::pair<double, std::chrono::duration<double> > test_backoff(
       total_observed_total += total;
       total_observations++;
       in_queue.pop_front();
-      assert(total <= max);
+      ceph_assert(total <= max);
 
       g.unlock();
       std::this_thread::sleep_for(

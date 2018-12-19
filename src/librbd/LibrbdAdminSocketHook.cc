@@ -88,10 +88,12 @@ LibrbdAdminSocketHook::~LibrbdAdminSocketHook() {
   }
 }
 
-bool LibrbdAdminSocketHook::call(std::string command, cmdmap_t& cmdmap,
-				 std::string format, bufferlist& out) {
+bool LibrbdAdminSocketHook::call(std::string_view command,
+				 const cmdmap_t& cmdmap,
+				 std::string_view format,
+				 bufferlist& out) {
   Commands::const_iterator i = commands.find(command);
-  assert(i != commands.end());
+  ceph_assert(i != commands.end());
   stringstream ss;
   bool r = i->second->call(&ss);
   out.append(ss);

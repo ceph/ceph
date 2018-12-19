@@ -4,7 +4,7 @@
 #include "test/librados_test_stub/TestRadosClient.h"
 #include "test/librados_test_stub/TestIoCtxImpl.h"
 #include "librados/AioCompletionImpl.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "common/ceph_json.h"
 #include "common/Finisher.h"
 #include <boost/bind.hpp>
@@ -165,6 +165,8 @@ int TestRadosClient::mon_command(const std::vector<std::string>& cmd,
     } else if ((*j_it)->get_data() == "osd tier remove-overlay") {
       return 0;
     } else if ((*j_it)->get_data() == "osd tier remove") {
+      return 0;
+    } else if ((*j_it)->get_data() == "config-key rm") {
       return 0;
     }
   }

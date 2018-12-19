@@ -20,7 +20,9 @@ function(distutils_install_module name)
       if(EXISTS /etc/debian_version)
         list(APPEND options --install-layout=deb)
       endif()
-      list(APPEND options --root=\$ENV{DESTDIR})
+      list(APPEND options
+        --root=\$ENV{DESTDIR}
+        --single-version-externally-managed)
       if(NOT \"${DU_INSTALL_SCRIPT}\" STREQUAL \"\")
         list(APPEND options --install-script=${DU_INSTALL_SCRIPT})
       endif()
@@ -34,20 +36,32 @@ endfunction(distutils_install_module)
 function(distutils_add_cython_module name src)
   get_property(compiler_launcher GLOBAL PROPERTY RULE_LAUNCH_COMPILE)
   get_property(link_launcher GLOBAL PROPERTY RULE_LAUNCH_LINK)
-  set(PY_CC \"${compiler_launcher} ${CMAKE_C_COMPILER}\")
-  set(PY_CXX \"${compiler_launcher} ${CMAKE_CXX_COMPILER}\")
-  set(PY_LDSHARED \"${link_launcher} ${CMAKE_C_COMPILER} -shared\")
+  # When using ccache, CMAKE_C_COMPILER is ccache executable absolute path
+  # and the actual C compiler is CMAKE_C_COMPILER_ARG1.
+  # However with a naive
+  # set(PY_CC ${compiler_launcher} ${CMAKE_C_COMPILER} ${CMAKE_C_COMPILER_ARG1})
+  # distutils tries to execve something like "/usr/bin/cmake gcc" and fails.
+  # Removing the leading whitespace from CMAKE_C_COMPILER_ARG1 helps to avoid
+  # the failure.
+  string(STRIP "${CMAKE_C_COMPILER_ARG1}" c_compiler_arg1)
+  string(STRIP "${CMAKE_CXX_COMPILER_ARG1}" cxx_compiler_arg1)
+  # Note: no quotes, otherwise distutils will execute "/usr/bin/ccache gcc"
+  # CMake's implicit conversion between strings and lists is wonderful, isn't it?
+  string(REPLACE " " ";" cflags ${CMAKE_C_FLAGS})
+  list(APPEND cflags -iquote${CMAKE_SOURCE_DIR}/src/include -w)
+  set(PY_CC ${compiler_launcher} ${CMAKE_C_COMPILER} ${c_compiler_arg1} ${cflags})
+  set(PY_CXX ${compiler_launcher} ${CMAKE_CXX_COMPILER} ${cxx_compiler_arg1})
+  set(PY_LDSHARED ${link_launcher} ${CMAKE_C_COMPILER} ${c_compiler_arg1} "-shared")
   add_custom_target(${name} ALL
     COMMAND
     env
-    CC=${PY_CC}
-    CXX=${PY_CXX}
-    LDSHARED=${PY_LDSHARED}
+    CC="${PY_CC}"
+    CXX="${PY_CXX}"
+    LDSHARED="${PY_LDSHARED}"
     OPT=\"-DNDEBUG -g -fwrapv -O2 -w\"
     LDFLAGS=-L${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
     CYTHON_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}
     CEPH_LIBDIR=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
-    CFLAGS=\"-iquote${CMAKE_SOURCE_DIR}/src/include -w\"
     ${PYTHON${PYTHON_VERSION}_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/setup.py
     build --verbose --build-base ${CYTHON_MODULE_DIR}
     --build-platlib ${CYTHON_MODULE_DIR}/lib.${PYTHON${PYTHON_VERSION}_VERSION_MAJOR}
@@ -56,7 +70,18 @@ function(distutils_add_cython_module name src)
 endfunction(distutils_add_cython_module)
 
 function(distutils_install_cython_module name)
+  get_property(compiler_launcher GLOBAL PROPERTY RULE_LAUNCH_COMPILE)
+  get_property(link_launcher GLOBAL PROPERTY RULE_LAUNCH_LINK)
+  set(PY_CC "${compiler_launcher} ${CMAKE_C_COMPILER}")
+  set(PY_LDSHARED "${link_launcher} ${CMAKE_C_COMPILER} -shared")
   install(CODE "
+    set(ENV{CC} \"${PY_CC}\")
+    set(ENV{LDSHARED} \"${PY_LDSHARED}\")
+    set(ENV{CPPFLAGS} \"-iquote${CMAKE_SOURCE_DIR}/src/include\")
+    set(ENV{LDFLAGS} \"-L${CMAKE_LIBRARY_OUTPUT_DIRECTORY}\")
+    set(ENV{CYTHON_BUILD_DIR} \"${CMAKE_CURRENT_BINARY_DIR}\")
+    set(ENV{CEPH_LIBDIR} \"${CMAKE_LIBRARY_OUTPUT_DIRECTORY}\")
+
     set(options --prefix=${CMAKE_INSTALL_PREFIX})
     if(DEFINED ENV{DESTDIR})
       if(EXISTS /etc/debian_version)
@@ -67,12 +92,7 @@ function(distutils_install_cython_module name)
       list(APPEND options --root=/)
     endif()
     execute_process(
-       COMMAND env
-           CYTHON_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}
-           CEPH_LIBDIR=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
-           CC=${CMAKE_C_COMPILER}
-           CPPFLAGS=\"-iquote${CMAKE_SOURCE_DIR}/src/include\"
-           LDFLAGS=\"-L${CMAKE_LIBRARY_OUTPUT_DIRECTORY}\"
+       COMMAND
            ${PYTHON${PYTHON_VERSION}_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/setup.py
            build --verbose --build-base ${CYTHON_MODULE_DIR}
            --build-platlib ${CYTHON_MODULE_DIR}/lib.${PYTHON${PYTHON_VERSION}_VERSION_MAJOR}

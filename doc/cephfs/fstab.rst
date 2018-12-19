@@ -1,14 +1,14 @@
-==========================================
- Mount Ceph FS in your File Systems Table
-==========================================
+========================================
+ Mount CephFS in your File Systems Table
+========================================
 
-If you mount Ceph FS in your file systems table, the Ceph file system will mount 
+If you mount CephFS in your file systems table, the Ceph file system will mount
 automatically on startup. 
 
 Kernel Driver
 =============
 
-To mount Ceph FS in your file systems table as a kernel driver, add the
+To mount CephFS in your file systems table as a kernel driver, add the
 following to ``/etc/fstab``::
 
 	{ipaddress}:{port}:/ {mount}/{mountpoint} {filesystem-name}	[name=username,secret=secretkey|secretfile=/path/to/secretfile],[{mount.options}]
@@ -26,7 +26,7 @@ See `User Management`_ for details.
 FUSE
 ====
 
-To mount Ceph FS in your file systems table as a filesystem in user space, add the
+To mount CephFS in your file systems table as a filesystem in user space, add the
 following to ``/etc/fstab``::
 
        #DEVICE PATH       TYPE      OPTIONS

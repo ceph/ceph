@@ -30,7 +30,7 @@ class PgFiles
 {
 private:
   Objecter *objecter;
-  struct ceph_mount_info *cmount;
+  struct ceph_mount_info *cmount = nullptr;
 
   std::set<pg_t> pgs;
   std::set<uint64_t> pools;
@@ -40,7 +40,7 @@ private:
 
 
 public:
-  PgFiles(Objecter *o, std::set<pg_t> pgs_);
+  PgFiles(Objecter *o, const std::set<pg_t> &pgs_);
   ~PgFiles();
 
   int init();

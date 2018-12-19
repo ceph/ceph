@@ -27,4 +27,4 @@ logfile=$run_root/out/radosgw.${port}.log
 
 $vstart_path/mstop.sh $name radosgw $port
 
-$vstart_path/mrun $name radosgw --rgw-frontends="civetweb port=$port" --pid-file=$pidfile --admin-socket=$asokfile "$@" --log-file=$logfile
+$vstart_path/mrun $name radosgw --rgw-frontends="civetweb port=$port" -n client.rgw --pid-file=$pidfile --admin-socket=$asokfile "$@" --log-file=$logfile

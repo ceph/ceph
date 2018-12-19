@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #include <list>
 #include <string>
 #include <iostream>
@@ -9,13 +12,11 @@
 #include "common/ceph_json.h"
 #include "rgw_es_query.h"
 
-using namespace std;
 
 int main(int argc, char *argv[])
 {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
-  env_to_vec(args);
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
                          CODE_ENVIRONMENT_UTILITY, 0);

@@ -13,6 +13,8 @@
  */
 
 #include "include/compat.h"
+#include "include/sock_compat.h"
+#include <iterator>
 #include <sys/socket.h>
 #include <netinet/tcp.h>
 #include <sys/uio.h>
@@ -40,35 +42,19 @@
  * Accepter
  */
 
-static int set_close_on_exec(int fd)
-{
-  int flags = fcntl(fd, F_GETFD, 0);
-  if (flags < 0) {
-    return errno;
-  }
-  if (fcntl(fd, F_SETFD, flags | FD_CLOEXEC)) {
-    return errno;
-  }
-  return 0;
-}
-
 int Accepter::create_selfpipe(int *pipe_rd, int *pipe_wr) {
   int selfpipe[2];
-#ifdef HAVE_PIPE2
-  int ret = ::pipe2(selfpipe, (O_CLOEXEC|O_NONBLOCK));
-#else
-  int ret = ::pipe(selfpipe);
-  if (ret == 0) {
-    for (int i = 0; i < ceph::size(selfpipe); i++) {
-      int f = fcntl(selfpipe[i], F_GETFD);
-      fcntl(selfpipe[i], F_SETFD, f | FD_CLOEXEC | O_NONBLOCK);
-    }
-  }
-#endif
-  if (ret < 0 ) {
+  if (pipe_cloexec(selfpipe) < 0) {
+    int e = errno;
     lderr(msgr->cct) << __func__ << " unable to create the selfpipe: "
-                    << cpp_strerror(errno) << dendl;
-    return -errno;
+                    << cpp_strerror(e) << dendl;
+    return -e;
+  }
+  for (size_t i = 0; i < std::size(selfpipe); i++) {
+    int rc = fcntl(selfpipe[i], F_GETFL);
+    ceph_assert(rc != -1);
+    rc = fcntl(selfpipe[i], F_SETFL, rc | O_NONBLOCK);
+    ceph_assert(rc != -1);
   }
   *pipe_rd = selfpipe[0];
   *pipe_wr = selfpipe[1];
@@ -77,7 +63,7 @@ int Accepter::create_selfpipe(int *pipe_rd, int *pipe_wr) {
 
 int Accepter::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
 {
-  const md_config_t *conf = msgr->cct->_conf;
+  const auto& conf = msgr->cct->_conf;
   // bind to a socket
   ldout(msgr->cct,10) <<  __func__ << dendl;
   
@@ -94,19 +80,14 @@ int Accepter::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
   }
 
   /* socket creation */
-  listen_sd = ::socket(family, SOCK_STREAM, 0);
-  ldout(msgr->cct,10) <<  __func__ << " socket sd: " << listen_sd << dendl;
+  listen_sd = socket_cloexec(family, SOCK_STREAM, 0);
   if (listen_sd < 0) {
+    int e = errno;
     lderr(msgr->cct) << __func__ << " unable to create socket: "
-		     << cpp_strerror(errno) << dendl;
-    return -errno;
+		     << cpp_strerror(e) << dendl;
+    return -e;
   }
-
-  if (set_close_on_exec(listen_sd)) {
-    lderr(msgr->cct) << __func__ << " unable to set_close_exec(): "
-		     << cpp_strerror(errno) << dendl;
-  }
-  
+  ldout(msgr->cct,10) <<  __func__ << " socket sd: " << listen_sd << dendl;
 
   // use whatever user specified (if anything)
   entity_addr_t listen_addr = bind_addr;
@@ -231,18 +212,19 @@ int Accepter::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
     return rc;
   }
   
-  msgr->set_myaddr(bind_addr);
-  if (bind_addr != entity_addr_t())
+  msgr->set_myaddrs(entity_addrvec_t(bind_addr));
+  if (bind_addr != entity_addr_t() &&
+      !bind_addr.is_blank_ip())
     msgr->learned_addr(bind_addr);
   else
-    assert(msgr->get_need_addr());  // should still be true.
+    ceph_assert(msgr->get_need_addr());  // should still be true.
 
   if (msgr->get_myaddr().get_port() == 0) {
-    msgr->set_myaddr(listen_addr);
+    msgr->set_myaddrs(entity_addrvec_t(listen_addr));
   }
   entity_addr_t addr = msgr->get_myaddr();
   addr.nonce = nonce;
-  msgr->set_myaddr(addr);
+  msgr->set_myaddrs(entity_addrvec_t(addr));
 
   msgr->init_local_connection();
 
@@ -253,7 +235,8 @@ int Accepter::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
     return rc;
   }
 
-  ldout(msgr->cct,1) <<  __func__ << " my_inst.addr is " << msgr->get_myaddr()
+  ldout(msgr->cct,1) <<  __func__ << " my_addrs " << *msgr->my_addrs
+		     << " my_addr " << msgr->my_addr
 		     << " need_addr=" << msgr->get_need_addr() << dendl;
   return 0;
 }
@@ -269,9 +252,11 @@ int Accepter::rebind(const set<int>& avoid_ports)
 
   // adjust the nonce; we want our entity_addr_t to be truly unique.
   nonce += 1000000;
-  msgr->my_inst.addr.nonce = nonce;
-  ldout(msgr->cct,10) << __func__ << " new nonce " << nonce << " and inst " 
-			<< msgr->my_inst << dendl;
+  entity_addrvec_t newaddrs = *msgr->my_addrs;
+  newaddrs.v[0].nonce = nonce;
+  msgr->set_myaddrs(newaddrs);
+  ldout(msgr->cct,10) << __func__ << " new nonce " << nonce << " and addr "
+			<< msgr->my_addr << dendl;
 
   ldout(msgr->cct,10) << " will try " << addr << " and avoid ports " << new_avoid << dendl;
   int r = bind(addr, new_avoid);
@@ -295,7 +280,6 @@ void *Accepter::entry()
   ldout(msgr->cct,1) << __func__ << " start" << dendl;
   
   int errors = 0;
-  int ch;
 
   struct pollfd pfd[2];
   memset(pfd, 0, sizeof(pfd));
@@ -313,7 +297,7 @@ void *Accepter::entry()
       }
       ldout(msgr->cct,1) << __func__ << " poll got error"  
  			  << " errno " << errno << " " << cpp_strerror(errno) << dendl;
-      break;
+      ceph_abort();
     }
     ldout(msgr->cct,10) << __func__ << " poll returned oke: " << r << dendl;
     ldout(msgr->cct,20) << __func__ <<  " pfd.revents[0]=" << pfd[0].revents << dendl;
@@ -322,12 +306,13 @@ void *Accepter::entry()
     if (pfd[0].revents & (POLLERR | POLLNVAL | POLLHUP)) {
       ldout(msgr->cct,1) << __func__ << " poll got errors in revents "  
  			 <<  pfd[0].revents << dendl;
-      break;
+      ceph_abort();
     }
     if (pfd[1].revents & (POLLIN | POLLERR | POLLNVAL | POLLHUP)) {
       // We got "signaled" to exit the poll
       // clean the selfpipe
-      if (::read(shutdown_rd_fd, &ch, 1) == -1) {
+      char ch;
+      if (::read(shutdown_rd_fd, &ch, sizeof(ch)) == -1) {
         if (errno != EAGAIN)
           ldout(msgr->cct,1) << __func__ << " Cannot read selfpipe: "
  			      << " errno " << errno << " " << cpp_strerror(errno) << dendl;
@@ -339,22 +324,20 @@ void *Accepter::entry()
     // accept
     sockaddr_storage ss;
     socklen_t slen = sizeof(ss);
-    int sd = ::accept(listen_sd, (sockaddr*)&ss, &slen);
+    int sd = accept_cloexec(listen_sd, (sockaddr*)&ss, &slen);
     if (sd >= 0) {
-      int r = set_close_on_exec(sd);
-      if (r) {
-	ldout(msgr->cct,1) << __func__ << " set_close_on_exec() failed "
-	      << cpp_strerror(r) << dendl;
-      }
       errors = 0;
       ldout(msgr->cct,10) << __func__ << " incoming on sd " << sd << dendl;
       
       msgr->add_accept_pipe(sd);
     } else {
+      int e = errno;
       ldout(msgr->cct,0) << __func__ << " no incoming connection?  sd = " << sd
-	      << " errno " << errno << " " << cpp_strerror(errno) << dendl;
-      if (++errors > 4)
-	break;
+	      << " errno " << e << " " << cpp_strerror(e) << dendl;
+      if (++errors > msgr->cct->_conf->ms_max_accept_failures) {
+        lderr(msgr->cct) << "accetper has encoutered enough errors, just do ceph_abort()." << dendl;
+        ceph_abort();
+      }
     }
   }
 
@@ -379,10 +362,10 @@ void Accepter::stop()
     return;
 
   // Send a byte to the shutdown pipe that the thread is listening to
-  char buf[1] = { 0x0 };
-  int ret = safe_write(shutdown_wr_fd, buf, 1);
+  char ch = 0x0;
+  int ret = safe_write(shutdown_wr_fd, &ch, sizeof(ch));
   if (ret < 0) {
-    ldout(msgr->cct,1) << __func__ << "close failed: "
+    ldout(msgr->cct,1) << __func__ << " close failed: "
              << " errno " << errno << " " << cpp_strerror(errno) << dendl;
   } else {
     ldout(msgr->cct,15) << __func__ << " signaled poll" << dendl;
@@ -399,14 +382,14 @@ void Accepter::stop()
 
   if (listen_sd >= 0) {
     if (::close(listen_sd) < 0) {
-      ldout(msgr->cct,1) << __func__ << "close listen_sd failed: "
+      ldout(msgr->cct,1) << __func__ << " close listen_sd failed: "
 	      << " errno " << errno << " " << cpp_strerror(errno) << dendl;
     }
     listen_sd = -1;
   }
   if (shutdown_rd_fd >= 0) {
     if (::close(shutdown_rd_fd) < 0) {
-      ldout(msgr->cct,1) << __func__ << "close shutdown_rd_fd failed: "
+      ldout(msgr->cct,1) << __func__ << " close shutdown_rd_fd failed: "
 	      << " errno " << errno << " " << cpp_strerror(errno) << dendl;
     }
     shutdown_rd_fd = -1;

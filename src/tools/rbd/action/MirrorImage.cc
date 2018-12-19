@@ -12,6 +12,7 @@
  *
  */
 #include "tools/rbd/ArgumentTypes.h"
+#include "tools/rbd/MirrorDaemonServiceInfo.h"
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
 #include "include/stringify.h"
@@ -22,7 +23,6 @@
 #include "global/global_context.h"
 #include <iostream>
 #include <boost/program_options.hpp>
-#include <boost/regex.hpp>
 
 namespace rbd {
 namespace action {
@@ -70,16 +70,18 @@ int execute_enable_disable(const po::variables_map &vm, bool enable,
   std::string image_name;
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
-      vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-      &snap_name, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_NONE);
+      vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, nullptr,
+      &image_name, &snap_name, true, utils::SNAPSHOT_PRESENCE_NONE,
+      utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
 
+  // TODO support namespaces
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", false,
+  r = utils::init_and_open_image(pool_name, "", image_name, "", "", false,
                                  &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
@@ -96,11 +98,13 @@ int execute_enable_disable(const po::variables_map &vm, bool enable,
   return 0;
 }
 
-int execute_disable(const po::variables_map &vm) {
+int execute_disable(const po::variables_map &vm,
+                    const std::vector<std::string> &ceph_global_init_args) {
   return execute_enable_disable(vm, false, vm["force"].as<bool>());
 }
 
-int execute_enable(const po::variables_map &vm) {
+int execute_enable(const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
   return execute_enable_disable(vm, true, false);
 }
 
@@ -111,24 +115,27 @@ void get_arguments_promote(po::options_description *positional,
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
 }
 
-int execute_promote(const po::variables_map &vm) {
+int execute_promote(const po::variables_map &vm,
+                    const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
   std::string image_name;
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
-      vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-      &snap_name, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_NONE);
+      vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, nullptr,
+      &image_name, &snap_name, true, utils::SNAPSHOT_PRESENCE_NONE,
+      utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
 
   bool force = vm["force"].as<bool>();
 
+  // TODO support namespaces
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", false,
+  r = utils::init_and_open_image(pool_name, "", image_name, "", "", false,
                                  &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
@@ -149,22 +156,25 @@ int execute_promote(const po::variables_map &vm) {
   return 0;
 }
 
-int execute_demote(const po::variables_map &vm) {
+int execute_demote(const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
   std::string image_name;
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
-      vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-      &snap_name, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_NONE);
+      vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, nullptr,
+      &image_name, &snap_name, true, utils::SNAPSHOT_PRESENCE_NONE,
+      utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
 
+  // TODO support namespaces
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", false,
+  r = utils::init_and_open_image(pool_name, "", image_name, "", "", false,
                                  &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
@@ -185,22 +195,25 @@ int execute_demote(const po::variables_map &vm) {
   return 0;
 }
 
-int execute_resync(const po::variables_map &vm) {
+int execute_resync(const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
   std::string image_name;
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
-      vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-      &snap_name, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_NONE);
+      vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, nullptr,
+      &image_name, &snap_name, true, utils::SNAPSHOT_PRESENCE_NONE,
+      utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
 
+  // TODO support namespaces
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", false,
+  r = utils::init_and_open_image(pool_name, "", image_name, "", "", false,
                                  &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
@@ -227,7 +240,8 @@ void get_status_arguments(po::options_description *positional,
   at::add_format_options(options);
 }
 
-int execute_status(const po::variables_map &vm) {
+int execute_status(const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
   at::Format::Formatter formatter;
   int r = utils::get_formatter(vm, &formatter);
   if (r < 0) {
@@ -239,16 +253,18 @@ int execute_status(const po::variables_map &vm) {
   std::string image_name;
   std::string snap_name;
   r = utils::get_pool_image_snapshot_names(
-      vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-      &snap_name, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_NONE);
+      vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, nullptr,
+      &image_name, &snap_name, true, utils::SNAPSHOT_PRESENCE_NONE,
+      utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
 
+  // TODO support namespaces
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", false,
+  r = utils::init_and_open_image(pool_name, "", image_name, "", "", false,
                                  &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
@@ -267,6 +283,24 @@ int execute_status(const po::variables_map &vm) {
     return r;
   }
 
+  std::string instance_id;
+  MirrorDaemonServiceInfo daemon_service_info(io_ctx);
+
+  if (status.up) {
+    r = image.mirror_image_get_instance_id(&instance_id);
+    if (r == -EOPNOTSUPP) {
+      std::cerr << "rbd: newer release of Ceph OSDs required to map image "
+                << "to rbd-mirror daemon instance" << std::endl;
+      // not fatal
+    } else if (r < 0 && r != -ENOENT) {
+      std::cerr << "rbd: failed to get service id for image "
+                << image_name << ": " << cpp_strerror(r) << std::endl;
+      // not fatal
+    } else if (!instance_id.empty()) {
+      daemon_service_info.init();
+    }
+  }
+
   std::string state = utils::mirror_image_status_state(status);
   std::string last_update = (
     status.last_update == 0 ? "" : utils::timestr(status.last_update));
@@ -277,6 +311,7 @@ int execute_status(const po::variables_map &vm) {
     formatter->dump_string("global_id", status.info.global_id);
     formatter->dump_string("state", state);
     formatter->dump_string("description", status.description);
+    daemon_service_info.dump(instance_id, formatter);
     formatter->dump_string("last_update", last_update);
     formatter->close_section(); // image
     formatter->flush(std::cout);
@@ -284,8 +319,12 @@ int execute_status(const po::variables_map &vm) {
     std::cout << image_name << ":\n"
 	      << "  global_id:   " << status.info.global_id << "\n"
 	      << "  state:       " << state << "\n"
-	      << "  description: " << status.description << "\n"
-	      << "  last_update: " << last_update << std::endl;
+              << "  description: " << status.description << "\n";
+    if (!instance_id.empty()) {
+      std::cout << "  service:     " <<
+        daemon_service_info.get_description(instance_id) << "\n";
+    }
+    std::cout << "  last_update: " << last_update << std::endl;
   }
 
   return 0;
@@ -313,7 +352,7 @@ Shell::Action action_resync(
   &get_arguments, &execute_resync);
 Shell::Action action_status(
   {"mirror", "image", "status"}, {},
-  "Show RDB mirroring status for an image.", "",
+  "Show RBD mirroring status for an image.", "",
   &get_status_arguments, &execute_status);
 
 } // namespace mirror_image

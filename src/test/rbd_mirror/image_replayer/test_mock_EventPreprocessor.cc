@@ -14,7 +14,7 @@ namespace librbd {
 namespace {
 
 struct MockTestImageCtx : public librbd::MockImageCtx {
-  MockTestImageCtx(librbd::ImageCtx &image_ctx)
+  explicit MockTestImageCtx(librbd::ImageCtx &image_ctx)
     : librbd::MockImageCtx(image_ctx) {
   }
 };
@@ -133,7 +133,7 @@ TEST_F(TestMockImageReplayerEventPreprocessor, PreprocessSnapMapPrune) {
   event_preprocessor.preprocess(&event_entry, &ctx);
   ASSERT_EQ(0, ctx.wait());
 
-  librbd::journal::MirrorPeerClientMeta::SnapSeqs expected_snap_seqs = {{5, 6}};
+  librbd::SnapSeqs expected_snap_seqs = {{5, 6}};
   ASSERT_EQ(expected_snap_seqs, m_client_meta.snap_seqs);
 }
 
@@ -159,7 +159,7 @@ TEST_F(TestMockImageReplayerEventPreprocessor, PreprocessSnapRename) {
   event_preprocessor.preprocess(&event_entry, &ctx);
   ASSERT_EQ(0, ctx.wait());
 
-  librbd::journal::MirrorPeerClientMeta::SnapSeqs expected_snap_seqs = {{5, 6}};
+  librbd::SnapSeqs expected_snap_seqs = {{5, 6}};
   ASSERT_EQ(expected_snap_seqs, m_client_meta.snap_seqs);
 
   librbd::journal::SnapRenameEvent *event =
@@ -211,7 +211,7 @@ TEST_F(TestMockImageReplayerEventPreprocessor, PreprocessSnapRenameKnown) {
   event_preprocessor.preprocess(&event_entry, &ctx);
   ASSERT_EQ(0, ctx.wait());
 
-  librbd::journal::MirrorPeerClientMeta::SnapSeqs expected_snap_seqs = {{5, 6}};
+  librbd::SnapSeqs expected_snap_seqs = {{5, 6}};
   ASSERT_EQ(expected_snap_seqs, m_client_meta.snap_seqs);
 
   librbd::journal::SnapRenameEvent *event =

@@ -1,9 +1,11 @@
+from __future__ import absolute_import
+
 from pecan.hooks import PecanHook
 
 import traceback
 
-import module
+from . import context
 
 class ErrorHook(PecanHook):
     def on_error(self, stat, exc):
-        module.instance.log.error(str(traceback.format_exc()))
+        context.instance.log.error(str(traceback.format_exc()))

@@ -15,60 +15,40 @@
 struct CephContext;
 
 namespace librbd {
+
+struct ImageCtx;
+
 namespace io {
 
 struct AioCompletion;
 template <typename> struct ObjectReadRequest;
 
 class ReadResult {
-private:
-  struct C_ReadRequest : public Context {
+public:
+  struct C_ImageReadRequest : public Context {
     AioCompletion *aio_completion;
+    Extents image_extents;
     bufferlist bl;
 
-    C_ReadRequest(AioCompletion *aio_completion);
-
-    void finish(int r) override;
-  };
-
-public:
-
-  struct C_ImageReadRequest : public C_ReadRequest {
-    Extents image_extents;
-
     C_ImageReadRequest(AioCompletion *aio_completion,
-                       const Extents image_extents)
-      : C_ReadRequest(aio_completion), image_extents(image_extents) {
-    }
+                       const Extents image_extents);
 
     void finish(int r) override;
   };
 
-  struct C_SparseReadRequestBase : public C_ReadRequest {
-    C_SparseReadRequestBase(AioCompletion *aio_completion)
-      : C_ReadRequest(aio_completion) {
-    }
+  struct C_ObjectReadRequest : public Context {
+    AioCompletion *aio_completion;
+    uint64_t object_off;
+    uint64_t object_len;
+    Extents buffer_extents;
 
-    using C_ReadRequest::finish;
-    void finish(ExtentMap &extent_map, const Extents &buffer_extents,
-                uint64_t offset, size_t length, bufferlist &bl, int r);
-  };
+    bufferlist bl;
+    ExtentMap extent_map;
 
-  template <typename ImageCtxT>
-  struct C_SparseReadRequest : public C_SparseReadRequestBase {
-    ObjectReadRequest<ImageCtxT> *request;
+    C_ObjectReadRequest(AioCompletion *aio_completion, uint64_t object_off,
+                        uint64_t object_len, Extents&& buffer_extents);
 
-    C_SparseReadRequest(AioCompletion *aio_completion)
-      : C_SparseReadRequestBase(aio_completion) {
-    }
-
-    void finish(int r) override {
-      C_SparseReadRequestBase::finish(request->get_extent_map(),
-                                      request->get_buffer_extents(),
-                                      request->get_offset(),
-                                      request->get_length(), request->data(),
-                                      r);
-    }
+    void finish(int r) override;
   };
 
   ReadResult();

@@ -20,7 +20,7 @@
 
 static void usage()
 {
-  derr << "usage: ceph_objectstore_bench [flags]\n"
+  cout << "usage: ceph_objectstore_bench [flags]\n"
       "	 --size\n"
       "	       total size in bytes\n"
       "	 --block-size\n"
@@ -30,7 +30,7 @@ static void usage()
       "	 --threads\n"
       "	       number of threads to carry out this workload\n"
       "	 --multi-object\n"
-      "	       have each thread write to a separate object\n" << dendl;
+    "	       have each thread write to a separate object\n" << std::endl;
   generic_server_usage();
 }
 
@@ -47,7 +47,7 @@ struct byte_units {
 
 bool byte_units::parse(const std::string &val, std::string *err)
 {
-  v = strict_sistrtoll(val.c_str(), err);
+  v = strict_iecstrtoll(val.c_str(), err);
   return err->empty();
 }
 
@@ -104,10 +104,11 @@ void osbench_worker(ObjectStore *os, const Config &cfg,
   dout(0) << "Writing " << cfg.size
       << " in blocks of " << cfg.block_size << dendl;
 
-  assert(starting_offset < cfg.size);
-  assert(starting_offset % cfg.block_size == 0);
+  ceph_assert(starting_offset < cfg.size);
+  ceph_assert(starting_offset % cfg.block_size == 0);
 
-  ObjectStore::Sequencer sequencer("osbench");
+  ObjectStore::CollectionHandle ch = os->open_collection(cid);
+  ceph_assert(ch);
 
   for (int i = 0; i < cfg.repeats; ++i) {
     uint64_t offset = starting_offset;
@@ -135,16 +136,13 @@ void osbench_worker(ObjectStore *os, const Config &cfg,
     std::condition_variable cond;
     bool done = false;
 
-    os->queue_transactions(&sequencer, tls, nullptr,
-                           new C_NotifyCond(&mutex, &cond, &done));
+    tls.back().register_on_commit(new C_NotifyCond(&mutex, &cond, &done));
+    os->queue_transactions(ch, tls);
 
     std::unique_lock<std::mutex> lock(mutex);
     cond.wait(lock, [&done](){ return done; });
     lock.unlock();
-
-
   }
-  sequencer.flush();
 }
 
 int main(int argc, const char *argv[])
@@ -154,10 +152,19 @@ int main(int argc, const char *argv[])
   // command-line arguments
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
-  env_to_vec(args);
+
+  if (args.empty()) {
+    cerr << argv[0] << ": -h or --help for usage" << std::endl;
+    exit(1);
+  }
+  if (ceph_argparse_need_usage(args)) {
+    usage();
+    exit(0);
+  }
 
   auto cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_OSD,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
 
   std::string val;
   vector<const char*>::iterator i = args.begin();
@@ -169,13 +176,13 @@ int main(int argc, const char *argv[])
       std::string err;
       if (!cfg.size.parse(val, &err)) {
         derr << "error parsing size: " << err << dendl;
-        usage();
+        exit(1);
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--block-size", (char*)nullptr)) {
       std::string err;
       if (!cfg.block_size.parse(val, &err)) {
         derr << "error parsing block-size: " << err << dendl;
-        usage();
+        exit(1);
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--repeats", (char*)nullptr)) {
       cfg.repeats = atoi(val.c_str());
@@ -185,16 +192,16 @@ int main(int argc, const char *argv[])
       cfg.multi_object = true;
     } else {
       derr << "Error: can't understand argument: " << *i << "\n" << dendl;
-      usage();
+      exit(1);
     }
   }
 
   common_init_finish(g_ceph_context);
 
   // create object store
-  dout(0) << "objectstore " << g_conf->osd_objectstore << dendl;
-  dout(0) << "data " << g_conf->osd_data << dendl;
-  dout(0) << "journal " << g_conf->osd_journal << dendl;
+  dout(0) << "objectstore " << g_conf()->osd_objectstore << dendl;
+  dout(0) << "data " << g_conf()->osd_data << dendl;
+  dout(0) << "journal " << g_conf()->osd_journal << dendl;
   dout(0) << "size " << cfg.size << dendl;
   dout(0) << "block-size " << cfg.block_size << dendl;
   dout(0) << "repeats " << cfg.repeats << dendl;
@@ -202,15 +209,15 @@ int main(int argc, const char *argv[])
 
   auto os = std::unique_ptr<ObjectStore>(
       ObjectStore::create(g_ceph_context,
-                          g_conf->osd_objectstore,
-                          g_conf->osd_data,
-                          g_conf->osd_journal));
+                          g_conf()->osd_objectstore,
+                          g_conf()->osd_data,
+                          g_conf()->osd_journal));
 
   //Checking data folder: create if needed or error if it's not empty
-  DIR *dir = ::opendir(g_conf->osd_data.c_str());
+  DIR *dir = ::opendir(g_conf()->osd_data.c_str());
   if (!dir) {
     std::string cmd("mkdir -p ");
-    cmd+=g_conf->osd_data;
+    cmd+=g_conf()->osd_data;
     int r = ::system( cmd.c_str() );
     if( r<0 ){
       derr << "Failed to create data directory, ret = " << r << dendl;
@@ -220,14 +227,14 @@ int main(int argc, const char *argv[])
   else {
      bool non_empty = readdir(dir) != NULL && readdir(dir) != NULL && readdir(dir) != NULL;
      if( non_empty ){
-       derr << "Data directory '"<<g_conf->osd_data<<"' isn't empty, please clean it first."<< dendl;
+       derr << "Data directory '"<<g_conf()->osd_data<<"' isn't empty, please clean it first."<< dendl;
        return 1;
      }
   }
   ::closedir(dir);
 
   //Create folders for journal if needed
-  string journal_base = g_conf->osd_journal.substr(0, g_conf->osd_journal.rfind('/'));
+  string journal_base = g_conf()->osd_journal.substr(0, g_conf()->osd_journal.rfind('/'));
   struct stat sb;
   if (stat(journal_base.c_str(), &sb) != 0 ){
     std::string cmd("mkdir -p ");
@@ -240,7 +247,7 @@ int main(int argc, const char *argv[])
   }
 
   if (!os) {
-    derr << "bad objectstore type " << g_conf->osd_objectstore << dendl;
+    derr << "bad objectstore type " << g_conf()->osd_objectstore << dendl;
     return 1;
   }
   if (os->mkfs() < 0) {
@@ -257,11 +264,11 @@ int main(int argc, const char *argv[])
   // create a collection
   spg_t pg;
   const coll_t cid(pg);
+  ObjectStore::CollectionHandle ch = os->create_new_collection(cid);
   {
-    ObjectStore::Sequencer osr(__func__);
     ObjectStore::Transaction t;
     t.create_collection(cid, 0);
-    os->apply_transaction(&osr, std::move(t));
+    os->queue_transaction(ch, std::move(t));
   }
 
   // create the objects
@@ -273,20 +280,18 @@ int main(int argc, const char *argv[])
       oss << "osbench-thread-" << i;
       oids.emplace_back(hobject_t(sobject_t(oss.str(), CEPH_NOSNAP)));
 
-      ObjectStore::Sequencer osr(__func__);
       ObjectStore::Transaction t;
       t.touch(cid, oids[i]);
-      int r = os->apply_transaction(&osr, std::move(t));
-      assert(r == 0);
+      int r = os->queue_transaction(ch, std::move(t));
+      ceph_assert(r == 0);
     }
   } else {
     oids.emplace_back(hobject_t(sobject_t("osbench", CEPH_NOSNAP)));
 
-    ObjectStore::Sequencer osr(__func__);
     ObjectStore::Transaction t;
     t.touch(cid, oids.back());
-    int r = os->apply_transaction(&osr, std::move(t));
-    assert(r == 0);
+    int r = os->queue_transaction(ch, std::move(t));
+    ceph_assert(r == 0);
   }
 
   // run the worker threads
@@ -314,11 +319,10 @@ int main(int argc, const char *argv[])
       << iops << " iops" << dendl;
 
   // remove the objects
-  ObjectStore::Sequencer osr(__func__);
   ObjectStore::Transaction t;
   for (const auto &oid : oids)
     t.remove(cid, oid);
-  os->apply_transaction(&osr,std::move(t));
+  os->queue_transaction(ch, std::move(t));
 
   os->umount();
   return 0;

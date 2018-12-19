@@ -17,7 +17,7 @@
 
 #include "include/rados/librados.hpp"
 #include "include/encoding.h"
-#include "test/librados/test.h"
+#include "test/librados/test_cxx.h"
 #include "gtest/gtest.h"
 
 using namespace librados;
@@ -162,9 +162,9 @@ TEST(ClsHello, Filter) {
 
   bufferlist filter_bl;
   std::string filter_name = "hello.hello";
-  ::encode(filter_name, filter_bl);
-  ::encode("_theattr", filter_bl);
-  ::encode(target_str, filter_bl);
+  encode(filter_name, filter_bl);
+  encode("_theattr", filter_bl);
+  encode(target_str, filter_bl);
 
   NObjectIterator iter(ioctx.nobjects_begin(filter_bl));
   bool foundit = false;

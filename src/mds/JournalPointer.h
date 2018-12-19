@@ -40,15 +40,15 @@ class JournalPointer {
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(front, bl);
-    ::encode(back, bl);
+    encode(front, bl);
+    encode(back, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START(1, bl);
-    ::decode(front, bl);
-    ::decode(back, bl);
+    decode(front, bl);
+    decode(back, bl);
     DECODE_FINISH(bl);
   }
 

@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #ifndef CEPH_RGW_SYNC_LOG_H
 #define CEPH_RGW_SYNC_LOG_H
 
@@ -10,6 +13,7 @@
 #include <set>
 #include <ostream>
 #include <string>
+#include <shared_mutex>
 #include <boost/circular_buffer.hpp>
 
 #define SSTR(o) ({      \
@@ -28,12 +32,10 @@ class RGWSyncTraceServiceMapThread;
 
 using RGWSyncTraceNodeRef = std::shared_ptr<RGWSyncTraceNode>;
 
-class RGWSyncTraceNode {
+class RGWSyncTraceNode final {
   friend class RGWSyncTraceManager;
 
   CephContext *cct;
-
-  RGWSyncTraceManager *manager{nullptr};
   RGWSyncTraceNodeRef parent;
 
   uint16_t state{0};
@@ -41,7 +43,6 @@ class RGWSyncTraceNode {
 
   Mutex lock{"RGWSyncTraceNode::lock"};
 
-protected:
   std::string type;
   std::string id;
 
@@ -52,10 +53,13 @@ protected:
   uint64_t handle;
 
   boost::circular_buffer<string> history;
-public:
-  RGWSyncTraceNode(CephContext *_cct, RGWSyncTraceManager *_manager, const RGWSyncTraceNodeRef& _parent,
-           const std::string& _type, const std::string& _id);
 
+  // private constructor, create with RGWSyncTraceManager::add_node()
+  RGWSyncTraceNode(CephContext *_cct, uint64_t _handle,
+                   const RGWSyncTraceNodeRef& _parent,
+                   const std::string& _type, const std::string& _id);
+
+ public:
   void set_resource_name(const string& s) {
     resource_name = s;
   }
@@ -74,7 +78,6 @@ public:
     return (state & f) == f;
   }
   void log(int level, const std::string& s);
-  void finish();
 
   std::string to_str() {
     return prefix + " " + status;
@@ -99,7 +102,7 @@ public:
 class RGWSyncTraceManager : public AdminSocketHook {
   friend class RGWSyncTraceNode;
 
-  mutable boost::shared_mutex lock;
+  mutable std::shared_timed_mutex lock;
   using shunique_lock = ceph::shunique_lock<decltype(lock)>;
 
   CephContext *cct;
@@ -111,10 +114,11 @@ class RGWSyncTraceManager : public AdminSocketHook {
   std::atomic<uint64_t> count = { 0 };
 
   std::list<std::array<string, 3> > admin_commands;
-protected:
+
   uint64_t alloc_handle() {
     return ++count;
   }
+  void finish_node(RGWSyncTraceNode *node);
 
 public:
   RGWSyncTraceManager(CephContext *_cct, int max_lru) : cct(_cct), complete_nodes(max_lru) {}
@@ -124,11 +128,13 @@ public:
 
   const RGWSyncTraceNodeRef root_node;
 
-  RGWSyncTraceNodeRef add_node(RGWSyncTraceNode *node);
-  void finish_node(RGWSyncTraceNode *node);
+  RGWSyncTraceNodeRef add_node(const RGWSyncTraceNodeRef& parent,
+                               const std::string& type,
+                               const std::string& id = "");
 
   int hook_to_admin_command();
-  bool call(std::string command, cmdmap_t& cmdmap, std::string format, bufferlist& out);
+  bool call(std::string_view command, const cmdmap_t& cmdmap,
+            std::string_view format, bufferlist& out) override;
   string get_active_names();
 };
 

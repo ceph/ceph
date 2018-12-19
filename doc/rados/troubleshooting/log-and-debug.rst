@@ -43,14 +43,14 @@ For example,::
 To activate Ceph's debugging output (*i.e.*, ``dout()``) at runtime,  use the
 ``ceph tell`` command to inject arguments into the runtime configuration:: 
 
-	ceph tell {daemon-type}.{daemon id or *} injectargs --{name} {value} [--{name} {value}]
+	ceph tell {daemon-type}.{daemon id or *} config set {name} {value}
 	
 Replace ``{daemon-type}`` with one of ``osd``, ``mon`` or ``mds``. You may apply
 the runtime setting to all daemons of a particular type with ``*``, or specify
 a specific daemon's ID. For example, to increase
 debug logging for a ``ceph-osd`` daemon named ``osd.0``, execute the following:: 
 
-	ceph tell osd.0 injectargs --debug-osd 0/5
+	ceph tell osd.0 config set debug_osd 0/5
 
 The ``ceph tell`` command goes through the monitors. If you cannot bind to the
 monitor, you can still make the change by logging into the host of the daemon
@@ -327,7 +327,7 @@ settings:
 :Description: The maximum number of recent events to include in a log file.
 :Type: Integer
 :Required:  No
-:Default: ``1000000``
+:Default: ``10000``
 
 
 ``log to stderr``
@@ -396,10 +396,17 @@ settings:
 
 ``mon cluster log file``
 
-:Description: The location of the cluster's log file. 
+:Description: The locations of the cluster's log files. There are two channels in
+              Ceph: ``cluster`` and ``audit``. This option represents a mapping
+              from channels to log files, where the log entries of that
+              channel are sent to. The ``default`` entry is a fallback
+              mapping for channels not explicitly specified. So, the following
+              default setting will send cluster log to ``$cluster.log``, and
+              send audit log to ``$cluster.audit.log``, where ``$cluster`` will
+              be replaced with the actual cluster name.
 :Type: String
 :Required: No
-:Default: ``/var/log/ceph/$cluster.log``
+:Default: ``default=/var/log/ceph/$cluster.$channel.log,cluster=/var/log/ceph/$cluster.log``
 
 
 
@@ -435,14 +442,6 @@ OSD
 :Type: Double
 :Required: No
 :Default: 1
-
-
-``osd tmapput sets uses tmap``
-
-:Description: Uses ``tmap``. For debug only.
-:Type: Boolean
-:Required: No
-:Default: ``false``
 
 
 ``osd min pg log entries``

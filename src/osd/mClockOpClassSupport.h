@@ -28,7 +28,8 @@ namespace ceph {
     using op_item_type_t = OpQueueItem::OpQueueable::op_type_t;
     
     enum class osd_op_type_t {
-      client_op, osd_rep_op, bg_snaptrim, bg_recovery, bg_scrub
+      client_op, osd_rep_op, bg_snaptrim, bg_recovery, bg_scrub, bg_pg_delete,
+      peering_event
     };
 
     class OpClassClientInfoMgr {
@@ -37,6 +38,8 @@ namespace ceph {
       crimson::dmclock::ClientInfo snaptrim;
       crimson::dmclock::ClientInfo recov;
       crimson::dmclock::ClientInfo scrub;
+      crimson::dmclock::ClientInfo pg_delete;
+      crimson::dmclock::ClientInfo peering_event;
 
       static constexpr std::size_t rep_op_msg_bitset_size = 128;
       std::bitset<rep_op_msg_bitset_size> rep_op_msg_bitset;
@@ -59,6 +62,10 @@ namespace ceph {
 	  return &recov;
 	case osd_op_type_t::bg_scrub:
 	  return &scrub;
+	case osd_op_type_t::bg_pg_delete:
+	  return &pg_delete;
+	case osd_op_type_t::peering_event:
+	  return &peering_event;
 	default:
 	  ceph_abort();
 	  return nullptr;
@@ -77,6 +84,10 @@ namespace ceph {
 	  return osd_op_type_t::bg_recovery;
 	case op_item_type_t::bg_scrub:
 	  return osd_op_type_t::bg_scrub;
+	case op_item_type_t::bg_pg_delete:
+	  return osd_op_type_t::bg_pg_delete;
+	case op_item_type_t::peering_event:
+	  return osd_op_type_t::peering_event;
 	default:
 	  ceph_abort();
 	}

@@ -45,7 +45,8 @@ static void json_print(const std::vector<MonCommand> &mon_commands)
 {
   bufferlist rdata;
   Formatter *f = Formatter::create("json");
-  Monitor::format_command_descriptions(mon_commands, f, &rdata);
+  Monitor::format_command_descriptions(mon_commands, f,
+                                       CEPH_FEATURES_ALL, &rdata);
   delete f;
   string data(rdata.c_str(), rdata.length());
   cout << data << std::endl;
@@ -58,18 +59,18 @@ static void all()
 #undef COMMAND_WITH_FLAG
   std::vector<MonCommand> mon_commands = {
 #define FLAG(f) (MonCommand::FLAG_##f)
-#define COMMAND(parsesig, helptext, modulename, req_perms, avail)	\
-    {parsesig, helptext, modulename, req_perms, avail, 0},
-#define COMMAND_WITH_FLAG(parsesig, helptext, modulename, req_perms, avail, flags) \
-    {parsesig, helptext, modulename, req_perms, avail, flags},
+#define COMMAND(parsesig, helptext, modulename, req_perms)	\
+    {parsesig, helptext, modulename, req_perms, 0},
+#define COMMAND_WITH_FLAG(parsesig, helptext, modulename, req_perms, flags) \
+    {parsesig, helptext, modulename, req_perms, flags},
 #include <mon/MonCommands.h>
 #undef COMMAND
 #undef COMMAND_WITH_FLAG
 
-#define COMMAND(parsesig, helptext, modulename, req_perms, avail)	\
-  {parsesig, helptext, modulename, req_perms, avail, FLAG(MGR)},
-#define COMMAND_WITH_FLAG(parsesig, helptext, modulename, req_perms, avail, flags) \
-  {parsesig, helptext, modulename, req_perms, avail, flags | FLAG(MGR)},
+#define COMMAND(parsesig, helptext, modulename, req_perms)	\
+  {parsesig, helptext, modulename, req_perms, FLAG(MGR)},
+#define COMMAND_WITH_FLAG(parsesig, helptext, modulename, req_perms, flags) \
+  {parsesig, helptext, modulename, req_perms, flags | FLAG(MGR)},
 #include <mgr/MgrCommands.h>
  #undef COMMAND
 #undef COMMAND_WITH_FLAG
@@ -87,7 +88,7 @@ static void pull585()
       "name=pg_num,type=CephInt,range=0 " 
       "name=pgp_num,type=CephInt,range=0,req=false" // !!! missing trailing space
       "name=properties,type=CephString,n=N,req=false,goodchars=[A-Za-z0-9-_.=]", 
-      "create pool", "osd", "rw", "cli,rest" }
+      "create pool", "osd", "rw" }
   };
 
   json_print(mon_commands);
@@ -98,7 +99,8 @@ int main(int argc, char **argv) {
   argv_to_vec(argc, (const char **)argv, args);
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
 
   if (args.empty()) {

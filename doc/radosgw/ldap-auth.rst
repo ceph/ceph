@@ -65,7 +65,7 @@ authentication:
 - ``rgw_ldap_dnattr``: The attribute being used in the constructed search
   filter to match a username. Depending on your Directory Information Tree
   (DIT) this would probably be ``uid`` or ``cn``.
-- ``rgw_search_filter``: If not specified, the Ceph Object Gateway
+- ``rgw_ldap_searchfilter``: If not specified, the Ceph Object Gateway
   automatically constructs the search filter with the ``rgw_ldap_dnattr``
   setting. Use this parameter to narrow the list of allowed users in very
   flexible ways. Consult the *Using a custom search filter to limit user access

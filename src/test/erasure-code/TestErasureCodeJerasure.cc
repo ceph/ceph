@@ -81,7 +81,7 @@ TYPED_TEST(ErasureCodeTest, encode_decode)
       "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
     in_ptr.append(payload, strlen(payload));
     bufferlist in;
-    in.push_front(in_ptr);
+    in.push_back(in_ptr);
     int want_to_encode[] = { 0, 1, 2, 3 };
     map<int, bufferlist> encoded;
     EXPECT_EQ(0, jerasure.encode(set<int>(want_to_encode, want_to_encode+4),
@@ -98,9 +98,9 @@ TYPED_TEST(ErasureCodeTest, encode_decode)
     {
       int want_to_decode[] = { 0, 1 };
       map<int, bufferlist> decoded;
-      EXPECT_EQ(0, jerasure.decode(set<int>(want_to_decode, want_to_decode+2),
-				   encoded,
-				   &decoded));
+      EXPECT_EQ(0, jerasure._decode(set<int>(want_to_decode, want_to_decode+2),
+				    encoded,
+				    &decoded));
       EXPECT_EQ(2u, decoded.size()); 
       EXPECT_EQ(length, decoded[0].length());
       EXPECT_EQ(0, memcmp(decoded[0].c_str(), in.c_str(), length));
@@ -116,9 +116,9 @@ TYPED_TEST(ErasureCodeTest, encode_decode)
       EXPECT_EQ(2u, degraded.size());
       int want_to_decode[] = { 0, 1 };
       map<int, bufferlist> decoded;
-      EXPECT_EQ(0, jerasure.decode(set<int>(want_to_decode, want_to_decode+2),
-				   degraded,
-				   &decoded));
+      EXPECT_EQ(0, jerasure._decode(set<int>(want_to_decode, want_to_decode+2),
+				    degraded,
+				    &decoded));
       // always decode all, regardless of want_to_decode
       EXPECT_EQ(4u, decoded.size()); 
       EXPECT_EQ(length, decoded[0].length());
@@ -147,9 +147,9 @@ TYPED_TEST(ErasureCodeTest, minimum_to_decode)
     set<int> available_chunks;
     set<int> minimum;
 
-    EXPECT_EQ(0, jerasure.minimum_to_decode(want_to_read,
-					    available_chunks,
-					    &minimum));
+    EXPECT_EQ(0, jerasure._minimum_to_decode(want_to_read,
+					     available_chunks,
+					     &minimum));
     EXPECT_TRUE(minimum.empty());
   }
   //
@@ -162,9 +162,9 @@ TYPED_TEST(ErasureCodeTest, minimum_to_decode)
 
     want_to_read.insert(0);
 
-    EXPECT_EQ(-EIO, jerasure.minimum_to_decode(want_to_read,
-					       available_chunks,
-					       &minimum));
+    EXPECT_EQ(-EIO, jerasure._minimum_to_decode(want_to_read,
+						available_chunks,
+						&minimum));
   }
   //
   // Reading a subset of the available chunks is always possible.
@@ -177,9 +177,9 @@ TYPED_TEST(ErasureCodeTest, minimum_to_decode)
     want_to_read.insert(0);
     available_chunks.insert(0);
 
-    EXPECT_EQ(0, jerasure.minimum_to_decode(want_to_read,
-					    available_chunks,
-					    &minimum));
+    EXPECT_EQ(0, jerasure._minimum_to_decode(want_to_read,
+					     available_chunks,
+					     &minimum));
     EXPECT_EQ(want_to_read, minimum);
   }
   //
@@ -195,9 +195,9 @@ TYPED_TEST(ErasureCodeTest, minimum_to_decode)
     want_to_read.insert(1);
     available_chunks.insert(0);
 
-    EXPECT_EQ(-EIO, jerasure.minimum_to_decode(want_to_read,
-					       available_chunks,
-					       &minimum));
+    EXPECT_EQ(-EIO, jerasure._minimum_to_decode(want_to_read,
+						available_chunks,
+						&minimum));
   }
   //
   // When chunks are not available, the minimum can be made of any
@@ -219,9 +219,9 @@ TYPED_TEST(ErasureCodeTest, minimum_to_decode)
     available_chunks.insert(2);
     available_chunks.insert(3);
 
-    EXPECT_EQ(0, jerasure.minimum_to_decode(want_to_read,
-					    available_chunks,
-					    &minimum));
+    EXPECT_EQ(0, jerasure._minimum_to_decode(want_to_read,
+					     available_chunks,
+					     &minimum));
     EXPECT_EQ(2u, minimum.size());
     EXPECT_EQ(0u, minimum.count(3));
   }
@@ -279,7 +279,7 @@ TEST(ErasureCodeTest, encode)
 
 TEST(ErasureCodeTest, create_rule)
 {
-  CrushWrapper *c = new CrushWrapper;
+  std::unique_ptr<CrushWrapper> c = std::make_unique<CrushWrapper>();
   c->create();
   int root_type = 2;
   c->set_type_name(root_type, "root");

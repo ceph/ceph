@@ -15,15 +15,15 @@ struct obj_version {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(ver, bl);
-    ::encode(tag, bl);
+    encode(ver, bl);
+    encode(tag, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(ver, bl);
-    ::decode(tag, bl);
+    decode(ver, bl);
+    decode(tag, bl);
     DECODE_FINISH(bl);
   }
 
@@ -67,17 +67,17 @@ struct obj_version_cond {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(ver, bl);
+    encode(ver, bl);
     uint32_t c = (uint32_t)cond;
-    ::encode(c, bl);
+    encode(c, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(ver, bl);
+    decode(ver, bl);
     uint32_t c;
-    ::decode(c, bl);
+    decode(c, bl);
     cond = (VersionCond)c;
     DECODE_FINISH(bl);
   }
@@ -87,5 +87,3 @@ WRITE_CLASS_ENCODER(obj_version_cond)
 
 
 #endif
-
-

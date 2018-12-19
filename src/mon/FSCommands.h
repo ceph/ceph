@@ -80,7 +80,7 @@ public:
     Monitor *mon,
     FSMap &fsmap,
     MonOpRequestRef op,
-    map<string, cmd_vartype> &cmdmap,
+    const cmdmap_t& cmdmap,
     std::stringstream &ss) = 0;
 };
 

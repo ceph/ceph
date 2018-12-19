@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -32,11 +35,6 @@ ostream& operator <<(ostream& m, const Principal& p) {
     return m << "root";
   }
   return m << (p.is_user() ? "user/" : "role/") << p.get_id();
-}
-string to_string(const Principal& p) {
-  stringstream s;
-  s << p;
-  return s.str();
 }
 }
 }

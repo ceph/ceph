@@ -16,7 +16,6 @@
 
 #include <iostream>
 #include <sstream>
-using namespace std;
 
 
 #include "common/config.h"
@@ -36,7 +35,7 @@ using namespace std;
 #include <sys/statvfs.h>
 
 #include "common/errno.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/cephfs/ceph_statx.h"
 
 #define dout_context g_ceph_context
@@ -941,17 +940,17 @@ int SyntheticClient::run()
 
 int SyntheticClient::start_thread()
 {
-  assert(!thread_id);
+  ceph_assert(!thread_id);
 
   pthread_create(&thread_id, NULL, synthetic_client_thread_entry, this);
-  assert(thread_id);
+  ceph_assert(thread_id);
   ceph_pthread_setname(thread_id, "client");
   return 0;
 }
 
 int SyntheticClient::join_thread()
 {
-  assert(thread_id);
+  ceph_assert(thread_id);
   void *rv;
   pthread_join(thread_id, &rv);
   return 0;
@@ -1596,7 +1595,6 @@ int SyntheticClient::full_walk(string& basedir)
   list<frag_info_t> statq;
   dirq.push_back(basedir);
   frag_info_t empty;
-  memset(&empty, 0, sizeof(empty));
   statq.push_back(empty);
 
   ceph::unordered_map<inodeno_t, int> nlink;
@@ -2749,7 +2747,7 @@ int SyntheticClient::random_walk(int num_req)
       else {
         r = client->open(get_random_sub(), O_RDONLY, perms);
         if (r > 0) {
-          assert(open_files.count(r) == 0);
+          ceph_assert(open_files.count(r) == 0);
           open_files.insert(r);
         }
       }
@@ -2902,18 +2900,18 @@ void SyntheticClient::foo()
     char buffer[8192]; 
     client->unlink(fn, perms);
     int handle = client->open(fn, O_CREAT|O_RDWR, perms, S_IRWXU);
-    assert(handle>=0);
+    ceph_assert(handle>=0);
     int r=client->write(handle,buffer,8192);
-    assert(r>=0);
+    ceph_assert(r>=0);
     r=client->close(handle);
-    assert(r>=0);
+    ceph_assert(r>=0);
          
     handle = client->open(fn, O_RDWR, perms); // open the same  file, it must have some data already
-    assert(handle>=0);      
+    ceph_assert(handle>=0);      
     r=client->read(handle,buffer,8192);
-    assert(r==8192); //  THIS ASSERTION FAILS with disabled cache
+    ceph_assert(r==8192); //  THIS ASSERTION FAILS with disabled cache
     r=client->close(handle);
-    assert(r>=0);
+    ceph_assert(r>=0);
 
     return;
   }
@@ -3210,7 +3208,7 @@ void SyntheticClient::import_find(const char *base, const char *find, bool data)
     client->mkdir(base, 0755, process_perms);
 
   ifstream f(find);
-  assert(f.is_open());
+  ceph_assert(f.is_open());
   
   int dirnum = 0;
 
@@ -3239,7 +3237,7 @@ void SyntheticClient::import_find(const char *base, const char *find, bool data)
     if (filename == ".") continue;
 
     // remove leading ./
-    assert(filename[0] == '.' && filename[1] == '/');
+    ceph_assert(filename[0] == '.' && filename[1] == '/');
     filename = filename.substr(2);
 
     // new leading dir?
@@ -3253,7 +3251,7 @@ void SyntheticClient::import_find(const char *base, const char *find, bool data)
     }
 
     // parse the mode
-    assert(modestring.length() == 10);
+    ceph_assert(modestring.length() == 10);
     mode_t mode = 0;
     switch (modestring[0]) {
     case 'd': mode |= S_IFDIR; break;
@@ -3276,7 +3274,7 @@ void SyntheticClient::import_find(const char *base, const char *find, bool data)
     if (S_ISLNK(mode)) {
       // target vs destination
       int pos = filename.find(" -> ");
-      assert(pos > 0);
+      ceph_assert(pos > 0);
       string link;
       if (base[0] != '-') {
 	link = base;
@@ -3304,7 +3302,7 @@ void SyntheticClient::import_find(const char *base, const char *find, bool data)
 	client->mkdir(f.c_str(), mode, perms);
       } else {
 	int fd = client->open(f.c_str(), O_WRONLY|O_CREAT, perms, mode & 0777);
-	assert(fd > 0);	
+	ceph_assert(fd > 0);	
 	if (data) {
 	  client->write(fd, "", 0, size);
 	} else {
@@ -3358,22 +3356,21 @@ int SyntheticClient::chunk_file(string &filename)
   uint64_t size = st.st_size;
   dout(0) << "file " << filename << " size is " << size << dendl;
 
-  inode_t inode;
-  memset(&inode, 0, sizeof(inode));
+  inode_t inode{};
   inode.ino = st.st_ino;
   ret = client->fdescribe_layout(fd, &inode.layout);
-  assert(ret == 0); // otherwise fstat did a bad thing
+  ceph_assert(ret == 0); // otherwise fstat did a bad thing
 
   uint64_t pos = 0;
   bufferlist from_before;
   while (pos < size) {
-    int get = MIN(size-pos, 1048576);
+    int get = std::min<int>(size - pos, 1048576);
 
     Mutex flock("synclient chunk_file lock");
     Cond cond;
     bool done;
     bufferlist bl;
-    
+
     flock.Lock();
     Context *onfinish = new C_SafeCond(&flock, &cond, &done);
     client->filer->read(inode.ino, &inode.layout, CEPH_NOSNAP, pos, get, &bl, 0,

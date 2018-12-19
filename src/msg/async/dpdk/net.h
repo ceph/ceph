@@ -1,17 +1,24 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 /*
- * Ceph - scalable distributed file system
+ * This file is open source software, licensed to you under the terms
+ * of the Apache License, Version 2.0 (the "License").  See the NOTICE file
+ * distributed with this work for additional information regarding copyright
+ * ownership.  You may not use this file except in compliance with the License.
  *
- * Copyright (C) 2015 XSky <haomai@xsky.com>
+ * You may obtain a copy of the License at
  *
- * Author: Haomai Wang <haomaiwang@gmail.com>
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * This is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software
- * Foundation.  See file COPYING.
- *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
  */
+/*
+ * Copyright (C) 2014 Cloudius Systems, Ltd.
+ */
+
 #ifndef CEPH_MSG_DPDK_NET_H
 #define CEPH_MSG_DPDK_NET_H
 
@@ -48,7 +55,7 @@ class forward_hash {
     return end_idx;
   }
   void push_back(uint8_t b) {
-    assert(end_idx < sizeof(data));
+    ceph_assert(end_idx < sizeof(data));
     data[end_idx++] = b;
   }
   void push_back(uint16_t b) {
@@ -98,7 +105,7 @@ class interface {
     stream<Packet, ethernet_address> packet_stream;
     std::function<bool (forward_hash&, Packet&, size_t)> forward;
     bool ready() { return packet_stream.started(); }
-    l3_rx_stream(std::function<bool (forward_hash&, Packet&, size_t)>&& fw) : forward(fw) {}
+    explicit l3_rx_stream(std::function<bool (forward_hash&, Packet&, size_t)>&& fw) : forward(fw) {}
   };
   std::unordered_map<uint16_t, l3_rx_stream> _proto_map;
   std::shared_ptr<DPDKDevice> _dev;
@@ -110,7 +117,7 @@ class interface {
  private:
   int dispatch_packet(EventCenter *c, Packet p);
  public:
-  explicit interface(CephContext *cct, std::shared_ptr<DPDKDevice> dev, EventCenter *c);
+  explicit interface(CephContext *cct, std::shared_ptr<DPDKDevice> dev, EventCenter *center);
   ethernet_address hw_address() { return _hw_address; }
   const struct hw_features& get_hw_features() const { return _hw_features; }
   subscription<Packet, ethernet_address> register_l3(

@@ -24,13 +24,13 @@ const char *MetaSession::get_state_name() const
 void MetaSession::dump(Formatter *f) const
 {
   f->dump_int("mds", mds_num);
-  f->dump_stream("addr") << inst.addr;
+  f->dump_object("addrs", addrs);
   f->dump_unsigned("seq", seq);
   f->dump_unsigned("cap_gen", cap_gen);
   f->dump_stream("cap_ttl") << cap_ttl;
   f->dump_stream("last_cap_renew_request") << last_cap_renew_request;
   f->dump_unsigned("cap_renew_seq", cap_renew_seq);
-  f->dump_int("num_caps", num_caps);
+  f->dump_int("num_caps", caps.size());
   f->dump_string("state", get_state_name());
 }
 

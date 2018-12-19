@@ -27,7 +27,7 @@
 SafeThreadState::SafeThreadState(PyThreadState *ts_)
     : ts(ts_)
 {
-  assert(ts != nullptr);
+  ceph_assert(ts != nullptr);
   thread = pthread_self();
 }
 
@@ -60,7 +60,7 @@ Gil::Gil(SafeThreadState &ts, bool new_thread) : pThreadState(ts)
     PyThreadState_Swap(pNewThreadState);
     dout(20) << "Switched to new thread state " << pNewThreadState << dendl;
   } else {
-    assert(pthread_self() == pThreadState.thread);
+    ceph_assert(pthread_self() == pThreadState.thread);
   }
 }
 

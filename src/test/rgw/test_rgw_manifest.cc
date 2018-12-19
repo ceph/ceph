@@ -40,17 +40,17 @@ struct OldObjManifestPart {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 2, bl);
-    ::encode(loc, bl);
-    ::encode(loc_ofs, bl);
-    ::encode(size, bl);
+    encode(loc, bl);
+    encode(loc_ofs, bl);
+    encode(size, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START_LEGACY_COMPAT_LEN_32(2, 2, 2, bl);
-     ::decode(loc, bl);
-     ::decode(loc_ofs, bl);
-     ::decode(size, bl);
+     decode(loc, bl);
+     decode(loc_ofs, bl);
+     decode(size, bl);
      DECODE_FINISH(bl);
   }
 
@@ -82,20 +82,20 @@ public:
 
   void append(uint64_t ofs, const OldObjManifestPart& part) {
     objs[ofs] = part;
-    obj_size = max(obj_size, ofs + part.size);
+    obj_size = std::max(obj_size, ofs + part.size);
   }
 
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 2, bl);
-    ::encode(obj_size, bl);
-    ::encode(objs, bl);
+    encode(obj_size, bl);
+    encode(objs, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN_32(6, 2, 2, bl);
-    ::decode(obj_size, bl);
-    ::decode(objs, bl);
+    decode(obj_size, bl);
+    decode(objs, bl);
     DECODE_FINISH(bl);
   }
 
@@ -157,7 +157,7 @@ static void gen_obj(test_rgw_env& env, uint64_t obj_size, uint64_t head_max_size
     rgw_raw_obj test_raw = rgw_obj_select(*iter).get_raw_obj(env.zonegroup, env.zone_params);
     ASSERT_TRUE(obj == test_raw);
 
-    ofs = MIN(ofs + gen->cur_stripe_max_size(), obj_size);
+    ofs = std::min(ofs + gen->cur_stripe_max_size(), obj_size);
     gen->create_next(ofs);
 
   cout << "obj=" << obj << " *iter=" << *iter << std::endl;
@@ -174,7 +174,7 @@ static void gen_obj(test_rgw_env& env, uint64_t obj_size, uint64_t head_max_size
   }
   ASSERT_TRUE(iter == test_objs->end());
   ASSERT_EQ(manifest->get_obj_size(), obj_size);
-  ASSERT_EQ(manifest->get_head_size(), MIN(obj_size, head_max_size));
+  ASSERT_EQ(manifest->get_head_size(), std::min(obj_size, head_max_size));
   ASSERT_EQ(manifest->has_tail(), (obj_size > head_max_size));
 }
 
@@ -357,13 +357,13 @@ TEST(TestRGWManifest, old_obj_manifest) {
 
 
   bufferlist bl;
-  ::encode(old_manifest , bl);
+  encode(old_manifest , bl);
 
   RGWObjManifest manifest;
 
   try {
-    auto iter = bl.begin();
-    ::decode(manifest, iter);
+    auto iter = bl.cbegin();
+    decode(manifest, iter);
   } catch (buffer::error& err) {
     ASSERT_TRUE(false);
   }
@@ -394,9 +394,10 @@ TEST(TestRGWManifest, old_obj_manifest) {
 int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
-  env_to_vec(args);
 
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

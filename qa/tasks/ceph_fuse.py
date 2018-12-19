@@ -7,6 +7,7 @@ import logging
 
 from teuthology import misc as teuthology
 from cephfs.fuse_mount import FuseMount
+from tasks.cephfs.filesystem import Filesystem
 
 log = logging.getLogger(__name__)
 
@@ -92,16 +93,19 @@ def task(ctx, config):
     :param ctx: Context
     :param config: Configuration
     """
-    log.info('Mounting ceph-fuse clients...')
+    log.info('Running ceph_fuse task...')
 
     testdir = teuthology.get_testdir(ctx)
+    log.info("config is {}".format(str(config)))
     config = get_client_configs(ctx, config)
+    log.info("new config is {}".format(str(config)))
 
     # List clients we will configure mounts for, default is all clients
     clients = list(teuthology.get_clients(ctx=ctx, roles=filter(lambda x: 'client.' in x, config.keys())))
 
     all_mounts = getattr(ctx, 'mounts', {})
     mounted_by_me = {}
+    skipped = {}
 
     # Construct any new FuseMount instances
     for id_, remote in clients:
@@ -109,8 +113,13 @@ def task(ctx, config):
         if client_config is None:
             client_config = {}
 
+        skip = client_config.get("skip", False)
+        if skip:
+            skipped[id_] = skip
+            continue
+
         if id_ not in all_mounts:
-            fuse_mount = FuseMount(client_config, testdir, id_, remote)
+            fuse_mount = FuseMount(ctx, client_config, testdir, id_, remote)
             all_mounts[id_] = fuse_mount
         else:
             # Catch bad configs where someone has e.g. tried to use ceph-fuse and kcephfs for the same client
@@ -122,6 +131,7 @@ def task(ctx, config):
     ctx.mounts = all_mounts
 
     # Mount any clients we have been asked to (default to mount all)
+    log.info('Mounting ceph-fuse clients...')
     for mount in mounted_by_me.values():
         mount.mount()
 
@@ -129,7 +139,7 @@ def task(ctx, config):
         mount.wait_until_mounted()
 
     # Umount any pre-existing clients that we have not been asked to mount
-    for client_id in set(all_mounts.keys()) - set(mounted_by_me.keys()):
+    for client_id in set(all_mounts.keys()) - set(mounted_by_me.keys()) - set(skipped.keys()):
         mount = all_mounts[client_id]
         if mount.is_mounted():
             mount.umount_wait()

@@ -8,7 +8,8 @@
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
-#include "librbd/io/ObjectRequest.h"
+#include "librbd/io/ObjectDispatchSpec.h"
+#include "librbd/io/ObjectDispatcher.h"
 #include "common/ContextCompletion.h"
 #include "common/dout.h"
 #include "common/errno.h"
@@ -38,16 +39,18 @@ public:
 
   int send() override {
     I &image_ctx = this->m_image_ctx;
-    assert(image_ctx.owner_lock.is_locked());
-    assert(image_ctx.exclusive_lock == nullptr ||
-           image_ctx.exclusive_lock->is_lock_owner());
+    ceph_assert(image_ctx.owner_lock.is_locked());
+    ceph_assert(image_ctx.exclusive_lock == nullptr ||
+                image_ctx.exclusive_lock->is_lock_owner());
 
     string oid = image_ctx.get_object_name(m_object_no);
     ldout(image_ctx.cct, 10) << "removing (with copyup) " << oid << dendl;
 
-    auto req = io::ObjectRequest<I>::create_trim(&image_ctx, oid, m_object_no,
-                                                 m_snapc, false, this);
-    req->send();
+    auto object_dispatch_spec = io::ObjectDispatchSpec::create_discard(
+      &image_ctx, io::OBJECT_DISPATCH_LAYER_NONE, oid, m_object_no, 0,
+      image_ctx.layout.object_size, m_snapc,
+      io::OBJECT_DISCARD_FLAG_DISABLE_OBJECT_MAP_UPDATE, 0, {}, this);
+    object_dispatch_spec->send();
     return 0;
   }
 private:
@@ -66,9 +69,9 @@ public:
 
   int send() override {
     I &image_ctx = this->m_image_ctx;
-    assert(image_ctx.owner_lock.is_locked());
-    assert(image_ctx.exclusive_lock == nullptr ||
-           image_ctx.exclusive_lock->is_lock_owner());
+    ceph_assert(image_ctx.owner_lock.is_locked());
+    ceph_assert(image_ctx.exclusive_lock == nullptr ||
+                image_ctx.exclusive_lock->is_lock_owner());
 
     {
       RWLock::RLocker snap_locker(image_ctx.snap_lock);
@@ -84,7 +87,7 @@ public:
     librados::AioCompletion *rados_completion =
       util::create_rados_callback(this);
     int r = image_ctx.data_ctx.aio_remove(oid, rados_completion);
-    assert(r == 0);
+    ceph_assert(r == 0);
     rados_completion->release();
     return 0;
   }
@@ -102,7 +105,7 @@ TrimRequest<I>::TrimRequest(I &image_ctx, Context *on_finish,
 {
   uint64_t period = image_ctx.get_stripe_period();
   uint64_t new_num_periods = ((m_new_size + period - 1) / period);
-  m_delete_off = MIN(new_num_periods * period, original_size);
+  m_delete_off = std::min(new_num_periods * period, original_size);
   // first object we can delete free and clear
   m_delete_start = new_num_periods * image_ctx.get_stripe_count();
   m_delete_start_min = m_delete_start;
@@ -177,7 +180,7 @@ void TrimRequest<I>::send() {
 template<typename I>
 void TrimRequest<I>::send_pre_trim() {
   I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.owner_lock.is_locked());
+  ceph_assert(image_ctx.owner_lock.is_locked());
 
   if (m_delete_start >= m_num_objects) {
     send_clean_boundary();
@@ -192,12 +195,12 @@ void TrimRequest<I>::send_pre_trim() {
                               << " num_objects=" << m_num_objects << dendl;
       m_state = STATE_PRE_TRIM;
 
-      assert(image_ctx.exclusive_lock->is_lock_owner());
+      ceph_assert(image_ctx.exclusive_lock->is_lock_owner());
 
       RWLock::WLocker object_map_locker(image_ctx.object_map_lock);
       if (image_ctx.object_map->template aio_update<AsyncRequest<I> >(
             CEPH_NOSNAP, m_delete_start_min, m_num_objects, OBJECT_PENDING,
-            OBJECT_EXISTS, {}, this)) {
+            OBJECT_EXISTS, {}, false, this)) {
         return;
       }
     }
@@ -209,7 +212,7 @@ void TrimRequest<I>::send_pre_trim() {
 template<typename I>
 void TrimRequest<I>::send_copyup_objects() {
   I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.owner_lock.is_locked());
+  ceph_assert(image_ctx.owner_lock.is_locked());
 
   ::SnapContext snapc;
   bool has_snapshots;
@@ -221,7 +224,7 @@ void TrimRequest<I>::send_copyup_objects() {
     snapc = image_ctx.snapc;
     has_snapshots = !image_ctx.snaps.empty();
     int r = image_ctx.get_parent_overlap(CEPH_NOSNAP, &parent_overlap);
-    assert(r == 0);
+    ceph_assert(r == 0);
   }
 
   // copyup is only required for portion of image that overlaps parent
@@ -250,13 +253,14 @@ void TrimRequest<I>::send_copyup_objects() {
   AsyncObjectThrottle<I> *throttle = new AsyncObjectThrottle<I>(
     this, image_ctx, context_factory, ctx, &m_prog_ctx, copyup_start,
     copyup_end);
-  throttle->start_ops(image_ctx.concurrent_management_ops);
+  throttle->start_ops(
+    image_ctx.config.template get_val<uint64_t>("rbd_concurrent_management_ops"));
 }
 
 template <typename I>
 void TrimRequest<I>::send_remove_objects() {
   I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.owner_lock.is_locked());
+  ceph_assert(image_ctx.owner_lock.is_locked());
 
   ldout(image_ctx.cct, 5) << this << " send_remove_objects: "
 			    << " delete_start=" << m_delete_start
@@ -270,13 +274,14 @@ void TrimRequest<I>::send_remove_objects() {
   AsyncObjectThrottle<I> *throttle = new AsyncObjectThrottle<I>(
     this, image_ctx, context_factory, ctx, &m_prog_ctx, m_delete_start,
     m_num_objects);
-  throttle->start_ops(image_ctx.concurrent_management_ops);
+  throttle->start_ops(
+    image_ctx.config.template get_val<uint64_t>("rbd_concurrent_management_ops"));
 }
 
 template<typename I>
 void TrimRequest<I>::send_post_trim() {
   I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.owner_lock.is_locked());
+  ceph_assert(image_ctx.owner_lock.is_locked());
 
   {
     RWLock::RLocker snap_locker(image_ctx.snap_lock);
@@ -286,12 +291,12 @@ void TrimRequest<I>::send_post_trim() {
                               << " num_objects=" << m_num_objects << dendl;
       m_state = STATE_POST_TRIM;
 
-      assert(image_ctx.exclusive_lock->is_lock_owner());
+      ceph_assert(image_ctx.exclusive_lock->is_lock_owner());
 
       RWLock::WLocker object_map_locker(image_ctx.object_map_lock);
       if (image_ctx.object_map->template aio_update<AsyncRequest<I> >(
             CEPH_NOSNAP, m_delete_start_min, m_num_objects, OBJECT_NONEXISTENT,
-            OBJECT_PENDING, {}, this)) {
+            OBJECT_PENDING, {}, false, this)) {
         return;
       }
     }
@@ -303,7 +308,7 @@ void TrimRequest<I>::send_post_trim() {
 template <typename I>
 void TrimRequest<I>::send_clean_boundary() {
   I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.owner_lock.is_locked());
+  ceph_assert(image_ctx.owner_lock.is_locked());
   CephContext *cct = image_ctx.cct;
   if (m_delete_off <= m_new_size) {
     send_finish(0);
@@ -311,8 +316,8 @@ void TrimRequest<I>::send_clean_boundary() {
   }
 
   // should have been canceled prior to releasing lock
-  assert(image_ctx.exclusive_lock == nullptr ||
-         image_ctx.exclusive_lock->is_lock_owner());
+  ceph_assert(image_ctx.exclusive_lock == nullptr ||
+              image_ctx.exclusive_lock->is_lock_owner());
   uint64_t delete_len = m_delete_off - m_new_size;
   ldout(image_ctx.cct, 5) << this << " send_clean_boundary: "
 			    << " delete_off=" << m_delete_off
@@ -338,17 +343,15 @@ void TrimRequest<I>::send_clean_boundary() {
     ldout(cct, 20) << " ex " << *p << dendl;
     Context *req_comp = new C_ContextCompletion(*completion);
 
-    io::ObjectRequest<I> *req;
     if (p->offset == 0) {
-      req = io::ObjectRequest<I>::create_trim(&image_ctx, p->oid.name,
-                                              p->objectno, snapc, true,
-                                              req_comp);
-    } else {
-      req = io::ObjectRequest<I>::create_truncate(&image_ctx, p->oid.name,
-                                                  p->objectno, p->offset, snapc,
-                                                  {}, req_comp);
+      // treat as a full object delete on the boundary
+      p->length = image_ctx.layout.object_size;
     }
-    req->send();
+
+    auto object_dispatch_spec = io::ObjectDispatchSpec::create_discard(
+      &image_ctx, io::OBJECT_DISPATCH_LAYER_NONE, p->oid.name, p->objectno,
+      p->offset, p->length, snapc, 0, 0, {}, req_comp);
+    object_dispatch_spec->send();
   }
   completion->finish_adding_requests();
 }

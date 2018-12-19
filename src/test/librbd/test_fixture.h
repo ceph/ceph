@@ -30,6 +30,7 @@ public:
   int snap_protect(librbd::ImageCtx &ictx, const std::string &snap_name);
 
   int flatten(librbd::ImageCtx &ictx, librbd::ProgressContext &prog_ctx);
+  int resize(librbd::ImageCtx *ictx, uint64_t size);
 
   int lock_image(librbd::ImageCtx &ictx, ClsLockType lock_type,
                  const std::string &cookie);
@@ -43,6 +44,7 @@ public:
   static uint64_t _image_number;
   static std::string _data_pool;
 
+  CephContext* m_cct = nullptr;
   librados::IoCtx m_ioctx;
   librbd::RBD m_rbd;
 

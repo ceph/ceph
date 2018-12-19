@@ -2,15 +2,11 @@ overrides:
   ceph:
     conf:
       client:
-        debug ms: 1
-        debug client: 20
         fuse set user groups: true
         fuse default permissions: false
-      mds:
-        debug ms: 1
-        debug mds: 20
 tasks:
 - workunit:
+    timeout: 6h
     clients:
       all:
         - suites/pjd.sh

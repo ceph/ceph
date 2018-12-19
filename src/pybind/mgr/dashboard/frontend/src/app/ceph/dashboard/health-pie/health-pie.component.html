@@ -1,0 +1,15 @@
+<div class="chart-container">
+  <canvas baseChart
+          #chartCanvas
+          [datasets]="chartConfig.dataset"
+          [chartType]="chartConfig.chartType"
+          [options]="chartConfig.options"
+          [labels]="chartConfig.labels"
+          [colors]="chartConfig.colors"
+          class="chart-canvas">
+  </canvas>
+  <div class="chartjs-tooltip"
+       #chartTooltip>
+    <table></table>
+  </div>
+</div>

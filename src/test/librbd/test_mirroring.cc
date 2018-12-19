@@ -75,6 +75,10 @@ public:
     ASSERT_EQ(0, image.mirror_image_get_status(&status, sizeof(status)));
     ASSERT_EQ(MIRROR_IMAGE_STATUS_STATE_UNKNOWN, status.state);
 
+    std::string instance_id;
+    ASSERT_EQ(mirror_state == RBD_MIRROR_IMAGE_ENABLED ? -ENOENT : -EINVAL,
+              image.mirror_image_get_instance_id(&instance_id));
+
     ASSERT_EQ(0, image.close());
     ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
     ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_DISABLED));
@@ -104,6 +108,10 @@ public:
     ASSERT_EQ(0, image.mirror_image_get_status(&status, sizeof(status)));
     ASSERT_EQ(MIRROR_IMAGE_STATUS_STATE_UNKNOWN, status.state);
 
+    std::string instance_id;
+    ASSERT_EQ(mirror_state == RBD_MIRROR_IMAGE_ENABLED ? -ENOENT : -EINVAL,
+              image.mirror_image_get_instance_id(&instance_id));
+
     ASSERT_EQ(0, image.close());
     ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
     ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_DISABLED));
@@ -122,6 +130,11 @@ public:
     ASSERT_EQ(images.size(), states_count);
 
     *images_count = images.size();
+
+    std::map<std::string, std::string> instance_ids;
+    ASSERT_EQ(0, m_rbd.mirror_image_instance_id_list(m_ioctx, "", 4096,
+                                                     &instance_ids));
+    ASSERT_TRUE(instance_ids.empty());
   }
 
   void check_mirroring_on_create(uint64_t features,
@@ -263,6 +276,45 @@ public:
     ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_DISABLED));
   }
 
+  void check_trash_move_restore(rbd_mirror_mode_t mirror_mode,
+                                bool enable_mirroring) {
+
+    ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, mirror_mode));
+
+    int order = 20;
+    uint64_t features = RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_JOURNALING;
+    ASSERT_EQ(0, m_rbd.create2(m_ioctx, image_name.c_str(), 4096, features,
+                               &order));
+    librbd::Image image;
+    ASSERT_EQ(0, m_rbd.open(m_ioctx, image, image_name.c_str()));
+
+    if (enable_mirroring) {
+      ASSERT_EQ(0, image.mirror_image_enable());
+    }
+
+    std::string image_id;
+    ASSERT_EQ(0, image.get_id(&image_id));
+
+    ASSERT_EQ(0, m_rbd.trash_move(m_ioctx, image_name.c_str(), 100));
+
+    librbd::mirror_image_info_t mirror_image;
+    ASSERT_EQ(0, image.mirror_image_get_info(&mirror_image, sizeof(mirror_image)));
+    ASSERT_EQ(mirror_image.state, RBD_MIRROR_IMAGE_DISABLED);
+
+    ASSERT_EQ(0, m_rbd.trash_restore(m_ioctx, image_id.c_str(), ""));
+
+    ASSERT_EQ(0, image.mirror_image_get_info(&mirror_image, sizeof(mirror_image)));
+    if (mirror_mode == RBD_MIRROR_MODE_POOL) {
+      ASSERT_EQ(mirror_image.state, RBD_MIRROR_IMAGE_ENABLED);
+    } else {
+      ASSERT_EQ(mirror_image.state, RBD_MIRROR_IMAGE_DISABLED);
+    }
+
+    image.close();
+    ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
+    ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_DISABLED));
+  }
+
   void setup_mirror_peer(librados::IoCtx &io_ctx, librbd::Image &image) {
     ASSERT_EQ(0, image.snap_create("sync-point-snap"));
 
@@ -279,7 +331,7 @@ public:
     ASSERT_EQ(-ENOENT, init_ctx.wait());
 
     bufferlist client_data_bl;
-    ::encode(client_data, client_data_bl);
+    encode(client_data, client_data_bl);
     ASSERT_EQ(0, journaler.register_client(client_data_bl));
 
     C_SaferCond shut_down_ctx;
@@ -619,6 +671,18 @@ TEST_F(TestMirroring, RemoveImage_With_MirrorImageDemoted) {
                      true, true);
 }
 
+TEST_F(TestMirroring, TrashMoveRestore_PoolMode) {
+  check_trash_move_restore(RBD_MIRROR_MODE_POOL, false);
+}
+
+TEST_F(TestMirroring, TrashMoveRestore_ImageMode_MirroringDisabled) {
+  check_trash_move_restore(RBD_MIRROR_MODE_IMAGE, false);
+}
+
+TEST_F(TestMirroring, TrashMoveRestore_ImageMode_MirroringEnabled) {
+  check_trash_move_restore(RBD_MIRROR_MODE_IMAGE, true);
+}
+
 TEST_F(TestMirroring, MirrorStatusList) {
   std::vector<uint64_t>
       features_vec(5, RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_JOURNALING);
@@ -660,7 +724,7 @@ TEST_F(TestMirroring, RemoveBootstrapped)
   // simulate the image is open by rbd-mirror bootstrap
   uint64_t handle;
   struct MirrorWatcher : public librados::WatchCtx2 {
-    MirrorWatcher(librados::IoCtx &ioctx) : m_ioctx(ioctx) {
+    explicit MirrorWatcher(librados::IoCtx &ioctx) : m_ioctx(ioctx) {
     }
     void handle_notify(uint64_t notify_id, uint64_t cookie,
                                uint64_t notifier_id, bufferlist& bl) override {

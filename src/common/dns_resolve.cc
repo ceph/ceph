@@ -20,7 +20,6 @@
 
 #define dout_subsys ceph_subsys_
 
-using namespace std;
 
 namespace ceph {
 
@@ -65,15 +64,15 @@ DNSResolver::~DNSResolver()
 #ifdef HAVE_RES_NQUERY
 int DNSResolver::get_state(CephContext *cct, res_state *ps)
 {
-  lock.Lock();
+  lock.lock();
   if (!states.empty()) {
     res_state s = states.front();
     states.pop_front();
-    lock.Unlock();
+    lock.unlock();
     *ps = s;
     return 0;
   }
-  lock.Unlock();
+  lock.unlock();
   struct __res_state *s = new struct __res_state;
   s->options = 0;
   if (res_ninit(s) < 0) {
@@ -87,7 +86,7 @@ int DNSResolver::get_state(CephContext *cct, res_state *ps)
 
 void DNSResolver::put_state(res_state s)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   states.push_back(s);
 }
 #endif
@@ -123,7 +122,7 @@ int DNSResolver::resolve_cname(CephContext *cct, const string& hostname,
 #else
   {
 # ifndef HAVE_THREAD_SAFE_RES_QUERY
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
 # endif
     len = resolv_h->res_query(origname, ns_c_in, ns_t_cname, buf, sizeof(buf));
   }
@@ -197,6 +196,9 @@ int DNSResolver::resolve_ip_addr(CephContext *cct, const string& hostname,
   if (r < 0) {
     return r;
   }
+  auto put_state = make_scope_guard([res, this] {
+      this->put_state(res);
+    });
   return this->resolve_ip_addr(cct, &res, hostname, addr);
 #else
   return this->resolve_ip_addr(cct, NULL, hostname, addr);
@@ -209,16 +211,17 @@ int DNSResolver::resolve_ip_addr(CephContext *cct, res_state *res, const string&
 
   u_char nsbuf[NS_PACKETSZ];
   int len;
-
+  int family = cct->_conf->ms_bind_ipv6 ? AF_INET6 : AF_INET;
+  int type = cct->_conf->ms_bind_ipv6 ? ns_t_aaaa : ns_t_a;
 
 #ifdef HAVE_RES_NQUERY
-  len = resolv_h->res_nquery(*res, hostname.c_str(), ns_c_in, ns_t_a, nsbuf, sizeof(nsbuf));
+  len = resolv_h->res_nquery(*res, hostname.c_str(), ns_c_in, type, nsbuf, sizeof(nsbuf));
 #else
   {
 # ifndef HAVE_THREAD_SAFE_RES_QUERY
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
 # endif
-    len = resolv_h->res_query(hostname.c_str(), ns_c_in, ns_t_a, nsbuf, sizeof(nsbuf));
+    len = resolv_h->res_query(hostname.c_str(), ns_c_in, type, nsbuf, sizeof(nsbuf));
   }
 #endif
   if (len < 0) {
@@ -247,7 +250,7 @@ int DNSResolver::resolve_ip_addr(CephContext *cct, res_state *res, const string&
 
   char addr_buf[64];
   memset(addr_buf, 0, sizeof(addr_buf));
-  inet_ntop(AF_INET, ns_rr_rdata(rr), addr_buf, sizeof(addr_buf));
+  inet_ntop(family, ns_rr_rdata(rr), addr_buf, sizeof(addr_buf));
   if (!addr->parse(addr_buf)) {
       lderr(cct) << "failed to parse address '" << (const char *)ns_rr_rdata(rr) 
         << "'" << dendl;
@@ -292,7 +295,7 @@ int DNSResolver::resolve_srv_hosts(CephContext *cct, const string& service_name,
 #else
   {
 # ifndef HAVE_THREAD_SAFE_RES_QUERY
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
 # endif
     len = resolv_h->res_search(query_str.c_str(), ns_c_in, ns_t_srv, nsbuf,
         sizeof(nsbuf));

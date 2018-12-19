@@ -15,6 +15,8 @@
 #ifndef CEPH_MDS_SNAP_H
 #define CEPH_MDS_SNAP_H
 
+#include <string_view>
+
 #include "mdstypes.h"
 #include "common/snap_types.h"
 
@@ -27,14 +29,14 @@ struct SnapInfo {
   utime_t stamp;
   string name;
 
-  string long_name; ///< cached _$ino_$name
+  mutable string long_name; ///< cached _$ino_$name
   
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<SnapInfo*>& ls);
 
-  const string& get_long_name();
+  std::string_view get_long_name() const;
 };
 WRITE_CLASS_ENCODER(SnapInfo)
 
@@ -57,7 +59,7 @@ struct snaplink_t {
   snapid_t first;
 
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<snaplink_t*>& ls);
 };
@@ -75,15 +77,25 @@ struct sr_t {
   snapid_t current_parent_since;
   map<snapid_t, SnapInfo> snaps;
   map<snapid_t, snaplink_t> past_parents;  // key is "last" (or NOSNAP)
+  set<snapid_t> past_parent_snaps;
+
+  __u32 flags;
+  enum {
+    PARENT_GLOBAL = 1 << 0,
+  };
+
+  void mark_parent_global() { flags |= PARENT_GLOBAL; }
+  void clear_parent_global() { flags &= ~PARENT_GLOBAL; }
+  bool is_parent_global() const { return flags & PARENT_GLOBAL; }
 
   sr_t()
     : seq(0), created(0),
       last_created(0), last_destroyed(0),
-      current_parent_since(1)
+      current_parent_since(1), flags(0)
   {}
 
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<sr_t*>& ls);
 };

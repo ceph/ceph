@@ -13,15 +13,7 @@
 
 #ifndef OPREQUEST_H_
 #define OPREQUEST_H_
-#include <sstream>
-#include <stdint.h>
-#include <vector>
 
-#include <include/utime.h>
-#include "common/Mutex.h"
-#include "include/xlist.h"
-#include "msg/Message.h"
-#include "include/memory.h"
 #include "osd/osd_types.h"
 #include "common/TrackedOp.h"
 
@@ -35,15 +27,15 @@ struct OpRequest : public TrackedOp {
   // rmw flags
   int rmw_flags;
 
-  bool check_rmw(int flag);
-  bool may_read();
-  bool may_write();
-  bool may_cache();
-  bool rwordered_forced();
-  bool rwordered();
+  bool check_rmw(int flag) const ;
+  bool may_read() const;
+  bool may_write() const;
+  bool may_cache() const;
+  bool rwordered_forced() const;
+  bool rwordered() const;
   bool includes_pg_op();
-  bool need_read_cap();
-  bool need_write_cap();
+  bool need_read_cap() const;
+  bool need_write_cap() const;
   bool need_promote();
   bool need_skip_handle_cache();
   bool need_skip_promote();
@@ -59,17 +51,20 @@ struct OpRequest : public TrackedOp {
   void set_force_rwordered();
 
   struct ClassInfo {
-    ClassInfo(const std::string& name, bool read, bool write,
-        bool whitelisted) :
-      name(name), read(read), write(write), whitelisted(whitelisted)
+    ClassInfo(std::string&& class_name, std::string&& method_name,
+              bool read, bool write, bool whitelisted) :
+      class_name(std::move(class_name)), method_name(std::move(method_name)),
+      read(read), write(write), whitelisted(whitelisted)
     {}
-    const std::string name;
+    const std::string class_name;
+    const std::string method_name;
     const bool read, write, whitelisted;
   };
 
-  void add_class(const std::string& name, bool read, bool write,
-      bool whitelisted) {
-    classes_.emplace_back(name, read, write, whitelisted);
+  void add_class(std::string&& class_name, std::string&& method_name,
+                 bool read, bool write, bool whitelisted) {
+    classes_.emplace_back(std::move(class_name), std::move(method_name),
+                          read, write, whitelisted);
   }
 
   std::vector<ClassInfo> classes() const {

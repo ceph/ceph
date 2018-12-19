@@ -6,9 +6,12 @@
 
 #include "MOSDFastDispatchOp.h"
 
-struct MOSDPGRecoveryDeleteReply : public MOSDFastDispatchOp {
-  static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 1;
+class MOSDPGRecoveryDeleteReply : public MessageInstance<MOSDPGRecoveryDeleteReply, MOSDFastDispatchOp> {
+public:
+  friend factory;
+
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 1;
 
   pg_shard_t from;
   spg_t pgid;
@@ -26,27 +29,28 @@ struct MOSDPGRecoveryDeleteReply : public MOSDFastDispatchOp {
   }
 
   MOSDPGRecoveryDeleteReply()
-    : MOSDFastDispatchOp(MSG_OSD_PG_RECOVERY_DELETE_REPLY, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_PG_RECOVERY_DELETE_REPLY, HEAD_VERSION, COMPAT_VERSION),
       map_epoch(0), min_epoch(0)
     {}
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(pgid.pgid, p);
-    ::decode(map_epoch, p);
-    ::decode(min_epoch, p);
-    ::decode(objects, p);
-    ::decode(pgid.shard, p);
-    ::decode(from, p);
+    auto p = payload.cbegin();
+    decode(pgid.pgid, p);
+    decode(map_epoch, p);
+    decode(min_epoch, p);
+    decode(objects, p);
+    decode(pgid.shard, p);
+    decode(from, p);
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(pgid.pgid, payload);
-    ::encode(map_epoch, payload);
-    ::encode(min_epoch, payload);
-    ::encode(objects, payload);
-    ::encode(pgid.shard, payload);
-    ::encode(from, payload);
+    using ceph::encode;
+    encode(pgid.pgid, payload);
+    encode(map_epoch, payload);
+    encode(min_epoch, payload);
+    encode(objects, payload);
+    encode(pgid.shard, payload);
+    encode(from, payload);
   }
 
   void print(ostream& out) const override {

@@ -54,11 +54,10 @@ int ErasureCodePluginJerasure::factory(const std::string& directory,
     } else if (t == "liber8tion") {
       interface = new ErasureCodeJerasureLiber8tion();
     } else {
-      derr << "technique=" << t << " is not a valid coding technique. "
+      *ss << "technique=" << t << " is not a valid coding technique. "
 	   << " Choose one of the following: "
 	   << "reed_sol_van, reed_sol_r6_op, cauchy_orig, "
-	   << "cauchy_good, liberation, blaum_roth, liber8tion"
-	   << dendl;
+	   << "cauchy_good, liberation, blaum_roth, liber8tion";
       return -ENOENT;
     }
     dout(20) << __func__ << ": " << profile << dendl;
@@ -70,8 +69,6 @@ int ErasureCodePluginJerasure::factory(const std::string& directory,
     *erasure_code = ErasureCodeInterfaceRef(interface);
     return 0;
 }
-
-#ifndef BUILDING_FOR_EMBEDDED
 
 const char *__erasure_code_version() { return CEPH_GIT_NICE_VER; }
 
@@ -85,5 +82,3 @@ int __erasure_code_init(char *plugin_name, char *directory)
   }
   return instance.add(plugin_name, new ErasureCodePluginJerasure());
 }
-
-#endif

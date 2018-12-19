@@ -45,11 +45,18 @@ public:
     return !((*this) == rhs);
   }
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bp);
+  void decode(bufferlist::const_iterator &bp);
 };
 WRITE_CLASS_ENCODER(ContDesc)
 
 std::ostream &operator<<(std::ostream &out, const ContDesc &rhs);
+
+class ChunkDesc {
+public:
+  uint32_t offset;
+  uint32_t length;
+  std::string oid;
+};
 
 class ContentsGenerator {
 public:
@@ -256,7 +263,7 @@ public:
     for (iterator i = get_iterator(in); !i.end(); ++i) {
       bl.append(*i);
     }
-    assert(bl.length() < big_max_len);
+    ceph_assert(bl.length() < big_max_len);
     return bl;
   }
 };
@@ -307,7 +314,7 @@ public:
   ObjectDesc(const ContDesc &init, ContentsGenerator *cont_gen)
     : exists(false), dirty(false),
       version(0) {
-    layers.push_front(std::pair<ceph::shared_ptr<ContentsGenerator>, ContDesc>(ceph::shared_ptr<ContentsGenerator>(cont_gen), init));
+    layers.push_front(std::pair<std::shared_ptr<ContentsGenerator>, ContDesc>(std::shared_ptr<ContentsGenerator>(cont_gen), init));
   }
 
   class iterator {
@@ -322,12 +329,12 @@ public:
 
     public:
       ContDesc cont;
-      ceph::shared_ptr<ContentsGenerator> gen;
+      std::shared_ptr<ContentsGenerator> gen;
       ContentsGenerator::iterator iter;
 
       ContState(
-	ContDesc _cont,
-	ceph::shared_ptr<ContentsGenerator> _gen,
+	const ContDesc &_cont,
+	std::shared_ptr<ContentsGenerator> _gen,
 	ContentsGenerator::iterator _iter)
 	: size(_gen->get_length(_cont)), cont(_cont), gen(_gen), iter(_iter) {
 	gen->get_ranges(cont, ranges);
@@ -346,12 +353,12 @@ public:
       }
 
       uint64_t next(uint64_t pos) {
-	assert(!covers(pos));
+	ceph_assert(!covers(pos));
 	return ranges.starts_after(pos) ? ranges.start_after(pos) : size;
       }
 
       uint64_t valid_till(uint64_t pos) {
-	assert(covers(pos));
+	ceph_assert(covers(pos));
 	return ranges.contains(pos) ?
 	  ranges.end_after(pos) :
 	  std::numeric_limits<uint64_t>::max();
@@ -380,7 +387,7 @@ public:
 
     void adjust_stack();
     iterator &operator++() {
-      assert(cur_valid_till >= pos);
+      ceph_assert(cur_valid_till >= pos);
       ++pos;
       if (pos >= cur_valid_till) {
 	adjust_stack();
@@ -405,22 +412,22 @@ public:
 	ceph_abort();
       }
       while (pos < _pos) {
-	assert(cur_valid_till >= pos);
+	ceph_assert(cur_valid_till >= pos);
 	uint64_t next = std::min(_pos - pos, cur_valid_till - pos);
 	pos += next;
 
 	if (pos >= cur_valid_till) {
-	  assert(pos == cur_valid_till);
+	  ceph_assert(pos == cur_valid_till);
 	  adjust_stack();
 	}
       }
-      assert(pos == _pos);
+      ceph_assert(pos == _pos);
     }
 
     bufferlist gen_bl_advance(uint64_t s) {
       bufferlist ret;
       while (s > 0) {
-	assert(cur_valid_till >= pos);
+	ceph_assert(cur_valid_till >= pos);
 	uint64_t next = std::min(s, cur_valid_till - pos);
 	if (current != layers.end() && pos < size) {
 	  ret.append(current->iter.gen_bl_advance(next));
@@ -429,11 +436,11 @@ public:
 	}
 
 	pos += next;
-	assert(next <= s);
+	ceph_assert(next <= s);
 	s -= next;
 
 	if (pos >= cur_valid_till) {
-	  assert(cur_valid_till == pos);
+	  ceph_assert(cur_valid_till == pos);
 	  adjust_stack();
 	}
       }
@@ -443,7 +450,7 @@ public:
     bool check_bl_advance(bufferlist &bl, uint64_t *error_at = nullptr) {
       uint64_t off = 0;
       while (off < bl.length()) {
-	assert(cur_valid_till >= pos);
+	ceph_assert(cur_valid_till >= pos);
 	uint64_t next = std::min(bl.length() - off, cur_valid_till - pos);
 
 	bufferlist to_check;
@@ -467,14 +474,14 @@ public:
 
 	pos += next;
 	off += next;
-	assert(off <= bl.length());
+	ceph_assert(off <= bl.length());
 
 	if (pos >= cur_valid_till) {
-	  assert(cur_valid_till == pos);
+	  ceph_assert(cur_valid_till == pos);
 	  adjust_stack();
 	}
       }
-      assert(off == bl.length());
+      ceph_assert(off == bl.length());
       return true;
     }
   };
@@ -507,8 +514,9 @@ public:
 
   uint64_t version;
   std::string redirect_target;
+  std::map<uint64_t, ChunkDesc> chunk_info;
 private:
-  std::list<std::pair<ceph::shared_ptr<ContentsGenerator>, ContDesc> > layers;
+  std::list<std::pair<std::shared_ptr<ContentsGenerator>, ContDesc> > layers;
 };
 
 #endif

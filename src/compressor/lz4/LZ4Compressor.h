@@ -20,15 +20,27 @@
 #include "compressor/Compressor.h"
 #include "include/buffer.h"
 #include "include/encoding.h"
+#include "common/config.h"
 #include "common/Tub.h"
 
 
 class LZ4Compressor : public Compressor {
  public:
-  LZ4Compressor() : Compressor(COMP_ALG_LZ4, "lz4") {}
+  LZ4Compressor(CephContext* cct) : Compressor(COMP_ALG_LZ4, "lz4") {
+#ifdef HAVE_QATZIP
+    if (cct->_conf->qat_compressor_enabled && qat_accel.init("lz4"))
+      qat_enabled = true;
+    else
+      qat_enabled = false;
+#endif
+  }
 
   int compress(const bufferlist &src, bufferlist &dst) override {
-    bufferptr outptr = buffer::create_page_aligned(
+#ifdef HAVE_QATZIP
+    if (qat_enabled)
+      return qat_accel.compress(src, dst);
+#endif
+    bufferptr outptr = buffer::create_small_page_aligned(
       LZ4_compressBound(src.length()));
     LZ4_stream_t lz4_stream;
     LZ4_resetStream(&lz4_stream);
@@ -38,43 +50,49 @@ class LZ4Compressor : public Compressor {
     int pos = 0;
     const char *data;
     unsigned num = src.get_num_buffers();
-    uint32_t origin_len;
-    int compressed_len;
-    ::encode((uint32_t)num, dst);
+    encode((uint32_t)num, dst);
     while (left) {
-      origin_len = p.get_ptr_and_advance(left, &data);
-      compressed_len = LZ4_compress_fast_continue(
+      uint32_t origin_len = p.get_ptr_and_advance(left, &data);
+      int compressed_len = LZ4_compress_fast_continue(
         &lz4_stream, data, outptr.c_str()+pos, origin_len,
         outptr.length()-pos, 1);
       if (compressed_len <= 0)
         return -1;
       pos += compressed_len;
       left -= origin_len;
-      ::encode(origin_len, dst);
-      ::encode((uint32_t)compressed_len, dst);
+      encode(origin_len, dst);
+      encode((uint32_t)compressed_len, dst);
     }
-    assert(p.end());
+    ceph_assert(p.end());
 
     dst.append(outptr, 0, pos);
     return 0;
   }
 
   int decompress(const bufferlist &src, bufferlist &dst) override {
-    bufferlist::iterator i = const_cast<bufferlist&>(src).begin();
+#ifdef HAVE_QATZIP
+    if (qat_enabled)
+      return qat_accel.decompress(src, dst);
+#endif
+    auto i = std::cbegin(src);
     return decompress(i, src.length(), dst);
   }
 
-  int decompress(bufferlist::iterator &p,
+  int decompress(bufferlist::const_iterator &p,
 		 size_t compressed_len,
 		 bufferlist &dst) override {
+#ifdef HAVE_QATZIP
+    if (qat_enabled)
+      return qat_accel.decompress(p, compressed_len, dst);
+#endif
     uint32_t count;
     std::vector<std::pair<uint32_t, uint32_t> > compressed_pairs;
-    ::decode(count, p);
+    decode(count, p);
     compressed_pairs.resize(count);
     uint32_t total_origin = 0;
     for (unsigned i = 0; i < count; ++i) {
-      ::decode(compressed_pairs[i].first, p);
-      ::decode(compressed_pairs[i].second, p);
+      decode(compressed_pairs[i].first, p);
+      decode(compressed_pairs[i].second, p);
       total_origin += compressed_pairs[i].first;
     }
     compressed_len -= (sizeof(uint32_t) + sizeof(uint32_t) * count * 2);
@@ -102,7 +120,7 @@ class LZ4Compressor : public Compressor {
         c_out += compressed_pairs[i].first;
       } else if (r < 0) {
         return -1;
-      } else if (r != (int)compressed_pairs[i].first) {
+      } else {
         return -2;
       }
     }

@@ -20,10 +20,12 @@
 #include "msg/Message.h"
 
 
-class MOSDPGRemove : public Message {
-
-  static const int HEAD_VERSION = 3;
-  static const int COMPAT_VERSION = 3;
+class MOSDPGRemove : public MessageInstance<MOSDPGRemove> {
+public:
+  friend factory;
+private:
+  static constexpr int HEAD_VERSION = 3;
+  static constexpr int COMPAT_VERSION = 3;
 
   epoch_t epoch = 0;
 
@@ -33,9 +35,9 @@ class MOSDPGRemove : public Message {
   epoch_t get_epoch() const { return epoch; }
 
   MOSDPGRemove() :
-    Message(MSG_OSD_PG_REMOVE, HEAD_VERSION, COMPAT_VERSION) {}
+    MessageInstance(MSG_OSD_PG_REMOVE, HEAD_VERSION, COMPAT_VERSION) {}
   MOSDPGRemove(epoch_t e, vector<spg_t>& l) :
-    Message(MSG_OSD_PG_REMOVE, HEAD_VERSION, COMPAT_VERSION) {
+    MessageInstance(MSG_OSD_PG_REMOVE, HEAD_VERSION, COMPAT_VERSION) {
     this->epoch = e;
     pg_list.swap(l);
   }
@@ -46,13 +48,14 @@ public:
   const char *get_type_name() const override { return "PGrm"; }
 
   void encode_payload(uint64_t features) override {
-    ::encode(epoch, payload);
-    ::encode(pg_list, payload);
+    using ceph::encode;
+    encode(epoch, payload);
+    encode(pg_list, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(epoch, p);
-    ::decode(pg_list, p);
+    auto p = payload.cbegin();
+    decode(epoch, p);
+    decode(pg_list, p);
   }
   void print(ostream& out) const override {
     out << "osd pg remove(" << "epoch " << epoch << "; ";

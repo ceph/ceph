@@ -24,9 +24,13 @@
 #include <mutex>
 #include <atomic>
 #include <typeinfo>
+#include <boost/container/flat_set.hpp>
+#include <boost/container/flat_map.hpp>
 
 #include <common/Formatter.h>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
+#include "include/compact_map.h"
+#include "include/compact_set.h"
 
 
 /*
@@ -397,6 +401,17 @@ public:
     using map = std::map<k, v, cmp,					\
 			 pool_allocator<std::pair<const k,v>>>;		\
                                                                         \
+    template<typename k,typename v, typename cmp = std::less<k> >       \
+    using compact_map = compact_map<k, v, cmp,                          \
+			 pool_allocator<std::pair<const k,v>>>;         \
+                                                                        \
+    template<typename k,typename v, typename cmp = std::less<k> >       \
+    using compact_multimap = compact_multimap<k, v, cmp,                \
+			 pool_allocator<std::pair<const k,v>>>;         \
+                                                                        \
+    template<typename k, typename cmp = std::less<k> >                  \
+    using compact_set = compact_set<k, cmp, pool_allocator<k>>;         \
+                                                                        \
     template<typename k,typename v, typename cmp = std::less<k> >	\
     using multimap = std::multimap<k,v,cmp,				\
 				   pool_allocator<std::pair<const k,	\
@@ -404,6 +419,13 @@ public:
                                                                         \
     template<typename k, typename cmp = std::less<k> >			\
     using set = std::set<k,cmp,pool_allocator<k>>;			\
+                                                                        \
+    template<typename k, typename cmp = std::less<k> >			\
+    using flat_set = boost::container::flat_set<k,cmp,pool_allocator<k>>; \
+									\
+    template<typename k, typename v, typename cmp = std::less<k> >	\
+    using flat_map = boost::container::flat_map<k,v,cmp,		\
+						pool_allocator<std::pair<k,v>>>; \
                                                                         \
     template<typename v>						\
     using list = std::list<v,pool_allocator<v>>;			\
@@ -492,10 +514,10 @@ bool operator!=(const std::vector<T, mempool::pool_allocator<pool_index, T>>& lh
 #define MEMPOOL_CLASS_HELPERS()						\
   void *operator new(size_t size);					\
   void *operator new[](size_t size) noexcept {				\
-    assert(0 == "no array new");					\
+    ceph_abort_msg("no array new");					\
     return nullptr; }							\
   void  operator delete(void *);					\
-  void  operator delete[](void *) { assert(0 == "no array delete"); }
+  void  operator delete[](void *) { ceph_abort_msg("no array delete"); }
 
 
 // Use this in some particular .cc file to match each class with a

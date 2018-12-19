@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #include "rgw_sync_module_es.h"
 #include "rgw_sync_module_es_rest.h"
 #include "rgw_es_query.h"
@@ -135,17 +138,16 @@ public:
     es_module = static_cast<RGWElasticSyncModuleInstance *>(sync_module_ref.get());
   }
 
-  int verify_permission() {
+  int verify_permission() override {
     return 0;
   }
   virtual int get_params() = 0;
-  void pre_exec();
-  void execute();
+  void pre_exec() override;
+  void execute() override;
 
-  virtual void send_response() = 0;
-  virtual const string name() { return "metadata_search"; }
-  virtual RGWOpType get_type() { return RGW_OP_METADATA_SEARCH; }
-  virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
+  const char* name() const override { return "metadata_search"; }
+  virtual RGWOpType get_type() override { return RGW_OP_METADATA_SEARCH; }
+  virtual uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
 
 void RGWMetadataSearchOp::pre_exec()
@@ -263,7 +265,7 @@ void RGWMetadataSearchOp::execute()
 
 class RGWMetadataSearch_ObjStore_S3 : public RGWMetadataSearchOp {
 public:
-  RGWMetadataSearch_ObjStore_S3(const RGWSyncModuleInstanceRef& _sync_module) : RGWMetadataSearchOp(_sync_module) {
+  explicit RGWMetadataSearch_ObjStore_S3(const RGWSyncModuleInstanceRef& _sync_module) : RGWMetadataSearchOp(_sync_module) {
     custom_prefix = "x-amz-meta-";
   }
 
@@ -366,7 +368,7 @@ public:
 
 class RGWHandler_REST_MDSearch_S3 : public RGWHandler_REST_S3 {
 protected:
-  RGWOp *op_get() {
+  RGWOp *op_get() override {
     if (s->info.args.exists("query")) {
       return new RGWMetadataSearch_ObjStore_S3(store->get_sync_module());
     }
@@ -376,14 +378,14 @@ protected:
     }
     return nullptr;
   }
-  RGWOp *op_head() {
+  RGWOp *op_head() override {
     return nullptr;
   }
-  RGWOp *op_post() {
+  RGWOp *op_post() override {
     return nullptr;
   }
 public:
-  RGWHandler_REST_MDSearch_S3(const rgw::auth::StrategyRegistry& auth_registry) : RGWHandler_REST_S3(auth_registry) {}
+  explicit RGWHandler_REST_MDSearch_S3(const rgw::auth::StrategyRegistry& auth_registry) : RGWHandler_REST_S3(auth_registry) {}
   virtual ~RGWHandler_REST_MDSearch_S3() {}
 };
 

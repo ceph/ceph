@@ -87,7 +87,7 @@ void PromoteRequest<I>::allocate_tag() {
   tag_data.predecessor = predecessor;
 
   bufferlist tag_bl;
-  ::encode(tag_data, tag_bl);
+  encode(tag_data, tag_bl);
 
   Context *ctx = create_context_callback<
     PromoteRequest<I>, &PromoteRequest<I>::handle_allocate_tag>(this);
@@ -117,9 +117,9 @@ void PromoteRequest<I>::append_event() {
 
   EventEntry event_entry{DemotePromoteEvent{}, {}};
   bufferlist event_entry_bl;
-  ::encode(event_entry, event_entry_bl);
+  encode(event_entry, event_entry_bl);
 
-  m_journaler->start_append(0, 0, 0);
+  m_journaler->start_append(0, 0, 0, 0);
   m_future = m_journaler->append(m_tag_tid, event_entry_bl);
 
   auto ctx = create_context_callback<

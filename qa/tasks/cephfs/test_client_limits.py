@@ -134,10 +134,10 @@ class TestClientLimits(CephFSTestCase):
         # Client B tries to stat the file that client A created
         rproc = self.mount_b.write_background("file1")
 
-        # After mds_revoke_cap_timeout, we should see a health warning (extra lag from
+        # After session_timeout, we should see a health warning (extra lag from
         # MDS beacon period)
-        mds_revoke_cap_timeout = float(self.fs.get_config("mds_revoke_cap_timeout"))
-        self.wait_for_health("MDS_CLIENT_LATE_RELEASE", mds_revoke_cap_timeout + 10)
+        session_timeout = self.fs.get_var("session_timeout")
+        self.wait_for_health("MDS_CLIENT_LATE_RELEASE", session_timeout + 10)
 
         # Client B should still be stuck
         self.assertFalse(rproc.finished)

@@ -23,7 +23,6 @@
  */
 
 #include <map>
-using namespace std;
 
 //typedef int T;
 
@@ -142,12 +141,12 @@ public:
   // ...
   bool contains(T val) {
     if (theset.get_range_for(val) == theset.ranges.end()) return false;
-    assert(!empty());
+    ceph_assert(!empty());
     return true;
   }
   
   void insert(T val) {
-    assert(!contains(val));
+    ceph_assert(!contains(val));
 
     map_iterator left = theset.get_range_for(val-1);
     map_iterator right = theset.get_range_for(val+1);
@@ -188,24 +187,24 @@ public:
 
   bool empty() {
     if (theset.ranges.empty()) {
-      assert(_size == 0);
+      ceph_assert(_size == 0);
       return true;
     }
-    assert(_size>0);
+    ceph_assert(_size>0);
     return false;
   }
 
   
   T first() {
-    assert(!empty());
+    ceph_assert(!empty());
     map_iterator it = theset.ranges.begin();
     return it->first;
   }
   
   void erase(T val) {
-    assert(contains(val));
+    ceph_assert(contains(val));
     map_iterator it = theset.get_range_for(val);
-    assert(it != theset.ranges.end());
+    ceph_assert(it != theset.ranges.end());
     
     // entire range
     if (val == it->first && val == it->second) {

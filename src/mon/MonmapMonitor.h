@@ -22,8 +22,6 @@
 #include <map>
 #include <set>
 
-using namespace std;
-
 #include "include/types.h"
 #include "msg/Messenger.h"
 
@@ -31,7 +29,6 @@ using namespace std;
 #include "MonMap.h"
 #include "MonitorDBStore.h"
 
-class MMonGetMap;
 class MMonMap;
 class MMonCommand;
 class MMonJoin;
@@ -80,8 +77,6 @@ class MonmapMonitor : public PaxosService {
 
 private:
   void check_subs();
-
-private:
   bufferlist monmap_bl;
 };
 

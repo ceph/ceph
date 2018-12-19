@@ -23,10 +23,12 @@ namespace librados {
 class TestMemCluster : public TestCluster {
 public:
   typedef std::map<std::string, bufferlist> OMap;
-  typedef std::map<std::string, OMap> FileOMaps;
-  typedef std::map<std::string, bufferlist> FileTMaps;
+  typedef std::map<ObjectLocator, OMap> FileOMaps;
+  typedef std::map<ObjectLocator, bufferlist> FileTMaps;
   typedef std::map<std::string, bufferlist> XAttrs;
-  typedef std::map<std::string, XAttrs> FileXAttrs;
+  typedef std::map<ObjectLocator, XAttrs> FileXAttrs;
+  typedef std::set<ObjectHandler*> ObjectHandlers;
+  typedef std::map<ObjectLocator, ObjectHandlers> FileHandlers;
 
   struct File {
     File();
@@ -45,7 +47,7 @@ public:
   typedef boost::shared_ptr<File> SharedFile;
 
   typedef std::list<SharedFile> FileSnapshots;
-  typedef std::map<std::string, FileSnapshots> Files;
+  typedef std::map<ObjectLocator, FileSnapshots> Files;
 
   typedef std::set<uint64_t> SnapSeqs;
   struct Pool : public RefCountedObject {
@@ -61,12 +63,18 @@ public:
     FileOMaps file_omaps;
     FileTMaps file_tmaps;
     FileXAttrs file_xattrs;
+    FileHandlers file_handlers;
   };
 
   TestMemCluster();
   ~TestMemCluster() override;
 
   TestRadosClient *create_rados_client(CephContext *cct) override;
+
+  int register_object_handler(int64_t pool_id, const ObjectLocator& locator,
+                              ObjectHandler* object_handler) override;
+  void unregister_object_handler(int64_t pool_id, const ObjectLocator& locator,
+                                 ObjectHandler* object_handler) override;
 
   int pool_create(const std::string &pool_name);
   int pool_delete(const std::string &pool_name);
@@ -84,8 +92,8 @@ public:
   bool is_blacklisted(uint32_t nonce) const;
   void blacklist(uint32_t nonce);
 
-  void transaction_start(const std::string &oid);
-  void transaction_finish(const std::string &oid);
+  void transaction_start(const ObjectLocator& locator);
+  void transaction_finish(const ObjectLocator& locator);
 
 private:
 
@@ -103,7 +111,9 @@ private:
   Blacklist m_blacklist;
 
   Cond m_transaction_cond;
-  std::set<std::string> m_transactions;
+  std::set<ObjectLocator> m_transactions;
+
+  Pool *get_pool(const Mutex& lock, int64_t pool_id);
 
 };
 

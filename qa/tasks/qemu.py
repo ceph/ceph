@@ -7,12 +7,15 @@ import contextlib
 import logging
 import os
 import yaml
+import time
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
 from tasks import rbd
 from teuthology.orchestra import run
 from teuthology.config import config as teuth_config
+
+from util.workunit import get_refspec_after_overrides
 
 log = logging.getLogger(__name__)
 
@@ -101,24 +104,20 @@ def generate_iso(ctx, config):
 
     # use ctx.config instead of config, because config has been
     # through teuthology.replace_all_with_clients()
-    refspec = ctx.config.get('branch')
-    if refspec is None:
-        refspec = ctx.config.get('tag')
-    if refspec is None:
-        refspec = ctx.config.get('sha1')
-    if refspec is None:
-        refspec = 'HEAD'
+    refspec = get_refspec_after_overrides(ctx.config, {})
 
-    # hack: the git_url is always ceph-ci or ceph
-    git_url = teuth_config.get_ceph_git_url()
-    repo_name = 'ceph.git'
-    if git_url.count('ceph-ci'):
-        repo_name = 'ceph-ci.git'
+    git_url = teuth_config.get_ceph_qa_suite_git_url()
+    log.info('Pulling tests from %s ref %s', git_url, refspec)
 
     for client, client_config in config.iteritems():
         assert 'test' in client_config, 'You must specify a test to run'
-        test_url = client_config['test'].format(repo=repo_name, branch=refspec)
+        test = client_config['test']
+
         (remote,) = ctx.cluster.only(client).remotes.keys()
+
+        clone_dir = '{tdir}/qemu_clone.{role}'.format(tdir=testdir, role=client)
+        remote.run(args=refspec.clone(git_url, clone_dir))
+
         src_dir = os.path.dirname(__file__)
         userdata_path = os.path.join(testdir, 'qemu', 'userdata.' + client)
         metadata_path = os.path.join(testdir, 'qemu', 'metadata.' + client)
@@ -180,11 +179,10 @@ def generate_iso(ctx, config):
 
         test_file = '{tdir}/qemu/{client}.test.sh'.format(tdir=testdir, client=client)
 
-        log.info('fetching test %s for %s', test_url, client)
+        log.info('fetching test %s for %s', test, client)
         remote.run(
             args=[
-                'wget', '-nv', '-O', test_file,
-                test_url,
+                'cp', '--', os.path.join(clone_dir, test), test_file,
                 run.Raw('&&'),
                 'chmod', '755', test_file,
                 ],
@@ -209,11 +207,12 @@ def generate_iso(ctx, config):
             (remote,) = ctx.cluster.only(client).remotes.keys()
             remote.run(
                 args=[
-                    'rm', '-f',
+                    'rm', '-rf',
                     '{tdir}/qemu/{client}.iso'.format(tdir=testdir, client=client),
                     os.path.join(testdir, 'qemu', 'userdata.' + client),
                     os.path.join(testdir, 'qemu', 'metadata.' + client),
                     '{tdir}/qemu/{client}.test.sh'.format(tdir=testdir, client=client),
+                    '{tdir}/qemu_clone.{client}'.format(tdir=testdir, client=client),
                     ],
                 )
 
@@ -271,7 +270,7 @@ def _setup_nfs_mount(remote, client, mount_dir):
     """
     Sets up an nfs mount on the remote that the guest can use to
     store logs. This nfs mount is also used to touch a file
-    at the end of the test to indiciate if the test was successful
+    at the end of the test to indicate if the test was successful
     or not.
     """
     export_dir = "/export/{client}".format(client=client)
@@ -407,6 +406,7 @@ def run_qemu(ctx, config):
                     cachemode=cachemode,
                     ),
                 ])
+        time_wait = client_config.get('time_wait', 0)
 
         log.info('starting qemu...')
         procs.append(
@@ -423,6 +423,11 @@ def run_qemu(ctx, config):
     finally:
         log.info('waiting for qemu tests to finish...')
         run.wait(procs)
+
+        if time_wait > 0:
+            log.debug('waiting {time_wait} sec for workloads detect finish...'.format(
+                time_wait=time_wait));
+            time.sleep(time_wait)
 
         log.debug('checking that qemu tests succeeded...')
         for client in config.iterkeys():

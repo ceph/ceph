@@ -2,19 +2,23 @@ set(rbd_srcs
   rbd.cc
   ArgumentTypes.cc
   IndentStream.cc
+  MirrorDaemonServiceInfo.cc
   OptionPrinter.cc
   Shell.cc
   Utils.cc
   action/Bench.cc
   action/Children.cc
   action/Clone.cc
+  action/Config.cc
   action/Copy.cc
   action/Create.cc
+  action/Device.cc
   action/Diff.cc
   action/DiskUsage.cc
   action/Export.cc
   action/Feature.cc
   action/Flatten.cc
+  action/Ggate.cc
   action/Group.cc
   action/ImageMeta.cc
   action/Import.cc
@@ -24,8 +28,10 @@ set(rbd_srcs
   action/List.cc
   action/Lock.cc
   action/MergeDiff.cc
+  action/Migration.cc
   action/MirrorPool.cc
   action/MirrorImage.cc
+  action/Namespace.cc
   action/Nbd.cc
   action/ObjectMap.cc
   action/Pool.cc
@@ -36,14 +42,11 @@ set(rbd_srcs
   action/Status.cc
   action/Trash.cc
   action/Watch.cc)
-if(FREEBSD)
-  list(APPEND rbd_srcs action/Ggate.cc)
-endif()
 
 add_executable(rbd ${rbd_srcs}
   $<TARGET_OBJECTS:common_texttable_obj>)
 set_target_properties(rbd PROPERTIES OUTPUT_NAME rbd)
-target_link_libraries(rbd librbd librados
+target_link_libraries(rbd librbd librados-cxx
   cls_journal_client cls_rbd_client
   rbd_types
   journal

@@ -22,13 +22,14 @@
 
 #include "MonCap.h"
 #include "include/stringify.h"
+#include "include/ipaddr.h"
 #include "common/debug.h"
 #include "common/Formatter.h"
 
 #include <algorithm>
+#include <regex>
 
-#include <boost/regex.hpp>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 static inline bool is_not_alnum_space(char c)
 {
@@ -113,6 +114,8 @@ ostream& operator<<(ostream& out, const MonCapGrant& m)
   }
   if (m.allow != 0)
     out << " " << m.allow;
+  if (m.network.size())
+    out << " network " << m.network;
   return out;
 }
 
@@ -127,13 +130,20 @@ BOOST_FUSION_ADAPT_STRUCT(MonCapGrant,
 			  (std::string, profile)
 			  (std::string, command)
 			  (kvmap, command_args)
-			  (mon_rwxa_t, allow))
+			  (mon_rwxa_t, allow)
+			  (std::string, network))
 
 BOOST_FUSION_ADAPT_STRUCT(StringConstraint,
                           (StringConstraint::MatchType, match_type)
 			  (std::string, value))
 
 // </magic>
+
+void MonCapGrant::parse_network()
+{
+  network_valid = ::parse_network(network.c_str(), &network_parsed,
+				  &network_prefix);
+}
 
 void MonCapGrant::expand_profile(int daemon_type, const EntityName& name) const
 {
@@ -195,16 +205,11 @@ void MonCapGrant::expand_profile_mon(const EntityName& name) const
     profile_grants.push_back(MonCapGrant("log", MON_CAP_R | MON_CAP_W));
     profile_grants.push_back(MonCapGrant("mon", MON_CAP_R | MON_CAP_W));
     profile_grants.push_back(MonCapGrant("mds", MON_CAP_R | MON_CAP_W));
+    profile_grants.push_back(MonCapGrant("fs", MON_CAP_R | MON_CAP_W));
     profile_grants.push_back(MonCapGrant("osd", MON_CAP_R | MON_CAP_W));
     profile_grants.push_back(MonCapGrant("auth", MON_CAP_R | MON_CAP_X));
     profile_grants.push_back(MonCapGrant("config-key", MON_CAP_R | MON_CAP_W));
-    StringConstraint constraint(StringConstraint::MATCH_TYPE_PREFIX,
-                                "daemon-private/mgr/");
-    profile_grants.push_back(MonCapGrant("config-key get", "key", constraint));
-    profile_grants.push_back(MonCapGrant("config-key set", "key", constraint));
-    profile_grants.push_back(MonCapGrant("config-key put", "key", constraint));
-    profile_grants.push_back(MonCapGrant("config-key exists", "key", constraint));
-    profile_grants.push_back(MonCapGrant("config-key delete", "key", constraint));
+    profile_grants.push_back(MonCapGrant("config", MON_CAP_R | MON_CAP_W));
   }
   if (profile == "osd" || profile == "mds" || profile == "mon" ||
       profile == "mgr") {
@@ -223,6 +228,7 @@ void MonCapGrant::expand_profile_mon(const EntityName& name) const
     profile_grants.push_back(MonCapGrant("osd", MON_CAP_R));  // read osdmap
     profile_grants.push_back(MonCapGrant("mon getmap"));
     profile_grants.push_back(MonCapGrant("osd new"));
+    profile_grants.push_back(MonCapGrant("osd purge-new"));
   }
   if (profile == "bootstrap-mds") {
     profile_grants.push_back(MonCapGrant("mon", MON_CAP_R));  // read monmap
@@ -260,13 +266,15 @@ void MonCapGrant::expand_profile_mon(const EntityName& name) const
     profile_grants.back().command_args["caps_osd"] = StringConstraint(
       StringConstraint::MATCH_TYPE_EQUAL, "allow rwx");
   }
-  if (profile == "bootstrap-rbd") {
+  if (profile == "bootstrap-rbd" || profile == "bootstrap-rbd-mirror") {
     profile_grants.push_back(MonCapGrant("mon", MON_CAP_R));  // read monmap
-    profile_grants.push_back(MonCapGrant("auth get-or-create"));  // FIXME: this can expose other mds keys
+    profile_grants.push_back(MonCapGrant("auth get-or-create"));  // FIXME: this can expose other rbd keys
     profile_grants.back().command_args["entity"] = StringConstraint(
       StringConstraint::MATCH_TYPE_PREFIX, "client.");
     profile_grants.back().command_args["caps_mon"] = StringConstraint(
-      StringConstraint::MATCH_TYPE_EQUAL, "profile rbd");
+      StringConstraint::MATCH_TYPE_EQUAL,
+      (profile == "bootstrap-rbd-mirror" ? "profile rbd-mirror" :
+                                           "profile rbd"));
     profile_grants.back().command_args["caps_osd"] = StringConstraint(
       StringConstraint::MATCH_TYPE_REGEX,
       "^([ ,]*profile(=|[ ]+)['\"]?rbd[^ ,'\"]*['\"]?([ ]+pool(=|[ ]+)['\"]?[^,'\"]+['\"]?)?)+$");
@@ -282,7 +290,7 @@ void MonCapGrant::expand_profile_mon(const EntityName& name) const
     profile_grants.push_back(MonCapGrant("osd", MON_CAP_R));
     profile_grants.push_back(MonCapGrant("pg", MON_CAP_R));
   }
-  if (profile == "rbd") {
+  if (profile == "rbd" || profile == "rbd-mirror") {
     profile_grants.push_back(MonCapGrant("mon", MON_CAP_R));
     profile_grants.push_back(MonCapGrant("osd", MON_CAP_R));
     profile_grants.push_back(MonCapGrant("pg", MON_CAP_R));
@@ -293,6 +301,12 @@ void MonCapGrant::expand_profile_mon(const EntityName& name) const
       StringConstraint::MATCH_TYPE_EQUAL, "add");
     profile_grants.back().command_args["addr"] = StringConstraint(
       StringConstraint::MATCH_TYPE_REGEX, "^[^/]+/[0-9]+$");
+
+  }
+  if (profile == "rbd-mirror") {
+    StringConstraint constraint(StringConstraint::MATCH_TYPE_PREFIX,
+                                "rbd/mirror/");
+    profile_grants.push_back(MonCapGrant("config-key get", "key", constraint));
   }
 
   if (profile == "role-definer") {
@@ -340,12 +354,14 @@ mon_rwxa_t MonCapGrant::get_allowed(CephContext *cct,
 	  return 0;
         break;
       case StringConstraint::MATCH_TYPE_REGEX:
-        {
-	  boost::regex pattern(
-            p->second.value, boost::regex::extended | boost::regex::no_except);
-          if (pattern.empty() || !boost::regex_match(q->second, pattern))
+        try {
+	  std::regex pattern(
+            p->second.value, std::regex::extended);
+          if (!std::regex_match(q->second, pattern))
 	    return 0;
-        }
+        } catch(const std::regex_error&) {
+	  return 0;
+	}
         break;
       default:
         break;
@@ -381,25 +397,38 @@ void MonCap::set_allow_all()
   text = "allow *";
 }
 
-bool MonCap::is_capable(CephContext *cct,
-			int daemon_type,
-			EntityName name,
-			const string& service,
-			const string& command, const map<string,string>& command_args,
-			bool op_may_read, bool op_may_write, bool op_may_exec) const
+bool MonCap::is_capable(
+  CephContext *cct,
+  int daemon_type,
+  EntityName name,
+  const string& service,
+  const string& command, const map<string,string>& command_args,
+  bool op_may_read, bool op_may_write, bool op_may_exec,
+  const entity_addr_t& addr) const
 {
   if (cct)
     ldout(cct, 20) << "is_capable service=" << service << " command=" << command
 		   << (op_may_read ? " read":"")
 		   << (op_may_write ? " write":"")
 		   << (op_may_exec ? " exec":"")
+		   << " addr " << addr
 		   << " on cap " << *this
 		   << dendl;
+
   mon_rwxa_t allow = 0;
   for (vector<MonCapGrant>::const_iterator p = grants.begin();
        p != grants.end(); ++p) {
     if (cct)
-      ldout(cct, 20) << " allow so far " << allow << ", doing grant " << *p << dendl;
+      ldout(cct, 20) << " allow so far " << allow << ", doing grant " << *p
+		     << dendl;
+
+    if (p->network.size() &&
+	(!p->network_valid ||
+	 !network_contains(p->network_parsed,
+			   p->network_prefix,
+			   addr))) {
+      continue;
+    }
 
     if (p->is_allow_all()) {
       if (cct)
@@ -424,15 +453,15 @@ bool MonCap::is_capable(CephContext *cct,
 void MonCap::encode(bufferlist& bl) const
 {
   ENCODE_START(4, 4, bl);   // legacy MonCaps was 3, 3
-  ::encode(text, bl);
+  encode(text, bl);
   ENCODE_FINISH(bl);
 }
 
-void MonCap::decode(bufferlist::iterator& bl)
+void MonCap::decode(bufferlist::const_iterator& bl)
 {
   string s;
   DECODE_START(4, bl);
-  ::decode(s, bl);
+  decode(s, bl);
   DECODE_FINISH(bl);
   parse(s, NULL);
 }
@@ -487,8 +516,9 @@ struct MonCapParser : qi::grammar<Iterator, MonCap()>
     quoted_string %=
       lexeme['"' >> +(char_ - '"') >> '"'] | 
       lexeme['\'' >> +(char_ - '\'') >> '\''];
-    unquoted_word %= +char_("a-zA-Z0-9_.-");
+    unquoted_word %= +char_("a-zA-Z0-9_./-");
     str %= quoted_string | unquoted_word;
+    network_str %= +char_("/.:a-fA-F0-9][");
 
     spaces = +(lit(' ') | lit('\n') | lit('\t'));
 
@@ -504,13 +534,15 @@ struct MonCapParser : qi::grammar<Iterator, MonCap()>
 			    >> qi::attr(string()) >> qi::attr(string())
 			    >> str
 			    >> -(spaces >> lit("with") >> spaces >> kv_map)
-			    >> qi::attr(0);
+			    >> qi::attr(0)
+			    >> -(spaces >> lit("network") >> spaces >> network_str);
 
     // service foo rwxa
     service_match %= -spaces >> lit("allow") >> spaces >> lit("service") >> (lit('=') | spaces)
 			     >> str >> qi::attr(string()) >> qi::attr(string())
 			     >> qi::attr(map<string,StringConstraint>())
-                             >> spaces >> rwxa;
+                             >> spaces >> rwxa
+			     >> -(spaces >> lit("network") >> spaces >> network_str);
 
     // profile foo
     profile_match %= -spaces >> -(lit("allow") >> spaces)
@@ -519,17 +551,20 @@ struct MonCapParser : qi::grammar<Iterator, MonCap()>
 			     >> str
 			     >> qi::attr(string())
 			     >> qi::attr(map<string,StringConstraint>())
-			     >> qi::attr(0);
+			     >> qi::attr(0)
+			     >> -(spaces >> lit("network") >> spaces >> network_str);
 
     // rwxa
     rwxa_match %= -spaces >> lit("allow") >> spaces
 			  >> qi::attr(string()) >> qi::attr(string()) >> qi::attr(string())
 			  >> qi::attr(map<string,StringConstraint>())
-			  >> rwxa;
+			  >> rwxa
+			  >> -(spaces >> lit("network") >> spaces >> network_str);
 
     // rwxa := * | [r][w][x]
     rwxa =
       (lit("*")[_val = MON_CAP_ANY]) |
+      (lit("all")[_val = MON_CAP_ANY]) |
       ( eps[_val = 0] >>
 	( lit('r')[_val |= MON_CAP_R] ||
 	  lit('w')[_val |= MON_CAP_W] ||
@@ -549,7 +584,7 @@ struct MonCapParser : qi::grammar<Iterator, MonCap()>
   qi::rule<Iterator, unsigned()> rwxa;
   qi::rule<Iterator, string()> quoted_string;
   qi::rule<Iterator, string()> unquoted_word;
-  qi::rule<Iterator, string()> str;
+  qi::rule<Iterator, string()> str, network_str;
 
   qi::rule<Iterator, StringConstraint()> str_match, str_prefix, str_regex;
   qi::rule<Iterator, pair<string, StringConstraint>()> kv_pair;
@@ -576,6 +611,9 @@ bool MonCap::parse(const string& str, ostream *err)
   //bool r = qi::phrase_parse(iter, end, g, ascii::space, foo);
   if (r && iter == end) {
     text = str;
+    for (auto& g : grants) {
+      g.parse_network();
+    }
     return true;
   }
 
@@ -584,10 +622,11 @@ bool MonCap::parse(const string& str, ostream *err)
 
   if (err) {
     if (iter != end)
-      *err << "moncap parse failed, stopped at '" << std::string(iter, end)
-	   << "' of '" << str << "'\n";
+      *err << "mon capability parse failed, stopped at '"
+	   << std::string(iter, end)
+	   << "' of '" << str << "'";
     else
-      *err << "moncap parse failed, stopped at end of '" << str << "'\n";
+      *err << "mon capability parse failed, stopped at end of '" << str << "'";
   }
 
   return false; 

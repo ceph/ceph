@@ -25,24 +25,44 @@ class CBT(Task):
         mon_hosts = self.hosts_of_type('mon')
         osd_hosts = self.hosts_of_type('osd')
         client_hosts = self.hosts_of_type('client')
+        rgw_client = {}
+        rgw_client[client_hosts[0]] = None
+        rgw_hosts = self.config.get('cluster', {}).get('rgws', rgw_client)
         cluster_config = dict(
             user=self.config.get('cluster', {}).get('user', 'ubuntu'),
             head=mon_hosts[0],
             osds=osd_hosts,
             mons=mon_hosts,
             clients=client_hosts,
+            rgws=rgw_hosts,
             osds_per_node=self.config.get('cluster', {}).get('osds_per_node', 1),
             rebuild_every_test=False,
             use_existing=True,
+            is_teuthology=self.config.get('cluster', {}).get('is_teuthology', True),
             iterations=self.config.get('cluster', {}).get('iterations', 1),
             tmp_dir='/tmp/cbt',
             pool_profiles=self.config.get('cluster', {}).get('pool_profiles'),
             )
+
         benchmark_config = self.config.get('benchmarks')
         benchmark_type = benchmark_config.keys()[0]
         if benchmark_type == 'librbdfio':
           testdir = misc.get_testdir(self.ctx)
           benchmark_config['librbdfio']['cmd_path'] = os.path.join(testdir, 'fio/fio')
+        if benchmark_type == 'cosbench':
+            # create cosbench_dir and cosbench_xml_dir
+            testdir = misc.get_testdir(self.ctx)
+            benchmark_config['cosbench']['cosbench_dir'] = os.path.join(testdir, 'cos')
+            benchmark_config['cosbench']['cosbench_xml_dir'] = os.path.join(testdir, 'xml')
+            self.ctx.cluster.run(args=['mkdir', '-p', '-m0755', '--', benchmark_config['cosbench']['cosbench_xml_dir']])
+            benchmark_config['cosbench']['controller'] = osd_hosts[0]
+
+            # set auth details
+            remotes_and_roles = self.ctx.cluster.remotes.items()
+            ips = [host for (host, port) in
+                   (remote.ssh.get_transport().getpeername() for (remote, role_list) in remotes_and_roles)]
+            benchmark_config['cosbench']['auth'] = "username=cosbench:operator;password=intel2012;url=http://%s:7280/auth/v1.0;retry=9" %(ips[0])
+
         return dict(
             cluster=cluster_config,
             benchmarks=benchmark_config,
@@ -53,28 +73,103 @@ class CBT(Task):
 
         if system_type == 'rpm':
             install_cmd = ['sudo', 'yum', '-y', 'install']
-            cbt_depends = ['python-yaml', 'python-lxml', 'librbd-devel', 'pdsh']
+            cbt_depends = ['python-yaml', 'python-lxml', 'librbd-devel', 'pdsh', 'collectl']
         else:
             install_cmd = ['sudo', 'apt-get', '-y', '--force-yes', 'install']
-            cbt_depends = ['python-yaml', 'python-lxml', 'librbd-dev']
+            cbt_depends = ['python-yaml', 'python-lxml', 'librbd-dev', 'collectl']
         self.first_mon.run(args=install_cmd + cbt_depends)
-         
-        # install fio
-        testdir = misc.get_testdir(self.ctx)
-        self.first_mon.run(
-            args=[
-                'git', 'clone', '-b', 'master',
-                'https://github.com/axboe/fio.git',
-                '{tdir}/fio'.format(tdir=testdir)
-            ]
-        )
-        self.first_mon.run(
-            args=[
-                'cd', os.path.join(testdir, 'fio'), run.Raw('&&'),
-                './configure', run.Raw('&&'),
-                'make'
-            ]
-        )
+
+        benchmark_type = self.cbt_config.get('benchmarks').keys()[0]
+        self.log.info('benchmark: %s', benchmark_type)
+
+        if benchmark_type == 'librbdfio':
+            # install fio
+            testdir = misc.get_testdir(self.ctx)
+            self.first_mon.run(
+                args=[
+                    'git', 'clone', '-b', 'master',
+                    'https://github.com/axboe/fio.git',
+                    '{tdir}/fio'.format(tdir=testdir)
+                ]
+            )
+            self.first_mon.run(
+                args=[
+                    'cd', os.path.join(testdir, 'fio'), run.Raw('&&'),
+                    './configure', run.Raw('&&'),
+                    'make'
+                ]
+            )
+
+        if benchmark_type == 'cosbench':
+            # install cosbench
+            self.log.info('install dependencies for cosbench')
+            if system_type == 'rpm':
+                cosbench_depends = ['wget', 'unzip', 'java-1.7.0-openjdk', 'curl']
+            else:
+                cosbench_depends = ['wget', 'unzip', 'openjdk-8-jre', 'curl']
+            self.first_mon.run(args=install_cmd + cosbench_depends)
+            testdir = misc.get_testdir(self.ctx)
+            cosbench_version = '0.4.2.c3'
+            cosbench_location = 'https://github.com/intel-cloud/cosbench/releases/download/v0.4.2.c3/0.4.2.c3.zip'
+            os_version = misc.get_system_type(self.first_mon, False, True)
+
+            # additional requirements for bionic
+            if os_version == '18.04':
+                self.first_mon.run(
+                    args=['sudo', 'apt-get', '-y', 'purge', 'openjdk-11*'])
+                # use our own version of cosbench
+                cosbench_version = 'cosbench-0.4.2.c3.1'
+                # contains additional parameter "-N" to nc
+                cosbench_location = 'http://drop.ceph.com/qa/cosbench-0.4.2.c3.1.zip'
+                cosbench_dir = os.path.join(testdir, cosbench_version)
+                self.ctx.cluster.run(args=['mkdir', '-p', '-m0755', '--', cosbench_dir])
+                self.first_mon.run(
+                    args=[
+                        'cd', testdir, run.Raw('&&'),
+                        'wget',
+                        cosbench_location, run.Raw('&&'),
+                        'unzip', '{name}.zip'.format(name=cosbench_version), '-d', cosbench_version
+                    ]
+                )
+            else:
+                self.first_mon.run(
+                    args=[
+                        'cd', testdir, run.Raw('&&'),
+                        'wget',
+                        cosbench_location, run.Raw('&&'),
+                        'unzip', '{name}.zip'.format(name=cosbench_version)
+                    ]
+                )
+            self.first_mon.run(
+                args=[
+                    'cd', testdir, run.Raw('&&'),
+                    'ln', '-s', cosbench_version, 'cos',
+                ]
+            )
+            self.first_mon.run(
+                args=[
+                    'cd', os.path.join(testdir, 'cos'), run.Raw('&&'),
+                    'chmod', '+x', run.Raw('*.sh'),
+                ]
+            )
+
+            # start cosbench and check info
+            self.log.info('start cosbench')
+            self.first_mon.run(
+                args=[
+                    'cd', testdir, run.Raw('&&'),
+                    'cd', 'cos', run.Raw('&&'),
+                    'sh', 'start-all.sh'
+                ]
+            )
+            self.log.info('check cosbench info')
+            self.first_mon.run(
+                args=[
+                    'cd', testdir, run.Raw('&&'),
+                    'cd', 'cos', run.Raw('&&'),
+                    'sh', 'cli.sh', 'info'
+                ]
+            )
 
     def checkout_cbt(self):
         testdir = misc.get_testdir(self.ctx)
@@ -118,6 +213,8 @@ class CBT(Task):
                 '{cbtdir}/cbt_config.yaml'.format(cbtdir=self.cbt_dir),
             ],
         )
+        preserve_file = os.path.join(self.ctx.archive, '.preserve')
+        open(preserve_file, 'a').close()
 
     def end(self):
         super(CBT, self).end()
@@ -128,11 +225,45 @@ class CBT(Task):
                 '{tdir}/cbt'.format(tdir=testdir),
             ]
         )
-        self.first_mon.run(
-            args=[
-                'rm', '--one-file-system', '-rf', '--',
-                '{tdir}/fio'.format(tdir=testdir),
-            ]
-        )
+        benchmark_type = self.cbt_config.get('benchmarks').keys()[0]
+        if benchmark_type == 'librbdfio':
+            self.first_mon.run(
+                args=[
+                    'rm', '--one-file-system', '-rf', '--',
+                    '{tdir}/fio'.format(tdir=testdir),
+                ]
+            )
+
+        if benchmark_type == 'cosbench':
+            os_version = misc.get_system_type(self.first_mon, False, True)
+            if os_version == '18.04':
+                cosbench_version = 'cosbench-0.4.2.c3.1'
+            else:
+                cosbench_version = '0.4.2.c3'
+            self.first_mon.run(
+                args=[
+                    'rm', '--one-file-system', '-rf', '--',
+                    '{tdir}/cos'.format(tdir=testdir),
+                ]
+            )
+            self.first_mon.run(
+                args=[
+                    'rm', '--one-file-system', '-rf', '--',
+                    '{tdir}/{version}'.format(tdir=testdir, version=cosbench_version),
+                ]
+            )
+            self.first_mon.run(
+                args=[
+                    'rm', '--one-file-system', '-rf', '--',
+                    '{tdir}/{version}.zip'.format(tdir=testdir, version=cosbench_version),
+                ]
+            )
+            self.first_mon.run(
+                args=[
+                    'rm', '--one-file-system', '-rf', '--',
+                    '{tdir}/xml'.format(tdir=testdir),
+                ]
+            )
+
 
 task = CBT

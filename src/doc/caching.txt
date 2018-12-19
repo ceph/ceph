@@ -161,7 +161,7 @@ pins) to be migrated to a different MDS node.  Pins can be placed on
 both inodes and directories.
 
 Auth pins can only exist for authoritative metadata, because they are
-only created if the object is authoritative, and their presense
+only created if the object is authoritative, and their presence
 prevents the migration of authority.
 
 
@@ -197,7 +197,7 @@ CACHE EXPIRATION FOR EXPORTING SUBTREES
 
 Cache expiration messages that are received for a subtree that is
 being exported are either deferred or handled immediately, based on
-the sender and reciever states. The importing MDS will always defer until
+the sender and receiver states. The importing MDS will always defer until
 after the export finishes, because the import could fail. The exporting MDS
 processes the expire UNLESS the expiring MDS does not know about the export or
 the exporting MDS is no longer auth.

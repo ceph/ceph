@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -ex
 
-STACK_BRANCH=stable/ocata
+STACK_BRANCH=stable/rocky
+TEMPEST_BRANCH=19.0.0
 
 STACK_USER=${STACK_USER:-stack}
 STACK_GROUP=${STACK_GROUP:-stack}
@@ -34,6 +35,10 @@ trap cleanup INT TERM EXIT
 # devstack configuration adapted from upstream gate
 cat<<EOF > ${STACK_HOME_PATH}/local.conf
 [[local|localrc]]
+ENABLE_CEPH_CINDER=True
+ENABLE_CEPH_GLANCE=True
+ENABLE_CEPH_C_BAK=True
+ENABLE_CEPH_NOVA=True
 Q_USE_DEBUG_COMMAND=True
 NETWORK_GATEWAY=10.1.0.1
 USE_SCREEN=False
@@ -51,7 +56,7 @@ SERVICE_TOKEN=111222333444
 SWIFT_HASH=1234123412341234
 ROOTSLEEP=0
 NOVNC_FROM_PACKAGE=True
-ENABLED_SERVICES=c-api,c-bak,c-sch,c-vol,ceilometer-acentral,ceilometer-acompute,ceilometer-alarm-evaluator,ceilometer-alarm-notifier,ceilometer-anotification,ceilometer-api,ceilometer-collector,cinder,dstat,g-api,g-reg,horizon,key,mysql,n-api,n-cauth,n-cond,n-cpu,n-novnc,n-obj,n-sch,peakmem_tracker,placement-api,q-agt,q-dhcp,q-l3,q-meta,q-metering,q-svc,rabbit,s-account,s-container,s-object,s-proxy,tempest
+ENABLED_SERVICES=c-api,c-bak,c-sch,c-vol,ceilometer-acentral,ceilometer-acompute,ceilometer-alarm-evaluator,ceilometer-alarm-notifier,ceilometer-anotification,ceilometer-api,ceilometer-collector,cinder,dstat,etcd3,g-api,g-reg,key,mysql,n-api,n-api-meta,n-cauth,n-cond,n-cpu,n-novnc,n-obj,n-sch,peakmem_tracker,placement-api,q-agt,q-dhcp,q-l3,q-meta,q-metering,q-svc,rabbit,s-account,s-container,s-object,s-proxy,tempest
 SKIP_EXERCISES=boot_from_volume,bundle,client-env,euca
 SYSLOG=False
 SCREEN_LOGDIR=${STACK_LOG_PATH}/screen-logs
@@ -64,17 +69,15 @@ PUBLIC_NETWORK_GATEWAY=172.24.5.1
 FIXED_NETWORK_SIZE=4096
 VIRT_DRIVER=libvirt
 SWIFT_REPLICAS=1
+SWIFT_START_ALL_SERVICES=False
 LOG_COLOR=False
 UNDO_REQUIREMENTS=False
 CINDER_PERIODIC_INTERVAL=10
 
 export OS_NO_CACHE=True
-OS_NO_CACHE=True
-CEILOMETER_BACKEND=mysql
 LIBS_FROM_GIT=
-DATABASE_QUERY_LOGGING=True
 EBTABLES_RACE_FIX=True
-CINDER_SECURE_DELETE=False
+DEBUG_LIBVIRT_COREDUMPS=False
 CINDER_VOLUME_CLEAR=none
 LIBVIRT_TYPE=kvm
 VOLUME_BACKING_FILE_SIZE=24G
@@ -84,6 +87,8 @@ FORCE_CONFIG_DRIVE=False
 CINDER_ENABLED_BACKENDS=ceph:ceph
 TEMPEST_STORAGE_PROTOCOL=ceph
 REMOTE_CEPH=True
+
+enable_plugin devstack-plugin-mariadb git://github.com/openstack/devstack-plugin-mariadb
 enable_plugin devstack-plugin-ceph git://git.openstack.org/openstack/devstack-plugin-ceph
 EOF
 
@@ -100,8 +105,9 @@ sed -i 's/appdirs===1.4.0/appdirs===1.4.3/' requirements/upper-constraints.txt
 cd devstack
 cp ${STACK_HOME_PATH}/local.conf .
 
+export TEMPEST_BRANCH=${TEMPEST_BRANCH}
 export PYTHONUNBUFFERED=true
-export PROJECTS="openstack/devstack-plugin-ceph"
+export PROJECTS="openstack/devstack-plugin-ceph openstack/devstack-plugin-mariadb"
 
 ./stack.sh
 EOF

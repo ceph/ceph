@@ -22,11 +22,9 @@ template <typename> class RefreshParentRequest;
 template <typename ImageCtxT = ImageCtx>
 class SetSnapRequest {
 public:
-  static SetSnapRequest *create(ImageCtxT &image_ctx,
-                                const cls::rbd::SnapshotNamespace& snap_namespace,
-				const std::string &snap_name,
+  static SetSnapRequest *create(ImageCtxT &image_ctx, uint64_t snap_id,
                                 Context *on_finish) {
-    return new SetSnapRequest(image_ctx, snap_namespace, snap_name, on_finish);
+    return new SetSnapRequest(image_ctx, snap_id, on_finish);
   }
 
   ~SetSnapRequest();
@@ -77,16 +75,12 @@ private:
    * @endverbatim
    */
 
-  SetSnapRequest(ImageCtxT &image_ctx, const cls::rbd::SnapshotNamespace& snap_namespace,
-		 const std::string &snap_name,
-                Context *on_finish);
+  SetSnapRequest(ImageCtxT &image_ctx, uint64_t snap_id, Context *on_finish);
 
   ImageCtxT &m_image_ctx;
-  cls::rbd::SnapshotNamespace m_snap_namespace;
-  std::string m_snap_name;
+  uint64_t m_snap_id;
   Context *m_on_finish;
 
-  uint64_t m_snap_id;
   ExclusiveLock<ImageCtxT> *m_exclusive_lock;
   ObjectMap<ImageCtxT> *m_object_map;
   RefreshParentRequest<ImageCtxT> *m_refresh_parent;

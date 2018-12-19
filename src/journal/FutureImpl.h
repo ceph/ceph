@@ -7,12 +7,13 @@
 #include "include/int_types.h"
 #include "common/Mutex.h"
 #include "common/RefCountedObj.h"
+#include "include/Context.h"
 #include "journal/Future.h"
 #include <list>
 #include <map>
 #include <boost/noncopyable.hpp>
 #include <boost/intrusive_ptr.hpp>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 class Context;
 
@@ -57,7 +58,7 @@ public:
   }
   inline void set_flush_in_progress() {
     Mutex::Locker locker(m_lock);
-    assert(m_flush_handler);
+    ceph_assert(m_flush_handler);
     m_flush_handler.reset();
     m_flush_state = FLUSH_STATE_IN_PROGRESS;
   }

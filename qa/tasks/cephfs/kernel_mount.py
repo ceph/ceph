@@ -17,9 +17,9 @@ UMOUNT_TIMEOUT = 300
 
 
 class KernelMount(CephFSMount):
-    def __init__(self, mons, test_dir, client_id, client_remote,
+    def __init__(self, ctx, mons, test_dir, client_id, client_remote,
                  ipmi_user, ipmi_password, ipmi_domain):
-        super(KernelMount, self).__init__(test_dir, client_id, client_remote)
+        super(KernelMount, self).__init__(ctx, test_dir, client_id, client_remote)
         self.mons = mons
 
         self.mounted = False
@@ -43,9 +43,12 @@ class KernelMount(CephFSMount):
                 run.Raw('>'),
                 filename,
             ],
+            timeout=(5*60),
         )
 
     def mount(self, mount_path=None, mount_fs_name=None):
+        self.setupfs(name=mount_fs_name)
+
         log.info('Mounting kclient client.{id} at {remote} {mnt}...'.format(
             id=self.client_id, remote=self.client_remote, mnt=self.mountpoint))
 
@@ -60,6 +63,7 @@ class KernelMount(CephFSMount):
                 '--',
                 self.mountpoint,
             ],
+            timeout=(5*60),
         )
 
         if mount_path is None:
@@ -84,10 +88,11 @@ class KernelMount(CephFSMount):
                 '-o',
                 opts
             ],
+            timeout=(30*60),
         )
 
         self.client_remote.run(
-            args=['sudo', 'chmod', '1777', self.mountpoint])
+            args=['sudo', 'chmod', '1777', self.mountpoint], timeout=(5*60))
 
         self.mounted = True
 
@@ -99,7 +104,7 @@ class KernelMount(CephFSMount):
             cmd.append('-f')
 
         try:
-            self.client_remote.run(args=cmd)
+            self.client_remote.run(args=cmd, timeout=(15*60))
         except Exception as e:
             self.client_remote.run(args=[
                 'sudo',
@@ -107,7 +112,7 @@ class KernelMount(CephFSMount):
                 'lsof',
                 run.Raw(';'),
                 'ps', 'auxf',
-            ])
+            ], timeout=(15*60))
             raise e
 
         rproc = self.client_remote.run(
@@ -124,7 +129,7 @@ class KernelMount(CephFSMount):
     def cleanup(self):
         pass
 
-    def umount_wait(self, force=False, require_clean=False):
+    def umount_wait(self, force=False, require_clean=False, timeout=900):
         """
         Unlike the fuse client, the kernel client's umount is immediate
         """
@@ -194,6 +199,7 @@ class KernelMount(CephFSMount):
                 '--',
                 self.mountpoint,
             ],
+            timeout=(5*60),
         )
 
     def _find_debug_dir(self):
@@ -219,7 +225,7 @@ class KernelMount(CephFSMount):
 
         p = self.client_remote.run(args=[
             'sudo', 'python', '-c', pyscript
-        ], stdout=StringIO())
+        ], stdout=StringIO(), timeout=(5*60))
         client_id_to_dir = json.loads(p.stdout.getvalue())
 
         try:
@@ -241,7 +247,7 @@ class KernelMount(CephFSMount):
 
         p = self.client_remote.run(args=[
             'sudo', 'python', '-c', pyscript
-        ], stdout=StringIO())
+        ], stdout=StringIO(), timeout=(5*60))
         return p.stdout.getvalue()
 
     def get_global_id(self):

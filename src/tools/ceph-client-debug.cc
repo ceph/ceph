@@ -39,11 +39,11 @@ void usage()
  */
 void traverse_dentries(Inode *ino, std::vector<Dentry*> &parts)
 {
-  if (ino->dn_set.empty()) {
+  if (ino->dentries.empty()) {
     return;
   }
   
-  Dentry* dn = *(ino->dn_set.begin());
+  Dentry* dn = *(ino->dentries.begin());
   parts.push_back(dn);
   traverse_dentries(dn->dir->parent_inode, parts);
 }
@@ -61,17 +61,17 @@ int lookup_trace(ceph_mount_info *client, inodeno_t const ino)
   if (r != 0) {
     return r;
   } else {
-    if (!inode->dn_set.empty()) {
-      Dentry *dn = *(inode->dn_set.begin());
-      assert(dn->dir);
-      assert(dn->dir->parent_inode);
+    if (!inode->dentries.empty()) {
+      Dentry *dn = *(inode->dentries.begin());
+      ceph_assert(dn->dir);
+      ceph_assert(dn->dir->parent_inode);
       r = lookup_trace(client, dn->dir->parent_inode->ino);
       if (r) {
         return r;
       }
     } else {
       // We reached the root of the tree
-      assert(inode->ino == CEPH_INO_ROOT);
+      ceph_assert(inode->ino == CEPH_INO_ROOT);
     }
   }
 
@@ -84,17 +84,26 @@ int main(int argc, const char **argv)
   // Argument handling
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
-  env_to_vec(args);
+  if (args.empty()) {
+    cerr << argv[0] << ": -h or --help for usage" << std::endl;
+    exit(1);
+  }
+  if (ceph_argparse_need_usage(args)) {
+    usage();
+    exit(0);
+  }
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY,
-			 CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
+			 CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS|
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   
   common_init_finish(g_ceph_context);
 
   // Expect exactly one positional argument (inode number)
   if (args.size() != 1) {
-    usage();
+    cerr << "missing position argument (inode number)" << std::endl;
+    exit(1);
   }
   char const *inode_str = args[0];
   inodeno_t inode = strtoll(inode_str, NULL, 0);

@@ -19,12 +19,14 @@
 #include "msg/Message.h"
 #include "mon/MonMap.h"
 
-class MMonMap : public Message {
+class MMonMap : public MessageInstance<MMonMap> {
 public:
+  friend factory;
+
   bufferlist monmapbl;
 
-  MMonMap() : Message(CEPH_MSG_MON_MAP) { }
-  explicit MMonMap(bufferlist &bl) : Message(CEPH_MSG_MON_MAP) { 
+  MMonMap() : MessageInstance(CEPH_MSG_MON_MAP) { }
+  explicit MMonMap(bufferlist &bl) : MessageInstance(CEPH_MSG_MON_MAP) { 
     monmapbl.claim(bl);
   }
 private:
@@ -44,11 +46,12 @@ public:
       t.encode(monmapbl, features);
     }
 
-    ::encode(monmapbl, payload);
+    using ceph::encode;
+    encode(monmapbl, payload);
   }
   void decode_payload() override { 
-    bufferlist::iterator p = payload.begin();
-    ::decode(monmapbl, p);
+    auto p = payload.cbegin();
+    decode(monmapbl, p);
   }
 };
 

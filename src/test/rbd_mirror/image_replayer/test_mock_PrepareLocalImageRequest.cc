@@ -38,7 +38,7 @@ struct GetMirrorImageIdRequest<librbd::MockTestImageCtx> {
                                          const std::string& global_image_id,
                                          std::string* image_id,
                                          Context* on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->image_id = image_id;
     s_instance->on_finish = on_finish;
     return s_instance;
@@ -87,6 +87,19 @@ public:
                 }));
   }
 
+  void expect_dir_get_name(librados::IoCtx &io_ctx,
+                           const std::string &image_name, int r) {
+    bufferlist bl;
+    encode(image_name, bl);
+
+    EXPECT_CALL(get_mock_io_ctx(io_ctx),
+                exec(RBD_DIRECTORY, _, StrEq("rbd"), StrEq("dir_get_name"), _, _, _))
+      .WillOnce(DoAll(WithArg<5>(Invoke([bl](bufferlist *out_bl) {
+                                          *out_bl = bl;
+                                        })),
+                      Return(r)));
+  }
+
   void expect_mirror_image_get(librados::IoCtx &io_ctx,
                                cls::rbd::MirrorImageState state,
                                const std::string &global_id, int r) {
@@ -95,7 +108,7 @@ public:
     mirror_image.global_image_id = global_id;
 
     bufferlist bl;
-    ::encode(mirror_image, bl);
+    encode(mirror_image, bl);
 
     EXPECT_CALL(get_mock_io_ctx(io_ctx),
                 exec(RBD_MIRRORING, _, StrEq("rbd"), StrEq("mirror_image_get"), _, _, _))
@@ -122,6 +135,7 @@ TEST_F(TestMockImageReplayerPrepareLocalImageRequest, Success) {
   MockGetMirrorImageIdRequest mock_get_mirror_image_id_request;
   expect_get_mirror_image_id(mock_get_mirror_image_id_request, "local image id",
                              0);
+  expect_dir_get_name(m_local_io_ctx, "local image name", 0);
   expect_mirror_image_get(m_local_io_ctx, cls::rbd::MIRROR_IMAGE_STATE_ENABLED,
                           "global image id", 0);
 
@@ -129,11 +143,13 @@ TEST_F(TestMockImageReplayerPrepareLocalImageRequest, Success) {
   expect_get_tag_owner(mock_journal, "local image id", "remote mirror uuid", 0);
 
   std::string local_image_id;
+  std::string local_image_name;
   std::string tag_owner;
   C_SaferCond ctx;
   auto req = MockPrepareLocalImageRequest::create(m_local_io_ctx,
                                                   "global image id",
                                                   &local_image_id,
+                                                  &local_image_name,
                                                   &tag_owner,
                                                   m_threads->work_queue,
                                                   &ctx);
@@ -141,6 +157,7 @@ TEST_F(TestMockImageReplayerPrepareLocalImageRequest, Success) {
 
   ASSERT_EQ(0, ctx.wait());
   ASSERT_EQ(std::string("local image id"), local_image_id);
+  ASSERT_EQ(std::string("local image name"), local_image_name);
   ASSERT_EQ(std::string("remote mirror uuid"), tag_owner);
 }
 
@@ -150,11 +167,13 @@ TEST_F(TestMockImageReplayerPrepareLocalImageRequest, MirrorImageIdError) {
   expect_get_mirror_image_id(mock_get_mirror_image_id_request, "", -EINVAL);
 
   std::string local_image_id;
+  std::string local_image_name;
   std::string tag_owner;
   C_SaferCond ctx;
   auto req = MockPrepareLocalImageRequest::create(m_local_io_ctx,
                                                   "global image id",
                                                   &local_image_id,
+                                                  &local_image_name,
                                                   &tag_owner,
                                                   m_threads->work_queue,
                                                   &ctx);
@@ -163,20 +182,46 @@ TEST_F(TestMockImageReplayerPrepareLocalImageRequest, MirrorImageIdError) {
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
 
-TEST_F(TestMockImageReplayerPrepareLocalImageRequest, MirrorImageError) {
+TEST_F(TestMockImageReplayerPrepareLocalImageRequest, DirGetNameError) {
   InSequence seq;
   MockGetMirrorImageIdRequest mock_get_mirror_image_id_request;
   expect_get_mirror_image_id(mock_get_mirror_image_id_request, "local image id",
                              0);
-  expect_mirror_image_get(m_local_io_ctx, cls::rbd::MIRROR_IMAGE_STATE_DISABLED,
-                          "", -EINVAL);
+  expect_dir_get_name(m_local_io_ctx, "", -ENOENT);
 
   std::string local_image_id;
+  std::string local_image_name;
   std::string tag_owner;
   C_SaferCond ctx;
   auto req = MockPrepareLocalImageRequest::create(m_local_io_ctx,
                                                   "global image id",
                                                   &local_image_id,
+                                                  &local_image_name,
+                                                  &tag_owner,
+                                                  m_threads->work_queue,
+                                                  &ctx);
+  req->send();
+
+  ASSERT_EQ(-ENOENT, ctx.wait());
+}
+
+TEST_F(TestMockImageReplayerPrepareLocalImageRequest, MirrorImageError) {
+  InSequence seq;
+  MockGetMirrorImageIdRequest mock_get_mirror_image_id_request;
+  expect_get_mirror_image_id(mock_get_mirror_image_id_request, "local image id",
+                             0);
+  expect_dir_get_name(m_local_io_ctx, "local image name", 0);
+  expect_mirror_image_get(m_local_io_ctx, cls::rbd::MIRROR_IMAGE_STATE_DISABLED,
+                          "", -EINVAL);
+
+  std::string local_image_id;
+  std::string local_image_name;
+  std::string tag_owner;
+  C_SaferCond ctx;
+  auto req = MockPrepareLocalImageRequest::create(m_local_io_ctx,
+                                                  "global image id",
+                                                  &local_image_id,
+                                                  &local_image_name,
                                                   &tag_owner,
                                                   m_threads->work_queue,
                                                   &ctx);
@@ -190,6 +235,7 @@ TEST_F(TestMockImageReplayerPrepareLocalImageRequest, TagOwnerError) {
   MockGetMirrorImageIdRequest mock_get_mirror_image_id_request;
   expect_get_mirror_image_id(mock_get_mirror_image_id_request, "local image id",
                              0);
+  expect_dir_get_name(m_local_io_ctx, "local image name", 0);
   expect_mirror_image_get(m_local_io_ctx, cls::rbd::MIRROR_IMAGE_STATE_ENABLED,
                           "global image id", 0);
 
@@ -198,11 +244,13 @@ TEST_F(TestMockImageReplayerPrepareLocalImageRequest, TagOwnerError) {
                        -ENOENT);
 
   std::string local_image_id;
+  std::string local_image_name;
   std::string tag_owner;
   C_SaferCond ctx;
   auto req = MockPrepareLocalImageRequest::create(m_local_io_ctx,
                                                   "global image id",
                                                   &local_image_id,
+                                                  &local_image_name,
                                                   &tag_owner,
                                                   m_threads->work_queue,
                                                   &ctx);

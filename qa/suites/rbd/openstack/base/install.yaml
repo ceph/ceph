@@ -4,4 +4,4 @@ tasks:
 overrides:
   ceph:
     log-whitelist:
-      - (POOL_APP_NOT_ENABLED)
+      - \(POOL_APP_NOT_ENABLED\)

@@ -13,7 +13,6 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-using namespace std;
 
 
 #define RGW_URI_ALL_USERS	"http://acs.amazonaws.com/groups/global/AllUsers"
@@ -455,14 +454,17 @@ static const s3_acl_header acl_header_perms[] = {
 int RGWAccessControlPolicy_S3::create_from_headers(RGWRados *store, const RGWEnv *env, ACLOwner& _owner)
 {
   std::list<ACLGrant> grants;
+  int r = 0;
 
   for (const struct s3_acl_header *p = acl_header_perms; p->rgw_perm; p++) {
-    if (parse_acl_header(store, env, p, grants) < 0)
-      return false;
+    r = parse_acl_header(store, env, p, grants);
+    if (r < 0) {
+      return r;
+    }
   }
 
   RGWAccessControlList_S3& _acl = static_cast<RGWAccessControlList_S3 &>(acl);
-  int r = _acl.create_from_grants(grants);
+  r = _acl.create_from_grants(grants);
 
   owner = _owner;
 

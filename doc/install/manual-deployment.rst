@@ -55,7 +55,7 @@ a number of things:
   especially useful when you are working with multiple clusters and you need to
   clearly understand which cluster your are working with.
 
-  For example, when you run multiple clusters in a `federated architecture`_,
+  For example, when you run multiple clusters in a :ref:`multisite configuration <multisite>`,
   the cluster name (e.g., ``us-west``, ``us-east``) identifies the cluster for
   the current CLI session. **Note:** To identify the cluster name on the
   command line interface, specify the Ceph configuration file with the
@@ -162,7 +162,7 @@ The procedure is as follows:
 #. Generate an administrator keyring, generate a ``client.admin`` user and add
    the user to the keyring. ::
 
-	sudo ceph-authtool --create-keyring /etc/ceph/ceph.client.admin.keyring --gen-key -n client.admin --set-uid=0 --cap mon 'allow *' --cap osd 'allow *' --cap mds 'allow *' --cap mgr 'allow *'
+	sudo ceph-authtool --create-keyring /etc/ceph/ceph.client.admin.keyring --gen-key -n client.admin --cap mon 'allow *' --cap osd 'allow *' --cap mds 'allow *' --cap mgr 'allow *'
 
 #. Generate a bootstrap-osd keyring, generate a ``client.bootstrap-osd`` user and add
    the user to the keyring. ::
@@ -240,30 +240,12 @@ The procedure is as follows:
 	osd pool default pgp num = 333
 	osd crush chooseleaf type = 1
 
-#. Touch the ``done`` file.
-
-   Mark that the monitor is created and ready to be started::
-
-	sudo touch /var/lib/ceph/mon/ceph-node1/done
 
 #. Start the monitor(s).
 
    For most distributions, services are started via systemd now::
 
 	sudo systemctl start ceph-mon@node1
-
-   For Ubuntu Trusty, use Upstart::
-
-	sudo start ceph-mon id=node1 [cluster={cluster-name}]
-
-   In this case, to allow the start of the daemon at each reboot you
-   must create two empty files like this::
-
-	sudo touch /var/lib/ceph/mon/{cluster-name}-{hostname}/upstart
-
-   For example::
-
-	sudo touch /var/lib/ceph/mon/ceph-node1/upstart
 
    For older Debian/CentOS/RHEL, use sysvinit::
 
@@ -318,36 +300,90 @@ a Ceph Node.
 Short Form
 ----------
 
-Ceph provides the ``ceph-disk`` utility, which can prepare a disk, partition or
-directory for use with Ceph. The ``ceph-disk`` utility creates the OSD ID by
-incrementing the index. Additionally, ``ceph-disk`` will add the new OSD to the
-CRUSH map under the host for you. Execute ``ceph-disk -h`` for CLI details.
-The ``ceph-disk`` utility automates the steps of the `Long Form`_ below. To
+Ceph provides the ``ceph-volume`` utility, which can prepare a logical volume, disk, or partition
+for use with Ceph. The ``ceph-volume`` utility creates the OSD ID by
+incrementing the index. Additionally, ``ceph-volume`` will add the new OSD to the
+CRUSH map under the host for you. Execute ``ceph-volume -h`` for CLI details.
+The ``ceph-volume`` utility automates the steps of the `Long Form`_ below. To
 create the first two OSDs with the short form procedure, execute the following
 on  ``node2`` and ``node3``:
 
-
-#. Prepare the OSD. ::
+bluestore
+^^^^^^^^^
+#. Create the OSD. ::
 
 	ssh {node-name}
-	sudo ceph-disk prepare --cluster {cluster-name} --cluster-uuid {uuid} {data-path} [{journal-path}]
+	sudo ceph-volume lvm create --data {data-path}
 
    For example::
 
 	ssh node1
-	sudo ceph-disk prepare --cluster ceph --cluster-uuid a7f64266-0894-4f1e-a635-d0aeaca0e993 --fs-type ext4 /dev/hdd1
+	sudo ceph-volume lvm create --data /dev/hdd1
 
+Alternatively, the creation process can be split in two phases (prepare, and
+activate):
 
-#. Activate the OSD::
+#. Prepare the OSD. ::
 
-	sudo ceph-disk activate {data-path} [--activate-key {path}]
+	ssh {node-name}
+	sudo ceph-volume lvm prepare --data {data-path} {data-path}
 
    For example::
 
-	sudo ceph-disk activate /dev/hdd1
+	ssh node1
+	sudo ceph-volume lvm prepare --data /dev/hdd1
 
-   **Note:** Use the ``--activate-key`` argument if you do not have a copy
-   of ``/var/lib/ceph/bootstrap-osd/{cluster}.keyring`` on the Ceph Node.
+   Once prepared, the ``ID`` and ``FSID`` of the prepared OSD are required for
+   activation. These can be obtained by listing OSDs in the current server::
+
+    sudo ceph-volume lvm list
+
+#. Activate the OSD::
+
+	sudo ceph-volume lvm activate {ID} {FSID}
+
+   For example::
+
+	sudo ceph-volume lvm activate 0 a7f64266-0894-4f1e-a635-d0aeaca0e993
+
+
+filestore
+^^^^^^^^^
+#. Create the OSD. ::
+
+	ssh {node-name}
+	sudo ceph-volume lvm create --filestore --data {data-path} --journal {journal-path}
+
+   For example::
+
+	ssh node1
+	sudo ceph-volume lvm create --filestore --data /dev/hdd1 --journal /dev/hdd2
+
+Alternatively, the creation process can be split in two phases (prepare, and
+activate):
+
+#. Prepare the OSD. ::
+
+	ssh {node-name}
+	sudo ceph-volume lvm prepare --filestore --data {data-path} --journal {journal-path}
+
+   For example::
+
+	ssh node1
+	sudo ceph-volume lvm prepare --filestore --data /dev/hdd1 --journal /dev/hdd2
+
+   Once prepared, the ``ID`` and ``FSID`` of the prepared OSD are required for
+   activation. These can be obtained by listing OSDs in the current server::
+
+    sudo ceph-volume lvm list
+
+#. Activate the OSD::
+
+	sudo ceph-volume lvm activate --filestore {ID} {FSID}
+
+   For example::
+
+	sudo ceph-volume lvm activate --filestore 0 a7f64266-0894-4f1e-a635-d0aeaca0e993
 
 
 Long Form
@@ -383,6 +419,10 @@ OSDs with the long form procedure, execute the following steps for each OSD.
      ID=$(echo "{\"cephx_secret\": \"$OSD_SECRET\"}" | \
 	ceph osd new $UUID -i - \
 	-n client.bootstrap-osd -k /var/lib/ceph/bootstrap-osd/ceph.keyring)
+
+   It is also possible to include a ``crush_device_class`` property in the JSON
+   to set an initial class other than the default (``ssd`` or ``hdd`` based on
+   the auto-detected device type).
 
 #. Create the default directory on your new OSD. ::
 
@@ -486,7 +526,6 @@ To add (or remove) additional monitors, see `Add/Remove Monitors`_.
 To add (or remove) additional Ceph OSD Daemons, see `Add/Remove OSDs`_.
 
 
-.. _federated architecture: ../../radosgw/federated-config
 .. _Installation (Quick): ../../start
 .. _Add/Remove Monitors: ../../rados/operations/add-or-rm-mons
 .. _Add/Remove OSDs: ../../rados/operations/add-or-rm-osds

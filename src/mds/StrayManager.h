@@ -85,7 +85,7 @@ class StrayManager
 
 
   // Call this on a dentry that has been identified as
-  // elegible for purging.  It will be passed on to PurgeQueue.
+  // eligible for purging.  It will be passed on to PurgeQueue.
   void enqueue(CDentry *dn, bool trunc);
 
   // Final part of enqueue() which we may have to retry

@@ -1,5 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -12,11 +13,14 @@
  * Foundation.  See file COPYING.
  * 
  */
+
 #ifndef RGW_WEBSITE_H
 #define RGW_WEBSITE_H
 
 #include <list>
 #include <string>
+
+#include "common/ceph_json.h"
 
 #include "rgw_xml.h"
 
@@ -28,16 +32,16 @@ struct RGWRedirectInfo
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(protocol, bl);
-    ::encode(hostname, bl);
-    ::encode(http_redirect_code, bl);
+    encode(protocol, bl);
+    encode(hostname, bl);
+    encode(http_redirect_code, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(protocol, bl);
-    ::decode(hostname, bl);
-    ::decode(http_redirect_code, bl);
+    decode(protocol, bl);
+    decode(hostname, bl);
+    decode(http_redirect_code, bl);
     DECODE_FINISH(bl);
   }
 
@@ -55,16 +59,16 @@ struct RGWBWRedirectInfo
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(redirect, bl);
-    ::encode(replace_key_prefix_with, bl);
-    ::encode(replace_key_with, bl);
+    encode(redirect, bl);
+    encode(replace_key_prefix_with, bl);
+    encode(replace_key_with, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(redirect, bl);
-    ::decode(replace_key_prefix_with, bl);
-    ::decode(replace_key_with, bl);
+    decode(redirect, bl);
+    decode(replace_key_prefix_with, bl);
+    decode(replace_key_with, bl);
     DECODE_FINISH(bl);
   }
 
@@ -78,18 +82,18 @@ WRITE_CLASS_ENCODER(RGWBWRedirectInfo)
 struct RGWBWRoutingRuleCondition
 {
   std::string key_prefix_equals;
-  uint16_t http_error_code_returned_equals;
+  uint16_t http_error_code_returned_equals = 0;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(key_prefix_equals, bl);
-    ::encode(http_error_code_returned_equals, bl);
+    encode(key_prefix_equals, bl);
+    encode(http_error_code_returned_equals, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(key_prefix_equals, bl);
-    ::decode(http_error_code_returned_equals, bl);
+    decode(key_prefix_equals, bl);
+    decode(http_error_code_returned_equals, bl);
     DECODE_FINISH(bl);
   }
 
@@ -112,14 +116,14 @@ struct RGWBWRoutingRule
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(condition, bl);
-    ::encode(redirect_info, bl);
+    encode(condition, bl);
+    encode(redirect_info, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(condition, bl);
-    ::decode(redirect_info, bl);
+    decode(condition, bl);
+    decode(redirect_info, bl);
     DECODE_FINISH(bl);
   }
 
@@ -149,12 +153,12 @@ struct RGWBWRoutingRules
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(rules, bl);
+    encode(rules, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(rules, bl);
+    decode(rules, bl);
     DECODE_FINISH(bl);
   }
 
@@ -186,25 +190,25 @@ struct RGWBucketWebsiteConf
 
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 1, bl);
-    ::encode(index_doc_suffix, bl);
-    ::encode(error_doc, bl);
-    ::encode(routing_rules, bl);
-    ::encode(redirect_all, bl);
-    ::encode(subdir_marker, bl);
-    ::encode(listing_css_doc, bl);
-    ::encode(listing_enabled, bl);
+    encode(index_doc_suffix, bl);
+    encode(error_doc, bl);
+    encode(routing_rules, bl);
+    encode(redirect_all, bl);
+    encode(subdir_marker, bl);
+    encode(listing_css_doc, bl);
+    encode(listing_enabled, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(2, bl);
-    ::decode(index_doc_suffix, bl);
-    ::decode(error_doc, bl);
-    ::decode(routing_rules, bl);
-    ::decode(redirect_all, bl);
+    decode(index_doc_suffix, bl);
+    decode(error_doc, bl);
+    decode(routing_rules, bl);
+    decode(redirect_all, bl);
     if (struct_v >= 2) {
-      ::decode(subdir_marker, bl);
-      ::decode(listing_css_doc, bl);
-      ::decode(listing_enabled, bl);
+      decode(subdir_marker, bl);
+      decode(listing_css_doc, bl);
+      decode(listing_enabled, bl);
     }
     DECODE_FINISH(bl);
   }

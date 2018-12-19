@@ -24,11 +24,10 @@
 #include "rgw/rgw_lib_frontend.h" // direct requests
 
 #include "gtest/gtest.h"
-#include "common/backport14.h"
 #include "common/ceph_argparse.h"
 #include "common/debug.h"
 #include "global/global_init.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -83,6 +82,7 @@ namespace {
     friend ostream& operator<<(ostream& os, const obj_rec& rec);
   };
 
+  /* Unused
   ostream& operator<<(ostream& os, const obj_rec& rec)
   {
     RGWFileHandle* rgw_fh = rec.rgw_fh;
@@ -94,7 +94,8 @@ namespace {
     }
     return os;
   }
-  
+  */
+
   std::stack<obj_rec> obj_stack;
   std::deque<obj_rec> cleanup_queue;
 
@@ -113,6 +114,7 @@ namespace {
       : obj(_obj), st(_st) {}
   };
 
+  /* Unused
   ostream& operator<<(ostream& os, const obj_rec_st& rec)
   {
     RGWFileHandle* rgw_fh = rec.obj.rgw_fh;
@@ -137,6 +139,7 @@ namespace {
     }
     return os;
   }
+  */
 
   bool do_marker1 = false;
   bool do_marker2 = true;
@@ -473,7 +476,7 @@ int main(int argc, char *argv[])
     }
   }
 
-  /* dont accidentally run as anonymous */
+  /* don't accidentally run as anonymous */
   if ((access_key == "") ||
       (secret_key == "")) {
     std::cout << argv[0] << " no AWS credentials, exiting" << std::endl;

@@ -8,14 +8,17 @@
  * One item from list_watchers
  */
 struct obj_watch_t {
+  /// Address of the Watcher
   char addr[256];
+  /// Watcher ID
   int64_t watcher_id;
+  /// Cookie
   uint64_t cookie;
+  /// Timeout in Seconds
   uint32_t timeout_seconds;
 }; 
 
 /**
- * @defines
  *
  * Pass as nspace argument to rados_ioctx_set_namespace()
  * before calling rados_nobjects_list_open() to return

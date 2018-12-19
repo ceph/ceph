@@ -66,7 +66,7 @@ TEST_F(BloomHitSetTest, Params) {
   bufferlist bl;
   params.encode(bl);
   BloomHitSet::Params p2;
-  bufferlist::iterator iter = bl.begin();
+  auto iter = bl.cbegin();
   p2.decode(iter);
   EXPECT_EQ(0.1, p2.get_fpp());
   EXPECT_EQ((unsigned)100, p2.target_size);

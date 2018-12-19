@@ -2,11 +2,11 @@
 
 set -e
 
-wget -q http://download.ceph.com/qa/linux-4.0.5.tar.xz
+wget -O linux.tar.gz http://download.ceph.com/qa/linux-4.17.tar.gz
 
 mkdir t
 cd t
-tar Jxvf ../linux*.xz
+tar xzf ../linux.tar.gz
 cd linux*
 make defconfig
 make -j`grep -c processor /proc/cpuinfo`

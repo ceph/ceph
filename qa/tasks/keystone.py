@@ -45,48 +45,6 @@ def install_packages(ctx, config):
             for dep in deps[remote.os.package_type]:
                 remove_package(dep, remote)
 
-@contextlib.contextmanager
-def download(ctx, config):
-    """
-    Download the Keystone from github.
-    Remove downloaded file upon exit.
-
-    The context passed in should be identical to the context
-    passed in to the main task.
-    """
-    assert isinstance(config, dict)
-    log.info('Downloading keystone...')
-    testdir = teuthology.get_testdir(ctx)
-
-    for (client, cconf) in config.items():
-        ctx.cluster.only(client).run(
-            args=[
-                'git', 'clone',
-                '-b', cconf.get('force-branch', 'master'),
-                'https://github.com/openstack/keystone.git',
-                '{tdir}/keystone'.format(tdir=testdir),
-                ],
-            )
-
-        sha1 = cconf.get('sha1')
-        if sha1 is not None:
-            ctx.cluster.only(client).run(
-                args=[
-                    'cd', '{tdir}/keystone'.format(tdir=testdir),
-                    run.Raw('&&'),
-                    'git', 'reset', '--hard', sha1,
-                ],
-            )
-    try:
-        yield
-    finally:
-        log.info('Removing keystone...')
-        testdir = teuthology.get_testdir(ctx)
-        for client in config:
-            ctx.cluster.only(client).run(
-                args=[ 'rm', '-rf', '{tdir}/keystone'.format(tdir=testdir) ],
-            )
-
 def get_keystone_dir(ctx):
     return '{tdir}/keystone'.format(tdir=teuthology.get_testdir(ctx))
 
@@ -108,6 +66,52 @@ def get_keystone_venved_cmd(ctx, cmd, args):
 
 def get_toxvenv_dir(ctx):
     return ctx.tox.venv_path
+
+@contextlib.contextmanager
+def download(ctx, config):
+    """
+    Download the Keystone from github.
+    Remove downloaded file upon exit.
+
+    The context passed in should be identical to the context
+    passed in to the main task.
+    """
+    assert isinstance(config, dict)
+    log.info('Downloading keystone...')
+    keystonedir = get_keystone_dir(ctx)
+
+    for (client, cconf) in config.items():
+        ctx.cluster.only(client).run(
+            args=[
+                'git', 'clone',
+                '-b', cconf.get('force-branch', 'master'),
+                'https://github.com/openstack/keystone.git',
+                keystonedir,
+                ],
+            )
+
+        sha1 = cconf.get('sha1')
+        if sha1 is not None:
+            run_in_keystone_dir(ctx, client, [
+                    'git', 'reset', '--hard', sha1,
+                ],
+            )
+
+        # hax for http://tracker.ceph.com/issues/23659
+        run_in_keystone_dir(ctx, client, [
+                'sed', '-i',
+                's/pysaml2<4.0.3,>=2.4.0/pysaml2>=4.5.0/',
+                'requirements.txt'
+            ],
+        )
+    try:
+        yield
+    finally:
+        log.info('Removing keystone...')
+        for client in config:
+            ctx.cluster.only(client).run(
+                args=[ 'rm', '-rf', keystonedir ],
+            )
 
 @contextlib.contextmanager
 def setup_venv(ctx, config):

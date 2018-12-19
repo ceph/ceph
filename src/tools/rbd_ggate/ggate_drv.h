@@ -8,6 +8,8 @@
 extern "C" {
 #endif
 
+#include <sys/param.h>
+
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -23,6 +25,12 @@ enum {
   GGATE_DRV_CMD_READ = 2,
   GGATE_DRV_CMD_FLUSH = 3,
   GGATE_DRV_CMD_DISCARD = 4,
+};
+
+struct ggate_drv_info {
+  char id[16];
+  char name[NAME_MAX];
+  char info[2048]; /* G_GATE_INFOSIZE */
 };
 
 uint64_t ggate_drv_req_id(ggate_drv_req_t req);
@@ -47,8 +55,7 @@ int ggate_drv_send(ggate_drv_t drv, ggate_drv_req_t req);
 int ggate_drv_resize(ggate_drv_t drv, size_t newsize);
 
 int ggate_drv_kill(const char *devname);
-int ggate_drv_list(char **devs, size_t *size);
-void ggate_drv_list_free(char **devs, size_t size);
+int ggate_drv_list(struct ggate_drv_info *info, size_t *size);
 
 #ifdef __cplusplus
 }

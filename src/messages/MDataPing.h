@@ -28,12 +28,12 @@ struct xio_reg_mem {};
 
 typedef void (*mdata_hook_func)(struct xio_reg_mem *mp);
 
-class MDataPing : public Message {
+class MDataPing : public MessageInstance<MDataPing> {
+public:
+  friend factory;
 
- public:
-
-  static const int HEAD_VERSION = 1;
-  static const int COMPAT_VERSION = 1;
+  static constexpr int HEAD_VERSION = 1;
+  static constexpr int COMPAT_VERSION = 1;
 
   std::string tag;
   uint32_t counter = 0;
@@ -42,7 +42,7 @@ class MDataPing : public Message {
   bool free_data;
 
   MDataPing()
-    : Message(MSG_DATA_PING, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_DATA_PING, HEAD_VERSION, COMPAT_VERSION),
       mdata_hook(NULL),
       free_data(false)
   {}
@@ -64,23 +64,22 @@ private:
 	mdata_hook(&mp);
 
       if (free_data)  {
-	const std::list<buffer::ptr>& buffers = data.buffers();
-	list<bufferptr>::const_iterator pb;
-	for (pb = buffers.begin(); pb != buffers.end(); ++pb) {
-	  free((void*) pb->c_str());
+	for (const auto& node : data.buffers()) {
+	  free(const_cast<void*>(static_cast<const void*>(node.c_str())));
 	}
       }
     }
 
 public:
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(tag, p);
-    ::decode(counter, p);
+    auto p = payload.cbegin();
+    decode(tag, p);
+    decode(counter, p);
   }
   void encode_payload(uint64_t features) override {
-    ::encode(tag, payload);
-    ::encode(counter, payload);
+    using ceph::encode;
+    encode(tag, payload);
+    encode(counter, payload);
   }
 
   const char *get_type_name() const override { return "data_ping"; }

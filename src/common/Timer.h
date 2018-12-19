@@ -77,7 +77,7 @@ public:
    * Call with the event_lock LOCKED
    *
    * Returns true if the callback was cancelled.
-   * Returns false if you never addded the callback in the first place.
+   * Returns false if you never added the callback in the first place.
    */
   bool cancel_event(Context *callback);
 

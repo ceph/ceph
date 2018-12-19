@@ -17,19 +17,25 @@ tasks:
     conf:
       osd:
         osd recovery sleep: .1
-        osd min pg log entries: 100
+        osd min pg log entries: 10
         osd max pg log entries: 1000
+        osd pg log trim min: 10
     log-whitelist:
       - \(POOL_APP_NOT_ENABLED\)
       - \(OSDMAP_FLAGS\)
       - \(OSD_
       - \(OBJECT_
       - \(PG_
+      - \(SLOW_OPS\)
       - overall HEALTH
 - exec:
     osd.0:
       - ceph osd pool create foo 128
       - ceph osd pool application enable foo foo
+      - sleep 5
+- ceph.healthy:
+- exec:
+    osd.0:
       - rados -p foo bench 30 write -b 4096 --no-cleanup
       - ceph osd out 0
       - sleep 5

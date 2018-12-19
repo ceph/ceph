@@ -19,9 +19,11 @@
 
 #include "include/types.h"
 
-class MMonGetMap : public Message {
- public:
-  MMonGetMap() : Message(CEPH_MSG_MON_GET_MAP) { }
+class MMonGetMap : public MessageInstance<MMonGetMap> {
+public:
+  friend factory;
+
+  MMonGetMap() : MessageInstance(CEPH_MSG_MON_GET_MAP) { }
 private:
   ~MMonGetMap() override {}
 
