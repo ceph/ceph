@@ -2678,6 +2678,37 @@ private:
     }
   }
 private:
+  ceph::mutex qlock = ceph::make_mutex("BlueStore::Alerts::qlock");
+  string failed_cmode;
+  set<string> failed_compressors;
+  string spillover_alert;
+
+  void _log_alerts(osd_alert_list_t& alerts);
+  bool _set_compression_alert(bool cmode, const char* s) {
+    std::lock_guard l(qlock);
+    if (cmode) {
+      bool ret = failed_cmode.empty();
+      failed_cmode = s;
+      return ret;
+    }
+    return failed_compressors.emplace(s).second;
+  }
+  void _clear_compression_alert() {
+    std::lock_guard l(qlock);
+    failed_compressors.clear();
+    failed_cmode.clear();
+  }
+
+  void _set_spillover_alert(const char* s) {
+    std::lock_guard l(qlock);
+    spillover_alert = s;
+  }
+  void _clear_spillover_alert() {
+    std::lock_guard l(qlock);
+    spillover_alert.clear();
+  }
+
+private:
 
   // --------------------------------------------------------
   // read processing internal methods
