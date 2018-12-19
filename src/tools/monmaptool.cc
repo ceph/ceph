@@ -24,6 +24,7 @@
 void usage()
 {
   cout << " usage: [--print] [--create [--clobber][--fsid uuid]]\n"
+       << "        [--enable-all-features]\n"
        << "        [--generate] [--set-initial-members]\n"
        << "        [--add name 1.2.3.4:567] [--rm name]\n"
        << "        [--feature-list [plain|parseable]]\n"
@@ -181,6 +182,7 @@ int main(int argc, const char **argv)
   std::string fn;
   bool print = false;
   bool create = false;
+  bool enable_all_features = false;
   bool clobber = false;
   bool modified = false;
   bool show_features = false;
@@ -203,6 +205,8 @@ int main(int argc, const char **argv)
       print = true;
     } else if (ceph_argparse_flag(args, i, "--create", (char*)NULL)) {
       create = true;
+    } else if (ceph_argparse_flag(args, i, "--enable-all-features", (char*)NULL)) {
+      enable_all_features = true;
     } else if (ceph_argparse_flag(args, i, "--clobber", (char*)NULL)) {
       clobber = true;
     } else if (ceph_argparse_flag(args, i, "--generate", (char*)NULL)) {
@@ -331,6 +335,11 @@ int main(int argc, const char **argv)
       monmap.generate_fsid();
       cout << me << ": generated fsid " << monmap.fsid << std::endl;
     }
+    modified = true;
+  }
+  if (enable_all_features) {
+    // populate persistent features, too
+    monmap.persistent_features = ceph::features::mon::get_persistent();
     modified = true;
   }
 
