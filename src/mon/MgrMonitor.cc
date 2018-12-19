@@ -54,6 +54,32 @@ const static std::map<uint32_t, std::set<std::string>> always_on_modules = {
 // Prefix for mon store of active mgr's command descriptions
 const static std::string command_descs_prefix = "mgr_command_descs";
 
+const Option *MgrMonitor::find_module_option(const string& name)
+{
+  // we have two forms of names: "mgr/$module/$option" and
+  // localized "mgr/$module/$instance/$option".  normalize to the
+  // former by stripping out $instance.
+  string real_name;
+  if (name.substr(0, 4) != "mgr/") {
+    return nullptr;
+  }
+  auto second_slash = name.find('/', 5);
+  if (second_slash == std::string::npos) {
+    return nullptr;
+  }
+  auto third_slash = name.find('/', second_slash + 1);
+  if (third_slash != std::string::npos) {
+    // drop the $instance part between the second and third slash
+    real_name = name.substr(0, second_slash) + name.substr(third_slash);
+  } else {
+    real_name = name;
+  }
+  auto p = mgr_module_options.find(real_name);
+  if (p != mgr_module_options.end()) {
+    return &p->second;
+  }
+  return nullptr;
+}
 
 version_t MgrMonitor::get_trim_to() const
 {
