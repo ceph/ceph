@@ -173,6 +173,7 @@ void MgrMonitor::update_from_paxos(bool *need_bootstrap)
 	       static_cast<Option::level_t>(j.second.level)));
       Option& opt = p.first->second;
       opt.set_flags(static_cast<Option::flag_t>(j.second.flags));
+      opt.set_flag(Option::FLAG_MGR);
       opt.set_description(j.second.desc.c_str());
       opt.set_long_description(j.second.long_desc.c_str());
       for (auto& k : j.second.tags) {
@@ -180,11 +181,11 @@ void MgrMonitor::update_from_paxos(bool *need_bootstrap)
       }
       for (auto& k : j.second.see_also) {
 	if (i.module_options.count(k)) {
-	  // another module option
+	  // it's another module option
 	  misc_option_strings.push_back(string("mgr/") + i.name + "/" + k);
 	  opt.add_see_also(misc_option_strings.back().c_str());
 	} else {
-	  // ceph option
+	  // it's a native option
 	  opt.add_see_also(k.c_str());
 	}
       }

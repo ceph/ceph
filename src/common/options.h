@@ -116,6 +116,7 @@ struct Option {
     FLAG_STARTUP = 0x4,         ///< option can only take effect at startup
     FLAG_CLUSTER_CREATE = 0x8,  ///< option only has effect at cluster creation
     FLAG_CREATE = 0x10,         ///< option only has effect at daemon creation
+    FLAG_MGR = 0x20,            ///< option is a mgr module option
   };
 
   struct size_t {
