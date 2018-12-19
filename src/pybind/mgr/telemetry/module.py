@@ -38,10 +38,12 @@ class Module(MgrModule):
         },
         {
             'name': 'enabled',
+            'type': 'bool',
             'default': True
         },
         {
             'name': 'leaderboard',
+            'type': 'bool',
             'default': False
         },
         {
@@ -62,6 +64,7 @@ class Module(MgrModule):
         },
         {
             'name': 'interval',
+            'type': 'int',
             'default': 72
         }
     ]
