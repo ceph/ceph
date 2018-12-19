@@ -22,7 +22,7 @@ Request<I>::Request(I &image_ctx, Context *on_finish, uint64_t journal_op_tid)
 template <typename I>
 void Request<I>::send() {
   I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.owner_lock.is_locked());
+  ceph_assert(image_ctx.owner_lock.is_locked());
 
   // automatically create the event if we don't need to worry
   // about affecting concurrent IO ops
@@ -66,7 +66,7 @@ void Request<I>::finish(int r) {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
 
-  assert(!m_appended_op_event || m_committed_op_event);
+  ceph_assert(!m_appended_op_event || m_committed_op_event);
   AsyncRequest<I>::finish(r);
 }
 
@@ -74,7 +74,7 @@ template <typename I>
 bool Request<I>::append_op_event() {
   I &image_ctx = this->m_image_ctx;
 
-  assert(image_ctx.owner_lock.is_locked());
+  ceph_assert(image_ctx.owner_lock.is_locked());
   RWLock::RLocker snap_locker(image_ctx.snap_lock);
   if (image_ctx.journal != nullptr &&
       image_ctx.journal->is_journal_appending()) {
@@ -94,8 +94,8 @@ bool Request<I>::commit_op_event(int r) {
     return false;
   }
 
-  assert(m_op_tid != 0);
-  assert(!m_committed_op_event);
+  ceph_assert(m_op_tid != 0);
+  ceph_assert(!m_committed_op_event);
   m_committed_op_event = true;
 
   if (image_ctx.journal != nullptr &&
@@ -104,7 +104,7 @@ bool Request<I>::commit_op_event(int r) {
     ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
 
     // ops will be canceled / completed before closing journal
-    assert(image_ctx.journal->is_journal_ready());
+    ceph_assert(image_ctx.journal->is_journal_ready());
     image_ctx.journal->commit_op_event(m_op_tid, r,
                                        new C_CommitOpEvent(this, r));
     return true;
@@ -131,9 +131,9 @@ void Request<I>::handle_commit_op_event(int r, int original_ret_val) {
 template <typename I>
 void Request<I>::replay_op_ready(Context *on_safe) {
   I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.owner_lock.is_locked());
-  assert(image_ctx.snap_lock.is_locked());
-  assert(m_op_tid != 0);
+  ceph_assert(image_ctx.owner_lock.is_locked());
+  ceph_assert(image_ctx.snap_lock.is_locked());
+  ceph_assert(m_op_tid != 0);
 
   m_appended_op_event = true;
   image_ctx.journal->replay_op_ready(
@@ -143,8 +143,8 @@ void Request<I>::replay_op_ready(Context *on_safe) {
 template <typename I>
 void Request<I>::append_op_event(Context *on_safe) {
   I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.owner_lock.is_locked());
-  assert(image_ctx.snap_lock.is_locked());
+  ceph_assert(image_ctx.owner_lock.is_locked());
+  ceph_assert(image_ctx.snap_lock.is_locked());
 
   CephContext *cct = image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
@@ -167,7 +167,7 @@ void Request<I>::handle_op_event_safe(int r) {
     this->finish(r);
     delete this;
   } else {
-    assert(!can_affect_io());
+    ceph_assert(!can_affect_io());
 
     // haven't started the request state machine yet
     RWLock::RLocker owner_locker(image_ctx.owner_lock);

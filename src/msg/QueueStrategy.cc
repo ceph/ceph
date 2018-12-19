@@ -15,7 +15,6 @@
 #include "QueueStrategy.h"
 #define dout_subsys ceph_subsys_ms
 #include "common/debug.h"
-#include "common/backport14.h"
 
 QueueStrategy::QueueStrategy(int _n_threads)
   : lock("QueueStrategy::lock"),
@@ -46,16 +45,15 @@ void QueueStrategy::ds_dispatch(Message *m) {
 
 void QueueStrategy::entry(QSThread *thrd)
 {
-  Message *m = NULL;
   for (;;) {
+    Message::ref m;
     lock.Lock();
     for (;;) {
       if (! mqueue.empty()) {
-	m = &(mqueue.front());
+	m = Message::ref(&mqueue.front(), false);
 	mqueue.pop_front();
 	break;
       }
-      m = NULL;
       if (stop)
 	break;
       disp_threads.push_front(*thrd);
@@ -64,7 +62,6 @@ void QueueStrategy::entry(QSThread *thrd)
     lock.Unlock();
     if (stop) {
 	if (!m) break;
-	m->put();
 	continue;
     }
     get_messenger()->ms_deliver_dispatch(m);
@@ -87,7 +84,7 @@ void QueueStrategy::shutdown()
 void QueueStrategy::wait()
 {
   lock.Lock();
-  assert(stop);
+  ceph_assert(stop);
   for (auto& thread : threads) {
     lock.Unlock();
 
@@ -101,13 +98,13 @@ void QueueStrategy::wait()
 
 void QueueStrategy::start()
 {
-  assert(!stop);
+  ceph_assert(!stop);
   lock.Lock();
   threads.reserve(n_threads);
   for (int ix = 0; ix < n_threads; ++ix) {
     string thread_name = "ms_xio_qs_";
     thread_name.append(std::to_string(ix));
-    auto thrd = ceph::make_unique<QSThread>(this);
+    auto thrd = std::make_unique<QSThread>(this);
     thrd->create(thread_name.c_str());
     threads.emplace_back(std::move(thrd));
   }

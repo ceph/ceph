@@ -43,31 +43,40 @@ private:
   /**
    * @verbatim
    *
-   * <start>
-   *    |
-   *    | (v1)
-   *    |-----> V1_READ_HEADER ---> V1_GET_SNAPSHOTS ---> V1_GET_LOCKS
-   *    |                                                     |
-   *    | (v2)                                                v
-   *    \-----> V2_GET_MUTABLE_METADATA                    <apply>
-   *                |                                         |
+   * <start> < * * * * * * * * * * * * * * * * * * * * * * * * * * (ENOENT)
+   *  ^ |                                                        *
+   *  * | (v1)                                                   *
+   *  * |-----> V1_READ_HEADER -------------> GET_MIGRATION_HEADER (skip if not
+   *  * |                                                     |     migrating)
+   *  * | (v2)                                                v
+   *  * \-----> V2_GET_MUTABLE_METADATA                   V1_GET_SNAPSHOTS
+   *  *             |                                         |
+   *  *             |     -EOPNOTSUPP                         v
+   *  *             |  * * *                              V1_GET_LOCKS
+   *  *             |  *   *                                  |
+   *  *             v  v   *                                  v
+   *  *         V2_GET_PARENT                              <apply>
+   *  *             |                                         |
+   *  *             v                                         |
+   *  * * * * * GET_MIGRATION_HEADER (skip if not             |
+   *  (ENOENT)      |                 migrating)              |
    *                v                                         |
    *            V2_GET_METADATA                               |
    *                |                                         |
    *                v                                         |
-   *            V2_GET_FLAGS                                  |
+   *            V2_GET_POOL_METADATA                          |
+   *                |                                         |
+   *                v (skip if not enabled)                   |
+   *            V2_GET_OP_FEATURES                            |
    *                |                                         |
    *                v                                         |
    *            V2_GET_GROUP                                  |
    *                |                                         |
-   *                v                                         |
+   *                |     -EOPNOTSUPP                         |
+   *                |   * * * *                               |
+   *                |   *     *                               |
+   *                v   v     *                               |
    *            V2_GET_SNAPSHOTS (skip if no snaps)           |
-   *                |                                         |
-   *                v                                         |
-   *            V2_GET_SNAP_TIMESTAMPS                        |
-   *                |                                         |
-   *                v                                         |
-   *            V2_GET_SNAP_NAMESPACES                        |
    *                |                                         |
    *                v                                         |
    *            V2_REFRESH_PARENT (skip if no parent or       |
@@ -116,6 +125,7 @@ private:
   bool m_skip_open_parent_image;
   Context *m_on_finish;
 
+  cls::rbd::MigrationSpec m_migration_spec;
   int m_error_result;
   bool m_flush_aio;
   decltype(m_image_ctx.exclusive_lock) m_exclusive_lock;
@@ -125,27 +135,29 @@ private:
 
   bufferlist m_out_bl;
 
+  bool m_legacy_parent = false;
+  bool m_legacy_snapshot = false;
+
   uint8_t m_order = 0;
   uint64_t m_size = 0;
   uint64_t m_features = 0;
   uint64_t m_incompatible_features = 0;
   uint64_t m_flags = 0;
+  uint64_t m_op_features = 0;
 
   std::string m_last_metadata_key;
   std::map<std::string, bufferlist> m_metadata;
 
   std::string m_object_prefix;
-  ParentInfo m_parent_md;
+  ParentImageInfo m_parent_md;
+  bool m_head_parent_overlap = false;
   cls::rbd::GroupSpec m_group_spec;
 
   ::SnapContext m_snapc;
-  std::vector<std::string> m_snap_names;
-  std::vector<cls::rbd::SnapshotNamespace> m_snap_namespaces;
-  std::vector<uint64_t> m_snap_sizes;
-  std::vector<ParentInfo> m_snap_parents;
+  std::vector<cls::rbd::SnapshotInfo> m_snap_infos;
+  std::vector<ParentImageInfo> m_snap_parents;
   std::vector<uint8_t> m_snap_protection;
   std::vector<uint64_t> m_snap_flags;
-  std::vector<utime_t> m_snap_timestamps;
 
   std::map<rados::cls::lock::locker_id_t,
            rados::cls::lock::locker_info_t> m_lockers;
@@ -154,6 +166,9 @@ private:
 
   bool m_blocked_writes = false;
   bool m_incomplete_update = false;
+
+  void send_get_migration_header();
+  Context *handle_get_migration_header(int *result);
 
   void send_v1_read_header();
   Context *handle_v1_read_header(int *result);
@@ -170,11 +185,17 @@ private:
   void send_v2_get_mutable_metadata();
   Context *handle_v2_get_mutable_metadata(int *result);
 
+  void send_v2_get_parent();
+  Context *handle_v2_get_parent(int *result);
+
   void send_v2_get_metadata();
   Context *handle_v2_get_metadata(int *result);
 
-  void send_v2_get_flags();
-  Context *handle_v2_get_flags(int *result);
+  void send_v2_get_pool_metadata();
+  Context *handle_v2_get_pool_metadata(int *result);
+
+  void send_v2_get_op_features();
+  Context *handle_v2_get_op_features(int *result);
 
   void send_v2_get_group();
   Context *handle_v2_get_group(int *result);
@@ -182,11 +203,8 @@ private:
   void send_v2_get_snapshots();
   Context *handle_v2_get_snapshots(int *result);
 
-  void send_v2_get_snap_namespaces();
-  Context *handle_v2_get_snap_namespaces(int *result);
-
-  void send_v2_get_snap_timestamps();
-  Context *handle_v2_get_snap_timestamps(int *result);
+  void send_v2_get_snapshots_legacy();
+  Context *handle_v2_get_snapshots_legacy(int *result);
 
   void send_v2_refresh_parent();
   Context *handle_v2_refresh_parent(int *result);
@@ -230,7 +248,10 @@ private:
   }
 
   void apply();
-  int get_parent_info(uint64_t snap_id, ParentInfo *parent_md);
+  int get_parent_info(uint64_t snap_id, ParentImageInfo *parent_md,
+                      MigrationInfo *migration_info);
+  bool get_migration_info(ParentImageInfo *parent_md,
+                          MigrationInfo *migration_info);
 };
 
 } // namespace image

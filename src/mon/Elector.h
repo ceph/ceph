@@ -17,7 +17,6 @@
 #define CEPH_MON_ELECTOR_H
 
 #include <map>
-using namespace std;
 
 #include "include/types.h"
 #include "include/Context.h"
@@ -100,7 +99,7 @@ class Elector {
    * Indicates if we are participating in the quorum.
    *
    * @remarks By default, we are created as participating. We may stop
-   *	      participating if the Monitor explicitely calls
+   *	      participating if the Monitor explicitly calls
    *	      Elector::stop_participating though. If that happens, it will
    *	      have to call Elector::start_participating for us to resume
    *	      participating in the quorum.
@@ -122,10 +121,6 @@ class Elector {
    */
   bool     electing_me;
   /**
-   * Holds the time at which we started the election.
-   */
-  utime_t  start_stamp;
-  /**
    * Set containing all those that acked our proposal to become the Leader.
    *
    * If we are acked by everyone in the MonMap, we will declare
@@ -143,10 +138,6 @@ class Elector {
    * Indicates who we have acked
    */
   int	    leader_acked;
-  /**
-   * Indicates when we have acked it
-   */
-  utime_t   ack_stamp;
   /**
    * @}
    */
@@ -204,7 +195,7 @@ class Elector {
    *
    * When the election expires, we will check if we were the ones who won, and
    * if so we will declare victory. If that is not the case, then we assume
-   * that the one we defered to didn't declare victory quickly enough (in fact,
+   * that the one we deferred to didn't declare victory quickly enough (in fact,
    * as far as we know, we may even be dead); so, just propose ourselves as the
    * Leader.
    */

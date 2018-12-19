@@ -6,7 +6,7 @@
 
 #include <string>
 #include <map>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "rgw_crypt_sanitize.h"
 
 #define dout_context g_ceph_context
@@ -17,9 +17,9 @@ void RGWEnv::init(CephContext *cct)
   conf.init(cct);
 }
 
-void RGWEnv::set(const boost::string_ref& name, const boost::string_ref& val)
+void RGWEnv::set(std::string name, std::string val)
 {
-  env_map[std::string{name}] = std::string{val};
+  env_map[std::move(name)] = std::move(val);
 }
 
 void RGWEnv::init(CephContext *cct, char **envp)

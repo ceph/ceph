@@ -90,8 +90,8 @@ function setup_downstream() {
 		        ;;
 	        esac
 	        ln -s "$upstream/.git/$x" "$downstream/.git/$x"
-                cp "$upstream/.git/HEAD" "$downstream/.git/HEAD"
             done
+            cp "$upstream/.git/HEAD" "$downstream/.git/HEAD"
         fi
         cd $downstream
         git reset --hard $ref || return 1
@@ -153,8 +153,8 @@ $0 [options] command args ...
 
    [--os-type type]       docker image repository (centos, ubuntu, etc.) 
                           (defaults to ubuntu)
-   [--os-version version] docker image tag (7 for centos, 12.04 for ubuntu, etc.)
-                          (defaults to 14.04)
+   [--os-version version] docker image tag (7 for centos, 16.04 for ubuntu, etc.)
+                          (defaults to 16.04)
    [--ref gitref]         git reset --hard gitref before running the command
                           (defaults to git rev-parse HEAD)
    [--all types+versions] list of docker image repositories and tags
@@ -171,7 +171,7 @@ continues. Here is a sample use case including an interactive session
 and running a unit test:
 
    $ lsb_release -d
-   Description:	Ubuntu Trusty Tahr (development branch)
+   Description:	Ubuntu Xenial Xerus (development branch)
    $ test/docker-test.sh --os-type centos --os-version 7 --shell
    HEAD is now at 1caee81 autotools: add --enable-docker
    bash-4.2$ pwd
@@ -202,13 +202,12 @@ and running a unit test:
 The --all argument is a bash associative array literal listing the
 operating system version for each operating system type. For instance
 
-   docker-test.sh --all '([ubuntu]="12.04 14.04" [centos]="6 7")' 
+   docker-test.sh --all '([ubuntu]="16.04 17.04" [centos]="7")' 
 
 is strictly equivalent to
 
-   docker-test.sh --os-type ubuntu --os-version 12.04
-   docker-test.sh --os-type ubuntu --os-version 14.04
-   docker-test.sh --os-type centos --os-version 6
+   docker-test.sh --os-type ubuntu --os-version 16.04
+   docker-test.sh --os-type ubuntu --os-version 17.04
    docker-test.sh --os-type centos --os-version 7
 
 The --os-type and --os-version must be exactly as displayed by docker images:
@@ -216,7 +215,7 @@ The --os-type and --os-version must be exactly as displayed by docker images:
    $ docker images
    REPOSITORY            TAG                 IMAGE ID          ...
    centos                7                   87e5b6b3ccc1      ...
-   ubuntu                14.04               6b4e8a7373fe      ...
+   ubuntu                16.04               6b4e8a7373fe      ...
 
 The --os-type value can be any string in the REPOSITORY column, the --os-version
 can be any string in the TAG column.
@@ -232,8 +231,8 @@ docker-test.sh --ref giant -- make check
 Run an interactive shell and set resolv.conf to use 172.17.42.1
 docker-test.sh --opts --dns=172.17.42.1 --shell
 
-Run make check on centos 6, centos 7, ubuntu 12.04 and ubuntu 14.04
-docker-test.sh --all '([ubuntu]="12.04 14.04" [centos]="6 7")' -- make check
+Run make check on centos 7, ubuntu 16.04 and ubuntu 17.04
+docker-test.sh --all '([ubuntu]="16.04 17.04" [centos]="7")' -- make check
 EOF
 }
 
@@ -249,7 +248,7 @@ function main_docker() {
     eval set -- "$temp"
 
     local os_type=ubuntu
-    local os_version=14.04
+    local os_version=16.04
     local all
     local remove=false
     local shell=false

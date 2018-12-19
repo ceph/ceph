@@ -19,15 +19,18 @@
 #include "msg/Message.h"
 
 
-class MExportCapsAck : public Message {
- public:  
-  inodeno_t ino;
+class MExportCapsAck : public MessageInstance<MExportCapsAck> {
+public:  
+  friend factory;
 
+  inodeno_t ino;
+  bufferlist cap_bl;
+
+protected:
   MExportCapsAck() :
-    Message(MSG_MDS_EXPORTCAPSACK) {}
+    MessageInstance(MSG_MDS_EXPORTCAPSACK) {}
   MExportCapsAck(inodeno_t i) :
-    Message(MSG_MDS_EXPORTCAPSACK), ino(i) {}
-private:
+    MessageInstance(MSG_MDS_EXPORTCAPSACK), ino(i) {}
   ~MExportCapsAck() override {}
 
 public:
@@ -37,13 +40,15 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(ino, payload);
+    using ceph::encode;
+    encode(ino, payload);
+    encode(cap_bl, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(ino, p);
+    auto p = payload.cbegin();
+    decode(ino, p);
+    decode(cap_bl, p);
   }
-
 };
 
 #endif

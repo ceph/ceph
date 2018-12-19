@@ -141,7 +141,9 @@ class TestDamage(CephFSTestCase):
                 # Missing dirfrags for non-system dirs result in empty directory
                 "10000000000.00000000",
                 # PurgeQueue is auto-created if not found on startup
-                "500.00000000"
+                "500.00000000",
+                # open file table is auto-created if not found on startup
+                "mds0_openfiles.0"
             ]:
                 expectation = NO_DAMAGE
             else:
@@ -480,7 +482,7 @@ class TestDamage(CephFSTestCase):
 
         # Drop everything from the MDS cache
         self.mds_cluster.mds_stop()
-        self.fs.journal_tool(['journal', 'reset'])
+        self.fs.journal_tool(['journal', 'reset'], 0)
         self.mds_cluster.mds_fail_restart()
         self.fs.wait_for_daemons()
 

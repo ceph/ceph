@@ -6,6 +6,9 @@ meta:
 overrides:
   ceph:
     fs: xfs
+    conf:
+      global:
+        ms dump corrupt message level: 0
 roles:
 - - mon.a
   - mon.b

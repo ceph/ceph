@@ -12,7 +12,7 @@ void cls_version_set(librados::ObjectWriteOperation& op, obj_version& objv)
   bufferlist in;
   cls_version_set_op call;
   call.objv = objv;
-  ::encode(call, in);
+  encode(call, in);
   op.exec("version", "set", in);
 }
 
@@ -20,7 +20,7 @@ void cls_version_inc(librados::ObjectWriteOperation& op)
 {
   bufferlist in;
   cls_version_inc_op call;
-  ::encode(call, in);
+  encode(call, in);
   op.exec("version", "inc", in);
 }
 
@@ -36,7 +36,7 @@ void cls_version_inc(librados::ObjectWriteOperation& op, obj_version& objv, Vers
 
   call.conds.push_back(c);
 
-  ::encode(call, in);
+  encode(call, in);
   op.exec("version", "inc_conds", in);
 }
 
@@ -52,7 +52,7 @@ void cls_version_check(librados::ObjectOperation& op, obj_version& objv, Version
 
   call.conds.push_back(c);
 
-  ::encode(call, in);
+  encode(call, in);
   op.exec("version", "check_conds", in);
 }
 
@@ -64,8 +64,8 @@ public:
     if (r >= 0) {
       cls_version_read_ret ret;
       try {
-        bufferlist::iterator iter = outbl.begin();
-        ::decode(ret, iter);
+        auto iter = outbl.cbegin();
+        decode(ret, iter);
 	*objv = ret.objv;
       } catch (buffer::error& err) {
         // nothing we can do about it atm
@@ -89,8 +89,8 @@ int cls_version_read(librados::IoCtx& io_ctx, string& oid, obj_version *ver)
 
   cls_version_read_ret ret;
   try {
-    bufferlist::iterator iter = out.begin();
-    ::decode(ret, iter);
+    auto iter = out.cbegin();
+    decode(ret, iter);
   } catch (buffer::error& err) {
     return -EIO;
   }

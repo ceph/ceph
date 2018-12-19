@@ -6,15 +6,19 @@ overrides:
       - \(CACHE_POOL_NO_HIT_SET\)
       - \(POOL_FULL\)
       - \(SMALLER_PGP_NUM\)
-      - \(REQUEST_SLOW\)
+      - \(SLOW_OPS\)
       - \(CACHE_POOL_NEAR_FULL\)
       - \(POOL_APP_NOT_ENABLED\)
+      - \(PG_AVAILABILITY\)
+      - \(OBJECT_MISPLACED\)
     conf:
       client:
         debug ms: 1
         debug objecter: 20
         debug rados: 20
         debug monc: 20
+      mon:
+        mon warn on pool no app: false
 tasks:
 - workunit:
     timeout: 6h

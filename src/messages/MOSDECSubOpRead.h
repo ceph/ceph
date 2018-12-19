@@ -18,9 +18,12 @@
 #include "MOSDFastDispatchOp.h"
 #include "osd/ECMsgTypes.h"
 
-class MOSDECSubOpRead : public MOSDFastDispatchOp {
-  static const int HEAD_VERSION = 3;
-  static const int COMPAT_VERSION = 1;
+class MOSDECSubOpRead : public MessageInstance<MOSDECSubOpRead, MOSDFastDispatchOp> {
+public:
+  friend factory;
+private:
+  static constexpr int HEAD_VERSION = 3;
+  static constexpr int COMPAT_VERSION = 1;
 
 public:
   spg_t pgid;
@@ -41,16 +44,16 @@ public:
   }
 
   MOSDECSubOpRead()
-    : MOSDFastDispatchOp(MSG_OSD_EC_READ, HEAD_VERSION, COMPAT_VERSION)
+    : MessageInstance(MSG_OSD_EC_READ, HEAD_VERSION, COMPAT_VERSION)
     {}
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(pgid, p);
-    ::decode(map_epoch, p);
-    ::decode(op, p);
+    auto p = payload.cbegin();
+    decode(pgid, p);
+    decode(map_epoch, p);
+    decode(op, p);
     if (header.version >= 3) {
-      ::decode(min_epoch, p);
+      decode(min_epoch, p);
       decode_trace(p);
     } else {
       min_epoch = map_epoch;
@@ -58,10 +61,11 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(pgid, payload);
-    ::encode(map_epoch, payload);
-    ::encode(op, payload, features);
-    ::encode(min_epoch, payload);
+    using ceph::encode;
+    encode(pgid, payload);
+    encode(map_epoch, payload);
+    encode(op, payload, features);
+    encode(min_epoch, payload);
     encode_trace(payload, features);
   }
 

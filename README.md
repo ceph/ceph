@@ -8,7 +8,7 @@ Please see http://ceph.com/ for current info.
 Most of Ceph is licensed under the LGPL version 2.1.  Some
 miscellaneous code is under BSD-style license or is public domain.
 The documentation is licensed under Creative Commons
-Attribution-ShareAlike (CC BY-SA).  There are a handful of headers
+Attribution Share Alike 3.0 (CC-BY-SA-3.0).  There are a handful of headers
 included here that are licensed under the GPL.  Please see the file
 COPYING for a full inventory of licenses by file.
 
@@ -51,7 +51,7 @@ suitable for installation we recommend you build deb or rpm packages,
 or refer to the `ceph.spec.in` or `debian/rules` to see which
 configuration options are specified for production builds.
 
-Prerequisite: CMake 2.8.12
+Prerequisite: CMake 3.5.1
 
 Build instructions:
 
@@ -59,9 +59,18 @@ Build instructions:
 	cd build
 	make
 
+(Note: do_cmake.sh now defaults to creating a debug build of ceph that can
+be up to 5x slower with some workloads. Please pass 
+"-DCMAKE_BUILD_TYPE=RelWithDebInfo" to do_cmake.sh to create a non-debug 
+release.)
+
 This assumes you make your build dir a subdirectory of the ceph.git
 checkout. If you put it elsewhere, just replace `..` in do_cmake.sh with a
-correct path to the checkout.
+correct path to the checkout. Any additional CMake args can be specified
+setting ARGS before invoking do_cmake. See [cmake options](#cmake-options) 
+for more details. Eg.
+
+    ARGS="-DCMAKE_C_COMPILER=gcc-7" ./do_cmake.sh
 
 To build only certain targets use:
 

@@ -2,74 +2,112 @@
 #
 # Once done, this will define
 #
-# DPDK_FOUND
-# DPDK_INCLUDE_DIR
-# DPDK_LIBRARIES
+# dpdk_FOUND
+# dpdk_INCLUDE_DIR
+# dpdk_LIBRARIES
 
-find_path(DPDK_INCLUDE_DIR rte_config.h
-  PATH_SUFFIXES dpdk)
-find_library(DPDK_rte_hash_LIBRARY rte_hash)
-find_library(DPDK_rte_kvargs_LIBRARY rte_kvargs)
-find_library(DPDK_rte_mbuf_LIBRARY rte_mbuf)
-find_library(DPDK_rte_ethdev_LIBRARY rte_ethdev)
-find_library(DPDK_rte_mempool_LIBRARY rte_mempool)
-find_library(DPDK_rte_ring_LIBRARY rte_ring)
-find_library(DPDK_rte_eal_LIBRARY rte_eal)
-find_library(DPDK_rte_cmdline_LIBRARY rte_cmdline)
-find_library(DPDK_rte_pmd_bond_LIBRARY rte_pmd_bond)
-find_library(DPDK_rte_pmd_vmxnet3_uio_LIBRARY rte_pmd_vmxnet3_uio)
-find_library(DPDK_rte_pmd_ixgbe_LIBRARY rte_pmd_ixgbe)
-find_library(DPDK_rte_pmd_i40e_LIBRARY rte_pmd_i40e)
-find_library(DPDK_rte_pmd_ring_LIBRARY rte_pmd_ring)
-find_library(DPDK_rte_pmd_af_packet_LIBRARY rte_pmd_af_packet)
-
-set(check_LIBRARIES
-  ${DPDK_rte_hash_LIBRARY}
-  ${DPDK_rte_kvargs_LIBRARY}
-  ${DPDK_rte_mbuf_LIBRARY}
-  ${DPDK_rte_ethdev_LIBRARY}
-  ${DPDK_rte_mempool_LIBRARY}
-  ${DPDK_rte_ring_LIBRARY}
-  ${DPDK_rte_eal_LIBRARY}
-  ${DPDK_rte_cmdline_LIBRARY}
-  ${DPDK_rte_pmd_bond_LIBRARY}
-  ${DPDK_rte_pmd_vmxnet3_uio_LIBRARY}
-  ${DPDK_rte_pmd_ixgbe_LIBRARY}
-  ${DPDK_rte_pmd_i40e_LIBRARY}
-  ${DPDK_rte_pmd_ring_LIBRARY}
-  ${DPDK_rte_pmd_af_packet_LIBRARY})
-
-mark_as_advanced(DPDK_INCLUDE_DIR
-  DPDK_rte_hash_LIBRARY
-  DPDK_rte_kvargs_LIBRARY
-  DPDK_rte_mbuf_LIBRARY
-  DPDK_rte_ethdev_LIBRARY
-  DPDK_rte_mempool_LIBRARY
-  DPDK_rte_ring_LIBRARY
-  DPDK_rte_eal_LIBRARY
-  DPDK_rte_cmdline_LIBRARY
-  DPDK_rte_pmd_bond_LIBRARY
-  DPDK_rte_pmd_vmxnet3_uio_LIBRARY
-  DPDK_rte_pmd_ixgbe_LIBRARY
-  DPDK_rte_pmd_i40e_LIBRARY
-  DPDK_rte_pmd_ring_LIBRARY
-  DPDK_rte_pmd_af_packet_LIBRARY)
-
-if (EXISTS ${WITH_DPDK_MLX5})
-  find_library(DPDK_rte_pmd_mlx5_LIBRARY rte_pmd_mlx5)
-  list(APPEND check_LIBRARIES ${DPDK_rte_pmd_mlx5_LIBRARY})
-  mark_as_advanced(DPDK_rte_pmd_mlx5_LIBRARY)
+find_package(PkgConfig QUIET)
+if(PKG_CONFIG_FOUND)
+  pkg_check_modules(dpdk QUIET libdpdk)
 endif()
+
+if(NOT dpdk_INCLUDE_DIRS)
+  find_path(dpdk_config_INCLUDE_DIR rte_config.h
+    HINTS
+      ENV DPDK_DIR
+    PATH_SUFFIXES
+      dpdk
+      include)
+  find_path(dpdk_common_INCLUDE_DIR rte_common.h
+    HINTS
+      ENC DPDK_DIR
+    PATH_SUFFIXES
+      dpdk
+      include)
+  set(dpdk_INCLUDE_DIRS "${dpdk_config_INCLUDE_DIR}")
+  if(NOT dpdk_config_INCLUDE_DIR EQUAL dpdk_common_INCLUDE_DIR)
+    list(APPEND dpdk_INCLUDE_DIRS "${dpdk_common_INCLUDE_DIR}")
+  endif()
+endif()
+
+set(components
+  bus_pci
+  cmdline
+  eal
+  ethdev
+  hash
+  kvargs
+  mbuf
+  mempool
+  mempool_ring
+  mempool_stack
+  pci
+  pmd_af_packet
+  pmd_bond
+  pmd_i40e
+  pmd_ixgbe
+  pmd_mlx5
+  pmd_ring
+  pmd_vmxnet3_uio
+  ring)
+
+set(dpdk_LIBRARIES)
+
+foreach(c ${components})
+  find_library(DPDK_rte_${c}_LIBRARY rte_${c}
+    HINTS
+      ENV DPDK_DIR
+      ${dpdk_LIBRARY_DIRS}
+    PATH_SUFFIXES lib)
+  if(DPDK_rte_${c}_LIBRARY)
+    set(dpdk_lib dpdk::${c})
+    if (NOT TARGET ${dpdk_lib})
+      add_library(${dpdk_lib} UNKNOWN IMPORTED)
+      set_target_properties(${dpdk_lib} PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES "${dpdk_INCLUDE_DIRS}"
+        IMPORTED_LOCATION "${DPDK_rte_${c}_LIBRARY}")
+      if(c STREQUAL pmd_mlx5)
+        find_package(verbs QUIET)
+        if(verbs_FOUND)
+          target_link_libraries(${dpdk_lib} INTERFACE IBVerbs::verbs)
+        endif()
+      endif()
+    endif()
+    list(APPEND dpdk_LIBRARIES ${dpdk_lib})
+  endif()
+endforeach()
+
+mark_as_advanced(dpdk_INCLUDE_DIRS ${dpdk_LIBRARIES})
 
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(dpdk DEFAULT_MSG
-  DPDK_INCLUDE_DIR
-  check_LIBRARIES)
+  dpdk_INCLUDE_DIRS
+  dpdk_LIBRARIES)
 
-if(DPDK_FOUND)
-if (EXISTS ${WITH_DPDK_MLX5})
-  list(APPEND check_LIBRARIES -libverbs)
+if(dpdk_FOUND)
+  if(NOT TARGET dpdk::cflags)
+     if(CMAKE_SYSTEM_PROCESSOR MATCHES "amd64|x86_64|AMD64")
+      set(rte_cflags "-march=core2")
+    elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "arm|ARM")
+      set(rte_cflags "-march=armv7-a")
+    elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64")
+      set(rte_cflags "-march=armv8-a+crc")
+    endif()
+    add_library(dpdk::cflags INTERFACE IMPORTED)
+    if (rte_cflags)
+      set_target_properties(dpdk::cflags PROPERTIES
+        INTERFACE_COMPILE_OPTIONS "${rte_cflags}")
+    endif()
+  endif()
+
+  if(NOT TARGET dpdk::dpdk)
+    add_library(dpdk::dpdk INTERFACE IMPORTED)
+    find_package(Threads QUIET)
+    list(APPEND dpdk_LIBRARIES
+      Threads::Threads
+      dpdk::cflags)
+    set_target_properties(dpdk::dpdk PROPERTIES
+      INTERFACE_LINK_LIBRARIES "${dpdk_LIBRARIES}"
+      INTERFACE_INCLUDE_DIRECTORIES "${dpdk_INCLUDE_DIRS}")
+  endif()
 endif()
-  set(DPDK_LIBRARIES
-    -Wl,--whole-archive ${check_LIBRARIES} -Wl,--no-whole-archive)
-endif(DPDK_FOUND)

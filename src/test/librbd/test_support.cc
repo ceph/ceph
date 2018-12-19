@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 #include "test/librbd/test_support.h"
 #include "include/rbd_types.h"
+#include "gtest/gtest.h"
 #include <sstream>
 
 bool get_features(uint64_t *features) {
@@ -114,7 +115,14 @@ int create_image_data_pool(librados::Rados &rados, std::string &data_pool, bool 
   if (r < 0) {
     return r;
   }
-  ioctx.application_enable("rbd", true);
 
-  return r;
+  librbd::RBD rbd;
+  return rbd.pool_init(ioctx, true);
 }
+
+bool is_librados_test_stub(librados::Rados &rados) {
+  std::string fsid;
+  EXPECT_EQ(0, rados.cluster_fsid(&fsid));
+  return fsid == "00000000-1111-2222-3333-444444444444";
+}
+

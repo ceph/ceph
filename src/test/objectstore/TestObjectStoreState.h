@@ -13,32 +13,36 @@
 #ifndef TEST_OBJECTSTORE_STATE_H_
 #define TEST_OBJECTSTORE_STATE_H_
 
-#include "os/ObjectStore.h"
 #include <boost/scoped_ptr.hpp>
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int.hpp>
 #include <map>
 #include <vector>
 
+#include "os/ObjectStore.h"
+#include "common/Cond.h"
+
 typedef boost::mt11213b rngen_t;
 
 class TestObjectStoreState {
 public:
   struct coll_entry_t {
-    int m_id;
     spg_t m_pgid;
-    coll_t m_coll;
+    coll_t m_cid;
     ghobject_t m_meta_obj;
-    ObjectStore::Sequencer m_osr;
+    ObjectStore::CollectionHandle m_ch;
     map<int, hobject_t*> m_objects;
     int m_next_object_id;
 
-    coll_entry_t(int i, char *coll_buf, char *meta_obj_buf)
-      : m_id(i),
-	m_pgid(pg_t(i, 1), shard_id_t::NO_SHARD),
-	m_coll(m_pgid),
+    coll_entry_t(spg_t pgid, ObjectStore::CollectionHandle& ch,
+		 char *meta_obj_buf)
+      : m_pgid(pgid),
+	m_cid(m_pgid),
 	m_meta_obj(hobject_t(sobject_t(object_t(meta_obj_buf), CEPH_NOSNAP))),
-      m_osr(coll_buf), m_next_object_id(0) {
+	m_ch(ch),
+	m_next_object_id(0) {
+      m_meta_obj.hobj.pool = m_pgid.pool();
+      m_meta_obj.hobj.set_hash(m_pgid.ps());
     }
     ~coll_entry_t();
 
@@ -58,8 +62,8 @@ public:
 
  protected:
   boost::shared_ptr<ObjectStore> m_store;
-  map<int, coll_entry_t*> m_collections;
-  vector<int> m_collections_ids;
+  map<coll_t, coll_entry_t*> m_collections;
+  vector<coll_t> m_collections_ids;
   int m_next_coll_nr;
   int m_num_objs_per_coll;
   int m_num_objects;
@@ -68,6 +72,14 @@ public:
   std::atomic<int> m_in_flight = { 0 };
   Mutex m_finished_lock;
   Cond m_finished_cond;
+
+  void rebuild_id_vec() {
+    m_collections_ids.clear();
+    m_collections_ids.reserve(m_collections.size());
+    for (auto& i : m_collections) {
+      m_collections_ids.push_back(i.first);
+    }
+  }
 
   void wait_for_ready() {
     Mutex::Locker locker(m_finished_lock);
@@ -88,7 +100,7 @@ public:
     m_num_objs_per_coll = val;
   }
 
-  coll_entry_t *get_coll(int key, bool erase = false);
+  coll_entry_t *get_coll(coll_t cid, bool erase = false);
   coll_entry_t *get_coll_at(int pos, bool erase = false);
   int get_next_pool_id() { return m_next_pool++; }
 
@@ -100,11 +112,11 @@ public:
  public:
   explicit TestObjectStoreState(ObjectStore *store) :
     m_next_coll_nr(0), m_num_objs_per_coll(10), m_num_objects(0),
-    m_max_in_flight(0), m_finished_lock("Finished Lock"), m_next_pool(1) {
+    m_max_in_flight(0), m_finished_lock("Finished Lock"), m_next_pool(2) {
     m_store.reset(store);
   }
   ~TestObjectStoreState() { 
-    map<int, coll_entry_t*>::iterator it = m_collections.begin();
+    auto it = m_collections.begin();
     while (it != m_collections.end()) {
       if (it->second)
 	delete it->second;
@@ -125,7 +137,7 @@ public:
     return --m_in_flight;
   }
 
-  coll_entry_t *coll_create(int id);
+  coll_entry_t *coll_create(spg_t pgid, ObjectStore::CollectionHandle ch);
 
   class C_OnFinished: public Context {
    protected:

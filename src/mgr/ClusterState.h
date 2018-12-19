@@ -43,7 +43,7 @@ protected:
 
   MgrMap mgr_map;
 
-  set<int64_t> existing_pools; ///< pools that exist, as of PGMap epoch
+  map<int64_t,unsigned> existing_pools; ///< pools that exist, and pg_num, as of PGMap epoch
   PGMap pg_map;
   PGMap::Incremental pending_inc;
 
@@ -70,28 +70,28 @@ public:
   void notify_osdmap(const OSDMap &osd_map);
 
   bool have_fsmap() const {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     return fsmap.get_epoch() > 0;
   }
 
   template<typename Callback, typename...Args>
   void with_servicemap(Callback&& cb, Args&&...args) const
   {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     std::forward<Callback>(cb)(servicemap, std::forward<Args>(args)...);
   }
 
   template<typename Callback, typename...Args>
   void with_fsmap(Callback&& cb, Args&&...args) const
   {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     std::forward<Callback>(cb)(fsmap, std::forward<Args>(args)...);
   }
 
   template<typename Callback, typename...Args>
   void with_mgrmap(Callback&& cb, Args&&...args) const
   {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     std::forward<Callback>(cb)(mgr_map, std::forward<Args>(args)...);
   }
 
@@ -99,15 +99,23 @@ public:
   auto with_pgmap(Callback&& cb, Args&&...args) const ->
     decltype(cb(pg_map, std::forward<Args>(args)...))
   {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
+    return std::forward<Callback>(cb)(pg_map, std::forward<Args>(args)...);
+  }
+
+  template<typename Callback, typename...Args>
+  auto with_mutable_pgmap(Callback&& cb, Args&&...args) ->
+    decltype(cb(pg_map, std::forward<Args>(args)...))
+  {
+    std::lock_guard l(lock);
     return std::forward<Callback>(cb)(pg_map, std::forward<Args>(args)...);
   }
 
   template<typename... Args>
   void with_monmap(Args &&... args) const
   {
-    Mutex::Locker l(lock);
-    assert(monc != nullptr);
+    std::lock_guard l(lock);
+    ceph_assert(monc != nullptr);
     monc->with_monmap(std::forward<Args>(args)...);
   }
 
@@ -115,8 +123,19 @@ public:
   auto with_osdmap(Args &&... args) const ->
     decltype(objecter->with_osdmap(std::forward<Args>(args)...))
   {
-    assert(objecter != nullptr);
+    ceph_assert(objecter != nullptr);
     return objecter->with_osdmap(std::forward<Args>(args)...);
+  }
+
+  // call cb(osdmap, pg_map, ...args) with the appropriate locks
+  template <typename Callback, typename ...Args>
+  auto with_osdmap_and_pgmap(Callback&& cb, Args&& ...args) const {
+    ceph_assert(objecter != nullptr);
+    std::lock_guard l(lock);
+    return objecter->with_osdmap(
+      std::forward<Callback>(cb),
+      pg_map,
+      std::forward<Args>(args)...);
   }
 
 };

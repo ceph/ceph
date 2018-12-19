@@ -5,9 +5,10 @@ High level status display commands
 
 from collections import defaultdict
 from prettytable import PrettyTable
-import prettytable
-import fnmatch
 import errno
+import fnmatch
+import prettytable
+import six
 
 from mgr_module import MgrModule
 
@@ -67,7 +68,7 @@ class Module(MgrModule):
         """
         
         factor = 1000 if decimal else 1024
-        units = [' ', 'k', 'M', 'G', 'T', 'P']
+        units = [' ', 'k', 'M', 'G', 'T', 'P', 'E']
         unit = 0
         while len("%s" % (int(n) // (factor**unit))) > width - 1:
             unit += 1
@@ -187,7 +188,7 @@ class Module(MgrModule):
                     ])
 
             # Find the standby replays
-            for gid_str, daemon_info in mdsmap['info'].iteritems():
+            for gid_str, daemon_info in six.iteritems(mdsmap['info']):
                 if daemon_info['state'] != "up:standby-replay":
                     continue
 
@@ -195,9 +196,12 @@ class Module(MgrModule):
                 dns = self.get_latest("mds", daemon_info['name'], "mds_mem.dn")
 
                 activity = "Evts: " + self.format_dimless(
-                    self.get_rate("mds", daemon_info['name'], "mds_log.replay"),
+                    self.get_rate("mds", daemon_info['name'], "mds_log.replayed"),
                     5
                 ) + "/s"
+
+                metadata = self.get_metadata('mds', daemon_info['name'])
+                mds_versions[metadata.get('ceph_version', "unknown")].append(daemon_info['name'])
 
                 rank_table.add_row([
                     "{0}-s".format(daemon_info['rank']), "standby-replay",
@@ -229,6 +233,9 @@ class Module(MgrModule):
             output += rank_table.get_string()
             output += "\n" + pools_table.get_string() + "\n"
 
+        if not output and fs_filter is not None:
+            return errno.EINVAL, "", "Invalid filesystem: " + fs_filter
+
         standby_table = PrettyTable(["Standby MDS"])
         for standby in fsmap['standbys']:
             metadata = self.get_metadata('mds', standby['name'])
@@ -239,20 +246,20 @@ class Module(MgrModule):
         output += "\n" + standby_table.get_string() + "\n"
 
         if len(mds_versions) == 1:
-            output += "MDS version: {0}".format(mds_versions.keys()[0])
+            output += "MDS version: {0}".format(list(mds_versions)[0])
         else:
             version_table = PrettyTable(["version", "daemons"])
-            for version, daemons in mds_versions.iteritems():
+            for version, daemons in six.iteritems(mds_versions):
                 version_table.add_row([
                     version,
                     ", ".join(daemons)
                 ])
             output += version_table.get_string() + "\n"
 
-        return 0, "", output
+        return 0, output, ""
 
     def handle_osd_status(self, cmd):
-        osd_table = PrettyTable(['id', 'host', 'used', 'avail', 'wr ops', 'wr data', 'rd ops', 'rd data'])
+        osd_table = PrettyTable(['id', 'host', 'used', 'avail', 'wr ops', 'wr data', 'rd ops', 'rd data', 'state'])
         osdmap = self.get("osd_map")
 
         filter_osds = set()
@@ -279,22 +286,31 @@ class Module(MgrModule):
             if bucket_filter and osd_id not in filter_osds:
                 continue
 
-            metadata = self.get_metadata('osd', "%s" % osd_id)
-            stats = osd_stats[osd_id]
+            hostname = ""
+            kb_used = 0
+            kb_avail = 0
 
-            osd_table.add_row([osd_id, metadata['hostname'],
-                               self.format_bytes(stats['kb_used'] * 1024, 5),
-                               self.format_bytes(stats['kb_avail'] * 1024, 5),
+            if osd_id in osd_stats:
+                metadata = self.get_metadata('osd', "%s" % osd_id)
+                stats = osd_stats[osd_id]
+                hostname = metadata['hostname']
+                kb_used = stats['kb_used'] * 1024
+                kb_avail = stats['kb_avail'] * 1024
+
+            osd_table.add_row([osd_id, hostname,
+                               self.format_bytes(kb_used, 5),
+                               self.format_bytes(kb_avail, 5),
                                self.format_dimless(self.get_rate("osd", osd_id.__str__(), "osd.op_w") +
                                self.get_rate("osd", osd_id.__str__(), "osd.op_rw"), 5),
                                self.format_bytes(self.get_rate("osd", osd_id.__str__(), "osd.op_in_bytes"), 5),
                                self.format_dimless(self.get_rate("osd", osd_id.__str__(), "osd.op_r"), 5),
                                self.format_bytes(self.get_rate("osd", osd_id.__str__(), "osd.op_out_bytes"), 5),
+                               ','.join(osd['state']),
                                ])
 
-        return 0, "", osd_table.get_string()
+        return 0, osd_table.get_string(), ""
 
-    def handle_command(self, cmd):
+    def handle_command(self, inbuf, cmd):
         self.log.error("handle_command")
 
         if cmd['prefix'] == "fs status":

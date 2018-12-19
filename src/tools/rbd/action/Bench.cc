@@ -14,6 +14,8 @@
 #include <boost/accumulators/statistics/rolling_sum.hpp>
 #include <boost/program_options.hpp>
 
+using namespace std::chrono;
+
 namespace rbd {
 namespace action {
 namespace bench {
@@ -41,7 +43,7 @@ void validate(boost::any& v, const std::vector<std::string>& values,
   const std::string &s = po::validators::get_single_string(values);
 
   std::string parse_error;
-  uint64_t size = strict_sistrtoll(s.c_str(), &parse_error);
+  uint64_t size = strict_iecstrtoll(s.c_str(), &parse_error);
   if (!parse_error.empty()) {
     throw po::validation_error(po::validation_error::invalid_option_value);
   }
@@ -197,8 +199,8 @@ int do_bench(librbd::Image& image, io_type_t io_type,
   uint64_t size = 0;
   image.size(&size);
   if (io_size > size) {
-    std::cerr << "rbd: io-size " << prettybyte_t(io_size) << " "
-              << "larger than image size " << prettybyte_t(size) << std::endl;
+    std::cerr << "rbd: io-size " << byte_u_t(io_size) << " "
+              << "larger than image size " << byte_u_t(size) << std::endl;
     return -EINVAL;
   }
 
@@ -228,8 +230,8 @@ int do_bench(librbd::Image& image, io_type_t io_type,
 
   srand(time(NULL) % (unsigned long) -1);
 
-  utime_t start = ceph_clock_now();
-  utime_t last;
+  coarse_mono_time start = coarse_mono_clock::now();
+  chrono::duration<double> last = chrono::duration<double>::zero();
   unsigned ios = 0;
 
   vector<uint64_t> thread_offset;
@@ -274,6 +276,7 @@ int do_bench(librbd::Image& image, io_type_t io_type,
   int write_ops = 0;
 
   for (off = 0; off < io_bytes; ) {
+    // Issue I/O
     i = 0;
     while (i < io_threads && off < io_bytes) {
       bool read_flag = should_read(read_proportion);
@@ -281,13 +284,6 @@ int do_bench(librbd::Image& image, io_type_t io_type,
       b.wait_for(io_threads - 1);
       b.start_io(io_threads, thread_offset[i], io_size, op_flags, read_flag);
 
-      if (random) {
-        thread_offset[i] = (rand() % (size / io_size)) * io_size;
-      } else {
-        thread_offset[i] += io_size;
-        if (thread_offset[i] + io_size > size)
-          thread_offset[i] = 0;
-      }
       ++i;
       ++ios;
       off += io_size;
@@ -301,12 +297,28 @@ int do_bench(librbd::Image& image, io_type_t io_type,
         write_ops++;
     }
 
-    utime_t now = ceph_clock_now();
-    utime_t elapsed = now - start;
-    if (last.is_zero()) {
+    // Set the thread_offsets of next I/O
+    for (i = 0; i < io_threads; ++i) {
+      if (random) {
+        thread_offset[i] = (rand() % (size / io_size)) * io_size;
+        continue;
+      }
+      if (off < (io_size * unit_len * io_threads) ) {
+        thread_offset[i] += io_size;
+      } else {
+        // thread_offset is adjusted to the chunks unassigned to threads.
+        thread_offset[i] = off + (i * io_size);
+      }
+      if (thread_offset[i] + io_size > size)
+        thread_offset[i] = unit_len * i * io_size;
+    }
+
+    coarse_mono_time now = coarse_mono_clock::now();
+    chrono::duration<double> elapsed = now - start;
+    if (last == chrono::duration<double>::zero()) {
       last = elapsed;
-    } else if (elapsed.sec() != last.sec()) {
-      time_acc(elapsed - last);
+    } else if ((int)elapsed.count() != (int)last.count()) {
+      time_acc((elapsed - last).count());
       ios_acc(static_cast<double>(cur_ios));
       off_acc(static_cast<double>(cur_off));
       cur_ios = 0;
@@ -314,7 +326,7 @@ int do_bench(librbd::Image& image, io_type_t io_type,
 
       double time_sum = boost::accumulators::rolling_sum(time_acc);
       printf("%5d  %8d  %8.2lf  %8.2lf\n",
-             (int)elapsed,
+             (int)elapsed.count(),
              (int)(ios - io_threads),
              boost::accumulators::rolling_sum(ios_acc) / time_sum,
              boost::accumulators::rolling_sum(off_acc) / time_sum);
@@ -331,18 +343,21 @@ int do_bench(librbd::Image& image, io_type_t io_type,
     }
   }
 
-  utime_t now = ceph_clock_now();
-  double elapsed = now - start;
+  coarse_mono_time now = coarse_mono_clock::now();
+  chrono::duration<double> elapsed = now - start;
 
   printf("elapsed: %5d  ops: %8d  ops/sec: %8.2lf  bytes/sec: %8.2lf\n",
-         (int)elapsed, ios, (double)ios / elapsed, (double)off / elapsed);
+         (int)elapsed.count(), ios, (double)ios / elapsed.count(),
+         (double)off / elapsed.count());
 
   if (io_type == IO_TYPE_RW) {
     printf("read_ops: %5d   read_ops/sec: %8.2lf   read_bytes/sec: %8.2lf\n",
-           read_ops, (double)read_ops / elapsed, (double)read_ops * io_size / elapsed);
+           read_ops, (double)read_ops / elapsed.count(),
+           (double)read_ops * io_size / elapsed.count());
 
     printf("write_ops: %5d   write_ops/sec: %8.2lf   write_bytes/sec: %8.2lf\n",
-           write_ops, (double)write_ops / elapsed, (double)write_ops * io_size / elapsed);
+           write_ops, (double)write_ops / elapsed.count(),
+           (double)write_ops * io_size / elapsed.count());
   }
 
   return 0;
@@ -376,6 +391,7 @@ void get_arguments_for_bench(po::options_description *positional,
 int bench_execute(const po::variables_map &vm, io_type_t bench_io_type) {
   size_t arg_index = 0;
   std::string pool_name;
+  std::string namespace_name;
   std::string image_name;
   std::string snap_name;
   utils::SnapshotPresence snap_presence = utils::SNAPSHOT_PRESENCE_NONE;
@@ -383,8 +399,8 @@ int bench_execute(const po::variables_map &vm, io_type_t bench_io_type) {
     snap_presence = utils::SNAPSHOT_PRESENCE_PERMITTED;
 
   int r = utils::get_pool_image_snapshot_names(
-    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-    &snap_name, snap_presence, utils::SPEC_VALIDATION_NONE);
+    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &namespace_name,
+    &image_name, &snap_name, true, snap_presence, utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
@@ -446,8 +462,8 @@ int bench_execute(const po::variables_map &vm, io_type_t bench_io_type) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", false, &rados,
-                                 &io_ctx, &image);
+  r = utils::init_and_open_image(pool_name, namespace_name, image_name, "",
+                                 snap_name, false, &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
   }
@@ -461,12 +477,14 @@ int bench_execute(const po::variables_map &vm, io_type_t bench_io_type) {
   return 0;
 }
 
-int execute_for_write(const po::variables_map &vm) {
+int execute_for_write(const po::variables_map &vm,
+                      const std::vector<std::string> &ceph_global_init_args) {
   std::cerr << "rbd: bench-write is deprecated, use rbd bench --io-type write ..." << std::endl;
   return bench_execute(vm, IO_TYPE_WRITE);
 }
 
-int execute_for_bench(const po::variables_map &vm) {
+int execute_for_bench(const po::variables_map &vm,
+                      const std::vector<std::string> &ceph_global_init_args) {
   io_type_t bench_io_type;
   if (vm.count("io-type")) {
     bench_io_type = vm["io-type"].as<io_type_t>();

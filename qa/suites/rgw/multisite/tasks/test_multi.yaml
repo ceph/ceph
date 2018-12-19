@@ -7,13 +7,13 @@ tasks:
 - ceph: {cluster: c2}
 - rgw:
     c1.client.0:
-      valgrind: [--tool=memcheck]
+      valgrind: [--tool=memcheck, --max-threads=1024] # http://tracker.ceph.com/issues/25214
     c1.client.1:
-      valgrind: [--tool=memcheck]
+      valgrind: [--tool=memcheck, --max-threads=1024]
     c2.client.0:
-      valgrind: [--tool=memcheck]
+      valgrind: [--tool=memcheck, --max-threads=1024]
     c2.client.1:
-      valgrind: [--tool=memcheck]
+      valgrind: [--tool=memcheck, --max-threads=1024]
 - rgw-multisite:
 - rgw-multisite-tests:
     config:

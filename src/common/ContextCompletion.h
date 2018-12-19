@@ -17,7 +17,7 @@ public:
   void finish_op(int r);
 
 private:
-  Mutex m_lock;
+  ceph::mutex m_lock = ceph::make_mutex("ContextCompletion::m_lock");
   Context *m_ctx;
   bool m_ignore_enoent;
   int m_ret;

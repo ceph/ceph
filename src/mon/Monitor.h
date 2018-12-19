@@ -25,6 +25,7 @@
 
 #include <errno.h>
 #include <cmath>
+#include <string>
 
 #include "include/types.h"
 #include "include/health.h"
@@ -39,13 +40,14 @@
 #include "Session.h"
 #include "MonCommand.h"
 
+
+#include "common/config_obs.h"
 #include "common/LogClient.h"
 #include "auth/cephx/CephxKeyServer.h"
 #include "auth/AuthMethodList.h"
 #include "auth/KeyRing.h"
 #include "messages/MMonCommand.h"
 #include "mon/MonitorDBStore.h"
-#include "include/memory.h"
 #include "mgr/MgrClient.h"
 
 #include "mon/MonOpRequest.h"
@@ -107,7 +109,7 @@ class MMonProbe;
 struct MMonSubscribe;
 struct MRoute;
 struct MForward;
-struct MTimeCheck;
+struct MTimeCheck2;
 struct MMonHealth;
 
 #define COMPAT_SET_LOC "feature_set"
@@ -164,9 +166,13 @@ public:
   vector<MonCommand> local_mon_commands;  // commands i support
   bufferlist local_mon_commands_bl;       // encoded version of above
 
+  vector<MonCommand> prenautilus_local_mon_commands;
+  bufferlist prenautilus_local_mon_commands_bl;
+
   Messenger *mgr_messenger;
   MgrClient mgr_client;
   uint64_t mgr_proxy_bytes = 0;  // in-flight proxied mgr command message bytes
+  std::string gss_ktfile_client{};
 
 private:
   void new_tick();
@@ -216,6 +222,8 @@ public:
 
   void prepare_new_fingerprint(MonitorDBStore::TransactionRef t);
 
+  std::vector<DaemonHealthMetric> get_health_metrics();
+
   // -- elector --
 private:
   Paxos *paxos;
@@ -227,6 +235,7 @@ private:
   
   int leader;            // current leader (to best of knowledge)
   set<int> quorum;       // current active set of monitors (if !starting)
+  mono_clock::time_point quorum_since;  // when quorum formed
   utime_t leader_since;  // when this monitor became the leader, if it is the leader
   utime_t exited_quorum; // time detected as not in quorum; 0 if in
 
@@ -283,7 +292,7 @@ private:
     ScrubState() : finished(false) { }
     virtual ~ScrubState() { }
   };
-  ceph::shared_ptr<ScrubState> scrub_state; ///< keeps track of current scrub
+  std::shared_ptr<ScrubState> scrub_state; ///< keeps track of current scrub
 
   /**
    * @defgroup Monitor_h_sync Synchronization
@@ -483,9 +492,9 @@ private:
    *  - Once all the quorum members have pong'ed, the leader will share the
    *    clock skew and latency maps with all the monitors in the quorum.
    */
-  map<entity_inst_t, utime_t> timecheck_waiting;
-  map<entity_inst_t, double> timecheck_skews;
-  map<entity_inst_t, double> timecheck_latencies;
+  map<int, utime_t> timecheck_waiting;
+  map<int, double> timecheck_skews;
+  map<int, double> timecheck_latencies;
   // odd value means we are mid-round; even value means the round has
   // finished.
   version_t timecheck_round;
@@ -530,7 +539,7 @@ private:
     double abs_skew = std::fabs(skew_bound);
     if (abs)
       *abs = abs_skew;
-    return (abs_skew > g_conf->mon_clock_drift_allowed);
+    return (abs_skew > g_conf()->mon_clock_drift_allowed);
   }
 
   /**
@@ -605,38 +614,42 @@ public:
   /**
    * Vector holding the Services serviced by this Monitor.
    */
-  vector<PaxosService*> paxos_service;
+  vector<std::unique_ptr<PaxosService>> paxos_service;
 
   class MDSMonitor *mdsmon() {
-    return (class MDSMonitor *)paxos_service[PAXOS_MDSMAP];
+    return (class MDSMonitor *)paxos_service[PAXOS_MDSMAP].get();
   }
 
   class MonmapMonitor *monmon() {
-    return (class MonmapMonitor *)paxos_service[PAXOS_MONMAP];
+    return (class MonmapMonitor *)paxos_service[PAXOS_MONMAP].get();
   }
 
   class OSDMonitor *osdmon() {
-    return (class OSDMonitor *)paxos_service[PAXOS_OSDMAP];
+    return (class OSDMonitor *)paxos_service[PAXOS_OSDMAP].get();
   }
 
   class AuthMonitor *authmon() {
-    return (class AuthMonitor *)paxos_service[PAXOS_AUTH];
+    return (class AuthMonitor *)paxos_service[PAXOS_AUTH].get();
   }
 
   class LogMonitor *logmon() {
-    return (class LogMonitor*) paxos_service[PAXOS_LOG];
+    return (class LogMonitor*) paxos_service[PAXOS_LOG].get();
   }
 
   class MgrMonitor *mgrmon() {
-    return (class MgrMonitor*) paxos_service[PAXOS_MGR];
+    return (class MgrMonitor*) paxos_service[PAXOS_MGR].get();
   }
 
   class MgrStatMonitor *mgrstatmon() {
-    return (class MgrStatMonitor*) paxos_service[PAXOS_MGRSTAT];
+    return (class MgrStatMonitor*) paxos_service[PAXOS_MGRSTAT].get();
   }
 
-  class MgrStatMonitor *healthmon() {
-    return (class MgrStatMonitor*) paxos_service[PAXOS_MGRSTAT];
+  class HealthMonitor *healthmon() {
+    return (class HealthMonitor*) paxos_service[PAXOS_HEALTH].get();
+  }
+
+  class ConfigMonitor *configmon() {
+    return (class ConfigMonitor*) paxos_service[PAXOS_CONFIG].get();
   }
 
   friend class Paxos;
@@ -655,7 +668,7 @@ public:
 
   template<typename Func, typename...Args>
   void with_session_map(Func&& func) {
-    Mutex::Locker l(session_map_lock);
+    std::lock_guard l(session_map_lock);
     std::forward<Func>(func)(session_map);
   }
   void send_latest_monmap(Connection *con);
@@ -665,18 +678,20 @@ public:
   void handle_subscribe(MonOpRequestRef op);
   void handle_mon_get_map(MonOpRequestRef op);
 
-  static void _generate_command_map(map<string,cmd_vartype>& cmdmap,
+  static void _generate_command_map(cmdmap_t& cmdmap,
                                     map<string,string> &param_str_map);
   static const MonCommand *_get_moncommand(
     const string &cmd_prefix,
     const vector<MonCommand>& cmds);
-  bool _allowed_command(MonSession *s, string &module, string &prefix,
-                        const map<string,cmd_vartype>& cmdmap,
+  bool _allowed_command(MonSession *s, const string& module,
+			const string& prefix,
+                        const cmdmap_t& cmdmap,
                         const map<string,string>& param_str_map,
                         const MonCommand *this_cmd);
   void get_mon_status(Formatter *f, ostream& ss);
   void _quorum_status(Formatter *f, ostream& ss);
-  bool _add_bootstrap_peer_hint(string cmd, cmdmap_t& cmdmap, ostream& ss);
+  bool _add_bootstrap_peer_hint(std::string_view cmd, const cmdmap_t& cmdmap,
+				std::ostream& ss);
   void handle_command(MonOpRequestRef op);
   void handle_route(MonOpRequestRef op);
 
@@ -779,7 +794,6 @@ public:
     MonSession *session;
     ConnectionRef con;
     uint64_t con_features;
-    entity_inst_t client_inst;
     MonOpRequestRef op;
 
     RoutedRequest() : tid(0), session(NULL), con_features(0) {}
@@ -793,7 +807,6 @@ public:
   
   void forward_request_leader(MonOpRequestRef op);
   void handle_forward(MonOpRequestRef op);
-  void try_send_message(Message *m, const entity_inst_t& to);
   void send_reply(MonOpRequestRef op, Message *reply);
   void no_reply(MonOpRequestRef op);
   void resend_routed_requests();
@@ -801,8 +814,7 @@ public:
   void remove_all_sessions();
   void waitlist_or_zap_client(MonOpRequestRef op);
 
-  void send_command(const entity_inst_t& inst,
-		    const vector<string>& com);
+  void send_mon_message(Message *m, int rank);
 
 public:
   struct C_Command : public C_MonOp {
@@ -827,7 +839,7 @@ public:
 
           // if client drops we may not have a session to draw information from.
           if (s) {
-            ss << "from='" << s->inst << "' "
+            ss << "from='" << s->name << " " << s->addrs << "' "
               << "entity='" << s->entity_name << "' ";
           } else {
             ss << "session dropped for command ";
@@ -843,7 +855,7 @@ public:
       else if (r == -EAGAIN)
 	mon->dispatch_op(op);
       else
-	assert(0 == "bad C_Command return value");
+	ceph_abort_msg("bad C_Command return value");
     }
   };
 
@@ -860,7 +872,7 @@ public:
       else if (r == -ECANCELED)
         return;
       else
-	assert(0 == "bad C_RetryMessage return value");
+	ceph_abort_msg("bad C_RetryMessage return value");
     }
   };
 
@@ -875,11 +887,12 @@ public:
   }
   void dispatch_op(MonOpRequestRef op);
   //mon_caps is used for un-connected messages from monitors
-  MonCap * mon_caps;
+  MonCap mon_caps;
   bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new) override;
-  bool ms_verify_authorizer(Connection *con, int peer_type,
-			    int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
-			    bool& isvalid, CryptoKey& session_key) override;
+  KeyStore *ms_get_auth1_authorizer_keystore();
+public: // for AuthMonitor msgr1:
+  int ms_handle_authentication(Connection *con) override;
+private:
   bool ms_handle_reset(Connection *con) override;
   void ms_handle_remote_reset(Connection *con) override {}
   bool ms_handle_refused(Connection *con) override;
@@ -913,7 +926,7 @@ public:
 
   // config observer
   const char** get_tracked_conf_keys() const override;
-  void handle_conf_change(const struct md_config_t *conf,
+  void handle_conf_change(const ConfigProxy& conf,
                           const std::set<std::string> &changed) override;
 
   void update_log_clients();
@@ -944,8 +957,8 @@ public:
   int write_fsid();
   int write_fsid(MonitorDBStore::TransactionRef t);
 
-  void do_admin_command(std::string command, cmdmap_t& cmdmap,
-			std::string format, ostream& ss);
+  void do_admin_command(std::string_view command, const cmdmap_t& cmdmap,
+			std::string_view format, std::ostream& ss);
 
 private:
   // don't allow copying
@@ -955,19 +968,28 @@ private:
 public:
   static void format_command_descriptions(const std::vector<MonCommand> &commands,
 					  Formatter *f,
+					  uint64_t features,
 					  bufferlist *rdata);
 
   const std::vector<MonCommand> &get_local_commands(mon_feature_t f) {
-    return local_mon_commands;
+    if (f.contains_all(ceph::features::mon::FEATURE_NAUTILUS)) {
+      return local_mon_commands;
+    } else {
+      return prenautilus_local_mon_commands;
+    }
   }
   const bufferlist& get_local_commands_bl(mon_feature_t f) {
-    return local_mon_commands_bl;
+    if (f.contains_all(ceph::features::mon::FEATURE_NAUTILUS)) {
+      return local_mon_commands_bl;
+    } else {
+      return prenautilus_local_mon_commands_bl;
+    }
   }
   void set_leader_commands(const std::vector<MonCommand>& cmds) {
     leader_mon_commands = cmds;
   }
 
-  static bool is_keyring_required();
+  bool is_keyring_required();
 };
 
 #define CEPH_MON_FEATURE_INCOMPAT_BASE CompatSet::Feature (1, "initial feature set (~v.18)")
@@ -980,6 +1002,7 @@ public:
 #define CEPH_MON_FEATURE_INCOMPAT_KRAKEN CompatSet::Feature(8, "support monmap features")
 #define CEPH_MON_FEATURE_INCOMPAT_LUMINOUS CompatSet::Feature(9, "luminous ondisk layout")
 #define CEPH_MON_FEATURE_INCOMPAT_MIMIC CompatSet::Feature(10, "mimic ondisk layout")
+#define CEPH_MON_FEATURE_INCOMPAT_NAUTILUS CompatSet::Feature(11, "nautilus ondisk layout")
 // make sure you add your feature to Monitor::get_supported_features
 
 

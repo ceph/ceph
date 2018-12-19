@@ -1,15 +1,19 @@
 from __future__ import print_function
 from textwrap import dedent
+import logging
 from ceph_volume.util import system
-from ceph_volume import decorators
-from .common import create_parser
+from ceph_volume.util.arg_validators import exclude_group_options
+from ceph_volume import decorators, terminal
+from .common import create_parser, rollback_osd
 from .prepare import Prepare
 from .activate import Activate
+
+logger = logging.getLogger(__name__)
 
 
 class Create(object):
 
-    help = 'Create a new OSD from  an LVM device'
+    help = 'Create a new OSD from an LVM device'
 
     def __init__(self, argv):
         self.argv = argv
@@ -18,8 +22,20 @@ class Create(object):
     def create(self, args):
         if not args.osd_fsid:
             args.osd_fsid = system.generate_uuid()
-        Prepare([]).prepare(args)
-        Activate([]).activate(args)
+        prepare_step = Prepare([])
+        prepare_step.safe_prepare(args)
+        osd_id = prepare_step.osd_id
+        try:
+            # we try this for activate only when 'creating' an OSD, because a rollback should not
+            # happen when doing normal activation. For example when starting an OSD, systemd will call
+            # activate, which would never need to be rolled back.
+            Activate([]).activate(args)
+        except Exception:
+            logger.exception('lvm activate was unable to complete, while creating the OSD')
+            logger.info('will rollback OSD ID creation')
+            rollback_osd(args, osd_id)
+            raise
+        terminal.success("ceph-volume lvm create successful for: %s" % args.data)
 
     def main(self):
         sub_command_help = dedent("""
@@ -28,18 +44,13 @@ class Create(object):
         all the metadata to the logical volumes using LVM tags, and starting
         the OSD daemon.
 
-        Example calls for supported scenarios:
+        Existing logical volume (lv) or device:
 
-        Filestore
-        ---------
+            ceph-volume lvm create --data {vg name/lv name} --journal /path/to/device
 
-          Existing logical volume (lv) or device:
+        Or:
 
-              ceph-volume lvm create --filestore --data {vg name/lv name} --journal /path/to/device
-
-          Or:
-
-              ceph-volume lvm create --filestore --data {vg name/lv name} --journal {vg name/lv name}
+            ceph-volume lvm create --data {vg name/lv name} --journal {vg name/lv name}
 
         """)
         parser = create_parser(
@@ -49,9 +60,10 @@ class Create(object):
         if len(self.argv) == 0:
             print(sub_command_help)
             return
+        exclude_group_options(parser, groups=['filestore', 'bluestore'], argv=self.argv)
         args = parser.parse_args(self.argv)
         # Default to bluestore here since defaulting it in add_argument may
         # cause both to be True
-        if args.bluestore is None and args.filestore is None:
+        if not args.bluestore and not args.filestore:
             args.bluestore = True
         self.create(args)

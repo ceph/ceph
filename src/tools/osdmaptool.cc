@@ -23,17 +23,21 @@
 #include "global/global_init.h"
 #include "osd/OSDMap.h"
 
-using namespace std;
 
 void usage()
 {
-  cout << " usage: [--print] [--createsimple <numosd> [--clobber] [--pg_bits <bitsperosd>]] <mapfilename>" << std::endl;
+  cout << " usage: [--print] <mapfilename>" << std::endl;
+  cout << "   --create-from-conf      creates an osd map with default configurations" << std::endl;
+  cout << "   --createsimple <numosd> [--clobber] [--pg-bits <bitsperosd>] [--pgp-bits <bits>] creates a relatively generic OSD map with <numosd> devices" << std::endl;
+  cout << "   --pgp-bits <bits>       pgp_num map attribute will be shifted by <bits>" << std::endl;
+  cout << "   --pg-bits <bits>        pg_num map attribute will be shifted by <bits>" << std::endl;
+  cout << "   --clobber               allows osdmaptool to overwrite <mapfilename> if it already exists" << std::endl;
   cout << "   --export-crush <file>   write osdmap's crush map to <file>" << std::endl;
   cout << "   --import-crush <file>   replace osdmap's crush map with <file>" << std::endl;
-  cout << "   --test-map-pgs [--pool <poolid>] [--pg_num <pg_num>] map all pgs" << std::endl;
-  cout << "   --test-map-pgs-dump [--pool <poolid>] map all pgs" << std::endl;
-  cout << "   --test-map-pgs-dump-all [--pool <poolid>] map all pgs to osds" << std::endl;
   cout << "   --health                dump health checks" << std::endl;
+  cout << "   --test-map-pgs [--pool <poolid>] [--pg_num <pg_num>] [--range-first <first> --range-last <last>] map all pgs" << std::endl;
+  cout << "   --test-map-pgs-dump [--pool <poolid>] [--range-first <first> --range-last <last>] map all pgs" << std::endl;
+  cout << "   --test-map-pgs-dump-all [--pool <poolid>] [--range-first <first> --range-last <last>] map all pgs to osds" << std::endl;
   cout << "   --mark-up-in            mark osds up and in (but do not persist)" << std::endl;
   cout << "   --mark-out <osdid>      mark an osd as out (but do not persist)" << std::endl;
   cout << "   --with-default-pool     include default pool when creating map" << std::endl;
@@ -51,6 +55,9 @@ void usage()
   cout << "                           max deviation from target [default: .01]" << std::endl;
   cout << "   --upmap-pool <poolname> restrict upmap balancing to 1 or more pools" << std::endl;
   cout << "   --upmap-save            write modified OSDMap with upmap changes" << std::endl;
+  cout << "   --dump <format>         displays the map in plain text when <format> is 'plain', 'json' if specified format is not supported" << std::endl;
+  cout << "   --tree                  displays a tree of the map" << std::endl;
+  cout << "   --test-crush [--range-first <first> --range-last <last>] map pgs to acting osds" << std::endl;
   exit(1);
 }
 
@@ -89,7 +96,14 @@ int main(int argc, const char **argv)
 {
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
-  env_to_vec(args);
+  if (args.empty()) {
+    cerr << argv[0] << ": -h or --help for usage" << std::endl;
+    exit(1);
+  }
+  if (ceph_argparse_need_usage(args)) {
+    usage();
+    exit(0);
+  }
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY,
@@ -107,8 +121,8 @@ int main(int argc, const char **argv)
   bool createpool = false;
   bool create_from_conf = false;
   int num_osd = 0;
-  int pg_bits = g_conf->osd_pg_bits;
-  int pgp_bits = g_conf->osd_pgp_bits;
+  int pg_bits = 6;
+  int pgp_bits = 6;
   bool clobber = false;
   bool modified = false;
   std::string export_crush, import_crush, test_map_pg, test_map_object;
@@ -138,8 +152,6 @@ int main(int argc, const char **argv)
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
-    } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
-      usage();
     } else if (ceph_argparse_flag(args, i, "-p", "--print", (char*)NULL)) {
       print = true;
     } else if (ceph_argparse_witharg(args, i, &val, err, "--dump", (char*)NULL)) {
@@ -152,6 +164,8 @@ int main(int argc, const char **argv)
       if (!val.empty() && val != "plain") {
 	tree_formatter.reset(Formatter::create(val, "", "json"));
       }
+    } else if (ceph_argparse_witharg(args, i, &pg_bits, err, "--osd-pg-bits", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &pgp_bits, err, "--osd-pgp-bits", (char*)NULL)) {
     } else if (ceph_argparse_witharg(args, i, &upmap_file, "--upmap-cleanup", (char*)NULL)) {
       upmap_cleanup = true;
     } else if (ceph_argparse_witharg(args, i, &upmap_file, "--upmap-save", (char*)NULL)) {
@@ -302,7 +316,6 @@ int main(int argc, const char **argv)
       num_osd = -1;
     }
     uuid_d fsid;
-    memset(&fsid, 0, sizeof(uuid_d));
     if (createpool) {
       osdmap.build_simple_with_pool(
 	g_ceph_context, 0, fsid, num_osd, pg_bits, pgp_bits);
@@ -354,7 +367,7 @@ int main(int argc, const char **argv)
     if (r > 0) {
       print_inc_upmaps(pending_inc, upmap_fd);
       r = osdmap.apply_incremental(pending_inc);
-      assert(r == 0);
+      ceph_assert(r == 0);
     }
   }
   if (upmap) {
@@ -383,7 +396,7 @@ int main(int argc, const char **argv)
       print_inc_upmaps(pending_inc, upmap_fd);
       if (upmap_save) {
 	int r = osdmap.apply_incremental(pending_inc);
-	assert(r == 0);
+	ceph_assert(r == 0);
 	modified = true;
       }
     } else {
@@ -406,7 +419,7 @@ int main(int argc, const char **argv)
 
     // validate
     CrushWrapper cw;
-    bufferlist::iterator p = cbl.begin();
+    auto p = cbl.cbegin();
     cw.decode(p);
 
     if (cw.get_max_devices() > osdmap.get_max_osd()) {
@@ -485,6 +498,7 @@ int main(int argc, const char **argv)
     vector<int> first_count(n, 0);
     vector<int> primary_count(n, 0);
     vector<int> size(30, 0);
+    int max_size = 0;
     if (test_random)
       srand(getpid());
     auto& pools = osdmap.get_pools();
@@ -510,11 +524,15 @@ int main(int argc, const char **argv)
 	} else if (test_map_pgs_dump_all) {
          osdmap.pg_to_raw_osds(pgid, &raw, &calced_primary);
          osdmap.pg_to_up_acting_osds(pgid, &up, &up_primary,
-                                &acting, &acting_primary);         
+                                &acting, &acting_primary);
+	 osds = acting;
+	 primary = acting_primary;
        } else {
 	  osdmap.pg_to_acting_osds(pgid, &osds, &primary);
 	}
 	size[osds.size()]++;
+	if ((unsigned)max_size < osds.size())
+	  max_size = osds.size();
 
 	if (test_map_pgs_dump) {
 	  cout << pgid << "\t" << osds << "\t" << primary << std::endl;
@@ -591,8 +609,9 @@ int main(int argc, const char **argv)
     if (max_osd >= 0)
       cout << " max osd." << max_osd << " " << count[max_osd] << std::endl;
 
-    for (int i=0; i<4; i++) {
-      cout << "size " << i << "\t" << size[i] << std::endl;
+    for (int i=0; i<=max_size; i++) {
+      if (size[i])
+        cout << "size " << i << "\t" << size[i] << std::endl;
     }
   }
   if (test_crush) {
@@ -606,7 +625,7 @@ int main(int argc, const char **argv)
 	   ++p) {
 	const pg_pool_t *pool = osdmap.get_pg_pool(p->first);
 	for (ps_t ps = 0; ps < pool->get_pg_num(); ps++) {
-	  pg_t pgid(ps, p->first, -1);
+	  pg_t pgid(ps, p->first);
 	  for (int i=0; i<100; i++) {
 	    cout << pgid << " attempt " << i << std::endl;
 

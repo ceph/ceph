@@ -7,6 +7,7 @@
 #include <numeric>
 #include <vector>
 #include <algorithm>
+#include <random>
 
 using std::vector;
 
@@ -23,7 +24,9 @@ protected:
     for (int i = 0; i < item_size; i++) {
       items.push_back(Item(i));
     }
-    std::random_shuffle(items.begin(), items.end());
+    std::random_device rd;
+    std::default_random_engine rng(rd());
+    std::shuffle(items.begin(), items.end(), rng);
   }
   void TearDown() override {
     items.clear();

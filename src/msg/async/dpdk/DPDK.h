@@ -19,19 +19,6 @@
 /*
  * Copyright (C) 2014 Cloudius Systems, Ltd.
  */
-/*
- * Ceph - scalable distributed file system
- *
- * Copyright (C) 2015 XSky <haomai@xsky.com>
- *
- * Author: Haomai Wang <haomaiwang@gmail.com>
- *
- * This is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software
- * Foundation.  See file COPYING.
- *
- */
 
 #ifndef CEPH_DPDK_DEV_H
 #define CEPH_DPDK_DEV_H
@@ -51,7 +38,6 @@
 #include "const.h"
 #include "circular_buffer.h"
 #include "ethernet.h"
-#include "memory.h"
 #include "Packet.h"
 #include "stream.h"
 #include "net.h"
@@ -201,8 +187,8 @@ class DPDKQueuePair {
 
       rte_mbuf* m;
 
-      // TODO: assert() in a fast path! Remove me ASAP!
-      assert(frag.size);
+      // TODO: ceph_assert() in a fast path! Remove me ASAP!
+      ceph_assert(frag.size);
 
       // Create a HEAD of mbufs' cluster and set the first bytes into it
       len = do_one_buf(qp, head, base, left_to_set);
@@ -294,18 +280,18 @@ class DPDKQueuePair {
         DPDKQueuePair& qp, rte_mbuf*& m, char* va, size_t buf_len) {
       static constexpr size_t max_frag_len = 15 * 1024; // 15K
 
-      // FIXME: current all tx buf is alloced without rte_malloc
+      // FIXME: current all tx buf is allocated without rte_malloc
       return copy_one_data_buf(qp, m, va, buf_len);
       //
       // Currently we break a buffer on a 15K boundary because 82599
       // devices have a 15.5K limitation on a maximum single fragment
       // size.
       //
-      phys_addr_t pa = rte_malloc_virt2phy(va);
+      rte_iova_t pa = rte_malloc_virt2iova(va);
       if (!pa)
         return copy_one_data_buf(qp, m, va, buf_len);
 
-      assert(buf_len);
+      ceph_assert(buf_len);
       tx_buf* buf = qp.get_tx_buf();
       if (!buf) {
         return 0;
@@ -564,8 +550,8 @@ class DPDKQueuePair {
   uint32_t _send(circular_buffer<Packet>& pb, Func &&packet_to_tx_buf_p) {
     if (_tx_burst.size() == 0) {
       for (auto&& p : pb) {
-        // TODO: assert() in a fast path! Remove me ASAP!
-        assert(p.len());
+        // TODO: ceph_assert() in a fast path! Remove me ASAP!
+        ceph_assert(p.len());
 
         tx_buf* buf = packet_to_tx_buf_p(std::move(p));
         if (!buf) {
@@ -626,18 +612,7 @@ class DPDKQueuePair {
     // actual data buffer.
     //
     m->buf_addr      = (char*)data - RTE_PKTMBUF_HEADROOM;
-    m->buf_physaddr  = rte_malloc_virt2phy(data) - RTE_PKTMBUF_HEADROOM;
-    return true;
-  }
-
-  static bool init_noninline_rx_mbuf(rte_mbuf* m, size_t size,
-                                     std::vector<void*> &datas) {
-    if (!refill_rx_mbuf(m, size, datas)) {
-      return false;
-    }
-    // The below fields stay constant during the execution.
-    m->buf_len       = size + RTE_PKTMBUF_HEADROOM;
-    m->data_off      = RTE_PKTMBUF_HEADROOM;
+    m->buf_physaddr  = rte_mem_virt2phy(data) - RTE_PKTMBUF_HEADROOM;
     return true;
   }
 
@@ -881,11 +856,11 @@ class DPDKDevice {
     return _redir_table[hash & (_redir_table.size() - 1)];
   }
   void set_local_queue(unsigned i, std::unique_ptr<DPDKQueuePair> qp) {
-    assert(!_queues[i]);
+    ceph_assert(!_queues[i]);
     _queues[i] = std::move(qp);
   }
   void unset_local_queue(unsigned i) {
-    assert(_queues[i]);
+    ceph_assert(_queues[i]);
     _queues[i].reset();
   }
   template <typename Func>
@@ -894,7 +869,7 @@ class DPDKDevice {
     if (!qp._sw_reta)
       return src_cpuid;
 
-    assert(!qp._sw_reta);
+    ceph_assert(!qp._sw_reta);
     auto hash = hashfn() >> _rss_table_bits;
     auto& reta = *qp._sw_reta;
     return reta[hash % reta.size()];

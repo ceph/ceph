@@ -49,6 +49,7 @@ function TEST_choose_args_update() {
     local dir=$1
 
     run_mon $dir a || return 1
+    run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
 
     ceph osd set-require-min-compat-client luminous
@@ -103,6 +104,7 @@ function TEST_no_update_weight_set() {
     CEPH_ARGS+="--osd-crush-update-weight-set=false "
 
     run_mon $dir a || return 1
+    run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
 
     ceph osd set-require-min-compat-client luminous

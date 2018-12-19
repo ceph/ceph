@@ -1,5 +1,4 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-#include "include/memory.h"
 #include <map>
 #include <set>
 #include <boost/scoped_ptr.hpp>
@@ -647,7 +646,7 @@ public:
 
     cerr << "using path " << strpath << std::endl;
     KeyValueDB *store = KeyValueDB::create(g_ceph_context, "leveldb", strpath);
-    assert(!store->create_and_open(cerr));
+    ceph_assert(!store->create_and_open(cerr));
 
     db.reset(new DBObjectMap(g_ceph_context, store));
     tester.db = db.get();
@@ -665,7 +664,8 @@ int main(int argc, char **argv) {
   argv_to_vec(argc, (const char **)argv, args);
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
@@ -1051,7 +1051,7 @@ TEST_F(ObjectMapTest, RandomTestNoDeletesXattrs) {
 string num_to_key(unsigned i) {
   char buf[100];
   int ret = snprintf(buf, sizeof(buf), "%010u", i);
-  assert(ret > 0);
+  ceph_assert(ret > 0);
   return string(buf, ret);
 }
 

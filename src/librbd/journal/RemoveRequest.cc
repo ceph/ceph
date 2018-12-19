@@ -6,7 +6,7 @@
 #include "common/Timer.h"
 #include "common/WorkQueue.h"
 #include "journal/Settings.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "librbd/Utils.h"
 #include "librbd/journal/RemoveRequest.h"
 

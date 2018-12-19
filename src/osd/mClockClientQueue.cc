@@ -34,7 +34,8 @@ namespace ceph {
    */
 
   mClockClientQueue::mClockClientQueue(CephContext *cct) :
-    queue(std::bind(&mClockClientQueue::op_class_client_info_f, this, _1)),
+    queue(std::bind(&mClockClientQueue::op_class_client_info_f, this, _1),
+	  cct->_conf->osd_op_queue_mclock_anticipation_timeout),
     client_info_mgr(cct)
   {
     // empty
@@ -77,8 +78,7 @@ namespace ceph {
 					 unsigned priority,
 					 unsigned cost,
 					 Request&& item) {
-    queue.enqueue(get_inner_client(cl, item), priority, cost,
-		  std::move(item));
+    queue.enqueue(get_inner_client(cl, item), priority, 1u, std::move(item));
   }
 
   // Enqueue the op in the front of the regular queue
@@ -86,7 +86,7 @@ namespace ceph {
 					       unsigned priority,
 					       unsigned cost,
 					       Request&& item) {
-    queue.enqueue_front(get_inner_client(cl, item), priority, cost,
+    queue.enqueue_front(get_inner_client(cl, item), priority, 1u,
 			std::move(item));
   }
 

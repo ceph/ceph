@@ -33,6 +33,14 @@ for example, to restrict client ``foo`` to writing only in the ``bar`` directory
 
  ceph fs authorize cephfs client.foo / r /bar rw
 
+ results in:
+
+ client.foo
+   key: *key*
+   caps: [mds] allow r, allow rw path=/bar
+   caps: [mon] allow r
+   caps: [osd] allow rw tag cephfs data=cephfs_a
+
 To completely restrict the client to the ``bar`` directory, omit the
 root directory ::
 
@@ -42,10 +50,13 @@ Note that if a client's read access is restricted to a path, they will only
 be able to mount the filesystem when specifying a readable path in the
 mount command (see below).
 
+Supplying ``all`` or ``*`` as the filesystem name will grant access to every
+file system. Note that it is usually necessary to quote ``*`` to protect it from
+the shell.
 
 See `User Management - Add a User to a Keyring`_. for additional details on user management
 
-To restrict a client to the specfied sub-directory only, we mention the specified
+To restrict a client to the specified sub-directory only, we mention the specified
 directory while mounting using the following syntax. ::
 
  ./ceph-fuse -n client.*client_name* *mount_path* -r *directory_to_be_mounted*
@@ -81,8 +92,8 @@ This restricts all the attributes that are set by special extended attributes
 with a "ceph." prefix, as well as restricting other means of setting
 these fields (such as openc operations with layouts).
 
-For example, in the following snippet client.0 can modify layouts and quotas, 
-but client.1 cannot.
+For example, in the following snippet client.0 can modify layouts and quotas
+on the filesystem cephfs_a, but client.1 cannot.
 
 ::
 
@@ -90,13 +101,48 @@ but client.1 cannot.
         key: AQAz7EVWygILFRAAdIcuJ12opU/JKyfFmxhuaw==
         caps: [mds] allow rwp
         caps: [mon] allow r
-        caps: [osd] allow rw pool=data
+        caps: [osd] allow rw tag cephfs data=cephfs_a
 
     client.1
         key: AQAz7EVWygILFRAAdIcuJ12opU/JKyfFmxhuaw==
         caps: [mds] allow rw
         caps: [mon] allow r
-        caps: [osd] allow rw pool=data
+        caps: [osd] allow rw tag cephfs data=cephfs_a
+
+
+Snapshot restriction (the 's' flag)
+===========================================
+
+To create or delete snapshots, clients require the 's' flag in addition to 'rw'.
+Note that when capability string also contains the 'p' flag, the 's' flag must
+appear after it (all flags except 'rw' must be specified in alphabetical order).
+
+For example, in the following snippet client.0 can create or delete snapshots
+in the ``bar`` directory of filesystem ``cephfs_a``.
+
+::
+
+    client.0
+        key: AQAz7EVWygILFRAAdIcuJ12opU/JKyfFmxhuaw==
+        caps: [mds] allow rw, allow rws path=/bar
+        caps: [mon] allow r
+        caps: [osd] allow rw tag cephfs data=cephfs_a
 
 
 .. _User Management - Add a User to a Keyring: ../../rados/operations/user-management/#add-a-user-to-a-keyring
+
+Network restriction
+===================
+
+::
+
+ client.foo
+   key: *key*
+   caps: [mds] allow r network 10.0.0.0/8, allow rw path=/bar network 10.0.0.0/8
+   caps: [mon] allow r network 10.0.0.0/8
+   caps: [osd] allow rw tag cephfs data=cephfs_a network 10.0.0.0/8
+
+The optional ``{network/prefix}`` is a standard network name and
+prefix length in CIDR notation (e.g., ``10.3.0.0/16``).  If present,
+the use of this capability is restricted to clients connecting from
+this network.

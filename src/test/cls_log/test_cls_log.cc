@@ -10,7 +10,7 @@
 #include "global/global_context.h"
 
 #include "gtest/gtest.h"
-#include "test/librados/test.h"
+#include "test/librados/test_cxx.h"
 
 #include <errno.h>
 #include <string>
@@ -31,10 +31,10 @@ static void reset_rop(librados::ObjectReadOperation **pop) {
 
 static int read_bl(bufferlist& bl, int *i)
 {
-  bufferlist::iterator iter = bl.begin();
+  auto iter = bl.cbegin();
 
   try {
-    ::decode(*i, iter);
+    decode(*i, iter);
   } catch (buffer::error& err) {
     std::cout << "failed to decode buffer" << std::endl;
     return -EIO;
@@ -46,7 +46,7 @@ static int read_bl(bufferlist& bl, int *i)
 void add_log(librados::ObjectWriteOperation *op, utime_t& timestamp, string& section, string&name, int i)
 {
   bufferlist bl;
-  ::encode(i, bl);
+  encode(i, bl);
 
   cls_log_add(*op, timestamp, section, name, bl);
 }

@@ -12,7 +12,7 @@ An individual OSD cannot be converted in place in isolation, however:
 BlueStore and FileStore are simply too different for that to be
 practical.  "Conversion" will rely either on the cluster's normal
 replication and healing support or tools and strategies that copy OSD
-content from and old (FileStore) device to a new (BlueStore) one.
+content from an old (FileStore) device to a new (BlueStore) one.
 
 
 Deploy new OSDs with BlueStore
@@ -32,7 +32,7 @@ Mark out and replace
 --------------------
 
 The simplest approach is to mark out each device in turn, wait for the
-data to rereplicate across the cluster, reprovision the OSD, and mark
+data to replicate across the cluster, reprovision the OSD, and mark
 it back in again.  It is simple and easy to automate.  However, it requires
 more data migration than should be necessary, so it is not optimal.
 
@@ -55,7 +55,7 @@ more data migration than should be necessary, so it is not optimal.
 
 #. Wait for the data to migrate off the OSD in question::
 
-     while ! ceph osd safe-to-destroy $ID ; sleep 60 ; done
+     while ! ceph osd safe-to-destroy $ID ; do sleep 60 ; done
 
 #. Stop the OSD::
 
@@ -69,11 +69,11 @@ more data migration than should be necessary, so it is not optimal.
 
      umount /var/lib/ceph/osd/ceph-$ID
 
-#. Destroy the OSD data.  Be *EXTREMELY CAREFUL* as this will destroy
+#. Destroy the OSD data. Be *EXTREMELY CAREFUL* as this will destroy
    the contents of the device; be certain the data on the device is
    not needed (i.e., that the cluster is healthy) before proceeding. ::
 
-     ceph-disk zap $DEVICE
+     ceph-volume lvm zap $DEVICE
 
 #. Tell the cluster the OSD has been destroyed (and a new OSD can be
    reprovisioned with the same ID)::
@@ -84,7 +84,7 @@ more data migration than should be necessary, so it is not optimal.
    This requires you do identify which device to wipe based on what you saw
    mounted above. BE CAREFUL! ::
 
-     ceph-disk prepare --bluestore $DEVICE --osd-id $ID
+     ceph-volume lvm create --bluestore --data $DEVICE --osd-id $ID
 
 #. Repeat.
 
@@ -171,10 +171,10 @@ Migration process
 
 If you're using a new host, start at step #1.  For an existing host,
 jump to step #5 below.
-     
+
 #. Provision new BlueStore OSDs for all devices::
 
-     ceph-disk prepare --bluestore /dev/$DEVICE
+     ceph-volume lvm create --bluestore --data /dev/$DEVICE
 
 #. Verify OSDs join the cluster with::
 
@@ -231,7 +231,7 @@ jump to step #5 below.
 #. Wipe the old OSD devices. This requires you do identify which
    devices are to be wiped manually (BE CAREFUL!). For each device,::
 
-     ceph-disk zap $DEVICE
+     ceph-volume lvm zap $DEVICE
 
 #. Use the now-empty host as the new host, and repeat::
 
@@ -265,7 +265,7 @@ old device is reclaimed to convert the next OSD.
 Caveats:
 
 * This strategy requires that a blank BlueStore OSD be prepared
-  without allocating a new OSD ID, something that the ``ceph-disk``
+  without allocating a new OSD ID, something that the ``ceph-volume``
   tool doesn't support.  More importantly, the setup of *dmcrypt* is
   closely tied to the OSD identity, which means that this approach
   does not work with encrypted OSDs.

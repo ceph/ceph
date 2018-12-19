@@ -31,38 +31,57 @@ int RGWCivetWebFrontend::process(struct mg_connection*  const conn)
   RGWRestfulIO client_io(dout_context, &real_client_io);
 
   RGWRequest req(env.store->get_new_req_id());
+  int http_ret = 0;
   int ret = process_request(env.store, env.rest, &req, env.uri_prefix,
-                            *env.auth_registry, &client_io, env.olog);
+                            *env.auth_registry, &client_io, env.olog, &http_ret);
   if (ret < 0) {
     /* We don't really care about return code. */
     dout(20) << "process_request() returned " << ret << dendl;
   }
 
-  /* Mark as processed. */
-  return 1;
+  if (http_ret <= 0) {
+    /* Mark as processed. */
+    return 1;
+  }
+
+  return http_ret;
 }
 
 int RGWCivetWebFrontend::run()
 {
   auto& conf_map = conf->get_config_map();
-  string port_str;
 
   set_conf_default(conf_map, "num_threads",
-                   std::to_string(g_conf->rgw_thread_pool_size));
+                   std::to_string(g_conf()->rgw_thread_pool_size));
   set_conf_default(conf_map, "decode_url", "no");
   set_conf_default(conf_map, "enable_keep_alive", "yes");
   set_conf_default(conf_map, "validate_http_method", "no");
   set_conf_default(conf_map, "canonicalize_url_path", "no");
   set_conf_default(conf_map, "enable_auth_domain_check", "no");
-  conf->get_val("port", "80", &port_str);
-  std::replace(port_str.begin(), port_str.end(), '+', ',');
-  conf_map["listening_ports"] = port_str;
+  set_conf_default(conf_map, "allow_unicode_in_urls", "yes");
+
+  std::string listening_ports;
+  // support multiple port= entries
+  auto range = conf_map.equal_range("port");
+  for (auto p = range.first; p != range.second; ++p) {
+    std::string port_str = p->second;
+    // support port= entries with multiple values
+    std::replace(port_str.begin(), port_str.end(), '+', ',');
+    if (!listening_ports.empty()) {
+      listening_ports.append(1, ',');
+    }
+    listening_ports.append(port_str);
+  }
+  if (listening_ports.empty()) {
+    listening_ports = "80";
+  }
+  conf_map.emplace("listening_ports", std::move(listening_ports));
 
   /* Set run_as_user. This will cause civetweb to invoke setuid() and setgid()
    * based on pw_uid and pw_gid obtained from pw_name. */
   std::string uid_string = g_ceph_context->get_set_uid_string();
   if (! uid_string.empty()) {
-    conf_map["run_as_user"] = std::move(uid_string);
+    conf_map.emplace("run_as_user", std::move(uid_string));
   }
 
   /* Prepare options for CivetWeb. */

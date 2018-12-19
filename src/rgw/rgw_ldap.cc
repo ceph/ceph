@@ -9,7 +9,7 @@
 #include "common/safe_io.h"
 #include <boost/algorithm/string.hpp>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -41,7 +41,7 @@ std::string parse_rgw_ldap_bindpw(CephContext* ctx)
 #if defined(HAVE_OPENLDAP)
 namespace rgw {
 
-  int LDAPHelper::auth(const std::string uid, const std::string pwd) {
+  int LDAPHelper::auth(const std::string &uid, const std::string &pwd) {
     int ret;
     std::string filter;
     if (msad) {

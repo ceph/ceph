@@ -11,19 +11,6 @@
 #include "common/config.h"
 #include "include/coredumpctl.h"
 
-/*
- * Override normal ceph assert.
- * It is needed to prevent hang when we assert() and THEN still wait on lock().
- */
-namespace ceph
-{
-  void __ceph_assert_fail(const char *assertion, const char *file, int line,
-        const char *func)
-  {
-    throw 0;
-  }
-}
-
 static CephContext* cct;
 
 static void do_init() {
@@ -44,7 +31,9 @@ static void disable_lockdep() {
 TEST(Mutex, NormalAsserts) {
   Mutex* m = new Mutex("Normal",false);
   m->Lock();
-  EXPECT_THROW(m->Lock(), int);
+  testing::GTEST_FLAG(death_test_style) = "threadsafe";
+  PrCtl unset_dumpable;
+  EXPECT_DEATH(m->Lock(), ".*");
 }
 
 TEST(Mutex, RecursiveWithLockdep) {

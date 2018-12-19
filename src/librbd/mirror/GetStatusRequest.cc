@@ -72,7 +72,7 @@ void GetStatusRequest<I>::get_status() {
   librados::AioCompletion *comp = create_rados_callback<
     GetStatusRequest<I>, &GetStatusRequest<I>::handle_get_status>(this);
   int r = m_image_ctx.md_ctx.aio_operate(RBD_MIRRORING, comp, &op, &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 
@@ -82,7 +82,7 @@ void GetStatusRequest<I>::handle_get_status(int r) {
   ldout(cct, 20) << "r=" << r << dendl;
 
   if (r == 0) {
-    bufferlist::iterator iter = m_out_bl.begin();
+    auto iter = m_out_bl.cbegin();
     r = cls_client::mirror_image_status_get_finish(&iter,
                                                    m_mirror_image_status);
   }

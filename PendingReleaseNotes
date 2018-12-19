@@ -1,52 +1,255 @@
->= 12.2.0
----------
-
-- *CephFS*:
-
-  * Several "ceph mds" commands have been obsoleted and replaced
-    by equivalent "ceph fs" commands:
-      - mds dump -> fs dump
-      - mds getmap -> fs dump
-      - mds stop -> mds deactivate
-      - mds set_max_mds -> fs set max_mds
-      - mds set -> fs set
-      - mds cluster_down -> fs set cluster_down true
-      - mds cluster_up -> fs set cluster_down false
-      - mds add_data_pool -> fs add_data_pool
-      - mds remove_data_pool -> fs rm_data_pool
-      - mds rm_data_pool -> fs rm_data_pool
-
-
-12.2.1
+14.0.1
 ------
 
-- *RGW*
+* ceph pg stat output has been modified in json
+  format to match ceph df output:
+  * "raw_bytes" field renamed to "total_bytes"
+  * "raw_bytes_avail" field renamed to "total_bytes_avail"
+  * "raw_bytes_avail" field renamed to "total_bytes_avail"
+  * "raw_bytes_used" field renamed to "total_bytes_raw_used"
+  * "total_bytes_used" field added to represent the space (accumulated over
+    all OSDs) allocated purely for data objects kept at block(slow) device
+  
+* ceph df [detail] output (GLOBAL section) has been modified in plain
+  format:
+  * new 'USED' column shows the space (accumulated over all OSDs) allocated
+    purely for data objects kept at block(slow) device.
+  * 'RAW USED' is now a sum of 'USED' space and space allocated/reserved at
+     block device for Ceph purposes, e.g. BlueFS part for BlueStore.
 
-  * dynamic resharding is now enabled by default, RGW will now automatically
-  reshard the bucket index once the index grows beyond `rgw_max_objs_per_shard`
+* ceph df [detail] output (GLOBAL section) has been modified in json
+  format:
+  * 'total_used_bytes' column now shows the space (accumulated over all OSDs)
+    allocated purely for data objects kept at block(slow) device
+  * new 'total_used_raw_bytes' column shows a sum of 'USED' space and space
+    allocated/reserved at block device for Ceph purposes, e.g. BlueFS part for
+    BlueStore.
 
-- *CephFS*:
+* ceph df [detail] output (POOLS section) has been modified in plain
+  format:
+  * 'BYTES USED' column renamed to 'STORED'. Represents amount of data
+    stored by the user.
+  * 'USED' column now represent amount of space allocated purely for data
+    by all OSD nodes in KB.
+  * 'QUOTA BYTES', 'QUOTA OBJECTS' aren't showed anumore in non-detailed mode.
+  * new column 'USED COMPR' - amount of space allocated for compressed
+    data. I.e. comrpessed data plus all the allocation, replication and erasure
+    coding overhead.
+  * new column 'UNDER COMPR' - amount of data passed through compression
+   (summed over all replicas) and beneficial enough to be stored in a
+    compressed form.
+  * Some columns reordering
 
-  * Limiting MDS cache via a memory limit is now supported using the new
-    mds_cache_memory_limit config option (1GB by default).  A cache reservation
-    can also be specified using mds_cache_reservation as a percentage of the
-    limit (5% by default). Limits by inode count are still supported using
-    mds_cache_size. Setting mds_cache_size to 0 (the default) disables the
-    inode limit.
+* ceph df [detail] output (POOLS section) has been modified in json
+  format:
+  * 'bytes used' column renamed to 'stored'. Represents amount of data
+    stored by the user.
+  * 'raw bytes used' column renamed to "stored_raw". Totals of user data
+     over all OSD excluding degraded.
+  * new 'bytes_used' column now represent amount of space allocated by 
+    all OSD nodes.
+  * 'kb_used' column - the same as 'bytes_used' but in KB.
+  * new column 'compress_bytes_used' - amount of space allocated for compressed
+    data. I.e. comrpessed data plus all the allocation, replication and erasure
+    coding overhead.
+  * new column 'compress_under_bytes' amount of data passed through compression
+   (summed over all replicas) and beneficial enough to be stored in a
+    compressed form.
 
-* The maximum number of PGs per OSD before the monitor issues a
-  warning has been reduced from 300 to 200 PGs.  200 is still twice
-  the generally recommended target of 100 PGs per OSD.  This limit can
-  be adjusted via the ``mon_max_pg_per_osd`` option on the
-  monitors.  The older ``mon_pg_warn_max_per_osd`` option has been removed.
+* rados df [detail] output (POOLS section) has been modified in plain
+  format:
+  * 'USED' column now shows the space (accumulated over all OSDs) allocated
+    purely for data objects kept at block(slow) device.
+  * new column 'USED COMPR' - amount of space allocated for compressed
+    data. I.e. comrpessed data plus all the allocation, replication and erasure
+    coding overhead.
+  * new column 'UNDER COMPR' - amount of data passed through compression
+   (summed over all replicas) and beneficial enough to be stored in a
+    compressed form.
 
-* Creating pools or adjusting pg_num will now fail if the change would
-  make the number of PGs per OSD exceed the configured
-  ``mon_max_pg_per_osd`` limit.  The option can be adjusted if it
-  is really necessary to create a pool with more PGs.
+* rados df [detail] output (POOLS section) has been modified in json
+  format:
+  * 'size_bytes' and 'size_kb' columns now show the space (accumulated
+    over all OSDs) allocated purely for data objects kept at block
+    device.
+  * new column 'compress_bytes_used' - amount of space allocated for compressed
+    data. I.e. comrpessed data plus all the allocation, replication and erasure
+    coding overhead.
+  * new column 'compress_under_bytes' amount of data passed through compression
+   (summed over all replicas) and beneficial enough to be stored in a
+    compressed form.
 
-* There was a bug in the PG mapping behavior of the new *upmap*
-  feature. If you made use of this feature (e.g., via the `ceph osd
-  pg-upmap-items` command), we recommend that all mappings be removed (via
-  the `ceph osd rm-pg-upmap-items` command) before upgrading to this
-  point release.
+* ceph pg dump output (totals section) has been modified in json
+  format:
+  * new 'USED' column shows the space (accumulated over all OSDs) allocated
+    purely for data objects kept at block(slow) device.
+  * 'USED_RAW' is now a sum of 'USED' space and space allocated/reserved at
+     block device for Ceph purposes, e.g. BlueFS part for BlueStore.
+
+* The 'ceph osd rm' command has been deprecated.  Users should use
+  'ceph osd destroy' or 'ceph osd purge' (but after first confirming it is
+  safe to do so via the 'ceph osd safe-to-destroy' command).
+
+* The MDS now supports dropping its cache for the purposes of benchmarking.
+
+    ceph tell mds.* cache drop <timeout>
+
+  Note that the MDS cache is cooperatively managed by the clients. It is
+  necessary for clients to give up capabilities in order for the MDS to fully
+  drop its cache. This is accomplished by asking all clients to trim as many
+  caps as possible. The timeout argument to the `cache drop` command controls
+  how long the MDS waits for clients to complete trimming caps. This is optional
+  and is 0 by default (no timeout). Keep in mind that clients may still retain
+  caps to open files which will prevent the metadata for those files from being
+  dropped by both the client and the MDS. (This is an equivalent scenario to
+  dropping the Linux page/buffer/inode/dentry caches with some processes pinning
+  some inodes/dentries/pages in cache.)
+
+* The mon_health_preluminous_compat and mon_health_preluminous_compat_warning
+  config options are removed, as the related functionality is more
+  than two versions old.  Any legacy monitoring system expecting Jewel-style
+  health output will need to be updated to work with Nautilus.
+
+* Nautilus is not supported on any distros still running upstart so upstart
+  specific files and references have been removed.
+
+* The 'ceph pg <pgid> list_missing' command has been renamed to
+  'ceph pg <pgid> list_unfound' to better match its behaviour.
+
+* The 'rbd-mirror' daemon can now retrieve remote peer cluster configuration
+  secrets from the monitor. To use this feature, the 'rbd-mirror' daemon
+  CephX user for the local cluster must use the 'profile rbd-mirror' mon cap.
+  The secrets can be set using the 'rbd mirror pool peer add' and
+  'rbd mirror pool peer set' actions.
+
+* The `ceph mds deactivate` is fully obsolete and references to it in the docs
+  have been removed or clarified.
+
+* The libcephfs bindings added the ceph_select_filesystem function
+  for use with multiple filesystems.
+
+* The cephfs python bindings now include mount_root and filesystem_name
+  options in the mount() function.
+
+* erasure-code: add experimental *Coupled LAYer (CLAY)* erasure codes
+  support. It features less network traffic and disk I/O when performing
+  recovery.
+
+* The 'cache drop' OSD command has been added to drop an OSD's caches:
+
+    - ``ceph tell osd.x cache drop``
+
+* The 'cache status' OSD command has been added to get the cache stats of an
+  OSD:
+
+    - ``ceph tell osd.x cache status'
+
+* The libcephfs added several functions that allow restarted client to destroy
+  or reclaim state held by a previous incarnation. These functions are for NFS
+  servers.
+
+* The `ceph` command line tool now accepts keyword arguments in
+  the format "--arg=value" or "--arg value".
+
+* librados::IoCtx::nobjects_begin() and librados::NObjectIterator now communicate
+  errors by throwing a std::system_error exception instead of std::runtime_error.
+
+>=13.1.0
+--------
+
+* The Telegraf module for the Manager allows for sending statistics to
+  an Telegraf Agent over TCP, UDP or a UNIX Socket. Telegraf can then
+  send the statistics to databases like InfluxDB, ElasticSearch, Graphite
+  and many more.
+
+* The graylog fields naming the originator of a log event have
+  changed: the string-form name is now included (e.g., ``"name":
+  "mgr.foo"``), and the rank-form name is now in a nested section
+  (e.g., ``"rank": {"type": "mgr", "num": 43243}``).
+
+* If the cluster log is directed at syslog, the entries are now
+  prefixed by both the string-form name and the rank-form name (e.g.,
+  ``mgr.x mgr.12345 ...`` instead of just ``mgr.12345 ...``).
+
+* The JSON output of the ``osd find`` command has replaced the ``ip``
+  field with an ``addrs`` section to reflect that OSDs may bind to
+  multiple addresses.
+
+* CephFS clients without the 's' flag in their authentication capability
+  string will no longer be able to create/delete snapshots. To allow
+  ``client.foo`` to create/delete snapshots in the ``bar`` directory of
+  filesystem ``cephfs_a``, use command:
+
+    - ``ceph auth caps client.foo mon 'allow r' osd 'allow rw tag cephfs data=cephfs_a' mds 'allow rw, allow rws path=/bar'``
+
+* The ``osd_heartbeat_addr`` option has been removed as it served no
+  (good) purpose: the OSD should always check heartbeats on both the
+  public and cluster networks.
+
+* The ``rados`` tool's ``mkpool`` and ``rmpool`` commands have been
+  removed because they are redundant; please use the ``ceph osd pool
+  create`` and ``ceph osd pool rm`` commands instead.
+
+* The ``auid`` property for cephx users and RADOS pools has been
+  removed.  This was an undocumented and partially implemented
+  capability that allowed cephx users to map capabilities to RADOS
+  pools that they "owned".  Because there are no users we have removed
+  this support.  If any cephx capabilities exist in the cluster that
+  restrict based on auid then they will no longer parse, and the
+  cluster will report a health warning like::
+
+    AUTH_BAD_CAPS 1 auth entities have invalid capabilities
+        client.bad osd capability parse failed, stopped at 'allow rwx auid 123' of 'allow rwx auid 123'
+
+  The capability can be adjusted with the ``ceph auth caps`` command. For example,::
+
+    ceph auth caps client.bad osd 'allow rwx pool foo'
+
+* The ``ceph-kvstore-tool`` ``repair`` command has been renamed
+  ``destructive-repair`` since we have discovered it can corrupt an
+  otherwise healthy rocksdb database.  It should be used only as a last-ditch
+  attempt to recover data from an otherwise corrupted store.
+
+
+* The default memory utilization for the mons has been increased
+  somewhat.  Rocksdb now uses 512 MB of RAM by default, which should
+  be sufficient for small to medium-sized clusters; large clusters
+  should tune this up.  Also, the ``mon_osd_cache_size`` has been
+  increase from 10 OSDMaps to 500, which will translate to an
+  additional 500 MB to 1 GB of RAM for large clusters, and much less
+  for small clusters.
+
+* The ``mgr/balancer/max_misplaced`` option has been replaced by a new
+  global ``target_max_misplaced_ratio`` option that throttles both
+  balancer activity and automated adjustments to ``pgp_num`` (normally as a
+  result of ``pg_num`` changes).  If you have customized the balancer module
+  option, you will need to adjust your config to set the new global option
+  or revert to the default of .05 (5%).
+
+* By default, Ceph no longer issues a health warning when there are
+  misplaced objects (objects that are fully replicated but not stored
+  on the intended OSDs).  You can reenable the old warning by setting
+  ``mon_warn_on_misplaced`` to ``true``.
+
+* The ``ceph-create-keys`` tool is now obsolete.  The monitors
+  automatically create these keys on their own.  For now the script
+  prints a warning message and exits, but it will be removed in the
+  next release.  Note that ``ceph-create-keys`` would also write the
+  admin and bootstrap keys to /etc/ceph and /var/lib/ceph, but this
+  script no longer does that.  Any deployment tools that relied on
+  this behavior should instead make use of the ``ceph auth export
+  <entity-name>`` command for whichever key(s) they need.
+
+* The ``mon_osd_pool_ec_fast_read`` option has been renamed
+  ``osd_pool_default_ec_fast_read`` to be more consistent with other
+  ``osd_pool_default_*`` options that affect default values for newly
+  created RADOS pools.
+
+
+Upgrading from Luminous
+-----------------------
+
+* During the upgrade from luminous to nautilus, it will not be possible to create
+  a new OSD using a luminous ceph-osd daemon after the monitors have been
+  upgraded to nautilus.
+

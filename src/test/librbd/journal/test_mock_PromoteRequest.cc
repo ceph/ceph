@@ -13,7 +13,7 @@ namespace librbd {
 namespace {
 
 struct MockTestImageCtx : public MockImageCtx {
-  MockTestImageCtx(librbd::ImageCtx& image_ctx) : MockImageCtx(image_ctx) {
+  explicit MockTestImageCtx(librbd::ImageCtx& image_ctx) : MockImageCtx(image_ctx) {
   }
 };
 
@@ -36,7 +36,7 @@ struct OpenRequest<MockTestImageCtx> {
                              Mutex *lock, ImageClientMeta *client_meta,
                              uint64_t *tag_tid, journal::TagData *tag_data,
                              Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     client_meta->tag_class = 456;
     tag_data->mirror_uuid = Journal<>::ORPHAN_MIRROR_UUID;
     *tag_tid = 567;
@@ -91,7 +91,8 @@ public:
     tag_data.predecessor = predecessor;
 
     bufferlist tag_data_bl;
-    ::encode(tag_data, tag_data_bl);
+    using ceph::encode;
+    encode(tag_data, tag_data_bl);
 
     EXPECT_CALL(mock_journaler, allocate_tag(456, ContentsEqual(tag_data_bl),
                                              _, _))
@@ -119,7 +120,7 @@ public:
   }
 
   void expect_start_append(::journal::MockJournaler &mock_journaler) {
-    EXPECT_CALL(mock_journaler, start_append(_, _, _));
+    EXPECT_CALL(mock_journaler, start_append(_, _, _, _));
   }
 
   void expect_stop_append(::journal::MockJournaler &mock_journaler, int r) {

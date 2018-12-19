@@ -18,7 +18,7 @@
 #include "arch/intel.h"
 #include "erasure-code/ErasureCodePlugin.h"
 #include "global/global_context.h"
-#include "common/config.h"
+#include "common/config_proxy.h"
 #include "gtest/gtest.h"
 
 TEST(ErasureCodePlugin, factory)
@@ -29,7 +29,7 @@ TEST(ErasureCodePlugin, factory)
     ErasureCodeInterfaceRef erasure_code;
     EXPECT_FALSE(erasure_code);
     EXPECT_EQ(-EIO, instance.factory("no-isa",
-				     g_conf->get_val<std::string>("erasure_code_dir"),
+				     g_conf().get_val<std::string>("erasure_code_dir"),
 				     profile,
 				     &erasure_code, &cerr));
     EXPECT_FALSE(erasure_code);
@@ -43,7 +43,7 @@ TEST(ErasureCodePlugin, factory)
     profile["technique"] = *technique;
     EXPECT_FALSE(erasure_code);
     EXPECT_EQ(0, instance.factory("isa",
-				  g_conf->get_val<std::string>("erasure_code_dir"),
+				  g_conf().get_val<std::string>("erasure_code_dir"),
 				  profile,
                                   &erasure_code, &cerr));
     EXPECT_TRUE(erasure_code.get());

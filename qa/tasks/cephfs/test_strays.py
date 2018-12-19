@@ -579,7 +579,6 @@ class TestStrays(CephFSTestCase):
 
         # Shut down rank 1
         self.fs.set_max_mds(1)
-        self.fs.deactivate(1)
 
         # It shouldn't proceed past stopping because its still not allowed
         # to purge
@@ -593,10 +592,7 @@ class TestStrays(CephFSTestCase):
                                             "--mds_max_purge_files 100")
 
         # It should now proceed through shutdown
-        self.wait_until_true(
-            lambda: self._is_stopped(1),
-            timeout=60
-        )
+        self.fs.wait_for_daemons(timeout=120)
 
         # ...and in the process purge all that data
         self.await_data_pool_empty()
@@ -639,10 +635,7 @@ class TestStrays(CephFSTestCase):
 
         # Shut down rank 1
         self.fs.set_max_mds(1)
-        self.fs.deactivate(1)
-
-        # Wait til we get to a single active MDS mdsmap state
-        self.wait_until_true(lambda: self._is_stopped(1), timeout=120)
+        self.fs.wait_for_daemons(timeout=120)
 
         # See that the stray counter on rank 0 has incremented
         self.assertEqual(self.get_mdc_stat("strays_created", rank_0_id), 1)
@@ -833,8 +826,6 @@ class TestStrays(CephFSTestCase):
         That unlinking fails when the stray directory fragment becomes too large and that unlinking may continue once those strays are purged.
         """
 
-        self.fs.set_allow_dirfrags(True)
-
         LOW_LIMIT = 50
         for mds in self.fs.get_daemon_names():
             self.fs.mds_asok(["config", "set", "mds_bal_fragment_size_max", str(LOW_LIMIT)], mds)
@@ -946,76 +937,6 @@ class TestStrays(CephFSTestCase):
         self.fs.rados(["rm", "500.00000000"])
         self.mds_cluster.mds_restart()
         self.fs.wait_for_daemons()
-
-    def test_purge_queue_op_rate(self):
-        """
-        A busy purge queue is meant to aggregate operations sufficiently
-        that our RADOS ops to the metadata pool are not O(files).  Check
-        that that is so.
-        :return:
-        """
-
-        # For low rates of deletion, the rate of metadata ops actually
-        # will be o(files), so to see the desired behaviour we have to give
-        # the system a significant quantity, i.e. an order of magnitude
-        # more than the number of files it will purge at one time.
-
-        max_purge_files = 2
-
-        self.set_conf('mds', 'mds_bal_frag', 'false')
-        self.set_conf('mds', 'mds_max_purge_files', "%d" % max_purge_files)
-        self.fs.mds_fail_restart()
-        self.fs.wait_for_daemons()
-
-        phase_1_files = 256
-        phase_2_files = 512
-
-        self.mount_a.run_shell(["mkdir", "phase1"])
-        self.mount_a.create_n_files("phase1/file", phase_1_files)
-
-        self.mount_a.run_shell(["mkdir", "phase2"])
-        self.mount_a.create_n_files("phase2/file", phase_2_files)
-
-        def unlink_and_count_ops(path, expected_deletions):
-            initial_ops = self.get_stat("objecter", "op")
-            initial_pq_executed = self.get_stat("purge_queue", "pq_executed")
-
-            self.mount_a.run_shell(["rm", "-rf", path])
-
-            self._wait_for_counter(
-                "purge_queue", "pq_executed", initial_pq_executed + expected_deletions
-            )
-
-            final_ops = self.get_stat("objecter", "op")
-
-            # Calculation of the *overhead* operations, i.e. do not include
-            # the operations where we actually delete files.
-            return final_ops - initial_ops - expected_deletions
-
-        self.fs.mds_asok(['flush', 'journal'])
-        phase1_ops = unlink_and_count_ops("phase1/", phase_1_files + 1)
-
-        self.fs.mds_asok(['flush', 'journal'])
-        phase2_ops = unlink_and_count_ops("phase2/", phase_2_files + 1)
-
-        log.info("Phase 1: {0}".format(phase1_ops))
-        log.info("Phase 2: {0}".format(phase2_ops))
-
-        # The success criterion is that deleting double the number
-        # of files doesn't generate double the number of overhead ops
-        # -- this comparison is a rough approximation of that rule.
-        self.assertTrue(phase2_ops < phase1_ops * 1.25)
-
-        # Finally, check that our activity did include properly quiescing
-        # the queue (i.e. call to Journaler::write_head in the right place),
-        # by restarting the MDS and checking that it doesn't try re-executing
-        # any of the work we did.
-        self.fs.mds_asok(['flush', 'journal'])  # flush to ensure no strays
-                                                # hanging around
-        self.fs.mds_fail_restart()
-        self.fs.wait_for_daemons()
-        time.sleep(10)
-        self.assertEqual(self.get_stat("purge_queue", "pq_executed"), 0)
 
     def test_replicated_delete_speed(self):
         """

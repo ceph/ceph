@@ -1,7 +1,7 @@
 from pecan import expose, request, response
 from pecan.rest import RestController
 
-from restful import module
+from restful import context
 from restful.decorators import auth, lock, paginate
 
 
@@ -18,7 +18,7 @@ class RequestId(RestController):
         """
         request = filter(
             lambda x: x.id == self.request_id,
-            module.instance.requests
+            context.instance.requests
         )
 
         if len(request) != 1:
@@ -36,9 +36,9 @@ class RequestId(RestController):
         """
         Remove the request id from the database
         """
-        for index in range(len(module.instance.requests)):
-            if module.instance.requests[index].id == self.request_id:
-                return module.instance.requests.pop(index)
+        for index in range(len(context.instance.requests)):
+            if context.instance.requests[index].id == self.request_id:
+                return context.instance.requests.pop(index)
 
         # Failed to find the job to cancel
         response.status = 500
@@ -54,7 +54,7 @@ class Request(RestController):
         """
         List all the available requests
         """
-        return module.instance.requests
+        return context.instance.requests
 
 
     @expose(template='json')
@@ -64,17 +64,17 @@ class Request(RestController):
         """
         Remove all the finished requests
         """
-        num_requests = len(module.instance.requests)
+        num_requests = len(context.instance.requests)
 
-        module.instance.requests = filter(
+        context.instance.requests = filter(
             lambda x: not x.is_finished(),
-            module.instance.requests
+            context.instance.requests
         )
 
         # Return the job statistics
         return {
-            'cleaned': num_requests - len(module.instance.requests),
-            'remaining': len(module.instance.requests),
+            'cleaned': num_requests - len(context.instance.requests),
+            'remaining': len(context.instance.requests),
         }
 
 
@@ -84,7 +84,7 @@ class Request(RestController):
         """
         Pass through method to create any request
         """
-        return module.instance.submit_request([[request.json]], **kwargs)
+        return context.instance.submit_request([[request.json]], **kwargs)
 
 
     @expose()

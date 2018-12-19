@@ -34,7 +34,7 @@ static int compute_image_disk_usage(const std::string& name,
                                     const std::string& snap_name,
                                     const std::string& from_snap_name,
                                     librbd::Image &image, uint64_t size,
-                                    TextTable& tbl, Formatter *f,
+                                    bool exact, TextTable& tbl, Formatter *f,
                                     uint64_t *used_size) {
   const char* from = NULL;
   if (!from_snap_name.empty()) {
@@ -55,7 +55,7 @@ static int compute_image_disk_usage(const std::string& name,
   }
 
   *used_size = 0;
-  r = image.diff_iterate2(from, 0, size, false, true,
+  r = image.diff_iterate2(from, 0, size, false, !exact,
                           &disk_usage_callback, used_size);
   if (r < 0) {
     std::cerr << "rbd: failed to iterate diffs: " << cpp_strerror(r)
@@ -78,8 +78,8 @@ static int compute_image_disk_usage(const std::string& name,
       full_name += "@" + snap_name;
     }
     tbl << full_name
-        << stringify(si_t(size))
-        << stringify(si_t(*used_size))
+        << stringify(byte_u_t(size))
+        << stringify(byte_u_t(*used_size))
         << TextTable::endrow;
   }
   return 0;
@@ -87,9 +87,9 @@ static int compute_image_disk_usage(const std::string& name,
 
 static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
                          const char *imgname, const char *snapname,
-                         const char *from_snapname, Formatter *f) {
-  std::vector<std::string> names;
-  int r = rbd.list(io_ctx, names);
+                         const char *from_snapname, bool exact, Formatter *f) {
+  std::vector<librbd::image_spec_t> images;
+  int r = rbd.list2(io_ctx, &images);
   if (r == -ENOENT) {
     r = 0;
   } else if (r < 0) {
@@ -102,43 +102,44 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
     f->open_array_section("images");
   } else {
     tbl.define_column("NAME", TextTable::LEFT, TextTable::LEFT);
-    tbl.define_column("PROVISIONED", TextTable::RIGHT, TextTable::RIGHT);
-    tbl.define_column("USED", TextTable::RIGHT, TextTable::RIGHT);
+    tbl.define_column("PROVISIONED", TextTable::LEFT, TextTable::RIGHT);
+    tbl.define_column("USED", TextTable::LEFT, TextTable::RIGHT);
   }
 
   uint32_t count = 0;
   uint64_t used_size = 0;
   uint64_t total_prov = 0;
   uint64_t total_used = 0;
+  uint64_t snap_id = CEPH_NOSNAP;
+  uint64_t from_id = CEPH_NOSNAP;
   bool found = false;
-  std::sort(names.begin(), names.end());
-  for (std::vector<string>::const_iterator name = names.begin();
-       name != names.end(); ++name) {
-    if (imgname != NULL && *name != imgname) {
+  for (auto& image_spec : images) {
+    if (imgname != NULL && image_spec.name != imgname) {
       continue;
     }
     found = true;
 
     librbd::Image image;
-    r = rbd.open_read_only(io_ctx, image, name->c_str(), NULL);
+    r = rbd.open_read_only(io_ctx, image, image_spec.name.c_str(), NULL);
     if (r < 0) {
       if (r != -ENOENT) {
-        std::cerr << "rbd: error opening " << *name << ": " << cpp_strerror(r)
-                  << std::endl;
+        std::cerr << "rbd: error opening " << image_spec.name << ": "
+                  << cpp_strerror(r) << std::endl;
       }
       continue;
     }
 
     uint64_t features;
-    int r = image.features(&features);
+    r = image.features(&features);
     if (r < 0) {
       std::cerr << "rbd: failed to retrieve image features: " << cpp_strerror(r)
                 << std::endl;
       goto out;
     }
     if ((features & RBD_FEATURE_FAST_DIFF) == 0) {
-      std::cerr << "warning: fast-diff map is not enabled for " << *name << ". "
-                << "operation may be slow." << std::endl;
+      std::cerr << "warning: fast-diff map is not enabled for "
+                << image_spec.name << ". " << "operation may be slow."
+                << std::endl;
     }
 
     librbd::image_info_t info;
@@ -150,32 +151,69 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
     std::vector<librbd::snap_info_t> snap_list;
     r = image.snap_list(snap_list);
     if (r < 0) {
-      std::cerr << "rbd: error opening " << *name << " snapshots: "
+      std::cerr << "rbd: error opening " << image_spec.name << " snapshots: "
                 << cpp_strerror(r) << std::endl;
       continue;
     }
 
+    snap_list.erase(remove_if(snap_list.begin(),
+                              snap_list.end(),
+                              boost::bind(utils::is_not_user_snap_namespace, &image, _1)),
+                    snap_list.end());
+
     bool found_from_snap = (from_snapname == nullptr);
+    bool found_snap = (snapname == nullptr);
+    bool found_from = (from_snapname == nullptr);
     std::string last_snap_name;
     std::sort(snap_list.begin(), snap_list.end(),
               boost::bind(&librbd::snap_info_t::id, _1) <
                 boost::bind(&librbd::snap_info_t::id, _2));
+    if (!found_snap || !found_from) {
+      for (auto &snap_info : snap_list) {
+        if (!found_snap && snap_info.name == snapname) {
+          snap_id = snap_info.id;
+          found_snap = true;
+        }
+        if (!found_from && snap_info.name == from_snapname) {
+          from_id = snap_info.id;
+          found_from = true;
+        }
+        if (found_snap && found_from) {
+          break;
+        }
+      }
+    }
+    if ((snapname != nullptr && snap_id == CEPH_NOSNAP) ||
+        (from_snapname != nullptr && from_id == CEPH_NOSNAP)) {
+      std::cerr << "specified snapshot is not found." << std::endl;
+      return -ENOENT;
+    }
+    if (snap_id != CEPH_NOSNAP && from_id != CEPH_NOSNAP) {
+      if (from_id == snap_id) {
+        // no diskusage.
+        return 0;
+      }
+      if (from_id >= snap_id) {
+        return -EINVAL;
+      }
+    }
+
     for (std::vector<librbd::snap_info_t>::const_iterator snap =
          snap_list.begin(); snap != snap_list.end(); ++snap) {
       librbd::Image snap_image;
-      r = rbd.open_read_only(io_ctx, snap_image, name->c_str(),
+      r = rbd.open_read_only(io_ctx, snap_image, image_spec.name.c_str(),
                              snap->name.c_str());
       if (r < 0) {
-        std::cerr << "rbd: error opening snapshot " << *name << "@"
+        std::cerr << "rbd: error opening snapshot " << image_spec.name << "@"
                   << snap->name << ": " << cpp_strerror(r) << std::endl;
         goto out;
       }
 
       if (imgname == nullptr || found_from_snap ||
          (found_from_snap && snapname != nullptr && snap->name == snapname)) {
-        r = compute_image_disk_usage(*name, snap->name, last_snap_name,
-                                     snap_image, snap->size, tbl, f,
-                                     &used_size);
+        r = compute_image_disk_usage(image_spec.name, snap->name,
+                                     last_snap_name, snap_image, snap->size,
+                                     exact, tbl, f, &used_size);
         if (r < 0) {
           goto out;
         }
@@ -198,8 +236,8 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
     }
 
     if (snapname == NULL) {
-      r = compute_image_disk_usage(*name, "", last_snap_name, image, info.size,
-                                   tbl, f, &used_size);
+      r = compute_image_disk_usage(image_spec.name, "", last_snap_name, image,
+                                   info.size, exact, tbl, f, &used_size);
       if (r < 0) {
         goto out;
       }
@@ -208,7 +246,7 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
       ++count;
     }
   }
-  if (!found) {
+  if (imgname != nullptr && !found) {
     std::cerr << "specified image " << imgname << " is not found." << std::endl;
     return -ENOENT;
   }
@@ -222,11 +260,11 @@ out:
     }
     f->close_section();
     f->flush(std::cout);
-  } else {
+  } else if (!images.empty()) {
     if (count > 1) {
       tbl << "<TOTAL>"
-          << stringify(si_t(total_prov))
-          << stringify(si_t(total_used))
+          << stringify(byte_u_t(total_prov))
+          << stringify(byte_u_t(total_used))
           << TextTable::endrow;
     }
     std::cout << tbl;
@@ -242,18 +280,21 @@ void get_arguments(po::options_description *positional,
   at::add_format_options(options);
   options->add_options()
     (at::FROM_SNAPSHOT_NAME.c_str(), po::value<std::string>(),
-     "snapshot starting point");
+     "snapshot starting point")
+    ("exact", po::bool_switch(), "compute exact disk usage (slow)");
 }
 
-int execute(const po::variables_map &vm) {
+int execute(const po::variables_map &vm,
+            const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
+  std::string namespace_name;
   std::string image_name;
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
-    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_PERMITTED,
-    utils::SPEC_VALIDATION_NONE, vm.count(at::FROM_SNAPSHOT_NAME));
+    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &namespace_name,
+    &image_name, &snap_name, vm.count(at::FROM_SNAPSHOT_NAME),
+    utils::SNAPSHOT_PRESENCE_PERMITTED, utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
@@ -271,17 +312,19 @@ int execute(const po::variables_map &vm) {
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  r = utils::init(pool_name, &rados, &io_ctx);
+  r = utils::init(pool_name, namespace_name, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
 
+  utils::disable_cache();
+
   librbd::RBD rbd;
   r = do_disk_usage(rbd, io_ctx,
-                    image_name.empty() ? nullptr: image_name.c_str() ,
+                    image_name.empty() ? nullptr: image_name.c_str(),
                     snap_name.empty() ? nullptr : snap_name.c_str(),
                     from_snap_name.empty() ? nullptr : from_snap_name.c_str(),
-                    formatter.get());
+                    vm["exact"].as<bool>(), formatter.get());
   if (r < 0) {
     std::cerr << "rbd: du failed: " << cpp_strerror(r) << std::endl;
     return r;
@@ -290,7 +333,7 @@ int execute(const po::variables_map &vm) {
 }
 
 Shell::Action action(
-  {"disk-usage"}, {"du"}, "Show disk usage stats for pool, image or snapshot",
+  {"disk-usage"}, {"du"}, "Show disk usage stats for pool, image or snapshot.",
   "", &get_arguments, &execute);
 
 } // namespace disk_usage

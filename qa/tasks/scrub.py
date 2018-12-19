@@ -63,7 +63,7 @@ def task(ctx, config):
 
 class Scrubber:
     """
-    Scrubbing is actually performed during initialzation
+    Scrubbing is actually performed during initialization
     """
     def __init__(self, manager, config):
         """

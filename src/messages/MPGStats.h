@@ -18,17 +18,22 @@
 #include "osd/osd_types.h"
 #include "messages/PaxosServiceMessage.h"
 
-class MPGStats : public PaxosServiceMessage {
+class MPGStats : public MessageInstance<MPGStats, PaxosServiceMessage> {
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 1;
 public:
+  friend factory;
+
   uuid_d fsid;
-  map<pg_t,pg_stat_t> pg_stat;
+  map<pg_t, pg_stat_t> pg_stat;
   osd_stat_t osd_stat;
+  map<int64_t, store_statfs_t> pool_stat;
   epoch_t epoch = 0;
   utime_t had_map_for;
   
-  MPGStats() : PaxosServiceMessage(MSG_PGSTATS, 0) {}
+  MPGStats() : MessageInstance(MSG_PGSTATS, 0, HEAD_VERSION, COMPAT_VERSION) {}
   MPGStats(const uuid_d& f, epoch_t e, utime_t had)
-    : PaxosServiceMessage(MSG_PGSTATS, 0),
+    : MessageInstance(MSG_PGSTATS, 0, HEAD_VERSION, COMPAT_VERSION),
       fsid(f),
       epoch(e),
       had_map_for(had)
@@ -44,21 +49,25 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     paxos_encode();
-    ::encode(fsid, payload);
-    ::encode(osd_stat, payload);
-    ::encode(pg_stat, payload);
-    ::encode(epoch, payload);
-    ::encode(had_map_for, payload);
+    encode(fsid, payload);
+    encode(osd_stat, payload, features);
+    encode(pg_stat, payload);
+    encode(epoch, payload);
+    encode(had_map_for, payload);
+    encode(pool_stat, payload, features);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     paxos_decode(p);
-    ::decode(fsid, p);
-    ::decode(osd_stat, p);
-    ::decode(pg_stat, p);
-    ::decode(epoch, p);
-    ::decode(had_map_for, p);
+    decode(fsid, p);
+    decode(osd_stat, p);
+    decode(pg_stat, p);
+    decode(epoch, p);
+    decode(had_map_for, p);
+    if (header.version >= 2)
+      decode(pool_stat, p);
   }
 };
 

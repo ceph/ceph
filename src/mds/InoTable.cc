@@ -44,7 +44,7 @@ void InoTable::reset_state()
 inodeno_t InoTable::project_alloc_id(inodeno_t id) 
 {
   dout(10) << "project_alloc_id " << id << " to " << projected_free << "/" << free << dendl;
-  assert(is_active());
+  ceph_assert(is_active());
   if (!id)
     id = projected_free.range_start();
   projected_free.erase(id);
@@ -60,7 +60,7 @@ void InoTable::apply_alloc_id(inodeno_t id)
 
 void InoTable::project_alloc_ids(interval_set<inodeno_t>& ids, int want) 
 {
-  assert(is_active());
+  ceph_assert(is_active());
   while (want > 0) {
     inodeno_t start = projected_free.range_start();
     inodeno_t end = projected_free.end_after(start);
@@ -100,7 +100,7 @@ void InoTable::apply_release_ids(interval_set<inodeno_t>& ids)
 
 void InoTable::replay_alloc_id(inodeno_t id) 
 {
-  assert(mds);  // Only usable in online mode
+  ceph_assert(mds);  // Only usable in online mode
 
   dout(10) << "replay_alloc_id " << id << dendl;
   if (free.contains(id)) {
@@ -114,20 +114,18 @@ void InoTable::replay_alloc_id(inodeno_t id)
 }
 void InoTable::replay_alloc_ids(interval_set<inodeno_t>& ids) 
 {
-  assert(mds);  // Only usable in online mode
+  ceph_assert(mds);  // Only usable in online mode
 
   dout(10) << "replay_alloc_ids " << ids << dendl;
   interval_set<inodeno_t> is;
   is.intersection_of(free, ids);
-  if (is == ids) {
-    free.subtract(ids);
-    projected_free.subtract(ids);
-  } else {
+  if (!(is==ids)) {
     mds->clog->error() << "journal replay alloc " << ids << ", only "
 	<< is << " is in free " << free;
-    free.subtract(is);
-    projected_free.subtract(is);
   }
+  free.subtract(is);
+  projected_free.subtract(is);
+
   projected_version = ++version;
 }
 void InoTable::replay_release_ids(interval_set<inodeno_t>& ids) 
@@ -217,11 +215,11 @@ bool InoTable::repair(inodeno_t id)
     return false;
   }
 
-  assert(is_marked_free(id));
-  dout(10) << "repair: before status. ino = 0x" << std::hex << id << " pver =" << projected_version << " ver= " << version << dendl;
+  ceph_assert(is_marked_free(id));
+  dout(10) << "repair: before status. ino = " << id << " pver =" << projected_version << " ver= " << version << dendl;
   free.erase(id);
   projected_free.erase(id);
   projected_version = ++version;
-  dout(10) << "repair: after status. ino = 0x" << std::hex <<id << " pver =" << projected_version << " ver= " << version << dendl;
+  dout(10) << "repair: after status. ino = " << id << " pver =" << projected_version << " ver= " << version << dendl;
   return true;
 }

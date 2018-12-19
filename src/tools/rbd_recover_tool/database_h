@@ -507,7 +507,7 @@ function discover_image_snap()
   local func="discover_image_snap"
   echo "$func ..."
   if [ $# -lt 3 ];then
-    echo "$func: paramters: <pool_id> <image_name> [<snap_name>]"
+    echo "$func: parameters: <pool_id> <image_name> [<snap_name>]"
     exit
   fi
   local pool_id=$1
@@ -726,7 +726,7 @@ function collect_image_snap_objects()
   fi
  
   # speed up copy snapshot
-  # lookup the coresponding head hobject of snap hobject
+  # lookup the corresponding head hobject of snap hobject
   # use command: grep <offset> <head hobjects>
   # 
   # eg.
@@ -1073,7 +1073,7 @@ function recover_image()
   echo "$func ..."
   
   if [ $# -lt 3 ];then
-    echo "$func: paramters: <pool_id> <image_name> <snap_name> [<backup_dir>]"
+    echo "$func: parameters: <pool_id> <image_name> <snap_name> [<backup_dir>]"
     exit
   fi
 

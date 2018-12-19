@@ -1,5 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -12,6 +13,7 @@
  * Foundation.  See file COPYING.
  * 
  */
+
 #include "common/debug.h"
 #include "common/ceph_json.h"
 
@@ -23,7 +25,6 @@
 #include "include/types.h"
 #include "rgw_website.h"
 
-using namespace std;
 
 
 bool RGWBWRoutingRuleCondition::check_key_condition(const string& key) {

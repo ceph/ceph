@@ -23,7 +23,7 @@
 #include "common/config.h"
 #include "common/cmdparse.h"
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/stringify.h"
 
 #define dout_subsys ceph_subsys_mon
@@ -41,7 +41,7 @@ void MonmapMonitor::create_initial()
   pending_map = *mon->monmap;
   pending_map.epoch = 1;
 
-  if (g_conf->mon_debug_no_initial_persistent_features) {
+  if (g_conf()->mon_debug_no_initial_persistent_features) {
     derr << __func__ << " mon_debug_no_initial_persistent_features=true"
 	 << dendl;
   } else {
@@ -67,8 +67,8 @@ void MonmapMonitor::update_from_paxos(bool *need_bootstrap)
   // read and decode
   monmap_bl.clear();
   int ret = get_version(version, monmap_bl);
-  assert(ret == 0);
-  assert(monmap_bl.length());
+  ceph_assert(ret == 0);
+  ceph_assert(monmap_bl.length());
 
   dout(10) << __func__ << " got " << version << dendl;
   mon->monmap->decode(monmap_bl);
@@ -94,7 +94,7 @@ void MonmapMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 {
   dout(10) << __func__ << " epoch " << pending_map.epoch << dendl;
 
-  assert(mon->monmap->epoch + 1 == pending_map.epoch ||
+  ceph_assert(mon->monmap->epoch + 1 == pending_map.epoch ||
 	 pending_map.epoch == 1);  // special case mkfs!
   bufferlist bl;
   pending_map.encode(bl, mon->get_quorum_con_features());
@@ -122,7 +122,7 @@ class C_ApplyFeatures : public Context {
       // established them in the first place.
       return;
     } else {
-      assert(0 == "bad C_ApplyFeatures return value");
+      ceph_abort_msg("bad C_ApplyFeatures return value");
     }
   }
 };
@@ -135,11 +135,11 @@ void MonmapMonitor::apply_mon_features(const mon_feature_t& features)
     return;
   }
 
-  assert(is_writeable());
-  assert(features.contains_all(pending_map.persistent_features));
+  ceph_assert(is_writeable());
+  ceph_assert(features.contains_all(pending_map.persistent_features));
   // we should never hit this because `features` should be the result
   // of the quorum's supported features. But if it happens, die.
-  assert(ceph::features::mon::get_supported().contains_all(features));
+  ceph_assert(ceph::features::mon::get_supported().contains_all(features));
 
   mon_feature_t new_features =
     (pending_map.persistent_features ^
@@ -188,8 +188,9 @@ void MonmapMonitor::on_active()
     mon->has_ever_joined = true;
   }
 
-  if (mon->is_leader())
-    mon->clog->info() << "monmap " << *mon->monmap;
+  if (mon->is_leader()) {
+    mon->clog->debug() << "monmap " << *mon->monmap;
+  }
 
   apply_mon_features(mon->get_quorum_mon_features());
 }
@@ -200,7 +201,14 @@ bool MonmapMonitor::preprocess_query(MonOpRequestRef op)
   switch (m->get_type()) {
     // READs
   case MSG_MON_COMMAND:
-    return preprocess_command(op);
+    try {
+      return preprocess_command(op);
+    }
+    catch (const bad_cmd_get& e) {
+      bufferlist bl;
+      mon->reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
+      return true;
+    }
   case MSG_MON_JOIN:
     return preprocess_join(op);
   default:
@@ -229,7 +237,7 @@ bool MonmapMonitor::preprocess_command(MonOpRequestRef op)
   bufferlist rdata;
   stringstream ss;
 
-  map<string, cmd_vartype> cmdmap;
+  cmdmap_t cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     string rs = ss.str();
     mon->reply_command(op, -EINVAL, rs, rdata, get_last_committed());
@@ -239,7 +247,7 @@ bool MonmapMonitor::preprocess_command(MonOpRequestRef op)
   string prefix;
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
 
-  MonSession *session = m->get_session();
+  MonSession *session = op->get_session();
   if (!session) {
     mon->reply_command(op, -EACCES, "access denied", get_last_committed());
     return true;
@@ -274,13 +282,13 @@ bool MonmapMonitor::preprocess_command(MonOpRequestRef op)
         ss << "there is no map for epoch " << epoch;
         goto reply;
       }
-      assert(r == 0);
-      assert(bl.length() > 0);
+      ceph_assert(r == 0);
+      ceph_assert(bl.length() > 0);
       p = new MonMap;
       p->decode(bl);
     }
 
-    assert(p != NULL);
+    ceph_assert(p);
 
     if (prefix == "mon getmap") {
       p->encode(rdata, m->get_connection()->get_features());
@@ -307,8 +315,10 @@ bool MonmapMonitor::preprocess_command(MonOpRequestRef op)
       rdata.append(ds);
       ss << "dumped monmap epoch " << p->get_epoch();
     }
-    if (p != mon->monmap)
+    if (p != mon->monmap) {
        delete p;
+       p = nullptr;
+    }
 
   } else if (prefix == "mon feature ls") {
    
@@ -402,7 +412,13 @@ bool MonmapMonitor::prepare_update(MonOpRequestRef op)
   
   switch (m->get_type()) {
   case MSG_MON_COMMAND:
-    return prepare_command(op);
+    try {
+      return prepare_command(op);
+    } catch (const bad_cmd_get& e) {
+      bufferlist bl;
+      mon->reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
+      return true;
+    }
   case MSG_MON_JOIN:
     return prepare_join(op);
   default:
@@ -419,7 +435,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
   string rs;
   int err = -EINVAL;
 
-  map<string, cmd_vartype> cmdmap;
+  cmdmap_t cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     string rs = ss.str();
     mon->reply_command(op, -EINVAL, rs, get_last_committed());
@@ -429,7 +445,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
   string prefix;
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
 
-  MonSession *session = m->get_session();
+  MonSession *session = op->get_session();
   if (!session) {
     mon->reply_command(op, -EACCES, "access denied", get_last_committed());
     return true;
@@ -463,7 +479,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
    * state, thus we are not bound by it.
    */
 
-  assert(mon->monmap);
+  ceph_assert(mon->monmap);
   MonMap &monmap = *mon->monmap;
 
 
@@ -501,8 +517,8 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
     }
 
     if (addr.get_port() == 0) {
-      ss << "port defaulted to " << CEPH_MON_PORT;
-      addr.set_port(CEPH_MON_PORT);
+      ss << "port defaulted to " << CEPH_MON_PORT_LEGACY;
+      addr.set_port(CEPH_MON_PORT_LEGACY);
     }
 
     /**
@@ -638,9 +654,9 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
       goto reply;
     }
 
-    string sure;
-    if (!cmd_getval(g_ceph_context, cmdmap, "sure", sure) ||
-        sure != "--yes-i-really-mean-it") {
+    bool sure = false;
+    cmd_getval(g_ceph_context, cmdmap, "yes_i_really_mean_it", sure);
+    if (!sure) {
       ss << "please specify '--yes-i-really-mean-it' if you "
          << "really, **really** want to set feature '"
          << feature << "' in the monmap.";
@@ -669,11 +685,29 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
     pending_map.last_changed = ceph_clock_now();
     propose = true;
 
-    dout(1) << __func__ << ss.str() << "; new features will be: "
+    dout(1) << __func__ << " " << ss.str() << "; new features will be: "
             << "persistent = " << pending_map.persistent_features
             // output optional nevertheless, for auditing purposes.
             << ", optional = " << pending_map.optional_features << dendl;
-    
+
+  } else if (prefix == "mon set-rank") {
+    string name;
+    int64_t rank;
+    if (!cmd_getval(g_ceph_context, cmdmap, "name", name) ||
+	!cmd_getval(g_ceph_context, cmdmap, "rank", rank)) {
+      err = -EINVAL;
+      goto reply;
+    }
+    int oldrank = pending_map.get_rank(name);
+    if (oldrank < 0) {
+      ss << "mon." << name << " does not exist in monmap";
+      err = -ENOENT;
+      goto reply;
+    }
+    err = 0;
+    pending_map.set_rank(name, rank);
+    pending_map.last_changed = ceph_clock_now();
+    propose = true;
   } else {
     ss << "unknown command " << prefix;
     err = -EINVAL;
@@ -691,7 +725,7 @@ bool MonmapMonitor::preprocess_join(MonOpRequestRef op)
   MMonJoin *join = static_cast<MMonJoin*>(op->get_req());
   dout(10) << __func__ << " " << join->name << " at " << join->addr << dendl;
 
-  MonSession *session = join->get_session();
+  MonSession *session = op->get_session();
   if (!session ||
       !session->is_capable("mon", MON_CAP_W | MON_CAP_X)) {
     dout(10) << " insufficient caps" << dendl;
@@ -766,7 +800,7 @@ void MonmapMonitor::check_sub(Subscription *sub)
   if (sub->next <= epoch) {
     mon->send_latest_monmap(sub->session->con.get());
     if (sub->onetime) {
-      mon->with_session_map([this, sub](MonSessionMap& session_map) {
+      mon->with_session_map([sub](MonSessionMap& session_map) {
 	  session_map.remove_sub(sub);
 	});
     } else {

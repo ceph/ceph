@@ -1,3 +1,3 @@
 
-from module import *
+from .module import Module
 

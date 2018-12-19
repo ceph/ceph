@@ -2,6 +2,8 @@
 #include "common/DecayCounter.h"
 
 #include <list>
+
+#include <unistd.h>
 using namespace std;
 
 struct RealCounter {
@@ -35,7 +37,7 @@ int main(int argc, char **argv)
   DecayCounter dc(hl);
   RealCounter rc;
 
-  utime_t now = ceph_clock_now();
+  DecayCounter::time now = DecayCounter::clock::now();
 
   for (int ms=0; ms < 300*1000; ms++) {
 	if (ms % 30000 == 0) {
@@ -64,7 +66,8 @@ int main(int argc, char **argv)
 		   << endl;
 	}
 
-	now += .001;
+    usleep(1);
+    now = DecayCounter::clock::now();
   }
 
 }

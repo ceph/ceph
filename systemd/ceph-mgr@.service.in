@@ -1,0 +1,21 @@
+[Unit]
+Description=Ceph cluster manager daemon
+After=network-online.target local-fs.target time-sync.target
+Wants=network-online.target local-fs.target time-sync.target
+PartOf=ceph-mgr.target
+
+[Service]
+LimitNOFILE=1048576
+LimitNPROC=1048576
+EnvironmentFile=-@SYSTEMD_ENV_FILE@
+Environment=CLUSTER=ceph
+
+ExecStart=/usr/bin/ceph-mgr -f --cluster ${CLUSTER} --id %i --setuser ceph --setgroup ceph
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=10
+StartLimitInterval=30min
+StartLimitBurst=3
+
+[Install]
+WantedBy=ceph-mgr.target

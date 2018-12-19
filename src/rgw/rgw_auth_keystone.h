@@ -37,16 +37,17 @@ class TokenEngine : public rgw::auth::Engine {
 
   /* Helper methods. */
   bool is_applicable(const std::string& token) const noexcept;
-  token_envelope_t decode_pki_token(const std::string& token) const;
+  token_envelope_t decode_pki_token(const DoutPrefixProvider* dpp, const std::string& token) const;
 
   boost::optional<token_envelope_t>
-  get_from_keystone(const std::string& token) const;
+  get_from_keystone(const DoutPrefixProvider* dpp, const std::string& token) const;
 
   acl_strategy_t get_acl_strategy(const token_envelope_t& token) const;
   auth_info_t get_creds_info(const token_envelope_t& token,
                              const std::vector<std::string>& admin_roles
                             ) const noexcept;
-  result_t authenticate(const std::string& token,
+  result_t authenticate(const DoutPrefixProvider* dpp,
+                        const std::string& token,
                         const req_state* s) const;
 
 public:
@@ -66,8 +67,8 @@ public:
     return "rgw::auth::keystone::TokenEngine";
   }
 
-  result_t authenticate(const req_state* const s) const override {
-    return authenticate(extractor->get_token(s), s);
+  result_t authenticate(const DoutPrefixProvider* dpp, const req_state* const s) const override {
+    return authenticate(dpp, extractor->get_token(s), s);
   }
 }; /* class TokenEngine */
 
@@ -88,11 +89,13 @@ class EC2Engine : public rgw::auth::s3::AWSEngine {
                              const std::vector<std::string>& admin_roles
                             ) const noexcept;
   std::pair<boost::optional<token_envelope_t>, int>
-  get_from_keystone(const boost::string_view& access_key_id,
+  get_from_keystone(const DoutPrefixProvider* dpp, const boost::string_view& access_key_id,
                     const std::string& string_to_sign,
                     const boost::string_view& signature) const;
-  result_t authenticate(const boost::string_view& access_key_id,
+  result_t authenticate(const DoutPrefixProvider* dpp,
+                        const boost::string_view& access_key_id,
                         const boost::string_view& signature,
+                        const boost::string_view& session_token,
                         const string_to_sign_t& string_to_sign,
                         const signature_factory_t&,
                         const completer_factory_t& completer_factory,

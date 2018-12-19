@@ -18,9 +18,11 @@
 
 #include "msg/Message.h"
 
-class MPing : public Message {
- public:
-  MPing() : Message(CEPH_MSG_PING) {}
+class MPing : public MessageInstance<MPing> {
+public:
+  friend factory;
+
+  MPing() : MessageInstance(CEPH_MSG_PING) {}
 private:
   ~MPing() override {}
 

@@ -1,6 +1,5 @@
 overrides:
   ceph:
-    crush_tunables: firefly
     log-whitelist:
       - must scrub before tier agent can activate
 tasks:

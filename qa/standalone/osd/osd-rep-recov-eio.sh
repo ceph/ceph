@@ -54,13 +54,7 @@ function get_state() {
     local pgid=$1
     local sname=state
     ceph --format json pg dump pgs 2>/dev/null | \
-        jq -r ".[] | select(.pgid==\"$pgid\") | .$sname"
-}
-
-function delete_pool() {
-    local poolname=$1
-
-    ceph osd pool delete $poolname $poolname --yes-i-really-really-mean-it
+        jq -r ".pg_stats | .[] | select(.pgid==\"$pgid\") | .$sname"
 }
 
 function rados_put() {
@@ -195,7 +189,7 @@ function TEST_rep_backfill_unfound() {
     done
 
     ceph pg dump pgs
-    ceph pg 2.0 list_missing | grep -q $testobj || return 1
+    ceph pg 2.0 list_unfound | grep -q $testobj || return 1
 
     # Command should hang because object is unfound
     timeout 5 rados -p $poolname get $testobj $dir/CHECK
@@ -272,7 +266,7 @@ function TEST_rep_recovery_unfound() {
     done
 
     ceph pg dump pgs
-    ceph pg 2.0 list_missing | grep -q $testobj || return 1
+    ceph pg 2.0 list_unfound | grep -q $testobj || return 1
 
     # Command should hang because object is unfound
     timeout 5 rados -p $poolname get $testobj $dir/CHECK
@@ -296,6 +290,55 @@ function TEST_rep_recovery_unfound() {
     rm -f ${dir}/ORIGINAL ${dir}/CHECK
 
     delete_pool $poolname
+}
+
+# This is a filestore only test because it requires data digest in object info
+function TEST_rep_read_unfound() {
+    local dir=$1
+    local objname=myobject
+
+    setup_osds 3 || return 1
+
+    ceph osd pool delete rbd rbd --yes-i-really-really-mean-it || return 1
+    local poolname=test-pool
+    create_pool $poolname 1 1 || return 1
+    ceph osd pool set $poolname size 2
+    wait_for_clean || return 1
+
+    ceph pg dump pgs
+
+    dd if=/dev/urandom bs=8k count=1 of=$dir/ORIGINAL
+    rados -p $poolname put $objname $dir/ORIGINAL
+
+    local primary=$(get_primary $poolname $objname)
+    local other=$(get_not_primary $poolname $objname)
+
+    dd if=/dev/urandom bs=8k count=1 of=$dir/CORRUPT
+    objectstore_tool $dir $primary $objname set-bytes $dir/CORRUPT || return 1
+    objectstore_tool $dir $other $objname set-bytes $dir/CORRUPT || return 1
+
+    timeout 30 rados -p $poolname get $objname $dir/tmp &
+
+    sleep 5
+
+    flush_pg_stats
+    ceph --format=json pg dump pgs | jq '.'
+
+    if ! ceph --format=json pg dump pgs | jq '.pg_stats | .[0].state' | grep -q recovery_unfound
+    then
+      echo "Failure to get to recovery_unfound state"
+      return 1
+    fi
+
+    objectstore_tool $dir $other $objname set-bytes $dir/ORIGINAL || return 1
+
+    wait
+
+    if ! cmp $dir/ORIGINAL $dir/tmp
+    then
+       echo "Bad data after primary repair"
+       return 1
+    fi
 }
 
 main osd-rep-recov-eio.sh "$@"

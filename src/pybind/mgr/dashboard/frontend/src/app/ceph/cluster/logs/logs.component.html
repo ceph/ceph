@@ -1,0 +1,35 @@
+<div *ngIf="contentData"> 
+<tabset>
+  <tab i18n-heading
+       heading="Cluster Logs">
+  <div class="well">
+  <div *ngIf="contentData.clog">
+  <p *ngFor="let line of contentData.clog">
+    {{ line.stamp }}&nbsp;{{ line.priority }}&nbsp;
+    <span [ngStyle]="line">
+    {{ line.message }}
+    <br>
+    </span>
+    </p>
+  </div>
+  </div>
+  </tab>
+
+  <tab i18n-heading
+       heading="Audit Logs">
+  <div class="well">
+  <div *ngIf="contentData.audit_log">
+    <p *ngFor="let line of contentData.audit_log">
+    {{ line.stamp }}&nbsp;{{ line.priority }}&nbsp;
+    <span [ngStyle]="line">
+    <span style="font-weight: bold;">
+    {{ line.message }}
+    </span>
+    <br>
+    </span>
+    </p>
+  </div>
+  </div>
+  </tab>
+</tabset>
+</div>

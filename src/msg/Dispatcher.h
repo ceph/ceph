@@ -16,16 +16,18 @@
 #ifndef CEPH_DISPATCHER_H
 #define CEPH_DISPATCHER_H
 
-#include "include/assert.h"
+#include <memory>
 #include "include/buffer_fwd.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
+#include "msg/MessageRef.h"
 
 class Messenger;
-class Message;
 class Connection;
 class AuthAuthorizer;
 class CryptoKey;
 class CephContext;
+class AuthAuthorizerChallenge;
+class KeyStore;
 
 class Dispatcher {
 public:
@@ -59,7 +61,10 @@ public:
    * @param m The message we want to fast dispatch.
    * @returns True if the message can be fast dispatched; false otherwise.
    */
-  virtual bool ms_can_fast_dispatch(const Message *m) const { return false;}
+  virtual bool ms_can_fast_dispatch(const Message *m) const { return false; }
+  virtual bool ms_can_fast_dispatch2(const MessageConstRef& m) const {
+    return ms_can_fast_dispatch(m.get());
+  }
   /**
    * This function determines if a dispatcher is included in the
    * list of fast-dispatch capable Dispatchers.
@@ -74,6 +79,13 @@ public:
    * @param m The Message to fast dispatch.
    */
   virtual void ms_fast_dispatch(Message *m) { ceph_abort(); }
+
+  /* ms_fast_dispatch2 because otherwise the child must define both */
+  virtual void ms_fast_dispatch2(const MessageRef &m) {
+    /* allow old style dispatch handling that expects a Message * with a floating ref */
+    return ms_fast_dispatch(MessageRef(m).detach()); /* XXX N.B. always consumes ref */
+  }
+
   /**
    * Let the Dispatcher preview a Message before it is dispatched. This
    * function is called on *every* Message, prior to the fast/regular dispatch
@@ -90,13 +102,33 @@ public:
    * @param m A message which has been received
    */
   virtual void ms_fast_preprocess(Message *m) {}
+
+  /* ms_fast_preprocess2 because otherwise the child must define both */
+  virtual void ms_fast_preprocess2(const MessageRef &m) {
+    /* allow old style dispatch handling that expects a Message* */
+    return ms_fast_preprocess(m.get());
+  }
+
   /**
    * The Messenger calls this function to deliver a single message.
    *
    * @param m The message being delivered. You (the Dispatcher)
    * are given a single reference count on it.
    */
-  virtual bool ms_dispatch(Message *m) = 0;
+  virtual bool ms_dispatch(Message *m) {
+    ceph_abort();
+  }
+
+  /* ms_dispatch2 because otherwise the child must define both */
+  virtual bool ms_dispatch2(const MessageRef &m) {
+    /* allow old style dispatch handling that expects a Message * with a floating ref */
+    MessageRef mr(m);
+    if (ms_dispatch(mr.get())) {
+      mr.detach(); /* dispatcher consumed ref */
+      return true;
+    }
+    return false;
+  }
 
   /**
    * This function will be called whenever a Connection is newly-created
@@ -171,6 +203,29 @@ public:
    * @{
    */
   /**
+   * handle successful authentication (msgr2)
+   *
+   * Authenticated result/state will be attached to the Connection.
+   *
+   * return 1 for success
+   * return 0 for no action (let another Dispatcher handle it)
+   * return <0 for failure (failure to parse caps, for instance)
+   */
+  virtual int ms_handle_authentication(Connection *con) {
+    return 0;
+  }
+
+  /**
+   * get authentication keyring
+   *
+   * Return the keyring to use for authentication with msgr1.  Remove me
+   * someday.
+   */
+  virtual KeyStore* ms_get_auth1_authorizer_keystore() {
+    return nullptr;
+  }
+
+  /**
    * Retrieve the AuthAuthorizer for the given peer type. It might not
    * provide one if it knows there is no AuthAuthorizer for that type.
    *
@@ -185,31 +240,19 @@ public:
    */
   virtual bool ms_get_authorizer(int dest_type, AuthAuthorizer **a, bool force_new) { return false; }
   /**
-   * Verify the authorizer for a new incoming Connection.
-   *
-   * @param con The new incoming Connection
-   * @param peer_type The type of the endpoint which initiated this Connection
-   * @param protocol The ID of the protocol in use (at time of writing, cephx or none)
-   * @param authorizer The authorization string supplied by the remote
-   * @param authorizer_reply Output param: The string we should send back to
-   * the remote to authorize ourselves. Only filled in if isvalid
-   * @param isvalid Output param: True if authorizer is valid, false otherwise
-   *
-   * @return True if we were able to prove or disprove correctness of
-   * authorizer, false otherwise.
-   */
-  virtual bool ms_verify_authorizer(Connection *con,
-				    int peer_type,
-				    int protocol,
-				    ceph::bufferlist& authorizer,
-				    ceph::bufferlist& authorizer_reply,
-				    bool& isvalid,
-				    CryptoKey& session_key) { return false; }
-  /**
    * @} //Authentication
    */
+
+  void ms_set_require_authorizer(bool b) {
+    require_authorizer = b;
+  }
 protected:
   CephContext *cct;
+public:
+  // allow unauthenticated connections.  This is needed for
+  // compatibility with pre-nautilus OSDs, which do not authenticate
+  // the heartbeat sessions.
+  bool require_authorizer = true;
 private:
   explicit Dispatcher(const Dispatcher &rhs);
   Dispatcher& operator=(const Dispatcher &rhs);

@@ -1,10 +1,12 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #ifndef CEPH_RGW_LC_H
 #define CEPH_RGW_LC_H
 
 #include <map>
 #include <string>
 #include <iostream>
-#include <include/types.h>
 
 #include "common/debug.h"
 
@@ -48,15 +50,15 @@ public:
 
   void encode(bufferlist& bl) const {
     ENCODE_START(3, 2, bl);
-    ::encode(days, bl);
-    ::encode(date, bl);
+    encode(days, bl);
+    encode(date, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
-    ::decode(days, bl);
+    decode(days, bl);
     if (struct_v >= 3) {
-      ::decode(date, bl);
+      decode(date, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -132,18 +134,19 @@ class LCFilter
 
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 1, bl);
-    ::encode(prefix, bl);
-    ::encode(obj_tags, bl);
+    encode(prefix, bl);
+    encode(obj_tags, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(2, bl);
-    ::decode(prefix, bl);
+    decode(prefix, bl);
     if (struct_v >= 2) {
-      ::decode(obj_tags, bl);
+      decode(obj_tags, bl);
     }
     DECODE_FINISH(bl);
   }
+  void dump(Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(LCFilter);
 
@@ -175,6 +178,14 @@ public:
       return status;
   }
 
+  bool is_enabled() {
+    return status == "Enabled";
+  }
+
+  void set_enabled(bool flag) {
+    status = (flag ? "Enabled" : "Disabled");
+  }
+
   string& get_prefix() {
       return prefix;
   }
@@ -199,28 +210,28 @@ public:
     return dm_expiration;
   }
 
-  void set_id(string*_id) {
-    id = *_id;
+  void set_id(const string& _id) {
+    id = _id;
   }
 
-  void set_prefix(string*_prefix) {
-    prefix = *_prefix;
+  void set_prefix(const string& _prefix) {
+    prefix = _prefix;
   }
 
-  void set_status(string*_status) {
-    status = *_status;
+  void set_status(const string& _status) {
+    status = _status;
   }
 
-  void set_expiration(LCExpiration*_expiration) {
-    expiration = *_expiration;
+  void set_expiration(const LCExpiration& _expiration) {
+    expiration = _expiration;
   }
 
-  void set_noncur_expiration(LCExpiration*_noncur_expiration) {
-    noncur_expiration = *_noncur_expiration;
+  void set_noncur_expiration(const LCExpiration& _noncur_expiration) {
+    noncur_expiration = _noncur_expiration;
   }
 
-  void set_mp_expiration(LCExpiration* _mp_expiration) {
-    mp_expiration = *_mp_expiration;
+  void set_mp_expiration(const LCExpiration& _mp_expiration) {
+    mp_expiration = _mp_expiration;
   }
 
   void set_dm_expiration(bool _dm_expiration) {
@@ -231,51 +242,53 @@ public:
   
   void encode(bufferlist& bl) const {
      ENCODE_START(5, 1, bl);
-     ::encode(id, bl);
-     ::encode(prefix, bl);
-     ::encode(status, bl);
-     ::encode(expiration, bl);
-     ::encode(noncur_expiration, bl);
-     ::encode(mp_expiration, bl);
-     ::encode(dm_expiration, bl);
-     ::encode(filter, bl);
+     encode(id, bl);
+     encode(prefix, bl);
+     encode(status, bl);
+     encode(expiration, bl);
+     encode(noncur_expiration, bl);
+     encode(mp_expiration, bl);
+     encode(dm_expiration, bl);
+     encode(filter, bl);
      ENCODE_FINISH(bl);
    }
-   void decode(bufferlist::iterator& bl) {
+   void decode(bufferlist::const_iterator& bl) {
      DECODE_START_LEGACY_COMPAT_LEN(5, 1, 1, bl);
-     ::decode(id, bl);
-     ::decode(prefix, bl);
-     ::decode(status, bl);
-     ::decode(expiration, bl);
+     decode(id, bl);
+     decode(prefix, bl);
+     decode(status, bl);
+     decode(expiration, bl);
      if (struct_v >=2) {
-       ::decode(noncur_expiration, bl);
+       decode(noncur_expiration, bl);
      }
      if (struct_v >= 3) {
-       ::decode(mp_expiration, bl);
+       decode(mp_expiration, bl);
      }
      if (struct_v >= 4) {
-        ::decode(dm_expiration, bl);
+        decode(dm_expiration, bl);
      }
      if (struct_v >= 5) {
-       ::decode(filter, bl);
+       decode(filter, bl);
      }
      DECODE_FINISH(bl);
    }
+  void dump(Formatter *f) const;
 
+  void init_simple_days_rule(std::string_view _id, std::string_view _prefix, int num_days);
 };
 WRITE_CLASS_ENCODER(LCRule)
 
 struct lc_op
 {
-  bool status;
-  bool dm_expiration;
-  int expiration;
-  int noncur_expiration;
-  int mp_expiration;
+  bool status{false};
+  bool dm_expiration{false};
+  int expiration{0};
+  int noncur_expiration{0};
+  int mp_expiration{0};
   boost::optional<ceph::real_time> expiration_date;
   boost::optional<RGWObjTags> obj_tags;
-  lc_op() : status(false), dm_expiration(false), expiration(0), noncur_expiration(0), mp_expiration(0) {}
   
+  void dump(Formatter *f) const;
 };
 
 class RGWLifecycleConfiguration
@@ -287,7 +300,7 @@ protected:
   bool _add_rule(LCRule *rule);
   bool has_same_action(const lc_op& first, const lc_op& second);
 public:
-  RGWLifecycleConfiguration(CephContext *_cct) : cct(_cct) {}
+  explicit RGWLifecycleConfiguration(CephContext *_cct) : cct(_cct) {}
   RGWLifecycleConfiguration() : cct(NULL) {}
 
   void set_ctx(CephContext *ctx) {
@@ -300,12 +313,12 @@ public:
 //  int get_group_perm(ACLGroupTypeEnum group, int perm_mask);
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(rule_map, bl);
+    encode(rule_map, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
-    ::decode(rule_map, bl);
+    decode(rule_map, bl);
     multimap<string, LCRule>::iterator iter;
     for (iter = rule_map.begin(); iter != rule_map.end(); ++iter) {
       LCRule& rule = iter->second;
@@ -314,7 +327,7 @@ public:
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-//  static void generate_test_instances(list<RGWAccessControlList*>& o);
+  static void generate_test_instances(list<RGWLifecycleConfiguration*>& o);
 
   void add_rule(LCRule* rule);
 
@@ -334,7 +347,7 @@ public:
 };
 WRITE_CLASS_ENCODER(RGWLifecycleConfiguration)
 
-class RGWLC {
+class RGWLC : public DoutPrefixProvider {
   CephContext *cct;
   RGWRados *store;
   int max_objs{0};
@@ -343,13 +356,14 @@ class RGWLC {
   string cookie;
 
   class LCWorker : public Thread {
+    const DoutPrefixProvider *dpp;
     CephContext *cct;
     RGWLC *lc;
     Mutex lock;
     Cond cond;
 
   public:
-    LCWorker(CephContext *_cct, RGWLC *_lc) : cct(_cct), lc(_lc), lock("LCWorker") {}
+    LCWorker(const DoutPrefixProvider* _dpp, CephContext *_cct, RGWLC *_lc) : dpp(_dpp), cct(_cct), lc(_lc), lock("LCWorker") {}
     void *entry() override;
     void stop();
     bool should_work(utime_t& now);
@@ -377,9 +391,18 @@ class RGWLC {
   bool going_down();
   void start_processor();
   void stop_processor();
+  int set_bucket_config(RGWBucketInfo& bucket_info,
+                        const map<string, bufferlist>& bucket_attrs,
+                        RGWLifecycleConfiguration *config);
+  int remove_bucket_config(RGWBucketInfo& bucket_info,
+                           const map<string, bufferlist>& bucket_attrs);
+
+  CephContext *get_cct() const override { return store->ctx(); }
+  unsigned get_subsys() const;
+  std::ostream& gen_prefix(std::ostream& out) const;
 
   private:
-  int remove_expired_obj(RGWBucketInfo& bucket_info, rgw_obj_key obj_key, bool remove_indeed = true);
+  int remove_expired_obj(RGWBucketInfo& bucket_info, rgw_obj_key obj_key, const string& owner, const string& owner_display_name, bool remove_indeed = true);
   bool obj_has_expired(ceph::real_time mtime, int days);
   int handle_multipart_expiration(RGWRados::Bucket *target, const map<string, lc_op>& prefix_map);
 };

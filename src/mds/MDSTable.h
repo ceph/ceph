@@ -19,9 +19,9 @@
 #include "mds_table_types.h"
 #include "include/buffer_fwd.h"
 
+#include "MDSContext.h"
+
 class MDSRank;
-class Context;
-class MDSInternalContextBase;
 
 class MDSTable {
 public:
@@ -41,7 +41,7 @@ protected:
   
   version_t version, committing_version, committed_version, projected_version;
   
-  map<version_t, list<MDSInternalContextBase*> > waitfor_save;
+  map<version_t, MDSInternalContextBase::vec > waitfor_save;
   
 public:
   MDSTable(MDSRank *m, const char *n, bool is_per_mds) :
@@ -85,8 +85,11 @@ public:
 
   // child must overload these
   virtual void reset_state() = 0;
-  virtual void decode_state(bufferlist::iterator& p) = 0;
+  virtual void decode_state(bufferlist::const_iterator& p) = 0;
   virtual void encode_state(bufferlist& bl) const = 0;
+
+  friend class C_IO_MT_Load;
+  friend class C_IO_MT_Save;
 };
 
 #endif

@@ -7,6 +7,7 @@
 #include "include/int_types.h"
 #include "include/rados/librados.hpp"
 #include "include/buffer.h"
+#include "common/Mutex.h"
 #include "common/zipkin_trace.h"
 #include "librbd/io/AsyncOperation.h"
 #include "librbd/io/Types.h"
@@ -24,7 +25,7 @@ struct ImageCtx;
 namespace io {
 
 struct AioCompletion;
-template <typename I> class ObjectRequest;
+template <typename I> class AbstractObjectWriteRequest;
 
 template <typename ImageCtxT = librbd::ImageCtx>
 class CopyupRequest {
@@ -40,7 +41,7 @@ public:
                 Extents &&image_extents, const ZTracer::Trace &parent_trace);
   ~CopyupRequest();
 
-  void append_request(ObjectRequest<ImageCtxT> *req);
+  void append_request(AbstractObjectWriteRequest<ImageCtxT> *req);
 
   void send();
 
@@ -91,8 +92,9 @@ private:
   ZTracer::Trace m_trace;
 
   State m_state;
+  bool m_flatten;
   ceph::bufferlist m_copyup_data;
-  std::vector<ObjectRequest<ImageCtxT> *> m_pending_requests;
+  std::vector<AbstractObjectWriteRequest<ImageCtxT> *> m_pending_requests;
   std::atomic<unsigned> m_pending_copyups { 0 };
 
   AsyncOperation m_async_op;
@@ -100,16 +102,21 @@ private:
   std::vector<uint64_t> m_snap_ids;
   librados::IoCtx m_data_ctx; // for empty SnapContext
 
+  Mutex m_lock;
+
   void complete_requests(int r);
 
-  bool should_complete(int r);
+  bool should_complete(int *r);
 
   void remove_from_list();
+  void remove_from_list(Mutex &lock);
 
   bool send_object_map_head();
   bool send_object_map();
   bool send_copyup();
   bool is_copyup_required();
+  bool is_update_object_map_required(int r);
+  bool is_deep_copy() const;
 };
 
 } // namespace io

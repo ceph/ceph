@@ -11,7 +11,7 @@
 #include <boost/intrusive/set.hpp>
 #include <deque>
 #include <list>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -106,7 +106,7 @@ public:
   void release(BlockGuardCell *cell, BlockOperations *block_operations) {
     Mutex::Locker locker(m_lock);
 
-    assert(cell != nullptr);
+    ceph_assert(cell != nullptr);
     auto &detained_block_extent = reinterpret_cast<DetainedBlockExtent &>(
       *cell);
     ldout(m_cct, 20) << "block_start="

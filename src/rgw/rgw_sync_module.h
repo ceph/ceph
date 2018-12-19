@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #ifndef CEPH_RGW_SYNC_MODULE_H
 #define CEPH_RGW_SYNC_MODULE_H
 
@@ -22,7 +25,10 @@ public:
     return nullptr;
   }
 
-  virtual RGWCoroutine *sync_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, uint64_t versioned_epoch, rgw_zone_set *zones_trace) = 0;
+  virtual RGWCoroutine *start_sync(RGWDataSyncEnv *sync_env) {
+    return nullptr;
+  }
+  virtual RGWCoroutine *sync_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, rgw_zone_set *zones_trace) = 0;
   virtual RGWCoroutine *remove_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, real_time& mtime,
                                       bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) = 0;
   virtual RGWCoroutine *create_delete_marker(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, real_time& mtime,
@@ -39,9 +45,14 @@ public:
   virtual RGWRESTMgr *get_rest_filter(int dialect, RGWRESTMgr *orig) {
     return orig;
   }
+  virtual bool supports_user_writes() {
+    return false;
+  }
 };
 
 typedef std::shared_ptr<RGWSyncModuleInstance> RGWSyncModuleInstanceRef;
+
+class JSONFormattable;
 
 class RGWSyncModule {
 
@@ -49,8 +60,11 @@ public:
   RGWSyncModule() {}
   virtual ~RGWSyncModule() {}
 
+  virtual bool supports_writes() {
+    return false;
+  }
   virtual bool supports_data_export() = 0;
-  virtual int create_instance(CephContext *cct, map<string, string, ltstr_nocase>& config, RGWSyncModuleInstanceRef *instance) = 0;
+  virtual int create_instance(CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) = 0;
 };
 
 typedef std::shared_ptr<RGWSyncModule> RGWSyncModuleRef;
@@ -77,7 +91,9 @@ public:
     if (iter == modules.end()) {
       return false;
     }
-    *module = iter->second;
+    if (module != nullptr) {
+      *module = iter->second;
+    }
     return true;
   }
 
@@ -91,13 +107,23 @@ public:
     return module.get()->supports_data_export();
   }
 
-  int create_instance(CephContext *cct, const string& name, map<string, string, ltstr_nocase>& config, RGWSyncModuleInstanceRef *instance) {
+  int create_instance(CephContext *cct, const string& name, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) {
     RGWSyncModuleRef module;
     if (!get_module(name, &module)) {
       return -ENOENT;
     }
 
     return module.get()->create_instance(cct, config, instance);
+  }
+
+  vector<string> get_registered_module_names() const {
+    vector<string> names;
+    for (auto& i: modules) {
+      if (!i.first.empty()) {
+        names.push_back(i.first);
+      }
+    }
+    return names;
   }
 };
 
@@ -110,7 +136,9 @@ protected:
 
   ceph::real_time mtime;
   uint64_t size = 0;
+  string etag;
   map<string, bufferlist> attrs;
+  map<string, string> headers;
 public:
   RGWStatRemoteObjCBCR(RGWDataSyncEnv *_sync_env,
                        RGWBucketInfo& _bucket_info, rgw_obj_key& _key);
@@ -118,17 +146,23 @@ public:
 
   void set_result(ceph::real_time& _mtime,
                   uint64_t _size,
-                  map<string, bufferlist>&& _attrs) {
+                  const string& _etag,
+                  map<string, bufferlist>&& _attrs,
+                  map<string, string>&& _headers) {
     mtime = _mtime;
     size = _size;
+    etag = _etag;
     attrs = std::move(_attrs);
+    headers = std::move(_headers);
   }
 };
 
 class RGWCallStatRemoteObjCR : public RGWCoroutine {
   ceph::real_time mtime;
   uint64_t size{0};
+  string etag;
   map<string, bufferlist> attrs;
+  map<string, string> headers;
 
 protected:
   RGWDataSyncEnv *sync_env;

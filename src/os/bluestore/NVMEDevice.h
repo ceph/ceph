@@ -27,8 +27,6 @@
 
 #include "include/interval_set.h"
 #include "common/ceph_time.h"
-#include "common/Mutex.h"
-#include "common/Cond.h"
 #include "BlockDevice.h"
 
 enum class IOCommand {
@@ -69,8 +67,9 @@ class NVMEDevice : public BlockDevice {
     IOContext *ioc) override;
   int aio_write(uint64_t off, bufferlist& bl,
                 IOContext *ioc,
-                bool buffered) override;
-  int write(uint64_t off, bufferlist& bl, bool buffered) override;
+                bool buffered,
+		int write_hint = WRITE_LIFE_NOT_SET) override;
+  int write(uint64_t off, bufferlist& bl, bool buffered, int write_hint = WRITE_LIFE_NOT_SET) override;
   int flush() override;
   int read_random(uint64_t off, uint64_t len, char *buf, bool buffered) override;
 

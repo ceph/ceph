@@ -1242,7 +1242,7 @@ TEST(GarbageCollector, BasicTest)
     ASSERT_EQ(saving, 1);
     auto& to_collect = gc.get_extents_to_collect();
     ASSERT_EQ(to_collect.size(), 1u);
-    ASSERT_EQ(to_collect[0], AllocExtent(100,10) );
+    ASSERT_EQ(to_collect[0], bluestore_pextent_t(100,10) );
 
     em.clear();
     old_extents.clear();
@@ -1312,10 +1312,10 @@ TEST(GarbageCollector, BasicTest)
     ASSERT_EQ(saving, 2);
     auto& to_collect = gc.get_extents_to_collect();
     ASSERT_EQ(to_collect.size(), 2u);
-    ASSERT_TRUE(to_collect[0] == AllocExtent(0x0,0x8000) ||
-		  to_collect[1] == AllocExtent(0x0,0x8000));
-    ASSERT_TRUE(to_collect[0] == AllocExtent(0x3f000,0x1000) ||
-		  to_collect[1] == AllocExtent(0x3f000,0x1000));
+    ASSERT_TRUE(to_collect[0] == bluestore_pextent_t(0x0,0x8000) ||
+		  to_collect[1] == bluestore_pextent_t(0x0,0x8000));
+    ASSERT_TRUE(to_collect[0] == bluestore_pextent_t(0x3f000,0x1000) ||
+		  to_collect[1] == bluestore_pextent_t(0x3f000,0x1000));
 
     em.clear();
     old_extents.clear();
@@ -1433,22 +1433,121 @@ TEST(GarbageCollector, BasicTest)
     ASSERT_EQ(saving, 2);
     auto& to_collect = gc.get_extents_to_collect();
     ASSERT_EQ(to_collect.size(), 2u);
-    ASSERT_TRUE(to_collect[0] == AllocExtent(0x0,0x8000) ||
-		  to_collect[1] == AllocExtent(0x0,0x8000));
-    ASSERT_TRUE(to_collect[0] == AllocExtent(0x3f000,0x1000) ||
-		  to_collect[1] == AllocExtent(0x3f000,0x1000));
+    ASSERT_TRUE(to_collect[0] == bluestore_pextent_t(0x0,0x8000) ||
+		  to_collect[1] == bluestore_pextent_t(0x0,0x8000));
+    ASSERT_TRUE(to_collect[0] == bluestore_pextent_t(0x3f000,0x1000) ||
+		  to_collect[1] == bluestore_pextent_t(0x3f000,0x1000));
 
     em.clear();
     old_extents.clear();
   }
- }
+}
+
+TEST(BlueStoreRepairer, StoreSpaceTracker)
+{
+  BlueStoreRepairer::StoreSpaceTracker bmap0;
+  bmap0.init((uint64_t)4096 * 1024 * 1024 * 1024, 0x1000);
+  ASSERT_EQ(bmap0.granularity, 2 * 1024 * 1024U);
+  ASSERT_EQ(bmap0.collections_bfs.size(), 2048u * 1024u);
+  ASSERT_EQ(bmap0.objects_bfs.size(), 2048u * 1024u);
+
+  BlueStoreRepairer::StoreSpaceTracker bmap;
+  bmap.init(0x2000 * 0x1000 - 1, 0x1000, 512 * 1024);
+  ASSERT_EQ(bmap.granularity, 0x1000u);
+  ASSERT_EQ(bmap.collections_bfs.size(), 0x2000u);
+  ASSERT_EQ(bmap.objects_bfs.size(), 0x2000u);
+
+  coll_t cid;
+  ghobject_t hoid;
+
+  ASSERT_FALSE(bmap.is_used(cid, 0));
+  ASSERT_FALSE(bmap.is_used(hoid, 0));
+  bmap.set_used(0, 1, cid, hoid);
+  ASSERT_TRUE(bmap.is_used(cid, 0));
+  ASSERT_TRUE(bmap.is_used(hoid, 0));
+
+  ASSERT_FALSE(bmap.is_used(cid, 0x1023));
+  ASSERT_FALSE(bmap.is_used(hoid, 0x1023));
+  ASSERT_FALSE(bmap.is_used(cid, 0x2023));
+  ASSERT_FALSE(bmap.is_used(hoid, 0x2023));
+  ASSERT_FALSE(bmap.is_used(cid, 0x3023));
+  ASSERT_FALSE(bmap.is_used(hoid, 0x3023));
+  bmap.set_used(0x1023, 0x3000, cid, hoid);
+  ASSERT_TRUE(bmap.is_used(cid, 0x1023));
+  ASSERT_TRUE(bmap.is_used(hoid, 0x1023));
+  ASSERT_TRUE(bmap.is_used(cid, 0x2023));
+  ASSERT_TRUE(bmap.is_used(hoid, 0x2023));
+  ASSERT_TRUE(bmap.is_used(cid, 0x3023));
+  ASSERT_TRUE(bmap.is_used(hoid, 0x3023));
+
+  ASSERT_FALSE(bmap.is_used(cid, 0x9001));
+  ASSERT_FALSE(bmap.is_used(hoid, 0x9001));
+  ASSERT_FALSE(bmap.is_used(cid, 0xa001));
+  ASSERT_FALSE(bmap.is_used(hoid, 0xa001));
+  ASSERT_FALSE(bmap.is_used(cid, 0xb000));
+  ASSERT_FALSE(bmap.is_used(hoid, 0xb000));
+  ASSERT_FALSE(bmap.is_used(cid, 0xc000));
+  ASSERT_FALSE(bmap.is_used(hoid, 0xc000));
+  bmap.set_used(0x9001, 0x2fff, cid, hoid);
+  ASSERT_TRUE(bmap.is_used(cid, 0x9001));
+  ASSERT_TRUE(bmap.is_used(hoid, 0x9001));
+  ASSERT_TRUE(bmap.is_used(cid, 0xa001));
+  ASSERT_TRUE(bmap.is_used(hoid, 0xa001));
+  ASSERT_TRUE(bmap.is_used(cid, 0xb001));
+  ASSERT_TRUE(bmap.is_used(hoid, 0xb001));
+  ASSERT_FALSE(bmap.is_used(cid, 0xc000));
+  ASSERT_FALSE(bmap.is_used(hoid, 0xc000));
+
+  bmap.set_used(0xa001, 0x2, cid, hoid);
+  ASSERT_TRUE(bmap.is_used(cid, 0x9001));
+  ASSERT_TRUE(bmap.is_used(hoid, 0x9001));
+  ASSERT_TRUE(bmap.is_used(cid, 0xa001));
+  ASSERT_TRUE(bmap.is_used(hoid, 0xa001));
+  ASSERT_TRUE(bmap.is_used(cid, 0xb001));
+  ASSERT_TRUE(bmap.is_used(hoid, 0xb001));
+  ASSERT_FALSE(bmap.is_used(cid, 0xc000));
+  ASSERT_FALSE(bmap.is_used(hoid, 0xc000));
+
+  ASSERT_FALSE(bmap.is_used(cid, 0xc0000));
+  ASSERT_FALSE(bmap.is_used(hoid, 0xc0000));
+  ASSERT_FALSE(bmap.is_used(cid, 0xc1000));
+  ASSERT_FALSE(bmap.is_used(hoid, 0xc1000));
+
+  bmap.set_used(0xc0000, 0x2000, cid, hoid);
+  ASSERT_TRUE(bmap.is_used(cid, 0xc0000));
+  ASSERT_TRUE(bmap.is_used(hoid, 0xc0000));
+  ASSERT_TRUE(bmap.is_used(cid, 0xc1000));
+  ASSERT_TRUE(bmap.is_used(hoid, 0xc1000));
+
+  interval_set<uint64_t> extents;
+  extents.insert(0,0x500);
+  extents.insert(0x800,0x100);
+  extents.insert(0x1000,0x1000);
+  extents.insert(0xa001,1);
+  extents.insert(0xa0000,0xff8);
+
+  ASSERT_EQ(3u, bmap.filter_out(extents));
+  ASSERT_TRUE(bmap.is_used(cid));
+  ASSERT_TRUE(bmap.is_used(hoid));
+ 
+  BlueStoreRepairer::StoreSpaceTracker bmap2;
+  bmap2.init((uint64_t)0x3223b1d1000, 0x10000);
+  ASSERT_EQ(0x1a0000u, bmap2.granularity);
+  ASSERT_EQ(0x1edae4u, bmap2.collections_bfs.size());
+  ASSERT_EQ(0x1edae4u, bmap2.objects_bfs.size());
+  bmap2.set_used(0x3223b190000, 0x10000, cid, hoid);
+  ASSERT_TRUE(bmap2.is_used(cid, 0x3223b190000));
+  ASSERT_TRUE(bmap2.is_used(hoid, 0x3223b190000));
+  ASSERT_TRUE(bmap2.is_used(cid, 0x3223b19f000));
+  ASSERT_TRUE(bmap2.is_used(hoid, 0x3223b19ffff));
+}
 
 int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
-  env_to_vec(args);
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

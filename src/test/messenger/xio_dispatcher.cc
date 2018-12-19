@@ -47,7 +47,7 @@ bool XioDispatcher::ms_dispatch(Message *m)
   }
     break;
   default:
-    abort();
+    ceph_abort();
   }
 
   if (unlikely(m->get_magic() & MSG_MAGIC_TRACE_CTR)) {

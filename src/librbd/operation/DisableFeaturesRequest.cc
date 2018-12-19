@@ -41,7 +41,7 @@ template <typename I>
 void DisableFeaturesRequest<I>::send_op() {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
-  assert(image_ctx.owner_lock.is_locked());
+  ceph_assert(image_ctx.owner_lock.is_locked());
 
   ldout(cct, 20) << this << " " << __func__ << ": features=" << m_features
 		 << dendl;
@@ -53,7 +53,7 @@ template <typename I>
 bool DisableFeaturesRequest<I>::should_complete(int r) {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
-  ldout(cct, 20) << this << " " << __func__ << "r=" << r << dendl;
+  ldout(cct, 20) << this << " " << __func__ << " r=" << r << dendl;
 
   if (r < 0) {
     lderr(cct) << "encountered error: " << cpp_strerror(r) << dendl;
@@ -160,19 +160,20 @@ Context *DisableFeaturesRequest<I>::handle_acquire_exclusive_lock(int *result) {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": r=" << *result << dendl;
 
+  image_ctx.owner_lock.get_read();
   if (*result < 0) {
     lderr(cct) << "failed to lock image: " << cpp_strerror(*result) << dendl;
+    image_ctx.owner_lock.put_read();
     return handle_finish(*result);
-  } else if (m_acquired_lock && (image_ctx.exclusive_lock == nullptr ||
-				 !image_ctx.exclusive_lock->is_lock_owner())) {
+  } else if (image_ctx.exclusive_lock != nullptr &&
+             !image_ctx.exclusive_lock->is_lock_owner()) {
     lderr(cct) << "failed to acquire exclusive lock" << dendl;
-    *result = -EROFS;
+    *result = image_ctx.exclusive_lock->get_unlocked_op_error();
+    image_ctx.owner_lock.put_read();
     return handle_finish(*result);
   }
 
   do {
-    RWLock::WLocker locker(image_ctx.owner_lock);
-
     m_features &= image_ctx.features;
     m_new_features = image_ctx.features & ~m_features;
     m_features_mask = m_features;
@@ -193,15 +194,10 @@ Context *DisableFeaturesRequest<I>::handle_acquire_exclusive_lock(int *result) {
       m_disable_flags |= RBD_FLAG_FAST_DIFF_INVALID;
     }
     if ((m_features & RBD_FEATURE_OBJECT_MAP) != 0) {
-      if ((m_new_features & RBD_FEATURE_FAST_DIFF) != 0) {
-        lderr(cct) << "cannot disable object-map. fast-diff must be "
-                      "disabled before disabling object-map." << dendl;
-        *result = -EINVAL;
-        break;
-      }
       m_disable_flags |= RBD_FLAG_OBJECT_MAP_INVALID;
     }
   } while (false);
+  image_ctx.owner_lock.put_read();
 
   if (*result < 0) {
     return handle_finish(*result);
@@ -231,7 +227,7 @@ void DisableFeaturesRequest<I>::send_get_mirror_mode() {
     create_rados_callback<klass, &klass::handle_get_mirror_mode>(this);
   m_out_bl.clear();
   int r = image_ctx.md_ctx.aio_operate(RBD_MIRRORING, comp, &op, &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 
@@ -242,7 +238,7 @@ Context *DisableFeaturesRequest<I>::handle_get_mirror_mode(int *result) {
   ldout(cct, 20) << this << " " << __func__ << ": r=" << *result << dendl;
 
   if (*result == 0) {
-    bufferlist::iterator it = m_out_bl.begin();
+    auto it = m_out_bl.cbegin();
     *result = cls_client::mirror_mode_get_finish(&it, &m_mirror_mode);
   }
 
@@ -279,7 +275,7 @@ void DisableFeaturesRequest<I>::send_get_mirror_image() {
     create_rados_callback<klass, &klass::handle_get_mirror_image>(this);
   m_out_bl.clear();
   int r = image_ctx.md_ctx.aio_operate(RBD_MIRRORING, comp, &op, &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 
@@ -292,7 +288,7 @@ Context *DisableFeaturesRequest<I>::handle_get_mirror_image(int *result) {
   cls::rbd::MirrorImage mirror_image;
 
   if (*result == 0) {
-    bufferlist::iterator it = m_out_bl.begin();
+    auto it = m_out_bl.cbegin();
     *result = cls_client::mirror_image_get_finish(&it, &mirror_image);
   }
 
@@ -380,7 +376,7 @@ Context *DisableFeaturesRequest<I>::handle_close_journal(int *result) {
                << dendl;
   }
 
-  assert(m_journal != nullptr);
+  ceph_assert(m_journal != nullptr);
   delete m_journal;
   m_journal = nullptr;
 
@@ -501,7 +497,7 @@ void DisableFeaturesRequest<I>::send_set_features() {
   librados::AioCompletion *comp =
     create_rados_callback<klass, &klass::handle_set_features>(this);
   int r = image_ctx.md_ctx.aio_operate(image_ctx.header_oid, comp, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 

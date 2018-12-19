@@ -21,7 +21,6 @@ struct MonCommand {
   std::string helpstring;
   std::string module;
   std::string req_perms;
-  std::string availability;
   uint64_t flags;
 
   // MonCommand flags
@@ -30,6 +29,8 @@ struct MonCommand {
   static const uint64_t FLAG_OBSOLETE   = 1 << 1;
   static const uint64_t FLAG_DEPRECATED = 1 << 2;
   static const uint64_t FLAG_MGR        = 1 << 3;
+  static const uint64_t FLAG_POLL       = 1 << 4;
+  static const uint64_t FLAG_HIDDEN     = 1 << 5;
 
   bool has_flag(uint64_t flag) const { return (flags & flag) != 0; }
   void set_flag(uint64_t flag) { flags |= flag; }
@@ -38,14 +39,14 @@ struct MonCommand {
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
     encode_bare(bl);
-    ::encode(flags, bl);
+    encode(flags, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START(1, bl);
     decode_bare(bl);
-    ::decode(flags, bl);
+    decode(flags, bl);
     DECODE_FINISH(bl);
   }
 
@@ -53,23 +54,26 @@ struct MonCommand {
    * Unversioned encoding for use within encode_array.
    */
   void encode_bare(bufferlist &bl) const {
-    ::encode(cmdstring, bl);
-    ::encode(helpstring, bl);
-    ::encode(module, bl);
-    ::encode(req_perms, bl);
-    ::encode(availability, bl);
+    using ceph::encode;
+    encode(cmdstring, bl);
+    encode(helpstring, bl);
+    encode(module, bl);
+    encode(req_perms, bl);
+    std::string availability = "cli,rest";  // Removed field, for backward compat
+    encode(availability, bl);
   }
-  void decode_bare(bufferlist::iterator &bl) {
-    ::decode(cmdstring, bl);
-    ::decode(helpstring, bl);
-    ::decode(module, bl);
-    ::decode(req_perms, bl);
-    ::decode(availability, bl);
+  void decode_bare(bufferlist::const_iterator &bl) {
+    using ceph::decode;
+    decode(cmdstring, bl);
+    decode(helpstring, bl);
+    decode(module, bl);
+    decode(req_perms, bl);
+    std::string availability;  // Removed field, for backward compat
+    decode(availability, bl);
   }
   bool is_compat(const MonCommand* o) const {
     return cmdstring == o->cmdstring &&
-	module == o->module && req_perms == o->req_perms &&
-	availability == o->availability;
+	module == o->module && req_perms == o->req_perms;
   }
 
   bool is_noforward() const {
@@ -88,23 +92,27 @@ struct MonCommand {
     return has_flag(MonCommand::FLAG_MGR);
   }
 
+  bool is_hidden() const {
+    return has_flag(MonCommand::FLAG_HIDDEN);
+  }
+
   static void encode_array(const MonCommand *cmds, int size, bufferlist &bl) {
     ENCODE_START(2, 1, bl);
     uint16_t s = size;
-    ::encode(s, bl);
+    encode(s, bl);
     for (int i = 0; i < size; ++i) {
       cmds[i].encode_bare(bl);
     }
     for (int i = 0; i < size; i++) {
-      ::encode(cmds[i].flags, bl);
+      encode(cmds[i].flags, bl);
     }
     ENCODE_FINISH(bl);
   }
   static void decode_array(MonCommand **cmds, int *size,
-                           bufferlist::iterator &bl) {
+                           bufferlist::const_iterator &bl) {
     DECODE_START(2, bl);
     uint16_t s = 0;
-    ::decode(s, bl);
+    decode(s, bl);
     *size = s;
     *cmds = new MonCommand[*size];
     for (int i = 0; i < *size; ++i) {
@@ -112,7 +120,7 @@ struct MonCommand {
     }
     if (struct_v >= 2) {
       for (int i = 0; i < *size; i++)
-        ::decode((*cmds)[i].flags, bl);
+        decode((*cmds)[i].flags, bl);
     } else {
       for (int i = 0; i < *size; i++)
         (*cmds)[i].flags = 0;
@@ -125,27 +133,27 @@ struct MonCommand {
 			    bufferlist &bl) {
     ENCODE_START(2, 1, bl);
     uint16_t s = cmds.size();
-    ::encode(s, bl);
+    encode(s, bl);
     for (unsigned i = 0; i < s; ++i) {
       cmds[i].encode_bare(bl);
     }
     for (unsigned i = 0; i < s; i++) {
-      ::encode(cmds[i].flags, bl);
+      encode(cmds[i].flags, bl);
     }
     ENCODE_FINISH(bl);
   }
   static void decode_vector(std::vector<MonCommand> &cmds,
-			    bufferlist::iterator &bl) {
+			    bufferlist::const_iterator &bl) {
     DECODE_START(2, bl);
     uint16_t s = 0;
-    ::decode(s, bl);
+    decode(s, bl);
     cmds.resize(s);
     for (unsigned i = 0; i < s; ++i) {
       cmds[i].decode_bare(bl);
     }
     if (struct_v >= 2) {
       for (unsigned i = 0; i < s; i++)
-        ::decode(cmds[i].flags, bl);
+        decode(cmds[i].flags, bl);
     } else {
       for (unsigned i = 0; i < s; i++)
         cmds[i].flags = 0;

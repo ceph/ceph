@@ -40,7 +40,7 @@ namespace dpdk {
   std::condition_variable eal::cond;
   std::list<std::function<void()>> eal::funcs;
 
-  static int bitcount(unsigned n)
+  static int bitcount(unsigned long long n)
   {
     return std::bitset<CHAR_BIT * sizeof(n)>{n}.count();
   }
@@ -52,11 +52,17 @@ namespace dpdk {
     }
 
     bool done = false;
+    auto num = std::stoull(c->_conf.get_val<std::string>("ms_dpdk_coremask"),
+                           nullptr, 16);
+    unsigned int coremaskbit = bitcount(num);
+
+    ceph_assert(coremaskbit > c->_conf->ms_async_op_threads);
+
     t = std::thread([&]() {
       // TODO: Inherit these from the app parameters - "opts"
       std::vector<std::vector<char>> args {
           string2vector(string("ceph")),
-          string2vector("-c"), string2vector(c->_conf->get_val<std::string>("ms_dpdk_coremask")),
+          string2vector("-c"), string2vector(c->_conf.get_val<std::string>("ms_dpdk_coremask")),
           string2vector("-n"), string2vector(c->_conf->ms_dpdk_memory_channel),
       };
 

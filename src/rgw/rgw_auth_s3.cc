@@ -17,6 +17,7 @@
 
 #include <boost/container/small_vector.hpp>
 #include <boost/utility/string_view.hpp>
+#include <boost/algorithm/string/trim_all.hpp>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -115,6 +116,7 @@ void rgw_create_s3_canonical_header(
   const char* const content_type,
   const char* const date,
   const std::map<std::string, std::string>& meta_map,
+  const std::map<std::string, std::string>& qs_map,
   const char* const request_uri,
   const std::map<std::string, std::string>& sub_resources,
   std::string& dest_str)
@@ -142,6 +144,7 @@ void rgw_create_s3_canonical_header(
   dest.append("\n");
 
   dest.append(get_canon_amz_hdr(meta_map));
+  dest.append(get_canon_amz_hdr(qs_map));
   dest.append(get_canon_resource(request_uri, sub_resources));
 
   dest_str = dest;
@@ -149,6 +152,17 @@ void rgw_create_s3_canonical_header(
 
 static inline bool is_base64_for_content_md5(unsigned char c) {
   return (isalnum(c) || isspace(c) || (c == '+') || (c == '/') || (c == '='));
+}
+
+static inline void get_v2_qs_map(const req_info& info,
+				 std::map<std::string, std::string>& qs_map) {
+  const auto& params = const_cast<RGWHTTPArgs&>(info.args).get_params();
+  for (const auto& elt : params) {
+    std::string k = boost::algorithm::to_lower_copy(elt.first);
+    if (k.find("x-amz-meta-") == /* offset */ 0) {
+      add_amz_meta_header(qs_map, k, elt.second);
+    }
+  }
 }
 
 /*
@@ -174,7 +188,10 @@ bool rgw_create_s3_canonical_header(const req_info& info,
   const char *content_type = info.env->get("CONTENT_TYPE");
 
   std::string date;
+  std::map<std::string, std::string> qs_map;
+
   if (qsr) {
+    get_v2_qs_map(info, qs_map); // handle qs metadata
     date = info.args.get("Expires");
   } else {
     const char *str = info.env->get("HTTP_X_AMZ_DATE");
@@ -213,8 +230,8 @@ bool rgw_create_s3_canonical_header(const req_info& info,
   }
 
   rgw_create_s3_canonical_header(info.method, content_md5, content_type,
-                                 date.c_str(), meta_map, request_uri.c_str(),
-                                 sub_resources, dest);
+                                 date.c_str(), meta_map, qs_map,
+				 request_uri.c_str(), sub_resources, dest);
   return true;
 }
 
@@ -223,14 +240,27 @@ namespace rgw {
 namespace auth {
 namespace s3 {
 
-/* FIXME(rzarzynski): duplicated from rgw_rest_s3.h. */
-#define RGW_AUTH_GRACE_MINS 15
+bool is_time_skew_ok(time_t t)
+{
+  auto req_tp = ceph::coarse_real_clock::from_time_t(t);
+  auto cur_tp = ceph::coarse_real_clock::now();
+
+  if (std::chrono::abs(cur_tp - req_tp) > RGW_AUTH_GRACE) {
+    dout(10) << "NOTICE: request time skew too big." << dendl;
+    using ceph::operator<<;
+    dout(10) << "req_tp=" << req_tp << ", cur_tp=" << cur_tp << dendl;
+    return false;
+  }
+
+  return true;
+}
 
 static inline int parse_v4_query_string(const req_info& info,              /* in */
                                         boost::string_view& credential,    /* out */
                                         boost::string_view& signedheaders, /* out */
                                         boost::string_view& signature,     /* out */
-                                        boost::string_view& date)          /* out */
+                                        boost::string_view& date,          /* out */
+                                        boost::string_view& sessiontoken)  /* out */
 {
   /* auth ships with req params ... */
 
@@ -246,41 +276,24 @@ static inline int parse_v4_query_string(const req_info& info,              /* in
     return -EPERM;
   }
 
-  /* Used for pre-signatured url, We shouldn't return -ERR_REQUEST_TIME_SKEWED
-   * when current time <= X-Amz-Expires */
-  bool qsr = false;
-
-  uint64_t now_req = 0;
-  uint64_t now = ceph_clock_now();
-
   boost::string_view expires = info.args.get("X-Amz-Expires");
-  if (!expires.empty()) {
-    /* X-Amz-Expires provides the time period, in seconds, for which
-       the generated presigned URL is valid. The minimum value
-       you can set is 1, and the maximum is 604800 (seven days) */
-    time_t exp = atoll(expires.data());
-    if ((exp < 1) || (exp > 7*24*60*60)) {
-      dout(10) << "NOTICE: exp out of range, exp = " << exp << dendl;
-      return -EPERM;
-    }
-    /* handle expiration in epoch time */
-    now_req = (uint64_t)internal_timegm(&date_t);
-    if (now >= now_req + exp) {
-      dout(10) << "NOTICE: now = " << now << ", now_req = " << now_req << ", exp = " << exp << dendl;
-      return -EPERM;
-    }
-    qsr = true;
+  if (expires.empty()) {
+    return -EPERM;
   }
-
-  if ((now_req < now - RGW_AUTH_GRACE_MINS * 60 ||
-     now_req > now + RGW_AUTH_GRACE_MINS * 60) && !qsr) {
-    dout(10) << "NOTICE: request time skew too big." << dendl;
-    dout(10) << "now_req = " << now_req << " now = " << now
-             << "; now - RGW_AUTH_GRACE_MINS="
-             << now - RGW_AUTH_GRACE_MINS * 60
-             << "; now + RGW_AUTH_GRACE_MINS="
-             << now + RGW_AUTH_GRACE_MINS * 60 << dendl;
-    return -ERR_REQUEST_TIME_SKEWED;
+  /* X-Amz-Expires provides the time period, in seconds, for which
+     the generated presigned URL is valid. The minimum value
+     you can set is 1, and the maximum is 604800 (seven days) */
+  time_t exp = atoll(expires.data());
+  if ((exp < 1) || (exp > 7*24*60*60)) {
+    dout(10) << "NOTICE: exp out of range, exp = " << exp << dendl;
+    return -EPERM;
+  }
+  /* handle expiration in epoch time */
+  uint64_t req_sec = (uint64_t)internal_timegm(&date_t);
+  uint64_t now = ceph_clock_now();
+  if (now >= req_sec + exp) {
+    dout(10) << "NOTICE: now = " << now << ", req_sec = " << req_sec << ", exp = " << exp << dendl;
+    return -EPERM;
   }
 
   signedheaders = info.args.get("X-Amz-SignedHeaders");
@@ -293,10 +306,16 @@ static inline int parse_v4_query_string(const req_info& info,              /* in
     return -EPERM;
   }
 
+  if (info.args.exists("X-Amz-Security-Token")) {
+    sessiontoken = info.args.get("X-Amz-Security-Token");
+    if (sessiontoken.size() == 0) {
+      return -EPERM;
+    }
+  }
+
   return 0;
 }
 
-namespace {
 static bool get_next_token(const boost::string_view& s,
                            size_t& pos,
                            const char* const delims,
@@ -345,13 +364,13 @@ get_str_vec(const boost::string_view& str)
   const char delims[] = ";,= \t";
   return get_str_vec<ExpectedStrNum>(str, delims);
 }
-};
 
 static inline int parse_v4_auth_header(const req_info& info,               /* in */
                                        boost::string_view& credential,     /* out */
                                        boost::string_view& signedheaders,  /* out */
                                        boost::string_view& signature,      /* out */
-                                       boost::string_view& date)           /* out */
+                                       boost::string_view& date,           /* out */
+                                       boost::string_view& sessiontoken)   /* out */
 {
   boost::string_view input(info.env->get("HTTP_AUTHORIZATION", ""));
   try {
@@ -408,35 +427,41 @@ static inline int parse_v4_auth_header(const req_info& info,               /* in
   }
   date = d;
 
+  if (!is_time_skew_ok(internal_timegm(&t))) {
+    return -ERR_REQUEST_TIME_SKEWED;
+  }
+
+  if (info.env->exists("HTTP_X_AMZ_SECURITY_TOKEN")) {
+    sessiontoken = info.env->get("HTTP_X_AMZ_SECURITY_TOKEN");
+  }
+
   return 0;
 }
 
-int parse_credentials(const req_info& info,                     /* in */
-                      boost::string_view& access_key_id,        /* out */
-                      boost::string_view& credential_scope,     /* out */
-                      boost::string_view& signedheaders,        /* out */
-                      boost::string_view& signature,            /* out */
-                      boost::string_view& date,                 /* out */
-                      bool& using_qs)                           /* out */
+int parse_v4_credentials(const req_info& info,                     /* in */
+			 boost::string_view& access_key_id,        /* out */
+			 boost::string_view& credential_scope,     /* out */
+			 boost::string_view& signedheaders,        /* out */
+			 boost::string_view& signature,            /* out */
+			 boost::string_view& date,                 /* out */
+			 boost::string_view& session_token,        /* out */
+			 const bool using_qs)                      /* in */
 {
-  const char* const http_auth = info.env->get("HTTP_AUTHORIZATION");
-  using_qs = http_auth == nullptr || http_auth[0] == '\0';
-
-  int ret;
   boost::string_view credential;
+  int ret;
   if (using_qs) {
     ret = parse_v4_query_string(info, credential, signedheaders,
-                                signature, date);
+                                signature, date, session_token);
   } else {
     ret = parse_v4_auth_header(info, credential, signedheaders,
-                               signature, date);
+                               signature, date, session_token);
   }
 
   if (ret < 0) {
     return ret;
   }
 
-  /* AKIAIVKTAZLOCF43WNQD/AAAAMMDD/region/host/aws4_request */
+  /* access_key/YYYYMMDD/region/service/aws4_request */
   dout(10) << "v4 credential format = " << credential << dendl;
 
   if (std::count(credential.begin(), credential.end(), '/') != 4) {
@@ -458,45 +483,6 @@ int parse_credentials(const req_info& info,                     /* in */
   dout(10) << "credential scope = " << credential_scope << dendl;
 
   return 0;
-}
-
-static inline bool char_needs_aws4_escaping(const char c)
-{
-  if ((c >= 'a' && c <= 'z') ||
-      (c >= 'A' && c <= 'Z') ||
-      (c >= '0' && c <= '9')) {
-    return false;
-  }
-
-  switch (c) {
-    case '-':
-    case '_':
-    case '.':
-    case '~':
-      return false;
-  }
-  return true;
-}
-
-static inline std::string aws4_uri_encode(const std::string& src)
-{
-  std::string result;
-
-  for (const std::string::value_type c : src) {
-    if (char_needs_aws4_escaping(c)) {
-      rgw_uri_escape_char(c, result);
-    } else {
-      result.push_back(c);
-    }
-  }
-
-  return result;
-}
-
-static inline std::string aws4_uri_recode(const boost::string_view& src)
-{
-  std::string decoded = url_decode(src);
-  return aws4_uri_encode(decoded);
 }
 
 std::string get_v4_canonical_qs(const req_info& info, const bool using_qs)
@@ -533,14 +519,10 @@ std::string get_v4_canonical_qs(const req_info& info, const bool using_qs)
       continue;
     }
 
-    if (key == "X-Amz-Credential") {
-      /* FIXME(rzarzynski): I can't find any comment in the previously linked
-       * Amazon's docs saying that X-Amz-Credential should be handled in this
-       * way. */
-      canonical_qs_map[key.to_string()] = val.to_string();
-    } else {
-      canonical_qs_map[aws4_uri_recode(key)] = aws4_uri_recode(val);
-    }
+    // while awsv4 specs ask for all slashes to be encoded, s3 itself is relaxed
+    // in its implementation allowing non-url-encoded slashes to be present in
+    // presigned urls for instance
+    canonical_qs_map[aws4_uri_recode(key, true)] = aws4_uri_recode(val, true);
   }
 
   /* Thanks to the early exist we have the guarantee that canonical_qs_map has
@@ -620,7 +602,8 @@ get_v4_canonical_headers(const req_info& info,
   std::string canonical_hdrs;
   for (const auto& header : canonical_hdrs_map) {
     const boost::string_view& name = header.first;
-    const std::string& value = header.second;
+    std::string value = header.second;
+    boost::trim_all<std::string>(value);
 
     canonical_hdrs.append(name.data(), name.length())
                   .append(":", std::strlen(":"))
@@ -1038,7 +1021,7 @@ size_t AWSv4ComplMulti::recv_body(char* const buf, const size_t buf_max)
   return buf_pos;
 }
 
-void AWSv4ComplMulti::modify_request_state(req_state* const s_rw)
+void AWSv4ComplMulti::modify_request_state(const DoutPrefixProvider* dpp, req_state* const s_rw)
 {
   const char* const decoded_length = \
     s_rw->info.env->get("HTTP_X_AMZ_DECODED_CONTENT_LENGTH");
@@ -1050,7 +1033,7 @@ void AWSv4ComplMulti::modify_request_state(req_state* const s_rw)
     s_rw->content_length = parse_content_length(decoded_length);
 
     if (s_rw->content_length < 0) {
-      ldout(cct, 10) << "negative AWSv4's content length, aborting" << dendl;
+      ldpp_dout(dpp, 10) << "negative AWSv4's content length, aborting" << dendl;
       throw -EINVAL;
     }
   }
@@ -1104,7 +1087,7 @@ size_t AWSv4ComplSingle::recv_body(char* const buf, const size_t max)
   return received;
 }
 
-void AWSv4ComplSingle::modify_request_state(req_state* const s_rw)
+void AWSv4ComplSingle::modify_request_state(const DoutPrefixProvider* dpp, req_state* const s_rw)
 {
   /* Install the filter over rgw::io::RestfulClient. */
   AWS_AUTHv4_IO(s_rw)->add_filter(

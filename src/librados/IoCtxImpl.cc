@@ -19,7 +19,7 @@
 #include "librados/AioCompletionImpl.h"
 #include "librados/PoolAsyncCompletionImpl.h"
 #include "librados/RadosClient.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "common/valgrind.h"
 #include "common/EventTrace.h"
 
@@ -138,7 +138,7 @@ struct C_aio_notify_Complete : public C_aio_linger_Complete {
   }
 
   void complete(int r) override {
-    // invoked by C_notify_Finish (or C_aio_notify_Ack on failure)
+    // invoked by C_notify_Finish
     lock.Lock();
     finished = true;
     complete_unlock(r);
@@ -175,10 +175,6 @@ struct C_aio_notify_Ack : public Context {
     ldout(cct, 10) << __func__ << " linger op " << oncomplete->linger_op << " "
                    << "acked (" << r << ")" << dendl;
     oncomplete->handle_ack(r);
-    if (r < 0) {
-      // on failure, we won't expect to see a notify_finish callback
-      onfinish->complete(r);
-    }
   }
 };
 
@@ -289,7 +285,7 @@ void librados::IoCtxImpl::queue_aio_write(AioCompletionImpl *c)
 {
   get();
   aio_write_list_lock.Lock();
-  assert(c->io == this);
+  ceph_assert(c->io == this);
   c->aio_write_seq = ++aio_write_seq;
   ldout(client->cct, 20) << "queue_aio_write " << this << " completion " << c
 			 << " write_seq " << aio_write_seq << dendl;
@@ -301,7 +297,7 @@ void librados::IoCtxImpl::complete_aio_write(AioCompletionImpl *c)
 {
   ldout(client->cct, 20) << "complete_aio_write " << c << dendl;
   aio_write_list_lock.Lock();
-  assert(c->io == this);
+  ceph_assert(c->io == this);
   c->aio_write_list_item.remove_myself();
 
   map<ceph_tid_t, std::list<AioCompletionImpl*> >::iterator waiters = aio_write_waiters.begin();
@@ -331,7 +327,7 @@ void librados::IoCtxImpl::flush_aio_writes_async(AioCompletionImpl *c)
 {
   ldout(client->cct, 20) << "flush_aio_writes_async " << this
 			 << " completion " << c << dendl;
-  Mutex::Locker l(aio_write_list_lock);
+  std::lock_guard l(aio_write_list_lock);
   ceph_tid_t seq = aio_write_seq;
   if (aio_write_list.empty()) {
     ldout(client->cct, 20) << "flush_aio_writes_async no writes. (tid "
@@ -502,32 +498,6 @@ void librados::IoCtxImpl::aio_selfmanaged_snap_remove(uint64_t snapid,
 {
   Context *onfinish = new C_aio_selfmanaged_snap_op_Complete(client, c);
   objecter->delete_selfmanaged_snap(poolid, snapid, onfinish);
-}
-
-int librados::IoCtxImpl::pool_change_auid(unsigned long long auid)
-{
-  int reply;
-
-  Mutex mylock("IoCtxImpl::pool_change_auid::mylock");
-  Cond cond;
-  bool done;
-  objecter->change_pool_auid(poolid,
-			     new C_SafeCond(&mylock, &cond, &done, &reply),
-			     auid);
-
-  mylock.Lock();
-  while (!done) cond.Wait(mylock);
-  mylock.Unlock();
-  return reply;
-}
-
-int librados::IoCtxImpl::pool_change_auid_async(unsigned long long auid,
-						  PoolAsyncCompletionImpl *c)
-{
-  objecter->change_pool_auid(poolid,
-			     new C_PoolAsync_Safe(c),
-			     auid);
-  return 0;
 }
 
 int librados::IoCtxImpl::snap_list(vector<uint64_t> *snaps)
@@ -772,7 +742,7 @@ int librados::IoCtxImpl::aio_operate_read(const object_t &oid,
 					  bufferlist *pbl,
                                           const blkin_trace_info *trace_info)
 {
-  FUNCTRACE();
+  FUNCTRACE(client->cct);
   Context *oncomplete = new C_aio_Complete(c);
 
 #if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
@@ -802,7 +772,7 @@ int librados::IoCtxImpl::aio_operate(const object_t& oid,
 				     const SnapContext& snap_context, int flags,
                                      const blkin_trace_info *trace_info)
 {
-  FUNCTRACE();
+  FUNCTRACE(client->cct);
   OID_EVENT_TRACE(oid.name.c_str(), "RADOS_WRITE_OP_BEGIN");
   auto ut = ceph::real_clock::now();
   /* can't write to a snapshot */
@@ -837,7 +807,7 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
 				  bufferlist *pbl, size_t len, uint64_t off,
 				  uint64_t snapid, const blkin_trace_info *info)
 {
-  FUNCTRACE();
+  FUNCTRACE(client->cct);
   if (len > (size_t) INT_MAX)
     return -EDOM;
 
@@ -867,7 +837,7 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
 				  char *buf, size_t len, uint64_t off,
 				  uint64_t snapid, const blkin_trace_info *info)
 {
-  FUNCTRACE();
+  FUNCTRACE(client->cct);
   if (len > (size_t) INT_MAX)
     return -EDOM;
 
@@ -913,7 +883,7 @@ int librados::IoCtxImpl::aio_sparse_read(const object_t oid,
 					 bufferlist *data_bl, size_t len,
 					 uint64_t off, uint64_t snapid)
 {
-  FUNCTRACE();
+  FUNCTRACE(client->cct);
   if (len > (size_t) INT_MAX)
     return -EDOM;
 
@@ -988,7 +958,7 @@ int librados::IoCtxImpl::aio_write(const object_t &oid, AioCompletionImpl *c,
 				   const bufferlist& bl, size_t len,
 				   uint64_t off, const blkin_trace_info *info)
 {
-  FUNCTRACE();
+  FUNCTRACE(client->cct);
   auto ut = ceph::real_clock::now();
   ldout(client->cct, 20) << "aio_write " << oid << " " << off << "~" << len << " snapc=" << snapc << " snap_seq=" << snap_seq << dendl;
   OID_EVENT_TRACE(oid.name.c_str(), "RADOS_WRITE_OP_BEGIN");
@@ -1023,7 +993,7 @@ int librados::IoCtxImpl::aio_write(const object_t &oid, AioCompletionImpl *c,
 int librados::IoCtxImpl::aio_append(const object_t &oid, AioCompletionImpl *c,
 				    const bufferlist& bl, size_t len)
 {
-  FUNCTRACE();
+  FUNCTRACE(client->cct);
   auto ut = ceph::real_clock::now();
 
   if (len > UINT_MAX/2)
@@ -1053,7 +1023,7 @@ int librados::IoCtxImpl::aio_write_full(const object_t &oid,
 					AioCompletionImpl *c,
 					const bufferlist& bl)
 {
-  FUNCTRACE();
+  FUNCTRACE(client->cct);
   auto ut = ceph::real_clock::now();
 
   if (bl.length() > UINT_MAX/2)
@@ -1085,7 +1055,7 @@ int librados::IoCtxImpl::aio_writesame(const object_t &oid,
 				       size_t write_len,
 				       uint64_t off)
 {
-  FUNCTRACE();
+  FUNCTRACE(client->cct);
   auto ut = ceph::real_clock::now();
 
   if ((bl.length() > UINT_MAX/2) || (write_len > UINT_MAX/2))
@@ -1116,7 +1086,7 @@ int librados::IoCtxImpl::aio_writesame(const object_t &oid,
 
 int librados::IoCtxImpl::aio_remove(const object_t &oid, AioCompletionImpl *c, int flags)
 {
-  FUNCTRACE();
+  FUNCTRACE(client->cct);
   auto ut = ceph::real_clock::now();
 
   /* can't write to a snapshot */
@@ -1282,7 +1252,7 @@ int librados::IoCtxImpl::remove(const object_t& oid)
   ::ObjectOperation op;
   prepare_assert_ops(&op);
   op.remove();
-  return operate(oid, &op, NULL);
+  return operate(oid, &op, nullptr, librados::OPERATION_FULL_FORCE);
 }
 
 int librados::IoCtxImpl::remove(const object_t& oid, int flags)
@@ -1313,7 +1283,7 @@ int librados::IoCtxImpl::get_inconsistent_objects(const pg_t& pg,
   c->io = this;
 
   ::ObjectOperation op;
-  op.scrub_ls(start_after, max_to_get, objects, interval, nullptr);
+  op.scrub_ls(start_after, max_to_get, objects, interval, &c->rval);
   object_locator_t oloc{poolid, pg.ps()};
   Objecter::Op *o = objecter->prepare_pg_read_op(
     oloc.hash, oloc, op, nullptr, CEPH_OSD_FLAG_PGOP, oncomplete,
@@ -1334,7 +1304,7 @@ int librados::IoCtxImpl::get_inconsistent_snapsets(const pg_t& pg,
   c->io = this;
 
   ::ObjectOperation op;
-  op.scrub_ls(start_after, max_to_get, snapsets, interval, nullptr);
+  op.scrub_ls(start_after, max_to_get, snapsets, interval, &c->rval);
   object_locator_t oloc{poolid, pg.ps()};
   Objecter::Op *o = objecter->prepare_pg_read_op(
     oloc.hash, oloc, op, nullptr, CEPH_OSD_FLAG_PGOP, oncomplete,
@@ -1348,30 +1318,6 @@ int librados::IoCtxImpl::tmap_update(const object_t& oid, bufferlist& cmdbl)
   ::ObjectOperation wr;
   prepare_assert_ops(&wr);
   wr.tmap_update(cmdbl);
-  return operate(oid, &wr, NULL);
-}
-
-int librados::IoCtxImpl::tmap_put(const object_t& oid, bufferlist& bl)
-{
-  ::ObjectOperation wr;
-  prepare_assert_ops(&wr);
-  wr.tmap_put(bl);
-  return operate(oid, &wr, NULL);
-}
-
-int librados::IoCtxImpl::tmap_get(const object_t& oid, bufferlist& bl)
-{
-  ::ObjectOperation rd;
-  prepare_assert_ops(&rd);
-  rd.tmap_get(&bl, NULL);
-  return operate_read(oid, &rd, NULL);
-}
-
-int librados::IoCtxImpl::tmap_to_omap(const object_t& oid, bool nullok)
-{
-  ::ObjectOperation wr;
-  prepare_assert_ops(&wr);
-  wr.tmap_to_omap(nullok);
   return operate(oid, &wr, NULL);
 }
 
@@ -1389,7 +1335,7 @@ int librados::IoCtxImpl::aio_exec(const object_t& oid, AioCompletionImpl *c,
 				  const char *cls, const char *method,
 				  bufferlist& inbl, bufferlist *outbl)
 {
-  FUNCTRACE();
+  FUNCTRACE(client->cct);
   Context *oncomplete = new C_aio_Complete(c);
 
 #if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
@@ -1411,7 +1357,7 @@ int librados::IoCtxImpl::aio_exec(const object_t& oid, AioCompletionImpl *c,
 				  const char *cls, const char *method,
 				  bufferlist& inbl, char *buf, size_t out_len)
 {
-  FUNCTRACE();
+  FUNCTRACE(client->cct);
   Context *oncomplete = new C_aio_Complete(c);
 
 #if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
@@ -1492,8 +1438,8 @@ int librados::IoCtxImpl::mapext(const object_t& oid,
   if (r < 0)
     return r;
 
-  bufferlist::iterator iter = bl.begin();
-  ::decode(m, iter);
+  auto iter = bl.cbegin();
+  decode(m, iter);
 
   return m.size();
 }
@@ -1832,6 +1778,7 @@ int librados::IoCtxImpl::notify(const object_t& oid, bufferlist& bl,
   Context *notify_finish = new C_notify_Finish(client->cct, &notify_finish_cond,
                                                objecter, linger_op, preply_bl,
                                                preply_buf, preply_buf_len);
+  (void) notify_finish;
 
   uint32_t timeout = notify_timeout;
   if (timeout_ms)
@@ -1863,7 +1810,7 @@ int librados::IoCtxImpl::notify(const object_t& oid, bufferlist& bl,
   } else {
     ldout(client->cct, 10) << __func__ << " failed to initiate notify, r = "
 			   << r << dendl;
-    notify_finish->complete(r);
+    notify_finish_cond.wait();
   }
 
   objecter->linger_cancel(linger_op);
@@ -1954,7 +1901,7 @@ librados::IoCtxImpl::C_aio_stat_Ack::C_aio_stat_Ack(AioCompletionImpl *_c,
 						    time_t *pm)
    : c(_c), pmtime(pm)
 {
-  assert(!c->io);
+  ceph_assert(!c->io);
   c->get();
 }
 
@@ -1982,7 +1929,7 @@ librados::IoCtxImpl::C_aio_stat2_Ack::C_aio_stat2_Ack(AioCompletionImpl *_c,
 						     struct timespec *pt)
    : c(_c), pts(pt)
 {
-  assert(!c->io);
+  ceph_assert(!c->io);
   c->get();
 }
 
@@ -2015,14 +1962,21 @@ librados::IoCtxImpl::C_aio_Complete::C_aio_Complete(AioCompletionImpl *_c)
 void librados::IoCtxImpl::C_aio_Complete::finish(int r)
 {
   c->lock.Lock();
-  c->rval = r;
+  // Leave an existing rval unless r != 0
+  if (r)
+    c->rval = r; // This clears the error set in C_ObjectOperation_scrub_ls::finish()
   c->complete = true;
   c->cond.Signal();
 
   if (r == 0 && c->blp && c->blp->length() > 0) {
-    if (c->out_buf && !c->blp->is_provided_buffer(c->out_buf))
-      c->blp->copy(0, c->blp->length(), c->out_buf);
-    c->rval = c->blp->length();
+    if (c->out_buf && !c->blp->is_contiguous()) {
+      c->rval = -ERANGE;
+    } else {
+      if (c->out_buf && !c->blp->is_provided_buffer(c->out_buf))
+        c->blp->copy(0, c->blp->length(), c->out_buf);
+
+      c->rval = c->blp->length();
+    }
   }
 
   if (c->callback_complete ||
@@ -2087,7 +2041,7 @@ int librados::IoCtxImpl::application_enable(const std::string& app_name,
   application_enable_async(app_name, force, c);
 
   int r = c->wait();
-  assert(r == 0);
+  ceph_assert(r == 0);
 
   r = c->get_return_value();
   c->release();
@@ -2116,7 +2070,7 @@ void librados::IoCtxImpl::application_enable_async(const std::string& app_name,
       << "\"pool\": \"" << get_cached_pool_name() << "\","
       << "\"app\": \"" << app_name << "\"";
   if (force) {
-    cmd << ",\"force\":\"--yes-i-really-mean-it\"";
+    cmd << ",\"yes_i_really_mean_it\": true";
   }
   cmd << "}";
 

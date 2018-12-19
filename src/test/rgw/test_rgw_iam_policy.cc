@@ -19,11 +19,13 @@
 
 #include <gtest/gtest.h>
 
+#include "include/stringify.h"
 #include "common/code_environment.h"
 #include "common/ceph_context.h"
 #include "global/global_init.h"
 #include "rgw/rgw_auth.h"
 #include "rgw/rgw_iam_policy.h"
+#include "rgw/rgw_op.h"
 
 
 using std::string;
@@ -33,7 +35,6 @@ using boost::container::flat_set;
 using boost::intrusive_ptr;
 using boost::make_optional;
 using boost::none;
-using boost::optional;
 
 using rgw::auth::Identity;
 using rgw::auth::Principal;
@@ -69,47 +70,66 @@ using rgw::IAM::s3GetReplicationConfiguration;
 using rgw::IAM::s3ListAllMyBuckets;
 using rgw::IAM::s3ListBucket;
 using rgw::IAM::s3ListBucket;
-using rgw::IAM::s3ListBucketMultiPartUploads;
+using rgw::IAM::s3ListBucketMultipartUploads;
 using rgw::IAM::s3ListBucketVersions;
 using rgw::IAM::s3ListMultipartUploadParts;
-using rgw::IAM::s3None;
+using rgw::IAM::None;
 using rgw::IAM::s3PutBucketAcl;
 using rgw::IAM::s3PutBucketPolicy;
 using rgw::IAM::Service;
 using rgw::IAM::TokenID;
 using rgw::IAM::Version;
+using rgw::IAM::Action_t;
+using rgw::IAM::NotAction_t;
+using rgw::IAM::iamCreateRole;
+using rgw::IAM::iamDeleteRole;
+using rgw::IAM::iamAll;
+using rgw::IAM::stsAll;
 
 class FakeIdentity : public Identity {
   const Principal id;
 public:
 
-  FakeIdentity(Principal&& id) : id(std::move(id)) {}
-  uint32_t get_perms_from_aclspec(const aclspec_t& aclspec) const override {
-    abort();
+  explicit FakeIdentity(Principal&& id) : id(std::move(id)) {}
+  uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override {
+    ceph_abort();
     return 0;
   };
 
   bool is_admin_of(const rgw_user& uid) const override {
-    abort();
+    ceph_abort();
     return false;
   }
 
   bool is_owner_of(const rgw_user& uid) const override {
-    abort();
+    ceph_abort();
     return false;
   }
 
   virtual uint32_t get_perm_mask() const override {
+    ceph_abort();
+    return 0;
+  }
+
+  uint32_t get_identity_type() const override {
+    abort();
+    return 0;
+  }
+
+  string get_acct_name() const override {
     abort();
     return 0;
   }
 
   void to_str(std::ostream& out) const override {
-    abort();
+    out << id;
   }
 
   bool is_identity(const flat_set<Principal>& ids) const override {
-    return ids.find(id) != ids.end();
+    if (id.is_wildcard() && (!ids.empty())) {
+      return true;
+    }
+    return ids.find(id) != ids.end() || ids.find(Principal::wildcard()) != ids.end();
   }
 };
 
@@ -120,6 +140,9 @@ protected:
   static string example1;
   static string example2;
   static string example3;
+  static string example4;
+  static string example5;
+  static string example6;
 public:
   PolicyTest() {
     cct = new CephContext(CEPH_ENTITY_TYPE_CLIENT);
@@ -127,7 +150,7 @@ public:
 };
 
 TEST_F(PolicyTest, Parse1) {
-  optional<Policy> p;
+  boost::optional<Policy> p;
 
   ASSERT_NO_THROW(p = Policy(cct.get(), arbitrary_tenant,
 			     bufferlist::static_from_string(example1)));
@@ -142,8 +165,10 @@ TEST_F(PolicyTest, Parse1) {
   EXPECT_TRUE(p->statements[0].princ.empty());
   EXPECT_TRUE(p->statements[0].noprinc.empty());
   EXPECT_EQ(p->statements[0].effect, Effect::Allow);
-  EXPECT_EQ(p->statements[0].action, s3ListBucket);
-  EXPECT_EQ(p->statements[0].notaction, s3None);
+  Action_t act;
+  act[s3ListBucket] = 1;
+  EXPECT_EQ(p->statements[0].action, act);
+  EXPECT_EQ(p->statements[0].notaction, None);
   ASSERT_FALSE(p->statements[0].resource.empty());
   ASSERT_EQ(p->statements[0].resource.size(), 1U);
   EXPECT_EQ(p->statements[0].resource.begin()->partition, Partition::aws);
@@ -178,7 +203,7 @@ TEST_F(PolicyTest, Eval1) {
 }
 
 TEST_F(PolicyTest, Parse2) {
-  optional<Policy> p;
+  boost::optional<Policy> p;
 
   ASSERT_NO_THROW(p = Policy(cct.get(), arbitrary_tenant,
 			     bufferlist::static_from_string(example2)));
@@ -196,8 +221,12 @@ TEST_F(PolicyTest, Parse2) {
 	    Principal::tenant("ACCOUNT-ID-WITHOUT-HYPHENS"));
   EXPECT_TRUE(p->statements[0].noprinc.empty());
   EXPECT_EQ(p->statements[0].effect, Effect::Allow);
-  EXPECT_EQ(p->statements[0].action, s3All);
-  EXPECT_EQ(p->statements[0].notaction, s3None);
+  Action_t act;
+  for (auto i = 0ULL; i < s3Count; i++)
+    act[i] = 1;
+  act[s3All] = 1;
+  EXPECT_EQ(p->statements[0].action, act);
+  EXPECT_EQ(p->statements[0].notaction, None);
   ASSERT_FALSE(p->statements[0].resource.empty());
   ASSERT_EQ(p->statements[0].resource.size(), 2U);
   EXPECT_EQ(p->statements[0].resource.begin()->partition, Partition::aws);
@@ -228,29 +257,29 @@ TEST_F(PolicyTest, Eval2) {
   auto notacct = FakeIdentity(
     Principal::tenant("some-other-account"));
   for (auto i = 0ULL; i < s3Count; ++i) {
-    EXPECT_EQ(p.eval(e, trueacct, 1ULL << i,
+    EXPECT_EQ(p.eval(e, trueacct, i,
 		     ARN(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "mybucket")),
 	      Effect::Allow);
-    EXPECT_EQ(p.eval(e, trueacct, 1ULL << i,
+    EXPECT_EQ(p.eval(e, trueacct, i,
 		     ARN(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "mybucket/myobject")),
 	      Effect::Allow);
 
-    EXPECT_EQ(p.eval(e, notacct, 1ULL << i,
+    EXPECT_EQ(p.eval(e, notacct, i,
 		     ARN(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "mybucket")),
 	      Effect::Pass);
-    EXPECT_EQ(p.eval(e, notacct, 1ULL << i,
+    EXPECT_EQ(p.eval(e, notacct, i,
 		     ARN(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "mybucket/myobject")),
 	      Effect::Pass);
 
-    EXPECT_EQ(p.eval(e, trueacct, 1ULL << i,
+    EXPECT_EQ(p.eval(e, trueacct, i,
 		     ARN(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "notyourbucket")),
 	      Effect::Pass);
-    EXPECT_EQ(p.eval(e, trueacct, 1ULL << i,
+    EXPECT_EQ(p.eval(e, trueacct, i,
 		     ARN(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "notyourbucket/notyourobject")),
 	      Effect::Pass);
@@ -259,7 +288,7 @@ TEST_F(PolicyTest, Eval2) {
 }
 
 TEST_F(PolicyTest, Parse3) {
-  optional<Policy> p;
+  boost::optional<Policy> p;
 
   ASSERT_NO_THROW(p = Policy(cct.get(), arbitrary_tenant,
 			     bufferlist::static_from_string(example3)));
@@ -275,8 +304,10 @@ TEST_F(PolicyTest, Parse3) {
   EXPECT_TRUE(p->statements[0].princ.empty());
   EXPECT_TRUE(p->statements[0].noprinc.empty());
   EXPECT_EQ(p->statements[0].effect, Effect::Allow);
-  EXPECT_EQ(p->statements[0].action, s3PutBucketPolicy);
-  EXPECT_EQ(p->statements[0].notaction, s3None);
+  Action_t act;
+  act[s3PutBucketPolicy] = 1;
+  EXPECT_EQ(p->statements[0].action, act);
+  EXPECT_EQ(p->statements[0].notaction, None);
   ASSERT_FALSE(p->statements[0].resource.empty());
   ASSERT_EQ(p->statements[0].resource.size(), 1U);
   EXPECT_EQ(p->statements[0].resource.begin()->partition, Partition::wildcard);
@@ -291,8 +322,10 @@ TEST_F(PolicyTest, Parse3) {
   EXPECT_TRUE(p->statements[1].princ.empty());
   EXPECT_TRUE(p->statements[1].noprinc.empty());
   EXPECT_EQ(p->statements[1].effect, Effect::Allow);
-  EXPECT_EQ(p->statements[1].action, s3ListAllMyBuckets);
-  EXPECT_EQ(p->statements[1].notaction, s3None);
+  Action_t act1;
+  act1[s3ListAllMyBuckets] = 1;
+  EXPECT_EQ(p->statements[1].action, act1);
+  EXPECT_EQ(p->statements[1].notaction, None);
   ASSERT_FALSE(p->statements[1].resource.empty());
   ASSERT_EQ(p->statements[1].resource.size(), 1U);
   EXPECT_EQ(p->statements[1].resource.begin()->partition, Partition::wildcard);
@@ -307,29 +340,36 @@ TEST_F(PolicyTest, Parse3) {
   EXPECT_TRUE(p->statements[2].princ.empty());
   EXPECT_TRUE(p->statements[2].noprinc.empty());
   EXPECT_EQ(p->statements[2].effect, Effect::Allow);
-  EXPECT_EQ(p->statements[2].action, (s3ListMultipartUploadParts |
-				      s3ListBucket | s3ListBucketVersions |
-				      s3ListAllMyBuckets |
-				      s3ListBucketMultiPartUploads |
-				      s3GetObject | s3GetObjectVersion |
-				      s3GetObjectAcl | s3GetObjectVersionAcl |
-				      s3GetObjectTorrent |
-				      s3GetObjectVersionTorrent |
-				      s3GetAccelerateConfiguration |
-				      s3GetBucketAcl | s3GetBucketCORS |
-				      s3GetBucketVersioning |
-				      s3GetBucketRequestPayment |
-				      s3GetBucketLocation |
-				      s3GetBucketPolicy |
-				      s3GetBucketNotification |
-				      s3GetBucketLogging |
-				      s3GetBucketTagging |
-				      s3GetBucketWebsite |
-				      s3GetLifecycleConfiguration |
-				      s3GetReplicationConfiguration |
-				      s3GetObjectTagging |
-				      s3GetObjectVersionTagging));
-  EXPECT_EQ(p->statements[2].notaction, s3None);
+  Action_t act2;
+  act2[s3ListMultipartUploadParts] = 1;
+  act2[s3ListBucket] = 1;
+  act2[s3ListBucketVersions] = 1;
+  act2[s3ListAllMyBuckets] = 1;
+  act2[s3ListBucketMultipartUploads] = 1;
+  act2[s3GetObject] = 1;
+  act2[s3GetObjectVersion] = 1;
+  act2[s3GetObjectAcl] = 1;
+  act2[s3GetObjectVersionAcl] = 1;
+  act2[s3GetObjectTorrent] = 1;
+  act2[s3GetObjectVersionTorrent] = 1;
+  act2[s3GetAccelerateConfiguration] = 1;
+  act2[s3GetBucketAcl] = 1;
+  act2[s3GetBucketCORS] = 1;
+  act2[s3GetBucketVersioning] = 1;
+  act2[s3GetBucketRequestPayment] = 1;
+  act2[s3GetBucketLocation] = 1;
+  act2[s3GetBucketPolicy] = 1;
+  act2[s3GetBucketNotification] = 1;
+  act2[s3GetBucketLogging] = 1;
+  act2[s3GetBucketTagging] = 1;
+  act2[s3GetBucketWebsite] = 1;
+  act2[s3GetLifecycleConfiguration] = 1;
+  act2[s3GetReplicationConfiguration] = 1;
+  act2[s3GetObjectTagging] = 1;
+  act2[s3GetObjectVersionTagging] = 1;
+
+  EXPECT_EQ(p->statements[2].action, act2);
+  EXPECT_EQ(p->statements[2].notaction, None);
   ASSERT_FALSE(p->statements[2].resource.empty());
   ASSERT_EQ(p->statements[2].resource.size(), 2U);
   EXPECT_EQ(p->statements[2].resource.begin()->partition, Partition::aws);
@@ -363,19 +403,33 @@ TEST_F(PolicyTest, Eval3) {
   Environment tr = { { "aws:MultiFactorAuthPresent", "true" } };
   Environment fa = { { "aws:MultiFactorAuthPresent", "false" } };
 
-  auto s3allow = (s3ListMultipartUploadParts | s3ListBucket |
-		  s3ListBucketVersions | s3ListAllMyBuckets |
-		  s3ListBucketMultiPartUploads | s3GetObject |
-		  s3GetObjectVersion | s3GetObjectAcl | s3GetObjectVersionAcl |
-		  s3GetObjectTorrent | s3GetObjectVersionTorrent |
-		  s3GetAccelerateConfiguration | s3GetBucketAcl |
-		  s3GetBucketCORS | s3GetBucketVersioning |
-		  s3GetBucketRequestPayment | s3GetBucketLocation |
-		  s3GetBucketPolicy | s3GetBucketNotification |
-		  s3GetBucketLogging | s3GetBucketTagging |
-		  s3GetBucketWebsite | s3GetLifecycleConfiguration |
-		  s3GetReplicationConfiguration |
-		  s3GetObjectTagging | s3GetObjectVersionTagging);
+  Action_t s3allow;
+  s3allow[s3ListMultipartUploadParts] = 1;
+  s3allow[s3ListBucket] = 1;
+  s3allow[s3ListBucketVersions] = 1;
+  s3allow[s3ListAllMyBuckets] = 1;
+  s3allow[s3ListBucketMultipartUploads] = 1;
+  s3allow[s3GetObject] = 1;
+  s3allow[s3GetObjectVersion] = 1;
+  s3allow[s3GetObjectAcl] = 1;
+  s3allow[s3GetObjectVersionAcl] = 1;
+  s3allow[s3GetObjectTorrent] = 1;
+  s3allow[s3GetObjectVersionTorrent] = 1;
+  s3allow[s3GetAccelerateConfiguration] = 1;
+  s3allow[s3GetBucketAcl] = 1;
+  s3allow[s3GetBucketCORS] = 1;
+  s3allow[s3GetBucketVersioning] = 1;
+  s3allow[s3GetBucketRequestPayment] = 1;
+  s3allow[s3GetBucketLocation] = 1;
+  s3allow[s3GetBucketPolicy] = 1;
+  s3allow[s3GetBucketNotification] = 1;
+  s3allow[s3GetBucketLogging] = 1;
+  s3allow[s3GetBucketTagging] = 1;
+  s3allow[s3GetBucketWebsite] = 1;
+  s3allow[s3GetLifecycleConfiguration] = 1;
+  s3allow[s3GetReplicationConfiguration] = 1;
+  s3allow[s3GetObjectTagging] = 1;
+  s3allow[s3GetObjectVersionTagging] = 1;
 
   EXPECT_EQ(p.eval(em, none, s3PutBucketPolicy,
 		   ARN(Partition::aws, Service::s3,
@@ -388,12 +442,10 @@ TEST_F(PolicyTest, Eval3) {
 	    Effect::Allow);
 
 
-  for (auto i = 0ULL; i < s3Count; ++i) {
-    auto op = 1ULL << i;
+  for (auto op = 0ULL; op < s3Count; ++op) {
     if ((op == s3ListAllMyBuckets) || (op == s3PutBucketPolicy)) {
       continue;
     }
-
     EXPECT_EQ(p.eval(em, none, op,
 		     ARN(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "confidential-data")),
@@ -401,7 +453,7 @@ TEST_F(PolicyTest, Eval3) {
     EXPECT_EQ(p.eval(tr, none, op,
 		     ARN(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "confidential-data")),
-	      op & s3allow ? Effect::Allow : Effect::Pass);
+	      s3allow[op] ? Effect::Allow : Effect::Pass);
     EXPECT_EQ(p.eval(fa, none, op,
 		     ARN(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "confidential-data")),
@@ -414,7 +466,7 @@ TEST_F(PolicyTest, Eval3) {
     EXPECT_EQ(p.eval(tr, none, op,
 		     ARN(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "confidential-data/moo")),
-	      op & s3allow ? Effect::Allow : Effect::Pass);
+	      s3allow[op] ? Effect::Allow : Effect::Pass);
     EXPECT_EQ(p.eval(fa, none, op,
 		     ARN(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "confidential-data/moo")),
@@ -447,6 +499,152 @@ TEST_F(PolicyTest, Eval3) {
 			 "really-confidential-data/moo")), Effect::Pass);
 
   }
+}
+
+TEST_F(PolicyTest, Parse4) {
+  boost::optional<Policy> p;
+
+  ASSERT_NO_THROW(p = Policy(cct.get(), arbitrary_tenant,
+			     bufferlist::static_from_string(example4)));
+  ASSERT_TRUE(p);
+
+  EXPECT_EQ(p->text, example4);
+  EXPECT_EQ(p->version, Version::v2012_10_17);
+  EXPECT_FALSE(p->id);
+  EXPECT_FALSE(p->statements[0].sid);
+  EXPECT_FALSE(p->statements.empty());
+  EXPECT_EQ(p->statements.size(), 1U);
+  EXPECT_TRUE(p->statements[0].princ.empty());
+  EXPECT_TRUE(p->statements[0].noprinc.empty());
+  EXPECT_EQ(p->statements[0].effect, Effect::Allow);
+  Action_t act;
+  act[iamCreateRole] = 1;
+  EXPECT_EQ(p->statements[0].action, act);
+  EXPECT_EQ(p->statements[0].notaction, None);
+  ASSERT_FALSE(p->statements[0].resource.empty());
+  ASSERT_EQ(p->statements[0].resource.size(), 1U);
+  EXPECT_EQ(p->statements[0].resource.begin()->partition, Partition::wildcard);
+  EXPECT_EQ(p->statements[0].resource.begin()->service, Service::wildcard);
+  EXPECT_EQ(p->statements[0].resource.begin()->region, "*");
+  EXPECT_EQ(p->statements[0].resource.begin()->account, arbitrary_tenant);
+  EXPECT_EQ(p->statements[0].resource.begin()->resource, "*");
+  EXPECT_TRUE(p->statements[0].notresource.empty());
+  EXPECT_TRUE(p->statements[0].conditions.empty());
+}
+
+TEST_F(PolicyTest, Eval4) {
+  auto p  = Policy(cct.get(), arbitrary_tenant,
+		   bufferlist::static_from_string(example4));
+  Environment e;
+
+  EXPECT_EQ(p.eval(e, none, iamCreateRole,
+		   ARN(Partition::aws, Service::iam,
+		       "", arbitrary_tenant, "role/example_role")),
+	    Effect::Allow);
+
+  EXPECT_EQ(p.eval(e, none, iamDeleteRole,
+		   ARN(Partition::aws, Service::iam,
+		       "", arbitrary_tenant, "role/example_role")),
+	    Effect::Pass);
+}
+
+TEST_F(PolicyTest, Parse5) {
+  boost::optional<Policy> p;
+
+  ASSERT_NO_THROW(p = Policy(cct.get(), arbitrary_tenant,
+			     bufferlist::static_from_string(example5)));
+  ASSERT_TRUE(p);
+  EXPECT_EQ(p->text, example5);
+  EXPECT_EQ(p->version, Version::v2012_10_17);
+  EXPECT_FALSE(p->id);
+  EXPECT_FALSE(p->statements[0].sid);
+  EXPECT_FALSE(p->statements.empty());
+  EXPECT_EQ(p->statements.size(), 1U);
+  EXPECT_TRUE(p->statements[0].princ.empty());
+  EXPECT_TRUE(p->statements[0].noprinc.empty());
+  EXPECT_EQ(p->statements[0].effect, Effect::Allow);
+  Action_t act;
+  for (auto i = s3All+1; i <= iamAll; i++)
+    act[i] = 1;
+  EXPECT_EQ(p->statements[0].action, act);
+  EXPECT_EQ(p->statements[0].notaction, None);
+  ASSERT_FALSE(p->statements[0].resource.empty());
+  ASSERT_EQ(p->statements[0].resource.size(), 1U);
+  EXPECT_EQ(p->statements[0].resource.begin()->partition, Partition::aws);
+  EXPECT_EQ(p->statements[0].resource.begin()->service, Service::iam);
+  EXPECT_EQ(p->statements[0].resource.begin()->region, "");
+  EXPECT_EQ(p->statements[0].resource.begin()->account, arbitrary_tenant);
+  EXPECT_EQ(p->statements[0].resource.begin()->resource, "role/example_role");
+  EXPECT_TRUE(p->statements[0].notresource.empty());
+  EXPECT_TRUE(p->statements[0].conditions.empty());
+}
+
+TEST_F(PolicyTest, Eval5) {
+  auto p  = Policy(cct.get(), arbitrary_tenant,
+		   bufferlist::static_from_string(example5));
+  Environment e;
+
+  EXPECT_EQ(p.eval(e, none, iamCreateRole,
+		   ARN(Partition::aws, Service::iam,
+		       "", arbitrary_tenant, "role/example_role")),
+	    Effect::Allow);
+
+  EXPECT_EQ(p.eval(e, none, s3ListBucket,
+		   ARN(Partition::aws, Service::iam,
+		       "", arbitrary_tenant, "role/example_role")),
+	    Effect::Pass);
+
+  EXPECT_EQ(p.eval(e, none, iamCreateRole,
+		   ARN(Partition::aws, Service::iam,
+		       "", "", "role/example_role")),
+	    Effect::Pass);
+}
+
+TEST_F(PolicyTest, Parse6) {
+  boost::optional<Policy> p;
+
+  ASSERT_NO_THROW(p = Policy(cct.get(), arbitrary_tenant,
+			     bufferlist::static_from_string(example6)));
+  ASSERT_TRUE(p);
+  EXPECT_EQ(p->text, example6);
+  EXPECT_EQ(p->version, Version::v2012_10_17);
+  EXPECT_FALSE(p->id);
+  EXPECT_FALSE(p->statements[0].sid);
+  EXPECT_FALSE(p->statements.empty());
+  EXPECT_EQ(p->statements.size(), 1U);
+  EXPECT_TRUE(p->statements[0].princ.empty());
+  EXPECT_TRUE(p->statements[0].noprinc.empty());
+  EXPECT_EQ(p->statements[0].effect, Effect::Allow);
+  Action_t act;
+  for (auto i = 0U; i <= stsAll; i++)
+    act[i] = 1;
+  EXPECT_EQ(p->statements[0].action, act);
+  EXPECT_EQ(p->statements[0].notaction, None);
+  ASSERT_FALSE(p->statements[0].resource.empty());
+  ASSERT_EQ(p->statements[0].resource.size(), 1U);
+  EXPECT_EQ(p->statements[0].resource.begin()->partition, Partition::aws);
+  EXPECT_EQ(p->statements[0].resource.begin()->service, Service::iam);
+  EXPECT_EQ(p->statements[0].resource.begin()->region, "");
+  EXPECT_EQ(p->statements[0].resource.begin()->account, arbitrary_tenant);
+  EXPECT_EQ(p->statements[0].resource.begin()->resource, "user/A");
+  EXPECT_TRUE(p->statements[0].notresource.empty());
+  EXPECT_TRUE(p->statements[0].conditions.empty());
+}
+
+TEST_F(PolicyTest, Eval6) {
+  auto p  = Policy(cct.get(), arbitrary_tenant,
+		   bufferlist::static_from_string(example6));
+  Environment e;
+
+  EXPECT_EQ(p.eval(e, none, iamCreateRole,
+		   ARN(Partition::aws, Service::iam,
+		       "", arbitrary_tenant, "user/A")),
+	    Effect::Allow);
+
+  EXPECT_EQ(p.eval(e, none, s3ListBucket,
+		   ARN(Partition::aws, Service::iam,
+		       "", arbitrary_tenant, "user/A")),
+	    Effect::Allow);
 }
 
 const string PolicyTest::arbitrary_tenant = "arbitrary_tenant";
@@ -508,6 +706,370 @@ string PolicyTest::example3 = R"(
       "Condition": {"Bool": {"aws:MultiFactorAuthPresent": "true"}}
     }
   ]
+}
+)";
+
+string PolicyTest::example4 = R"(
+{
+  "Version": "2012-10-17",
+  "Statement": {
+    "Effect": "Allow",
+    "Action": "iam:CreateRole",
+    "Resource": "*"
+  }
+}
+)";
+
+string PolicyTest::example5 = R"(
+{
+  "Version": "2012-10-17",
+  "Statement": {
+    "Effect": "Allow",
+    "Action": "iam:*",
+    "Resource": "arn:aws:iam:::role/example_role"
+  }
+}
+)";
+
+string PolicyTest::example6 = R"(
+{
+  "Version": "2012-10-17",
+  "Statement": {
+    "Effect": "Allow",
+    "Action": "*",
+    "Resource": "arn:aws:iam:::user/A"
+  }
+}
+)";
+class IPPolicyTest : public ::testing::Test {
+protected:
+  intrusive_ptr<CephContext> cct;
+  static const string arbitrary_tenant;
+  static string ip_address_allow_example;
+  static string ip_address_deny_example;
+  static string ip_address_full_example;
+  // 192.168.1.0/24
+  const rgw::IAM::MaskedIP allowedIPv4Range = { false, rgw::IAM::Address("11000000101010000000000100000000"), 24 };
+  // 192.168.1.1/32
+  const rgw::IAM::MaskedIP blacklistedIPv4 = { false, rgw::IAM::Address("11000000101010000000000100000001"), 32 };
+  // 2001:db8:85a3:0:0:8a2e:370:7334/128
+  const rgw::IAM::MaskedIP allowedIPv6 = { true, rgw::IAM::Address("00100000000000010000110110111000100001011010001100000000000000000000000000000000100010100010111000000011011100000111001100110100"), 128 };
+  // ::1
+  const rgw::IAM::MaskedIP blacklistedIPv6 = { true, rgw::IAM::Address(1), 128 };
+  // 2001:db8:85a3:0:0:8a2e:370:7330/124
+  const rgw::IAM::MaskedIP allowedIPv6Range = { true, rgw::IAM::Address("00100000000000010000110110111000100001011010001100000000000000000000000000000000100010100010111000000011011100000111001100110000"), 124 };
+public:
+  IPPolicyTest() {
+    cct = new CephContext(CEPH_ENTITY_TYPE_CLIENT);
+  }
+};
+const string IPPolicyTest::arbitrary_tenant = "arbitrary_tenant";
+
+TEST_F(IPPolicyTest, MaskedIPOperations) {
+  EXPECT_EQ(stringify(allowedIPv4Range), "192.168.1.0/24");
+  EXPECT_EQ(stringify(blacklistedIPv4), "192.168.1.1/32");
+  EXPECT_EQ(stringify(allowedIPv6), "2001:db8:85a3:0:0:8a2e:370:7334/128");
+  EXPECT_EQ(stringify(allowedIPv6Range), "2001:db8:85a3:0:0:8a2e:370:7330/124");
+  EXPECT_EQ(stringify(blacklistedIPv6), "0:0:0:0:0:0:0:1/128");
+  EXPECT_EQ(allowedIPv4Range, blacklistedIPv4);
+  EXPECT_EQ(allowedIPv6Range, allowedIPv6);
+}
+
+TEST_F(IPPolicyTest, asNetworkIPv4Range) {
+  auto actualIPv4Range = rgw::IAM::Condition::as_network("192.168.1.0/24");
+  ASSERT_TRUE(actualIPv4Range.is_initialized());
+  EXPECT_EQ(*actualIPv4Range, allowedIPv4Range);
+}
+
+TEST_F(IPPolicyTest, asNetworkIPv4) {
+  auto actualIPv4 = rgw::IAM::Condition::as_network("192.168.1.1");
+  ASSERT_TRUE(actualIPv4.is_initialized());
+  EXPECT_EQ(*actualIPv4, blacklistedIPv4);
+}
+
+TEST_F(IPPolicyTest, asNetworkIPv6Range) {
+  auto actualIPv6Range = rgw::IAM::Condition::as_network("2001:db8:85a3:0:0:8a2e:370:7330/124");
+  ASSERT_TRUE(actualIPv6Range.is_initialized());
+  EXPECT_EQ(*actualIPv6Range, allowedIPv6Range);
+}
+
+TEST_F(IPPolicyTest, asNetworkIPv6) {
+  auto actualIPv6 = rgw::IAM::Condition::as_network("2001:db8:85a3:0:0:8a2e:370:7334");
+  ASSERT_TRUE(actualIPv6.is_initialized());
+  EXPECT_EQ(*actualIPv6, allowedIPv6);
+}
+
+TEST_F(IPPolicyTest, asNetworkInvalid) {
+  EXPECT_FALSE(rgw::IAM::Condition::as_network(""));
+  EXPECT_FALSE(rgw::IAM::Condition::as_network("192.168.1.1/33"));
+  EXPECT_FALSE(rgw::IAM::Condition::as_network("2001:db8:85a3:0:0:8a2e:370:7334/129"));
+  EXPECT_FALSE(rgw::IAM::Condition::as_network("192.168.1.1:"));
+  EXPECT_FALSE(rgw::IAM::Condition::as_network("1.2.3.10000"));
+}
+
+TEST_F(IPPolicyTest, IPEnvironment) {
+  // Unfortunately RGWCivetWeb is too tightly tied to civetweb to test RGWCivetWeb::init_env.
+  RGWEnv rgw_env;
+  RGWUserInfo user;
+  RGWRados rgw_rados;
+  rgw_env.set("REMOTE_ADDR", "192.168.1.1");
+  rgw_env.set("HTTP_HOST", "1.2.3.4");
+  req_state rgw_req_state(cct.get(), &rgw_env, &user, 0);
+  Environment iam_env = rgw_build_iam_environment(&rgw_rados, &rgw_req_state);
+  auto ip = iam_env.find("aws:SourceIp");
+  ASSERT_NE(ip, iam_env.end());
+  EXPECT_EQ(ip->second, "192.168.1.1");
+
+  ASSERT_EQ(cct.get()->_conf.set_val("rgw_remote_addr_param", "SOME_VAR"), 0);
+  EXPECT_EQ(cct.get()->_conf->rgw_remote_addr_param, "SOME_VAR");
+  iam_env = rgw_build_iam_environment(&rgw_rados, &rgw_req_state);
+  ip = iam_env.find("aws:SourceIp");
+  EXPECT_EQ(ip, iam_env.end());
+
+  rgw_env.set("SOME_VAR", "192.168.1.2");
+  iam_env = rgw_build_iam_environment(&rgw_rados, &rgw_req_state);
+  ip = iam_env.find("aws:SourceIp");
+  ASSERT_NE(ip, iam_env.end());
+  EXPECT_EQ(ip->second, "192.168.1.2");
+
+  ASSERT_EQ(cct.get()->_conf.set_val("rgw_remote_addr_param", "HTTP_X_FORWARDED_FOR"), 0);
+  rgw_env.set("HTTP_X_FORWARDED_FOR", "192.168.1.3");
+  iam_env = rgw_build_iam_environment(&rgw_rados, &rgw_req_state);
+  ip = iam_env.find("aws:SourceIp");
+  ASSERT_NE(ip, iam_env.end());
+  EXPECT_EQ(ip->second, "192.168.1.3");
+
+  rgw_env.set("HTTP_X_FORWARDED_FOR", "192.168.1.4, 4.3.2.1, 2001:db8:85a3:8d3:1319:8a2e:370:7348");
+  iam_env = rgw_build_iam_environment(&rgw_rados, &rgw_req_state);
+  ip = iam_env.find("aws:SourceIp");
+  ASSERT_NE(ip, iam_env.end());
+  EXPECT_EQ(ip->second, "192.168.1.4");
+}
+
+TEST_F(IPPolicyTest, ParseIPAddress) {
+  boost::optional<Policy> p;
+
+  ASSERT_NO_THROW(p = Policy(cct.get(), arbitrary_tenant,
+			     bufferlist::static_from_string(ip_address_full_example)));
+  ASSERT_TRUE(p);
+
+  EXPECT_EQ(p->text, ip_address_full_example);
+  EXPECT_EQ(p->version, Version::v2012_10_17);
+  EXPECT_EQ(*p->id, "S3IPPolicyTest");
+  EXPECT_FALSE(p->statements.empty());
+  EXPECT_EQ(p->statements.size(), 1U);
+  EXPECT_EQ(*p->statements[0].sid, "IPAllow");
+  EXPECT_FALSE(p->statements[0].princ.empty());
+  EXPECT_EQ(p->statements[0].princ.size(), 1U);
+  EXPECT_EQ(*p->statements[0].princ.begin(),
+	    Principal::wildcard());
+  EXPECT_TRUE(p->statements[0].noprinc.empty());
+  EXPECT_EQ(p->statements[0].effect, Effect::Allow);
+  Action_t act;
+  act[s3ListBucket] = 1;
+  EXPECT_EQ(p->statements[0].action, act);
+  EXPECT_EQ(p->statements[0].notaction, None);
+  ASSERT_FALSE(p->statements[0].resource.empty());
+  ASSERT_EQ(p->statements[0].resource.size(), 2U);
+  EXPECT_EQ(p->statements[0].resource.begin()->partition, Partition::aws);
+  EXPECT_EQ(p->statements[0].resource.begin()->service, Service::s3);
+  EXPECT_TRUE(p->statements[0].resource.begin()->region.empty());
+  EXPECT_EQ(p->statements[0].resource.begin()->account, arbitrary_tenant);
+  EXPECT_EQ(p->statements[0].resource.begin()->resource, "example_bucket");
+  EXPECT_EQ((p->statements[0].resource.begin() + 1)->resource, "example_bucket/*");
+  EXPECT_TRUE(p->statements[0].notresource.empty());
+  ASSERT_FALSE(p->statements[0].conditions.empty());
+  ASSERT_EQ(p->statements[0].conditions.size(), 2U);
+  EXPECT_EQ(p->statements[0].conditions[0].op, TokenID::IpAddress);
+  EXPECT_EQ(p->statements[0].conditions[0].key, "aws:SourceIp");
+  ASSERT_FALSE(p->statements[0].conditions[0].vals.empty());
+  EXPECT_EQ(p->statements[0].conditions[0].vals.size(), 2U);
+  EXPECT_EQ(p->statements[0].conditions[0].vals[0], "192.168.1.0/24");
+  EXPECT_EQ(p->statements[0].conditions[0].vals[1], "::1");
+  boost::optional<rgw::IAM::MaskedIP> convertedIPv4 = rgw::IAM::Condition::as_network(p->statements[0].conditions[0].vals[0]);
+  EXPECT_TRUE(convertedIPv4.is_initialized());
+  if (convertedIPv4.is_initialized()) {
+    EXPECT_EQ(*convertedIPv4, allowedIPv4Range);
+  }
+
+  EXPECT_EQ(p->statements[0].conditions[1].op, TokenID::NotIpAddress);
+  EXPECT_EQ(p->statements[0].conditions[1].key, "aws:SourceIp");
+  ASSERT_FALSE(p->statements[0].conditions[1].vals.empty());
+  EXPECT_EQ(p->statements[0].conditions[1].vals.size(), 2U);
+  EXPECT_EQ(p->statements[0].conditions[1].vals[0], "192.168.1.1/32");
+  EXPECT_EQ(p->statements[0].conditions[1].vals[1], "2001:0db8:85a3:0000:0000:8a2e:0370:7334");
+  boost::optional<rgw::IAM::MaskedIP> convertedIPv6 = rgw::IAM::Condition::as_network(p->statements[0].conditions[1].vals[1]);
+  EXPECT_TRUE(convertedIPv6.is_initialized());
+  if (convertedIPv6.is_initialized()) {
+    EXPECT_EQ(*convertedIPv6, allowedIPv6);
+  }
+}
+
+TEST_F(IPPolicyTest, EvalIPAddress) {
+  auto allowp  = Policy(cct.get(), arbitrary_tenant,
+			bufferlist::static_from_string(ip_address_allow_example));
+  auto denyp  = Policy(cct.get(), arbitrary_tenant,
+		       bufferlist::static_from_string(ip_address_deny_example));
+  auto fullp  = Policy(cct.get(), arbitrary_tenant,
+		   bufferlist::static_from_string(ip_address_full_example));
+  Environment e;
+  Environment allowedIP, blacklistedIP, allowedIPv6, blacklistedIPv6;
+  allowedIP["aws:SourceIp"] = "192.168.1.2";
+  allowedIPv6["aws:SourceIp"] = "::1";
+  blacklistedIP["aws:SourceIp"] = "192.168.1.1";
+  blacklistedIPv6["aws:SourceIp"] = "2001:0db8:85a3:0000:0000:8a2e:0370:7334";
+
+  auto trueacct = FakeIdentity(
+    Principal::tenant("ACCOUNT-ID-WITHOUT-HYPHENS"));
+  // Without an IP address in the environment then evaluation will always pass
+  EXPECT_EQ(allowp.eval(e, trueacct, s3ListBucket,
+			ARN(Partition::aws, Service::s3,
+			    "", arbitrary_tenant, "example_bucket")),
+	    Effect::Pass);
+  EXPECT_EQ(fullp.eval(e, trueacct, s3ListBucket,
+		       ARN(Partition::aws, Service::s3,
+			   "", arbitrary_tenant, "example_bucket/myobject")),
+	    Effect::Pass);
+
+  EXPECT_EQ(allowp.eval(allowedIP, trueacct, s3ListBucket,
+			ARN(Partition::aws, Service::s3,
+			    "", arbitrary_tenant, "example_bucket")),
+	    Effect::Allow);
+  EXPECT_EQ(allowp.eval(blacklistedIPv6, trueacct, s3ListBucket,
+			ARN(Partition::aws, Service::s3,
+			    "", arbitrary_tenant, "example_bucket")),
+	    Effect::Pass);
+
+
+  EXPECT_EQ(denyp.eval(allowedIP, trueacct, s3ListBucket,
+		       ARN(Partition::aws, Service::s3,
+			   "", arbitrary_tenant, "example_bucket")),
+	    Effect::Deny);
+  EXPECT_EQ(denyp.eval(allowedIP, trueacct, s3ListBucket,
+		       ARN(Partition::aws, Service::s3,
+			   "", arbitrary_tenant, "example_bucket/myobject")),
+	    Effect::Deny);
+
+  EXPECT_EQ(denyp.eval(blacklistedIP, trueacct, s3ListBucket,
+		       ARN(Partition::aws, Service::s3,
+			   "", arbitrary_tenant, "example_bucket")),
+	    Effect::Pass);
+  EXPECT_EQ(denyp.eval(blacklistedIP, trueacct, s3ListBucket,
+		       ARN(Partition::aws, Service::s3,
+			   "", arbitrary_tenant, "example_bucket/myobject")),
+	    Effect::Pass);
+
+  EXPECT_EQ(denyp.eval(blacklistedIPv6, trueacct, s3ListBucket,
+		       ARN(Partition::aws, Service::s3,
+			   "", arbitrary_tenant, "example_bucket")),
+	    Effect::Pass);
+  EXPECT_EQ(denyp.eval(blacklistedIPv6, trueacct, s3ListBucket,
+		       ARN(Partition::aws, Service::s3,
+			   "", arbitrary_tenant, "example_bucket/myobject")),
+	    Effect::Pass);
+  EXPECT_EQ(denyp.eval(allowedIPv6, trueacct, s3ListBucket,
+		       ARN(Partition::aws, Service::s3,
+			   "", arbitrary_tenant, "example_bucket")),
+	    Effect::Deny);
+  EXPECT_EQ(denyp.eval(allowedIPv6, trueacct, s3ListBucket,
+		       ARN(Partition::aws, Service::s3,
+			   "", arbitrary_tenant, "example_bucket/myobject")),
+	    Effect::Deny);
+
+  EXPECT_EQ(fullp.eval(allowedIP, trueacct, s3ListBucket,
+		       ARN(Partition::aws, Service::s3,
+			   "", arbitrary_tenant, "example_bucket")),
+	    Effect::Allow);
+  EXPECT_EQ(fullp.eval(allowedIP, trueacct, s3ListBucket,
+		       ARN(Partition::aws, Service::s3,
+			   "", arbitrary_tenant, "example_bucket/myobject")),
+	    Effect::Allow);
+
+  EXPECT_EQ(fullp.eval(blacklistedIP, trueacct, s3ListBucket,
+		       ARN(Partition::aws, Service::s3,
+			   "", arbitrary_tenant, "example_bucket")),
+	    Effect::Pass);
+  EXPECT_EQ(fullp.eval(blacklistedIP, trueacct, s3ListBucket,
+		       ARN(Partition::aws, Service::s3,
+			   "", arbitrary_tenant, "example_bucket/myobject")),
+	    Effect::Pass);
+
+  EXPECT_EQ(fullp.eval(allowedIPv6, trueacct, s3ListBucket,
+		       ARN(Partition::aws, Service::s3,
+			   "", arbitrary_tenant, "example_bucket")),
+	    Effect::Allow);
+  EXPECT_EQ(fullp.eval(allowedIPv6, trueacct, s3ListBucket,
+		       ARN(Partition::aws, Service::s3,
+			   "", arbitrary_tenant, "example_bucket/myobject")),
+	    Effect::Allow);
+
+  EXPECT_EQ(fullp.eval(blacklistedIPv6, trueacct, s3ListBucket,
+		       ARN(Partition::aws, Service::s3,
+			   "", arbitrary_tenant, "example_bucket")),
+	    Effect::Pass);
+  EXPECT_EQ(fullp.eval(blacklistedIPv6, trueacct, s3ListBucket,
+		       ARN(Partition::aws, Service::s3,
+			   "", arbitrary_tenant, "example_bucket/myobject")),
+	    Effect::Pass);
+}
+
+string IPPolicyTest::ip_address_allow_example = R"(
+{
+  "Version": "2012-10-17",
+  "Id": "S3SimpleIPPolicyTest",
+  "Statement": [{
+    "Sid": "1",
+    "Effect": "Allow",
+    "Principal": {"AWS": ["arn:aws:iam::ACCOUNT-ID-WITHOUT-HYPHENS:root"]},
+    "Action": "s3:ListBucket",
+    "Resource": [
+      "arn:aws:s3:::example_bucket"
+    ],
+    "Condition": {
+      "IpAddress": {"aws:SourceIp": "192.168.1.0/24"}
+    }
+  }]
+}
+)";
+
+string IPPolicyTest::ip_address_deny_example = R"(
+{
+  "Version": "2012-10-17",
+  "Id": "S3IPPolicyTest",
+  "Statement": {
+    "Effect": "Deny",
+    "Sid": "IPDeny",
+    "Action": "s3:ListBucket",
+    "Principal": {"AWS": ["arn:aws:iam::ACCOUNT-ID-WITHOUT-HYPHENS:root"]},
+    "Resource": [
+      "arn:aws:s3:::example_bucket",
+      "arn:aws:s3:::example_bucket/*"
+    ],
+    "Condition": {
+      "NotIpAddress": {"aws:SourceIp": ["192.168.1.1/32", "2001:0db8:85a3:0000:0000:8a2e:0370:7334"]}
+    }
+  }
+}
+)";
+
+string IPPolicyTest::ip_address_full_example = R"(
+{
+  "Version": "2012-10-17",
+  "Id": "S3IPPolicyTest",
+  "Statement": {
+    "Effect": "Allow",
+    "Sid": "IPAllow",
+    "Action": "s3:ListBucket",
+    "Principal": "*",
+    "Resource": [
+      "arn:aws:s3:::example_bucket",
+      "arn:aws:s3:::example_bucket/*"
+    ],
+    "Condition": {
+      "IpAddress": {"aws:SourceIp": ["192.168.1.0/24", "::1"]},
+      "NotIpAddress": {"aws:SourceIp": ["192.168.1.1/32", "2001:0db8:85a3:0000:0000:8a2e:0370:7334"]}
+    }
+  }
 }
 )";
 
@@ -607,7 +1169,7 @@ TEST(MatchPolicy, Resource)
   EXPECT_TRUE(match_policy("a:b:c", "a:b:c", flag));
   EXPECT_FALSE(match_policy("a:b:c", "A:B:C", flag)); // case sensitive
   EXPECT_TRUE(match_policy("a:*:e", "a:bcd:e", flag));
-  EXPECT_FALSE(match_policy("a:*", "a:b:c", flag)); // cannot span segments
+  EXPECT_TRUE(match_policy("a:*", "a:b:c", flag)); // can span segments
 }
 
 TEST(MatchPolicy, ARN)
@@ -625,5 +1187,5 @@ TEST(MatchPolicy, String)
   EXPECT_TRUE(match_policy("a:b:c", "a:b:c", flag));
   EXPECT_FALSE(match_policy("a:b:c", "A:B:C", flag)); // case sensitive
   EXPECT_TRUE(match_policy("a:*:e", "a:bcd:e", flag));
-  EXPECT_FALSE(match_policy("a:*", "a:b:c", flag)); // cannot span segments
+  EXPECT_TRUE(match_policy("a:*", "a:b:c", flag)); // can span segments
 }

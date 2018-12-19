@@ -13,6 +13,7 @@
  */
 
 #include "Capability.h"
+#include "CInode.h"
 
 #include "common/Formatter.h"
 
@@ -24,28 +25,28 @@
 void Capability::Export::encode(bufferlist &bl) const
 {
   ENCODE_START(2, 2, bl);
-  ::encode(cap_id, bl);
-  ::encode(wanted, bl);
-  ::encode(issued, bl);
-  ::encode(pending, bl);
-  ::encode(client_follows, bl);
-  ::encode(seq, bl);
-  ::encode(mseq, bl);
-  ::encode(last_issue_stamp, bl);
+  encode(cap_id, bl);
+  encode(wanted, bl);
+  encode(issued, bl);
+  encode(pending, bl);
+  encode(client_follows, bl);
+  encode(seq, bl);
+  encode(mseq, bl);
+  encode(last_issue_stamp, bl);
   ENCODE_FINISH(bl);
 }
 
-void Capability::Export::decode(bufferlist::iterator &p)
+void Capability::Export::decode(bufferlist::const_iterator &p)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, p);
-  ::decode(cap_id, p);
-  ::decode(wanted, p);
-  ::decode(issued, p);
-  ::decode(pending, p);
-  ::decode(client_follows, p);
-  ::decode(seq, p);
-  ::decode(mseq, p);
-  ::decode(last_issue_stamp, p);
+  decode(cap_id, p);
+  decode(wanted, p);
+  decode(issued, p);
+  decode(pending, p);
+  decode(client_follows, p);
+  decode(seq, p);
+  decode(mseq, p);
+  decode(last_issue_stamp, p);
   DECODE_FINISH(p);
 }
 
@@ -76,18 +77,18 @@ void Capability::Export::generate_test_instances(list<Capability::Export*>& ls)
 void Capability::Import::encode(bufferlist &bl) const
 {
   ENCODE_START(1, 1, bl);
-  ::encode(cap_id, bl);
-  ::encode(issue_seq, bl);
-  ::encode(mseq, bl);
+  encode(cap_id, bl);
+  encode(issue_seq, bl);
+  encode(mseq, bl);
   ENCODE_FINISH(bl);
 }
 
-void Capability::Import::decode(bufferlist::iterator &bl)
+void Capability::Import::decode(bufferlist::const_iterator &bl)
 {
   DECODE_START(1, bl);
-  ::decode(cap_id, bl);
-  ::decode(issue_seq, bl);
-  ::decode(mseq, bl);
+  decode(cap_id, bl);
+  decode(issue_seq, bl);
+  decode(mseq, bl);
   DECODE_FINISH(bl);
 }
 
@@ -105,18 +106,18 @@ void Capability::Import::dump(Formatter *f) const
 void Capability::revoke_info::encode(bufferlist& bl) const
 {
   ENCODE_START(2, 2, bl)
-  ::encode(before, bl);
-  ::encode(seq, bl);
-  ::encode(last_issue, bl);
+  encode(before, bl);
+  encode(seq, bl);
+  encode(last_issue, bl);
   ENCODE_FINISH(bl);
 }
 
-void Capability::revoke_info::decode(bufferlist::iterator& bl)
+void Capability::revoke_info::decode(bufferlist::const_iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
-  ::decode(before, bl);
-  ::decode(seq, bl);
-  ::decode(last_issue, bl);
+  decode(before, bl);
+  decode(seq, bl);
+  decode(last_issue, bl);
   DECODE_FINISH(bl);
 }
 
@@ -141,27 +142,40 @@ void Capability::revoke_info::generate_test_instances(list<Capability::revoke_in
  * Capability
  */
 
+void Capability::set_wanted(int w) {
+  CInode *in = get_inode();
+  if (in) {
+    if (!_wanted && w)
+      in->adjust_num_caps_wanted(1);
+    else if (_wanted && !w)
+      in->adjust_num_caps_wanted(-1);
+  }
+  _wanted = w;
+}
+
 void Capability::encode(bufferlist& bl) const
 {
   ENCODE_START(2, 2, bl)
-  ::encode(last_sent, bl);
-  ::encode(last_issue_stamp, bl);
+  encode(last_sent, bl);
+  encode(last_issue_stamp, bl);
 
-  ::encode(_wanted, bl);
-  ::encode(_pending, bl);
-  ::encode(_revokes, bl);
+  encode(_wanted, bl);
+  encode(_pending, bl);
+  encode(_revokes, bl);
   ENCODE_FINISH(bl);
 }
 
-void Capability::decode(bufferlist::iterator &bl)
+void Capability::decode(bufferlist::const_iterator &bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl)
-  ::decode(last_sent, bl);
-  ::decode(last_issue_stamp, bl);
+  decode(last_sent, bl);
+  decode(last_issue_stamp, bl);
 
-  ::decode(_wanted, bl);
-  ::decode(_pending, bl);
-  ::decode(_revokes, bl);
+  __u32 tmp_wanted;
+  decode(tmp_wanted, bl);
+  set_wanted(tmp_wanted);
+  decode(_pending, bl);
+  decode(_revokes, bl);
   DECODE_FINISH(bl);
   
   _calc_issued();
@@ -175,9 +189,9 @@ void Capability::dump(Formatter *f) const
   f->dump_unsigned("pending", _pending);
 
   f->open_array_section("revokes");
-  for (list<revoke_info>::const_iterator p = _revokes.begin(); p != _revokes.end(); ++p) {
+  for (const auto &r : _revokes) {
     f->open_object_section("revoke");
-    p->dump(f);
+    r.dump(f);
     f->close_section();
   }
   f->close_section();
@@ -189,14 +203,20 @@ void Capability::generate_test_instances(list<Capability*>& ls)
   ls.push_back(new Capability);
   ls.back()->last_sent = 11;
   ls.back()->last_issue_stamp = utime_t(12, 13);
-  ls.back()->_wanted = 14;
+  ls.back()->set_wanted(14);
   ls.back()->_pending = 15;
-  ls.back()->_revokes.push_back(revoke_info());
-  ls.back()->_revokes.back().before = 16;
-  ls.back()->_revokes.back().seq = 17;
-  ls.back()->_revokes.back().last_issue = 18;
-  ls.back()->_revokes.push_back(revoke_info());
-  ls.back()->_revokes.back().before = 19;
-  ls.back()->_revokes.back().seq = 20;
-  ls.back()->_revokes.back().last_issue = 21;
+  {
+    auto &r = ls.back()->_revokes.emplace_back();
+    r.before = 16;
+    r.seq = 17;
+    r.last_issue = 18;
+  }
+  {
+    auto &r = ls.back()->_revokes.emplace_back();
+    r.before = 19;
+    r.seq = 20;
+    r.last_issue = 21;
+  }
 }
+
+MEMPOOL_DEFINE_OBJECT_FACTORY(Capability, co_cap, mds_co);

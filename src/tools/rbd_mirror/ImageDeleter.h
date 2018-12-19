@@ -12,27 +12,34 @@
  *
  */
 
-#ifndef CEPH_RBD_MIRROR_IMAGEDELETER_H
-#define CEPH_RBD_MIRROR_IMAGEDELETER_H
+#ifndef CEPH_RBD_MIRROR_IMAGE_DELETER_H
+#define CEPH_RBD_MIRROR_IMAGE_DELETER_H
 
+#include "include/utime.h"
+#include "common/AsyncOpTracker.h"
 #include "common/Mutex.h"
-#include "common/Cond.h"
-#include "common/Thread.h"
-#include "common/Timer.h"
-#include "types.h"
-
-#include <deque>
-#include <vector>
+#include "tools/rbd_mirror/Types.h"
+#include "tools/rbd_mirror/image_deleter/Types.h"
 #include <atomic>
+#include <deque>
+#include <iosfwd>
+#include <map>
+#include <memory>
+#include <vector>
 
 class AdminSocketHook;
+class Context;
 class ContextWQ;
+class SafeTimer;
 namespace librbd { struct ImageCtx; }
 
 namespace rbd {
 namespace mirror {
 
 template <typename> class ServiceDaemon;
+template <typename> class Threads;
+
+namespace image_deleter { template <typename> struct TrashWatcher; }
 
 /**
  * Manage deletion of non-primary images.
@@ -40,104 +47,128 @@ template <typename> class ServiceDaemon;
 template <typename ImageCtxT = librbd::ImageCtx>
 class ImageDeleter {
 public:
-  static const int EISPRM = 1000;
+  static ImageDeleter* create(librados::IoCtx& local_io_ctx,
+                              Threads<librbd::ImageCtx>* threads,
+                              ServiceDaemon<librbd::ImageCtx>* service_daemon) {
+    return new ImageDeleter(local_io_ctx, threads, service_daemon);
+  }
 
-  ImageDeleter(ContextWQ *work_queue, SafeTimer *timer, Mutex *timer_lock,
+  ImageDeleter(librados::IoCtx& local_io_ctx,
+               Threads<librbd::ImageCtx>* threads,
                ServiceDaemon<librbd::ImageCtx>* service_daemon);
-  ~ImageDeleter();
+
   ImageDeleter(const ImageDeleter&) = delete;
   ImageDeleter& operator=(const ImageDeleter&) = delete;
 
-  void schedule_image_delete(RadosRef local_rados,
-                             int64_t local_pool_id,
-                             const std::string& global_image_id,
-                             bool ignore_orphaned);
-  void wait_for_scheduled_deletion(int64_t local_pool_id,
-                                   const std::string &global_image_id,
-                                   Context *ctx,
-                                   bool notify_on_failed_retry=true);
-  void cancel_waiter(int64_t local_pool_id,
-                     const std::string &global_image_id);
+  static void trash_move(librados::IoCtx& local_io_ctx,
+                         const std::string& global_image_id, bool resync,
+                         ContextWQ* work_queue, Context* on_finish);
+
+  void init(Context* on_finish);
+  void shut_down(Context* on_finish);
 
   void print_status(Formatter *f, std::stringstream *ss);
 
   // for testing purposes
+  void wait_for_deletion(const std::string &image_id,
+                         bool scheduled_only, Context* on_finish);
+
   std::vector<std::string> get_delete_queue_items();
   std::vector<std::pair<std::string, int> > get_failed_queue_items();
-  void set_failed_timer_interval(double interval);
+
+  inline void set_busy_timer_interval(double interval) {
+    m_busy_interval = interval;
+  }
 
 private:
+  struct TrashListener : public image_deleter::TrashListener {
+    ImageDeleter *image_deleter;
 
-  class ImageDeleterThread : public Thread {
-    ImageDeleter *m_image_deleter;
-  public:
-    ImageDeleterThread(ImageDeleter *image_deleter) :
-      m_image_deleter(image_deleter) {}
-    void *entry() override {
-      m_image_deleter->run();
-      return 0;
+    TrashListener(ImageDeleter *image_deleter) : image_deleter(image_deleter) {
+    }
+
+    void handle_trash_image(const std::string& image_id,
+                            const utime_t& deferment_end_time) override {
+      image_deleter->handle_trash_image(image_id, deferment_end_time);
     }
   };
 
   struct DeleteInfo {
-    RadosRef local_rados;
-    int64_t local_pool_id;
-    std::string global_image_id;
-    bool ignore_orphaned;
+    std::string image_id;
+
+    image_deleter::ErrorResult error_result = {};
     int error_code = 0;
+    utime_t retry_time = {};
     int retries = 0;
-    bool notify_on_failed_retry = true;
-    Context *on_delete = nullptr;
 
-    DeleteInfo(RadosRef local_rados, int64_t local_pool_id,
-               const std::string& global_image_id,
-               bool ignore_orphaned)
-      : local_rados(local_rados), local_pool_id(local_pool_id),
-        global_image_id(global_image_id), ignore_orphaned(ignore_orphaned) {
+    DeleteInfo(const std::string& image_id)
+      : image_id(image_id) {
     }
 
-    bool match(int64_t local_pool_id, const std::string &global_image_id) {
-      return (this->local_pool_id == local_pool_id &&
-              this->global_image_id == global_image_id);
+    inline bool operator==(const DeleteInfo& delete_info) const {
+      return (image_id == delete_info.image_id);
     }
-    void notify(int r);
-    void to_string(std::stringstream& ss);
+
+    friend std::ostream& operator<<(std::ostream& os, DeleteInfo& delete_info) {
+      os << "[image_id=" << delete_info.image_id << "]";
+    return os;
+    }
+
     void print_status(Formatter *f, std::stringstream *ss,
                       bool print_failure_info=false);
   };
+  typedef std::shared_ptr<DeleteInfo> DeleteInfoRef;
+  typedef std::deque<DeleteInfoRef> DeleteQueue;
+  typedef std::map<std::string, Context*> OnDeleteContexts;
+
+  librados::IoCtx& m_local_io_ctx;
+  Threads<librbd::ImageCtx>* m_threads;
+  ServiceDaemon<librbd::ImageCtx>* m_service_daemon;
+
+  image_deleter::TrashWatcher<ImageCtxT>* m_trash_watcher = nullptr;
+  TrashListener m_trash_listener;
 
   std::atomic<unsigned> m_running { 1 };
 
-  ContextWQ *m_work_queue;
-  ServiceDaemon<librbd::ImageCtx>* m_service_daemon;
+  double m_busy_interval = 1;
 
-  std::deque<std::unique_ptr<DeleteInfo> > m_delete_queue;
-  Mutex m_delete_lock;
-  Cond m_delete_queue_cond;
+  AsyncOpTracker m_async_op_tracker;
 
-  unique_ptr<DeleteInfo> m_active_delete;
+  Mutex m_lock;
+  DeleteQueue m_delete_queue;
+  DeleteQueue m_retry_delete_queue;
+  DeleteQueue m_in_flight_delete_queue;
 
-  ImageDeleterThread m_image_deleter_thread;
+  OnDeleteContexts m_on_delete_contexts;
 
-  std::deque<std::unique_ptr<DeleteInfo>> m_failed_queue;
-  double m_failed_interval;
-  SafeTimer *m_failed_timer;
-  Mutex *m_failed_timer_lock;
+  AdminSocketHook *m_asok_hook = nullptr;
 
-  AdminSocketHook *m_asok_hook;
+  Context *m_timer_ctx = nullptr;
 
-  void run();
   bool process_image_delete();
-  int image_has_snapshots_and_children(librados::IoCtx *ioctx,
-                                       std::string& image_id,
-                                       bool *has_snapshots);
 
-  void complete_active_delete(int r);
-  void enqueue_failed_delete(int error_code);
-  void retry_failed_deletions();
+  void complete_active_delete(DeleteInfoRef* delete_info, int r);
+  void enqueue_failed_delete(DeleteInfoRef* delete_info, int error_code,
+                             double retry_delay);
 
-  unique_ptr<DeleteInfo> const*
-  find_delete_info(int64_t local_pool_id, const std::string &global_image_id);
+  DeleteInfoRef find_delete_info(const std::string &image_id);
+
+  void remove_images();
+  void remove_image(DeleteInfoRef delete_info);
+  void handle_remove_image(DeleteInfoRef delete_info, int r);
+
+  void schedule_retry_timer();
+  void cancel_retry_timer();
+  void handle_retry_timer();
+
+  void handle_trash_image(const std::string& image_id,
+                          const utime_t& deferment_end_time);
+
+  void shut_down_trash_watcher(Context* on_finish);
+  void wait_for_ops(Context* on_finish);
+  void cancel_all_deletions(Context* on_finish);
+
+  void notify_on_delete(const std::string& image_id, int r);
 
 };
 
@@ -146,4 +177,4 @@ private:
 
 extern template class rbd::mirror::ImageDeleter<librbd::ImageCtx>;
 
-#endif // CEPH_RBD_MIRROR_IMAGEDELETER_H
+#endif // CEPH_RBD_MIRROR_IMAGE_DELETER_H

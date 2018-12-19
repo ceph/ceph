@@ -47,6 +47,7 @@ class RBDMirror(Task):
         client: role - ceph client to connect as
         valgrind: [--tool=<valgrind tool>] - none by default
         coverage: bool - whether this run may be collecting coverage data
+        thrash: bool - whether this run may be thrashed
     """
     def __init__(self, ctx, config):
         super(RBDMirror, self).__init__(ctx, config)
@@ -71,7 +72,8 @@ class RBDMirror(Task):
         super(RBDMirror, self).begin()
         testdir = misc.get_testdir(self.ctx)
         daemon_signal = 'kill'
-        if 'coverage' in self.config or 'valgrind' in self.config:
+        if 'coverage' in self.config or 'valgrind' in self.config or \
+                self.config.get('thrash', False):
             daemon_signal = 'term'
 
         args = [

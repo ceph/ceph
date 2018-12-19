@@ -48,7 +48,7 @@ static int do_lock_list(librbd::Image& image, Formatter *f)
     return r;
 
   if (f) {
-    f->open_object_section("locks");
+    f->open_array_section("locks");
   } else {
     tbl.define_column("Locker", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("ID", TextTable::LEFT, TextTable::LEFT);
@@ -69,7 +69,8 @@ static int do_lock_list(librbd::Image& image, Formatter *f)
     for (std::list<librbd::locker_t>::const_iterator it = lockers.begin();
          it != lockers.end(); ++it) {
       if (f) {
-        f->open_object_section(it->cookie.c_str());
+        f->open_object_section("lock");
+        f->dump_string("id", it->cookie);
         f->dump_string("locker", it->client);
         f->dump_string("address", it->address);
         f->close_section();
@@ -109,14 +110,17 @@ void get_list_arguments(po::options_description *positional,
   at::add_format_options(options);
 }
 
-int execute_list(const po::variables_map &vm) {
+int execute_list(const po::variables_map &vm,
+                 const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
+  std::string namespace_name;
   std::string image_name;
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
-    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_NONE);
+    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &namespace_name,
+    &image_name, &snap_name, true, utils::SNAPSHOT_PRESENCE_NONE,
+    utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
@@ -130,8 +134,8 @@ int execute_list(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", true,
-                                 &rados, &io_ctx, &image);
+  r = utils::init_and_open_image(pool_name, namespace_name, image_name, "", "",
+                                 true, &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
   }
@@ -152,14 +156,17 @@ void get_add_arguments(po::options_description *positional,
     ("shared", po::value<std::string>(), "shared lock tag");
 }
 
-int execute_add(const po::variables_map &vm) {
+int execute_add(const po::variables_map &vm,
+                const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
+  std::string namespace_name;
   std::string image_name;
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
-    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_NONE);
+    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &namespace_name,
+    &image_name, &snap_name, true, utils::SNAPSHOT_PRESENCE_NONE,
+    utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
@@ -178,8 +185,8 @@ int execute_add(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", false,
-                                 &rados, &io_ctx, &image);
+  r = utils::init_and_open_image(pool_name, namespace_name, image_name, "", "",
+                                 false, &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
   }
@@ -210,14 +217,17 @@ void get_remove_arguments(po::options_description *positional,
     ("locker", "locker client");
 }
 
-int execute_remove(const po::variables_map &vm) {
+int execute_remove(const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
+  std::string namespace_name;
   std::string image_name;
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
-    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_NONE);
+    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &namespace_name,
+    &image_name, &snap_name, true, utils::SNAPSHOT_PRESENCE_NONE,
+    utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
@@ -237,8 +247,8 @@ int execute_remove(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", false,
-                                 &rados, &io_ctx, &image);
+  r = utils::init_and_open_image(pool_name, namespace_name, image_name, "", "",
+                                 false, &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
   }

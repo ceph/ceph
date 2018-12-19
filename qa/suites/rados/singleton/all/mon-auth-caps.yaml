@@ -8,6 +8,9 @@ roles:
 tasks:
 - install:
 - ceph:
+    log-whitelist:
+    - overall HEALTH_
+    - \(AUTH_BAD_CAPS\)
 - workunit:
     clients:
       all:

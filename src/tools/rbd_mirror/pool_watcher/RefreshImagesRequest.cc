@@ -39,7 +39,7 @@ void RefreshImagesRequest<I>::mirror_image_list() {
     RefreshImagesRequest<I>,
     &RefreshImagesRequest<I>::handle_mirror_image_list>(this);
   int r = m_remote_io_ctx.aio_operate(RBD_MIRRORING, aio_comp, &op, &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   aio_comp->release();
 }
 
@@ -49,7 +49,7 @@ void RefreshImagesRequest<I>::handle_mirror_image_list(int r) {
 
   std::map<std::string, std::string> ids;
   if (r == 0) {
-    bufferlist::iterator it = m_out_bl.begin();
+    auto it = m_out_bl.cbegin();
     r = librbd::cls_client::mirror_image_list_finish(&it, &ids);
   }
 

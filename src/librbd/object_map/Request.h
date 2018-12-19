@@ -30,8 +30,11 @@ protected:
 
   bool should_complete(int r) override;
   int filter_return_code(int r) const override {
-    // never propagate an error back to the caller
-    return 0;
+    if (m_state == STATE_REQUEST) {
+      // never propagate an error back to the caller
+      return 0;
+    }
+    return r;
   }
   virtual void finish_request() {
   }

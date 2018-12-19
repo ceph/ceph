@@ -15,7 +15,6 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-using namespace std;
 
 void RGWAccessControlList::_add_grant(ACLGrant *grant)
 {
@@ -53,13 +52,14 @@ void RGWAccessControlList::add_grant(ACLGrant *grant)
   _add_grant(grant);
 }
 
-uint32_t RGWAccessControlList::get_perm(const rgw::auth::Identity& auth_identity,
+uint32_t RGWAccessControlList::get_perm(const DoutPrefixProvider* dpp, 
+                                        const rgw::auth::Identity& auth_identity,
                                         const uint32_t perm_mask)
 {
-  ldout(cct, 5) << "Searching permissions for identity=" << auth_identity
+  ldpp_dout(dpp, 5) << "Searching permissions for identity=" << auth_identity
                 << " mask=" << perm_mask << dendl;
 
-  return perm_mask & auth_identity.get_perms_from_aclspec(acl_user_map);
+  return perm_mask & auth_identity.get_perms_from_aclspec(dpp, acl_user_map);
 }
 
 uint32_t RGWAccessControlList::get_group_perm(ACLGroupTypeEnum group,
@@ -84,7 +84,7 @@ uint32_t RGWAccessControlList::get_referer_perm(const uint32_t current_perm,
   ldout(cct, 5) << "Searching permissions for referer=" << http_referer
                 << " mask=" << perm_mask << dendl;
 
-  /* This function is bacically a transformation from current perm to
+  /* This function is basically a transformation from current perm to
    * a new one that takes into consideration the Swift's HTTP referer-
    * based ACLs. We need to go through all items to respect negative
    * grants. */
@@ -99,14 +99,15 @@ uint32_t RGWAccessControlList::get_referer_perm(const uint32_t current_perm,
   return referer_perm & perm_mask;
 }
 
-uint32_t RGWAccessControlPolicy::get_perm(const rgw::auth::Identity& auth_identity,
+uint32_t RGWAccessControlPolicy::get_perm(const DoutPrefixProvider* dpp,
+                                          const rgw::auth::Identity& auth_identity,
                                           const uint32_t perm_mask,
                                           const char * const http_referer)
 {
-  ldout(cct, 20) << "-- Getting permissions begin with perm_mask=" << perm_mask
+  ldpp_dout(dpp, 20) << "-- Getting permissions begin with perm_mask=" << perm_mask
                  << dendl;
 
-  uint32_t perm = acl.get_perm(auth_identity, perm_mask);
+  uint32_t perm = acl.get_perm(dpp, auth_identity, perm_mask);
 
   if (auth_identity.is_owner_of(owner.get_id())) {
     perm |= perm_mask & (RGW_PERM_READ_ACP | RGW_PERM_WRITE_ACP);
@@ -131,21 +132,22 @@ uint32_t RGWAccessControlPolicy::get_perm(const rgw::auth::Identity& auth_identi
     perm = acl.get_referer_perm(perm, http_referer, perm_mask);
   }
 
-  ldout(cct, 5) << "-- Getting permissions done for identity=" << auth_identity
+  ldpp_dout(dpp, 5) << "-- Getting permissions done for identity=" << auth_identity
                 << ", owner=" << owner.get_id()
                 << ", perm=" << perm << dendl;
 
   return perm;
 }
 
-bool RGWAccessControlPolicy::verify_permission(const rgw::auth::Identity& auth_identity,
+bool RGWAccessControlPolicy::verify_permission(const DoutPrefixProvider* dpp,
+                                               const rgw::auth::Identity& auth_identity,
                                                const uint32_t user_perm_mask,
                                                const uint32_t perm,
                                                const char * const http_referer)
 {
   uint32_t test_perm = perm | RGW_PERM_READ_OBJS | RGW_PERM_WRITE_OBJS;
 
-  uint32_t policy_perm = get_perm(auth_identity, test_perm, http_referer);
+  uint32_t policy_perm = get_perm(dpp, auth_identity, test_perm, http_referer);
 
   /* the swift WRITE_OBJS perm is equivalent to the WRITE obj, just
      convert those bits. Note that these bits will only be set on
@@ -160,7 +162,7 @@ bool RGWAccessControlPolicy::verify_permission(const rgw::auth::Identity& auth_i
    
   uint32_t acl_perm = policy_perm & perm & user_perm_mask;
 
-  ldout(cct, 10) << " identity=" << auth_identity
+  ldpp_dout(dpp, 10) << " identity=" << auth_identity
                  << " requested perm (type)=" << perm
                  << ", policy perm=" << policy_perm
                  << ", user_perm_mask=" << user_perm_mask

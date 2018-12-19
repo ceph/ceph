@@ -1,3 +1,5 @@
+.. _adding-and-removing-monitors:
+
 ==========================
  Adding/Removing Monitors
 ==========================
@@ -5,6 +7,8 @@
 When you have a cluster up and running, you may add or remove monitors
 from the cluster at runtime. To bootstrap a monitor, see `Manual Deployment`_
 or `Monitor Bootstrap`_.
+
+.. _adding-monitors:
 
 Adding Monitors
 ===============
@@ -45,7 +49,7 @@ Deploy your Hardware
 If you are adding a new host when adding a new monitor,  see `Hardware
 Recommendations`_ for details on minimum recommendations for monitor hardware.
 To add a monitor host to your cluster, first make sure you have an up-to-date
-version of Linux installed (typically Ubuntu 14.04 or RHEL 7). 
+version of Linux installed (typically Ubuntu 16.04 or RHEL 7). 
 
 Add your monitor host to a rack in your cluster, connect it to the network
 and ensure that it has network connectivity.
@@ -121,6 +125,7 @@ on ``mon.a``).
 
 	ceph-mon -i {mon-id} --public-addr {ip:port}
 
+.. _removing-monitors:
 
 Removing Monitors
 =================

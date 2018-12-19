@@ -4,13 +4,14 @@ import string
 import sys
 import time
 import logging
+import errno
 
 try:
     from itertools import izip_longest as zip_longest
 except ImportError:
     from itertools import zip_longest
 from itertools import combinations
-from cStringIO import StringIO
+from six import StringIO
 
 import boto
 import boto.s3.connection
@@ -21,9 +22,10 @@ from nose.tools import eq_ as eq
 from nose.plugins.attrib import attr
 from nose.plugins.skip import SkipTest
 
-from .multisite import Zone
+from .multisite import Zone, ZoneGroup, Credentials
 
 from .conn import get_gateway_connection
+from .tools import assert_raises
 
 class Config:
     """ test configuration """
@@ -94,6 +96,15 @@ def meta_sync_status(zone):
 
 def mdlog_autotrim(zone):
     zone.cluster.admin(['mdlog', 'autotrim'])
+
+def bilog_list(zone, bucket, args = None):
+    cmd = ['bilog', 'list', '--bucket', bucket] + (args or [])
+    bilog, _ = zone.cluster.admin(cmd, read_only=True)
+    bilog = bilog.decode('utf-8')
+    return json.loads(bilog)
+
+def bilog_autotrim(zone, args = None):
+    zone.cluster.admin(['bilog', 'autotrim'] + (args or []))
 
 def parse_meta_sync_status(meta_sync_status_json):
     meta_sync_status_json = meta_sync_status_json.decode('utf-8')
@@ -242,7 +253,7 @@ def bucket_sync_status(target_zone, source_zone, bucket_name):
     if target_zone == source_zone:
         return None
 
-    cmd = ['bucket', 'sync', 'status'] + target_zone.zone_args()
+    cmd = ['bucket', 'sync', 'markers'] + target_zone.zone_args()
     cmd += ['--source-zone', source_zone.name]
     cmd += ['--bucket', bucket_name]
     while True:
@@ -253,7 +264,7 @@ def bucket_sync_status(target_zone, source_zone, bucket_name):
         assert(retcode == 2) # ENOENT
 
     bucket_sync_status_json = bucket_sync_status_json.decode('utf-8')
-    log.debug('current bucket sync status=%s', bucket_sync_status_json)
+    log.debug('current bucket sync markers=%s', bucket_sync_status_json)
     sync_status = json.loads(bucket_sync_status_json)
 
     markers={}
@@ -377,16 +388,18 @@ def zone_bucket_checkpoint(target_zone, source_zone, bucket_name):
 
         time.sleep(config.checkpoint_delay)
 
-    assert False, 'finished bucket checkpoint for target_zone=%s source_zone=%s bucket=%s' % \
+    assert False, 'failed bucket checkpoint for target_zone=%s source_zone=%s bucket=%s' % \
                   (target_zone.name, source_zone.name, bucket_name)
 
 def zonegroup_bucket_checkpoint(zonegroup_conns, bucket_name):
-    for source_conn in zonegroup_conns.zones:
+    for source_conn in zonegroup_conns.rw_zones:
         for target_conn in zonegroup_conns.zones:
             if source_conn.zone == target_conn.zone:
                 continue
+            log.debug('bucket checkpoint: source=%s target=%s bucket=%s', source_conn.zone.name, target_conn.zone.name, bucket_name)
             zone_bucket_checkpoint(target_conn.zone, source_conn.zone, bucket_name)
-            target_conn.check_bucket_eq(source_conn, bucket_name)
+    for source_conn, target_conn in combinations(zonegroup_conns.zones, 2):
+        target_conn.check_bucket_eq(source_conn, bucket_name)
 
 def set_master_zone(zone):
     zone.modify(zone.cluster, ['--master'])
@@ -394,6 +407,22 @@ def set_master_zone(zone):
     zonegroup.period.update(zone, commit=True)
     zonegroup.master_zone = zone
     log.info('Set master zone=%s, waiting %ds for reconfiguration..', zone.name, config.reconfigure_delay)
+    time.sleep(config.reconfigure_delay)
+
+def set_sync_from_all(zone, flag):
+    s = 'true' if flag else 'false'
+    zone.modify(zone.cluster, ['--sync-from-all={}'.format(s)])
+    zonegroup = zone.zonegroup
+    zonegroup.period.update(zone, commit=True)
+    log.info('Set sync_from_all flag on zone %s to %s', zone.name, s)
+    time.sleep(config.reconfigure_delay)
+
+def set_redirect_zone(zone, redirect_zone):
+    id_str = redirect_zone.id if redirect_zone else ''
+    zone.modify(zone.cluster, ['--redirect-zone={}'.format(id_str)])
+    zonegroup = zone.zonegroup
+    zonegroup.period.update(zone, commit=True)
+    log.info('Set redirect_zone zone %s to "%s"', zone.name, id_str)
     time.sleep(config.reconfigure_delay)
 
 def enable_bucket_sync(zone, bucket_name):
@@ -663,12 +692,20 @@ def test_versioned_object_incremental_sync():
             log.debug('version3 id=%s', v.version_id)
             k.bucket.delete_key(obj, version_id=v.version_id)
 
-    for source_conn, bucket in zone_bucket:
-        for target_conn in zonegroup_conns.zones:
-            if source_conn.zone == target_conn.zone:
-                continue
-            zone_bucket_checkpoint(target_conn.zone, source_conn.zone, bucket.name)
-            check_bucket_eq(source_conn, target_conn, bucket)
+    for _, bucket in zone_bucket:
+        zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    for _, bucket in zone_bucket:
+        # overwrite the acls to test that metadata-only entries are applied
+        for zone_conn in zonegroup_conns.rw_zones:
+            obj = 'obj-' + zone_conn.name
+            k = new_key(zone_conn, bucket.name, obj)
+            v = get_latest_object_version(k)
+            v.make_public()
+
+    for _, bucket in zone_bucket:
+        zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
 
 def test_bucket_versioning():
     buckets, zone_bucket = create_bucket_per_zone_in_realm()
@@ -803,6 +840,51 @@ def test_multi_period_incremental_sync():
             mdlog = mdlog_list(zone, period)
             assert len(mdlog) == 0
 
+def test_multi_zone_redirect():
+    zonegroup = realm.master_zonegroup()
+    if len(zonegroup.rw_zones) < 2:
+        raise SkipTest("test_multi_period_incremental_sync skipped. Requires 3 or more zones in master zonegroup.")
+
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    (zc1, zc2) = zonegroup_conns.rw_zones[0:2]
+
+    z1, z2 = (zc1.zone, zc2.zone)
+
+    set_sync_from_all(z2, False)
+
+    # create a bucket on the first zone
+    bucket_name = gen_bucket_name()
+    log.info('create bucket zone=%s name=%s', z1.name, bucket_name)
+    bucket = zc1.conn.create_bucket(bucket_name)
+    obj = 'testredirect'
+
+    key = bucket.new_key(obj)
+    data = 'A'*512
+    key.set_contents_from_string(data)
+
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # try to read object from second zone (should fail)
+    bucket2 = get_bucket(zc2, bucket_name)
+    assert_raises(boto.exception.S3ResponseError, bucket2.get_key, obj)
+
+    set_redirect_zone(z2, z1)
+
+    key2 = bucket2.get_key(obj)
+
+    eq(data, key2.get_contents_as_string())
+
+    key = bucket.new_key(obj)
+
+    for x in ['a', 'b', 'c', 'd']:
+        data = x*512
+        key.set_contents_from_string(data)
+        eq(data, key2.get_contents_as_string())
+
+    # revert config changes
+    set_sync_from_all(z2, True)
+    set_redirect_zone(z2, None)
+
 def test_zonegroup_remove():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
@@ -813,9 +895,13 @@ def test_zonegroup_remove():
     z1, z2 = zonegroup.zones[0:2]
     c1, c2 = (z1.cluster, z2.cluster)
 
+    # get admin credentials out of existing zone
+    system_key = z1.data['system_key']
+    admin_creds = Credentials(system_key['access_key'], system_key['secret_key'])
+
     # create a new zone in zonegroup on c2 and commit
     zone = Zone('remove', zonegroup, c2)
-    zone.create(c2)
+    zone.create(c2, admin_creds.credential_args())
     zonegroup.zones.append(zone)
     zonegroup.period.update(zone, commit=True)
 
@@ -830,6 +916,34 @@ def test_zonegroup_remove():
 
     # validate the resulting period
     zonegroup.period.update(z1, commit=True)
+
+
+def test_zg_master_zone_delete():
+
+    master_zg = realm.master_zonegroup()
+    master_zone = master_zg.master_zone
+
+    assert(len(master_zg.zones) >= 1)
+    master_cluster = master_zg.zones[0].cluster
+
+    rm_zg = ZoneGroup('remove_zg')
+    rm_zg.create(master_cluster)
+
+    rm_zone = Zone('remove', rm_zg, master_cluster)
+    rm_zone.create(master_cluster)
+    master_zg.period.update(master_zone, commit=True)
+
+
+    rm_zone.delete(master_cluster)
+    # Period update: This should now fail as the zone will be the master zone
+    # in that zg
+    _, retcode = master_zg.period.update(master_zone, check_retcode=False)
+    assert(retcode == errno.EINVAL)
+
+    # Proceed to delete the zonegroup as well, previous period now does not
+    # contain a dangling master_zone, this must succeed
+    rm_zg.delete(master_cluster)
+    master_zg.period.update(master_zone, commit=True)
 
 def test_set_bucket_website():
     buckets, zone_bucket = create_bucket_per_zone_in_realm()
@@ -957,6 +1071,9 @@ def test_encrypted_object_sync():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
 
+    if len(zonegroup.rw_zones) < 2:
+        raise SkipTest("test_zonegroup_remove skipped. Requires 2 or more zones in master zonegroup.")
+
     (zone1, zone2) = zonegroup_conns.rw_zones[0:2]
 
     # create a bucket on the first zone
@@ -994,3 +1111,57 @@ def test_encrypted_object_sync():
 
     key = bucket2.get_key('testobj-sse-kms')
     eq(data, key.get_contents_as_string())
+
+def test_bucket_index_log_trim():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    zone = zonegroup_conns.rw_zones[0]
+
+    # create a test bucket, upload some objects, and wait for sync
+    def make_test_bucket():
+        name = gen_bucket_name()
+        log.info('create bucket zone=%s name=%s', zone.name, name)
+        bucket = zone.conn.create_bucket(name)
+        for objname in ('a', 'b', 'c', 'd'):
+            k = new_key(zone, name, objname)
+            k.set_contents_from_string('foo')
+        zonegroup_meta_checkpoint(zonegroup)
+        zonegroup_bucket_checkpoint(zonegroup_conns, name)
+        return bucket
+
+    # create a 'cold' bucket
+    cold_bucket = make_test_bucket()
+
+    # trim with max-buckets=0 to clear counters for cold bucket. this should
+    # prevent it from being considered 'active' by the next autotrim
+    bilog_autotrim(zone.zone, [
+        '--rgw-sync-log-trim-max-buckets', '0',
+    ])
+
+    # create an 'active' bucket
+    active_bucket = make_test_bucket()
+
+    # trim with max-buckets=1 min-cold-buckets=0 to trim active bucket only
+    bilog_autotrim(zone.zone, [
+        '--rgw-sync-log-trim-max-buckets', '1',
+        '--rgw-sync-log-trim-min-cold-buckets', '0',
+    ])
+
+    # verify active bucket has empty bilog
+    active_bilog = bilog_list(zone.zone, active_bucket.name)
+    assert(len(active_bilog) == 0)
+
+    # verify cold bucket has nonempty bilog
+    cold_bilog = bilog_list(zone.zone, cold_bucket.name)
+    assert(len(cold_bilog) > 0)
+
+    # trim with min-cold-buckets=999 to trim all buckets
+    bilog_autotrim(zone.zone, [
+        '--rgw-sync-log-trim-max-buckets', '999',
+        '--rgw-sync-log-trim-min-cold-buckets', '999',
+    ])
+
+    # verify cold bucket has empty bilog
+    cold_bilog = bilog_list(zone.zone, cold_bucket.name)
+    assert(len(cold_bilog) == 0)

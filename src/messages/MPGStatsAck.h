@@ -17,11 +17,13 @@
 
 #include "osd/osd_types.h"
 
-class MPGStatsAck : public Message {
+class MPGStatsAck : public MessageInstance<MPGStatsAck> {
 public:
+  friend factory;
+
   map<pg_t,pair<version_t,epoch_t> > pg_stat;
   
-  MPGStatsAck() : Message(MSG_PGSTATSACK) {}
+  MPGStatsAck() : MessageInstance(MSG_PGSTATSACK) {}
 
 private:
   ~MPGStatsAck() override {}
@@ -33,11 +35,12 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(pg_stat, payload);
+    using ceph::encode;
+    encode(pg_stat, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(pg_stat, p);
+    auto p = payload.cbegin();
+    decode(pg_stat, p);
   }
 };
 

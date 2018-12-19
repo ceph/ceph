@@ -1,5 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -125,9 +126,9 @@ void RGWFormatter_Plain::dump_float(const char *name, double d)
   dump_value_int(name, "%f", d);
 }
 
-void RGWFormatter_Plain::dump_string(const char *name, const std::string& s)
+void RGWFormatter_Plain::dump_string(const char *name, std::string_view s)
 {
-  dump_format(name, "%s", s.c_str());
+  dump_format(name, "%s", s.data());
 }
 
 std::ostream& RGWFormatter_Plain::dump_stream(const char *name)
@@ -218,7 +219,7 @@ void RGWFormatter_Plain::write_data(const char *fmt, ...)
 done:
 #define LARGE_ENOUGH_BUF 4096
   if (!buf) {
-    max_len = max(LARGE_ENOUGH_BUF, size);
+    max_len = std::max(LARGE_ENOUGH_BUF, size);
     buf = (char *)malloc(max_len);
     if (!buf) {
       cerr << "ERROR: RGWFormatter_Plain::write_data: failed allocating " << max_len << " bytes" << std::endl;
@@ -287,7 +288,10 @@ void RGWFormatter_Plain::dump_value_int(const char *name, const char *fmt, ...)
 class HTMLHelper : public XMLFormatter {
 public:
   static std::string escape(const std::string& unescaped_str) {
-    return escape_xml_str(unescaped_str.c_str());
+    int len = escape_xml_attr_len(unescaped_str.c_str());
+    std::string escaped(len, 0);
+    escape_xml_attr(unescaped_str.c_str(), escaped.data());
+    return escaped;
   }
 };
 
@@ -298,7 +302,7 @@ void RGWSwiftWebsiteListingFormatter::generate_header(
   ss << R"(<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 )"
      << R"(Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">)";
 
-  ss << "<html><head><title>Listing of " << HTMLHelper::escape(dir_path)
+  ss << "<html><head><title>Listing of " << xml_stream_escaper(dir_path)
      << "</title>";
 
   if (! css_path.empty()) {
@@ -315,7 +319,7 @@ void RGWSwiftWebsiteListingFormatter::generate_header(
 
   ss << "</head><body>";
 
-  ss << R"(<h1 id="title">Listing of )" << HTMLHelper::escape(dir_path) << "</h1>"
+  ss << R"(<h1 id="title">Listing of )" << xml_stream_escaper(dir_path) << "</h1>"
      << R"(<table id="listing">)"
      << R"(<tr id="heading">)"
      << R"(<th class="colname">Name</th>)"

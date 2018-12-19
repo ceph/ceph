@@ -279,7 +279,7 @@ def task(ctx, config):
 
     # once the client is chosen, pull the host name and  assigned port out of
     # the role_endpoints that were assigned by the rgw task
-    (remote_host, remote_port) = ctx.rgw.role_endpoints[client]
+    endpoint = ctx.rgw.role_endpoints[client]
 
     ##
     user1='foo'
@@ -305,16 +305,16 @@ def task(ctx, config):
         aws_access_key_id=access_key,
         aws_secret_access_key=secret_key,
         is_secure=False,
-        port=remote_port,
-        host=remote_host,
+        port=endpoint.port,
+        host=endpoint.hostname,
         calling_format=boto.s3.connection.OrdinaryCallingFormat(),
         )
     connection2 = boto.s3.connection.S3Connection(
         aws_access_key_id=access_key2,
         aws_secret_access_key=secret_key2,
         is_secure=False,
-        port=remote_port,
-        host=remote_host,
+        port=endpoint.port,
+        host=endpoint.hostname,
         calling_format=boto.s3.connection.OrdinaryCallingFormat(),
         )
 
@@ -908,7 +908,7 @@ def task(ctx, config):
         stdin=StringIO(json.dumps(out)),
         check_status=True)
 
-    (err, out) = rgwadmin(ctx, client, ['zone', 'get','--rgw-zone','default'])
+    (err, out) = rgwadmin(ctx, client, ['zone', 'get'])
     assert len(out) > 0
     assert len(out['placement_pools']) == orig_placement_pools + 1
 
@@ -917,6 +917,9 @@ def task(ctx, config):
 	'--placement-id', 'new-placement']
 
     (err, out) = rgwadmin(ctx, client, zonecmd, check_status=True)
+
+    # TESTCASE 'zonegroup-info', 'zonegroup', 'get', 'get zonegroup info', 'succeeds'
+    (err, out) = rgwadmin(ctx, client, ['zonegroup', 'get'], check_status=True)
 
 import sys
 from tasks.radosgw_admin import task

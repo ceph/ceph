@@ -8,7 +8,6 @@
 #include <string>
 
 #include <vector>
-#include "include/memory.h"
 #include <boost/scoped_ptr.hpp>
 
 #include "os/ObjectMap.h"
@@ -57,7 +56,8 @@
  */
 class DBObjectMap : public ObjectMap {
 public:
-  boost::scoped_ptr<KeyValueDB> db;
+
+  KeyValueDB *get_db() override { return db.get(); }
 
   /**
    * Serializes access to next_seq as well as the in_use set
@@ -92,12 +92,12 @@ public:
     }
 
     const ghobject_t &get_locked() const {
-      assert(locked);
+      ceph_assert(locked);
       return *locked;
     }
 
     void swap(MapHeaderLock &o) {
-      assert(db == o.db);
+      ceph_assert(db == o.db);
 
       // centos6's boost optional doesn't seem to have swap :(
       boost::optional<ghobject_t> _locked = o.locked;
@@ -108,7 +108,7 @@ public:
     ~MapHeaderLock() {
       if (locked) {
 	Mutex::Locker l(db->header_lock);
-	assert(db->map_header_in_use.count(*locked));
+	ceph_assert(db->map_header_in_use.count(*locked));
 	db->map_header_cond.Signal();
 	db->map_header_in_use.erase(*locked);
       }
@@ -116,7 +116,7 @@ public:
   };
 
   DBObjectMap(CephContext* cct, KeyValueDB *db)
-    : ObjectMap(cct), db(db), header_lock("DBOBjectMap"),
+    : ObjectMap(cct, db), header_lock("DBOBjectMap"),
       cache_lock("DBObjectMap::CacheLock"),
       caches(cct->_conf->filestore_omap_header_cache_size)
     {}
@@ -235,7 +235,7 @@ public:
   int sync(const ghobject_t *oid=0, const SequencerPosition *spos=0) override;
 
   void compact() override {
-    assert(db);
+    ceph_assert(db);
     db->compact();
   }
 
@@ -275,21 +275,21 @@ public:
 
     void encode(bufferlist &bl) const {
       ENCODE_START(3, 1, bl);
-      ::encode(v, bl);
-      ::encode(seq, bl);
-      ::encode(legacy, bl);
+      encode(v, bl);
+      encode(seq, bl);
+      encode(legacy, bl);
       ENCODE_FINISH(bl);
     }
 
-    void decode(bufferlist::iterator &bl) {
+    void decode(bufferlist::const_iterator &bl) {
       DECODE_START(3, bl);
       if (struct_v >= 2)
-	::decode(v, bl);
+	decode(v, bl);
       else
 	v = 0;
-      ::decode(seq, bl);
+      decode(seq, bl);
       if (struct_v >= 3)
-	::decode(legacy, bl);
+	decode(legacy, bl);
       else
 	legacy = false;
       DECODE_FINISH(bl);
@@ -319,25 +319,25 @@ public:
     void encode(bufferlist &bl) const {
       coll_t unused;
       ENCODE_START(2, 1, bl);
-      ::encode(seq, bl);
-      ::encode(parent, bl);
-      ::encode(num_children, bl);
-      ::encode(unused, bl);
-      ::encode(oid, bl);
-      ::encode(spos, bl);
+      encode(seq, bl);
+      encode(parent, bl);
+      encode(num_children, bl);
+      encode(unused, bl);
+      encode(oid, bl);
+      encode(spos, bl);
       ENCODE_FINISH(bl);
     }
 
-    void decode(bufferlist::iterator &bl) {
+    void decode(bufferlist::const_iterator &bl) {
       coll_t unused;
       DECODE_START(2, bl);
-      ::decode(seq, bl);
-      ::decode(parent, bl);
-      ::decode(num_children, bl);
-      ::decode(unused, bl);
-      ::decode(oid, bl);
+      decode(seq, bl);
+      decode(parent, bl);
+      decode(num_children, bl);
+      decode(unused, bl);
+      decode(oid, bl);
       if (struct_v >= 2)
-	::decode(spos, bl);
+	decode(spos, bl);
       DECODE_FINISH(bl);
     }
 
@@ -365,7 +365,7 @@ public:
 				      const string &in);
 private:
   /// Implicit lock on Header->seq
-  typedef ceph::shared_ptr<_Header> Header;
+  typedef std::shared_ptr<_Header> Header;
   Mutex cache_lock;
   SimpleLRU<ghobject_t, _Header> caches;
 
@@ -387,7 +387,7 @@ private:
     int upper_bound(const string &after) override { return 0; }
     int lower_bound(const string &to) override { return 0; }
     bool valid() override { return false; }
-    int next(bool validate=true) override { ceph_abort(); return 0; }
+    int next() override { ceph_abort(); return 0; }
     string key() override { ceph_abort(); return ""; }
     bufferlist value() override { ceph_abort(); return bufferlist(); }
     int status() override { return 0; }
@@ -405,12 +405,12 @@ private:
     Header header;
 
     /// parent_iter == NULL iff no parent
-    ceph::shared_ptr<DBObjectMapIteratorImpl> parent_iter;
+    std::shared_ptr<DBObjectMapIteratorImpl> parent_iter;
     KeyValueDB::Iterator key_iter;
     KeyValueDB::Iterator complete_iter;
 
     /// cur_iter points to currently valid iterator
-    ceph::shared_ptr<ObjectMapIteratorImpl> cur_iter;
+    std::shared_ptr<ObjectMapIteratorImpl> cur_iter;
     int r;
 
     /// init() called, key_iter, complete_iter, parent_iter filled in
@@ -425,7 +425,7 @@ private:
     int upper_bound(const string &after) override;
     int lower_bound(const string &to) override;
     bool valid() override;
-    int next(bool validate=true) override;
+    int next() override;
     string key() override;
     bufferlist value() override;
     int status() override;
@@ -456,7 +456,7 @@ private:
     int adjust();
   };
 
-  typedef ceph::shared_ptr<DBObjectMapIteratorImpl> DBObjectMapIterator;
+  typedef std::shared_ptr<DBObjectMapIteratorImpl> DBObjectMapIterator;
   DBObjectMapIterator _get_iterator(Header header) {
     return std::make_shared<DBObjectMapIteratorImpl>(this, header);
   }
@@ -496,7 +496,7 @@ private:
   /**
    * Generate new header for c oid with new seq number
    *
-   * Has the side effect of syncronously saving the new DBObjectMap state
+   * Has the side effect of synchronously saving the new DBObjectMap state
    */
   Header _generate_new_header(const ghobject_t &oid, Header parent);
   Header generate_new_header(const ghobject_t &oid, Header parent) {
@@ -565,7 +565,7 @@ private:
       db(db) {}
     void operator() (_Header *header) {
       Mutex::Locker l(db->header_lock);
-      assert(db->in_use.count(header->seq));
+      ceph_assert(db->in_use.count(header->seq));
       db->in_use.erase(header->seq);
       db->header_cond.Signal();
       delete header;
