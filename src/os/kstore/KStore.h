@@ -439,7 +439,8 @@ public:
   void get_db_statistics(Formatter *f) override {
     db->get_statistics(f);
   }
-  int statfs(struct store_statfs_t *buf) override;
+  int statfs(struct store_statfs_t *buf,
+             osd_alert_list_t* alerts = nullptr) override;
   int pool_statfs(uint64_t pool_id, struct store_statfs_t *buf) override;
 
   CollectionHandle open_collection(const coll_t& c) override;

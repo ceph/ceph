@@ -2993,7 +2993,8 @@ int OSD::init()
   // prime osd stats
   {
     struct store_statfs_t stbuf;
-    int r = store->statfs(&stbuf);
+    osd_alert_list_t alerts;
+    int r = store->statfs(&stbuf, &alerts);
     ceph_assert(r == 0);
     service.set_statfs(stbuf);
   }
@@ -3948,7 +3949,8 @@ int OSD::update_crush_location()
     snprintf(weight, sizeof(weight), "%.4lf", cct->_conf->osd_crush_initial_weight);
   } else {
     struct store_statfs_t st;
-    int r = store->statfs(&st);
+    osd_alert_list_t alerts;
+    int r = store->statfs(&st, &alerts);
     if (r < 0) {
       derr << "statfs: " << cpp_strerror(r) << dendl;
       return r;
@@ -5290,7 +5292,8 @@ void OSD::tick_without_osd_lock()
 
   // refresh osd stats
   struct store_statfs_t stbuf;
-  int r = store->statfs(&stbuf);
+  osd_alert_list_t alerts;
+  int r = store->statfs(&stbuf, &alerts);
   ceph_assert(r == 0);
   service.set_statfs(stbuf);
 
