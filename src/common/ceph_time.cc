@@ -181,4 +181,54 @@ namespace ceph {
     ss << yr << "y";
     return ss.str();
   }
+
+  std::string exact_timespan_str(timespan t)
+  {
+    uint64_t nsec = std::chrono::nanoseconds(t).count();
+    uint64_t sec = nsec / 1000000000;
+    nsec %= 1000000000;
+    uint64_t yr = sec / (60 * 60 * 24 * 365);
+    ostringstream ss;
+    if (yr) {
+      ss << yr << "y";
+      sec -= yr * (60 * 60 * 24 * 365);
+    }
+    /* I don't like the capital M -sage
+    uint64_t mn = sec / (60 * 60 * 24 * 30);
+    if (mn >= 3) {
+      ss << mn << "M";
+      sec -= mn * (60 * 60 * 24 * 30);
+    }
+    */
+    uint64_t wk = sec / (60 * 60 * 24 * 7);
+    if (wk >= 2) {
+      ss << wk << "w";
+      sec -= wk * (60 * 60 * 24 * 7);
+    }
+    uint64_t day = sec / (60 * 60 * 24);
+    if (day >= 2) {
+      ss << day << "d";
+      sec -= day * (60 * 60 * 24);
+    }
+    uint64_t hr = sec / (60 * 60);
+    if (hr >= 2) {
+      ss << hr << "h";
+      sec -= hr * (60 * 60);
+    }
+    uint64_t min = sec / 60;
+    if (min >= 2) {
+      ss << min << "m";
+      sec -= min * 60;
+    }
+    if (sec) {
+      ss << sec;
+    }
+    if (nsec) {
+      ss << ((float)nsec / 1000000000);
+    }
+    if (sec || nsec) {
+      ss << "s";
+    }
+    return ss.str();
+  }
 }
