@@ -1116,12 +1116,15 @@ def osd_scrub_pgs(ctx, config):
     all_clean = False
     for _ in range(0, retries):
         stats = manager.get_pg_stats()
-        bad = [stat['pgid'] for stat in stats if 'active+clean' not in stat['state']]
-        if not bad:
+        unclean = [stat['pgid'] for stat in stats if 'active+clean' not in stat['state']]
+        split_merge = []
+        osd_dump = manager.get_osd_dump_json()
+        split_merge = [i['pool_name'] for i in osd_dump['pools'] if i['pg_num'] != i['pg_num_target']]
+        if not unclean and not split_merge:
             all_clean = True
             break
         log.info(
-            "Waiting for all PGs to be active and clean, waiting on %s" % bad)
+            "Waiting for all PGs to be active+clean and split+merged, waiting on %s to go clean and/or %s to split/merge" % (unclean, split_merge))
         time.sleep(delays)
     if not all_clean:
         raise RuntimeError("Scrubbing terminated -- not all pgs were active and clean.")
