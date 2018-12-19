@@ -58,6 +58,32 @@ namespace librbd {
       const write_result_d& operator=(const write_result_d& rhs);
     };
 
+    struct write_item {
+      object_t oid;
+      uint64_t off;
+      uint64_t len;
+      SnapContext snapc;
+      bufferlist bl;
+      ceph_tid_t journal_tid;
+      const ZTracer::Trace &parent_trace;
+      write_result_d *result;
+      write_item(const object_t& oid, uint64_t off, uint64_t len,
+      const SnapContext& snapc, const bufferlist &bl, ceph_tid_t journal_tid,
+      const ZTracer::Trace &parent_trace, write_result_d *result):
+      oid(oid),off(off), len(len), snapc(snapc), bl(bl), journal_tid(journal_tid),
+      parent_trace(parent_trace), result(result) {}
+   };
+
+   class WritebackQueue: public ThreadPool::PointerWQ<write_item> {
+     public:
+        WritebackQueue(LibrbdWriteback *wb, librbd::ImageCtx *m_ictx, const string &name, time_t ti,
+                       ThreadPool *tp);
+     protected:
+       void process(write_item *req) override;
+     private:
+       LibrbdWriteback *m_wb_handler;
+       librbd::ImageCtx *m_ictx;
+   };
   private:
     void complete_writes(const std::string& oid);
 
@@ -65,6 +91,7 @@ namespace librbd {
     Mutex& m_lock;
     librbd::ImageCtx *m_ictx;
     ceph::unordered_map<std::string, std::queue<write_result_d*> > m_writes;
+    WritebackQueue *writeback_queue;
     friend class C_OrderedWrite;
   };
 }

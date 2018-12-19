@@ -31,6 +31,24 @@
 #define dout_prefix *_dout << "librbdwriteback: "
 
 namespace librbd {
+namespace {
+class ThreadPoolSingleton : public ThreadPool {
+public:
+  LibrbdWriteback::WritebackQueue *writeback_queue;
+
+  explicit ThreadPoolSingleton(CephContext *cct)
+    : ThreadPool(cct, "librbd::writeback_thread_pool", "tp_writeback",
+                 cct->_conf->get_val<uint64_t>("rbd_cache_writeback_threads"), "rbd_cache_writeback_threads") {
+    start();
+  }
+  ~ThreadPoolSingleton() override {
+    writeback_queue->drain();
+    delete writeback_queue;
+
+    stop();
+  }
+};
+}
 
   /**
    * context to wrap another context in a Mutex
@@ -106,6 +124,13 @@ namespace librbd {
 
   LibrbdWriteback::LibrbdWriteback(ImageCtx *ictx, Mutex& lock)
     : m_tid(0), m_lock(lock), m_ictx(ictx) {
+    ThreadPoolSingleton *thread_pool_singleton;
+    ictx->cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
+      thread_pool_singleton, "librbd::writeback_thread_pool");
+    writeback_queue = new WritebackQueue(this, ictx, "librbd::writeback_work_queue",
+                                  m_ictx->cct->_conf->get_val<int64_t>("rbd_op_thread_timeout"),
+                                  thread_pool_singleton);
+    thread_pool_singleton->writeback_queue = writeback_queue;
   }
 
   void LibrbdWriteback::read(const object_t& oid, uint64_t object_no,
@@ -175,35 +200,50 @@ namespace librbd {
                                     const ZTracer::Trace &parent_trace,
 				    Context *oncommit)
   {
-    ZTracer::Trace trace;
-    if (parent_trace.valid()) {
-      trace.init("", &m_ictx->trace_endpoint, &parent_trace);
-      trace.copy_name("writeback " + oid.name);
-      trace.event("start");
-    }
-
-    uint64_t object_no = oid_to_object_no(oid.name, m_ictx->object_prefix);
-
     write_result_d *result = new write_result_d(oid.name, oncommit);
-    m_writes[oid.name].push(result);
     ldout(m_ictx->cct, 20) << "write will wait for result " << result << dendl;
-
-    bufferlist bl_copy(bl);
-
-    Context *ctx = new C_OrderedWrite(m_ictx->cct, result, trace, this);
-    ctx = util::create_async_context_callback(*m_ictx, ctx);
-
-    auto req = io::ObjectDispatchSpec::create_write(
-      m_ictx, io::OBJECT_DISPATCH_LAYER_CACHE, oid.name, object_no, off,
-      std::move(bl_copy), snapc, 0, journal_tid, trace, ctx);
-    req->object_dispatch_flags = (
-      io::OBJECT_DISPATCH_FLAG_FLUSH |
-      io::OBJECT_DISPATCH_FLAG_WILL_RETRY_ON_ERROR);
-    req->send();
-
+    m_writes[oid.name].push(result); 
+    write_item *w = new write_item(oid, off, len, snapc, bl, journal_tid, parent_trace, result);
+    writeback_queue->queue(w);
     return ++m_tid;
   }
 
+  LibrbdWriteback::WritebackQueue::WritebackQueue(LibrbdWriteback *wb,
+                                                  ImageCtx *ictx,
+                                                  const string &name, time_t ti,
+                                                  ThreadPool *tp)
+    : ThreadPool::PointerWQ<write_item>(name, ti, 0, tp),
+      m_wb_handler(wb), m_ictx(ictx)  {
+    this->register_work_queue();
+  }
+
+  void LibrbdWriteback::WritebackQueue::process(write_item *req)
+  {
+    ZTracer::Trace trace;
+    if (req->parent_trace.valid()) {
+      trace.init("", &m_ictx->trace_endpoint, &(req->parent_trace));
+      trace.copy_name("writeback " + req->oid.name);
+      trace.event("start");
+    }
+
+    uint64_t object_no = oid_to_object_no(req->oid.name, m_ictx->object_prefix);
+    C_OrderedWrite *req_comp = new C_OrderedWrite(m_ictx->cct, req->result, trace,
+                                                  m_wb_handler);
+
+    // all IO operations are flushed prior to closing the journal
+    assert(req->journal_tid == 0 || m_ictx->journal != NULL);
+    if (req->journal_tid != 0) {
+      m_ictx->journal->flush_event(
+        req->journal_tid, new C_WriteJournalCommit(
+	  m_ictx, req->oid.name, object_no, req->off, req->bl, req->snapc, req->journal_tid, trace,
+          req_comp));
+    } else {
+      auto r = new io::ObjectWriteRequest(
+	m_ictx, req->oid.name, object_no, req->off, req->bl, req->snapc, 0, trace, req_comp);
+      r->send();
+    }
+    delete req;
+  }
 
   void LibrbdWriteback::overwrite_extent(const object_t& oid, uint64_t off,
 					 uint64_t len,
@@ -268,3 +308,4 @@ namespace librbd {
     }
   }
 }
+

@@ -6769,6 +6769,10 @@ static std::vector<Option> get_rbd_options() {
     .set_description("whether to make writeback caching writethrough until "
                      "flush is called, to be sure the user of librbd will send "
                      "flushes so that writeback is safe"),
+    
+    Option("rbd_cache_writeback_threads", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(1)
+    .set_description("number of threads to writeback"),
 
     Option("rbd_cache_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(32_M)
