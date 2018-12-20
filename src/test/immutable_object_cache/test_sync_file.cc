@@ -11,22 +11,22 @@
 #include "global/global_context.h"
 #include <experimental/filesystem>
 
-#include "tools/ceph_immutable_object_cache/ObjectCacheFile.h"
+#include "tools/immutable_object_cache/ObjectCacheFile.h"
 
 using namespace ceph::immutable_obj_cache;
 namespace efs = std::experimental::filesystem;
 
-class TestSyncFile :public ::testing::Test {
+class TestObjectCacheFile :public ::testing::Test {
 public:
   std::string m_cache_root_dir;
 
-  TestSyncFile(){}
-  ~TestSyncFile(){}
+  TestObjectCacheFile(){}
+  ~TestObjectCacheFile(){}
   static void SetUpTestCase() {}
   static void TearDownTestCase() {}
 
   void SetUp() override {
-    m_cache_root_dir = g_ceph_context->_conf.get_val<std::string>("rbd_shared_cache_path")
+    m_cache_root_dir = g_ceph_context->_conf.get_val<std::string>("immutable_object_cache_path")
       + "/ceph_immutable_obj_cache/";
 
     if (efs::exists(m_cache_root_dir)) {
@@ -41,25 +41,25 @@ public:
 
 };
 
-TEST_F(TestSyncFile, test_create_file) {
-  SyncFile* m_sync_file = new SyncFile(g_ceph_context, "test_sync_file");
+TEST_F(TestObjectCacheFile, test_create_file) {
+  ObjectCacheFile* m_sync_file = new ObjectCacheFile(g_ceph_context, "test_sync_file");
   ASSERT_TRUE(m_sync_file->create() >  0);
   ASSERT_TRUE(m_sync_file->get_file_size() == 0);
   delete m_sync_file;
 }
 
 
-TEST_F(TestSyncFile, test_open_file) {
-  SyncFile* m_sync_file = new SyncFile(g_ceph_context, "test_sync_file");
+TEST_F(TestObjectCacheFile, test_open_file) {
+  ObjectCacheFile* m_sync_file = new ObjectCacheFile(g_ceph_context, "test_sync_file");
   ASSERT_EQ(m_sync_file->open_file(), -1);
   ASSERT_GT(m_sync_file->create(), 0);
   ASSERT_GT(m_sync_file->open_file(), 0);
   delete m_sync_file;
 }
 
-TEST_F(TestSyncFile, test_write_object_to_file) {
-  SyncFile* m_sync_file_1 = new SyncFile(g_ceph_context, "test_sync_file_1");
-  SyncFile* m_sync_file_2 = new SyncFile(g_ceph_context, "test_sync_file_2");
+TEST_F(TestObjectCacheFile, test_write_object_to_file) {
+  ObjectCacheFile* m_sync_file_1 = new ObjectCacheFile(g_ceph_context, "test_sync_file_1");
+  ObjectCacheFile* m_sync_file_2 = new ObjectCacheFile(g_ceph_context, "test_sync_file_2");
   ASSERT_GT(m_sync_file_1->create(), 0);
   ASSERT_GT(m_sync_file_2->create(), 0);
   ASSERT_TRUE(m_sync_file_1->get_file_size() == 0);
@@ -78,9 +78,9 @@ TEST_F(TestSyncFile, test_write_object_to_file) {
   delete buf_2;
 }
 
-TEST_F(TestSyncFile, test_read_object_from_file) {
-  SyncFile* m_sync_file_1 = new SyncFile(g_ceph_context, "test_sync_file_1");
-  SyncFile* m_sync_file_2 = new SyncFile(g_ceph_context, "test_sync_file_2");
+TEST_F(TestObjectCacheFile, test_read_object_from_file) {
+  ObjectCacheFile* m_sync_file_1 = new ObjectCacheFile(g_ceph_context, "test_sync_file_1");
+  ObjectCacheFile* m_sync_file_2 = new ObjectCacheFile(g_ceph_context, "test_sync_file_2");
   bufferlist* buf_1 = new ceph::bufferlist();
   bufferlist* buf_2 = new ceph::bufferlist();
 

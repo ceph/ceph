@@ -2,7 +2,6 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "ObjectCacheStore.h"
-#include "include/Context.h"
 #include "librbd/Utils.h"
 
 #include <experimental/filesystem>
@@ -23,9 +22,9 @@ ObjectCacheStore::ObjectCacheStore(CephContext *cct, ContextWQ* work_queue)
         m_ioctxs_lock("ceph::cache::ObjectCacheStore::m_ioctxs_lock") {
 
   object_cache_entries =
-    m_cct->_conf.get_val<int64_t>("rbd_shared_cache_entries");
+    m_cct->_conf.get_val<Option::size_t>("immutable_object_cache_max_size");
 
-  std::string cache_path = m_cct->_conf.get_val<std::string>("rbd_shared_cache_path");
+  std::string cache_path = m_cct->_conf.get_val<std::string>("immutable_object_cache_path");
   m_cache_root_dir = cache_path + "/ceph_immutable_obj_cache/";
 
   //TODO(): allow to set cache level
@@ -86,7 +85,7 @@ int ObjectCacheStore::init_cache(std::string pool_name, std::string vol_name, ui
 
   std::string vol_cache_dir = m_cache_root_dir + pool_name + "_" + vol_name;
 
-  int dir = dir_num - 1;
+  int dir = m_dir_num - 1;
   while (dir >= 0) {
     efs::create_directories(vol_cache_dir + "/" + std::to_string(dir));
     dir --;
@@ -154,12 +153,12 @@ int ObjectCacheStore::handle_promote_callback(int ret, bufferlist* read_buf,
     read_buf->append(std::string(object_size - ret, '0'));
   }
 
-  if (dir_num > 0) {
+  if (m_dir_num > 0) {
     auto const pos = cache_file_name.find_last_of('.');
-    cache_dir = cache_dir + "/" + std::to_string(stoul(cache_file_name.substr(pos+1)) % dir_num);
+    cache_dir = cache_dir + "/" + std::to_string(stoul(cache_file_name.substr(pos+1)) % m_dir_num);
   }
   // write to cache
-  SyncFile cache_file(m_cct, cache_dir + "/" + cache_file_name);
+  ObjectCacheFile cache_file(m_cct, cache_dir + "/" + cache_file_name);
   cache_file.create();
 
   ret = cache_file.write_object_to_file(*read_buf, object_size);
@@ -253,9 +252,9 @@ int ObjectCacheStore::do_evict(std::string cache_file) {
 
   std::string cache_dir = m_cache_root_dir + pool_name + "_" + vol_name;
 
-   if (dir_num > 0) {
+   if (m_dir_num > 0) {
     auto const pos = cache_file.find_last_of('.');
-    cache_dir = cache_dir + "/" + std::to_string(stoul(cache_file.substr(pos+1)) % dir_num);
+    cache_dir = cache_dir + "/" + std::to_string(stoul(cache_file.substr(pos+1)) % m_dir_num);
   }
   std::string cache_file_path = cache_dir + "/" + cache_file;
 

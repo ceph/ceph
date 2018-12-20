@@ -19,7 +19,7 @@ void usage() {
   std::cout << "  -m monaddress[:port]      connect to specified monitor\n";
   std::cout << "  --keyring=<path>          path to keyring for local cluster\n";
   std::cout << "  --log-file=<logfile>       file to log debug output\n";
-  std::cout << "  --debug-rbd-cachecontroller=<log-level>/<memory-level>  set rbd-mirror debug level\n";
+  std::cout << "  --debug-immutable-obj-cache=<log-level>/<memory-level>  set debug level\n";
   generic_server_usage();
 }
 
@@ -51,6 +51,7 @@ int main(int argc, const char **argv)
   }
 
   common_init_finish(g_ceph_context);
+  global_init_chdir(g_ceph_context);
 
   init_async_signal_handler();
   register_async_signal_handler(SIGHUP, sighup_handler);
@@ -60,10 +61,8 @@ int main(int argc, const char **argv)
   std::vector<const char*> cmd_args;
   argv_to_vec(argc, argv, cmd_args);
 
-  // disable unnecessary librbd cache
-  g_ceph_context->_conf.set_val_or_die("rbd_cache", "false");
-
-  cachectl = new ceph::immutable_obj_cache::CacheController(g_ceph_context, cmd_args);
+  cachectl = new ceph::immutable_obj_cache::CacheController(g_ceph_context,
+                                                            cmd_args);
   int r = cachectl->init();
   if (r < 0) {
     std::cerr << "failed to initialize: " << cpp_strerror(r) << std::endl;

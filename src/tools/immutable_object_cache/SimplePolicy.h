@@ -1,8 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CEPH_CACHE_SIMPLE_POLICY_HPP
-#define CEPH_CACHE_SIMPLE_POLICY_HPP
+#ifndef CEPH_CACHE_SIMPLE_POLICY_H
+#define CEPH_CACHE_SIMPLE_POLICY_H
 
 #include "common/ceph_context.h"
 #include "common/RWLock.h"
@@ -50,7 +50,8 @@ private:
   CephContext* cct;
   float m_watermark;
   uint64_t m_entry_count;
-  std::atomic<uint8_t> inflight_ops;
+  uint64_t m_max_inflight_ops;
+  std::atomic<uint64_t> inflight_ops = 0;
 
   std::unordered_map<std::string, Entry*> m_cache_map;
   RWLock m_cache_map_lock;
@@ -63,4 +64,4 @@ private:
 
 } // namespace immutable_obj_cache
 } // namespace ceph
-#endif
+#endif // CEPH_CACHE_SIMPLE_POLICY_H

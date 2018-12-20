@@ -15,8 +15,10 @@
 namespace ceph {
 namespace immutable_obj_cache {
 
-CacheSession::CacheSession(uint64_t session_id, boost::asio::io_service& io_service, ProcessMsg processmsg, CephContext* cct)
-    : m_session_id(session_id), m_dm_socket(io_service), process_msg(processmsg), cct(cct)
+CacheSession::CacheSession(uint64_t session_id, io_service& io_service,
+                           ProcessMsg processmsg, CephContext* cct)
+    : m_session_id(session_id), m_dm_socket(io_service),
+      process_msg(processmsg), cct(cct)
     {}
 
 CacheSession::~CacheSession() {
@@ -42,7 +44,8 @@ void CacheSession::start() {
 }
 
 void CacheSession::handing_request() {
-  boost::asio::async_read(m_dm_socket, boost::asio::buffer(m_buffer, RBDSC_MSG_LEN),
+  boost::asio::async_read(m_dm_socket,
+                          boost::asio::buffer(m_buffer, RBDSC_MSG_LEN),
                           boost::asio::transfer_exactly(RBDSC_MSG_LEN),
                           boost::bind(&CacheSession::handle_read,
                                       shared_from_this(),
@@ -50,7 +53,8 @@ void CacheSession::handing_request() {
                                       boost::asio::placeholders::bytes_transferred));
 }
 
-void CacheSession::handle_read(const boost::system::error_code& err, size_t bytes_transferred) {
+void CacheSession::handle_read(const boost::system::error_code& err,
+                               size_t bytes_transferred) {
   if (err == boost::asio::error::eof ||
      err == boost::asio::error::connection_reset ||
      err == boost::asio::error::operation_aborted ||
@@ -73,14 +77,15 @@ void CacheSession::handle_read(const boost::system::error_code& err, size_t byte
   process_msg(m_session_id, std::string(m_buffer, bytes_transferred));
 }
 
-void CacheSession::handle_write(const boost::system::error_code& error, size_t bytes_transferred) {
+void CacheSession::handle_write(const boost::system::error_code& error,
+                                size_t bytes_transferred) {
   if (error) {
-    ldout(cct, 20) << "session: async_write fails: " << error.message() << dendl;
+    ldout(cct, 20) << "async_write failed: " << error.message() << dendl;
     assert(0);
   }
 
   if(bytes_transferred != RBDSC_MSG_LEN) {
-    ldout(cct, 20) << "session : reply in-complete. "<<dendl;
+    ldout(cct, 20) << "reply in-complete. "<<dendl;
     assert(0);
   }
 

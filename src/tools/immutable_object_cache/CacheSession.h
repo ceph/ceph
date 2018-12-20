@@ -16,13 +16,15 @@
 
 
 using boost::asio::local::stream_protocol;
+using boost::asio::io_service;
 
 namespace ceph {
 namespace immutable_obj_cache {
 
 class CacheSession : public std::enable_shared_from_this<CacheSession> {
 public:
-  CacheSession(uint64_t session_id, boost::asio::io_service& io_service, ProcessMsg processmsg, CephContext* cct);
+  CacheSession(uint64_t session_id, io_service& io_service,
+               ProcessMsg processmsg, CephContext* cct);
   ~CacheSession();
 
   stream_protocol::socket& socket();
@@ -32,9 +34,11 @@ public:
 
 private:
 
-  void handle_read(const boost::system::error_code& error, size_t bytes_transferred);
+  void handle_read(const boost::system::error_code& error,
+                   size_t bytes_transferred);
 
-  void handle_write(const boost::system::error_code& error, size_t bytes_transferred);
+  void handle_write(const boost::system::error_code& error,
+                    size_t bytes_transferred);
 
 public:
   void send(std::string msg);

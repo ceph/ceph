@@ -9,7 +9,6 @@
 #include <boost/bind.hpp>
 #include <boost/asio/error.hpp>
 #include <boost/algorithm/string.hpp>
-#include "librbd/ImageCtx.h"
 #include "include/ceph_assert.h"
 #include "include/Context.h"
 #include "SocketCommon.h"
