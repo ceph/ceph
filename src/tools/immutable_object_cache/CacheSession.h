@@ -4,16 +4,11 @@
 #ifndef CEPH_CACHE_SESSION_H
 #define CEPH_CACHE_SESSION_H
 
-#include <iostream>
-#include <string>
 #include <boost/bind.hpp>
 #include <boost/asio.hpp>
 #include <boost/asio/error.hpp>
-#include <boost/algorithm/string.hpp>
 
-#include "include/ceph_assert.h"
 #include "SocketCommon.h"
-
 
 using boost::asio::local::stream_protocol;
 using boost::asio::io_service;
