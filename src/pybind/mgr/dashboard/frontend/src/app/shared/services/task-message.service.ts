@@ -20,13 +20,17 @@ export class TaskMessageOperation {
 }
 
 class TaskMessage {
+  i18n: I18n;
+
   operation: TaskMessageOperation;
   involves: (object) => string;
   errors: (metadata) => object;
 
   failure(metadata): string {
-    // TODO: I18N
-    return `Failed to ${this.operation.failure} ${this.involves(metadata)}`;
+    return this.i18n('Failed to {{failure}} {{metadata}}', {
+      failure: this.operation.failure,
+      metadata: this.involves(metadata)
+    });
   }
 
   running(metadata): string {
@@ -38,10 +42,12 @@ class TaskMessage {
   }
 
   constructor(
+    i18n: I18n,
     operation: TaskMessageOperation,
     involves: (metadata) => string,
     errors?: (metadata) => object
   ) {
+    this.i18n = i18n;
     this.operation = operation;
     this.involves = involves;
     this.errors = errors || (() => ({}));
@@ -54,7 +60,7 @@ class TaskMessage {
 export class TaskMessageService {
   constructor(private i18n: I18n) {}
 
-  defaultMessage = new TaskMessage(
+  defaultMessage = this.newTaskMessage(
     new TaskMessageOperation(this.i18n('Executing'), this.i18n('execute'), this.i18n('Executed')),
     (metadata) => {
       return (
@@ -117,7 +123,7 @@ export class TaskMessageService {
 
   messages = {
     // Pool tasks
-    'pool/create': new TaskMessage(
+    'pool/create': this.newTaskMessage(
       this.commonOperations.create,
       (metadata) => this.pool(metadata),
       (metadata) => ({
@@ -126,7 +132,7 @@ export class TaskMessageService {
         })
       })
     ),
-    'pool/edit': new TaskMessage(
+    'pool/edit': this.newTaskMessage(
       this.commonOperations.update,
       (metadata) => this.pool(metadata),
       (metadata) => ({
@@ -135,9 +141,11 @@ export class TaskMessageService {
         })
       })
     ),
-    'pool/delete': new TaskMessage(this.commonOperations.delete, (metadata) => this.pool(metadata)),
+    'pool/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
+      this.pool(metadata)
+    ),
     // Erasure code profile tasks
-    'ecp/create': new TaskMessage(
+    'ecp/create': this.newTaskMessage(
       this.commonOperations.create,
       (metadata) => this.ecp(metadata),
       (metadata) => ({
@@ -146,24 +154,34 @@ export class TaskMessageService {
         })
       })
     ),
-    'ecp/delete': new TaskMessage(this.commonOperations.delete, (metadata) => this.ecp(metadata)),
+    'ecp/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
+      this.ecp(metadata)
+    ),
     // RBD tasks
-    'rbd/create': new TaskMessage(this.commonOperations.create, this.rbd.default, (metadata) => ({
+    'rbd/create': this.newTaskMessage(
+      this.commonOperations.create,
+      this.rbd.default,
+      (metadata) => ({
+        '17': this.i18n('Name is already used by {{rbd_name}}.', {
+          rbd_name: this.rbd.default(metadata)
+        })
+      })
+    ),
+    'rbd/edit': this.newTaskMessage(this.commonOperations.update, this.rbd.default, (metadata) => ({
       '17': this.i18n('Name is already used by {{rbd_name}}.', {
         rbd_name: this.rbd.default(metadata)
       })
     })),
-    'rbd/edit': new TaskMessage(this.commonOperations.update, this.rbd.default, (metadata) => ({
-      '17': this.i18n('Name is already used by {{rbd_name}}.', {
-        rbd_name: this.rbd.default(metadata)
+    'rbd/delete': this.newTaskMessage(
+      this.commonOperations.delete,
+      this.rbd.default,
+      (metadata) => ({
+        '39': this.i18n('{{rbd_name}} contains snapshots.', {
+          rbd_name: this.rbd.default(metadata)
+        })
       })
-    })),
-    'rbd/delete': new TaskMessage(this.commonOperations.delete, this.rbd.default, (metadata) => ({
-      '39': this.i18n('{{rbd_name}} contains snapshots.', {
-        rbd_name: this.rbd.default(metadata)
-      })
-    })),
-    'rbd/clone': new TaskMessage(
+    ),
+    'rbd/clone': this.newTaskMessage(
       new TaskMessageOperation(this.i18n('Cloning'), this.i18n('clone'), this.i18n('Cloned')),
       this.rbd.child,
       (metadata) => ({
@@ -175,7 +193,7 @@ export class TaskMessageService {
         })
       })
     ),
-    'rbd/copy': new TaskMessage(
+    'rbd/copy': this.newTaskMessage(
       new TaskMessageOperation(this.i18n('Copying'), this.i18n('copy'), this.i18n('Copied')),
       this.rbd.destination,
       (metadata) => ({
@@ -184,7 +202,7 @@ export class TaskMessageService {
         })
       })
     ),
-    'rbd/flatten': new TaskMessage(
+    'rbd/flatten': this.newTaskMessage(
       new TaskMessageOperation(
         this.i18n('Flattening'),
         this.i18n('flatten'),
@@ -193,7 +211,7 @@ export class TaskMessageService {
       this.rbd.default
     ),
     // RBD snapshot tasks
-    'rbd/snap/create': new TaskMessage(
+    'rbd/snap/create': this.newTaskMessage(
       this.commonOperations.create,
       this.rbd.snapshot,
       (metadata) => ({
@@ -202,7 +220,7 @@ export class TaskMessageService {
         })
       })
     ),
-    'rbd/snap/edit': new TaskMessage(
+    'rbd/snap/edit': this.newTaskMessage(
       this.commonOperations.update,
       this.rbd.snapshot,
       (metadata) => ({
@@ -211,7 +229,7 @@ export class TaskMessageService {
         })
       })
     ),
-    'rbd/snap/delete': new TaskMessage(
+    'rbd/snap/delete': this.newTaskMessage(
       this.commonOperations.delete,
       this.rbd.snapshot,
       (metadata) => ({
@@ -220,7 +238,7 @@ export class TaskMessageService {
         })
       })
     ),
-    'rbd/snap/rollback': new TaskMessage(
+    'rbd/snap/rollback': this.newTaskMessage(
       new TaskMessageOperation(
         this.i18n('Rolling back'),
         this.i18n('rollback'),
@@ -229,7 +247,7 @@ export class TaskMessageService {
       this.rbd.snapshot
     ),
     // RBD trash tasks
-    'rbd/trash/move': new TaskMessage(
+    'rbd/trash/move': this.newTaskMessage(
       new TaskMessageOperation(this.i18n('Moving'), this.i18n('move'), this.i18n('Moved')),
       (metadata) =>
         this.i18n(`image '{{id}}' to trash`, {
@@ -239,7 +257,7 @@ export class TaskMessageService {
         2: this.i18n('Could not find image.')
       })
     ),
-    'rbd/trash/restore': new TaskMessage(
+    'rbd/trash/restore': this.newTaskMessage(
       new TaskMessageOperation(this.i18n('Restoring'), this.i18n('restore'), this.i18n('Restored')),
       (metadata) =>
         this.i18n(`image '{{id}}' into '{{new_id}}'`, {
@@ -252,14 +270,14 @@ export class TaskMessageService {
         })
       })
     ),
-    'rbd/trash/remove': new TaskMessage(
+    'rbd/trash/remove': this.newTaskMessage(
       new TaskMessageOperation(this.i18n('Deleting'), this.i18n('delete'), this.i18n('Deleted')),
       (metadata) =>
         this.i18n(`image '{{id}}'`, {
           id: `${metadata.pool_name}/${metadata.image_name}@${metadata.image_id}`
         })
     ),
-    'rbd/trash/purge': new TaskMessage(
+    'rbd/trash/purge': this.newTaskMessage(
       new TaskMessageOperation(this.i18n('Purging'), this.i18n('purge'), this.i18n('Purged')),
       (metadata) => {
         let message = this.i18n('all pools');
@@ -272,29 +290,37 @@ export class TaskMessageService {
       }
     ),
     // RBD mirroring tasks
-    'rbd/mirroring/pool/edit': new TaskMessage(
+    'rbd/mirroring/pool/edit': this.newTaskMessage(
       this.commonOperations.update,
       this.rbd_mirroring.pool,
       (metadata) => ({
         16: this.i18n('Cannot disable mirroring because it contains a peer.')
       })
     ),
-    'rbd/mirroring/peer/add': new TaskMessage(
+    'rbd/mirroring/peer/add': this.newTaskMessage(
       this.commonOperations.create,
       this.rbd_mirroring.pool_peer,
       (metadata) => ({})
     ),
-    'rbd/mirroring/peer/edit': new TaskMessage(
+    'rbd/mirroring/peer/edit': this.newTaskMessage(
       this.commonOperations.update,
       this.rbd_mirroring.pool_peer,
       (metadata) => ({})
     ),
-    'rbd/mirroring/peer/delete': new TaskMessage(
+    'rbd/mirroring/peer/delete': this.newTaskMessage(
       this.commonOperations.delete,
       this.rbd_mirroring.pool_peer,
       (metadata) => ({})
     )
   };
+
+  newTaskMessage(
+    operation: TaskMessageOperation,
+    involves: (metadata) => string,
+    errors?: (metadata) => object
+  ) {
+    return new TaskMessage(this.i18n, operation, involves, errors);
+  }
 
   pool(metadata) {
     return this.i18n(`pool '{{pool_name}}'`, {

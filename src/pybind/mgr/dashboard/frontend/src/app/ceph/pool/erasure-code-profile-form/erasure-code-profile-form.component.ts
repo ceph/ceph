@@ -10,7 +10,6 @@ import { CdValidators } from '../../../shared/forms/cd-validators';
 import { ErasureCodeProfile } from '../../../shared/models/erasure-code-profile';
 import { FinishedTask } from '../../../shared/models/finished-task';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
-import { ErasureCodeProfileFormTooltips } from './erasure-code-profile-form-tooltips';
 
 @Component({
   selector: 'cd-erasure-code-profile-form',
@@ -28,7 +27,7 @@ export class ErasureCodeProfileFormComponent implements OnInit {
   techniques: string[];
   requiredControls: string[] = [];
   devices: string[] = [];
-  tooltips = new ErasureCodeProfileFormTooltips();
+  tooltips = this.ecpService.formTooltips;
 
   PLUGIN = {
     LRC: 'lrc', // Locally Repairable Erasure Code

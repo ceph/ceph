@@ -1,6 +1,8 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
+import { I18n } from '@ngx-translate/i18n-polyfill';
+
 import { ApiModule } from './api.module';
 
 @Injectable({
@@ -9,7 +11,52 @@ import { ApiModule } from './api.module';
 export class OsdService {
   private path = 'api/osd';
 
-  constructor(private http: HttpClient) {}
+  osdRecvSpeedModalPriorities = {
+    KNOWN_PRIORITIES: [
+      {
+        name: null,
+        text: this.i18n('-- Select the priority --'),
+        values: {
+          osd_max_backfills: null,
+          osd_recovery_max_active: null,
+          osd_recovery_max_single_start: null,
+          osd_recovery_sleep: null
+        }
+      },
+      {
+        name: 'low',
+        text: this.i18n('Low'),
+        values: {
+          osd_max_backfills: 1,
+          osd_recovery_max_active: 1,
+          osd_recovery_max_single_start: 1,
+          osd_recovery_sleep: 0.5
+        }
+      },
+      {
+        name: 'default',
+        text: this.i18n('Default'),
+        values: {
+          osd_max_backfills: 1,
+          osd_recovery_max_active: 3,
+          osd_recovery_max_single_start: 1,
+          osd_recovery_sleep: 0
+        }
+      },
+      {
+        name: 'high',
+        text: this.i18n('High'),
+        values: {
+          osd_max_backfills: 4,
+          osd_recovery_max_active: 4,
+          osd_recovery_max_single_start: 4,
+          osd_recovery_sleep: 0
+        }
+      }
+    ]
+  };
+
+  constructor(private http: HttpClient, private i18n: I18n) {}
 
   getList() {
     return this.http.get(`${this.path}`);

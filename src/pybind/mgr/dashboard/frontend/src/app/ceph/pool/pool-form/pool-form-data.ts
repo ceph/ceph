@@ -22,19 +22,22 @@ export class PoolFormData {
         new SelectBadgesOption(false, 'rgw', '')
       ],
       validators: [Validators.pattern('[A-Za-z0-9_]+'), Validators.maxLength(128)],
-      messages: new SelectBadgesMessages({
-        empty: i18n('No applications added'),
-        selectionLimit: {
-          text: i18n('Applications limit reached'),
-          tooltip: i18n('A pool can only have up to four applications definitions.')
+      messages: new SelectBadgesMessages(
+        {
+          empty: i18n('No applications added'),
+          selectionLimit: {
+            text: i18n('Applications limit reached'),
+            tooltip: i18n('A pool can only have up to four applications definitions.')
+          },
+          customValidations: {
+            pattern: i18n(`Allowed characters '_a-zA-Z0-9'`),
+            maxlength: i18n('Maximum length is 128 characters')
+          },
+          filter: i18n('Filter or add applications'),
+          add: i18n('Add application')
         },
-        customValidations: {
-          pattern: i18n(`Allowed characters '_a-zA-Z0-9'`),
-          maxlength: i18n('Maximum length is 128 characters')
-        },
-        filter: i18n('Filter or add applications'),
-        add: i18n('Add application')
-      })
+        i18n
+      )
     };
   }
 

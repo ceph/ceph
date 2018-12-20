@@ -1,6 +1,7 @@
 import { Component, Input, OnChanges, OnInit } from '@angular/core';
 import { FormControl, ValidatorFn } from '@angular/forms';
 
+import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 
 import { CdFormGroup } from '../../forms/cd-form-group';
@@ -18,7 +19,7 @@ export class SelectBadgesComponent implements OnInit, OnChanges {
   @Input()
   options: Array<SelectBadgesOption> = [];
   @Input()
-  messages = new SelectBadgesMessages({});
+  messages = new SelectBadgesMessages({}, this.i18n);
   @Input()
   selectionLimit: number;
   @Input()
@@ -30,7 +31,7 @@ export class SelectBadgesComponent implements OnInit, OnChanges {
   Object = Object;
   filteredOptions: Array<SelectBadgesOption> = [];
 
-  constructor() {}
+  constructor(private i18n: I18n) {}
 
   ngOnInit() {
     this.initFilter();
