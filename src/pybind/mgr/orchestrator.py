@@ -365,6 +365,20 @@ class ServiceDescription(object):
         # Service status description when status == -1.
         self.status_desc = None
 
+    def to_json(self):
+        out = {
+            'nodename': self.nodename,
+            'container_id': self.container_id,
+            'daemon_name': self.daemon_name,
+            'service_type': self.service_type,
+            'version': self.version,
+            'rados_config_location': self.rados_config_location,
+            'service_url': self.service_url,
+            'status': self.status,
+            'status_desc': self.status_desc,
+        }
+        return {k:v for (k,v) in out.items() if v is not None}
+
 
 class DriveGroupSpec(object):
     """
@@ -476,9 +490,19 @@ class InventoryDevice(object):
         # how much space is available.
         self.metadata_space_free = None
 
+    def to_json(self):
+        return dict(type=self.type, blank=self.blank, id=self.id, size=self.size, **self.extended)
+
 
 class InventoryNode(object):
+    """
+    When fetching inventory, all Devices are groups inside of an
+    InventoryNode.
+    """
     def __init__(self, name, devices):
         assert isinstance(devices, list)
         self.name = name  # unique within cluster.  For example a hostname.
-        self.devices = devices  # list of InventoryDevice
+        self.devices = devices  # type: List[InventoryDevice]
+
+    def to_json(self):
+       return {'name': self.name, 'devices': [d.to_json() for d in self.devices]}
