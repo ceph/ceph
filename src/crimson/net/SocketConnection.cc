@@ -26,6 +26,7 @@
 
 #include "crimson/common/log.h"
 #include "Config.h"
+#include "Dispatcher.h"
 #include "Errors.h"
 #include "SocketMessenger.h"
 
@@ -43,15 +44,18 @@ namespace {
 }
 
 SocketConnection::SocketConnection(SocketMessenger& messenger,
-                                   const entity_addr_t& my_addr)
+                                   const entity_addr_t& my_addr,
+                                   Dispatcher& dispatcher)
   : Connection(my_addr),
     messenger(messenger),
+    dispatcher(dispatcher),
     send_ready(h.promise.get_future())
 {
 }
 
 SocketConnection::~SocketConnection()
 {
+  ceph_assert(pending_dispatch.is_closed());
   // errors were reported to callers of send()
   ceph_assert(send_ready.available());
   send_ready.ignore_ready_future();
@@ -310,10 +314,13 @@ seastar::future<> SocketConnection::close()
   assert(!close_ready.valid());
 
   if (socket) {
-    close_ready = socket->close().finally(std::move(cleanup));
+    close_ready = socket->close()
+      .then([this] {
+        return pending_dispatch.close();
+      }).finally(std::move(cleanup));
   } else {
     ceph_assert(state == state_t::connecting);
-    close_ready = seastar::now();
+    close_ready = pending_dispatch.close().finally(std::move(cleanup));
   }
   state = state_t::closing;
   return close_ready.get_future();
@@ -453,9 +460,9 @@ SocketConnection::repeat_handle_connect()
         return seastar::make_ready_future<msgr_tag_t, bufferlist>(
             CEPH_MSGR_TAG_FEATURES, bufferlist{});
       }
-      return messenger.verify_authorizer(peer_type,
-                                         h.connect.authorizer_protocol,
-                                         authorizer);
+      return dispatcher.ms_verify_authorizer(peer_type,
+                                             h.connect.authorizer_protocol,
+                                             authorizer);
     }).then([this] (ceph::net::msgr_tag_t tag, bufferlist&& authorizer_reply) {
       memset(&h.reply, 0, sizeof(h.reply));
       if (tag) {
@@ -526,8 +533,6 @@ SocketConnection::send_connect_reply_ready(msgr_tag_t tag,
         return socket->flush();
       }
     }).then([this] {
-      messenger.register_conn(this);
-      messenger.unaccept_conn(this);
       return stop_t::yes;
     });
 }
@@ -637,7 +642,7 @@ SocketConnection::handle_connect_reply(msgr_tag_t tag)
     }
     h.got_bad_auth = true;
     // try harder
-    return messenger.get_authorizer(peer_type, true)
+    return dispatcher.ms_get_authorizer(peer_type, true)
       .then([this](auto&& auth) {
         h.authorizer = std::move(auth);
         return stop_t::no;
@@ -729,7 +734,7 @@ SocketConnection::repeat_connect()
   // this is fyi, actually, server decides!
   h.connect.flags = policy.lossy ? CEPH_MSG_CONNECT_LOSSY : 0;
 
-  return messenger.get_authorizer(peer_type, false)
+  return dispatcher.ms_get_authorizer(peer_type, false)
     .then([this](auto&& auth) {
       h.authorizer = std::move(auth);
       bufferlist bl;
@@ -764,7 +769,7 @@ SocketConnection::repeat_connect()
     });
 }
 
-seastar::future<>
+void
 SocketConnection::start_connect(const entity_addr_t& _peer_addr,
                                 const entity_type_t& _peer_type)
 {
@@ -774,52 +779,59 @@ SocketConnection::start_connect(const entity_addr_t& _peer_addr,
   peer_type = _peer_type;
   messenger.register_conn(this);
   state = state_t::connecting;
-  return seastar::connect(peer_addr.in4_addr())
-    .then([this](seastar::connected_socket fd) {
-      if (state == state_t::closing) {
-        fd.shutdown_input();
-        fd.shutdown_output();
-        throw std::system_error(make_error_code(error::connection_aborted));
-      }
-      socket.emplace(std::move(fd));
-      // read server's handshake header
-      return socket->read(server_header_size);
-    }).then([this] (bufferlist headerbl) {
-      auto p = headerbl.cbegin();
-      validate_banner(p);
-      entity_addr_t saddr, caddr;
-      ::decode(saddr, p);
-      ::decode(caddr, p);
-      ceph_assert(p.end());
-      validate_peer_addr(saddr, peer_addr);
+  seastar::with_gate(pending_dispatch, [this] {
+      return seastar::connect(peer_addr.in4_addr())
+        .then([this](seastar::connected_socket fd) {
+          if (state == state_t::closing) {
+            fd.shutdown_input();
+            fd.shutdown_output();
+            throw std::system_error(make_error_code(error::connection_aborted));
+          }
+          socket.emplace(std::move(fd));
+          // read server's handshake header
+          return socket->read(server_header_size);
+        }).then([this] (bufferlist headerbl) {
+          auto p = headerbl.cbegin();
+          validate_banner(p);
+          entity_addr_t saddr, caddr;
+          ::decode(saddr, p);
+          ::decode(caddr, p);
+          ceph_assert(p.end());
+          validate_peer_addr(saddr, peer_addr);
 
-      if (my_addr != caddr) {
-        // take peer's address for me, but preserve my nonce
-        caddr.nonce = my_addr.nonce;
-        my_addr = caddr;
-      }
-      // encode/send client's handshake header
-      bufferlist bl;
-      bl.append(buffer::create_static(banner_size, banner));
-      ::encode(my_addr, bl, 0);
-      h.global_seq = messenger.get_global_seq();
-      return socket->write_flush(std::move(bl));
-    }).then([=] {
-      return seastar::repeat([this] {
-        return repeat_connect();
-      });
-      // TODO: handle errors for state_t::connecting
-    }).then([this] {
-      state = state_t::open;
-      // start background processing of tags
-      read_tags_until_next_message();
-    }).then_wrapped([this] (auto fut) {
-      // satisfy the handshake's promise
-      fut.forward_to(std::move(h.promise));
+          if (my_addr != caddr) {
+            // take peer's address for me, but preserve my nonce
+            caddr.nonce = my_addr.nonce;
+            my_addr = caddr;
+          }
+          // encode/send client's handshake header
+          bufferlist bl;
+          bl.append(buffer::create_static(banner_size, banner));
+          ::encode(my_addr, bl, 0);
+          h.global_seq = messenger.get_global_seq();
+          return socket->write_flush(std::move(bl));
+        }).then([=] {
+          return seastar::repeat([this] {
+            return repeat_connect();
+          });
+        }).then_wrapped([this] (auto fut) {
+          // TODO: do not forward the exception
+          //       and let the reconnect happen transparently inside connection
+          // satisfy the handshake's promise
+          fut.forward_to(std::move(h.promise));
+        }).then([this] {
+          // notify the dispatcher and allow them to reject the connection
+          return dispatcher.ms_handle_connect(this);
+        }).then([this] {
+          execute_open();
+        }).handle_exception([this] (std::exception_ptr eptr) {
+          // TODO: handle fault in the connecting state
+          close();
+        });
     });
 }
 
-seastar::future<>
+void
 SocketConnection::start_accept(seastar::connected_socket&& fd,
                                const entity_addr_t& _peer_addr)
 {
@@ -829,36 +841,78 @@ SocketConnection::start_accept(seastar::connected_socket&& fd,
   socket.emplace(std::move(fd));
   messenger.accept_conn(this);
   state = state_t::accepting;
-  // encode/send server's handshake header
-  bufferlist bl;
-  bl.append(buffer::create_static(banner_size, banner));
-  ::encode(my_addr, bl, 0);
-  ::encode(peer_addr, bl, 0);
-  return socket->write_flush(std::move(bl))
-    .then([this] {
-      // read client's handshake header and connect request
-      return socket->read(client_header_size);
-    }).then([this] (bufferlist bl) {
-      auto p = bl.cbegin();
-      validate_banner(p);
-      entity_addr_t addr;
-      ::decode(addr, p);
-      ceph_assert(p.end());
-      if (!addr.is_blank_ip()) {
-        peer_addr = addr;
-      }
-    }).then([this] {
-      return seastar::repeat([this] {
-        return repeat_handle_connect();
-      });
-      // TODO: handle errors for state_t::accepting
-    }).then([this] {
-      state = state_t::open;
+  seastar::with_gate(pending_dispatch, [this] {
+      // encode/send server's handshake header
+      bufferlist bl;
+      bl.append(buffer::create_static(banner_size, banner));
+      ::encode(my_addr, bl, 0);
+      ::encode(peer_addr, bl, 0);
+      return socket->write_flush(std::move(bl))
+        .then([this] {
+          // read client's handshake header and connect request
+          return socket->read(client_header_size);
+        }).then([this] (bufferlist bl) {
+          auto p = bl.cbegin();
+          validate_banner(p);
+          entity_addr_t addr;
+          ::decode(addr, p);
+          ceph_assert(p.end());
+          if (!addr.is_blank_ip()) {
+            peer_addr = addr;
+          }
+        }).then([this] {
+          return seastar::repeat([this] {
+            return repeat_handle_connect();
+          });
+        }).then_wrapped([this] (auto fut) {
+          // TODO: do not forward the exception
+          //       and let the reconnect happen transparently inside connection
+          // satisfy the handshake's promise
+          fut.forward_to(std::move(h.promise));
+        }).then([this] {
+          // notify the dispatcher and allow them to reject the connection
+          return dispatcher.ms_handle_accept(this);
+        }).then([this] {
+          messenger.register_conn(this);
+          messenger.unaccept_conn(this);
+          execute_open();
+        }).handle_exception([this] (std::exception_ptr eptr) {
+          // TODO: handle fault in the accepting state
+          close();
+        });
+    });
+}
+
+void
+SocketConnection::execute_open()
+{
+  state = state_t::open;
+  seastar::with_gate(pending_dispatch, [this] {
       // start background processing of tags
       read_tags_until_next_message();
-    }).then_wrapped([this] (auto fut) {
-      // satisfy the handshake's promise
-      fut.forward_to(std::move(h.promise));
+      return seastar::keep_doing([this] {
+          return read_message()
+            .then([this] (MessageRef msg) {
+              // start dispatch, ignoring exceptions from the application layer
+              seastar::with_gate(pending_dispatch, [this, msg = std::move(msg)] {
+                  return dispatcher.ms_dispatch(this, std::move(msg))
+                    .handle_exception([] (std::exception_ptr eptr) {});
+                });
+              // return immediately to start on the next message
+              return seastar::now();
+            });
+        }).handle_exception_type([this] (const std::system_error& e) {
+          if (e.code() == error::connection_aborted ||
+              e.code() == error::connection_reset) {
+            return dispatcher.ms_handle_reset(this);
+          } else if (e.code() == error::read_eof) {
+            return dispatcher.ms_handle_remote_reset(this);
+          } else {
+            throw e;
+          }
+        }).handle_exception([] (std::exception_ptr eptr) {
+          // TODO: handle fault in the open state
+        });
     });
 }
 
