@@ -960,6 +960,12 @@ void MemStore::_do_transaction(Transaction& t)
       }
       break;
 
+    case Transaction::OP_COLL_SET_BITS:
+      {
+        r = 0;
+      }
+      break;
+
     default:
       derr << "bad op " << op->op << dendl;
       ceph_abort();

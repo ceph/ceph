@@ -1481,9 +1481,9 @@ private:
   hobject_t get_temp_recovery_object(const hobject_t& target,
 				     eversion_t version) override;
   int get_recovery_op_priority() const {
-      int pri = 0;
-      pool.info.opts.get(pool_opts_t::RECOVERY_OP_PRIORITY, &pri);
-      return  pri > 0 ? pri : cct->_conf->osd_recovery_op_priority;
+    int64_t pri = 0;
+    pool.info.opts.get(pool_opts_t::RECOVERY_OP_PRIORITY, &pri);
+    return  pri > 0 ? pri : cct->_conf->osd_recovery_op_priority;
   }
   void log_missing(unsigned missing,
 			const boost::optional<hobject_t> &head,

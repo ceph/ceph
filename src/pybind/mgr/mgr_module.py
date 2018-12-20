@@ -126,6 +126,16 @@ class OSDMap(ceph_module.BasePyOSDMap):
     def dump(self):
         return self._dump()
 
+    def get_pools(self):
+        # FIXME: efficient implementation
+        d = self._dump()
+        return dict([(p['pool'], p) for p in d['pools']])
+
+    def get_pools_by_name(self):
+        # FIXME: efficient implementation
+        d = self._dump()
+        return dict([(p['pool_name'], p) for p in d['pools']])
+
     def new_incremental(self):
         return self._new_incremental()
 
@@ -150,6 +160,14 @@ class OSDMap(ceph_module.BasePyOSDMap):
     def pg_to_up_acting_osds(self, pool_id, ps):
         return self._pg_to_up_acting_osds(pool_id, ps)
 
+    def pool_raw_used_rate(self, pool_id):
+        return self._pool_raw_used_rate(pool_id)
+
+    def get_ec_profile(self, name):
+        # FIXME: efficient implementation
+        d = self._dump()
+        return d['erasure_code_profiles'].get(name, None)
+
 
 class OSDMapIncremental(ceph_module.BasePyOSDMapIncremental):
     def get_epoch(self):
@@ -170,6 +188,7 @@ class OSDMapIncremental(ceph_module.BasePyOSDMapIncremental):
         { 0: 3.4, 1: 3.3, 2: 3.334 }
         """
         return self._set_crush_compat_weight_set_weights(weightmap)
+
 
 class CRUSHMap(ceph_module.BasePyCRUSH):
     ITEM_NONE = 0x7fffffff
@@ -198,6 +217,66 @@ class CRUSHMap(ceph_module.BasePyCRUSH):
     @staticmethod
     def get_default_choose_args(dump):
         return dump.get('choose_args').get(CRUSHMap.DEFAULT_CHOOSE_ARGS, [])
+
+    def get_rule(self, rule_name):
+        # TODO efficient implementation
+        for rule in self.dump()['rules']:
+            if rule_name == rule['rule_name']:
+                return rule
+
+        return None
+
+    def get_rule_by_id(self, rule_id):
+        for rule in self.dump()['rules']:
+            if rule['rule_id'] == rule_id:
+                return rule
+
+        return None
+
+    def get_rule_root(self, rule_name):
+        rule = self.get_rule(rule_name)
+        if rule is None:
+            return None
+
+        try:
+            first_take = [s for s in rule['steps'] if s['op'] == 'take'][0]
+        except IndexError:
+            self.log.warn("CRUSH rule '{0}' has no 'take' step".format(
+                rule_name))
+            return None
+        else:
+            return first_take['item']
+
+    def get_osds_under(self, root_id):
+        # TODO don't abuse dump like this
+        d = self.dump()
+        buckets = dict([(b['id'], b) for b in d['buckets']])
+
+        osd_list = []
+
+        def accumulate(b):
+            for item in b['items']:
+                if item['id'] >= 0:
+                    osd_list.append(item['id'])
+                else:
+                    try:
+                        accumulate(buckets[item['id']])
+                    except KeyError:
+                        pass
+
+        accumulate(buckets[root_id])
+
+        return osd_list
+
+    def device_class_counts(self):
+        result = defaultdict(int)
+        # TODO don't abuse dump like this
+        d = self.dump()
+        for device in d['devices']:
+            cls = device.get('class', None)
+            result[cls] += 1
+
+        return dict(result)
 
 
 class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):

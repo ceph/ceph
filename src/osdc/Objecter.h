@@ -2180,7 +2180,6 @@ public:
   void _wait_for_new_map(Context *c, epoch_t epoch, int err=0);
   void wait_for_latest_osdmap(Context *fin);
   void get_latest_version(epoch_t oldest, epoch_t neweset, Context *fin);
-  void _get_latest_version(epoch_t oldest, epoch_t neweset, Context *fin);
 
   /** Get the current set of global op flags */
   int get_global_op_flags() const { return global_op_flags; }

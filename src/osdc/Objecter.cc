@@ -1944,15 +1944,9 @@ void Objecter::wait_for_latest_osdmap(Context *fin)
 void Objecter::get_latest_version(epoch_t oldest, epoch_t newest, Context *fin)
 {
   unique_lock wl(rwlock);
-  _get_latest_version(oldest, newest, fin);
-}
-
-void Objecter::_get_latest_version(epoch_t oldest, epoch_t newest,
-				   Context *fin)
-{
-  // rwlock is locked unique
   if (osdmap->get_epoch() >= newest) {
-  ldout(cct, 10) << __func__ << " latest " << newest << ", have it" << dendl;
+    ldout(cct, 10) << __func__ << " latest " << newest << ", have it" << dendl;
+    wl.unlock();
     if (fin)
       fin->complete(0);
     return;
