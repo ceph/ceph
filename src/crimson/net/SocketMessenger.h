@@ -36,9 +36,6 @@ class SocketMessenger final : public Messenger {
   std::set<SocketConnectionRef> accepting_conns;
   using Throttle = ceph::thread::Throttle;
   ceph::net::PolicySet<Throttle> policy_set;
-  seastar::gate pending_dispatch;
-
-  seastar::future<> dispatch(SocketConnectionRef conn);
 
   seastar::future<> accept(seastar::connected_socket socket,
                            seastar::socket_address paddr);
@@ -54,15 +51,6 @@ class SocketMessenger final : public Messenger {
                         const entity_type_t& peer_type) override;
 
   seastar::future<> shutdown() override;
-
-  seastar::future<msgr_tag_t, bufferlist>
-  verify_authorizer(peer_type_t peer_type,
-		    auth_proto_t protocol,
-		    bufferlist& auth) override;
-
-  seastar::future<std::unique_ptr<AuthAuthorizer>>
-  get_authorizer(peer_type_t peer_type,
-		 bool force_new) override;
 
  public:
   void set_default_policy(const SocketPolicy& p);
