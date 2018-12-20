@@ -232,7 +232,7 @@ BuildRequires:  krb5
 BuildRequires:  krb5-devel
 BuildRequires:  cunit-devel
 BuildRequires:	python%{_python_buildid}-base
-BuildRequires:	python%{_python_buildid}-Cython < 0.29
+BuildRequires:	python%{_python_buildid}-Cython
 BuildRequires:	python%{_python_buildid}-PrettyTable
 BuildRequires:	python%{_python_buildid}-Sphinx
 BuildRequires:  rdma-core-devel
@@ -251,7 +251,7 @@ BuildRequires:  krb5-devel
 BuildRequires:  openssl-devel
 BuildRequires:  CUnit-devel
 BuildRequires:  redhat-lsb-core
-BuildRequires:	Cython < 0.29
+BuildRequires:	Cython
 BuildRequires:	python%{_python_buildid}-prettytable
 BuildRequires:	python%{_python_buildid}-sphinx
 BuildRequires:	lz4-devel >= 1.7
@@ -260,11 +260,11 @@ BuildRequires:	lz4-devel >= 1.7
 %if 0%{?rhel}
 BuildRequires:	python34-devel
 BuildRequires:	python34-setuptools
-BuildRequires:	python34-Cython < 0.29
+BuildRequires:	python34-Cython
 %else
 BuildRequires:	python3-devel
 BuildRequires:	python3-setuptools
-BuildRequires:	python3-Cython < 0.29
+BuildRequires:	python3-Cython
 %endif
 # distro-conditional make check dependencies
 %if 0%{with make_check}
