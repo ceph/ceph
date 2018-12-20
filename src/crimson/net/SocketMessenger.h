@@ -52,15 +52,6 @@ class SocketMessenger final : public Messenger {
 
   seastar::future<> shutdown() override;
 
-  seastar::future<msgr_tag_t, bufferlist>
-  verify_authorizer(peer_type_t peer_type,
-		    auth_proto_t protocol,
-		    bufferlist& auth) override;
-
-  seastar::future<std::unique_ptr<AuthAuthorizer>>
-  get_authorizer(peer_type_t peer_type,
-		 bool force_new) override;
-
  public:
   void set_default_policy(const SocketPolicy& p);
   void set_policy(entity_type_t peer_type, const SocketPolicy& p);
