@@ -36,7 +36,8 @@ public:
   };
 
   struct ColumnFamilyHandle {
-    void* priv = nullptr;
+    ColumnFamilyHandle() : priv(nullptr) {}
+    void* priv;
     bool operator==(struct ColumnFamilyHandle rhs) const {return rhs.priv == priv;}
     bool operator!=(struct ColumnFamilyHandle rhs) const {return rhs.priv != priv;}
     bool operator==(void* rhs) const {return rhs == priv;}
@@ -174,7 +175,7 @@ public:
   /// test whether we can successfully initialize; may have side effects (e.g., create)
   static int test_init(const std::string& type, const std::string& dir);
   virtual int init(string option_str="") = 0;
-  /*
+  /**
    * Opens existing database
    *
    * Makes transition to state that allows to fetch/store data into database.
@@ -192,7 +193,7 @@ public:
    *   0 - success, <0 error code
    */
   virtual int open(std::ostream &out, const std::vector<ColumnFamily>& options = {}) = 0;
-  /*
+  /**
    * Creates new database
    *
    * Enables access to newly created database. This database is empty, with exception that
@@ -213,7 +214,7 @@ public:
 
   virtual void close() { }
 
-  /*
+  /**
    * @defgroup column_family Column Families
    * There are 3 categories of column families.
    *
@@ -234,7 +235,7 @@ public:
    * Merge operator name must not include prefixes handled by mono column families.
    */
 
-  /*
+  /**
    * @ingroup column_family
    * List column families
    *
@@ -253,7 +254,7 @@ public:
   virtual int column_family_list(vector<std::string>& cf_names)
   { cf_names.clear(); return -1; }
 
-  /*
+  /**
    * @ingroup column_family
    * Create new column family
    *
@@ -269,7 +270,7 @@ public:
   virtual int column_family_create(const std::string& cf_name, const std::string& cf_options)
   { ceph_abort_msg("Not implemented"); return -1; }
 
-  /*
+  /**
    * @ingroup column_family
    * Delete column family
    *
@@ -285,7 +286,7 @@ public:
   virtual int column_family_delete(const std::string& cf_name)
   { ceph_abort_msg("Not implemented"); return -1; }
 
-  /*
+  /**
    * @ingroup column_family
    * Get handle to column family
    *
@@ -297,8 +298,8 @@ public:
    * Result:
    *   handle to column family, or nullptr when cf_name does not exist
    */
-  virtual ColumnFamilyHandle column_family_handle(const std::string& cf_name)
-  { ceph_abort_msg("Not implemented"); return {nullptr}; }
+  virtual ColumnFamilyHandle column_family_handle(const std::string& cf_name) const
+  { ceph_abort_msg("Not implemented"); return ColumnFamilyHandle(); }
 
   /// Try to repair K/V database. leveldb and rocksdb require that database must be not opened.
   virtual int repair(std::ostream &out) { return 0; }
@@ -524,7 +525,8 @@ public:
 
   /// estimate space utilization for a prefix (in bytes)
   virtual int64_t estimate_prefix_size(const string& prefix,
-				       const string& key_prefix) {
+				       const string& key_prefix,
+                                       ColumnFamilyHandle cfh = ColumnFamilyHandle()) {
     return 0;
   }
 
