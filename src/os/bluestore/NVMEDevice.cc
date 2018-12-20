@@ -477,7 +477,7 @@ class NVMEManager {
 
  private:
   ceph::mutex lock = ceph::make_mutex("NVMEManager::lock");
-  bool init = false;
+  bool stopping = false;
   std::vector<SharedDriverData*> shared_driver_datas;
   std::thread dpdk_thread;
   ceph::mutex probe_queue_lock = ceph::make_mutex("NVMEManager::probe_queue_lock");
@@ -486,6 +486,17 @@ class NVMEManager {
 
  public:
   NVMEManager() {}
+  ~NVMEManager() {
+    if (!dpdk_thread.joinable())
+      return;
+    {
+      std::lock_guard guard(probe_queue_lock);
+      stopping = true;
+      probe_queue_cond.notify_all();
+    }
+    dpdk_thread.join();
+  }
+
   int try_get(const spdk_nvme_transport_id& trid, SharedDriverData **driver);
   void register_ctrlr(const spdk_nvme_transport_id& trid, spdk_nvme_ctrlr *c, SharedDriverData **driver) {
     ceph_assert(ceph_mutex_is_locked(lock));
@@ -569,9 +580,7 @@ int NVMEManager::try_get(const spdk_nvme_transport_id& trid, SharedDriverData **
 
   uint32_t mem_size_arg = (uint32_t)g_conf().get_val<Option::size_t>("bluestore_spdk_mem");
 
-
-  if (!init) {
-    init = true;
+  if (!dpdk_thread.joinable()) {
     dpdk_thread = std::thread(
       [this, coremask_arg, m_core_arg, mem_size_arg]() {
         static struct spdk_env_opts opts;
@@ -590,7 +599,7 @@ int NVMEManager::try_get(const spdk_nvme_transport_id& trid, SharedDriverData **
           spdk_nvme_retry_count = SPDK_NVME_DEFAULT_RETRY_COUNT;
 
         std::unique_lock l(probe_queue_lock);
-        while (true) {
+        while (!stopping) {
           if (!probe_queue.empty()) {
             ProbeContext* ctxt = probe_queue.front();
             probe_queue.pop_front();
@@ -605,9 +614,11 @@ int NVMEManager::try_get(const spdk_nvme_transport_id& trid, SharedDriverData **
             probe_queue_cond.wait(l);
           }
         }
+        for (auto p : probe_queue)
+          p->done = true;
+        probe_queue_cond.notify_all();
       }
     );
-    dpdk_thread.detach();
   }
 
   ProbeContext ctx{trid, this, nullptr, false};
