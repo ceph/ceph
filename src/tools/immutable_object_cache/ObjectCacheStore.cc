@@ -1,9 +1,9 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "include/Context.h"
 #include "ObjectCacheStore.h"
-#include "librbd/Utils.h"
-
+#include "Utils.h"
 #include <experimental/filesystem>
 
 #define dout_context g_ceph_context
@@ -217,10 +217,10 @@ int ObjectCacheStore::promote_object(librados::IoCtx* ioctx, std::string object_
     on_finish->complete(ret);
   });
 
-  librados::AioCompletion* read_completion = librbd::util::create_rados_callback(ctx);
+  librados::AioCompletion* read_completion = create_rados_callback(ctx);
   int ret = ioctx->aio_read(object_name, read_completion, read_buf, read_len, 0);
   if(ret < 0) {
-    lderr(m_cct) << "fail to read from rados" << dendl;
+    lderr(m_cct) << "failed to read from rados" << dendl;
   }
   read_completion->release();
 

@@ -5,7 +5,9 @@ set(ceph_immutable_object_cache_files
   CacheServer.cc
   CacheClient.cc
   CacheSession.cc
-  SimplePolicy.cc)
+  SimplePolicy.cc
+  Utils.cc
+  )
 add_library(ceph_immutable_object_cache_lib STATIC ${ceph_immutable_object_cache_files})
 
 add_executable(ceph-immutable-object-cache
@@ -15,6 +17,7 @@ add_executable(ceph-immutable-object-cache
   CacheServer.cc
   CacheSession.cc
   SimplePolicy.cc
+  Utils.cc
   main.cc)
 target_link_libraries(ceph-immutable-object-cache
   librados-cxx
