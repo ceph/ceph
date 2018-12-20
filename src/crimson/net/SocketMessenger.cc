@@ -151,17 +151,3 @@ void SocketMessenger::unregister_conn(SocketConnectionRef conn)
   ceph_assert(found->second == conn);
   connections.erase(found);
 }
-
-seastar::future<msgr_tag_t, bufferlist>
-SocketMessenger::verify_authorizer(peer_type_t peer_type,
-				   auth_proto_t protocol,
-				   bufferlist& auth)
-{
-  return dispatcher->ms_verify_authorizer(peer_type, protocol, auth);
-}
-
-seastar::future<std::unique_ptr<AuthAuthorizer>>
-SocketMessenger::get_authorizer(peer_type_t peer_type, bool force_new)
-{
-  return dispatcher->ms_get_authorizer(peer_type, force_new);
-}

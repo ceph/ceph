@@ -460,9 +460,9 @@ SocketConnection::repeat_handle_connect()
         return seastar::make_ready_future<msgr_tag_t, bufferlist>(
             CEPH_MSGR_TAG_FEATURES, bufferlist{});
       }
-      return messenger.verify_authorizer(peer_type,
-                                         h.connect.authorizer_protocol,
-                                         authorizer);
+      return dispatcher.ms_verify_authorizer(peer_type,
+                                             h.connect.authorizer_protocol,
+                                             authorizer);
     }).then([this] (ceph::net::msgr_tag_t tag, bufferlist&& authorizer_reply) {
       memset(&h.reply, 0, sizeof(h.reply));
       if (tag) {
@@ -642,7 +642,7 @@ SocketConnection::handle_connect_reply(msgr_tag_t tag)
     }
     h.got_bad_auth = true;
     // try harder
-    return messenger.get_authorizer(peer_type, true)
+    return dispatcher.ms_get_authorizer(peer_type, true)
       .then([this](auto&& auth) {
         h.authorizer = std::move(auth);
         return stop_t::no;
@@ -734,7 +734,7 @@ SocketConnection::repeat_connect()
   // this is fyi, actually, server decides!
   h.connect.flags = policy.lossy ? CEPH_MSG_CONNECT_LOSSY : 0;
 
-  return messenger.get_authorizer(peer_type, false)
+  return dispatcher.ms_get_authorizer(peer_type, false)
     .then([this](auto&& auth) {
       h.authorizer = std::move(auth);
       bufferlist bl;
