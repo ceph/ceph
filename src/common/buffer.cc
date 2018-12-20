@@ -787,6 +787,15 @@ using namespace ceph;
     return ptr(*p, p_off, p->length() - p_off);
   }
 
+  template<bool is_const>
+  bool buffer::list::iterator_impl<is_const>::is_pointing_same_raw(
+    const ptr& other) const
+  {
+    if (p == ls->end())
+      throw end_of_buffer();
+    return p->get_raw() == other.get_raw();
+  }
+
   // copy data out.
   // note that these all _append_ to dest!
   template<bool is_const>

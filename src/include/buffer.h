@@ -708,6 +708,7 @@ namespace buffer CEPH_BUFFER_API {
       char operator*() const;
       iterator_impl& operator++();
       ptr get_current_ptr() const;
+      bool is_pointing_same_raw(const ptr& other) const;
 
       bl_t& get_bl() const { return *bl; }
 
