@@ -139,6 +139,9 @@ add_library(rbd_internal STATIC
   ${librbd_internal_srcs}
   $<TARGET_OBJECTS:rados_snap_set_diff_obj>)
 if(WITH_LTTNG)
+  # librbd.cc includes tracing/librbd.h
+  add_dependencies(rbd_api librbd-tp)
+  # io/AioCompletion.cc includes tracing/librbd.h
   add_dependencies(rbd_internal librbd-tp)
 endif()
 if(WITH_LTTNG AND WITH_EVENTTRACE)
@@ -149,6 +152,9 @@ target_link_libraries(rbd_internal PRIVATE
 
 add_library(librbd ${CEPH_SHARED}
   librbd.cc)
+if(WITH_LTTNG)
+  add_dependencies(librbd librbd-tp)
+endif()
 
 target_link_libraries(librbd PRIVATE
   rbd_internal
