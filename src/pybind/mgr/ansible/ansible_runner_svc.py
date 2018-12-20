@@ -1,12 +1,9 @@
 """
-Tool module to interact with the Ansible Runner Service
+Client module to interact with the Ansible Runner Service
 """
 import requests
 import json
 import re
-
-# Ansible Runner events finished
-
 
 # Ansible Runner service API endpoints
 API_URL = "api"
@@ -45,7 +42,6 @@ class PlayBookExecution(object):
         # Params used in the playbook
         self.params = the_params
 
-        # Logger
         self.log = logger
 
     def launch(self):
@@ -164,8 +160,6 @@ class Client(object):
     def login(self):
         """ Login with user credentials to obtain a valid token
         """
-
-        response = None
 
         the_url = "%s/%s" % (self.server_url, LOGIN_URL)
         response = requests.get(the_url,
