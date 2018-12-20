@@ -504,6 +504,7 @@ static int update_mkfs(MonitorDBStore& st)
     cerr << "no initial monitors" << std::endl;
     return -EINVAL;
   }
+  monmap.print(cout);
   bufferlist bl;
   monmap.encode(bl, CEPH_FEATURES_ALL);
   monmap.set_epoch(0);
