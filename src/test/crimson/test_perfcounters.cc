@@ -31,12 +31,11 @@ static seastar::future<> test_perfcounters(){
   }).then([]{
     return ceph::common::sharded_perf_coll().invoke_on_all([] (auto& s){
       auto pcc = s.get_perf_collection();
-      pcc->with_counters([=](auto& by_path){
-        for (const auto &[path, perf_counter_ref] : by_path) {
-          if (PERF_VAL != perf_counter_ref.perf_counters->get(PERFTEST_INDEX)) {
-            throw std::runtime_error("perf counter does not match");
-          }
-          (void)path;           // silence -Wunused-variable
+      pcc->with_counters([](auto& by_path){
+        for (auto& perf_counter : by_path) {
+          if (PERF_VAL != perf_counter.second.perf_counters->get(PERFTEST_INDEX)) {
+             throw std::runtime_error("perf counter does not match");
+           }
         }
       });
     });
