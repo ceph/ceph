@@ -1,8 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CEPH_CACHE_CLIENT_H
-#define CEPH_CACHE_CLIENT_H
+#ifndef CEPH_CACHE_CACHE_CLIENT_H
+#define CEPH_CACHE_CACHE_CLIENT_H
 
 #include <atomic>
 #include <boost/asio.hpp>

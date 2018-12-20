@@ -7,11 +7,9 @@
 #include "common/ceph_context.h"
 #include "common/RWLock.h"
 #include "common/Mutex.h"
-#include "common/debug.h"
 #include "include/lru.h"
 #include "Policy.h"
 
-#include <vector>
 #include <unordered_map>
 #include <string>
 

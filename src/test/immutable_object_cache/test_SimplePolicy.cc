@@ -5,6 +5,7 @@
 #include <list>
 #include <gtest/gtest.h>
 
+#include "include/Context.h"
 #include "tools/immutable_object_cache/SimplePolicy.h"
 
 using namespace ceph::immutable_obj_cache;

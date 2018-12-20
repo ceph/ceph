@@ -9,9 +9,6 @@
 #define dout_prefix *_dout << "ceph::cache::CacheClient: " << this << " " \
                            << __func__ << ": "
 
-
-using boost::asio::local::stream_protocol;
-
 namespace ceph {
 namespace immutable_obj_cache {
 

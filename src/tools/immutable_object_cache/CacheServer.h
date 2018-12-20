@@ -1,20 +1,12 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CEPH_CACHE_SERVER_H
-#define CEPH_CACHE_SERVER_H
+#ifndef CEPH_CACHE_CACHE_SERVER_H
+#define CEPH_CACHE_CACHE_SERVER_H
 
-#include <cstdio>
-#include <iostream>
-#include <array>
-#include <memory>
-#include <string>
-#include <boost/bind.hpp>
 #include <boost/asio.hpp>
 #include <boost/asio/error.hpp>
-#include <boost/algorithm/string.hpp>
 
-#include "include/ceph_assert.h"
 #include "SocketCommon.h"
 #include "CacheSession.h"
 

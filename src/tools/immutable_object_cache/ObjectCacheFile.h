@@ -7,7 +7,6 @@
 #include "include/Context.h"
 #include "include/buffer_fwd.h"
 #include "common/ceph_context.h"
-#include <sys/mman.h>
 #include <string>
 
 

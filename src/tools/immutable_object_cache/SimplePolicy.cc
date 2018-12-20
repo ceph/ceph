@@ -1,11 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "common/debug.h"
 #include "SimplePolicy.h"
-
-#include <vector>
-#include <unordered_map>
-#include <string>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_immutable_obj_cache
