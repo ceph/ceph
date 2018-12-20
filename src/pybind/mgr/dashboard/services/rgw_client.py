@@ -319,13 +319,15 @@ class RgwClient(RestClient):
         return response['data']['user_id']
 
     @RestClient.api_get('/{admin_path}/metadata/user', resp_structure='[+]')
-    def _user_exists(self, admin_path, request=None):
+    def _user_exists(self, admin_path, user_id, request=None):
         # pylint: disable=unused-argument
         response = request()
+        if user_id:
+            return user_id in response
         return self.userid in response
 
-    def user_exists(self):
-        return self._user_exists(self.admin_path)
+    def user_exists(self, user_id=None):
+        return self._user_exists(self.admin_path, user_id)
 
     @RestClient.api_get('/{admin_path}/metadata/user?key={userid}',
                         resp_structure='data > system')
