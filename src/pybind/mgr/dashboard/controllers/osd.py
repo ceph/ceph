@@ -199,7 +199,7 @@ class OsdFlagsController(RESTController):
 
     def bulk_set(self, flags):
         """
-        The `recovery_deletes` and `sortbitwise` flags cannot be unset.
+        The `recovery_deletes`, `sortbitwise` and `pglog_hardlimit` flags cannot be unset.
         `purged_snapshots` cannot even be set. It is therefore required to at
         least include those three flags for a successful operation.
         """
