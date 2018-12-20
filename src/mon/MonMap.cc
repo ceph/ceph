@@ -757,9 +757,11 @@ int MonMap::build_initial(CephContext *cct, bool for_mkfs, ostream& errout)
   // -m foo?
   if (const auto mon_host = conf.get_val<std::string>("mon_host");
       !mon_host.empty()) {
-    auto ret = init_with_ips(mon_host, for_mkfs, "noname-");
+    // NOTE: the for_mkfs path here is dodgey.. it assumes the mons will be
+    // named 'a', 'b', 'c'.
+    auto ret = init_with_ips(mon_host, for_mkfs, for_mkfs ? "" : "noname-");
     if (ret == -EINVAL) {
-      ret = init_with_hosts(mon_host, for_mkfs, "noname-");
+      ret = init_with_hosts(mon_host, for_mkfs, for_mkfs ? "" : "noname-");
     }
     if (ret < 0) {
       errout << "unable to parse addrs in '" << mon_host << "'"
