@@ -4,11 +4,8 @@
 #ifndef CEPH_CACHE_OBJECT_CACHE_STORE_H
 #define CEPH_CACHE_OBJECT_CACHE_STORE_H
 
-#include "common/debug.h"
-#include "common/errno.h"
 #include "common/ceph_context.h"
 #include "common/Mutex.h"
-#include "include/Context.h"
 #include "include/rados/librados.hpp"
 
 #include "ObjectCacheFile.h"
