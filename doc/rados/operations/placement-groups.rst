@@ -2,6 +2,164 @@
  Placement Groups
 ==================
 
+.. _pg-autoscaler:
+
+Autoscaling placement groups
+============================
+
+Placement groups (PGs) are an internal implementation detail of how
+Ceph distributes data.  You can allow the cluster to either make
+recommendations or automatically tune PGs based on how the cluster is
+used by enabling *pg-autoscaling*.
+
+Each pool in the system has a ``pg_autoscale_mode`` property that can be set to ``off``, ``on``, or ``warn``.
+
+* ``off``: Disable autoscaling for this pool.  It is up to the administrator to choose an appropriate PG number for each pool.  Please refer to :ref:`choosing-number-of-placement-groups` for more information.
+* ``on``: Enable automated adjustments of the PG count for the given pool.
+* ``warn``: Raise health alerts when the PG count should be adjusted
+
+To set the autoscaling mode for existing pools,::
+
+  ceph osd pool set <pool-name> pg_autoscale_mode <mode>
+
+For example to enable autoscaling on pool ``foo``,::
+
+  ceph osd pool set foo pg_autoscale_mode on
+
+You can also configure the default ``pg_autoscale_mode`` that is
+applied to any pools that are created in the future with::
+
+  ceph config set global osd_pool_default_autoscale_mode <mode>
+
+Viewing PG scaling recommendations
+----------------------------------
+
+You can view each pool, its relative utilization, and any suggested changes to
+the PG count with this command::
+
+  ceph osd pool autoscale-status
+
+Output will be something like::
+
+   POOL    SIZE  TARGET SIZE  RATE  RAW CAPACITY   RATIO  TARGET RATIO  PG_NUM  NEW PG_NUM  AUTOSCALE
+   a     12900M                3.0        82431M  0.4695                     8         128  warn
+   c         0                 3.0        82431M  0.0000        0.2000       1          64  warn
+   b         0        953.6M   3.0        82431M  0.0347                     8              warn
+
+**SIZE** is the amount of data stored in the pool. **TARGET SIZE**, if
+present, is the amount of data the administrator has specified that
+they expect to eventually be stored in this pool.  The system uses
+the larger of the two values for its calculation.
+
+**RATE** is the multiplier for the pool that determines how much raw
+storage capacity is consumed.  For example, a 3 replica pool will
+have a ratio of 3.0, while a k=4,m=2 erasure coded pool will have a
+ratio of 1.5.
+
+**RAW CAPACITY** is the total amount of raw storage capacity on the
+OSDs that are responsible for storing this pool's (and perhaps other
+pools') data.  **RATIO** is the ratio of that total capacity that
+this pool is consuming (i.e., ratio = size * rate / raw capacity).
+
+**TARGET RATIO**, if present, is the ratio of storage that the
+administrator has specified that they expect this pool to consume.
+The system uses the larger of the actual ratio and the target ratio
+for its calculation.  If both target size bytes and ratio are specified, the
+ratio takes precedence.
+
+**PG_NUM** is the current number of PGs for the pool (or the current
+number of PGs that the pool is working towards, if a ``pg_num``
+change is in progress).  **NEW PG_NUM**, if present, is what the
+system believes the pool's ``pg_num`` should be changed to.  It is
+always a power of 2, and will only be present if the "ideal" value
+varies from the current value by more than a factor of 3.
+
+The final column, **AUTOSCALE**, is the pool ``pg_autoscale_mode``,
+and will be either ``on``, ``off``, or ``warn``.
+
+
+Automated scaling
+-----------------
+
+Allowing the cluster to automatically scale PGs based on usage is the
+simplest approach.  Ceph will look at the total available storage and
+target number of PGs for the whole system, look at how much data is
+stored in each pool, and try to apportion the PGs accordingly.  The
+system is relatively conservative with its approach, only making
+changes to a pool when the current number of PGs (``pg_num``) is more
+than 3 times off from what it thinks it should be.
+
+The target number of PGs per OSD is based on the
+``mon_target_pg_per_osd`` configurable (default: 100), which can be
+adjusted with::
+
+  ceph config set global mon_target_pg_per_osd 100
+
+The autoscaler analyzes pools and adjusts on a per-subtree basis.
+Because each pool may map to a different CRUSH rule, and each rule may
+distribute data across different devices, Ceph will consider
+utilization of each subtree of the hierarchy independently.  For
+example, a pool that maps to OSDs of class `ssd` and a pool that maps
+to OSDs of class `hdd` will each have optimal PG counts that depend on
+the number of those respective device types.
+
+
+.. _specifying_pool_target_size:
+
+Specifying expected pool size
+-----------------------------
+
+When a cluster or pool is first created, it will consume a small
+fraction of the total cluster capacity and will appear to the system
+as if it should only need a small number of placement groups.
+However, in most cases cluster administrators have a good idea which
+pools are expected to consume most of the system capacity over time.
+By providing this information to Ceph, a more appropriate number of
+PGs can be used from the beginning, preventing subsequent changes in
+``pg_num`` and the overhead associated with moving data around when
+those adjustments are made.
+
+The *target size** of a pool can be specified in two ways: either in
+terms of the absolute size of the pool (i.e., bytes), or as a ratio of
+the total cluster capacity.
+
+For example,::
+
+  ceph osd pool set mypool target_size_bytes 100T
+
+will tell the system that `mypool` is expected to consume 100 TiB of
+space.  Alternatively,::
+
+  ceph osd pool set mypool target_size_ratio .9
+
+will tell the system that `mypool` is expected to consume 90% of the
+total cluster capacity.
+
+You can also set the target size of a pool at creation time with the optional ``--target-size-bytes <bytes>`` or ``--target-size-ratio <ratio>`` arguments to the ``ceph osd pool create`` command.
+
+Note that if impossible target size values are specified (for example,
+a capacity larger than the total cluster, or ratio(s) that sum to more
+than 1.0) then a health warning
+(``POOL_TARET_SIZE_RATIO_OVERCOMMITTED`` or
+``POOL_TARGET_SIZE_BYTES_OVERCOMMITTED``) will be raised.
+
+Specifying bounds on a pool's PGs
+---------------------------------
+
+It is also possible to specify a minimum number of PGs for a pool.
+This is useful for establishing a lower bound on the amount of
+parallelism client will see when doing IO, even when a pool is mostly
+empty.  Setting the lower bound prevents Ceph from reducing (or
+recommending you reduce) the PG number below the configured number.
+
+You can set the minimum number of PGs for a pool with::
+
+  ceph osd pool set <pool-name> pg_num_min <num>
+
+You can also specify the minimum PG count at pool creation time with
+the optional ``--pg-num-min <num>`` argument to the ``ceph osd pool
+create`` command.
+
 .. _preselection:
 
 A preselection of pg_num
@@ -254,6 +412,8 @@ resources.
 
 Choosing the number of Placement Groups
 =======================================
+
+.. note: It is rarely necessary to do this math by hand.  Instead, use the ``ceph osd pool autoscale-status`` command in combination with the ``target_size_bytes`` or ``target_size_ratio`` pool properties.  See :ref:`pg-autoscaler` for more information.
 
 If you have more than 50 OSDs, we recommend approximately 50-100
 placement groups per OSD to balance out resource usage, data

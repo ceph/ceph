@@ -4499,7 +4499,8 @@ namespace {
     RECOVERY_PRIORITY, RECOVERY_OP_PRIORITY, SCRUB_PRIORITY,
     COMPRESSION_MODE, COMPRESSION_ALGORITHM, COMPRESSION_REQUIRED_RATIO,
     COMPRESSION_MAX_BLOB_SIZE, COMPRESSION_MIN_BLOB_SIZE,
-    CSUM_TYPE, CSUM_MAX_BLOCK, CSUM_MIN_BLOCK, FINGERPRINT_ALGORITHM };
+    CSUM_TYPE, CSUM_MAX_BLOCK, CSUM_MIN_BLOCK, FINGERPRINT_ALGORITHM,
+    PG_AUTOSCALE_MODE, PG_NUM_MIN, TARGET_SIZE_BYTES, TARGET_SIZE_RATIO };
 
   std::set<osd_pool_get_choices>
     subtract_second_from_first(const std::set<osd_pool_get_choices>& first,
@@ -5107,6 +5108,10 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       {"csum_max_block", CSUM_MAX_BLOCK},
       {"csum_min_block", CSUM_MIN_BLOCK},
       {"fingerprint_algorithm", FINGERPRINT_ALGORITHM},
+      {"pg_autoscale_mode", PG_AUTOSCALE_MODE},
+      {"pg_num_min", PG_NUM_MIN},
+      {"target_size_bytes", TARGET_SIZE_BYTES},
+      {"target_size_ratio", TARGET_SIZE_RATIO},
     };
 
     typedef std::set<osd_pool_get_choices> choices_set_t;
@@ -5208,6 +5213,11 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case EC_OVERWRITES:
 	    f->dump_bool("allow_ec_overwrites",
                          p->has_flag(pg_pool_t::FLAG_EC_OVERWRITES));
+	    break;
+	  case PG_AUTOSCALE_MODE:
+	    f->dump_string("pg_autoscale_mode",
+			   pg_pool_t::get_pg_autoscale_mode_name(
+			     p->pg_autoscale_mode));
 	    break;
 	  case HASHPSPOOL:
 	  case NODELETE:
@@ -5314,10 +5324,13 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case CSUM_MAX_BLOCK:
 	  case CSUM_MIN_BLOCK:
 	  case FINGERPRINT_ALGORITHM:
+	  case PG_NUM_MIN:
+	  case TARGET_SIZE_BYTES:
+	  case TARGET_SIZE_RATIO:
             pool_opts_t::key_t key = pool_opts_t::get_opt_desc(i->first).key;
             if (p->opts.is_set(key)) {
               if(*it == CSUM_TYPE) {
-                int val;
+                int64_t val;
                 p->opts.get(pool_opts_t::CSUM_TYPE, &val);
                 f->dump_string(i->first.c_str(), Checksummer::get_csum_type_string(val));
               } else {
@@ -5353,6 +5366,10 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	    } else {
 	      ss << "crush_rule: " << p->get_crush_rule() << "\n";
 	    }
+	    break;
+	  case PG_AUTOSCALE_MODE:
+	    ss << "pg_autoscale_mode: " << pg_pool_t::get_pg_autoscale_mode_name(
+	      p->pg_autoscale_mode);
 	    break;
 	  case HIT_SET_PERIOD:
 	    ss << "hit_set_period: " << p->hit_set_period << "\n";
@@ -5463,6 +5480,9 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case CSUM_MAX_BLOCK:
 	  case CSUM_MIN_BLOCK:
 	  case FINGERPRINT_ALGORITHM:
+	  case PG_NUM_MIN:
+	  case TARGET_SIZE_BYTES:
+	  case TARGET_SIZE_RATIO:
 	    for (i = ALL_CHOICES.begin(); i != ALL_CHOICES.end(); ++i) {
 	      if (i->second == *it)
 		break;
@@ -5472,7 +5492,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	      pool_opts_t::key_t key = pool_opts_t::get_opt_desc(i->first).key;
 	      if (p->opts.is_set(key)) {
                 if(key == pool_opts_t::CSUM_TYPE) {
-                  int val;
+                  int64_t val;
                   p->opts.get(key, &val);
   		  ss << i->first << ": " << Checksummer::get_csum_type_string(val) << "\n";
                 } else {
@@ -6128,7 +6148,7 @@ int OSDMonitor::prepare_new_pool(MonOpRequestRef op)
   string rule_name;
   int ret = 0;
   ret = prepare_new_pool(m->name, m->crush_rule, rule_name,
-			 0, 0,
+			 0, 0, 0, 0, 0, 0.0,
 			 erasure_code_profile,
 			 pg_pool_t::TYPE_REPLICATED, 0, FAST_READ_OFF, &ss);
 
@@ -6441,14 +6461,18 @@ int OSDMonitor::parse_erasure_code_profile(const vector<string> &erasure_code_pr
 
 int OSDMonitor::prepare_pool_size(const unsigned pool_type,
 				  const string &erasure_code_profile,
+                                  uint8_t repl_size,
 				  unsigned *size, unsigned *min_size,
 				  ostream *ss)
 {
   int err = 0;
   switch (pool_type) {
   case pg_pool_t::TYPE_REPLICATED:
-    *size = g_conf().get_val<uint64_t>("osd_pool_default_size");
-    *min_size = g_conf().get_osd_pool_default_min_size();
+    if (repl_size == 0) {
+      repl_size = g_conf().get_val<uint64_t>("osd_pool_default_size");
+    }
+    *size = repl_size;
+    *min_size = g_conf().get_osd_pool_default_min_size(repl_size);
     break;
   case pg_pool_t::TYPE_ERASURE:
     {
@@ -6610,7 +6634,7 @@ int OSDMonitor::check_pg_num(int64_t pool, int pg_num, int size, ostream *ss)
     if (i.first == pool) {
       projected += pg_num * size;
     } else {
-      projected += i.second.get_pg_num() * i.second.get_size();
+      projected += i.second.get_pg_num_target() * i.second.get_size();
     }
   }
   if (projected > max_pgs) {
@@ -6633,6 +6657,7 @@ int OSDMonitor::check_pg_num(int64_t pool, int pg_num, int size, ostream *ss)
  * @param crush_rule_name The crush rule to use, if crush_rulset <0
  * @param pg_num The pg_num to use. If set to 0, will use the system default
  * @param pgp_num The pgp_num to use. If set to 0, will use the system default
+ * @param repl_size Replication factor, or 0 for default
  * @param erasure_code_profile The profile name in OSDMap to be used for erasure code
  * @param pool_type TYPE_ERASURE, or TYPE_REP
  * @param expected_num_objects expected number of objects on the pool
@@ -6645,6 +6670,10 @@ int OSDMonitor::prepare_new_pool(string& name,
 				 int crush_rule,
 				 const string &crush_rule_name,
                                  unsigned pg_num, unsigned pgp_num,
+				 unsigned pg_num_min,
+                                 const uint64_t repl_size,
+				 const uint64_t target_size_bytes,
+				 const float target_size_ratio,
 				 const string &erasure_code_profile,
                                  const unsigned pool_type,
                                  const uint64_t expected_num_objects,
@@ -6700,7 +6729,8 @@ int OSDMonitor::prepare_new_pool(string& name,
              << duration << dendl;
   }
   unsigned size, min_size;
-  r = prepare_pool_size(pool_type, erasure_code_profile, &size, &min_size, ss);
+  r = prepare_pool_size(pool_type, erasure_code_profile, repl_size,
+                        &size, &min_size, ss);
   if (r) {
     dout(10) << "prepare_pool_size returns " << r << dendl;
     return r;
@@ -6775,6 +6805,12 @@ int OSDMonitor::prepare_new_pool(string& name,
   pi->crush_rule = crush_rule;
   pi->expected_num_objects = expected_num_objects;
   pi->object_hash = CEPH_STR_HASH_RJENKINS;
+
+  {
+    auto m = pg_pool_t::get_pg_autoscale_mode_by_name(
+      g_conf().get_val<string>("osd_pool_default_pg_autoscale_mode"));
+    pi->pg_autoscale_mode = m >= 0 ? m : 0;
+  }
   auto max = g_conf().get_val<int64_t>("mon_osd_max_initial_pgs");
   pi->set_pg_num(
     max > 0 ? std::min<uint64_t>(pg_num, std::max<int64_t>(1, max))
@@ -6783,14 +6819,33 @@ int OSDMonitor::prepare_new_pool(string& name,
   pi->set_pg_num_target(pg_num);
   pi->set_pgp_num(pi->get_pg_num());
   pi->set_pgp_num_target(pgp_num);
+  if (osdmap.require_osd_release >= CEPH_RELEASE_NAUTILUS &&
+      pg_num_min) {
+    pi->opts.set(pool_opts_t::PG_NUM_MIN, static_cast<int64_t>(pg_num_min));
+  }
+
   pi->last_change = pending_inc.epoch;
   pi->auid = 0;
+
   if (pool_type == pg_pool_t::TYPE_ERASURE) {
       pi->erasure_code_profile = erasure_code_profile;
   } else {
       pi->erasure_code_profile = "";
   }
   pi->stripe_width = stripe_width;
+
+  if (osdmap.require_osd_release >= CEPH_RELEASE_NAUTILUS &&
+      target_size_bytes) {
+    // only store for nautilus+ because TARGET_SIZE_BYTES may be
+    // larger than int32_t max.
+    pi->opts.set(pool_opts_t::TARGET_SIZE_BYTES, static_cast<int64_t>(target_size_bytes));
+  }
+  if (target_size_ratio > 0.0 &&
+    osdmap.require_osd_release >= CEPH_RELEASE_NAUTILUS) {
+    // only store for nautilus+, just to be consistent and tidy.
+    pi->opts.set(pool_opts_t::TARGET_SIZE_RATIO, target_size_ratio);
+  }
+
   pi->cache_target_dirty_ratio_micro =
     g_conf()->osd_pool_default_cache_target_dirty_ratio * 1000000;
   pi->cache_target_dirty_high_ratio_micro =
@@ -6799,6 +6854,7 @@ int OSDMonitor::prepare_new_pool(string& name,
     g_conf()->osd_pool_default_cache_target_full_ratio * 1000000;
   pi->cache_min_flush_age = g_conf()->osd_pool_default_cache_min_flush_age;
   pi->cache_min_evict_age = g_conf()->osd_pool_default_cache_min_evict_age;
+
   pending_inc.new_pool_names[pool] = name;
   return 0;
 }
@@ -7009,15 +7065,6 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
 	ss << "splits in cache pools must be followed by scrubs and leave sufficient free space to avoid overfilling.  use --yes-i-really-mean-it to force.";
 	return -EPERM;
       }
-      int expected_osds = std::min(p.get_pg_num(), osdmap.get_num_osds());
-      int64_t new_pgs = n - p.get_pg_num_target();
-      if (new_pgs > g_conf()->mon_osd_max_split_count * expected_osds) {
-	ss << "specified pg_num " << n << " is too large (creating "
-	   << new_pgs << " new PGs on ~" << expected_osds
-	   << " OSDs exceeds per-OSD max with mon_osd_max_split_count of "
-	   << g_conf()->mon_osd_max_split_count << ')';
-	return -E2BIG;
-      }
     } else {
       if (osdmap.require_osd_release < CEPH_RELEASE_NAUTILUS) {
 	ss << "nautilus OSDs are required to adjust pg_num_pending";
@@ -7073,6 +7120,13 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       return -EINVAL;
     }
     p.set_pgp_num_target(n);
+  } else if (var == "pg_autoscale_mode") {
+    n = pg_pool_t::get_pg_autoscale_mode_by_name(val);
+    if (n < 0) {
+      ss << "specified invalid mode " << val;
+      return -EINVAL;
+    }
+    p.pg_autoscale_mode = n;
   } else if (var == "crush_rule") {
     int id = osdmap.crush->get_rule_id(val);
     if (id == -ENOENT) {
@@ -7350,6 +7404,16 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
 	  return -EINVAL;
         }
       }
+    } else if (var == "pg_num_min") {
+      if (interr.length()) {
+        ss << "error parsing int value '" << val << "': " << interr;
+        return -EINVAL;
+      }
+      if (n > (int)p.get_pg_num_target()) {
+	ss << "specified pg_num_min " << n
+	   << " > pg_num " << p.get_pg_num_target();
+	return -EINVAL;
+      }
     }
 
     pool_opts_t::opt_desc_t desc = pool_opts_t::get_opt_desc(var);
@@ -7369,7 +7433,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       if (n == 0) {
 	p.opts.unset(desc.key);
       } else {
-	p.opts.set(desc.key, static_cast<int>(n));
+	p.opts.set(desc.key, static_cast<int64_t>(n));
       }
       break;
     case pool_opts_t::DOUBLE:
@@ -11436,10 +11500,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 					      get_last_committed() + 1));
     return true;
   } else if (prefix == "osd pool create") {
-    int64_t  pg_num;
+    int64_t pg_num, pg_num_min;
     int64_t pgp_num;
     cmd_getval(cct, cmdmap, "pg_num", pg_num, int64_t(0));
     cmd_getval(cct, cmdmap, "pgp_num", pgp_num, pg_num);
+    cmd_getval(cct, cmdmap, "pg_num_min", pg_num_min, int64_t(0));
 
     string pool_type_str;
     cmd_getval(cct, cmdmap, "pool_type", pool_type_str);
@@ -11576,11 +11641,19 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       fast_read = FAST_READ_OFF;
     else if (fast_read_param > 0)
       fast_read = FAST_READ_ON;
-    
+
+    int64_t repl_size = 0;
+    cmd_getval(cct, cmdmap, "size", repl_size);
+    int64_t target_size_bytes = 0;
+    double target_size_ratio = 0.0;
+    cmd_getval(cct, cmdmap, "target_size_bytes", target_size_bytes);
+    cmd_getval(cct, cmdmap, "target_size_ratio", target_size_ratio);
+
     err = prepare_new_pool(poolstr,
 			   -1, // default crush rule
 			   rule_name,
-			   pg_num, pgp_num,
+			   pg_num, pgp_num, pg_num_min,
+                           repl_size, target_size_bytes, target_size_ratio,
 			   erasure_code_profile, pool_type,
                            (uint64_t)expected_num_objects,
                            fast_read,

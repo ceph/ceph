@@ -1434,11 +1434,6 @@ std::vector<Option> get_global_options() {
     .add_service("mgr")
     .set_description("issue REQUEST_STUCK health error if OSD ops are slower than is age (seconds)"),
 
-    Option("mon_osd_max_split_count", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(32)
-    .add_service("mon")
-    .set_description(""),
-
     Option("mon_osd_prime_pg_temp", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(true)
     .add_service("mon")
@@ -1525,9 +1520,25 @@ std::vector<Option> get_global_options() {
     .set_description("minimal number PGs per (in) osd before we warn the admin"),
 
     Option("mon_max_pg_per_osd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_min(1)
     .set_default(250)
     .add_service("mgr")
-    .set_description("Max number of PGs per OSD the cluster will allow"),
+    .set_description("Max number of PGs per OSD the cluster will allow")
+    .set_long_description("If the number of PGs per OSD exceeds this, a "
+        "health warning will be visible in `ceph status`.  This is also used "
+        "in automated PG management, as the threshold at which some pools' "
+        "pg_num may be shrunk in order to enable increasing the pg_num of "
+        "others."),
+
+    Option("mon_target_pg_per_osd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_min(1)
+    .set_default(100)
+    .set_description("Automated PG management creates this many PGs per OSD")
+    .set_long_description("When creating pools, the automated PG management "
+        "logic will attempt to reach this target.  In some circumstances, it "
+        "may exceed this target, up to the ``mon_max_pg_per_osd`` limit. "
+        "Conversely, a lower number of PGs per OSD may be created if the "
+        "cluster is not yet fully utilised"),
 
     Option("mon_pg_warn_max_object_skew", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(10.0)
@@ -2368,12 +2379,14 @@ std::vector<Option> get_global_options() {
 
     Option("osd_pool_default_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(3)
+    .set_min_max(0, 255)
     .set_flag(Option::FLAG_RUNTIME)
     .set_description("the number of copies of an object")
     .add_service("mon"),
 
     Option("osd_pool_default_min_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
+    .set_min_max(0, 255)
     .set_flag(Option::FLAG_RUNTIME)
     .set_description("the minimal number of copies allowed to write to a degraded pool")
     .set_long_description("0 means no specific default; ceph will use size-size/2")
@@ -2466,6 +2479,11 @@ std::vector<Option> get_global_options() {
     Option("osd_pool_default_cache_max_evict_check_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(10)
     .set_description(""),
+
+    Option("osd_pool_default_pg_autoscale_mode", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("warn")
+    .set_enum_allowed({"off", "warn", "on"})
+    .set_description("Default PG autoscaling behavior for new pools"),
 
     Option("osd_hit_set_min_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1000)

@@ -1110,23 +1110,33 @@ static opt_mapping_t opt_mapping = boost::assign::map_list_of
            ("csum_min_block", pool_opts_t::opt_desc_t(
 	     pool_opts_t::CSUM_MIN_BLOCK, pool_opts_t::INT))
            ("fingerprint_algorithm", pool_opts_t::opt_desc_t(
-	     pool_opts_t::FINGERPRINT_ALGORITHM, pool_opts_t::STR));
+	     pool_opts_t::FINGERPRINT_ALGORITHM, pool_opts_t::STR))
+           ("pg_num_min", pool_opts_t::opt_desc_t(
+	     pool_opts_t::PG_NUM_MIN, pool_opts_t::INT))
+           ("target_size_bytes", pool_opts_t::opt_desc_t(
+	     pool_opts_t::TARGET_SIZE_BYTES, pool_opts_t::INT))
+           ("target_size_ratio", pool_opts_t::opt_desc_t(
+	     pool_opts_t::TARGET_SIZE_RATIO, pool_opts_t::DOUBLE));
 
-bool pool_opts_t::is_opt_name(const std::string& name) {
-    return opt_mapping.count(name);
+bool pool_opts_t::is_opt_name(const std::string& name)
+{
+  return opt_mapping.count(name);
 }
 
-pool_opts_t::opt_desc_t pool_opts_t::get_opt_desc(const std::string& name) {
-    opt_mapping_t::iterator i = opt_mapping.find(name);
-    ceph_assert(i != opt_mapping.end());
-    return i->second;
+pool_opts_t::opt_desc_t pool_opts_t::get_opt_desc(const std::string& name)
+{
+  opt_mapping_t::iterator i = opt_mapping.find(name);
+  ceph_assert(i != opt_mapping.end());
+  return i->second;
 }
 
-bool pool_opts_t::is_set(pool_opts_t::key_t key) const {
-    return opts.count(key);
+bool pool_opts_t::is_set(pool_opts_t::key_t key) const
+{
+  return opts.count(key);
 }
 
-const pool_opts_t::value_t& pool_opts_t::get(pool_opts_t::key_t key) const {
+const pool_opts_t::value_t& pool_opts_t::get(pool_opts_t::key_t key) const
+{
   opts_t::const_iterator i = opts.find(key);
   ceph_assert(i != opts.end());
   return i->second;
@@ -1136,8 +1146,7 @@ bool pool_opts_t::unset(pool_opts_t::key_t key) {
   return opts.erase(key) > 0;
 }
 
-class pool_opts_dumper_t : public boost::static_visitor<>
-{
+class pool_opts_dumper_t : public boost::static_visitor<> {
 public:
   pool_opts_dumper_t(const std::string& name_, Formatter* f_) :
     name(name_.c_str()), f(f_) {}
@@ -1145,7 +1154,7 @@ public:
   void operator()(std::string s) const {
     f->dump_string(name, s);
   }
-  void operator()(int i) const {
+  void operator()(int64_t i) const {
     f->dump_int(name, i);
   }
   void operator()(double d) const {
@@ -1181,18 +1190,23 @@ void pool_opts_t::dump(Formatter* f) const
   }
 }
 
-class pool_opts_encoder_t : public boost::static_visitor<>
-{
+class pool_opts_encoder_t : public boost::static_visitor<> {
 public:
-  explicit pool_opts_encoder_t(bufferlist& bl_) : bl(bl_) {}
+  explicit pool_opts_encoder_t(bufferlist& bl_, uint64_t features)
+    : bl(bl_),
+      features(features) {}
 
   void operator()(const std::string &s) const {
     encode(static_cast<int32_t>(pool_opts_t::STR), bl);
     encode(s, bl);
   }
-  void operator()(int i) const {
+  void operator()(int64_t i) const {
     encode(static_cast<int32_t>(pool_opts_t::INT), bl);
-    encode(i, bl);
+    if (HAVE_FEATURE(features, SERVER_NAUTILUS)) {
+      encode(i, bl);
+    } else {
+      encode(static_cast<int32_t>(i), bl);
+    }
   }
   void operator()(double d) const {
     encode(static_cast<int32_t>(pool_opts_t::DOUBLE), bl);
@@ -1201,20 +1215,27 @@ public:
 
 private:
   bufferlist& bl;
+  uint64_t features;
 };
 
-void pool_opts_t::encode(bufferlist& bl) const {
-  ENCODE_START(1, 1, bl);
+void pool_opts_t::encode(bufferlist& bl, uint64_t features) const
+{
+  unsigned v = 2;
+  if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
+    v = 1;
+  }
+  ENCODE_START(v, 1, bl);
   uint32_t n = static_cast<uint32_t>(opts.size());
   encode(n, bl);
   for (opts_t::const_iterator i = opts.begin(); i != opts.end(); ++i) {
     encode(static_cast<int32_t>(i->first), bl);
-    boost::apply_visitor(pool_opts_encoder_t(bl), i->second);
+    boost::apply_visitor(pool_opts_encoder_t(bl, features), i->second);
   }
   ENCODE_FINISH(bl);
 }
 
-void pool_opts_t::decode(bufferlist::const_iterator& bl) {
+void pool_opts_t::decode(bufferlist::const_iterator& bl)
+{
   DECODE_START(1, bl);
   __u32 n;
   decode(n, bl);
@@ -1228,8 +1249,14 @@ void pool_opts_t::decode(bufferlist::const_iterator& bl) {
       decode(s, bl);
       opts[static_cast<key_t>(k)] = s;
     } else if (t == INT) {
-      int i;
-      decode(i, bl);
+      int64_t i;
+      if (struct_v >= 2) {
+	decode(i, bl);
+      } else {
+	int ii;
+	decode(ii, bl);
+	i = ii;
+      }
       opts[static_cast<key_t>(k)] = i;
     } else if (t == DOUBLE) {
       double d;
@@ -1273,6 +1300,8 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_int("min_size", get_min_size());
   f->dump_int("crush_rule", get_crush_rule());
   f->dump_int("object_hash", get_object_hash());
+  f->dump_string("pg_autoscale_mode",
+		 get_pg_autoscale_mode_name(pg_autoscale_mode));
   f->dump_unsigned("pg_num", get_pg_num());
   f->dump_unsigned("pg_placement_num", get_pgp_num());
   f->dump_unsigned("pg_placement_num_target", get_pgp_num_target());
@@ -1768,7 +1797,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     encode(hit_set_search_last_n, bl);
   }
   if (v >= 24) {
-    encode(opts, bl);
+    encode(opts, bl, features);
   }
   if (v >= 25) {
     encode(last_force_op_resend_prenautilus, bl);
@@ -1786,6 +1815,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     encode(pg_num_dec_last_epoch_started, bl);
     encode(pg_num_dec_last_epoch_clean, bl);
     encode(last_force_op_resend, bl);
+    encode(pg_autoscale_mode, bl);
   }
   ENCODE_FINISH(bl);
 }
@@ -1952,11 +1982,13 @@ void pg_pool_t::decode(bufferlist::const_iterator& bl)
     decode(pg_num_dec_last_epoch_started, bl);
     decode(pg_num_dec_last_epoch_clean, bl);
     decode(last_force_op_resend, bl);
+    decode(pg_autoscale_mode, bl);
   } else {
     pg_num_target = pg_num;
     pgp_num_target = pgp_num;
     pg_num_pending = pg_num;
     last_force_op_resend = last_force_op_resend_prenautilus;
+    pg_autoscale_mode = PG_AUTOSCALE_MODE_WARN;    // default to warn on upgrade
   }
   DECODE_FINISH(bl);
   calc_pg_masks();
@@ -2054,6 +2086,9 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
 	p.get_pg_num_dec_last_epoch_clean())
       out << " dles/c " << p.get_pg_num_dec_last_epoch_started()
 	  << "/" << p.get_pg_num_dec_last_epoch_clean();
+  }
+  if (p.pg_autoscale_mode) {
+    out << " autoscale_mode " << p.get_pg_autoscale_mode_name(p.pg_autoscale_mode);
   }
   out << " last_change " << p.get_last_change();
   if (p.get_last_force_op_resend() ||

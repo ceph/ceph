@@ -443,6 +443,7 @@ private:
 				 ostream *ss);
   int prepare_pool_size(const unsigned pool_type,
 			const string &erasure_code_profile,
+                        uint8_t repl_size,
 			unsigned *size, unsigned *min_size,
 			ostream *ss);
   int prepare_pool_stripe_width(const unsigned pool_type,
@@ -454,6 +455,10 @@ private:
 		       int crush_rule,
 		       const string &crush_rule_name,
                        unsigned pg_num, unsigned pgp_num,
+		       unsigned pg_num_min,
+                       uint64_t repl_size,
+		       const uint64_t target_size_bytes,
+		       const float target_size_ratio,
 		       const string &erasure_code_profile,
                        const unsigned pool_type,
                        const uint64_t expected_num_objects,
