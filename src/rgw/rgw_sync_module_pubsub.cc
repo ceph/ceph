@@ -733,8 +733,8 @@ class PSSubscription {
       int send_request() override {
         init_new_io(this);
         const auto rc = sync_env->http_manager->add_request(this);
-        if (rc < 0) return rc;
-        return io_block(0, get_io_id(RGWHTTPClient::HTTPCLIENT_IO_READ | RGWHTTPClient::HTTPCLIENT_IO_CONTROL));
+        // return zero on sucess, rc o/w
+        return std::max(rc, 0);
       }
 
       // wait for reply
@@ -754,6 +754,8 @@ class PSSubscription {
     rgw_object_simple_put_params put_obj;
     string oid_prefix;
     int i;
+    std::string post_data;
+
   public:
     StoreEventCR(RGWDataSyncEnv *_sync_env,
                  PSSubscriptionRef& _sub,
@@ -792,15 +794,16 @@ class PSSubscription {
         }
 
         if (!sub_conf->push_endpoint.empty()) {
-          yield {
+          {
             bufferlist bl;
             pse.format(&bl);
-            const std::string post_data(bl.c_str(), bl.length());
-
-            call(new RGWPostHTTPDataCR(post_data, sync_env, "POST", sub_conf->push_endpoint));
-          };
+            post_data.assign(bl.c_str(), bl.length());
+          }
+          yield call(new RGWPostHTTPDataCR(post_data, sync_env, "POST", sub_conf->push_endpoint));
           
           if (retcode < 0) {
+            std::cout << "ERROR: failed to push event: " << put_obj.bucket << "/" << put_obj.key << 
+              " to endpoint: " << sub_conf->push_endpoint << " ret=" << retcode << std::endl;
             ldout(sync_env->cct, 0) << "ERROR: failed to push event: " << put_obj.bucket << "/" << put_obj.key <<
               " to endpoint: " << sub_conf->push_endpoint << " ret=" << retcode << dendl;
             return set_cr_error(retcode);
@@ -855,7 +858,6 @@ public:
 
   friend class InitCR;
 };
-
 
 class PSManager
 {
