@@ -1,8 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CEPH_CACHE_OBJECT_CACHE_SYNC_FILE_H
-#define CEPH_CACHE_OBJECT_CACHE_SYNC_FILE_H
+#ifndef CEPH_CACHE_OBJECT_CACHE_FILE_H
+#define CEPH_CACHE_OBJECT_CACHE_FILE_H
 
 #include "include/Context.h"
 #include "include/buffer_fwd.h"
@@ -14,10 +14,10 @@
 namespace ceph {
 namespace immutable_obj_cache {
 
-class SyncFile {
+class ObjectCacheFile {
 public:
-  SyncFile(CephContext *cct, const std::string &name);
-  ~SyncFile();
+  ObjectCacheFile(CephContext *cct, const std::string &name);
+  ~ObjectCacheFile();
 
   // TODO use IO queue instead of individual commands so operations can be
   // submitted in batch
@@ -41,7 +41,7 @@ private:
   int m_fd;
 };
 
+} // namespace immutable_obj_cache
 } // namespace cache
-} // namespace librbd
 
-#endif // CEPH_LIBRBD_CACHE_STORE_SYNC_FILE
+#endif // CEPH_CACHE_OBJECT_CACHE_FILE_H

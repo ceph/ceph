@@ -11,8 +11,8 @@
 #include "global/global_init.h"
 #include "global/global_context.h"
 
-#include "tools/ceph_immutable_object_cache/CacheClient.h"
-#include "tools/ceph_immutable_object_cache/CacheServer.h"
+#include "tools/immutable_object_cache/CacheClient.h"
+#include "tools/immutable_object_cache/CacheServer.h"
 
 using namespace ceph::immutable_obj_cache;
 

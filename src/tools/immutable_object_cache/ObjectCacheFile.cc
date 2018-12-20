@@ -21,20 +21,20 @@
 namespace ceph {
 namespace immutable_obj_cache {
 
-SyncFile::SyncFile(CephContext *cct, const std::string &name)
+ObjectCacheFile::ObjectCacheFile(CephContext *cct, const std::string &name)
   : cct(cct), m_fd(-1) {
-  m_name = cct->_conf.get_val<std::string>("rbd_shared_cache_path") + "/ceph_immutable_obj_cache/" + name;
+  m_name = cct->_conf.get_val<std::string>("immutable_object_cache_path") + "/ceph_immutable_obj_cache/" + name;
   ldout(cct, 20) << "file path=" << m_name << dendl;
 }
 
-SyncFile::~SyncFile() {
+ObjectCacheFile::~ObjectCacheFile() {
   // TODO force proper cleanup
   if (m_fd != -1) {
     ::close(m_fd);
   }
 }
 
-int SyncFile::open_file() {
+int ObjectCacheFile::open_file() {
   m_fd = ::open(m_name.c_str(), O_RDONLY);
   if(m_fd == -1) {
     lderr(cct) << "open fails : " << std::strerror(errno) << dendl;
@@ -42,7 +42,7 @@ int SyncFile::open_file() {
   return m_fd;
 }
 
-int SyncFile::create() {
+int ObjectCacheFile::create() {
   m_fd = ::open(m_name.c_str(), O_CREAT | O_NOATIME | O_RDWR | O_SYNC,
                   S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
   if(m_fd == -1) {
@@ -51,15 +51,15 @@ int SyncFile::create() {
   return m_fd;
 }
 
-void SyncFile::read(uint64_t offset, uint64_t length, ceph::bufferlist *bl, Context *on_finish) {
+void ObjectCacheFile::read(uint64_t offset, uint64_t length, ceph::bufferlist *bl, Context *on_finish) {
   on_finish->complete(read_object_from_file(bl, offset, length));
 }
 
-void SyncFile::write(uint64_t offset, ceph::bufferlist &&bl, bool fdatasync, Context *on_finish) {
+void ObjectCacheFile::write(uint64_t offset, ceph::bufferlist &&bl, bool fdatasync, Context *on_finish) {
   on_finish->complete(write_object_to_file(bl, bl.length()));
 }
 
-int SyncFile::write_object_to_file(ceph::bufferlist read_buf, uint64_t object_len) {
+int ObjectCacheFile::write_object_to_file(ceph::bufferlist read_buf, uint64_t object_len) {
 
   ldout(cct, 20) << "cache file name:" << m_name
                  << ", length:" << object_len <<  dendl;
@@ -74,7 +74,7 @@ int SyncFile::write_object_to_file(ceph::bufferlist read_buf, uint64_t object_le
   return ret;
 }
 
-int SyncFile::read_object_from_file(ceph::bufferlist* read_buf, uint64_t object_off, uint64_t object_len) {
+int ObjectCacheFile::read_object_from_file(ceph::bufferlist* read_buf, uint64_t object_off, uint64_t object_len) {
 
   ldout(cct, 20) << "offset:" << object_off
                  << ", length:" << object_len <<  dendl;
@@ -92,7 +92,7 @@ int SyncFile::read_object_from_file(ceph::bufferlist* read_buf, uint64_t object_
   return ret;
 }
 
-uint64_t SyncFile::get_file_size() {
+uint64_t ObjectCacheFile::get_file_size() {
   struct stat buf;
   if(m_fd == -1) {
     lderr(cct)<<"get_file_size fail: file is closed status." << dendl;
@@ -107,5 +107,5 @@ uint64_t SyncFile::get_file_size() {
 }
 
 
+} // namespace immutable_obj_cache
 } // namespace cache
-} // namespace librbd

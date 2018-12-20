@@ -45,7 +45,7 @@ void CacheController::handle_signal(int signum){}
 
 void CacheController::run() {
   try {
-    std::string controller_path = m_cct->_conf.get_val<std::string>("rbd_shared_cache_sock");
+    std::string controller_path = m_cct->_conf.get_val<std::string>("immutable_object_cache_sock");
     std::remove(controller_path.c_str());
 
     m_cache_server = new CacheServer(m_cct, controller_path,
