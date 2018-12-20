@@ -1841,7 +1841,6 @@ CtPtr ProtocolV2::handle_client_addrvec(char *buffer, int r) {
                     << " (socket is " << connection->socket_addr << ")"
                     << dendl;
       peer_addr_p = &peer_addr;
-      break; // we can only check one
     }
   }
 
