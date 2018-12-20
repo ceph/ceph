@@ -7,6 +7,21 @@ VAGRANTFILE_API_VERSION = '2'
 
 DEBUG = false
 
+global_settings = {}
+if File.symlink?(__FILE__)
+  global_config =  File.expand_path(
+    File.join(
+      File.dirname(File.readlink(__FILE__)),
+      'global_vagrant_variables.yml')
+  )
+  if File.exist?(global_config)
+    global_settings = YAML.load_file(global_config)
+  end
+end
+
+LIBVIRT_URI = global_settings.fetch('libvirt_uri', '')
+LIBVIRT_STORAGE_POOL = global_settings.fetch('libvirt_storage_pool', '')
+
 config_file=File.expand_path(File.join(File.dirname(__FILE__), 'vagrant_variables.yml'))
 settings=YAML.load_file(config_file)
 
@@ -46,10 +61,18 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   config.ssh.private_key_path = settings['ssh_private_key_path']
   config.ssh.username = USER
 
-  # When using libvirt, avoid errors like:
-  # "CPU feature cmt not found"
   config.vm.provider :libvirt do |lv|
+    # When using libvirt, avoid errors like:
+    # "CPU feature cmt not found"
     lv.cpu_mode = 'host-passthrough'
+    # set libvirt uri if present
+    if not LIBVIRT_URI.empty?
+      lv.uri = LIBVIRT_URI
+    end
+    # set libvirt storage pool if present
+    if not LIBVIRT_STORAGE_POOL.empty?
+      lv.storage_pool_name = LIBVIRT_STORAGE_POOL
+    end
   end
 
   # Faster bootup. Disables mounting the sync folder for libvirt and virtualbox
