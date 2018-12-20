@@ -5,7 +5,6 @@
 #include "include/Context.h"
 #include "common/dout.h"
 #include "common/WorkQueue.h"
-#include "librbd/ImageCtx.h"
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <aio.h>
