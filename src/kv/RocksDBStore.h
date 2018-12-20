@@ -24,6 +24,7 @@
 #include "common/Cond.h"
 #include "common/ceph_context.h"
 #include "common/PriorityCache.h"
+#include "common/RWLock.h"
 
 class PerfCounters;
 
@@ -64,11 +65,11 @@ namespace rocksdb{
 }
 
 extern rocksdb::Logger *create_rocksdb_ceph_logger();
-
 /**
  * Uses RocksDB to implement the KeyValueDB interface
  */
 class RocksDBStore : public KeyValueDB {
+private:
   CephContext *cct;
   PerfCounters *logger;
   string path;
@@ -85,7 +86,7 @@ class RocksDBStore : public KeyValueDB {
 
   bool must_close_default_cf = false;
   rocksdb::ColumnFamilyHandle *default_cf = nullptr;
-
+  RWLock api_lock;
   int submit_common(rocksdb::WriteOptions& woptions, KeyValueDB::Transaction t);
 
   int create_db_dir();
@@ -96,6 +97,7 @@ class RocksDBStore : public KeyValueDB {
   Cond compact_queue_cond;
   list< pair<string,string> > compact_queue;
   bool compact_queue_stop;
+
   class CompactThread : public Thread {
     RocksDBStore *db;
   public:
@@ -143,106 +145,38 @@ public:
     compact_range_async(combine_strings(prefix, start), combine_strings(prefix, end));
   }
 
-  RocksDBStore(CephContext *c, const string &path, map<string,string> opt, void *p) :
-    cct(c),
-    logger(NULL),
-    path(path),
-    kv_options(opt),
-    priv(p),
-    db(NULL),
-    env(static_cast<rocksdb::Env*>(p)),
-    dbstats(NULL),
-    compact_queue_lock("RocksDBStore::compact_thread_lock"),
-    compact_queue_stop(false),
-    compact_thread(this),
-    compact_on_mount(false),
-    disableWAL(false),
-    enable_rmrange(cct->_conf->rocksdb_enable_rmrange),
-    high_pri_watermark(0)
-  {}
-
+  RocksDBStore(CephContext *c, const string &path, map<string,string> opt, void *p);
   ~RocksDBStore() override;
 
   static bool check_omap_dir(string &omap_dir);
   int open(ostream &out, const std::vector<ColumnFamily>& options = {}) override;
   int create_and_open(ostream &out, const std::vector<ColumnFamily>& new_cfs = {}) override;
-
   void close() override;
 
   int column_family_list(vector<std::string>& cf_names) override;
   int column_family_create(const std::string& name, const std::string& options) override;
   int column_family_delete(const std::string& name) override;
-  KeyValueDB::ColumnFamilyHandle column_family_handle(const std::string& cf_name) override;
+  KeyValueDB::ColumnFamilyHandle column_family_handle(const std::string& cf_name) const override;
 
 private:
-  /*
-   * Get merge operator for column family.
-   */
-  std::shared_ptr<rocksdb::MergeOperator> cf_get_merge_operator(const std::string& prefix);
+  std::shared_ptr<rocksdb::MergeOperator> cf_get_merge_operator(const std::string& prefix) const;
+  rocksdb::ColumnFamilyHandle* cf_get_mono_handle(const std::string& cf_name) const;
+  rocksdb::ColumnFamilyHandle* cf_get_handle(const std::string& cf_name) const;
+  bool cf_check_mode(rocksdb::ColumnFamilyHandle* &cf, const string &prefix) const;
+  std::pair<std::string, ColumnFamilyHandle> cf_get_by_rocksdb_ID(uint32_t ID) const;
+  int cf_create(const std::string& name, const std::string& options);
+  KeyValueDB::ColumnFamilyHandle cf_wrap_handle(rocksdb::ColumnFamilyHandle*);
 
-  /*
-   * Returns handle to mono column family.
-   * Does not return handles for regular column family, even if name matches
-   */
-  rocksdb::ColumnFamilyHandle *cf_mono_get_handle(const std::string& cf_name) {
-    auto iter = cf_mono_handles.find(cf_name);
-    if (iter == cf_mono_handles.end())
-      return nullptr;
-    else
-      return static_cast<rocksdb::ColumnFamilyHandle*>(iter->second.priv);
-  }
-
-  /*
-   * Determines how 'prefix' should be handled.
-   * It is a convenience function that allow to better structuralize conditions
-   * in functions that operate on both mono column families and regular column families.
-   *
-   * Param:
-   *  - cf [in] column family handle as requested by client
-   *       [out] fixed column family handle after redirection
-   *  - prefix [in] as requested by client
-   * Result:
-   *  true - we operate on mono column family, false - we operate on normal column family
-   */
-  bool cf_check_mode(rocksdb::ColumnFamilyHandle* &cf, const string &prefix) {
-    if (cf != nullptr) {
-      return false;
-    }
-    cf = get_cf_handle(prefix);
-    if (cf != nullptr)
-      return true;
-    cf = default_cf;
-    return false;
-  }
-
-private:
   rocksdb::Options rocksdb_options;
-  int open_existing(rocksdb::Options& rocksdb_options);
-
-  struct ColumnFamilyData {
-      string options;                   ///< specific configure option string for this CF
-      ColumnFamilyHandle handle;        ///< handle to column family
-      ColumnFamilyData(const string &options, ColumnFamilyHandle handle = {nullptr})
-        : options(options), handle(handle) {}
-      ColumnFamilyData() {}
-    };
+  struct ColumnFamilyData;
   typedef std::string ColumnFamilyName;
   std::map<ColumnFamilyName, ColumnFamilyData> column_families;
-
   std::unordered_map<std::string, ColumnFamilyHandle> cf_mono_handles;
 
   void perf_counters_register();
 
-  std::pair<std::string, ColumnFamilyHandle> get_cf_by_rocksdb_ID(uint32_t ID) const;
   friend class RocksWBHandler;
 public:
-  rocksdb::ColumnFamilyHandle *get_cf_handle(const std::string& cf_name) const {
-    auto iter = cf_mono_handles.find(cf_name);
-    if (iter == cf_mono_handles.end())
-      return nullptr;
-    else
-      return static_cast<rocksdb::ColumnFamilyHandle*>(iter->second.priv);
-  }
 
   int repair(std::ostream &out) override;
   void split_stats(const std::string &s, char delim, std::vector<std::string> &elems);
@@ -253,7 +187,8 @@ public:
     return logger;
   }
 
-  int64_t estimate_prefix_size(const string& prefix) override;
+  int64_t estimate_prefix_size(const string& prefix,
+                               ColumnFamilyHandle cfh = ColumnFamilyHandle{}) override;
 
   class RocksDBTransactionImpl : public KeyValueDB::TransactionImpl {
   public:
