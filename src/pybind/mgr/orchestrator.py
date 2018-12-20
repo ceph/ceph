@@ -186,6 +186,28 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def service_action(self, action, service_type, service_name=None, service_id=None):
+        # type: (str, str, str, str) -> WriteCompletion
+        """
+        Perform an action (start/stop/reload) on a service.
+
+        Either service_name or service_id must be specified:
+        - If using service_name, perform the action on that entire logical
+          service (i.e. all daemons providing that named service).
+        - If using service_id, perform the action on a single specific daemon
+          instance.
+
+        :param action: one of "start", "stop", "reload"
+        :param service_type: e.g. "mds", "rgw", ...
+        :param service_name: name of logical service ("cephfs", "us-east", ...)
+        :param service_id: service daemon instance (usually a short hostname)
+        :rtype: WriteCompletion
+        """
+        assert action in ["start", "stop", "reload"]
+        assert service_name or service_id
+        assert not (service_name and service_id)
+        raise NotImplementedError()
+
     def create_osds(self, osd_spec):
         """
         Create one or more OSDs within a single Drive Group.
