@@ -1755,8 +1755,16 @@ void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
     to_check.insert(p.first);
   }
   for (auto& pg : to_check) {
-    if (!nextmap.pg_exists(pg)) {
-      ldout(cct, 0) << __func__ << " pg " << pg << " is gone" << dendl;
+    const pg_pool_t *pi = nextmap.get_pg_pool(pg.pool());
+    if (!pi || pg.ps() >= pi->get_pg_num_pending()) {
+      ldout(cct, 0) << __func__ << " pg " << pg << " is gone or merge source"
+		    << dendl;
+      to_cancel.insert(pg);
+      continue;
+    }
+    if (pi->is_pending_merge(pg, nullptr)) {
+      ldout(cct, 0) << __func__ << " pg " << pg << " is pending merge"
+		    << dendl;
       to_cancel.insert(pg);
       continue;
     }
