@@ -756,6 +756,10 @@ if(WITH_MGR AND WITH_MGR_DASHBOARD_FRONTEND AND CMAKE_SYSTEM_PROCESSOR MATCHES "
   add_dependencies(vstart mgr-dashboard-frontend-build)
 endif()
 
+if(WITH_MGR)
+  add_dependencies(vstart ceph-volume-venv-setup)
+endif()
+
 # Everything you need to run CephFS tests
 add_custom_target(cephfs_testing DEPENDS
     vstart
