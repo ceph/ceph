@@ -1,3 +1,5 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 #include "rgw_common.h"
 #include "rgw_coroutine.h"
 #include "rgw_sync_module.h"
@@ -559,11 +561,6 @@ class PSSubscription {
   RGWDataAccessRef data_access;
   RGWDataAccess::BucketRef bucket;
 
-  struct push_endpoint_info {
-    shared_ptr<RGWRESTConn> conn;
-    string path;
-  } push;
-
   class InitCR;
   InitCR *init_cr{nullptr};
 
@@ -643,35 +640,6 @@ class PSSubscription {
     PSSubConfigRef& sub_conf;
     int i;
 
-    bool split_endpoint(const string& push_endpoint, string *addr, string *path) {
-      if (push_endpoint.size() < 9) { /* http://x/ */
-        return false;
-      }
-      size_t pos = push_endpoint.find(':');
-      if (pos == string::npos || pos >= push_endpoint.size() - 1) {
-        return false;
-      }
-
-      string protocol = push_endpoint.substr(0, pos);
-      string s = push_endpoint.substr(pos + 1);
-
-      if (s.size() < 4) { /* //x/ */
-        return false;
-      }
-
-      size_t slash_pos = s.find('/', 2);
-      if (slash_pos == string::npos) {
-        return false;
-      }
-
-      pos += slash_pos;
-
-      *addr = push_endpoint.substr(0, pos + 1);
-      *path = push_endpoint.substr(pos + 1);
-
-      return true;
-    }
-
   public:
     InitCR(RGWDataSyncEnv *_sync_env,
            PSSubscriptionRef& _sub) : RGWSingletonCR<bool>(_sync_env->cct),
@@ -715,17 +683,6 @@ class PSSubscription {
               return set_cr_error(retcode);
             }
 
-            if (!sub_conf->push_endpoint.empty()) {
-              string remote_id = string("pubsub:sub:") + sub->get_bucket_info_result->bucket_info.owner.to_str() + ":" + sub_conf->name;
-              string addr;
-              if (split_endpoint(sub_conf->push_endpoint, &addr, &sub->push.path)) {
-                list<string> endpoints{addr};
-                sub->push.conn = std::make_shared<RGWRESTConn>(sync_env->cct, sync_env->store->svc.zone, remote_id, endpoints);
-              } else {
-                ldout(sync_env->cct, 20) << "failed to split push endpoint: " << sub_conf->push_endpoint << dendl;
-              }
-            }
-
             return set_cr_done();
           }
 
@@ -753,7 +710,39 @@ class PSSubscription {
     }
   };
 
-  using PushCR = RGWPostRESTResourceCR<rgw_pubsub_event, int>;
+  // async execution of RGWPostHTTPData via coroutine
+  class RGWPostHTTPDataCR : public RGWPostHTTPData, public RGWSimpleCoroutine {
+    private:
+      RGWDataSyncEnv *sync_env;
+      bufferlist read_bl;
+
+    public:
+      RGWPostHTTPDataCR(const std::string& _post_data,
+                    RGWDataSyncEnv* _sync_env,
+                    const string& method,
+                    const string& url) :
+      RGWPostHTTPData(_sync_env->cct, method, url, &read_bl, false),
+      RGWSimpleCoroutine(_sync_env->cct), sync_env(_sync_env)
+      {
+        // ctor also set the data to send
+        set_post_data(_post_data);
+        set_send_length(_post_data.length());
+      }
+
+      // send message to endpoint
+      int send_request() override {
+        init_new_io(this);
+        const auto rc = sync_env->http_manager->add_request(this);
+        // return zero on sucess, rc o/w
+        return std::max(rc, 0);
+      }
+
+      // wait for reply
+      int request_complete() override {
+        // TODO: check result and return accordingly
+        return 0;
+      }
+  };
 
   class StoreEventCR : public RGWCoroutine {
     RGWDataSyncEnv *sync_env;
@@ -765,6 +754,8 @@ class PSSubscription {
     rgw_object_simple_put_params put_obj;
     string oid_prefix;
     int i;
+    std::string post_data;
+
   public:
     StoreEventCR(RGWDataSyncEnv *_sync_env,
                  PSSubscriptionRef& _sub,
@@ -802,16 +793,20 @@ class PSSubscription {
           return set_cr_error(retcode);
         }
 
-        if (sub->push.conn) {
-          yield {
-            rgw_http_param_pair params[] = {
-              { nullptr, nullptr }
-            };
-
-            call(new PushCR(sync_env->cct, sub->push.conn.get(),
-                            sync_env->http_manager,
-                            sub->push.path,
-                            params, *event, nullptr));
+        if (!sub_conf->push_endpoint.empty()) {
+          {
+            bufferlist bl;
+            pse.format(&bl);
+            post_data.assign(bl.c_str(), bl.length());
+          }
+          yield call(new RGWPostHTTPDataCR(post_data, sync_env, "POST", sub_conf->push_endpoint));
+          
+          if (retcode < 0) {
+            std::cout << "ERROR: failed to push event: " << put_obj.bucket << "/" << put_obj.key << 
+              " to endpoint: " << sub_conf->push_endpoint << " ret=" << retcode << std::endl;
+            ldout(sync_env->cct, 0) << "ERROR: failed to push event: " << put_obj.bucket << "/" << put_obj.key <<
+              " to endpoint: " << sub_conf->push_endpoint << " ret=" << retcode << dendl;
+            return set_cr_error(retcode);
           }
         }
 
@@ -863,7 +858,6 @@ public:
 
   friend class InitCR;
 };
-
 
 class PSManager
 {
