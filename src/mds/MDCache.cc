@@ -4005,18 +4005,37 @@ void MDCache::rejoin_send_rejoins()
   }
 
   if (mds->is_rejoin()) {
-    map<client_t, set<mds_rank_t> > client_exports;
-    for (auto p = cap_exports.begin(); p != cap_exports.end(); ++p) {
-      mds_rank_t target = p->second.first;
+    map<client_t, pair<Session*, set<mds_rank_t> > > client_exports;
+    for (auto& p : cap_exports) {
+      mds_rank_t target = p.second.first;
       if (rejoins.count(target) == 0)
 	continue;
-      rejoins[target]->cap_exports[p->first] = p->second.second;
-      for (auto q = p->second.second.begin(); q != p->second.second.end(); ++q)
-	client_exports[q->first].insert(target);
+      for (auto q = p.second.second.begin(); q != p.second.second.end(); ) {
+	Session *session = nullptr;
+	auto it = client_exports.find(q->first);
+	if (it != client_exports.end()) {
+	  session = it->second.first;
+	  if (session)
+	    it->second.second.insert(target);
+	} else {
+	  session = mds->sessionmap.get_session(entity_name_t::CLIENT(q->first.v));
+	  auto& r = client_exports[q->first];
+	  r.first = session;
+	  if (session)
+	    r.second.insert(target);
+	}
+	if (session) {
+	  ++q;
+	} else {
+	  // remove reconnect with no session
+	  p.second.second.erase(q++);
+	}
+      }
+      rejoins[target]->cap_exports[p.first] = p.second.second;
     }
     for (auto& p : client_exports) {
-      Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(p.first.v));
-      for (auto& q : p.second) {
+      Session *session = p.second.first;
+      for (auto& q : p.second.second) {
 	auto rejoin =  rejoins[q];
 	rejoin->client_map[p.first] = session->info.inst;
 	rejoin->client_metadata_map[p.first] = session->info.client_metadata;
@@ -5845,6 +5864,9 @@ void MDCache::open_snaprealms()
 	auto q = reconnected_caps.find(child->ino());
 	ceph_assert(q != reconnected_caps.end());
 	for (auto r = q->second.begin(); r != q->second.end(); ++r) {
+	  Capability *cap = child->get_client_cap(r->first);
+	  if (!cap)
+	    continue;
 	  if (r->second.snap_follows > 0) {
 	    if (r->second.snap_follows < child->first - 1) {
 	      rebuild_need_snapflush(child, realm, r->first, r->second.snap_follows);
@@ -5852,9 +5874,7 @@ void MDCache::open_snaprealms()
 	      // When processing a cap flush message that is re-sent, it's possble
 	      // that the sender has already released all WR caps. So we should
 	      // force MDCache::cow_inode() to setup CInode::client_need_snapflush.
-	      Capability *cap = child->get_client_cap(r->first);
-	      if (cap)
-		cap->mark_needsnapflush();
+	      cap->mark_needsnapflush();
 	    }
 	  }
 	  // make sure client's cap is in the correct snaprealm.
