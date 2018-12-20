@@ -2734,7 +2734,8 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
     goto ignore;
   }
 
-  if (osdmap.test_flag(CEPH_OSDMAP_PGLOG_HARDLIMIT) &&
+  if (osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS &&
+      osdmap.test_flag(CEPH_OSDMAP_PGLOG_HARDLIMIT) &&
       !(m->osd_features & CEPH_FEATURE_OSD_PGLOG_HARDLIMIT)) {
     mon->clog->info() << "disallowing boot of OSD "
 		      << m->get_orig_source_inst()
