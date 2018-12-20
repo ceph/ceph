@@ -2935,6 +2935,7 @@ public:
       ceph_assert(!has_full_intervals());
       ceph_abort_msg("not valid for this implementation");
     }
+    virtual void adjust_start_backwards(epoch_t last_epoch_clean) = 0;
 
     virtual ~interval_rep() {}
   };
@@ -3099,6 +3100,11 @@ public:
   pair<epoch_t, epoch_t> get_bounds() const {
     ceph_assert(past_intervals);
     return past_intervals->get_bounds();
+  }
+
+  void adjust_start_backwards(epoch_t last_epoch_clean) {
+    ceph_assert(past_intervals);
+    past_intervals->adjust_start_backwards(last_epoch_clean);
   }
 
   enum osd_state_t {
