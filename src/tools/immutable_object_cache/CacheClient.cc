@@ -6,7 +6,7 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_immutable_obj_cache
 #undef dout_prefix
-#define dout_prefix *_dout << "ceph::cache::CacheControllerSocketClient: " << this << " " \
+#define dout_prefix *_dout << "ceph::cache::CacheClient: " << this << " " \
                            << __func__ << ": "
 
 
@@ -54,7 +54,8 @@ namespace immutable_obj_cache {
     if(close_ec) {
        ldout(cct, 20) << "close: " << close_ec.message() << dendl;
     }
-    ldout(cct, 20) << "session don't work, later all request will be dispatched to rados layer" << dendl;
+    ldout(cct, 20) << "session don't work, later all request will be" <<
+                      " dispatched to rados layer" << dendl;
   }
 
   int CacheClient::connect() {
@@ -62,8 +63,9 @@ namespace immutable_obj_cache {
     m_dm_socket.connect(m_ep, ec);
     if(ec) {
       if(ec == boost::asio::error::connection_refused) {
-        ldout(cct, 20) << ec.message() << " : maybe rbd-cache Controller don't startup. "
-                  << "Now data will be read from ceph cluster " << dendl;
+        ldout(cct, 20) << ec.message()
+                       << " : immutable-object-cache daemon is down?"
+                       << "Now data will be read from ceph cluster " << dendl;
       } else {
         ldout(cct, 20) << "connect: " << ec.message() << dendl;
       }
@@ -86,7 +88,8 @@ namespace immutable_obj_cache {
     return 0;
   }
 
-  int CacheClient::register_volume(std::string pool_name, std::string vol_name, uint64_t vol_size, Context* on_finish) {
+  int CacheClient::register_volume(std::string pool_name, std::string vol_name,
+                                   uint64_t vol_size, Context* on_finish) {
     // cache controller will init layout
     rbdsc_req_type_t *message = new rbdsc_req_type_t();
     message->type = RBDSC_REGISTER;
@@ -99,7 +102,9 @@ namespace immutable_obj_cache {
     uint64_t ret;
     boost::system::error_code ec;
 
-    ret = boost::asio::write(m_dm_socket, boost::asio::buffer((char*)message, message->size()), ec);
+    ret = boost::asio::write(m_dm_socket,
+      boost::asio::buffer((char*)message, message->size()), ec);
+
     if(ec) {
       ldout(cct, 20) << "write fails : " << ec.message() << dendl;
       return -1;
@@ -111,7 +116,9 @@ namespace immutable_obj_cache {
     }
 
     // hard code TODO
-    ret = boost::asio::read(m_dm_socket, boost::asio::buffer(m_recv_buffer, RBDSC_MSG_LEN), ec);
+    ret = boost::asio::read(m_dm_socket,
+      boost::asio::buffer(m_recv_buffer, RBDSC_MSG_LEN), ec);
+
     if(ec == boost::asio::error::eof) {
       ldout(cct, 20) << "recv eof" << dendl;
       return -1;
@@ -147,7 +154,8 @@ namespace immutable_obj_cache {
   }
 
   // if occur any error, we just return false. Then read from rados.
-  int CacheClient::lookup_object(std::string pool_name, std::string vol_name, std::string object_id, Context* on_finish) {
+  int CacheClient::lookup_object(std::string pool_name, std::string vol_name,
+                                 std::string object_id, Context* on_finish) {
     rbdsc_req_type_t *message = new rbdsc_req_type_t();
     message->type = RBDSC_READ;
     memcpy(message->pool_name, pool_name.c_str(), pool_name.size());
@@ -158,18 +166,19 @@ namespace immutable_obj_cache {
     message->length = 0;
 
     boost::asio::async_write(m_dm_socket,
-                             boost::asio::buffer((char*)message, message->size()),
-                             boost::asio::transfer_exactly(RBDSC_MSG_LEN),
-        [this, on_finish, message](const boost::system::error_code& err, size_t cb) {
+      boost::asio::buffer((char*)message, message->size()),
+      boost::asio::transfer_exactly(RBDSC_MSG_LEN),
+      [this, on_finish, message](const boost::system::error_code& err, size_t cb) {
           delete message;
           if(err) {
-            ldout(cct, 20) << "lookup_object: async_write fails." << err.message() << dendl;
+            ldout(cct, 20) << "async_write failed"
+                           << err.message() << dendl;
             close();
             on_finish->complete(false);
             return;
           }
           if(cb != RBDSC_MSG_LEN) {
-            ldout(cct, 20) << "lookup_object: async_write fails. in-complete request" << dendl;
+            ldout(cct, 20) << "async_write failed in-complete request" << dendl;
             close();
             on_finish->complete(false);
             return;
@@ -182,14 +191,17 @@ namespace immutable_obj_cache {
 
   void CacheClient::get_result(Context* on_finish) {
     char* lookup_result = new char[RBDSC_MSG_LEN + 1];
-    boost::asio::async_read(m_dm_socket, boost::asio::buffer(lookup_result, RBDSC_MSG_LEN),
-                            boost::asio::transfer_exactly(RBDSC_MSG_LEN),
-        [this, lookup_result, on_finish](const boost::system::error_code& err, size_t cb) {
+    boost::asio::async_read(m_dm_socket,
+      boost::asio::buffer(lookup_result, RBDSC_MSG_LEN),
+      boost::asio::transfer_exactly(RBDSC_MSG_LEN),
+      [this, lookup_result, on_finish](const boost::system::error_code& err,
+                                       size_t cb) {
           if(err == boost::asio::error::eof ||
             err == boost::asio::error::connection_reset ||
             err == boost::asio::error::operation_aborted ||
             err == boost::asio::error::bad_descriptor) {
-            ldout(cct, 20) << "fail to read lookup result" << err.message() << dendl;
+            ldout(cct, 20) << "fail to read lookup result"
+                           << err.message() << dendl;
             close();
             on_finish->complete(false);
             delete lookup_result;
@@ -197,7 +209,8 @@ namespace immutable_obj_cache {
           }
 
           if(err) {
-            ldout(cct, 1) << "fail to read lookup result" << err.message() << dendl;
+            ldout(cct, 1) << "fail to read lookup result"
+                          << err.message() << dendl;
             close();
             on_finish->complete(false);
             delete lookup_result;

@@ -1,8 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CEPH_CACHE_POLICY_HPP
-#define CEPH_CACHE_POLICY_HPP
+#ifndef CEPH_CACHE_POLICY_H
+#define CEPH_CACHE_POLICY_H
 
 #include <list>
 #include <string>

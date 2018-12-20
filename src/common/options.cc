@@ -6980,21 +6980,21 @@ static std::vector<Option> get_rbd_options() {
     .set_default(false)
     .set_description("whether to block writes to the cache before the aio_write call completes"),
 
-    Option("rbd_shared_cache_enabled", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(false)
-    .set_description("whether to enable shared ssd caching"),
-
-    Option("rbd_shared_cache_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    Option("immutable_object_cache_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("/tmp")
-    .set_description("shared ssd caching data dir"),
+    .set_description("immutable object cache data dir"),
 
-    Option("rbd_shared_cache_sock", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("/tmp/rbd_shared_ro_cache_sock")
-    .set_description("shared ssd caching domain socket"),
+    Option("immutable_object_cache_sock", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("/var/run/ceph/immutable_object_cache_sock")
+    .set_description("immutable object cache domain socket"),
 
-    Option("rbd_shared_cache_entries", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(4096)
-    .set_description("shared ssd caching data entries"),
+    Option("immutable_object_cache_max_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
+    .set_default(1_G)
+    .set_description("max immutable object cache data size"),
+
+    Option("immutable_object_cache_max_inflight_ops", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(128)
+    .set_description("max immutable object caching inflight ops"),
 
     Option("rbd_concurrent_management_ops", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(10)

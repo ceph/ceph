@@ -16,11 +16,13 @@
 namespace ceph {
 namespace immutable_obj_cache {
 
-SimplePolicy::SimplePolicy(CephContext *cct, uint64_t block_num, float watermark)
-  : cct(cct), m_watermark(watermark), m_entry_count(block_num), inflight_ops(0),
+SimplePolicy::SimplePolicy(CephContext *cct, uint64_t block_num,
+                           float watermark)
+  : cct(cct), m_watermark(watermark), m_entry_count(block_num),
     m_cache_map_lock("rbd::cache::SimplePolicy::m_cache_map_lock"),
     m_free_list_lock("rbd::cache::SimplePolicy::m_free_list_lock") {
   ldout(cct, 20) << dendl;
+  m_max_inflight_ops = cct->_conf.get_val<uint64_t>("immutable_object_cache_max_inflight_ops");
   for(uint64_t i = 0; i < m_entry_count; i++) {
     m_free_list.push_back(new Entry());
   }
@@ -87,7 +89,8 @@ cache_status_t SimplePolicy::lookup_object(std::string file_name) {
   return entry->status;
 }
 
-void SimplePolicy::update_status(std::string file_name, cache_status_t new_status) {
+void SimplePolicy::update_status(std::string file_name,
+                                 cache_status_t new_status) {
   ldout(cct, 20) << "update status for: " << file_name
                  << " new status = " << new_status << dendl;
 

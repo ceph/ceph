@@ -8,7 +8,7 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_immutable_obj_cache
 #undef dout_prefix
-#define dout_prefix *_dout << "ceph::cache::CacheControllerSocket: " << this << " " \
+#define dout_prefix *_dout << "ceph::cache::CacheServer: " << this << " " \
                            << __func__ << ": "
 
 
@@ -17,7 +17,8 @@ using boost::asio::local::stream_protocol;
 namespace ceph {
 namespace immutable_obj_cache {
 
-CacheServer::CacheServer(CephContext* cct, const std::string& file, ProcessMsg processmsg)
+CacheServer::CacheServer(CephContext* cct, const std::string& file,
+                         ProcessMsg processmsg)
   : cct(cct), m_server_process_msg(processmsg),
     m_local_path(file), m_acceptor(m_io_service) {}
 
@@ -87,13 +88,15 @@ int CacheServer::start_accept() {
 
 void CacheServer::accept() {
 
-  CacheSessionPtr new_session(new CacheSession(m_session_id, m_io_service, m_server_process_msg, cct));
+  CacheSessionPtr new_session(new CacheSession(m_session_id, m_io_service,
+                                               m_server_process_msg, cct));
   m_acceptor.async_accept(new_session->socket(),
       boost::bind(&CacheServer::handle_accept, this, new_session,
         boost::asio::placeholders::error));
 }
 
-void CacheServer::handle_accept(CacheSessionPtr new_session, const boost::system::error_code& error) {
+void CacheServer::handle_accept(CacheSessionPtr new_session,
+                                const boost::system::error_code& error) {
   ldout(cct, 20) << dendl;
   if (error) {
     // operation_absort

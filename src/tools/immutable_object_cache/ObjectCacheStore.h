@@ -8,16 +8,16 @@
 #include "common/errno.h"
 #include "common/ceph_context.h"
 #include "common/Mutex.h"
+#include "include/Context.h"
 #include "include/rados/librados.hpp"
-#include "include/rbd/librbd.h"
-#include "librbd/ImageCtx.h"
-#include "librbd/ImageState.h"
+
 #include "ObjectCacheFile.h"
 #include "SimplePolicy.h"
 
 
 using librados::Rados;
 using librados::IoCtx;
+class ContextWQ;
 
 namespace ceph {
 namespace immutable_obj_cache {
@@ -60,14 +60,14 @@ class ObjectCacheStore
     std::map<std::string, librados::IoCtx*> m_ioctxs;
     Mutex m_ioctxs_lock;
 
-    SyncFile *m_cache_file;
+    ObjectCacheFile *m_cache_file;
 
     Policy* m_policy;
     std::thread* evict_thd;
     bool m_evict_go = false;
 
     //TODO(): make this configurable
-    int dir_num = 10;
+    int m_dir_num = 10;
     uint64_t object_cache_entries;
     std::string m_cache_root_dir;
 };
