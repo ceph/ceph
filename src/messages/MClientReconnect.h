@@ -24,23 +24,46 @@ class MClientReconnect : public MessageInstance<MClientReconnect> {
 public:
   friend factory;
 private:
-  static constexpr int HEAD_VERSION = 4;
+  static constexpr int HEAD_VERSION = 5;
   static constexpr int COMPAT_VERSION = 4;
 
 public:
-  map<inodeno_t, cap_reconnect_t>  caps;   // only head inodes
+  map<inodeno_t, cap_reconnect_t> caps; // only head inodes
   vector<snaprealm_reconnect_t> realms;
+  bool more = false;
 
   MClientReconnect() :
-    MessageInstance(CEPH_MSG_CLIENT_RECONNECT, HEAD_VERSION, COMPAT_VERSION) { }
+    MessageInstance(CEPH_MSG_CLIENT_RECONNECT, HEAD_VERSION, COMPAT_VERSION) {}
 private:
   ~MClientReconnect() override {}
+
+  size_t cap_size = 0;
+  size_t realm_size = 0;
+  size_t approx_size = sizeof(__u32) + sizeof(__u32) + 1;
+
+  void calc_item_size() {
+    using ceph::encode;
+    {
+      bufferlist bl;
+      inodeno_t ino;
+      cap_reconnect_t cr;
+      encode(ino, bl);
+      encode(cr, bl);
+      cap_size = bl.length();
+    }
+    {
+      bufferlist bl;
+      snaprealm_reconnect_t sr;
+      encode(sr, bl);
+      realm_size = bl.length();
+    }
+  }
 
 public:
   std::string_view get_type_name() const override { return "client_reconnect"; }
   void print(ostream& out) const override {
     out << "client_reconnect("
-	<< caps.size() << " caps)";
+	<< caps.size() << " caps " << realms.size() << " realms )";
   }
 
   // Force to use old encoding.
@@ -50,11 +73,19 @@ public:
     if (v <= 3)
       header.compat_version = 0;
   }
+  size_t get_approx_size() {
+    return approx_size;
+  }
+  void mark_more() { more = true; }
+  bool has_more() const { return more; }
 
   void add_cap(inodeno_t ino, uint64_t cap_id, inodeno_t pathbase, const string& path,
 	       int wanted, int issued, inodeno_t sr, snapid_t sf, bufferlist& lb)
   {
     caps[ino] = cap_reconnect_t(cap_id, pathbase, path, wanted, issued, sr, sf, lb);
+    if (!cap_size)
+      calc_item_size();
+    approx_size += cap_size + path.length() + lb.length();
   }
   void add_snaprealm(inodeno_t ino, snapid_t seq, inodeno_t parent) {
     snaprealm_reconnect_t r;
@@ -62,6 +93,9 @@ public:
     r.realm.seq = seq;
     r.realm.parent = parent;
     realms.push_back(r);
+    if (!realm_size)
+      calc_item_size();
+    approx_size += realm_size;
   }
 
   void encode_payload(uint64_t features) override {
@@ -80,6 +114,7 @@ public:
     if (header.version >= 4) {
 	encode(caps, data);
 	encode(realms, data);
+	encode(more, data);
     } else {
       // compat crap
       if (header.version == 3) {
@@ -107,6 +142,8 @@ public:
     if (header.version >= 4) {
       decode(caps, p);
       decode(realms, p);
+      if (header.version >= 5)
+	decode(more, p);
     } else {
       // compat crap
       if (header.version == 3) {

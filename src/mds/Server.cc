@@ -1198,7 +1198,8 @@ void Server::reconnect_clients(MDSInternalContext *reconnect_done_)
 
 void Server::handle_client_reconnect(const MClientReconnect::const_ref &m)
 {
-  dout(7) << "handle_client_reconnect " << m->get_source() << dendl;
+  dout(7) << "handle_client_reconnect " << m->get_source()
+	  << (m->has_more() ? " (more)" : "") << dendl;
   client_t from = m->get_source().num();
   Session *session = mds->get_session(m);
   ceph_assert(session);
@@ -1249,21 +1250,23 @@ void Server::handle_client_reconnect(const MClientReconnect::const_ref &m)
   }
 
   if (deny) {
-    auto m = MClientSession::create(CEPH_SESSION_CLOSE);
-    mds->send_message_client(m, session);
+    auto r = MClientSession::create(CEPH_SESSION_CLOSE);
+    mds->send_message_client(r, session);
     if (session->is_open())
       kill_session(session, nullptr);
     return;
   }
 
-  // notify client of success with an OPEN
-  auto reply = MClientSession::create(CEPH_SESSION_OPEN);
-  if (session->info.has_feature(CEPHFS_FEATURE_MIMIC))
-    reply->supported_features = supported_features;
-  mds->send_message_client(reply, session);
+  if (!m->has_more()) {
+    // notify client of success with an OPEN
+    auto reply = MClientSession::create(CEPH_SESSION_OPEN);
+    if (session->info.has_feature(CEPHFS_FEATURE_MIMIC))
+      reply->supported_features = supported_features;
+    mds->send_message_client(reply, session);
+    mds->clog->debug() << "reconnect by " << session->info.inst << " after " << delay;
+  }
 
   session->last_cap_renew = clock::now();
-  mds->clog->debug() << "reconnect by " << session->info.inst << " after " << delay;
   
   // snaprealms
   for (const auto &r : m->realms) {
@@ -1316,14 +1319,17 @@ void Server::handle_client_reconnect(const MClientReconnect::const_ref &m)
       mdcache->rejoin_recovered_caps(p.first, from, p.second, MDS_RANK_NONE);
     }
   }
-  mdcache->rejoin_recovered_client(session->get_client(), session->info.inst);
 
   reconnect_last_seen = clock::now();
 
-  // remove from gather set
-  client_reconnect_gather.erase(from);
-  if (client_reconnect_gather.empty())
-    reconnect_gather_finish();
+  if (!m->has_more()) {
+    mdcache->rejoin_recovered_client(session->get_client(), session->info.inst);
+
+    // remove from gather set
+    client_reconnect_gather.erase(from);
+    if (client_reconnect_gather.empty())
+      reconnect_gather_finish();
+  }
 }
 
 void Server::infer_supported_features(Session *session, client_metadata_t& client_metadata)
