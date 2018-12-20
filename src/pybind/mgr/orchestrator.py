@@ -297,6 +297,26 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def update_mgrs(self, num, hosts):
+        # type: (int, List[str]) -> WriteCompletion
+        """
+        Update the number of cluster managers.
+
+        :param num: requested number of managers.
+        :param hosts: list of hosts (optional)
+        """
+        raise NotImplementedError()
+
+    def update_mons(self, num, hosts):
+        # type: (int, List[List[str,str]]) -> WriteCompletion
+        """
+        Update the number of cluster monitors.
+
+        :param num: requested number of monitors.
+        :param hosts: list of hosts (optional)
+        """
+        raise NotImplementedError()
+
     def add_stateless_service(self, service_type, spec):
         # type: (str, StatelessServiceSpec) -> WriteCompletion
         """
