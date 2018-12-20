@@ -5,7 +5,7 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { BsModalRef } from 'ngx-bootstrap/modal';
 import { of } from 'rxjs';
 
-import { configureTestBed } from '../../../../../testing/unit-test-helper';
+import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
 import { OsdService } from '../../../../shared/api/osd.service';
 import { ModalComponent } from '../../../../shared/components/modal/modal.component';
 import { SubmitButtonComponent } from '../../../../shared/components/submit-button/submit-button.component';
@@ -19,7 +19,7 @@ describe('OsdReweightModalComponent', () => {
   configureTestBed({
     imports: [ReactiveFormsModule, HttpClientTestingModule],
     declarations: [OsdReweightModalComponent, ModalComponent, SubmitButtonComponent],
-    providers: [OsdService, BsModalRef, CdFormBuilder]
+    providers: [OsdService, BsModalRef, CdFormBuilder, i18nProviders]
   });
 
   beforeEach(() => {

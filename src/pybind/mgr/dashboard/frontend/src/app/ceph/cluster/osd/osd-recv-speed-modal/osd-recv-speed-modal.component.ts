@@ -8,10 +8,10 @@ import { forkJoin as observableForkJoin, of } from 'rxjs';
 import { mergeMap } from 'rxjs/operators';
 
 import { ConfigurationService } from '../../../../shared/api/configuration.service';
+import { OsdService } from '../../../../shared/api/osd.service';
 import { NotificationType } from '../../../../shared/enum/notification-type.enum';
 import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
 import { NotificationService } from '../../../../shared/services/notification.service';
-import { OsdRecvSpeedModalPriorities } from './osd-recv-speed-modal.priorities';
 
 @Component({
   selector: 'cd-osd-recv-speed-modal',
@@ -20,15 +20,17 @@ import { OsdRecvSpeedModalPriorities } from './osd-recv-speed-modal.priorities';
 })
 export class OsdRecvSpeedModalComponent implements OnInit {
   osdRecvSpeedForm: CdFormGroup;
-  priorities = OsdRecvSpeedModalPriorities.KNOWN_PRIORITIES;
+  priorities = [];
   priorityAttrs = [];
 
   constructor(
     public bsModalRef: BsModalRef,
     private configService: ConfigurationService,
     private notificationService: NotificationService,
-    private i18n: I18n
+    private i18n: I18n,
+    private osdService: OsdService
   ) {
+    this.priorities = this.osdService.osdRecvSpeedModalPriorities.KNOWN_PRIORITIES;
     this.osdRecvSpeedForm = new CdFormGroup({
       priority: new FormControl(null, { validators: [Validators.required] }),
       customizePriority: new FormControl(false)

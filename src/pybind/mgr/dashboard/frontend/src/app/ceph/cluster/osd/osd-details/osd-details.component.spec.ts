@@ -6,7 +6,7 @@ import { of } from 'rxjs';
 
 import { TabsModule } from 'ngx-bootstrap/tabs';
 
-import { configureTestBed } from '../../../../../testing/unit-test-helper';
+import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
 import { OsdService } from '../../../../shared/api/osd.service';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
 import { SharedModule } from '../../../../shared/shared.module';
@@ -28,7 +28,8 @@ describe('OsdDetailsComponent', () => {
       PerformanceCounterModule,
       SharedModule
     ],
-    declarations: [OsdDetailsComponent, OsdPerformanceHistogramComponent]
+    declarations: [OsdDetailsComponent, OsdPerformanceHistogramComponent],
+    providers: i18nProviders
   });
 
   beforeEach(() => {

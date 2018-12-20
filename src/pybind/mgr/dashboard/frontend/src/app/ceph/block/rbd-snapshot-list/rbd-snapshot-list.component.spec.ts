@@ -3,6 +3,7 @@ import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testin
 import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { I18n } from '@ngx-translate/i18n-polyfill';
 import { ToastModule } from 'ng2-toastr';
 import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 import { Subject, throwError as observableThrowError } from 'rxjs';
@@ -80,11 +81,12 @@ describe('RbdSnapshotListComponent', () => {
 
     beforeEach(() => {
       fixture.detectChanges();
+      const i18n = TestBed.get(I18n);
       called = false;
       rbdService = new RbdService(null);
       notificationService = new NotificationService(null, null);
       authStorageService = new AuthStorageService();
-      authStorageService.set('user', { 'rbd-image': ['create', 'read', 'update', 'delete'] });
+      authStorageService.set('user', '', { 'rbd-image': ['create', 'read', 'update', 'delete'] });
       component = new RbdSnapshotListComponent(
         authStorageService,
         null,
@@ -94,7 +96,8 @@ describe('RbdSnapshotListComponent', () => {
         null,
         notificationService,
         null,
-        null
+        null,
+        i18n
       );
       spyOn(rbdService, 'deleteSnapshot').and.returnValue(observableThrowError({ status: 500 }));
       spyOn(notificationService, 'notifyTask').and.stub();

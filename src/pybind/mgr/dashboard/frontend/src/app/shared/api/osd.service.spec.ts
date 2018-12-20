@@ -1,7 +1,7 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 
-import { configureTestBed } from '../../../testing/unit-test-helper';
+import { configureTestBed, i18nProviders } from '../../../testing/unit-test-helper';
 import { OsdService } from './osd.service';
 
 describe('OsdService', () => {
@@ -9,7 +9,7 @@ describe('OsdService', () => {
   let httpTesting: HttpTestingController;
 
   configureTestBed({
-    providers: [OsdService],
+    providers: [OsdService, i18nProviders],
     imports: [HttpClientTestingModule]
   });
 
