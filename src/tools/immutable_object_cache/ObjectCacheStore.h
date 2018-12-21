@@ -60,8 +60,6 @@ class ObjectCacheStore
     ObjectCacheFile *m_cache_file;
 
     Policy* m_policy;
-    std::thread* evict_thd;
-    bool m_evict_go = false;
 
     //TODO(): make this configurable
     int m_dir_num = 10;
