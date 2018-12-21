@@ -947,7 +947,7 @@ TEST_F(TestMockInstanceWatcher_NotifySync, StartedOnNonLeaderAcquireLeader) {
   expect_throttler_destroy();
   instance_watcher2->handle_release_leader();
   instance_watcher1->handle_acquire_leader();
-  instance_watcher2->handle_update_leader(instance_id2);
+  instance_watcher2->handle_update_leader(instance_id1);
 
   instance_watcher1->notify_sync_complete("sync_id");
 }
