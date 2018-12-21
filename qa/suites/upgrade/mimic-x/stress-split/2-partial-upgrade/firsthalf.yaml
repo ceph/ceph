@@ -11,3 +11,8 @@ tasks:
     daemons: [mon.a,mon.b,mon.c,mgr.x,osd.0,osd.1,osd.2,osd.3]
     mon-health-to-clog: false
 - print: "**** done ceph.restart 1st half"
+- exec:
+    osd.0:
+      - ceph osd set pglog_hardlimit && exit 1 || true
+      - ceph osd dump --format=json-pretty | grep "flags"
+- print: "**** try to set pglog_hardlimit, should not succeed"
