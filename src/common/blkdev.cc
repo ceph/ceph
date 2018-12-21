@@ -29,7 +29,10 @@
 //#include "common/debug.h"
 #include "include/scope_guard.h"
 #include "include/uuid.h"
+#include "include/stringify.h"
 #include "blkdev.h"
+
+#include "json_spirit/json_spirit_reader.h"
 
 int get_device_by_path(const char *path, char* partition, char* device,
 		       size_t max)
@@ -477,6 +480,29 @@ std::string get_device_id(const std::string& devname)
   device_id = model + "_" + serial;
   std::replace(device_id.begin(), device_id.end(), ' ', '_');
   return device_id;
+}
+
+int block_device_get_metrics(const char *device, int timeout,
+			     json_spirit::mValue *result)
+{
+  std::string s;
+  if (int r = block_device_run_smartctl(device, timeout, &s); r != 0) {
+    s = "{\"error\": \"smartctl failed\", \"dev\": \"";
+    s += device;
+    s += "\", \"smartctl_error_code\": " + stringify(r);
+    s += "\", \"smartctl_output\": \"" + s;
+    s += + "\"}";
+  }
+  if (json_spirit::read(s, *result)) {
+    return 0;
+  }
+  s = "{\"error\": \"smartctl returned invalid JSON\", \"dev\": \"";
+  s += device;
+  s += "\"}";
+  if (json_spirit::read(s, *result)) {
+    return 0;
+  }
+  return -EINVAL;
 }
 
 int block_device_run_smartctl(const char *device, int timeout,
