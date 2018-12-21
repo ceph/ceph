@@ -72,6 +72,10 @@ various aspects of your Ceph cluster:
   counters. Display and manage (add/edit/delete) object gateway users and their
   details (e.g. quotas) as well as the users' buckets and their details (e.g.
   owner, quotas).
+* **Feature toggles**: regardless of any existing Role-Based Authorization
+  defined, certain features can be disabled from the Dashboard, as well as the
+  corresponding REST API functionality. See :ref:`dashboard-feature-toggles`
+  for details.
 
 Enabling
 --------
@@ -525,7 +529,7 @@ To associate roles to users, the following CLI commands are available:
 
   $ ceph dashboard ac-user-del-roles <username> <rolename> [<rolename>...]
 
-
+ 
 Example of user and custom role creation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -546,6 +550,49 @@ view and create Ceph pools, and have read-only access to any other scopes.
 3. *Associate roles to user*::
 
    $ ceph dashboard ac-user-set-roles bob rbd/pool-manager read-only
+
+.. _dashboard-feature-toggles:
+
+Feature toggles
+---------------
+
+If some Ceph or Dashboard functionality is not being used (e.g.: RBD Mirroring)
+it can be disabled and hidden from the Web User Interface, as well as from the REST
+API (501 "Not Implemented" error will be returned). Features can be disabled or
+enabled without the need of restarting Ceph Manager.
+
+Currently the following features can be disabled:
+
+- *RBD (Images, Mirroring and iSCSI)*::
+
+  $ ceph dashboard set-enable-rbd-images <true|false>
+  $ ceph dashboard set-enable-rbd-mirroring <true|false>
+  $ ceph dashboard set-enable-rbd-iscsi <true|false>
+
+- *CephFS*::
+
+  $ ceph dashboard set-enable-cephfs <true|false>
+
+- *Rados GW*::
+
+  $ ceph dashboard set-enable-rgw <true|false>
+
+Debug mode
+----------
+
+While not recommended for production deployments, under certain circumstances,
+it can be helpful to obtain extra information from Dashboard errors.
+
+This can be achieved with the following command:
+
+::
+
+  $ ceph dashboard set-debug-mode <false|true>
+
+The list of changes that `DEBUG_MODE` brings in is the following:
+
+- CherryPy environment changes from `production` to `test_suite`. As a result of this:
+  - Back-end HTTP Error responses include Python traceback.
 
 
 Reverse proxies
