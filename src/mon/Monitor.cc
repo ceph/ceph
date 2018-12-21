@@ -2130,15 +2130,24 @@ void Monitor::collect_metadata(Metadata *m)
 
   // infer storage device
   string devname = store->get_devname();
-  if (devname.size()) {
-    (*m)["devices"] = devname;
-    string id = get_device_id(devname);
+  set<string> devnames;
+  derr << " devname " << devname << dendl;
+  get_raw_devices(devname, &devnames);
+  (*m)["devices"] = stringify(devnames);
+  string devids;
+  for (auto& devname : devnames) {
+    string err;
+    string id = get_device_id(devname, &err);
     if (id.size()) {
-      (*m)["device_ids"] = string(devname) + "=" + id;
+      if (!devids.empty()) {
+	devids += ",";
+      }
+      devids += devname + "=" + id;
     } else {
-      derr << "failed to get devid for " << devname << dendl;
+      derr << "failed to get devid for " << devname << ": " << err << dendl;
     }
   }
+  (*m)["device_ids"] = devids;
 }
 
 void Monitor::finish_election()
@@ -3637,27 +3646,33 @@ void Monitor::handle_command(MonOpRequestRef op)
     string want_devid;
     cmd_getval(cct, cmdmap, "devid", want_devid);
 
-    string dev = store->get_devname();
-    string devid = get_device_id(dev);
-    if (want_devid.size() && want_devid != devid) {
-      r = -ENOENT;
-    } else {
-      uint64_t smart_timeout = cct->_conf.get_val<uint64_t>(
-	"mon_smart_report_timeout");
-      json_spirit::mObject json_map;
-      json_spirit::mValue smart_json;
-      if (block_device_get_metrics(("/dev/" + dev).c_str(), smart_timeout,
-				    &smart_json)) {
-	dout(10) << "block_device_get_metrics failed for /dev/" << dev << dendl;
-      } else {
-	json_map[devid] = smart_json;
+    string devname = store->get_devname();
+    set<string> devnames;
+    get_raw_devices(devname, &devnames);
+    json_spirit::mObject json_map;
+    uint64_t smart_timeout = cct->_conf.get_val<uint64_t>(
+      "mon_smart_report_timeout");
+    for (auto& devname : devnames) {
+      string err;
+      string devid = get_device_id(devname, &err);
+      if (want_devid.size() && want_devid != devid) {
+	derr << "get_device_id failed on " << devname << ": " << err << dendl;
+	continue;
       }
-      ostringstream ss;
-      json_spirit::write(json_map, ss, json_spirit::pretty_print);
-      rdata.append(ss.str());
-      r = 0;
-      rs = "";
+      json_spirit::mValue smart_json;
+      if (block_device_get_metrics(("/dev/" + devname).c_str(), smart_timeout,
+				   &smart_json)) {
+	dout(10) << "block_device_get_metrics failed for /dev/" << devname
+		 << dendl;
+	continue;
+      }
+      json_map[devid] = smart_json;
     }
+    ostringstream ss;
+    json_spirit::write(json_map, ss, json_spirit::pretty_print);
+    rdata.append(ss.str());
+    r = 0;
+    rs = "";
   }
 
  out:
