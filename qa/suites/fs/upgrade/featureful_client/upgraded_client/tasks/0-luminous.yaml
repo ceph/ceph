@@ -8,6 +8,8 @@ tasks:
     extra_packages: ['librados2']
 - print: "**** done installing luminous"
 - ceph:
+    mon_bind_addrvec: false
+    mon_bind_msgr2: false
     log-whitelist:
       - overall HEALTH_
       - \(FS_
@@ -25,6 +27,7 @@ tasks:
     conf:
       global:
         mon warn on pool no app: false
+        ms bind msgr2: false
 - exec:
     osd.0:
       - ceph osd require-osd-release luminous
