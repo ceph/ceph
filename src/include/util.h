@@ -99,5 +99,30 @@ bool match_str(const std::string& s, const XS& ...xs)
  return ((s == xs) || ...);
 }
 
+/* Modifies "haystack": erases any entries matching needle found in the
+haystack (notice that this may convert to the container's value type--
+this is to handle cases like const char* being passed variadically to
+a container of std::string): */
+template <typename SeqT>
+void erase_match(SeqT& haystack, const typename SeqT::value_type& needle)
+{
+ haystack.erase(
+     std::remove(std::begin(haystack), std::end(haystack), needle),
+     std::end(haystack));
+}
+
+/* Modifies "haystack": erases any matching needles found in the 
+haystack; returns the number of entries removed: */
+template <typename SeqT, typename ...ValsT>
+auto count_erase_matches(SeqT& haystack, const ValsT& ...needles)
+{
+ auto original_size = haystack.size();
+
+ (..., erase_match(haystack, needles));
+
+ return original_size - haystack.size();
+}
+
 } // namespace ceph::util
+
 #endif /* CEPH_UTIL_H */
