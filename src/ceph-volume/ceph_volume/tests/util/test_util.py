@@ -15,6 +15,14 @@ class TestAsBytes(object):
 
 class TestStrToInt(object):
 
+    def test_passing_a_float_str_comma(self):
+        result = util.str_to_int("1,99")
+        assert result == 1
+
+    def test_passing_a_float_does_not_round_comma(self):
+        result = util.str_to_int("1,99", round_down=False)
+        assert result == 2
+
     def test_passing_a_float_str(self):
         result = util.str_to_int("1.99")
         assert result == 1
