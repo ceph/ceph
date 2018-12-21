@@ -30,8 +30,8 @@ public:
   int stop();
   int connect();
 
-  int register_volume(std::string pool_name, std::string vol_name, uint64_t vol_size, Context* on_finish);
-  int lookup_object(std::string pool_name, std::string vol_name, std::string object_id, Context* on_finish);
+  int register_client(Context* on_finish);
+  int lookup_object(std::string pool_name, std::string object_id, Context* on_finish);
   void get_result(Context* on_finish);
 
 private:
