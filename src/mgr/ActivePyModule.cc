@@ -193,7 +193,7 @@ int ActivePyModule::handle_command(
   inbuf.copy(0, inbuf.length(), instr);
 
   auto pResult = PyObject_CallMethod(pClassInstance,
-      const_cast<char*>("handle_command"), const_cast<char*>("s#O"),
+      const_cast<char*>("_handle_command"), const_cast<char*>("s#O"),
       instr.c_str(), instr.length(), py_cmd);
 
   Py_DECREF(py_cmd);
