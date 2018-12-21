@@ -218,10 +218,7 @@ int KernelDevice::get_devices(std::set<std::string> *ls)
   if (devname.empty()) {
     return 0;
   }
-  ls->insert(devname);
-  if (devname.find("dm-") == 0) {
-    get_dm_parents(devname, ls);
-  }
+  get_raw_devices(devname, ls);
   return 0;
 }
 
