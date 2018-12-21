@@ -5572,7 +5572,7 @@ void BlueStore::_open_statfs()
     } else {
       dout(10) << __func__ << " store_statfs is corrupt, using empty" << dendl;
     }
-  } else if (cct->_conf->bluestore_debug_no_per_pool_stats) {
+  } else if (cct->_conf->bluestore_no_per_pool_stats_tolerance == "enforce") {
     per_pool_stat_collection = false;
     dout(10) << __func__ << " store_statfs is requested but missing, using empty" << dendl;
   } else {
@@ -6499,24 +6499,26 @@ int BlueStore::_fsck_check_extents(
 
 void BlueStore::_fsck_check_pool_statfs(
   BlueStore::per_pool_statfs& expected_pool_statfs,
+  bool need_per_pool_stats,
   int& errors,
   BlueStoreRepairer* repairer)
 {
-  if (!per_pool_stat_collection) {
-    return;
-  }
   auto it = db->get_iterator(PREFIX_STAT);
   if (it) {
     for (it->lower_bound(string()); it->valid(); it->next()) {
       string key = it->key();
       if (key == BLUESTORE_GLOBAL_STATFS_KEY) {
         if (repairer) {
-	  derr << "fsck error: legacy statfs record found, removing" << dendl;
-	  repairer->remove_key(db, PREFIX_STAT, BLUESTORE_GLOBAL_STATFS_KEY);
-	  errors++;
+	  if (need_per_pool_stats) {
+	    ++errors;
+	    repairer->remove_key(db, PREFIX_STAT, BLUESTORE_GLOBAL_STATFS_KEY);
+	    derr << "fsck error: " << "legacy statfs record found, removing" << dendl;
+	  } else {
+	    derr << "fsck warning: " << "legacy statfs record found, bypassing" << dendl;
+	  }
 	} else {
 	  const char* s = "fsck warning: ";
-          if (cct->_conf->bluestore_fsck_error_on_legacy_stats) {
+          if (need_per_pool_stats) {
 	    ++errors;
 	    s = "fsck error: ";
 	  }
@@ -6524,6 +6526,9 @@ void BlueStore::_fsck_check_pool_statfs(
 	          "run store repair to get consistent statistic reports"
 	       << dendl;
 	}
+	continue;
+      }
+      if (!need_per_pool_stats) {
 	continue;
       }
       uint64_t pool_id;
@@ -6690,6 +6695,10 @@ int BlueStore::_fsck(bool deep, bool repair)
   store_statfs_t* expected_statfs = nullptr;
 
   utime_t start = ceph_clock_now();
+  const auto& no_pps_mode = cct->_conf->bluestore_no_per_pool_stats_tolerance;
+  bool need_per_pool_stats = no_pps_mode == "until_fsck" ||
+    (no_pps_mode == "until_repair" && repair);
+  bool enforce_no_per_pool_stats = no_pps_mode == "enforce";
 
   int r = _open_path();
   if (r < 0)
@@ -6800,11 +6809,7 @@ int BlueStore::_fsck(bool deep, bool repair)
   actual_statfs.internal_metadata = 0;
   actual_statfs.omap_allocated = 0;
 
-  // switch to per-pool stats if not explicitly prohibited
-  if (!per_pool_stat_collection &&
-        !cct->_conf->bluestore_debug_no_per_pool_stats) {
-    per_pool_stat_collection = true;
-  }
+  need_per_pool_stats = per_pool_stat_collection || need_per_pool_stats;
 
   // walk PREFIX_OBJ
   dout(1) << __func__ << " walking object keyspace" << dendl;
@@ -6891,7 +6896,7 @@ int BlueStore::_fsck(bool deep, bool repair)
 	auto pool_id = c->cid.is_pg(&pgid) ? pgid.pool() : META_POOL_ID;
 	dout(20) << __func__ << "  collection " << c->cid << " " << c->cnode
 		 << dendl;
-	if (per_pool_stat_collection) {
+	if (need_per_pool_stats) {
 	  expected_statfs = &expected_pool_statfs[pool_id];
 	}
 
@@ -7178,7 +7183,7 @@ int BlueStore::_fsck(bool deep, bool repair)
 	for (auto &r : shared_blob.ref_map.ref_map) {
 	  extents.emplace_back(bluestore_pextent_t(r.first, r.second.length));
 	}
-	if (per_pool_stat_collection) {
+	if (need_per_pool_stats) {
 	  expected_statfs = &expected_pool_statfs[sbi.pool_id];
 	}
 	errors += _fsck_check_extents(sbi.cid,
@@ -7238,7 +7243,7 @@ int BlueStore::_fsck(bool deep, bool repair)
 	    continue;
 	  }
 	  auto pool_id = c->cid.is_pg(&pgid) ? pgid.pool() : META_POOL_ID;
-	  if (per_pool_stat_collection) {
+	  if (need_per_pool_stats) {
 	    expected_statfs = &expected_pool_statfs[pool_id];
 	  }
 	}
@@ -7416,7 +7421,8 @@ int BlueStore::_fsck(bool deep, bool repair)
   }
   sb_info.clear();
 
-  if (!per_pool_stat_collection) {
+  // check global stats if no-pps is enforced only
+  if (!need_per_pool_stats) {
     if (!(actual_statfs == expected_store_statfs)) {
       derr << "fsck error: actual " << actual_statfs
 	   << " != expected " << expected_store_statfs << dendl;
@@ -7426,10 +7432,11 @@ int BlueStore::_fsck(bool deep, bool repair)
       }
       ++errors;
     }
-  } else {
+  }
+  if (!enforce_no_per_pool_stats) {
     dout(1) << __func__ << " checking pool_statfs" << dendl;
-    _fsck_check_pool_statfs(expected_pool_statfs, errors,
-      repair ? &repairer : nullptr);
+    _fsck_check_pool_statfs(expected_pool_statfs, need_per_pool_stats,
+      errors, repair ? &repairer : nullptr);
   }
 
   dout(1) << __func__ << " checking for stray omap data" << dendl;
@@ -9434,7 +9441,7 @@ void BlueStore::_txc_update_store_statfs(TransContext *txc)
     vstatfs += txc->statfs_delta; //non-persistent in this mode
 
   } else {
-    txc->t->merge(PREFIX_STAT, "bluestore_statfs", bl);
+    txc->t->merge(PREFIX_STAT, BLUESTORE_GLOBAL_STATFS_KEY, bl);
 
     std::lock_guard l(vstatfs_lock);
     vstatfs += txc->statfs_delta;

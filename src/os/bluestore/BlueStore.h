@@ -2278,8 +2278,11 @@ private:
 
   using  per_pool_statfs =
     mempool::bluestore_fsck::map<uint64_t, store_statfs_t>;
-  void _fsck_check_pool_statfs(per_pool_statfs& expected_pool_statfs,
-    int& errors, BlueStoreRepairer* repairer);
+  void _fsck_check_pool_statfs(
+    per_pool_statfs& expected_pool_statfs,
+    bool need_per_pool_stats,
+    int& errors,
+    BlueStoreRepairer* repairer);
 
   void _buffer_cache_write(
     TransContext *txc,
