@@ -754,16 +754,18 @@ int ErasureCodeLrc::encode_chunks(const set<int> &want_to_encode,
     set<int> layer_want_to_encode;
     map<int, bufferlist> layer_encoded;
     int j = 0;
-    for (vector<int>::const_iterator c = layer.chunks.begin();
-	 c != layer.chunks.end();
-	 ++c) {
-      layer_encoded[j] = (*encoded)[*c];
-      if (want_to_encode.find(*c) != want_to_encode.end())
+    for (const auto& c : layer.chunks) {
+      std::swap(layer_encoded[j], (*encoded)[c]);
+      if (want_to_encode.find(c) != want_to_encode.end())
 	layer_want_to_encode.insert(j);
       j++;
     }
     int err = layer.erasure_code->encode_chunks(layer_want_to_encode,
 						&layer_encoded);
+    j = 0;
+    for (const auto& c : layer.chunks) {
+      std::swap(layer_encoded[j++], (*encoded)[c]);
+    }
     if (err) {
       derr << __func__ << " layer " << layer.chunks_map
 	   << " failed with " << err << " trying to encode "
