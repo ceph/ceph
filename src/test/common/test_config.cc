@@ -195,7 +195,7 @@ TEST(md_config_t, set_val)
     { "1weeks"s, duration_cast<seconds>(seconds{3600*24*7}) },
     { "1month"s, duration_cast<seconds>(seconds{3600*24*30}) },
     { "1months"s, duration_cast<seconds>(seconds{3600*24*30}) },
-    { "1M"s, duration_cast<seconds>(seconds{3600*24*30}) },
+    { "1mo"s, duration_cast<seconds>(seconds{3600*24*30}) },
     { "1y"s, duration_cast<seconds>(seconds{3600*24*365}) },
     { "1yr"s, duration_cast<seconds>(seconds{3600*24*365}) },
     { "1year"s, duration_cast<seconds>(seconds{3600*24*365}) },
