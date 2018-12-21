@@ -133,8 +133,8 @@ namespace rgw {
     /* unambiguiously return req_state */
     inline struct req_state* get_state() { return this->RGWRequest::s; }
 
-    RGWLibRequest(CephContext* _cct, RGWUserInfo* _user)
-      :  RGWRequest(0), cct(_cct), user(_user)
+    RGWLibRequest(CephContext* _cct, RGWUserInfo* _user, uint64_t id = 0)
+      :  RGWRequest(id), cct(_cct), user(_user)
       {}
 
     RGWUserInfo* get_user() { return user; }
@@ -185,8 +185,8 @@ namespace rgw {
     RGWObjectCtx rados_ctx;
   public:
 
-    RGWLibContinuedReq(CephContext* _cct, RGWUserInfo* _user)
-      :  RGWLibRequest(_cct, _user), io_ctx(),
+    RGWLibContinuedReq(CephContext* _cct, RGWUserInfo* _user, uint64_t id = 0)
+      :  RGWLibRequest(_cct, _user, id), io_ctx(),
 	 rstate(_cct, &io_ctx.get_env(), _user, id),
 	 rados_ctx(rgwlib.get_store(), &rstate)
       {
