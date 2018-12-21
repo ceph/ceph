@@ -32,21 +32,19 @@ class ObjectCacheStore
 
     int shutdown();
 
-    int lookup_object(std::string pool_name, std::string vol_name, std::string object_name);
-
-    int init_cache(std::string pool_name, std::string vol_name, uint64_t vol_size);
+    int init_cache();
+    int lookup_object(std::string pool_name, std::string object_name);
 
   private:
-    void evict_thread_body();
     int evict_objects();
 
-    int do_promote(std::string pool_name, std::string vol_name, std::string object_name);
+    int do_promote(std::string pool_name, std::string object_name);
 
     int promote_object(librados::IoCtx*, std::string object_name,
                        librados::bufferlist* read_buf,
-                       uint64_t length, Context* on_finish);
+                       Context* on_finish);
 
-   int handle_promote_callback(int, bufferlist*, std::string, std::string, uint32_t);
+   int handle_promote_callback(int, bufferlist*, std::string);
    int do_evict(std::string cache_file);
 
     CephContext *m_cct;

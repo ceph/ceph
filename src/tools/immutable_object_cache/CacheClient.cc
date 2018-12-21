@@ -85,16 +85,10 @@ namespace immutable_obj_cache {
     return 0;
   }
 
-  int CacheClient::register_volume(std::string pool_name, std::string vol_name,
-                                   uint64_t vol_size, Context* on_finish) {
+  int CacheClient::register_client(Context* on_finish) {
     // cache controller will init layout
     rbdsc_req_type_t *message = new rbdsc_req_type_t();
     message->type = RBDSC_REGISTER;
-    memcpy(message->pool_name, pool_name.c_str(), pool_name.size());
-    memcpy(message->vol_name, vol_name.c_str(), vol_name.size());
-    message->vol_size = vol_size;
-    message->offset = 0;
-    message->length = 0;
 
     uint64_t ret;
     boost::system::error_code ec;
@@ -151,12 +145,11 @@ namespace immutable_obj_cache {
   }
 
   // if occur any error, we just return false. Then read from rados.
-  int CacheClient::lookup_object(std::string pool_name, std::string vol_name,
-                                 std::string object_id, Context* on_finish) {
+  int CacheClient::lookup_object(std::string pool_name, std::string object_id,
+                                 Context* on_finish) {
     rbdsc_req_type_t *message = new rbdsc_req_type_t();
     message->type = RBDSC_READ;
     memcpy(message->pool_name, pool_name.c_str(), pool_name.size());
-    memcpy(message->vol_name, vol_name.c_str(), vol_name.size());
     memcpy(message->oid, object_id.c_str(), object_id.size());
     message->vol_size = 0;
     message->offset = 0;
